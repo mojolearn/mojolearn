@@ -24,10 +24,10 @@ from max.gpu.sync import barrier
 
 
 def substract_histograms_kernel(
-    from_ids: UnsafePointer[Scalar[DType.uint32]],
-    what_ids: UnsafePointer[Scalar[DType.uint32]],
-    bin_feature_count: Int,
-    histogram: UnsafePointer[Scalar[DType.float32]],
+    from_ids: MutPointer[UInt32, MutAnyOrigin],
+    what_ids: MutPointer[UInt32, MutAnyOrigin],
+    bin_feature_count_in: Int32,
+    histogram: MutPointer[Float32, MutAnyOrigin],
 ):
     """`SubstractHistogramsImpl`, copied.
 
@@ -42,16 +42,16 @@ def substract_histograms_kernel(
     slightly negative, which would poison a later division. Do NOT lift it to
     the other stats; a gradient sum is legitimately negative.
     """
+    var bin_feature_count = Int(bin_feature_count_in)
     var bin_feature_id = Int(block_idx.x) * Int(block_dim.x) + Int(
         thread_idx.x
     )
-    var from_id = Int(from_ids[Int(block_idx.y)])
-    var what_id = Int(what_ids[Int(block_idx.y)])
+    var from_id = Int(from_ids.unsafe_load(Int(block_idx.y)))
+    var what_id = Int(what_ids.unsafe_load(Int(block_idx.y)))
     var stat_id = Int(block_idx.z)
     var stat_count = Int(grid_dim.z)
 
     if bin_feature_id < bin_feature_count:
-        var h = histogram + bin_feature_id
         var from_offset = (
             from_id * bin_feature_count * stat_count
             + stat_id * bin_feature_count
@@ -60,18 +60,18 @@ def substract_histograms_kernel(
             what_id * bin_feature_count * stat_count
             + stat_id * bin_feature_count
         )
-        var new_val = h[from_offset] - h[what_offset]
+        var new_val = histogram.unsafe_load(bin_feature_id + from_offset) - histogram.unsafe_load(bin_feature_id + what_offset)
         if stat_id == 0:
             new_val = max(new_val, Scalar[DType.float32](0.0))
-        h[from_offset] = new_val
+        histogram.unsafe_store(bin_feature_id + from_offset, new_val)
 
 
 def scan_histograms_kernel(
-    feature_first_bin: UnsafePointer[Scalar[DType.uint32]],
-    feature_folds: UnsafePointer[Scalar[DType.uint32]],
-    feature_count: Int,
-    bin_feature_count: Int,
-    histogram: UnsafePointer[Scalar[DType.float32]],
+    feature_first_bin: MutPointer[UInt32, MutAnyOrigin],
+    feature_folds: MutPointer[UInt32, MutAnyOrigin],
+    feature_count_in: Int32,
+    bin_feature_count_in: Int32,
+    histogram: MutPointer[Float32, MutAnyOrigin],
 ):
     """`ScanHistogramsImpl`, restructured for a block scan.
 
@@ -91,6 +91,8 @@ def scan_histograms_kernel(
     at the very most, 1 for the binary features that dominate covtype), while
     features are many. It is the leaf and stat axes that fill the machine.
     """
+    var feature_count = Int(feature_count_in)
+    var bin_feature_count = Int(bin_feature_count_in)
     var feature_id = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var leaf_id = Int(block_idx.y)
     var stat_id = Int(block_idx.z)
@@ -99,15 +101,15 @@ def scan_histograms_kernel(
     if feature_id >= feature_count:
         return
 
-    var folds = Int(feature_folds[feature_id])
+    var folds = Int(feature_folds.unsafe_load(feature_id))
     if folds == 0:
         return
 
     var base = (
         leaf_id * bin_feature_count * stat_count + stat_id * bin_feature_count
-    ) + Int(feature_first_bin[feature_id])
+    ) + Int(feature_first_bin.unsafe_load(feature_id))
 
     var running = Scalar[DType.float32](0.0)
     for i in range(folds):
-        running += histogram[base + i]
-        histogram[base + i] = running
+        running += histogram.unsafe_load(base + i)
+        histogram.unsafe_store(base + i, running)

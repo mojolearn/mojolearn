@@ -131,3 +131,27 @@ Cheap here because folds per feature is small (1 for the binary features that
 dominate covtype, 255 at the very most) while features are many, and the leaf
 and stat axes fill the machine anyway. It would need revisiting on a dataset
 of few, very high-cardinality features.
+
+## 9. Mojo kernel signature rules, learned the hard way
+
+Every "it compiles" claim before the first launch probe was
+`mojo build --emit=object`, which targets the HOST. A kernel body that
+typechecks for the host proves nothing about whether it can be launched, and
+three files reported as compiling did not compile at a real use site. The
+rules, each one found by a failure:
+
+1. **Scalar kernel parameters must be `Int32`, not `Int`.** An `Int`
+   parameter fails `enqueue_function` instantiation with no message beyond
+   "function instantiation failed". Take `n: Int32` and widen inside.
+2. **Pointers are `MutPointer[T, MutAnyOrigin]`**, not
+   `UnsafePointer[Scalar[DType.T]]`, which cannot infer its origin at a call
+   site even though it compiles standalone.
+3. **Index with `unsafe_load` / `unsafe_store` / `[unsafe_offset=i]`**;
+   positional `p[i]` is deprecated.
+4. Shared memory is `stack_allocation[N, Scalar[DType.f32],
+   address_space = AddressSpace.SHARED]()`, and THAT one does keep
+   `UnsafePointer` with the origin unbound as `_`.
+
+**Rule for this tree: a kernel is not ported until it has been ENQUEUED.**
+Compiling is not evidence. `src/launch_probe.mojo` is the smallest harness
+that produces the evidence and every new kernel gets added to it.

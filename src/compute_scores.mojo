@@ -41,16 +41,16 @@ comptime SCORE_BLOCK_SIZE = 128
 
 
 def compute_optimal_splits_kernel(
-    bf_skip: UnsafePointer[Scalar[DType.uint8]],
+    bf_skip: MutPointer[UInt8, MutAnyOrigin],
     bin_feature_count: Int,
-    histograms: UnsafePointer[Scalar[DType.float32]],
-    part_stats: UnsafePointer[Scalar[DType.float32]],
+    histograms: MutPointer[Float32, MutAnyOrigin],
+    part_stats: MutPointer[Float32, MutAnyOrigin],
     stat_count: Int,
-    part_ids: UnsafePointer[Scalar[DType.uint32]],
+    part_ids: MutPointer[UInt32, MutAnyOrigin],
     p_count: Int,
     lambda_l2: Scalar[DType.float32],
-    out_score: UnsafePointer[Scalar[DType.float32]],
-    out_bin: UnsafePointer[Scalar[DType.uint32]],
+    out_score: MutPointer[Float32, MutAnyOrigin],
+    out_bin: MutPointer[UInt32, MutAnyOrigin],
 ):
     """`ComputeOptimalSplits`, with the block argmax that follows it.
 
