@@ -213,7 +213,7 @@ def sum_partials_kernel(
         half //= 2
 
     if tid == 0:
-        out_partial.unsafe_store(Int(block_idx.x), s[0])
+        out_partial.unsafe_store(Int(block_idx.x), s0)
 
 
 def zero_i32_kernel(
@@ -286,4 +286,4 @@ def finish_sum_kernel(
         half //= 2
 
     if tid == 0:
-        out_scalar.unsafe_store(0, s[0])
+        out_scalar.unsafe_store(0, s0)

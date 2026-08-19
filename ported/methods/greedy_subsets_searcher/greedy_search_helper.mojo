@@ -1809,7 +1809,7 @@ def run_tree_layout(
         ctx.enqueue_function[compute_optimal_splits_kernel](
             skip.unsafe_ptr(), Int32(hist_cells_per_leaf), hist.unsafe_ptr(),
             part_stats.unsafe_ptr(), Int32(stat_count), ids_a.unsafe_ptr(),
-            Int32(n_live), Float32(3.0),
+            Int32(n_live), l2_leaf_reg,
             out_score.unsafe_ptr(), out_bin.unsafe_ptr(),
             grid_dim=(1, 1, 1), block_dim=(SCORE_BLOCK_SIZE, 1, 1),
         )

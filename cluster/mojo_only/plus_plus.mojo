@@ -84,7 +84,7 @@ def candidate_cost_kernel(
         half //= 2
 
     if tid == 0:
-        out_cost.unsafe_store(trial, s[0])
+        out_cost.unsafe_store(trial, s0)
 
 
 def adopt_candidate_min_kernel(
@@ -188,7 +188,7 @@ def chunk_sums_kernel(
         half //= 2
 
     if tid == 0:
-        out_partial.unsafe_store(Int(block_idx.x), s[0])
+        out_partial.unsafe_store(Int(block_idx.x), s0)
 
 
 def select_chunk_kernel(

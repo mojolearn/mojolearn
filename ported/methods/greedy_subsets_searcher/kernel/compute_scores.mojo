@@ -105,8 +105,21 @@ def compute_optimal_splits_kernel(
 
                 # `TScoreCalcer::AddLeaf` for the L2 calcer: the Newton
                 # objective, summed over both sides of every leaf.
-                score += (sum_left * sum_left) / (weight_left + lambda_l2)
-                score += (sum_right * sum_right) / (weight_right + lambda_l2)
+                # `leafScore = (weight > 1e-20f ? (-sum*sum)/(weight+Lambda)
+                #             : 0)` -- `score_calcers.cuh:54`. Every calcer of
+                # theirs carries this guard. Ours divided unconditionally.
+                # The weights are `max(.., 0)` clamped but the SUMS are not,
+                # so a side whose weight cancels to zero with a non-zero
+                # residual contributed `sum^2 / lambda` here and 0 in theirs,
+                # and divides by zero outright if lambda is ever 0.
+                if weight_left > Float32(1e-20):
+                    score += (sum_left * sum_left) / (
+                        weight_left + lambda_l2
+                    )
+                if weight_right > Float32(1e-20):
+                    score += (sum_right * sum_right) / (
+                        weight_right + lambda_l2
+                    )
 
         if score > best_score:
             best_score = score
@@ -133,7 +146,20 @@ def compute_optimal_splits_kernel(
     var stride = SCORE_BLOCK_SIZE // 2
     while stride > 0:
         if tid < stride:
-            if s_score[tid + stride] > s_score[tid]:
+            # `gains[tid] > gains[tid+s] || (gains[tid] == gains[tid+s] &&
+            #  indices[tid] > indices[tid+s])` -- `compute_scores.cu:30`.
+            # On an exact tie the SMALLER bin-feature index wins. Ours kept
+            # the lower `tid`, and a lower `tid` does not mean a lower bin:
+            # thread 0 covers bins 0, 128, 256..., thread 5 covers 5, 133...
+            # Ties are the common case, not the rare one -- constant
+            # features, duplicated columns and small-integer gradient sums
+            # all produce exact float equality -- so this made the split
+            # depend on block geometry.
+            var take = s_score[tid + stride] > s_score[tid]
+            if s_score[tid + stride] == s_score[tid]:
+                if s_bin[tid + stride] < s_bin[tid]:
+                    take = True
+            if take:
                 s_score[tid] = s_score[tid + stride]
                 s_bin[tid] = s_bin[tid + stride]
         barrier()

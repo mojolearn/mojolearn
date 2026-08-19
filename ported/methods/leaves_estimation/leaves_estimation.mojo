@@ -59,7 +59,11 @@ def compute_leaf_values_kernel(
     var w = part_stats.unsafe_load(leaf * stat_count)
     var g = part_stats.unsafe_load(leaf * stat_count + 1)
 
-    if w <= Float32(0.0):
+    # `w > 1e-20 ? ... : 0.0` -- `greedy_search_helper.cpp:646`, and the same
+    # 1e-20 is their `MinLeafWeight` (`leaves_estimation_config.h:11`), so it
+    # is a deliberate value and not an artifact. Ours guarded on `w <= 0`,
+    # which divides in the window `0 < w <= 1e-20` where theirs returns 0.
+    if w <= Float32(1e-20):
         out_values.unsafe_store(leaf, Float32(0.0))
         return
 
@@ -81,7 +85,8 @@ def compute_leaf_values_kernel(
     # `boosting_check`, the loss GREW by about 1.68x per iteration, from 231
     # to 55839 over twelve trees, instead of falling.
     # =========================================================
-    var v = g / (w + l2)
+    # `Gradient[i] / (Hessian[i] + 1e-20f)` -- `descent_helpers.cpp:87`.
+    var v = g / (w + l2 + Float32(1e-20))
     if v > max_leaf_value:
         v = max_leaf_value
     if v < -max_leaf_value:

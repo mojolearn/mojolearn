@@ -28,6 +28,7 @@ produces a plausible clustering that disagrees with sklearn everywhere.
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.memory import AddressSpace
+from max.gpu.primitives.block import sum as block_sum
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
@@ -62,18 +63,11 @@ def eps_neighborhood_kernel(
             count += 1
         j += VD_TPB
 
-    var s = stack_allocation[
-        VD_TPB,
-        Scalar[DType.int32],
-        address_space = AddressSpace.SHARED,
-    ]()
-    s[tid] = count
-    barrier()
-    var half = VD_TPB // 2
-    while half > 0:
-        if tid < half:
-            s[tid] = s[tid] + s[tid + half]
-        barrier()
-        half //= 2
+    # `cub::BlockReduce`'s counterpart from
+    # `max.gpu.primitives.block`. The hand-written shared-memory tree
+    # reduction this replaced is gone: same arithmetic, one call, and
+    # the reduction shape is Modular's to tune rather than ours to
+    # guess. See VENDOR_LIBRARIES.md.
+    var s0 = block_sum[block_size=VD_TPB](count)
     if tid == 0:
-        vd.unsafe_store(row, s[0])
+        vd.unsafe_store(row, s0)
