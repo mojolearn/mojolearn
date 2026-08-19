@@ -30,12 +30,12 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from .point_hist_half_byte import (
+from .point_hist_half_byte_template import (
     BLOCK_SIZE,
     HIST_SIZE,
-    add_point,
-    hist_reduce,
-    hist_zero_and_slice,
+    REDUCE_WIDTH,
+    add_point_slot,
+    reduce_stage2_slot,
     slice_offset,
 )
 
@@ -64,17 +64,17 @@ def binary_hist_kernel(
     feature_fold_offset: MutPointer[UInt32, MutAnyOrigin],
     feature_group_offset: MutPointer[UInt32, MutAnyOrigin],
     feature_group_size: MutPointer[UInt32, MutAnyOrigin],
-    f_count_in: Int,
+    f_count_in32: Int32,
     bins: MutPointer[UInt32, MutAnyOrigin],
-    bins_line_size: Int,
+    bins_line_size_in: Int32,
     stats: MutPointer[Float32, MutAnyOrigin],
-    stat_line_size: Int,
+    stat_line_size_in: Int32,
     part_offset: MutPointer[UInt32, MutAnyOrigin],
     part_size: MutPointer[UInt32, MutAnyOrigin],
     part_ids: MutPointer[UInt32, MutAnyOrigin],
     bin_sums: MutPointer[Float32, MutAnyOrigin],
-    leaf_count: Int,
-    stat_count: Int,
+    leaf_count_in: Int32,
+    stat_count_in: Int32,
 ):
     """`ComputeSplitPropertiesDirectLoadsImpl` with `GroupSize = 32`.
 
@@ -86,11 +86,16 @@ def binary_hist_kernel(
     dataset size. That is the design point (`compute_by_blocks_helper.h:87-92`
     states it outright) and it is the opposite of a per-leaf launch.
     """
+    var f_count_in = Int(f_count_in32)
+    var bins_line_size = Int(bins_line_size_in)
+    var stat_line_size = Int(stat_line_size_in)
+    var leaf_count = Int(leaf_count_in)
+    var stat_count = Int(stat_count_in)
     var tid = Int(thread_idx.x)
 
-    var part_id = Int(part_ids[Int(block_idx.y)])
-    var p_offset = Int(part_offset[part_id])
-    var p_size = Int(part_size[part_id])
+    var part_id = Int(part_ids.unsafe_load(Int(block_idx.y)))
+    var p_offset = Int(part_offset.unsafe_load(part_id))
+    var p_size = Int(part_size.unsafe_load(part_id))
 
     # `maxBlocksPerPart = gridDim.x / ceil(fCount / GroupSize)`
     var feature_blocks = (f_count_in + 31) // 32
@@ -119,12 +124,21 @@ def binary_hist_kernel(
 
     var stats_p = stats + Int(block_idx.z) * stat_line_size
 
+    # `TPointHistHalfByteBase`'s constructor, inlined (PORTING.md 10):
+    #     for (i = threadIdx.x; i < histSize; i += BlockSize) buff[i] = 0;
+    #     __syncthreads();
+    #     Histogram = buff + SliceOffset();
     var smem = stack_allocation[
         HIST_SIZE,
         Scalar[DType.float32],
         address_space = AddressSpace.SHARED,
     ]()
-    var hist = hist_zero_and_slice(smem, tid)
+    var z = tid
+    while z < HIST_SIZE:
+        smem[z] = Float32(0.0)
+        z += BLOCK_SIZE
+    barrier()
+    var slice_base = slice_offset(tid)
 
     # --- ALIGN_MEMORY(1), copied ---------------------------------------
     #
@@ -148,61 +162,94 @@ def binary_hist_kernel(
     for _ in range(iter_count):
         # Their two unrolled loops: gather the batch, then add it. Kept in
         # that order because it is what keeps the loads in flight.
-        var local_bins = InlineArray[Scalar[DType.uint32], UNROLL](fill=0)
-        var local_stats = InlineArray[Scalar[DType.float32], UNROLL](fill=0)
+        var local_bins = InlineArray[UInt32, UNROLL](fill=0)
+        var local_stats = InlineArray[Float32, UNROLL](fill=0)
 
         @parameter
         for k in range(UNROLL):
-            local_bins[k] = b_ptr[LANE_WIDTH * k]
+            local_bins[k] = b_ptr.unsafe_load(LANE_WIDTH * k)
 
         @parameter
         for k in range(UNROLL):
-            local_stats[k] = s_ptr[LANE_WIDTH * k]
+            local_stats[k] = s_ptr.unsafe_load(LANE_WIDTH * k)
 
+        # `AddPoint`, inlined. The 8 lanes of a tile touch 8 distinct slots
+        # per iteration (see `add_point_slot`), so the update is a plain
+        # `+=` with no atomic. The barrier between iterations is CatBoost's
+        # 8-lane `addToHistTile.sync()` widened to the threadgroup, which is
+        # correct and strictly more expensive (PORTING.md 2). It is NOT safe
+        # to drop: distinctness holds WITHIN an iteration only.
         @parameter
         for k in range(UNROLL):
-            add_point(hist, local_bins[k], local_stats[k], tid)
+            @parameter
+            for i in range(8):
+                var slot = slice_base + add_point_slot(local_bins[k], tid, i)
+                smem[slot] = smem[slot] + local_stats[k]
+                barrier()
 
         b_ptr += stripe_size
         s_ptr += stripe_size
 
-    var reduced = hist_reduce(hist, tid)
+    # `Reduce()`, inlined. Stage 1 folds the whole replicated scratch to
+    # REDUCE_WIDTH slots, stage 2 folds those to 128 at
+    # `featureId + 8 * fold`.
+    barrier()
+    var slot_i = tid
+    while slot_i < REDUCE_WIDTH:
+        var acc = Float32(0.0)
+        var i2 = slot_i
+        while i2 < HIST_SIZE:
+            acc += smem[i2]
+            i2 += REDUCE_WIDTH
+        barrier()
+        smem[slot_i] = acc
+        barrier()
+        slot_i += BLOCK_SIZE
+
+    var acc2 = Float32(0.0)
+    if tid < 128:
+        @parameter
+        for group in range(4):
+            acc2 += smem[reduce_stage2_slot(tid, group)]
+    barrier()
+    if tid < 128:
+        smem[tid] = acc2
     barrier()
 
     # --- TPointHistBinary::AddToGlobalMemory, copied --------------------
     var fid = tid
     var fold = 0
     if fid < f_count:
-        var folds = Int(feature_folds[feature_offset + fid])
+        var folds = Int(feature_folds.unsafe_load(feature_offset + fid))
         if folds != 0:
-            var group_offset = Int(feature_group_offset[feature_offset + fid])
-            var group_size = Int(feature_group_size[feature_offset + fid])
+            var group_offset = Int(feature_group_offset.unsafe_load(feature_offset + fid))
+            var group_size = Int(feature_group_size.unsafe_load(feature_offset + fid))
             var device_offset = group_offset * stat_count * leaf_count
             var entries_per_leaf = stat_count * group_size
             var dst = (
                 bin_sums
                 + device_offset
-                + Int(part_ids[Int(block_idx.y)]) * entries_per_leaf
+                + Int(part_ids.unsafe_load(Int(block_idx.y))) * entries_per_leaf
                 + Int(block_idx.z) * group_size
-                + Int(feature_fold_offset[feature_offset + fid])
+                + Int(feature_fold_offset.unsafe_load(feature_offset + fid))
             )
 
             var group_id = fid // 4
             var f_mask = 1 << (3 - (fid & 3))
 
-            var val = Scalar[DType.float32](0.0)
+            var val = Float32(0.0)
 
             @parameter
             for i in range(16):
                 if (i & f_mask) == 0:
-                    val += reduced[8 * i + group_id]
+                    val += smem[8 * i + group_id]
 
             # Their guard, copied: skip a flush that cannot matter, so the
             # non-deterministic atomic is not paid for nothing.
-            if abs(val) > Scalar[DType.float32](1e-20):
+            if abs(val) > Float32(1e-20):
                 # DEVIATION (numerics.mojo): CatBoost uses atomicAdd when
                 # blockCount > 1 and a plain store otherwise. The atomic is
                 # order-nondeterministic and is what `NUMERIC_IDENTICAL`
                 # replaces with a fixed-point accumulator. Direct store here;
                 # the multi-block flush lands with the replication work.
-                dst[fold] = val
+                dst.unsafe_store(fold, val)

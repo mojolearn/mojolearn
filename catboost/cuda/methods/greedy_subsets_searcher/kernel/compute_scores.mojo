@@ -42,13 +42,13 @@ comptime SCORE_BLOCK_SIZE = 128
 
 def compute_optimal_splits_kernel(
     bf_skip: MutPointer[UInt8, MutAnyOrigin],
-    bin_feature_count: Int,
+    bin_feature_count_in: Int32,
     histograms: MutPointer[Float32, MutAnyOrigin],
     part_stats: MutPointer[Float32, MutAnyOrigin],
-    stat_count: Int,
+    stat_count_in: Int32,
     part_ids: MutPointer[UInt32, MutAnyOrigin],
-    p_count: Int,
-    lambda_l2: Scalar[DType.float32],
+    p_count_in: Int32,
+    lambda_l2: Float32,
     out_score: MutPointer[Float32, MutAnyOrigin],
     out_bin: MutPointer[UInt32, MutAnyOrigin],
 ):
@@ -59,9 +59,12 @@ def compute_optimal_splits_kernel(
     (`greedy_search_helper.cpp:513-532`). Copied: an argmax over 64 structs
     is not worth a second kernel and a second synchronization.
     """
+    var bin_feature_count = Int(bin_feature_count_in)
+    var stat_count = Int(stat_count_in)
+    var p_count = Int(p_count_in)
     var tid = Int(thread_idx.x)
 
-    var best_score = Scalar[DType.float32](0.0)
+    var best_score = Float32(0.0)
     var best_bin = UInt32(0xFFFFFFFF)
 
     var offset = Int(block_idx.x) * SCORE_BLOCK_SIZE
@@ -69,33 +72,35 @@ def compute_optimal_splits_kernel(
         var bin_feature_id = offset + tid
         if bin_feature_id >= bin_feature_count:
             break
-        if bf_skip[bin_feature_id] != 0:
+        if bf_skip.unsafe_load(bin_feature_id) != 0:
             offset += SCORE_BLOCK_SIZE * Int(grid_dim.x)
             continue
 
-        var score = Scalar[DType.float32](0.0)
+        var score = Float32(0.0)
 
         # THE SERIAL LEAF LOOP. See the module docstring for why it is inside
         # the thread and not across threads.
         for i in range(p_count):
-            var leaf_id = Int(part_ids[i])
+            var leaf_id = Int(part_ids.unsafe_load(i))
             var leaf_base = leaf_id * stat_count * bin_feature_count
 
             # stat 0 is the weight plane.
             var weight_left = max(
-                histograms[leaf_base + bin_feature_id],
-                Scalar[DType.float32](0.0),
+                histograms.unsafe_load(leaf_base + bin_feature_id),
+                Float32(0.0),
             )
             var weight_right = max(
-                part_stats[leaf_id * stat_count] - weight_left,
-                Scalar[DType.float32](0.0),
+                part_stats.unsafe_load(leaf_id * stat_count) - weight_left,
+                Float32(0.0),
             )
 
             for stat_id in range(1, stat_count):
-                var sum_left = histograms[
+                var sum_left = histograms.unsafe_load(
                     leaf_base + stat_id * bin_feature_count + bin_feature_id
-                ]
-                var part_stat = part_stats[leaf_id * stat_count + stat_id]
+                )
+                var part_stat = part_stats.unsafe_load(
+                    leaf_id * stat_count + stat_id
+                )
                 var sum_right = part_stat - sum_left
 
                 # `TScoreCalcer::AddLeaf` for the L2 calcer: the Newton
@@ -135,5 +140,5 @@ def compute_optimal_splits_kernel(
         stride //= 2
 
     if tid == 0:
-        out_score[Int(block_idx.x)] = s_score[0]
-        out_bin[Int(block_idx.x)] = s_bin[0]
+        out_score.unsafe_store(Int(block_idx.x), s_score[0])
+        out_bin.unsafe_store(Int(block_idx.x), s_bin[0])

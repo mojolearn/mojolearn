@@ -39,7 +39,7 @@ cost of the product property, and it is a number we can measure rather than
 an argument we have to have.
 """
 
-from .numerics import NumericMode, NUMERIC_FAST, NUMERIC_IDENTICAL
+from mojo_only.numerics import NumericMode, NUMERIC_FAST, NUMERIC_IDENTICAL
 
 
 # --- the four columns ----------------------------------------------------
