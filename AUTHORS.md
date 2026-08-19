@@ -26,6 +26,11 @@ two convergence tests and the empty-cluster rule are NVIDIA's work,
 Apache-2.0, and `cluster/PORTED_MAP.tsv` names the source file behind each of
 ours. `cluster/UNPORTED.tsv` names what was deliberately left out.
 
+**Not ours, third upstream.** `neighbors/ported/matrix/detail/
+select_radix.mojo` implements RAFT's radix top-k and follows its structure.
+`neighbors/PORTED_MAP.tsv` names the upstream per row, because that section
+draws from two projects at once.
+
 **Ours.** The translation itself, which is not mechanical: CUDA has warp-local
 synchronization and float atomics that Mojo 1.0 and Metal do not, so several
 kernels required a construct their source does not contain. `PORTING.md`

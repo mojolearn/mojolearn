@@ -1,0 +1,6 @@
+# Deliberately not ported, and why.
+raft matrix/detail/select_warpsort.cuh	UNPORTABLE	14 warp intrinsics (__shfl, laneId). Mojo 1.0 has no warp primitives. This is the FAISS WarpSelect family and RAFT's own dispatch prefers it for every k a user asks for, so we are on their second choice by necessity
+raft matrix/detail/select_radix.cuh::radix_topk	not ported	the MULTI-BLOCK variant, for a single very long row. One block per query row is the right shape for brute force
+cuvs neighbors/detail/knn_brute_force.cuh::DistanceEpilogue	not ported	template hook for custom epilogues; nothing here needs one
+cuvs neighbors/brute_force.cu index/search API	not ported yet	the index object and serialization. tiled_brute_force_knn is the algorithm
+cuvs neighbors/ivf_flat, ivf_pq, cagra	OUT OF SCOPE FOR NOW	approximate. Build brute force, measure where it stops winning, only then consider IVF. NEVER HNSW, see ROADMAP.md

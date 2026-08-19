@@ -60,6 +60,24 @@ CORPORATION. "cuVS" and "RAFT" are used only to identify the software this
 work derives from.
 
 --------------------------------------------------------------------------
+Derived from RAFT
+--------------------------------------------------------------------------
+
+`neighbors/ported/matrix/detail/select_radix.mojo` is a DERIVATIVE WORK of
+RAFT, translated from CUDA C++ into Mojo at RAFT commit 9aa17e5.
+
+    RAFT
+    Copyright (c) NVIDIA CORPORATION & AFFILIATES
+    Licensed under the Apache License, Version 2.0
+    https://github.com/rapidsai/raft
+
+This is a separate obligation from the cuVS one above and is recorded
+separately because the two are different works. Files that merely STAND IN
+for a RAFT call, under `core/` and the various `mojo_only/` directories, are
+NOT derived from RAFT: no RAFT source was translated into them, and each
+names the call whose semantics it reproduces.
+
+--------------------------------------------------------------------------
 Modular trademarks
 --------------------------------------------------------------------------
 

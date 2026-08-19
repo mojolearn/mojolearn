@@ -190,6 +190,17 @@ def check_knn_reach_by_sabotage() raises:
     distances negative, the clamp at `unfused_distance_nn.cuh:81` flattens
     them all to zero, and the result moves for a reason that has nothing to
     do with reach.
+
+    **The offset also has to be SMALL, which cost another run.** The first
+    version added 5000 per query. Distances here are of order 2.7 and the
+    gaps between the k-th and (k+1)-th neighbor are of order 0.01, so adding
+    5000 pushes everything to where float32's ulp is 0.03 and the ranking
+    dissolves. The set moved for 438 slots and the kernel was right, again.
+
+    So a reach sabotage has a WINDOW: large enough that the result must
+    visibly move, small enough that it does not destroy the property being
+    asserted. That window is a fact about the expanded identity in float32
+    and it is the same fact that made the first k-NN fixture unusable.
     """
     var ctx = DeviceContext()
     var buf_len = KNN_INDEX // 8
@@ -293,7 +304,7 @@ def check_knn_reach_by_sabotage() raises:
     for i in range(KNN_QUERIES):
         hqn.unsafe_ptr().unsafe_store(
             i,
-            hqn.unsafe_ptr().unsafe_load(i) + Float32(5000.0) * Float32(i + 1),
+            hqn.unsafe_ptr().unsafe_load(i) + Float32(0.1) * Float32(i + 1),
         )
     ctx.enqueue_copy(dst_buf=query_norm, src_ptr=hqn.unsafe_ptr())
     ctx.synchronize()

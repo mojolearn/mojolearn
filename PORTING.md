@@ -334,3 +334,75 @@ is a fact about their numerics rather than about our port: for `float` input
 the compute type is `CUBLAS_COMPUTE_32F_FAST_TF32`, ten mantissa bits. cuVS's
 shipped float32 k-means does not compute float32 distances on NVIDIA. See
 `cluster/mojo_only/gemm.mojo` and the `bitwise-gbdt` tree.
+
+# Deviations and hazards in the `neighbors/` section (cuVS + RAFT)
+
+## 19. A pointer conditional expression picked the WRONG BRANCH
+
+This one cost a debugging session and is the most important entry in this
+file for anyone writing Mojo kernels here.
+
+In `select_radix.mojo` the last-filter stage chose its input with
+
+    var lf_ptr = out_ptr if writes_buffer else in_base
+
+`writes_buffer` was False, verified by writing it to a debug buffer from
+inside the same block, and `in_base` held the right data, verified by reading
+`in_base.unsafe_load(0)` from the same block. **`lf_ptr` still pointed at
+`out_ptr`.** Every top-k came back as `0.0` because `out_ptr` was a zeroed
+scratch buffer.
+
+Rewriting it as an explicit `if` fixed it outright and all four size and
+buffer configurations went to zero errors.
+
+**Be precise about the claim.** A minimal probe of `a if flag else b` on two
+`MutPointer`s in a kernel did NOT reproduce it, so this is not "Mojo pointer
+ternaries are broken". What is established is that in this kernel, with the
+operands being `var`s reassigned across several branches inside a loop, the
+conditional expression selected the wrong operand while a plain `if` did not.
+
+**The rule for this tree: do not select a pointer with a conditional
+expression. Use `if`.** It costs three lines and this failure mode is
+invisible, because the wrong pointer is still a valid pointer to zeros.
+
+## 20. A reach sabotage has a WINDOW, at both ends
+
+Three checks in this session failed on sabotage magnitude while the kernel
+under test was correct. The pattern is worth naming because a failed reach
+check reads exactly like a real bug.
+
+- **Too large, replacing:** the k-means x_norm sabotage REPLACED the sample
+  norms with small values, which drove the expanded distances negative, and
+  the clamp at `unfused_distance_nn.cuh:81` flattened all of them to `0.0` so
+  the tie-break sent every row to centroid 0. 384 of 512 labels moved.
+- **Too large, offsetting:** the k-NN query-norm sabotage added 5000 where
+  distances are of order 2.7 and neighbor gaps of order 0.01. At 5000 the
+  float32 ulp is 0.03 and the ranking dissolved. 438 slots moved.
+- **Correct:** offset by 0.1 per query. Distances visibly move, ranking is
+  preserved to well inside the gaps, and the assertion "a per-query constant
+  cannot change a ranking" is actually being tested.
+
+So a sabotage must be **large enough that the result must visibly move, and
+small enough that it does not destroy the property being asserted**. When a
+sabotage fails, check its magnitude against the precision of the quantity
+before believing the kernel is wrong.
+
+## 21. `L2Expanded` in float32 cannot rank collinear points, at any scale
+
+Not a deviation, a property of the metric cuVS defaults to, found by a
+fixture that assumed otherwise.
+
+The expanded identity computes `||x||^2 + ||y||^2 - 2 x.y`. For N points on a
+line the closest-pair squared distance is about `(range/N)^2` and the norm is
+about `range^2`, so their ratio is about `1/N^2` INDEPENDENT OF SCALE. At
+N=4096 that is 6e-8 against float32's 1.2e-7 relative precision, so the
+subtraction has no significant bits left. Rescaling the data does not help.
+
+The first k-NN fixture hit this exactly: norms about 1e10, distances about
+1e3, ulp about 1024, true distance 900 returned as 0.0. The direct formula
+has no such problem and is far slower, which is the whole reason the expanded
+form is used.
+
+Consequence for benchmarking: any speed comparison against a CPU
+implementation using the DIRECT formula is also an accuracy comparison, and
+this is where our answer differs from theirs.

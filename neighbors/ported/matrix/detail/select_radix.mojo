@@ -140,7 +140,6 @@ def radix_topk_one_block_kernel(
     k_in: Int32,
     buf_len_in: Int32,
     select_min_in: Int32,
-    dbg: MutPointer[Int32, MutAnyOrigin],
 ):
     """`radix_topk_one_block_kernel`, one block per row of the batch.
 
@@ -304,22 +303,19 @@ def radix_topk_one_block_kernel(
             ctr[CTR_PREVIOUS_LEN] = Int32(current_len)
         barrier()
 
-        if tid == 0:
-            dbg.unsafe_store(pass_id * 5 + 0, ctr[CTR_LEN])
-            dbg.unsafe_store(pass_id * 5 + 1, ctr[CTR_K])
-            dbg.unsafe_store(pass_id * 5 + 2, Int32(kth_bits[0] >> UInt32(16)))
-            dbg.unsafe_store(pass_id * 5 + 3, ctr[CTR_FILTER_CNT])
-            dbg.unsafe_store(pass_id * 5 + 4, Int32(1 if writes_buffer else 0))
-        barrier()
 
         if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES - 1:
             # --- last_filter ---------------------------------------------
             var lf_kth = kth_bits[0]
             var lf_start = calc_start_bit(pass_id)
             var needed = Int(ctr[CTR_K])
-            var lf_len = current_len if writes_buffer else length
-            var lf_ptr = out_ptr if writes_buffer else in_base
-            var lf_has_idx = writes_buffer
+            var lf_len = length
+            var lf_ptr = in_base
+            var lf_has_idx = False
+            if writes_buffer:
+                lf_len = current_len
+                lf_ptr = out_ptr
+                lf_has_idx = True
             barrier()
 
             var j = tid
@@ -357,10 +353,4 @@ def radix_topk_one_block_kernel(
                             o_idx.unsafe_store(pos, src)
                 j += SELECT_BLOCK
             barrier()
-            if tid == 0:
-                dbg.unsafe_store(15, ctr[CTR_OUT_CNT])
-                dbg.unsafe_store(16, ctr[CTR_OUT_BACK_CNT])
-                dbg.unsafe_store(17, Int32(lf_len))
-                dbg.unsafe_store(18, Int32(needed))
-                dbg.unsafe_store(19, Int32(lf_kth >> UInt32(16)))
             break

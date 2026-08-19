@@ -1,0 +1,6 @@
+# our_file	upstream_file	status	notes
+# TWO upstreams in one section, which is why the header names them per row:
+#   cuVS  pinned at 2140532c   (the algorithm)
+#   RAFT  pinned at 9aa17e5    (the top-k primitive, TRANSLITERATED not stood in for)
+ported/neighbors/detail/knn_brute_force.mojo	cuvs cpp/src/neighbors/detail/knn_brute_force.cuh	partial	tiled_brute_force_knn, expanded metrics, query-axis tiling only
+ported/matrix/detail/select_radix.mojo	raft cpp/include/raft/matrix/detail/select_radix.cuh	partial	radix_topk_one_block only; BitsPerPass 8 not 11; CUB BlockScan replaced

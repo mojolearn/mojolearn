@@ -422,3 +422,11 @@ the real border count of 254 it does not happen, which is why the shipped
 check uses 254. Not explained, and it is a correctness question for any
 dataset binned below 8 bits.
 
+
+### `neighbors/` (cuVS brute force + RAFT radix select), 2026-08-19
+
+| thing | state | note |
+|---|---|---|
+| `tiled_brute_force_knn` and `radix_topk_one_block_kernel` | **REACHED AND PASSING**, `neighbors/knn_main.mojo` | Truth computed on the host in Float64 with the DIRECT formula, so the GPU's expanded-identity answer is checked against an independent computation. Reach proved by two sabotages predicting different movements. |
+| tie handling in `select_radix` | REACHED, and NON-REPRODUCIBLE BY DESIGN | RAFT places every output with `atomicAdd` and has no index tie-break, so which of several equidistant neighbors is returned is not reproducible. Not fixed here: fixing it is an improvement on the upstream. An `IDENTICAL` column cannot cover k-NN indices until it is. |
+| index-axis tiling | NOT PORTED | Only the query axis is tiled, so one query tile's distances against the whole index must fit. Splitting the index needs a merge of partial top-k lists, which is where the correctness trap is. |
