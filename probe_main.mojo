@@ -3,6 +3,7 @@ from mojo_only.permuted_ids_check import check_permuted_leaf_ids
 from mojo_only.replicated_half_byte_check import (
     check_replicated_half_byte,
 )
+from mojo_only.boosting_hist_check import check_boosting_histogram
 from mojo_only.copy_histograms_check import check_copy_histograms
 from mojo_only.boosting_check import check_boosting_learns
 from mojo_only.binarization_check import check_binarization
@@ -450,6 +451,20 @@ def main() raises:
     # the scale on purpose and requires the result to move, so it fails
     # rather than passes if it ever stops reaching that flush.
     check_replicated_half_byte()
+    print()
+    print("half-byte histogram at TWO FEATURE GROUPS vs a host tally (GPU):")
+    # The other half of the same gap, and it had never been RUN: this check
+    # existed but nothing imported it, and what it did assert was a fixture
+    # that shared one host staging buffer across four asynchronous
+    # `enqueue_copy` calls, so it failed at commits that were known good. It
+    # now runs the boosting dataset's shape, sixteen half-byte features that
+    # take TWO compressed-index columns and therefore two feature groups
+    # (`numBlocks.x = (fCount + 7) / 8`, `hist_half_byte.cu:80`), and its
+    # second arm ZEROES every column past the first. Group 1's cells must
+    # move and group 0's must not, so a launch that silently reads only the
+    # first group -- the column bug, which every single-column check in this
+    # tree passed straight through -- fails here instead of passing.
+    check_boosting_histogram()
     print()
     print("BOOSTING, end to end:")
     check_boosting_learns()

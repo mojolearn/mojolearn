@@ -70,6 +70,7 @@ from ported.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     scan_histograms_kernel,
     substract_histograms_kernel,
     write_reduces_histograms_kernel,
+    zero_buffer_kernel,
     zero_histograms_kernel,
 )
 from ported.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
@@ -609,11 +610,12 @@ def run_tree(
         hzf.unsafe_ptr().unsafe_store(i, Float32(0.0))
     ctx.enqueue_copy(dst_buf=hist, src_ptr=hzf.unsafe_ptr())
 
-    # FIXED-POINT ACCUMULATOR for replicated blocks. Metal has no float
-    # atomic, so partial histograms from blocks sharing a partition sum as
-    # Int32 through an integer atomic and are converted back afterwards.
-    # Integer addition is associative, so the histogram does not depend on
-    # which block lands first.
+    # FIXED-POINT ACCUMULATOR for replicated blocks under
+    # `NUMERIC_IDENTICAL`: partial histograms from blocks sharing a partition
+    # sum as Int32 through an integer atomic and are converted back
+    # afterwards. Integer addition is associative, so the histogram does not
+    # depend on which block lands first. `NUMERIC_FAST` leaves this buffer at
+    # zero and takes CatBoost's float `atomicAdd`.
     var acc_i32 = ctx.enqueue_create_buffer[DType.int32](hist_cells)
     var zi = ctx.enqueue_create_host_buffer[DType.int32](hist_cells)
     for i in range(hist_cells):
@@ -1167,10 +1169,11 @@ def launch_one_byte[bits: Int](
             #
             # CatBoost replicates this kernel and sums the partials with
             # `atomicAdd(dst + fold, val)` when `blockCount > 1`
-            # (`hist_one_byte.cu`, `AddToGlobalMemory`). Metal has no float
-            # atomic, so the flush goes through the Int32 accumulator
-            # instead; integer addition is associative, so the result does
-            # not depend on which block lands first.
+            # (`hist_one_byte.cu:255`, `AddToGlobalMemory`), which is what
+            # `NUMERIC_FAST` does here. `NUMERIC_IDENTICAL` sends the same
+            # flush through the Int32 accumulator instead, because integer
+            # addition is associative and the result then does not depend on
+            # which block lands first.
             grid_dim=(
                 feature_groups_for(POLICY_ONE_BYTE, Int(blk.n_features))
                 * replication_for(
@@ -1204,10 +1207,11 @@ def launch_one_byte[bits: Int](
             #
             # CatBoost replicates this kernel and sums the partials with
             # `atomicAdd(dst + fold, val)` when `blockCount > 1`
-            # (`hist_one_byte.cu`, `AddToGlobalMemory`). Metal has no float
-            # atomic, so the flush goes through the Int32 accumulator
-            # instead; integer addition is associative, so the result does
-            # not depend on which block lands first.
+            # (`hist_one_byte.cu:255`, `AddToGlobalMemory`), which is what
+            # `NUMERIC_FAST` does here. `NUMERIC_IDENTICAL` sends the same
+            # flush through the Int32 accumulator instead, because integer
+            # addition is associative and the result then does not depend on
+            # which block lands first.
             grid_dim=(
                 feature_groups_for(POLICY_ONE_BYTE, Int(blk.n_features))
                 * replication_for(
@@ -1329,6 +1333,19 @@ def launch_histograms_for_blocks(
     `bins_line_size` is passed as the block's FIRST COLUMN stride so the
     kernel's `blockIdx.x / maxBlocksPerPart` column arithmetic lands inside
     this policy's contiguous columns.
+
+    THEIR LOOP BODY, `split_properties_helper.cpp:1147-1240`, in order:
+    reset the block mapping (`:1154`), `ZeroBuffer` the scratch (`:1157`),
+    launch the histogram kernel, `ReduceScatter` (`:1219`), then
+    `TWriteReducesHistogramsKernel` (`:1224`). Ours is the same order with
+    two differences, both stated where they happen: `fixed_to_float_kernel`
+    sits between the kernel and the writeback and has no counterpart of
+    theirs, and `ReduceScatter` has no counterpart of ours.
+
+    `dense_ids` is no longer read. It was the id list handed to the scratch's
+    old indexed zero; the scratch now takes a whole-buffer zero, which needs
+    no ids at all. The argument stays because the callers of this function
+    live in `mojo_only/` and their signatures are not this file's to change.
     """
     # Where each block's slice begins in the flat histogram: the running
     # total of earlier blocks' bin counts.
@@ -1336,9 +1353,9 @@ def launch_histograms_for_blocks(
 
     # ZERO THE BLOCK SCRATCH before every block. Their writeback is guarded
     # by `if (abs(val) > 1e-20f)`, so a cell whose value is zero is NEVER
-    # WRITTEN and keeps whatever the buffer held. CatBoost zeroes through
-    # `ZeroHistograms` for the same reason; this port zeroed the FLAT
-    # histogram and not the per-block scratch the kernels actually write.
+    # WRITTEN and keeps whatever the buffer held. The float `atomicAdd`
+    # branch needs the same thing for a harder reason: it ACCUMULATES into
+    # the cell, so a stale cell is added to rather than overwritten.
     #
     # It also means the scratch cannot be shared between blocks without
     # clearing: block 2 would inherit block 1's cells wherever its own value
@@ -1355,23 +1372,45 @@ def launch_histograms_for_blocks(
         var groups = feature_groups_for(blk.policy, blk.n_features)
         var replicas = replication_for(groups, n_live, stat_count, sm_count)
 
-        # DENSE ids, `0..n_live`. The block scratch is written at
-        # `blockIdx.y` (their `compute_hist_loop_two_stats.cuh:554`), so it
-        # must be CLEARED at `blockIdx.y` too. Passing the leaf-id list here
-        # clears the wrong slots the moment the list is not the identity.
-        ctx.enqueue_function[zero_histograms_kernel](
-            dense_ids.unsafe_ptr(),
-            Int32(blk.total_folds),
-            block_hist.unsafe_ptr(),
-            grid_dim=((blk.total_folds + 255) // 256, n_live, stat_count),
-            block_dim=(256, 1, 1),
-        )
-
-        # Each block writes its OWN layout, [leaf][stat][bin-in-block], into
-        # scratch. Writing straight into the flat histogram is correct only
-        # when there is one block, because the writeback strides by this
-        # block's `group_size` and the flat array strides by the total.
+        # Each block writes its own scratch, and writing straight into the
+        # flat histogram is correct only when there is one block, because the
+        # writeback strides by this block's `group_size` and the flat array
+        # strides by the total.
+        #
+        # `BlockHistogramsMapping(blockId, histCount, statCount)` is
+        # `blockSize.Size() * histCount * statCount`
+        # (`compute_by_blocks_helper.h:74-78`), where `blockSize.Size()` is
+        # this block's bin-feature count. Ours is the same product with
+        # `max_leaves` in place of their `leavesCount`, because the kernels
+        # are handed `max_leaves` as `leafCount` and that is what
+        # `device_offset = group_offset * stat_count * leaf_count` strides
+        # by. So this is exactly the span the kernels can touch.
         var block_cells = max_leaves * stat_count * blk.total_folds
+
+        # `ZeroBuffer(blockHistograms, streamId)`
+        # (`split_properties_helper.cpp:1157`), which is
+        # `cudaMemsetAsync(ptr, 0, Buffer.Size() * sizeof(T))` (`:34-38`). A
+        # WHOLE-BUFFER zero, sized by the block's own mapping, and it is
+        # deliberate on their side: line 1155 is
+        # `FillBuffer(blockHistograms, 0.0f, streamId)` COMMENTED OUT and
+        # replaced by this one.
+        #
+        # This was `zero_histograms_kernel`, which is `ZeroHistogramsImpl`,
+        # the kernel they point at the FINAL FLAT histogram and never at the
+        # scratch. It happened to cover the same cells here, because
+        # `blocks_for` gives every feature `group_offset = 0` and
+        # `group_size = total_folds` (`gpu_data/feature_blocks.mojo`), which
+        # is what CatBoost itself produces on ONE DEVICE, so `device_offset`
+        # is zero and the scratch is plain `[leaf][stat][binInBlock]`. The
+        # two agree today and stop agreeing the moment `group_offset` is
+        # nonzero, which is the moment a second device exists. Their call is
+        # the whole-buffer one; this is now their call.
+        ctx.enqueue_function[zero_buffer_kernel](
+            block_hist.unsafe_ptr(),
+            Int32(block_cells),
+            grid_dim=(block_cells + 255) // 256,
+            block_dim=256,
+        )
 
         if blk.policy == POLICY_BINARY:
             if depth == 0:
@@ -1547,6 +1586,33 @@ def launch_histograms_for_blocks(
             block_dim=256,
         )
 
+        # ============ THEIR `ReduceScatter` HAS NO COUNTERPART HERE ========
+        # Between the histogram kernel and this writeback CatBoost runs
+        #
+        #     auto reducedMapping =
+        #         ComputeByBlocksHelper.ReducedBlockHistogramsMapping(
+        #             blockId, leavesCount, statsCount);
+        #     ReduceScatter(blockHistograms, reducedMapping, false, streamId);
+        #
+        # (`split_properties_helper.cpp:1217-1221`). It is an INTER-DEVICE
+        # all-reduce over a stripe mapping: each GPU built the histogram for
+        # its own stripe of rows, and this sums the partials across GPUs and
+        # scatters the result so each device owns a slice of bin-features.
+        # `BlockHistogramsMapping` is the before-reduce shape and
+        # `ReducedBlockHistogramsMapping` the after-reduce one
+        # (`compute_by_blocks_helper.h:74-85`).
+        #
+        # Ours does nothing here, and that is theirs too on one device:
+        #
+        #     if (devCount == 1) { return *this; }
+        #
+        # (`cuda_lib/cuda_buffer_helpers/reduce_scatter.h:460-462`, inside
+        # `TReducer::operator()`). This port is single device, so the call
+        # would return immediately and the before-reduce and after-reduce
+        # mappings are the same buffer. Multi-device is the point at which
+        # this becomes a real gap, not a no-op, and it is where the port
+        # would need `TReducer` from `gpu_lib`.
+        # ==================================================================
         ctx.enqueue_function[write_reduces_histograms_kernel](
             Int32(block_first_bin),
             Int32(blk.total_folds),
@@ -1630,13 +1696,13 @@ def run_tree_layout(
 
     `weight_magnitude` and `gradient_magnitude` are `sum over all rows of
     abs(plane)`, ONE PER STAT PLANE, not the signed totals. They are the
-    whole safety argument for the fixed-point flush that stands in for
-    Metal's missing float atomic: every partial sum the device forms is over
-    a SUBSET of the rows, so bounding the full-dataset sum of magnitudes
-    bounds every Int32 slot at every depth. A signed total is NOT that bound
-    -- gradients cancel, so it can be arbitrarily smaller than the largest
-    cell -- and passing zero asks for the largest scale the type admits.
-    See `mojo_only/fixed_point.mojo`.
+    whole safety argument for the fixed-point flush `NUMERIC_IDENTICAL` puts
+    in place of CatBoost's float atomic: every partial sum the device forms
+    is over a SUBSET of the rows, so bounding the full-dataset sum of
+    magnitudes bounds every Int32 slot at every depth. A signed total is NOT
+    that bound -- gradients cancel, so it can be arbitrarily smaller than the
+    largest cell -- and passing zero asks for the largest scale the type
+    admits. See `mojo_only/fixed_point.mojo`.
     """
     var stat_count = 2
     var max_leaves = 1 << max_depth

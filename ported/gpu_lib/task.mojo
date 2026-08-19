@@ -137,20 +137,27 @@ struct TCommand(Copyable, Movable):
     Field by field, and which of their commands owns each one:
 
         command_type        `ICommand::Type`                    task.h:27
-        stream              `IGpuKernelTask::GetStreamId()`     kernel_task.h
+        stream              `IGpuKernelTask::Stream`            kernel_task.h:67
+                            read by `GetStreamId()`             kernel_task.h:43-45
         host_task_type      `IHostTask::GetHostTaskType()`      task.h:150
         handle/size/ptr_type
                             `IAllocateMemoryTask`               task.h:116-120
         gpu_memory_part, pinned_memory_size
                             `TResetCommand`                     task.h:103-104
-        streams             `TFreeStreamCommand::GetStreams()`  request_stream_task.h:64
-        stream_id_result    `IRequestStreamCommand::SetStreamId`
-                                                                request_stream_task.h:19
+        streams             `TFreeStreamCommand::Streams`       request_stream_task.h:50
+                            read by `GetStreams()`              request_stream_task.h:64
+        stream_id_result    `TRequestStreamCommand::StreamId`   request_stream_task.h:25
+                            written by `SetStreamId`            request_stream_task.h:41-43
 
-    `stream_id_result` is where their `RequestStream` case writes its answer.
-    Theirs writes it into a promise the caller already holds
-    (`gpu_single_worker.cpp:122`); ours writes it into the command, because
-    the caller runs the worker itself and can read the command back.
+    Every field has a counterpart in one of their commands. No field here
+    stands for something they do not have; a field we invented would be a
+    deviation, and there is none in this struct.
+
+    `stream_id_result` is where their `RequestStream` case writes its answer
+    (`gpu_single_worker.cpp:122`). Theirs writes through a promise the caller
+    already holds, so the caller sees it wherever it is; ours writes into the
+    command, so the caller has to be holding THAT command. See
+    `request_stream_command` below for what that costs.
     """
 
     var command_type: ECommandType
@@ -276,7 +283,15 @@ def reset_command(
 def request_stream_command() -> TCommand:
     """Their `IRequestStreamCommand` (`request_stream_task.h:7-20`).
 
-    Read the answer back out of `stream_id_result` after the worker runs it.
+    Read the answer back out of `stream_id_result` after the worker runs it,
+    and read it through a DIRECT `TGpuOneDeviceWorker.run(cmd)`, which takes
+    the command by `mut`. The queue path cannot hand it back: theirs writes
+    into a promise the caller already holds
+    (`TRequestStreamCommand::SetStreamId` -> `StreamId.SetValue(id)`,
+    `request_stream_task.h:41-43`), and the promise half of their design is
+    `future/local_promise_future.h`, which is not ported. See NOT_PORTED.md.
+    `TCudaManager.request_stream` therefore calls `request_stream_impl`
+    straight, which is the same code the case runs.
     """
     return TCommand(ECommandType.RequestStream, DEFAULT_STREAM)
 

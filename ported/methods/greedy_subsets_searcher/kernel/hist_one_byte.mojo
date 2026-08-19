@@ -547,47 +547,67 @@ def one_byte_hist_kernel[bits: Int](
             var val = smem[fid * hist_size_bins + fold]
 
             if abs(val) > Float32(1e-20):
-                # `AddToGlobalMemory`, their multi-block branch:
+                # THE FLUSH. `AddToGlobalMemory`, their multi-block branch
+                # (`hist_one_byte.cu:253-259`):
                 #
                 #     if (blockCount > 1) { atomicAdd(dst + fold, val); }
                 #     else               { dst[fold] = val; }
                 #
-                # DEVIATION (numerics.mojo, same as `hist_binary.mojo`):
-                # Metal has no float atomic, so replicated blocks sum as
-                # Int32 through an integer atomic, which is associative and
-                # therefore reproducible run to run.
-                #
-                # Until this existed the kernel took the plain store on BOTH
-                # branches, so replicating it left one block's partial
-                # histogram standing and threw the other fifteen away. See
-                # UNWIRED.md.
+                # A plain store is only correct when ONE block owns the
+                # partition. Replicating blocks across a partition, which is
+                # what fills the machine, makes every block hold a PARTIAL
+                # histogram, and partials must be summed.
                 comptime det = deterministic_flush_for[
                     TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
                 ]()
-                if det and active_block_count > 1:
-                    var q = Int32(val * fixed_scale)
-                    _ = Atomic.fetch_add(
-                        acc_i32.unsafe_offset(
-                            device_offset
-                            + Int(block_idx.y) * entries_per_leaf
-                            + Int(block_idx.z) * group_size
-                            + Int(
-                                feature_fold_offset.unsafe_load(
-                                    feature_offset + fid
-                                )
-                            )
-                            + fold
-                        ),
-                        q,
-                    )
-                    continue
 
-                # DEVIATION (numerics.mojo): CatBoost uses atomicAdd when
-                # blockCount > 1 and a plain store otherwise. The atomic is
-                # order-nondeterministic and is what `NUMERIC_IDENTICAL`
-                # replaces with a fixed-point accumulator. Direct store here;
-                # the multi-block flush lands with the replication work.
-                dst.unsafe_store(fold, val)
+                @parameter
+                if det:
+                    if active_block_count > 1:
+                        # `NUMERIC_IDENTICAL`. Partials sum as Int32 through
+                        # an integer atomic, which is associative, so the
+                        # histogram does not depend on which block lands
+                        # first. That is the property CatBoost's float atomic
+                        # gives up.
+                        var q = Int32(val * fixed_scale)
+                        _ = Atomic.fetch_add(
+                            acc_i32.unsafe_offset(
+                                device_offset
+                                + Int(block_idx.y) * entries_per_leaf
+                                + Int(block_idx.z) * group_size
+                                + Int(
+                                    feature_fold_offset.unsafe_load(
+                                        feature_offset + fid
+                                    )
+                                )
+                                + fold
+                            ),
+                            q,
+                        )
+                    else:
+                        dst.unsafe_store(fold, val)
+                else:
+                    # `atomicAdd(dst + fold, val)`, theirs verbatim.
+                    #
+                    # THIS BRANCH USED TO BE A PLAIN STORE. The condition was
+                    # written `if det and active_block_count > 1`, so with
+                    # `det` false and the block replicated it fell through to
+                    # `dst[fold] = val` and left ONE block's partial
+                    # histogram standing while every other block's was
+                    # overwritten. It was a store where CatBoost has an
+                    # atomic, which is not a deviation, it is a wrong answer.
+                    #
+                    # This is what held `deterministic_flush_for` at a
+                    # hardcoded `True`: with the fixed-point path forced on,
+                    # `det` was never false and the store was never taken, so
+                    # flipping the row to the mode's answer was reported as
+                    # "the float atomic breaks the mixed tree" -- 16 non-empty
+                    # leaves at depth 4 dropping to 4. It was not the atomic.
+                    # It was this branch not having one.
+                    if active_block_count > 1:
+                        _ = Atomic.fetch_add(dst.unsafe_offset(fold), val)
+                    else:
+                        dst.unsafe_store(fold, val)
 
 
 def one_byte_hist_gather_kernel[bits: Int](
@@ -906,44 +926,64 @@ def one_byte_hist_gather_kernel[bits: Int](
             var val = smem[fid * hist_size_bins + fold]
 
             if abs(val) > Float32(1e-20):
-                # `AddToGlobalMemory`, their multi-block branch:
+                # THE FLUSH. `AddToGlobalMemory`, their multi-block branch
+                # (`hist_one_byte.cu:253-259`):
                 #
                 #     if (blockCount > 1) { atomicAdd(dst + fold, val); }
                 #     else               { dst[fold] = val; }
                 #
-                # DEVIATION (numerics.mojo, same as `hist_binary.mojo`):
-                # Metal has no float atomic, so replicated blocks sum as
-                # Int32 through an integer atomic, which is associative and
-                # therefore reproducible run to run.
-                #
-                # Until this existed the kernel took the plain store on BOTH
-                # branches, so replicating it left one block's partial
-                # histogram standing and threw the other fifteen away. See
-                # UNWIRED.md.
+                # A plain store is only correct when ONE block owns the
+                # partition. Replicating blocks across a partition, which is
+                # what fills the machine, makes every block hold a PARTIAL
+                # histogram, and partials must be summed.
                 comptime det = deterministic_flush_for[
                     TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
                 ]()
-                if det and active_block_count > 1:
-                    var q = Int32(val * fixed_scale)
-                    _ = Atomic.fetch_add(
-                        acc_i32.unsafe_offset(
-                            device_offset
-                            + Int(block_idx.y) * entries_per_leaf
-                            + Int(block_idx.z) * group_size
-                            + Int(
-                                feature_fold_offset.unsafe_load(
-                                    feature_offset + fid
-                                )
-                            )
-                            + fold
-                        ),
-                        q,
-                    )
-                    continue
 
-                # DEVIATION (numerics.mojo): CatBoost uses atomicAdd when
-                # blockCount > 1 and a plain store otherwise. The atomic is
-                # order-nondeterministic and is what `NUMERIC_IDENTICAL`
-                # replaces with a fixed-point accumulator. Direct store here;
-                # the multi-block flush lands with the replication work.
-                dst.unsafe_store(fold, val)
+                @parameter
+                if det:
+                    if active_block_count > 1:
+                        # `NUMERIC_IDENTICAL`. Partials sum as Int32 through
+                        # an integer atomic, which is associative, so the
+                        # histogram does not depend on which block lands
+                        # first. That is the property CatBoost's float atomic
+                        # gives up.
+                        var q = Int32(val * fixed_scale)
+                        _ = Atomic.fetch_add(
+                            acc_i32.unsafe_offset(
+                                device_offset
+                                + Int(block_idx.y) * entries_per_leaf
+                                + Int(block_idx.z) * group_size
+                                + Int(
+                                    feature_fold_offset.unsafe_load(
+                                        feature_offset + fid
+                                    )
+                                )
+                                + fold
+                            ),
+                            q,
+                        )
+                    else:
+                        dst.unsafe_store(fold, val)
+                else:
+                    # `atomicAdd(dst + fold, val)`, theirs verbatim.
+                    #
+                    # THIS BRANCH USED TO BE A PLAIN STORE. The condition was
+                    # written `if det and active_block_count > 1`, so with
+                    # `det` false and the block replicated it fell through to
+                    # `dst[fold] = val` and left ONE block's partial
+                    # histogram standing while every other block's was
+                    # overwritten. It was a store where CatBoost has an
+                    # atomic, which is not a deviation, it is a wrong answer.
+                    #
+                    # This is what held `deterministic_flush_for` at a
+                    # hardcoded `True`: with the fixed-point path forced on,
+                    # `det` was never false and the store was never taken, so
+                    # flipping the row to the mode's answer was reported as
+                    # "the float atomic breaks the mixed tree" -- 16 non-empty
+                    # leaves at depth 4 dropping to 4. It was not the atomic.
+                    # It was this branch not having one.
+                    if active_block_count > 1:
+                        _ = Atomic.fetch_add(dst.unsafe_offset(fold), val)
+                    else:
+                        dst.unsafe_store(fold, val)

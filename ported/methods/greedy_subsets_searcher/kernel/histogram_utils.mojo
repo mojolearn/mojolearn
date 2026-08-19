@@ -149,6 +149,16 @@ def zero_histograms_kernel(
 
     Grid: x over bin-features, y over the ID LIST, z over stats. So one
     launch clears every leaf that needs clearing, whatever subset that is.
+
+    **THIS IS THE FLAT HISTOGRAM'S ZERO AND ONLY THAT.** Its address
+    arithmetic is `[leaf][stat][binFeature]` with a leaf stride of
+    `binFeatureCount * statCount` over EVERY block. The per-block scratch has
+    a leaf stride of `statCount * GroupSize` and a `deviceOffset` in front of
+    it, so this kernel clears the scratch's cells only while `GroupOffset` is
+    zero and `GroupSize` is the whole block, which is the single-device case
+    and nothing wider. CatBoost never points it there at all: the scratch
+    gets `ZeroBuffer` (`zero_buffer_kernel`,
+    `split_properties_helper.cpp:1157`) and the flat histogram gets this one.
     """
     var bin_feature_count = Int(bin_feature_count_in)
     var bin_feature_id = Int(block_idx.x) * Int(block_dim.x) + Int(
@@ -164,6 +174,71 @@ def zero_histograms_kernel(
             + stat_id * bin_feature_count
         )
         dst_histogram.unsafe_store(base + bin_feature_id, Float32(0.0))
+
+
+def zero_buffer_kernel(
+    buffer: MutPointer[Float32, MutAnyOrigin],
+    n_cells_in: Int32,
+):
+    """`TZeroBuffer::Run`, copied (`split_properties_helper.cpp:34-38`).
+
+        ui64 size = Buffer.Size() * sizeof(T);
+        cudaMemsetAsync(Buffer.Get(), 0, size, stream.GetStream());
+
+    A WHOLE-BUFFER zero, and that is the entire point of it. It is the OTHER
+    zeroing CatBoost does, and it is not interchangeable with
+    `zero_histograms_kernel`:
+
+        FillBuffer(subsets.Histograms, 0.0f)   the FINAL FLAT histogram,
+                                               `[leaf][stat][binFeature]`
+                                               across every block; the
+                                               indexed form of it is
+                                               `ZeroHistogramsImpl`
+                                               (`:1061`)
+        ZeroBuffer(blockHistograms, streamId)  the PER-BLOCK SCRATCH, which
+                                               one block owns and strides by
+                                               its own `GroupSize`
+                                               (`:1155-1157`)
+
+    Line 1155 of their file is `FillBuffer(blockHistograms, 0.0f, streamId)`
+    COMMENTED OUT and replaced by `ZeroBuffer` on line 1157, so this is the
+    call they settled on. It is layout agnostic because it clears every byte,
+    which is what the scratch needs: the histogram writeback addresses it as
+    `deviceOffset + leafId * statCount * GroupSize + statId * GroupSize +
+    FoldOffsetInGroup`, and `deviceOffset` is `GroupOffset * statCount *
+    leafCount`.
+
+    **`GroupOffset` and `GroupSize` are per DEVICE, not per feature group,
+    and that is easy to read backwards.** They come off
+    `groupOffsetsBeforeReduce[devAfterReduce]` and
+    `binFeatureCountAfterReduceOnDevices[devAfterReduce]`
+    (`compute_by_blocks_helper.cpp:273-274`), a running total over DEVICES of
+    each device's after-reduce bin-feature count. On one device that is
+    `GroupOffset = 0` and `GroupSize` = the whole block's bin-feature count,
+    so `deviceOffset` vanishes and the scratch is plain
+    `[leaf][stat][binInBlock]` -- which is exactly what
+    `write_reduces_histograms_kernel` reads. The feature-group axis of the
+    grid, `blockIdx.x / maxBlocksPerPart`, does NOT appear in this address at
+    all.
+
+    Size it with their `BlockHistogramsMapping(blockId, histCount, statCount)`
+    (`compute_by_blocks_helper.h:74-78`):
+
+        blockSize.Size() * histCount * statCount
+
+    where `blockSize.Size()` is this block's bin-feature count.
+
+    DEVIATION (PORTING_RULES 4): theirs is `cudaMemsetAsync`, a driver call.
+    Mojo has no exposed async memset on this toolchain, so the memset is a
+    grid-stride store loop. Same bytes, same value, different way of saying
+    it.
+    """
+    var n = Int(n_cells_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(block_dim.x) * Int(grid_dim.x)
+    while i < n:
+        buffer.unsafe_store(i, Float32(0.0))
+        i += stride
 
 
 def copy_histograms_kernel(
@@ -211,8 +286,11 @@ def fixed_to_float_kernel(
     """Convert the fixed-point accumulator back to the float histogram.
 
     NO CATBOOST COUNTERPART: they accumulate partials with a float atomic and
-    need no conversion. This exists because Metal has no float atomic, so
-    replicated blocks sum into Int32 and the result is divided back out here.
+    need no conversion. This exists for `NUMERIC_IDENTICAL`, which sums
+    replicated blocks into Int32 so the order the blocks land in cannot
+    change the answer; the result is divided back out here. `NUMERIC_FAST`
+    takes CatBoost's float atomic and never fills the accumulator, so every
+    cell reads zero and this kernel stores nothing.
 
     Also zeroes the accumulator, so the next level does not inherit it. A
     separate zeroing launch would cost a kernel for nothing.

@@ -38,9 +38,11 @@ synchronization and float atomics that Mojo 1.0 and Metal do not, so several
 kernels required a construct their source does not contain. `PORTING.md`
 records each such deviation and why. Everything under `mojo_only/` and
 `cluster/mojo_only/` is work the upstream never had to do, most substantially
-the fixed-point accumulator that exists because Metal has no float atomic
-add, and which now serves both the histogram flush and the k-means centroid
-update unchanged.
+the fixed-point accumulator, which serves both the histogram flush and the
+k-means centroid update unchanged. It was written on the belief that Metal
+has no float atomic add; that belief was false, and it survives as the
+deterministic arm rather than as a forced substitution. See `PORTING.md`
+item 7.
 
 **Also ours, and worth naming separately: the RAFT and cuBLAS stand-ins.**
 cuVS calls out to RAFT primitives and to cuBLAS for norms, keyed reductions

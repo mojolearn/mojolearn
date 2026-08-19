@@ -136,8 +136,8 @@ thing that can answer whether the shared substrate is actually shared or is
 quietly tree-shaped.
 
 **The first answer is in and it is a good one.** The fixed-point accumulator
-in `mojo_only/fixed_point.mojo`, written for the histogram flush because
-Metal has no float atomic add, serves the k-means centroid update unchanged.
+in `mojo_only/fixed_point.mojo`, written for the histogram flush, serves the
+k-means centroid update unchanged.
 Its overflow argument transferred with one noun changed: "any leaf's rows are
 a subset of all rows" became "any cluster's rows are a subset of all rows",
 and nothing else moved. That also gives the file its first reader; it had

@@ -1,0 +1,8 @@
+# Solved environment. `pixi.lock` IS committed so a runner reproduces the
+# exact solve; the materialised environment is not.
+.pixi/
+
+# `mojo precompile` output for the `build-pkg` task. The task does `mkdir -p`
+# because precompile will not create its own output directory and fails with
+# "cannot open output file" on a clean clone otherwise.
+build/

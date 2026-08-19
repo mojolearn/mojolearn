@@ -98,28 +98,35 @@ the same values are added in the same order, fewer at a time.
 It exists to align the vector loads of item 5. At one element per load there
 is nothing to align. Required the moment the load width moves above 1.
 
-## 7. THE ONE THAT IS NOT OURS TO CHOOSE: Metal has no float atomic add
+## 7. THE FLOAT ATOMIC FLUSH (THE PREMISE WAS WRONG)
 
 CatBoost flushes every histogram with `atomicAdd(dst + fold, val)` on
-`float`. **Metal has no floating-point atomic add at all.** Not slower, not
-discouraged: the instruction does not exist.
+`float`. This section used to assert that Metal has no floating-point atomic
+add at all, that the instruction does not exist, and that the port therefore
+could not be literal here on our primary target.
 
-This is the only deviation in this file that a mode cannot express, because
-there is no faster alternative to fall back from. `NUMERIC_FAST` is defined
-by the float atomic flush, and on Apple that mode's defining row is
-unavailable, so `spec_for` FORCES `deterministic_flush` on the apple column
-and records `flush_forced_by_vendor` beside it.
+**That was false, and it was the load-bearing claim under
+`mojo_only/fixed_point.mojo`.** Probed 2026-08-19 on the M4: 1024 threads
+each adding 1.0 through `Atomic.fetch_add` return exactly 1024.0. The
+instruction is there. Nothing forced the substitution.
 
-Three consequences worth stating plainly:
+So this is no longer a deviation a vendor imposes on us; it is a choice, and
+the ladder now expresses it. `FAST` takes CatBoost's float atomic on every
+vendor, which is what they ship. `IDENTICAL` pins every vendor to the integer
+accumulator, where integer addition is associative and the sum does not
+depend on which block lands first. No column is forced.
 
-1. **The port cannot be literal here even in FAST mode on our primary
-   target.** Apple accumulates fixed-point `Int32`.
-2. **Apple is reproducible by default and identity costs it nothing**, since
-   integer addition is associative and Apple's lane width already equals the
-   pinned 32. The bit-identical column is paid for by NVIDIA and AMD.
-3. Fixed point needs a scale, and the scale must bound every partial sum.
-   That is a real piece of work CatBoost never has to do, and it has to be
-   ported from nothing.
+Two things survive the correction:
+
+1. Fixed point needs a scale, and the scale must bound every partial sum.
+   That is a real piece of work CatBoost never has to do, and it had to be
+   written from nothing. It is also where the 20x loss regression came from,
+   so the range contract in `HANDOFF.md` is the part of this section worth
+   keeping.
+2. Reproducibility is still cheaper on Apple than elsewhere, because Apple's
+   lane width already equals the pinned 32. But it is no longer FREE, since
+   the integer path is no longer what Apple runs anyway. The cost is
+   unrecorded.
 
 
 ## 8. The bin prefix scan: `cub::WarpScan` (SEE ITEM 2, THE PREMISE WAS WRONG)

@@ -60,9 +60,11 @@ comptime BLOCK_SIZE = block_size_for[K_HIST_HALF_BYTE, TARGET_COLUMN]()
 #: `kernel_matrix.column_lane_width` for why AMD's 64 must not reach this.
 comptime LANE_WIDTH = 32
 
-#: The mode this build compiles against. See `mojo_only/numerics.mojo`; FAST
-#: is the default and on Apple the flush row is forced deterministic anyway,
-#: because Metal has no float atomic add.
+#: The mode this build compiles against. See `mojo_only/numerics.mojo`. FAST
+#: is the default, and under FAST the flush is CatBoost's own float
+#: `atomicAdd` (`hist_half_byte.cu:45-51`) on every vendor including Apple.
+#: No vendor forces the deterministic row. The fixed-point Int32 accumulator
+#: is what IDENTICAL selects, and it is dead code in this build.
 comptime BUILD_MODE = NUMERIC_FAST
 
 #: `Reduce()`'s stage-1 width (`point_hist_half_byte_template.cuh:115-134`).

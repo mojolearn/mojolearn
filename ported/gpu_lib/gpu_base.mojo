@@ -25,11 +25,33 @@ NOT ported from `cuda_base.h`, and why:
         called after every worker iteration (`gpu_single_worker.cpp:147`).
         Mojo surfaces device errors by raising from the submitting call, so
         there is no error flag to poll.
+    GetStreamsProvider                                     (cuda_base.h:86-88)
+        theirs is a `FastTlsSingleton`, one provider per HOST THREAD, shared
+        by every worker on it. Ours is a member of `TGpuOneDeviceWorker`. With
+        one worker on one thread the two are the same object; with two they
+        would not be, which is why the difference is written down here rather
+        than left to be noticed.
+    ~TCudaStreamsProvider                                  (cuda_base.h:69-73)
+        `cudaStreamDestroy` on every stream it still holds. A handle here has
+        nothing underneath it to destroy, so there is nothing to run.
 
 The stream is the whole point of the control plane. `TSplitPointsKernel::Run`
-(`split_points.cpp:232`) issues five kernels back to back on ONE stream and
-blocks nowhere, because ordering within a stream is guaranteed by the device,
-not by the host.
+(`split_points.cpp:37-162`) issues its entire split as six calls on the ONE
+`stream` it is handed and blocks nowhere:
+
+    SplitAndMakeSequenceInLeaves        split_points.cpp:41
+    SortByFlagsInLeaves                 split_points.cpp:56
+    GatherInplaceLeqSize                split_points.cpp:115  (small-leaf path)
+    CopyHistograms                      split_points.cpp:135
+    UpdatePartitionsAfterSplit          split_points.cpp:143
+    UpdatePartitionsPropsForSplit       split_points.cpp:151
+
+Ordering within a stream is guaranteed by the device, not by the host, so the
+host never appears between them. The single-leaf twin
+`TSplitPointsSingleLeafKernel::Run` (`split_points.cpp:232-352`) is the same
+sequence over one leaf. An earlier version of this file put
+`TSplitPointsKernel::Run` at `split_points.cpp:232` and called it five
+kernels; `:232` is the single-leaf twin and the count is six.
 
 ================================ DEVIATION BLOCK ======================
 MEASURED 2026-08-19 on Apple M4: `DeviceContext.stream()` EXISTS in the Mojo
@@ -42,10 +64,36 @@ So on Metal there is exactly ONE queue. `request_stream` therefore hands out
 distinct HANDLES that all resolve to that one queue.
 
 That is correct but stricter than CatBoost. Two of their streams may overlap;
-our two handles serialise. Over-ordering never produces a wrong answer, it
+our two handles serialize. Over-ordering never produces a wrong answer, it
 only leaves parallelism on the table, so the port is safe today and gets
 faster for free on CUDA and HIP the day `stream()` is implemented, with no
 change to any caller.
+
+WHAT WE LOSE, exactly, read out of their tree rather than guessed. The only
+part of the searcher that asks for more than one stream is the by-blocks
+histogram, and it asks conditionally:
+
+    config.StreamCount = statCount <= 2 ? 1 : 3;
+                                        compute_by_blocks_helper.cpp:386
+
+    if (MaxStreamCount > 1) { ... RequestStream() ... }
+    else                    { Streams.push_back(DefaultStream()); }
+                                        split_properties_helper.h:88-95
+
+So at `statCount <= 2`, which is every single-output regression and binary
+classification run, CatBoost itself is single stream and we lose NOTHING.
+Above it they overlap three blocks of the histogram, and that three-way
+overlap is what the Metal collapse costs us.
+
+The collapse also DELETES work rather than only serializing it. Their two
+cross-stream barriers in that loop are guarded:
+
+    if (!IsOnlyDefaultStream()) { NCudaLib::GetCudaManager().Barrier(); }
+                                        split_properties_helper.cpp:1143, :1257
+
+and `IsOnlyDefaultStream()` (`split_properties_helper.h:128-130`) is true
+whenever the only stream is stream 0, which here is always. Both barriers are
+unreachable in this port, by their own condition, not by our choice.
 
 What we DO get on Metal, and what the whole port is for, is that ordering
 WITHIN a stream is free. Measured, 54 launches on a trivial kernel:

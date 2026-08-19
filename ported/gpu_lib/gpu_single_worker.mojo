@@ -21,15 +21,27 @@ of its cases are guards, not work:
 
 The one command that always drains is a `DeviceBlocking` host task, which is
 what `TCudaSingleDevice::WaitComplete()` sends (`single_device.h:349-351`).
+It is NOT the only drain in their tree: `TCudaSingleDevice::StreamSynchronize`
+(`single_device.h:342-347`) drains one stream by putting a `TSyncStreamKernel`
+on it, and their searcher calls it once per split
+(`split_properties_helper.cpp:961`) and twice more per histogram round behind
+a multi-stream guard (`:1143`, `:1257`).
+
+A stream that has been drained goes INACTIVE (`gpu_single_worker.h:122-126`),
+and `SyncActiveStreams` only visits active ones (`gpu_single_worker.h:194-200`).
+So a second `WaitComplete` with nothing launched in between costs zero drains,
+not one. That is a load-bearing property of their state machine and it is what
+`mojo_only/gpu_lib_worker_check.mojo` asserts.
 
 Their inner `TComputationStream` (`gpu_single_worker.h:35-127`) keeps a queue
 of waiting tasks and one running task per stream, and `TryProceedTask` only
 submits the next one when the current says `ReadyToSubmitNext`. That is the
-mechanism by which `TSplitPointsKernel::Run` gets to issue five kernels back
-to back without the host ever appearing between them.
+mechanism by which `TSplitPointsKernel::Run` gets to issue the six calls of a
+whole split (`split_points.cpp:41`, `:56`, `:115`, `:135`, `:143`, `:151`)
+without the host ever appearing between them.
 
 ================================ DEVIATION BLOCK ======================
-Four departures, all forced.
+Five departures, four of them forced, plus one thing of ours.
 
 **1. No thread.** Theirs runs on its own OS thread so `cudaLaunchKernel`
 stays off the host critical path. `DeviceContext.enqueue_function` is already
@@ -55,6 +67,21 @@ task object exists here, only `try_proceed_task` changes.
 port raises on because buffers belong to `DeviceContext`. The list and the
 branches that read it (`gpu_single_worker.cpp:83-86`) are transcribed anyway,
 because deleting a branch is how a state machine silently inverts.
+
+Its feeder `TempMemoryAllocatedObjects` (`gpu_single_worker.h:162`), which
+`RunIteration` drains into `ObjectsToFree` at the top of every turn
+(`gpu_single_worker.cpp:55-58`), has no counterpart at all: it is filled only
+by `AllocateTempMemory` (`gpu_single_worker.cpp:10-47`), which is the
+`IMemoryManager` half of `PrepareExec` and belongs to the unported
+`tasks_impl/kernel_task.h`. With no producer the drain loop would be a loop
+over nothing, so it is named here instead of written.
+
+**5. One queue means one COUNTED drain per active stream.** `_device_sync` is
+device-wide on Metal, so the second and later iterations of
+`sync_active_streams` wait on nothing. They still charge `sync_count`, because
+the alternative is a counter that lies about how many stream drains the code
+asked for. With `n` active streams a `wait_submit_and_sync` therefore reads as
+`n` drains and costs one. Their `SyncStream` is per stream and costs `n`.
 
 **Ours that theirs does not have: `sync_budget`.** CatBoost counts nothing
 and refuses nothing. `sync_count`, `launch_count` and `sync_budget` are OURS.
@@ -294,10 +321,43 @@ struct TGpuOneDeviceWorker(Movable):
         """Their `TCudaSingleDevice::WaitComplete()` (`single_device.h:349`)
         and their `TCudaManager::WaitComplete()` (`cuda_manager.h:239-241`).
 
-        THE ONLY DRAIN IN THE TREE. If a second one appears anywhere else,
-        the port has been undone.
+        Theirs launches a `TBlockingSyncDevice` host task, so the drain is the
+        HostTask case reaching `WaitSubmitAndSync`
+        (`gpu_single_worker.cpp:111-118`), not a call the manager makes
+        itself.
+
+        This is one of the two KINDS of drain in their tree, not the only
+        drain. The other is `stream_synchronize` below, which their searcher
+        calls once per split (`split_properties_helper.cpp:961`). An earlier
+        version of this docstring claimed it was the only one; their own
+        searcher falsifies that.
         """
         self.wait_submit_and_sync()
+
+    def stream_synchronize(mut self, stream: TCudaStream) raises:
+        """Their `TCudaSingleDevice::StreamSynchronize`
+        (`single_device.h:342-347`), which is two commands:
+
+            LaunchKernel(TSyncStreamKernel(), streamHandle);
+            //ensure all jobs to stream we submitted to GPU
+            EmplaceTask<TWaitSubmitCommand>();
+
+        `TSyncStreamKernel::Run` is exactly `stream.Synchronize()`
+        (`tasks_impl/kernel_task.h:313-317`), so the drain happens INSIDE the
+        StreamKernel case, after that case's own stream-0 guard, and the
+        `TWaitSubmitCommand` after it waits for submission only
+        (`gpu_single_worker.cpp:107-109`).
+
+        Transcribing all three steps rather than calling `sync_stream`
+        directly is what keeps the ACTIVE flags right: the stream-0 guard
+        clears every other active stream (`gpu_single_worker.cpp:80-87`), and
+        a version that only drained the named stream would leave those
+        streams marked active and pay for them again at the next
+        `wait_submit_and_sync`.
+        """
+        self.stream_kernel(stream)
+        self.sync_stream(stream.get_stream())
+        self.wait_all_task_to_submit()
 
     # --------------------------------------------------------------- streams
 
@@ -344,7 +404,14 @@ struct TGpuOneDeviceWorker(Movable):
 
     def free_streams_impl(mut self, var ids: List[Int32]) raises:
         """The body of their FreeStream case, which frees a LIST
-        (`gpu_single_worker.cpp:126-131`)."""
+        (`gpu_single_worker.cpp:126-131`).
+
+        The `id == 0` refusal is not in their case body; it is
+        `CB_ENSURE(streamId != 0)` one level up, in
+        `TCudaSingleDevice::FreeStream` (`single_device.h:334-337`), so their
+        `UserFreeStreams` can never hold it. This port has no such level, so
+        the check sits where the list is read. The value refused is the same.
+        """
         self.wait_all_task_to_submit()
         for i in range(len(ids)):
             var id = ids[i]
@@ -408,12 +475,23 @@ struct TGpuOneDeviceWorker(Movable):
                 " NOT_PORTED.md."
             )
 
-    def run(mut self, var command: TCommand) raises:
+    def run(mut self, mut command: TCommand) raises -> Bool:
         """Their dispatch switch (`gpu_single_worker.cpp:69-145`).
 
         Same cases, same order. The ones with no single-device meaning raise
         rather than silently doing nothing, because a silent no-op is exactly
         how `enqueue_copy(dst_buf=, src_ptr=device)` cost this port a day.
+
+        `command` is `mut` and not `var` for the same reason: their
+        RequestStream case WRITES to the command (`gpu_single_worker.cpp:122`,
+        `IRequestStreamCommand::SetStreamId`), and taking it by value would
+        make that write land in a temporary and vanish.
+
+        Returns their local `shouldStop` (`gpu_single_worker.cpp:50`), which
+        only the StopWorker case sets. It is NOT their `Stopped` member: that
+        one is cleared when `Run()` is entered and set only after the post-loop
+        checks pass (`gpu_single_worker.cpp:155`, `:179`), so a worker whose
+        checks fail never reports itself stopped.
         """
         var type = command.get_command_type()
 
@@ -449,7 +527,7 @@ struct TGpuOneDeviceWorker(Movable):
             self.free_streams_impl(command.streams.copy())
         elif type == ECommandType.StopWorker:
             self.wait_submit_and_sync()
-            self.stopped = True
+            return True
         else:
             # `gpu_single_worker.cpp:139-141` is `Y_UNREACHABLE()`, because a
             # SerializedCommand is deserialised into a real command before the
@@ -462,42 +540,63 @@ struct TGpuOneDeviceWorker(Movable):
                 " host. See NOT_PORTED.md."
             )
 
+        return False
+
     def run_iteration(mut self) raises -> Bool:
         """Their `RunIteration` (`gpu_single_worker.cpp:49-152`), minus the
         blocking `InputTaskQueue.Wait` on an empty queue: there is no producer
         thread to wait for.
 
-        Returns their `shouldStop`.
+        Returns their `shouldStop` (`gpu_single_worker.cpp:50`, `:151`).
         """
         _ = self.check_running_tasks()
         if self.queue.is_empty():
-            return self.stopped
+            return False
         var command = self.queue.dequeue()
-        self.run(command^)
-        return self.stopped
+        return self.run(command)
 
     def drain_queue(mut self) raises:
-        """Their worker loop (`gpu_single_worker.cpp:165-170`)."""
+        """Their `Run()` loop and everything after it
+        (`gpu_single_worker.cpp:165-179`).
+
+        Theirs breaks on `shouldStop` and THEN runs the post-loop checks. So
+        does this: a StopWorker command that arrives through the queue has to
+        reach the same leak checks a direct `stop()` does, or the queue path
+        becomes the way to skip them.
+        """
         while not self.queue.is_empty():
             if self.run_iteration():
-                break
+                self._finish_run()
+                return
 
     def add_task(mut self, var command: TCommand):
         """Their `TSingleHostTaskQueue::AddTask` reached through the worker."""
         self.queue.add_task(command^)
 
     def is_running(self) -> Bool:
-        """Their `IsRunning()` (`gpu_single_worker.h:353-355`)."""
+        """Their `IsRunning()` (`gpu_single_worker.h:353-355`), which is
+        `!Stopped`."""
         return not self.stopped
 
     def stop(mut self) raises:
-        """Their post-loop checks (`gpu_single_worker.cpp:171-179`).
+        """Their StopWorker case followed by the post-loop
+        (`gpu_single_worker.cpp:134-138`, then `:171-179`), for a caller that
+        never put a command on the queue. `TCudaManager.stop` is that caller.
+        """
+        self.wait_submit_and_sync()
+        self._finish_run()
+
+    def _finish_run(mut self) raises:
+        """Their post-loop block (`gpu_single_worker.cpp:171-179`).
 
         Every one of these is a CB_ENSURE in their tree, and each catches a
         different way of leaking: a command queued after the stop, a stream
         handed out and never freed, an object still pending deletion.
+
+        `Stopped = true` is the LAST line of theirs (`:179`), after every
+        check. A worker that fails one of them is still running, which is what
+        makes the failure visible instead of tidy.
         """
-        self.stopped = True
         if not self.queue.is_empty():
             raise Error("Error: found tasks after stop command")
         if (1 + len(self.free_streams)) != len(self.streams):
@@ -514,6 +613,7 @@ struct TGpuOneDeviceWorker(Movable):
         self.streams.clear()
         self.free_streams.clear()
         self.objects_to_free.clear()
+        self.stopped = True
 
     def reset_counters(mut self):
         """OURS, not theirs. Per-tree accounting: `structure_searcher` calls

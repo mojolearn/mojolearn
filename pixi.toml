@@ -1,0 +1,66 @@
+[workspace]
+authors = ["Andrew Hendel <ajhendel@gmail.com>"]
+channels = ["https://conda.modular.com/max", "conda-forge"]
+name = "mojolearn"
+platforms = ["osx-arm64", "linux-64", "linux-aarch64"]
+version = "0.1.0a1"
+
+# WHY THIS FILE APPEARED ON 2026-08-19, LATE.
+#
+# It did not exist. The repository had no manifest of any kind, so `mojo` was
+# not on PATH inside this directory and nothing here could be built from a
+# clean clone. Every build and every timing recorded in this repository so far
+# was produced by borrowing the SIBLING repository's environment, roughly
+#
+#     cd ../mojotrees && pixi run mojo run -I ../mojolearn ../mojolearn/probe_main.mojo
+#
+# which works only on a machine that happens to have mojotrees checked out
+# beside this one with its environment already solved. That is not a build.
+#
+# It also means `.github/workflows/gpu-validation.yml` could never have run.
+# Every one of its steps calls `pixi run mojo ...`, and on a runner with no
+# pixi.toml the first such step fails before it reaches a GPU. The workflow is
+# `workflow_dispatch` only and targets self-hosted runners that do not exist
+# yet, so nothing ever reported the failure. Read its jobs as UNVALIDATED
+# rather than as passing.
+#
+# Pins match what the sibling environment actually resolved to and what every
+# recorded result was therefore produced under, `mojo list` on 2026-08-19:
+# mojo 1.0.0, max 26.5.0. They are not aspirational.
+
+[dependencies]
+mojo = ">=1.0.0,<2"
+max = ">=26.5.0,<27"
+
+[tasks]
+# The whole correctness suite, end to end, on the GPU. This is the one command
+# that answers "does it still work". It builds and runs; there is no separate
+# build step to keep in sync.
+probe = "mojo run -I . probe_main.mojo"
+
+# The control plane, which is host-side and has its own `main()` rather than
+# a function `probe_main` could call, so it runs as its own task instead of
+# being folded in. Until 2026-08-19 neither of these had ever been compiled.
+check-gpu-lib = "mojo run -I . mojo_only/gpu_lib_check.mojo"
+check-gpu-lib-worker = "mojo run -I . mojo_only/gpu_lib_worker_check.mojo"
+
+# What the host toolchain actually resolved to. Worth recording beside any
+# number, because `--target-cpu` and `--target-features` default to the HOST,
+# so every `mojo run` above is already a native build and a result carries the
+# chip it was taken on whether or not anybody wrote it down.
+print-target = "mojo build --print-effective-target"
+
+# Elaborates every module, including ones no check imports, so it catches a
+# file that only compiles because nothing reaches it. Stricter than `probe`.
+build-pkg = "mkdir -p build && mojo precompile -I . ported -o build/ported.mojopkg"
+
+[feature.bench.dependencies]
+python = ">=3.11"
+numpy = "*"
+# The incumbent we are porting. `tools/catboost_reference.py` calls it to
+# produce the oracle values a check compares against, which is the only way a
+# port gets an answer it did not compute itself.
+catboost = ">=1.2"
+
+[environments]
+bench = ["bench"]

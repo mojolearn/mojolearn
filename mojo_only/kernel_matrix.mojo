@@ -116,14 +116,18 @@ struct KernelSpec(Copyable, Movable):
     var deterministic_flush: Bool
     """NUMERIC. Fixed-point integer flush instead of float `atomicAdd`.
 
-    Forced true on Apple whatever the mode asks for: Metal has no float
-    atomic add, so the alternative does not exist. See
-    `column_has_float_atomics`."""
+    The MODE's choice on every column. `FAST` takes CatBoost's float atomic
+    (`atomicAdd(dst + fold, val)`, `hist_binary.cu:60`,
+    `hist_half_byte.cu:47`, `hist_one_byte.cu:255`); `IDENTICAL` takes the
+    integer path, where addition is associative and the histogram does not
+    depend on which block lands first. See `column_has_float_atomics`."""
 
     var flush_forced_by_vendor: Bool
     """Whether `deterministic_flush` is the mode's choice or the vendor's
-    constraint, so a report can say "Apple is deterministic because Metal
-    cannot do otherwise" rather than implying the user asked for it."""
+    constraint. **No vendor forces it today** -- all three do float
+    `atomicAdd`. Kept so a column that genuinely cannot has somewhere to say
+    so, and so a report never implies the user asked for a flush the mode
+    did not choose."""
 
     def shared_bytes(self) -> Int:
         """What this spec asks of threadgroup memory."""
@@ -254,9 +258,11 @@ def spec_for(kernel: Int, device: Int, mode: NumericMode) raises -> KernelSpec:
             " full lane group"
         )
 
-    # The flush row, and the one place a VENDOR overrides a MODE. Asking for
-    # FAST on Apple cannot produce a float atomic, so the row is forced and
-    # the fact that it was forced is recorded beside it.
+    # The flush row. It is the one row a VENDOR could override a MODE on, and
+    # today NO VENDOR DOES: all three do float `atomicAdd`, so
+    # `vendor_forces_flush` is false everywhere and `flush` is the mode's
+    # answer. The override is kept because it is the honest shape of the
+    # row, and a column that genuinely lacked the instruction would need it.
     var vendor_forces_flush = not column_has_float_atomics(device)
     var flush = identical or vendor_forces_flush
 
@@ -413,25 +419,14 @@ def deterministic_flush_for[column: Int, identical: Bool]() -> Bool:
     not a configured value, which is the distinction `numerics.mojo` draws
     between a row a mode can pin and one it must replace.
 
-    ================== WHY THIS STILL RETURNS TRUE ==================
-    It should return `identical`, so that `FAST` takes CatBoost's float
-    atomic. Flipping it to that RIGHT NOW breaks the mixed tree: depth 4
-    drops from 16 non-empty leaves to 4.
-
-    The float atomic itself is fine (probed, exact). What it exposes is that
-    `block_hist` is zeroed in the FLAT `[leaf][stat][binFeature]` layout by
-    `zero_histograms_kernel`, while the histogram kernels write it in the
-    BLOCK layout `[group][leaf][stat][foldInGroup]` via `device_offset`.
-    Those coincide for ONE feature group and diverge for more. The
-    fixed-point path never noticed because it accumulates into its own
-    `acc_i32` buffer, which IS zeroed correctly, and only lands in
-    `block_hist` through `fixed_to_float_kernel`.
-
-    So the blocker is the ZEROING, not the atomic. Fix the zero to walk the
-    block layout, then return `identical` here and delete this block.
-    ================================================================
+    The float atomic needs its destination ZEROED, which is why CatBoost
+    clears the per-block scratch with `ZeroBuffer(blockHistograms, streamId)`
+    -- a whole-buffer `cudaMemsetAsync` sized by
+    `BlockHistogramsMapping(blockId, leavesCount, statsCount)`
+    (`split_properties_helper.cpp:1155-1157`, `:34-38`) -- rather than with
+    the indexed `ZeroHistogramsImpl` it uses on the final flat histogram.
     """
-    return True
+    return identical
 
 def replicas_for(hist_cells: Int) -> Int:
     """DELETED IN SPIRIT. Do not call this.

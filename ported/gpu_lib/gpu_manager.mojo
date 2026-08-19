@@ -110,19 +110,39 @@ struct TCudaManager(Movable):
         self.worker.stream_kernel(stream)
 
     def wait_complete(mut self) raises:
-        """Their `WaitComplete()` (`cuda_manager.h:239-241`). The only drain.
+        """Their `WaitComplete()` (`cuda_manager.h:239-241`), which is
+        `WaitComplete(GetActiveDevices())` (`cuda_manager.cpp:183-196`): one
+        `TCudaSingleDevice::WaitComplete()` per active device, then wait on
+        each future.
+
+        It drains every ACTIVE stream and nothing else
+        (`gpu_single_worker.h:194-200`), so calling it twice with no launch in
+        between costs one drain, not two.
         """
         self.worker.wait_complete()
 
     def barrier(mut self) raises:
         """Their `Barrier()` (`cuda_manager.h:235-237`), which is
-        `DefaultStream().Synchronize()`.
+        `DefaultStream().Synchronize()` and reaches
+        `TCudaSingleDevice::StreamSynchronize` per active device
+        (`cuda_manager.h:305-310`).
 
-        Their stream synchronize is a `TSyncStreamKernel` on that stream
-        followed by a `TWaitSubmitCommand` (`single_device.h:343-347`); the
-        effect is that the default stream is drained and nothing else is.
+        Their searcher calls this behind `if (!IsOnlyDefaultStream())`
+        (`split_properties_helper.cpp:1143`, `:1257`), a condition this port
+        can never satisfy; see the DEVIATION BLOCK in `gpu_base.mojo`. It is
+        ported anyway because `MakeSplit` calls the same drain unguarded
+        (`split_properties_helper.cpp:961`).
         """
-        self.worker.sync_stream(0)
+        self.stream_synchronize(DEFAULT_STREAM)
+
+    def stream_synchronize(mut self, stream: TCudaStream) raises:
+        """Their `TComputationStream::Synchronize()`
+        (`cuda_manager.h:305-310`), which is
+        `Devices[dev]->StreamSynchronize(At(dev))` for each active device.
+        This is what `NCudaLib::GetCudaManager().DefaultStream().Synchronize()`
+        runs at `split_properties_helper.cpp:961`, once per split.
+        """
+        self.worker.stream_synchronize(stream)
 
     def get_profiler(self) -> TCudaProfiler:
         """Their `GetProfiler()` (`cuda_manager.h:253-256`).
@@ -146,15 +166,19 @@ struct TCudaManager(Movable):
         """Their `Stop()` (`cuda_manager.cpp:213-226`).
 
         Theirs is `FreeComputationStreams(); WaitComplete(); FreeDevices();
-        ResetProfiler(true)`. `FreeComputationStreams`
-        (`cuda_manager.cpp:160-166`) enqueues a FreeStream command per stream
-        and asserts every one was already handed back; ours ran those commands
-        synchronously at each `free_stream`, so what is left of that step is
-        the assertion, and `TGpuOneDeviceWorker.stop` is where it lives
+        ResetProfiler(true)` (`cuda_manager.cpp:211-224`).
+        `FreeComputationStreams` (`cuda_manager.cpp:159-166`) enqueues a
+        FreeStream command per stream and asserts every one was already handed
+        back; ours ran those commands synchronously at each `free_stream`, so
+        what is left of that step is the assertion, and
+        `TGpuOneDeviceWorker._finish_run` is where it lives
         (`gpu_single_worker.cpp:171-179`). `FreeDevices` has no counterpart:
         the `DeviceContext` belongs to the caller.
+
+        `worker.stop()` is their StopWorker case plus that post-loop, so the
+        drain their `WaitComplete()` does is inside it and is not repeated
+        here (`gpu_single_worker.cpp:134-138`).
         """
-        self.wait_complete()
         self.worker.stop()
         self.reset_profiler(True)
 

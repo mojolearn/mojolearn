@@ -73,7 +73,7 @@ part of an already-ported file and is not counted again.
 | `cuda_buffer_helpers/all_reduce.h`, `reduce_scatter.h`, `buffer_resharding.h` | collectives over a buffer | degenerate at one device, but they are how `TCudaBuffer` moves data |
 | `read_and_write_helpers.h` | `Read`/`Write` over a vector of buffers | needs `cuda_buffer.h` |
 | `mapping.h`'s `Transform`, `Apply`, `At`, `NonEmptyDevices` (not counted; the file is ported) | callback and metadata halves of a mapping | their only caller is `TCudaBuffer` |
-| `tasks_impl/kernel_task.h` (341) | `IGpuKernelTask`, `PrepareExec` temp memory | our launches carry no temp-memory contract |
+| `tasks_impl/kernel_task.h` (341) | `IGpuKernelTask`, `PrepareExec` temp memory | our launches carry no temp-memory contract. One struct of it IS ported: `TSyncStreamKernel` (`:313-317`), whose whole body is `stream.Synchronize()`, is what `TGpuOneDeviceWorker.stream_synchronize` runs between its two commands. Its feeder `TempMemoryAllocatedObjects` (`gpu_single_worker.h:162`, drained at `gpu_single_worker.cpp:55-58`) has no producer here and is named in that file rather than written |
 | `tasks_impl/memory_copy_tasks.h` (504), `memory_copy_staged_operation.h` | async copies as stream tasks | our copies are still bare `enqueue_copy` |
 | `tasks_impl/cpu_func.h`, `host_tasks.h` | the host-task bodies the `HostTask` case runs | our `HostTask` case does the blocking guard and the caller runs the body |
 | `future/future.h`, `local_promise_future.h`, `promise_factory.h` | how a command returns a value to the host | `RequestStream` writes its answer into the command instead |
@@ -93,6 +93,23 @@ Apple there is one stream: `DeviceContext.stream()` raises `Metal stream not
 implemented` (`device_context.mojo:2172`), measured 2026-08-19. Ordering
 across streams is not a thing that can be under-delivered here, it is a thing
 with no referent. All three light up on CUDA and HIP with no caller change.
+
+What that costs, read out of their tree rather than guessed. The only part of
+the searcher that asks for more than one stream is the by-blocks histogram,
+and it asks conditionally: `config.StreamCount = statCount <= 2 ? 1 : 3`
+(`compute_by_blocks_helper.cpp:386`), and `TSplitPropertiesHelper` requests
+streams only when that count exceeds one, otherwise it holds the DEFAULT
+stream (`split_properties_helper.h:88-95`). So at `statCount <= 2`, which is
+every single-output regression and binary classification run, CatBoost is
+single stream too and we lose nothing. Above it we lose a three-way overlap.
+
+Their two cross-stream barriers in that loop are themselves guarded by
+`if (!IsOnlyDefaultStream())` (`split_properties_helper.cpp:1143`, `:1257`,
+with the predicate at `split_properties_helper.h:128-130`), a condition this
+port can never satisfy, so both barriers are unreachable here by their own
+test rather than by our choice. `TCudaManager.barrier` is ported anyway,
+because `MakeSplit` runs the same drain unguarded once per split
+(`split_properties_helper.cpp:961`).
 
 `cuda_base.h`'s `TCudaDeviceProperties` and `NCudaHelpers`
 (`cuda_base.h:262-320`) are the same shape of problem, and like the `mapping.h`

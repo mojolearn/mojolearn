@@ -434,15 +434,16 @@ def half_byte_hist_kernel(
                 # threw the rest away. Replication is what fills the machine,
                 # so this was not a corner case.
                 #
-                # DEVIATION BLOCK
-                # ---------------
+                # DEVIATION BLOCK, and it applies to `NUMERIC_IDENTICAL` only
+                # ----------------------------------------------------------
                 # THEIRS: `atomicAdd` on a float.
                 # OURS:   `val * fixed_scale` quantized to Int32 and summed
                 #         with an integer atomic.
-                # WHY:    Metal has no float atomic add. Integer addition is
-                #         also associative, so unlike their float atomic the
-                #         result does not depend on which block lands first
-                #         and the histogram is reproducible run to run.
+                # WHY:    integer addition is associative, so unlike their
+                #         float atomic the result does not depend on which
+                #         block lands first and the histogram is reproducible
+                #         run to run. `NUMERIC_FAST` takes their float atomic
+                #         unchanged.
                 #
                 # Same shape as `hist_binary.mojo` and `hist_one_byte.mojo`,
                 # including the address arithmetic: the accumulator is the
@@ -450,10 +451,9 @@ def half_byte_hist_kernel(
                 # `device_offset` and keys on the DENSE `blockIdx.y` rather
                 # than on `partIds[blockIdx.y]`.
                 #
-                # THE ROW, read from the matrix rather than assumed. On Apple
-                # it is forced true because Metal has no float atomic; on
-                # NVIDIA and AMD it follows the mode. Comptime, because the
-                # two flushes are different code and not a configured value,
+                # THE ROW, read from the matrix rather than assumed. It
+                # follows the MODE on every vendor. Comptime, because the two
+                # flushes are different code and not a configured value,
                 # which is the distinction numerics.mojo draws.
                 comptime det = deterministic_flush_for[
                     TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
@@ -858,15 +858,16 @@ def half_byte_hist_gather_kernel(
                 # threw the rest away. Replication is what fills the machine,
                 # so this was not a corner case.
                 #
-                # DEVIATION BLOCK
-                # ---------------
+                # DEVIATION BLOCK, and it applies to `NUMERIC_IDENTICAL` only
+                # ----------------------------------------------------------
                 # THEIRS: `atomicAdd` on a float.
                 # OURS:   `val * fixed_scale` quantized to Int32 and summed
                 #         with an integer atomic.
-                # WHY:    Metal has no float atomic add. Integer addition is
-                #         also associative, so unlike their float atomic the
-                #         result does not depend on which block lands first
-                #         and the histogram is reproducible run to run.
+                # WHY:    integer addition is associative, so unlike their
+                #         float atomic the result does not depend on which
+                #         block lands first and the histogram is reproducible
+                #         run to run. `NUMERIC_FAST` takes their float atomic
+                #         unchanged.
                 #
                 # Same shape as `hist_binary.mojo` and `hist_one_byte.mojo`,
                 # including the address arithmetic: the accumulator is the
@@ -874,10 +875,9 @@ def half_byte_hist_gather_kernel(
                 # `device_offset` and keys on the DENSE `blockIdx.y` rather
                 # than on `partIds[blockIdx.y]`.
                 #
-                # THE ROW, read from the matrix rather than assumed. On Apple
-                # it is forced true because Metal has no float atomic; on
-                # NVIDIA and AMD it follows the mode. Comptime, because the
-                # two flushes are different code and not a configured value,
+                # THE ROW, read from the matrix rather than assumed. It
+                # follows the MODE on every vendor. Comptime, because the two
+                # flushes are different code and not a configured value,
                 # which is the distinction numerics.mojo draws.
                 comptime det = deterministic_flush_for[
                     TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL

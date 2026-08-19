@@ -1,15 +1,39 @@
 # Porting rules
 
-Andrew, 2026-08-19. These are binding. The exercise is **take CatBoost's
-code and CatBoost's algorithms and port them to Mojo.** Nothing else.
+Andrew, 2026-08-19. These are binding. The exercise is **take an incumbent
+library's code and its algorithms and port them to Mojo.** Nothing else.
 
-## 0. The charter
+## 0a. Where their source is
+
+Every rule below says "read their file". These are the files. Clone them if
+the directory is missing; a session without them is a session guessing.
+
+| upstream | checkout | pin | sections it governs |
+|---|---|---|---|
+| CatBoost | `/private/tmp/catboost-src` | `54a8143a` | root (boosting) |
+| cuVS | `/Users/andrewhendel/CascadeProjects/upstream/cuvs` | `94c2819` | `cluster/`, `neighbors/` |
+| cuML | `/Users/andrewhendel/CascadeProjects/upstream/cuml` | `00094f7` | `dbscan/`, `decomposition/`, `glm/` |
+| RAFT | `/Users/andrewhendel/CascadeProjects/upstream/raft` | `661a3b8` | primitives under all of the above |
+
+The three RAPIDS checkouts were cloned on 2026-08-19 and **did not exist before
+that date.** Every port written before then was written from a recollection of
+their code rather than from their code, and the DBSCAN neighborhood step is the
+proof: it was recorded as "ported the SHAPE their runner depends on" when their
+actual kernel is fused, unexpanded, and materializes nothing. Treat any port
+predating the clone as unverified against its own upstream.
+
+Clone recipe (blobless, shallow, minutes not hours):
+
+    git clone --filter=blob:none --depth 1 --single-branch \
+      --branch branch-25.08 https://github.com/rapidsai/<repo>.git <repo>
+
+## 0b. The charter
 
 **COPY. DO NOT IMPROVE.**
 
-We are not designing a GBDT. CatBoost already did that, on GPUs, with people
-who measured. Every design question has an answer already sitting in
-`/private/tmp/catboost-src` and the answer is whatever they wrote.
+We are not designing these algorithms. CatBoost, cuML and cuVS already did,
+on GPUs, with people who measured. Every design question has an answer already
+sitting in one of the checkouts above and the answer is whatever they wrote.
 
 A file in this tree is exactly one of two things:
 
@@ -18,7 +42,7 @@ A file in this tree is exactly one of two things:
 
 There is no third category of "good idea worth adopting."
 
-## 0b. ASSUME OUR CODE IS BROKEN
+## 0c. ASSUME OUR CODE IS BROKEN
 
 Andrew, 2026-08-19. When our code and theirs disagree, **theirs is right.**
 When a measurement of ours disagrees with their design, suspect the
@@ -37,8 +61,8 @@ This is not deference for its own sake. It is the record:
 | the histogram loop was transliterated | they load 4 elements per thread, we loaded 1 |
 | a threadgroup barrier was the only option | they sync a warp, and `syncwarp` exists |
 
-Seven, in one session. Every one found by reading `/private/tmp/catboost-src`,
-none by reasoning about our own code. The two "optimisations" we invented
+Seven, in one session. Every one found by reading their checkout, none by
+reasoning about our own code. The two "optimisations" we invented
 (`replicas_for`, the widened barrier) were both worse than the thing they
 replaced.
 
@@ -58,7 +82,7 @@ annotate it.
 
 ## 2. The control plane is code too, and it gets ported like everything else
 
-`catboost/cuda/cuda_lib/` is 47 headers of scheduler and it is as much a part
+`catboost/cuda/cuda_lib/` is 57 headers of scheduler and it is as much a part
 of CatBoost as the histogram kernels. It is ported into `ported/gpu_lib/`.
 
 **If they do something on the GPU in the control plane, we do it on the GPU.**

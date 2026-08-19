@@ -24,10 +24,19 @@ THREE ARMS, AND THE THIRD IS THE POINT
    partitions large enough for it take the Int32 flush. Must agree with the
    same host tally, within the quantum the fixed point costs.
 3. SABOTAGE. The same many-block launch with a deliberately unbounded scale.
-   It MUST come back wrong. If it does not, arm 2 never reached the Int32
-   flush and arms 1 and 2 agreeing proves nothing -- which is exactly the
-   state this file exists to end. A check that cannot fail on a broken
-   kernel is a check that passed a broken kernel.
+   Its expectation FOLLOWS THE BUILD, because the two flushes fail in
+   opposite directions. Where the flush is fixed point the arm must come
+   back WRONG, since nothing else here separates a reached Int32 flush from
+   an unreached one. Where the flush is CatBoost's float `atomicAdd` the
+   scale is dead input and the arm must move NOTHING, which is the positive
+   statement that the Int32 path is gone rather than merely quiet; reach
+   then rests on arm 2, and arm 2 earns it, because a plain store in place
+   of the atomic keeps one block's partial and drops three.
+
+   A check that cannot fail on a broken kernel is a check that passed a
+   broken kernel. A check that fails on a CORRECT kernel because it asserts
+   dead code is live is the same defect wearing the other sign, and this
+   file shipped that version for exactly one commit.
 
 The bins are HASHED per row and per feature and the stats are hashed per
 row, so a cell's expected value differs from its neighbour's. A uniform
@@ -55,7 +64,19 @@ from ported.methods.greedy_subsets_searcher.greedy_search_helper import (
 )
 from ported.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
     BLOCK_SIZE,
+    BUILD_MODE,
+    TARGET_COLUMN,
 )
+from mojo_only.kernel_matrix import deterministic_flush_for
+from mojo_only.numerics import NUMERIC_IDENTICAL
+
+#: WHICH FLUSH THIS BUILD ACTUALLY COMPILED, read from the same expression the
+#: kernel branches on (`hist_half_byte.mojo`, both writeback sites). Arm 3 has
+#: to know it, because the two flushes fail in OPPOSITE directions and a
+#: sabotage aimed at the wrong one proves nothing.
+comptime FLUSH_IS_FIXED_POINT = deterministic_flush_for[
+    TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
+]()
 
 
 #: `THist::BlockLoadSize(ECIndexLoadType::Direct)`, i.e.
@@ -355,19 +376,62 @@ def check_replicated_half_byte() raises:
             " not summing the partials correctly, or the scale handed to it"
             " does not bound them"
         )
-    if wrong_broken == 0:
-        raise Error(
-            "THE SABOTAGE ARM PASSED. An unbounded `fixed_scale` must"
-            " overflow the Int32 accumulator and produce wrong cells; that it"
-            " did not means the replicated launch never took the Int32 path"
-            " at all, and the agreement between the other two arms is"
-            " vacuous. This check is not reaching what it claims to check"
+    # ================ ARM 3 DEPENDS ON WHICH FLUSH COMPILED ================
+    # `fixed_scale` only reaches arithmetic on the Int32 path. Under the float
+    # atomic it is loaded and never used, so an unbounded value is inert BY
+    # CONSTRUCTION and "the sabotage moved nothing" is the CORRECT result
+    # rather than a missing reader. Asserting movement in that build asserts
+    # that dead code is live, which is how this check failed the moment the
+    # flush row was restored to CatBoost's `atomicAdd`.
+    #
+    # So each build gets the sabotage that can actually bite it:
+    #
+    #   FIXED POINT  the unbounded scale MUST move cells. Nothing else in
+    #                this file distinguishes a reached Int32 flush from an
+    #                unreached one.
+    #   FLOAT ATOMIC the unbounded scale must move NOTHING, which is the
+    #                positive statement that the Int32 path is genuinely gone
+    #                and not merely quiet. Reach then comes from arm 2 on its
+    #                own, and arm 2 is a real reach test here: with four
+    #                blocks landing on one leaf's cells, a plain store in
+    #                place of `atomicAdd` keeps ONE block's partial and drops
+    #                the rest, so arm 2 fails. That is not hypothetical. It
+    #                is the defect that was sitting in `hist_one_byte.mojo`
+    #                at both writeback sites, unreachable only because this
+    #                row was pinned, and it surfaced the instant it was not.
+    # =======================================================================
+    @parameter
+    if FLUSH_IS_FIXED_POINT:
+        if wrong_broken == 0:
+            raise Error(
+                "THE SABOTAGE ARM PASSED. An unbounded `fixed_scale` must"
+                " overflow the Int32 accumulator and produce wrong cells;"
+                " that it did not means the replicated launch never took the"
+                " Int32 path at all, and the agreement between the other two"
+                " arms is vacuous. This check is not reaching what it claims"
+                " to check"
+            )
+        print(
+            "  replicated half-byte histogram matches the host tally, and"
+            " the sabotage arm moves", wrong_broken,
+            "cells, so the Int32 flush is reached",
         )
-
-    print(
-        "  replicated half-byte histogram matches the host tally, and the"
-        " sabotage arm moves", wrong_broken, "cells, so the path is reached"
-    )
+    else:
+        if wrong_broken != 0:
+            raise Error(
+                String("the unbounded `fixed_scale` moved ")
+                + String(wrong_broken)
+                + " cells in a build whose flush is CatBoost's float"
+                " `atomicAdd` (`hist_half_byte.cu:45-51`). Nothing should"
+                " read `fixed_scale` on that path, so a value that changes"
+                " the answer means the Int32 accumulator is still live"
+                " somewhere it should not be"
+            )
+        print(
+            "  replicated half-byte histogram matches the host tally on"
+            " CatBoost's float atomic, and an unbounded `fixed_scale` moves"
+            " nothing, so the Int32 path is gone rather than quiet"
+        )
 
 
 def replicas_for_check(

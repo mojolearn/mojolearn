@@ -46,6 +46,15 @@ device exists.
 (`mapping.h:63-72`) returns a `TDevicesList`. All four have exactly one class
 of caller, `TCudaBuffer` (`cuda_buffer.h`), which is not ported. See
 NOT_PORTED.md.
+
+**4. `TSingleMapping`'s slices constructor is not ported.** Theirs
+(`mapping.h:98-112`) takes one `TSlice` per device, CB_ENSUREs that at most
+one is non-empty, and adopts that device. At one device it is
+`TSingleMapping(0, slices[0].Size(), size)` and adds nothing that the
+two-argument constructor does not already do; `TSingleMappingBuilder` below is
+their same rule spelled the way their callers actually reach it
+(`mapping.h:396-403`, `CreateMapping`). It comes back the day a second device
+does.
 ======================================================================
 """
 

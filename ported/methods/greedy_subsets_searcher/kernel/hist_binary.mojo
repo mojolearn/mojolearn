@@ -423,21 +423,19 @@ def binary_hist_kernel(
                 # what fills the machine, makes every block hold a PARTIAL
                 # histogram, and partials must be summed.
                 #
-                # Metal has no float atomic add, so the partial sum goes
-                # through the FIXED-POINT accumulator: `val * scale` into an
-                # Int32 with an integer atomic, which Metal does have.
-                # Integer addition is associative, so the result does not
-                # depend on which block lands first, and the histogram is
-                # reproducible run to run rather than merely correct. That is
-                # the property CatBoost's float atomic gives up.
-                # THE ROW, read from the matrix rather than assumed. On
-                # Apple it is forced true because Metal has no float atomic;
-                # on NVIDIA and AMD it follows the mode.
-                # THE ROW, read from the matrix rather than assumed. On
-                # Apple it is forced true because Metal has no float atomic;
-                # on NVIDIA and AMD it follows the mode. Comptime, because
-                # the two flushes are different code and not a configured
-                # value, which is the distinction numerics.mojo draws.
+                # `NUMERIC_IDENTICAL` sends the partial sum through the
+                # FIXED-POINT accumulator instead: `val * scale` into an
+                # Int32 with an integer atomic. Integer addition is
+                # associative, so the result does not depend on which block
+                # lands first, and the histogram is reproducible run to run
+                # rather than merely correct. That is the property CatBoost's
+                # float atomic gives up, and it is the only reason the
+                # integer path exists.
+                #
+                # THE ROW, read from the matrix rather than assumed. It
+                # follows the MODE on every vendor. Comptime, because the two
+                # flushes are different code and not a configured value,
+                # which is the distinction numerics.mojo draws.
                 comptime det = deterministic_flush_for[
                     TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
                 ]()
@@ -445,9 +443,9 @@ def binary_hist_kernel(
                 @parameter
                 if det:
                     if active_block_count > 1:
-                        # Replicated blocks hold PARTIAL histograms. Metal
-                        # has no float atomic, so partials sum as Int32
-                        # through an integer atomic, which is associative and
+                        # Replicated blocks hold PARTIAL histograms, and
+                        # under `NUMERIC_IDENTICAL` they sum as Int32 through
+                        # an integer atomic, which is associative and
                         # therefore reproducible run to run.
                         var q = Int32(val * fixed_scale)
                         # THE ACCUMULATOR MIRRORS `bin_sums` EXACTLY.
@@ -874,21 +872,19 @@ def binary_hist_gather_kernel(
                 # what fills the machine, makes every block hold a PARTIAL
                 # histogram, and partials must be summed.
                 #
-                # Metal has no float atomic add, so the partial sum goes
-                # through the FIXED-POINT accumulator: `val * scale` into an
-                # Int32 with an integer atomic, which Metal does have.
-                # Integer addition is associative, so the result does not
-                # depend on which block lands first, and the histogram is
-                # reproducible run to run rather than merely correct. That is
-                # the property CatBoost's float atomic gives up.
-                # THE ROW, read from the matrix rather than assumed. On
-                # Apple it is forced true because Metal has no float atomic;
-                # on NVIDIA and AMD it follows the mode.
-                # THE ROW, read from the matrix rather than assumed. On
-                # Apple it is forced true because Metal has no float atomic;
-                # on NVIDIA and AMD it follows the mode. Comptime, because
-                # the two flushes are different code and not a configured
-                # value, which is the distinction numerics.mojo draws.
+                # `NUMERIC_IDENTICAL` sends the partial sum through the
+                # FIXED-POINT accumulator instead: `val * scale` into an
+                # Int32 with an integer atomic. Integer addition is
+                # associative, so the result does not depend on which block
+                # lands first, and the histogram is reproducible run to run
+                # rather than merely correct. That is the property CatBoost's
+                # float atomic gives up, and it is the only reason the
+                # integer path exists.
+                #
+                # THE ROW, read from the matrix rather than assumed. It
+                # follows the MODE on every vendor. Comptime, because the two
+                # flushes are different code and not a configured value,
+                # which is the distinction numerics.mojo draws.
                 comptime det = deterministic_flush_for[
                     TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
                 ]()
@@ -896,9 +892,9 @@ def binary_hist_gather_kernel(
                 @parameter
                 if det:
                     if active_block_count > 1:
-                        # Replicated blocks hold PARTIAL histograms. Metal
-                        # has no float atomic, so partials sum as Int32
-                        # through an integer atomic, which is associative and
+                        # Replicated blocks hold PARTIAL histograms, and
+                        # under `NUMERIC_IDENTICAL` they sum as Int32 through
+                        # an integer atomic, which is associative and
                         # therefore reproducible run to run.
                         var q = Int32(val * fixed_scale)
                         # THE ACCUMULATOR MIRRORS `bin_sums` EXACTLY.
