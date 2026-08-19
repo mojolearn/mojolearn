@@ -31,6 +31,10 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
+from mojo_only.kernel_matrix import (
+    TARGET_COLUMN,
+    requires_uniform_iteration_for,
+)
 from catboost.cuda.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
     BLOCK_SIZE,
     HIST_SIZE,
@@ -157,10 +161,43 @@ def half_byte_hist_kernel(
     var base = p_offset + global_warp_id * entries_per_warp + local_idx
     var iter_count = (remaining - local_idx + stripe_size - 1) // stripe_size
 
+    # THE BARRIER MUST NOT DIVERGE. The requirement is a MATRIX ROW,
+    # `requires_uniform_iteration_for`, not a local decision, so that when
+    # Mojo exposes lane primitives the kernels follow the table instead of
+    # each carrying its own workaround.
+    comptime uniform = requires_uniform_iteration_for[TARGET_COLUMN]()
+
+    @parameter
+    if not uniform:
+        # Deliberately unimplemented rather than silently wrong: the literal
+        # CatBoost loop needs a lane-local sync, and reaching here means the
+        # matrix claims one exists. Write that path before flipping the row.
+        return
+
+    # This is where the port stops being a transliteration. CatBoost syncs a `tiled_partition<8>`, which is
+    # WARP-LOCAL, so warps with different iteration counts never wait on each
+    # other. Mojo 1.0 has only the threadgroup-wide `barrier()`, and a
+    # threadgroup barrier that some warps reach and others skip is undefined
+    # behavior.
+    #
+    # It bites immediately rather than rarely: a 64-row partition over a
+    # 512-thread block gives warp 0 one iteration and warps 1 to 15 zero, so
+    # the first fifteen sixteenths of the block walk past barriers warp 0 is
+    # waiting on. Measured result before this fix: every feature's histogram
+    # came back 0.0.
+    #
+    # So every thread runs the SAME iteration count and the ones with no rows
+    # contribute nothing. `block.max` is not available here, so the count is
+    # derived from the partition size, which every thread already has.
+    var max_iters = (p_size + stripe_size - 1) // stripe_size
+    if max_iters < 1:
+        max_iters = 1
+
     var b_ptr = bins_p + base
     var s_ptr = stats_p + base
 
-    for _ in range(iter_count):
+    for it in range(max_iters):
+        var active = it < iter_count
         # Their two unrolled loops: gather the batch, then add it. Kept in
         # that order because it is what keeps the loads in flight.
         var local_bins = InlineArray[UInt32, UNROLL](fill=0)
@@ -168,11 +205,15 @@ def half_byte_hist_kernel(
 
         @parameter
         for k in range(UNROLL):
-            local_bins[k] = b_ptr.unsafe_load(LANE_WIDTH * k)
-
-        @parameter
-        for k in range(UNROLL):
-            local_stats[k] = s_ptr.unsafe_load(LANE_WIDTH * k)
+            if active and base + it * stripe_size + LANE_WIDTH * k < p_offset + p_size:
+                local_bins[k] = b_ptr.unsafe_load(LANE_WIDTH * k)
+                local_stats[k] = s_ptr.unsafe_load(LANE_WIDTH * k)
+            else:
+                # No row: contribute zero. The slot it lands in is harmless
+                # because the stat is 0.0, and it keeps this lane inside every
+                # barrier below.
+                local_bins[k] = UInt32(0)
+                local_stats[k] = Float32(0.0)
 
         # `AddPoint`, inlined. The 8 lanes of a tile touch 8 distinct slots
         # per iteration (see `add_point_slot`), so the update is a plain

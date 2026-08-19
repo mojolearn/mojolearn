@@ -194,3 +194,28 @@ the kernel indexed a one-element partition array out of bounds,
 Every histogram cell read 0.0 with nothing wrong in the kernel.
 
 One staging buffer per copy, or synchronize between them.
+
+## 13. Derive-by-copy does not propagate fixes. It already bit once.
+
+`hist_half_byte.mojo` was derived from `hist_binary.mojo` by textual copy,
+because the two differ in only `GroupSize` and the writeback. Then item 11's
+divergent-barrier bug was fixed in the binary file, and the half-byte file
+kept the broken loop: a grep for the fix found seven references in one and
+ZERO in the other. It would have produced silently wrong histograms for every
+feature with 2 to 15 folds.
+
+**CatBoost does not have this problem and the reason is instructive.** Their
+three histogram kernels share ONE loop, `ComputeSplitPropertiesDirectLoadsImpl
+<THist, blockSize, GroupSize>`, instantiated per policy. The loop exists once;
+only the accumulator type and the writeback differ. A fix lands in one place.
+
+We cannot do that yet, and the blocker is item 10: Mojo cannot pass a
+shared-memory pointer across a function boundary without a concrete origin,
+so the loop had to be inlined into each kernel. The duplication is a
+CONSEQUENCE of that language limit, not a choice, and it is the second cost
+that limit has imposed after the accumulator split.
+
+Until it can be unified, treat the two files as one: any change to the loop
+in either must be applied to both in the same commit, and the launch probe
+must exercise both. The right fix is a comptime-parameterized loop shared the
+way CatBoost's template shares it, once shared pointers can cross a boundary.
