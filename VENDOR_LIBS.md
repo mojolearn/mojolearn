@@ -43,10 +43,42 @@ Grepped from their tree, `cub::|thrust::|cublas|cusolver`:
 is marked `replaced` or `partial+replaced` in `PORTED_MAP.tsv`, which is how
 they were found.
 
-## The order to fix them in
+## `SortPairs` -> `nn.argsort`: DO NOT. Measured and refuted, 2026-08-19
 
-1. `split_points.cu`'s `SortPairs` -> `nn.argsort.argsort`. It is the largest
-   hand-written block in the tree and it sits in the per-level critical path.
+This looked like the obvious first swap and it is the wrong one, for two
+independent reasons.
+
+**1. They sort ONE BIT.** `split_points.cu:676-685`:
+
+    cub::DeviceRadixSort::SortPairs<bool, ui32>(..., part.Size,
+                                                0,   // begin_bit
+                                                1,   // end_bit
+                                                stream);
+
+`begin_bit=0, end_bit=1` is a SINGLE radix pass, which is a stable partition
+by a boolean, O(n). Our three kernels -- count chunks, scan chunks, scatter
+-- are precisely that. `nn.argsort` is a full argsort over a 32-bit key and
+is not segmented, so using it here means several radix passes and a composite
+key to fake the segments. It would be slower AND less faithful: the primitive
+they call and the primitive we would call are not the same primitive.
+
+**2. It is under a tenth of the time.** Phase timings at 800k rows:
+
+    histogram alone           2.199 ms   (at only 32 features)
+    stable partition alone    0.376 ms
+    the other six phases      1.381 ms
+
+The partition is about 9.5% of a level at 32 features, and its share FALLS as
+features grow because it does not scale with them while the histogram does.
+At the 100-feature benchmark it is a rounding error.
+
+**The histogram is the target.** Within it, the barrier count: their
+`AddPoint` syncs a `tiled_partition<32>` and ours uses a threadgroup
+`barrier()`, which at 8-bit features is 4 features x 8 passes = 32
+threadgroup barriers per point. No vendor call fixes that; it needs a
+warp-level sync that Mojo does not currently expose.
+
+## The order to fix the rest in
 2. `partitions_reduce` -> whatever ships for segmented reduce, once the
    search above is finished.
 3. The two scans -> `nn.cumsum.cumsum`.

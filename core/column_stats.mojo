@@ -255,3 +255,21 @@ def diagonal_to_vector_kernel(
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < n:
         out_v.unsafe_store(i, a.unsafe_load(i * n + i))
+
+
+def scale_in_place_kernel(
+    a: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    scale_in: Float32,
+):
+    """Apply cuBLAS's `alpha` after the fact.
+
+    `raft::linalg::gemm` takes `alpha` and folds the scale into the product.
+    MAX's `matmul` has no alpha argument, so the `1 / (n_rows - 1)` that turns
+    a Gram matrix into a covariance is a separate pass over `n_cols^2`
+    elements. That is a deviation in launch count, not in arithmetic, and it
+    is tiny: the product is O(rows * cols^2) and this is O(cols^2).
+    """
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in):
+        a.unsafe_store(i, a.unsafe_load(i) * scale_in)

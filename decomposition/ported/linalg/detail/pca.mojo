@@ -44,18 +44,14 @@ the same convention, which is what makes the two comparable at all.
 from std.math import sqrt
 from max.gpu.host import DeviceBuffer, DeviceContext
 
+from cluster.mojo_only.reduce_by_key import copy_f32_kernel
+from core.gemm import gemm_nt, gemm_tn
 from core.column_stats import (
     COV_TILE,
     STATS_TPB,
     column_mean_kernel,
-    covariance_kernel,
+    scale_in_place_kernel,
     shift_columns_kernel,
-)
-from core.gemm import (
-    GEMM_MBLK,
-    GEMM_NBLK,
-    GEMM_THREADS,
-    gemm_nt_kernel,
 )
 from decomposition.mojo_only.jacobi_eigh import jacobi_eigh
 from decomposition.mojo_only.jacobi_eigh_device import (
@@ -82,6 +78,7 @@ struct PCAResult(Movable):
 def compute_covariance(
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32],
+    mut x_alias: DeviceBuffer[DType.float32],
     mut mu: DeviceBuffer[DType.float32],
     mut cov: DeviceBuffer[DType.float32],
     n_rows: Int,
@@ -107,18 +104,20 @@ def compute_covariance(
         grid_dim=((cells + 255) // 256, 1, 1),
         block_dim=(256, 1, 1),
     )
-    ctx.enqueue_function[covariance_kernel](
+    # `raft::stats::cov` is a GEMM with `CUBLAS_OP_T, CUBLAS_OP_N`, so it goes
+    # through the same tuned matmul as everything else. This was the SECOND
+    # contraction-shaped kernel in `core/` and it is why PCA did not move for
+    # four benchmark rounds while the other one was being tuned.
+    #
+    # MAX's matmul has no `alpha`, so cuBLAS's scale becomes its own pass over
+    # `n_cols^2` elements. A deviation in launch count, not arithmetic.
+    gemm_tn(ctx, cov, x, x_alias, n_cols, n_cols, n_rows)
+    ctx.enqueue_function[scale_in_place_kernel](
         cov.unsafe_ptr(),
-        x.unsafe_ptr(),
-        Int32(n_rows),
-        Int32(n_cols),
+        Int32(n_cols * n_cols),
         Float32(1.0) / Float32(n_rows - 1),
-        grid_dim=(
-            (n_cols + COV_TILE - 1) // COV_TILE,
-            (n_cols + COV_TILE - 1) // COV_TILE,
-            1,
-        ),
-        block_dim=(COV_TILE, COV_TILE, 1),
+        grid_dim=((n_cols * n_cols + 255) // 256, 1, 1),
+        block_dim=(256, 1, 1),
     )
     if restore_input:
         # `raft::stats::meanAdd`, `detail/pca.cuh:186`. Do not drop this.
@@ -137,6 +136,7 @@ def compute_covariance(
 def pca_fit(
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32],
+    mut x_alias: DeviceBuffer[DType.float32],
     mut mu: DeviceBuffer[DType.float32],
     mut cov: DeviceBuffer[DType.float32],
     n_rows: Int,
@@ -161,7 +161,16 @@ def pca_fit(
     if n_components > n_cols:
         raise Error("n_components cannot exceed n_cols")
 
-    compute_covariance(ctx, x, mu, cov, n_rows, n_cols, restore_input)
+    # Mojo refuses one buffer as two mutable kernel arguments (PORTING.md 24),
+    # and X^T X names X twice, so the caller supplies an aliased copy.
+    ctx.enqueue_function[copy_f32_kernel](
+        x_alias.unsafe_ptr(),
+        x.unsafe_ptr(),
+        Int32(n_rows * n_cols),
+        grid_dim=((n_rows * n_cols + 255) // 256, 1, 1),
+        block_dim=(256, 1, 1),
+    )
+    compute_covariance(ctx, x, x_alias, mu, cov, n_rows, n_cols, restore_input)
 
     return eig_and_truncate(
         ctx, cov, n_cols, n_components, n_rows - 1
@@ -309,19 +318,14 @@ def pca_transform(
         grid_dim=((cells + 255) // 256, 1, 1),
         block_dim=(256, 1, 1),
     )
-    ctx.enqueue_function[gemm_nt_kernel](
-        out.unsafe_ptr(),
-        x.unsafe_ptr(),
-        components.unsafe_ptr(),
-        Int32(n_rows),
-        Int32(n_components),
-        Int32(n_cols),
-        grid_dim=(
-                (n_components + GEMM_NBLK - 1) // GEMM_NBLK,
-                (n_rows + GEMM_MBLK - 1) // GEMM_MBLK,
-                1,
-            ),
-            block_dim=(GEMM_THREADS, 1, 1),
+    gemm_nt(
+        ctx,
+        out,
+        x,
+        components,
+        n_rows,
+        n_components,
+        n_cols,
     )
     ctx.enqueue_function[shift_columns_kernel](
         x.unsafe_ptr(),

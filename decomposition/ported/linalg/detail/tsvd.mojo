@@ -24,7 +24,8 @@ exist.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from core.column_stats import COV_TILE, covariance_kernel
+from cluster.mojo_only.reduce_by_key import copy_f32_kernel
+from core.gemm import gemm_tn
 from decomposition.ported.linalg.detail.pca import PCAResult, eig_and_truncate
 
 
@@ -32,6 +33,7 @@ def tsvd_fit(
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32],
     mut gram: DeviceBuffer[DType.float32],
+    mut x_alias: DeviceBuffer[DType.float32],
     n_rows: Int,
     n_cols: Int,
     n_components: Int,
@@ -52,20 +54,18 @@ def tsvd_fit(
     if n_components > n_cols:
         raise Error("n_components cannot exceed n_cols")
 
-    # Step 1. `alpha = 1`, so scale 1: the raw Gram matrix, not a covariance.
-    ctx.enqueue_function[covariance_kernel](
-        gram.unsafe_ptr(),
+    ctx.enqueue_function[copy_f32_kernel](
+        x_alias.unsafe_ptr(),
         x.unsafe_ptr(),
-        Int32(n_rows),
-        Int32(n_cols),
-        Float32(1.0),
-        grid_dim=(
-            (n_cols + COV_TILE - 1) // COV_TILE,
-            (n_cols + COV_TILE - 1) // COV_TILE,
-            1,
-        ),
-        block_dim=(COV_TILE, COV_TILE, 1),
+        Int32(n_rows * n_cols),
+        grid_dim=((n_rows * n_cols + 255) // 256, 1, 1),
+        block_dim=(256, 1, 1),
     )
+    # Step 1. `alpha = 1`, so scale 1: the raw Gram matrix, not a covariance.
+    # Same tuned matmul as PCA, with alpha = 1 and no centering. Their
+    # `tsvd_fit` asks cuBLAS for exactly this: CUBLAS_OP_T, CUBLAS_OP_N.
+    gemm_tn(ctx, gram, x, x_alias, n_cols, n_cols, n_rows)
+
     ctx.synchronize()
 
     # Steps 2 and 3. `singular_scale = 1` because these eigenvalues already

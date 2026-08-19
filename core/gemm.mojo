@@ -198,3 +198,66 @@ def gemm_nt_kernel(
                 elif i == 3:
                     v3 = acc3[j]
                 z.unsafe_store(gr3 * n + gc3, v3)
+
+
+# ---------------------------------------------------------------------------
+# The vendor-library path. Prefer this.
+#
+# cuVS and cuML call cuBLAS for their matrix products. cuBLAS has no source to
+# port, and the first version of this file drew the wrong conclusion from that
+# and hand-wrote a kernel. **The faithful mirror of "they call a tuned vendor
+# BLAS" is to call OURS**, and MAX ships one: `linalg.matmul`, targeting the
+# GPU, with `transpose_a` and `transpose_b` and an `elementwise_lambda_fn`
+# epilogue hook.
+#
+# `gemm_nt_kernel` above stays as the ported RAFT contraction. It is the
+# reference these wrappers are checked against, and it is what runs if a
+# backend ever lacks a tuned matmul.
+# ---------------------------------------------------------------------------
+
+from layout import TileTensor
+from layout.tile_layout import row_major
+from linalg.matmul import matmul
+from max.gpu.host import DeviceBuffer, DeviceContext
+
+
+def gemm_nt(
+    ctx: DeviceContext,
+    mut z: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut y: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+) raises:
+    """`z[m x n] = x[m x k] . y[n x k]^T` through MAX's tuned matmul.
+
+    `transpose_b=True` is exactly the shape every algorithm here wants: rows
+    against centroids, index points or candidates, with neither operand ever
+    materialized in another layout.
+    """
+    var tz = TileTensor(z, row_major(m, n))
+    var tx = TileTensor(x, row_major(m, k))
+    var ty = TileTensor(y, row_major(n, k))
+    matmul[transpose_b=True, target="gpu"](tz, tx, ty, ctx)
+
+
+def gemm_tn(
+    ctx: DeviceContext,
+    mut z: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut y: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+) raises:
+    """`z[m x n] = x[k x m]^T . y[k x n]`, the Gram/covariance shape.
+
+    This is what `raft::stats::cov` and `lstsqEig`'s first step compute, and
+    what cuML's `tsvd_fit` asks cuBLAS for as `CUBLAS_OP_T, CUBLAS_OP_N`. The
+    contracted axis is the ROW axis of both operands.
+    """
+    var tz = TileTensor(z, row_major(m, n))
+    var tx = TileTensor(x, row_major(k, m))
+    var ty = TileTensor(y, row_major(k, n))
+    matmul[transpose_a=True, target="gpu"](tz, tx, ty, ctx)

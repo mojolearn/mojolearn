@@ -152,10 +152,11 @@ def _fit(
     var x = ctx.enqueue_create_buffer[DType.float32](PCA_ROWS * PCA_COLS)
     var mu = ctx.enqueue_create_buffer[DType.float32](PCA_COLS)
     var cov = ctx.enqueue_create_buffer[DType.float32](PCA_COLS * PCA_COLS)
+    var x_alias = ctx.enqueue_create_buffer[DType.float32](PCA_ROWS * PCA_COLS)
     ctx.synchronize()
     _fill(ctx, x, scale, shift_col0)
     return pca_fit(
-        ctx, x, mu, cov, PCA_ROWS, PCA_COLS, PCA_COMPONENTS
+        ctx, x, x_alias, mu, cov, PCA_ROWS, PCA_COLS, PCA_COMPONENTS
     )
 
 
@@ -299,6 +300,7 @@ def check_input_restored() raises:
     var x = ctx.enqueue_create_buffer[DType.float32](PCA_ROWS * PCA_COLS)
     var mu = ctx.enqueue_create_buffer[DType.float32](PCA_COLS)
     var cov = ctx.enqueue_create_buffer[DType.float32](PCA_COLS * PCA_COLS)
+    var x_alias = ctx.enqueue_create_buffer[DType.float32](PCA_ROWS * PCA_COLS)
     ctx.synchronize()
     _fill(ctx, x, 1.0, 0.0)
 
@@ -308,7 +310,7 @@ def check_input_restored() raises:
     ctx.enqueue_copy(dst_ptr=before.unsafe_ptr(), src_buf=x)
     ctx.synchronize()
 
-    _ = pca_fit(ctx, x, mu, cov, PCA_ROWS, PCA_COLS, PCA_COMPONENTS)
+    _ = pca_fit(ctx, x, x_alias, mu, cov, PCA_ROWS, PCA_COLS, PCA_COMPONENTS)
 
     var after = ctx.enqueue_create_host_buffer[DType.float32](
         PCA_ROWS * PCA_COLS
@@ -351,15 +353,16 @@ def check_tsvd_against_pca() raises:
     var x = ctx.enqueue_create_buffer[DType.float32](PCA_ROWS * PCA_COLS)
     var mu = ctx.enqueue_create_buffer[DType.float32](PCA_COLS)
     var cov = ctx.enqueue_create_buffer[DType.float32](PCA_COLS * PCA_COLS)
+    var x_alias = ctx.enqueue_create_buffer[DType.float32](PCA_ROWS * PCA_COLS)
     var gram = ctx.enqueue_create_buffer[DType.float32](PCA_COLS * PCA_COLS)
     ctx.synchronize()
 
     # The latent columns are symmetric about zero, so the raw data is already
     # very nearly centered and the two must agree.
     _fill(ctx, x, 1.0, 0.0)
-    var t0 = tsvd_fit(ctx, x, gram, PCA_ROWS, PCA_COLS, PCA_COMPONENTS)
+    var t0 = tsvd_fit(ctx, x, gram, x_alias, PCA_ROWS, PCA_COLS, PCA_COMPONENTS)
     _fill(ctx, x, 1.0, 0.0)
-    var p0 = pca_fit(ctx, x, mu, cov, PCA_ROWS, PCA_COLS, PCA_COMPONENTS)
+    var p0 = pca_fit(ctx, x, x_alias, mu, cov, PCA_ROWS, PCA_COLS, PCA_COMPONENTS)
 
     for c in range(PCA_COMPONENTS):
         var dot = 0.0
@@ -375,7 +378,7 @@ def check_tsvd_against_pca() raises:
 
     # Now shift. PCA must not move; tsvd must.
     _fill(ctx, x, 1.0, 1000.0)
-    var t1 = tsvd_fit(ctx, x, gram, PCA_ROWS, PCA_COLS, PCA_COMPONENTS)
+    var t1 = tsvd_fit(ctx, x, gram, x_alias, PCA_ROWS, PCA_COLS, PCA_COMPONENTS)
 
     var moved = 0.0
     for j in range(PCA_COLS):

@@ -46,19 +46,13 @@ free from CUDA and we do not.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
+from cluster.mojo_only.reduce_by_key import copy_f32_kernel
+from core.gemm import GEMM_MBLK, GEMM_THREADS, gemm_nt, gemm_nt_kernel, gemm_tn
 from core.column_stats import (
-    COV_TILE,
     STATS_TPB,
-    covariance_kernel,
     diagonal_to_vector_kernel,
     divide_columns_by_nonzero_kernel,
     xty_kernel,
-)
-from core.gemm import (
-    GEMM_MBLK,
-    GEMM_NBLK,
-    GEMM_THREADS,
-    gemm_nt_kernel,
 )
 from decomposition.mojo_only.jacobi_eigh_device import (
     JACOBI_TPB,
@@ -77,24 +71,26 @@ def lstsq_eig(
     mut s_vec: DeviceBuffer[DType.float32],
     mut ab: DeviceBuffer[DType.float32],
     mut inv: DeviceBuffer[DType.float32],
+    mut a_alias: DeviceBuffer[DType.float32],
     n_rows: Int,
     n_cols: Int,
 ) raises:
     """`w = inv(A^T A) A^T b`, their step order."""
-    # covA <- A^T A. alpha = 1, so scale 1: a Gram matrix, not a covariance.
-    ctx.enqueue_function[covariance_kernel](
-        cov_a.unsafe_ptr(),
+    ctx.enqueue_function[copy_f32_kernel](
+        a_alias.unsafe_ptr(),
         a.unsafe_ptr(),
-        Int32(n_rows),
-        Int32(n_cols),
-        Float32(1.0),
-        grid_dim=(
-            (n_cols + COV_TILE - 1) // COV_TILE,
-            (n_cols + COV_TILE - 1) // COV_TILE,
-            1,
-        ),
-        block_dim=(COV_TILE, COV_TILE, 1),
+        Int32(n_rows * n_cols),
+        grid_dim=((n_rows * n_cols + 255) // 256, 1, 1),
+        block_dim=(256, 1, 1),
     )
+    # covA <- A^T A. alpha = 1, so scale 1: a Gram matrix, not a covariance.
+    # covA <- A^T A. `raft::linalg::gemm(CUBLAS_OP_T, CUBLAS_OP_N, alpha=1)`,
+    # so the tuned matmul with `transpose_a` and no scale. This is the ONLY
+    # step here that touches rows, and it was still on the hand-written
+    # contraction while every other section had moved: OLS sat at 28 ms
+    # across five benchmark rounds because nothing I changed was on its path.
+    gemm_tn(ctx, cov_a, a, a_alias, n_cols, n_cols, n_rows)
+
     # Ab <- A^T b. Theirs overlaps this with the line above on a second
     # stream; see the module docstring.
     ctx.enqueue_function[xty_kernel](
@@ -138,22 +134,20 @@ def lstsq_eig(
         block_dim=(256, 1, 1),
     )
     # inv <- QS Q^T == Q invS Q^T == inv(A^T A)
-    ctx.enqueue_function[gemm_nt_kernel](
-        inv.unsafe_ptr(),
-        qs.unsafe_ptr(),
-        q.unsafe_ptr(),
-        Int32(n_cols),
-        Int32(n_cols),
-        Int32(n_cols),
-        grid_dim=(
-                (n_cols + GEMM_NBLK - 1) // GEMM_NBLK,
-                (n_cols + GEMM_MBLK - 1) // GEMM_MBLK,
-                1,
-            ),
-            block_dim=(GEMM_THREADS, 1, 1),
-    )
-    # w <- inv Ab. A d x d matrix against one vector, expressed as the same
-    # `X Y^T` the GEMM already does with n = 1.
+    gemm_nt(ctx, inv, qs, q, n_cols, n_cols, n_cols)
+
+    # w <- inv Ab.
+    #
+    # **This one stays on the ported contraction kernel, and that is the
+    # faithful choice, not a workaround.** RAFT does not call gemm here: it
+    # calls `raft::linalg::gemv` (`lstsq.cuh`, "w <- covA Ab"), because a
+    # matrix against ONE vector is a different BLAS routine with a different
+    # tuning. Expressing it as a matmul with `n = 1` produced zeros for some
+    # coefficients, which is what sent me to read their line again.
+    #
+    # MAX ships `linalg.gemv`, so the finished form is to call that. Until
+    # then the ported kernel is correct here and the cost is nothing: this is
+    # `n_cols x n_cols` against `n_cols`, a 32 x 32 problem in the benchmark.
     ctx.enqueue_function[gemm_nt_kernel](
         w.unsafe_ptr(),
         inv.unsafe_ptr(),
@@ -161,11 +155,7 @@ def lstsq_eig(
         Int32(n_cols),
         Int32(1),
         Int32(n_cols),
-        grid_dim=(
-                (1 + GEMM_NBLK - 1) // GEMM_NBLK,
-                (n_cols + GEMM_MBLK - 1) // GEMM_MBLK,
-                1,
-            ),
-            block_dim=(GEMM_THREADS, 1, 1),
+        grid_dim=(1, (n_cols + GEMM_MBLK - 1) // GEMM_MBLK, 1),
+        block_dim=(GEMM_THREADS, 1, 1),
     )
     ctx.synchronize()

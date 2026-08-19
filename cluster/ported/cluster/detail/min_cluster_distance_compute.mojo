@@ -45,12 +45,7 @@ what must fit the index type.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from core.gemm import (
-    GEMM_MBLK,
-    GEMM_NBLK,
-    GEMM_THREADS,
-    gemm_nt_kernel,
-)
+from core.gemm import GEMM_MBLK, GEMM_THREADS, gemm_nt
 from core.row_norms import NORM_TPB, row_norm_kernel
 from cluster.ported.cluster.detail.kmeans_common import (
     centroid_norms_take_sqrt,
@@ -183,19 +178,14 @@ def min_cluster_and_distance_compute_unfused(
             var nc = min(centroid_batch, n_clusters - c_idx)
 
             # z[ns x nc] = X[ns x d] . C[nc x d]^T
-            ctx.enqueue_function[gemm_nt_kernel](
-                dist_buf.unsafe_ptr(),
-                x.unsafe_ptr().unsafe_offset(d_idx * n_features),
-                centroids.unsafe_ptr().unsafe_offset(c_idx * n_features),
-                Int32(ns),
-                Int32(nc),
-                Int32(n_features),
-                grid_dim=(
-                (nc + GEMM_NBLK - 1) // GEMM_NBLK,
-                (ns + GEMM_MBLK - 1) // GEMM_MBLK,
-                1,
-            ),
-            block_dim=(GEMM_THREADS, 1, 1),
+            gemm_nt(
+                ctx,
+                dist_buf,
+                x.unsafe_offset(d_idx * n_features),
+                centroids.unsafe_offset(c_idx * n_features),
+                ns,
+                nc,
+                n_features,
             )
 
             # One block per row of the tile; the block strides the centroids.

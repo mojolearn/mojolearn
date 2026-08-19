@@ -39,12 +39,7 @@ sparse and the non-expanded metrics, and the multi-index merge. See
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.expand_distances import expand_distances_kernel
-from core.gemm import (
-    GEMM_MBLK,
-    GEMM_NBLK,
-    GEMM_THREADS,
-    gemm_nt_kernel,
-)
+from core.gemm import gemm_nt
 from core.row_norms import NORM_TPB, row_norm_kernel
 from neighbors.ported.matrix.detail.select_radix import (
     SELECT_BLOCK,
@@ -111,20 +106,13 @@ def tiled_brute_force_knn(
         var rows = min(query_tile, n_queries - q)
 
         # z = Q_tile . I^T
-        ctx.enqueue_function[gemm_nt_kernel](
-            dist_tile.unsafe_ptr(),
-            queries.unsafe_ptr().unsafe_offset(q * n_features),
-            index.unsafe_ptr(),
-            Int32(rows),
-            Int32(n_index),
-            Int32(n_features),
-            grid_dim=(
-                (n_index + GEMM_NBLK - 1) // GEMM_NBLK,
-                (rows + GEMM_MBLK - 1) // GEMM_MBLK,
-                1,
-            ),
-            block_dim=(GEMM_THREADS, 1, 1),
+        # A `create_sub_buffer` window rather than a pointer offset, because
+        # MAX's matmul takes a TileTensor over a DeviceBuffer and there is no
+        # offset form of that. Same bytes, no copy.
+        var q_tile = queries.create_sub_buffer[DType.float32](
+            q * n_features, rows * n_features
         )
+        gemm_nt(ctx, dist_tile, q_tile, index, rows, n_index, n_features)
 
         # The epilogue k-means fuses into its reduction has to be its own
         # pass here, because the top-k needs every distance to survive.
