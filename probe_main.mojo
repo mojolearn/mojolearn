@@ -1,4 +1,7 @@
 from mojo_only.launch_probe import probe
+from catboost.cuda.methods.greedy_subsets_searcher.structure_searcher_template import (
+    grow_tree_schedule,
+)
 from mojo_only.fixed_point import (
     SCALE_LIMIT,
     choose_scale,
@@ -201,7 +204,54 @@ def check_fixed_point() raises:
     print("  max representable at this scale", max_representable(scale))
 
 
+def show_tree_schedule() raises:
+    """One depth-8 tree on covtype, as the schedule CatBoost's loop produces.
+
+    The property being checked is the one their own header states: the number
+    of kernels per level does not depend on the leaf count or on the dataset
+    (`compute_by_blocks_helper.h:87-92`). So launches stay flat as leaves
+    double, and launches-per-leaf must FALL. Ours does 73 per tree where
+    mojotrees' leaf-wise plane does 2,303.
+    """
+    var sched = grow_tree_schedule(8, 464809, 3)
+    print("  depth  leaves   builds  pairs  launches  launches/leaf")
+    var total = 0
+    for i in range(len(sched)):
+        ref s = sched[i]
+        total += s.launches
+        print(
+            "  ",
+            s.depth,
+            "\t",
+            s.leaf_count,
+            "\t",
+            s.histogram_builds,
+            "\t",
+            s.subtraction_pairs,
+            "\t",
+            s.launches,
+            "\t",
+            s.launches_per_leaf(),
+        )
+    print("  total launches for the tree:", total)
+    print("  mojotrees leaf-wise plane, same shape: 2303")
+    var first_launches = sched[0].launches
+    var last_launches = sched[len(sched) - 1].launches
+    if last_launches != first_launches:
+        raise Error(
+            "launches per level must not depend on the leaf count; level 0"
+            " had "
+            + String(first_launches)
+            + " and the last had "
+            + String(last_launches)
+        )
+    print("  launch count is flat in leaf count, as their design requires")
+
+
 def main() raises:
+    print("tree schedule:")
+    show_tree_schedule()
+    print()
     print("fixed point (no CatBoost counterpart):")
     check_fixed_point()
     print()
