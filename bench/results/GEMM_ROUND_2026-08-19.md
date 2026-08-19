@@ -41,8 +41,9 @@ measured:
   k-means' 200k rows and 16 clusters that is 200,000 blocks in which 112 of
   128 threads have nothing to do. The block shape is sized for the row count
   and the work is sized for the cluster count.
-- **`core/column_stats.mojo::covariance_kernel` is STILL the naive 16x16
-  tile.** Only `gemm_nt_kernel` was rewritten. PCA's whole row-scaling cost
+- **`core/column_stats.mojo::covariance_kernel` was STILL the naive 16x16
+  tile.** (Fixed later the same day: it is now a port of RAFT's COLUMN-major
+  contraction policy plus a split-K over rows. See VENDOR_LIBRARIES.md.) Only `gemm_nt_kernel` was rewritten. PCA's whole row-scaling cost
   is that kernel, which is exactly why PCA did not move by one millisecond.
 
 That second one is the more embarrassing and the more instructive: there are

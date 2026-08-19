@@ -55,8 +55,8 @@ DBSCAN (0.53x).
 And the next two are the same lesson again, already visible:
 
 - **PCA has not moved by one millisecond across four rounds.** Its cost is
-  `core/column_stats.mojo::covariance_kernel`, which is still the naive 16x16
-  tile, and RAFT computes that product through the same contraction policy
+  `core/column_stats.mojo::covariance_kernel`, which was still the naive 16x16
+  tile (since ported to RAFT's column-major policy with a split-K over rows), and RAFT computes that product through the same contraction policy
   everything else uses. There is a second contraction-shaped kernel in
   `core/` and it has never been ported.
 - **DBSCAN materializes its full `n x n` adjacency matrix.** cuML does not:
