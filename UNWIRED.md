@@ -331,19 +331,43 @@ conclusions were drawn from it before that was noticed. Any next attempt
 needs the dump itself checked against a host tally first, on a leaf whose
 answer is known.
 
-### The order to attack it in, next time
+### Both first suspects are now CLEARED
 
-1. **Check `copy_histograms_kernel` in isolation.** Fill leaf 0 with hashed
-   per-cell values, copy `0 -> 1`, verify every cell of leaf 1 and verify no
-   other leaf moved. It is the only one of the three kernels with no
-   standalone check.
-2. **Check the pairing against sizes.** `leaf_records[i].size = ...` writes
-   through a `List` subscript, and whether that mutates in place or a copy
-   has NOT been verified. If sizes stay zero the planner still runs, still
-   pairs, and silently picks the wrong child as small.
-3. Only then re-wire, and compare the derived histogram against an
-   independent full rebuild CELL BY CELL. Children summing to the parent is
-   an identity under subtraction and proves nothing.
+1. `copy_histograms_kernel` is checked in isolation by
+   `mojo_only/copy_histograms_check.mojo`: hashed per-cell values, copies
+   `1 -> 5` and `3 -> 6` so the pairs are non-contiguous and out of order,
+   and it asserts the destinations match, the sources are unchanged and every
+   unnamed leaf is untouched. 0 wrong of 692, nothing disturbed.
+2. `leaf_records[i].size = ...` through a `List` subscript DOES mutate in
+   place. Verified directly. The bookkeeping is not the problem.
+
+Together with the permuted-id check passing on both load paths and the
+subtraction kernel's own check, **every kernel involved is now individually
+verified.** What is left is the DRIVER's sequencing.
+
+### The concrete hypothesis to test next
+
+`fixed_to_float_kernel` converts the accumulator to the flat histogram by
+IDENTICAL FLAT INDEX, `bin_sums[i] = acc_i32[i] / scale`. That silently
+assumes `acc_i32` is in the same layout as the flat histogram, indexed by
+LEAF ID. But the histogram kernels write their output in the BLOCK layout,
+indexed DENSELY, which is the whole point of `WriteReducesHistograms`
+existing at all.
+
+With a full contiguous build over one block the two layouts coincide and the
+identity map is right, which is why everything passes today. With a PARTIAL
+build over a non-contiguous leaf list they do not coincide, and the
+conversion would scatter each leaf's fixed-point sums into the wrong leaf's
+float slot.
+
+`fixed_to_float_kernel` has NO CatBoost counterpart, it exists only because
+Metal has no float atomic, so its layout contract was never inherited from
+anywhere and was never written down. Establish which layout `acc_i32` is
+actually in, write it in the docstring, and make the conversion respect it.
+
+Only then re-wire, and compare the derived histogram against an independent
+full rebuild CELL BY CELL. Children summing to the parent is an identity
+under subtraction and proves nothing.
 
 ### Ordering facts established from their source, worth keeping
 
