@@ -15,6 +15,7 @@ from mojo_only.level_bench import (
     bench_remaining_phases,
     bench_replication_interleaved,
     bench_wide_histogram_interleaved,
+    bench_realistic,
     bench_tree,
     bench_tree_shapes,
 )
@@ -311,6 +312,8 @@ def main() raises:
     # which is the shape CatBoost's design suits least. This is the same
     # tree over four policy mixes at matched feature count.
     bench_tree_shapes(200000, 6, 3)
+    # CatBoost's reference on this box is ~32 ms/tree at 800k x 100.
+    bench_realistic(800000, 100, 6, 3)
     bench_tree(500000, 1, 3)
     bench_tree(500000, 2, 3)
     bench_tree(500000, 3, 3)

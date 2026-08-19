@@ -986,3 +986,69 @@ def bench_tree_shapes(n_rows: Int, max_depth: Int, repeats: Int) raises:
     for s in range(len(shapes)):
         arms.append(summarize(shapes[s], samples[s]))
     report(arms)
+
+
+def bench_realistic(n_rows: Int, n_features: Int, max_depth: Int, repeats: Int) raises:
+    """One-byte features at realistic scale, MEASURED rather than scaled up.
+
+    `bench_tree_shapes` establishes that one-byte is 2.4x binary at 200k x
+    32, and `border_count = 254` makes one-byte the default shape of a
+    quantized numeric column. Extrapolating from there to a real dataset is
+    the mistake this file exists to avoid, so this measures it.
+
+    The reference on this box is CatBoost at ~32 ms/tree, 800k x 100. That
+    number is from a different session and this box drifts 2-3x across time
+    windows, so it is INDICATIVE and not a resolved comparison. Only arms
+    interleaved inside one process compare.
+
+    MEASURED, depth 6:
+
+        200k x  32 one-byte    43.6 ms
+        800k x 100 one-byte    61.8 ms
+
+    12.5x the cell-updates for 1.4x the time. **The small shape is
+    overhead-bound, not data-bound**, which is where the launches and syncs
+    per level live. Extrapolating the 200k number to 800k x 100 predicts
+    ~620 ms and is off by ten times, which is the reason this is measured.
+    """
+    var folds = List[Int]()
+    for _ in range(n_features):
+        folds.append(254)
+
+    var ctx = DeviceContext()
+    # Bound to separate names: indexing the tuple inline reads as aliasing
+    # mutable arguments to `run_tree_layout`.
+    var built = build_mixed_dataset(ctx, n_rows, folds)
+    var cindex = built[0]
+    var stats = built[1]
+    var row_index = built[2]
+    var hstat = built[3]
+    var hidx = built[4]
+    var tw = built[5]
+    var tg = built[6]
+
+    var samples = List[Float64]()
+    for _ in range(repeats):
+        ctx.enqueue_copy(dst_buf=row_index, src_ptr=hidx.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=stats, src_ptr=hstat.unsafe_ptr())
+        ctx.synchronize()
+        var t0 = perf_counter_ns()
+        var sizes = run_tree_layout(
+            ctx, n_rows, folds, max_depth, cindex, stats, row_index,
+            Float32(tw), Float32(tg),
+        )
+        var dt = perf_counter_ns() - t0
+        _ = len(sizes)
+        samples.append(Float64(dt) / 1.0e6)
+
+    var arms = List[ArmResult]()
+    arms.append(
+        summarize(
+            String(n_rows) + " x " + String(n_features) + " one-byte", samples
+        )
+    )
+    print(
+        "  depth", max_depth, "tree,", n_rows, "rows x", n_features,
+        "one-byte features (border_count 254):",
+    )
+    report(arms)
