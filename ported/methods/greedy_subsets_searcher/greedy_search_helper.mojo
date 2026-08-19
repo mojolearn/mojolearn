@@ -591,6 +591,13 @@ def run_tree(
 
     Buffers are allocated ONCE here and reused across levels, unlike
     `run_one_level`, which allocates per call and pays about 0.6 ms for it.
+    The level loop below now allocates NOTHING. That sentence was already
+    written when four buffers -- their `BinFeatures` and `FeatureWeights`
+    plus the host staging for both -- were still being created and refilled
+    inside it; `CreateInitialSubsets` builds those two once
+    (`split_properties_helper.cpp:1063`, `:1075-1076`) and
+    `structure_searcher_template.h:49` runs it once before the loop at
+    `:55-65`, so they are hoisted to match.
     """
     var stat_count = 2
     var max_leaves = 1 << max_depth
@@ -602,6 +609,29 @@ def run_tree(
         wide = 1
 
     # --- persistent state, allocated once --------------------------------
+    # These are the SETUP allocations and they stay as they are. CatBoost
+    # allocates the same things at the same point: `CreateInitialSubsets`
+    # (`split_properties_helper.cpp:1035-1080`) resets the partitions, the
+    # partition stats, the histograms, the bin features and the feature
+    # weights before a single level runs. What made theirs cheap was that
+    # every `TCudaBuffer::Create` lands in `TStackLikeMemoryPool`
+    # (`memory_provider_trait.h:14`), a slab carved into 256-byte-aligned
+    # stack slices, so no allocation in a tree reaches the driver.
+    #
+    # We do not port that pool. Mojo's `DeviceContext` already is one: it
+    # owns a "device memory pool" that a stream view shares
+    # (`DeviceContext.select_stream`), it holds "cached memory buffers" until
+    # the context is destroyed (`DeviceContext.__deinit__`), every allocation
+    # goes through a memory manager (`MODULAR_DEBUG_DEVICE_ALLOCATOR`
+    # poisons "every memory-manager allocation"), and that manager has a
+    # defragmenting implementation by default on NVIDIA
+    # (`MODULAR_DEVICE_CONTEXT_MEMORY_MANAGER_VMM`), which is their
+    # `MemoryDefragmentation` under another name. See `gpu_lib/gpu_base.mojo`
+    # and `VENDOR_LIBS.md`.
+    #
+    # So the work worth doing was not a second allocator underneath theirs.
+    # It was getting the allocations OUT of the level loop, which is where
+    # theirs are not.
     var p_off = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
     var p_sz = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
     var hp_off = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
@@ -761,6 +791,47 @@ def run_tree(
         hsk.unsafe_ptr().unsafe_store(f, UInt8(0))
     ctx.enqueue_copy(dst_buf=skip, src_ptr=hsk.unsafe_ptr())
 
+    # THEIR `BinFeatures` AND `FeatureWeights`, WHICH ARE PER-TREE, NOT
+    # PER-LEVEL. `CreateInitialSubsets` sets both once
+    # (`split_properties_helper.cpp:1063` takes `BinFeatures` as a const view
+    # of the by-blocks helper's buffer, `:1075-1076` creates and writes
+    # `FeatureWeights`), and `structure_searcher_template.h:49` calls it once
+    # before the level loop at `:55-65`. `ComputeOptimalSplits` then only
+    # READS `subsets->BinFeatures` and `subsets->FeatureWeights`, as the two
+    # arguments at `greedy_search_helper.cpp:455-456`; it allocates nothing
+    # shaped like them. The one thing it does touch them with is
+    # `UpdateFeatureWeightsForBestSplits` at `:447`, which returns at
+    # `update_feature_weights.cpp:20-22` the moment `GetCtrsCount() == 0`.
+    # With no CTRs that call is a no-op and the weights are a per-tree
+    # constant, which is why hoisting them changes no value.
+    #
+    # These four used to be created INSIDE the depth loop and refilled with
+    # the same constants at every level: `bff[f] = f` and `ffw[f] = 1.0` do
+    # not depend on `depth`. That cost four allocations and two host-to-device
+    # copies per level for a value that never changed.
+    #
+    # `bff` is their `TCBinFeature.FeatureId` column (`compute_scores.cu:136`).
+    # `ffw` is all 1.0 because `UpdateFeatureWeights` fills 1.0 and returns
+    # early with no CTRs (`update_feature_weights.cpp:14-22`) -- their value,
+    # not a stub.
+    #
+    # LIFETIME. `bff` and `ffw` are read by the score kernel at every level
+    # and are never written again after the two copies below, so no level can
+    # observe a stale or half-written value. `hbf` and `hfw` are the host
+    # staging for those copies; they stay in scope for the whole function so
+    # that the asynchronous `enqueue_copy` cannot outlive its source.
+    # The `ctx.synchronize()` further down settles both before the loop.
+    var bff = ctx.enqueue_create_buffer[DType.uint32](n_features)
+    var hbf = ctx.enqueue_create_host_buffer[DType.uint32](n_features)
+    var ffw = ctx.enqueue_create_buffer[DType.float32](n_features)
+    var hfw = ctx.enqueue_create_host_buffer[DType.float32](n_features)
+    for f in range(n_features):
+        hbf.unsafe_ptr().unsafe_store(f, UInt32(f))
+    for f in range(n_features):
+        hfw.unsafe_ptr().unsafe_store(f, Float32(1.0))
+    ctx.enqueue_copy(dst_buf=bff, src_ptr=hbf.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=ffw, src_ptr=hfw.unsafe_ptr())
+
     var out_score = ctx.enqueue_create_buffer[DType.float32](1)
     var out_bin = ctx.enqueue_create_buffer[DType.uint32](1)
     var hos = ctx.enqueue_create_host_buffer[DType.float32](1)
@@ -912,20 +983,14 @@ def run_tree(
         ctx.synchronize()
 
         # ---- 3. one split for the whole level ---------------------------
-        # their `TCBinFeature.FeatureId` and `binFeaturesWeights`
-        # (`compute_scores.cu:136`). The weights are all 1.0 because
-        # `UpdateFeatureWeights` fills 1.0 and returns early with no CTRs
-        # (`update_feature_weights.cpp:14-22`) -- their value, not a stub.
-        var bff = ctx.enqueue_create_buffer[DType.uint32](n_features)
-        var hbf = ctx.enqueue_create_host_buffer[DType.uint32](n_features)
-        var ffw = ctx.enqueue_create_buffer[DType.float32](n_features)
-        var hfw = ctx.enqueue_create_host_buffer[DType.float32](n_features)
-        for f in range(n_features):
-            hbf.unsafe_ptr().unsafe_store(f, UInt32(f))
-        for f in range(n_features):
-            hfw.unsafe_ptr().unsafe_store(f, Float32(1.0))
-        ctx.enqueue_copy(dst_buf=bff, src_ptr=hbf.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=ffw, src_ptr=hfw.unsafe_ptr())
+        # `bff` and `ffw` are their `subsets->BinFeatures` and
+        # `subsets->FeatureWeights`, built once above this loop because that
+        # is where `CreateInitialSubsets` builds them
+        # (`split_properties_helper.cpp:1063`, `:1075-1076`).
+        # `ComputeOptimalSplits` reads them and allocates neither
+        # (`greedy_search_helper.cpp:455-456`). NOTHING in this loop is
+        # allocated any more; every buffer the level touches was created
+        # before it.
         ctx.enqueue_function[
             compute_optimal_splits_kernel[SCORE_FUNCTION_COSINE]
         ](
@@ -1998,6 +2063,50 @@ def run_tree_layout(
     ctx.enqueue_copy(dst_buf=flat_first, src_ptr=hff.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=flat_folds, src_ptr=hfd.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=flat_one_hot, src_ptr=hfoh.unsafe_ptr())
+
+    # THEIR `BinFeatures` AND `FeatureWeights`, WHICH ARE PER-TREE.
+    # `bff` is the `TCBinFeature.FeatureId` column (`compute_scores.cu:136`),
+    # here the flattened bin-feature to feature map the layout defines; `ffw`
+    # is their `binFeaturesWeights`, all 1.0 because `UpdateFeatureWeights`
+    # fills 1.0 and returns early with no CTRs
+    # (`update_feature_weights.cpp:14-22`) -- their value, not a stub.
+    #
+    # `CreateInitialSubsets` builds both once
+    # (`split_properties_helper.cpp:1063`, `:1075-1076`) and
+    # `structure_searcher_template.h:49` runs it once before the level loop
+    # at `:55-65`. `ComputeOptimalSplits` reads them at
+    # `greedy_search_helper.cpp:455-456` and allocates neither; the one call
+    # that touches them per level, `UpdateFeatureWeightsForBestSplits`
+    # (`:447`), returns immediately when there are no CTRs
+    # (`update_feature_weights.cpp:20-22`).
+    #
+    # Both used to be created INSIDE the depth loop, along with their host
+    # staging, and the `bff` fill re-walked every feature and every one of
+    # its folds at every level to write the same map. Neither value depends
+    # on `depth`, and `layout` is fixed for the whole tree.
+    #
+    # LIFETIME. Nothing writes `bff` or `ffw` after the two copies below, so
+    # no level can read a stale or half-written value. `hbf` and `hfw` are
+    # the host staging for those copies and stay in scope for the whole
+    # function, so the asynchronous copy cannot outlive its source; the
+    # `ctx.synchronize()` below settles both before the first level.
+    var bff = ctx.enqueue_create_buffer[DType.uint32](hist_cells_per_leaf)
+    var hbf = ctx.enqueue_create_host_buffer[DType.uint32](
+        hist_cells_per_leaf
+    )
+    var ffw = ctx.enqueue_create_buffer[DType.float32](len(fold_counts))
+    var hfw = ctx.enqueue_create_host_buffer[DType.float32](len(fold_counts))
+    for f in range(len(fold_counts)):
+        ref lf = layout.features[f]
+        for b in range(Int(lf.folds)):
+            hbf.unsafe_ptr().unsafe_store(
+                Int(lf.first_fold_index) + b, UInt32(f)
+            )
+    for f in range(len(fold_counts)):
+        hfw.unsafe_ptr().unsafe_store(f, Float32(1.0))
+    ctx.enqueue_copy(dst_buf=bff, src_ptr=hbf.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=ffw, src_ptr=hfw.unsafe_ptr())
+
     ctx.synchronize()
 
     # ================================================================
@@ -2217,22 +2326,13 @@ def run_tree_layout(
         )
         mgr.stream_kernel()
 
-        # their `TCBinFeature.FeatureId` and `binFeaturesWeights`
-        # (`compute_scores.cu:136`). The weights are all 1.0 because
-        # `UpdateFeatureWeights` fills 1.0 and returns early with no CTRs
-        # (`update_feature_weights.cpp:14-22`) -- their value, not a stub.
-        var bff = ctx.enqueue_create_buffer[DType.uint32](hist_cells_per_leaf)
-        var hbf = ctx.enqueue_create_host_buffer[DType.uint32](hist_cells_per_leaf)
-        var ffw = ctx.enqueue_create_buffer[DType.float32](len(fold_counts))
-        var hfw = ctx.enqueue_create_host_buffer[DType.float32](len(fold_counts))
-        for f in range(len(fold_counts)):
-            ref lf = layout.features[f]
-            for b in range(Int(lf.folds)):
-                hbf.unsafe_ptr().unsafe_store(Int(lf.first_fold_index) + b, UInt32(f))
-        for f in range(len(fold_counts)):
-            hfw.unsafe_ptr().unsafe_store(f, Float32(1.0))
-        ctx.enqueue_copy(dst_buf=bff, src_ptr=hbf.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=ffw, src_ptr=hfw.unsafe_ptr())
+        # `bff` and `ffw` are their `subsets->BinFeatures` and
+        # `subsets->FeatureWeights`, built once above this loop because that
+        # is where `CreateInitialSubsets` builds them
+        # (`split_properties_helper.cpp:1063`, `:1075-1076`).
+        # `ComputeOptimalSplits` reads them as its two arguments at
+        # `greedy_search_helper.cpp:455-456` and allocates neither. NOTHING
+        # in this loop is allocated any more.
         ctx.enqueue_function[
             compute_optimal_splits_kernel[SCORE_FUNCTION_COSINE]
         ](

@@ -8,6 +8,11 @@ from mojo_only.copy_histograms_check import check_copy_histograms
 from mojo_only.boosting_check import check_boosting_learns
 from mojo_only.binarization_check import check_binarization
 from mojo_only.reorder_check import check_reorder_one_bit
+from mojo_only.partitions_reduce_check import (
+    check_partitions_reduce,
+    check_partitions_reduce_narrow_grid,
+    check_partitions_reduce_sabotage,
+)
 from mojo_only.options_check import check_options
 from mojo_only.mixed_hist_probe import probe_mixed_histogram
 from mojo_only.layout_check import (
@@ -694,3 +699,25 @@ def main() raises:
     print("their reorder path (SortWithoutCub):")
     check_reorder_one_bit(20000, 37)
     check_reorder_one_bit(513, 0)
+    print()
+    print("ComputePartitionStats vs an exact host tally (GPU):")
+    # The other half of commit 47966cf. That commit swapped a hand-written
+    # scan-plus-broadcast for `max.gpu.primitives.block.sum` in `reorder_one_bit`
+    # AND in both kernels here, on signature evidence. `reorder_check` covered
+    # the first; nothing covered these two, and `nn.argsort[target="gpu"]` is
+    # the standing proof that a call which resolves and returns a well-formed
+    # answer can still be wrong past element 256.
+    #
+    # Sizes straddle the 256-wide block: 1, 255, 256, 257, 512, 513, 1000,
+    # 4096, 40000. Both the per-block partials and the per-leaf totals are
+    # compared, and the plant is integer-valued so the oracle is EXACT and the
+    # comparison carries no tolerance.
+    check_partitions_reduce()
+    # Reach, two ways. The perturbation arm moves one row and requires exactly
+    # one cell to follow it, sweeping lane 0, lane 255, the second block and the
+    # last row; its negative control perturbs a row belonging to no partition
+    # and requires nothing to move. The narrow-grid arm runs a 40000-row leaf
+    # through a one-block grid, which is only exact if phase 1 stripes the way
+    # `ComputeSum` does (`cuda_util/kernel/update_part_props.cu`).
+    check_partitions_reduce_sabotage()
+    check_partitions_reduce_narrow_grid()

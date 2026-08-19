@@ -16,7 +16,9 @@ NOT ported from `cuda_base.h`, and why:
         We have one worker on the calling thread and a `DEFAULT_STREAM`
         constant, so the indirection has no referent.
     TCudaMemoryAllocation, TMemoryCopier, TMemoryCopyKind  (cuda_base.h:133-238)
-        allocation and copies belong to `DeviceContext` here. See NOT_PORTED.md.
+        allocation and copies belong to `DeviceContext` here. See NOT_PORTED.md
+        and the MEMORY PROVIDER note below, which is the evidence for that
+        sentence rather than the assertion of it.
     TCudaDeviceProperties, NCudaHelpers                    (cuda_base.h:262-320)
         their `TResetCommand` handler is the only reader
         (`gpu_single_worker.h:315`), and the memory-provider half of Reset is
@@ -34,6 +36,80 @@ NOT ported from `cuda_base.h`, and why:
     ~TCudaStreamsProvider                                  (cuda_base.h:69-73)
         `cudaStreamDestroy` on every stream it still holds. A handle here has
         nothing underneath it to destroy, so there is nothing to run.
+
+=============================== MEMORY PROVIDER ========================
+CHECKED 2026-08-19 against the published MAX docs, because "belongs to
+`DeviceContext`" was an assertion in this file and in `NOT_PORTED.md` and
+this repository has been wrong three times about what Mojo ships.
+
+WHAT THEY HAVE. `memory_provider_trait.h:14` makes
+`memory_pool/stack_like_memory_pool.h`'s `TStackLikeMemoryPool` the memory
+provider for both device and pinned-host memory, unless `USE_CUDA_MALLOC` is
+defined, in which case `memory_pool/cuda_malloc_wrapper.h` calls `cudaMalloc`
+straight through. Their own comment states the design
+(`stack_like_memory_pool.h:7-13`):
+
+    For most GPU task we don't need sophisticated allocators. We just need to
+    allocate big bunch of memory, do some job and deallocate it. ... So for
+    buffers we use simple stack-based scheme ... If we don't have enough
+    memory we simply defragment it
+
+One slab, carved into `MEMORY_ALIGMENT_BYTES = 256` aligned slices
+(`:19`, `:212-216`); a request is served from the first free block if it fits
+and from the last block otherwise (`Create`, `:287-313`); a freed block flips
+`IsFree` and merges with its free neighbours with no driver call
+(`~TMemoryBlock`, `:234-240`, and `MergeFreeBlocks`, `:96-124`); and when the
+last block cannot cover the request plus `MEMORY_REQUEST_ADJUSTMENT`
+(`= 256 * 32`, `:22`) or would be left with under
+`MINIMUM_FREE_MEMORY_TO_DEFRAGMENTATION` (16 MB, `:21`), it compacts through
+the last block and retries (`TryDefragment`, `:315-332`, and
+`MemoryDefragmentation`, `:144-210`). Exhausting it after that throws
+`TOutOfMemoryError` (`:302-305`).
+
+THE SLAB SIZE IS THEIR FREE MEMORY, NOT A CONSTANT. `gpu_single_worker.h:311-321`
+calls `cudaMemGetInfo`, warns when under 75% of the device is free, and takes
+`gpuMemorySize = free * GpuMemoryPart` with `GpuMemoryPartByWorker = 0.95`
+(`devices_provider.h:47`). The pinned-host pool is a flat
+`PinnedMemorySize = 1024 * MB` (`devices_provider.h:46`).
+
+WHAT MOJO SHIPS, AND WHY THIS IS NOT PORTED. `DeviceContext` already is a
+pooling allocator, stated four separate ways in the published docs:
+
+    select_stream           the returned view "shares this context's full
+                            stream set, driver context, and device memory
+                            pool"
+    __deinit__              releasing a context releases "any cached memory
+                            buffers and compiled device functions", so a
+                            freed buffer is CACHED rather than returned to
+                            the driver
+    MODULAR_DEBUG_DEVICE_ALLOCATOR
+                            its `poison-all` mode fills "every memory-manager
+                            allocation", so every allocation goes through a
+                            memory manager
+    MODULAR_DEVICE_CONTEXT_MEMORY_MANAGER_VMM
+                            toggles "the VMM defragmenting allocator, which
+                            avoids external-fragmentation OOMs", default on
+                            NVIDIA, opt in on AMD MI300
+
+The last one is their `MemoryDefragmentation` under another name, and the
+first two are the slab and the free-and-reuse. Porting a stack pool on top of
+it would be a second allocator over a first, and it would still ask
+`enqueue_create_buffer` for its slab. PORTING_RULES `0b-i` keeps exactly one
+substitution alive -- a CLOSED library on their dispatch path -- and the MAX
+memory manager is one: it is the runtime, there is no source here to port.
+
+TWO THINGS THE DOCS DO NOT SAY, written down rather than assumed. They do not
+describe the Metal backend's memory manager, so the defragmenting behaviour is
+claimed only where the docs claim it, on NVIDIA by default and AMD MI300 by
+opt-in. And they do not state a size class or reuse policy, so "a repeated
+allocation of the same size is cheap" is not established here, only that a
+pool and a cache exist.
+
+A SEPARATE WALL, and it is the one that would decide this even if MAX pooled
+nothing. A stack pool's product is a derived pointer into one slab, and rule 4
+of PORTING_RULES already records that `enqueue_function` refuses derived
+pointers as aliasing. Handing kernels slab slices is the shape Mojo rejects.
+======================================================================
 
 The stream is the whole point of the control plane. `TSplitPointsKernel::Run`
 (`split_points.cpp:37-162`) issues its entire split as six calls on the ONE

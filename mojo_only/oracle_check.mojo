@@ -323,38 +323,47 @@ def check_tree_structure() raises:
     should name. So the comparison converts theirs into our encoding rather
     than the other way round, because ours is the one under test.
 
-    THE RESULT THIS CHECK FOUND ON ITS FIRST RUN, 2026-08-19, and it is a
-    live defect rather than a caveat.
+    THE RESULT: 48 OF 48 SPLITS MATCH, AND THE LOSS AGREES TO NINE DIGITS.
 
-    Against CatBoost at its DEFAULT `score_function = Cosine`
-    (`oblivious_tree_options.cpp:22`), our tree 0 diverges at DEPTH 0, the
-    root, where there is one leaf holding every row and the histogram is a
-    pure argmax over identical inputs. 4 of 48 splits match.
+        ours      0.7272208329569003
+        CatBoost  0.7272208331492337
 
-    Against the same CatBoost run with `score_function = L2`, our first
-    THREE levels match exactly in every tree checked, and 17 of 48 splits
-    match overall.
+    Every split, every feature, every bin, across twelve trees at depth 4.
+    The residual on the loss is float32 against their double and nothing
+    else. This is the strongest statement this repository can make about the
+    port and it is the only one not made against a tally written here.
 
-        catboost L2   (0,7) (3,8) (0,1) (7,5)
-        ours          (0,7) (3,8) (0,1) (7,7)
+    THE FALSE ALARM THAT CAME FIRST, KEPT BECAUSE IT COST HOURS.
 
-    So THE PORT IS RANKING LIKE L2 WHILE ASKING FOR COSINE. The selection is
-    not the bug: `greedy_search_helper.mojo` instantiates
-    `compute_optimal_splits_kernel[SCORE_FUNCTION_COSINE]` at all three call
-    sites. The arithmetic in `compute_scores.mojo` is a faithful-looking
-    transcription of `TCosineScoreCalcer::AddLeaf`
-    (`score_calcers.cuh:152-157`), and it still does not reproduce their
-    Cosine.
+    On its first run this check reported that we diverged from CatBoost at
+    DEPTH 0 under their default Cosine while matching their L2 exactly for
+    three levels, and the conclusion drawn was that our Cosine calcer was
+    silently computing L2. That conclusion was WRONG and the defect was in
+    the ORACLE, not in the port.
 
-    A SECOND divergence sits underneath the first: even against L2, depth 3
-    differs in every tree while depths 0 to 2 match. Depth 3 is the first
-    level whose leaves fall under the 1024-row threshold that selects
-    `GatherInplaceLeqSize` (`split_points.cpp:64`), which is a hypothesis
-    with an obvious test rather than a conclusion.
+    `tools/catboost_oracle.py` had not set `random_strength`, and CatBoost's
+    default is 1.0, not 0. That adds Gaussian noise to every candidate score
+    (`score_calcers.cuh:162-166`, with `ScoreStdDev = RandomStrength *
+    ComputeTargetStdDev` at `greedy_search_helper.cpp:385`). Our port refuses
+    `random_strength` by name, so it computes the noiseless score.
 
-    Neither of these was visible to any check in this repository, because
-    every other check compares the device to a host tally written here. This
-    is what an external oracle buys.
+    WHY IT LOOKED LIKE A COSINE BUG SPECIFICALLY, which is the part worth
+    remembering. The noise is ABSOLUTE, and the two calcers work at wildly
+    different scales. On this fixture Cosine's candidates run about 146 with
+    gaps of order 1, while L2's run about 21000 with gaps of order 300. The
+    same perturbation reorders Cosine's ranking and leaves L2's untouched. So
+    a noiseless port matches their L2 and not their Cosine, and the symptom
+    reads exactly like computing the wrong calcer.
+
+    Two things were also claimed on that reading and are RETRACTED: that a
+    second divergence lived at depth 3, and that it implicated the 1024-row
+    `GatherInplaceLeqSize` threshold. Both were the same artifact.
+
+    THE RULE THIS EARNS. An oracle has a configuration, and every default it
+    leaves standing is a claim that we implement that default. Anything the
+    port refuses by name must be turned OFF in the oracle and said out loud,
+    which is why `bootstrap_type`, `model_shrink_rate`, `boost_from_average`
+    and now `random_strength` are all pinned in that file with a reason.
 
     WHAT A MISMATCH MEANS, and it is worth stating before reading a result.
     Not necessarily a defect. The tree is a greedy argmax over scores, so two
@@ -460,6 +469,21 @@ def check_tree_structure() raises:
         print(
             "    first divergence: tree", first_divergence // 100,
             "depth", first_divergence % 100,
+        )
+        raise Error(
+            String("the port no longer reproduces CatBoost's trees: ")
+            + String(matched)
+            + " of "
+            + String(compared)
+            + " splits match, first divergence at tree "
+            + String(first_divergence // 100)
+            + " depth "
+            + String(first_divergence % 100)
+            + ". This matched 48 of 48 on 2026-08-19, so a mismatch here is"
+            " a REGRESSION and not a known gap. Before suspecting the port,"
+            " check that bench/oracle.txt was generated with every CatBoost"
+            " feature this port refuses turned off, because that mistake has"
+            " already produced one convincing false alarm"
         )
     else:
         print("    every split matches CatBoost, feature and bin")

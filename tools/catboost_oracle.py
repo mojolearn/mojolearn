@@ -128,6 +128,15 @@ def main() -> int:
         model_shrink_rate=0.0,
         boost_from_average=False,
         leaf_estimation_iterations=1,
+        # random_strength is CatBoost's LAST source of randomness here and its
+        # default is 1.0, not 0. It adds Gaussian noise to every candidate's
+        # score (`score_calcers.cuh:162-166`, ScoreStdDev at
+        # `greedy_search_helper.cpp:385`). The noise is ABSOLUTE, so it is
+        # devastating to Cosine, whose candidate gaps are order 1 against
+        # scores of order 146, and negligible to L2, whose gaps are order 300
+        # against scores of order 21000. Leaving it at the default is what
+        # made our port look like it was computing L2.
+        random_strength=0.0,
         score_function=__import__('os').environ.get('ORACLE_SCORE', 'Cosine'),
         logging_level="Silent",
         allow_writing_files=False,
