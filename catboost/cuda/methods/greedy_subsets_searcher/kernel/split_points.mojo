@@ -111,3 +111,73 @@ def split_and_make_sequence_kernel(
                     offset + at, UInt8(1) if goes_right else UInt8(0)
                 )
         i += stride
+
+
+def update_partitions_after_split_kernel(
+    left_leaves: MutPointer[UInt32, MutAnyOrigin],
+    right_leaves: MutPointer[UInt32, MutAnyOrigin],
+    leaf_count: Int32,
+    sorted_flags: MutPointer[UInt8, MutAnyOrigin],
+    part_offset: MutPointer[UInt32, MutAnyOrigin],
+    part_size: MutPointer[UInt32, MutAnyOrigin],
+    host_offset: MutPointer[UInt32, MutAnyOrigin],
+    host_size: MutPointer[UInt32, MutAnyOrigin],
+):
+    """`UpdatePartitionsAfterSplitImpl`, copied.
+
+    After the stable partition has sorted a leaf's range into
+    "goes left" then "goes right", this finds the BORDER between the two and
+    turns one `{Offset, Size}` into two. It is how a leaf becomes two leaves
+    while membership stays positional.
+
+    Their border search, copied exactly:
+
+        int flag0 = i < partSize ? sortedFlags[i] : 1;
+        int flag1 = i ? sortedFlags[i - 1] : 0;
+        if (flag0 != flag1) { ... break; }
+
+    The sentinels are the whole trick and they are easy to lose. At `i == 0`
+    the previous flag reads 0, and at `i == partSize` the current flag reads
+    1, so a leaf where EVERY row goes one way still finds a border, at 0 or
+    at `partSize`, and produces an empty child rather than no answer at all.
+    Every thread scans a strided slice and the first to find the border
+    writes both partitions; only one can, because a sorted flag array has
+    exactly one transition.
+
+    **`partsCpu` is worth stealing rather than just porting.** They write the
+    new partitions to device memory AND to pinned host memory in the same
+    store (`split_points.cu:372`, `:379`), so the host learns every leaf's
+    size with no device-to-host copy at all. That is what lets the next
+    level's `build_necessary_histograms` pick the smaller sibling on the host
+    without a readback in the critical path.
+    """
+    var leaf_slot = Int(block_idx.y)
+    var left_leaf = Int(left_leaves.unsafe_load(leaf_slot))
+    var right_leaf = Int(right_leaves.unsafe_load(leaf_slot))
+
+    var offset = Int(part_offset.unsafe_load(left_leaf))
+    var part_sz = Int(part_size.unsafe_load(left_leaf))
+
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(block_dim.x) * Int(grid_dim.x)
+
+    while i <= part_sz:
+        var flag0 = 1
+        if i < part_sz:
+            flag0 = Int(sorted_flags.unsafe_load(offset + i))
+        var flag1 = 0
+        if i != 0:
+            flag1 = Int(sorted_flags.unsafe_load(offset + i - 1))
+
+        if flag0 != flag1:
+            # The border. Left keeps the offset and shrinks to `i`; right
+            # starts where left ends and takes the remainder.
+            part_size.unsafe_store(left_leaf, UInt32(i))
+            host_size.unsafe_store(left_leaf, UInt32(i))
+
+            part_offset.unsafe_store(right_leaf, UInt32(offset + i))
+            part_size.unsafe_store(right_leaf, UInt32(part_sz - i))
+            host_offset.unsafe_store(right_leaf, UInt32(offset + i))
+            host_size.unsafe_store(right_leaf, UInt32(part_sz - i))
+            break
+        i += stride

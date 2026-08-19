@@ -38,6 +38,7 @@ from catboost.cuda.methods.greedy_subsets_searcher.kernel.hist_binary import (
 )
 from catboost.cuda.methods.greedy_subsets_searcher.kernel.split_points import (
     split_and_make_sequence_kernel,
+    update_partitions_after_split_kernel,
 )
 from catboost.cuda.methods.greedy_subsets_searcher.kernel.compute_scores import (
     compute_optimal_splits_kernel,
@@ -929,3 +930,111 @@ def check_split_points() raises:
     if wrong_flag != 0 or wrong_seq != 0:
         raise Error("split_points is wrong")
     print("  flags read the right feature, sequence is per-leaf 0..size-1")
+
+
+def check_partition_update() raises:
+    """One leaf becomes two, and the SENTINELS are what is being checked.
+
+    Three cases in one launch, because the sentinel logic is exactly what a
+    single happy-path case fails to exercise:
+
+      leaf 0: rows [0,10), flags 0,0,0,0,1,1,1,1,1,1 -> border at 4
+      leaf 2: rows [10,16), flags ALL ZERO           -> border at size (6)
+      leaf 4: rows [16,24), flags ALL ONE            -> border at 0
+
+    The all-zero and all-one leaves are the ones that matter. Without their
+    `i == partSize -> flag0 = 1` and `i == 0 -> flag1 = 0` sentinels, a leaf
+    with no transition finds no border and writes nothing, leaving a stale
+    partition that silently corrupts the next level.
+    """
+    var ctx = DeviceContext()
+    var n_rows = 24
+    var n_leaves = 6
+
+    var flags = ctx.enqueue_create_buffer[DType.uint8](n_rows)
+    var hf = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
+    for r in range(10):
+        hf.unsafe_ptr().unsafe_store(r, UInt8(0) if r < 4 else UInt8(1))
+    for r in range(10, 16):
+        hf.unsafe_ptr().unsafe_store(r, UInt8(0))
+    for r in range(16, 24):
+        hf.unsafe_ptr().unsafe_store(r, UInt8(1))
+    ctx.enqueue_copy(dst_buf=flags, src_ptr=hf.unsafe_ptr())
+
+    var p_off = ctx.enqueue_create_buffer[DType.uint32](n_leaves)
+    var p_sz = ctx.enqueue_create_buffer[DType.uint32](n_leaves)
+    var hh_off = ctx.enqueue_create_buffer[DType.uint32](n_leaves)
+    var hh_sz = ctx.enqueue_create_buffer[DType.uint32](n_leaves)
+    var h_off = ctx.enqueue_create_host_buffer[DType.uint32](n_leaves)
+    var h_sz = ctx.enqueue_create_host_buffer[DType.uint32](n_leaves)
+    var h_off2 = ctx.enqueue_create_host_buffer[DType.uint32](n_leaves)
+    var h_sz2 = ctx.enqueue_create_host_buffer[DType.uint32](n_leaves)
+    for i in range(n_leaves):
+        h_off.unsafe_ptr().unsafe_store(i, UInt32(0))
+        h_sz.unsafe_ptr().unsafe_store(i, UInt32(0))
+    h_off.unsafe_ptr().unsafe_store(0, UInt32(0))
+    h_sz.unsafe_ptr().unsafe_store(0, UInt32(10))
+    h_off.unsafe_ptr().unsafe_store(2, UInt32(10))
+    h_sz.unsafe_ptr().unsafe_store(2, UInt32(6))
+    h_off.unsafe_ptr().unsafe_store(4, UInt32(16))
+    h_sz.unsafe_ptr().unsafe_store(4, UInt32(8))
+    for i in range(n_leaves):
+        h_off2.unsafe_ptr().unsafe_store(i, h_off.unsafe_ptr().unsafe_load(i))
+        h_sz2.unsafe_ptr().unsafe_store(i, h_sz.unsafe_ptr().unsafe_load(i))
+    ctx.enqueue_copy(dst_buf=p_off, src_ptr=h_off.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=p_sz, src_ptr=h_sz.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=hh_off, src_ptr=h_off2.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=hh_sz, src_ptr=h_sz2.unsafe_ptr())
+
+    var left = ctx.enqueue_create_buffer[DType.uint32](3)
+    var right = ctx.enqueue_create_buffer[DType.uint32](3)
+    var hl = ctx.enqueue_create_host_buffer[DType.uint32](3)
+    var hr = ctx.enqueue_create_host_buffer[DType.uint32](3)
+    for i in range(3):
+        hl.unsafe_ptr().unsafe_store(i, UInt32(2 * i))
+        hr.unsafe_ptr().unsafe_store(i, UInt32(2 * i + 1))
+    ctx.enqueue_copy(dst_buf=left, src_ptr=hl.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=right, src_ptr=hr.unsafe_ptr())
+    ctx.synchronize()
+
+    ctx.enqueue_function[update_partitions_after_split_kernel](
+        left.unsafe_ptr(),
+        right.unsafe_ptr(),
+        Int32(3),
+        flags.unsafe_ptr(),
+        p_off.unsafe_ptr(),
+        p_sz.unsafe_ptr(),
+        hh_off.unsafe_ptr(),
+        hh_sz.unsafe_ptr(),
+        grid_dim=(1, 3, 1),
+        block_dim=(512, 1, 1),
+    )
+    ctx.synchronize()
+
+    var oo = ctx.enqueue_create_host_buffer[DType.uint32](n_leaves)
+    var os = ctx.enqueue_create_host_buffer[DType.uint32](n_leaves)
+    ctx.enqueue_copy(dst_ptr=oo.unsafe_ptr(), src_buf=p_off)
+    ctx.enqueue_copy(dst_ptr=os.unsafe_ptr(), src_buf=p_sz)
+    ctx.synchronize()
+
+    var want_off = List[Int]()
+    var want_sz = List[Int]()
+    want_off.append(0);  want_sz.append(4)
+    want_off.append(4);  want_sz.append(6)
+    want_off.append(10); want_sz.append(6)
+    want_off.append(16); want_sz.append(0)
+    want_off.append(16); want_sz.append(0)
+    want_off.append(16); want_sz.append(8)
+
+    var wrong = 0
+    for i in range(n_leaves):
+        var go = Int(oo.unsafe_ptr().unsafe_load(i))
+        var gs = Int(os.unsafe_ptr().unsafe_load(i))
+        if go != want_off[i] or gs != want_sz[i]:
+            wrong += 1
+            print("    leaf", i, "got", go, gs, "want", want_off[i], want_sz[i])
+    print("  mixed -> 4/6, all-zero -> 6 then empty, all-one -> empty then 8")
+    print("  wrong partitions:", wrong, "of", n_leaves)
+    if wrong != 0:
+        raise Error("partition update is wrong")
+    print("  border found in all three cases, sentinels work")
