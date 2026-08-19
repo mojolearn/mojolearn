@@ -43,6 +43,8 @@ def check_hist_depends_on_partition() raises:
     explain a score that never changes with depth.
     """
     var ctx = DeviceContext()
+    # Scratch for the multi-block flush signature; unused at one block.
+    var acc_scratch = ctx.enqueue_create_buffer[DType.int32](8192)
     var n_rows = 1024
     var n_features = features_per_int(POLICY_BINARY)
     var stat_count = 1
@@ -140,8 +142,8 @@ def check_hist_depends_on_partition() raises:
         grp_sz.unsafe_ptr(), Int32(n_features), cindex.unsafe_ptr(),
         Int32(n_rows), row_index.unsafe_ptr(), stats.unsafe_ptr(),
         Int32(n_rows), p_off.unsafe_ptr(), p_sz.unsafe_ptr(),
-        ids.unsafe_ptr(), hist.unsafe_ptr(), Int32(max_leaves),
-        Int32(stat_count),
+        ids.unsafe_ptr(), hist.unsafe_ptr(), acc_scratch.unsafe_ptr(),
+        Float32(1.0), Int32(max_leaves), Int32(stat_count),
         grid_dim=(1, 1, 1), block_dim=(BLOCK_SIZE, 1, 1),
     )
     ctx.synchronize()
@@ -163,8 +165,8 @@ def check_hist_depends_on_partition() raises:
         grp_sz.unsafe_ptr(), Int32(n_features), cindex.unsafe_ptr(),
         Int32(n_rows), row_index.unsafe_ptr(), stats.unsafe_ptr(),
         Int32(n_rows), p_off.unsafe_ptr(), p_sz.unsafe_ptr(),
-        ids.unsafe_ptr(), hist.unsafe_ptr(), Int32(max_leaves),
-        Int32(stat_count),
+        ids.unsafe_ptr(), hist.unsafe_ptr(), acc_scratch.unsafe_ptr(),
+        Float32(1.0), Int32(max_leaves), Int32(stat_count),
         grid_dim=(1, 2, 1), block_dim=(BLOCK_SIZE, 1, 1),
     )
     ctx.synchronize()

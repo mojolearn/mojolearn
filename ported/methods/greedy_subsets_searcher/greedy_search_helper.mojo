@@ -43,6 +43,7 @@ from ported.methods.greedy_subsets_searcher.kernel.hist_binary import (
     binary_hist_kernel,
 )
 from ported.methods.greedy_subsets_searcher.kernel.histogram_utils import (
+    fixed_to_float_kernel,
     scan_histograms_kernel,
     zero_histograms_kernel,
 )
@@ -172,6 +173,9 @@ def run_one_level(
     # --- histogram buffer: [leaf][stat][binFeature] ----------------------
     var hist_cells = n_leaves * stat_count * n_features
     var hist = ctx.enqueue_create_buffer[DType.float32](hist_cells)
+    # run_one_level is depth 0 with one block per partition, so the
+    # multi-block flush never fires; the scratch satisfies the signature.
+    var acc_scratch = ctx.enqueue_create_buffer[DType.int32](hist_cells)
     var zero_ids = ctx.enqueue_create_buffer[DType.uint32](n_leaves)
     var hz = ctx.enqueue_create_host_buffer[DType.uint32](n_leaves)
     for i in range(n_leaves):
@@ -203,6 +207,8 @@ def run_one_level(
         p_sz.unsafe_ptr(),
         leaf0.unsafe_ptr(),
         hist.unsafe_ptr(),
+        acc_scratch.unsafe_ptr(),
+        Float32(1.0),
         Int32(n_leaves),
         Int32(stat_count),
         grid_dim=(1, 1, stat_count),
@@ -442,9 +448,51 @@ def run_tree(
     ctx.enqueue_copy(dst_buf=hp_off, src_ptr=h_off.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=hp_sz, src_ptr=h_sz.unsafe_ptr())
 
-    var hist = ctx.enqueue_create_buffer[DType.float32](
-        max_leaves * stat_count * n_features
-    )
+    var hist_cells = max_leaves * stat_count * n_features
+    var hist = ctx.enqueue_create_buffer[DType.float32](hist_cells)
+
+    # FIXED-POINT ACCUMULATOR for replicated blocks. Metal has no float
+    # atomic, so partial histograms from blocks sharing a partition sum as
+    # Int32 through an integer atomic and are converted back afterwards.
+    # Integer addition is associative, so the histogram does not depend on
+    # which block lands first.
+    var acc_i32 = ctx.enqueue_create_buffer[DType.int32](hist_cells)
+    var zi = ctx.enqueue_create_host_buffer[DType.int32](hist_cells)
+    for i in range(hist_cells):
+        zi.unsafe_ptr().unsafe_store(i, Int32(0))
+    ctx.enqueue_copy(dst_buf=acc_i32, src_ptr=zi.unsafe_ptr())
+
+    # The scale bounds every partial sum. A cell can hold at most the whole
+    # dataset's weight or the sum of gradient magnitudes, and both are known
+    # here, so a scale derived from them cannot overflow at any depth: a
+    # leaf's rows are a subset of all rows. See mojo_only/fixed_point.mojo.
+    var mag = Float64(total_weight)
+    var gmag = Float64(total_gradient)
+    if gmag < 0.0:
+        gmag = -gmag
+    if gmag > mag:
+        mag = gmag
+    if mag <= 0.0:
+        mag = 1.0
+    var fixed_scale = Float32(Float64((1 << 28) - 1) / mag)
+
+    # REPLICATION: how many blocks share one partition. CatBoost sizes this
+    # to fill the SMs (`hist_binary.cu:90-95`).
+    #
+    # **MEASURED AT 32 AND IT WAS SLOWER, so it is 1.** Depth 8 went 70.3 ms
+    # to 81.1 and depth 6 45.5 to 50.8, correctness unchanged. The reason is
+    # the OUTPUT SIZE, not the input: 32 binary features is 32 bin-features,
+    # so the histogram is 64 cells across two stat planes. Thirty-two replica
+    # blocks of 512 threads is about 16,000 threads contending on 64 atomic
+    # addresses, plus a conversion pass per level.
+    #
+    # CatBoost's replication pays because their histograms are thousands of
+    # cells (100 features at up to 256 bins each). The rule that would make
+    # this useful is bin-count-aware rather than constant, and writing one
+    # without measuring the wide-feature shape would be a guess. The
+    # fixed-point flush stays wired and correct so the experiment can be rerun
+    # the moment there is a shape worth running it on.
+    var hist_replicas = 1
     var part_stats = ctx.enqueue_create_buffer[DType.float32](
         max_leaves * stat_count
     )
@@ -563,8 +611,9 @@ def run_tree(
                 Int32(n_features), cindex.unsafe_ptr(), Int32(n_rows),
                 stats.unsafe_ptr(), Int32(n_rows),
                 p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids_a.unsafe_ptr(),
-                hist.unsafe_ptr(), Int32(max_leaves), Int32(stat_count),
-                grid_dim=(1, n_live, stat_count),
+                hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
+                Int32(max_leaves), Int32(stat_count),
+                grid_dim=(hist_replicas, n_live, stat_count),
                 block_dim=(BLOCK_SIZE, 1, 1),
             )
         else:
@@ -575,11 +624,21 @@ def run_tree(
                 row_index.unsafe_ptr(),
                 stats.unsafe_ptr(), Int32(n_rows),
                 p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids_a.unsafe_ptr(),
-                hist.unsafe_ptr(), Int32(max_leaves), Int32(stat_count),
-                grid_dim=(1, n_live, stat_count),
+                hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
+                Int32(max_leaves), Int32(stat_count),
+                grid_dim=(hist_replicas, n_live, stat_count),
                 block_dim=(BLOCK_SIZE, 1, 1),
             )
 
+        # Convert the replicated partials back to floats before the scan.
+        ctx.enqueue_function[fixed_to_float_kernel](
+            acc_i32.unsafe_ptr(),
+            hist.unsafe_ptr(),
+            Int32(hist_cells),
+            fixed_scale,
+            grid_dim=(hist_cells + 255) // 256,
+            block_dim=256,
+        )
         ctx.enqueue_function[scan_histograms_kernel](
             fold_off.unsafe_ptr(),
             folds.unsafe_ptr(),

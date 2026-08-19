@@ -27,6 +27,8 @@ from ported.methods.greedy_subsets_searcher.kernel.histogram_utils import (
 
 def probe() raises:
     var ctx = DeviceContext()
+    # Scratch for the multi-block flush signature; unused at one block.
+    var acc_scratch = ctx.enqueue_create_buffer[DType.int32](8192)
 
     var u32a = ctx.enqueue_create_buffer[DType.uint32](64)
     var u32b = ctx.enqueue_create_buffer[DType.uint32](64)
@@ -102,6 +104,8 @@ def probe() raises:
         p_size.unsafe_ptr(),
         p_ids.unsafe_ptr(),
         sums.unsafe_ptr(),
+        acc_scratch.unsafe_ptr(),
+        Float32(1.0),
         Int32(4),
         Int32(2),
         grid_dim=(1, 1, 1),

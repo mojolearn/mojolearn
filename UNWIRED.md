@@ -23,8 +23,8 @@ so this tree cannot repeat that quietly. **Audited by grep, not by memory.**
 
 | thing | read by | why not, and what would change it |
 |---|---|---|
-| `deterministic_flush` (matrix row) | **nothing** but a doc line | No kernel does a MULTI-BLOCK flush. One block per (leaf, feature-group) owns its output slot outright, so no atomic is needed and the histograms are correct without it. The row starts mattering the moment replication across blocks exists. |
-| `mojo_only/fixed_point.mojo` | **nothing** but its own check | Same reason. It is verified in isolation (overflow bound tight at 268,435,453 of 268,435,455; forward and reverse accumulation exact) and used by no kernel. |
+| `deterministic_flush` (matrix row) | **WIRED**: `hist_binary.mojo` branches on `deterministic_flush_for[TARGET_COLUMN, ...]` at comptime | Forced true on apple because Metal has no float atomic; follows the mode on nvidia and amd. The multi-block path sums Int32 partials through an integer atomic and converts back in `fixed_to_float_kernel`. Correct and exercised, but `hist_replicas` is 1 because replication measured SLOWER at this shape. |
+| `mojo_only/fixed_point.mojo` | its own check, and the flush now uses the same scheme inline | Same reason. It is verified in isolation (overflow bound tight at 268,435,453 of 268,435,455; forward and reverse accumulation exact) and used by no kernel. |
 | `column_lane_width` | `spec_for` only | Nothing needs a lane width while `sync_granularity` is `SYNC_BLOCK` everywhere. |
 | pinned host partitions (`partsCpu`) | the kernel writes them | `update_partitions_after_split_kernel` takes `host_offset` / `host_size` and writes them, so the device half is ported. The driver must allocate those as PINNED host memory rather than ordinary device buffers, which is where the trick pays: the host then learns every leaf's size with no device-to-host copy, and the next level's smaller-sibling decision needs no readback in the critical path. |
 

@@ -68,6 +68,8 @@ from ported.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template
 
 def check_binary_histogram() raises:
     var ctx = DeviceContext()
+    # Scratch for the multi-block flush signature; unused at one block.
+    var acc_scratch = ctx.enqueue_create_buffer[DType.int32](8192)
 
     var n_rows = 64
     var n_features = features_per_int(POLICY_BINARY)  # 32
@@ -166,6 +168,8 @@ def check_binary_histogram() raises:
         p_sz.unsafe_ptr(),
         p_ids.unsafe_ptr(),
         sums.unsafe_ptr(),
+        acc_scratch.unsafe_ptr(),
+        Float32(1.0),
         Int32(1),
         Int32(1),
         grid_dim=(1, 1, 1),
@@ -214,6 +218,8 @@ def check_two_partitions() raises:
     is the count over [24, 64), which is 20.
     """
     var ctx = DeviceContext()
+    # Scratch for the multi-block flush signature; unused at one block.
+    var acc_scratch = ctx.enqueue_create_buffer[DType.int32](8192)
     var n_rows = 64
     var n_features = features_per_int(POLICY_BINARY)
     var split_at = 24
@@ -307,6 +313,8 @@ def check_two_partitions() raises:
         p_sz.unsafe_ptr(),
         p_ids.unsafe_ptr(),
         sums.unsafe_ptr(),
+        acc_scratch.unsafe_ptr(),
+        Float32(1.0),
         Int32(2),
         Int32(1),
         grid_dim=(1, 2, 1),
@@ -353,6 +361,8 @@ def check_half_byte_histogram() raises:
     written, not just the zero side, so a wrong fold index shows up directly.
     """
     var ctx = DeviceContext()
+    # Scratch for the multi-block flush signature; unused at one block.
+    var acc_scratch = ctx.enqueue_create_buffer[DType.int32](8192)
     var n_rows = 64
     var n_features = features_per_int(POLICY_HALF_BYTE)  # 8
     var n_folds = 4
@@ -500,6 +510,8 @@ def check_subtraction() raises:
         wrote both slots would still make the first assertion pass.
     """
     var ctx = DeviceContext()
+    # Scratch for the multi-block flush signature; unused at one block.
+    var acc_scratch = ctx.enqueue_create_buffer[DType.int32](8192)
     var n_bf = 8
     var n_leaves = 3
 
@@ -579,6 +591,8 @@ def check_scan() raises:
     feature 1's first fold into 10+10.
     """
     var ctx = DeviceContext()
+    # Scratch for the multi-block flush signature; unused at one block.
+    var acc_scratch = ctx.enqueue_create_buffer[DType.int32](8192)
     var n_features = 2
     var n_folds = 4
     var n_bf = n_features * n_folds
@@ -658,6 +672,8 @@ def check_scores() raises:
     serial inside the thread and needs no cross-thread reduction.
     """
     var ctx = DeviceContext()
+    # Scratch for the multi-block flush signature; unused at one block.
+    var acc_scratch = ctx.enqueue_create_buffer[DType.int32](8192)
     var n_bf = 4
     var n_leaves = 2
     var stat_count = 2  # [weight, gradient]
@@ -797,6 +813,8 @@ def check_split_points() raises:
         which is what the stable partition afterwards permutes.
     """
     var ctx = DeviceContext()
+    # Scratch for the multi-block flush signature; unused at one block.
+    var acc_scratch = ctx.enqueue_create_buffer[DType.int32](8192)
     var n_rows = 32
     var split_at = 12
     var feature_id = 5  # not 0, so the shift is non-trivial
@@ -959,6 +977,8 @@ def check_partition_update() raises:
     partition that silently corrupts the next level.
     """
     var ctx = DeviceContext()
+    # Scratch for the multi-block flush signature; unused at one block.
+    var acc_scratch = ctx.enqueue_create_buffer[DType.int32](8192)
     var n_rows = 24
     var n_leaves = 6
 
@@ -1068,6 +1088,8 @@ def check_zero_and_copy() raises:
     subtraction afterwards legal.
     """
     var ctx = DeviceContext()
+    # Scratch for the multi-block flush signature; unused at one block.
+    var acc_scratch = ctx.enqueue_create_buffer[DType.int32](8192)
     var n_leaves = 4
     var n_bf = 3
     var total = n_leaves * n_bf
@@ -1165,6 +1187,8 @@ def check_stable_partition() raises:
     the leaf silently held different rows.
     """
     var ctx = DeviceContext()
+    # Scratch for the multi-block flush signature; unused at one block.
+    var acc_scratch = ctx.enqueue_create_buffer[DType.int32](8192)
     var n0 = 300
     var n1 = 17
     var n_rows = n0 + n1
@@ -1266,6 +1290,8 @@ def check_one_byte_bits[bits: Int]() raises:
     """
     comptime n_folds = 1 << bits
     var ctx = DeviceContext()
+    # Scratch for the multi-block flush signature; unused at one block.
+    var acc_scratch = ctx.enqueue_create_buffer[DType.int32](8192)
     var n_features = 4
     var n_rows = 10 * n_folds
 

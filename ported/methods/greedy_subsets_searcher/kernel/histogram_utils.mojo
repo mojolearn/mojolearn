@@ -181,3 +181,29 @@ def copy_histograms_kernel(
     while i < hist_size:
         histograms.unsafe_store(dst + i, histograms.unsafe_load(src + i))
         i += stride
+
+
+def fixed_to_float_kernel(
+    acc_i32: MutPointer[Int32, MutAnyOrigin],
+    bin_sums: MutPointer[Float32, MutAnyOrigin],
+    n_cells_in: Int32,
+    fixed_scale: Float32,
+):
+    """Convert the fixed-point accumulator back to the float histogram.
+
+    NO CATBOOST COUNTERPART: they accumulate partials with a float atomic and
+    need no conversion. This exists because Metal has no float atomic, so
+    replicated blocks sum into Int32 and the result is divided back out here.
+
+    Also zeroes the accumulator, so the next level does not inherit it. A
+    separate zeroing launch would cost a kernel for nothing.
+    """
+    var n = Int(n_cells_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(block_dim.x) * Int(grid_dim.x)
+    while i < n:
+        var q = acc_i32.unsafe_load(i)
+        if q != Int32(0):
+            bin_sums.unsafe_store(i, Float32(Int(q)) / fixed_scale)
+            acc_i32.unsafe_store(i, Int32(0))
+        i += stride

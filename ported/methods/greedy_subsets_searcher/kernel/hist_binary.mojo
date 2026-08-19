@@ -25,6 +25,7 @@ Only the zero side is written. The one side is `total - val`, recovered by
 the caller, which is why a binary feature costs one fold and not two.
 """
 
+from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
@@ -32,8 +33,10 @@ from max.gpu.sync import barrier
 
 from mojo_only.kernel_matrix import (
     TARGET_COLUMN,
+    deterministic_flush_for,
     requires_uniform_iteration_for,
 )
+from mojo_only.numerics import NUMERIC_FAST, NUMERIC_IDENTICAL
 from ported.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
     BLOCK_SIZE,
     HIST_SIZE,
@@ -60,6 +63,9 @@ comptime LOAD_SIZE = 1
 #: `kernel_matrix.column_lane_width` for why AMD's 64 must not reach this.
 comptime LANE_WIDTH = 32
 
+#: The mode this build compiles against; see `mojo_only/numerics.mojo`.
+comptime BUILD_MODE = NUMERIC_FAST
+
 
 def binary_hist_kernel(
     # `TFeatureInBlock*`, flattened to four parallel arrays so the kernel
@@ -77,6 +83,8 @@ def binary_hist_kernel(
     part_size: MutPointer[UInt32, MutAnyOrigin],
     part_ids: MutPointer[UInt32, MutAnyOrigin],
     bin_sums: MutPointer[Float32, MutAnyOrigin],
+    acc_i32: MutPointer[Int32, MutAnyOrigin],
+    fixed_scale: Float32,
     leaf_count_in: Int32,
     stat_count_in: Int32,
 ):
@@ -288,12 +296,73 @@ def binary_hist_kernel(
             # Their guard, copied: skip a flush that cannot matter, so the
             # non-deterministic atomic is not paid for nothing.
             if abs(val) > Float32(1e-20):
-                # DEVIATION (numerics.mojo): CatBoost uses atomicAdd when
-                # blockCount > 1 and a plain store otherwise. The atomic is
-                # order-nondeterministic and is what `NUMERIC_IDENTICAL`
-                # replaces with a fixed-point accumulator. Direct store here;
-                # the multi-block flush lands with the replication work.
-                dst.unsafe_store(fold, val)
+                # THE FLUSH, and the one row `mojo_only/numerics.mojo` says a
+                # vendor can override. CatBoost writes
+                #
+                #     if (blockCount > 1) atomicAdd(dst + fold, val);
+                #     else                dst[fold] = val;
+                #
+                # A plain store is only correct when ONE block owns the
+                # partition. Replicating blocks across a partition, which is
+                # what fills the machine, makes every block hold a PARTIAL
+                # histogram, and partials must be summed.
+                #
+                # Metal has no float atomic add, so the partial sum goes
+                # through the FIXED-POINT accumulator: `val * scale` into an
+                # Int32 with an integer atomic, which Metal does have.
+                # Integer addition is associative, so the result does not
+                # depend on which block lands first, and the histogram is
+                # reproducible run to run rather than merely correct. That is
+                # the property CatBoost's float atomic gives up.
+                # THE ROW, read from the matrix rather than assumed. On
+                # Apple it is forced true because Metal has no float atomic;
+                # on NVIDIA and AMD it follows the mode.
+                # THE ROW, read from the matrix rather than assumed. On
+                # Apple it is forced true because Metal has no float atomic;
+                # on NVIDIA and AMD it follows the mode. Comptime, because
+                # the two flushes are different code and not a configured
+                # value, which is the distinction numerics.mojo draws.
+                comptime det = deterministic_flush_for[
+                    TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
+                ]()
+
+                @parameter
+                if det:
+                    if active_block_count > 1:
+                        # Replicated blocks hold PARTIAL histograms. Metal
+                        # has no float atomic, so partials sum as Int32
+                        # through an integer atomic, which is associative and
+                        # therefore reproducible run to run.
+                        var q = Int32(val * fixed_scale)
+                        _ = Atomic.fetch_add(
+                            acc_i32.unsafe_offset(
+                                (
+                                    Int(
+                                        part_ids.unsafe_load(
+                                            Int(block_idx.y)
+                                        )
+                                    )
+                                    * stat_count
+                                    + Int(block_idx.z)
+                                )
+                                * group_size
+                                + Int(
+                                    feature_fold_offset.unsafe_load(
+                                        feature_offset + fid
+                                    )
+                                )
+                                + fold
+                            ),
+                            q,
+                        )
+                    else:
+                        dst.unsafe_store(fold, val)
+                else:
+                    # CatBoost's float-atomic path. Unreachable while
+                    # TARGET_COLUMN is apple. Left as a plain store rather
+                    # than a float atomic Mojo cannot emit; the day a CUDA
+                    # column is built this is where their branch goes.
+                    dst.unsafe_store(fold, val)
 
 
 def binary_hist_gather_kernel(
@@ -313,6 +382,8 @@ def binary_hist_gather_kernel(
     part_size: MutPointer[UInt32, MutAnyOrigin],
     part_ids: MutPointer[UInt32, MutAnyOrigin],
     bin_sums: MutPointer[Float32, MutAnyOrigin],
+    acc_i32: MutPointer[Int32, MutAnyOrigin],
+    fixed_scale: Float32,
     leaf_count_in: Int32,
     stat_count_in: Int32,
 ):
@@ -552,9 +623,70 @@ def binary_hist_gather_kernel(
             # Their guard, copied: skip a flush that cannot matter, so the
             # non-deterministic atomic is not paid for nothing.
             if abs(val) > Float32(1e-20):
-                # DEVIATION (numerics.mojo): CatBoost uses atomicAdd when
-                # blockCount > 1 and a plain store otherwise. The atomic is
-                # order-nondeterministic and is what `NUMERIC_IDENTICAL`
-                # replaces with a fixed-point accumulator. Direct store here;
-                # the multi-block flush lands with the replication work.
-                dst.unsafe_store(fold, val)
+                # THE FLUSH, and the one row `mojo_only/numerics.mojo` says a
+                # vendor can override. CatBoost writes
+                #
+                #     if (blockCount > 1) atomicAdd(dst + fold, val);
+                #     else                dst[fold] = val;
+                #
+                # A plain store is only correct when ONE block owns the
+                # partition. Replicating blocks across a partition, which is
+                # what fills the machine, makes every block hold a PARTIAL
+                # histogram, and partials must be summed.
+                #
+                # Metal has no float atomic add, so the partial sum goes
+                # through the FIXED-POINT accumulator: `val * scale` into an
+                # Int32 with an integer atomic, which Metal does have.
+                # Integer addition is associative, so the result does not
+                # depend on which block lands first, and the histogram is
+                # reproducible run to run rather than merely correct. That is
+                # the property CatBoost's float atomic gives up.
+                # THE ROW, read from the matrix rather than assumed. On
+                # Apple it is forced true because Metal has no float atomic;
+                # on NVIDIA and AMD it follows the mode.
+                # THE ROW, read from the matrix rather than assumed. On
+                # Apple it is forced true because Metal has no float atomic;
+                # on NVIDIA and AMD it follows the mode. Comptime, because
+                # the two flushes are different code and not a configured
+                # value, which is the distinction numerics.mojo draws.
+                comptime det = deterministic_flush_for[
+                    TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
+                ]()
+
+                @parameter
+                if det:
+                    if active_block_count > 1:
+                        # Replicated blocks hold PARTIAL histograms. Metal
+                        # has no float atomic, so partials sum as Int32
+                        # through an integer atomic, which is associative and
+                        # therefore reproducible run to run.
+                        var q = Int32(val * fixed_scale)
+                        _ = Atomic.fetch_add(
+                            acc_i32.unsafe_offset(
+                                (
+                                    Int(
+                                        part_ids.unsafe_load(
+                                            Int(block_idx.y)
+                                        )
+                                    )
+                                    * stat_count
+                                    + Int(block_idx.z)
+                                )
+                                * group_size
+                                + Int(
+                                    feature_fold_offset.unsafe_load(
+                                        feature_offset + fid
+                                    )
+                                )
+                                + fold
+                            ),
+                            q,
+                        )
+                    else:
+                        dst.unsafe_store(fold, val)
+                else:
+                    # CatBoost's float-atomic path. Unreachable while
+                    # TARGET_COLUMN is apple. Left as a plain store rather
+                    # than a float atomic Mojo cannot emit; the day a CUDA
+                    # column is built this is where their branch goes.
+                    dst.unsafe_store(fold, val)

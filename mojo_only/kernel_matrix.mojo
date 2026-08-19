@@ -392,3 +392,23 @@ def requires_uniform_iteration_for[column: Int]() -> Bool:
     is a scheduling change and the histogram is unaffected.
     """
     return sync_granularity_for[column]() == SYNC_BLOCK
+
+
+def deterministic_flush_for[column: Int, identical: Bool]() -> Bool:
+    """NUMERIC row, comptime, so a kernel can branch on it.
+
+    Whether a multi-block histogram flush sums through a FIXED-POINT integer
+    accumulator instead of `atomicAdd` on `float`.
+
+    **The apple column cannot negotiate this and the others can.** Metal has
+    no float atomic add, so on Apple the row is forced true whatever mode is
+    asked for; on NVIDIA and AMD `FAST` leaves them CatBoost's float atomic
+    and `IDENTICAL` pins them to the integer path so all three agree.
+
+    Comptime rather than runtime because the two flushes are different code,
+    not a configured value, which is the distinction `numerics.mojo` draws
+    between a row a mode can pin and one it must replace.
+    """
+    if identical:
+        return True
+    return not column_has_float_atomics(column)

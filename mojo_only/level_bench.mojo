@@ -68,6 +68,8 @@ from ported.methods.greedy_subsets_searcher.greedy_search_helper import (
 
 def bench_level(n_rows: Int, repeats: Int) raises:
     var ctx = DeviceContext()
+    # Scratch for the multi-block flush signature; unused at one block.
+    var acc_scratch = ctx.enqueue_create_buffer[DType.int32](8192)
     var n_features = features_per_int(POLICY_BINARY)
 
     var cindex = ctx.enqueue_create_buffer[DType.uint32](n_rows)
@@ -161,6 +163,8 @@ def bench_histogram_only(n_rows: Int, repeats: Int) raises:
     known handicap in the port and it has never been measured.
     """
     var ctx = DeviceContext()
+    # Scratch for the multi-block flush signature; unused at one block.
+    var acc_scratch = ctx.enqueue_create_buffer[DType.int32](8192)
     var n_features = features_per_int(POLICY_BINARY)
     var stat_count = 2
 
@@ -229,6 +233,8 @@ def bench_histogram_only(n_rows: Int, repeats: Int) raises:
             p_sz.unsafe_ptr(),
             p_ids.unsafe_ptr(),
             hist.unsafe_ptr(),
+            acc_scratch.unsafe_ptr(),
+            Float32(1.0),
             Int32(1),
             Int32(stat_count),
             grid_dim=(1, 1, stat_count),
@@ -257,6 +263,8 @@ def bench_partition_only(n_rows: Int, repeats: Int) raises:
     correct and 12x slower and would not fail any correctness test.
     """
     var ctx = DeviceContext()
+    # Scratch for the multi-block flush signature; unused at one block.
+    var acc_scratch = ctx.enqueue_create_buffer[DType.int32](8192)
 
     var flags = ctx.enqueue_create_buffer[DType.uint8](n_rows)
     var hf = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
@@ -320,6 +328,8 @@ def bench_remaining_phases(n_rows: Int, repeats: Int) raises:
     schedule an untimed level gets. They are for attribution, not for a total.
     """
     var ctx = DeviceContext()
+    # Scratch for the multi-block flush signature; unused at one block.
+    var acc_scratch = ctx.enqueue_create_buffer[DType.int32](8192)
     var n_features = features_per_int(POLICY_BINARY)
     var stat_count = 2
 
@@ -507,6 +517,8 @@ def bench_tree(n_rows: Int, max_depth: Int, repeats: Int) raises:
     same time. This is the tree.
     """
     var ctx = DeviceContext()
+    # Scratch for the multi-block flush signature; unused at one block.
+    var acc_scratch = ctx.enqueue_create_buffer[DType.int32](8192)
     var n_features = features_per_int(POLICY_BINARY)
 
     var cindex = ctx.enqueue_create_buffer[DType.uint32](n_rows)
