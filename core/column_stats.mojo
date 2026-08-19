@@ -166,3 +166,92 @@ def covariance_kernel(
 
     if i < n_cols and j < n_cols:
         cov.unsafe_store(i * n_cols + j, acc * scale_in)
+
+
+def xty_kernel(
+    out_v: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    y: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+    n_cols_in: Int32,
+):
+    """`A^T b`. Stands in for `raft::linalg::gemv(..., trans=true)`.
+
+    One block per feature, striding rows. This and `covariance_kernel` are
+    the only two things in ordinary least squares that touch rows at all;
+    everything after them is `n_cols x n_cols`.
+    """
+    var n_rows = Int(n_rows_in)
+    var n_cols = Int(n_cols_in)
+    var col = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+
+    var acc = Float32(0.0)
+    var r = tid
+    while r < n_rows:
+        acc += x.unsafe_load(r * n_cols + col) * y.unsafe_load(r)
+        r += STATS_TPB
+
+    var s = stack_allocation[
+        STATS_TPB,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    s[tid] = acc
+    barrier()
+    var half = STATS_TPB // 2
+    while half > 0:
+        if tid < half:
+            s[tid] = s[tid] + s[tid + half]
+        barrier()
+        half //= 2
+    if tid == 0:
+        out_v.unsafe_store(col, s[0])
+
+
+def divide_columns_by_nonzero_kernel(
+    qs: MutPointer[Float32, MutAnyOrigin],
+    q: MutPointer[Float32, MutAnyOrigin],
+    s_vec: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    thresh_in: Float32,
+):
+    """`QS <- Q invS` with `DivideByNonZero`, `lstsq.cuh`'s matrixVectorOp.
+
+    Column `k` of `Q` is divided by eigenvalue `k`, and a column whose
+    eigenvalue is at or below the threshold is ZEROED rather than divided.
+
+    That zeroing is the whole numerical story of solving least squares
+    through the normal equations. `A^T A` squares the condition number, so a
+    direction the data barely constrains shows up as a tiny eigenvalue, and
+    dividing by it would amplify noise without bound. Dropping the direction
+    instead is a pseudo-inverse, and it is why their default OLS solver is
+    SVD rather than this one.
+    """
+    var n = Int(n_in)
+    var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if idx >= n * n:
+        return
+    var col = idx % n
+    var lam = s_vec.unsafe_load(col)
+    if lam > thresh_in or lam < -thresh_in:
+        qs.unsafe_store(idx, q.unsafe_load(idx) / lam)
+    else:
+        qs.unsafe_store(idx, Float32(0.0))
+
+
+def diagonal_to_vector_kernel(
+    out_v: MutPointer[Float32, MutAnyOrigin],
+    a: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """Pull the eigenvalues off the diagonal Jacobi leaves behind.
+
+    cuSOLVER hands back a separate eigenvalue array; Jacobi leaves them on
+    the diagonal of the matrix it consumed. One kernel bridges the two
+    conventions so the rest of the port reads like theirs.
+    """
+    var n = Int(n_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < n:
+        out_v.unsafe_store(i, a.unsafe_load(i * n + i))

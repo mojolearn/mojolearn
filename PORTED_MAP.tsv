@@ -35,3 +35,4 @@ ported/methods/doc_parallel_boosting.mojo	catboost/cuda/methods/doc_parallel_boo
 ported/methods/greedy_subsets_searcher/points_subsets.mojo	catboost/cuda/methods/greedy_subsets_searcher/split_properties_helper.h	partial	TPointsSubsets, TLeaf, TBestSplitProperties; PartitionsCpu not pinned, see NOT_PORTED.md
 ported/models/oblivious_model.mojo	catboost/cuda/models/oblivious_model.h	partial	TObliviousTreeStructure, TObliviousTreeModel, TAdditiveModel; no serialization, no SplitType
 ported/models/kernel/add_bin_values.mojo	catboost/cuda/models/kernel/add_model_value.cu	partial	ComputeBins fused with the add; ordered predicate only
+ported/grid_creator/binarization.mojo	library/cpp/grid_creator/binarization.cpp	partial	GreedyLogSum only, their default; host-side as theirs is; priority queue replaced by a scanned List
