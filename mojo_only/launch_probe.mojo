@@ -17,6 +17,7 @@ from max.gpu.host import DeviceContext
 
 from catboost.cuda.methods.greedy_subsets_searcher.kernel.compute_scores import compute_optimal_splits_kernel
 from catboost.cuda.methods.greedy_subsets_searcher.kernel.hist_binary import binary_hist_kernel
+from catboost.cuda.methods.greedy_subsets_searcher.kernel.hist_half_byte import half_byte_hist_kernel
 from catboost.cuda.methods.greedy_subsets_searcher.kernel.split_points import split_and_make_sequence_kernel
 from catboost.cuda.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     scan_histograms_kernel,
@@ -107,6 +108,38 @@ def probe() raises:
         block_dim=(512, 1, 1),
     )
     print("  binary_hist            enqueued")
+
+    var hb_folds = ctx.enqueue_create_buffer[DType.uint32](64)
+    var hb_fold_off = ctx.enqueue_create_buffer[DType.uint32](64)
+    var hb_grp_off = ctx.enqueue_create_buffer[DType.uint32](64)
+    var hb_grp_size = ctx.enqueue_create_buffer[DType.uint32](64)
+    var hb_cindex = ctx.enqueue_create_buffer[DType.uint32](4096)
+    var hb_poff = ctx.enqueue_create_buffer[DType.uint32](64)
+    var hb_psize = ctx.enqueue_create_buffer[DType.uint32](64)
+    var hb_pids = ctx.enqueue_create_buffer[DType.uint32](64)
+    var hb_stats = ctx.enqueue_create_buffer[DType.float32](4096)
+    var hb_sums = ctx.enqueue_create_buffer[DType.float32](4096)
+
+    ctx.enqueue_function[half_byte_hist_kernel](
+        hb_folds.unsafe_ptr(),
+        hb_fold_off.unsafe_ptr(),
+        hb_grp_off.unsafe_ptr(),
+        hb_grp_size.unsafe_ptr(),
+        Int32(8),
+        hb_cindex.unsafe_ptr(),
+        Int32(64),
+        hb_stats.unsafe_ptr(),
+        Int32(64),
+        hb_poff.unsafe_ptr(),
+        hb_psize.unsafe_ptr(),
+        hb_pids.unsafe_ptr(),
+        hb_sums.unsafe_ptr(),
+        Int32(4),
+        Int32(2),
+        grid_dim=(1, 1, 1),
+        block_dim=(512, 1, 1),
+    )
+    print("  half_byte_hist         enqueued")
 
     var ci = ctx.enqueue_create_buffer[DType.uint32](4096)
     var li = ctx.enqueue_create_buffer[DType.uint32](4096)

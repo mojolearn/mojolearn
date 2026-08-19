@@ -1,28 +1,29 @@
-"""The binary-feature histogram kernel: 32 features per 4-byte load.
+"""The half-byte histogram kernel: 8 features per 4-byte load.
 
-PORT OF `hist_binary.cu` plus the loop it instantiates,
+PORT OF `hist_half_byte.cu` plus the loop it instantiates,
 `compute_hist_loop_one_stat.cuh` (`ALIGN_MEMORY`,
 `TComputeHistogramImpl<OneElement>::Compute`,
 `ComputeSplitPropertiesDirectLoadsImpl`), at CatBoost `54a8143a`.
 Transliterated. Do not improve.
 
-**This is the kernel that should matter most on covtype**, where 44 of 54
-columns are 0/1 and route to `BinaryFeatures`. One `UInt32` of the compressed
-index holds 32 of them, so one load feeds 32 features' worth of histogram
-work. mojotrees issues 32 separate one-byte loads for the same result.
+The features that need 2 to 15 folds land here: one `UInt32` of the
+compressed index holds EIGHT of them at 4 bits each, so one load feeds eight
+features' worth of histogram work.
 
-The nibble trick in the writeback is worth reading twice. Binary features are
-packed 1 bit each, but the ACCUMULATOR is the half-byte one with 16 bins per
-group, so one 4-bit nibble carries FOUR binary features and its 16 bins are
-the 16 combinations of those four. To recover feature `fid`'s "bin 0" count
-you sum the eight of those sixteen combinations in which its bit is clear:
+**It shares the accumulator and the whole outer loop with `hist_binary`, and
+differs in exactly two places**, which is why the two files read almost
+identically and why that duplication is deliberate rather than sloppy:
 
-    groupId = fid / 4
-    fMask   = 1 << (3 - (fid & 3))
-    val     = sum over i in 0..15 where !(i & fMask) of Histogram[8 * i + groupId]
+1. `GroupSize` is 8 rather than 32, so the grid divides the feature axis by 8
+   (`hist_half_byte.cu:80`) instead of by 32.
+2. The writeback is DIRECT. A half-byte feature owns its own nibble, so bin
+   `fold` of feature `fid` is simply `Histogram[fid + 8 * fold]`
+   (`hist_half_byte.cu:44`) with no combination decode. Binary features need
+   the decode only because four of them share a nibble.
 
-Only the zero side is written. The one side is `total - val`, recovered by
-the caller, which is why a binary feature costs one fold and not two.
+Their thread mapping for the writeback, copied: `fid = threadIdx.x >> 4` and
+`fold = threadIdx.x & 15`, so one thread owns one (feature, fold) cell and
+the bounds test is `fold < features[fid].Folds`.
 """
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
@@ -57,7 +58,7 @@ comptime LOAD_SIZE = 1
 comptime LANE_WIDTH = 32
 
 
-def binary_hist_kernel(
+def half_byte_hist_kernel(
     # `TFeatureInBlock*`, flattened to four parallel arrays so the kernel
     # takes plain pointers.
     feature_folds: MutPointer[UInt32, MutAnyOrigin],
@@ -76,10 +77,10 @@ def binary_hist_kernel(
     leaf_count_in: Int32,
     stat_count_in: Int32,
 ):
-    """`ComputeSplitPropertiesDirectLoadsImpl` with `GroupSize = 32`.
+    """`ComputeSplitPropertiesDirectLoadsImpl` with `GroupSize = 8`.
 
-    Grid, copied from `hist_binary.cu:86-97`:
-        z = numStats, y = partCount, x = ceil(fCount/32) * replication
+    Grid, copied from `hist_half_byte.cu:72-84`:
+        z = numStats, y = partCount, x = ceil(fCount/8) * replication
 
     **`blockIdx.y` is the LEAF.** All leaves of a level are one launch, and
     the number of launches does not depend on the leaf count or on the
@@ -98,10 +99,10 @@ def binary_hist_kernel(
     var p_size = Int(part_size.unsafe_load(part_id))
 
     # `maxBlocksPerPart = gridDim.x / ceil(fCount / GroupSize)`
-    var feature_blocks = (f_count_in + 31) // 32
+    var feature_blocks = (f_count_in + 7) // 8
     var max_blocks_per_part = Int(grid_dim.x) // feature_blocks
-    var feature_offset = (Int(block_idx.x) // max_blocks_per_part) * 32
-    var f_count = min(f_count_in - feature_offset, 32)
+    var feature_offset = (Int(block_idx.x) // max_blocks_per_part) * 8
+    var f_count = min(f_count_in - feature_offset, 8)
 
     var bins_p = bins + bins_line_size * (
         Int(block_idx.x) // max_blocks_per_part
@@ -216,14 +217,24 @@ def binary_hist_kernel(
         smem[tid] = acc2
     barrier()
 
-    # --- TPointHistBinary::AddToGlobalMemory, copied --------------------
-    var fid = tid
-    var fold = 0
+    # --- TPointHistHalfByte::AddToGlobalMemory, copied ------------------
+    #
+    #     const int fid = threadIdx.x >> 4;
+    #     const int fold = threadIdx.x & 15;
+    #     ... const float val = Histogram[fid + 8 * fold];
+    #
+    # No combination decode: a half-byte feature owns its nibble outright.
+    var fid = tid >> 4
+    var fold = tid & 15
     if fid < f_count:
         var folds = Int(feature_folds.unsafe_load(feature_offset + fid))
-        if folds != 0:
-            var group_offset = Int(feature_group_offset.unsafe_load(feature_offset + fid))
-            var group_size = Int(feature_group_size.unsafe_load(feature_offset + fid))
+        if fold < folds:
+            var group_offset = Int(
+                feature_group_offset.unsafe_load(feature_offset + fid)
+            )
+            var group_size = Int(
+                feature_group_size.unsafe_load(feature_offset + fid)
+            )
             var device_offset = group_offset * stat_count * leaf_count
             var entries_per_leaf = stat_count * group_size
             var dst = (
@@ -233,23 +244,8 @@ def binary_hist_kernel(
                 + Int(block_idx.z) * group_size
                 + Int(feature_fold_offset.unsafe_load(feature_offset + fid))
             )
-
-            var group_id = fid // 4
-            var f_mask = 1 << (3 - (fid & 3))
-
-            var val = Float32(0.0)
-
-            @parameter
-            for i in range(16):
-                if (i & f_mask) == 0:
-                    val += smem[8 * i + group_id]
-
-            # Their guard, copied: skip a flush that cannot matter, so the
-            # non-deterministic atomic is not paid for nothing.
+            var val = smem[fid + 8 * fold]
             if abs(val) > Float32(1e-20):
-                # DEVIATION (numerics.mojo): CatBoost uses atomicAdd when
-                # blockCount > 1 and a plain store otherwise. The atomic is
-                # order-nondeterministic and is what `NUMERIC_IDENTICAL`
-                # replaces with a fixed-point accumulator. Direct store here;
-                # the multi-block flush lands with the replication work.
+                # DEVIATION (mojo_only/numerics.mojo): their multi-block arm
+                # is atomicAdd on float, which Metal cannot express at all.
                 dst.unsafe_store(fold, val)
