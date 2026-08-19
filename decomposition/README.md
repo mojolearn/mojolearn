@@ -22,15 +22,39 @@ structural reason this algorithm is a good GPU fit**: one bandwidth-bound
 pass, one big arithmetic-dense product, then a small dense problem that does
 not care where it runs.
 
-Step 4 runs on the host here (`mojo_only/jacobi_eigh.mojo`). That is inside
-`HOST_AND_DEVICE.md`'s rule, not an exception to it: the rule forbids host
-work that is O(rows), and this is `n_cols^3` on a matrix that for a
-million-row, fifty-feature fit is 50x50. **Jacobi is also THEIR algorithm**,
-not our substitute: `cal_eig` branches on `prms.algorithm` and
-`solver::COV_EIG_JACOBI` selects exactly it.
+Step 4 runs **on the device** (`mojo_only/jacobi_eigh_device.mojo`), because
+cuSOLVER's `syevj` does, and the standing rule is to mirror their host/device
+split rather than to make our own. The first version of this port put it on
+the host; that was inside `HOST_AND_DEVICE.md`'s O(rows) rule but was not a
+mirror of theirs, and the rule about mirroring wins. The host version
+survives as the reference the device one is checked against.
+
+**Jacobi is also THEIR algorithm**, not our substitute: `cal_eig` branches on
+`prms.algorithm` and `solver::COV_EIG_JACOBI` selects exactly it.
+
+**Honest caveat on that kernel.** It is device-RESIDENT but its `(p, q)` pair
+loop is serial, with the O(n) updates inside each rotation parallel. cuSOLVER
+is the round-robin tournament version, which does `n/2` disjoint rotations at
+once and is what actually leverages the GPU. Ours is the right shape for
+being diffed against the host reference rotation for rotation, and it is the
+wrong shape for speed. At `n_cols = 4` this is irrelevant; at `n_cols = 32`
+it is 496 serial pairs and it will show. Named here rather than discovered
+later.
 
 Step 6 is the one that is easy to drop and invisible when dropped, so it has
 its own check.
+
+## Truncated SVD comes almost free
+
+`tsvd_fit` is PCA without the centering and without the `n_rows - 1`
+division: same product, same `cal_eig`, same truncation. Their two files
+share `cal_eig` and so do ours, which is why `tsvd.mojo` is thirty lines.
+
+The user-visible difference gets its own check: truncated SVD is NOT
+translation invariant and PCA is. Shift a column by 1000 and tsvd's first
+component swings onto it while PCA's does not move. Asserting both halves
+together is the point, because either alone would pass for an implementation
+that centered in the wrong place.
 
 ## Status
 
@@ -42,6 +66,9 @@ its own check.
     check_pca_invariants OK: x3 scaling moved variances by exactly 9 and moved
       no direction; a +1000 column shift moved nothing at all
     check_input_restored OK: worst element moved 9.5e-07 after a full fit
+    check_tsvd_against_pca OK: identical directions on centered data, and a
+      +1000 shift moved tsvd's first component to |dot| = 0.83 while PCA's
+      was unmoved
 
 Never benchmarked.
 

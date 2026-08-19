@@ -3,3 +3,4 @@
 # over raft::linalg::pca, so the algorithm lives in RAFT and that is what is
 # mirrored here.
 ported/linalg/detail/pca.mojo	raft cpp/include/raft/linalg/detail/pca.cuh	partial	pca_fit and pca_transform; plus cal_eig and trunc_comp_exp_vars from detail/tsvd.cuh, which are inseparable from fit
+ported/linalg/detail/tsvd.mojo	raft cpp/include/raft/linalg/detail/tsvd.cuh	partial	tsvd_fit only; shares eig_and_truncate with pca, which is how their two files share cal_eig

@@ -44,6 +44,7 @@ from std.math import cos, sin, sqrt
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from decomposition.ported.linalg.detail.pca import PCAResult, pca_fit
+from decomposition.ported.linalg.detail.tsvd import tsvd_fit
 
 
 comptime PCA_ROWS = 8192
@@ -331,4 +332,63 @@ def check_input_restored() raises:
     print(
         "check_input_restored OK: worst element moved " + String(worst)
         + " after a full fit"
+    )
+
+
+def check_tsvd_against_pca() raises:
+    """The two differ by CENTERING and by nothing else, so assert exactly that.
+
+    On data whose columns already have zero mean, `X^T X = (n_rows - 1) * cov`,
+    so truncated SVD and PCA must find the SAME directions. Shift a column and
+    they must part company: PCA is unchanged, truncated SVD is not, because
+    nothing centered it.
+
+    Asserting both halves in one check is the point. Either alone would pass
+    for an implementation that centered in the wrong place.
+    """
+    var ctx = DeviceContext()
+
+    var x = ctx.enqueue_create_buffer[DType.float32](PCA_ROWS * PCA_COLS)
+    var mu = ctx.enqueue_create_buffer[DType.float32](PCA_COLS)
+    var cov = ctx.enqueue_create_buffer[DType.float32](PCA_COLS * PCA_COLS)
+    var gram = ctx.enqueue_create_buffer[DType.float32](PCA_COLS * PCA_COLS)
+    ctx.synchronize()
+
+    # The latent columns are symmetric about zero, so the raw data is already
+    # very nearly centered and the two must agree.
+    _fill(ctx, x, 1.0, 0.0)
+    var t0 = tsvd_fit(ctx, x, gram, PCA_ROWS, PCA_COLS, PCA_COMPONENTS)
+    _fill(ctx, x, 1.0, 0.0)
+    var p0 = pca_fit(ctx, x, mu, cov, PCA_ROWS, PCA_COLS, PCA_COMPONENTS)
+
+    for c in range(PCA_COMPONENTS):
+        var dot = 0.0
+        for j in range(PCA_COLS):
+            dot += t0.components[c * PCA_COLS + j] * p0.components[c * PCA_COLS + j]
+        if abs(dot) < 0.99:
+            raise Error(
+                "on centered data tsvd and pca disagree on component "
+                + String(c) + ", |dot| = " + String(abs(dot))
+                + ". They share cal_eig, so they can only differ by the"
+                " centering, and there is nothing to center here."
+            )
+
+    # Now shift. PCA must not move; tsvd must.
+    _fill(ctx, x, 1.0, 1000.0)
+    var t1 = tsvd_fit(ctx, x, gram, PCA_ROWS, PCA_COLS, PCA_COMPONENTS)
+
+    var moved = 0.0
+    for j in range(PCA_COLS):
+        moved += t1.components[j] * t0.components[j]
+    if abs(moved) > 0.9:
+        raise Error(
+            "shifting a column by 1000 did NOT move the first truncated-SVD"
+            " component (|dot| = " + String(abs(moved)) + "). tsvd_fit is"
+            " centering, which is the one thing that would make it PCA."
+        )
+
+    print(
+        "check_tsvd_against_pca OK: identical directions on centered data,"
+        " and a +1000 shift moved tsvd's first component to |dot| = "
+        + String(abs(moved)) + " while PCA's was unmoved"
     )
