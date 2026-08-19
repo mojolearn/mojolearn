@@ -1,4 +1,5 @@
 from mojo_only.launch_probe import probe
+from mojo_only.level_check import check_one_level
 from mojo_only.pack_check import check_packing
 from mojo_only.hist_check import (
     check_binary_histogram,
@@ -262,6 +263,9 @@ def show_tree_schedule() raises:
 
 
 def main() raises:
+    print("ONE FULL LEVEL (GPU, end to end):")
+    check_one_level()
+    print()
     print("packing round trip (GPU):")
     check_packing()
     print()
