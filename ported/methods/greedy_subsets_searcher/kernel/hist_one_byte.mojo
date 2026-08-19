@@ -86,7 +86,19 @@ comptime UNROLL = ONE_BYTE_UNROLL
 #: DEVIATION (PORTING.md 5): CatBoost picks a 4-element vector load here
 #: (`hist_2_one_byte_base.cuh:44-48`); the port takes one element, which is
 #: scheduling and not numeric.
-comptime LOAD_SIZE = 1
+#: `ELoadSize::FourElements` (`hist_one_byte.cu:47`). CatBoost picks it on
+#: every GPU newer than Maxwell, and it is the reason a thread of theirs
+#: consumes four points per load where ours used to consume one. The
+#: histogram is bandwidth bound, so this is the load path, not a detail.
+#:
+#: Raising it REQUIRES the head/tail peel below: a partition offset is not
+#: 4-aligned in general, and their whole reason for `AlignMemoryAccess` is
+#: that the main loop may then issue aligned vector loads with no bounds
+#: test inside it.
+comptime LOAD_SIZE = 4
+
+#: `loadSize * N`, the points one thread takes per iteration.
+comptime POINTS_PER_ITER = UNROLL * LOAD_SIZE
 
 comptime LANE_WIDTH = 32
 
@@ -127,6 +139,58 @@ def one_byte_bin_offset[bits: Int](ci: UInt32, tid: Int, i: Int) -> Int:
     var bin = Int((ci >> UInt32(24 - 8 * f)) & UInt32(255))
     var higher_bin = (bin >> 5) & mask
     return 4 * higher_bin + f + ((bin & 31) << 5)
+
+
+def add_one_byte_point[
+    bits: Int
+](
+    ci: UInt32,
+    stat: Float32,
+    tid: Int,
+    slice_base: Int,
+    smem: UnsafePointer[
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+        origin=MutUntrackedOrigin,
+    ],
+):
+    """`TPointHistOneByte::AddPoint`, one point, as a callable.
+
+    Their `AddPoint` is a method, so `AlignMemoryAccess` calls the SAME code
+    the main loop does (`compute_hist_loop_two_stats.cuh:81`). Ours had it
+    inlined in the loop, which is fine until the head/tail peel needs it too,
+    and duplicating twenty lines of barrier-carrying accumulation in four
+    places is how the two copies drift.
+
+    Four features per word, so the rotation is `& 3`. The PASS LOOP is what
+    separates this from the half-byte accumulator: the low five bits of the
+    bin index the slot directly and the HIGH bits are serialized, one pass
+    each, with only the lanes whose `higherBin == pass` writing.
+
+    **Every barrier here is threadgroup-wide and must be reached by every
+    thread of the block.** Callers therefore run a UNIFORM number of trips;
+    see the peel and the main loop.
+    """
+
+    @parameter
+    for i in range(4):
+        var slot = slice_base + one_byte_bin_offset[bits](ci, tid, i)
+        comptime inner_bits = bits - 5
+
+        @parameter
+        if inner_bits == 0:
+            barrier()
+            smem[slot] = smem[slot] + stat
+        else:
+            var higher = one_byte_higher_bin[bits](ci, tid, i)
+            comptime mask = (1 << inner_bits) - 1
+
+            @parameter
+            for kk in range(1 << inner_bits):
+                var p = ((tid >> 2) + kk) & mask
+                barrier()
+                if p == higher:
+                    smem[slot] = smem[slot] + stat
 
 
 def one_byte_higher_bin[bits: Int](ci: UInt32, tid: Int, i: Int) -> Int:
@@ -233,20 +297,70 @@ def one_byte_hist_kernel[bits: Int](
     barrier()
     var slice_base = one_byte_slice_offset[bits](tid)
 
-    # --- ALIGN_MEMORY(1), copied ---------------------------------------
+    # --- AlignMemoryAccess, ported (`compute_hist_loop_two_stats.cuh:57`) --
     #
-    # DEVIATION (PORTING.md 6): `AlignMemoryAccess` peels an unaligned prefix
-    # so the vector loads that follow are aligned. At LOAD_SIZE 1 there is
-    # nothing to align, so the peel is omitted rather than ported. It becomes
-    # required the moment LOAD_SIZE moves above 1.
+    # Peels the unaligned HEAD and TAIL of the partition on block 0 with
+    # scalar adds, so what remains starts and ends on an `alignSize`
+    # boundary. `alignSize = LoadSize * warpSize * N` is exactly one warp
+    # iteration, which is what lets the striped loop below issue ALIGNED
+    # 4-wide loads and carry no per-element bounds test.
+    #
+    #     int lastId = min(partSize, alignSize - (partOffset % alignSize));
+    #     if (blockId == 0) for (idx = tid; idx < alignSize; idx += BlockSize)
+    #     partSize = max(partSize - lastId, 0);
+    #     const int unalignedTail = (partSize % alignSize);
+    #     if (unalignedTail) { if (blockId == 0) { ...tail... } }
+    #     partSize -= unalignedTail;
+    #
+    # Their head and tail loops run to a FIXED `alignSize` bound, so every
+    # thread of block 0 makes the same number of trips and the threadgroup
+    # barriers inside `AddPoint` stay uniform. Blocks other than 0 must still
+    # make those trips, because the barriers are threadgroup-wide and Mojo
+    # has no warp-local form; they contribute zeros.
+    comptime ALIGN_SIZE = LOAD_SIZE * LANE_WIDTH * UNROLL
+
+    var head_len = p_size
+    var to_align = ALIGN_SIZE - (p_offset % ALIGN_SIZE)
+    if to_align < head_len:
+        head_len = to_align
+    if head_len < 0:
+        head_len = 0
+
+    var body_size = p_size - head_len
+    if body_size < 0:
+        body_size = 0
+    var tail_len = body_size % ALIGN_SIZE
+    var tail_start = p_offset + head_len + (body_size - tail_len)
+
+    var pe = tid
+    while pe < ALIGN_SIZE:
+        var hb = UInt32(0)
+        var hs = Float32(0.0)
+        if local_block_idx == 0 and pe < head_len:
+            hb = bins_p.unsafe_load(p_offset + pe)
+            hs = stats_p.unsafe_load(p_offset + pe)
+        add_one_byte_point[bits](hb, hs, tid, slice_base, smem)
+
+        var tb = UInt32(0)
+        var ts = Float32(0.0)
+        if local_block_idx == 0 and pe < tail_len:
+            tb = bins_p.unsafe_load(tail_start + pe)
+            ts = stats_p.unsafe_load(tail_start + pe)
+        add_one_byte_point[bits](tb, ts, tid, slice_base, smem)
+        pe += ONE_BYTE_BLOCK_SIZE
+
+    # the striped loop sees the ALIGNED MIDDLE only
+    var aligned_offset = p_offset + head_len
+    var aligned_size = body_size - tail_len
+
     var warps_per_block = ONE_BYTE_BLOCK_SIZE // LANE_WIDTH
     var global_warp_id = local_block_idx * warps_per_block + (tid // LANE_WIDTH)
     var entries_per_warp = LANE_WIDTH * UNROLL * LOAD_SIZE
     var stripe_size = entries_per_warp * warps_per_block * active_block_count
-    var remaining = max(p_size - global_warp_id * entries_per_warp, 0)
+    var remaining = max(aligned_size - global_warp_id * entries_per_warp, 0)
     var local_idx = (tid & (LANE_WIDTH - 1)) * LOAD_SIZE
 
-    var base = p_offset + global_warp_id * entries_per_warp + local_idx
+    var base = aligned_offset + global_warp_id * entries_per_warp + local_idx
     var iter_count = (remaining - local_idx + stripe_size - 1) // stripe_size
 
     # THE BARRIER MUST NOT DIVERGE. The requirement is a MATRIX ROW,
@@ -277,7 +391,7 @@ def one_byte_hist_kernel[bits: Int](
     # So every thread runs the SAME iteration count and the ones with no rows
     # contribute nothing. `block.max` is not available here, so the count is
     # derived from the partition size, which every thread already has.
-    var max_iters = (p_size + stripe_size - 1) // stripe_size
+    var max_iters = (aligned_size + stripe_size - 1) // stripe_size
     if max_iters < 1:
         max_iters = 1
 
@@ -288,59 +402,48 @@ def one_byte_hist_kernel[bits: Int](
         var active = it < iter_count
         # Their two unrolled loops: gather the batch, then add it. Kept in
         # that order because it is what keeps the loads in flight.
-        var local_bins = InlineArray[UInt32, UNROLL](fill=0)
-        var local_stats = InlineArray[Float32, UNROLL](fill=0)
+        var local_bins = InlineArray[UInt32, POINTS_PER_ITER](fill=0)
+        var local_stats = InlineArray[Float32, POINTS_PER_ITER](fill=0)
 
+        # `Ldg((uint4*) bins, warpSize * k)` and its `float4` twin
+        # (`compute_hist_loop_two_stats.cuh:293`). Indexing a `uint4*` by
+        # `warpSize * k` advances `warpSize * k * 4` ELEMENTS, which is the
+        # element-space stride written here.
+        #
+        # NO per-element bounds test. The peel above leaves a whole number of
+        # warp iterations, so an ACTIVE iteration is wholly in range. That is
+        # the entire reason `AlignMemoryAccess` exists, and it is what makes
+        # a 4-wide load legal as well as fast. Only the uniform-iteration
+        # guard remains, and that one is ours.
         @parameter
         for k in range(UNROLL):
-            if active and base + it * stripe_size + LANE_WIDTH * k < p_offset + p_size:
-                local_bins[k] = b_ptr.unsafe_load(LANE_WIDTH * k)
-                local_stats[k] = s_ptr.unsafe_load(LANE_WIDTH * k)
-            else:
-                # No row: contribute zero. The slot it lands in is harmless
-                # because the stat is 0.0, and it keeps this lane inside every
-                # barrier below.
-                local_bins[k] = UInt32(0)
-                local_stats[k] = Float32(0.0)
-
-        # `AddPoint`, inlined. The 8 lanes of a tile touch 8 distinct slots
-        # per iteration (see `add_point_slot`), so the update is a plain
-        # `+=` with no atomic. The barrier between iterations is CatBoost's
-        # 8-lane `addToHistTile.sync()` widened to the threadgroup, which is
-        # correct and strictly more expensive (PORTING.md 2). It is NOT safe
-        # to drop: distinctness holds WITHIN an iteration only.
-        # `TPointHistOneByte::AddPoint`, copied. Four features per word, so
-        # the rotation is `& 3`. The PASS LOOP is the difference from the
-        # half-byte accumulator: the low five bits of the bin index the slot
-        # directly and the HIGH bits are serialized, one pass each, with only
-        # the lanes whose `higherBin == pass` writing. A 5-bit feature runs
-        # one pass and an 8-bit feature eight, so wide features are paid for
-        # in TIME rather than in shared memory.
-        @parameter
-        for k in range(UNROLL):
-            @parameter
-            for i in range(4):
-                var slot = slice_base + one_byte_bin_offset[bits](
-                    local_bins[k], tid, i
-                )
-                comptime inner_bits = bits - 5
+            if active:
+                var vb = (b_ptr + LANE_WIDTH * LOAD_SIZE * k).load[
+                    width=LOAD_SIZE
+                ]()
+                var vs = (s_ptr + LANE_WIDTH * LOAD_SIZE * k).load[
+                    width=LOAD_SIZE
+                ]()
 
                 @parameter
-                if inner_bits == 0:
-                    barrier()
-                    smem[slot] = smem[slot] + local_stats[k]
-                else:
-                    var higher = one_byte_higher_bin[bits](
-                        local_bins[k], tid, i
-                    )
-                    comptime mask = (1 << inner_bits) - 1
+                for e in range(LOAD_SIZE):
+                    local_bins[k * LOAD_SIZE + e] = vb[e]
+                    local_stats[k * LOAD_SIZE + e] = vs[e]
+            else:
+                # No row: contribute zero. Harmless, and it keeps this lane
+                # inside every barrier below.
+                @parameter
+                for e in range(LOAD_SIZE):
+                    local_bins[k * LOAD_SIZE + e] = UInt32(0)
+                    local_stats[k * LOAD_SIZE + e] = Float32(0.0)
 
-                    @parameter
-                    for kk in range(1 << inner_bits):
-                        var p = ((tid >> 2) + kk) & mask
-                        barrier()
-                        if p == higher:
-                            smem[slot] = smem[slot] + local_stats[k]
+        # `hist.AddPoints<loadSize * N>(...)`: every point the batch loaded,
+        # through the same `AddPoint` the peel calls.
+        @parameter
+        for k in range(POINTS_PER_ITER):
+            add_one_byte_point[bits](
+                local_bins[k], local_stats[k], tid, slice_base, smem
+            )
 
         b_ptr += stripe_size
         s_ptr += stripe_size
@@ -567,20 +670,54 @@ def one_byte_hist_gather_kernel[bits: Int](
     barrier()
     var slice_base = one_byte_slice_offset[bits](tid)
 
-    # --- ALIGN_MEMORY(1), copied ---------------------------------------
-    #
-    # DEVIATION (PORTING.md 6): `AlignMemoryAccess` peels an unaligned prefix
-    # so the vector loads that follow are aligned. At LOAD_SIZE 1 there is
-    # nothing to align, so the peel is omitted rather than ported. It becomes
-    # required the moment LOAD_SIZE moves above 1.
+    # --- AlignMemoryAccess (gather), ported
+    # (`compute_hist_loop_two_stats.cuh:110`). Same peel as the direct
+    # variant; the difference is only that the bins come through `indices`.
+    comptime ALIGN_SIZE = LOAD_SIZE * LANE_WIDTH * UNROLL
+
+    var head_len = p_size
+    var to_align = ALIGN_SIZE - (p_offset % ALIGN_SIZE)
+    if to_align < head_len:
+        head_len = to_align
+    if head_len < 0:
+        head_len = 0
+
+    var body_size = p_size - head_len
+    if body_size < 0:
+        body_size = 0
+    var tail_len = body_size % ALIGN_SIZE
+    var tail_start = p_offset + head_len + (body_size - tail_len)
+
+    var pe = tid
+    while pe < ALIGN_SIZE:
+        var hb = UInt32(0)
+        var hs = Float32(0.0)
+        if local_block_idx == 0 and pe < head_len:
+            var hrow = Int(indices.unsafe_load(p_offset + pe))
+            hb = cindex_p.unsafe_load(hrow)
+            hs = stats_p.unsafe_load(p_offset + pe)
+        add_one_byte_point[bits](hb, hs, tid, slice_base, smem)
+
+        var tb = UInt32(0)
+        var ts = Float32(0.0)
+        if local_block_idx == 0 and pe < tail_len:
+            var trow = Int(indices.unsafe_load(tail_start + pe))
+            tb = cindex_p.unsafe_load(trow)
+            ts = stats_p.unsafe_load(tail_start + pe)
+        add_one_byte_point[bits](tb, ts, tid, slice_base, smem)
+        pe += ONE_BYTE_BLOCK_SIZE
+
+    var aligned_offset = p_offset + head_len
+    var aligned_size = body_size - tail_len
+
     var warps_per_block = ONE_BYTE_BLOCK_SIZE // LANE_WIDTH
     var global_warp_id = local_block_idx * warps_per_block + (tid // LANE_WIDTH)
     var entries_per_warp = LANE_WIDTH * UNROLL * LOAD_SIZE
     var stripe_size = entries_per_warp * warps_per_block * active_block_count
-    var remaining = max(p_size - global_warp_id * entries_per_warp, 0)
+    var remaining = max(aligned_size - global_warp_id * entries_per_warp, 0)
     var local_idx = (tid & (LANE_WIDTH - 1)) * LOAD_SIZE
 
-    var base = p_offset + global_warp_id * entries_per_warp + local_idx
+    var base = aligned_offset + global_warp_id * entries_per_warp + local_idx
     var iter_count = (remaining - local_idx + stripe_size - 1) // stripe_size
 
     # THE BARRIER MUST NOT DIVERGE. The requirement is a MATRIX ROW,
@@ -611,7 +748,7 @@ def one_byte_hist_gather_kernel[bits: Int](
     # So every thread runs the SAME iteration count and the ones with no rows
     # contribute nothing. `block.max` is not available here, so the count is
     # derived from the partition size, which every thread already has.
-    var max_iters = (p_size + stripe_size - 1) // stripe_size
+    var max_iters = (aligned_size + stripe_size - 1) // stripe_size
     if max_iters < 1:
         max_iters = 1
 
@@ -622,63 +759,50 @@ def one_byte_hist_gather_kernel[bits: Int](
         var active = it < iter_count
         # Their two unrolled loops: gather the batch, then add it. Kept in
         # that order because it is what keeps the loads in flight.
-        var local_bins = InlineArray[UInt32, UNROLL](fill=0)
-        var local_stats = InlineArray[Float32, UNROLL](fill=0)
+        var local_bins = InlineArray[UInt32, POINTS_PER_ITER](fill=0)
+        var local_stats = InlineArray[Float32, POINTS_PER_ITER](fill=0)
 
+        # Their gather batch (`compute_hist_loop_two_stats.cuh:410`):
+        #
+        #     localIndices[k] = Ldg((int4*) indices, warpSize * k);
+        #     localBins[k].x  = Ldg(cindex, localIndices[k].x);   ...
+        #     localStats1[k]  = Ldg((float4*) stats, warpSize * k);
+        #
+        # The INDICES and the STATS are contiguous, so both load 4-wide. Only
+        # the BINS are gathered, one at a time, because a gather has no
+        # vector form. That asymmetry is theirs and it is the point: two of
+        # the three streams still get the wide load.
         @parameter
         for k in range(UNROLL):
-            if active and base + it * stripe_size + LANE_WIDTH * k < p_offset + p_size:
-                # THE GATHER: position -> row -> bin. The compressed index
-                # is never permuted, so after a reorder position no longer
-                # names a row. See hist_binary for the full note.
-                var row = Int(i_ptr.unsafe_load(LANE_WIDTH * k))
-                local_bins[k] = cindex_p.unsafe_load(row)
-                local_stats[k] = s_ptr.unsafe_load(LANE_WIDTH * k)
-            else:
-                # No row: contribute zero. The slot it lands in is harmless
-                # because the stat is 0.0, and it keeps this lane inside every
-                # barrier below.
-                local_bins[k] = UInt32(0)
-                local_stats[k] = Float32(0.0)
-
-        # `AddPoint`, inlined. The 8 lanes of a tile touch 8 distinct slots
-        # per iteration (see `add_point_slot`), so the update is a plain
-        # `+=` with no atomic. The barrier between iterations is CatBoost's
-        # 8-lane `addToHistTile.sync()` widened to the threadgroup, which is
-        # correct and strictly more expensive (PORTING.md 2). It is NOT safe
-        # to drop: distinctness holds WITHIN an iteration only.
-        # `TPointHistOneByte::AddPoint`, copied. Four features per word, so
-        # the rotation is `& 3`. The PASS LOOP is the difference from the
-        # half-byte accumulator: the low five bits of the bin index the slot
-        # directly and the HIGH bits are serialized, one pass each, with only
-        # the lanes whose `higherBin == pass` writing. A 5-bit feature runs
-        # one pass and an 8-bit feature eight, so wide features are paid for
-        # in TIME rather than in shared memory.
-        @parameter
-        for k in range(UNROLL):
-            @parameter
-            for i in range(4):
-                var slot = slice_base + one_byte_bin_offset[bits](
-                    local_bins[k], tid, i
-                )
-                comptime inner_bits = bits - 5
+            if active:
+                var vi = (i_ptr + LANE_WIDTH * LOAD_SIZE * k).load[
+                    width=LOAD_SIZE
+                ]()
+                var vs = (s_ptr + LANE_WIDTH * LOAD_SIZE * k).load[
+                    width=LOAD_SIZE
+                ]()
 
                 @parameter
-                if inner_bits == 0:
-                    barrier()
-                    smem[slot] = smem[slot] + local_stats[k]
-                else:
-                    var higher = one_byte_higher_bin[bits](
-                        local_bins[k], tid, i
+                for e in range(LOAD_SIZE):
+                    # The compressed index is never permuted, so after a
+                    # reorder a position no longer names a row and the index
+                    # array is the only way back. See hist_binary.
+                    local_bins[k * LOAD_SIZE + e] = cindex_p.unsafe_load(
+                        Int(vi[e])
                     )
-                    comptime mask = (1 << inner_bits) - 1
+                    local_stats[k * LOAD_SIZE + e] = vs[e]
+            else:
+                @parameter
+                for e in range(LOAD_SIZE):
+                    local_bins[k * LOAD_SIZE + e] = UInt32(0)
+                    local_stats[k * LOAD_SIZE + e] = Float32(0.0)
 
-                    @parameter
-                    for kk in range(1 << inner_bits):
-                        var p = ((tid >> 2) + kk) & mask
-                        barrier()
-                        if p == higher:
-                            smem[slot] = smem[slot] + local_stats[k]
+        # `hist.AddPoints<loadSize * N>(...)`
+        @parameter
+        for k in range(POINTS_PER_ITER):
+            add_one_byte_point[bits](
+                local_bins[k], local_stats[k], tid, slice_base, smem
+            )
 
         i_ptr += stripe_size
         s_ptr += stripe_size
