@@ -45,6 +45,7 @@ since 8 warps times 1024 floats is 8192 floats.
 
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from std.gpu.intrinsics import ldg
 
 from mojo_only.kernel_matrix import (
     lane_width_for,
@@ -92,16 +93,25 @@ comptime ONE_BYTE_HIST_SIZE = ONE_BYTE_BLOCK_SIZE * hist_floats_per_thread_for[
     K_HIST_ONE_BYTE
 ]()
 
-#: `Unroll` for `__CUDA_ARCH__ >= 700`.
-comptime ONE_BYTE_UNROLL = 2
+#: `TPointHistOneByte::Unroll(ECIndexLoadType)` (`hist_one_byte.cu:30-37`),
+#: which returns 2 below Volta and 4 on everything after it.
+#:
+#: THIS FILE'S OWN TABLE. It was 2, cited as "`Unroll` for
+#: `__CUDA_ARCH__ >= 700`", and 2 is the value on the OTHER side of that
+#: test. Each of the three histogram kernels has a different table --
+#: 4/1/2 for binary (`hist_binary.cu:18-26`), 4/1 for half byte
+#: (`hist_half_byte.cu:19-25`), 2/4 here -- and they share the load path,
+#: not the unroll.
+#:
+#: SCHEDULING row: it changes how many loads are in flight, not what is
+#: summed into what. It does widen `ALIGN_SIZE` to
+#: `LOAD_SIZE * LANE_WIDTH * UNROLL`, which is theirs as well.
+comptime ONE_BYTE_UNROLL = 4
 
 #: Their unroll and load width, named as the loop expects them.
 comptime UNROLL = ONE_BYTE_UNROLL
 
-#: DEVIATION (PORTING.md 5): CatBoost picks a 4-element vector load here
-#: (`hist_2_one_byte_base.cuh:44-48`); the port takes one element, which is
-#: scheduling and not numeric.
-#: `ELoadSize::FourElements` (`hist_one_byte.cu:47`). CatBoost picks it on
+#: `ELoadSize::FourElements` (`hist_one_byte.cu:43-47`). CatBoost picks it on
 #: every GPU newer than Maxwell, and it is the reason a thread of theirs
 #: consumes four points per load where ours used to consume one. The
 #: histogram is bandwidth bound, so this is the load path, not a detail.
@@ -129,7 +139,20 @@ def one_byte_slice_offset[bits: Int](tid: Int) -> Int:
     `blocks` shrinks as the feature widens: a 5-bit feature gets 8 private
     sub-copies per warp, an 8-bit feature gets 1. That is the same trade as
     the pass loop, seen from the memory side.
+
+    THE 1024 IS THEIRS AND IT IS 32-LANE. It is 32 lanes times the 32 floats
+    per thread this accumulator takes, and `blocks = 8 >> InnerHistBitsCount`
+    cuts that warp into up to eight 4-lane sub-copies, which is 32 lanes
+    again. `Reduce`'s stage 1 folds at the same 1024 (`hist_one_byte.cu:182`).
+    A 64-lane wavefront needs a 2048-float slice and sixteen sub-copies, and
+    CatBoost never wrote that layout, so the assert makes it a compile error
+    rather than two warps quietly sharing one private copy.
     """
+    comptime assert LANE_WIDTH == 32, (
+        "the one-byte accumulator's slice layout is 32-lane by construction"
+        " (`hist_one_byte.cu:55-59`, and `Reduce`'s warpHistSize at `:182`);"
+        " write the wide-wavefront layout before letting LANE_WIDTH be 64"
+    )
     comptime inner_bits = bits - 5
     var warp_offset = 1024 * (tid // LANE_WIDTH)
     comptime blocks = 8 >> inner_bits
@@ -137,20 +160,33 @@ def one_byte_slice_offset[bits: Int](tid: Int) -> Int:
     return warp_offset + inner_hist_start
 
 
-def one_byte_bin_offset[bits: Int](ci: UInt32, tid: Int, i: Int) -> Int:
-    """The slot for iteration `i`, as pure arithmetic (PORTING.md 10).
+def one_byte_bin(ci: UInt32, tid: Int, i: Int) -> Int:
+    """The BIN this lane reads on iteration `i`, before any slot arithmetic.
 
         int f = (threadIdx.x + i) & 3;
         int bin = (ci >> (24 - 8 * f)) & 255;
-        const int higherBin = (bin >> 5) & mask;
-        int offset = 4 * higherBin + f + ((bin & 31) << 5);
+            (`hist_one_byte.cu:80-82`)
 
     Four features per word here, so the rotation is `& 3` rather than `& 7`.
+    Factored out because the slot, the pass and the `statToAdd` guard are
+    three readings of the SAME bin and had drifted into three copies of the
+    shift.
+    """
+    var f = (tid + i) & 3
+    return Int((ci >> UInt32(24 - 8 * f)) & UInt32(255))
+
+
+def one_byte_bin_offset[bits: Int](ci: UInt32, tid: Int, i: Int) -> Int:
+    """The slot for iteration `i`, as pure arithmetic (PORTING.md 10).
+
+        const int higherBin = (bin >> 5) & mask;
+        int offset = 4 * higherBin + f + ((bin & 31) << 5);
+            (`hist_one_byte.cu:87-90`)
     """
     comptime inner_bits = bits - 5
     comptime mask = (1 << inner_bits) - 1
     var f = (tid + i) & 3
-    var bin = Int((ci >> UInt32(24 - 8 * f)) & UInt32(255))
+    var bin = one_byte_bin(ci, tid, i)
     var higher_bin = (bin >> 5) & mask
     return 4 * higher_bin + f + ((bin & 31) << 5)
 
@@ -208,10 +244,24 @@ def add_one_byte_point[
         var slot = slice_base + one_byte_bin_offset[bits](ci, tid, i)
         comptime inner_bits = bits - 5
 
+        # `const float statToAdd = (bin >> Bits) == 0 ? t : 0;`
+        # (`hist_one_byte.cu:85`). A BIN WIDER THAN THE FEATURE CONTRIBUTES
+        # NOTHING, and this guard was missing outright.
+        #
+        # It is not cosmetic below 8 bits. The slot keeps only `bin & 31` and
+        # masks `higherBin` to `InnerHistBitsCount` bits, so a bin at or above
+        # `1 << Bits` does not fall off the end of the histogram -- it ALIASES
+        # onto a real bin of the same feature and is counted there. At
+        # `Bits == 8` the test is always true and this costs nothing, which is
+        # why the omission could sit under the 8-bit path unseen.
+        var stat_to_add = Float32(0.0)
+        if (one_byte_bin(ci, tid, i) >> bits) == 0:
+            stat_to_add = stat
+
         @parameter
         if inner_bits == 0:
             syncwarp()
-            smem[slot] = smem[slot] + stat
+            smem[slot] = smem[slot] + stat_to_add
         else:
             var higher = one_byte_higher_bin[bits](ci, tid, i)
             comptime mask = (1 << inner_bits) - 1
@@ -221,16 +271,15 @@ def add_one_byte_point[
                 var p = ((tid >> 2) + kk) & mask
                 syncwarp()
                 if p == higher:
-                    smem[slot] = smem[slot] + stat
+                    smem[slot] = smem[slot] + stat_to_add
 
 
 def one_byte_higher_bin[bits: Int](ci: UInt32, tid: Int, i: Int) -> Int:
-    """`higherBin` alone: which PASS of the inner-bits loop may write."""
+    """`higherBin` alone: which PASS of the inner-bits loop may write
+    (`hist_one_byte.cu:88`)."""
     comptime inner_bits = bits - 5
     comptime mask = (1 << inner_bits) - 1
-    var f = (tid + i) & 3
-    var bin = Int((ci >> UInt32(24 - 8 * f)) & UInt32(255))
-    return (bin >> 5) & mask
+    return (one_byte_bin(ci, tid, i) >> 5) & mask
 
 
 def one_byte_hist_kernel[bits: Int](
@@ -368,15 +417,22 @@ def one_byte_hist_kernel[bits: Int](
         var hb = UInt32(0)
         var hs = Float32(0.0)
         if local_block_idx == 0 and pe < head_len:
-            hb = bins_p.unsafe_load(p_offset + pe)
-            hs = stats_p.unsafe_load(p_offset + pe)
+            # `Ldg(bins, idx)` and `Ldg(stats, idx)`
+            # (`compute_hist_loop_one_stat.cuh:80-81`). `Ldg` is
+            # `cub::ThreadLoad<cub::LOAD_LDG>` (`kernel_helpers.cuh:180`),
+            # the read-only non-coherent load; `std.gpu.intrinsics.ldg` is
+            # its Mojo spelling.
+            hb = ldg(bins_p + (p_offset + pe))
+            hs = ldg(stats_p + (p_offset + pe))
         add_one_byte_point[bits](hb, hs, tid, slice_base, smem)
 
         var tb = UInt32(0)
         var ts = Float32(0.0)
         if local_block_idx == 0 and pe < tail_len:
-            tb = bins_p.unsafe_load(tail_start + pe)
-            ts = stats_p.unsafe_load(tail_start + pe)
+            # `Ldg(bins, tailOffset + idx)` and `Ldg(stats, tailOffset + idx)`
+            # (`compute_hist_loop_one_stat.cuh:98-99`).
+            tb = ldg(bins_p + (tail_start + pe))
+            ts = ldg(stats_p + (tail_start + pe))
         add_one_byte_point[bits](tb, ts, tid, slice_base, smem)
         pe += ONE_BYTE_BLOCK_SIZE
 
@@ -449,12 +505,21 @@ def one_byte_hist_kernel[bits: Int](
         @parameter
         for k in range(UNROLL):
             if active:
-                var vb = (b_ptr + LANE_WIDTH * LOAD_SIZE * k).load[
-                    width=LOAD_SIZE
-                ]()
-                var vs = (s_ptr + LANE_WIDTH * LOAD_SIZE * k).load[
-                    width=LOAD_SIZE
-                ]()
+                # `Ldg((uint4*) bins, warpSize * k)` and
+                # `Ldg((float4*) stats, warpSize * k)`
+                # (`compute_hist_loop_one_stat.cuh:368`, `:374`).
+                # `alignment=4` is OURS and is stated rather than
+                # inherited. Their `Ldg((uint4*) ...)` is a 16-byte load
+                # because their column stride is `AlignedColumnSize()`; ours
+                # is `n_rows` (`greedy_search_helper.mojo`), so a column base
+                # is not 4-element aligned in general and the width-4 load
+                # keeps the element alignment the plain load already assumed.
+                var vb = ldg[width=LOAD_SIZE, alignment=4](
+                    b_ptr + LANE_WIDTH * LOAD_SIZE * k
+                )
+                var vs = ldg[width=LOAD_SIZE, alignment=4](
+                    s_ptr + LANE_WIDTH * LOAD_SIZE * k
+                )
 
                 @parameter
                 for e in range(LOAD_SIZE):
@@ -744,17 +809,24 @@ def one_byte_hist_gather_kernel[bits: Int](
         var hb = UInt32(0)
         var hs = Float32(0.0)
         if local_block_idx == 0 and pe < head_len:
-            var hrow = Int(indices.unsafe_load(p_offset + pe))
-            hb = cindex_p.unsafe_load(hrow)
-            hs = stats_p.unsafe_load(p_offset + pe)
+            # `Ldg(indices, idx)`, `Ldg(cindex, loadIdx)`, `Ldg(stats, idx)`
+            # (`compute_hist_loop_one_stat.cuh:130-132`). All three streams
+            # are read-only for the kernel's lifetime, which is what `Ldg`
+            # declares.
+            var hrow = Int(ldg(indices + (p_offset + pe)))
+            hb = ldg(cindex_p + hrow)
+            hs = ldg(stats_p + (p_offset + pe))
         add_one_byte_point[bits](hb, hs, tid, slice_base, smem)
 
         var tb = UInt32(0)
         var ts = Float32(0.0)
         if local_block_idx == 0 and pe < tail_len:
-            var trow = Int(indices.unsafe_load(tail_start + pe))
-            tb = cindex_p.unsafe_load(trow)
-            ts = stats_p.unsafe_load(tail_start + pe)
+            # `Ldg(indices, tailOffset + idx)`, `Ldg(cindex, loadIdx)`,
+            # `Ldg(stats, tailOffset + idx)`
+            # (`compute_hist_loop_one_stat.cuh:149-151`).
+            var trow = Int(ldg(indices + (tail_start + pe)))
+            tb = ldg(cindex_p + trow)
+            ts = ldg(stats_p + (tail_start + pe))
         add_one_byte_point[bits](tb, ts, tid, slice_base, smem)
         pe += ONE_BYTE_BLOCK_SIZE
 
@@ -826,20 +898,33 @@ def one_byte_hist_gather_kernel[bits: Int](
         @parameter
         for k in range(UNROLL):
             if active:
-                var vi = (i_ptr + LANE_WIDTH * LOAD_SIZE * k).load[
-                    width=LOAD_SIZE
-                ]()
-                var vs = (s_ptr + LANE_WIDTH * LOAD_SIZE * k).load[
-                    width=LOAD_SIZE
-                ]()
+                # `Ldg((int4*) indices, warpSize * k)` and
+                # `Ldg((float4*) stats, warpSize * k)`
+                # (`compute_hist_loop_one_stat.cuh:407`, `:423`).
+                # `alignment=4` is OURS and is stated rather than
+                # inherited. Their `Ldg((uint4*) ...)` is a 16-byte load
+                # because their column stride is `AlignedColumnSize()`; ours
+                # is `n_rows` (`greedy_search_helper.mojo`), so a column base
+                # is not 4-element aligned in general and the width-4 load
+                # keeps the element alignment the plain load already assumed.
+                var vi = ldg[width=LOAD_SIZE, alignment=4](
+                    i_ptr + LANE_WIDTH * LOAD_SIZE * k
+                )
+                var vs = ldg[width=LOAD_SIZE, alignment=4](
+                    s_ptr + LANE_WIDTH * LOAD_SIZE * k
+                )
 
                 @parameter
                 for e in range(LOAD_SIZE):
                     # The compressed index is never permuted, so after a
                     # reorder a position no longer names a row and the index
                     # array is the only way back. See hist_binary.
-                    local_bins[k * LOAD_SIZE + e] = cindex_p.unsafe_load(
-                        Int(vi[e])
+                    # `localBins[k].x = Ldg(cindex, localIndices[k].x)` and
+                    # its y, z, w twins
+                    # (`compute_hist_loop_one_stat.cuh:415-418`). Scalar,
+                    # because a gather has no vector form.
+                    local_bins[k * LOAD_SIZE + e] = ldg(
+                        cindex_p + Int(vi[e])
                     )
                     local_stats[k * LOAD_SIZE + e] = vs[e]
             else:

@@ -33,8 +33,10 @@ only as a stable 1-bit partition, so that is what is written.
 
 from ported.gpu_data.gpu_structures import CFeature
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from std.gpu.intrinsics import ldg
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host.device_attribute import DeviceAttribute
 from max.gpu.memory import AddressSpace
 from max.gpu.primitives.block import broadcast as block_broadcast
 from max.gpu.primitives.block import prefix_sum as block_prefix_sum
@@ -72,10 +74,17 @@ def split_and_make_sequence_kernel(
     dropping a branch is a change and the rule here is to copy.
     """
     var leaf_slot = Int(block_idx.y)
+    # `leafIds[blockIdx.y]` (`split_points.cu:480`) is a PLAIN load in their
+    # file and stays one here.
     var leaf_id = Int(leaf_ids.unsafe_load(leaf_slot))
 
-    var size = Int(part_size.unsafe_load(leaf_id))
-    var offset = Int(part_offset.unsafe_load(leaf_id))
+    # `TDataPartition part = Ldg(parts + leafId)` (`split_points.cu:482`).
+    # `Ldg` is `cub::ThreadLoad<cub::LOAD_LDG>` (`kernel_helpers.cuh:180`),
+    # the read-only non-coherent load; `std.gpu.intrinsics.ldg` is its Mojo
+    # spelling. Their ONE struct load is two scalar loads here, for the
+    # Metal reason recorded below.
+    var size = Int(ldg(part_size + leaf_id))
+    var offset = Int(ldg(part_offset + leaf_id))
 
     var i = Int(block_idx.x) * SPLIT_BLOCK_SIZE * SPLIT_UNROLL + Int(
         thread_idx.x
@@ -121,13 +130,15 @@ def split_and_make_sequence_kernel(
         for k in range(SPLIT_UNROLL):
             var at = i + k * SPLIT_BLOCK_SIZE
             if at < size:
-                # `loadIndices ? loadIndices[at] : at`. The port always
-                # carries the array; the root seeds it with the identity.
-                var load_index = Int(
-                    load_indices.unsafe_load(offset + at)
-                )
+                # `loadIndex[k] = loadIndices ? __ldg(loadIndices + i +
+                #  k * BlockSize) : i + k * BlockSize` (`split_points.cu:511`).
+                # The port always carries the array; the root seeds it with
+                # the identity.
+                var load_index = Int(ldg(load_indices + (offset + at)))
+                # `featureVal[k] = __ldg(compressedIndex + loadIndex[k]) &
+                #  mask` (`split_points.cu:518`).
                 var feature_val = (
-                    compressed_index.unsafe_load(f_offset + load_index) & mask
+                    ldg(compressed_index + (f_offset + load_index)) & mask
                 )
                 # The sequence, written before the flag, exactly as they do.
                 indices.unsafe_store(offset + at, UInt32(at))
@@ -194,12 +205,15 @@ def update_partitions_after_split_kernel(
     var stride = Int(block_dim.x) * Int(grid_dim.x)
 
     while i <= part_sz:
+        # `Ldg(sortedFlags + i)` and `Ldg(sortedFlags + i - 1)`
+        # (`split_points.cu:364-365`). The partition reads above are PLAIN in
+        # their kernel (`:355-362`) and stay plain here.
         var flag0 = 1
         if i < part_sz:
-            flag0 = Int(sorted_flags.unsafe_load(offset + i))
+            flag0 = Int(ldg(sorted_flags + (offset + i)))
         var flag1 = 0
         if i != 0:
-            flag1 = Int(sorted_flags.unsafe_load(offset + i - 1))
+            flag1 = Int(ldg(sorted_flags + (offset + i - 1)))
 
         if flag0 != flag1:
             # The border. Left keeps the offset and shrinks to `i`; right
@@ -234,6 +248,49 @@ def update_partitions_after_split_kernel(
 #: `const ui32 blockSize = 256` for the in-leaf copy and the in-leaf gather
 #: (`split_points.cu:217`, `:239`).
 comptime LEAF_COPY_BLOCK = 256
+
+
+def split_points_grid_x(n_leaf_slots: Int, sm_count: Int) -> Int:
+    """`numBlocks.x` for the in-leaf copy and gather, copied.
+
+        numBlocks.x = (leavesCount > 4 ? 2 : 4) * TArchProps::SMCount();
+            (`split_points.cu:220` for `CopyInLeaves`, `:242` for
+             `GatherInLeaves`; the same expression again at `:397` for
+             `UpdatePartitionsAfterSplit` and `:563` for
+             `SplitAndMakeSequenceInLeaves`)
+
+    **The grid comes from the DEVICE, not from the data.** These kernels
+    stride (`i += gridDim.x * blockDim.x`), so grid x does not have to cover
+    the rows and covering them is not what it is for: it is an occupancy
+    target. Four blocks per SM while the leaf count is small enough that
+    grid y cannot fill the machine on its own, two once grid y is 5 or more
+    and supplies the rest.
+
+    ================= WHAT THIS REPLACES =================
+    `min(256, ceil(n_rows / 256))`, computed on the host in
+    `greedy_search_helper.mojo` and passed in as `wide`. That number is
+    DEVICE-BLIND: it is the same on a 10-core M4 and on a 132-SM H100, so it
+    is wrong on both sides of whichever machine it was tuned on, and it also
+    ties an occupancy knob to the row count, which is the one thing the
+    stride already handles.
+
+    `replication_for` in `greedy_search_helper.mojo` ports the histogram
+    kernels' shape of the same idea (`hist_binary.cu:95`), which is
+    `blocksPerSm * SMCount()` divided out over the other grid axes. This is
+    their OTHER shape, and it is written the way their file writes it rather
+    than reduced to one rule, because they are two different expressions in
+    two different files.
+    ======================================================
+
+    `TArchProps::SMCount()` is
+    `ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)`, the same
+    attribute `replication_for`'s caller already reads.
+    """
+    var per_sm = 2 if n_leaf_slots > 4 else 4
+    var grid_x = per_sm * sm_count
+    if grid_x < 1:
+        grid_x = 1
+    return grid_x
 
 #: `const ui32 statsPerKernel = 8` (`split_properties_helper.cpp:922`,
 #: `:1010`), the number of stat COLUMNS the copy/gather pair handles per
@@ -291,9 +348,13 @@ def copy_in_leaves_kernel(
 
     while i < size:
         for k in range(num_stats):
+            # `WriteThrough(dst + i + k * lineSize,
+            #  __ldg(src + i + k * lineSize))` (`split_points.cu:42`). The
+            # LOAD half ports; the store half has no Mojo spelling, which is
+            # the deviation block on `gather_inplace_kernel`.
             dst.unsafe_store(
                 offset + i + k * line_size,
-                src.unsafe_load(offset + i + (stat_base + k) * line_size),
+                ldg(src + (offset + i + (stat_base + k) * line_size)),
             )
         i += stride
 
@@ -320,7 +381,8 @@ def copy_index_in_leaves_kernel(
     var stride = Int(grid_dim.x) * Int(block_dim.x)
 
     while i < size:
-        dst.unsafe_store(offset + i, src.unsafe_load(offset + i))
+        # `__ldg(src + i + k * lineSize)` at one column (`split_points.cu:42`).
+        dst.unsafe_store(offset + i, ldg(src + (offset + i)))
         i += stride
 
 
@@ -376,11 +438,13 @@ def gather_in_leaves_kernel(
     var stride = Int(grid_dim.x) * Int(block_dim.x)
 
     while i < size:
-        var load_idx = Int(gather_map.unsafe_load(offset + i))
+        # `const ui32 loadIdx = __ldg(map + i)` (`split_points.cu:198`) and
+        # `__ldg(src + loadIdx + k * lineSize)` (`:202`).
+        var load_idx = Int(ldg(gather_map + (offset + i)))
         for k in range(num_stats):
             dst.unsafe_store(
                 offset + i + (stat_base + k) * line_size,
-                src.unsafe_load(offset + load_idx + k * line_size),
+                ldg(src + (offset + load_idx + k * line_size)),
             )
         i += stride
 
@@ -413,8 +477,10 @@ def gather_index_in_leaves_kernel(
     var stride = Int(grid_dim.x) * Int(block_dim.x)
 
     while i < size:
-        var load_idx = Int(gather_map.unsafe_load(offset + i))
-        dst.unsafe_store(offset + i, src.unsafe_load(offset + load_idx))
+        # `__ldg(map + i)` (`split_points.cu:198`) and `__ldg(src + loadIdx)`
+        # (`:202`) at one column.
+        var load_idx = Int(ldg(gather_map + (offset + i)))
+        dst.unsafe_store(offset + i, ldg(src + (offset + load_idx)))
         i += stride
 
 
@@ -515,12 +581,15 @@ def gather_inplace_kernel(
         `strided_store`, `scatter` and `prefetch`. All of these are addressing
         patterns; none carries a cache or temporality hint.
 
-    So the LOAD half of their pair ships and the STORE half does not. Their
-    `Ldg` / `__ldg` (`kernel_helpers.cuh:180`) has an exact counterpart in
-    `std.gpu.intrinsics.ldg` and in `load[read_only=True]`, and this file
-    uses neither yet -- that is a live gap across every kernel in the tree,
-    not something local to this one, and it is recorded rather than half
-    applied here.
+    So the LOAD half of their pair ships and the STORE half does not. The
+    load half is now CALLED: their `Ldg` / `__ldg` (`kernel_helpers.cuh:180`)
+    is `std.gpu.intrinsics.ldg`, and every read they mark with it in this
+    file and in the three histogram kernels goes through it, at their sites
+    and only at their sites. `max.gpu.memory.memory.load[read_only=True]`
+    is the other spelling and carries `cache_policy` and `eviction_policy`
+    knobs their call does not use, so `ldg` is the closer mirror.
+
+    The store half remains missing, and that is what this block records.
 
     Cost of the missing store hint: the permuted leaf is dead to this kernel
     the moment it lands, so a normal store pollutes L1 with data nothing will
@@ -547,10 +616,11 @@ def gather_inplace_kernel(
 
     # `TDataPartition part = Ldg(parts + leafId)` (`split_points.cu:66`), read
     # field by field: a whole-struct load in a kernel kills the Metal
-    # compiler, and our partitions are two arrays regardless.
+    # compiler, and our partitions are two arrays regardless. `leaf[blockIdx.y]`
+    # (`:64`) is PLAIN in their file and stays plain here.
     var leaf_id = Int(leaves.unsafe_load(Int(block_idx.y)))
-    var offset = Int(part_offset.unsafe_load(leaf_id))
-    var size = Int(part_size.unsafe_load(leaf_id))
+    var offset = Int(ldg(part_offset + leaf_id))
+    var size = Int(ldg(part_size + leaf_id))
 
     var tid = Int(thread_idx.x)
 
@@ -565,8 +635,10 @@ def gather_inplace_kernel(
     # inner guard is what lets one 1024-wide launch serve a 7-row leaf.
     for i in range(tid, GATHER_INPLACE_SIZE, GATHER_INPLACE_BLOCK):
         if i < size:
-            var load_idx = Int(gather_map.unsafe_load(offset + i))
-            tmp[i] = data.unsafe_load(base + load_idx)
+            # `const ui32 loadIdx = __ldg(map + i)` and
+            # `tmp[i] = __ldg(data + loadIdx)` (`split_points.cu:80-81`).
+            var load_idx = Int(ldg(gather_map + (offset + i)))
+            tmp[i] = ldg(data + (base + load_idx))
 
     # `__syncthreads()` (`split_points.cu:85`). A THREADGROUP barrier, not
     # `syncwarp`: `tmp` is written by every thread of the block and read back
@@ -678,6 +750,23 @@ def launch_reorder_in_leaves(
         )
         return 1
 
+    # `numBlocks.x = (leavesCount > 4 ? 2 : 4) * TArchProps::SMCount()`
+    # (`split_points.cu:220` for `CopyInLeaves`, `:242` for `GatherInLeaves`).
+    # Read from the DEVICE here rather than taken from the caller: `wide` is
+    # `min(256, ceil(n_rows / 256))`, which is device-blind and is not what
+    # their grid x means. See `split_points_grid_x`.
+    #
+    # Below the fast-path return, because the fast path's grid is theirs too
+    # (`1 + statCount`, `split_points.cu:105`) and does not want this number;
+    # the attribute query is host work and the fast path is most levels.
+    #
+    # `wide` is still in this signature only because the call sites live in
+    # `greedy_search_helper.mojo`, which another lane owns this round. It is
+    # READ BY NOTHING now and the parameter should go with the call sites.
+    var grid_x = split_points_grid_x(
+        n_leaf_slots, ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+    )
+
     var launches = 0
     var first_stat = 0
     while first_stat < stat_count:
@@ -694,7 +783,7 @@ def launch_reorder_in_leaves(
             Int32(first_stat),
             Int32(n),
             Int32(line_size),
-            grid_dim=(wide, n_leaf_slots, 1),
+            grid_dim=(grid_x, n_leaf_slots, 1),
             block_dim=(LEAF_COPY_BLOCK, 1, 1),
         )
         ctx.enqueue_function[gather_in_leaves_kernel](
@@ -707,7 +796,7 @@ def launch_reorder_in_leaves(
             Int32(first_stat),
             Int32(n),
             Int32(line_size),
-            grid_dim=(wide, n_leaf_slots, 1),
+            grid_dim=(grid_x, n_leaf_slots, 1),
             block_dim=(LEAF_COPY_BLOCK, 1, 1),
         )
         launches += 2
@@ -728,7 +817,7 @@ def launch_reorder_in_leaves(
         part_size.unsafe_ptr(),
         row_index.unsafe_ptr(),
         temp_index.unsafe_ptr(),
-        grid_dim=(wide, n_leaf_slots, 1),
+        grid_dim=(grid_x, n_leaf_slots, 1),
         block_dim=(LEAF_COPY_BLOCK, 1, 1),
     )
     ctx.enqueue_function[gather_index_in_leaves_kernel](
@@ -738,7 +827,7 @@ def launch_reorder_in_leaves(
         temp_index.unsafe_ptr(),
         gather_map.unsafe_ptr(),
         row_index.unsafe_ptr(),
-        grid_dim=(wide, n_leaf_slots, 1),
+        grid_dim=(grid_x, n_leaf_slots, 1),
         block_dim=(LEAF_COPY_BLOCK, 1, 1),
     )
     return launches + 2
@@ -979,6 +1068,12 @@ def launch_stable_partition(
     if n_leaf_slots <= 0:
         return
 
+    # `const int numBlocks = (part.Size + (N * blockSize) - 1) /
+    #  (N * blockSize)` (`split_points.cu:724`). FULL COVERAGE, not the
+    # `(leavesCount > 4 ? 2 : 4) * SMCount()` occupancy target the copy and
+    # gather kernels take: `ReorderOneBitImpl` does not stride, one block owns
+    # one chunk, so grid x has to cover the rows here and `split_points_grid_x`
+    # must not be used for it.
     var max_chunks = (max_leaf_rows + PARTITION_BLOCK - 1) // PARTITION_BLOCK
     if max_chunks < 1:
         max_chunks = 1

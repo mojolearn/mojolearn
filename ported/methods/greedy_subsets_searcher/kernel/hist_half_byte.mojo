@@ -32,6 +32,7 @@ the bounds test is `fold < features[fid].Folds`.
 
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from std.gpu.intrinsics import ldg
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier, syncwarp
@@ -237,15 +238,22 @@ def half_byte_hist_kernel(
         var hb = UInt32(0)
         var hs = Float32(0.0)
         if local_block_idx == 0 and pe < head_len:
-            hb = bins_p.unsafe_load(p_offset + pe)
-            hs = stats_p.unsafe_load(p_offset + pe)
+            # `Ldg(bins, idx)` and `Ldg(stats, idx)`
+            # (`compute_hist_loop_one_stat.cuh:80-81`). `Ldg` is
+            # `cub::ThreadLoad<cub::LOAD_LDG>` (`kernel_helpers.cuh:180`),
+            # the read-only non-coherent load; `std.gpu.intrinsics.ldg` is
+            # its Mojo spelling.
+            hb = ldg(bins_p + (p_offset + pe))
+            hs = ldg(stats_p + (p_offset + pe))
         add_half_byte_point(hb, hs, tid, slice_base, smem)
 
         var tb = UInt32(0)
         var ts = Float32(0.0)
         if local_block_idx == 0 and pe < tail_len:
-            tb = bins_p.unsafe_load(tail_start + pe)
-            ts = stats_p.unsafe_load(tail_start + pe)
+            # `Ldg(bins, tailOffset + idx)` and `Ldg(stats, tailOffset + idx)`
+            # (`compute_hist_loop_one_stat.cuh:98-99`).
+            tb = ldg(bins_p + (tail_start + pe))
+            ts = ldg(stats_p + (tail_start + pe))
         add_half_byte_point(tb, ts, tid, slice_base, smem)
         pe += BLOCK_SIZE
 
@@ -318,12 +326,21 @@ def half_byte_hist_kernel(
         @parameter
         for k in range(UNROLL):
             if active:
-                var vb = (b_ptr + LANE_WIDTH * LOAD_SIZE * k).load[
-                    width=LOAD_SIZE
-                ]()
-                var vs = (s_ptr + LANE_WIDTH * LOAD_SIZE * k).load[
-                    width=LOAD_SIZE
-                ]()
+                # `Ldg((uint4*) bins, warpSize * k)` and
+                # `Ldg((float4*) stats, warpSize * k)`
+                # (`compute_hist_loop_one_stat.cuh:368`, `:374`).
+                # `alignment=4` is OURS and is stated rather than
+                # inherited. Their `Ldg((uint4*) ...)` is a 16-byte load
+                # because their column stride is `AlignedColumnSize()`; ours
+                # is `n_rows` (`greedy_search_helper.mojo`), so a column base
+                # is not 4-element aligned in general and the width-4 load
+                # keeps the element alignment the plain load already assumed.
+                var vb = ldg[width=LOAD_SIZE, alignment=4](
+                    b_ptr + LANE_WIDTH * LOAD_SIZE * k
+                )
+                var vs = ldg[width=LOAD_SIZE, alignment=4](
+                    s_ptr + LANE_WIDTH * LOAD_SIZE * k
+                )
 
                 @parameter
                 for e in range(LOAD_SIZE):
@@ -651,17 +668,24 @@ def half_byte_hist_gather_kernel(
         var hb = UInt32(0)
         var hs = Float32(0.0)
         if local_block_idx == 0 and pe < head_len:
-            var hrow = Int(indices.unsafe_load(p_offset + pe))
-            hb = cindex_p.unsafe_load(hrow)
-            hs = stats_p.unsafe_load(p_offset + pe)
+            # `Ldg(indices, idx)`, `Ldg(cindex, loadIdx)`, `Ldg(stats, idx)`
+            # (`compute_hist_loop_one_stat.cuh:130-132`). All three streams
+            # are read-only for the kernel's lifetime, which is what `Ldg`
+            # declares.
+            var hrow = Int(ldg(indices + (p_offset + pe)))
+            hb = ldg(cindex_p + hrow)
+            hs = ldg(stats_p + (p_offset + pe))
         add_half_byte_point(hb, hs, tid, slice_base, smem)
 
         var tb = UInt32(0)
         var ts = Float32(0.0)
         if local_block_idx == 0 and pe < tail_len:
-            var trow = Int(indices.unsafe_load(tail_start + pe))
-            tb = cindex_p.unsafe_load(trow)
-            ts = stats_p.unsafe_load(tail_start + pe)
+            # `Ldg(indices, tailOffset + idx)`, `Ldg(cindex, loadIdx)`,
+            # `Ldg(stats, tailOffset + idx)`
+            # (`compute_hist_loop_one_stat.cuh:149-151`).
+            var trow = Int(ldg(indices + (tail_start + pe)))
+            tb = ldg(cindex_p + trow)
+            ts = ldg(stats_p + (tail_start + pe))
         add_half_byte_point(tb, ts, tid, slice_base, smem)
         pe += BLOCK_SIZE
 
@@ -737,20 +761,33 @@ def half_byte_hist_gather_kernel(
         @parameter
         for k in range(UNROLL):
             if active:
-                var vi = (i_ptr + LANE_WIDTH * LOAD_SIZE * k).load[
-                    width=LOAD_SIZE
-                ]()
-                var vs = (s_ptr + LANE_WIDTH * LOAD_SIZE * k).load[
-                    width=LOAD_SIZE
-                ]()
+                # `Ldg((int4*) indices, warpSize * k)` and
+                # `Ldg((float4*) stats, warpSize * k)`
+                # (`compute_hist_loop_one_stat.cuh:407`, `:423`).
+                # `alignment=4` is OURS and is stated rather than
+                # inherited. Their `Ldg((uint4*) ...)` is a 16-byte load
+                # because their column stride is `AlignedColumnSize()`; ours
+                # is `n_rows` (`greedy_search_helper.mojo`), so a column base
+                # is not 4-element aligned in general and the width-4 load
+                # keeps the element alignment the plain load already assumed.
+                var vi = ldg[width=LOAD_SIZE, alignment=4](
+                    i_ptr + LANE_WIDTH * LOAD_SIZE * k
+                )
+                var vs = ldg[width=LOAD_SIZE, alignment=4](
+                    s_ptr + LANE_WIDTH * LOAD_SIZE * k
+                )
 
                 @parameter
                 for e in range(LOAD_SIZE):
                     # THE GATHER: position -> row -> bin. The compressed
                     # index is never permuted, so after a reorder position no
                     # longer names a row. See hist_binary for the full note.
-                    local_bins[k * LOAD_SIZE + e] = cindex_p.unsafe_load(
-                        Int(vi[e])
+                    # `localBins[k].x = Ldg(cindex, localIndices[k].x)` and
+                    # its y, z, w twins
+                    # (`compute_hist_loop_one_stat.cuh:415-418`). Scalar,
+                    # because a gather has no vector form.
+                    local_bins[k * LOAD_SIZE + e] = ldg(
+                        cindex_p + Int(vi[e])
                     )
                     local_stats[k * LOAD_SIZE + e] = vs[e]
             else:

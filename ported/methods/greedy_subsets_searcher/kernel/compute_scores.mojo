@@ -80,6 +80,7 @@ concentrated the gradient is in one bin.
 """
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from std.gpu.intrinsics import ldg
 from std.math import sqrt
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -199,25 +200,40 @@ def compute_optimal_splits_kernel[
         # THE SERIAL LEAF LOOP. See the module docstring for why it is inside
         # the thread and not across threads.
         for i in range(p_count):
-            var leaf_id = Int(part_ids.unsafe_load(i))
+            # `const int leafId = __ldg(partIds + i)`
+            # (`compute_scores.cu:88`). `__ldg` is a read-only non-coherent
+            # load; `std.gpu.intrinsics.ldg` is its Mojo spelling. Note
+            # `bf[binFeatureId]` above is NOT `__ldg` in their file
+            # (`:80`, `:84`, `:136`) and is not one here.
+            var leaf_id = Int(ldg(part_ids + i))
             var leaf_base = leaf_id * stat_count * bin_feature_count
 
-            # stat 0 is the weight plane.
+            # stat 0 is the weight plane. `__ldg(histograms + ...)` and
+            # `__ldg(partStats + leafId * statCount)`
+            # (`compute_scores.cu:90-91`).
             var weight_left = max(
-                histograms.unsafe_load(leaf_base + bin_feature_id),
+                ldg(histograms + (leaf_base + bin_feature_id)),
                 Float32(0.0),
             )
             var weight_right = max(
-                part_stats.unsafe_load(leaf_id * stat_count) - weight_left,
+                ldg(part_stats + leaf_id * stat_count) - weight_left,
                 Float32(0.0),
             )
 
             for stat_id in range(1, stat_count):
-                var sum_left = histograms.unsafe_load(
-                    leaf_base + stat_id * bin_feature_count + bin_feature_id
+                # `float sumLeft = __ldg(histograms + ...)` and
+                # `double partStat = __ldg(partStats + ...)`
+                # (`compute_scores.cu:96-97`). The DOUBLE is theirs and is
+                # the deviation recorded in the module docstring; the `__ldg`
+                # is not, and is ported here.
+                var stat_slot = (
+                    leaf_base
+                    + stat_id * bin_feature_count
+                    + bin_feature_id
                 )
-                var part_stat = part_stats.unsafe_load(
-                    leaf_id * stat_count + stat_id
+                var sum_left = ldg(histograms + stat_slot)
+                var part_stat = ldg(
+                    part_stats + (leaf_id * stat_count + stat_id)
                 )
                 var sum_right = part_stat - sum_left
 
@@ -296,8 +312,8 @@ def compute_optimal_splits_kernel[
         # returns before touching anything when the CTR count is zero
         # (`update_feature_weights.cpp:14-22`). It is here so that
         # `model_size_reg` is not a divergence the day CTRs land.
-        var gain = final_score * feature_weights.unsafe_load(
-            Int(bf_feature_id.unsafe_load(bin_feature_id))
+        var gain = final_score * ldg(
+            feature_weights + Int(bf_feature_id.unsafe_load(bin_feature_id))
         )
 
         if gain > best_gain:

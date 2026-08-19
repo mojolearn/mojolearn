@@ -124,7 +124,28 @@ def slice_offset(tid: Int) -> Int:
     each warp's 512-float region. Do not "simplify" it to `& 31`; the low
     three bits are the lane's position inside the 8-lane tile and are carried
     by `f` instead.
+
+    THE 512 AND THE 32 ARE THEIRS, TRANSCRIBED, AND THEY ARE 32-LANE
+    ---------------------------------------------------------------
+    512 is not `LANE_WIDTH * 16` that happens to be right; it is 16 bins of
+    32 slots, and the 32 is 8 features times the 4 sub-copies a 32-lane warp
+    is cut into. `add_point_slot` spaces bins by `<< 5`, so the layout has
+    room for exactly four 8-lane tiles. A 64-lane wavefront would need eight,
+    and two of them would collide on every bin.
+
+    So this geometry does not generalise, CatBoost never had to make it, and
+    guessing at it is inventing. The assert below turns the AMD case into a
+    COMPILE ERROR instead of a silently mis-folded histogram: `REDUCE_WIDTH`
+    is derived from `LANE_WIDTH` and would move to 1024 while these two
+    literals stayed at 512 and 32, and stage 1 would then fold cells that
+    belong to different bins.
     """
+    comptime assert LANE_WIDTH == 32, (
+        "the half-byte accumulator's slice layout is 32-lane by construction"
+        " (`point_hist_half_byte_template.cuh:48-52` plus the `<< 5` bin"
+        " spacing); write the wide-wavefront layout before letting"
+        " LANE_WIDTH be 64"
+    )
     return 512 * (tid // 32) + (tid & 24)
 
 
