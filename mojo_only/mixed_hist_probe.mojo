@@ -130,9 +130,17 @@ def probe_mixed_histogram(binary: Int = 8, half: Int = 4, one: Int = 4, pre_brid
     )
     ctx.synchronize()
 
+    # DENSE ids for the block scratch, `0..max_leaves`.
+    var dense_ids = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+    var h_dense = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
+    for i in range(max_leaves):
+        h_dense.unsafe_ptr().unsafe_store(i, UInt32(i))
+    ctx.enqueue_copy(dst_buf=dense_ids, src_ptr=h_dense.unsafe_ptr())
+    ctx.synchronize()
+
     launch_histograms_for_blocks(
         ctx, dblocks, 0, 1, n_rows, stat_count, max_leaves, 1, Float32(1.0),
-        cindex, row_index, stats, p_off, p_sz, ids, hist, acc,
+        cindex, row_index, stats, p_off, p_sz, ids, dense_ids, hist, acc,
         block_hist, lay.hist_cells, pre_bridge,
     )
     ctx.synchronize()

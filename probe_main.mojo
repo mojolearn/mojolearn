@@ -1,4 +1,5 @@
 from mojo_only.launch_probe import probe
+from mojo_only.permuted_ids_check import check_permuted_leaf_ids
 from mojo_only.options_check import check_options
 from mojo_only.mixed_hist_probe import probe_mixed_histogram
 from mojo_only.layout_check import (
@@ -415,3 +416,6 @@ def main() raises:
     print()
     print("mixed histogram slices (GPU):")
     probe_mixed_histogram(8, 4, 4)
+    print()
+    print("non-contiguous leaf ids (GPU):")
+    check_permuted_leaf_ids()

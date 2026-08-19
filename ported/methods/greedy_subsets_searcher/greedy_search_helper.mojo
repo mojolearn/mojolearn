@@ -1076,6 +1076,7 @@ def launch_histograms_for_blocks(
     mut p_off: DeviceBuffer[DType.uint32],
     mut p_sz: DeviceBuffer[DType.uint32],
     mut ids: DeviceBuffer[DType.uint32],
+    mut dense_ids: DeviceBuffer[DType.uint32],
     mut hist: DeviceBuffer[DType.float32],
     mut acc_i32: DeviceBuffer[DType.int32],
     mut block_hist: DeviceBuffer[DType.float32],
@@ -1113,8 +1114,12 @@ def launch_histograms_for_blocks(
         var base = n_rows * blk.first_column
         var line = n_rows
 
+        # DENSE ids, `0..n_live`. The block scratch is written at
+        # `blockIdx.y` (their `compute_hist_loop_two_stats.cuh:554`), so it
+        # must be CLEARED at `blockIdx.y` too. Passing the leaf-id list here
+        # clears the wrong slots the moment the list is not the identity.
         ctx.enqueue_function[zero_histograms_kernel](
-            ids.unsafe_ptr(),
+            dense_ids.unsafe_ptr(),
             Int32(blk.total_folds),
             block_hist.unsafe_ptr(),
             grid_dim=((blk.total_folds + 255) // 256, n_live, stat_count),
@@ -1406,6 +1411,15 @@ def run_tree_layout(
 
     var zero_ids = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
 
+    # `0, 1, 2, ...`, the DENSE index list. Their histogram kernels write the
+    # block scratch at `blockIdx.y`, so anything addressing that scratch by
+    # position needs this rather than the leaf-id list.
+    var dense_ids = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+    var h_dense = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
+    for i in range(max_leaves):
+        h_dense.unsafe_ptr().unsafe_store(i, UInt32(i))
+    ctx.enqueue_copy(dst_buf=dense_ids, src_ptr=h_dense.unsafe_ptr())
+
     var skip = ctx.enqueue_create_buffer[DType.uint8](hist_cells_per_leaf)
     var hsk = ctx.enqueue_create_host_buffer[DType.uint8](
         hist_cells_per_leaf
@@ -1500,8 +1514,8 @@ def run_tree_layout(
         launch_histograms_for_blocks(
             ctx, dblocks, depth, n_live, n_rows, stat_count, max_leaves,
             replicas, fixed_scale,
-            cindex, row_index, stats, p_off, p_sz, ids_a, hist, acc_i32,
-            block_hist, hist_cells_per_leaf,
+            cindex, row_index, stats, p_off, p_sz, ids_a, dense_ids, hist,
+            acc_i32, block_hist, hist_cells_per_leaf,
         )
         mgr.stream_kernel()
 

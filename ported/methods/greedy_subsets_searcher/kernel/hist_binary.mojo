@@ -284,7 +284,9 @@ def binary_hist_kernel(
             var dst = (
                 bin_sums
                 + device_offset
-                + Int(part_ids.unsafe_load(Int(block_idx.y))) * entries_per_leaf
+                # `blockIdx.y`, DENSE, not `partIds[blockIdx.y]`. See the
+                # note above `entries_per_leaf`.
+                + Int(block_idx.y) * entries_per_leaf
                 + Int(block_idx.z) * group_size
                 + Int(feature_fold_offset.unsafe_load(feature_offset + fid))
             )
@@ -614,7 +616,9 @@ def binary_hist_gather_kernel(
             var dst = (
                 bin_sums
                 + device_offset
-                + Int(part_ids.unsafe_load(Int(block_idx.y))) * entries_per_leaf
+                # `blockIdx.y`, DENSE, not `partIds[blockIdx.y]`. See the
+                # note above `entries_per_leaf`.
+                + Int(block_idx.y) * entries_per_leaf
                 + Int(block_idx.z) * group_size
                 + Int(feature_fold_offset.unsafe_load(feature_offset + fid))
             )
