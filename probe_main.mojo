@@ -18,6 +18,7 @@ from mojo_only.level_bench import (
     bench_replication_interleaved,
     bench_wide_histogram_interleaved,
     bench_realistic,
+    bench_subtraction,
     bench_tree,
     bench_tree_shapes,
 )

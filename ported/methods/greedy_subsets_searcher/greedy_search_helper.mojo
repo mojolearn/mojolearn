@@ -1379,6 +1379,7 @@ def run_tree_layout(
     mut row_index: DeviceBuffer[DType.uint32],
     total_weight: Float32,
     total_gradient: Float32,
+    use_subtraction: Bool = True,
 ) raises -> List[Int]:
     """`FitImpl` over a LAYOUT: mixed feature widths, one launch per policy.
 
@@ -1825,8 +1826,17 @@ def run_tree_layout(
                 LeafRecord(UInt32(0), HISTOGRAMS_ZEROES, 0, False)
             )
         for i in range(n_live):
+            # `use_subtraction=False` keeps every child at `Zeroes`, so the
+            # planner finds no pairs and the level rebuilds all `2^depth`
+            # histograms. It exists so the two can be measured INTERLEAVED
+            # inside one process; this box drifts 2-3x across time windows
+            # and sequential arms do not compare.
             var t = HISTOGRAMS_ZEROES
-            if prev_records[i].histograms_type == HISTOGRAMS_CURRENT_PATH:
+            if (
+                use_subtraction
+                and prev_records[i].histograms_type
+                == HISTOGRAMS_CURRENT_PATH
+            ):
                 t = HISTOGRAMS_PREVIOUS_PATH
             leaf_records[i] = LeafRecord(UInt32(0), t, i, False)
             leaf_records[n_live + i] = LeafRecord(UInt32(0), t, i, False)

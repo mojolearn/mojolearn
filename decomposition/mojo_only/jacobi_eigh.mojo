@@ -34,6 +34,7 @@ eigenvalue (`tsvd.cuh:150`). PCA components are meaningless without that
 convention, so the reversal is copied and is not an implementation detail.
 """
 
+from std.math import sqrt
 
 def jacobi_eigh(
     mut a: List[Float64],
@@ -80,10 +81,10 @@ def jacobi_eigh(
                 var theta = (aqq - app) / (2.0 * apq)
                 var t = 0.0
                 if theta >= 0.0:
-                    t = 1.0 / (theta + (1.0 + theta * theta) ** 0.5)
+                    t = 1.0 / (theta + sqrt(1.0 + theta * theta))
                 else:
-                    t = -1.0 / (-theta + (1.0 + theta * theta) ** 0.5)
-                var c = 1.0 / (1.0 + t * t) ** 0.5
+                    t = -1.0 / (-theta + sqrt(1.0 + theta * theta))
+                var c = 1.0 / sqrt(1.0 + t * t)
                 var s = t * c
 
                 for k in range(n):

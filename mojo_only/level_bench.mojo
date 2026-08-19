@@ -1000,6 +1000,87 @@ def bench_tree_shapes(n_rows: Int, max_depth: Int, repeats: Int) raises:
     report(arms)
 
 
+def bench_subtraction(
+    n_rows: Int, n_features: Int, max_depth: Int, repeats: Int
+) raises:
+    """Sibling subtraction ON against OFF, arms interleaved in one process.
+
+    The subtraction halves the histogram build: a level computes the SMALLER
+    child of each pair and derives the larger as `parent - smaller`. Whether
+    that shows in wall clock depends on how much of a tree is histogram and
+    how much is fixed control-plane cost, and the only way to find out on
+    this box is to alternate the arms inside ONE process. Sequential runs
+    have produced 2-3x spreads across time windows.
+
+    Both arms must return the SAME leaf sizes. If they ever diverge the
+    subtraction is wrong, and that is checked here rather than assumed.
+    """
+    print(
+        "  depth", max_depth, "tree,", n_rows, "rows x", n_features,
+        "one-byte features, subtraction arms interleaved:",
+    )
+
+    var ctx = DeviceContext()
+    var folds = List[Int]()
+    for _ in range(n_features):
+        folds.append(254)
+
+    var built = build_mixed_dataset(ctx, n_rows, folds)
+    var cidx = built[0]
+    var stat = built[1]
+    var ridx = built[2]
+    var hstat = built[3]
+    var hidx = built[4]
+    var tw = built[5]
+    var tg = built[6]
+
+    var names = List[String]()
+    names.append("subtraction ON")
+    names.append("subtraction OFF")
+    var samples = List[List[Float64]]()
+    samples.append(List[Float64]())
+    samples.append(List[Float64]())
+
+    var ref_sizes = List[Int]()
+    var mismatches = 0
+
+    for _ in range(repeats):
+        for arm in range(2):
+            ctx.enqueue_copy(dst_buf=ridx, src_ptr=hidx.unsafe_ptr())
+            ctx.enqueue_copy(dst_buf=stat, src_ptr=hstat.unsafe_ptr())
+            ctx.synchronize()
+            var t0 = perf_counter_ns()
+            var sizes = run_tree_layout(
+                ctx, n_rows, folds, max_depth, cidx, stat, ridx,
+                Float32(tw), Float32(tg), arm == 0,
+            )
+            var dt = perf_counter_ns() - t0
+            samples[arm].append(Float64(dt) / 1.0e6)
+
+            # The two arms must agree leaf for leaf. Timing an arm that
+            # computes something else is not a comparison.
+            if len(ref_sizes) == 0:
+                for i in range(len(sizes)):
+                    ref_sizes.append(sizes[i])
+            else:
+                if len(sizes) != len(ref_sizes):
+                    mismatches += 1
+                else:
+                    for i in range(len(sizes)):
+                        if sizes[i] != ref_sizes[i]:
+                            mismatches += 1
+
+    var arms = List[ArmResult]()
+    for a in range(2):
+        arms.append(summarize(names[a], samples[a]))
+    report(arms)
+    print("    leaf-size mismatches between arms:", mismatches)
+    if mismatches != 0:
+        raise Error(
+            "the two arms produced different trees; the subtraction is wrong"
+        )
+
+
 def bench_realistic(n_rows: Int, n_features: Int, max_depth: Int, repeats: Int) raises:
     """One-byte features at realistic scale, MEASURED rather than scaled up.
 

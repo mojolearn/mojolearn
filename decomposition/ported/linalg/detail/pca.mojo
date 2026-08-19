@@ -41,6 +41,7 @@ largest magnitude in each component positive. scikit-learn's `svd_flip` uses
 the same convention, which is what makes the two comparable at all.
 """
 
+from std.math import sqrt
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.column_stats import (
@@ -204,7 +205,7 @@ def pca_fit(
         explained_var.append(lam)
         explained_var_ratio.append(lam / total if total != 0.0 else 0.0)
         # `weighted_sqrt(explained_var, n_rows - 1)`, `detail/pca.cuh:180`.
-        singular_vals.append((lam * Float64(n_rows - 1)) ** 0.5)
+        singular_vals.append(sqrt(lam * Float64(n_rows - 1)))
 
     # `noise_vars`: the mean of the DISCARDED eigenvalues, or zero if none
     # were discarded (`trunc_comp_exp_vars`, tail).

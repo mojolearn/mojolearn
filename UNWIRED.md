@@ -324,19 +324,31 @@ both were invisible to every check that existed:
 Neither had anything to do with subtraction. Both were reaching real
 datasets.
 
-### Timing is NOT resolved
+### Timing: RESOLVED, and the answer is that it does not matter
 
-800k x 100 depth 6 reads 40.55 ms/tree median against 39.08 without the
-subtraction, but those are CROSS-TIME measurements and this box drifts 2-3x
-across windows, so per the standing rule they do not compare. What is
-established is the work, not the wall clock: half the histogram build for
-the same tree.
+`bench_subtraction` alternates the two arms inside ONE process. 800k x 100
+one-byte, depth 6, five interleaved repeats:
 
-The likely reason it does not show is that the histogram is not the
-bottleneck at this shape. About 34 of 40 ms is fixed control-plane cost that
-does not scale with rows, so halving the part that does scale moves a small
-share. **An interleaved arm inside one process is the only way to settle
-it**, and that harness does not exist yet.
+    subtraction ON     39.94 ms median   (39.37 - 41.19)
+    subtraction OFF    40.16 ms median   (39.89 - 42.28)
+
+    INDISTINGUISHABLE, ranges overlap
+    leaf-size mismatches between arms: 0
+
+**Halving the histogram build does not move the wall clock at this shape.**
+That is not a defect in the subtraction; it is a statement about where the
+time goes. About 34 of 40 ms is fixed control-plane cost that does not scale
+with rows, so halving the part that does scale moves a small share of a small
+share.
+
+It is kept ON because CatBoost does it and this is a port, and because at
+larger row counts the histogram share grows. But **the honest conclusion is
+that kernel-side work is not where the remaining time is**, which is now the
+second independent measurement saying so.
+
+The zero mismatch count is the other half of the result. The two arms compute
+the tree by different amounts of work and agree leaf for leaf, which is
+correctness evidence that conservation could never give.
 
 ## Top-bin aliasing at narrow fold counts, OPEN
 
