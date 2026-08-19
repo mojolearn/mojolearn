@@ -249,6 +249,7 @@ def run_one_level(
         Int32(n_features),
         cindex.unsafe_ptr(),
         Int32(n_rows),
+        Int32(0),
         stats.unsafe_ptr(),
         Int32(n_rows),
         p_off.unsafe_ptr(),
@@ -670,6 +671,7 @@ def run_tree(
                 folds.unsafe_ptr(), fold_off.unsafe_ptr(),
                 grp_off.unsafe_ptr(), grp_sz.unsafe_ptr(),
                 Int32(n_features), cindex.unsafe_ptr(), Int32(n_rows),
+                Int32(0),
                 stats.unsafe_ptr(), Int32(n_rows),
                 p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids_a.unsafe_ptr(),
                 hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
@@ -682,6 +684,7 @@ def run_tree(
                 folds.unsafe_ptr(), fold_off.unsafe_ptr(),
                 grp_off.unsafe_ptr(), grp_sz.unsafe_ptr(),
                 Int32(n_features), cindex.unsafe_ptr(), Int32(n_rows),
+                Int32(0),
                 row_index.unsafe_ptr(),
                 stats.unsafe_ptr(), Int32(n_rows),
                 p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids_a.unsafe_ptr(),
@@ -958,7 +961,7 @@ def upload_blocks(
 
 def launch_histograms_for_blocks(
     ctx: DeviceContext,
-    blocks: List[DeviceBlock],
+    mut blocks: List[DeviceBlock],
     depth: Int,
     n_live: Int,
     n_rows: Int,
@@ -988,14 +991,16 @@ def launch_histograms_for_blocks(
     """
     for b in range(len(blocks)):
         ref blk = blocks[b]
-        var line = n_rows * blk.first_column
+        # The policy's column BASE, and the feature-block stride within it.
+        var base = n_rows * blk.first_column
+        var line = n_rows
 
         if blk.policy == POLICY_BINARY:
             if depth == 0:
                 ctx.enqueue_function[binary_hist_kernel](
                     blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
                     blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
-                    Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
+                    Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line), Int32(base),
                     stats.unsafe_ptr(), Int32(n_rows),
                     p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
                     hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
@@ -1007,7 +1012,7 @@ def launch_histograms_for_blocks(
                 ctx.enqueue_function[binary_hist_gather_kernel](
                     blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
                     blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
-                    Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
+                    Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line), Int32(base),
                     row_index.unsafe_ptr(),
                     stats.unsafe_ptr(), Int32(n_rows),
                     p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
@@ -1021,7 +1026,7 @@ def launch_histograms_for_blocks(
                 ctx.enqueue_function[half_byte_hist_kernel](
                     blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
                     blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
-                    Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
+                    Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line), Int32(base),
                     stats.unsafe_ptr(), Int32(n_rows),
                     p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
                     hist.unsafe_ptr(),
@@ -1033,7 +1038,7 @@ def launch_histograms_for_blocks(
                 ctx.enqueue_function[half_byte_hist_gather_kernel](
                     blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
                     blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
-                    Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
+                    Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line), Int32(base),
                     row_index.unsafe_ptr(),
                     stats.unsafe_ptr(), Int32(n_rows),
                     p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
@@ -1051,7 +1056,7 @@ def launch_histograms_for_blocks(
                 ctx.enqueue_function[one_byte_hist_kernel[8]](
                     blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
                     blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
-                    Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
+                    Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line), Int32(base),
                     stats.unsafe_ptr(), Int32(n_rows),
                     p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
                     hist.unsafe_ptr(),
@@ -1063,7 +1068,7 @@ def launch_histograms_for_blocks(
                 ctx.enqueue_function[one_byte_hist_gather_kernel[8]](
                     blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
                     blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
-                    Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
+                    Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line), Int32(base),
                     row_index.unsafe_ptr(),
                     stats.unsafe_ptr(), Int32(n_rows),
                     p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
@@ -1112,3 +1117,304 @@ def resolve_split(
         + String(bin_feature)
         + " belongs to no feature; the histogram and the layout disagree"
     )
+
+
+def run_tree_layout(
+    ctx: DeviceContext,
+    n_rows: Int,
+    fold_counts: List[Int],
+    max_depth: Int,
+    mut cindex: DeviceBuffer[DType.uint32],
+    mut stats: DeviceBuffer[DType.float32],
+    mut row_index: DeviceBuffer[DType.uint32],
+    total_weight: Float32,
+    total_gradient: Float32,
+) raises -> List[Int]:
+    """`FitImpl` over a LAYOUT: mixed feature widths, one launch per policy.
+
+    Same level sequence as `run_tree`, which stays as the verified uniform
+    binary path. What differs is that the histogram comes from
+    `launch_histograms_for_blocks` and the winning bin-feature is resolved
+    through `resolve_split`, so a dataset may mix binary, half-byte and
+    one-byte features.
+
+    Returns the final leaf sizes, which must sum to `n_rows` at every depth.
+    """
+    var stat_count = 2
+    var max_leaves = 1 << max_depth
+
+    var layout = build_layout(fold_counts)
+    var blocks = blocks_for(layout, n_rows)
+    var dblocks = upload_blocks(ctx, blocks)
+    var hist_cells_per_leaf = layout.hist_cells
+
+    var replicas = replicas_for(stat_count * hist_cells_per_leaf)
+
+    var wide = (n_rows + 255) // 256
+    if wide > 256:
+        wide = 256
+    if wide < 1:
+        wide = 1
+
+    var p_off = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+    var p_sz = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+    var hp_off = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+    var hp_sz = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+    var h_off = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
+    var h_sz = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
+    for i in range(max_leaves):
+        h_off.unsafe_ptr().unsafe_store(i, UInt32(0))
+        h_sz.unsafe_ptr().unsafe_store(i, UInt32(0))
+    h_sz.unsafe_ptr().unsafe_store(0, UInt32(n_rows))
+    ctx.enqueue_copy(dst_buf=p_off, src_ptr=h_off.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=p_sz, src_ptr=h_sz.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=hp_off, src_ptr=h_off.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=hp_sz, src_ptr=h_sz.unsafe_ptr())
+
+    var hist_cells = max_leaves * stat_count * hist_cells_per_leaf
+    var hist = ctx.enqueue_create_buffer[DType.float32](hist_cells)
+    var acc_i32 = ctx.enqueue_create_buffer[DType.int32](hist_cells)
+    var zi = ctx.enqueue_create_host_buffer[DType.int32](hist_cells)
+    for i in range(hist_cells):
+        zi.unsafe_ptr().unsafe_store(i, Int32(0))
+    ctx.enqueue_copy(dst_buf=acc_i32, src_ptr=zi.unsafe_ptr())
+
+    var mag = Float64(total_weight)
+    var gm = Float64(total_gradient)
+    if gm < 0.0:
+        gm = -gm
+    if gm > mag:
+        mag = gm
+    if mag <= 0.0:
+        mag = 1.0
+    var fixed_scale = Float32(Float64((1 << 28) - 1) / mag)
+
+    var part_stats = ctx.enqueue_create_buffer[DType.float32](
+        max_leaves * stat_count
+    )
+    var stat_chunks = (n_rows + STATS_BLOCK - 1) // STATS_BLOCK
+    var stat_partials = ctx.enqueue_create_buffer[DType.float32](
+        max_leaves * stat_count * stat_chunks
+    )
+
+    var flags = ctx.enqueue_create_buffer[DType.uint8](n_rows)
+    var seq = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+    var gmap = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+    var sflags = ctx.enqueue_create_buffer[DType.uint8](n_rows)
+    var new_index = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+    var new_stats = ctx.enqueue_create_buffer[DType.float32](
+        stat_count * n_rows
+    )
+
+    var max_chunks = (n_rows + PARTITION_BLOCK - 1) // PARTITION_BLOCK
+    var chunk_zeros = ctx.enqueue_create_buffer[DType.uint32](
+        max_leaves * max_chunks
+    )
+    var chunk_offsets = ctx.enqueue_create_buffer[DType.uint32](
+        max_leaves * max_chunks
+    )
+    var leaf_zeros = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+
+    var ids_a = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+    var ids_b = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+    var ids_c = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+    var h_ids_a = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
+    var h_ids_b = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
+    var h_ids_c = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
+
+    var zero_ids = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+
+    var skip = ctx.enqueue_create_buffer[DType.uint8](hist_cells_per_leaf)
+    var hsk = ctx.enqueue_create_host_buffer[DType.uint8](
+        hist_cells_per_leaf
+    )
+    for i in range(hist_cells_per_leaf):
+        hsk.unsafe_ptr().unsafe_store(i, UInt8(0))
+    ctx.enqueue_copy(dst_buf=skip, src_ptr=hsk.unsafe_ptr())
+
+    var out_score = ctx.enqueue_create_buffer[DType.float32](1)
+    var out_bin = ctx.enqueue_create_buffer[DType.uint32](1)
+    var hob = ctx.enqueue_create_host_buffer[DType.uint32](1)
+
+    var sp1 = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+    var sp2 = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+    var sp3 = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+    var sp5 = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+    var sp4 = ctx.enqueue_create_buffer[DType.uint8](max_leaves)
+    var hs1 = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
+    var hs2 = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
+    var hs3 = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
+    var hs5 = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
+    var hs4 = ctx.enqueue_create_host_buffer[DType.uint8](max_leaves)
+
+    # The scan needs each feature's first bin and fold count over the FLAT
+    # histogram, which is exactly what the layout holds.
+    var flat_first = ctx.enqueue_create_buffer[DType.uint32](
+        len(fold_counts)
+    )
+    var flat_folds = ctx.enqueue_create_buffer[DType.uint32](
+        len(fold_counts)
+    )
+    var hff = ctx.enqueue_create_host_buffer[DType.uint32](len(fold_counts))
+    var hfd = ctx.enqueue_create_host_buffer[DType.uint32](len(fold_counts))
+    for i in range(len(fold_counts)):
+        hff.unsafe_ptr().unsafe_store(i, layout.features[i].first_fold_index)
+        hfd.unsafe_ptr().unsafe_store(i, layout.features[i].folds)
+    ctx.enqueue_copy(dst_buf=flat_first, src_ptr=hff.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=flat_folds, src_ptr=hfd.unsafe_ptr())
+    ctx.synchronize()
+
+    var n_live = 1
+    var max_live_rows = n_rows
+
+    for depth in range(max_depth):
+        for i in range(n_live):
+            h_ids_a.unsafe_ptr().unsafe_store(i, UInt32(i))
+        ctx.enqueue_copy(dst_buf=ids_a, src_ptr=h_ids_a.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=zero_ids, src_ptr=h_ids_a.unsafe_ptr())
+        ctx.synchronize()
+
+        ctx.enqueue_function[zero_histograms_kernel](
+            zero_ids.unsafe_ptr(),
+            Int32(hist_cells_per_leaf),
+            hist.unsafe_ptr(),
+            grid_dim=(
+                (hist_cells_per_leaf + 255) // 256, n_live, stat_count
+            ),
+            block_dim=(256, 1, 1),
+        )
+
+        launch_histograms_for_blocks(
+            ctx, dblocks, depth, n_live, n_rows, stat_count, max_leaves,
+            replicas, fixed_scale,
+            cindex, row_index, stats, p_off, p_sz, ids_a, hist, acc_i32,
+        )
+
+        ctx.enqueue_function[fixed_to_float_kernel](
+            acc_i32.unsafe_ptr(), hist.unsafe_ptr(), Int32(hist_cells),
+            fixed_scale,
+            grid_dim=(hist_cells + 255) // 256, block_dim=256,
+        )
+        ctx.enqueue_function[scan_histograms_kernel](
+            flat_first.unsafe_ptr(), flat_folds.unsafe_ptr(),
+            Int32(len(fold_counts)), Int32(hist_cells_per_leaf),
+            hist.unsafe_ptr(),
+            grid_dim=(1, n_live, stat_count), block_dim=(256, 1, 1),
+        )
+
+        compute_partition_stats(
+            ctx, n_live, max_live_rows, stat_count, n_rows,
+            ids_a, p_off, p_sz, stats, stat_partials, part_stats,
+        )
+        ctx.synchronize()
+
+        ctx.enqueue_function[compute_optimal_splits_kernel](
+            skip.unsafe_ptr(), Int32(hist_cells_per_leaf), hist.unsafe_ptr(),
+            part_stats.unsafe_ptr(), Int32(stat_count), ids_a.unsafe_ptr(),
+            Int32(n_live), Float32(3.0),
+            out_score.unsafe_ptr(), out_bin.unsafe_ptr(),
+            grid_dim=(1, 1, 1), block_dim=(SCORE_BLOCK_SIZE, 1, 1),
+        )
+        ctx.synchronize()
+        ctx.enqueue_copy(dst_ptr=hob.unsafe_ptr(), src_buf=out_bin)
+        ctx.synchronize()
+
+        var best_bf = Int(hob.unsafe_ptr().unsafe_load(0))
+        if best_bf < 0 or best_bf >= hist_cells_per_leaf:
+            best_bf = 0
+        var choice = resolve_split(layout, best_bf)
+        ref cf = layout.features[choice.feature]
+
+        for i in range(n_live):
+            hs1.unsafe_ptr().unsafe_store(i, cf.offset * UInt32(n_rows))
+            hs2.unsafe_ptr().unsafe_store(i, cf.shift)
+            hs3.unsafe_ptr().unsafe_store(i, cf.mask)
+            hs4.unsafe_ptr().unsafe_store(
+                i, UInt8(1) if cf.one_hot_feature else UInt8(0)
+            )
+            hs5.unsafe_ptr().unsafe_store(i, UInt32(choice.bin))
+        ctx.enqueue_copy(dst_buf=sp1, src_ptr=hs1.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=sp2, src_ptr=hs2.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=sp3, src_ptr=hs3.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=sp4, src_ptr=hs4.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=sp5, src_ptr=hs5.unsafe_ptr())
+        ctx.synchronize()
+
+        ctx.enqueue_function[split_and_make_sequence_kernel](
+            cindex.unsafe_ptr(), row_index.unsafe_ptr(),
+            p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids_a.unsafe_ptr(),
+            sp1.unsafe_ptr(), sp2.unsafe_ptr(), sp3.unsafe_ptr(),
+            sp4.unsafe_ptr(), sp5.unsafe_ptr(),
+            flags.unsafe_ptr(), seq.unsafe_ptr(),
+            grid_dim=(wide, n_live, 1),
+            block_dim=(SPLIT_BLOCK_SIZE, 1, 1),
+        )
+
+        launch_stable_partition(
+            ctx, n_live, max_live_rows, ids_a, p_off, p_sz, flags,
+            chunk_zeros, chunk_offsets, leaf_zeros, gmap, sflags,
+        )
+
+        ctx.enqueue_function[gather_index_in_leaves_kernel](
+            ids_a.unsafe_ptr(), p_off.unsafe_ptr(), p_sz.unsafe_ptr(),
+            row_index.unsafe_ptr(), gmap.unsafe_ptr(), new_index.unsafe_ptr(),
+            grid_dim=(wide, n_live, 1), block_dim=(256, 1, 1),
+        )
+        ctx.enqueue_function[copy_u32_kernel](
+            row_index.unsafe_ptr(), new_index.unsafe_ptr(), Int32(n_rows),
+            grid_dim=wide, block_dim=COPY_BLOCK,
+        )
+        ctx.enqueue_function[gather_in_leaves_kernel](
+            ids_a.unsafe_ptr(), p_off.unsafe_ptr(), p_sz.unsafe_ptr(),
+            stats.unsafe_ptr(), gmap.unsafe_ptr(), new_stats.unsafe_ptr(),
+            Int32(stat_count), Int32(n_rows),
+            grid_dim=(wide, n_live, 1), block_dim=(256, 1, 1),
+        )
+        ctx.enqueue_function[copy_f32_kernel](
+            stats.unsafe_ptr(), new_stats.unsafe_ptr(),
+            Int32(stat_count * n_rows),
+            grid_dim=wide, block_dim=COPY_BLOCK,
+        )
+
+        for i in range(n_live):
+            h_ids_b.unsafe_ptr().unsafe_store(i, UInt32(2 * i))
+            h_ids_c.unsafe_ptr().unsafe_store(i, UInt32(2 * i + 1))
+        ctx.enqueue_copy(dst_buf=ids_b, src_ptr=h_ids_b.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=ids_c, src_ptr=h_ids_c.unsafe_ptr())
+        ctx.enqueue_copy(dst_ptr=h_off.unsafe_ptr(), src_buf=p_off)
+        ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
+        ctx.synchronize()
+        for i in range(n_live - 1, -1, -1):
+            var o = h_off.unsafe_ptr().unsafe_load(i)
+            var s = h_sz.unsafe_ptr().unsafe_load(i)
+            h_off.unsafe_ptr().unsafe_store(2 * i, o)
+            h_sz.unsafe_ptr().unsafe_store(2 * i, s)
+            h_off.unsafe_ptr().unsafe_store(2 * i + 1, o)
+            h_sz.unsafe_ptr().unsafe_store(2 * i + 1, UInt32(0))
+        ctx.enqueue_copy(dst_buf=p_off, src_ptr=h_off.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=p_sz, src_ptr=h_sz.unsafe_ptr())
+        ctx.synchronize()
+
+        ctx.enqueue_function[update_partitions_after_split_kernel](
+            ids_b.unsafe_ptr(), ids_c.unsafe_ptr(), Int32(n_live),
+            sflags.unsafe_ptr(), p_off.unsafe_ptr(), p_sz.unsafe_ptr(),
+            hp_off.unsafe_ptr(), hp_sz.unsafe_ptr(),
+            grid_dim=(wide, n_live, 1), block_dim=(512, 1, 1),
+        )
+        ctx.synchronize()
+
+        n_live = n_live * 2
+        ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
+        ctx.synchronize()
+        max_live_rows = 1
+        for i in range(n_live):
+            var s = Int(h_sz.unsafe_ptr().unsafe_load(i))
+            if s > max_live_rows:
+                max_live_rows = s
+
+    ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
+    ctx.synchronize()
+    var out = List[Int]()
+    for i in range(n_live):
+        out.append(Int(h_sz.unsafe_ptr().unsafe_load(i)))
+    return out^

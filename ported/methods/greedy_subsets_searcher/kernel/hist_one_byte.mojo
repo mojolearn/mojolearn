@@ -142,6 +142,7 @@ def one_byte_hist_kernel[bits: Int](
     f_count_in32: Int32,
     bins: MutPointer[UInt32, MutAnyOrigin],
     bins_line_size_in: Int32,
+    cindex_base_in: Int32,
     stats: MutPointer[Float32, MutAnyOrigin],
     stat_line_size_in: Int32,
     part_offset: MutPointer[UInt32, MutAnyOrigin],
@@ -182,7 +183,12 @@ def one_byte_hist_kernel[bits: Int](
     var feature_offset = (Int(block_idx.x) // max_blocks_per_part) * 4
     var f_count = min(f_count_in - feature_offset, 4)
 
-    var bins_p = bins + bins_line_size * (
+    # `cindex += features->CompressedIndexOffset` in theirs: the base of
+    # THIS POLICY's columns. Distinct from `bins_line_size`, which is the
+    # stride between FEATURE BLOCKS inside the policy. Conflating them makes
+    # every policy after the first read the first one's bits, which looks
+    # like a tree that will not split.
+    var bins_p = bins + Int(cindex_base_in) + bins_line_size * (
         Int(block_idx.x) // max_blocks_per_part
     )
 
@@ -386,6 +392,7 @@ def one_byte_hist_gather_kernel[bits: Int](
     f_count_in32: Int32,
     cindex: MutPointer[UInt32, MutAnyOrigin],
     bins_line_size_in: Int32,
+    cindex_base_in: Int32,
     indices: MutPointer[UInt32, MutAnyOrigin],
     stats: MutPointer[Float32, MutAnyOrigin],
     stat_line_size_in: Int32,
@@ -430,7 +437,9 @@ def one_byte_hist_gather_kernel[bits: Int](
     var feature_offset = (Int(block_idx.x) // max_blocks_per_part) * 4
     var f_count = min(f_count_in - feature_offset, 4)
 
-    var cindex_p = cindex + bins_line_size * (
+    # See the note in the direct variant: this is the policy's column base,
+    # not the feature-block stride.
+    var cindex_p = cindex + Int(cindex_base_in) + bins_line_size * (
         Int(block_idx.x) // max_blocks_per_part
     )
     var idx_p = indices

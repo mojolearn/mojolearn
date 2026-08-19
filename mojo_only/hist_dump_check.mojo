@@ -140,7 +140,7 @@ def check_hist_depends_on_partition() raises:
     ctx.enqueue_function[binary_hist_gather_kernel](
         folds.unsafe_ptr(), fold_off.unsafe_ptr(), grp_off.unsafe_ptr(),
         grp_sz.unsafe_ptr(), Int32(n_features), cindex.unsafe_ptr(),
-        Int32(n_rows), row_index.unsafe_ptr(), stats.unsafe_ptr(),
+        Int32(n_rows), Int32(0), row_index.unsafe_ptr(), stats.unsafe_ptr(),
         Int32(n_rows), p_off.unsafe_ptr(), p_sz.unsafe_ptr(),
         ids.unsafe_ptr(), hist.unsafe_ptr(), acc_scratch.unsafe_ptr(),
         Float32(1.0), Int32(max_leaves), Int32(stat_count),
@@ -163,7 +163,7 @@ def check_hist_depends_on_partition() raises:
     ctx.enqueue_function[binary_hist_gather_kernel](
         folds.unsafe_ptr(), fold_off.unsafe_ptr(), grp_off.unsafe_ptr(),
         grp_sz.unsafe_ptr(), Int32(n_features), cindex.unsafe_ptr(),
-        Int32(n_rows), row_index.unsafe_ptr(), stats.unsafe_ptr(),
+        Int32(n_rows), Int32(0), row_index.unsafe_ptr(), stats.unsafe_ptr(),
         Int32(n_rows), p_off.unsafe_ptr(), p_sz.unsafe_ptr(),
         ids.unsafe_ptr(), hist.unsafe_ptr(), acc_scratch.unsafe_ptr(),
         Float32(1.0), Int32(max_leaves), Int32(stat_count),

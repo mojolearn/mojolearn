@@ -97,3 +97,25 @@ failed; the measurement took one attempt.
   written back. Now `ported/gpu_util/copy.mojo`
 
 So the hunt paid even though the final cause was elsewhere.
+
+
+## Mixed-width trees: NOT WORKING
+
+`run_tree_layout` grows a tree over mixed feature widths, conserves every row
+at every depth, and produces `2^depth` partitions. It **does not split**:
+depth 6 over 4,096 rows leaves 1 non-empty leaf of 64.
+
+The uniform-binary `run_tree` is unaffected and still correct: 46 of 64
+leaves populated at depth 6.
+
+One real bug found and fixed while chasing it, which was not the cause: the
+histogram kernels took a single `bins_line_size` and used it both as the
+policy's column BASE and as the stride between feature blocks. CatBoost keeps
+those separate (`cindex += features->CompressedIndexOffset`, distinct from
+the block stride), and conflating them made every policy after the first read
+the first one's bits. Now a separate `cindex_base_in` parameter on all six
+kernels.
+
+Not yet isolated. The next probe should be the same move that resolved the
+last one: read a mixed histogram back at depth 0 and compare its per-policy
+slices against a host count, rather than inferring from leaf occupancy.

@@ -5,7 +5,7 @@ from mojo_only.layout_check import (
     check_layout,
     check_split_resolution,
 )
-from mojo_only.level_check import check_one_level, check_tree
+from mojo_only.level_check import check_mixed_tree, check_one_level, check_tree
 from mojo_only.hist_dump_check import check_hist_depends_on_partition
 from mojo_only.level_bench import (
     bench_histogram_only,
@@ -295,6 +295,8 @@ def main() raises:
     check_tree(1)
     check_tree(3)
     check_tree(6)
+    check_mixed_tree(4)
+    check_mixed_tree(6)
     print()
     print("LEVEL TIMING:")
     bench_level(500000, 5)

@@ -14,6 +14,7 @@ from ported.gpu_data.grid_policy import (
     policy_mask,
     policy_shift,
 )
+from ported.gpu_data.compressed_index_builder import build_layout
 from ported.gpu_data.kernel.binarize import (
     WRITE_BLOCK_SIZE,
     write_compressed_index_kernel,
@@ -21,6 +22,7 @@ from ported.gpu_data.kernel.binarize import (
 from ported.methods.greedy_subsets_searcher.greedy_search_helper import (
     run_one_level,
     run_tree,
+    run_tree_layout,
 )
 
 
@@ -247,3 +249,116 @@ def check_tree(max_depth: Int) raises:
     if negative != 0:
         raise Error("a leaf has a negative size")
     print("  every row accounted for at depth", max_depth)
+
+
+def check_mixed_tree(max_depth: Int) raises:
+    """A tree over MIXED feature widths: binary, half-byte and one-byte.
+
+    Every check before this used 32 uniform binary features, which is one
+    policy, one histogram launch and a 64-cell histogram. This is the shape
+    CatBoost is actually built for and the one every kernel in the port was
+    written to handle.
+
+    16 features: 8 binary (1 fold), 4 half-byte (8 folds), 4 one-byte (64
+    folds), so the flat histogram is 8 + 32 + 256 = 296 cells and three
+    launches per level instead of one.
+
+    Invariant is the same one that caught the earlier wiring bugs: leaf sizes
+    must sum to `n_rows` at every depth, because a split moves rows and
+    creates none.
+    """
+    var ctx = DeviceContext()
+    var n_rows = 4096
+
+    var folds = List[Int]()
+    for _ in range(8):
+        folds.append(1)
+    for _ in range(4):
+        folds.append(8)
+    for _ in range(4):
+        folds.append(64)
+    var n_features = len(folds)
+
+    # Columns: binary 8 -> 1 column, half-byte 4 -> 1, one-byte 4 -> 1.
+    var n_columns = 3
+    var cindex = ctx.enqueue_create_buffer[DType.uint32](n_rows * n_columns)
+    var z = ctx.enqueue_create_host_buffer[DType.uint32](n_rows * n_columns)
+    for i in range(n_rows * n_columns):
+        z.unsafe_ptr().unsafe_store(i, UInt32(0))
+    ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
+    ctx.synchronize()
+
+    var lay = build_layout(folds)
+    var hb = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
+    var bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
+    for f in range(n_features):
+        ref cf = lay.features[f]
+        for r in range(n_rows):
+            var x = UInt32(r * 2654435761 + f * 40503 + 0x2545F491)
+            x ^= x << 13
+            x ^= x >> 17
+            x ^= x << 5
+            hb.unsafe_ptr().unsafe_store(r, UInt8(Int(x % UInt32(folds[f]))))
+        ctx.enqueue_copy(dst_buf=bins, src_ptr=hb.unsafe_ptr())
+        ctx.enqueue_function[write_compressed_index_kernel](
+            Int32(Int(cf.offset) * n_rows),
+            cf.mask,
+            cf.shift,
+            bins.unsafe_ptr(),
+            Int32(n_rows),
+            cindex.unsafe_ptr(),
+            grid_dim=(n_rows + WRITE_BLOCK_SIZE - 1) // WRITE_BLOCK_SIZE,
+            block_dim=WRITE_BLOCK_SIZE,
+        )
+        ctx.synchronize()
+
+    var stats = ctx.enqueue_create_buffer[DType.float32](2 * n_rows)
+    var hs = ctx.enqueue_create_host_buffer[DType.float32](2 * n_rows)
+    var tw = Float64(0.0)
+    var tg = Float64(0.0)
+    for r in range(n_rows):
+        var g = -0.1
+        if (r % 4) == 0:
+            g = 3.0
+        hs.unsafe_ptr().unsafe_store(r, Float32(1.0))
+        hs.unsafe_ptr().unsafe_store(n_rows + r, Float32(g))
+        tw += 1.0
+        tg += g
+    ctx.enqueue_copy(dst_buf=stats, src_ptr=hs.unsafe_ptr())
+
+    var row_index = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+    var hi = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
+    for r in range(n_rows):
+        hi.unsafe_ptr().unsafe_store(r, UInt32(r))
+    ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
+    ctx.synchronize()
+
+    var sizes = run_tree_layout(
+        ctx, n_rows, folds, max_depth, cindex, stats, row_index,
+        Float32(tw), Float32(tg),
+    )
+
+    var total = 0
+    var nonempty = 0
+    for i in range(len(sizes)):
+        total += sizes[i]
+        if sizes[i] > 0:
+            nonempty += 1
+
+    print(
+        "  mixed: 8 binary + 4 half-byte + 4 one-byte =",
+        lay.hist_cells,
+        "flat bins, 3 launches/level",
+    )
+    print(
+        "  depth", max_depth, "->", len(sizes), "leaves,", nonempty,
+        "non-empty, rows", total, "of", n_rows,
+    )
+    if total != n_rows:
+        raise Error(
+            "rows lost or duplicated: " + String(total) + " of "
+            + String(n_rows)
+        )
+    if len(sizes) != (1 << max_depth):
+        raise Error("wrong leaf count")
+    print("  mixed-width tree grows and conserves every row")
