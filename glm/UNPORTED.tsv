@@ -1,0 +1,5 @@
+raft linalg/detail/lstsq.cuh::lstsqSvdJacobi	NOT PORTED, AND IT IS THEIR DEFAULT	cuML olsFit defaults to algo=0, one-sided Jacobi SVD. Normal equations SQUARE the condition number, so lstsqEig loses about twice the digits on an ill-conditioned design. sklearn's LinearRegression uses LAPACK gelsd, also an SVD route, so this difference belongs in any accuracy comparison
+raft linalg/detail/lstsq.cuh::lstsqQR, lstsqSvdQR	not ported	the other two solver arms
+cuml glm/ridge.cuh	not ported yet	ridge is lstsqEig with alpha added to the eigenvalues before inverting. Cheap once wanted
+cuml glm/preprocess.cuh	not ported yet	fit_intercept centering and the normalize option. core/column_stats.mojo already has the kernels
+cuml glm/qn/	NOT PORTED	logistic and softmax regression, 2737 lines. An LBFGS/OWL-QN solver with line search, not a linear-algebra routine. See glm/README.md on why its GPU upside is also smaller

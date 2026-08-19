@@ -1,0 +1,3 @@
+# our_file	upstream_file	status	notes
+# cuML pinned at 7e29955c, RAFT at 9aa17e5.
+ported/linalg/detail/lstsq.mojo	raft cpp/include/raft/linalg/detail/lstsq.cuh	partial	lstsqEig only, which is cuML olsFit algo=1. Their two-stream overlap is not ported
