@@ -1,7 +1,26 @@
-# catboost-symmetric-trees
+# mojolearn
 
-**A port of CatBoost's GPU oblivious (symmetric) tree learner into
-Mojo. GPU path only. No CPU path. Nothing from mojotrees.**
+**Ports of GPU machine-learning algorithms into Mojo, taken from the sources
+that already got them right.**
+
+The rule for every one of them is in `PORTING_RULES.md`: take their code and
+their algorithms, keep their control plane and their data plane, keep what
+they do on the GPU on the GPU and what they do on the host on the host, and
+adapt to Mojo only where the toolchain forces it.
+
+Two upstreams so far:
+
+| directory | upstream | what |
+|---|---|---|
+| `ported/`, `mojo_only/` | CatBoost | the GPU oblivious (symmetric) tree learner, control plane included |
+| `cluster/` | cuVS | k-means |
+
+Renamed from `catboost-symmetric-trees` on 2026-08-19, because it stopped
+being one port.
+
+## The CatBoost port
+
+**GPU path only. No CPU path. Nothing from mojotrees.**
 
 ## Why this exists
 
