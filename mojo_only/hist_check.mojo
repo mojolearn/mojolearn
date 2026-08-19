@@ -1278,7 +1278,7 @@ def check_stable_partition() raises:
     print("  partitioned, stable within each side, across chunk boundaries")
 
 
-def check_one_byte_bits[bits: Int](n_stats: Int = 1, rows_per_fold: Int = 10) raises:
+def check_one_byte_bits[bits: Int](n_stats: Int = 1, rows_per_fold: Int = 10, scattered: Bool = False) raises:
     """The one-byte kernel at `bits` bits, against a hand-computable answer.
 
     Four features per `UInt32`, `2^bits` folds each. Feature f at row r gets
@@ -1308,9 +1308,24 @@ def check_one_byte_bits[bits: Int](n_stats: Int = 1, rows_per_fold: Int = 10) ra
 
     var host_bins = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
     var bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
+    # `(r + f) % n_folds` gives consecutive rows consecutive bins, so lanes
+    # in a warp systematically land on DIFFERENT slots. That pattern hides any
+    # collision the slot arithmetic has. `scattered` uses a hash instead, so
+    # lanes can hit the same bin, which is what real data does.
+    var counts = List[Int]()
+    for _ in range(n_features * n_folds):
+        counts.append(0)
     for f in range(n_features):
         for r in range(n_rows):
-            host_bins.unsafe_ptr().unsafe_store(r, UInt8((r + f) % n_folds))
+            var v = (r + f) % n_folds
+            if scattered:
+                var x = UInt32(r * 2654435761 + f * 40503 + 0x2545F491)
+                x ^= x << 13
+                x ^= x >> 17
+                x ^= x << 5
+                v = Int(x % UInt32(n_folds))
+            counts[f * n_folds + v] += 1
+            host_bins.unsafe_ptr().unsafe_store(r, UInt8(v))
         ctx.enqueue_copy(dst_buf=bins, src_ptr=host_bins.unsafe_ptr())
         ctx.enqueue_function[write_compressed_index_kernel](
             Int32(0),
@@ -1421,12 +1436,13 @@ def check_one_byte_bits[bits: Int](n_stats: Int = 1, rows_per_fold: Int = 10) ra
                 var got = out.unsafe_ptr().unsafe_load(
                     s * group_size + f * n_folds + fold
                 )
-                if abs(got - Float32(Float64(rows_per_fold))) > Float32(1e-3):
+                var want = counts[f * n_folds + fold]
+                if abs(got - Float32(Float64(want))) > Float32(1e-3):
                     wrong += 1
                     if wrong <= 4:
                         print(
                             "      stat", s, "feature", f, "fold", fold,
-                            "got", got, "want", rows_per_fold,
+                            "got", got, "want", want,
                         )
     print("    feature 0 folds 0..3:",
           out.unsafe_ptr().unsafe_load(0), out.unsafe_ptr().unsafe_load(1))

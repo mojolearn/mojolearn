@@ -1035,6 +1035,7 @@ def launch_histograms_for_blocks(
     mut acc_i32: DeviceBuffer[DType.int32],
     mut block_hist: DeviceBuffer[DType.float32],
     hist_cells_per_leaf: Int,
+    skip_bridge: Bool = False,
 ) raises:
     """One histogram launch per policy present, dispatching on the block.
 
@@ -1180,8 +1181,15 @@ def launch_histograms_for_blocks(
                 )
 
         # THE BRIDGE. Scatter this block's slice into the flat histogram the
-        # score kernel reads. Without it every policy after the first lands
+        # score kernel reads. `skip_bridge` leaves the result in the
+        # per-block layout so a probe can read what the KERNEL wrote rather
+        # than what the bridge moved, which is the only way to tell a bad
+        # accumulation from a bad scatter. Without it every policy after the first lands
         # on the previous one's cells.
+        if skip_bridge:
+            block_first_bin += blk.total_folds
+            continue
+
         ctx.enqueue_function[write_reduces_histograms_kernel](
             Int32(block_first_bin),
             Int32(blk.total_folds),

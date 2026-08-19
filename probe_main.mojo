@@ -331,6 +331,9 @@ def main() raises:
     check_one_byte_bits[8](2)
     # 2048 rows: the probe's row count, 4 accumulation iterations not 2.
     check_one_byte_bits[6](2, 32)
+    # SCATTERED bins: lanes can hit the same slot, which the uniform
+    # (r + f) %% n_folds pattern never does.
+    check_one_byte_bits[6](2, 32, True)
     check_subtraction()
     check_scan()
     check_scores()
@@ -352,6 +355,9 @@ def main() raises:
     check_level_plan()
     print("kernels:")
     probe()
+    print()
+    print("one-byte only, PRE-BRIDGE (what the kernel wrote):")
+    probe_mixed_histogram(0, 0, 4, True)
     print()
     print("histogram slices, ONE-BYTE ONLY (GPU):")
     probe_mixed_histogram(0, 0, 4)

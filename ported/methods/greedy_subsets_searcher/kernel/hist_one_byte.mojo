@@ -337,22 +337,65 @@ def one_byte_hist_kernel[bits: Int](
         b_ptr += stripe_size
         s_ptr += stripe_size
 
-    # `TPointHistOneByte::Reduce`, the one-byte shape: fold the warp copies
-    # down so feature `fid`'s bin `fold` lands at `Histogram[fid * histSize +
-    # fold]`, which is what the writeback below reads.
+    # `TPointHistOneByte::Reduce` (`hist_one_byte.cu:177-230`), copied. TWO
+    # stages, and they are not interchangeable with one strided fold.
+    #
+    # A single fold at stride `4 * histSize` gives the RIGHT answer whenever
+    # every cell holds the same value and the WRONG one otherwise, so a
+    # histogram check built on `(r + f) % folds` passes it and real data does
+    # not. That is how it survived: the uniform pattern gives consecutive
+    # rows consecutive bins, every cell ends up equal, and summing the wrong
+    # set of equal cells still lands on the right number.
+    comptime inner_bits = bits - 5
+    comptime hist_size_bins = 1 << (5 + inner_bits)
+    comptime WARP_HIST_SIZE = 1024
+
+    # Stage 1: fold the per-warp copies down to 1024 entries, parked at
+    # `Histogram[1024 + start]`. Stride 1024 means one thread owns each
+    # residue class, so the write at `1024 + start` is by the same thread
+    # that already read it. That is why their loop needs no barrier inside.
     barrier()
-    comptime hist_size_bins = 1 << (5 + (bits - 5))
-    var slot_i = tid
-    while slot_i < hist_size_bins * 4:
+    var start = tid
+    while start < WARP_HIST_SIZE:
         var acc = Float32(0.0)
-        var j = slot_i
+        var j = start
         while j < ONE_BYTE_HIST_SIZE:
             acc += smem[j]
-            j += hist_size_bins * 4
-        barrier()
-        smem[slot_i] = acc
-        barrier()
-        slot_i += ONE_BYTE_BLOCK_SIZE
+            j += WARP_HIST_SIZE
+        smem[WARP_HIST_SIZE + start] = acc
+        start += ONE_BYTE_BLOCK_SIZE
+    barrier()
+
+    # Stage 2: UN-SCRAMBLE. The slot for feature `f`, bin `b` is
+    # `((b & 31) << 5) + 4 * (b >> 5) + f + innerHistStart`, so the sub-copies
+    # a warp keeps at `innerHistStart` in `{0, blockSize, 2*blockSize, ...}`
+    # have to be gathered per feature. `i` here is the FEATURE.
+    comptime warp_hist_block_count = 8 >> inner_bits
+    comptime sub_block = 4 * (1 << inner_bits)
+    var fold_r = tid
+    var sums = InlineArray[Float32, 4](fill=Float32(0.0))
+    if fold_r < hist_size_bins:
+        var lower_bits_offset = (fold_r & 31) << 5
+        var higher_bin = (fold_r >> 5) & ((1 << inner_bits) - 1)
+        var src = WARP_HIST_SIZE + lower_bits_offset + 4 * higher_bin
+
+        @parameter
+        for blk in range(warp_hist_block_count):
+
+            @parameter
+            for i in range(4):
+                sums[i] += smem[src + i + blk * sub_block]
+
+    # Their `__syncthreads()` between the gather and the store: the read
+    # window and the write window are disjoint here, but the barrier is
+    # theirs and dropping it is a bet on that staying true.
+    barrier()
+    if fold_r < hist_size_bins:
+
+        @parameter
+        for i in range(4):
+            smem[hist_size_bins * i + fold_r] = sums[i]
+    barrier()
 
     # `AddToGlobalMemory`, one-byte: one thread per FOLD, looping features.
     var fold = tid
@@ -593,22 +636,65 @@ def one_byte_hist_gather_kernel[bits: Int](
         i_ptr += stripe_size
         s_ptr += stripe_size
 
-    # `TPointHistOneByte::Reduce`, the one-byte shape: fold the warp copies
-    # down so feature `fid`'s bin `fold` lands at `Histogram[fid * histSize +
-    # fold]`, which is what the writeback below reads.
+    # `TPointHistOneByte::Reduce` (`hist_one_byte.cu:177-230`), copied. TWO
+    # stages, and they are not interchangeable with one strided fold.
+    #
+    # A single fold at stride `4 * histSize` gives the RIGHT answer whenever
+    # every cell holds the same value and the WRONG one otherwise, so a
+    # histogram check built on `(r + f) % folds` passes it and real data does
+    # not. That is how it survived: the uniform pattern gives consecutive
+    # rows consecutive bins, every cell ends up equal, and summing the wrong
+    # set of equal cells still lands on the right number.
+    comptime inner_bits = bits - 5
+    comptime hist_size_bins = 1 << (5 + inner_bits)
+    comptime WARP_HIST_SIZE = 1024
+
+    # Stage 1: fold the per-warp copies down to 1024 entries, parked at
+    # `Histogram[1024 + start]`. Stride 1024 means one thread owns each
+    # residue class, so the write at `1024 + start` is by the same thread
+    # that already read it. That is why their loop needs no barrier inside.
     barrier()
-    comptime hist_size_bins = 1 << (5 + (bits - 5))
-    var slot_i = tid
-    while slot_i < hist_size_bins * 4:
+    var start = tid
+    while start < WARP_HIST_SIZE:
         var acc = Float32(0.0)
-        var j = slot_i
+        var j = start
         while j < ONE_BYTE_HIST_SIZE:
             acc += smem[j]
-            j += hist_size_bins * 4
-        barrier()
-        smem[slot_i] = acc
-        barrier()
-        slot_i += ONE_BYTE_BLOCK_SIZE
+            j += WARP_HIST_SIZE
+        smem[WARP_HIST_SIZE + start] = acc
+        start += ONE_BYTE_BLOCK_SIZE
+    barrier()
+
+    # Stage 2: UN-SCRAMBLE. The slot for feature `f`, bin `b` is
+    # `((b & 31) << 5) + 4 * (b >> 5) + f + innerHistStart`, so the sub-copies
+    # a warp keeps at `innerHistStart` in `{0, blockSize, 2*blockSize, ...}`
+    # have to be gathered per feature. `i` here is the FEATURE.
+    comptime warp_hist_block_count = 8 >> inner_bits
+    comptime sub_block = 4 * (1 << inner_bits)
+    var fold_r = tid
+    var sums = InlineArray[Float32, 4](fill=Float32(0.0))
+    if fold_r < hist_size_bins:
+        var lower_bits_offset = (fold_r & 31) << 5
+        var higher_bin = (fold_r >> 5) & ((1 << inner_bits) - 1)
+        var src = WARP_HIST_SIZE + lower_bits_offset + 4 * higher_bin
+
+        @parameter
+        for blk in range(warp_hist_block_count):
+
+            @parameter
+            for i in range(4):
+                sums[i] += smem[src + i + blk * sub_block]
+
+    # Their `__syncthreads()` between the gather and the store: the read
+    # window and the write window are disjoint here, but the barrier is
+    # theirs and dropping it is a bet on that staying true.
+    barrier()
+    if fold_r < hist_size_bins:
+
+        @parameter
+        for i in range(4):
+            smem[hist_size_bins * i + fold_r] = sums[i]
+    barrier()
 
     # `AddToGlobalMemory`, one-byte: one thread per FOLD, looping features.
     var fold = tid
