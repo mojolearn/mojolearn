@@ -1,5 +1,5 @@
 from mojo_only.launch_probe import probe
-from mojo_only.level_check import check_one_level
+from mojo_only.level_check import check_one_level, check_tree
 from mojo_only.level_bench import (
     bench_histogram_only,
     bench_level,
@@ -272,6 +272,9 @@ def show_tree_schedule() raises:
 def main() raises:
     print("ONE FULL LEVEL (GPU, end to end):")
     check_one_level()
+    check_tree(1)
+    check_tree(3)
+    check_tree(6)
     print()
     print("LEVEL TIMING:")
     bench_level(500000, 5)

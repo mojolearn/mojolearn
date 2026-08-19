@@ -20,6 +20,7 @@ from ported.gpu_data.kernel.binarize import (
 )
 from ported.methods.greedy_subsets_searcher.greedy_search_helper import (
     run_one_level,
+    run_tree,
 )
 
 
@@ -140,3 +141,98 @@ def check_one_level() raises:
             + String(want_right)
         )
     print("  ONE FULL LEVEL: nine kernels in sequence, correct end to end")
+
+
+def check_tree(max_depth: Int) raises:
+    """A whole oblivious tree, and the invariant that catches most wiring bugs.
+
+    **Leaf sizes must sum to n_rows at every depth.** A split moves rows
+    between leaves and creates none, so any break in the chain, a partition
+    that drops rows, a border search that writes a stale size, a gather that
+    permutes across a leaf boundary, shows up as a sum that is not n_rows.
+    It is a weak check per leaf and a strong one over the tree, which is what
+    you want from an invariant that runs at every depth.
+
+    Also checked: `2^depth` leaves exist, and no leaf is negative.
+    """
+    var ctx = DeviceContext()
+    var n_rows = 4096
+    var n_features = features_per_int(POLICY_BINARY)
+
+    var cindex = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+    var z = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
+    for i in range(n_rows):
+        z.unsafe_ptr().unsafe_store(i, UInt32(0))
+    ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
+    ctx.synchronize()
+
+    var host_bin = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
+    var bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
+    for f in range(n_features):
+        for r in range(n_rows):
+            host_bin.unsafe_ptr().unsafe_store(
+                r, UInt8(((r // (f + 1)) + f) % 2)
+            )
+        ctx.enqueue_copy(dst_buf=bins, src_ptr=host_bin.unsafe_ptr())
+        ctx.enqueue_function[write_compressed_index_kernel](
+            Int32(0),
+            policy_mask(POLICY_BINARY),
+            UInt32(policy_shift(POLICY_BINARY, f)),
+            bins.unsafe_ptr(),
+            Int32(n_rows),
+            cindex.unsafe_ptr(),
+            grid_dim=(n_rows + WRITE_BLOCK_SIZE - 1) // WRITE_BLOCK_SIZE,
+            block_dim=WRITE_BLOCK_SIZE,
+        )
+        ctx.synchronize()
+
+    var stats = ctx.enqueue_create_buffer[DType.float32](2 * n_rows)
+    var hs = ctx.enqueue_create_host_buffer[DType.float32](2 * n_rows)
+    var tw = Float64(0.0)
+    var tg = Float64(0.0)
+    for r in range(n_rows):
+        var g = -0.1
+        if (r % 4) == 0:
+            g = 3.0
+        hs.unsafe_ptr().unsafe_store(r, Float32(1.0))
+        hs.unsafe_ptr().unsafe_store(n_rows + r, Float32(g))
+        tw += 1.0
+        tg += g
+    ctx.enqueue_copy(dst_buf=stats, src_ptr=hs.unsafe_ptr())
+
+    var row_index = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+    var hi = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
+    for r in range(n_rows):
+        hi.unsafe_ptr().unsafe_store(r, UInt32(r))
+    ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
+    ctx.synchronize()
+
+    var sizes = run_tree(
+        ctx, n_rows, n_features, max_depth, cindex, stats, row_index,
+        Float32(tw), Float32(tg),
+    )
+
+    var total = 0
+    var negative = 0
+    var nonempty = 0
+    for i in range(len(sizes)):
+        total += sizes[i]
+        if sizes[i] < 0:
+            negative += 1
+        if sizes[i] > 0:
+            nonempty += 1
+
+    print("  depth", max_depth, "->", len(sizes), "leaves,", nonempty, "non-empty")
+    print("  leaf sizes sum to", total, "of", n_rows)
+    if len(sizes) != (1 << max_depth):
+        raise Error("expected " + String(1 << max_depth) + " leaves")
+    if total != n_rows:
+        raise Error(
+            "rows lost or duplicated: leaves sum to "
+            + String(total)
+            + " of "
+            + String(n_rows)
+        )
+    if negative != 0:
+        raise Error("a leaf has a negative size")
+    print("  every row accounted for at depth", max_depth)

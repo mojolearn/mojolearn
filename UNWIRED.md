@@ -64,3 +64,30 @@ instruction Metal lacks), and the harnesses.
 **The rule the audit produced:** a replacement for a step of THEIR file
 belongs in that file, marked. `mojo_only/` is for what CatBoost never had to
 write at all.
+
+
+## Multi-level tree: runs, conserves rows, does NOT fully split yet
+
+`run_tree` grows a whole oblivious tree and the row-conservation invariant
+holds at every depth: 4096 rows across 2, 8 and 64 partitions, none negative,
+exactly `2^depth` leaves. But only the first two levels split for real.
+Depth 6 produces 64 partitions of which **4 hold rows**.
+
+Two causes found and fixed, one remains:
+
+- **FIXED: the wrong histogram variant.** CatBoost has
+  `ComputeSplitPropertiesDirectLoadsImpl` AND
+  `ComputeSplitPropertiesGatherImpl`; only the direct one was ported. Direct
+  reads `bins[position]`, gather reads `cindex[indices[position]]`. The
+  compressed index is never permuted, so position stops naming a row after
+  the first reorder. Took depth 3 from 2 to 4 non-empty.
+- **FIXED: the stat gather was ported and never called.** The histogram reads
+  bins THROUGH the index and stats BY POSITION, so leaving the stat columns
+  unpermuted pairs the right rows' bins with the wrong rows' gradients.
+- **OPEN: something still stops splitting after depth 1.** Not yet isolated.
+
+**Why this matters more than the bug does:** every isolated kernel check
+passed, the end-to-end depth-0 level passed against a host calculation, and
+the row-conservation invariant passed at every depth. The only thing that
+caught it was counting how many leaves actually hold rows. A tree that
+conserves every row and splits nothing looks exactly like healthy plumbing.
