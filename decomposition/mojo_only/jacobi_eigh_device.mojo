@@ -39,6 +39,7 @@ check compares them at a stated tolerance.
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import sqrt
 from max.gpu.memory import AddressSpace
+from max.gpu.primitives.block import sum as block_sum
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
@@ -80,11 +81,6 @@ def jacobi_eigh_kernel(
         Scalar[DType.float32],
         address_space = AddressSpace.SHARED,
     ]()
-    var offdiag = stack_allocation[
-        1,
-        Scalar[DType.float32],
-        address_space = AddressSpace.SHARED,
-    ]()
 
     var idx = tid
     while idx < n * n:
@@ -96,14 +92,37 @@ def jacobi_eigh_kernel(
     barrier()
 
     for _sweep in range(Int(max_sweeps_in)):
-        if tid == 0:
-            var off = Float32(0.0)
-            for i in range(n):
-                for j in range(i + 1, n):
-                    off += a[i * n + j] * a[i * n + j]
-            offdiag[0] = off
-        barrier()
-        if offdiag[0] <= tol_in:
+        # `cub::BlockReduce`'s counterpart from `max.gpu.primitives.block`.
+        # This REPLACED a `tid == 0` serial double loop over the strict upper
+        # triangle, run once per sweep with 31 of the 32 threads idle. Every
+        # thread now accumulates a strided slice of the SAME triangle and the
+        # block reduces them. See VENDOR_LIBRARIES.md.
+        #
+        # `broadcast=True` is load bearing rather than decoration: every
+        # thread has to receive the same `off`, because the `break` below is
+        # taken on it and a divergent break deadlocks on the barriers inside
+        # the rotation loop. It is also what lets the shared `offdiag` slot
+        # this replaced disappear.
+        #
+        # The block reduction ends block-wide, so it doubles as the barrier
+        # that used to sit between the sum and the test: no thread reaches a
+        # rotation write to `a` while another is still reading `a` here.
+        #
+        # NUMERIC: the summation ORDER changes, so `off` can differ from the
+        # serial version in its last bits. The CONVERGENCE SEMANTICS do not:
+        # same `off <= tol_in` test against the same `tol_in`, and a last-bit
+        # difference can only move which sweep a knife-edge matrix stops on,
+        # never the answer it stops at.
+        var local_off = Float32(0.0)
+        var e = tid
+        while e < n * n:
+            var i = e // n
+            var j = e - i * n
+            if j > i:
+                local_off += a[e] * a[e]
+            e += JACOBI_TPB
+        var off = block_sum[block_size=JACOBI_TPB, broadcast=True](local_off)
+        if off <= tol_in:
             break
 
         for p in range(n):
