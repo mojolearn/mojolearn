@@ -16,6 +16,7 @@ from mojo_only.level_bench import (
     bench_replication_interleaved,
     bench_wide_histogram_interleaved,
     bench_tree,
+    bench_tree_shapes,
 )
 from mojo_only.pack_check import check_packing
 from mojo_only.hist_check import (
@@ -306,6 +307,10 @@ def main() raises:
     bench_remaining_phases(500000, 20)
     bench_wide_histogram_interleaved(500000, 7)
     bench_replication_interleaved(500000, 6, 5)
+    # EVERY number above this line came from 32 uniform binary features,
+    # which is the shape CatBoost's design suits least. This is the same
+    # tree over four policy mixes at matched feature count.
+    bench_tree_shapes(200000, 6, 3)
     bench_tree(500000, 1, 3)
     bench_tree(500000, 2, 3)
     bench_tree(500000, 3, 3)

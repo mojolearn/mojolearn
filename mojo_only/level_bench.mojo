@@ -22,7 +22,7 @@ from std.time import perf_counter_ns
 
 from mojo_only.interleaved import ArmResult, report, summarize
 
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from ported.gpu_data.grid_policy import (
     POLICY_BINARY,
@@ -69,7 +69,10 @@ from ported.methods.greedy_subsets_searcher.kernel.split_points import (
 from ported.methods.greedy_subsets_searcher.greedy_search_helper import (
     run_one_level,
     run_tree,
+    run_tree_layout,
 )
+
+from ported.gpu_data.compressed_index_builder import build_layout
 
 
 def bench_level(n_rows: Int, repeats: Int) raises:
@@ -809,4 +812,177 @@ def bench_wide_histogram_interleaved(n_rows: Int, repeats: Int) raises:
         n_rows,
         "rows:",
     )
+    report(arms)
+
+
+def build_mixed_dataset(
+    ctx: DeviceContext, n_rows: Int, folds: List[Int]
+) raises -> Tuple[
+    DeviceBuffer[DType.uint32],
+    DeviceBuffer[DType.float32],
+    DeviceBuffer[DType.uint32],
+    HostBuffer[DType.float32],
+    HostBuffer[DType.uint32],
+    Float64,
+    Float64,
+]:
+    """Compressed index, stats and identity index for an arbitrary fold list.
+
+    Bins are `hash(r, f) % (folds + 1)`, because `Folds` is the BORDER count
+    and a feature takes bins `0..Folds`. Using `% folds` makes every binary
+    feature constant, which is how a tree that never splits gets built.
+    """
+    var lay = build_layout(folds)
+    var n_features = len(folds)
+
+    var cindex = ctx.enqueue_create_buffer[DType.uint32](
+        n_rows * lay.columns
+    )
+    var z = ctx.enqueue_create_host_buffer[DType.uint32](n_rows * lay.columns)
+    for i in range(n_rows * lay.columns):
+        z.unsafe_ptr().unsafe_store(i, UInt32(0))
+    ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
+    ctx.synchronize()
+
+    var hb = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
+    var bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
+    for f in range(n_features):
+        ref cf = lay.features[f]
+        for r in range(n_rows):
+            var x = UInt32(r * 2654435761 + f * 40503 + 0x2545F491)
+            x ^= x << 13
+            x ^= x >> 17
+            x ^= x << 5
+            hb.unsafe_ptr().unsafe_store(
+                r, UInt8(Int(x % UInt32(folds[f] + 1)))
+            )
+        ctx.enqueue_copy(dst_buf=bins, src_ptr=hb.unsafe_ptr())
+        ctx.enqueue_function[write_compressed_index_kernel](
+            Int32(Int(cf.offset) * n_rows),
+            cf.mask,
+            cf.shift,
+            bins.unsafe_ptr(),
+            Int32(n_rows),
+            cindex.unsafe_ptr(),
+            grid_dim=(n_rows + WRITE_BLOCK_SIZE - 1) // WRITE_BLOCK_SIZE,
+            block_dim=WRITE_BLOCK_SIZE,
+        )
+        ctx.synchronize()
+
+    var stats = ctx.enqueue_create_buffer[DType.float32](2 * n_rows)
+    var hs = ctx.enqueue_create_host_buffer[DType.float32](2 * n_rows)
+    var tw = Float64(0.0)
+    var tg = Float64(0.0)
+    for r in range(n_rows):
+        var g = -0.1
+        if (r % 4) == 0:
+            g = 3.0
+        hs.unsafe_ptr().unsafe_store(r, Float32(1.0))
+        hs.unsafe_ptr().unsafe_store(n_rows + r, Float32(g))
+        tw += 1.0
+        tg += g
+    ctx.enqueue_copy(dst_buf=stats, src_ptr=hs.unsafe_ptr())
+
+    var row_index = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+    var hi = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
+    for r in range(n_rows):
+        hi.unsafe_ptr().unsafe_store(r, UInt32(r))
+    ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
+    ctx.synchronize()
+
+    return (cindex, stats, row_index, hs, hi, tw, tg)
+
+
+def bench_tree_shapes(n_rows: Int, max_depth: Int, repeats: Int) raises:
+    """The timing table on WIDE data, with the arms interleaved.
+
+    EVERY earlier number in this port came from 32 uniform binary features:
+    one policy, one launch per level, a 64-cell histogram. That is the shape
+    CatBoost's design is least suited to, and it is not the shape CatBoost
+    runs. `border_count` defaults to 254, so a quantized numeric column is a
+    ONE-BYTE feature and a real dataset is mostly one-byte.
+
+    Four shapes at matched feature count, so the only thing that varies is
+    the policy mix and therefore the bins each row touches:
+
+      32 binary      1 fold each,  32 flat cells, 1 column,  1 launch/level
+      32 half-byte   8 folds each, 256 cells,     4 columns, 1 launch/level
+      32 one-byte  254 folds each, 8128 cells,    8 columns, 1 launch/level
+      32 mixed     16/8/8 split,   ~2200 cells,   5 columns, 3 launches/level
+    """
+    print(
+        "  depth", max_depth, "tree,", n_rows,
+        "rows x 32 features, POLICY MIX varied, arms interleaved:",
+    )
+
+    var shapes = List[String]()
+    shapes.append("32 binary  (1 fold)")
+    shapes.append("32 half-byte (8)")
+    shapes.append("32 one-byte (254)")
+    shapes.append("mixed 16/8/8")
+
+    var fold_sets = List[List[Int]]()
+    var a = List[Int]()
+    for _ in range(32):
+        a.append(1)
+    fold_sets.append(a^)
+    var b = List[Int]()
+    for _ in range(32):
+        b.append(8)
+    fold_sets.append(b^)
+    var c = List[Int]()
+    for _ in range(32):
+        c.append(254)
+    fold_sets.append(c^)
+    var d = List[Int]()
+    for _ in range(16):
+        d.append(1)
+    for _ in range(8):
+        d.append(8)
+    for _ in range(8):
+        d.append(254)
+    fold_sets.append(d^)
+
+    var ctx = DeviceContext()
+
+    # Build every dataset ONCE, then alternate the arms so all four see the
+    # same thermal window. This box has produced 2-3x spreads across time
+    # windows, so sequential arms do not compare.
+    var cidx = List[DeviceBuffer[DType.uint32]]()
+    var stat = List[DeviceBuffer[DType.float32]]()
+    var ridx = List[DeviceBuffer[DType.uint32]]()
+    var hstat = List[HostBuffer[DType.float32]]()
+    var hidx = List[HostBuffer[DType.uint32]]()
+    var tws = List[Float64]()
+    var tgs = List[Float64]()
+    var samples = List[List[Float64]]()
+    for s in range(len(shapes)):
+        var built = build_mixed_dataset(ctx, n_rows, fold_sets[s])
+        cidx.append(built[0])
+        stat.append(built[1])
+        ridx.append(built[2])
+        hstat.append(built[3])
+        hidx.append(built[4])
+        tws.append(built[5])
+        tgs.append(built[6])
+        samples.append(List[Float64]())
+
+    for _ in range(repeats):
+        for s in range(len(shapes)):
+            ctx.enqueue_copy(dst_buf=ridx[s], src_ptr=hidx[s].unsafe_ptr())
+            ctx.enqueue_copy(dst_buf=stat[s], src_ptr=hstat[s].unsafe_ptr())
+            ctx.synchronize()
+            var t0 = perf_counter_ns()
+            var sizes = run_tree_layout(
+                ctx, n_rows, fold_sets[s], max_depth,
+                cidx[s], stat[s], ridx[s],
+                Float32(tws[s]), Float32(tgs[s]),
+            )
+            var dt = perf_counter_ns() - t0
+            _ = len(sizes)
+            samples[s].append(Float64(dt) / 1.0e6)
+
+    var arms = List[ArmResult]()
+    for s in range(len(shapes)):
+        arms.append(summarize(shapes[s], samples[s]))
     report(arms)
