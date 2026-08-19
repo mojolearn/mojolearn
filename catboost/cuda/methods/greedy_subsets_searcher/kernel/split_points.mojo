@@ -144,12 +144,17 @@ def update_partitions_after_split_kernel(
     writes both partitions; only one can, because a sorted flag array has
     exactly one transition.
 
-    **`partsCpu` is worth stealing rather than just porting.** They write the
+    **`partsCpu` is part of the port and is NOT DONE YET.** They write the
     new partitions to device memory AND to pinned host memory in the same
     store (`split_points.cu:372`, `:379`), so the host learns every leaf's
     size with no device-to-host copy at all. That is what lets the next
     level's `build_necessary_histograms` pick the smaller sibling on the host
     without a readback in the critical path.
+
+    The kernel here takes `host_offset` / `host_size` and writes them, so the
+    device half is ported. What is missing is the driver allocating those as
+    PINNED host memory rather than ordinary device buffers, which is where
+    the trick actually pays. Listed in UNWIRED.md.
     """
     var leaf_slot = Int(block_idx.y)
     var left_leaf = Int(left_leaves.unsafe_load(leaf_slot))

@@ -44,8 +44,10 @@ from catboost.cuda.methods.greedy_subsets_searcher.kernel.compute_scores import 
     compute_optimal_splits_kernel,
 )
 from catboost.cuda.methods.greedy_subsets_searcher.kernel.histogram_utils import (
+    copy_histograms_kernel,
     scan_histograms_kernel,
     substract_histograms_kernel,
+    zero_histograms_kernel,
 )
 from catboost.cuda.methods.greedy_subsets_searcher.kernel.hist_half_byte import (
     half_byte_hist_kernel,
@@ -1038,3 +1040,102 @@ def check_partition_update() raises:
     if wrong != 0:
         raise Error("partition update is wrong")
     print("  border found in all three cases, sentinels work")
+
+
+def check_zero_and_copy() raises:
+    """`ZeroHistograms` clears only the named set; `CopyHistograms` stages
+    the parent into the sibling slot.
+
+    Four leaves, three bin-features, one stat, every cell seeded with the
+    leaf id plus one so a wrong slot is obvious.
+
+    Zero is asked to clear leaves 1 and 3 ONLY. The indirection through
+    `histIds` is the whole point: `build_necessary_histograms` decides which
+    leaves need a fresh build, so leaves 0 and 2 must survive untouched. A
+    kernel that cleared a contiguous range would pass a test that zeroed
+    everything and fail here.
+
+    Copy then stages leaf 0 into leaf 2, which is what makes the in-place
+    subtraction afterwards legal.
+    """
+    var ctx = DeviceContext()
+    var n_leaves = 4
+    var n_bf = 3
+    var total = n_leaves * n_bf
+
+    var hist = ctx.enqueue_create_buffer[DType.float32](total)
+    var h = ctx.enqueue_create_host_buffer[DType.float32](total)
+    for leaf in range(n_leaves):
+        for b in range(n_bf):
+            h.unsafe_ptr().unsafe_store(
+                leaf * n_bf + b, Float32(Float64(leaf) + 1.0)
+            )
+    ctx.enqueue_copy(dst_buf=hist, src_ptr=h.unsafe_ptr())
+
+    var ids = ctx.enqueue_create_buffer[DType.uint32](2)
+    var hids = ctx.enqueue_create_host_buffer[DType.uint32](2)
+    hids.unsafe_ptr().unsafe_store(0, UInt32(1))
+    hids.unsafe_ptr().unsafe_store(1, UInt32(3))
+    ctx.enqueue_copy(dst_buf=ids, src_ptr=hids.unsafe_ptr())
+    ctx.synchronize()
+
+    ctx.enqueue_function[zero_histograms_kernel](
+        ids.unsafe_ptr(),
+        Int32(n_bf),
+        hist.unsafe_ptr(),
+        grid_dim=(1, 2, 1),
+        block_dim=(256, 1, 1),
+    )
+    ctx.synchronize()
+
+    var o1 = ctx.enqueue_create_host_buffer[DType.float32](total)
+    ctx.enqueue_copy(dst_ptr=o1.unsafe_ptr(), src_buf=hist)
+    ctx.synchronize()
+
+    var wrong = 0
+    for leaf in range(n_leaves):
+        var want = Float32(0.0) if (leaf == 1 or leaf == 3) else Float32(
+            Float64(leaf) + 1.0
+        )
+        for b in range(n_bf):
+            if abs(o1.unsafe_ptr().unsafe_load(leaf * n_bf + b) - want) > Float32(1e-4):
+                wrong += 1
+    print("  zero cleared leaves {1,3} only; untouched cells wrong:", wrong)
+    if wrong != 0:
+        raise Error("zero_histograms cleared the wrong leaves")
+
+    var left = ctx.enqueue_create_buffer[DType.uint32](1)
+    var right = ctx.enqueue_create_buffer[DType.uint32](1)
+    var hl = ctx.enqueue_create_host_buffer[DType.uint32](1)
+    var hr = ctx.enqueue_create_host_buffer[DType.uint32](1)
+    hl.unsafe_ptr().unsafe_store(0, UInt32(0))
+    hr.unsafe_ptr().unsafe_store(0, UInt32(2))
+    ctx.enqueue_copy(dst_buf=left, src_ptr=hl.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=right, src_ptr=hr.unsafe_ptr())
+    ctx.synchronize()
+
+    ctx.enqueue_function[copy_histograms_kernel](
+        left.unsafe_ptr(),
+        right.unsafe_ptr(),
+        Int32(1),
+        Int32(n_bf),
+        hist.unsafe_ptr(),
+        grid_dim=(1, 1, 1),
+        block_dim=(256, 1, 1),
+    )
+    ctx.synchronize()
+
+    var o2 = ctx.enqueue_create_host_buffer[DType.float32](total)
+    ctx.enqueue_copy(dst_ptr=o2.unsafe_ptr(), src_buf=hist)
+    ctx.synchronize()
+
+    var wrong2 = 0
+    for b in range(n_bf):
+        if abs(o2.unsafe_ptr().unsafe_load(2 * n_bf + b) - Float32(1.0)) > Float32(1e-4):
+            wrong2 += 1
+        if abs(o2.unsafe_ptr().unsafe_load(0 * n_bf + b) - Float32(1.0)) > Float32(1e-4):
+            wrong2 += 1
+    print("  copy staged leaf 0 into leaf 2; wrong cells:", wrong2)
+    if wrong2 != 0:
+        raise Error("copy_histograms is wrong")
+    print("  zero is set-indexed and copy stages the parent for subtraction")

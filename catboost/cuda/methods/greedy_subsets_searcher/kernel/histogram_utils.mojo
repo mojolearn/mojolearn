@@ -3,7 +3,7 @@
 PORT OF `catboost/cuda/methods/greedy_subsets_searcher/kernel/
 histogram_utils.cu` at CatBoost `54a8143a`. Transliterated. Do not improve.
 
-Two kernels, both bucket-scaling rather than row-scaling, so neither is
+Four kernels, all bucket-scaling rather than row-scaling, so neither is
 where the time goes. They matter because of what they let the histogram
 kernel skip.
 
@@ -113,3 +113,71 @@ def scan_histograms_kernel(
     for i in range(folds):
         running += histogram.unsafe_load(base + i)
         histogram.unsafe_store(base + i, running)
+
+
+def zero_histograms_kernel(
+    hist_ids: MutPointer[UInt32, MutAnyOrigin],
+    bin_feature_count_in: Int32,
+    dst_histogram: MutPointer[Float32, MutAnyOrigin],
+):
+    """`ZeroHistogramsImpl`, copied.
+
+    Zeroes the histograms of a NAMED SET of leaves, indexed indirectly
+    through `histIds`, rather than a contiguous range. That indirection is
+    the point: `build_necessary_histograms` decides which leaves need a fresh
+    build and which keep the parent's, so only the `Zeroes` set is cleared
+    and the `PreviousPath` set is left intact.
+
+    Grid: x over bin-features, y over the ID LIST, z over stats. So one
+    launch clears every leaf that needs clearing, whatever subset that is.
+    """
+    var bin_feature_count = Int(bin_feature_count_in)
+    var bin_feature_id = Int(block_idx.x) * Int(block_dim.x) + Int(
+        thread_idx.x
+    )
+    var stat_id = Int(block_idx.z)
+    var stat_count = Int(grid_dim.z)
+    var dst_hist = Int(hist_ids.unsafe_load(Int(block_idx.y)))
+
+    if bin_feature_id < bin_feature_count:
+        var base = (
+            dst_hist * bin_feature_count * stat_count
+            + stat_id * bin_feature_count
+        )
+        dst_histogram.unsafe_store(base + bin_feature_id, Float32(0.0))
+
+
+def copy_histograms_kernel(
+    left_leaves: MutPointer[UInt32, MutAnyOrigin],
+    right_leaves: MutPointer[UInt32, MutAnyOrigin],
+    num_stats_in: Int32,
+    bin_features_in_hist_in: Int32,
+    histograms: MutPointer[Float32, MutAnyOrigin],
+):
+    """`CopyHistogramsImpl`, copied.
+
+    Duplicates a parent's histogram into the RIGHT child's slot before the
+    level splits, which is what makes the in-place subtraction afterwards
+    legal: `substract_histograms_kernel` overwrites `from` with
+    `from - what`, and `from` has to already hold the parent's totals.
+
+    So the sequence per level is copy, build the smaller child, subtract. Get
+    the order wrong and the subtraction reads a stale or zeroed slot and
+    produces a plausible wrong histogram rather than an obvious failure.
+
+    Grid y is the PAIR, so one launch copies for every splitting leaf.
+    """
+    var num_stats = Int(num_stats_in)
+    var bin_features_in_hist = Int(bin_features_in_hist_in)
+    var left_leaf_id = Int(left_leaves.unsafe_load(Int(block_idx.y)))
+    var right_leaf_id = Int(right_leaves.unsafe_load(Int(block_idx.y)))
+
+    var hist_size = bin_features_in_hist * num_stats
+    var src = left_leaf_id * hist_size
+    var dst = right_leaf_id * hist_size
+
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while i < hist_size:
+        histograms.unsafe_store(dst + i, histograms.unsafe_load(src + i))
+        i += stride
