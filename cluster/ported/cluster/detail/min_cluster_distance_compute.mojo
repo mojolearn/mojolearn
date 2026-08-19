@@ -178,15 +178,18 @@ def min_cluster_and_distance_compute_unfused(
             var nc = min(centroid_batch, n_clusters - c_idx)
 
             # z[ns x nc] = X[ns x d] . C[nc x d]^T
-            gemm_nt(
-                ctx,
-                dist_buf,
-                x.unsafe_offset(d_idx * n_features),
-                centroids.unsafe_offset(c_idx * n_features),
-                ns,
-                nc,
-                n_features,
+            #
+            # `create_sub_buffer` windows rather than pointer offsets: MAX's
+            # matmul takes a TileTensor over a DeviceBuffer and there is no
+            # offset form of that. Same bytes, no copy. Same reason the k-NN
+            # driver windows its query tile.
+            var x_tile = x.create_sub_buffer[DType.float32](
+                d_idx * n_features, ns * n_features
             )
+            var c_tile = centroids.create_sub_buffer[DType.float32](
+                c_idx * n_features, nc * n_features
+            )
+            gemm_nt(ctx, dist_buf, x_tile, c_tile, ns, nc, n_features)
 
             # One block per row of the tile; the block strides the centroids.
             ctx.enqueue_function[reduce_min_kernel](
