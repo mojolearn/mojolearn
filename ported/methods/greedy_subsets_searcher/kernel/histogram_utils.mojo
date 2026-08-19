@@ -207,3 +207,66 @@ def fixed_to_float_kernel(
             bin_sums.unsafe_store(i, Float32(Int(q)) / fixed_scale)
             acc_i32.unsafe_store(i, Int32(0))
         i += stride
+
+
+def write_reduces_histograms_kernel(
+    hist_block_offset_in: Int32,
+    bin_features_in_block_in: Int32,
+    histogram_ids: MutPointer[UInt32, MutAnyOrigin],
+    block_histogram: MutPointer[Float32, MutAnyOrigin],
+    bin_feature_count_in: Int32,
+    dst_histogram: MutPointer[Float32, MutAnyOrigin],
+):
+    """`WriteReducesHistogramsImpl`, copied.
+
+    **CatBoost keeps TWO histogram layouts and this is the bridge between
+    them.** The absence of this kernel is why mixed-width trees in this port
+    grew, conserved every row, and refused to split.
+
+        block histogram   [leaf][stat][binFeature WITHIN THIS BLOCK]
+        dst histogram     [leaf][stat][binFeature across ALL blocks]
+
+    The histogram kernels write the first: their writeback strides by
+    `entriesPerLeaf = statCount * group.GroupSize`, which is THAT BLOCK's
+    leaf stride. The score kernel reads the second, whose leaf stride is
+    `statCount * binFeatureCount` over every block.
+
+    With ONE policy the two strides coincide and writing straight into the
+    flat array is correct, which is why every single-policy check in this
+    repository passed. With three policies each block strides by its own
+    size and they land on top of each other.
+
+    `histBlockOffset` is where this block's slice begins in the flat array,
+    which is the running total of earlier blocks' bin counts.
+
+    Their `histogramIds` indirection is kept: the destination leaf is looked
+    up rather than assumed to be `blockIdx.y`, because the caller passes the
+    subset of leaves being rebuilt this level.
+    """
+    var hist_block_offset = Int(hist_block_offset_in)
+    var bin_features_in_block = Int(bin_features_in_block_in)
+    var bin_feature_count = Int(bin_feature_count_in)
+
+    var bin_feature_id = Int(block_idx.x) * Int(block_dim.x) + Int(
+        thread_idx.x
+    )
+    var leaf_id = Int(block_idx.y)
+    var stat_id = Int(block_idx.z)
+    var stat_count = Int(grid_dim.z)
+    var dst_id = Int(histogram_ids.unsafe_load(leaf_id))
+
+    if bin_feature_id < bin_features_in_block:
+        var src = (
+            leaf_id * bin_features_in_block * stat_count
+            + bin_features_in_block * stat_id
+            + bin_feature_id
+        )
+        var val = block_histogram.unsafe_load(src)
+
+        var dst = (
+            dst_id * bin_feature_count * stat_count
+            + stat_id * bin_feature_count
+            + hist_block_offset
+            + bin_feature_id
+        )
+        dst_histogram.unsafe_store(dst, val)

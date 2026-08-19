@@ -44,6 +44,7 @@ from ported.methods.greedy_subsets_searcher.kernel.hist_binary import (
 )
 from ported.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     fixed_to_float_kernel,
+    write_reduces_histograms_kernel,
     scan_histograms_kernel,
     zero_histograms_kernel,
 )
@@ -977,6 +978,8 @@ def launch_histograms_for_blocks(
     mut ids: DeviceBuffer[DType.uint32],
     mut hist: DeviceBuffer[DType.float32],
     mut acc_i32: DeviceBuffer[DType.int32],
+    mut block_hist: DeviceBuffer[DType.float32],
+    hist_cells_per_leaf: Int,
 ) raises:
     """One histogram launch per policy present, dispatching on the block.
 
@@ -989,11 +992,21 @@ def launch_histograms_for_blocks(
     kernel's `blockIdx.x / maxBlocksPerPart` column arithmetic lands inside
     this policy's contiguous columns.
     """
+    # Where each block's slice begins in the flat histogram: the running
+    # total of earlier blocks' bin counts.
+    var block_first_bin = 0
+
     for b in range(len(blocks)):
         ref blk = blocks[b]
         # The policy's column BASE, and the feature-block stride within it.
         var base = n_rows * blk.first_column
         var line = n_rows
+
+        # Each block writes its OWN layout, [leaf][stat][bin-in-block], into
+        # scratch. Writing straight into the flat histogram is correct only
+        # when there is one block, because the writeback strides by this
+        # block's `group_size` and the flat array strides by the total.
+        var block_cells = max_leaves * stat_count * blk.total_folds
 
         if blk.policy == POLICY_BINARY:
             if depth == 0:
@@ -1003,7 +1016,7 @@ def launch_histograms_for_blocks(
                     Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line), Int32(base),
                     stats.unsafe_ptr(), Int32(n_rows),
                     p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
-                    hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
+                    block_hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
                     Int32(max_leaves), Int32(stat_count),
                     grid_dim=(replicas, n_live, stat_count),
                     block_dim=(BLOCK_SIZE, 1, 1),
@@ -1016,7 +1029,7 @@ def launch_histograms_for_blocks(
                     row_index.unsafe_ptr(),
                     stats.unsafe_ptr(), Int32(n_rows),
                     p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
-                    hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
+                    block_hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
                     Int32(max_leaves), Int32(stat_count),
                     grid_dim=(replicas, n_live, stat_count),
                     block_dim=(BLOCK_SIZE, 1, 1),
@@ -1029,7 +1042,7 @@ def launch_histograms_for_blocks(
                     Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line), Int32(base),
                     stats.unsafe_ptr(), Int32(n_rows),
                     p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
-                    hist.unsafe_ptr(),
+                    block_hist.unsafe_ptr(),
                     Int32(max_leaves), Int32(stat_count),
                     grid_dim=(1, n_live, stat_count),
                     block_dim=(BLOCK_SIZE, 1, 1),
@@ -1042,7 +1055,7 @@ def launch_histograms_for_blocks(
                     row_index.unsafe_ptr(),
                     stats.unsafe_ptr(), Int32(n_rows),
                     p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
-                    hist.unsafe_ptr(),
+                    block_hist.unsafe_ptr(),
                     Int32(max_leaves), Int32(stat_count),
                     grid_dim=(1, n_live, stat_count),
                     block_dim=(BLOCK_SIZE, 1, 1),
@@ -1059,7 +1072,7 @@ def launch_histograms_for_blocks(
                     Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line), Int32(base),
                     stats.unsafe_ptr(), Int32(n_rows),
                     p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
-                    hist.unsafe_ptr(),
+                    block_hist.unsafe_ptr(),
                     Int32(max_leaves), Int32(stat_count),
                     grid_dim=(replicas, n_live, stat_count),
                     block_dim=(ONE_BYTE_BLOCK_SIZE, 1, 1),
@@ -1072,11 +1085,41 @@ def launch_histograms_for_blocks(
                     row_index.unsafe_ptr(),
                     stats.unsafe_ptr(), Int32(n_rows),
                     p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
-                    hist.unsafe_ptr(),
+                    block_hist.unsafe_ptr(),
                     Int32(max_leaves), Int32(stat_count),
                     grid_dim=(replicas, n_live, stat_count),
                     block_dim=(ONE_BYTE_BLOCK_SIZE, 1, 1),
                 )
+
+        # THE BRIDGE. Scatter this block's slice into the flat histogram the
+        # score kernel reads. Without it every policy after the first lands
+        # on the previous one's cells.
+        ctx.enqueue_function[write_reduces_histograms_kernel](
+            Int32(block_first_bin),
+            Int32(blk.total_folds),
+            ids.unsafe_ptr(),
+            block_hist.unsafe_ptr(),
+            Int32(hist_cells_per_leaf),
+            hist.unsafe_ptr(),
+            grid_dim=((blk.total_folds + 127) // 128, n_live, stat_count),
+            block_dim=(128, 1, 1),
+        )
+        block_first_bin += blk.total_folds
+
+        # THE BRIDGE. Scatter this block's slice into the flat histogram the
+        # score kernel reads. Without it every policy after the first lands
+        # on the previous one's cells.
+        ctx.enqueue_function[write_reduces_histograms_kernel](
+            Int32(block_first_bin),
+            Int32(blk.total_folds),
+            ids.unsafe_ptr(),
+            block_hist.unsafe_ptr(),
+            Int32(hist_cells_per_leaf),
+            hist.unsafe_ptr(),
+            grid_dim=((blk.total_folds + 127) // 128, n_live, stat_count),
+            block_dim=(128, 1, 1),
+        )
+        block_first_bin += blk.total_folds
 
 
 @fieldwise_init
@@ -1173,6 +1216,19 @@ def run_tree_layout(
 
     var hist_cells = max_leaves * stat_count * hist_cells_per_leaf
     var hist = ctx.enqueue_create_buffer[DType.float32](hist_cells)
+
+    # Scratch for the per-block layout. Sized to the LARGEST block, since the
+    # blocks are written one at a time and scattered before the next runs.
+    var widest_block = 1
+    for b in range(len(blocks)):
+        var tf = 0
+        for k in range(blocks[b].count()):
+            tf += Int(blocks[b].folds[k])
+        if tf > widest_block:
+            widest_block = tf
+    var block_hist = ctx.enqueue_create_buffer[DType.float32](
+        max_leaves * stat_count * widest_block
+    )
     var acc_i32 = ctx.enqueue_create_buffer[DType.int32](hist_cells)
     var zi = ctx.enqueue_create_host_buffer[DType.int32](hist_cells)
     for i in range(hist_cells):
@@ -1288,6 +1344,7 @@ def run_tree_layout(
             ctx, dblocks, depth, n_live, n_rows, stat_count, max_leaves,
             replicas, fixed_scale,
             cindex, row_index, stats, p_off, p_sz, ids_a, hist, acc_i32,
+            block_hist, hist_cells_per_leaf,
         )
 
         ctx.enqueue_function[fixed_to_float_kernel](

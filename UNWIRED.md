@@ -116,6 +116,14 @@ the block stride), and conflating them made every policy after the first read
 the first one's bits. Now a separate `cindex_base_in` parameter on all six
 kernels.
 
-Not yet isolated. The next probe should be the same move that resolved the
-last one: read a mixed histogram back at depth 0 and compare its per-policy
-slices against a host count, rather than inferring from leaf occupancy.
+A SECOND real omission found and ported, also not the cause:
+`WriteReducesHistograms` (`histogram_utils.cu:99`). CatBoost keeps TWO
+histogram layouts, `[leaf][stat][bin-within-block]` for what the kernels
+write and `[leaf][stat][bin-across-all-blocks]` for what the scorer reads,
+and that kernel is the bridge. This port had the kernels writing straight
+into the flat array, which is correct for ONE block because the strides
+coincide and wrong for several because each strides by its own size.
+
+Still not isolated. Next probe unchanged: read the flat histogram back at
+depth 0 for a mixed dataset and compare each policy's slice against a host
+count, instead of inferring from leaf occupancy.
