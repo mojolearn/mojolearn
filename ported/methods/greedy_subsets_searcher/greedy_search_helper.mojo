@@ -1852,6 +1852,10 @@ def run_tree_layout(
     var out_score = ctx.enqueue_create_buffer[DType.float32](1)
     var out_bin = ctx.enqueue_create_buffer[DType.uint32](1)
     var hob = ctx.enqueue_create_host_buffer[DType.uint32](1)
+    # Its OWN staging buffer, not a second read out of `hob`. One host buffer
+    # feeding two asynchronous copies is what made `boosting_hist_check`
+    # demand a histogram it had never asked the device to build.
+    var hos = ctx.enqueue_create_host_buffer[DType.float32](1)
 
     # Their `MakeSplit` packs every ui32 it has to send into ONE buffer and
     # copies once (`split_properties_helper.cpp:886-905`):
@@ -2062,6 +2066,7 @@ def run_tree_layout(
         )
         mgr.stream_kernel()
         ctx.enqueue_copy(dst_ptr=hob.unsafe_ptr(), src_buf=out_bin)
+        ctx.enqueue_copy(dst_ptr=hos.unsafe_ptr(), src_buf=out_score)
 
         # DRAIN 1 of 2. Their `bestProps.Read(propsCpu)`
         # (`greedy_search_helper.cpp:517`). The host cannot pick the split
@@ -2069,6 +2074,7 @@ def run_tree_layout(
         mgr.wait_complete()
 
         var best_bf = Int(hob.unsafe_ptr().unsafe_load(0))
+        var best_score = hos.unsafe_ptr().unsafe_load(0)
         # their `CB_ENSURE(bestSplits[0].FeatureId != (ui32)-1, "All splits
         # have infinite score. Probably, numerical overflow occurs in loss
         # function and/or split score calculation. Try increasing
@@ -2086,6 +2092,38 @@ def run_tree_layout(
                 " calculation. Try increasing l2_leaf_reg, and/or"
                 " decreasing learning_rate, etc."
             )
+        # ================ THE SCORE GATE, `Score < 0` ====================
+        # `SelectLeavesToSplit` only pushes a leaf whose best split is both
+        # DEFINED and IMPROVING (`greedy_search_helper.cpp:360-364`):
+        #
+        #     if (subsets.Leaves[leaf].BestSplit.Defined() &&
+        #         subsets.Leaves[leaf].BestSplit.Score < 0) {
+        #         leavesToSplit->push_back(leaf);
+        #     }
+        #
+        # and when `leavesToSplit` comes back EMPTY, `SplitLeaves` marks
+        # every leaf terminal and the tree stops (`:619-623`).
+        #
+        # WHY ONE TEST IS THE WHOLE GATE HERE. For an oblivious tree the
+        # score kernel accumulates its calcer across every leaf before it
+        # picks a bin-feature, so all leaves in a level share one
+        # `BestSplit`, and `SplitLeaves` then takes `leavesToSplit.back()`'s
+        # split as THE split for the level (`:596-599`). Either every leaf
+        # passes the test or none does, so a per-leaf loop would be a loop
+        # over identical values.
+        #
+        # THE SIGN IS FLIPPED FROM THEIRS, as everywhere in this port. Their
+        # calcers return `-Score / sqrt(DenumSqr)` and MINIMISE; ours drops
+        # the negation and MAXIMISES (`compute_scores.mojo`, "SIGN OF THE
+        # SCORE"). Their improving `Score < 0` is our `best_score > 0`.
+        #
+        # Without this a tree keeps splitting on whatever scored least badly
+        # after the real signal is exhausted, which is not a smaller model,
+        # it is the same model with noise splits stapled to the bottom.
+        # ================================================================
+        if not (best_score > Float32(0.0)):
+            break
+
         var choice = resolve_split(layout, best_bf)
         ref cf = layout.features[choice.feature]
 

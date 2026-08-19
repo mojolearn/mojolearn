@@ -1,8 +1,9 @@
 """The boosting loop: gradients, a tree, leaf values, updated predictions.
 
 PORT OF `catboost/cuda/methods/doc_parallel_boosting.h` at CatBoost
-`54a8143a`, the `Fit` body at `:302`. Partial: one objective, no permutations,
-no test cursor, no snapshotting, no early stopping.
+`54a8143a`, the `Fit` body at `:302`. Partial: one objective, no test cursor,
+no snapshotting, no early stopping, no row sampling. One cursor, which is what
+CatBoost itself keeps in this configuration; see the audit below.
 
 Their iteration, stripped to what exists here (`:336-400`):
 
@@ -20,21 +21,56 @@ target is rebuilt from the CURSOR at the top of every iteration, which is
 what makes this gradient boosting rather than a forest: each tree fits the
 residual left by all the trees before it.
 
-`TTargetAtPointTrait::Create(objective, cursor)` is `mse_kernel` here, since
-`RMSE` resolves to `MseImpl` (`pointwise_targets.cu:496`).
+`TTargetAtPointTrait::Create(objective, cursor)` is `mse_kernel` here. `RMSE`
+resolves to `PointwiseTargetImpl<TRmseTarget>`, dispatched at
+`pointwise_targets.cu:496-500`, and NOT to `MseImpl`, which nothing in their
+tree calls; see the module docstring of `pointwise_targets.mojo`.
 
-## What is NOT ported yet, and matters
+**The one step of theirs this file adds is not theirs.** Between the target
+kernel and the tree it computes two sums of absolute values and hands them to
+`choose_scale`. CatBoost has no counterpart because it flushes histograms
+through a float atomic and needs no range bound. That block is load bearing
+and its contract audit is written out at the call site.
 
-- **Permutations.** They keep `PermutationsCount()` cursors and pick one at
-  random per iteration for the structure search, which is their ordered
-  boosting defence against target leakage. We keep one.
-- **Test cursor and early stopping.** `ShouldStop()` is a fixed iteration
-  count here.
-- **`CalcScoreModelLengthMult`** (`:358`), their model-size regularisation.
-- **Snapshotting**, which is `MaybeSaveSnapshot` in their loop.
+## Their steps we do NOT take, audited one by one
 
-Each of those changes the ANSWER, not just the plumbing, so none of them is
-a detail. They are listed rather than silently skipped.
+Two of the four this file used to list turned out not to be divergences at
+all in the configuration this port runs, and saying so is part of the audit:
+
+- **Permutations. NOT A DIVERGENCE HERE.** `Config.PermutationCount` defaults
+  to 4 (`boosting_options.cpp:14`), but `UpdateGpuSpecificDefaults` sets it
+  back to 1 whenever the dataset has no permutation-dependent features and
+  boosting is Plain, which is the default (`cuda/train_lib/train.cpp:102-108`,
+  "No catFeatures for ctrs found and don't look ahead is disabled. Fallback to
+  one permutation"). No CTRs are ported, so stock CatBoost on this input keeps
+  exactly one cursor too. One is theirs, not a simplification of theirs.
+- **`CalcScoreModelLengthMult` (`:358`). NOT A DIVERGENCE HERE, and it is not
+  model-size regularization.** Its only consumer is `ComputeScoreStdDev`,
+  which returns 0 unconditionally when `modelLengthMult * randomStrength` is
+  zero (`random_score_helper.h:25-32`), and it reaches the searcher solely as
+  `options.RandomStrength *= randomStrengthMult`
+  (`greedy_subsets_searcher.h:76`). At `random_strength = 0`, which is what
+  `CatBoostOptions.check()` requires because score noise is unported, the
+  whole quantity is an exact no-op. It becomes a divergence the day random
+  strength lands, and not before. (`model_size_reg` is a different option
+  entirely and lives on the feature weights.)
+- **Test cursor and early stopping. A REAL GAP.** `ShouldStop()` is a fixed
+  iteration count here, and `TrackTestErrors` / `IsBestTestIteration` /
+  `BestTestCursor` have no counterpart. Nothing selects a best iteration, so
+  a fit runs the full budget.
+- **Snapshotting. A REAL GAP**, and a cosmetic one: `MaybeSaveSnapshot` and
+  `MaybeRestoreFromSnapshot` change no model, only whether a run can resume.
+
+## The estimator, which does NOT run here and does not need to
+
+Their loop calls `estimator.Estimate(...)` (`:371`) whenever
+`NeedEstimation()`, and that is `LeavesEstimationMethod != Simple`
+(`greedy_subsets_searcher.h:67-69`), so under RMSE's default of Newton it
+runs on every iteration and OVERWRITES the leaf values the structure search
+produced. This port has no second pass: `run_tree_layout` computes leaf
+values once. That is sound only because the two answers coincide for MSE,
+and `leaves_estimation.mojo` carries the derivation and the two file:line
+citations rather than leaving it to be assumed.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -65,25 +101,40 @@ def fit(
     mut weights: DeviceBuffer[DType.float32],
     has_weights: Bool,
     n_estimators: Int,
-    learning_rate: Float32 = Float32(0.3),
+    learning_rate: Float32 = Float32(0.03),
     l2_leaf_reg: Float32 = Float32(3.0),
     use_subtraction: Bool = True,
 ) raises -> List[Float64]:
     """Their `Fit` (`doc_parallel_boosting.h:302`), one permutation.
 
-    Returns the mean squared error after each iteration, computed on the host
-    from the cursor. Their `functionValue` accumulates the NEGATIVE squared
-    error inside the target kernel with a float `atomicAdd`; Metal has no
-    float atomic, so the reduction moves to the host where it costs one copy
-    per iteration and sits on no hot path.
+    `learning_rate` is their `Config.LearningRate`, whose default is **0.03**
+    (`boosting_options.cpp:10`). It stood at 0.3 here, a tenfold larger step
+    than stock CatBoost, which is a different model for every caller that did
+    not pass one. See `CatBoostOptions.learning_rate` for the data-dependent
+    retune (`options_helper.cpp:269-288`) that is deliberately not ported.
+
+    Returns the weighted squared error per row after each iteration, computed
+    on the host from the cursor. That is their `functionValue`
+    (`pointwise_targets.cu:271`) with the sign flipped and divided by the row
+    count: theirs accumulates `-weight * (val - relev)^2` because everything
+    downstream of it maximizes, and a caller here wants a number that falls.
+    The reduction moves to the host because their kernel-side version needs a
+    block reduce plus a float `atomicAdd` into one scalar, and pulling it back
+    costs one copy per iteration on no hot path.
 
     The loss is returned rather than printed because the thing worth
     asserting is that it DECREASES, and an assertion needs the numbers.
     """
     var stat_count = 2
 
-    # their `cursor`: the running prediction for every row. CatBoost seeds it
-    # from the baseline or from zero; zero here.
+    # their `cursor`: the running prediction for every row. Zeros is THEIR
+    # default branch, not a simplification of it: with no baseline column and
+    # `boost_from_average` false (`boosting_options.cpp:17`),
+    # `cursors->StartingPoint` is unset and `CreateCursors` writes
+    # `TVector<float> start(sampleCount, 0.0)`
+    # (`doc_parallel_boosting.h:180-186`). `boost_from_average` true would
+    # seed it with `CalcOptimumConstApprox` and is refused by
+    # `CatBoostOptions.check()`.
     var cursor = ctx.enqueue_create_buffer[DType.float32](n_rows)
     var h_zero = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
     for i in range(n_rows):
@@ -103,6 +154,10 @@ def fit(
 
     var h_cursor = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
     var h_target = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
+    # Their `functionValue` is WEIGHTED (`pointwise_targets.cu:271`), and the
+    # weight is `(weights && i < size) ? weights[i] : 1.0f` (`:299`). The
+    # weights never change across iterations, so they come back once.
+    var h_weight = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
 
     # THE FIXED-POINT BOUND, and it is not optional. The histogram flush
     # accumulates through an Int32 because Metal has no float atomic
@@ -116,7 +171,12 @@ def fit(
     )
 
     ctx.enqueue_copy(dst_ptr=h_target.unsafe_ptr(), src_buf=targets)
+    if has_weights:
+        ctx.enqueue_copy(dst_ptr=h_weight.unsafe_ptr(), src_buf=weights)
     ctx.synchronize()
+    if not has_weights:
+        for i in range(n_rows):
+            h_weight.unsafe_ptr().unsafe_store(i, Float32(1.0))
 
     var losses = List[Float64]()
     # their `TVector<TResultModel>* result`, the ensemble being built
@@ -144,9 +204,12 @@ def fit(
         ctx.synchronize()
 
         # `sum over all rows of abs(...)`, per plane, which is what
-        # `choose_scale` is specified against. Plane 0 is `der2` (the
-        # weights) and plane 1 is `der`, laid out `stats[s * n_rows + i]`
-        # by `mse_kernel`.
+        # `choose_scale` is specified against. Plane 0 is the WEIGHT plane
+        # and plane 1 is `der`, laid out `stats[s * n_rows + i]` by
+        # `mse_kernel`, which is their `StatsToAggregate` column order
+        # (`pointwise_target_impl.h:188-192`). Plane 0 is the sample weight
+        # rather than `der2` under Cosine, their default score function, and
+        # the two coincide for RMSE; see `pointwise_targets.mojo`.
         #
         # ===================== WHY THIS EXISTS =====================
         # This call passed `0.0, 0.0` for both. Zero is not "unknown", it is
@@ -164,6 +227,34 @@ def fit(
         # `compute_partition_stats` and never touch the accumulator; only the
         # SPLITS go bad. That is exactly a model that stays monotone, still
         # beats the mean, and is several times worse than it should be.
+        #
+        # CONTRACT AUDIT, 2026-08-19. Every caller of `choose_scale` on the
+        # tree path was re-read against `mojo_only/fixed_point.mojo`'s stated
+        # precondition, "sum over all rows of abs(value) for the plane being
+        # accumulated":
+        #
+        #   this file                      sum of |stats| read back from the
+        #                                  plane `mse_kernel` wrote, both
+        #                                  planes, per iteration -- SOUND
+        #   mojo_only/level_check.mojo     abs-accumulates a signed generator
+        #                                  at :210-218 and :344-352 -- SOUND
+        #   mojo_only/level_bench.mojo     same, three sites -- SOUND
+        #   probe_main.check_fixed_point   sums |rows| directly -- SOUND
+        #
+        # The permutation growth applies to the stats plane does not move the
+        # bound: a gather is a bijection on rows, so the sum of magnitudes is
+        # invariant, and the sibling subtraction cannot exceed the parent's
+        # bound either. The three reserved headroom bits cover the rest,
+        # including the one place the bound is not exact: these sums are
+        # accumulated in Float64 and narrowed to Float32 at the call below, so
+        # a round DOWN yields a scale up to one part in 2^24 too large.
+        # `SCALE_HEADROOM_BITS = 3` is a factor of eight against a relative
+        # error of 6e-8.
+        #
+        # If another lane restores the float atomic on the FAST arm, this
+        # block does NOT become dead. `DETERMINISM_DEVICE` is the default and
+        # it pins the integer flush on every backend, so the contract still
+        # governs the shipped configuration; only the `OFF` arm escapes it.
         # ===========================================================
         var weight_magnitude = Float64(0.0)
         var gradient_magnitude = Float64(0.0)
@@ -205,13 +296,18 @@ def fit(
 
         ctx.enqueue_copy(dst_ptr=h_cursor.unsafe_ptr(), src_buf=cursor)
         ctx.synchronize()
+        # `-weight * (val - relev) * (val - relev)` summed over rows --
+        # `pointwise_targets.cu:311`, sign flipped. The weight was dropped
+        # here, which made the reported number an UNWEIGHTED mean squared
+        # error and therefore not their `functionValue` at all on any fit
+        # with weights.
         var sse = Float64(0.0)
         for i in range(n_rows):
             var d = Float64(
                 h_target.unsafe_ptr().unsafe_load(i)
                 - h_cursor.unsafe_ptr().unsafe_load(i)
             )
-            sse += d * d
+            sse += Float64(h_weight.unsafe_ptr().unsafe_load(i)) * d * d
         losses.append(sse / Float64(n_rows))
 
     return losses^

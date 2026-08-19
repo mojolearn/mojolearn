@@ -72,7 +72,18 @@ struct TObliviousTreeModel(Copyable, Movable):
 
     `LeafWeights` is carried because their constructor does and because a
     leaf's weight is what tells a reader whether a value is trustworthy or
-    the artefact of three rows. `Dim` is 1 until multiclass lands.
+    the artifact of three rows. `Dim` is 1 until multiclass lands.
+
+    **`leaf_weights` is NEVER FILLED and that is a gap, not a choice.** Theirs
+    is populated on both paths: the structure search writes
+    `(*resultsLeafWeights)[leafId] = w` as it terminates
+    (`greedy_search_helper.cpp:642`), `BuildTreeLikeModel` permutes it into
+    leaf order beside the values (`model_builder.cpp:70`), and the estimator
+    overwrites it again from `WriteWeights` (`doc_parallel_leaves_estimator.cpp:20,
+    :40`). `run_tree_layout` returns leaf SIZES, which is a row count and not
+    a weight, so filling the field from what `fit` has would be wrong whenever
+    the rows carry weights. Closing it means returning the weight plane of
+    `part_stats` alongside the values.
     """
 
     var structure: TObliviousTreeStructure
@@ -96,7 +107,15 @@ struct TAdditiveModel(Copyable, Movable):
 
     Prediction is the sum over weak models. The learning rate is already
     folded into the stored leaf values by their `Rescale(step)`
-    (`doc_parallel_boosting.h:390`), so nothing here reapplies it.
+    (`doc_parallel_boosting.h:389-391`), so nothing here reapplies it.
+
+    Their `SetBias` is not carried (`doc_parallel_boosting.h:527`). It exists
+    to record `cursors->StartingPoint`, which is set only under
+    `boost_from_average` or `RMSEWithUncertainty` (`:146-148`); both are
+    refused by `CatBoostOptions.check()`, so the bias would be zero on every
+    model this port can build. It has to appear the day either lands, because
+    a model whose cursor started somewhere other than zero and does not say so
+    predicts the residual rather than the target.
     """
 
     var weak_models: List[TObliviousTreeModel]

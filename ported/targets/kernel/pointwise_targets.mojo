@@ -3,25 +3,47 @@
 PORT OF `catboost/cuda/targets/kernel/pointwise_targets.cu` at CatBoost
 `54a8143a`. Transliterated. Do not improve.
 
-Only `MseImpl` is ported. It is the objective behind `RMSE`
-(`pointwise_targets.cu:496`) and it is the smallest correct starting point
+Only the RMSE objective is ported. It is the smallest correct starting point
 for a boosting loop, because its derivatives are exact rather than
 approximated and its Newton step needs no line search.
 
-Their kernel, verbatim in structure:
+## Which of their two MSE kernels this is, because they have two
 
-    const float direction = relev - val;
+`MseImpl` (`pointwise_targets.cu:285-321`) is the obvious one to port and it
+is UNREACHED IN THEIR OWN TREE. Its only entry point is `MseTargetKernel`
+(`:415-428`) behind `ApproximateMse` (`targets/kernel.h:828`), and
+`ApproximateMse` has no caller anywhere in `catboost/`. This file used to cite
+it, and the citation was to dead code.
+
+What RMSE actually reaches is the generic
+`PointwiseTargetImpl<TTarget, BLOCK_SIZE>` (`:246-281`), dispatched at
+`case ELossFunction::RMSE: TRmseTarget target;` (`:496-500`) out of
+`PointwiseTargetKernel`, which `ApproximatePointwise`
+(`targets/kernel.h:840`) launches. The objective is a three-method struct
+(`:178-191`):
+
+    Score(t, p) = (t - p) * (t - p)
+    Der  (t, p) = t - p
+    Der2 (_, p) = 1.0f
+
+and the generic kernel multiplies each by the weight (`:259-271`):
+
     const float weight = (weights && (i < size)) ? weights[i] : 1.0f;
-    if (der)  der[i]  = weight * direction;
-    if (der2) der2[i] = weight;
-    functionValue += -weight * (val - relev) * (val - relev);
+    if (der)  der[i]  = weight * target.Der(relev, val);
+    if (der2) der2[i] = weight * target.Der2(relev, val);
+    functionValue += -weight * target.Score(relev, val);
 
-So the FIRST derivative is the residual and the SECOND is just the weight.
-That is why an MSE tree's leaf value is a plain weighted mean and why this
-objective is the one to build the loop against before anything harder.
+**The two kernels compute the same three numbers**, term for term, which is
+why the port was numerically right while its citation was wrong. It is
+transcribed from the reachable one now, because a reader diffing against
+`MseImpl` is diffing against a file CatBoost never runs.
+
+So the FIRST derivative is the weighted residual and the SECOND is just the
+weight. That is why an MSE tree's leaf value is a plain weighted mean and why
+this objective is the one to build the loop against before anything harder.
 
 Note the SIGN on `functionValue`: theirs accumulates the NEGATIVE squared
-error, because everything downstream maximises. Kept, because flipping it
+error, because everything downstream maximizes. Kept, because flipping it
 here would silently invert every early-stopping comparison later.
 """
 
@@ -36,7 +58,10 @@ def mse_kernel(
     has_weights: Int32,
     stats: MutPointer[Float32, MutAnyOrigin],
 ):
-    """`MseImpl`, copied, writing straight into the stats planes.
+    """`PointwiseTargetImpl<TRmseTarget>`, copied, writing straight into the
+    stats planes. The name is kept from when this file cited `MseImpl`; see
+    the module docstring for why that citation was to dead code and why the
+    two kernels agree term for term anyway.
 
     ================= DEVIATION BLOCK =================
     Theirs writes `der` and `der2` into two separate buffers and sums
@@ -45,18 +70,31 @@ def mse_kernel(
     Ours writes the two derivatives into the ONE `stats` buffer the histogram
     kernels already read, in the layout they already expect:
 
-        stats[0 * size + i]  = der2 = weight        (the weight plane)
-        stats[1 * size + i]  = der  = weight * (y - pred)
+        stats[0 * size + i]  = the WEIGHT plane
+        stats[1 * size + i]  = der = weight * (y - pred)
 
-    That is not a redesign, it is the same two numbers in the place the rest
-    of this port already reads them from. Adding a copy to move them would be
-    inventing work CatBoost does not do either, since their der buffers ARE
-    what their histogram kernels consume.
+    That is not a redesign, it is their own layout: `StochasticDer` builds
+    `StatsToAggregate` with column 0 the weights and columns 1.. the ders
+    (`targets/pointwise_target_impl.h:188-213`), and that buffer IS what their
+    histogram kernels consume.
 
-    `functionValue` is NOT computed here. Their block reduce needs an
-    `atomicAdd` on a float, which Metal does not have. The loss is reduced on
-    the host in `doc_parallel_boosting.mojo` instead, where it costs one copy
-    per iteration and is not on any hot path.
+    WHAT GOES IN PLANE 0 DEPENDS ON THE SCORE FUNCTION, and this port writes
+    the branch CatBoost's default takes. `ComputeTarget` passes
+    `secondDerAsWeights = IsSecondOrderScoreFunction(scoreFunction)`
+    (`greedy_search_helper.cpp:286-296`), and Cosine, the shipped default, is
+    NOT second order (`enum_helpers.cpp:829-841`), so plane 0 is
+    `weightsView.Copy(weightsForIndices)` -- the sample weight -- and not
+    `der2`. Under NewtonCosine or NewtonL2 it would be `der2` instead. For
+    RMSE the distinction is invisible because `TRmseTarget::Der2` returns
+    `1.0f`, so `weight * der2 == weight`; for any objective whose second
+    derivative is not constant it is two different numbers and this kernel
+    would need the flag.
+
+    `functionValue` is NOT computed here. It is one scalar per iteration
+    behind a block reduce, it feeds nothing this port computes on the device,
+    and the boosting loop already reads the cursor back for its own reduction,
+    so adding it here would be work for a number that is produced anyway. The
+    host reduction lives in `doc_parallel_boosting.mojo`.
     ===================================================
     """
     var size = Int(size_in)

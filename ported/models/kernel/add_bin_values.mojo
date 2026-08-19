@@ -1,8 +1,9 @@
 """Apply a stored oblivious tree to rows, by EVALUATING it.
 
-PORT OF `catboost/cuda/models/kernel/add_model_value.cu` and the
-`ComputeBins` half of `add_oblivious_tree_model_doc_parallel.cpp` at CatBoost
-`54a8143a`.
+PORT OF `AddObliviousTreeImpl`, `catboost/cuda/models/kernel/add_model_value.cu:70-120`
+at CatBoost `54a8143a`, which is the kernel their own `AppendModels` reaches
+on the learn set as well as the test set
+(`add_oblivious_tree_model_doc_parallel.cpp:191-192`).
 
 `kernel_add_model_value.mojo` updates the LEARN cursor by reading each row's
 leaf off the partition growth already produced. That is exact and free, and
@@ -38,12 +39,23 @@ def compute_bins_and_add_kernel(
     n_rows_in: Int32,
     cursor: MutPointer[Float32, MutAnyOrigin],
 ):
-    """Their `ComputeBins` then `AddBinModelValue`, fused into one pass.
+    """Their `AddObliviousTreeImpl`, transcribed.
 
-    Theirs writes the bin indices to a buffer and adds in a second kernel,
-    because their bins are reused by other machinery. Nothing here reuses
-    them yet, so the round trip through memory is skipped; the arithmetic is
-    identical and the fusion is noted rather than silent.
+    Their loop, `add_model_value.cu:106-117`:
+
+        const ui32 featureVal = __ldg((cindex + offsetsLocal[level]) + loadIdx) & mask;
+        const ui32 split = (takeEqual[level] ? (featureVal == value) : featureVal > value);
+        bin |= split << level;
+
+    with `value = bins[level] << feature.Shift` and `mask = feature.Mask <<
+    feature.Shift` (`:91-92`), then one grid-stride add of `leaves[bin]`.
+    That is this kernel line for line; there is no fusion of two kernels
+    here, because theirs is already one.
+
+    Two shapes of theirs are not carried and neither changes a number:
+    `readIndices` / `writeIndices`, which are null on this path, and the
+    `__shared__` staging of the per-level masks, which is their way of
+    broadcasting `depth <= 32` scalars that we pass as buffers.
 
     The split arrays are parallel and one entry per LEVEL, which is the whole
     of an oblivious tree's structure.

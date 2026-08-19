@@ -2,27 +2,36 @@
 
 PORT OF the `AddModelValue` step of
 `catboost/cuda/methods/doc_parallel_boosting.h:265` (`AppendModels`), whose
-device side is CatBoost's add-model-value kernel family.
+device side is CatBoost's add-model-value kernel family
+(`catboost/cuda/models/kernel/add_model_value.cu`).
 
 Their `AppendModels` runs once per boosting iteration and is what turns a
 tree into a change in the cursor. `Rescale(step)` multiplies the leaf values
-by the learning rate first (`doc_parallel_boosting.h:390`), which is why the
+by the learning rate first (`doc_parallel_boosting.h:388`), which is why the
 rate arrives here as a plain multiplier rather than being baked into the leaf
 estimate.
 
 ================= DEVIATION BLOCK =================
-CatBoost applies the model by EVALUATING it: each row walks the tree's splits
-and lands in a leaf. That is required for a test set, where no partition
-exists.
+CatBoost applies the model by EVALUATING it, on the learn set as much as
+anywhere else. `TAddModelDocParallel<TObliviousTreeModel>::Append` calls
+`AddObliviousTree` (`add_oblivious_tree_model_doc_parallel.cpp:191-192`),
+which launches `AddObliviousTreeImpl` (`add_model_value.cu:70-120`): each row
+reads its bin out of the compressed index at every level and builds the leaf
+index bit by bit. There is NO partition-indexed path in their doc-parallel
+weak learner. Their other kernel, `AddBinModelValueImpl` (`:14-53`), takes a
+precomputed per-row bin array and belongs to the leaves estimator's `MoveTo`
+(`pointwise_oracle.cpp:50-52`), not to `AppendModels`.
 
 On the LEARN set during training the partition is already known: growth left
 `row_index` permuted so that every row of leaf `L` sits in
 `[offset[L], offset[L] + size[L])`. So the leaf assignment is read off the
-partition instead of recomputed, which is exact rather than approximate and
-is the same answer their evaluation would produce.
+partition instead of recomputed. It is exact rather than approximate and is
+the same answer their evaluation produces, which `boosting_check` asserts by
+comparing this cursor against `predict`'s rather than assuming it.
 
-The moment a test cursor exists this kernel is NOT enough and the evaluating
-form has to be ported beside it. Recorded so that gap is visible.
+`add_bin_values.mojo` beside this file IS the port of `AddObliviousTreeImpl`,
+so the evaluating form is not missing; what is missing is a test cursor to
+point it at. Recorded so that gap is visible.
 ===================================================
 """
 
