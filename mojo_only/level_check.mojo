@@ -168,11 +168,22 @@ def check_tree(max_depth: Int) raises:
 
     var host_bin = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
     var bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
+    # INDEPENDENT bins, not the periodic `((r // (f+1)) + f) % 2` this used
+    # to carry. That pattern makes features near-duplicates of each other, so
+    # every leaf comes out with the same distribution, every feature ties on
+    # score, the argmax deterministically re-picks the same one, and the tree
+    # re-splits on an already-used feature into empty children. That looked
+    # exactly like a porting bug and was a property of the test data.
+    var seed = 0x2545F491
     for f in range(n_features):
         for r in range(n_rows):
-            host_bin.unsafe_ptr().unsafe_store(
-                r, UInt8(((r // (f + 1)) + f) % 2)
-            )
+            # xorshift, so features are uncorrelated with each other and with
+            # the row index.
+            var x = UInt32(r * 2654435761 + f * 40503 + seed)
+            x ^= x << 13
+            x ^= x >> 17
+            x ^= x << 5
+            host_bin.unsafe_ptr().unsafe_store(r, UInt8(Int(x & 1)))
         ctx.enqueue_copy(dst_buf=bins, src_ptr=host_bin.unsafe_ptr())
         ctx.enqueue_function[write_compressed_index_kernel](
             Int32(0),

@@ -66,47 +66,34 @@ belongs in that file, marked. `mojo_only/` is for what CatBoost never had to
 write at all.
 
 
-## Multi-level tree: runs, conserves rows, does NOT fully split yet
+## Multi-level tree: RESOLVED
 
-`run_tree` grows a whole oblivious tree and the row-conservation invariant
-holds at every depth: 4096 rows across 2, 8 and 64 partitions, none negative,
-exactly `2^depth` leaves. But only the first two levels split for real.
-Depth 6 produces 64 partitions of which **4 hold rows**.
+`run_tree` grows a whole oblivious tree correctly. Depth 3 gives 8 leaves all
+non-empty; depth 6 gives 64 of which 46 hold rows, which is what 4096 rows
+over 64 leaves looks like with real data. Row conservation holds at every
+depth.
 
-Two causes found and fixed, one remains:
+**The final cause was the TEST DATA, not the port**, after three rounds of
+looking like a porting bug. The bins were `((r // (f+1)) + f) % 2`, which
+makes features near-duplicates: every leaf came out with the same
+distribution, every feature tied on score, the argmax deterministically
+re-picked the same one, and re-splitting on an already-used feature produced
+empty children. Independent xorshift bins fixed it.
 
-- **FIXED: the wrong histogram variant.** CatBoost has
-  `ComputeSplitPropertiesDirectLoadsImpl` AND
-  `ComputeSplitPropertiesGatherImpl`; only the direct one was ported. Direct
-  reads `bins[position]`, gather reads `cindex[indices[position]]`. The
-  compressed index is never permuted, so position stops naming a row after
-  the first reorder. Took depth 3 from 2 to 4 non-empty.
-- **FIXED: the stat gather was ported and never called.** The histogram reads
-  bins THROUGH the index and stats BY POSITION, so leaving the stat columns
-  unpermuted pairs the right rows' bins with the wrong rows' gradients.
-- **FIXED: a device-to-device copy that silently did nothing.** The driver
-  called `ctx.enqueue_copy(dst_buf=row_index, src_ptr=new_index.unsafe_ptr())`,
-  passing a DEVICE pointer where a host source is expected. Mojo's
-  `enqueue_copy` is host-to-device or device-to-host only; there is no
-  device-to-device form and no error. The gathered row index and stat columns
-  were never written back. Now a real kernel, `ported/gpu_util/copy.mojo`.
-- **OPEN: the level score is IDENTICAL from depth 1 onward**, 9237.699 on
-  feature 0 for five consecutive levels, which means the score kernel reads
-  byte-identical histograms and per-leaf stats every level.
+**What resolved it was reading bytes, not reasoning.** A probe built the same
+histogram twice, once as one leaf of 1024 rows and once as two leaves of 512,
+and got 512 against 256 + 256. Once the histogram was proven to track the
+partition, the remaining suspects collapsed to the data. Three inferences
+failed; the measurement took one attempt.
 
-  Ruled out so far: the histogram variant (gather now used below depth 0),
-  the stat gather (now called), the device copy (now a kernel), row
-  conservation (holds at every depth), partition counts (2^depth, and the
-  non-empty count does grow 1 -> 2 -> 4). The histogram destination
-  arithmetic was re-derived by hand and agrees with the score kernel's read
-  arithmetic: leaf `i` at `i * stat_count * n_features` from both sides.
+**Three real bugs were found while chasing it and all are fixed:**
 
-  Not yet isolated. The next probe is to read one leaf's histogram back at
-  depth 1 and depth 2 and compare them directly, rather than inferring from
-  the score.
+- only `ComputeSplitPropertiesDirectLoadsImpl` was ported, not the gather
+  variant, so below depth 0 the histogram read unrelated rows' bins
+- `gather_in_leaves_kernel` was ported, verified, and never called, so the
+  stat columns stayed unpermuted while the bins were permuted
+- `enqueue_copy(dst_buf=..., src_ptr=device_ptr)` silently did nothing; Mojo
+  has no device-to-device form, and the gathered index and stats were never
+  written back. Now `ported/gpu_util/copy.mojo`
 
-**Why this matters more than the bug does:** every isolated kernel check
-passed, the end-to-end depth-0 level passed against a host calculation, and
-the row-conservation invariant passed at every depth. The only thing that
-caught it was counting how many leaves actually hold rows. A tree that
-conserves every row and splits nothing looks exactly like healthy plumbing.
+So the hunt paid even though the final cause was elsewhere.
