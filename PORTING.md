@@ -487,3 +487,23 @@ version" does. **Nothing in the docstring was read from their source.**
 This is the same failure the repository's founding note describes: our code,
 and our description of their code, are not evidence about their code. Read
 the file.
+
+## 26. `stack_allocation` with no address space is MEMORY, not registers
+
+The register-tiling port of `core/gemm.mojo` was SLOWER than the naive kernel
+it replaced, on every arm.
+
+RAFT's contraction holds its accumulators in `DataT acc[AccRowsPerTh]
+[AccColsPerTh]` and its operands in `regx[]` / `regy[]`, plain C arrays that
+nvcc keeps in registers. The obvious Mojo transliteration is
+`stack_allocation[N, Scalar[DType.float32]]()` with no `address_space`, and
+that is thread-local MEMORY. Every `acc[i] += ...` became a load and a store,
+which is precisely the traffic register tiling exists to remove.
+
+Rewriting the accumulators as `SIMD[DType.float32, 4]` values recovered it:
+k-NN went 30.9 ms to 22.3 ms and from INDISTINGUISHABLE to a 1.41x win.
+
+**Rule: in a kernel, an array meant to live in registers must be a `SIMD`
+value or named scalars.** `stack_allocation` is for shared memory, where the
+address space is passed explicitly, and using it for thread-private data
+silently spills what the whole optimization was about.

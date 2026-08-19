@@ -128,19 +128,15 @@ def gemm_nt_kernel(
         address_space = AddressSpace.SHARED,
     ]()
 
-    var acc = stack_allocation[
-        GEMM_ACC_ROWS_PER_TH * GEMM_ACC_COLS_PER_TH,
-        Scalar[DType.float32],
-    ]()
-    for i in range(GEMM_ACC_ROWS_PER_TH * GEMM_ACC_COLS_PER_TH):
-        acc[i] = Float32(0.0)
-
-    var regx = stack_allocation[
-        GEMM_ACC_ROWS_PER_TH, Scalar[DType.float32]
-    ]()
-    var regy = stack_allocation[
-        GEMM_ACC_COLS_PER_TH, Scalar[DType.float32]
-    ]()
+    # SIMD values, NOT `stack_allocation`. Their `regx[][]` and `acc[][]` are
+    # plain C arrays that nvcc keeps in registers; `stack_allocation` without
+    # an address space is thread-local MEMORY, so the first attempt turned
+    # every accumulator access into a load and a store and made the kernel
+    # SLOWER than the naive one it replaced. See PORTING.md 26.
+    var acc0 = SIMD[DType.float32, GEMM_ACC_COLS_PER_TH](0.0)
+    var acc1 = SIMD[DType.float32, GEMM_ACC_COLS_PER_TH](0.0)
+    var acc2 = SIMD[DType.float32, GEMM_ACC_COLS_PER_TH](0.0)
+    var acc3 = SIMD[DType.float32, GEMM_ACC_COLS_PER_TH](0.0)
 
     var kt = 0
     while kt < k:
@@ -173,18 +169,16 @@ def gemm_nt_kernel(
 
         # --- ldsXY + accumulate. The four-by-four block is the point: each
         # register value is reused AccColsPerTh (or AccRowsPerTh) times.
+        var xb = tr * GEMM_ACC_ROWS_PER_TH
+        var yb = tc * GEMM_ACC_COLS_PER_TH
         for kk in range(GEMM_KBLK):
-            for i in range(GEMM_ACC_ROWS_PER_TH):
-                regx[i] = sx[
-                    (tr * GEMM_ACC_ROWS_PER_TH + i) * GEMM_SMEM_STRIDE + kk
-                ]
+            var regy = SIMD[DType.float32, GEMM_ACC_COLS_PER_TH](0.0)
             for j in range(GEMM_ACC_COLS_PER_TH):
-                regy[j] = sy[
-                    (tc * GEMM_ACC_COLS_PER_TH + j) * GEMM_SMEM_STRIDE + kk
-                ]
-            for i in range(GEMM_ACC_ROWS_PER_TH):
-                for j in range(GEMM_ACC_COLS_PER_TH):
-                    acc[i * GEMM_ACC_COLS_PER_TH + j] += regx[i] * regy[j]
+                regy[j] = sy[(yb + j) * GEMM_SMEM_STRIDE + kk]
+            acc0 += sx[(xb + 0) * GEMM_SMEM_STRIDE + kk] * regy
+            acc1 += sx[(xb + 1) * GEMM_SMEM_STRIDE + kk] * regy
+            acc2 += sx[(xb + 2) * GEMM_SMEM_STRIDE + kk] * regy
+            acc3 += sx[(xb + 3) * GEMM_SMEM_STRIDE + kk] * regy
 
         barrier()
         kt += GEMM_KBLK
@@ -196,6 +190,11 @@ def gemm_nt_kernel(
         for j in range(GEMM_ACC_COLS_PER_TH):
             var gc3 = n0 + tc * GEMM_ACC_COLS_PER_TH + j
             if gc3 < n:
-                z.unsafe_store(
-                    gr3 * n + gc3, acc[i * GEMM_ACC_COLS_PER_TH + j]
-                )
+                var v3 = acc0[j]
+                if i == 1:
+                    v3 = acc1[j]
+                elif i == 2:
+                    v3 = acc2[j]
+                elif i == 3:
+                    v3 = acc3[j]
+                z.unsafe_store(gr3 * n + gc3, v3)
