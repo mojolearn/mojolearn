@@ -1278,7 +1278,7 @@ def check_stable_partition() raises:
     print("  partitioned, stable within each side, across chunk boundaries")
 
 
-def check_one_byte_bits[bits: Int]() raises:
+def check_one_byte_bits[bits: Int](n_stats: Int = 1) raises:
     """The one-byte kernel at `bits` bits, against a hand-computable answer.
 
     Four features per `UInt32`, `2^bits` folds each. Feature f at row r gets
@@ -1337,10 +1337,13 @@ def check_one_byte_bits[bits: Int]() raises:
     ctx.enqueue_copy(dst_buf=p_sz, src_ptr=bb.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=p_ids, src_ptr=cc.unsafe_ptr())
 
-    var stats = ctx.enqueue_create_buffer[DType.float32](n_rows)
-    var hst = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
-    for r in range(n_rows):
-        hst.unsafe_ptr().unsafe_store(r, Float32(1.0))
+    # One plane per stat, laid out [stat][row] as the kernels expect. With
+    # `n_stats = 2` the second plane is what the mixed path uses and what no
+    # check covered until now.
+    var stats = ctx.enqueue_create_buffer[DType.float32](n_stats * n_rows)
+    var hst = ctx.enqueue_create_host_buffer[DType.float32](n_stats * n_rows)
+    for i in range(n_stats * n_rows):
+        hst.unsafe_ptr().unsafe_store(i, Float32(1.0))
     ctx.enqueue_copy(dst_buf=stats, src_ptr=hst.unsafe_ptr())
 
     var group_size = n_features * n_folds
@@ -1362,9 +1365,11 @@ def check_one_byte_bits[bits: Int]() raises:
     ctx.enqueue_copy(dst_buf=grp_off, src_ptr=q3.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=grp_sz, src_ptr=q4.unsafe_ptr())
 
-    var sums = ctx.enqueue_create_buffer[DType.float32](group_size)
-    var zf = ctx.enqueue_create_host_buffer[DType.float32](group_size)
-    for i in range(group_size):
+    var sums = ctx.enqueue_create_buffer[DType.float32](n_stats * group_size)
+    var zf = ctx.enqueue_create_host_buffer[DType.float32](
+        n_stats * group_size
+    )
+    for i in range(n_stats * group_size):
         zf.unsafe_ptr().unsafe_store(i, Float32(0.0))
     ctx.enqueue_copy(dst_buf=sums, src_ptr=zf.unsafe_ptr())
     ctx.synchronize()
@@ -1385,13 +1390,15 @@ def check_one_byte_bits[bits: Int]() raises:
         p_ids.unsafe_ptr(),
         sums.unsafe_ptr(),
         Int32(1),
-        Int32(1),
-        grid_dim=(1, 1, 1),
+        Int32(n_stats),
+        grid_dim=(1, 1, n_stats),
         block_dim=(ONE_BYTE_BLOCK_SIZE, 1, 1),
     )
     ctx.synchronize()
 
-    var out = ctx.enqueue_create_host_buffer[DType.float32](group_size)
+    var out = ctx.enqueue_create_host_buffer[DType.float32](
+        n_stats * group_size
+    )
     ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=sums)
     ctx.synchronize()
 
@@ -1408,14 +1415,22 @@ def check_one_byte_bits[bits: Int]() raises:
     )
     print("  expected every cell: 10.0")
     var wrong = 0
-    for f in range(n_features):
-        for fold in range(n_folds):
-            var got = out.unsafe_ptr().unsafe_load(f * n_folds + fold)
-            if abs(got - Float32(10.0)) > Float32(1e-3):
-                wrong += 1
+    for s in range(n_stats):
+        for f in range(n_features):
+            for fold in range(n_folds):
+                var got = out.unsafe_ptr().unsafe_load(
+                    s * group_size + f * n_folds + fold
+                )
+                if abs(got - Float32(10.0)) > Float32(1e-3):
+                    wrong += 1
+                    if wrong <= 4:
+                        print(
+                            "      stat", s, "feature", f, "fold", fold,
+                            "got", got, "want 10.0",
+                        )
     print("    feature 0 folds 0..3:",
           out.unsafe_ptr().unsafe_load(0), out.unsafe_ptr().unsafe_load(1))
-    print("  wrong cells:", wrong, "of", group_size)
+    print("  stats", n_stats, " wrong cells:", wrong, "of", n_stats * group_size)
     if wrong != 0:
         raise Error("the one-byte histogram is wrong")
     print("  one-byte at", bits, "bits computes the right answer")

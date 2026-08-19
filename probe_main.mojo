@@ -282,9 +282,6 @@ def show_tree_schedule() raises:
 
 
 def main() raises:
-    print("mixed histogram slices (GPU):")
-    probe_mixed_histogram()
-    print()
     print("options:")
     check_options()
     print()
@@ -330,6 +327,8 @@ def main() raises:
     check_one_byte_bits[6]()
     check_one_byte_bits[7]()
     check_one_byte_bits[8]()
+    check_one_byte_bits[6](2)
+    check_one_byte_bits[8](2)
     check_subtraction()
     check_scan()
     check_scores()
@@ -351,3 +350,6 @@ def main() raises:
     check_level_plan()
     print("kernels:")
     probe()
+    print()
+    print("mixed histogram slices (GPU):")
+    probe_mixed_histogram()

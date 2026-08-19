@@ -145,4 +145,18 @@ is the configuration those checks never covered.
 
 The width-matched dispatch is KEPT even though it scores worse, because
 picking `[8]` for scoring 2 instead of 4 when both are wrong is fitting to
-noise. Next: run the standalone one-byte check at `stat_count = 2`.
+noise.
+
+**`stat_count = 2` RULED OUT.** The standalone one-byte check now runs with
+two stat planes and passes: 0 wrong of 512 at 6 bits, 0 wrong of 2048 at 8
+bits. The kernel is correct in isolation at exactly the configuration the
+mixed path uses (4 features, 64 folds, 6 bits, 2 planes), so the defect is in
+the mixed SETUP around it rather than in the kernel.
+
+Excluded so far: the compressed-index base, the missing bridge kernel, the
+duplicated bridge, the bit width, the stat count. What remains distinctive
+about the one-byte block in the mixed path: it is the THIRD block, at column
+2, and the only one whose per-feature fold count (64) differs from its block
+total (256). The next probe should compare the block-local histogram
+(`block_hist`) against a host tally BEFORE the bridge runs, which separates a
+bad accumulation from a bad scatter.
