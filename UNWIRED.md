@@ -176,3 +176,24 @@ remaining differences are small and enumerable:
 Next: run `check_one_byte_bits[6](2)` at 2048 rows. If it fails, the kernel
 has a row-count-dependent defect and the standalone check's 640 rows were
 hiding it; if it passes, the difference is in the probe's setup.
+
+
+## One-byte in the mixed path: exclusions as of the end of the session
+
+Ruled out by measurement, each in one attempt:
+
+1. compressed-index base vs feature-block stride (was a real bug, fixed)
+2. missing `WriteReducesHistograms` (was a real bug, ported)
+3. duplicated block-to-flat bridge (was a real bug, fixed; took 8 wrong
+   slices to 2)
+4. the one-byte bit width (width-matched scores WORSE, so not the cause)
+5. `stat_count = 2` (standalone passes with two planes)
+6. the row count (standalone passes at 2048 rows)
+7. cross-block interference (one-byte ALONE fails)
+8. unzeroed per-block scratch (was a real bug, fixed; not the cause)
+
+**Six real bugs found while chasing one.** Every exclusion came from a
+measurement; none came from reasoning. The kernel is now known correct at
+every parameter the probe uses, so the defect is in the probe path around it.
+
+NEXT: dump `block_hist` before the bridge. It halves the remaining space.

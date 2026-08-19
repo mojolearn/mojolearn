@@ -44,6 +44,7 @@ from ported.methods.greedy_subsets_searcher.kernel.hist_binary import (
 )
 from ported.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     fixed_to_float_kernel,
+    zero_histograms_kernel,
     write_reduces_histograms_kernel,
     scan_histograms_kernel,
     zero_histograms_kernel,
@@ -1050,11 +1051,29 @@ def launch_histograms_for_blocks(
     # total of earlier blocks' bin counts.
     var block_first_bin = 0
 
+    # ZERO THE BLOCK SCRATCH before every block. Their writeback is guarded
+    # by `if (abs(val) > 1e-20f)`, so a cell whose value is zero is NEVER
+    # WRITTEN and keeps whatever the buffer held. CatBoost zeroes through
+    # `ZeroHistograms` for the same reason; this port zeroed the FLAT
+    # histogram and not the per-block scratch the kernels actually write.
+    #
+    # It also means the scratch cannot be shared between blocks without
+    # clearing: block 2 would inherit block 1's cells wherever its own value
+    # rounds to zero.
+
     for b in range(len(blocks)):
         ref blk = blocks[b]
         # The policy's column BASE, and the feature-block stride within it.
         var base = n_rows * blk.first_column
         var line = n_rows
+
+        ctx.enqueue_function[zero_histograms_kernel](
+            ids.unsafe_ptr(),
+            Int32(blk.total_folds),
+            block_hist.unsafe_ptr(),
+            grid_dim=((blk.total_folds + 255) // 256, n_live, stat_count),
+            block_dim=(256, 1, 1),
+        )
 
         # Each block writes its OWN layout, [leaf][stat][bin-in-block], into
         # scratch. Writing straight into the flat histogram is correct only

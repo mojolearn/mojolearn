@@ -1278,7 +1278,7 @@ def check_stable_partition() raises:
     print("  partitioned, stable within each side, across chunk boundaries")
 
 
-def check_one_byte_bits[bits: Int](n_stats: Int = 1) raises:
+def check_one_byte_bits[bits: Int](n_stats: Int = 1, rows_per_fold: Int = 10) raises:
     """The one-byte kernel at `bits` bits, against a hand-computable answer.
 
     Four features per `UInt32`, `2^bits` folds each. Feature f at row r gets
@@ -1297,7 +1297,7 @@ def check_one_byte_bits[bits: Int](n_stats: Int = 1) raises:
     # Scratch for the multi-block flush signature; unused at one block.
     var acc_scratch = ctx.enqueue_create_buffer[DType.int32](8192)
     var n_features = 4
-    var n_rows = 10 * n_folds
+    var n_rows = rows_per_fold * n_folds
 
     var cindex = ctx.enqueue_create_buffer[DType.uint32](n_rows)
     var zero32 = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
@@ -1413,7 +1413,7 @@ def check_one_byte_bits[bits: Int](n_stats: Int = 1) raises:
         1 << (bits - 5),
         "pass(es)",
     )
-    print("  expected every cell: 10.0")
+    print("  expected every cell:", rows_per_fold, " rows:", n_rows)
     var wrong = 0
     for s in range(n_stats):
         for f in range(n_features):
@@ -1421,12 +1421,12 @@ def check_one_byte_bits[bits: Int](n_stats: Int = 1) raises:
                 var got = out.unsafe_ptr().unsafe_load(
                     s * group_size + f * n_folds + fold
                 )
-                if abs(got - Float32(10.0)) > Float32(1e-3):
+                if abs(got - Float32(Float64(rows_per_fold))) > Float32(1e-3):
                     wrong += 1
                     if wrong <= 4:
                         print(
                             "      stat", s, "feature", f, "fold", fold,
-                            "got", got, "want 10.0",
+                            "got", got, "want", rows_per_fold,
                         )
     print("    feature 0 folds 0..3:",
           out.unsafe_ptr().unsafe_load(0), out.unsafe_ptr().unsafe_load(1))

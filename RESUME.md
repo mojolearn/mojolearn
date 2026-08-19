@@ -47,9 +47,27 @@ trail. The live target, sharply characterized:
   iterations) against the standalone's 640 (2), and passes `leaf_count = 2`
   rather than 1.
 
-**NEXT STEP, already decided:** run `check_one_byte_bits[6](2)` at 2048 rows.
-If it fails, the kernel has a row-count-dependent defect and 640 rows was
-hiding it. If it passes, the difference is in the probe's setup.
+**Row count RULED OUT.** `check_one_byte_bits[6](2, 32)` runs at 2048 rows
+and passes, 0 wrong of 512. The kernel is correct at EVERY parameter the
+probe uses: 4 features, 64 folds, 6 bits, 2 stat planes, 2048 rows.
+
+**A sixth real bug was found and fixed here and was NOT the cause:** the
+per-block scratch was never zeroed. CatBoost's writeback is guarded by
+`if (abs(val) > 1e-20f)`, so a cell whose value is zero is never written and
+keeps whatever the buffer held. This port zeroed the FLAT histogram and not
+the per-block scratch the kernels actually write, which also means the
+scratch cannot be shared between blocks without clearing.
+
+**WHAT IS LEFT.** The kernel is correct in isolation; the probe path is not.
+The remaining difference is that the probe goes through
+`launch_histograms_for_blocks` and reads the POST-BRIDGE flat histogram,
+where the standalone launches the kernel directly and reads its output.
+
+**NEXT STEP:** read `block_hist` directly in the probe, BEFORE the bridge
+runs, and compare it against the host tally. That splits the remaining space
+exactly in half: if block_hist is right, the bridge is wrong; if it is wrong,
+the launch parameters `launch_histograms_for_blocks` computes differ from
+what the standalone passes. Everything else about the kernel is excluded.
 
 ## The method that has worked, and the one that has not
 

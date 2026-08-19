@@ -329,6 +329,8 @@ def main() raises:
     check_one_byte_bits[8]()
     check_one_byte_bits[6](2)
     check_one_byte_bits[8](2)
+    # 2048 rows: the probe's row count, 4 accumulation iterations not 2.
+    check_one_byte_bits[6](2, 32)
     check_subtraction()
     check_scan()
     check_scores()
