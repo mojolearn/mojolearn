@@ -1,6 +1,7 @@
 """Training options, under CatBoost's own names.
 
-MIRRORS `catboost/private/libs/options/`. Their spellings are kept exactly,
+MIRRORS `catboost/private/libs/options/`, principally
+`catboost_options.h`, `boosting_options.h` and `oblivious_tree_options.h`. Their spellings are kept exactly,
 including the ones this port does not honor yet, because a name that differs
 from CatBoost's is a name somebody has to translate every time they read
 their docs against our source.

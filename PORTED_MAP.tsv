@@ -32,3 +32,6 @@ ported/gpu_lib/gpu_manager.mojo	catboost/cuda/cuda_lib/cuda_manager.h	partial	si
 ported/targets/kernel/pointwise_targets.mojo	catboost/cuda/targets/kernel/pointwise_targets.cu	partial	MseImpl only; der/der2 written into the two stats planes, functionValue reduced on the host
 ported/methods/kernel_add_model_value.mojo	catboost/cuda/methods/doc_parallel_boosting.h	partial+replaced	AppendModels device side; leaf read off the partition, not by evaluating the tree
 ported/methods/doc_parallel_boosting.mojo	catboost/cuda/methods/doc_parallel_boosting.h	partial	the Fit loop; one permutation, no test cursor, no early stopping, no snapshots
+ported/methods/greedy_subsets_searcher/points_subsets.mojo	catboost/cuda/methods/greedy_subsets_searcher/split_properties_helper.h	partial	TPointsSubsets, TLeaf, TBestSplitProperties; PartitionsCpu not pinned, see NOT_PORTED.md
+ported/models/oblivious_model.mojo	catboost/cuda/models/oblivious_model.h	partial	TObliviousTreeStructure, TObliviousTreeModel, TAdditiveModel; no serialization, no SplitType
+ported/models/kernel/add_bin_values.mojo	catboost/cuda/models/kernel/add_model_value.cu	partial	ComputeBins fused with the add; ordered predicate only
