@@ -124,6 +124,25 @@ and that kernel is the bridge. This port had the kernels writing straight
 into the flat array, which is correct for ONE block because the strides
 coincide and wrong for several because each strides by its own size.
 
-Still not isolated. Next probe unchanged: read the flat histogram back at
-depth 0 for a mixed dataset and compare each policy's slice against a host
-count, instead of inferring from leaf occupancy.
+**The byte probe ran and localized it in one attempt**, after three
+inferences had each found a real bug without finding this one.
+`mojo_only/mixed_hist_probe.mojo` builds the depth-0 histogram for a mixed
+dataset and compares every policy's slice against a host tally.
+
+It found a THIRD real bug immediately: the block-to-flat bridge was
+DUPLICATED in the dispatcher, so `block_first_bin` advanced twice per block
+and every slice after the binary one landed a cell late, each feature reading
+its predecessor's count. Removing the duplicate took the failure from 8 wrong
+slices of 16 to 2.
+
+**Remaining: the one-byte kernel is wrong under `stat_count = 2`.** Binary
+and half-byte are now exact. Two of four one-byte features return wrong
+counts at `bits = 8`, and FOUR of four at the width-matched `bits = 6`, so
+changing the width only moves which features are wrong. Every standalone
+one-byte check passed at widths 5, 6, 7 and 8 with `folds == 2^bits` and
+`stat_count = 1`; the mixed path is the first use with two stat planes, which
+is the configuration those checks never covered.
+
+The width-matched dispatch is KEPT even though it scores worse, because
+picking `[8]` for scoring 2 instead of 4 when both are wrong is fitting to
+noise. Next: run the standalone one-byte check at `stat_count = 2`.

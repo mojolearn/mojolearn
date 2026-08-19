@@ -1,5 +1,6 @@
 from mojo_only.launch_probe import probe
 from mojo_only.options_check import check_options
+from mojo_only.mixed_hist_probe import probe_mixed_histogram
 from mojo_only.layout_check import (
     check_feature_blocks,
     check_layout,
@@ -281,6 +282,9 @@ def show_tree_schedule() raises:
 
 
 def main() raises:
+    print("mixed histogram slices (GPU):")
+    probe_mixed_histogram()
+    print()
     print("options:")
     check_options()
     print()

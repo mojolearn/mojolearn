@@ -913,6 +913,9 @@ struct DeviceBlock(Copyable, Movable):
     var n_features: Int
     var first_column: Int
     var total_folds: Int
+    var max_folds: Int
+    """Widest fold count in this block. The one-byte kernel's bit width must
+    cover it and must not exceed it; see the dispatch note."""
     var folds: DeviceBuffer[DType.uint32]
     var fold_off: DeviceBuffer[DType.uint32]
     var grp_off: DeviceBuffer[DType.uint32]
@@ -940,24 +943,75 @@ def upload_blocks(
         var h3 = ctx.enqueue_create_host_buffer[DType.uint32](n)
         var h4 = ctx.enqueue_create_host_buffer[DType.uint32](n)
         var total = 0
+        var widest = 0
         for k in range(n):
             h1.unsafe_ptr().unsafe_store(k, blk.folds[k])
             h2.unsafe_ptr().unsafe_store(k, blk.fold_offset[k])
             h3.unsafe_ptr().unsafe_store(k, blk.group_offset[k])
             h4.unsafe_ptr().unsafe_store(k, blk.group_size[k])
             total += Int(blk.folds[k])
+            if Int(blk.folds[k]) > widest:
+                widest = Int(blk.folds[k])
         ctx.enqueue_copy(dst_buf=d_folds, src_ptr=h1.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=d_fo, src_ptr=h2.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=d_go, src_ptr=h3.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=d_gs, src_ptr=h4.unsafe_ptr())
         out.append(
             DeviceBlock(
-                blk.policy, n, blk.first_column, total,
+                blk.policy, n, blk.first_column, total, widest,
                 d_folds^, d_fo^, d_go^, d_gs^,
             )
         )
     ctx.synchronize()
     return out^
+
+
+def launch_one_byte[bits: Int](
+    ctx: DeviceContext,
+    mut blk: DeviceBlock,
+    depth: Int,
+    n_live: Int,
+    n_rows: Int,
+    stat_count: Int,
+    max_leaves: Int,
+    replicas: Int,
+    line: Int,
+    base: Int,
+    mut cindex: DeviceBuffer[DType.uint32],
+    mut row_index: DeviceBuffer[DType.uint32],
+    mut stats: DeviceBuffer[DType.float32],
+    mut p_off: DeviceBuffer[DType.uint32],
+    mut p_sz: DeviceBuffer[DType.uint32],
+    mut ids: DeviceBuffer[DType.uint32],
+    mut block_hist: DeviceBuffer[DType.float32],
+) raises:
+    """One one-byte launch at a comptime bit width. Direct at depth 0,
+    gather below it."""
+    if depth == 0:
+        ctx.enqueue_function[one_byte_hist_kernel[bits]](
+            blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
+            blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
+            Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
+            Int32(base), stats.unsafe_ptr(), Int32(n_rows),
+            p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
+            block_hist.unsafe_ptr(),
+            Int32(max_leaves), Int32(stat_count),
+            grid_dim=(replicas, n_live, stat_count),
+            block_dim=(ONE_BYTE_BLOCK_SIZE, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[one_byte_hist_gather_kernel[bits]](
+            blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
+            blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
+            Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
+            Int32(base), row_index.unsafe_ptr(),
+            stats.unsafe_ptr(), Int32(n_rows),
+            p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
+            block_hist.unsafe_ptr(),
+            Int32(max_leaves), Int32(stat_count),
+            grid_dim=(replicas, n_live, stat_count),
+            block_dim=(ONE_BYTE_BLOCK_SIZE, 1, 1),
+        )
 
 
 def launch_histograms_for_blocks(
@@ -1061,50 +1115,50 @@ def launch_histograms_for_blocks(
                     block_dim=(BLOCK_SIZE, 1, 1),
                 )
         else:
-            # One-byte is comptime-parameterized by bit width. 8 bits covers
-            # every fold count the policy admits; a narrower instantiation
-            # would run fewer passes and is a tuning question, not a
-            # correctness one.
-            if depth == 0:
-                ctx.enqueue_function[one_byte_hist_kernel[8]](
-                    blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
-                    blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
-                    Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line), Int32(base),
-                    stats.unsafe_ptr(), Int32(n_rows),
-                    p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
-                    block_hist.unsafe_ptr(),
-                    Int32(max_leaves), Int32(stat_count),
-                    grid_dim=(replicas, n_live, stat_count),
-                    block_dim=(ONE_BYTE_BLOCK_SIZE, 1, 1),
+            # One-byte is comptime-parameterized by bit width, and the width
+            # must MATCH the block's fold count.
+            #
+            # This previously dispatched [8] for every one-byte block with a
+            # comment calling the width a tuning question. A byte-level probe
+            # falsified that: a 64-fold block dispatched at 8 bits returned 2
+            # of 4 features with wrong counts, while every standalone check
+            # passed at a width MATCHED to its folds and never mismatched.
+            #
+            # `bits` sets `InnerHistBitsCount = bits - 5`, which decides the
+            # slot arithmetic `(bin >> 5) & mask` AND the number of passes, so
+            # a width wider than the data changes where bins land.
+            var ob = 5
+            if blk.max_folds > 128:
+                ob = 8
+            elif blk.max_folds > 64:
+                ob = 7
+            elif blk.max_folds > 32:
+                ob = 6
+
+            if ob == 5:
+                launch_one_byte[5](
+                    ctx, blk, depth, n_live, n_rows, stat_count, max_leaves,
+                    replicas, line, base, cindex, row_index, stats, p_off,
+                    p_sz, ids, block_hist,
+                )
+            elif ob == 6:
+                launch_one_byte[6](
+                    ctx, blk, depth, n_live, n_rows, stat_count, max_leaves,
+                    replicas, line, base, cindex, row_index, stats, p_off,
+                    p_sz, ids, block_hist,
+                )
+            elif ob == 7:
+                launch_one_byte[7](
+                    ctx, blk, depth, n_live, n_rows, stat_count, max_leaves,
+                    replicas, line, base, cindex, row_index, stats, p_off,
+                    p_sz, ids, block_hist,
                 )
             else:
-                ctx.enqueue_function[one_byte_hist_gather_kernel[8]](
-                    blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
-                    blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
-                    Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line), Int32(base),
-                    row_index.unsafe_ptr(),
-                    stats.unsafe_ptr(), Int32(n_rows),
-                    p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
-                    block_hist.unsafe_ptr(),
-                    Int32(max_leaves), Int32(stat_count),
-                    grid_dim=(replicas, n_live, stat_count),
-                    block_dim=(ONE_BYTE_BLOCK_SIZE, 1, 1),
+                launch_one_byte[8](
+                    ctx, blk, depth, n_live, n_rows, stat_count, max_leaves,
+                    replicas, line, base, cindex, row_index, stats, p_off,
+                    p_sz, ids, block_hist,
                 )
-
-        # THE BRIDGE. Scatter this block's slice into the flat histogram the
-        # score kernel reads. Without it every policy after the first lands
-        # on the previous one's cells.
-        ctx.enqueue_function[write_reduces_histograms_kernel](
-            Int32(block_first_bin),
-            Int32(blk.total_folds),
-            ids.unsafe_ptr(),
-            block_hist.unsafe_ptr(),
-            Int32(hist_cells_per_leaf),
-            hist.unsafe_ptr(),
-            grid_dim=((blk.total_folds + 127) // 128, n_live, stat_count),
-            block_dim=(128, 1, 1),
-        )
-        block_first_bin += blk.total_folds
 
         # THE BRIDGE. Scatter this block's slice into the flat histogram the
         # score kernel reads. Without it every policy after the first lands
