@@ -486,23 +486,24 @@ def run_tree(
     var fixed_scale = Float32(Float64((1 << 28) - 1) / mag)
 
     # REPLICATION: how many blocks share one partition. CatBoost sizes this
-    # to fill the SMs (`hist_binary.cu:90-95`).
+    # to fill the SMs (`hist_binary.cu:90-95`). A PARAMETER of this function,
+    # defaulting to 1, because a configuration that cannot be varied inside
+    # one process cannot be measured on this machine.
     #
-    # **MEASURED AT 32 AND IT WAS SLOWER, so the default is 1.** It is a
-    # PARAMETER so the two can be interleaved in one process rather than
-    # compared across runs, which is the only comparison this box supports. Depth 8 went 70.3 ms
-    # to 81.1 and depth 6 45.5 to 50.8, correctness unchanged. The reason is
-    # the OUTPUT SIZE, not the input: 32 binary features is 32 bin-features,
-    # so the histogram is 64 cells across two stat planes. Thirty-two replica
-    # blocks of 512 threads is about 16,000 threads contending on 64 atomic
-    # addresses, plus a conversion pass per level.
+    # **1 and 32 are INDISTINGUISHABLE at this shape.** Interleaved, five
+    # repeats, depth 6 over 500,000 rows: median 25.755 ms at 1 replica
+    # against 24.936 at 32, ranges overlapping.
     #
-    # CatBoost's replication pays because their histograms are thousands of
-    # cells (100 features at up to 256 bins each). The rule that would make
-    # this useful is bin-count-aware rather than constant, and writing one
-    # without measuring the wide-feature shape would be a guess. The
-    # fixed-point flush stays wired and correct so the experiment can be rerun
-    # the moment there is a shape worth running it on.
+    # A 1.16x gap measured ACROSS RUNS said 32 was slower. It was noise:
+    # this box has produced 59.7 and 44.8 ms for identical work an hour
+    # apart. `mojo_only/interleaved.mojo` exists for that reason and
+    # overturned the claim the first time it ran.
+    #
+    # So the default is 1 because 32 buys nothing measurable HERE, not
+    # because 32 costs anything. The arithmetic still says replication should
+    # pay once the histogram is thousands of cells rather than the 64 that 32
+    # binary features produce, and that shape has not been measured.
+
     var part_stats = ctx.enqueue_create_buffer[DType.float32](
         max_leaves * stat_count
     )
