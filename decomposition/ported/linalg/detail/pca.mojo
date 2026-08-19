@@ -1,0 +1,271 @@
+"""PCA by covariance eigendecomposition.
+
+PORT OF `raft/linalg/detail/pca.cuh` and the `cal_eig` /
+`trunc_comp_exp_vars` pair from `raft/linalg/detail/tsvd.cuh` at RAFT
+`9aa17e5`. Partial. Do not improve.
+
+**RAFT's PCA is NOT randomized SVD**, which is what I expected to find and is
+worth stating because it changes what the port costs. `pca_fit` is six steps
+(`detail/pca.cuh:128-190`):
+
+    1  mean over columns                     -> mu           O(rows)
+    2  center the input IN PLACE             ->              O(rows)
+    3  covariance, Xc^T Xc / (n_rows - 1)    -> cov          O(rows * cols^2)
+    4  eigendecompose cov, take the top k    -> components   O(cols^3)
+    5  singular_vals = sqrt(var * (n-1))     ->              O(k)
+    6  RESTORE the input by adding mu back   ->              O(rows)
+
+**Only steps 1, 2, 3 and 6 touch rows at all.** Everything after step 3 works
+on an `n_cols x n_cols` matrix. That is the structural reason this algorithm
+suits a GPU so well: one bandwidth-bound pass and one big arithmetic-dense
+product, then a small dense problem that does not care where it runs.
+
+Step 6 is the one to not drop. `input` is an in-out parameter that must end
+the call unchanged, and a fit that leaves the caller's matrix centered is
+wrong in a way nothing in the fit itself will reveal.
+
+ORDER IS PART OF THE ANSWER
+---------------------------
+`cal_eig` gets ascending eigenvalues from cuSOLVER and then calls
+`raft::matrix::col_reverse` (`tsvd.cuh:150`) to make components descend by
+explained variance. Copied. PCA components in the wrong order are not a
+lesser answer, they are a different one.
+
+SIGN IS ALSO PART OF THE ANSWER
+-------------------------------
+An eigenvector is defined up to sign, so any implementation must PICK one or
+its output is not reproducible. RAFT calls `sign_flip_components` with a
+`flip_signs_based_on_U` switch (`detail/pca.cuh:189`). This ports the default
+arm, which fixes the sign from the components themselves: make the entry of
+largest magnitude in each component positive. scikit-learn's `svd_flip` uses
+the same convention, which is what makes the two comparable at all.
+"""
+
+from max.gpu.host import DeviceBuffer, DeviceContext
+
+from core.column_stats import (
+    COV_TILE,
+    STATS_TPB,
+    column_mean_kernel,
+    covariance_kernel,
+    shift_columns_kernel,
+)
+from core.gemm import GEMM_TILE, gemm_nt_kernel
+from decomposition.mojo_only.jacobi_eigh import jacobi_eigh
+
+
+@fieldwise_init
+struct PCAResult(Movable):
+    """What `pca_fit` writes back on the host side.
+
+    `components` is `n_components x n_cols` row major, matching theirs and
+    scikit-learn's `components_`.
+    """
+
+    var components: List[Float64]
+    var explained_var: List[Float64]
+    var explained_var_ratio: List[Float64]
+    var singular_vals: List[Float64]
+    var noise_var: Float64
+
+
+def compute_covariance(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    mut mu: DeviceBuffer[DType.float32],
+    mut cov: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    n_cols: Int,
+    restore_input: Bool = True,
+) raises:
+    """Steps 1, 2, 3 and 6. The only part of PCA that scales with rows."""
+    ctx.enqueue_function[column_mean_kernel](
+        mu.unsafe_ptr(),
+        x.unsafe_ptr(),
+        Int32(n_rows),
+        Int32(n_cols),
+        grid_dim=(n_cols, 1, 1),
+        block_dim=(STATS_TPB, 1, 1),
+    )
+    var cells = n_rows * n_cols
+    ctx.enqueue_function[shift_columns_kernel](
+        x.unsafe_ptr(),
+        mu.unsafe_ptr(),
+        Int32(n_rows),
+        Int32(n_cols),
+        Float32(-1.0),
+        grid_dim=((cells + 255) // 256, 1, 1),
+        block_dim=(256, 1, 1),
+    )
+    ctx.enqueue_function[covariance_kernel](
+        cov.unsafe_ptr(),
+        x.unsafe_ptr(),
+        Int32(n_rows),
+        Int32(n_cols),
+        grid_dim=(
+            (n_cols + COV_TILE - 1) // COV_TILE,
+            (n_cols + COV_TILE - 1) // COV_TILE,
+            1,
+        ),
+        block_dim=(COV_TILE, COV_TILE, 1),
+    )
+    if restore_input:
+        # `raft::stats::meanAdd`, `detail/pca.cuh:186`. Do not drop this.
+        ctx.enqueue_function[shift_columns_kernel](
+            x.unsafe_ptr(),
+            mu.unsafe_ptr(),
+            Int32(n_rows),
+            Int32(n_cols),
+            Float32(1.0),
+            grid_dim=((cells + 255) // 256, 1, 1),
+            block_dim=(256, 1, 1),
+        )
+    ctx.synchronize()
+
+
+def pca_fit(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    mut mu: DeviceBuffer[DType.float32],
+    mut cov: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    n_cols: Int,
+    n_components: Int,
+    restore_input: Bool = True,
+) raises -> PCAResult:
+    """`pca_fit`, all six steps.
+
+    The eigen half runs on the host on an `n_cols x n_cols` matrix; see
+    `decomposition/mojo_only/jacobi_eigh.mojo` for why that is inside
+    `HOST_AND_DEVICE.md`'s rule and not an exception to it.
+    """
+    if n_cols <= 1:
+        raise Error("Parameter n_cols: number of columns cannot be less than two")
+    if n_rows <= 1:
+        raise Error("Parameter n_rows: number of rows cannot be less than two")
+    if n_components <= 0:
+        raise Error(
+            "Parameter n_components: number of components cannot be less than one"
+        )
+    if n_components > n_cols:
+        raise Error("n_components cannot exceed n_cols")
+
+    compute_covariance(ctx, x, mu, cov, n_rows, n_cols, restore_input)
+
+    var h_cov = ctx.enqueue_create_host_buffer[DType.float32](n_cols * n_cols)
+    ctx.enqueue_copy(dst_ptr=h_cov.unsafe_ptr(), src_buf=cov)
+    ctx.synchronize()
+
+    var a = List[Float64]()
+    for i in range(n_cols * n_cols):
+        a.append(Float64(h_cov.unsafe_ptr().unsafe_load(i)))
+    var vecs = List[Float64]()
+    for _i in range(n_cols * n_cols):
+        vecs.append(0.0)
+
+    jacobi_eigh(a, vecs, n_cols)
+
+    # `cal_eig` + `col_reverse`: sort DESCENDING by eigenvalue.
+    var order = List[Int]()
+    for i in range(n_cols):
+        order.append(i)
+    for i in range(n_cols):
+        for j in range(i + 1, n_cols):
+            if a[order[j] * n_cols + order[j]] > a[order[i] * n_cols + order[i]]:
+                var t = order[i]
+                order[i] = order[j]
+                order[j] = t
+
+    var total = 0.0
+    for i in range(n_cols):
+        total += a[i * n_cols + i]
+
+    var components = List[Float64]()
+    var explained_var = List[Float64]()
+    var explained_var_ratio = List[Float64]()
+    var singular_vals = List[Float64]()
+
+    for c in range(n_components):
+        var src = order[c]
+        var lam = a[src * n_cols + src]
+
+        # sign_flip: make the largest-magnitude entry positive.
+        var biggest = 0.0
+        var sign = 1.0
+        for f in range(n_cols):
+            var v = vecs[f * n_cols + src]
+            if abs(v) > abs(biggest):
+                biggest = v
+        if biggest < 0.0:
+            sign = -1.0
+
+        for f in range(n_cols):
+            components.append(sign * vecs[f * n_cols + src])
+        explained_var.append(lam)
+        explained_var_ratio.append(lam / total if total != 0.0 else 0.0)
+        # `weighted_sqrt(explained_var, n_rows - 1)`, `detail/pca.cuh:180`.
+        singular_vals.append((lam * Float64(n_rows - 1)) ** 0.5)
+
+    # `noise_vars`: the mean of the DISCARDED eigenvalues, or zero if none
+    # were discarded (`trunc_comp_exp_vars`, tail).
+    var noise = 0.0
+    if n_components < n_cols and n_components < n_rows:
+        for c in range(n_components, n_cols):
+            noise += a[order[c] * n_cols + order[c]]
+        noise /= Float64(n_cols - n_components)
+
+    return PCAResult(
+        components^, explained_var^, explained_var_ratio^, singular_vals^, noise
+    )
+
+
+def pca_transform(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    mut mu: DeviceBuffer[DType.float32],
+    mut components: DeviceBuffer[DType.float32],
+    mut out: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    n_cols: Int,
+    n_components: Int,
+) raises:
+    """`pca_transform`: center, then project onto the components.
+
+    The projection is `Xc . components^T`, which is exactly the shape
+    `core/gemm.mojo` already computes, so the transform needs no new kernel.
+    The input is centered and restored around it, same as the fit.
+    """
+    var cells = n_rows * n_cols
+    ctx.enqueue_function[shift_columns_kernel](
+        x.unsafe_ptr(),
+        mu.unsafe_ptr(),
+        Int32(n_rows),
+        Int32(n_cols),
+        Float32(-1.0),
+        grid_dim=((cells + 255) // 256, 1, 1),
+        block_dim=(256, 1, 1),
+    )
+    ctx.enqueue_function[gemm_nt_kernel](
+        out.unsafe_ptr(),
+        x.unsafe_ptr(),
+        components.unsafe_ptr(),
+        Int32(n_rows),
+        Int32(n_components),
+        Int32(n_cols),
+        grid_dim=(
+            (n_components + GEMM_TILE - 1) // GEMM_TILE,
+            (n_rows + GEMM_TILE - 1) // GEMM_TILE,
+            1,
+        ),
+        block_dim=(GEMM_TILE, GEMM_TILE, 1),
+    )
+    ctx.enqueue_function[shift_columns_kernel](
+        x.unsafe_ptr(),
+        mu.unsafe_ptr(),
+        Int32(n_rows),
+        Int32(n_cols),
+        Float32(1.0),
+        grid_dim=((cells + 255) // 256, 1, 1),
+        block_dim=(256, 1, 1),
+    )
+    ctx.synchronize()

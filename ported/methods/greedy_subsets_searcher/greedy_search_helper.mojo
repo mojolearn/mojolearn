@@ -31,6 +31,13 @@ while porting rather than read from their source:
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from ported.gpu_lib.gpu_manager import TCudaManager
+from ported.methods.greedy_subsets_searcher.split_properties_helper import (
+    HISTOGRAMS_CURRENT_PATH,
+    HISTOGRAMS_PREVIOUS_PATH,
+    HISTOGRAMS_ZEROES,
+    LeafRecord,
+    build_necessary_histograms,
+)
 from std.sys.info import size_of
 from ported.gpu_data.gpu_structures import CFeature
 
@@ -47,10 +54,11 @@ from ported.methods.greedy_subsets_searcher.kernel.hist_binary import (
     binary_hist_kernel,
 )
 from ported.methods.greedy_subsets_searcher.kernel.histogram_utils import (
+    copy_histograms_kernel,
     fixed_to_float_kernel,
-    zero_histograms_kernel,
-    write_reduces_histograms_kernel,
     scan_histograms_kernel,
+    substract_histograms_kernel,
+    write_reduces_histograms_kernel,
     zero_histograms_kernel,
 )
 from ported.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
@@ -1488,6 +1496,17 @@ def run_tree_layout(
         h_dense.unsafe_ptr().unsafe_store(i, UInt32(i))
     ctx.enqueue_copy(dst_buf=dense_ids, src_ptr=h_dense.unsafe_ptr())
 
+    # their `computeLeaves`, `bigLeaves`, `smallLeaves`
+    # (`split_properties_helper.cpp:1287-1291`)
+    var ids_compute = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+    var h_ids_compute = ctx.enqueue_create_host_buffer[DType.uint32](
+        max_leaves
+    )
+    var sub_from = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+    var sub_what = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+    var h_sub_from = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
+    var h_sub_what = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
+
     var skip = ctx.enqueue_create_buffer[DType.uint8](hist_cells_per_leaf)
     var hsk = ctx.enqueue_create_host_buffer[DType.uint8](
         hist_cells_per_leaf
@@ -1559,44 +1578,95 @@ def run_tree_layout(
     var n_live = 1
     var max_live_rows = n_rows
 
+    # their `subsets->Leaves`. The root holds every row and its histogram slot
+    # is empty, which is `EHistogramsType::Zeroes`.
+    var leaf_records = List[LeafRecord]()
+    leaf_records.append(
+        LeafRecord(UInt32(n_rows), HISTOGRAMS_ZEROES, 0, False)
+    )
+
     for depth in range(max_depth):
         # ============ ComputeOptimalSplits ============
         # their `greedy_search_helper.cpp:398`
         for i in range(n_live):
             h_ids_a.unsafe_ptr().unsafe_store(i, UInt32(i))
         ctx.enqueue_copy(dst_buf=ids_a, src_ptr=h_ids_a.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=zero_ids, src_ptr=h_ids_a.unsafe_ptr())
 
+        # their `SplitPropsHelper.BuildNecessaryHistograms(subsets)`
+        # (`split_properties_helper.cpp:1283`).
+        #
+        # THE HALVING. A level does not build `2^depth` histograms. It builds
+        # the SMALLER child of each pair and derives the larger as
+        # `parent - smaller`, because the larger's slot already holds the
+        # parent, put there by `copy_histograms_kernel` at split time (their
+        # `CopyHistogram`, `split_points.cpp:326`).
+        var plan = build_necessary_histograms(leaf_records)
+        var n_compute = len(plan.compute_ids)
+        var n_pairs = len(plan.subtract_from)
+        for i in range(n_compute):
+            h_ids_compute.unsafe_ptr().unsafe_store(i, plan.compute_ids[i])
+        ctx.enqueue_copy(
+            dst_buf=ids_compute, src_ptr=h_ids_compute.unsafe_ptr()
+        )
+        ctx.enqueue_copy(dst_buf=zero_ids, src_ptr=h_ids_compute.unsafe_ptr())
+
+        # their `ZeroLeavesHistograms(zeroLeaves, subsets)`
         ctx.enqueue_function[zero_histograms_kernel](
             zero_ids.unsafe_ptr(),
             Int32(hist_cells_per_leaf),
             hist.unsafe_ptr(),
             grid_dim=(
-                (hist_cells_per_leaf + 255) // 256, n_live, stat_count
+                (hist_cells_per_leaf + 255) // 256, n_compute, stat_count
             ),
             block_dim=(256, 1, 1),
         )
         mgr.stream_kernel()
 
-        # their `SplitPropsHelper.BuildNecessaryHistograms(subsets)`
         launch_histograms_for_blocks(
-            ctx, dblocks, depth, n_live, n_rows, stat_count, max_leaves,
+            ctx, dblocks, depth, n_compute, n_rows, stat_count, max_leaves,
             replicas, fixed_scale,
-            cindex, row_index, stats, p_off, p_sz, ids_a, dense_ids, hist,
-            acc_i32, block_hist, hist_cells_per_leaf,
+            cindex, row_index, stats, p_off, p_sz, ids_compute, dense_ids,
+            hist, acc_i32, block_hist, hist_cells_per_leaf,
         )
         mgr.stream_kernel()
 
-        # NO `fixed_to_float` here. The accumulator is converted inside
-        # `launch_histograms_for_blocks`, per block, before the bridge.
+        # their `TScanHistogramsKernel` over `*leavesGpu` (`:1262`). It runs on
+        # the leaves JUST COMPUTED and BEFORE the subtraction. A prefix sum is
+        # linear, so `scan(parent) - scan(small)` is already `scan(big)` and
+        # the derived child needs no further scan.
         ctx.enqueue_function[scan_histograms_kernel](
-            ids_a.unsafe_ptr(),
+            ids_compute.unsafe_ptr(),
             flat_first.unsafe_ptr(), flat_folds.unsafe_ptr(),
             Int32(len(fold_counts)), Int32(hist_cells_per_leaf),
             hist.unsafe_ptr(),
-            grid_dim=(1, n_live, stat_count), block_dim=(256, 1, 1),
+            grid_dim=(1, n_compute, stat_count), block_dim=(256, 1, 1),
         )
         mgr.stream_kernel()
+
+        # their `SubstractHistograms(bigLeaves, smallLeaves, subsets)`
+        # (`:1354`). `from - what`, in place, one launch for all pairs.
+        if n_pairs > 0:
+            for i in range(n_pairs):
+                h_sub_from.unsafe_ptr().unsafe_store(i, plan.subtract_from[i])
+                h_sub_what.unsafe_ptr().unsafe_store(i, plan.subtract_what[i])
+            ctx.enqueue_copy(dst_buf=sub_from, src_ptr=h_sub_from.unsafe_ptr())
+            ctx.enqueue_copy(dst_buf=sub_what, src_ptr=h_sub_what.unsafe_ptr())
+            ctx.enqueue_function[substract_histograms_kernel](
+                sub_from.unsafe_ptr(), sub_what.unsafe_ptr(),
+                Int32(hist_cells_per_leaf), hist.unsafe_ptr(),
+                grid_dim=(
+                    (hist_cells_per_leaf + 255) // 256, n_pairs, stat_count
+                ),
+                block_dim=(256, 1, 1),
+            )
+            mgr.stream_kernel()
+
+        # their `allUpdatedLeaves` loop (`:1359`)
+        var updated = plan.updated_ids()
+        for i in range(len(updated)):
+            leaf_records[Int(updated[i])].histograms_type = (
+                HISTOGRAMS_CURRENT_PATH
+            )
 
         # their `AllReduceThroughMaster(subsets->CurrentPartStats(), ...)`
         compute_partition_stats(
@@ -1712,6 +1782,25 @@ def run_tree_layout(
         )
         mgr.stream_kernel()
 
+        # their `CopyHistogram(LeafIdToSplit, RightLeafIdAfterSplit, ...)`
+        # (`split_points.cpp:326`), issued right before the partition update
+        # exactly where they issue it.
+        #
+        # The left child kept the parent's slot so it already holds the parent
+        # histogram; this puts the same histogram in the right child's slot.
+        # Both children are then `PreviousPath`, which is what lets the next
+        # level pair them and derive one by subtraction whichever is smaller.
+        ctx.enqueue_function[copy_histograms_kernel](
+            ids_b.unsafe_ptr(), ids_c.unsafe_ptr(),
+            Int32(stat_count), Int32(hist_cells_per_leaf),
+            hist.unsafe_ptr(),
+            grid_dim=(
+                (hist_cells_per_leaf * stat_count + 255) // 256, n_live, 1
+            ),
+            block_dim=(256, 1, 1),
+        )
+        mgr.stream_kernel()
+
         # their `UpdatePartitionsAfterSplit` (`split_points.cu:387`), reached
         # with NO host arithmetic in front of it because the left child kept
         # the parent's slot.
@@ -1723,6 +1812,25 @@ def run_tree_layout(
         )
         mgr.stream_kernel()
 
+        # their `SplitLeaf` (`split_properties_helper.cpp:786`):
+        #
+        #     if (leaf.HistogramsType == EHistogramsType::CurrentPath)
+        #         newLeaf.HistogramsType = EHistogramsType::PreviousPath;
+        #
+        # Both children of leaf `i` group on the parent's path, which is `i`.
+        var prev_records = leaf_records.copy()
+        leaf_records = List[LeafRecord]()
+        for _ in range(2 * n_live):
+            leaf_records.append(
+                LeafRecord(UInt32(0), HISTOGRAMS_ZEROES, 0, False)
+            )
+        for i in range(n_live):
+            var t = HISTOGRAMS_ZEROES
+            if prev_records[i].histograms_type == HISTOGRAMS_CURRENT_PATH:
+                t = HISTOGRAMS_PREVIOUS_PATH
+            leaf_records[i] = LeafRecord(UInt32(0), t, i, False)
+            leaf_records[n_live + i] = LeafRecord(UInt32(0), t, i, False)
+
         n_live = n_live * 2
         ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
 
@@ -1733,9 +1841,13 @@ def run_tree_layout(
         # on this stack.
         mgr.wait_complete()
 
+        # their `RebuildLeavesSizes` filling `Leaves[i].Size` (`:806`). The
+        # pairing rule reads these to pick the smaller child, so a stale size
+        # here silently builds the wrong one.
         max_live_rows = 1
         for i in range(n_live):
             var s = Int(h_sz.unsafe_ptr().unsafe_load(i))
+            leaf_records[i].size = UInt32(s)
             if s > max_live_rows:
                 max_live_rows = s
 

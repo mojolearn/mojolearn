@@ -296,121 +296,47 @@ assignment step is doing something other than what it says.
 | `check_convergence` (host version) | kept, unused by the fit | The device kernel beside it is what runs. The host one documents the three details in prose and is what a bring-up harness wants. Not dead by accident. |
 
 
-## Sibling subtraction: STILL UNWIRED, second attempt, one real bug extracted
+## Sibling subtraction: WIRED AND WORKING
 
-`build_necessary_histograms`, `substract_histograms_kernel` and
-`copy_histograms_kernel` are ported and the driver calls NONE of them, so
-every level builds `2^depth` histograms where CatBoost builds `2^(depth-1)`.
-**We do twice their histogram work on the dominant cost.**
+`run_tree_layout` builds the SMALLER child of each pair and derives the
+larger as `parent - smaller`, which is what CatBoost does and what this port
+had been skipping. Measured, mixed dataset:
 
-### What the second attempt DID land
+    depth 0   live 1   built 1   derived 0
+    depth 1   live 2   built 1   derived 1
+    depth 2   live 4   built 2   derived 2
+    depth 3   live 8   built 4   derived 4
 
-A real bug, found by chasing the subtraction and fixed independently of it:
-all six histogram writebacks used the LOOKED-UP leaf id where CatBoost uses
-the DENSE `blockIdx.y`. See the commit for
-`compute_hist_loop_two_stats.cuh:511` versus `:554`. Invisible under
-contiguous ids, which was every check in this tree.
+**Half the histogram work, and the tree is IDENTICAL to the full rebuild**:
+16 of 16 non-empty at depth 4, 48 of 64 at depth 6, both matching the
+rebuild exactly. That equality is the correctness evidence. Conservation is
+not: children summing to the parent is an identity under subtraction and
+cannot fail.
 
-`mojo_only/permuted_ids_check.mojo` now covers it, on BOTH load paths, and
-its reach is proved by sabotage rather than by passing:
+It took three attempts because two unrelated bugs sat underneath it, and
+both were invisible to every check that existed:
 
-    writeback at blockIdx.y            0 wrong of 3168
-    writeback at partIds[blockIdx.y]   2653 wrong of 3168
+1. the histogram writeback used the LOOKED-UP leaf id where CatBoost uses
+   the DENSE `blockIdx.y`, which only matters for a non-identity id list
+2. the one-byte kernel was replicated with no atomic to sum the partials,
+   which only matters at `replicas > 1`
 
-### What is still not understood
+Neither had anything to do with subtraction. Both were reaching real
+datasets.
 
-With the builder fixed and the permuted check green on direct AND gather, the
-wired subtraction still collapses the mixed tree to 2 non-empty leaves of 64.
-The full-rebuild control is healthy at 12 to 13 non-empty, so the fault is in
-the subtraction path specifically, not in the shared changes.
+### Timing is NOT resolved
 
-**Do not trust the level histogram dump used during that hunt.** It printed a
-zero weight histogram for a leaf that demonstrably held 2703 rows in a run
-whose tree came out healthy, so its indexing is wrong somewhere. Two
-conclusions were drawn from it before that was noticed. Any next attempt
-needs the dump itself checked against a host tally first, on a leaf whose
-answer is known.
+800k x 100 depth 6 reads 40.55 ms/tree median against 39.08 without the
+subtraction, but those are CROSS-TIME measurements and this box drifts 2-3x
+across windows, so per the standing rule they do not compare. What is
+established is the work, not the wall clock: half the histogram build for
+the same tree.
 
-### Both first suspects are now CLEARED
-
-1. `copy_histograms_kernel` is checked in isolation by
-   `mojo_only/copy_histograms_check.mojo`: hashed per-cell values, copies
-   `1 -> 5` and `3 -> 6` so the pairs are non-contiguous and out of order,
-   and it asserts the destinations match, the sources are unchanged and every
-   unnamed leaf is untouched. 0 wrong of 692, nothing disturbed.
-2. `leaf_records[i].size = ...` through a `List` subscript DOES mutate in
-   place. Verified directly. The bookkeeping is not the problem.
-
-Together with the permuted-id check passing on both load paths and the
-subtraction kernel's own check, **every kernel involved is now individually
-verified.** What is left is the DRIVER's sequencing.
-
-### RESOLVED: the one-byte kernel was being replicated without an atomic
-
-`launch_histograms_for_blocks` launched the one-byte kernel with
-`grid_dim=(replicas, n_live, stat_count)`. CatBoost replicates it too and
-sums the partials with `atomicAdd(dst + fold, val)` when `blockCount > 1`
-(`hist_one_byte.cu`, `AddToGlobalMemory`). Metal has no float atomic, and
-unlike the binary kernel this one has NO fixed-point Int32 flush ported, so
-its writeback is a plain STORE. Sixteen blocks each computed a partial
-histogram over their slice of rows and then overwrote each other.
-
-Half-byte was already launched at `grid.x = 1`. Only one-byte replicated.
-
-**This was reaching every dataset wide enough for `replicas_for` to return
-16, which is `stat_count * hist_cells_per_leaf >= 256`, so essentially every
-realistic one.** It is a correctness bug in the shipped mixed path, not
-something the subtraction introduced.
-
-Measured, at `replicas = 16`:
-
-    contiguous ids   459 of 3168 cells wrong  ->  0
-    permuted ids     577 of 3168 cells wrong  ->  0
-
-and the mixed tree went from 23 non-empty leaves at depth 6 to 48.
-
-Why every existing check missed it: `replicas_for` returns 1 below 256 cells,
-and every histogram check was narrow enough to get 1. The check now runs a
-MATRIX of `{contiguous, permuted} x {1, 16} x {direct, gather}`, because the
-two bugs found here are independent. The writeback bug needs a permuted id
-list to show; this one shows on contiguous ids and needs replication.
-
-To get the replication back, port the fixed-point flush into the one-byte
-kernel the way `hist_binary.mojo` has it. One block is correct and slower.
-
-### The hypothesis that led here, now settled
-
-`fixed_to_float_kernel` converts the accumulator to the flat histogram by
-IDENTICAL FLAT INDEX, `bin_sums[i] = acc_i32[i] / scale`. That silently
-assumes `acc_i32` is in the same layout as the flat histogram, indexed by
-LEAF ID. But the histogram kernels write their output in the BLOCK layout,
-indexed DENSELY, which is the whole point of `WriteReducesHistograms`
-existing at all.
-
-With a full contiguous build over one block the two layouts coincide and the
-identity map is right, which is why everything passes today. With a PARTIAL
-build over a non-contiguous leaf list they do not coincide, and the
-conversion would scatter each leaf's fixed-point sums into the wrong leaf's
-float slot.
-
-`fixed_to_float_kernel` has NO CatBoost counterpart, it exists only because
-Metal has no float atomic, so its layout contract was never inherited from
-anywhere and was never written down. Establish which layout `acc_i32` is
-actually in, write it in the docstring, and make the conversion respect it.
-
-Only then re-wire, and compare the derived histogram against an independent
-full rebuild CELL BY CELL. Children summing to the parent is an identity
-under subtraction and proves nothing.
-
-### Ordering facts established from their source, worth keeping
-
-- The scan runs on the leaves just COMPUTED and BEFORE the subtraction
-  (`split_properties_helper.cpp:1262` then `:1354`). A prefix sum is linear,
-  so `scan(parent) - scan(small) == scan(parent - small)`.
-- `CopyHistogram(LeafIdToSplit, RightLeafIdAfterSplit, ...)` runs at split
-  time right before the partition update (`split_points.cpp:326`).
-- Their `TSplitPointsSingleLeafKernel` proves the parent must be in BOTH
-  children's slots before the pairing can pick either as small.
+The likely reason it does not show is that the histogram is not the
+bottleneck at this shape. About 34 of 40 ms is fixed control-plane cost that
+does not scale with rows, so halving the part that does scale moves a small
+share. **An interleaved arm inside one process is the only way to settle
+it**, and that harness does not exist yet.
 
 ## Top-bin aliasing at narrow fold counts, OPEN
 
