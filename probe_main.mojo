@@ -3,6 +3,7 @@ from mojo_only.permuted_ids_check import check_permuted_leaf_ids
 from mojo_only.copy_histograms_check import check_copy_histograms
 from mojo_only.boosting_check import check_boosting_learns
 from mojo_only.binarization_check import check_binarization
+from mojo_only.reorder_check import check_reorder_one_bit
 from mojo_only.options_check import check_options
 from mojo_only.mixed_hist_probe import probe_mixed_histogram
 from mojo_only.layout_check import (
@@ -443,3 +444,7 @@ def main() raises:
     print()
     print("border selection (host, as theirs is):")
     check_binarization()
+    print()
+    print("their reorder path (SortWithoutCub):")
+    check_reorder_one_bit(20000, 37)
+    check_reorder_one_bit(513, 0)
