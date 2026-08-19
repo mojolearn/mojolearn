@@ -103,6 +103,29 @@ scikit-learn. Whether MAX's is faster is a measurement nobody has taken.
            They are NOT in the same package, which is what made the first
            search miss both.
 
+## Vendor calls that EXIST, COMPILE, and DO NOT WORK HERE
+
+Three so far, and the pattern is the same each time: the symbol resolves, the
+call typechecks, and it fails at a level the signature does not advertise.
+Recorded in full because "AVAILABLE" in the table above means *the import
+compiled* and nothing more.
+
+| call | how it fails | what we do instead |
+|---|---|---|
+| `linalg.matmul` with `transpose_a=True` | `constraint failed: transpose_a not yet supported` at compile time | `covariance_kernel`, the hand-ported contraction |
+| `linalg.matmul` with `n = 1` | returns zeros for some outputs, no error | ported contraction; RAFT calls `gemv` here anyway |
+| `linalg.transpose` on device buffers | **SIGNALS at runtime** inside `linalg::transpose::_copy_with_strides[...] rank=2, dtype=f32`, a HOST strided-copy path handed DEVICE pointers | nothing; the transpose route to the Gram shape is blocked |
+
+That third one killed the planned unblock for PCA and OLS. The identity was
+right (`Xt . Xt^T == X^T X` turns the unsupported T-N shape into the
+supported N-T one), it compiled, and it died on execution.
+`linalg.transpose` takes an `Optional[DeviceContext]`, and **accepting one is
+not the same as dispatching on it.**
+
+The remaining routes to the Gram shape, neither yet measured against the
+other: write a twenty-line device transpose kernel and then use MAX's matmul,
+or apply the register-tiling port directly to `covariance_kernel`.
+
 ## Limits of the ones we do use, both compiler-verified
 
 `linalg.matmul`:

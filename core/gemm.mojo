@@ -218,7 +218,6 @@ def gemm_nt_kernel(
 from layout import TileTensor
 from layout.tile_layout import row_major
 from linalg.matmul import matmul
-from linalg.transpose import transpose
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 
@@ -253,54 +252,46 @@ def gemm_tn(
     n: Int,
     k: Int,
 ) raises:
-    """`z[m x n] = x[k x m]^T . x[k x n]`, the Gram shape, ON THE VENDOR PATH.
+    """`z[m x n] = x[k x m]^T . x[k x n]`, the Gram shape.
 
-    MAX's matmul refuses `transpose_a`:
+    **STILL ON THE HAND-PORTED CONTRACTION. The vendor route was built,
+    compiled, and CRASHED, and that is worth more than the attempt.**
 
-        constraint failed: transpose_a not yet supported
+    The identity is right: MAX refuses `transpose_a`, but
+    `Xt . Xt^T == X^T X`, so one transpose turns the unsupported T-N shape
+    into the N-T shape MAX does support. It compiled. It then died inside
 
-    which blocked every covariance in this repository and is why PCA and OLS
-    did not move across six benchmark rounds. The way through is an identity
-    rather than a workaround:
+        linalg::transpose::_copy_with_strides[...] rank=2, dtype=f32
 
-        X is `k x m`.  Xt = transpose(X) is `m x k`.
-        Xt . Xt^T  ==  X^T X
+    with a signal, because that is a HOST strided-copy path being handed
+    DEVICE pointers. `linalg.transpose` takes an `Optional[DeviceContext]`
+    and accepting one is not the same as dispatching on it.
 
-    So one `linalg.transpose` turns the unsupported T-N shape into the N-T
-    shape MAX does support, and the product itself runs on the tuned kernel.
-    `xt` is caller-supplied scratch of `k * m` floats.
+    So `transpose` joins `matmul`'s `transpose_a` and `matmul` at `n = 1` on
+    the list of vendor calls that exist, compile, and do not do the job here.
+    All three are in `VENDOR_LIBRARIES.md` with what was tried.
 
-    This only serves the SYMMETRIC case, `X^T X`, which is the only T-N shape
-    any of these ports asks for: `raft::stats::cov`, `lstsqEig`'s first step
-    and `tsvd_fit` all pass the same matrix twice.
+    `xt` and `xt2` are kept in the signature because the shape of the fix is
+    known and only the transpose is missing. A device transpose kernel is
+    twenty lines and is the obvious next move; it just has not been measured
+    against simply register-tiling `covariance_kernel` directly, and this
+    repository does not guess between two options it can measure.
     """
-    var perms = InlineArray[Int, 2](uninitialized=True)
-    perms[0] = 1
-    perms[1] = 0
-    transpose(
-        TileTensor(xt, row_major(m, k)),
-        TileTensor(x, row_major(k, m)),
-        Pointer(to=perms[0]),
-        ctx,
+    from core.column_stats import COV_TILE, covariance_kernel
+
+    ctx.enqueue_function[covariance_kernel](
+        z.unsafe_ptr(),
+        x.unsafe_ptr(),
+        Int32(k),
+        Int32(m),
+        Float32(1.0),
+        grid_dim=(
+            (n + COV_TILE - 1) // COV_TILE,
+            (m + COV_TILE - 1) // COV_TILE,
+            1,
+        ),
+        block_dim=(COV_TILE, COV_TILE, 1),
     )
-    # `matmul` enforces the same no-aliasing rule `enqueue_function` does
-    # (PORTING.md 24), and `Xt . Xt^T` names the same buffer twice, so the
-    # transpose runs into two buffers. Two transposes rather than a transpose
-    # and a copy: identical cost, one fewer kernel to explain.
-    transpose(
-        TileTensor(xt2, row_major(m, k)),
-        TileTensor(x, row_major(k, m)),
-        Pointer(to=perms[0]),
-        ctx,
-    )
-    ctx.synchronize()
-    matmul[transpose_b=True, target="gpu"](
-        TileTensor(z, row_major(m, n)),
-        TileTensor(xt, row_major(m, k)),
-        TileTensor(xt2, row_major(n, k)),
-        ctx,
-    )
-    ctx.synchronize()
 
 
 # WHY `gemm_tn` IS NOT ON THE VENDOR PATH, AND IT IS A HARD LIMIT
