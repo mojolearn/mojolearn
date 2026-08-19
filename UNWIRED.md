@@ -376,3 +376,45 @@ dataset binned below 8 bits.
 | `pca_fit`, `pca_transform`, `covariance_kernel`, `column_mean_kernel`, `shift_columns_kernel`, `jacobi_eigh` | **REACHED AND PASSING**, `decomposition/pca_main.mojo` | Reach for the centering path is proved by an INVARIANT rather than a corruption: a +1000 column shift must change nothing, which is impossible unless both the mean and the shift kernels run. |
 | `pca_transform` | built, and its output is NOT yet checked | `pca_fit` is checked three ways; `pca_transform` compiles and is called by nothing in the checks. It reuses `core/gemm.mojo`, which is exercised elsewhere, but that is an argument and not evidence. Next check to write. |
 | `whiten`, `pca_inverse_transform` | NOT PORTED | see `decomposition/UNPORTED.tsv` |
+
+
+## The boosting check's trees always split on bin-feature 0, OPEN
+
+`boosting_check` learns and the model round-trips exactly, but every tree it
+grows picks bin-feature 0 (feature 0, bin 0) at every level and at every
+boosting iteration, no matter how the residuals move. So the model is a
+sequence of stumps on one split and the loss stalls at 57.26 against a
+mean-baseline of 66.46: it learns, but far less than it should.
+
+**It is not the argmax.** The mixed-tree path through the SAME
+`compute_optimal_splits_kernel` picks varied splits on the same run:
+
+    bf 37 -> feature 11 bin 5
+    bf 22 -> feature  9 bin 6
+    bf  8 -> feature  8 bin 0
+    bf 211 -> feature 14 bin 43
+
+So the reduction, the coverage loop and the skip mask all work. The
+difference is the data or the path, and the two candidates are:
+
+1. `boosting_check` uses SIXTEEN half-byte features at 15 folds and nothing
+   else, so `hist_cells_per_leaf` is 240 and every feature shares one policy
+   block. The mixed check spans three policies.
+2. Its weight plane is uniformly 1.0, where the other checks plant varied
+   weights. A degenerate weight plane could make the score's denominator
+   nearly constant and flatten the comparison.
+
+### Attack it in this order
+
+Run the boosting check's exact dataset through
+`mojo_only/mixed_hist_probe.mojo`, which compares each policy's histogram
+slice against a host tally. If the slice is right, the histogram is not at
+fault and the score kernel gets the same treatment on the same data. Do NOT
+reason about which split "should" win; hand-arithmetic on this got the wrong
+answer twice already this session.
+
+### What it does NOT invalidate
+
+The stop-on-repeat rule, the model round-trip and the monotone loss are all
+real and all measured. A model made of stumps still trains, stores and
+replays correctly, which is what those three assert.

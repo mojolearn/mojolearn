@@ -6,6 +6,7 @@ one wrote. A failure here is a wiring failure, which is the whole reason the
 pieces were checked separately first.
 """
 
+from ported.models.oblivious_model import TBinarySplit
 from max.gpu.host import DeviceContext
 
 from ported.gpu_data.grid_policy import (
@@ -350,10 +351,13 @@ def check_mixed_tree(max_depth: Int) raises:
     # No cursor here: growth only. `apply_to_cursor` defaults off, so this
     # buffer is never written.
     var scratch_cursor = ctx.enqueue_create_buffer[DType.float32](1)
+    var _sp = List[TBinarySplit]()
+    var _lv = List[Float32]()
     var sizes = run_tree_layout(
         ctx, n_rows, folds, max_depth, cindex, stats, row_index,
         scratch_cursor,
         Float32(tw), Float32(tg),
+        _sp, _lv,
     )
 
     var total = 0

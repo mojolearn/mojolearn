@@ -34,6 +34,7 @@ from ported.gpu_lib.gpu_manager import TCudaManager
 from ported.methods.kernel_add_model_value import (
     add_model_value_kernel,
 )
+from ported.models.oblivious_model import TBinarySplit
 from ported.methods.greedy_subsets_searcher.split_properties_helper import (
     HISTOGRAMS_CURRENT_PATH,
     HISTOGRAMS_PREVIOUS_PATH,
@@ -1383,6 +1384,8 @@ def run_tree_layout(
     mut cursor: DeviceBuffer[DType.float32],
     total_weight: Float32,
     total_gradient: Float32,
+    mut out_splits: List[TBinarySplit],
+    mut out_leaf_values: List[Float32],
     use_subtraction: Bool = True,
     apply_to_cursor: Bool = False,
     learning_rate: Float32 = Float32(0.3),
@@ -1506,6 +1509,9 @@ def run_tree_layout(
 
     # their weak model's leaf values, one per final leaf
     var leaf_values = ctx.enqueue_create_buffer[DType.float32](max_leaves)
+    var h_leaf_values = ctx.enqueue_create_host_buffer[DType.float32](
+        max_leaves
+    )
 
     # their `computeLeaves`, `bigLeaves`, `smallLeaves`
     # (`split_properties_helper.cpp:1287-1291`)
@@ -1707,6 +1713,34 @@ def run_tree_layout(
         var choice = resolve_split(layout, best_bf)
         ref cf = layout.features[choice.feature]
 
+        # their `if (structure.HasSplit(bestSplit)) { ...; break; }`
+        # (`oblivious_tree_doc_parallel_structure_searcher.cpp:134`).
+        #
+        # When the best split is one the tree ALREADY HAS, CatBoost STOPS
+        # GROWING. It does not exclude it and take the runner-up: a repeat
+        # means no candidate improved on a split whose gain is already spent,
+        # so the level below it would be pure padding.
+        #
+        # Without this the tree grows to full depth re-applying the same
+        # split. Measured on `boosting_check`: every tree came out as
+        # `(0,0) (0,0) (0,0) (0,0)`, sixteen leaves of which TWO held rows,
+        # so a depth-4 model was a stump and the loss stalled at 57.26.
+        var repeat = False
+        for i in range(len(out_splits)):
+            if (
+                out_splits[i].feature_id == Int32(choice.feature)
+                and out_splits[i].bin_idx == Int32(choice.bin)
+            ):
+                repeat = True
+        if repeat:
+            break
+
+        # their `TObliviousTreeStructure::Splits`, one entry per level
+        # (`oblivious_model.h:10`). An oblivious tree IS this list.
+        out_splits.append(
+            TBinarySplit(Int32(choice.feature), Int32(choice.bin))
+        )
+
         # ============ SplitLeaves -> MakeSplit ============
         # their `greedy_search_helper.cpp:575` and
         # `split_properties_helper.cpp:833`.
@@ -1902,6 +1936,10 @@ def run_tree_layout(
         mgr.stream_kernel()
 
         # their `AppendModels`, with `Rescale(step)` folded into the kernel.
+        ctx.enqueue_copy(
+            dst_ptr=h_leaf_values.unsafe_ptr(), src_buf=leaf_values
+        )
+
         ctx.enqueue_function[add_model_value_kernel](
             p_off.unsafe_ptr(), p_sz.unsafe_ptr(), row_index.unsafe_ptr(),
             leaf_values.unsafe_ptr(), learning_rate, cursor.unsafe_ptr(),
@@ -1911,6 +1949,11 @@ def run_tree_layout(
 
     ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
     mgr.wait_complete()
+    if apply_to_cursor:
+        # their `result[i].AddWeakModel(model)`, the half that keeps the tree
+        # rather than only its effect on the cursor.
+        for i in range(n_live):
+            out_leaf_values.append(h_leaf_values.unsafe_ptr().unsafe_load(i))
     var out = List[Int]()
     for i in range(n_live):
         out.append(Int(h_sz.unsafe_ptr().unsafe_load(i)))

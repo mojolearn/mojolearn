@@ -26,7 +26,8 @@ from ported.gpu_data.kernel.binarize import (
     WRITE_BLOCK_SIZE,
     write_compressed_index_kernel,
 )
-from ported.methods.doc_parallel_boosting import fit
+from ported.methods.doc_parallel_boosting import fit, predict
+from ported.models.oblivious_model import TAdditiveModel
 
 
 def check_boosting_learns(
@@ -102,8 +103,9 @@ def check_boosting_learns(
     ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
     ctx.synchronize()
 
+    var model = TAdditiveModel()
     var losses = fit(
-        ctx, n_rows, folds, max_depth, cindex, targets, weights, False,
+        model, ctx, n_rows, folds, max_depth, cindex, targets, weights, False,
         n_estimators, Float32(0.3), Float32(3.0),
     )
 
@@ -136,3 +138,58 @@ def check_boosting_learns(
             + " does not go back up"
         )
     print("  boosting learns: loss falls monotonically and beats the mean")
+
+    # ---- the stored model must BE the trained model ----
+    #
+    # Training updated the cursor by reading each row's leaf off the
+    # partition. Prediction walks the stored splits instead and never sees a
+    # partition. If the two disagree, the thing that was stored is not the
+    # thing that was trained, and every piece-wise check would still pass.
+    #
+    # This is also the only check that can see a reversed leaf-index bit
+    # order: reading the split bits the other way round permutes the leaves,
+    # so every total is preserved and every individual prediction is wrong.
+    print("    tree 0 structure:")
+    ref w0 = model.weak_models[0]
+    var line = String("      ")
+    for lv in range(w0.structure.get_depth()):
+        line += (
+            "(" + String(Int(w0.structure.splits[lv].feature_id)) + ","
+            + String(Int(w0.structure.splits[lv].bin_idx)) + ") "
+        )
+    print(line)
+    var nonzero = 0
+    for i in range(len(w0.leaf_values)):
+        if w0.leaf_values[i] != Float32(0.0):
+            nonzero += 1
+    print("      leaves with a non-zero value:", nonzero, "of",
+          len(w0.leaf_values))
+
+    var pred = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    predict(model, ctx, n_rows, folds, cindex, pred)
+    var hp = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
+    ctx.enqueue_copy(dst_ptr=hp.unsafe_ptr(), src_buf=pred)
+    ctx.synchronize()
+
+    var sse_pred = Float64(0.0)
+    var worst = Float64(0.0)
+    for r in range(n_rows):
+        var d = Float64(
+            ht.unsafe_ptr().unsafe_load(r) - hp.unsafe_ptr().unsafe_load(r)
+        )
+        sse_pred += d * d
+    var mse_pred = sse_pred / Float64(n_rows)
+    print("    replayed from the stored model, mse", mse_pred)
+    print("    training cursor mse            ", losses[len(losses) - 1])
+
+    var gap = mse_pred - losses[len(losses) - 1]
+    if gap < 0.0:
+        gap = -gap
+    var tol = 1.0e-3 * losses[len(losses) - 1]
+    if gap > tol:
+        raise Error(
+            String("the stored model does not reproduce the trained one: ")
+            + String(mse_pred) + " against "
+            + String(losses[len(losses) - 1])
+        )
+    print("  the stored model reproduces training to", gap, "mse")

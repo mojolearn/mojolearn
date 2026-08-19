@@ -43,10 +43,19 @@ from ported.gpu_lib.gpu_manager import TCudaManager
 from ported.methods.greedy_subsets_searcher.greedy_search_helper import (
     run_tree_layout,
 )
+from ported.models.oblivious_model import (
+    TAdditiveModel,
+    TBinarySplit,
+    TObliviousTreeModel,
+    TObliviousTreeStructure,
+)
+from ported.gpu_data.compressed_index_builder import build_layout
+from ported.models.kernel.add_bin_values import compute_bins_and_add_kernel
 from ported.targets.kernel.pointwise_targets import mse_kernel
 
 
 def fit(
+    mut model: TAdditiveModel,
     ctx: DeviceContext,
     n_rows: Int,
     fold_counts: List[Int],
@@ -97,6 +106,7 @@ def fit(
     ctx.synchronize()
 
     var losses = List[Float64]()
+    # their `TVector<TResultModel>* result`, the ensemble being built
 
     for _ in range(n_estimators):
         # `TTargetAtPointTrait::Create(learnTarget, cursor)` (`:353`).
@@ -116,13 +126,26 @@ def fit(
 
         # `optimizer.Fit(...)` then `Estimate` then `Rescale` then
         # `AppendModels`, all four inside `run_tree_layout`, in their order.
+        var splits = List[TBinarySplit]()
+        var leaf_values = List[Float32]()
         var sizes = run_tree_layout(
             ctx, n_rows, fold_counts, max_depth,
             cindex, stats, row_index, cursor,
-            Float32(0.0), Float32(0.0),
+            Float32(0.0), Float32(0.0), splits, leaf_values,
             True, True, learning_rate, l2_leaf_reg,
         )
         _ = len(sizes)
+
+        # their `result[i].AddWeakModel(iterationModels[i])` (`:398`).
+        # `Rescale(step)` is folded into `add_model_value_kernel`, so the
+        # stored values are UNSCALED and the rate is applied on the way out.
+        var structure = TObliviousTreeStructure()
+        for i in range(len(splits)):
+            structure.splits.append(splits[i])
+        var weak = TObliviousTreeModel(structure^)
+        for i in range(len(leaf_values)):
+            weak.leaf_values.append(leaf_values[i] * learning_rate)
+        model.add_weak_model(weak^)
 
         ctx.enqueue_copy(dst_ptr=h_cursor.unsafe_ptr(), src_buf=cursor)
         ctx.synchronize()
@@ -136,3 +159,79 @@ def fit(
         losses.append(sse / Float64(n_rows))
 
     return losses^
+
+
+def predict(
+    model: TAdditiveModel,
+    ctx: DeviceContext,
+    n_rows: Int,
+    fold_counts: List[Int],
+    mut cindex: DeviceBuffer[DType.uint32],
+    mut cursor: DeviceBuffer[DType.float32],
+) raises:
+    """Apply a stored ensemble by EVALUATING every tree.
+
+    Their `TAdditiveModel` prediction: sum over weak models. The learning
+    rate is already in the stored leaf values (`Rescale(step)`), so nothing
+    here reapplies it.
+
+    This is the path that works on rows the model was never grown on, which
+    the partition-based `add_model_value_kernel` cannot do. On the learn set
+    the two must agree exactly, and `boosting_check` asserts that.
+    """
+    var layout = build_layout(fold_counts)
+
+    var h_zero = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
+    for i in range(n_rows):
+        h_zero.unsafe_ptr().unsafe_store(i, Float32(0.0))
+    ctx.enqueue_copy(dst_buf=cursor, src_ptr=h_zero.unsafe_ptr())
+
+    for t in range(model.size()):
+        ref weak = model.weak_models[t]
+        var depth = weak.structure.get_depth()
+        if depth == 0:
+            continue
+
+        var d_off = ctx.enqueue_create_buffer[DType.uint32](depth)
+        var d_shift = ctx.enqueue_create_buffer[DType.uint32](depth)
+        var d_mask = ctx.enqueue_create_buffer[DType.uint32](depth)
+        var d_bin = ctx.enqueue_create_buffer[DType.uint32](depth)
+        var h_off = ctx.enqueue_create_host_buffer[DType.uint32](depth)
+        var h_shift = ctx.enqueue_create_host_buffer[DType.uint32](depth)
+        var h_mask = ctx.enqueue_create_host_buffer[DType.uint32](depth)
+        var h_bin = ctx.enqueue_create_host_buffer[DType.uint32](depth)
+        for level in range(depth):
+            ref cf = layout.features[Int(weak.structure.splits[level].feature_id)]
+            h_off.unsafe_ptr().unsafe_store(
+                level, cf.offset * UInt32(n_rows)
+            )
+            h_shift.unsafe_ptr().unsafe_store(level, cf.shift)
+            h_mask.unsafe_ptr().unsafe_store(level, cf.mask)
+            h_bin.unsafe_ptr().unsafe_store(
+                level, UInt32(Int(weak.structure.splits[level].bin_idx))
+            )
+        ctx.enqueue_copy(dst_buf=d_off, src_ptr=h_off.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d_shift, src_ptr=h_shift.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d_mask, src_ptr=h_mask.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d_bin, src_ptr=h_bin.unsafe_ptr())
+
+        var n_leaves = 1 << depth
+        var d_vals = ctx.enqueue_create_buffer[DType.float32](n_leaves)
+        var h_vals = ctx.enqueue_create_host_buffer[DType.float32](n_leaves)
+        for i in range(n_leaves):
+            var v = Float32(0.0)
+            if i < len(weak.leaf_values):
+                v = weak.leaf_values[i]
+            h_vals.unsafe_ptr().unsafe_store(i, v)
+        ctx.enqueue_copy(dst_buf=d_vals, src_ptr=h_vals.unsafe_ptr())
+
+        var wide = (n_rows + 255) // 256
+        if wide > 1024:
+            wide = 1024
+        ctx.enqueue_function[compute_bins_and_add_kernel](
+            cindex.unsafe_ptr(), d_off.unsafe_ptr(), d_shift.unsafe_ptr(),
+            d_mask.unsafe_ptr(), d_bin.unsafe_ptr(), Int32(depth),
+            d_vals.unsafe_ptr(), Int32(n_rows), cursor.unsafe_ptr(),
+            grid_dim=wide, block_dim=256,
+        )
+        ctx.synchronize()
