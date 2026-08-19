@@ -84,7 +84,26 @@ Two causes found and fixed, one remains:
 - **FIXED: the stat gather was ported and never called.** The histogram reads
   bins THROUGH the index and stats BY POSITION, so leaving the stat columns
   unpermuted pairs the right rows' bins with the wrong rows' gradients.
-- **OPEN: something still stops splitting after depth 1.** Not yet isolated.
+- **FIXED: a device-to-device copy that silently did nothing.** The driver
+  called `ctx.enqueue_copy(dst_buf=row_index, src_ptr=new_index.unsafe_ptr())`,
+  passing a DEVICE pointer where a host source is expected. Mojo's
+  `enqueue_copy` is host-to-device or device-to-host only; there is no
+  device-to-device form and no error. The gathered row index and stat columns
+  were never written back. Now a real kernel, `ported/gpu_util/copy.mojo`.
+- **OPEN: the level score is IDENTICAL from depth 1 onward**, 9237.699 on
+  feature 0 for five consecutive levels, which means the score kernel reads
+  byte-identical histograms and per-leaf stats every level.
+
+  Ruled out so far: the histogram variant (gather now used below depth 0),
+  the stat gather (now called), the device copy (now a kernel), row
+  conservation (holds at every depth), partition counts (2^depth, and the
+  non-empty count does grow 1 -> 2 -> 4). The histogram destination
+  arithmetic was re-derived by hand and agrees with the score kernel's read
+  arithmetic: leaf `i` at `i * stat_count * n_features` from both sides.
+
+  Not yet isolated. The next probe is to read one leaf's histogram back at
+  depth 1 and depth 2 and compare them directly, rather than inferring from
+  the score.
 
 **Why this matters more than the bug does:** every isolated kernel check
 passed, the end-to-end depth-0 level passed against a host calculation, and

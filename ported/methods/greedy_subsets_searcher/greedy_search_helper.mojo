@@ -49,6 +49,11 @@ from ported.methods.greedy_subsets_searcher.kernel.histogram_utils import (
 from ported.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
     BLOCK_SIZE,
 )
+from ported.gpu_util.copy import (
+    COPY_BLOCK,
+    copy_f32_kernel,
+    copy_u32_kernel,
+)
 from ported.gpu_util.partitions_reduce import (
     STATS_BLOCK,
     compute_partition_stats,
@@ -59,6 +64,11 @@ from ported.methods.greedy_subsets_searcher.kernel.split_points import (
     gather_index_in_leaves_kernel,
     split_and_make_sequence_kernel,
     update_partitions_after_split_kernel,
+)
+from ported.gpu_util.copy import (
+    COPY_BLOCK,
+    copy_f32_kernel,
+    copy_u32_kernel,
 )
 from ported.gpu_util.partitions_reduce import (
     STATS_BLOCK,
@@ -600,6 +610,17 @@ def run_tree(
         ctx.enqueue_copy(dst_ptr=hob.unsafe_ptr(), src_buf=out_bin)
         ctx.synchronize()
         var best = Int(hob.unsafe_ptr().unsafe_load(0))
+        ctx.enqueue_copy(dst_ptr=hos.unsafe_ptr(), src_buf=out_score)
+        ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
+        ctx.synchronize()
+        var live_rows = 0
+        var nonzero = 0
+        for i in range(n_live):
+            var s = Int(h_sz.unsafe_ptr().unsafe_load(i))
+            live_rows += s
+            if s > 0:
+                nonzero += 1
+        print("      d", depth, "live", n_live, "nonzero", nonzero, "rows", live_rows, "chose f", best, "score", hos.unsafe_ptr().unsafe_load(0))
         if best > n_features:
             best = 0
 
@@ -649,7 +670,13 @@ def run_tree(
             grid_dim=(wide, n_live, 1),
             block_dim=(256, 1, 1),
         )
-        ctx.enqueue_copy(dst_buf=row_index, src_ptr=new_index.unsafe_ptr())
+        ctx.enqueue_function[copy_u32_kernel](
+            row_index.unsafe_ptr(),
+            new_index.unsafe_ptr(),
+            Int32(n_rows),
+            grid_dim=wide,
+            block_dim=COPY_BLOCK,
+        )
 
         # The STAT columns are permuted too, and this kernel was ported and
         # never called until now. The histogram reads bins THROUGH the index
@@ -661,7 +688,13 @@ def run_tree(
             Int32(stat_count), Int32(n_rows),
             grid_dim=(wide, n_live, 1), block_dim=(256, 1, 1),
         )
-        ctx.enqueue_copy(dst_buf=stats, src_ptr=new_stats.unsafe_ptr())
+        ctx.enqueue_function[copy_f32_kernel](
+            stats.unsafe_ptr(),
+            new_stats.unsafe_ptr(),
+            Int32(stat_count * n_rows),
+            grid_dim=wide,
+            block_dim=COPY_BLOCK,
+        )
 
         # ---- 5. one leaf becomes two ------------------------------------
         # Children are laid out so leaf i becomes (2i, 2i+1), which is what
