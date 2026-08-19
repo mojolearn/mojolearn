@@ -128,7 +128,11 @@ k-means moved out of RAFT and into cuVS, so the mirror is two-layer:
 algorithms from cuVS into `cluster/ported/`, and the RAFT and cuBLAS
 primitives they call into `cluster/mojo_only/`. See `cluster/README.md`.
 
-**Nothing in `cluster/` has been launched yet.** See `UNWIRED.md`.
+`cluster/` is LAUNCHED and passing: 4 of 4 centroids recovered as a
+permutation, 0 of 512 rows misassigned, inertia within 0.3% of the
+analytically known value, and reach proved by two sabotages that predict
+different movements. The k-means++ init path is still unreached. See
+`cluster/README.md`.
 
 ## What is deliberately NOT here
 

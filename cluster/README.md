@@ -58,12 +58,32 @@ raises instead of quietly running classic k-means++ and reporting the
 inertia. Set `oversampling_factor = 0` for classic k-means++, which is
 ported, or `init = Random`.
 
-**Nothing here has been launched yet**, and by this tree's rule a kernel is
-not ported until it has been enqueued (`PORTING.md 9`). Every kernel in this
-section is therefore UNREACHED, not merely untested, and `UNWIRED.md` says
-so. The first job is `cluster/mojo_only/kmeans_check.mojo`, and the reach
-evidence has to be a SABOTAGE: corrupt the thing that should matter and watch
-the answer move.
+**It has now been LAUNCHED and it passes.** `cluster/kmeans_main.mojo` builds
+and runs `cluster/mojo_only/kmeans_check.mojo`:
+
+    check_reach_by_sabotage OK: centroid_norm moved 384/512 labels;
+      x_norm moved 512 distances and 0 labels, which is the predicted shape
+    check_kmeans_fit OK: 4/4 centroids matched as a permutation,
+      0/512 rows misassigned, inertia 170.703125 vs expected 171.19362
+      (rel 0.0029), 2 iterations
+
+The reach evidence is a SABOTAGE and not a digest, and the two sabotages
+predict DIFFERENT movements on purpose. Corrupting the centroid norms must
+change which centroid wins; perturbing the sample norms must change the
+distance and NOT the labels, because a per-row constant cannot move an
+argmin. A no-op passes neither. Something that merely "moves" under any
+corruption passes the first and fails the second.
+
+**The first version of the second sabotage failed, and the kernel was
+right.** It replaced the sample norms instead of offsetting them, which drove
+every expanded distance negative; their clamp then flattened all four to
+exactly 0.0 and the tie-break handed every row to centroid 0. That is a real
+property of their kernel worth knowing: the clamp is safe for the round-off
+it exists for and is not order-preserving in general.
+
+**Still unreached: the k-means++ init path.** The check initializes with
+`INIT_ARRAY` deliberately, because a check that also depends on the draw
+cannot say which half failed. `UNWIRED.md` tracks it.
 
 ## Validation
 
