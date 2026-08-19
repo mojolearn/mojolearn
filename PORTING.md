@@ -40,24 +40,33 @@ This is the first hazard the port has surfaced that is invisible in the
 original: a constant that is only correct in conjunction with a block size we
 cannot use.
 
-## 2. There are no warp-level primitives in Mojo 1.0
+## 2. WRONG, CORRECTED 2026-08-19: Mojo DOES have warp primitives
 
-CatBoost's accumulator is conflict-free by construction rather than by
-atomics. `SliceOffset()` hands each 32-lane warp its own 512-float copy and
-each group of 8 lanes its own sub-copy, and `AddPoint` rotates which feature
-a lane handles with `(threadIdx.x + i) & 7`, so within one iteration no two
-lanes of the tile touch the same slot. Between iterations it calls
-`tiled_partition<8>(this_thread_block()).sync()` -- an **8-lane barrier**.
+**This item claimed Mojo 1.0 has no warp-level primitives, only `block` and
+`barrier()`. That is false and it has been load-bearing since the first
+commit.** It justified the scan substitution in item 8, it is why RAFT's
+`select_warpsort.cuh` was ruled untranslatable, and it is repeated in the
+memory notes.
 
-Mojo 1.0 exposes only `barrier()`, which is threadgroup-wide. So the port
-widens an 8-lane sync to a 256-thread sync. **This is correct but strictly
-more expensive**, and it is the single largest known deviation in the port.
-Marked at every site as `DEVIATION: tile sync widened to block barrier`.
+The namespace is `std.gpu.primitives.warp`. Probed AVAILABLE in this
+toolchain: `shuffle_down`, `shuffle_idx`, `shuffle_xor`, `lane_id`,
+`prefix_sum`, `reduce`, `sum`, `max`, `broadcast`. Also `syncwarp` from
+`max.gpu.sync`, and block collectives from `max.gpu.primitives.block`.
 
-The one true warp SHUFFLE in the whole path is in the bin prefix scan
-(`cub::WarpScan<double>` plus `cub::ShuffleIndex<32>`,
-`histogram_utils.cu:381`, `:413`, `:423`). That one is substitutable without
-loss: a threadgroup scan computes the same values.
+The earlier searches looked under `std.gpu`, `max.gpu`, `std.gpu.block` and
+`max.gpu.block` and missed the `primitives` level in all four. Block
+primitives live under MAX and warp primitives under STD, which is why one
+search could not find both.
+
+**Deleted rather than annotated**, per the standing rule, except for this
+note recording that the claim existed and what it cost. What follows from the
+correction is re-derived in `VENDOR_LIBRARIES.md` and is NOT yet done:
+`cub::WarpScan` and `cub::ShuffleIndex` may port directly, and
+`select_warpsort.cuh` may be translatable, which matters because RAFT's own
+dispatch prefers it for every k a k-NN user asks for.
+
+**Metal's missing float `atomicAdd` is a HARDWARE limit and is untouched by
+this.** `mojo_only/fixed_point.mojo` and its overflow proof stand.
 
 ## 3. `float` accumulation, not fixed point
 
@@ -113,7 +122,15 @@ Three consequences worth stating plainly:
    ported from nothing.
 
 
-## 8. The bin prefix scan: no `cub::WarpScan`
+## 8. The bin prefix scan: `cub::WarpScan` (SEE ITEM 2, THE PREMISE WAS WRONG)
+
+**The justification below rests on item 2's claim that Mojo has no warp
+primitives. That claim was false.** `std.gpu.primitives.warp.prefix_sum` and
+`shuffle_idx` are both available, so this substitution may be unnecessary and
+the fidelity loss it describes may be avoidable. Not yet re-measured; the
+block scan is still what runs. Tracked in `VENDOR_LIBRARIES.md`.
+
+### The original entry, kept because the deviation is still in the code
 
 `ScanHistogramsImpl` scans with `cub::WarpScan<double>` and
 `cub::ShuffleIndex<32>` (`histogram_utils.cu:381`, `:413`, `:423`). Those are
