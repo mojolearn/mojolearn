@@ -35,6 +35,10 @@ reason the k-means check compares centroids as a permutation.
 
 from max.gpu.host import DeviceContext
 
+from dbscan.ported.dbscan.adjgraph.algo import (
+    SCAN_TPB,
+    exclusive_scan_kernel,
+)
 from dbscan.ported.dbscan.runner import dbscan_fit
 from dbscan.ported.sparse.detail.csr import MAX_LABEL
 
@@ -222,4 +226,73 @@ def check_dbscan_eps_sensitivity() raises:
         "check_dbscan_eps_sensitivity OK: eps=2 gives 3 clusters and eps=12"
         " gives 1, which is impossible without the neighbourhood kernel"
         " running on real distances"
+    )
+
+
+def check_exclusive_scan_beyond_the_old_cap() raises:
+    """Regression for a SILENT correctness bug, at a size no fixture reaches.
+
+    The first version of `exclusive_scan_kernel` gave each of `SCAN_TPB = 256`
+    threads a FIXED `SCAN_CHUNK = 64` rows, which caps it at 16,384. Past that
+    it stopped scanning, returned a wrong `nnz` and a truncated CSR, and
+    raised nothing.
+
+    Nothing here would have caught it: the DBSCAN fixture is 612 rows, and it
+    cannot simply be made larger because the distance matrix is `n^2` and
+    16,385 rows is a gigabyte. So this checks the SCAN ON ITS OWN, against a
+    host scan, at 20,000 entries.
+
+    The lesson generalizes past this kernel: a launch geometry that encodes a
+    maximum size needs a test at that size, or the maximum is a trapdoor.
+    """
+    var ctx = DeviceContext()
+    var n = 20000
+
+    var vd = ctx.enqueue_create_buffer[DType.int32](n)
+    var ex = ctx.enqueue_create_buffer[DType.int32](n + 1)
+    ctx.synchronize()
+
+    var hv = ctx.enqueue_create_host_buffer[DType.int32](n)
+    for i in range(n):
+        hv.unsafe_ptr().unsafe_store(i, Int32((i * 7 + 3) % 13))
+    ctx.enqueue_copy(dst_buf=vd, src_ptr=hv.unsafe_ptr())
+    ctx.synchronize()
+
+    ctx.enqueue_function[exclusive_scan_kernel](
+        ex.unsafe_ptr(),
+        vd.unsafe_ptr(),
+        Int32(n),
+        grid_dim=(1, 1, 1),
+        block_dim=(SCAN_TPB, 1, 1),
+    )
+    ctx.synchronize()
+
+    var he = ctx.enqueue_create_host_buffer[DType.int32](n + 1)
+    ctx.enqueue_copy(dst_ptr=he.unsafe_ptr(), src_buf=ex)
+    ctx.synchronize()
+
+    var running = 0
+    var wrong = 0
+    for i in range(n):
+        if Int(he.unsafe_ptr().unsafe_load(i)) != running:
+            wrong += 1
+        running += Int(hv.unsafe_ptr().unsafe_load(i))
+    var total = Int(he.unsafe_ptr().unsafe_load(n))
+
+    if wrong != 0:
+        raise Error(
+            String(wrong) + " of " + String(n)
+            + " exclusive-scan entries are wrong at n = " + String(n)
+            + ", which is past the old 16,384 cap"
+        )
+    if total != running:
+        raise Error(
+            "the scan total is " + String(total) + " against " + String(running)
+        )
+    print(
+        "check_exclusive_scan_beyond_the_old_cap OK: "
+        + String(n)
+        + " entries exact, total "
+        + String(total)
+        + ", past the 16,384 the fixed chunk size used to cap it at"
     )

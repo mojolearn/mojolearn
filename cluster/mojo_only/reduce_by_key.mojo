@@ -61,27 +61,42 @@ def accumulate_centroid_sums_kernel(
 ):
     """`reduce_rows_by_key`, as a quantized scatter-add.
 
-    Grid x strides rows, threads stride features, so consecutive threads
-    write consecutive features of one cluster and the scatter is coalesced
-    within a row.
+    **The atomic scatter-add itself is faithful, not a substitution gap.**
+    RAFT's `reduce_rows_by_key.cuh:300` also lands its contributions with a
+    global atomic add rather than a vendor segmented reduce, so there is
+    nothing here to swap `cub::DeviceSegmentedReduce` into (and that is
+    NOT FOUND anyway; see VENDOR_LIBRARIES.md). The only thing Metal changes
+    is the accumulator TYPE, which is why this is fixed point.
+
+    The indexing is theirs too: a FLAT grid-stride over `n_rows * n_features`
+    cells, matching their `gid = threadIdx.x + blockDim.x * blockIdx.x`
+    (`reduce_rows_by_key.cuh:292`). The earlier shape here strided rows on
+    grid x and features on the threads, which idles `REDUCE_BY_KEY_TPB -
+    n_features` threads of every block whenever `n_features < 128` and reads
+    `x` in short runs. Flat indexing keeps all 128 threads on 128 consecutive
+    elements of `x`.
+
+    That change cannot move a number: every `(row, feature)` cell is still
+    visited exactly once, and the accumulator is fixed point, so the sum is
+    order-independent by construction. Bit-identical, which is the only
+    reason it was safe to make without a measurement.
     """
     var n_rows = Int(n_rows_in)
     var n_features = Int(n_features_in)
+    var total = n_rows * n_features
 
-    var row = Int(block_idx.x)
-    while row < n_rows:
+    var gid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while gid < total:
+        var row = gid // n_features
+        var f = gid - row * n_features
+
         var label = Int(labels.unsafe_load(row))
         var w = weights.unsafe_load(row)
-        var base_in = row * n_features
-        var base_out = label * n_features
+        var q = Int32(x.unsafe_load(gid) * w * scale_in)
+        _ = Atomic.fetch_add(sums_i32.unsafe_offset(label * n_features + f), q)
 
-        var f = Int(thread_idx.x)
-        while f < n_features:
-            var q = Int32(x.unsafe_load(base_in + f) * w * scale_in)
-            _ = Atomic.fetch_add(sums_i32.unsafe_offset(base_out + f), q)
-            f += REDUCE_BY_KEY_TPB
-
-        row += Int(grid_dim.x)
+        gid += stride
 
 
 def accumulate_weight_per_cluster_kernel(

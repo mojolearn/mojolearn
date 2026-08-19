@@ -40,6 +40,7 @@ enough for that to matter, this is the first thing to revisit.
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.memory import AddressSpace
+from max.gpu.primitives.block import prefix_sum
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
@@ -58,41 +59,37 @@ def exclusive_scan_kernel(
     No core mask: see the module docstring for why that was wrong.
     `ex_scan[n_rows]` ends as the total `nnz`.
 
-    Single block with `SCAN_CHUNK` rows per thread: a serial pass per thread,
-    a block scan over the thread totals, then a serial pass to write out.
-    Standard, and the same shape as the scan in `select_radix.mojo`.
+    **THE CHUNK SIZE IS NOW DYNAMIC, AND THE FIXED ONE WAS A SILENT
+    CORRECTNESS BUG.** The first version used `SCAN_CHUNK = 64` rows per
+    thread against `SCAN_TPB = 256` threads, which caps the kernel at 16,384
+    rows. Past that it simply stopped scanning, produced a wrong `nnz` and a
+    truncated CSR, and raised nothing. Found by audit, not by a test: every
+    fixture in this repository is smaller than the cap.
+
+    The per-thread block scan is `max.gpu.primitives.block.prefix_sum` with
+    `exclusive=True`, which is `cub::BlockScan::ExclusiveSum`'s counterpart
+    and is what the hand-written Hillis-Steele here replaced.
     """
     var n_rows = Int(n_rows_in)
     var tid = Int(thread_idx.x)
 
-    var totals = stack_allocation[
-        SCAN_TPB,
-        Scalar[DType.int32],
-        address_space = AddressSpace.SHARED,
-    ]()
-
-    var begin = tid * SCAN_CHUNK
-    var end = min(begin + SCAN_CHUNK, n_rows)
+    var chunk = (n_rows + SCAN_TPB - 1) // SCAN_TPB
+    var begin = tid * chunk
+    var end = min(begin + chunk, n_rows)
+    if begin > n_rows:
+        begin = n_rows
+    if end < begin:
+        end = begin
 
     var sum = Int32(0)
     var i = begin
     while i < end:
         sum += vd.unsafe_load(i)
         i += 1
-    totals[tid] = sum
-    barrier()
 
-    var offset = 1
-    while offset < SCAN_TPB:
-        var addend = Int32(0)
-        if tid >= offset:
-            addend = totals[tid - offset]
-        barrier()
-        totals[tid] = totals[tid] + addend
-        barrier()
-        offset *= 2
+    var offset = prefix_sum[block_size=SCAN_TPB, exclusive=True](sum)
 
-    var running = totals[tid] - sum  # exclusive prefix for this thread
+    var running = offset
     i = begin
     while i < end:
         ex_scan.unsafe_store(i, running)
@@ -100,7 +97,7 @@ def exclusive_scan_kernel(
         i += 1
 
     if tid == SCAN_TPB - 1:
-        ex_scan.unsafe_store(n_rows, totals[SCAN_TPB - 1])
+        ex_scan.unsafe_store(n_rows, offset + sum)
 
 
 def compact_adjacency_kernel(
@@ -112,19 +109,49 @@ def compact_adjacency_kernel(
 ):
     """`adj_to_csr`: write every row's neighbor indices into its CSR slot.
 
-    Every row, not only core rows. One thread per row, so the indices come
-    out ascending where theirs come out in atomic order. See the module
-    docstring: that is a recorded deviation, not a fix.
+    **ALL THREADS NOW WORK.** The first version opened with
+    `if thread_idx.x != 0: return` and let ONE thread walk an entire row of
+    `n_cols`, which was the largest raw-parallelism loss in the port. Theirs
+    (`raft/sparse/convert/detail/adj_to_csr.cuh`) runs 512 threads per row
+    with vectorized `chunk_bool` loads and a per-row atomic counter.
+
+    Ours uses `block.prefix_sum` instead of their atomic counter, which is
+    the one deliberate difference and it BUYS something: theirs is
+    documented non-deterministic in column order, ours comes out ascending.
+    Same set, and a diffable CSR is worth more here than their last increment
+    of throughput.
     """
     var n_cols = Int(n_cols_in)
     var row = Int(block_idx.x)
     if row >= Int(n_rows_in):
         return
-    if Int(thread_idx.x) != 0:
-        return
+    var tid = Int(thread_idx.x)
+    var base = Int(ex_scan.unsafe_load(row))
 
-    var pos = Int(ex_scan.unsafe_load(row))
-    for j in range(n_cols):
-        if adj.unsafe_load(row * n_cols + j) != 0:
-            col_ind.unsafe_store(pos, Int32(j))
-            pos += 1
+    var written = stack_allocation[
+        1, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    if tid == 0:
+        written[0] = Int32(0)
+    barrier()
+
+    var c0 = 0
+    while c0 < n_cols:
+        var c = c0 + tid
+        var hit = Int32(0)
+        if c < n_cols and adj.unsafe_load(row * n_cols + c) != 0:
+            hit = Int32(1)
+        var pos = prefix_sum[block_size=SCAN_TPB, exclusive=True](hit)
+        if hit != 0:
+            col_ind.unsafe_store(
+                base + Int(written[0]) + Int(pos), Int32(c)
+            )
+        # BARRIER BEFORE THE CARRY, not only after it. Without this the last
+        # thread can advance `written[0]` while other threads are still
+        # reading it for their own store, and the CSR comes out with rows
+        # overlapping. That merged two DBSCAN blobs on the first run.
+        barrier()
+        if tid == SCAN_TPB - 1:
+            written[0] = written[0] + pos + hit
+        barrier()
+        c0 += SCAN_TPB

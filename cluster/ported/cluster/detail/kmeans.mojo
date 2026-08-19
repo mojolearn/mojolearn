@@ -583,7 +583,17 @@ def kmeans_fit_main(
                 params.batch_centroids,
             )
 
-            var acc_blocks = min(256, max(1, n_samples // 256))
+            # Sized in CELLS now, not rows: `accumulate_centroid_sums_kernel`
+            # grid-strides `n_samples * n_features` the way RAFT's
+            # `reduce_rows_by_key.cuh:292` does, rather than striding rows
+            # and features separately. A grid-stride loop is correct for any
+            # grid size, so this is a throughput knob and not a correctness
+            # one, but leaving it row-shaped would under-occupy the device
+            # whenever `n_features` is large.
+            var acc_cells = n_samples * n_features
+            var acc_blocks = min(
+                1024, max(1, (acc_cells + REDUCE_BY_KEY_TPB - 1) // REDUCE_BY_KEY_TPB)
+            )
             ctx.enqueue_function[accumulate_centroid_sums_kernel](
                 sums_i32.unsafe_ptr(),
                 x.unsafe_ptr(),

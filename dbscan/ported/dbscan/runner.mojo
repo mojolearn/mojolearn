@@ -159,7 +159,7 @@ def dbscan_fit(
         Int32(n_rows),
         Int32(n_rows),
         grid_dim=(n_rows, 1, 1),
-        block_dim=(1, 1, 1),
+        block_dim=(SCAN_TPB, 1, 1),
     )
     ctx.enqueue_function[weak_cc_init_kernel](
         labels.unsafe_ptr(),
