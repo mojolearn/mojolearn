@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If this is useful in your work, we would appreciate a citation."
+type: software
+title: "mojolearn: GPU oblivious gradient-boosted trees in Mojo"
+authors:
+  - family-names: Hendel
+    given-names: Andrew
+    alias: ajhendel
+license: Apache-2.0
+abstract: >-
+  A port of CatBoost's GPU oblivious (symmetric) tree learner into Mojo,
+  targeting Apple Silicon via Metal first, with CUDA and ROCm from the same
+  source. The tree-growing algorithm is CatBoost's; see NOTICE and
+  PORTED_MAP.tsv for what derives from their work and what does not.
+keywords:
+  - gradient boosting
+  - oblivious trees
+  - symmetric trees
+  - GPU
+  - Metal
+  - Apple Silicon
+  - Mojo

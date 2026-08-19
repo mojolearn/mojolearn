@@ -129,6 +129,15 @@ Apple and is exactly what NVIDIA and AMD would take under `determinism=off`.
 
 ## License and attribution
 
+Created and maintained by **Andrew Hendel**
+([@ajhendel](https://github.com/ajhendel)). [AUTHORS.md](AUTHORS.md) records
+who holds what, and is worth reading here specifically because most of the
+*algorithm* is CatBoost's and most of the *translation* is not.
+
+If this is useful in work you publish, we would appreciate a citation.
+[CITATION.cff](CITATION.cff) is what GitHub's **Cite this repository** button
+reads.
+
 Apache-2.0, in [LICENSE](LICENSE). [NOTICE](NOTICE) records what this derives
 from and must travel with any redistribution.
 
