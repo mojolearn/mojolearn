@@ -50,6 +50,10 @@ from ported.methods.greedy_subsets_searcher.kernel.histogram_utils import (
 from ported.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
     BLOCK_SIZE,
 )
+from ported.methods.leaves_estimation.leaves_estimation import (
+    LEAF_BLOCK,
+    compute_leaf_values_kernel,
+)
 from ported.gpu_util.copy import (
     COPY_BLOCK,
     copy_f32_kernel,
@@ -65,6 +69,10 @@ from ported.methods.greedy_subsets_searcher.kernel.split_points import (
     gather_index_in_leaves_kernel,
     split_and_make_sequence_kernel,
     update_partitions_after_split_kernel,
+)
+from ported.methods.leaves_estimation.leaves_estimation import (
+    LEAF_BLOCK,
+    compute_leaf_values_kernel,
 )
 from ported.gpu_util.copy import (
     COPY_BLOCK,
@@ -570,6 +578,11 @@ def run_tree(
     var hs4 = ctx.enqueue_create_host_buffer[DType.uint8](max_leaves)
     ctx.synchronize()
 
+    # Leaf values land here; the caller reads them through `tree_leaf_value`.
+    var h_leaf_values = ctx.enqueue_create_host_buffer[DType.float32](
+        max_leaves
+    )
+
     var n_live = 1  # leaves at the current level
 
     # THE LARGEST LIVE LEAF, tracked on the host so the grids that are sized
@@ -806,7 +819,33 @@ def run_tree(
             if s > max_live_rows:
                 max_live_rows = s
 
+    # ---- leaf values, once the structure is final ----------------------
+    # `compute_partition_stats` over the FINAL partitions, then the Newton
+    # step. The stats kernel is reused rather than a second reduction
+    # written: the layout it produces is exactly what the estimator reads.
+    for i in range(n_live):
+        h_ids_a.unsafe_ptr().unsafe_store(i, UInt32(i))
+    ctx.enqueue_copy(dst_buf=ids_a, src_ptr=h_ids_a.unsafe_ptr())
+    ctx.synchronize()
+    compute_partition_stats(
+        ctx, n_live, max_live_rows, stat_count, n_rows,
+        ids_a, p_off, p_sz, stats, stat_partials, part_stats,
+    )
+    var leaf_values = ctx.enqueue_create_buffer[DType.float32](max_leaves)
+    ctx.enqueue_function[compute_leaf_values_kernel](
+        part_stats.unsafe_ptr(),
+        Int32(stat_count),
+        Int32(n_live),
+        Float32(1.0),
+        Float32(1.0e6),
+        leaf_values.unsafe_ptr(),
+        grid_dim=(n_live + LEAF_BLOCK - 1) // LEAF_BLOCK,
+        block_dim=LEAF_BLOCK,
+    )
+    ctx.synchronize()
+
     ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
+    ctx.enqueue_copy(dst_ptr=h_leaf_values.unsafe_ptr(), src_buf=leaf_values)
     ctx.synchronize()
     var out = List[Int]()
     for i in range(n_live):

@@ -1,0 +1,19 @@
+# our_file	catboost_file	status	notes
+# CatBoost pinned at 54a8143a. `tools/check_upstream.sh` diffs each mapped
+# source against a fresh checkout and reports which of ours need attention.
+ported/gpu_data/grid_policy.mojo	catboost/cuda/gpu_data/grid_policy.h	transliterated	1/4/8 bits per feature
+ported/gpu_data/kernel/binarize.mojo	catboost/cuda/gpu_data/kernel/binarize.cu	transliterated	WriteCompressedIndexImpl only
+ported/gpu_util/gpu_data/partitions.mojo	catboost/cuda/cuda_util/gpu_data/partitions.h	transliterated	TDataPartition
+ported/gpu_util/partitions_reduce.mojo	catboost/cuda/cuda_util/partitions_reduce.h	replaced	theirs is a CUB segmented reduce
+ported/gpu_util/copy.mojo	catboost/cuda/cuda_util/	replaced	Mojo has no device-to-device enqueue_copy
+ported/methods/greedy_subsets_searcher/kernel/point_hist_half_byte_template.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/point_hist_half_byte_template.cuh	transliterated	accumulator split into slot arithmetic, see PORTING.md 10
+ported/methods/greedy_subsets_searcher/kernel/hist_binary.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/hist_binary.cu	transliterated	direct AND gather variants
+ported/methods/greedy_subsets_searcher/kernel/hist_half_byte.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/hist_half_byte.cu	transliterated	derived from hist_binary, see PORTING.md 13
+ported/methods/greedy_subsets_searcher/kernel/hist_one_byte.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/hist_one_byte.cu	transliterated	inner-bits pass loop, 5 to 8 bits
+ported/methods/greedy_subsets_searcher/kernel/histogram_utils.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/histogram_utils.cu	partial	scan, subtract, zero, copy. fixed_to_float has no counterpart
+ported/methods/greedy_subsets_searcher/kernel/compute_scores.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/compute_scores.cu	partial	L2 calcer only; no multiclass, feature weights or variance
+ported/methods/greedy_subsets_searcher/kernel/split_points.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/split_points.cu	partial+replaced	flags, gathers, partition update ported; the per-leaf CUB sort is replaced by a segmented stable partition
+ported/methods/greedy_subsets_searcher/split_properties_helper.mojo	catboost/cuda/methods/greedy_subsets_searcher/split_properties_helper.cpp	partial	BuildNecessaryHistograms classification only
+ported/methods/greedy_subsets_searcher/structure_searcher_template.mojo	catboost/cuda/methods/greedy_subsets_searcher/structure_searcher_template.h	partial	the schedule and its launch invariant
+ported/methods/greedy_subsets_searcher/greedy_search_helper.mojo	catboost/cuda/methods/greedy_subsets_searcher/greedy_search_helper.cpp	partial	ComputeOptimalSplits + SplitLeaves as one function
+ported/methods/leaves_estimation/leaves_estimation.mojo	catboost/cuda/methods/leaves_estimation/	partial	pointwise Newton step only; no descent loop, ordered, exact or backtracking
