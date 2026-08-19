@@ -1030,6 +1030,8 @@ def launch_one_byte[bits: Int](
     mut p_sz: DeviceBuffer[DType.uint32],
     mut ids: DeviceBuffer[DType.uint32],
     mut block_hist: DeviceBuffer[DType.float32],
+    mut acc_i32: DeviceBuffer[DType.int32],
+    fixed_scale: Float32,
 ) raises:
     """One one-byte launch at a comptime bit width. Direct at depth 0,
     gather below it."""
@@ -1040,9 +1042,17 @@ def launch_one_byte[bits: Int](
             Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
             Int32(base), stats.unsafe_ptr(), Int32(n_rows),
             p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
-            block_hist.unsafe_ptr(),
+            block_hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
             Int32(max_leaves), Int32(stat_count),
-            # grid.x = 1, NOT `replicas`.
+            # REPLICATION IS BACK. The one-byte kernel now has the
+            # fixed-point Int32 flush that `hist_binary.mojo` has, so
+            # replicated blocks sum their partials through an integer atomic
+            # instead of overwriting each other with a plain store.
+            #
+            # It ran at grid.x = 1 for exactly as long as that flush was
+            # missing, which was one commit. See UNWIRED.md for the
+            # measurement that forced it: 459 of 3168 cells wrong on
+            # contiguous ids at 16 replicas.
             #
             # CatBoost replicates this kernel and sums the partials with
             # `atomicAdd(dst + fold, val)` when `blockCount > 1`
@@ -1060,7 +1070,7 @@ def launch_one_byte[bits: Int](
             #
             # One block is correct and slower. Port the fixed-point flush
             # here to get the replication back.
-            grid_dim=(1, n_live, stat_count),
+            grid_dim=(replicas, n_live, stat_count),
             block_dim=(ONE_BYTE_BLOCK_SIZE, 1, 1),
         )
     else:
@@ -1071,9 +1081,17 @@ def launch_one_byte[bits: Int](
             Int32(base), row_index.unsafe_ptr(),
             stats.unsafe_ptr(), Int32(n_rows),
             p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
-            block_hist.unsafe_ptr(),
+            block_hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
             Int32(max_leaves), Int32(stat_count),
-            # grid.x = 1, NOT `replicas`.
+            # REPLICATION IS BACK. The one-byte kernel now has the
+            # fixed-point Int32 flush that `hist_binary.mojo` has, so
+            # replicated blocks sum their partials through an integer atomic
+            # instead of overwriting each other with a plain store.
+            #
+            # It ran at grid.x = 1 for exactly as long as that flush was
+            # missing, which was one commit. See UNWIRED.md for the
+            # measurement that forced it: 459 of 3168 cells wrong on
+            # contiguous ids at 16 replicas.
             #
             # CatBoost replicates this kernel and sums the partials with
             # `atomicAdd(dst + fold, val)` when `blockCount > 1`
@@ -1091,7 +1109,7 @@ def launch_one_byte[bits: Int](
             #
             # One block is correct and slower. Port the fixed-point flush
             # here to get the replication back.
-            grid_dim=(1, n_live, stat_count),
+            grid_dim=(replicas, n_live, stat_count),
             block_dim=(ONE_BYTE_BLOCK_SIZE, 1, 1),
         )
 
@@ -1245,25 +1263,25 @@ def launch_histograms_for_blocks(
                 launch_one_byte[5](
                     ctx, blk, depth, n_live, n_rows, stat_count, max_leaves,
                     replicas, line, base, cindex, row_index, stats, p_off,
-                    p_sz, ids, block_hist,
+                    p_sz, ids, block_hist, acc_i32, fixed_scale,
                 )
             elif ob == 6:
                 launch_one_byte[6](
                     ctx, blk, depth, n_live, n_rows, stat_count, max_leaves,
                     replicas, line, base, cindex, row_index, stats, p_off,
-                    p_sz, ids, block_hist,
+                    p_sz, ids, block_hist, acc_i32, fixed_scale,
                 )
             elif ob == 7:
                 launch_one_byte[7](
                     ctx, blk, depth, n_live, n_rows, stat_count, max_leaves,
                     replicas, line, base, cindex, row_index, stats, p_off,
-                    p_sz, ids, block_hist,
+                    p_sz, ids, block_hist, acc_i32, fixed_scale,
                 )
             else:
                 launch_one_byte[8](
                     ctx, blk, depth, n_live, n_rows, stat_count, max_leaves,
                     replicas, line, base, cindex, row_index, stats, p_off,
-                    p_sz, ids, block_hist,
+                    p_sz, ids, block_hist, acc_i32, fixed_scale,
                 )
 
         # THE BRIDGE. Scatter this block's slice into the flat histogram the

@@ -781,6 +781,10 @@ def bench_wide_histogram_interleaved(n_rows: Int, repeats: Int) raises:
     var s1 = List[Float64]()
     var s16 = List[Float64]()
 
+    # The replicated arm now sums its partials through the fixed-point
+    # accumulator, so this bench measures the flush as well as the loads.
+    var acc_rep = ctx.enqueue_create_buffer[DType.int32](n_features * 256)
+    ctx.synchronize()
     for rep in range(repeats + 1):
         for arm in range(2):
             var reps = 1 if arm == 0 else 16
@@ -792,7 +796,8 @@ def bench_wide_histogram_interleaved(n_rows: Int, repeats: Int) raises:
                 Int32(0),
                 stats.unsafe_ptr(), Int32(n_rows),
                 p_off.unsafe_ptr(), p_sz.unsafe_ptr(), p_ids.unsafe_ptr(),
-                sums.unsafe_ptr(), Int32(1), Int32(1),
+                sums.unsafe_ptr(), acc_rep.unsafe_ptr(), Float32(1.0),
+                Int32(1), Int32(1),
                 grid_dim=(reps, 1, 1),
                 block_dim=(ONE_BYTE_BLOCK_SIZE, 1, 1),
             )

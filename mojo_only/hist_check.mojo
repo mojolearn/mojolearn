@@ -1391,6 +1391,9 @@ def check_one_byte_bits[bits: Int](n_stats: Int = 1, rows_per_fold: Int = 10, sc
     for i in range(n_stats * group_size):
         zf.unsafe_ptr().unsafe_store(i, Float32(0.0))
     ctx.enqueue_copy(dst_buf=sums, src_ptr=zf.unsafe_ptr())
+    var acc_unused = ctx.enqueue_create_buffer[DType.int32](
+        n_stats * group_size
+    )
     ctx.synchronize()
 
     ctx.enqueue_function[one_byte_hist_kernel[bits]](
@@ -1408,6 +1411,10 @@ def check_one_byte_bits[bits: Int](n_stats: Int = 1, rows_per_fold: Int = 10, sc
         p_sz.unsafe_ptr(),
         p_ids.unsafe_ptr(),
         sums.unsafe_ptr(),
+        # grid.x is 1 here, so the fixed-point flush never engages and the
+        # accumulator is only along for the signature.
+        acc_unused.unsafe_ptr(),
+        Float32(1.0),
         Int32(1),
         Int32(n_stats),
         grid_dim=(1, 1, n_stats),

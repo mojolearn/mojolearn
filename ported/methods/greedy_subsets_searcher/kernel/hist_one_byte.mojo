@@ -43,12 +43,15 @@ asks for exactly 32,768 and keeps their per-warp slice arithmetic intact,
 since 8 warps times 1024 floats is 8192 floats.
 """
 
+from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 
 from mojo_only.kernel_matrix import (
     TARGET_COLUMN,
+    deterministic_flush_for,
     requires_uniform_iteration_for,
 )
+from mojo_only.numerics import NUMERIC_FAST, NUMERIC_IDENTICAL
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -64,6 +67,9 @@ from mojo_only.kernel_matrix import (
 #: READ FROM THE MATRIX. Theirs is 384; Apple's 32 KB over 32 floats per
 #: thread yields 256, which is exactly 32,768 bytes and keeps their per-warp
 #: slice arithmetic intact at 8 warps of 1024 floats.
+#: Same build mode as `hist_binary.mojo`; the flush follows the matrix.
+comptime BUILD_MODE = NUMERIC_FAST
+
 comptime ONE_BYTE_BLOCK_SIZE = block_size_for[K_HIST_ONE_BYTE, TARGET_COLUMN]()
 
 #: `GetHistSize()` = `BlockSize * 32`, the 32 from the matrix.
@@ -149,6 +155,8 @@ def one_byte_hist_kernel[bits: Int](
     part_size: MutPointer[UInt32, MutAnyOrigin],
     part_ids: MutPointer[UInt32, MutAnyOrigin],
     bin_sums: MutPointer[Float32, MutAnyOrigin],
+    acc_i32: MutPointer[Int32, MutAnyOrigin],
+    fixed_scale: Float32,
     leaf_count_in: Int32,
     stat_count_in: Int32,
 ):
@@ -419,6 +427,41 @@ def one_byte_hist_kernel[bits: Int](
             var val = smem[fid * hist_size_bins + fold]
 
             if abs(val) > Float32(1e-20):
+                # `AddToGlobalMemory`, their multi-block branch:
+                #
+                #     if (blockCount > 1) { atomicAdd(dst + fold, val); }
+                #     else               { dst[fold] = val; }
+                #
+                # DEVIATION (numerics.mojo, same as `hist_binary.mojo`):
+                # Metal has no float atomic, so replicated blocks sum as
+                # Int32 through an integer atomic, which is associative and
+                # therefore reproducible run to run.
+                #
+                # Until this existed the kernel took the plain store on BOTH
+                # branches, so replicating it left one block's partial
+                # histogram standing and threw the other fifteen away. See
+                # UNWIRED.md.
+                comptime det = deterministic_flush_for[
+                    TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
+                ]()
+                if det and active_block_count > 1:
+                    var q = Int32(val * fixed_scale)
+                    _ = Atomic.fetch_add(
+                        acc_i32.unsafe_offset(
+                            device_offset
+                            + Int(block_idx.y) * entries_per_leaf
+                            + Int(block_idx.z) * group_size
+                            + Int(
+                                feature_fold_offset.unsafe_load(
+                                    feature_offset + fid
+                                )
+                            )
+                            + fold
+                        ),
+                        q,
+                    )
+                    continue
+
                 # DEVIATION (numerics.mojo): CatBoost uses atomicAdd when
                 # blockCount > 1 and a plain store otherwise. The atomic is
                 # order-nondeterministic and is what `NUMERIC_IDENTICAL`
@@ -445,6 +488,8 @@ def one_byte_hist_gather_kernel[bits: Int](
     part_size: MutPointer[UInt32, MutAnyOrigin],
     part_ids: MutPointer[UInt32, MutAnyOrigin],
     bin_sums: MutPointer[Float32, MutAnyOrigin],
+    acc_i32: MutPointer[Int32, MutAnyOrigin],
+    fixed_scale: Float32,
     leaf_count_in: Int32,
     stat_count_in: Int32,
 ):
@@ -720,6 +765,41 @@ def one_byte_hist_gather_kernel[bits: Int](
             var val = smem[fid * hist_size_bins + fold]
 
             if abs(val) > Float32(1e-20):
+                # `AddToGlobalMemory`, their multi-block branch:
+                #
+                #     if (blockCount > 1) { atomicAdd(dst + fold, val); }
+                #     else               { dst[fold] = val; }
+                #
+                # DEVIATION (numerics.mojo, same as `hist_binary.mojo`):
+                # Metal has no float atomic, so replicated blocks sum as
+                # Int32 through an integer atomic, which is associative and
+                # therefore reproducible run to run.
+                #
+                # Until this existed the kernel took the plain store on BOTH
+                # branches, so replicating it left one block's partial
+                # histogram standing and threw the other fifteen away. See
+                # UNWIRED.md.
+                comptime det = deterministic_flush_for[
+                    TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
+                ]()
+                if det and active_block_count > 1:
+                    var q = Int32(val * fixed_scale)
+                    _ = Atomic.fetch_add(
+                        acc_i32.unsafe_offset(
+                            device_offset
+                            + Int(block_idx.y) * entries_per_leaf
+                            + Int(block_idx.z) * group_size
+                            + Int(
+                                feature_fold_offset.unsafe_load(
+                                    feature_offset + fid
+                                )
+                            )
+                            + fold
+                        ),
+                        q,
+                    )
+                    continue
+
                 # DEVIATION (numerics.mojo): CatBoost uses atomicAdd when
                 # blockCount > 1 and a plain store otherwise. The atomic is
                 # order-nondeterministic and is what `NUMERIC_IDENTICAL`
