@@ -36,6 +36,9 @@ from catboost.cuda.gpu_data.kernel.binarize import (
 from catboost.cuda.methods.greedy_subsets_searcher.kernel.hist_binary import (
     binary_hist_kernel,
 )
+from catboost.cuda.methods.greedy_subsets_searcher.kernel.compute_scores import (
+    compute_optimal_splits_kernel,
+)
 from catboost.cuda.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     scan_histograms_kernel,
     substract_histograms_kernel,
@@ -620,3 +623,145 @@ def check_scan() raises:
     if wrong != 0:
         raise Error("the bin scan is wrong")
     print("  scan is per-feature and does not cross the boundary")
+
+
+def check_scores() raises:
+    """The score kernel picks the split a hand calculation picks.
+
+    Two leaves, four candidate bin-features, one gradient stat plus the
+    weight plane, `lambda_l2 = 1.0`. Histograms are the POST-SCAN cumulative
+    left-side sums the kernel expects, and `part_stats` holds each leaf's
+    totals so the right side is derived as `total - left`.
+
+    The candidate values are chosen so one split is unambiguously best and
+    the winner is not the first or the last slot, which is what catches an
+    argmax that returns an edge by accident. Expected winner is bin-feature
+    2, where both leaves split cleanly into halves.
+
+    An oblivious level scores ONE split across ALL its leaves, so the score
+    is the sum over leaves. That summation is what makes the leaf loop
+    serial inside the thread and needs no cross-thread reduction.
+    """
+    var ctx = DeviceContext()
+    var n_bf = 4
+    var n_leaves = 2
+    var stat_count = 2  # [weight, gradient]
+    var lambda_l2 = Float32(1.0)
+
+    # histograms[leaf * stat_count * n_bf + stat * n_bf + bf]
+    var hist = ctx.enqueue_create_buffer[DType.float32](
+        n_leaves * stat_count * n_bf
+    )
+    var h = ctx.enqueue_create_host_buffer[DType.float32](
+        n_leaves * stat_count * n_bf
+    )
+    # Leaf totals: weight 100, gradient 20 for leaf 0; 80 and -12 for leaf 1.
+    var tot_w = List[Float32]()
+    tot_w.append(100.0)
+    tot_w.append(80.0)
+    var tot_g = List[Float32]()
+    tot_g.append(20.0)
+    tot_g.append(-12.0)
+
+    # left-side weight per (leaf, bf), and left-side gradient.
+    var lw = List[Float32]()
+    var lg = List[Float32]()
+    # leaf 0
+    lw.append(10.0); lg.append(1.0)     # bf0: lopsided, tiny gain
+    lw.append(90.0); lg.append(18.0)    # bf1: lopsided the other way
+    lw.append(50.0); lg.append(19.0)    # bf2: even split, gradient concentrated
+    lw.append(50.0); lg.append(10.0)    # bf3: even split, gradient split evenly
+    # leaf 1
+    lw.append(8.0);  lg.append(-1.0)
+    lw.append(72.0); lg.append(-11.0)
+    lw.append(40.0); lg.append(-11.5)
+    lw.append(40.0); lg.append(-6.0)
+
+    for leaf in range(n_leaves):
+        for bf in range(n_bf):
+            h.unsafe_ptr().unsafe_store(
+                leaf * stat_count * n_bf + 0 * n_bf + bf, lw[leaf * n_bf + bf]
+            )
+            h.unsafe_ptr().unsafe_store(
+                leaf * stat_count * n_bf + 1 * n_bf + bf, lg[leaf * n_bf + bf]
+            )
+    ctx.enqueue_copy(dst_buf=hist, src_ptr=h.unsafe_ptr())
+
+    var part_stats = ctx.enqueue_create_buffer[DType.float32](
+        n_leaves * stat_count
+    )
+    var hp = ctx.enqueue_create_host_buffer[DType.float32](
+        n_leaves * stat_count
+    )
+    for leaf in range(n_leaves):
+        hp.unsafe_ptr().unsafe_store(leaf * stat_count + 0, tot_w[leaf])
+        hp.unsafe_ptr().unsafe_store(leaf * stat_count + 1, tot_g[leaf])
+    ctx.enqueue_copy(dst_buf=part_stats, src_ptr=hp.unsafe_ptr())
+
+    var skip = ctx.enqueue_create_buffer[DType.uint8](n_bf)
+    var hs = ctx.enqueue_create_host_buffer[DType.uint8](n_bf)
+    for i in range(n_bf):
+        hs.unsafe_ptr().unsafe_store(i, UInt8(0))
+    ctx.enqueue_copy(dst_buf=skip, src_ptr=hs.unsafe_ptr())
+
+    var part_ids = ctx.enqueue_create_buffer[DType.uint32](n_leaves)
+    var hi = ctx.enqueue_create_host_buffer[DType.uint32](n_leaves)
+    for i in range(n_leaves):
+        hi.unsafe_ptr().unsafe_store(i, UInt32(i))
+    ctx.enqueue_copy(dst_buf=part_ids, src_ptr=hi.unsafe_ptr())
+
+    var out_score = ctx.enqueue_create_buffer[DType.float32](1)
+    var out_bin = ctx.enqueue_create_buffer[DType.uint32](1)
+    ctx.synchronize()
+
+    ctx.enqueue_function[compute_optimal_splits_kernel](
+        skip.unsafe_ptr(),
+        Int32(n_bf),
+        hist.unsafe_ptr(),
+        part_stats.unsafe_ptr(),
+        Int32(stat_count),
+        part_ids.unsafe_ptr(),
+        Int32(n_leaves),
+        lambda_l2,
+        out_score.unsafe_ptr(),
+        out_bin.unsafe_ptr(),
+        grid_dim=(1, 1, 1),
+        block_dim=(128, 1, 1),
+    )
+    ctx.synchronize()
+
+    var hos = ctx.enqueue_create_host_buffer[DType.float32](1)
+    var hob = ctx.enqueue_create_host_buffer[DType.uint32](1)
+    ctx.enqueue_copy(dst_ptr=hos.unsafe_ptr(), src_buf=out_score)
+    ctx.enqueue_copy(dst_ptr=hob.unsafe_ptr(), src_buf=out_bin)
+    ctx.synchronize()
+
+    # The same sum the kernel forms, on the host, in Float64.
+    var best_bf = -1
+    var best = -1.0
+    for bf in range(n_bf):
+        var s = 0.0
+        for leaf in range(n_leaves):
+            var wl = Float64(lw[leaf * n_bf + bf])
+            var gl = Float64(lg[leaf * n_bf + bf])
+            var wr = Float64(tot_w[leaf]) - wl
+            var gr = Float64(tot_g[leaf]) - gl
+            s += gl * gl / (wl + 1.0) + gr * gr / (wr + 1.0)
+        print("    bf", bf, "host score", s)
+        if s > best:
+            best = s
+            best_bf = bf
+
+    print("  device picked bin-feature", Int(hob.unsafe_ptr().unsafe_load(0)),
+          "score", hos.unsafe_ptr().unsafe_load(0))
+    print("  host says best is bin-feature", best_bf, "score", best)
+    if Int(hob.unsafe_ptr().unsafe_load(0)) != best_bf:
+        raise Error(
+            "the score kernel picked "
+            + String(Int(hob.unsafe_ptr().unsafe_load(0)))
+            + " but the hand calculation says "
+            + String(best_bf)
+        )
+    if abs(Float64(hos.unsafe_ptr().unsafe_load(0)) - best) > 1e-2:
+        raise Error("the winning score disagrees with the hand calculation")
+    print("  score kernel agrees with the hand calculation")
