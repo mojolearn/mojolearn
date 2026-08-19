@@ -17,6 +17,7 @@ from max.gpu.host import DeviceContext
 
 from catboost.cuda.methods.greedy_subsets_searcher.kernel.compute_scores import compute_optimal_splits_kernel
 from catboost.cuda.methods.greedy_subsets_searcher.kernel.hist_binary import binary_hist_kernel
+from catboost.cuda.methods.greedy_subsets_searcher.kernel.split_points import split_and_make_sequence_kernel
 from catboost.cuda.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     scan_histograms_kernel,
     substract_histograms_kernel,
@@ -106,6 +107,37 @@ def probe() raises:
         block_dim=(512, 1, 1),
     )
     print("  binary_hist            enqueued")
+
+    var ci = ctx.enqueue_create_buffer[DType.uint32](4096)
+    var li = ctx.enqueue_create_buffer[DType.uint32](4096)
+    var spo = ctx.enqueue_create_buffer[DType.uint32](64)
+    var sps = ctx.enqueue_create_buffer[DType.uint32](64)
+    var spm = ctx.enqueue_create_buffer[DType.uint32](64)
+    var sph = ctx.enqueue_create_buffer[DType.uint8](64)
+    var spb = ctx.enqueue_create_buffer[DType.uint32](64)
+    var sfl = ctx.enqueue_create_buffer[DType.uint8](4096)
+    var idx = ctx.enqueue_create_buffer[DType.uint32](4096)
+    var lids = ctx.enqueue_create_buffer[DType.uint32](64)
+    var poff = ctx.enqueue_create_buffer[DType.uint32](64)
+    var psz = ctx.enqueue_create_buffer[DType.uint32](64)
+
+    ctx.enqueue_function[split_and_make_sequence_kernel](
+        ci.unsafe_ptr(),
+        li.unsafe_ptr(),
+        poff.unsafe_ptr(),
+        psz.unsafe_ptr(),
+        lids.unsafe_ptr(),
+        spo.unsafe_ptr(),
+        sps.unsafe_ptr(),
+        spm.unsafe_ptr(),
+        sph.unsafe_ptr(),
+        spb.unsafe_ptr(),
+        sfl.unsafe_ptr(),
+        idx.unsafe_ptr(),
+        grid_dim=(1, 2, 1),
+        block_dim=(512, 1, 1),
+    )
+    print("  split_and_make_seq     enqueued")
 
     ctx.synchronize()
     print("all ported kernels enqueued and the queue drained")
