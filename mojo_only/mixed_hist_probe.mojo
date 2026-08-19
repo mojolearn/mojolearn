@@ -24,17 +24,17 @@ from ported.methods.greedy_subsets_searcher.greedy_search_helper import (
 )
 
 
-def probe_mixed_histogram() raises:
+def probe_mixed_histogram(binary: Int = 8, half: Int = 4, one: Int = 4) raises:
     var ctx = DeviceContext()
     var n_rows = 2048
     var stat_count = 2
 
     var folds = List[Int]()
-    for _ in range(8):
+    for _ in range(binary):
         folds.append(1)
-    for _ in range(4):
+    for _ in range(half):
         folds.append(8)
-    for _ in range(4):
+    for _ in range(one):
         folds.append(64)
     var n_features = len(folds)
 

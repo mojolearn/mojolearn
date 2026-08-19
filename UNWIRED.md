@@ -154,9 +154,25 @@ mixed path uses (4 features, 64 folds, 6 bits, 2 planes), so the defect is in
 the mixed SETUP around it rather than in the kernel.
 
 Excluded so far: the compressed-index base, the missing bridge kernel, the
-duplicated bridge, the bit width, the stat count. What remains distinctive
-about the one-byte block in the mixed path: it is the THIRD block, at column
-2, and the only one whose per-feature fold count (64) differs from its block
-total (256). The next probe should compare the block-local histogram
-(`block_hist`) against a host tally BEFORE the bridge runs, which separates a
-bad accumulation from a bad scatter.
+duplicated bridge, the bit width, the stat count.
+
+**AND CROSS-BLOCK INTERFERENCE IS NOW EXCLUDED TOO.** The probe takes a
+per-policy feature count, and one-byte features ALONE fail: 3 of 4 wrong with
+no binary or half-byte block present. Binary alone and half-byte alone are
+exact.
+
+So the target is the one-byte block's own setup in the probe path, and the
+contradiction is sharp: the standalone `check_one_byte_bits[6](2)` passes
+with what appear to be identical parameters, 4 features of 64 folds at 6 bits
+with 2 stat planes, the same shifts, fold offsets and group size. The
+remaining differences are small and enumerable:
+
+  - the probe uses 2048 rows against the standalone's 640, which is 4
+    iterations of the accumulation loop rather than 2
+  - the probe passes `leaf_count = 2` where the standalone passes 1, though
+    `device_offset = group_offset * stat_count * leaf_count` is 0 either way
+    since `group_offset` is 0
+
+Next: run `check_one_byte_bits[6](2)` at 2048 rows. If it fails, the kernel
+has a row-count-dependent defect and the standalone check's 640 rows were
+hiding it; if it passes, the difference is in the probe's setup.
