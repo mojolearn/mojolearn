@@ -8,8 +8,8 @@ ported/gpu_util/partitions_reduce.mojo	catboost/cuda/cuda_util/partitions_reduce
 ported/gpu_util/copy.mojo	catboost/cuda/cuda_util/	replaced	Mojo has no device-to-device enqueue_copy
 ported/methods/greedy_subsets_searcher/kernel/point_hist_half_byte_template.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/point_hist_half_byte_template.cuh	transliterated	accumulator split into slot arithmetic, see PORTING.md 10
 ported/methods/greedy_subsets_searcher/kernel/hist_binary.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/hist_binary.cu	transliterated	direct AND gather variants
-ported/methods/greedy_subsets_searcher/kernel/hist_half_byte.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/hist_half_byte.cu	transliterated	derived from hist_binary, see PORTING.md 13
-ported/methods/greedy_subsets_searcher/kernel/hist_one_byte.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/hist_one_byte.cu	transliterated	inner-bits pass loop, 5 to 8 bits
+ported/methods/greedy_subsets_searcher/kernel/hist_half_byte.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/hist_half_byte.cu	transliterated	direct AND gather variants; derived from hist_binary, see PORTING.md 13
+ported/methods/greedy_subsets_searcher/kernel/hist_one_byte.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/hist_one_byte.cu	transliterated	direct AND gather variants; inner-bits pass loop, 5 to 8 bits
 ported/methods/greedy_subsets_searcher/kernel/histogram_utils.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/histogram_utils.cu	partial	scan, subtract, zero, copy. fixed_to_float has no counterpart
 ported/methods/greedy_subsets_searcher/kernel/compute_scores.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/compute_scores.cu	partial	L2 calcer only; no multiclass, feature weights or variance
 ported/methods/greedy_subsets_searcher/kernel/split_points.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/split_points.cu	partial+replaced	flags, gathers, partition update ported; the per-leaf CUB sort is replaced by a segmented stable partition

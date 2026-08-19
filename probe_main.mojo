@@ -14,6 +14,7 @@ from mojo_only.level_bench import (
 from mojo_only.pack_check import check_packing
 from mojo_only.hist_check import (
     check_binary_histogram,
+    check_gather_matches_direct,
     check_half_byte_histogram,
     check_one_byte_bits,
     check_scan,
@@ -306,6 +307,7 @@ def main() raises:
     print()
     print("binary histogram correctness (GPU):")
     check_binary_histogram()
+    check_gather_matches_direct()
     check_two_partitions()
     check_half_byte_histogram()
     check_one_byte_bits[5]()

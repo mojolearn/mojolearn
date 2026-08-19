@@ -39,6 +39,7 @@ from ported.gpu_data.kernel.binarize import (
     write_compressed_index_kernel,
 )
 from ported.methods.greedy_subsets_searcher.kernel.hist_binary import (
+    binary_hist_gather_kernel,
     binary_hist_kernel,
 )
 from ported.methods.greedy_subsets_searcher.kernel.split_points import (
@@ -1414,3 +1415,147 @@ def check_one_byte_bits[bits: Int]() raises:
     if wrong != 0:
         raise Error("the one-byte histogram is wrong")
     print("  one-byte at", bits, "bits computes the right answer")
+
+
+def check_gather_matches_direct() raises:
+    """A gather histogram with a permuted index equals the direct one.
+
+    The gather kernels read `cindex[indices[position]]` where the direct ones
+    read `bins[position]`. With the IDENTITY index the two must agree exactly.
+    With a REVERSED index they must STILL agree, because a histogram is a sum
+    over a set of rows and does not care what order they are visited in.
+
+    That second case is the one worth having: it is the only check here that
+    would catch a gather kernel which reads the index but then indexes the
+    bins by position anyway, which is exactly the bug the multi-level tree hit
+    and took three rounds to find.
+    """
+    var ctx = DeviceContext()
+    var acc_scratch = ctx.enqueue_create_buffer[DType.int32](8192)
+    var n_rows = 1024
+    var n_features = features_per_int(POLICY_BINARY)
+
+    var cindex = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+    var z = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
+    for i in range(n_rows):
+        z.unsafe_ptr().unsafe_store(i, UInt32(0))
+    ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
+    ctx.synchronize()
+
+    var hb = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
+    var bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
+    for f in range(n_features):
+        for r in range(n_rows):
+            var x = UInt32(r * 2654435761 + f * 40503 + 0x2545F491)
+            x ^= x << 13
+            x ^= x >> 17
+            x ^= x << 5
+            hb.unsafe_ptr().unsafe_store(r, UInt8(Int(x & 1)))
+        ctx.enqueue_copy(dst_buf=bins, src_ptr=hb.unsafe_ptr())
+        ctx.enqueue_function[write_compressed_index_kernel](
+            Int32(0), policy_mask(POLICY_BINARY),
+            UInt32(policy_shift(POLICY_BINARY, f)),
+            bins.unsafe_ptr(), Int32(n_rows), cindex.unsafe_ptr(),
+            grid_dim=(n_rows + WRITE_BLOCK_SIZE - 1) // WRITE_BLOCK_SIZE,
+            block_dim=WRITE_BLOCK_SIZE,
+        )
+        ctx.synchronize()
+
+    var stats = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    var hs = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
+    for r in range(n_rows):
+        hs.unsafe_ptr().unsafe_store(r, Float32(1.0))
+    ctx.enqueue_copy(dst_buf=stats, src_ptr=hs.unsafe_ptr())
+
+    var p_off = ctx.enqueue_create_buffer[DType.uint32](1)
+    var p_sz = ctx.enqueue_create_buffer[DType.uint32](1)
+    var p_ids = ctx.enqueue_create_buffer[DType.uint32](1)
+    var a = ctx.enqueue_create_host_buffer[DType.uint32](1)
+    var b = ctx.enqueue_create_host_buffer[DType.uint32](1)
+    var c = ctx.enqueue_create_host_buffer[DType.uint32](1)
+    a.unsafe_ptr().unsafe_store(0, UInt32(0))
+    b.unsafe_ptr().unsafe_store(0, UInt32(n_rows))
+    c.unsafe_ptr().unsafe_store(0, UInt32(0))
+    ctx.enqueue_copy(dst_buf=p_off, src_ptr=a.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=p_sz, src_ptr=b.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=p_ids, src_ptr=c.unsafe_ptr())
+
+    var folds = ctx.enqueue_create_buffer[DType.uint32](n_features)
+    var fold_off = ctx.enqueue_create_buffer[DType.uint32](n_features)
+    var grp_off = ctx.enqueue_create_buffer[DType.uint32](n_features)
+    var grp_sz = ctx.enqueue_create_buffer[DType.uint32](n_features)
+    var q1 = ctx.enqueue_create_host_buffer[DType.uint32](n_features)
+    var q2 = ctx.enqueue_create_host_buffer[DType.uint32](n_features)
+    var q3 = ctx.enqueue_create_host_buffer[DType.uint32](n_features)
+    var q4 = ctx.enqueue_create_host_buffer[DType.uint32](n_features)
+    for f in range(n_features):
+        q1.unsafe_ptr().unsafe_store(f, UInt32(1))
+        q2.unsafe_ptr().unsafe_store(f, UInt32(f))
+        q3.unsafe_ptr().unsafe_store(f, UInt32(0))
+        q4.unsafe_ptr().unsafe_store(f, UInt32(n_features))
+    ctx.enqueue_copy(dst_buf=folds, src_ptr=q1.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=fold_off, src_ptr=q2.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=grp_off, src_ptr=q3.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=grp_sz, src_ptr=q4.unsafe_ptr())
+
+    var sums = ctx.enqueue_create_buffer[DType.float32](n_features)
+    var zf = ctx.enqueue_create_host_buffer[DType.float32](n_features)
+    for i in range(n_features):
+        zf.unsafe_ptr().unsafe_store(i, Float32(0.0))
+
+    var idx = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+    var hidx = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
+    var out = ctx.enqueue_create_host_buffer[DType.float32](n_features)
+
+    # direct
+    ctx.enqueue_copy(dst_buf=sums, src_ptr=zf.unsafe_ptr())
+    ctx.synchronize()
+    ctx.enqueue_function[binary_hist_kernel](
+        folds.unsafe_ptr(), fold_off.unsafe_ptr(), grp_off.unsafe_ptr(),
+        grp_sz.unsafe_ptr(), Int32(n_features), cindex.unsafe_ptr(),
+        Int32(n_rows), stats.unsafe_ptr(), Int32(n_rows),
+        p_off.unsafe_ptr(), p_sz.unsafe_ptr(), p_ids.unsafe_ptr(),
+        sums.unsafe_ptr(), acc_scratch.unsafe_ptr(), Float32(1.0),
+        Int32(1), Int32(1),
+        grid_dim=(1, 1, 1), block_dim=(BLOCK_SIZE, 1, 1),
+    )
+    ctx.synchronize()
+    ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=sums)
+    ctx.synchronize()
+    var direct = List[Float32]()
+    for f in range(n_features):
+        direct.append(out.unsafe_ptr().unsafe_load(f))
+
+    var bad = 0
+    for which in range(2):
+        for r in range(n_rows):
+            if which == 0:
+                hidx.unsafe_ptr().unsafe_store(r, UInt32(r))
+            else:
+                hidx.unsafe_ptr().unsafe_store(r, UInt32(n_rows - 1 - r))
+        ctx.enqueue_copy(dst_buf=idx, src_ptr=hidx.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=sums, src_ptr=zf.unsafe_ptr())
+        ctx.synchronize()
+        ctx.enqueue_function[binary_hist_gather_kernel](
+            folds.unsafe_ptr(), fold_off.unsafe_ptr(), grp_off.unsafe_ptr(),
+            grp_sz.unsafe_ptr(), Int32(n_features), cindex.unsafe_ptr(),
+            Int32(n_rows), idx.unsafe_ptr(), stats.unsafe_ptr(),
+            Int32(n_rows), p_off.unsafe_ptr(), p_sz.unsafe_ptr(),
+            p_ids.unsafe_ptr(), sums.unsafe_ptr(), acc_scratch.unsafe_ptr(),
+            Float32(1.0), Int32(1), Int32(1),
+            grid_dim=(1, 1, 1), block_dim=(BLOCK_SIZE, 1, 1),
+        )
+        ctx.synchronize()
+        ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=sums)
+        ctx.synchronize()
+        var label = "identity" if which == 0 else "reversed"
+        var wrong = 0
+        for f in range(n_features):
+            if abs(out.unsafe_ptr().unsafe_load(f) - direct[f]) > Float32(1e-3):
+                wrong += 1
+        print("    gather with", label, "index vs direct: wrong", wrong)
+        bad += wrong
+
+    if bad != 0:
+        raise Error("the gather histogram disagrees with the direct one")
+    print("  gather matches direct under identity AND permutation")
