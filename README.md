@@ -53,6 +53,33 @@ GPU, pointwise objectives.
 | in-leaf reorder after a split | `.../split_points.cu` | `src/split_points.mojo` |
 | the level loop | `methods/greedy_subsets_searcher/structure_searcher_template.h`, `split_properties_helper.cpp` | `src/searcher.mojo` |
 
+## The one thing here that is NOT a port: `src/numerics.mojo`
+
+CatBoost ships one GPU backend and accepts a non-deterministic answer: its
+histogram flushes through `atomicAdd` on `float`, so two runs of the same fit
+on the same device can differ in the last bits. We ship Metal, CUDA and HIP
+from one source, so we need "the same fit gives the same model" to be
+available.
+
+The design is a two-column table. Every backend row is classified by ONE
+question: **does it change the sequence or the precision of the arithmetic?**
+Rows that do are NUMERIC and `IDENTICAL` pins them to a safe column; rows
+that do not are SCHEDULING and every backend picks freely in both modes. So
+geometry runs at full per-backend speed always, and identity costs only the
+named subset.
+
+**The classification is not "numerics versus scheduling", and that
+distinction is the whole point.** A block count is a summation order. A
+replication factor is a summation order. Both look like scheduling and both
+are numeric. Getting this axis wrong is not hypothetical: mojotrees shipped a
+wrong bit-identity claim on exactly that mistake, because
+`AccumulationPlan.row_blocks` reads as a schedule and moves bits.
+
+Two things escape the table and are handled in source rather than
+configured: floating-point atomics are order-nondeterministic run to run, so
+`IDENTICAL` REPLACES the accumulator rather than configuring it; and FMA
+contraction is a codegen decision a runtime row cannot reach.
+
 ## What is deliberately NOT here
 
 No CPU fallback. No binning: this consumes an already-quantized matrix. No
