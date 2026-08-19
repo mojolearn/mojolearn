@@ -296,59 +296,72 @@ assignment step is doing something other than what it says.
 | `check_convergence` (host version) | kept, unused by the fit | The device kernel beside it is what runs. The host one documents the three details in prose and is what a bring-up harness wants. Not dead by accident. |
 
 
-## Sibling subtraction: STILL UNWIRED, and now we know why it is not free
+## Sibling subtraction: STILL UNWIRED, second attempt, one real bug extracted
 
-`build_necessary_histograms` and `substract_histograms_kernel` are ported and
-correct. `copy_histograms_kernel` is ported. The driver calls NONE of them, so
+`build_necessary_histograms`, `substract_histograms_kernel` and
+`copy_histograms_kernel` are ported and the driver calls NONE of them, so
 every level builds `2^depth` histograms where CatBoost builds `2^(depth-1)`.
-**We do twice their histogram work, and the histogram is the dominant cost.**
+**We do twice their histogram work on the dominant cost.**
 
-An attempt to wire it on 2026-08-19 was reverted. What it established, all
-measured on the mixed dataset at 4096 rows:
+### What the second attempt DID land
 
-**The subtraction itself is right.** At depth 1, with the small child built
-and the large derived, the weight histogram came back
+A real bug, found by chasing the subtraction and fixed independently of it:
+all six histogram writebacks used the LOOKED-UP leaf id where CatBoost uses
+the DENSE `blockIdx.y`. See the commit for
+`compute_hist_loop_two_stats.cuh:511` versus `:554`. Invisible under
+contiguous ids, which was every check in this tree.
 
-    d0 leaf 0   2042 2043 2050 2048 2052 2058     (root)
-    d1 leaf 0    717  714  698  690  680  689     (built)
-    d1 leaf 1   1325 1329 1352 1358 1372 1369     (derived)
+`mojo_only/permuted_ids_check.mojo` now covers it, on BOTH load paths, and
+its reach is proved by sabotage rather than by passing:
 
-and the children sum to the parent in every cell.
+    writeback at blockIdx.y            0 wrong of 3168
+    writeback at partIds[blockIdx.y]   2653 wrong of 3168
 
-**But that check is worthless on its own**, and this is the trap from
-`uniform test data hides permutation` wearing a new hat: subtraction DEFINES
-the derived child as `parent - small`, so children summing to the parent is
-an identity, not evidence. It cannot fail. The only real check is against an
-independent full rebuild.
+### What is still not understood
 
-**And the full rebuild disagreed.** Asking the same launcher to build leaves
-`[0,1,2,3]` returned nonzero histograms for leaves 0 and 1 and ALL ZEROES for
-leaves 2 and 3, on a level where every leaf held rows. Roughly half the
-requested leaves come back unfilled.
+With the builder fixed and the permuted check green on direct AND gather, the
+wired subtraction still collapses the mixed tree to 2 non-empty leaves of 64.
+The full-rebuild control is healthy at 12 to 13 non-empty, so the fault is in
+the subtraction path specifically, not in the shared changes.
 
-**The cause is NOT isolated.** The working driver passes `(ids_a, n_live)` to
-`launch_histograms_for_blocks` and fills every leaf; the reverted attempt
-passed `(ids_compute, n_compute)` with byte-identical contents and the same
-count, and did not. Two arguments that should be interchangeable are not.
-Until that is explained, nothing about the subtraction path can be trusted,
-including the depth-1 numbers above.
+**Do not trust the level histogram dump used during that hunt.** It printed a
+zero weight histogram for a leaf that demonstrably held 2703 rows in a run
+whose tree came out healthy, so its indexing is wrong somewhere. Two
+conclusions were drawn from it before that was noticed. Any next attempt
+needs the dump itself checked against a host tally first, on a leaf whose
+answer is known.
 
-### What the next attempt should do first
+### The order to attack it in, next time
 
-Do not re-wire the plan. Isolate the launcher on its own, with a check that
-plants HASHED per-cell values and compares every cell against a host tally
-for a NON-CONTIGUOUS id list such as `[2,0,3]`. `mojo_only/hist_check.mojo`
-already has the machinery; every existing histogram check passes contiguous
-ids starting at 0, which is exactly the blind spot.
+1. **Check `copy_histograms_kernel` in isolation.** Fill leaf 0 with hashed
+   per-cell values, copy `0 -> 1`, verify every cell of leaf 1 and verify no
+   other leaf moved. It is the only one of the three kernels with no
+   standalone check.
+2. **Check the pairing against sizes.** `leaf_records[i].size = ...` writes
+   through a `List` subscript, and whether that mutates in place or a copy
+   has NOT been verified. If sizes stay zero the planner still runs, still
+   pairs, and silently picks the wrong child as small.
+3. Only then re-wire, and compare the derived histogram against an
+   independent full rebuild CELL BY CELL. Children summing to the parent is
+   an identity under subtraction and proves nothing.
 
-### Ordering facts worth keeping, established from their source
+### Ordering facts established from their source, worth keeping
 
-- The scan runs on the leaves that were just COMPUTED and it runs BEFORE the
-  subtraction (`split_properties_helper.cpp:1262` then `:1354`). A prefix sum
-  is linear, so `scan(parent) - scan(small) == scan(parent - small)` and the
-  derived child needs no further scan. `scan_histograms_kernel` now takes
-  their `ids` argument so a partial scan is expressible at all.
+- The scan runs on the leaves just COMPUTED and BEFORE the subtraction
+  (`split_properties_helper.cpp:1262` then `:1354`). A prefix sum is linear,
+  so `scan(parent) - scan(small) == scan(parent - small)`.
 - `CopyHistogram(LeafIdToSplit, RightLeafIdAfterSplit, ...)` runs at split
-  time, right before the partition update (`split_points.cpp:326`). It is
-  what puts the parent in BOTH children's slots, which is what makes the
-  pairing legal whichever child turns out smaller.
+  time right before the partition update (`split_points.cpp:326`).
+- Their `TSplitPointsSingleLeafKernel` proves the parent must be in BOTH
+  children's slots before the pairing can pick either as small.
+
+## Top-bin aliasing at narrow fold counts, OPEN
+
+With 64-fold features the permuted check showed about one bin of rows landing
+in bin 0 of every one-byte feature: cells 40, 104, 168, 232, `got` above
+`want` by roughly `size / 65`. `Folds` is the BORDER count, so a feature takes
+bins `0..Folds`, and at 64 folds the top bin appears to alias onto bin 0. At
+the real border count of 254 it does not happen, which is why the shipped
+check uses 254. Not explained, and it is a correctness question for any
+dataset binned below 8 bits.
+

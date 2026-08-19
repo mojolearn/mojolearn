@@ -40,7 +40,7 @@ control plane becomes the cost. Copied as-is because it is theirs.
 from std.math import ceil, log
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from cluster.mojo_only.gemm import GEMM_TILE, gemm_nt_kernel
+from core.gemm import GEMM_TILE, gemm_nt_kernel
 from cluster.mojo_only.plus_plus import (
     PLUS_PLUS_TPB,
     adopt_candidate_min_kernel,
@@ -61,7 +61,7 @@ from cluster.mojo_only.reduce_by_key import (
     sum_partials_kernel,
     zero_i32_kernel,
 )
-from cluster.mojo_only.row_norms import NORM_TPB, row_norm_kernel
+from core.row_norms import NORM_TPB, row_norm_kernel
 from cluster.ported.cluster.detail.kmeans_common import (
     check_convergence_kernel,
 )

@@ -49,7 +49,7 @@ from cluster.ported.cluster.kmeans_params import (
     KMeansParams,
     METRIC_L2_EXPANDED,
 )
-from cluster.mojo_only.row_norms import NORM_TPB, row_norm_kernel
+from core.row_norms import NORM_TPB, row_norm_kernel
 from mojo_only.fixed_point import choose_scale
 
 

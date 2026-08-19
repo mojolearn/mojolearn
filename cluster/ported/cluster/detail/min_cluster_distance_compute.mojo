@@ -45,8 +45,8 @@ what must fit the index type.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from cluster.mojo_only.gemm import GEMM_TILE, gemm_nt_kernel
-from cluster.mojo_only.row_norms import NORM_TPB, row_norm_kernel
+from core.gemm import GEMM_TILE, gemm_nt_kernel
+from core.row_norms import NORM_TPB, row_norm_kernel
 from cluster.ported.cluster.detail.kmeans_common import (
     centroid_norms_take_sqrt,
     metric_is_sqrt,

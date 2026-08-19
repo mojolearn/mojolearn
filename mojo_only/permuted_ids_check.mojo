@@ -45,7 +45,7 @@ from ported.methods.greedy_subsets_searcher.kernel.histogram_utils import (
 )
 
 
-def check_permuted_leaf_ids() raises:
+def check_permuted_leaf_ids(depth: Int = 0) raises:
     var ctx = DeviceContext()
     var n_rows = 2048
     var stat_count = 2
@@ -183,8 +183,12 @@ def check_permuted_leaf_ids() raises:
     )
     ctx.synchronize()
 
+    # `depth` picks the load path: 0 is the direct load, anything below it
+    # is the GATHER variant, which reads rows through `row_index`. With
+    # `row_index` the identity the two must agree cell for cell, so running
+    # both is a differential on the gather path alone.
     launch_histograms_for_blocks(
-        ctx, dblocks, 0, n_live, n_rows, stat_count, max_leaves, 1,
+        ctx, dblocks, depth, n_live, n_rows, stat_count, max_leaves, 1,
         Float32(1.0), cindex, row_index, stats, p_off, p_sz, ids, dense_ids,
         hist, acc, block_hist, lay.hist_cells,
     )
@@ -198,7 +202,8 @@ def check_permuted_leaf_ids() raises:
     ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=hist)
     ctx.synchronize()
 
-    print("  requested leaves [2, 0, 3]; leaf 1 must be untouched")
+    print("  depth", depth, "( 0 = direct load, >0 = gather ):",
+          "requested leaves [2, 0, 3], leaf 1 must be untouched")
 
     var wrong = 0
     var checked = 0
