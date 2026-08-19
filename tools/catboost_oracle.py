@@ -128,6 +128,7 @@ def main() -> int:
         model_shrink_rate=0.0,
         boost_from_average=False,
         leaf_estimation_iterations=1,
+        score_function=__import__('os').environ.get('ORACLE_SCORE', 'Cosine'),
         logging_level="Silent",
         allow_writing_files=False,
     )

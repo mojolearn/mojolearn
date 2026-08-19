@@ -11,6 +11,7 @@ why every other check in this repository cannot do what this one does.
 from mojo_only.oracle_check import (
     check_border_parity,
     check_oracle_is_not_degenerate,
+    check_tree_structure,
     print_catboost_structure,
 )
 
@@ -21,3 +22,6 @@ def main() raises:
     print("  CatBoost's own first three trees:")
     print_catboost_structure()
     check_border_parity()
+    print()
+    print("  OUR TREES against THEIRS, same data, same grid, same parameters:")
+    check_tree_structure()

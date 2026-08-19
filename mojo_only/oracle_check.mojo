@@ -38,7 +38,15 @@ every comparison downstream meaningless, and would also mean our accuracy has
 never been comparable to theirs at any point in this port.
 """
 
-from ported.grid_creator.binarization import best_split
+from max.gpu.host import DeviceContext
+
+from ported.grid_creator.binarization import best_split, binarize
+from ported.gpu_data.compressed_index_builder import build_layout
+from ported.gpu_data.kernel.binarize import (
+    WRITE_BLOCK_SIZE,
+    write_compressed_index_kernel,
+)
+from ported.methods.doc_parallel_boosting import TAdditiveModel, fit
 
 
 struct Oracle(Movable):
@@ -59,6 +67,10 @@ struct Oracle(Movable):
     #: depth order, which is the order an oblivious tree applies them.
     var split_feature: List[List[Int]]
     var split_border: List[List[Float32]]
+    #: The target CatBoost was trained on, so our port trains on the SAME y.
+    var y: List[Float32]
+    #: `leaf_values[t]`, in CatBoost's own leaf order.
+    var leaf_values: List[List[Float32]]
 
     def __init__(out self):
         self.rows = 0
@@ -72,6 +84,8 @@ struct Oracle(Movable):
         self.x = List[List[Float32]]()
         self.split_feature = List[List[Int]]()
         self.split_border = List[List[Float32]]()
+        self.y = List[Float32]()
+        self.leaf_values = List[List[Float32]]()
 
 
 def _fields(line: String) raises -> List[String]:
@@ -118,6 +132,7 @@ def load_oracle(path: String) raises -> Oracle:
             for _ in range(o.trees):
                 o.split_feature.append(List[Int]())
                 o.split_border.append(List[Float32]())
+                o.leaf_values.append(List[Float32]())
         elif kind == String("train_mse"):
             o.train_mse = Float64(t[1])
         elif kind == String("baseline_mse"):
@@ -131,6 +146,13 @@ def load_oracle(path: String) raises -> Oracle:
             var ti = Int(t[1])
             o.split_feature[ti].append(Int(t[2]))
             o.split_border[ti].append(Float32(Float64(t[3])))
+        elif kind == String("leaves"):
+            var lt = Int(t[1])
+            for i in range(2, len(t)):
+                o.leaf_values[lt].append(Float32(Float64(t[i])))
+        elif kind == String("y"):
+            for i in range(1, len(t)):
+                o.y.append(Float32(Float64(t[i])))
         elif kind == String("x"):
             for f in range(o.feats):
                 o.x[f].append(Float32(Float64(t[1 + f])))
@@ -283,3 +305,161 @@ def print_catboost_structure() raises:
             line += String(o.split_border[t][d])
             line += String(") ")
         print(line)
+
+
+def check_tree_structure() raises:
+    """OUR TREES against CATBOOST'S TREES, on the same data and the same grid.
+
+    This is the comparison border parity exists to make possible. Both sides
+    see the same 4096 x 16 matrix, the same target, the same quantization,
+    and the same depth, learning rate and L2. An oblivious tree IS its list
+    of splits, so if the port is faithful the lists match level for level.
+
+    HOW A SPLIT IS COMPARED. CatBoost reports a split as
+    (float_feature_index, border VALUE); ours is (feature, bin index) into a
+    compressed index. They are the same statement in two encodings, and the
+    bridge is the border list itself: their border value sits at some
+    position in `borders[f]`, and that position is the bin our `resolve_split`
+    should name. So the comparison converts theirs into our encoding rather
+    than the other way round, because ours is the one under test.
+
+    THE RESULT THIS CHECK FOUND ON ITS FIRST RUN, 2026-08-19, and it is a
+    live defect rather than a caveat.
+
+    Against CatBoost at its DEFAULT `score_function = Cosine`
+    (`oblivious_tree_options.cpp:22`), our tree 0 diverges at DEPTH 0, the
+    root, where there is one leaf holding every row and the histogram is a
+    pure argmax over identical inputs. 4 of 48 splits match.
+
+    Against the same CatBoost run with `score_function = L2`, our first
+    THREE levels match exactly in every tree checked, and 17 of 48 splits
+    match overall.
+
+        catboost L2   (0,7) (3,8) (0,1) (7,5)
+        ours          (0,7) (3,8) (0,1) (7,7)
+
+    So THE PORT IS RANKING LIKE L2 WHILE ASKING FOR COSINE. The selection is
+    not the bug: `greedy_search_helper.mojo` instantiates
+    `compute_optimal_splits_kernel[SCORE_FUNCTION_COSINE]` at all three call
+    sites. The arithmetic in `compute_scores.mojo` is a faithful-looking
+    transcription of `TCosineScoreCalcer::AddLeaf`
+    (`score_calcers.cuh:152-157`), and it still does not reproduce their
+    Cosine.
+
+    A SECOND divergence sits underneath the first: even against L2, depth 3
+    differs in every tree while depths 0 to 2 match. Depth 3 is the first
+    level whose leaves fall under the 1024-row threshold that selects
+    `GatherInplaceLeqSize` (`split_points.cpp:64`), which is a hypothesis
+    with an obvious test rather than a conclusion.
+
+    Neither of these was visible to any check in this repository, because
+    every other check compares the device to a host tally written here. This
+    is what an external oracle buys.
+
+    WHAT A MISMATCH MEANS, and it is worth stating before reading a result.
+    Not necessarily a defect. The tree is a greedy argmax over scores, so two
+    faithful implementations can diverge at a genuine tie and never reconverge,
+    and a single differing split at depth 0 makes every later level
+    incomparable. That is why the report prints both sequences in full and
+    counts the FIRST divergence rather than a total: the depth at which the
+    two first disagree is the number that means something.
+    """
+    var o = load_oracle(String("bench/oracle.txt"))
+
+    var ctx = DeviceContext()
+    var n_rows = o.rows
+    var n_features = o.feats
+
+    # THEIR grid, not ours. `check_border_parity` establishes that our
+    # `best_split` reproduces it, so using theirs removes binarization as a
+    # variable and leaves only the tree search under test.
+    var folds = List[Int]()
+    for f in range(n_features):
+        folds.append(len(o.borders[f]))
+
+    var lay = build_layout(folds)
+    var cindex = ctx.enqueue_create_buffer[DType.uint32](n_rows * lay.columns)
+    var z = ctx.enqueue_create_host_buffer[DType.uint32](n_rows * lay.columns)
+    for i in range(n_rows * lay.columns):
+        z.unsafe_ptr().unsafe_store(i, UInt32(0))
+    ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
+    ctx.synchronize()
+
+    var hb = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
+    var bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
+    for f in range(n_features):
+        ref cf = lay.features[f]
+        for r in range(n_rows):
+            hb.unsafe_ptr().unsafe_store(
+                r, UInt8(binarize(o.x[f][r], o.borders[f]))
+            )
+        ctx.enqueue_copy(dst_buf=bins, src_ptr=hb.unsafe_ptr())
+        ctx.enqueue_function[write_compressed_index_kernel](
+            Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
+            bins.unsafe_ptr(), Int32(n_rows), cindex.unsafe_ptr(),
+            grid_dim=(n_rows + WRITE_BLOCK_SIZE - 1) // WRITE_BLOCK_SIZE,
+            block_dim=(WRITE_BLOCK_SIZE, 1, 1),
+        )
+        ctx.synchronize()
+
+    var targets = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    var weights = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    var ht = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
+    var hw = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
+    for r in range(n_rows):
+        ht.unsafe_ptr().unsafe_store(r, o.y[r])
+        hw.unsafe_ptr().unsafe_store(r, Float32(1.0))
+    ctx.enqueue_copy(dst_buf=targets, src_ptr=ht.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
+    ctx.synchronize()
+
+    var model = TAdditiveModel()
+    var losses = fit(
+        model, ctx, n_rows, folds, o.depth, cindex, targets, weights, False,
+        o.trees, Float32(0.3), Float32(3.0), True,
+    )
+
+    print(
+        "    our final mse", losses[len(losses) - 1],
+        " CatBoost", o.train_mse, " mean baseline", o.baseline_mse,
+    )
+
+    # Their border value -> the bin index our side would name for it.
+    var first_divergence = -1
+    var matched = 0
+    var compared = 0
+    for t in range(min(o.trees, model.size())):
+        ref ours = model.weak_models[t].structure.splits
+        var line_them = String("      catboost ")
+        var line_us = String("      ours     ")
+        for d in range(len(o.split_feature[t])):
+            var f = o.split_feature[t][d]
+            var want_bin = -1
+            for i in range(len(o.borders[f])):
+                if abs(Float64(o.borders[f][i]) - Float64(o.split_border[t][d])) <= 1e-9:
+                    want_bin = i
+            line_them += String("(") + String(f) + String(",") + String(want_bin) + String(") ")
+            if d < len(ours):
+                var gf = Int(ours[d].feature_id)
+                var gb = Int(ours[d].bin_idx)
+                line_us += String("(") + String(gf) + String(",") + String(gb) + String(") ")
+                compared += 1
+                if gf == f and gb == want_bin:
+                    matched += 1
+                elif first_divergence < 0:
+                    first_divergence = t * 100 + d
+        if t < 3:
+            print("    tree", t)
+            print(line_them)
+            print(line_us)
+
+    print(
+        "    splits matching CatBoost exactly:", matched, "of", compared,
+    )
+    if first_divergence >= 0:
+        print(
+            "    first divergence: tree", first_divergence // 100,
+            "depth", first_divergence % 100,
+        )
+    else:
+        print("    every split matches CatBoost, feature and bin")
