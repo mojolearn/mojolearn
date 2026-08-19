@@ -65,6 +65,11 @@ build-pkg = "mkdir -p build && mojo precompile -I . ported -o build/ported.mojop
 # bench/oracle.json (the same content, for humans and for diffing).
 oracle-gen = "python tools/catboost_oracle.py > bench/oracle.json"
 
+# The root split recomputed in numpy from the oracle's own data, with no GPU
+# and no Mojo in the question. Its L2 line reproduces CatBoost's L2 root split
+# exactly, which is what makes its Cosine disagreement evidence.
+score-probe = "python tools/score_probe.py"
+
 [feature.bench.dependencies]
 python = ">=3.11"
 numpy = "*"
