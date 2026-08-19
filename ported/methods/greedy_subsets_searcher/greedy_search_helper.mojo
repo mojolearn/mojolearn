@@ -1042,7 +1042,25 @@ def launch_one_byte[bits: Int](
             p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
             block_hist.unsafe_ptr(),
             Int32(max_leaves), Int32(stat_count),
-            grid_dim=(replicas, n_live, stat_count),
+            # grid.x = 1, NOT `replicas`.
+            #
+            # CatBoost replicates this kernel and sums the partials with
+            # `atomicAdd(dst + fold, val)` when `blockCount > 1`
+            # (`hist_one_byte.cu`, `AddToGlobalMemory`). Metal has no float
+            # atomic, and unlike the binary kernel this one has no
+            # fixed-point Int32 flush ported yet, so its writeback is a plain
+            # STORE. Replicating a plain store means 16 blocks each compute a
+            # PARTIAL histogram over their slice of rows and then overwrite
+            # each other, leaving roughly one sixteenth of the counts.
+            #
+            # Measured: with `replicas` here, 459 of 3168 cells wrong on
+            # CONTIGUOUS leaf ids. Not a permutation problem, and it was
+            # reaching every dataset wide enough for `replicas_for` to return
+            # 16, which is `stat_count * hist_cells_per_leaf >= 256`.
+            #
+            # One block is correct and slower. Port the fixed-point flush
+            # here to get the replication back.
+            grid_dim=(1, n_live, stat_count),
             block_dim=(ONE_BYTE_BLOCK_SIZE, 1, 1),
         )
     else:
@@ -1055,7 +1073,25 @@ def launch_one_byte[bits: Int](
             p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
             block_hist.unsafe_ptr(),
             Int32(max_leaves), Int32(stat_count),
-            grid_dim=(replicas, n_live, stat_count),
+            # grid.x = 1, NOT `replicas`.
+            #
+            # CatBoost replicates this kernel and sums the partials with
+            # `atomicAdd(dst + fold, val)` when `blockCount > 1`
+            # (`hist_one_byte.cu`, `AddToGlobalMemory`). Metal has no float
+            # atomic, and unlike the binary kernel this one has no
+            # fixed-point Int32 flush ported yet, so its writeback is a plain
+            # STORE. Replicating a plain store means 16 blocks each compute a
+            # PARTIAL histogram over their slice of rows and then overwrite
+            # each other, leaving roughly one sixteenth of the counts.
+            #
+            # Measured: with `replicas` here, 459 of 3168 cells wrong on
+            # CONTIGUOUS leaf ids. Not a permutation problem, and it was
+            # reaching every dataset wide enough for `replicas_for` to return
+            # 16, which is `stat_count * hist_cells_per_leaf >= 256`.
+            #
+            # One block is correct and slower. Port the fixed-point flush
+            # here to get the replication back.
+            grid_dim=(1, n_live, stat_count),
             block_dim=(ONE_BYTE_BLOCK_SIZE, 1, 1),
         )
 
@@ -1239,6 +1275,20 @@ def launch_histograms_for_blocks(
         if skip_bridge:
             block_first_bin += blk.total_folds
             continue
+
+        # The fixed-point accumulator is the twin of `block_hist`, so it is
+        # converted HERE, per block, before the bridge scatters the block
+        # into the flat histogram. Converting it into the flat histogram
+        # instead skips the bridge entirely, which is only correct when one
+        # block spans everything.
+        ctx.enqueue_function[fixed_to_float_kernel](
+            acc_i32.unsafe_ptr(),
+            block_hist.unsafe_ptr(),
+            Int32(block_cells),
+            fixed_scale,
+            grid_dim=(block_cells + 255) // 256,
+            block_dim=256,
+        )
 
         ctx.enqueue_function[write_reduces_histograms_kernel](
             Int32(block_first_bin),
@@ -1519,12 +1569,8 @@ def run_tree_layout(
         )
         mgr.stream_kernel()
 
-        ctx.enqueue_function[fixed_to_float_kernel](
-            acc_i32.unsafe_ptr(), hist.unsafe_ptr(), Int32(hist_cells),
-            fixed_scale,
-            grid_dim=(hist_cells + 255) // 256, block_dim=256,
-        )
-        mgr.stream_kernel()
+        # NO `fixed_to_float` here. The accumulator is converted inside
+        # `launch_histograms_for_blocks`, per block, before the bridge.
         ctx.enqueue_function[scan_histograms_kernel](
             ids_a.unsafe_ptr(),
             flat_first.unsafe_ptr(), flat_folds.unsafe_ptr(),

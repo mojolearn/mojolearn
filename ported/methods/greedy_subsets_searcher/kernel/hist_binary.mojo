@@ -342,18 +342,22 @@ def binary_hist_kernel(
                         # through an integer atomic, which is associative and
                         # therefore reproducible run to run.
                         var q = Int32(val * fixed_scale)
+                        # THE ACCUMULATOR MIRRORS `bin_sums` EXACTLY.
+                        #
+                        # It is the fixed-point twin of the same cell, so it
+                        # has to use the same address arithmetic: the block
+                        # layout, `device_offset` included, keyed by the
+                        # DENSE `blockIdx.y`. It used to be keyed by
+                        # `partIds[blockIdx.y]` and to omit `device_offset`,
+                        # which coincides with this expression only when
+                        # there is ONE feature block and the id list is the
+                        # identity. That is every single-policy check in this
+                        # repository, which is why it survived.
                         _ = Atomic.fetch_add(
                             acc_i32.unsafe_offset(
-                                (
-                                    Int(
-                                        part_ids.unsafe_load(
-                                            Int(block_idx.y)
-                                        )
-                                    )
-                                    * stat_count
-                                    + Int(block_idx.z)
-                                )
-                                * group_size
+                                device_offset
+                                + Int(block_idx.y) * entries_per_leaf
+                                + Int(block_idx.z) * group_size
                                 + Int(
                                     feature_fold_offset.unsafe_load(
                                         feature_offset + fid
@@ -674,18 +678,22 @@ def binary_hist_gather_kernel(
                         # through an integer atomic, which is associative and
                         # therefore reproducible run to run.
                         var q = Int32(val * fixed_scale)
+                        # THE ACCUMULATOR MIRRORS `bin_sums` EXACTLY.
+                        #
+                        # It is the fixed-point twin of the same cell, so it
+                        # has to use the same address arithmetic: the block
+                        # layout, `device_offset` included, keyed by the
+                        # DENSE `blockIdx.y`. It used to be keyed by
+                        # `partIds[blockIdx.y]` and to omit `device_offset`,
+                        # which coincides with this expression only when
+                        # there is ONE feature block and the id list is the
+                        # identity. That is every single-policy check in this
+                        # repository, which is why it survived.
                         _ = Atomic.fetch_add(
                             acc_i32.unsafe_offset(
-                                (
-                                    Int(
-                                        part_ids.unsafe_load(
-                                            Int(block_idx.y)
-                                        )
-                                    )
-                                    * stat_count
-                                    + Int(block_idx.z)
-                                )
-                                * group_size
+                                device_offset
+                                + Int(block_idx.y) * entries_per_leaf
+                                + Int(block_idx.z) * group_size
                                 + Int(
                                     feature_fold_offset.unsafe_load(
                                         feature_offset + fid

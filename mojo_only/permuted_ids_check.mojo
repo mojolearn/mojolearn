@@ -45,7 +45,7 @@ from ported.methods.greedy_subsets_searcher.kernel.histogram_utils import (
 )
 
 
-def check_permuted_leaf_ids(depth: Int = 0) raises:
+def check_permuted_leaf_ids(depth: Int = 0, replicas: Int = 1, permute: Bool = True) raises:
     var ctx = DeviceContext()
     var n_rows = 2048
     var stat_count = 2
@@ -141,9 +141,16 @@ def check_permuted_leaf_ids(depth: Int = 0) raises:
 
     # THE POINT: a permuted, non-contiguous request. Leaf 1 is absent.
     var want_ids = List[Int]()
-    want_ids.append(2)
-    want_ids.append(0)
-    want_ids.append(3)
+    if permute:
+        want_ids.append(2)
+        want_ids.append(0)
+        want_ids.append(3)
+    else:
+        # The CONTIGUOUS control. Separates "permuted ids are broken" from
+        # "this configuration is broken regardless of the ids".
+        want_ids.append(0)
+        want_ids.append(1)
+        want_ids.append(2)
     var n_live = len(want_ids)
 
     var ids = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
@@ -188,8 +195,8 @@ def check_permuted_leaf_ids(depth: Int = 0) raises:
     # `row_index` the identity the two must agree cell for cell, so running
     # both is a differential on the gather path alone.
     launch_histograms_for_blocks(
-        ctx, dblocks, depth, n_live, n_rows, stat_count, max_leaves, 1,
-        Float32(1.0), cindex, row_index, stats, p_off, p_sz, ids, dense_ids,
+        ctx, dblocks, depth, n_live, n_rows, stat_count, max_leaves,
+        replicas, Float32(1.0), cindex, row_index, stats, p_off, p_sz, ids, dense_ids,
         hist, acc, block_hist, lay.hist_cells,
     )
     ctx.enqueue_function[fixed_to_float_kernel](
@@ -202,8 +209,8 @@ def check_permuted_leaf_ids(depth: Int = 0) raises:
     ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=hist)
     ctx.synchronize()
 
-    print("  depth", depth, "( 0 = direct load, >0 = gather ):",
-          "requested leaves [2, 0, 3], leaf 1 must be untouched")
+    print("  depth", depth, "( 0 = direct, >0 = gather ), replicas",
+          replicas, "permuted", permute)
 
     var wrong = 0
     var checked = 0
@@ -234,14 +241,28 @@ def check_permuted_leaf_ids(depth: Int = 0) raises:
     # Leaf 1 was never requested. Anything other than the sentinel means the
     # build wrote into a leaf it was not asked for, which is exactly what
     # would corrupt a parent histogram the subtraction is about to read.
+    # The bystander is whichever leaf was NOT asked for, which differs
+    # between the permuted and contiguous arms. Hardcoding it to leaf 1 made
+    # the contiguous arm assert against a leaf it had actually requested.
+    var bystander = -1
+    for leaf in range(max_leaves):
+        var named = False
+        for k in range(n_live):
+            if want_ids[k] == leaf:
+                named = True
+        if not named:
+            bystander = leaf
+            break
+
     var untouched_wrong = 0
-    for c in range(lay.hist_cells):
-        var got = out.unsafe_ptr().unsafe_load(
-            1 * stat_count * lay.hist_cells + c
-        )
-        if got != sentinel:
-            untouched_wrong += 1
-    print("    leaf 1 (not requested):", untouched_wrong,
+    if bystander >= 0:
+        for c in range(lay.hist_cells):
+            var got = out.unsafe_ptr().unsafe_load(
+                bystander * stat_count * lay.hist_cells + c
+            )
+            if got != sentinel:
+                untouched_wrong += 1
+    print("    leaf", bystander, "(not requested):", untouched_wrong,
           "cells disturbed of", lay.hist_cells)
 
     print("  total wrong:", wrong, "of", checked)

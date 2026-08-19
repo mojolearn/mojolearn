@@ -345,7 +345,40 @@ Together with the permuted-id check passing on both load paths and the
 subtraction kernel's own check, **every kernel involved is now individually
 verified.** What is left is the DRIVER's sequencing.
 
-### The concrete hypothesis to test next
+### RESOLVED: the one-byte kernel was being replicated without an atomic
+
+`launch_histograms_for_blocks` launched the one-byte kernel with
+`grid_dim=(replicas, n_live, stat_count)`. CatBoost replicates it too and
+sums the partials with `atomicAdd(dst + fold, val)` when `blockCount > 1`
+(`hist_one_byte.cu`, `AddToGlobalMemory`). Metal has no float atomic, and
+unlike the binary kernel this one has NO fixed-point Int32 flush ported, so
+its writeback is a plain STORE. Sixteen blocks each computed a partial
+histogram over their slice of rows and then overwrote each other.
+
+Half-byte was already launched at `grid.x = 1`. Only one-byte replicated.
+
+**This was reaching every dataset wide enough for `replicas_for` to return
+16, which is `stat_count * hist_cells_per_leaf >= 256`, so essentially every
+realistic one.** It is a correctness bug in the shipped mixed path, not
+something the subtraction introduced.
+
+Measured, at `replicas = 16`:
+
+    contiguous ids   459 of 3168 cells wrong  ->  0
+    permuted ids     577 of 3168 cells wrong  ->  0
+
+and the mixed tree went from 23 non-empty leaves at depth 6 to 48.
+
+Why every existing check missed it: `replicas_for` returns 1 below 256 cells,
+and every histogram check was narrow enough to get 1. The check now runs a
+MATRIX of `{contiguous, permuted} x {1, 16} x {direct, gather}`, because the
+two bugs found here are independent. The writeback bug needs a permuted id
+list to show; this one shows on contiguous ids and needs replication.
+
+To get the replication back, port the fixed-point flush into the one-byte
+kernel the way `hist_binary.mojo` has it. One block is correct and slower.
+
+### The hypothesis that led here, now settled
 
 `fixed_to_float_kernel` converts the accumulator to the flat histogram by
 IDENTICAL FLAT INDEX, `bin_sums[i] = acc_i32[i] / scale`. That silently

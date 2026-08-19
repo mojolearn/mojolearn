@@ -424,5 +424,13 @@ def main() raises:
     print("copy_histograms in isolation:")
     check_copy_histograms()
     print()
-    print("non-contiguous leaf ids, gather path (GPU):")
-    check_permuted_leaf_ids(1)
+    print("leaf-id / replication matrix (GPU):")
+    # Four arms, because the two failures found here were independent: the
+    # dense-vs-looked-up writeback needs a PERMUTED id list to show, and the
+    # unreplicable one-byte store needs REPLICAS > 1 and shows on contiguous
+    # ids too. Either arm alone misses one of them.
+    check_permuted_leaf_ids(0, 1, True)
+    check_permuted_leaf_ids(1, 1, True)
+    check_permuted_leaf_ids(0, 16, False)
+    check_permuted_leaf_ids(0, 16, True)
+    check_permuted_leaf_ids(1, 16, True)
