@@ -60,6 +60,9 @@ from cluster.ported.cluster.kmeans_params import (
     get_centroids_batch_size,
     get_data_batch_size,
 )
+from cluster.ported.distance.fused_distance_nn.simt_kernel import (
+    fused_distance_nn_kernel,
+)
 from cluster.ported.distance.unfused_distance_nn import (
     REDUCE_MIN_TPB,
     reduce_min_kernel,
@@ -121,6 +124,54 @@ def min_cluster_and_distance_compute(
     var data_batch = get_data_batch_size(batch_samples, n_samples)
     var centroid_batch = get_centroids_batch_size(batch_centroids, n_clusters)
 
+    var is_sqrt = Int32(1 if metric_is_sqrt(metric) else 0)
+
+    # THE FUSED PATH. `use_fused` is their selector and it is True on every
+    # architecture before Blackwell; the CUTLASS version is unportable but
+    # the SIMT one is not, and it is the one that never writes the distance
+    # tile. See `distance/fused_distance_nn/simt_kernel.mojo`.
+    #
+    # `dist_buf` is now unused on this path and is kept in the signature so
+    # the unfused arm stays reachable for differential testing.
+    ctx.enqueue_function[fused_distance_nn_kernel](
+        out_key.unsafe_ptr(),
+        out_value.unsafe_ptr(),
+        x.unsafe_ptr(),
+        centroids.unsafe_ptr(),
+        x_norm.unsafe_ptr(),
+        centroid_norm.unsafe_ptr(),
+        Int32(n_samples),
+        Int32(n_clusters),
+        Int32(n_features),
+        is_sqrt,
+        grid_dim=(1, (n_samples + GEMM_MBLK - 1) // GEMM_MBLK, 1),
+        block_dim=(GEMM_THREADS, 1, 1),
+    )
+
+
+def min_cluster_and_distance_compute_unfused(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    mut x_norm: DeviceBuffer[DType.float32],
+    mut centroids: DeviceBuffer[DType.float32],
+    mut centroid_norm: DeviceBuffer[DType.float32],
+    mut dist_buf: DeviceBuffer[DType.float32],
+    mut out_key: DeviceBuffer[DType.uint32],
+    mut out_value: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    n_features: Int,
+    n_clusters: Int,
+    metric: Int,
+    batch_samples: Int,
+    batch_centroids: Int,
+) raises:
+    """The unfused arm, kept reachable so the two can be diffed.
+
+    Their selector picks between these; keeping both means a disagreement
+    between them is findable, which is worth more than the file it costs.
+    """
+    var data_batch = get_data_batch_size(batch_samples, n_samples)
+    var centroid_batch = get_centroids_batch_size(batch_centroids, n_clusters)
     var is_sqrt = Int32(1 if metric_is_sqrt(metric) else 0)
 
     var d_idx = 0
