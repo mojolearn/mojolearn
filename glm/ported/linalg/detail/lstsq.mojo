@@ -54,7 +54,12 @@ from core.column_stats import (
     divide_columns_by_nonzero_kernel,
     xty_kernel,
 )
-from core.gemm import GEMM_TILE, gemm_nt_kernel
+from core.gemm import (
+    GEMM_MBLK,
+    GEMM_NBLK,
+    GEMM_THREADS,
+    gemm_nt_kernel,
+)
 from decomposition.mojo_only.jacobi_eigh_device import (
     JACOBI_TPB,
     jacobi_eigh_kernel,
@@ -141,11 +146,11 @@ def lstsq_eig(
         Int32(n_cols),
         Int32(n_cols),
         grid_dim=(
-            (n_cols + GEMM_TILE - 1) // GEMM_TILE,
-            (n_cols + GEMM_TILE - 1) // GEMM_TILE,
-            1,
-        ),
-        block_dim=(GEMM_TILE, GEMM_TILE, 1),
+                (n_cols + GEMM_NBLK - 1) // GEMM_NBLK,
+                (n_cols + GEMM_MBLK - 1) // GEMM_MBLK,
+                1,
+            ),
+            block_dim=(GEMM_THREADS, 1, 1),
     )
     # w <- inv Ab. A d x d matrix against one vector, expressed as the same
     # `X Y^T` the GEMM already does with n = 1.
@@ -156,7 +161,11 @@ def lstsq_eig(
         Int32(n_cols),
         Int32(1),
         Int32(n_cols),
-        grid_dim=(1, (n_cols + GEMM_TILE - 1) // GEMM_TILE, 1),
-        block_dim=(GEMM_TILE, GEMM_TILE, 1),
+        grid_dim=(
+                (1 + GEMM_NBLK - 1) // GEMM_NBLK,
+                (n_cols + GEMM_MBLK - 1) // GEMM_MBLK,
+                1,
+            ),
+            block_dim=(GEMM_THREADS, 1, 1),
     )
     ctx.synchronize()

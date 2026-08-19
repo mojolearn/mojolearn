@@ -498,3 +498,60 @@ unexamined is whether replication (`replicas_for`) helps now that there is
 real work to replicate; every measurement of it so far was taken on an empty
 histogram and none of them mean anything.
 
+
+
+## THE 4.3x: we load one element where CatBoost loads FOUR
+
+Found by reading their kernel rather than profiling ours, 2026-08-19.
+
+`hist_one_byte.cu:42-49`:
+
+    static constexpr ELoadSize LoadSize() {
+        #if __CUDA_ARCH__ < 500
+        return ELoadSize::OneElement;
+        #else
+        return ELoadSize::FourElements;
+        #endif
+    }
+
+**CatBoost's one-byte histogram uses 4-wide vector loads on any GPU newer
+than Maxwell.** Every one of our three histogram kernels runs `LOAD_SIZE = 1`.
+The histogram is bandwidth bound, so this is four times the load instructions
+for the same bytes, on the exact path that is 4.3x behind.
+
+Their `FourElements` body (`compute_hist_loop_two_stats.cuh:366`):
+
+    uint4  localBins[N];
+    float4 localStats1[N];
+    float4 localStats2[N];
+    for k in N:  localBins[k]   = Ldg((uint4*)  bins,  warpSize * k);
+    for k in N:  localStats1[k] = Ldg((float4*) stats, warpSize * k);
+                 localStats2[k] = Ldg((float4*)(stats + statsLineSize), ...);
+    hist.AddPoints<loadSize * N>(...);
+
+with `N = 4` on `__CUDA_ARCH__ >= 700` (`hist_one_byte.cu:30-37`), so a thread
+takes SIXTEEN points per iteration where ours takes two.
+
+### Why our loop can adopt it almost directly
+
+Our striping already matches theirs line for line: `entries_per_warp`,
+`global_warp_id`, `stripe_size`, `local_idx = (tid & 31) * LOAD_SIZE`, and
+`iter_count`. All of it was ported with `LOAD_SIZE` as a symbol. Raising it
+to 4 changes the constant and the load width and nothing structural.
+
+### The one thing that must come with it
+
+`AlignMemoryAccess` (`:57-108`), which our port skipped with the note "at
+LOAD_SIZE 1 there is nothing to align". It peels the unaligned HEAD and TAIL
+of the partition on block 0, with scalar `AddPoint`, so the main loop is
+guaranteed 4-aligned and fully in range. That is what lets their inner loop
+carry NO per-element bounds test. Ours tests every element, which is both the
+scalar cost and a branch in the hot loop.
+
+Adopt one without the other and the loop reads past the partition.
+
+### Verified portable
+
+A 25-line probe confirms Metal takes `(ptr + i).load[width=4]()` for both
+`UInt32` and `Float32`. So `FourElements` is not blocked by the toolchain; it
+was simply not ported.

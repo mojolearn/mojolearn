@@ -27,7 +27,12 @@ permutation.
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.expand_distances import expand_distances_kernel
-from core.gemm import GEMM_TILE, gemm_nt_kernel
+from core.gemm import (
+    GEMM_MBLK,
+    GEMM_NBLK,
+    GEMM_THREADS,
+    gemm_nt_kernel,
+)
 from core.row_norms import NORM_TPB, row_norm_kernel
 from cluster.mojo_only.reduce_by_key import copy_f32_kernel
 from dbscan.ported.dbscan.adjgraph.algo import (
@@ -115,11 +120,11 @@ def dbscan_fit(
         Int32(n_rows),
         Int32(n_features),
         grid_dim=(
-            (n_rows + GEMM_TILE - 1) // GEMM_TILE,
-            (n_rows + GEMM_TILE - 1) // GEMM_TILE,
-            1,
-        ),
-        block_dim=(GEMM_TILE, GEMM_TILE, 1),
+                (n_rows + GEMM_NBLK - 1) // GEMM_NBLK,
+                (n_rows + GEMM_MBLK - 1) // GEMM_MBLK,
+                1,
+            ),
+            block_dim=(GEMM_THREADS, 1, 1),
     )
     var cells = n_rows * n_rows
     ctx.enqueue_function[expand_distances_kernel](

@@ -40,7 +40,12 @@ control plane becomes the cost. Copied as-is because it is theirs.
 from std.math import ceil, log
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from core.gemm import GEMM_TILE, gemm_nt_kernel
+from core.gemm import (
+    GEMM_MBLK,
+    GEMM_NBLK,
+    GEMM_THREADS,
+    gemm_nt_kernel,
+)
 from cluster.mojo_only.plus_plus import (
     PLUS_PLUS_TPB,
     adopt_candidate_min_kernel,
@@ -371,11 +376,11 @@ def kmeans_plus_plus(
             Int32(n_trials),
             Int32(n_features),
             grid_dim=(
-                (n_trials + GEMM_TILE - 1) // GEMM_TILE,
-                (n_samples + GEMM_TILE - 1) // GEMM_TILE,
+                (n_trials + GEMM_NBLK - 1) // GEMM_NBLK,
+                (n_samples + GEMM_MBLK - 1) // GEMM_MBLK,
                 1,
             ),
-            block_dim=(GEMM_TILE, GEMM_TILE, 1),
+            block_dim=(GEMM_THREADS, 1, 1),
         )
         ctx.enqueue_function[candidate_cost_kernel](
             candidate_cost.unsafe_ptr(),

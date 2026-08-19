@@ -39,7 +39,12 @@ sparse and the non-expanded metrics, and the multi-index merge. See
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.expand_distances import expand_distances_kernel
-from core.gemm import GEMM_TILE, gemm_nt_kernel
+from core.gemm import (
+    GEMM_MBLK,
+    GEMM_NBLK,
+    GEMM_THREADS,
+    gemm_nt_kernel,
+)
 from core.row_norms import NORM_TPB, row_norm_kernel
 from neighbors.ported.matrix.detail.select_radix import (
     SELECT_BLOCK,
@@ -114,11 +119,11 @@ def tiled_brute_force_knn(
             Int32(n_index),
             Int32(n_features),
             grid_dim=(
-                (n_index + GEMM_TILE - 1) // GEMM_TILE,
-                (rows + GEMM_TILE - 1) // GEMM_TILE,
+                (n_index + GEMM_NBLK - 1) // GEMM_NBLK,
+                (rows + GEMM_MBLK - 1) // GEMM_MBLK,
                 1,
             ),
-            block_dim=(GEMM_TILE, GEMM_TILE, 1),
+            block_dim=(GEMM_THREADS, 1, 1),
         )
 
         # The epilogue k-means fuses into its reduction has to be its own

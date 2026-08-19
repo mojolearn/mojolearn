@@ -51,7 +51,12 @@ from core.column_stats import (
     covariance_kernel,
     shift_columns_kernel,
 )
-from core.gemm import GEMM_TILE, gemm_nt_kernel
+from core.gemm import (
+    GEMM_MBLK,
+    GEMM_NBLK,
+    GEMM_THREADS,
+    gemm_nt_kernel,
+)
 from decomposition.mojo_only.jacobi_eigh import jacobi_eigh
 from decomposition.mojo_only.jacobi_eigh_device import (
     JACOBI_TPB,
@@ -312,11 +317,11 @@ def pca_transform(
         Int32(n_components),
         Int32(n_cols),
         grid_dim=(
-            (n_components + GEMM_TILE - 1) // GEMM_TILE,
-            (n_rows + GEMM_TILE - 1) // GEMM_TILE,
-            1,
-        ),
-        block_dim=(GEMM_TILE, GEMM_TILE, 1),
+                (n_components + GEMM_NBLK - 1) // GEMM_NBLK,
+                (n_rows + GEMM_MBLK - 1) // GEMM_MBLK,
+                1,
+            ),
+            block_dim=(GEMM_THREADS, 1, 1),
     )
     ctx.enqueue_function[shift_columns_kernel](
         x.unsafe_ptr(),
