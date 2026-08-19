@@ -31,6 +31,7 @@ DEVIATION (PORTING.md 4): there is no CUB in Mojo, and the sort is being used
 only as a stable 1-bit partition, so that is what is written.
 """
 
+from ported.gpu_data.gpu_structures import CFeature
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -53,10 +54,7 @@ def split_and_make_sequence_kernel(
     part_offset: MutPointer[UInt32, MutAnyOrigin],
     part_size: MutPointer[UInt32, MutAnyOrigin],
     leaf_ids: MutPointer[UInt32, MutAnyOrigin],
-    split_feature_offset: MutPointer[UInt32, MutAnyOrigin],
-    split_feature_shift: MutPointer[UInt32, MutAnyOrigin],
-    split_feature_mask: MutPointer[UInt32, MutAnyOrigin],
-    split_one_hot: MutPointer[UInt8, MutAnyOrigin],
+    split_features: MutPointer[CFeature, MutAnyOrigin],
     split_bins: MutPointer[UInt32, MutAnyOrigin],
     split_flags: MutPointer[UInt8, MutAnyOrigin],
     indices: MutPointer[UInt32, MutAnyOrigin],
@@ -85,13 +83,36 @@ def split_and_make_sequence_kernel(
     if i >= size:
         return
 
-    var f_offset = Int(split_feature_offset.unsafe_load(leaf_slot))
-    var shift = UInt32(split_feature_shift.unsafe_load(leaf_slot))
+    # `const TCFeature feature = Ldg(splitFeatures + blockIdx.y);`
+    #
+    # Their signature is ONE `const TCFeature*`. The port used to carry the
+    # four fields as four parallel arrays, which is four pointers derived
+    # from one allocation, and `enqueue_function` refuses those as aliasing
+    # mutable arguments. Matching their type fixes that structurally.
+    #
+    # ===================== DEVIATION BLOCK =====================
+    # Their `Ldg` pulls the WHOLE struct into a register in one load. We read
+    # field by field instead, because binding the struct to a local:
+    #
+    #     var feature = split_features[unsafe_offset=leaf_slot]
+    #
+    # makes the Metal backend die with
+    #
+    #     error: Metal Compiler failed to compile metallib.
+    #            Please submit a bug report.
+    #
+    # Reproduced 2026-08-19 in a 25-line probe: per-field access through the
+    # pointer compiles and runs, one whole-struct load does not, and the
+    # field type is irrelevant (it fails the same with the Bool untouched).
+    # Semantically identical, so nothing downstream changes.
+    # ===========================================================
+    var f_offset = Int(split_features[unsafe_offset=leaf_slot].offset)
+    var shift = split_features[unsafe_offset=leaf_slot].shift
     var bin_idx = UInt32(split_bins.unsafe_load(leaf_slot))
-    var one_hot = split_one_hot.unsafe_load(leaf_slot) != 0
+    var one_hot = split_features[unsafe_offset=leaf_slot].one_hot_feature
 
     var value = bin_idx << shift
-    var mask = UInt32(split_feature_mask.unsafe_load(leaf_slot)) << shift
+    var mask = split_features[unsafe_offset=leaf_slot].mask << shift
 
     var stride = SPLIT_UNROLL * SPLIT_BLOCK_SIZE * Int(grid_dim.x)
 

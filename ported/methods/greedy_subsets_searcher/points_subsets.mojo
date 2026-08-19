@@ -1,0 +1,161 @@
+"""The state a growing tree carries between its two phases.
+
+PORT OF `TPointsSubsets`, `TLeaf` and `TBestSplitProperties` from
+`catboost/cuda/methods/greedy_subsets_searcher/split_properties_helper.h:40`
+and `catboost/cuda/gpu_data/gpu_structures.h:64` at CatBoost `54a8143a`.
+Transliterated. Do not improve.
+
+Every function in their level loop takes `TPointsSubsets*`. It is the reason
+`ComputeOptimalSplits` and `SplitLeaves` are two functions and not one long
+body, and porting it is what lets ours be two functions as well.
+
+Their comments on the fields are kept verbatim where they had them, because
+they say which buffer is already reduced and which is not.
+"""
+
+from max.gpu.host import DeviceBuffer, HostBuffer
+
+
+struct TBestSplitProperties(Copyable, ImplicitlyCopyable, Movable):
+    """`gpu_structures.h:64`. Their defaults, exactly.
+
+    `FeatureId` defaults to `(ui32)-1` and `ComputeOptimalSplits` raises on
+    it, which is their check that a level found any finite score at all
+    (`greedy_search_helper.cpp:534`).
+    """
+
+    var feature_id: Int32
+    var bin_id: Int32
+    var score: Float32
+    var gain: Float32
+    var defined: Bool
+
+    def __init__(out self):
+        self.feature_id = -1
+        self.bin_id = 0
+        self.score = Float32.MAX
+        self.gain = Float32.MAX
+        self.defined = False
+
+    def __init__(
+        out self,
+        feature_id: Int32,
+        bin_id: Int32,
+        score: Float32,
+        gain: Float32,
+    ):
+        self.feature_id = feature_id
+        self.bin_id = bin_id
+        self.score = score
+        self.gain = gain
+        self.defined = True
+
+
+struct EHistogramsType(Copyable, ImplicitlyCopyable, Movable):
+    """Their `EHistogramsType`. Which histogram a leaf already holds.
+
+    Not yet consulted: our `build_necessary_histograms` rebuilds every level
+    rather than reusing a parent's. Kept so the field on `TLeaf` has a type
+    and the gap is visible rather than absent.
+    """
+
+    var value: Int32
+
+    comptime Zeroes = Self(0)
+    comptime PreviousPath = Self(1)
+    comptime CurrentPath = Self(2)
+
+    def __init__(out self, value: Int32):
+        self.value = value
+
+    def __eq__(self, other: Self) -> Bool:
+        return self.value == other.value
+
+    def __ne__(self, other: Self) -> Bool:
+        return self.value != other.value
+
+
+struct TLeaf(Copyable, ImplicitlyCopyable, Movable):
+    """`split_properties_helper.h`, their `TLeaf`, same five fields."""
+
+    var size: Int
+    var histograms_type: EHistogramsType
+    var best_split: TBestSplitProperties
+    var is_terminal: Bool
+    var depth: Int
+    """Their `Path.GetDepth()`. We carry the depth rather than the whole
+    `TLeafPath`, because nothing downstream of tree growth reads the path
+    yet. When the model builder lands, this becomes the path."""
+
+    def __init__(out self):
+        self.size = 0
+        self.histograms_type = EHistogramsType.Zeroes
+        self.best_split = TBestSplitProperties()
+        self.is_terminal = False
+        self.depth = 0
+
+    def update_best_split(mut self, best: TBestSplitProperties):
+        """Their `UpdateBestSplit`."""
+        self.best_split = best
+
+
+struct TPointsSubsets(Movable):
+    """`split_properties_helper.h:40`, their `TPointsSubsets`.
+
+    Their field comments, kept:
+
+        Partitions      how to access this leaves
+        PartitionsCpu   this leaf sizes
+        PartitionStats  sum of stats in leaves for each devices
+        Histograms      stripped between devices final histograms
+                        (already reduced)
+
+    ================= DEVIATION BLOCK =================
+    `PartitionsCpu` is a plain host buffer here, not their pinned
+    `EPtrType::CudaHost`. Measured 2026-08-19: a Mojo kernel handed an
+    `enqueue_create_host_buffer` pointer writes nothing, silently, and
+    `map_to_host` is 2x slower than the copy it would replace. So this one
+    is filled by an explicit copy. See `ported/gpu_lib/NOT_PORTED.md`.
+
+    Their `Partitions` is one `TDataPartition` array of `{Offset, Size}`
+    pairs; ours is two parallel `UInt32` buffers, which is how
+    `ported/gpu_util/gpu_data/partitions.mojo` already had it.
+    ===================================================
+    """
+
+    var partitions_offset: DeviceBuffer[DType.uint32]
+    var partitions_size: DeviceBuffer[DType.uint32]
+    var partitions_cpu_offset: HostBuffer[DType.uint32]
+    var partitions_cpu_size: HostBuffer[DType.uint32]
+    var partition_stats: DeviceBuffer[DType.float32]
+    var histograms: DeviceBuffer[DType.float32]
+    var leaves: List[TLeaf]
+    var stat_count: Int
+
+    def __init__(
+        out self,
+        var partitions_offset: DeviceBuffer[DType.uint32],
+        var partitions_size: DeviceBuffer[DType.uint32],
+        var partitions_cpu_offset: HostBuffer[DType.uint32],
+        var partitions_cpu_size: HostBuffer[DType.uint32],
+        var partition_stats: DeviceBuffer[DType.float32],
+        var histograms: DeviceBuffer[DType.float32],
+        stat_count: Int,
+    ):
+        self.partitions_offset = partitions_offset^
+        self.partitions_size = partitions_size^
+        self.partitions_cpu_offset = partitions_cpu_offset^
+        self.partitions_cpu_size = partitions_cpu_size^
+        self.partition_stats = partition_stats^
+        self.histograms = histograms^
+        self.leaves = List[TLeaf]()
+        self.leaves.append(TLeaf())
+        self.stat_count = stat_count
+
+    def get_stat_count(self) -> Int:
+        """Their `GetStatCount()`."""
+        return self.stat_count
+
+    def leaf_count(self) -> Int:
+        """Their `Leaves.size()`."""
+        return len(self.leaves)

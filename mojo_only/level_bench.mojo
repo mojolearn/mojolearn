@@ -18,6 +18,8 @@ barrier because Mojo has no lane primitives, runs 16 times per row-batch in
 the inner loop and has never been measured.
 """
 
+from std.sys.info import size_of
+from ported.gpu_data.gpu_structures import CFeature
 from std.time import perf_counter_ns
 
 from mojo_only.interleaved import ArmResult, report, summarize
@@ -404,11 +406,9 @@ def bench_remaining_phases(n_rows: Int, repeats: Int) raises:
     var skip = ctx.enqueue_create_buffer[DType.uint8](n_features)
     var oscore = ctx.enqueue_create_buffer[DType.float32](1)
     var obin = ctx.enqueue_create_buffer[DType.uint32](1)
-    var sp1 = ctx.enqueue_create_buffer[DType.uint32](1)
-    var sp2 = ctx.enqueue_create_buffer[DType.uint32](1)
-    var sp3 = ctx.enqueue_create_buffer[DType.uint32](1)
+    # their `const TCFeature* splitFeatures` plus `const ui32* splitBins`
+    var sp_feats = ctx.enqueue_create_buffer[DType.uint8](size_of[CFeature]())
     var sp5 = ctx.enqueue_create_buffer[DType.uint32](1)
-    var sp4 = ctx.enqueue_create_buffer[DType.uint8](1)
     ctx.synchronize()
 
     var wide = (n_rows + 255) // 256
@@ -469,8 +469,8 @@ def bench_remaining_phases(n_rows: Int, repeats: Int) raises:
         var t0 = perf_counter_ns()
         ctx.enqueue_function[split_and_make_sequence_kernel](
             cindex.unsafe_ptr(), row_index.unsafe_ptr(), p_off.unsafe_ptr(),
-            p_sz.unsafe_ptr(), one.unsafe_ptr(), sp1.unsafe_ptr(),
-            sp2.unsafe_ptr(), sp3.unsafe_ptr(), sp4.unsafe_ptr(),
+            p_sz.unsafe_ptr(), one.unsafe_ptr(),
+            sp_feats.unsafe_ptr().bitcast[CFeature](),
             sp5.unsafe_ptr(), flags.unsafe_ptr(), seq.unsafe_ptr(),
             grid_dim=(wide, 1, 1), block_dim=(SPLIT_BLOCK_SIZE, 1, 1),
         )

@@ -20,6 +20,8 @@ expected answer and any indexing error in the nibble decode shows up as a
 wrong count rather than as a crash.
 """
 
+from std.sys.info import size_of
+from ported.gpu_data.gpu_structures import CFeature
 from max.gpu.host import DeviceContext
 
 from ported.methods.greedy_subsets_searcher.kernel.split_points import (
@@ -887,28 +889,27 @@ def check_split_points() raises:
     ctx.enqueue_copy(dst_buf=p_sz, src_ptr=h_sz.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=leaf_ids, src_ptr=h_lid.unsafe_ptr())
 
-    var sp_off = ctx.enqueue_create_buffer[DType.uint32](2)
-    var sp_shift = ctx.enqueue_create_buffer[DType.uint32](2)
-    var sp_mask = ctx.enqueue_create_buffer[DType.uint32](2)
-    var sp_hot = ctx.enqueue_create_buffer[DType.uint8](2)
     var sp_bin = ctx.enqueue_create_buffer[DType.uint32](2)
-    var h_spo = ctx.enqueue_create_host_buffer[DType.uint32](2)
-    var h_sps = ctx.enqueue_create_host_buffer[DType.uint32](2)
-    var h_spm = ctx.enqueue_create_host_buffer[DType.uint32](2)
-    var h_sph = ctx.enqueue_create_host_buffer[DType.uint8](2)
+    # their `const TCFeature* splitFeatures` plus `const ui32* splitBins`
+    var sp_feats = ctx.enqueue_create_buffer[DType.uint8](
+        2 * size_of[CFeature]()
+    )
+    var h_feats = ctx.enqueue_create_host_buffer[DType.uint8](
+        2 * size_of[CFeature]()
+    )
     var h_spb = ctx.enqueue_create_host_buffer[DType.uint32](2)
+    var hfp = h_feats.unsafe_ptr().bitcast[CFeature]()
     for i in range(2):
-        h_spo.unsafe_ptr().unsafe_store(i, UInt32(0))
-        h_sps.unsafe_ptr().unsafe_store(
-            i, UInt32(policy_shift(POLICY_BINARY, feature_id))
+        hfp[unsafe_offset=i] = CFeature(
+            offset=UInt32(0),
+            mask=policy_mask(POLICY_BINARY),
+            shift=UInt32(policy_shift(POLICY_BINARY, feature_id)),
+            first_fold_index=UInt32(0),
+            folds=UInt32(1),
+            one_hot_feature=False,  # ordered, so test is >
         )
-        h_spm.unsafe_ptr().unsafe_store(i, policy_mask(POLICY_BINARY))
-        h_sph.unsafe_ptr().unsafe_store(i, UInt8(0))  # ordered, so test is >
         h_spb.unsafe_ptr().unsafe_store(i, UInt32(0))  # bin > 0 goes right
-    ctx.enqueue_copy(dst_buf=sp_off, src_ptr=h_spo.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=sp_shift, src_ptr=h_sps.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=sp_mask, src_ptr=h_spm.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=sp_hot, src_ptr=h_sph.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=sp_feats, src_ptr=h_feats.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=sp_bin, src_ptr=h_spb.unsafe_ptr())
 
     var flags = ctx.enqueue_create_buffer[DType.uint8](n_rows)
@@ -928,10 +929,7 @@ def check_split_points() raises:
         p_off.unsafe_ptr(),
         p_sz.unsafe_ptr(),
         leaf_ids.unsafe_ptr(),
-        sp_off.unsafe_ptr(),
-        sp_shift.unsafe_ptr(),
-        sp_mask.unsafe_ptr(),
-        sp_hot.unsafe_ptr(),
+        sp_feats.unsafe_ptr().bitcast[CFeature](),
         sp_bin.unsafe_ptr(),
         flags.unsafe_ptr(),
         seq.unsafe_ptr(),

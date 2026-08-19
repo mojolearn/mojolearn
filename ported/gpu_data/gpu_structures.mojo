@@ -21,7 +21,7 @@ selection, categorical CTRs, exists to fill this struct.
 
 
 @fieldwise_init
-struct CFeature(Copyable, Movable):
+struct CFeature(Copyable, ImplicitlyCopyable, Movable):
     """`TCFeature`, field for field."""
 
     var offset: UInt32

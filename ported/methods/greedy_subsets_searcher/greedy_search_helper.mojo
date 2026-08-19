@@ -28,7 +28,11 @@ while porting rather than read from their source:
    forcing the bin loop innermost and the leaf loop outward.
 """
 
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+
+from ported.gpu_lib.gpu_manager import TCudaManager
+from std.sys.info import size_of
+from ported.gpu_data.gpu_structures import CFeature
 
 from ported.gpu_data.kernel.binarize import (
     WRITE_BLOCK_SIZE,
@@ -139,6 +143,25 @@ struct LevelResult(Copyable, Movable):
     var score: Float32
     var left_size: Int
     var right_size: Int
+
+
+
+# `TCFeature` is one struct in their kernels, not four parallel arrays, so the
+# driver has to build an array of it. Mojo device buffers are DType-shaped, so
+# the array is allocated as raw bytes and bitcast, which is what
+# `size_of[CFeature]()` is for.
+comptime CFEATURE_BYTES = size_of[CFeature]()
+
+
+def make_split_features_buffers(
+    ctx: DeviceContext, count: Int
+) raises -> Tuple[DeviceBuffer[DType.uint8], HostBuffer[DType.uint8]]:
+    """Their `splitFeaturesGpu` (`split_properties_helper.cpp:856`)."""
+    var d = ctx.enqueue_create_buffer[DType.uint8](count * CFEATURE_BYTES)
+    var h = ctx.enqueue_create_host_buffer[DType.uint8](
+        count * CFEATURE_BYTES
+    )
+    return (d^, h^)
 
 
 def run_one_level(
@@ -327,10 +350,9 @@ def run_one_level(
     var best = Int(hob.unsafe_ptr().unsafe_load(0))
 
     # 5. SPLIT FLAGS ------------------------------------------------------
-    var sp_off = ctx.enqueue_create_buffer[DType.uint32](1)
-    var sp_shift = ctx.enqueue_create_buffer[DType.uint32](1)
-    var sp_mask = ctx.enqueue_create_buffer[DType.uint32](1)
-    var sp_hot = ctx.enqueue_create_buffer[DType.uint8](1)
+    var built1 = make_split_features_buffers(ctx, 1)
+    var sp_feats = built1[0]
+    var sp_feats_h = built1[1]
     var sp_bin = ctx.enqueue_create_buffer[DType.uint32](1)
     var a = ctx.enqueue_create_host_buffer[DType.uint32](1)
     var b = ctx.enqueue_create_host_buffer[DType.uint32](1)
@@ -342,10 +364,17 @@ def run_one_level(
     c.unsafe_ptr().unsafe_store(0, UInt32(1))
     d.unsafe_ptr().unsafe_store(0, UInt8(0))
     e.unsafe_ptr().unsafe_store(0, UInt32(0))
-    ctx.enqueue_copy(dst_buf=sp_off, src_ptr=a.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=sp_shift, src_ptr=b.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=sp_mask, src_ptr=c.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=sp_hot, src_ptr=d.unsafe_ptr())
+    sp_feats_h.unsafe_ptr().bitcast[CFeature]()[unsafe_offset=0] = (
+        CFeature(
+            offset=UInt32(0),
+            mask=UInt32(1),
+            shift=UInt32(31 - best),
+            first_fold_index=UInt32(0),
+            folds=UInt32(1),
+            one_hot_feature=False,
+        )
+    )
+    ctx.enqueue_copy(dst_buf=sp_feats, src_ptr=sp_feats_h.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=sp_bin, src_ptr=e.unsafe_ptr())
 
     var flags = ctx.enqueue_create_buffer[DType.uint8](n_rows)
@@ -358,10 +387,7 @@ def run_one_level(
         p_off.unsafe_ptr(),
         p_sz.unsafe_ptr(),
         leaf0.unsafe_ptr(),
-        sp_off.unsafe_ptr(),
-        sp_shift.unsafe_ptr(),
-        sp_mask.unsafe_ptr(),
-        sp_hot.unsafe_ptr(),
+        sp_feats.unsafe_ptr().bitcast[CFeature](),
         sp_bin.unsafe_ptr(),
         flags.unsafe_ptr(),
         seq.unsafe_ptr(),
@@ -617,16 +643,26 @@ def run_tree(
     var hos = ctx.enqueue_create_host_buffer[DType.float32](1)
     var hob = ctx.enqueue_create_host_buffer[DType.uint32](1)
 
-    var sp1 = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
-    var sp2 = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
-    var sp3 = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+    # Their `MakeSplit` packs every ui32 it has to send into ONE buffer and
+    # copies once (`split_properties_helper.cpp:886-905`):
+    #
+    #     const TSlice binsSlice      = TSlice(0, splitBins.size());
+    #     const TSlice leftIdsSlice   = TSlice(binsSlice.Right, ...);
+    #     const TSlice rightIdsSlice  = TSlice(leftIdsSlice.Right, ...);
+    #     auto allUi32Data = TMirrorBuffer<ui32>::Create(...);
+    #     allUi32DataCpu.Write(tmp);
+    #     allUi32Data.Copy(allUi32DataCpu);
+    #
+    # Ours holds the four ui32 fields of the split descriptor the same way.
+    # It used to be four separate buffers and four separate copies followed
+    # by a drain. The one-hot flag stays its own buffer because it is UInt8,
+    # which is also why theirs keeps `splitFeaturesGpu` separate from
+    # `allUi32Data`.
+    var built_f = make_split_features_buffers(ctx, max_leaves)
+    var sp_feats = built_f[0]
+    var sp_feats_h = built_f[1]
     var sp5 = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
-    var sp4 = ctx.enqueue_create_buffer[DType.uint8](max_leaves)
-    var hs1 = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
-    var hs2 = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
-    var hs3 = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
     var hs5 = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
-    var hs4 = ctx.enqueue_create_host_buffer[DType.uint8](max_leaves)
     ctx.synchronize()
 
     # Leaf values land here; the caller reads them through `tree_leaf_value`.
@@ -750,16 +786,20 @@ def run_tree(
             best = 0
 
         # ---- 4. apply it to every leaf ----------------------------------
+        var hfeat = sp_feats_h.unsafe_ptr().bitcast[CFeature]()
         for i in range(n_live):
-            hs1.unsafe_ptr().unsafe_store(i, UInt32(0))
-            hs2.unsafe_ptr().unsafe_store(i, UInt32(31 - best))
-            hs3.unsafe_ptr().unsafe_store(i, UInt32(1))
-            hs4.unsafe_ptr().unsafe_store(i, UInt8(0))
+            hfeat[unsafe_offset=i] = (
+                CFeature(
+                    offset=UInt32(0),
+                    mask=UInt32(1),
+                    shift=UInt32(31 - best),
+                    first_fold_index=UInt32(0),
+                    folds=UInt32(1),
+                    one_hot_feature=False,
+                )
+            )
             hs5.unsafe_ptr().unsafe_store(i, UInt32(0))
-        ctx.enqueue_copy(dst_buf=sp1, src_ptr=hs1.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=sp2, src_ptr=hs2.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=sp3, src_ptr=hs3.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=sp4, src_ptr=hs4.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=sp_feats, src_ptr=sp_feats_h.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=sp5, src_ptr=hs5.unsafe_ptr())
         ctx.synchronize()
 
@@ -769,10 +809,7 @@ def run_tree(
             p_off.unsafe_ptr(),
             p_sz.unsafe_ptr(),
             ids_a.unsafe_ptr(),
-            sp1.unsafe_ptr(),
-            sp2.unsafe_ptr(),
-            sp3.unsafe_ptr(),
-            sp4.unsafe_ptr(),
+            sp_feats.unsafe_ptr().bitcast[CFeature](),
             sp5.unsafe_ptr(),
             flags.unsafe_ptr(),
             seq.unsafe_ptr(),
@@ -1373,16 +1410,26 @@ def run_tree_layout(
     var out_bin = ctx.enqueue_create_buffer[DType.uint32](1)
     var hob = ctx.enqueue_create_host_buffer[DType.uint32](1)
 
-    var sp1 = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
-    var sp2 = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
-    var sp3 = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
-    var sp5 = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
-    var sp4 = ctx.enqueue_create_buffer[DType.uint8](max_leaves)
-    var hs1 = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
-    var hs2 = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
-    var hs3 = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
-    var hs5 = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
-    var hs4 = ctx.enqueue_create_host_buffer[DType.uint8](max_leaves)
+    # Their `MakeSplit` packs every ui32 it has to send into ONE buffer and
+    # copies once (`split_properties_helper.cpp:886-905`):
+    #
+    #     const TSlice binsSlice      = TSlice(0, splitBins.size());
+    #     const TSlice leftIdsSlice   = TSlice(binsSlice.Right, ...);
+    #     const TSlice rightIdsSlice  = TSlice(leftIdsSlice.Right, ...);
+    #     auto allUi32Data = TMirrorBuffer<ui32>::Create(...);
+    #     allUi32DataCpu.Write(tmp);
+    #     allUi32Data.Copy(allUi32DataCpu);
+    #
+    # Ours holds the four ui32 fields of the split descriptor the same way.
+    # It used to be four separate buffers and four separate copies followed
+    # by a drain. The one-hot flag stays its own buffer because it is UInt8,
+    # which is also why theirs keeps `splitFeaturesGpu` separate from
+    # `allUi32Data`.
+    var built_f = make_split_features_buffers(ctx, max_leaves)
+    var sp_feats = built_f[0]
+    var sp_feats_h = built_f[1]
+    var sp_bins = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+    var sp_bins_h = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
 
     # The scan needs each feature's first bin and fold count over the FLAT
     # histogram, which is exactly what the layout holds.
@@ -1401,15 +1448,34 @@ def run_tree_layout(
     ctx.enqueue_copy(dst_buf=flat_folds, src_ptr=hfd.unsafe_ptr())
     ctx.synchronize()
 
+    # ================================================================
+    # Their `TGreedyTreeLikeStructureSearcher::FitImpl`
+    # (`structure_searcher_template.h:41`):
+    #
+    #     TPointsSubsets subsets = searchHelper.CreateInitialSubsets(...);
+    #     while (true) {
+    #         searchHelper.ComputeOptimalSplits(&subsets);
+    #         if (!searchHelper.SplitLeaves(&subsets, ...)) break;
+    #     }
+    #
+    # Two phases per level, and theirs blocks the host exactly TWICE in them:
+    # `bestProps.Read(propsCpu)` (`greedy_search_helper.cpp:517`) and the
+    # leaf-size read in `RebuildLeavesSizes`
+    # (`split_properties_helper.cpp:802`). This loop now does the same two
+    # and nothing else, and the budget below turns a third into an error.
+    # ================================================================
+    var mgr = TCudaManager(ctx.copy(), sync_budget=2 * max_depth + 1)
+
     var n_live = 1
     var max_live_rows = n_rows
 
     for depth in range(max_depth):
+        # ============ ComputeOptimalSplits ============
+        # their `greedy_search_helper.cpp:398`
         for i in range(n_live):
             h_ids_a.unsafe_ptr().unsafe_store(i, UInt32(i))
         ctx.enqueue_copy(dst_buf=ids_a, src_ptr=h_ids_a.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=zero_ids, src_ptr=h_ids_a.unsafe_ptr())
-        ctx.synchronize()
 
         ctx.enqueue_function[zero_histograms_kernel](
             zero_ids.unsafe_ptr(),
@@ -1420,31 +1486,37 @@ def run_tree_layout(
             ),
             block_dim=(256, 1, 1),
         )
+        mgr.stream_kernel()
 
+        # their `SplitPropsHelper.BuildNecessaryHistograms(subsets)`
         launch_histograms_for_blocks(
             ctx, dblocks, depth, n_live, n_rows, stat_count, max_leaves,
             replicas, fixed_scale,
             cindex, row_index, stats, p_off, p_sz, ids_a, hist, acc_i32,
             block_hist, hist_cells_per_leaf,
         )
+        mgr.stream_kernel()
 
         ctx.enqueue_function[fixed_to_float_kernel](
             acc_i32.unsafe_ptr(), hist.unsafe_ptr(), Int32(hist_cells),
             fixed_scale,
             grid_dim=(hist_cells + 255) // 256, block_dim=256,
         )
+        mgr.stream_kernel()
         ctx.enqueue_function[scan_histograms_kernel](
             flat_first.unsafe_ptr(), flat_folds.unsafe_ptr(),
             Int32(len(fold_counts)), Int32(hist_cells_per_leaf),
             hist.unsafe_ptr(),
             grid_dim=(1, n_live, stat_count), block_dim=(256, 1, 1),
         )
+        mgr.stream_kernel()
 
+        # their `AllReduceThroughMaster(subsets->CurrentPartStats(), ...)`
         compute_partition_stats(
             ctx, n_live, max_live_rows, stat_count, n_rows,
             ids_a, p_off, p_sz, stats, stat_partials, part_stats,
         )
-        ctx.synchronize()
+        mgr.stream_kernel()
 
         ctx.enqueue_function[compute_optimal_splits_kernel](
             skip.unsafe_ptr(), Int32(hist_cells_per_leaf), hist.unsafe_ptr(),
@@ -1453,9 +1525,13 @@ def run_tree_layout(
             out_score.unsafe_ptr(), out_bin.unsafe_ptr(),
             grid_dim=(1, 1, 1), block_dim=(SCORE_BLOCK_SIZE, 1, 1),
         )
-        ctx.synchronize()
+        mgr.stream_kernel()
         ctx.enqueue_copy(dst_ptr=hob.unsafe_ptr(), src_buf=out_bin)
-        ctx.synchronize()
+
+        # DRAIN 1 of 2. Their `bestProps.Read(propsCpu)`
+        # (`greedy_search_helper.cpp:517`). The host cannot pick the split
+        # without the argmax, so this one is theirs too and stays.
+        mgr.wait_complete()
 
         var best_bf = Int(hob.unsafe_ptr().unsafe_load(0))
         if best_bf < 0 or best_bf >= hist_cells_per_leaf:
@@ -1463,87 +1539,113 @@ def run_tree_layout(
         var choice = resolve_split(layout, best_bf)
         ref cf = layout.features[choice.feature]
 
+        # ============ SplitLeaves -> MakeSplit ============
+        # their `greedy_search_helper.cpp:575` and
+        # `split_properties_helper.cpp:833`.
+        #
+        # THE LEAF NUMBERING IS THEIRS NOW:
+        #
+        #     const ui32 leftId  = leavesToSplit[i];
+        #     const ui32 rightId = leavesCount + i;
+        #
+        # The left child KEEPS its parent's slot and the right child is
+        # appended at the end. That is the whole reason their partition
+        # array never round trips: `UpdatePartitionsAfterSplitImpl`
+        # (`split_points.cu:346`) reads `parts[leftLeaf]`, which still holds
+        # the parent, and writes both children from it.
+        #
+        # Ours used to number children 2i and 2i+1, which needs the parent
+        # spread outward before the kernel can run, and that spread was a
+        # host loop between a device-to-host read and a host-to-device write.
+        # Adopting their numbering deletes the read, the loop and the write.
+        var hfeat = sp_feats_h.unsafe_ptr().bitcast[CFeature]()
         for i in range(n_live):
-            hs1.unsafe_ptr().unsafe_store(i, cf.offset * UInt32(n_rows))
-            hs2.unsafe_ptr().unsafe_store(i, cf.shift)
-            hs3.unsafe_ptr().unsafe_store(i, cf.mask)
-            hs4.unsafe_ptr().unsafe_store(
-                i, UInt8(1) if cf.one_hot_feature else UInt8(0)
+            # Their `splitsFeaturesBuilder.Add(DataSet.GetTCFeature(...))`
+            # and `splitBins.push_back(splitFeature.BinIdx)`
+            # (`split_properties_helper.cpp:872-873`), one entry per leaf.
+            # `offset` is scaled to the row stride here because our
+            # compressed index is addressed in rows, not in their columns.
+            hfeat[unsafe_offset=i] = (
+                CFeature(
+                    offset=cf.offset * UInt32(n_rows),
+                    mask=cf.mask,
+                    shift=cf.shift,
+                    first_fold_index=cf.first_fold_index,
+                    folds=cf.folds,
+                    one_hot_feature=cf.one_hot_feature,
+                )
             )
-            hs5.unsafe_ptr().unsafe_store(i, UInt32(choice.bin))
-        ctx.enqueue_copy(dst_buf=sp1, src_ptr=hs1.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=sp2, src_ptr=hs2.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=sp3, src_ptr=hs3.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=sp4, src_ptr=hs4.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=sp5, src_ptr=hs5.unsafe_ptr())
-        ctx.synchronize()
+            sp_bins_h.unsafe_ptr().unsafe_store(i, UInt32(choice.bin))
+            # their leftIds / rightIds
+            h_ids_b.unsafe_ptr().unsafe_store(i, UInt32(i))
+            h_ids_c.unsafe_ptr().unsafe_store(i, UInt32(n_live + i))
+        ctx.enqueue_copy(dst_buf=sp_feats, src_ptr=sp_feats_h.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=sp_bins, src_ptr=sp_bins_h.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=ids_b, src_ptr=h_ids_b.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=ids_c, src_ptr=h_ids_c.unsafe_ptr())
 
         ctx.enqueue_function[split_and_make_sequence_kernel](
             cindex.unsafe_ptr(), row_index.unsafe_ptr(),
             p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids_a.unsafe_ptr(),
-            sp1.unsafe_ptr(), sp2.unsafe_ptr(), sp3.unsafe_ptr(),
-            sp4.unsafe_ptr(), sp5.unsafe_ptr(),
+            sp_feats.unsafe_ptr().bitcast[CFeature](), sp_bins.unsafe_ptr(),
             flags.unsafe_ptr(), seq.unsafe_ptr(),
             grid_dim=(wide, n_live, 1),
             block_dim=(SPLIT_BLOCK_SIZE, 1, 1),
         )
+        mgr.stream_kernel()
 
         launch_stable_partition(
             ctx, n_live, max_live_rows, ids_a, p_off, p_sz, flags,
             chunk_zeros, chunk_offsets, leaf_zeros, gmap, sflags,
         )
+        mgr.stream_kernel()
 
         ctx.enqueue_function[gather_index_in_leaves_kernel](
             ids_a.unsafe_ptr(), p_off.unsafe_ptr(), p_sz.unsafe_ptr(),
             row_index.unsafe_ptr(), gmap.unsafe_ptr(), new_index.unsafe_ptr(),
             grid_dim=(wide, n_live, 1), block_dim=(256, 1, 1),
         )
+        mgr.stream_kernel()
         ctx.enqueue_function[copy_u32_kernel](
             row_index.unsafe_ptr(), new_index.unsafe_ptr(), Int32(n_rows),
             grid_dim=wide, block_dim=COPY_BLOCK,
         )
+        mgr.stream_kernel()
         ctx.enqueue_function[gather_in_leaves_kernel](
             ids_a.unsafe_ptr(), p_off.unsafe_ptr(), p_sz.unsafe_ptr(),
             stats.unsafe_ptr(), gmap.unsafe_ptr(), new_stats.unsafe_ptr(),
             Int32(stat_count), Int32(n_rows),
             grid_dim=(wide, n_live, 1), block_dim=(256, 1, 1),
         )
+        mgr.stream_kernel()
         ctx.enqueue_function[copy_f32_kernel](
             stats.unsafe_ptr(), new_stats.unsafe_ptr(),
             Int32(stat_count * n_rows),
             grid_dim=wide, block_dim=COPY_BLOCK,
         )
+        mgr.stream_kernel()
 
-        for i in range(n_live):
-            h_ids_b.unsafe_ptr().unsafe_store(i, UInt32(2 * i))
-            h_ids_c.unsafe_ptr().unsafe_store(i, UInt32(2 * i + 1))
-        ctx.enqueue_copy(dst_buf=ids_b, src_ptr=h_ids_b.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=ids_c, src_ptr=h_ids_c.unsafe_ptr())
-        ctx.enqueue_copy(dst_ptr=h_off.unsafe_ptr(), src_buf=p_off)
-        ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
-        ctx.synchronize()
-        for i in range(n_live - 1, -1, -1):
-            var o = h_off.unsafe_ptr().unsafe_load(i)
-            var s = h_sz.unsafe_ptr().unsafe_load(i)
-            h_off.unsafe_ptr().unsafe_store(2 * i, o)
-            h_sz.unsafe_ptr().unsafe_store(2 * i, s)
-            h_off.unsafe_ptr().unsafe_store(2 * i + 1, o)
-            h_sz.unsafe_ptr().unsafe_store(2 * i + 1, UInt32(0))
-        ctx.enqueue_copy(dst_buf=p_off, src_ptr=h_off.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=p_sz, src_ptr=h_sz.unsafe_ptr())
-        ctx.synchronize()
-
+        # their `UpdatePartitionsAfterSplit` (`split_points.cu:387`), reached
+        # with NO host arithmetic in front of it because the left child kept
+        # the parent's slot.
         ctx.enqueue_function[update_partitions_after_split_kernel](
             ids_b.unsafe_ptr(), ids_c.unsafe_ptr(), Int32(n_live),
             sflags.unsafe_ptr(), p_off.unsafe_ptr(), p_sz.unsafe_ptr(),
             hp_off.unsafe_ptr(), hp_sz.unsafe_ptr(),
             grid_dim=(wide, n_live, 1), block_dim=(512, 1, 1),
         )
-        ctx.synchronize()
+        mgr.stream_kernel()
 
         n_live = n_live * 2
         ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
-        ctx.synchronize()
+
+        # DRAIN 2 of 2. Their `RebuildLeavesSizes`
+        # (`split_properties_helper.cpp:800`). They get it for free off
+        # pinned host memory; we pay a copy. See ported/gpu_lib/NOT_PORTED.md
+        # for the measurement that says the copy is the cheaper of the two
+        # on this stack.
+        mgr.wait_complete()
+
         max_live_rows = 1
         for i in range(n_live):
             var s = Int(h_sz.unsafe_ptr().unsafe_load(i))
@@ -1551,7 +1653,7 @@ def run_tree_layout(
                 max_live_rows = s
 
     ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
-    ctx.synchronize()
+    mgr.wait_complete()
     var out = List[Int]()
     for i in range(n_live):
         out.append(Int(h_sz.unsafe_ptr().unsafe_load(i)))

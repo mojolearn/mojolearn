@@ -13,6 +13,8 @@ It checks REACHABILITY, not correctness. A kernel that enqueues can still
 compute nonsense; that is what the level loop's digests will be for.
 """
 
+from std.sys.info import size_of
+from ported.gpu_data.gpu_structures import CFeature
 from max.gpu.host import DeviceContext
 
 from ported.methods.greedy_subsets_searcher.kernel.compute_scores import compute_optimal_splits_kernel
@@ -149,10 +151,8 @@ def probe() raises:
 
     var ci = ctx.enqueue_create_buffer[DType.uint32](4096)
     var li = ctx.enqueue_create_buffer[DType.uint32](4096)
-    var spo = ctx.enqueue_create_buffer[DType.uint32](64)
-    var sps = ctx.enqueue_create_buffer[DType.uint32](64)
-    var spm = ctx.enqueue_create_buffer[DType.uint32](64)
-    var sph = ctx.enqueue_create_buffer[DType.uint8](64)
+    # their `const TCFeature* splitFeatures` plus `const ui32* splitBins`
+    var spf = ctx.enqueue_create_buffer[DType.uint8](64 * size_of[CFeature]())
     var spb = ctx.enqueue_create_buffer[DType.uint32](64)
     var sfl = ctx.enqueue_create_buffer[DType.uint8](4096)
     var idx = ctx.enqueue_create_buffer[DType.uint32](4096)
@@ -166,10 +166,7 @@ def probe() raises:
         poff.unsafe_ptr(),
         psz.unsafe_ptr(),
         lids.unsafe_ptr(),
-        spo.unsafe_ptr(),
-        sps.unsafe_ptr(),
-        spm.unsafe_ptr(),
-        sph.unsafe_ptr(),
+        spf.unsafe_ptr().bitcast[CFeature](),
         spb.unsafe_ptr(),
         sfl.unsafe_ptr(),
         idx.unsafe_ptr(),

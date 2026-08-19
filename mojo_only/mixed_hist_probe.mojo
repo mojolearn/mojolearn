@@ -24,7 +24,7 @@ from ported.methods.greedy_subsets_searcher.greedy_search_helper import (
 )
 
 
-def probe_mixed_histogram(binary: Int = 8, half: Int = 4, one: Int = 4) raises:
+def probe_mixed_histogram(binary: Int = 8, half: Int = 4, one: Int = 4, pre_bridge: Bool = False) raises:
     var ctx = DeviceContext()
     var n_rows = 2048
     var stat_count = 2
@@ -133,16 +133,26 @@ def probe_mixed_histogram(binary: Int = 8, half: Int = 4, one: Int = 4) raises:
     launch_histograms_for_blocks(
         ctx, dblocks, 0, 1, n_rows, stat_count, max_leaves, 1, Float32(1.0),
         cindex, row_index, stats, p_off, p_sz, ids, hist, acc,
-        block_hist, lay.hist_cells,
+        block_hist, lay.hist_cells, pre_bridge,
     )
     ctx.synchronize()
 
+    # PRE-BRIDGE reads what the KERNEL wrote, in the per-block layout.
+    # POST-BRIDGE reads the flat histogram the scorer sees. Comparing the two
+    # separates a bad accumulation from a bad scatter.
     var out = ctx.enqueue_create_host_buffer[DType.float32](hist_cells)
-    ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=hist)
+    if pre_bridge:
+        ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=block_hist)
+    else:
+        ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=hist)
     ctx.synchronize()
 
     # Leaf 0, stat 0 (the weight plane): cell for (feature f, bin b) sits at
     # first_fold_index[f] + b in the flat array.
+    print(
+        "  reading",
+        "BLOCK scratch (pre-bridge)" if pre_bridge else "FLAT (post-bridge)",
+    )
     print("  feature  policy            bin0 device / host   status")
     var wrong = 0
     for f in range(n_features):
@@ -151,6 +161,8 @@ def probe_mixed_histogram(binary: Int = 8, half: Int = 4, one: Int = 4) raises:
         for r in range(n_rows):
             if host_bin[f][r] == 0:
                 want += 1
+        # Post-bridge: the flat index. Pre-bridge: the within-block index,
+        # which for a single-policy probe is the same running total.
         var got = out.unsafe_ptr().unsafe_load(Int(cf.first_fold_index))
         var ok = abs(got - Float32(want)) < Float32(1e-3)
         if not ok:
