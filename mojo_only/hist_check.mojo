@@ -173,3 +173,142 @@ def check_binary_histogram() raises:
             + " features"
         )
     print("  binary histogram computes the right answer")
+
+
+def check_two_partitions() raises:
+    """The case a single full partition cannot catch: TWO leaves, unequal.
+
+    A one-partition check passes even if the kernel ignores `part_offset`
+    entirely, because that offset is zero. This one puts leaf 0 at rows
+    [0, 24) and leaf 1 at rows [24, 64), so an ignored offset or a wrong
+    partition lookup gives a wrong count rather than the right one by
+    accident.
+
+    Feature f has bin (r + f) % 2, so leaf 0's zero-side count is the number
+    of even (r + f) for r in [0, 24), which is 12 for every f, and leaf 1's
+    is the count over [24, 64), which is 20.
+    """
+    var ctx = DeviceContext()
+    var n_rows = 64
+    var n_features = features_per_int(POLICY_BINARY)
+    var split_at = 24
+
+    var cindex = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+    var zero32 = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
+    for i in range(n_rows):
+        zero32.unsafe_ptr().unsafe_store(i, UInt32(0))
+    ctx.enqueue_copy(dst_buf=cindex, src_ptr=zero32.unsafe_ptr())
+    ctx.synchronize()
+
+    var host_bins = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
+    var bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
+    for f in range(n_features):
+        for r in range(n_rows):
+            host_bins.unsafe_ptr().unsafe_store(r, UInt8((r + f) % 2))
+        ctx.enqueue_copy(dst_buf=bins, src_ptr=host_bins.unsafe_ptr())
+        ctx.enqueue_function[write_compressed_index_kernel](
+            Int32(0),
+            policy_mask(POLICY_BINARY),
+            UInt32(policy_shift(POLICY_BINARY, f)),
+            bins.unsafe_ptr(),
+            Int32(n_rows),
+            cindex.unsafe_ptr(),
+            grid_dim=(n_rows + WRITE_BLOCK_SIZE - 1) // WRITE_BLOCK_SIZE,
+            block_dim=WRITE_BLOCK_SIZE,
+        )
+        ctx.synchronize()
+
+    # Two partitions, unequal, second one offset.
+    var p_off = ctx.enqueue_create_buffer[DType.uint32](2)
+    var p_sz = ctx.enqueue_create_buffer[DType.uint32](2)
+    var p_ids = ctx.enqueue_create_buffer[DType.uint32](2)
+    var h_off = ctx.enqueue_create_host_buffer[DType.uint32](2)
+    var h_sz = ctx.enqueue_create_host_buffer[DType.uint32](2)
+    var h_ids = ctx.enqueue_create_host_buffer[DType.uint32](2)
+    h_off.unsafe_ptr().unsafe_store(0, UInt32(0))
+    h_off.unsafe_ptr().unsafe_store(1, UInt32(split_at))
+    h_sz.unsafe_ptr().unsafe_store(0, UInt32(split_at))
+    h_sz.unsafe_ptr().unsafe_store(1, UInt32(n_rows - split_at))
+    h_ids.unsafe_ptr().unsafe_store(0, UInt32(0))
+    h_ids.unsafe_ptr().unsafe_store(1, UInt32(1))
+    ctx.enqueue_copy(dst_buf=p_off, src_ptr=h_off.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=p_sz, src_ptr=h_sz.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=p_ids, src_ptr=h_ids.unsafe_ptr())
+
+    var stats = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    var host_stats = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
+    for r in range(n_rows):
+        host_stats.unsafe_ptr().unsafe_store(r, Float32(1.0))
+    ctx.enqueue_copy(dst_buf=stats, src_ptr=host_stats.unsafe_ptr())
+
+    var folds = ctx.enqueue_create_buffer[DType.uint32](n_features)
+    var fold_off = ctx.enqueue_create_buffer[DType.uint32](n_features)
+    var grp_off = ctx.enqueue_create_buffer[DType.uint32](n_features)
+    var grp_sz = ctx.enqueue_create_buffer[DType.uint32](n_features)
+    var h_folds = ctx.enqueue_create_host_buffer[DType.uint32](n_features)
+    var h_fold_off = ctx.enqueue_create_host_buffer[DType.uint32](n_features)
+    var h_grp_off = ctx.enqueue_create_host_buffer[DType.uint32](n_features)
+    var h_grp_sz = ctx.enqueue_create_host_buffer[DType.uint32](n_features)
+    for f in range(n_features):
+        h_folds.unsafe_ptr().unsafe_store(f, UInt32(1))
+        h_fold_off.unsafe_ptr().unsafe_store(f, UInt32(f))
+        h_grp_off.unsafe_ptr().unsafe_store(f, UInt32(0))
+        h_grp_sz.unsafe_ptr().unsafe_store(f, UInt32(n_features))
+    ctx.enqueue_copy(dst_buf=folds, src_ptr=h_folds.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=fold_off, src_ptr=h_fold_off.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=grp_off, src_ptr=h_grp_off.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=grp_sz, src_ptr=h_grp_sz.unsafe_ptr())
+
+    # Two leaves, so the sums buffer holds two leaves' worth.
+    var sums = ctx.enqueue_create_buffer[DType.float32](2 * n_features)
+    var zerof = ctx.enqueue_create_host_buffer[DType.float32](2 * n_features)
+    for i in range(2 * n_features):
+        zerof.unsafe_ptr().unsafe_store(i, Float32(0.0))
+    ctx.enqueue_copy(dst_buf=sums, src_ptr=zerof.unsafe_ptr())
+    ctx.synchronize()
+
+    # grid y = 2: BOTH leaves in ONE launch. That is the design property.
+    ctx.enqueue_function[binary_hist_kernel](
+        folds.unsafe_ptr(),
+        fold_off.unsafe_ptr(),
+        grp_off.unsafe_ptr(),
+        grp_sz.unsafe_ptr(),
+        Int32(n_features),
+        cindex.unsafe_ptr(),
+        Int32(n_rows),
+        stats.unsafe_ptr(),
+        Int32(n_rows),
+        p_off.unsafe_ptr(),
+        p_sz.unsafe_ptr(),
+        p_ids.unsafe_ptr(),
+        sums.unsafe_ptr(),
+        Int32(2),
+        Int32(1),
+        grid_dim=(1, 2, 1),
+        block_dim=(BLOCK_SIZE, 1, 1),
+    )
+    ctx.synchronize()
+
+    var out = ctx.enqueue_create_host_buffer[DType.float32](2 * n_features)
+    ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=sums)
+    ctx.synchronize()
+
+    print("  two leaves in ONE launch: rows [0,24) and [24,64)")
+    print("  expected zero-side counts: leaf 0 -> 12.0, leaf 1 -> 20.0")
+    var wrong = 0
+    for leaf in range(2):
+        var want = Float32(12.0) if leaf == 0 else Float32(20.0)
+        for f in range(n_features):
+            var got = out.unsafe_ptr().unsafe_load(leaf * n_features + f)
+            if abs(got - want) > Float32(1e-3):
+                wrong += 1
+    print("    leaf 0 feature 0 ->", out.unsafe_ptr().unsafe_load(0))
+    print("    leaf 1 feature 0 ->", out.unsafe_ptr().unsafe_load(n_features))
+    print("  wrong cells:", wrong, "of", 2 * n_features)
+    if wrong != 0:
+        raise Error(
+            "the two-leaf histogram is WRONG in "
+            + String(wrong)
+            + " cells"
+        )
+    print("  partition offsets honored, both leaves from one launch")
