@@ -154,10 +154,19 @@ one-hot flag, bin) into five separate buffers.
 
 ### What this means for porting
 
-More kernel porting will not close this gap. The kernels are transliterated
-and the histogram is not the bottleneck at this shape. The deficit is in the
-CONTROL PLANE, which is the part that could not be transliterated because
-CatBoost's is CUDA streams and ours is Mojo enqueue plus drain.
+The paragraph that stood here said the deficit was the CONTROL PLANE. **A
+2026-08-19 measurement falsified it and it is deleted rather than
+annotated.** `sync_price.mojo` priced the drains and the copies but never
+the kernel time between them. Counters on the live fit read 77 launches and
+12 drains per depth-6 tree (12 = CatBoost's own 2/level discipline, so the
+scheduling already matches theirs), and at this device's measured dispatch
+prices (191 us per launch+drain, 23 us per undrained launch) ALL dispatch
+comes to 3.8 ms of the 41.7 ms fixed cost. Nine percent. The remaining
+~38 ms is kernel time on the row-independent histogram footprint: 64 leaves
+x 100 features x 255 bins x 2 stats = 3.26M cells zeroed, flushed, scanned,
+subtracted and scored per level. Fixing dispatch cannot return more than
+3.8 ms; the fixed-cost work is in the KERNELS' footprint, and the per-row
+work is separately 2.1x CatBoost CPU (103 vs 48.6 us per 1000 rows).
 
 Two separate tracks, and they are not the same work:
 

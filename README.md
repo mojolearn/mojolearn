@@ -31,12 +31,23 @@ our histogram kernel is about 2x FASTER per update than CatBoost's.
 That paragraph used to end with a claim about launch count, that this port
 issues "73 command buffers and 1 host sync per tree". **It is false and it is
 deleted rather than annotated**, per the standing rule that a document a
-result falsifies is part of the result. `RESUME.md` measured
-`run_tree_layout` at 9 `ctx.synchronize()` and about 16 launches PER LEVEL,
-which is 54 host round trips and about 96 launches per depth-6 tree, and
-about 34 of our 50 ms per tree is fixed cost independent of the data. The
-deficit is the CONTROL PLANE, and `HOST_AND_DEVICE.md` now carries the rule
-that decides what may be done about it.
+result falsifies is part of the result.
+
+This section then said, for a day, that the deficit was the CONTROL PLANE.
+**That is falsified too, by measurement, and is deleted under the same
+rule.** On 2026-08-19 the counters read 77 launches and 12 drains per
+depth-6 tree at 800k x 100 (12 is exactly CatBoost's own two-per-level
+discipline), and pricing them on this Metal device (one launch+drain
+191 us, one undrained launch 23 us) puts ALL dispatch at 3.8 ms of the
+measured 41.7 ms fixed cost per tree. **Nine percent.** The other ~38 ms is
+KERNEL TIME on work whose size does not depend on the rows: the depth-6
+histogram footprint is 64 leaves x 100 features x 255 bins x 2 stats =
+3.26M cells, zeroed, flushed, scanned, subtracted and scored every level.
+The deficit is row-independent KERNEL WORK, and the per-row work is also
+2.1x CatBoost CPU's (103 vs 48.6 us per 1000 rows), so no dataset size
+closes the gap by itself. `HOST_AND_DEVICE.md` still carries the rule for
+what may be done about the control plane; the control plane is just no
+longer where the time is.
 
 What that day also established is that mojotrees' own code and its own
 instruments cannot be trusted to say why. Four features were found built,
