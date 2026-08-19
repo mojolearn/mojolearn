@@ -54,13 +54,19 @@ unportable. Keeping them apart is the whole content of this section.
 
    The total order is the one part of this that is OURS. Their fused
    comparator `KVPMinReduceImpl`
-   (`detail/fused_distance_nn/helper_structs.cuh:28-33`) compares the VALUE
+   (`detail/fused_distance_nn/helper_structs.cuh:39-44`) compares the VALUE
    only and keeps the shuffled partner on a tie, so their fused answer is
-   shuffle-shape dependent; this tree uses the tie-break from their UNFUSED
-   `MinAndDistanceReduceOpImpl` / `KVPMinReduceImpl`
-   (`fused_distance_nn/helper_structs.cuh:39-62`) in both arms so the two can
-   be
-   diffed against each other. That was already true of the shared-memory
+   shuffle-shape dependent. This tree uses the tie-break their UNFUSED arm
+   gets, which is `raft::argmin_op`
+   (`raft/core/operators.hpp:198-205`: `(b.value < a.value) || ((a.value ==
+   b.value) && (b.key < a.key))`), reached from
+   `kmeans_common.cuh:474-489` where `minClusterAndDistanceCompute`'s
+   non-fused branch hands `raft::argmin_op{}` to `coalescedReduction`. It is
+   used in both arms here so the two can be diffed against each other.
+   (This paragraph used to attribute the tie-break to
+   `MinAndDistanceReduceOpImpl` at `helper_structs.cuh:39-62`. That struct is
+   at `:47-97` and it is VALUE-ONLY too -- `if (other.value < out->value)`,
+   `:52` and `:59` -- so it was never the source of a key tie-break.) That was already true of the shared-memory
    merge this replaced, and it is load-bearing rather than tidiness
    (`PORTING.md` 14).
 
@@ -258,11 +264,12 @@ def fused_distance_nn_kernel(
     # butterfly pass per accumulator row, key and value shuffled together.
     # The comparator is NOT literally theirs, and this is the one place in
     # this kernel where that is deliberate. `KVPMinReduceImpl`
-    # (`detail/fused_distance_nn/helper_structs.cuh:28-33`) is
+    # (`detail/fused_distance_nn/helper_structs.cuh:39-44`) is
     # `b.value < a.value ? b : a`, VALUE ONLY, so on a tie their shuffled
     # partner wins and the answer depends on the shuffle shape. This tree
-    # uses the total order from their UNFUSED `Reducer`
-    # (`fused_distance_nn/helper_structs.cuh:39-62`) in both kernels instead:
+    # uses the total order their UNFUSED arm reduces with, `raft::argmin_op`
+    # (`raft/core/operators.hpp:202`, handed to `coalescedReduction` at
+    # `kmeans_common.cuh:488`), in both kernels instead:
     #     (a.value < b.value) || (a.value == b.value && a.key < b.key)
     # That is what makes the fused and unfused arms diffable against each
     # other, and it is what makes any reduction shape return the same pair.

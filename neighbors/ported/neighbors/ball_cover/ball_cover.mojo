@@ -110,11 +110,34 @@ ordering theirs produces:
 The cost is `sum over landmarks of |group|^2`, which at sqrt(m) landmarks is
 O(m^1.5) expected — the same order as the ball cover's own query bound
 (`ball_cover.cuh:318-327`, "a guarantee of sqrt(n) * c^{3/2}"), so it does
-not touch the asymptotics this lane exists to fix. A per-group bitonic sort
-would take it to O(m log^2 sqrt(m)) and is the follow-up recorded in the lane
-file; porting CUB's `DeviceRadixSort` (open, and the same digit-histogram
-shape as the RAFT radix SELECT already at
-`neighbors/ported/matrix/detail/select_radix.mojo`) is the other.
+not touch the asymptotics this lane exists to fix.
+
+**AND IT IS NOT WORTH REPLACING. MEASURED, M4, 2026-08-19.** The claim this
+paragraph used to carry — that the rank would dominate the build at large m —
+is false, and it is false for a structural reason: the rank and the 1-nn
+kernel above it are BOTH O(m^1.5), so their ratio is fixed and the rank never
+catches up. Build stages, min of three, DBSCAN scaling fixture (d = 8):
+
+    n          1-nn      count+scan+scatter    RANK    reorder+radii
+    16,000     0.62 ms         0.36 ms        0.30 ms      0.25 ms
+    50,000     2.33            0.43           0.58         0.35
+    100,000    6.05            0.46           1.16         0.49
+    200,000   16.53            0.54           2.59         0.80
+
+The rank is 13% of the build at 200,000 and the whole build is 7% of a
+DBSCAN fit, so **the rank is 0.4% of the fit** — and the 1-nn kernel above it
+is 6.4x larger. The tail is mild too: the worst group is 2.3x the mean on a
+uniform fixture and 4.5x on a 12-blob clustered one, which puts
+`sum |group|^2` at 1.18x and 1.42x the balanced `m^1.5` and the rank kernel
+at 4.4 ms and 6.4 ms at m = 200,000.
+
+So a per-group bitonic sort, or a port of CUB's `DeviceRadixSort` (open, and
+the same digit-histogram shape as the RAFT radix SELECT already at
+`neighbors/ported/matrix/detail/select_radix.mojo`), is worth at most 1% of a
+fit here. `DeviceRadixSort` is still the general device sort this repository
+lacks — `nn.argsort[target="gpu"]` is wrong above 256 elements — and it
+should be ported for that reason, by whoever needs it. It should not be
+ported for this.
 
 **THE ORDER IS LOAD-BEARING AND IS NOT AN OPTIMIZATION.** Ascending order
 within each landmark group is what makes the query kernel's backward walk

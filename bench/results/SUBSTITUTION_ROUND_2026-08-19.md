@@ -1,5 +1,23 @@
 # After the substitution passes. Every arm moved.
 
+> **THE 8.33x IS AGAINST THE WRONG ARM. Corrected 2026-08-19, late.**
+>
+> `LinearRegression` is LAPACK `gelsd` -- an SVD of the full design matrix.
+> Ours is `lstsq_eig`: form `X^T X` (32 x 32 here) and eigendecompose it. Those
+> are different algorithms doing different amounts of work, so 8.33x is a
+> comparison of ALGORITHMS wearing the costume of a comparison of hardware.
+>
+> **The honest number is the `ols_normal_eq` arm** --
+> `Ridge(alpha=0, solver="cholesky")`, which forms `X^T X` and solves it, the
+> same route as ours. It is now emitted by `bench_sklearn.py` beside the
+> default arm. Until that has been run, THIS FILE HAS NO DEFENSIBLE OLS RATIO.
+>
+> The accuracy side of that trade is priced in `bench/ols_conditioning.py`: in
+> float32 -- which is all Metal has -- the normal-equations route is 32x less
+> accurate than `gelsd` at condition number 10 and 834x at 100, and past 1e3
+> float32 cannot hold the problem at all. Speed bought with precision, and both
+> halves belong next to the number.
+
 Apple M4, 3 rounds alternating our process with scikit-learn's, 15 samples
 per arm per side, pooled from one invocation of `bench/run_bench.py`.
 

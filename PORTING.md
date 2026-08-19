@@ -544,3 +544,81 @@ k-NN went 30.9 ms to 22.3 ms and from INDISTINGUISHABLE to a 1.41x win.
 value or named scalars.** `stack_allocation` is for shared memory, where the
 address space is passed explicitly, and using it for thread-private data
 silently spills what the whole optimization was about.
+
+# Deviations added 2026-08-19, late round
+
+> **NUMBERING GAP, STATED RATHER THAN HIDDEN.** Entries 27 through 34 are
+> referenced from code (`deviation 30`, `31`, `33`, `34`) and were written up
+> in the lane files that produced them -- `LANE_dbscan-brute`,
+> `LANE_vendor-correctness`, `LANE_rbc-build` -- but have not been folded into
+> this file yet. The two below are here because nothing else records them.
+
+## 35. DBSCAN defaults to the ball cover; cuML defaults to brute force
+
+Lives in full at `dbscan/ported/dbscan/runner.mojo`, above `EPS_NN_BRUTE_FORCE`.
+Short form: RBC beats our own brute force 2.70x to 27.53x from 16,000 points
+up and loses at no measured size, with labels identical point for point.
+
+**The mirroring argument for it was withdrawn.** An earlier version of that
+note claimed cuML's restrictions "cost us nothing"; the opposite is true.
+`runner.cuh:143-150` downgrades RBC to BRUTE_FORCE whenever the label type is
+`int32_t`, and `:235` builds the index only under `float && int64_t`. This
+port is int32-label, so **cuML's dispatch would never hand our parameters to
+RBC at all.** The default rests on the measurement alone.
+
+The inherited consequence is real and is now guarded: their int64 requirement
+exists because the CSR is indexed by EDGE count, which passes 2^31 at dense
+neighbourhoods long before it runs out of memory. `runner.mojo` raises on that
+overflow rather than wrapping, mirroring their brute-arm assertion at
+`:180-184`. Without it the offsets wrap, the CSR is garbage, and `weak_cc`
+still returns a plausible labelling -- silently.
+
+## 36. k-NN defaults to the TILED arm; cuVS defaults to the FUSED one
+
+Lives in full at `neighbors/ported/neighbors/detail/knn_brute_force.mojo`,
+above `KNN_METHOD_FUSED`. This is entry 35 pointed the other way, and it is
+the more instructive of the two, because the port was CORRECT and the
+expectation was still wrong.
+
+`fusedL2Knn` is what their dispatch takes at `k <= 64` + row-major + L2
+(`knn_brute_force.cuh:443`). It was ported down to `faiss_select::WarpSelect`
+in registers, verified register-resident in the emitted Metal IR, and it
+matches a host Float64 oracle slot for slot and in order. It is also 1.15x to
+1.18x SLOWER than the materialized tiled path at every size from 20,000 to
+400,000 index rows, arms interleaved inside the repeat loop and the whole
+sweep re-run with the arms in the opposite order.
+
+**The estimate going in was 6x to 10x faster.** It was arithmetic over memory
+traffic: the fused kernel never writes the ~23 GB distance matrix, so it
+"must" win. What that model left out is how many blocks the kernel can field.
+At `gridDim.x == 1` -- their cross-block merge protocol is a mutex plus
+`__threadfence` and is unported -- the block count is `ceil(n_queries / Mblk)`
+and does not depend on the index size at all. Holding the index at 200,000 and
+raising the query count shrinks the deficit monotonically (0.66x at 500
+queries, 0.86x at 2,000, 0.92x at 8,000, 0.93x at 32,000) and never crosses.
+
+**Rule: a traffic model that does not count blocks can predict the wrong
+SIGN, not merely the wrong magnitude.** Porting their `gridDim.x > 1` split
+is what would reverse this, and the arm stays reachable through `knn_method`
+so that re-measuring it then costs one argument rather than a revert.
+
+## Hazard: `linalg.matmul[transpose_b=True]` at `n == 1` does not write
+
+Not a deviation from an upstream, a defect in a vendor primitive we call, and
+it is recorded here because it was live on five paths at once.
+
+Measured through `core/gemm.mojo::gemm_nt` itself: m=64, n=1, k=32, output
+poisoned before the call, **63 of 64 rows still held the poison afterwards.**
+Nothing written wrong; almost nothing written at all. `VENDOR_LIBRARIES.md`
+had said "returns zeros for some outputs", which is why this looked benign for
+as long as it did -- zeros are visible, stale buffer contents are not.
+
+The fault is `transpose_b=True` and not the shape: the same product with
+`transpose_b=False` is correct at the identical shape. `n == 1` reaches it
+from ordinary parameters, including `n_clusters % centroid_batch == 1` at
+`min_cluster_distance_compute.mojo:197`, which is a REMAINDER. `gemm_nt` now
+routes `n == 1` to `gemv_n`, which is what RAFT does and which tests correct
+at every m from 1 to 100,003.
+
+**Rule: a vendor primitive is UNCHECKED until a poisoned output has survived
+it.** A signature proves reach; only a run proves the answer.

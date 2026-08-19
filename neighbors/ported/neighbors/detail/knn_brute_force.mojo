@@ -209,6 +209,67 @@ def tiled_brute_force_knn(
     ctx.synchronize()
 
 
+#: WHICH SIDE OF `knn_brute_force.cuh:443` THIS PORT TAKES BY DEFAULT.
+#:
+#: DEVIATION 36: WE DEFAULT TO THE TILED ARM AND cuVS DEFAULTS TO THE FUSED
+#: ONE. Their dispatch sends `k <= 64` + row-major + L2 to `fusedL2Knn`; ours
+#: sends it to `tiledBruteForceKnn`, their `else`. Both arms are theirs. Only
+#: which one runs unasked has changed.
+#:
+#: Measured on an M4, 32 features, k = 10, 2,000 queries, ARMS INTERLEAVED
+#: INSIDE THE REPEAT LOOP, min of 3, and RE-RUN WITH THE ARMS IN THE OPPOSITE
+#: ORDER (the second run agreed with the first to about 1%, so the ordering is
+#: not carrying the result). OURS AGAINST OURS:
+#:
+#:     n index     tiled ms   fused ms   fused/tiled
+#:      20,000        15.64      18.55       0.84x
+#:      50,000        39.60      45.39       0.87x
+#:     100,000        79.44      90.34       0.88x
+#:     200,000       155.25     180.22       0.86x
+#:     400,000       306.10     359.47       0.85x
+#:
+#: **The fused kernel is slower at every size measured and faster at none.**
+#: That is the same shape of argument the DBSCAN default rests on (DEVIATION
+#: 35), pointed the other way, and it was a surprise: fusion was expected to
+#: win by removing the distance matrix entirely.
+#:
+#: WHY IT LOSES, AS FAR AS IT HAS BEEN MEASURED. The ported `fusedL2Knn` runs
+#: at `gridDim.x == 1`, so its block count is `ceil(n_queries / Mblk)` and does
+#: NOT depend on n_index: at 2,000 queries that is ~125 blocks whether the
+#: index holds 20,000 rows or 400,000, and each block streams the whole index.
+#: Holding n_index at 200,000 and raising the query count confirms this is part
+#: of it, because the deficit shrinks monotonically as blocks are added:
+#:
+#:     queries     tiled ms   fused ms   fused/tiled
+#:        500         39.60      59.91       0.66x
+#:      2,000        154.89     180.12       0.86x
+#:      8,000        618.95     673.95       0.92x
+#:     32,000      2,498.22   2,696.12       0.93x
+#:
+#: **but it never crosses.** It asymptotes near 0.93x, so under-parallelisation
+#: explains the size of the gap and not its sign. The leading hypothesis for
+#: the residual is that the tiled arm's contraction is `linalg.matmul` while
+#: the fused arm's is our transliteration of RAFT's Policy4x4 tile, and
+#: `core/gemm.mojo` already records those measured at 248 against 15 GFLOP/s on
+#: a standalone product. **That is a hypothesis, not a measurement of THIS
+#: kernel**, and it is not what decided the default; the table above is.
+#:
+#: WHAT WOULD REVERSE THIS, and it is a real possibility rather than a hedge:
+#: porting their `gridDim.x > 1` split (the mutex plus `__threadfence`
+#: protocol at `fused_l2_knn.cuh:284-300`, unported) gives the fused kernel the
+#: second parallel axis the tiled arm already has. Until that lands the fused
+#: arm cannot use more than ~125 blocks at a normal query count. It stays
+#: reachable through `knn_method` precisely so that measuring it again after
+#: that lands costs one argument rather than a revert.
+#:
+#: This does not change any answer. `check_fused_l2_knn` and
+#: `check_fused_edge_shapes` match the host Float64 oracle slot for slot and in
+#: order, on the same fixtures the tiled arm is checked against, so the flip
+#: changes a wait and not an output.
+comptime KNN_METHOD_FUSED = 0
+comptime KNN_METHOD_TILED = 1
+
+
 def brute_force_knn_impl(
     ctx: DeviceContext,
     mut queries: DeviceBuffer[DType.float32],
@@ -231,6 +292,7 @@ def brute_force_knn_impl(
     use_vendor_topk: Bool = False,
     row_major_query: Bool = True,
     row_major_index: Bool = True,
+    knn_method: Int = KNN_METHOD_TILED,
 ) raises:
     """`brute_force_knn_impl`'s dispatch, `knn_brute_force.cuh:443-447`.
 
@@ -255,6 +317,13 @@ def brute_force_knn_impl(
     `query_tile`, `buf_len`, `dist_tile`, `buf_val`, `buf_idx` and
     `out_idx32` are only read on the fallback path. The fused path needs none
     of them, which is the whole point of it.
+
+    **BUT THE FUSED PATH IS NOT WHAT THIS RUNS BY DEFAULT.** `knn_method`
+    defaults to `KNN_METHOD_TILED`, which is their `else` at `:447`, because
+    the fused arm measured slower at every size on this hardware. The four
+    conditions above are still evaluated and still decide the arm whenever
+    `knn_method == KNN_METHOD_FUSED`. Read DEVIATION 36 above the constants
+    before changing either.
     """
     # THEIR `n < k` CASE IS NOT PORTED ON EITHER ARM, SO REFUSE IT.
     #
@@ -280,10 +349,15 @@ def brute_force_knn_impl(
             " selector cannot take k > len; see the lane file."
         )
 
+    # Their four conditions, unchanged, AND our own method switch. The
+    # switch is a separate clause rather than a rewrite of theirs so that
+    # `knn_method = KNN_METHOD_FUSED` restores their dispatch exactly. See
+    # DEVIATION 36 above the constants for why the default is the other side.
     var fused_ok = (
         k <= FKNN_MAX_NN
         and row_major_query == row_major_index
         and row_major_query
+        and knn_method == KNN_METHOD_FUSED
     )
     if fused_ok:
         fused_l2_knn(

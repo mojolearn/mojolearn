@@ -9,7 +9,8 @@ the only part of DBSCAN that is not distance arithmetic.
 THE `filter_op` IS THE WHOLE OF DBSCAN'S SEMANTICS
 --------------------------------------------------
 `weak_cc` is a general primitive; DBSCAN passes it a lambda that returns
-whether a vertex is a CORE point (`cuml/cpp/src/dbscan/runner.cuh:365`). That
+whether a vertex is a CORE point (`cuml/cpp/src/dbscan/runner.cuh:384-386`,
+the `filter_op` lambda passed to `weak_cc_batched`). That
 one predicate is what makes this DBSCAN rather than plain connected
 components:
 

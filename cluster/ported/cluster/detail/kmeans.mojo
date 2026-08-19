@@ -623,7 +623,7 @@ def kmeans_fit_main(
             # Sized in CELLS now, not rows: `accumulate_centroid_sums_kernel`
             # indexes `n_samples * n_features` the way RAFT's
             # `sum_rows_by_key_direct_kernel`
-            # (`raft/linalg/detail/reduce_rows_by_key.cuh:270-288`) does,
+            # (`raft/linalg/detail/reduce_rows_by_key.cuh:272-288`) does,
             # rather than striding rows and features separately.
             #
             # DEVIATION: theirs launches exactly one thread per cell and

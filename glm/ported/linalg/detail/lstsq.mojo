@@ -1,9 +1,9 @@
 """Least squares through the normal equations and an eigendecomposition.
 
-PORT OF `raft/linalg/detail/lstsq.cuh::lstsqEig` at RAFT `9aa17e5`.
+PORT OF `raft/linalg/detail/lstsq.cuh::lstsqEig` at RAFT `661a3b8`.
 Transliterated. Do not improve.
 
-This is cuML's OLS solver `algo = 1` (`cuml/cpp/src/glm/ols.cuh:105`). Their
+This is cuML's OLS solver `algo = 1` (`cuml/cpp/src/glm/ols.cuh:120`). Their
 six steps, copied:
 
     covA = A^T A                 O(rows * cols^2)
@@ -135,8 +135,10 @@ def lstsq_eig(
     # Q S Q* <- covA. Jacobi consumes covA and leaves S on its diagonal.
     #
     # `info` is the eigensolver's convergence report and it is not optional:
-    # `eigDC`, the arm cuML's default dispatch reaches, aborts on a non-zero
-    # `dev_info` (`raft/linalg/detail/eig.cuh:79-82`). An OLS built on an
+    # `eigDC`, the arm `lstsqEig` reaches (`lstsq.cuh:315`), aborts on a
+    # non-zero `dev_info` (`raft/linalg/detail/eig.cuh:149-151`; the
+    # identically worded ASSERT at `:79-81` belongs to `eigDC_legacy`, which
+    # nothing calls). An OLS built on an
     # unconverged eigendecomposition of `A^T A` is a wrong answer with no
     # error. `tol` and `sweeps` are `raft::linalg::eigJacobi`'s own defaults
     # (`raft/linalg/eig.cuh:108-109`); they used to be a hardcoded 80 and

@@ -84,7 +84,8 @@ def accumulate_centroid_sums_kernel(
     """`reduce_rows_by_key`, as a quantized scatter-add.
 
     **The atomic scatter-add itself is faithful, not a substitution gap.**
-    RAFT's `reduce_rows_by_key.cuh:300` also lands its contributions with a
+    RAFT's `reduce_rows_by_key.cuh:287` (`raft::myAtomicAdd`) also lands its
+    contributions with a
     global atomic add rather than a vendor segmented reduce, so there is
     nothing here to swap `cub::DeviceSegmentedReduce` into (and that is
     NOT FOUND anyway; see VENDOR_LIBRARIES.md). The only thing we change is
@@ -94,7 +95,8 @@ def accumulate_centroid_sums_kernel(
 
     The indexing is theirs too: a FLAT grid-stride over `n_rows * n_features`
     cells, matching their `gid = threadIdx.x + blockDim.x * blockIdx.x`
-    (`reduce_rows_by_key.cuh:292`). The earlier shape here strided rows on
+    (`reduce_rows_by_key.cuh:280`, in
+    `sum_rows_by_key_large_nkeys_kernel_rowmajor`). The earlier shape here strided rows on
     grid x and features on the threads, which idles `REDUCE_BY_KEY_TPB -
     n_features` threads of every block whenever `n_features < 128` and reads
     `x` in short runs. Flat indexing keeps all 128 threads on 128 consecutive

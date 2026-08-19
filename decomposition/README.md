@@ -161,7 +161,8 @@ Two defects of the same class as the size cap, both fixed:
 - hitting the sweep limit was SILENT. RAFT's Jacobi arm is silent too --
   `detail/eig.cuh:310` fetches `executed_sweeps` and never reads it, and it
   never checks `dev_info` -- but their DEFAULT arm `eigDC` aborts with
-  "eigensolver couldn't converge to a solution" (`detail/eig.cuh:79-82`), and
+  "eigensolver couldn't converge to a solution" (`detail/eig.cuh:149-151`;
+  the identical ASSERT at `:79-81` is `eigDC_legacy`'s, which nothing calls), and
   that is the behaviour we follow. The kernel writes a three-slot info buffer
   and `eig_and_truncate` raises on it.
 

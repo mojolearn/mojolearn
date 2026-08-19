@@ -41,7 +41,7 @@ is reading the index once.
 
 THE SELECTOR IS THEIRS, AND IT IS IN REGISTERS
 -----------------------------------------------
-`fused_l2_knn.cuh:221-222` declares
+`fused_l2_knn.cuh:218-222` declares
 
     typedef WarpSelect<AccT, uint32_t, Dir=false, Comparator<AccT>,
                        NumWarpQ, NumThreadQ, 32> myWarpSelect;
@@ -67,21 +67,21 @@ and owns exactly one value of `threadIdx.x / AccThCols`, so a warp owns the
 `WarpSelect` for each -- their `heapArr1` / `heapArr2` at `:359-361`.
 Every lane of a warp calls `add` the SAME number of times, `AccColsPerTh`
 per column tile, with `{keyMax, identity}` for a column past `n`: that is
-their `:459-469` verbatim, and it is also the call contract `WarpSelect`
+their `:456-469` verbatim, and it is also the call contract `WarpSelect`
 requires, because `checkThreadQ` holds a warp vote and a merge full of
 shuffles.
 
 **DEVIATION BLOCK 1 - the queues live in registers for the WHOLE column
 sweep, where theirs are spilled to shared memory and rebuilt every column
-tile.** THEIRS: the `epilog_lambda` (`:341-479`) is called once per
+tile.** THEIRS: the `epilog_lambda` (`:341-484`) is called once per
 `gridStrideX`, constructs fresh `heapArr1`/`heapArr2` each call, and carries
 the state between calls through `shDumpKV`, a `Mblk x numOfNN` shared array
-(`:351`, `loadWarpQShmem` `:59`, `storeWarpQShmem` `:77`). The first column
-tile (`gridStrideX == blockIdx.x * Nblk`, the `else` arm at `:453-476`)
+(`:352`, `loadWarpQShmem` `:59`, `storeWarpQShmem` `:77`). The first column
+tile (`gridStrideX == blockIdx.x * Nblk`, the `else` arm at `:454-477`)
 feeds every accumulator through `add` and then `reduce`s; every LATER column
-tile takes the `:366-451` arm instead, which counts the candidates below
-`warpKTop`, warp-prefix-sums them into `allWarpTopKs`, and merges them with
-`updateSortedWarpQ` (`:147-179`).
+tile takes the `:367-453` arm instead, which counts the candidates below
+`warpKTop`, warp-prefix-sums them into `allWarpTopKs` (`:396`, `:427-429`),
+and merges them with `updateSortedWarpQ` (`:147-185`).
 
 OURS: `heap0`/`heap1` are constructed once, before the column loop, and
 every column tile runs their `else` arm. `shDumpKV`, `allWarpTopKs`,
@@ -94,9 +94,12 @@ REASON, and it is a hard language wall, not a preference:
 them. Mojo 1.0 exposes warp shuffles and warp reductions
 (`std.gpu.primitives.warp`) but no ballot and no lane mask, so the value
 `activeLanes` cannot be formed at all. The prefix-sum staging at `:405-412`
-needs `__ballot_sync` as well. **Note that this is NOT confined to their
-cross-block path**: `updateSortedWarpQ` is called from the epilogue at
-`:437` on every column tile after the first, at any `gridDim.x`.
+needs `__ballot_sync` as well. **Note that this is NOT their cross-block
+code**: `updateSortedWarpQ` has exactly two call sites in the file, its
+definition at `:147` and `:437` inside `epilog_lambda`, and `:437` runs on
+every column tile after the first at any `gridDim.x`. Their cross-block
+merge in `rowEpilog_lambda` uses plain `heapArr[i]->add` (`:284-300`) and
+would have been expressible.
 
 Both arms are exact selections over the same set of `(distance, column)`
 pairs, so with distinct distances they return the identical sorted answer;
@@ -105,7 +108,7 @@ against a host Float64 oracle. What the deviation costs is their threshold
 pre-count: theirs rejects a whole column tile's candidates with one compare
 against `warpKTop` and only pays the merge for the survivors, while ours
 pays one `add` -- a compare, plus a warp vote -- per accumulator element.
-`addThreadQ` (`Select.cuh:376`) applies the SAME `warpKTop` threshold, so no
+`addThreadQ` (`Select.cuh:383-397`) applies the SAME `warpKTop` threshold, so no
 element enters the thread queue that theirs would have rejected; the cost is
 the vote in `checkThreadQ`, which is 8 per row per column tile. Not measured
 separately.
@@ -113,7 +116,7 @@ separately.
 **DEVIATION BLOCK 2 - the cross-block merge is not ported.** Theirs
 grid-strides BOTH axes and serializes the per-row merge across column blocks
 with a mutex array, `atomicCAS`/`atomicExch` and `__threadfence`
-(`:251-279`, `:313-337`). We launch `gridDim.x == 1` and grid-stride the
+(`:241-281`, `:313-338`). We launch `gridDim.x == 1` and grid-stride the
 column axis INSIDE the block, so every row is owned by exactly one block and
 there is nothing to serialize. **This is their own configuration, not an
 invention**: their `rowEpilog_lambda` opens `if (gridDim.x == 1) { return; }`
@@ -123,8 +126,10 @@ invention**: their `rowEpilog_lambda` opens `if (gridDim.x == 1) { return; }`
 `launchConfigGenerator` picks `grid.x > 1` when `m` is small; we never do,
 which costs parallelism when `m` is small and `n` is huge. Same deviation,
 same reason, as `cluster/ported/distance/fused_distance_nn/simt_kernel.mojo`.
-The mutex protocol is also unreachable for us for the DEVIATION BLOCK 1
-reason: `rowEpilog_lambda`'s merge is `updateSortedWarpQ` too (`:290`).
+What blocks it is the mutex protocol itself and nothing else: its merge is
+plain `heapArr[i]->add` (`:284-300`), which IS ported, so if a spin on
+`atomicCAS` plus `__threadfence` is ever established as sound on Metal this
+is reachable. That is an OPEN item, not a wall.
 
 **DEVIATION BLOCK 3 - single-buffered shared pages.** Their
 `Policy::SmemSize` is `2 * SmemPage` because `Contractions_NT` is DOUBLE
@@ -138,8 +143,8 @@ constant, and it is left OPEN; see the lane file.
 
 **DEVIATION BLOCK 4 - `sqrt`.** Not a deviation, a copy, recorded because it
 looks like one. `fusedL2Knn` hard-codes `constexpr bool sqrt = false`
-(`fused_l2_knn.cuh:1017-1019`) with the comment that FAISS bfKNN only
-supports the non-sqrt metric, and `brute_force_knn_impl:463-472` takes the
+(`fused_l2_knn.cuh:977-979`) with the comment that FAISS bfKNN only
+supports the non-sqrt metric, and `brute_force_knn_impl:463-475` takes the
 square root AFTERWARDS with `powf(fabsf(x), 0.5)` over the k outputs. So the
 kernel is squared-distance only and `sqrt_postprocess_kernel` below is their
 `raft::linalg::unaryOp`. Taking k square roots instead of m*n of them is the
@@ -147,14 +152,15 @@ point.
 
 THE EPILOGUE IS THEIR l2_exp OP AND IT HAS A CLAUSE `core/` IS MISSING
 -----------------------------------------------------------------------
-`distance_ops/l2_exp.cuh:120-129`:
+`cuvs/src/distance/detail/distance_ops/l2_exp.cuh:132-134`:
 
     val = regxn[i] + regyn[j] - 2 * acc
     acc[i][j] = val * (val > 0) *
                 !((val * val < get_clamp_precision<float,float>()) &&
                   (regxn[i] == regyn[j]))
 
-with `get_clamp_precision<float, float>() == 1e-6` (`:31-39`). There are TWO
+with `get_clamp_precision<float, float>() == 1e-6` (`:30-39`, `case 4` at
+`:35`). There are TWO
 clauses. The first zeroes a negative, and that is the one
 `core/expand_distances.mojo:40-41` has. The second zeroes a SMALL POSITIVE
 whose two norms are equal, which is their fix for a point finding itself at
@@ -179,7 +185,7 @@ from neighbors.ported.neighbors.detail.faiss_select.select import WarpSelect
 # `KernelPolicy<float, Veclen=1, Kblk=16, AccRowsPerTh=2, AccColsPerTh=8,
 #               AccThRows=8, AccThCols=32>`
 # (`contractions.cuh:203-206`). This is NOT `core/gemm.mojo`'s Policy4x4:
-# `fusedL2ExpKnnImpl:722` selects Policy2x8 for the k-NN shape, whose block
+# `fusedL2ExpKnnImpl:724` selects Policy2x8 for the k-NN shape, whose block
 # is 16 rows by 256 columns.
 comptime FKNN_VECLEN = 1
 comptime FKNN_KBLK = 16
@@ -196,7 +202,7 @@ comptime FKNN_SMEM_PAGE_X = FKNN_SMEM_STRIDE * FKNN_MBLK
 comptime FKNN_SMEM_PAGE_Y = FKNN_SMEM_STRIDE * FKNN_NBLK
 
 # `ASSERT(numOfNN <= 64, "fusedL2kNN: num of nearest neighbors must be <= 64")`
-# (`fused_l2_knn.cuh:581`, `:759`), which is also the `k <= 64` in the
+# (`fused_l2_knn.cuh:581`, `:770`), which is also the `k <= 64` in the
 # dispatch at `knn_brute_force.cuh:443`. Their bound is `NumWarpQ = 64` being
 # the largest warp queue they instantiate, and it is ours for the same
 # reason and no other.
@@ -204,17 +210,18 @@ comptime FKNN_MAX_NN = 64
 
 # `std::numeric_limits<float>::max()` and
 # `std::numeric_limits<uint32_t>::max()`, their `identity` and `keyMax`
-# at `fused_l2_knn.cuh:213-214`.
+# at `fused_l2_knn.cuh:218-219`.
 comptime FKNN_IDENTITY = Float32(3.4028234663852886e38)
 comptime FKNN_KEY_MAX = UInt32(0xFFFFFFFF)
 
-# `get_clamp_precision<float, float>()`, `l2_exp.cuh:34`.
+# `get_clamp_precision<float, float>()`, `l2_exp.cuh:35`.
 comptime FKNN_CLAMP_PRECISION = Float32(1.0e-6)
 
 
 @always_inline
 def l2_exp_epilog(xnv: Float32, ynv: Float32, dot: Float32) -> Float32:
-    """`l2_exp_distance_op::epilog`, `distance_ops/l2_exp.cuh:120-129`.
+    """`l2_exp_distance_op::epilog`, `l2_exp.cuh:114-146`, the clamp at
+    `:132-134`.
 
     BOTH clauses; see the module docstring for why the second one matters and
     where it is missing in this tree.
@@ -245,7 +252,7 @@ def fused_l2_knn_kernel[
     `l2_exp_distance_op`, at `gridDim.x == 1`.
 
     `x` is the QUERIES (`m x d`) and `y` is the INDEX (`n x d`), which is
-    their argument order at `fused_l2_knn.cuh:1042-1043`
+    their argument order at `fused_l2_knn.cuh:1003-1004`
     (`query` then `index`) and is the opposite of the name order in
     `fusedL2Knn`'s own signature. `xn` and `yn` are the SQUARED row norms.
 
@@ -256,7 +263,7 @@ def fused_l2_knn_kernel[
 
     `num_warp_q` / `num_thread_q` are their `NumWarpQ` / `NumThreadQ`
     template arguments, and `num_nn_in` must be `<= num_warp_q`. The host
-    picks between `<32, 2>` and `<64, 3>` exactly as `:749-760` does.
+    picks between `<32, 2>` and `<64, 3>` exactly as `:765-771` does.
 
     Launch `grid_dim = (1, ceil(m / FKNN_MBLK), 1)`,
     `block_dim = (FKNN_THREADS, 1, 1)`. `grid_dim.x` must be 1; see
@@ -302,7 +309,7 @@ def fused_l2_knn_kernel[
     )
 
     # `const IdxT starty = gridStrideY + (threadIdx.x / Policy::AccThCols);`
-    # `:355`, then `gmemRowId = starty + i * Policy::AccThRows` `:456`.
+    # `:355`, then `gmemRowId = starty + i * Policy::AccThRows` `:457`.
     # Both are warp-uniform, which is what makes the `< m` guards below safe
     # to wrap around a queue method that votes.
     var row0 = m0 + tr
@@ -325,7 +332,8 @@ def fused_l2_knn_kernel[
 
         var kt = 0
         while kt < d:
-            # `ldgXY` + `stsXY`, `detail/contractions.cuh:176-275`, as a flat
+            # `ldgXY` (`:150-165`) + `stsXY` (`:166-175`, and the `stsX`
+            # at `:261` / `stsY` at `:270`), as a flat
             # strided sweep. `Veclen == 1` here, so there is no vector load
             # to lose.
             var ex = tid
@@ -348,7 +356,8 @@ def fused_l2_knn_kernel[
                 ey += FKNN_THREADS
             barrier()
 
-            # `ldsXY`, `detail/contractions.cuh:282-313`. The row a thread
+            # `ldsXY`, `detail/contractions.cuh:176-180`, and the `ldsX`
+            # (`:279-298`) / `ldsY` (`:299-317`) it calls. The row a thread
             # owns is `accrowid + i * AccThRows` and the column is
             # `acccolid + j * AccThCols`: STRIDED, not blocked. That mapping
             # is not cosmetic here, because their epilogue at
@@ -369,12 +378,12 @@ def fused_l2_knn_kernel[
             barrier()
             kt += FKNN_KBLK
 
-        # --- `epilog_lambda`, `fused_l2_knn.cuh:341-479` -----------------
-        # The `gridStrideX == blockIdx.x * Policy::Nblk` arm, `:453-476`,
+        # --- `epilog_lambda`, `fused_l2_knn.cuh:341-484` -----------------
+        # The `gridStrideX == blockIdx.x * Policy::Nblk` arm, `:454-477`,
         # which for us is EVERY column tile. DEVIATION BLOCK 1.
         #
         # `regyn`, the per-column norms their contraction hands the lambda
-        # as `OutT* regyn` (`:345`).
+        # as `OutT* regyn` (`:346`).
         var regyn = SIMD[DType.float32, FKNN_ACC_COLS_PER_TH](0.0)
 
         @parameter
@@ -383,13 +392,13 @@ def fused_l2_knn_kernel[
             if cj < n:
                 regyn[j] = yn.unsafe_load(cj)
 
-        # `for (int i = 0; i < Policy::AccRowsPerTh; ++i)` `:455`, unrolled
+        # `for (int i = 0; i < Policy::AccRowsPerTh; ++i)` `:456`, unrolled
         # by hand because `acc0`/`acc1` are separate SIMD values. The
-        # `if (gmemRowId < m)` guard is `:458` and is warp-uniform.
+        # `if (gmemRowId < m)` guard is `:459` and is warp-uniform.
         if have0:
             @parameter
             for j in range(FKNN_ACC_COLS_PER_TH):
-                # `Pair otherKV = {keyMax, identity};` `:462`, overwritten
+                # `Pair otherKV = {keyMax, identity};` `:463`, overwritten
                 # only when `colId < ldd`. The out-of-range lane still calls
                 # `add`, which is both their code and the call contract
                 # `checkThreadQ`'s warp vote requires.
@@ -419,10 +428,10 @@ def fused_l2_knn_kernel[
     # per column tile because the queue is about to be spilled; ours runs it
     # once, because the queue was never spilled.
     #
-    # Then `storeWarpQGmem`, `:93-115`, reached through their
+    # Then `storeWarpQGmem`, `:95-117`, reached through their
     # `gridDim.x == 1` final-iteration guard at `:479`. `writeOut` places
     # register `i` of lane `l` at output slot `i * 32 + l`, which is exactly
-    # the `idx = j * warpSize + lid` of `:107`.
+    # the `idx = j * warpSize + lid` of `:109`.
     if have0:
         var f0 = Int32(0)
         if heap0.num_vals > 0:
@@ -451,7 +460,7 @@ def sqrt_postprocess_kernel(
     out_dists: MutPointer[Float32, MutAnyOrigin],
     count_in: Int32,
 ):
-    """`raft::linalg::unaryOp` at `knn_brute_force.cuh:463-472`.
+    """`raft::linalg::unaryOp` at `knn_brute_force.cuh:463-475`.
 
     Theirs is `powf(fabsf(input), p)` with `p = 0.5` for L2Sqrt. The
     absolute value is theirs and is not decoration: the kernel's clamp can
@@ -482,18 +491,18 @@ def fused_l2_knn(
     k: Int,
     is_sqrt: Bool,
 ) raises:
-    """`fusedL2Knn`, `fused_l2_knn.cuh:996-1078`, expanded-L2 arm only.
+    """`fusedL2Knn`, `fused_l2_knn.cuh:947-1076`, expanded-L2 arm only.
 
-    Their validation block at `:1000-1015` is copied as raises. The norms are
+    Their validation block at `:963-975` is copied as raises. The norms are
     an argument here rather than computed inside, because
-    `fusedL2ExpKnnImpl:775-800` only computes them when they were not passed
+    `fusedL2ExpKnnImpl:776-800` only computes them when they were not passed
     and every caller in this tree already has them from `compute_norms`.
 
     `L2Unexpanded` / `L2SqrtUnexpanded` route to `fusedL2UnexpKnn` upstream
     and are NOT ported; see `neighbors/UNPORTED.tsv` in the lane file.
     """
     # `ASSERT(k > 0)`, `ASSERT(D > 0)`, `ASSERT(n_index_rows > 0)`,
-    # `ASSERT(n_query_rows > 0)`, `fused_l2_knn.cuh:1000-1010`.
+    # `ASSERT(n_query_rows > 0)`, `fused_l2_knn.cuh:963-967`.
     if k <= 0:
         raise Error("l2Knn: k must be > 0")
     if n_features <= 0:
@@ -502,7 +511,7 @@ def fused_l2_knn(
         raise Error("l2Knn: n_index_rows must be > 0")
     if n_queries <= 0:
         raise Error("l2Knn: n_query_rows must be > 0")
-    # `ASSERT(numOfNN <= 64, ...)`, `:581` and `:759`. Theirs is the `else`
+    # `ASSERT(numOfNN <= 64, ...)`, `:581` and `:770`. Theirs is the `else`
     # of the same two-way instantiation choice made below.
     if k > FKNN_MAX_NN:
         raise Error("fusedL2kNN: num of nearest neighbors must be <= 64")
@@ -519,7 +528,7 @@ def fused_l2_knn(
     var grid_y = (n_queries + FKNN_MBLK - 1) // FKNN_MBLK
 
     # `if (numOfNN <= 32) { ...Knn32RowMajor } else if (numOfNN <= 64)
-    # { ...Knn64RowMajor }`, `fusedL2ExpKnnImpl:768-774`. Two whole-kernel
+    # { ...Knn64RowMajor }`, `fusedL2ExpKnnImpl:765-771`. Two whole-kernel
     # instantiations, chosen on the host, exactly as theirs.
     if k <= 32:
         ctx.enqueue_function[fused_l2_knn_kernel[32, 2]](
@@ -552,7 +561,7 @@ def fused_l2_knn(
             block_dim=(FKNN_THREADS, 1, 1),
         )
 
-    # `knn_brute_force.cuh:463-472`. Only for the Sqrt metrics, and only
+    # `knn_brute_force.cuh:463-475`. Only for the Sqrt metrics, and only
     # over the `n * k` outputs.
     if is_sqrt:
         var cells = n_queries * k

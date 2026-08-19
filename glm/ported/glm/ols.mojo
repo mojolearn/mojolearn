@@ -39,12 +39,30 @@ Both of these are true and `glm/UNPORTED.tsv` used to state only the first:
 
 `_get_algorithm_int` (`:336-343`) maps `'eig'` to 1, which is `lstsqEig`,
 which is what this repository ported. **A user calling cuML from Python gets
-the solver we have.** A user calling their C++ directly gets the one we do
+the SOLVER we have.** A user calling their C++ directly gets the one we do
 not.
+
+**BUT THE PYTHON DOOR ALSO DEFAULTS `fit_intercept=True`**
+(`linear_regression.pyx:309`), and that is not a flag, it is two steps
+wrapped around the solver. cuML's default Python fit is
+
+    preProcessData  (center X by its column means, center y by its mean;
+                     `preprocess.cuh:98`, `:100`, `:115`, `:117`)
+      -> the algo-1 guard and lstsqEig
+      -> postProcessData  (intercept = mean(y) - mu_X . coef,
+                     `preprocess.cuh:148-161`; then UNDO the centering of X
+                     and y in place, `:163-176`)
+
+This port refuses `fit_intercept` and defaults it to False, so what it
+mirrors is the `fit_intercept=False` BRANCH of the Python default path --
+which on their side skips both wrappers and sets `*intercept = 0`
+(`ols.cuh:156`). It is a real arm of theirs; it is not the arm a Python user
+lands on without asking. That is the honest statement and the docstring used
+to stop one sentence early.
 
 NOT PORTED, and refused by name below: `fit_intercept`, `normalize` (both
 need `preProcessData`/`postProcessData` from `cuml glm/preprocess.cuh`) and
-`sample_weight` (`ols.cuh:98-110`, a sqrt-scaling of both operands and its
+`sample_weight` (`ols.cuh:99-110`, a sqrt-scaling of both operands and its
 exact inverse afterwards). See `glm/UNPORTED.tsv`.
 """
 
@@ -53,7 +71,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from glm.ported.linalg.detail.lstsq import lstsq_eig
 
 
-# `ols.cuh:120-125`. Their ids, so an error message names the same solver
+# `ols.cuh:116-126`, the switch. Their ids, so an error message names the same solver
 # theirs would.
 comptime OLS_ALGO_SVD_JACOBI = 0
 comptime OLS_ALGO_EIG = 1
@@ -88,7 +106,7 @@ def ols_fit(
     PYTHON layer defaults to is the closest honest choice. That is a
     DEVIATION and it is recorded in `glm/UNPORTED.tsv`.
     """
-    # `ols.cuh:75-76`, copied including the bounds.
+    # `ols.cuh:74-75`, copied including the bounds.
     if n_cols <= 0:
         raise Error("olsFit: number of columns cannot be less than one")
     if n_rows <= 1:
@@ -146,7 +164,7 @@ def ols_fit(
     elif selected_algo == OLS_ALGO_SVD_QR:
         raise Error("olsFit: algo 3 is lstsqSvdQR, which is NOT PORTED")
     else:
-        # `ols.cuh:122-124`, their default arm.
+        # `ols.cuh:123-125`, their default arm.
         raise Error(
             "olsFit: no algorithm with this id has been implemented"
         )

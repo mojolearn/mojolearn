@@ -86,7 +86,35 @@ def gemm_nt(
     `transpose_b=True` is exactly the shape every algorithm here wants: rows
     against centroids, index points or candidates, with neither operand ever
     materialized in another layout.
+
+    **`n == 1` GOES TO GEMV, BECAUSE `transpose_b=True` DOES NOT WRITE THERE.**
+    Measured 2026-08-19 through this wrapper (`mojo_only/
+    vendor_correctness_check.mojo`): m=64, n=1, k=32, output poisoned before
+    the call, **63 of the 64 rows still held the poison afterwards**. Nothing
+    was written wrong; 63 rows were not written at all, so a caller reusing a
+    buffer reads whatever was in it last time. That is worse than zeros, and
+    `VENDOR_LIBRARIES.md` used to say "returns zeros for some outputs", which
+    is why this was mistaken for a benign edge case for as long as it was.
+
+    The fault is `transpose_b=True`, not `n == 1`: the same product with
+    `transpose_b=False` is correct at the identical shape, which is what the
+    sabotage in that check established.
+
+    `n == 1` is not exotic. It is a one-column design matrix in `lstsq.mojo`
+    and `pca.mojo`, a single index point in `knn_brute_force.mojo`, and in
+    `min_cluster_distance_compute.mojo:197` it is any run where
+    `n_clusters % centroid_batch == 1` -- a REMAINDER, so ordinary cluster
+    counts reach it.
+
+    Routing to `gemv_n` needs no reshaping and is what RAFT does for the same
+    degenerate case: at `n == 1` this product IS a matrix-vector product, `y`
+    is already a contiguous k-vector whether it is read as `(1, k)` or
+    `(k, 1)`, and `z` is already a contiguous m-vector. `gemv_n` wraps
+    `gemv_gpu`, which tests correct at every m from 1 to 100,003.
     """
+    if n == 1:
+        gemv_n(ctx, z, x, y, m, k)
+        return
     var tz = TileTensor(z, row_major(m, n))
     var tx = TileTensor(x, row_major(m, k))
     var ty = TileTensor(y, row_major(n, k))

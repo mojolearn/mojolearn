@@ -105,17 +105,34 @@ from neighbors.ported.neighbors.ball_cover.ball_cover import (
 #: canonical -- and they are identical. So the flip cannot change a user's
 #: output, only their wait, which is why it needs no further justification.
 #:
-#: WHY THIS IS NOT A DEPARTURE FROM "MIRROR cuML". Their DESIGN is kept whole:
-#: their index, their two eps kernels, their fallback conditions, their batch
-#: structure, their `if` at `algo.cuh:226`. What changed is which side of that
-#: `if` is taken by default, and cuML chose BRUTE_FORCE for hardware where an
-#: n^2 pass costs little and where their RBC arm is additionally restricted to
-#: float32 / int64 labels / L2. We are float32, int32-label and L2 only, so
-#: those restrictions cost us nothing, and n^2 on an M4 costs 27x.
+#: HOW FAR THE DEPARTURE ACTUALLY GOES, STATED HONESTLY. Their DESIGN is kept
+#: whole: their index, their two eps kernels, their batch structure, their
+#: `if` at `algo.cuh:226`. What changed is which side of that `if` is taken by
+#: default. But this is NOT merely "cuML picked the other default for their
+#: hardware", and an earlier version of this note claimed it was.
 #:
-#: Every fallback below still downgrades to BRUTE_FORCE exactly where theirs
-#: does, so an ineligible fit lands on their default anyway. Reverting is this
-#: one constant.
+#: **AT OUR EXACT PARAMETERS cuML NEVER REACHES RBC AT ALL.** `runner.cuh:143-150`
+#: is a `constexpr` downgrade, not a runtime one:
+#:
+#:     if constexpr (std::is_same_v<Type_f, double> || std::is_same_v<Index_, int32_t>) {
+#:       if (sparse_rbc_mode) { sparse_rbc_mode = false; ... }
+#:     }
+#:
+#: and `runner.cuh:235` builds the index only `if constexpr (float && int64_t)`.
+#: **This port is int32-label.** So a caller who asks cuML for `algorithm='rbc'`
+#: on an int32-label build gets BRUTE_FORCE with a warning, every time. Their
+#: dispatch sends our parameters to brute force and to nothing else; the RBC
+#: arm we ported is one their dispatch would not hand us.
+#:
+#: That does not make the default wrong -- `check_dbscan_rbc_matches_brute`
+#: compares the two labellings POINT FOR POINT and the measurement above is
+#: 27x -- but it does mean the ONLY support for it is that measurement plus
+#: that equality check. There is no "we are following their dispatch" here.
+#: Reverting is this one constant.
+#:
+#: The one restriction that survives as a genuine cost-free match is the
+#: METRIC: `runner.cuh:152-156` downgrades anything but
+#: L2Sqrt{Expanded,Unexpanded}, and L2 is all this port does.
 comptime EPS_NN_BRUTE_FORCE = 0
 comptime EPS_NN_RBC = 1
 
@@ -198,11 +215,18 @@ def dbscan_fit(
     # --- the RBC arm's fallbacks, `runner.cuh:139-201` --------------------
     # Theirs DOWNGRADES rather than refusing, and logs. Each of these is a
     # real condition in their file and none is ours:
-    #   :143-150  double precision or int32 labels        -> BRUTE_FORCE
+    #   :143-150  double precision OR int32 labels        -> BRUTE_FORCE
     #   :152-156  any metric but L2Sqrt{Expanded,Unexpanded} -> BRUTE_FORCE
-    #   :195-200  D > MAX_LABEL / N (the index cannot be addressed)
-    # We are float32/int32-label and L2 only, so the first two cannot fire
-    # here; the third can, and is copied.
+    #   :194-200  D > MAX_LABEL / N (the index cannot be addressed)
+    #
+    # THE FIRST ONE FIRES FOR US AND IS DELIBERATELY NOT COPIED. `Index_` here
+    # is Int32, which is the exact case `:143` disables RBC for, so a faithful
+    # copy of that guard would make `EPS_NN_RBC` dead code and pin every fit
+    # to the n^2 arm. We keep the RBC arm reachable anyway; see DEVIATION 35
+    # at the top of this file for the measurement that is its only support,
+    # and for why "their dispatch takes this path" is NOT among the reasons.
+    # The metric guard cannot fire because L2 is all this port does, and the
+    # third is copied verbatim below.
     var sparse_rbc_mode = eps_nn_method == EPS_NN_RBC
     if sparse_rbc_mode and n_features > Int(MAX_LABEL) // n_rows:
         sparse_rbc_mode = False
@@ -253,11 +277,11 @@ def dbscan_fit(
         var n_points = min(n_rows - i * batch, batch)
 
         if sparse_rbc_mode:
-            # `algo.cuh:137-153`, the `max_k == 0` arm: fill `ia` and `vd`,
+            # `algo.cuh:137-144`, the `max_k == 0` arm: fill `ia` and `vd`,
             # emit no columns. `runner.cuh:262` passes the literal 0 here,
             # so this is their first-loop call verbatim.
-            # THE QUERY IS THE BATCH, NOT THE DATASET. `algo.cuh:131` and
-            # `:146` both build the query view as
+            # THE QUERY IS THE BATCH, NOT THE DATASET. `algo.cuh:132`,
+            # `:143` and `:161` all build the query view as
             # `data.x + start_vertex_id * k, n, k` -- an offset of
             # `start_vertex_id` ROWS. Handing the whole `x` here makes every
             # batch re-query rows 0..n_points and the batched fit disagrees
@@ -266,10 +290,34 @@ def dbscan_fit(
             var qb1 = x.create_sub_buffer[DType.float32](
                 start_vertex_id * n_features, n_points * n_features
             )
-            var _nnz1 = rbc_eps_nn_query_count(
+            var nnz1 = rbc_eps_nn_query_count(
                 ctx, rbc_xr, qb1, rbc_r, rbc_ip, rbc_c1, rbc_d1, rbc_rad,
                 ex_scan, vd, n_points, n_features, n_landmarks, eps_radius,
             )
+            # WHY cuML REQUIRES int64 ON THIS PATH, INHERITED HONESTLY.
+            #
+            # `runner.cuh:143-150` refuses RBC for `Index_ == int32_t`, and
+            # `:235` builds the index only under `float && int64_t`. That is
+            # not a build-config accident: the CSR this query emits is indexed
+            # by the EDGE COUNT, and a dense neighbourhood at large n runs past
+            # 2^31 long before it runs out of memory. cuML's answer is a wider
+            # index type. Ours is int32 throughout, so ours must be a REFUSAL.
+            #
+            # Their brute-force arm has the matching assertion at
+            # `runner.cuh:180-184` ("An overflow occurred with the current
+            # choice of precision"). This is its counterpart for the arm we
+            # actually default to, and without it the failure is silent: the
+            # offsets wrap, the CSR is garbage, and `weak_cc` still returns a
+            # plausible labelling.
+            if nnz1 < 0 or nnz1 > Int(MAX_LABEL):
+                raise Error(
+                    "dbscan: the ball-cover neighbourhood has "
+                    + String(nnz1)
+                    + " edges in one batch, which does not fit the int32 CSR"
+                    " this port uses. cuML requires int64 labels for RBC"
+                    " (runner.cuh:143-150) for exactly this reason. Use a"
+                    " smaller eps, a smaller batch, or the BRUTE_FORCE arm."
+                )
         else:
             vertex_deg_run(
                 ctx, adj, vd, x, start_vertex_id, n_points, n_rows,

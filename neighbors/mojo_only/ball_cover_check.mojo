@@ -829,3 +829,280 @@ def check_ball_cover_at_scale() raises:
         n_landmarks,
         "landmarks",
     )
+
+
+def check_ball_cover_max_k_wiring() raises:
+    """cuML's TWO-LOOP dispatch, run end to end, against the two-pass CSR.
+
+    THIS IS A DISPATCH CHECK, NOT A KERNEL CHECK. `rbc_eps_nn_query_max_k`
+    was already checked against a host oracle at one batch
+    (`check_ball_cover_dense_and_max_k`). What was never checked is the thing
+    the DBSCAN runner actually has to do, which is not "call the one-pass
+    form" but their exact sequence across two loops over batches:
+
+    `cuml/cpp/src/dbscan/runner.cuh:257-293` -- loop one, every batch:
+
+        need_ja_compute = sparse_rbc_mode && ((i == 0) || sample_weight)
+        VertexDeg::run(..., need_ja_compute ? &adj_graph : nullptr, 0, ...)
+        maxklen[i] = thrust::reduce(vd, vd + n_points, 0, maximum{})
+
+    so `max_k == 0` puts every batch through the TWO-PASS arm of
+    `vertexdeg/algo.cuh:119`, and `data.ja` is non-null only for batch 0 --
+    batch 0 is counted AND filled here, every other batch is only counted.
+    The longest row of each batch is measured and kept.
+
+    `runner.cuh:319-350` -- loop two, batches `i > 0` only (`if (i > 0)`,
+    `:327`, whose comment is "i==0 -> adj and vd for batch 0 already in
+    memory"):
+
+        VertexDeg::run(..., &adj_graph, maxklen.at(i), ..., nullptr /* vd */)
+
+    which is `max_k > 0`, so `algo.cuh:122` takes the ONE-PASS arm, and
+    `algo.cuh:135` then asserts `max_k == data.max_k` -- an equality, not an
+    inequality, because the bound came from a measurement of the same rows
+    one loop earlier and therefore cannot be exceeded.
+
+    Net effect on the work: **two walks over the dataset, not three.** The
+    runner today does count, count, fill.
+
+    What this asserts:
+
+    1. the one-pass CSR is BYTE-IDENTICAL to the two-pass CSR for the same
+       batch -- same offsets and the same column order, not merely the same
+       set. The order is load bearing downstream in the same way the in-group
+       order is load bearing inside the index, and a set comparison would not
+       see it move;
+    2. their equality assert holds: `actual_max` comes back exactly equal to
+       the bound measured in loop one, for every batch;
+    3. batch 0's `ja` from loop one is still correct after loop two has run,
+       since the wiring depends on it surviving;
+    4. SABOTAGE -- the same call with `max_k` one too small returns an
+       `actual_max` that is strictly larger than the bound and a CSR whose
+       rows are clamped. That is the branch `algo.cuh:135` exists to catch,
+       and it proves the bound is read rather than ignored.
+
+    The fixture is 1201 rows, which is prime, above 256 (the size that hid
+    the `argsort` bug), and not a multiple of 32, 64, 128 or 256; the batch
+    is 401, so the batches are 401 / 401 / 399 and none of them is a multiple
+    of a plausible block width either.
+    """
+    var ctx = DeviceContext()
+    var n = 1201
+    var d = 4
+    var n_landmarks = rbc_n_landmarks(n)
+    var batch = 401
+    var n_batches = (n + batch - 1) // batch
+
+    var x = ctx.enqueue_create_buffer[DType.float32](n * d)
+    var r = ctx.enqueue_create_buffer[DType.float32](n_landmarks * d)
+    var x_reordered = ctx.enqueue_create_buffer[DType.float32](n * d)
+    var landmark_ids = ctx.enqueue_create_buffer[DType.int32](n_landmarks)
+    var slot_cols = ctx.enqueue_create_buffer[DType.int32](n)
+    var slot_dists = ctx.enqueue_create_buffer[DType.float32](n)
+    var nearest = ctx.enqueue_create_buffer[DType.int32](n)
+    var nearest_dist = ctx.enqueue_create_buffer[DType.float32](n)
+    var r_indptr = ctx.enqueue_create_buffer[DType.int32](n_landmarks + 1)
+    var r_1nn_cols = ctx.enqueue_create_buffer[DType.int32](n)
+    var r_1nn_dists = ctx.enqueue_create_buffer[DType.float32](n)
+    var r_radius = ctx.enqueue_create_buffer[DType.float32](n_landmarks)
+    var counts = ctx.enqueue_create_buffer[DType.int32](n_landmarks)
+    var adj_ia = ctx.enqueue_create_buffer[DType.int32](batch + 1)
+    var vd = ctx.enqueue_create_buffer[DType.int32](batch + 1)
+    var scratch = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.synchronize()
+
+    var hx = ctx.enqueue_create_host_buffer[DType.float32](n * d)
+    for i in range(n):
+        for f in range(d):
+            hx.unsafe_ptr().unsafe_store(i * d + f, _coord(i, f))
+    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+    ctx.synchronize()
+
+    rbc_build_index(
+        ctx, x, r, x_reordered, landmark_ids, slot_cols, slot_dists,
+        nearest, nearest_dist, r_indptr, r_1nn_cols, r_1nn_dists, r_radius,
+        counts, n, d, n_landmarks,
+    )
+
+    var eps = Float32(3.0)
+
+    # ---- loop one: `runner.cuh:257-293` -------------------------------
+    # Every batch counted, batch 0 also filled, the longest row of each
+    # batch measured and kept. The reference CSR for every batch is taken
+    # here too, with the two-pass form the runner uses today.
+    var maxklen = List[Int]()
+    var ref_ia = List[Int32]()
+    var ref_ja = List[Int32]()
+    var ref_ja_start = List[Int]()
+    var batch_nnz = List[Int]()
+
+    for b in range(n_batches):
+        var start = b * batch
+        var np = min(n - start, batch)
+        var qb = x.create_sub_buffer[DType.float32](start * d, np * d)
+        var nnz = rbc_eps_nn_query_count(
+            ctx, x_reordered, qb, r, r_indptr, r_1nn_cols, r_1nn_dists,
+            r_radius, adj_ia, vd, np, d, n_landmarks, eps,
+        )
+        # `thrust::reduce(vd, vd + n_points, 0, maximum{})`, `runner.cuh:289`.
+        var hvd = ctx.enqueue_create_host_buffer[DType.int32](batch + 1)
+        ctx.enqueue_copy(dst_ptr=hvd.unsafe_ptr(), src_buf=vd)
+        ctx.synchronize()
+        var mk = 0
+        for i in range(np):
+            var g = Int(hvd.unsafe_ptr().unsafe_load(i))
+            if g > mk:
+                mk = g
+        maxklen.append(mk)
+        batch_nnz.append(nnz)
+
+        var qb2 = x.create_sub_buffer[DType.float32](start * d, np * d)
+        var ja = ctx.enqueue_create_buffer[DType.int32](nnz)
+        ctx.synchronize()
+        rbc_eps_nn_query_fill(
+            ctx, x_reordered, qb2, r, r_indptr, r_1nn_cols, r_1nn_dists,
+            r_radius, adj_ia, ja, np, d, n_landmarks, eps,
+        )
+        var hia = ctx.enqueue_create_host_buffer[DType.int32](batch + 1)
+        var hja = ctx.enqueue_create_host_buffer[DType.int32](nnz)
+        ctx.enqueue_copy(dst_ptr=hia.unsafe_ptr(), src_buf=adj_ia)
+        ctx.enqueue_copy(dst_ptr=hja.unsafe_ptr(), src_buf=ja)
+        ctx.synchronize()
+        for i in range(np + 1):
+            ref_ia.append(hia.unsafe_ptr().unsafe_load(i))
+        ref_ja_start.append(len(ref_ja))
+        for p in range(nnz):
+            ref_ja.append(hja.unsafe_ptr().unsafe_load(p))
+
+    # The fixture has to make the check mean something: a batch whose rows
+    # are all length 1 would pass every assertion below without exercising
+    # anything.
+    var longest = 0
+    for b in range(n_batches):
+        if maxklen[b] > longest:
+            longest = maxklen[b]
+    if longest < 5:
+        raise Error(
+            "max_k wiring: the fixture's longest row is "
+            + String(longest)
+            + ", which is too short for this check to mean anything"
+        )
+
+    # ---- loop two: `runner.cuh:319-350`, batches i > 0 -----------------
+    var ia_base = 0
+    for b in range(n_batches):
+        var start = b * batch
+        var np = min(n - start, batch)
+        if b == 0:
+            # `if (i > 0)` at `:327`. Batch 0 is skipped: its `ja` was
+            # produced in loop one and is still in memory.
+            ia_base += np + 1
+            continue
+
+        var mk = maxklen[b]
+        var nnz = batch_nnz[b]
+        var qb = x.create_sub_buffer[DType.float32](start * d, np * d)
+        var tmp = ctx.enqueue_create_buffer[DType.int32](np * mk)
+        var ja = ctx.enqueue_create_buffer[DType.int32](nnz)
+        ctx.synchronize()
+        var actual = rbc_eps_nn_query_max_k(
+            ctx, x_reordered, qb, r, r_indptr, r_1nn_cols, r_1nn_dists,
+            r_radius, adj_ia, ja, vd, tmp, scratch, np, d, n_landmarks,
+            eps, mk,
+        )
+        # `ASSERT(max_k == data.max_k, ...)`, `algo.cuh:135`.
+        if actual != mk:
+            raise Error(
+                "max_k wiring: batch " + String(b) + " was given the bound "
+                + String(mk) + " measured in loop one and came back with "
+                + String(actual) + "; their assert at algo.cuh:135 is an"
+                " EQUALITY and it just failed"
+            )
+
+        var hia = ctx.enqueue_create_host_buffer[DType.int32](batch + 1)
+        var hja = ctx.enqueue_create_host_buffer[DType.int32](nnz)
+        ctx.enqueue_copy(dst_ptr=hia.unsafe_ptr(), src_buf=adj_ia)
+        ctx.enqueue_copy(dst_ptr=hja.unsafe_ptr(), src_buf=ja)
+        ctx.synchronize()
+
+        for i in range(np + 1):
+            if hia.unsafe_ptr().unsafe_load(i) != ref_ia[ia_base + i]:
+                raise Error(
+                    "max_k wiring: batch " + String(b) + " ia[" + String(i)
+                    + "] is " + String(hia.unsafe_ptr().unsafe_load(i))
+                    + " one-pass against " + String(ref_ia[ia_base + i])
+                    + " two-pass"
+                )
+        var js = ref_ja_start[b]
+        for p in range(nnz):
+            if hja.unsafe_ptr().unsafe_load(p) != ref_ja[js + p]:
+                raise Error(
+                    "max_k wiring: batch " + String(b) + " ja[" + String(p)
+                    + "] is " + String(hja.unsafe_ptr().unsafe_load(p))
+                    + " one-pass against " + String(ref_ja[js + p])
+                    + " two-pass; the COLUMN ORDER moved"
+                )
+        ia_base += np + 1
+
+    # ---- sabotage: hand it a bound one too small -----------------------
+    # `:944-950` keeps counting past `max_k` and stops only the writes, so
+    # the predicted shape is exact: `actual_max` comes back as the TRUE
+    # longest row, strictly above the bound, and every row of the CSR is
+    # clamped to the bound. A kernel that ignored `max_k` would return the
+    # bound it was given and leave the rows unclamped.
+    var sb = 1
+    var sstart = sb * batch
+    var snp = min(n - sstart, batch)
+    var strue = maxklen[sb]
+    var sbound = strue - 1
+    var sqb = x.create_sub_buffer[DType.float32](sstart * d, snp * d)
+    var stmp = ctx.enqueue_create_buffer[DType.int32](snp * sbound)
+    var sja = ctx.enqueue_create_buffer[DType.int32](batch_nnz[sb])
+    ctx.synchronize()
+    var sactual = rbc_eps_nn_query_max_k(
+        ctx, x_reordered, sqb, r, r_indptr, r_1nn_cols, r_1nn_dists,
+        r_radius, adj_ia, sja, vd, stmp, scratch, snp, d, n_landmarks,
+        eps, sbound,
+    )
+    if sactual != strue:
+        raise Error(
+            "max_k wiring sabotage: the bound was cut to " + String(sbound)
+            + " and the call reported a longest row of " + String(sactual)
+            + " instead of the true " + String(strue) + "; the count is"
+            " supposed to keep going past the bound"
+        )
+    var shia = ctx.enqueue_create_host_buffer[DType.int32](batch + 1)
+    ctx.enqueue_copy(dst_ptr=shia.unsafe_ptr(), src_buf=adj_ia)
+    ctx.synchronize()
+    var clamped = 0
+    for i in range(snp):
+        var rowlen = Int(shia.unsafe_ptr().unsafe_load(i + 1)) - Int(
+            shia.unsafe_ptr().unsafe_load(i)
+        )
+        if rowlen > sbound:
+            raise Error(
+                "max_k wiring sabotage: row " + String(i) + " kept "
+                + String(rowlen) + " columns against a bound of "
+                + String(sbound)
+            )
+        if rowlen == sbound:
+            clamped += 1
+    if clamped == 0:
+        raise Error(
+            "max_k wiring sabotage: nothing was clamped, so the truncation"
+            " branch was never reached"
+        )
+
+    print(
+        "ball_cover: cuML's two-loop max_k dispatch is byte-identical to the"
+        " two-pass CSR over",
+        n_batches,
+        "batches; bounds",
+        maxklen[0],
+        maxklen[1],
+        maxklen[2],
+        "; a bound one short clamps",
+        clamped,
+        "rows and still reports",
+        strue,
+    )

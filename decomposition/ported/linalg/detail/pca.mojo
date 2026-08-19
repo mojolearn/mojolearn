@@ -31,6 +31,41 @@ Step 6 is the one to not drop. `input` is an in-out parameter that must end
 the call unchanged, and a fit that leaves the caller's matrix centered is
 wrong in a way nothing in the fit itself will reveal.
 
+COV_EIG_DQ vs COV_EIG_JACOBI: THE BRANCH IS THREE LINES WIDE AND NOTHING ELSE
+------------------------------------------------------------------------------
+Their default is `COV_EIG_DQ` (`params.hpp:53`; `pca.pyx:394-395` maps both
+`'full'` and `'auto'` to it) and this port ships a Jacobi. The obvious worry
+is that the two arms differ in more than the eigensolver. **They do not.**
+`calEig` is `tsvd.cuh:98-126` and the whole branch is `:108-120`:
+
+    if (prms.algorithm == COV_EIG_JACOBI) eigJacobi(..., prms.tol, prms.n_iterations);
+    else                                  eigDC(...);
+    colReverse(components, ...);      // :122  -- BOTH arms
+    transpose(components, n_cols);    // :123  -- BOTH arms
+    rowReverse(explained_var, ...);   // :125  -- BOTH arms
+
+Scaling, `truncCompExpVars`, the `seqRoot` factor, the component order and
+the (absent) sign handling are all downstream of the join and are identical.
+The only thing the arm changes besides the numerics of the decomposition is
+that `prms.tol` and `prms.n_iterations` are DEAD on the DQ arm and live on
+the Jacobi arm. Both arms end in closed cuSOLVER, so neither is more
+portable; there is nothing to port from either and a hand-written Jacobi is
+the only option here.
+
+ONE STEP OF `pcaFit` WE DO NOT PERFORM: `set_neg_zero`
+------------------------------------------------------
+`pcaFit` calls `seqRoot(explained_var, singular_vals, n_rows - 1,
+n_components, stream, true)` (`pca.cuh:136`) and that trailing `true` is
+`set_neg_zero`: any eigenvalue that came back NEGATIVE becomes 0 instead of
+`sqrt(negative)` (`raft/matrix/detail/math.cuh:86-95`). A covariance matrix
+is positive semi-definite in exact arithmetic, so a negative eigenvalue is
+always round-off -- and always REACHABLE, on a rank-deficient or badly scaled
+design. Ours computes `sqrt(lam * scale)` with no clamp, so it can return NaN
+where cuML returns 0. `tsvdFit` passes NO `set_neg_zero` (`tsvd.cuh:237`,
+default false), so the clamp belongs to the PCA path only. NOT FIXED here:
+it is an arithmetic change and this lane is read-mostly; see the
+dispatch-audit lane report.
+
 ORDER IS PART OF THE ANSWER
 ---------------------------
 `calEig` gets ascending eigenvalues from cuSOLVER and then calls
@@ -56,10 +91,18 @@ WHAT THEY ACTUALLY DO, read from the files:
     reaches (`pca.pyx:547`) -- **does not flip signs at all.** Its component
     signs are whatever cuSOLVER happened to return.
   - `pcaFitTransform` (`pca.cuh:160`) calls `ML::signFlip`
-    (`cuml/cpp/src/tsvd/tsvd.cuh:139`) after the transform, and that one is
+    (`cuml/cpp/src/tsvd/tsvd.cuh:140`) after the transform, and that one is
     **U-BASED**: it takes the argmax-by-absolute-value down each column of
     the TRANSFORMED data and flips the score column and the matching
     component row together (`tsvd.cuh:151-176`).
+  - **AND NO PYTHON PATH REACHES `pcaFitTransform`.** `PCA.fit_transform` is
+    `return self.fit(X).transform(X)` (`pca.pyx:582-588`), and the only
+    caller of `pcaFitTransform` in either checkout is
+    `cpp/tests/sg/pca_test.cu:165`. So for a cuML PCA user the sign of a
+    component is unconditionally whatever cuSOLVER returned; there is no flip
+    anywhere on the reachable path. tSVD is NOT the same:
+    `TruncatedSVD.fit_transform` does call `tsvdFitTransform`
+    (`tsvd.pyx:414`), which does flip, at `tsvd.cuh:270`.
   - `raft::matrix::signFlip` / `signFlipKernel`
     (`raft/matrix/detail/math.cuh:367`) is a V-based flip that does exist,
     but **no cuML PCA or tSVD path calls it**; only RAFT's own unit test does
@@ -369,9 +412,16 @@ def eig_and_truncate(
     var info_buf = ctx.enqueue_create_buffer[DType.float32](3)
     ctx.synchronize()
     # `tol` and `sweeps` are `raft::linalg::eigJacobi`'s own defaults
-    # (`raft/linalg/eig.cuh:108-109`) and cuML's Python defaults for the
-    # Jacobi arm (`pca.pyx` `tol=1e-7`, `iterated_power=15`). They used to be
-    # a hardcoded `80` and `1e-10`, neither of which came from their code.
+    # (`raft/linalg/eig.cuh:108-109`) AND cuML's Python defaults for the
+    # Jacobi arm (`pca.pyx:356-358`: `iterated_power=15`, `tol=1e-7`, both
+    # copied into `params` at `pca.pyx:412-413`). They used to be a hardcoded
+    # `80` and `1e-10`, neither of which came from their code.
+    #
+    # WHICH DOOR THOSE DEFAULTS COME FROM MATTERS. cuML's C++ `paramsSolver`
+    # defaults `tol = 0.0` and `n_iterations = 15` (`params.hpp:44-45`), so a
+    # C++ caller who asks for COV_EIG_JACOBI gets a tolerance of ZERO and
+    # always runs all 15 sweeps. We match the PYTHON door, which is the one a
+    # user comes in through, not the C++ one.
     ctx.enqueue_function[jacobi_eigh_kernel](
         cov.unsafe_ptr(),
         vec_buf.unsafe_ptr(),
@@ -383,8 +433,12 @@ def eig_and_truncate(
         block_dim=(JACOBI_TPB, 1, 1),
     )
 
-    # `sign_flip_components`, `detail/pca.cuh:189`, ported as
-    # `signFlipKernel` (`raft/matrix/detail/math.cuh:367`). One block per
+    # `signFlipKernel` (`raft/matrix/detail/math.cuh:367`), which is a
+    # V-based flip NO cuML PCA path calls; see the module docstring for the
+    # deviation and for what `pcaFit` and `pcaFitTransform` actually do.
+    # (The name `sign_flip_components` and the path `detail/pca.cuh:189` stood
+    # here until this round. Both are invented; neither exists upstream.)
+    # One block per
     # eigenvector, and the whole `n_cols x n_cols` basis is fixed in one
     # launch before anything is copied back, which is what REPLACED the host
     # loop that used to run per SELECTED component further down. The
@@ -418,9 +472,12 @@ def eig_and_truncate(
     ctx.enqueue_copy(dst_ptr=h_info.unsafe_ptr(), src_buf=info_buf)
     ctx.synchronize()
 
-    # `eigDC`, the arm cuML's default `svd_solver='auto'` reaches, aborts on a
-    # non-zero `dev_info` with "eigensolver couldn't converge to a solution"
-    # (`raft/linalg/detail/eig.cuh:79-82`). Their JACOBI arm silently does
+    # `eigDC`, the arm cuML's default `svd_solver='auto'` reaches
+    # (`pca.pyx:395` maps 'auto' to COV_EIG_DQ, `tsvd.cuh:119` calls eigDC),
+    # aborts on a non-zero `dev_info` with "eigensolver couldn't converge to a
+    # solution" (`raft/linalg/detail/eig.cuh:149-151`; the identical ASSERT at
+    # `:79-81` is `eigDC_legacy`'s and nothing calls it). Their JACOBI arm
+    # silently does
     # not (`eig.cuh:310`, `executed_sweeps` fetched and never read). We follow
     # the default arm: an unconverged eigendecomposition returned as if it
     # were one is the same defect as the 32-feature cap, a wrong answer with
@@ -469,10 +526,15 @@ def eig_and_truncate(
     # `HOST_AND_DEVICE.md`'s rule is about O(rows), which this is not.
     #
     # It stops being the right shape when `n_cols` reaches the low thousands.
-    # `nn.argsort.argsort` is recorded AVAILABLE and device-capable in
-    # VENDOR_LIBRARIES.md and is the replacement when it does: sort the
-    # diagonal descending on the device and gather. OPEN, and named in the
-    # lane report rather than left as a comment nobody counts.
+    #
+    # **`nn.argsort` IS NOT THE REPLACEMENT AND THIS COMMENT USED TO SAY IT
+    # WAS.** `nn.argsort[target="gpu"]` is correct at 256 elements and
+    # non-monotone at 257 and every larger size tried, with the first
+    # inversion always at output position 256; it raises nothing and returns a
+    # well-formed permutation, so it would silently reorder the components at
+    # exactly the sizes this note is about. VENDOR_LIBRARIES.md listed it as
+    # device-capable on the strength of its signature. OPEN, and it needs a
+    # device sort we can trust, not this one.
     var order = List[Int]()
     for i in range(n_cols):
         order.append(i)

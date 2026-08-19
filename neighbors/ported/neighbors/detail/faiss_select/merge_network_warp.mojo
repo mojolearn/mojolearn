@@ -30,11 +30,11 @@ Neither subsumes the other. They differ in the network too, not just the
 plumbing: `bitonic_sort.cuh` sorts data STRIDED across the subwarp with one
 element per lane per array slot and takes `warp_width` as a RUNTIME argument;
 this file sorts `WarpSize * N` elements with `N` registers per lane, pins
-`WarpSize == 32` in a `static_assert` (`MergeNetworkWarp.cuh:495`), and
+`WarpSize == 32` in a `static_assert` (`MergeNetworkWarp.cuh:501`), and
 expands the whole network at compile time. `bitonic_sort.cuh` compares
 strictly and keeps the incumbent on a tie; this file deliberately runs BOTH
 `<` and `>` on the two sides of an exchange so that the two lanes of a pair
-agree, which their comment at `MergeNetworkWarp.cuh:38-63` explains at
+agree, which their comment at `MergeNetworkWarp.cuh:38-64` explains at
 length and which is NOT the same tie behavior.
 
 THE ONE CONSTRUCT THAT DOES NOT PORT ELSEWHERE DOES NOT APPEAR HERE
@@ -51,9 +51,9 @@ that width, so the `% width` inside the intrinsic is load-bearing. Mojo's
   * `shfl_xor(v, stride)` with `stride < 32` -- exactly Mojo's
     `shuffle_xor(v, stride)`.
   * `shfl_xor(v, WarpSize - 1)`, i.e. stride 31 -- still inside one warp.
-  * `shfl(warpK[...], kLane)` in `Select.cuh:429`, where
+  * `shfl(warpK[...], kLane)` in `Select.cuh:427`, where
     `kLane = (k - 1) % WarpSize` is ALREADY reduced modulo the warp size by
-    their own constructor (`Select.cuh:359`). The lane is in `[0, 31]`, there
+    their own constructor (`Select.cuh:363`). The lane is in `[0, 31]`, there
     is no width argument, and Mojo's `shuffle_idx(v, lane)` is that call.
 
 So the register-resident queue is reachable in Mojo, and the fusion it
@@ -66,14 +66,14 @@ DEVIATIONS
    `stack_allocation` without an address space is thread-local MEMORY
    (`PORTING.md 26`), so `SIMD` is the only register form. Mojo's `SIMD`
    width must be a power of two and `NumThreadQ` is 3 for the k>32 fused
-   instantiation (`fused_l2_knn.cuh:759`), so the array is widened to 4 and
+   instantiation (`fused_l2_knn.cuh:760`), so the array is widened to 4 and
    element 3 is NEVER read or written: every loop in this file runs
    `range(N)` with the true `N`. Padding lanes are initialized to the same
    sentinel as the rest so that a stray read would be inert rather than
    garbage.
 
 2. **`swap`/`assign` are written as `if`, not as a conditional
-   expression.** `MergeNetworkUtils.cuh:14-24` writes `x = swap ? y : x`.
+   expression.** `MergeNetworkUtils.cuh:13-24` writes `x = swap ? y : x`.
    Identical arithmetic; `PORTING.md 19` forbids the conditional form for
    pointers in this tree and an explicit branch is the same value here.
 
@@ -85,14 +85,14 @@ DEVIATIONS
 
 NOT PORTED, and each is a row in `UNPORTED.tsv`
 ------------------------------------------------
-  * `Comparator<half>` (`Comparators.cuh:22-27`). Metal has no `half`
+  * `Comparator<half>` (`Comparators.cuh:23-27`). Metal has no `half`
     comparison intrinsics to mirror and nothing asks for it.
   * The NON-power-of-two `BitonicMergeStep` specializations,
-    `MergeNetworkWarp.cuh:218-303` (Low) and `:306-385` (High). These are
+    `MergeNetworkWarp.cuh:221-304` (Low) and `:305-388` (High). These are
     UNREACHABLE for every instantiation `fused_l2_knn.cuh` makes, and that
     is checked rather than assumed: its only two instantiations are
     `NumWarpQ=32, NumThreadQ=2` and `NumWarpQ=64, NumThreadQ=3`
-    (`fused_l2_knn.cuh:749-760`), so `kNumWarpQRegisters` is 1 or 2 and every
+    (`fused_l2_knn.cuh:743-771`), so `kNumWarpQRegisters` is 1 or 2 and every
     `BitonicMergeStep` reached has `N` in {1, 2}. `BitonicSortStep` DOES see
     the odd `N = 3` and is ported in full, because its generic case splits
     `N` into `N/2` and `N - N/2` and handles odd sizes without ever calling a
@@ -103,8 +103,8 @@ NOT PORTED, and each is a row in `UNPORTED.tsv`
 from std.gpu.primitives.warp import lane_id, shuffle_xor
 
 
-#: `static const int WarpSize = 32;`, `util/cuda_dev_essentials.cuh:74`, and
-#: `static_assert(WarpSize == 32)` at `MergeNetworkWarp.cuh:495`. Theirs,
+#: `static const int WarpSize = 32;`, `util/cuda_dev_essentials.cuh:83`, and
+#: `static_assert(WarpSize == 32)` at `MergeNetworkWarp.cuh:501`. Theirs,
 #: pinned, and wrong on AMD -- the same cross-vendor hazard
 #: `select_warpsort.mojo` DEVIATION 9 names.
 comptime WARP_LANES = 32
@@ -145,7 +145,7 @@ def comp_gt(a: Float32, b: Float32) -> Bool:
 
 
 # =========================================================================
-# `warpBitonicMergeLE16`, `MergeNetworkWarp.cuh:83-136`
+# `warpBitonicMergeLE16`, `MergeNetworkWarp.cuh:84-137`
 #
 # Merges `WarpSize / 2L` lists in parallel using warp shuffles. One element
 # per lane. `L <= 16` because 32 threads are needed for the shuffle merge.
@@ -225,7 +225,7 @@ def warp_bitonic_merge_le16[
 
 # =========================================================================
 # `BitonicMergeStep`, power-of-two specializations,
-# `MergeNetworkWarp.cuh:146-212`
+# `MergeNetworkWarp.cuh:140-219`
 #
 # `BASE` is this port's addition and carries no meaning of its own: it is
 # where their copy of a sub-array into `newK[N/2]` and back went, because a
@@ -282,7 +282,7 @@ def bitonic_merge_step[
 
 
 # =========================================================================
-# `warpMergeAnyRegisters`, `MergeNetworkWarp.cuh:391-436`
+# `warpMergeAnyRegisters`, `MergeNetworkWarp.cuh:390-442`
 # =========================================================================
 
 
@@ -302,7 +302,7 @@ def warp_merge_any_registers[
     `WarpSize * N2`, for any `N1, N2 >= 1`.
     """
     # The non-power-of-two `BitonicMergeStep` specializations
-    # (`MergeNetworkWarp.cuh:218`, `:306`) are deliberately not ported;
+    # (`MergeNetworkWarp.cuh:221`, `:305`) are deliberately not ported;
     # `fused_l2_knn.cuh` instantiates only N1 in {1, 2}. Fail loudly rather
     # than silently if that ever stops being true.
     comptime assert is_pow2(N1), "warp_merge_any_registers: N1 must be a power of two"
@@ -364,9 +364,9 @@ def warp_merge_any_registers[
 
 
 # =========================================================================
-# `BitonicSortStep` / `warpSortAnyRegisters`, `MergeNetworkWarp.cuh:440-517`
+# `BitonicSortStep` / `warpSortAnyRegisters`, `MergeNetworkWarp.cuh:444-517`
 #
-# THIS one does handle an odd `N`, and it must: `fused_l2_knn.cuh:759`
+# THIS one does handle an odd `N`, and it must: `fused_l2_knn.cuh:760`
 # instantiates the queue with `NumThreadQ = 3`. Its generic case splits `N`
 # into `N/2` and `N - N/2` and merges them, so an odd size never reaches a
 # non-power-of-two BitonicMergeStep.

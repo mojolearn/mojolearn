@@ -136,6 +136,38 @@ def _dbscan_at(ctx: DeviceContext, n: Int) raises:
         )
 
 
+def _dbscan_rbc_only_at(ctx: DeviceContext, n: Int) raises:
+    """RBC alone at the large sizes. The brute arm is deliberately NOT run.
+
+    Brute at 800,000 is roughly `(800/200)^2 * 17.5 s` = four and a half
+    minutes PER REPEAT, and it is no longer the comparison that matters: the
+    default is RBC and the open question is where our curve crosses
+    scikit-learn's, not how much worse our own fallback gets.
+    """
+    var d = 8
+    var eps = 0.30
+
+    var x = ctx.enqueue_create_buffer[DType.float32](n * d)
+    var lab = ctx.enqueue_create_buffer[DType.int32](n)
+    ctx.synchronize()
+
+    var h = ctx.enqueue_create_host_buffer[DType.float32](n * d)
+    for i in range(n):
+        for f in range(d):
+            h.unsafe_ptr().unsafe_store(i * d + f, Float32(_u01(i, f, 4) * 4.0))
+    ctx.enqueue_copy(dst_buf=x, src_ptr=h.unsafe_ptr())
+    ctx.synchronize()
+
+    for _r in range(REPEATS):
+        var t0 = perf_counter_ns()
+        _ = dbscan_fit_impl(ctx, x, lab, n, d, eps, 5, 0, 200, EPS_NN_RBC)
+        ctx.synchronize()
+        print(
+            "ARM dbscan_rbc@" + String(n) + " "
+            + String(Float64(perf_counter_ns() - t0) / 1.0e6)
+        )
+
+
 def main() raises:
     var ctx = DeviceContext()
     # Unrolled: this Mojo has no variadic `List[Int](...)` constructor.
@@ -149,3 +181,5 @@ def main() raises:
     _dbscan_at(ctx, 50000)
     _dbscan_at(ctx, 100000)
     _dbscan_at(ctx, 200000)
+    _dbscan_rbc_only_at(ctx, 400000)
+    _dbscan_rbc_only_at(ctx, 800000)

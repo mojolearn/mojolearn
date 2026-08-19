@@ -2,7 +2,22 @@
 
 PORT OF `cuml/cpp/src/dbscan/dbscan.cuh::compute_batch_size` and
 `dbscanFitImpl` at cuML `00094f7`. Partial (single node, L2, no
-`sample_weight`, no `core_sample_indices`, brute force). Do not improve.
+`sample_weight`, no `core_sample_indices`). Do not improve.
+
+`eps_nn_method` defaults to RBC here and to BRUTE_FORCE in theirs; that
+DEVIATION and its measurement live at the top of
+`dbscan/ported/dbscan/runner.mojo`, not here.
+
+THEIR FIXED ALGORITHM CODES, WHICH ARE NOT USER-VISIBLE (`dbscan.cuh:118-122`)
+
+    algo_vd  = (metric == Precomputed) ? 2 : 1     -> 1 for every L2 fit
+    algo_adj = 1
+    algo_ccl = 2                                   -> `final_relabel` ALWAYS runs
+
+`algo_ccl = 2` is worth reading twice: the monotonic relabel at
+`runner.cuh:412` is guarded by `if (algo_ccl == 2)` and `dbscanFitImpl`
+hardcodes 2, so it is not optional in their dispatch and is not optional
+here either.
 
 THIS IS THE FILE THAT WAS MISSING, AND ITS ABSENCE CAPPED THE BENCHMARK
 -----------------------------------------------------------------------
@@ -36,6 +51,17 @@ def compute_batch_size(
 
     Index type is Int32 throughout this port, so `sizeof(Index_) == 4` and
     `MAX_LABEL == 2147483647`.
+
+    DIVERGENCE, NOT FIXED, and it is a slowdown rather than a wrong answer.
+    Theirs takes `eps_nn_method` as a parameter and gates the
+    `batch_size <= MAX_LABEL / n_rows` clamp on `eps_nn_method != RBC`
+    (`dbscan.cuh:71`), because the RBC arm emits CSR directly and never
+    materializes the `N * batch_size` dense adjacency the clamp exists to
+    keep addressable. This signature has no `eps_nn_method` and applies the
+    clamp unconditionally, so an RBC fit here batches more finely than cuML's
+    would. Fixing it means threading `eps_nn_method` in from
+    `dbscan_fit_impl` and wrapping the clamp; see the dispatch-audit lane
+    report.
     """
     var npr = neigh_per_row
     if npr <= 0:
@@ -95,7 +121,8 @@ def dbscan_fit_impl(
 ) raises -> Int:
     """`dbscanFitImpl` (`dbscan.cuh:101`): size the batch, allocate, run.
 
-    Their memory estimate, copied from `dbscan.cuh:147-151`:
+    Their memory estimate, copied from `dbscan.cuh:157-158` (the
+    `max_mbytes_per_batch == 0` guard around it is `:147`):
 
         // The estimate is: 80% * total - dataset
         max_mbytes_per_batch = (80 * total_memory / 100 - dataset_memory)/1e6;

@@ -32,6 +32,10 @@ file used to do, is not enough: the number still went into a table.
 So each of those two now emits TWO measurements, and a reader can see the
 algorithm penalty and the hardware difference separately:
 
+    pca            PCA()                 svd_solver='auto'. THEIR DEFAULT.
+    pca_cov_eigh   PCA(covariance_eigh)  Forms the covariance and
+                                         eigendecomposes it -- OUR route.
+
     ols            LinearRegression      LAPACK gelsd, an SVD route.
                                          THEIR DEFAULT: what a user gets.
     ols_normal_eq  Ridge(alpha=0,        Forms X^T X and solves it. The SAME
@@ -60,6 +64,24 @@ timing harness cannot see.
 sklearn's KMeans still uses Elkan or Lloyd with its own initialization and
 that one is NOT split into two arms, because there is no sklearn option that
 matches ours.
+
+TWO THINGS THIS HARNESS DOES NOT TIME, STATED RATHER THAN BURIED
+----------------------------------------------------------------
+1. **`n_jobs=-1` is now passed to every estimator that accepts it.** Their
+   default is `None`, which means ONE CORE, and DBSCAN's and k-NN's whole cost
+   is neighbour queries. Racing a 10-core GPU against a single CPU core is the
+   same unfairness this file refuses when it declines to pass
+   `algorithm='brute'`. `KMeans`, `PCA` and OLS reach OpenMP and LAPACK
+   regardless.
+
+2. **Host-to-device transfer is OUTSIDE our timed region.** Every
+   `enqueue_copy` in `bench_main.mojo` happens before the repeat loop, so our
+   arms time compute on data already resident. That is the right shape for a
+   repeated-call workload and the wrong shape for a one-shot
+   `fit(numpy_array)`: at 4,000,000 x 32 it is 512 MB a user would pay once.
+   Immaterial against k-means at ~120 ms; **potentially decisive against PCA
+   at ~10 ms**, which is the arm where it should be read as a caveat rather
+   than a footnote. scikit-learn's arms have no transfer to hide.
 """
 
 import sys
@@ -129,10 +151,41 @@ def main():
         emit("kmeans", time.perf_counter() - t)
 
         t = time.perf_counter()
-        NearestNeighbors(n_neighbors=knn_k, algorithm="brute").fit(
+        # THEIR DEFAULT. `algorithm='auto'` and NOT a hardcoded 'brute',
+        # which is what this file used to pass while `scaling_sklearn.py`
+        # passed auto -- the identical file-disagreement this docstring
+        # claims to have fixed for DBSCAN, left standing for k-NN.
+        # Verified on sklearn 1.9.0: at d=32 `auto` resolves to `brute`
+        # anyway, so the number does not move. The hardcode was still wrong,
+        # because it made the harness assert a choice instead of reporting
+        # theirs, and it would have silently stopped tracking them the moment
+        # their heuristic changed.
+        NearestNeighbors(n_neighbors=knn_k, n_jobs=-1).fit(
             kn_idx).kneighbors(kn_q)
         emit("knn", time.perf_counter() - t)
 
+        t = time.perf_counter()
+        # THEIR DEFAULT. `svd_solver='auto'`, which is what a user gets.
+        PCA(n_components=pca_comp).fit(pc_x)
+        emit("pca", time.perf_counter() - t)
+
+        # ALGORITHM-MATCHED. `covariance_eigh` forms the covariance matrix
+        # and eigendecomposes it, which is our route.
+        #
+        # This file previously ran ONLY this arm and reported it as "pca".
+        # Probed on sklearn 1.9.0 at 200,000 x 32: `auto` RESOLVES TO
+        # `covariance_eigh` at this shape, so the hardcode moved no number and
+        # was not a bias in either direction -- the same finding as the k-NN
+        # `algorithm="brute"` hardcode above. It was still wrong for the same
+        # reason: a harness that asserts their choice instead of reporting it
+        # stops tracking them the moment their heuristic changes, and this one
+        # would have gone on printing "sklearn PCA" for a solver sklearn no
+        # longer picks.
+        #
+        # The useful consequence: **PCA is already apples-to-apples.** Their
+        # default and ours are the same algorithm, so that ratio needs no
+        # second arm to be honest -- unlike DBSCAN and OLS. Both are emitted
+        # anyway, so the claim stays checkable.
         t = time.perf_counter()
         PCA(n_components=pca_comp, svd_solver="covariance_eigh").fit(pc_x)
         emit("pca", time.perf_counter() - t)
@@ -141,13 +194,13 @@ def main():
         # O(n log n) queries; it is what a user gets and it is the arm the
         # scaling curve already used.
         t = time.perf_counter()
-        DBSCAN(eps=0.35, min_samples=5).fit(db_x)
+        DBSCAN(eps=0.35, min_samples=5, n_jobs=-1).fit(db_x)
         emit("dbscan", time.perf_counter() - t)
 
         # ALGORITHM-MATCHED. All n^2 pairs, like ours. The gap between this
         # and `dbscan` above is the index, not the hardware.
         t = time.perf_counter()
-        DBSCAN(eps=0.35, min_samples=5, algorithm="brute").fit(db_x)
+        DBSCAN(eps=0.35, min_samples=5, algorithm="brute", n_jobs=-1).fit(db_x)
         emit("dbscan_brute", time.perf_counter() - t)
 
         # THEIR DEFAULT. LAPACK gelsd: an SVD of the full 4,000,000 x 32

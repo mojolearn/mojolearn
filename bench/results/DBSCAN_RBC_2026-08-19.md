@@ -1,5 +1,63 @@
 # The ball-cover index, measured. The 37x is gone.
 
+> **THE sklearn COLUMN IN THIS FILE WAS MEASURED AGAINST A CRIPPLED INCUMBENT.
+> CORRECTED 2026-08-19, LATE. The 2.08x is DEAD.**
+>
+> `DBSCAN(n_jobs=None)` is scikit-learn's default and it means **ONE CORE**.
+> DBSCAN's neighbour queries are its entire cost, so every sklearn number below
+> was a 10-core M4's GPU racing a single CPU core. With `n_jobs=-1`:
+>
+>     n         our rbc   skl 1 core   skl -1   skl gain   rbc vs skl
+>     4,000         6.3         11.5     17.0      0.68x       2.71x
+>     16,000       25.9         54.7     37.1      1.47x       1.43x
+>     50,000      196.3        208.6     94.2      2.21x       0.48x
+>     100,000     316.9        519.2    227.9      2.28x       0.72x
+>     200,000     632.7      1,315.6    570.8      2.30x       0.90x
+>
+> **We win below roughly 20,000 points and LOSE from 50,000 up.** At 50,000 we
+> are about 1.9x SLOWER, not 1.06x faster. Measured to 800,000 below: it does
+> not cross back.
+>
+> This is the same unfairness this harness already refuses in the other
+> direction when it declines to hand scikit-learn `algorithm='brute'`. A
+> default that runs the incumbent on a tenth of the machine is not their
+> default in any sense a user would recognise. It was caught by Andrew, not by
+> the harness, and not by me.
+>
+> **WHAT SURVIVES UNCHANGED:** everything in the ours-against-ours column. RBC
+> is 27.63x faster than our own brute force at 200,000 and wins at every size,
+> which is what the default flip rested on and it never depended on sklearn.
+> Nothing about DEVIATION 35 changes.
+>
+> **THERE IS NO CROSSOVER. Measured to 800,000, not extrapolated.**
+>
+>     n         our rbc ms   sklearn ms   ratio    ours vs prev   skl vs prev
+>     4,000            6.7         17.3   2.57x
+>     16,000          24.2         33.4   1.38x      3.60x          1.93x
+>     50,000         172.9         93.1   0.54x      7.15x          2.79x
+>     100,000        362.6        207.2   0.57x      2.10x          2.23x
+>     200,000        796.5        523.4   0.66x      2.20x          2.53x
+>     400,000      3,449.8      1,482.6   0.43x      4.33x          2.83x
+>     800,000      7,930.5      4,009.6   0.51x      2.30x          2.70x
+>
+> The ratio sits between 0.43x and 0.66x from 50,000 to 800,000 with no trend
+> toward 1. **We win below roughly 20,000 points and lose by 1.5x to 2.3x
+> everywhere above it, out to the largest size measured.**
+>
+> **The "closing gap" I reported an hour ago was NOISE.** The previous run gave
+> 0.48x / 0.72x / 0.90x at 50k / 100k / 200k; this one gives 0.54x / 0.57x /
+> 0.66x at the same sizes on the same code. Three-repeat medians on this box
+> are not tight enough to support a trend claim, and I made one. The right
+> reading is a flat ratio around 0.5x, not a curve heading for a crossover.
+>
+> **One real lead, and it is not a small-n artifact.** Ours costs 4.33x going
+> from 200,000 to 400,000 where scikit-learn costs 2.83x, then returns to 2.30x
+> for the next doubling. A single superlinear step that does not repeat looks
+> like a threshold being crossed, and the obvious candidate is
+> `compute_batch_size` starting to split the fit into batches -- which adds a
+> full extra neighbourhood pass per batch beyond the first
+> (`runner.cuh:331-341`). Not confirmed.
+
 Apple M4. One window, arms INTERLEAVED inside the repeat loop (not all of one
 then all of the other), 3 repeats, median reported. scikit-learn re-run in the
 same window rather than compared against yesterday's numbers, because this box
@@ -42,9 +100,11 @@ a number taken on a defect is not a number, so the whole sweep was re-run.
 After the fix, 50,000 goes 0.90x -> 1.06x against scikit-learn and 231.7 ->
 196.3 ms, and the sublinearity between 50,000 and 100,000 that made the row
 suspicious (231.7 -> 323.1 for twice the data) largely dissolves: 196.3 ->
-316.9 -> 632.7 is 1.61x then 2.00x. Whatever remains at 50,000 costs a user
-nothing, since RBC still beats brute 4.21x there, and it is logged rather than
-chased.
+316.9 -> 632.7 is 1.61x then 2.00x. **The rest of that row has since been
+chased and found (2026-08-19, LANE_rbc-build), and the sentence that used to
+sit here -- "whatever remains at 50,000 costs a user nothing ... logged rather
+than chased" -- was wrong on both halves.** It costs 1.4x to 2.0x, and it is
+reachable from a public argument. See "The 50,000 row, explained" below.
 
 **At 200,000 points we went from 37x SLOWER to 2.08x FASTER.** That is a ~77x
 swing, and none of it came from tuning a kernel.
@@ -92,19 +152,61 @@ SILENT. The point still gets a label, just possibly its own cluster instead of
 its neighbour's. Counting clusters cannot see it; comparing the partition
 point by point can.
 
-## The 50,000 row, as it stood before the re-run
+## The 50,000 row, explained. Both of the candidates were wrong.
 
-0.90x is the one size where rbc loses to scikit-learn, and it sits between two
-sizes where rbc wins. It is not a thermal artifact — the arms were interleaved
-inside the same loop. Candidates: the landmark count `sqrt(n)` crossing a
-grid-occupancy boundary, or the index build (`O(m^1.5)` in our port, a radix
-sort in theirs) being a larger share at that size. **Not investigated. Not
-explained away.**
+The two explanations offered here originally -- the landmark count `sqrt(n)`
+crossing a grid-occupancy boundary, and the index build being a larger share at
+that size -- are **both false, and the second is backwards.** Measured
+2026-08-19, ball cover alone, warm-up discarded, min of 3, re-run in reverse
+order and agreeing to 3%:
+
+    n         L    build ms  count ms  fill ms   build share
+    16,000   126     1.49      4.25     4.02       15.2%
+    50,000   223     3.65     18.53    18.37        9.0%
+    100,000  316     8.22     49.75    49.81        7.4%
+    200,000  447    20.79    129.08   132.14        7.4%
+
+`ball_cover.hpp:62` is `raft::sqrt(m)` and ours matches it. Cost per (query x
+landmark) is monotone DECREASING through 50,000 -- 2.11 / 1.66 / 1.57 / 1.44 ns
+at 16k / 50k / 100k / 200k -- with no step anywhere, so there is no occupancy
+boundary. And the build's share of the ball cover FALLS through 50,000 rather
+than rising. A third candidate of mine, the dead 2.03 GB `adj` allocation, is
+also dead: it allocates in 0.088 ms and holding one live across the query moves
+the total 0.06%.
+
+**It is not in the ball cover at all.** The same query work at n = 50,000, split
+the way DBSCAN splits it, is flat (18.50 / 19.28 / 19.35 / 20.82 ms across
+1/2/2/4 batches) -- but a whole DBSCAN RBC fit at that n moves 1.4x to 2.0x
+across those same shapes:
+
+    batch size   fit ms
+    40,669 (default)   150-196
+    25,002             106-130
+    12,502              90-112
+
+Two batches of 40,669 and two of 25,002 are the same batch COUNT, so the axis is
+batch SIZE and the ball cover is insensitive to it. Sixty to seventy percent of
+the 50,000 fit is outside the neighbourhood search. The suspect is
+`weak_cc_batched`, which re-initialises all N labels per batch, iterates
+propagation, and takes three host syncs per pass -- a bigger batch holds longer
+label chains. **That is measured but NOT explained**; confirming it needs a timer
+inside `dbscan/ported/dbscan/runner.mojo`.
+
+The actionable consequence: `compute_batch_size` spends 80% of device memory on
+one batch, and on this device the biggest batch is the slowest. Exposing
+`max_mbytes_per_batch`, or wiring cuML's own `neigh_per_row` `///@todo`, is
+worth 1.4x to 2.0x at 50,000 and cannot change the answer.
 
 ## What is still not ported
 
 The index build's in-group ordering is `O(m^1.5)` where cuVS uses
 `thrust::sort_by_key`. Same order as RBC's own query bound, so the asymptotics
-hold, but it will dominate the BUILD at large m. `nn.argsort[target="gpu"]`
+hold. **The sentence that used to follow -- "but it will dominate the BUILD at
+large m" -- is false and is deleted rather than annotated.** The rank is 13% of
+the build, the build is 7.4% of the ball cover, so the rank is 0.4% of a DBSCAN
+fit; the 1-nn kernel above it in the same build is 6.4x larger, and both are
+`O(m^1.5)`, so the RATIO is fixed and the rank can never overtake the kernel it
+sits under. On a clustered fixture (12 blobs, worst group 4.5x the mean) the
+imbalance costs only 1.42x in `sum|g|^2`. A perfect radix sort buys under 1%. `nn.argsort[target="gpu"]`
 cannot stand in for it — see `PORTING.md`, it is silently wrong above 256
 elements.

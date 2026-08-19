@@ -56,13 +56,32 @@ DEVIATION 2: 32 THREADS PER BLOCK, ONE QUERY PER BLOCK
 -------------------------------------------------------
 Theirs launches `tpb = 64` with two warps per block and
 `ceildiv(n_query_rows, 2)` blocks (`:1332-1335`). Ours launches 32 threads and
-`n_query_rows` blocks. The reason is portability, not preference: `vote`
-returns a mask over the WHOLE warp, so packing two 32-lane query groups into
-one 64-lane wavefront — which is what AMD would do with `tpb = 64` — would
-merge two queries' ballots and silently corrupt both. One query per block
-makes the lane group and the warp the same set on every backend whose warp is
-at least 32 wide. Their `query_id >= n_queries` early-out is kept anyway; it
-is dead at this launch shape and it costs one comparison.
+`n_query_rows` blocks. Their `query_id >= n_queries` early-out is kept anyway;
+it is dead at this launch shape and it costs one comparison.
+
+The kernel is written in THEIR shape — `RBC_QPB` is their `num_warps` and the
+query id is their `blockIdx.x * num_warps + threadIdx.x / WarpSize` (`:600`)
+— so the only thing that differs is the value of `RBC_TPB`, and it is 32 for
+two reasons, one of them measured.
+
+**Correctness.** `vote` returns a mask over the WHOLE warp, so packing two
+32-lane query groups into one 64-lane wavefront — which is what AMD would do
+with `tpb = 64` — would merge two queries' ballots and silently corrupt both.
+A vendor that wants their 64 must set `RBC_QPB` from its own lane width, not
+from a constant.
+
+**Cost.** Measured on an M4, 2026-08-19, one window, three repeats, min, on
+the DBSCAN scaling fixture (d = 8, eps = 0.30), count-pass milliseconds:
+
+    RBC_TPB     n=16,000   n=50,000   n=100,000   n=200,000
+    32 (ours)       4.25      18.53       49.75      129.08
+    64 (theirs)     6.53      20.08       49.60      130.85
+    128             6.35      20.21       49.87      142.10
+    256             5.40      20.22       51.23      135.56
+
+Their 64 is not faster than our 32 anywhere on this device and is 1.54x
+slower at 16,000. **This kernel is not block-shape bound**, so the deviation
+costs nothing here and the portability argument decides it unopposed.
 
 NOT PORTED
 ----------
@@ -92,9 +111,27 @@ from neighbors.ported.neighbors.ball_cover.scan import (
 )
 
 
-# One warp, one query. See DEVIATION 2.
+#: The lane group one query is walked by. `vote`, `shuffle_idx`, `warp_sum`
+#: and `pop_count(mask & lid_mask)` all range over exactly this many lanes,
+#: so it is the hardware warp and nothing else.
 comptime RBC_LANES = 32
+
+#: Threads per block. Theirs is 64, two queries per block
+#: (`registers.cuh:1332-1335`). See DEVIATION 2 and the measurement in it.
 comptime RBC_TPB = 32
+
+#: Queries per block, derived. `RBC_TPB // RBC_LANES` is their
+#: `num_warps = tpb / WarpSize` (`registers.cuh:1330`) and the query id is
+#: their `blockIdx.x * num_warps + threadIdx.x / WarpSize` (`:600`), so the
+#: kernel is written in their shape at every value of this. It is 1 here for
+#: the reason DEVIATION 2 gives.
+comptime RBC_QPB = RBC_TPB // RBC_LANES
+
+#: `block_rbc_kernel_eps_max_k_copy<value_idx, 32><<<n_query_rows, 32>>>`,
+#: `registers.cuh:1476-1478`. One block per ROW and 32 threads, theirs
+#: exactly; it is a compaction, not a warp-cooperative walk, so it does not
+#: move with `RBC_TPB`.
+comptime RBC_COPY_TPB = 32
 
 
 def block_rbc_kernel_eps_csr_pass(
@@ -137,7 +174,14 @@ def block_rbc_kernel_eps_csr_pass(
 
     # `raft::shfl(blockIdx.x * num_warps + threadIdx.x / WarpSize, 0)`, `:600`.
     # Their comment: "this should help the compiler to prevent branches".
-    var query_id = Int(shuffle_idx(Int32(block_idx.x), UInt32(0)))
+    var query_id = Int(
+        shuffle_idx(
+            Int32(
+                Int(block_idx.x) * RBC_QPB + Int(thread_idx.x) // RBC_LANES
+            ),
+            UInt32(0),
+        )
+    )
     if query_id >= n_queries:
         return
 
@@ -289,7 +333,14 @@ def block_rbc_kernel_eps_dense(
 
     var lid = Int(lane_id())
 
-    var query_id = Int(shuffle_idx(Int32(block_idx.x), UInt32(0)))
+    var query_id = Int(
+        shuffle_idx(
+            Int32(
+                Int(block_idx.x) * RBC_QPB + Int(thread_idx.x) // RBC_LANES
+            ),
+            UInt32(0),
+        )
+    )
     if query_id >= n_queries:
         return
 
@@ -407,7 +458,14 @@ def block_rbc_kernel_eps_max_k(
     var lid = Int(lane_id())
     var lid_mask = (UInt32(1) << UInt32(lid)) - UInt32(1)
 
-    var query_id = Int(shuffle_idx(Int32(block_idx.x), UInt32(0)))
+    var query_id = Int(
+        shuffle_idx(
+            Int32(
+                Int(block_idx.x) * RBC_QPB + Int(thread_idx.x) // RBC_LANES
+            ),
+            UInt32(0),
+        )
+    )
     if query_id >= n_queries:
         return
 
@@ -519,7 +577,7 @@ def block_rbc_kernel_eps_max_k_copy(
     var i = Int(thread_idx.x)
     while i < num_cols:
         adj_ja.unsafe_store(col_start + i, tmp.unsafe_load(offset + i))
-        i += RBC_TPB
+        i += RBC_COPY_TPB
 
 
 # ---------------------------------------------------------------------------
@@ -568,7 +626,7 @@ def rbc_eps_pass_count(
         vd.unsafe_ptr(),
         adj_ia.unsafe_ptr(),
         Int32(0),
-        grid_dim=(n_queries, 1, 1),
+        grid_dim=((n_queries + RBC_QPB - 1) // RBC_QPB, 1, 1),
         block_dim=(RBC_TPB, 1, 1),
     )
     ctx.enqueue_function[rbc_exclusive_scan_kernel](
@@ -628,7 +686,7 @@ def rbc_eps_pass_fill(
         adj_ia.unsafe_ptr(),
         adj_ja.unsafe_ptr(),
         Int32(1),
-        grid_dim=(n_queries, 1, 1),
+        grid_dim=((n_queries + RBC_QPB - 1) // RBC_QPB, 1, 1),
         block_dim=(RBC_TPB, 1, 1),
     )
     ctx.synchronize()
@@ -672,7 +730,7 @@ def rbc_eps_pass_dense(
         r_radius.unsafe_ptr(),
         adj.unsafe_ptr(),
         vd.unsafe_ptr(),
-        grid_dim=(n_queries, 1, 1),
+        grid_dim=((n_queries + RBC_QPB - 1) // RBC_QPB, 1, 1),
         block_dim=(RBC_TPB, 1, 1),
     )
     ctx.synchronize()
@@ -723,7 +781,7 @@ def rbc_eps_pass_max_k(
         vd.unsafe_ptr(),
         Int32(max_k),
         tmp.unsafe_ptr(),
-        grid_dim=(n_queries, 1, 1),
+        grid_dim=((n_queries + RBC_QPB - 1) // RBC_QPB, 1, 1),
         block_dim=(RBC_TPB, 1, 1),
     )
     ctx.enqueue_function[rbc_max_reduce_kernel](
@@ -762,7 +820,7 @@ def rbc_eps_pass_max_k(
         tmp.unsafe_ptr(),
         adj_ja.unsafe_ptr(),
         grid_dim=(n_queries, 1, 1),
-        block_dim=(RBC_TPB, 1, 1),
+        block_dim=(RBC_COPY_TPB, 1, 1),
     )
     ctx.synchronize()
 

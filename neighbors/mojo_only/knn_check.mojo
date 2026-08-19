@@ -46,6 +46,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.row_norms import NORM_TPB, row_norm_kernel
 from neighbors.ported.neighbors.detail.fused_l2_knn import fused_l2_knn
 from neighbors.ported.neighbors.detail.knn_brute_force import (
+    KNN_METHOD_FUSED,
     brute_force_knn_impl,
     compute_norms,
     tiled_brute_force_knn,
@@ -897,7 +898,7 @@ def check_fused_reach_by_sabotage() raises:
 
 
 def check_dispatch_takes_fused() raises:
-    """`brute_force_knn_impl` must route k <= 64 to the fused kernel.
+    """`brute_force_knn_impl`'s dispatch, in all THREE of its directions.
 
     **The proof is which BUFFER comes back written, not whether the answer is
     right**, because both paths return the same neighbours and an equality
@@ -905,17 +906,23 @@ def check_dispatch_takes_fused() raises:
 
     The two arms write different outputs. The fused kernel writes `out_idx`
     (`uint32`). The tiled fallback with `use_vendor_topk = True` writes
-    `out_idx32` (`int32`) and never touches `out_idx`. So both calls below
-    pass `use_vendor_topk = True`, and:
+    `out_idx32` (`int32`) and never touches `out_idx`. So every call below
+    passes `use_vendor_topk = True`, and:
 
-      - at k = 8 the dispatch must take the fused arm, so `out_idx` must come
-        back correct and `out_idx32` must still hold the sentinel;
+      - at k = 8 with `knn_method = KNN_METHOD_FUSED`, their own dispatch, the
+        fused arm must run, so `out_idx` must come back correct and
+        `out_idx32` must still hold the sentinel;
       - at k = 65, one past their `k <= 64` at `:443`, the dispatch must fall
-        through, so `out_idx32` must come back correct and `out_idx` must
-        still hold the sentinel.
+        through EVEN WITH `KNN_METHOD_FUSED` asked for, so `out_idx32` must
+        come back correct and `out_idx` must still hold the sentinel;
+      - at k = 8 with the argument OMITTED, the tiled arm must run, because
+        DEVIATION 36 makes `KNN_METHOD_TILED` this port's default.
 
-    Both directions are asserted. One direction alone would pass if the
-    dispatch were wired to a constant.
+    The first two together are what stops the arm selection being wired to a
+    constant: one direction alone would pass either way. The third is what
+    stops the DEFAULT drifting back silently, which is a different failure and
+    needs its own assertion -- a check that only ever passes the method
+    explicitly cannot see which value is the default.
     """
     var ctx = DeviceContext()
     var kf = 8
@@ -982,14 +989,14 @@ def check_dispatch_takes_fused() raises:
         FCHK_QUERIES * kmax
     )
 
-    # --- k = 8: their fused arm ------------------------------------------
+    # --- k = 8, THEIR dispatch asked for explicitly: their fused arm ------
     ctx.enqueue_copy(dst_buf=oi, src_ptr=seed_u.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=oi32, src_ptr=seed_i.unsafe_ptr())
     ctx.synchronize()
     brute_force_knn_impl(
         ctx, queries, qnorm, index, inorm, dist, bv, bi, od, oi, oi32,
         FCHK_QUERIES, FCHK_INDEX, FCHK_FEATURES, kf, tile, buf_len, False,
-        True,
+        True, knn_method=KNN_METHOD_FUSED,
     )
     ctx.enqueue_copy(dst_ptr=got_u.unsafe_ptr(), src_buf=oi)
     ctx.enqueue_copy(dst_ptr=got_i.unsafe_ptr(), src_buf=oi32)
@@ -1025,7 +1032,7 @@ def check_dispatch_takes_fused() raises:
     brute_force_knn_impl(
         ctx, queries, qnorm, index, inorm, dist, bv, bi, od, oi, oi32,
         FCHK_QUERIES, FCHK_INDEX, FCHK_FEATURES, kt, tile, buf_len, False,
-        True,
+        True, knn_method=KNN_METHOD_FUSED,
     )
     ctx.enqueue_copy(dst_ptr=got_u.unsafe_ptr(), src_buf=oi)
     ctx.enqueue_copy(dst_ptr=got_i.unsafe_ptr(), src_buf=oi32)
@@ -1059,8 +1066,573 @@ def check_dispatch_takes_fused() raises:
             " `:443` bound is k <= 64 and 65 must fall through."
         )
 
+    # --- k = 8, ARGUMENT OMITTED: DEVIATION 36's default, the tiled arm ---
+    #
+    # Same k, same fixture, same buffers as the first call. The ONLY thing
+    # that differs is that `knn_method` is not passed, so this asserts the
+    # value of the default and nothing else.
+    ctx.enqueue_copy(dst_buf=oi, src_ptr=seed_u.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=oi32, src_ptr=seed_i.unsafe_ptr())
+    ctx.synchronize()
+    brute_force_knn_impl(
+        ctx, queries, qnorm, index, inorm, dist, bv, bi, od, oi, oi32,
+        FCHK_QUERIES, FCHK_INDEX, FCHK_FEATURES, kf, tile, buf_len, False,
+        True,
+    )
+    ctx.enqueue_copy(dst_ptr=got_u.unsafe_ptr(), src_buf=oi)
+    ctx.enqueue_copy(dst_ptr=got_i.unsafe_ptr(), src_buf=oi32)
+    ctx.synchronize()
+
+    var untouched3 = 0
+    for i in range(FCHK_QUERIES * kf):
+        if got_u.unsafe_ptr().unsafe_load(i) == UInt32(0xDEADBEEF):
+            untouched3 += 1
+    if untouched3 != FCHK_QUERIES * kf:
+        raise Error(
+            "DEFAULT DISPATCH at k=8 wrote out_idx, so the FUSED arm ran."
+            " DEVIATION 36 says the default is KNN_METHOD_TILED; either the"
+            " default moved or the switch is not reaching the dispatch."
+        )
+    var bad3 = 0
+    for i in range(FCHK_QUERIES):
+        for s3 in range(kf):
+            var got3 = Int(got_i.unsafe_ptr().unsafe_load(i * kf + s3))
+            var found3 = False
+            for t in range(FCHK_MAX_K):
+                if truth[i * FCHK_MAX_K + t] == got3:
+                    found3 = True
+            if not found3:
+                bad3 += 1
+    if bad3 != 0:
+        raise Error(
+            "DEFAULT DISPATCH at k=8 returned " + String(bad3)
+            + " neighbours outside the true top-64, so the arm it took is"
+            " running but wrong"
+        )
+
     print(
-        "check_dispatch_takes_fused OK: k=8 wrote out_idx and left out_idx32"
-        " at its sentinel; k=65 did the opposite, so the `k <= 64` branch at"
-        " knn_brute_force.cuh:443 is wired both ways"
+        "check_dispatch_takes_fused OK: with KNN_METHOD_FUSED, k=8 wrote"
+        " out_idx and left out_idx32 at its sentinel and k=65 did the"
+        " opposite, so the `k <= 64` branch at knn_brute_force.cuh:443 is"
+        " wired both ways; with the argument omitted, k=8 took the TILED arm,"
+        " which is DEVIATION 36's default"
+    )
+
+
+# ---------------------------------------------------------------------------
+# THE REGISTER-RESIDENT SELECTOR. Everything above this line was written
+# against a shared-memory placeholder in the selector slot; these three are
+# written against `faiss_select::WarpSelect`, which is what
+# `fused_l2_knn.cuh:221-222` actually instantiates.
+#
+# The call contract that makes them necessary: `WarpSelect::checkThreadQ`
+# (`Select.cuh:393-419`) holds a warp vote and a merge full of shuffles, so
+# every lane of a warp must call `add` the same number of times and every
+# guard around it must be warp-uniform. In `fusedL2kNN` the guards are
+# `gmemRowId < m` (`:458`), which depends on `threadIdx.x / AccThCols` and is
+# therefore constant across a warp, and `colId < ldd` (`:463`), which is NOT
+# and is handled by feeding `{keyMax, identity}` rather than by skipping
+# (`:462`). A fixture that never crosses either edge cannot see a violation,
+# so `check_fused_edge_shapes` is built to cross both.
+# ---------------------------------------------------------------------------
+
+
+comptime FCHK2_INDEX = 1013
+comptime FCHK2_QUERIES = 17
+comptime FCHK2_FEATURES = 13
+
+
+def _oracle_at(
+    hq: MutPointer[Float32, MutUntrackedOrigin],
+    hi: MutPointer[Float32, MutUntrackedOrigin],
+    n_queries: Int,
+    n_index: Int,
+    n_features: Int,
+    k: Int,
+) -> List[Int]:
+    """Host Float64 top-`k`, ascending, direct formula, at runtime shapes."""
+    var out = List[Int]()
+    for i in range(n_queries):
+        var best_idx = List[Int]()
+        var best_d = List[Float64]()
+        for _s in range(k):
+            best_idx.append(-1)
+            best_d.append(1.0e30)
+        for j in range(n_index):
+            var d = Float64(0.0)
+            for f in range(n_features):
+                var diff = Float64(
+                    hq.unsafe_load(i * n_features + f)
+                ) - Float64(hi.unsafe_load(j * n_features + f))
+                d += diff * diff
+            if d < best_d[k - 1]:
+                var pos = k - 1
+                while pos > 0 and best_d[pos - 1] > d:
+                    best_d[pos] = best_d[pos - 1]
+                    best_idx[pos] = best_idx[pos - 1]
+                    pos -= 1
+                best_d[pos] = d
+                best_idx[pos] = j
+        for t in range(k):
+            out.append(best_idx[t])
+    return out^
+
+
+def check_fused_edge_shapes() raises:
+    """A second fused fixture whose every extent is a partial tile, at the
+    two k values on either side of their instantiation boundary.
+
+    `Policy2x8` is `Mblk = 16`, `Nblk = 256`, `Kblk = 16`, and this fixture
+    is 17 queries x 1,013 index x 13 features:
+
+      * **17 queries** puts a row tile with ONE live row in it. In that tile
+        seven of the eight warps have `gmemRowId >= m` for both of their
+        `AccRowsPerTh` rows and skip the queue entirely, and the eighth has
+        `heap0` live and `heap1` dead. That is the only shape in which the
+        `:458` guard can be caught being non-warp-uniform, and the whole
+        `WarpSelect` call contract rests on it being uniform.
+      * **1,013 index points** is 3 full column tiles and a 245-wide tail,
+        and 1013 is not a multiple of the 32-lane warp either, so lanes with
+        `colId >= n` must feed `{keyMax, identity}` (`:462`) instead of
+        exiting -- a lane that exited early would desynchronize the vote.
+      * **13 features** is a partial `Kblk`.
+
+    `k = 1, 32, 33, 64`. Thirty-two and thirty-three straddle
+    `fusedL2ExpKnnImpl:768-771`, so they select DIFFERENT whole-kernel
+    instantiations, `<NumWarpQ=32, NumThreadQ=2>` and
+    `<64, 3>`; 33 is also the first k whose `kNumWarpQRegisters` is 2, which
+    is the only setting in which `warpK[1]` and the cross-register merge in
+    `warpMergeAnyRegisters` are reached at all, and its
+    `kLane = (33-1) % 32 = 0` is the wrap `Select.cuh:351` exists for.
+
+    Compared PER SLOT and IN ORDER against a host Float64 direct-formula
+    oracle, which is the same bar the placeholder selector cleared.
+    """
+    var ctx = DeviceContext()
+
+    var index = ctx.enqueue_create_buffer[DType.float32](
+        FCHK2_INDEX * FCHK2_FEATURES
+    )
+    var queries = ctx.enqueue_create_buffer[DType.float32](
+        FCHK2_QUERIES * FCHK2_FEATURES
+    )
+    var inorm = ctx.enqueue_create_buffer[DType.float32](FCHK2_INDEX)
+    var qnorm = ctx.enqueue_create_buffer[DType.float32](FCHK2_QUERIES)
+    var od = ctx.enqueue_create_buffer[DType.float32](
+        FCHK2_QUERIES * FCHK_MAX_K
+    )
+    var oi = ctx.enqueue_create_buffer[DType.uint32](
+        FCHK2_QUERIES * FCHK_MAX_K
+    )
+    ctx.synchronize()
+
+    var hi = ctx.enqueue_create_host_buffer[DType.float32](
+        FCHK2_INDEX * FCHK2_FEATURES
+    )
+    for j in range(FCHK2_INDEX):
+        for f in range(FCHK2_FEATURES):
+            hi.unsafe_ptr().unsafe_store(
+                j * FCHK2_FEATURES + f, _fchk_coord(j, f, 53)
+            )
+    ctx.enqueue_copy(dst_buf=index, src_ptr=hi.unsafe_ptr())
+    var hq = ctx.enqueue_create_host_buffer[DType.float32](
+        FCHK2_QUERIES * FCHK2_FEATURES
+    )
+    for i in range(FCHK2_QUERIES):
+        for f in range(FCHK2_FEATURES):
+            hq.unsafe_ptr().unsafe_store(
+                i * FCHK2_FEATURES + f, _fchk_coord(i, f, 61)
+            )
+    ctx.enqueue_copy(dst_buf=queries, src_ptr=hq.unsafe_ptr())
+    ctx.synchronize()
+
+    compute_norms(ctx, index, inorm, FCHK2_INDEX, FCHK2_FEATURES, False)
+    compute_norms(ctx, queries, qnorm, FCHK2_QUERIES, FCHK2_FEATURES, False)
+    ctx.synchronize()
+
+    var truth = _oracle_at(
+        hq.unsafe_ptr(),
+        hi.unsafe_ptr(),
+        FCHK2_QUERIES,
+        FCHK2_INDEX,
+        FCHK2_FEATURES,
+        FCHK_MAX_K,
+    )
+
+    var ho = ctx.enqueue_create_host_buffer[DType.uint32](
+        FCHK2_QUERIES * FCHK_MAX_K
+    )
+    var hd = ctx.enqueue_create_host_buffer[DType.float32](
+        FCHK2_QUERIES * FCHK_MAX_K
+    )
+
+    var ks = List[Int]()
+    ks.append(1)
+    ks.append(32)
+    ks.append(33)
+    ks.append(FCHK_MAX_K)
+
+    for t in range(len(ks)):
+        var k = ks[t]
+        fused_l2_knn(
+            ctx, queries, qnorm, index, inorm, od, oi,
+            FCHK2_QUERIES, FCHK2_INDEX, FCHK2_FEATURES, k, False,
+        )
+        ctx.enqueue_copy(dst_ptr=ho.unsafe_ptr(), src_buf=oi)
+        ctx.enqueue_copy(dst_ptr=hd.unsafe_ptr(), src_buf=od)
+        ctx.synchronize()
+
+        var bad = 0
+        var unsorted = 0
+        for i in range(FCHK2_QUERIES):
+            for s in range(k):
+                if (
+                    Int(ho.unsafe_ptr().unsafe_load(i * k + s))
+                    != truth[i * FCHK_MAX_K + s]
+                ):
+                    bad += 1
+                if s > 0:
+                    if hd.unsafe_ptr().unsafe_load(
+                        i * k + s
+                    ) < hd.unsafe_ptr().unsafe_load(i * k + s - 1):
+                        unsorted += 1
+        if bad != 0:
+            raise Error(
+                "fused edge-shape k=" + String(k) + ": " + String(bad)
+                + " of " + String(FCHK2_QUERIES * k)
+                + " slots disagree with the host Float64 oracle at "
+                + String(FCHK2_QUERIES) + " x " + String(FCHK2_INDEX)
+                + " x " + String(FCHK2_FEATURES)
+            )
+        if unsorted != 0:
+            raise Error(
+                "fused edge-shape k=" + String(k) + ": " + String(unsorted)
+                + " slots are out of ascending order"
+            )
+
+    print(
+        "check_fused_edge_shapes OK: k = 1, 32, 33, 64 over "
+        + String(FCHK2_QUERIES)
+        + " queries x "
+        + String(FCHK2_INDEX)
+        + " index x "
+        + String(FCHK2_FEATURES)
+        + " features -- a partial tile on Mblk, Nblk and Kblk at once, and"
+        " both WarpSelect instantiations"
+    )
+
+
+def check_fused_queue_reach_by_sabotage() raises:
+    """A sabotage aimed at the SELECTOR, not at the epilogue.
+
+    `check_fused_reach_by_sabotage` corrupts the norms, which proves the
+    distance arithmetic ran. It would pass just as well with any selector in
+    the slot. This one asserts a property only the queue can produce.
+
+    Sabotage: overwrite ONE index point's coordinates with an exact copy of
+    ONE query's, choosing an index point deep in the index so that it is
+    reached on a LATE grid-stride column tile, and recompute the index
+    norms.
+
+    PREDICTED SHAPE, and every clause of it is sharp:
+
+      1. That query's slot 0 must be that index point. It is at squared
+         distance zero and the fixture is hashed, so nothing ties it. A
+         queue that inserted at the wrong rank, or that dropped a candidate
+         arriving after the queue was already full, fails here -- and the
+         victim column is chosen past the first column tile precisely so
+         that the queue IS already full when it arrives.
+      2. That distance must be EXACTLY 0.0. `xn == yn` here and the expanded
+         identity's round-off is about a float32 ulp at the norm, so this is
+         `l2_exp.cuh:120-129`'s SECOND clamp clause and nothing else can
+         produce the exact zero.
+      3. That query's slots 1..k-1 must be its OLD slots 0..k-2, shifted by
+         one, in index AND in distance. Only the victim column moved, and it
+         was not a neighbour of anything before, so one new minimum must
+         displace the tail by exactly one and change nothing else. A queue
+         that rebuilt itself rather than inserting comes back with a
+         different tail.
+      4. Every OTHER query row must be bit-identical in value and in index.
+         The fixture is checked up front to make this a THEOREM rather than
+         a hope: the planted point sits at the victim query's coordinates,
+         so it can only disturb query `i` if `dist(query_i, victim)` is
+         inside query `i`'s baseline top-k, and the victim ROW is CHOSEN at
+         run time as the first query for which the host, in Float64, finds
+         that true of no other query. A queue leaking across rows, or a
+         `starty` guard that is not warp-uniform, shows up here.
+    """
+    var ctx = DeviceContext()
+    var k = 32
+    comptime VICTIM_COL = 3971
+
+    var index = ctx.enqueue_create_buffer[DType.float32](
+        FCHK_INDEX * FCHK_FEATURES
+    )
+    var queries = ctx.enqueue_create_buffer[DType.float32](
+        FCHK_QUERIES * FCHK_FEATURES
+    )
+    var inorm = ctx.enqueue_create_buffer[DType.float32](FCHK_INDEX)
+    var qnorm = ctx.enqueue_create_buffer[DType.float32](FCHK_QUERIES)
+    var od = ctx.enqueue_create_buffer[DType.float32](FCHK_QUERIES * k)
+    var oi = ctx.enqueue_create_buffer[DType.uint32](FCHK_QUERIES * k)
+    ctx.synchronize()
+
+    var hi = ctx.enqueue_create_host_buffer[DType.float32](
+        FCHK_INDEX * FCHK_FEATURES
+    )
+    for j in range(FCHK_INDEX):
+        for f in range(FCHK_FEATURES):
+            hi.unsafe_ptr().unsafe_store(
+                j * FCHK_FEATURES + f, _fchk_coord(j, f, 3)
+            )
+    ctx.enqueue_copy(dst_buf=index, src_ptr=hi.unsafe_ptr())
+    var hq = ctx.enqueue_create_host_buffer[DType.float32](
+        FCHK_QUERIES * FCHK_FEATURES
+    )
+    for i in range(FCHK_QUERIES):
+        for f in range(FCHK_FEATURES):
+            hq.unsafe_ptr().unsafe_store(
+                i * FCHK_FEATURES + f, _fchk_coord(i, f, 11)
+            )
+    ctx.enqueue_copy(dst_buf=queries, src_ptr=hq.unsafe_ptr())
+    ctx.synchronize()
+
+    compute_norms(ctx, index, inorm, FCHK_INDEX, FCHK_FEATURES, False)
+    compute_norms(ctx, queries, qnorm, FCHK_QUERIES, FCHK_FEATURES, False)
+    ctx.synchronize()
+
+    fused_l2_knn(
+        ctx, queries, qnorm, index, inorm, od, oi,
+        FCHK_QUERIES, FCHK_INDEX, FCHK_FEATURES, k, False,
+    )
+    var base_i = ctx.enqueue_create_host_buffer[DType.uint32](
+        FCHK_QUERIES * k
+    )
+    var base_d = ctx.enqueue_create_host_buffer[DType.float32](
+        FCHK_QUERIES * k
+    )
+    ctx.enqueue_copy(dst_ptr=base_i.unsafe_ptr(), src_buf=oi)
+    ctx.enqueue_copy(dst_ptr=base_d.unsafe_ptr(), src_buf=od)
+    ctx.synchronize()
+
+    # The victim column must not already be an answer anywhere, or clause 3
+    # would be asserting the wrong shift and clause 4 the wrong invariance.
+    for s in range(FCHK_QUERIES * k):
+        if Int(base_i.unsafe_ptr().unsafe_load(s)) == VICTIM_COL:
+            raise Error(
+                "sabotage fixture is degenerate: column "
+                + String(VICTIM_COL)
+                + " is already a baseline neighbour; pick another"
+            )
+
+    # The victim ROW is CHOSEN, not typed, and the criterion is what makes
+    # clause 4 a theorem about the fixture rather than an assumption about
+    # the data: the planted point lands on query `v`'s coordinates, so it
+    # can disturb query `i` only if `dist(query_i, query_v)` is inside query
+    # `i`'s baseline top-k. Pick the first `v` for which no other query is
+    # that close, in Float64. Queries this close DO occur here -- 20
+    # dimensions and 53 queries -- so a typed constant was wrong twice.
+    var victim_row = -1
+    for v in range(FCHK_QUERIES):
+        var ok = True
+        for i in range(FCHK_QUERIES):
+            if i == v:
+                continue
+            var dqq = Float64(0.0)
+            for f in range(FCHK_FEATURES):
+                var df = Float64(
+                    hq.unsafe_ptr().unsafe_load(i * FCHK_FEATURES + f)
+                ) - Float64(
+                    hq.unsafe_ptr().unsafe_load(v * FCHK_FEATURES + f)
+                )
+                dqq += df * df
+            if dqq <= Float64(base_d.unsafe_ptr().unsafe_load(i * k + k - 1)):
+                ok = False
+                break
+        if ok:
+            victim_row = v
+            break
+    if victim_row < 0:
+        raise Error(
+            "sabotage fixture is degenerate: every query is inside some"
+            " other query's baseline top-k, so no victim row can isolate"
+            " the planted point"
+        )
+    var VICTIM_ROW = victim_row
+
+    for f in range(FCHK_FEATURES):
+        hi.unsafe_ptr().unsafe_store(
+            VICTIM_COL * FCHK_FEATURES + f,
+            hq.unsafe_ptr().unsafe_load(VICTIM_ROW * FCHK_FEATURES + f),
+        )
+    ctx.enqueue_copy(dst_buf=index, src_ptr=hi.unsafe_ptr())
+    ctx.synchronize()
+    compute_norms(ctx, index, inorm, FCHK_INDEX, FCHK_FEATURES, False)
+    ctx.synchronize()
+
+    fused_l2_knn(
+        ctx, queries, qnorm, index, inorm, od, oi,
+        FCHK_QUERIES, FCHK_INDEX, FCHK_FEATURES, k, False,
+    )
+    var sab_i = ctx.enqueue_create_host_buffer[DType.uint32](FCHK_QUERIES * k)
+    var sab_d = ctx.enqueue_create_host_buffer[DType.float32](
+        FCHK_QUERIES * k
+    )
+    ctx.enqueue_copy(dst_ptr=sab_i.unsafe_ptr(), src_buf=oi)
+    ctx.enqueue_copy(dst_ptr=sab_d.unsafe_ptr(), src_buf=od)
+    ctx.synchronize()
+
+    # 1. rank 0 is the planted point
+    if Int(sab_i.unsafe_ptr().unsafe_load(VICTIM_ROW * k)) != VICTIM_COL:
+        raise Error(
+            "QUEUE SABOTAGE clause 1: query "
+            + String(VICTIM_ROW)
+            + " came back with neighbour "
+            + String(Int(sab_i.unsafe_ptr().unsafe_load(VICTIM_ROW * k)))
+            + " at rank 0, not the co-located index point "
+            + String(VICTIM_COL)
+            + ". A candidate arriving on a late column tile is not reaching"
+            " the top of the queue."
+        )
+
+    # 2. and at exactly zero, which is the second clamp clause
+    var d0 = sab_d.unsafe_ptr().unsafe_load(VICTIM_ROW * k)
+    if d0 != Float32(0.0):
+        raise Error(
+            "QUEUE SABOTAGE clause 2: the co-located pair came back at "
+            + String(d0)
+            + ", not exactly 0. `l2_exp.cuh:120-129`'s second clamp clause"
+            " is not firing."
+        )
+
+    # 3. the rest of the victim row is its old answer, shifted by one
+    for s in range(1, k):
+        if (
+            sab_i.unsafe_ptr().unsafe_load(VICTIM_ROW * k + s)
+            != base_i.unsafe_ptr().unsafe_load(VICTIM_ROW * k + s - 1)
+            or sab_d.unsafe_ptr().unsafe_load(VICTIM_ROW * k + s)
+            != base_d.unsafe_ptr().unsafe_load(VICTIM_ROW * k + s - 1)
+        ):
+            raise Error(
+                "QUEUE SABOTAGE clause 3: slot "
+                + String(s)
+                + " of the victim row is not its old slot "
+                + String(s - 1)
+                + ". Inserting one new minimum must shift the tail by"
+                " exactly one."
+            )
+
+    # 4. no other row moved at all
+    for i in range(FCHK_QUERIES):
+        if i == VICTIM_ROW:
+            continue
+        for s in range(k):
+            if (
+                sab_i.unsafe_ptr().unsafe_load(i * k + s)
+                != base_i.unsafe_ptr().unsafe_load(i * k + s)
+                or sab_d.unsafe_ptr().unsafe_load(i * k + s)
+                != base_d.unsafe_ptr().unsafe_load(i * k + s)
+            ):
+                raise Error(
+                    "QUEUE SABOTAGE clause 4: query row "
+                    + String(i)
+                    + " moved when only index point "
+                    + String(VICTIM_COL)
+                    + " was touched, and the host verified that point is"
+                    " outside row "
+                    + String(i)
+                    + "'s top-k. The queue is leaking across rows."
+                )
+
+    print(
+        "check_fused_queue_reach_by_sabotage OK: a co-located point planted"
+        " at index column "
+        + String(VICTIM_COL)
+        + " for query "
+        + String(VICTIM_ROW)
+        + " came back at rank 0 at exactly 0.0, shifted that row's tail by"
+        " exactly one, and moved no other row"
+    )
+
+
+def check_fused_k_ceiling() raises:
+    """`ASSERT(numOfNN <= 64, "fusedL2kNN: num of nearest neighbors must be
+    <= 64")`, `fused_l2_knn.cuh:581` and `:759`.
+
+    `check_dispatch_takes_fused` shows that `brute_force_knn_impl` sends
+    k = 65 to the fallback. This asserts the other half: `fused_l2_knn`
+    itself refuses k = 65 rather than silently instantiating a queue that
+    cannot hold it, which is what their `else` branch at `:770-772` does.
+    It also pins k = 64 as ACCEPTED, so the bound is tested from both sides
+    and an off-by-one cannot hide.
+    """
+    var ctx = DeviceContext()
+
+    var index = ctx.enqueue_create_buffer[DType.float32](
+        FCHK2_INDEX * FCHK2_FEATURES
+    )
+    var queries = ctx.enqueue_create_buffer[DType.float32](
+        FCHK2_QUERIES * FCHK2_FEATURES
+    )
+    var inorm = ctx.enqueue_create_buffer[DType.float32](FCHK2_INDEX)
+    var qnorm = ctx.enqueue_create_buffer[DType.float32](FCHK2_QUERIES)
+    var od = ctx.enqueue_create_buffer[DType.float32](FCHK2_QUERIES * 65)
+    var oi = ctx.enqueue_create_buffer[DType.uint32](FCHK2_QUERIES * 65)
+    ctx.synchronize()
+
+    var hi = ctx.enqueue_create_host_buffer[DType.float32](
+        FCHK2_INDEX * FCHK2_FEATURES
+    )
+    for j in range(FCHK2_INDEX):
+        for f in range(FCHK2_FEATURES):
+            hi.unsafe_ptr().unsafe_store(
+                j * FCHK2_FEATURES + f, _fchk_coord(j, f, 53)
+            )
+    ctx.enqueue_copy(dst_buf=index, src_ptr=hi.unsafe_ptr())
+    var hq = ctx.enqueue_create_host_buffer[DType.float32](
+        FCHK2_QUERIES * FCHK2_FEATURES
+    )
+    for i in range(FCHK2_QUERIES):
+        for f in range(FCHK2_FEATURES):
+            hq.unsafe_ptr().unsafe_store(
+                i * FCHK2_FEATURES + f, _fchk_coord(i, f, 61)
+            )
+    ctx.enqueue_copy(dst_buf=queries, src_ptr=hq.unsafe_ptr())
+    ctx.synchronize()
+    compute_norms(ctx, index, inorm, FCHK2_INDEX, FCHK2_FEATURES, False)
+    compute_norms(ctx, queries, qnorm, FCHK2_QUERIES, FCHK2_FEATURES, False)
+    ctx.synchronize()
+
+    var accepted_64 = True
+    try:
+        fused_l2_knn(
+            ctx, queries, qnorm, index, inorm, od, oi,
+            FCHK2_QUERIES, FCHK2_INDEX, FCHK2_FEATURES, 64, False,
+        )
+    except:
+        accepted_64 = False
+    if not accepted_64:
+        raise Error(
+            "fused_l2_knn refused k = 64, which is their own NumWarpQ = 64"
+            " instantiation at `fused_l2_knn.cuh:759`"
+        )
+
+    var refused_65 = False
+    try:
+        fused_l2_knn(
+            ctx, queries, qnorm, index, inorm, od, oi,
+            FCHK2_QUERIES, FCHK2_INDEX, FCHK2_FEATURES, 65, False,
+        )
+    except:
+        refused_65 = True
+    if not refused_65:
+        raise Error(
+            "fused_l2_knn ACCEPTED k = 65. Their `else` at"
+            " `fused_l2_knn.cuh:770-772` asserts, and NumWarpQ = 64 cannot"
+            " hold 65 neighbours, so this would return silent garbage."
+        )
+
+    print(
+        "check_fused_k_ceiling OK: k = 64 accepted, k = 65 refused with"
+        " their ASSERT message"
     )

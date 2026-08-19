@@ -77,6 +77,10 @@ numpy = "*"
 # produce the oracle values a check compares against, which is the only way a
 # port gets an answer it did not compute itself.
 catboost = ">=1.2"
+# Only for its DATASET LOADERS. covtype is 581012 x 54 of real data, which is
+# what a timing claim needs beside a synthetic one. Not used as an oracle for
+# the tree port; CatBoost is the oracle there.
+scikit-learn = "*"
 
 [environments]
 bench = ["bench"]
