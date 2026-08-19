@@ -1,8 +1,11 @@
 # our_file	upstream_file	status	notes
 # TWO upstreams in one section, which is why the header names them per row:
-#   cuVS  pinned at 2140532c   (the algorithm)
-#   RAFT  pinned at 9aa17e5    (the top-k primitive, TRANSLITERATED not stood in for)
-ported/neighbors/detail/knn_brute_force.mojo	cuvs cpp/src/neighbors/detail/knn_brute_force.cuh	partial	tiled_brute_force_knn, expanded metrics, query-axis tiling only
+#   cuVS  pinned at 94c2819    (the algorithm; branch-25.08, cloned 2026-08-19)
+#   RAFT  pinned at 661a3b8    (the top-k primitive, TRANSLITERATED not stood in for)
+ported/neighbors/detail/fused_l2_knn.mojo	cuvs cpp/src/neighbors/detail/fused_l2_knn.cuh	partial	fusedL2kNN on Policy2x8; THE PATH THEIR DISPATCH TAKES for k<=64 + row-major + L2 (knn_brute_force.cuh:443). Single-buffered: their SmemSize is 2 pages = 36,992 B against Metal's 32 KB
+ported/neighbors/detail/knn_brute_force.mojo	cuvs cpp/src/neighbors/detail/knn_brute_force.cuh	partial	tiled_brute_force_knn, their FALLBACK arm, plus brute_force_knn_impl's four-condition dispatch; query-axis tiling only
+ported/neighbors/detail/faiss_select/select.mojo	raft cpp/include/raft/neighbors/detail/faiss_select/Select.cuh	partial	WarpSelect at the two instantiations fused_l2_knn.cuh:743-771 uses; register-resident, which is what makes fusion possible
+ported/neighbors/ball_cover/**	cuvs cpp/src/neighbors/ball_cover/*	partial	RBC index build + the two eps paths cuML's DBSCAN actually calls (runner.cuh:262 max_k=0 two-pass, :335 max_k one-pass); exact, verified by per-row set equality
 ported/matrix/detail/select_radix.mojo	raft cpp/include/raft/matrix/detail/select_radix.cuh	partial	radix_topk_one_block only; BitsPerPass 8 not 11; CUB BlockScan replaced
 ported/matrix/detail/select_warpsort.mojo	raft cpp/include/raft/matrix/detail/select_warpsort.cuh	partial	warp_sort_immediate + block_sort + block_kernel (dense) only; the three set_k_th_ queues left out; host occupancy search replaced by a pinned geometry
 ported/matrix/detail/select_warpsort.mojo	raft cpp/include/raft/util/bitonic_sort.cuh	transliterated	merge_impl and sort_impl in full, as a comptime SIZE/BASE recursion over SIMD registers; same comparator network

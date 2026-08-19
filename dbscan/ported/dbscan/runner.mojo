@@ -1,265 +1,386 @@
 """The DBSCAN driver: neighborhood, core points, CSR, label propagation.
 
-PORT OF `cuml/cpp/src/dbscan/runner.cuh` at cuML `7e29955c`. Partial.
-Do not improve.
+PORT OF `cuml/cpp/src/dbscan/runner.cuh::run` at cuML `00094f7`. Partial
+(single GPU). Do not improve.
 
-Their step order, copied:
+THEIR STRUCTURE, WHICH IS TWO LOOPS OVER THE BATCHES AND NOT ONE
+----------------------------------------------------------------
+    loop 1, batches n-1 .. 0 (REVERSED):
+        VertexDeg   -> adj (boolean, batch x N) and vd (degrees, batch + 1)
+        read vd[n_points] back to the host: the batch's edge count
+        CorePoints  -> core[i + start] = vd[i] >= min_pts
+    allocate adj_graph for the LARGEST batch
+    loop 2, batches 0 .. n-1:
+        VertexDeg again, EXCEPT for batch 0
+        AdjGraph    -> exclusive scan of vd, then adj_to_csr
+        weak_cc_batched -> a labelling of THIS batch's sub-graph, over all N
+        MergeLabels -> fold it into the running labelling, except for batch 0
+    final_relabel   -> monotonic 0..k-1
+    relabelForSkl   -> MAX_LABEL becomes -1, everything else loses one
 
-    VertexDeg   -> adj (boolean) and vd (degrees)
-    CorePoints  -> core[i] = vd[i] >= min_pts
-    AdjGraph    -> exclusive scan of vd, then adj_to_csr
-    WeakCC      -> label propagation with core points as the filter
+Their comment at `runner.cuh:245-246` explains the reversal and it is copied
+rather than paraphrased:
+
+    // 1. Compute the part owned by this worker (reversed order of batches to
+    // keep the batch 0 in memory)
+
+so that loop 2's first iteration finds batch 0's `adj` and `vd` already
+resident and skips one neighborhood pass. Two passes over the data are
+unavoidable and are NOT a defect of the port: the core mask over the WHOLE
+dataset has to exist before any batch is labelled, because `weak_cc`'s
+`filter_op` reads `core[j]` for neighbours `j` in every other batch.
 
 The one thing worth understanding before changing anything here is WHERE the
 core-point restriction is applied. It is not in the graph. The CSR contains
 every edge, including edges out of border points, and the restriction lives
-in the labeler's `filter_op`. Moving it earlier looks like an optimization
-and quietly changes the answer.
+in the labeler's `filter_op` (`runner.cuh:384`). Moving it earlier looks like
+an optimization and quietly changes the answer.
 
-NOT PORTED, and named in `dbscan/UNPORTED.tsv`: their batching over rows,
-their multi-GPU label exchange, and the monotonic relabelling that renumbers
-clusters `0..k-1` to match scikit-learn. Cluster labels are arbitrary up to a
-permutation, so the check compares the PARTITION rather than the numbers,
-which is the same reason the k-means check compares centroids as a
-permutation.
+WHAT THE PREVIOUS VERSION OF THIS FILE DID INSTEAD, AND WHAT IT COST
+---------------------------------------------------------------------
+It ran `gemm_nt` (MAX's matmul) into an `m x N` float32 distance buffer, then
+`expand_distances_kernel` over that buffer, then a third kernel that read it
+back to threshold it -- three kernels and 16 bytes of memory traffic per
+pair where `epsUnexpL2SqNeighborhood` is one kernel and one byte. It also
+kept ONE `weak_cc` over a CSR built from every row of the dataset, so the
+memory that batching the adjacency saved came straight back in `col_ind`,
+and it never relabelled, so its output did not match cuML's or sklearn's.
+Those were three separate departures from `runner.cuh` and all three are
+gone.
+
+NOT PORTED, and named in `dbscan/UNPORTED.tsv`: the multi-GPU arms
+(`CorePoints::exchange`, `MergeLabels::tree_reduction`), the `core_indices`
+output (`runner.cuh:419-442`, a `thrust::copy_if` stream compaction of the
+core mask), the ball-cover arm, and `sample_weight`.
 """
 
+from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from core.expand_distances import expand_distances_kernel
-from core.gemm import gemm_nt
-from core.row_norms import NORM_TPB, row_norm_kernel
-from cluster.mojo_only.reduce_by_key import copy_f32_kernel
 from dbscan.ported.dbscan.adjgraph.algo import (
-    SCAN_TPB,
-    compact_adjacency_kernel,
-    exclusive_scan_kernel,
+    adj_graph_run,
+    scan_blocks_needed,
 )
-from dbscan.ported.dbscan.corepoints.compute import core_points_kernel
-from dbscan.ported.dbscan.vertexdeg.algo import (
-    VD_TPB,
-    eps_neighborhood_kernel,
-)
+from dbscan.ported.dbscan.corepoints.compute import core_points_compute
+from dbscan.ported.dbscan.mergelabels.runner import merge_labels_run
+from dbscan.ported.dbscan.vertexdeg.algo import vertex_deg_run
+from dbscan.ported.label.classlabels import make_monotonic
 from dbscan.ported.sparse.detail.csr import (
     MAX_LABEL,
-    WEAK_CC_TPB,
-    weak_cc_init_kernel,
-    weak_cc_label_kernel,
+    weak_cc_batched,
 )
+from neighbors.ported.neighbors.ball_cover.ball_cover import (
+    rbc_build_index,
+    rbc_eps_nn_query_count,
+    rbc_eps_nn_query_fill,
+    rbc_n_landmarks,
+)
+
+
+#: `EpsNnMethod` (`cuml/cpp/include/cuml/cluster/dbscan.hpp:32`). Their enum,
+#: their order, and their DEFAULT: `BRUTE_FORCE` is the value every public
+#: signature in `dbscan.hpp` carries (`:74`, `:88`, `:103`, `:117`) and the
+#: value cuML's Python layer passes unless the user asks for `'rbc'`
+#: (`dbscan.pyx:371-372`, `algorithm='brute'` at `:300`).
+#:
+#: DEVIATION 35: WE DEFAULT TO RBC AND THEY DEFAULT TO BRUTE_FORCE.
+#:
+#: Measured on an M4, 8 features, eps 0.30, arms interleaved inside the repeat
+#: loop, medians of 3 -- OURS AGAINST OURS, which is the comparison that
+#: decides a default:
+#:
+#:     n          brute ms    rbc ms   speedup
+#:     4,000           8.1       8.1     1.00x   (indistinguishable)
+#:     16,000         77.5      28.7     2.70x
+#:     50,000        808.8     231.7     3.49x
+#:     100,000     4,093.6     323.1    12.67x
+#:     200,000    17,243.6     626.3    27.53x
+#:
+#: **RBC wins at every measured size and loses at none.** There is no n at
+#: which BRUTE_FORCE is the better choice for a user on this hardware.
+#:
+#: This does not change any answer. `check_dbscan_rbc_matches_brute` compares
+#: the two labellings POINT FOR POINT -- not up to permutation, because
+#: `final_relabel` + `relabelForSkl` (`runner.cuh:410-416`) make the ids
+#: canonical -- and they are identical. So the flip cannot change a user's
+#: output, only their wait, which is why it needs no further justification.
+#:
+#: WHY THIS IS NOT A DEPARTURE FROM "MIRROR cuML". Their DESIGN is kept whole:
+#: their index, their two eps kernels, their fallback conditions, their batch
+#: structure, their `if` at `algo.cuh:226`. What changed is which side of that
+#: `if` is taken by default, and cuML chose BRUTE_FORCE for hardware where an
+#: n^2 pass costs little and where their RBC arm is additionally restricted to
+#: float32 / int64 labels / L2. We are float32, int32-label and L2 only, so
+#: those restrictions cost us nothing, and n^2 on an M4 costs 27x.
+#:
+#: Every fallback below still downgrades to BRUTE_FORCE exactly where theirs
+#: does, so an ineligible fit lands on their default anyway. Reverting is this
+#: one constant.
+comptime EPS_NN_BRUTE_FORCE = 0
+comptime EPS_NN_RBC = 1
+
+
+comptime TPB = 256
+
+
+def relabel_for_skl_kernel(
+    labels: MutPointer[Int32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """`relabelForSkl` (`runner.cuh:59`), copied.
+
+        1. Turn any labels matching MAX_LABEL into -1
+        2. Subtract 1 from all other labels.
+    """
+    var tid = Int(thread_idx.x) + Int(block_dim.x) * Int(block_idx.x)
+    if tid < Int(n_in):
+        if labels.unsafe_load(tid) == MAX_LABEL:
+            labels.unsafe_store(tid, Int32(-1))
+        else:
+            labels.unsafe_store(tid, labels.unsafe_load(tid) - Int32(1))
 
 
 def dbscan_fit(
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32],
-    mut x_norm: DeviceBuffer[DType.float32],
-    mut dist: DeviceBuffer[DType.float32],
     mut adj: DeviceBuffer[DType.uint8],
     mut vd: DeviceBuffer[DType.int32],
     mut core: DeviceBuffer[DType.uint8],
     mut ex_scan: DeviceBuffer[DType.int32],
-    mut col_ind: DeviceBuffer[DType.int32],
     mut labels: DeviceBuffer[DType.int32],
-    mut x_alias: DeviceBuffer[DType.float32],
-    mut xn_alias: DeviceBuffer[DType.float32],
+    mut labels_temp: DeviceBuffer[DType.int32],
+    mut work_buffer: DeviceBuffer[DType.int32],
+    mut block_sums: DeviceBuffer[DType.int32],
     n_rows: Int,
     n_features: Int,
     eps: Float64,
     min_pts: Int,
     batch_size: Int = 0,
     max_iterations: Int = 200,
+    eps_nn_method: Int = EPS_NN_RBC,
 ) raises -> Int:
-    """Returns the number of label-propagation passes it took to converge.
+    """`Dbscan::run`, single node. Returns the total propagation passes.
 
-    `eps` is squared once here, not per pair.
+    Workspace, sized as `runner.cuh:169-177` sizes theirs:
 
-    ROWS ARE BATCHED, WHICH IS THEIRS AND IS A MEMORY BOUND NOT A SPEEDUP
-    ------------------------------------------------------------------
-    `cuml/cpp/src/dbscan/runner.cuh:121` computes
-    `n_batches = ceildiv(n_owned_rows, batch_size)` and every stage after it
-    works on `batch_size x N` rather than `N x N`. Their own comment at
-    `:150` gives the reason: "adjacency graph has a worst case size of
-    N * batch_size elements".
+        adj          bool  [N * batch_size]
+        core         bool  [N]
+        vd           Index [batch_size + 1]
+        ex_scan      Index [batch_size + 1]
+        labels       Index [N]         (output)
+        labels_temp  Index [N]
+        work_buffer  Index [N]
+        block_sums   Index [scan_blocks_needed(N) + 1]
 
-    Without it this port allocates an `N x N` distance matrix AND an `N x N`
-    adjacency, so it dies of memory long before it dies of time. The
-    benchmark caps DBSCAN at 4,000 rows purely for that reason.
+    `block_sums` is OURS and replaces two things of theirs: thrust's internal
+    scan scratch, and `row_counters` (`runner.cuh:218`), which their
+    `adj_to_csr` uses as a per-row atomic cursor and our block-prefix-sum
+    compaction does not need.
 
-    `batch_size = 0` means one batch, which is the previous behaviour.
+    `adj_graph` (the CSR column indices) is NOT a parameter, which is also
+    theirs: `runner.cuh:230` declares it as a local `rmm::device_uvector` of
+    length 0 and resizes it to the largest batch's edge count at `:317`,
+    after loop 1 has measured them. It is allocated here at the same point
+    for the same reason.
 
-    DEVIATION, and it is the honest half of this. Theirs runs
-    vertexdeg -> adjgraph -> weak_cc PER BATCH and then combines the
-    per-batch labelings with `MergeLabels::run` (`runner.cuh:379`). That
-    merge is NOT PORTED (`dbscan/UNPORTED.tsv`), and it is where the
-    correctness trap lives. So this batches the DISTANCE and ADJACENCY work,
-    which is what bounds the memory, and keeps ONE `weak_cc` over the whole
-    graph, which needs no merge. The cost is that the distances are computed
-    TWICE, once to count degrees and once to emit the CSR, because a batch's
-    adjacency cannot be kept. Two passes of arithmetic to avoid an unported
-    merge and an `N x N` allocation.
+    `batch_size = 0` means one batch over the whole dataset.
     """
-    var eps_sq = Float32(eps * eps)
     var batch = batch_size if batch_size > 0 else n_rows
     if batch > n_rows:
         batch = n_rows
     var n_batches = (n_rows + batch - 1) // batch
 
-    ctx.enqueue_function[row_norm_kernel](
-        x_norm.unsafe_ptr(),
-        x.unsafe_ptr(),
-        Int32(n_features),
-        Int32(0),
-        grid_dim=(n_rows, 1, 1),
-        block_dim=(NORM_TPB, 1, 1),
-    )
-    # DBSCAN's distance matrix is the dataset against ITSELF, so both GEMM
-    # operands are `x` and both norm operands are `x_norm`. Mojo will not
-    # accept the same buffer as two mutable kernel arguments (PORTING.md 24),
-    # so the transposed operand is an aliased copy.
-    ctx.enqueue_function[copy_f32_kernel](
-        x_alias.unsafe_ptr(),
-        x.unsafe_ptr(),
-        Int32(n_rows * n_features),
-        grid_dim=((n_rows * n_features + 255) // 256, 1, 1),
-        block_dim=(256, 1, 1),
-    )
-    ctx.enqueue_function[copy_f32_kernel](
-        xn_alias.unsafe_ptr(),
-        x_norm.unsafe_ptr(),
-        Int32(n_rows),
-        grid_dim=((n_rows + 255) // 256, 1, 1),
-        block_dim=(256, 1, 1),
-    )
+    var d_flag = ctx.enqueue_create_buffer[DType.int32](1)
+    var h_flag = ctx.enqueue_create_host_buffer[DType.int32](1)
+    var h_adjlen = ctx.enqueue_create_host_buffer[DType.int32](1)
     ctx.synchronize()
 
-    # PASS 1 over the batches: degrees only. `adj` holds one batch.
-    var b = 0
-    while b < n_batches:
-        var r0 = b * batch
-        var rows = min(batch, n_rows - r0)
-        var xb = x.create_sub_buffer[DType.float32](
-            r0 * n_features, rows * n_features
-        )
-        var xnb = x_norm.create_sub_buffer[DType.float32](r0, rows)
-        var vdb = vd.create_sub_buffer[DType.int32](r0, rows)
-        gemm_nt(ctx, dist, xb, x_alias, rows, n_rows, n_features)
-        ctx.enqueue_function[expand_distances_kernel](
-            dist.unsafe_ptr(),
-            xnb.unsafe_ptr(),
-            xn_alias.unsafe_ptr(),
-            Int32(rows),
-            Int32(n_rows),
-            Int32(0),
-            grid_dim=((rows * n_rows + 255) // 256, 1, 1),
-            block_dim=(256, 1, 1),
-        )
-        ctx.enqueue_function[eps_neighborhood_kernel](
-            adj.unsafe_ptr(),
-            vdb.unsafe_ptr(),
-            dist.unsafe_ptr(),
-            Int32(n_rows),
-            eps_sq,
-            grid_dim=(rows, 1, 1),
-            block_dim=(VD_TPB, 1, 1),
-        )
-        b += 1
-    ctx.synchronize()
+    # --- the RBC arm's fallbacks, `runner.cuh:139-201` --------------------
+    # Theirs DOWNGRADES rather than refusing, and logs. Each of these is a
+    # real condition in their file and none is ours:
+    #   :143-150  double precision or int32 labels        -> BRUTE_FORCE
+    #   :152-156  any metric but L2Sqrt{Expanded,Unexpanded} -> BRUTE_FORCE
+    #   :195-200  D > MAX_LABEL / N (the index cannot be addressed)
+    # We are float32/int32-label and L2 only, so the first two cannot fire
+    # here; the third can, and is copied.
+    var sparse_rbc_mode = eps_nn_method == EPS_NN_RBC
+    if sparse_rbc_mode and n_features > Int(MAX_LABEL) // n_rows:
+        sparse_rbc_mode = False
 
-    ctx.enqueue_function[core_points_kernel](
-        core.unsafe_ptr(),
-        vd.unsafe_ptr(),
-        Int32(n_rows),
-        Int32(min_pts),
-        grid_dim=((n_rows + 255) // 256, 1, 1),
-        block_dim=(256, 1, 1),
+    # `runner.cuh:231-241`: build the index ONCE, before the batch loop, not
+    # per batch. `rbc_build_index` is `cuvs::neighbors::ball_cover::build`.
+    var n_landmarks = rbc_n_landmarks(n_rows) if sparse_rbc_mode else 1
+    var rbc_r = ctx.enqueue_create_buffer[DType.float32](
+        n_landmarks * n_features
     )
-    ctx.enqueue_function[exclusive_scan_kernel](
-        ex_scan.unsafe_ptr(),
-        vd.unsafe_ptr(),
-        Int32(n_rows),
-        grid_dim=(1, 1, 1),
-        block_dim=(SCAN_TPB, 1, 1),
+    var rbc_xr = ctx.enqueue_create_buffer[DType.float32](
+        (n_rows * n_features) if sparse_rbc_mode else 1
     )
-    # PASS 2: recompute each batch's adjacency and emit its CSR rows. The
-    # distances are recomputed rather than kept, which is the deviation the
-    # docstring prices: a batch's `adj` cannot survive to here without the
-    # `N x N` allocation the batching exists to remove.
-    b = 0
-    while b < n_batches:
-        var r0b = b * batch
-        var rowsb = min(batch, n_rows - r0b)
-        var xb2 = x.create_sub_buffer[DType.float32](
-            r0b * n_features, rowsb * n_features
-        )
-        var xnb2 = x_norm.create_sub_buffer[DType.float32](r0b, rowsb)
-        var vdb2 = vd.create_sub_buffer[DType.int32](r0b, rowsb)
-        var exb = ex_scan.create_sub_buffer[DType.int32](r0b, rowsb)
-        gemm_nt(ctx, dist, xb2, x_alias, rowsb, n_rows, n_features)
-        ctx.enqueue_function[expand_distances_kernel](
-            dist.unsafe_ptr(),
-            xnb2.unsafe_ptr(),
-            xn_alias.unsafe_ptr(),
-            Int32(rowsb),
-            Int32(n_rows),
-            Int32(0),
-            grid_dim=((rowsb * n_rows + 255) // 256, 1, 1),
-            block_dim=(256, 1, 1),
-        )
-        ctx.enqueue_function[eps_neighborhood_kernel](
-            adj.unsafe_ptr(),
-            vdb2.unsafe_ptr(),
-            dist.unsafe_ptr(),
-            Int32(n_rows),
-            eps_sq,
-            grid_dim=(rowsb, 1, 1),
-            block_dim=(VD_TPB, 1, 1),
-        )
-        ctx.enqueue_function[compact_adjacency_kernel](
-            col_ind.unsafe_ptr(),
-            adj.unsafe_ptr(),
-            exb.unsafe_ptr(),
-            Int32(rowsb),
-            Int32(n_rows),
-            grid_dim=(rowsb, 1, 1),
-            block_dim=(SCAN_TPB, 1, 1),
-        )
-        b += 1
+    var rbc_lm = ctx.enqueue_create_buffer[DType.int32](n_landmarks)
+    var rbc_sc = ctx.enqueue_create_buffer[DType.int32](n_rows)
+    var rbc_sd = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    var rbc_ne = ctx.enqueue_create_buffer[DType.int32](n_rows)
+    var rbc_nd = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    var rbc_ip = ctx.enqueue_create_buffer[DType.int32](n_landmarks + 1)
+    var rbc_c1 = ctx.enqueue_create_buffer[DType.int32](n_rows)
+    var rbc_d1 = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    var rbc_rad = ctx.enqueue_create_buffer[DType.float32](n_landmarks)
+    var rbc_cnt = ctx.enqueue_create_buffer[DType.int32](n_landmarks)
     ctx.synchronize()
 
-    ctx.enqueue_function[weak_cc_init_kernel](
-        labels.unsafe_ptr(),
-        core.unsafe_ptr(),
-        Int32(n_rows),
-        grid_dim=((n_rows + WEAK_CC_TPB - 1) // WEAK_CC_TPB, 1, 1),
-        block_dim=(WEAK_CC_TPB, 1, 1),
-    )
+    if sparse_rbc_mode:
+        rbc_build_index(
+            ctx, x, rbc_r, rbc_xr, rbc_lm, rbc_sc, rbc_sd, rbc_ne, rbc_nd,
+            rbc_ip, rbc_c1, rbc_d1, rbc_rad, rbc_cnt,
+            n_rows, n_features, n_landmarks,
+        )
+        ctx.synchronize()
+
+    # THE RADIUS, NOT ITS SQUARE. `algo.cuh:227` hands `data.eps` to `eps_nn`
+    # while the brute-force arm one line later gets `eps2`. The query kernel
+    # squares it once, internally. Passing the squared value here silently
+    # widens every neighborhood to eps^2.
+    var eps_radius = Float32(eps)
+
+    # --- loop 1: the mask. REVERSED, so batch 0 stays resident -----------
+    var batchadjlen = List[Int]()
+    for _i in range(n_batches):
+        batchadjlen.append(0)
+
+    var i = n_batches - 1
+    while i >= 0:
+        var start_vertex_id = i * batch
+        var n_points = min(n_rows - i * batch, batch)
+
+        if sparse_rbc_mode:
+            # `algo.cuh:137-153`, the `max_k == 0` arm: fill `ia` and `vd`,
+            # emit no columns. `runner.cuh:262` passes the literal 0 here,
+            # so this is their first-loop call verbatim.
+            # THE QUERY IS THE BATCH, NOT THE DATASET. `algo.cuh:131` and
+            # `:146` both build the query view as
+            # `data.x + start_vertex_id * k, n, k` -- an offset of
+            # `start_vertex_id` ROWS. Handing the whole `x` here makes every
+            # batch re-query rows 0..n_points and the batched fit disagrees
+            # with the unbatched one, which is exactly what
+            # `check_dbscan_batching_agrees` caught: 412 of 612 labels.
+            var qb1 = x.create_sub_buffer[DType.float32](
+                start_vertex_id * n_features, n_points * n_features
+            )
+            var _nnz1 = rbc_eps_nn_query_count(
+                ctx, rbc_xr, qb1, rbc_r, rbc_ip, rbc_c1, rbc_d1, rbc_rad,
+                ex_scan, vd, n_points, n_features, n_landmarks, eps_radius,
+            )
+        else:
+            vertex_deg_run(
+                ctx, adj, vd, x, start_vertex_id, n_points, n_rows,
+                n_features, eps,
+            )
+        ctx.synchronize()
+
+        # `raft::update_host(&curradjlen, vd + n_points, 1, stream)`
+        # (`runner.cuh:281`): the neighborhood kernel put the batch's total
+        # edge count in the last element of `vd`.
+        var vd_last = vd.create_sub_buffer[DType.int32](n_points, 1)
+        ctx.enqueue_copy(dst_ptr=h_adjlen.unsafe_ptr(), src_buf=vd_last)
+        ctx.synchronize()
+        batchadjlen[i] = Int(h_adjlen.unsafe_ptr().unsafe_load(0))
+
+        core_points_compute(
+            ctx, vd, core, min_pts, start_vertex_id, n_points
+        )
+        ctx.synchronize()
+        i -= 1
+
+    # `Index_ maxadjlen = *std::max_element(...); adj_graph.resize(maxadjlen)`
+    var maxadjlen = 1
+    for b in range(n_batches):
+        if batchadjlen[b] > maxadjlen:
+            maxadjlen = batchadjlen[b]
+    var col_ind = ctx.enqueue_create_buffer[DType.int32](maxadjlen)
     ctx.synchronize()
 
-    # Their loop: repeat the propagation until a pass changes nothing. The
-    # flag comes back to the host each pass, which is theirs too
-    # (`weak_cc_batched` copies `state.m` and the caller loops).
-    var d_changed = ctx.enqueue_create_buffer[DType.int32](1)
-    var h_changed = ctx.enqueue_create_host_buffer[DType.int32](1)
-    ctx.synchronize()
-
+    # --- loop 2: the labelling -------------------------------------------
     var passes = 0
-    for _it in range(max_iterations):
-        h_changed.unsafe_ptr().unsafe_store(0, Int32(0))
-        ctx.enqueue_copy(dst_buf=d_changed, src_ptr=h_changed.unsafe_ptr())
-        ctx.enqueue_function[weak_cc_label_kernel](
-            labels.unsafe_ptr(),
-            ex_scan.unsafe_ptr(),
-            col_ind.unsafe_ptr(),
-            core.unsafe_ptr(),
-            d_changed.unsafe_ptr(),
-            Int32(n_rows),
-            grid_dim=((n_rows + WEAK_CC_TPB - 1) // WEAK_CC_TPB, 1, 1),
-            block_dim=(WEAK_CC_TPB, 1, 1),
-        )
-        ctx.synchronize()
-        ctx.enqueue_copy(dst_ptr=h_changed.unsafe_ptr(), src_buf=d_changed)
-        ctx.synchronize()
-        passes += 1
-        if h_changed.unsafe_ptr().unsafe_load(0) == Int32(0):
+    for b2 in range(n_batches):
+        var start2 = b2 * batch
+        var n_points2 = min(n_rows - b2 * batch, batch)
+        if n_points2 <= 0:
             break
+
+        # i == 0 -> adj and vd for batch 0 already in memory
+        if sparse_rbc_mode:
+            # The query EMITS CSR, so `ex_scan` is `adj_ia` and `col_ind` is
+            # `adj_ja`. `algo.cuh` has no `adj_to_csr` in this branch at all,
+            # which is why `AdjGraph::run` is skipped below: their own
+            # `runner.cuh:355` guards it with `if (!sparse_rbc_mode)`.
+            # Running both would scan the degrees twice.
+            var qb2 = x.create_sub_buffer[DType.float32](
+                start2 * n_features, n_points2 * n_features
+            )
+            var _nnz2 = rbc_eps_nn_query_count(
+                ctx, rbc_xr, qb2, rbc_r, rbc_ip, rbc_c1, rbc_d1, rbc_rad,
+                ex_scan, vd, n_points2, n_features, n_landmarks, eps_radius,
+            )
+            ctx.synchronize()
+            var qb3 = x.create_sub_buffer[DType.float32](
+                start2 * n_features, n_points2 * n_features
+            )
+            rbc_eps_nn_query_fill(
+                ctx, rbc_xr, qb3, rbc_r, rbc_ip, rbc_c1, rbc_d1, rbc_rad,
+                ex_scan, col_ind, n_points2, n_features, n_landmarks,
+                eps_radius,
+            )
+            ctx.synchronize()
+        else:
+            if b2 > 0:
+                vertex_deg_run(
+                    ctx, adj, vd, x, start2, n_points2, n_rows, n_features,
+                    eps,
+                )
+                ctx.synchronize()
+
+            adj_graph_run(
+                ctx, adj, vd, ex_scan, col_ind, block_sums, n_points2, n_rows
+            )
+            ctx.synchronize()
+
+        # Their ternary `i == 0 ? labels : labels_temp` is written out: a
+        # pointer-valued conditional picks the wrong branch in this Mojo
+        # (`PORTING.md 19`), and buffers are not pointers here anyway.
+        if b2 == 0:
+            passes += weak_cc_batched(
+                ctx, labels, ex_scan, col_ind, core, d_flag, h_flag,
+                n_rows, start2, n_points2, max_iterations,
+            )
+        else:
+            passes += weak_cc_batched(
+                ctx, labels_temp, ex_scan, col_ind, core, d_flag, h_flag,
+                n_rows, start2, n_points2, max_iterations,
+            )
+            # The labels_temp array contains the labelling for the
+            # neighborhood graph of the current batch. This needs to be
+            # merged with the labelling created by the previous batches.
+            # Using the labelling from the previous batches as initial value
+            # for weak_cc_batched and skipping the merge step would lead to
+            # incorrect results as described in #3094.
+            merge_labels_run(
+                ctx, labels, labels_temp, core, work_buffer, d_flag, h_flag,
+                n_rows, max_iterations,
+            )
+
+    # --- final relabel (`runner.cuh:410-416`) -----------------------------
+    # `if (algo_ccl == 2) final_relabel(labels, N, stream);` and cuML's own
+    # `dbscanFitImpl` hardcodes `algo_ccl = 2` (`dbscan.cuh:122`), so this is
+    # not optional in their dispatch.
+    var rank = ctx.enqueue_create_buffer[DType.int32](n_rows + 1)
+    ctx.synchronize()
+    make_monotonic(ctx, labels, work_buffer, rank, block_sums, n_rows)
+    ctx.enqueue_function[relabel_for_skl_kernel](
+        labels.unsafe_ptr(),
+        Int32(n_rows),
+        grid_dim=((n_rows + TPB - 1) // TPB, 1, 1),
+        block_dim=(TPB, 1, 1),
+    )
+    ctx.synchronize()
 
     return passes

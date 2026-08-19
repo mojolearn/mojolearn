@@ -1,7 +1,7 @@
 """The one kernel k-means++ needs that is a fusion of two RAFT primitives.
 
 NOT A PORT, but it is a direct translation of two consecutive RAFT calls in
-`detail/kmeans.cuh:196-215`:
+`detail/kmeans.cuh:189-217`:
 
     matrix_vector_op<ALONG_ROWS>(pwd, minClusterDistance, minDistBuf, min_op)
     reduce<ALONG_ROWS>(minDistBuf, costPerCandidate, 0)
@@ -20,6 +20,13 @@ centroid and the whole fit diverges. Ties at that precision are not expected
 and are not impossible.
 """
 
+from mojo_only.kernel_matrix import (
+    K_LIB_PLUS_PLUS,
+    TARGET_COLUMN,
+    lib_block_size_for,
+)
+
+
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.memory import AddressSpace
 from max.gpu.primitives.block import sum as block_sum
@@ -28,7 +35,10 @@ from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
 
-comptime PLUS_PLUS_TPB = 128
+# READ FROM THE MATRIX, not restated here. `mojo_only/kernel_matrix.mojo`
+# owns every tunable in this tree; changing TARGET_COLUMN there rebuilds
+# this kernel for another vendor with no edit in this file.
+comptime PLUS_PLUS_TPB = lib_block_size_for[K_LIB_PLUS_PLUS, TARGET_COLUMN]()
 
 
 def candidate_cost_kernel(
@@ -46,7 +56,8 @@ def candidate_cost_kernel(
     when the candidates play the role of centroids. Their `pwd` is the
     transpose of that, `[n_trials x n_samples]`, because their
     `pairwise_distance_kmeans` call passes the candidates first
-    (`detail/kmeans.cuh:190`). Same numbers, and reading down a column here
+    (`detail/kmeans.cuh:190`, `raft::matrix::gather`). Same numbers, and
+    reading down a column here
     keeps consecutive threads on consecutive samples.
     """
     var n_samples = Int(n_samples_in)
@@ -89,7 +100,7 @@ def adopt_candidate_min_kernel(
     n_trials_in: Int32,
     chosen_in: Int32,
 ):
-    """`detail/kmeans.cuh:230-234`, the copy that follows the argmin.
+    """`detail/kmeans.cuh:249-257`, the two copies that follow the argmin.
 
     Theirs copies row `bestCandidateIdx` of the already-materialized
     `minDistBuf` into `minClusterDistance`. Having fused that buffer away,
@@ -119,7 +130,8 @@ def adopt_candidate_min_kernel(
 # ---------------------------------------------------------------------------
 # Device-side weighted sampling: what `raft::random::discrete` does for them.
 #
-# `detail/kmeans.cuh:187` draws the k-means++ candidates ON DEVICE. The first
+# `detail/kmeans.cuh:189` (`raft::random::discrete`) draws the k-means++
+# candidates ON DEVICE. The first
 # version of this port copied all `n_samples` distances to the host and drew
 # there, once per accepted centroid, which is O(rows) host traffic and breaks
 # `HOST_AND_DEVICE.md`'s first rule outright.
@@ -135,7 +147,7 @@ def adopt_candidate_min_kernel(
 # `n_trials` costs, and BOTH of those are correct to keep: they are
 # O(candidates), which is what the rule permits, and cuVS also brings
 # `bestCandidateIdx` to the host every accepted centroid
-# (`detail/kmeans.cuh:224`). Host DECIDING was never the problem. Host WAITING
+# (`detail/kmeans.cuh:242-244`). Host DECIDING was never the problem. Host WAITING
 # on a row-sized transfer was.
 # ---------------------------------------------------------------------------
 
@@ -251,7 +263,7 @@ def binary_search_kernel(
     """`sample_with_replacement_kernel`, transliterated.
 
     PORT OF `raft/random/detail/rng_device.cuh:697-727`, which is what
-    `raft::random::discrete` reaches at `cuvs/.../kmeans.cuh:187`.
+    `raft::random::discrete` reaches at `cuvs/.../kmeans.cuh:189`.
 
     **This replaces a DIFFERENT DECOMPOSITION of the same draw**, and the
     difference was the point. Theirs ranks per ELEMENT with a real prefix sum

@@ -126,7 +126,7 @@ fast on Metal" is a hypothesis, and no amount of k-means makes it a finding.
 ## Status, 2026-08-19
 
 **Step 1 is built and is not yet reached.** `cluster/` exists, mirrors cuVS
-`2140532c` file for file, and its call graph closes from `fit` down to every
+`94c2819` file for file, and its call graph closes from `fit` down to every
 kernel. What does not exist is a `main` that launches it, so by this tree's
 own rule nothing in it is ported yet.
 

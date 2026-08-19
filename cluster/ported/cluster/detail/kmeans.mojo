@@ -1,37 +1,53 @@
 """Initialization and the Lloyd iteration.
 
-PORT OF `cuvs/src/cluster/detail/kmeans.cuh` at cuVS `2140532c`. Partial.
+PORT OF `cuvs/src/cluster/detail/kmeans.cuh` at cuVS `94c2819`. Partial.
 Do not improve.
 
-Their file is 1220 lines and most of it is host bookkeeping for cases this
-tree does not have: host-resident input with a pinned batch iterator,
-multi-GPU partitioned fits, and `kmeans_transform`. What is ported is the
-algorithm: the two initializations and the iteration.
+Their file is 1242 lines and most of it is host bookkeeping for cases this
+tree does not have: multi-GPU partitioned fits, `kmeans_transform`, and the
+`kmeans_auto_find_k` driver. What is ported is the algorithm: the two
+initializations and the iteration.
 
 THE ITERATION, THEIR ORDER, WHICH IS NOT THE TEXTBOOK ORDER
 -----------------------------------------------------------
-The textbook writes assign, update, test. Theirs is
+The textbook writes assign, update, test. `kmeans_fit_main`
+(`detail/kmeans.cuh:407-497`) is
 
-    assign  ->  accumulate  ->  finalize  ->  measure shift  ->  SWAP  ->  test
+    assign  ->  accumulate  ->  finalize  ->  measure shift  ->  COPY BACK
+            ->  sync  ->  test on the host  ->  break
 
-and the swap sitting where it does (`detail/kmeans.cuh:907`) is what makes
-the shift measurement free: the shift is computed between the buffer that
-was just consumed and the one just produced, before either is recycled, so
-no third copy of the centroids ever exists.
+and the copy-back sitting where it does (`:464-465`, a device-to-device
+`raft::copy`) is what makes the shift measurement free: the shift is computed
+between the buffer that was just consumed and the one just produced
+(`mapThenSumReduce` with `sqdiff_op`, `:454-459`), before either is recycled,
+so no third copy of the centroids ever exists.
 
-The test itself runs on DEVICE in their code and its result reaches the host
-one iteration late (`:817-825`, the `n_current_iter > 1` guard at the TOP of
-the loop). They do that to keep the stream unblocked. This port tests on the
-host, which is a deviation with a visible consequence: a fit here can report
-one fewer iteration than cuVS's on identical data, because they always run
-the iteration during which the flag is in flight. See PORTING.md 15. It does
-not change the centroids of a converged fit; it changes `n_iter` and it
-changes what a fit does when `max_iter` binds.
+THE TEST RUNS ON THE HOST AND STOPS THE FIT IN THE SAME ITERATION
+----------------------------------------------------------------
+`:461-462` copies the shift scalar to the host, `:491` is the loop body's ONE
+`raft::resource::sync_stream`, `:492` is `if (sqrdNormError < params.tol)
+done = true;`, and `:494-497` breaks. There is no device-side convergence
+kernel and no flag in flight.
+
+An earlier version of this port ran the test in a one-thread kernel, read the
+flag one iteration late, and attributed both to cuVS. Neither is in their
+source: `check_convergence` does not exist anywhere in cuVS, cuML or RAFT.
+That version paid for both control planes at once -- it still synced every
+iteration -- and it always ran one Lloyd iteration more than cuVS would.
+
+WHAT THE DEFAULT FIT DOES NOT DO
+--------------------------------
+`params.inertia_check` is FALSE by default (`cuvs/cluster/kmeans.hpp:120`).
+With it off, the loop never reduces the cluster cost and never applies the
+`delta > 1 - tol` ratio test (`:468-489` is all inside that `if`). The cost
+is computed ONCE per restart, after the loop, over a fresh assignment against
+the final centroids (`:500-537`) -- so the reported inertia belongs to the
+centroids that are returned, not to the ones from the last iteration.
 
 WHAT `n_init` ACTUALLY COSTS
 ----------------------------
 `n_init` restarts are FULLY SEQUENTIAL here, as they are in cuVS: the whole
-fit runs, its inertia is compared, and the best is kept (`:966-971`). Nothing
+fit runs, its inertia is compared, and the best is kept (`:888-949`). Nothing
 about restarts is inherently serial, and they are the most obviously
 parallel thing in k-means, so this is the first place to look when the
 control plane becomes the cost. Copied as-is because it is theirs.
@@ -53,9 +69,11 @@ from cluster.mojo_only.plus_plus import (
 )
 from cluster.mojo_only.reduce_by_key import (
     REDUCE_BY_KEY_TPB,
+    SUM_MODE_PLAIN,
+    SUM_MODE_PRODUCT,
+    SUM_MODE_SQDIFF,
     accumulate_centroid_sums_kernel,
     accumulate_weight_per_cluster_kernel,
-    centroid_shift_kernel,
     copy_f32_kernel,
     finish_sum_kernel,
     finalize_centroids_kernel,
@@ -64,7 +82,7 @@ from cluster.mojo_only.reduce_by_key import (
 )
 from core.row_norms import NORM_TPB, row_norm_kernel
 from cluster.ported.cluster.detail.kmeans_common import (
-    check_convergence_kernel,
+    check_convergence,
 )
 from cluster.ported.cluster.detail.min_cluster_distance_compute import (
     compute_centroid_norms,
@@ -85,7 +103,8 @@ struct HostRng(Copyable, Movable):
     """A documented LCG, because cuVS's `std::mt19937` is not reproducible here.
 
     DEVIATION (PORTING.md 17). Their host RNG picks the first k-means++
-    centroid and the per-restart seeds (`detail/kmeans.cuh:148`, `:794`), and
+    centroid (`detail/kmeans.cuh:152-157`) and the per-restart seeds
+    (`:885`, `:890`), and
     their device RNG (`raft::random::discrete`) draws the k-means||
     candidates. Neither has a Mojo counterpart that would produce the same
     stream, so matching cuVS draw for draw is impossible and pretending
@@ -128,16 +147,21 @@ def _sum_device(
     mut partials: DeviceBuffer[DType.float32],
     mut out_scalar: DeviceBuffer[DType.float32],
     n: Int,
-    use_b: Bool,
+    mode: Int,
 ) raises:
-    """Two enqueued stages into a DEVICE scalar. No drain, no transfer.
+    """Two enqueued stages into a DEVICE scalar, with the map folded in.
 
-    This used to sum the block partials in a host loop, which cost a drain
-    and a transfer per call and was called TWICE per Lloyd iteration, for two
-    numbers the host wanted only in order to decide something the device can
-    decide. cuVS does not do that (`detail/kmeans.cuh:920-930`), so it was
-    our artifact rather than their design. See `HOST_AND_DEVICE.md` on why
-    that distinction decides whether a wait may be removed.
+    `mode` selects the map, which cuVS keeps inside the reduction rather than
+    materializing: `SUM_MODE_SQDIFF` is `raft::linalg::mapThenSumReduce` with
+    `raft::sqdiff_op` (`detail/kmeans.cuh:454-459`), `SUM_MODE_PLAIN` and
+    `SUM_MODE_PRODUCT` are `computeClusterCost` with `raft::value_op` over an
+    unweighted and a weight-multiplied distance vector respectively
+    (`:470-476` and `:516-535`).
+
+    The result lands in a DEVICE scalar. Whether it then comes to the host is
+    the caller's business and is where cuVS's control plane is decided: the
+    shift scalar does cross every iteration (`:462`), the cost scalar crosses
+    only when `inertia_check` is on, and once more after the loop.
     """
     var blocks = (n + REDUCE_BY_KEY_TPB - 1) // REDUCE_BY_KEY_TPB
     if blocks > 256:
@@ -150,7 +174,7 @@ def _sum_device(
         a.unsafe_ptr(),
         b.unsafe_ptr(),
         Int32(n),
-        Int32(1 if use_b else 0),
+        Int32(mode),
         grid_dim=(blocks, 1, 1),
         block_dim=(REDUCE_BY_KEY_TPB, 1, 1),
     )
@@ -236,7 +260,7 @@ def kmeans_plus_plus(
     Step 4 is the part people get wrong when reimplementing from the paper.
     Arthur and Vassilvitskii's algorithm draws ONE point and accepts it.
     cuVS, like scikit-learn, draws `n_trials = 2 + ceil(log(k))` and keeps
-    the greedily best of them (`detail/kmeans.cuh:112`). That greedy variant
+    the greedily best of them (`detail/kmeans.cuh:109`). That greedy variant
     is strictly better in practice and is what both implementations ship, so
     an accuracy comparison against scikit-learn is comparing two greedy
     k-means++ and not greedy against vanilla.
@@ -393,8 +417,12 @@ def kmeans_plus_plus(
 
         # Step 4, the greedy argmin over candidates. THIS READBACK STAYS.
         # It is `n_trials` floats, which is O(candidates), and cuVS brings
-        # `bestCandidateIdx` to the host every accepted centroid too
-        # (`detail/kmeans.cuh:224`). Host deciding was never the problem.
+        # `bestCandidateIdx` to the host every accepted centroid too, and
+        # syncs the stream for it (`detail/kmeans.cuh:242-244`). Host deciding
+        # was never the problem. Theirs argmins on the device first
+        # (`cub::DeviceReduce::ArgMin`, `:224-240`) and brings back one int
+        # where this brings back `n_trials` floats and argmins on the host;
+        # both are O(candidates) and one drain.
         ctx.enqueue_copy(dst_ptr=host_cost.unsafe_ptr(), src_buf=candidate_cost)
         ctx.synchronize()
         var best = 0
@@ -439,7 +467,9 @@ def kmeans_fit_main(
     sum_scale: Float32,
     weight_scale: Float32,
 ) raises -> FitResult:
-    """`kmeans_fit`, device-resident arm, `detail/kmeans.cuh:556-984`.
+    """`kmeans_fit` plus `kmeans_fit_main`, `detail/kmeans.cuh:352-542` and
+    `:811-951`, flattened into one function because the split in theirs exists
+    to give the multi-GPU driver a re-entry point this tree does not have.
 
     `sum_scale` and `weight_scale` come from `mojo_only/fixed_point.mojo` and
     are the caller's responsibility because the bound they satisfy is a
@@ -447,7 +477,7 @@ def kmeans_fit_main(
     reduce_by_key.mojo` for why a global bound is enough for every cluster.
 
     `centroids` is in-out. On `INIT_ARRAY` it is read as the starting set,
-    which is theirs (`:641-644`), and on return it holds the best restart.
+    which is theirs (`:916-924`), and on return it holds the best restart.
     """
     params.validate()
     if params.init == INIT_KMEANS_PLUS_PLUS and params.uses_scalable_plus_plus():
@@ -475,18 +505,18 @@ def kmeans_fit_main(
     var weight_i32 = ctx.enqueue_create_buffer[DType.int32](n_clusters)
     var cur_centroids = ctx.enqueue_create_buffer[DType.float32](cd)
     var new_centroids = ctx.enqueue_create_buffer[DType.float32](cd)
-    var shift_cells = ctx.enqueue_create_buffer[DType.float32](cd)
     var partials = ctx.enqueue_create_buffer[DType.float32](256)
+    # A distinct one-element buffer so `sum_partials_kernel` never receives the
+    # same buffer as both of its mutable arguments (PORTING.md 24). Its
+    # contents are never read on the modes that pass it.
     var ones = ctx.enqueue_create_buffer[DType.float32](1)
     var d_cost = ctx.enqueue_create_buffer[DType.float32](1)
     var d_shift = ctx.enqueue_create_buffer[DType.float32](1)
-    var d_prior_cost = ctx.enqueue_create_buffer[DType.float32](1)
-    var d_done = ctx.enqueue_create_buffer[DType.int32](1)
-    var h_done = ctx.enqueue_create_host_buffer[DType.int32](1)
+    var h_shift = ctx.enqueue_create_host_buffer[DType.float32](1)
     var h_cost = ctx.enqueue_create_host_buffer[DType.float32](1)
     ctx.synchronize()
 
-    # X's norms, ONCE for the whole fit (`:786-790`). This is the single
+    # X's norms, ONCE for the whole fit (`:394-399`). This is the single
     # biggest reason the assignment step is cheap: the sample side of the
     # expanded identity never has to be recomputed, only the centroid side.
     if params.needs_row_norms():
@@ -504,7 +534,15 @@ def kmeans_fit_main(
     var best_inertia = Float64(1.0e308)
     var best_iter = 0
 
-    for _seed_iter in range(params.n_init):
+    # `detail/kmeans.cuh:877-883`. An explicit initial centroid set makes
+    # every restart identical, so theirs collapses `n_init` to 1 rather than
+    # running the same fit repeatedly. It is a debug log there and a silent
+    # correction; it is the same correction here.
+    var n_init = params.n_init
+    if params.init == INIT_ARRAY:
+        n_init = 1
+
+    for _seed_iter in range(n_init):
         if params.init == INIT_ARRAY:
             ctx.enqueue_function[copy_f32_kernel](
                 cur_centroids.unsafe_ptr(),
@@ -535,22 +573,15 @@ def kmeans_fit_main(
                 rng,
             )
 
-        var n_current_iter = 0
-        h_done.unsafe_ptr().unsafe_store(0, Int32(0))
-
-        for it in range(1, params.max_iter + 1):
-            # `detail/kmeans.cuh:817-825`. The flag is read at the TOP of the
-            # NEXT iteration, so the fit always runs one iteration with the
-            # answer in flight and `n_current_iter` is decremented when it
-            # fires. That is theirs, decrement included, and this port used
-            # to test on the host instead and report one fewer iteration.
-            if it > 1:
-                ctx.synchronize()
-                if h_done.unsafe_ptr().unsafe_load(0) != Int32(0):
-                    n_current_iter = it - 1
-                    break
-            n_current_iter = it
-
+        # `for (n_iter[0] = 1; n_iter[0] <= params.max_iter; ++n_iter[0])`,
+        # `detail/kmeans.cuh:407`. On a break `n_current_iter` is the
+        # iteration that converged; on exhaustion theirs leaves it at
+        # `max_iter + 1`, which is why their own log line subtracts one
+        # (`:540`). Not clamped, because theirs is not.
+        var prior_cost = Float64(0.0)
+        var n_current_iter = params.max_iter + 1
+        var it = 1
+        while it <= params.max_iter:
             ctx.enqueue_function[zero_i32_kernel](
                 sums_i32.unsafe_ptr(),
                 Int32(cd),
@@ -590,12 +621,14 @@ def kmeans_fit_main(
             )
 
             # Sized in CELLS now, not rows: `accumulate_centroid_sums_kernel`
-            # grid-strides `n_samples * n_features` the way RAFT's
-            # `reduce_rows_by_key.cuh:292` does, rather than striding rows
-            # and features separately. A grid-stride loop is correct for any
-            # grid size, so this is a throughput knob and not a correctness
-            # one, but leaving it row-shaped would under-occupy the device
-            # whenever `n_features` is large.
+            # indexes `n_samples * n_features` the way RAFT's
+            # `sum_rows_by_key_direct_kernel`
+            # (`raft/linalg/detail/reduce_rows_by_key.cuh:270-288`) does,
+            # rather than striding rows and features separately.
+            #
+            # DEVIATION: theirs launches exactly one thread per cell and
+            # returns early; this grid-strides a capped grid. Same arithmetic
+            # and same atomic target, different launch shape.
             var acc_cells = n_samples * n_features
             var acc_blocks = min(
                 1024, max(1, (acc_cells + REDUCE_BY_KEY_TPB - 1) // REDUCE_BY_KEY_TPB)
@@ -633,23 +666,25 @@ def kmeans_fit_main(
                 grid_dim=((cd + 255) // 256, 1, 1),
                 block_dim=(256, 1, 1),
             )
-            ctx.enqueue_function[centroid_shift_kernel](
-                shift_cells.unsafe_ptr(),
-                cur_centroids.unsafe_ptr(),
-                new_centroids.unsafe_ptr(),
-                Int32(cd),
-                grid_dim=((cd + 255) // 256, 1, 1),
-                block_dim=(256, 1, 1),
-            )
 
+            # The shift, `:453-459`. `mapThenSumReduce` with `sqdiff_op`: the
+            # squared difference is applied INSIDE the reduction, between the
+            # buffer about to be overwritten and the one just produced, so
+            # nothing of size `n_clusters * n_features` is materialized.
             _sum_device(
-                ctx, min_dist, weights, partials, d_cost, n_samples, True
+                ctx,
+                cur_centroids,
+                new_centroids,
+                partials,
+                d_shift,
+                cd,
+                SUM_MODE_SQDIFF,
             )
-            _sum_device(
-                ctx, shift_cells, ones, partials, d_shift, cd, False
-            )
+            # `:461-462`, the scalar starts its trip to the host.
+            ctx.enqueue_copy(dst_ptr=h_shift.unsafe_ptr(), src_buf=d_shift)
 
-            # THE SWAP, `:907`, after the shift and before the test.
+            # `:464-465`, the copy back over the working set, AFTER the shift
+            # has been measured against it.
             ctx.enqueue_function[copy_f32_kernel](
                 cur_centroids.unsafe_ptr(),
                 new_centroids.unsafe_ptr(),
@@ -658,29 +693,93 @@ def kmeans_fit_main(
                 block_dim=(256, 1, 1),
             )
 
-            # THE TEST, on device, exactly as theirs. It also advances
-            # `d_prior_cost`, which is why it cannot be split in two.
-            ctx.enqueue_function[check_convergence_kernel](
-                d_done.unsafe_ptr(),
-                d_prior_cost.unsafe_ptr(),
-                d_cost.unsafe_ptr(),
-                d_shift.unsafe_ptr(),
-                Float32(params.tol),
-                Int32(it),
-                grid_dim=(1, 1, 1),
-                block_dim=(1, 1, 1),
-            )
-            ctx.enqueue_copy(dst_ptr=h_done.unsafe_ptr(), src_buf=d_done)
+            # `:468-489`, the whole cost half of the stopping rule, and it is
+            # OFF by default. Note their in-loop cost is UNWEIGHTED
+            # (`raft::value_op` straight over `minClusterAndDistance`); only
+            # the post-loop inertia at `:516-535` multiplies by the weights.
+            var cur_cost = Float64(0.0)
+            if params.inertia_check:
+                _sum_device(
+                    ctx,
+                    min_dist,
+                    ones,
+                    partials,
+                    d_cost,
+                    n_samples,
+                    SUM_MODE_PLAIN,
+                )
+                ctx.enqueue_copy(dst_ptr=h_cost.unsafe_ptr(), src_buf=d_cost)
+                # `clusterCostD.value(stream)` at `:478` is `rmm`'s blocking
+                # scalar read: a copy AND a stream sync. Turning
+                # `inertia_check` on therefore costs a SECOND drain per
+                # iteration, which is a reason it is off by default.
+                ctx.synchronize()
+                cur_cost = Float64(h_cost.unsafe_ptr().unsafe_load(0))
+                # `ASSERT` at `:480-482`, message included.
+                if cur_cost == 0.0:
+                    raise Error(
+                        "Too few points and centroids being found is getting"
+                        " 0 cost from centers"
+                    )
 
-        # The fit's inertia. ONE transfer per restart, not one per iteration.
-        ctx.synchronize()
+            # `:491`. THE one stream sync of the loop body.
+            ctx.synchronize()
+            var shift = Float64(h_shift.unsafe_ptr().unsafe_load(0))
+
+            # `:492`, on the host, in this iteration.
+            var done = check_convergence(
+                cur_cost, prior_cost, shift, params.tol, it, params.inertia_check
+            )
+            if params.inertia_check:
+                prior_cost = cur_cost  # `:488`
+
+            # `:494-497`.
+            if done:
+                n_current_iter = it
+                break
+            it += 1
+
+        # `:500-537`. The fit's inertia is ONE fresh assignment against the
+        # FINAL centroids, weighted, after the loop -- not the last
+        # iteration's cost, which belongs to the centroids from before the
+        # final update. This also leaves `labels` consistent with the
+        # centroids that are returned.
+        compute_centroid_norms(
+            ctx,
+            cur_centroids,
+            centroid_norm,
+            n_clusters,
+            n_features,
+            params.metric,
+        )
+        min_cluster_and_distance_compute(
+            ctx,
+            x,
+            x_norm,
+            cur_centroids,
+            centroid_norm,
+            dist_buf,
+            labels,
+            min_dist,
+            n_samples,
+            n_features,
+            n_clusters,
+            params.metric,
+            params.batch_samples,
+            params.batch_centroids,
+        )
+        _sum_device(
+            ctx, min_dist, weights, partials, d_cost, n_samples,
+            SUM_MODE_PRODUCT,
+        )
         ctx.enqueue_copy(dst_ptr=h_cost.unsafe_ptr(), src_buf=d_cost)
         ctx.synchronize()
         var iter_cost = Float64(h_cost.unsafe_ptr().unsafe_load(0))
 
+        # `:938-943`, and `n_iter` is NOT clamped there.
         if iter_cost < best_inertia:
             best_inertia = iter_cost
-            best_iter = min(n_current_iter, params.max_iter)
+            best_iter = n_current_iter
             ctx.enqueue_function[copy_f32_kernel](
                 centroids.unsafe_ptr(),
                 cur_centroids.unsafe_ptr(),

@@ -20,10 +20,46 @@ machine can actually reach.
 
 Parameters are matched where they mean the same thing: same k, same
 n_components, same eps and min_samples, same max_iter, n_init pinned to 1 on
-both sides. Where they cannot be matched the difference is printed rather
-than hidden: sklearn's LinearRegression uses LAPACK gelsd (an SVD route)
-against our normal-equations route, and sklearn's KMeans uses Elkan or Lloyd
-with its own initialization.
+both sides.
+
+WHERE THE ALGORITHM DIFFERS, BOTH ARMS ARE REPORTED
+---------------------------------------------------
+Revised 2026-08-19. Two arms here were comparing OUR algorithm against a
+DIFFERENT one of theirs and reporting the ratio as if it were hardware
+against hardware. Naming the difference in a docstring, which is what this
+file used to do, is not enough: the number still went into a table.
+
+So each of those two now emits TWO measurements, and a reader can see the
+algorithm penalty and the hardware difference separately:
+
+    ols            LinearRegression      LAPACK gelsd, an SVD route.
+                                         THEIR DEFAULT: what a user gets.
+    ols_normal_eq  Ridge(alpha=0,        Forms X^T X and solves it. The SAME
+                   solver="cholesky")    algorithm class as our lstsq_eig,
+                                         so this ratio is hardware only.
+
+    dbscan         algorithm="auto"      A kd-tree/ball-tree, O(n log n)
+                                         queries. THEIR DEFAULT.
+    dbscan_brute   algorithm="brute"     All n^2 pairs, like ours.
+
+**The default arm is the honest headline and the matched arm is the
+diagnostic.** A user choosing a library gets the default; forcing scikit-learn
+to run something no user would run flatters us. This file previously gave
+DBSCAN only `algorithm="brute"` while `scaling_sklearn.py` gave it `auto`, so
+the two files disagreed about the same comparison, and the flattering one was
+the headline.
+
+Cholesky-vs-eigendecomposition is a real but minor difference INSIDE the
+normal-equations route: both form the Gram matrix, which is the only step
+that touches rows and therefore all of the cost at 4,000,000 x 32. What
+follows is O(cols^3) on a 32 x 32 matrix.
+
+`bench/ols_conditioning.py` prices the accuracy side of that trade, which a
+timing harness cannot see.
+
+sklearn's KMeans still uses Elkan or Lloyd with its own initialization and
+that one is NOT split into two arms, because there is no sklearn option that
+matches ours.
 """
 
 import sys
@@ -32,7 +68,7 @@ import time
 import numpy as np
 from sklearn.cluster import DBSCAN, KMeans
 from sklearn.decomposition import PCA
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LinearRegression, Ridge
 from sklearn.neighbors import NearestNeighbors
 
 REPEATS = 5
@@ -101,13 +137,31 @@ def main():
         PCA(n_components=pca_comp, svd_solver="covariance_eigh").fit(pc_x)
         emit("pca", time.perf_counter() - t)
 
+        # THEIR DEFAULT. `auto` picks a kd-tree or ball tree and does
+        # O(n log n) queries; it is what a user gets and it is the arm the
+        # scaling curve already used.
         t = time.perf_counter()
-        DBSCAN(eps=0.35, min_samples=5, algorithm="brute").fit(db_x)
+        DBSCAN(eps=0.35, min_samples=5).fit(db_x)
         emit("dbscan", time.perf_counter() - t)
 
+        # ALGORITHM-MATCHED. All n^2 pairs, like ours. The gap between this
+        # and `dbscan` above is the index, not the hardware.
+        t = time.perf_counter()
+        DBSCAN(eps=0.35, min_samples=5, algorithm="brute").fit(db_x)
+        emit("dbscan_brute", time.perf_counter() - t)
+
+        # THEIR DEFAULT. LAPACK gelsd: an SVD of the full 4,000,000 x 32
+        # design. Much more work than ours, and stable on collinear X.
         t = time.perf_counter()
         LinearRegression(fit_intercept=False).fit(ol_a, ol_b)
         emit("ols", time.perf_counter() - t)
+
+        # ALGORITHM-MATCHED. `Ridge(alpha=0, solver="cholesky")` forms X^T X
+        # and solves it -- the normal equations, which is our route. alpha=0
+        # makes it ordinary least squares rather than ridge.
+        t = time.perf_counter()
+        Ridge(alpha=0.0, solver="cholesky", fit_intercept=False).fit(ol_a, ol_b)
+        emit("ols_normal_eq", time.perf_counter() - t)
 
 
 if __name__ == "__main__":

@@ -269,6 +269,7 @@ comptime MAX_CAPACITY = 256
 comptime DEFAULT_BLOCK_WARPS = 8
 
 
+@always_inline
 def is_ordered[ascending: Bool](left: UInt32, right: UInt32) -> Bool:
     """`is_ordered`, `select_warpsort.cuh:103-109`.
 
@@ -284,6 +285,7 @@ def is_ordered[ascending: Bool](left: UInt32, right: UInt32) -> Bool:
         return left > right
 
 
+@always_inline
 def dummy_key[ascending: Bool]() -> UInt32:
     """`kDummy`, `select_warpsort.cuh:139`.
 
@@ -301,6 +303,7 @@ def dummy_key[ascending: Bool]() -> UInt32:
         return UInt32(0)
 
 
+@always_inline
 def twiddle_in(value: Float32) -> UInt32:
     """`cub::Traits<float>::TwiddleIn`, as `block_kernel:796` applies it.
 
@@ -315,6 +318,7 @@ def twiddle_in(value: Float32) -> UInt32:
     return bits ^ UInt32(0x80000000)
 
 
+@always_inline
 def twiddle_out(bits: UInt32) -> Float32:
     """`cub::Traits<float>::TwiddleOut`, as `block_kernel:805` applies it.
 
@@ -343,6 +347,7 @@ def twiddle_out(bits: UInt32) -> Float32:
 # =========================================================================
 
 
+@always_inline
 def bitonic_merge[
     SIZE: Int, BASE: Int, ARR: Int
 ](
@@ -411,6 +416,7 @@ def bitonic_merge[
         vals[BASE] = payload
 
 
+@always_inline
 def bitonic_sort[
     SIZE: Int, BASE: Int, ARR: Int
 ](
@@ -482,6 +488,7 @@ struct WarpSortImmediate[capacity: Int, ascending: Bool](Copyable, Movable):
     #: docstring on the `len + laneId()` loop bound.
     var buf_len: Int
 
+    @always_inline
     def __init__(out self, k: Int):
         """`warp_sort(int k)` `:154-161` and `warp_sort_immediate(int k)`
         `:603-612`, merged."""
@@ -496,6 +503,7 @@ struct WarpSortImmediate[capacity: Int, ascending: Bool](Copyable, Movable):
         self.idx_buf = SIMD[DType.uint32, Self.arr_len](UInt32(0))
         self.buf_len = 0
 
+    @always_inline
     def merge_in(mut self):
         """`warp_sort::merge_in<PerThreadSizeIn>`, `:254-268`, at
         `PerThreadSizeIn == kMaxArrLen` which is the only instantiation
@@ -517,6 +525,7 @@ struct WarpSortImmediate[capacity: Int, ascending: Bool](Copyable, Movable):
             self.val_arr, self.idx_arr, Self.ascending, Self.warp_width
         )
 
+    @always_inline
     def add(mut self, val: UInt32, idx: UInt32):
         """`warp_sort_immediate::add`, `:618-640`."""
         # NB: the loop is used here to ensure the constant indexing, to not
@@ -541,6 +550,7 @@ struct WarpSortImmediate[capacity: Int, ascending: Bool](Copyable, Movable):
                 self.val_buf[i] = dummy_key[Self.ascending]()
             self.buf_len = 0
 
+    @always_inline
     def done(mut self):
         """`warp_sort_immediate::done`, `:642-648`.
 
@@ -553,6 +563,7 @@ struct WarpSortImmediate[capacity: Int, ascending: Bool](Copyable, Movable):
             )
             self.merge_in()
 
+    @always_inline
     def load_sorted(
         mut self,
         in_val: UnsafePointer[
@@ -605,6 +616,7 @@ struct WarpSortImmediate[capacity: Int, ascending: Bool](Copyable, Movable):
                 self.val_arr, self.idx_arr, Self.ascending, Self.warp_width
             )
 
+    @always_inline
     def store(
         self,
         out_val: UnsafePointer[
@@ -637,6 +649,7 @@ struct WarpSortImmediate[capacity: Int, ascending: Bool](Copyable, Movable):
                 out_idx.unsafe_store(idx, self.idx_arr[i])
             idx += Self.warp_width
 
+    @always_inline
     def store_twiddled(
         self,
         out_val: MutPointer[Float32, MutAnyOrigin],
@@ -661,6 +674,7 @@ struct WarpSortImmediate[capacity: Int, ascending: Bool](Copyable, Movable):
 # =========================================================================
 
 
+@always_inline
 def block_sort_done[
     capacity: Int, ascending: Bool
 ](
@@ -697,9 +711,38 @@ def block_sort_done[
     var warp_id = Int(thread_idx.x) // WW
     var k = queue.k
 
+    # THE LOOP UPDATE IS RESTATED, AND THE REASON IS A COMPILER BUG.
+    #
+    # Theirs, `:709-710`, is a C for-increment with a comma operator:
+    #
+    #     for (int shift_mask = ~0, split = (nwarps + 1) >> 1; nwarps > 1;
+    #          nwarps = split, split = (nwarps + 1) >> 1)
+    #
+    # i.e. `nwarps = split` and then `split` recomputed from the NEW `nwarps`.
+    # Written that way literally, `mojo build` CRASHES -- not a diagnostic, a
+    # segfault in the compiler. Bisected to a 7-line program with no GPU, no
+    # SIMD and no warp primitive in it:
+    #
+    #     def main():
+    #         var a = 8
+    #         var b = 4
+    #         while a > 1:
+    #             a = b          # bare copy INTO the condition variable
+    #             b = b - 1
+    #         print(a)
+    #
+    # The trigger is exactly that: the while-condition variable's last write in
+    # the body is a bare copy of another local. Any arithmetic on top of the
+    # copy (`a = b - 1`, `a = b; a = a - 1`) compiles. See `PORTING.md`.
+    #
+    # `split` is a pure function of `nwarps` -- `split == (nwarps + 1) >> 1`
+    # holds on entry to every iteration, by induction from their initializer
+    # and their increment -- so it is a loop-local, and the induction step is
+    # written as the same arithmetic instead of a copy. Same values, same
+    # order, same number of iterations. WHAT is said is unchanged; only HOW.
     var shift_mask = ~Int(0)
-    var split = (nwarps + 1) >> 1
     while nwarps > 1:
+        var split = (nwarps + 1) >> 1
         if warp_id < nwarps and warp_id >= split:
             var dst_warp_shift = (warp_id - (split & shift_mask)) * k
             queue.store(
@@ -718,10 +761,11 @@ def block_sort_done[
             warp_id < nwarps - split,
         )
 
-        nwarps = split
-        split = (nwarps + 1) >> 1
+        # `nwarps = split, split = (nwarps + 1) >> 1`, `:710`, as arithmetic.
+        nwarps = (nwarps + 1) >> 1
 
 
+@always_inline
 def block_sort_store[
     capacity: Int, ascending: Bool
 ](

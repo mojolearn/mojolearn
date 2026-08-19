@@ -1,12 +1,15 @@
 """Truncated SVD, which is PCA without the centering.
 
-PORT OF `raft/linalg/detail/tsvd.cuh::tsvd_fit` at RAFT `9aa17e5`. Partial.
-Do not improve.
+PORT OF `cuml/cpp/src/tsvd/tsvd.cuh::tsvdFit` at cuML `00094f7`
+(branch-25.08). Partial. Do not improve.
 
-Their `tsvd_fit` is three steps:
+The path this file used to cite, `raft/linalg/detail/tsvd.cuh`, does not
+exist and never has. Truncated SVD lives in cuML.
+
+Their `tsvdFit` is three steps:
 
     1  input_cross_mult = X^T X      (raft::linalg::gemm, OP_T / OP_N, alpha=1)
-    2  cal_eig on it
+    2  calEig on it
     3  truncate to n_components
 
 Set that beside `pca_fit` and the whole difference is visible: PCA subtracts
@@ -24,7 +27,6 @@ exist.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from cluster.mojo_only.reduce_by_key import copy_f32_kernel
 from core.gemm import gemm_tn
 from decomposition.ported.linalg.detail.pca import PCAResult, eig_and_truncate
 

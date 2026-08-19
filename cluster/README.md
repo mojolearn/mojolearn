@@ -1,7 +1,8 @@
 # cluster: a port of cuVS k-means
 
 **Same strategy as `ported/`, different upstream.** This section mirrors
-[rapidsai/cuvs](https://github.com/rapidsai/cuvs) at commit `2140532c`, file
+[rapidsai/cuvs](https://github.com/rapidsai/cuvs) at commit `94c2819`
+(branch-25.08, checked out at `~/CascadeProjects/upstream/cuvs`), file
 for file, so that "did we port this?" is answered by `ls` rather than by
 reading.
 
@@ -18,12 +19,23 @@ mirrors:
 | layer | upstream | where it lands here |
 |---|---|---|
 | algorithm | cuVS `cpp/src/cluster/`, `cpp/src/distance/` | `ported/` |
-| primitive | RAFT `linalg`, `matrix`, and cuBLAS | `mojo_only/` |
+| primitive | RAFT `linalg`, `matrix` | `mojo_only/` |
 
-A RAFT call is NOT a `ported/` file. RAFT is a general library this tree does
-not mirror, so what gets copied from a `raft::linalg::norm` call is the CALL
-SITE and its semantics, and the kernel underneath is ours. Every such file
-says so in its first paragraph and names the call it replaces.
+A RAFT call is not itself a `ported/` file, because RAFT is a general library
+this tree does not mirror file for file. **It is still readable, so it is a
+PORT candidate and not a substitution candidate**: RAFT, CUB and Thrust are
+open source and their kernels get transliterated. `mojo_only/` files name the
+RAFT call they came from and cite the RAFT kernel they were read from --
+`reduce_by_key.mojo` cites `raft/linalg/detail/reduce_rows_by_key.cuh`, not
+just `raft::linalg::reduce_rows_by_key`.
+
+Only a CLOSED library with nothing to read (cuBLAS, cuSOLVER) is a reason to
+call a MAX equivalent instead. In this section that applies to exactly one
+thing: the candidate-cost matrix product in k-means++, and their own dispatch
+materializes that matrix too (`detail/kmeans.cuh:195-196`), so nothing is
+being unfused by the substitution. **The Lloyd assignment step calls no vendor
+primitive at all** -- it is a transliteration of their SIMT fused kernel, and
+that is what took this arm from 450 ms to 175 ms.
 
 ## Path mirroring
 
@@ -47,10 +59,24 @@ is named in `UNPORTED.tsv`.
 
 ## What runs and what does not
 
-`ported/cluster/kmeans.mojo::fit` is wired end to end: norms, tiled GEMM,
-fused distance-and-argmin reduction, fixed-point cluster accumulation,
-centroid finalize with the empty-cluster rule, centroid shift, and both
-convergence tests.
+`ported/cluster/kmeans.mojo::fit` is wired end to end: norms, the fused
+distance-and-argmin kernel, fixed-point cluster accumulation, centroid
+finalize with the empty-cluster rule, the centroid-shift reduction, the
+host-side stopping rule, and the post-loop inertia pass.
+
+**The default fit runs ONE convergence test, not two.** `inertia_check` is
+`false` by default in cuVS (`cpp/include/cuvs/cluster/kmeans.hpp:120`), and
+with it off their loop never reduces the cluster cost and never applies the
+`delta > 1 - tol` ratio test (`detail/kmeans.cuh:468-489` is entirely inside
+that `if`). The centroid shift is the whole default rule. Setting
+`inertia_check = True` turns the second test on and costs a second full-length
+reduction and a second drain per iteration, which is why theirs is off.
+
+**The test runs on the HOST, in the same iteration.** `detail/kmeans.cuh:491`
+is the loop body's one `sync_stream`, `:492` is the test, `:494-497` breaks.
+There is no device-side convergence kernel in cuVS and no flag read one
+iteration late; an earlier version of this port had both and attributed them
+to cuVS with citations that pointed at a function signature.
 
 **It refuses cuVS's DEFAULT initialization.** `oversampling_factor = 2.0`
 selects scalable k-means|| and that is not ported, so `kmeans_fit_main`
@@ -81,9 +107,10 @@ exactly 0.0 and the tie-break handed every row to centroid 0. That is a real
 property of their kernel worth knowing: the clamp is safe for the round-off
 it exists for and is not order-preserving in general.
 
-**Still unreached: the k-means++ init path.** The check initializes with
-`INIT_ARRAY` deliberately, because a check that also depends on the draw
-cannot say which half failed. `UNWIRED.md` tracks it.
+`check_kmeans_fit` initializes with `INIT_ARRAY` deliberately, because a
+check that also depends on the draw cannot say which half failed;
+`check_kmeans_plus_plus_init` covers the k-means++ draw separately and also
+passes.
 
 ## Validation
 
@@ -98,9 +125,29 @@ seed while both remaining correct.
 
 ## The finding worth reading before anything else here
 
-cuVS's float32 distance GEMM runs in **TF32** by default
-(`CUBLAS_COMPUTE_32F_FAST_TF32`, `unfused_distance_nn.cuh:196`): 10 mantissa
-bits where float32 has 23. Their shipped float32 k-means does not compute
-float32 distances on NVIDIA, and no non-NVIDIA implementation can reproduce
-its answer bit for bit. See `mojo_only/gemm.mojo`, and the `bitwise-gbdt`
-tree, where this is a second incumbent with a device-dependent number system.
+cuVS's float32 distance GEMMs do not run in plain float32 on NVIDIA tensor
+cores. Their CUTLASS specializations select
+`cutlass::arch::OpMultiplyAddFastF32`
+(`cpp/src/distance/detail/fused_distance_nn/gemm.h:122` and
+`cpp/src/distance/detail/pairwise_distance_gemm.h:75`), which is CUTLASS's
+**3xTF32** emulation: three TF32 products summed, not one. Their own
+commented-out alternative on the next line says what the other choice would
+have been -- `OpMultiplyAdd`, "this runs only 1xTF32 for float inputs" -- and
+they did not take it.
+
+Two things follow, and the second is the one that matters:
+
+1. **The precision claim is 3xTF32, not TF32.** 3xTF32 recovers most of
+   float32's mantissa; a plain 10-bit TF32 claim overstates the gap and this
+   file used to make it, citing a `CUBLAS_COMPUTE_32F_FAST_TF32` constant and
+   a file (`unfused_distance_nn.cuh`) that does not exist in cuVS.
+2. **Their float32 distance arithmetic is architecture-dependent by
+   construction**, because these specializations are `ArchTag = Sm80` tensor-op
+   paths and their SIMT kernel is not. No implementation on other hardware
+   reproduces it bit for bit, and neither do two NVIDIA generations
+   necessarily. See `mojo_only/gemm.mojo`, and the `bitwise-gbdt` tree, where
+   this is a second incumbent with a device-dependent number system.
+
+The kernel this tree actually ports is their SIMT one
+(`cpp/src/distance/detail/fused_distance_nn/simt_kernel.cuh`), which has no
+tensor-op path in it at all.

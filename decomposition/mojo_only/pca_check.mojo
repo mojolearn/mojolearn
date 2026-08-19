@@ -298,7 +298,7 @@ def check_input_restored() raises:
     """Step 6, the one that is easy to drop and invisible when dropped.
 
     `pca_fit` centers the caller's matrix in place and must add the mean back
-    (`detail/pca.cuh:186`). A fit that forgets leaves the caller holding
+    (`pca.cuh:138`). A fit that forgets leaves the caller holding
     centered data, and nothing inside the fit will ever reveal it.
     """
     var ctx = DeviceContext()
@@ -457,4 +457,280 @@ def check_covariance_is_symmetric() raises:
         "check_covariance_is_symmetric OK: all "
         + String(PCA_COLS * (PCA_COLS - 1) // 2)
         + " off-diagonal pairs bitwise equal"
+    )
+
+
+# ---------------------------------------------------------------------------
+# WIDE PCA: 64 and 128 features, which is where the section shipped a bug
+# ---------------------------------------------------------------------------
+#
+# Every check above runs at `PCA_COLS = 4`. The device eigensolver used to cap
+# `n_cols` at 32 and return a non-answer above it, and NOTHING HERE COULD SEE
+# THAT, because nothing here ever asked for more than four features. A check
+# suite whose widest case is four columns does not test a PCA, it tests a
+# 4 x 4 PCA.
+#
+# So this part runs the real fit at 64 and at 128, and prints the result in a
+# form `bench/pca_wide_sklearn.py` re-derives from the SAME fixture with
+# `sklearn.decomposition.PCA`. sklearn is the ORACLE here and not a design
+# source: the design is cuML's `pcaFit` (`cuml/cpp/src/pca/pca.cuh:104`), and
+# sklearn only says whether the numbers are right.
+#
+# THE FIXTURE IS LOW RANK PLUS NOISE, ON PURPOSE. A matrix of independent
+# columns has a DIAGONAL covariance, so its eigenvectors are the coordinate
+# axes and an implementation that never rotated anything would pass. Here
+# eight dense hashed loadings are mixed into every column, so the leading
+# eigenvectors are dense rotations that only a working solver produces, and
+# the trailing spectrum is deliberately degenerate at the noise floor, which
+# is where the sign and permutation caveats in the comparison come from.
+
+comptime WIDE_ROWS = 4096
+comptime WIDE_RANK = 8
+comptime WIDE_TOP = 8
+
+
+def _wide_u01(row: Int, k: Int, salt: Int) -> Float64:
+    """splitmix64 -> [0, 1). Mirrored exactly in `bench/pca_wide_sklearn.py`."""
+    var z = (
+        UInt64(row) * 0x9E3779B97F4A7C15
+        + UInt64(k + 1) * 0xBF58476D1CE4E5B9
+        + UInt64(salt + 1) * 0x94D049BB133111EB
+    )
+    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9
+    z = (z ^ (z >> 27)) * 0x94D049BB133111EB
+    z = z ^ (z >> 31)
+    return Float64(z >> 11) * (1.0 / 9007199254740992.0)
+
+
+def _wide_latent_sd(k: Int) -> Float64:
+    """Eight well-separated signal strengths, then the noise floor."""
+    var v = 200.0 - Float64(k) * 24.0
+    return sqrt(v)
+
+
+def _fill_wide(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    n_cols: Int,
+) raises:
+    var hx = ctx.enqueue_create_host_buffer[DType.float32](n_rows * n_cols)
+    for i in range(n_rows):
+        for j in range(n_cols):
+            var v = 0.0
+            for k in range(WIDE_RANK):
+                var z = (_wide_u01(i, k, 1) - 0.5) * 2.0 * sqrt(3.0)
+                var b = (_wide_u01(k, j, 2) - 0.5) * 2.0
+                v += z * _wide_latent_sd(k) * b
+            v += (_wide_u01(i, j + 1000, 3) - 0.5) * 2.0 * sqrt(3.0)
+            hx.unsafe_ptr().unsafe_store(i * n_cols + j, Float32(v))
+    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+    ctx.synchronize()
+
+
+def _fit_wide(
+    ctx: DeviceContext, n_rows: Int, n_cols: Int, n_components: Int
+) raises -> PCAResult:
+    var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_cols)
+    var mu = ctx.enqueue_create_buffer[DType.float32](n_cols)
+    var cov = ctx.enqueue_create_buffer[DType.float32](n_cols * n_cols)
+    var x_alias = ctx.enqueue_create_buffer[DType.float32](n_rows * n_cols)
+    var x_alias2 = ctx.enqueue_create_buffer[DType.float32](n_rows * n_cols)
+    ctx.synchronize()
+    _fill_wide(ctx, x, n_rows, n_cols)
+    return pca_fit(
+        ctx, x, x_alias, x_alias2, mu, cov, n_rows, n_cols, n_components
+    )
+
+
+def _emit(name: String, xs: List[Float64], count: Int):
+    var line = name
+    for i in range(count):
+        line += " " + String(xs[i])
+    print(line)
+
+
+def check_pca_wide() raises:
+    """Run the real fit at 64 and 128 features and assert the properties that
+    hold for ANY correct PCA, then print for the sklearn oracle.
+
+    Asserted here, in Mojo, without needing Python:
+
+    - the spectrum is DESCENDING (a permutation of the truth is a different
+      answer, not a worse one, and the sort is the step cuSOLVER did for cuML);
+    - `explained_variance_ratio_` sums to 1 over all components;
+    - the eight planted signal variances are recovered to within 10 percent,
+      so a solver that returned the noise floor everywhere fails;
+    - every component is a UNIT vector, and the top eight are mutually
+      orthogonal. This is the property that dies above a size cap.
+    """
+    var ctx = DeviceContext()
+    var widths = List[Int]()
+    widths.append(64)
+    widths.append(128)
+
+    for w in range(len(widths)):
+        var n_cols = widths[w]
+        var r = _fit_wide(ctx, WIDE_ROWS, n_cols, n_cols)
+
+        for c in range(1, n_cols):
+            if r.explained_var[c] > r.explained_var[c - 1] + 1e-6:
+                raise Error(
+                    "n_cols = " + String(n_cols) + ": explained_var is not"
+                    " descending at " + String(c) + " ("
+                    + String(r.explained_var[c - 1]) + " then "
+                    + String(r.explained_var[c]) + ")"
+                )
+
+        var ratio_sum = 0.0
+        for c in range(n_cols):
+            ratio_sum += r.explained_var_ratio[c]
+        if abs(ratio_sum - 1.0) > 1e-3:
+            raise Error(
+                "n_cols = " + String(n_cols) + ": explained_var_ratio sums to "
+                + String(ratio_sum) + ", expected 1"
+            )
+
+        # Unit norm and mutual orthogonality of the leading components. Under
+        # the old 32-feature cap the entries past 32 were never rotated, so a
+        # component was not a unit vector at all.
+        for c in range(WIDE_TOP):
+            var nrm = 0.0
+            for j in range(n_cols):
+                nrm += r.components[c * n_cols + j] * r.components[c * n_cols + j]
+            if abs(nrm - 1.0) > 1e-4:
+                raise Error(
+                    "n_cols = " + String(n_cols) + ": component " + String(c)
+                    + " has squared norm " + String(nrm) + ", not 1"
+                )
+            for d in range(c + 1, WIDE_TOP):
+                var dot = 0.0
+                for j in range(n_cols):
+                    dot += (
+                        r.components[c * n_cols + j]
+                        * r.components[d * n_cols + j]
+                    )
+                if abs(dot) > 1e-4:
+                    raise Error(
+                        "n_cols = " + String(n_cols) + ": components "
+                        + String(c) + " and " + String(d) + " are not"
+                        " orthogonal, dot = " + String(dot)
+                    )
+
+        # THE SPECTRUM HAS THE PLANTED SHAPE: a rank-8 signal standing well
+        # clear of an isotropic noise floor of variance 1.
+        #
+        # This is asserted as the GAP and as the floor, not as eight absolute
+        # numbers. The eight loading vectors are hashed and therefore NOT
+        # mutually orthogonal, so the signal eigenvalues are the spectrum of a
+        # Gram matrix of non-orthogonal directions and have no closed form.
+        # An earlier version of this check predicted `sd[k]^2 * n_cols / 3`,
+        # which is what they would be if the loadings WERE orthogonal, and it
+        # failed at 787 against a predicted 1194. The port was right and the
+        # prediction was wrong.
+        if r.explained_var[WIDE_RANK - 1] < 20.0 * r.explained_var[WIDE_RANK]:
+            raise Error(
+                "n_cols = " + String(n_cols) + ": no rank-"
+                + String(WIDE_RANK) + " gap in the spectrum. Component "
+                + String(WIDE_RANK - 1) + " has variance "
+                + String(r.explained_var[WIDE_RANK - 1]) + " and component "
+                + String(WIDE_RANK) + " has "
+                + String(r.explained_var[WIDE_RANK])
+                + ". The planted signal is rank 8 over a noise floor of 1, so"
+                " a solver that found it shows a cliff here and a solver that"
+                " returned garbage does not."
+            )
+        var floor = r.explained_var[n_cols - 1]
+        if floor < 0.5 or floor > 2.0:
+            raise Error(
+                "n_cols = " + String(n_cols) + ": the smallest eigenvalue is "
+                + String(floor) + ", and the planted noise floor is variance"
+                " 1. Anything else means the trailing components are not"
+                " being solved."
+            )
+
+        print("WIDE n_cols=" + String(n_cols) + " n_rows=" + String(WIDE_ROWS))
+        _emit("EV", r.explained_var, n_cols)
+        _emit("EVR", r.explained_var_ratio, n_cols)
+        _emit("SV", r.singular_vals, n_cols)
+        for c in range(WIDE_TOP):
+            var comp = List[Float64]()
+            for j in range(n_cols):
+                comp.append(r.components[c * n_cols + j])
+            _emit("COMP " + String(c), comp, n_cols)
+        print("NOISE " + String(r.noise_var))
+        print(
+            "  check_pca_wide n_cols = " + String(n_cols) + " OK: spectrum"
+            " descending, ratios sum to " + String(ratio_sum) + ", top "
+            + String(WIDE_TOP) + " components orthonormal, rank-"
+            + String(WIDE_RANK) + " cliff present, noise floor "
+            + String(r.explained_var[n_cols - 1])
+        )
+
+    print("check_pca_wide OK at 64 and 128 features")
+
+
+def check_pca_truncation() raises:
+    """Truncation and `noise_vars`, which nothing else in this file reaches.
+
+    `truncCompExpVars` (`cuml/cpp/src/pca/pca.cuh:39`) computes the ratios
+    over ALL `n_cols` eigenvalues and only then keeps the first
+    `n_components`, so a truncated fit's `explained_variance_ratio_` sums to
+    LESS than one and its entries must be identical to the corresponding
+    entries of an untruncated fit. `noise_vars` is the MEAN OF THE DISCARDED
+    eigenvalues, guarded by `n_components < n_cols && n_components < n_rows`.
+
+    Both are checked against a full fit on the same fixture, so the assertion
+    is on the DIFFERENCE and not on numbers that a broken truncation could
+    also produce. This runs at 128 features, past the old cap.
+    """
+    var ctx = DeviceContext()
+    var n_cols = 128
+    var keep = 10
+    var full = _fit_wide(ctx, WIDE_ROWS, n_cols, n_cols)
+    var trunc = _fit_wide(ctx, WIDE_ROWS, n_cols, keep)
+
+    for c in range(keep):
+        var rel = abs(trunc.explained_var[c] - full.explained_var[c]) / full.explained_var[c]
+        if rel > 1e-6:
+            raise Error(
+                "truncating to " + String(keep) + " changed explained_var["
+                + String(c) + "] by " + String(rel) + " relative. Truncation"
+                " selects, it does not recompute."
+            )
+        var dr = abs(trunc.explained_var_ratio[c] - full.explained_var_ratio[c])
+        if dr > 1e-9:
+            raise Error(
+                "truncating changed explained_var_ratio[" + String(c) + "] by "
+                + String(dr) + ". Theirs divides by the total over ALL"
+                " n_cols eigenvalues before truncating, so it cannot move."
+            )
+
+    var want_noise = 0.0
+    for c in range(keep, n_cols):
+        want_noise += full.explained_var[c]
+    want_noise /= Float64(n_cols - keep)
+    var nrel = abs(trunc.noise_var - want_noise) / want_noise
+    if nrel > 1e-5:
+        raise Error(
+            "noise_var came back " + String(trunc.noise_var) + ", and the"
+            " mean of the " + String(n_cols - keep) + " discarded"
+            " eigenvalues is " + String(want_noise) + " (relative "
+            + String(nrel) + ")"
+        )
+    if full.noise_var != 0.0:
+        raise Error(
+            "an untruncated fit must report noise_var 0 and reported "
+            + String(full.noise_var)
+        )
+
+    var s = 0.0
+    for c in range(keep):
+        s += trunc.explained_var_ratio[c]
+    print(
+        "check_pca_truncation OK at 128 features: top " + String(keep)
+        + " variances and ratios identical to the full fit, ratios sum to "
+        + String(s) + " (not 1, which is the point), noise_var "
+        + String(trunc.noise_var) + " = mean of the " + String(n_cols - keep)
+        + " discarded eigenvalues, and 0 when nothing is discarded"
     )

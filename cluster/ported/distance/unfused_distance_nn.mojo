@@ -1,23 +1,28 @@
 """Distance and 1-nearest-neighbor, GEMM first and reduction second.
 
-PORT OF `cuvs/src/distance/unfused_distance_nn.cuh` at cuVS `2140532c`.
+PORT OF the non-fused arm of `minClusterAndDistanceCompute`,
+`cuvs/src/cluster/detail/kmeans_common.cuh:450-491`, at cuVS `94c2819`.
+(There is no `unfused_distance_nn.cuh` in cuVS.)
 Transliterated. Do not improve.
 
 cuVS has two paths to "which centroid is nearest, and how far". The FUSED one
-is a CUTLASS kernel that keeps the distance tile in registers and never
-writes the `n x k` matrix; the UNFUSED one calls a GEMM and then reduces its
-output. **This tree ports the unfused path and only the unfused path**, which
-is a choice worth stating because it is not the one their own selector
-usually takes.
+keeps the distance tile in registers and never writes the `n x k` matrix; the
+UNFUSED one calls a pairwise-distance kernel and then reduces its output.
+**Their dispatch takes the fused arm for L2Expanded and L2SqrtExpanded and the
+unfused arm for everything else** -- `is_fused` at `kmeans_common.cuh:378-379`
+is that whole decision, a metric test with no hardware term in it.
 
-The reason is not preference. Their fused path is a CUTLASS
-`persistent_gemm` specialized on NVIDIA tensor-core tiles
-(`src/distance/detail/fused_distance_nn/`), and CUTLASS is CUDA. There is no
-version of it that runs on Metal. Their own selector already treats fused as
-a hardware-conditional choice rather than the algorithm
-(`detail/kmeans_common.cuh::use_fused`): fused on SM 8.x, fused on SM 9.x
-only past 4096, and UNFUSED from Blackwell onward. So the unfused path is
-theirs, is current, and is the one they expect newer hardware to take.
+k-means's default metric is L2Expanded, so their default fit takes the FUSED
+arm, and so does this tree: `distance/fused_distance_nn/simt_kernel.mojo` is a
+port of their SIMT fused kernel
+(`src/distance/detail/fused_distance_nn/simt_kernel.cuh`) and it is what
+`min_cluster_and_distance_compute` launches. **This file is the OTHER arm.**
+It is kept reachable so the two can be differentially tested, and because it
+is the arm their dispatch takes for metrics this tree does not yet fit.
+
+(cuVS also has a CUTLASS specialization of the fused arm, under
+`src/distance/detail/fused_distance_nn/`, which is CUDA and has no Metal
+counterpart. Their SIMT kernel is the portable one and is the one ported.)
 
 **What survives the port is the whole reason this is fast**: the expanded
 identity `||x-c||^2 = ||x||^2 + ||c||^2 - 2 x.c`. That turns every pairwise
@@ -28,8 +33,18 @@ Two consequences of the identity, both of them theirs and both load-bearing:
 
 1. GEMM round-off can make the expanded value slightly NEGATIVE for a point
    sitting on its own centroid, so the kernel clamps to zero before any
-   square root (`unfused_distance_nn.cuh:81`). Not defensive coding; without
-   it `sqrt` returns NaN on the easiest input in the dataset.
+   square root (`src/distance/detail/distance_ops/l2_exp.cuh:124-135`). Not
+   defensive coding; without it `sqrt` returns NaN on the easiest input in
+   the dataset.
+
+   DIVERGENCE, NOT FIXED HERE. Their expression has a SECOND factor this
+   port does not have: `!((val * val < get_clamp_precision<DataT, AccT>()) *
+   (regxn[i] == regyn[j]))`, which forces an exact zero when the two norms
+   are bit-equal and the residual is below a type-dependent precision floor
+   (`l2_exp.cuh:132-134`). It is the self-neighbor case. For k-means it is
+   nearly unreachable, because a point's norm is not bit-equal to a
+   centroid's; for a self-join k-NN, where every row meets itself, it is the
+   normal case. Both kernels here clamp on sign alone.
 2. The reduction is an ARGMIN over a total order, not a sum. Ties break on
    the lower key, so the answer does not depend on the reduction tree, the
    block size, or the number of blocks. **This is the rare reduction in this
@@ -39,6 +54,14 @@ Two consequences of the identity, both of them theirs and both load-bearing:
    that feeds it is a different story, see `mojo_only/gemm.mojo`.
 """
 
+from mojo_only.kernel_matrix import (
+    K_LIB_FUSED_DISTANCE_NN,
+    TARGET_COLUMN,
+    lib_block_size_for,
+    lib_reduce_lanes_for,
+)
+
+
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.gpu.primitives.warp import shuffle_xor
 from std.math import sqrt
@@ -47,9 +70,17 @@ from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
 
-# `const int TPB = 128` at `unfused_distance_nn.cuh:151`, and `blocks = m`,
+# `P::Nthreads` for their SIMT fused kernel is 256
+# (`fused_distance_nn/simt_kernel.cuh:70`, `__launch_bounds__(P::Nthreads, 2)`,
+# with the policy from `linalg/contractions.cuh`); this arm uses 128, and
+# `blocks = m`,
 # so the grid is one block per row of X and the block strides the centroids.
-comptime REDUCE_MIN_TPB = 128
+# READ FROM THE MATRIX, not restated here. `mojo_only/kernel_matrix.mojo`
+# owns every tunable in this tree; changing TARGET_COLUMN there rebuilds
+# this kernel for another vendor with no edit in this file.
+comptime REDUCE_MIN_TPB = lib_block_size_for[
+    K_LIB_FUSED_DISTANCE_NN, TARGET_COLUMN
+]()
 
 # The width of one shuffle group in the block argmin below. `shuffle_xor`
 # with an offset under this value flips only the low bits of the lane id, so
@@ -58,7 +89,10 @@ comptime REDUCE_MIN_TPB = 128
 # independently and the cross-group stage picks both halves up, so the only
 # assumption is that the hardware lane width is a MULTIPLE of 32, never that
 # it equals 32.
-comptime REDUCE_MIN_LANES = 32
+# READ FROM THE MATRIX, not restated here. `mojo_only/kernel_matrix.mojo`
+# owns every tunable in this tree; changing TARGET_COLUMN there rebuilds
+# this kernel for another vendor with no edit in this file.
+comptime REDUCE_MIN_LANES = lib_reduce_lanes_for[TARGET_COLUMN, False]()
 comptime REDUCE_MIN_GROUPS = REDUCE_MIN_TPB // REDUCE_MIN_LANES
 
 # `max_val<float>()` and `max_val<IdxT>()` at `:71-72`, the identity elements
@@ -123,7 +157,8 @@ def reduce_min_kernel(
 
     `key_base` is ours and is not a deviation in behavior: their caller adds
     the centroid-tile offset AFTERWARD, in a `raft::linalg::map` over the
-    whole output (`minClusterDistanceCompute.cu:124-132`). Folding it into
+    whole output (`kmeans_common.cuh:405-410`, a `thrust::fill` of
+    `(0, FLT_MAX)` before the tile loop). Folding it into
     the kernel removes a full-length pass over the output per centroid tile
     and cannot change which centroid wins, because it is the same constant
     added to every key in the tile.
@@ -156,7 +191,9 @@ def reduce_min_kernel(
                 - Float32(2.0) * z.unsafe_load(row * n + col)
             )
             # GEMM round-off can produce slightly negative expanded
-            # distances; clamp to zero. Theirs, `:80-81`.
+            # distances; clamp to zero. Theirs,
+            # `src/distance/detail/distance_ops/l2_exp.cuh:132`, minus the
+            # self-neighbor factor -- see the module docstring.
             if dist <= Float32(0.0):
                 dist = Float32(0.0)
 

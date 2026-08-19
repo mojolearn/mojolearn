@@ -23,6 +23,7 @@ fixed-fixture check would not notice.
 
 from max.gpu.host import DeviceContext
 
+from glm.ported.glm.ols import OLS_ALGO_EIG, ols_fit
 from glm.ported.linalg.detail.lstsq import lstsq_eig
 
 
@@ -81,7 +82,12 @@ def _solve(
     ctx.enqueue_copy(dst_buf=b, src_ptr=hb.unsafe_ptr())
     ctx.synchronize()
 
-    lstsq_eig(ctx, a, b, w, cov_a, q, qs, s_vec, ab, inv, a_alias, a_alias2, n, d)
+    # Through `olsFit`'s dispatch (`ols.cuh:112`), not around it. Calling
+    # `lstsq_eig` directly is what let a singular shape reach the solver.
+    ols_fit(
+        ctx, a, b, w, cov_a, q, qs, s_vec, ab, inv, a_alias, a_alias2,
+        n, d, OLS_ALGO_EIG,
+    )
 
     var hw = ctx.enqueue_create_host_buffer[DType.float32](d)
     ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=w)
@@ -171,3 +177,107 @@ def check_ols_beats_truth_on_noise() raises:
         "check_ols_beats_truth_on_noise OK: fitted residual "
         + String(res_fit) + " against the true model's " + String(res_true)
     )
+
+
+def check_ols_dispatch_guard() raises:
+    """`ols.cuh:112-113` REFUSES the two shapes eig cannot solve.
+
+    Before this guard was ported, both of these reached the normal-equations
+    solver and returned a plausible vector from a singular `A^T A`. Neither
+    is an exotic input: `n_cols > n_rows` is every wide design, and
+    `n_cols == 1` is a simple regression.
+
+    The assertion is that the call RAISES. A check that merely ran them and
+    looked at the numbers would have passed before the fix, because garbage
+    from a singular inverse is finite and plausibly scaled.
+    """
+    var ctx = DeviceContext()
+
+    # n_cols > n_rows. Their guard switches to lstsqSvdJacobi; ours refuses.
+    var wide_raised = False
+    try:
+        var wide = _solve_shaped(ctx, 4, 8)
+        _ = len(wide)
+    except e:
+        wide_raised = True
+    if not wide_raised:
+        raise Error(
+            "check_ols_dispatch_guard: n_cols > n_rows did NOT raise. The"
+            " ols.cuh:113 guard is not reached, and a singular A^T A is"
+            " being inverted."
+        )
+
+    # n_cols == 1, the case cuML's Python layer warns about by name.
+    var single_raised = False
+    try:
+        var single = _solve_shaped(ctx, 64, 1)
+        _ = len(single)
+    except e:
+        single_raised = True
+    if not single_raised:
+        raise Error(
+            "check_ols_dispatch_guard: n_cols == 1 did NOT raise. The"
+            " ols.cuh:113 guard is not reached."
+        )
+
+    # And the guard must not fire on an ordinary shape, or it would be
+    # refusing everything and the two assertions above would be vacuous.
+    var ok_raised = False
+    try:
+        var fine = _solve_shaped(ctx, 256, 4)
+        _ = len(fine)
+    except e:
+        ok_raised = True
+    if ok_raised:
+        raise Error(
+            "check_ols_dispatch_guard: an ordinary 256 x 4 design raised."
+            " The guard is over-firing and the other two assertions prove"
+            " nothing."
+        )
+
+    print(
+        "check_ols_dispatch_guard OK: n_cols>n_rows and n_cols==1 both"
+        " refused, 256x4 accepted"
+    )
+
+
+def _solve_shaped(ctx: DeviceContext, n: Int, d: Int) raises -> List[Float64]:
+    """A solve at an arbitrary shape, so the guard can be exercised."""
+    var a = ctx.enqueue_create_buffer[DType.float32](n * d)
+    var b = ctx.enqueue_create_buffer[DType.float32](n)
+    var w = ctx.enqueue_create_buffer[DType.float32](d)
+    var cov_a = ctx.enqueue_create_buffer[DType.float32](d * d)
+    var q = ctx.enqueue_create_buffer[DType.float32](d * d)
+    var qs = ctx.enqueue_create_buffer[DType.float32](d * d)
+    var s_vec = ctx.enqueue_create_buffer[DType.float32](d)
+    var ab = ctx.enqueue_create_buffer[DType.float32](d)
+    var inv = ctx.enqueue_create_buffer[DType.float32](d * d)
+    var a_alias = ctx.enqueue_create_buffer[DType.float32](n * d)
+    var a_alias2 = ctx.enqueue_create_buffer[DType.float32](n * d)
+    ctx.synchronize()
+
+    var ha = ctx.enqueue_create_host_buffer[DType.float32](n * d)
+    var hb = ctx.enqueue_create_host_buffer[DType.float32](n)
+    for i in range(n):
+        var target = 0.0
+        for k in range(d):
+            var v = _u01(i, k, 0) - 0.5
+            ha.unsafe_ptr().unsafe_store(i * d + k, Float32(v))
+            target += v * _true_w(k)
+        hb.unsafe_ptr().unsafe_store(i, Float32(target))
+    ctx.enqueue_copy(dst_buf=a, src_ptr=ha.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=b, src_ptr=hb.unsafe_ptr())
+    ctx.synchronize()
+
+    ols_fit(
+        ctx, a, b, w, cov_a, q, qs, s_vec, ab, inv, a_alias, a_alias2,
+        n, d, OLS_ALGO_EIG,
+    )
+
+    var hw = ctx.enqueue_create_host_buffer[DType.float32](d)
+    ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=w)
+    ctx.synchronize()
+    var result = List[Float64]()
+    for k in range(d):
+        result.append(Float64(hw.unsafe_ptr().unsafe_load(k)))
+    return result^

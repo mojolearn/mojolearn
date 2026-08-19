@@ -1,61 +1,49 @@
 """The pieces every k-means path shares: batching, convergence, sampling.
 
-PORT OF `cuvs/src/cluster/detail/kmeans_common.cuh` at cuVS `2140532c`.
+PORT OF `cuvs/src/cluster/detail/kmeans_common.cuh` at cuVS `94c2819`.
 Partial. Do not improve.
 
 What is ported here is the part of that file that is DECISION rather than
 plumbing. Most of its bulk is RAFT and CUB glue (`cub::DeviceHistogram`,
-`cub::DeviceSelect::If`, `cub::DeviceReduce`, `thrust::for_each_n`), which
-has no counterpart to transliterate; see `PORTED_MAP.tsv` for which of those
-became `mojo_only/` files and which are simply not ported yet.
+`cub::DeviceSelect::If`, `cub::DeviceReduce`, `thrust::for_each_n`); see
+`PORTED_MAP.tsv` for which of those became `mojo_only/` files and which are
+simply not ported yet.
 
 The decisions that ARE theirs and are copied exactly:
 
-- when the fused path is chosen over the unfused one, and why that is a
-  hardware question rather than an algorithm question,
-- the two convergence tests and the fact that BOTH are checked every
-  iteration and either one alone stops the fit,
-- that convergence is evaluated ON DEVICE and the flag reaches the host one
-  iteration late, so a fit runs one iteration further than a host-side test
-  would,
+- which arm of `minClusterAndDistanceCompute` runs, which is a pure metric
+  test and nothing else (`is_fused`, `kmeans_common.cuh:378-379`),
+- the convergence test, which runs ON THE HOST, on a scalar copied back
+  after the loop body's single stream sync (`detail/kmeans.cuh:461-497`),
+- that the cost/ratio half of that test is GATED OFF by default
+  (`params.inertia_check = false`, `cuvs/cluster/kmeans.hpp:120`), so the
+  default fit stops on the centroid shift alone,
 - the k-means|| sampling probability.
 """
 
-from std.gpu import block_idx, thread_idx
-
 from cluster.ported.cluster.kmeans_params import (
-    KMeansParams,
     METRIC_COSINE_EXPANDED,
     METRIC_L2_EXPANDED,
     METRIC_L2_SQRT_EXPANDED,
 )
 
 
-# `use_fused` at `kmeans_common.cuh:60-82`. Their compute-capability codes.
-comptime SM_AMPERE_OR_EARLIER = 8
-comptime SM_HOPPER = 9
-comptime SM_BLACKWELL = 10
+def is_fused(metric: Int) -> Bool:
+    """`is_fused`, `kmeans_common.cuh:378-379`. Their ENTIRE arm selector.
 
+        bool is_fused = metric == L2Expanded || metric == L2SqrtExpanded;
 
-def use_fused(sm_major: Int, m: Int, n: Int) -> Bool:
-    """`use_fused`, copied including the 4096 threshold.
+    There is no compute-capability term, no size threshold, and no CUTLASS
+    fallback rule in it. `minClusterAndDistanceCompute` takes the fused arm
+    (`:430-449`, `fusedDistanceNNMinReduce`) for those two metrics and the
+    tile-and-`coalescedReduction` arm (`:450-491`) for everything else, and
+    that is the whole dispatch.
 
-    Recorded here rather than dropped, even though this tree ports only the
-    unfused kernel, because it is the evidence that the unfused path is not a
-    fallback. Their own rule sends Blackwell and later to unfused
-    unconditionally, and sends Hopper there for anything smaller than 4096.
-
-    We have no counterpart to a CUTLASS tensor-core GEMM, so on every backend
-    this tree targets the answer is False. That is a REACH fact and belongs
-    in `UNWIRED.md`, not a silent constant.
+    It has one visible consequence their own code calls out: on the fused arm
+    `dataBatchSize` is forced to `n_samples` (`:380`), so `batch_samples` is
+    inert for the metrics k-means actually uses.
     """
-    if sm_major <= SM_AMPERE_OR_EARLIER:
-        return True
-    if sm_major == SM_HOPPER and (m >= 4096 or n >= 4096):
-        return True
-    if sm_major >= SM_BLACKWELL:
-        return False
-    return False
+    return metric == METRIC_L2_EXPANDED or metric == METRIC_L2_SQRT_EXPANDED
 
 
 def sampling_probability(
@@ -64,7 +52,7 @@ def sampling_probability(
     oversampling_factor: Float64,
     n_clusters: Int,
 ) -> Float64:
-    """`SamplingOp::operator()` at `kmeans_common.cuh:100-106`.
+    """`SamplingOp::operator()` at `kmeans_common.cuh:73-81`.
 
         prob_x = (oversampling_factor * n_clusters * a.value) / cluster_cost
 
@@ -87,27 +75,48 @@ def check_convergence(
     sqrd_norm_error: Float64,
     tol: Float64,
     n_iter: Int,
+    inertia_check: Bool,
 ) -> Bool:
-    """`check_convergence` at `kmeans_common.cuh:637-660`, copied exactly.
+    """The stopping rule of `kmeans_fit_main`, `detail/kmeans.cuh:466-492`.
 
-        if (cur_cost != 0 && n_iter > 1) {
-            delta = cur_cost / prior_clustering_cost;
-            if (delta > 1 - tol) done = 1;
+    There is NO `check_convergence` function in cuVS. The rule is written
+    inline in the fit loop and it looks like this:
+
+        bool done = false;
+        if (params.inertia_check) {                       // :468
+          ... computeClusterCost -> clusterCostD          // :470-476
+          DataT curClusteringCost = clusterCostD.value(stream);   // :478
+          ASSERT(curClusteringCost != 0.0, ...);          // :480
+          if (n_iter[0] > 1) {                            // :484
+            DataT delta = curClusteringCost / priorClusteringCost;
+            if (delta > 1 - params.tol) done = true;
+          }
+          priorClusteringCost = curClusteringCost;
         }
-        if (norm_err < tol) done = 1;
+        raft::resource::sync_stream(handle, stream);      // :491
+        if (sqrdNormError < params.tol) done = true;      // :492
 
-    Three details that are easy to "fix" and must not be:
+    Four details that are easy to "fix" and must not be:
 
-    1. The cost test is a RATIO, not a difference, so `tol` is relative for
+    1. **`inertia_check` is FALSE by default** (`cuvs/cluster/kmeans.hpp:120`).
+       The ratio test and the reduction that feeds it do not run in a default
+       cuVS fit at all. The default stopping rule is the centroid shift and
+       only the centroid shift.
+    2. The cost test is a RATIO, not a difference, so `tol` is relative for
        one test and absolute for the other. `1e-4` means two different things
-       in the same function.
-    2. `n_iter > 1` skips the ratio test on the first iteration, because
+       in the same rule.
+    3. `n_iter > 1` skips the ratio test on the first iteration, because
        there is no prior cost yet. The centroid-shift test is NOT skipped, so
        a fit whose first iteration moves nothing stops immediately.
-    3. Either test alone stops the fit. They are not combined.
+    4. Either test alone stops the fit. They are not combined.
+
+    All of this runs on the HOST, in the same iteration, after the loop
+    body's one `sync_stream`, and the loop breaks immediately (`:494-497`).
+    The caller advances `prior_clustering_cost` itself, as theirs does at
+    `:488`.
     """
     var done = False
-    if clustering_cost != 0.0 and n_iter > 1:
+    if inertia_check and clustering_cost != 0.0 and n_iter > 1:
         var delta = clustering_cost / prior_clustering_cost
         if delta > 1.0 - tol:
             done = True
@@ -119,8 +128,8 @@ def check_convergence(
 def metric_is_sqrt(metric: Int) -> Bool:
     """Whether the reduction takes a square root before writing.
 
-    `minClusterDistanceCompute.cu:71` passes
-    `metric != DistanceType::L2Expanded`, so L2Expanded keeps SQUARED
+    `kmeans_common.cuh:444` passes `metric != DistanceType::L2Expanded` as
+    `fusedDistanceNNMinReduce`'s `sqrt` argument, so L2Expanded keeps SQUARED
     distances and everything else does not. Inertia is therefore a sum of
     squares under the default metric, which is what makes it comparable to
     scikit-learn's `inertia_`.
@@ -129,52 +138,12 @@ def metric_is_sqrt(metric: Int) -> Bool:
 
 
 def centroid_norms_take_sqrt(metric: Int) -> Bool:
-    """`minClusterDistanceCompute.cu:44-49`.
+    """The centroid `rowNorm` at `kmeans_common.cuh:385-389`.
 
-    Cosine takes `sqrt` of the centroid norms because its branch DIVIDES by
-    `||x|| ||y||`; the L2 branches subtract `2 x.c` from squared norms and
+    Theirs takes no square root there (`rowNorm<L2Norm, true>`, where the
+    `true` is row-major, not sqrt), which is right for the L2 branches. Cosine
+    is ours: it needs `sqrt` of the centroid norms because its branch DIVIDES
+    by `||x|| ||y||`; the L2 branches subtract `2 x.c` from squared norms and
     must not.
     """
     return metric == METRIC_COSINE_EXPANDED
-
-
-def check_convergence_kernel(
-    done_flag: MutPointer[Int32, MutAnyOrigin],
-    prior_clustering_cost: MutPointer[Float32, MutAnyOrigin],
-    clustering_cost: MutPointer[Float32, MutAnyOrigin],
-    sqrd_norm_error: MutPointer[Float32, MutAnyOrigin],
-    tol_in: Float32,
-    n_iter_in: Int32,
-):
-    """`check_convergence` (`kmeans_common.cuh:637-660`) AS A DEVICE FUNCTION,
-    which is what it is in their source.
-
-    The host version above is kept because it documents the three details in
-    prose and because a host-side checker is what a bring-up harness wants.
-    **This is the one the fit uses**, and porting it as a kernel is not an
-    optimization: cuVS runs this on the device
-    (`detail/kmeans.cuh:920-930`, a `map_offset` over a single element) and
-    reads only the resulting FLAG back. A host-side test was our artifact and
-    it cost a full drain plus two transfers per iteration for a number the
-    host never needed except to decide.
-
-    Note it also ADVANCES `prior_clustering_cost` in the same call, which is
-    theirs and is why the flag and the prior cost cannot be split into two
-    kernels without reintroducing an ordering hazard.
-    """
-    if Int(thread_idx.x) != 0 or Int(block_idx.x) != 0:
-        return
-
-    var cur_cost = clustering_cost.unsafe_load(0)
-    var norm_err = sqrd_norm_error.unsafe_load(0)
-    var done = Int32(0)
-
-    if cur_cost != Float32(0.0) and Int(n_iter_in) > 1:
-        var delta = cur_cost / prior_clustering_cost.unsafe_load(0)
-        if delta > Float32(1.0) - tol_in:
-            done = Int32(1)
-    if norm_err < tol_in:
-        done = Int32(1)
-
-    prior_clustering_cost.unsafe_store(0, cur_cost)
-    done_flag.unsafe_store(0, done)

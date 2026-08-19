@@ -1,7 +1,7 @@
 """The Python surface, mirrored so the names a user types are cuVS's names.
 
 PORT OF `cuvs/python/cuvs/cuvs/cluster/kmeans/kmeans.pyx` at cuVS
-`2140532c`. Partial. Do not improve.
+`94c2819`. Partial. Do not improve.
 
 There are no Python bindings in this tree yet, so this file is not a binding.
 It is the SHAPE of one, written in Mojo, and it exists for the reason the
@@ -22,10 +22,13 @@ C++ layer does not:
 1. **`fit` returns `(centroids, inertia, n_iter)` as a tuple**, so inertia is
    not an out-parameter. The Mojo counterpart is `FitResult` plus the
    centroids buffer the caller owns.
-2. **The pyx accepts either host or device arrays** and copies as needed
-   (`kmeans.pyx:208`). This tree is device-resident by construction, so the
-   upload is the caller's, and that is the single biggest difference a Python
-   user would notice.
+2. **The pyx allocates the output centroids for you** when `centroids=None`
+   (`kmeans.pyx:229-231`), so a Python caller never sizes the buffer. Here the
+   caller owns and sizes every buffer, which is the single biggest difference
+   a Python user would notice. Note their pyx does NOT accept host arrays: it
+   calls `_check_input_array` on a wrapped CUDA-array-interface object
+   (`kmeans.pyx:218-219`), so device residency is theirs too, not a
+   simplification of ours.
 
 `cluster_cost` is theirs and is worth keeping visible: it is inertia for an
 arbitrary centroid set, which is how you score a model you did not fit, and
@@ -50,15 +53,22 @@ def kmeans_params_from_python(
     oversampling_factor: Float64 = 2.0,
     batch_samples: Int = 1 << 15,
     batch_centroids: Int = 0,
-    init_size: Int = 0,
-    device_buffer_samples: Int = 0,
     seed: UInt64 = 0,
 ) raises -> KMeansParams:
-    """`KMeansParams.__init__` (`kmeans.pyx:105`), keyword-only, same defaults.
+    """`KMeansParams.__init__` (`kmeans.pyx:98-129`), keyword-only.
 
     Their `__init__` is keyword-only (`def __init__(self, *, ...)`), which is
     a deliberate API choice: no caller can pass `n_clusters` positionally and
     then be wrong about the second argument. Kept.
+
+    Their keyword list is `metric, n_clusters, init_method, max_iter, tol,
+    n_init, oversampling_factor, hierarchical, hierarchical_n_iters` and
+    NOTHING else: `batch_samples`, `batch_centroids`, `inertia_check` and the
+    seed are C++-only fields with no Python setter. `batch_samples`,
+    `batch_centroids` and `seed` are kept here because this tree's fit takes
+    them; `hierarchical`/`hierarchical_n_iters` select their balanced k-means
+    (`kmeans_balanced.cuh`), which is NOT PORTED, so they are absent rather
+    than accepted and ignored.
     """
     var p = KMeansParams.default()
     p.n_clusters = n_clusters
@@ -68,8 +78,6 @@ def kmeans_params_from_python(
     p.oversampling_factor = oversampling_factor
     p.batch_samples = batch_samples
     p.batch_centroids = batch_centroids
-    p.init_size = init_size
-    p.device_buffer_samples = device_buffer_samples
     p.seed = seed
 
     if init_method == String("KMeansPlusPlus"):

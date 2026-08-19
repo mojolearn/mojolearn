@@ -36,6 +36,7 @@ assignment argmin and unlike CatBoost's float histogram flush.
 
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 
 comptime WEAK_CC_TPB = 256
@@ -66,32 +67,49 @@ def weak_cc_label_kernel(
     col_ind: MutPointer[Int32, MutAnyOrigin],
     core: MutPointer[UInt8, MutAnyOrigin],
     changed: MutPointer[Int32, MutAnyOrigin],
+    start_vertex_id_in: Int32,
+    batch_size_in: Int32,
     n_in: Int32,
 ):
     """`weak_cc_label_device`, copied including both propagation guards.
 
-    One thread per vertex. Each pass pushes a smaller label to every
-    neighbor it may propagate to, and pulls the smallest neighbor label it
-    may accept. `changed` is their `*m`, and the host repeats until it stays
-    zero.
+    One thread per vertex OF THE BATCH. `tid` indexes the batch's CSR rows and
+    `global_id = tid + start_vertex_id` indexes `labels` and the core mask,
+    which is theirs (`csr.cuh:61-63`) and is what makes the CSR a
+    `batch_size x N` slice rather than an `N x N` graph. The first version of
+    this port used `tid` for both and only worked because it was handed one
+    global CSR.
+
+    Each pass pushes a smaller label to every neighbor it may propagate to,
+    and pulls the smallest neighbor label it may accept. `changed` is their
+    `*m`, and the host repeats until it stays zero.
 
     The asymmetry between the two arms is theirs and is load-bearing:
     pushing requires `ci_allow_prop` (the SOURCE must be core) while pulling
     requires `cj_allow_prop` (the NEIGHBOR must be core). A border point can
     therefore end up labelled by a core neighbor and still never join two
     clusters together.
+
+    `end` comes from `row_ind[tid + 1]` rather than their
+    `get_stop_idx(tid, batch_size, nnz, row_ind)`. That is the extra element
+    their own TODO one line above asks for (`csr.cuh:72`, "add one element to
+    row_ind and avoid get_stop_idx"), and the scan in
+    `adjgraph/algo.mojo` writes it.
     """
     var n = Int(n_in)
+    var batch_size = Int(batch_size_in)
+    var start_vertex_id = Int(start_vertex_id_in)
     var tid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if tid >= n:
+    var global_id = tid + start_vertex_id
+    if tid >= batch_size or global_id >= n:
         return
 
     var start = Int(row_ind.unsafe_load(tid))
     var end = Int(row_ind.unsafe_load(tid + 1))
 
-    var ci = labels.unsafe_load(tid)
+    var ci = labels.unsafe_load(global_id)
     var ci_mod = False
-    var ci_allow_prop = core.unsafe_load(tid) != 0
+    var ci_allow_prop = core.unsafe_load(global_id) != 0
 
     for j in range(start, end):
         var j_ind = Int(col_ind.unsafe_load(j))
@@ -106,6 +124,67 @@ def weak_cc_label_kernel(
             ci_mod = True
 
     if ci_mod:
-        _ = Atomic.min(labels.unsafe_offset(tid), ci)
+        _ = Atomic.min(labels.unsafe_offset(global_id), ci)
         if ci_allow_prop:
             changed.unsafe_store(0, Int32(1))
+
+
+def weak_cc_batched(
+    ctx: DeviceContext,
+    mut labels: DeviceBuffer[DType.int32],
+    mut row_ind: DeviceBuffer[DType.int32],
+    mut col_ind: DeviceBuffer[DType.int32],
+    mut core: DeviceBuffer[DType.uint8],
+    mut d_changed: DeviceBuffer[DType.int32],
+    mut h_changed: HostBuffer[DType.int32],
+    n_rows: Int,
+    start_vertex_id: Int,
+    batch_size: Int,
+    max_iterations: Int,
+) raises -> Int:
+    """`weak_cc_batched` (`csr.cuh:133`), copied, returning the pass count.
+
+    **THE INITIALIZATION IS INSIDE, AND OVER ALL `N`, NOT OVER THE BATCH.**
+    Theirs calls `weak_cc_init_all_kernel` on every fit of every batch
+    (`csr.cuh:149`), so each batch starts from a fresh labelling of the whole
+    dataset and the caller merges the results afterwards. Reusing the
+    previous batch's labels as the initial value and skipping the merge is
+    the exact bug their comment at `runner.cuh:392-395` names, cuML issue
+    #3094.
+
+    The convergence flag comes back to the host every pass, which is theirs
+    too: `raft::update_host(&host_m, state->m, 1, stream)` inside their
+    `do { } while (host_m)`.
+    """
+    ctx.enqueue_function[weak_cc_init_kernel](
+        labels.unsafe_ptr(),
+        core.unsafe_ptr(),
+        Int32(n_rows),
+        grid_dim=((n_rows + WEAK_CC_TPB - 1) // WEAK_CC_TPB, 1, 1),
+        block_dim=(WEAK_CC_TPB, 1, 1),
+    )
+    ctx.synchronize()
+
+    var passes = 0
+    for _it in range(max_iterations):
+        h_changed.unsafe_ptr().unsafe_store(0, Int32(0))
+        ctx.enqueue_copy(dst_buf=d_changed, src_ptr=h_changed.unsafe_ptr())
+        ctx.enqueue_function[weak_cc_label_kernel](
+            labels.unsafe_ptr(),
+            row_ind.unsafe_ptr(),
+            col_ind.unsafe_ptr(),
+            core.unsafe_ptr(),
+            d_changed.unsafe_ptr(),
+            Int32(start_vertex_id),
+            Int32(batch_size),
+            Int32(n_rows),
+            grid_dim=((batch_size + WEAK_CC_TPB - 1) // WEAK_CC_TPB, 1, 1),
+            block_dim=(WEAK_CC_TPB, 1, 1),
+        )
+        ctx.synchronize()
+        ctx.enqueue_copy(dst_ptr=h_changed.unsafe_ptr(), src_buf=d_changed)
+        ctx.synchronize()
+        passes += 1
+        if h_changed.unsafe_ptr().unsafe_load(0) == Int32(0):
+            break
+    return passes

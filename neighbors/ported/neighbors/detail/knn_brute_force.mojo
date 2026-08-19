@@ -1,61 +1,67 @@
-"""Exact brute-force k-nearest-neighbors, tiled.
+"""Brute-force k-nearest-neighbors: their DISPATCH, and their FALLBACK.
 
-PORT OF `cuvs/src/neighbors/detail/knn_brute_force.cuh::tiled_brute_force_knn`
-at cuVS `2140532c`. Partial. Do not improve.
+PORT OF `cuvs/src/neighbors/detail/knn_brute_force.cuh` at cuVS `94c2819`:
+`brute_force_knn_impl`'s dispatch (`:443-447`) and `tiled_brute_force_knn`
+(`:69-340`). Partial. Do not improve.
 
-THE CLAIM THIS EXISTS TO TEST
------------------------------
-Brute force is a matrix multiply plus a top-k. Both are arithmetic-dense and
-embarrassingly parallel, which is the shape a GPU wants and the shape a graph
-walk like HNSW is not. On a machine where the competition's GPU arms do not
-run at all, exact brute force on the GPU can plausibly beat APPROXIMATE k-NN
-on the CPU, and that is a strictly stronger result than being faster: it
-returns the RIGHT neighbors.
+WHAT THEIR DISPATCH DOES, WHICH IS NOT WHAT THIS FILE USED TO SAY
+------------------------------------------------------------------
+`brute_force_knn_impl` chooses between two entirely different algorithms at
+`:443`:
 
-`ROADMAP.md` rules out HNSW permanently for the complementary reason. It is a
-graph traversal with a serial dependency per hop, and FAISS ships it CPU-only.
+    if (k <= 64 && rowMajorQuery == rowMajorIndex && rowMajorQuery == true &&
+        (metric == L2Unexpanded || L2SqrtUnexpanded ||
+         L2Expanded  || L2SqrtExpanded)) {
+      fusedL2Knn(...);                       // fused_l2_knn.cuh
+    } else {
+      switch (metric) {
+        case Haversine: haversine_knn(...);  // not ported
+        default:        tiled_brute_force_knn(...);
+      }
+    }
 
-WHAT IS THEIRS AND WHY THE STRUCTURE LOOKS LIKE k-MEANS
--------------------------------------------------------
-It looks like k-means because it IS k-means' assignment step with the argmin
-replaced by a top-k. Same expanded identity, same precomputed norms, same
-tiling. Their own comment at `:107-109` gives the reason the norms are hoisted
-out of the tile loop: "this lets us avoid calculating norms repeatedly
-per-tile, and just do once for the entire input".
+`tiled_brute_force_knn` is the **else**. For k <= 64 on row-major L2 - which
+is every k-NN measurement this repository has ever taken - cuVS runs
+`fusedL2Knn`, and until 2026-08-19 this tree had ported only the fallback and
+compared it against scikit-learn as though it were their algorithm. That is
+now `neighbors/ported/neighbors/detail/fused_l2_knn.mojo`, and
+`brute_force_knn_impl` below is their dispatch rather than a direct call to
+whichever function we happened to own.
 
-That shared structure is why `core/` now exists. `core/gemm.mojo` and
-`core/row_norms.mojo` were written for the k-means port and moved up
-unchanged the moment a second consumer appeared, which is the evidence
-`PLAN.md` wanted for whether the substrate was real or was quietly
-tree-shaped.
+The two paths are not interchangeable and the difference is structural, not a
+constant factor. This one MATERIALIZES a `tile_rows x n_index` distance
+matrix: the GEMM writes it, the epilogue reads and rewrites it, and the
+selector reads it a third time. At 400,000 index points and
+`bench/scaling_main.mojo:46`'s tile of 256 that is 409.6 MB per tile, about
+23 GB of traffic across the run to carry 51.2 GFLOP of arithmetic. The fused
+kernel never writes it at all.
 
-SUBSTITUTION AUDIT, 2026-08-19: NOTHING LEFT HERE
---------------------------------------------------
-Every vendor-shaped call on this path has already been swapped or has no
-counterpart, so this section exists to say the search was done rather than
-skipped.
-
-- `cuvs::selection::select_k` -> `nn.topk.top_k`, WIRED, behind
-  `use_vendor_topk`, with the ported RAFT radix select kept reachable so the
-  vendor answer is checkable. `VENDOR_LIBRARIES.md`.
-- `cuvs::distance::pairwise_distance` at `:189` (cuBLAS underneath) ->
-  `linalg.matmul` via `core/gemm.mojo::gemm_nt`, WIRED. N-T is the shape it
-  supports and the shape every distance wants, so this one costs nothing.
-- `raft::linalg::norm` at `:107-149` -> `core/row_norms.mojo`, whose block
-  reduction is already `max.gpu.primitives.block.sum`.
-- The L2 epilogue at `:207-217` is `raft::linalg::map_offset`, which is
-  RAFT's OWN portable elementwise map and not a CUB/cuBLAS call. Rule 1
-  applies, not rule 2: port their kernel, which is what
-  `core/expand_distances.mojo` is. Not a substitution candidate.
-- `raft::matrix::fill` at `:165-172`, their `n < k` short-fill, is not ported
-  at all. That is a missing CASE, not a missing primitive; see
-  `neighbors/UNPORTED.tsv`.
+WHAT IS THEIRS ON THIS PATH
+----------------------------
+- `cuvs::distance::pairwise_distance` at `:172-183` is cuBLAS underneath, and
+  cuBLAS has no source to port, so this calls `linalg.matmul` through
+  `core/gemm.mojo::gemm_nt`. That substitution is legitimate HERE and only
+  here, because a materialized distance matrix is what their own fallback
+  asks for on this path.
+- `cuvs::selection::select_k` at `:265` and `:305`. Their `select_k`
+  dispatches (`raft/matrix/detail/select_k-inl.cuh:47-72`) to WARPSORT for
+  `2 < k <= 256` and to RADIX only above that, so radix is their second
+  choice across the whole practical range. `select_radix.mojo` is ported and
+  is the selector here; `nn.topk.top_k` stays reachable behind
+  `use_vendor_topk` as a second opinion the ported selector can be checked
+  against, and `neighbors/mojo_only/knn_check.mojo` runs that comparison.
+- `raft::linalg::rowNorm` at `:110-146` -> `core/row_norms.mojo`, hoisted out
+  of the tile loop exactly as their comment at `:107-109` says.
+- The L2 epilogue at `:184-205` is `raft::linalg::map_offset` over their
+  `l2_exp_cutlass_op`. That is RAFT's own portable elementwise map, so it is
+  a port and not a substitution: `core/expand_distances.mojo`. It is MISSING
+  one of the op's two clamp clauses; see the lane file.
 
 WHAT IS NOT PORTED
 ------------------
-Their `DistanceEpilogue` template, their precomputed-norm fast paths, the
-sparse and the non-expanded metrics, and the multi-index merge. See
-`neighbors/UNPORTED.tsv`.
+Their `DistanceEpilogue` template, the bitmap/bitset filters at `:229-256`,
+the sparse and non-expanded metrics, `haversine_knn`, and the multi-index
+merge (`knn_merge_parts`). See `neighbors/UNPORTED.tsv`.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -70,6 +76,10 @@ from nn.topk import top_k
 from neighbors.ported.matrix.detail.select_radix import (
     SELECT_BLOCK,
     radix_topk_one_block_kernel,
+)
+from neighbors.ported.neighbors.detail.fused_l2_knn import (
+    FKNN_MAX_NN,
+    fused_l2_knn,
 )
 
 
@@ -119,15 +129,16 @@ def tiled_brute_force_knn(
 ) raises:
     """Tile the QUERIES, keep the whole index resident, top-k per query row.
 
-    Their loop tiles both axes. This tiles queries only, because the index
-    axis is what the top-k reduces over and splitting it would need a merge
-    of partial top-k lists, which is their multi-index path and is not
-    ported. So `n_index` columns of one query tile must fit `dist_tile`, and
-    `query_tile` is the knob that makes that true.
+    THEIR FALLBACK, reached from `brute_force_knn_impl` below only when the
+    fused path's conditions fail (k > 64, or a metric fusion does not cover).
 
-    That IS a deviation from their shape, and it is the honest one to take
-    first: the merge is the part with a correctness trap in it, and this port
-    has no number yet.
+    Their loop tiles both axes. This tiles queries only, because the index
+    axis is what the top-k reduces over and splitting it needs a merge of
+    partial top-k lists (`:278-320`). That merge is NOT ported and is the
+    largest remaining gap on this path; the lane file carries the full
+    reading of their `num_col_tiles` / `temp_out_cols` machinery and what it
+    would take. So `n_index` columns of one query tile must fit `dist_tile`,
+    and `query_tile` is the knob that makes that true.
     """
     var q = 0
     while q < n_queries:
@@ -159,12 +170,12 @@ def tiled_brute_force_knn(
         # THE SELECTION. Two implementations, and which one runs is a
         # parameter rather than a preference.
         #
-        # cuVS calls `cuvs::selection::select_k`, a VENDOR primitive, so by
-        # the standing rule the faithful port calls OURS: `nn.topk.top_k`,
-        # which has a GPU form (`ctx: DeviceContext`, `target`). The ported
-        # RAFT radix select stays reachable because it is the only way to
-        # check the vendor call's answer against something, and because a
-        # backend without a tuned top-k needs it.
+        # The ported RAFT radix select is the default. `nn.topk.top_k` is a
+        # device-wide call that consumes a materialized matrix, which is
+        # exactly what this path already has, so it is a legitimate second
+        # opinion HERE - and it is the reason it can never be the fused
+        # path's selector, because a device-wide call cannot live inside a
+        # kernel. `neighbors/mojo_only/knn_check.mojo` diffs the two.
         if use_vendor_topk:
             var dv = dist_tile.create_sub_buffer[DType.float32](
                 0, rows * n_index
@@ -196,3 +207,118 @@ def tiled_brute_force_knn(
             )
         q += rows
     ctx.synchronize()
+
+
+def brute_force_knn_impl(
+    ctx: DeviceContext,
+    mut queries: DeviceBuffer[DType.float32],
+    mut query_norm: DeviceBuffer[DType.float32],
+    mut index: DeviceBuffer[DType.float32],
+    mut index_norm: DeviceBuffer[DType.float32],
+    mut dist_tile: DeviceBuffer[DType.float32],
+    mut buf_val: DeviceBuffer[DType.float32],
+    mut buf_idx: DeviceBuffer[DType.uint32],
+    mut out_dist: DeviceBuffer[DType.float32],
+    mut out_idx: DeviceBuffer[DType.uint32],
+    mut out_idx32: DeviceBuffer[DType.int32],
+    n_queries: Int,
+    n_index: Int,
+    n_features: Int,
+    k: Int,
+    query_tile: Int,
+    buf_len: Int,
+    is_sqrt: Bool,
+    use_vendor_topk: Bool = False,
+    row_major_query: Bool = True,
+    row_major_index: Bool = True,
+) raises:
+    """`brute_force_knn_impl`'s dispatch, `knn_brute_force.cuh:443-447`.
+
+    Their four conditions, in their order:
+
+        k <= 64
+        rowMajorQuery == rowMajorIndex
+        rowMajorQuery == true
+        metric is one of L2Unexpanded / L2SqrtUnexpanded / L2Expanded /
+                         L2SqrtExpanded
+
+    The metric test is not a runtime test here because this port carries only
+    the expanded-L2 arm, so it is satisfied by construction; `is_sqrt`
+    selects between L2Expanded and L2SqrtExpanded, both of which are in their
+    set. If a metric outside that set is ever ported, this is where it has to
+    become a switch, and the `Haversine` case at `:481-487` goes with it.
+
+    `k > n_index` is refused outright rather than dispatched, because their
+    `n < k` fill at `:157-166` is not ported on either arm and the fallback's
+    selector cannot take `k > len`. See the raise below.
+
+    `query_tile`, `buf_len`, `dist_tile`, `buf_val`, `buf_idx` and
+    `out_idx32` are only read on the fallback path. The fused path needs none
+    of them, which is the whole point of it.
+    """
+    # THEIR `n < k` CASE IS NOT PORTED ON EITHER ARM, SO REFUSE IT.
+    #
+    # `knn_brute_force.cuh:157-166` fills the output with
+    # `numeric_limits<DistanceT>::lowest()` and, for a signed index type,
+    # `-1`, so a row with fewer than k candidates comes back marked. That
+    # fill is not ported. Worse, the selector this path would reach cannot
+    # take `k > len` at all: `select_radix.mojo:329` looks for the bucket
+    # where `prev_count < current_k <= cur_count`, and when the whole row
+    # holds fewer than k elements no bucket ever satisfies it, so `ctr` is
+    # never updated, every later pass drops every element, and `last_filter`
+    # reads a buffer nothing wrote. That is a silent wrong answer, and
+    # returning one is worse than refusing.
+    #
+    # Read from their file and from ours, NOT measured on hardware. Porting
+    # the fill needs the selection clamped to `min(k, n)` and its packed
+    # output scattered back to a stride of `k`, which is the same scatter the
+    # two-axis tiling needs; both are in the lane file as one open item.
+    if k > n_index:
+        raise Error(
+            "brute_force_knn_impl: k > n_index. Their `n < k` short-fill at"
+            " knn_brute_force.cuh:157-166 is not ported and the ported radix"
+            " selector cannot take k > len; see the lane file."
+        )
+
+    var fused_ok = (
+        k <= FKNN_MAX_NN
+        and row_major_query == row_major_index
+        and row_major_query
+    )
+    if fused_ok:
+        fused_l2_knn(
+            ctx,
+            queries,
+            query_norm,
+            index,
+            index_norm,
+            out_dist,
+            out_idx,
+            n_queries,
+            n_index,
+            n_features,
+            k,
+            is_sqrt,
+        )
+    else:
+        tiled_brute_force_knn(
+            ctx,
+            queries,
+            query_norm,
+            index,
+            index_norm,
+            dist_tile,
+            buf_val,
+            buf_idx,
+            out_dist,
+            out_idx,
+            out_idx32,
+            n_queries,
+            n_index,
+            n_features,
+            k,
+            query_tile,
+            buf_len,
+            is_sqrt,
+            use_vendor_topk,
+        )

@@ -1,22 +1,26 @@
 """Assign every sample to its nearest centroid, tiled to bound memory.
 
-PORT OF `cuvs/src/cluster/detail/minClusterDistanceCompute.cu` at cuVS
-`2140532c`. Partial. Do not improve.
+PORT OF `minClusterAndDistanceCompute`,
+`cuvs/src/cluster/detail/kmeans_common.cuh:360-493`, at cuVS `94c2819`.
+Partial. Do not improve. (There is no `minClusterDistanceCompute.cu` in
+cuVS; this function lives in `kmeans_common.cuh`.)
 
 This is the assignment half of Lloyd's algorithm and it is where essentially
-all the time goes. Their file has three arms; this ports the one that runs
-on hardware we can target.
+all the time goes. Their dispatch has exactly TWO arms and the selector is a
+metric test with nothing else in it (`is_fused`, `:378-379`):
 
-    can_use_fused && use_fused   -> CUTLASS fused kernel      NOT PORTED
-    can_use_fused && !use_fused  -> GEMM then reduce, tiled   PORTED (here)
-    !can_use_fused               -> full pairwise matrix      NOT PORTED
+    L2Expanded / L2SqrtExpanded -> fusedDistanceNNMinReduce  (`:430-449`)
+    anything else               -> pairwise matrix + reduce  (`:450-491`)
 
-The third arm is their general path for metrics with no expanded form. It
-materializes the whole `ns x nc` distance matrix and calls a stock
-`coalescedReduction`. k-means never reaches it, because `kmeans_fit` refuses
-any metric except `L2Expanded` and `L2SqrtExpanded` before it gets here
-(`detail/kmeans.cuh:568`), so the arm is dead for this algorithm and porting
-it would be porting unreachable code.
+k-means's default metric is L2Expanded, so THEIR DISPATCH TAKES THE FUSED
+ARM, and so does this file. The fused kernel is ported at
+`distance/fused_distance_nn/simt_kernel.mojo` and writes no distance tile at
+all. The second arm is kept below only so the two can be diffed; it is not
+the path.
+
+Note what this means for the tiling: on the fused arm THEY force
+`dataBatchSize = n_samples` (`:380`) and log that `batch_samples` is being
+ignored (`detail/kmeans.cuh:837-846`). Tiling is the OTHER arm's property.
 
 THE TILING IS THE POINT OF THE FILE
 -----------------------------------
@@ -72,7 +76,7 @@ def compute_centroid_norms(
     n_features: Int,
     metric: Int,
 ) raises:
-    """`minClusterDistanceCompute.cu:43-49`.
+    """`kmeans_common.cuh:383-389`, the fused arm's centroid `rowNorm`.
 
     Every assignment, not once per fit: the centroids moved.
     """
@@ -121,10 +125,11 @@ def min_cluster_and_distance_compute(
 
     var is_sqrt = Int32(1 if metric_is_sqrt(metric) else 0)
 
-    # THE FUSED PATH. `use_fused` is their selector and it is True on every
-    # architecture before Blackwell; the CUTLASS version is unportable but
-    # the SIMT one is not, and it is the one that never writes the distance
-    # tile. See `distance/fused_distance_nn/simt_kernel.mojo`.
+    # THE FUSED PATH, which is the one their dispatch takes for this metric
+    # (`is_fused`, `kmeans_common.cuh:378-379` and `:430-449`). The CUTLASS
+    # specialization of it is unportable but the SIMT one is not, and it is
+    # the one that never writes the distance tile. See
+    # `distance/fused_distance_nn/simt_kernel.mojo`.
     #
     # `dist_buf` is now unused on this path and is kept in the signature so
     # the unfused arm stays reachable for differential testing.

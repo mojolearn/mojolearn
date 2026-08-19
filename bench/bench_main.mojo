@@ -27,12 +27,12 @@ from cluster.ported.cluster.kmeans_params import (
     KMeansParams,
     METRIC_L2_EXPANDED,
 )
-from dbscan.ported.dbscan.runner import dbscan_fit
+from dbscan.ported.dbscan.dbscan import dbscan_fit_impl
 from decomposition.ported.linalg.detail.pca import pca_fit
 from glm.ported.linalg.detail.lstsq import lstsq_eig
 from neighbors.ported.neighbors.detail.knn_brute_force import (
+    brute_force_knn_impl,
     compute_norms,
-    tiled_brute_force_knn,
 )
 from mojo_only.fixed_point import choose_scale
 
@@ -175,16 +175,12 @@ def main() raises:
     ctx.synchronize()
 
     # ================= DBSCAN setup =====================================
+    # DBSCAN's workspace is allocated inside `dbscan_fit_impl`, sized from the
+    # device's memory by `compute_batch_size` (`dbscan.cuh:34`), exactly as
+    # cuML's `dbscanFitImpl` does it. This harness used to allocate an
+    # `N x N` distance matrix and an `N x N` adjacency here, which is what
+    # capped `db_rows` at 4,000.
     var db_x = ctx.enqueue_create_buffer[DType.float32](db_rows * db_cols)
-    var db_xa = ctx.enqueue_create_buffer[DType.float32](db_rows * db_cols)
-    var db_xn = ctx.enqueue_create_buffer[DType.float32](db_rows)
-    var db_xna = ctx.enqueue_create_buffer[DType.float32](db_rows)
-    var db_d = ctx.enqueue_create_buffer[DType.float32](db_rows * db_rows)
-    var db_adj = ctx.enqueue_create_buffer[DType.uint8](db_rows * db_rows)
-    var db_vd = ctx.enqueue_create_buffer[DType.int32](db_rows)
-    var db_core = ctx.enqueue_create_buffer[DType.uint8](db_rows)
-    var db_ex = ctx.enqueue_create_buffer[DType.int32](db_rows + 1)
-    var db_ci = ctx.enqueue_create_buffer[DType.int32](db_rows * db_rows)
     var db_lab = ctx.enqueue_create_buffer[DType.int32](db_rows)
     ctx.synchronize()
     var hdx = ctx.enqueue_create_host_buffer[DType.float32](db_rows * db_cols)
@@ -237,7 +233,9 @@ def main() raises:
         t0 = perf_counter_ns()
         compute_norms(ctx, kn_idx, kn_in, knn_index, knn_cols, False)
         compute_norms(ctx, kn_q, kn_qn, knn_queries, knn_cols, False)
-        tiled_brute_force_knn(
+        # THEIR DISPATCH, `knn_brute_force.cuh:443`. k=10 <= 64 on
+        # row-major L2 takes `fusedL2Knn`, not `tiled_brute_force_knn`.
+        brute_force_knn_impl(
             ctx, kn_q, kn_qn, kn_idx, kn_in, kn_dist, kn_bv, kn_bi,
             kn_od, kn_oi, kn_oi32, knn_queries, knn_index, knn_cols, knn_k,
             knn_tile, kn_bl, False,
@@ -251,10 +249,7 @@ def main() raises:
         _emit("pca", perf_counter_ns() - t0)
 
         t0 = perf_counter_ns()
-        _ = dbscan_fit(
-            ctx, db_x, db_xn, db_d, db_adj, db_vd, db_core, db_ex, db_ci,
-            db_lab, db_xa, db_xna, db_rows, db_cols, 0.35, 5,
-        )
+        _ = dbscan_fit_impl(ctx, db_x, db_lab, db_rows, db_cols, 0.35, 5)
         ctx.synchronize()
         _emit("dbscan", perf_counter_ns() - t0)
 

@@ -1,5 +1,11 @@
-cuml dbscan/runner.cuh batching	not ported	they tile rows so the adjacency matrix stays bounded; one batch here
-cuml dbscan/mergelabels/	not ported	only needed to combine per-batch labelings, and there is one batch
-cuml dbscan/corepoints/exchange.cuh	out of scope	multi-GPU
-cuml dbscan/runner.cuh monotonic relabelling	not ported	renumbers clusters 0..k-1 to match sklearn. Labels are arbitrary up to permutation, so the check compares the PARTITION
-cuvs neighbors/ball_cover	not ported	an index that prunes the neighbourhood search. Brute force first, measure where it stops winning
+cuml dbscan/runner.cuh core_indices	not ported	thrust::copy_if stream compaction of the core mask into an index list (runner.cuh:419-442). Optional output, nullptr in every cuML default path
+cuml dbscan/corepoints/exchange.cuh	out of scope	multi-GPU allgather of the core mask
+cuml dbscan/mergelabels/tree_reduction.cuh	out of scope	multi-GPU; it is comm.isend/irecv over a binary tree of ranks and calls the same MergeLabels::run we ported on the receiving side
+cuml dbscan/vertexdeg/algo.cuh sample_weight	not ported	coalescedReduction over adj with `adj_ij ? sample_weight[j] : 0` gives a WEIGHTED degree that CorePoints::compute thresholds instead of the integer one. Reaches the public API as DBSCAN(sample_weight=)
+cuml dbscan/vertexdeg/algo.cuh CosineExpanded	not ported	row-normalize x in place, eps2 = 2*eps, same neighborhood kernel, un-normalize. Two matrixVectorOp passes over the dataset
+cuml dbscan/vertexdeg/precomputed.cuh	not ported	metric == Precomputed, algo_vd == 2, x is an N x N distance matrix
+cuml dbscan/dbscan.cuh metric switch	not ported	L2SqrtExpanded/L2SqrtUnexpanded only; the Precomputed and Cosine branches of dbscanFitImpl go with the two rows above
+raft adj_to_csr atomicIncWarp	not ported	cg::coalesced_threads() has no Mojo counterpart; their comment prices it at up to 32x the atomic traffic. Deviation 34
+raft contractions.cuh double buffering	not ported	two smem pages at Policy4x4 is 32 KB, exactly Metal's threadgroup ceiling. Same gap core/gemm.mojo records
+raft contractions.cuh Veclen loads	not ported	their float path loads 4 floats per LDG; ours loads one. Veclen still sets SmemStride, so the bank-conflict padding is theirs
+cuvs neighbors/ball_cover	not ported	the index that prunes the neighbourhood search and turns the quadratic into something else. Different lane

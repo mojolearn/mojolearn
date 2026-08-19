@@ -129,7 +129,9 @@ contraction is a codegen decision a runtime row cannot reach.
 
 ## A second section, a second upstream: `cluster/`
 
-`cluster/` is a port of **cuVS** k-means at commit `2140532c`, built the same
+`cluster/` is a port of **cuVS** k-means at commit `94c2819` (branch-25.08, cloned 2026-08-19). The commit `2140532c` that this
+file and every `cluster/` header used to name is NOT A VALID OBJECT in the
+cuVS repository; it was never verifiable and is corrected rather than kept. Built the same
 way and under the same rule. It is the first algorithm here with no histogram
 in it, and per `PLAN.md` that is why it was built first: it is the smallest
 thing that can answer whether the shared substrate is actually shared or is

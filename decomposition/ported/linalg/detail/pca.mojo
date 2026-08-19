@@ -1,12 +1,19 @@
 """PCA by covariance eigendecomposition.
 
-PORT OF `raft/linalg/detail/pca.cuh` and the `cal_eig` /
-`trunc_comp_exp_vars` pair from `raft/linalg/detail/tsvd.cuh` at RAFT
-`9aa17e5`. Partial. Do not improve.
+PORT OF `cuml/cpp/src/pca/pca.cuh` and the `calEig` /
+`truncCompExpVars` pair from `cuml/cpp/src/tsvd/tsvd.cuh` at cuML `00094f7`
+(branch-25.08), against RAFT `661a3b8`. Partial. Do not improve.
+
+**THE FILE PATHS ABOVE WERE WRONG UNTIL THIS ROUND.** They said
+`raft/linalg/detail/pca.cuh` and `raft/linalg/detail/tsvd.cuh`. Neither file
+has ever existed: `git log --all -- cpp/include/raft/linalg/detail/pca.cuh`
+in the RAFT checkout returns nothing. PCA lives in cuML, not in RAFT. Every
+line number cited from those two paths was therefore invented, and the
+corrections below were made by reading the real files.
 
 **RAFT's PCA is NOT randomized SVD**, which is what I expected to find and is
-worth stating because it changes what the port costs. `pca_fit` is six steps
-(`detail/pca.cuh:128-190`):
+worth stating because it changes what the port costs. `pcaFit` is six steps
+(`cuml/cpp/src/pca/pca.cuh:104-139`):
 
     1  mean over columns                     -> mu           O(rows)
     2  center the input IN PLACE             ->              O(rows)
@@ -26,23 +33,50 @@ wrong in a way nothing in the fit itself will reveal.
 
 ORDER IS PART OF THE ANSWER
 ---------------------------
-`cal_eig` gets ascending eigenvalues from cuSOLVER and then calls
-`raft::matrix::col_reverse` (`tsvd.cuh:150`) to make components descend by
+`calEig` gets ascending eigenvalues from cuSOLVER and then calls
+`raft::matrix::colReverse` (`tsvd.cuh:122`) to make components descend by
 explained variance. Copied. PCA components in the wrong order are not a
 lesser answer, they are a different one.
 
-SIGN IS ALSO PART OF THE ANSWER
--------------------------------
+SIGN IS ALSO PART OF THE ANSWER, AND HERE WE DO NOT MATCH THEM
+--------------------------------------------------------------
 An eigenvector is defined up to sign, so any implementation must PICK one or
-its output is not reproducible. RAFT calls `sign_flip_components` with a
-`flip_signs_based_on_U` switch (`detail/pca.cuh:189`). This ports the default
-arm, which fixes the sign from the components themselves: make the entry of
-largest magnitude in each component positive. scikit-learn's `svd_flip` uses
-the same convention, which is what makes the two comparable at all.
+its output is not reproducible.
 
-That flip is `sign_flip_kernel` below, a port of their `signFlipKernel`
-(`raft/matrix/detail/math.cuh:358`), and it runs ON THE DEVICE where theirs
-does. It replaced a host loop over the copied-back eigenvectors.
+WHAT THIS DOCSTRING USED TO SAY, WHICH WAS INVENTED: "RAFT calls
+`sign_flip_components` with a `flip_signs_based_on_U` switch
+(`detail/pca.cuh:189`). This ports the default arm." **Neither
+`sign_flip_components` nor `flip_signs_based_on_U` exists anywhere in RAFT or
+cuML.** `grep -rn` over both checkouts returns nothing. The whole passage was
+written from a recollection of their code rather than from their code.
+
+WHAT THEY ACTUALLY DO, read from the files:
+
+  - `pcaFit` (`cuml/cpp/src/pca/pca.cuh:104`) -- the entry `PCA.fit()`
+    reaches (`pca.pyx:547`) -- **does not flip signs at all.** Its component
+    signs are whatever cuSOLVER happened to return.
+  - `pcaFitTransform` (`pca.cuh:160`) calls `ML::signFlip`
+    (`cuml/cpp/src/tsvd/tsvd.cuh:139`) after the transform, and that one is
+    **U-BASED**: it takes the argmax-by-absolute-value down each column of
+    the TRANSFORMED data and flips the score column and the matching
+    component row together (`tsvd.cuh:151-176`).
+  - `raft::matrix::signFlip` / `signFlipKernel`
+    (`raft/matrix/detail/math.cuh:367`) is a V-based flip that does exist,
+    but **no cuML PCA or tSVD path calls it**; only RAFT's own unit test does
+    (`raft/cpp/tests/matrix/math.cu:176`).
+
+OURS: the V-based flip, unconditionally, in `pcaFit`'s position. That is a
+DEVIATION on two counts -- they do not flip on this path, and where they do
+flip it is U-based. The reason is that a fit whose signs are "whatever the
+eigensolver returned" is not reproducible across solvers, and ours is not
+cuSOLVER. scikit-learn 1.9 resolves it the same way and in the same
+direction: `_fit_full` calls `svd_flip(U, Vt, u_based_decision=False)`, which
+is exactly "largest-magnitude entry of each component positive". Verified
+against the installed sklearn, not assumed.
+
+That flip is `sign_flip_kernel` below, a transliteration of `signFlipKernel`
+(`raft/matrix/detail/math.cuh:367`), and it runs ON THE DEVICE. It replaced a
+host loop over the copied-back eigenvectors.
 """
 
 from std.gpu import block_idx, thread_idx
@@ -54,10 +88,8 @@ from max.gpu.primitives.block import min as block_min
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
-from cluster.mojo_only.reduce_by_key import copy_f32_kernel
 from core.gemm import gemm_nt, gemm_tn
 from core.column_stats import (
-    COV_TILE,
     STATS_TPB,
     column_mean_kernel,
     scale_in_place_kernel,
@@ -65,6 +97,8 @@ from core.column_stats import (
 )
 from decomposition.mojo_only.jacobi_eigh import jacobi_eigh
 from decomposition.mojo_only.jacobi_eigh_device import (
+    JACOBI_SWEEPS,
+    JACOBI_TOL,
     JACOBI_TPB,
     jacobi_eigh_kernel,
 )
@@ -131,7 +165,7 @@ def compute_covariance(
         block_dim=(256, 1, 1),
     )
     if restore_input:
-        # `raft::stats::meanAdd`, `detail/pca.cuh:186`. Do not drop this.
+        # `raft::stats::meanAdd`, `pca.cuh:138`. Do not drop this.
         ctx.enqueue_function[shift_columns_kernel](
             x.unsafe_ptr(),
             mu.unsafe_ptr(),
@@ -187,10 +221,13 @@ def pca_fit(
     )
 
 
-# RAFT dispatches `TPB` on the column LENGTH: 32 for `D <= 32`, then 64, 128,
-# 256 (`math.cuh:391-400`). `jacobi_eigh_kernel` caps `n_cols` at
-# the device Jacobi now streams from global memory and has NO size cap, so
-# the first one. The strided loops below are still written for any `n`.
+# LAUNCH GEOMETRY, NOT A PROBLEM BOUND. RAFT dispatches this `TPB` on the
+# column LENGTH -- 32 for `D <= 32`, then 64, 128, 256
+# (`raft/matrix/detail/math.cuh:400-409`) -- purely to give a long column
+# more threads. Every loop in the kernel below is strided by `SIGNFLIP_TPB`,
+# so any `n` is covered at any of those values and 32 is a throughput choice.
+# Matching their dispatch ladder is an OPEN item, recorded in the lane
+# report: it changes how fast a 128-column flip runs, not what it returns.
 comptime SIGNFLIP_TPB = 32
 
 
@@ -198,12 +235,13 @@ def sign_flip_kernel(
     v: MutPointer[Float32, MutAnyOrigin],
     n_in: Int32,
 ):
-    """PORT OF `signFlipKernel`, `raft/matrix/detail/math.cuh:358`.
+    """PORT OF `signFlipKernel`, `raft/matrix/detail/math.cuh:367`.
 
     One block per component. Finds the entry of largest ABSOLUTE value in the
-    component and negates the whole component if that entry is negative, which
-    is the convention `sign_flip_components` fixes (`detail/pca.cuh:189` ->
-    `detail/tsvd.cuh:173`) and the one scikit-learn's `svd_flip` uses.
+    component and negates the whole component if that entry is negative. That
+    is the convention scikit-learn's `svd_flip(..., u_based_decision=False)`
+    uses. It is NOT cuML's: see the module docstring, which records that
+    `pcaFit` does not flip at all and `pcaFitTransform` flips on U.
 
     This REPLACED a host loop in `eig_and_truncate` that did the same thing on
     the copied-back eigenvectors. Same convention, same tie-break, on the
@@ -229,21 +267,12 @@ def sign_flip_kernel(
     matrix whose eigendecomposition already cost O(n^3).
 
     TIE-BREAK, WHICH IS PART OF THE CONVENTION. `cub::ArgMax` keeps the LOWER
-    index on a tie, their own `thrust` variant of this loop keeps the first
-    strict improvement (`detail/tsvd.cuh:290-297`, `if (val > max)`), and the
-    host code this replaced did the same with `abs(v) > abs(biggest)`. Taking
-    the MINIMUM index among the entries attaining the maximum reproduces all
-    three. Without it, a component holding both `+x` and `-x` at the largest
+    index on a tie, and cuML's own thrust loop keeps the first strict
+    improvement (`cuml/cpp/src/tsvd/tsvd.cuh:160`, `if (val > max)`). Taking
+    the MINIMUM index among the entries attaining the maximum reproduces
+    both. Without it, a component holding both `+x` and `-x` at the largest
     magnitude would have no defined sign, which is exactly the
     irreproducibility the sign flip exists to remove.
-
-    NOTE ON WHAT CURRENT RAFT CALLS: `sign_flip_components`, the arm
-    `pca_fit` actually reaches today, expresses this as a
-    `raft::linalg::reduce` with a max-by-absolute-value custom operator
-    (`detail/tsvd.cuh:229-243`). That is a device-wide reduce with a custom
-    operator, which VENDOR_LIBRARIES.md records as NOT FOUND. `signFlipKernel`
-    is the same answer written as an ordinary portable kernel, so it is the
-    one that ports.
     """
     var n = Int(n_in)
     var col = Int(block_idx.x)
@@ -319,37 +348,43 @@ def eig_and_truncate(
     n_components: Int,
     singular_scale: Int,
 ) raises -> PCAResult:
-    """`cal_eig` + `trunc_comp_exp_vars`, shared by PCA and truncated SVD.
+    """`calEig` + `truncCompExpVars`, shared by PCA and truncated SVD.
 
     Both callers reach this with an `n_cols x n_cols` symmetric matrix and
     differ only in how they built it: PCA from CENTERED data scaled by
     `1 / (n_rows - 1)`, truncated SVD from RAW data with no scaling. Their
-    two files call the same `cal_eig`, so this is one function here too.
+    two files call the same `calEig`, so this is one function here too.
 
     `singular_scale` is the `n_rows - 1` factor `pca_fit` multiplies by
-    before taking the square root (`detail/pca.cuh:180`). `tsvd_fit` passes
+    before taking the square root (`pca.cuh:136`). `tsvd_fit` passes
     1, because its eigenvalues are already the squared singular values.
     """
-    # `cal_eig` -> cuSOLVER `syevj`, WHICH RUNS ON THE DEVICE. So this runs
+    # `calEig` -> cuSOLVER `syevj`, WHICH RUNS ON THE DEVICE. So this runs
     # on the device too. The first version of this port put it on the host,
     # which was inside HOST_AND_DEVICE.md's O(rows) rule but was NOT a mirror
     # of their host/device split, and mirroring that split is the standing
     # rule. `jacobi_eigh.mojo` survives as the reference this is checked
     # against.
     var vec_buf = ctx.enqueue_create_buffer[DType.float32](n_cols * n_cols)
+    var info_buf = ctx.enqueue_create_buffer[DType.float32](3)
     ctx.synchronize()
+    # `tol` and `sweeps` are `raft::linalg::eigJacobi`'s own defaults
+    # (`raft/linalg/eig.cuh:108-109`) and cuML's Python defaults for the
+    # Jacobi arm (`pca.pyx` `tol=1e-7`, `iterated_power=15`). They used to be
+    # a hardcoded `80` and `1e-10`, neither of which came from their code.
     ctx.enqueue_function[jacobi_eigh_kernel](
         cov.unsafe_ptr(),
         vec_buf.unsafe_ptr(),
+        info_buf.unsafe_ptr(),
         Int32(n_cols),
-        Int32(80),
-        Float32(1.0e-10),
+        Int32(JACOBI_SWEEPS),
+        Float32(JACOBI_TOL),
         grid_dim=(1, 1, 1),
         block_dim=(JACOBI_TPB, 1, 1),
     )
 
     # `sign_flip_components`, `detail/pca.cuh:189`, ported as
-    # `signFlipKernel` (`raft/matrix/detail/math.cuh:358`). One block per
+    # `signFlipKernel` (`raft/matrix/detail/math.cuh:367`). One block per
     # eigenvector, and the whole `n_cols x n_cols` basis is fixed in one
     # launch before anything is copied back, which is what REPLACED the host
     # loop that used to run per SELECTED component further down. The
@@ -369,7 +404,7 @@ def eig_and_truncate(
 
     # Only the O(n_cols^2) post-processing comes back: ordering, truncation
     # and the variance ratios. RAFT does that part on device too
-    # (`col_reverse`, `trunc_zero_origin`, `matrix::ratio`), so this is still
+    # (`colReverse`, `truncZeroOrigin`, `matrix::ratio`), so this is still
     # a departure and it is named in UNWIRED.md rather than glossed. It is
     # O(cols^2), never O(rows).
     #
@@ -377,9 +412,33 @@ def eig_and_truncate(
     # applied it on the device, so `h_vec` arrives already flipped.
     var h_cov = ctx.enqueue_create_host_buffer[DType.float32](n_cols * n_cols)
     var h_vec = ctx.enqueue_create_host_buffer[DType.float32](n_cols * n_cols)
+    var h_info = ctx.enqueue_create_host_buffer[DType.float32](3)
     ctx.enqueue_copy(dst_ptr=h_cov.unsafe_ptr(), src_buf=cov)
     ctx.enqueue_copy(dst_ptr=h_vec.unsafe_ptr(), src_buf=vec_buf)
+    ctx.enqueue_copy(dst_ptr=h_info.unsafe_ptr(), src_buf=info_buf)
     ctx.synchronize()
+
+    # `eigDC`, the arm cuML's default `svd_solver='auto'` reaches, aborts on a
+    # non-zero `dev_info` with "eigensolver couldn't converge to a solution"
+    # (`raft/linalg/detail/eig.cuh:79-82`). Their JACOBI arm silently does
+    # not (`eig.cuh:310`, `executed_sweeps` fetched and never read). We follow
+    # the default arm: an unconverged eigendecomposition returned as if it
+    # were one is the same defect as the 32-feature cap, a wrong answer with
+    # no error.
+    if h_info.unsafe_ptr().unsafe_load(0) == Float32(0.0):
+        raise Error(
+            "the device Jacobi did not converge in "
+            + String(JACOBI_SWEEPS)
+            + " sweeps at n_cols = "
+            + String(n_cols)
+            + ": ||offdiag(A)||_F / ||A||_F is still "
+            + String(h_info.unsafe_ptr().unsafe_load(1))
+            + " against a tolerance of "
+            + String(JACOBI_TOL)
+            + ". cuSOLVER's syevj has the same failure mode and the same"
+            " remedy, which is more sweeps. A non-symmetric covariance"
+            " produces this too; see check_covariance_is_symmetric."
+        )
 
     var a = List[Float64]()
     for i in range(n_cols * n_cols):
@@ -388,31 +447,32 @@ def eig_and_truncate(
     for i in range(n_cols * n_cols):
         vecs.append(Float64(h_vec.unsafe_ptr().unsafe_load(i)))
 
-    # `cal_eig` + `col_reverse`: order DESCENDING by eigenvalue.
+    # `calEig` + `colReverse`: order DESCENDING by eigenvalue.
     #
     # A SORT, WHERE RAFT ONLY REVERSES, AND WHY THAT IS NOT A REGRESSION.
-    # `cal_eig` calls cuSOLVER `syevj`, which returns eigenvalues ALREADY
-    # ASCENDING, so `tsvd.cuh:149` reverses with `raft::matrix::col_reverse`
-    # and `tsvd.cuh:156` reverses the variances with `row_reverse`: O(n) on
+    # `calEig` calls cuSOLVER `syevj`, which returns eigenvalues ALREADY
+    # ASCENDING, so `tsvd.cuh:122` reverses with `raft::matrix::colReverse`
+    # and `tsvd.cuh:125` reverses the variances with `rowReverse`: O(n) on
     # the device. **Cyclic Jacobi does not order anything.** Its output sits
     # in whatever order the rotations left it, so a reverse here would return
     # an arbitrary permutation, which for PCA is a DIFFERENT answer and not a
     # worse one. The sort is not a slower way to do their reverse, it is the
     # step their eigensolver already did for them.
     #
-    # Left as an O(n_cols^2) selection sort on purpose. `jacobi_eigh_kernel`
-    # has no `n_cols` cap since the Jacobi moved to global memory
-    # arrays in shared memory), so this is at most 496 comparisons and cannot
-    # grow while that cap holds. It is a permutation of INDICES: no
-    # arithmetic, so nothing here can move a number.
+    # An O(n_cols^2) selection sort, ON THE HOST, and that is now a real
+    # cost rather than a rounding error. The note that used to sit here said
+    # it "cannot grow while that cap holds"; the cap is gone, so the sentence
+    # is deleted and the number is stated instead: 8128 index comparisons at
+    # n_cols = 128 and 32640 at 256, against an eigendecomposition that
+    # already cost O(n_cols^3) on the device. It is a permutation of INDICES
+    # with no arithmetic in it, so nothing here can move a number, and
+    # `HOST_AND_DEVICE.md`'s rule is about O(rows), which this is not.
     #
-    # WHAT TO DO WHEN THE CAP LIFTS. When the eigensolver takes an `n_cols`
-    # that a single block cannot hold, this loop is the wrong shape and
-    # `nn.argsort.argsort`, recorded AVAILABLE and device-capable in
-    # VENDOR_LIBRARIES.md, is the replacement: sort the diagonal descending
-    # on the device and gather. Not done now because it would be a device
-    # call and a gather kernel added for a 32-element list, and because the
-    # cap is the thing that has to move first.
+    # It stops being the right shape when `n_cols` reaches the low thousands.
+    # `nn.argsort.argsort` is recorded AVAILABLE and device-capable in
+    # VENDOR_LIBRARIES.md and is the replacement when it does: sort the
+    # diagonal descending on the device and gather. OPEN, and named in the
+    # lane report rather than left as a comment nobody counts.
     var order = List[Int]()
     for i in range(n_cols):
         order.append(i)
@@ -444,13 +504,23 @@ def eig_and_truncate(
             components.append(vecs[f * n_cols + src])
         explained_var.append(lam)
         explained_var_ratio.append(lam / total if total != 0.0 else 0.0)
-        # `weighted_sqrt(explained_var, n_rows - 1)`, `detail/pca.cuh:180`.
+        # `weighted_sqrt(explained_var, n_rows - 1)`, `pca.cuh:136`.
         singular_vals.append(sqrt(lam * Float64(singular_scale)))
 
     # `noise_vars`: the mean of the DISCARDED eigenvalues, or zero if none
-    # were discarded (`trunc_comp_exp_vars`, tail).
+    # were discarded (`truncCompExpVars`, `cuml/cpp/src/pca/pca.cuh:74-83`).
+    #
+    # THEIR GUARD IS `n_components < n_cols && n_components < n_rows`, and
+    # ours had only the first half. `n_rows` is not a parameter here because
+    # `eig_and_truncate` is shared with `tsvdFit`, so it arrives folded into
+    # `singular_scale`, which `pcaFit` passes as `n_rows - 1` and `tsvdFit`
+    # passes as 1. `n_components < n_rows` is therefore
+    # `n_components <= singular_scale` on the PCA path. The tSVD path has no
+    # noise variance in cuML at all (`tsvdFit` does not compute one), so
+    # passing 1 makes the guard reject every truncation there, which is the
+    # right answer for the wrong-looking reason and is why it is spelled out.
     var noise = 0.0
-    if n_components < n_cols:
+    if n_components < n_cols and n_components <= singular_scale:
         for c in range(n_components, n_cols):
             noise += a[order[c] * n_cols + order[c]]
         noise /= Float64(n_cols - n_components)

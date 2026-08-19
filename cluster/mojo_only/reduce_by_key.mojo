@@ -49,6 +49,13 @@ It also gives `mojo_only/fixed_point.mojo` its first reader. `UNWIRED.md`
 listed it as verified in isolation and used by no kernel.
 """
 
+from mojo_only.kernel_matrix import (
+    K_LIB_REDUCE_BY_KEY,
+    TARGET_COLUMN,
+    lib_block_size_for,
+)
+
+
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.memory import AddressSpace
@@ -57,7 +64,12 @@ from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
 
-comptime REDUCE_BY_KEY_TPB = 128
+# READ FROM THE MATRIX, not restated here. `mojo_only/kernel_matrix.mojo`
+# owns every tunable in this tree; changing TARGET_COLUMN there rebuilds
+# this kernel for another vendor with no edit in this file.
+comptime REDUCE_BY_KEY_TPB = lib_block_size_for[
+    K_LIB_REDUCE_BY_KEY, TARGET_COLUMN
+]()
 
 
 def accumulate_centroid_sums_kernel(

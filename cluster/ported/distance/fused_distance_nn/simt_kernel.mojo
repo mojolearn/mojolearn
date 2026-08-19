@@ -1,7 +1,7 @@
 """Distance and argmin FUSED, so the distance matrix is never written.
 
 PORT OF `cuvs/src/distance/detail/fused_distance_nn/simt_kernel.cuh` at cuVS
-`2140532c`, built on their `linalg/contractions.cuh` policy. Partial.
+`94c2819`, built on their `linalg/contractions.cuh` policy. Partial.
 Do not improve.
 
 WHY THIS EXISTS AND THE UNFUSED PATH WAS NOT ENOUGH
@@ -57,7 +57,9 @@ unportable. Keeping them apart is the whole content of this section.
    (`detail/fused_distance_nn/helper_structs.cuh:28-33`) compares the VALUE
    only and keeps the shuffled partner on a tie, so their fused answer is
    shuffle-shape dependent; this tree uses the tie-break from their UNFUSED
-   `Reducer` (`unfused_distance_nn.cuh:44-49`) in both arms so the two can be
+   `MinAndDistanceReduceOpImpl` / `KVPMinReduceImpl`
+   (`fused_distance_nn/helper_structs.cuh:39-62`) in both arms so the two can
+   be
    diffed against each other. That was already true of the shared-memory
    merge this replaced, and it is load-bearing rather than tidiness
    (`PORTING.md` 14).
@@ -260,7 +262,7 @@ def fused_distance_nn_kernel(
     # `b.value < a.value ? b : a`, VALUE ONLY, so on a tie their shuffled
     # partner wins and the answer depends on the shuffle shape. This tree
     # uses the total order from their UNFUSED `Reducer`
-    # (`unfused_distance_nn.cuh:44-49`) in both kernels instead:
+    # (`fused_distance_nn/helper_structs.cuh:39-62`) in both kernels instead:
     #     (a.value < b.value) || (a.value == b.value && a.key < b.key)
     # That is what makes the fused and unfused arms diffable against each
     # other, and it is what makes any reduction shape return the same pair.

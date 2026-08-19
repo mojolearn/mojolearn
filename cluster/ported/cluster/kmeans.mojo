@@ -1,6 +1,6 @@
 """The public surface: fit, predict, fit_predict, cluster_cost.
 
-PORT OF `cuvs/src/cluster/kmeans.cuh` at cuVS `2140532c`. Partial. Do not
+PORT OF `cuvs/src/cluster/kmeans.cuh` at cuVS `94c2819`. Partial. Do not
 improve.
 
 Their file is a dispatch layer: it takes mdspans, decides host or device
@@ -58,12 +58,12 @@ def fit(
 ) raises -> FitResult:
     """`cuvs::cluster::kmeans::fit`, device-resident inputs only.
 
-    No host-resident arm. Theirs batches host data onto the device through a
-    `batch_load_iterator` and warns that `device_buffer_samples` is ignored
-    when the data is already resident (`detail/kmeans.cuh:610`). This tree
-    consumes device-resident data by construction, exactly as the boosting
-    side consumes an already-quantized matrix, so the whole host arm is out
-    of scope rather than missing.
+    Theirs has no host-resident arm either: `kmeans_fit`
+    (`detail/kmeans.cuh:811-951`) takes `device_matrix_view` and its only
+    input-shape concessions are two RAFT_LOG_DEBUG lines saying `batch_samples`
+    and `batch_centroids` will be ignored on the fused metrics
+    (`:837-856`). This tree consumes device-resident data by construction,
+    exactly as they do.
     """
     return kmeans_fit_main(
         ctx,

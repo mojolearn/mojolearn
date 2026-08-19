@@ -1,36 +1,39 @@
 """Cyclic Jacobi eigendecomposition of a small symmetric matrix, on the host.
 
-NOT A PORT of a file. RAFT calls `raft::linalg::eigJacobi`, which is
-cuSOLVER's `syevj`, and cuSOLVER is a closed NVIDIA library with no source to
-transliterate. Same situation as cuBLAS in `core/gemm.mojo`.
+**THIS IS THE ORACLE, NOT A PATH ANY FIT TAKES.** The fit runs
+`jacobi_eigh_device.mojo` on the device; this Float64 host version exists so
+that the Float32 device version has something independent to be checked
+against, at every size, in `jacobi_check.mojo`. It is not a CPU fallback --
+there is no CPU path in this repository -- and the two are not expected to
+agree bit for bit.
 
-**Jacobi is THEIR algorithm choice, not our substitute.** `cal_eig`
-(`raft/linalg/detail/tsvd.cuh:110`) branches on `prms.algorithm`, and
-`solver::COV_EIG_JACOBI` selects exactly this method. The other arm is
-`eigDC`, a divide-and-conquer routine, and porting that would be inventing an
-algorithm they also ship rather than copying one.
+NOT A PORT of a file. cuML calls `raft::linalg::eigJacobi`, which is
+cuSOLVER's `syevj`, and cuSOLVER is closed with no source to transliterate.
 
-WHY THE HOST, AND WHY THAT IS NOT A RULE VIOLATION
---------------------------------------------------
-`HOST_AND_DEVICE.md` rule one is that host work must never be O(rows). This
-is O(n_cols^3) on an `n_cols x n_cols` matrix, and the covariance that
-produced it is the ONLY part of PCA that touches rows at all. For a fit with
-a million rows and fifty features this is a 50x50 problem: putting it on the
-device would cost more in launches than it costs to solve.
+**Jacobi is NOT the arm cuML's dispatch takes, and the sentence that used to
+sit here saying it was "THEIR algorithm choice, not our substitute" is
+deleted because it is false.** `calEig` (`cuml/cpp/src/tsvd/tsvd.cuh:99`)
+branches on `prms.algorithm`, and that field DEFAULTS to
+`solver::COV_EIG_DQ` (`cuml/cpp/include/cuml/decomposition/params.hpp:53`),
+which is `eigDC` -> cuSOLVER `syevd`. Both `svd_solver='auto'` and `'full'`
+map to it (`cuml/python/cuml/cuml/decomposition/pca.pyx:392-404`);
+`COV_EIG_JACOBI` is reached only by asking for `'jacobi'` explicitly. We ship
+their opt-in arm, that is a substitution, and it is recorded as one in
+`decomposition/UNPORTED.tsv`.
 
-cuSOLVER runs it on device because it already has a tuned batched kernel and
-nothing to lose. We do not, and the honest first version says so.
-
-Recorded as `PORTING.md 22` with the condition that would change it: a wide
-fit, where `n_cols` is large enough that `n_cols^3` stops being small
-compared to `n_rows * n_cols^2`. That crossover is near `n_cols ~ n_rows`,
-which no PCA anyone runs is near.
+SWEEPS AND TOLERANCE COME FROM THEIR CODE
+-----------------------------------------
+`raft::linalg::eigJacobi` defaults to `tol = 1.e-7` and `sweeps = 15`
+(`raft/linalg/eig.cuh:108-109`), which are also cuML's Python defaults for
+this arm. The device version uses exactly those. This host reference keeps a
+tighter `1e-12` over 60 sweeps on purpose: an oracle that stops where the
+thing it is checking stops cannot tell you the thing stopped too early.
 
 ORDERING, WHICH IS PART OF THE PORT AND NOT A DETAIL
 ----------------------------------------------------
-`syevj` returns eigenvalues ASCENDING, and `cal_eig` then calls
-`raft::matrix::col_reverse` to put the components in DESCENDING order of
-eigenvalue (`tsvd.cuh:150`). PCA components are meaningless without that
+`syevj` returns eigenvalues ASCENDING, and `calEig` then calls
+`raft::matrix::colReverse` to put the components in DESCENDING order of
+eigenvalue (`tsvd.cuh:122`). PCA components are meaningless without that
 convention, so the reversal is copied and is not an implementation detail.
 """
 

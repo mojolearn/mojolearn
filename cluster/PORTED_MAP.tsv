@@ -1,16 +1,23 @@
 # our_file	cuvs_file	status	notes
-# cuVS pinned at 2140532c. `tools/check_upstream.sh <checkout> cluster` diffs
-# each mapped source against a fresh checkout and reports which of ours need
-# attention. Paths are relative to the cuVS repository root.
+# cuVS pinned at 94c2819 (branch-25.08), checked out at
+# ~/CascadeProjects/upstream/cuvs. `tools/check_upstream.sh <checkout> cluster`
+# diffs each mapped source against a fresh checkout and reports which of ours
+# need attention. Paths are relative to the cuVS repository root.
+#
+# Rows were re-verified against the checkout on 2026-08-19. Three of the
+# previous rows named upstream files THAT DO NOT EXIST
+# (minClusterDistanceCompute.cu, distance/unfused_distance_nn.cuh) and are
+# corrected here.
 #
 # NOT RAFT. k-means used to live in rapidsai/raft and does not any more:
 # RAFT 26.10 ships no cluster/ and no neighbors/, only primitives. The
 # algorithms are in rapidsai/cuvs and the primitives they call are still
 # RAFT's, which is why some rows below have no upstream file at all.
-ported/cluster/kmeans_params.mojo	cpp/include/cuvs/cluster/kmeans.hpp	transliterated	struct params only; verbosity dropped, no logger here
+ported/cluster/kmeans_params.mojo	cpp/include/cuvs/cluster/kmeans.hpp	transliterated	struct params (:28-121) only; verbosity dropped, no logger here. inertia_check present and FALSE by default, as theirs
 ported/cluster/kmeans.mojo	cpp/src/cluster/kmeans.cuh	partial	fit, predict, fit_predict; no transform, no mdspan dispatch
-ported/cluster/detail/kmeans.mojo	cpp/src/cluster/detail/kmeans.cuh	partial	initRandom, kmeansPlusPlus, the Lloyd loop. No host-resident arm, no multi-GPU, no kmeans_transform
-ported/cluster/detail/kmeans_common.mojo	cpp/src/cluster/detail/kmeans_common.cuh	partial	the decisions: use_fused, check_convergence, SamplingOp probability, the sqrt flags. CUB and thrust glue not ported
-ported/cluster/detail/min_cluster_distance_compute.mojo	cpp/src/cluster/detail/minClusterDistanceCompute.cu	partial	the unfused tiled arm only; fused CUTLASS arm and the non-expanded arm not ported
-ported/distance/unfused_distance_nn.mojo	cpp/src/distance/unfused_distance_nn.cuh	partial+replaced	reduce_min_kernel transliterated; cublasGemmEx replaced, see mojo_only/gemm.mojo
-ported/python/cluster/kmeans/kmeans.mojo	python/cuvs/cuvs/cluster/kmeans/kmeans.pyx	partial	the API SHAPE, not a binding. KMeansParams construction only
+ported/cluster/detail/kmeans.mojo	cpp/src/cluster/detail/kmeans.cuh	partial	initRandom, kmeansPlusPlus, kmeans_fit_main (:352-542) and the kmeans_fit restart driver (:811-951) flattened into one function. No multi-GPU, no kmeans_transform
+ported/cluster/detail/kmeans_common.mojo	cpp/src/cluster/detail/kmeans_common.cuh	partial	the decisions: is_fused (:378-379), the stopping rule (which lives inline in kmeans.cuh, not here), SamplingOp probability (:73-81), the sqrt flags. CUB and thrust glue not ported
+ported/cluster/detail/min_cluster_distance_compute.mojo	cpp/src/cluster/detail/kmeans_common.cuh	partial	minClusterAndDistanceCompute (:360-493). Fused arm (:430-449) is the one their dispatch takes for L2Expanded and is the one wired; the pairwise arm (:450-491) is kept reachable for differential testing
+ported/distance/fused_distance_nn/simt_kernel.mojo	cpp/src/distance/detail/fused_distance_nn/simt_kernel.cuh	partial	the SIMT fused kernel, no vendor call. Epilogue clamps on sign only; theirs also zeroes the bit-equal-norm self-neighbor case (distance_ops/l2_exp.cuh:132-134)
+ported/distance/unfused_distance_nn.mojo	cpp/src/cluster/detail/kmeans_common.cuh	partial	the non-fused arm, :450-491 (pairwise_distance_kmeans then coalescedReduction). NOT the path their dispatch takes for k-means
+ported/python/cluster/kmeans/kmeans.mojo	python/cuvs/cuvs/cluster/kmeans/kmeans.pyx	partial	the API SHAPE, not a binding. KMeansParams construction only (:98-129)

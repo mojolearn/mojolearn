@@ -317,7 +317,8 @@ def check_reach_by_sabotage() raises:
        must NOT.
 
        The perturbation has to be a positive OFFSET, not a replacement.
-       Their clamp at `unfused_distance_nn.cuh:81` is not order-preserving:
+       Their clamp at `distance/detail/distance_ops/l2_exp.cuh:132` is not
+       order-preserving:
        drive the distances negative and all of them flatten to exactly 0.0,
        the tie-break hands every row to centroid 0, and the labels move. The
        first version of this check replaced the norms outright, failed with
@@ -439,7 +440,7 @@ def check_reach_by_sabotage() raises:
     # ADDS to the true norms rather than replacing them. The first version of
     # this sabotage REPLACED them with small values, which drove every
     # expanded distance negative, and their clamp at
-    # `unfused_distance_nn.cuh:81` then flattened all four centroids to
+    # `distance_ops/l2_exp.cuh:132` then flattened all four centroids to
     # exactly 0.0 so the tie-break handed every row to centroid 0. It failed
     # with 384 labels moved and the kernel was RIGHT.
     #

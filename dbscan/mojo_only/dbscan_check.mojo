@@ -33,13 +33,28 @@ the partition would be testing a renumbering convention, and it is the same
 reason the k-means check compares centroids as a permutation.
 """
 
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext
 
+from core.expand_distances import expand_distances_kernel
+from core.gemm import gemm_nt
+from core.row_norms import NORM_TPB, row_norm_kernel
 from dbscan.ported.dbscan.adjgraph.algo import (
-    SCAN_TPB,
-    exclusive_scan_kernel,
+    exclusive_scan,
+    scan_blocks_needed,
 )
+from dbscan.ported.dbscan.dbscan import dbscan_fit_impl
+from dbscan.ported.dbscan.runner import EPS_NN_BRUTE_FORCE, EPS_NN_RBC
 from dbscan.ported.dbscan.runner import dbscan_fit
+from dbscan.ported.dbscan.vertexdeg.algo import (
+    VD_TPB,
+    eps_neighborhood_kernel,
+)
+from dbscan.ported.neighbors.epsilon_neighborhood import (
+    EPS_MBLK,
+    EPS_NBLK,
+    EPS_THREADS,
+    eps_unexp_l2_sq_neigh_kernel,
+)
 from dbscan.ported.sparse.detail.csr import MAX_LABEL
 
 
@@ -74,56 +89,34 @@ def _coord(row: Int, feature: Int) -> Float32:
     return Float32(base2)
 
 
-def check_dbscan() raises:
-    var ctx = DeviceContext()
-    var n = DB_ROWS
-    var d = DB_FEATURES
-
+def _load_fixture(ctx: DeviceContext, n: Int, d: Int) raises -> DeviceBuffer[
+    DType.float32
+]:
     var x = ctx.enqueue_create_buffer[DType.float32](n * d)
-    var x_alias = ctx.enqueue_create_buffer[DType.float32](n * d)
-    var x_norm = ctx.enqueue_create_buffer[DType.float32](n)
-    var xn_alias = ctx.enqueue_create_buffer[DType.float32](n)
-    var dist = ctx.enqueue_create_buffer[DType.float32](n * n)
-    var adj = ctx.enqueue_create_buffer[DType.uint8](n * n)
-    var vd = ctx.enqueue_create_buffer[DType.int32](n)
-    var core = ctx.enqueue_create_buffer[DType.uint8](n)
-    var ex_scan = ctx.enqueue_create_buffer[DType.int32](n + 1)
-    var col_ind = ctx.enqueue_create_buffer[DType.int32](
-        BLOBS * PER_BLOB * PER_BLOB + NOISE + 16
-    )
-    var labels = ctx.enqueue_create_buffer[DType.int32](n)
     ctx.synchronize()
-
     var hx = ctx.enqueue_create_host_buffer[DType.float32](n * d)
     for i in range(n):
         for f in range(d):
             hx.unsafe_ptr().unsafe_store(i * d + f, _coord(i, f))
     ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
     ctx.synchronize()
+    return x
 
-    var passes = dbscan_fit(
-        ctx, x, x_norm, dist, adj, vd, core, ex_scan, col_ind, labels,
-        x_alias, xn_alias, n, d, DB_EPS, DB_MIN_PTS,
-    )
 
-    var hl = ctx.enqueue_create_host_buffer[DType.int32](n)
-    var hc = ctx.enqueue_create_host_buffer[DType.uint8](n)
-    ctx.enqueue_copy(dst_ptr=hl.unsafe_ptr(), src_buf=labels)
-    ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=core)
+def check_dbscan() raises:
+    var ctx = DeviceContext()
+    var n = DB_ROWS
+    var d = DB_FEATURES
+
+    var x = _load_fixture(ctx, n, d)
+    var labels = ctx.enqueue_create_buffer[DType.int32](n)
     ctx.synchronize()
 
-    # --- every blob point is core, every noise point is not --------------
-    for i in range(BLOBS * PER_BLOB):
-        if hc.unsafe_ptr().unsafe_load(i) == 0:
-            raise Error(
-                "blob point " + String(i) + " is not a core point; every"
-                " point in a fully connected blob of 200 must be"
-            )
-    for i in range(BLOBS * PER_BLOB, n):
-        if hc.unsafe_ptr().unsafe_load(i) != 0:
-            raise Error(
-                "isolated noise point " + String(i) + " was marked core"
-            )
+    var passes = dbscan_fit_impl(ctx, x, labels, n, d, DB_EPS, DB_MIN_PTS)
+
+    var hl = ctx.enqueue_create_host_buffer[DType.int32](n)
+    ctx.enqueue_copy(dst_ptr=hl.unsafe_ptr(), src_buf=labels)
+    ctx.synchronize()
 
     # --- each blob is ONE cluster ----------------------------------------
     var blob_label = List[Int32]()
@@ -148,22 +141,44 @@ def check_dbscan() raises:
                     + " were merged, which no edge in the graph permits"
                 )
 
-    # --- noise stays noise -----------------------------------------------
+    # --- noise is -1, and the cluster ids are EXACTLY 0..k-1 -------------
+    # This is what `final_relabel` + `relabelForSkl` (`runner.cuh:410-416`)
+    # buy, and it is the half that could not be checked before they were
+    # ported: the old port compared the PARTITION because its label VALUES
+    # were `min(vertex index) + 1` and matched neither cuML nor sklearn.
     for i in range(BLOBS * PER_BLOB, n):
-        if hl.unsafe_ptr().unsafe_load(i) != MAX_LABEL:
+        if hl.unsafe_ptr().unsafe_load(i) != Int32(-1):
             raise Error(
-                "noise point " + String(i) + " was given cluster label "
+                "noise point " + String(i) + " has label "
                 + String(hl.unsafe_ptr().unsafe_load(i))
+                + ", and scikit-learn's noise label is -1"
+            )
+    var seen = List[Int]()
+    for _c in range(BLOBS):
+        seen.append(0)
+    for b in range(BLOBS):
+        var v = Int(blob_label[b])
+        if v < 0 or v >= BLOBS:
+            raise Error(
+                "cluster label " + String(v) + " is outside 0.."
+                + String(BLOBS - 1) + "; final_relabel did not run"
+            )
+        seen[v] = seen[v] + 1
+    for c in range(BLOBS):
+        if seen[c] != 1:
+            raise Error(
+                "cluster id " + String(c) + " was used " + String(seen[c])
+                + " times; the relabelling is not a bijection onto 0.."
+                + String(BLOBS - 1)
             )
 
     print(
-        "check_dbscan OK: 3/3 blobs each one whole cluster, 0 merges, "
+        "check_dbscan OK: 3/3 blobs each one whole cluster with ids exactly"
+        " {0, 1, 2}, 0 merges, "
         + String(NOISE)
         + "/"
         + String(NOISE)
-        + " isolated points left as noise, "
-        + String(BLOBS * PER_BLOB)
-        + " core points, converged in "
+        + " isolated points labelled -1 as scikit-learn does, converged in "
         + String(passes)
         + " propagation passes"
     )
@@ -173,43 +188,19 @@ def check_dbscan_eps_sensitivity() raises:
     """The reach test, and it is an INVARIANT rather than a corruption.
 
     Raise `eps` past the blob separation and the three clusters MUST merge
-    into one. Lower `min_pts` past a blob's size and nothing may change,
-    because every blob point already has 200 neighbours.
-
-    The first half is the reach evidence for the neighbourhood kernel: there
-    is no way to produce one cluster at `eps = 12` and three at `eps = 2`
-    without the radius test actually running on real distances. A no-op
-    neighbourhood gives the same answer at both.
+    into one. There is no way to produce one cluster at `eps = 12` and three
+    at `eps = 2` without the radius test actually running on real distances:
+    a no-op neighbourhood gives the same answer at both.
     """
     var ctx = DeviceContext()
     var n = DB_ROWS
     var d = DB_FEATURES
 
-    var x = ctx.enqueue_create_buffer[DType.float32](n * d)
-    var x_alias = ctx.enqueue_create_buffer[DType.float32](n * d)
-    var x_norm = ctx.enqueue_create_buffer[DType.float32](n)
-    var xn_alias = ctx.enqueue_create_buffer[DType.float32](n)
-    var dist = ctx.enqueue_create_buffer[DType.float32](n * n)
-    var adj = ctx.enqueue_create_buffer[DType.uint8](n * n)
-    var vd = ctx.enqueue_create_buffer[DType.int32](n)
-    var core = ctx.enqueue_create_buffer[DType.uint8](n)
-    var ex_scan = ctx.enqueue_create_buffer[DType.int32](n + 1)
-    var col_ind = ctx.enqueue_create_buffer[DType.int32](n * n)
+    var x = _load_fixture(ctx, n, d)
     var labels = ctx.enqueue_create_buffer[DType.int32](n)
     ctx.synchronize()
 
-    var hx = ctx.enqueue_create_host_buffer[DType.float32](n * d)
-    for i in range(n):
-        for f in range(d):
-            hx.unsafe_ptr().unsafe_store(i * d + f, _coord(i, f))
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
-    ctx.synchronize()
-
-    # eps large enough to bridge the 10-apart blob centres.
-    _ = dbscan_fit(
-        ctx, x, x_norm, dist, adj, vd, core, ex_scan, col_ind, labels,
-        x_alias, xn_alias, n, d, 12.0, DB_MIN_PTS,
-    )
+    _ = dbscan_fit_impl(ctx, x, labels, n, d, 12.0, DB_MIN_PTS)
     var hl = ctx.enqueue_create_host_buffer[DType.int32](n)
     ctx.enqueue_copy(dst_ptr=hl.unsafe_ptr(), src_buf=labels)
     ctx.synchronize()
@@ -230,26 +221,29 @@ def check_dbscan_eps_sensitivity() raises:
 
 
 def check_exclusive_scan_beyond_the_old_cap() raises:
-    """Regression for a SILENT correctness bug, at a size no fixture reaches.
+    """Regression for a SILENT correctness bug, plus the multi-block scan.
 
-    The first version of `exclusive_scan_kernel` gave each of `SCAN_TPB = 256`
-    threads a FIXED `SCAN_CHUNK = 64` rows, which caps it at 16,384. Past that
-    it stopped scanning, returned a wrong `nnz` and a truncated CSR, and
-    raised nothing.
+    Two caps have lived in this kernel. The first gave each of `SCAN_TPB`
+    threads a FIXED 64 rows, capping it at 16,384: past that it stopped
+    scanning, returned a wrong `nnz` and a truncated CSR, and raised nothing.
+    The second was the launch: `grid_dim = (1, 1, 1)`, one threadgroup for
+    the whole array, which was correct and serial.
 
-    Nothing here would have caught it: the DBSCAN fixture is 612 rows, and it
-    cannot simply be made larger because the distance matrix is `n^2` and
-    16,385 rows is a gigabyte. So this checks the SCAN ON ITS OWN, against a
-    host scan, at 20,000 entries.
+    So this runs the DEVICE-WIDE scan at 2,000,000 entries -- 977 blocks of
+    the first pass, which is the only size at which pass 2 and pass 3 can be
+    wrong -- and diffs every entry against a host scan.
 
     The lesson generalizes past this kernel: a launch geometry that encodes a
     maximum size needs a test at that size, or the maximum is a trapdoor.
     """
     var ctx = DeviceContext()
-    var n = 20000
+    var n = 2000000
 
     var vd = ctx.enqueue_create_buffer[DType.int32](n)
     var ex = ctx.enqueue_create_buffer[DType.int32](n + 1)
+    var block_sums = ctx.enqueue_create_buffer[DType.int32](
+        scan_blocks_needed(n) + 1
+    )
     ctx.synchronize()
 
     var hv = ctx.enqueue_create_host_buffer[DType.int32](n)
@@ -258,13 +252,7 @@ def check_exclusive_scan_beyond_the_old_cap() raises:
     ctx.enqueue_copy(dst_buf=vd, src_ptr=hv.unsafe_ptr())
     ctx.synchronize()
 
-    ctx.enqueue_function[exclusive_scan_kernel](
-        ex.unsafe_ptr(),
-        vd.unsafe_ptr(),
-        Int32(n),
-        grid_dim=(1, 1, 1),
-        block_dim=(SCAN_TPB, 1, 1),
-    )
+    exclusive_scan(ctx, ex, vd, block_sums, n)
     ctx.synchronize()
 
     var he = ctx.enqueue_create_host_buffer[DType.int32](n + 1)
@@ -283,7 +271,7 @@ def check_exclusive_scan_beyond_the_old_cap() raises:
         raise Error(
             String(wrong) + " of " + String(n)
             + " exclusive-scan entries are wrong at n = " + String(n)
-            + ", which is past the old 16,384 cap"
+            + ", across " + String(scan_blocks_needed(n)) + " blocks"
         )
     if total != running:
         raise Error(
@@ -292,68 +280,62 @@ def check_exclusive_scan_beyond_the_old_cap() raises:
     print(
         "check_exclusive_scan_beyond_the_old_cap OK: "
         + String(n)
-        + " entries exact, total "
+        + " entries exact across "
+        + String(scan_blocks_needed(n))
+        + " blocks, total "
         + String(total)
-        + ", past the 16,384 the fixed chunk size used to cap it at"
     )
 
 
 def check_dbscan_batching_agrees() raises:
-    """Batched and unbatched must return the SAME partition, and the batched
-    run must fit in a buffer the unbatched run could not.
+    """Batched and unbatched must return the SAME labels, and the batched run
+    must fit in a buffer the unbatched run could not.
 
     Both halves matter. Equality alone would pass if `batch_size` were
-    ignored, so this also allocates `dist` and `adj` at `batch x N` instead
-    of `N x N` — a quarter of the memory at these numbers. A run that
-    secretly ignored the batching would write off the end of that buffer, not
-    quietly agree.
+    ignored, so this also allocates `adj` at `batch x N` instead of `N x N`.
+    A run that secretly ignored the batching would write off the end of that
+    buffer, not quietly agree.
 
-    This is the check the batching commit needed and the plain fixture could
-    not give: `check_dbscan` runs with `batch_size = 0`, one batch, which is
-    exactly the old code path.
+    Since `weak_cc` now runs PER BATCH and `merge_labels` folds the results
+    (`runner.cuh:374-400`), this is also the only check on the merge: with
+    128-row batches over 612 points, four merges happen and every blob spans
+    at least two batches, so a broken merge splits a blob.
     """
     var ctx = DeviceContext()
     var n = DB_ROWS
     var d = DB_FEATURES
     var batch = 128
 
-    var x = ctx.enqueue_create_buffer[DType.float32](n * d)
-    var x_alias = ctx.enqueue_create_buffer[DType.float32](n * d)
-    var x_norm = ctx.enqueue_create_buffer[DType.float32](n)
-    var xn_alias = ctx.enqueue_create_buffer[DType.float32](n)
-    var vd = ctx.enqueue_create_buffer[DType.int32](n)
-    var core = ctx.enqueue_create_buffer[DType.uint8](n)
-    var ex_scan = ctx.enqueue_create_buffer[DType.int32](n + 1)
-    var col_ind = ctx.enqueue_create_buffer[DType.int32](n * n)
+    var x = _load_fixture(ctx, n, d)
     var labels = ctx.enqueue_create_buffer[DType.int32](n)
-
+    var labels_temp = ctx.enqueue_create_buffer[DType.int32](n)
+    var work_buffer = ctx.enqueue_create_buffer[DType.int32](n)
+    var core = ctx.enqueue_create_buffer[DType.uint8](n)
+    var block_sums = ctx.enqueue_create_buffer[DType.int32](
+        scan_blocks_needed(n) + 1
+    )
     # FULL-SIZE buffers for the reference run.
-    var dist_full = ctx.enqueue_create_buffer[DType.float32](n * n)
     var adj_full = ctx.enqueue_create_buffer[DType.uint8](n * n)
+    var vd_full = ctx.enqueue_create_buffer[DType.int32](n + 1)
+    var ex_full = ctx.enqueue_create_buffer[DType.int32](n + 1)
     # BATCH-SIZE buffers for the batched run. Deliberately too small for a
     # run that ignored `batch_size`.
-    var dist_b = ctx.enqueue_create_buffer[DType.float32](batch * n)
     var adj_b = ctx.enqueue_create_buffer[DType.uint8](batch * n)
-    ctx.synchronize()
-
-    var hx = ctx.enqueue_create_host_buffer[DType.float32](n * d)
-    for i in range(n):
-        for f in range(d):
-            hx.unsafe_ptr().unsafe_store(i * d + f, _coord(i, f))
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+    var vd_b = ctx.enqueue_create_buffer[DType.int32](batch + 1)
+    var ex_b = ctx.enqueue_create_buffer[DType.int32](batch + 1)
     ctx.synchronize()
 
     _ = dbscan_fit(
-        ctx, x, x_norm, dist_full, adj_full, vd, core, ex_scan, col_ind,
-        labels, x_alias, xn_alias, n, d, DB_EPS, DB_MIN_PTS, 0,
+        ctx, x, adj_full, vd_full, core, ex_full, labels, labels_temp,
+        work_buffer, block_sums, n, d, DB_EPS, DB_MIN_PTS, 0,
     )
     var baseline = ctx.enqueue_create_host_buffer[DType.int32](n)
     ctx.enqueue_copy(dst_ptr=baseline.unsafe_ptr(), src_buf=labels)
     ctx.synchronize()
 
     _ = dbscan_fit(
-        ctx, x, x_norm, dist_b, adj_b, vd, core, ex_scan, col_ind,
-        labels, x_alias, xn_alias, n, d, DB_EPS, DB_MIN_PTS, batch,
+        ctx, x, adj_b, vd_b, core, ex_b, labels, labels_temp,
+        work_buffer, block_sums, n, d, DB_EPS, DB_MIN_PTS, batch,
     )
     var got = ctx.enqueue_create_host_buffer[DType.int32](n)
     ctx.enqueue_copy(dst_ptr=got.unsafe_ptr(), src_buf=labels)
@@ -361,7 +343,9 @@ def check_dbscan_batching_agrees() raises:
 
     var differ = 0
     for i in range(n):
-        if baseline.unsafe_ptr().unsafe_load(i) != got.unsafe_ptr().unsafe_load(i):
+        if baseline.unsafe_ptr().unsafe_load(i) != got.unsafe_ptr().unsafe_load(
+            i
+        ):
             differ += 1
     if differ != 0:
         raise Error(
@@ -373,7 +357,283 @@ def check_dbscan_batching_agrees() raises:
     print(
         "check_dbscan_batching_agrees OK: "
         + String((n + batch - 1) // batch)
-        + " batches give labels identical to one batch, in a dist buffer "
+        + " batches with "
+        + String((n + batch - 1) // batch - 1)
+        + " merge_labels folds give labels identical to one batch, in an adj"
+        " buffer "
         + String(n // batch)
         + "x smaller than the unbatched run needs"
+    )
+
+
+def check_fused_eps_agrees_with_materialized() raises:
+    """The FUSED neighborhood against the materialized one, CELL BY CELL.
+
+    `dbscan/ported/neighbors/epsilon_neighborhood.mojo` replaced a three-
+    kernel path (`gemm_nt` -> `expand_distances_kernel` ->
+    `eps_neighborhood_kernel`) with one kernel that never writes a float. The
+    old path stays reachable precisely so this check can exist. That is what a
+    second implementation is FOR: diffing a fused kernel against a
+    materialized one. It is not the same as keeping an unfused kernel beside
+    an unfused library call, which is what `core/gemm.mojo` was doing and no
+    longer does.
+
+    **This compares every cell, not a count.** A check whose expected value is
+    the same everywhere verifies the total and nothing about placement, and
+    that failure mode has already passed a wrong-reduction bug in this
+    repository twice. So the fixture is hashed coordinates with a radius
+    chosen to make the adjacency roughly half full and IRREGULAR, and the
+    comparison is per `(i, j)`, plus the degrees, plus the total.
+
+    The shape is deliberately not a multiple of the 64x64 tile in either
+    axis, so the boundary guards in both kernels are exercised.
+    """
+    var ctx = DeviceContext()
+    var m = 150
+    var n = 213
+    var d = 9
+    var eps_sq = Float32(2.0)
+
+    var xb = ctx.enqueue_create_buffer[DType.float32](m * d)
+    var yb = ctx.enqueue_create_buffer[DType.float32](n * d)
+    var yb2 = ctx.enqueue_create_buffer[DType.float32](n * d)
+    var xn = ctx.enqueue_create_buffer[DType.float32](m)
+    var yn = ctx.enqueue_create_buffer[DType.float32](n)
+    var dist = ctx.enqueue_create_buffer[DType.float32](m * n)
+    var adj_ref = ctx.enqueue_create_buffer[DType.uint8](m * n)
+    var adj_new = ctx.enqueue_create_buffer[DType.uint8](m * n)
+    var vd_ref = ctx.enqueue_create_buffer[DType.int32](m)
+    var vd_new = ctx.enqueue_create_buffer[DType.int32](m + 1)
+    ctx.synchronize()
+
+    var hx = ctx.enqueue_create_host_buffer[DType.float32](m * d)
+    for i in range(m):
+        for f in range(d):
+            hx.unsafe_ptr().unsafe_store(i * d + f, Float32(_jitter(i, f) * 2.0))
+    ctx.enqueue_copy(dst_buf=xb, src_ptr=hx.unsafe_ptr())
+    var hy = ctx.enqueue_create_host_buffer[DType.float32](n * d)
+    for i in range(n):
+        for f in range(d):
+            hy.unsafe_ptr().unsafe_store(
+                i * d + f, Float32(_jitter(i + 5000, f) * 2.0)
+            )
+    ctx.enqueue_copy(dst_buf=yb, src_ptr=hy.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=yb2, src_ptr=hy.unsafe_ptr())
+    ctx.synchronize()
+
+    # --- the OLD path: norms, GEMM, expand, threshold -------------------
+    ctx.enqueue_function[row_norm_kernel](
+        xn.unsafe_ptr(), xb.unsafe_ptr(), Int32(d), Int32(0),
+        grid_dim=(m, 1, 1), block_dim=(NORM_TPB, 1, 1),
+    )
+    ctx.enqueue_function[row_norm_kernel](
+        yn.unsafe_ptr(), yb.unsafe_ptr(), Int32(d), Int32(0),
+        grid_dim=(n, 1, 1), block_dim=(NORM_TPB, 1, 1),
+    )
+    ctx.synchronize()
+    gemm_nt(ctx, dist, xb, yb2, m, n, d)
+    ctx.enqueue_function[expand_distances_kernel](
+        dist.unsafe_ptr(), xn.unsafe_ptr(), yn.unsafe_ptr(),
+        Int32(m), Int32(n), Int32(0),
+        grid_dim=((m * n + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+    )
+    ctx.enqueue_function[eps_neighborhood_kernel](
+        adj_ref.unsafe_ptr(), vd_ref.unsafe_ptr(), dist.unsafe_ptr(),
+        Int32(n), eps_sq,
+        grid_dim=(m, 1, 1), block_dim=(VD_TPB, 1, 1),
+    )
+    ctx.synchronize()
+
+    # --- the FUSED path -------------------------------------------------
+    ctx.enqueue_memset(vd_new, Int32(0))
+    ctx.synchronize()
+    ctx.enqueue_function[eps_unexp_l2_sq_neigh_kernel](
+        adj_new.unsafe_ptr(), vd_new.unsafe_ptr(),
+        xb.unsafe_ptr(), yb.unsafe_ptr(),
+        Int32(m), Int32(n), Int32(d), eps_sq,
+        grid_dim=(
+            (m + EPS_MBLK - 1) // EPS_MBLK,
+            (n + EPS_NBLK - 1) // EPS_NBLK,
+            1,
+        ),
+        block_dim=(EPS_THREADS, 1, 1),
+    )
+    ctx.synchronize()
+
+    var ha = ctx.enqueue_create_host_buffer[DType.uint8](m * n)
+    var hb = ctx.enqueue_create_host_buffer[DType.uint8](m * n)
+    var hvr = ctx.enqueue_create_host_buffer[DType.int32](m)
+    var hvn = ctx.enqueue_create_host_buffer[DType.int32](m + 1)
+    ctx.enqueue_copy(dst_ptr=ha.unsafe_ptr(), src_buf=adj_ref)
+    ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=adj_new)
+    ctx.enqueue_copy(dst_ptr=hvr.unsafe_ptr(), src_buf=vd_ref)
+    ctx.enqueue_copy(dst_ptr=hvn.unsafe_ptr(), src_buf=vd_new)
+    ctx.synchronize()
+
+    var cells = 0
+    var ones = 0
+    for i in range(m):
+        for j in range(n):
+            var a = Int(ha.unsafe_ptr().unsafe_load(i * n + j))
+            var b = Int(hb.unsafe_ptr().unsafe_load(i * n + j))
+            if a != 0:
+                ones += 1
+            if a != b:
+                if cells < 4:
+                    print(
+                        "  first mismatches: (" + String(i) + ", " + String(j)
+                        + ") materialized " + String(a) + " fused " + String(b)
+                    )
+                cells += 1
+    if cells != 0:
+        raise Error(
+            String(cells) + " of " + String(m * n)
+            + " adjacency cells disagree between the fused kernel and the"
+            " materialized path"
+        )
+    if ones == 0 or ones == m * n:
+        raise Error(
+            "the fixture is degenerate: " + String(ones) + " of "
+            + String(m * n) + " cells are neighbours, so agreeing everywhere"
+            " proves nothing about placement"
+        )
+
+    # --- AND against a HOST oracle, which depends on nothing of ours ----
+    # The materialized arm above shares `core/gemm.mojo` and
+    # `core/expand_distances.mojo` with the fused kernel's ancestry, so the
+    # two could in principle be wrong together. This one is float64 on the
+    # host, straight from the coordinates, and agrees with neither by
+    # construction. It is an ORACLE, not a CPU path: nothing ships through
+    # it.
+    var host_wrong = 0
+    for i in range(m):
+        for j in range(n):
+            var acc = Float64(0.0)
+            for f in range(d):
+                var df = Float64(
+                    hx.unsafe_ptr().unsafe_load(i * d + f)
+                ) - Float64(hy.unsafe_ptr().unsafe_load(j * d + f))
+                acc += df * df
+            var want = 1 if acc <= Float64(eps_sq) else 0
+            if want != Int(hb.unsafe_ptr().unsafe_load(i * n + j)):
+                host_wrong += 1
+    if host_wrong != 0:
+        raise Error(
+            String(host_wrong) + " of " + String(m * n)
+            + " fused adjacency cells disagree with a float64 host oracle"
+        )
+
+    var total = 0
+    for i in range(m):
+        var vr = Int(hvr.unsafe_ptr().unsafe_load(i))
+        var vn = Int(hvn.unsafe_ptr().unsafe_load(i))
+        if vr != vn:
+            raise Error(
+                "degree of row " + String(i) + " is " + String(vr)
+                + " materialized against " + String(vn) + " fused"
+            )
+        total += vr
+    if Int(hvn.unsafe_ptr().unsafe_load(m)) != total:
+        raise Error(
+            "vd[m] is " + String(Int(hvn.unsafe_ptr().unsafe_load(m)))
+            + " against a row-degree total of " + String(total)
+            + "; runner.cuh:281 reads that element to size the CSR"
+        )
+
+    print(
+        "check_fused_eps_agrees_with_materialized OK: " + String(m * n)
+        + " cells identical to the materialized path AND to a float64 host"
+        " oracle (" + String(ones) + " of them neighbours, so the pattern is"
+        " irregular), " + String(m) + " degrees identical, vd[m] = "
+        + String(total)
+    )
+
+
+def check_dbscan_rbc_matches_brute() raises:
+    """The INDEX and the brute force must label identically. No tolerance.
+
+    `cuml/cpp/src/dbscan/vertexdeg/algo.cuh:226-231` is one `if`: the
+    ball-cover index on one side, `epsUnexpL2SqNeighborhood` on the other.
+    Both are supposed to answer the same question, so the only honest test of
+    the index is that swapping the branch changes nothing about the ANSWER.
+
+    Two clusterings agreeing is a strong assertion here because `final_relabel`
+    + `relabelForSkl` (`runner.cuh:410-416`) make the ids canonical: labels are
+    `0..k-1` in first-appearance order and noise is `-1`, so equality is
+    literal and not up to permutation.
+
+    THE FAILURE THIS EXISTS TO CATCH is an index that drops a real neighbor.
+    That is silent: the point still gets a label, just possibly its own
+    cluster instead of its neighbor's. It cannot be seen by counting clusters
+    or by eyeballing inertia, only by comparing the partition point by point.
+    """
+    var ctx = DeviceContext()
+    var n = DB_ROWS
+    var d = DB_FEATURES
+
+    var x_b = _load_fixture(ctx, n, d)
+    var lab_b = ctx.enqueue_create_buffer[DType.int32](n)
+    ctx.synchronize()
+    _ = dbscan_fit_impl(
+        ctx, x_b, lab_b, n, d, DB_EPS, DB_MIN_PTS, 0, 200,
+        EPS_NN_BRUTE_FORCE,
+    )
+    var hb = ctx.enqueue_create_host_buffer[DType.int32](n)
+    ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=lab_b)
+    ctx.synchronize()
+
+    var x_r = _load_fixture(ctx, n, d)
+    var lab_r = ctx.enqueue_create_buffer[DType.int32](n)
+    ctx.synchronize()
+    _ = dbscan_fit_impl(
+        ctx, x_r, lab_r, n, d, DB_EPS, DB_MIN_PTS, 0, 200, EPS_NN_RBC
+    )
+    var hr = ctx.enqueue_create_host_buffer[DType.int32](n)
+    ctx.enqueue_copy(dst_ptr=hr.unsafe_ptr(), src_buf=lab_r)
+    ctx.synchronize()
+
+    var wrong = 0
+    var first_bad = -1
+    for i in range(n):
+        if hb.unsafe_ptr().unsafe_load(i) != hr.unsafe_ptr().unsafe_load(i):
+            wrong += 1
+            if first_bad < 0:
+                first_bad = i
+    if wrong != 0:
+        raise Error(
+            "check_dbscan_rbc_matches_brute: the ball-cover index and the"
+            " brute force disagree on "
+            + String(wrong)
+            + " of "
+            + String(n)
+            + " points, first at "
+            + String(first_bad)
+            + " (brute "
+            + String(hb.unsafe_ptr().unsafe_load(first_bad))
+            + " vs rbc "
+            + String(hr.unsafe_ptr().unsafe_load(first_bad))
+            + "). The index is dropping or inventing neighbours."
+        )
+
+    # The comparison is only worth something if it saw real structure. An
+    # all-noise or one-cluster labelling would match trivially.
+    var seen = 0
+    for i in range(n):
+        if hb.unsafe_ptr().unsafe_load(i) > Int32(seen - 1):
+            seen = Int(hb.unsafe_ptr().unsafe_load(i)) + 1
+    if seen < 2:
+        raise Error(
+            "check_dbscan_rbc_matches_brute: only "
+            + String(seen)
+            + " cluster(s) in the brute-force labelling, so agreement proves"
+            " nothing. Pick a fixture and eps with real structure."
+        )
+
+    print(
+        "check_dbscan_rbc_matches_brute OK:",
+        n,
+        "points labelled identically by the ball-cover index and by brute"
+        " force,",
+        seen,
+        "clusters",
     )

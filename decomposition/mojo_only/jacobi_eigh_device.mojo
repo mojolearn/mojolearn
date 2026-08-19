@@ -1,14 +1,30 @@
 """Cyclic Jacobi eigendecomposition ON THE DEVICE.
 
-NOT A PORT of a file: RAFT calls cuSOLVER's `syevj` and cuSOLVER is closed.
-But **it runs on the device in RAFT, so it runs on the device here**, which
-is the standing rule for this repository: mirror their host/device split, and
-where they use the GPU we use the GPU.
+NOT A PORT of a file, and NOT THE ARM THEIR DISPATCH TAKES. Both halves of
+that sentence matter.
 
-This REPLACES the host version in `jacobi_eigh.mojo` as the path the fit
-takes. The host one stays because it is the reference the device one is
-checked against, and because a host implementation of a small dense solver is
-the right thing for a bring-up harness to have.
+`calEig` (`cuml/cpp/src/tsvd/tsvd.cuh:99`) branches on `prms.algorithm`.
+**Its default is `solver::COV_EIG_DQ`**
+(`cuml/cpp/include/cuml/decomposition/params.hpp:53`), which is
+`raft::linalg::eigDC` -> cuSOLVER `syevd`, a divide-and-conquer tridiagonal
+eigensolver. `COV_EIG_JACOBI` is the OPT-IN arm, reached only from
+`svd_solver='jacobi'` (`cuml/python/cuml/cuml/decomposition/pca.pyx:392-404`,
+where `'auto'` and `'full'` both map to `COV_EIG_DQ`).
+
+So this file ports the shape of their SECOND arm, not their default. The
+reason is that both arms end in a closed NVIDIA library. `syevd` and `syevj`
+are cuSOLVER, there is no source to transliterate, and MAX ships no symmetric
+eigensolver at all (`linalg` has `matmul`, `bmm`, `gemv`, `transpose`,
+`qr_factorization` and no eigen or SVD entry point). When the path their
+dispatch takes calls a closed library and no equivalent exists to call, the
+only remaining option is to write one, and between their two named algorithms
+Jacobi is the one whose per-rotation arithmetic is small enough to be checked
+against a host reference line by line. **That is a substitution and it is
+recorded as one**, in `decomposition/UNPORTED.tsv` and in the lane report.
+
+This is the path a fit takes. `jacobi_eigh.mojo` is the host Float64 oracle
+it is checked against, not a CPU fallback: there is no CPU path in this
+repository.
 
 WHAT IS PARALLEL AND WHAT IS NOT
 --------------------------------
@@ -32,11 +48,27 @@ orthogonal arithmetic and the basis stays orthonormal to rounding no matter
 how many are applied, which is the property that makes it worth its extra
 passes on a small matrix.
 
-**The two therefore do not agree bit for bit and are not meant to.** The
-check compares them at a stated tolerance.
+**The two therefore do not agree bit for bit and are not meant to.**
+`jacobi_check.mojo` compares them at a stated tolerance and prints it.
+
+THERE IS NO SIZE CAP
+--------------------
+There used to be. The matrix and the basis were two `32 x 32` THREADGROUP
+arrays, so `JACOBI_MAX_N = 32` and a PCA at 33 or more features silently
+returned something that was not an eigendecomposition of anything. Both
+arrays now live in global memory and `JACOBI_MAX_N` is gone. Verified across
+16, 32, 33, 64, 128 and 256 by `check_jacobi_device_sizes`, and the check has
+reach: re-imposing the cap makes n = 33 fail at `||V^T V - I|| = 0.61`.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from mojo_only.kernel_matrix import (
+    K_LIB_JACOBI_EIGH,
+    TARGET_COLUMN,
+    lib_block_size_for,
+)
+
+
+from std.gpu import thread_idx
 from std.math import sqrt
 from max.gpu.memory import AddressSpace
 from max.gpu.primitives.block import sum as block_sum
@@ -44,15 +76,26 @@ from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
 
-# One block, and the matrix plus the basis both live in shared memory, so
-# this is the cap. 32 x 32 x 4 bytes x 2 arrays = 8 KB against Metal's 32 KB
-# threadgroup budget (`PORTING.md 1`).
-comptime JACOBI_TPB = 32
+# LAUNCH GEOMETRY, NOT A PROBLEM BOUND. One block of 32 threads, and every
+# loop over the matrix below is strided by exactly this, so any `n` is
+# covered. Nothing `n`-sized lives in threadgroup memory, so no value of `n`
+# can exhaust Metal's 32 KB budget (`PORTING.md 1`).
+# READ FROM THE MATRIX, not restated here. `mojo_only/kernel_matrix.mojo`
+# owns every tunable in this tree; changing TARGET_COLUMN there rebuilds
+# this kernel for another vendor with no edit in this file.
+comptime JACOBI_TPB = lib_block_size_for[K_LIB_JACOBI_EIGH, TARGET_COLUMN]()
+
+# `raft::linalg::eigJacobi`'s own defaults (`raft/linalg/eig.cuh:108-109`),
+# which are also what cuML's Python layer passes for the Jacobi arm
+# (`pca.pyx:358` `tol=1e-7`, `pca.pyx:356` `iterated_power=15`).
+comptime JACOBI_TOL = 1.0e-7
+comptime JACOBI_SWEEPS = 15
 
 
 def jacobi_eigh_kernel(
     a_io: MutPointer[Float32, MutAnyOrigin],
     v_out: MutPointer[Float32, MutAnyOrigin],
+    info_out: MutPointer[Float32, MutAnyOrigin],
     n_in: Int32,
     max_sweeps_in: Int32,
     tol_in: Float32,
@@ -61,6 +104,14 @@ def jacobi_eigh_kernel(
 
     `v_out` ends with eigenvector `i` in COLUMN `i`, LAPACK's convention and
     therefore cuSOLVER's, which is what the caller's ordering code expects.
+
+    `info_out` is three slots and it is not optional bookkeeping.
+    `info_out[0]` is 1 if the sweep loop converged and 0 if it hit
+    `max_sweeps_in`; `info_out[1]` is the last measured
+    `||offdiag(A)||_F / ||A||_F`; `info_out[2]` is the number of sweeps
+    executed, which is `cusolverDnXsyevjGetSweeps`. See the DEVIATION BLOCK 2
+    note below for why an unchecked sweep limit is not acceptable here even
+    though RAFT's Jacobi arm leaves one unchecked.
     """
     var n = Int(n_in)
     var tid = Int(thread_idx.x)
@@ -96,6 +147,51 @@ def jacobi_eigh_kernel(
         idx += JACOBI_TPB
     barrier()
 
+    # DEVIATION BLOCK 1 -- THE CONVERGENCE TEST IS RELATIVE, NOT ABSOLUTE.
+    #
+    # THEIRS: cuSOLVER's `syevj` takes a `tol` through
+    # `cusolverDnXsyevjSetTolerance` (`raft/linalg/detail/eig.cuh:276`) and
+    # stops on the off-diagonal norm measured AGAINST THE MATRIX. RAFT's
+    # default is `1.e-7` (`raft/linalg/eig.cuh:108`), a number that only
+    # means anything as a relative quantity.
+    #
+    # OURS, BEFORE: `off <= tol_in` with `tol_in = 1e-10`, where `off` is a
+    # sum of SQUARES of the strict upper triangle. That is an ABSOLUTE test
+    # on a quantity that scales with the square of the data. On a covariance
+    # whose eigenvalues are around 100 it is unreachable, so the loop always
+    # ran its full sweep budget; multiply the same data by 1000 and it is
+    # unreachable by another six orders of magnitude. **The same matrix in
+    # different units converged differently**, which is not a tolerance, it
+    # is a bug with a tolerance-shaped name.
+    #
+    # OURS, NOW: `||offdiag||_F <= tol * ||A||_F`, which is cuSOLVER's
+    # quantity and is invariant to the units of the data. `off` is the sum of
+    # squares over the STRICT UPPER triangle, so `||offdiag||_F^2 = 2 * off`
+    # and the test is `2 * off <= tol^2 * ||A||_F^2`.
+    #
+    # MEASURED (`check_jacobi_scale_invariance`, and the sweep column of
+    # `check_jacobi_device_sizes`): a matrix and the SAME matrix times 1000
+    # now both converge in 7 sweeps to a relative off-diagonal of 3.1e-12,
+    # and their spectra agree to 3.9e-07 after dividing the scale out. Across
+    # n = 16, 32, 33, 64, 128, 256 the executed sweep counts are 5, 6, 6, 8,
+    # 8, 9, all inside RAFT's default budget of 15 and none of them near the
+    # 80 this file used to be given. Accuracy is UNCHANGED on that fixture
+    # (n = 128 orthogonality error 2.7999649614418587e-05 both before and
+    # after), so this is a correctness fix and a work reduction, not an
+    # accuracy claim.
+    var local_f = Float32(0.0)
+    var fe = tid
+    while fe < n * n:
+        var fv = a.unsafe_load(fe)
+        local_f += fv * fv
+        fe += JACOBI_TPB
+    var fro2 = block_sum[block_size=JACOBI_TPB, broadcast=True](local_f)
+    var limit = tol_in * tol_in * fro2
+
+    var executed = 0
+    var converged = False
+    var last_off = Float32(0.0)
+
     for _sweep in range(Int(max_sweeps_in)):
         # `cub::BlockReduce`'s counterpart from `max.gpu.primitives.block`.
         # This REPLACED a `tid == 0` serial double loop over the strict upper
@@ -115,9 +211,9 @@ def jacobi_eigh_kernel(
         #
         # NUMERIC: the summation ORDER changes, so `off` can differ from the
         # serial version in its last bits. The CONVERGENCE SEMANTICS do not:
-        # same `off <= tol_in` test against the same `tol_in`, and a last-bit
-        # difference can only move which sweep a knife-edge matrix stops on,
-        # never the answer it stops at.
+        # same test against the same `tol_in`, and a last-bit difference can
+        # only move which sweep a knife-edge matrix stops on, never the
+        # answer it stops at.
         var local_off = Float32(0.0)
         var e = tid
         while e < n * n:
@@ -127,8 +223,11 @@ def jacobi_eigh_kernel(
                 local_off += a.unsafe_load(e) * a.unsafe_load(e)
             e += JACOBI_TPB
         var off = block_sum[block_size=JACOBI_TPB, broadcast=True](local_off)
-        if off <= tol_in:
+        last_off = off
+        if Float32(2.0) * off <= limit:
+            converged = True
             break
+        executed += 1
 
         for p in range(n):
             for q in range(p + 1, n):
@@ -187,5 +286,31 @@ def jacobi_eigh_kernel(
                     v.unsafe_store(k * n + q, s * vkp + c * vkq)
                     k += JACOBI_TPB
                 barrier()
+
+    # DEVIATION BLOCK 2 -- WE REPORT NON-CONVERGENCE. RAFT'S JACOBI ARM
+    # DOES NOT.
+    #
+    # THEIRS: `detail::eigJacobi` calls `cusolverDnXsyevjGetSweeps` into a
+    # local `int executed_sweeps` and then **never reads it**
+    # (`raft/linalg/detail/eig.cuh:310-311`). It does not check `dev_info`
+    # either. A `syevj` that exhausts its 15 sweeps returns an unconverged
+    # answer to cuML with no signal at all.
+    #
+    # THEIRS, ON THE DEFAULT PATH: `eigDC` -- the arm `svd_solver='auto'`
+    # actually reaches -- DOES check, and aborts with "eigensolver couldn't
+    # converge to a solution" (`raft/linalg/detail/eig.cuh:79-82`).
+    #
+    # OURS: we follow the DEFAULT arm's behaviour, because a silently
+    # unconverged eigendecomposition is the same class of defect as the
+    # 32-feature cap this file just lost: a wrong answer with no error. The
+    # host reference in `jacobi_eigh.mojo` already raises on the same
+    # condition. Two slots are written and `eig_and_truncate` raises on them.
+    if tid == 0:
+        info_out.unsafe_store(0, Float32(1.0) if converged else Float32(0.0))
+        var rel = Float32(0.0)
+        if fro2 > Float32(0.0):
+            rel = sqrt(Float32(2.0) * last_off / fro2)
+        info_out.unsafe_store(1, rel)
+        info_out.unsafe_store(2, Float32(executed))
 
     # No write-back: `a` and `v` ARE the caller's buffers now.

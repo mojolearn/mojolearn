@@ -2,9 +2,11 @@
 # A file absent from both this list and PORTED_MAP.tsv has simply not been
 # looked at, which is a different and worse state. Keep both complete.
 cpp/src/cluster/detail/kmeans.cuh::initScalableKMeansPlusPlus	NOT PORTED, BLOCKS THE DEFAULT	k-means|| is the default init (oversampling_factor=2.0). kmeans_fit_main RAISES rather than substituting classic k-means++
-cpp/src/distance/detail/fused_distance_nn/	unportable	CUTLASS persistent GEMM on NVIDIA tensor cores. Their own use_fused sends Blackwell to the unfused path anyway
+cpp/src/distance/detail/fused_distance_nn/cutlass_base.cuh	unportable	CUTLASS persistent GEMM on NVIDIA tensor cores. Only the CUTLASS specialization is unportable; their SIMT kernel in the same directory IS ported. There is no compute-capability selector in cuVS's k-means dispatch -- is_fused (kmeans_common.cuh:378-379) is a metric test and nothing else
 cpp/src/cluster/detail/kmeans_balanced.cuh	out of scope	balanced k-means is an ANN index-building primitive, not the clustering algorithm being compared
 cpp/src/cluster/detail/kmeans_mg.cuh	out of scope	multi-GPU. One device here
 cpp/src/cluster/detail/kmeans_auto_find_k.cuh	out of scope	chooses k by sweeping. Layers on top of fit and adds nothing to measure
 cpp/src/cluster/kmeans_transform_float.cu	not ported	materializes the full n x k distance matrix; nothing in the fit path calls it
+cpp/src/cluster/detail/kmeans.cuh::kmeans_transform	not ported	same, the header side of the .cu above
 cpp/src/cluster/detail/kmeans_common.cuh::countLabels	not ported yet	cub::DeviceHistogram over labels. Only countSamplesInCluster needs it and nothing calls that here
+cpp/src/cluster/detail/kmeans_common.cuh::checkWeight	not ported	RAFT_EXPECTS that the sample weights sum to n_samples, and rescales them if they do not (kmeans.cuh:872). Ours takes the caller's weights as given

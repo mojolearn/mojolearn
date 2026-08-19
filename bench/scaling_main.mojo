@@ -18,10 +18,11 @@ with the scikit-learn one and compare per size.
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext
 
-from dbscan.ported.dbscan.runner import dbscan_fit
+from dbscan.ported.dbscan.dbscan import dbscan_fit_impl
+from dbscan.ported.dbscan.runner import EPS_NN_BRUTE_FORCE, EPS_NN_RBC
 from neighbors.ported.neighbors.detail.knn_brute_force import (
+    brute_force_knn_impl,
     compute_norms,
-    tiled_brute_force_knn,
 )
 
 
@@ -75,7 +76,11 @@ def _knn_at(ctx: DeviceContext, n_index: Int, n_queries: Int) raises -> Int:
         var t0 = perf_counter_ns()
         compute_norms(ctx, index, inorm, n_index, d, False)
         compute_norms(ctx, queries, qnorm, n_queries, d, False)
-        tiled_brute_force_knn(
+        # THEIR DISPATCH, `knn_brute_force.cuh:443`, not a direct call to
+        # the fallback. k=10 is <= 64 on row-major L2, so cuVS runs
+        # `fusedL2Knn` for these parameters and so do we; measuring
+        # `tiled_brute_force_knn` here measured their ELSE branch.
+        brute_force_knn_impl(
             ctx, queries, qnorm, index, inorm, dist, bv, bi, od, oi, oi32,
             n_queries, n_index, d, k, tile, buf_len, False,
         )
@@ -89,19 +94,9 @@ def _knn_at(ctx: DeviceContext, n_index: Int, n_queries: Int) raises -> Int:
 
 def _dbscan_at(ctx: DeviceContext, n: Int) raises:
     var d = 8
-    var batch = 2048
     var eps = 0.30
 
     var x = ctx.enqueue_create_buffer[DType.float32](n * d)
-    var xa = ctx.enqueue_create_buffer[DType.float32](n * d)
-    var xn = ctx.enqueue_create_buffer[DType.float32](n)
-    var xna = ctx.enqueue_create_buffer[DType.float32](n)
-    var dist = ctx.enqueue_create_buffer[DType.float32](batch * n)
-    var adj = ctx.enqueue_create_buffer[DType.uint8](batch * n)
-    var vd = ctx.enqueue_create_buffer[DType.int32](n)
-    var core = ctx.enqueue_create_buffer[DType.uint8](n)
-    var ex = ctx.enqueue_create_buffer[DType.int32](n + 1)
-    var ci = ctx.enqueue_create_buffer[DType.int32](n * 48)
     var lab = ctx.enqueue_create_buffer[DType.int32](n)
     ctx.synchronize()
 
@@ -112,16 +107,32 @@ def _dbscan_at(ctx: DeviceContext, n: Int) raises:
     ctx.enqueue_copy(dst_buf=x, src_ptr=h.unsafe_ptr())
     ctx.synchronize()
 
+    # The workspace is allocated INSIDE, and the batch size is chosen from
+    # the device's memory, which is `dbscanFitImpl` (`dbscan.cuh:101`). The
+    # hand-passed `batch = 2048` that used to be here was a guess this
+    # harness had to make because `compute_batch_size` was not ported.
+    # BOTH ARMS, INTERLEAVED WITHIN THE REPEAT, not one after the other.
+    # This box drifts two- to threefold between thermal windows, so running
+    # every brute repeat and then every rbc repeat compares thermal states as
+    # much as algorithms. cuML's own default is BRUTE_FORCE
+    # (`dbscan.hpp:74`), so that arm is the incumbent and rbc is the
+    # challenger; both are cuML's, one `if` apart in `algo.cuh:226`.
     for _r in range(REPEATS):
         var t0 = perf_counter_ns()
-        _ = dbscan_fit(
-            ctx, x, xn, dist, adj, vd, core, ex, ci, lab, xa, xna,
-            n, d, eps, 5, batch,
-        )
+        _ = dbscan_fit_impl(ctx, x, lab, n, d, eps, 5, 0, 200,
+                            EPS_NN_BRUTE_FORCE)
         ctx.synchronize()
         print(
             "ARM dbscan@" + String(n) + " "
             + String(Float64(perf_counter_ns() - t0) / 1.0e6)
+        )
+
+        var t1 = perf_counter_ns()
+        _ = dbscan_fit_impl(ctx, x, lab, n, d, eps, 5, 0, 200, EPS_NN_RBC)
+        ctx.synchronize()
+        print(
+            "ARM dbscan_rbc@" + String(n) + " "
+            + String(Float64(perf_counter_ns() - t1) / 1.0e6)
         )
 
 

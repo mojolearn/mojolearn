@@ -20,6 +20,13 @@ over the feature axis, so the block size changes the summation order and
 therefore the last bits. It is listed in the `IDENTICAL` column's scope.
 """
 
+from mojo_only.kernel_matrix import (
+    K_LIB_ROW_NORM,
+    TARGET_COLUMN,
+    lib_block_size_for,
+)
+
+
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import sqrt
 from max.gpu.memory import AddressSpace
@@ -28,7 +35,10 @@ from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
 
-comptime NORM_TPB = 128
+# READ FROM THE MATRIX, not restated here. `mojo_only/kernel_matrix.mojo`
+# owns every tunable in this tree; changing TARGET_COLUMN there rebuilds
+# this kernel for another vendor with no edit in this file.
+comptime NORM_TPB = lib_block_size_for[K_LIB_ROW_NORM, TARGET_COLUMN]()
 
 
 def row_norm_kernel(

@@ -35,6 +35,13 @@ which is invisible until they use it for something else.
 recover singular values.
 """
 
+from mojo_only.kernel_matrix import (
+    K_LIB_COLUMN_STATS,
+    TARGET_COLUMN,
+    lib_block_size_for,
+)
+
+
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.memory import AddressSpace
 from max.gpu.primitives.block import sum as block_sum
@@ -42,7 +49,10 @@ from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
 
-comptime STATS_TPB = 128
+# READ FROM THE MATRIX, not restated here. `mojo_only/kernel_matrix.mojo`
+# owns every tunable in this tree; changing TARGET_COLUMN there rebuilds
+# this kernel for another vendor with no edit in this file.
+comptime STATS_TPB = lib_block_size_for[K_LIB_COLUMN_STATS, TARGET_COLUMN]()
 
 
 def column_mean_kernel(
