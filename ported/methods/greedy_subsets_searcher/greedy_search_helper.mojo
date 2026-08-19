@@ -90,6 +90,20 @@ def run_one_level(
     var stat_count = 2  # [weight, gradient], their layout
     var n_leaves = 2  # the level's output
 
+    # LAUNCH WIDTH. CatBoost sizes these grids as
+    # `(leavesCount > 4 ? 2 : 4) * TArchProps::SMCount()`
+    # (`split_points.cu:559`, `:388`, `:214`), i.e. dozens of blocks, and
+    # every one of these kernels carries a grid-stride loop so the count is
+    # free to choose. The driver originally passed grid_dim=(1,1,1) to all
+    # three, which is correct and runs one threadgroup on the whole machine:
+    # measured 0.989 ms for the index gather, which moves ONE UInt32 per row
+    # and should be bandwidth-trivial. Same error the partition had.
+    var wide = (n_rows + 255) // 256
+    if wide > 256:
+        wide = 256
+    if wide < 1:
+        wide = 1
+
     # --- partitions: one leaf, every row --------------------------------
     var p_off = ctx.enqueue_create_buffer[DType.uint32](n_leaves)
     var p_sz = ctx.enqueue_create_buffer[DType.uint32](n_leaves)
@@ -274,7 +288,7 @@ def run_one_level(
         sp_bin.unsafe_ptr(),
         flags.unsafe_ptr(),
         seq.unsafe_ptr(),
-        grid_dim=(1, 1, 1),
+        grid_dim=(wide, 1, 1),
         block_dim=(SPLIT_BLOCK_SIZE, 1, 1),
     )
 
@@ -309,7 +323,7 @@ def run_one_level(
         row_index.unsafe_ptr(),
         gmap.unsafe_ptr(),
         new_index.unsafe_ptr(),
-        grid_dim=(1, 1, 1),
+        grid_dim=(wide, 1, 1),
         block_dim=(256, 1, 1),
     )
 
@@ -333,7 +347,7 @@ def run_one_level(
         p_sz.unsafe_ptr(),
         hp_off.unsafe_ptr(),
         hp_sz.unsafe_ptr(),
-        grid_dim=(1, 1, 1),
+        grid_dim=(wide, 1, 1),
         block_dim=(512, 1, 1),
     )
     ctx.synchronize()

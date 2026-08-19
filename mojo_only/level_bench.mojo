@@ -36,6 +36,20 @@ from ported.methods.greedy_subsets_searcher.kernel.split_points import (
     PARTITION_BLOCK,
     launch_stable_partition,
 )
+from ported.methods.greedy_subsets_searcher.kernel.compute_scores import (
+    SCORE_BLOCK_SIZE,
+    compute_optimal_splits_kernel,
+)
+from ported.methods.greedy_subsets_searcher.kernel.histogram_utils import (
+    scan_histograms_kernel,
+    zero_histograms_kernel,
+)
+from ported.methods.greedy_subsets_searcher.kernel.split_points import (
+    SPLIT_BLOCK_SIZE,
+    gather_index_in_leaves_kernel,
+    split_and_make_sequence_kernel,
+    update_partitions_after_split_kernel,
+)
 from ported.methods.greedy_subsets_searcher.kernel.hist_binary import (
     binary_hist_kernel,
 )
@@ -291,3 +305,193 @@ def bench_partition_only(n_rows: Int, repeats: Int) raises:
         (n_rows + PARTITION_BLOCK - 1) // PARTITION_BLOCK,
         "chunks (was one block, 2.985 ms)",
     )
+
+
+def bench_remaining_phases(n_rows: Int, repeats: Int) raises:
+    """The six kernels that are neither the histogram nor the partition.
+
+    The level is 4.9 ms, the histogram 1.3 and the partition 0.25, so 3.4 ms
+    is unaccounted for: LARGER THAN EITHER MEASURED PART. Guessing at its
+    split is exactly how five conclusions went wrong in the other repository
+    this morning, so each kernel gets its own clock.
+
+    Timed one at a time with a `synchronize` after each, so these are not the
+    schedule an untimed level gets. They are for attribution, not for a total.
+    """
+    var ctx = DeviceContext()
+    var n_features = features_per_int(POLICY_BINARY)
+    var stat_count = 2
+
+    var cindex = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+    var stats = ctx.enqueue_create_buffer[DType.float32](2 * n_rows)
+    var row_index = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+    var new_index = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+    var gmap = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+    var flags = ctx.enqueue_create_buffer[DType.uint8](n_rows)
+    var sflags = ctx.enqueue_create_buffer[DType.uint8](n_rows)
+    var seq = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+
+    var hu = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
+    for r in range(n_rows):
+        hu.unsafe_ptr().unsafe_store(r, UInt32(r))
+    ctx.enqueue_copy(dst_buf=row_index, src_ptr=hu.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=gmap, src_ptr=hu.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=cindex, src_ptr=hu.unsafe_ptr())
+
+    var p_off = ctx.enqueue_create_buffer[DType.uint32](2)
+    var p_sz = ctx.enqueue_create_buffer[DType.uint32](2)
+    var hp_off = ctx.enqueue_create_buffer[DType.uint32](2)
+    var hp_sz = ctx.enqueue_create_buffer[DType.uint32](2)
+    var lids = ctx.enqueue_create_buffer[DType.uint32](2)
+    var one = ctx.enqueue_create_buffer[DType.uint32](1)
+    var two = ctx.enqueue_create_buffer[DType.uint32](1)
+    var h2a = ctx.enqueue_create_host_buffer[DType.uint32](2)
+    var h2b = ctx.enqueue_create_host_buffer[DType.uint32](2)
+    var h2c = ctx.enqueue_create_host_buffer[DType.uint32](2)
+    var h1a = ctx.enqueue_create_host_buffer[DType.uint32](1)
+    var h1b = ctx.enqueue_create_host_buffer[DType.uint32](1)
+    h2a.unsafe_ptr().unsafe_store(0, UInt32(0))
+    h2a.unsafe_ptr().unsafe_store(1, UInt32(0))
+    h2b.unsafe_ptr().unsafe_store(0, UInt32(n_rows))
+    h2b.unsafe_ptr().unsafe_store(1, UInt32(0))
+    h2c.unsafe_ptr().unsafe_store(0, UInt32(0))
+    h2c.unsafe_ptr().unsafe_store(1, UInt32(1))
+    h1a.unsafe_ptr().unsafe_store(0, UInt32(0))
+    h1b.unsafe_ptr().unsafe_store(0, UInt32(1))
+    ctx.enqueue_copy(dst_buf=p_off, src_ptr=h2a.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=p_sz, src_ptr=h2b.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=hp_off, src_ptr=h2a.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=hp_sz, src_ptr=h2b.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=lids, src_ptr=h2c.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=one, src_ptr=h1a.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=two, src_ptr=h1b.unsafe_ptr())
+
+    var nf = ctx.enqueue_create_buffer[DType.uint32](n_features)
+    var nf2 = ctx.enqueue_create_buffer[DType.uint32](n_features)
+    var hnf = ctx.enqueue_create_host_buffer[DType.uint32](n_features)
+    for f in range(n_features):
+        hnf.unsafe_ptr().unsafe_store(f, UInt32(1))
+    ctx.enqueue_copy(dst_buf=nf, src_ptr=hnf.unsafe_ptr())
+    for f in range(n_features):
+        hnf.unsafe_ptr().unsafe_store(f, UInt32(f))
+    ctx.enqueue_copy(dst_buf=nf2, src_ptr=hnf.unsafe_ptr())
+
+    var hist = ctx.enqueue_create_buffer[DType.float32](
+        2 * stat_count * n_features
+    )
+    var pstats = ctx.enqueue_create_buffer[DType.float32](2 * stat_count)
+    var skip = ctx.enqueue_create_buffer[DType.uint8](n_features)
+    var oscore = ctx.enqueue_create_buffer[DType.float32](1)
+    var obin = ctx.enqueue_create_buffer[DType.uint32](1)
+    var sp1 = ctx.enqueue_create_buffer[DType.uint32](1)
+    var sp2 = ctx.enqueue_create_buffer[DType.uint32](1)
+    var sp3 = ctx.enqueue_create_buffer[DType.uint32](1)
+    var sp5 = ctx.enqueue_create_buffer[DType.uint32](1)
+    var sp4 = ctx.enqueue_create_buffer[DType.uint8](1)
+    ctx.synchronize()
+
+    var wide = (n_rows + 255) // 256
+    if wide > 256:
+        wide = 256
+
+    var names = List[String]()
+    var times = List[Float64]()
+
+    # zero
+    var best = 0
+    for i in range(repeats + 1):
+        var t0 = perf_counter_ns()
+        ctx.enqueue_function[zero_histograms_kernel](
+            lids.unsafe_ptr(), Int32(n_features), hist.unsafe_ptr(),
+            grid_dim=(1, 2, stat_count), block_dim=(256, 1, 1),
+        )
+        ctx.synchronize()
+        var dt = perf_counter_ns() - t0
+        if i == 1 or (i > 1 and dt < best):
+            best = dt
+    names.append(String("zero")); times.append(Float64(best) / 1.0e6)
+
+    # scan
+    best = 0
+    for i in range(repeats + 1):
+        var t0 = perf_counter_ns()
+        ctx.enqueue_function[scan_histograms_kernel](
+            nf2.unsafe_ptr(), nf.unsafe_ptr(), Int32(n_features),
+            Int32(n_features), hist.unsafe_ptr(),
+            grid_dim=(1, 2, stat_count), block_dim=(256, 1, 1),
+        )
+        ctx.synchronize()
+        var dt = perf_counter_ns() - t0
+        if i == 1 or (i > 1 and dt < best):
+            best = dt
+    names.append(String("scan")); times.append(Float64(best) / 1.0e6)
+
+    # score
+    best = 0
+    for i in range(repeats + 1):
+        var t0 = perf_counter_ns()
+        ctx.enqueue_function[compute_optimal_splits_kernel](
+            skip.unsafe_ptr(), Int32(n_features), hist.unsafe_ptr(),
+            pstats.unsafe_ptr(), Int32(stat_count), one.unsafe_ptr(),
+            Int32(1), Float32(1.0), oscore.unsafe_ptr(), obin.unsafe_ptr(),
+            grid_dim=(1, 1, 1), block_dim=(SCORE_BLOCK_SIZE, 1, 1),
+        )
+        ctx.synchronize()
+        var dt = perf_counter_ns() - t0
+        if i == 1 or (i > 1 and dt < best):
+            best = dt
+    names.append(String("score")); times.append(Float64(best) / 1.0e6)
+
+    # split flags
+    best = 0
+    for i in range(repeats + 1):
+        var t0 = perf_counter_ns()
+        ctx.enqueue_function[split_and_make_sequence_kernel](
+            cindex.unsafe_ptr(), row_index.unsafe_ptr(), p_off.unsafe_ptr(),
+            p_sz.unsafe_ptr(), one.unsafe_ptr(), sp1.unsafe_ptr(),
+            sp2.unsafe_ptr(), sp3.unsafe_ptr(), sp4.unsafe_ptr(),
+            sp5.unsafe_ptr(), flags.unsafe_ptr(), seq.unsafe_ptr(),
+            grid_dim=(wide, 1, 1), block_dim=(SPLIT_BLOCK_SIZE, 1, 1),
+        )
+        ctx.synchronize()
+        var dt = perf_counter_ns() - t0
+        if i == 1 or (i > 1 and dt < best):
+            best = dt
+    names.append(String("split flags")); times.append(Float64(best) / 1.0e6)
+
+    # gather
+    best = 0
+    for i in range(repeats + 1):
+        var t0 = perf_counter_ns()
+        ctx.enqueue_function[gather_index_in_leaves_kernel](
+            one.unsafe_ptr(), p_off.unsafe_ptr(), p_sz.unsafe_ptr(),
+            row_index.unsafe_ptr(), gmap.unsafe_ptr(), new_index.unsafe_ptr(),
+            grid_dim=(wide, 1, 1), block_dim=(256, 1, 1),
+        )
+        ctx.synchronize()
+        var dt = perf_counter_ns() - t0
+        if i == 1 or (i > 1 and dt < best):
+            best = dt
+    names.append(String("gather index")); times.append(Float64(best) / 1.0e6)
+
+    # update partitions
+    best = 0
+    for i in range(repeats + 1):
+        var t0 = perf_counter_ns()
+        ctx.enqueue_function[update_partitions_after_split_kernel](
+            one.unsafe_ptr(), two.unsafe_ptr(), Int32(1), sflags.unsafe_ptr(),
+            p_off.unsafe_ptr(), p_sz.unsafe_ptr(), hp_off.unsafe_ptr(),
+            hp_sz.unsafe_ptr(),
+            grid_dim=(wide, 1, 1), block_dim=(512, 1, 1),
+        )
+        ctx.synchronize()
+        var dt = perf_counter_ns() - t0
+        if i == 1 or (i > 1 and dt < best):
+            best = dt
+    names.append(String("update parts")); times.append(Float64(best) / 1.0e6)
+
+    var total = 0.0
+    for i in range(len(names)):
+        print("    ", names[i], ":", times[i], "ms")
+        total += times[i]
+    print("    the other six together:", total, "ms")
