@@ -248,6 +248,13 @@ def check_tree(max_depth: Int) raises:
         )
     if negative != 0:
         raise Error("a leaf has a negative size")
+    # A tree that never splits conserves every row and produces exactly
+    # 2^depth partitions, so conservation alone cannot see it.
+    if max_depth > 0 and nonempty < 2:
+        raise Error(
+            "the tree never split: " + String(nonempty)
+            + " non-empty leaf of " + String(len(sizes))
+        )
     print("  every row accounted for at depth", max_depth)
 
 
@@ -298,7 +305,14 @@ def check_mixed_tree(max_depth: Int) raises:
             x ^= x << 13
             x ^= x >> 17
             x ^= x << 5
-            hb.unsafe_ptr().unsafe_store(r, UInt8(Int(x % UInt32(folds[f]))))
+            # `folds` is the BORDER count, so a feature takes bins 0..Folds,
+            # which is Folds + 1 values. `% folds[f]` makes every binary
+            # feature (Folds = 1) the constant 0, and a split resolved onto a
+            # constant feature puts every row on one side, which is what a
+            # tree that grows and never splits looks like.
+            hb.unsafe_ptr().unsafe_store(
+                r, UInt8(Int(x % UInt32(folds[f] + 1)))
+            )
         ctx.enqueue_copy(dst_buf=bins, src_ptr=hb.unsafe_ptr())
         ctx.enqueue_function[write_compressed_index_kernel](
             Int32(Int(cf.offset) * n_rows),
@@ -361,4 +375,14 @@ def check_mixed_tree(max_depth: Int) raises:
         )
     if len(sizes) != (1 << max_depth):
         raise Error("wrong leaf count")
-    print("  mixed-width tree grows and conserves every row")
+    # CONSERVATION IS NOT ENOUGH. A tree that puts every row on one side of
+    # every split conserves rows perfectly, produces exactly 2^depth
+    # partitions and passes both checks above while splitting nothing. That
+    # is what a constant feature or a scrambled histogram looks like from
+    # here, and it went unnoticed until this line existed.
+    if nonempty < 2:
+        raise Error(
+            "the tree never split: " + String(nonempty)
+            + " non-empty leaf of " + String(len(sizes))
+        )
+    print("  mixed-width tree grows, splits and conserves every row")
