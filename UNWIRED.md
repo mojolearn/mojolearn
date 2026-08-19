@@ -468,3 +468,33 @@ answer twice already this session.
 The stop-on-repeat rule, the model round-trip and the monotone loss are all
 real and all measured. A model made of stumps still trains, stores and
 replays correctly, which is what those three assert.
+
+
+## Where the time goes, RE-MEASURED after the column fix
+
+The earlier row sweep was taken on empty histograms and said about 34 of 40
+ms was fixed control-plane cost, so kernels were not the bottleneck. **That
+conclusion is dead.** With the kernels actually doing work, 800k x 100
+one-byte, depth 6:
+
+    100k rows    42.8 ms/tree
+    200k rows    50.6
+    400k rows    66.6
+    800k rows   129.2
+
+Eight times the rows costs 3.0x the time, and the increments are superlinear
+at the top: 400k to 800k is 1.94x for 2x the rows. Extrapolating the upper
+segment puts fixed cost around 30 ms, which is close to the old figure in
+ABSOLUTE terms and completely different in SHARE: it was ~85% of a 40 ms
+tree, it is now ~23% of a 129 ms tree.
+
+**So kernel-side work is now the majority of a tree at scale, and the two
+earlier measurements saying otherwise were both measuring nothing.** Against
+CatBoost's 30.1 ms/tree on the same shape we are about 4.3x behind, and the
+gap is in the histogram, not the control plane.
+
+The subtraction is worth 1.67x of that and is already on. What remains
+unexamined is whether replication (`replicas_for`) helps now that there is
+real work to replicate; every measurement of it so far was taken on an empty
+histogram and none of them mean anything.
+
