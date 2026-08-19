@@ -51,6 +51,29 @@ bound. Widely used, small surface, hard to get subtly wrong.
 k-NN is also the retrieval primitive under vector search, which is the one
 place this list touches current AI infrastructure directly.
 
+**Which index, and the answer is not the popular one.** The two approximate
+nearest-neighbour structures people reach for behave oppositely on a GPU:
+
+- **HNSW is a BAD GPU fit and should not be attempted.** It is a graph
+  traversal: pointer chasing, irregular access, and every hop depends on the
+  previous one. That is close to the worst case for a wide machine. This is
+  not a prediction; FAISS ships HNSW as CPU-only for exactly this reason.
+- **IVF is a GOOD GPU fit.** Distances to centroids are a matrix multiply,
+  selecting `nprobe` lists is a top-k, and the search inside those lists is
+  brute force. Dense and regular throughout. FAISS-GPU implements IVFFlat and
+  IVFPQ and not HNSW, which is the same conclusion reached by people who
+  measured it.
+
+**And the shortcut worth taking first: at laptop scale, exact brute-force k-NN
+on the GPU can beat approximate k-NN on the CPU.** Brute force is a matrix
+multiply plus a top-k, which is the operation a GPU is best at. For corpora up
+to a few million vectors there may be no index needed at all.
+
+That is a better claim than owning an ANN index, because it is *exact*.
+Competing implementations return approximate neighbours and we would return
+the right ones, faster, on hardware they cannot use. Build brute force first,
+measure where it stops winning, and only then consider IVF. Never HNSW.
+
 ### 3. Gaussian Processes.
 
 An O(n^3) Cholesky is close to the ideal GPU workload: dense, regular, high
@@ -59,17 +82,58 @@ one, so the competitive gap is wider than for anything else here.
 
 The largest single win available on this list, and the most work.
 
-### 4. UMAP and t-SNE.
+### 4. UMAP and t-SNE. HARD. Do not start here.
 
-Heavy pairwise computation, very widely used in practice for looking at
-embeddings, and cuML accelerates both. Mac users currently get the CPU
-implementations and wait.
+**What they are for**, since the names say nothing: reducing high-dimensional
+data to two dimensions so it can be *plotted*. You have 768-dimensional
+embeddings and you want a scatter plot showing whether they cluster sensibly.
+Exploratory visualization rather than a modeling step. Dominant in single-cell
+genomics and in inspecting embedding spaces.
+
+Heavy pairwise computation, very widely used, and cuML accelerates both, so
+Mac users currently get the CPU implementations and wait.
+
+**But this is the hardest entry on the list and it is not close.** UMAP needs
+fuzzy simplicial set construction, a spectral initialization, and an SGD
+layout phase, each with its own correctness traps. t-SNE needs either
+Barnes-Hut or an FFT-based approximation to avoid being O(n^2), and both are
+substantial algorithms in their own right. Neither is a few hundred lines and
+neither is verifiable against a hand calculation the way a histogram is.
+
+High user value, high difficulty. Correct to want, wrong to attempt before
+the easy entries have shipped and been used.
 
 ### 5. Bootstrap, permutation tests, Monte Carlo.
 
 Embarrassingly parallel by construction, and statisticians run them on
 laptops constantly. Least glamorous entry and possibly the highest ratio of
 user-visible speedup to implementation difficulty.
+
+## Difficulty, stated separately from value
+
+The ranking above is by value. This one is by cost, and they do not agree.
+
+| item | difficulty | note |
+|---|---|---|
+| Bootstrap, permutation, Monte Carlo | **trivial** | a parallel loop |
+| k-means | **easy** | a few hundred lines, and once correct it stays correct |
+| Random Forest | **easy from here** | a delta on machinery already built |
+| k-NN, exact brute force | **easy** | matrix multiply plus top-k |
+| k-NN, IVF index | **moderate** | only if brute force stops winning |
+| Gaussian Processes | **hard** | Cholesky is a call; numerical robustness, kernel choice and marginal-likelihood gradients are the work |
+| UMAP, t-SNE | **hard** | see above |
+| k-NN, HNSW | **do not** | wrong shape for the hardware |
+
+**On maintenance, which is the real objection to a broad scope.** Most of the
+treadmill is per REPOSITORY, not per algorithm: language churn, interpreter
+releases, packaging, CI. That is paid once whether one algorithm ships or six.
+
+Per-algorithm carry varies enormously, and not in the direction intuition
+suggests. Gradient boosting is *expensive* to maintain because it has a large
+parameter surface and accuracy gates against three competitors. k-means has
+almost none, because there is nothing in it to drift. So the cost of a broad
+scope is concentrated in FIRST implementation and validation rather than in
+ongoing carry, and several entries above are cheap on both.
 
 ## The uncomfortable note about the current project
 
