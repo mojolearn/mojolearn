@@ -34,12 +34,12 @@ comptime HISTOGRAMS_CURRENT_PATH = 2
 
 
 @fieldwise_init
-struct LeafRecord(Copyable, Movable):
+struct LeafRecord(Copyable, ImplicitlyCopyable, Movable):
     """One leaf of the level, as the pairing rule needs to see it.
 
-    `path_id` stands in for `TLeafPath` as a hash key: two siblings share it,
-    which is exactly what `THashMap<TLeafPath, TVector<ui32>> rebuildLeaves`
-    is grouping on (`:1293`).
+    `path_id` is their `PreviousSplit(leaf.Path)`, the PARENT's path, which
+    is the key `THashMap<TLeafPath, TVector<ui32>> rebuildLeaves` groups on
+    (`:1293`). Two siblings share it; that is the whole point of the key.
     """
 
     var size: UInt32
@@ -52,9 +52,15 @@ struct LeafRecord(Copyable, Movable):
 struct LevelPlan(Copyable, Movable):
     """The output: what to launch this level.
 
-    - `compute_ids`: leaves whose histogram is accumulated from their rows.
-    - `subtract_from`, `subtract_what`: parallel arrays, one entry per pair,
-      feeding the batched subtraction. `from - what` overwrites `from`.
+    Their three vectors, same names, same meaning (`:1287-1291`):
+
+    - `compute_ids`  = `computeLeaves`, accumulated from their rows
+    - `subtract_what` = `smallLeaves`, a strict subset of `computeLeaves`
+    - `subtract_from` = `bigLeaves`, derived as `parent - small` in place
+
+    `updated_ids` is their `allUpdatedLeaves` (`:1359`), which is
+    `computeLeaves` followed by `bigLeaves`, and is exactly the set that
+    becomes `CurrentPath` once the level is built.
     """
 
     var compute_ids: List[UInt32]
@@ -65,58 +71,86 @@ struct LevelPlan(Copyable, Movable):
         """How many accumulations the subtraction avoided. One per pair."""
         return len(self.subtract_from)
 
+    def updated_ids(self) -> List[UInt32]:
+        """Their `allUpdatedLeaves` (`:1359`)."""
+        var out = List[UInt32]()
+        for i in range(len(self.compute_ids)):
+            out.append(self.compute_ids[i])
+        for i in range(len(self.subtract_from)):
+            out.append(self.subtract_from[i])
+        return out^
+
 
 def build_necessary_histograms(leaves: List[LeafRecord]) raises -> LevelPlan:
     """`BuildNecessaryHistograms`'s classification, copied.
 
-    Their loop shape: first bucket every leaf by `HistogramsType`, grouping
-    the rebuild candidates by path; then walk the groups and, for a group of
-    two, pick the smaller to compute and record the pair for subtraction.
+    ==================== CORRECTED 2026-08-19 ====================
+    The first port had this state machine BACKWARDS, and it was never
+    wired, so nothing caught it. It skipped `PreviousPath` as "needs
+    nothing" and paired up `Zeroes` leaves for subtraction. Theirs
+    (`:1295-1304`) is the exact opposite:
+
+        if (leaf.HistogramsType == EHistogramsType::PreviousPath) {
+            auto prevPath = PreviousSplit(leaf.Path);
+            rebuildLeaves[prevPath].push_back(i);
+        } else if (leaf.HistogramsType == EHistogramsType::Zeroes) {
+            computeLeaves.push_back(i);
+        }
+
+    A `PreviousPath` leaf is one whose slot ALREADY HOLDS ITS PARENT'S
+    histogram, put there by `CopyHistogram` at split time
+    (`split_points.cpp:326`). Those are precisely the leaves that can be
+    paired and subtracted. A `Zeroes` leaf holds nothing and must be built.
+
+    Wiring the old version would have silently subtracted the wrong
+    histograms. See PORTING_RULES.md rule 3.
+    ==============================================================
     """
     var compute_ids = List[UInt32]()
     var subtract_from = List[UInt32]()
     var subtract_what = List[UInt32]()
 
-    # `for (size_t i = 0; i < leaves.size(); ++i)` at `:1295`. A
-    # `PreviousPath` leaf needs nothing; a `Zeroes` leaf is a rebuild
-    # candidate and is grouped by path.
     var n = len(leaves)
-    var seen = List[Bool]()
+
+    # `for (size_t i = 0; i < leaves.size(); ++i)` at `:1295`.
+    # Zeroes goes straight to computeLeaves; PreviousPath is grouped by the
+    # PARENT path so siblings meet.
+    var grouped = List[Bool]()
     for _ in range(n):
-        seen.append(False)
+        grouped.append(False)
 
     for i in range(n):
-        if seen[i]:
-            continue
-        if leaves[i].histograms_type == HISTOGRAMS_PREVIOUS_PATH:
-            seen[i] = True
-            continue
-        if leaves[i].histograms_type != HISTOGRAMS_ZEROES:
-            seen[i] = True
-            continue
+        if leaves[i].histograms_type == HISTOGRAMS_ZEROES:
+            compute_ids.append(UInt32(i))
 
-        # Find this leaf's sibling: the other member of its path group.
+    # `for (auto& rebuildLeavesPair : rebuildLeaves)` at `:1306`.
+    for i in range(n):
+        if grouped[i]:
+            continue
+        if leaves[i].histograms_type != HISTOGRAMS_PREVIOUS_PATH:
+            continue
+        grouped[i] = True
+
         var sibling = -1
         for j in range(i + 1, n):
             if (
-                not seen[j]
-                and leaves[j].histograms_type == HISTOGRAMS_ZEROES
+                not grouped[j]
+                and leaves[j].histograms_type == HISTOGRAMS_PREVIOUS_PATH
                 and leaves[j].path_id == leaves[i].path_id
             ):
                 sibling = j
                 break
 
-        seen[i] = True
         if sibling < 0:
-            # `if (ids.size() == 1)` at `:1309`: no sibling, build it.
-            compute_ids.append(UInt32(i))
+            # `CB_ENSURE(subsets->Leaves[leafId].IsTerminal, ...)` at `:1311`.
+            if not leaves[i].is_terminal:
+                raise Error(
+                    String("Error: this leaf should be terminal, id ")
+                    + String(i)
+                )
             continue
 
-        seen[sibling] = True
-
-        # `:1326-1328`. Both terminal means neither histogram is ever read.
-        if leaves[i].is_terminal and leaves[sibling].is_terminal:
-            continue
+        grouped[sibling] = True
 
         # `:1318`, the rule the whole design rests on.
         var small = i
@@ -125,10 +159,15 @@ def build_necessary_histograms(leaves: List[LeafRecord]) raises -> LevelPlan:
             small = sibling
             big = i
 
-        compute_ids.append(UInt32(small))
-        # `parent - smaller = larger`, and the parent's histogram already
-        # occupies the larger's slot, so `from` is the big leaf.
-        subtract_from.append(UInt32(big))
+        # `:1327`. Both terminal means neither histogram is ever read.
+        if leaves[small].is_terminal and leaves[big].is_terminal:
+            continue
+
+        # `smallLeaves.push_back(smallLeafId);`
+        # `computeLeaves.push_back(smallLeafId);`
+        # `bigLeaves.push_back(bigLeafId);`  (`:1332-1334`)
         subtract_what.append(UInt32(small))
+        compute_ids.append(UInt32(small))
+        subtract_from.append(UInt32(big))
 
     return LevelPlan(compute_ids^, subtract_from^, subtract_what^)
