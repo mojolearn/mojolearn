@@ -42,6 +42,7 @@ listed it as verified in isolation and used by no kernel.
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.memory import AddressSpace
+from max.gpu.primitives.block import sum as block_sum
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
@@ -197,21 +198,12 @@ def sum_partials_kernel(
         acc += v
         i += stride
 
-    var s = stack_allocation[
-        REDUCE_BY_KEY_TPB,
-        Scalar[DType.float32],
-        address_space = AddressSpace.SHARED,
-    ]()
-    s[tid] = acc
-    barrier()
-
-    var half = REDUCE_BY_KEY_TPB // 2
-    while half > 0:
-        if tid < half:
-            s[tid] = s[tid] + s[tid + half]
-        barrier()
-        half //= 2
-
+    # `cub::BlockReduce`'s counterpart from
+    # `max.gpu.primitives.block`. The hand-written shared-memory tree
+    # reduction this replaced is gone: same arithmetic, one call, and
+    # the reduction shape is Modular's to tune rather than ours to
+    # guess. See VENDOR_LIBRARIES.md.
+    var s0 = block_sum[block_size=REDUCE_BY_KEY_TPB](acc)
     if tid == 0:
         out_partial.unsafe_store(Int(block_idx.x), s0)
 
@@ -270,20 +262,11 @@ def finish_sum_kernel(
         acc += partials.unsafe_load(i)
         i += REDUCE_BY_KEY_TPB
 
-    var s = stack_allocation[
-        REDUCE_BY_KEY_TPB,
-        Scalar[DType.float32],
-        address_space = AddressSpace.SHARED,
-    ]()
-    s[tid] = acc
-    barrier()
-
-    var half = REDUCE_BY_KEY_TPB // 2
-    while half > 0:
-        if tid < half:
-            s[tid] = s[tid] + s[tid + half]
-        barrier()
-        half //= 2
-
+    # `cub::BlockReduce`'s counterpart from
+    # `max.gpu.primitives.block`. The hand-written shared-memory tree
+    # reduction this replaced is gone: same arithmetic, one call, and
+    # the reduction shape is Modular's to tune rather than ours to
+    # guess. See VENDOR_LIBRARIES.md.
+    var s0 = block_sum[block_size=REDUCE_BY_KEY_TPB](acc)
     if tid == 0:
         out_scalar.unsafe_store(0, s0)

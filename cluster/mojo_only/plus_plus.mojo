@@ -22,6 +22,7 @@ and are not impossible.
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.memory import AddressSpace
+from max.gpu.primitives.block import sum as block_sum
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
@@ -68,21 +69,12 @@ def candidate_cost_kernel(
         acc += d if d < cur else cur
         i += PLUS_PLUS_TPB
 
-    var s = stack_allocation[
-        PLUS_PLUS_TPB,
-        Scalar[DType.float32],
-        address_space = AddressSpace.SHARED,
-    ]()
-    s[tid] = acc
-    barrier()
-
-    var half = PLUS_PLUS_TPB // 2
-    while half > 0:
-        if tid < half:
-            s[tid] = s[tid] + s[tid + half]
-        barrier()
-        half //= 2
-
+    # `cub::BlockReduce`'s counterpart from
+    # `max.gpu.primitives.block`. The hand-written shared-memory tree
+    # reduction this replaced is gone: same arithmetic, one call, and
+    # the reduction shape is Modular's to tune rather than ours to
+    # guess. See VENDOR_LIBRARIES.md.
+    var s0 = block_sum[block_size=PLUS_PLUS_TPB](acc)
     if tid == 0:
         out_cost.unsafe_store(trial, s0)
 
@@ -172,21 +164,12 @@ def chunk_sums_kernel(
         acc += a.unsafe_load(i)
         i += PLUS_PLUS_TPB
 
-    var s = stack_allocation[
-        PLUS_PLUS_TPB,
-        Scalar[DType.float32],
-        address_space = AddressSpace.SHARED,
-    ]()
-    s[tid] = acc
-    barrier()
-
-    var half = PLUS_PLUS_TPB // 2
-    while half > 0:
-        if tid < half:
-            s[tid] = s[tid] + s[tid + half]
-        barrier()
-        half //= 2
-
+    # `cub::BlockReduce`'s counterpart from
+    # `max.gpu.primitives.block`. The hand-written shared-memory tree
+    # reduction this replaced is gone: same arithmetic, one call, and
+    # the reduction shape is Modular's to tune rather than ours to
+    # guess. See VENDOR_LIBRARIES.md.
+    var s0 = block_sum[block_size=PLUS_PLUS_TPB](acc)
     if tid == 0:
         out_partial.unsafe_store(Int(block_idx.x), s0)
 
