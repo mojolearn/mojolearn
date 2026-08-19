@@ -985,9 +985,11 @@ def bench_tree_shapes(n_rows: Int, max_depth: Int, repeats: Int) raises:
             ctx.enqueue_copy(dst_buf=stat[s], src_ptr=hstat[s].unsafe_ptr())
             ctx.synchronize()
             var t0 = perf_counter_ns()
+            var scratch_cursor = ctx.enqueue_create_buffer[DType.float32](1)
             var sizes = run_tree_layout(
                 ctx, n_rows, fold_sets[s], max_depth,
                 cidx[s], stat[s], ridx[s],
+                scratch_cursor,
                 Float32(tws[s]), Float32(tgs[s]),
             )
             var dt = perf_counter_ns() - t0
@@ -1050,8 +1052,10 @@ def bench_subtraction(
             ctx.enqueue_copy(dst_buf=stat, src_ptr=hstat.unsafe_ptr())
             ctx.synchronize()
             var t0 = perf_counter_ns()
+            var scratch_cursor = ctx.enqueue_create_buffer[DType.float32](1)
             var sizes = run_tree_layout(
                 ctx, n_rows, folds, max_depth, cidx, stat, ridx,
+                scratch_cursor,
                 Float32(tw), Float32(tg), arm == 0,
             )
             var dt = perf_counter_ns() - t0
@@ -1126,8 +1130,10 @@ def bench_realistic(n_rows: Int, n_features: Int, max_depth: Int, repeats: Int) 
         ctx.enqueue_copy(dst_buf=stats, src_ptr=hstat.unsafe_ptr())
         ctx.synchronize()
         var t0 = perf_counter_ns()
+        var scratch_cursor = ctx.enqueue_create_buffer[DType.float32](1)
         var sizes = run_tree_layout(
             ctx, n_rows, folds, max_depth, cindex, stats, row_index,
+            scratch_cursor,
             Float32(tw), Float32(tg),
         )
         var dt = perf_counter_ns() - t0

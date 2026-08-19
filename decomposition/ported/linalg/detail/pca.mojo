@@ -53,6 +53,10 @@ from core.column_stats import (
 )
 from core.gemm import GEMM_TILE, gemm_nt_kernel
 from decomposition.mojo_only.jacobi_eigh import jacobi_eigh
+from decomposition.mojo_only.jacobi_eigh_device import (
+    JACOBI_TPB,
+    jacobi_eigh_kernel,
+)
 
 
 @fieldwise_init
@@ -103,6 +107,7 @@ def compute_covariance(
         x.unsafe_ptr(),
         Int32(n_rows),
         Int32(n_cols),
+        Float32(1.0) / Float32(n_rows - 1),
         grid_dim=(
             (n_cols + COV_TILE - 1) // COV_TILE,
             (n_cols + COV_TILE - 1) // COV_TILE,
@@ -153,18 +158,65 @@ def pca_fit(
 
     compute_covariance(ctx, x, mu, cov, n_rows, n_cols, restore_input)
 
+    return eig_and_truncate(
+        ctx, cov, n_cols, n_components, n_rows - 1
+    )
+
+
+def eig_and_truncate(
+    ctx: DeviceContext,
+    mut cov: DeviceBuffer[DType.float32],
+    n_cols: Int,
+    n_components: Int,
+    singular_scale: Int,
+) raises -> PCAResult:
+    """`cal_eig` + `trunc_comp_exp_vars`, shared by PCA and truncated SVD.
+
+    Both callers reach this with an `n_cols x n_cols` symmetric matrix and
+    differ only in how they built it: PCA from CENTERED data scaled by
+    `1 / (n_rows - 1)`, truncated SVD from RAW data with no scaling. Their
+    two files call the same `cal_eig`, so this is one function here too.
+
+    `singular_scale` is the `n_rows - 1` factor `pca_fit` multiplies by
+    before taking the square root (`detail/pca.cuh:180`). `tsvd_fit` passes
+    1, because its eigenvalues are already the squared singular values.
+    """
+    # `cal_eig` -> cuSOLVER `syevj`, WHICH RUNS ON THE DEVICE. So this runs
+    # on the device too. The first version of this port put it on the host,
+    # which was inside HOST_AND_DEVICE.md's O(rows) rule but was NOT a mirror
+    # of their host/device split, and mirroring that split is the standing
+    # rule. `jacobi_eigh.mojo` survives as the reference this is checked
+    # against.
+    var vec_buf = ctx.enqueue_create_buffer[DType.float32](n_cols * n_cols)
+    ctx.synchronize()
+    ctx.enqueue_function[jacobi_eigh_kernel](
+        cov.unsafe_ptr(),
+        vec_buf.unsafe_ptr(),
+        Int32(n_cols),
+        Int32(80),
+        Float32(1.0e-10),
+        grid_dim=(1, 1, 1),
+        block_dim=(JACOBI_TPB, 1, 1),
+    )
+    ctx.synchronize()
+
+    # Only the O(n_cols^2) post-processing comes back: ordering, truncation,
+    # the sign convention and the variance ratios. RAFT does that part on
+    # device too (`col_reverse`, `trunc_zero_origin`, `matrix::ratio`), so
+    # this is still a departure and it is named in UNWIRED.md rather than
+    # glossed. It is O(cols^2), never O(rows).
     var h_cov = ctx.enqueue_create_host_buffer[DType.float32](n_cols * n_cols)
+    var h_vec = ctx.enqueue_create_host_buffer[DType.float32](n_cols * n_cols)
     ctx.enqueue_copy(dst_ptr=h_cov.unsafe_ptr(), src_buf=cov)
+    ctx.enqueue_copy(dst_ptr=h_vec.unsafe_ptr(), src_buf=vec_buf)
     ctx.synchronize()
 
     var a = List[Float64]()
     for i in range(n_cols * n_cols):
         a.append(Float64(h_cov.unsafe_ptr().unsafe_load(i)))
     var vecs = List[Float64]()
-    for _i in range(n_cols * n_cols):
-        vecs.append(0.0)
-
-    jacobi_eigh(a, vecs, n_cols)
+    for i in range(n_cols * n_cols):
+        vecs.append(Float64(h_vec.unsafe_ptr().unsafe_load(i)))
 
     # `cal_eig` + `col_reverse`: sort DESCENDING by eigenvalue.
     var order = List[Int]()
@@ -205,15 +257,21 @@ def pca_fit(
         explained_var.append(lam)
         explained_var_ratio.append(lam / total if total != 0.0 else 0.0)
         # `weighted_sqrt(explained_var, n_rows - 1)`, `detail/pca.cuh:180`.
-        singular_vals.append(sqrt(lam * Float64(n_rows - 1)))
+        singular_vals.append(sqrt(lam * Float64(singular_scale)))
 
     # `noise_vars`: the mean of the DISCARDED eigenvalues, or zero if none
     # were discarded (`trunc_comp_exp_vars`, tail).
     var noise = 0.0
-    if n_components < n_cols and n_components < n_rows:
+    if n_components < n_cols:
         for c in range(n_components, n_cols):
             noise += a[order[c] * n_cols + order[c]]
         noise /= Float64(n_cols - n_components)
+
+    return PCAResult(
+        components^, explained_var^, explained_var_ratio^, singular_vals^, noise
+    )
+
+
 
     return PCAResult(
         components^, explained_var^, explained_var_ratio^, singular_vals^, noise

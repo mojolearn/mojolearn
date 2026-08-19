@@ -63,7 +63,25 @@ def compute_leaf_values_kernel(
         out_values.unsafe_store(leaf, Float32(0.0))
         return
 
-    var v = -g / (w + l2)
+    # ==================== SIGN CONVENTION ====================
+    # `+g`, NOT `-g`. This is CatBoost's convention and it is easy to get
+    # backwards, so it is written down rather than inferred.
+    #
+    # Their `MseImpl` sets `der[i] = weight * (relev - val)`
+    # (`pointwise_targets.cu`), which they name `direction`: it is the
+    # NEGATIVE loss gradient, already pointing downhill. Their Newton step
+    # then solves `Hessian * x = Gradient` and uses `x` UNNEGATED as the move
+    # direction (`descent_helpers.cpp:104-116`).
+    #
+    # So a leaf's value is `+sum(der) / (sum(der2) + l2)`, the weighted mean
+    # residual, and adding it to the prediction moves toward the target.
+    #
+    # It was `-g` here, ported before any target existed to fix the
+    # convention. With CatBoost's `der` that inverts every step: measured on
+    # `boosting_check`, the loss GREW by about 1.68x per iteration, from 231
+    # to 55839 over twelve trees, instead of falling.
+    # =========================================================
+    var v = g / (w + l2)
     if v > max_leaf_value:
         v = max_leaf_value
     if v < -max_leaf_value:

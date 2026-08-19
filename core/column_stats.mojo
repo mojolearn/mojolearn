@@ -91,8 +91,19 @@ def covariance_kernel(
     xc: MutPointer[Float32, MutAnyOrigin],
     n_rows_in: Int32,
     n_cols_in: Int32,
+    scale_in: Float32,
 ):
-    """`raft::stats::cov` on ALREADY CENTERED data: `Xc^T Xc / (n_rows - 1)`.
+    """`X^T X * scale`. Serves BOTH of RAFT's users of this product.
+
+    `raft::stats::cov` on centered data with `scale = 1 / (n_rows - 1)` is
+    PCA's covariance. `tsvd_fit` calls `raft::linalg::gemm` with
+    `CUBLAS_OP_T, CUBLAS_OP_N` and `alpha = 1` on UNCENTERED data
+    (`detail/tsvd.cuh`), which is the same product with `scale = 1`.
+
+    One kernel with a scale rather than two, because the two differ only in
+    that constant and in whether the caller centered first. Which of those
+    happens is the caller's business and is exactly what separates PCA from
+    truncated SVD.
 
     A different GEMM shape from `core/gemm.mojo`, which computes `X Y^T`.
     Here both operands are the same matrix and the CONTRACTED axis is the row
@@ -154,6 +165,4 @@ def covariance_kernel(
         tile += 1
 
     if i < n_cols and j < n_cols:
-        cov.unsafe_store(
-            i * n_cols + j, acc / Float32(n_rows - 1)
-        )
+        cov.unsafe_store(i * n_cols + j, acc * scale_in)

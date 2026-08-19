@@ -1,6 +1,7 @@
 from mojo_only.launch_probe import probe
 from mojo_only.permuted_ids_check import check_permuted_leaf_ids
 from mojo_only.copy_histograms_check import check_copy_histograms
+from mojo_only.boosting_check import check_boosting_learns
 from mojo_only.options_check import check_options
 from mojo_only.mixed_hist_probe import probe_mixed_histogram
 from mojo_only.layout_check import (
@@ -435,3 +436,6 @@ def main() raises:
     check_permuted_leaf_ids(0, 16, False)
     check_permuted_leaf_ids(0, 16, True)
     check_permuted_leaf_ids(1, 16, True)
+    print()
+    print("BOOSTING, end to end:")
+    check_boosting_learns()

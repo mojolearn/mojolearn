@@ -31,6 +31,9 @@ while porting rather than read from their source:
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from ported.gpu_lib.gpu_manager import TCudaManager
+from ported.methods.kernel_add_model_value import (
+    add_model_value_kernel,
+)
 from ported.methods.greedy_subsets_searcher.split_properties_helper import (
     HISTOGRAMS_CURRENT_PATH,
     HISTOGRAMS_PREVIOUS_PATH,
@@ -1377,9 +1380,13 @@ def run_tree_layout(
     mut cindex: DeviceBuffer[DType.uint32],
     mut stats: DeviceBuffer[DType.float32],
     mut row_index: DeviceBuffer[DType.uint32],
+    mut cursor: DeviceBuffer[DType.float32],
     total_weight: Float32,
     total_gradient: Float32,
     use_subtraction: Bool = True,
+    apply_to_cursor: Bool = False,
+    learning_rate: Float32 = Float32(0.3),
+    l2_leaf_reg: Float32 = Float32(3.0),
 ) raises -> List[Int]:
     """`FitImpl` over a LAYOUT: mixed feature widths, one launch per policy.
 
@@ -1496,6 +1503,9 @@ def run_tree_layout(
     for i in range(max_leaves):
         h_dense.unsafe_ptr().unsafe_store(i, UInt32(i))
     ctx.enqueue_copy(dst_buf=dense_ids, src_ptr=h_dense.unsafe_ptr())
+
+    # their weak model's leaf values, one per final leaf
+    var leaf_values = ctx.enqueue_create_buffer[DType.float32](max_leaves)
 
     # their `computeLeaves`, `bigLeaves`, `smallLeaves`
     # (`split_properties_helper.cpp:1287-1291`)
@@ -1860,6 +1870,44 @@ def run_tree_layout(
             leaf_records[i].size = UInt32(s)
             if s > max_live_rows:
                 max_live_rows = s
+
+    # ================================================================
+    # their `estimator.Estimate(...)` then `AppendModels(...)`
+    # (`doc_parallel_boosting.h:371` and `:391`).
+    #
+    # Their boosting loop runs these AFTER the structure search returns, in
+    # that order, and so does this. The structure is final at this point;
+    # nothing below changes which rows are in which leaf.
+    # ================================================================
+    if apply_to_cursor:
+        # The final level's stats were never computed: the loop computes them
+        # BEFORE each split, and the last split has no level after it.
+        # `ids_a` still holds the LAST level's ids, and `n_live` has doubled
+        # since. Refill it for the final leaf count.
+        for i in range(n_live):
+            h_ids_a.unsafe_ptr().unsafe_store(i, UInt32(i))
+        ctx.enqueue_copy(dst_buf=ids_a, src_ptr=h_ids_a.unsafe_ptr())
+        compute_partition_stats(
+            ctx, n_live, max_live_rows, stat_count, n_rows,
+            ids_a, p_off, p_sz, stats, stat_partials, part_stats,
+        )
+        mgr.stream_kernel()
+
+        ctx.enqueue_function[compute_leaf_values_kernel](
+            part_stats.unsafe_ptr(), Int32(stat_count), Int32(n_live),
+            l2_leaf_reg, Float32(1.0e30), leaf_values.unsafe_ptr(),
+            grid_dim=(n_live + LEAF_BLOCK - 1) // LEAF_BLOCK,
+            block_dim=LEAF_BLOCK,
+        )
+        mgr.stream_kernel()
+
+        # their `AppendModels`, with `Rescale(step)` folded into the kernel.
+        ctx.enqueue_function[add_model_value_kernel](
+            p_off.unsafe_ptr(), p_sz.unsafe_ptr(), row_index.unsafe_ptr(),
+            leaf_values.unsafe_ptr(), learning_rate, cursor.unsafe_ptr(),
+            grid_dim=(wide, n_live, 1), block_dim=(256, 1, 1),
+        )
+        mgr.stream_kernel()
 
     ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
     mgr.wait_complete()

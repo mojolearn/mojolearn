@@ -29,3 +29,6 @@ ported/gpu_lib/task.mojo	catboost/cuda/cuda_lib/task.h	partial+replaced	ECommand
 ported/gpu_lib/tasks_queue/single_host_task_queue.mojo	catboost/cuda/cuda_lib/tasks_queue/single_host_task_queue.h	replaced	no thread; enqueue_function is already an async submit
 ported/gpu_lib/gpu_single_worker.mojo	catboost/cuda/cuda_lib/gpu_single_worker.cpp	partial	the ECommandType dispatch switch; sync_count/launch_count/sync_budget
 ported/gpu_lib/gpu_manager.mojo	catboost/cuda/cuda_lib/cuda_manager.h	partial	single device; owns the ONLY drain
+ported/targets/kernel/pointwise_targets.mojo	catboost/cuda/targets/kernel/pointwise_targets.cu	partial	MseImpl only; der/der2 written into the two stats planes, functionValue reduced on the host
+ported/methods/kernel_add_model_value.mojo	catboost/cuda/methods/doc_parallel_boosting.h	partial+replaced	AppendModels device side; leaf read off the partition, not by evaluating the tree
+ported/methods/doc_parallel_boosting.mojo	catboost/cuda/methods/doc_parallel_boosting.h	partial	the Fit loop; one permutation, no test cursor, no early stopping, no snapshots
