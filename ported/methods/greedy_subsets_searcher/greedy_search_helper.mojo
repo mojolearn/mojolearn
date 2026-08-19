@@ -1951,6 +1951,9 @@ def run_tree_layout(
                 " calculation. Try increasing l2_leaf_reg, and/or"
                 " decreasing learning_rate, etc."
             )
+        print("      [SPLIT] d", depth, "bf", best_bf, "feat",
+              resolve_split(layout, best_bf).feature, "bin",
+              resolve_split(layout, best_bf).bin)
         var choice = resolve_split(layout, best_bf)
         ref cf = layout.features[choice.feature]
 
