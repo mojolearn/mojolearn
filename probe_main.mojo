@@ -1,4 +1,11 @@
 from mojo_only.launch_probe import probe
+from mojo_only.fixed_point import (
+    SCALE_LIMIT,
+    choose_scale,
+    dequantize,
+    max_representable,
+    quantize,
+)
 from mojo_only.kernel_matrix import (
     COLUMN_AMD,
     COLUMN_APPLE,
@@ -137,7 +144,67 @@ def show_matrix() raises:
     print("  kernels agree with the matrix, so the table is reached")
 
 
+def check_fixed_point() raises:
+    """The overflow guarantee, exercised at the boundary.
+
+    The claim is that a scale derived from the GLOBAL sum of magnitudes makes
+    overflow impossible for every partial sum, because any leaf's rows are a
+    subset of all rows. The check is the worst case: one leaf that contains
+    every row, all of one sign, so its accumulation is exactly the global sum
+    and lands exactly on the limit.
+    """
+    var rows = List[Float64]()
+    rows.append(3.5)
+    rows.append(-2.25)
+    rows.append(0.125)
+    rows.append(-9.0)
+    rows.append(0.0009765625)
+
+    var total_mag = 0.0
+    for i in range(len(rows)):
+        total_mag += abs(rows[i])
+    var scale = choose_scale(total_mag)
+    print("  sum of magnitudes", total_mag, " scale", scale)
+
+    # Worst case: every row in one leaf, all magnitudes adding in one
+    # direction. This is the largest partial sum the device can ever form.
+    var worst = Int64(0)
+    for i in range(len(rows)):
+        worst += Int64(quantize(abs(rows[i]), scale))
+    print("  worst-case slot", worst, " limit", Int64(SCALE_LIMIT))
+    if Float64(worst) > SCALE_LIMIT:
+        raise Error(
+            "the scale does NOT bound the worst case: slot "
+            + String(worst)
+            + " exceeds "
+            + String(SCALE_LIMIT)
+        )
+
+    # Round trip: quantize then dequantize is within one quantum.
+    var q = quantize(rows[0], scale)
+    var back = dequantize(Int64(q), scale)
+    var quantum = 1.0 / scale
+    if abs(back - rows[0]) > quantum:
+        raise Error("round trip lost more than one quantum")
+    print("  round trip", rows[0], "->", back, " quantum", quantum)
+
+    # Order independence, which is the property the whole thing exists for.
+    var fwd = Int64(0)
+    for i in range(len(rows)):
+        fwd += Int64(quantize(rows[i], scale))
+    var rev = Int64(0)
+    for i in range(len(rows) - 1, -1, -1):
+        rev += Int64(quantize(rows[i], scale))
+    if fwd != rev:
+        raise Error("integer accumulation is not order independent")
+    print("  forward and reverse accumulation agree exactly:", fwd)
+    print("  max representable at this scale", max_representable(scale))
+
+
 def main() raises:
+    print("fixed point (no CatBoost counterpart):")
+    check_fixed_point()
+    print()
     print("kernel matrix:")
     show_matrix()
     print()
