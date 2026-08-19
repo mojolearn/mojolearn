@@ -265,3 +265,74 @@ def spec_for(kernel: Int, device: Int, mode: NumericMode) raises -> KernelSpec:
         flush,
         vendor_forces_flush,
     )
+
+
+# ---------------------------------------------------------------------------
+# COMPTIME ACCESSORS, so a kernel READS this table instead of restating it.
+#
+# `spec_for` above resolves a whole spec at runtime, which is right for a
+# report and useless to a kernel: a threadgroup allocation size must be known
+# at compile time. These are the same rows as pure comptime functions so that
+#
+#     comptime BLOCK_SIZE = block_size_for[K_HIST_BINARY, TARGET_COLUMN]()
+#
+# is legal at the top of a kernel file. Without them the table is decoration:
+# every kernel restates its own constants and the matrix silently describes a
+# build nobody runs. That failure has a name in this project's history and it
+# is the reason these exist.
+# ---------------------------------------------------------------------------
+
+#: The column kernels compile against. One value for the whole build, because
+#: a threadgroup size is fixed at compile time and cannot follow a runtime
+#: device query. Cross-compiling for another vendor means rebuilding with
+#: this changed, which is the honest shape of the constraint.
+comptime TARGET_COLUMN = COLUMN_APPLE
+
+
+def hist_floats_per_thread_for[kernel: Int]() -> Int:
+    """Shared floats per thread. `GetHistSize()` is this times the block."""
+    if kernel == K_HIST_ONE_BYTE:
+        return 32
+    return 16
+
+
+def catboost_block_for[kernel: Int]() -> Int:
+    """What CatBoost uses, before our shared-memory budget bites."""
+    if kernel == K_HIST_ONE_BYTE:
+        return 384
+    return 768
+
+
+def block_size_for[kernel: Int, column: Int]() -> Int:
+    """SCHEDULING row, bounded by a NUMERIC one.
+
+    The block itself is scheduling: it decides which thread does which work.
+    The BUDGET that bounds it is numeric, because the shared-memory ceiling
+    decides the replication factor and the replication factor decides how
+    many partial sums combine. So the ceiling comes from the column and the
+    block is the largest that fits under it, capped at CatBoost's own choice
+    because more threads than they use buys nothing and costs a wider
+    barrier.
+    """
+    comptime floats = hist_floats_per_thread_for[kernel]()
+    comptime cap = catboost_block_for[kernel]()
+    comptime limit = column_shared_limit(column) // (floats * 4)
+    return limit if limit < cap else cap
+
+
+def lane_width_for[column: Int, identical: Bool]() -> Int:
+    """NUMERIC. Pinned to 32 under identity so AMD's 64-wide wavefront cannot
+    change the reduction geometry. See `column_lane_width`."""
+    if identical:
+        return PINNED_REPLICATION_LANES
+    return column_lane_width(column)
+
+
+def reduce_width_for[kernel: Int, column: Int, identical: Bool]() -> Int:
+    """NUMERIC. `Reduce()`'s stage width. CatBoost writes a literal 512 that
+    is only correct at its own block size; pinned here so the reduction tree
+    has one shape, and never above the block or stage 1 leaves slots unwritten.
+    """
+    comptime block = block_size_for[kernel, column]()
+    comptime pinned = PINNED_REDUCE_WIDTH if identical else block
+    return block if block < pinned else pinned

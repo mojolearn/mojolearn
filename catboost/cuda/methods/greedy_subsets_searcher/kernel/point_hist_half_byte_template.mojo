@@ -35,24 +35,38 @@ Mojo 1.0 has no warp primitives.
 
 from std.gpu import block_dim, block_idx, thread_idx
 
+from mojo_only.kernel_matrix import (
+    K_HIST_HALF_BYTE,
+    TARGET_COLUMN,
+    block_size_for,
+    hist_floats_per_thread_for,
+    reduce_width_for,
+)
+from mojo_only.numerics import NUMERIC_IDENTICAL, NUMERIC_FAST
 
-# DEVIATION (PORTING.md 1): CatBoost uses 768 here for the half-byte and
-# binary kernels. `BLOCK_SIZE * 16` floats is the scratch, so 768 asks for
-# 49,152 bytes and Apple gives 32,768. 512 asks for exactly 32,768, which is
-# the largest block size that fits and the one that keeps `Reduce()`'s
-# hardcoded 512-thread stage literal.
-comptime BLOCK_SIZE = 512
 
-#: The width `Reduce()`'s first two stages run at. CatBoost writes the
-#: literal 512 and can, because its BlockSize is 768. Ours must not exceed
-#: the block, or stage 1 writes only `BLOCK_SIZE` of the 512 slots that stage
-#: 2 goes on to read, and the histogram silently loses everything above it.
-#: At BLOCK_SIZE 512 this IS 512 and the port stays literal; the expression
-#: exists so that dropping to 256 stays correct rather than silently wrong.
-comptime REDUCE_WIDTH = BLOCK_SIZE if BLOCK_SIZE < 512 else 512
+#: READ FROM THE MATRIX, not restated here. `mojo_only/kernel_matrix.mojo`
+#: owns every knob, and a kernel that hardcodes one makes the table
+#: decoration. CatBoost uses 768; Apple's 32 KB ceiling over 16 floats per
+#: thread yields 512, which is exactly 32,768 bytes.
+comptime BLOCK_SIZE = block_size_for[K_HIST_HALF_BYTE, TARGET_COLUMN]()
 
-#: `GetHistSize()`, `BlockSize * 16`.
-comptime HIST_SIZE = BLOCK_SIZE * 16
+#: The mode this build compiles against. See `mojo_only/numerics.mojo`; FAST
+#: is the default and on Apple the flush row is forced deterministic anyway,
+#: because Metal has no float atomic add.
+comptime BUILD_MODE = NUMERIC_FAST
+
+#: Also from the matrix. CatBoost writes the literal 512 and can, because
+#: its BlockSize is 768; ours must not exceed the block or stage 1 leaves
+#: slots unwritten that stage 2 reads.
+comptime REDUCE_WIDTH = reduce_width_for[
+    K_HIST_HALF_BYTE, TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
+]()
+
+#: `GetHistSize()`, `BlockSize * 16`, with the 16 from the matrix.
+comptime HIST_SIZE = BLOCK_SIZE * hist_floats_per_thread_for[
+    K_HIST_HALF_BYTE
+]()
 
 
 def slice_offset(tid: Int) -> Int:

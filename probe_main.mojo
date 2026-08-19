@@ -1,4 +1,29 @@
 from mojo_only.launch_probe import probe
+from mojo_only.kernel_matrix import (
+    COLUMN_AMD,
+    COLUMN_APPLE,
+    COLUMN_BIT_IDENTICAL,
+    COLUMN_NVIDIA,
+    K_HIST_BINARY,
+    K_HIST_HALF_BYTE,
+    K_HIST_ONE_BYTE,
+    TARGET_COLUMN,
+    block_size_for,
+    column_has_float_atomics,
+    column_lane_width,
+    column_name,
+    column_shared_limit,
+    hist_floats_per_thread_for,
+)
+from catboost.cuda.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
+    BLOCK_SIZE,
+    HIST_SIZE,
+    REDUCE_WIDTH,
+)
+from catboost.cuda.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
+    ONE_BYTE_BLOCK_SIZE,
+    ONE_BYTE_HIST_SIZE,
+)
 from catboost.cuda.methods.greedy_subsets_searcher.split_properties_helper import (
     HISTOGRAMS_PREVIOUS_PATH,
     HISTOGRAMS_ZEROES,
@@ -51,7 +76,71 @@ def check_level_plan() raises:
     print("  smaller-side rule holds, terminal pair skipped")
 
 
+def show_matrix() raises:
+    """Print the resolved table, and prove the kernels READ it.
+
+    The last two lines are the reach check: `BLOCK_SIZE` is imported from the
+    half-byte template, not recomputed here, so if it agrees with the matrix
+    the kernel is taking its constants from the table rather than restating
+    them. Importing a module is not reading it.
+    """
+    print("  column          shared    lanes   float-atomic   half-byte block")
+    var cols = List[Int]()
+    cols.append(COLUMN_BIT_IDENTICAL)
+    cols.append(COLUMN_APPLE)
+    cols.append(COLUMN_NVIDIA)
+    cols.append(COLUMN_AMD)
+    var blocks = List[Int]()
+    blocks.append(block_size_for[K_HIST_HALF_BYTE, COLUMN_BIT_IDENTICAL]())
+    blocks.append(block_size_for[K_HIST_HALF_BYTE, COLUMN_APPLE]())
+    blocks.append(block_size_for[K_HIST_HALF_BYTE, COLUMN_NVIDIA]())
+    blocks.append(block_size_for[K_HIST_HALF_BYTE, COLUMN_AMD]())
+    for ci in range(len(cols)):
+        var c = cols[ci]
+        var blk = blocks[ci]
+        print(
+            "  ",
+            column_name(c),
+            "\t",
+            column_shared_limit(c) // 1024,
+            "KB\t",
+            column_lane_width(c),
+            "\t",
+            "yes" if column_has_float_atomics(c) else "NO",
+            "\t\t",
+            blk,
+        )
+    print()
+    print("  building against column:", column_name(TARGET_COLUMN))
+    print(
+        "  half-byte kernel reads   BLOCK_SIZE",
+        BLOCK_SIZE,
+        " HIST_SIZE",
+        HIST_SIZE,
+        " REDUCE_WIDTH",
+        REDUCE_WIDTH,
+    )
+    print(
+        "  one-byte kernel reads    BLOCK_SIZE",
+        ONE_BYTE_BLOCK_SIZE,
+        " HIST_SIZE",
+        ONE_BYTE_HIST_SIZE,
+    )
+    var want = block_size_for[K_HIST_HALF_BYTE, TARGET_COLUMN]()
+    if BLOCK_SIZE != want:
+        raise Error(
+            "the half-byte kernel is NOT reading the matrix: kernel says "
+            + String(BLOCK_SIZE)
+            + ", matrix says "
+            + String(want)
+        )
+    print("  kernels agree with the matrix, so the table is reached")
+
+
 def main() raises:
+    print("kernel matrix:")
+    show_matrix()
+    print()
     print("level plan:")
     check_level_plan()
     print("kernels:")
