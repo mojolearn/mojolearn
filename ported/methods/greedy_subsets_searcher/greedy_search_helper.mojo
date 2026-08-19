@@ -31,6 +31,8 @@ while porting rather than read from their source:
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.host.device_attribute import DeviceAttribute
 
+from mojo_only.fixed_point import choose_scale
+
 from ported.gpu_lib.gpu_manager import TCudaManager
 from ported.methods.kernel_add_model_value import (
     add_model_value_kernel,
@@ -547,8 +549,8 @@ def run_tree(
     mut cindex: DeviceBuffer[DType.uint32],
     mut stats: DeviceBuffer[DType.float32],
     mut row_index: DeviceBuffer[DType.uint32],
-    total_weight: Float32,
-    total_gradient: Float32,
+    weight_magnitude: Float32,
+    gradient_magnitude: Float32,
     hist_replicas: Int = 0,  # 0 means ask the matrix
 ) raises -> List[Int]:
     """`FitImpl`'s loop: grow a whole oblivious tree, level by level.
@@ -618,19 +620,27 @@ def run_tree(
         zi.unsafe_ptr().unsafe_store(i, Int32(0))
     ctx.enqueue_copy(dst_buf=acc_i32, src_ptr=zi.unsafe_ptr())
 
-    # The scale bounds every partial sum. A cell can hold at most the whole
-    # dataset's weight or the sum of gradient magnitudes, and both are known
-    # here, so a scale derived from them cannot overflow at any depth: a
-    # leaf's rows are a subset of all rows. See mojo_only/fixed_point.mojo.
-    var mag = Float64(total_weight)
-    var gmag = Float64(total_gradient)
+    # The scale bounds every partial sum. A cell can hold at most the sum of
+    # magnitudes of the plane it accumulates, and one scale serves both
+    # planes, so the bound is the LARGER of the two. A leaf's rows are a
+    # subset of all rows, so a scale derived from that cannot overflow at any
+    # depth. `choose_scale` owns the derivation; see mojo_only/fixed_point.mojo.
+    #
+    # THIS WAS INLINED AND IT DRIFTED. The copy that stood here fell back to
+    # `mag = 1.0` when both magnitudes were zero, which is a SCALE of
+    # 268,435,455 -- the largest scale the type admits, i.e. the one that
+    # overflows soonest -- where `choose_scale` returns a scale of 1.0 for
+    # the same input. Inlining a safety derivation is how the safe branch and
+    # the unsafe branch swapped places.
+    var mag = Float64(weight_magnitude)
+    if mag < 0.0:
+        mag = -mag
+    var gmag = Float64(gradient_magnitude)
     if gmag < 0.0:
         gmag = -gmag
     if gmag > mag:
         mag = gmag
-    if mag <= 0.0:
-        mag = 1.0
-    var fixed_scale = Float32(Float64((1 << 28) - 1) / mag)
+    var fixed_scale = Float32(choose_scale(mag))
 
     # REPLICATION: how many blocks share one partition. CatBoost sizes this
     # to fill the SMs (`hist_binary.cu:90-95`). A PARAMETER of this function,
@@ -1396,6 +1406,14 @@ def launch_histograms_for_blocks(
             # other. That is what makes `* replicas` legal here: their
             # `numBlocks.x = ceil(fCount / GroupSize)` times
             # `CeilDivide(maxActiveBlocks, ...)` (`hist_half_byte.cu:81`).
+            #
+            # AND IT IS LEGAL ONLY WITH A BOUNDED `fixed_scale`. The integer
+            # flush is exact, not forgiving: `Int32(val * fixed_scale)` wraps
+            # silently once `fixed_scale` is too large for the cell. Turning
+            # replication on here is what first made this path reachable from
+            # `doc_parallel_boosting.fit`, which was passing zero for both
+            # magnitudes -- see the WHY THIS EXISTS block there. A kernel
+            # that only ever ran unreplicated hides its caller's scale bug.
             if depth == 0:
                 ctx.enqueue_function[half_byte_hist_kernel](
                     blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
@@ -1405,7 +1423,22 @@ def launch_histograms_for_blocks(
                     p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
                     block_hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
                     Int32(max_leaves), Int32(stat_count),
-                    grid_dim=(groups * replicas, n_live, stat_count),
+                    grid_dim=(groups, n_live, stat_count),
+                    # NO `* replicas`. CatBoost DOES replicate this kernel
+                    # (`hist_half_byte.cu:80-81`) and sums the partials with
+                    # `atomicAdd` when `blockCount > 1` (`:45-51`). Our
+                    # fixed-point Int32 stand-in for that atomic is WRONG in
+                    # this kernel: with replication on, the depth-0 weight
+                    # histogram came back as -1.5e-08, -3.0e-08, -4.5e-08
+                    # where it should be 550, 1104, 1651. `part_stats` was
+                    # correct, so it is the histogram alone.
+                    #
+                    # Bisected: with replication the boosting check ends at
+                    # 14.79 mse, without it at 0.61. One block is correct and
+                    # slower. Restore the `* replicas` only with a check that
+                    # compares a replicated half-byte histogram against a
+                    # host tally -- every existing half-byte check runs at
+                    # grid_dim=(1,1,1) and cannot see this.
                     block_dim=(BLOCK_SIZE, 1, 1),
                 )
             else:
@@ -1418,7 +1451,22 @@ def launch_histograms_for_blocks(
                     p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
                     block_hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
                     Int32(max_leaves), Int32(stat_count),
-                    grid_dim=(groups * replicas, n_live, stat_count),
+                    grid_dim=(groups, n_live, stat_count),
+                    # NO `* replicas`. CatBoost DOES replicate this kernel
+                    # (`hist_half_byte.cu:80-81`) and sums the partials with
+                    # `atomicAdd` when `blockCount > 1` (`:45-51`). Our
+                    # fixed-point Int32 stand-in for that atomic is WRONG in
+                    # this kernel: with replication on, the depth-0 weight
+                    # histogram came back as -1.5e-08, -3.0e-08, -4.5e-08
+                    # where it should be 550, 1104, 1651. `part_stats` was
+                    # correct, so it is the histogram alone.
+                    #
+                    # Bisected: with replication the boosting check ends at
+                    # 14.79 mse, without it at 0.61. One block is correct and
+                    # slower. Restore the `* replicas` only with a check that
+                    # compares a replicated half-byte histogram against a
+                    # host tally -- every existing half-byte check runs at
+                    # grid_dim=(1,1,1) and cannot see this.
                     block_dim=(BLOCK_SIZE, 1, 1),
                 )
         else:
@@ -1553,8 +1601,8 @@ def run_tree_layout(
     mut stats: DeviceBuffer[DType.float32],
     mut row_index: DeviceBuffer[DType.uint32],
     mut cursor: DeviceBuffer[DType.float32],
-    total_weight: Float32,
-    total_gradient: Float32,
+    weight_magnitude: Float32,
+    gradient_magnitude: Float32,
     mut out_splits: List[TBinarySplit],
     mut out_leaf_values: List[Float32],
     use_subtraction: Bool = True,
@@ -1571,6 +1619,16 @@ def run_tree_layout(
     one-byte features.
 
     Returns the final leaf sizes, which must sum to `n_rows` at every depth.
+
+    `weight_magnitude` and `gradient_magnitude` are `sum over all rows of
+    abs(plane)`, ONE PER STAT PLANE, not the signed totals. They are the
+    whole safety argument for the fixed-point flush that stands in for
+    Metal's missing float atomic: every partial sum the device forms is over
+    a SUBSET of the rows, so bounding the full-dataset sum of magnitudes
+    bounds every Int32 slot at every depth. A signed total is NOT that bound
+    -- gradients cancel, so it can be arbitrarily smaller than the largest
+    cell -- and passing zero asks for the largest scale the type admits.
+    See `mojo_only/fixed_point.mojo`.
     """
     var stat_count = 2
     var max_leaves = 1 << max_depth
@@ -1635,15 +1693,18 @@ def run_tree_layout(
         zi.unsafe_ptr().unsafe_store(i, Int32(0))
     ctx.enqueue_copy(dst_buf=acc_i32, src_ptr=zi.unsafe_ptr())
 
-    var mag = Float64(total_weight)
-    var gm = Float64(total_gradient)
-    if gm < 0.0:
-        gm = -gm
-    if gm > mag:
-        mag = gm
-    if mag <= 0.0:
-        mag = 1.0
-    var fixed_scale = Float32(Float64((1 << 28) - 1) / mag)
+    # See the note in `run_tree`: one scale serves both accumulated planes,
+    # so the bound is the larger of the two sums of magnitudes, and
+    # `choose_scale` owns the derivation rather than a fourth copy of it.
+    var mag = Float64(weight_magnitude)
+    if mag < 0.0:
+        mag = -mag
+    var gmag = Float64(gradient_magnitude)
+    if gmag < 0.0:
+        gmag = -gmag
+    if gmag > mag:
+        mag = gmag
+    var fixed_scale = Float32(choose_scale(mag))
 
     var part_stats = ctx.enqueue_create_buffer[DType.float32](
         max_leaves * stat_count

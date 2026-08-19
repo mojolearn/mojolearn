@@ -13,10 +13,22 @@ known function of a few features, runs `fit`, and requires:
   predicting the mean and is therefore the bar any real learner clears
 - the loss to be monotonically non-increasing across iterations, which is
   what a correct gradient step on a convex objective gives
+- the loss to reach 2% of that mean baseline, which is the LEVEL a correct
+  depth-4 twelve-tree fit reaches on this target (it reaches about 1%)
+- most splits to land on a feature the target actually depends on
 
-The third is the sharp one. A sign error in the gradient, a missing learning
-rate, or a leaf value computed from the wrong stats plane all still produce a
-loss that moves; only a correct step produces one that never goes back up.
+The third is the sharp one for the GRADIENT. A sign error in the gradient, a
+missing learning rate, or a leaf value computed from the wrong stats plane
+all still produce a loss that moves; only a correct step produces one that
+never goes back up.
+
+The last two are the sharp ones for the SPLIT SEARCH, and they were added
+after the first three passed a model that was 22x worse than it should be. A
+corrupt histogram does not disturb the leaf values at all -- those come from
+`compute_partition_stats`, which never reads the histogram -- so a tree built
+on arbitrary splits with correct leaf values is still monotone and still
+beats the mean. Nothing above the fourth assertion can see it. Whenever this
+file grows a new assertion, ask which of the two halves it constrains.
 """
 
 from max.gpu.host import DeviceContext
@@ -139,6 +151,71 @@ def check_boosting_learns(
             + " does not go back up"
         )
     print("  boosting learns: loss falls monotonically and beats the mean")
+
+    # ================== HOW WELL, NOT MERELY WHETHER ==================
+    # Monotone and "beats the mean" are BOTH TRUE OF A BADLY BROKEN MODEL.
+    # Measured: a fixed-point histogram that overflowed Int32 on the top two
+    # levels of every tree scored 14.79 here, against 0.66 for the same code
+    # with the scale bounded. Both pass every assertion above, because the
+    # leaf VALUES come from `compute_partition_stats` and never touch the
+    # histogram: only the SPLITS were garbage, and a tree with arbitrary
+    # splits and correct leaf values still fits a monotone decreasing
+    # sequence. The three assertions above are blind to the split search.
+    #
+    # So this asserts a LEVEL. Twelve depth-4 trees at learning rate 0.3 on a
+    # target this tree class can represent reach 0.66, which is 1.0% of the
+    # 66.46 mean baseline. The bar is 2%, double the measured value, and the
+    # overflow run was 22.3%. It is expressed as a FRACTION of the baseline
+    # rather than an absolute so it survives a change to the dataset size or
+    # the target's scale.
+    var reached = losses[len(losses) - 1] / variance
+    print("    final loss as a fraction of the mean baseline:", reached)
+    if reached > 0.02:
+        raise Error(
+            String("boosting learns, but far less than a correct depth-")
+            + String(max_depth) + " " + String(n_estimators)
+            + "-tree model does: final mse "
+            + String(losses[len(losses) - 1]) + " is "
+            + String(reached * 100.0)
+            + "% of the mean baseline " + String(variance)
+            + ", and a correct fit reaches about 1%. Monotone and"
+            + " better-than-the-mean are already true above, so what this"
+            + " catches is a split search reading a corrupt histogram"
+            + " while the leaf values stay right"
+        )
+
+    # ================== AND ON WHICH FEATURES ==================
+    # The target is built from features 0, 3 and 7. The other thirteen are
+    # noise drawn from the same generator, so a search that is working picks
+    # from the three and a search reading a corrupt histogram picks close to
+    # uniformly, which is 3 of 16.
+    #
+    # This localizes what the loss bar only detects: it fails in the SPLIT
+    # SEARCH and not in the leaf values, the boosting loop or the model
+    # round-trip, all of which the assertions around it cover.
+    var on_signal = 0
+    var total_splits = 0
+    for t in range(model.size()):
+        ref wm = model.weak_models[t]
+        for lv in range(wm.structure.get_depth()):
+            var f = Int(wm.structure.splits[lv].feature_id)
+            total_splits += 1
+            if f == 0 or f == 3 or f == 7:
+                on_signal += 1
+    print(
+        "    splits on a signal feature (0, 3, 7):", on_signal, "of",
+        total_splits,
+    )
+    if total_splits == 0:
+        raise Error("no tree in the ensemble carries a split at all")
+    if on_signal * 2 <= total_splits:
+        raise Error(
+            String("only ") + String(on_signal) + " of "
+            + String(total_splits)
+            + " splits landed on a feature the target depends on; the"
+            + " thirteen noise features are 13 of 16, so this is a split"
+            + " search reading a histogram that does not rank candidates"
+        )
 
     # ---- the stored model must BE the trained model ----
     #

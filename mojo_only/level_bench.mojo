@@ -600,7 +600,13 @@ def bench_tree(n_rows: Int, max_depth: Int, repeats: Int) raises:
         hs.unsafe_ptr().unsafe_store(r, Float32(1.0))
         hs.unsafe_ptr().unsafe_store(n_rows + r, Float32(g))
         tw += 1.0
-        tg += g
+        # `choose_scale` is specified against a sum of MAGNITUDES, not a
+        # signed total: gradients cancel, so a signed total can be far
+        # smaller than the largest histogram cell it is meant to bound.
+        if g < 0.0:
+            tg += -g
+        else:
+            tg += g
     ctx.enqueue_copy(dst_buf=stats, src_ptr=hs.unsafe_ptr())
 
     var row_index = ctx.enqueue_create_buffer[DType.uint32](n_rows)
@@ -690,7 +696,13 @@ def bench_replication_interleaved(
         hs.unsafe_ptr().unsafe_store(r, Float32(1.0))
         hs.unsafe_ptr().unsafe_store(n_rows + r, Float32(g))
         tw += 1.0
-        tg += g
+        # `choose_scale` is specified against a sum of MAGNITUDES, not a
+        # signed total: gradients cancel, so a signed total can be far
+        # smaller than the largest histogram cell it is meant to bound.
+        if g < 0.0:
+            tg += -g
+        else:
+            tg += g
     ctx.enqueue_copy(dst_buf=stats, src_ptr=hs.unsafe_ptr())
 
     var row_index = ctx.enqueue_create_buffer[DType.uint32](n_rows)
@@ -914,7 +926,13 @@ def build_mixed_dataset(
         hs.unsafe_ptr().unsafe_store(r, Float32(1.0))
         hs.unsafe_ptr().unsafe_store(n_rows + r, Float32(g))
         tw += 1.0
-        tg += g
+        # `choose_scale` is specified against a sum of MAGNITUDES, not a
+        # signed total: gradients cancel, so a signed total can be far
+        # smaller than the largest histogram cell it is meant to bound.
+        if g < 0.0:
+            tg += -g
+        else:
+            tg += g
     ctx.enqueue_copy(dst_buf=stats, src_ptr=hs.unsafe_ptr())
 
     var row_index = ctx.enqueue_create_buffer[DType.uint32](n_rows)

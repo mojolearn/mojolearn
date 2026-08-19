@@ -103,6 +103,18 @@ def fit(
 
     var h_cursor = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
     var h_target = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
+
+    # THE FIXED-POINT BOUND, and it is not optional. The histogram flush
+    # accumulates through an Int32 because Metal has no float atomic
+    # (`mojo_only/fixed_point.mojo`), and the scale that keeps every slot
+    # inside Int32 is derived from `sum over all rows of abs(plane)`, one per
+    # stat plane. It has to be read back from the plane the target kernel
+    # actually wrote, not recomputed from the target here: recomputing it
+    # would make this file a second definition of the gradient.
+    var h_stats = ctx.enqueue_create_host_buffer[DType.float32](
+        stat_count * n_rows
+    )
+
     ctx.enqueue_copy(dst_ptr=h_target.unsafe_ptr(), src_buf=targets)
     ctx.synchronize()
 
@@ -121,9 +133,51 @@ def fit(
             grid_dim=(n_rows + 255) // 256, block_dim=256,
         )
 
+        # The gradients the histogram will accumulate, read back so the
+        # fixed-point scale can be bounded by them. It rides on the
+        # synchronize the row index already needs, so it costs a copy and no
+        # extra drain.
+        ctx.enqueue_copy(dst_ptr=h_stats.unsafe_ptr(), src_buf=stats)
+
         # growth reorders rows in place, so the index restarts each tree
         ctx.enqueue_copy(dst_buf=row_index, src_ptr=h_ident.unsafe_ptr())
         ctx.synchronize()
+
+        # `sum over all rows of abs(...)`, per plane, which is what
+        # `choose_scale` is specified against. Plane 0 is `der2` (the
+        # weights) and plane 1 is `der`, laid out `stats[s * n_rows + i]`
+        # by `mse_kernel`.
+        #
+        # ===================== WHY THIS EXISTS =====================
+        # This call passed `0.0, 0.0` for both. Zero is not "unknown", it is
+        # the input for which the scale derivation returns its LARGEST value,
+        # 2^28 - 1 -- so `Int32(val * scale)` overflowed on any histogram
+        # cell holding more than about eight rows' worth of weight.
+        #
+        # It was invisible for as long as no replicated kernel reached the
+        # Int32 flush on this path: the half-byte kernel took the plain store
+        # on both branches, and `boosting_check` is 16 half-byte features and
+        # nothing else. The moment `launch_histograms_for_blocks` began
+        # launching half-byte with `groups * replicas`, the top two levels of
+        # every tree started scoring a wrapped-around histogram. The tree
+        # still learns, because the leaf VALUES come from
+        # `compute_partition_stats` and never touch the accumulator; only the
+        # SPLITS go bad. That is exactly a model that stays monotone, still
+        # beats the mean, and is several times worse than it should be.
+        # ===========================================================
+        var weight_magnitude = Float64(0.0)
+        var gradient_magnitude = Float64(0.0)
+        for i in range(n_rows):
+            var w = Float64(h_stats.unsafe_ptr().unsafe_load(i))
+            if w < 0.0:
+                w = -w
+            weight_magnitude += w
+            var g = Float64(
+                h_stats.unsafe_ptr().unsafe_load(n_rows + i)
+            )
+            if g < 0.0:
+                g = -g
+            gradient_magnitude += g
 
         # `optimizer.Fit(...)` then `Estimate` then `Rescale` then
         # `AppendModels`, all four inside `run_tree_layout`, in their order.
@@ -132,7 +186,8 @@ def fit(
         var sizes = run_tree_layout(
             ctx, n_rows, fold_counts, max_depth,
             cindex, stats, row_index, cursor,
-            Float32(0.0), Float32(0.0), splits, leaf_values,
+            Float32(weight_magnitude), Float32(gradient_magnitude),
+            splits, leaf_values,
             use_subtraction, True, learning_rate, l2_leaf_reg,
         )
         _ = len(sizes)

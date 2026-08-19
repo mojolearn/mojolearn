@@ -56,8 +56,6 @@ WITHIN a stream is free. Measured, 54 launches on a trivial kernel:
 ======================================================================
 """
 
-from max.gpu.host import DeviceContext
-
 
 struct TCudaStream(Copyable, ImplicitlyCopyable, Movable):
     """Their `TCudaStreamsProvider::TCudaStream` (`cuda_base.h:35-67`).
