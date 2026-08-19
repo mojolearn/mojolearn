@@ -1250,23 +1250,24 @@ def check_stable_partition() raises:
     print("  partitioned, stable within each side, across chunk boundaries")
 
 
-def check_one_byte_histogram() raises:
-    """The one-byte kernel at 5 bits, against a hand-computable answer.
+def check_one_byte_bits[bits: Int]() raises:
+    """The one-byte kernel at `bits` bits, against a hand-computable answer.
 
-    Four features per `UInt32`, 32 folds each. Feature f at row r gets bin
-    `(r + f) % 32`, so over 320 rows every fold holds exactly 10 rows for
-    every feature, and with stat 1.0 every cell must read 10.0.
+    Four features per `UInt32`, `2^bits` folds each. Feature f at row r gets
+    bin `(r + f) % folds`, so with `10 * folds` rows every fold holds exactly
+    10 rows for every feature and every cell must read 10.0.
 
-    5 bits means `InnerHistBitsCount == 0`, so the pass loop runs ONCE and
-    this checks the direct path. It is the shape to get right first: at 6, 7
-    and 8 bits the same code serializes 2, 4 and 8 passes over the same
-    slots, so a wrong slot here is wrong everywhere and a wrong PASS is wrong
-    only above 5.
+    **The bit width is the whole point of running this more than once.**
+    `InnerHistBitsCount = bits - 5`, so 5 bits runs ONE pass through the
+    inner loop and 8 bits runs EIGHT, with only the lanes whose `higherBin`
+    equals the current pass writing on each. A wrong slot is wrong at every
+    width; a wrong PASS is wrong only above 5 bits, so the 5-bit case alone
+    cannot see it.
     """
+    comptime n_folds = 1 << bits
     var ctx = DeviceContext()
     var n_features = 4
-    var n_folds = 32
-    var n_rows = 320
+    var n_rows = 10 * n_folds
 
     var cindex = ctx.enqueue_create_buffer[DType.uint32](n_rows)
     var zero32 = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
@@ -1338,7 +1339,7 @@ def check_one_byte_histogram() raises:
     ctx.enqueue_copy(dst_buf=sums, src_ptr=zf.unsafe_ptr())
     ctx.synchronize()
 
-    ctx.enqueue_function[one_byte_hist_kernel[5]](
+    ctx.enqueue_function[one_byte_hist_kernel[bits]](
         folds.unsafe_ptr(),
         fold_off.unsafe_ptr(),
         grp_off.unsafe_ptr(),
@@ -1363,7 +1364,17 @@ def check_one_byte_histogram() raises:
     ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=sums)
     ctx.synchronize()
 
-    print("  4 features x 32 folds, 320 rows, 5 bits (one pass)")
+    print(
+        "  4 features x",
+        n_folds,
+        "folds,",
+        n_rows,
+        "rows,",
+        bits,
+        "bits ->",
+        1 << (bits - 5),
+        "pass(es)",
+    )
     print("  expected every cell: 10.0")
     var wrong = 0
     for f in range(n_features):
@@ -1376,4 +1387,4 @@ def check_one_byte_histogram() raises:
     print("  wrong cells:", wrong, "of", group_size)
     if wrong != 0:
         raise Error("the one-byte histogram is wrong")
-    print("  one-byte histogram computes the right answer")
+    print("  one-byte at", bits, "bits computes the right answer")
