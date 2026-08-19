@@ -1,4 +1,8 @@
-# Vendor primitives: what they call, what Mojo ships, what we still hand-write
+# Vendor primitives, mojolearn sections (cluster, neighbors, decomposition, dbscan, glm)
+
+**Companion to `VENDOR_LIBS.md`, which covers the CatBoost boosting port.**
+Same rule, different upstreams. Where the two disagree, the probe result in
+whichever file was written later wins, and both record the exact path tried.
 
 **The rule, from Andrew, 2026-08-19: where the incumbent calls a vendor
 primitive, call OURS. Hand-write only where no equivalent exists, and CHECK
@@ -55,7 +59,7 @@ the largest open item in the repository.
 | their file | vendor call | Mojo equivalent | ours today |
 |---|---|---|---|
 | `split_points.cu` | `cub::DeviceRadixSort::SortPairs` | `nn.argsort.argsort` AVAILABLE | hand-written stable partition |
-| `split_points.cu` | `cub::DeviceScan::ExclusiveSum` | `nn.cumsum.cumsum` AVAILABLE (inclusive; no `cumsum_exclusive`) | hand-written chunk offsets |
+| `split_points.cu` | `cub::DeviceScan::ExclusiveSum` | **`nn.cumsum` IS CPU-ONLY** and is not a swap candidate: its signature carries neither `ctx: DeviceContext` nor `target`, unlike `argsort`, `top_k` and `gather` which carry both. Corrected here after the first version of this table listed it as available. | hand-written chunk offsets |
 | `cuda_util/reduce.cu` | `cub::DeviceSegmentedReduce` | **NOT FOUND** | hand-written `partitions_reduce` |
 | `split_points.cu` | `cub::DeviceSegmentedRadixSort` | **NOT FOUND** | segmented stable partition |
 | cuVS/cuML | `cublasGemmEx` | `linalg.matmul.matmul` AVAILABLE | **WIRED**, N-T shape only |
@@ -72,7 +76,7 @@ library. Listed so the distinction is explicit.
 
 | vendor call | Mojo equivalent | ours today |
 |---|---|---|
-| `cub::BlockReduce` | `max.gpu.primitives.block.sum` / `max`/`min` AVAILABLE | hand-written tree reduction |
+| `cub::BlockReduce` | `max.gpu.primitives.block.sum[block_size=N](val)` AVAILABLE | **SUBSTITUTED** in `core/row_norms.mojo` and `core/column_stats.mojo` (3 kernels) |
 | `cub::BlockScan` | `max.gpu.primitives.block.prefix_sum` AVAILABLE | hand-written Hillis-Steele |
 | `cub::WarpScan` | `std.gpu.primitives.warp.prefix_sum` AVAILABLE | hand-written serial scan |
 | `cub::ShuffleIndex` | `std.gpu.primitives.warp.shuffle_idx` AVAILABLE | **was called blocked. It is not.** |
@@ -146,3 +150,32 @@ call gemm there either; it calls `gemv`.
 Probe the import, record AVAILABLE or NOT FOUND with the exact path tried,
 and say what we do instead. A row asserting an equivalent does not exist is
 only worth having if it names what was searched.
+
+
+---
+
+## The correction this file has to carry, from the boosting side
+
+`VENDOR_LIBS.md` section 3c establishes something that reframes this whole
+document: **`split_points.cu` is mostly NOT a CUB call site.** Their
+`ReorderOneBitImpl` is an ordinary portable kernel with a rank-based scatter:
+
+    totalOnes    = offsets[size-1] + ((tempKeys[size-1] >> bit) & 1)
+    totalZeros   = size - totalOnes
+    onesBefore   = offsets[idx]
+    zeroesBefore = idx - onesBefore
+    offset       = isZero ? zeroesBefore : (totalZeros + onesBefore)
+
+Their scan is over ELEMENTS and the scatter reads a per-element rank. Ours
+counts zeros per 256-row chunk, scans the chunk counts, and then scatters.
+Same partition, different decomposition, and ours has never been diffed
+against a reference.
+
+**So "swap in a vendor primitive" was partly the wrong frame.** The answer
+there is the same one the fused-distance round produced: PORT THEIR KERNEL,
+which was portable all along. Only the device-wide exclusive scan under it
+has no shipped GPU primitive.
+
+That is now twice in one session that the useful move was reading their
+kernel rather than shopping for a library call, and both times I had a
+plausible reason for not reading it.

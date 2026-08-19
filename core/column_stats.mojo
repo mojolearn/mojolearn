@@ -21,6 +21,7 @@ recover singular values.
 
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.memory import AddressSpace
+from max.gpu.primitives.block import sum as block_sum
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
@@ -47,21 +48,14 @@ def column_mean_kernel(
         acc += x.unsafe_load(r * n_cols + col)
         r += STATS_TPB
 
-    var s = stack_allocation[
-        STATS_TPB,
-        Scalar[DType.float32],
-        address_space = AddressSpace.SHARED,
-    ]()
-    s[tid] = acc
-    barrier()
-    var half = STATS_TPB // 2
-    while half > 0:
-        if tid < half:
-            s[tid] = s[tid] + s[tid + half]
-        barrier()
-        half //= 2
+    # `cub::BlockReduce`'s counterpart. MAX ships the block
+    # collectives at `max.gpu.primitives.block`, so the hand-written
+    # shared-memory tree reduction this replaced is gone. Same
+    # arithmetic, one call, and the reduction shape is Modular's to
+    # tune rather than ours to guess. See VENDOR_LIBRARIES.md.
+    var s0 = block_sum[block_size=STATS_TPB](acc)
     if tid == 0:
-        mu.unsafe_store(col, s[0] / Float32(n_rows))
+        mu.unsafe_store(col, s0 / Float32(n_rows))
 
 
 def shift_columns_kernel(
@@ -192,21 +186,14 @@ def xty_kernel(
         acc += x.unsafe_load(r * n_cols + col) * y.unsafe_load(r)
         r += STATS_TPB
 
-    var s = stack_allocation[
-        STATS_TPB,
-        Scalar[DType.float32],
-        address_space = AddressSpace.SHARED,
-    ]()
-    s[tid] = acc
-    barrier()
-    var half = STATS_TPB // 2
-    while half > 0:
-        if tid < half:
-            s[tid] = s[tid] + s[tid + half]
-        barrier()
-        half //= 2
+    # `cub::BlockReduce`'s counterpart. MAX ships the block
+    # collectives at `max.gpu.primitives.block`, so the hand-written
+    # shared-memory tree reduction this replaced is gone. Same
+    # arithmetic, one call, and the reduction shape is Modular's to
+    # tune rather than ours to guess. See VENDOR_LIBRARIES.md.
+    var s0 = block_sum[block_size=STATS_TPB](acc)
     if tid == 0:
-        out_v.unsafe_store(col, s[0])
+        out_v.unsafe_store(col, s0)
 
 
 def divide_columns_by_nonzero_kernel(

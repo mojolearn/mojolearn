@@ -23,6 +23,7 @@ therefore the last bits. It is listed in the `IDENTICAL` column's scope.
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import sqrt
 from max.gpu.memory import AddressSpace
+from max.gpu.primitives.block import sum as block_sum
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
@@ -48,23 +49,14 @@ def row_norm_kernel(
         acc += v * v
         col += NORM_TPB
 
-    var s = stack_allocation[
-        NORM_TPB,
-        Scalar[DType.float32],
-        address_space = AddressSpace.SHARED,
-    ]()
-    s[tid] = acc
-    barrier()
-
-    var stride = NORM_TPB // 2
-    while stride > 0:
-        if tid < stride:
-            s[tid] = s[tid] + s[tid + stride]
-        barrier()
-        stride //= 2
+    # `cub::BlockReduce`'s counterpart, from `max.gpu.primitives.block`.
+    # The hand-written shared-memory tree reduction this replaced is gone:
+    # same arithmetic, one call, and the reduction shape is Modular's to tune
+    # rather than ours to guess. See VENDOR_LIBRARIES.md.
+    var s0 = block_sum[block_size=NORM_TPB](acc)
 
     if tid == 0:
-        var total = s[0]
+        var total = s0
         if take_sqrt_in != 0:
             if total <= Float32(0.0):
                 total = Float32(0.0)
