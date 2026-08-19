@@ -20,7 +20,7 @@ Every row below was confirmed to import and compile here.
 | Modular | CUDA counterpart |
 |---|---|
 | `linalg.matmul.matmul` | cuBLAS GEMM |
-| `nn.cumsum.cumsum` | `cub::DeviceScan::{Inclusive,Exclusive}Sum` |
+| `nn.cumsum.cumsum` | `cub::DeviceScan::{Inclusive,Exclusive}Sum` -- **CPU ONLY**, see 3b |
 | `nn.argsort.argsort` | `cub::DeviceRadixSort::SortKeys` (full width) |
 | `nn.gather_scatter.gather` | `thrust::gather` |
 | `nn.topk.top_k` | `cub::DeviceSelect` / partial sort |
@@ -91,6 +91,36 @@ are not the same primitive.
 only 32 features, stable partition 0.376 ms, the other six phases 1.381 ms.
 The partition's share FALLS as features grow, because it does not scale with
 them and the histogram does.
+
+---
+
+## 3b. `ExclusiveSum` -> `nn.cumsum`: BLOCKED, it is CPU only
+
+`nn.cumsum` looked like the cleanest swap on the list. Its signature even
+carries `exclusive: Bool` and an `axis`, so a `[leaf][chunk]` tensor scanned
+on axis 1 would be a SEGMENTED exclusive scan, which is exactly the shape our
+chunk offsets have.
+
+**It has no GPU form.** Probed 2026-08-19:
+
+    nn.argsort.argsort   ctx: DeviceContext, target: StringSpan = "cpu"
+    nn.cumsum.cumsum     neither
+
+`argsort` carries both a `DeviceContext` and a `target` parameter, so it
+dispatches to a device kernel. `cumsum` has a single overload with neither,
+so it runs on the host. Calling it per level would mean a device-to-host copy,
+a host scan, and a copy back, once per level per tree. That undoes the
+control-plane work outright.
+
+So the scan stays hand-written, and the DEVIATION BLOCK reason is now "the
+shipped primitive is CPU only", not "nothing ships". Re-probe when Modular
+adds a target to it.
+
+**Where this leaves the vendor pass:** of everything CatBoost calls
+device-wide, only `argsort` and `matmul` have GPU forms here, and `argsort`
+is the wrong primitive for a 1-bit partition (section 3). The honest result
+of the whole audit is that the vendor swaps available to us today are
+`matmul`, once multiclass needs cuSOLVER's job, and nothing else.
 
 ---
 
