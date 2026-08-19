@@ -248,26 +248,54 @@ unbroken, block shape would decide the winner and the assignment would become
 backend-dependent. Their comparator breaks ties on the lower key and that is
 load-bearing, not tidiness.
 
-## 15. Convergence is tested on the HOST here and on the DEVICE there
+## 15. Convergence: was a deviation, is now RESTORED
 
-cuVS evaluates both stopping tests in a device lambda and reads the flag back
-asynchronously, checking it at the TOP of the NEXT iteration
-(`detail/kmeans.cuh:817-825`, `:920-930`). The stream never blocks and the
-fit always runs one iteration with the answer in flight.
+**This item used to describe a deviation. The deviation is gone and the
+entry is rewritten rather than annotated**, per the standing rule that a
+document a result falsifies is part of the result.
 
-This port syncs and tests on the host. The consequence is visible and is not
-a rounding difference: **a converged fit here can report one fewer iteration
-than cuVS reports on identical data.** The centroids agree; `n_iter` does
-not, and neither does behavior when `max_iter` binds.
+cuVS evaluates both stopping tests in a device lambda and reads only the
+resulting FLAG back, checking it at the TOP of the NEXT iteration
+(`detail/kmeans.cuh:817-825`, `:920-930`). The first version of this port
+summed the cost and the shift to the host and tested there, which cost **six
+drains and two full transfers per Lloyd iteration** and made a converged fit
+report one fewer iteration than cuVS reports on the same data.
 
-It is a deviation of the kind this tree normally refuses, and it is taken
-knowingly because the host test costs one sync per ITERATION while the
-assignment step already costs many, and because a device-side flag with a
-one-iteration lag is exactly the kind of thing that silently hides a
-non-converging fit during bring-up. **Revisit it once the fit is validated**,
-because on a converged, tuned fit the extra sync is pure control-plane cost
-and this tree's whole diagnosis of mojotrees was that the control plane is a
-constant.
+That was OUR artifact, not their design, and `HOST_AND_DEVICE.md` is explicit
+that a wait we have and they do not is a fidelity defect rather than an
+optimization opportunity. So it is fixed:
+
+- `mojo_only/reduce_by_key.mojo::finish_sum_kernel` folds the block partials
+  into a device scalar, so no sum reaches the host.
+- `detail/kmeans_common.mojo::check_convergence_kernel` is their
+  `check_convergence` as the device function it is in their source, advancing
+  `prior_clustering_cost` in the same call because splitting it would
+  reintroduce an ordering hazard.
+- The loop reads the flag at the top of the next iteration and decrements
+  `n_current_iter` when it fires, which is theirs, decrement included.
+
+**Now one drain per iteration and one four-byte flag**, with inertia read
+once per restart instead of once per iteration. The host-side
+`check_convergence` is kept beside the kernel because it documents the three
+easy-to-"fix" details in prose and is what a bring-up harness wants.
+
+The init path had the same defect in a worse form and is fixed in the same
+commit. `kmeans_plus_plus` used to copy all `n_samples` distances to the host
+to draw its candidates, ONCE PER ACCEPTED CENTROID, which is O(rows) host
+traffic and breaks `HOST_AND_DEVICE.md`'s first rule outright. cuVS draws on
+device (`raft::random::discrete`, `detail/kmeans.cuh:187`), so again this was
+ours and not theirs. It is now a two-level device search in
+`mojo_only/plus_plus.mojo`: contiguous chunk sums, pick the chunk over at
+most 256 totals, then scan inside that chunk, plus a one-launch
+`gather_rows_kernel` where there used to be one copy per trial.
+
+**What deliberately did NOT change is the host still deciding.** It draws the
+`n_trials` uniforms and takes the greedy argmin over `n_trials` costs, both
+O(candidates), and cuVS also brings `bestCandidateIdx` to the host every
+accepted centroid (`detail/kmeans.cuh:224`).
+
+The whole fit now moves nothing that scales with rows across the bus. Every
+remaining device-to-host read is one flag, one scalar, or `n_trials` floats.
 
 ## 16. The k-means++ candidate cost is FUSED
 

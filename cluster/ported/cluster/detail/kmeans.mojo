@@ -45,6 +45,10 @@ from cluster.mojo_only.plus_plus import (
     PLUS_PLUS_TPB,
     adopt_candidate_min_kernel,
     candidate_cost_kernel,
+    chunk_sums_kernel,
+    gather_rows_kernel,
+    select_chunk_kernel,
+    select_index_in_chunk_kernel,
 )
 from cluster.mojo_only.reduce_by_key import (
     REDUCE_BY_KEY_TPB,
@@ -52,12 +56,15 @@ from cluster.mojo_only.reduce_by_key import (
     accumulate_weight_per_cluster_kernel,
     centroid_shift_kernel,
     copy_f32_kernel,
+    finish_sum_kernel,
     finalize_centroids_kernel,
     sum_partials_kernel,
     zero_i32_kernel,
 )
 from cluster.mojo_only.row_norms import NORM_TPB, row_norm_kernel
-from cluster.ported.cluster.detail.kmeans_common import check_convergence
+from cluster.ported.cluster.detail.kmeans_common import (
+    check_convergence_kernel,
+)
 from cluster.ported.cluster.detail.min_cluster_distance_compute import (
     compute_centroid_norms,
     min_cluster_and_distance_compute,
@@ -118,10 +125,19 @@ def _sum_device(
     mut a: DeviceBuffer[DType.float32],
     mut b: DeviceBuffer[DType.float32],
     mut partials: DeviceBuffer[DType.float32],
+    mut out_scalar: DeviceBuffer[DType.float32],
     n: Int,
     use_b: Bool,
-) raises -> Float64:
-    """One block-reduced pass plus a host sum over the block partials."""
+) raises:
+    """Two enqueued stages into a DEVICE scalar. No drain, no transfer.
+
+    This used to sum the block partials in a host loop, which cost a drain
+    and a transfer per call and was called TWICE per Lloyd iteration, for two
+    numbers the host wanted only in order to decide something the device can
+    decide. cuVS does not do that (`detail/kmeans.cuh:920-930`), so it was
+    our artifact rather than their design. See `HOST_AND_DEVICE.md` on why
+    that distinction decides whether a wait may be removed.
+    """
     var blocks = (n + REDUCE_BY_KEY_TPB - 1) // REDUCE_BY_KEY_TPB
     if blocks > 256:
         blocks = 256
@@ -137,16 +153,13 @@ def _sum_device(
         grid_dim=(blocks, 1, 1),
         block_dim=(REDUCE_BY_KEY_TPB, 1, 1),
     )
-    ctx.synchronize()
-
-    var host = ctx.enqueue_create_host_buffer[DType.float32](blocks)
-    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=partials)
-    ctx.synchronize()
-
-    var total = Float64(0.0)
-    for i in range(blocks):
-        total += Float64(host.unsafe_ptr().unsafe_load(i))
-    return total
+    ctx.enqueue_function[finish_sum_kernel](
+        out_scalar.unsafe_ptr(),
+        partials.unsafe_ptr(),
+        Int32(blocks),
+        grid_dim=(1, 1, 1),
+        block_dim=(REDUCE_BY_KEY_TPB, 1, 1),
+    )
 
 
 def init_random(
@@ -277,45 +290,70 @@ def kmeans_plus_plus(
         n_samples * n_trials
     )
     var candidate_cost = ctx.enqueue_create_buffer[DType.float32](n_trials)
-    var host_dist = ctx.enqueue_create_host_buffer[DType.float32](n_samples)
     var host_cost = ctx.enqueue_create_host_buffer[DType.float32](n_trials)
+
+    # Two-level device draw. `n_chunks` is capped so the serial walk inside a
+    # chunk is `n / n_chunks` steps rather than `n`.
+    var n_chunks = (n_samples + PLUS_PLUS_TPB - 1) // PLUS_PLUS_TPB
+    if n_chunks > 256:
+        n_chunks = 256
+    if n_chunks < 1:
+        n_chunks = 1
+    var chunk = (n_samples + n_chunks - 1) // n_chunks
+
+    var chunk_totals = ctx.enqueue_create_buffer[DType.float32](n_chunks)
+    var sel_chunk = ctx.enqueue_create_buffer[DType.int32](n_trials)
+    var sel_residual = ctx.enqueue_create_buffer[DType.float32](n_trials)
+    var sel_index = ctx.enqueue_create_buffer[DType.uint32](n_trials)
+    var d_u01 = ctx.enqueue_create_buffer[DType.float32](n_trials)
+    var h_u01 = ctx.enqueue_create_host_buffer[DType.float32](n_trials)
     ctx.synchronize()
 
     var picked = 1
     while picked < params.n_clusters:
-        # Step 3. `raft::random::discrete` over the d^2 weights. Done on the
-        # host because the weights have to come back anyway to normalize.
-        ctx.enqueue_copy(dst_ptr=host_dist.unsafe_ptr(), src_buf=min_dist)
-        ctx.synchronize()
-
-        var total = Float64(0.0)
-        for i in range(n_samples):
-            total += Float64(host_dist.unsafe_ptr().unsafe_load(i))
-        if total <= 0.0:
-            # Every point already sits on a centroid. Their `discrete` would
-            # draw uniformly; do the same rather than dividing by zero.
-            total = 0.0
-
+        # Step 3. `raft::random::discrete` over the d^2 weights, ON DEVICE.
+        # The host contributes only `n_trials` uniforms, which is
+        # O(candidates) and is what HOST_AND_DEVICE.md permits.
         for t in range(n_trials):
-            var target = rng.next_unit() * total
-            var acc = Float64(0.0)
-            var pick = n_samples - 1
-            if total <= 0.0:
-                pick = rng.next_index(n_samples)
-            else:
-                for i in range(n_samples):
-                    acc += Float64(host_dist.unsafe_ptr().unsafe_load(i))
-                    if acc >= target:
-                        pick = i
-                        break
-            ctx.enqueue_function[copy_f32_kernel](
-                candidates.unsafe_ptr().unsafe_offset(t * n_features),
-                x.unsafe_ptr().unsafe_offset(pick * n_features),
-                Int32(n_features),
-                grid_dim=((n_features + 255) // 256, 1, 1),
-                block_dim=(256, 1, 1),
-            )
-        ctx.synchronize()
+            h_u01.unsafe_ptr().unsafe_store(t, Float32(rng.next_unit()))
+        ctx.enqueue_copy(dst_buf=d_u01, src_ptr=h_u01.unsafe_ptr())
+
+        ctx.enqueue_function[chunk_sums_kernel](
+            chunk_totals.unsafe_ptr(),
+            min_dist.unsafe_ptr(),
+            Int32(n_samples),
+            Int32(chunk),
+            grid_dim=(n_chunks, 1, 1),
+            block_dim=(PLUS_PLUS_TPB, 1, 1),
+        )
+        ctx.enqueue_function[select_chunk_kernel](
+            sel_chunk.unsafe_ptr(),
+            sel_residual.unsafe_ptr(),
+            chunk_totals.unsafe_ptr(),
+            d_u01.unsafe_ptr(),
+            Int32(n_chunks),
+            Int32(n_trials),
+            grid_dim=(1, 1, 1),
+            block_dim=(max(n_trials, 1), 1, 1),
+        )
+        ctx.enqueue_function[select_index_in_chunk_kernel](
+            sel_index.unsafe_ptr(),
+            min_dist.unsafe_ptr(),
+            sel_chunk.unsafe_ptr(),
+            sel_residual.unsafe_ptr(),
+            Int32(n_samples),
+            Int32(chunk),
+            grid_dim=(n_trials, 1, 1),
+            block_dim=(PLUS_PLUS_TPB, 1, 1),
+        )
+        ctx.enqueue_function[gather_rows_kernel](
+            candidates.unsafe_ptr(),
+            x.unsafe_ptr(),
+            sel_index.unsafe_ptr(),
+            Int32(n_features),
+            grid_dim=(n_trials, 1, 1),
+            block_dim=(PLUS_PLUS_TPB, 1, 1),
+        )
 
         ctx.enqueue_function[row_norm_kernel](
             candidate_norm.unsafe_ptr(),
@@ -352,7 +390,10 @@ def kmeans_plus_plus(
         )
         ctx.synchronize()
 
-        # Step 4, the greedy argmin over candidates.
+        # Step 4, the greedy argmin over candidates. THIS READBACK STAYS.
+        # It is `n_trials` floats, which is O(candidates), and cuVS brings
+        # `bestCandidateIdx` to the host every accepted centroid too
+        # (`detail/kmeans.cuh:224`). Host deciding was never the problem.
         ctx.enqueue_copy(dst_ptr=host_cost.unsafe_ptr(), src_buf=candidate_cost)
         ctx.synchronize()
         var best = 0
@@ -436,6 +477,12 @@ def kmeans_fit_main(
     var shift_cells = ctx.enqueue_create_buffer[DType.float32](cd)
     var partials = ctx.enqueue_create_buffer[DType.float32](256)
     var ones = ctx.enqueue_create_buffer[DType.float32](1)
+    var d_cost = ctx.enqueue_create_buffer[DType.float32](1)
+    var d_shift = ctx.enqueue_create_buffer[DType.float32](1)
+    var d_prior_cost = ctx.enqueue_create_buffer[DType.float32](1)
+    var d_done = ctx.enqueue_create_buffer[DType.int32](1)
+    var h_done = ctx.enqueue_create_host_buffer[DType.int32](1)
+    var h_cost = ctx.enqueue_create_host_buffer[DType.float32](1)
     ctx.synchronize()
 
     # X's norms, ONCE for the whole fit (`:786-790`). This is the single
@@ -487,11 +534,20 @@ def kmeans_fit_main(
                 rng,
             )
 
-        var prior_cost = Float64(0.0)
-        var iter_cost = Float64(0.0)
         var n_current_iter = 0
+        h_done.unsafe_ptr().unsafe_store(0, Int32(0))
 
         for it in range(1, params.max_iter + 1):
+            # `detail/kmeans.cuh:817-825`. The flag is read at the TOP of the
+            # NEXT iteration, so the fit always runs one iteration with the
+            # answer in flight and `n_current_iter` is decremented when it
+            # fires. That is theirs, decrement included, and this port used
+            # to test on the host instead and report one fewer iteration.
+            if it > 1:
+                ctx.synchronize()
+                if h_done.unsafe_ptr().unsafe_load(0) != Int32(0):
+                    n_current_iter = it - 1
+                    break
             n_current_iter = it
 
             ctx.enqueue_function[zero_i32_kernel](
@@ -574,13 +630,12 @@ def kmeans_fit_main(
                 grid_dim=((cd + 255) // 256, 1, 1),
                 block_dim=(256, 1, 1),
             )
-            ctx.synchronize()
 
-            iter_cost = _sum_device(
-                ctx, min_dist, weights, partials, n_samples, True
+            _sum_device(
+                ctx, min_dist, weights, partials, d_cost, n_samples, True
             )
-            var shift = _sum_device(
-                ctx, shift_cells, ones, partials, cd, False
+            _sum_device(
+                ctx, shift_cells, ones, partials, d_shift, cd, False
             )
 
             # THE SWAP, `:907`, after the shift and before the test.
@@ -591,14 +646,26 @@ def kmeans_fit_main(
                 grid_dim=((cd + 255) // 256, 1, 1),
                 block_dim=(256, 1, 1),
             )
-            ctx.synchronize()
 
-            if check_convergence(
-                iter_cost, prior_cost, shift, params.tol, it
-            ):
-                prior_cost = iter_cost
-                break
-            prior_cost = iter_cost
+            # THE TEST, on device, exactly as theirs. It also advances
+            # `d_prior_cost`, which is why it cannot be split in two.
+            ctx.enqueue_function[check_convergence_kernel](
+                d_done.unsafe_ptr(),
+                d_prior_cost.unsafe_ptr(),
+                d_cost.unsafe_ptr(),
+                d_shift.unsafe_ptr(),
+                Float32(params.tol),
+                Int32(it),
+                grid_dim=(1, 1, 1),
+                block_dim=(1, 1, 1),
+            )
+            ctx.enqueue_copy(dst_ptr=h_done.unsafe_ptr(), src_buf=d_done)
+
+        # The fit's inertia. ONE transfer per restart, not one per iteration.
+        ctx.synchronize()
+        ctx.enqueue_copy(dst_ptr=h_cost.unsafe_ptr(), src_buf=d_cost)
+        ctx.synchronize()
+        var iter_cost = Float64(h_cost.unsafe_ptr().unsafe_load(0))
 
         if iter_cost < best_inertia:
             best_inertia = iter_cost

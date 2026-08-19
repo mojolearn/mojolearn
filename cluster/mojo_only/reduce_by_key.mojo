@@ -244,3 +244,46 @@ def copy_f32_kernel(
     var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if idx < Int(n_in):
         dst.unsafe_store(idx, src.unsafe_load(idx))
+
+
+def finish_sum_kernel(
+    out_scalar: MutPointer[Float32, MutAnyOrigin],
+    partials: MutPointer[Float32, MutAnyOrigin],
+    n_blocks_in: Int32,
+):
+    """Second stage: fold the block partials into ONE device scalar.
+
+    Exists so the Lloyd loop never has to bring a sum to the host. The first
+    version of this port summed the partials in a host loop, which cost a
+    drain and a transfer per iteration for a number the host only needed in
+    order to make a decision the DEVICE can make. See
+    `HOST_AND_DEVICE.md`.
+
+    One block, because `n_blocks` is at most 256 by construction.
+    """
+    var n_blocks = Int(n_blocks_in)
+    var tid = Int(thread_idx.x)
+
+    var acc = Float32(0.0)
+    var i = tid
+    while i < n_blocks:
+        acc += partials.unsafe_load(i)
+        i += REDUCE_BY_KEY_TPB
+
+    var s = stack_allocation[
+        REDUCE_BY_KEY_TPB,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    s[tid] = acc
+    barrier()
+
+    var half = REDUCE_BY_KEY_TPB // 2
+    while half > 0:
+        if tid < half:
+            s[tid] = s[tid] + s[tid + half]
+        barrier()
+        half //= 2
+
+    if tid == 0:
+        out_scalar.unsafe_store(0, s[0])

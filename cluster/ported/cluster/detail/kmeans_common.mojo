@@ -21,6 +21,8 @@ The decisions that ARE theirs and are copied exactly:
 - the k-means|| sampling probability.
 """
 
+from std.gpu import block_idx, thread_idx
+
 from cluster.ported.cluster.kmeans_params import (
     KMeansParams,
     METRIC_COSINE_EXPANDED,
@@ -134,3 +136,45 @@ def centroid_norms_take_sqrt(metric: Int) -> Bool:
     must not.
     """
     return metric == METRIC_COSINE_EXPANDED
+
+
+def check_convergence_kernel(
+    done_flag: MutPointer[Int32, MutAnyOrigin],
+    prior_clustering_cost: MutPointer[Float32, MutAnyOrigin],
+    clustering_cost: MutPointer[Float32, MutAnyOrigin],
+    sqrd_norm_error: MutPointer[Float32, MutAnyOrigin],
+    tol_in: Float32,
+    n_iter_in: Int32,
+):
+    """`check_convergence` (`kmeans_common.cuh:637-660`) AS A DEVICE FUNCTION,
+    which is what it is in their source.
+
+    The host version above is kept because it documents the three details in
+    prose and because a host-side checker is what a bring-up harness wants.
+    **This is the one the fit uses**, and porting it as a kernel is not an
+    optimization: cuVS runs this on the device
+    (`detail/kmeans.cuh:920-930`, a `map_offset` over a single element) and
+    reads only the resulting FLAG back. A host-side test was our artifact and
+    it cost a full drain plus two transfers per iteration for a number the
+    host never needed except to decide.
+
+    Note it also ADVANCES `prior_clustering_cost` in the same call, which is
+    theirs and is why the flag and the prior cost cannot be split into two
+    kernels without reintroducing an ordering hazard.
+    """
+    if Int(thread_idx.x) != 0 or Int(block_idx.x) != 0:
+        return
+
+    var cur_cost = clustering_cost.unsafe_load(0)
+    var norm_err = sqrd_norm_error.unsafe_load(0)
+    var done = Int32(0)
+
+    if cur_cost != Float32(0.0) and Int(n_iter_in) > 1:
+        var delta = cur_cost / prior_clustering_cost.unsafe_load(0)
+        if delta > Float32(1.0) - tol_in:
+            done = Int32(1)
+    if norm_err < tol_in:
+        done = Int32(1)
+
+    prior_clustering_cost.unsafe_store(0, cur_cost)
+    done_flag.unsafe_store(0, done)

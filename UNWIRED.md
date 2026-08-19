@@ -220,7 +220,38 @@ for why this one does NOT transfer to our stack.
 Their per-level blocking reads for an oblivious tree are **two**:
 `bestProps.Read(propsCpu)` (`greedy_search_helper.cpp:517`) and the pinned
 partition read. `ComputeTargetStdDev`'s `ReadReduce` is per TREE, not per
-level. Ours is **nine** syncs plus about sixteen launches.
+level.
+
+**Closed 2026-08-19 for all three drivers.** Every drain that was pure
+ordering is gone, and every remaining one goes through
+`TCudaManager::WaitComplete` under a budget that RAISES when exceeded, so a
+fourth cannot reappear quietly.
+
+| driver | drains before | drains now | budget |
+|---|---|---|---|
+| `run_one_level` | 8 | 2 | `2` |
+| `run_tree` | 14 | 3 per level + 1 | `3 * max_depth + 1` |
+| `run_tree_layout` | 2 per level + 1 stray setup drain | 2 per level + 1 | `2 * max_depth + 1` |
+
+`run_tree_layout` already had its LOOP right. What it still had was a raw
+`ctx.synchronize()` in its SETUP, before the manager was constructed, which
+the budget therefore never saw. An uncounted drain inside a function that
+advertises a budget is worse than a counted one.
+
+`run_tree` is the only driver still above their two, and the third drain is
+annotated at its site. It is not theirs: CatBoost's left child keeps the
+PARENT's slot, so `UpdatePartitionsAfterSplit` (`split_points.cu:387`) is
+reached with no host arithmetic in front of it, while `run_tree` scatters
+leaf `i` to slot `2i` and zeroes `2i+1` on the host, and needs `p_off`/`p_sz`
+back to do it. `run_tree_layout` in the same file already adopted their slot
+convention. The permutation depends on NO host value, so closing it is a
+kernel or a slot convention, not a drain. **This is the one OPEN item.**
+
+**One raw `ctx.synchronize()` remains in the file and it stays.** It is in
+`upload_blocks`, and it is LIFETIME, not ordering: the per-block host buffers
+are locals that die at return while the copies still read them. It runs once
+per tree build, not per level, and removing it would be a use-after-free that
+no digest would catch.
 
 ### What the difference is worth, measured
 
@@ -253,3 +284,11 @@ working change from a no-op and this repository has been bitten by exactly
 that: corrupt `centroid_norm` before the reduction and watch inertia move. If
 inertia does not move, the reduction is not reading it, and the whole
 assignment step is doing something other than what it says.
+
+### `cluster/` follow-up, 2026-08-19
+
+| thing | state | why it matters |
+|---|---|---|
+| `kmeans_plus_plus` host sampling | **FIXED in the same commit that found it** | It used to copy all `n_samples` distances to the host per accepted centroid. Now a two-level device search (`chunk_sums` / `select_chunk` / `select_index_in_chunk`) plus a one-launch `gather_rows_kernel`. No transfer in the fit scales with rows any more. |
+| the remaining device-to-host reads | audited, all O(1) or O(candidates) | `h_done` one Int32 per Lloyd iteration, `h_cost` one Float32 per restart, `host_cost` `n_trials` floats per accepted centroid. cuVS reads the last of those too. |
+| `check_convergence` (host version) | kept, unused by the fit | The device kernel beside it is what runs. The host one documents the three details in prose and is what a bring-up harness wants. Not dead by accident. |
