@@ -365,11 +365,24 @@ def check_mixed_tree(max_depth: Int) raises:
     var scratch_cursor = ctx.enqueue_create_buffer[DType.float32](1)
     var _sp = List[TBinarySplit]()
     var _lv = List[Float32]()
+    # THE DRAIN BUDGET IS ASSERTED HERE, NOT INSIDE THE LIBRARY.
+    #
+    # `sync_budget` is ours and CatBoost has no counterpart, so arming it on
+    # the training path made a diagnostic into a way for a real fit to fail.
+    # It now defaults to unbounded there and the CHECK supplies the tight
+    # number, which is where a claim about our own drain discipline belongs.
+    #
+    # `2 * max_depth + 1` is theirs read off their loop: two host blocks per
+    # level, `bestProps.Read(propsCpu)` (`greedy_search_helper.cpp:517`) and
+    # the leaf-size read in `RebuildLeavesSizes`
+    # (`split_properties_helper.cpp:802`), plus one at the end. A third drain
+    # per level fails this check, which is the point.
     var sizes = run_tree_layout(
         ctx, n_rows, folds, max_depth, cindex, stats, row_index,
         scratch_cursor,
         Float32(tw), Float32(tg),
         _sp, _lv,
+        sync_budget=2 * max_depth + 1,
     )
 
     var total = 0

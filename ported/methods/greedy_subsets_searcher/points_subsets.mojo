@@ -54,9 +54,16 @@ struct TBestSplitProperties(Copyable, ImplicitlyCopyable, Movable):
 struct EHistogramsType(Copyable, ImplicitlyCopyable, Movable):
     """Their `EHistogramsType`. Which histogram a leaf already holds.
 
-    Not yet consulted: our `build_necessary_histograms` rebuilds every level
-    rather than reusing a parent's. Kept so the field on `TLeaf` has a type
-    and the gap is visible rather than absent.
+    The sentence that used to sit here, "not yet consulted: our
+    `build_necessary_histograms` rebuilds every level rather than reusing a
+    parent's", is FALSE and is deleted. `run_tree_layout` consults it every
+    level through `split_properties_helper.build_necessary_histograms`, which
+    is what builds the smaller sibling and derives the larger.
+
+    What is still true is that the LIVE path carries these three states on
+    `split_properties_helper.LeafRecord` and not on the `TLeaf` below, so
+    this enum is the transliterated shape and `LeafRecord.histograms_type`
+    is the field actually read.
     """
 
     var value: Int32
@@ -79,6 +86,20 @@ struct TLeaf(Copyable, ImplicitlyCopyable, Movable):
     """`split_properties_helper.h`, their `TLeaf`, same five fields."""
 
     var size: Int
+    """Their `Leaf.Size`, the ROW COUNT of the leaf's partition, summed over
+    devices by `RebuildLeavesSizes` (`split_properties_helper.cpp:800-812`)
+    and by `FastUpdateLeavesSizes` on the single-leaf split path (`:815-828`).
+
+    **Two decisions read it and both are silent when it is stale.** The
+    smaller-of-the-pair choice at `:1318` picks which sibling to build and
+    which to derive, and the `NonZeroLeaves` / `ZeroLeaves` partition at
+    `:1342-1344` decides which leaves get a histogram built at all. A stale
+    size makes the first slow and the second WRONG.
+
+    Their maintenance points, all of them: `CreateInitialSubsets` (`:1078`),
+    the multi-leaf split (`:950`), the single-leaf split (`:1031`), and the
+    lossguide fast path (`:948`)."""
+
     var histograms_type: EHistogramsType
     var best_split: TBestSplitProperties
     var is_terminal: Bool

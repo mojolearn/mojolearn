@@ -44,6 +44,8 @@ from ported.methods.greedy_subsets_searcher.split_properties_helper import (
     HISTOGRAMS_ZEROES,
     LeafRecord,
     build_necessary_histograms,
+    non_zero_leaves,
+    zero_leaves,
 )
 from std.sys.info import size_of
 from ported.gpu_data.gpu_structures import CFeature
@@ -71,6 +73,7 @@ from ported.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     substract_histograms_kernel,
     write_reduces_histograms_kernel,
     zero_buffer_kernel,
+    zero_histogram_kernel,
     zero_histograms_kernel,
 )
 from ported.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
@@ -109,8 +112,7 @@ from ported.gpu_util.partitions_reduce import (
     compute_partition_stats,
 )
 from ported.methods.greedy_subsets_searcher.kernel.split_points import (
-    launch_reorder_index_in_leaves,
-    launch_reorder_stats_in_leaves,
+    launch_reorder_in_leaves,
     SPLIT_BLOCK_SIZE,
     gather_in_leaves_kernel,
     gather_index_in_leaves_kernel,
@@ -514,8 +516,13 @@ def run_one_level(
     hr.unsafe_ptr().unsafe_store(0, UInt32(1))
     ctx.enqueue_copy(dst_buf=left, src_ptr=hl.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=right, src_ptr=hr.unsafe_ptr())
-    ctx.synchronize()
 
+    # `hp_off` / `hp_size` are their `partsCpu` and they are ORDINARY DEVICE
+    # BUFFERS, which is a deviation and not a choice. Read the DEVIATION
+    # BLOCK in `ported/gpu_util/gpu_data/partitions.mojo` before assuming
+    # otherwise. The kernel writes them (`split_points.cu:372`, `:379`) and
+    # nothing on the host can address them, so the leaf size still comes back
+    # through the `enqueue_copy` below.
     ctx.enqueue_function[update_partitions_after_split_kernel](
         left.unsafe_ptr(),
         right.unsafe_ptr(),
@@ -528,8 +535,20 @@ def run_one_level(
         grid_dim=(wide, 1, 1),
         block_dim=(512, 1, 1),
     )
-    ctx.synchronize()
 
+    # ONE partition read, which is their count. `RebuildLeavesSizes` reads
+    # the parts once per `MakeSplit` (`split_properties_helper.cpp:803`,
+    # reached at `:950`), and it is safe there because the read is stream
+    # ordered behind the split kernel launched at `:920-934`.
+    #
+    # ORDERING HERE. Both the `left` / `right` uploads above and this copy
+    # are enqueued on the same queue as the kernel between them, so the copy
+    # cannot observe a `p_sz` the kernel has not written and the kernel
+    # cannot observe an unwritten `left` / `right`. The single drain below is
+    # what makes the copy's result readable on the host. The two
+    # `ctx.synchronize()` calls that used to sit before and after the kernel
+    # ordered nothing that the queue did not already order; they were three
+    # drains per level where CatBoost has one.
     var osz = ctx.enqueue_create_host_buffer[DType.uint32](n_leaves)
     ctx.enqueue_copy(dst_ptr=osz.unsafe_ptr(), src_buf=p_sz)
     ctx.synchronize()
@@ -968,44 +987,49 @@ def run_tree(
             chunk_zeros, chunk_offsets, leaf_zeros, gmap, sflags,
         )
 
-        # their `CopyInLeaves` then `GatherInLeaves`, BOTH restricted to the
-        # leaf ranges (`split_points.cpp:71-88`, `:94-111`). In place, so
-        # rows outside a splitting leaf are neither read nor written.
-        launch_reorder_index_in_leaves(
-            ctx, n_live, wide, max_live_rows,
-            ids_a, p_off, p_sz, row_index, new_index, gmap,
-        )
-        launch_reorder_stats_in_leaves(
+        # their `TSplitPointsKernel::Run` (`split_points.cpp:64-136`): one
+        # branch on the largest splitting leaf, then either the shared-memory
+        # fast path in ONE launch or `CopyInLeaves` then `GatherInLeaves` per
+        # chunk of eight stat columns plus one more pair for the index. Every
+        # launch is restricted to the leaf ranges, so rows outside a splitting
+        # leaf are neither read nor written.
+        _ = launch_reorder_in_leaves(
             ctx, n_live, wide, max_live_rows, stat_count, n_rows,
-            ids_a, p_off, p_sz, stats, new_stats, gmap,
+            ids_a, p_off, p_sz, stats, new_stats, row_index, new_index, gmap,
         )
 
         # ---- 5. one leaf becomes two ------------------------------------
-        # Children are laid out so leaf i becomes (2i, 2i+1), which is what
-        # keeps the partition ranges contiguous and ascending.
+        # THEIR NUMBERING (`split_properties_helper.cpp:860-861`):
+        #
+        #     const ui32 leftId = leavesToSplit[i];
+        #     const ui32 rightId = static_cast<const ui32>(leavesCount + i);
+        #
+        # The left child KEEPS the parent's slot and the right child is
+        # appended past the end of the level. That is why their partition
+        # array never round trips: `UpdatePartitionsAfterSplitImpl` reads
+        # `parts[leftLeaf]`, which still holds the parent, and writes both
+        # children out of it (`split_points.cu:346-380`).
+        #
+        # This used to number the children 2i and 2i+1, which needs the
+        # parent spread outward before the border search runs, and that
+        # spread was a device-to-host read of BOTH partition planes, a host
+        # loop, and a host-to-device write back, once per level.
+        # `run_tree_layout` deleted it by taking their numbering; this takes
+        # their numbering for the same reason. Nothing in this loop wants
+        # children adjacent: every per-leaf kernel here is handed an id list
+        # plus `p_off` / `p_sz` and never assumes an order over them.
         for i in range(n_live):
-            h_ids_b.unsafe_ptr().unsafe_store(i, UInt32(2 * i))
-            h_ids_c.unsafe_ptr().unsafe_store(i, UInt32(2 * i + 1))
+            h_ids_b.unsafe_ptr().unsafe_store(i, UInt32(i))
+            h_ids_c.unsafe_ptr().unsafe_store(i, UInt32(n_live + i))
         ctx.enqueue_copy(dst_buf=ids_b, src_ptr=h_ids_b.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=ids_c, src_ptr=h_ids_c.unsafe_ptr())
-        ctx.synchronize()
 
-        # The parent's {Offset, Size} must sit at the LEFT child's index
-        # before the border search runs, since it shrinks left in place.
-        ctx.enqueue_copy(dst_ptr=h_off.unsafe_ptr(), src_buf=p_off)
-        ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
-        ctx.synchronize()
-        for i in range(n_live - 1, -1, -1):
-            var o = h_off.unsafe_ptr().unsafe_load(i)
-            var s = h_sz.unsafe_ptr().unsafe_load(i)
-            h_off.unsafe_ptr().unsafe_store(2 * i, o)
-            h_sz.unsafe_ptr().unsafe_store(2 * i, s)
-            h_off.unsafe_ptr().unsafe_store(2 * i + 1, o)
-            h_sz.unsafe_ptr().unsafe_store(2 * i + 1, UInt32(0))
-        ctx.enqueue_copy(dst_buf=p_off, src_ptr=h_off.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=p_sz, src_ptr=h_sz.unsafe_ptr())
-        ctx.synchronize()
-
+        # `hp_off` / `hp_size` are their `partsCpu`, and ours are ORDINARY
+        # DEVICE BUFFERS that no host read reaches. That is a deviation and
+        # not a choice, so read the DEVIATION BLOCK in
+        # `ported/gpu_util/gpu_data/partitions.mojo` before assuming the
+        # allocation could simply be moved. The kernel writes them where
+        # theirs writes `partsCpu` (`split_points.cu:372`, `:379`).
         ctx.enqueue_function[update_partitions_after_split_kernel](
             ids_b.unsafe_ptr(),
             ids_c.unsafe_ptr(),
@@ -1018,11 +1042,23 @@ def run_tree(
             grid_dim=(wide, n_live, 1),
             block_dim=(512, 1, 1),
         )
-        ctx.synchronize()
 
         n_live = n_live * 2
 
-        # O(leaves) on the host, never O(rows). See HOST_AND_DEVICE.md.
+        # ONE partition read per level, which is their count.
+        # `RebuildLeavesSizes` is `currentParts.Read(partsCpu)` over the
+        # whole leaf range (`split_properties_helper.cpp:800-813`) and runs
+        # once per `MakeSplit`, at `:950`. O(leaves) on the host, never
+        # O(rows). See HOST_AND_DEVICE.md.
+        #
+        # ORDERING, and it is the part that a wrong answer would not
+        # announce. The two id uploads, the kernel, and this copy are all
+        # enqueued on one queue in that order, so the kernel cannot read an
+        # id that has not landed and the copy cannot read a `p_sz` the kernel
+        # has not written. The drain below is only what makes the copy
+        # READABLE on the host. It is the sole drain this path needs; the
+        # three that used to sit above it ordered nothing the queue did not
+        # already order, and CatBoost has one.
         ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
         ctx.synchronize()
         max_live_rows = 1
@@ -1147,7 +1183,48 @@ def launch_one_byte[bits: Int](
     fixed_scale: Float32,
 ) raises:
     """One one-byte launch at a comptime bit width. Direct at depth 0,
-    gather below it."""
+    indexed below it.
+
+    OUR NAMES DO NOT MEAN THEIRS, AND THE MISMATCH IS A TRAP.
+
+    CatBoost picks between two policies at
+    `split_properties_helper.cpp:1337-1339`:
+
+        loadPolicy = (Leaves.size() == 1 || GetStatCount() <= 2)
+                        ? LoadByIndexBins : GatherBins;
+
+    `LoadByIndexBins` reads each row's bins THROUGH `Target.Indices`, one
+    indirection per load. `GatherBins` first materialises a reordered copy of
+    the compressed index into `tempGatheredCompressedIndex` and then reads it
+    contiguously.
+
+    Our kernel called "gather" is the one that takes `indices`, so it is
+    their **LoadByIndexBins**, not their GatherBins. We have NO
+    implementation of GatherBins at all: nothing in this repository ever
+    materialises a reordered compressed index, which is verifiable by
+    grepping for a temp gathered index and finding none.
+
+    That is CORRECT BY THEIR DISPATCH rather than by luck. The boosting path
+    runs `stat_count = 2` (`doc_parallel_boosting.mojo:128`), so
+    `GetStatCount() <= 2` is always true and CatBoost takes LoadByIndexBins
+    at every depth, which is what we run at every depth below the root. The
+    unported policy is one their own dispatch never selects for our
+    parameters.
+
+    So do not "fix" this by porting GatherBins, and do not read the word
+    gather here as evidence that we took their gather path. The `depth == 0`
+    shortcut IS ours: at the root the index is the identity, so the
+    indirection is provably a no-op and the direct kernel is the same
+    arithmetic with one load removed.
+
+    THE FAILURE SHAPE THIS WAS CHECKED FOR, because a peer session found it
+    four times in one round: a function of theirs ported faithfully, while
+    their dispatch would never send our parameters to it. It compiles, it
+    passes, its citations are real, and it is the wrong kernel. Checked here
+    on 2026-08-19 and clean. `SortByFlagsInLeaf` was checked the same way,
+    `part.Size > FastSortSize()` at 500000 (`split_points.cu:737, :749`), and
+    our leaves are far below it, so `SortWithoutCub` is their path too.
+    """
     if depth == 0:
         ctx.enqueue_function[one_byte_hist_kernel[bits]](
             blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
@@ -1341,6 +1418,14 @@ def launch_histograms_for_blocks(
     two differences, both stated where they happen: `fixed_to_float_kernel`
     sits between the kernel and the writeback and has no counterpart of
     theirs, and `ReduceScatter` has no counterpart of ours.
+
+    `n_live` and `ids` are their `leavesCount` and `*leavesGpu`
+    (`split_properties_helper.cpp:1096` and `:1102`), which is
+    `nonZeroComputeLeaves` and NOT every leaf of the level. `ids[blockIdx.y]`
+    is the leaf whose partition the kernel reads; the scratch is written at
+    the dense `blockIdx.y`. Callers must therefore pass the NON-EMPTY set and
+    must not call at all when it is empty, which is their
+    `if (leavesToCompute.size() == 0) { return; }` (`:1089-1091`).
 
     `dense_ids` is no longer read. It was the id list handed to the scratch's
     old indexed zero; the scratch now takes a whole-buffer zero, which needs
@@ -1683,6 +1768,7 @@ def run_tree_layout(
     apply_to_cursor: Bool = False,
     learning_rate: Float32 = Float32(0.3),
     l2_leaf_reg: Float32 = Float32(3.0),
+    sync_budget: Int = -1,
 ) raises -> List[Int]:
     """`FitImpl` over a LAYOUT: mixed feature widths, one launch per policy.
 
@@ -1813,7 +1899,13 @@ def run_tree_layout(
     var h_ids_b = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
     var h_ids_c = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
 
+    # their `zeroLeaves` (`split_properties_helper.cpp:1344`) and the mirror
+    # buffer `ZeroLeavesHistograms` writes it into (`:1391-1392`). It is a
+    # buffer of its own and not a second copy of `h_ids_compute`, because
+    # `enqueue_copy` is asynchronous: overwriting one host staging buffer to
+    # feed two device buffers races the first copy.
     var zero_ids = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+    var h_zero_ids = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
 
     # `0, 1, 2, ...`, the DENSE index list. Their histogram kernels write the
     # block scratch at `blockIdx.y`, so anything addressing that scratch by
@@ -1922,9 +2014,30 @@ def run_tree_layout(
     # `bestProps.Read(propsCpu)` (`greedy_search_helper.cpp:517`) and the
     # leaf-size read in `RebuildLeavesSizes`
     # (`split_properties_helper.cpp:802`). This loop now does the same two
-    # and nothing else, and the budget below turns a third into an error.
+    # and nothing else.
+    #
+    # THE BUDGET IS NOT ARMED HERE, AND THAT IS DELIBERATE.
+    #
+    # `sync_budget` is OURS. CatBoost counts no drains and refuses none
+    # (`gpu_single_worker.mojo`, DEVIATION BLOCK). It was written as a
+    # debugging aid, because an older driver called `synchronize` nine times
+    # per level and nobody could see the total.
+    #
+    # It was then left ARMED on this path at `2 * max_depth + 1`, which made
+    # a counter into a RUNTIME FAILURE MODE OF THE LIBRARY. A fit could raise
+    # "sync budget exceeded" for a reason that has nothing to do with the
+    # caller's data, their parameters, or their device, and CatBoost cannot
+    # fail that way because it does not count. Worse, the number is a
+    # prediction about our own future code: any correct change that needs one
+    # more drain turns into an exception at a call site that did nothing
+    # wrong.
+    #
+    # A diagnostic belongs where assertions belong. The default is unbounded,
+    # the counters stay because they cost nothing and are worth reading, and
+    # the CHECKS pass the tight budget so the drain discipline is still
+    # enforced against a fixture rather than against a user.
     # ================================================================
-    var mgr = TCudaManager(ctx.copy(), sync_budget=2 * max_depth + 1)
+    var mgr = TCudaManager(ctx.copy(), sync_budget=sync_budget)
 
     var n_live = 1
     var max_live_rows = n_rows
@@ -1952,58 +2065,125 @@ def run_tree_layout(
         # parent, put there by `copy_histograms_kernel` at split time (their
         # `CopyHistogram`, `split_points.cpp:326`).
         var plan = build_necessary_histograms(leaf_records)
-        var n_compute = len(plan.compute_ids)
         var n_pairs = len(plan.subtract_from)
-        for i in range(n_compute):
-            h_ids_compute.unsafe_ptr().unsafe_store(i, plan.compute_ids[i])
-        ctx.enqueue_copy(
-            dst_buf=ids_compute, src_ptr=h_ids_compute.unsafe_ptr()
-        )
-        ctx.enqueue_copy(dst_buf=zero_ids, src_ptr=h_ids_compute.unsafe_ptr())
 
-        # their `ZeroLeavesHistograms(zeroLeaves, subsets)`
-        ctx.enqueue_function[zero_histograms_kernel](
-            zero_ids.unsafe_ptr(),
-            Int32(hist_cells_per_leaf),
-            hist.unsafe_ptr(),
-            grid_dim=(
-                (hist_cells_per_leaf + 255) // 256, n_compute, stat_count
-            ),
-            block_dim=(256, 1, 1),
-        )
-        mgr.stream_kernel()
+        # ============================================================
+        # THE ZERO-LEAF SPLIT, `split_properties_helper.cpp:1342-1350`:
+        #
+        #     auto nonZeroComputeLeaves =
+        #         NonZeroLeaves(*subsets, computeLeaves);
+        #     auto zeroLeaves = ZeroLeaves(*subsets, computeLeaves);
+        #     ComputeSplitProperties(loadPolicy, nonZeroComputeLeaves, subsets);
+        #     ZeroLeavesHistograms(zeroLeaves, subsets);
+        #
+        # **AN EMPTY LEAF'S HISTOGRAM IS ALL ZEROS BY DEFINITION AND
+        # CATBOOST NEVER BUILDS IT.** It zeroes the slot and moves on. This
+        # loop used to hand the whole of `computeLeaves` to the histogram
+        # builder, so every empty leaf bought a full accumulation over every
+        # row and every feature to produce a result known in advance. At
+        # depth 6 this port's own checks report 56 of 64 leaves non-empty on
+        # one fixture and 46 of 64 on another.
+        #
+        # This is safe only because `leaf_records[i].size` is REBUILT from
+        # the partition sizes at the foot of every level, which is their
+        # `RebuildLeavesSizes` (`:800-812`). If it were stale, the partition
+        # here would be wrong AND the smaller-child choice at `:1318` would
+        # already be being made on bad data.
+        # ============================================================
+        var compute_nonzero = non_zero_leaves(leaf_records, plan.compute_ids)
+        var compute_zero = zero_leaves(leaf_records, plan.compute_ids)
+        var n_compute = len(compute_nonzero)
+        var n_zero = len(compute_zero)
 
-        launch_histograms_for_blocks(
-            ctx, dblocks, depth, n_compute, n_rows, stat_count, max_leaves,
-            sm_count, fixed_scale,
-            cindex, row_index, stats, p_off, p_sz, ids_compute, dense_ids,
-            hist, acc_i32, block_hist, hist_cells_per_leaf,
-        )
-        mgr.stream_kernel()
+        # their `ComputeSplitProperties(loadPolicy, nonZeroComputeLeaves,
+        # subsets)` (`:1346`), whose first statement is
+        # `if (leavesToCompute.size() == 0) { return; }` (`:1089-1091`).
+        if n_compute > 0:
+            for i in range(n_compute):
+                h_ids_compute.unsafe_ptr().unsafe_store(i, compute_nonzero[i])
+            ctx.enqueue_copy(
+                dst_buf=ids_compute, src_ptr=h_ids_compute.unsafe_ptr()
+            )
 
-        # their `TScanHistogramsKernel` over `*leavesGpu` (`:1262`). It runs on
-        # the leaves JUST COMPUTED and BEFORE the subtraction. A prefix sum is
-        # linear, so `scan(parent) - scan(small)` is already `scan(big)` and
-        # the derived child needs no further scan.
-        # `numBlocks.x = CeilDivide(fCount * 32, blockSize)`
-        # (`histogram_utils.cu:442`), theirs at one WARP per feature. Ours is
-        # one THREAD per feature, so the same rule is
-        # `ceil(fCount / blockSize)`. The kernel guards with
-        # `feature_id >= feature_count` and has no grid-stride loop, so grid
-        # x of 1 left every feature from 256 up unscanned, holding raw
-        # per-bin counts while the score kernel read them as prefix sums.
-        ctx.enqueue_function[scan_histograms_kernel](
-            ids_compute.unsafe_ptr(),
-            flat_first.unsafe_ptr(), flat_folds.unsafe_ptr(),
-            flat_one_hot.unsafe_ptr(),
-            Int32(len(fold_counts)), Int32(hist_cells_per_leaf),
-            hist.unsafe_ptr(),
-            grid_dim=(
-                (len(fold_counts) + 255) // 256, n_compute, stat_count
-            ),
-            block_dim=(256, 1, 1),
-        )
-        mgr.stream_kernel()
+            launch_histograms_for_blocks(
+                ctx, dblocks, depth, n_compute, n_rows, stat_count, max_leaves,
+                sm_count, fixed_scale,
+                cindex, row_index, stats, p_off, p_sz, ids_compute, dense_ids,
+                hist, acc_i32, block_hist, hist_cells_per_leaf,
+            )
+            mgr.stream_kernel()
+
+            # their `TScanHistogramsKernel` over `*leavesGpu` (`:1262`), the
+            # LAST statement of `ComputeSplitProperties` and therefore over
+            # the NON-ZERO set too. It runs on the leaves JUST COMPUTED and
+            # BEFORE the subtraction. A prefix sum is linear, so
+            # `scan(parent) - scan(small)` is already `scan(big)` and the
+            # derived child needs no further scan.
+            # `numBlocks.x = CeilDivide(fCount * 32, blockSize)`
+            # (`histogram_utils.cu:442`), theirs at one WARP per feature.
+            # Ours is one THREAD per feature, so the same rule is
+            # `ceil(fCount / blockSize)`. The kernel guards with
+            # `feature_id >= feature_count` and has no grid-stride loop, so
+            # grid x of 1 left every feature from 256 up unscanned, holding
+            # raw per-bin counts while the score kernel read them as prefix
+            # sums.
+            ctx.enqueue_function[scan_histograms_kernel](
+                ids_compute.unsafe_ptr(),
+                flat_first.unsafe_ptr(), flat_folds.unsafe_ptr(),
+                flat_one_hot.unsafe_ptr(),
+                Int32(len(fold_counts)), Int32(hist_cells_per_leaf),
+                hist.unsafe_ptr(),
+                grid_dim=(
+                    (len(fold_counts) + 255) // 256, n_compute, stat_count
+                ),
+                block_dim=(256, 1, 1),
+            )
+            mgr.stream_kernel()
+
+        # their `ZeroLeavesHistograms(zeroLeaves, subsets)` (`:1348`), the
+        # whole of `:1375-1400` including its dispatch, which is the part
+        # that is easy to skip:
+        #
+        #     if (leaves.size() <= 2) { one TZeroHistogramKernel per leaf }
+        #     else { ids.Write(leaves); one TZeroHistogramsKernel }
+        #
+        # The small case avoids the host id-buffer write and its copy, which
+        # cost more than the extra launch at one or two ids. It runs AFTER
+        # the build and BEFORE the subtraction, and the order matters in one
+        # direction: an empty leaf can be the SMALLER child of a pair, and
+        # `substract_histograms_kernel` reads its slot.
+        if n_zero > 0:
+            if n_zero <= 2:
+                # `TZeroHistogramKernel`, leaf id BY VALUE, `numBlocks.y = 1`
+                # (`histogram_utils.cu:268-284`).
+                for i in range(n_zero):
+                    ctx.enqueue_function[zero_histogram_kernel](
+                        UInt32(compute_zero[i]),
+                        Int32(hist_cells_per_leaf),
+                        hist.unsafe_ptr(),
+                        grid_dim=(
+                            (hist_cells_per_leaf + 255) // 256, 1, stat_count
+                        ),
+                        block_dim=(256, 1, 1),
+                    )
+                    mgr.stream_kernel()
+            else:
+                # `ids.Write(leaves)` then `TZeroHistogramsKernel` (`:1391`).
+                for i in range(n_zero):
+                    h_zero_ids.unsafe_ptr().unsafe_store(i, compute_zero[i])
+                ctx.enqueue_copy(
+                    dst_buf=zero_ids, src_ptr=h_zero_ids.unsafe_ptr()
+                )
+                ctx.enqueue_function[zero_histograms_kernel](
+                    zero_ids.unsafe_ptr(),
+                    Int32(hist_cells_per_leaf),
+                    hist.unsafe_ptr(),
+                    grid_dim=(
+                        (hist_cells_per_leaf + 255) // 256, n_zero, stat_count
+                    ),
+                    block_dim=(256, 1, 1),
+                )
+                mgr.stream_kernel()
 
         # their `SubstractHistograms(bigLeaves, smallLeaves, subsets)`
         # (`:1354`). `from - what`, in place, one launch for all pairs.
@@ -2216,10 +2396,18 @@ def run_tree_layout(
         )
         mgr.stream_kernel()
 
-        # their `CopyInLeaves` then `GatherInLeaves`, BOTH restricted to the
-        # leaf ranges (`split_points.cpp:71-88`, `:94-111`). The write-back is
-        # IN PLACE, so rows outside a splitting leaf are neither read nor
-        # written.
+        # their `TSplitPointsKernel::Run` (`split_points.cpp:64-136`), the
+        # whole if/else in one call because it is one function of theirs.
+        #
+        # It branches on the largest leaf being split. At or under 1024 rows
+        # every leaf is staged in shared memory and permuted in place, ONE
+        # launch for the index and every stat column together
+        # (`split_points.cpp:113-135`, grid width `1 + statCount` at
+        # `split_points.cu:105`). Above it, `CopyInLeaves` then
+        # `GatherInLeaves` per chunk of eight stat columns, then one more pair
+        # for the index (`split_points.cpp:66-111`). Both arms touch only
+        # `[part.Offset, part.Offset + part.Size)`, so rows outside a
+        # splitting leaf are neither read nor written.
         #
         # This replaces a gather into a second full plane followed by a copy
         # of the ENTIRE `stat_count * n_rows` buffer: two defects at once. It
@@ -2228,18 +2416,17 @@ def run_tree_layout(
         # row not covered by a live leaf was copied back as garbage. That
         # survived only because this port splits every leaf unconditionally
         # and CatBoost does not (`greedy_search_helper.cpp:691-694`).
-        launch_reorder_index_in_leaves(
-            ctx, n_live, wide, max_live_rows,
-            ids_a, p_off, p_sz, row_index, new_index, gmap,
-        )
-        mgr.stream_kernel()
-        mgr.stream_kernel()
-        launch_reorder_stats_in_leaves(
+        #
+        # The launch count is data dependent -- 1 on the fast path,
+        # `2 * ceil(stat_count / 8) + 2` on the slow one -- so it comes back
+        # from the call rather than being written out here. A hardcoded 4 was
+        # counting two launches the fast path never issues.
+        var reorder_launches = launch_reorder_in_leaves(
             ctx, n_live, wide, max_live_rows, stat_count, n_rows,
-            ids_a, p_off, p_sz, stats, new_stats, gmap,
+            ids_a, p_off, p_sz, stats, new_stats, row_index, new_index, gmap,
         )
-        mgr.stream_kernel()
-        mgr.stream_kernel()
+        for _ in range(reorder_launches):
+            mgr.stream_kernel()
 
         # their `CopyHistogram(LeafIdToSplit, RightLeafIdAfterSplit, ...)`
         # (`split_points.cpp:326`), issued right before the partition update
@@ -2263,6 +2450,16 @@ def run_tree_layout(
         # their `UpdatePartitionsAfterSplit` (`split_points.cu:387`), reached
         # with NO host arithmetic in front of it because the left child kept
         # the parent's slot.
+        #
+        # `hp_off` / `hp_size` are their `partsCpu`
+        # (`split_properties_helper.h:49`), which on their side is
+        # `EPtrType::CudaHost` and is READ BY THE HOST with no copy at all
+        # (`split_points.cpp:56-62`, `split_points.cu:667`). Ours are
+        # ordinary device buffers that nothing reads, so the kernel pays
+        # their write and we collect none of their benefit. That is a
+        # deviation forced by the toolchain, not a choice; the search that
+        # established it is the DEVIATION BLOCK in
+        # `ported/gpu_util/gpu_data/partitions.mojo`.
         ctx.enqueue_function[update_partitions_after_split_kernel](
             ids_b.unsafe_ptr(), ids_c.unsafe_ptr(), Int32(n_live),
             sflags.unsafe_ptr(), p_off.unsafe_ptr(), p_sz.unsafe_ptr(),
@@ -2303,10 +2500,25 @@ def run_tree_layout(
         ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
 
         # DRAIN 2 of 2. Their `RebuildLeavesSizes`
-        # (`split_properties_helper.cpp:800`). They get it for free off
-        # pinned host memory; we pay a copy. See ported/gpu_lib/NOT_PORTED.md
-        # for the measurement that says the copy is the cheaper of the two
-        # on this stack.
+        # (`split_properties_helper.cpp:800-813`), which is also ONE blocking
+        # partition read per level on their side, at `:950`. So this drain is
+        # their count and not an artifact of ours.
+        #
+        # What IS an artifact is the transfer under it. Their `Read` moves
+        # host memory to host memory, because `PartitionsCpu` is
+        # `EPtrType::CudaHost` and the split kernel already wrote it
+        # (`split_points.cu:372`, `:379`); ours moves device memory to host
+        # memory. `hp_off` / `hp_size` are the mirror that was supposed to
+        # remove that transfer and cannot, and the search behind that is the
+        # DEVIATION BLOCK in `ported/gpu_util/gpu_data/partitions.mojo`.
+        # It used to point at `ported/gpu_lib/NOT_PORTED.md`, which says
+        # nothing about any of this.
+        #
+        # ORDERING. The copy above is enqueued behind
+        # `update_partitions_after_split_kernel` on the same queue, so it
+        # cannot read a size the kernel has not written; this drain is only
+        # what makes the copy's result readable on the host. The same
+        # property is what makes their stream-ordered `Read` safe.
         mgr.wait_complete()
 
         # their `RebuildLeavesSizes` filling `Leaves[i].Size` (`:806`). The

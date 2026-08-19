@@ -176,6 +176,43 @@ def zero_histograms_kernel(
         dst_histogram.unsafe_store(base + bin_feature_id, Float32(0.0))
 
 
+def zero_histogram_kernel(
+    dst_hist_in: UInt32,
+    bin_feature_count_in: Int32,
+    dst_histogram: MutPointer[Float32, MutAnyOrigin],
+):
+    """`ZeroHistogramImpl`, copied (`histogram_utils.cu:251-266`).
+
+    The SINGULAR form of `zero_histograms_kernel`. Same addressing, same
+    `WriteThrough(dst + binFeatureId, 0.0f)`, one difference: the destination
+    leaf arrives BY VALUE instead of through a `histIds[blockIdx.y]` load,
+    and the grid is `numBlocks.y = 1` (`histogram_utils.cu:268-284`).
+
+    **Why they keep both.** `ZeroLeavesHistograms` dispatches on the count
+    (`split_properties_helper.cpp:1375-1400`): at two leaves or fewer it
+    launches this one per leaf, above two it writes a mirror id buffer and
+    launches the plural once. The small case exists to avoid the host-side
+    `ids.Write(leaves)` and its copy, which cost more than the extra launch
+    when there are one or two ids. This is the same dispatch they use for
+    `SubstractHistograms` (`:1402`) and for the whole compute path
+    (`:1099-1105`).
+    """
+    var bin_feature_count = Int(bin_feature_count_in)
+    var bin_feature_id = Int(block_idx.x) * Int(block_dim.x) + Int(
+        thread_idx.x
+    )
+    var stat_id = Int(block_idx.z)
+    var stat_count = Int(grid_dim.z)
+    var dst_hist = Int(dst_hist_in)
+
+    if bin_feature_id < bin_feature_count:
+        var base = (
+            dst_hist * bin_feature_count * stat_count
+            + stat_id * bin_feature_count
+        )
+        dst_histogram.unsafe_store(base + bin_feature_id, Float32(0.0))
+
+
 def zero_buffer_kernel(
     buffer: MutPointer[Float32, MutAnyOrigin],
     n_cells_in: Int32,

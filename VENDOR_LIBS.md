@@ -304,14 +304,26 @@ ported.
 
 | theirs | ours | why it matters |
 |---|---|---|
-| `GatherInplaceLeqSize<SIZE>` shared-memory fast path below 1024 rows, ONE launch (`split_points.cu:52-112`) | always the global path, three launches | every leaf at depth 4+ on normal data; directly the fixed per-tree overhead |
-| Copy then Gather, both restricted to leaf ranges (`split_points.cpp:71-88`) | Gather then a FULL-ARRAY copy | correctness landmine plus full-`n_rows` traffic per level |
-| stat columns chunked 8 at a time (`split_points.cpp:66`) | all stats in one shot | temp storage sized to the chunk, not the whole thing |
 | five single-leaf kernel variants, dispatched at count `<= 2` | always the plural id-list form | a host id-buffer write and copy at depths 0 and 1 |
 | `partsCpu` is PINNED host memory written by the kernel (`split_points.cpp:177`) | an ordinary device buffer nothing reads | a full D2H stall every level |
 | `NonZeroLeaves` / `ZeroLeaves` disjoint sets (`split_properties_helper.cpp:762-784`) | one undifferentiated list fed to both | a wasted histogram launch per empty leaf per level |
 | grid x from `SMCount()`, halved above 4 leaves (`split_points.cu:220`) | `min(256, ceil(n_rows/256))`, device-blind | never adapts across GPUs |
-| `WriteThrough` = `cub::ThreadStore<STORE_WT>` on every streaming store | plain stores | keeps write-once data out of L1; may not port to Apple, but the drop is unrecorded |
+| `Ldg` / `__ldg` = `cub::ThreadLoad<LOAD_LDG>` on every streaming read (`kernel_helpers.cuh:180`) | plain loads, in every kernel in the tree | `std.gpu.intrinsics.ldg` and `max.gpu.memory.load[read_only=True]` BOTH ship and neither is called anywhere; verified 2026-08-19 |
+
+`GatherInplaceLeqSize`, the leaf-range-restricted Copy-then-Gather pair and the
+eight-column chunk were all three on this list. They are ported and reached as
+of 2026-08-19; `launch_reorder_in_leaves` is their `TSplitPointsKernel::Run`
+(`split_points.cpp:64-136`) including the fused `1 + statCount` fast launch, so
+the fast path is ONE launch per level, as theirs is.
+
+`WriteThrough` = `cub::ThreadStore<cub::STORE_WT>` (`kernel_helpers.cuh:190`)
+was also on this list as "the drop is unrecorded". It is recorded now, in the
+DEVIATION BLOCK on `gather_inplace_kernel`: `max.gpu.memory.memory` ships
+`load` with `read_only`, `cache_policy` and `eviction_policy` and ships no
+store at all; `std.gpu.intrinsics` ships `ldg` and `threadfence` and no store;
+`std.sys.intrinsics` ships `masked_store`, `compressed_store`, `strided_store`
+and `scatter`, all addressing patterns with no cache or temporality hint. The
+load half of their pair ships, the store half does not.
 
 ## 7. The rule for a genuine gap
 
@@ -347,6 +359,16 @@ This list was wrong in two places and both were load-bearing. Corrected
 - `cluster/mojo_only/reduce_by_key.mojo`: the fixed-point accumulator was
   justified by "Metal has no float atomic add". That sentence is deleted, not
   annotated, and the determinism argument replaces it.
+- `ported/methods/greedy_subsets_searcher/kernel/split_points.mojo`,
+  `gather_inplace_kernel`: `WriteThrough`. The old text said "No Mojo
+  spelling; a plain store" and named no search, which section 7 says is not
+  evidence of anything. The three module paths searched are now written into
+  the block, along with the finding that the LOAD half of the same CUB pair
+  (`ldg`) does ship and this tree calls it nowhere.
+- The same file's launch-count deviation is DELETED rather than annotated: it
+  claimed no call site could hold both payload pointers, which was true only
+  because the driver had been split in two. `launch_reorder_in_leaves` is
+  their single `Run` and the fast path is their single launch.
 
 ---
 

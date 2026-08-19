@@ -446,7 +446,8 @@ def gather_inplace_kernel(
     part_offset: MutPointer[UInt32, MutAnyOrigin],
     part_size: MutPointer[UInt32, MutAnyOrigin],
     gather_map: MutPointer[UInt32, MutAnyOrigin],
-    data: MutPointer[UInt32, MutAnyOrigin],
+    indices: MutPointer[UInt32, MutAnyOrigin],
+    stats: MutPointer[UInt32, MutAnyOrigin],
     line_size_in: Int32,
 ):
     """`GatherInplaceImpl` (`split_points.cu:52-91`), copied.
@@ -464,10 +465,11 @@ def gather_inplace_kernel(
     measured about 30 ms of every 129 ms tree as fixed per-level launch
     overhead; this is aimed at it.
 
-    Grid x is the COLUMN and grid y is the leaf, exactly their
+    Grid x is `1 + statCount` and grid y is the leaf, exactly their
     `numBlocks.x = 1 + statCount; numBlocks.y = leavesCount`
-    (`split_points.cu:105-106`) minus the fused index block; see the second
-    deviation block below.
+    (`split_points.cu:105-106`). Block 0 carries the row index and block
+    `k + 1` carries stat column `k`, which is their `blockIdx.x == 0` branch
+    (`split_points.cu:61`), so ONE launch moves both payloads.
 
     ===================== DEVIATION BLOCK =====================
     THE ELEMENT TYPE. Theirs stages `__shared__ char4 tmp[Size]`
@@ -480,40 +482,50 @@ def gather_inplace_kernel(
     `char4` is nothing but "some 4-byte word I will move without looking at
     it", which is what lets one kernel serve a `float*` and a `ui32*` at once.
     Mojo has no `char4`; the equivalent is `UInt32` plus a pointer `bitcast`,
-    so this kernel takes a `MutPointer[UInt32]` and the STATS driver hands it
-    `stats.unsafe_ptr().bitcast[UInt32]()`. Four bytes in, four bytes out, bit
-    for bit: a permutation never inspects the value, so reinterpreting floats
-    as words is not an approximation of their trick, it IS their trick.
+    so both payloads arrive here as `MutPointer[UInt32]` and the driver hands
+    the stats plane over as `stats.unsafe_ptr().bitcast[UInt32]()`. Four bytes
+    in, four bytes out, bit for bit: a permutation never inspects the value,
+    so reinterpreting floats as words is not an approximation of their trick,
+    it IS their trick.
 
     This is why there is ONE kernel here and not a float one plus a UInt32
     one.
     ===========================================================
 
     ===================== DEVIATION BLOCK =====================
-    THE LAUNCH COUNT. Theirs runs ONE launch for both payloads by branching on
-    `blockIdx.x == 0` between two DIFFERENT allocations, the index array and
-    the stats plane (`split_points.cu:61`), with grid width `1 + statCount`
-    (`split_points.cu:105`).
+    `WriteThrough(data + i, tmp[i])` (`split_points.cu:90`) is
+    `cub::ThreadStore<cub::STORE_WT>` (`kernel_helpers.cuh:190`), a
+    write-through store that lands in L2 without dirtying L1. Every streaming
+    store in this file goes through it. Mojo ships no counterpart; this is a
+    plain store.
 
-    Ours takes a single payload base and a column stride, and is launched
-    twice: once with `grid.x = 1` over the row index, once with
-    `grid.x = stat_count` over the stats plane. The reason is the driver
-    shape, not the language -- `launch_reorder_index_in_leaves` is handed the
-    index buffer and `launch_reorder_stats_in_leaves` is handed the stats
-    buffer, and neither can see the other's, so no single call site here has
-    both pointers to hand to a fused kernel.
+    Searched 2026-08-19, and the paths are named so the next person does not
+    repeat them:
 
-    Cost: 2 launches per level where theirs has 1. Against the 4 the global
-    path costs, that is still 4 -> 2 rather than their 4 -> 1. Recovering the
-    last one needs a fused driver taking BOTH buffers, called ONCE in place of
-    the two, which is a caller change and is theirs' actual shape
-    (`split_points.cpp:113-135` is one `FAST_PATH` call, not two). Left
-    undone deliberately rather than added unreached (PORTING_RULES 3).
+      * `max.gpu.memory.memory` (`/api/mojo/max/gpu/memory/memory/`) is the
+        module whose own summary is "load/store: Memory access operations
+        with cache control". It exports `load` with `read_only`,
+        `cache_policy: CacheOperation` and `eviction_policy: CacheEviction`,
+        and it exports NO store. The only stores in it are `multimem_st`
+        (NVIDIA multimem) and the `cp_async_bulk_*` TMA family, neither of
+        which is a scalar store with a cache modifier.
+      * `std.gpu.intrinsics` exports `CacheOperation`, `Scope`, `ldg`,
+        `threadfence` and the AMD/permlane intrinsics. No store.
+      * `std.sys.intrinsics` exports `masked_store`, `compressed_store`,
+        `strided_store`, `scatter` and `prefetch`. All of these are addressing
+        patterns; none carries a cache or temporality hint.
+
+    So the LOAD half of their pair ships and the STORE half does not. Their
+    `Ldg` / `__ldg` (`kernel_helpers.cuh:180`) has an exact counterpart in
+    `std.gpu.intrinsics.ldg` and in `load[read_only=True]`, and this file
+    uses neither yet -- that is a live gap across every kernel in the tree,
+    not something local to this one, and it is recorded rather than half
+    applied here.
+
+    Cost of the missing store hint: the permuted leaf is dead to this kernel
+    the moment it lands, so a normal store pollutes L1 with data nothing will
+    read. That is cache pressure, not a correctness difference.
     ===========================================================
-
-    `WriteThrough` (`split_points.cu:90`) is a `st.global.wt` store that
-    bypasses L1. No Mojo spelling; a plain store. The data is dead to this
-    kernel after it lands, so the only cost is cache pollution.
     """
     # `__shared__ char4 tmp[Size]` (`split_points.cu:59`). 1024 words = 4 KB.
     var tmp = stack_allocation[
@@ -524,11 +536,14 @@ def gather_inplace_kernel(
 
     var line_size = Int(line_size_in)
 
-    # `stats + (blockIdx.x - 1) * lineSize` (`split_points.cu:61`), with their
-    # index block already peeled off by the driver, so the column is grid x
-    # itself. The index launch passes `line_size = 0` and `grid.x = 1`, which
-    # makes this term vanish exactly as their `blockIdx.x == 0` branch does.
-    var col_base = Int(block_idx.x) * line_size
+    # `char4* data = blockIdx.x == 0 ? (char4*)indices
+    #                               : (char4*)(stats + (blockIdx.x - 1) * lineSize);`
+    # (`split_points.cu:61`). One launch, two different allocations, selected
+    # by the block's x index. Block 0 is the row index, which has no column
+    # stride to apply; every other block is stat column `blockIdx.x - 1`.
+    var col = Int(block_idx.x)
+    var data = indices if col == 0 else stats
+    var col_base = 0 if col == 0 else (col - 1) * line_size
 
     # `TDataPartition part = Ldg(parts + leafId)` (`split_points.cu:66`), read
     # field by field: a whole-struct load in a kernel kills the Metal
@@ -568,7 +583,7 @@ def gather_inplace_kernel(
             data.unsafe_store(base + i, tmp[i])
 
 
-def launch_reorder_stats_in_leaves(
+def launch_reorder_in_leaves(
     ctx: DeviceContext,
     n_leaf_slots: Int,
     wide: Int,
@@ -580,66 +595,90 @@ def launch_reorder_stats_in_leaves(
     mut part_size: DeviceBuffer[DType.uint32],
     mut stats: DeviceBuffer[DType.float32],
     mut temp_stats: DeviceBuffer[DType.float32],
+    mut row_index: DeviceBuffer[DType.uint32],
+    mut temp_index: DeviceBuffer[DType.uint32],
     mut gather_map: DeviceBuffer[DType.uint32],
-) raises:
-    """`split_points.cpp:65-136`: reorder the stat columns of the split leaves.
+) raises -> Int:
+    """`TSplitPointsKernel::Run` (`split_points.cpp:64-136`), the whole if/else.
 
-    THE PATH CHOICE IS THEIRS, and it is made on one number: the largest leaf
-    in the level, `maxLeafSize` (`split_points.cpp:60-63`).
+    ONE function because theirs is one function. The stat columns and the row
+    index are not two independent jobs with two policies; they are two arms of
+    a single branch taken on a single number, and in the fast arm they are one
+    kernel launch. Splitting them in two here is what made the fast path cost
+    2 launches instead of their 1.
+
+    THE PATH CHOICE IS THEIRS, and it is made on the largest leaf being split,
+    `maxLeafSize` (`split_points.cpp:60-63`):
 
         if (maxLeafSize > 1024) { ... } else { FAST_PATH(1024) }
             (`split_points.cpp:65`, `:113`)
 
-    SLOW PATH, `maxLeafSize > 1024` (`split_points.cpp:66-88`):
+    SLOW PATH, `maxLeafSize > 1024` (`split_points.cpp:66-111`):
 
         for (firstStat = 0; firstStat < numStats; firstStat += StatsPerKernel)
+            CopyInLeaves<float>(...); GatherInLeaves<float>(...);
+        //now copy indices
+        { CopyInLeaves<ui32>(...); GatherInLeaves(...); }
 
-    Eight columns at a time out to scratch and straight back in place. Two
-    launches per chunk, both restricted to the splitting leaves, and the
-    scratch is `min(8, statCount) * lineSize` floats (`split_points.cpp:10`)
-    rather than a second stats plane that would have to live for the whole
-    fit.
+    Eight columns at a time out to scratch and straight back in place, then
+    ONE more pair for the index. Every launch is restricted to the splitting
+    leaves, and the scratch is `min(8, statCount) * lineSize` floats
+    (`split_points.cpp:10`) rather than a second stats plane that would have
+    to live for the whole fit.
 
-    FAST PATH, otherwise (`split_points.cpp:113-135`): the whole leaf is
-    staged in shared memory and permuted in place, ONE launch, `temp_stats`
-    untouched. Once the level is fine enough that no leaf exceeds 1024 rows,
-    every leaf takes this path and the copy/gather pair is not cheaper, it is
-    simply absent.
+    The index pass is theirs' own separate block, with `numCopies = 1` and
+    `lineSize = Indices.Size()` rather than `AlignedColumnSize()`
+    (`split_points.cpp:96-98`). At one column the stride multiplies nothing,
+    which is why the two `ui32` kernels here carry no stride argument at all.
+
+    FAST PATH, otherwise (`split_points.cpp:113-135`): every leaf is staged in
+    shared memory and permuted in place, ONE launch for the index and all the
+    stat columns together, `temp_stats` and `temp_index` untouched. Once the
+    level is fine enough that no leaf exceeds 1024 rows -- which is most of
+    the tree -- the copy/gather pair is not cheaper, it is absent.
+
+    Launches per level: 1 on the fast path, `2 * ceil(statCount / 8) + 2` on
+    the slow one. That count is returned, because the caller has to tell the
+    manager about each launch and a hardcoded number would be wrong in one of
+    the two arms.
 
     `temp_stats` holds chunk-local columns `0 .. n-1`; `stats` is indexed at
     absolute columns `first_stat .. first_stat + n - 1`.
 
     `if (leavesCount)` guards their slow launches (`split_points.cu:224`,
     `:246`) and `IsGridEmpty(numBlocks)` guards the fast one
-    (`split_points.cu:108`); `numBlocks.x = 1 + statCount` and
-    `numBlocks.y = leavesCount` (`split_points.cu:105-106`), so the one guard
-    below covers both.
+    (`split_points.cu:108`). Their fast grid is `1 + statCount` wide
+    (`split_points.cu:105`), so it is never empty for a live leaf even at
+    `statCount == 0`, and the guard below is on the leaf count alone.
     """
-    if n_leaf_slots <= 0 or stat_count <= 0:
-        return
+    if n_leaf_slots <= 0:
+        return 0
 
     # `else { FAST_PATH(1024) }` (`split_points.cpp:113`, `:134`). Their test
     # is `maxLeafSize > 1024` on the largest SPLITTING leaf, not on the row
     # count, so a 500,000-row dataset still takes this path once the level is
-    # fine enough -- which is most of the tree.
+    # fine enough.
     if max_leaf_rows <= GATHER_INPLACE_SIZE:
         ctx.enqueue_function[gather_inplace_kernel](
             leaves.unsafe_ptr(),
             part_offset.unsafe_ptr(),
             part_size.unsafe_ptr(),
             gather_map.unsafe_ptr(),
+            # `(char4*)indices` (`split_points.cu:61`). Already `ui32`, so the
+            # reinterpretation is the identity and no bitcast is needed.
+            row_index.unsafe_ptr(),
             # the `char4` reinterpretation, `(char4*)(stats + ...)`
             # (`split_points.cu:61`)
             stats.unsafe_ptr().bitcast[UInt32](),
             Int32(line_size),
-            # theirs is `1 + statCount` because block 0 carries the index
-            # (`split_points.cu:105`); ours launches the index separately, so
-            # the width is the stat columns alone.
-            grid_dim=(stat_count, n_leaf_slots, 1),
+            # `numBlocks.x = 1 + statCount` (`split_points.cu:105`): block 0
+            # is the row index, block `k + 1` is stat column `k`.
+            grid_dim=(1 + stat_count, n_leaf_slots, 1),
             block_dim=(GATHER_INPLACE_BLOCK, 1, 1),
         )
-        return
+        return 1
 
+    var launches = 0
     var first_stat = 0
     while first_stat < stat_count:
         var n = stat_count - first_stat
@@ -671,59 +710,18 @@ def launch_reorder_stats_in_leaves(
             grid_dim=(wide, n_leaf_slots, 1),
             block_dim=(LEAF_COPY_BLOCK, 1, 1),
         )
+        launches += 2
         first_stat += STATS_PER_KERNEL
 
-
-def launch_reorder_index_in_leaves(
-    ctx: DeviceContext,
-    n_leaf_slots: Int,
-    wide: Int,
-    max_leaf_rows: Int,
-    mut leaves: DeviceBuffer[DType.uint32],
-    mut part_offset: DeviceBuffer[DType.uint32],
-    mut part_size: DeviceBuffer[DType.uint32],
-    mut row_index: DeviceBuffer[DType.uint32],
-    mut temp_index: DeviceBuffer[DType.uint32],
-    mut gather_map: DeviceBuffer[DType.uint32],
-) raises:
-    """`split_points.cpp:90-111`: the same two paths for the row-index array.
-
-    SLOW PATH, `maxLeafSize > 1024`: copy out, gather back. Theirs reuses
-    `context.TempStorage` for it, cast to `ui32` (`split_points.cpp:92`); this
-    takes a separate `ui32` scratch because Mojo buffers are typed. One
-    column, so no chunking.
-
-    FAST PATH, otherwise: the index is `blockIdx.x == 0` of their single fused
-    launch (`split_points.cu:61`, grid width `1 + statCount` at `:105`). Here
-    it is its own one-block-wide launch of the same kernel; see the launch
-    count deviation on `gather_inplace_kernel`.
-
-    The index matters exactly as much as the stats. It is what
-    `split_and_make_sequence_kernel` dereferences to reach the compressed
-    index next level, so permuting the payload without it reads the right
-    rows' bins against the wrong rows' gradients.
-    """
-    if n_leaf_slots <= 0:
-        return
-
-    if max_leaf_rows <= GATHER_INPLACE_SIZE:
-        ctx.enqueue_function[gather_inplace_kernel](
-            leaves.unsafe_ptr(),
-            part_offset.unsafe_ptr(),
-            part_size.unsafe_ptr(),
-            gather_map.unsafe_ptr(),
-            # `(char4*)indices` (`split_points.cu:61`). Already `ui32`, so the
-            # reinterpretation is the identity and no bitcast is needed.
-            row_index.unsafe_ptr(),
-            # one column, so the column stride is never multiplied by
-            # anything; theirs reaches the same place through the
-            # `blockIdx.x == 0` branch, which skips the stride term entirely.
-            Int32(0),
-            grid_dim=(1, n_leaf_slots, 1),
-            block_dim=(GATHER_INPLACE_BLOCK, 1, 1),
-        )
-        return
-
+    # `//now copy indices` (`split_points.cpp:90`), their own separate block
+    # after the stat loop. Theirs reuses `context.TempStorage` for it, cast to
+    # `ui32` (`split_points.cpp:92`); this takes a separate `ui32` scratch
+    # because Mojo buffers are typed. One column, so no chunking.
+    #
+    # The index matters exactly as much as the stats. It is what
+    # `split_and_make_sequence_kernel` dereferences to reach the compressed
+    # index next level, so permuting the payload without it reads the right
+    # rows' bins against the wrong rows' gradients.
     ctx.enqueue_function[copy_index_in_leaves_kernel](
         leaves.unsafe_ptr(),
         part_offset.unsafe_ptr(),
@@ -743,6 +741,7 @@ def launch_reorder_index_in_leaves(
         grid_dim=(wide, n_leaf_slots, 1),
         block_dim=(LEAF_COPY_BLOCK, 1, 1),
     )
+    return launches + 2
 
 
 # =========================================================================

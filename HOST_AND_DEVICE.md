@@ -37,11 +37,23 @@ the question has not arisen. It arises the moment the candidate count exceeds
 one block's worth, and the fix is a host loop over at most 64 structs, not a
 second kernel.
 
-**Not yet done, and it is the one with a measured payoff on their side:**
-pinned host partitions. `update_partitions_after_split_kernel` already takes
-and writes `host_offset` / `host_size`, so the device half exists. The driver
-allocates them as ordinary device buffers, so today the host still has to
-copy to learn a leaf's size. Tracked in UNWIRED.md.
+**Not portable to this toolchain, and it is the one with a measured payoff
+on their side:** pinned host partitions.
+`update_partitions_after_split_kernel` already takes and writes
+`host_offset` / `host_size`, so the device half exists. The driver allocates
+them as ordinary device buffers, and on `mojo 1.0.0` / `max 26.5.0` it has
+no other option: `HostBuffer` does not conform to `DevicePassable`, so a
+kernel handed one writes nothing, and `DeviceContext` ships no managed,
+unified or mapped allocator to try instead. MAX **nightly** adds
+`DeviceBuffer.unsafe_host_ptr()`, which returns a CPU-addressable pointer to
+a device buffer on unified-memory hardware and is described in its own
+release note as suiting "small control records rather than bulk readback";
+that is the API this wants, and the pin cannot call it yet. Until the pin
+moves, the host copies to learn a leaf's size, ONCE PER LEVEL, which is
+their count (`RebuildLeavesSizes`, `split_properties_helper.cpp:800-813`,
+called at `:950`). Search, citations and the ordering rule are in the
+DEVIATION BLOCK in `ported/gpu_util/gpu_data/partitions.mojo`; tracked in
+UNWIRED.md.
 
 ## The second rule, added 2026-08-19
 

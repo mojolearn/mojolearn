@@ -25,6 +25,12 @@ one batched launch over every pair at once.
 terminal, neither histogram will ever be read, so neither is built
 (`:1326-1328`). Copied. Dropping it would be correct and would waste a build
 per terminal pair at the last level, which is where the leaves are.
+
+**A second case, and it is the one this port had wrong:** `computeLeaves` is
+split ONE MORE TIME before anything launches, on `leaf.Size != 0`
+(`:1342-1346`). An empty leaf's histogram is zeros by definition, so CatBoost
+zeroes the slot instead of building it. See `non_zero_leaves` and
+`zero_leaves` at the foot of this file.
 """
 
 
@@ -171,3 +177,58 @@ def build_necessary_histograms(leaves: List[LeafRecord]) raises -> LevelPlan:
         subtract_from.append(UInt32(big))
 
     return LevelPlan(compute_ids^, subtract_from^, subtract_what^)
+
+
+def non_zero_leaves(
+    leaves: List[LeafRecord], ids: List[UInt32]
+) -> List[UInt32]:
+    """`NonZeroLeaves`, copied (`split_properties_helper.cpp:762-773`).
+
+        for (const auto leafId : leaves) {
+            auto& leaf = subsets.Leaves.at(leafId);
+            if (leaf.Size != 0) {
+                result.push_back(leafId);
+            }
+        }
+
+    THE POINT, so the next reader does not undo it. **An EMPTY leaf's
+    histogram is all zeros by definition, so CatBoost never builds it.** It
+    zeroes the slot and moves on. `BuildNecessaryHistograms` splits
+    `computeLeaves` in two right before it launches anything (`:1342-1346`):
+
+        auto nonZeroComputeLeaves = NonZeroLeaves(*subsets, computeLeaves);
+        auto zeroLeaves           = ZeroLeaves(*subsets, computeLeaves);
+        ComputeSplitProperties(loadPolicy, nonZeroComputeLeaves, subsets);
+        ZeroLeavesHistograms(zeroLeaves, subsets);
+
+    Feeding one undifferentiated list to the histogram builder costs a full
+    accumulation over every row and every feature to produce a result that
+    was known in advance. At depth 6 this port's own checks report 56 of 64
+    leaves non-empty on one fixture and 46 of 64 on another, so that is 8 to
+    18 wasted launches per level on the fixtures already in the tree, and
+    far more on sparse data.
+
+    `leaf.Size` has to be right for the partition to be safe. It is
+    maintained by `RebuildLeavesSizes` (`:800-812`) after every split, and
+    ours is filled from the same partition sizes at the same point, at the
+    drain at the foot of the level loop in `run_tree_layout`.
+    """
+    var result = List[UInt32]()
+    for i in range(len(ids)):
+        if leaves[Int(ids[i])].size != UInt32(0):
+            result.append(ids[i])
+    return result^
+
+
+def zero_leaves(leaves: List[LeafRecord], ids: List[UInt32]) -> List[UInt32]:
+    """`ZeroLeaves`, copied (`split_properties_helper.cpp:775-784`).
+
+    The complement of `non_zero_leaves` over the same list. Their two
+    helpers are separate functions over the same input rather than one pass
+    returning both, and this keeps that shape.
+    """
+    var result = List[UInt32]()
+    for i in range(len(ids)):
+        if leaves[Int(ids[i])].size == UInt32(0):
+            result.append(ids[i])
+    return result^
