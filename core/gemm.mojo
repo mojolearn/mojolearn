@@ -254,10 +254,11 @@ def gemm_tn(
 ) raises:
     """`z[m x n] = x[k x m]^T . x[k x n]`, the Gram shape.
 
-    **STILL ON THE HAND-PORTED CONTRACTION. The vendor route was built,
-    compiled, and CRASHED, and that is worth more than the attempt.**
+    **STILL OFF THE VENDOR PATH, AND NOW ON A REGISTER-TILED CONTRACTION
+    RATHER THAN A NAIVE ONE.** The vendor route was built, compiled, and
+    CRASHED, and that is worth more than the attempt.
 
-    The identity is right: MAX refuses `transpose_a`, but
+    The identity was right: MAX refuses `transpose_a`, but
     `Xt . Xt^T == X^T X`, so one transpose turns the unsupported T-N shape
     into the N-T shape MAX does support. It compiled. It then died inside
 
@@ -271,27 +272,98 @@ def gemm_tn(
     the list of vendor calls that exist, compile, and do not do the job here.
     All three are in `VENDOR_LIBRARIES.md` with what was tried.
 
-    `xt` and `xt2` are kept in the signature because the shape of the fix is
-    known and only the transpose is missing. A device transpose kernel is
-    twenty lines and is the obvious next move; it just has not been measured
-    against simply register-tiling `covariance_kernel` directly, and this
-    repository does not guess between two options it can measure.
-    """
-    from core.column_stats import COV_TILE, covariance_kernel
+    THE TRANSPOSE IS NO LONGER THE PLAN, AND THAT IS THE NEWS
+    ---------------------------------------------------------
+    The other branch was to register-tile `covariance_kernel` directly, and
+    it turned out not to need a transpose at all: RAFT already ships the
+    column-major arm of its contraction, and a row-major `X` read as a
+    column-major `X^T` puts this product in exactly that arm. That is done.
+    `xt` and `xt2` are now dead weight in this signature; they are kept only
+    so the three call sites do not have to change in the same commit, and
+    they are the next thing to delete.
 
+    THE GEOMETRY LIVES HERE, AND ONLY HERE
+    ---------------------------------------
+    Nothing outside this function should compute a grid for
+    `covariance_kernel`. The launch is
+
+        block_dim = (COV_THREADS, 1, 1)                      = (256, 1, 1)
+        grid_dim  = (ceil(n / COV_NBLK), ceil(m / COV_MBLK), splits)
+
+    and `splits > 1` means `covariance_kernel` writes `splits` partial
+    matrices instead of one and `covariance_reduce_kernel` sums them.
+
+    WHY SPLIT-K, spelled out because it is the part that is not a port
+    ------------------------------------------------------------------
+    The output is `m x n = n_cols x n_cols` and `k = n_rows`. Register tiling
+    grows the output tile from 16x16 to 64x64, and at `n_cols = 32`, which is
+    what `bench/bench_main.mojo` runs, that is ONE thread block for a 200,000
+    row contraction where the naive kernel at least had four. The tiling would
+    have been a regression on its own. Partitioning the ROW axis across
+    `grid_dim.z` is where the parallelism comes from, and it is what cuBLAS
+    does for a T-N with tiny `m`, `n` and enormous `k`.
+
+    The split count is chosen to fill the grid and then capped so a split is
+    never shorter than `COV_SPLIT_MIN_ROWS` rows, below which the fixed cost
+    of a block outweighs the work in it. Any split count is CORRECT: the
+    kernel re-derives its own row range from `grid_dim.z`, so this policy can
+    be tuned without touching the kernel.
+    """
+    from core.column_stats import (
+        COV_MBLK,
+        COV_NBLK,
+        COV_SPLIT_MIN_ROWS,
+        COV_TARGET_BLOCKS,
+        COV_THREADS,
+        covariance_kernel,
+        covariance_reduce_kernel,
+    )
+
+    var tiles_x = (n + COV_NBLK - 1) // COV_NBLK
+    var tiles_y = (m + COV_MBLK - 1) // COV_MBLK
+    var tiles = tiles_x * tiles_y
+
+    var splits = (COV_TARGET_BLOCKS + tiles - 1) // tiles
+    var cap = k // COV_SPLIT_MIN_ROWS
+    if splits > cap:
+        splits = cap
+    if splits < 1:
+        splits = 1
+
+    if splits == 1:
+        ctx.enqueue_function[covariance_kernel](
+            z.unsafe_ptr(),
+            x.unsafe_ptr(),
+            Int32(k),
+            Int32(m),
+            Float32(1.0),
+            grid_dim=(tiles_x, tiles_y, 1),
+            block_dim=(COV_THREADS, 1, 1),
+        )
+        return
+
+    var cells = m * n
+    var partials = ctx.enqueue_create_buffer[DType.float32](splits * cells)
     ctx.enqueue_function[covariance_kernel](
-        z.unsafe_ptr(),
+        partials.unsafe_ptr(),
         x.unsafe_ptr(),
         Int32(k),
         Int32(m),
         Float32(1.0),
-        grid_dim=(
-            (n + COV_TILE - 1) // COV_TILE,
-            (m + COV_TILE - 1) // COV_TILE,
-            1,
-        ),
-        block_dim=(COV_TILE, COV_TILE, 1),
+        grid_dim=(tiles_x, tiles_y, splits),
+        block_dim=(COV_THREADS, 1, 1),
     )
+    ctx.enqueue_function[covariance_reduce_kernel](
+        z.unsafe_ptr(),
+        partials.unsafe_ptr(),
+        Int32(cells),
+        Int32(splits),
+        grid_dim=((cells + 255) // 256, 1, 1),
+        block_dim=(256, 1, 1),
+    )
+    # `partials` dies at the end of this scope and the reduction must be done
+    # with it before that happens. One synchronize per fit, not per iteration.
+    ctx.synchronize()
 
 
 # WHY `gemm_tn` IS NOT ON THE VENDOR PATH, AND IT IS A HARD LIMIT
@@ -308,8 +380,15 @@ def gemm_tn(
 # `core/column_stats.mojo::covariance_kernel`, the hand-ported contraction,
 # stays as the only implementation of that shape.
 #
-# That is why PCA and OLS did not move in this round while k-NN and DBSCAN
-# did. The follow-up is either an explicit transpose (MAX ships
-# `linalg.transpose`) plus an N-T matmul, or applying the register-tiling
-# port to `covariance_kernel` directly. Both are measurable; neither is
-# guessed.
+# That limit is unchanged. What changed is what sits behind it: that kernel
+# is no longer the naive 16x16 one-element-per-thread tile that left PCA and
+# OLS flat for six benchmark rounds. It is now RAFT's COLUMN-major
+# contraction (`ColKernelPolicy`, the `isRowMajor == false` arm of
+# `raft/linalg/detail/contractions.cuh`), which is the same policy this file
+# ported for the N-T shape and which fits the T-N shape without a transpose
+# at all. The transpose-plus-vendor-matmul route is therefore ABANDONED
+# rather than pending: there is nothing left for it to buy.
+#
+# `VENDOR_LIBRARIES.md` still lists that transpose as the follow-up and now
+# says something false. It is outside the scope of this change and has to be
+# corrected before this lands.

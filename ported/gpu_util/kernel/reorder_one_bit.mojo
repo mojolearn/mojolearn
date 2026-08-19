@@ -2,7 +2,7 @@
 
 PORT OF `catboost/cuda/cuda_util/kernel/reorder_one_bit_impl.cuh:127`
 (`ReorderOneBitImpl`) and the `SortWithoutCub` driver that calls it,
-`catboost/cuda/methods/greedy_subsets_searcher/kernel/split_points.cu:691`.
+`catboost/cuda/methods/greedy_subsets_searcher/kernel/split_points.cu:692`.
 
 ## Why this file exists, and why it is not `split_points`
 
@@ -53,13 +53,15 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
-#: `const int blockSize = 512` at their call site (`split_points.cu:720`).
+#: `const int blockSize = 512` at their call site (`split_points.cu:722`),
+#: and again at `reorder_one_bit.cu:35`.
 comptime REORDER_BLOCK = 512
 
-#: `const int N = 1` at their call site (`split_points.cu:721`).
+#: `const int N = 1` at their call site (`split_points.cu:723`), and again
+#: at `reorder_one_bit.cu:36`.
 comptime REORDER_UNROLL = 1
 
-#: `FastSortSize()` (`split_points.cu:735`). Above this they take the CUB
+#: `FastSortSize()` (`split_points.cu:737`). Above this they take the CUB
 #: 1-bit radix sort instead; we have no device sort to take, so this is
 #: recorded and the scan path runs at every size. Ported so the threshold is
 #: visible rather than absent.
@@ -207,9 +209,13 @@ def launch_reorder_one_bit(
     mut flags: DeviceBuffer[DType.uint8],
     mut values: DeviceBuffer[DType.uint32],
 ) raises:
-    """`SortWithoutCub` (`split_points.cu:691`): scan, then reorder.
+    """`SortWithoutCub` (`split_points.cu:692`): scan, then reorder.
 
     One leaf, `[offset, offset + size)`. Their driver calls this per leaf.
+
+    The empty guard is `if (part.Size)` (`split_points.cu:694`, and `:674` on
+    the CUB path): a zero-row leaf produces a zero-extent grid, and it also
+    makes `offsets[size - 1]` in the reorder kernel a read before the buffer.
     """
     if size <= 0:
         return

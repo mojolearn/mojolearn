@@ -50,6 +50,7 @@ from ported.gpu_data.kernel.binarize import (
     WRITE_BLOCK_SIZE,
     write_compressed_index_kernel,
 )
+from ported.options.catboost_options import SCORE_FUNCTION_COSINE
 from ported.methods.greedy_subsets_searcher.kernel.compute_scores import (
     SCORE_BLOCK_SIZE,
     compute_optimal_splits_kernel,
@@ -102,6 +103,8 @@ from ported.gpu_util.partitions_reduce import (
     compute_partition_stats,
 )
 from ported.methods.greedy_subsets_searcher.kernel.split_points import (
+    launch_reorder_index_in_leaves,
+    launch_reorder_stats_in_leaves,
     SPLIT_BLOCK_SIZE,
     gather_in_leaves_kernel,
     gather_index_in_leaves_kernel,
@@ -372,9 +375,26 @@ def run_one_level(
     var out_bin = ctx.enqueue_create_buffer[DType.uint32](1)
     ctx.synchronize()
 
-    ctx.enqueue_function[compute_optimal_splits_kernel](
+    # their `TCBinFeature.FeatureId` and `binFeaturesWeights`
+    # (`compute_scores.cu:136`). The weights are all 1.0 because
+    # `UpdateFeatureWeights` fills 1.0 and returns early with no CTRs
+    # (`update_feature_weights.cpp:14-22`) -- their value, not a stub.
+    var bff = ctx.enqueue_create_buffer[DType.uint32](n_features)
+    var hbf = ctx.enqueue_create_host_buffer[DType.uint32](n_features)
+    var ffw = ctx.enqueue_create_buffer[DType.float32](n_features)
+    var hfw = ctx.enqueue_create_host_buffer[DType.float32](n_features)
+    for f in range(n_features):
+        hbf.unsafe_ptr().unsafe_store(f, UInt32(f))
+    for f in range(n_features):
+        hfw.unsafe_ptr().unsafe_store(f, Float32(1.0))
+    ctx.enqueue_copy(dst_buf=bff, src_ptr=hbf.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=ffw, src_ptr=hfw.unsafe_ptr())
+    ctx.enqueue_function[
+            compute_optimal_splits_kernel[SCORE_FUNCTION_COSINE]
+        ](
         skip.unsafe_ptr(),
         Int32(n_features),
+        bff.unsafe_ptr(), ffw.unsafe_ptr(),
         hist.unsafe_ptr(),
         part_stats.unsafe_ptr(),
         Int32(stat_count),
@@ -858,9 +878,26 @@ def run_tree(
         ctx.synchronize()
 
         # ---- 3. one split for the whole level ---------------------------
-        ctx.enqueue_function[compute_optimal_splits_kernel](
+        # their `TCBinFeature.FeatureId` and `binFeaturesWeights`
+        # (`compute_scores.cu:136`). The weights are all 1.0 because
+        # `UpdateFeatureWeights` fills 1.0 and returns early with no CTRs
+        # (`update_feature_weights.cpp:14-22`) -- their value, not a stub.
+        var bff = ctx.enqueue_create_buffer[DType.uint32](n_features)
+        var hbf = ctx.enqueue_create_host_buffer[DType.uint32](n_features)
+        var ffw = ctx.enqueue_create_buffer[DType.float32](n_features)
+        var hfw = ctx.enqueue_create_host_buffer[DType.float32](n_features)
+        for f in range(n_features):
+            hbf.unsafe_ptr().unsafe_store(f, UInt32(f))
+        for f in range(n_features):
+            hfw.unsafe_ptr().unsafe_store(f, Float32(1.0))
+        ctx.enqueue_copy(dst_buf=bff, src_ptr=hbf.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=ffw, src_ptr=hfw.unsafe_ptr())
+        ctx.enqueue_function[
+            compute_optimal_splits_kernel[SCORE_FUNCTION_COSINE]
+        ](
             skip.unsafe_ptr(),
             Int32(n_features),
+            bff.unsafe_ptr(), ffw.unsafe_ptr(),
             hist.unsafe_ptr(),
             part_stats.unsafe_ptr(),
             Int32(stat_count),
@@ -916,40 +953,16 @@ def run_tree(
             chunk_zeros, chunk_offsets, leaf_zeros, gmap, sflags,
         )
 
-        ctx.enqueue_function[gather_index_in_leaves_kernel](
-            ids_a.unsafe_ptr(),
-            p_off.unsafe_ptr(),
-            p_sz.unsafe_ptr(),
-            row_index.unsafe_ptr(),
-            gmap.unsafe_ptr(),
-            new_index.unsafe_ptr(),
-            grid_dim=(wide, n_live, 1),
-            block_dim=(256, 1, 1),
+        # their `CopyInLeaves` then `GatherInLeaves`, BOTH restricted to the
+        # leaf ranges (`split_points.cpp:71-88`, `:94-111`). In place, so
+        # rows outside a splitting leaf are neither read nor written.
+        launch_reorder_index_in_leaves(
+            ctx, n_live, wide, max_live_rows,
+            ids_a, p_off, p_sz, row_index, new_index, gmap,
         )
-        ctx.enqueue_function[copy_u32_kernel](
-            row_index.unsafe_ptr(),
-            new_index.unsafe_ptr(),
-            Int32(n_rows),
-            grid_dim=wide,
-            block_dim=COPY_BLOCK,
-        )
-
-        # The STAT columns are permuted too, and this kernel was ported and
-        # never called until now. The histogram reads bins THROUGH the index
-        # and stats BY POSITION, so leaving stats unpermuted pairs the right
-        # rows' bins with the wrong rows' gradients.
-        ctx.enqueue_function[gather_in_leaves_kernel](
-            ids_a.unsafe_ptr(), p_off.unsafe_ptr(), p_sz.unsafe_ptr(),
-            stats.unsafe_ptr(), gmap.unsafe_ptr(), new_stats.unsafe_ptr(),
-            Int32(stat_count), Int32(n_rows),
-            grid_dim=(wide, n_live, 1), block_dim=(256, 1, 1),
-        )
-        ctx.enqueue_function[copy_f32_kernel](
-            stats.unsafe_ptr(),
-            new_stats.unsafe_ptr(),
-            Int32(stat_count * n_rows),
-            grid_dim=wide,
-            block_dim=COPY_BLOCK,
+        launch_reorder_stats_in_leaves(
+            ctx, n_live, wide, max_live_rows, stat_count, n_rows,
+            ids_a, p_off, p_sz, stats, new_stats, gmap,
         )
 
         # ---- 5. one leaf becomes two ------------------------------------
@@ -1021,8 +1034,7 @@ def run_tree(
         Int32(stat_count),
         Int32(n_live),
         Float32(1.0),
-        Float32(1.0e6),
-        leaf_values.unsafe_ptr(),
+                leaf_values.unsafe_ptr(),
         grid_dim=(n_live + LEAF_BLOCK - 1) // LEAF_BLOCK,
         block_dim=LEAF_BLOCK,
     )
@@ -1883,8 +1895,28 @@ def run_tree_layout(
         )
         mgr.stream_kernel()
 
-        ctx.enqueue_function[compute_optimal_splits_kernel](
-            skip.unsafe_ptr(), Int32(hist_cells_per_leaf), hist.unsafe_ptr(),
+        # their `TCBinFeature.FeatureId` and `binFeaturesWeights`
+        # (`compute_scores.cu:136`). The weights are all 1.0 because
+        # `UpdateFeatureWeights` fills 1.0 and returns early with no CTRs
+        # (`update_feature_weights.cpp:14-22`) -- their value, not a stub.
+        var bff = ctx.enqueue_create_buffer[DType.uint32](hist_cells_per_leaf)
+        var hbf = ctx.enqueue_create_host_buffer[DType.uint32](hist_cells_per_leaf)
+        var ffw = ctx.enqueue_create_buffer[DType.float32](len(fold_counts))
+        var hfw = ctx.enqueue_create_host_buffer[DType.float32](len(fold_counts))
+        for f in range(len(fold_counts)):
+            ref lf = layout.features[f]
+            for b in range(Int(lf.folds)):
+                hbf.unsafe_ptr().unsafe_store(Int(lf.first_fold_index) + b, UInt32(f))
+        for f in range(len(fold_counts)):
+            hfw.unsafe_ptr().unsafe_store(f, Float32(1.0))
+        ctx.enqueue_copy(dst_buf=bff, src_ptr=hbf.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=ffw, src_ptr=hfw.unsafe_ptr())
+        ctx.enqueue_function[
+            compute_optimal_splits_kernel[SCORE_FUNCTION_COSINE]
+        ](
+            skip.unsafe_ptr(), Int32(hist_cells_per_leaf),
+            bff.unsafe_ptr(), ffw.unsafe_ptr(),
+            hist.unsafe_ptr(),
             part_stats.unsafe_ptr(), Int32(stat_count), ids_a.unsafe_ptr(),
             Int32(n_live), l2_leaf_reg,
             out_score.unsafe_ptr(), out_bin.unsafe_ptr(),
@@ -1899,8 +1931,23 @@ def run_tree_layout(
         mgr.wait_complete()
 
         var best_bf = Int(hob.unsafe_ptr().unsafe_load(0))
+        # their `CB_ENSURE(bestSplits[0].FeatureId != (ui32)-1, "All splits
+        # have infinite score. Probably, numerical overflow occurs in loss
+        # function and/or split score calculation. Try increasing
+        # l2_leaf_reg, and/or decreasing learning_rate, etc.")`
+        # -- `greedy_search_helper.cpp:535-539`.
+        #
+        # This used to CLAMP the sentinel to 0, turning their numerical
+        # overflow diagnostic into a silently wrong tree that split on
+        # whatever happened to own bin-feature 0. That clamp is how the
+        # empty-histogram bug hid for the whole port.
         if best_bf < 0 or best_bf >= hist_cells_per_leaf:
-            best_bf = 0
+            raise Error(
+                "All splits have infinite score. Probably, numerical"
+                " overflow occurs in loss function and/or split score"
+                " calculation. Try increasing l2_leaf_reg, and/or"
+                " decreasing learning_rate, etc."
+            )
         var choice = resolve_split(layout, best_bf)
         ref cf = layout.features[choice.feature]
 
@@ -1993,29 +2040,29 @@ def run_tree_layout(
         )
         mgr.stream_kernel()
 
-        ctx.enqueue_function[gather_index_in_leaves_kernel](
-            ids_a.unsafe_ptr(), p_off.unsafe_ptr(), p_sz.unsafe_ptr(),
-            row_index.unsafe_ptr(), gmap.unsafe_ptr(), new_index.unsafe_ptr(),
-            grid_dim=(wide, n_live, 1), block_dim=(256, 1, 1),
+        # their `CopyInLeaves` then `GatherInLeaves`, BOTH restricted to the
+        # leaf ranges (`split_points.cpp:71-88`, `:94-111`). The write-back is
+        # IN PLACE, so rows outside a splitting leaf are neither read nor
+        # written.
+        #
+        # This replaces a gather into a second full plane followed by a copy
+        # of the ENTIRE `stat_count * n_rows` buffer: two defects at once. It
+        # moved the whole array every level regardless of how much was
+        # actually splitting, and the scratch was never initialised, so any
+        # row not covered by a live leaf was copied back as garbage. That
+        # survived only because this port splits every leaf unconditionally
+        # and CatBoost does not (`greedy_search_helper.cpp:691-694`).
+        launch_reorder_index_in_leaves(
+            ctx, n_live, wide, max_live_rows,
+            ids_a, p_off, p_sz, row_index, new_index, gmap,
         )
         mgr.stream_kernel()
-        ctx.enqueue_function[copy_u32_kernel](
-            row_index.unsafe_ptr(), new_index.unsafe_ptr(), Int32(n_rows),
-            grid_dim=wide, block_dim=COPY_BLOCK,
+        mgr.stream_kernel()
+        launch_reorder_stats_in_leaves(
+            ctx, n_live, wide, max_live_rows, stat_count, n_rows,
+            ids_a, p_off, p_sz, stats, new_stats, gmap,
         )
         mgr.stream_kernel()
-        ctx.enqueue_function[gather_in_leaves_kernel](
-            ids_a.unsafe_ptr(), p_off.unsafe_ptr(), p_sz.unsafe_ptr(),
-            stats.unsafe_ptr(), gmap.unsafe_ptr(), new_stats.unsafe_ptr(),
-            Int32(stat_count), Int32(n_rows),
-            grid_dim=(wide, n_live, 1), block_dim=(256, 1, 1),
-        )
-        mgr.stream_kernel()
-        ctx.enqueue_function[copy_f32_kernel](
-            stats.unsafe_ptr(), new_stats.unsafe_ptr(),
-            Int32(stat_count * n_rows),
-            grid_dim=wide, block_dim=COPY_BLOCK,
-        )
         mgr.stream_kernel()
 
         # their `CopyHistogram(LeafIdToSplit, RightLeafIdAfterSplit, ...)`
@@ -2120,7 +2167,7 @@ def run_tree_layout(
 
         ctx.enqueue_function[compute_leaf_values_kernel](
             part_stats.unsafe_ptr(), Int32(stat_count), Int32(n_live),
-            l2_leaf_reg, Float32(1.0e30), leaf_values.unsafe_ptr(),
+            l2_leaf_reg, leaf_values.unsafe_ptr(),
             grid_dim=(n_live + LEAF_BLOCK - 1) // LEAF_BLOCK,
             block_dim=LEAF_BLOCK,
         )

@@ -48,6 +48,10 @@ from ported.methods.greedy_subsets_searcher.kernel.split_points import (
     split_and_make_sequence_kernel,
     update_partitions_after_split_kernel,
 )
+from ported.options.catboost_options import (
+    SCORE_FUNCTION_COSINE,
+    SCORE_FUNCTION_L2,
+)
 from ported.methods.greedy_subsets_searcher.kernel.compute_scores import (
     compute_optimal_splits_kernel,
 )
@@ -437,6 +441,7 @@ def check_half_byte_histogram() raises:
     ctx.enqueue_copy(dst_buf=grp_sz, src_ptr=h_grp_sz.unsafe_ptr())
 
     var sums = ctx.enqueue_create_buffer[DType.float32](group_size)
+    var hb_acc = ctx.enqueue_create_buffer[DType.int32](group_size)
     var zerof = ctx.enqueue_create_host_buffer[DType.float32](group_size)
     for i in range(group_size):
         zerof.unsafe_ptr().unsafe_store(i, Float32(0.0))
@@ -458,6 +463,8 @@ def check_half_byte_histogram() raises:
         p_sz.unsafe_ptr(),
         p_ids.unsafe_ptr(),
         sums.unsafe_ptr(),
+        hb_acc.unsafe_ptr(),
+        Float32(1.0),
         Int32(1),
         Int32(1),
         grid_dim=(1, 1, 1),
@@ -626,10 +633,13 @@ def check_scan() raises:
     scan_ids_h.unsafe_ptr().unsafe_store(0, UInt32(0))
     ctx.enqueue_copy(dst_buf=scan_ids, src_ptr=scan_ids_h.unsafe_ptr())
     ctx.synchronize()
+    # all-binary fixture: no one-hot features, so the skip never fires
+    var scan_onehot = ctx.enqueue_create_buffer[DType.uint8](256)
     ctx.enqueue_function[scan_histograms_kernel](
         scan_ids.unsafe_ptr(),
         first_bin.unsafe_ptr(),
         folds_b.unsafe_ptr(),
+        scan_onehot.unsafe_ptr(),
         Int32(n_features),
         Int32(n_bf),
         hist.unsafe_ptr(),
@@ -757,9 +767,31 @@ def check_scores() raises:
     var out_bin = ctx.enqueue_create_buffer[DType.uint32](1)
     ctx.synchronize()
 
-    ctx.enqueue_function[compute_optimal_splits_kernel](
+    var sc_bff = ctx.enqueue_create_buffer[DType.uint32](n_bf)
+    var sc_hbf = ctx.enqueue_create_host_buffer[DType.uint32](n_bf)
+    var sc_ffw = ctx.enqueue_create_buffer[DType.float32](n_bf)
+    var sc_hfw = ctx.enqueue_create_host_buffer[DType.float32](n_bf)
+    for i in range(n_bf):
+        sc_hbf.unsafe_ptr().unsafe_store(i, UInt32(i))
+        sc_hfw.unsafe_ptr().unsafe_store(i, Float32(1.0))
+    ctx.enqueue_copy(dst_buf=sc_bff, src_ptr=sc_hbf.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=sc_ffw, src_ptr=sc_hfw.unsafe_ptr())
+    ctx.synchronize()
+
+    ctx.enqueue_function[
+        # This check hand-computes an L2 score, so it must name the L2
+        # calcer. CatBoost's DEFAULT is Cosine (`oblivious_tree_options.cpp:22`)
+        # and the driver uses it; this fixture is testing the kernel's
+        # arithmetic, not the default.
+        compute_optimal_splits_kernel[SCORE_FUNCTION_L2]
+    ](
         skip.unsafe_ptr(),
         Int32(n_bf),
+        # their `TCBinFeature.FeatureId` and `binFeaturesWeights`; this
+        # fixture is one bin-feature per feature, so the map is the identity
+        # and every weight is 1.0, which is their no-CTR value.
+        sc_bff.unsafe_ptr(),
+        sc_ffw.unsafe_ptr(),
         hist.unsafe_ptr(),
         part_stats.unsafe_ptr(),
         Int32(stat_count),

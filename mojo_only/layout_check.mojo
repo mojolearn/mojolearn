@@ -82,14 +82,30 @@ def check_layout() raises:
     if Int(lay.features[6].shift) != 30:
         wrong += 1
 
-    # histogram slices are a running total across ALL policies, so the score
-    # kernel can walk one flat array without knowing about policies.
+    # Histogram slices are a running total in POLICY-BLOCK ORDER, not input
+    # order, because `WriteReducesHistograms` writes each block at a running
+    # `block_first_bin` and the two walks have to agree. Theirs guarantees it
+    # by construction: `AddGroup` stamps `FirstFoldIndex` from the same
+    # builder that yields the group's write offset, inside one call, walked
+    # once per group in group order (`compute_by_blocks_helper.cpp:189`,
+    # `:218`, `:341`).
+    #
+    # This check USED to assert input order, and it passed while the two
+    # walks disagreed, because every fixture here happens to be listed in
+    # block order. `mojo_only/bin_order_check.mojo` is the one that plants a
+    # dataset whose input order is the REVERSE of block order.
     var expect = 0
-    for i in range(len(folds)):
-        if Int(lay.features[i].first_fold_index) != expect:
-            wrong += 1
-            print("    feature", i, "first_fold should be", expect)
-        expect += folds[i]
+    for policy in range(3):
+        for i in range(len(folds)):
+            if lay.policy_of[i] != policy:
+                continue
+            if Int(lay.features[i].first_fold_index) != expect:
+                wrong += 1
+                print(
+                    "    feature", i, "first_fold should be", expect,
+                    "got", Int(lay.features[i].first_fold_index),
+                )
+            expect += folds[i]
 
     print("  columns:", lay.columns, " histogram cells:", lay.hist_cells)
     if lay.hist_cells != 1 + 2 + 15 + 16 + 200 + 0 + 1:
@@ -184,10 +200,17 @@ def check_split_resolution() raises:
 
     var lay = build_layout(folds)
     var wrong = 0
+    # Bin-features are laid out in POLICY-BLOCK ORDER, not input order, so
+    # this walks policies then features. It used to walk input order, and it
+    # passed while the two orderings disagreed because every fixture here is
+    # already listed in block order. See `mojo_only/bin_order_check.mojo`.
     var expect_first = 0
 
-    for i in range(len(folds)):
+    for policy in range(3):
+      for i in range(len(folds)):
         if folds[i] == 0:
+            continue
+        if lay.policy_of[i] != policy:
             continue
         # first bin of this feature
         var lo = resolve_split(lay, expect_first)

@@ -13,6 +13,7 @@ It checks REACHABILITY, not correctness. A kernel that enqueues can still
 compute nonsense; that is what the level loop's digests will be for.
 """
 
+from ported.options.catboost_options import SCORE_FUNCTION_COSINE
 from std.sys.info import size_of
 from ported.gpu_data.gpu_structures import CFeature
 from max.gpu.host import DeviceContext
@@ -56,10 +57,13 @@ def probe() raises:
     for i in range(4):
         scan_ids_h.unsafe_ptr().unsafe_store(i, UInt32(i))
     ctx.enqueue_copy(dst_buf=scan_ids, src_ptr=scan_ids_h.unsafe_ptr())
+    # all-binary fixture: no one-hot features, so the skip never fires
+    var scan_onehot = ctx.enqueue_create_buffer[DType.uint8](256)
     ctx.enqueue_function[scan_histograms_kernel](
         scan_ids.unsafe_ptr(),
         u32a.unsafe_ptr(),
         u32b.unsafe_ptr(),
+        scan_onehot.unsafe_ptr(),
         Int32(8),
         Int32(64),
         f32a.unsafe_ptr(),
@@ -68,9 +72,15 @@ def probe() raises:
     )
     print("  scan_histograms        enqueued")
 
-    ctx.enqueue_function[compute_optimal_splits_kernel](
+    var f32d = ctx.enqueue_create_buffer[DType.float32](64)
+    ctx.enqueue_function[
+        compute_optimal_splits_kernel[SCORE_FUNCTION_COSINE]
+    ](
         u8a.unsafe_ptr(),
         Int32(64),
+        # their `TCBinFeature.FeatureId` and `binFeaturesWeights`
+        u32b.unsafe_ptr(),
+        f32d.unsafe_ptr(),
         f32a.unsafe_ptr(),
         f32b.unsafe_ptr(),
         Int32(2),
@@ -132,6 +142,7 @@ def probe() raises:
     var hb_pids = ctx.enqueue_create_buffer[DType.uint32](64)
     var hb_stats = ctx.enqueue_create_buffer[DType.float32](4096)
     var hb_sums = ctx.enqueue_create_buffer[DType.float32](4096)
+    var hb_acc = ctx.enqueue_create_buffer[DType.int32](4096)
 
     ctx.enqueue_function[half_byte_hist_kernel](
         hb_folds.unsafe_ptr(),
@@ -148,6 +159,10 @@ def probe() raises:
         hb_psize.unsafe_ptr(),
         hb_pids.unsafe_ptr(),
         hb_sums.unsafe_ptr(),
+        # grid.x is 1, so the fixed-point flush never engages; the
+        # accumulator is only along for the signature.
+        hb_acc.unsafe_ptr(),
+        Float32(1.0),
         Int32(4),
         Int32(2),
         grid_dim=(1, 1, 1),

@@ -27,6 +27,45 @@ def grow_policy_name(p: Int) -> String:
     return String("Lossguide")
 
 
+# --- score_function --------------------------------------------------------
+#
+# `enum class EScoreFunction` -- `private/libs/options/enums.h:72-80`. THEIR
+# ORDER AND THEIR VALUES, so a number read out of one of their configs means
+# the same thing here.
+#
+# The shipped default is COSINE, not L2:
+# `ScoreFunction("score_function", EScoreFunction::Cosine)` --
+# `private/libs/options/oblivious_tree_options.cpp:22`. This port scored
+# every level with L2 and had no option at all, so a run configured as stock
+# CatBoost picked a DIFFERENT SPLIT AT EVERY LEVEL. Cosine is not a rescaled
+# L2 -- it normalizes by `sqrt(sum(w * mu^2))`, so it ranks candidates by the
+# ANGLE between the gradient and the step rather than by the raw drop.
+
+comptime SCORE_FUNCTION_SOLAR_L2 = 0
+comptime SCORE_FUNCTION_COSINE = 1
+comptime SCORE_FUNCTION_NEWTON_L2 = 2
+comptime SCORE_FUNCTION_NEWTON_COSINE = 3
+comptime SCORE_FUNCTION_LOO_L2 = 4
+comptime SCORE_FUNCTION_SAT_L2 = 5
+comptime SCORE_FUNCTION_L2 = 6
+
+
+def score_function_name(s: Int) -> String:
+    if s == SCORE_FUNCTION_SOLAR_L2:
+        return String("SolarL2")
+    if s == SCORE_FUNCTION_COSINE:
+        return String("Cosine")
+    if s == SCORE_FUNCTION_NEWTON_L2:
+        return String("NewtonL2")
+    if s == SCORE_FUNCTION_NEWTON_COSINE:
+        return String("NewtonCosine")
+    if s == SCORE_FUNCTION_LOO_L2:
+        return String("LOOL2")
+    if s == SCORE_FUNCTION_SAT_L2:
+        return String("SatL2")
+    return String("L2")
+
+
 # --- determinism -----------------------------------------------------------
 #
 # NO CATBOOST COUNTERPART. They ship one GPU backend and accept whatever
@@ -96,9 +135,29 @@ struct CatBoostOptions(Copyable, Movable):
     no minimum-count test. Recorded rather than silently ignored."""
 
     var l2_leaf_reg: Float32
-    """`l2_leaf_reg`. Default 3.0. HONORED: the score kernel's `lambda_l2`
-    and the leaf estimator's `l2`. NOTE the port currently passes 1.0 at both
-    call sites rather than this default, which is a wiring gap."""
+    """`l2_leaf_reg`. Default 3.0. HONORED: `run_tree_layout` takes it and
+    passes it to both the score kernel's `lambda_l2` and the leaf estimator's
+    `l2`. The probe entry points in the same file still hardcode 1.0; they
+    are checks, not the training path."""
+
+    var score_function: Int
+    """`score_function`. **Default Cosine**, which is CatBoost's shipped
+    default (`oblivious_tree_options.cpp:22`), NOT L2. HONORED for Cosine,
+    NewtonCosine, L2 and NewtonL2: the score kernel selects the calcer at
+    comptime. SolarL2, SatL2 and LOOL2 are not ported and `check()` refuses
+    them."""
+
+    var model_size_reg: Float32
+    """`model_size_reg`. Default 0.5 (`oblivious_tree_options.cpp:28`). It
+    feeds `UpdateFeatureWeightsForBestSplits`, which the score kernel then
+    multiplies into every gain (`compute_scores.cu:136-137`).
+
+    NOT HONORED, and an exact no-op at present: that function fills the
+    weight vector with 1.0 and RETURNS EARLY when the CTR count is zero
+    (`update_feature_weights.cpp:14-22`), and CTRs are not ported. The score
+    kernel takes the weight buffer anyway so that this stops being a
+    divergence the day CTRs land. `check()` refuses any other value, because
+    any other value would be silently discarded."""
 
     var border_count: Int
     """`border_count`. Default 254. NOT HONORED: quantization is not ported,
@@ -137,12 +196,13 @@ struct CatBoostOptions(Copyable, Movable):
         counterpart and defaults to `device`, which is free on Apple.
 
         Everything else is theirs: depth 6, SymmetricTree, max_leaves 31,
-        min_data_in_leaf 1, l2_leaf_reg 3.0, border_count 254,
-        leaf_estimation_iterations 1, rsm 1.0.
+        min_data_in_leaf 1, l2_leaf_reg 3.0, score_function Cosine,
+        model_size_reg 0.5, border_count 254, leaf_estimation_iterations 1,
+        rsm 1.0.
         """
         return Self(
-            6, GROW_SYMMETRIC, 31, 1, 3.0, 254, 1, 0.0, 1.0,
-            DETERMINISM_DEVICE,
+            6, GROW_SYMMETRIC, 31, 1, 3.0, SCORE_FUNCTION_COSINE, 0.5, 254,
+            1, 0.0, 1.0, DETERMINISM_DEVICE,
         )
 
     def check(self) raises:
@@ -179,6 +239,24 @@ struct CatBoostOptions(Copyable, Movable):
             raise Error(
                 "rsm is not ported; every feature is scored at every level,"
                 " so set it to 1.0"
+            )
+        if (
+            self.score_function != SCORE_FUNCTION_COSINE
+            and self.score_function != SCORE_FUNCTION_NEWTON_COSINE
+            and self.score_function != SCORE_FUNCTION_L2
+            and self.score_function != SCORE_FUNCTION_NEWTON_L2
+        ):
+            raise Error(
+                "score_function="
+                + score_function_name(self.score_function)
+                + " is not ported; only Cosine, NewtonCosine, L2 and"
+                " NewtonL2 have a calcer in the score kernel"
+            )
+        if self.model_size_reg != 0.5:
+            raise Error(
+                "model_size_reg is not ported; feature weights are all 1.0"
+                " because CTRs are not ported, so any value but the default"
+                " 0.5 would be silently discarded"
             )
         if self.min_data_in_leaf != 1:
             raise Error(

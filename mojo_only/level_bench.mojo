@@ -41,6 +41,7 @@ from ported.methods.greedy_subsets_searcher.kernel.split_points import (
     PARTITION_BLOCK,
     launch_stable_partition,
 )
+from ported.options.catboost_options import SCORE_FUNCTION_COSINE
 from ported.methods.greedy_subsets_searcher.kernel.compute_scores import (
     SCORE_BLOCK_SIZE,
     compute_optimal_splits_kernel,
@@ -443,10 +444,13 @@ def bench_remaining_phases(n_rows: Int, repeats: Int) raises:
     best = 0
     for i in range(repeats + 1):
         var t0 = perf_counter_ns()
+        # all-binary fixture: no one-hot features, so the skip never fires
+        var scan_onehot = ctx.enqueue_create_buffer[DType.uint8](256)
         ctx.enqueue_function[scan_histograms_kernel](
             scan_ids.unsafe_ptr(),
-            nf2.unsafe_ptr(), nf.unsafe_ptr(), Int32(n_features),
-            Int32(n_features), hist.unsafe_ptr(),
+            nf2.unsafe_ptr(), nf.unsafe_ptr(),
+            scan_onehot.unsafe_ptr(),
+            Int32(n_features), Int32(n_features), hist.unsafe_ptr(),
             grid_dim=(1, 2, stat_count), block_dim=(256, 1, 1),
         )
         ctx.synchronize()
@@ -455,12 +459,29 @@ def bench_remaining_phases(n_rows: Int, repeats: Int) raises:
             best = dt
     names.append(String("scan")); times.append(Float64(best) / 1.0e6)
 
+    # their `TCBinFeature.FeatureId` and `binFeaturesWeights`: one
+    # bin-feature per feature here, so identity and all-ones.
+    var sb_bff = ctx.enqueue_create_buffer[DType.uint32](n_features)
+    var sb_hbf = ctx.enqueue_create_host_buffer[DType.uint32](n_features)
+    var sb_ffw = ctx.enqueue_create_buffer[DType.float32](n_features)
+    var sb_hfw = ctx.enqueue_create_host_buffer[DType.float32](n_features)
+    for i2 in range(n_features):
+        sb_hbf.unsafe_ptr().unsafe_store(i2, UInt32(i2))
+        sb_hfw.unsafe_ptr().unsafe_store(i2, Float32(1.0))
+    ctx.enqueue_copy(dst_buf=sb_bff, src_ptr=sb_hbf.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=sb_ffw, src_ptr=sb_hfw.unsafe_ptr())
+    ctx.synchronize()
+
     # score
     best = 0
     for i in range(repeats + 1):
         var t0 = perf_counter_ns()
-        ctx.enqueue_function[compute_optimal_splits_kernel](
-            skip.unsafe_ptr(), Int32(n_features), hist.unsafe_ptr(),
+        ctx.enqueue_function[
+            compute_optimal_splits_kernel[SCORE_FUNCTION_COSINE]
+        ](
+            skip.unsafe_ptr(), Int32(n_features),
+            sb_bff.unsafe_ptr(), sb_ffw.unsafe_ptr(),
+            hist.unsafe_ptr(),
             pstats.unsafe_ptr(), Int32(stat_count), one.unsafe_ptr(),
             Int32(1), Float32(1.0), oscore.unsafe_ptr(), obin.unsafe_ptr(),
             grid_dim=(1, 1, 1), block_dim=(SCORE_BLOCK_SIZE, 1, 1),
