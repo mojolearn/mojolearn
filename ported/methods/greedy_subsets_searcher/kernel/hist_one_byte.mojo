@@ -47,6 +47,7 @@ from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 
 from mojo_only.kernel_matrix import (
+    lane_width_for,
     TARGET_COLUMN,
     deterministic_flush_for,
     requires_uniform_iteration_for,
@@ -69,6 +70,20 @@ from mojo_only.kernel_matrix import (
 #: slice arithmetic intact at 8 warps of 1024 floats.
 #: Same build mode as `hist_binary.mojo`; the flush follows the matrix.
 comptime BUILD_MODE = NUMERIC_FAST
+
+#: Lanes moving in lockstep. READ FROM THE MATRIX, not pinned here.
+#:
+#: This used to be a literal 32 in this file and in three others, with a
+#: comment pointing at `kernel_matrix.column_lane_width` for why AMD's 64
+#: must not reach it. That is a matrix row that EXISTS and was bypassed:
+#: `column_lane_width` had fifteen call sites and every one of them was
+#: inside the matrix itself or the table printer, so changing
+#: `TARGET_COLUMN` to AMD would have compiled and silently kept 32 while the
+#: replication geometry assumed a 32-wide slice on a 64-wide wavefront.
+#: One number now flows through, which is the point of having the table.
+comptime LANE_WIDTH = lane_width_for[
+    TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
+]()
 
 comptime ONE_BYTE_BLOCK_SIZE = block_size_for[K_HIST_ONE_BYTE, TARGET_COLUMN]()
 
@@ -100,7 +115,6 @@ comptime LOAD_SIZE = 4
 #: `loadSize * N`, the points one thread takes per iteration.
 comptime POINTS_PER_ITER = UNROLL * LOAD_SIZE
 
-comptime LANE_WIDTH = 32
 
 
 def one_byte_slice_offset[bits: Int](tid: Int) -> Int:

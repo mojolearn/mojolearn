@@ -32,6 +32,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier, syncwarp
 
 from mojo_only.kernel_matrix import (
+    lane_width_for,
     TARGET_COLUMN,
     deterministic_flush_for,
     requires_uniform_iteration_for,
@@ -72,12 +73,23 @@ comptime LOAD_SIZE = 4
 #: `loadSize * N`, the points one thread takes per iteration.
 comptime POINTS_PER_ITER = UNROLL * LOAD_SIZE
 
-#: Lanes moving in lockstep. Pinned rather than read from the device; see
-#: `kernel_matrix.column_lane_width` for why AMD's 64 must not reach this.
-comptime LANE_WIDTH = 32
 
 #: The mode this build compiles against; see `mojo_only/numerics.mojo`.
 comptime BUILD_MODE = NUMERIC_FAST
+
+#: Lanes moving in lockstep. READ FROM THE MATRIX, not pinned here.
+#:
+#: This used to be a literal 32 in this file and in three others, with a
+#: comment pointing at `kernel_matrix.column_lane_width` for why AMD's 64
+#: must not reach it. That is a matrix row that EXISTS and was bypassed:
+#: `column_lane_width` had fifteen call sites and every one of them was
+#: inside the matrix itself or the table printer, so changing
+#: `TARGET_COLUMN` to AMD would have compiled and silently kept 32 while the
+#: replication geometry assumed a 32-wide slice on a 64-wide wavefront.
+#: One number now flows through, which is the point of having the table.
+comptime LANE_WIDTH = lane_width_for[
+    TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
+]()
 
 
 def binary_hist_kernel(

@@ -449,3 +449,319 @@ def replicas_for(hist_cells: Int) -> Int:
     """
     return -16
     return 1
+
+
+# =========================================================================
+# THE mojolearn SECTIONS: cluster, neighbors, dbscan, decomposition, glm
+# =========================================================================
+#
+# Added 2026-08-19 after Andrew asked whether the sections added since this
+# file was written actually USE it. **They did not.** One file mentioned it
+# in a comment and nothing called it. Every tunable in `core/`, `cluster/`,
+# `neighbors/`, `dbscan/`, `decomposition/` and `glm/` was a bare `comptime`
+# constant chosen on one M4, which is precisely the "constants sprinkled
+# across kernels" this table opens by refusing.
+#
+# The rows below DECLARE the truth. Wiring the call sites is a separate step
+# and is tracked in `UNWIRED.md`; a declared row that no kernel reads is not
+# done, and saying so here is better than implying otherwise.
+#
+# WHY A SECOND SPEC STRUCT RATHER THAN MORE FIELDS ON `KernelSpec`
+# ----------------------------------------------------------------
+# `KernelSpec` is histogram-shaped: `hist_floats_per_thread` and
+# `features_per_int` are CatBoost's compressed-index packing and mean nothing
+# to a distance kernel. Widening it would put dead fields on every row and
+# invite a caller to read one. These kernels take different knobs, so they
+# get their own struct and their own resolver, against the same four columns.
+
+comptime K_LIB_ROW_NORM = 100
+comptime K_LIB_COLUMN_STATS = 101
+comptime K_LIB_TRANSPOSE = 102
+comptime K_LIB_GEMM_CONTRACTION = 103
+comptime K_LIB_FUSED_DISTANCE_NN = 104
+comptime K_LIB_REDUCE_BY_KEY = 105
+comptime K_LIB_PLUS_PLUS = 106
+comptime K_LIB_EPS_NEIGHBORHOOD = 107
+comptime K_LIB_ADJ_SCAN = 108
+comptime K_LIB_WEAK_CC = 109
+comptime K_LIB_SELECT_RADIX = 110
+comptime K_LIB_SELECT_WARPSORT = 111
+comptime K_LIB_BALL_COVER_EPS = 112
+comptime K_LIB_JACOBI_EIGH = 113
+
+
+#: NUMERIC. The reduction width every cross-lane fold in these sections uses.
+#:
+#: This is `PINNED_REPLICATION_LANES`'s counterpart for the library kernels
+#: and it exists for the identical reason. `unfused_distance_nn.mojo:76`
+#: hardcodes `REDUCE_MIN_LANES = 32` and `select_warpsort.mojo:263` hardcodes
+#: `WARP_LANES = 32`. Both are right on Apple and NVIDIA and **wrong on AMD,
+#: whose wavefront is 64** (`column_lane_width`).
+#:
+#: A cross-lane reduction is float addition, which is not associative, so its
+#: WIDTH decides which partials combine with which. Letting it follow the
+#: hardware would make an AMD fit disagree with a CUDA fit in the last bits
+#: with nothing in the code admitting it. Pinned at 32; AMD reduces within
+#: half a wavefront and pays for it.
+comptime PINNED_LIB_REDUCE_LANES = 32
+
+#: NUMERIC. RAFT's `Policy4x4` accumulation geometry
+#: (`raft/linalg/contractions.cuh`): 4x4 outputs per thread, K-block 32,
+#: vector length 4. These decide the ORDER a dot product is accumulated in,
+#: so two columns with different values give different last bits on the same
+#: input. Pinned to RAFT's own numbers, which is also what makes our tiles
+#: diffable against theirs.
+comptime PINNED_ACC_ROWS_PER_TH = 4
+comptime PINNED_ACC_COLS_PER_TH = 4
+comptime PINNED_KBLK = 32
+comptime PINNED_VECLEN = 4
+
+
+@fieldwise_init
+struct LibKernelSpec(Copyable, Movable):
+    """The knobs one library kernel takes, resolved per column."""
+
+    var block_size: Int
+    """SCHEDULING. Threads per threadgroup."""
+
+    var lane_width: Int
+    """SCHEDULING **only for indexing**, NUMERIC when it bounds a reduction.
+
+    Read this for "which lane am I" arithmetic, where it must match the
+    hardware or the indexing is simply wrong. Do NOT read it to size a
+    cross-lane fold -- that is `reduce_lanes` below, and conflating the two
+    is how a portable-looking kernel produces two different answers."""
+
+    var reduce_lanes: Int
+    """NUMERIC. See `PINNED_LIB_REDUCE_LANES`."""
+
+    var acc_rows_per_th: Int
+    """NUMERIC. Policy4x4 accumulation geometry."""
+
+    var acc_cols_per_th: Int
+    """NUMERIC. Policy4x4 accumulation geometry."""
+
+    var kblk: Int
+    """NUMERIC. Policy4x4 K-block."""
+
+    var veclen: Int
+    """NUMERIC. Policy4x4 vector length."""
+
+    var shared_limit: Int
+    """SCHEDULING. Threadgroup bytes this column allows a block to claim."""
+
+
+def lib_block_size(kernel: Int, column: Int) -> Int:
+    """SCHEDULING. Threads per block, per vendor.
+
+    Every value here is currently the SAME on all three columns, and that is
+    an honest statement of ignorance rather than a finding: they were chosen
+    on an M4 and no other device has run them. The column parameter exists so
+    a measurement on NVIDIA or AMD has somewhere to land WITHOUT touching a
+    kernel, which is the whole point of the table. Do not read a uniform row
+    as evidence that the value is optimal anywhere.
+    """
+    if kernel == K_LIB_SELECT_RADIX:
+        #: `select_radix.mojo:117`, SELECT_BLOCK = NUM_BUCKETS = 1 << 8.
+        #: This one is NOT free to vary: the block must have one thread per
+        #: histogram bucket. It is geometry forced by the algorithm, so it is
+        #: the same in every column for a reason, unlike the rows above.
+        return 256
+    if kernel == K_LIB_SELECT_WARPSORT:
+        #: 8 lane-groups per block, `select_warpsort.mojo:269`.
+        return 8 * lib_lane_width(column)
+    if kernel == K_LIB_TRANSPOSE:
+        #: A 32x32 padded tile, `column_stats.mojo:200`.
+        return 32 * 32 // 4
+    if kernel == K_LIB_JACOBI_EIGH:
+        return 32
+    if kernel == K_LIB_GEMM_CONTRACTION or kernel == K_LIB_FUSED_DISTANCE_NN:
+        #: Policy4x4: AccThRows * AccThCols threads cover the tile.
+        return 16 * 16
+    return 128
+
+
+def lib_lane_width(column: Int) -> Int:
+    """SCHEDULING. The hardware lane group, for INDEXING only.
+
+    Delegates to `column_lane_width` rather than restating it, so there is
+    exactly one place in this repository that knows AMD is 64.
+    """
+    return column_lane_width(column)
+
+
+def lib_spec_for(
+    kernel: Int, device: Int, mode: NumericMode
+) raises -> LibKernelSpec:
+    """The resolved knobs for one library kernel. The "sub in and out" step.
+
+    Same discipline as `spec_for`: a SCHEDULING row comes from the `device`
+    column always, a NUMERIC row comes from `COLUMN_BIT_IDENTICAL` under the
+    default and from the device column only under `FAST`.
+
+    Note what that means for `lane_width` versus `reduce_lanes` on AMD: the
+    kernel indexes with 64 because that is what the hardware does, and folds
+    over 32 because that is what the answer requires. They are different
+    numbers on the same device and a kernel needs both.
+    """
+    var identical = mode.mode == NUMERIC_IDENTICAL
+    var numeric_column = COLUMN_BIT_IDENTICAL if identical else device
+
+    var reduce_lanes = PINNED_LIB_REDUCE_LANES
+    if not identical:
+        #: Even under FAST the fold stays pinned unless a vendor column is
+        #: measured to want otherwise. No such measurement exists, so this
+        #: is deliberately not `lib_lane_width(device)`.
+        reduce_lanes = PINNED_LIB_REDUCE_LANES
+
+    var spec = LibKernelSpec(
+        lib_block_size(kernel, device),
+        lib_lane_width(device),
+        reduce_lanes,
+        PINNED_ACC_ROWS_PER_TH,
+        PINNED_ACC_COLS_PER_TH,
+        PINNED_KBLK,
+        PINNED_VECLEN,
+        column_shared_limit(numeric_column),
+    )
+
+    if spec.block_size < spec.reduce_lanes:
+        raise Error(
+            "library kernel "
+            + String(kernel)
+            + " resolves to a block of "
+            + String(spec.block_size)
+            + " threads in column "
+            + column_name(device)
+            + ", which is narrower than the "
+            + String(spec.reduce_lanes)
+            + "-lane fold it has to perform"
+        )
+    return spec^
+
+
+# --- THE FIRST THING THIS TABLE SHOULD HAVE BEEN DECIDING ----------------
+#
+# RAFT's `contractions.cuh` DOUBLE BUFFERS: two shared-memory pages, so the
+# next K-block's loads are in flight while the current one accumulates. It is
+# not an optimization bolted on, it is how their contraction hides latency,
+# and every kernel built on `Contractions_NT` gets it.
+#
+# We do not have it anywhere, and on 2026-08-19 THREE separate sites recorded
+# the same reason in the same words:
+#
+#   dbscan/UNPORTED.tsv:9
+#       "two smem pages at Policy4x4 is 32 KB, exactly Metal's threadgroup
+#        ceiling. Same gap core/gemm.mojo records"
+#   dbscan/ported/neighbors/epsilon_neighborhood.mojo:195
+#       "exactly Metal's ceiling. That gap is recorded ..."
+#   neighbors/.../fused_l2_knn.mojo
+#       their SmemSize is 2 pages = 36,992 B against Metal's 32 KB, so ours
+#       is single-buffered at 30,848 B
+#
+# Two different lanes reached that conclusion independently, hours apart,
+# neither having read the other's file. Both were right about Apple.
+#
+# **AND BOTH THEREFORE SINGLE-BUFFERED NVIDIA AND AMD, WHICH HAVE THE ROOM.**
+# `column_shared_limit` has said 32 / 48 / 64 KB since this file was written.
+# NVIDIA's 48 KB holds RAFT's 36,992 with 11 KB to spare; AMD's 64 KB holds it
+# nearly twice. The constraint is Apple's alone and it was applied to all
+# three, because the number was typed into a kernel instead of read from here.
+#
+# That is the failure mode this table exists to prevent, it happened twice in
+# one day, and it is the reason the rows above were added.
+#
+# DOUBLE BUFFERING IS A SCHEDULING ROW. It changes which loads are in flight,
+# never what is added to what: the accumulation order is `Policy4x4`'s and is
+# pinned separately. So it may legitimately differ per column, and a fit stays
+# bit-identical across all three with Apple single-buffered and the other two
+# double-buffered.
+#
+# Not wired. `UNWIRED.md` tracks it. The row below is what a kernel should
+# ask, so that the answer is a table lookup rather than a fresh decision by
+# whoever is next in that file.
+
+def lib_smem_pages(kernel: Int, column: Int, page_bytes: Int) -> Int:
+    """SCHEDULING. How many shared-memory pages this column can afford.
+
+    2 is RAFT's double buffer; 1 is the fallback. `page_bytes` is the size of
+    ONE page at the kernel's policy, which the caller knows and this table
+    does not, because it depends on the tile the kernel chose.
+    """
+    if 2 * page_bytes <= column_shared_limit(column):
+        return 2
+    return 1
+
+
+# --- COMPTIME ACCESSORS FOR THE LIBRARY KERNELS --------------------------
+#
+# `lib_spec_for` above resolves a whole spec at RUNTIME, which is right for a
+# report and useless to a kernel: a threadgroup allocation is fixed at compile
+# time. These are the same rows as pure comptime functions, so a kernel file
+# says
+#
+#     comptime NORM_TPB = lib_block_size_for[K_LIB_ROW_NORM, TARGET_COLUMN]()
+#
+# and NOTHING ELSE. No `if column ==` at the call site, no constant restated,
+# no second opinion about what Apple can do. Change `TARGET_COLUMN` in one
+# place and every kernel in every section recompiles against the new vendor.
+#
+# That is the whole contract. A kernel that branches on the column itself has
+# reintroduced the problem in a more expensive form, because now the table AND
+# the kernel both have an opinion and they can disagree.
+
+def lib_block_size_for[kernel: Int, column: Int]() -> Int:
+    """SCHEDULING. Threads per block for one library kernel, per column."""
+    comptime lanes = column_lane_width(column)
+    if kernel == K_LIB_SELECT_RADIX:
+        #: Forced by the algorithm, not by the vendor: one thread per
+        #: histogram bucket, `select_radix.mojo:117`.
+        return 256
+    if kernel == K_LIB_SELECT_WARPSORT:
+        #: 8 lane-groups. This is the row that MUST widen on AMD.
+        return 8 * lanes
+    if kernel == K_LIB_TRANSPOSE:
+        return 256
+    if kernel == K_LIB_JACOBI_EIGH:
+        return 32
+    if kernel == K_LIB_GEMM_CONTRACTION or kernel == K_LIB_FUSED_DISTANCE_NN:
+        #: Policy4x4: AccThRows * AccThCols threads cover one tile.
+        return 256
+    return 128
+
+
+def lib_lane_width_for[column: Int]() -> Int:
+    """SCHEDULING. The hardware lane group, for INDEXING ONLY.
+
+    32 on Apple and NVIDIA, 64 on AMD. Use this to answer "which lane am I".
+    Do NOT use it to size a cross-lane fold: that is `lib_reduce_lanes_for`,
+    and the two are different numbers on the same AMD device.
+    """
+    return column_lane_width(column)
+
+
+def lib_reduce_lanes_for[column: Int, identical: Bool]() -> Int:
+    """NUMERIC. The width of a cross-lane fold.
+
+    Pinned to 32 in every column. A fold is float addition, which is not
+    associative, so its width decides which partials combine with which; if
+    it followed the hardware, an AMD fit would combine 64 where a CUDA fit
+    combines 32 and the two would disagree in the last bits.
+
+    `identical` is accepted so the signature matches `lane_width_for` and a
+    future measured exception has somewhere to go. There is no such
+    measurement, so both arms return the pinned value today and the parameter
+    is deliberately not wired to `column_lane_width`.
+    """
+    return PINNED_LIB_REDUCE_LANES
+
+
+def lib_smem_pages_for[column: Int, page_bytes: Int]() -> Int:
+    """SCHEDULING. 2 for RAFT's double buffer, 1 where it will not fit.
+
+    Apple's 32 KB is the only column that forces 1 at Policy4x4. Two lanes
+    independently hardcoded that answer for all three vendors today; see the
+    block above.
+    """
+    comptime limit = column_shared_limit(column)
+    return 2 if 2 * page_bytes <= limit else 1

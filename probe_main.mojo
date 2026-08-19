@@ -69,10 +69,36 @@ from mojo_only.kernel_matrix import (
     column_name,
     column_shared_limit,
     hist_floats_per_thread_for,
+    lane_width_for,
 )
+from mojo_only.kernel_matrix import (
+    K_LIB_FUSED_DISTANCE_NN,
+    K_LIB_SELECT_WARPSORT,
+    PINNED_LIB_REDUCE_LANES,
+    lib_block_size_for,
+    lib_lane_width_for,
+    lib_smem_pages_for,
+    lib_spec_for,
+)
+from mojo_only.numerics import NumericMode, NUMERIC_FAST, NUMERIC_IDENTICAL
+
+# Imported FROM THE KERNELS, not recomputed here. If these agree with the
+# matrix, the kernels are reading the table rather than restating it.
+# Importing a module is not reading it; agreeing with it is.
+from core.row_norms import NORM_TPB
+from core.column_stats import STATS_TPB
+from cluster.mojo_only.plus_plus import PLUS_PLUS_TPB
+from cluster.ported.distance.unfused_distance_nn import (
+    REDUCE_MIN_LANES,
+    REDUCE_MIN_TPB,
+)
+from dbscan.ported.dbscan.vertexdeg.algo import VD_TPB
+from decomposition.mojo_only.jacobi_eigh_device import JACOBI_TPB
 from ported.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
     BLOCK_SIZE,
     HIST_SIZE,
+    BUILD_MODE,
+    LANE_WIDTH,
     REDUCE_WIDTH,
 )
 from ported.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
@@ -223,7 +249,199 @@ def show_matrix() raises:
             + ", matrix says "
             + String(want)
         )
-    print("  kernels agree with the matrix, so the table is reached")
+
+    # ============ THE ROW THIS CHECK USED TO MISS ENTIRELY ============
+    # It asserted BLOCK_SIZE and nothing else, so `LANE_WIDTH` sat as a
+    # literal 32 in FOUR kernel files while `column_lane_width` existed in
+    # the matrix and answered 64 for AMD. Every one of that function's call
+    # sites was inside the matrix or inside the printer above. Changing
+    # `TARGET_COLUMN` would have compiled and been silently wrong, which is
+    # the exact failure a lookup table is supposed to make impossible.
+    #
+    # A table nothing reads is decoration. Assert the read.
+    # =================================================================
+    var want_lanes = lane_width_for[
+        TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
+    ]()
+    if LANE_WIDTH != want_lanes:
+        raise Error(
+            "the half-byte kernel is NOT reading the matrix for LANE_WIDTH:"
+            " kernel says "
+            + String(LANE_WIDTH)
+            + ", matrix says "
+            + String(want_lanes)
+        )
+    if REDUCE_WIDTH != LANE_WIDTH * 16:
+        raise Error(
+            "REDUCE_WIDTH must be LANE_WIDTH * floats-per-thread"
+            " (`point_hist_half_byte_template.cuh:48-52`), so it has to move"
+            " when the lane width moves; it did not"
+        )
+
+    # `slice_offset` transcribes their `512 * (threadIdx.x / 32) + (tid & 24)`
+    # with the 32 and the 512 as LITERALS, because that is how their file
+    # writes it. Those literals are only correct while the lane width IS 32.
+    # CatBoost never had to care, since they build for CUDA alone. We claim
+    # three vendors, so the day the column moves to AMD this is the line that
+    # is wrong, and it will not announce itself.
+    if LANE_WIDTH != 32:
+        raise Error(
+            "LANE_WIDTH is "
+            + String(LANE_WIDTH)
+            + ", but `slice_offset` in point_hist_half_byte_template.mojo"
+            " still transcribes CatBoost's literal `512 * (tid / 32)`"
+            " (`point_hist_half_byte_template.cuh:48-52`). Their warp is 32"
+            " and ours is not any more, so the private replica stride and the"
+            " sub-copy mask are both wrong. Port `SliceOffset` to the lane"
+            " width before building this column"
+        )
+    print(
+        "  kernels agree with the matrix on BLOCK_SIZE, LANE_WIDTH and"
+        " REDUCE_WIDTH, so the table is reached"
+    )
+
+
+def check_library_matrix() raises:
+    """The mojolearn sections' rows, and the ONE thing that must hold on AMD.
+
+    `lane_width` and `reduce_lanes` are different numbers on the same device
+    and a kernel needs both: index with the hardware's group, fold over the
+    pinned width. If they were ever the same row, an AMD fit would combine 64
+    partial sums where a CUDA fit combines 32, and float addition is not
+    associative, so the two would disagree in the last bits with nothing in
+    the code admitting it.
+
+    This asserts the separation rather than printing it, because printing a
+    table proves the table exists and not that it resolves correctly.
+    """
+    var fast = NumericMode(NUMERIC_FAST)
+    print("  column     lane_width   reduce_lanes   fused-distance block")
+    var cols = List[Int]()
+    cols.append(COLUMN_BIT_IDENTICAL)
+    cols.append(COLUMN_APPLE)
+    cols.append(COLUMN_NVIDIA)
+    cols.append(COLUMN_AMD)
+    for ci in range(len(cols)):
+        var c = cols[ci]
+        var spec = lib_spec_for(K_LIB_FUSED_DISTANCE_NN, c, fast)
+        print(
+            "  ",
+            column_name(c),
+            "\t",
+            spec.lane_width,
+            "\t\t",
+            spec.reduce_lanes,
+            "\t\t",
+            spec.block_size,
+        )
+        if spec.reduce_lanes != PINNED_LIB_REDUCE_LANES:
+            raise Error(
+                "column "
+                + column_name(c)
+                + " resolved reduce_lanes to "
+                + String(spec.reduce_lanes)
+                + ", but a NUMERIC row must be pinned in every column"
+            )
+
+    # THE ASSERTION THIS FUNCTION EXISTS FOR.
+    var amd = lib_spec_for(K_LIB_FUSED_DISTANCE_NN, COLUMN_AMD, fast)
+    var nv = lib_spec_for(K_LIB_FUSED_DISTANCE_NN, COLUMN_NVIDIA, fast)
+    if amd.lane_width != 64:
+        raise Error(
+            "AMD resolved lane_width to "
+            + String(amd.lane_width)
+            + ", not 64. A wavefront is 64 and indexing with 32 is wrong."
+        )
+    if amd.lane_width == amd.reduce_lanes:
+        raise Error(
+            "AMD resolved lane_width == reduce_lanes == "
+            + String(amd.lane_width)
+            + ". The fold must stay pinned at 32 while indexing follows the"
+            " 64-lane wavefront; collapsing them changes the reduction tree"
+        )
+    if amd.reduce_lanes != nv.reduce_lanes:
+        raise Error(
+            "AMD and NVIDIA disagree on reduce_lanes ("
+            + String(amd.reduce_lanes)
+            + " vs "
+            + String(nv.reduce_lanes)
+            + "), so a fit on the two would not produce one model"
+        )
+
+    # The warpsort block scales WITH the wavefront, because it is scheduling.
+    var ws_amd = lib_spec_for(K_LIB_SELECT_WARPSORT, COLUMN_AMD, fast)
+    var ws_ap = lib_spec_for(K_LIB_SELECT_WARPSORT, COLUMN_APPLE, fast)
+    if ws_amd.block_size <= ws_ap.block_size:
+        raise Error(
+            "select_warpsort block did not widen on AMD ("
+            + String(ws_amd.block_size)
+            + " vs "
+            + String(ws_ap.block_size)
+            + "); a SCHEDULING row is supposed to follow the device"
+        )
+
+    # THE SINGLE-KNOB PROOF. Every constant below lives in a different
+    # section's kernel file and none of them contains a number: each is
+    # `lib_*_for[..., TARGET_COLUMN]()`. Flipping TARGET_COLUMN moves all of
+    # them at once, which is the property the table exists to provide.
+    var target = lib_spec_for(K_LIB_FUSED_DISTANCE_NN, TARGET_COLUMN, fast)
+    print("  kernels resolved against column:", column_name(TARGET_COLUMN))
+    print(
+        "    core/row_norms NORM_TPB",
+        NORM_TPB,
+        " core/column_stats STATS_TPB",
+        STATS_TPB,
+    )
+    print(
+        "    cluster PLUS_PLUS_TPB",
+        PLUS_PLUS_TPB,
+        " REDUCE_MIN_TPB",
+        REDUCE_MIN_TPB,
+        " REDUCE_MIN_LANES",
+        REDUCE_MIN_LANES,
+    )
+    print(
+        "    dbscan VD_TPB",
+        VD_TPB,
+        " decomposition JACOBI_TPB",
+        JACOBI_TPB,
+    )
+    # RAFT's Policy4x4 shared page is 18,496 B; two of them are 36,992, which
+    # is over Metal's 32 KB and under NVIDIA's 48 KB and AMD's 64 KB. This is
+    # the row two lanes hardcoded to 1 for all three vendors today.
+    print(
+        "    contraction smem pages",
+        lib_smem_pages_for[TARGET_COLUMN, 18496](),
+        " lane width",
+        lib_lane_width_for[TARGET_COLUMN](),
+        " warpsort block",
+        lib_block_size_for[K_LIB_SELECT_WARPSORT, TARGET_COLUMN](),
+    )
+    if REDUCE_MIN_LANES != PINNED_LIB_REDUCE_LANES:
+        raise Error(
+            "cluster's REDUCE_MIN_LANES is "
+            + String(REDUCE_MIN_LANES)
+            + " but the matrix pins the fold at "
+            + String(PINNED_LIB_REDUCE_LANES)
+            + ": the kernel is not reading the table"
+        )
+    if REDUCE_MIN_TPB != target.block_size:
+        raise Error(
+            "cluster's REDUCE_MIN_TPB is "
+            + String(REDUCE_MIN_TPB)
+            + " but the matrix resolves "
+            + String(target.block_size)
+            + " for this column: the kernel is not reading the table"
+        )
+
+    print(
+        "  check_library_matrix OK: AMD indexes 64 and folds",
+        PINNED_LIB_REDUCE_LANES,
+        "- warpsort block",
+        ws_ap.block_size,
+        "->",
+        ws_amd.block_size,
+    )
 
 
 def check_fixed_point() raises:
@@ -404,6 +622,7 @@ def main() raises:
     show_tree_schedule()
     print()
     print("fixed point (no CatBoost counterpart):")
+    check_library_matrix()
     check_fixed_point()
     print()
     print("kernel matrix:")

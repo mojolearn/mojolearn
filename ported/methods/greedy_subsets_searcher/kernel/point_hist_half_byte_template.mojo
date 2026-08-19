@@ -41,6 +41,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import syncwarp
 
 from mojo_only.kernel_matrix import (
+    lane_width_for,
     K_HIST_HALF_BYTE,
     TARGET_COLUMN,
     block_size_for,
@@ -55,10 +56,6 @@ from mojo_only.numerics import NUMERIC_IDENTICAL, NUMERIC_FAST
 #: floats per thread yields 512, which is exactly 32,768 bytes.
 comptime BLOCK_SIZE = block_size_for[K_HIST_HALF_BYTE, TARGET_COLUMN]()
 
-#: Lanes moving in lockstep, and the unit `SliceOffset()` replicates over.
-#: Pinned rather than read from the device; see
-#: `kernel_matrix.column_lane_width` for why AMD's 64 must not reach this.
-comptime LANE_WIDTH = 32
 
 #: The mode this build compiles against. See `mojo_only/numerics.mojo`. FAST
 #: is the default, and under FAST the flush is CatBoost's own float
@@ -66,6 +63,20 @@ comptime LANE_WIDTH = 32
 #: No vendor forces the deterministic row. The fixed-point Int32 accumulator
 #: is what IDENTICAL selects, and it is dead code in this build.
 comptime BUILD_MODE = NUMERIC_FAST
+
+#: Lanes moving in lockstep. READ FROM THE MATRIX, not pinned here.
+#:
+#: This used to be a literal 32 in this file and in three others, with a
+#: comment pointing at `kernel_matrix.column_lane_width` for why AMD's 64
+#: must not reach it. That is a matrix row that EXISTS and was bypassed:
+#: `column_lane_width` had fifteen call sites and every one of them was
+#: inside the matrix itself or the table printer, so changing
+#: `TARGET_COLUMN` to AMD would have compiled and silently kept 32 while the
+#: replication geometry assumed a 32-wide slice on a 64-wide wavefront.
+#: One number now flows through, which is the point of having the table.
+comptime LANE_WIDTH = lane_width_for[
+    TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
+]()
 
 #: `Reduce()`'s stage-1 width (`point_hist_half_byte_template.cuh:115-134`).
 #:
