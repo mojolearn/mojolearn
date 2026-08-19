@@ -610,17 +610,6 @@ def run_tree(
         ctx.enqueue_copy(dst_ptr=hob.unsafe_ptr(), src_buf=out_bin)
         ctx.synchronize()
         var best = Int(hob.unsafe_ptr().unsafe_load(0))
-        ctx.enqueue_copy(dst_ptr=hos.unsafe_ptr(), src_buf=out_score)
-        ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
-        ctx.synchronize()
-        var live_rows = 0
-        var nonzero = 0
-        for i in range(n_live):
-            var s = Int(h_sz.unsafe_ptr().unsafe_load(i))
-            live_rows += s
-            if s > 0:
-                nonzero += 1
-        print("      d", depth, "live", n_live, "nonzero", nonzero, "rows", live_rows, "chose f", best, "score", hos.unsafe_ptr().unsafe_load(0))
         if best > n_features:
             best = 0
 
