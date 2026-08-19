@@ -579,3 +579,26 @@ Why it is worth finishing: RAFT's own dispatch (`select_k-inl.cuh:38`) sends
 `2 < k <= 256` to this family and only `k > 256` to radix, so every k a k-NN
 user actually asks for goes here. We currently run their second choice across
 the whole practical range.
+
+**AND HERE IS WHERE IT STOPS, 2026-08-19.** Wiring it into
+`knn_brute_force.mojo` behind a `use_warpsort` flag **crashes the Mojo
+compiler**. Not a type error, not a constraint failure: `mojo build` dies and
+the crash handler runs.
+
+    UniversalExceptionRaise: (os/kern) failure (5)
+    crash_report_exception_handler.cc:257
+
+Isolated by bisection: the file COMPILES on its own
+(`mojo build --emit=object` is clean, after 15 mechanical `Self.`-qualifier
+fixes). It is instantiating `warpsort_topk_block_kernel[16, True, 8]` at a
+launch site that kills the compiler. The wiring is reverted; the port stays.
+
+So warpsort is not at COMPILES either, by the four tiers in
+`VENDOR_LIBRARIES.md`. It is at "compiles alone, cannot be instantiated".
+
+The suspect is the recursive parametric bitonic network: `bitonic_merge` and
+`bitonic_sort` recurse on a comptime `SIZE` over `mut SIMD` arguments, and a
+`@parameter if` that fails to prune the dead branch recurses forever. That
+would explain a compiler death rather than a diagnostic. **Unverified** —
+narrowing it means bisecting the network with a standalone harness, which is
+the next step and is not this session's.

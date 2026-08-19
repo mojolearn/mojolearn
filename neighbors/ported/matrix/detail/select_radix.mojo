@@ -35,7 +35,7 @@ small one: `select_k-inl.cuh:38` routes `k > 256` to radix and `2 < k <= 256`
 to the warp family, so every k a k-NN user actually asks for (10, 50, 100)
 goes to warpsort in RAFT's own dispatch and radix is their second choice
 across the entire practical range. Nothing here has measured the two against
-each other, and porting warpsort is a large job that has not started.
+each other, and warpsort IS now ported (`select_warpsort.mojo`) but cannot yet be instantiated at a launch site without crashing the compiler; see UNWIRED.md.
 
 What remains TRUE about the choice made here: `select_radix.cuh` has **ZERO**
 warp intrinsics. Counted, not assumed. It synchronizes with
