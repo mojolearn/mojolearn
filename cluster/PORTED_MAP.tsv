@@ -1,0 +1,16 @@
+# our_file	cuvs_file	status	notes
+# cuVS pinned at 2140532c. `tools/check_upstream.sh <checkout> cluster` diffs
+# each mapped source against a fresh checkout and reports which of ours need
+# attention. Paths are relative to the cuVS repository root.
+#
+# NOT RAFT. k-means used to live in rapidsai/raft and does not any more:
+# RAFT 26.10 ships no cluster/ and no neighbors/, only primitives. The
+# algorithms are in rapidsai/cuvs and the primitives they call are still
+# RAFT's, which is why some rows below have no upstream file at all.
+ported/cluster/kmeans_params.mojo	cpp/include/cuvs/cluster/kmeans.hpp	transliterated	struct params only; verbosity dropped, no logger here
+ported/cluster/kmeans.mojo	cpp/src/cluster/kmeans.cuh	partial	fit, predict, fit_predict; no transform, no mdspan dispatch
+ported/cluster/detail/kmeans.mojo	cpp/src/cluster/detail/kmeans.cuh	partial	initRandom, kmeansPlusPlus, the Lloyd loop. No host-resident arm, no multi-GPU, no kmeans_transform
+ported/cluster/detail/kmeans_common.mojo	cpp/src/cluster/detail/kmeans_common.cuh	partial	the decisions: use_fused, check_convergence, SamplingOp probability, the sqrt flags. CUB and thrust glue not ported
+ported/cluster/detail/min_cluster_distance_compute.mojo	cpp/src/cluster/detail/minClusterDistanceCompute.cu	partial	the unfused tiled arm only; fused CUTLASS arm and the non-expanded arm not ported
+ported/distance/unfused_distance_nn.mojo	cpp/src/distance/unfused_distance_nn.cuh	partial+replaced	reduce_min_kernel transliterated; cublasGemmEx replaced, see mojo_only/gemm.mojo
+ported/python/cluster/kmeans/kmeans.mojo	python/cuvs/cuvs/cluster/kmeans/kmeans.pyx	partial	the API SHAPE, not a binding. KMeansParams construction only

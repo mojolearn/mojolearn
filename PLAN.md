@@ -122,3 +122,36 @@ discipline from its first commit:
 The port's experiment still has to conclude. One tree, on covtype, timed,
 against mojotrees and LightGBM. Until that number exists, "CatBoost's design is
 fast on Metal" is a hypothesis, and no amount of k-means makes it a finding.
+
+## Status, 2026-08-19
+
+**Step 1 is built and is not yet reached.** `cluster/` exists, mirrors cuVS
+`2140532c` file for file, and its call graph closes from `fit` down to every
+kernel. What does not exist is a `main` that launches it, so by this tree's
+own rule nothing in it is ported yet.
+
+Three things this step already settled, none of which needed a GPU:
+
+1. **`core/` is not tree-shaped.** The fixed-point accumulator transferred
+   from histograms to centroid sums with one noun changed in its overflow
+   proof. That was the stated purpose of doing k-means first and it is
+   answered.
+2. **The upstream is cuVS, not RAFT.** RAFT 26.10 ships no `cluster/` and no
+   `neighbors/`; both moved. The mirror is algorithms from cuVS, primitives
+   from RAFT, and that split is cleaner than the one this plan originally
+   named.
+3. **cuVS's float32 k-means is not float32 on NVIDIA.** Its distance GEMM
+   defaults to `CUBLAS_COMPUTE_32F_FAST_TF32`, ten mantissa bits. A second
+   incumbent with a device-dependent number system, for `bitwise-gbdt`.
+
+Step 2, brute-force k-NN, gains a concrete answer to the one thing that
+looked like a blocker: RAFT's top-k has two implementations and
+`matrix/detail/select_radix.cuh` contains **no warp intrinsics at all** (0
+occurrences of `__shfl`, `laneId`, `__ballot`, `__popc`), against 14 in
+`select_warpsort.cuh`. It synchronizes with `__syncthreads()` and counts with
+CUB block collectives, which is exactly the pair Mojo provides. RAFT's own
+learned dispatch prefers warpsort for every k a user actually asks for, so
+radix is their second choice; it is our only one, and the bar is not
+WarpSelect on an NVIDIA card, it is `argpartition` on a CPU, because their
+GPU arms do not run on this machine at all. In `PORTED_MAP.tsv` that is a
+`replaced` row, the same status `partitions_reduce.mojo` carries.

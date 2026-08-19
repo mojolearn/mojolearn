@@ -100,6 +100,28 @@ configured: floating-point atomics are order-nondeterministic run to run, so
 `IDENTICAL` REPLACES the accumulator rather than configuring it; and FMA
 contraction is a codegen decision a runtime row cannot reach.
 
+## A second section, a second upstream: `cluster/`
+
+`cluster/` is a port of **cuVS** k-means at commit `2140532c`, built the same
+way and under the same rule. It is the first algorithm here with no histogram
+in it, and per `PLAN.md` that is why it was built first: it is the smallest
+thing that can answer whether the shared substrate is actually shared or is
+quietly tree-shaped.
+
+**The first answer is in and it is a good one.** The fixed-point accumulator
+in `mojo_only/fixed_point.mojo`, written for the histogram flush because
+Metal has no float atomic add, serves the k-means centroid update unchanged.
+Its overflow argument transferred with one noun changed: "any leaf's rows are
+a subset of all rows" became "any cluster's rows are a subset of all rows",
+and nothing else moved. That also gives the file its first reader; it had
+none.
+
+k-means moved out of RAFT and into cuVS, so the mirror is two-layer:
+algorithms from cuVS into `cluster/ported/`, and the RAFT and cuBLAS
+primitives they call into `cluster/mojo_only/`. See `cluster/README.md`.
+
+**Nothing in `cluster/` has been launched yet.** See `UNWIRED.md`.
+
 ## What is deliberately NOT here
 
 No CPU fallback. No binning: this consumes an already-quantized matrix. No

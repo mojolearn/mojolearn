@@ -28,6 +28,38 @@ This project is not affiliated with, endorsed by, or sponsored by YANDEX LLC.
 "CatBoost" is used only to identify the software this work derives from.
 
 --------------------------------------------------------------------------
+Derived from cuVS
+--------------------------------------------------------------------------
+
+Everything under `cluster/ported/` is a DERIVATIVE WORK of cuVS, translated
+from CUDA C++ and Cython into Mojo at cuVS commit 2140532c.
+`cluster/PORTED_MAP.tsv` maps each file to the cuVS source it derives from
+and records whether the port is transliterated, partial, or replaced, and
+`cluster/UNPORTED.tsv` records what was deliberately left out.
+
+    cuVS
+    Copyright (c) 2022-2026, NVIDIA CORPORATION & AFFILIATES
+    Licensed under the Apache License, Version 2.0
+    https://github.com/rapidsai/cuvs
+
+cuVS ships no NOTICE file, so there is no attribution text of theirs to
+reproduce here. As with the CatBoost derivation above, this section exists
+because Apache 2.0 sections 4(a) and 4(b) require a derivative work to carry
+the license and to state that files were changed, and every file under
+`cluster/ported/` is changed: it is a different language targeting a
+different GPU API.
+
+Files under `cluster/mojo_only/` are NOT derived from cuVS. They replace
+calls cuVS makes into RAFT (https://github.com/rapidsai/raft, Copyright (c)
+NVIDIA CORPORATION, Apache-2.0) and into NVIDIA cuBLAS. No RAFT or cuBLAS
+source was translated: what those files reproduce is the call site and its
+documented semantics, and each one names the call it stands in for.
+
+This project is not affiliated with, endorsed by, or sponsored by NVIDIA
+CORPORATION. "cuVS" and "RAFT" are used only to identify the software this
+work derives from.
+
+--------------------------------------------------------------------------
 Modular trademarks
 --------------------------------------------------------------------------
 

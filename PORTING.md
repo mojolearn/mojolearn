@@ -219,3 +219,90 @@ Until it can be unified, treat the two files as one: any change to the loop
 in either must be applied to both in the same commit, and the launch probe
 must exercise both. The right fix is a comptime-parameterized loop shared the
 way CatBoost's template shares it, once shared pointers can cross a boundary.
+
+---
+
+# Deviations in the `cluster/` section (cuVS)
+
+Items 14 and up belong to the k-means port. Same numbering, same file, on
+purpose: these are all one tree and a reader should not have to know which
+upstream a constraint came from to find it.
+
+## 14. `cub::BlockReduce` over a key-value pair
+
+`unfused_distance_nn.cuh:99` reduces the per-thread nearest centroid with
+`cub::BlockReduce<KVType, TPB>` and a custom comparator. Mojo 1.0 has no CUB,
+so it becomes the shared-memory tree reduction this tree already uses in
+`compute_scores.mojo`.
+
+**Unlike item 8 this one costs nothing**, and the difference is worth being
+precise about. The histogram scan lost fidelity because a scan is a SUM and
+float addition is not associative, so a different tree gives a different
+answer. This reducer is a MIN over a total order (`value`, then `key`
+ascending), so every reduction tree returns the same pair. Tiling the
+centroids does not change it either, because the merge arm uses the same
+total order.
+
+The one thing that would break it is a partial order. If ties were left
+unbroken, block shape would decide the winner and the assignment would become
+backend-dependent. Their comparator breaks ties on the lower key and that is
+load-bearing, not tidiness.
+
+## 15. Convergence is tested on the HOST here and on the DEVICE there
+
+cuVS evaluates both stopping tests in a device lambda and reads the flag back
+asynchronously, checking it at the TOP of the NEXT iteration
+(`detail/kmeans.cuh:817-825`, `:920-930`). The stream never blocks and the
+fit always runs one iteration with the answer in flight.
+
+This port syncs and tests on the host. The consequence is visible and is not
+a rounding difference: **a converged fit here can report one fewer iteration
+than cuVS reports on identical data.** The centroids agree; `n_iter` does
+not, and neither does behavior when `max_iter` binds.
+
+It is a deviation of the kind this tree normally refuses, and it is taken
+knowingly because the host test costs one sync per ITERATION while the
+assignment step already costs many, and because a device-side flag with a
+one-iteration lag is exactly the kind of thing that silently hides a
+non-converging fit during bring-up. **Revisit it once the fit is validated**,
+because on a converged, tuned fit the extra sync is pure control-plane cost
+and this tree's whole diagnosis of mojotrees was that the control plane is a
+constant.
+
+## 16. The k-means++ candidate cost is FUSED
+
+`detail/kmeans.cuh:196-215` writes an `n_trials x n_samples` matrix with
+`matrix_vector_op(min_op)` and then reduces it with `reduce<ALONG_ROWS>`.
+`cluster/mojo_only/plus_plus.mojo` does both in one kernel and never
+materializes the matrix.
+
+Arithmetically identical, and still a deviation, because it changes the
+summation ORDER over samples. Two candidates that tie to the last bit would
+be resolved differently and the fit would diverge from there. Recorded rather
+than waved off.
+
+## 17. Host RNG: `std::mt19937` has no counterpart
+
+cuVS picks the first k-means++ centroid and each restart's seed with
+`std::mt19937` on the host, and draws k-means|| candidates with
+`raft::random::discrete` on the device. Neither stream is reproducible in
+Mojo, so matching cuVS draw for draw is impossible.
+
+`HostRng` is splitmix64, chosen because it is short enough to audit in place.
+What survives is the property validation needs: same seed, same fit. What
+does not survive is any hope of comparing our trajectory to theirs
+iteration by iteration, which is why `cluster/tools/sklearn_reference.py`
+compares INERTIA OVER SEVERAL SEEDS and prints the seed-to-seed spread of the
+oracle itself before any tolerance is chosen.
+
+## 18. cuBLAS is not a file we can read
+
+`cublasGemmEx` (`unfused_distance_nn.cuh:205`) is closed source, so
+`cluster/mojo_only/gemm.mojo` is a plain tiled product and is not pretending
+to be a port.
+
+**Their call carries the most interesting finding in the cuVS source**, and it
+is a fact about their numerics rather than about our port: for `float` input
+the compute type is `CUBLAS_COMPUTE_32F_FAST_TF32`, ten mantissa bits. cuVS's
+shipped float32 k-means does not compute float32 distances on NVIDIA. See
+`cluster/mojo_only/gemm.mojo` and the `bitwise-gbdt` tree.

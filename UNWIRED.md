@@ -233,3 +233,23 @@ and correctness holds with the syncs gone: 54 chained increments behind a
 single drain came back exact, so **stream ordering is enough and 7 of our 9
 per-level syncs are pure ordering we are paying for by hand.**
 
+
+## `cluster/` (cuVS k-means), added 2026-08-19
+
+**Everything in this section is UNREACHED.** Not "untested": unreached. No
+kernel in `cluster/` has been enqueued, and this tree's rule is that a kernel
+is not ported until it has been (`PORTING.md 9`). Compiling is not evidence.
+
+| thing | read by | why not, and what would change it |
+|---|---|---|
+| every kernel in `cluster/mojo_only/` and `cluster/ported/distance/` | `cluster/ported/cluster/detail/kmeans.mojo` calls all of them | The call graph is complete and closes: `fit` -> `kmeans_fit_main` -> norms, GEMM, reduce, accumulate, finalize, shift, convergence. **What does not exist is a `main` that launches it.** `cluster/mojo_only/kmeans_check.mojo` is the missing piece and is the next commit. |
+| `use_fused` (`cluster/ported/cluster/detail/kmeans_common.mojo`) | nothing | Ported for the evidence it carries, not for its answer. We have no CUTLASS counterpart, so on every backend this tree targets the answer is False and the unfused path is the only path. It is a row that documents a decision of theirs rather than one that drives ours, and it should stay that way unless a fused kernel ever exists here. |
+| `sampling_probability` (k-means\|\| step 3) | nothing | `initScalableKMeansPlusPlus` is NOT PORTED, and it is cuVS's DEFAULT init at `oversampling_factor = 2.0`. `kmeans_fit_main` RAISES on the default rather than substituting classic k-means++, which is the whole point: a substituted initialization that still reports an inertia is exactly the silent deviation this file exists to prevent. |
+| `init_size`, `device_buffer_samples` (`KMeansParams`) | nothing | Both belong to cuVS's host-resident arm, which is out of scope here. Carried so the params struct is theirs field for field; they will stay dead unless a host arm appears. |
+| `mojo_only/fixed_point.mojo` | **NOW READ**: `cluster/mojo_only/reduce_by_key.mojo` accumulates cluster sums through the same Int32 scheme | Moved upstairs from the NOT WIRED table. Its overflow argument transferred with one noun changed, leaf to cluster, which is the strongest evidence so far that the shared substrate is genuinely shared and not tree-shaped. Still unreached until the check runs. |
+
+**The sabotage the first run has to do**, because a digest cannot tell a
+working change from a no-op and this repository has been bitten by exactly
+that: corrupt `centroid_norm` before the reduction and watch inertia move. If
+inertia does not move, the reduction is not reading it, and the whole
+assignment step is doing something other than what it says.
