@@ -336,3 +336,59 @@ def reduce_width_for[kernel: Int, column: Int, identical: Bool]() -> Int:
     comptime block = block_size_for[kernel, column]()
     comptime pinned = PINNED_REDUCE_WIDTH if identical else block
     return block if block < pinned else pinned
+
+
+# ---------------------------------------------------------------------------
+# SYNC GRANULARITY, and the correctness bug it exists to prevent.
+# ---------------------------------------------------------------------------
+
+#: Only threadgroup-wide `barrier()` is available.
+comptime SYNC_BLOCK = 0
+
+#: A lane group can sync independently (CUDA `tiled_partition`, AMD wave ops).
+#: NOT REACHABLE FROM MOJO TODAY on any vendor.
+comptime SYNC_LANE = 1
+
+
+def sync_granularity_for[column: Int]() -> Int:
+    """The finest sync a kernel may rely on. `SYNC_BLOCK` for EVERY column.
+
+    **This is a Mojo limitation and not an Apple one, which is worth stating
+    because the natural assumption is the opposite.** `max.gpu.primitives`
+    exposes `block` only: `block.prefix_sum`, `block.max`, `block.min`. There
+    is no warp, simdgroup or shuffle primitive for any vendor. NVIDIA and AMD
+    hardware both have them and CatBoost uses them heavily
+    (`tiled_partition<8>` in the half-byte accumulator, `tiled_partition<32>`
+    in the one-byte one, `cub::WarpScan` in the bin scan); we cannot emit any
+    of it from here.
+
+    So the row is `SYNC_BLOCK` across the board today. When Mojo exposes lane
+    primitives this becomes a per-column value, the kernels follow it, and
+    nothing else in the tree changes.
+
+    SCHEDULING row: it decides which threads wait for which, never what is
+    added to what.
+    """
+    return SYNC_BLOCK
+
+
+def requires_uniform_iteration_for[column: Int]() -> Bool:
+    """Whether every thread of a block must run the SAME iteration count.
+
+    **A correctness requirement, not a tuning knob, and it cost a wrong
+    answer to learn.** CatBoost syncs a `tiled_partition<8>` inside the
+    histogram inner loop, which is lane-local, so warps with different
+    iteration counts never wait on each other. Widened to a threadgroup
+    `barrier()`, a warp that finishes early walks past a barrier its
+    neighbours are still waiting on, and a divergent threadgroup barrier is
+    undefined behavior.
+
+    It is not a rare edge case. A 64-row partition over a 512-thread block
+    gives warp 0 one iteration and warps 1 through 15 zero.
+
+    So under `SYNC_BLOCK` the kernels derive one iteration count for the
+    whole block and let threads with no rows contribute a 0.0 stat, which
+    keeps every lane inside every barrier. Adding 0.0 changes no sum, so this
+    is a scheduling change and the histogram is unaffected.
+    """
+    return sync_granularity_for[column]() == SYNC_BLOCK

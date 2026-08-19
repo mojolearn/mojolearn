@@ -155,3 +155,42 @@ rules, each one found by a failure:
 **Rule for this tree: a kernel is not ported until it has been ENQUEUED.**
 Compiling is not evidence. `src/launch_probe.mojo` is the smallest harness
 that produces the evidence and every new kernel gets added to it.
+
+## 11. CORRECTION to item 2: widening the tile sync is NOT merely expensive
+
+Item 2 says CatBoost's 8-lane `addToHistTile.sync()` becomes a threadgroup
+`barrier()` and calls that "correct and strictly more expensive". **That was
+wrong, and a known-answer check caught it.**
+
+A threadgroup barrier that some warps reach and others skip is undefined
+behavior. CatBoost never hits it because its sync is lane-local, so warps
+with different iteration counts never wait on each other. Widened to the
+threadgroup, they do.
+
+It is not an edge case: a 64-row partition over a 512-thread block gives warp
+0 one iteration and warps 1 to 15 zero. The measured symptom was every
+feature's histogram reading 0.0.
+
+The fix is a matrix row, `requires_uniform_iteration_for`, not a local
+workaround: every thread of a block runs the same iteration count and threads
+with no rows contribute a 0.0 stat, which keeps every lane inside every
+barrier. Adding 0.0 changes no sum, so it is a scheduling change.
+
+**The limitation is MOJO's, not Apple's**, which is the opposite of the
+natural assumption. `max.gpu.primitives` exposes `block` only, for every
+vendor; NVIDIA and AMD hardware both have lane primitives and CatBoost uses
+them heavily. So the row is `SYNC_BLOCK` on all four columns today, and the
+kernel refuses rather than running an unwritten lane-sync path if it ever
+says otherwise.
+
+## 12. Async copies: one host staging buffer per copy
+
+Not a port issue, a harness one, recorded because it cost an hour and
+presented as a broken kernel. `enqueue_copy` is asynchronous. Reusing one
+host buffer for three copies and overwriting it between them let the last
+value land in the first copy: `part_ids[0]` took the row count instead of 0,
+the kernel indexed a one-element partition array out of bounds,
+`active_block_count` resolved to 0, and every thread took the early return.
+Every histogram cell read 0.0 with nothing wrong in the kernel.
+
+One staging buffer per copy, or synchronize between them.
