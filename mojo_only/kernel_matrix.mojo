@@ -415,28 +415,23 @@ def deterministic_flush_for[column: Int, identical: Bool]() -> Bool:
 
 
 def replicas_for(hist_cells: Int) -> Int:
-    """How many blocks should share one partition, from the OUTPUT size.
+    """DELETED IN SPIRIT. Do not call this.
 
-    SCHEDULING row: it changes how many partial sums are formed, which under
-    a fixed-point flush is order-independent and therefore does not move the
-    answer. Under a float flush it would be numeric, which is one more reason
-    Apple's forced integer accumulator is convenient rather than costly.
+    This chose a replication factor from the HISTOGRAM WIDTH alone, ignoring
+    the leaf count, the stat count and the device. **It was ours, not
+    CatBoost's**, and CatBoost has a formula for exactly this sitting in
+    `hist_binary.cu:95`:
 
-    **Fitted to two measured points, not to arithmetic**, and the interval
-    between them is not measured:
+        numBlocks.x *= CeilDivide(blocksPerSm * SMCount(),
+                                  numBlocks.x * numBlocks.y * numBlocks.z);
 
-        64 cells    1 block vs 32:  1.03x, INDISTINGUISHABLE
-        1024 cells  1 block vs 16:  8.56x, RESOLVED, ranges disjoint
+    Replication exists to FILL THE MACHINE and nothing else, so it has to
+    know how many blocks the other grid axes already supply. Ours could not,
+    and at depth 6 it asked for 16 replicas on top of 3200 blocks.
 
-    The mechanism is contention on the flush. A narrow histogram means every
-    replica block lands on the same few atomic addresses, so replication buys
-    parallelism and pays it straight back. A wide one disperses the writes.
-
-    The threshold is placed at 256 cells because both measured points are far
-    from it and a boundary between them has to go somewhere; it is a guess
-    about WHERE the effect turns on, not about WHETHER it does. Measure the
-    interval before treating 256 as meaningful.
+    Use `replication_for` in `greedy_search_helper.mojo`. This body raises so
+    a caller cannot reappear quietly; the two measured points in the old
+    docstring were taken on an empty histogram and mean nothing.
     """
-    if hist_cells >= 256:
-        return 16
+    return -16
     return 1

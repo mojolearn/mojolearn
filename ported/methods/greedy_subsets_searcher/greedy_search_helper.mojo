@@ -29,6 +29,7 @@ while porting rather than read from their source:
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from max.gpu.host.device_attribute import DeviceAttribute
 
 from ported.gpu_lib.gpu_manager import TCudaManager
 from ported.methods.kernel_add_model_value import (
@@ -72,7 +73,6 @@ from ported.methods.leaves_estimation.leaves_estimation import (
     LEAF_BLOCK,
     compute_leaf_values_kernel,
 )
-from mojo_only.kernel_matrix import replicas_for
 from ported.gpu_data.grid_policy import (
     POLICY_BINARY,
     POLICY_HALF_BYTE,
@@ -112,7 +112,6 @@ from ported.methods.leaves_estimation.leaves_estimation import (
     LEAF_BLOCK,
     compute_leaf_values_kernel,
 )
-from mojo_only.kernel_matrix import replicas_for
 from ported.gpu_data.grid_policy import (
     POLICY_BINARY,
     POLICY_HALF_BYTE,
@@ -591,11 +590,16 @@ def run_tree(
     # there: the one-byte kernel at 4 features by 256 folds, 1,024 cells, is
     # **8.56x faster with 16 blocks than with 1, ranges disjoint**. So the
     # factor is not a constant, it is a function of the OUTPUT size, and
-    # `replicas_for` in the matrix owns it. Passing 0 here asks the matrix;
-    # a positive value overrides it so the two can still be interleaved.
-    var replicas = hist_replicas
-    if replicas <= 0:
-        replicas = replicas_for(stat_count * n_features)
+    # Passing 0 here asks THEIR formula; a positive value overrides it so the
+    # two can still be interleaved.
+    # THEIR formula, `hist_binary.cu:95`, not a heuristic of ours.
+    # `replicas_for` used to decide this from the histogram width alone and
+    # is deleted; see `replication_for` for what it got wrong. Passing a
+    # positive `hist_replicas` still overrides, so the arms stay interleavable.
+    # THEIR formula (`hist_binary.cu:95`), and it is computed PER LAUNCH
+    # because `numBlocks.y` is the leaf count and that changes every level.
+    # `replicas_for` is deleted; it keyed on histogram width alone.
+    var sm_count = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
 
     var part_stats = ctx.enqueue_create_buffer[DType.float32](
         max_leaves * stat_count
@@ -733,7 +737,13 @@ def run_tree(
                 p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids_a.unsafe_ptr(),
                 hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
                 Int32(max_leaves), Int32(stat_count),
-                grid_dim=(replicas, n_live, stat_count),
+                grid_dim=(
+                    hist_replicas if hist_replicas > 0 else replication_for(
+                        1, n_live, stat_count, sm_count
+                    ),
+                    n_live,
+                    stat_count,
+                ),
                 block_dim=(BLOCK_SIZE, 1, 1),
             )
         else:
@@ -747,7 +757,13 @@ def run_tree(
                 p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids_a.unsafe_ptr(),
                 hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
                 Int32(max_leaves), Int32(stat_count),
-                grid_dim=(replicas, n_live, stat_count),
+                grid_dim=(
+                    hist_replicas if hist_replicas > 0 else replication_for(
+                        1, n_live, stat_count, sm_count
+                    ),
+                    n_live,
+                    stat_count,
+                ),
                 block_dim=(BLOCK_SIZE, 1, 1),
             )
 
@@ -1032,7 +1048,7 @@ def launch_one_byte[bits: Int](
     n_rows: Int,
     stat_count: Int,
     max_leaves: Int,
-    replicas: Int,
+    sm_count: Int,
     line: Int,
     base: Int,
     mut cindex: DeviceBuffer[DType.uint32],
@@ -1084,7 +1100,10 @@ def launch_one_byte[bits: Int](
             # here to get the replication back.
             grid_dim=(
                 feature_groups_for(POLICY_ONE_BYTE, Int(blk.n_features))
-                * replicas,
+                * replication_for(
+                    feature_groups_for(POLICY_ONE_BYTE, Int(blk.n_features)),
+                    n_live, stat_count, sm_count,
+                ),
                 n_live,
                 stat_count,
             ),
@@ -1128,7 +1147,10 @@ def launch_one_byte[bits: Int](
             # here to get the replication back.
             grid_dim=(
                 feature_groups_for(POLICY_ONE_BYTE, Int(blk.n_features))
-                * replicas,
+                * replication_for(
+                    feature_groups_for(POLICY_ONE_BYTE, Int(blk.n_features)),
+                    n_live, stat_count, sm_count,
+                ),
                 n_live,
                 stat_count,
             ),
@@ -1166,6 +1188,51 @@ def feature_groups_for(policy: Int, n_features: Int) -> Int:
     return (n_features + 3) // 4
 
 
+
+def replication_for(
+    groups: Int, n_live: Int, stat_count: Int, sm_count: Int
+) -> Int:
+    """`numBlocks.x *= CeilDivide(maxActiveBlocks, x * y * z)`.
+
+    PORT OF the grid sizing shared by all three histogram kernels
+    (`hist_binary.cu:95`, `hist_half_byte.cu:81`, `hist_one_byte.cu:291`):
+
+        blocksPerSm     = TArchProps::GetMajorVersion() > 3 ? 2 : 1;
+        maxActiveBlocks = blocksPerSm * TArchProps::SMCount();
+        numBlocks.x     = ceil(fCount / GroupSize);
+        numBlocks.x    *= CeilDivide(maxActiveBlocks,
+                                     numBlocks.x * numBlocks.y * numBlocks.z);
+
+    **Replication exists to FILL THE MACHINE, and only that.** The other grid
+    axes already supply blocks: `y` is the leaf count and `z` is the stat
+    count. Replication makes up the shortfall between what they supply and
+    what the device can run at once, so it collapses to 1 the moment there
+    are enough leaves, which is every level below the first few.
+
+    ================= WHAT THIS REPLACES =================
+    `mojo_only/kernel_matrix.replicas_for` was OURS, not theirs. It chose 16
+    or 1 from the HISTOGRAM WIDTH, ignoring the leaf count, the stat count
+    and the device entirely. At depth 6 that asks for 16 replicas on top of
+    64 leaves times 2 stats times 25 groups, which is 3200 blocks already:
+    sixteen times more blocks than the machine can hold, each doing a
+    sixteenth of the rows, all contending on the same atomics.
+
+    An invented heuristic in place of a formula that was sitting in their
+    source is exactly what PORTING_RULES rule 0 forbids, and it survived
+    because every measurement of it was taken on an empty histogram.
+    ======================================================
+    """
+    var blocks_per_sm = 2
+    var max_active_blocks = blocks_per_sm * sm_count
+    var base = groups * n_live * stat_count
+    if base < 1:
+        base = 1
+    var rep = (max_active_blocks + base - 1) // base
+    if rep < 1:
+        rep = 1
+    return rep
+
+
 def launch_histograms_for_blocks(
     ctx: DeviceContext,
     mut blocks: List[DeviceBlock],
@@ -1174,7 +1241,7 @@ def launch_histograms_for_blocks(
     n_rows: Int,
     stat_count: Int,
     max_leaves: Int,
-    replicas: Int,
+    sm_count: Int,
     fixed_scale: Float32,
     mut cindex: DeviceBuffer[DType.uint32],
     mut row_index: DeviceBuffer[DType.uint32],
@@ -1223,6 +1290,7 @@ def launch_histograms_for_blocks(
         # grid x = FEATURE GROUPS times replication, their
         # `numBlocks.x = ceil(fCount / GroupSize); numBlocks.x *= ...`
         var groups = feature_groups_for(blk.policy, blk.n_features)
+        var replicas = replication_for(groups, n_live, stat_count, sm_count)
 
         # DENSE ids, `0..n_live`. The block scratch is written at
         # `blockIdx.y` (their `compute_hist_loop_two_stats.cuh:554`), so it
@@ -1318,25 +1386,25 @@ def launch_histograms_for_blocks(
             if ob == 5:
                 launch_one_byte[5](
                     ctx, blk, depth, n_live, n_rows, stat_count, max_leaves,
-                    replicas, line, base, cindex, row_index, stats, p_off,
+                    sm_count, line, base, cindex, row_index, stats, p_off,
                     p_sz, ids, block_hist, acc_i32, fixed_scale,
                 )
             elif ob == 6:
                 launch_one_byte[6](
                     ctx, blk, depth, n_live, n_rows, stat_count, max_leaves,
-                    replicas, line, base, cindex, row_index, stats, p_off,
+                    sm_count, line, base, cindex, row_index, stats, p_off,
                     p_sz, ids, block_hist, acc_i32, fixed_scale,
                 )
             elif ob == 7:
                 launch_one_byte[7](
                     ctx, blk, depth, n_live, n_rows, stat_count, max_leaves,
-                    replicas, line, base, cindex, row_index, stats, p_off,
+                    sm_count, line, base, cindex, row_index, stats, p_off,
                     p_sz, ids, block_hist, acc_i32, fixed_scale,
                 )
             else:
                 launch_one_byte[8](
                     ctx, blk, depth, n_live, n_rows, stat_count, max_leaves,
-                    replicas, line, base, cindex, row_index, stats, p_off,
+                    sm_count, line, base, cindex, row_index, stats, p_off,
                     p_sz, ids, block_hist, acc_i32, fixed_scale,
                 )
 
@@ -1453,7 +1521,9 @@ def run_tree_layout(
     var dblocks = upload_blocks(ctx, blocks)
     var hist_cells_per_leaf = layout.hist_cells
 
-    var replicas = replicas_for(stat_count * hist_cells_per_leaf)
+    # their `TArchProps::SMCount()`, read from the device rather than
+    # guessed. `replication_for` turns it into their grid x factor.
+    var sm_count = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
 
     var wide = (n_rows + 255) // 256
     if wide > 256:
@@ -1685,7 +1755,7 @@ def run_tree_layout(
 
         launch_histograms_for_blocks(
             ctx, dblocks, depth, n_compute, n_rows, stat_count, max_leaves,
-            replicas, fixed_scale,
+            sm_count, fixed_scale,
             cindex, row_index, stats, p_off, p_sz, ids_compute, dense_ids,
             hist, acc_i32, block_hist, hist_cells_per_leaf,
         )

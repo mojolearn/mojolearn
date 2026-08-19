@@ -33,7 +33,6 @@ from ported.methods.greedy_subsets_searcher.greedy_search_helper import (
 from ported.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     scan_histograms_kernel,
 )
-from mojo_only.kernel_matrix import replicas_for
 
 
 def check_boosting_histogram(n_rows: Int = 8192, n_features: Int = 16, n_folds: Int = 15) raises:
