@@ -19,3 +19,4 @@ ported/methods/greedy_subsets_searcher/greedy_search_helper.mojo	catboost/cuda/m
 ported/methods/leaves_estimation/leaves_estimation.mojo	catboost/cuda/methods/leaves_estimation/	partial	pointwise Newton step only; no descent loop, ordered, exact or backtracking
 ported/gpu_data/gpu_structures.mojo	catboost/cuda/gpu_data/gpu_structures.h	transliterated	TCFeature; Offset narrowed ui64 to UInt32
 ported/gpu_data/compressed_index_builder.mojo	catboost/cuda/gpu_data/compressed_index_builder.h	partial	layout decision only; single-device, no docParallel striping
+ported/gpu_data/feature_blocks.mojo	catboost/cuda/methods/greedy_subsets_searcher/split_properties_helper.cpp	partial	TFeatureInBlock assembly, one block per policy present

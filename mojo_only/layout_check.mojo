@@ -6,6 +6,7 @@ everywhere and nothing downstream would look suspicious.
 """
 
 from ported.gpu_data.compressed_index_builder import build_layout
+from ported.gpu_data.feature_blocks import blocks_for
 from ported.gpu_data.grid_policy import (
     POLICY_BINARY,
     POLICY_HALF_BYTE,
@@ -97,3 +98,62 @@ def check_layout() raises:
     if wrong != 0:
         raise Error("the compressed index layout is wrong")
     print("  policies, shared columns, shifts and slices all correct")
+
+
+def check_feature_blocks() raises:
+    """Do the per-policy blocks carry the right slices?
+
+    Same mixed dataset as `check_layout`. What is being checked is the split
+    into blocks: which features land in which block, that a policy with no
+    features produces NO block (and therefore no launch), and that
+    `fold_offset` is a running total WITHIN the block rather than within the
+    whole histogram, because the writeback strides by the block's own
+    `group_size`.
+    """
+    var folds = List[Int]()
+    folds.append(1)
+    folds.append(2)
+    folds.append(15)
+    folds.append(16)
+    folds.append(200)
+    folds.append(0)
+    folds.append(1)
+
+    var lay = build_layout(folds)
+    var blocks = blocks_for(lay, 1024)
+
+    print("  blocks:", len(blocks), "(one per policy PRESENT)")
+    var wrong = 0
+    for b in range(len(blocks)):
+        ref blk = blocks[b]
+        var total = 0
+        for k in range(blk.count()):
+            total += Int(blk.folds[k])
+        print(
+            "    ",
+            policy_name(blk.policy),
+            " features",
+            blk.count(),
+            " total folds",
+            total,
+            " first column",
+            blk.first_column,
+        )
+        # fold_offset must be a running total within the block
+        var cursor = 0
+        for k in range(blk.count()):
+            if Int(blk.fold_offset[k]) != cursor:
+                wrong += 1
+                print("      fold_offset", k, "should be", cursor)
+            if Int(blk.group_size[k]) != total:
+                wrong += 1
+                print("      group_size must be the block's total folds")
+            cursor += Int(blk.folds[k])
+
+    if len(blocks) != 3:
+        wrong += 1
+        print("    expected 3 blocks for this dataset")
+    print("  block errors:", wrong)
+    if wrong != 0:
+        raise Error("feature blocks are wrong")
+    print("  every policy's block carries its own contiguous fold slices")
