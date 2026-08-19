@@ -36,6 +36,9 @@ from catboost.cuda.gpu_data.kernel.binarize import (
 from catboost.cuda.methods.greedy_subsets_searcher.kernel.hist_binary import (
     binary_hist_kernel,
 )
+from catboost.cuda.methods.greedy_subsets_searcher.kernel.split_points import (
+    split_and_make_sequence_kernel,
+)
 from catboost.cuda.methods.greedy_subsets_searcher.kernel.compute_scores import (
     compute_optimal_splits_kernel,
 )
@@ -765,3 +768,164 @@ def check_scores() raises:
     if abs(Float64(hos.unsafe_ptr().unsafe_load(0)) - best) > 1e-2:
         raise Error("the winning score disagrees with the hand calculation")
     print("  score kernel agrees with the hand calculation")
+
+
+def check_split_points() raises:
+    """The split flags and the in-leaf sequence.
+
+    Two leaves over 32 rows, split at row 12, on a BINARY feature at a
+    non-zero shift so a dropped shift or a wrong mask shows up. Row r has
+    feature bin `(r // 3) % 2`, giving runs of three rather than an
+    alternating pattern, so an off-by-one in the row index is visible.
+
+    Checks three things the kernel must get right:
+      - the flag is computed from THIS feature's bits, not a neighbour's,
+      - the flag is written at the leaf's OFFSET, not at row 0,
+      - the sequence written into `indices` is 0..size-1 WITHIN each leaf,
+        which is what the stable partition afterwards permutes.
+    """
+    var ctx = DeviceContext()
+    var n_rows = 32
+    var split_at = 12
+    var feature_id = 5  # not 0, so the shift is non-trivial
+
+    var cindex = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+    var zero32 = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
+    for i in range(n_rows):
+        zero32.unsafe_ptr().unsafe_store(i, UInt32(0))
+    ctx.enqueue_copy(dst_buf=cindex, src_ptr=zero32.unsafe_ptr())
+    ctx.synchronize()
+
+    # Write a decoy into a neighbouring feature first, then the real one.
+    var host_bins = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
+    var bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
+    for r in range(n_rows):
+        host_bins.unsafe_ptr().unsafe_store(r, UInt8(1))
+    ctx.enqueue_copy(dst_buf=bins, src_ptr=host_bins.unsafe_ptr())
+    ctx.enqueue_function[write_compressed_index_kernel](
+        Int32(0),
+        policy_mask(POLICY_BINARY),
+        UInt32(policy_shift(POLICY_BINARY, feature_id + 1)),
+        bins.unsafe_ptr(),
+        Int32(n_rows),
+        cindex.unsafe_ptr(),
+        grid_dim=1,
+        block_dim=WRITE_BLOCK_SIZE,
+    )
+    ctx.synchronize()
+
+    var bins2 = ctx.enqueue_create_buffer[DType.uint8](n_rows)
+    var host_bins2 = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
+    for r in range(n_rows):
+        host_bins2.unsafe_ptr().unsafe_store(r, UInt8((r // 3) % 2))
+    ctx.enqueue_copy(dst_buf=bins2, src_ptr=host_bins2.unsafe_ptr())
+    ctx.enqueue_function[write_compressed_index_kernel](
+        Int32(0),
+        policy_mask(POLICY_BINARY),
+        UInt32(policy_shift(POLICY_BINARY, feature_id)),
+        bins2.unsafe_ptr(),
+        Int32(n_rows),
+        cindex.unsafe_ptr(),
+        grid_dim=1,
+        block_dim=WRITE_BLOCK_SIZE,
+    )
+    ctx.synchronize()
+
+    var load_idx = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+    var h_load = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
+    for r in range(n_rows):
+        h_load.unsafe_ptr().unsafe_store(r, UInt32(r))
+    ctx.enqueue_copy(dst_buf=load_idx, src_ptr=h_load.unsafe_ptr())
+
+    var p_off = ctx.enqueue_create_buffer[DType.uint32](2)
+    var p_sz = ctx.enqueue_create_buffer[DType.uint32](2)
+    var leaf_ids = ctx.enqueue_create_buffer[DType.uint32](2)
+    var h_off = ctx.enqueue_create_host_buffer[DType.uint32](2)
+    var h_sz = ctx.enqueue_create_host_buffer[DType.uint32](2)
+    var h_lid = ctx.enqueue_create_host_buffer[DType.uint32](2)
+    h_off.unsafe_ptr().unsafe_store(0, UInt32(0))
+    h_off.unsafe_ptr().unsafe_store(1, UInt32(split_at))
+    h_sz.unsafe_ptr().unsafe_store(0, UInt32(split_at))
+    h_sz.unsafe_ptr().unsafe_store(1, UInt32(n_rows - split_at))
+    h_lid.unsafe_ptr().unsafe_store(0, UInt32(0))
+    h_lid.unsafe_ptr().unsafe_store(1, UInt32(1))
+    ctx.enqueue_copy(dst_buf=p_off, src_ptr=h_off.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=p_sz, src_ptr=h_sz.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=leaf_ids, src_ptr=h_lid.unsafe_ptr())
+
+    var sp_off = ctx.enqueue_create_buffer[DType.uint32](2)
+    var sp_shift = ctx.enqueue_create_buffer[DType.uint32](2)
+    var sp_mask = ctx.enqueue_create_buffer[DType.uint32](2)
+    var sp_hot = ctx.enqueue_create_buffer[DType.uint8](2)
+    var sp_bin = ctx.enqueue_create_buffer[DType.uint32](2)
+    var h_spo = ctx.enqueue_create_host_buffer[DType.uint32](2)
+    var h_sps = ctx.enqueue_create_host_buffer[DType.uint32](2)
+    var h_spm = ctx.enqueue_create_host_buffer[DType.uint32](2)
+    var h_sph = ctx.enqueue_create_host_buffer[DType.uint8](2)
+    var h_spb = ctx.enqueue_create_host_buffer[DType.uint32](2)
+    for i in range(2):
+        h_spo.unsafe_ptr().unsafe_store(i, UInt32(0))
+        h_sps.unsafe_ptr().unsafe_store(
+            i, UInt32(policy_shift(POLICY_BINARY, feature_id))
+        )
+        h_spm.unsafe_ptr().unsafe_store(i, policy_mask(POLICY_BINARY))
+        h_sph.unsafe_ptr().unsafe_store(i, UInt8(0))  # ordered, so test is >
+        h_spb.unsafe_ptr().unsafe_store(i, UInt32(0))  # bin > 0 goes right
+    ctx.enqueue_copy(dst_buf=sp_off, src_ptr=h_spo.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=sp_shift, src_ptr=h_sps.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=sp_mask, src_ptr=h_spm.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=sp_hot, src_ptr=h_sph.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=sp_bin, src_ptr=h_spb.unsafe_ptr())
+
+    var flags = ctx.enqueue_create_buffer[DType.uint8](n_rows)
+    var seq = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+    var hzf = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
+    var hzs = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
+    for r in range(n_rows):
+        hzf.unsafe_ptr().unsafe_store(r, UInt8(9))
+        hzs.unsafe_ptr().unsafe_store(r, UInt32(999))
+    ctx.enqueue_copy(dst_buf=flags, src_ptr=hzf.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=seq, src_ptr=hzs.unsafe_ptr())
+    ctx.synchronize()
+
+    ctx.enqueue_function[split_and_make_sequence_kernel](
+        cindex.unsafe_ptr(),
+        load_idx.unsafe_ptr(),
+        p_off.unsafe_ptr(),
+        p_sz.unsafe_ptr(),
+        leaf_ids.unsafe_ptr(),
+        sp_off.unsafe_ptr(),
+        sp_shift.unsafe_ptr(),
+        sp_mask.unsafe_ptr(),
+        sp_hot.unsafe_ptr(),
+        sp_bin.unsafe_ptr(),
+        flags.unsafe_ptr(),
+        seq.unsafe_ptr(),
+        grid_dim=(1, 2, 1),
+        block_dim=(512, 1, 1),
+    )
+    ctx.synchronize()
+
+    var of = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
+    var os = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
+    ctx.enqueue_copy(dst_ptr=of.unsafe_ptr(), src_buf=flags)
+    ctx.enqueue_copy(dst_ptr=os.unsafe_ptr(), src_buf=seq)
+    ctx.synchronize()
+
+    var wrong_flag = 0
+    var wrong_seq = 0
+    for leaf in range(2):
+        var off = 0 if leaf == 0 else split_at
+        var size = split_at if leaf == 0 else n_rows - split_at
+        for i in range(size):
+            var r = off + i
+            var want_flag = UInt8(1) if ((r // 3) % 2) > 0 else UInt8(0)
+            if of.unsafe_ptr().unsafe_load(r) != want_flag:
+                wrong_flag += 1
+            if os.unsafe_ptr().unsafe_load(r) != UInt32(i):
+                wrong_seq += 1
+    print("  32 rows, leaves [0,12) and [12,32), binary feature", feature_id)
+    print("  wrong flags:", wrong_flag, " wrong sequence entries:", wrong_seq)
+    if wrong_flag != 0 or wrong_seq != 0:
+        raise Error("split_points is wrong")
+    print("  flags read the right feature, sequence is per-leaf 0..size-1")
