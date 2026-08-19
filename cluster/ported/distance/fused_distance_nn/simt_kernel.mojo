@@ -24,22 +24,58 @@ fused arm is what runs on the hardware most people have, and its CUTLASS
 version is unportable but THIS one is not: `simt_kernel.cuh` is the SIMT
 path, plain CUDA cores, no tensor-core instructions anywhere.
 
-THE ONE THING THAT DID NOT PORT, AND WHAT REPLACED IT
------------------------------------------------------
-Their cross-block merge, `updateReducedVal`, serializes per-row updates with
-`raft::laneId()`, a mutex array and `atomicCAS` (`simt_kernel.cuh:25-47`).
-Their own comment calls it a workaround for pre-Volta hang behavior and says
-a 64-bit `atomicCAS` would eliminate it. Mojo 1.0 has no lane primitives.
+THE CROSS-THREAD MERGE IS NOW THEIRS. THE CROSS-BLOCK ONE STILL IS NOT
+-----------------------------------------------------------------------
+`rowEpilog_lambda` does two separate things and only the second one is
+unportable. Keeping them apart is the whole content of this section.
 
-Replaced by making the column axis a grid-stride loop INSIDE the block and
-launching one block row-tile: every row is then owned by exactly one block,
-so there is no cross-block reduction and no mutex at all. Their kernel
-grid-strides both axes and therefore needs one. This is a `replaced` row in
-`PORTED_MAP.tsv`, and it costs parallelism when `n` is large and `m` is
-small, which is the opposite of every shape in this repository.
+1. **The intra-warp merge, `simt_kernel.cuh:119-130`.** The `P::AccThCols`
+   threads that share a row hold partial `(value, key)` minima, and they are
+   combined with `raft::shfl` on the key AND on the value. **That is now
+   ported.** It used to be a shared-memory transpose plus a serial 16-way
+   scan, justified by a claim that Mojo has no lane primitives. **The claim
+   was false** (`PORTING.md` 2): `std.gpu.primitives.warp` has the shuffles,
+   and `block.min` was never the answer here because it reduces VALUES ONLY
+   and this reduction has to carry the key that achieved the minimum.
+
+   One detail is not literal. Their `raft::shfl(x, lid + j, P::AccThCols)`
+   ROTATES within a width-`AccThCols` subgroup, relying on CUDA's `width`
+   argument to apply the modulo; Mojo's `shuffle_idx` has no width parameter,
+   so the same coverage is obtained with `shuffle_xor`, which the vendor's own
+   guidance names as the reduction primitive. XOR with an offset below
+   `AccThCols` flips only the low lane bits, so it stays inside the same
+   aligned `AccThCols` group their rotate stays inside, and both leave EVERY
+   lane of the group holding the group's winner. The results are identical,
+   not merely equivalent, because the reducer is a min over a TOTAL order and
+   is therefore associative, commutative and idempotent: no reduction shape
+   can change the answer. The tie-break on the lower key is what buys that
+   and is load-bearing (`PORTING.md` 14).
+
+   Two things this relies on, both true here: `GEMM_ACC_TH_COLS` is a power of
+   two no larger than the lane width, and `tc = tid % GEMM_ACC_TH_COLS`, so
+   the threads sharing a row are CONTIGUOUS and aligned and never straddle a
+   warp boundary. Change either and the shuffle silently reduces the wrong
+   set.
+
+2. **The cross-block merge, `updateReducedVal` (`simt_kernel.cuh:25-47`).**
+   Still replaced, and for a reason that has nothing to do with Mojo. It
+   serializes per-row global updates with a mutex array and `atomicCAS`;
+   their own comment calls it a workaround for pre-Volta hang behavior and
+   says a 64-bit `atomicCAS` would eliminate it. We make the column axis a
+   grid-stride loop INSIDE the block and launch one block per row tile, so
+   every row is owned by exactly one block and there is nothing to serialize.
+   Their kernel grid-strides both axes and therefore needs one. This is the
+   `replaced` row in `PORTED_MAP.tsv`, and it costs parallelism when `n` is
+   large and `m` is small, which is the opposite of every shape in this
+   repository.
+
+   What survives from `updateReducedVal` is its LANE STRUCTURE: the lanes it
+   lets write are `lid == j * P::AccThCols`, the first lane of each group,
+   each writing its own `P::AccRowsPerTh` rows. That is `tc == 0` below.
 """
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from std.gpu.primitives.warp import shuffle_xor
 from std.math import sqrt
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -100,17 +136,10 @@ def fused_distance_nn_kernel(
         Scalar[DType.float32],
         address_space = AddressSpace.SHARED,
     ]()
-    # The cross-thread merge at the end: 64 rows x 16 column-threads.
-    var s_val = stack_allocation[
-        GEMM_MBLK * GEMM_ACC_TH_COLS,
-        Scalar[DType.float32],
-        address_space = AddressSpace.SHARED,
-    ]()
-    var s_key = stack_allocation[
-        GEMM_MBLK * GEMM_ACC_TH_COLS,
-        Scalar[DType.uint32],
-        address_space = AddressSpace.SHARED,
-    ]()
+    # The cross-thread merge at the end needs NO shared memory: it is a warp
+    # shuffle, `simt_kernel.cuh:125-126`. The 64 x 16 pair of scratch arrays
+    # that used to sit here cost 8 KB of the 32 KB Apple allows a threadgroup,
+    # which the two GEMM pages already spend 18 KB of.
 
     # `KVPair val[P::AccRowsPerTh]`, in registers. This is the whole point.
     var val0 = FUSED_MAX
@@ -207,40 +236,66 @@ def fused_distance_nn_kernel(
                         key3 = UInt32(col)
         n0 += GEMM_NBLK
 
-    # --- merge the 16 column-threads that share each row -----------------
-    for i in range(GEMM_ACC_ROWS_PER_TH):
-        var local_row = tr * GEMM_ACC_ROWS_PER_TH + i
-        var v = val0
-        var kk2 = key0
-        if i == 1:
-            v = val1
-            kk2 = key1
-        elif i == 2:
-            v = val2
-            kk2 = key2
-        elif i == 3:
-            v = val3
-            kk2 = key3
-        s_val[local_row * GEMM_ACC_TH_COLS + tc] = v
-        s_key[local_row * GEMM_ACC_TH_COLS + tc] = kk2
-    barrier()
+    # --- `rowEpilog_lambda`, `simt_kernel.cuh:119-130` -------------------
+    # Merge the GEMM_ACC_TH_COLS column-threads that share each row, one
+    # butterfly pass per accumulator row, key and value shuffled together.
+    # Their comparator, `KVPMinReduce` extended by the lower-key tie-break
+    # this tree pins everywhere:
+    #     (a.value < b.value) || (a.value == b.value && a.key < b.key)
+    #
+    # Every thread reaches every shuffle: the loop bound is a comptime
+    # constant and nothing here is conditional. That is required, because a
+    # lane that skips a full-mask shuffle hangs the lanes that reach it.
+    var lane_offset = 1
+    while lane_offset < GEMM_ACC_TH_COLS:
+        var o0v = shuffle_xor(val0, UInt32(lane_offset))
+        var o0k = shuffle_xor(key0, UInt32(lane_offset))
+        if o0v < val0 or (o0v == val0 and o0k < key0):
+            val0 = o0v
+            key0 = o0k
 
-    var lr = tid
-    while lr < GEMM_MBLK:
-        var row2 = m0 + lr
-        if row2 < m:
-            var best_v = s_val[lr * GEMM_ACC_TH_COLS + 0]
-            var best_k = s_key[lr * GEMM_ACC_TH_COLS + 0]
-            for t in range(1, GEMM_ACC_TH_COLS):
-                var cv = s_val[lr * GEMM_ACC_TH_COLS + t]
-                var ck = s_key[lr * GEMM_ACC_TH_COLS + t]
-                if cv < best_v or (cv == best_v and ck < best_k):
-                    best_v = cv
-                    best_k = ck
-            if is_sqrt_in != 0:
-                if best_v <= Float32(0.0):
-                    best_v = Float32(0.0)
-                best_v = sqrt(best_v)
-            out_value.unsafe_store(row2, best_v)
-            out_key.unsafe_store(row2, best_k)
-        lr += GEMM_THREADS
+        var o1v = shuffle_xor(val1, UInt32(lane_offset))
+        var o1k = shuffle_xor(key1, UInt32(lane_offset))
+        if o1v < val1 or (o1v == val1 and o1k < key1):
+            val1 = o1v
+            key1 = o1k
+
+        var o2v = shuffle_xor(val2, UInt32(lane_offset))
+        var o2k = shuffle_xor(key2, UInt32(lane_offset))
+        if o2v < val2 or (o2v == val2 and o2k < key2):
+            val2 = o2v
+            key2 = o2k
+
+        var o3v = shuffle_xor(val3, UInt32(lane_offset))
+        var o3k = shuffle_xor(key3, UInt32(lane_offset))
+        if o3v < val3 or (o3v == val3 and o3k < key3):
+            val3 = o3v
+            key3 = o3k
+
+        lane_offset *= 2
+
+    # `updateReducedVal`'s lane structure without its mutex: the first lane
+    # of each column group writes the `GEMM_ACC_ROWS_PER_TH` rows that group
+    # owns. Every lane holds the winner after the butterfly, so `tc == 0` is
+    # a choice of writer and not a reduction step.
+    if tc == 0:
+        for i in range(GEMM_ACC_ROWS_PER_TH):
+            var row2 = m0 + tr * GEMM_ACC_ROWS_PER_TH + i
+            if row2 < m:
+                var best_v = val0
+                var best_k = key0
+                if i == 1:
+                    best_v = val1
+                    best_k = key1
+                elif i == 2:
+                    best_v = val2
+                    best_k = key2
+                elif i == 3:
+                    best_v = val3
+                    best_k = key3
+                if is_sqrt_in != 0:
+                    if best_v <= Float32(0.0):
+                        best_v = Float32(0.0)
+                    best_v = sqrt(best_v)
+                out_value.unsafe_store(row2, best_v)
+                out_key.unsafe_store(row2, best_k)

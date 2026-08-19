@@ -28,8 +28,9 @@ struct PolicyBlock(Copyable, Movable):
     var first_column: Int
     """The compressed-index column this policy's block starts at. The kernel
     strides from here by `bins_line_size`, so a policy's columns must be
-    CONTIGUOUS, which `build_layout` guarantees by filling one policy's
-    column before opening another."""
+    CONTIGUOUS, which `build_layout` guarantees by assigning columns in this
+    same policy order: one policy's columns are all opened before the next
+    policy's first one."""
 
     def count(self) -> Int:
         return len(self.feature_ids)
@@ -48,6 +49,18 @@ def blocks_for(layout: CompressedIndexLayout, n_rows: Int) raises -> List[
     the writeback uses between leaves (`entriesPerLeaf = statCount *
     group.GroupSize`). `fold_offset` is the feature's slice WITHIN the
     policy's block, not within the whole histogram, for the same reason.
+
+    **THIS ORDER IS THE FLAT BIN ORDER.** `launch_histograms_for_blocks`
+    walks the blocks in the order returned here and advances
+    `block_first_bin` by each block's fold count, so a feature's destination
+    in the flat histogram is `sum(earlier blocks' folds) + fold_offset`.
+    `build_layout` assigns `first_fold_index` by walking policies and
+    features in exactly this order, which is the port of their one-builder
+    invariant: their group write offset and their per-feature
+    `FirstFoldIndex` both come off `BinFeaturesBuilder`
+    (`compute_by_blocks_helper.cpp:189` and `:218`) inside one `AddGroup`
+    pass over the groups (`:341`). Reorder either walk without the other and
+    the scan, `resolve_split` and the skip mask all address the wrong cells.
     """
     var out = List[PolicyBlock]()
 

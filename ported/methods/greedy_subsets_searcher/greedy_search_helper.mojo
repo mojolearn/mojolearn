@@ -254,9 +254,26 @@ def run_one_level(
     ctx.enqueue_copy(dst_buf=grp_off, src_ptr=hfc.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=grp_sz, src_ptr=hfd.unsafe_ptr())
 
+    # `TBinarizedFeature::OneHotFeature`, which the scan tests before it
+    # prefix-sums anything (`histogram_utils.cu:395`). These are plain binary
+    # features, so none of them is one-hot.
+    var one_hot = ctx.enqueue_create_buffer[DType.uint8](n_features)
+    var hoh = ctx.enqueue_create_host_buffer[DType.uint8](n_features)
+    for f in range(n_features):
+        hoh.unsafe_ptr().unsafe_store(f, UInt8(0))
+    ctx.enqueue_copy(dst_buf=one_hot, src_ptr=hoh.unsafe_ptr())
+
     # --- histogram buffer: [leaf][stat][binFeature] ----------------------
     var hist_cells = n_leaves * stat_count * n_features
     var hist = ctx.enqueue_create_buffer[DType.float32](hist_cells)
+    # their `FillBuffer(subsets.Histograms, 0.0f)` in `CreateInitialSubsets`
+    # (`split_properties_helper.cpp:1061`). The histogram kernels do not
+    # write a cell whose accumulator is zero, so an unfilled allocation is
+    # read back as whatever the driver handed us.
+    var hzf = ctx.enqueue_create_host_buffer[DType.float32](hist_cells)
+    for i in range(hist_cells):
+        hzf.unsafe_ptr().unsafe_store(i, Float32(0.0))
+    ctx.enqueue_copy(dst_buf=hist, src_ptr=hzf.unsafe_ptr())
     # run_one_level is depth 0 with one block per partition, so the
     # multi-block flush never fires; the scratch satisfies the signature.
     var acc_scratch = ctx.enqueue_create_buffer[DType.int32](hist_cells)
@@ -268,11 +285,16 @@ def run_one_level(
     ctx.synchronize()
 
     # 1. ZERO -------------------------------------------------------------
+    # `numBlocks.x = CeilDivide(binFeatureCount, blockSize)` with blockSize
+    # 256 (`histogram_utils.cu:236-238`). Grid x of 1 clears only the first
+    # 256 bin-features and leaves every one after that holding the previous
+    # level's values, because `fixed_to_float_kernel` deliberately does not
+    # write a cell whose accumulator is zero.
     ctx.enqueue_function[zero_histograms_kernel](
         zero_ids.unsafe_ptr(),
         Int32(n_features),
         hist.unsafe_ptr(),
-        grid_dim=(1, n_leaves, stat_count),
+        grid_dim=((n_features + 255) // 256, n_leaves, stat_count),
         block_dim=(256, 1, 1),
     )
 
@@ -310,14 +332,20 @@ def run_one_level(
     for i in range(n_leaves):
         scan_ids_h.unsafe_ptr().unsafe_store(i, UInt32(i))
     ctx.enqueue_copy(dst_buf=scan_ids, src_ptr=scan_ids_h.unsafe_ptr())
+    # `numBlocks.x = CeilDivide(fCount * 32, blockSize)`
+    # (`histogram_utils.cu:442`), theirs at one WARP per feature. Ours is one
+    # THREAD per feature, so the same rule is `ceil(fCount / blockSize)`. The
+    # kernel guards with `feature_id >= feature_count` and has no grid-stride
+    # loop, so grid x of 1 silently left every feature from 256 up unscanned.
     ctx.enqueue_function[scan_histograms_kernel](
         scan_ids.unsafe_ptr(),
         fold_off.unsafe_ptr(),
         folds.unsafe_ptr(),
+        one_hot.unsafe_ptr(),
         Int32(n_features),
         Int32(n_features),
         hist.unsafe_ptr(),
-        grid_dim=(1, n_leaves, stat_count),
+        grid_dim=((n_features + 255) // 256, n_leaves, stat_count),
         block_dim=(256, 1, 1),
     )
 
@@ -546,6 +574,15 @@ def run_tree(
 
     var hist_cells = max_leaves * stat_count * n_features
     var hist = ctx.enqueue_create_buffer[DType.float32](hist_cells)
+    # their `FillBuffer(subsets.Histograms, 0.0f)` in `CreateInitialSubsets`
+    # (`split_properties_helper.cpp:1061`). `zero_histograms_kernel` clears
+    # only the leaves a level rebuilds, and the histogram kernels skip a cell
+    # whose accumulator is zero, so an unfilled allocation is never fully
+    # overwritten.
+    var hzf = ctx.enqueue_create_host_buffer[DType.float32](hist_cells)
+    for i in range(hist_cells):
+        hzf.unsafe_ptr().unsafe_store(i, Float32(0.0))
+    ctx.enqueue_copy(dst_buf=hist, src_ptr=hzf.unsafe_ptr())
 
     # FIXED-POINT ACCUMULATOR for replicated blocks. Metal has no float
     # atomic, so partial histograms from blocks sharing a partition sum as
@@ -655,6 +692,15 @@ def run_tree(
         q4.unsafe_ptr().unsafe_store(f, UInt32(n_features))
     ctx.enqueue_copy(dst_buf=grp_sz, src_ptr=q4.unsafe_ptr())
 
+    # `TBinarizedFeature::OneHotFeature`, tested by the scan before it
+    # prefix-sums (`histogram_utils.cu:395`). This path is uniform binary,
+    # so none of them is one-hot.
+    var one_hot = ctx.enqueue_create_buffer[DType.uint8](n_features)
+    var q5 = ctx.enqueue_create_host_buffer[DType.uint8](n_features)
+    for f in range(n_features):
+        q5.unsafe_ptr().unsafe_store(f, UInt8(0))
+    ctx.enqueue_copy(dst_buf=one_hot, src_ptr=q5.unsafe_ptr())
+
     var skip = ctx.enqueue_create_buffer[DType.uint8](n_features)
     var hsk = ctx.enqueue_create_host_buffer[DType.uint8](n_features)
     for f in range(n_features):
@@ -716,11 +762,16 @@ def run_tree(
         ctx.enqueue_copy(dst_buf=ids_a, src_ptr=h_ids_a.unsafe_ptr())
         ctx.synchronize()
 
+        # `numBlocks.x = CeilDivide(binFeatureCount, blockSize)` with
+        # blockSize 256 (`histogram_utils.cu:236-238`). Grid x of 1 cleared
+        # only the first 256 bin-features; everything above kept the previous
+        # level's values, because `fixed_to_float_kernel` does not write a
+        # cell whose accumulator is zero.
         ctx.enqueue_function[zero_histograms_kernel](
             ids_a.unsafe_ptr(),
             Int32(n_features),
             hist.unsafe_ptr(),
-            grid_dim=(1, n_live, stat_count),
+            grid_dim=((n_features + 255) // 256, n_live, stat_count),
             block_dim=(256, 1, 1),
         )
         # DIRECT LOADS AT DEPTH 0, GATHER BELOW IT. The compressed index is
@@ -776,14 +827,21 @@ def run_tree(
             grid_dim=(hist_cells + 255) // 256,
             block_dim=256,
         )
+        # `numBlocks.x = CeilDivide(fCount * 32, blockSize)`
+        # (`histogram_utils.cu:442`), theirs at one WARP per feature. Ours is
+        # one THREAD per feature, so the same rule is
+        # `ceil(fCount / blockSize)`. The kernel guards with
+        # `feature_id >= feature_count` and has no grid-stride loop, so grid
+        # x of 1 left every feature from 256 up holding raw per-bin counts.
         ctx.enqueue_function[scan_histograms_kernel](
             ids_a.unsafe_ptr(),
             fold_off.unsafe_ptr(),
             folds.unsafe_ptr(),
+            one_hot.unsafe_ptr(),
             Int32(n_features),
             Int32(n_features),
             hist.unsafe_ptr(),
-            grid_dim=(1, n_live, stat_count),
+            grid_dim=((n_features + 255) // 256, n_live, stat_count),
             block_dim=(256, 1, 1),
         )
 
@@ -1085,19 +1143,9 @@ def launch_one_byte[bits: Int](
             # CatBoost replicates this kernel and sums the partials with
             # `atomicAdd(dst + fold, val)` when `blockCount > 1`
             # (`hist_one_byte.cu`, `AddToGlobalMemory`). Metal has no float
-            # atomic, and unlike the binary kernel this one has no
-            # fixed-point Int32 flush ported yet, so its writeback is a plain
-            # STORE. Replicating a plain store means 16 blocks each compute a
-            # PARTIAL histogram over their slice of rows and then overwrite
-            # each other, leaving roughly one sixteenth of the counts.
-            #
-            # Measured: with `replicas` here, 459 of 3168 cells wrong on
-            # CONTIGUOUS leaf ids. Not a permutation problem, and it was
-            # reaching every dataset wide enough for `replicas_for` to return
-            # 16, which is `stat_count * hist_cells_per_leaf >= 256`.
-            #
-            # One block is correct and slower. Port the fixed-point flush
-            # here to get the replication back.
+            # atomic, so the flush goes through the Int32 accumulator
+            # instead; integer addition is associative, so the result does
+            # not depend on which block lands first.
             grid_dim=(
                 feature_groups_for(POLICY_ONE_BYTE, Int(blk.n_features))
                 * replication_for(
@@ -1132,19 +1180,9 @@ def launch_one_byte[bits: Int](
             # CatBoost replicates this kernel and sums the partials with
             # `atomicAdd(dst + fold, val)` when `blockCount > 1`
             # (`hist_one_byte.cu`, `AddToGlobalMemory`). Metal has no float
-            # atomic, and unlike the binary kernel this one has no
-            # fixed-point Int32 flush ported yet, so its writeback is a plain
-            # STORE. Replicating a plain store means 16 blocks each compute a
-            # PARTIAL histogram over their slice of rows and then overwrite
-            # each other, leaving roughly one sixteenth of the counts.
-            #
-            # Measured: with `replicas` here, 459 of 3168 cells wrong on
-            # CONTIGUOUS leaf ids. Not a permutation problem, and it was
-            # reaching every dataset wide enough for `replicas_for` to return
-            # 16, which is `stat_count * hist_cells_per_leaf >= 256`.
-            #
-            # One block is correct and slower. Port the fixed-point flush
-            # here to get the replication back.
+            # atomic, so the flush goes through the Int32 accumulator
+            # instead; integer addition is associative, so the result does
+            # not depend on which block lands first.
             grid_dim=(
                 feature_groups_for(POLICY_ONE_BYTE, Int(blk.n_features))
                 * replication_for(
@@ -1337,6 +1375,12 @@ def launch_histograms_for_blocks(
                     block_dim=(BLOCK_SIZE, 1, 1),
                 )
         elif blk.policy == POLICY_HALF_BYTE:
+            # The half-byte kernels now carry the same fixed-point Int32
+            # flush the binary ones do, so replicated blocks sum their
+            # partials through an integer atomic instead of overwriting each
+            # other. That is what makes `* replicas` legal here: their
+            # `numBlocks.x = ceil(fCount / GroupSize)` times
+            # `CeilDivide(maxActiveBlocks, ...)` (`hist_half_byte.cu:81`).
             if depth == 0:
                 ctx.enqueue_function[half_byte_hist_kernel](
                     blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
@@ -1344,9 +1388,9 @@ def launch_histograms_for_blocks(
                     Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line), Int32(base),
                     stats.unsafe_ptr(), Int32(n_rows),
                     p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
-                    block_hist.unsafe_ptr(),
+                    block_hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
                     Int32(max_leaves), Int32(stat_count),
-                    grid_dim=(groups, n_live, stat_count),
+                    grid_dim=(groups * replicas, n_live, stat_count),
                     block_dim=(BLOCK_SIZE, 1, 1),
                 )
             else:
@@ -1357,9 +1401,9 @@ def launch_histograms_for_blocks(
                     row_index.unsafe_ptr(),
                     stats.unsafe_ptr(), Int32(n_rows),
                     p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
-                    block_hist.unsafe_ptr(),
+                    block_hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
                     Int32(max_leaves), Int32(stat_count),
-                    grid_dim=(groups, n_live, stat_count),
+                    grid_dim=(groups * replicas, n_live, stat_count),
                     block_dim=(BLOCK_SIZE, 1, 1),
                 )
         else:
@@ -1548,6 +1592,15 @@ def run_tree_layout(
 
     var hist_cells = max_leaves * stat_count * hist_cells_per_leaf
     var hist = ctx.enqueue_create_buffer[DType.float32](hist_cells)
+    # their `FillBuffer(subsets.Histograms, 0.0f)` in `CreateInitialSubsets`
+    # (`split_properties_helper.cpp:1061`). `zero_histograms_kernel` clears
+    # only `plan.compute_ids`, by design, so every other slot holds whatever
+    # the allocation came with until the bridge writes it, and the bridge
+    # writes only the cells the kernels produced.
+    var hzf = ctx.enqueue_create_host_buffer[DType.float32](hist_cells)
+    for i in range(hist_cells):
+        hzf.unsafe_ptr().unsafe_store(i, Float32(0.0))
+    ctx.enqueue_copy(dst_buf=hist, src_ptr=hzf.unsafe_ptr())
 
     # Scratch for the per-block layout. Sized to the LARGEST block, since the
     # blocks are written one at a time and scattered before the next runs.
@@ -1679,13 +1732,26 @@ def run_tree_layout(
     var flat_folds = ctx.enqueue_create_buffer[DType.uint32](
         len(fold_counts)
     )
+    # ...and their `TBinarizedFeature::OneHotFeature`, which the scan tests
+    # before it prefix-sums anything (`histogram_utils.cu:395`). A one-hot
+    # feature's bins are equality tests, so a running prefix over them is
+    # meaningless. `build_layout` reports False for every feature today; the
+    # flag is carried so the scan is already right when categoricals land.
+    var flat_one_hot = ctx.enqueue_create_buffer[DType.uint8](
+        len(fold_counts)
+    )
     var hff = ctx.enqueue_create_host_buffer[DType.uint32](len(fold_counts))
     var hfd = ctx.enqueue_create_host_buffer[DType.uint32](len(fold_counts))
+    var hfoh = ctx.enqueue_create_host_buffer[DType.uint8](len(fold_counts))
     for i in range(len(fold_counts)):
         hff.unsafe_ptr().unsafe_store(i, layout.features[i].first_fold_index)
         hfd.unsafe_ptr().unsafe_store(i, layout.features[i].folds)
+        hfoh.unsafe_ptr().unsafe_store(
+            i, UInt8(1) if layout.features[i].one_hot_feature else UInt8(0)
+        )
     ctx.enqueue_copy(dst_buf=flat_first, src_ptr=hff.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=flat_folds, src_ptr=hfd.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=flat_one_hot, src_ptr=hfoh.unsafe_ptr())
     ctx.synchronize()
 
     # ================================================================
@@ -1765,12 +1831,23 @@ def run_tree_layout(
         # the leaves JUST COMPUTED and BEFORE the subtraction. A prefix sum is
         # linear, so `scan(parent) - scan(small)` is already `scan(big)` and
         # the derived child needs no further scan.
+        # `numBlocks.x = CeilDivide(fCount * 32, blockSize)`
+        # (`histogram_utils.cu:442`), theirs at one WARP per feature. Ours is
+        # one THREAD per feature, so the same rule is
+        # `ceil(fCount / blockSize)`. The kernel guards with
+        # `feature_id >= feature_count` and has no grid-stride loop, so grid
+        # x of 1 left every feature from 256 up unscanned, holding raw
+        # per-bin counts while the score kernel read them as prefix sums.
         ctx.enqueue_function[scan_histograms_kernel](
             ids_compute.unsafe_ptr(),
             flat_first.unsafe_ptr(), flat_folds.unsafe_ptr(),
+            flat_one_hot.unsafe_ptr(),
             Int32(len(fold_counts)), Int32(hist_cells_per_leaf),
             hist.unsafe_ptr(),
-            grid_dim=(1, n_compute, stat_count), block_dim=(256, 1, 1),
+            grid_dim=(
+                (len(fold_counts) + 255) // 256, n_compute, stat_count
+            ),
+            block_dim=(256, 1, 1),
         )
         mgr.stream_kernel()
 

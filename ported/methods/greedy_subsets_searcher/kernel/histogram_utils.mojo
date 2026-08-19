@@ -70,6 +70,7 @@ def scan_histograms_kernel(
     hist_ids: MutPointer[UInt32, MutAnyOrigin],
     feature_first_bin: MutPointer[UInt32, MutAnyOrigin],
     feature_folds: MutPointer[UInt32, MutAnyOrigin],
+    feature_one_hot: MutPointer[UInt8, MutAnyOrigin],
     feature_count_in: Int32,
     bin_feature_count_in: Int32,
     histogram: MutPointer[Float32, MutAnyOrigin],
@@ -91,6 +92,18 @@ def scan_histograms_kernel(
     One thread per feature is enough because folds per feature is small (255
     at the very most, 1 for the binary features that dominate covtype), while
     features are many. It is the leaf and stat axes that fill the machine.
+
+    ONE-HOT FEATURES ARE SKIPPED, and that is theirs, not a choice
+    (`histogram_utils.cu:395-397`):
+
+        const bool skipFeature = features->OneHotFeature || (features->Folds <= 1);
+        if (!skipFeature) { ... }
+
+    A one-hot feature's bins are EQUALITY tests, not thresholds, so the
+    score kernel reads a bin's own count and a running prefix over them
+    means nothing. The `Folds <= 1` half is theirs too and is free: a
+    single-bin prefix sum is the identity, so running it only costs a
+    read-modify-write.
     """
     var feature_count = Int(feature_count_in)
     var bin_feature_count = Int(bin_feature_count_in)
@@ -106,8 +119,9 @@ def scan_histograms_kernel(
     if feature_id >= feature_count:
         return
 
+    # their `skipFeature` (`histogram_utils.cu:395`), both halves.
     var folds = Int(feature_folds.unsafe_load(feature_id))
-    if folds == 0:
+    if feature_one_hot.unsafe_load(feature_id) != UInt8(0) or folds <= 1:
         return
 
     var base = (

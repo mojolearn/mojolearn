@@ -2,7 +2,7 @@
 
 PORT OF `hist_half_byte.cu` plus the loop it instantiates,
 `compute_hist_loop_one_stat.cuh` (`ALIGN_MEMORY`,
-`TComputeHistogramImpl<OneElement>::Compute`,
+`TComputeHistogramImpl<FourElements>::Compute`,
 `ComputeSplitPropertiesDirectLoadsImpl`), at CatBoost `54a8143a`.
 Transliterated. Do not improve.
 
@@ -11,7 +11,7 @@ compressed index holds EIGHT of them at 4 bits each, so one load feeds eight
 features' worth of histogram work.
 
 **It shares the accumulator and the whole outer loop with `hist_binary`, and
-differs in exactly two places**, which is why the two files read almost
+differs in exactly three places**, which is why the two files read almost
 identically and why that duplication is deliberate rather than sloppy:
 
 1. `GroupSize` is 8 rather than 32, so the grid divides the feature axis by 8
@@ -20,12 +20,17 @@ identically and why that duplication is deliberate rather than sloppy:
    `fold` of feature `fid` is simply `Histogram[fid + 8 * fold]`
    (`hist_half_byte.cu:44`) with no combination decode. Binary features need
    the decode only because four of them share a nibble.
+3. `Unroll` is 1, not 2. Each kernel carries its own arch table
+   (`hist_half_byte.cu:19-25` against `hist_binary.cu:18-26`); what they
+   share is the accumulator base, and the base is where the LOAD WIDTH comes
+   from, which is 4 for both.
 
 Their thread mapping for the writeback, copied: `fid = threadIdx.x >> 4` and
 `fold = threadIdx.x & 15`, so one thread owns one (feature, fold) cell and
 the bounds test is `fold < features[fid].Folds`.
 """
 
+from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
@@ -33,33 +38,56 @@ from max.gpu.sync import barrier, syncwarp
 
 from mojo_only.kernel_matrix import (
     TARGET_COLUMN,
+    deterministic_flush_for,
     requires_uniform_iteration_for,
 )
+from mojo_only.numerics import NUMERIC_FAST, NUMERIC_IDENTICAL
 from ported.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
     BLOCK_SIZE,
     HIST_SIZE,
     REDUCE_WIDTH,
+    add_half_byte_point,
     add_point_slot,
     reduce_stage2_slot,
     slice_offset,
 )
 
 
-#: `THist::Unroll(ECIndexLoadType::Direct)` for `__CUDA_ARCH__ >= 700`
-#: (`hist_binary.cu:20-26`). SCHEDULING row: it changes how many loads are in
-#: flight, not what is summed into what.
-comptime UNROLL = 2
+#: `TPointHistHalfByte::Unroll(ECIndexLoadType)` (`hist_half_byte.cu:19-25`),
+#: which returns 4 below Maxwell and 1 on everything after it. THIS FILE'S
+#: OWN TABLE: the previous value of 2 and the citation to `hist_binary.cu`
+#: were both copy-pasted from the binary kernel, whose table is different
+#: (4 / 1 / 2 by arch, `hist_binary.cu:18-26`). The two kernels share the
+#: accumulator base, not the unroll.
+#:
+#: SCHEDULING row: it changes how many loads are in flight, not what is
+#: summed into what.
+comptime UNROLL = 1
 
-#: DEVIATION (PORTING.md 5): CatBoost selects a 2- or 4-element vector load
-#: by arch (`point_hist_half_byte_template.cuh:34-41`) and instantiates a
-#: different `TComputeHistogramImpl` for each. This port takes the
-#: `OneElement` specialization only. Scheduling, not numeric: the same values
-#: are added in the same order, fewer at a time.
-comptime LOAD_SIZE = 1
+#: `ELoadSize::FourElements`, selected by the SHARED base for both this
+#: kernel and the binary one (`point_hist_half_byte_template.cuh:34-42`).
+#: CatBoost picks it on every arch except Maxwell-to-Volta, and it is the
+#: reason a thread of theirs consumes four points per load where ours used to
+#: consume one. The histogram is bandwidth bound, so this is the load path,
+#: not a detail.
+#:
+#: Raising it REQUIRES the head/tail peel below: a partition offset is not
+#: 4-aligned in general, so a 4-wide load without `AlignMemoryAccess` is
+#: ILLEGAL and not merely slow. The claim this replaces, that the load width
+#: is "scheduling and not numeric", was the same sentence that was wrong for
+#: `hist_one_byte.mojo`.
+comptime LOAD_SIZE = 4
+
+#: `loadSize * N`, the points one thread takes per iteration.
+comptime POINTS_PER_ITER = UNROLL * LOAD_SIZE
 
 #: Lanes moving in lockstep. Pinned rather than read from the device; see
 #: `kernel_matrix.column_lane_width` for why AMD's 64 must not reach this.
 comptime LANE_WIDTH = 32
+
+#: The mode this build compiles against; see `mojo_only/numerics.mojo`. Same
+#: row as `hist_binary.mojo`, and the flush below follows the matrix.
+comptime BUILD_MODE = NUMERIC_FAST
 
 
 def half_byte_hist_kernel(
@@ -79,6 +107,8 @@ def half_byte_hist_kernel(
     part_size: MutPointer[UInt32, MutAnyOrigin],
     part_ids: MutPointer[UInt32, MutAnyOrigin],
     bin_sums: MutPointer[Float32, MutAnyOrigin],
+    acc_i32: MutPointer[Int32, MutAnyOrigin],
+    fixed_scale: Float32,
     leaf_count_in: Int32,
     stat_count_in: Int32,
 ):
@@ -151,20 +181,74 @@ def half_byte_hist_kernel(
     barrier()
     var slice_base = slice_offset(tid)
 
-    # --- ALIGN_MEMORY(1), copied ---------------------------------------
+    # --- AlignMemoryAccess, ported --------------------------------------
+    # (`compute_hist_loop_one_stat.cuh:57-105`, the direct overload.)
     #
-    # DEVIATION (PORTING.md 6): `AlignMemoryAccess` peels an unaligned prefix
-    # so the vector loads that follow are aligned. At LOAD_SIZE 1 there is
-    # nothing to align, so the peel is omitted rather than ported. It becomes
-    # required the moment LOAD_SIZE moves above 1.
+    # REQUIRED by LOAD_SIZE 4, not an optimization: a partition offset is not
+    # 4-aligned in general, so the vector load below is illegal without this.
+    #
+    # Peels the unaligned HEAD and TAIL of the partition on block 0 with
+    # scalar adds, so what remains starts and ends on an `alignSize`
+    # boundary. `alignSize = LoadSize * warpSize * N` is exactly one warp
+    # iteration, which is what lets the striped loop issue ALIGNED 4-wide
+    # loads and carry no per-element bounds test.
+    #
+    #     int lastId = min(partSize, alignSize - (partOffset % alignSize));
+    #     if (blockId == 0) for (idx = tid; idx < alignSize; idx += BlockSize)
+    #     partSize = max(partSize - lastId, 0);
+    #     const int unalignedTail = (partSize % alignSize);
+    #     if (unalignedTail) { if (blockId == 0) { ...tail... } }
+    #     partSize -= unalignedTail;
+    #
+    # Their head and tail loops run to a FIXED `alignSize` bound, so every
+    # thread of block 0 makes the same number of trips and the syncs inside
+    # `AddPoint` stay uniform across the warp. Blocks other than 0 make the
+    # trips too and contribute zeros, which keeps the count uniform without a
+    # second code path.
+    comptime ALIGN_SIZE = LOAD_SIZE * LANE_WIDTH * UNROLL
+
+    var head_len = p_size
+    var to_align = ALIGN_SIZE - (p_offset % ALIGN_SIZE)
+    if to_align < head_len:
+        head_len = to_align
+    if head_len < 0:
+        head_len = 0
+
+    var body_size = p_size - head_len
+    if body_size < 0:
+        body_size = 0
+    var tail_len = body_size % ALIGN_SIZE
+    var tail_start = p_offset + head_len + (body_size - tail_len)
+
+    var pe = tid
+    while pe < ALIGN_SIZE:
+        var hb = UInt32(0)
+        var hs = Float32(0.0)
+        if local_block_idx == 0 and pe < head_len:
+            hb = bins_p.unsafe_load(p_offset + pe)
+            hs = stats_p.unsafe_load(p_offset + pe)
+        add_half_byte_point(hb, hs, tid, slice_base, smem)
+
+        var tb = UInt32(0)
+        var ts = Float32(0.0)
+        if local_block_idx == 0 and pe < tail_len:
+            tb = bins_p.unsafe_load(tail_start + pe)
+            ts = stats_p.unsafe_load(tail_start + pe)
+        add_half_byte_point(tb, ts, tid, slice_base, smem)
+        pe += BLOCK_SIZE
+
+    # the striped loop sees the ALIGNED MIDDLE only
+    var aligned_offset = p_offset + head_len
+    var aligned_size = body_size - tail_len
+
     var warps_per_block = BLOCK_SIZE // LANE_WIDTH
     var global_warp_id = local_block_idx * warps_per_block + (tid // LANE_WIDTH)
     var entries_per_warp = LANE_WIDTH * UNROLL * LOAD_SIZE
     var stripe_size = entries_per_warp * warps_per_block * active_block_count
-    var remaining = max(p_size - global_warp_id * entries_per_warp, 0)
+    var remaining = max(aligned_size - global_warp_id * entries_per_warp, 0)
     var local_idx = (tid & (LANE_WIDTH - 1)) * LOAD_SIZE
 
-    var base = p_offset + global_warp_id * entries_per_warp + local_idx
+    var base = aligned_offset + global_warp_id * entries_per_warp + local_idx
     var iter_count = (remaining - local_idx + stripe_size - 1) // stripe_size
 
     # THE BARRIER MUST NOT DIVERGE. The requirement is a MATRIX ROW,
@@ -195,7 +279,7 @@ def half_byte_hist_kernel(
     # So every thread runs the SAME iteration count and the ones with no rows
     # contribute nothing. `block.max` is not available here, so the count is
     # derived from the partition size, which every thread already has.
-    var max_iters = (p_size + stripe_size - 1) // stripe_size
+    var max_iters = (aligned_size + stripe_size - 1) // stripe_size
     if max_iters < 1:
         max_iters = 1
 
@@ -206,40 +290,74 @@ def half_byte_hist_kernel(
         var active = it < iter_count
         # Their two unrolled loops: gather the batch, then add it. Kept in
         # that order because it is what keeps the loads in flight.
-        var local_bins = InlineArray[UInt32, UNROLL](fill=0)
-        var local_stats = InlineArray[Float32, UNROLL](fill=0)
+        var local_bins = InlineArray[UInt32, POINTS_PER_ITER](fill=0)
+        var local_stats = InlineArray[Float32, POINTS_PER_ITER](fill=0)
 
+        # `Ldg((uint4*) bins, warpSize * k)` and its `float4` twin
+        # (`compute_hist_loop_one_stat.cuh:366-375`). Indexing a `uint4*` by
+        # `warpSize * k` advances `warpSize * k * 4` ELEMENTS, which is the
+        # element-space stride written here.
+        #
+        # NO per-element bounds test. The peel above leaves a whole number of
+        # warp iterations, so an ACTIVE iteration is wholly in range. That is
+        # the entire reason `AlignMemoryAccess` exists, and it is what makes
+        # a 4-wide load legal as well as fast. Only the uniform-iteration
+        # guard remains, and that one is ours.
         @parameter
         for k in range(UNROLL):
-            if active and base + it * stripe_size + LANE_WIDTH * k < p_offset + p_size:
-                local_bins[k] = b_ptr.unsafe_load(LANE_WIDTH * k)
-                local_stats[k] = s_ptr.unsafe_load(LANE_WIDTH * k)
+            if active:
+                var vb = (b_ptr + LANE_WIDTH * LOAD_SIZE * k).load[
+                    width=LOAD_SIZE
+                ]()
+                var vs = (s_ptr + LANE_WIDTH * LOAD_SIZE * k).load[
+                    width=LOAD_SIZE
+                ]()
+
+                @parameter
+                for e in range(LOAD_SIZE):
+                    local_bins[k * LOAD_SIZE + e] = vb[e]
+                    local_stats[k * LOAD_SIZE + e] = vs[e]
             else:
                 # No row: contribute zero. The slot it lands in is harmless
-                # because the stat is 0.0, and it keeps this lane inside every
-                # barrier below.
-                local_bins[k] = UInt32(0)
-                local_stats[k] = Float32(0.0)
+                # because the stat is 0.0, and it keeps this lane inside
+                # every sync below.
+                @parameter
+                for e in range(LOAD_SIZE):
+                    local_bins[k * LOAD_SIZE + e] = UInt32(0)
+                    local_stats[k * LOAD_SIZE + e] = Float32(0.0)
 
-        # `AddPoint`, inlined. The 8 lanes of a tile touch 8 distinct slots
-        # per iteration (see `add_point_slot`), so the update is a plain
-        # `+=` with no atomic. The barrier between iterations is CatBoost's
-        # 8-lane `addToHistTile.sync()` widened to the threadgroup, which is
-        # correct and strictly more expensive (PORTING.md 2). It is NOT safe
-        # to drop: distinctness holds WITHIN an iteration only.
+        # `hist.AddPoints<loadSize * N>(...)`
+        # (`point_hist_half_byte_template.cuh:103-112`), which hands the
+        # points to `AddPointsImpl<N>` (:79-101) in batches of
+        # `AddPointsBatchSize()` = LOAD_SIZE.
+        #
+        # THE NEST IS THEIRS, and its ORDER is the whole point: `i`, the
+        # feature rotation, is OUTER and `k`, the batch, is INNER, with
+        # exactly ONE sync per `i` -- 8 syncs per batch of LOAD_SIZE points.
+        # Ours had `k` outer and `i` inner, which pays 8 syncs PER POINT.
+        #
+        # It stays collision-free because distinctness is a property of `i`
+        # and not of `k`: within one `i` the 8 lanes of a tile hold 8
+        # distinct values of `f = (tid + i) & 7`, and the slot carries `f` in
+        # its low three bits, so no two lanes of the tile can land on the
+        # same slot however many `k` they run. That is exactly why the sync
+        # belongs on `i`.
         @parameter
-        for k in range(UNROLL):
+        for batch in range(UNROLL):
+
             @parameter
             for i in range(8):
-                var slot = slice_base + add_point_slot(local_bins[k], tid, i)
-                smem[slot] = smem[slot] + local_stats[k]
-                # `addToHistTile.sync()`, an 8-lane
-                # `tiled_partition<8>` in theirs. `syncwarp` is 32 lanes, so
-                # it orders a SUPERSET and is still correct; it is the
-                # narrowest sync Mojo exposes. It had been widened to a
-                # threadgroup `barrier()`, which is correct and strictly
-                # more expensive. Warp SHUFFLES are what Mojo lacks, not
-                # warp SYNC, and the two were conflated.
+
+                @parameter
+                for e in range(LOAD_SIZE):
+                    var t = local_stats[batch * LOAD_SIZE + e]
+                    var slot = slice_base + add_point_slot(
+                        local_bins[batch * LOAD_SIZE + e], tid, i
+                    )
+                    smem[slot] = smem[slot] + t
+                # `addToHistTile.sync()`, an 8-lane `tiled_partition<8>` in
+                # theirs. `syncwarp` is 32 lanes, so it orders a SUPERSET and
+                # is still correct; it is the narrowest sync Mojo exposes.
                 syncwarp()
 
         b_ptr += stripe_size
@@ -301,10 +419,72 @@ def half_byte_hist_kernel(
                 + Int(feature_fold_offset.unsafe_load(feature_offset + fid))
             )
             var val = smem[fid + 8 * fold]
+
+            # Their guard, copied: skip a flush that cannot matter, so the
+            # replicated path is not paid for nothing.
             if abs(val) > Float32(1e-20):
-                # DEVIATION (mojo_only/numerics.mojo): their multi-block arm
-                # is atomicAdd on float, which Metal cannot express at all.
-                dst.unsafe_store(fold, val)
+                # THE FLUSH, `hist_half_byte.cu:45-51`:
+                #
+                #     if (blockCount > 1) { atomicAdd(dst + fold, val); }
+                #     else                { dst[fold] = val; }
+                #
+                # This kernel had NO multi-block arm at all: it took the
+                # plain store on both branches, so replicating blocks across
+                # a partition left ONE block's partial histogram standing and
+                # threw the rest away. Replication is what fills the machine,
+                # so this was not a corner case.
+                #
+                # DEVIATION BLOCK
+                # ---------------
+                # THEIRS: `atomicAdd` on a float.
+                # OURS:   `val * fixed_scale` quantized to Int32 and summed
+                #         with an integer atomic.
+                # WHY:    Metal has no float atomic add. Integer addition is
+                #         also associative, so unlike their float atomic the
+                #         result does not depend on which block lands first
+                #         and the histogram is reproducible run to run.
+                #
+                # Same shape as `hist_binary.mojo` and `hist_one_byte.mojo`,
+                # including the address arithmetic: the accumulator is the
+                # fixed-point TWIN of the same `bin_sums` cell, so it repeats
+                # `device_offset` and keys on the DENSE `blockIdx.y` rather
+                # than on `partIds[blockIdx.y]`.
+                #
+                # THE ROW, read from the matrix rather than assumed. On Apple
+                # it is forced true because Metal has no float atomic; on
+                # NVIDIA and AMD it follows the mode. Comptime, because the
+                # two flushes are different code and not a configured value,
+                # which is the distinction numerics.mojo draws.
+                comptime det = deterministic_flush_for[
+                    TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
+                ]()
+
+                @parameter
+                if det:
+                    if active_block_count > 1:
+                        var q = Int32(val * fixed_scale)
+                        _ = Atomic.fetch_add(
+                            acc_i32.unsafe_offset(
+                                device_offset
+                                + Int(block_idx.y) * entries_per_leaf
+                                + Int(block_idx.z) * group_size
+                                + Int(
+                                    feature_fold_offset.unsafe_load(
+                                        feature_offset + fid
+                                    )
+                                )
+                                + fold
+                            ),
+                            q,
+                        )
+                    else:
+                        dst.unsafe_store(fold, val)
+                else:
+                    # CatBoost's float-atomic path. Unreachable while
+                    # TARGET_COLUMN is apple. Left as a plain store rather
+                    # than a float atomic Mojo cannot emit; the day a CUDA
+                    # column is built this is where their branch goes.
+                    dst.unsafe_store(fold, val)
 
 
 def half_byte_hist_gather_kernel(
@@ -325,6 +505,8 @@ def half_byte_hist_gather_kernel(
     part_size: MutPointer[UInt32, MutAnyOrigin],
     part_ids: MutPointer[UInt32, MutAnyOrigin],
     bin_sums: MutPointer[Float32, MutAnyOrigin],
+    acc_i32: MutPointer[Int32, MutAnyOrigin],
+    fixed_scale: Float32,
     leaf_count_in: Int32,
     stat_count_in: Int32,
 ):
@@ -399,20 +581,77 @@ def half_byte_hist_gather_kernel(
     barrier()
     var slice_base = slice_offset(tid)
 
-    # --- ALIGN_MEMORY(1), copied ---------------------------------------
+    # --- AlignMemoryAccess (gather), ported
+    # (`compute_hist_loop_one_stat.cuh:107-157`). Same peel as the direct
+    # variant; the difference is only that the bin comes through `indices`.
     #
-    # DEVIATION (PORTING.md 6): `AlignMemoryAccess` peels an unaligned prefix
-    # so the vector loads that follow are aligned. At LOAD_SIZE 1 there is
-    # nothing to align, so the peel is omitted rather than ported. It becomes
-    # required the moment LOAD_SIZE moves above 1.
+    # REQUIRED by LOAD_SIZE 4, not an optimization: a partition offset is not
+    # 4-aligned in general, so the vector load below is illegal without this.
+    #
+    # Peels the unaligned HEAD and TAIL of the partition on block 0 with
+    # scalar adds, so what remains starts and ends on an `alignSize`
+    # boundary. `alignSize = LoadSize * warpSize * N` is exactly one warp
+    # iteration, which is what lets the striped loop issue ALIGNED 4-wide
+    # loads and carry no per-element bounds test.
+    #
+    #     int lastId = min(partSize, alignSize - (partOffset % alignSize));
+    #     if (blockId == 0) for (idx = tid; idx < alignSize; idx += BlockSize)
+    #     partSize = max(partSize - lastId, 0);
+    #     const int unalignedTail = (partSize % alignSize);
+    #     if (unalignedTail) { if (blockId == 0) { ...tail... } }
+    #     partSize -= unalignedTail;
+    #
+    # Their head and tail loops run to a FIXED `alignSize` bound, so every
+    # thread of block 0 makes the same number of trips and the syncs inside
+    # `AddPoint` stay uniform across the warp. Blocks other than 0 make the
+    # trips too and contribute zeros, which keeps the count uniform without a
+    # second code path.
+    comptime ALIGN_SIZE = LOAD_SIZE * LANE_WIDTH * UNROLL
+
+    var head_len = p_size
+    var to_align = ALIGN_SIZE - (p_offset % ALIGN_SIZE)
+    if to_align < head_len:
+        head_len = to_align
+    if head_len < 0:
+        head_len = 0
+
+    var body_size = p_size - head_len
+    if body_size < 0:
+        body_size = 0
+    var tail_len = body_size % ALIGN_SIZE
+    var tail_start = p_offset + head_len + (body_size - tail_len)
+
+    var pe = tid
+    while pe < ALIGN_SIZE:
+        var hb = UInt32(0)
+        var hs = Float32(0.0)
+        if local_block_idx == 0 and pe < head_len:
+            var hrow = Int(indices.unsafe_load(p_offset + pe))
+            hb = cindex_p.unsafe_load(hrow)
+            hs = stats_p.unsafe_load(p_offset + pe)
+        add_half_byte_point(hb, hs, tid, slice_base, smem)
+
+        var tb = UInt32(0)
+        var ts = Float32(0.0)
+        if local_block_idx == 0 and pe < tail_len:
+            var trow = Int(indices.unsafe_load(tail_start + pe))
+            tb = cindex_p.unsafe_load(trow)
+            ts = stats_p.unsafe_load(tail_start + pe)
+        add_half_byte_point(tb, ts, tid, slice_base, smem)
+        pe += BLOCK_SIZE
+
+    # the striped loop sees the ALIGNED MIDDLE only
+    var aligned_offset = p_offset + head_len
+    var aligned_size = body_size - tail_len
+
     var warps_per_block = BLOCK_SIZE // LANE_WIDTH
     var global_warp_id = local_block_idx * warps_per_block + (tid // LANE_WIDTH)
     var entries_per_warp = LANE_WIDTH * UNROLL * LOAD_SIZE
     var stripe_size = entries_per_warp * warps_per_block * active_block_count
-    var remaining = max(p_size - global_warp_id * entries_per_warp, 0)
+    var remaining = max(aligned_size - global_warp_id * entries_per_warp, 0)
     var local_idx = (tid & (LANE_WIDTH - 1)) * LOAD_SIZE
 
-    var base = p_offset + global_warp_id * entries_per_warp + local_idx
+    var base = aligned_offset + global_warp_id * entries_per_warp + local_idx
     var iter_count = (remaining - local_idx + stripe_size - 1) // stripe_size
 
     # THE BARRIER MUST NOT DIVERGE. The requirement is a MATRIX ROW,
@@ -443,7 +682,7 @@ def half_byte_hist_gather_kernel(
     # So every thread runs the SAME iteration count and the ones with no rows
     # contribute nothing. `block.max` is not available here, so the count is
     # derived from the partition size, which every thread already has.
-    var max_iters = (p_size + stripe_size - 1) // stripe_size
+    var max_iters = (aligned_size + stripe_size - 1) // stripe_size
     if max_iters < 1:
         max_iters = 1
 
@@ -454,44 +693,82 @@ def half_byte_hist_gather_kernel(
         var active = it < iter_count
         # Their two unrolled loops: gather the batch, then add it. Kept in
         # that order because it is what keeps the loads in flight.
-        var local_bins = InlineArray[UInt32, UNROLL](fill=0)
-        var local_stats = InlineArray[Float32, UNROLL](fill=0)
+        var local_bins = InlineArray[UInt32, POINTS_PER_ITER](fill=0)
+        var local_stats = InlineArray[Float32, POINTS_PER_ITER](fill=0)
 
+        # Their gather batch (`compute_hist_loop_one_stat.cuh:406-424`):
+        #
+        #     localIndices[k] = Ldg((int4*) indices, warpSize * k);
+        #     localBins[k].x  = Ldg(cindex, localIndices[k].x);   ...
+        #     localStats[k]   = Ldg((float4*) stats, warpSize * k);
+        #
+        # The INDICES and the STATS are contiguous, so both load 4-wide. Only
+        # the BINS are gathered, one at a time, because a gather has no
+        # vector form. That asymmetry is theirs and it is the point: two of
+        # the three streams still get the wide load.
+        #
+        # NO per-element bounds test: the peel above leaves a whole number of
+        # warp iterations, so an ACTIVE iteration is wholly in range.
         @parameter
         for k in range(UNROLL):
-            if active and base + it * stripe_size + LANE_WIDTH * k < p_offset + p_size:
-                # THE GATHER: position -> row -> bin. The compressed index
-                # is never permuted, so after a reorder position no longer
-                # names a row. See hist_binary for the full note.
-                var row = Int(i_ptr.unsafe_load(LANE_WIDTH * k))
-                local_bins[k] = cindex_p.unsafe_load(row)
-                local_stats[k] = s_ptr.unsafe_load(LANE_WIDTH * k)
+            if active:
+                var vi = (i_ptr + LANE_WIDTH * LOAD_SIZE * k).load[
+                    width=LOAD_SIZE
+                ]()
+                var vs = (s_ptr + LANE_WIDTH * LOAD_SIZE * k).load[
+                    width=LOAD_SIZE
+                ]()
+
+                @parameter
+                for e in range(LOAD_SIZE):
+                    # THE GATHER: position -> row -> bin. The compressed
+                    # index is never permuted, so after a reorder position no
+                    # longer names a row. See hist_binary for the full note.
+                    local_bins[k * LOAD_SIZE + e] = cindex_p.unsafe_load(
+                        Int(vi[e])
+                    )
+                    local_stats[k * LOAD_SIZE + e] = vs[e]
             else:
                 # No row: contribute zero. The slot it lands in is harmless
-                # because the stat is 0.0, and it keeps this lane inside every
-                # barrier below.
-                local_bins[k] = UInt32(0)
-                local_stats[k] = Float32(0.0)
+                # because the stat is 0.0, and it keeps this lane inside
+                # every sync below.
+                @parameter
+                for e in range(LOAD_SIZE):
+                    local_bins[k * LOAD_SIZE + e] = UInt32(0)
+                    local_stats[k * LOAD_SIZE + e] = Float32(0.0)
 
-        # `AddPoint`, inlined. The 8 lanes of a tile touch 8 distinct slots
-        # per iteration (see `add_point_slot`), so the update is a plain
-        # `+=` with no atomic. The barrier between iterations is CatBoost's
-        # 8-lane `addToHistTile.sync()` widened to the threadgroup, which is
-        # correct and strictly more expensive (PORTING.md 2). It is NOT safe
-        # to drop: distinctness holds WITHIN an iteration only.
+        # `hist.AddPoints<loadSize * N>(...)`
+        # (`point_hist_half_byte_template.cuh:103-112`), which hands the
+        # points to `AddPointsImpl<N>` (:79-101) in batches of
+        # `AddPointsBatchSize()` = LOAD_SIZE.
+        #
+        # THE NEST IS THEIRS, and its ORDER is the whole point: `i`, the
+        # feature rotation, is OUTER and `k`, the batch, is INNER, with
+        # exactly ONE sync per `i` -- 8 syncs per batch of LOAD_SIZE points.
+        # Ours had `k` outer and `i` inner, which pays 8 syncs PER POINT.
+        #
+        # It stays collision-free because distinctness is a property of `i`
+        # and not of `k`: within one `i` the 8 lanes of a tile hold 8
+        # distinct values of `f = (tid + i) & 7`, and the slot carries `f` in
+        # its low three bits, so no two lanes of the tile can land on the
+        # same slot however many `k` they run. That is exactly why the sync
+        # belongs on `i`.
         @parameter
-        for k in range(UNROLL):
+        for batch in range(UNROLL):
+
             @parameter
             for i in range(8):
-                var slot = slice_base + add_point_slot(local_bins[k], tid, i)
-                smem[slot] = smem[slot] + local_stats[k]
-                # `addToHistTile.sync()`, an 8-lane
-                # `tiled_partition<8>` in theirs. `syncwarp` is 32 lanes, so
-                # it orders a SUPERSET and is still correct; it is the
-                # narrowest sync Mojo exposes. It had been widened to a
-                # threadgroup `barrier()`, which is correct and strictly
-                # more expensive. Warp SHUFFLES are what Mojo lacks, not
-                # warp SYNC, and the two were conflated.
+
+                @parameter
+                for e in range(LOAD_SIZE):
+                    var t = local_stats[batch * LOAD_SIZE + e]
+                    var slot = slice_base + add_point_slot(
+                        local_bins[batch * LOAD_SIZE + e], tid, i
+                    )
+                    smem[slot] = smem[slot] + t
+                # `addToHistTile.sync()`, an 8-lane `tiled_partition<8>` in
+                # theirs. `syncwarp` is 32 lanes, so it orders a SUPERSET and
+                # is still correct; it is the narrowest sync Mojo exposes.
                 syncwarp()
 
         i_ptr += stripe_size
@@ -553,7 +830,69 @@ def half_byte_hist_gather_kernel(
                 + Int(feature_fold_offset.unsafe_load(feature_offset + fid))
             )
             var val = smem[fid + 8 * fold]
+
+            # Their guard, copied: skip a flush that cannot matter, so the
+            # replicated path is not paid for nothing.
             if abs(val) > Float32(1e-20):
-                # DEVIATION (mojo_only/numerics.mojo): their multi-block arm
-                # is atomicAdd on float, which Metal cannot express at all.
-                dst.unsafe_store(fold, val)
+                # THE FLUSH, `hist_half_byte.cu:45-51`:
+                #
+                #     if (blockCount > 1) { atomicAdd(dst + fold, val); }
+                #     else                { dst[fold] = val; }
+                #
+                # This kernel had NO multi-block arm at all: it took the
+                # plain store on both branches, so replicating blocks across
+                # a partition left ONE block's partial histogram standing and
+                # threw the rest away. Replication is what fills the machine,
+                # so this was not a corner case.
+                #
+                # DEVIATION BLOCK
+                # ---------------
+                # THEIRS: `atomicAdd` on a float.
+                # OURS:   `val * fixed_scale` quantized to Int32 and summed
+                #         with an integer atomic.
+                # WHY:    Metal has no float atomic add. Integer addition is
+                #         also associative, so unlike their float atomic the
+                #         result does not depend on which block lands first
+                #         and the histogram is reproducible run to run.
+                #
+                # Same shape as `hist_binary.mojo` and `hist_one_byte.mojo`,
+                # including the address arithmetic: the accumulator is the
+                # fixed-point TWIN of the same `bin_sums` cell, so it repeats
+                # `device_offset` and keys on the DENSE `blockIdx.y` rather
+                # than on `partIds[blockIdx.y]`.
+                #
+                # THE ROW, read from the matrix rather than assumed. On Apple
+                # it is forced true because Metal has no float atomic; on
+                # NVIDIA and AMD it follows the mode. Comptime, because the
+                # two flushes are different code and not a configured value,
+                # which is the distinction numerics.mojo draws.
+                comptime det = deterministic_flush_for[
+                    TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
+                ]()
+
+                @parameter
+                if det:
+                    if active_block_count > 1:
+                        var q = Int32(val * fixed_scale)
+                        _ = Atomic.fetch_add(
+                            acc_i32.unsafe_offset(
+                                device_offset
+                                + Int(block_idx.y) * entries_per_leaf
+                                + Int(block_idx.z) * group_size
+                                + Int(
+                                    feature_fold_offset.unsafe_load(
+                                        feature_offset + fid
+                                    )
+                                )
+                                + fold
+                            ),
+                            q,
+                        )
+                    else:
+                        dst.unsafe_store(fold, val)
+                else:
+                    # CatBoost's float-atomic path. Unreachable while
+                    # TARGET_COLUMN is apple. Left as a plain store rather
+                    # than a float atomic Mojo cannot emit; the day a CUDA
+                    # column is built this is where their branch goes.
+                    dst.unsafe_store(fold, val)

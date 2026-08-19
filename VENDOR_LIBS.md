@@ -187,7 +187,45 @@ neither needed a library.
 
 ---
 
-## 5. The rule for a genuine gap
+## 5. Wrong DEFAULTS found alongside the vendor audit
+
+Not vendor calls, but the same category of error: a value we chose where
+CatBoost had already chosen one. Each is a live divergence from stock
+CatBoost behaviour, not a scope gap.
+
+| ours | theirs | citation |
+|---|---|---|
+| score function is L2, and not configurable | **Cosine** is the shipped default | `oblivious_tree_options.cpp:22` |
+| `max_leaf_value` clamp | **no such parameter exists in CatBoost**; they have `RegularizeImpl`, which zeroes leaves under `MinLeafWeight` | `oracle_interface.h:43-53` |
+| `l2_leaf_reg` fed the leaf kernel but the score kernel got a literal `3.0` | one field feeds both | `greedy_search_helper.cpp:466`, `:646` -- FIXED |
+| tie-break kept the lower thread id | tie-break keeps the lower BIN index | `compute_scores.cu:30` -- FIXED |
+| leaf guard `w <= 0`, no epsilon in the denominator | `w > 1e-20`, and `+1e-20` | `greedy_search_helper.cpp:646`, `descent_helpers.cpp:87` -- FIXED |
+| `replicas_for`, an invented width heuristic | occupancy: `blocksPerSm * SMCount()` | `hist_binary.cu:95` -- FIXED |
+| threadgroup `barrier()` | `tiled_partition<32>().sync()` | `hist_one_byte.cu` -- FIXED |
+| `LOAD_SIZE = 1` | `ELoadSize::FourElements` | `hist_one_byte.cu:47` -- FIXED for one-byte |
+| tree grows to `max_depth` | stop when a split repeats | `oblivious_tree_doc_parallel_structure_searcher.cpp:134` -- FIXED |
+| no `Score < 0` gate | a leaf is only put forward if its best score is negative | `greedy_search_helper.cpp:362` |
+| no feature weights on the gain | `gain *= binFeaturesWeights[featureId]` | `compute_scores.cu:136` |
+| `partStats` are Float32 | **double**, and the right-child subtraction is done in double before narrowing | `compute_scores.cu:60`, `:99` |
+
+## 6. Structural substitutions still open
+
+Places where theirs has a shape ours does not, found by the same audits.
+None of these is a vendor call; all are portable CUDA we simply have not
+ported.
+
+| theirs | ours | why it matters |
+|---|---|---|
+| `GatherInplaceLeqSize<SIZE>` shared-memory fast path below 1024 rows, ONE launch (`split_points.cu:52-112`) | always the global path, three launches | every leaf at depth 4+ on normal data; directly the fixed per-tree overhead |
+| Copy then Gather, both restricted to leaf ranges (`split_points.cpp:71-88`) | Gather then a FULL-ARRAY copy | correctness landmine plus full-`n_rows` traffic per level |
+| stat columns chunked 8 at a time (`split_points.cpp:66`) | all stats in one shot | temp storage sized to the chunk, not the whole thing |
+| five single-leaf kernel variants, dispatched at count `<= 2` | always the plural id-list form | a host id-buffer write and copy at depths 0 and 1 |
+| `partsCpu` is PINNED host memory written by the kernel (`split_points.cpp:177`) | an ordinary device buffer nothing reads | a full D2H stall every level |
+| `NonZeroLeaves` / `ZeroLeaves` disjoint sets (`split_properties_helper.cpp:762-784`) | one undifferentiated list fed to both | a wasted histogram launch per empty leaf per level |
+| grid x from `SMCount()`, halved above 4 leaves (`split_points.cu:220`) | `min(256, ceil(n_rows/256))`, device-blind | never adapts across GPUs |
+| `WriteThrough` = `cub::ThreadStore<STORE_WT>` on every streaming store | plain stores | keeps write-once data out of L1; may not port to Apple, but the drop is unrecorded |
+
+## 7. The rule for a genuine gap
 
 If nothing ships, hand-write it AND record the search that came up empty in a
 `DEVIATION BLOCK`, so the next person does not repeat it and does not assume

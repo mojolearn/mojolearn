@@ -27,40 +27,71 @@ The mechanism, in their words rearranged:
 each, so one load feeds eight histogram updates. That is the read-density
 win: mojotrees issues eight one-byte loads for the same work.
 
-DEVIATION, see PORTING.md 1 and 2: `BLOCK_SIZE` is 256 rather than their 768
-because Apple caps threadgroup memory at 32 KB, and their 8-lane
-`tiled_partition<8>::sync()` becomes a threadgroup-wide `barrier()` because
-Mojo 1.0 has no warp primitives.
+DEVIATION (PORTING.md 1): `BLOCK_SIZE` is 512 rather than their 768 because
+Apple caps threadgroup memory at 32 KB and this accumulator wants 16 floats
+per thread, so 32,768 / (16 * 4) = 512 threads is the largest block that
+fits. Their `tiled_partition<8>::sync()` becomes `syncwarp()`, a 32-lane
+sync: it orders a SUPERSET of the 8 lanes theirs orders, so it is correct,
+and it is the narrowest sync Mojo 1.0 exposes. Warp SHUFFLES are what Mojo
+lacks, not warp SYNC.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import syncwarp
 
 from mojo_only.kernel_matrix import (
     K_HIST_HALF_BYTE,
     TARGET_COLUMN,
     block_size_for,
     hist_floats_per_thread_for,
-    reduce_width_for,
 )
 from mojo_only.numerics import NUMERIC_IDENTICAL, NUMERIC_FAST
 
 
 #: READ FROM THE MATRIX, not restated here. `mojo_only/kernel_matrix.mojo`
-#: owns every knob, and a kernel that hardcodes one makes the table
-#: decoration. CatBoost uses 768; Apple's 32 KB ceiling over 16 floats per
-#: thread yields 512, which is exactly 32,768 bytes.
+#: owns every knob that is a BUDGET, and a kernel that hardcodes one makes
+#: the table decoration. CatBoost uses 768; Apple's 32 KB ceiling over 16
+#: floats per thread yields 512, which is exactly 32,768 bytes.
 comptime BLOCK_SIZE = block_size_for[K_HIST_HALF_BYTE, TARGET_COLUMN]()
+
+#: Lanes moving in lockstep, and the unit `SliceOffset()` replicates over.
+#: Pinned rather than read from the device; see
+#: `kernel_matrix.column_lane_width` for why AMD's 64 must not reach this.
+comptime LANE_WIDTH = 32
 
 #: The mode this build compiles against. See `mojo_only/numerics.mojo`; FAST
 #: is the default and on Apple the flush row is forced deterministic anyway,
 #: because Metal has no float atomic add.
 comptime BUILD_MODE = NUMERIC_FAST
 
-#: Also from the matrix. CatBoost writes the literal 512 and can, because
-#: its BlockSize is 768; ours must not exceed the block or stage 1 leaves
-#: slots unwritten that stage 2 reads.
-comptime REDUCE_WIDTH = reduce_width_for[
-    K_HIST_HALF_BYTE, TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
+#: `Reduce()`'s stage-1 width (`point_hist_half_byte_template.cuh:115-134`).
+#:
+#: THE DERIVATION, because the old one was a coincidence. Their literal 512
+#: is NOT "512 because BlockSize is 768". It is the size of ONE WARP'S
+#: PRIVATE REPLICA, established by `SliceOffset()` at
+#: `point_hist_half_byte_template.cuh:48-52`:
+#:
+#:     const int warpOffset = 512 * (threadIdx.x / 32);
+#:
+#: i.e. `LANE_WIDTH * 16`, lanes per warp times floats per thread. Folding
+#: the scratch at exactly that stride is what sums a bin ACROSS the warps'
+#: private copies while leaving the 512-float layout of a single copy
+#: standing for stage 2 to un-scramble. Any other width sums the wrong
+#: cells, so this is a NUMERIC quantity and not a tunable one.
+#:
+#: It used to be read from `mojo_only/kernel_matrix.mojo`, whose
+#: `reduce_width_for` returns the BLOCK SIZE under `NUMERIC_FAST`. That is
+#: 512 on Apple by accident and 768 on CatBoost's own configuration, where
+#: it would be wrong. The block size does not belong in this quantity, so
+#: the matrix is no longer consulted for it.
+#:
+#: Stage 1 strides `slot_i += BLOCK_SIZE` while `slot_i < REDUCE_WIDTH`, and
+#: it carries barriers, so BLOCK_SIZE must divide or equal REDUCE_WIDTH for
+#: the trip count to stay uniform. At 512 and 512 every thread makes exactly
+#: one trip.
+comptime REDUCE_WIDTH = LANE_WIDTH * hist_floats_per_thread_for[
+    K_HIST_HALF_BYTE
 ]()
 
 #: `GetHistSize()`, `BlockSize * 16`, with the 16 from the matrix.
@@ -92,12 +123,10 @@ def add_point_slot(ci: UInt32, tid: Int, i: Int) -> Int:
         bin <<= 5;
         bin += f;
 
-    DEVIATION (PORTING.md 10): CatBoost keeps this inside `AddPoint`, which
-    also owns the shared pointer and the 8-lane sync. Mojo cannot pass a
-    shared-memory pointer across a function boundary without a concrete
-    origin, so the ARITHMETIC lives here and the load, the add and the
-    barrier are inlined at the call site. Same operations, same order; the
-    split is a language constraint and not a design change.
+    CatBoost keeps this inside `AddPoint`. Here the ARITHMETIC is factored
+    out so that `AddPoint` (below) and `AddPointsImpl`'s inner batch loop,
+    which is inlined at each call site, can share one copy of it. Same
+    operations, same order.
 
     Why the slot is collision-free: the 8 lanes of a tile hold 8 distinct
     values of `tid & 7`, so `(tid + i) & 7` is a permutation of them and the
@@ -110,6 +139,54 @@ def add_point_slot(ci: UInt32, tid: Int, i: Int) -> Int:
     bin <<= 5
     bin += f
     return bin
+
+
+def add_half_byte_point(
+    ci: UInt32,
+    stat: Float32,
+    tid: Int,
+    slice_base: Int,
+    smem: UnsafePointer[
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+        origin=MutUntrackedOrigin,
+    ],
+):
+    """`TPointHistHalfByteBase::AddPoint`, ONE point, as a callable
+    (`point_hist_half_byte_template.cuh:65-77`):
+
+        thread_block_tile<8> addToHistTile = tiled_partition<8>(...);
+        #pragma unroll
+        for (int i = 0; i < 8; i++) {
+            const int f = (threadIdx.x + i) & 7;
+            int bin = (ci >> (28 - 4 * f)) & 15;
+            bin <<= 5;
+            bin += f;
+            Histogram[bin] += t;
+            addToHistTile.sync();
+        }
+
+    Their `AddPoint` is a method, so `AlignMemoryAccess`
+    (`compute_hist_loop_one_stat.cuh:81`, `:129`) calls the SAME code the
+    main loop does. Ours used to be inlined in the loop only, which is fine
+    right up until the head/tail peel needs it too; duplicating a
+    sync-carrying accumulation in four places is how the four copies drift.
+
+    DEVIATION BLOCK
+    ---------------
+    THEIRS: `addToHistTile.sync()` on a `tiled_partition<8>`.
+    OURS:   `syncwarp()`, 32 lanes.
+    WHY:    Mojo 1.0 exposes no 8-lane tile. 32 lanes is a SUPERSET of the 8
+            theirs orders, so the ordering guarantee is strictly stronger and
+            the result is unchanged. It is warp-local either way, so callers
+            need a uniform trip count per WARP only, not per block.
+    """
+
+    @parameter
+    for i in range(8):
+        var slot = slice_base + add_point_slot(ci, tid, i)
+        smem[slot] = smem[slot] + stat
+        syncwarp()
 
 
 def reduce_stage2_slot(tid: Int, group: Int) -> Int:

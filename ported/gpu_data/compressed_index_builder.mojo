@@ -66,30 +66,49 @@ def build_layout(fold_counts: List[Int]) raises -> CompressedIndexLayout:
     goes in the SMALLEST policy whose `MaxFolds` covers it, and features of
     the same policy are packed `FeaturesPerInt` to a column in order.
 
-    Histogram slices are assigned in input order across all policies, so
-    `first_fold_index` is a running total and the histogram is one flat array
-    the score kernel walks without knowing about policies at all. That is
-    what lets `compute_scores` be policy-blind.
+    ONE WALK, IN POLICY-BLOCK ORDER, AND IT HAS TO BE.
+    ==================================================
+    CatBoost derives a feature's `FirstFoldIndex` and its group's write
+    offset into the flat histogram from the SAME builder in the SAME pass:
+    `GroupBinFeatureOffsets` records `BinFeaturesBuilder.GetCurrentSize(dev)`
+    at the top of `AddGroup` (`compute_by_blocks_helper.cpp:189`) and each
+    feature's `FirstFoldIndex` is stamped from that same builder a few lines
+    down (`:218`), with `AddGroup` called once per group in group order
+    (`:341`). The two therefore agree by construction and cannot drift.
+
+    This walk is the port of that invariant. It visits POLICIES in the order
+    `feature_blocks.blocks_for` emits blocks, and features in input order
+    within a policy, which is the order `launch_histograms_for_blocks`
+    accumulates `block_first_bin` in. Assigning `first_fold_index` in INPUT
+    order instead gives two independent walks that agree only when the input
+    order happens to already be block order. Every check in this repository
+    used a binary-first dataset, which IS block order, so the disagreement
+    never showed. A dataset ordered one-byte-first then binary (covtype: 10
+    continuous, then 44 binary) writes the binary bins near flat bin 0 while
+    an input-order `first_fold_index` claims they start near 1280, and the
+    scan, `resolve_split` and the skip mask all read the wrong cells.
+
+    THE COLUMN WALK IS POLICY-ORDERED FOR THE SAME REASON. The histogram
+    kernels address a feature group as `cindex_base + bins_line_size * g`
+    (`hist_binary.mojo`, their `cindex += features->CompressedIndexOffset`),
+    so a policy's columns must be CONTIGUOUS. A single global column cursor
+    walked in input order interleaves them: 33 binary features, then a
+    one-byte feature, then more binary, hands binary columns 0, 1 and 3 with
+    the one-byte feature holding 2, and the second binary group then reads
+    the one-byte feature's bits.
 
     A feature with 0 folds is CONSTANT and is given `folds = 0`, which every
     kernel already tests, rather than being dropped: dropping it would
     renumber every feature after it and break the caller's column mapping.
+    It occupies no bits and no bins, so it takes no column and does not
+    advance the fold cursor.
     """
     var n = len(fold_counts)
-    var features = List[CFeature]()
+
+    # Pass 1: which policy each feature belongs to. A constant feature has no
+    # bits at all; it is parked under `POLICY_BINARY` so `policy_of` is total,
+    # and `blocks_for` drops it on the `folds > 0` test.
     var policy_of = List[Int]()
-
-    # Column cursors, one per policy, and how many features are already in
-    # the current column of each.
-    var next_column = 0
-    var col_of = List[Int]()
-    var used_in_col = List[Int]()
-    for _ in range(3):
-        col_of.append(-1)
-        used_in_col.append(0)
-
-    var fold_cursor = 0
-
     for i in range(n):
         var folds = fold_counts[i]
         if folds < 0:
@@ -97,34 +116,53 @@ def build_layout(fold_counts: List[Int]) raises -> CompressedIndexLayout:
                 "feature " + String(i) + " has a negative fold count"
             )
         if folds == 0:
-            # Constant feature: no bits, no bins, still occupies its slot.
-            features.append(CFeature(0, 0, 0, UInt32(fold_cursor), 0, False))
             policy_of.append(POLICY_BINARY)
-            continue
+        else:
+            policy_of.append(policy_for_fold_count(folds))
 
-        var policy = policy_for_fold_count(folds)
+    # Pass 2: THE walk. Placeholders first so a feature can be written at its
+    # input index while the walk runs in policy order.
+    var features = List[CFeature]()
+    for _ in range(n):
+        features.append(CFeature(0, 0, 0, 0, 0, False))
+
+    var next_column = 0
+    var fold_cursor = 0
+
+    for policy in range(3):
         var per_int = features_per_int(policy)
+        var col = -1
+        var used_in_col = 0
 
-        if col_of[policy] < 0 or used_in_col[policy] == per_int:
-            col_of[policy] = next_column
-            used_in_col[policy] = 0
-            next_column += 1
+        for i in range(n):
+            if policy_of[i] != policy:
+                continue
+            var folds = fold_counts[i]
+            if folds == 0:
+                # No bits, no bins. It still gets a `first_fold_index` so the
+                # field is never garbage, but nothing reads it: `folds == 0`
+                # short-circuits the scan, the score kernel and
+                # `resolve_split`.
+                features[i] = CFeature(0, 0, 0, UInt32(fold_cursor), 0, False)
+                continue
 
-        var local = used_in_col[policy]
-        used_in_col[policy] = local + 1
+            if col < 0 or used_in_col == per_int:
+                col = next_column
+                used_in_col = 0
+                next_column += 1
 
-        features.append(
-            CFeature(
-                UInt32(col_of[policy]),
+            var local = used_in_col
+            used_in_col = local + 1
+
+            features[i] = CFeature(
+                UInt32(col),
                 policy_mask(policy),
                 UInt32(policy_shift(policy, local)),
                 UInt32(fold_cursor),
                 UInt32(folds),
                 False,
             )
-        )
-        policy_of.append(policy)
-        fold_cursor += folds
+            fold_cursor += folds
 
     return CompressedIndexLayout(
         features^, policy_of^, next_column, fold_cursor

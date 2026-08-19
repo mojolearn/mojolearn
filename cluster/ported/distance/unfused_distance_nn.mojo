@@ -40,6 +40,7 @@ Two consequences of the identity, both of them theirs and both load-bearing:
 """
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from std.gpu.primitives.warp import shuffle_xor
 from std.math import sqrt
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -49,6 +50,16 @@ from std.memory import stack_allocation
 # `const int TPB = 128` at `unfused_distance_nn.cuh:151`, and `blocks = m`,
 # so the grid is one block per row of X and the block strides the centroids.
 comptime REDUCE_MIN_TPB = 128
+
+# The width of one shuffle group in the block argmin below. `shuffle_xor`
+# with an offset under this value flips only the low bits of the lane id, so
+# it never leaves an aligned group of this size. 32 is the lane width on
+# NVIDIA and on Apple; on AMD's 64-wide wavefront each aligned half reduces
+# independently and the cross-group stage picks both halves up, so the only
+# assumption is that the hardware lane width is a MULTIPLE of 32, never that
+# it equals 32.
+comptime REDUCE_MIN_LANES = 32
+comptime REDUCE_MIN_GROUPS = REDUCE_MIN_TPB // REDUCE_MIN_LANES
 
 # `max_val<float>()` and `max_val<IdxT>()` at `:71-72`, the identity elements
 # of the argmin.
@@ -81,17 +92,33 @@ def reduce_min_kernel(
     at a time, which is why their comment says the reduction cannot use a
     stock RAFT reduce.
 
-    DEVIATIONS, both mechanical and both recorded in PORTING.md 14:
+    DEVIATIONS, both mechanical:
 
-    - `cub::BlockReduce<KVType, TPB>` becomes the shared-memory tree
-      reduction this tree already uses in `compute_scores.mojo`, because Mojo
-      1.0 has no CUB. Unlike the histogram scan (PORTING.md 8) this one costs
-      NOTHING in fidelity: the reducer is a min over a total order, so every
-      reduction tree returns the same pair.
+    - `cub::BlockReduce<KVType, TPB>` becomes a warp-shuffle butterfly
+      followed by a one-slot-per-warp shared merge. **This used to be a
+      whole-block shared-memory tree, justified by a claim that Mojo has no
+      warp primitives. That claim was false** (PORTING.md 2), and CUB's
+      default block reduction is `BLOCK_REDUCE_WARP_REDUCTIONS`, which is
+      exactly a warp reduction followed by a merge over the per-warp
+      aggregates. So the shape below is now THEIRS rather than a substitute
+      for it, and the shared footprint drops from `TPB` pairs to
+      `TPB / 32` pairs.
     - `raft::KeyValuePair` becomes two output pointers. Mojo can express the
       struct, but a kernel parameter that is a struct of mixed types is a
       launch risk this tree has already been bitten by (PORTING.md 9), and
       the split costs one extra store per block.
+
+    Neither one costs fidelity, and the reason is worth stating precisely
+    (PORTING.md 14). Unlike the histogram scan (PORTING.md 8) this reducer is
+    a min over a TOTAL order, `(value, then key ascending)`, which makes it
+    associative, commutative AND idempotent. The shared tree, the butterfly,
+    and CUB's own raking reduction therefore all return the same pair. The
+    tie-break on the lower key is what makes that true; without it the block
+    shape would pick the winner. It is load-bearing, not tidiness.
+
+    LAUNCH CONTRACT: `block_dim` must be exactly `REDUCE_MIN_TPB`. Their
+    `cub::BlockReduce<KVType, TPB>` carries the same requirement, and so did
+    the tree this replaced: a short block leaves shared slots unwritten.
 
     `key_base` is ours and is not a deviation in behavior: their caller adds
     the centroid-tile offset AFTERWARD, in a `raft::linalg::map` over the
@@ -140,39 +167,58 @@ def reduce_min_kernel(
 
         col += REDUCE_MIN_TPB
 
+    # --- STAGE 1, the warp butterfly. CUB's `BLOCK_REDUCE_WARP_REDUCTIONS`
+    # first half, and the same primitive their fused twin uses in
+    # `simt_kernel.cuh:125-126`. `Reducer::operator()` at `:44-49` verbatim:
+    #     (a.value < b.value) || (a.value == b.value && a.key < b.key)
+    # Every lane of the group ends holding the group's winner, which is what
+    # lets one leader per group write stage 2 with no extra broadcast.
+    #
+    # All REDUCE_MIN_TPB threads reach these shuffles unconditionally. That
+    # is required: a lane that skips a full-mask shuffle hangs the rest.
+    var lane_offset = 1
+    while lane_offset < REDUCE_MIN_LANES:
+        var other_value = shuffle_xor(thread_min_value, UInt32(lane_offset))
+        var other_key = shuffle_xor(thread_min_key, UInt32(lane_offset))
+        var takes_other = other_value < thread_min_value or (
+            other_value == thread_min_value and other_key < thread_min_key
+        )
+        if takes_other:
+            thread_min_value = other_value
+            thread_min_key = other_key
+        lane_offset *= 2
+
+    # --- STAGE 2, the merge over the per-group aggregates. Four pairs, not
+    # 128, because stage 1 already collapsed each group.
     var s_value = stack_allocation[
-        REDUCE_MIN_TPB,
+        REDUCE_MIN_GROUPS,
         Scalar[DType.float32],
         address_space = AddressSpace.SHARED,
     ]()
     var s_key = stack_allocation[
-        REDUCE_MIN_TPB,
+        REDUCE_MIN_GROUPS,
         Scalar[DType.uint32],
         address_space = AddressSpace.SHARED,
     ]()
-    s_value[tid] = thread_min_value
-    s_key[tid] = thread_min_key
+    if tid % REDUCE_MIN_LANES == 0:
+        s_value[tid // REDUCE_MIN_LANES] = thread_min_value
+        s_key[tid // REDUCE_MIN_LANES] = thread_min_key
     barrier()
-
-    # `Reducer::operator()` at `:44-49`, unrolled into a tree:
-    #     (a.value < b.value) || (a.value == b.value && a.key < b.key)
-    var stride = REDUCE_MIN_TPB // 2
-    while stride > 0:
-        if tid < stride:
-            var other_value = s_value[tid + stride]
-            var other_key = s_key[tid + stride]
-            var takes_other = other_value < s_value[tid] or (
-                other_value == s_value[tid] and other_key < s_key[tid]
-            )
-            if takes_other:
-                s_value[tid] = other_value
-                s_key[tid] = other_key
-        barrier()
-        stride //= 2
 
     if tid == 0:
         var best_value = s_value[0]
-        var best_key = s_key[0] + UInt32(key_base_in)
+        var best_group_key = s_key[0]
+        # Same total order again, so the group count cannot pick the winner.
+        for g in range(1, REDUCE_MIN_GROUPS):
+            var group_value = s_value[g]
+            var group_key = s_key[g]
+            var takes_group = group_value < best_value or (
+                group_value == best_value and group_key < best_group_key
+            )
+            if takes_group:
+                best_value = group_value
+                best_group_key = group_key
+        var best_key = best_group_key + UInt32(key_base_in)
         if is_sqrt_in != 0:
             if best_value <= Float32(0.0):
                 best_value = Float32(0.0)
@@ -181,8 +227,8 @@ def reduce_min_kernel(
             out_key.unsafe_store(row, best_key)
             out_value.unsafe_store(row, best_value)
         else:
-            # The merge arm, `:107-113`. Same total order as the tree above,
-            # so tiling the centroids cannot change the winner.
+            # The merge arm, `:107-113`. Same total order as both reduction
+            # stages above, so tiling the centroids cannot change the winner.
             var prev_value = out_value.unsafe_load(row)
             var prev_key = out_key.unsafe_load(row)
             var takes_new = best_value < prev_value or (
