@@ -1,4 +1,5 @@
 from mojo_only.launch_probe import probe
+from mojo_only.pack_check import check_packing
 from catboost.cuda.methods.greedy_subsets_searcher.structure_searcher_template import (
     grow_tree_schedule,
 )
@@ -249,6 +250,9 @@ def show_tree_schedule() raises:
 
 
 def main() raises:
+    print("packing round trip (GPU):")
+    check_packing()
+    print()
     print("tree schedule:")
     show_tree_schedule()
     print()
