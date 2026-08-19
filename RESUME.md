@@ -5,7 +5,7 @@ then `PORTED_MAP.tsv`.
 
 ## What this repository is
 
-A clean-room port of **CatBoost's GPU oblivious (symmetric) tree learner**
+A port of **CatBoost's GPU oblivious (symmetric) tree learner**
 into Mojo, targeting Metal first. Nothing from mojotrees. `ported/` mirrors
 CatBoost's own paths file for file (their constant `catboost/cuda/` prefix
 dropped, and `cuda_util` renamed `gpu_util` because CUDA is not our

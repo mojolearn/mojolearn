@@ -1,6 +1,6 @@
 # catboost-symmetric-trees
 
-**A clean-room port of CatBoost's GPU oblivious (symmetric) tree learner into
+**A port of CatBoost's GPU oblivious (symmetric) tree learner into
 Mojo. GPU path only. No CPU path. Nothing from mojotrees.**
 
 ## Why this exists
@@ -126,3 +126,24 @@ never executed on another vendor**, which is what the script exists to fix:
 `replication_lanes` is pinned at 32 so AMD's 64-wide wavefront cannot change
 the reduction geometry, and the float-atomic flush branch is unreachable on
 Apple and is exactly what NVIDIA and AMD would take under `determinism=off`.
+
+## License and attribution
+
+Apache-2.0, in [LICENSE](LICENSE). [NOTICE](NOTICE) records what this derives
+from and must travel with any redistribution.
+
+**Everything under `ported/` is a derivative work of CatBoost**, Copyright
+2017-2026 YANDEX LLC, Apache-2.0, translated from CUDA C++ into Mojo at commit
+`54a8143a`. `PORTED_MAP.tsv` maps each file to its origin.
+
+**This is not a clean-room reimplementation and must not be described as one.**
+Clean-room means reproducing behavior from a specification without reading the
+source. This project does the opposite deliberately: `README.md`'s own rule is
+COPY, DO NOT IMPROVE, and the tree mirrors CatBoost's paths file for file so a
+reviewer can diff `hist_binary.mojo` against `hist_binary.cu`. That is a port,
+which Apache-2.0 permits, and it carries attribution obligations that a
+clean-room reimplementation would not.
+
+Not affiliated with, endorsed by, or sponsored by YANDEX LLC or Modular, Inc.
+
+MAX (R) and Mojo (R) are trademarks of Modular, Inc. used under license.

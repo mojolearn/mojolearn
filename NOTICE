@@ -1,0 +1,36 @@
+mojolearn (working name; this tree was developed as catboost-symmetric-trees)
+Copyright 2026 Andrew Hendel
+
+This product includes software developed by Andrew Hendel, licensed under the
+Apache License, Version 2.0.
+
+--------------------------------------------------------------------------
+Derived from CatBoost
+--------------------------------------------------------------------------
+
+Everything under `ported/` is a DERIVATIVE WORK of CatBoost, translated from
+CUDA C++ into Mojo at CatBoost commit 54a8143a. `PORTED_MAP.tsv` maps each
+file to the CatBoost source it derives from and records whether the port is
+transliterated, partial, or replaced.
+
+    CatBoost
+    Copyright 2017-2026 YANDEX LLC
+    Licensed under the Apache License, Version 2.0
+    https://github.com/catboost/catboost
+
+CatBoost ships no NOTICE file, so there is no attribution text of theirs to
+reproduce here. This section exists because Apache 2.0 section 4(a) and 4(b)
+require a derivative work to carry the license and to state that files were
+changed, and every file under `ported/` is changed: it is a different
+language targeting a different GPU API.
+
+This project is not affiliated with, endorsed by, or sponsored by YANDEX LLC.
+"CatBoost" is used only to identify the software this work derives from.
+
+--------------------------------------------------------------------------
+Modular trademarks
+--------------------------------------------------------------------------
+
+MAX (R) and Mojo (R) are trademarks of Modular, Inc. used under license.
+
+This project is not operated or endorsed by Modular, Inc.
