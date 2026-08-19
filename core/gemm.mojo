@@ -253,11 +253,42 @@ def gemm_tn(
 ) raises:
     """`z[m x n] = x[k x m]^T . y[k x n]`, the Gram/covariance shape.
 
-    This is what `raft::stats::cov` and `lstsqEig`'s first step compute, and
-    what cuML's `tsvd_fit` asks cuBLAS for as `CUBLAS_OP_T, CUBLAS_OP_N`. The
-    contracted axis is the ROW axis of both operands.
+    **Implemented on the HAND-PORTED contraction, not on MAX's matmul, and
+    the reason is a hard limit rather than a preference.** See below.
     """
-    var tz = TileTensor(z, row_major(m, n))
-    var tx = TileTensor(x, row_major(k, m))
-    var ty = TileTensor(y, row_major(k, n))
-    matmul[transpose_a=True, target="gpu"](tz, tx, ty, ctx)
+    from core.column_stats import COV_TILE, covariance_kernel
+
+    ctx.enqueue_function[covariance_kernel](
+        z.unsafe_ptr(),
+        x.unsafe_ptr(),
+        Int32(k),
+        Int32(m),
+        Float32(1.0),
+        grid_dim=(
+            (n + COV_TILE - 1) // COV_TILE,
+            (m + COV_TILE - 1) // COV_TILE,
+            1,
+        ),
+        block_dim=(COV_TILE, COV_TILE, 1),
+    )
+
+
+# WHY `gemm_tn` IS NOT ON THE VENDOR PATH, AND IT IS A HARD LIMIT
+#
+# `raft::stats::cov`, `lstsqEig`'s first step and cuML's `tsvd_fit` all ask
+# cuBLAS for `CUBLAS_OP_T, CUBLAS_OP_N`: the Gram shape `A^T A`, contracting
+# down the ROW axis. Routing those through MAX's matmul fails to compile:
+#
+#     max/kernels/src/linalg/matmul/__init__.mojo:110:9:
+#     note: constraint failed: transpose_a not yet supported
+#
+# So the vendor path covers the N-T shape every distance computation wants
+# and does NOT cover the T-N shape every covariance wants.
+# `core/column_stats.mojo::covariance_kernel`, the hand-ported contraction,
+# stays as the only implementation of that shape.
+#
+# That is why PCA and OLS did not move in this round while k-NN and DBSCAN
+# did. The follow-up is either an explicit transpose (MAX ships
+# `linalg.transpose`) plus an N-T matmul, or applying the register-tiling
+# port to `covariance_kernel` directly. Both are measurable; neither is
+# guessed.
