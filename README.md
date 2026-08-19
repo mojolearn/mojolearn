@@ -6,10 +6,18 @@ Mojo. GPU path only. No CPU path. Nothing from mojotrees.**
 ## Why this exists
 
 mojotrees is 2.5x behind LightGBM and 10x behind CatBoost per symmetric tree,
-and a full day of measurement established that the gap is not the inner loop
-(our histogram kernel is about 2x FASTER per update than CatBoost's) and not
-launch count (our oblivious path issues 73 command buffers and 1 host sync
-per tree against CatBoost's ~400-900 launches and ~24 syncs).
+and a full day of measurement established that the gap is not the inner loop:
+our histogram kernel is about 2x FASTER per update than CatBoost's.
+
+That paragraph used to end with a claim about launch count, that this port
+issues "73 command buffers and 1 host sync per tree". **It is false and it is
+deleted rather than annotated**, per the standing rule that a document a
+result falsifies is part of the result. `RESUME.md` measured
+`run_tree_layout` at 9 `ctx.synchronize()` and about 16 launches PER LEVEL,
+which is 54 host round trips and about 96 launches per depth-6 tree, and
+about 34 of our 50 ms per tree is fixed cost independent of the data. The
+deficit is the CONTROL PLANE, and `HOST_AND_DEVICE.md` now carries the rule
+that decides what may be done about it.
 
 What that day also established is that mojotrees' own code and its own
 instruments cannot be trusted to say why. Four features were found built,
