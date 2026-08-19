@@ -296,3 +296,84 @@ def check_exclusive_scan_beyond_the_old_cap() raises:
         + String(total)
         + ", past the 16,384 the fixed chunk size used to cap it at"
     )
+
+
+def check_dbscan_batching_agrees() raises:
+    """Batched and unbatched must return the SAME partition, and the batched
+    run must fit in a buffer the unbatched run could not.
+
+    Both halves matter. Equality alone would pass if `batch_size` were
+    ignored, so this also allocates `dist` and `adj` at `batch x N` instead
+    of `N x N` — a quarter of the memory at these numbers. A run that
+    secretly ignored the batching would write off the end of that buffer, not
+    quietly agree.
+
+    This is the check the batching commit needed and the plain fixture could
+    not give: `check_dbscan` runs with `batch_size = 0`, one batch, which is
+    exactly the old code path.
+    """
+    var ctx = DeviceContext()
+    var n = DB_ROWS
+    var d = DB_FEATURES
+    var batch = 128
+
+    var x = ctx.enqueue_create_buffer[DType.float32](n * d)
+    var x_alias = ctx.enqueue_create_buffer[DType.float32](n * d)
+    var x_norm = ctx.enqueue_create_buffer[DType.float32](n)
+    var xn_alias = ctx.enqueue_create_buffer[DType.float32](n)
+    var vd = ctx.enqueue_create_buffer[DType.int32](n)
+    var core = ctx.enqueue_create_buffer[DType.uint8](n)
+    var ex_scan = ctx.enqueue_create_buffer[DType.int32](n + 1)
+    var col_ind = ctx.enqueue_create_buffer[DType.int32](n * n)
+    var labels = ctx.enqueue_create_buffer[DType.int32](n)
+
+    # FULL-SIZE buffers for the reference run.
+    var dist_full = ctx.enqueue_create_buffer[DType.float32](n * n)
+    var adj_full = ctx.enqueue_create_buffer[DType.uint8](n * n)
+    # BATCH-SIZE buffers for the batched run. Deliberately too small for a
+    # run that ignored `batch_size`.
+    var dist_b = ctx.enqueue_create_buffer[DType.float32](batch * n)
+    var adj_b = ctx.enqueue_create_buffer[DType.uint8](batch * n)
+    ctx.synchronize()
+
+    var hx = ctx.enqueue_create_host_buffer[DType.float32](n * d)
+    for i in range(n):
+        for f in range(d):
+            hx.unsafe_ptr().unsafe_store(i * d + f, _coord(i, f))
+    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+    ctx.synchronize()
+
+    _ = dbscan_fit(
+        ctx, x, x_norm, dist_full, adj_full, vd, core, ex_scan, col_ind,
+        labels, x_alias, xn_alias, n, d, DB_EPS, DB_MIN_PTS, 0,
+    )
+    var baseline = ctx.enqueue_create_host_buffer[DType.int32](n)
+    ctx.enqueue_copy(dst_ptr=baseline.unsafe_ptr(), src_buf=labels)
+    ctx.synchronize()
+
+    _ = dbscan_fit(
+        ctx, x, x_norm, dist_b, adj_b, vd, core, ex_scan, col_ind,
+        labels, x_alias, xn_alias, n, d, DB_EPS, DB_MIN_PTS, batch,
+    )
+    var got = ctx.enqueue_create_host_buffer[DType.int32](n)
+    ctx.enqueue_copy(dst_ptr=got.unsafe_ptr(), src_buf=labels)
+    ctx.synchronize()
+
+    var differ = 0
+    for i in range(n):
+        if baseline.unsafe_ptr().unsafe_load(i) != got.unsafe_ptr().unsafe_load(i):
+            differ += 1
+    if differ != 0:
+        raise Error(
+            String(differ) + " of " + String(n)
+            + " labels differ between one batch and "
+            + String((n + batch - 1) // batch)
+            + " batches. Batching changes the memory, not the answer."
+        )
+    print(
+        "check_dbscan_batching_agrees OK: "
+        + String((n + batch - 1) // batch)
+        + " batches give labels identical to one batch, in a dist buffer "
+        + String(n // batch)
+        + "x smaller than the unbatched run needs"
+    )

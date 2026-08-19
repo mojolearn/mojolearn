@@ -65,13 +65,43 @@ def dbscan_fit(
     n_features: Int,
     eps: Float64,
     min_pts: Int,
+    batch_size: Int = 0,
     max_iterations: Int = 200,
 ) raises -> Int:
     """Returns the number of label-propagation passes it took to converge.
 
     `eps` is squared once here, not per pair.
+
+    ROWS ARE BATCHED, WHICH IS THEIRS AND IS A MEMORY BOUND NOT A SPEEDUP
+    ------------------------------------------------------------------
+    `cuml/cpp/src/dbscan/runner.cuh:121` computes
+    `n_batches = ceildiv(n_owned_rows, batch_size)` and every stage after it
+    works on `batch_size x N` rather than `N x N`. Their own comment at
+    `:150` gives the reason: "adjacency graph has a worst case size of
+    N * batch_size elements".
+
+    Without it this port allocates an `N x N` distance matrix AND an `N x N`
+    adjacency, so it dies of memory long before it dies of time. The
+    benchmark caps DBSCAN at 4,000 rows purely for that reason.
+
+    `batch_size = 0` means one batch, which is the previous behaviour.
+
+    DEVIATION, and it is the honest half of this. Theirs runs
+    vertexdeg -> adjgraph -> weak_cc PER BATCH and then combines the
+    per-batch labelings with `MergeLabels::run` (`runner.cuh:379`). That
+    merge is NOT PORTED (`dbscan/UNPORTED.tsv`), and it is where the
+    correctness trap lives. So this batches the DISTANCE and ADJACENCY work,
+    which is what bounds the memory, and keeps ONE `weak_cc` over the whole
+    graph, which needs no merge. The cost is that the distances are computed
+    TWICE, once to count degrees and once to emit the CSR, because a batch's
+    adjacency cannot be kept. Two passes of arithmetic to avoid an unported
+    merge and an `N x N` allocation.
     """
     var eps_sq = Float32(eps * eps)
+    var batch = batch_size if batch_size > 0 else n_rows
+    if batch > n_rows:
+        batch = n_rows
+    var n_batches = (n_rows + batch - 1) // batch
 
     ctx.enqueue_function[row_norm_kernel](
         x_norm.unsafe_ptr(),
@@ -81,18 +111,10 @@ def dbscan_fit(
         grid_dim=(n_rows, 1, 1),
         block_dim=(NORM_TPB, 1, 1),
     )
-    # DBSCAN's distance matrix is the dataset against ITSELF, where k-NN's
-    # was queries against an index, so both GEMM operands are `x` and both
-    # norm operands are `x_norm`.
-    #
-    # **Mojo will not accept the same buffer as two mutable kernel
-    # arguments**, and it checks the underlying value rather than the
-    # expression, so binding through two locals does not help either. The
-    # operands are read-only in the kernel and cuVS declares them `const`,
-    # so the right long-term fix is an immutable pointer type on the kernel
-    # signature. Until then this makes one aliased copy. It is
-    # `n_rows * n_features` floats against an `n_rows^2` distance matrix that
-    # already exists, so the cost is real but small. PORTING.md 24.
+    # DBSCAN's distance matrix is the dataset against ITSELF, so both GEMM
+    # operands are `x` and both norm operands are `x_norm`. Mojo will not
+    # accept the same buffer as two mutable kernel arguments (PORTING.md 24),
+    # so the transposed operand is an aliased copy.
     ctx.enqueue_function[copy_f32_kernel](
         x_alias.unsafe_ptr(),
         x.unsafe_ptr(),
@@ -107,36 +129,41 @@ def dbscan_fit(
         grid_dim=((n_rows + 255) // 256, 1, 1),
         block_dim=(256, 1, 1),
     )
-    gemm_nt(
-        ctx,
-        dist,
-        x,
-        x_alias,
-        n_rows,
-        n_rows,
-        n_features,
-    )
-    var cells = n_rows * n_rows
-    ctx.enqueue_function[expand_distances_kernel](
-        dist.unsafe_ptr(),
-        x_norm.unsafe_ptr(),
-        xn_alias.unsafe_ptr(),
-        Int32(n_rows),
-        Int32(n_rows),
-        Int32(0),
-        grid_dim=((cells + 255) // 256, 1, 1),
-        block_dim=(256, 1, 1),
-    )
+    ctx.synchronize()
 
-    ctx.enqueue_function[eps_neighborhood_kernel](
-        adj.unsafe_ptr(),
-        vd.unsafe_ptr(),
-        dist.unsafe_ptr(),
-        Int32(n_rows),
-        eps_sq,
-        grid_dim=(n_rows, 1, 1),
-        block_dim=(VD_TPB, 1, 1),
-    )
+    # PASS 1 over the batches: degrees only. `adj` holds one batch.
+    var b = 0
+    while b < n_batches:
+        var r0 = b * batch
+        var rows = min(batch, n_rows - r0)
+        var xb = x.create_sub_buffer[DType.float32](
+            r0 * n_features, rows * n_features
+        )
+        var xnb = x_norm.create_sub_buffer[DType.float32](r0, rows)
+        var vdb = vd.create_sub_buffer[DType.int32](r0, rows)
+        gemm_nt(ctx, dist, xb, x_alias, rows, n_rows, n_features)
+        ctx.enqueue_function[expand_distances_kernel](
+            dist.unsafe_ptr(),
+            xnb.unsafe_ptr(),
+            xn_alias.unsafe_ptr(),
+            Int32(rows),
+            Int32(n_rows),
+            Int32(0),
+            grid_dim=((rows * n_rows + 255) // 256, 1, 1),
+            block_dim=(256, 1, 1),
+        )
+        ctx.enqueue_function[eps_neighborhood_kernel](
+            adj.unsafe_ptr(),
+            vdb.unsafe_ptr(),
+            dist.unsafe_ptr(),
+            Int32(n_rows),
+            eps_sq,
+            grid_dim=(rows, 1, 1),
+            block_dim=(VD_TPB, 1, 1),
+        )
+        b += 1
+    ctx.synchronize()
+
     ctx.enqueue_function[core_points_kernel](
         core.unsafe_ptr(),
         vd.unsafe_ptr(),
@@ -152,15 +179,52 @@ def dbscan_fit(
         grid_dim=(1, 1, 1),
         block_dim=(SCAN_TPB, 1, 1),
     )
-    ctx.enqueue_function[compact_adjacency_kernel](
-        col_ind.unsafe_ptr(),
-        adj.unsafe_ptr(),
-        ex_scan.unsafe_ptr(),
-        Int32(n_rows),
-        Int32(n_rows),
-        grid_dim=(n_rows, 1, 1),
-        block_dim=(SCAN_TPB, 1, 1),
-    )
+    # PASS 2: recompute each batch's adjacency and emit its CSR rows. The
+    # distances are recomputed rather than kept, which is the deviation the
+    # docstring prices: a batch's `adj` cannot survive to here without the
+    # `N x N` allocation the batching exists to remove.
+    b = 0
+    while b < n_batches:
+        var r0b = b * batch
+        var rowsb = min(batch, n_rows - r0b)
+        var xb2 = x.create_sub_buffer[DType.float32](
+            r0b * n_features, rowsb * n_features
+        )
+        var xnb2 = x_norm.create_sub_buffer[DType.float32](r0b, rowsb)
+        var vdb2 = vd.create_sub_buffer[DType.int32](r0b, rowsb)
+        var exb = ex_scan.create_sub_buffer[DType.int32](r0b, rowsb)
+        gemm_nt(ctx, dist, xb2, x_alias, rowsb, n_rows, n_features)
+        ctx.enqueue_function[expand_distances_kernel](
+            dist.unsafe_ptr(),
+            xnb2.unsafe_ptr(),
+            xn_alias.unsafe_ptr(),
+            Int32(rowsb),
+            Int32(n_rows),
+            Int32(0),
+            grid_dim=((rowsb * n_rows + 255) // 256, 1, 1),
+            block_dim=(256, 1, 1),
+        )
+        ctx.enqueue_function[eps_neighborhood_kernel](
+            adj.unsafe_ptr(),
+            vdb2.unsafe_ptr(),
+            dist.unsafe_ptr(),
+            Int32(n_rows),
+            eps_sq,
+            grid_dim=(rowsb, 1, 1),
+            block_dim=(VD_TPB, 1, 1),
+        )
+        ctx.enqueue_function[compact_adjacency_kernel](
+            col_ind.unsafe_ptr(),
+            adj.unsafe_ptr(),
+            exb.unsafe_ptr(),
+            Int32(rowsb),
+            Int32(n_rows),
+            grid_dim=(rowsb, 1, 1),
+            block_dim=(SCAN_TPB, 1, 1),
+        )
+        b += 1
+    ctx.synchronize()
+
     ctx.enqueue_function[weak_cc_init_kernel](
         labels.unsafe_ptr(),
         core.unsafe_ptr(),
