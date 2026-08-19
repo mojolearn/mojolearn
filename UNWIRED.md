@@ -26,7 +26,7 @@ so this tree cannot repeat that quietly. **Audited by grep, not by memory.**
 | `deterministic_flush` (matrix row) | **WIRED**: `hist_binary.mojo` branches on `deterministic_flush_for[TARGET_COLUMN, ...]` at comptime | Forced true on apple because Metal has no float atomic; follows the mode on nvidia and amd. The multi-block path sums Int32 partials through an integer atomic and converts back in `fixed_to_float_kernel`. Correct and exercised. `hist_replicas` defaults to 1 because 1 and 32 are INDISTINGUISHABLE interleaved at this shape, not because 32 is slower: the earlier 'slower' reading was cross-run noise. |
 | `mojo_only/fixed_point.mojo` | its own check, and the flush now uses the same scheme inline | Same reason. It is verified in isolation (overflow bound tight at 268,435,453 of 268,435,455; forward and reverse accumulation exact) and used by no kernel. |
 | `column_lane_width` | `spec_for` only | Nothing needs a lane width while `sync_granularity` is `SYNC_BLOCK` everywhere. |
-| pinned host partitions (`partsCpu`) | the kernel writes them | `update_partitions_after_split_kernel` takes `host_offset` / `host_size` and writes them, so the device half is ported. The driver must allocate those as PINNED host memory rather than ordinary device buffers, which is where the trick pays: the host then learns every leaf's size with no device-to-host copy, and the next level's smaller-sibling decision needs no readback in the critical path. |
+| pinned host partitions (`partsCpu`) | the kernel writes them | `update_partitions_after_split_kernel` takes `host_offset` / `host_size` and writes them, so the device half is ported. **MEASURED 2026-08-19: on this stack the trick does NOT pay and the sentence that used to sit here was wrong.** A kernel handed an `enqueue_create_host_buffer` pointer writes NOTHING, silently, all zeros (64 of 64 wrong) -- another silent no-op in the family of `enqueue_copy(dst_buf=, src_ptr=device)`. The working route is `DeviceBuffer.map_to_host()`, which does see kernel output (0 of 64 wrong), but 54 of them cost 18-29 ms against 8-14 ms for 54 `enqueue_copy` + `synchronize`, so it is 2x SLOWER than the copy it was supposed to replace. CatBoost gets this for free because `PartitionsCpu` is `EPtrType::CudaHost` and `TSplitPointsKernel` dereferences it on the host as a plain pointer; we have no equivalent. Keep the copies, cut their COUNT. |
 
 **Consequence to state plainly, because it is the honest answer to "does the
 matrix drive the fixed-point path": IT DOES NOT, YET.** Under `FAST` the
@@ -183,3 +183,53 @@ failing, because the check's data pattern made the defect invisible. A
 histogram check whose expected value is the same in every cell verifies the
 total and nothing about placement. Plant scattered bins and compare against a
 host tally per cell.
+
+
+## The control plane: NOT PORTED AT ALL
+
+`PORTED_MAP.tsv` has entries from `gpu_data/`, `cuda_util/`, `methods/` and
+`options/`. It has **zero entries from `catboost/cuda/cuda_lib/`**, which is
+their entire control plane: 1694 lines across `cuda_manager`,
+`gpu_single_worker`, `single_device`, `task`, `stream_section_tasks_launcher`
+and the task queues.
+
+We ported the `.cu` files and HAND-WROTE the driver. The driver is the part
+that is slow. Measured Aug 19: ~34 of our 50 ms/tree is fixed and
+row-independent, and it lives here.
+
+### Three differences, read out of their source
+
+**1. The split descriptor is a by-value kernel argument, not five buffers.**
+`split_points.h:76-90`, `TSplitPointsSingleLeafKernel`, holds
+`TCFeature Feature; ui32 FeatureBin; ui32 LeafIdToSplit;
+ui32 RightLeafIdAfterSplit;` as plain members. Ours broadcasts exactly those
+five scalars into five device buffers with five `enqueue_copy` and a
+`synchronize`, every level (`greedy_search_helper.mojo:1474-1479`).
+
+**2. One task is many launches on one stream with NO host sync inside.**
+`split_points.cpp:232-280`, `TSplitPointsSingleLeafKernel::Run`, issues
+`SplitAndMakeSequenceInLeaf`, `SortByFlagsInLeaf`, `CopyLeaf`, `GatherLeaf`
+and the partition update back to back on the same `stream`, and blocks
+nowhere. Ours syncs after nearly every stage.
+
+**3. They read leaf sizes off a host pointer.** `PartitionsCpu` is
+`EPtrType::CudaHost` (`split_properties_helper.h:49`), so
+`partitionsCpuPtr[LeafIdToSplit].Size` is a dereference. See the row above
+for why this one does NOT transfer to our stack.
+
+Their per-level blocking reads for an oblivious tree are **two**:
+`bestProps.Read(propsCpu)` (`greedy_search_helper.cpp:517`) and the pinned
+partition read. `ComputeTargetStdDev`'s `ReadReduce` is per TREE, not per
+level. Ours is **nine** syncs plus about sixteen launches.
+
+### What the difference is worth, measured
+
+Trivial kernel, 64 elements, three interleaved trials:
+
+    54 launches, sync after each      7.7 / 8.9 / 9.8 ms
+    54 launches, ONE sync at the end  2.1 / 1.2 / 1.2 ms
+
+and correctness holds with the syncs gone: 54 chained increments behind a
+single drain came back exact, so **stream ordering is enough and 7 of our 9
+per-level syncs are pure ordering we are paying for by hand.**
+
