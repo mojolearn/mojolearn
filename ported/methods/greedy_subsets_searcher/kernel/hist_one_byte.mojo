@@ -54,7 +54,7 @@ from mojo_only.kernel_matrix import (
 from mojo_only.numerics import NUMERIC_FAST, NUMERIC_IDENTICAL
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
-from max.gpu.sync import barrier
+from max.gpu.sync import barrier, syncwarp
 
 from mojo_only.kernel_matrix import (
     K_HIST_ONE_BYTE,
@@ -167,9 +167,26 @@ def add_one_byte_point[
     bin index the slot directly and the HIGH bits are serialized, one pass
     each, with only the lanes whose `higherBin == pass` writing.
 
-    **Every barrier here is threadgroup-wide and must be reached by every
-    thread of the block.** Callers therefore run a UNIFORM number of trips;
-    see the peel and the main loop.
+    Their sync is WARP-LOCAL and so is ours:
+
+        auto syncTile = tiled_partition<32>(this_thread_block());
+        ...
+        syncTile.sync();
+
+    `SliceOffset()` gives every warp its own private copy of the histogram,
+    which is why `AddPoint` needs no atomics: the only ordering required is
+    among the 32 lanes sharing that copy. A threadgroup `barrier()` would
+    also be correct and is strictly more expensive, and at 8 bits it costs
+    4 features x 8 passes = 32 threadgroup barriers PER POINT.
+
+    `syncwarp` was thought unavailable and is not: it imports from
+    `max.gpu.sync`. Warp SHUFFLES really are missing in Mojo 1.0, and the two
+    were conflated.
+
+    Because the sync is warp-local, callers no longer need a uniform trip
+    count across the BLOCK, only across each warp. The peel and the main loop
+    keep their uniform counts anyway, which is stricter than required and
+    costs nothing.
     """
 
     @parameter
@@ -179,7 +196,7 @@ def add_one_byte_point[
 
         @parameter
         if inner_bits == 0:
-            barrier()
+            syncwarp()
             smem[slot] = smem[slot] + stat
         else:
             var higher = one_byte_higher_bin[bits](ci, tid, i)
@@ -188,7 +205,7 @@ def add_one_byte_point[
             @parameter
             for kk in range(1 << inner_bits):
                 var p = ((tid >> 2) + kk) & mask
-                barrier()
+                syncwarp()
                 if p == higher:
                     smem[slot] = smem[slot] + stat
 
