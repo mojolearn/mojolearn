@@ -524,6 +524,17 @@ def run_tree(
 
     var n_live = 1  # leaves at the current level
 
+    # THE LARGEST LIVE LEAF, tracked on the host so the grids that are sized
+    # per leaf are sized for the level rather than for the dataset.
+    #
+    # Passing `n_rows` here sizes every per-leaf grid for the biggest leaf
+    # that could ever exist, so at depth d there are 2^d leaves each with a
+    # full dataset's worth of chunks and nearly all of them empty. The empty
+    # work grows as 2^d while the real work stays flat, which showed up as
+    # marginal cost per level RISING through depth 5 (+4.9, +9.9, +15.8,
+    # +19.5 ms) when a constant per-level row count says it should be flat.
+    var max_live_rows = n_rows
+
     for depth in range(max_depth):
         # ---- 1. histograms for this level's leaves ----------------------
         # Depth 0 has one leaf and no sibling, so it is a plain build. Below
@@ -586,7 +597,7 @@ def run_tree(
         # made depth 0 look correct and produced 64 leaves of which only 2
         # were non-empty at depth 6.
         compute_partition_stats(
-            ctx, n_live, n_rows, stat_count, n_rows,
+            ctx, n_live, max_live_rows, stat_count, n_rows,
             ids_a, p_off, p_sz, stats, stat_partials, part_stats,
         )
         ctx.synchronize()
@@ -645,7 +656,7 @@ def run_tree(
         )
 
         launch_stable_partition(
-            ctx, n_live, n_rows, ids_a, p_off, p_sz, flags,
+            ctx, n_live, max_live_rows, ids_a, p_off, p_sz, flags,
             chunk_zeros, chunk_offsets, leaf_zeros, gmap, sflags,
         )
 
@@ -726,6 +737,15 @@ def run_tree(
         ctx.synchronize()
 
         n_live = n_live * 2
+
+        # O(leaves) on the host, never O(rows). See HOST_AND_DEVICE.md.
+        ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
+        ctx.synchronize()
+        max_live_rows = 1
+        for i in range(n_live):
+            var s = Int(h_sz.unsafe_ptr().unsafe_load(i))
+            if s > max_live_rows:
+                max_live_rows = s
 
     ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
     ctx.synchronize()
