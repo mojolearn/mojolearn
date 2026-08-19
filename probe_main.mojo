@@ -6,6 +6,7 @@ from mojo_only.level_bench import (
     bench_level,
     bench_partition_only,
     bench_remaining_phases,
+    bench_tree,
 )
 from mojo_only.pack_check import check_packing
 from mojo_only.hist_check import (
@@ -283,6 +284,8 @@ def main() raises:
     bench_histogram_only(500000, 20)
     bench_partition_only(500000, 20)
     bench_remaining_phases(500000, 20)
+    bench_tree(500000, 6, 3)
+    bench_tree(500000, 8, 3)
     print()
     print("packing round trip (GPU):")
     check_packing()

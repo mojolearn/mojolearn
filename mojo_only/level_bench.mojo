@@ -62,6 +62,7 @@ from ported.methods.greedy_subsets_searcher.kernel.split_points import (
 )
 from ported.methods.greedy_subsets_searcher.greedy_search_helper import (
     run_one_level,
+    run_tree,
 )
 
 
@@ -495,3 +496,94 @@ def bench_remaining_phases(n_rows: Int, repeats: Int) raises:
         print("    ", names[i], ":", times[i], "ms")
         total += times[i]
     print("    the other six together:", total, "ms")
+
+
+def bench_tree(n_rows: Int, max_depth: Int, repeats: Int) raises:
+    """A whole depth-`max_depth` tree, measured rather than extrapolated.
+
+    Every number before this one multiplied a depth-0 level by 8, which
+    overestimates (sibling subtraction halves the histogram below the root)
+    and underestimates (the reorder touches every row at every level) at the
+    same time. This is the tree.
+    """
+    var ctx = DeviceContext()
+    var n_features = features_per_int(POLICY_BINARY)
+
+    var cindex = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+    var z = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
+    for i in range(n_rows):
+        z.unsafe_ptr().unsafe_store(i, UInt32(0))
+    ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
+    ctx.synchronize()
+
+    var hb = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
+    var bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
+    for f in range(n_features):
+        for r in range(n_rows):
+            var x = UInt32(r * 2654435761 + f * 40503 + 0x2545F491)
+            x ^= x << 13
+            x ^= x >> 17
+            x ^= x << 5
+            hb.unsafe_ptr().unsafe_store(r, UInt8(Int(x & 1)))
+        ctx.enqueue_copy(dst_buf=bins, src_ptr=hb.unsafe_ptr())
+        ctx.enqueue_function[write_compressed_index_kernel](
+            Int32(0),
+            policy_mask(POLICY_BINARY),
+            UInt32(policy_shift(POLICY_BINARY, f)),
+            bins.unsafe_ptr(),
+            Int32(n_rows),
+            cindex.unsafe_ptr(),
+            grid_dim=(n_rows + WRITE_BLOCK_SIZE - 1) // WRITE_BLOCK_SIZE,
+            block_dim=WRITE_BLOCK_SIZE,
+        )
+        ctx.synchronize()
+
+    var stats = ctx.enqueue_create_buffer[DType.float32](2 * n_rows)
+    var hs = ctx.enqueue_create_host_buffer[DType.float32](2 * n_rows)
+    var tw = Float64(0.0)
+    var tg = Float64(0.0)
+    for r in range(n_rows):
+        var g = -0.1
+        if (r % 4) == 0:
+            g = 3.0
+        hs.unsafe_ptr().unsafe_store(r, Float32(1.0))
+        hs.unsafe_ptr().unsafe_store(n_rows + r, Float32(g))
+        tw += 1.0
+        tg += g
+    ctx.enqueue_copy(dst_buf=stats, src_ptr=hs.unsafe_ptr())
+
+    var row_index = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+    var hi = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
+    for r in range(n_rows):
+        hi.unsafe_ptr().unsafe_store(r, UInt32(r))
+    ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
+    ctx.synchronize()
+
+    var best = 0
+    for i in range(repeats + 1):
+        # Fresh identity index each repeat: the tree permutes it in place.
+        ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=stats, src_ptr=hs.unsafe_ptr())
+        ctx.synchronize()
+        var t0 = perf_counter_ns()
+        var sizes = run_tree(
+            ctx, n_rows, n_features, max_depth, cindex, stats, row_index,
+            Float32(tw), Float32(tg),
+        )
+        var dt = perf_counter_ns() - t0
+        _ = len(sizes)
+        if i == 1 or (i > 1 and dt < best):
+            best = dt
+
+    var ms = Float64(best) / 1.0e6
+    print(
+        "    depth",
+        max_depth,
+        "tree,",
+        n_rows,
+        "rows x",
+        n_features,
+        "binary features:",
+        ms,
+        "ms",
+    )
