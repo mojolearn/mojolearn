@@ -449,3 +449,41 @@ handed before touching the solver.** A cheap assertion that
 `cov[i][j] == cov[j][i]` would have found this in one run, and any future
 kernel producing a matrix with a mathematical structure should be checked for
 that structure and not only for plausible magnitudes.
+
+# `dbscan/` (cuML + RAFT)
+
+## 24. Mojo refuses the same buffer as two mutable kernel arguments
+
+DBSCAN's distance matrix is the dataset against ITSELF, so both GEMM operands
+are `x` and both norm operands are `x_norm`. `enqueue_function` rejects that:
+
+    error: aliasing values passed mutably to 'args' argument and passed
+    mutably to 'args' argument
+
+It checks the underlying value, not the expression, so binding through two
+locals does not help either.
+
+The operands are read-only in the kernel and cuVS declares them `const`, so
+the right fix is an immutable pointer type on the kernel signature, which
+would also be MORE faithful to their declarations rather than less. Until
+then `runner.mojo` makes one aliased copy of `x` and of `x_norm`. That is
+`n_rows * n_features` floats against an `n_rows^2` distance matrix that
+already exists, so the cost is small, but it is a real allocation that their
+code does not make.
+
+## 25. Read their file. Do not describe it.
+
+I wrote a core-point filter into DBSCAN's scan and compaction and documented
+it as "not an optimization, it is the definition". Their
+`thrust::exclusive_scan` runs over the whole degree array with no mask, and
+`adj_to_csr` emits every non-zero. The core restriction is applied one step
+later, in `weak_cc`'s `filter_op`.
+
+The invented version would have produced a graph missing exactly the border
+edges the labeler needs, which is the classic wrong DBSCAN, and it was
+justified in a docstring with a confident paragraph about what "their
+version" does. **Nothing in the docstring was read from their source.**
+
+This is the same failure the repository's founding note describes: our code,
+and our description of their code, are not evidence about their code. Read
+the file.

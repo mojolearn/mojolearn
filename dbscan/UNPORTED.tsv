@@ -1,0 +1,5 @@
+cuml dbscan/runner.cuh batching	not ported	they tile rows so the adjacency matrix stays bounded; one batch here
+cuml dbscan/mergelabels/	not ported	only needed to combine per-batch labelings, and there is one batch
+cuml dbscan/corepoints/exchange.cuh	out of scope	multi-GPU
+cuml dbscan/runner.cuh monotonic relabelling	not ported	renumbers clusters 0..k-1 to match sklearn. Labels are arbitrary up to permutation, so the check compares the PARTITION
+cuvs neighbors/ball_cover	not ported	an index that prunes the neighbourhood search. Brute force first, measure where it stops winning

@@ -1,0 +1,7 @@
+# our_file	upstream_file	status	notes
+# cuML pinned at 7e29955c (the algorithm), RAFT at 9aa17e5 (weak_cc).
+ported/dbscan/vertexdeg/algo.mojo	cuml cpp/src/dbscan/vertexdeg/algo.cuh	replaced	they delegate to cuvs epsilon_neighborhood or a ball-cover index; ported the SHAPE their runner depends on, adj + vd
+ported/dbscan/corepoints/compute.mojo	cuml cpp/src/dbscan/corepoints/compute.cuh	transliterated	four lines, kept as its own file to mirror theirs
+ported/dbscan/adjgraph/algo.mojo	cuml cpp/src/dbscan/adjgraph/algo.cuh	partial+replaced	exclusive scan transliterated from their thrust call; adj_to_csr replaced, theirs is multi-block and deliberately unordered
+ported/dbscan/runner.mojo	cuml cpp/src/dbscan/runner.cuh	partial	single batch, single device; the step order and the placement of the core-point filter are theirs
+ported/sparse/detail/csr.mojo	raft cpp/include/raft/sparse/detail/csr.cuh	transliterated	weak_cc_label_device and weak_cc_init_all_kernel, both propagation guards copied
