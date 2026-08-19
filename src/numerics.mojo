@@ -44,13 +44,24 @@ two modes interleaved and report the ratio.
 """
 
 
-#: Every backend picks every row for speed. Histograms flush through
-#: floating-point atomics, so two runs of the SAME fit on the SAME device may
-#: differ in the last bits. This is CatBoost's shipped behavior.
+#: **THE DEFAULT.** Every row is read from the device's own column. Full
+#: per-vendor speed, and histograms flush through floating-point atomics.
+#:
+#: **What that costs, stated because a user must not discover it:** float
+#: atomics have no ordering guarantee, so the last bits move between two runs
+#: of the SAME fit on the SAME device, not only between vendors. Model files
+#: will not be byte-comparable, a fit is not reproducible from its seed
+#: alone, and a regression test cannot assert on exact predictions. This is
+#: CatBoost's shipped behavior, so it is a defensible default rather than a
+#: novel one.
 comptime NUMERIC_FAST = 0
 
-#: Numeric rows are pinned to the safe column; scheduling rows stay free. The
-#: same fit gives the same model, on this device and across backends.
+#: Opt in when reproducibility is needed: numeric rows are read from
+#: `COLUMN_BIT_IDENTICAL` instead of the device's column, so the same fit
+#: gives the same model on Apple, NVIDIA and AMD and on repeated runs.
+#:
+#: The cost is a measurement, not an argument: the two modes differ by a
+#: named set of rows, so run them interleaved and report the ratio.
 comptime NUMERIC_IDENTICAL = 1
 
 
@@ -64,6 +75,12 @@ struct NumericMode(Copyable, Movable):
     """
 
     var mode: Int
+
+    @staticmethod
+    def default() -> Self:
+        """`FAST`. Per-vendor speed everywhere, and results that move in the
+        last bits run to run. See `NUMERIC_FAST` for the full consequence."""
+        return Self(NUMERIC_FAST)
 
     def deterministic_flush(self) -> Bool:
         """NUMERIC ROW. Whether the shared histogram flushes to global memory

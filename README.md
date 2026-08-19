@@ -61,8 +61,22 @@ on the same device can differ in the last bits. We ship Metal, CUDA and HIP
 from one source, so we need "the same fit gives the same model" to be
 available.
 
-The design is a two-column table. Every backend row is classified by ONE
-question: **does it change the sequence or the precision of the arithmetic?**
+The design is a four-column table: **bit-identical**, apple, nvidia, amd.
+The bit-identical column is not a mode flag, it is a real column holding the
+value every vendor can meet, so it is the INTERSECTION of the other three and
+can be printed and diffed against a device column to show exactly what
+identity costs there.
+
+Resolution substitutes per ROW, not per spec: a scheduling row always comes
+from the device's column, and a numeric row comes from the device's column
+under the default `FAST` mode or from bit-identical under `IDENTICAL`.
+
+**`FAST` is the default.** Full per-vendor speed, and because histograms
+flush through float atomics the last bits move between two runs of the same
+fit on the same device, not only across vendors. That is CatBoost's shipped
+behavior. `IDENTICAL` is the opt-in for reproducibility.
+
+Each row is classified by ONE question. **Does it change the sequence or the precision of the arithmetic?**
 Rows that do are NUMERIC and `IDENTICAL` pins them to a safe column; rows
 that do not are SCHEDULING and every backend picks freely in both modes. So
 geometry runs at full per-backend speed always, and identity costs only the
