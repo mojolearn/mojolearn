@@ -1,4 +1,5 @@
 from mojo_only.launch_probe import probe
+from mojo_only.layout_check import check_layout
 from mojo_only.level_check import check_one_level, check_tree
 from mojo_only.hist_dump_check import check_hist_depends_on_partition
 from mojo_only.level_bench import (
@@ -274,6 +275,9 @@ def show_tree_schedule() raises:
 
 
 def main() raises:
+    print("compressed index layout (host):")
+    check_layout()
+    print()
     print("ONE FULL LEVEL (GPU, end to end):")
     check_hist_depends_on_partition()
     check_one_level()
