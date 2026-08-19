@@ -38,6 +38,10 @@ from ported.methods.greedy_subsets_searcher.kernel.hist_binary import (
 from ported.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
     BLOCK_SIZE,
 )
+from mojo_only.stable_partition import (
+    PARTITION_BLOCK,
+    stable_partition_kernel,
+)
 from mojo_only.level_driver import run_one_level
 
 
@@ -220,3 +224,68 @@ def bench_histogram_only(n_rows: Int, repeats: Int) raises:
     var cells = Float64(n_rows) * Float64(n_features)
     print("    histogram alone:", ms, "ms for", n_rows, "rows x", n_features)
     print("    that is", cells / (ms * 1.0e6), "G cell-updates/s")
+
+
+def bench_partition_only(n_rows: Int, repeats: Int) raises:
+    """The stable partition alone.
+
+    Named as the prime suspect for the 83 percent of a level that is not the
+    histogram, so it gets measured rather than assumed. Two passes of
+    block-wide prefix sums over every row, one block per leaf.
+    """
+    var ctx = DeviceContext()
+
+    var flags = ctx.enqueue_create_buffer[DType.uint8](n_rows)
+    var hf = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
+    for r in range(n_rows):
+        hf.unsafe_ptr().unsafe_store(r, UInt8(1) if (r % 3) == 0 else UInt8(0))
+    ctx.enqueue_copy(dst_buf=flags, src_ptr=hf.unsafe_ptr())
+
+    var p_off = ctx.enqueue_create_buffer[DType.uint32](1)
+    var p_sz = ctx.enqueue_create_buffer[DType.uint32](1)
+    var lids = ctx.enqueue_create_buffer[DType.uint32](1)
+    var a = ctx.enqueue_create_host_buffer[DType.uint32](1)
+    var b = ctx.enqueue_create_host_buffer[DType.uint32](1)
+    var c = ctx.enqueue_create_host_buffer[DType.uint32](1)
+    a.unsafe_ptr().unsafe_store(0, UInt32(0))
+    b.unsafe_ptr().unsafe_store(0, UInt32(n_rows))
+    c.unsafe_ptr().unsafe_store(0, UInt32(0))
+    ctx.enqueue_copy(dst_buf=p_off, src_ptr=a.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=p_sz, src_ptr=b.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=lids, src_ptr=c.unsafe_ptr())
+
+    var gmap = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+    var sflags = ctx.enqueue_create_buffer[DType.uint8](n_rows)
+    ctx.synchronize()
+
+    var best = 0
+    for i in range(repeats + 1):
+        var t0 = perf_counter_ns()
+        ctx.enqueue_function[stable_partition_kernel](
+            lids.unsafe_ptr(),
+            p_off.unsafe_ptr(),
+            p_sz.unsafe_ptr(),
+            flags.unsafe_ptr(),
+            gmap.unsafe_ptr(),
+            sflags.unsafe_ptr(),
+            grid_dim=(1, 1, 1),
+            block_dim=(PARTITION_BLOCK, 1, 1),
+        )
+        ctx.synchronize()
+        var dt = perf_counter_ns() - t0
+        if i == 1:
+            best = dt
+        elif i > 1 and dt < best:
+            best = dt
+
+    var ms = Float64(best) / 1.0e6
+    print("    stable partition alone:", ms, "ms for", n_rows, "rows")
+    print(
+        "    ONE BLOCK for the whole leaf:",
+        PARTITION_BLOCK,
+        "threads over",
+        n_rows,
+        "rows =",
+        (n_rows + PARTITION_BLOCK - 1) // PARTITION_BLOCK,
+        "sequential chunks",
+    )
