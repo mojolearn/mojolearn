@@ -29,6 +29,28 @@ unchanged the moment a second consumer appeared, which is the evidence
 `PLAN.md` wanted for whether the substrate was real or was quietly
 tree-shaped.
 
+SUBSTITUTION AUDIT, 2026-08-19: NOTHING LEFT HERE
+--------------------------------------------------
+Every vendor-shaped call on this path has already been swapped or has no
+counterpart, so this section exists to say the search was done rather than
+skipped.
+
+- `cuvs::selection::select_k` -> `nn.topk.top_k`, WIRED, behind
+  `use_vendor_topk`, with the ported RAFT radix select kept reachable so the
+  vendor answer is checkable. `VENDOR_LIBRARIES.md`.
+- `cuvs::distance::pairwise_distance` at `:189` (cuBLAS underneath) ->
+  `linalg.matmul` via `core/gemm.mojo::gemm_nt`, WIRED. N-T is the shape it
+  supports and the shape every distance wants, so this one costs nothing.
+- `raft::linalg::norm` at `:107-149` -> `core/row_norms.mojo`, whose block
+  reduction is already `max.gpu.primitives.block.sum`.
+- The L2 epilogue at `:207-217` is `raft::linalg::map_offset`, which is
+  RAFT's OWN portable elementwise map and not a CUB/cuBLAS call. Rule 1
+  applies, not rule 2: port their kernel, which is what
+  `core/expand_distances.mojo` is. Not a substitution candidate.
+- `raft::matrix::fill` at `:165-172`, their `n < k` short-fill, is not ported
+  at all. That is a missing CASE, not a missing primitive; see
+  `neighbors/UNPORTED.tsv`.
+
 WHAT IS NOT PORTED
 ------------------
 Their `DistanceEpilogue` template, their precomputed-norm fast paths, the

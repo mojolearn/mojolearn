@@ -40,9 +40,11 @@ unportable. Keeping them apart is the whole content of this section.
 
    One detail is not literal. Their `raft::shfl(x, lid + j, P::AccThCols)`
    ROTATES within a width-`AccThCols` subgroup, relying on CUDA's `width`
-   argument to apply the modulo; Mojo's `shuffle_idx` has no width parameter,
-   so the same coverage is obtained with `shuffle_xor`, which the vendor's own
-   guidance names as the reduction primitive. XOR with an offset below
+   argument to apply the modulo; their own comment at `simt_kernel.cuh:123`
+   says so ("the shfl op applies the modulo internally"). Mojo's
+   `shuffle_idx` has no width parameter, so the same coverage is obtained
+   with `shuffle_xor`, which Modular's own GPU guide names as THE reduction
+   primitive. XOR with an offset below
    `AccThCols` flips only the low lane bits, so it stays inside the same
    aligned `AccThCols` group their rotate stays inside, and both leave EVERY
    lane of the group holding the group's winner. The results are identical,

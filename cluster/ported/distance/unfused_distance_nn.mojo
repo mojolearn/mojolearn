@@ -97,12 +97,13 @@ def reduce_min_kernel(
     - `cub::BlockReduce<KVType, TPB>` becomes a warp-shuffle butterfly
       followed by a one-slot-per-warp shared merge. **This used to be a
       whole-block shared-memory tree, justified by a claim that Mojo has no
-      warp primitives. That claim was false** (PORTING.md 2), and CUB's
-      default block reduction is `BLOCK_REDUCE_WARP_REDUCTIONS`, which is
-      exactly a warp reduction followed by a merge over the per-warp
-      aggregates. So the shape below is now THEIRS rather than a substitute
-      for it, and the shared footprint drops from `TPB` pairs to
-      `TPB / 32` pairs.
+      warp primitives. That claim was false** (PORTING.md 2). CUB's default
+      algorithm is `BLOCK_REDUCE_WARP_REDUCTIONS`
+      (`cub/block/block_reduce.cuh:238`), documented at `:120-135` as a
+      warp-synchronous reduction inside each warp followed by a propagation
+      phase over the per-warp aggregates. So the two stages below are THEIRS
+      rather than a substitute for them, and the shared footprint drops from
+      `TPB` pairs to `TPB / 32` pairs.
     - `raft::KeyValuePair` becomes two output pointers. Mojo can express the
       struct, but a kernel parameter that is a struct of mixed types is a
       launch risk this tree has already been bitten by (PORTING.md 9), and

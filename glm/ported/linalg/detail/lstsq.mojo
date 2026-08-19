@@ -34,6 +34,17 @@ exist here yet. The accuracy difference is real and belongs in any
 comparison against scikit-learn, whose `LinearRegression` uses LAPACK
 `gelsd`, an SVD route.
 
+A CHECKED NEGATIVE: `linalg.gemv` IS HOST-ONLY
+-----------------------------------------------
+Step 6 is `raft::linalg::gemv` upstream and runs on a hand-ported contraction
+kernel here. The reason is NOT that MAX lacks a gemv. It is that
+`linalg.gemv.gemv` takes no `DeviceContext` and no `target` and describes
+itself as a CPU product, so it is the wrong symbol; `linalg.gemv.gemv_gpu`
+is the right one and is unwired. Both are written out at the call site so the
+next reader does not repeat the search. Recorded here because
+`VENDOR_LIBRARIES.md` lists `linalg.gemv.gemv` as AVAILABLE, and AVAILABLE in
+that table means only that the import compiled.
+
 THE STREAM OVERLAP IS NOT PORTED
 --------------------------------
 Theirs computes `A^T A` and `A^T b` on TWO CUDA streams concurrently, with
@@ -139,9 +150,29 @@ def lstsq_eig(
     # tuning. Expressing it as a matmul with `n = 1` produced zeros for some
     # coefficients, which is what sent me to read their line again.
     #
-    # MAX ships `linalg.gemv`, so the finished form is to call that. Until
-    # then the ported kernel is correct here and the cost is nothing: this is
-    # `n_cols x n_cols` against `n_cols`, a 32 x 32 problem in the benchmark.
+    # THE OBVIOUS SWAP IS THE WRONG SYMBOL. `linalg.gemv.gemv` is HOST-ONLY.
+    # Checked, not assumed: its signature is
+    # `gemv[parallelize: Bool, elementwise_lambda_fn](c_buf, a_buf, b_buf)`
+    # with **no `ctx: DeviceContext` and no `target`**, and its own docstring
+    # opens "Computes a CPU matrix-vector product". It is the same tell that
+    # caught `nn.cumsum` in `VENDOR_LIBRARIES.md`: the GPU-capable calls in
+    # this toolchain (`matmul`, `top_k`, `argsort`, `gather`) all carry a
+    # context and this one does not. Handing it device pointers is the
+    # `linalg.transpose` failure again, so it is not a candidate. Recorded so
+    # nobody re-derives it.
+    #
+    # The symbol that IS the candidate is `linalg.gemv.gemv_gpu`, same
+    # module, `gemv_gpu[transpose_b, ...](c, a, b, ctx: DeviceContext)` over
+    # rank-2 TileTensors. That is the real counterpart of
+    # `raft::linalg::gemv` and it is NOT WIRED HERE. Two reasons, both
+    # honest: it has never been executed in this tree, so "the import
+    # compiles" is all anyone could claim for it, and the three OLS checks
+    # are the only thing that would catch it going wrong. It is an open item,
+    # not a blocked one.
+    #
+    # Until then the ported kernel is correct here and the cost is nothing:
+    # this is `n_cols x n_cols` against `n_cols`, a 32 x 32 problem in the
+    # benchmark, which is also why swapping it can only ever buy noise.
     ctx.enqueue_function[gemm_nt_kernel](
         w.unsafe_ptr(),
         inv.unsafe_ptr(),

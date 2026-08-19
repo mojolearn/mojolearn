@@ -63,7 +63,7 @@ the largest open item in the repository.
 | `cuda_util/reduce.cu` | `cub::DeviceSegmentedReduce` | **NOT FOUND** | hand-written `partitions_reduce` |
 | `split_points.cu` | `cub::DeviceSegmentedRadixSort` | **NOT FOUND** | segmented stable partition |
 | cuVS/cuML | `cublasGemmEx` | `linalg.matmul.matmul` AVAILABLE | **WIRED**, N-T shape only |
-| RAFT `lstsq.cuh` | `raft::linalg::gemv` | `linalg.gemv.gemv` AVAILABLE | ported contraction with `n = 1` |
+| RAFT `lstsq.cuh` | `raft::linalg::gemv` | **`linalg.gemv.gemv` IS HOST-ONLY** (no `ctx`, no `target`; its docstring opens "Computes a CPU matrix-vector product"). The GPU counterpart is **`linalg.gemv.gemv_gpu`**, `gemv_gpu[transpose_b](c, a, b, ctx)`, which this table did not list. Not yet wired. | ported contraction with `n = 1` |
 | RAFT `pca.cuh` | cuSOLVER `syevj` | **NOT FOUND** as a dense eigensolver; `linalg.qr_factorization` AVAILABLE | `jacobi_eigh_device.mojo` |
 | CatBoost multiclass | cuSOLVER dense Newton solve | same gap | not ported |
 | RAFT distance | `raft::stats::cov` (`OP_T, OP_N`) | **BLOCKED**: `transpose_a not yet supported` | `covariance_kernel` |
@@ -77,9 +77,10 @@ library. Listed so the distinction is explicit.
 | vendor call | Mojo equivalent | ours today |
 |---|---|---|
 | `cub::BlockReduce` | `max.gpu.primitives.block.sum[block_size=N](val)` AVAILABLE | **SUBSTITUTED** in `core/row_norms.mojo` and `core/column_stats.mojo` (3 kernels) |
-| `cub::BlockScan` | `max.gpu.primitives.block.prefix_sum` AVAILABLE | hand-written Hillis-Steele |
-| `cub::WarpScan` | `std.gpu.primitives.warp.prefix_sum` AVAILABLE | hand-written serial scan |
-| `cub::ShuffleIndex` | `std.gpu.primitives.warp.shuffle_idx` AVAILABLE | **was called blocked. It is not.** |
+| `cub::BlockScan` | `max.gpu.primitives.block.prefix_sum` AVAILABLE | **SUBSTITUTED** in `select_radix` (16 barriers per radix pass per row down to one call), `dbscan/adjgraph`, and the k-means++ device scan |
+| `cub::WarpScan` | `std.gpu.primitives.warp.prefix_sum` AVAILABLE | hand-written serial scan (boosting side, untouched) |
+| `cub::ShuffleIndex` / `raft::shfl` | `std.gpu.primitives.warp.shuffle_xor` AVAILABLE | **SUBSTITUTED** in `unfused_distance_nn` and the fused SIMT kernel. `shuffle_xor` not `shuffle_idx`: theirs is a rotate relying on CUDA's `width` modulo, Mojo's `shuffle_idx` has no width parameter, and XOR over the same aligned group returns the identical pair because the reducer is an idempotent min over a total order. |
+| `cub::BlockReduce<KeyValuePair>` | none directly; built from `warp.shuffle_xor` + a 4-way block merge | **SUBSTITUTED**. `block.min` reduces VALUES only and cannot carry the key, which is why the plain block collectives never solved this. CUB's own default is `BLOCK_REDUCE_WARP_REDUCTIONS`, a two-stage warp-then-propagate shape, so the two-stage port is closer to theirs than the old whole-block tree was. |
 | `cub::BlockRadixSort` | **NOT FOUND** | n/a |
 | `ThreadLoad` / `ThreadStore` cache hints | **NOT FOUND** | plain loads |
 | `LoadDirectWarpStriped` | **NOT FOUND** | plain strided loads |

@@ -245,7 +245,20 @@ Items 14 and up belong to the k-means port. Same numbering, same file, on
 purpose: these are all one tree and a reader should not have to know which
 upstream a constraint came from to find it.
 
-## 14. `cub::BlockReduce` over a key-value pair
+## 14. SUPERSEDED 2026-08-19: the key-value block reduce is now warp-based
+
+**The justification below rested on item 2's false claim that Mojo has no
+warp primitives.** `std.gpu.primitives.warp.shuffle_xor` exists, and both
+distance kernels now do a shuffle butterfly on the (value, key) pair followed
+by a small block merge, which is the shape CUB itself defaults to
+(`BLOCK_REDUCE_WARP_REDUCTIONS`). The old whole-block shared tree is gone.
+
+The conclusion of the original entry survives unchanged and is the reason the
+substitution was safe: the reducer is a MIN over a total order, so every
+reduction shape returns the same pair. That is why this could be re-derived
+without re-validating the numerics.
+
+### The original entry, kept for the argument about total orders
 
 `unfused_distance_nn.cuh:99` reduces the per-thread nearest centroid with
 `cub::BlockReduce<KVType, TPB>` and a custom comparator. Mojo 1.0 has no CUB,

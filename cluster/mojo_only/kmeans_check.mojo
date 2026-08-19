@@ -39,6 +39,10 @@ its planted membership through that permutation.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
+from cluster.ported.distance.fused_distance_nn.simt_kernel import (
+    fused_distance_nn_kernel,
+)
+from core.gemm import GEMM_MBLK, GEMM_THREADS
 from cluster.ported.cluster.detail.min_cluster_distance_compute import (
     compute_centroid_norms,
     min_cluster_and_distance_compute,
@@ -650,4 +654,116 @@ def check_kmeans_plus_plus_init() raises:
         " permutation through the k-means++ path, inertia "
         + String(result.inertia)
         + ", " + String(result.n_iter) + " iterations"
+    )
+
+
+def check_fused_reduction_across_lanes() raises:
+    """Exercise the fused kernel's CROSS-LANE merge, which nothing else did.
+
+    **This check exists because a sabotage came back clean and that was the
+    check's fault, not the code's.** Skipping a partner lane in the fused
+    butterfly changed nothing, because at `CHECK_CLUSTERS = 4` every valid
+    column lands in ONE lane group: `GEMM_ACC_COLS_PER_TH = 4` columns per
+    thread means `tc = col // 4`, so columns 0..3 are all `tc == 0` and the
+    other fifteen lanes hold nothing but `FUSED_MAX`. The merge was
+    degenerate and a broken merge could not show.
+
+    That is the same failure the repository already has a name for: a fixture
+    whose structure hides the thing under test. Here it hid a whole reduction
+    stage rather than a permutation.
+
+    So: 40 clusters, spreading real values over ten lane groups, checked
+    against a host argmin. Now a broken cross-lane merge has to show.
+    """
+    var ctx = DeviceContext()
+    var n = 512
+    var d = 4
+    var k = 40
+
+    var x = ctx.enqueue_create_buffer[DType.float32](n * d)
+    var c = ctx.enqueue_create_buffer[DType.float32](k * d)
+    var xn = ctx.enqueue_create_buffer[DType.float32](n)
+    var cn = ctx.enqueue_create_buffer[DType.float32](k)
+    var okey = ctx.enqueue_create_buffer[DType.uint32](n)
+    var oval = ctx.enqueue_create_buffer[DType.float32](n)
+    ctx.synchronize()
+
+    var hx = ctx.enqueue_create_host_buffer[DType.float32](n * d)
+    var hc = ctx.enqueue_create_host_buffer[DType.float32](k * d)
+    for i in range(n):
+        for f in range(d):
+            hx.unsafe_ptr().unsafe_store(
+                i * d + f, Float32(_jitter(i, f) * 10.0)
+            )
+    for j in range(k):
+        for f in range(d):
+            hc.unsafe_ptr().unsafe_store(
+                j * d + f, Float32(_jitter(j + 9001, f) * 10.0)
+            )
+    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=c, src_ptr=hc.unsafe_ptr())
+    ctx.synchronize()
+
+    ctx.enqueue_function[row_norm_kernel](
+        xn.unsafe_ptr(), x.unsafe_ptr(), Int32(d), Int32(0),
+        grid_dim=(n, 1, 1), block_dim=(NORM_TPB, 1, 1),
+    )
+    ctx.enqueue_function[row_norm_kernel](
+        cn.unsafe_ptr(), c.unsafe_ptr(), Int32(d), Int32(0),
+        grid_dim=(k, 1, 1), block_dim=(NORM_TPB, 1, 1),
+    )
+    ctx.synchronize()
+    ctx.enqueue_function[fused_distance_nn_kernel](
+        okey.unsafe_ptr(), oval.unsafe_ptr(), x.unsafe_ptr(), c.unsafe_ptr(),
+        xn.unsafe_ptr(), cn.unsafe_ptr(),
+        Int32(n), Int32(k), Int32(d), Int32(0),
+        grid_dim=(1, (n + GEMM_MBLK - 1) // GEMM_MBLK, 1),
+        block_dim=(GEMM_THREADS, 1, 1),
+    )
+    ctx.synchronize()
+
+    var hk = ctx.enqueue_create_host_buffer[DType.uint32](n)
+    ctx.enqueue_copy(dst_ptr=hk.unsafe_ptr(), src_buf=okey)
+    ctx.synchronize()
+
+    var wrong = 0
+    var spread = List[Int]()
+    for _t in range(16):
+        spread.append(0)
+    for i in range(n):
+        var best = 0
+        var best_d = Float64(1.0e30)
+        for j in range(k):
+            var dd = Float64(0.0)
+            for f in range(d):
+                var diff = Float64(
+                    hx.unsafe_ptr().unsafe_load(i * d + f)
+                ) - Float64(hc.unsafe_ptr().unsafe_load(j * d + f))
+                dd += diff * diff
+            if dd < best_d:
+                best_d = dd
+                best = j
+        var got = Int(hk.unsafe_ptr().unsafe_load(i))
+        if got != best:
+            wrong += 1
+        spread[best // 4] = 1
+    var lanes = 0
+    for t in range(16):
+        lanes += spread[t]
+
+    if lanes < 4:
+        raise Error(
+            "the fixture only used " + String(lanes) + " lane groups; it"
+            " cannot exercise a cross-lane merge"
+        )
+    if wrong != 0:
+        raise Error(
+            String(wrong) + " of " + String(n)
+            + " assignments disagree with a host argmin over "
+            + String(k) + " clusters"
+        )
+    print(
+        "check_fused_reduction_across_lanes OK: " + String(n)
+        + " rows x " + String(k) + " clusters match a host argmin, winners"
+        " spread over " + String(lanes) + " lane groups"
     )

@@ -14,26 +14,36 @@ follows. The refined rule:
     a RAFT call we stand in for   ->  mojo_only/, naming the call
     a RAFT file we transliterate  ->  ported/,  with raft as its upstream
 
-WHY THIS ONE AND NOT THE OTHER ONE
-----------------------------------
-RAFT ships two top-k families and only one of them can exist here.
+WHY THIS ONE FIRST, AND THE OTHER ONE IS **NOT** RULED OUT
+----------------------------------------------------------
+RAFT ships two top-k families. This file ported the radix one.
 
-`matrix/detail/select_warpsort.cuh` is the FAISS WarpSelect design and is
-saturated with warp intrinsics: 14 occurrences of `__shfl` and `laneId()`.
-Mojo 1.0 has no warp primitives at all, only `block` and `barrier()`, so it
-is not expressible.
+**CORRECTED 2026-08-19.** This section used to say that
+`matrix/detail/select_warpsort.cuh`, the FAISS WarpSelect design, was **not
+expressible** because "Mojo 1.0 has no warp primitives at all, only `block`
+and `barrier()`". **That claim was false.** Warp primitives exist and are
+under `std.gpu.primitives.warp`: `shuffle_down`, `shuffle_idx`,
+`shuffle_xor`, `lane_id`, `prefix_sum`, `reduce`, `sum`, `max`, `broadcast`,
+with `syncwarp` in `max.gpu.sync`. The earlier searches looked under
+`std.gpu`, `max.gpu`, `std.gpu.block` and `max.gpu.block` and missed the
+`primitives` level in all four. `VENDOR_LIBRARIES.md` opens by retracting the
+claim; this file was one of the places it was asserted.
 
-`select_radix.cuh` has **ZERO** warp intrinsics. Counted, not assumed. It
-synchronizes with `__syncthreads()` and counts with CUB block collectives,
-which is exactly the pair Mojo provides. The algorithm ports; only the
-primitives underneath change, and that is the correct thing to substitute.
+So the 14 occurrences of `__shfl` and `laneId()` in `select_warpsort.cuh` are
+not a wall. **Warpsort is an OPEN item, not a blocked one**, and it is not a
+small one: `select_k-inl.cuh:38` routes `k > 256` to radix and `2 < k <= 256`
+to the warp family, so every k a k-NN user actually asks for (10, 50, 100)
+goes to warpsort in RAFT's own dispatch and radix is their second choice
+across the entire practical range. Nothing here has measured the two against
+each other, and porting warpsort is a large job that has not started.
 
-**Their own dispatch prefers the one we cannot have.** `select_k-inl.cuh:38`
-routes `k > 256` to radix and `2 < k <= 256` to the warp family, so every k a
-k-NN user actually asks for (10, 50, 100) goes to warpsort and radix is
-RAFT's second choice across the practical range. It is our only choice, and
-the bar is not WarpSelect on an NVIDIA card, because that card cannot run
-here at all. The bar is `argpartition` on a CPU.
+What remains TRUE about the choice made here: `select_radix.cuh` has **ZERO**
+warp intrinsics. Counted, not assumed. It synchronizes with
+`__syncthreads()` and counts with CUB block collectives, which is the pair
+Mojo has shipped all along, so it was the cheaper of the two to port and it
+went first for that reason and no longer for the false one. The bar is not
+WarpSelect on an NVIDIA card, because that card cannot run here at all. The
+bar is `argpartition` on a CPU.
 
 A FINDING ABOUT THEIR TIE HANDLING, WHICH IS THE OPPOSITE OF WHAT I EXPECTED
 ----------------------------------------------------------------------------
@@ -65,13 +75,31 @@ DEVIATIONS
    (`PORTING.md 1`) and makes the block scan exactly one element per thread.
    A pass costs a full sweep of the survivors, so this trades one extra pass
    for a much smaller scan. Measure before changing it.
-2. `cub::BlockScan` becomes a Hillis-Steele scan in shared memory, the same
-   substitution as `PORTING.md 14`. It is a scan over COUNTS, which are
-   integers, so unlike the histogram scan of `PORTING.md 8` it is exact and
-   order-independent.
-3. `vectorized_process` is not ported. It is a 16-byte-load optimization
+2. `vectorized_process` is not ported. It is a 16-byte-load optimization
    whose only effect is bandwidth, and their own comment says they avoid it
    in two of the three branches because it costs registers.
+
+WHAT USED TO BE DEVIATION 2 AND IS NOT A DEVIATION ANY MORE
+-----------------------------------------------------------
+The bucket scan was a hand-written Hillis-Steele loop in shared memory, and
+it was listed here as a deviation. **It now calls
+`max.gpu.primitives.block.prefix_sum[block_size=SELECT_BLOCK]`, Modular's
+block collective, which is the direct counterpart of the
+`cub::BlockScan<IdxT, BlockSize>` at `select_radix.cuh:341` and its
+`.InclusiveSum` at `:353,:364`.** `SELECT_BLOCK == NUM_BUCKETS`, so we land
+in their `items_per_thread == 1` branch: one count per thread, one call.
+
+What that bought: the loop ran 2 barriers x 8 rounds = **16 barriers per
+radix pass per row**, against one collective call. The counts are integers,
+so the result is bit-for-bit the same sequence the loop produced and there is
+no fidelity cost anywhere in it. The scan is now the same KIND of thing
+upstream's is, so it is ordinary ported code, not a substitution to declare.
+See `VENDOR_LIBRARIES.md`.
+
+`Atomic.fetch_add` on the SHARED histogram is NOT in that category and stays.
+It is theirs: `select_radix.cuh:1002,1016,1035` in
+`filter_and_histogram_for_one_block` bump a shared `histogram` with
+`atomicAdd` exactly as we do, and these are INTEGER atomics, which Metal has.
 """
 
 from std.atomic import Atomic
@@ -79,6 +107,7 @@ from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import sqrt
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
+from max.gpu.primitives.block import prefix_sum as block_prefix_sum
 from max.gpu.sync import barrier
 
 
@@ -276,16 +305,21 @@ def radix_topk_one_block_kernel(
         barrier()
 
         # --- scan: inclusive prefix over the bucket counts ---------------
-        # DEVIATION 2. Integer counts, so exact and order-independent.
-        var offset = 1
-        while offset < NUM_BUCKETS:
-            var addend = Int32(0)
-            if tid >= offset:
-                addend = hist[tid - offset]
-            barrier()
-            hist[tid] = hist[tid] + addend
-            barrier()
-            offset *= 2
+        # `cub::BlockScan<IdxT, BlockSize>` (`select_radix.cuh:341`) and its
+        # `.InclusiveSum` (`:353,:364`), as `max.gpu.primitives.block`'s
+        # counterpart. INCLUSIVE, because `choose_bucket` below reads
+        # `hist[i - 1]` and `hist[i]` as an inclusive prefix, which is what
+        # their `scan()` writes back over the histogram.
+        #
+        # The hand-written Hillis-Steele loop this replaced is gone: it cost
+        # 2 barriers x 8 rounds = 16 barriers per radix pass per row against
+        # one collective call, and the counts are integers so the arithmetic
+        # is identical. `SELECT_BLOCK == NUM_BUCKETS`, one count per thread,
+        # so this is their `items_per_thread == 1` branch. See
+        # VENDOR_LIBRARIES.md.
+        var scanned = block_prefix_sum[block_size=SELECT_BLOCK](hist[tid])
+        hist[tid] = scanned
+        barrier()
 
         # --- choose_bucket -----------------------------------------------
         var prev_count = Int32(0)
