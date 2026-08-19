@@ -111,3 +111,23 @@ Three consequences worth stating plainly:
 3. Fixed point needs a scale, and the scale must bound every partial sum.
    That is a real piece of work CatBoost never has to do, and it has to be
    ported from nothing.
+
+
+## 8. The bin prefix scan: no `cub::WarpScan`
+
+`ScanHistogramsImpl` scans with `cub::WarpScan<double>` and
+`cub::ShuffleIndex<32>` (`histogram_utils.cu:381`, `:413`, `:423`). Those are
+the **only warp shuffles in the entire oblivious path**, so this is the one
+place the missing warp primitives bite the algorithm rather than just the
+barrier width.
+
+Substituted with a serial scan, one thread per (feature, leaf, stat). Safe
+for identity, not free for speed: a prefix sum is order-defined, so a serial
+scan and a correct parallel scan agree exactly in exact arithmetic and NOT in
+floating point, which is why the scan is a numeric row pinned to one shape
+across vendors rather than tuned per vendor.
+
+Cheap here because folds per feature is small (1 for the binary features that
+dominate covtype, 255 at the very most) while features are many, and the leaf
+and stat axes fill the machine anyway. It would need revisiting on a dataset
+of few, very high-cardinality features.
