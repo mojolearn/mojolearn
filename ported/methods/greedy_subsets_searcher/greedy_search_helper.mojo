@@ -55,6 +55,22 @@ from ported.methods.leaves_estimation.leaves_estimation import (
     compute_leaf_values_kernel,
 )
 from mojo_only.kernel_matrix import replicas_for
+from ported.gpu_data.grid_policy import (
+    POLICY_BINARY,
+    POLICY_HALF_BYTE,
+    POLICY_ONE_BYTE,
+)
+from ported.methods.greedy_subsets_searcher.kernel.hist_half_byte import (
+    half_byte_hist_gather_kernel,
+    half_byte_hist_kernel,
+)
+from ported.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
+    ONE_BYTE_BLOCK_SIZE,
+    one_byte_hist_gather_kernel,
+    one_byte_hist_kernel,
+)
+from ported.gpu_data.feature_blocks import PolicyBlock, blocks_for
+from ported.gpu_data.compressed_index_builder import build_layout
 from ported.gpu_util.copy import (
     COPY_BLOCK,
     copy_f32_kernel,
@@ -76,6 +92,22 @@ from ported.methods.leaves_estimation.leaves_estimation import (
     compute_leaf_values_kernel,
 )
 from mojo_only.kernel_matrix import replicas_for
+from ported.gpu_data.grid_policy import (
+    POLICY_BINARY,
+    POLICY_HALF_BYTE,
+    POLICY_ONE_BYTE,
+)
+from ported.methods.greedy_subsets_searcher.kernel.hist_half_byte import (
+    half_byte_hist_gather_kernel,
+    half_byte_hist_kernel,
+)
+from ported.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
+    ONE_BYTE_BLOCK_SIZE,
+    one_byte_hist_gather_kernel,
+    one_byte_hist_kernel,
+)
+from ported.gpu_data.feature_blocks import PolicyBlock, blocks_for
+from ported.gpu_data.compressed_index_builder import build_layout
 from ported.gpu_util.copy import (
     COPY_BLOCK,
     copy_f32_kernel,
@@ -861,3 +893,176 @@ def run_tree(
     for i in range(n_live):
         out.append(Int(h_sz.unsafe_ptr().unsafe_load(i)))
     return out^
+
+
+@fieldwise_init
+struct DeviceBlock(Copyable, Movable):
+    """One policy's descriptor arrays, uploaded once for the whole fit."""
+
+    var policy: Int
+    var n_features: Int
+    var first_column: Int
+    var total_folds: Int
+    var folds: DeviceBuffer[DType.uint32]
+    var fold_off: DeviceBuffer[DType.uint32]
+    var grp_off: DeviceBuffer[DType.uint32]
+    var grp_sz: DeviceBuffer[DType.uint32]
+
+
+def upload_blocks(
+    ctx: DeviceContext, blocks: List[PolicyBlock]
+) raises -> List[DeviceBlock]:
+    """Upload every policy's descriptor arrays once.
+
+    They are constant for the fit: the layout depends on fold counts, not on
+    the tree. Re-uploading per level would be a copy per level for nothing.
+    """
+    var out = List[DeviceBlock]()
+    for b in range(len(blocks)):
+        ref blk = blocks[b]
+        var n = blk.count()
+        var d_folds = ctx.enqueue_create_buffer[DType.uint32](n)
+        var d_fo = ctx.enqueue_create_buffer[DType.uint32](n)
+        var d_go = ctx.enqueue_create_buffer[DType.uint32](n)
+        var d_gs = ctx.enqueue_create_buffer[DType.uint32](n)
+        var h1 = ctx.enqueue_create_host_buffer[DType.uint32](n)
+        var h2 = ctx.enqueue_create_host_buffer[DType.uint32](n)
+        var h3 = ctx.enqueue_create_host_buffer[DType.uint32](n)
+        var h4 = ctx.enqueue_create_host_buffer[DType.uint32](n)
+        var total = 0
+        for k in range(n):
+            h1.unsafe_ptr().unsafe_store(k, blk.folds[k])
+            h2.unsafe_ptr().unsafe_store(k, blk.fold_offset[k])
+            h3.unsafe_ptr().unsafe_store(k, blk.group_offset[k])
+            h4.unsafe_ptr().unsafe_store(k, blk.group_size[k])
+            total += Int(blk.folds[k])
+        ctx.enqueue_copy(dst_buf=d_folds, src_ptr=h1.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d_fo, src_ptr=h2.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d_go, src_ptr=h3.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d_gs, src_ptr=h4.unsafe_ptr())
+        out.append(
+            DeviceBlock(
+                blk.policy, n, blk.first_column, total,
+                d_folds^, d_fo^, d_go^, d_gs^,
+            )
+        )
+    ctx.synchronize()
+    return out^
+
+
+def launch_histograms_for_blocks(
+    ctx: DeviceContext,
+    blocks: List[DeviceBlock],
+    depth: Int,
+    n_live: Int,
+    n_rows: Int,
+    stat_count: Int,
+    max_leaves: Int,
+    replicas: Int,
+    fixed_scale: Float32,
+    mut cindex: DeviceBuffer[DType.uint32],
+    mut row_index: DeviceBuffer[DType.uint32],
+    mut stats: DeviceBuffer[DType.float32],
+    mut p_off: DeviceBuffer[DType.uint32],
+    mut p_sz: DeviceBuffer[DType.uint32],
+    mut ids: DeviceBuffer[DType.uint32],
+    mut hist: DeviceBuffer[DType.float32],
+    mut acc_i32: DeviceBuffer[DType.int32],
+) raises:
+    """One histogram launch per policy present, dispatching on the block.
+
+    This is `B` histogram kernels of the `3B + 12` census, and it is where
+    the port stops assuming a uniform dataset. Direct loads at depth 0 where
+    the index is the identity, gather below it, exactly as the binary path
+    already does.
+
+    `bins_line_size` is passed as the block's FIRST COLUMN stride so the
+    kernel's `blockIdx.x / maxBlocksPerPart` column arithmetic lands inside
+    this policy's contiguous columns.
+    """
+    for b in range(len(blocks)):
+        ref blk = blocks[b]
+        var line = n_rows * blk.first_column
+
+        if blk.policy == POLICY_BINARY:
+            if depth == 0:
+                ctx.enqueue_function[binary_hist_kernel](
+                    blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
+                    blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
+                    Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
+                    stats.unsafe_ptr(), Int32(n_rows),
+                    p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
+                    hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
+                    Int32(max_leaves), Int32(stat_count),
+                    grid_dim=(replicas, n_live, stat_count),
+                    block_dim=(BLOCK_SIZE, 1, 1),
+                )
+            else:
+                ctx.enqueue_function[binary_hist_gather_kernel](
+                    blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
+                    blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
+                    Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
+                    row_index.unsafe_ptr(),
+                    stats.unsafe_ptr(), Int32(n_rows),
+                    p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
+                    hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
+                    Int32(max_leaves), Int32(stat_count),
+                    grid_dim=(replicas, n_live, stat_count),
+                    block_dim=(BLOCK_SIZE, 1, 1),
+                )
+        elif blk.policy == POLICY_HALF_BYTE:
+            if depth == 0:
+                ctx.enqueue_function[half_byte_hist_kernel](
+                    blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
+                    blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
+                    Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
+                    stats.unsafe_ptr(), Int32(n_rows),
+                    p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
+                    hist.unsafe_ptr(),
+                    Int32(max_leaves), Int32(stat_count),
+                    grid_dim=(1, n_live, stat_count),
+                    block_dim=(BLOCK_SIZE, 1, 1),
+                )
+            else:
+                ctx.enqueue_function[half_byte_hist_gather_kernel](
+                    blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
+                    blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
+                    Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
+                    row_index.unsafe_ptr(),
+                    stats.unsafe_ptr(), Int32(n_rows),
+                    p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
+                    hist.unsafe_ptr(),
+                    Int32(max_leaves), Int32(stat_count),
+                    grid_dim=(1, n_live, stat_count),
+                    block_dim=(BLOCK_SIZE, 1, 1),
+                )
+        else:
+            # One-byte is comptime-parameterized by bit width. 8 bits covers
+            # every fold count the policy admits; a narrower instantiation
+            # would run fewer passes and is a tuning question, not a
+            # correctness one.
+            if depth == 0:
+                ctx.enqueue_function[one_byte_hist_kernel[8]](
+                    blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
+                    blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
+                    Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
+                    stats.unsafe_ptr(), Int32(n_rows),
+                    p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
+                    hist.unsafe_ptr(),
+                    Int32(max_leaves), Int32(stat_count),
+                    grid_dim=(replicas, n_live, stat_count),
+                    block_dim=(ONE_BYTE_BLOCK_SIZE, 1, 1),
+                )
+            else:
+                ctx.enqueue_function[one_byte_hist_gather_kernel[8]](
+                    blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
+                    blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
+                    Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
+                    row_index.unsafe_ptr(),
+                    stats.unsafe_ptr(), Int32(n_rows),
+                    p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
+                    hist.unsafe_ptr(),
+                    Int32(max_leaves), Int32(stat_count),
+                    grid_dim=(replicas, n_live, stat_count),
+                    block_dim=(ONE_BYTE_BLOCK_SIZE, 1, 1),
+                )
