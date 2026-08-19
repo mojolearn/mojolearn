@@ -35,39 +35,41 @@ number finally arrives, and every deviation is recorded in `PORTING.md`.
 
 ## State: what is broken
 
-**Mixed-width trees do not split.** They grow, conserve every row and produce
-`2^depth` partitions, but leave 1 non-empty leaf. `UNWIRED.md` has the full
-trail. The live target, sharply characterized:
+Nothing known. Mixed-width trees now grow, split and conserve every row:
+depth 4 gives 16 of 16 non-empty leaves, depth 6 gives 44 of 64 against the
+uniform binary tree's 46. `UNWIRED.md` has the full trail of nine exclusions
+and seven real bugs.
 
-- one-byte features ALONE fail, 3 of 4 slices wrong. Binary alone and
-  half-byte alone are exact, so cross-block interference is excluded.
-- the standalone `check_one_byte_bits[6](2)` PASSES at what look like
-  identical parameters.
-- two enumerable differences remain: the probe uses 2048 rows (4 accumulation
-  iterations) against the standalone's 640 (2), and passes `leaf_count = 2`
-  rather than 1.
+The cause was `TPointHistOneByte::Reduce`, which is TWO stages in CatBoost
+(`hist_one_byte.cu:177-230`) and had been collapsed into one strided fold.
+The second defect was the test data: `check_mixed_tree` planted bins as
+`x % folds[f]`, but `Folds` is the border count and a feature takes bins
+`0..Folds`, so every binary feature was the constant 0.
 
-**Row count RULED OUT.** `check_one_byte_bits[6](2, 32)` runs at 2048 rows
-and passes, 0 wrong of 512. The kernel is correct at EVERY parameter the
-probe uses: 4 features, 64 folds, 6 bits, 2 stat planes, 2048 rows.
+**READ THIS BEFORE WRITING ANOTHER CHECK.** Both defects were invisible to
+the checks written to catch them, for the same reason. A single strided fold
+gives the RIGHT answer whenever every cell holds the same value, and
+`check_one_byte_bits` assigned bins `(r + f) % n_folds`, which makes every
+cell equal. Two separate exclusions therefore reported the kernel correct at
+exactly the parameters that were failing. Same kernel, same parameters, only
+the bin pattern changed:
 
-**A sixth real bug was found and fixed here and was NOT the cause:** the
-per-block scratch was never zeroed. CatBoost's writeback is guarded by
-`if (abs(val) > 1e-20f)`, so a cell whose value is zero is never written and
-keeps whatever the buffer held. This port zeroed the FLAT histogram and not
-the per-block scratch the kernels actually write, which also means the
-scratch cannot be shared between blocks without clearing.
+    uniform   (r + f) % 64      0 wrong of 512
+    scattered hashed          490 wrong of 512
 
-**WHAT IS LEFT.** The kernel is correct in isolation; the probe path is not.
-The remaining difference is that the probe goes through
-`launch_histograms_for_blocks` and reads the POST-BRIDGE flat histogram,
-where the standalone launches the kernel directly and reads its output.
+A histogram check whose expected value is the same in every cell verifies the
+total and nothing about placement. Plant SCATTERED bins and compare per cell
+against a host tally. Likewise, conservation cannot see a tree that never
+splits, so both tree checks now require `nonempty >= 2`.
 
-**NEXT STEP:** read `block_hist` directly in the probe, BEFORE the bridge
-runs, and compare it against the host tally. That splits the remaining space
-exactly in half: if block_hist is right, the bridge is wrong; if it is wrong,
-the launch parameters `launch_histograms_for_blocks` computes differ from
-what the standalone passes. Everything else about the kernel is excluded.
+## State: what is next
+
+Every timing number in this port was measured on 32 uniform binary features,
+which is one policy, one launch per level and a 64-cell histogram. That is
+the shape CatBoost's design is LEAST suited to and the one it was least
+written for. The mixed path is what needed fixing before those numbers meant
+anything, and it now works, so the whole timing table should be re-measured
+on a wide mixed dataset before any of it is quoted.
 
 ## The method that has worked, and the one that has not
 

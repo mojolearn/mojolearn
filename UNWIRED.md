@@ -99,101 +99,87 @@ failed; the measurement took one attempt.
 So the hunt paid even though the final cause was elsewhere.
 
 
-## Mixed-width trees: NOT WORKING
+## Mixed-width trees: WORKING
 
-`run_tree_layout` grows a tree over mixed feature widths, conserves every row
-at every depth, and produces `2^depth` partitions. It **does not split**:
-depth 6 over 4,096 rows leaves 1 non-empty leaf of 64.
+`run_tree_layout` grows, splits and conserves every row over a dataset mixing
+binary, half-byte and one-byte features:
 
-The uniform-binary `run_tree` is unaffected and still correct: 46 of 64
-leaves populated at depth 6.
+    depth 4 -> 16 of 16 leaves non-empty
+    depth 6 -> 44 of 64 leaves non-empty   (uniform binary gets 46)
 
-One real bug found and fixed while chasing it, which was not the cause: the
-histogram kernels took a single `bins_line_size` and used it both as the
-policy's column BASE and as the stride between feature blocks. CatBoost keeps
-those separate (`cindex += features->CompressedIndexOffset`, distinct from
-the block stride), and conflating them made every policy after the first read
-the first one's bits. Now a separate `cindex_base_in` parameter on all six
-kernels.
+For most of its life it grew, conserved every row and produced `2^depth`
+partitions while splitting NOTHING: 1 non-empty leaf of 64. Two defects, and
+seven real bugs found while chasing them.
 
-A SECOND real omission found and ported, also not the cause:
-`WriteReducesHistograms` (`histogram_utils.cu:99`). CatBoost keeps TWO
-histogram layouts, `[leaf][stat][bin-within-block]` for what the kernels
-write and `[leaf][stat][bin-across-all-blocks]` for what the scorer reads,
-and that kernel is the bridge. This port had the kernels writing straight
-into the flat array, which is correct for ONE block because the strides
-coincide and wrong for several because each strides by its own size.
+### The cause: `TPointHistOneByte::Reduce` is two stages
 
-**The byte probe ran and localized it in one attempt**, after three
-inferences had each found a real bug without finding this one.
-`mojo_only/mixed_hist_probe.mojo` builds the depth-0 histogram for a mixed
-dataset and compares every policy's slice against a host tally.
+`hist_one_byte.cu:177-230` reduces in two:
 
-It found a THIRD real bug immediately: the block-to-flat bridge was
-DUPLICATED in the dispatcher, so `block_first_bin` advanced twice per block
-and every slice after the binary one landed a cell late, each feature reading
-its predecessor's count. Removing the duplicate took the failure from 8 wrong
-slices of 16 to 2.
+1. fold the per-warp copies at stride `warpHistSize = 1024` into
+   `Histogram[1024 + start]`
+2. UN-SCRAMBLE. The slot for feature `f` bin `b` is
+   `((b & 31) << 5) + 4 * (b >> 5) + f + innerHistStart`, so each feature's
+   `8 >> InnerHistBitsCount` sub-copies have to be gathered:
+   `sum[i] += src[i + block * blockSize]`, then
+   `Histogram[histSize * i + fold] = sum[i]` with `i` the FEATURE
 
-**Remaining: the one-byte kernel is wrong under `stat_count = 2`.** Binary
-and half-byte are now exact. Two of four one-byte features return wrong
-counts at `bits = 8`, and FOUR of four at the width-matched `bits = 6`, so
-changing the width only moves which features are wrong. Every standalone
-one-byte check passed at widths 5, 6, 7 and 8 with `folds == 2^bits` and
-`stat_count = 1`; the mixed path is the first use with two stat planes, which
-is the configuration those checks never covered.
+The port had collapsed both into one fold at stride `4 * histSize`, which
+sums the wrong set of cells.
 
-The width-matched dispatch is KEPT even though it scores worse, because
-picking `[8]` for scoring 2 instead of 4 when both are wrong is fitting to
-noise.
+### Why every check passed anyway
 
-**`stat_count = 2` RULED OUT.** The standalone one-byte check now runs with
-two stat planes and passes: 0 wrong of 512 at 6 bits, 0 wrong of 2048 at 8
-bits. The kernel is correct in isolation at exactly the configuration the
-mixed path uses (4 features, 64 folds, 6 bits, 2 planes), so the defect is in
-the mixed SETUP around it rather than in the kernel.
+**A single strided fold returns the RIGHT answer whenever every cell holds
+the same value.** `check_one_byte_bits` assigned bins `(r + f) % n_folds`,
+which gives consecutive rows consecutive bins and leaves every cell holding
+exactly `rows_per_fold`. Summing the wrong set of equal cells still lands on
+the right number. The check could not see a permutation.
 
-Excluded so far: the compressed-index base, the missing bridge kernel, the
-duplicated bridge, the bit width, the stat count.
+`check_one_byte_bits` now takes `scattered`, which hashes the bin instead.
+Same kernel, same parameters, 2048 rows, 4 features, 64 folds, 6 bits, 2
+stats:
 
-**AND CROSS-BLOCK INTERFERENCE IS NOW EXCLUDED TOO.** The probe takes a
-per-policy feature count, and one-byte features ALONE fail: 3 of 4 wrong with
-no binary or half-byte block present. Binary alone and half-byte alone are
-exact.
+    uniform   (r + f) % 64      0 wrong of 512
+    scattered hashed          490 wrong of 512
 
-So the target is the one-byte block's own setup in the probe path, and the
-contradiction is sharp: the standalone `check_one_byte_bits[6](2)` passes
-with what appear to be identical parameters, 4 features of 64 folds at 6 bits
-with 2 stat planes, the same shifts, fold offsets and group size. The
-remaining differences are small and enumerable:
+That reproduces the mixed-path failure with no dispatcher, no feature blocks
+and no bridge, and fold 0 reads `38.0 / want 41` in both.
 
-  - the probe uses 2048 rows against the standalone's 640, which is 4
-    iterations of the accumulation loop rather than 2
-  - the probe passes `leaf_count = 2` where the standalone passes 1, though
-    `device_offset = group_offset * stat_count * leaf_count` is 0 either way
-    since `group_offset` is 0
+### The second defect: the test data
 
-Next: run `check_one_byte_bits[6](2)` at 2048 rows. If it fails, the kernel
-has a row-count-dependent defect and the standalone check's 640 rows were
-hiding it; if it passes, the difference is in the probe's setup.
+`check_mixed_tree` planted bins as `x % folds[f]`, but `Folds` is the BORDER
+count and a feature takes bins `0..Folds`. `% 1` made all 8 binary features
+the constant 0, and a split resolved onto a constant feature puts every row
+on one side.
+
+### The assertion that was missing
+
+Conservation cannot see a tree that never splits. Sending every row to one
+side of every split conserves rows exactly and still produces `2^depth`
+partitions, so "rows sum to `n_rows`" and "leaf count is `2^depth`" both
+pass. Both tree checks now also require `nonempty >= 2`.
 
 
-## One-byte in the mixed path: exclusions as of the end of the session
+## One-byte in the mixed path: the exclusion trail
 
 Ruled out by measurement, each in one attempt:
 
-1. compressed-index base vs feature-block stride (was a real bug, fixed)
-2. missing `WriteReducesHistograms` (was a real bug, ported)
-3. duplicated block-to-flat bridge (was a real bug, fixed; took 8 wrong
-   slices to 2)
+1. compressed-index base vs feature-block stride (real bug, fixed)
+2. missing `WriteReducesHistograms` (real omission, ported)
+3. duplicated block-to-flat bridge (real bug, fixed; took 8 wrong slices to 2)
 4. the one-byte bit width (width-matched scores WORSE, so not the cause)
 5. `stat_count = 2` (standalone passes with two planes)
 6. the row count (standalone passes at 2048 rows)
 7. cross-block interference (one-byte ALONE fails)
-8. unzeroed per-block scratch (was a real bug, fixed; not the cause)
+8. unzeroed per-block scratch (real bug, fixed; not the cause)
+9. the bridge itself (PRE-bridge `block_hist` is identically wrong)
 
-**Six real bugs found while chasing one.** Every exclusion came from a
-measurement; none came from reasoning. The kernel is now known correct at
-every parameter the probe uses, so the defect is in the probe path around it.
+Nine exclusions, six of them real bugs. Every one came from a measurement and
+none from reasoning; each of the three inferences that "found" something
+found a real bug that was not the cause.
 
-NEXT: dump `block_hist` before the bridge. It halves the remaining space.
+**The lesson is about the checks, not the kernel.** Exclusion 5 and exclusion
+6 both reported the kernel correct at exactly the parameters that were
+failing, because the check's data pattern made the defect invisible. A
+histogram check whose expected value is the same in every cell verifies the
+total and nothing about placement. Plant scattered bins and compare against a
+host tally per cell.
