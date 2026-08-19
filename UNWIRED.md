@@ -40,3 +40,28 @@ effect, because the row has no reader.
 A row that nothing reads is indistinguishable from a row something reads.
 When the multi-block flush lands, `deterministic_flush` must be consulted at
 that site and this table must move it upstairs in the same commit.
+
+
+## Placement audit, 2026-08-19
+
+Andrew asked whether things had been put in `mojo_only/` that belong in
+`ported/`. Two had:
+
+- **The stable partition** replaces ONE CALL inside their `split_points.cu`
+  (`cub::DeviceRadixSort::SortPairs`, `:658-689`). Splitting it out left the
+  reorder incomplete in the file that owns it, so it now lives in
+  `ported/.../split_points.mojo` under an explicit DEVIATION BLOCK banner, so
+  a reviewer diffing against their file knows exactly where the port stops
+  being literal. It is the one place in `ported/` allowed to be better than
+  CatBoost, because there is no CatBoost code there to be faithful to.
+- **The level driver** is a port of `ComputeOptimalSplits` plus `SplitLeaves`
+  (`greedy_search_helper.cpp:398`, `:534`) and was sitting in `mojo_only/`.
+  Moved to `ported/methods/greedy_subsets_searcher/greedy_search_helper.mojo`.
+
+What is correctly in `mojo_only/`: `numerics` and `kernel_matrix` (they ship
+one vendor and need no columns), `fixed_point` (they use a hardware
+instruction Metal lacks), and the harnesses.
+
+**The rule the audit produced:** a replacement for a step of THEIR file
+belongs in that file, marked. `mojo_only/` is for what CatBoost never had to
+write at all.

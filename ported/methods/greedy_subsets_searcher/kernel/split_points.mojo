@@ -32,6 +32,12 @@ only as a stable 1-bit partition, so that is what is written.
 """
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from std.memory import stack_allocation
+from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.memory import AddressSpace
+from max.gpu.primitives.block import broadcast as block_broadcast
+from max.gpu.primitives.block import prefix_sum as block_prefix_sum
+from max.gpu.sync import barrier
 
 
 #: `split_points.cu:558`.
@@ -271,3 +277,260 @@ def gather_index_in_leaves_kernel(
         var load_idx = Int(gather_map.unsafe_load(offset + i))
         dst.unsafe_store(offset + i, src.unsafe_load(offset + load_idx))
         i += stride
+
+
+# =========================================================================
+# DEVIATION BLOCK: everything below replaces ONE CALL in their file.
+#
+# `split_points.cu:658-689` calls `cub::DeviceRadixSort::SortPairs` once per
+# leaf, from a host loop, to sort each leaf's range by the split flag. There
+# is no CUB in Mojo, so there is no line-for-line port of that call and a
+# reviewer diffing this file against theirs will find no counterpart for what
+# follows. It lives HERE rather than in `mojo_only/` because it replaces a
+# step of THIS module, and moving it elsewhere would leave the reorder
+# incomplete in the file that owns it.
+#
+# It is also the one place in `ported/` allowed to be better than CatBoost,
+# because there is no CatBoost code to be faithful to. Their own comments ask
+# for exactly this:
+#
+#     //TODO(noxoomo): cub sucks for this, write proper segmented version
+#     //TODO(noxoomo): for oblivious trees we have overhead for launching
+#       kernel per leaf
+#
+# The key is ONE BIT, the split flag, so a full radix sort was never needed;
+# a segmented stable partition is sufficient and is what that TODO describes.
+#
+# WHY THREE PHASES, AND WHAT THE FIRST VERSION GOT WRONG
+# ------------------------------------------------------
+# The first version ran ONE BLOCK PER LEAF, walking the leaf in chunks and
+# carrying the running zero and one counts between them to keep the order
+# stable. Correct, and measured 2.985 ms against the histogram's 1.327 ms at
+# 500,000 rows, because at depth 0 there is ONE leaf: 256 threads, 1,954
+# sequential chunks, the rest of the machine idle.
+#
+# That was the mirror image of CatBoost's wart rather than an escape from it.
+# Theirs is too many launches where leaves are many; mine was too few blocks
+# where leaves are few and huge. Depth 8 is the worst case for one, depth 0
+# for the other.
+#
+# So: block-per-CHUNK counts, a scan of the per-chunk totals, then placement.
+# Every phase is grid-parallel over (chunk, leaf), so a single 500,000-row
+# leaf fills the machine and a level of 64 small leaves still runs at once.
+# Stability still comes from the carry; it is precomputed instead of walked.
+# =========================================================================
+
+comptime PARTITION_BLOCK = 256
+
+
+def partition_count_chunks_kernel(
+    leaves: MutPointer[UInt32, MutAnyOrigin],
+    part_offset: MutPointer[UInt32, MutAnyOrigin],
+    part_size: MutPointer[UInt32, MutAnyOrigin],
+    flags: MutPointer[UInt8, MutAnyOrigin],
+    chunk_zeros: MutPointer[UInt32, MutAnyOrigin],
+    max_chunks_in: Int32,
+):
+    """PHASE 1: how many zeros in each chunk of each leaf.
+
+    Grid x is the CHUNK and grid y is the leaf, so the whole machine works on
+    one big leaf and on many small ones alike.
+    """
+    var max_chunks = Int(max_chunks_in)
+    var leaf_slot = Int(block_idx.y)
+    var leaf_id = Int(leaves.unsafe_load(leaf_slot))
+    var offset = Int(part_offset.unsafe_load(leaf_id))
+    var size = Int(part_size.unsafe_load(leaf_id))
+
+    var chunk = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var i = chunk * PARTITION_BLOCK + tid
+
+    var v = Int32(0)
+    if i < size:
+        if flags.unsafe_load(offset + i) == UInt8(0):
+            v = Int32(1)
+    var inc = block_prefix_sum[block_size=PARTITION_BLOCK, exclusive=False](v)
+    var total = block_broadcast[block_size=PARTITION_BLOCK](
+        inc, src_thread = PARTITION_BLOCK - 1
+    )
+    if tid == 0:
+        chunk_zeros.unsafe_store(
+            leaf_slot * max_chunks + chunk, UInt32(Int(total))
+        )
+
+
+def partition_scan_chunks_kernel(
+    leaves: MutPointer[UInt32, MutAnyOrigin],
+    part_size: MutPointer[UInt32, MutAnyOrigin],
+    chunk_zeros: MutPointer[UInt32, MutAnyOrigin],
+    chunk_zero_offsets: MutPointer[UInt32, MutAnyOrigin],
+    leaf_total_zeros: MutPointer[UInt32, MutAnyOrigin],
+    max_chunks_in: Int32,
+):
+    """PHASE 2: exclusive scan of a leaf's per-chunk zero counts.
+
+    One block per leaf, but over CHUNKS rather than rows, so the sequential
+    dimension is `size / 256` instead of `size`. At 500,000 rows that is
+    1,954 values scanned by 256 threads rather than 500,000, and the phase
+    that has to be sequential is now three orders of magnitude smaller than
+    the phases that do not.
+    """
+    var max_chunks = Int(max_chunks_in)
+    var leaf_slot = Int(block_idx.y)
+    var leaf_id = Int(leaves.unsafe_load(leaf_slot))
+    var size = Int(part_size.unsafe_load(leaf_id))
+    var n_chunks = (size + PARTITION_BLOCK - 1) // PARTITION_BLOCK
+    var tid = Int(thread_idx.x)
+
+    var carry = 0
+    var c = 0
+    while c < n_chunks:
+        var idx = c + tid
+        var v = Int32(0)
+        if idx < n_chunks:
+            v = Int32(Int(chunk_zeros.unsafe_load(leaf_slot * max_chunks + idx)))
+        var inc = block_prefix_sum[
+            block_size=PARTITION_BLOCK, exclusive=False
+        ](v)
+        var group_total = block_broadcast[block_size=PARTITION_BLOCK](
+            inc, src_thread = PARTITION_BLOCK - 1
+        )
+        if idx < n_chunks:
+            # exclusive within the group, plus everything before the group
+            chunk_zero_offsets.unsafe_store(
+                leaf_slot * max_chunks + idx,
+                UInt32(carry + Int(inc) - Int(v)),
+            )
+        carry += Int(group_total)
+        barrier()
+        c += PARTITION_BLOCK
+
+    if tid == 0:
+        leaf_total_zeros.unsafe_store(leaf_slot, UInt32(carry))
+
+
+def partition_place_kernel(
+    leaves: MutPointer[UInt32, MutAnyOrigin],
+    part_offset: MutPointer[UInt32, MutAnyOrigin],
+    part_size: MutPointer[UInt32, MutAnyOrigin],
+    flags: MutPointer[UInt8, MutAnyOrigin],
+    chunk_zero_offsets: MutPointer[UInt32, MutAnyOrigin],
+    leaf_total_zeros: MutPointer[UInt32, MutAnyOrigin],
+    gather_map: MutPointer[UInt32, MutAnyOrigin],
+    sorted_flags: MutPointer[UInt8, MutAnyOrigin],
+    max_chunks_in: Int32,
+):
+    """PHASE 3: place every row, grid-parallel again.
+
+    A chunk's zero rows start at the number of zeros in all earlier chunks
+    (`chunk_zero_offsets`), and its one rows start after ALL the leaf's zeros
+    plus the number of ones in all earlier chunks, which is
+    `earlier_elements - earlier_zeros` and needs no second scan.
+    """
+    var max_chunks = Int(max_chunks_in)
+    var leaf_slot = Int(block_idx.y)
+    var leaf_id = Int(leaves.unsafe_load(leaf_slot))
+    var offset = Int(part_offset.unsafe_load(leaf_id))
+    var size = Int(part_size.unsafe_load(leaf_id))
+
+    var chunk = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var i = chunk * PARTITION_BLOCK + tid
+
+    var n_zeros = Int(leaf_total_zeros.unsafe_load(leaf_slot))
+    var zeros_before = Int(
+        chunk_zero_offsets.unsafe_load(leaf_slot * max_chunks + chunk)
+    )
+    var elems_before = chunk * PARTITION_BLOCK
+    if elems_before > size:
+        elems_before = size
+    var ones_before = elems_before - zeros_before
+
+    var in_range = i < size
+    var is_zero = Int32(0)
+    if in_range:
+        if flags.unsafe_load(offset + i) == UInt8(0):
+            is_zero = Int32(1)
+
+    var inc_zero = block_prefix_sum[
+        block_size=PARTITION_BLOCK, exclusive=False
+    ](is_zero)
+    var rank_zero = Int(inc_zero) - Int(is_zero)
+
+    var is_one = Int32(0)
+    if in_range and is_zero == Int32(0):
+        is_one = Int32(1)
+    var inc_one = block_prefix_sum[
+        block_size=PARTITION_BLOCK, exclusive=False
+    ](is_one)
+    var rank_one = Int(inc_one) - Int(is_one)
+
+    if in_range:
+        var dst = 0
+        if is_zero == Int32(1):
+            dst = zeros_before + rank_zero
+        else:
+            dst = n_zeros + ones_before + rank_one
+        gather_map.unsafe_store(offset + dst, UInt32(i))
+        sorted_flags.unsafe_store(
+            offset + dst, UInt8(0) if is_zero == Int32(1) else UInt8(1)
+        )
+
+
+def launch_stable_partition(
+    ctx: DeviceContext,
+    n_leaf_slots: Int,
+    max_leaf_rows: Int,
+    mut leaves: DeviceBuffer[DType.uint32],
+    mut part_offset: DeviceBuffer[DType.uint32],
+    mut part_size: DeviceBuffer[DType.uint32],
+    mut flags: DeviceBuffer[DType.uint8],
+    mut chunk_zeros: DeviceBuffer[DType.uint32],
+    mut chunk_offsets: DeviceBuffer[DType.uint32],
+    mut leaf_zeros: DeviceBuffer[DType.uint32],
+    mut gather_map: DeviceBuffer[DType.uint32],
+    mut sorted_flags: DeviceBuffer[DType.uint8],
+) raises:
+    """The three phases in order. Callers should not launch them by hand.
+
+    `max_leaf_rows` sizes the grid and the scratch: it is the largest leaf in
+    the level, so a level of small leaves does not pay for the depth-0 shape.
+    """
+    var max_chunks = (max_leaf_rows + PARTITION_BLOCK - 1) // PARTITION_BLOCK
+    if max_chunks < 1:
+        max_chunks = 1
+
+    ctx.enqueue_function[partition_count_chunks_kernel](
+        leaves.unsafe_ptr(),
+        part_offset.unsafe_ptr(),
+        part_size.unsafe_ptr(),
+        flags.unsafe_ptr(),
+        chunk_zeros.unsafe_ptr(),
+        Int32(max_chunks),
+        grid_dim=(max_chunks, n_leaf_slots, 1),
+        block_dim=(PARTITION_BLOCK, 1, 1),
+    )
+    ctx.enqueue_function[partition_scan_chunks_kernel](
+        leaves.unsafe_ptr(),
+        part_size.unsafe_ptr(),
+        chunk_zeros.unsafe_ptr(),
+        chunk_offsets.unsafe_ptr(),
+        leaf_zeros.unsafe_ptr(),
+        Int32(max_chunks),
+        grid_dim=(1, n_leaf_slots, 1),
+        block_dim=(PARTITION_BLOCK, 1, 1),
+    )
+    ctx.enqueue_function[partition_place_kernel](
+        leaves.unsafe_ptr(),
+        part_offset.unsafe_ptr(),
+        part_size.unsafe_ptr(),
+        flags.unsafe_ptr(),
+        chunk_offsets.unsafe_ptr(),
+        leaf_zeros.unsafe_ptr(),
+        gather_map.unsafe_ptr(),
+        sorted_flags.unsafe_ptr(),
+        Int32(max_chunks),
+        grid_dim=(max_chunks, n_leaf_slots, 1),
+        block_dim=(PARTITION_BLOCK, 1, 1),
+    )

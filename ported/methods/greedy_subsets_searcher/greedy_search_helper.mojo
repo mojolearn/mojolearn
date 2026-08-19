@@ -1,10 +1,17 @@
 """One complete oblivious level, end to end, on the GPU.
 
-NO CATBOOST COUNTERPART as a file: this is the Mojo shape of
-`TGreedySearchHelper::ComputeOptimalSplits` followed by `SplitLeaves`
-(`greedy_search_helper.cpp:398`, `:534`), which in their tree is host C++
-spread across a helper class. Ported as a function because we have no
-`TPointsSubsets` object yet and the sequence is the thing worth having first.
+PORT OF `TGreedySearchHelper::ComputeOptimalSplits` followed by `SplitLeaves`
+(`catboost/cuda/methods/greedy_subsets_searcher/greedy_search_helper.cpp:398`
+and `:534`) at CatBoost `54a8143a`.
+
+Ported as a FUNCTION where theirs is a helper class, because we have no
+`TPointsSubsets` object yet and the launch sequence is the part worth having
+first. That is a deviation of shape, not of behavior: the order of kernels
+and the data each one reads is theirs.
+
+It lived in `mojo_only/` for one commit, which was wrong. This is a port of
+their file, so it belongs beside the other ports; `mojo_only/` is for things
+CatBoost never had to write at all.
 
 **Every kernel it calls is already verified in isolation.** This is the first
 code that runs them in ORDER, so a wrong answer here is in the wiring, not in
@@ -47,9 +54,9 @@ from ported.methods.greedy_subsets_searcher.kernel.split_points import (
     split_and_make_sequence_kernel,
     update_partitions_after_split_kernel,
 )
-from mojo_only.stable_partition import (
+from ported.methods.greedy_subsets_searcher.kernel.split_points import (
     PARTITION_BLOCK,
-    stable_partition_kernel,
+    launch_stable_partition,
 )
 
 
@@ -271,18 +278,26 @@ def run_one_level(
         block_dim=(SPLIT_BLOCK_SIZE, 1, 1),
     )
 
-    # 6. STABLE PARTITION -------------------------------------------------
+    # 6. STABLE PARTITION, three phases -----------------------------------
     var gmap = ctx.enqueue_create_buffer[DType.uint32](n_rows)
     var sflags = ctx.enqueue_create_buffer[DType.uint8](n_rows)
-    ctx.enqueue_function[stable_partition_kernel](
-        leaf0.unsafe_ptr(),
-        p_off.unsafe_ptr(),
-        p_sz.unsafe_ptr(),
-        flags.unsafe_ptr(),
-        gmap.unsafe_ptr(),
-        sflags.unsafe_ptr(),
-        grid_dim=(1, 1, 1),
-        block_dim=(PARTITION_BLOCK, 1, 1),
+    var max_chunks = (n_rows + PARTITION_BLOCK - 1) // PARTITION_BLOCK
+    var chunk_zeros = ctx.enqueue_create_buffer[DType.uint32](max_chunks)
+    var chunk_offsets = ctx.enqueue_create_buffer[DType.uint32](max_chunks)
+    var leaf_zeros = ctx.enqueue_create_buffer[DType.uint32](1)
+    launch_stable_partition(
+        ctx,
+        1,
+        n_rows,
+        leaf0,
+        p_off,
+        p_sz,
+        flags,
+        chunk_zeros,
+        chunk_offsets,
+        leaf_zeros,
+        gmap,
+        sflags,
     )
 
     # 7. GATHER the row index through the permutation ---------------------

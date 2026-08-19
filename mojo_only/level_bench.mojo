@@ -32,17 +32,23 @@ from ported.gpu_data.kernel.binarize import (
     WRITE_BLOCK_SIZE,
     write_compressed_index_kernel,
 )
+from ported.methods.greedy_subsets_searcher.kernel.split_points import (
+    PARTITION_BLOCK,
+    launch_stable_partition,
+)
 from ported.methods.greedy_subsets_searcher.kernel.hist_binary import (
     binary_hist_kernel,
 )
 from ported.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
     BLOCK_SIZE,
 )
-from mojo_only.stable_partition import (
+from ported.methods.greedy_subsets_searcher.kernel.split_points import (
     PARTITION_BLOCK,
-    stable_partition_kernel,
+    launch_stable_partition,
 )
-from mojo_only.level_driver import run_one_level
+from ported.methods.greedy_subsets_searcher.greedy_search_helper import (
+    run_one_level,
+)
 
 
 def bench_level(n_rows: Int, repeats: Int) raises:
@@ -229,9 +235,11 @@ def bench_histogram_only(n_rows: Int, repeats: Int) raises:
 def bench_partition_only(n_rows: Int, repeats: Int) raises:
     """The stable partition alone.
 
-    Named as the prime suspect for the 83 percent of a level that is not the
-    histogram, so it gets measured rather than assumed. Two passes of
-    block-wide prefix sums over every row, one block per leaf.
+    Named as the prime suspect for the 83 percent of a level that was not the
+    histogram, measured at 2.985 ms, rewritten as a three-phase grid-parallel
+    scan, and re-measured at 0.248 ms. Kept as a standing check because the
+    failure it guards against is a regression to one-block-per-leaf, which is
+    correct and 12x slower and would not fail any correctness test.
     """
     var ctx = DeviceContext()
 
@@ -256,20 +264,18 @@ def bench_partition_only(n_rows: Int, repeats: Int) raises:
 
     var gmap = ctx.enqueue_create_buffer[DType.uint32](n_rows)
     var sflags = ctx.enqueue_create_buffer[DType.uint8](n_rows)
+    var max_chunks = (n_rows + PARTITION_BLOCK - 1) // PARTITION_BLOCK
+    var chunk_zeros = ctx.enqueue_create_buffer[DType.uint32](max_chunks)
+    var chunk_offsets = ctx.enqueue_create_buffer[DType.uint32](max_chunks)
+    var leaf_zeros = ctx.enqueue_create_buffer[DType.uint32](1)
     ctx.synchronize()
 
     var best = 0
     for i in range(repeats + 1):
         var t0 = perf_counter_ns()
-        ctx.enqueue_function[stable_partition_kernel](
-            lids.unsafe_ptr(),
-            p_off.unsafe_ptr(),
-            p_sz.unsafe_ptr(),
-            flags.unsafe_ptr(),
-            gmap.unsafe_ptr(),
-            sflags.unsafe_ptr(),
-            grid_dim=(1, 1, 1),
-            block_dim=(PARTITION_BLOCK, 1, 1),
+        launch_stable_partition(
+            ctx, 1, n_rows, lids, p_off, p_sz, flags,
+            chunk_zeros, chunk_offsets, leaf_zeros, gmap, sflags,
         )
         ctx.synchronize()
         var dt = perf_counter_ns() - t0
@@ -281,11 +287,7 @@ def bench_partition_only(n_rows: Int, repeats: Int) raises:
     var ms = Float64(best) / 1.0e6
     print("    stable partition alone:", ms, "ms for", n_rows, "rows")
     print(
-        "    ONE BLOCK for the whole leaf:",
-        PARTITION_BLOCK,
-        "threads over",
-        n_rows,
-        "rows =",
+        "    three phases, grid-parallel over",
         (n_rows + PARTITION_BLOCK - 1) // PARTITION_BLOCK,
-        "sequential chunks",
+        "chunks (was one block, 2.985 ms)",
     )

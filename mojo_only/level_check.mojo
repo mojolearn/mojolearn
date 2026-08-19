@@ -18,7 +18,9 @@ from ported.gpu_data.kernel.binarize import (
     WRITE_BLOCK_SIZE,
     write_compressed_index_kernel,
 )
-from mojo_only.level_driver import run_one_level
+from ported.methods.greedy_subsets_searcher.greedy_search_helper import (
+    run_one_level,
+)
 
 
 def check_one_level() raises:

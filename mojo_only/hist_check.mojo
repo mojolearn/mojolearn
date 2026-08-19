@@ -22,9 +22,9 @@ wrong count rather than as a crash.
 
 from max.gpu.host import DeviceContext
 
-from mojo_only.stable_partition import (
+from ported.methods.greedy_subsets_searcher.kernel.split_points import (
     PARTITION_BLOCK,
-    stable_partition_kernel,
+    launch_stable_partition,
 )
 
 from ported.gpu_data.grid_policy import (
@@ -1193,15 +1193,13 @@ def check_stable_partition() raises:
     var sflags = ctx.enqueue_create_buffer[DType.uint8](n_rows)
     ctx.synchronize()
 
-    ctx.enqueue_function[stable_partition_kernel](
-        lids.unsafe_ptr(),
-        p_off.unsafe_ptr(),
-        p_sz.unsafe_ptr(),
-        flags.unsafe_ptr(),
-        gmap.unsafe_ptr(),
-        sflags.unsafe_ptr(),
-        grid_dim=(1, 2, 1),
-        block_dim=(PARTITION_BLOCK, 1, 1),
+    var max_chunks = (n0 + PARTITION_BLOCK - 1) // PARTITION_BLOCK
+    var chunk_zeros = ctx.enqueue_create_buffer[DType.uint32](2 * max_chunks)
+    var chunk_offsets = ctx.enqueue_create_buffer[DType.uint32](2 * max_chunks)
+    var leaf_zeros = ctx.enqueue_create_buffer[DType.uint32](2)
+    launch_stable_partition(
+        ctx, 2, n0, lids, p_off, p_sz, flags,
+        chunk_zeros, chunk_offsets, leaf_zeros, gmap, sflags,
     )
     ctx.synchronize()
 
