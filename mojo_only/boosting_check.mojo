@@ -48,7 +48,12 @@ def check_boosting_learns(
 ) raises:
     var ctx = DeviceContext()
 
-    # 16 one-byte features. The target depends on three of them, so most
+    # 16 HALF-BYTE features: 15 folds is `policy_max_folds(POLICY_HALF_BYTE)`,
+    # so `policy_for_fold_count` puts every one of them under the half-byte
+    # policy and this check exercises that kernel and no other. It said
+    # "one-byte" here and that was simply wrong, which mattered: it is the
+    # reason nobody looked at `hist_half_byte.mojo` when this check moved.
+    # The target depends on three of them, so most
     # features are noise and the split search has to find the signal.
     var folds = List[Int]()
     for _ in range(16):

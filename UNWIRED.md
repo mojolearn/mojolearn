@@ -420,6 +420,48 @@ from an empty histogram. Corrected numbers are in the commit.
 The `mixed_hist_probe` sweep now passes at 32 one-byte, 100 binary, 16
 half-byte and a mixed 40/24/20, none of which it could do before.
 
+## The boosting check regressed 0.66 -> 14.79: RESOLVED, the fixed-point scale
+
+**`doc_parallel_boosting.fit` passed `0.0, 0.0` for `total_weight` and
+`total_gradient`.** Those are the two numbers the Int32 histogram flush is
+bounded by. Zero is not "unknown" to `choose_scale`'s inlined twin in
+`greedy_search_helper`: it fell back to `mag = 1.0`, which is a SCALE of
+268,435,455, the largest the type admits and therefore the one that
+overflows soonest. `Int32(val * fixed_scale)` wrapped on any histogram cell
+holding more than about eight rows' worth of weight, and at 8,192 rows over
+240 bin-features with four replicated blocks a cell carries about 136.
+
+It had been latent since the flush was written. What made it live was
+replication reaching the half-byte kernel: before, `launch_histograms_for_blocks`
+launched half-byte at `grid.x = groups`, so `maxBlocksPerPart` was 1,
+`activeBlockCount` was 1, and the writeback took the plain float store on
+both branches. `boosting_check` is sixteen half-byte features and nothing
+else, so it never touched the accumulator. Once the grid became
+`groups * replicas` the top two levels of every tree (depth 0 at four active
+blocks, depth 1 at two) started scoring a wrapped histogram; depth 2 and
+below fall back to one block per partition and were unaffected.
+
+**Why every assertion still passed.** Leaf values come from
+`compute_partition_stats`, which never reads the histogram. Only the SPLITS
+were corrupt. A tree with arbitrary splits and correct leaf values still
+reduces the loss, still reduces it monotonically, and still beats predicting
+the mean, so the check's three assertions were all blind to it. It also
+explains why swapping Cosine for L2 changed nothing to the last digit: both
+calcers were ranking the same garbage.
+
+Fixed by making `fit` read the stats plane back and pass `sum of abs` per
+plane, and by deleting both inlined copies of the scale derivation in favour
+of `choose_scale`, whose zero-input answer is a scale of 1.0 rather than the
+maximum. `boosting_check` now asserts a LEVEL (2% of the mean baseline) and
+that most splits land on a feature the target depends on.
+
+**The reusable part.** `probe_main.check_fixed_point` verified `choose_scale`
+in isolation and passed throughout. The unit was never wrong; the caller
+never called it. A safety derivation that is inlined at its call sites has as
+many versions as call sites, and the copies drift toward the unsafe branch
+because the unsafe branch is the one nothing exercises.
+
+
 ## The boosting check's trees always split on bin-feature 0: RESOLVED
 
 Cause was the column bug above. After the fix the boosting check falls from
