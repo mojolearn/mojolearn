@@ -41,6 +41,10 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.expand_distances import expand_distances_kernel
 from core.gemm import gemm_nt
 from core.row_norms import NORM_TPB, row_norm_kernel
+from layout import TileTensor
+from layout.tile_layout import row_major
+from nn.topk import top_k
+
 from neighbors.ported.matrix.detail.select_radix import (
     SELECT_BLOCK,
     radix_topk_one_block_kernel,
@@ -81,6 +85,7 @@ def tiled_brute_force_knn(
     mut buf_idx: DeviceBuffer[DType.uint32],
     mut out_dist: DeviceBuffer[DType.float32],
     mut out_idx: DeviceBuffer[DType.uint32],
+    mut out_idx32: DeviceBuffer[DType.int32],
     n_queries: Int,
     n_index: Int,
     n_features: Int,
@@ -88,6 +93,7 @@ def tiled_brute_force_knn(
     query_tile: Int,
     buf_len: Int,
     is_sqrt: Bool,
+    use_vendor_topk: Bool = False,
 ) raises:
     """Tile the QUERIES, keep the whole index resident, top-k per query row.
 
@@ -128,19 +134,43 @@ def tiled_brute_force_knn(
             block_dim=(256, 1, 1),
         )
 
-        # One block per query row.
-        ctx.enqueue_function[radix_topk_one_block_kernel](
-            dist_tile.unsafe_ptr(),
-            out_dist.unsafe_ptr().unsafe_offset(q * k),
-            out_idx.unsafe_ptr().unsafe_offset(q * k),
-            buf_val.unsafe_ptr(),
-            buf_idx.unsafe_ptr(),
-            Int32(n_index),
-            Int32(k),
-            Int32(buf_len),
-            Int32(1),
-            grid_dim=(rows, 1, 1),
-            block_dim=(SELECT_BLOCK, 1, 1),
-        )
+        # THE SELECTION. Two implementations, and which one runs is a
+        # parameter rather than a preference.
+        #
+        # cuVS calls `cuvs::selection::select_k`, a VENDOR primitive, so by
+        # the standing rule the faithful port calls OURS: `nn.topk.top_k`,
+        # which has a GPU form (`ctx: DeviceContext`, `target`). The ported
+        # RAFT radix select stays reachable because it is the only way to
+        # check the vendor call's answer against something, and because a
+        # backend without a tuned top-k needs it.
+        if use_vendor_topk:
+            var dv = dist_tile.create_sub_buffer[DType.float32](
+                0, rows * n_index
+            )
+            var ov = out_dist.create_sub_buffer[DType.float32](q * k, rows * k)
+            var oi = out_idx32.create_sub_buffer[DType.int32](q * k, rows * k)
+            top_k[largest=False, target="gpu"](
+                TileTensor(dv, row_major(rows, n_index)),
+                k,
+                1,
+                TileTensor(ov, row_major(rows, k)),
+                TileTensor(oi, row_major(rows, k)),
+                False,
+                ctx,
+            )
+        else:
+            ctx.enqueue_function[radix_topk_one_block_kernel](
+                dist_tile.unsafe_ptr(),
+                out_dist.unsafe_ptr().unsafe_offset(q * k),
+                out_idx.unsafe_ptr().unsafe_offset(q * k),
+                buf_val.unsafe_ptr(),
+                buf_idx.unsafe_ptr(),
+                Int32(n_index),
+                Int32(k),
+                Int32(buf_len),
+                Int32(1),
+                grid_dim=(rows, 1, 1),
+                block_dim=(SELECT_BLOCK, 1, 1),
+            )
         q += rows
     ctx.synchronize()

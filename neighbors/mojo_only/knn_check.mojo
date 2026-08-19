@@ -87,6 +87,7 @@ def check_knn() raises:
         KNN_QUERIES * KNN_K
     )
     var out_idx = ctx.enqueue_create_buffer[DType.uint32](KNN_QUERIES * KNN_K)
+    var out_i32 = ctx.enqueue_create_buffer[DType.int32](KNN_QUERIES * KNN_K)
     ctx.synchronize()
 
     var hi = ctx.enqueue_create_host_buffer[DType.float32](
@@ -116,8 +117,8 @@ def check_knn() raises:
 
     tiled_brute_force_knn(
         ctx, queries, query_norm, index, index_norm, dist_tile, buf_val,
-        buf_idx, out_dist, out_idx, KNN_QUERIES, KNN_INDEX, KNN_FEATURES,
-        KNN_K, KNN_TILE, buf_len, False,
+        buf_idx, out_dist, out_idx, out_i32, KNN_QUERIES, KNN_INDEX,
+        KNN_FEATURES, KNN_K, KNN_TILE, buf_len, False,
     )
 
     var ho = ctx.enqueue_create_host_buffer[DType.uint32](KNN_QUERIES * KNN_K)
@@ -226,6 +227,7 @@ def check_knn_reach_by_sabotage() raises:
         KNN_QUERIES * KNN_K
     )
     var out_idx = ctx.enqueue_create_buffer[DType.uint32](KNN_QUERIES * KNN_K)
+    var out_i32 = ctx.enqueue_create_buffer[DType.int32](KNN_QUERIES * KNN_K)
     ctx.synchronize()
 
     var hi = ctx.enqueue_create_host_buffer[DType.float32](
@@ -260,8 +262,8 @@ def check_knn_reach_by_sabotage() raises:
 
     tiled_brute_force_knn(
         ctx, queries, query_norm, index, index_norm, dist_tile, buf_val,
-        buf_idx, out_dist, out_idx, KNN_QUERIES, KNN_INDEX, KNN_FEATURES,
-        KNN_K, KNN_TILE, buf_len, False,
+        buf_idx, out_dist, out_idx, out_i32, KNN_QUERIES, KNN_INDEX,
+        KNN_FEATURES, KNN_K, KNN_TILE, buf_len, False,
     )
     ctx.enqueue_copy(dst_ptr=base.unsafe_ptr(), src_buf=out_idx)
     ctx.synchronize()
@@ -280,8 +282,8 @@ def check_knn_reach_by_sabotage() raises:
 
     tiled_brute_force_knn(
         ctx, queries, query_norm, index, index_norm, dist_tile, buf_val,
-        buf_idx, out_dist, out_idx, KNN_QUERIES, KNN_INDEX, KNN_FEATURES,
-        KNN_K, KNN_TILE, buf_len, False,
+        buf_idx, out_dist, out_idx, out_i32, KNN_QUERIES, KNN_INDEX,
+        KNN_FEATURES, KNN_K, KNN_TILE, buf_len, False,
     )
     ctx.enqueue_copy(dst_ptr=sab.unsafe_ptr(), src_buf=out_idx)
     ctx.synchronize()
@@ -311,8 +313,8 @@ def check_knn_reach_by_sabotage() raises:
 
     tiled_brute_force_knn(
         ctx, queries, query_norm, index, index_norm, dist_tile, buf_val,
-        buf_idx, out_dist, out_idx, KNN_QUERIES, KNN_INDEX, KNN_FEATURES,
-        KNN_K, KNN_TILE, buf_len, False,
+        buf_idx, out_dist, out_idx, out_i32, KNN_QUERIES, KNN_INDEX,
+        KNN_FEATURES, KNN_K, KNN_TILE, buf_len, False,
     )
     ctx.enqueue_copy(dst_ptr=sab.unsafe_ptr(), src_buf=out_idx)
     ctx.synchronize()
@@ -342,4 +344,102 @@ def check_knn_reach_by_sabotage() raises:
         + String(KNN_QUERIES * KNN_K)
         + " neighbors; query_norm offset moved 0 sets, which is the"
         " predicted shape"
+    )
+
+
+def check_vendor_topk_matches_ported() raises:
+    """The two selection paths must return the same neighbour SET.
+
+    cuVS calls `select_k`, a vendor primitive, so the faithful port calls
+    `nn.topk.top_k`. Keeping the ported RAFT radix select reachable is what
+    makes that checkable: a vendor call whose answer nothing verifies is a
+    vendor call nobody should trust.
+
+    Compared as a SET, not element-wise. Neither implementation promises an
+    order, and `select_radix.mojo` documents why RAFT's tie handling makes
+    even the identity of an equidistant neighbour non-reproducible.
+    """
+    var ctx = DeviceContext()
+    var n = KNN_INDEX
+    var buf_len = n // 8
+
+    var index = ctx.enqueue_create_buffer[DType.float32](n * KNN_FEATURES)
+    var queries = ctx.enqueue_create_buffer[DType.float32](
+        KNN_QUERIES * KNN_FEATURES
+    )
+    var index_norm = ctx.enqueue_create_buffer[DType.float32](n)
+    var query_norm = ctx.enqueue_create_buffer[DType.float32](KNN_QUERIES)
+    var dist = ctx.enqueue_create_buffer[DType.float32](KNN_TILE * n)
+    var bv = ctx.enqueue_create_buffer[DType.float32](KNN_TILE * 2 * buf_len)
+    var bi = ctx.enqueue_create_buffer[DType.uint32](KNN_TILE * 2 * buf_len)
+    var od = ctx.enqueue_create_buffer[DType.float32](KNN_QUERIES * KNN_K)
+    var oi = ctx.enqueue_create_buffer[DType.uint32](KNN_QUERIES * KNN_K)
+    var oi32 = ctx.enqueue_create_buffer[DType.int32](KNN_QUERIES * KNN_K)
+    ctx.synchronize()
+
+    var hi = ctx.enqueue_create_host_buffer[DType.float32](n * KNN_FEATURES)
+    for j in range(n):
+        for f in range(KNN_FEATURES):
+            hi.unsafe_ptr().unsafe_store(
+                j * KNN_FEATURES + f, _coord(j, f, 0)
+            )
+    ctx.enqueue_copy(dst_buf=index, src_ptr=hi.unsafe_ptr())
+    var hq = ctx.enqueue_create_host_buffer[DType.float32](
+        KNN_QUERIES * KNN_FEATURES
+    )
+    for i in range(KNN_QUERIES):
+        for f in range(KNN_FEATURES):
+            hq.unsafe_ptr().unsafe_store(
+                i * KNN_FEATURES + f, _coord(i, f, 7)
+            )
+    ctx.enqueue_copy(dst_buf=queries, src_ptr=hq.unsafe_ptr())
+    ctx.synchronize()
+    compute_norms(ctx, index, index_norm, n, KNN_FEATURES, False)
+    compute_norms(ctx, queries, query_norm, KNN_QUERIES, KNN_FEATURES, False)
+    ctx.synchronize()
+
+    tiled_brute_force_knn(
+        ctx, queries, query_norm, index, index_norm, dist, bv, bi, od, oi,
+        oi32, KNN_QUERIES, n, KNN_FEATURES, KNN_K, KNN_TILE, buf_len, False,
+        False,
+    )
+    var ported = ctx.enqueue_create_host_buffer[DType.uint32](
+        KNN_QUERIES * KNN_K
+    )
+    ctx.enqueue_copy(dst_ptr=ported.unsafe_ptr(), src_buf=oi)
+    ctx.synchronize()
+
+    tiled_brute_force_knn(
+        ctx, queries, query_norm, index, index_norm, dist, bv, bi, od, oi,
+        oi32, KNN_QUERIES, n, KNN_FEATURES, KNN_K, KNN_TILE, buf_len, False,
+        True,
+    )
+    var vendor = ctx.enqueue_create_host_buffer[DType.int32](
+        KNN_QUERIES * KNN_K
+    )
+    ctx.enqueue_copy(dst_ptr=vendor.unsafe_ptr(), src_buf=oi32)
+    ctx.synchronize()
+
+    var disagree = 0
+    for i in range(KNN_QUERIES):
+        for slot in range(KNN_K):
+            var got = Int(vendor.unsafe_ptr().unsafe_load(i * KNN_K + slot))
+            var found = False
+            for t in range(KNN_K):
+                if Int(ported.unsafe_ptr().unsafe_load(i * KNN_K + t)) == got:
+                    found = True
+            if not found:
+                disagree += 1
+    if disagree != 0:
+        raise Error(
+            String(disagree) + " of " + String(KNN_QUERIES * KNN_K)
+            + " neighbours differ between nn.topk.top_k and the ported RAFT"
+            " radix select. They solve the same problem on the same"
+            " distances, so a disagreement is a bug in one of them."
+        )
+    print(
+        "check_vendor_topk_matches_ported OK: nn.topk.top_k and the ported"
+        " RAFT radix select agree on all "
+        + String(KNN_QUERIES * KNN_K)
+        + " neighbours"
     )

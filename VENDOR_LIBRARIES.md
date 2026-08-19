@@ -90,9 +90,24 @@ library. Listed so the distinction is explicit.
 `nn.concat.concat`, `linalg.transpose.transpose`,
 `linalg.qr_factorization.qr_factorization`.
 
-`nn.topk.top_k` is worth a second look: `neighbors/` hand-ports RAFT's radix
-select for exactly this, and the ported version is currently a 1.93x win over
-scikit-learn. Whether MAX's is faster is a measurement nobody has taken.
+**`nn.topk.top_k` is now WIRED** in `neighbors/`, beside the ported RAFT
+radix select rather than instead of it, selected by a `use_vendor_topk` flag.
+cuVS calls `cuvs::selection::select_k`, a vendor primitive, so by the
+standing rule the faithful port calls ours. Keeping the ported kernel
+reachable is what makes the vendor call CHECKABLE, and
+`check_vendor_topk_matches_ported` confirms the two agree on all 512
+neighbours of the fixture. A vendor call whose answer nothing verifies is a
+vendor call nobody should trust.
+
+One behaviour to know: `top_k` prints
+
+    Warning: Unsorted top-k is not supported on GPU. Falling back to sorted
+    top-k.
+
+so `sorted=False` is ignored on the GPU path and you pay for a sort you did
+not ask for. For k-NN that is harmless, and for anything that only needs the
+SET it is wasted work. Not yet measured against the ported kernel; per
+Andrew, no timing runs until the substitution passes are finished.
 
 ## Probed and NOT FOUND, recorded so the search is not repeated blindly
 
