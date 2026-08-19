@@ -23,6 +23,7 @@ and are not impossible.
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.memory import AddressSpace
 from max.gpu.primitives.block import sum as block_sum
+from max.gpu.primitives.block import prefix_sum
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
@@ -145,13 +146,7 @@ def chunk_sums_kernel(
     n_in: Int32,
     chunk_in: Int32,
 ):
-    """Sum of one CONTIGUOUS chunk per block.
-
-    Deliberately not the grid-stride `sum_partials_kernel`: that one is
-    correct for a total and useless here, because a weighted draw needs the
-    partials to correspond to contiguous ranges or the prefix over them means
-    nothing.
-    """
+    """Sum of one CONTIGUOUS chunk per block. Stage 1 of the device scan."""
     var n = Int(n_in)
     var chunk = Int(chunk_in)
     var tid = Int(thread_idx.x)
@@ -164,91 +159,138 @@ def chunk_sums_kernel(
         acc += a.unsafe_load(i)
         i += PLUS_PLUS_TPB
 
-    # `cub::BlockReduce`'s counterpart from
-    # `max.gpu.primitives.block`. The hand-written shared-memory tree
-    # reduction this replaced is gone: same arithmetic, one call, and
-    # the reduction shape is Modular's to tune rather than ours to
-    # guess. See VENDOR_LIBRARIES.md.
     var s0 = block_sum[block_size=PLUS_PLUS_TPB](acc)
     if tid == 0:
         out_partial.unsafe_store(Int(block_idx.x), s0)
 
 
-def select_chunk_kernel(
-    out_chunk: MutPointer[Int32, MutAnyOrigin],
-    out_residual: MutPointer[Float32, MutAnyOrigin],
-    partials: MutPointer[Float32, MutAnyOrigin],
-    u01: MutPointer[Float32, MutAnyOrigin],
+def scan_chunk_offsets_kernel(
+    offsets: MutPointer[Float32, MutAnyOrigin],
+    totals: MutPointer[Float32, MutAnyOrigin],
     n_chunks_in: Int32,
-    n_trials_in: Int32,
 ):
-    """One thread per trial over at most 256 chunk totals.
+    """Exclusive scan of the chunk totals. Stage 2. One block, any length.
 
-    `total` is recomputed here from the partials rather than passed in, so
-    the target and the walk are consistent to the last bit. Passing a total
-    summed by a different reduction tree would let a target exceed the walk's
-    final accumulator and fall off the end.
+    The per-thread slice is derived from `n_chunks` rather than fixed, which
+    is the same lesson `dbscan/.../adjgraph/algo.mojo` paid for: a fixed
+    chunk size silently caps the kernel at `threads * chunk` inputs.
     """
     var n_chunks = Int(n_chunks_in)
+    var tid = Int(thread_idx.x)
+    var per = (n_chunks + PLUS_PLUS_TPB - 1) // PLUS_PLUS_TPB
+    var begin = min(tid * per, n_chunks)
+    var end = min(begin + per, n_chunks)
+
+    var sum = Float32(0.0)
+    var i = begin
+    while i < end:
+        sum += totals.unsafe_load(i)
+        i += 1
+
+    var offset = prefix_sum[block_size=PLUS_PLUS_TPB, exclusive=True](sum)
+
+    var running = offset
+    i = begin
+    while i < end:
+        offsets.unsafe_store(i, running)
+        running += totals.unsafe_load(i)
+        i += 1
+
+
+def write_inclusive_scan_kernel(
+    csum: MutPointer[Float32, MutAnyOrigin],
+    a: MutPointer[Float32, MutAnyOrigin],
+    offsets: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    chunk_in: Int32,
+):
+    """Stage 3: `csum[i]` = running total of `a` up to and including `i`.
+
+    One block per chunk. `block.prefix_sum` INCLUSIVE within the chunk, plus
+    that chunk's exclusive offset from stage 2. Together the three stages are
+    `cub::DeviceScan::InclusiveSum`, which has no shipped GPU counterpart:
+    `nn.cumsum` is CPU-only. This is the genuine gap `VENDOR_LIBRARIES.md`
+    records, built out of the block primitive that DOES ship.
+    """
+    var n = Int(n_in)
+    var chunk = Int(chunk_in)
+    var tid = Int(thread_idx.x)
+    var begin = Int(block_idx.x) * chunk
+    var base = offsets.unsafe_load(Int(block_idx.x))
+
+    var carry = stack_allocation[
+        1, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    if tid == 0:
+        carry[0] = Float32(0.0)
+    barrier()
+
+    var c0 = 0
+    while c0 < chunk:
+        var i = begin + c0 + tid
+        var v = Float32(0.0)
+        if i < n and c0 + tid < chunk:
+            v = a.unsafe_load(i)
+        var inc = prefix_sum[block_size=PLUS_PLUS_TPB](v)
+        if i < n and c0 + tid < chunk:
+            csum.unsafe_store(i, base + carry[0] + inc)
+        barrier()
+        if tid == PLUS_PLUS_TPB - 1:
+            carry[0] = carry[0] + inc
+        barrier()
+        c0 += PLUS_PLUS_TPB
+
+
+def binary_search_kernel(
+    out_index: MutPointer[UInt32, MutAnyOrigin],
+    csum: MutPointer[Float32, MutAnyOrigin],
+    u01: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    n_trials_in: Int32,
+):
+    """`sample_with_replacement_kernel`, transliterated.
+
+    PORT OF `raft/random/detail/rng_device.cuh:697-727`, which is what
+    `raft::random::discrete` reaches at `cuvs/.../kmeans.cuh:187`.
+
+    **This replaces a DIFFERENT DECOMPOSITION of the same draw**, and the
+    difference was the point. Theirs ranks per ELEMENT with a real prefix sum
+    and then binary-searches it:
+
+        IdxT idx_start = 0; IdxT idx_end = len;
+        while (idx_end > idx_start) {
+          IdxT idx_middle = (idx_start + idx_end) / 2;
+          ...
+        }
+
+    Ours counted zeros per 256-element chunk and then LINEAR-WALKED the
+    winning chunk on a single thread, with 127 of 128 threads returning
+    immediately. Same distribution, `O(n / 256)` serial against their
+    `O(log n)`, and ours had never been diffed against a reference draw.
+
+    Their own comment there reads `// todo(lsugy): warp-collaborative binary
+    search`, so even they consider this the unoptimized version. Copied as it
+    is, not as they wish it were.
+    """
+    var n = Int(n_in)
     var trial = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if trial >= Int(n_trials_in):
         return
 
-    var total = Float32(0.0)
-    for c in range(n_chunks):
-        total += partials.unsafe_load(c)
-
+    var total = csum.unsafe_load(n - 1)
     var target = u01.unsafe_load(trial) * total
-    var acc = Float32(0.0)
-    var chosen = n_chunks - 1
-    var before = Float32(0.0)
-    for c in range(n_chunks):
-        before = acc
-        acc += partials.unsafe_load(c)
-        if acc >= target:
-            chosen = c
-            break
 
-    out_chunk.unsafe_store(trial, Int32(chosen))
-    out_residual.unsafe_store(trial, target - before)
-
-
-def select_index_in_chunk_kernel(
-    out_index: MutPointer[UInt32, MutAnyOrigin],
-    a: MutPointer[Float32, MutAnyOrigin],
-    chunks: MutPointer[Int32, MutAnyOrigin],
-    residuals: MutPointer[Float32, MutAnyOrigin],
-    n_in: Int32,
-    chunk_in: Int32,
-):
-    """One block per trial, scanning only its own chunk.
-
-    Serial inside the chunk, which is the honest shape for a prefix search
-    and is why the chunk count is capped: the serial walk is `n / n_chunks`
-    steps, not `n`.
-    """
-    if Int(thread_idx.x) != 0:
-        return
-    var n = Int(n_in)
-    var chunk = Int(chunk_in)
-    var trial = Int(block_idx.x)
-
-    var begin = Int(chunks.unsafe_load(trial)) * chunk
-    var end = min(begin + chunk, n)
-    var target = residuals.unsafe_load(trial)
-
-    var acc = Float32(0.0)
-    var chosen = end - 1
-    var i = begin
-    while i < end:
-        acc += a.unsafe_load(i)
-        if acc >= target:
-            chosen = i
-            break
-        i += 1
-    if chosen < 0:
-        chosen = 0
-    out_index.unsafe_store(trial, UInt32(chosen))
+    var lo = 0
+    var hi = n
+    while hi > lo:
+        var mid = (lo + hi) // 2
+        if csum.unsafe_load(mid) < target:
+            lo = mid + 1
+        else:
+            hi = mid
+    if lo >= n:
+        lo = n - 1
+    out_index.unsafe_store(trial, UInt32(lo))
 
 
 def gather_rows_kernel(

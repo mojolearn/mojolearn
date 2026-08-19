@@ -44,7 +44,14 @@ from cluster.ported.cluster.detail.min_cluster_distance_compute import (
     min_cluster_and_distance_compute,
 )
 from cluster.ported.cluster.kmeans import fit
+from cluster.mojo_only.plus_plus import (
+    PLUS_PLUS_TPB,
+    chunk_sums_kernel,
+    scan_chunk_offsets_kernel,
+    write_inclusive_scan_kernel,
+)
 from cluster.ported.cluster.kmeans_params import (
+    INIT_KMEANS_PLUS_PLUS,
     INIT_ARRAY,
     KMeansParams,
     METRIC_L2_EXPANDED,
@@ -490,4 +497,157 @@ def check_reach_by_sabotage() raises:
         + " labels; x_norm moved "
         + String(dist_moved)
         + " distances and 0 labels, which is the predicted shape"
+    )
+
+
+def check_device_inclusive_scan() raises:
+    """The three-stage device scan, alone, against a host scan.
+
+    `cub::DeviceScan::InclusiveSum` has no shipped GPU counterpart
+    (`nn.cumsum` is CPU-only), so k-means++ builds one out of
+    `block.prefix_sum`. That construction is exactly where a fixed
+    per-thread slice silently truncates, which is what happened in DBSCAN's
+    CSR and went unnoticed because every fixture was smaller than the cap.
+
+    So this runs at 20,000 elements, well past one block's worth, and checks
+    every entry rather than the total. A conservation check would pass on a
+    scan that got the placement wrong.
+    """
+    var ctx = DeviceContext()
+    var n = 20000
+    var chunk = PLUS_PLUS_TPB
+    var n_chunks = (n + chunk - 1) // chunk
+
+    var a = ctx.enqueue_create_buffer[DType.float32](n)
+    var totals = ctx.enqueue_create_buffer[DType.float32](n_chunks)
+    var offsets = ctx.enqueue_create_buffer[DType.float32](n_chunks)
+    var csum = ctx.enqueue_create_buffer[DType.float32](n)
+    ctx.synchronize()
+
+    var ha = ctx.enqueue_create_host_buffer[DType.float32](n)
+    for i in range(n):
+        ha.unsafe_ptr().unsafe_store(i, Float32((i % 17) + 1))
+    ctx.enqueue_copy(dst_buf=a, src_ptr=ha.unsafe_ptr())
+    ctx.synchronize()
+
+    ctx.enqueue_function[chunk_sums_kernel](
+        totals.unsafe_ptr(), a.unsafe_ptr(), Int32(n), Int32(chunk),
+        grid_dim=(n_chunks, 1, 1), block_dim=(PLUS_PLUS_TPB, 1, 1),
+    )
+    ctx.enqueue_function[scan_chunk_offsets_kernel](
+        offsets.unsafe_ptr(), totals.unsafe_ptr(), Int32(n_chunks),
+        grid_dim=(1, 1, 1), block_dim=(PLUS_PLUS_TPB, 1, 1),
+    )
+    ctx.enqueue_function[write_inclusive_scan_kernel](
+        csum.unsafe_ptr(), a.unsafe_ptr(), offsets.unsafe_ptr(),
+        Int32(n), Int32(chunk),
+        grid_dim=(n_chunks, 1, 1), block_dim=(PLUS_PLUS_TPB, 1, 1),
+    )
+    ctx.synchronize()
+
+    var hc = ctx.enqueue_create_host_buffer[DType.float32](n)
+    ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=csum)
+    ctx.synchronize()
+
+    var running = Float64(0.0)
+    var worst = Float64(0.0)
+    for i in range(n):
+        running += Float64(ha.unsafe_ptr().unsafe_load(i))
+        var d = abs(Float64(hc.unsafe_ptr().unsafe_load(i)) - running) / running
+        if d > worst:
+            worst = d
+    if worst > 1.0e-4:
+        raise Error(
+            "device inclusive scan disagrees with the host scan, worst"
+            " relative error " + String(worst) + " at n = " + String(n)
+        )
+    print(
+        "check_device_inclusive_scan OK: " + String(n)
+        + " entries, worst relative error " + String(worst)
+        + ", past one block's worth"
+    )
+
+
+def check_kmeans_plus_plus_init() raises:
+    """Run a fit through the k-means++ path, which nothing else reaches.
+
+    Every other check here uses `INIT_ARRAY` on purpose, so that a failure
+    cannot hide in the draw. The cost of that is that the entire
+    initialization stayed UNREACHED, which `UNWIRED.md` has said since the
+    section was written and which is now false only because of this.
+
+    It exercises the scan, the binary search, the gather, the candidate cost
+    and the adopt step. The assertion is deliberately weak on WHICH centroids
+    come back, because that depends on the draw, and strong on the thing that
+    must hold regardless: with blobs this well separated, k-means++ followed
+    by Lloyd has to recover them as a permutation.
+    """
+    var ctx = DeviceContext()
+    var cd = CHECK_CLUSTERS * CHECK_FEATURES
+
+    var x = ctx.enqueue_create_buffer[DType.float32](
+        CHECK_ROWS * CHECK_FEATURES
+    )
+    var weights = ctx.enqueue_create_buffer[DType.float32](CHECK_ROWS)
+    var centroids = ctx.enqueue_create_buffer[DType.float32](cd)
+    var labels = ctx.enqueue_create_buffer[DType.uint32](CHECK_ROWS)
+    ctx.synchronize()
+
+    var magnitude = _fill_fixture(ctx, x, weights)
+    var sum_scale = Float32(choose_scale(magnitude))
+    var weight_scale = Float32(choose_scale(Float64(CHECK_ROWS)))
+
+    var params = KMeansParams.default()
+    params.n_clusters = CHECK_CLUSTERS
+    params.init = INIT_KMEANS_PLUS_PLUS
+    params.oversampling_factor = 0.0  # classic k-means++, the ported arm
+    params.metric = METRIC_L2_EXPANDED
+    params.n_init = 1
+    params.max_iter = 50
+    params.seed = 12345
+
+    var result = fit(
+        ctx, x, weights, centroids, labels, params,
+        CHECK_ROWS, CHECK_FEATURES, sum_scale, weight_scale,
+    )
+
+    var out_c = ctx.enqueue_create_host_buffer[DType.float32](cd)
+    ctx.enqueue_copy(dst_ptr=out_c.unsafe_ptr(), src_buf=centroids)
+    ctx.synchronize()
+
+    var used = List[Int]()
+    for _c in range(CHECK_CLUSTERS):
+        used.append(0)
+    for slot in range(CHECK_CLUSTERS):
+        var best = -1
+        var best_err = Float64(1.0e30)
+        for planted in range(CHECK_CLUSTERS):
+            var err = Float64(0.0)
+            for f in range(CHECK_FEATURES):
+                var d = Float64(
+                    out_c.unsafe_ptr().unsafe_load(slot * CHECK_FEATURES + f)
+                    - _planted_center(planted, f)
+                )
+                err += d * d
+            if err < best_err:
+                best_err = err
+                best = planted
+        if best_err > 1.0:
+            raise Error(
+                "k-means++ init: centroid " + String(slot)
+                + " is not near any planted center, squared error "
+                + String(best_err)
+            )
+        if used[best] != 0:
+            raise Error(
+                "k-means++ init: two centroids matched planted center "
+                + String(best) + ", the fit collapsed"
+            )
+        used[best] = 1
+
+    print(
+        "check_kmeans_plus_plus_init OK: 4/4 centroids recovered as a"
+        " permutation through the k-means++ path, inertia "
+        + String(result.inertia)
+        + ", " + String(result.n_iter) + " iterations"
     )

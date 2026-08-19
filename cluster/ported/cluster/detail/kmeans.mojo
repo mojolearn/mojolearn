@@ -44,11 +44,12 @@ from core.gemm import gemm_nt
 from cluster.mojo_only.plus_plus import (
     PLUS_PLUS_TPB,
     adopt_candidate_min_kernel,
+    binary_search_kernel,
     candidate_cost_kernel,
     chunk_sums_kernel,
     gather_rows_kernel,
-    select_chunk_kernel,
-    select_index_in_chunk_kernel,
+    scan_chunk_offsets_kernel,
+    write_inclusive_scan_kernel,
 )
 from cluster.mojo_only.reduce_by_key import (
     REDUCE_BY_KEY_TPB,
@@ -294,16 +295,16 @@ def kmeans_plus_plus(
 
     # Two-level device draw. `n_chunks` is capped so the serial walk inside a
     # chunk is `n / n_chunks` steps rather than `n`.
-    var n_chunks = (n_samples + PLUS_PLUS_TPB - 1) // PLUS_PLUS_TPB
-    if n_chunks > 256:
-        n_chunks = 256
-    if n_chunks < 1:
-        n_chunks = 1
-    var chunk = (n_samples + n_chunks - 1) // n_chunks
+    # One chunk per block of threads, and NO cap on the chunk count: the
+    # second stage scans the chunk totals with a per-thread slice derived
+    # from their number. Capping it is exactly the trapdoor that silently
+    # truncated DBSCAN's CSR.
+    var chunk = PLUS_PLUS_TPB
+    var n_chunks = (n_samples + chunk - 1) // chunk
 
     var chunk_totals = ctx.enqueue_create_buffer[DType.float32](n_chunks)
-    var sel_chunk = ctx.enqueue_create_buffer[DType.int32](n_trials)
-    var sel_residual = ctx.enqueue_create_buffer[DType.float32](n_trials)
+    var chunk_offsets = ctx.enqueue_create_buffer[DType.float32](n_chunks)
+    var csum = ctx.enqueue_create_buffer[DType.float32](n_samples)
     var sel_index = ctx.enqueue_create_buffer[DType.uint32](n_trials)
     var d_u01 = ctx.enqueue_create_buffer[DType.float32](n_trials)
     var h_u01 = ctx.enqueue_create_host_buffer[DType.float32](n_trials)
@@ -326,25 +327,30 @@ def kmeans_plus_plus(
             grid_dim=(n_chunks, 1, 1),
             block_dim=(PLUS_PLUS_TPB, 1, 1),
         )
-        ctx.enqueue_function[select_chunk_kernel](
-            sel_chunk.unsafe_ptr(),
-            sel_residual.unsafe_ptr(),
+        ctx.enqueue_function[scan_chunk_offsets_kernel](
+            chunk_offsets.unsafe_ptr(),
             chunk_totals.unsafe_ptr(),
-            d_u01.unsafe_ptr(),
             Int32(n_chunks),
+            grid_dim=(1, 1, 1),
+            block_dim=(PLUS_PLUS_TPB, 1, 1),
+        )
+        ctx.enqueue_function[write_inclusive_scan_kernel](
+            csum.unsafe_ptr(),
+            min_dist.unsafe_ptr(),
+            chunk_offsets.unsafe_ptr(),
+            Int32(n_samples),
+            Int32(chunk),
+            grid_dim=(n_chunks, 1, 1),
+            block_dim=(PLUS_PLUS_TPB, 1, 1),
+        )
+        ctx.enqueue_function[binary_search_kernel](
+            sel_index.unsafe_ptr(),
+            csum.unsafe_ptr(),
+            d_u01.unsafe_ptr(),
+            Int32(n_samples),
             Int32(n_trials),
             grid_dim=(1, 1, 1),
             block_dim=(max(n_trials, 1), 1, 1),
-        )
-        ctx.enqueue_function[select_index_in_chunk_kernel](
-            sel_index.unsafe_ptr(),
-            min_dist.unsafe_ptr(),
-            sel_chunk.unsafe_ptr(),
-            sel_residual.unsafe_ptr(),
-            Int32(n_samples),
-            Int32(chunk),
-            grid_dim=(n_trials, 1, 1),
-            block_dim=(PLUS_PLUS_TPB, 1, 1),
         )
         ctx.enqueue_function[gather_rows_kernel](
             candidates.unsafe_ptr(),

@@ -160,6 +160,24 @@ wired.
 `linalg.matmul` with `n = 1` returns zeros for some outputs. RAFT does not
 call gemm there either; it calls `gemv`.
 
+## Built out of a block primitive because the device-wide one is missing
+
+`cub::DeviceScan::InclusiveSum` has no shipped GPU counterpart. `nn.cumsum`
+carries neither `ctx` nor `target` and is CPU-only.
+
+So `cluster/mojo_only/plus_plus.mojo` builds one from
+`max.gpu.primitives.block.prefix_sum` in three stages: chunk sums, an
+exclusive scan of the chunk totals, then an inclusive scan within each chunk
+plus its offset. `check_device_inclusive_scan` verifies it against a host
+scan at 20,000 elements and it is EXACT.
+
+That is the pattern for every missing device-wide primitive on this list:
+the block-scope one ships, and two extra launches turn it into the
+device-scope one. It is worth writing down because the alternative that keeps
+suggesting itself, a fixed per-thread slice, silently caps the kernel at
+`threads * slice` and truncates without raising. That bug shipped once in
+DBSCAN's CSR and was found by audit, not by a test.
+
 ## How to add a row
 
 Probe the import, record AVAILABLE or NOT FOUND with the exact path tried,

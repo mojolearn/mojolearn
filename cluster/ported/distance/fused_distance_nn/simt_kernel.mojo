@@ -48,8 +48,17 @@ unportable. Keeping them apart is the whole content of this section.
    lane of the group holding the group's winner. The results are identical,
    not merely equivalent, because the reducer is a min over a TOTAL order and
    is therefore associative, commutative and idempotent: no reduction shape
-   can change the answer. The tie-break on the lower key is what buys that
-   and is load-bearing (`PORTING.md` 14).
+   can change the answer.
+
+   The total order is the one part of this that is OURS. Their fused
+   comparator `KVPMinReduceImpl`
+   (`detail/fused_distance_nn/helper_structs.cuh:28-33`) compares the VALUE
+   only and keeps the shuffled partner on a tie, so their fused answer is
+   shuffle-shape dependent; this tree uses the tie-break from their UNFUSED
+   `Reducer` (`unfused_distance_nn.cuh:44-49`) in both arms so the two can be
+   diffed against each other. That was already true of the shared-memory
+   merge this replaced, and it is load-bearing rather than tidiness
+   (`PORTING.md` 14).
 
    Two things this relies on, both true here: `GEMM_ACC_TH_COLS` is a power of
    two no larger than the lane width, and `tc = tid % GEMM_ACC_TH_COLS`, so
@@ -116,6 +125,10 @@ def fused_distance_nn_kernel(
     One block per row tile, grid-striding the column axis internally.
     Launch `grid_dim = (1, ceil(m / GEMM_MBLK), 1)`,
     `block_dim = (GEMM_THREADS, 1, 1)`.
+
+    The row epilogue is a warp shuffle, so `block_dim` is not free: it must be
+    `GEMM_THREADS`, and `GEMM_ACC_TH_COLS` must stay a power of two no larger
+    than the hardware lane width. See the module docstring, part 1.
     """
     var m = Int(m_in)
     var n = Int(n_in)
@@ -239,9 +252,17 @@ def fused_distance_nn_kernel(
     # --- `rowEpilog_lambda`, `simt_kernel.cuh:119-130` -------------------
     # Merge the GEMM_ACC_TH_COLS column-threads that share each row, one
     # butterfly pass per accumulator row, key and value shuffled together.
-    # Their comparator, `KVPMinReduce` extended by the lower-key tie-break
-    # this tree pins everywhere:
+    # The comparator is NOT literally theirs, and this is the one place in
+    # this kernel where that is deliberate. `KVPMinReduceImpl`
+    # (`detail/fused_distance_nn/helper_structs.cuh:28-33`) is
+    # `b.value < a.value ? b : a`, VALUE ONLY, so on a tie their shuffled
+    # partner wins and the answer depends on the shuffle shape. This tree
+    # uses the total order from their UNFUSED `Reducer`
+    # (`unfused_distance_nn.cuh:44-49`) in both kernels instead:
     #     (a.value < b.value) || (a.value == b.value && a.key < b.key)
+    # That is what makes the fused and unfused arms diffable against each
+    # other, and it is what makes any reduction shape return the same pair.
+    # It was already the rule in the shared-memory merge this replaced.
     #
     # Every thread reaches every shuffle: the loop bound is a comptime
     # constant and nothing here is conditional. That is required, because a
