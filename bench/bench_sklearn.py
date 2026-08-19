@@ -60,11 +60,11 @@ def emit(name, seconds):
 
 
 def main():
-    km_rows, km_cols, km_k, km_iter = 1000000, 128, 64, 20
-    knn_index, knn_queries, knn_cols, knn_k = 100000, 2000, 128, 10
-    pca_rows, pca_cols, pca_comp = 1000000, 128, 8
+    km_rows, km_cols, km_k, km_iter = 4000000, 32, 64, 20
+    knn_index, knn_queries, knn_cols, knn_k = 400000, 4000, 32, 10
+    pca_rows, pca_cols, pca_comp = 4000000, 32, 8
     db_rows, db_cols = 4000, 16
-    ols_rows, ols_cols = 1000000, 128
+    ols_rows, ols_cols = 4000000, 32
 
     km_x = np.ascontiguousarray(u01(km_rows, km_cols, 0) * 10.0, dtype=np.float32)
     km_init = np.ascontiguousarray(

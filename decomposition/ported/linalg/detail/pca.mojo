@@ -189,7 +189,7 @@ def pca_fit(
 
 # RAFT dispatches `TPB` on the column LENGTH: 32 for `D <= 32`, then 64, 128,
 # 256 (`math.cuh:391-400`). `jacobi_eigh_kernel` caps `n_cols` at
-# `JACOBI_MAX_N = 32`, so the only arm of that dispatch this port can reach is
+# the device Jacobi now streams from global memory and has NO size cap, so
 # the first one. The strided loops below are still written for any `n`.
 comptime SIGNFLIP_TPB = 32
 
@@ -401,7 +401,7 @@ def eig_and_truncate(
     # step their eigensolver already did for them.
     #
     # Left as an O(n_cols^2) selection sort on purpose. `jacobi_eigh_kernel`
-    # caps `n_cols` at `JACOBI_MAX_N = 32` (one block, two `32 x 32` float
+    # has no `n_cols` cap since the Jacobi moved to global memory
     # arrays in shared memory), so this is at most 496 comparisons and cannot
     # grow while that cap holds. It is a permutation of INDICES: no
     # arithmetic, so nothing here can move a number.

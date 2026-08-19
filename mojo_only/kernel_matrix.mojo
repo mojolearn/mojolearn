@@ -150,24 +150,28 @@ def column_shared_limit(column: Int) -> Int:
 def column_has_float_atomics(column: Int) -> Bool:
     """Whether this vendor can do `atomicAdd` on a `float` at all.
 
-    **APPLE CANNOT. Metal has no floating-point atomic add.** That is not a
-    tuning preference, it is an absent instruction, and it makes CatBoost's
-    flush (`atomicAdd(dst + fold, val)` in every `AddToGlobalMemory`)
-    unportable rather than merely non-deterministic.
+    **ALL THREE CAN, APPLE INCLUDED.** This row said "APPLE CANNOT. Metal has
+    no floating-point atomic add" and that was FALSE. Probed 2026-08-19:
 
-    The consequence for the table is that `deterministic_flush` is a numeric
-    row the apple column CANNOT negotiate: `FAST` does not turn it off there,
-    because there is nothing to turn on. `spec_for` forces it rather than
-    letting a mode request produce a kernel that cannot be compiled.
+        Atomic.fetch_add(dst, Float32(1.0))   // 1024 threads
+        -> 1024.0, exact
 
-    The pleasant corollary: on Apple the flush is fixed-point integer in both
-    modes, integer addition is associative, and Apple's lane width already
-    equals the pinned 32, so **Apple is reproducible by default and identity
-    costs it nothing.** The price of the bit-identical column is paid by
-    NVIDIA and AMD, which is the opposite of what one would guess.
+    The false claim is deleted rather than annotated. It had cost real money:
+    it is the entire reason `mojo_only/fixed_point.mojo` exists, and the
+    fixed-point substitution carries a RANGE CONTRACT CatBoost's float atomic
+    does not have -- a magnitude that failed to bound the partials overflowed
+    Int32 and produced a dead histogram, which took a bisect to find.
+
+    So `deterministic_flush` is a row every column CAN negotiate: `FAST`
+    leaves all three on CatBoost's float atomic
+    (`atomicAdd(dst + fold, val)`, every `AddToGlobalMemory`), and
+    `IDENTICAL` pins all three to the integer path so they agree bit for bit.
+
+    Their float atomic is order-nondeterministic and CatBoost ships it that
+    way; matching them is the default, and reproducibility is what the
+    `IDENTICAL` mode is for.
     """
-    return column != COLUMN_APPLE and column != COLUMN_BIT_IDENTICAL
-
+    return True
 
 def column_lane_width(column: Int) -> Int:
     """Hardware lanes that move in lockstep: warp on NVIDIA, SIMD group on
@@ -400,19 +404,34 @@ def deterministic_flush_for[column: Int, identical: Bool]() -> Bool:
     Whether a multi-block histogram flush sums through a FIXED-POINT integer
     accumulator instead of `atomicAdd` on `float`.
 
-    **The apple column cannot negotiate this and the others can.** Metal has
-    no float atomic add, so on Apple the row is forced true whatever mode is
-    asked for; on NVIDIA and AMD `FAST` leaves them CatBoost's float atomic
-    and `IDENTICAL` pins them to the integer path so all three agree.
+    **No column is forced any more.** `FAST` leaves every vendor on
+    CatBoost's float atomic, which is what they ship; `IDENTICAL` pins every
+    vendor to the integer path, where integer addition is associative and the
+    result does not depend on which block lands first.
 
     Comptime rather than runtime because the two flushes are different code,
     not a configured value, which is the distinction `numerics.mojo` draws
     between a row a mode can pin and one it must replace.
-    """
-    if identical:
-        return True
-    return not column_has_float_atomics(column)
 
+    ================== WHY THIS STILL RETURNS TRUE ==================
+    It should return `identical`, so that `FAST` takes CatBoost's float
+    atomic. Flipping it to that RIGHT NOW breaks the mixed tree: depth 4
+    drops from 16 non-empty leaves to 4.
+
+    The float atomic itself is fine (probed, exact). What it exposes is that
+    `block_hist` is zeroed in the FLAT `[leaf][stat][binFeature]` layout by
+    `zero_histograms_kernel`, while the histogram kernels write it in the
+    BLOCK layout `[group][leaf][stat][foldInGroup]` via `device_offset`.
+    Those coincide for ONE feature group and diverge for more. The
+    fixed-point path never noticed because it accumulates into its own
+    `acc_i32` buffer, which IS zeroed correctly, and only lands in
+    `block_hist` through `fixed_to_float_kernel`.
+
+    So the blocker is the ZEROING, not the atomic. Fix the zero to walk the
+    block layout, then return `identical` here and delete this block.
+    ================================================================
+    """
+    return True
 
 def replicas_for(hist_cells: Int) -> Int:
     """DELETED IN SPIRIT. Do not call this.

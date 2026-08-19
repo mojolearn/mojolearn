@@ -1,5 +1,8 @@
 from mojo_only.launch_probe import probe
 from mojo_only.permuted_ids_check import check_permuted_leaf_ids
+from mojo_only.replicated_half_byte_check import (
+    check_replicated_half_byte,
+)
 from mojo_only.copy_histograms_check import check_copy_histograms
 from mojo_only.boosting_check import check_boosting_learns
 from mojo_only.binarization_check import check_binarization
@@ -438,6 +441,15 @@ def main() raises:
     check_permuted_leaf_ids(0, 16, False)
     check_permuted_leaf_ids(0, 16, True)
     check_permuted_leaf_ids(1, 16, True)
+    print()
+    print("REPLICATED half-byte histogram vs a host tally (GPU):")
+    # The arm no half-byte check had. Every other one runs at one block per
+    # partition, so the Int32 flush that replaces their `atomicAdd` had no
+    # reader, and an unbounded `fixed_scale` wrapped it in silence for as
+    # long as it took to notice the boosting loss. Its third arm SABOTAGES
+    # the scale on purpose and requires the result to move, so it fails
+    # rather than passes if it ever stops reaching that flush.
+    check_replicated_half_byte()
     print()
     print("BOOSTING, end to end:")
     check_boosting_learns()

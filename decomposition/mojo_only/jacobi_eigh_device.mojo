@@ -47,7 +47,6 @@ from std.memory import stack_allocation
 # One block, and the matrix plus the basis both live in shared memory, so
 # this is the cap. 32 x 32 x 4 bytes x 2 arrays = 8 KB against Metal's 32 KB
 # threadgroup budget (`PORTING.md 1`).
-comptime JACOBI_MAX_N = 32
 comptime JACOBI_TPB = 32
 
 
@@ -66,16 +65,23 @@ def jacobi_eigh_kernel(
     var n = Int(n_in)
     var tid = Int(thread_idx.x)
 
-    var a = stack_allocation[
-        JACOBI_MAX_N * JACOBI_MAX_N,
-        Scalar[DType.float32],
-        address_space = AddressSpace.SHARED,
-    ]()
-    var v = stack_allocation[
-        JACOBI_MAX_N * JACOBI_MAX_N,
-        Scalar[DType.float32],
-        address_space = AddressSpace.SHARED,
-    ]()
+    # THE MATRIX AND THE BASIS LIVE IN GLOBAL MEMORY, NOT SHARED.
+    #
+    # They used to be two `JACOBI_MAX_N x JACOBI_MAX_N` shared arrays, and
+    # that imposed a HARD CAP OF 32 FEATURES on PCA, truncated SVD and OLS.
+    # Not a property of Jacobi, not a property of Metal: a consequence of
+    # choosing to hold the whole problem in threadgroup memory. At 32 that is
+    # 8 KB, at 64 it is 32 KB which is Metal's entire budget, and at 128 it
+    # is 128 KB which is impossible. A 128-feature PCA is an ordinary thing
+    # to ask for and this refused it.
+    #
+    # Streaming from global costs bandwidth per rotation and removes the cap
+    # entirely. cuSOLVER has no such limit for the same reason: it does not
+    # try to hold the matrix on chip.
+    #
+    # `JACOBI_MAX_N` is gone. There is no maximum.
+    var a = a_io
+    var v = v_out
     var rot = stack_allocation[
         2,
         Scalar[DType.float32],
@@ -84,10 +90,9 @@ def jacobi_eigh_kernel(
 
     var idx = tid
     while idx < n * n:
-        a[idx] = a_io.unsafe_load(idx)
         var r = idx // n
         var c = idx % n
-        v[idx] = Float32(1.0) if r == c else Float32(0.0)
+        v.unsafe_store(idx, Float32(1.0) if r == c else Float32(0.0))
         idx += JACOBI_TPB
     barrier()
 
@@ -119,7 +124,7 @@ def jacobi_eigh_kernel(
             var i = e // n
             var j = e - i * n
             if j > i:
-                local_off += a[e] * a[e]
+                local_off += a.unsafe_load(e) * a.unsafe_load(e)
             e += JACOBI_TPB
         var off = block_sum[block_size=JACOBI_TPB, broadcast=True](local_off)
         if off <= tol_in:
@@ -128,12 +133,12 @@ def jacobi_eigh_kernel(
         for p in range(n):
             for q in range(p + 1, n):
                 if tid == 0:
-                    var apq = a[p * n + q]
+                    var apq = a.unsafe_load(p * n + q)
                     if apq == Float32(0.0):
                         rot[0] = Float32(1.0)
                         rot[1] = Float32(0.0)
                     else:
-                        var theta = (a[q * n + q] - a[p * n + p]) / (
+                        var theta = (a.unsafe_load(q * n + q) - a.unsafe_load(p * n + p)) / (
                             Float32(2.0) * apq
                         )
                         var t = Float32(0.0)
@@ -156,35 +161,31 @@ def jacobi_eigh_kernel(
                 # Columns p and q, one thread per row.
                 var k = tid
                 while k < n:
-                    var akp = a[k * n + p]
-                    var akq = a[k * n + q]
-                    a[k * n + p] = c * akp - s * akq
-                    a[k * n + q] = s * akp + c * akq
+                    var akp = a.unsafe_load(k * n + p)
+                    var akq = a.unsafe_load(k * n + q)
+                    a.unsafe_store(k * n + p, c * akp - s * akq)
+                    a.unsafe_store(k * n + q, s * akp + c * akq)
                     k += JACOBI_TPB
                 barrier()
 
                 # Rows p and q, one thread per column.
                 k = tid
                 while k < n:
-                    var apk = a[p * n + k]
-                    var aqk = a[q * n + k]
-                    a[p * n + k] = c * apk - s * aqk
-                    a[q * n + k] = s * apk + c * aqk
+                    var apk = a.unsafe_load(p * n + k)
+                    var aqk = a.unsafe_load(q * n + k)
+                    a.unsafe_store(p * n + k, c * apk - s * aqk)
+                    a.unsafe_store(q * n + k, s * apk + c * aqk)
                     k += JACOBI_TPB
                 barrier()
 
                 # The accumulated basis.
                 k = tid
                 while k < n:
-                    var vkp = v[k * n + p]
-                    var vkq = v[k * n + q]
-                    v[k * n + p] = c * vkp - s * vkq
-                    v[k * n + q] = s * vkp + c * vkq
+                    var vkp = v.unsafe_load(k * n + p)
+                    var vkq = v.unsafe_load(k * n + q)
+                    v.unsafe_store(k * n + p, c * vkp - s * vkq)
+                    v.unsafe_store(k * n + q, s * vkp + c * vkq)
                     k += JACOBI_TPB
                 barrier()
 
-    idx = tid
-    while idx < n * n:
-        a_io.unsafe_store(idx, a[idx])
-        v_out.unsafe_store(idx, v[idx])
-        idx += JACOBI_TPB
+    # No write-back: `a` and `v` ARE the caller's buffers now.

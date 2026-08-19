@@ -461,6 +461,41 @@ never called it. A safety derivation that is inlined at its call sites has as
 many versions as call sites, and the copies drift toward the unsafe branch
 because the unsafe branch is the one nothing exercises.
 
+**The arithmetic, because a second agent bisected to a different conclusion.**
+That arm removed the `* replicas` from the half-byte launch and recorded
+"our fixed-point Int32 stand-in for that atomic is WRONG in this kernel",
+citing the depth-0 weight histogram reading -1.5e-08, -3.0e-08, -4.5e-08,
+-6.0e-08 where it should read 550, 1104, 1651, 2237. Those four numbers name
+the cause outright:
+
+    -4  / 268435455 = -1.4901e-08
+    -8  / 268435455 = -2.9802e-08
+    -12 / 268435455 = -4.4703e-08
+    -16 / 268435455 = -5.9605e-08
+
+268,435,455 is `fixed_scale` at `mag = 1.0`. A 137-row partial times that
+scale is 3.7e10, the conversion saturates at INT32_MAX, and the FOUR active
+blocks of an 8,192-row partition sum to 4 * 2147483647 = 8,589,934,588,
+which as Int32 is exactly -4; the prefix scan walks it out to -8, -12, -16.
+The kernel summed its four partials correctly. The scale it was handed was
+the largest the type admits. So `* replicas` is back, `choose_scale` bounds
+the scale by construction, and CatBoost's own grid formula
+(`hist_half_byte.cu:80-81`) is not given up.
+
+Measured with replication back on and the scale bounded: boosting 0.61 mse,
+better than the 0.66 that stood before any of this landed, with the mixed
+tree at 16/16 leaves at depth 4 and every slice and permuted-id check at 0
+wrong.
+
+`mojo_only/replicated_half_byte_check.mojo` is the check that arm asked for
+-- a replicated half-byte histogram against a host tally -- and it is wired
+into `probe_main`. Its third arm hands the kernel an unbounded scale ON
+PURPOSE and requires the result to move, so the file fails rather than passes
+if it ever stops reaching the flush it exists to cover. **That file has not
+been run**; it was written after the fix was measured, so it has never seen
+the failure it was designed around and its thresholds are derived, not
+observed.
+
 
 ## The boosting check's trees always split on bin-feature 0: RESOLVED
 

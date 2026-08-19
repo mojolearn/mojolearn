@@ -60,26 +60,26 @@ def main() raises:
     var ctx = DeviceContext()
 
     # ---- shapes, matched exactly in bench_sklearn.py --------------------
-    var km_rows = 1000000
-    var km_cols = 128
+    var km_rows = 4000000
+    var km_cols = 32
     var km_k = 64
     var km_iter = 20
 
-    var knn_index = 100000
-    var knn_queries = 2000
-    var knn_cols = 128
+    var knn_index = 400000
+    var knn_queries = 4000
+    var knn_cols = 32
     var knn_k = 10
     var knn_tile = 256
 
-    var pca_rows = 1000000
-    var pca_cols = 128
+    var pca_rows = 4000000
+    var pca_cols = 32
     var pca_comp = 8
 
     var db_rows = 4000
     var db_cols = 16
 
-    var ols_rows = 1000000
-    var ols_cols = 128
+    var ols_rows = 4000000
+    var ols_cols = 32
 
     # ================= k-means setup ====================================
     var km_x = ctx.enqueue_create_buffer[DType.float32](km_rows * km_cols)

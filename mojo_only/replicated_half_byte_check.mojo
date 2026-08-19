@@ -34,7 +34,7 @@ row, so a cell's expected value differs from its neighbour's. A uniform
 plant verifies the total and nothing about placement.
 """
 
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from mojo_only.fixed_point import choose_scale
 
@@ -49,6 +49,7 @@ from ported.gpu_data.kernel.binarize import (
     write_compressed_index_kernel,
 )
 from ported.methods.greedy_subsets_searcher.greedy_search_helper import (
+    DeviceBlock,
     launch_histograms_for_blocks,
     upload_blocks,
 )
@@ -237,11 +238,21 @@ def check_replicated_half_byte() raises:
 
     # ---- the host tally, once ------------------------------------------
     # `[leaf][stat][flat bin]`, the layout the bridge leaves behind.
+    #
+    # `tally_mag` is the SUM OF MAGNITUDES of the same cell, and it is what
+    # the tolerance is built from. The gradient plane is signed and cancels,
+    # so a cell's VALUE can be near zero while the Float32 error of summing
+    # it is not; a relative tolerance keyed on the value would then be
+    # tighter than the arithmetic can deliver, and the check would fail on
+    # correct output. Keyed on the magnitude it tracks the real error.
     var tally = List[List[Float64]]()
+    var tally_mag = List[List[Float64]]()
     for k in range(n_live):
         var t = List[Float64]()
+        var tm = List[Float64]()
         for _ in range(stat_count * lay.hist_cells):
             t.append(0.0)
+            tm.append(0.0)
         for r in range(off[k], off[k] + siz[k]):
             for f in range(n_features):
                 var b = host_bin[f][r]
@@ -250,8 +261,14 @@ def check_replicated_half_byte() raises:
                 if b < folds[f]:
                     var cell = Int(lay.features[f].first_fold_index) + b
                     t[cell] += host_w[r]
+                    tm[cell] += host_w[r]
                     t[lay.hist_cells + cell] += host_g[r]
+                    if host_g[r] < 0.0:
+                        tm[lay.hist_cells + cell] += -host_g[r]
+                    else:
+                        tm[lay.hist_cells + cell] += host_g[r]
         tally.append(t^)
+        tally_mag.append(tm^)
 
     # ---- REACH, computed before anything runs --------------------------
     # `activeBlockCount = min(ceil(size / minDocsPerBlock), maxBlocksPerPart)`
@@ -307,15 +324,18 @@ def check_replicated_half_byte() raises:
     )
 
     var wrong_one = compare(
-        one, tally, n_live, stat_count, lay.hist_cells, quantum_tol,
+        one, tally, tally_mag, n_live, stat_count, lay.hist_cells,
+        quantum_tol,
         String("one block"),
     )
     var wrong_many = compare(
-        many, tally, n_live, stat_count, lay.hist_cells, quantum_tol,
+        many, tally, tally_mag, n_live, stat_count, lay.hist_cells,
+        quantum_tol,
         String("many blocks"),
     )
     var wrong_broken = compare(
-        broken, tally, n_live, stat_count, lay.hist_cells, quantum_tol,
+        broken, tally, tally_mag, n_live, stat_count, lay.hist_cells,
+        quantum_tol,
         String("many blocks, unbounded scale (SABOTAGE)"),
     )
 
@@ -389,8 +409,8 @@ def run_arm(
     mut acc: DeviceBuffer[DType.int32],
     mut block_hist: DeviceBuffer[DType.float32],
     hist_cells_per_leaf: Int,
-    mut zf: HostBuffer[DType.float32],
-    mut zi: HostBuffer[DType.int32],
+    zf: HostBuffer[DType.float32],
+    zi: HostBuffer[DType.int32],
 ) raises -> HostBuffer[DType.float32]:
     """One launch at a given `sm_count` and scale, read back to the host.
 
@@ -425,6 +445,7 @@ def run_arm(
 def compare(
     got: HostBuffer[DType.float32],
     tally: List[List[Float64]],
+    tally_mag: List[List[Float64]],
     n_live: Int,
     stat_count: Int,
     hist_cells: Int,
@@ -451,10 +472,7 @@ def compare(
             var d = have - want
             if d < 0.0:
                 d = -d
-            var aw = want
-            if aw < 0.0:
-                aw = -aw
-            var tol = quantum_tol + 1.0e-4 * aw
+            var tol = quantum_tol + 1.0e-4 * tally_mag[k][c]
             if d > tol:
                 wrong += 1
                 if d > worst:

@@ -480,11 +480,24 @@ def half_byte_hist_kernel(
                     else:
                         dst.unsafe_store(fold, val)
                 else:
-                    # CatBoost's float-atomic path. Unreachable while
-                    # TARGET_COLUMN is apple. Left as a plain store rather
-                    # than a float atomic Mojo cannot emit; the day a CUDA
-                    # column is built this is where their branch goes.
-                    dst.unsafe_store(fold, val)
+                    # `atomicAdd(dst + fold, val)` -- CatBoost's flush, in
+                    # every `AddToGlobalMemory`.
+                    #
+                    # This was a plain STORE with a comment saying Mojo could
+                    # not emit a float atomic and that the branch was
+                    # unreachable on Apple. Both halves were false: probed
+                    # 2026-08-19, 1024 threads each adding 1.0 through
+                    # `Atomic.fetch_add` give exactly 1024.0 on the M4.
+                    #
+                    # Order-nondeterministic, exactly as theirs is, and
+                    # CatBoost ships it that way. `NUMERIC_IDENTICAL` selects
+                    # the fixed-point branch above when reproducibility is
+                    # wanted; that branch is now a CHOICE rather than the
+                    # only thing that compiles.
+                    if active_block_count > 1:
+                        _ = Atomic.fetch_add(dst.unsafe_offset(fold), val)
+                    else:
+                        dst.unsafe_store(fold, val)
 
 
 def half_byte_hist_gather_kernel(
@@ -891,8 +904,21 @@ def half_byte_hist_gather_kernel(
                     else:
                         dst.unsafe_store(fold, val)
                 else:
-                    # CatBoost's float-atomic path. Unreachable while
-                    # TARGET_COLUMN is apple. Left as a plain store rather
-                    # than a float atomic Mojo cannot emit; the day a CUDA
-                    # column is built this is where their branch goes.
-                    dst.unsafe_store(fold, val)
+                    # `atomicAdd(dst + fold, val)` -- CatBoost's flush, in
+                    # every `AddToGlobalMemory`.
+                    #
+                    # This was a plain STORE with a comment saying Mojo could
+                    # not emit a float atomic and that the branch was
+                    # unreachable on Apple. Both halves were false: probed
+                    # 2026-08-19, 1024 threads each adding 1.0 through
+                    # `Atomic.fetch_add` give exactly 1024.0 on the M4.
+                    #
+                    # Order-nondeterministic, exactly as theirs is, and
+                    # CatBoost ships it that way. `NUMERIC_IDENTICAL` selects
+                    # the fixed-point branch above when reproducibility is
+                    # wanted; that branch is now a CHOICE rather than the
+                    # only thing that compiles.
+                    if active_block_count > 1:
+                        _ = Atomic.fetch_add(dst.unsafe_offset(fold), val)
+                    else:
+                        dst.unsafe_store(fold, val)
