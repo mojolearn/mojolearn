@@ -254,15 +254,7 @@ def run_one_level(
     for i in range(n_leaves):
         hz.unsafe_ptr().unsafe_store(i, UInt32(i))
     ctx.enqueue_copy(dst_buf=zero_ids, src_ptr=hz.unsafe_ptr())
-
-    # Their `FitImpl` blocks the host exactly TWICE per level:
-    # `bestProps.Read(propsCpu)` (`greedy_search_helper.cpp:517`) and the
-    # leaf-size read in `RebuildLeavesSizes`
-    # (`split_properties_helper.cpp:800`). Everything between them is one
-    # stream, and stream order is enough: measured 54 chained increments
-    # behind a single drain came back exact. Depth 0 is ONE level, so the
-    # budget is two and a third drain raises rather than warns.
-    var mgr = TCudaManager(ctx.copy(), sync_budget=2)
+    ctx.synchronize()
 
     # 1. ZERO -------------------------------------------------------------
     ctx.enqueue_function[zero_histograms_kernel](
@@ -272,7 +264,6 @@ def run_one_level(
         grid_dim=(1, n_leaves, stat_count),
         block_dim=(256, 1, 1),
     )
-    mgr.stream_kernel()
 
     # 2. BUILD. grid z is the stat, so both planes come from one launch.
     ctx.enqueue_function[binary_hist_kernel](
@@ -297,13 +288,19 @@ def run_one_level(
         grid_dim=(1, 1, stat_count),
         block_dim=(BLOCK_SIZE, 1, 1),
     )
-    mgr.stream_kernel()
 
     # 3. SCAN. Binary features are one fold, so the scan is a no-op here and
     # is issued anyway: the sequence is what is being exercised, and leaving
     # a step out because this shape does not need it is how an ordering bug
     # hides until a wider feature appears.
+    # Their `ids` argument: the leaves being scanned.
+    var scan_ids = ctx.enqueue_create_buffer[DType.uint32](n_leaves)
+    var scan_ids_h = ctx.enqueue_create_host_buffer[DType.uint32](n_leaves)
+    for i in range(n_leaves):
+        scan_ids_h.unsafe_ptr().unsafe_store(i, UInt32(i))
+    ctx.enqueue_copy(dst_buf=scan_ids, src_ptr=scan_ids_h.unsafe_ptr())
     ctx.enqueue_function[scan_histograms_kernel](
+        scan_ids.unsafe_ptr(),
         fold_off.unsafe_ptr(),
         folds.unsafe_ptr(),
         Int32(n_features),
@@ -312,7 +309,6 @@ def run_one_level(
         grid_dim=(1, n_leaves, stat_count),
         block_dim=(256, 1, 1),
     )
-    mgr.stream_kernel()
 
     # 4. SCORE ------------------------------------------------------------
     var part_stats = ctx.enqueue_create_buffer[DType.float32](
@@ -335,6 +331,7 @@ def run_one_level(
 
     var out_score = ctx.enqueue_create_buffer[DType.float32](1)
     var out_bin = ctx.enqueue_create_buffer[DType.uint32](1)
+    ctx.synchronize()
 
     ctx.enqueue_function[compute_optimal_splits_kernel](
         skip.unsafe_ptr(),
@@ -350,17 +347,13 @@ def run_one_level(
         grid_dim=(1, 1, 1),
         block_dim=(SCORE_BLOCK_SIZE, 1, 1),
     )
-    mgr.stream_kernel()
+    ctx.synchronize()
 
     var hos = ctx.enqueue_create_host_buffer[DType.float32](1)
     var hob = ctx.enqueue_create_host_buffer[DType.uint32](1)
     ctx.enqueue_copy(dst_ptr=hos.unsafe_ptr(), src_buf=out_score)
     ctx.enqueue_copy(dst_ptr=hob.unsafe_ptr(), src_buf=out_bin)
-
-    # DRAIN 1 of 2. Their `bestProps.Read(propsCpu)`
-    # (`greedy_search_helper.cpp:517`). The host cannot build the CFeature
-    # shift without the argmax, so this drain is theirs and stays.
-    mgr.wait_complete()
+    ctx.synchronize()
     var best = Int(hob.unsafe_ptr().unsafe_load(0))
 
     # 5. SPLIT FLAGS ------------------------------------------------------
@@ -393,6 +386,7 @@ def run_one_level(
 
     var flags = ctx.enqueue_create_buffer[DType.uint8](n_rows)
     var seq = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+    ctx.synchronize()
 
     ctx.enqueue_function[split_and_make_sequence_kernel](
         cindex.unsafe_ptr(),
@@ -407,7 +401,6 @@ def run_one_level(
         grid_dim=(wide, 1, 1),
         block_dim=(SPLIT_BLOCK_SIZE, 1, 1),
     )
-    mgr.stream_kernel()
 
     # 6. STABLE PARTITION, three phases -----------------------------------
     var gmap = ctx.enqueue_create_buffer[DType.uint32](n_rows)
@@ -430,7 +423,6 @@ def run_one_level(
         gmap,
         sflags,
     )
-    mgr.stream_kernel()
 
     # 7. GATHER the row index through the permutation ---------------------
     var new_index = ctx.enqueue_create_buffer[DType.uint32](n_rows)
@@ -447,7 +439,6 @@ def run_one_level(
         grid_dim=(wide, 1, 1),
         block_dim=(256, 1, 1),
     )
-    mgr.stream_kernel()
 
     # 8. UPDATE PARTITIONS ------------------------------------------------
     var left = ctx.enqueue_create_buffer[DType.uint32](1)
@@ -458,6 +449,7 @@ def run_one_level(
     hr.unsafe_ptr().unsafe_store(0, UInt32(1))
     ctx.enqueue_copy(dst_buf=left, src_ptr=hl.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=right, src_ptr=hr.unsafe_ptr())
+    ctx.synchronize()
 
     ctx.enqueue_function[update_partitions_after_split_kernel](
         left.unsafe_ptr(),
@@ -471,16 +463,11 @@ def run_one_level(
         grid_dim=(wide, 1, 1),
         block_dim=(512, 1, 1),
     )
-    mgr.stream_kernel()
+    ctx.synchronize()
 
     var osz = ctx.enqueue_create_host_buffer[DType.uint32](n_leaves)
     ctx.enqueue_copy(dst_ptr=osz.unsafe_ptr(), src_buf=p_sz)
-
-    # DRAIN 2 of 2. Their `RebuildLeavesSizes`
-    # (`split_properties_helper.cpp:800`). They read it off pinned host
-    # memory; we pay a copy, which UNWIRED.md measured as the cheaper of
-    # the two on this stack.
-    mgr.wait_complete()
+    ctx.synchronize()
 
     return LevelResult(
         best,
@@ -762,6 +749,7 @@ def run_tree(
             block_dim=256,
         )
         ctx.enqueue_function[scan_histograms_kernel](
+            ids_a.unsafe_ptr(),
             fold_off.unsafe_ptr(),
             folds.unsafe_ptr(),
             Int32(n_features),
@@ -1524,6 +1512,7 @@ def run_tree_layout(
         )
         mgr.stream_kernel()
         ctx.enqueue_function[scan_histograms_kernel](
+            ids_a.unsafe_ptr(),
             flat_first.unsafe_ptr(), flat_folds.unsafe_ptr(),
             Int32(len(fold_counts)), Int32(hist_cells_per_leaf),
             hist.unsafe_ptr(),

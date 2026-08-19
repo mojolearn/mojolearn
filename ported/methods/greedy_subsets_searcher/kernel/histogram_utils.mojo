@@ -67,6 +67,7 @@ def substract_histograms_kernel(
 
 
 def scan_histograms_kernel(
+    hist_ids: MutPointer[UInt32, MutAnyOrigin],
     feature_first_bin: MutPointer[UInt32, MutAnyOrigin],
     feature_folds: MutPointer[UInt32, MutAnyOrigin],
     feature_count_in: Int32,
@@ -94,7 +95,11 @@ def scan_histograms_kernel(
     var feature_count = Int(feature_count_in)
     var bin_feature_count = Int(bin_feature_count_in)
     var feature_id = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    var leaf_id = Int(block_idx.y)
+    # Their `ids` argument, `*leavesGpu` at `split_properties_helper.cpp:1265`.
+    # The scan runs over the leaves that were just COMPUTED, not over leaf
+    # slots 0..n. Indexing `block_idx.y` straight into the histogram was our
+    # departure and it made a partial build impossible to scan correctly.
+    var leaf_id = Int(hist_ids.unsafe_load(Int(block_idx.y)))
     var stat_id = Int(block_idx.z)
     var stat_count = Int(grid_dim.z)
 

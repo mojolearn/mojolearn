@@ -621,7 +621,13 @@ def check_scan() raises:
     ctx.enqueue_copy(dst_buf=folds_b, src_ptr=h_folds.unsafe_ptr())
     ctx.synchronize()
 
+    var scan_ids = ctx.enqueue_create_buffer[DType.uint32](1)
+    var scan_ids_h = ctx.enqueue_create_host_buffer[DType.uint32](1)
+    scan_ids_h.unsafe_ptr().unsafe_store(0, UInt32(0))
+    ctx.enqueue_copy(dst_buf=scan_ids, src_ptr=scan_ids_h.unsafe_ptr())
+    ctx.synchronize()
     ctx.enqueue_function[scan_histograms_kernel](
+        scan_ids.unsafe_ptr(),
         first_bin.unsafe_ptr(),
         folds_b.unsafe_ptr(),
         Int32(n_features),

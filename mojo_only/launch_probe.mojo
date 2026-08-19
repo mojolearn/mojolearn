@@ -51,7 +51,13 @@ def probe() raises:
     )
     print("  substract_histograms   enqueued")
 
+    var scan_ids = ctx.enqueue_create_buffer[DType.uint32](4)
+    var scan_ids_h = ctx.enqueue_create_host_buffer[DType.uint32](4)
+    for i in range(4):
+        scan_ids_h.unsafe_ptr().unsafe_store(i, UInt32(i))
+    ctx.enqueue_copy(dst_buf=scan_ids, src_ptr=scan_ids_h.unsafe_ptr())
     ctx.enqueue_function[scan_histograms_kernel](
+        scan_ids.unsafe_ptr(),
         u32a.unsafe_ptr(),
         u32b.unsafe_ptr(),
         Int32(8),

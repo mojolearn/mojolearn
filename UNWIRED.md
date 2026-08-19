@@ -292,3 +292,61 @@ assignment step is doing something other than what it says.
 | `kmeans_plus_plus` host sampling | **FIXED in the same commit that found it** | It used to copy all `n_samples` distances to the host per accepted centroid. Now a two-level device search (`chunk_sums` / `select_chunk` / `select_index_in_chunk`) plus a one-launch `gather_rows_kernel`. No transfer in the fit scales with rows any more. |
 | the remaining device-to-host reads | audited, all O(1) or O(candidates) | `h_done` one Int32 per Lloyd iteration, `h_cost` one Float32 per restart, `host_cost` `n_trials` floats per accepted centroid. cuVS reads the last of those too. |
 | `check_convergence` (host version) | kept, unused by the fit | The device kernel beside it is what runs. The host one documents the three details in prose and is what a bring-up harness wants. Not dead by accident. |
+
+
+## Sibling subtraction: STILL UNWIRED, and now we know why it is not free
+
+`build_necessary_histograms` and `substract_histograms_kernel` are ported and
+correct. `copy_histograms_kernel` is ported. The driver calls NONE of them, so
+every level builds `2^depth` histograms where CatBoost builds `2^(depth-1)`.
+**We do twice their histogram work, and the histogram is the dominant cost.**
+
+An attempt to wire it on 2026-08-19 was reverted. What it established, all
+measured on the mixed dataset at 4096 rows:
+
+**The subtraction itself is right.** At depth 1, with the small child built
+and the large derived, the weight histogram came back
+
+    d0 leaf 0   2042 2043 2050 2048 2052 2058     (root)
+    d1 leaf 0    717  714  698  690  680  689     (built)
+    d1 leaf 1   1325 1329 1352 1358 1372 1369     (derived)
+
+and the children sum to the parent in every cell.
+
+**But that check is worthless on its own**, and this is the trap from
+`uniform test data hides permutation` wearing a new hat: subtraction DEFINES
+the derived child as `parent - small`, so children summing to the parent is
+an identity, not evidence. It cannot fail. The only real check is against an
+independent full rebuild.
+
+**And the full rebuild disagreed.** Asking the same launcher to build leaves
+`[0,1,2,3]` returned nonzero histograms for leaves 0 and 1 and ALL ZEROES for
+leaves 2 and 3, on a level where every leaf held rows. Roughly half the
+requested leaves come back unfilled.
+
+**The cause is NOT isolated.** The working driver passes `(ids_a, n_live)` to
+`launch_histograms_for_blocks` and fills every leaf; the reverted attempt
+passed `(ids_compute, n_compute)` with byte-identical contents and the same
+count, and did not. Two arguments that should be interchangeable are not.
+Until that is explained, nothing about the subtraction path can be trusted,
+including the depth-1 numbers above.
+
+### What the next attempt should do first
+
+Do not re-wire the plan. Isolate the launcher on its own, with a check that
+plants HASHED per-cell values and compares every cell against a host tally
+for a NON-CONTIGUOUS id list such as `[2,0,3]`. `mojo_only/hist_check.mojo`
+already has the machinery; every existing histogram check passes contiguous
+ids starting at 0, which is exactly the blind spot.
+
+### Ordering facts worth keeping, established from their source
+
+- The scan runs on the leaves that were just COMPUTED and it runs BEFORE the
+  subtraction (`split_properties_helper.cpp:1262` then `:1354`). A prefix sum
+  is linear, so `scan(parent) - scan(small) == scan(parent - small)` and the
+  derived child needs no further scan. `scan_histograms_kernel` now takes
+  their `ids` argument so a partial scan is expressible at all.
+- `CopyHistogram(LeafIdToSplit, RightLeafIdAfterSplit, ...)` runs at split
+  time, right before the partition update (`split_points.cpp:326`). It is
+  what puts the parent in BOTH children's slots, which is what makes the
+  pairing legal whichever child turns out smaller.

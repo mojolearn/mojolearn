@@ -85,17 +85,25 @@ def check_level_plan() raises:
     sibling pairs, plus one leaf whose histogram survives from the parent
     path, plus a terminal pair that must be skipped entirely.
     """
+    # REWRITTEN 2026-08-19. The old fixture was built for the port's
+    # inverted state machine: it made `Zeroes` leaves pair up and treated
+    # `PreviousPath` as no work. Theirs is the opposite
+    # (`split_properties_helper.cpp:1295-1304`), so the fixture had to move
+    # with it. The corrected planner rejected the old fixture on its first
+    # run, which is the only reason this is a probe and not a silent bug.
     var leaves = List[LeafRecord]()
-    # pair A on path 7: sizes 900 and 100, so the SMALLER (id 1) is built.
-    leaves.append(LeafRecord(900, HISTOGRAMS_ZEROES, 7, False))
-    leaves.append(LeafRecord(100, HISTOGRAMS_ZEROES, 7, False))
-    # a leaf still valid from the parent path: no work at all.
-    leaves.append(LeafRecord(500, HISTOGRAMS_PREVIOUS_PATH, 9, False))
+    # pair A, both holding the PARENT histogram from path 7: sizes 900 and
+    # 100, so the SMALLER (id 1) is built and id 0 is derived.
+    leaves.append(LeafRecord(900, HISTOGRAMS_PREVIOUS_PATH, 7, False))
+    leaves.append(LeafRecord(100, HISTOGRAMS_PREVIOUS_PATH, 7, False))
+    # a leaf whose slot holds NOTHING: it must be built outright.
+    leaves.append(LeafRecord(500, HISTOGRAMS_ZEROES, 9, False))
     # pair B on path 3, BOTH terminal: neither histogram is ever read.
-    leaves.append(LeafRecord(400, HISTOGRAMS_ZEROES, 3, True))
-    leaves.append(LeafRecord(600, HISTOGRAMS_ZEROES, 3, True))
-    # an unpaired rebuild on path 5.
-    leaves.append(LeafRecord(250, HISTOGRAMS_ZEROES, 5, False))
+    leaves.append(LeafRecord(400, HISTOGRAMS_PREVIOUS_PATH, 3, True))
+    leaves.append(LeafRecord(600, HISTOGRAMS_PREVIOUS_PATH, 3, True))
+    # a lone rebuild candidate on path 5. Their `CB_ENSURE` at `:1311` says
+    # this is only legal when the leaf is terminal, so it is terminal here.
+    leaves.append(LeafRecord(250, HISTOGRAMS_PREVIOUS_PATH, 5, True))
 
     var plan = build_necessary_histograms(leaves)
 
@@ -112,13 +120,39 @@ def check_level_plan() raises:
         )
     print("  builds saved by subtraction:", plan.builds_saved())
 
+    # leaf 2 is `Zeroes` so it is built outright; leaf 1 is the smaller of
+    # pair A so it is built and leaf 0 derived. Pair B is skipped as both
+    # terminal, and leaf 5 is a legal lone terminal.
     if len(plan.compute_ids) != 2:
         raise Error("expected 2 builds, got " + String(len(plan.compute_ids)))
-    if Int(plan.compute_ids[0]) != 1:
+    if Int(plan.compute_ids[0]) != 2:
+        raise Error("a Zeroes leaf must be built outright, leaf 2")
+    if Int(plan.compute_ids[1]) != 1:
         raise Error("pair A must build the SMALLER sibling, leaf 1")
+    if len(plan.subtract_from) != 1:
+        raise Error(
+            "expected 1 pair, got " + String(len(plan.subtract_from))
+        )
     if Int(plan.subtract_from[0]) != 0 or Int(plan.subtract_what[0]) != 1:
         raise Error("pair A must derive leaf 0 as parent - leaf 1")
+    var upd = plan.updated_ids()
+    if len(upd) != 3:
+        raise Error("allUpdatedLeaves must be computeLeaves + bigLeaves")
     print("  smaller-side rule holds, terminal pair skipped")
+
+    # A lone NON-terminal rebuild candidate is their CB_ENSURE at `:1311`,
+    # and it has to fire, or the pairing rule is silently accepting a leaf
+    # whose sibling went missing.
+    var bad = List[LeafRecord]()
+    bad.append(LeafRecord(250, HISTOGRAMS_PREVIOUS_PATH, 5, False))
+    var fired = False
+    try:
+        _ = build_necessary_histograms(bad)
+    except e:
+        fired = True
+    if not fired:
+        raise Error("a lone non-terminal rebuild candidate must be refused")
+    print("  lone non-terminal rebuild candidate refused, as CB_ENSURE does")
 
 
 def show_matrix() raises:
