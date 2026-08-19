@@ -134,6 +134,7 @@ def main() raises:
     var kn_bi = ctx.enqueue_create_buffer[DType.uint32](knn_tile * 2 * kn_bl)
     var kn_od = ctx.enqueue_create_buffer[DType.float32](knn_queries * knn_k)
     var kn_oi = ctx.enqueue_create_buffer[DType.uint32](knn_queries * knn_k)
+    var kn_oi32 = ctx.enqueue_create_buffer[DType.int32](knn_queries * knn_k)
     ctx.synchronize()
     var hki = ctx.enqueue_create_host_buffer[DType.float32](
         knn_index * knn_cols
@@ -238,7 +239,7 @@ def main() raises:
         compute_norms(ctx, kn_q, kn_qn, knn_queries, knn_cols, False)
         tiled_brute_force_knn(
             ctx, kn_q, kn_qn, kn_idx, kn_in, kn_dist, kn_bv, kn_bi,
-            kn_od, kn_oi, knn_queries, knn_index, knn_cols, knn_k,
+            kn_od, kn_oi, kn_oi32, knn_queries, knn_index, knn_cols, knn_k,
             knn_tile, kn_bl, False,
         )
         ctx.synchronize()
