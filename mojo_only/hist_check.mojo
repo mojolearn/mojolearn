@@ -24,6 +24,7 @@ from max.gpu.host import DeviceContext
 
 from catboost.cuda.gpu_data.grid_policy import (
     POLICY_BINARY,
+    POLICY_HALF_BYTE,
     features_per_int,
     policy_mask,
     policy_shift,
@@ -34,6 +35,9 @@ from catboost.cuda.gpu_data.kernel.binarize import (
 )
 from catboost.cuda.methods.greedy_subsets_searcher.kernel.hist_binary import (
     binary_hist_kernel,
+)
+from catboost.cuda.methods.greedy_subsets_searcher.kernel.hist_half_byte import (
+    half_byte_hist_kernel,
 )
 from catboost.cuda.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
     BLOCK_SIZE,
@@ -312,3 +316,144 @@ def check_two_partitions() raises:
             + " cells"
         )
     print("  partition offsets honored, both leaves from one launch")
+
+
+def check_half_byte_histogram() raises:
+    """The half-byte kernel against a hand-computable answer.
+
+    This is the file that carried a stale divergent-barrier bug for several
+    commits with nothing to catch it, because a launch probe cannot see a
+    wrong answer. It gets its own known-answer check for that reason.
+
+    Eight features per `UInt32`, four folds each. Feature f at row r gets bin
+    `(r + f) % 4`, so over 64 rows each of the four folds holds exactly 16
+    rows for every feature. With stat 1.0 the histogram must read 16.0 in
+    every (feature, fold) cell, and unlike the binary case EVERY fold is
+    written, not just the zero side, so a wrong fold index shows up directly.
+    """
+    var ctx = DeviceContext()
+    var n_rows = 64
+    var n_features = features_per_int(POLICY_HALF_BYTE)  # 8
+    var n_folds = 4
+
+    var cindex = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+    var zero32 = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
+    for i in range(n_rows):
+        zero32.unsafe_ptr().unsafe_store(i, UInt32(0))
+    ctx.enqueue_copy(dst_buf=cindex, src_ptr=zero32.unsafe_ptr())
+    ctx.synchronize()
+
+    var host_bins = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
+    var bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
+    for f in range(n_features):
+        for r in range(n_rows):
+            host_bins.unsafe_ptr().unsafe_store(r, UInt8((r + f) % n_folds))
+        ctx.enqueue_copy(dst_buf=bins, src_ptr=host_bins.unsafe_ptr())
+        ctx.enqueue_function[write_compressed_index_kernel](
+            Int32(0),
+            policy_mask(POLICY_HALF_BYTE),
+            UInt32(policy_shift(POLICY_HALF_BYTE, f)),
+            bins.unsafe_ptr(),
+            Int32(n_rows),
+            cindex.unsafe_ptr(),
+            grid_dim=(n_rows + WRITE_BLOCK_SIZE - 1) // WRITE_BLOCK_SIZE,
+            block_dim=WRITE_BLOCK_SIZE,
+        )
+        ctx.synchronize()
+
+    var p_off = ctx.enqueue_create_buffer[DType.uint32](1)
+    var p_sz = ctx.enqueue_create_buffer[DType.uint32](1)
+    var p_ids = ctx.enqueue_create_buffer[DType.uint32](1)
+    var h_off = ctx.enqueue_create_host_buffer[DType.uint32](1)
+    var h_sz = ctx.enqueue_create_host_buffer[DType.uint32](1)
+    var h_ids = ctx.enqueue_create_host_buffer[DType.uint32](1)
+    h_off.unsafe_ptr().unsafe_store(0, UInt32(0))
+    h_sz.unsafe_ptr().unsafe_store(0, UInt32(n_rows))
+    h_ids.unsafe_ptr().unsafe_store(0, UInt32(0))
+    ctx.enqueue_copy(dst_buf=p_off, src_ptr=h_off.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=p_sz, src_ptr=h_sz.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=p_ids, src_ptr=h_ids.unsafe_ptr())
+
+    var stats = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    var host_stats = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
+    for r in range(n_rows):
+        host_stats.unsafe_ptr().unsafe_store(r, Float32(1.0))
+    ctx.enqueue_copy(dst_buf=stats, src_ptr=host_stats.unsafe_ptr())
+
+    # Each feature owns `n_folds` consecutive cells in the group.
+    var group_size = n_features * n_folds
+    var folds = ctx.enqueue_create_buffer[DType.uint32](n_features)
+    var fold_off = ctx.enqueue_create_buffer[DType.uint32](n_features)
+    var grp_off = ctx.enqueue_create_buffer[DType.uint32](n_features)
+    var grp_sz = ctx.enqueue_create_buffer[DType.uint32](n_features)
+    var h_folds = ctx.enqueue_create_host_buffer[DType.uint32](n_features)
+    var h_fold_off = ctx.enqueue_create_host_buffer[DType.uint32](n_features)
+    var h_grp_off = ctx.enqueue_create_host_buffer[DType.uint32](n_features)
+    var h_grp_sz = ctx.enqueue_create_host_buffer[DType.uint32](n_features)
+    for f in range(n_features):
+        h_folds.unsafe_ptr().unsafe_store(f, UInt32(n_folds))
+        h_fold_off.unsafe_ptr().unsafe_store(f, UInt32(f * n_folds))
+        h_grp_off.unsafe_ptr().unsafe_store(f, UInt32(0))
+        h_grp_sz.unsafe_ptr().unsafe_store(f, UInt32(group_size))
+    ctx.enqueue_copy(dst_buf=folds, src_ptr=h_folds.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=fold_off, src_ptr=h_fold_off.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=grp_off, src_ptr=h_grp_off.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=grp_sz, src_ptr=h_grp_sz.unsafe_ptr())
+
+    var sums = ctx.enqueue_create_buffer[DType.float32](group_size)
+    var zerof = ctx.enqueue_create_host_buffer[DType.float32](group_size)
+    for i in range(group_size):
+        zerof.unsafe_ptr().unsafe_store(i, Float32(0.0))
+    ctx.enqueue_copy(dst_buf=sums, src_ptr=zerof.unsafe_ptr())
+    ctx.synchronize()
+
+    ctx.enqueue_function[half_byte_hist_kernel](
+        folds.unsafe_ptr(),
+        fold_off.unsafe_ptr(),
+        grp_off.unsafe_ptr(),
+        grp_sz.unsafe_ptr(),
+        Int32(n_features),
+        cindex.unsafe_ptr(),
+        Int32(n_rows),
+        stats.unsafe_ptr(),
+        Int32(n_rows),
+        p_off.unsafe_ptr(),
+        p_sz.unsafe_ptr(),
+        p_ids.unsafe_ptr(),
+        sums.unsafe_ptr(),
+        Int32(1),
+        Int32(1),
+        grid_dim=(1, 1, 1),
+        block_dim=(BLOCK_SIZE, 1, 1),
+    )
+    ctx.synchronize()
+
+    var out = ctx.enqueue_create_host_buffer[DType.float32](group_size)
+    ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=sums)
+    ctx.synchronize()
+
+    print("  8 features x 4 folds, 64 rows, stat 1.0")
+    print("  expected every (feature, fold) cell: 16.0")
+    var wrong = 0
+    for f in range(n_features):
+        for fold in range(n_folds):
+            var got = out.unsafe_ptr().unsafe_load(f * n_folds + fold)
+            if abs(got - Float32(16.0)) > Float32(1e-3):
+                wrong += 1
+    print(
+        "    feature 0 folds:",
+        out.unsafe_ptr().unsafe_load(0),
+        out.unsafe_ptr().unsafe_load(1),
+        out.unsafe_ptr().unsafe_load(2),
+        out.unsafe_ptr().unsafe_load(3),
+    )
+    print("  wrong cells:", wrong, "of", group_size)
+    if wrong != 0:
+        raise Error(
+            "the half-byte histogram is WRONG in "
+            + String(wrong)
+            + " of "
+            + String(group_size)
+            + " cells"
+        )
+    print("  half-byte histogram computes the right answer")
