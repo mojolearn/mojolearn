@@ -26,7 +26,7 @@ so this tree cannot repeat that quietly. **Audited by grep, not by memory.**
 | `deterministic_flush` (matrix row) | **nothing** but a doc line | No kernel does a MULTI-BLOCK flush. One block per (leaf, feature-group) owns its output slot outright, so no atomic is needed and the histograms are correct without it. The row starts mattering the moment replication across blocks exists. |
 | `mojo_only/fixed_point.mojo` | **nothing** but its own check | Same reason. It is verified in isolation (overflow bound tight at 268,435,453 of 268,435,455; forward and reverse accumulation exact) and used by no kernel. |
 | `column_lane_width` | `spec_for` only | Nothing needs a lane width while `sync_granularity` is `SYNC_BLOCK` everywhere. |
-| one-byte histogram body | its arithmetic is ported | The kernel around it is not written; only `hist_one_byte`'s slot arithmetic exists. |
+| one-byte histogram at 6, 7, 8 bits | the kernel is written and compiles | Verified at 5 bits only, where `InnerHistBitsCount` is 0 and the pass loop runs once. Above 5 bits the same code serializes 2, 4 or 8 passes over the same slots, so a wrong PASS would not show in the 5-bit check. Needs its own known-answer check per width. |
 | pinned host partitions (`partsCpu`) | the kernel writes them | `update_partitions_after_split_kernel` takes `host_offset` / `host_size` and writes them, so the device half is ported. The driver must allocate those as PINNED host memory rather than ordinary device buffers, which is where the trick pays: the host then learns every leaf's size with no device-to-host copy, and the next level's smaller-sibling decision needs no readback in the critical path. |
 
 **Consequence to state plainly, because it is the honest answer to "does the

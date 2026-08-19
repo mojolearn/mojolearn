@@ -10,6 +10,7 @@ from mojo_only.pack_check import check_packing
 from mojo_only.hist_check import (
     check_binary_histogram,
     check_half_byte_histogram,
+    check_one_byte_histogram,
     check_scan,
     check_scores,
     check_partition_update,
@@ -285,6 +286,7 @@ def main() raises:
     check_binary_histogram()
     check_two_partitions()
     check_half_byte_histogram()
+    check_one_byte_histogram()
     check_subtraction()
     check_scan()
     check_scores()

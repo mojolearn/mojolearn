@@ -54,6 +54,10 @@ from ported.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     substract_histograms_kernel,
     zero_histograms_kernel,
 )
+from ported.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
+    ONE_BYTE_BLOCK_SIZE,
+    one_byte_hist_kernel,
+)
 from ported.methods.greedy_subsets_searcher.kernel.hist_half_byte import (
     half_byte_hist_kernel,
 )
@@ -1244,3 +1248,132 @@ def check_stable_partition() raises:
     if bad != 0:
         raise Error("stable partition is wrong")
     print("  partitioned, stable within each side, across chunk boundaries")
+
+
+def check_one_byte_histogram() raises:
+    """The one-byte kernel at 5 bits, against a hand-computable answer.
+
+    Four features per `UInt32`, 32 folds each. Feature f at row r gets bin
+    `(r + f) % 32`, so over 320 rows every fold holds exactly 10 rows for
+    every feature, and with stat 1.0 every cell must read 10.0.
+
+    5 bits means `InnerHistBitsCount == 0`, so the pass loop runs ONCE and
+    this checks the direct path. It is the shape to get right first: at 6, 7
+    and 8 bits the same code serializes 2, 4 and 8 passes over the same
+    slots, so a wrong slot here is wrong everywhere and a wrong PASS is wrong
+    only above 5.
+    """
+    var ctx = DeviceContext()
+    var n_features = 4
+    var n_folds = 32
+    var n_rows = 320
+
+    var cindex = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+    var zero32 = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
+    for i in range(n_rows):
+        zero32.unsafe_ptr().unsafe_store(i, UInt32(0))
+    ctx.enqueue_copy(dst_buf=cindex, src_ptr=zero32.unsafe_ptr())
+    ctx.synchronize()
+
+    var host_bins = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
+    var bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
+    for f in range(n_features):
+        for r in range(n_rows):
+            host_bins.unsafe_ptr().unsafe_store(r, UInt8((r + f) % n_folds))
+        ctx.enqueue_copy(dst_buf=bins, src_ptr=host_bins.unsafe_ptr())
+        ctx.enqueue_function[write_compressed_index_kernel](
+            Int32(0),
+            UInt32(255),
+            UInt32(24 - 8 * f),
+            bins.unsafe_ptr(),
+            Int32(n_rows),
+            cindex.unsafe_ptr(),
+            grid_dim=(n_rows + WRITE_BLOCK_SIZE - 1) // WRITE_BLOCK_SIZE,
+            block_dim=WRITE_BLOCK_SIZE,
+        )
+        ctx.synchronize()
+
+    var p_off = ctx.enqueue_create_buffer[DType.uint32](1)
+    var p_sz = ctx.enqueue_create_buffer[DType.uint32](1)
+    var p_ids = ctx.enqueue_create_buffer[DType.uint32](1)
+    var a = ctx.enqueue_create_host_buffer[DType.uint32](1)
+    var bb = ctx.enqueue_create_host_buffer[DType.uint32](1)
+    var cc = ctx.enqueue_create_host_buffer[DType.uint32](1)
+    a.unsafe_ptr().unsafe_store(0, UInt32(0))
+    bb.unsafe_ptr().unsafe_store(0, UInt32(n_rows))
+    cc.unsafe_ptr().unsafe_store(0, UInt32(0))
+    ctx.enqueue_copy(dst_buf=p_off, src_ptr=a.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=p_sz, src_ptr=bb.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=p_ids, src_ptr=cc.unsafe_ptr())
+
+    var stats = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    var hst = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
+    for r in range(n_rows):
+        hst.unsafe_ptr().unsafe_store(r, Float32(1.0))
+    ctx.enqueue_copy(dst_buf=stats, src_ptr=hst.unsafe_ptr())
+
+    var group_size = n_features * n_folds
+    var folds = ctx.enqueue_create_buffer[DType.uint32](n_features)
+    var fold_off = ctx.enqueue_create_buffer[DType.uint32](n_features)
+    var grp_off = ctx.enqueue_create_buffer[DType.uint32](n_features)
+    var grp_sz = ctx.enqueue_create_buffer[DType.uint32](n_features)
+    var q1 = ctx.enqueue_create_host_buffer[DType.uint32](n_features)
+    var q2 = ctx.enqueue_create_host_buffer[DType.uint32](n_features)
+    var q3 = ctx.enqueue_create_host_buffer[DType.uint32](n_features)
+    var q4 = ctx.enqueue_create_host_buffer[DType.uint32](n_features)
+    for f in range(n_features):
+        q1.unsafe_ptr().unsafe_store(f, UInt32(n_folds))
+        q2.unsafe_ptr().unsafe_store(f, UInt32(f * n_folds))
+        q3.unsafe_ptr().unsafe_store(f, UInt32(0))
+        q4.unsafe_ptr().unsafe_store(f, UInt32(group_size))
+    ctx.enqueue_copy(dst_buf=folds, src_ptr=q1.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=fold_off, src_ptr=q2.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=grp_off, src_ptr=q3.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=grp_sz, src_ptr=q4.unsafe_ptr())
+
+    var sums = ctx.enqueue_create_buffer[DType.float32](group_size)
+    var zf = ctx.enqueue_create_host_buffer[DType.float32](group_size)
+    for i in range(group_size):
+        zf.unsafe_ptr().unsafe_store(i, Float32(0.0))
+    ctx.enqueue_copy(dst_buf=sums, src_ptr=zf.unsafe_ptr())
+    ctx.synchronize()
+
+    ctx.enqueue_function[one_byte_hist_kernel[5]](
+        folds.unsafe_ptr(),
+        fold_off.unsafe_ptr(),
+        grp_off.unsafe_ptr(),
+        grp_sz.unsafe_ptr(),
+        Int32(n_features),
+        cindex.unsafe_ptr(),
+        Int32(n_rows),
+        stats.unsafe_ptr(),
+        Int32(n_rows),
+        p_off.unsafe_ptr(),
+        p_sz.unsafe_ptr(),
+        p_ids.unsafe_ptr(),
+        sums.unsafe_ptr(),
+        Int32(1),
+        Int32(1),
+        grid_dim=(1, 1, 1),
+        block_dim=(ONE_BYTE_BLOCK_SIZE, 1, 1),
+    )
+    ctx.synchronize()
+
+    var out = ctx.enqueue_create_host_buffer[DType.float32](group_size)
+    ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=sums)
+    ctx.synchronize()
+
+    print("  4 features x 32 folds, 320 rows, 5 bits (one pass)")
+    print("  expected every cell: 10.0")
+    var wrong = 0
+    for f in range(n_features):
+        for fold in range(n_folds):
+            var got = out.unsafe_ptr().unsafe_load(f * n_folds + fold)
+            if abs(got - Float32(10.0)) > Float32(1e-3):
+                wrong += 1
+    print("    feature 0 folds 0..3:",
+          out.unsafe_ptr().unsafe_load(0), out.unsafe_ptr().unsafe_load(1))
+    print("  wrong cells:", wrong, "of", group_size)
+    if wrong != 0:
+        raise Error("the one-byte histogram is wrong")
+    print("  one-byte histogram computes the right answer")
