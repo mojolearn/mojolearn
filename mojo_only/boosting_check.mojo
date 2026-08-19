@@ -31,7 +31,8 @@ from ported.models.oblivious_model import TAdditiveModel
 
 
 def check_boosting_learns(
-    n_rows: Int = 8192, n_estimators: Int = 12, max_depth: Int = 4
+    n_rows: Int = 8192, n_estimators: Int = 12, max_depth: Int = 4,
+    use_subtraction: Bool = True,
 ) raises:
     var ctx = DeviceContext()
 
@@ -106,7 +107,7 @@ def check_boosting_learns(
     var model = TAdditiveModel()
     var losses = fit(
         model, ctx, n_rows, folds, max_depth, cindex, targets, weights, False,
-        n_estimators, Float32(0.3), Float32(3.0),
+        n_estimators, Float32(0.3), Float32(3.0), use_subtraction,
     )
 
     print("    predicting the mean would score", variance)

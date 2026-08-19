@@ -67,6 +67,7 @@ def fit(
     n_estimators: Int,
     learning_rate: Float32 = Float32(0.3),
     l2_leaf_reg: Float32 = Float32(3.0),
+    use_subtraction: Bool = True,
 ) raises -> List[Float64]:
     """Their `Fit` (`doc_parallel_boosting.h:302`), one permutation.
 
@@ -132,7 +133,7 @@ def fit(
             ctx, n_rows, fold_counts, max_depth,
             cindex, stats, row_index, cursor,
             Float32(0.0), Float32(0.0), splits, leaf_values,
-            True, True, learning_rate, l2_leaf_reg,
+            use_subtraction, True, learning_rate, l2_leaf_reg,
         )
         _ = len(sizes)
 

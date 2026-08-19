@@ -1082,7 +1082,12 @@ def launch_one_byte[bits: Int](
             #
             # One block is correct and slower. Port the fixed-point flush
             # here to get the replication back.
-            grid_dim=(replicas, n_live, stat_count),
+            grid_dim=(
+                feature_groups_for(POLICY_ONE_BYTE, Int(blk.n_features))
+                * replicas,
+                n_live,
+                stat_count,
+            ),
             block_dim=(ONE_BYTE_BLOCK_SIZE, 1, 1),
         )
     else:
@@ -1121,9 +1126,44 @@ def launch_one_byte[bits: Int](
             #
             # One block is correct and slower. Port the fixed-point flush
             # here to get the replication back.
-            grid_dim=(replicas, n_live, stat_count),
+            grid_dim=(
+                feature_groups_for(POLICY_ONE_BYTE, Int(blk.n_features))
+                * replicas,
+                n_live,
+                stat_count,
+            ),
             block_dim=(ONE_BYTE_BLOCK_SIZE, 1, 1),
         )
+
+
+
+def feature_groups_for(policy: Int, n_features: Int) -> Int:
+    """`numBlocks.x = (fCount + 3) / 4` and its siblings.
+
+    CatBoost's grid x carries TWO factors multiplied together
+    (`hist_one_byte.cu:290-291`):
+
+        numBlocks.x  = ceil(fCount / GroupSize);          // feature groups
+        numBlocks.x *= CeilDivide(maxActiveBlocks, ...);  // row replication
+
+    and the kernels invert it as
+    `maxBlocksPerPart = gridDim.x / featureBlocks`.
+
+    The port launched with grid x = REPLICAS ALONE, dropping the feature-group
+    factor. With one group the two agree and everything works, which is every
+    check this repository had. With two or more groups
+    `maxBlocksPerPart` becomes `1 / 2 == 0` and the kernel divides by zero,
+    and the histogram comes back EMPTY rather than partial.
+
+    `GroupSize` is how many features share a `UInt32`, which is the policy's
+    whole reason for existing: 32 binary, 8 half-byte, 4 one-byte. Kept in one
+    place so it cannot drift from the kernels' own `feature_blocks`.
+    """
+    if policy == POLICY_BINARY:
+        return (n_features + 31) // 32
+    if policy == POLICY_HALF_BYTE:
+        return (n_features + 7) // 8
+    return (n_features + 3) // 4
 
 
 def launch_histograms_for_blocks(
@@ -1180,6 +1220,10 @@ def launch_histograms_for_blocks(
         var base = n_rows * blk.first_column
         var line = n_rows
 
+        # grid x = FEATURE GROUPS times replication, their
+        # `numBlocks.x = ceil(fCount / GroupSize); numBlocks.x *= ...`
+        var groups = feature_groups_for(blk.policy, blk.n_features)
+
         # DENSE ids, `0..n_live`. The block scratch is written at
         # `blockIdx.y` (their `compute_hist_loop_two_stats.cuh:554`), so it
         # must be CLEARED at `blockIdx.y` too. Passing the leaf-id list here
@@ -1208,7 +1252,7 @@ def launch_histograms_for_blocks(
                     p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
                     block_hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
                     Int32(max_leaves), Int32(stat_count),
-                    grid_dim=(replicas, n_live, stat_count),
+                    grid_dim=(groups * replicas, n_live, stat_count),
                     block_dim=(BLOCK_SIZE, 1, 1),
                 )
             else:
@@ -1221,7 +1265,7 @@ def launch_histograms_for_blocks(
                     p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
                     block_hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
                     Int32(max_leaves), Int32(stat_count),
-                    grid_dim=(replicas, n_live, stat_count),
+                    grid_dim=(groups * replicas, n_live, stat_count),
                     block_dim=(BLOCK_SIZE, 1, 1),
                 )
         elif blk.policy == POLICY_HALF_BYTE:
@@ -1234,7 +1278,7 @@ def launch_histograms_for_blocks(
                     p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
                     block_hist.unsafe_ptr(),
                     Int32(max_leaves), Int32(stat_count),
-                    grid_dim=(1, n_live, stat_count),
+                    grid_dim=(groups, n_live, stat_count),
                     block_dim=(BLOCK_SIZE, 1, 1),
                 )
             else:
@@ -1247,7 +1291,7 @@ def launch_histograms_for_blocks(
                     p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
                     block_hist.unsafe_ptr(),
                     Int32(max_leaves), Int32(stat_count),
-                    grid_dim=(1, n_live, stat_count),
+                    grid_dim=(groups, n_live, stat_count),
                     block_dim=(BLOCK_SIZE, 1, 1),
                 )
         else:

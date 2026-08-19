@@ -378,7 +378,57 @@ dataset binned below 8 bits.
 | `whiten`, `pca_inverse_transform` | NOT PORTED | see `decomposition/UNPORTED.tsv` |
 
 
-## The boosting check's trees always split on bin-feature 0, OPEN
+## FIXED: any policy needing more than ONE COLUMN produced an EMPTY histogram
+
+This is the largest correctness bug found in this port, and every check in
+the repository passed while it was live.
+
+CatBoost's grid x carries TWO factors multiplied together
+(`hist_one_byte.cu:290-291`):
+
+    numBlocks.x  = ceil(fCount / GroupSize);          // feature GROUPS
+    numBlocks.x *= CeilDivide(maxActiveBlocks, ...);  // row replication
+
+and the kernels invert it as `maxBlocksPerPart = gridDim.x / featureBlocks`.
+The port launched with grid x = REPLICATION ALONE and dropped the
+feature-group factor. With one group the two agree. With two or more,
+`maxBlocksPerPart` is `1 / 2 == 0`, the kernel divides by zero, and the
+histogram comes back ENTIRELY EMPTY rather than partial.
+
+`GroupSize` is how many features share a `UInt32`, so the wall is exactly:
+
+    binary      33 features
+    half-byte    9 features
+    one-byte     5 features
+
+**Every check in this repository used a single column per policy.** The mixed
+check is 8 binary, 4 half-byte, 4 one-byte: one column each. That is why 16
+features passed and 17 would not have.
+
+Downstream, an empty histogram makes every score zero, `best_bin` stays at
+its `0xFFFFFFFF` sentinel, and the driver's clamp turns that into
+bin-feature 0. So the visible symptom was a tree that always split on
+bin-feature 0, which is what led here.
+
+### What it invalidates
+
+**Every timing measured before this commit**, including the 1.66x-behind
+CatBoost comparison and the "subtraction is indistinguishable" result. The
+800k x 100 one-byte benchmark is 25 columns, so it was timing a tree built
+from an empty histogram. Corrected numbers are in the commit.
+
+The `mixed_hist_probe` sweep now passes at 32 one-byte, 100 binary, 16
+half-byte and a mixed 40/24/20, none of which it could do before.
+
+## The boosting check's trees always split on bin-feature 0: RESOLVED
+
+Cause was the column bug above. After the fix the boosting check falls from
+83.62 to 0.66 mse over twelve trees against a mean baseline of 66.46, where
+it used to stall at 57.26, and its trees use 8 of 16 leaves instead of 2.
+
+What follows is the original entry, kept because the reasoning that narrowed
+it is the reusable part.
+
 
 `boosting_check` learns and the model round-trips exactly, but every tree it
 grows picks bin-feature 0 (feature 0, bin 0) at every level and at every
