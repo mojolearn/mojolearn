@@ -20,3 +20,4 @@ ported/methods/leaves_estimation/leaves_estimation.mojo	catboost/cuda/methods/le
 ported/gpu_data/gpu_structures.mojo	catboost/cuda/gpu_data/gpu_structures.h	transliterated	TCFeature; Offset narrowed ui64 to UInt32
 ported/gpu_data/compressed_index_builder.mojo	catboost/cuda/gpu_data/compressed_index_builder.h	partial	layout decision only; single-device, no docParallel striping
 ported/gpu_data/feature_blocks.mojo	catboost/cuda/methods/greedy_subsets_searcher/split_properties_helper.cpp	partial	TFeatureInBlock assembly, one block per policy present
+ported/options/catboost_options.mojo	catboost/private/libs/options/	partial	their option names and defaults; two departures (random_strength 0.0, plus determinism which has no counterpart)
