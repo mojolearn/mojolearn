@@ -21,3 +21,11 @@ ported/gpu_data/gpu_structures.mojo	catboost/cuda/gpu_data/gpu_structures.h	tran
 ported/gpu_data/compressed_index_builder.mojo	catboost/cuda/gpu_data/compressed_index_builder.h	partial	layout decision only; single-device, no docParallel striping
 ported/gpu_data/feature_blocks.mojo	catboost/cuda/methods/greedy_subsets_searcher/split_properties_helper.cpp	partial	TFeatureInBlock assembly, one block per policy present
 ported/options/catboost_options.mojo	catboost/private/libs/options/	partial	their option names and defaults; two departures (random_strength 0.0, plus determinism which has no counterpart)
+ported/gpu_lib/fwd.mojo	catboost/cuda/cuda_lib/fwd.h	transliterated	EPtrType; dir renamed cuda_lib -> gpu_lib, classes keep CatBoost names
+ported/gpu_lib/gpu_base.mojo	catboost/cuda/cuda_lib/cuda_base.h	partial	streams only; Metal has ONE, ctx.stream() raises not-implemented
+ported/gpu_lib/slice.mojo	catboost/cuda/cuda_lib/slice.h	transliterated	TSlice
+ported/gpu_lib/device_id.mojo	catboost/cuda/cuda_lib/device_id.h	transliterated	host_id always -1
+ported/gpu_lib/task.mojo	catboost/cuda/cuda_lib/task.h	partial+replaced	ECommandType all 10; ICommand -> tagged union, Mojo has no trait objects
+ported/gpu_lib/tasks_queue/single_host_task_queue.mojo	catboost/cuda/cuda_lib/tasks_queue/single_host_task_queue.h	replaced	no thread; enqueue_function is already an async submit
+ported/gpu_lib/gpu_single_worker.mojo	catboost/cuda/cuda_lib/gpu_single_worker.cpp	partial	the ECommandType dispatch switch; sync_count/launch_count/sync_budget
+ported/gpu_lib/gpu_manager.mojo	catboost/cuda/cuda_lib/cuda_manager.h	partial	single device; owns the ONLY drain
