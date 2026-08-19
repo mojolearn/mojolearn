@@ -160,6 +160,7 @@ def main() raises:
     var pc_mu = ctx.enqueue_create_buffer[DType.float32](pca_cols)
     var pc_cov = ctx.enqueue_create_buffer[DType.float32](pca_cols * pca_cols)
     var pc_xa = ctx.enqueue_create_buffer[DType.float32](pca_rows * pca_cols)
+    var pc_xa2 = ctx.enqueue_create_buffer[DType.float32](pca_rows * pca_cols)
     ctx.synchronize()
     var hpx = ctx.enqueue_create_host_buffer[DType.float32](
         pca_rows * pca_cols
@@ -205,6 +206,7 @@ def main() raises:
     var ol_ab = ctx.enqueue_create_buffer[DType.float32](ols_cols)
     var ol_inv = ctx.enqueue_create_buffer[DType.float32](ols_cols * ols_cols)
     var ol_aa = ctx.enqueue_create_buffer[DType.float32](ols_rows * ols_cols)
+    var ol_aa2 = ctx.enqueue_create_buffer[DType.float32](ols_rows * ols_cols)
     ctx.synchronize()
     var hoa = ctx.enqueue_create_host_buffer[DType.float32](
         ols_rows * ols_cols
@@ -243,7 +245,7 @@ def main() raises:
         _emit("knn", perf_counter_ns() - t0)
 
         t0 = perf_counter_ns()
-        _ = pca_fit(ctx, pc_x, pc_xa, pc_mu, pc_cov, pca_rows, pca_cols, pca_comp)
+        _ = pca_fit(ctx, pc_x, pc_xa, pc_xa2, pc_mu, pc_cov, pca_rows, pca_cols, pca_comp)
         ctx.synchronize()
         _emit("pca", perf_counter_ns() - t0)
 
@@ -258,7 +260,7 @@ def main() raises:
         t0 = perf_counter_ns()
         lstsq_eig(
             ctx, ol_a, ol_b, ol_w, ol_cov, ol_q, ol_qs, ol_s, ol_ab, ol_inv,
-            ol_aa, ols_rows, ols_cols,
+            ol_aa, ol_aa2, ols_rows, ols_cols,
         )
         ctx.synchronize()
         _emit("ols", perf_counter_ns() - t0)

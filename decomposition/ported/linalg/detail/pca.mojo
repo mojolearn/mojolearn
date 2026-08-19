@@ -79,6 +79,7 @@ def compute_covariance(
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32],
     mut x_alias: DeviceBuffer[DType.float32],
+    mut x_alias2: DeviceBuffer[DType.float32],
     mut mu: DeviceBuffer[DType.float32],
     mut cov: DeviceBuffer[DType.float32],
     n_rows: Int,
@@ -111,7 +112,7 @@ def compute_covariance(
     #
     # MAX's matmul has no `alpha`, so cuBLAS's scale becomes its own pass over
     # `n_cols^2` elements. A deviation in launch count, not arithmetic.
-    gemm_tn(ctx, cov, x, x_alias, n_cols, n_cols, n_rows)
+    gemm_tn(ctx, cov, x, x_alias, x_alias2, n_cols, n_cols, n_rows)
     ctx.enqueue_function[scale_in_place_kernel](
         cov.unsafe_ptr(),
         Int32(n_cols * n_cols),
@@ -137,6 +138,7 @@ def pca_fit(
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32],
     mut x_alias: DeviceBuffer[DType.float32],
+    mut x_alias2: DeviceBuffer[DType.float32],
     mut mu: DeviceBuffer[DType.float32],
     mut cov: DeviceBuffer[DType.float32],
     n_rows: Int,
@@ -163,14 +165,9 @@ def pca_fit(
 
     # Mojo refuses one buffer as two mutable kernel arguments (PORTING.md 24),
     # and X^T X names X twice, so the caller supplies an aliased copy.
-    ctx.enqueue_function[copy_f32_kernel](
-        x_alias.unsafe_ptr(),
-        x.unsafe_ptr(),
-        Int32(n_rows * n_cols),
-        grid_dim=((n_rows * n_cols + 255) // 256, 1, 1),
-        block_dim=(256, 1, 1),
+    compute_covariance(
+        ctx, x, x_alias, x_alias2, mu, cov, n_rows, n_cols, restore_input
     )
-    compute_covariance(ctx, x, x_alias, mu, cov, n_rows, n_cols, restore_input)
 
     return eig_and_truncate(
         ctx, cov, n_cols, n_components, n_rows - 1

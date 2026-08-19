@@ -218,6 +218,7 @@ def gemm_nt_kernel(
 from layout import TileTensor
 from layout.tile_layout import row_major
 from linalg.matmul import matmul
+from linalg.transpose import transpose
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 
@@ -246,31 +247,60 @@ def gemm_tn(
     ctx: DeviceContext,
     mut z: DeviceBuffer[DType.float32],
     mut x: DeviceBuffer[DType.float32],
-    mut y: DeviceBuffer[DType.float32],
+    mut xt: DeviceBuffer[DType.float32],
+    mut xt2: DeviceBuffer[DType.float32],
     m: Int,
     n: Int,
     k: Int,
 ) raises:
-    """`z[m x n] = x[k x m]^T . y[k x n]`, the Gram/covariance shape.
+    """`z[m x n] = x[k x m]^T . x[k x n]`, the Gram shape, ON THE VENDOR PATH.
 
-    **Implemented on the HAND-PORTED contraction, not on MAX's matmul, and
-    the reason is a hard limit rather than a preference.** See below.
+    MAX's matmul refuses `transpose_a`:
+
+        constraint failed: transpose_a not yet supported
+
+    which blocked every covariance in this repository and is why PCA and OLS
+    did not move across six benchmark rounds. The way through is an identity
+    rather than a workaround:
+
+        X is `k x m`.  Xt = transpose(X) is `m x k`.
+        Xt . Xt^T  ==  X^T X
+
+    So one `linalg.transpose` turns the unsupported T-N shape into the N-T
+    shape MAX does support, and the product itself runs on the tuned kernel.
+    `xt` is caller-supplied scratch of `k * m` floats.
+
+    This only serves the SYMMETRIC case, `X^T X`, which is the only T-N shape
+    any of these ports asks for: `raft::stats::cov`, `lstsqEig`'s first step
+    and `tsvd_fit` all pass the same matrix twice.
     """
-    from core.column_stats import COV_TILE, covariance_kernel
-
-    ctx.enqueue_function[covariance_kernel](
-        z.unsafe_ptr(),
-        x.unsafe_ptr(),
-        Int32(k),
-        Int32(m),
-        Float32(1.0),
-        grid_dim=(
-            (n + COV_TILE - 1) // COV_TILE,
-            (m + COV_TILE - 1) // COV_TILE,
-            1,
-        ),
-        block_dim=(COV_TILE, COV_TILE, 1),
+    var perms = InlineArray[Int, 2](uninitialized=True)
+    perms[0] = 1
+    perms[1] = 0
+    transpose(
+        TileTensor(xt, row_major(m, k)),
+        TileTensor(x, row_major(k, m)),
+        Pointer(to=perms[0]),
+        ctx,
     )
+    # `matmul` enforces the same no-aliasing rule `enqueue_function` does
+    # (PORTING.md 24), and `Xt . Xt^T` names the same buffer twice, so the
+    # transpose runs into two buffers. Two transposes rather than a transpose
+    # and a copy: identical cost, one fewer kernel to explain.
+    transpose(
+        TileTensor(xt2, row_major(m, k)),
+        TileTensor(x, row_major(k, m)),
+        Pointer(to=perms[0]),
+        ctx,
+    )
+    ctx.synchronize()
+    matmul[transpose_b=True, target="gpu"](
+        TileTensor(z, row_major(m, n)),
+        TileTensor(xt, row_major(m, k)),
+        TileTensor(xt2, row_major(n, k)),
+        ctx,
+    )
+    ctx.synchronize()
 
 
 # WHY `gemm_tn` IS NOT ON THE VENDOR PATH, AND IT IS A HARD LIMIT

@@ -63,6 +63,7 @@ def _solve(
     var ab = ctx.enqueue_create_buffer[DType.float32](d)
     var inv = ctx.enqueue_create_buffer[DType.float32](d * d)
     var a_alias = ctx.enqueue_create_buffer[DType.float32](n * d)
+    var a_alias2 = ctx.enqueue_create_buffer[DType.float32](n * d)
     ctx.synchronize()
 
     var ha = ctx.enqueue_create_host_buffer[DType.float32](n * d)
@@ -80,7 +81,7 @@ def _solve(
     ctx.enqueue_copy(dst_buf=b, src_ptr=hb.unsafe_ptr())
     ctx.synchronize()
 
-    lstsq_eig(ctx, a, b, w, cov_a, q, qs, s_vec, ab, inv, a_alias, n, d)
+    lstsq_eig(ctx, a, b, w, cov_a, q, qs, s_vec, ab, inv, a_alias, a_alias2, n, d)
 
     var hw = ctx.enqueue_create_host_buffer[DType.float32](d)
     ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=w)

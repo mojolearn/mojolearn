@@ -124,6 +124,48 @@ of the whole audit is that the vendor swaps available to us today are
 
 ---
 
+## 3c. Their partition has TWO paths, and the DEFAULT is not CUB
+
+Reading `SortByFlagsInLeaf` (`split_points.cu:741`) rather than only the CUB
+call it contains:
+
+    if (part.Size > FastSortSize()) {          // FastSortSize() == 500000
+        cub::DeviceRadixSort::SortPairs(..., 0, 1, stream);
+    } else {
+        SortWithoutCub(leafId, ...);
+    }
+
+**Below 500,000 rows the CUB sort is not used at all.** After the first split
+every leaf of an 800k dataset is under that, so the path CatBoost actually
+runs almost everywhere is `SortWithoutCub`, which is:
+
+1. `cub::DeviceScan::ExclusiveSum` over the flag bits, per leaf
+2. `ReorderOneBitImpl<bool, ui32, N=1, blockSize=512>`
+   (`cuda_util/kernel/reorder_one_bit_impl.cuh:127`), which is ORDINARY
+   PORTABLE CUDA, not a vendor call
+
+`ReorderOneBitImpl`, transliterated from their source:
+
+    totalOnes  = offsets[size-1] + ((tempKeys[size-1] >> bit) & 1)
+    totalZeros = size - totalOnes
+    onesBefore   = offsets[idx]
+    zeroesBefore = idx - onesBefore
+    offset = isZero ? zeroesBefore : (totalZeros + onesBefore)
+    keys[offset] = key;  values[offset] = value
+
+So the scan is over the ELEMENTS, not over chunks, and the scatter reads a
+per-element rank. Ours counts zeros per 256-row chunk, scans the chunk
+counts, then scatters. Functionally the same partition; structurally a
+different decomposition, and ours is the one nobody has diffed against a
+reference.
+
+**Per rule 0b, ours is the suspect.** The port to make is `ReorderOneBitImpl`
+plus a device-wide exclusive scan, with their 500,000-row switch to a 1-bit
+sort above it. The scan is the piece with no shipped GPU primitive, which is
+what section 3b established.
+
+---
+
 ## 4. What actually paid, and it was not a vendor call
 
 The 4.3x gap was in the histogram, and reading their kernel found two things

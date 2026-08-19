@@ -34,6 +34,7 @@ def tsvd_fit(
     mut x: DeviceBuffer[DType.float32],
     mut gram: DeviceBuffer[DType.float32],
     mut x_alias: DeviceBuffer[DType.float32],
+    mut x_alias2: DeviceBuffer[DType.float32],
     n_rows: Int,
     n_cols: Int,
     n_components: Int,
@@ -54,17 +55,10 @@ def tsvd_fit(
     if n_components > n_cols:
         raise Error("n_components cannot exceed n_cols")
 
-    ctx.enqueue_function[copy_f32_kernel](
-        x_alias.unsafe_ptr(),
-        x.unsafe_ptr(),
-        Int32(n_rows * n_cols),
-        grid_dim=((n_rows * n_cols + 255) // 256, 1, 1),
-        block_dim=(256, 1, 1),
-    )
     # Step 1. `alpha = 1`, so scale 1: the raw Gram matrix, not a covariance.
     # Same tuned matmul as PCA, with alpha = 1 and no centering. Their
     # `tsvd_fit` asks cuBLAS for exactly this: CUBLAS_OP_T, CUBLAS_OP_N.
-    gemm_tn(ctx, gram, x, x_alias, n_cols, n_cols, n_rows)
+    gemm_tn(ctx, gram, x, x_alias, x_alias2, n_cols, n_cols, n_rows)
 
     ctx.synchronize()
 

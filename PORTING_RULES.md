@@ -18,6 +18,34 @@ A file in this tree is exactly one of two things:
 
 There is no third category of "good idea worth adopting."
 
+## 0b. ASSUME OUR CODE IS BROKEN
+
+Andrew, 2026-08-19. When our code and theirs disagree, **theirs is right.**
+When a measurement of ours disagrees with their design, suspect the
+measurement. When our code looks like it is already doing what they do, read
+their file anyway.
+
+This is not deference for its own sake. It is the record:
+
+| what we believed | what reading their source found |
+|---|---|
+| `build_necessary_histograms` was ported | its state machine was exactly inverted |
+| the histogram writeback was fine | it used the looked-up leaf id, theirs uses the dense one |
+| replication was tuned | `replicas_for` was invented; they compute it from occupancy |
+| leaf values were a ported Newton step | the sign was inverted against their `der` convention |
+| the tree grew to `max_depth` | they STOP when a split repeats |
+| the histogram loop was transliterated | they load 4 elements per thread, we loaded 1 |
+| a threadgroup barrier was the only option | they sync a warp, and `syncwarp` exists |
+
+Seven, in one session. Every one found by reading `/private/tmp/catboost-src`,
+none by reasoning about our own code. The two "optimisations" we invented
+(`replicas_for`, the widened barrier) were both worse than the thing they
+replaced.
+
+**So the default is: our version is wrong until their file says otherwise.**
+The same applies to cuML for `cluster/`. If you cannot find their file, that
+is the work -- not a licence to design.
+
 ## 1. Read their source, not our notes
 
 Our notes have been wrong about our own code four times in one day, and our

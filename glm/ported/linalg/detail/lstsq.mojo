@@ -72,24 +72,18 @@ def lstsq_eig(
     mut ab: DeviceBuffer[DType.float32],
     mut inv: DeviceBuffer[DType.float32],
     mut a_alias: DeviceBuffer[DType.float32],
+    mut a_alias2: DeviceBuffer[DType.float32],
     n_rows: Int,
     n_cols: Int,
 ) raises:
     """`w = inv(A^T A) A^T b`, their step order."""
-    ctx.enqueue_function[copy_f32_kernel](
-        a_alias.unsafe_ptr(),
-        a.unsafe_ptr(),
-        Int32(n_rows * n_cols),
-        grid_dim=((n_rows * n_cols + 255) // 256, 1, 1),
-        block_dim=(256, 1, 1),
-    )
     # covA <- A^T A. alpha = 1, so scale 1: a Gram matrix, not a covariance.
     # covA <- A^T A. `raft::linalg::gemm(CUBLAS_OP_T, CUBLAS_OP_N, alpha=1)`,
     # so the tuned matmul with `transpose_a` and no scale. This is the ONLY
     # step here that touches rows, and it was still on the hand-written
     # contraction while every other section had moved: OLS sat at 28 ms
     # across five benchmark rounds because nothing I changed was on its path.
-    gemm_tn(ctx, cov_a, a, a_alias, n_cols, n_cols, n_rows)
+    gemm_tn(ctx, cov_a, a, a_alias, a_alias2, n_cols, n_cols, n_rows)
 
     # Ab <- A^T b. Theirs overlaps this with the line above on a second
     # stream; see the module docstring.
