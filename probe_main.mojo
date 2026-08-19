@@ -3,6 +3,7 @@ from mojo_only.pack_check import check_packing
 from mojo_only.hist_check import (
     check_binary_histogram,
     check_half_byte_histogram,
+    check_scan,
     check_subtraction,
     check_two_partitions,
 )
@@ -264,6 +265,7 @@ def main() raises:
     check_two_partitions()
     check_half_byte_histogram()
     check_subtraction()
+    check_scan()
     print()
     print("tree schedule:")
     show_tree_schedule()

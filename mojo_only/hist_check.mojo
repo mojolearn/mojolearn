@@ -37,6 +37,7 @@ from catboost.cuda.methods.greedy_subsets_searcher.kernel.hist_binary import (
     binary_hist_kernel,
 )
 from catboost.cuda.methods.greedy_subsets_searcher.kernel.histogram_utils import (
+    scan_histograms_kernel,
     substract_histograms_kernel,
 )
 from catboost.cuda.methods.greedy_subsets_searcher.kernel.hist_half_byte import (
@@ -545,3 +546,77 @@ def check_subtraction() raises:
     if wrong != 0 or what_moved != 0:
         raise Error("sibling subtraction is wrong")
     print("  subtraction correct, clamp fires, `what` untouched")
+
+
+def check_scan() raises:
+    """The bin prefix scan, which is what buys the score kernel its shape.
+
+    Two features of four folds each, one leaf, one stat. Feature 0's folds
+    hold 1,2,3,4 and feature 1's hold 10,20,30,40, laid out consecutively in
+    the leaf's bin-feature row.
+
+    After the scan each feature's folds must be its own running total,
+    1,3,6,10 and 10,30,60,100. The property that matters is that the scan is
+    PER FEATURE: it must not run across the feature boundary and turn
+    feature 1's first fold into 10+10.
+    """
+    var ctx = DeviceContext()
+    var n_features = 2
+    var n_folds = 4
+    var n_bf = n_features * n_folds
+
+    var hist = ctx.enqueue_create_buffer[DType.float32](n_bf)
+    var h = ctx.enqueue_create_host_buffer[DType.float32](n_bf)
+    for k in range(n_folds):
+        h.unsafe_ptr().unsafe_store(k, Float32(1.0 + Float64(k)))
+        h.unsafe_ptr().unsafe_store(n_folds + k, Float32(10.0 * (1.0 + Float64(k))))
+    ctx.enqueue_copy(dst_buf=hist, src_ptr=h.unsafe_ptr())
+
+    var first_bin = ctx.enqueue_create_buffer[DType.uint32](n_features)
+    var folds_b = ctx.enqueue_create_buffer[DType.uint32](n_features)
+    var h_first = ctx.enqueue_create_host_buffer[DType.uint32](n_features)
+    var h_folds = ctx.enqueue_create_host_buffer[DType.uint32](n_features)
+    for f in range(n_features):
+        h_first.unsafe_ptr().unsafe_store(f, UInt32(f * n_folds))
+        h_folds.unsafe_ptr().unsafe_store(f, UInt32(n_folds))
+    ctx.enqueue_copy(dst_buf=first_bin, src_ptr=h_first.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=folds_b, src_ptr=h_folds.unsafe_ptr())
+    ctx.synchronize()
+
+    ctx.enqueue_function[scan_histograms_kernel](
+        first_bin.unsafe_ptr(),
+        folds_b.unsafe_ptr(),
+        Int32(n_features),
+        Int32(n_bf),
+        hist.unsafe_ptr(),
+        grid_dim=(1, 1, 1),
+        block_dim=(256, 1, 1),
+    )
+    ctx.synchronize()
+
+    var out = ctx.enqueue_create_host_buffer[DType.float32](n_bf)
+    ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=hist)
+    ctx.synchronize()
+
+    print("  feature 0 folds 1,2,3,4 -> expect 1,3,6,10")
+    print("  feature 1 folds 10,20,30,40 -> expect 10,30,60,100")
+    var want = List[Float32]()
+    want.append(1.0)
+    want.append(3.0)
+    want.append(6.0)
+    want.append(10.0)
+    want.append(10.0)
+    want.append(30.0)
+    want.append(60.0)
+    want.append(100.0)
+    var wrong = 0
+    for i in range(n_bf):
+        if abs(out.unsafe_ptr().unsafe_load(i) - want[i]) > Float32(1e-3):
+            wrong += 1
+            print("    slot", i, "got", out.unsafe_ptr().unsafe_load(i), "want", want[i])
+    print("    got f0:", out.unsafe_ptr().unsafe_load(0), out.unsafe_ptr().unsafe_load(3))
+    print("    got f1:", out.unsafe_ptr().unsafe_load(4), out.unsafe_ptr().unsafe_load(7))
+    print("  wrong slots:", wrong, "of", n_bf)
+    if wrong != 0:
+        raise Error("the bin scan is wrong")
+    print("  scan is per-feature and does not cross the boundary")
