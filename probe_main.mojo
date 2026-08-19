@@ -3,6 +3,7 @@ from mojo_only.pack_check import check_packing
 from mojo_only.hist_check import (
     check_binary_histogram,
     check_half_byte_histogram,
+    check_subtraction,
     check_two_partitions,
 )
 from catboost.cuda.methods.greedy_subsets_searcher.structure_searcher_template import (
@@ -262,6 +263,7 @@ def main() raises:
     check_binary_histogram()
     check_two_partitions()
     check_half_byte_histogram()
+    check_subtraction()
     print()
     print("tree schedule:")
     show_tree_schedule()

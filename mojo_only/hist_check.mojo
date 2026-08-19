@@ -36,6 +36,9 @@ from catboost.cuda.gpu_data.kernel.binarize import (
 from catboost.cuda.methods.greedy_subsets_searcher.kernel.hist_binary import (
     binary_hist_kernel,
 )
+from catboost.cuda.methods.greedy_subsets_searcher.kernel.histogram_utils import (
+    substract_histograms_kernel,
+)
 from catboost.cuda.methods.greedy_subsets_searcher.kernel.hist_half_byte import (
     half_byte_hist_kernel,
 )
@@ -49,7 +52,6 @@ def check_binary_histogram() raises:
 
     var n_rows = 64
     var n_features = features_per_int(POLICY_BINARY)  # 32
-    var n_stats = 1
 
     # --- build the packed column ------------------------------------------
     var cindex = ctx.enqueue_create_buffer[DType.uint32](n_rows)
@@ -146,7 +148,7 @@ def check_binary_histogram() raises:
         p_ids.unsafe_ptr(),
         sums.unsafe_ptr(),
         Int32(1),
-        Int32(n_stats),
+        Int32(1),
         grid_dim=(1, 1, 1),
         block_dim=(BLOCK_SIZE, 1, 1),
     )
@@ -457,3 +459,89 @@ def check_half_byte_histogram() raises:
             + " cells"
         )
     print("  half-byte histogram computes the right answer")
+
+
+def check_subtraction() raises:
+    """Sibling subtraction: the mechanism that halves every level's work.
+
+    Least trustworthy unchecked kernel in the tree, because everything
+    downstream reads its output and a wrong sign or a wrong offset produces
+    plausible numbers rather than obvious garbage.
+
+    Layout is theirs: `histogram[leaf * binFeatureCount * statCount +
+    stat * binFeatureCount + binFeature]`. Three leaves, one stat. Leaf 0 is
+    the PARENT total, leaf 1 the smaller child that was actually built, and
+    the kernel must overwrite leaf 0 with `parent - smaller`, in place, which
+    is the larger child.
+
+    Two properties checked that a single pair cannot show:
+      - the `max(., 0)` clamp on stat 0 fires where cancellation would go
+        negative, and
+      - `what` is left UNTOUCHED, since a kernel that swapped operands or
+        wrote both slots would still make the first assertion pass.
+    """
+    var ctx = DeviceContext()
+    var n_bf = 8
+    var n_leaves = 3
+
+    var hist = ctx.enqueue_create_buffer[DType.float32](n_leaves * n_bf)
+    var h = ctx.enqueue_create_host_buffer[DType.float32](n_leaves * n_bf)
+    # leaf 0: the parent totals. leaf 1: the built smaller child.
+    for b in range(n_bf):
+        h.unsafe_ptr().unsafe_store(0 * n_bf + b, Float32(100.0 + Float64(b)))
+        h.unsafe_ptr().unsafe_store(1 * n_bf + b, Float32(30.0 + Float64(b)))
+        h.unsafe_ptr().unsafe_store(2 * n_bf + b, Float32(-1.0))
+    # One bin where the child EXCEEDS the parent, so cancellation would go
+    # negative and the clamp must fire.
+    h.unsafe_ptr().unsafe_store(1 * n_bf + 3, Float32(1000.0))
+    ctx.enqueue_copy(dst_buf=hist, src_ptr=h.unsafe_ptr())
+
+    var from_ids = ctx.enqueue_create_buffer[DType.uint32](1)
+    var what_ids = ctx.enqueue_create_buffer[DType.uint32](1)
+    var hf = ctx.enqueue_create_host_buffer[DType.uint32](1)
+    var hw = ctx.enqueue_create_host_buffer[DType.uint32](1)
+    hf.unsafe_ptr().unsafe_store(0, UInt32(0))
+    hw.unsafe_ptr().unsafe_store(0, UInt32(1))
+    ctx.enqueue_copy(dst_buf=from_ids, src_ptr=hf.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=what_ids, src_ptr=hw.unsafe_ptr())
+    ctx.synchronize()
+
+    ctx.enqueue_function[substract_histograms_kernel](
+        from_ids.unsafe_ptr(),
+        what_ids.unsafe_ptr(),
+        Int32(n_bf),
+        hist.unsafe_ptr(),
+        grid_dim=(1, 1, 1),
+        block_dim=(256, 1, 1),
+    )
+    ctx.synchronize()
+
+    var out = ctx.enqueue_create_host_buffer[DType.float32](n_leaves * n_bf)
+    ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=hist)
+    ctx.synchronize()
+
+    print("  parent 100+b, smaller child 30+b, bin 3 child=1000 (clamp case)")
+    var wrong = 0
+    for b in range(n_bf):
+        var got = out.unsafe_ptr().unsafe_load(0 * n_bf + b)
+        var want = Float32(70.0)
+        if b == 3:
+            want = Float32(0.0)  # 103 - 1000 clamped by max(., 0)
+        if abs(got - want) > Float32(1e-3):
+            wrong += 1
+            print("    bin", b, "got", got, "want", want)
+    print("    derived larger child, bin 0:", out.unsafe_ptr().unsafe_load(0))
+    print("    derived larger child, bin 3:", out.unsafe_ptr().unsafe_load(3))
+    # `what` must be untouched: a kernel that swapped operands or wrote both
+    # slots would still satisfy the check above.
+    var what_moved = 0
+    for b in range(n_bf):
+        var want_child = Float32(30.0 + Float64(b))
+        if b == 3:
+            want_child = Float32(1000.0)
+        if abs(out.unsafe_ptr().unsafe_load(1 * n_bf + b) - want_child) > Float32(1e-3):
+            what_moved += 1
+    print("  wrong derived cells:", wrong, " cells of `what` disturbed:", what_moved)
+    if wrong != 0 or what_moved != 0:
+        raise Error("sibling subtraction is wrong")
+    print("  subtraction correct, clamp fires, `what` untouched")
