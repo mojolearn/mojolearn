@@ -392,3 +392,41 @@ def gemm_tn(
 # `VENDOR_LIBRARIES.md` still lists that transpose as the follow-up and now
 # says something false. It is outside the scope of this change and has to be
 # corrected before this lands.
+
+
+from linalg.gemv import gemv_gpu
+
+
+def gemv_n(
+    ctx: DeviceContext,
+    mut z: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut y: DeviceBuffer[DType.float32],
+    m: Int,
+    k: Int,
+) raises:
+    """`z[m] = x[m x k] . y[k]`, on MAX's tuned GEMV.
+
+    `raft::linalg::gemv` is what RAFT calls for `w <- covA Ab`, and
+    `linalg.gemv.gemv` is HOST-ONLY (no ctx, no target). `gemv_gpu` is the
+    GPU sibling. See VENDOR_LIBRARIES.md.
+
+    Orientation read from MAX's `gemv.mojo`, not guessed: `GemmShape.get`
+    takes m and n from `c` and k from `a`, ignoring `b` entirely, so
+    `c = (m, 1)`, `a = (m, k)`, `b = (k, 1)`. `transpose_b` must be False;
+    its True arm swaps a and b and at n=1 would write one output instead of
+    m. `b` is `(k, 1)` and not `(1, k)` because the MATMUL_NAIVE fallback in
+    the same dispatcher indexes B as `(k, n)`.
+
+    REACH PROVED BY SABOTAGE, 2026-08-19. A green OLS run does NOT show this
+    is reached: `w <- inv Ab` is 8x8 in the checks, and the scale-invariance
+    check in particular would pass under any wrong-but-linear kernel. So the
+    orientation was flipped to `transpose_b=True` and the run failed with
+    `coefficient 1 = 0.0` — only the first output written, exactly what that
+    arm predicts at n=1, since it swaps a and b and passes `(n, m, k)`.
+    Reverted; that failure is the evidence.
+    """
+    var tz = TileTensor(z, row_major(m, Int(1)))
+    var tx = TileTensor(x, row_major(m, k))
+    var ty = TileTensor(y, row_major(k, Int(1)))
+    gemv_gpu[transpose_b=False](tz, tx, ty, ctx)

@@ -50,7 +50,10 @@ from ported.gpu_data.kernel.binarize import (
     WRITE_BLOCK_SIZE,
     write_compressed_index_kernel,
 )
-from ported.options.catboost_options import SCORE_FUNCTION_COSINE
+from ported.options.catboost_options import (
+    SCORE_FUNCTION_COSINE,
+    SCORE_FUNCTION_L2,
+)
 from ported.methods.greedy_subsets_searcher.kernel.compute_scores import (
     SCORE_BLOCK_SIZE,
     compute_optimal_splits_kernel,

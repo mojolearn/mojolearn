@@ -43,7 +43,11 @@ Invariant 1 fails if the `n_rows - 1` normalization is wrong or missing.
 from std.math import cos, sin, sqrt
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from decomposition.ported.linalg.detail.pca import PCAResult, pca_fit
+from decomposition.ported.linalg.detail.pca import (
+    PCAResult,
+    compute_covariance,
+    pca_fit,
+)
 from decomposition.ported.linalg.detail.tsvd import tsvd_fit
 
 
@@ -397,4 +401,60 @@ def check_tsvd_against_pca() raises:
         "check_tsvd_against_pca OK: identical directions on centered data,"
         " and a +1000 shift moved tsvd's first component to |dot| = "
         + String(abs(moved)) + " while PCA's was unmoved"
+    )
+
+
+def check_covariance_is_symmetric() raises:
+    """`X^T X` must be EXACTLY symmetric, and this is a tripwire not a formality.
+
+    `PORTING.md 23` records what a transposed contraction looks like here: it
+    does not produce an obviously wrong number, it produces a plausible and
+    NON-SYMMETRIC matrix, and the symptom surfaced two files away as the
+    Jacobi eigensolver running to its sweep limit and raising. That cost a
+    debugging session, and a three-line assertion on `cov[i][j] ==
+    cov[j][i]` would have found it in one run.
+
+    Symmetry here is STRUCTURAL, not approximate. `(i, j)` and `(j, i)` are
+    accumulated over the same rows in the same order by mirrored blocks, and
+    float multiply is exactly commutative, so the two must agree BITWISE.
+    Anything else means the tile indexing or the row split disagrees between
+    the two halves. The test is `!=`, deliberately, with no tolerance.
+    """
+    var ctx = DeviceContext()
+    var x = ctx.enqueue_create_buffer[DType.float32](PCA_ROWS * PCA_COLS)
+    var x_alias = ctx.enqueue_create_buffer[DType.float32](PCA_ROWS * PCA_COLS)
+    var x_alias2 = ctx.enqueue_create_buffer[DType.float32](
+        PCA_ROWS * PCA_COLS
+    )
+    var mu = ctx.enqueue_create_buffer[DType.float32](PCA_COLS)
+    var cov = ctx.enqueue_create_buffer[DType.float32](PCA_COLS * PCA_COLS)
+    ctx.synchronize()
+    _fill(ctx, x, 1.0, 0.0)
+
+    compute_covariance(
+        ctx, x, x_alias, x_alias2, mu, cov, PCA_ROWS, PCA_COLS
+    )
+
+    var h = ctx.enqueue_create_host_buffer[DType.float32](PCA_COLS * PCA_COLS)
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=cov)
+    ctx.synchronize()
+
+    var asym = 0
+    for i in range(PCA_COLS):
+        for j in range(i + 1, PCA_COLS):
+            var a = h.unsafe_ptr().unsafe_load(i * PCA_COLS + j)
+            var b = h.unsafe_ptr().unsafe_load(j * PCA_COLS + i)
+            if a != b:
+                asym += 1
+    if asym != 0:
+        raise Error(
+            String(asym) + " of " + String(PCA_COLS * (PCA_COLS - 1) // 2)
+            + " off-diagonal pairs are not bitwise symmetric. A transposed"
+            " contraction or a disagreeing row split produces exactly this,"
+            " and its next symptom is the eigensolver failing to converge."
+        )
+    print(
+        "check_covariance_is_symmetric OK: all "
+        + String(PCA_COLS * (PCA_COLS - 1) // 2)
+        + " off-diagonal pairs bitwise equal"
     )
