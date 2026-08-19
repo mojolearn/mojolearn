@@ -105,3 +105,24 @@ contraction is a codegen decision a runtime row cannot reach.
 No CPU fallback. No binning: this consumes an already-quantized matrix. No
 categorical features, no CTRs, no ordered boosting, no ranking. No tests
 until the thing runs end to end.
+
+## Testing the columns we do not have
+
+`tools/remote_gpu.sh <user@host> [nvidia|amd]` syncs this tree to a rented
+GPU, rewrites `TARGET_COLUMN`, builds, and runs the correctness checks.
+
+`TARGET_COLUMN` is a **comptime** constant, so a column is a BUILD and not a
+flag. That is the honest shape of the constraint rather than a limitation of
+the script: a threadgroup allocation size is fixed at compile time and cannot
+follow a runtime device query.
+
+It runs correctness only, never timing. A rented box is shared, throttled and
+unknown, and this repository's rule is that only interleaved arms inside one
+process compare. Correctness checks are verdicts and do not care about the
+machine's mood.
+
+**Two of this port's deviations are currently justified by reasoning that has
+never executed on another vendor**, which is what the script exists to fix:
+`replication_lanes` is pinned at 32 so AMD's 64-wide wavefront cannot change
+the reduction geometry, and the float-atomic flush branch is unreachable on
+Apple and is exactly what NVIDIA and AMD would take under `determinism=off`.
