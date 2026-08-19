@@ -411,6 +411,7 @@ def run_tree(
     mut row_index: DeviceBuffer[DType.uint32],
     total_weight: Float32,
     total_gradient: Float32,
+    hist_replicas: Int = 1,
 ) raises -> List[Int]:
     """`FitImpl`'s loop: grow a whole oblivious tree, level by level.
 
@@ -487,7 +488,9 @@ def run_tree(
     # REPLICATION: how many blocks share one partition. CatBoost sizes this
     # to fill the SMs (`hist_binary.cu:90-95`).
     #
-    # **MEASURED AT 32 AND IT WAS SLOWER, so it is 1.** Depth 8 went 70.3 ms
+    # **MEASURED AT 32 AND IT WAS SLOWER, so the default is 1.** It is a
+    # PARAMETER so the two can be interleaved in one process rather than
+    # compared across runs, which is the only comparison this box supports. Depth 8 went 70.3 ms
     # to 81.1 and depth 6 45.5 to 50.8, correctness unchanged. The reason is
     # the OUTPUT SIZE, not the input: 32 binary features is 32 bin-features,
     # so the histogram is 64 cells across two stat planes. Thirty-two replica
@@ -500,7 +503,6 @@ def run_tree(
     # without measuring the wide-feature shape would be a guess. The
     # fixed-point flush stays wired and correct so the experiment can be rerun
     # the moment there is a shape worth running it on.
-    var hist_replicas = 1
     var part_stats = ctx.enqueue_create_buffer[DType.float32](
         max_leaves * stat_count
     )

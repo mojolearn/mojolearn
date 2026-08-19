@@ -20,6 +20,8 @@ the inner loop and has never been measured.
 
 from std.time import perf_counter_ns
 
+from mojo_only.interleaved import ArmResult, report, summarize
+
 from max.gpu.host import DeviceContext
 
 from ported.gpu_data.grid_policy import (
@@ -599,3 +601,92 @@ def bench_tree(n_rows: Int, max_depth: Int, repeats: Int) raises:
         ms,
         "ms",
     )
+
+
+def bench_replication_interleaved(
+    n_rows: Int, max_depth: Int, repeats: Int
+) raises:
+    """Replication 1 against 32, ARMS INTERLEAVED in one process.
+
+    The first attempt at this compared two separate runs and read 70.3 ms
+    against 81.1. That comparison was worthless on a box that has produced
+    59.7 and 44.8 ms for identical work an hour apart. This alternates the
+    arms so both see the same thermal window.
+    """
+    var ctx = DeviceContext()
+    var n_features = features_per_int(POLICY_BINARY)
+
+    var cindex = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+    var z = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
+    for i in range(n_rows):
+        z.unsafe_ptr().unsafe_store(i, UInt32(0))
+    ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
+    ctx.synchronize()
+
+    var hb = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
+    var bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
+    for f in range(n_features):
+        for r in range(n_rows):
+            var x = UInt32(r * 2654435761 + f * 40503 + 0x2545F491)
+            x ^= x << 13
+            x ^= x >> 17
+            x ^= x << 5
+            hb.unsafe_ptr().unsafe_store(r, UInt8(Int(x & 1)))
+        ctx.enqueue_copy(dst_buf=bins, src_ptr=hb.unsafe_ptr())
+        ctx.enqueue_function[write_compressed_index_kernel](
+            Int32(0), policy_mask(POLICY_BINARY),
+            UInt32(policy_shift(POLICY_BINARY, f)),
+            bins.unsafe_ptr(), Int32(n_rows), cindex.unsafe_ptr(),
+            grid_dim=(n_rows + WRITE_BLOCK_SIZE - 1) // WRITE_BLOCK_SIZE,
+            block_dim=WRITE_BLOCK_SIZE,
+        )
+        ctx.synchronize()
+
+    var stats = ctx.enqueue_create_buffer[DType.float32](2 * n_rows)
+    var hs = ctx.enqueue_create_host_buffer[DType.float32](2 * n_rows)
+    var tw = Float64(0.0)
+    var tg = Float64(0.0)
+    for r in range(n_rows):
+        var g = -0.1
+        if (r % 4) == 0:
+            g = 3.0
+        hs.unsafe_ptr().unsafe_store(r, Float32(1.0))
+        hs.unsafe_ptr().unsafe_store(n_rows + r, Float32(g))
+        tw += 1.0
+        tg += g
+    ctx.enqueue_copy(dst_buf=stats, src_ptr=hs.unsafe_ptr())
+
+    var row_index = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+    var hi = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
+    for r in range(n_rows):
+        hi.unsafe_ptr().unsafe_store(r, UInt32(r))
+    ctx.synchronize()
+
+    var s1 = List[Float64]()
+    var s32 = List[Float64]()
+
+    for rep in range(repeats + 1):
+        for arm in range(2):
+            var reps = 1 if arm == 0 else 32
+            ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
+            ctx.enqueue_copy(dst_buf=stats, src_ptr=hs.unsafe_ptr())
+            ctx.synchronize()
+            var t0 = perf_counter_ns()
+            var sizes = run_tree(
+                ctx, n_rows, n_features, max_depth, cindex, stats, row_index,
+                Float32(tw), Float32(tg), reps,
+            )
+            var dt = Float64(perf_counter_ns() - t0) / 1.0e6
+            _ = len(sizes)
+            if rep == 0:
+                continue  # warm-up pass, both arms
+            if arm == 0:
+                s1.append(dt)
+            else:
+                s32.append(dt)
+
+    var arms = List[ArmResult]()
+    arms.append(summarize(String("replicas=1 "), s1))
+    arms.append(summarize(String("replicas=32"), s32))
+    print("  depth", max_depth, "tree,", n_rows, "rows, arms interleaved:")
+    report(arms)
