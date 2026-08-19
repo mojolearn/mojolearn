@@ -75,3 +75,39 @@ version` (`:657`) and `//TODO(noxoomo): for oblivious trees we have overhead
 for launching kernel per leaf` (`split_points.cpp:53`). There is no CUB in
 Mojo. Port writes a stable 1-bit partition per leaf range, which is what the
 sort is being used for.
+
+
+## 5. Vector loads not ported
+
+CatBoost instantiates a different `TComputeHistogramImpl` per load width and
+picks 2 or 4 elements by arch (`point_hist_half_byte_template.cuh:34-41`).
+The port takes the `OneElement` specialization only. Scheduling, not numeric:
+the same values are added in the same order, fewer at a time.
+
+## 6. `AlignMemoryAccess` peel omitted
+
+It exists to align the vector loads of item 5. At one element per load there
+is nothing to align. Required the moment the load width moves above 1.
+
+## 7. THE ONE THAT IS NOT OURS TO CHOOSE: Metal has no float atomic add
+
+CatBoost flushes every histogram with `atomicAdd(dst + fold, val)` on
+`float`. **Metal has no floating-point atomic add at all.** Not slower, not
+discouraged: the instruction does not exist.
+
+This is the only deviation in this file that a mode cannot express, because
+there is no faster alternative to fall back from. `NUMERIC_FAST` is defined
+by the float atomic flush, and on Apple that mode's defining row is
+unavailable, so `spec_for` FORCES `deterministic_flush` on the apple column
+and records `flush_forced_by_vendor` beside it.
+
+Three consequences worth stating plainly:
+
+1. **The port cannot be literal here even in FAST mode on our primary
+   target.** Apple accumulates fixed-point `Int32`.
+2. **Apple is reproducible by default and identity costs it nothing**, since
+   integer addition is associative and Apple's lane width already equals the
+   pinned 32. The bit-identical column is paid for by NVIDIA and AMD.
+3. Fixed point needs a scale, and the scale must bound every partial sum.
+   That is a real piece of work CatBoost never has to do, and it has to be
+   ported from nothing.

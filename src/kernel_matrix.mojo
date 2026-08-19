@@ -114,7 +114,16 @@ struct KernelSpec(Copyable, Movable):
     """NUMERIC. See PINNED_REDUCE_WIDTH."""
 
     var deterministic_flush: Bool
-    """NUMERIC. Fixed-point integer flush instead of float atomicAdd."""
+    """NUMERIC. Fixed-point integer flush instead of float `atomicAdd`.
+
+    Forced true on Apple whatever the mode asks for: Metal has no float
+    atomic add, so the alternative does not exist. See
+    `column_has_float_atomics`."""
+
+    var flush_forced_by_vendor: Bool
+    """Whether `deterministic_flush` is the mode's choice or the vendor's
+    constraint, so a report can say "Apple is deterministic because Metal
+    cannot do otherwise" rather than implying the user asked for it."""
 
     def shared_bytes(self) -> Int:
         """What this spec asks of threadgroup memory."""
@@ -136,6 +145,28 @@ def column_shared_limit(column: Int) -> Int:
     if column == COLUMN_AMD:
         return 64 * 1024
     return 32 * 1024  # BIT_IDENTICAL: the intersection, Apple-bound
+
+
+def column_has_float_atomics(column: Int) -> Bool:
+    """Whether this vendor can do `atomicAdd` on a `float` at all.
+
+    **APPLE CANNOT. Metal has no floating-point atomic add.** That is not a
+    tuning preference, it is an absent instruction, and it makes CatBoost's
+    flush (`atomicAdd(dst + fold, val)` in every `AddToGlobalMemory`)
+    unportable rather than merely non-deterministic.
+
+    The consequence for the table is that `deterministic_flush` is a numeric
+    row the apple column CANNOT negotiate: `FAST` does not turn it off there,
+    because there is nothing to turn on. `spec_for` forces it rather than
+    letting a mode request produce a kernel that cannot be compiled.
+
+    The pleasant corollary: on Apple the flush is fixed-point integer in both
+    modes, integer addition is associative, and Apple's lane width already
+    equals the pinned 32, so **Apple is reproducible by default and identity
+    costs it nothing.** The price of the bit-identical column is paid by
+    NVIDIA and AMD, which is the opposite of what one would guess.
+    """
+    return column != COLUMN_APPLE and column != COLUMN_BIT_IDENTICAL
 
 
 def column_lane_width(column: Int) -> Int:
@@ -219,11 +250,18 @@ def spec_for(kernel: Int, device: Int, mode: NumericMode) raises -> KernelSpec:
             " full lane group"
         )
 
+    # The flush row, and the one place a VENDOR overrides a MODE. Asking for
+    # FAST on Apple cannot produce a float atomic, so the row is forced and
+    # the fact that it was forced is recorded beside it.
+    var vendor_forces_flush = not column_has_float_atomics(device)
+    var flush = identical or vendor_forces_flush
+
     return KernelSpec(
         block,
         floats_per_thread,
         per_int,
         PINNED_REPLICATION_LANES if identical else column_lane_width(device),
         PINNED_REDUCE_WIDTH if identical else block,
-        identical,
+        flush,
+        vendor_forces_flush,
     )
