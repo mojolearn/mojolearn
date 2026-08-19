@@ -108,3 +108,62 @@ one run what three rounds of inference could not.
   wide dataset once mixed trees work.
 - Depth-8 uniform-binary tree, 500k x 32: roughly 45-70 ms depending on
   thermal window. Not comparable to anything without interleaving.
+
+## The comparison, MEASURED (Aug 19 2026)
+
+CatBoost 1.2.10 was installed and run. `tools/catboost_reference.py` is the
+script; quantization is moved out of the timed region with `pool.quantize()`
+because our port consumes a compressed index and never builds borders, so
+leaving it in charges CatBoost for work we do not do (it cost them 10 ms/tree).
+
+800k rows x 100 one-byte features, depth 6, symmetric:
+
+    our GPU port        50.0 ms/tree
+    CatBoost CPU        30.1 ms/tree   (10 cores)
+
+**1.66x behind, and the comparison FLATTERS US.** CatBoost's 30 ms is a whole
+boosting iteration: gradients, tree, model update. Our 50 ms is tree growth
+alone with the gradients handed to it. We have no boosting loop to charge.
+
+CatBoost's GPU arm cannot run on this box at all, so this is our GPU against
+their CPU.
+
+### Why we are slower, and it is not the kernels
+
+Row sweep at 100 one-byte features, depth 6:
+
+    100k  37.2 ms      400k  43.3 ms
+    200k  37.6 ms      800k  50.0 ms
+
+**8x the rows costs 1.34x the time.** Extrapolated to zero rows, ~34 of the
+50 ms is FIXED per tree and independent of the data. Depth 1 at 800k is
+5.4 ms and 6 x 5.4 = 32, which lands on the same floor.
+
+`run_tree_layout` runs **9 `ctx.synchronize()` and ~16 kernel launches per
+level**, so 54 host round trips and ~96 launches per depth-6 tree.
+
+`mojo_only/sync_price.mojo` prices them, and it CORRECTED the obvious guess:
+
+    54 bare drains        0.76 ms     (0.014 ms each, nearly free)
+    54 copy + drain      13.0  ms     (0.24 ms each)
+
+The barrier is not the cost; the HOST TRANSFER attached to it is. 13 ms is
+about 38% of the fixed 34, and the rest is launch count. Five of the copies
+per level exist only to broadcast one split descriptor (offset, shift, mask,
+one-hot flag, bin) into five separate buffers.
+
+### What this means for porting
+
+More kernel porting will not close this gap. The kernels are transliterated
+and the histogram is not the bottleneck at this shape. The deficit is in the
+CONTROL PLANE, which is the part that could not be transliterated because
+CatBoost's is CUDA streams and ours is Mojo enqueue plus drain.
+
+Two separate tracks, and they are not the same work:
+
+1. **To make the comparison honest**: port the boosting loop, gradient
+   computation and model update. This makes our number WORSE, not better,
+   and it is required before quoting 1.66x as a like-for-like result.
+2. **To make it faster**: cut the per-level host round trips and launches.
+   Pack the five split-descriptor copies into one. Keep the split resolution
+   on the device so the argmax never returns to the host.

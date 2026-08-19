@@ -313,7 +313,13 @@ def main() raises:
     # tree over four policy mixes at matched feature count.
     bench_tree_shapes(200000, 6, 3)
     # CatBoost's reference on this box is ~32 ms/tree at 800k x 100.
+    # A SWEEP, because "why are we slower" is not answerable from one point.
+    # Flat in rows means launch overhead; linear in rows means bandwidth.
+    bench_realistic(100000, 100, 6, 3)
+    bench_realistic(200000, 100, 6, 3)
+    bench_realistic(400000, 100, 6, 3)
     bench_realistic(800000, 100, 6, 3)
+    bench_realistic(800000, 100, 1, 3)
     bench_tree(500000, 1, 3)
     bench_tree(500000, 2, 3)
     bench_tree(500000, 3, 3)
