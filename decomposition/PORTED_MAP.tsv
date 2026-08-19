@@ -1,0 +1,5 @@
+# our_file	upstream_file	status	notes
+# RAFT pinned at 9aa17e5. cuML's cpp/src/pca/pca.cu is a thin dispatch layer
+# over raft::linalg::pca, so the algorithm lives in RAFT and that is what is
+# mirrored here.
+ported/linalg/detail/pca.mojo	raft cpp/include/raft/linalg/detail/pca.cuh	partial	pca_fit and pca_transform; plus cal_eig and trunc_comp_exp_vars from detail/tsvd.cuh, which are inseparable from fit

@@ -406,3 +406,46 @@ form is used.
 Consequence for benchmarking: any speed comparison against a CPU
 implementation using the DIRECT formula is also an accuracy comparison, and
 this is where our answer differs from theirs.
+
+# Deviations and hazards in the `decomposition/` section (RAFT)
+
+## 22. `x ** 0.5` is not `sqrt(x)` here, and two other Mojo import traps
+
+`jacobi_eigh` failed to converge and the first suspect was the rotation
+formula. It was `(1.0 + theta * theta) ** 0.5`. Replaced with
+`std.math.sqrt` everywhere and recorded rather than quietly fixed, because
+the expression compiles, looks right, and is wrong.
+
+Two smaller ones from the same family, both of which cost a build:
+
+- `from math import ...` does not resolve. It is `from std.math import ...`.
+- `out` is reserved and cannot name a kernel parameter.
+
+Also in this section: the eigen step runs on the HOST. That is inside
+`HOST_AND_DEVICE.md`'s rule, which forbids host work that is O(rows), not
+host work as such. This is `n_cols^3` on an `n_cols x n_cols` matrix, and the
+covariance that produced it is the only part of PCA that touches rows.
+cuSOLVER runs it on device because it already has a tuned batched kernel;
+we do not, and the honest first version says so. The condition that would
+change it is `n_cols` approaching `n_rows`, which no real PCA is near.
+
+## 23. A TRANSPOSED CONTRACTION SHOWS UP AS NON-CONVERGENCE, NOT AS A WRONG NUMBER
+
+The most useful debugging lesson in this section.
+
+`covariance_kernel` loaded its two shared tiles with the row index and the
+feature index the wrong way round. The output was not garbage and was not
+obviously wrong. It was **plausible and non-symmetric**, and the symptom was
+that the Jacobi eigensolver ran to its sweep limit and raised, because Jacobi
+converges only on symmetric input.
+
+So the failure surfaced two files away from its cause, as a solver problem
+rather than a data problem, and the first instinct was to blame the solver.
+What settled it was testing `jacobi_eigh` standalone on a 2x2 with known
+eigenvalues, where it was immediately correct.
+
+**Rule: when a solver will not converge, check the SYMMETRY of what it was
+handed before touching the solver.** A cheap assertion that
+`cov[i][j] == cov[j][i]` would have found this in one run, and any future
+kernel producing a matrix with a mathematical structure should be checked for
+that structure and not only for plausible magnitudes.

@@ -63,8 +63,11 @@ work derives from.
 Derived from RAFT
 --------------------------------------------------------------------------
 
-`neighbors/ported/matrix/detail/select_radix.mojo` is a DERIVATIVE WORK of
-RAFT, translated from CUDA C++ into Mojo at RAFT commit 9aa17e5.
+These files are DERIVATIVE WORKS of RAFT, translated from CUDA C++ into Mojo
+at RAFT commit 9aa17e5:
+
+    neighbors/ported/matrix/detail/select_radix.mojo
+    decomposition/ported/linalg/detail/pca.mojo
 
     RAFT
     Copyright (c) NVIDIA CORPORATION & AFFILIATES

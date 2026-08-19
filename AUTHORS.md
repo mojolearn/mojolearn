@@ -27,7 +27,9 @@ Apache-2.0, and `cluster/PORTED_MAP.tsv` names the source file behind each of
 ours. `cluster/UNPORTED.tsv` names what was deliberately left out.
 
 **Not ours, third upstream.** `neighbors/ported/matrix/detail/
-select_radix.mojo` implements RAFT's radix top-k and follows its structure.
+select_radix.mojo` implements RAFT's radix top-k and
+`decomposition/ported/linalg/detail/pca.mojo` implements RAFT's PCA, both
+following its structure.
 `neighbors/PORTED_MAP.tsv` names the upstream per row, because that section
 draws from two projects at once.
 

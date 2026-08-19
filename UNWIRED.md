@@ -368,3 +368,11 @@ dataset binned below 8 bits.
 | `tiled_brute_force_knn` and `radix_topk_one_block_kernel` | **REACHED AND PASSING**, `neighbors/knn_main.mojo` | Truth computed on the host in Float64 with the DIRECT formula, so the GPU's expanded-identity answer is checked against an independent computation. Reach proved by two sabotages predicting different movements. |
 | tie handling in `select_radix` | REACHED, and NON-REPRODUCIBLE BY DESIGN | RAFT places every output with `atomicAdd` and has no index tie-break, so which of several equidistant neighbors is returned is not reproducible. Not fixed here: fixing it is an improvement on the upstream. An `IDENTICAL` column cannot cover k-NN indices until it is. |
 | index-axis tiling | NOT PORTED | Only the query axis is tiled, so one query tile's distances against the whole index must fit. Splitting the index needs a merge of partial top-k lists, which is where the correctness trap is. |
+
+### `decomposition/` (RAFT PCA), 2026-08-19
+
+| thing | state | note |
+|---|---|---|
+| `pca_fit`, `pca_transform`, `covariance_kernel`, `column_mean_kernel`, `shift_columns_kernel`, `jacobi_eigh` | **REACHED AND PASSING**, `decomposition/pca_main.mojo` | Reach for the centering path is proved by an INVARIANT rather than a corruption: a +1000 column shift must change nothing, which is impossible unless both the mean and the shift kernels run. |
+| `pca_transform` | built, and its output is NOT yet checked | `pca_fit` is checked three ways; `pca_transform` compiles and is called by nothing in the checks. It reuses `core/gemm.mojo`, which is exercised elsewhere, but that is an argument and not evidence. Next check to write. |
+| `whiten`, `pca_inverse_transform` | NOT PORTED | see `decomposition/UNPORTED.tsv` |

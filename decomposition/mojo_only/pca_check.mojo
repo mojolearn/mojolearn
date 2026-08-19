@@ -104,8 +104,21 @@ def _latent(row: Int, k: Int) -> Float64:
 
     Uniform on [-a, a] has variance a^2 / 3, so a = sqrt(3 * v).
     """
-    var h = (row * 2654435761 + k * 40503 + 7919) % 1000003
-    var u = Float64(h) / Float64(1000003) - 0.5
+    # splitmix64. The first version used `(row * C + k * D) % prime`, which
+    # makes every latent column an ARITHMETIC PROGRESSION differing only by a
+    # constant offset, so the four columns were near-perfectly dependent, the
+    # covariance was not `diag(v)`, and the planted eigenvalues were not the
+    # true ones. The check failed at 145 against a planted 100 and the port
+    # was right. A fixture needs a real mixer, not a modular stride.
+    var z = (
+        UInt64(row) * 0x9E3779B97F4A7C15
+        + UInt64(k + 1) * 0xBF58476D1CE4E5B9
+        + 0x94D049BB133111EB
+    )
+    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9
+    z = (z ^ (z >> 27)) * 0x94D049BB133111EB
+    z = z ^ (z >> 31)
+    var u = Float64(z >> 11) * (1.0 / 9007199254740992.0) - 0.5
     var a = sqrt(3.0 * _planted_var(k))
     return 2.0 * a * u
 

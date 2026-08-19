@@ -1,0 +1,7 @@
+# Deliberately not ported, and why.
+raft linalg/detail/pca.cuh::pca_inverse_transform	not ported yet	one GEMM plus a mean add; trivial once anything needs it
+raft linalg/detail/tsvd.cuh::cal_eig COV_EIG_DC arm	not ported	the divide-and-conquer eigensolver. Their other arm, COV_EIG_JACOBI, IS ported, so this would be adding a second algorithm rather than copying one
+raft linalg/rsvd.cuh	not ported	randomized SVD. A different algorithm from the covariance route pca_fit actually takes
+raft linalg/detail/pca.cuh sign_flip_components flip_signs_based_on_U=true	not ported	only the default V-based arm is ported; the U-based arm needs U, which the covariance route never forms
+cuml cpp/src/pca/pca_mg.cu	out of scope	multi-GPU
+raft linalg/detail/tsvd.cuh whiten	not ported yet	a per-component rescale on transform

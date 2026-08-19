@@ -124,18 +124,25 @@ def covariance_kernel(
         address_space = AddressSpace.SHARED,
     ]()
 
+    # Both tiles are loaded as [contraction_row][feature], because the
+    # contracted axis here is the ROW axis and both operands are the same
+    # matrix. Getting these two indices the wrong way round produces a
+    # plausible but NON-SYMMETRIC matrix, which then makes the Jacobi
+    # eigensolver run forever rather than return a wrong answer. That is how
+    # this bug was found; see PORTING.md 23.
     var acc = Float32(0.0)
     var tile = 0
     while tile * COV_TILE < n_rows:
-        var ra = tile * COV_TILE + tx
-        var rb = tile * COV_TILE + ty
+        var row = tile * COV_TILE + ty
+        var fa = Int(block_idx.y) * COV_TILE + tx
+        var fb = Int(block_idx.x) * COV_TILE + tx
 
-        if i < n_cols and ra < n_rows:
-            s_a[ty * COV_TILE + tx] = xc.unsafe_load(ra * n_cols + i)
+        if row < n_rows and fa < n_cols:
+            s_a[ty * COV_TILE + tx] = xc.unsafe_load(row * n_cols + fa)
         else:
             s_a[ty * COV_TILE + tx] = Float32(0.0)
-        if j < n_cols and rb < n_rows:
-            s_b[ty * COV_TILE + tx] = xc.unsafe_load(rb * n_cols + j)
+        if row < n_rows and fb < n_cols:
+            s_b[ty * COV_TILE + tx] = xc.unsafe_load(row * n_cols + fb)
         else:
             s_b[ty * COV_TILE + tx] = Float32(0.0)
         barrier()
