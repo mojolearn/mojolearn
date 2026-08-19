@@ -1,71 +1,59 @@
-"""The matrix product, register-tiled, ported from RAFT's contraction policy.
+"""The matrix product. One call to MAX's tuned matmul, plus RAFT's policy.
 
-PORT OF `raft/linalg/contractions.cuh::KernelPolicy` and the load/accumulate
-structure of `raft/linalg/detail/contractions.cuh` at RAFT `9aa17e5`.
-Partial. Do not improve.
+WHAT IS LEFT IN THIS FILE, AND WHY THE KERNEL IS NOT
+-----------------------------------------------------
+Where cuVS and cuML call cuBLAS for a STANDALONE matrix product, they call a
+library with no source, so there is nothing to port and `linalg.matmul` is the
+faithful mirror. That is the Gram product PCA, truncated SVD and OLS need, and
+those three go through `gemm_tn` here.
 
-WHY THIS FILE WAS REWRITTEN, WHICH IS THE MORE USEFUL PART OF THIS DOCSTRING
-----------------------------------------------------------------------------
-The first version was a plain 16x16 tile with ONE output element per thread,
-written from scratch. The reasoning was: cuVS and cuML call cuBLAS, cuBLAS is
-closed, therefore there is nothing to port, therefore write the simplest
-honest thing and optimize after the first measurement.
+**It is not the rule for a distance step.** `VENDOR_LIBS.md` opens with why:
+their dispatch for pairwise distance under an argmin or a top-k does not call
+cuBLAS at all, it calls a FUSED kernel that never materializes the distance
+matrix, and a device-wide matmul cannot be fused into anything. Callers whose
+product is an intermediate inside a reduction belong on the fused kernel
+(`cluster/ported/distance/fused_distance_nn/simt_kernel.mojo`,
+`neighbors/.../fused_l2_knn.mojo`), not here.
 
-**The first half of that was right and the conclusion was wrong.** cuBLAS has
-no source, but RAFT does not depend on cuBLAS for its distance kernels. It
-ships `linalg/contractions.cuh`, a register-tiled double-buffered contraction
-that every pairwise-distance kernel in RAFT and cuVS is built on, and it
-contains no warp intrinsics and no tensor-core instructions at all. It was
-portable and it was the thing to port.
+A STANDALONE register-tiled contraction used to sit here as well, a port of
+`raft/linalg/contractions.cuh::KernelPolicy` and the load/accumulate structure
+of `raft/linalg/detail/contractions.cuh` at RAFT `9aa17e5`, unfused and
+writing its product to memory. It is DELETED. Nothing called it once OLS's
+step 6 went to `gemv_gpu`, it was measured at about 15 GFLOP/s against
+`linalg.matmul`'s 248 at 1M x 128, and the FUSED instantiation of the same
+policy, which is the one RAFT's dispatch actually runs, lives in
+`simt_kernel.mojo` and is untouched.
 
-The measurement that exposed this is `bench/results/FIRST_RUN_2026-08-19.md`:
-we lost k-means, PCA and DBSCAN to scikit-learn on Apple Accelerate, and all
-three are dominated by this file.
+If a later round wants the standalone contraction back, take it from
+`simt_kernel.mojo` or from git history rather than rewriting it.
 
-THEIR POLICY, COPIED
---------------------
+THEIR POLICY IS STILL HERE, BECAUSE THE FUSED KERNEL NEEDS IT
+--------------------------------------------------------------
 `KernelPolicy<float, Veclen=4, Kblk=32, AccRowsPerTh=4, AccColsPerTh=4,
-AccThRows=16, AccThCols=16>`, which is RAFT's `Policy4x4<float>` and the one
-their float distance kernels instantiate:
+AccThRows=16, AccThCols=16>`, RAFT's `Policy4x4<float>` and the one their float
+distance kernels instantiate:
 
-    Nthreads = AccThRows * AccThCols   = 256
+    Nthreads = AccThRows * AccThCols    = 256
     Mblk     = AccRowsPerTh * AccThRows = 64
     Nblk     = AccColsPerTh * AccThCols = 64
-    SmemStride = Kblk + Veclen         = 36   (padding, not a rounding)
+    SmemStride = Kblk + Veclen          = 36   (padding, not a rounding)
 
-**The whole idea is `AccRowsPerTh x AccColsPerTh`.** Each thread computes a
-4x4 block of the output instead of one element, so the four X values and four
-Y values it holds in registers each get used four times. That cuts shared
-memory traffic per output by 4x and raises arithmetic intensity by the same
-factor. It is why 256 threads now cover a 64x64 output tile where before they
-covered 16x16.
+These constants stay because `cluster/ported/distance/fused_distance_nn/
+simt_kernel.mojo` is instantiated at this policy and its callers compute their
+launch geometry from it. That kernel is NOT a substitution candidate under any
+version of the rule: RAFT fuses the argmin epilogue into the contraction and
+never writes the distance tile, which is a thing no BLAS call can do and is
+the whole point of `fusedDistanceNN`.
 
 `SmemStride = Kblk + Veclen` is theirs and is not arbitrary: the padding
 staggers each row's start so that threads reading down a column of shared
 memory do not all land in the same bank.
-
-NOT PORTED YET, and named so it does not get forgotten
-------------------------------------------------------
-**Double buffering.** Theirs keeps TWO shared-memory pages (`SmemPage`,
-`pageWr`, `pageRd`) and issues the global loads for tile `t+1` into registers
-while computing tile `t`, so the load latency hides behind the arithmetic.
-Ours loads, barriers, computes, barriers. That is the single largest
-remaining gap in this kernel.
-
-It is deferred rather than skipped because two pages at this policy is 32 KB
-of threadgroup memory, which is exactly Metal's limit (`PORTING.md 1`), so it
-needs either a smaller `Kblk` or a check of what Metal actually permits. That
-is a real decision and it deserves its own measurement.
-
-**Vectorized loads.** `Veclen = 4` means their loads move four floats at a
-time. Ours move one. `Veclen` still sets `SmemStride` here, so the padding is
-theirs even though the load width is not yet.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
-from max.gpu.memory import AddressSpace
-from max.gpu.sync import barrier
-from std.memory import stack_allocation
+from layout import TileTensor
+from layout.tile_layout import row_major
+from linalg.matmul import matmul
+from max.gpu.host import DeviceBuffer, DeviceContext
 
 
 # `KernelPolicy<float, 4, 32, 4, 4, 16, 16>`, RAFT's Policy4x4<float>.
@@ -82,143 +70,6 @@ comptime GEMM_NBLK = GEMM_ACC_COLS_PER_TH * GEMM_ACC_TH_COLS
 comptime GEMM_SMEM_STRIDE = GEMM_KBLK + GEMM_VECLEN
 comptime GEMM_SMEM_PAGE_X = GEMM_SMEM_STRIDE * GEMM_MBLK
 comptime GEMM_SMEM_PAGE_Y = GEMM_SMEM_STRIDE * GEMM_NBLK
-
-# Kept so call sites that computed a grid from a single tile size still read
-# correctly. The output tile is MBLK x NBLK now, not TILE x TILE.
-comptime GEMM_TILE = GEMM_MBLK
-
-
-def gemm_nt_kernel(
-    z: MutPointer[Float32, MutAnyOrigin],
-    x: MutPointer[Float32, MutAnyOrigin],
-    y: MutPointer[Float32, MutAnyOrigin],
-    m_in: Int32,
-    n_in: Int32,
-    k_in: Int32,
-):
-    """`z[m x n] = x[m x k] . y[n x k]^T`, all row major.
-
-    Launch with `block_dim = (GEMM_THREADS, 1, 1)` and
-    `grid_dim = (ceil(n / GEMM_NBLK), ceil(m / GEMM_MBLK), 1)`.
-
-    This is the shape every algorithm here wants: X is `rows x features`, the
-    second operand is `centroids`, `index points` or `candidates`, and the
-    product is everything against everything, so the second operand is
-    transposed and neither matrix is ever materialized in another layout.
-    """
-    var m = Int(m_in)
-    var n = Int(n_in)
-    var k = Int(k_in)
-
-    var tid = Int(thread_idx.x)
-    var tr = tid // GEMM_ACC_TH_COLS
-    var tc = tid % GEMM_ACC_TH_COLS
-
-    var m0 = Int(block_idx.y) * GEMM_MBLK
-    var n0 = Int(block_idx.x) * GEMM_NBLK
-
-    var sx = stack_allocation[
-        GEMM_SMEM_PAGE_X,
-        Scalar[DType.float32],
-        address_space = AddressSpace.SHARED,
-    ]()
-    var sy = stack_allocation[
-        GEMM_SMEM_PAGE_Y,
-        Scalar[DType.float32],
-        address_space = AddressSpace.SHARED,
-    ]()
-
-    # SIMD values, NOT `stack_allocation`. Their `regx[][]` and `acc[][]` are
-    # plain C arrays that nvcc keeps in registers; `stack_allocation` without
-    # an address space is thread-local MEMORY, so the first attempt turned
-    # every accumulator access into a load and a store and made the kernel
-    # SLOWER than the naive one it replaced. See PORTING.md 26.
-    var acc0 = SIMD[DType.float32, GEMM_ACC_COLS_PER_TH](0.0)
-    var acc1 = SIMD[DType.float32, GEMM_ACC_COLS_PER_TH](0.0)
-    var acc2 = SIMD[DType.float32, GEMM_ACC_COLS_PER_TH](0.0)
-    var acc3 = SIMD[DType.float32, GEMM_ACC_COLS_PER_TH](0.0)
-
-    var kt = 0
-    while kt < k:
-        # --- ldgXY + stsXY. `LdgPerThX = Mblk * LdgThRow / Nthreads` loads
-        # per thread; expressed here as a flat strided sweep of the tile.
-        var e = tid
-        while e < GEMM_MBLK * GEMM_KBLK:
-            var r = e // GEMM_KBLK
-            var c = e % GEMM_KBLK
-            var gr = m0 + r
-            var gc = kt + c
-            var v = Float32(0.0)
-            if gr < m and gc < k:
-                v = x.unsafe_load(gr * k + gc)
-            sx[r * GEMM_SMEM_STRIDE + c] = v
-            e += GEMM_THREADS
-
-        e = tid
-        while e < GEMM_NBLK * GEMM_KBLK:
-            var r2 = e // GEMM_KBLK
-            var c2 = e % GEMM_KBLK
-            var gr2 = n0 + r2
-            var gc2 = kt + c2
-            var v2 = Float32(0.0)
-            if gr2 < n and gc2 < k:
-                v2 = y.unsafe_load(gr2 * k + gc2)
-            sy[r2 * GEMM_SMEM_STRIDE + c2] = v2
-            e += GEMM_THREADS
-        barrier()
-
-        # --- ldsXY + accumulate. The four-by-four block is the point: each
-        # register value is reused AccColsPerTh (or AccRowsPerTh) times.
-        var xb = tr * GEMM_ACC_ROWS_PER_TH
-        var yb = tc * GEMM_ACC_COLS_PER_TH
-        for kk in range(GEMM_KBLK):
-            var regy = SIMD[DType.float32, GEMM_ACC_COLS_PER_TH](0.0)
-            for j in range(GEMM_ACC_COLS_PER_TH):
-                regy[j] = sy[(yb + j) * GEMM_SMEM_STRIDE + kk]
-            acc0 += sx[(xb + 0) * GEMM_SMEM_STRIDE + kk] * regy
-            acc1 += sx[(xb + 1) * GEMM_SMEM_STRIDE + kk] * regy
-            acc2 += sx[(xb + 2) * GEMM_SMEM_STRIDE + kk] * regy
-            acc3 += sx[(xb + 3) * GEMM_SMEM_STRIDE + kk] * regy
-
-        barrier()
-        kt += GEMM_KBLK
-
-    for i in range(GEMM_ACC_ROWS_PER_TH):
-        var gr3 = m0 + tr * GEMM_ACC_ROWS_PER_TH + i
-        if gr3 >= m:
-            continue
-        for j in range(GEMM_ACC_COLS_PER_TH):
-            var gc3 = n0 + tc * GEMM_ACC_COLS_PER_TH + j
-            if gc3 < n:
-                var v3 = acc0[j]
-                if i == 1:
-                    v3 = acc1[j]
-                elif i == 2:
-                    v3 = acc2[j]
-                elif i == 3:
-                    v3 = acc3[j]
-                z.unsafe_store(gr3 * n + gc3, v3)
-
-
-# ---------------------------------------------------------------------------
-# The vendor-library path. Prefer this.
-#
-# cuVS and cuML call cuBLAS for their matrix products. cuBLAS has no source to
-# port, and the first version of this file drew the wrong conclusion from that
-# and hand-wrote a kernel. **The faithful mirror of "they call a tuned vendor
-# BLAS" is to call OURS**, and MAX ships one: `linalg.matmul`, targeting the
-# GPU, with `transpose_a` and `transpose_b` and an `elementwise_lambda_fn`
-# epilogue hook.
-#
-# `gemm_nt_kernel` above stays as the ported RAFT contraction. It is the
-# reference these wrappers are checked against, and it is what runs if a
-# backend ever lacks a tuned matmul.
-# ---------------------------------------------------------------------------
-
-from layout import TileTensor
-from layout.tile_layout import row_major
-from linalg.matmul import matmul
-from max.gpu.host import DeviceBuffer, DeviceContext
 
 
 def gemm_nt(
@@ -273,15 +124,11 @@ def gemm_tn(
     that gap and did not close it, and the honest reading is that a tuned
     matmul is not something to reimplement when one ships.
 
-    The hand-ported `covariance_kernel` stays reachable behind
-    `use_ported_contraction` as the reference this is checked against.
+    `transpose_a` is STILL unsupported and this does not use it. The transpose
+    is two extra passes over `k x m` floats against a product that is
+    `O(k * m * n)`, and it buys the tuned kernel.
     """
-    from core.column_stats import (
-        COV_TILE,
-        TRANSPOSE_TILE,
-        covariance_kernel,
-        transpose_kernel,
-    )
+    from core.column_stats import TRANSPOSE_TILE, transpose_kernel
 
     # Xt and Xt2 are two copies because `matmul` refuses one buffer as two
     # mutable arguments (PORTING.md 24), and `Xt . Xt^T` names it twice.
@@ -314,33 +161,24 @@ def gemm_tn(
     ctx.synchronize()
 
 
-# WHY `gemm_tn` IS NOT ON THE VENDOR PATH, AND IT IS A HARD LIMIT
+# `gemm_tn` IS ON THE VENDOR PATH. `transpose_a` IS THE THING THAT IS NOT.
 #
 # `raft::stats::cov`, `lstsqEig`'s first step and cuML's `tsvd_fit` all ask
 # cuBLAS for `CUBLAS_OP_T, CUBLAS_OP_N`: the Gram shape `A^T A`, contracting
-# down the ROW axis. Routing those through MAX's matmul fails to compile:
+# down the ROW axis. Handing that shape to MAX's matmul directly fails to
+# compile, and the constraint is still live:
 #
 #     max/kernels/src/linalg/matmul/__init__.mojo:110:9:
 #     note: constraint failed: transpose_a not yet supported
 #
-# So the vendor path covers the N-T shape every distance computation wants
-# and does NOT cover the T-N shape every covariance wants.
-# `core/column_stats.mojo::covariance_kernel`, the hand-ported contraction,
-# stays as the only implementation of that shape.
+# What does NOT follow, and was believed here for two rounds, is that the Gram
+# shape therefore needs a hand-written kernel. `transpose(X) . transpose(X)^T`
+# is the same matrix and is the N-T shape, so one twenty-line transpose puts
+# the T-N users on the tuned matmul too. `gemm_tn` above does exactly that,
+# and the ported column-major contraction it replaced is deleted.
 #
-# That limit is unchanged. What changed is what sits behind it: that kernel
-# is no longer the naive 16x16 one-element-per-thread tile that left PCA and
-# OLS flat for six benchmark rounds. It is now RAFT's COLUMN-major
-# contraction (`ColKernelPolicy`, the `isRowMajor == false` arm of
-# `raft/linalg/detail/contractions.cuh`), which is the same policy this file
-# ported for the N-T shape and which fits the T-N shape without a transpose
-# at all. The transpose-plus-vendor-matmul route is therefore ABANDONED
-# rather than pending: there is nothing left for it to buy.
-#
-# `VENDOR_LIBRARIES.md` still lists that transpose as the follow-up and now
-# says something false. It is outside the scope of this change and has to be
-# corrected before this lands.
-
+# The N-T route is still the one to prefer where a caller can choose it: it
+# skips the transpose entirely.
 
 from linalg.gemv import gemv_gpu
 

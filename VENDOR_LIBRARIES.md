@@ -1,5 +1,34 @@
 # Vendor primitives, mojolearn sections (cluster, neighbors, decomposition, dbscan, glm)
 
+> **RULE CHANGE, Andrew, 2026-08-19 (evening). READ THIS BEFORE THE REST OF
+> THIS FILE.** The rule this document was written to serve — "where the
+> incumbent calls a vendor primitive, call OURS" — is **DELETED**. It is
+> replaced by one rule: **FOLLOW THEIR DISPATCH.** Port the path their library
+> actually takes for the parameters in question.
+>
+> All that survives is a narrow exception: where the path their dispatch
+> actually takes calls a **CLOSED** library we cannot read or port (cuBLAS,
+> cuSOLVER), call the MAX equivalent, because there is nothing to port. **CUB
+> and Thrust are OPEN.** Their kernels are readable, so they are PORT
+> candidates, not substitution candidates.
+>
+> **What killed it: a device-wide vendor call cannot be fused.** It reads its
+> input from memory and writes its output to memory, by construction.
+> Substituting one for a step that belongs INSIDE a kernel freezes the unfused
+> structure permanently. k-NN substituted `linalg.matmul` for its distance step
+> and `nn.topk` for its selection under the old rule, so the distance matrix had
+> to be materialized, so a 13 ms job takes 306 ms — while cuVS's default path
+> for those same parameters (`knn_brute_force.cuh:443` -> `fusedL2Knn`) calls no
+> vendor primitive at all. It is their own tile kernel with a register-resident
+> `faiss_select::WarpSelect` queue. **When they fuse, they hand-write.**
+>
+> The probe results below are still VALID and still useful — what MAX ships and
+> what it does not is a fact. What is no longer valid is treating an available
+> primitive as a reason to substitute. Before citing any row of this file,
+> answer in writing: does their dispatch take this path for these parameters,
+> and is this step standalone in THEIR code too? If either answer is no, port
+> their kernel.
+
 **Companion to `VENDOR_LIBS.md`, which covers the CatBoost boosting port.**
 Same rule, different upstreams. Where the two disagree, the probe result in
 whichever file was written later wins, and both record the exact path tried.
@@ -41,16 +70,23 @@ What follows from it has to be re-derived rather than assumed:
 - `cub::WarpScan` and `cub::ShuffleIndex` in `histogram_utils.cu`, which
   `PORTING.md 8` replaced with a block scan and called a fidelity loss, may
   now be portable directly.
-- RAFT's `select_warpsort.cuh`, ruled out at 14 warp intrinsics, may be
-  translatable. **RAFT's own dispatch prefers it for every k a k-NN user asks
-  for** (`select_k-inl.cuh:38` sends `2 < k <= 256` there), so this is not a
-  small door.
-- Metal still has **no float `atomicAdd`**, which is a HARDWARE limit and is
-  unaffected by any of this. `mojo_only/fixed_point.mojo` and its overflow
-  proof stand.
+- RAFT's `select_warpsort.cuh` was ruled out at 14 warp intrinsics on the
+  same false premise, and under the rule change at the top of this file it is
+  now the file that MATTERS. cuVS's dispatch for a normal k does not call
+  `select_k` standalone at all: `knn_brute_force.cuh:443` goes to
+  `fusedL2Knn`, whose selection is a register-resident
+  `faiss_select::WarpSelect` queue inside the distance kernel, and
+  `select_warpsort.cuh` is the port of that family. Finishing it is the work;
+  the three `set_k_th_` queues in `neighbors/UNPORTED.tsv` are what is left.
 
-None of that is done. It is written here so it is not forgotten, and it is
-the largest open item in the repository.
+**A float `atomicAdd` DOES work on Metal.** Probed on this M4: 1024 threads
+each adding 1.0 return exactly 1024.0. This file previously called it a
+hardware limit; that was wrong, and every design in this tree that cited it
+has to be re-argued on its own merits. `mojo_only/fixed_point.mojo` survives
+the re-argument, but on a different ground: an integer accumulator is exactly
+order-independent and a float atomic is not, so fixed point is what makes a
+fit reproducible run to run and device to device. It is a CHOICE about
+determinism, not a workaround for missing hardware.
 
 ---
 
@@ -60,13 +96,14 @@ the largest open item in the repository.
 |---|---|---|---|
 | `split_points.cu` | `cub::DeviceRadixSort::SortPairs` | `nn.argsort.argsort` AVAILABLE | hand-written stable partition |
 | `split_points.cu` | `cub::DeviceScan::ExclusiveSum` | **`nn.cumsum` IS CPU-ONLY** and is not a swap candidate: its signature carries neither `ctx: DeviceContext` nor `target`, unlike `argsort`, `top_k` and `gather` which carry both. Corrected here after the first version of this table listed it as available. | hand-written chunk offsets |
-| `cuda_util/reduce.cu` | `cub::DeviceSegmentedReduce` | **NOT FOUND** | hand-written `partitions_reduce` |
+| `cuda_util/reduce.cu` | `cub::DeviceReduce::Reduce` | **FOUND, and this table said NOT FOUND.** `algorithm.reductions.reduce_{sum,max,min,mean,product,argmax,argmin}` take `target`, an optional `DeviceContext`, an `InputFn` and an `OutputFn`, and a `reduce_dim`. They run on CPU and GPU through the `algorithm.rowwise` scaffolder. The earlier search tried `algorithm.reduce` and `algorithm.reduction`, both singular, and missed the plural module. | not used, and the `algorithm.reductions` section below says why that is now the expected answer rather than a gap |
+| `cuda_util/reduce.cu` | `cub::DeviceSegmentedReduce` | **NOT FOUND.** `algorithm.reductions` reduces a DENSE axis of a rectangular shape. Our segments are leaf partitions, `[part_offset[leaf], + part_size[leaf])`, ragged and different every level, which no dense-axis reduction expresses. | hand-written `partitions_reduce`, whose per-block reduction is now `block.sum` |
 | `split_points.cu` | `cub::DeviceSegmentedRadixSort` | **NOT FOUND** | segmented stable partition |
 | cuVS/cuML | `cublasGemmEx` | `linalg.matmul.matmul` AVAILABLE | **WIRED**, N-T shape only |
-| RAFT `lstsq.cuh` | `raft::linalg::gemv` | **`linalg.gemv.gemv` IS HOST-ONLY** (no `ctx`, no `target`; its docstring opens "Computes a CPU matrix-vector product"). The GPU counterpart is **`linalg.gemv.gemv_gpu`**, `gemv_gpu[transpose_b](c, a, b, ctx)`, which this table did not list. Not yet wired. | ported contraction with `n = 1` |
+| RAFT `lstsq.cuh` | `raft::linalg::gemv` | **`linalg.gemv.gemv` IS HOST-ONLY** (no `ctx`, no `target`; its docstring opens "Computes a CPU matrix-vector product"). The GPU counterpart is **`linalg.gemv.gemv_gpu`**, `gemv_gpu[transpose_b](c, a, b, ctx)`. | **WIRED and now the only path.** `glm/.../lstsq.mojo` step 6. The `use_vendor_gemv=False` arm and the ported contraction behind it are deleted. |
 | RAFT `pca.cuh` | cuSOLVER `syevj` | **NOT FOUND** as a dense eigensolver; `linalg.qr_factorization` AVAILABLE | `jacobi_eigh_device.mojo` |
 | CatBoost multiclass | cuSOLVER dense Newton solve | same gap | not ported |
-| RAFT distance | `raft::stats::cov` (`OP_T, OP_N`) | **NOT BLOCKED AFTER ALL, AND NO TRANSPOSE WAS EVER NEEDED.** RAFT ships TWO policies and we had only ported the row-major one. A row-major `X[n_rows][n_cols]` IS bit-for-bit a column-major `n_cols x n_rows` matrix, so `X^T X` is that matrix against ITSELF in the N-T shape, which is exactly what `ColKernelPolicy` (`contractions.cuh:96`) was written for. | `covariance_kernel`, now a port of their column-major contraction at Policy4x4 |
+| RAFT distance | `raft::stats::cov` (`OP_T, OP_N`) | **NOT BLOCKED, AND IT IS ON THE TUNED MATMUL NOW.** `transpose_a` is still refused by `linalg.matmul`, but `transpose(X) . transpose(X)^T` is the same matrix in the N-T shape it does support, and a transpose is two passes against an `O(rows * cols^2)` product. | **`core/gemm.mojo::gemm_tn`, on `linalg.matmul`.** The ported column-major contraction (`covariance_kernel`) and its split-K reduction are DELETED: about 250 lines that nothing called once `gemm_tn` took this route. |
 
 ## Block and warp scope: ordinary kernel code, not swap candidates
 
@@ -76,8 +113,8 @@ library. Listed so the distinction is explicit.
 
 | vendor call | Mojo equivalent | ours today |
 |---|---|---|
-| `cub::BlockReduce` | `max.gpu.primitives.block.sum[block_size=N](val)` AVAILABLE | **SUBSTITUTED** in `core/row_norms.mojo` and `core/column_stats.mojo` (3 kernels) |
-| `cub::BlockScan` | `max.gpu.primitives.block.prefix_sum` AVAILABLE | **SUBSTITUTED** in `select_radix` (16 barriers per radix pass per row down to one call), `dbscan/adjgraph`, and the k-means++ device scan |
+| `cub::BlockReduce` | `max.gpu.primitives.block.sum[block_size=N](val)` AVAILABLE | **SUBSTITUTED** in `core/row_norms.mojo`, `core/column_stats.mojo` (2 kernels), `dbscan/vertexdeg`, `cluster/plus_plus`, `jacobi_eigh_device`, and now `ported/gpu_util/partitions_reduce.mojo`, which had been faking a reduce with a `prefix_sum` plus a `broadcast` on the belief that no block reduce shipped |
+| `cub::BlockScan` | `max.gpu.primitives.block.prefix_sum` AVAILABLE | **SUBSTITUTED** in `dbscan/adjgraph`, the k-means++ device scan, and now `ported/gpu_util/kernel/reorder_one_bit.mojo` (a Hillis-Steele loop and its shared page, 16 barriers per block, down to one call). It is also substituted in `select_radix`, which stays |
 | `cub::WarpScan` | `std.gpu.primitives.warp.prefix_sum` AVAILABLE | hand-written serial scan (boosting side, untouched) |
 | `cub::ShuffleIndex` / `raft::shfl` | `std.gpu.primitives.warp.shuffle_xor` AVAILABLE | **SUBSTITUTED** in `unfused_distance_nn` and the fused SIMT kernel. `shuffle_xor` not `shuffle_idx`: theirs is a rotate relying on CUDA's `width` modulo, Mojo's `shuffle_idx` has no width parameter, and XOR over the same aligned group returns the identical pair because the reducer is an idempotent min over a total order. |
 | `cub::BlockReduce<KeyValuePair>` | none directly; built from `warp.shuffle_xor` + a 4-way block merge | **SUBSTITUTED**. `block.min` reduces VALUES only and cannot carry the key, which is why the plain block collectives never solved this. CUB's own default is `BLOCK_REDUCE_WARP_REDUCTIONS`, a two-stage warp-then-propagate shape, so the two-stage port is closer to theirs than the old whole-block tree was. |
@@ -91,14 +128,22 @@ library. Listed so the distinction is explicit.
 `nn.concat.concat`, `linalg.transpose.transpose`,
 `linalg.qr_factorization.qr_factorization`.
 
-**`nn.topk.top_k` is now WIRED** in `neighbors/`, beside the ported RAFT
-radix select rather than instead of it, selected by a `use_vendor_topk` flag.
-cuVS calls `cuvs::selection::select_k`, a vendor primitive, so by the
-standing rule the faithful port calls ours. Keeping the ported kernel
-reachable is what makes the vendor call CHECKABLE, and
-`check_vendor_topk_matches_ported` confirms the two agree on all 512
-neighbours of the fixture. A vendor call whose answer nothing verifies is a
-vendor call nobody should trust.
+**`nn.topk.top_k` IS wired in `neighbors/`, behind `use_vendor_topk`, and the
+ported RAFT radix select is still the default arm.**
+
+This entry said, for about an hour, that `top_k` was the ONLY selection and
+that both hand-written selectors were deleted. That change was MADE and then
+REVERTED, and the reason is the rule change at the top of this file rather
+than anything wrong with the call itself. `top_k` and the ported radix select
+agree on all 512 neighbours of the fixture, which is a real result and stands.
+What does not stand is the inference from "cuVS calls a vendor primitive
+somewhere" to "our selection should be that primitive": for the parameters a
+k-NN user actually passes, their dispatch fuses the selection INTO the
+distance kernel and hand-writes it, and a device-wide `top_k` cannot be fused
+into anything.
+
+So the state is: `top_k` reachable and checked, the ported selectors kept,
+and the fused path (`fused_l2_knn.mojo`) is where the work is.
 
 One behaviour to know: `top_k` prints
 
@@ -113,7 +158,15 @@ Andrew, no timing runs until the substitution passes are finished.
 ## Probed and NOT FOUND, recorded so the search is not repeated blindly
 
     algorithm.reduce, algorithm.reduction.sum, nn.reduction.reduce
-        -> no device-wide reduce with a custom operator
+        -> WRONG CONCLUSION, and this entry is what a NOT FOUND that names
+           only the paths it tried is for. The module is `algorithm.
+           reductions`, PLURAL, and it ships reduce_sum, reduce_max,
+           reduce_min, reduce_mean, reduce_product, reduce_argmax and
+           reduce_argmin, each taking an InputFn, an OutputFn, a reduce_dim,
+           a `target` and an optional DeviceContext, over the
+           `algorithm.rowwise` scaffolder. The InputFn IS the custom
+           operator this entry says does not exist. Re-checked against the
+           docs 2026-08-19.
     nn.cumsum.cumsum_exclusive
         -> cumsum is inclusive only
     nn.sort.sort
@@ -161,11 +214,42 @@ was looking for a library call instead.
 so the N-T shape (every distance) works and the T-N shape (every covariance:
 `raft::stats::cov`, `lstsqEig` step 1, `tsvd_fit`) does not. **That single
 limit is why PCA and OLS did not move across six benchmark rounds.** The
-answer is `linalg.transpose` followed by an N-T matmul, and it is not yet
-wired.
+answer is a transpose followed by an N-T matmul, and it IS wired now:
+`core/gemm.mojo::gemm_tn` transposes with `column_stats.mojo::
+transpose_kernel` (`linalg.transpose` itself signals on device buffers, see
+above) and calls `gemm_nt`. PCA, OLS and truncated SVD all reach it.
 
 `linalg.matmul` with `n = 1` returns zeros for some outputs. RAFT does not
-call gemm there either; it calls `gemv`.
+call gemm there either; it calls `gemv`, and so do we
+(`core/gemm.mojo::gemv_n`).
+
+## `algorithm.reductions`: shipped, unused, and now mostly NOT wanted
+
+Three kernels in this tree are a dense-axis reduction wearing a hand-written
+block reduce, and once the plural module turned up they looked like swaps:
+
+| kernel | what it is | shipped counterpart |
+|---|---|---|
+| `core/row_norms.mojo::row_norm_kernel` | sum of squares along the feature axis, one output per row | `reduce_sum`, `reduce_dim=1`, an `InputFn` that squares |
+| `core/column_stats.mojo::column_mean_kernel` | mean down the ROW axis, one output per column | `reduce_mean`, but the reduced axis is the OUTER one and the scaffolder is row-based |
+| `core/column_stats.mojo::xty_kernel` | `A^T b`, a weighted sum down the row axis | `reduce_sum` with an `InputFn` reading both operands |
+| `cluster/ported/distance/unfused_distance_nn.mojo::reduce_min_kernel` | argmin over the candidate axis | `reduce_argmin` plus `reduce_min` |
+
+**NOT DONE, and after the rule change at the top of this file, mostly not to
+be done.** Their upstreams are `raft::linalg::norm`, `raft::stats::mean`,
+`raft::linalg::gemv(trans=true)` and RAFT's KVP argmin. Every one of those is
+RAFT's OWN kernel, open source and readable, so the rule makes them PORT
+candidates and not substitution candidates. The last row is worse than
+neutral: cuVS's dispatch fuses that argmin into the distance kernel
+(`fusedDistanceNN`), which is precisely the fusion a device-wide reduction
+cannot be part of.
+
+What survives as a real question is narrower: each of these reductions already
+calls `block.sum`, which is the collective CUB would use inside the same
+kernel, so the remaining difference is launch shape, not arithmetic. Any swap
+here also changes the ORDER of a float summation, and `row_norms.mojo` records
+that its reduction is in the `IDENTICAL` column's scope, so it moves last bits
+and needs a run. Not a doc question.
 
 ## Built out of a block primitive because the device-wide one is missing
 

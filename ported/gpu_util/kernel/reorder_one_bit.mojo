@@ -27,10 +27,17 @@ living in `cuda_util/kernel/`, not a vendor call. Reading only the CUB call in
 2. `ReorderOneBitImpl<bool, ui32, N=1, blockSize=512>`
 
 Step 2 is transliterated below. Step 1 has no CatBoost implementation to port
--- it IS the vendor call -- and `nn.cumsum` ships CPU-only, so the scan is
-written here as the standard two-level decoupled scan. That is what CUB does
-internally and it is recorded as a gap rather than presented as a choice. See
-`VENDOR_LIBS.md` sections 3b and 3c.
+-- it IS the vendor call -- and `nn.cumsum` ships CPU-only (re-checked against
+the docs 2026-08-19: one overload, no `ctx`, no `target`), so the DEVICE-WIDE
+scan is written here as the standard two-level decoupled scan. That is what
+CUB does internally and it is recorded as a gap rather than presented as a
+choice. See `VENDOR_LIBS.md` sections 3b and 3c.
+
+The BLOCK-level half of it is not hand-written any more:
+`max.gpu.primitives.block.prefix_sum[exclusive=True]` is
+`cub::BlockScan::ExclusiveSum`'s counterpart and is what pass 1 calls. What
+remains ours is the three-pass decoupling around it, which is exactly the part
+with no shipped counterpart.
 
 ## Their reorder arithmetic, verbatim
 
@@ -49,9 +56,7 @@ scan serves both destinations.
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
-from max.gpu.memory import AddressSpace
-from max.gpu.sync import barrier
-from std.memory import stack_allocation
+from max.gpu.primitives.block import prefix_sum
 
 #: `const int blockSize = 512` at their call site (`split_points.cu:722`),
 #: and again at `reorder_one_bit.cu:35`.
@@ -82,42 +87,35 @@ def block_scan_flags_kernel(
     third adds the carry, which is the decoupled shape CUB uses internally.
 
     NO CATBOOST COUNTERPART: they call CUB here. `nn.cumsum` ships CPU-only
-    (VENDOR_LIBS.md 3b), so this is written out. If Modular adds a device
-    scan, this file should shrink to a call.
+    (VENDOR_LIBS.md 3b), so the DEVICE-WIDE decoupling is written out. The
+    within-block scan is `max.gpu.primitives.block.prefix_sum`, so what is
+    hand-written here is only the part CUB would call `DeviceScan` for. If
+    Modular gives `cumsum` a target, these three kernels become one call.
     """
     var size = Int(size_in)
     var base = Int(offset_in)
     var tid = Int(thread_idx.x)
     var start = Int(block_idx.x) * REORDER_BLOCK
 
-    var smem = stack_allocation[
-        REORDER_BLOCK,
-        Scalar[DType.int32],
-        address_space = AddressSpace.SHARED,
-    ]()
-
     var v = Int32(0)
     if start + tid < size:
         v = Int32(Int(flags.unsafe_load(base + start + tid)) & 1)
-    smem[tid] = v
-    barrier()
 
-    # Hillis-Steele inclusive scan, then shift to exclusive.
-    var d = 1
-    while d < REORDER_BLOCK:
-        var add = Int32(0)
-        if tid >= d:
-            add = smem[tid - d]
-        barrier()
-        smem[tid] = smem[tid] + add
-        barrier()
-        d *= 2
+    # `max.gpu.primitives.block.prefix_sum[exclusive=True]`, Modular's
+    # counterpart to `cub::BlockScan::ExclusiveSum`, which is the collective
+    # `cub::DeviceScan::ExclusiveSum` uses per block internally. The
+    # hand-written Hillis-Steele scan and its shared-memory page that stood
+    # here are gone: 16 barriers per block became one call. Same arithmetic,
+    # and the shape is Modular's to tune rather than ours to guess.
+    var exclusive = prefix_sum[block_size=REORDER_BLOCK, exclusive=True](v)
 
-    var inclusive = smem[tid]
     if start + tid < size:
-        offsets.unsafe_store(start + tid, inclusive - v)
+        offsets.unsafe_store(start + tid, exclusive)
+    # The block total. A thread past `size` contributes `v == 0`, so the last
+    # thread's exclusive prefix plus its own flag is the block's count of ones
+    # whether or not the block is full.
     if tid == REORDER_BLOCK - 1:
-        block_sums.unsafe_store(Int(block_idx.x), inclusive)
+        block_sums.unsafe_store(Int(block_idx.x), exclusive + v)
 
 
 def scan_block_sums_kernel(

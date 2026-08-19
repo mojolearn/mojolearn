@@ -2,7 +2,8 @@
 
 NOT A PORT of cuVS. Their two calls are
 `raft::linalg::reduce_rows_by_key` and `raft::linalg::reduce_cols_by_key`
-(`detail/kmeans_common.cuh::compute_centroid_adjustments`), and RAFT is a
+(`raft/linalg/reduce_rows_by_key.cuh` and `reduce_cols_by_key.cuh`, called
+from `update_centroids`, `detail/kmeans.cuh:300-318`), and RAFT is a
 separate library this tree does not mirror file for file. The CALL SITES,
 their order, and their accumulate-versus-reset semantics are theirs and are
 copied in `cluster/ported/cluster/detail/kmeans_common.mojo`.
@@ -11,9 +12,18 @@ THE ACCUMULATOR IS THE INTERESTING PART, AND IT IS NOT A NEW PROBLEM
 --------------------------------------------------------------------
 Summing rows into their cluster is a scatter-add: many rows land on one
 centroid and the order they arrive in is not fixed. RAFT does it with float
-arithmetic on NVIDIA. Metal has no float atomic add, which is the exact wall
-`PORTING.md 7` describes for the histogram flush, so this file reuses the
-answer already built and verified for that: **`mojo_only/fixed_point.mojo`**.
+atomics on NVIDIA. This file quantizes into `Int32` through
+**`mojo_only/fixed_point.mojo`** instead, and the reason is REPRODUCIBILITY,
+not capability.
+
+**A float `atomicAdd` does work on Metal.** Probed on this M4: 1024 threads
+each adding 1.0 return exactly 1024.0. Earlier notes here, and the ones that
+described this as a hardware wall, were wrong, and a design resting on a false
+constraint has to be re-argued rather than annotated. The argument that
+survives is point 1 below: float atomics sum in whatever order the hardware
+delivers, so the same fit gives different last bits run to run and device to
+device, while an integer accumulator is exactly order-independent. That is
+worth one quantization per element here.
 
 **The overflow bound transfers word for word, with one noun changed.** That
 file's argument is "any leaf's rows are a subset of all rows, so a scale that
@@ -65,8 +75,10 @@ def accumulate_centroid_sums_kernel(
     RAFT's `reduce_rows_by_key.cuh:300` also lands its contributions with a
     global atomic add rather than a vendor segmented reduce, so there is
     nothing here to swap `cub::DeviceSegmentedReduce` into (and that is
-    NOT FOUND anyway; see VENDOR_LIBRARIES.md). The only thing Metal changes
-    is the accumulator TYPE, which is why this is fixed point.
+    NOT FOUND anyway; see VENDOR_LIBRARIES.md). The only thing we change is
+    the accumulator TYPE, and the module docstring says why: not because
+    Metal lacks a float atomic, which it does not, but because an integer
+    accumulator is order-independent and a float one is not.
 
     The indexing is theirs too: a FLAT grid-stride over `n_rows * n_features`
     cells, matching their `gid = threadIdx.x + blockDim.x * blockIdx.x`
@@ -158,24 +170,9 @@ def finalize_centroids_kernel(
             new_centroids.unsafe_store(idx, s / w)
 
 
-def centroid_shift_kernel(
-    out_partial: MutPointer[Float32, MutAnyOrigin],
-    old_centroids: MutPointer[Float32, MutAnyOrigin],
-    new_centroids: MutPointer[Float32, MutAnyOrigin],
-    n_in: Int32,
-):
-    """`compute_centroid_shift` (`kmeans_common.cuh`), `sum((old - new)^2)`.
-
-    One block, one partial per block; the host takes the total over at most a
-    handful of blocks, the same shape `compute_scores.mojo` uses for its
-    argmax. `n_clusters * n_features` is small, so this is not on any hot
-    path and does not deserve a two-stage reduction.
-    """
-    var n = Int(n_in)
-    var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if idx < n:
-        var d = old_centroids.unsafe_load(idx) - new_centroids.unsafe_load(idx)
-        out_partial.unsafe_store(idx, d * d)
+comptime SUM_MODE_PLAIN = 0
+comptime SUM_MODE_PRODUCT = 1
+comptime SUM_MODE_SQDIFF = 2
 
 
 def sum_partials_kernel(
@@ -183,13 +180,25 @@ def sum_partials_kernel(
     a: MutPointer[Float32, MutAnyOrigin],
     b: MutPointer[Float32, MutAnyOrigin],
     n_in: Int32,
-    use_b_in: Int32,
+    mode_in: Int32,
 ):
-    """One partial sum per block, host adds the handful of partials.
+    """One partial sum per block; a second kernel folds the partials.
 
-    Serves two call sites in the Lloyd loop: the weighted clustering cost
-    (`a` = per-row distance, `b` = per-row weight) and the centroid shift
-    (`a` = squared differences, `use_b` = 0).
+    The MAP IS INSIDE THE REDUCTION, which is theirs. Both call sites in the
+    Lloyd loop are a `map`-then-`sum` in cuVS and neither materializes the
+    mapped array:
+
+    - the centroid shift is `raft::linalg::mapThenSumReduce(sqrdNorm, ...,
+      raft::sqdiff_op{}, ..., centroids, newCentroids)`
+      (`detail/kmeans.cuh:453-459`) -> `SUM_MODE_SQDIFF`;
+    - the weighted cluster cost is `computeClusterCost(..., raft::value_op{},
+      raft::add_op{})` over `minClusterAndDistance` whose `.value` was already
+      multiplied by the sample weight (`:516-535`) -> `SUM_MODE_PRODUCT`.
+
+    An earlier version of this port wrote the squared differences to a
+    `n_clusters * n_features` scratch buffer with a separate
+    `centroid_shift_kernel` and then summed it. That kernel is gone: it was a
+    launch cuVS does not have.
 
     **This is a float sum and therefore NUMERIC.** The block count changes
     the order and moves the last bits of inertia, which is exactly the trap
@@ -202,14 +211,18 @@ def sum_partials_kernel(
     """
     var n = Int(n_in)
     var tid = Int(thread_idx.x)
+    var mode = Int(mode_in)
 
     var acc = Float32(0.0)
     var i = Int(block_idx.x) * REDUCE_BY_KEY_TPB + tid
     var stride = Int(grid_dim.x) * REDUCE_BY_KEY_TPB
     while i < n:
         var v = a.unsafe_load(i)
-        if use_b_in != 0:
+        if mode == SUM_MODE_PRODUCT:
             v = v * b.unsafe_load(i)
+        elif mode == SUM_MODE_SQDIFF:
+            var d = v - b.unsafe_load(i)
+            v = d * d
         acc += v
         i += stride
 
@@ -240,10 +253,12 @@ def copy_f32_kernel(
 ):
     """Device to device copy of the centroid buffer.
 
-    Exists because `std::swap(cur_centroids_ptr, new_centroids_ptr)`
-    (`detail/kmeans.cuh:907`) has no counterpart here: theirs swaps two raw
-    pointers on the host and ours are `DeviceBuffer` values. A kernel is the
-    honest way to move 'k x d' floats, and 'k x d' is small.
+    This is theirs: cuVS moves the freshly finalized centroids back over the
+    working set with a device-to-device `raft::copy`
+    (`detail/kmeans.cuh:465-466`), after the shift has been measured between
+    the two buffers and before the next iteration reads them. It is a copy in
+    their code too, not a pointer swap. A kernel is how a `DeviceBuffer` to
+    `DeviceBuffer` copy is spelled here, and 'k x d' is small.
 
     It is also the second time this tree has needed one: see `UNWIRED.md` on
     `enqueue_copy(dst_buf=, src_ptr=device)` being a silent no-op.

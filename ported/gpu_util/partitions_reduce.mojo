@@ -11,6 +11,19 @@ MIRRORS `catboost/cuda/cuda_util/partitions_reduce.h`, whose
 # which is CUB. There is no CUB in Mojo, so there is no line-for-line port and
 # a reviewer diffing against their header will find no counterpart for what
 # follows. Same situation as the stable partition in `split_points.mojo`.
+#
+# THE SEARCH, so it is not repeated: re-run against the docs 2026-08-19. What
+# ships that is reduction-shaped is `max.gpu.primitives.block.{sum,max,min}`
+# (BLOCK scope, and this file calls it), `std.gpu.primitives.warp.{sum,max,
+# min,prefix_sum}` (WARP scope), and the `algorithm` package's row-wise
+# scaffolder, which reduces the INNERMOST axis of a dense tensor. None of them
+# is a device-wide reduce over RAGGED segments, which is what a leaf partition
+# is: our segments are `[part_offset[leaf], + part_size[leaf])` and vary per
+# leaf per level. `nn.argmaxmin` and `nn.cumsum` are dense-axis too, and
+# `cumsum` is CPU-only besides. So the two phases below stay ours.
+#
+# What is NOT ours any more is the reduction inside each block. See the
+# kernels.
 # =========================================================================
 
 WHY IT EXISTS, and what breaks without it
@@ -38,9 +51,7 @@ measured twice.
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
-from max.gpu.primitives.block import broadcast as block_broadcast
-from max.gpu.primitives.block import prefix_sum as block_prefix_sum
-from max.gpu.sync import barrier
+from max.gpu.primitives.block import sum as block_sum
 
 
 comptime STATS_BLOCK = 256
@@ -60,9 +71,11 @@ def partition_stats_partial_kernel(
     Grid x is the chunk, y the leaf, z the stat plane, so every plane of
     every leaf is summed in one launch.
 
-    DEVIATION: the reduction uses `block_prefix_sum` over Float32 and takes
-    the last lane's inclusive value, because Mojo exposes a scan and not a
-    block reduce. Same arithmetic, one extra dependency chain.
+    The reduction is `max.gpu.primitives.block.sum`, `cub::BlockReduce`'s
+    counterpart. It used to be a `prefix_sum` whose last lane was broadcast
+    back, on the belief that Mojo exposed a scan and not a block reduce. That
+    belief was false, and it cost a scan's dependency chain and a broadcast
+    on every partial.
     """
     var line_size = Int(line_size_in)
     var max_chunks = Int(max_chunks_in)
@@ -81,10 +94,7 @@ def partition_stats_partial_kernel(
     var v = Float32(0.0)
     if i < size:
         v = stats.unsafe_load(stat * line_size + offset + i)
-    var inc = block_prefix_sum[block_size=STATS_BLOCK, exclusive=False](v)
-    var total = block_broadcast[block_size=STATS_BLOCK](
-        inc, src_thread = STATS_BLOCK - 1
-    )
+    var total = block_sum[block_size=STATS_BLOCK](v)
     if tid == 0:
         partials.unsafe_store(
             (leaf_slot * n_stats + stat) * max_chunks + chunk, total
@@ -119,10 +129,7 @@ def partition_stats_finish_kernel(
             (leaf_slot * n_stats + stat) * max_chunks + c
         )
         c += STATS_BLOCK
-    var inc = block_prefix_sum[block_size=STATS_BLOCK, exclusive=False](acc)
-    var total = block_broadcast[block_size=STATS_BLOCK](
-        inc, src_thread = STATS_BLOCK - 1
-    )
+    var total = block_sum[block_size=STATS_BLOCK](acc)
     if tid == 0:
         out_stats.unsafe_store(leaf_id * n_stats + stat, total)
 
