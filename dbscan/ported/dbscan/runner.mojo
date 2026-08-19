@@ -8,10 +8,12 @@ THEIR STRUCTURE, WHICH IS TWO LOOPS OVER THE BATCHES AND NOT ONE
     loop 1, batches n-1 .. 0 (REVERSED):
         VertexDeg   -> adj (boolean, batch x N) and vd (degrees, batch + 1)
         read vd[n_points] back to the host: the batch's edge count
+        maxklen[i] = max(vd[0 .. n_points))    (RBC only, `runner.cuh:289`)
         CorePoints  -> core[i + start] = vd[i] >= min_pts
     allocate adj_graph for the LARGEST batch
     loop 2, batches 0 .. n-1:
-        VertexDeg again, EXCEPT for batch 0
+        VertexDeg again, EXCEPT for batch 0; the RBC arm takes the ONE-PASS
+        max_k form when loop 1's bound fits the spare room (`algo.cuh:119`)
         AdjGraph    -> exclusive scan of vd, then adj_to_csr
         weak_cc_batched -> a labelling of THIS batch's sub-graph, over all N
         MergeLabels -> fold it into the running labelling, except for batch 0
@@ -51,10 +53,14 @@ gone.
 NOT PORTED, and named in `dbscan/UNPORTED.tsv`: the multi-GPU arms
 (`CorePoints::exchange`, `MergeLabels::tree_reduction`), the `core_indices`
 output (`runner.cuh:419-442`, a `thrust::copy_if` stream compaction of the
-core mask), the ball-cover arm, and `sample_weight`.
+core mask), `sample_weight`, and the two-loop `max_k` dispatch
+(`runner.cuh:257`, `:289`, `:327`, `:335`: their loop 2 reuses batch 0's CSR
+from loop 1 and takes the one-pass arm for the rest, where the RBC branch
+below re-counts and re-fills every batch, batch 0 included).
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
+from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from dbscan.ported.dbscan.adjgraph.algo import (
@@ -73,7 +79,12 @@ from neighbors.ported.neighbors.ball_cover.ball_cover import (
     rbc_build_index,
     rbc_eps_nn_query_count,
     rbc_eps_nn_query_fill,
+    rbc_eps_nn_query_max_k,
     rbc_n_landmarks,
+)
+from neighbors.ported.neighbors.ball_cover.scan import (
+    RBC_SCAN_TPB,
+    rbc_max_reduce_kernel,
 )
 
 
@@ -140,6 +151,37 @@ comptime EPS_NN_RBC = 1
 comptime TPB = 256
 
 
+def rbc_take_one_pass(
+    batch_size: Int,
+    n_rows: Int,
+    ja_capacity: Int,
+    n_points: Int,
+    max_k: Int,
+) -> Bool:
+    """`vertexdeg/algo.cuh:119-122`: which arm the second batch loop takes.
+
+        int64_t spare_elemets_per_row =
+          data.max_k > 0 ? (batch_size * data.N - data.ja->capacity()) / n : 0;
+        if (data.max_k > 0 && data.max_k < spare_elemets_per_row) { ... }
+
+    Their guard, verbatim (their misspelling too). It is a MEMORY test on
+    the `n x max_k` scratch the one-pass kernel needs (`registers.cuh:1431`),
+    not a correctness test: `batch_size * N` is the dense worst case the
+    runner budgeted for, and `ja_capacity` is what the CSR columns already
+    claim -- `maxadjlen` by the time loop 2 runs (`runner.cuh:317`).
+
+    A named host function rather than two inline lines so the checks can
+    assert which arm a fixture routes to with the SAME arithmetic the runner
+    uses (`dbscan_check.mojo::check_dbscan_rbc_two_loop_arms`), per
+    PORTING_RULES 8: a parameter that selects a kernel is a parameter the
+    checks enumerate.
+    """
+    if max_k <= 0:
+        return False
+    var spare = (batch_size * n_rows - ja_capacity) // n_points
+    return max_k < spare
+
+
 def relabel_for_skl_kernel(
     labels: MutPointer[Int32, MutAnyOrigin],
     n_in: Int32,
@@ -175,6 +217,7 @@ def dbscan_fit(
     batch_size: Int = 0,
     max_iterations: Int = 200,
     eps_nn_method: Int = EPS_NN_RBC,
+    phase_timing: Bool = False,
 ) raises -> Int:
     """`Dbscan::run`, single node. Returns the total propagation passes.
 
@@ -201,6 +244,35 @@ def dbscan_fit(
     for the same reason.
 
     `batch_size = 0` means one batch over the whole dataset.
+
+    `phase_timing` (PORTING.md 38) is the port of the instrumentation cuML
+    hangs on this function: their `verbosity` parameter gates a
+    `CUML_LOG_DEBUG("- Batch %d / %ld ...")` per batch per loop, and every
+    phase sits in an nvtx range (`Trace::Dbscan::VertexDeg` :255/:330,
+    `CorePoints` :299, `AdjGraph` :355, `WeakCC` :373, `MergeLabels` :397,
+    `FinalRelabel` :411). Metal has no nvtx consumer, so the ranges print as
+    wall-clock lines instead, one per phase per batch:
+
+        PHASE plan n_rows <N> batch <b> n_batches <nb> method <rbc|brute>
+        PHASE mask.vertexdeg batch <i>/<n> <ms>      loop 1, includes the
+                                                     vd[n] readback, as their
+                                                     range does (:255-296)
+        PHASE mask.corepoints batch <i>/<n> <ms>
+        PHASE label.vertexdeg batch <i>/<n> <ms>     loop 2, batches > 0
+                                                     (batch 0 is resident
+                                                     from loop 1); the rbc
+                                                     arm is one max_k pass,
+                                                     or count + fill when
+                                                     the bound does not fit
+        PHASE label.adjgraph batch <i>/<n> <ms>      brute arm only, as :355
+        PHASE label.weak_cc batch <i>/<n> <ms> passes <p>
+        PHASE label.merge_labels batch <i>/<n> <ms>  batches > 0, as :389
+        PHASE final_relabel batch 1/1 <ms>
+
+    `<i>` is 1-based, as their "- Batch %d" prints `i + 1`. Every phase
+    already ends on a `ctx.synchronize()`, so the timestamps add no sync
+    that the port does not already perform. Off (the default), nothing
+    prints and nothing is measured.
     """
     var batch = batch_size if batch_size > 0 else n_rows
     if batch > n_rows:
@@ -231,6 +303,35 @@ def dbscan_fit(
     if sparse_rbc_mode and n_features > Int(MAX_LABEL) // n_rows:
         sparse_rbc_mode = False
 
+    # `runner.cuh:181-186`: `ASSERT(N * batch_size <
+    # static_cast<std::size_t>(MAX_LABEL), "An overflow occurred with the
+    # current choice of precision ...")`. Theirs is unconditional and cannot
+    # bind on their RBC path, because RBC requires int64 labels (`:143-150`)
+    # and 2^63 / N never caps a real batch. Ours is int32-label with RBC
+    # reachable (DEVIATION 35), so the assert is scoped to the arm whose
+    # dense `N * batch_size` adjacency is real; on the RBC arm the honest
+    # int32 bound is the EDGE COUNT, refused at the query below, and copying
+    # the assert unconditionally would re-impose the very clamp
+    # `dbscan.cuh:71` gates off for RBC.
+    if not sparse_rbc_mode and n_rows * batch >= Int(MAX_LABEL):
+        raise Error(
+            "An overflow occurred with the current choice of precision and"
+            " the number of samples. (Max allowed batch size is "
+            + String(Int(MAX_LABEL) // n_rows)
+            + ", but was "
+            + String(batch)
+            + ")."
+        )
+
+    if phase_timing:
+        var method_name = String("brute")
+        if sparse_rbc_mode:
+            method_name = String("rbc")
+        print(
+            "PHASE plan n_rows " + String(n_rows) + " batch " + String(batch)
+            + " n_batches " + String(n_batches) + " method " + method_name
+        )
+
     # `runner.cuh:231-241`: build the index ONCE, before the batch loop, not
     # per batch. `rbc_build_index` is `cuvs::neighbors::ball_cover::build`.
     var n_landmarks = rbc_n_landmarks(n_rows) if sparse_rbc_mode else 1
@@ -250,6 +351,9 @@ def dbscan_fit(
     var rbc_d1 = ctx.enqueue_create_buffer[DType.float32](n_rows)
     var rbc_rad = ctx.enqueue_create_buffer[DType.float32](n_landmarks)
     var rbc_cnt = ctx.enqueue_create_buffer[DType.int32](n_landmarks)
+    # One int of device scratch: loop 1's max-reduce result, then the max_k
+    # query's `actual_max` readback (`registers.cuh:1453`).
+    var rbc_mk_scratch = ctx.enqueue_create_buffer[DType.int32](1)
     ctx.synchronize()
 
     if sparse_rbc_mode:
@@ -268,13 +372,16 @@ def dbscan_fit(
 
     # --- loop 1: the mask. REVERSED, so batch 0 stays resident -----------
     var batchadjlen = List[Int]()
+    var maxklen = List[Int]()
     for _i in range(n_batches):
         batchadjlen.append(0)
+        maxklen.append(0)
 
     var i = n_batches - 1
     while i >= 0:
         var start_vertex_id = i * batch
         var n_points = min(n_rows - i * batch, batch)
+        var t_vd1 = perf_counter_ns()
 
         if sparse_rbc_mode:
             # `algo.cuh:137-144`, the `max_k == 0` arm: fill `ia` and `vd`,
@@ -333,10 +440,44 @@ def dbscan_fit(
         ctx.synchronize()
         batchadjlen[i] = Int(h_adjlen.unsafe_ptr().unsafe_load(0))
 
+        # `runner.cuh:287-293`: `maxklen.at(i) = thrust::reduce(vd, vd +
+        # n_points, 0, maximum{})` -- the longest row in this batch, measured
+        # while the degrees are resident so loop 2 can take the one-pass
+        # form. The reduce runs on the DEVICE as thrust's does; only the
+        # scalar comes back. It sits inside the mask.vertexdeg window below
+        # exactly as it sits inside their nvtx VertexDeg range (:255-296).
+        if sparse_rbc_mode:
+            ctx.enqueue_function[rbc_max_reduce_kernel](
+                rbc_mk_scratch.unsafe_ptr(),
+                vd.unsafe_ptr(),
+                Int32(n_points),
+                grid_dim=(1, 1, 1),
+                block_dim=(RBC_SCAN_TPB, 1, 1),
+            )
+            ctx.synchronize()
+            ctx.enqueue_copy(
+                dst_ptr=h_adjlen.unsafe_ptr(), src_buf=rbc_mk_scratch
+            )
+            ctx.synchronize()
+            maxklen[i] = Int(h_adjlen.unsafe_ptr().unsafe_load(0))
+        if phase_timing:
+            print(
+                "PHASE mask.vertexdeg batch " + String(i + 1) + "/"
+                + String(n_batches) + " "
+                + String(Float64(perf_counter_ns() - t_vd1) / 1.0e6)
+            )
+
+        var t_cp = perf_counter_ns()
         core_points_compute(
             ctx, vd, core, min_pts, start_vertex_id, n_points
         )
         ctx.synchronize()
+        if phase_timing:
+            print(
+                "PHASE mask.corepoints batch " + String(i + 1) + "/"
+                + String(n_batches) + " "
+                + String(Float64(perf_counter_ns() - t_cp) / 1.0e6)
+            )
         i -= 1
 
     # `Index_ maxadjlen = *std::max_element(...); adj_graph.resize(maxadjlen)`
@@ -345,6 +486,43 @@ def dbscan_fit(
         if batchadjlen[b] > maxadjlen:
             maxadjlen = batchadjlen[b]
     var col_ind = ctx.enqueue_create_buffer[DType.int32](maxadjlen)
+    ctx.synchronize()
+
+    # `need_ja_compute = sparse_rbc_mode && ((i == 0) || sample_weight)`,
+    # `runner.cuh:257`: batch 0 is the one batch whose COLUMNS loop 1 also
+    # produces, so loop 2 can skip its neighborhood pass (`:327`).
+    #
+    # DEVIATION 39 (PORTING.md): theirs fills during loop 1 into `adj_graph`
+    # sized to batch 0's own edge count (`algo.cuh:150`) and then GROWS it
+    # to `maxadjlen` at `runner.cuh:317` -- `rmm::device_uvector::resize`
+    # preserves contents when growing. `DeviceBuffer` has no growing resize,
+    # so ours sizes `col_ind` first and runs batch 0's fill immediately
+    # after, against the `ex_scan` and `vd` that loop 1's last, reversed
+    # iteration left resident. Same single fill of batch 0, and the device
+    # state at loop 2's entry is identical byte for byte.
+    var rbc_tmp_len = 1
+    if sparse_rbc_mode:
+        var np0 = min(n_rows, batch)
+        var qb0 = x.create_sub_buffer[DType.float32](0, np0 * n_features)
+        rbc_eps_nn_query_fill(
+            ctx, rbc_xr, qb0, rbc_r, rbc_ip, rbc_c1, rbc_d1, rbc_rad,
+            ex_scan, col_ind, np0, n_features, n_landmarks, eps_radius,
+        )
+        ctx.synchronize()
+
+        # `registers.cuh:1431` allocates the `n x max_k` scratch inside
+        # each max_k call; `maxklen` is fully known here, so ours is one
+        # buffer at the largest size any one-pass batch will ask for.
+        for b1 in range(1, n_batches):
+            var np_b = min(n_rows - b1 * batch, batch)
+            if np_b <= 0:
+                break
+            if rbc_take_one_pass(
+                batch, n_rows, maxadjlen, np_b, maxklen[b1]
+            ):
+                if np_b * maxklen[b1] > rbc_tmp_len:
+                    rbc_tmp_len = np_b * maxklen[b1]
+    var rbc_tmp = ctx.enqueue_create_buffer[DType.int32](rbc_tmp_len)
     ctx.synchronize()
 
     # --- loop 2: the labelling -------------------------------------------
@@ -356,29 +534,78 @@ def dbscan_fit(
             break
 
         # i == 0 -> adj and vd for batch 0 already in memory
+        var t_vd2 = perf_counter_ns()
         if sparse_rbc_mode:
             # The query EMITS CSR, so `ex_scan` is `adj_ia` and `col_ind` is
             # `adj_ja`. `algo.cuh` has no `adj_to_csr` in this branch at all,
             # which is why `AdjGraph::run` is skipped below: their own
             # `runner.cuh:355` guards it with `if (!sparse_rbc_mode)`.
             # Running both would scan the degrees twice.
-            var qb2 = x.create_sub_buffer[DType.float32](
-                start2 * n_features, n_points2 * n_features
-            )
-            var _nnz2 = rbc_eps_nn_query_count(
-                ctx, rbc_xr, qb2, rbc_r, rbc_ip, rbc_c1, rbc_d1, rbc_rad,
-                ex_scan, vd, n_points2, n_features, n_landmarks, eps_radius,
-            )
-            ctx.synchronize()
-            var qb3 = x.create_sub_buffer[DType.float32](
-                start2 * n_features, n_points2 * n_features
-            )
-            rbc_eps_nn_query_fill(
-                ctx, rbc_xr, qb3, rbc_r, rbc_ip, rbc_c1, rbc_d1, rbc_rad,
-                ex_scan, col_ind, n_points2, n_features, n_landmarks,
-                eps_radius,
-            )
-            ctx.synchronize()
+            #
+            # `if (i > 0)`, `runner.cuh:327` -- "i==0 -> adj and vd for
+            # batch 0 already in memory". Batch 0's `ia` is in `ex_scan`
+            # from loop 1's last, reversed iteration and its `ja` was
+            # filled into `col_ind` the moment `col_ind` was sized, so
+            # batch 0 runs NO neighborhood pass here. Every other batch is
+            # ONE pass when loop 1's bound fits the spare room, and the
+            # two-pass form otherwise. Two walks over the dataset per fit,
+            # not three.
+            if b2 > 0:
+                var qb2 = x.create_sub_buffer[DType.float32](
+                    start2 * n_features, n_points2 * n_features
+                )
+                if rbc_take_one_pass(
+                    batch, n_rows, maxadjlen, n_points2, maxklen[b2]
+                ):
+                    # `runner.cuh:335` passes `maxklen.at(i)`. Their `vd`
+                    # argument is `nullptr` here (`:337`) and cuVS reads
+                    # the degrees off `adj_ia` instead
+                    # (`registers.cuh:1429`); ours hands the same `vd`
+                    # buffer, and nothing after this point reads it -- the
+                    # core mask came from loop 1.
+                    var actual = rbc_eps_nn_query_max_k(
+                        ctx, rbc_xr, qb2, rbc_r, rbc_ip, rbc_c1, rbc_d1,
+                        rbc_rad, ex_scan, col_ind, vd, rbc_tmp,
+                        rbc_mk_scratch, n_points2, n_features,
+                        n_landmarks, eps_radius, maxklen[b2],
+                    )
+                    # `ASSERT(max_k == data.max_k, "given maximum rowsize
+                    # was not sufficient")`, `algo.cuh:135`. An EQUALITY:
+                    # the bound was measured on these exact rows in loop
+                    # 1, so it cannot be exceeded, and a mismatch means
+                    # the CSR in `col_ind` is truncated garbage.
+                    if actual != maxklen[b2]:
+                        raise Error(
+                            "dbscan rbc: batch " + String(b2)
+                            + " was bounded at " + String(maxklen[b2])
+                            + " columns by loop 1 and came back with "
+                            + String(actual)
+                            + "; given maximum rowsize was not sufficient"
+                        )
+                else:
+                    # `algo.cuh:137-163`, the two-pass arm loop 2 falls
+                    # back to when the bound does not fit the spare room.
+                    var _nnz2 = rbc_eps_nn_query_count(
+                        ctx, rbc_xr, qb2, rbc_r, rbc_ip, rbc_c1, rbc_d1,
+                        rbc_rad, ex_scan, vd, n_points2, n_features,
+                        n_landmarks, eps_radius,
+                    )
+                    ctx.synchronize()
+                    var qb3 = x.create_sub_buffer[DType.float32](
+                        start2 * n_features, n_points2 * n_features
+                    )
+                    rbc_eps_nn_query_fill(
+                        ctx, rbc_xr, qb3, rbc_r, rbc_ip, rbc_c1, rbc_d1,
+                        rbc_rad, ex_scan, col_ind, n_points2, n_features,
+                        n_landmarks, eps_radius,
+                    )
+                    ctx.synchronize()
+                if phase_timing:
+                    print(
+                        "PHASE label.vertexdeg batch " + String(b2 + 1)
+                        + "/" + String(n_batches) + " "
+                        + String(Float64(perf_counter_ns() - t_vd2) / 1.0e6)
+                    )
         else:
             if b2 > 0:
                 vertex_deg_run(
@@ -386,40 +613,74 @@ def dbscan_fit(
                     eps,
                 )
                 ctx.synchronize()
+                if phase_timing:
+                    print(
+                        "PHASE label.vertexdeg batch " + String(b2 + 1) + "/"
+                        + String(n_batches) + " "
+                        + String(Float64(perf_counter_ns() - t_vd2) / 1.0e6)
+                    )
 
+            var t_ag = perf_counter_ns()
             adj_graph_run(
                 ctx, adj, vd, ex_scan, col_ind, block_sums, n_points2, n_rows
             )
             ctx.synchronize()
+            if phase_timing:
+                print(
+                    "PHASE label.adjgraph batch " + String(b2 + 1) + "/"
+                    + String(n_batches) + " "
+                    + String(Float64(perf_counter_ns() - t_ag) / 1.0e6)
+                )
 
         # Their ternary `i == 0 ? labels : labels_temp` is written out: a
         # pointer-valued conditional picks the wrong branch in this Mojo
-        # (`PORTING.md 19`), and buffers are not pointers here anyway.
+        # (`PORTING.md 19`), and buffers are not pointers here anyway. The
+        # merge is a separate `if (i > 0)` in theirs too (`runner.cuh:389`).
+        var t_cc = perf_counter_ns()
+        var batch_passes: Int
         if b2 == 0:
-            passes += weak_cc_batched(
+            batch_passes = weak_cc_batched(
                 ctx, labels, ex_scan, col_ind, core, d_flag, h_flag,
                 n_rows, start2, n_points2, max_iterations,
             )
         else:
-            passes += weak_cc_batched(
+            batch_passes = weak_cc_batched(
                 ctx, labels_temp, ex_scan, col_ind, core, d_flag, h_flag,
                 n_rows, start2, n_points2, max_iterations,
             )
+        passes += batch_passes
+        if phase_timing:
+            print(
+                "PHASE label.weak_cc batch " + String(b2 + 1) + "/"
+                + String(n_batches) + " "
+                + String(Float64(perf_counter_ns() - t_cc) / 1.0e6)
+                + " passes " + String(batch_passes)
+            )
+
+        if b2 > 0:
             # The labels_temp array contains the labelling for the
             # neighborhood graph of the current batch. This needs to be
             # merged with the labelling created by the previous batches.
             # Using the labelling from the previous batches as initial value
             # for weak_cc_batched and skipping the merge step would lead to
             # incorrect results as described in #3094.
+            var t_ml = perf_counter_ns()
             merge_labels_run(
                 ctx, labels, labels_temp, core, work_buffer, d_flag, h_flag,
                 n_rows, max_iterations,
             )
+            if phase_timing:
+                print(
+                    "PHASE label.merge_labels batch " + String(b2 + 1) + "/"
+                    + String(n_batches) + " "
+                    + String(Float64(perf_counter_ns() - t_ml) / 1.0e6)
+                )
 
     # --- final relabel (`runner.cuh:410-416`) -----------------------------
     # `if (algo_ccl == 2) final_relabel(labels, N, stream);` and cuML's own
     # `dbscanFitImpl` hardcodes `algo_ccl = 2` (`dbscan.cuh:122`), so this is
     # not optional in their dispatch.
+    var t_fr = perf_counter_ns()
     var rank = ctx.enqueue_create_buffer[DType.int32](n_rows + 1)
     ctx.synchronize()
     make_monotonic(ctx, labels, work_buffer, rank, block_sums, n_rows)
@@ -430,5 +691,10 @@ def dbscan_fit(
         block_dim=(TPB, 1, 1),
     )
     ctx.synchronize()
+    if phase_timing:
+        print(
+            "PHASE final_relabel batch 1/1 "
+            + String(Float64(perf_counter_ns() - t_fr) / 1.0e6)
+        )
 
     return passes

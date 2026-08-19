@@ -27,7 +27,7 @@ GPU, row-major, L2, and the defaults in our own params structs.**
 | 5 | `ML::Dbscan::fit`, `eps_nn_method=BRUTE_FORCE` (default, C++ and Python) | `epsUnexpL2SqNeighborhood` (fused, unexpanded, `eps2`) | `dbscan/ported/neighbors/epsilon_neighborhood.mojo`, reachable | **YES** | `dbscan.hpp:74`; `vertexdeg/algo.cuh:225,229-230` |
 | 6 | `ML::Dbscan::fit`, `eps_nn_method=RBC` **at int32 labels** | **STILL `epsUnexpL2SqNeighborhood`.** RBC is disabled `constexpr` for `Index_ == int32_t` | **we default to RBC and run it** | **NO — deliberate, measured, documented** | `runner.cuh:143-150`, index build guard `:235` |
 | 7 | DBSCAN final labelling, `algo_ccl` | `algo_ccl` is hardcoded 2 -> `final_relabel` (make_monotonic) **always**, then `relabelForSkl` | `make_monotonic` then `relabel_for_skl_kernel`, same order | **YES** | `dbscan.cuh:122`; `runner.cuh:410-416` |
-| 8 | DBSCAN batch policy | `compute_batch_size` takes `eps_nn_method`; the `MAX_LABEL/n_rows` clamp is **skipped in RBC mode** | clamp applied unconditionally; no `eps_nn_method` parameter | **NO** | `dbscan.cuh:71` |
+| 8 | DBSCAN batch policy | `compute_batch_size` takes `eps_nn_method`; the `MAX_LABEL/n_rows` clamp is **skipped in RBC mode** | same: `eps_nn_method` threaded from `dbscan_fit_impl`, clamp gated (fixed by LANE_dbscan-batching_2026-08-19; was unconditional) | **YES** | `dbscan.cuh:71` |
 | 9 | `PCA.fit`, `svd_solver='auto'` (Python default) | `COV_EIG_DQ` -> `raft::linalg::eigDC` -> cuSOLVER `syevd` | device cyclic Jacobi | **NO — closed cuSOLVER both arms, nothing to port** | `params.hpp:53`; `pca.pyx:394-395`; `tsvd.cuh:119` |
 | 10 | `PCA.fit` sign of components | **no flip at all.** `pcaFit` never calls `signFlip` | V-based `signFlipKernel` | **NO — deliberate, sklearn-aligned** | `pca.cuh:104-139` (no flip); `math.cuh:367` |
 | 11 | `PCA.fit_transform` (Python) | `self.fit(X).transform(X)`. **`pcaFitTransform` and its U-based flip are UNREACHABLE from Python** | n/a | n/a — the U-based arm is not a missing default | `pca.pyx:582-588`; only caller `cpp/tests/sg/pca_test.cu:165` |
@@ -54,7 +54,7 @@ fact that they reach the same `minClusterAndDistanceCompute` as `fit`; the
 | # | what upstream does (file:line) | what ours did | fixed? |
 |---|---|---|---|
 | D1 | `runner.cuh:143-150` disables RBC **`constexpr`** for `Index_ == int32_t`; `:235` builds the index only for `float && int64_t`. We are int32-label, so **cuML's dispatch can never send our parameters to RBC.** | `dbscan/ported/dbscan/runner.mojo` defaults to RBC and its DEVIATION 35 note claimed "We are float32, int32-label and L2 only, so those restrictions **cost us nothing**", and the inline fallback list claimed "the first two cannot fire here". Both are the exact opposite of `:143`. | **DOC FIXED.** The default is left at RBC (its 27x measurement and its point-for-point equality check stand), but the file now says plainly that their dispatch never reaches this arm at our parameters and that "we follow their dispatch" is NOT among the reasons. |
-| D2 | `dbscan.cuh:71`: the `batch_size <= MAX_LABEL/n_rows` clamp is inside `if (eps_nn_method != RBC)`. RBC emits CSR directly and never materializes the `N*batch_size` dense adjacency the clamp protects. | `compute_batch_size` has no `eps_nn_method` parameter and clamps unconditionally. With our RBC default this over-batches every fit. | **NOT FIXED** (needs code; see §4 F1). Documented in the docstring. |
+| D2 | `dbscan.cuh:71`: the `batch_size <= MAX_LABEL/n_rows` clamp is inside `if (eps_nn_method != RBC)`. RBC emits CSR directly and never materializes the `N*batch_size` dense adjacency the clamp protects. | `compute_batch_size` had no `eps_nn_method` parameter and clamped unconditionally. | **FIXED** by LANE_dbscan-batching_2026-08-19: parameter threaded in their order, clamp gated, reach checked on both sides (`check_dbscan_max_mbytes_moves_the_batch`). On this device the clamp never bound a default-budget run (the 80% budget cuts first at every n), so the fix changes dispatch fidelity and user-raised budgets, not the recorded timings. |
 | D3 | `detail/kmeans.cuh:872`: `kmeans_fit` calls `checkWeight` **unconditionally** on the default path. It is not an assertion — it cub-reduces the weights and rescales all of them by `n_samples/sum` when they disagree (`kmeans_common.cuh:160-172`). The rescale cancels in the centroids (`div_checkzero_op` at `detail/kmeans.cuh:326-331`) but **not** in the inertia, which is weighted at `:521-526` and is what `n_init` selects on and what `fit` reports. | `kmeans_fit_main` takes the caller's weights as given. | **NOT FIXED** (needs code; see §4 F2). `cluster/UNPORTED.tsv` row rewritten — it previously said "RAFT_EXPECTS", which is not what the function does. |
 | D4 | `pca.cuh:136`: `seqRoot(..., set_neg_zero=true)` turns a negative eigenvalue into a **zero** singular value (`math.cuh:86-95`). Reachable on any rank-deficient or badly scaled design. `tsvdFit` passes no such flag (`tsvd.cuh:237`). | `eig_and_truncate` does `sqrt(lam * scale)` with no clamp -> **NaN** where cuML returns 0, on both paths. | **NOT FIXED** (arithmetic; see §4 F3). Documented in `pca.mojo`. |
 | D5 | `tsvdFit` (`tsvd.cuh:190-238`) outputs **only** components and singular values. `explained_var` for tSVD exists only in `tsvdFitTransform` and is `raft::stats::vars` of the **transformed** data (`tsvd.cuh:272-276`) — a different quantity from the Gram eigenvalue on uncentered data. | `tsvd_fit` returns a full `PCAResult` with eigenvalue-derived `explained_var`/`ratio`/`noise_var`. | **NOT FIXED** (arithmetic; see §4 F4). Documented in `tsvd.mojo`. Already an `UNPORTED.tsv` row; the row is accurate. |
@@ -213,13 +213,14 @@ algorithm, nothing under `neighbors/`, `core/`, `bench/`, `ported/`,
 
 ## 4. FINDINGS THAT NEED CODE (written up, not made)
 
-**F1 — DBSCAN batch policy ignores `eps_nn_method`.**
-`dbscan/ported/dbscan/dbscan.mojo`. Add `eps_nn_method: Int` to
-`compute_batch_size`'s signature and wrap the `MAX_LABEL // n_rows` clamp in
-`if eps_nn_method != EPS_NN_RBC:`, mirroring `dbscan.cuh:71`. Thread it in
-from `dbscan_fit_impl`, which already has the value. Effect: RBC fits stop
-being batched more finely than cuML would batch them. Held back because it
-changes batch counts and therefore every DBSCAN timing measured this round.
+**F1 — DBSCAN batch policy ignores `eps_nn_method`. DONE**
+(LANE_dbscan-batching_2026-08-19): `eps_nn_method` added in their parameter
+order, clamp wrapped in `if eps_nn_method != EPS_NN_RBC:` mirroring
+`dbscan.cuh:71`, threaded from `dbscan_fit_impl`. The hold-back concern was
+empty: the clamp never bound a default-budget fit on this device (at n =
+50,000 the budget gives 40,669 rows against a clamp of 42,949, and a clamped
+batch costs ~5*MAX_LABEL ~ 10.7 GB at every n, above the ~10.2 GB default
+budget), so no recorded timing's batch count moves.
 
 **F2 — `checkWeight` is not ported and is on cuVS's default path.**
 `cluster/ported/cluster/detail/kmeans.mojo::kmeans_fit_main`, immediately

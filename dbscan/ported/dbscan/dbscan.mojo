@@ -36,6 +36,7 @@ from dbscan.ported.dbscan.runner import EPS_NN_BRUTE_FORCE, EPS_NN_RBC, dbscan_f
 def compute_batch_size(
     n_rows: Int,
     n_owned_rows: Int,
+    eps_nn_method: Int,
     max_mbytes_per_batch: Int = 0,
     neigh_per_row: Int = 0,
 ) raises -> Int:
@@ -52,16 +53,28 @@ def compute_batch_size(
     Index type is Int32 throughout this port, so `sizeof(Index_) == 4` and
     `MAX_LABEL == 2147483647`.
 
-    DIVERGENCE, NOT FIXED, and it is a slowdown rather than a wrong answer.
-    Theirs takes `eps_nn_method` as a parameter and gates the
-    `batch_size <= MAX_LABEL / n_rows` clamp on `eps_nn_method != RBC`
-    (`dbscan.cuh:71`), because the RBC arm emits CSR directly and never
-    materializes the `N * batch_size` dense adjacency the clamp exists to
-    keep addressable. This signature has no `eps_nn_method` and applies the
-    clamp unconditionally, so an RBC fit here batches more finely than cuML's
-    would. Fixing it means threading `eps_nn_method` in from
-    `dbscan_fit_impl` and wrapping the clamp; see the dispatch-audit lane
-    report.
+    `eps_nn_method` is theirs (`dbscan.cuh:37`) and it gates ONE thing,
+    exactly as theirs does at `:71`: the `batch_size <= MAX_LABEL / n_rows`
+    clamp is skipped when the method is RBC, because the RBC arm emits CSR
+    directly and never materializes the `N * batch_size` dense adjacency the
+    clamp exists to keep addressable. Nothing else in the estimate varies by
+    method -- not `est_mem_per_row`, not `est_mem_fixed` -- and that too is
+    theirs: their `:55` and `:60` are method-blind, their runner sizes
+    `adj_size` unconditionally even when RBC leaves it unread
+    (`runner.cuh:169`), and neither budget counts the RBC index, which their
+    runner allocates OUTSIDE the workspace (`runner.cuh:233-240`) just as
+    `dbscan_fit` allocates its `rbc_*` buffers beside the workspace.
+
+    Their `estimated_memory` out-parameter (`:96`) feeds one debug log line
+    (`dbscan.cuh:171-173`) and is not returned here.
+
+    DEVIATION 37 (PORTING.md): their `:66` computes
+    `max_mbytes_per_batch * 1000000 - est_mem_fixed` in `size_t`, so a
+    nonzero budget smaller than the fixed cost WRAPS, and the `min` at `:69`
+    turns the wrap into a full-size batch. Ours raises instead. Their
+    missing `batch_size >= 1` floor (a zero batch would reach
+    `raft::ceildiv` at `runner.cuh:131` and divide by zero) is a raise here
+    for the same reason.
     """
     var npr = neigh_per_row
     if npr <= 0:
@@ -94,10 +107,19 @@ def compute_batch_size(
     if batch_size > n_owned_rows:
         batch_size = n_owned_rows
 
-    # To avoid overflow, we need: batch_size <= MAX_LABEL / n_rows (floor div)
-    var max_label = 2147483647
-    if batch_size > max_label // n_rows:
-        batch_size = max_label // n_rows
+    # `dbscan.cuh:71`: `if (eps_nn_method != EpsNnMethod::RBC)`. The clamp
+    # guards the dense `N * batch_size` adjacency and the worst-case CSR the
+    # brute arm can emit; the RBC arm materializes neither, and its int32
+    # bound is the ACTUAL edge count, refused at the query site
+    # (runner.mojo, the `nnz1 > MAX_LABEL` raise). Their `:86-94` info about
+    # a smaller sufficient index type is dead for Index_ == int32 and is not
+    # ported.
+    if eps_nn_method != EPS_NN_RBC:
+        # To avoid overflow, we need: batch_size <= MAX_LABEL / n_rows
+        # (floor div)
+        var max_label = 2147483647
+        if batch_size > max_label // n_rows:
+            batch_size = max_label // n_rows
 
     if batch_size < 1:
         raise Error(
@@ -118,6 +140,7 @@ def dbscan_fit_impl(
     max_mbytes_per_batch: Int = 0,
     max_iterations: Int = 200,
     eps_nn_method: Int = EPS_NN_RBC,
+    phase_timing: Bool = False,
 ) raises -> Int:
     """`dbscanFitImpl` (`dbscan.cuh:101`): size the batch, allocate, run.
 
@@ -135,6 +158,19 @@ def dbscan_fit_impl(
     Allocation happens inside the call, as it does in theirs (their
     `rmm::device_uvector<char> workspace(workspaceSize, stream)` at
     `dbscan.cuh:197`, sized by a first `Dbscan::run` with a null workspace).
+
+    `max_mbytes_per_batch` is THE user-facing memory knob and both its name
+    and its default are theirs: the C++ public `fit` spells it
+    `max_bytes_per_batch` while documenting it as MEGABYTES
+    (`cuml/cpp/include/cuml/cluster/dbscan.hpp:54-56`, default 0 at `:73`),
+    and the Python layer spells it `max_mbytes_per_batch` with `None -> 0`
+    (`dbscan.pyx:302`, `:316-317`). The internal spelling here matches their
+    internal one (`dbscan.cuh:38`, `:111`). 0 means the 80%-of-total
+    estimate below (`:147`); any other value is used as given, unvalidated,
+    which is also theirs.
+
+    `phase_timing` prints `PHASE <name> batch <i>/<n> <ms>` per phase; see
+    `dbscan_fit` and PORTING.md 38. Off, nothing prints.
     """
     if n_rows <= 0:
         raise Error("No rows in the input array. DBSCAN cannot be fitted!")
@@ -146,7 +182,12 @@ def dbscan_fit_impl(
         var dataset_memory = n_rows * n_features * 4
         budget_mb = (80 * total_memory // 100 - dataset_memory) // 1000000
 
-    var batch = compute_batch_size(n_rows, n_rows, budget_mb)
+    var batch = compute_batch_size(n_rows, n_rows, eps_nn_method, budget_mb)
+    if phase_timing:
+        print(
+            "PHASE budget mbytes " + String(budget_mb) + " batch "
+            + String(batch)
+        )
 
     var adj = ctx.enqueue_create_buffer[DType.uint8](batch * n_rows)
     var core = ctx.enqueue_create_buffer[DType.uint8](n_rows)
@@ -177,4 +218,5 @@ def dbscan_fit_impl(
         batch,
         max_iterations,
         eps_nn_method,
+        phase_timing,
     )

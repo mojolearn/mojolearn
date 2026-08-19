@@ -602,6 +602,43 @@ SIGN, not merely the wrong magnitude.** Porting their `gridDim.x > 1` split
 is what would reverse this, and the arm stays reachable through `knn_method`
 so that re-measuring it then costs one argument rather than a revert.
 
+## 37. A tiny DBSCAN batch budget raises here; theirs wraps `size_t` into a full batch
+
+`dbscan.cuh:66` computes `max_mbytes_per_batch * 1000000 - est_mem_fixed` in
+`size_t`. Hand it a nonzero budget smaller than the fixed cost and the
+subtraction WRAPS to ~2^64; the `std::min` at `:69` then quietly turns the
+wrap into `batch_size = n_owned_rows` -- the tiniest budget buys the LARGEST
+batch. And a budget between the fixed cost and one row's cost yields
+`batch_size = 0`, which reaches `raft::ceildiv` at `runner.cuh:131` and
+divides by zero. Neither behavior is a design; both are what unsigned
+arithmetic does when nobody expected the input.
+
+`compute_batch_size` in `dbscan/ported/dbscan/dbscan.mojo` raises on both:
+budget at or under the fixed cost, and a computed batch under one row.
+Copying the wrap would make `max_mbytes_per_batch = 1` MEAN "unbatched", and
+`check_dbscan_tiny_budget_agrees` uses exactly that value to force many
+batches, so the wrap is not merely unhelpful, it is untestable.
+
+## 38. DBSCAN per-phase timing prints where cuML has nvtx ranges
+
+cuML wraps every DBSCAN phase in an nvtx range (`runner.cuh:255`, `:299`,
+`:330`, `:355`, `:373`, `:397`, `:411`) and logs per-batch progress through
+the `verbosity` parameter (`dbscan.cuh:114`). Metal has no nvtx consumer, so
+`dbscan_fit` takes `phase_timing: Bool = False` and prints each range as a
+machine-parseable wall-clock line instead:
+
+    PHASE <loop>.<phase> batch <i>/<n> <ms>
+
+with `passes <p>` appended on `label.weak_cc`, the count their `WeakCC`
+range cannot show either. The full format and the range-for-range mapping
+are documented on `dbscan_fit` in `dbscan/ported/dbscan/runner.mojo`;
+`dbscan/phase_main.mojo` is the dedicated main. Every phase already ends on
+a `ctx.synchronize()` the port performs anyway, so the flag adds no
+synchronization, and off (the default) it prints nothing. Timestamps are
+host wall clock, which on one queue with a sync at each boundary is the
+phase's device time plus its enqueue overhead -- the same thing their nvtx
+range brackets.
+
 ## Hazard: `linalg.matmul[transpose_b=True]` at `n == 1` does not write
 
 Not a deviation from an upstream, a defect in a vendor primitive we call, and

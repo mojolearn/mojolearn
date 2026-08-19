@@ -168,6 +168,36 @@ subtracted and scored per level. Fixing dispatch cannot return more than
 3.8 ms; the fixed-cost work is in the KERNELS' footprint, and the per-row
 work is separately 2.1x CatBoost CPU (103 vs 48.6 us per 1000 rows).
 
+The same day's per-kernel itemization, at 800k x 100 depth 6 (ms/tree):
+histogram accumulate ~68, zero ~8, fixed-to-float ~7, bridge ~2, reorder
+~12, score ~11, partition stats ~5.4, split+sequence ~3.5, the rest under
+2. Three findings out of it, all against their source:
+
+1. **The score kernel ran at grid (1,1,1).** Theirs is
+   `argmaxBlockCount = min(ceil(binFeatureCount/256), 64)` blocks with one
+   `TBestSplitProperties` per block and a host reduce
+   (`greedy_search_helper.cpp:439`, `:513-529`). Fixed; 11 ms became 1.9,
+   oracle still 48 of 48. Curve after: {100k: 42.4, 200k: 48.2,
+   400k: 63.7, 800k: 107.1} ms/tree.
+2. **Every gather-arm histogram launch divides `2 * maxActiveBlocks`**
+   (`hist_one_byte.cu:356`); this port used the direct-load number for
+   both arms. Fixed (no effect at this shape, where the other grid axes
+   already fill the machine).
+3. **The `hist_2` fused-two-stat family is not ported and is THEIR PATH
+   for every `maxBins <= 128`** (`hist_one_byte.cu:315-323`:
+   `HIST2_PASS(5/6/7)`, falling back to the family we ported only at
+   129-255 bins). CatBoost's GPU default border_count is 128, so at their
+   own defaults we run a kernel family they would not. It fuses both
+   stats in one pass (half the bin reads, half the pass serialization).
+   This is the largest known missing port.
+
+A streaming probe on plain device buffers measured 90 GB/s at 20 blocks
+(M4 base, 10 GPU cores), so the substrate is not the problem; the
+histogram accumulate runs at ~8 GB/s and ~256 threads per core because its
+32-floats-per-thread shared scratch fills Apple's 32KB threadgroup budget
+at 256 threads (CatBoost runs the same kernel at 384 threads in NVIDIA's
+48KB).
+
 Two separate tracks, and they are not the same work:
 
 1. **To make the comparison honest**: port the boosting loop, gradient

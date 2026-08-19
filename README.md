@@ -45,7 +45,14 @@ histogram footprint is 64 leaves x 100 features x 255 bins x 2 stats =
 3.26M cells, zeroed, flushed, scanned, subtracted and scored every level.
 The deficit is row-independent KERNEL WORK, and the per-row work is also
 2.1x CatBoost CPU's (103 vs 48.6 us per 1000 rows), so no dataset size
-closes the gap by itself. `HOST_AND_DEVICE.md` still carries the rule for
+closes the gap by itself. A per-kernel itemization taken the same day put
+the histogram ACCUMULATE at ~68 ms of the 124 at 800k, found the score
+kernel launched at grid (1,1,1) where CatBoost launches
+`min(ceil(binFeatureCount/256), 64)` blocks (`greedy_search_helper.cpp:439`),
+and fixing that one dispatch took the curve to {100k: 42.4, 200k: 48.2,
+400k: 63.7, 800k: 107.1} ms/tree, splits still 48/48 against the oracle. A
+90 GB/s streaming probe on the same buffers cleared the substrate: MAX's
+Metal path delivers bandwidth, and what remains is kernel geometry. `HOST_AND_DEVICE.md` still carries the rule for
 what may be done about the control plane; the control plane is just no
 longer where the time is.
 

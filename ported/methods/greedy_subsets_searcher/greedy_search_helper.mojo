@@ -59,6 +59,7 @@ from ported.options.catboost_options import (
     SCORE_FUNCTION_L2,
 )
 from ported.methods.greedy_subsets_searcher.kernel.compute_scores import (
+    FLOAT32_MAX,
     SCORE_BLOCK_SIZE,
     compute_optimal_splits_kernel,
 )
@@ -935,7 +936,7 @@ def run_tree(
                 Int32(max_leaves), Int32(stat_count),
                 grid_dim=(
                     hist_replicas if hist_replicas > 0 else replication_for(
-                        1, n_live, stat_count, sm_count
+                        1, n_live, stat_count, sm_count, gather=True
                     ),
                     n_live,
                     stat_count,
@@ -1358,7 +1359,7 @@ def launch_one_byte[bits: Int](
                 feature_groups_for(POLICY_ONE_BYTE, Int(blk.n_features))
                 * replication_for(
                     feature_groups_for(POLICY_ONE_BYTE, Int(blk.n_features)),
-                    n_live, stat_count, sm_count,
+                    n_live, stat_count, sm_count, gather=True,
                 ),
                 n_live,
                 stat_count,
@@ -1399,7 +1400,8 @@ def feature_groups_for(policy: Int, n_features: Int) -> Int:
 
 
 def replication_for(
-    groups: Int, n_live: Int, stat_count: Int, sm_count: Int
+    groups: Int, n_live: Int, stat_count: Int, sm_count: Int,
+    gather: Bool = False,
 ) -> Int:
     """`numBlocks.x *= CeilDivide(maxActiveBlocks, x * y * z)`.
 
@@ -1433,6 +1435,14 @@ def replication_for(
     """
     var blocks_per_sm = 2
     var max_active_blocks = blocks_per_sm * sm_count
+    # THE GATHER ARM DOUBLES THE TARGET. Their direct-load launches divide
+    # `maxActiveBlocks` (`hist_one_byte.cu:291`) but every gather launch
+    # divides `2 * maxActiveBlocks` (`hist_one_byte.cu:356`,
+    # `hist_half_byte.cu` and `hist_binary.cu` gather arms alike): an
+    # indirected row fetch stalls longer, so it gets twice the blocks to
+    # hide behind. This port used the direct-load number for both arms.
+    if gather:
+        max_active_blocks = 2 * max_active_blocks
     var base = groups * n_live * stat_count
     if base < 1:
         base = 1
@@ -1520,7 +1530,9 @@ def launch_histograms_for_blocks(
         # grid x = FEATURE GROUPS times replication, their
         # `numBlocks.x = ceil(fCount / GroupSize); numBlocks.x *= ...`
         var groups = feature_groups_for(blk.policy, blk.n_features)
-        var replicas = replication_for(groups, n_live, stat_count, sm_count)
+        var replicas = replication_for(
+            groups, n_live, stat_count, sm_count, gather=(depth > 0)
+        )
 
         # Each block writes its own scratch, and writing straight into the
         # flat histogram is correct only when there is one block, because the
@@ -2006,13 +2018,28 @@ def run_tree_layout(
         hsk.unsafe_ptr().unsafe_store(i, UInt8(0))
     ctx.enqueue_copy(dst_buf=skip, src_ptr=hsk.unsafe_ptr())
 
-    var out_score = ctx.enqueue_create_buffer[DType.float32](1)
-    var out_bin = ctx.enqueue_create_buffer[DType.uint32](1)
-    var hob = ctx.enqueue_create_host_buffer[DType.uint32](1)
+    # their `argmaxBlockCount = Min(CeilDivide(binFeatureCountPerDevice,
+    # 256), 64)` (`greedy_search_helper.cpp:439`) and `bestProps` sized
+    # `argmaxBlockCount * numScoreBlocks` (`:440`), `numScoreBlocks == 1`
+    # for a symmetric tree. This launch ran at grid (1,1,1) -- ONE
+    # threadgroup walking every candidate -- and measured 11 ms/tree of the
+    # 41.7 ms fixed cost at 800k x 100 depth 6. The block decomposition
+    # cannot change the winner: the tie-break (gain, then bin-feature index,
+    # their `TBestSplitProperties::operator<`, `gpu_structures.h:80-94`) is
+    # a total order over candidates, so this is a SCHEDULING row, not a
+    # numeric one.
+    var argmax_blocks = (hist_cells_per_leaf + 255) // 256
+    if argmax_blocks > 64:
+        argmax_blocks = 64
+    if argmax_blocks < 1:
+        argmax_blocks = 1
+    var out_score = ctx.enqueue_create_buffer[DType.float32](argmax_blocks)
+    var out_bin = ctx.enqueue_create_buffer[DType.uint32](argmax_blocks)
+    var hob = ctx.enqueue_create_host_buffer[DType.uint32](argmax_blocks)
     # Its OWN staging buffer, not a second read out of `hob`. One host buffer
     # feeding two asynchronous copies is what made `boosting_hist_check`
     # demand a histogram it had never asked the device to build.
-    var hos = ctx.enqueue_create_host_buffer[DType.float32](1)
+    var hos = ctx.enqueue_create_host_buffer[DType.float32](argmax_blocks)
 
     # Their `MakeSplit` packs every ui32 it has to send into ONE buffer and
     # copies once (`split_properties_helper.cpp:886-905`):
@@ -2342,7 +2369,8 @@ def run_tree_layout(
             part_stats.unsafe_ptr(), Int32(stat_count), ids_a.unsafe_ptr(),
             Int32(n_live), l2_leaf_reg,
             out_score.unsafe_ptr(), out_bin.unsafe_ptr(),
-            grid_dim=(1, 1, 1), block_dim=(SCORE_BLOCK_SIZE, 1, 1),
+            grid_dim=(argmax_blocks, 1, 1),
+            block_dim=(SCORE_BLOCK_SIZE, 1, 1),
         )
         mgr.stream_kernel()
         ctx.enqueue_copy(dst_ptr=hob.unsafe_ptr(), src_buf=out_bin)
@@ -2353,8 +2381,27 @@ def run_tree_layout(
         # without the argmax, so this one is theirs too and stays.
         mgr.wait_complete()
 
-        var best_bf = Int(hob.unsafe_ptr().unsafe_load(0))
-        var best_score = hos.unsafe_ptr().unsafe_load(0)
+        # their block-winner reduce (`greedy_search_helper.cpp:520-529`):
+        # `if (blockProps[i] < bestSplits[0])`, operator< = lower gain, tie
+        # to lower FeatureId then BinId. Our scores are negated so it is
+        # HIGHER score, tie to lower bin-feature index (bin-features are
+        # ordered by (feature, fold), the same lexicographic order). A
+        # poison record is score -FLOAT32_MAX / bin 0xFFFFFFFF and can
+        # never beat a real one.
+        var best_bf = -1
+        var best_score = -FLOAT32_MAX
+        var best_bin_u = UInt32(0xFFFFFFFF)
+        for bi in range(argmax_blocks):
+            var b_score = hos.unsafe_ptr().unsafe_load(bi)
+            var b_bin = hob.unsafe_ptr().unsafe_load(bi)
+            var take = b_score > best_score
+            if b_score == best_score and b_bin < best_bin_u:
+                take = True
+            if take:
+                best_score = b_score
+                best_bin_u = b_bin
+        if best_bin_u != UInt32(0xFFFFFFFF):
+            best_bf = Int(best_bin_u)
         # their `CB_ENSURE(bestSplits[0].FeatureId != (ui32)-1, "All splits
         # have infinite score. Probably, numerical overflow occurs in loss
         # function and/or split score calculation. Try increasing

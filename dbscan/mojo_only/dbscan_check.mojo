@@ -42,9 +42,9 @@ from dbscan.ported.dbscan.adjgraph.algo import (
     exclusive_scan,
     scan_blocks_needed,
 )
-from dbscan.ported.dbscan.dbscan import dbscan_fit_impl
+from dbscan.ported.dbscan.dbscan import compute_batch_size, dbscan_fit_impl
 from dbscan.ported.dbscan.runner import EPS_NN_BRUTE_FORCE, EPS_NN_RBC
-from dbscan.ported.dbscan.runner import dbscan_fit
+from dbscan.ported.dbscan.runner import dbscan_fit, rbc_take_one_pass
 from dbscan.ported.dbscan.vertexdeg.algo import (
     VD_TPB,
     eps_neighborhood_kernel,
@@ -636,4 +636,384 @@ def check_dbscan_rbc_matches_brute() raises:
         " force,",
         seen,
         "clusters",
+    )
+
+
+comptime WIDE_BLOBS = 6
+comptime WIDE_PER_BLOB = 320
+comptime WIDE_NOISE = 12
+comptime WIDE_ROWS = WIDE_BLOBS * WIDE_PER_BLOB + WIDE_NOISE
+
+
+def _wide_coord(row: Int, feature: Int) -> Float32:
+    """Same construction as `_coord`, six blobs instead of three.
+
+    Hashed jitter per (row, feature) -- scattered, not uniform -- so no two
+    rows have the same neighbour set and a placement bug cannot cancel. Blob
+    centres 10 apart in feature 0 against eps = 2; noise from 100 on, 40
+    apart, so blob 5 (feature 0 near 50) is 50 away from the first noise
+    point.
+    """
+    if row < WIDE_BLOBS * WIDE_PER_BLOB:
+        var blob = row // WIDE_PER_BLOB
+        var base = 10.0 * Float64(blob) if feature == 0 else 0.0
+        return Float32(base + _jitter(row, feature))
+    var k = row - WIDE_BLOBS * WIDE_PER_BLOB
+    var base2 = 100.0 + 40.0 * Float64(k) if feature == 0 else 0.0
+    return Float32(base2)
+
+
+def check_dbscan_max_mbytes_moves_the_batch() raises:
+    """REACH: `max_mbytes_per_batch` must change the computed batch, and
+    `eps_nn_method` must change the clamp. Host arithmetic only --
+    `compute_batch_size` allocates nothing, exactly like theirs.
+
+    Two assertions, each on a branch the suite did not previously run:
+
+    1. Two budgets at one n give DIFFERENT batch counts. A signature that
+       ignored its budget would return the same batch twice.
+    2. `dbscan.cuh:71`: at an n where the int32 clamp binds, RBC and
+       BRUTE_FORCE must DISAGREE -- RBC keeps the budget's answer, brute is
+       clamped to `MAX_LABEL / n_rows` -- and at an n where it cannot bind
+       they must AGREE. A gate stuck on either side fails one of the two.
+    """
+    var n = WIDE_ROWS
+
+    # (1) the budget is load-bearing.
+    var b_tiny = compute_batch_size(n, n, EPS_NN_RBC, 1)
+    var b_big = compute_batch_size(n, n, EPS_NN_RBC, 1000)
+    var nb_tiny = (n + b_tiny - 1) // b_tiny
+    var nb_big = (n + b_big - 1) // b_big
+    if nb_big != 1:
+        raise Error(
+            "a 1000 MB budget for " + String(n) + " rows should be one"
+            " batch, got " + String(nb_big)
+        )
+    if nb_tiny <= 4:
+        raise Error(
+            "a 1 MB budget for " + String(n) + " rows should force many"
+            " batches, got " + String(nb_tiny)
+        )
+
+    # (2) the `eps_nn_method != RBC` gate (`dbscan.cuh:71`).
+    var big_n = 50000
+    var rbc_batch = compute_batch_size(big_n, big_n, EPS_NN_RBC, 100000)
+    var brute_batch = compute_batch_size(
+        big_n, big_n, EPS_NN_BRUTE_FORCE, 100000
+    )
+    var clamp = 2147483647 // big_n
+    if rbc_batch != big_n:
+        raise Error(
+            "RBC with a 100 GB budget should take the whole " + String(big_n)
+            + " rows in one batch, got " + String(rbc_batch)
+        )
+    if brute_batch != clamp:
+        raise Error(
+            "BRUTE_FORCE at n = " + String(big_n) + " must clamp to"
+            " MAX_LABEL / n = " + String(clamp) + ", got "
+            + String(brute_batch)
+        )
+    # Below the clamp the two methods must agree, or the gate leaks into the
+    # estimate itself.
+    var rbc_small = compute_batch_size(n, n, EPS_NN_RBC, 3)
+    var brute_small = compute_batch_size(n, n, EPS_NN_BRUTE_FORCE, 3)
+    if rbc_small != brute_small:
+        raise Error(
+            "the eps_nn_method gate changed an UNCLAMPED batch: rbc "
+            + String(rbc_small) + " vs brute " + String(brute_small)
+        )
+
+    print(
+        "check_dbscan_max_mbytes_moves_the_batch OK: 1 MB -> "
+        + String(nb_tiny) + " batches and 1000 MB -> 1 batch at n = "
+        + String(n) + "; at n = 50000 the dbscan.cuh:71 gate keeps rbc at "
+        + String(rbc_batch) + " rows where brute clamps to " + String(clamp)
+        + ", and both agree at " + String(rbc_small)
+        + " rows when the clamp cannot bind"
+    )
+
+
+def check_dbscan_tiny_budget_agrees() raises:
+    """A user-forced tiny `max_mbytes_per_batch` must change the batching and
+    nothing else, END TO END through `dbscan_fit_impl` -- the plumbing check
+    for the public knob, on BOTH sides of the `algo.cuh:226` switch.
+
+    The fixture is scattered (hashed jitter, six blobs each spanning several
+    tiny batches, twelve isolated noise points), so a merge that misplaces
+    labels cannot cancel. `final_relabel` + `relabelForSkl` make ids
+    canonical, so the comparison is literal equality.
+
+    Reach is asserted twice over: the expected batch counts differ (host
+    arithmetic above), and the returned PASS COUNT must be strictly larger
+    under many batches, because each batch runs its own `weak_cc_batched`
+    and each run is at least one pass. Identical labels with identical pass
+    counts would mean the budget never reached the loop.
+    """
+    var ctx = DeviceContext()
+    var n = WIDE_ROWS
+    var d = DB_FEATURES
+
+    var x = ctx.enqueue_create_buffer[DType.float32](n * d)
+    ctx.synchronize()
+    var hx = ctx.enqueue_create_host_buffer[DType.float32](n * d)
+    for i in range(n):
+        for f in range(d):
+            hx.unsafe_ptr().unsafe_store(i * d + f, _wide_coord(i, f))
+    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+    ctx.synchronize()
+
+    var nb_tiny = (
+        n + compute_batch_size(n, n, EPS_NN_RBC, 1) - 1
+    ) // compute_batch_size(n, n, EPS_NN_RBC, 1)
+
+    var labels_one = ctx.enqueue_create_buffer[DType.int32](n)
+    var labels_many = ctx.enqueue_create_buffer[DType.int32](n)
+    ctx.synchronize()
+
+    var methods = [EPS_NN_RBC, EPS_NN_BRUTE_FORCE]
+    var method_names = [String("rbc"), String("brute")]
+    for mi in range(len(methods)):
+        var method = methods[mi]
+        var passes_one = dbscan_fit_impl(
+            ctx, x, labels_one, n, d, DB_EPS, DB_MIN_PTS, 1000, 200, method
+        )
+        var passes_many = dbscan_fit_impl(
+            ctx, x, labels_many, n, d, DB_EPS, DB_MIN_PTS, 1, 200, method
+        )
+
+        var h_one = ctx.enqueue_create_host_buffer[DType.int32](n)
+        var h_many = ctx.enqueue_create_host_buffer[DType.int32](n)
+        ctx.enqueue_copy(dst_ptr=h_one.unsafe_ptr(), src_buf=labels_one)
+        ctx.enqueue_copy(dst_ptr=h_many.unsafe_ptr(), src_buf=labels_many)
+        ctx.synchronize()
+
+        if passes_many <= passes_one:
+            raise Error(
+                method_names[mi] + ": " + String(nb_tiny)
+                + " batches returned " + String(passes_many)
+                + " propagation passes against " + String(passes_one)
+                + " for one batch; the budget never reached the batch loop"
+            )
+
+        var differ = 0
+        for i in range(n):
+            if h_one.unsafe_ptr().unsafe_load(i) != h_many.unsafe_ptr().unsafe_load(i):
+                differ += 1
+        if differ != 0:
+            raise Error(
+                method_names[mi] + ": " + String(differ) + " of " + String(n)
+                + " labels differ between 1 batch and " + String(nb_tiny)
+                + " budget-forced batches"
+            )
+
+        # The agreement must have seen real structure: six clusters as ids
+        # exactly 0..5, noise as -1, no blob split.
+        for b in range(WIDE_BLOBS):
+            var first = h_many.unsafe_ptr().unsafe_load(b * WIDE_PER_BLOB)
+            if Int(first) != b:
+                raise Error(
+                    method_names[mi] + ": blob " + String(b)
+                    + " has canonical label " + String(first)
+                    + "; final_relabel should give first-appearance ids 0.."
+                    + String(WIDE_BLOBS - 1)
+                )
+            for k in range(WIDE_PER_BLOB):
+                if h_many.unsafe_ptr().unsafe_load(b * WIDE_PER_BLOB + k) != first:
+                    raise Error(
+                        method_names[mi] + ": blob " + String(b)
+                        + " split at point " + String(k)
+                    )
+        for i in range(WIDE_BLOBS * WIDE_PER_BLOB, n):
+            if h_many.unsafe_ptr().unsafe_load(i) != Int32(-1):
+                raise Error(
+                    method_names[mi] + ": noise point " + String(i)
+                    + " has label "
+                    + String(h_many.unsafe_ptr().unsafe_load(i))
+                )
+        print(
+            "check_dbscan_tiny_budget_agrees OK (" + method_names[mi]
+            + "): max_mbytes_per_batch = 1 forced " + String(nb_tiny)
+            + " batches (" + String(passes_many) + " passes vs "
+            + String(passes_one) + " for one batch) and all " + String(n)
+            + " labels match one batch: " + String(WIDE_BLOBS)
+            + " blobs whole with ids 0.." + String(WIDE_BLOBS - 1) + ", "
+            + String(WIDE_NOISE) + " noise points at -1"
+        )
+
+
+def _tl_coord(row: Int, feature: Int, dense: Bool) -> Float32:
+    """Two blob layouts for `check_dbscan_rbc_two_loop_arms`, hashed jitter.
+
+    `dense = False`: blobs of 250 / 200 / 150 rows at 0 / 10 / 20 in
+    feature 0. `dense = True`: blobs of 500 / 100 at 0 / 10. Same `_jitter`
+    as `_coord` (at most 0.3 per feature), so within-blob squared distances
+    stay under 1.44 against eps^2 = 4 and between-blob ones start near 88 --
+    every within-blob pair is a neighbour, no cross-blob pair is, and the
+    degrees below are exact by construction rather than by luck.
+    """
+    var blob: Int
+    if dense:
+        blob = 0 if row < 500 else 1
+    else:
+        if row < 250:
+            blob = 0
+        elif row < 450:
+            blob = 1
+        else:
+            blob = 2
+    var base = 10.0 * Float64(blob) if feature == 0 else 0.0
+    return Float32(base + _jitter(row, feature))
+
+
+def _run_two_loop_arm(
+    dense: Bool, expect_one_pass: Bool, name: String
+) raises -> Int:
+    """One fixture, pinned to ONE arm of `algo.cuh:119-122`, labels against
+    brute force. Returns the cluster count. See the caller for what each
+    fixture pins and why.
+    """
+    var ctx = DeviceContext()
+    var n = 600
+    var d = DB_FEATURES
+    var batch = 200
+    var n_batches = (n + batch - 1) // batch
+    var eps = 2.0
+
+    var x = ctx.enqueue_create_buffer[DType.float32](n * d)
+    ctx.synchronize()
+    var hx = ctx.enqueue_create_host_buffer[DType.float32](n * d)
+    for i in range(n):
+        for f in range(d):
+            hx.unsafe_ptr().unsafe_store(i * d + f, _tl_coord(i, f, dense))
+    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+    ctx.synchronize()
+
+    # Host degrees with the device's own float32 arithmetic, then the
+    # ROUTING assertion: every batch after 0 must take the EXPECTED arm of
+    # `algo.cuh:119-122`, decided by `rbc_take_one_pass` -- the identical
+    # function the runner calls, fed the identical numbers the runner will
+    # derive (`maxadjlen` is the largest batch's edge count, `max_k` the
+    # batch's longest row). A fixture that stopped pinning its arm fails
+    # HERE, not by silently testing the other branch.
+    var eps2 = Float32(eps) * Float32(eps)
+    var deg = List[Int]()
+    for i in range(n):
+        var c = 0
+        for j in range(n):
+            var sd = Float32(0.0)
+            for f in range(d):
+                var diff = hx.unsafe_ptr().unsafe_load(
+                    i * d + f
+                ) - hx.unsafe_ptr().unsafe_load(j * d + f)
+                sd += diff * diff
+            if sd <= eps2:
+                c += 1
+        deg.append(c)
+
+    var maxadjlen = 1
+    for b in range(n_batches):
+        var np_b = min(n - b * batch, batch)
+        var nnz_b = 0
+        for i2 in range(np_b):
+            nnz_b += deg[b * batch + i2]
+        if nnz_b > maxadjlen:
+            maxadjlen = nnz_b
+    for b in range(1, n_batches):
+        var np_b = min(n - b * batch, batch)
+        var mk = 0
+        for i2 in range(np_b):
+            if deg[b * batch + i2] > mk:
+                mk = deg[b * batch + i2]
+        var one_pass = rbc_take_one_pass(batch, n, maxadjlen, np_b, mk)
+        if one_pass != expect_one_pass:
+            raise Error(
+                "two-loop " + name + ": batch " + String(b)
+                + " routes one_pass=" + String(one_pass) + " (max_k "
+                + String(mk) + ", maxadjlen " + String(maxadjlen)
+                + "), so the fixture does not pin the arm it claims to"
+            )
+
+    # RBC, batched -> loop 2 takes the arm just pinned. Brute force,
+    # unbatched, is the reference labelling; `final_relabel` +
+    # `relabelForSkl` make the ids canonical, so equality is literal.
+    var labels = ctx.enqueue_create_buffer[DType.int32](n)
+    var labels_temp = ctx.enqueue_create_buffer[DType.int32](n)
+    var work_buffer = ctx.enqueue_create_buffer[DType.int32](n)
+    var core = ctx.enqueue_create_buffer[DType.uint8](n)
+    var block_sums = ctx.enqueue_create_buffer[DType.int32](
+        scan_blocks_needed(n) + 1
+    )
+    var adj_b = ctx.enqueue_create_buffer[DType.uint8](batch * n)
+    var vd_b = ctx.enqueue_create_buffer[DType.int32](batch + 1)
+    var ex_b = ctx.enqueue_create_buffer[DType.int32](batch + 1)
+    ctx.synchronize()
+    _ = dbscan_fit(
+        ctx, x, adj_b, vd_b, core, ex_b, labels, labels_temp, work_buffer,
+        block_sums, n, d, eps, DB_MIN_PTS, batch, 200, EPS_NN_RBC,
+    )
+    var hr = ctx.enqueue_create_host_buffer[DType.int32](n)
+    ctx.enqueue_copy(dst_ptr=hr.unsafe_ptr(), src_buf=labels)
+    ctx.synchronize()
+
+    var adj_f = ctx.enqueue_create_buffer[DType.uint8](n * n)
+    var vd_f = ctx.enqueue_create_buffer[DType.int32](n + 1)
+    var ex_f = ctx.enqueue_create_buffer[DType.int32](n + 1)
+    ctx.synchronize()
+    _ = dbscan_fit(
+        ctx, x, adj_f, vd_f, core, ex_f, labels, labels_temp, work_buffer,
+        block_sums, n, d, eps, DB_MIN_PTS, 0, 200, EPS_NN_BRUTE_FORCE,
+    )
+    var hb = ctx.enqueue_create_host_buffer[DType.int32](n)
+    ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=labels)
+    ctx.synchronize()
+
+    var wrong = 0
+    for i in range(n):
+        if hr.unsafe_ptr().unsafe_load(i) != hb.unsafe_ptr().unsafe_load(i):
+            wrong += 1
+    if wrong != 0:
+        raise Error(
+            "two-loop " + name + ": " + String(wrong) + " of " + String(n)
+            + " labels differ between batched RBC and unbatched brute force"
+        )
+    var seen = 0
+    for i in range(n):
+        if hb.unsafe_ptr().unsafe_load(i) > Int32(seen - 1):
+            seen = Int(hb.unsafe_ptr().unsafe_load(i)) + 1
+    if seen < 2:
+        raise Error(
+            "two-loop " + name + ": only " + String(seen)
+            + " cluster(s), so agreement proves nothing"
+        )
+    return seen
+
+
+def check_dbscan_rbc_two_loop_arms() raises:
+    """BOTH arms of loop 2's RBC dispatch, one named fixture each.
+
+    PORTING_RULES 8: a switch is exercised on both sides or one side is
+    unchecked, and the RBC arm's loop 2 now has a switch --
+    `algo.cuh:119-122` sends a batch down the ONE-PASS `max_k` form when
+    loop 1's bound fits the spare room, and down the two-pass count + fill
+    otherwise. The guard is data-derived, not a parameter, so each fixture
+    PINS its arm and the check proves the pin with the runner's own
+    `rbc_take_one_pass` on host-recomputed degrees before trusting the
+    labels.
+
+    - one-pass: blobs of 250 / 200 / 150 rows, batch 200 -- batches straddle
+      blob boundaries (so `merge_labels` works across the new arm's CSR) and
+      the longest row (250) is far under the spare room (350).
+    - fallback: blobs of 500 / 100, batch 200 -- the 500-blob makes
+      `maxadjlen` 100,000 of the 120,000 budgeted, the spare room collapses
+      to 100, and the 500-long rows cannot take the one-pass arm.
+
+    Both fits must label every point exactly as unbatched BRUTE_FORCE does.
+    """
+    var c1 = _run_two_loop_arm(False, True, "one-pass")
+    var c2 = _run_two_loop_arm(True, False, "fallback")
+    print(
+        "check_dbscan_rbc_two_loop_arms OK: the one-pass arm ("
+        + String(c1) + " clusters) and the two-pass fallback (" + String(c2)
+        + " clusters) both label identically to unbatched brute force, and"
+        " algo.cuh:119's guard provably routes each fixture to its arm"
     )
