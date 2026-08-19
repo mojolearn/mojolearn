@@ -6,6 +6,7 @@ from mojo_only.hist_check import (
     check_scan,
     check_scores,
     check_partition_update,
+    check_stable_partition,
     check_zero_and_copy,
     check_split_points,
     check_subtraction,
@@ -274,6 +275,7 @@ def main() raises:
     check_split_points()
     check_partition_update()
     check_zero_and_copy()
+    check_stable_partition()
     print()
     print("tree schedule:")
     show_tree_schedule()

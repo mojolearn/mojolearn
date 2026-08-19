@@ -186,3 +186,88 @@ def update_partitions_after_split_kernel(
             host_size.unsafe_store(right_leaf, UInt32(part_sz - i))
             break
         i += stride
+
+
+def gather_in_leaves_kernel(
+    leaves: MutPointer[UInt32, MutAnyOrigin],
+    part_offset: MutPointer[UInt32, MutAnyOrigin],
+    part_size: MutPointer[UInt32, MutAnyOrigin],
+    src: MutPointer[Float32, MutAnyOrigin],
+    gather_map: MutPointer[UInt32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
+    num_stats_in: Int32,
+    line_size_in: Int32,
+):
+    """`GatherInLeavesImpl`, copied.
+
+    Applies a permutation WITHIN each leaf's range, to every stat column at
+    once. `map[i]` is the source position for destination position `i`,
+    both relative to the leaf's offset, so the permutation never crosses a
+    leaf boundary and a leaf's rows stay contiguous.
+
+    This is the second half of the reorder. `split_and_make_sequence_kernel`
+    writes the flags and the identity sequence, a stable partition turns that
+    sequence into a permutation with the "goes left" rows first, and this
+    applies it to the payload.
+
+    **What is permuted is the STAT COLUMNS and the index, never the binned
+    matrix.** `src` here is gradients and weights, `lineSize` strides between
+    stat planes. The compressed index is read indirectly through the
+    permuted row ids and does not move for the life of the fit. That
+    distinction is the reason CatBoost can afford a per-level reorder at all:
+    mojotrees measured reordering the BIN MATRIX at 1.535x slower on GPU and
+    2.6x on CPU, which is a different and far more expensive operation.
+
+    Grid y is the LEAF, so one launch reorders every splitting leaf.
+    """
+    var num_stats = Int(num_stats_in)
+    var line_size = Int(line_size_in)
+    var leaf_id = Int(leaves.unsafe_load(Int(block_idx.y)))
+
+    var offset = Int(part_offset.unsafe_load(leaf_id))
+    var size = Int(part_size.unsafe_load(leaf_id))
+
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+
+    while i < size:
+        var load_idx = Int(gather_map.unsafe_load(offset + i))
+        for k in range(num_stats):
+            dst.unsafe_store(
+                offset + i + k * line_size,
+                src.unsafe_load(offset + load_idx + k * line_size),
+            )
+        i += stride
+
+
+def gather_index_in_leaves_kernel(
+    leaves: MutPointer[UInt32, MutAnyOrigin],
+    part_offset: MutPointer[UInt32, MutAnyOrigin],
+    part_size: MutPointer[UInt32, MutAnyOrigin],
+    src: MutPointer[UInt32, MutAnyOrigin],
+    gather_map: MutPointer[UInt32, MutAnyOrigin],
+    dst: MutPointer[UInt32, MutAnyOrigin],
+):
+    """The same permutation applied to the `UInt32` row-index array.
+
+    CatBoost gets this from the same template instantiated at `ui32`
+    (`GatherInLeaves<ui32>`); Mojo has no template over the element type
+    here, so it is a second function. DEVIATION of expression only: identical
+    arithmetic, one stat, no line stride.
+
+    It matters as much as the stat gather. The index array is what
+    `split_and_make_sequence_kernel` dereferences to reach the compressed
+    index next level, so if the payload is permuted and the index is not, the
+    next level reads the right rows' bins against the wrong rows' gradients.
+    """
+    var leaf_id = Int(leaves.unsafe_load(Int(block_idx.y)))
+    var offset = Int(part_offset.unsafe_load(leaf_id))
+    var size = Int(part_size.unsafe_load(leaf_id))
+
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+
+    while i < size:
+        var load_idx = Int(gather_map.unsafe_load(offset + i))
+        dst.unsafe_store(offset + i, src.unsafe_load(offset + load_idx))
+        i += stride

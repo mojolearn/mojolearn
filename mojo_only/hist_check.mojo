@@ -22,6 +22,11 @@ wrong count rather than as a crash.
 
 from max.gpu.host import DeviceContext
 
+from mojo_only.stable_partition import (
+    PARTITION_BLOCK,
+    stable_partition_kernel,
+)
+
 from catboost.cuda.gpu_data.grid_policy import (
     POLICY_BINARY,
     POLICY_HALF_BYTE,
@@ -1139,3 +1144,105 @@ def check_zero_and_copy() raises:
     if wrong2 != 0:
         raise Error("copy_histograms is wrong")
     print("  zero is set-indexed and copy stages the parent for subtraction")
+
+
+def check_stable_partition() raises:
+    """Stable partition: order preserved within each side, across chunks.
+
+    Two leaves in one launch. Leaf 0 is 300 rows, deliberately LARGER than
+    the 256-thread block, because the running zero and one counts carried
+    between chunks are exactly what a small leaf never exercises. Leaf 1 is
+    17 rows with an irregular pattern.
+
+    Stability is checked directly rather than inferred: for each side the
+    source indices must come out strictly increasing. A non-stable partition
+    still produces one flag transition, so `update_partitions_after_split`
+    would still find a boundary and every count would still be right, while
+    the leaf silently held different rows.
+    """
+    var ctx = DeviceContext()
+    var n0 = 300
+    var n1 = 17
+    var n_rows = n0 + n1
+
+    var flags = ctx.enqueue_create_buffer[DType.uint8](n_rows)
+    var hf = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
+    for r in range(n0):
+        hf.unsafe_ptr().unsafe_store(r, UInt8(1) if (r % 3) == 0 else UInt8(0))
+    for r in range(n1):
+        hf.unsafe_ptr().unsafe_store(n0 + r, UInt8(1) if (r % 2) == 1 else UInt8(0))
+    ctx.enqueue_copy(dst_buf=flags, src_ptr=hf.unsafe_ptr())
+
+    var p_off = ctx.enqueue_create_buffer[DType.uint32](2)
+    var p_sz = ctx.enqueue_create_buffer[DType.uint32](2)
+    var lids = ctx.enqueue_create_buffer[DType.uint32](2)
+    var h_off = ctx.enqueue_create_host_buffer[DType.uint32](2)
+    var h_sz = ctx.enqueue_create_host_buffer[DType.uint32](2)
+    var h_lid = ctx.enqueue_create_host_buffer[DType.uint32](2)
+    h_off.unsafe_ptr().unsafe_store(0, UInt32(0))
+    h_off.unsafe_ptr().unsafe_store(1, UInt32(n0))
+    h_sz.unsafe_ptr().unsafe_store(0, UInt32(n0))
+    h_sz.unsafe_ptr().unsafe_store(1, UInt32(n1))
+    h_lid.unsafe_ptr().unsafe_store(0, UInt32(0))
+    h_lid.unsafe_ptr().unsafe_store(1, UInt32(1))
+    ctx.enqueue_copy(dst_buf=p_off, src_ptr=h_off.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=p_sz, src_ptr=h_sz.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=lids, src_ptr=h_lid.unsafe_ptr())
+
+    var gmap = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+    var sflags = ctx.enqueue_create_buffer[DType.uint8](n_rows)
+    ctx.synchronize()
+
+    ctx.enqueue_function[stable_partition_kernel](
+        lids.unsafe_ptr(),
+        p_off.unsafe_ptr(),
+        p_sz.unsafe_ptr(),
+        flags.unsafe_ptr(),
+        gmap.unsafe_ptr(),
+        sflags.unsafe_ptr(),
+        grid_dim=(1, 2, 1),
+        block_dim=(PARTITION_BLOCK, 1, 1),
+    )
+    ctx.synchronize()
+
+    var om = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
+    var osf = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
+    ctx.enqueue_copy(dst_ptr=om.unsafe_ptr(), src_buf=gmap)
+    ctx.enqueue_copy(dst_ptr=osf.unsafe_ptr(), src_buf=sflags)
+    ctx.synchronize()
+
+    var bad = 0
+    for leaf in range(2):
+        var off = 0 if leaf == 0 else n0
+        var size = n0 if leaf == 0 else n1
+        var seen_one = False
+        var prev_zero = -1
+        var prev_one = -1
+        var n_zero = 0
+        for i in range(size):
+            var srcpos = Int(om.unsafe_ptr().unsafe_load(off + i))
+            var f = Int(hf.unsafe_ptr().unsafe_load(off + srcpos))
+            # sorted_flags must agree with the source row's real flag
+            if Int(osf.unsafe_ptr().unsafe_load(off + i)) != f:
+                bad += 1
+            if f == 0:
+                if seen_one:
+                    bad += 1  # a zero after a one: not partitioned
+                if srcpos <= prev_zero:
+                    bad += 1  # not stable within the zero side
+                prev_zero = srcpos
+                n_zero += 1
+            else:
+                seen_one = True
+                if srcpos <= prev_one:
+                    bad += 1  # not stable within the one side
+                prev_one = srcpos
+        if leaf == 0:
+            print("  leaf 0:", size, "rows (>", PARTITION_BLOCK, "), zeros:", n_zero)
+        else:
+            print("  leaf 1:", size, "rows, zeros:", n_zero)
+
+    print("  violations (order, stability, flag agreement):", bad)
+    if bad != 0:
+        raise Error("stable partition is wrong")
+    print("  partitioned, stable within each side, across chunk boundaries")
