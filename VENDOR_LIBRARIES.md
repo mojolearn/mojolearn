@@ -519,14 +519,22 @@ Those reduce **values only**, so they still do not solve the key-value case —
 `algorithm.reduce_op.ArgMin` (A2 item 2) is the candidate for that.
 
 **C8. `matmul`'s `transpose_a` limit is confirmed in the published docs, not
-only by the compiler.** The parameter's own description reads "Transpose `a`
-before the matmul (defaults to `False`); **currently unsupported**"
+only by the compiler, and it is family-wide.** The parameter's own description
+reads "Transpose `a` before the matmul (defaults to `False`); **currently
+unsupported**"
 ([docs](https://max.modular.com/api/mojo/linalg/matmul/matmul.md)), and
 `linalg.bmm.batched_matmul` carries the identical "not yet supported"
-([docs](https://max.modular.com/api/mojo/linalg/bmm/batched_matmul.md)). So
-the blocker on PCA and OLS is a documented product limit across the whole
-matmul family, not a local quirk — and `transpose_b` is supported everywhere,
-including `gemv_gpu` and `enqueue_apple_matmul`.
+([docs](https://max.modular.com/api/mojo/linalg/bmm/batched_matmul.md)). So it
+is a documented product limit across the whole matmul family, not a local
+quirk — and `transpose_b` is supported everywhere, including `gemv_gpu` and
+`enqueue_apple_matmul`. Note that a peer resolved the T-N Gram shape while
+this appendix was being written, via RAFT's `ColKernelPolicy` and no transpose
+at all; **the "Limits of the ones we do use" section above is stale where it
+still says "The answer is `linalg.transpose` followed by an N-T matmul, and it
+is not yet wired"** — that sentence is contradicted by the RESOLVED note a few
+paragraphs earlier in the same file, and whoever owns that section should
+delete it. What C8 adds is only that `transpose_a` will not arrive by upgrade
+either, so no future round should re-plan around it.
 
 **C9. `linalg.transpose` has siblings, and they have the same suspect shape.**
 The module also ships `transpose_2d`, `transpose_3d_swap_inner`,
@@ -626,3 +634,87 @@ The second move that paid: **when a probe returns NOT FOUND, read the package
 index rather than trying another guessed symbol name.** Three of the six
 corrections above (C3, C5, and the segmented-reduce half of A2) are cases where
 the capability was present and the guessed path was not.
+
+
+---
+
+# Appendix A, COMPILE-PROBED. 2026-08-19.
+
+Appendix A was crawled from documentation and flagged as never compiled.
+**That flag was right to insist on and here is the follow-through.** Every
+row below was put through `mojo build` in this toolchain. This is what the
+rest of the file means by AVAILABLE.
+
+    AVAILABLE  nn.toppminp_gpu.run_radix_sort_pairs_gpu
+    AVAILABLE  algorithm.reduce_op.ReduceOp
+    AVAILABLE  algorithm.reduce_op.ArgMin
+    AVAILABLE  algorithm.reduce_op.ArgMax
+    AVAILABLE  algorithm.rowwise.launch
+    AVAILABLE  nn.argmaxmin_gpu.argmaxmin_gpu
+    AVAILABLE  linalg.bmm.batched_matmul
+    AVAILABLE  std.gpu.primitives.id.lane_id
+    AVAILABLE  max.gpu.memory.memory.load
+    AVAILABLE  nn.moe.moe_create_indices
+    MISSING    algorithm.reductions.reduce_sum
+
+So the sweep was right on ten of eleven, and the eleventh is a wrong symbol
+name rather than a wrong package.
+
+## What this changes, in order
+
+**`algorithm.reduce_op.ArgMin` and `ArgMax` exist and compile.** This file
+has said in two places that there is "no block reduce over a custom operator"
+and "none directly" for `cub::BlockReduce<KeyValuePair>`. Both statements
+were produced by searching three paths that do not exist. The real thing is a
+monoid trait plus `algorithm.rowwise.launch`, and ArgMin is exactly the
+key-carrying reduction k-means and k-NN need.
+
+That does NOT automatically mean we should switch. `cluster/ported/distance/`
+now runs a warp-shuffle butterfly, which is what CUB's own default
+(`BLOCK_REDUCE_WARP_REDUCTIONS`) does underneath, so we are already close to
+their implementation rather than merely their call. Whether `rowwise.launch`
+beats it is a MEASUREMENT nobody has taken, and taking it needs the
+benchmark, which is on hold.
+
+**A GPU key-value radix sort exists**, `run_radix_sort_pairs_gpu`. This file
+lists `cub::DeviceRadixSort::SortPairs` and `cub::DeviceSegmentedRadixSort`
+as NOT FOUND. Both rows are wrong. It sorts each batch row independently, so
+for equal-length segments it is the segmented variant too. Caveats the sweep
+raised and probing cannot settle: `DoubleBuffer` has no published field list,
+there is no documented way to learn which half holds the result, and
+`skip_sort` has no documented always-sort value.
+
+**`linalg.qr_factorization` is HOST-ONLY.** Third instance of the same trap
+after `nn.cumsum` and `linalg.gemv`. This file had it as the device-side
+consolation prize for the missing eigensolver; it is not one.
+
+**No eigensolver, SVD, Cholesky, LU, triangular solve or lstsq exists
+anywhere**, now established by exhaustion over 524 documented pages rather
+than assumed. `jacobi_eigh_device.mojo` is not a failure to shop.
+
+**`lane_id` is in `std.gpu.primitives.id`, not `.warp`.** Corrected above.
+
+## The remaining unknown, and it is the important one
+
+**Whether a signature carrying `Optional[DeviceContext]` actually DISPATCHES
+on it.** That is unanswerable from documentation and it is not answerable by
+compiling either, because it is a RUNTIME property. `linalg.transpose` has
+exactly that shape, compiles, and signals on device pointers.
+
+So the file's three tiers are now four:
+
+    NOT FOUND        the symbol does not exist
+    CPU-ONLY         no ctx and no target in the signature
+    COMPILES         the import and the call typecheck
+    RUNS ON DEVICE   only provable by executing it
+
+Nothing may be called a substitution until it reaches the fourth tier, and
+`linalg.transpose` is the standing reminder of why.
+
+## Not searched at all
+
+`builtin_primitives`, `machine`, `matmul_rs`, `mega_ffn`, `msa`,
+`weights_registry`, `internal_utils`, and the `_cublas` / `_cudnn` / `_cufft`
+/ `_hal` / `_miopen` / `_rocblas` shims ship in the toolchain and publish no
+documentation index. `matmul_rs` is named like a matmul backend. Every NOT
+FOUND in this file is scoped to documented packages only.

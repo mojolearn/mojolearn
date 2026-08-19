@@ -555,3 +555,27 @@ Adopt one without the other and the loop reads past the partition.
 A 25-line probe confirms Metal takes `(ptr + i).load[width=4]()` for both
 `UInt32` and `Float32`. So `FourElements` is not blocked by the toolchain; it
 was simply not ported.
+
+### `select_warpsort`, 2026-08-19: COMPILES, NEVER RUN
+
+`neighbors/ported/matrix/detail/select_warpsort.mojo` is a port of RAFT's
+`select_warpsort.cuh`, the family this repository ruled UNTRANSLATABLE on the
+claim that Mojo has no warp primitives. That claim was false and the port
+exists now.
+
+**It compiles and it has never executed.** By the four tiers in
+`VENDOR_LIBRARIES.md` it is at COMPILES, not at RUNS ON DEVICE, and those are
+different things: `linalg.transpose` compiles too and signals on device
+pointers.
+
+Nothing calls it. `knn_brute_force.mojo` still selects between the ported
+radix select and `nn.topk.top_k`. Wiring it in is deliberately a separate
+step, and it must go in BESIDE those two rather than replacing either, so
+that `check_vendor_topk_matches_ported` can be extended to a three-way
+agreement. That is this repo's rule for any new selection implementation and
+it is the only thing that would catch a wrong answer here.
+
+Why it is worth finishing: RAFT's own dispatch (`select_k-inl.cuh:38`) sends
+`2 < k <= 256` to this family and only `k > 256` to radix, so every k a k-NN
+user actually asks for goes here. We currently run their second choice across
+the whole practical range.

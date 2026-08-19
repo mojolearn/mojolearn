@@ -23,18 +23,28 @@ is what `select_radix.mojo` is, and which makes it a derivative work of RAFT.
 
 `PORTED_MAP.tsv` names the upstream per row for that reason.
 
-## Why radix and not warpsort
+## Both top-k families are ported now
 
-RAFT ships two top-k families. `select_warpsort.cuh` is the FAISS WarpSelect
-design with 14 warp intrinsics, and Mojo 1.0 has none, so it is not
-expressible. `select_radix.cuh` has **zero**: `__syncthreads()` plus CUB block
-collectives, which is exactly the pair Mojo provides.
+RAFT ships two. `select_radix.cuh` has **zero** warp intrinsics:
+`__syncthreads()` plus CUB block collectives. `select_warpsort.cuh` is the
+FAISS WarpSelect design and has 14, which is why radix went first.
 
-**Their own dispatch prefers the one we cannot have.** `select_k-inl.cuh:38`
-sends `2 < k <= 256` to warpsort, which is every k a user actually asks for.
-We are on RAFT's second choice by necessity. The bar is not WarpSelect on an
-NVIDIA card, because that card cannot run here; the bar is `argpartition` on a
-CPU.
+This section used to say warpsort was **not expressible**, because Mojo 1.0
+was believed to have no warp primitives. **That was false** (`PORTING.md 2`,
+`VENDOR_LIBRARIES.md`): they are under `std.gpu.primitives.warp`, one
+namespace level below where four searches looked. `select_warpsort.mojo`
+ports `warp_sort_immediate`, its base queue, the block tree-merge and the
+dense `block_kernel`; the three `warp_sort_filtered` / `_distributed` /
+`_distributed_ext` queues are still out, for one specific reason recorded in
+that file's docstring and in `UNPORTED.tsv`.
+
+**Their own dispatch prefers warpsort.** `select_k-inl.cuh:38` sends
+`2 < k <= 256` to it and only `k > 256` to radix, which is every k a user
+actually asks for. Radix was RAFT's second choice across the whole practical
+range and this tree ran it alone. Nothing here has yet MEASURED the two
+against each other; until it has, radix stays the default and warpsort sits
+beside it so the two can be diffed. The bar is not WarpSelect on an NVIDIA
+card, because that card cannot run here; the bar is `argpartition` on a CPU.
 
 ## `core/` now exists, and it was earned rather than planned
 

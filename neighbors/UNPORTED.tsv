@@ -1,5 +1,11 @@
 # Deliberately not ported, and why.
-raft matrix/detail/select_warpsort.cuh	UNPORTABLE	14 warp intrinsics (__shfl, laneId). Mojo 1.0 has no warp primitives. This is the FAISS WarpSelect family and RAFT's own dispatch prefers it for every k a user asks for, so we are on their second choice by necessity
+raft matrix/detail/select_warpsort.cuh::warp_sort_filtered	not ported	needs set_k_th_ (:327), which is __shfl_sync with an explicit width and a DELIBERATELY out-of-range source lane k-1 (their comment, :329). Mojo shuffle_idx takes no width and reconstructing the modulo would be a guess at CUDA, not a transliteration. shuffle_xor is unaffected: bitonic only ever shuffles within an aligned subwarp
+raft matrix/detail/select_warpsort.cuh::warp_sort_distributed	not ported	same set_k_th_ blocker (:452), plus ballot/__ffs/__popc which nothing here has probed
+raft matrix/detail/select_warpsort.cuh::warp_sort_distributed_ext	not ported	same set_k_th_ blocker (:560), plus ballot/__popc and a shared-memory warp buffer
+raft matrix/detail/select_warpsort.cuh::calc_launch_parameter	not ported	the host occupancy search, built on cudaOccupancyMaxPotentialBlockSizeVariableSMem (:846) which has no counterpart here. Geometry is pinned instead; see LAUNCH GEOMETRY in select_warpsort.mojo
+raft matrix/detail/select_warpsort.cuh::select_k	not ported	the host entry point and its len_per_thread<=4 choice between immediate and filtered (:1220). With one queue ported there is nothing to choose
+raft matrix/detail/select_warpsort.cuh::csr_layout	not ported	the CSR RowLayout and in_indptr. Dense only
+raft matrix/detail/select_warpsort.cuh::kMaxGridDimY loop	not ported	host-side chunking for CUDA's 65535 grid-Y cap; the caller can loop if a batch ever exceeds it
 raft matrix/detail/select_radix.cuh::radix_topk	not ported	the MULTI-BLOCK variant, for a single very long row. One block per query row is the right shape for brute force
 cuvs neighbors/detail/knn_brute_force.cuh::DistanceEpilogue	not ported	template hook for custom epilogues; nothing here needs one
 cuvs neighbors/brute_force.cu index/search API	not ported yet	the index object and serialization. tiled_brute_force_knn is the algorithm

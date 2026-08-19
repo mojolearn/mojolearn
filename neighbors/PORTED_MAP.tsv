@@ -4,3 +4,5 @@
 #   RAFT  pinned at 9aa17e5    (the top-k primitive, TRANSLITERATED not stood in for)
 ported/neighbors/detail/knn_brute_force.mojo	cuvs cpp/src/neighbors/detail/knn_brute_force.cuh	partial	tiled_brute_force_knn, expanded metrics, query-axis tiling only
 ported/matrix/detail/select_radix.mojo	raft cpp/include/raft/matrix/detail/select_radix.cuh	partial	radix_topk_one_block only; BitsPerPass 8 not 11; CUB BlockScan replaced
+ported/matrix/detail/select_warpsort.mojo	raft cpp/include/raft/matrix/detail/select_warpsort.cuh	partial	warp_sort_immediate + block_sort + block_kernel (dense) only; the three set_k_th_ queues left out; host occupancy search replaced by a pinned geometry
+ported/matrix/detail/select_warpsort.mojo	raft cpp/include/raft/util/bitonic_sort.cuh	transliterated	merge_impl and sort_impl in full, as a comptime SIZE/BASE recursion over SIMD registers; same comparator network

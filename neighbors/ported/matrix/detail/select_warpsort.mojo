@@ -90,8 +90,8 @@ down because it looks like the same problem and is not. `bitonic_sort.cuh`
 calls `shfl_xor(key, stride, warp_width)` only with `stride < warp_width`
 (`bitonic_sort.cuh:206`, whose loop starts at `warp_width >> 1`), and the
 subwarps are power-of-two sized and aligned, so `lane ^ stride` never leaves
-the subwarp and the `width` argument cannot change the answer. Mojo's two-argument
-`shuffle_xor(value, offset)` is therefore EXACTLY their three-argument call
+the subwarp and the `width` argument cannot change the answer. Mojo's
+two-argument `shuffle_xor(value, offset)` is therefore EXACTLY their call
 on every use site in this file, not an approximation of it.
 
 THE COMPARATOR, AND HOW ITS TIES DIFFER FROM `select_radix.mojo`
@@ -165,7 +165,11 @@ DEVIATIONS, each one deliberate
    `ceildiv(block_warps, 2) * capacity`, which is `>= ceildiv(nwarps, 2) * k`
    for every legal call. At the maximum instantiation (capacity 256,
    block_warps 8) that is 4 KB per half, 8 KB total, against Metal's 32 KB
-   threadgroup budget (`PORTING.md 1`).
+   threadgroup budget (`PORTING.md 1`). A consequence: the `store` and
+   `load_sorted` overloads that face shared memory are typed
+   `UnsafePointer[..., address_space = AddressSpace.SHARED,
+   origin=MutUntrackedOrigin]` rather than `MutPointer`, because theirs is
+   one untyped `uint8_t*` and Mojo carries the address space in the type.
 
 4. **`block_sort` is two free functions, not a class.** RAFT's `block_sort`
    is a template-template wrapper whose entire job is to pick a queue type
@@ -443,18 +447,6 @@ def bitonic_sort[
 # =========================================================================
 
 
-def warp_width_of[capacity: Int]() -> Int:
-    """`kWarpWidth = std::min<int>(Capacity, WarpSize)`, `:141`."""
-    if capacity < WARP_LANES:
-        return capacity
-    return WARP_LANES
-
-
-def arr_len_of[capacity: Int]() -> Int:
-    """`kMaxArrLen = Capacity / kWarpWidth`, `:232`."""
-    return capacity // warp_width_of[capacity]()
-
-
 struct WarpSortImmediate[capacity: Int, ascending: Bool](Copyable, Movable):
     """`warp_sort_immediate<Capacity, Ascending, T, IdxT>`, `:595-658`,
     flattened together with its base `warp_sort<...>`, `:129-268`.
@@ -469,8 +461,12 @@ struct WarpSortImmediate[capacity: Int, ascending: Bool](Copyable, Movable):
     as `block_kernel:786-787` instantiates it. Payloads are UInt32 indices.
     """
 
-    comptime warp_width = warp_width_of[capacity]()
-    comptime arr_len = arr_len_of[capacity]()
+    #: `kWarpWidth = std::min<int>(Capacity, WarpSize)`, `:141`.
+    comptime warp_width = Self.capacity if Self.capacity < WARP_LANES else WARP_LANES
+    #: `kMaxArrLen = Capacity / kWarpWidth`, `:232`.
+    comptime arr_len = Self.capacity // (
+        Self.capacity if Self.capacity < WARP_LANES else WARP_LANES
+    )
 
     #: `const int k`, `:143`. The number of elements to select.
     var k: Int
@@ -491,11 +487,11 @@ struct WarpSortImmediate[capacity: Int, ascending: Bool](Copyable, Movable):
         `:603-612`, merged."""
         self.k = k
         self.val_arr = SIMD[DType.uint32, Self.arr_len](
-            dummy_key[ascending]()
+            dummy_key[Self.ascending]()
         )
         self.idx_arr = SIMD[DType.uint32, Self.arr_len](UInt32(0))
         self.val_buf = SIMD[DType.uint32, Self.arr_len](
-            dummy_key[ascending]()
+            dummy_key[Self.ascending]()
         )
         self.idx_buf = SIMD[DType.uint32, Self.arr_len](UInt32(0))
         self.buf_len = 0
@@ -513,12 +509,12 @@ struct WarpSortImmediate[capacity: Int, ascending: Bool](Copyable, Movable):
         for j in range(Self.arr_len):
             var key = self.val_arr[j]
             var other = self.val_buf[j]
-            if is_ordered[ascending](other, key):
+            if is_ordered[Self.ascending](other, key):
                 self.val_arr[j] = other
                 self.idx_arr[j] = self.idx_buf[j]
 
         bitonic_merge[Self.arr_len, 0, Self.arr_len](
-            self.val_arr, self.idx_arr, ascending, Self.warp_width
+            self.val_arr, self.idx_arr, Self.ascending, Self.warp_width
         )
 
     def add(mut self, val: UInt32, idx: UInt32):
@@ -536,13 +532,13 @@ struct WarpSortImmediate[capacity: Int, ascending: Bool](Copyable, Movable):
         self.buf_len += 1
         if self.buf_len == Self.arr_len:
             bitonic_sort[Self.arr_len, 0, Self.arr_len](
-                self.val_buf, self.idx_buf, not ascending, Self.warp_width
+                self.val_buf, self.idx_buf, not Self.ascending, Self.warp_width
             )
             self.merge_in()
 
             @parameter
             for i in range(Self.arr_len):
-                self.val_buf[i] = dummy_key[ascending]()
+                self.val_buf[i] = dummy_key[Self.ascending]()
             self.buf_len = 0
 
     def done(mut self):
@@ -553,14 +549,22 @@ struct WarpSortImmediate[capacity: Int, ascending: Bool](Copyable, Movable):
         """
         if self.buf_len != 0:
             bitonic_sort[Self.arr_len, 0, Self.arr_len](
-                self.val_buf, self.idx_buf, not ascending, Self.warp_width
+                self.val_buf, self.idx_buf, not Self.ascending, Self.warp_width
             )
             self.merge_in()
 
     def load_sorted(
         mut self,
-        in_val: MutPointer[UInt32, MutAnyOrigin],
-        in_idx: MutPointer[UInt32, MutAnyOrigin],
+        in_val: UnsafePointer[
+            Scalar[DType.uint32],
+            address_space = AddressSpace.SHARED,
+            origin=MutUntrackedOrigin,
+        ],
+        in_idx: UnsafePointer[
+            Scalar[DType.uint32],
+            address_space = AddressSpace.SHARED,
+            origin=MutUntrackedOrigin,
+        ],
         do_merge: Bool,
     ):
         """`warp_sort::load_sorted`, `:182-198`.
@@ -585,7 +589,7 @@ struct WarpSortImmediate[capacity: Int, ascending: Bool](Copyable, Movable):
             for t in range(Self.arr_len):
                 if idx < self.k:
                     var value = in_val.unsafe_load(idx)
-                    if is_ordered[ascending](
+                    if is_ordered[Self.ascending](
                         value, self.val_arr[Self.arr_len - 1 - t]
                     ):
                         self.val_arr[Self.arr_len - 1 - t] = value
@@ -598,15 +602,27 @@ struct WarpSortImmediate[capacity: Int, ascending: Bool](Copyable, Movable):
         # a comptime constant here.
         if Self.warp_width < WARP_LANES or do_merge:
             bitonic_merge[Self.arr_len, 0, Self.arr_len](
-                self.val_arr, self.idx_arr, ascending, Self.warp_width
+                self.val_arr, self.idx_arr, Self.ascending, Self.warp_width
             )
 
     def store(
         self,
-        out_val: MutPointer[UInt32, MutAnyOrigin],
-        out_idx: MutPointer[UInt32, MutAnyOrigin],
+        out_val: UnsafePointer[
+            Scalar[DType.uint32],
+            address_space = AddressSpace.SHARED,
+            origin=MutUntrackedOrigin,
+        ],
+        out_idx: UnsafePointer[
+            Scalar[DType.uint32],
+            address_space = AddressSpace.SHARED,
+            origin=MutUntrackedOrigin,
+        ],
     ):
         """`warp_sort::store` with the identity postprocessors, `:218-230`.
+
+        The two pointers are SHARED-address-space, because the only caller of
+        this overload is the block tree-merge. `store_twiddled` below is the
+        global-memory one.
 
         Their loop condition is `i < kMaxArrLen && idx < k`, an early exit.
         Written as a guard inside the comptime loop, which is the same set of
@@ -641,7 +657,7 @@ struct WarpSortImmediate[capacity: Int, ascending: Bool](Copyable, Movable):
 
 
 # =========================================================================
-# `block_sort`, `:669-741`. See DEVIATION 4 for why it is functions.
+# `block_sort`, `:672-739`. See DEVIATION 4 for why it is functions.
 # =========================================================================
 
 
@@ -649,8 +665,16 @@ def block_sort_done[
     capacity: Int, ascending: Bool
 ](
     mut queue: WarpSortImmediate[capacity, ascending],
-    val_smem: MutPointer[UInt32, MutAnyOrigin],
-    idx_smem: MutPointer[UInt32, MutAnyOrigin],
+    val_smem: UnsafePointer[
+        Scalar[DType.uint32],
+        address_space = AddressSpace.SHARED,
+        origin=MutUntrackedOrigin,
+    ],
+    idx_smem: UnsafePointer[
+        Scalar[DType.uint32],
+        address_space = AddressSpace.SHARED,
+        origin=MutUntrackedOrigin,
+    ],
 ):
     """`block_sort::done`, `:689-721`.
 
@@ -715,7 +739,7 @@ def block_sort_store[
 
 
 # =========================================================================
-# `block_kernel`, `:749-785`, dense layout only.
+# `block_kernel`, `:753-806`, dense layout only.
 # =========================================================================
 
 
@@ -746,9 +770,11 @@ def warpsort_topk_block_kernel[
     be a valid, DISTINCT buffer -- Mojo refuses the same buffer as two
     mutable kernel arguments.
     """
-    comptime WW = WarpSortImmediate[capacity, ascending].warp_width
     #: `calc_smem_size_for_block_wide`, `:661`, as two static halves.
-    #: DEVIATION 3.
+    #: DEVIATION 3. `block_warps` sizes it and the runtime `blockDim.x` is
+    #: what `block_sort_done` actually divides, so the caller's
+    #: `block_dim.x == block_warps * warp_width` contract is what keeps the
+    #: tree merge inside this allocation.
     comptime SMEM_SLOTS = ((block_warps + 1) // 2) * capacity
 
     var val_smem = stack_allocation[
