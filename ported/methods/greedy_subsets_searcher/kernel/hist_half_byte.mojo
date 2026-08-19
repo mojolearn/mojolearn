@@ -29,7 +29,7 @@ the bounds test is `fold < features[fid].Folds`.
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
-from max.gpu.sync import barrier
+from max.gpu.sync import barrier, syncwarp
 
 from mojo_only.kernel_matrix import (
     TARGET_COLUMN,
@@ -233,7 +233,14 @@ def half_byte_hist_kernel(
             for i in range(8):
                 var slot = slice_base + add_point_slot(local_bins[k], tid, i)
                 smem[slot] = smem[slot] + local_stats[k]
-                barrier()
+                # `addToHistTile.sync()`, an 8-lane
+                # `tiled_partition<8>` in theirs. `syncwarp` is 32 lanes, so
+                # it orders a SUPERSET and is still correct; it is the
+                # narrowest sync Mojo exposes. It had been widened to a
+                # threadgroup `barrier()`, which is correct and strictly
+                # more expensive. Warp SHUFFLES are what Mojo lacks, not
+                # warp SYNC, and the two were conflated.
+                syncwarp()
 
         b_ptr += stripe_size
         s_ptr += stripe_size
@@ -478,7 +485,14 @@ def half_byte_hist_gather_kernel(
             for i in range(8):
                 var slot = slice_base + add_point_slot(local_bins[k], tid, i)
                 smem[slot] = smem[slot] + local_stats[k]
-                barrier()
+                # `addToHistTile.sync()`, an 8-lane
+                # `tiled_partition<8>` in theirs. `syncwarp` is 32 lanes, so
+                # it orders a SUPERSET and is still correct; it is the
+                # narrowest sync Mojo exposes. It had been widened to a
+                # threadgroup `barrier()`, which is correct and strictly
+                # more expensive. Warp SHUFFLES are what Mojo lacks, not
+                # warp SYNC, and the two were conflated.
+                syncwarp()
 
         i_ptr += stripe_size
         s_ptr += stripe_size
