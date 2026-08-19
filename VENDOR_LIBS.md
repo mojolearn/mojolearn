@@ -1,54 +1,79 @@
-# Where CatBoost calls a vendor library, and what we should call
+# Vendor calls: what CatBoost calls, and what we should call
 
-**Rule (PORTING_RULES 0, sharpened 2026-08-19):** when the incumbent calls a
-VENDOR LIBRARY, the faithful port calls OUR vendor library. Hand-writing a
-replacement is the same category error as inventing an algorithm. CatBoost
-did not hand-write a segmented radix sort; they called CUB. Reproducing the
-CALL is the port. Reproducing the IMPLEMENTATION is inventing, and it loses
-to a kernel somebody tuned.
+**Rule (PORTING_RULES 0, sharpened 2026-08-19 by Andrew):** when the
+incumbent calls a VENDOR LIBRARY, the faithful port calls OUR vendor library.
+Hand-writing a replacement is the same category error as inventing an
+algorithm. CatBoost did not hand-write a segmented radix sort; they called
+CUB. **Reproducing the CALL is the port. Reproducing the IMPLEMENTATION is
+inventing**, and it loses to a kernel somebody tuned.
 
-## What Modular actually ships, probed 2026-08-19
+Modular ships tuned kernels that compile in this toolchain and run on Metal.
+They are the counterpart to cuBLAS, cuSOLVER, CUB and Thrust, and they are
+what the incumbents' vendor calls should map onto.
 
-Confirmed to import and compile in this toolchain, on Metal:
+---
 
-| ours | resolves | CUDA analog |
-|---|---|---|
-| `linalg.matmul.matmul` | yes | cuBLAS GEMM |
-| `nn.cumsum.cumsum` | yes | `cub::DeviceScan` |
-| `nn.argsort.argsort` | yes | `cub::DeviceRadixSort::SortPairs` |
-| `nn.gather_scatter.gather` | yes | Thrust gather |
-| `nn.topk` (module) | yes, symbol name differs | `cub::DeviceSelect` |
+## 1. What Modular ships, probed 2026-08-19
 
-Probed and NOT found under the obvious names: `algorithm.reduce`,
-`algorithm.sum`, `algorithm.scan`, `nn.reductions`, `nn.sort`. A reduction
-primitive may exist under a name not guessed here; that search is not
-finished and nothing should be hand-written on the strength of it.
+Every row below was confirmed to import and compile here.
 
-## What CatBoost calls, by file
+| Modular | CUDA counterpart |
+|---|---|
+| `linalg.matmul.matmul` | cuBLAS GEMM |
+| `nn.cumsum.cumsum` | `cub::DeviceScan::{Inclusive,Exclusive}Sum` |
+| `nn.argsort.argsort` | `cub::DeviceRadixSort::SortKeys` (full width) |
+| `nn.gather_scatter.gather` | `thrust::gather` |
+| `nn.topk.top_k` | `cub::DeviceSelect` / partial sort |
+| `nn.softmax.softmax` | fused reduce + exp, no single CUB analog |
+| `nn.concat.concat` | `thrust::copy` into a joined buffer |
 
-Grepped from their tree, `cub::|thrust::|cublas|cusolver`:
+**Probed and NOT found** under any name tried: a device-wide `reduce`, a
+`scan` taking a custom operator, and any SEGMENTED form of sort or reduce.
+`algorithm.{reduce,sum,scan}`, `nn.{reductions,reduce,sort}` and
+`algorithm.reduction` all fail to resolve. That search is not finished; do not
+hand-write on the strength of it without extending the search first.
+
+---
+
+## 2. Every vendor primitive CatBoost calls
+
+Grepped from their whole `catboost/cuda` tree.
+
+### Device-wide, i.e. things with a Modular counterpart
+
+| their file | vendor call | ours today | swap |
+|---|---|---|---|
+| `greedy_subsets_searcher/kernel/split_points.cu` | `cub::DeviceRadixSort::SortPairs` | hand-written stable partition | **NO, see section 3** |
+| `greedy_subsets_searcher/kernel/split_points.cu` | `cub::DeviceScan::ExclusiveSum` | hand-written chunk offsets | `nn.cumsum` -- OPEN |
+| `cuda_util/kernel/scan.cu` | `cub::DeviceScan::{Inclusive,Exclusive}{Sum,Scan}` | not ported | `nn.cumsum` for the Sum forms |
+| `cuda_util/kernel/reduce.cu` | `cub::DeviceReduce::Reduce`, `ReduceByKey` | not ported | nothing found yet |
+| `cuda_util/kernel/reduce.cu` | `cub::DeviceSegmentedReduce::Reduce` | hand-written `partitions_reduce` | nothing found yet |
+| `cuda_util/kernel/segmented_sort.cu` | `cub::DeviceSegmentedRadixSort::*` | not ported | nothing segmented found |
+| `cuda_util/kernel/reduce.cu` | `thrust::maximum`, `minimum`, `plus` | not ported | plain comparisons |
+| `cuda_util/kernel/mvs.cu` | `thrust::transform` | not ported | elementwise |
+| `methods/kernel/linear_cusolver.cuh` | cuSOLVER dense (`cusolverDn*`) | not ported | `linalg` -- OPEN, multiclass Newton |
+
+### Block and warp scope, i.e. things INSIDE one kernel
+
+These have no device-wide analog and are not swap candidates. They are
+ordinary kernel code and get transliterated.
 
 | their file | vendor call | ours today |
 |---|---|---|
-| `greedy_subsets_searcher/kernel/split_points.cu` | `cub::DeviceRadixSort::SortPairs` | **hand-written** segmented stable partition |
-| `greedy_subsets_searcher/kernel/split_points.cu` | `cub::DeviceScan::ExclusiveSum` | **hand-written** chunk offsets |
-| `greedy_subsets_searcher/kernel/compute_scores.cu` | `cub::BlockReduce` | **hand-written** tree reduction |
-| `greedy_subsets_searcher/kernel/histogram_utils.cu` | `cub::WarpScan`, `cub::ShuffleIndex` | **hand-written** serial scan |
-| `cuda_util/kernel/reduce.cu` | `cub::DeviceSegmentedReduce`, `thrust::maximum/minimum` | **hand-written** `partitions_reduce` |
-| `cuda_util/kernel/scan.cu` | `cub::DeviceScan::{Inclusive,Exclusive}{Sum,Scan}` | not ported |
-| `cuda_util/kernel/segmented_sort.cu` | `cub::DeviceSegmentedRadixSort::*` | not ported |
-| `methods/kernel/linear_cusolver.cuh` | cuSOLVER | not ported (multiclass Newton) |
+| `greedy_subsets_searcher/kernel/compute_scores.cu` | `cub::BlockReduce` | hand-written tree reduction |
+| `greedy_subsets_searcher/kernel/histogram_utils.cu` | `cub::WarpScan` | hand-written serial scan |
+| `greedy_subsets_searcher/kernel/histogram_utils.cu` | `cub::ShuffleIndex` | **BLOCKED**: no warp shuffles in Mojo 1.0 |
+| various | `cub::BlockRadixSort`, `cub::BlockScan` | not ported |
+| various | `cub::ThreadLoad/ThreadStore`, `cub::CacheModified*Iterator` | plain loads; these are cache-modifier hints |
+| various | `cub::LoadDirectWarpStriped` | our striping is written out longhand |
 
-**Five hand-written replacements for CUB primitives**, and every one of them
-is marked `replaced` or `partial+replaced` in `PORTED_MAP.tsv`, which is how
-they were found.
+---
 
-## `SortPairs` -> `nn.argsort`: DO NOT. Measured and refuted, 2026-08-19
+## 3. `SortPairs` -> `nn.argsort`: REFUTED, do not do it
 
-This looked like the obvious first swap and it is the wrong one, for two
-independent reasons.
+This looked like the obvious first swap. It is wrong twice over.
 
-**1. They sort ONE BIT.** `split_points.cu:676-685`:
+**They sort ONE BIT.** `split_points.cu:676-685`:
 
     cub::DeviceRadixSort::SortPairs<bool, ui32>(..., part.Size,
                                                 0,   // begin_bit
@@ -56,38 +81,44 @@ independent reasons.
                                                 stream);
 
 `begin_bit=0, end_bit=1` is a SINGLE radix pass, which is a stable partition
-by a boolean, O(n). Our three kernels -- count chunks, scan chunks, scatter
--- are precisely that. `nn.argsort` is a full argsort over a 32-bit key and
-is not segmented, so using it here means several radix passes and a composite
-key to fake the segments. It would be slower AND less faithful: the primitive
-they call and the primitive we would call are not the same primitive.
+by a boolean, O(n). Our count-chunks / scan-chunks / scatter is exactly that.
+`nn.argsort` is a full argsort over a 32-bit key and is not segmented, so
+using it means several passes plus a composite key to fake the segments.
+Slower, and LESS faithful: the primitive they call and the one we would call
+are not the same primitive.
 
-**2. It is under a tenth of the time.** Phase timings at 800k rows:
+**And it is under a tenth of the time.** At 800k rows: histogram 2.199 ms at
+only 32 features, stable partition 0.376 ms, the other six phases 1.381 ms.
+The partition's share FALLS as features grow, because it does not scale with
+them and the histogram does.
 
-    histogram alone           2.199 ms   (at only 32 features)
-    stable partition alone    0.376 ms
-    the other six phases      1.381 ms
+---
 
-The partition is about 9.5% of a level at 32 features, and its share FALLS as
-features grow because it does not scale with them while the histogram does.
-At the 100-feature benchmark it is a rounding error.
+## 4. What actually paid, and it was not a vendor call
 
-**The histogram is the target.** Within it, the barrier count: their
-`AddPoint` syncs a `tiled_partition<32>` and ours uses a threadgroup
-`barrier()`, which at 8-bit features is 4 features x 8 passes = 32
-threadgroup barriers per point. No vendor call fixes that; it needs a
-warp-level sync that Mojo does not currently expose.
+The 4.3x gap was in the histogram, and reading their kernel found two things
+that were mis-ported rather than un-ported:
 
-## The order to fix the rest in
-2. `partitions_reduce` -> whatever ships for segmented reduce, once the
-   search above is finished.
-3. The two scans -> `nn.cumsum.cumsum`.
-4. `compute_scores`'s block reduce: LAST, and possibly never. It is a
-   32-thread reduction inside one kernel, not a device-wide primitive, so
-   there may be nothing to call.
+- `ELoadSize::FourElements` (`hist_one_byte.cu:47`). They load four elements
+  per thread; we loaded one. Ported with `AlignMemoryAccess`. ~4%.
+- `tiled_partition<32>(...).sync()`. They sync a WARP; we widened it to a
+  threadgroup `barrier()`, which at 8 bits is 32 threadgroup barriers per
+  point. `syncwarp` imports from `max.gpu.sync` and had been wrongly believed
+  absent. **21%: 800k went 122.9 -> 97.3 ms/tree.**
 
-## The rule for a genuine gap
+`hist_binary` and `hist_half_byte` still widen `tiled_partition<8>` the same
+way. Same swap, not yet made.
+
+**The lesson for this file: check for a MIS-port before reaching for a vendor
+swap.** Both wins were things they already do that we did differently, and
+neither needed a library.
+
+---
+
+## 5. The rule for a genuine gap
 
 If nothing ships, hand-write it AND record the search that came up empty in a
 `DEVIATION BLOCK`, so the next person does not repeat it and does not assume
-it was never looked for.
+it was never looked for. See `metal-hardware-gaps` in memory for what the
+hardware genuinely lacks: no float `atomicAdd`, no warp shuffles, no Metal
+streams, no device-to-device copy.
