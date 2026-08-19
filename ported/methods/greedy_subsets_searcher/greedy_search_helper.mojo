@@ -1414,6 +1414,39 @@ def launch_histograms_for_blocks(
             # `doc_parallel_boosting.fit`, which was passing zero for both
             # magnitudes -- see the WHY THIS EXISTS block there. A kernel
             # that only ever ran unreplicated hides its caller's scale bug.
+            #
+            # ============ THE `* replicas` WAS REMOVED AND IS BACK ============
+            # It was taken out with the finding "our fixed-point Int32
+            # stand-in for that atomic is WRONG in this kernel", citing the
+            # depth-0 weight histogram coming back as -1.5e-08, -3.0e-08,
+            # -4.5e-08, -6.0e-08 where it should read 550, 1104, 1651, 2237.
+            #
+            # THOSE FOUR NUMBERS ARE NOT NOISE AND THEY ARE NOT THIS KERNEL.
+            # They are, to every digit given, -4, -8, -12, -16 divided by
+            # 268,435,455:
+            #
+            #     -4  / 268435455 = -1.4901e-08
+            #     -8  / 268435455 = -2.9802e-08
+            #     -12 / 268435455 = -4.4703e-08
+            #     -16 / 268435455 = -5.9605e-08
+            #
+            # 268,435,455 is `fixed_scale` when `mag` is 1.0, which is what
+            # the old scale derivation returned for the `0.0, 0.0` that
+            # `fit` was passing. At that scale `val * fixed_scale` is about
+            # 3.7e10 for a 137-row partial, the conversion saturates at
+            # INT32_MAX, and the FOUR active blocks of a 8,192-row partition
+            # sum to 4 * 2147483647 = 8589934588, which as Int32 is exactly
+            # -4. The prefix scan then walks it out to -8, -12, -16.
+            #
+            # So the kernel added its four partials correctly; the SCALE it
+            # was handed was the largest the type admits. With
+            # `choose_scale` bounding it by the sum of magnitudes, the
+            # full-dataset sum maps to at most 2^28 - 1 and a partial is a
+            # subset of it, so this cannot recur by construction.
+            #
+            # NOT RUN. `mojo_only/replicated_half_byte_check.mojo` is the
+            # check that arm asked for and it has not been executed here.
+            # ==================================================================
             if depth == 0:
                 ctx.enqueue_function[half_byte_hist_kernel](
                     blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
@@ -1423,22 +1456,7 @@ def launch_histograms_for_blocks(
                     p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
                     block_hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
                     Int32(max_leaves), Int32(stat_count),
-                    grid_dim=(groups, n_live, stat_count),
-                    # NO `* replicas`. CatBoost DOES replicate this kernel
-                    # (`hist_half_byte.cu:80-81`) and sums the partials with
-                    # `atomicAdd` when `blockCount > 1` (`:45-51`). Our
-                    # fixed-point Int32 stand-in for that atomic is WRONG in
-                    # this kernel: with replication on, the depth-0 weight
-                    # histogram came back as -1.5e-08, -3.0e-08, -4.5e-08
-                    # where it should be 550, 1104, 1651. `part_stats` was
-                    # correct, so it is the histogram alone.
-                    #
-                    # Bisected: with replication the boosting check ends at
-                    # 14.79 mse, without it at 0.61. One block is correct and
-                    # slower. Restore the `* replicas` only with a check that
-                    # compares a replicated half-byte histogram against a
-                    # host tally -- every existing half-byte check runs at
-                    # grid_dim=(1,1,1) and cannot see this.
+                    grid_dim=(groups * replicas, n_live, stat_count),
                     block_dim=(BLOCK_SIZE, 1, 1),
                 )
             else:
@@ -1451,22 +1469,7 @@ def launch_histograms_for_blocks(
                     p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
                     block_hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
                     Int32(max_leaves), Int32(stat_count),
-                    grid_dim=(groups, n_live, stat_count),
-                    # NO `* replicas`. CatBoost DOES replicate this kernel
-                    # (`hist_half_byte.cu:80-81`) and sums the partials with
-                    # `atomicAdd` when `blockCount > 1` (`:45-51`). Our
-                    # fixed-point Int32 stand-in for that atomic is WRONG in
-                    # this kernel: with replication on, the depth-0 weight
-                    # histogram came back as -1.5e-08, -3.0e-08, -4.5e-08
-                    # where it should be 550, 1104, 1651. `part_stats` was
-                    # correct, so it is the histogram alone.
-                    #
-                    # Bisected: with replication the boosting check ends at
-                    # 14.79 mse, without it at 0.61. One block is correct and
-                    # slower. Restore the `* replicas` only with a check that
-                    # compares a replicated half-byte histogram against a
-                    # host tally -- every existing half-byte check runs at
-                    # grid_dim=(1,1,1) and cannot see this.
+                    grid_dim=(groups * replicas, n_live, stat_count),
                     block_dim=(BLOCK_SIZE, 1, 1),
                 )
         else:

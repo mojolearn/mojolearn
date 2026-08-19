@@ -21,35 +21,37 @@ Timing, 800k x 100 one-byte depth 6: **~109 ms/tree**. CatBoost CPU on the
 same shape is 30.1 ms. Earlier numbers in git history are NOT comparable --
 several were taken while the histogram was silently empty.
 
-## THE OPEN BUG, highest priority
+## CLOSED: the half-byte replication bug, and what CatBoost does
 
-**Half-byte replication is DISABLED and must not be re-enabled without a
-check.** `greedy_search_helper.mojo`, the two `half_byte_hist*` launches, use
-`grid_dim=(groups, ...)` where CatBoost uses `groups * replicas`
-(`hist_half_byte.cu:80-81`).
+Half-byte replication is BACK ON, matching CatBoost
+(`hist_half_byte.cu:80-81`), and boosting is at 0.61 mse.
 
-CatBoost DOES replicate this kernel and sums partials with
-`atomicAdd(dst + fold, val)` when `blockCount > 1` (`hist_half_byte.cu:45-51`).
-Our fixed-point Int32 stand-in for that atomic is WRONG in this kernel --
-though the SAME stand-in is correct in `hist_binary.mojo`, which is the clue.
+**Root cause, and it was ours, not the kernel's.** CatBoost sums replicated
+partials with `atomicAdd(dst + fold, val)` on a FLOAT
+(`hist_half_byte.cu:45-51`) -- no scaling, no range limit. Metal has no float
+atomic, so we quantize into an Int32 accumulator by `fixed_scale`
+(`mojo_only/fixed_point.mojo`). That scale comes from `choose_scale(mag)`,
+where `mag` must be a sum of absolute values that BOUNDS every partial the
+device forms.
 
-Evidence, depth-0 weight histogram of the boosting fixture:
+The boosting loop was passing a magnitude that did not bound them. With
+`SCALE_LIMIT = 2^28 - 1` and a magnitude near 4, the scale came out at 2^26,
+and a weight count of 550 times 2^26 overflows Int32. The histogram came back
+as `-1.5e-08, -3.0e-08, ...`, which is exactly `-1 / 2^26` accumulating.
 
-    correct   550, 1104, 1651, 2237, 2812, 3308, 3783, 4328
-    with rep  -1.5e-08, -3.0e-08, -4.5e-08, -6.0e-08, ...
+`doc_parallel_boosting.mojo` now computes the true sum of magnitudes for both
+planes before each tree, and the scale bounds the partials. Restoring
+replication after that is safe and is what CatBoost does.
 
-`part_stats` was identical, so the histogram alone dies. Boosting goes
-0.61 -> 14.79 mse.
+**The lesson worth keeping:** a fixed-point substitution for a float atomic
+carries a RANGE CONTRACT the original does not have. Every caller that feeds
+`choose_scale` is part of that contract. Grep for `choose_scale` before
+touching any accumulator.
 
-**Why no check caught it: every half-byte check runs at `grid_dim=(1,1,1)`.**
-The multi-block path of that kernel has never been executed by any test.
-
-Next step: diff `hist_half_byte.mojo`'s `acc_i32` address arithmetic against
-`hist_binary.mojo`'s, which works. Their writebacks differ -- binary decodes
-a combination (`hist_binary.cu:47-56`), half-byte reads `smem[fid + 8*fold]`
-(`hist_half_byte.cu:33-43`) -- so the acc offset almost certainly needs to
-mirror the half-byte writeback, not the binary one. THEN write a check that
-compares a REPLICATED half-byte histogram against a host tally.
+**Still true and still a gap:** every half-byte check runs at
+`grid_dim=(1,1,1)`, so the multi-block path is exercised only by the boosting
+check, indirectly. A check comparing a REPLICATED half-byte histogram against
+a host tally is still missing.
 
 ## Method that works, and the one that does not
 

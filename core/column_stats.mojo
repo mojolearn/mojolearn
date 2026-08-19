@@ -475,3 +475,51 @@ def scale_in_place_kernel(
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < Int(n_in):
         a.unsafe_store(i, a.unsafe_load(i) * scale_in)
+
+
+
+comptime TRANSPOSE_TILE = 32
+
+
+def transpose_kernel(
+    dst: MutPointer[Float32, MutAnyOrigin],
+    src: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+    n_cols_in: Int32,
+):
+    """`dst[n_cols x n_rows] = src[n_rows x n_cols]^T`, tiled through shared.
+
+    NOT A PORT. `linalg.transpose` exists, compiles, and SIGNALS at runtime on
+    device buffers — it dispatches into a HOST strided-copy path. This is the
+    twenty-line kernel that `core/gemm.mojo` named as the alternative route
+    and that nobody had written.
+
+    Tiled and padded so both the read and the write are coalesced: a naive
+    transpose is coalesced on exactly one side and strided on the other,
+    which costs more than the whole operation is worth.
+    """
+    var n_rows = Int(n_rows_in)
+    var n_cols = Int(n_cols_in)
+    var tile = stack_allocation[
+        TRANSPOSE_TILE * (TRANSPOSE_TILE + 1),
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+
+    var tx = Int(thread_idx.x)
+    var ty = Int(thread_idx.y)
+    var r0 = Int(block_idx.y) * TRANSPOSE_TILE
+    var c0 = Int(block_idx.x) * TRANSPOSE_TILE
+
+    var r = r0 + ty
+    var c = c0 + tx
+    if r < n_rows and c < n_cols:
+        tile[ty * (TRANSPOSE_TILE + 1) + tx] = src.unsafe_load(r * n_cols + c)
+    barrier()
+
+    var r2 = c0 + ty
+    var c2 = r0 + tx
+    if r2 < n_cols and c2 < n_rows:
+        dst.unsafe_store(
+            r2 * n_rows + c2, tile[tx * (TRANSPOSE_TILE + 1) + ty]
+        )

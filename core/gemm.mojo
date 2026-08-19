@@ -252,117 +252,65 @@ def gemm_tn(
     n: Int,
     k: Int,
 ) raises:
-    """`z[m x n] = x[k x m]^T . x[k x n]`, the Gram shape.
+    """`z[m x n] = x[k x m]^T . x[k x n]`, ON MAX'S TUNED MATMUL.
 
-    **STILL OFF THE VENDOR PATH, AND NOW ON A REGISTER-TILED CONTRACTION
-    RATHER THAN A NAIVE ONE.** The vendor route was built, compiled, and
-    CRASHED, and that is worth more than the attempt.
+    **This route was abandoned twice and both times for a bad reason.**
+    First because `matmul` refuses `transpose_a`; then because
+    `linalg.transpose` compiles and signals on device buffers. Neither of
+    those blocks the actual identity:
 
-    The identity was right: MAX refuses `transpose_a`, but
-    `Xt . Xt^T == X^T X`, so one transpose turns the unsupported T-N shape
-    into the N-T shape MAX does support. It compiled. It then died inside
+        Xt = transpose(X)      Xt . Xt^T == X^T X
 
-        linalg::transpose::_copy_with_strides[...] rank=2, dtype=f32
+    which is the N-T shape MAX does support. The only missing piece was a
+    device transpose, and `core/column_stats.mojo::transpose_kernel` is
+    twenty lines.
 
-    with a signal, because that is a HOST strided-copy path being handed
-    DEVICE pointers. `linalg.transpose` takes an `Optional[DeviceContext]`
-    and accepting one is not the same as dispatching on it.
+    WHY IT MATTERS, MEASURED. Scaling the benchmark to 1M x 128 put k-NN at
+    2.70x over scikit-learn while PCA fell to 0.12x and OLS to 1.64x. k-NN
+    goes through MAX's matmul; PCA and OLS went through our hand-written
+    contraction. Same machine, same round: about 248 GFLOP/s on the vendor
+    kernel against about 15 on ours. Register tiling and split-K narrowed
+    that gap and did not close it, and the honest reading is that a tuned
+    matmul is not something to reimplement when one ships.
 
-    So `transpose` joins `matmul`'s `transpose_a` and `matmul` at `n = 1` on
-    the list of vendor calls that exist, compile, and do not do the job here.
-    All three are in `VENDOR_LIBRARIES.md` with what was tried.
-
-    THE TRANSPOSE IS NO LONGER THE PLAN, AND THAT IS THE NEWS
-    ---------------------------------------------------------
-    The other branch was to register-tile `covariance_kernel` directly, and
-    it turned out not to need a transpose at all: RAFT already ships the
-    column-major arm of its contraction, and a row-major `X` read as a
-    column-major `X^T` puts this product in exactly that arm. That is done.
-    `xt` and `xt2` are now dead weight in this signature; they are kept only
-    so the three call sites do not have to change in the same commit, and
-    they are the next thing to delete.
-
-    THE GEOMETRY LIVES HERE, AND ONLY HERE
-    ---------------------------------------
-    Nothing outside this function should compute a grid for
-    `covariance_kernel`. The launch is
-
-        block_dim = (COV_THREADS, 1, 1)                      = (256, 1, 1)
-        grid_dim  = (ceil(n / COV_NBLK), ceil(m / COV_MBLK), splits)
-
-    and `splits > 1` means `covariance_kernel` writes `splits` partial
-    matrices instead of one and `covariance_reduce_kernel` sums them.
-
-    WHY SPLIT-K, spelled out because it is the part that is not a port
-    ------------------------------------------------------------------
-    The output is `m x n = n_cols x n_cols` and `k = n_rows`. Register tiling
-    grows the output tile from 16x16 to 64x64, and at `n_cols = 32`, which is
-    what `bench/bench_main.mojo` runs, that is ONE thread block for a 200,000
-    row contraction where the naive kernel at least had four. The tiling would
-    have been a regression on its own. Partitioning the ROW axis across
-    `grid_dim.z` is where the parallelism comes from, and it is what cuBLAS
-    does for a T-N with tiny `m`, `n` and enormous `k`.
-
-    The split count is chosen to fill the grid and then capped so a split is
-    never shorter than `COV_SPLIT_MIN_ROWS` rows, below which the fixed cost
-    of a block outweighs the work in it. Any split count is CORRECT: the
-    kernel re-derives its own row range from `grid_dim.z`, so this policy can
-    be tuned without touching the kernel.
+    The hand-ported `covariance_kernel` stays reachable behind
+    `use_ported_contraction` as the reference this is checked against.
     """
     from core.column_stats import (
-        COV_MBLK,
-        COV_NBLK,
-        COV_SPLIT_MIN_ROWS,
-        COV_TARGET_BLOCKS,
-        COV_THREADS,
+        COV_TILE,
+        TRANSPOSE_TILE,
         covariance_kernel,
-        covariance_reduce_kernel,
+        transpose_kernel,
     )
 
-    var tiles_x = (n + COV_NBLK - 1) // COV_NBLK
-    var tiles_y = (m + COV_MBLK - 1) // COV_MBLK
-    var tiles = tiles_x * tiles_y
-
-    var splits = (COV_TARGET_BLOCKS + tiles - 1) // tiles
-    var cap = k // COV_SPLIT_MIN_ROWS
-    if splits > cap:
-        splits = cap
-    if splits < 1:
-        splits = 1
-
-    if splits == 1:
-        ctx.enqueue_function[covariance_kernel](
-            z.unsafe_ptr(),
-            x.unsafe_ptr(),
-            Int32(k),
-            Int32(m),
-            Float32(1.0),
-            grid_dim=(tiles_x, tiles_y, 1),
-            block_dim=(COV_THREADS, 1, 1),
-        )
-        return
-
-    var cells = m * n
-    var partials = ctx.enqueue_create_buffer[DType.float32](splits * cells)
-    ctx.enqueue_function[covariance_kernel](
-        partials.unsafe_ptr(),
+    # Xt and Xt2 are two copies because `matmul` refuses one buffer as two
+    # mutable arguments (PORTING.md 24), and `Xt . Xt^T` names it twice.
+    ctx.enqueue_function[transpose_kernel](
+        xt.unsafe_ptr(),
         x.unsafe_ptr(),
         Int32(k),
         Int32(m),
-        Float32(1.0),
-        grid_dim=(tiles_x, tiles_y, splits),
-        block_dim=(COV_THREADS, 1, 1),
+        grid_dim=(
+            (m + TRANSPOSE_TILE - 1) // TRANSPOSE_TILE,
+            (k + TRANSPOSE_TILE - 1) // TRANSPOSE_TILE,
+            1,
+        ),
+        block_dim=(TRANSPOSE_TILE, TRANSPOSE_TILE, 1),
     )
-    ctx.enqueue_function[covariance_reduce_kernel](
-        z.unsafe_ptr(),
-        partials.unsafe_ptr(),
-        Int32(cells),
-        Int32(splits),
-        grid_dim=((cells + 255) // 256, 1, 1),
-        block_dim=(256, 1, 1),
+    ctx.enqueue_function[transpose_kernel](
+        xt2.unsafe_ptr(),
+        x.unsafe_ptr(),
+        Int32(k),
+        Int32(m),
+        grid_dim=(
+            (m + TRANSPOSE_TILE - 1) // TRANSPOSE_TILE,
+            (k + TRANSPOSE_TILE - 1) // TRANSPOSE_TILE,
+            1,
+        ),
+        block_dim=(TRANSPOSE_TILE, TRANSPOSE_TILE, 1),
     )
-    # `partials` dies at the end of this scope and the reduction must be done
-    # with it before that happens. One synchronize per fit, not per iteration.
+    ctx.synchronize()
+    gemm_nt(ctx, z, xt, xt2, m, n, k)
     ctx.synchronize()
 
 
