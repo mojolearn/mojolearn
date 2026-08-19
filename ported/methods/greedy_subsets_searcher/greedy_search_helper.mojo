@@ -70,7 +70,10 @@ from ported.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
     one_byte_hist_kernel,
 )
 from ported.gpu_data.feature_blocks import PolicyBlock, blocks_for
-from ported.gpu_data.compressed_index_builder import build_layout
+from ported.gpu_data.compressed_index_builder import (
+    CompressedIndexLayout,
+    build_layout,
+)
 from ported.gpu_util.copy import (
     COPY_BLOCK,
     copy_f32_kernel,
@@ -107,7 +110,10 @@ from ported.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
     one_byte_hist_kernel,
 )
 from ported.gpu_data.feature_blocks import PolicyBlock, blocks_for
-from ported.gpu_data.compressed_index_builder import build_layout
+from ported.gpu_data.compressed_index_builder import (
+    CompressedIndexLayout,
+    build_layout,
+)
 from ported.gpu_util.copy import (
     COPY_BLOCK,
     copy_f32_kernel,
@@ -1066,3 +1072,43 @@ def launch_histograms_for_blocks(
                     grid_dim=(replicas, n_live, stat_count),
                     block_dim=(ONE_BYTE_BLOCK_SIZE, 1, 1),
                 )
+
+
+@fieldwise_init
+struct SplitChoice(Copyable, Movable):
+    """A winning bin-feature, resolved back to (feature, bin).
+
+    The score kernel returns an index into the FLAT histogram, which spans
+    every policy. Turning that into a split needs the owning feature and the
+    bin within it, which `first_fold_index` makes an O(features) host walk.
+    CatBoost does the same resolution on the host (`ToSplit` in
+    `greedy_search_helper.cpp`).
+    """
+
+    var bin_feature: Int
+    var feature: Int
+    var bin: Int
+
+
+def resolve_split(
+    layout: CompressedIndexLayout, bin_feature: Int
+) raises -> SplitChoice:
+    """Which feature owns this bin-feature, and which of its bins is it.
+
+    O(features) on the host, which is the right side of the boundary: it
+    scales with the TREE's feature count, never with rows. See
+    HOST_AND_DEVICE.md.
+    """
+    for i in range(len(layout.features)):
+        ref f = layout.features[i]
+        if f.folds == 0:
+            continue
+        var lo = Int(f.first_fold_index)
+        var hi = lo + Int(f.folds)
+        if bin_feature >= lo and bin_feature < hi:
+            return SplitChoice(bin_feature, i, bin_feature - lo)
+    raise Error(
+        "bin-feature "
+        + String(bin_feature)
+        + " belongs to no feature; the histogram and the layout disagree"
+    )

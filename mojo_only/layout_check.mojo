@@ -7,6 +7,7 @@ everywhere and nothing downstream would look suspicious.
 
 from ported.gpu_data.compressed_index_builder import build_layout
 from ported.gpu_data.feature_blocks import blocks_for
+from ported.methods.greedy_subsets_searcher.greedy_search_helper import resolve_split
 from ported.gpu_data.grid_policy import (
     POLICY_BINARY,
     POLICY_HALF_BYTE,
@@ -157,3 +158,69 @@ def check_feature_blocks() raises:
     if wrong != 0:
         raise Error("feature blocks are wrong")
     print("  every policy's block carries its own contiguous fold slices")
+
+
+def check_split_resolution() raises:
+    """Does a flat bin-feature index resolve to the right (feature, bin)?
+
+    The score kernel returns an index into ONE flat histogram spanning every
+    policy. Turning that into a split needs the owning feature and the bin
+    within it. Getting this wrong produces a split on the wrong feature at a
+    plausible bin, which trains, converges to something, and is silently the
+    wrong model.
+
+    Checked at every boundary: the first and last bin of each feature, and
+    across the policy changes where the flat index crosses from one block's
+    slice to another's.
+    """
+    var folds = List[Int]()
+    folds.append(1)
+    folds.append(2)
+    folds.append(15)
+    folds.append(16)
+    folds.append(200)
+    folds.append(0)
+    folds.append(1)
+
+    var lay = build_layout(folds)
+    var wrong = 0
+    var expect_first = 0
+
+    for i in range(len(folds)):
+        if folds[i] == 0:
+            continue
+        # first bin of this feature
+        var lo = resolve_split(lay, expect_first)
+        if lo.feature != i or lo.bin != 0:
+            wrong += 1
+            print(
+                "    bin-feature", expect_first, "-> feature", lo.feature,
+                "bin", lo.bin, " expected feature", i, "bin 0",
+            )
+        # last bin of this feature
+        var last = expect_first + folds[i] - 1
+        var hi = resolve_split(lay, last)
+        if hi.feature != i or hi.bin != folds[i] - 1:
+            wrong += 1
+            print(
+                "    bin-feature", last, "-> feature", hi.feature,
+                "bin", hi.bin, " expected feature", i, "bin", folds[i] - 1,
+            )
+        expect_first += folds[i]
+
+    # past the end must raise rather than return a plausible answer
+    var raised = False
+    try:
+        var bad = resolve_split(lay, lay.hist_cells + 5)
+        _ = bad.feature
+    except:
+        raised = True
+    if not raised:
+        wrong += 1
+        print("    an out-of-range bin-feature must raise")
+
+    print("  resolved", expect_first, "bin-features across 3 policies")
+    print("  resolution errors:", wrong)
+    if wrong != 0:
+        raise Error("split resolution is wrong")
+    print("  every feature boundary and policy crossing resolves correctly")

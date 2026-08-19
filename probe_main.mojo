@@ -1,6 +1,10 @@
 from mojo_only.launch_probe import probe
 from mojo_only.options_check import check_options
-from mojo_only.layout_check import check_feature_blocks, check_layout
+from mojo_only.layout_check import (
+    check_feature_blocks,
+    check_layout,
+    check_split_resolution,
+)
 from mojo_only.level_check import check_one_level, check_tree
 from mojo_only.hist_dump_check import check_hist_depends_on_partition
 from mojo_only.level_bench import (
@@ -283,6 +287,7 @@ def main() raises:
     print("compressed index layout (host):")
     check_layout()
     check_feature_blocks()
+    check_split_resolution()
     print()
     print("ONE FULL LEVEL (GPU, end to end):")
     check_hist_depends_on_partition()
