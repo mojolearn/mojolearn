@@ -13,13 +13,13 @@ computing on garbage.
 
 from max.gpu.host import DeviceContext
 
-from catboost.cuda.gpu_data.grid_policy import (
+from ported.gpu_data.grid_policy import (
     POLICY_BINARY,
     features_per_int,
     policy_mask,
     policy_shift,
 )
-from catboost.cuda.gpu_data.kernel.binarize import (
+from ported.gpu_data.kernel.binarize import (
     WRITE_BLOCK_SIZE,
     write_compressed_index_kernel,
 )

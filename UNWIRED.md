@@ -1,6 +1,6 @@
 # Built here, not yet reached
 
-**Two categories exist in this tree and only two:** `catboost/` is a port of
+**Two categories exist in this tree and only two:** `ported/` is a port of
 a real file of theirs, and `mojo_only/` is something they never needed. There
 is no third category of "good idea worth adopting" -- if it is in their
 source it is simply PORTED or NOT PORTED YET, and this file tracks the

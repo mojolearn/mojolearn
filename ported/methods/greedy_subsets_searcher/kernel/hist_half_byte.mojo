@@ -35,7 +35,7 @@ from mojo_only.kernel_matrix import (
     TARGET_COLUMN,
     requires_uniform_iteration_for,
 )
-from catboost.cuda.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
+from ported.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
     BLOCK_SIZE,
     HIST_SIZE,
     REDUCE_WIDTH,

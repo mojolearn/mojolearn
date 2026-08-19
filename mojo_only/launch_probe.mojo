@@ -15,11 +15,11 @@ compute nonsense; that is what the level loop's digests will be for.
 
 from max.gpu.host import DeviceContext
 
-from catboost.cuda.methods.greedy_subsets_searcher.kernel.compute_scores import compute_optimal_splits_kernel
-from catboost.cuda.methods.greedy_subsets_searcher.kernel.hist_binary import binary_hist_kernel
-from catboost.cuda.methods.greedy_subsets_searcher.kernel.hist_half_byte import half_byte_hist_kernel
-from catboost.cuda.methods.greedy_subsets_searcher.kernel.split_points import split_and_make_sequence_kernel
-from catboost.cuda.methods.greedy_subsets_searcher.kernel.histogram_utils import (
+from ported.methods.greedy_subsets_searcher.kernel.compute_scores import compute_optimal_splits_kernel
+from ported.methods.greedy_subsets_searcher.kernel.hist_binary import binary_hist_kernel
+from ported.methods.greedy_subsets_searcher.kernel.hist_half_byte import half_byte_hist_kernel
+from ported.methods.greedy_subsets_searcher.kernel.split_points import split_and_make_sequence_kernel
+from ported.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     scan_histograms_kernel,
     substract_histograms_kernel,
 )

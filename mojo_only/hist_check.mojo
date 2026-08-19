@@ -27,37 +27,37 @@ from mojo_only.stable_partition import (
     stable_partition_kernel,
 )
 
-from catboost.cuda.gpu_data.grid_policy import (
+from ported.gpu_data.grid_policy import (
     POLICY_BINARY,
     POLICY_HALF_BYTE,
     features_per_int,
     policy_mask,
     policy_shift,
 )
-from catboost.cuda.gpu_data.kernel.binarize import (
+from ported.gpu_data.kernel.binarize import (
     WRITE_BLOCK_SIZE,
     write_compressed_index_kernel,
 )
-from catboost.cuda.methods.greedy_subsets_searcher.kernel.hist_binary import (
+from ported.methods.greedy_subsets_searcher.kernel.hist_binary import (
     binary_hist_kernel,
 )
-from catboost.cuda.methods.greedy_subsets_searcher.kernel.split_points import (
+from ported.methods.greedy_subsets_searcher.kernel.split_points import (
     split_and_make_sequence_kernel,
     update_partitions_after_split_kernel,
 )
-from catboost.cuda.methods.greedy_subsets_searcher.kernel.compute_scores import (
+from ported.methods.greedy_subsets_searcher.kernel.compute_scores import (
     compute_optimal_splits_kernel,
 )
-from catboost.cuda.methods.greedy_subsets_searcher.kernel.histogram_utils import (
+from ported.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     copy_histograms_kernel,
     scan_histograms_kernel,
     substract_histograms_kernel,
     zero_histograms_kernel,
 )
-from catboost.cuda.methods.greedy_subsets_searcher.kernel.hist_half_byte import (
+from ported.methods.greedy_subsets_searcher.kernel.hist_half_byte import (
     half_byte_hist_kernel,
 )
-from catboost.cuda.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
+from ported.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
     BLOCK_SIZE,
 )
 

@@ -35,7 +35,7 @@ is a property of this file, not of either kernel, and it is the kind of thing
 that gets lost if the loop is written last.
 """
 
-from catboost.cuda.methods.greedy_subsets_searcher.split_properties_helper import (
+from ported.methods.greedy_subsets_searcher.split_properties_helper import (
     HISTOGRAMS_PREVIOUS_PATH,
     HISTOGRAMS_ZEROES,
     LeafRecord,

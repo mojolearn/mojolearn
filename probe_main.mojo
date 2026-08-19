@@ -12,7 +12,7 @@ from mojo_only.hist_check import (
     check_subtraction,
     check_two_partitions,
 )
-from catboost.cuda.methods.greedy_subsets_searcher.structure_searcher_template import (
+from ported.methods.greedy_subsets_searcher.structure_searcher_template import (
     grow_tree_schedule,
 )
 from mojo_only.fixed_point import (
@@ -38,16 +38,16 @@ from mojo_only.kernel_matrix import (
     column_shared_limit,
     hist_floats_per_thread_for,
 )
-from catboost.cuda.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
+from ported.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
     BLOCK_SIZE,
     HIST_SIZE,
     REDUCE_WIDTH,
 )
-from catboost.cuda.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
+from ported.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
     ONE_BYTE_BLOCK_SIZE,
     ONE_BYTE_HIST_SIZE,
 )
-from catboost.cuda.methods.greedy_subsets_searcher.split_properties_helper import (
+from ported.methods.greedy_subsets_searcher.split_properties_helper import (
     HISTOGRAMS_PREVIOUS_PATH,
     HISTOGRAMS_ZEROES,
     LeafRecord,

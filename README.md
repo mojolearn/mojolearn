@@ -41,17 +41,17 @@ Specifically forbidden in this tree:
 CatBoost commit `54a8143a`, `catboost/cuda/`. Symmetric (oblivious) growth,
 GPU, pointwise objectives.
 
-**The tree mirrors CatBoost's, file for file**, so a reviewer can put
-`catboost/cuda/.../hist_binary.mojo` beside their `hist_binary.cu` and diff
+**The tree mirrors CatBoost's tree, file for file, with their constant `catboost/cuda/` prefix dropped**, so a reviewer can put
+`ported/methods/.../hist_binary.mojo` beside their `hist_binary.cu` and diff
 them, and so "did we port this file?" is answered by `ls` rather than by
 reading. Anything with no CatBoost counterpart lives under `mojo_only/` and
 has to justify its existence there.
 
 | stage | CatBoost source | port |
 |---|---|---|
-| feature grouping and bit packing | `gpu_data/grid_policy.h` | `catboost/cuda/gpu_data/grid_policy.mojo` |
-| leaf as a contiguous range | `cuda_util/gpu_data/partitions.h` | `catboost/cuda/cuda_util/gpu_data/partitions.mojo` |
-| histogram, binary (32 features/ui32) | `methods/greedy_subsets_searcher/kernel/hist_binary.cu` | `catboost/cuda/methods/greedy_subsets_searcher/kernel/hist_binary.mojo` |
+| feature grouping and bit packing | `gpu_data/grid_policy.h` | `ported/gpu_data/grid_policy.mojo` |
+| leaf as a contiguous range | `cuda_util/gpu_data/partitions.h` | `ported/cuda_util/gpu_data/partitions.mojo` |
+| histogram, binary (32 features/ui32) | `methods/greedy_subsets_searcher/kernel/hist_binary.cu` | `ported/methods/greedy_subsets_searcher/kernel/hist_binary.mojo` |
 | histogram, half-byte (8/ui32) | `.../hist_half_byte.cu`, `point_hist_half_byte_template.cuh` | `.../kernel/hist_half_byte.mojo` |
 | histogram, one-byte (4/ui32) | `.../hist_one_byte.cu`, `compute_hist_loop_two_stats.cuh` | `.../kernel/hist_one_byte.mojo` |
 | bin prefix scan, sibling subtraction | `.../histogram_utils.cu` | `.../kernel/histogram_utils.mojo` |
