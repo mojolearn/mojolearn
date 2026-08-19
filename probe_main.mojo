@@ -7,6 +7,7 @@ from mojo_only.level_bench import (
     bench_partition_only,
     bench_remaining_phases,
     bench_replication_interleaved,
+    bench_wide_histogram_interleaved,
     bench_tree,
 )
 from mojo_only.pack_check import check_packing
@@ -285,6 +286,7 @@ def main() raises:
     bench_histogram_only(500000, 20)
     bench_partition_only(500000, 20)
     bench_remaining_phases(500000, 20)
+    bench_wide_histogram_interleaved(500000, 7)
     bench_replication_interleaved(500000, 6, 5)
     bench_tree(500000, 1, 3)
     bench_tree(500000, 2, 3)

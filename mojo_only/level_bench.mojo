@@ -52,6 +52,10 @@ from ported.methods.greedy_subsets_searcher.kernel.split_points import (
     split_and_make_sequence_kernel,
     update_partitions_after_split_kernel,
 )
+from ported.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
+    ONE_BYTE_BLOCK_SIZE,
+    one_byte_hist_kernel,
+)
 from ported.methods.greedy_subsets_searcher.kernel.hist_binary import (
     binary_hist_kernel,
 )
@@ -689,4 +693,118 @@ def bench_replication_interleaved(
     arms.append(summarize(String("replicas=1 "), s1))
     arms.append(summarize(String("replicas=32"), s32))
     print("  depth", max_depth, "tree,", n_rows, "rows, arms interleaved:")
+    report(arms)
+
+
+def bench_wide_histogram_interleaved(n_rows: Int, repeats: Int) raises:
+    """Does replication pay when the histogram is thousands of cells?
+
+    The open question from the replication experiment. At 32 binary features
+    the histogram is 64 cells and 1 replica is indistinguishable from 32. The
+    arithmetic says replication should pay once there are enough output cells
+    that atomic contention stops dominating, which is CatBoost's actual shape
+    (100 features at up to 256 bins).
+
+    So: the ONE-BYTE kernel at 8 bits, 4 features per word, 256 folds each.
+    That is 1,024 cells per feature group against 64, sixteen times the
+    output, and it is the kernel CatBoost built the pass loop for.
+
+    Arms interleaved, because the last time this question was answered across
+    runs the answer was wrong.
+    """
+    var ctx = DeviceContext()
+    var n_features = 4
+    var n_folds = 256
+    var group_size = n_features * n_folds
+
+    var cindex = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+    var hz = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
+    for r in range(n_rows):
+        var x = UInt32(r * 2654435761 + 0x2545F491)
+        x ^= x << 13
+        x ^= x >> 17
+        x ^= x << 5
+        hz.unsafe_ptr().unsafe_store(r, x)
+    ctx.enqueue_copy(dst_buf=cindex, src_ptr=hz.unsafe_ptr())
+
+    var stats = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    var hs = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
+    for r in range(n_rows):
+        hs.unsafe_ptr().unsafe_store(r, Float32(1.0))
+    ctx.enqueue_copy(dst_buf=stats, src_ptr=hs.unsafe_ptr())
+
+    var p_off = ctx.enqueue_create_buffer[DType.uint32](1)
+    var p_sz = ctx.enqueue_create_buffer[DType.uint32](1)
+    var p_ids = ctx.enqueue_create_buffer[DType.uint32](1)
+    var a = ctx.enqueue_create_host_buffer[DType.uint32](1)
+    var b = ctx.enqueue_create_host_buffer[DType.uint32](1)
+    var c = ctx.enqueue_create_host_buffer[DType.uint32](1)
+    a.unsafe_ptr().unsafe_store(0, UInt32(0))
+    b.unsafe_ptr().unsafe_store(0, UInt32(n_rows))
+    c.unsafe_ptr().unsafe_store(0, UInt32(0))
+    ctx.enqueue_copy(dst_buf=p_off, src_ptr=a.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=p_sz, src_ptr=b.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=p_ids, src_ptr=c.unsafe_ptr())
+
+    var folds = ctx.enqueue_create_buffer[DType.uint32](n_features)
+    var fold_off = ctx.enqueue_create_buffer[DType.uint32](n_features)
+    var grp_off = ctx.enqueue_create_buffer[DType.uint32](n_features)
+    var grp_sz = ctx.enqueue_create_buffer[DType.uint32](n_features)
+    var q1 = ctx.enqueue_create_host_buffer[DType.uint32](n_features)
+    var q2 = ctx.enqueue_create_host_buffer[DType.uint32](n_features)
+    var q3 = ctx.enqueue_create_host_buffer[DType.uint32](n_features)
+    var q4 = ctx.enqueue_create_host_buffer[DType.uint32](n_features)
+    for f in range(n_features):
+        q1.unsafe_ptr().unsafe_store(f, UInt32(n_folds))
+        q2.unsafe_ptr().unsafe_store(f, UInt32(f * n_folds))
+        q3.unsafe_ptr().unsafe_store(f, UInt32(0))
+        q4.unsafe_ptr().unsafe_store(f, UInt32(group_size))
+    ctx.enqueue_copy(dst_buf=folds, src_ptr=q1.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=fold_off, src_ptr=q2.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=grp_off, src_ptr=q3.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=grp_sz, src_ptr=q4.unsafe_ptr())
+
+    var sums = ctx.enqueue_create_buffer[DType.float32](group_size)
+    ctx.synchronize()
+
+    var s1 = List[Float64]()
+    var s16 = List[Float64]()
+
+    for rep in range(repeats + 1):
+        for arm in range(2):
+            var reps = 1 if arm == 0 else 16
+            var t0 = perf_counter_ns()
+            ctx.enqueue_function[one_byte_hist_kernel[8]](
+                folds.unsafe_ptr(), fold_off.unsafe_ptr(),
+                grp_off.unsafe_ptr(), grp_sz.unsafe_ptr(),
+                Int32(n_features), cindex.unsafe_ptr(), Int32(n_rows),
+                stats.unsafe_ptr(), Int32(n_rows),
+                p_off.unsafe_ptr(), p_sz.unsafe_ptr(), p_ids.unsafe_ptr(),
+                sums.unsafe_ptr(), Int32(1), Int32(1),
+                grid_dim=(reps, 1, 1),
+                block_dim=(ONE_BYTE_BLOCK_SIZE, 1, 1),
+            )
+            ctx.synchronize()
+            var dt = Float64(perf_counter_ns() - t0) / 1.0e6
+            if rep == 0:
+                continue
+            if arm == 0:
+                s1.append(dt)
+            else:
+                s16.append(dt)
+
+    var arms = List[ArmResult]()
+    arms.append(summarize(String("1 block  "), s1))
+    arms.append(summarize(String("16 blocks"), s16))
+    print(
+        "  one-byte 8-bit histogram,",
+        n_features,
+        "features x",
+        n_folds,
+        "folds =",
+        group_size,
+        "cells,",
+        n_rows,
+        "rows:",
+    )
     report(arms)

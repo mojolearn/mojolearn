@@ -412,3 +412,31 @@ def deterministic_flush_for[column: Int, identical: Bool]() -> Bool:
     if identical:
         return True
     return not column_has_float_atomics(column)
+
+
+def replicas_for(hist_cells: Int) -> Int:
+    """How many blocks should share one partition, from the OUTPUT size.
+
+    SCHEDULING row: it changes how many partial sums are formed, which under
+    a fixed-point flush is order-independent and therefore does not move the
+    answer. Under a float flush it would be numeric, which is one more reason
+    Apple's forced integer accumulator is convenient rather than costly.
+
+    **Fitted to two measured points, not to arithmetic**, and the interval
+    between them is not measured:
+
+        64 cells    1 block vs 32:  1.03x, INDISTINGUISHABLE
+        1024 cells  1 block vs 16:  8.56x, RESOLVED, ranges disjoint
+
+    The mechanism is contention on the flush. A narrow histogram means every
+    replica block lands on the same few atomic addresses, so replication buys
+    parallelism and pays it straight back. A wide one disperses the writes.
+
+    The threshold is placed at 256 cells because both measured points are far
+    from it and a boundary between them has to go somewhere; it is a guess
+    about WHERE the effect turns on, not about WHETHER it does. Measure the
+    interval before treating 256 as meaningful.
+    """
+    if hist_cells >= 256:
+        return 16
+    return 1

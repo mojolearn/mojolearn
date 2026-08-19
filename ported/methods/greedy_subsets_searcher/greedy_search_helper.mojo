@@ -54,6 +54,7 @@ from ported.methods.leaves_estimation.leaves_estimation import (
     LEAF_BLOCK,
     compute_leaf_values_kernel,
 )
+from mojo_only.kernel_matrix import replicas_for
 from ported.gpu_util.copy import (
     COPY_BLOCK,
     copy_f32_kernel,
@@ -74,6 +75,7 @@ from ported.methods.leaves_estimation.leaves_estimation import (
     LEAF_BLOCK,
     compute_leaf_values_kernel,
 )
+from mojo_only.kernel_matrix import replicas_for
 from ported.gpu_util.copy import (
     COPY_BLOCK,
     copy_f32_kernel,
@@ -411,7 +413,7 @@ def run_tree(
     mut row_index: DeviceBuffer[DType.uint32],
     total_weight: Float32,
     total_gradient: Float32,
-    hist_replicas: Int = 1,
+    hist_replicas: Int = 0,  # 0 means ask the matrix
 ) raises -> List[Int]:
     """`FitImpl`'s loop: grow a whole oblivious tree, level by level.
 
@@ -499,10 +501,15 @@ def run_tree(
     # apart. `mojo_only/interleaved.mojo` exists for that reason and
     # overturned the claim the first time it ran.
     #
-    # So the default is 1 because 32 buys nothing measurable HERE, not
-    # because 32 costs anything. The arithmetic still says replication should
-    # pay once the histogram is thousands of cells rather than the 64 that 32
-    # binary features produce, and that shape has not been measured.
+    # THAT SHAPE HAS NOW BEEN MEASURED and replication pays enormously
+    # there: the one-byte kernel at 4 features by 256 folds, 1,024 cells, is
+    # **8.56x faster with 16 blocks than with 1, ranges disjoint**. So the
+    # factor is not a constant, it is a function of the OUTPUT size, and
+    # `replicas_for` in the matrix owns it. Passing 0 here asks the matrix;
+    # a positive value overrides it so the two can still be interleaved.
+    var replicas = hist_replicas
+    if replicas <= 0:
+        replicas = replicas_for(stat_count * n_features)
 
     var part_stats = ctx.enqueue_create_buffer[DType.float32](
         max_leaves * stat_count
@@ -629,7 +636,7 @@ def run_tree(
                 p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids_a.unsafe_ptr(),
                 hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
                 Int32(max_leaves), Int32(stat_count),
-                grid_dim=(hist_replicas, n_live, stat_count),
+                grid_dim=(replicas, n_live, stat_count),
                 block_dim=(BLOCK_SIZE, 1, 1),
             )
         else:
@@ -642,7 +649,7 @@ def run_tree(
                 p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids_a.unsafe_ptr(),
                 hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
                 Int32(max_leaves), Int32(stat_count),
-                grid_dim=(hist_replicas, n_live, stat_count),
+                grid_dim=(replicas, n_live, stat_count),
                 block_dim=(BLOCK_SIZE, 1, 1),
             )
 
