@@ -66,8 +66,12 @@ from gbdt.models.model_text import (
     parse_f64,
     save_model,
 )
+from gbdt.models.ctr_value_table import TCtrValueTable
 from gbdt.models.oblivious_model import (
+    BIN_SPLIT_TAKE_BIN,
+    BIN_SPLIT_TAKE_GREATER,
     TAdditiveModel,
+    bin_split_type_name,
     TBinarySplit,
     TObliviousTreeModel,
     TObliviousTreeStructure,
@@ -244,6 +248,16 @@ def compare_models(a: TrainedModel, b: TrainedModel, label: String) raises:
             if wa.structure.splits[d].bin_idx != wb.structure.splits[d].bin_idx:
                 raise Error(label + ": tree " + String(t) + " level "
                             + String(d) + " bin differs")
+            if (
+                wa.structure.splits[d].split_type
+                != wb.structure.splits[d].split_type
+            ):
+                raise Error(label + ": tree " + String(t) + " level "
+                            + String(d) + " SPLIT TYPE differs: "
+                            + bin_split_type_name(
+                                Int(wa.structure.splits[d].split_type))
+                            + " vs " + bin_split_type_name(
+                                Int(wb.structure.splits[d].split_type)))
         if len(wa.leaf_values) != len(wb.leaf_values):
             raise Error(label + ": tree " + String(t) + " leaf count "
                         + String(len(wa.leaf_values)) + " vs "
@@ -262,6 +276,47 @@ def compare_models(a: TrainedModel, b: TrainedModel, label: String) raises:
             if not _same_f32(wa.leaf_weights[i], wb.leaf_weights[i]):
                 raise Error(label + ": tree " + String(t) + " weight "
                             + String(i) + " differs bitwise")
+    if a.ctr_column_count != b.ctr_column_count:
+        raise Error(label + ": ctr_column_count "
+                    + String(a.ctr_column_count) + " vs "
+                    + String(b.ctr_column_count))
+    if len(a.ctr_tables) != len(b.ctr_tables):
+        raise Error(label + ": CTR table count " + String(len(a.ctr_tables))
+                    + " vs " + String(len(b.ctr_tables)))
+    for k in range(len(a.ctr_tables)):
+        ref ta = a.ctr_tables[k]
+        ref tb = b.ctr_tables[k]
+        if ta.column != tb.column or ta.source_feature != tb.source_feature:
+            raise Error(label + ": CTR table " + String(k)
+                        + " column/source differs")
+        if ta.ctr_type != tb.ctr_type:
+            raise Error(label + ": CTR table " + String(k) + " type differs")
+        if ta.counter_denominator != tb.counter_denominator:
+            raise Error(label + ": CTR table " + String(k)
+                        + " denominator " + String(ta.counter_denominator)
+                        + " vs " + String(tb.counter_denominator))
+        if not _same_f32(ta.prior_num, tb.prior_num):
+            raise Error(label + ": CTR table " + String(k)
+                        + " prior_num differs bitwise")
+        if not _same_f32(ta.prior_denom, tb.prior_denom):
+            raise Error(label + ": CTR table " + String(k)
+                        + " prior_denom differs bitwise")
+        if not _same_f32(ta.shift, tb.shift):
+            raise Error(label + ": CTR table " + String(k)
+                        + " shift differs bitwise")
+        if not _same_f32(ta.scale, tb.scale):
+            raise Error(label + ": CTR table " + String(k)
+                        + " scale differs bitwise")
+        if len(ta.counts) != len(tb.counts):
+            raise Error(label + ": CTR table " + String(k) + " has "
+                        + String(len(ta.counts)) + " categories vs "
+                        + String(len(tb.counts)))
+        for c in range(len(ta.counts)):
+            if ta.counts[c] != tb.counts[c]:
+                raise Error(label + ": CTR table " + String(k)
+                            + " category " + String(c) + " count "
+                            + String(ta.counts[c]) + " vs "
+                            + String(tb.counts[c]))
 
 
 def assert_not_degenerate(tm: TrainedModel, label: String) raises -> Int:
@@ -382,10 +437,18 @@ def build_synthetic(ctr_columns: Int = 0) raises -> TrainedModel:
             # alternate the two features that HAVE bins, with a bin index
             # inside each one's range
             if (t + lvl) % 3 == 2:
-                st.splits.append(TBinarySplit(Int32(2), Int32((lvl % 3))))
+                st.splits.append(
+                    TBinarySplit(
+                        Int32(2), Int32((lvl % 3)),
+                        Int32(BIN_SPLIT_TAKE_BIN),
+                    )
+                )
             else:
                 st.splits.append(
-                    TBinarySplit(Int32(0), Int32(1 + ((lvl * 5 + t) % 14)))
+                    TBinarySplit(
+                        Int32(0), Int32(1 + ((lvl * 5 + t) % 14)),
+                        Int32(BIN_SPLIT_TAKE_GREATER),
+                    )
                 )
         var tree = TObliviousTreeModel(st^)
         var n_leaves = 1 << depth
@@ -419,7 +482,7 @@ def build_synthetic(ctr_columns: Int = 0) raises -> TrainedModel:
     losses.append(Float64(-0.0))
 
     return TrainedModel(m^, fold_counts^, one_hot^, borders^, losses^,
-                        ctr_columns)
+                        ctr_columns, List[TCtrValueTable]())
 
 
 def check_synthetic_roundtrip(ctx: DeviceContext) raises:
@@ -534,20 +597,12 @@ def _training_data(
 def check_trained_roundtrip(ctx: DeviceContext) raises:
     """A trained model with a ONE-HOT feature, through save and load.
 
-    THE CATEGORY COUNT IS THREE AND THAT IS NOT ARBITRARY. `train`'s
-    compressed index is written by `_build_cindex_from_floats`, which derives
-    each feature's fold count as `len(borders[f])`, while `fit` and `predict`
-    are handed `TrainedModel.fold_counts`, which for a one-hot feature is
-    `len(borders[f]) + 1`. `policy_for_fold_count` sends 15 folds to
-    HALF_BYTE and 16 to ONE_BYTE, so at SIXTEEN categories the layout that
-    writes the compressed index and the layout that reads it disagree.
-    Measured on a fixture whose target is a pure function of the category
-    (scratch probe, 2026-08-20): k = 2, 3, 4 and 17 all reach a final loss
-    of 1e-5 or below against a variance near 10, and k = 16 reaches 8.48
-    against a variance of 9.87 -- it does not learn at all. That is a defect
-    in `gbdt/train.mojo`, which this lane does not own; three categories
-    keeps this gate on the side of it that works, so that a failure here is
-    a serialization failure.
+    THREE CATEGORIES, so that a failure here is a SERIALIZATION failure and
+    not a layout one. The fold-count step function
+    (`policy_for_fold_count`) is swept on both sides of every step by
+    `mojo_only/one_hot_cardinality_check.mojo` and again, end to end
+    through save, load and both apply paths, by
+    `mojo_only/ctr_apply_check.mojo`.
     """
     print("  trained model with a one-hot feature:")
     var n = 4096
@@ -675,12 +730,12 @@ def evaluator_predict(
 def check_evaluator_agrees(ctx: DeviceContext) raises:
     """The loaded model through THEIR OWN GPU evaluator.
 
-    NO ONE-HOT FEATURE HERE, and that is not an oversight. The evaluator's
-    only split predicate is `bucket >= SplitIdx`; its `XorMask` slot, which
-    is where CatBoost keeps the one-hot machinery, is documented in
-    `evaluator.mojo` as staying zero. A categorical model therefore cannot
-    be scored through the device path at all yet, so this part uses a
-    float-only model and the gap is reported rather than papered over.
+    NO ONE-HOT FEATURE HERE, and that is a division of labour rather than a
+    gap: this part pins the FLOAT-ONLY arm of the evaluator, the one whose
+    kernel must not move when the one-hot arm exists. The `XorMask` arm and
+    a categorical model through the device path are
+    `mojo_only/ctr_apply_check.mojo`, which also proves the arm is reached
+    by flipping the predicate and watching 405 of 512 rows move.
 
     EIGHT TREES, and that is not arbitrary either. The evaluator's
     cross-block reduce ends in a float atomicAdd, which is order-dependent

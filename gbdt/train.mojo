@@ -29,6 +29,12 @@ from gbdt.ctrs.ctr_binarization import (
 )
 from gbdt.ctrs.ctr_calcers import compute_simple_ctrs
 from gbdt.grid_creator.binarization import best_split
+from gbdt.models.ctr_value_table import (
+    TCtrValueTable,
+    build_feature_freq_tables,
+    column_plan,
+    expand_raw_columns,
+)
 from gbdt.methods.doc_parallel_boosting import TAdditiveModel, fit, predict
 from gbdt.options.catboost_options import (
     COUNTER_CALC_FULL,
@@ -50,12 +56,18 @@ struct TrainedModel(Movable):
     var losses: List[Float64]
     var ctr_column_count: Int
     """How many of the columns above are CTR values rather than raw input
-    features. Nonzero means `predict_floats` cannot apply this model to new
-    raw rows: the CTR values were computed from the LEARN pool, and scoring
-    a new row needs the final CTR tables their model file carries
-    (`ctr_data.hash_map` in `save_model(format='json')`). No model file
-    format exists here for the numeric case either, so that is a
-    prerequisite rather than a CTR task -- `RECON_CTRS.md` step 5."""
+    features. It is a SAFETY count: a model that declares CTR columns and
+    carries no tables for them cannot be applied to raw rows, and
+    `predict_floats` refuses it. It survives serialization for exactly that
+    reason -- a round trip that dropped it would turn a model that refuses
+    into one that silently scores."""
+    var ctr_tables: List[TCtrValueTable]
+    """The apply-time CTR tables, one per CTR column, their
+    `ctr_data.hash_map` (`libs/model/ctr_value_table.h`). With these
+    present and covering every declared CTR column, `predict_floats` maps a
+    raw category to the statistic the LEARN pool produced and scores the
+    row; without them it refuses. See
+    `gbdt/models/ctr_value_table.mojo`."""
 
 
 def _build_cindex_from_floats(
@@ -221,6 +233,7 @@ def train(
     """-1 for a raw column, otherwise an index into `ctr_grids`."""
     var ctr_grids = List[TBinarizationOptions]()
     var ctr_column_count = 0
+    var ctr_tables = List[TCtrValueTable]()
 
     var configs = cat_params.simple_ctr_configs()
 
@@ -284,6 +297,17 @@ def train(
             List[UInt8](),
             cat_params.counter_calc_method == COUNTER_CALC_FULL,
         )
+        # the APPLY-TIME half of the same statistic: their
+        # `CalcFinalCtrs` writes a `TCtrValueTable` beside every CTR the
+        # model uses, because the learn column cannot score a new row.
+        # Built from the codes rather than from the columns, so it is the
+        # counts and the priors that travel and not the divided values --
+        # see gbdt/models/ctr_value_table.mojo.
+        var tables = build_feature_freq_tables(
+            codes, unique_values, configs, f, len(columns)
+        )
+        for c in range(len(tables)):
+            ctr_tables.append(tables[c].copy())
         for c in range(len(ctr_columns)):
             columns.append(ctr_columns[c].copy())
             column_one_hot.append(False)
@@ -375,7 +399,23 @@ def train(
         borders^,
         losses^,
         ctr_column_count,
+        ctr_tables^,
     )
+
+
+def model_input_features(tm: TrainedModel) raises -> Int:
+    """How many RAW input columns `predict_floats` expects for this model.
+
+    For a float-only or one-hot model that is just the column count. For a
+    model with CTR tables it is fewer, because one categorical input stands
+    behind one column per CTR config -- the shape their
+    `TStaticCtrProvider` reconstructs from the model rather than being
+    told."""
+    if len(tm.ctr_tables) == 0:
+        return len(tm.fold_counts)
+    return column_plan(
+        tm.ctr_tables, len(tm.fold_counts)
+    ).n_input_features
 
 
 def predict_floats(
@@ -386,27 +426,55 @@ def predict_floats(
 ) raises -> List[Float32]:
     """Apply a trained model to NEW raw floats: quantize against the
     model's own grid (as their predict does internally), then the
-    tree-wise apply the probe suite pins to the learn cursor."""
+    tree-wise apply the probe suite pins to the learn cursor.
+
+    ## What `x_colmajor` holds for a CATEGORICAL model
+
+    RAW INPUT COLUMNS, not model columns. A high-cardinality categorical
+    input is REPLACED by one CTR column per config
+    (`binarizations_manager.cpp:106-115`), so a model can have more columns
+    than the caller has features; the categorical column still arrives as
+    its DENSE CODES and this function maps each code through the model's
+    CTR tables before quantizing, which is their
+    `TStaticCtrProvider::CalcCtrs` step
+    (`libs/model/static_ctr_provider.cpp:14-71`) run ahead of the
+    quantizer. For a model with no CTR tables the two spaces are the same
+    and nothing about the old contract changes.
+
+    ## The refusal, and when it lifts
+
+    A CTR value is a statistic of the LEARN pool, so a model that declares
+    CTR columns and does not carry their tables cannot score a new row at
+    all, and this refuses rather than quantizing raw codes against a grid
+    built for frequencies. It lifts when the tables are PRESENT and cover
+    every declared CTR column -- never merely because the count went
+    missing, which is why `ctr_column_count` travels through save and load
+    beside them."""
     var n_features = len(tm.fold_counts)
-    if tm.ctr_column_count > 0:
+    if tm.ctr_column_count != len(tm.ctr_tables):
         raise Error(
             "predict_floats cannot apply a model with "
             + String(tm.ctr_column_count)
-            + " CTR columns: a CTR value is a statistic of the LEARN pool,"
+            + " CTR columns and "
+            + String(len(tm.ctr_tables))
+            + " CTR tables: a CTR value is a statistic of the LEARN pool,"
             " and scoring a new row needs the final CTR tables their model"
             " file carries (ctr_data.hash_map in save_model(format='json')"
-            "). The numeric model file format landed in"
-            " gbdt/models/model_text.mojo and reserves ctr_table /"
-            " ctr_entry / ctr_borders records for those tables; they are"
-            " not built yet -- RECON_CTRS.md step 5. The count travels"
-            " through save and load precisely so this refusal survives a"
-            " round trip. Refused rather than scored against a grid the"
-            " rows were never mapped onto"
+            "). Refused rather than scored against a grid the rows were"
+            " never mapped onto"
         )
-    if len(x_colmajor) != n_rows * n_features:
-        raise Error("x_colmajor size mismatch")
+    var expanded: List[Float32]
+    if len(tm.ctr_tables) == 0:
+        if len(x_colmajor) != n_rows * n_features:
+            raise Error("x_colmajor size mismatch")
+        expanded = x_colmajor.copy()
+    else:
+        # their CalcCtrs, then the ordinary quantizer
+        expanded = expand_raw_columns(
+            tm.ctr_tables, n_features, x_colmajor, n_rows
+        )
     var cindex = _build_cindex_from_floats(
-        ctx, x_colmajor, n_rows, tm.borders, tm.fold_counts
+        ctx, expanded, n_rows, tm.borders, tm.fold_counts
     )
     var cursor = ctx.enqueue_create_buffer[DType.float32](n_rows)
     predict(

@@ -27,15 +27,46 @@ feature's bin for a lane's 4 docs:
 (`evaluator.cpp:32`, `cpuRepackedBin.FeatureIndex * WarpSize`), so the
 kernel adds it to the tile base directly. `FeatureVal` is the CPU
 repack's `SplitIdx` = training bin index + 1, because the split predicate
-is `bucket >= SplitIdx` where training stored `bin > bin_idx`. The
-`XorMask` member is one-hot machinery and stays zero here exactly as it
-is zero for their float splits.
+is `bucket >= SplitIdx` where training stored `bin > bin_idx`.
+
+THE ONE-HOT ARM, AND WHOSE PREDICATE IT IS. `TGPURepackedBin` carries a
+third member, `FeatureXorMask` (`evaluator.cuh:14`), and their GPU kernel
+never reads it -- because their GPU evaluator REFUSES a categorical model
+outright: `CB_ENSURE(!model.HasCategoricalFeatures(), "Model contains
+categorical features, GPU evaluation impossible")` (`evaluator.cpp:22`).
+The mask is not a gap in their kernel, it is a member their CPU evaluator
+uses and their GPU one inherits unused.
+
+So the predicate is TAKEN FROM THEIR CPU EVALUATOR rather than invented.
+Their repack (`libs/model/model.cpp:566-572`):
+
+    if (feature.Type != ESplitType::OneHotFeature) {
+        rb.SplitIdx = featureIndex.SplitIdx;
+    } else {
+        rb.XorMask = ((~featureIndex.SplitIdx) & 0xff);
+        rb.SplitIdx = 0xff;
+    }
+
+and their predicate (`libs/model/cpu/evaluator_impl.cpp:38`):
+
+    indexesVec[docId] |= ((binFeaturePtr[docId] ^ xorMask) >= borderVal)
+                         << depth;
+
+`(b ^ (~v & 0xff)) >= 0xff` holds exactly when `b == v` for a byte, so
+one branch-free form covers both predicates and a float split keeps the
+identical arithmetic under `xorMask == 0`. Their CPU dispatch templates
+the mask away when no split needs it (`NeedXorMask`,
+`evaluator_impl.cpp:16`, `:257`); this file mirrors that with a comptime
+kernel parameter picked from the model, so a float-only model runs the
+byte-for-byte kernel it ran before this arm existed. Recorded as a
+deviation in `PORTING.md`, because their GPU evaluator declines the case
+and ours takes it.
 
 DEVIATIONS, all stated:
 * by-value structs -> parallel scalar arrays (as every kernel in this
   port): repacked bins arrive as `bin_feature_idx` (u32, pre-scaled) +
-  `bin_feature_val` (u32) arrays; the uchar4 is a `UInt32` unpacked by
-  byte shifts.
+  `bin_feature_val` (u32) + `bin_feature_xor` (u32) arrays; the uchar4 is
+  a `UInt32` unpacked by byte shifts.
 * their results pipeline converts to FLOAT64 with model scale/bias
   (`ProcessResultsImpl`); Metal has no float64, our models have
   scale 1 / bias 0, so the Float32 accumulator IS the prediction and
@@ -207,11 +238,12 @@ def gpu_binarize_kernel[search_mode: Int = quantize_search_for[TARGET_COLUMN]()]
 
 
 def _calc_tree_index[
-    unroll_depth: Int
+    unroll_depth: Int, need_xor_mask: Bool
 ](
     depth: Int,
     bin_feature_idx: MutPointer[UInt32, MutAnyOrigin],
     bin_feature_val: MutPointer[UInt32, MutAnyOrigin],
+    bin_feature_xor: MutPointer[UInt32, MutAnyOrigin],
     split_base: Int,
     quantized: MutPointer[UInt32, MutAnyOrigin],
     quant_base: Int,
@@ -223,6 +255,13 @@ def _calc_tree_index[
     6/7/8 arm; 0 is the generic loop. Their `+=` instead of `|=` is an
     A100 compiler workaround (MLTOOLS-6839) and either is exact here;
     `+=` is kept verbatim.
+
+    `need_xor_mask` is their CPU evaluator's template parameter
+    (`cpu/evaluator_impl.cpp:16`, `:257`): under `False` this is their GPU
+    kernel unchanged, under `True` every compare becomes
+    `(bucket ^ xorMask) >= FeatureVal` (`:38`), which is the one-hot
+    predicate. See the file docstring for whose predicate it is and why
+    their own GPU arm does not carry it.
     """
 
     @parameter
@@ -237,10 +276,15 @@ def _calc_tree_index[
             var fi = Int(ldg(bin_feature_idx + (split_base + d)))
             var fv = ldg(bin_feature_val + (split_base + d))
             var buckets = ldg(quantized + (quant_base + fi))
+            var xm = UInt32(0)
+
+            @parameter
+            if need_xor_mask:
+                xm = ldg(bin_feature_xor + (split_base + d))
 
             @parameter
             for k in range(EVAL_OBJECTS_PER_THREAD):
-                var b = (buckets >> UInt32(8 * k)) & UInt32(255)
+                var b = ((buckets >> UInt32(8 * k)) & UInt32(255)) ^ xm
                 if b >= fv:
                     idx[k] += UInt32(1 << d)
     else:
@@ -248,21 +292,27 @@ def _calc_tree_index[
             var fi = Int(ldg(bin_feature_idx + (split_base + d)))
             var fv = ldg(bin_feature_val + (split_base + d))
             var buckets = ldg(quantized + (quant_base + fi))
+            var xm = UInt32(0)
+
+            @parameter
+            if need_xor_mask:
+                xm = ldg(bin_feature_xor + (split_base + d))
 
             @parameter
             for k in range(EVAL_OBJECTS_PER_THREAD):
-                var b = (buckets >> UInt32(8 * k)) & UInt32(255)
+                var b = ((buckets >> UInt32(8 * k)) & UInt32(255)) ^ xm
                 if b >= fv:
                     idx[k] += UInt32(1 << d)
 
 
-def eval_oblivious_trees_kernel(
+def eval_oblivious_trees_kernel[need_xor_mask: Bool = False](
     quantized: MutPointer[UInt32, MutAnyOrigin],
     tree_sizes: MutPointer[UInt32, MutAnyOrigin],
     tree_count_in: Int32,
     tree_start_offsets: MutPointer[UInt32, MutAnyOrigin],
     bin_feature_idx: MutPointer[UInt32, MutAnyOrigin],
     bin_feature_val: MutPointer[UInt32, MutAnyOrigin],
+    bin_feature_xor: MutPointer[UInt32, MutAnyOrigin],
     first_leaf_offset: MutPointer[UInt32, MutAnyOrigin],
     ext_tree_block_width_in: Int32,
     buckets_count_in: Int32,
@@ -327,24 +377,24 @@ def eval_oblivious_trees_kernel(
         for tree in range(first_tree, last_tree):
             var depth = Int(ldg(tree_sizes + tree))
             if depth == 6:
-                _calc_tree_index[6](
-                    depth, bin_feature_idx, bin_feature_val, split_base,
-                    quantized, quant_base, idx,
+                _calc_tree_index[6, need_xor_mask](
+                    depth, bin_feature_idx, bin_feature_val, bin_feature_xor,
+                    split_base, quantized, quant_base, idx,
                 )
             elif depth == 7:
-                _calc_tree_index[7](
-                    depth, bin_feature_idx, bin_feature_val, split_base,
-                    quantized, quant_base, idx,
+                _calc_tree_index[7, need_xor_mask](
+                    depth, bin_feature_idx, bin_feature_val, bin_feature_xor,
+                    split_base, quantized, quant_base, idx,
                 )
             elif depth == 8:
-                _calc_tree_index[8](
-                    depth, bin_feature_idx, bin_feature_val, split_base,
-                    quantized, quant_base, idx,
+                _calc_tree_index[8, need_xor_mask](
+                    depth, bin_feature_idx, bin_feature_val, bin_feature_xor,
+                    split_base, quantized, quant_base, idx,
                 )
             else:
-                _calc_tree_index[0](
-                    depth, bin_feature_idx, bin_feature_val, split_base,
-                    quantized, quant_base, idx,
+                _calc_tree_index[0, need_xor_mask](
+                    depth, bin_feature_idx, bin_feature_val, bin_feature_xor,
+                    split_base, quantized, quant_base, idx,
                 )
 
             @parameter
@@ -401,7 +451,10 @@ def eval_oblivious_trees_kernel(
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from gbdt.models.oblivious_model import TAdditiveModel
+from gbdt.models.oblivious_model import (
+    BIN_SPLIT_TAKE_BIN,
+    TAdditiveModel,
+)
 
 
 @fieldwise_init
@@ -414,8 +467,13 @@ struct GpuEvaluatorModel(Movable):
     var first_leaf: DeviceBuffer[DType.uint32]
     var bf_idx: DeviceBuffer[DType.uint32]
     var bf_val: DeviceBuffer[DType.uint32]
+    var bf_xor: DeviceBuffer[DType.uint32]
     var leaves: DeviceBuffer[DType.float32]
     var tree_count: Int
+    var need_xor_mask: Bool
+    """Their `NeedXorMask` dispatch (`cpu/evaluator_impl.cpp:257`,
+    `:428-437`): true iff some split in this model is one-hot. A float-only
+    model runs the kernel it ran before the one-hot arm existed."""
 
 
 def pack_model_for_evaluator(
@@ -441,6 +499,7 @@ def pack_model_for_evaluator(
     var first_leaf = ctx.enqueue_create_buffer[DType.uint32](n_trees)
     var bf_idx = ctx.enqueue_create_buffer[DType.uint32](total_levels)
     var bf_val = ctx.enqueue_create_buffer[DType.uint32](total_levels)
+    var bf_xor = ctx.enqueue_create_buffer[DType.uint32](total_levels)
     var leaves = ctx.enqueue_create_buffer[DType.float32](total_leaves)
 
     var h1 = ctx.enqueue_create_host_buffer[DType.uint32](n_trees)
@@ -448,10 +507,12 @@ def pack_model_for_evaluator(
     var h3 = ctx.enqueue_create_host_buffer[DType.uint32](n_trees)
     var h4 = ctx.enqueue_create_host_buffer[DType.uint32](total_levels)
     var h5 = ctx.enqueue_create_host_buffer[DType.uint32](total_levels)
+    var h7 = ctx.enqueue_create_host_buffer[DType.uint32](total_levels)
     var h6 = ctx.enqueue_create_host_buffer[DType.float32](total_leaves)
 
     var lvl = 0
     var leaf = 0
+    var need_xor_mask = False
     for t in range(n_trees):
         ref weak = model.weak_models[t]
         var depth = weak.structure.get_depth()
@@ -464,10 +525,26 @@ def pack_model_for_evaluator(
                 UInt32(Int(weak.structure.splits[level].feature_id))
                 * UInt32(EVAL_WARP),
             )
-            h5.unsafe_ptr().unsafe_store(
-                lvl,
-                UInt32(Int(weak.structure.splits[level].bin_idx) + 1),
-            )
+            var bin_idx = Int(weak.structure.splits[level].bin_idx)
+            if (
+                Int(weak.structure.splits[level].split_type)
+                == BIN_SPLIT_TAKE_BIN
+            ):
+                # their `model.cpp:569-570` for an `ESplitType::OneHotFeature`
+                if bin_idx < 0 or bin_idx > 254:
+                    raise Error(
+                        "a one-hot split on category " + String(bin_idx)
+                        + " cannot be repacked: the bucket is one byte and"
+                        " 255 is the predicate's own sentinel"
+                    )
+                h5.unsafe_ptr().unsafe_store(lvl, UInt32(0xFF))
+                h7.unsafe_ptr().unsafe_store(
+                    lvl, UInt32((~bin_idx) & 0xFF)
+                )
+                need_xor_mask = True
+            else:
+                h5.unsafe_ptr().unsafe_store(lvl, UInt32(bin_idx + 1))
+                h7.unsafe_ptr().unsafe_store(lvl, UInt32(0))
             lvl += 1
         var n_leaves = 1 << depth
         for i in range(n_leaves):
@@ -481,11 +558,12 @@ def pack_model_for_evaluator(
     ctx.enqueue_copy(dst_buf=first_leaf, src_ptr=h3.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=bf_idx, src_ptr=h4.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=bf_val, src_ptr=h5.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=bf_xor, src_ptr=h7.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=leaves, src_ptr=h6.unsafe_ptr())
     ctx.synchronize()
     return GpuEvaluatorModel(
-        tree_sizes^, tree_starts^, first_leaf^, bf_idx^, bf_val^,
-        leaves^, n_trees,
+        tree_sizes^, tree_starts^, first_leaf^, bf_idx^, bf_val^, bf_xor^,
+        leaves^, n_trees, need_xor_mask,
     )
 
 
@@ -556,17 +634,30 @@ def launch_eval(
         + EVAL_TREE_SUB_BLOCK_WIDTH * ext_width
         - 1
     ) // (EVAL_TREE_SUB_BLOCK_WIDTH * ext_width)
-    ctx.enqueue_function[eval_oblivious_trees_kernel](
-        quantized.unsafe_ptr(), m.tree_sizes.unsafe_ptr(),
-        Int32(m.tree_count), m.tree_starts.unsafe_ptr(),
-        m.bf_idx.unsafe_ptr(), m.bf_val.unsafe_ptr(),
-        m.first_leaf.unsafe_ptr(), Int32(ext_width), Int32(n_feats),
-        m.leaves.unsafe_ptr(), Int32(n_rows), results.unsafe_ptr(),
-        grid_dim=(
-            tree_grid,
-            (n_rows + EVAL_DOC_BLOCK_SIZE * EVAL_OBJECTS_PER_THREAD - 1)
-            // (EVAL_DOC_BLOCK_SIZE * EVAL_OBJECTS_PER_THREAD),
-            1,
-        ),
-        block_dim=(EVAL_DOC_BLOCK_SIZE, EVAL_TREE_SUB_BLOCK_WIDTH, 1),
-    )
+    var doc_grid = (
+        n_rows + EVAL_DOC_BLOCK_SIZE * EVAL_OBJECTS_PER_THREAD - 1
+    ) // (EVAL_DOC_BLOCK_SIZE * EVAL_OBJECTS_PER_THREAD)
+    # their `NeedXorMask` dispatch: one kernel or the other, never a
+    # runtime test inside the level loop
+    if m.need_xor_mask:
+        ctx.enqueue_function[eval_oblivious_trees_kernel[True]](
+            quantized.unsafe_ptr(), m.tree_sizes.unsafe_ptr(),
+            Int32(m.tree_count), m.tree_starts.unsafe_ptr(),
+            m.bf_idx.unsafe_ptr(), m.bf_val.unsafe_ptr(),
+            m.bf_xor.unsafe_ptr(),
+            m.first_leaf.unsafe_ptr(), Int32(ext_width), Int32(n_feats),
+            m.leaves.unsafe_ptr(), Int32(n_rows), results.unsafe_ptr(),
+            grid_dim=(tree_grid, doc_grid, 1),
+            block_dim=(EVAL_DOC_BLOCK_SIZE, EVAL_TREE_SUB_BLOCK_WIDTH, 1),
+        )
+    else:
+        ctx.enqueue_function[eval_oblivious_trees_kernel[False]](
+            quantized.unsafe_ptr(), m.tree_sizes.unsafe_ptr(),
+            Int32(m.tree_count), m.tree_starts.unsafe_ptr(),
+            m.bf_idx.unsafe_ptr(), m.bf_val.unsafe_ptr(),
+            m.bf_xor.unsafe_ptr(),
+            m.first_leaf.unsafe_ptr(), Int32(ext_width), Int32(n_feats),
+            m.leaves.unsafe_ptr(), Int32(n_rows), results.unsafe_ptr(),
+            grid_dim=(tree_grid, doc_grid, 1),
+            block_dim=(EVAL_DOC_BLOCK_SIZE, EVAL_TREE_SUB_BLOCK_WIDTH, 1),
+        )
