@@ -147,4 +147,7 @@ strided arm; UNMEASURED, awaiting the bench window.
 
 ## Commits
 
-(filled at commit time below)
+- `50451a9 parent c2aa6a0` -- the remap + checks + this report (parent is
+  a PEER commit that landed in the shared checkout after this lane's last
+  log read; mojotrees-shared-checkout-parents rule).
+- The report-finalization commit below records this section itself.
