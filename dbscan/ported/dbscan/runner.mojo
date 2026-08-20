@@ -53,10 +53,10 @@ gone.
 NOT PORTED, and named in `dbscan/UNPORTED.tsv`: the multi-GPU arms
 (`CorePoints::exchange`, `MergeLabels::tree_reduction`), the `core_indices`
 output (`runner.cuh:419-442`, a `thrust::copy_if` stream compaction of the
-core mask), `sample_weight`, and the two-loop `max_k` dispatch
-(`runner.cuh:257`, `:289`, `:327`, `:335`: their loop 2 reuses batch 0's CSR
-from loop 1 and takes the one-pass arm for the rest, where the RBC branch
-below re-counts and re-fills every batch, batch 0 included).
+core mask), and `sample_weight`. The two-loop `max_k` dispatch
+(`runner.cuh:257`, `:289`, `:327`, `:335`) briefly sat on this list and is
+now PORTED below: loop 2 reuses batch 0's CSR from loop 1 and takes the
+one-pass arm for the rest whenever `algo.cuh:119`'s spare guard admits it.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx

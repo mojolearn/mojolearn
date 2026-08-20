@@ -13,9 +13,19 @@ why 50,000 batches in two — **the clamp never bound any default-budget run
 on this device; the 80% memory budget did** — and that sentence is corrected
 at its source in this same commit.
 
-No timing was run beyond one smoke fit at n = 4,000 to prove the
+No timing was run beyond a smoke fit at n = 4,000 to prove the
 instrumentation prints. The 50,000 measurements are the orchestrator's; the
 exact commands are in §5.
+
+**CONCURRENT LANDING, read before trusting any single row below.** While this
+lane worked, the rbc-maxk lane landed cuML's two-loop `max_k` dispatch INTO
+`runner.mojo` in the same shared checkout, interleaved with this lane's
+instrumentation (their loop-1 `maxklen` reduce deliberately sits inside this
+lane's `mask.vertexdeg` window, as it sits inside cuML's nvtx VertexDeg
+range). Both lanes were swept into one commit. Rows below that were written
+against the three-walk RBC arm are marked; the PHASE format notes reflect
+the MERGED state, which is the state the suite transcript in §4 and the
+smoke in §3 were re-taken on.
 
 ---
 
@@ -63,9 +73,9 @@ not recalled.
 | `:181-186` | `ASSERT(N * batch_size < MAX_LABEL)` — **unconditional** | **WAS MISSING ENTIRELY.** Now raised on the brute arm only | **ADDED, SCOPED.** Theirs cannot bind on their RBC path (RBC requires int64, `:143-150`); ours is int32 with RBC reachable (DEVIATION 35), where the honest bound is the EDGE count, already refused at the query (`runner.mojo`, the `nnz1 > MAX_LABEL` raise). Copying it unconditionally would re-impose the clamp `:71` just gated off. A fit that REQUESTS rbc but downgrades to brute (the `D > MAX_LABEL/N` guard) now dies exactly where theirs does |
 | `:245-247` | loop 1 REVERSED, `n_points = min(n_owned - i*batch, batch)` | same | MATCHES |
 | `:281-283` | `update_host(&curradjlen, vd + n_points, 1)` + sync per batch | same | MATCHES |
-| `:288-293` | `maxklen[i] = thrust::reduce(vd, ..., maximum{})` per batch (rbc) | absent | UNPORTED: the two-loop max_k dispatch, now a row in `dbscan/UNPORTED.tsv` (was missing from it; LANE_rbc-build §7 specifies the wiring) |
+| `:288-293` | `maxklen[i] = thrust::reduce(vd, ..., maximum{})` per batch (rbc) | absent at audit time | PORTED by the concurrent rbc-maxk lane in the same commit (`rbc_max_reduce_kernel`, device-side, inside the `mask.vertexdeg` window as theirs is inside their VertexDeg range). The `UNPORTED.tsv` row this audit added lived for one working-tree afternoon and was deleted on landing |
 | `:325` | loop 2 `if (n_points <= 0) break` | same | MATCHES |
-| `:327-349` | vertexdeg `if (i > 0)` | brute arm: same. RBC arm: count + fill EVERY batch, batch 0 included — three walks where theirs does two | KNOWN DIVERGENCE (LANE_rbc-build E4), named in `runner.mojo`'s header and `UNPORTED.tsv`, not this lane's fix |
+| `:327-349` | vertexdeg `if (i > 0)` | at audit time: RBC arm counted + filled EVERY batch, batch 0 included — three walks (LANE_rbc-build E4) | RESOLVED by the concurrent rbc-maxk lane in the same commit: batch 0 reuses loop 1's resident CSR, batches > 0 take the one-pass `max_k` arm under `algo.cuh:119`'s spare guard (`rbc_take_one_pass`) or fall back to count + fill. Two walks, as theirs |
 | `:355` | AdjGraph `if (!sparse_rbc_mode)` | same guard | MATCHES |
 | `:374-386` | `weak_cc_batched` per batch, over ALL N, init inside | same (`csr.mojo:133`) | MATCHES — and it is why the 50,000 suspicion exists: every batch re-inits N labels and iterates to convergence with host syncs per pass |
 | `:389-399` | MergeLabels `if (i > 0)` | same, now written as their separate `if` | MATCHES |
@@ -138,7 +148,7 @@ Format (documented on `dbscan_fit`):
     PHASE plan n_rows <N> batch <b> n_batches <nb> method <rbc|brute>
     PHASE mask.vertexdeg batch <i>/<n> <ms>             loop 1, incl. the vd[n] readback, as their range :255-296
     PHASE mask.corepoints batch <i>/<n> <ms>
-    PHASE label.vertexdeg batch <i>/<n> <ms>            loop 2; rbc = count + fill
+    PHASE label.vertexdeg batch <i>/<n> <ms>            loop 2, batches > 0 only (batch 0 is resident from loop 1); rbc = one max_k pass, or count + fill when the bound does not fit
     PHASE label.adjgraph batch <i>/<n> <ms>             brute arm only (:355)
     PHASE label.weak_cc batch <i>/<n> <ms> passes <p>   <p> = propagation passes, the number the 50k suspicion predicts grows with batch SIZE
     PHASE label.merge_labels batch <i>/<n> <ms>         batches > 0 (:389)
@@ -150,22 +160,26 @@ scaling fixture VERBATIM (`bench/scaling_main.mojo`: d = 8,
 `_u01(i, f, 4) * 4.0`, eps 0.30, min_pts 5) and prints
 `ARM dbscan_phase@<n> <total ms>` per repeat.
 
-### The one smoke run (n = 4,000, budget forced to 6 batches, rbc)
+### The smoke run (n = 4,000, budget forced to 6 batches, rbc)
+
+Taken TWICE: once before the rbc-maxk landing, once after, because that
+landing rewrote the function under the instrumentation. The merged-state
+transcript is the binding one; note batch 1 correctly prints NO
+`label.vertexdeg` line — loop 2 reuses batch 0's resident CSR (`:327`):
 
     $ /tmp/phase_probe 4000 15 rbc 1
     PHASE budget mbytes 15 batch 748
     PHASE plan n_rows 4000 batch 748 n_batches 6 method rbc
-    PHASE mask.vertexdeg batch 6/6 1.954
-    PHASE mask.corepoints batch 6/6 0.71
+    PHASE mask.vertexdeg batch 6/6 2.408
+    PHASE mask.corepoints batch 6/6 0.478
     ... (batches 5..1) ...
-    PHASE label.vertexdeg batch 1/6 1.848
-    PHASE label.weak_cc batch 1/6 1.477 passes 1
-    PHASE label.vertexdeg batch 2/6 1.82
-    PHASE label.weak_cc batch 2/6 0.92 passes 1
-    PHASE label.merge_labels batch 2/6 1.661
+    PHASE label.weak_cc batch 1/6 1.023 passes 1
+    PHASE label.vertexdeg batch 2/6 2.113
+    PHASE label.weak_cc batch 2/6 0.572 passes 1
+    PHASE label.merge_labels batch 2/6 0.933
     ... (batches 3..6) ...
-    PHASE final_relabel batch 1/1 0.945
-    ARM dbscan_phase@4000 37.115
+    PHASE final_relabel batch 1/1 1.139
+    ARM dbscan_phase@4000 37.043
 
 Every line type on the rbc arm printed. **The brute-arm prints
 (`label.adjgraph`, brute `label.vertexdeg`) compiled but have NOT yet
@@ -194,7 +208,8 @@ them, and if one were malformed it fails loudly, not silently.
   (rbc 56 vs 2, brute 38 vs 2), which is the observable proof the budget
   reached the batch loop and not just the arithmetic.
 
-Full transcript at the commit's state:
+Full transcript at the merged state (the `rbc_two_loop_arms` line is the
+concurrent rbc-maxk lane's check, green in the same suite):
 
     check_fused_eps_agrees_with_materialized OK: 31950 cells identical to the materialized path AND to a float64 host oracle (15298 of them neighbours, so the pattern is irregular), 150 degrees identical, vd[m] = 15298
     check_dbscan OK: 3/3 blobs each one whole cluster with ids exactly {0, 1, 2}, 0 merges, 12/12 isolated points labelled -1 as scikit-learn does, converged in 2 propagation passes
@@ -202,6 +217,7 @@ Full transcript at the commit's state:
     check_exclusive_scan_beyond_the_old_cap OK: 2000000 entries exact across 977 blocks, total 12000001
     check_dbscan_batching_agrees OK: 5 batches with 4 merge_labels folds give labels identical to one batch, in an adj buffer 4x smaller than the unbatched run needs
     check_dbscan_rbc_matches_brute OK: 612 points labelled identically by the ball-cover index and by brute force, 3 clusters
+    check_dbscan_rbc_two_loop_arms OK: the one-pass arm (3 clusters) and the two-pass fallback (2 clusters) both label identically to unbatched brute force, and algo.cuh:119's guard provably routes each fixture to its arm
     check_dbscan_max_mbytes_moves_the_batch OK: 1 MB -> 19 batches and 1000 MB -> 1 batch at n = 1932; at n = 50000 the dbscan.cuh:71 gate keeps rbc at 50000 rows where brute clamps to 42949, and both agree at 309 rows when the clamp cannot bind
     check_dbscan_tiny_budget_agrees OK (rbc): max_mbytes_per_batch = 1 forced 19 batches (56 passes vs 2 for one batch) and all 1932 labels match one batch: 6 blobs whole with ids 0..5, 12 noise points at -1
     check_dbscan_tiny_budget_agrees OK (brute): max_mbytes_per_batch = 1 forced 19 batches (38 passes vs 2 for one batch) and all 1932 labels match one batch: 6 blobs whole with ids 0..5, 12 noise points at -1
@@ -232,12 +248,17 @@ How to read it: the suspicion (LANE_rbc-build §0.4) is that
 `weak_cc_batched` re-inits all N labels per batch and needs MORE PASSES on a
 LARGER batch. It is confirmed if, at fixed n, the summed
 `PHASE label.weak_cc` milliseconds and their `passes` fields fall as the
-batch shrinks while `label.vertexdeg` stays ~flat (the ball cover is
+batch shrinks while `label.vertexdeg` stays ~flat per row (the ball cover is
 measured flat across these shapes); it is killed if `weak_cc`'s share is
-flat and the movement sits in `merge_labels` or in the mask loop. The
-decomposition WITHIN one process is the primary read — cross-process totals
-drift 2-3x on this box. A brute run (`/tmp/phase_probe 4000 15 brute 1`)
-also completes the print coverage noted in §3.
+flat and the movement sits in `merge_labels` or in the mask loop. Two
+merged-state cautions: batch 0 emits no `label.vertexdeg` line at all now
+(resident CSR), and `label.vertexdeg` for batches > 0 may be the one-pass
+`max_k` arm rather than count + fill — the totals at these budgets therefore
+sit BELOW the LANE_rbc-build §0.3 fit numbers, which were taken on the
+three-walk runner. The decomposition WITHIN one process is the primary read
+— cross-process totals drift 2-3x on this box. A brute run
+(`/tmp/phase_probe 4000 15 brute 1`) also completes the print coverage noted
+in §3.
 
 ---
 
@@ -254,7 +275,8 @@ also completes the print coverage noted in §3.
 - `dbscan/phase_main.mojo` — NEW, the dedicated measurement main.
 - `dbscan/PORTED_MAP.tsv`, `dbscan/UNPORTED.tsv` — rows updated; the stale
   "cuvs neighbors/ball_cover not ported" row (false since the RBC default
-  landed) replaced by the genuinely unported two-loop max_k dispatch row.
+  landed) was replaced by a two-loop max_k dispatch row, which the rbc-maxk
+  lane then deleted the same day on porting exactly that dispatch.
 - `PORTING.md` — deviations 37, 38.
 - `bench/results/LANE_rbc-build_2026-08-19.md` E1,
   `bench/results/LANE_dispatch-audit_2026-08-19.md` rows 8/D2/F1 — falsified
