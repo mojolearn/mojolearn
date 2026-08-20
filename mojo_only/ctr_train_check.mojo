@@ -41,7 +41,7 @@ column rather than replacing it, turns all three assertions red at once:
 `loss/var` 0.4907 against the RAW arm's 0.4971 (so the 5x separation
 assertion fires), and `4 columns for 3 inputs`.
 
-## And four refusals, because a refusal nobody runs is an unchecked branch
+## And three refusals, because a refusal nobody runs is an unchecked branch
 
 * `predict_floats` on a model with CTR columns -- the CTR values are a
   statistic of the LEARN pool, and scoring new rows needs the final CTR
@@ -50,10 +50,15 @@ assertion fires), and `4 columns for 3 inputs`.
 * a feature in BOTH `cat_features` and `one_hot`.
 * a constant categorical column -- their
   `CB_ENSURE(uniqueValues > 1, "Error: useless catFeature found")`.
-* `TCatFeatureParams.default()`, which includes the three `Borders`
-  descriptions. It RAISES rather than running the ordered statistic in row
-  order, because the CTR estimation permutation is not ported and row order
-  is a different estimator, not a slower one.
+plus a POSITIVE case where a refusal used to stand:
+`TCatFeatureParams.default()`, CatBoost's own GPU `simple_ctr`, which
+includes the three `Borders` descriptions. It used to raise, because the CTR
+estimation permutation was not ported and row order is a different
+estimator rather than a slower one. The permutation landed 2026-08-21
+(`gbdt/data/permutation.mojo`, `PORTING.md` 55), so the call now trains and
+emits four columns per categorical feature. The refusal sentence that stood
+here is deleted rather than annotated; the ordered statistic's VALUES are
+gated in `mojo_only/ctr_device_check.mojo`, not here.
 """
 
 from max.gpu.host import DeviceContext
@@ -268,21 +273,35 @@ def check_ctr_train() raises:
         + String(" 'useless catFeature found')")
     )
 
+    # THE FOURTH REFUSAL IS GONE, AND ITS REMOVAL IS THE RESULT.
+    #
+    # `TCatFeatureParams.default()` used to raise here, because Borders is
+    # permutation dependent and the CTR estimation permutation was not
+    # ported. It is ported now (`gbdt/data/permutation.mojo`,
+    # `PORTING.md` 55), so the same call TRAINS and emits FOUR columns per
+    # categorical feature -- three Borders priors and one FeatureFreq --
+    # which is CatBoost's own GPU `simple_ctr` default. The values, the
+    # ordering and the permutation are gated by
+    # `pixi run check-ctr-device`; what is asserted here is only that
+    # `train()` takes the configuration at all.
     var borders_params = List[TCatFeatureParams]()
     borders_params.append(TCatFeatureParams.default())
-    var r4 = False
-    try:
-        _ = train(
-            ctx, x, y, n, CTRT_FEATURES, n_estimators=1,
-            cat_features=cat_flags, cat_feature_params=borders_params,
-        )
-    except:
-        r4 = True
-    _expect_raise(
-        failures, r4,
-        String("CatBoost's own default simple_ctr, which includes Borders")
-        + String(" -- the CTR estimation permutation is not ported"),
+    var borders_model = train(
+        ctx, x, y, n, CTRT_FEATURES, n_estimators=1,
+        cat_features=cat_flags, cat_feature_params=borders_params,
     )
+    print(
+        "    CatBoost's GPU default simple_ctr: columns",
+        len(borders_model.fold_counts), "of which ctr",
+        borders_model.ctr_column_count,
+    )
+    if borders_model.ctr_column_count != 4:
+        failures.append(
+            String("their GPU simple_ctr default (three Borders priors plus")
+            + String(" FeatureFreq) must give FOUR columns for one")
+            + String(" categorical feature; got ")
+            + String(borders_model.ctr_column_count)
+        )
 
     if len(failures) > 0:
         var msg = String("train(cat_features=...) FAILED:")

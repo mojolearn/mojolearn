@@ -1214,40 +1214,58 @@ measurement that pays for the format.
 
 # Deviations added 2026-08-20 (the CTR block)
 
-## 52. The CTR bin ordering, the segmented scan and the freq calcer run on the HOST
+## 52. The FeatureFreq calcer runs on the HOST (the rest of this landed on the device 2026-08-21)
 
-CatBoost computes all of this on the device. `TCtrBinBuilder::ProceedNewBins`
-(`ctrs/ctr_bins_builder.h:214-222`) gathers, calls their LSD radix
-`ReorderBins`, and marks segment boundaries with `UpdateBordersMask`;
+**MOSTLY RETIRED.** This entry used to cover three things: the CTR bin
+ordering, the segmented scan, and the frequency calcer. The first two are
+now on the device and the sentences claiming otherwise are deleted rather
+than annotated.
+
+WHAT LANDED ON THE DEVICE, 2026-08-21:
+
+* `TCtrBinBuilderGpu` (`gbdt/ctrs/ctr_bins_builder.mojo`) is
+  `ProceedNewBins` (`ctrs/ctr_bins_builder.h:212-222`) launch for launch:
+  `ComputeCurrentBins` (`ExtractMask` + `ScanVector` + `ScatterWithMask`),
+  `GatherWithMask`, `ReorderBins` -- their LSD radix sort,
+  `gpu_util/kernel/radix_sort.mojo` -- and `UpdateBordersMask`.
+* `THistoryBasedCtrCalcerGpu` (`gbdt/ctrs/ctr_calcers.mojo`) is
+  `Reset` (`ctr_calcers.h:85-99`) and `VisitCatFeatureCtr` (`:121-153`)
+  launch for launch, including both calls to
+  `SegmentedScanAndScatterNonNegativeVector` and `GetGatheredBinSample`'s
+  `ui8` gather.
+* Two `cuda_util` files the above needed and nothing had ported:
+  `gpu_util/kernel/transform.mojo` (`GatherWithMask`, `ScatterWithMask`,
+  `transform.cu:214-276`) and `gpu_util/kernel/scan.mojo`
+  (`ScanVector<ui32>`, `scan.cu:10-19`).
+
+WHAT IS STILL HOST SIDE, and it is one class:
 `TWeightedBinFreqCalcer::VisitEqualUpToPriorFreqCtrs`
-(`ctrs/ctr_calcers.h:307-341`) scans, reduces per segment and divides;
-`THistoryBasedCtrCalcer` runs `SegmentedScanAndScatterNonNegativeVector`
-three times.
+(`ctrs/ctr_calcers.h:307-341`), which scans the segment ids, reduces per
+segment and divides. It needs two device pieces the Borders path does not:
+`UpdatePartitionOffsets` (`cuda_util/kernel/partitions.cu:81-107`) and
+`SegmentedReduceVector` (a `cub::DeviceSegmentedReduce`). Neither is ported.
+`TCtrBinBuilder` (no suffix) stays beside it as the host reference the
+device builder is gated against, and `TCtrBinBuilderGpu.read_indices` is the
+seam that feeds the host freq calcer a device-produced ordering.
 
-`gbdt/ctrs/ctr_bins_builder.mojo` and `gbdt/ctrs/ctr_calcers.mojo` do the
-same arithmetic in host loops. **The reason is scheduling, not design: the
-device radix sort and the segmented scan are being built by another lane in
-the same round, and blocking on them would have shipped nothing.**
-`RECON_CTRS.md` step 3 is that work; the unsegmented three-phase decoupled
-scan it composes from already exists in
-`gpu_util/kernel/reorder_one_bit.mojo`, as does the one-bit stable reorder.
+`THistoryBasedCtrCalcer` (no suffix) is likewise kept, as the reference
+`mojo_only/ctr_device_check.mojo` compares the device calcer against cell by
+cell. A host reference used to CHECK a device answer is not a CPU path
+(`PORTING_RULES.md` 0b-ii).
 
-What is NOT host-side: the ten elementwise kernels of
-`ctrs/kernel/ctr_calcers.cu` are ported, enqueued and gated cell by cell by
-`mojo_only/ctr_kernels_check.mojo`. So the missing piece is the scan
-between them, not the arithmetic around it, and the swap is a body
-replacement -- the signatures, the bit-31 index packing, the segment
-definition and every call site are already theirs.
+Two consequences that were stated here in advance and both held:
 
-Two consequences worth stating rather than discovering later:
-
-* `_stable_sort_by_bin` must stay STABLE when it becomes a radix sort. The
-  order of rows within a category IS the learn permutation, which is the
-  history an ordered target statistic reads. An unstable sort is invisible
-  to any FeatureFreq check (counts do not care about order) and silently
-  randomizes every `Borders` value.
-* `mojo_only/ctr_check.mojo` gates the host arithmetic against planted
-  counts and an independent O(n^2) tally, so the device version has a
+* `_stable_sort_by_bin` had to stay STABLE when it became a radix sort. The
+  order of rows within a category IS the CTR estimation permutation, which
+  is the history an ordered target statistic reads. An unstable sort is
+  invisible to any FeatureFreq check (counts do not care about order) and
+  silently randomizes every `Borders` value. `check-ctr-device` gates
+  stability SEPARATELY from sortedness for exactly that reason, and the
+  distinction earned its keep: under the skip-the-sort sabotage the run
+  prints both, and under an off-by-one bit count it prints 60 descending
+  steps at k=17 against 2003 wrong index words.
+* `mojo_only/ctr_check.mojo` gating the host arithmetic against planted
+  counts and an independent O(n^2) tally is what gave the device version a
   reference to match rather than a claim to inherit.
 
 ## 53. `model_size_reg` STOPPED being a no-op the day CTR columns appeared
@@ -1308,3 +1326,84 @@ than left standing.
 It survived until now because `bench/minentropy_oracle.txt` never runs
 budget 1, where `bins == 2` makes the per-level loops execute zero times
 and the last match is the only comparison in the algorithm.
+
+# Deviations added 2026-08-21 (the CTR estimation permutation)
+
+## 55. ONE CTR estimation permutation, not `permutation_count` of them, and it is never their id 0
+
+`gbdt/data/permutation.mojo` ports `TDataPermutation`
+(`cuda/data/permutation.{h,cpp}`) and everything under it -- their
+`Shuffle` (`cuda/data/data_utils.h:21-47`), `TRandom`
+(`libs/helpers/cpu_random.h`) and MT19937-64
+(`util/random/mersenne64.{h,cpp}`) -- bit for bit. `pixi run
+check-permutation` compares the raw 64-bit stream, `Uniform(t)`, and whole
+orders against CatBoost's own generator compiled by
+`tools/permutation_oracle/`. That part is not a deviation.
+
+**Two things around it are.**
+
+### 55a. One column set where they build `permutation_count` of them
+
+Their builder loops (`gpu_data/doc_parallel_dataset_builder.cpp:251-262`):
+
+    for (permutationId = 0; permutationId < permutationCount; ++permutationId) {
+        ds.GetCtrsEstimationPermutation().WriteOrder(ctrEstimationOrder);
+        writeCtrs(useTest, ds.PermutationDependentFeatures, ...);
+    }
+
+so `permutation_count` (4, `boosting_options.cpp:14`, and NOT collapsed to 1
+here because a Borders CTR is a permutation feature,
+`cuda/train_lib/train.cpp:102-107`) separate sets of `Borders` columns are
+written, one per permutation dataset. Their boosting loop then picks a learn
+permutation per iteration and estimates leaves on
+`GetEstimationPermutation()`, which is `PermutationsCount() - 1`
+(`methods/doc_parallel_boosting.h:101-103`, `:344-352`).
+
+**`gbdt/methods/doc_parallel_boosting.fit` holds ONE dataset and has no
+permutation machinery**, so `train()` builds ONE set of columns, over
+`ctr_estimation_permutation_id`, defaulting to `permutation_count - 1` --
+their estimation permutation, the one whose model `Run()` exports
+(`doc_parallel_boosting.h:526-528`). Porting the other three sets is
+porting the ordered-boosting loop, which is a different piece of work.
+
+What this costs, stated rather than hidden: their ordered boosting averages
+the ordered-statistic noise over four independent orders and ours does not,
+so a `Borders` fit here carries more of it. It is a QUALITY difference on
+the same estimator, not a different estimator -- unlike substituting row
+order, which is 55b.
+
+### 55b. Their permutation 0 is the identity and this port must not use it
+
+`FillOrder` returns `std::iota` when `Index == IdentityPermutationId()`,
+which is 0 (`permutation.cpp:14-17`, `permutation.h:81-83`). So one of their
+four CTR column sets IS computed in row order.
+
+That is safe on their side and not on ours, and the reason is a stage
+upstream of everything in `catboost/cuda`: `ShuffleLearnDataIfNeeded`
+shuffles the whole learn pool at load whenever the data has any categorical
+feature and `has_time` is false (`private/libs/algo/preprocess.cpp:161-181`,
+`:183-199`). By the time their GPU builder sees a row order, it is already
+random. `train()` here is handed `x_colmajor` in whatever order the caller
+has, which may be sorted by target.
+
+MEASURED, on a 4001-row target-sorted fixture with a category that carries
+no information about the target
+(`mojo_only/ctr_device_check.mojo` section 3):
+
+    leak = mean(ctr | target bin 1) - mean(ctr | target bin 0)
+
+    row order (their permutation id 0):   0.303
+    the shipped permutation (id 3):      -0.0027
+
+and at the `train()` level, on the same fixture with the categorical column
+as the only feature, 30 trees at depth 4:
+
+    train loss under the permutation:  0.1234
+    train loss in row order:           0.0606
+
+Row order fits a feature that contains nothing twice as well, because the
+statistic is reading the label it is supposed to be estimating without.
+That is what "a different and worse estimator, not a slower one" means, and
+it is why `ctr_estimation_permutation_id` defaults to 3 rather than to their
+0. The pool shuffle itself is not ported: it is not a `catboost/cuda` file,
+and reordering the caller's rows would change what `predict` returns.
