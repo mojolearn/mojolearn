@@ -222,7 +222,7 @@ Two separate tracks, and they are not the same work:
    Pack the five split-descriptor copies into one. Keep the split resolution
    on the device so the argmax never returns to the host.
 
-### Where the numbers stand, end of 2026-08-19
+### Where the numbers stand, end of 2026-08-19 (superseded by the block below)
 
 All same-window, interleaved where two arms are named. Synthetic 800k x 100
 depth 6 at 254 borders: 105 ms/tree in the morning, **91 after the evening
@@ -236,3 +236,23 @@ after the fixes: hist ~10.5, reorder ~4.4, splitseq ~4.5, pstats ~2.0,
 score 1.6, everything else under 2. The box's GPU window drifted ~4.5x for
 about an hour mid-evening (another session's GPU benchmark); every
 cross-window comparison taken in that hole was discarded.
+
+### And then the boosting loop gave back 17 ms/tree (later the same night)
+
+`fit` was spending ~17 ms/tree OUTSIDE tree growth, none of it CatBoost's
+design: a 6.4 MB gradient readback plus an 800k-row host abs-scan feeding
+only the fixed-point scale (comptime-dead under FAST now), a 3.2 MB host
+identity upload per tree (their `MakeSequence` builds it on the device,
+`fill.cu:47` -> `ported/gpu_util/kernel/fill.mojo`), and an 800k-row host
+SSE loop (their `functionValue` is a block reduce + one float atomicAdd
+inside the SAME gradient kernel, `pointwise_targets.cu:309-317`, now
+ported; the reported loss moved in its 7th decimal, the model did not).
+
+**Standings after, same-window, interleaved, same data both arms:**
+
+    800k x 100 @ 128 borders (their GPU default): ours ~48 vs CPU ~32 -> 1.4x
+    800k x 100 @ 254 borders:                     ours ~68 vs CPU ~31 -> 2.2x
+    covtype 581k x 53 @ 128:                      ours ~24 vs CPU ~10 -> 2.4x
+    covtype 581k x 53 @ 254:                      ours ~29 vs CPU ~10 -> 2.8x
+
+The morning started at 21x fixed / 2.1x variable and covtype 4.9x.

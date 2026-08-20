@@ -87,7 +87,13 @@ from ported.models.oblivious_model import (
 )
 from ported.gpu_data.compressed_index_builder import build_layout
 from ported.models.kernel.add_bin_values import compute_bins_and_add_kernel
-from ported.targets.kernel.pointwise_targets import mse_kernel
+from mojo_only.kernel_matrix import TARGET_COLUMN, deterministic_flush_for
+from mojo_only.numerics import NUMERIC_IDENTICAL
+from ported.gpu_util.kernel.fill import launch_make_sequence
+from ported.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
+    BUILD_MODE as HIST_BUILD_MODE,
+)
+from ported.targets.kernel.pointwise_targets import MSE_BLOCK_SIZE, mse_kernel
 
 
 def fit(
@@ -145,38 +151,32 @@ def fit(
     # already read. See the DEVIATION BLOCK in `pointwise_targets.mojo`.
     var stats = ctx.enqueue_create_buffer[DType.float32](stat_count * n_rows)
 
-    # growth permutes this, so it is reseeded to the identity every iteration
-    # exactly as their per-iteration dataset view is.
+    # growth permutes this, so it is reseeded to the identity every
+    # iteration exactly as their per-iteration dataset view is -- ON THE
+    # DEVICE, their `MakeSequence` (`fill.cu:47`). This used to upload a
+    # host-built identity, 3.2 MB of H2D per tree at 800k rows.
     var row_index = ctx.enqueue_create_buffer[DType.uint32](n_rows)
-    var h_ident = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
-    for i in range(n_rows):
-        h_ident.unsafe_ptr().unsafe_store(i, UInt32(i))
 
-    var h_cursor = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
-    var h_target = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
-    # Their `functionValue` is WEIGHTED (`pointwise_targets.cu:271`), and the
-    # weight is `(weights && i < size) ? weights[i] : 1.0f` (`:299`). The
-    # weights never change across iterations, so they come back once.
-    var h_weight = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
+    # their `functionValue`: ONE float, accumulated by `mse_kernel`'s block
+    # reduce + atomicAdd (`pointwise_targets.cu:309-317`). This replaces a
+    # HOST loop over every row per iteration (~5 ms/tree at 800k), which
+    # was never their design.
+    var fv = ctx.enqueue_create_buffer[DType.float32](1)
+    var h_fv = ctx.enqueue_create_host_buffer[DType.float32](1)
 
-    # THE FIXED-POINT BOUND, and it is not optional. The histogram flush
-    # accumulates through an Int32 because Metal has no float atomic
-    # (`mojo_only/fixed_point.mojo`), and the scale that keeps every slot
-    # inside Int32 is derived from `sum over all rows of abs(plane)`, one per
-    # stat plane. It has to be read back from the plane the target kernel
-    # actually wrote, not recomputed from the target here: recomputing it
-    # would make this file a second definition of the gradient.
+    # THE FIXED-POINT BOUND, for the IDENTICAL build only. The integer
+    # flush needs a scale bounded by `sum over all rows of abs(plane)`,
+    # read back from the plane the target kernel actually wrote. The FAST
+    # build flushes through CatBoost's float atomic (which Metal HAS; the
+    # sentence that stood here claiming otherwise was the falsified import
+    # -path reading), never touches the accumulator, and skips the readback
+    # and both host scans at comptime.
+    comptime _flush_fixed = deterministic_flush_for[
+        TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
+    ]()
     var h_stats = ctx.enqueue_create_host_buffer[DType.float32](
-        stat_count * n_rows
+        (stat_count * n_rows) if _flush_fixed else 1
     )
-
-    ctx.enqueue_copy(dst_ptr=h_target.unsafe_ptr(), src_buf=targets)
-    if has_weights:
-        ctx.enqueue_copy(dst_ptr=h_weight.unsafe_ptr(), src_buf=weights)
-    ctx.synchronize()
-    if not has_weights:
-        for i in range(n_rows):
-            h_weight.unsafe_ptr().unsafe_store(i, Float32(1.0))
 
     var losses = List[Float64]()
     # their `TVector<TResultModel>* result`, the ensemble being built
@@ -185,23 +185,33 @@ def fit(
         # `TTargetAtPointTrait::Create(learnTarget, cursor)` (`:353`).
         # The gradients are taken AT THE CURRENT PREDICTIONS, which is the
         # whole of what makes this boosting.
+        # their `functionValue` is accumulated in the SAME launch as the
+        # gradients, so the value this iteration reads is the loss of the
+        # cursor as it stands -- i.e. after the PREVIOUS tree.
+        ctx.enqueue_memset(fv, Float32(0.0))
         ctx.enqueue_function[mse_kernel](
             targets.unsafe_ptr(), weights.unsafe_ptr(), Int32(n_rows),
             cursor.unsafe_ptr(),
             Int32(1) if has_weights else Int32(0),
             stats.unsafe_ptr(),
-            grid_dim=(n_rows + 255) // 256, block_dim=256,
+            fv.unsafe_ptr(), Int32(1),
+            grid_dim=(n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE,
+            block_dim=MSE_BLOCK_SIZE,
         )
+        # stream-ordered behind the kernel; READ after `run_tree_layout`,
+        # whose first drain settles it, so it costs no synchronize here.
+        ctx.enqueue_copy(dst_ptr=h_fv.unsafe_ptr(), src_buf=fv)
 
-        # The gradients the histogram will accumulate, read back so the
-        # fixed-point scale can be bounded by them. It rides on the
-        # synchronize the row index already needs, so it costs a copy and no
-        # extra drain.
-        ctx.enqueue_copy(dst_ptr=h_stats.unsafe_ptr(), src_buf=stats)
+        # growth reorders rows in place, so the index restarts each tree.
+        # their `MakeSequence` (`fill.cu:47`), device-side.
+        launch_make_sequence(ctx, UInt32(0), row_index, n_rows)
 
-        # growth reorders rows in place, so the index restarts each tree
-        ctx.enqueue_copy(dst_buf=row_index, src_ptr=h_ident.unsafe_ptr())
-        ctx.synchronize()
+        @parameter
+        if _flush_fixed:
+            # The gradients the histogram will accumulate, read back so the
+            # fixed-point scale can be bounded by them. IDENTICAL only.
+            ctx.enqueue_copy(dst_ptr=h_stats.unsafe_ptr(), src_buf=stats)
+            ctx.synchronize()
 
         # `sum over all rows of abs(...)`, per plane, which is what
         # `choose_scale` is specified against. Plane 0 is the WEIGHT plane
@@ -258,17 +268,20 @@ def fit(
         # ===========================================================
         var weight_magnitude = Float64(0.0)
         var gradient_magnitude = Float64(0.0)
-        for i in range(n_rows):
-            var w = Float64(h_stats.unsafe_ptr().unsafe_load(i))
-            if w < 0.0:
-                w = -w
-            weight_magnitude += w
-            var g = Float64(
-                h_stats.unsafe_ptr().unsafe_load(n_rows + i)
-            )
-            if g < 0.0:
-                g = -g
-            gradient_magnitude += g
+
+        @parameter
+        if _flush_fixed:
+            for i in range(n_rows):
+                var w = Float64(h_stats.unsafe_ptr().unsafe_load(i))
+                if w < 0.0:
+                    w = -w
+                weight_magnitude += w
+                var g = Float64(
+                    h_stats.unsafe_ptr().unsafe_load(n_rows + i)
+                )
+                if g < 0.0:
+                    g = -g
+                gradient_magnitude += g
 
         # `optimizer.Fit(...)` then `Estimate` then `Rescale` then
         # `AppendModels`, all four inside `run_tree_layout`, in their order.
@@ -294,21 +307,34 @@ def fit(
             weak.leaf_values.append(leaf_values[i] * learning_rate)
         model.add_weak_model(weak^)
 
-        ctx.enqueue_copy(dst_ptr=h_cursor.unsafe_ptr(), src_buf=cursor)
-        ctx.synchronize()
-        # `-weight * (val - relev) * (val - relev)` summed over rows --
-        # `pointwise_targets.cu:311`, sign flipped. The weight was dropped
-        # here, which made the reported number an UNWEIGHTED mean squared
-        # error and therefore not their `functionValue` at all on any fit
-        # with weights.
-        var sse = Float64(0.0)
-        for i in range(n_rows):
-            var d = Float64(
-                h_target.unsafe_ptr().unsafe_load(i)
-                - h_cursor.unsafe_ptr().unsafe_load(i)
-            )
-            sse += Float64(h_weight.unsafe_ptr().unsafe_load(i)) * d * d
-        losses.append(sse / Float64(n_rows))
+        # the device `functionValue` read alongside this iteration's
+        # gradients: the loss AFTER THE PREVIOUS TREE (their accumulation
+        # is `-w * (val - relev)^2`, `pointwise_targets.cu:311`, so the
+        # positive loss is its negation). Iteration 0's value is the
+        # baseline and is not a tree's loss, so it is dropped, and the
+        # LAST tree's loss comes from one extra gradient pass below.
+        if len(losses) < n_estimators:
+            var v = Float64(h_fv.unsafe_ptr().unsafe_load(0))
+            if len(model.weak_models) > 1:
+                losses.append(-v / Float64(n_rows))
+
+    # the final tree's loss: one more `functionValue` pass over the settled
+    # cursor. The gradient planes it writes feed nothing.
+    ctx.enqueue_memset(fv, Float32(0.0))
+    ctx.enqueue_function[mse_kernel](
+        targets.unsafe_ptr(), weights.unsafe_ptr(), Int32(n_rows),
+        cursor.unsafe_ptr(),
+        Int32(1) if has_weights else Int32(0),
+        stats.unsafe_ptr(),
+        fv.unsafe_ptr(), Int32(1),
+        grid_dim=(n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE,
+        block_dim=MSE_BLOCK_SIZE,
+    )
+    ctx.enqueue_copy(dst_ptr=h_fv.unsafe_ptr(), src_buf=fv)
+    ctx.synchronize()
+    losses.append(
+        -Float64(h_fv.unsafe_ptr().unsafe_load(0)) / Float64(n_rows)
+    )
 
     return losses^
 

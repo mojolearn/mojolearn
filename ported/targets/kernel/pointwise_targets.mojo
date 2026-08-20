@@ -47,7 +47,13 @@ error, because everything downstream maximizes. Kept, because flipping it
 here would silently invert every early-stopping comparison later.
 """
 
+from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu.primitives.block import sum as block_sum
+
+#: the boosting loop launches this kernel at 256 threads; the reduce below
+#: needs the block size at comptime.
+comptime MSE_BLOCK_SIZE = 256
 
 
 def mse_kernel(
@@ -57,6 +63,8 @@ def mse_kernel(
     predictions: MutPointer[Float32, MutAnyOrigin],
     has_weights: Int32,
     stats: MutPointer[Float32, MutAnyOrigin],
+    function_value: MutPointer[Float32, MutAnyOrigin],
+    compute_fv: Int32,
 ):
     """`PointwiseTargetImpl<TRmseTarget>`, copied, writing straight into the
     stats planes. The name is kept from when this file cited `MseImpl`; see
@@ -90,24 +98,45 @@ def mse_kernel(
     derivative is not constant it is two different numbers and this kernel
     would need the flag.
 
-    `functionValue` is NOT computed here. It is one scalar per iteration
-    behind a block reduce, it feeds nothing this port computes on the device,
-    and the boosting loop already reads the cursor back for its own reduction,
-    so adding it here would be work for a number that is produced anyway. The
-    host reduction lives in `doc_parallel_boosting.mojo`.
+    `functionValue` IS computed here now, as theirs is
+    (`pointwise_targets.cu:309-317`): every in-range thread contributes
+    `-weight * (val - relev)^2`, the block reduces, and thread 0 does one
+    float `atomicAdd` into the scalar. `compute_fv` stands in for their
+    null-pointer test on `functionValue`. The paragraph that stood here said
+    the host reduction was free because "the boosting loop already reads the
+    cursor back" -- that host read WAS the cost, ~5 ms/tree of host loop
+    over 800k rows per iteration, and it is deleted with this.
+
+    The block reduce goes through `max.gpu.primitives.block.sum` where
+    theirs is `FastInBlockReduce`, the same substitution
+    `partitions_reduce.mojo` records.
     ===================================================
     """
     var size = Int(size_in)
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i >= size:
-        return
 
-    var val = predictions.unsafe_load(i)
-    var relev = relevs.unsafe_load(i)
-    var direction = relev - val
+    # their `(i < size) ? ... : 0` ternaries (`:296-299`): out-of-range
+    # threads stay alive to take part in the reduce, contributing zero.
+    var in_range = i < size
+    var val = Float32(0.0)
+    var relev = Float32(0.0)
     var weight = Float32(1.0)
-    if has_weights != Int32(0):
-        weight = weights.unsafe_load(i)
+    if in_range:
+        val = predictions.unsafe_load(i)
+        relev = relevs.unsafe_load(i)
+        if has_weights != Int32(0):
+            weight = weights.unsafe_load(i)
+        var direction = relev - val
+        stats.unsafe_store(i, weight)
+        stats.unsafe_store(size + i, weight * direction)
 
-    stats.unsafe_store(i, weight)
-    stats.unsafe_store(size + i, weight * direction)
+    # `if (functionValue) { tmpScores[tid] = -w * (val - relev)^2; ...
+    # FastInBlockReduce; if (tid == 0) atomicAdd(functionValue, val); }`
+    # (`pointwise_targets.cu:309-317`).
+    if compute_fv != Int32(0):
+        var score = Float32(0.0)
+        if in_range:
+            score = -weight * (val - relev) * (val - relev)
+        var total = block_sum[block_size=MSE_BLOCK_SIZE](score)
+        if thread_idx.x == 0:
+            _ = Atomic.fetch_add(function_value, total)
