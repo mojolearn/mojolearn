@@ -60,6 +60,11 @@ check-hist2 = "mojo run -I . mojo_only/hist2_check.mojo"
 # features, and this compares our exact-DP port against CatBoost's own
 # borders over six budgets. Host-side, seconds, no GPU.
 check-minentropy = "mojo run -I . mojo_only/min_entropy_check.mojo"
+
+# GreedyLogSum, the NUMERIC border default, against CatBoost on columns built
+# to tie. Budgets that cut a tier mid-way, plus budget 15 as the
+# order-invariant control. Host-side, seconds, no GPU.
+check-greedylogsum = "mojo run -I . mojo_only/greedy_log_sum_check.mojo"
 check-gpu-lib-worker = "mojo run -I . mojo_only/gpu_lib_worker_check.mojo"
 
 # What the host toolchain actually resolved to. Worth recording beside any

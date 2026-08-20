@@ -315,12 +315,16 @@ def _penalty_min_entropy(weight: Float64) -> Float64:
     scratch, because no libm is reachable there and the accuracy question
     comes back in a form this fix cannot answer.
 
-    OPEN, and NOT changed here: `_penalty_max_sum_log` above still calls
-    `std.math.log`. `GreedyLogSum` scores `log(n) - log(l) - log(r)` over
-    INTEGER bin sizes, which ties exactly for the same structural reason,
-    so it is exposed to the identical defect. It currently matches
-    `bench/oracle*.txt`, so changing it is a measurement and not a
-    cleanup: do it against those fixtures, in its own commit.
+    MEASURED AND CLOSED: `_penalty_max_sum_log` above deliberately still
+    calls `std.math.log`, and that is now a result rather than an omission.
+    `GreedyLogSum` ties for a DIFFERENT structural reason and is not
+    exposed. Its tied scores come from IDENTICAL integer bin sizes, so both
+    sides are computed from the same inputs and any deterministic log
+    returns the same bits; MinEntropy's tied costs are reached by DIFFERENT
+    summation paths, which is what let 5e-8 of noise pull them apart.
+    `pixi run check-greedylogsum` swapped libm in on tie-heavy columns at
+    budgets 37, 63, 100 and 200 and nothing moved, while flipping one
+    comparison in the heap pop broke 4 of 6 cases. Do not "fix" it.
     """
     return weight * external_call["log", Float64](weight + 1e-8)
 
