@@ -378,9 +378,54 @@ rep):
     4M x 100  @ 128:  0.47-0.51x -- 2.0-2.1x faster than CatBoost
     4M x 100  @ 254:  0.76-0.88x
 
-Next known levers, in order: the remaining covtype floor is now
-launches + the level-plan drain (a full device-resident level plan
-would fold DRAIN 2 as well -- bigger bite, `build_necessary_histograms`
-on device); the predict/inference path (unmeasured; their
-model_evaluation_speed suite is the arena plan). Beyond this box: a
-Pro/Max chip multiplies OUR arm by 2-4x and theirs by ~1.5x.
+THE DEVICE-RESIDENT LEVEL PLAN IS PRICED AND DECLINED (2026-08-20
+night). A working-tree probe removed ALL six remaining per-level drains
+(approximate balanced sizes fed to the host planner, one drain per
+tree): the covtype-shape tree moved 19.7 -> 19.4 ms. The probe's fixed
+floor dropped 9.3-11.5 -> 6.7-7.0 ms, but its crude size approximation
+inflated the variable cost (wrong-sibling subtraction builds the larger
+child half the time), so the honest ceiling for a REAL device-resident
+plan -- exact sizes, no wrong siblings -- is ~1-2 ms/tree on covtype.
+The residual ~6.7 ms floor is LAUNCH + enqueue + copy cost, not drains,
+so the next floor attack is launch-count fusion, not the plan port.
+Declined at that price; the lever stays on the list behind fusion.
+
+### 2026-08-20/21: THE INFERENCE PATH (74fdd44)
+
+Their model_evaluation_speed methodology mirrored
+(bench/interleaved/predict_interleaved.mojo): raw pool outside the timed
+region, quantization inside predict, CPU arms at full threads and one
+thread. The arc, all in one bite:
+
+    tree-wise apply (their training-side kernel, our drains/allocs
+        deleted): 2.9x BEHIND their CPU evaluator -- 100 trees re-stream
+        the cindex from DRAM per tree.
+    their OWN GPU evaluator ported (ported/models/cuda/evaluator.mojo,
+        from libs/model/cuda/evaluator.cu): eval kernel 2.7 ms for
+        100 trees x 800k -- the cost was ALL in their linear-scan
+        quantize (27-30 ms, the base M4's ALU floor; V100-class cards
+        absorb it). A binary search measured 3.5x WORSE (dependent
+        divergent loads vs pipelined compare-adds). The shipped Apple
+        arm is a TWO-LEVEL scan; all three arms and their prices live
+        in kernel_matrix.quantize_search_for.
+
+STANDINGS (interleaved, 100 trees depth 6 @ 128 borders, evaluator arm
+asserted equal to the tree-wise apply and to the fit's train mse every
+rep):
+
+    800k x 100: parity band -- ratios 0.89-1.55 across windows (median
+        ~1.2, best window 0.76-0.90), theirs ~18 ms / ~44 M docs/s
+    4M x 100:  ALL EIGHT REPS FASTER, 0.75-0.88x -- ours 52-62 M
+        docs/s vs their 46-50, stable
+
+Also landed on the way: `binarize_float_feature_kernel` (their
+BinarizeFloatFeatureImpl -- the missing raw-float device quantization),
+the batched ensemble pack in `predict`, and the adaptive
+ExtTreeBlockWidth (their 128 idles 7/8 tree sub-blocks below ~1000
+trees; runtime width, their shape at their scale).
+
+Next known levers, in order: launch-count fusion for the covtype
+training floor, the device-resident level plan (priced above), the
+epsilon 8000-tree arena config (their notebook's exact model size --
+needs the epsilon download to fit the box). Beyond this box: a Pro/Max
+chip multiplies OUR arms by 2-4x and theirs by ~1.5x.
