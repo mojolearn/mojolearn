@@ -93,9 +93,12 @@ right on this device too. Details in DBSCAN_RBC_2026-08-19.md.
 
 ## What the table says to do next
 
-1. **PCA is the worst row (0.25x) and has a known unblock**: the covariance
-   shape needs `linalg.transpose` + N-T matmul (the T-N arm is unsupported);
-   the OLS normal-equation loss (0.38x vs cholesky) shares the same root.
+1. **PCA is the worst row (0.25x) and the covariance matmul is NOT the
+   cause** (LANE_covariance-unblock: `gemm_tn` has served the T-N shape in
+   PCA/tSVD/OLS since 048f3da and caps at ~50-60 ms of the 520; the zero-copy
+   col-major route is BANNED, silently wrong across most shapes). The 4x and
+   the OLS 0.38x need a per-phase timer; the reading-visible suspects are
+   `xty_kernel`'s 32-block launch and the fit's sync/alloc pattern.
 2. **DBSCAN at 400k-800k trails 0.70x-0.83x**: sklearn's kd-tree asymptotics
    at d=8 against our RBC constants. The gap is flat, not diverging.
 3. **kmeans is a tie that shouldn't be**: 4M x 32 is exactly the shape a GPU
