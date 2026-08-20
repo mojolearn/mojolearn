@@ -512,8 +512,8 @@ CatBoost closer than ever (synth@128 9 sig figs, @254 8, covtype 7-8;
 the halved resolution margin at 254 held).
 
 CATEGORICAL ROUND 1, RUN AND REPORTED (2026-08-21): host-side
-FeatureFreq CTRs (their exact GPU formula count/(n+1), their Uniform-15
-ctr binarization; tools/ctr_prep.py + bench/interleaved/ctr_quality.mojo)
+FeatureFreq CTRs (their exact GPU formula count/(n+1); tools/ctr_prep.py +
+bench/interleaved/ctr_quality.mojo)
 on AMAZON, 26215/6554 holdout, 100 trees depth 6, both arms restricted
 to frequency information: ours 0.05078 test mse vs CatBoost 0.05064 --
 0.3%% apart. Attribution: the CPU arm uses `Counter` because CatBoost's
@@ -523,6 +523,39 @@ system); same information class, slightly different normalization, so
 this is a quality-band row, not a bitwise one. ADULT: prep bug diagnosed
 (float NaN inside object columns; fillna before astype), handed to the
 harness stream -- to be RUN AND REPORTED once fixed, whatever it shows.
+
+(That run's ctr binarization was recorded here as "their Uniform-15",
+which was wrong and the phrase is deleted rather than annotated. The run
+used MinEntropy 15, which IS their FeatureFreq grid; `Uniform 15` is the
+grid a **Borders** column gets. Both are real defaults on real paths and
+they are different -- see RECON_CTRS.md and PORTING.md 51.)
+
+### 2026-08-20: CTRs, the block itself (this session)
+
+`gbdt/ctrs/` exists, mirroring `catboost/cuda/ctrs/`: the CTR option
+surface with `GetDefaultPriors`' THREE-prior fan-out (a Borders cat
+feature is THREE columns, not one, plus a FeatureFreq column -- four per
+categorical feature under their GPU defaults), target binarization at
+MinEntropy-1, `TWeightedBinFreqCalcer`, `THistoryBasedCtrCalcer`, and all
+ten elementwise kernels of `ctrs/kernel/ctr_calcers.cu` enqueued and gated
+cell by cell. `train(cat_features=...)` now has a categorical path, so the
+FeatureFreq half ships in the LIBRARY and not only in the benchmark prep.
+
+Three things worth carrying forward:
+
+* **The kernel-matrix prediction held.** Not one warp intrinsic, not one
+  byte of shared memory, not one atomic in the ten CTR kernels.
+* **Borders is not wired into `train()`** and the reason is a seam nobody
+  had listed: it needs the CTR ESTIMATION PERMUTATION as well as the
+  device sort and scan. Row order would be a different estimator, so it
+  raises.
+* **A shipped accuracy bug fell out of the cardinality sweep**: `train()`
+  and `_build_cindex_from_floats` derived DIFFERENT fold counts for a
+  one-hot feature, so the compressed index was written and read under
+  different packing policies. A 16-category one-hot feature was silently
+  unlearnable, and the fit/predict consistency assertion could not see it
+  because both sides read the same wrong layout. Fixed;
+  `mojo_only/one_hot_cardinality_check.mojo` sweeps every policy boundary.
 
 ### 2026-08-21, the 254 lever closed out (9b2b64e + 8010b2f)
 

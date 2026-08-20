@@ -1,35 +1,61 @@
-"""FeatureFreq CTR fixtures. HANDED OFF 2026-08-21: kernel stream owns
-no further work here. KNOWN ISSUE for the harness stream: adult's object
-columns carry real float NaN among strings, so `.astype(str)` alone does
-not homogenize them -- `cat_df[c].fillna("nan").astype(str)` at the
-np.unique site is the fix. Amazon works and its quality row is RUN AND
-REPORTED (RESUME): ours 0.05078 vs CatBoost-Counter 0.05064 test mse,
-frequency-information-matched arms. Original doc follows.
+"""FeatureFreq CTR fixtures for the LEGACY categorical harness.
 
-FeatureFreq CTR fixtures: categoricals as their GPU's simplest CTR,
-computed HOST-SIDE with their exact arithmetic, so the Mojo arm can train
-on categorical datasets today and the future device CTR kernels have a
-bit-exact reference to match.
+**THE CALCER HAS MOVED. This script is no longer where the arithmetic
+lives.** `gbdt/ctrs/ctr_calcers.TWeightedBinFreqCalcer` and
+`gbdt/ctrs/ctr_bins_builder.TCtrBinBuilder`, mirroring
+`catboost/cuda/ctrs/ctr_calcers.h` and `ctr_bins_builder.h`, are the
+implementation; `train(cat_features=...)` calls them, and
+`mojo_only/ctr_check.mojo` gates it against planted counts across eleven
+cardinalities.
+
+What is left here is FIXTURE GENERATION for
+`bench/interleaved/ctr_quality.mojo`, which reads pre-binned columns
+(`<name>_bins_ctr.u8`) and predates `train()` having a categorical path at
+all. **That harness rewire is a one-line change in a file this lane does
+not own**: pass `<name>_catcodes.u8` and a `cat_features` flag list to
+`train()` instead of the pre-binned CTR columns, and this script's numpy
+formula can be deleted outright. Until then it is a SECOND
+IMPLEMENTATION of an arithmetic that now exists in the library, which is a
+drift risk, and it is named `_legacy_freq_ctr_column` so nobody mistakes it
+for the definition.
+
+The manifest now carries the per-feature CARDINALITIES so the rewire has
+everything it needs.
 
     pixi run -e bench python tools/ctr_prep.py <dir> amazon
     pixi run -e bench python tools/ctr_prep.py <dir> adult
+
+KNOWN ISSUE for the harness stream: adult's object columns carry real float
+NaN among strings, so `.astype(str)` alone does not homogenize them --
+`cat_df[c].fillna("nan").astype(str)` at the np.unique site is the fix.
+Amazon works and its quality row is RUN AND REPORTED (RESUME): ours 0.05078
+vs CatBoost-Counter 0.05064 test mse, frequency-information-matched arms.
 
 THE FORMULAS ARE THEIRS, PINNED FROM SOURCE (CatBoost 54a8143a):
 * FeatureFreq value = (bin_count + prior) / (n_rows + prior_observations)
   with the default prior {0.0, 1}:  count / (n + 1)
   (`cuda/ctrs/kernel/ctr_calcers.cu:100` NonWeightedBinFreqCtrsImpl;
   default priors `private/libs/options/cat_feature_options.cpp:127-129`).
+  NOTE, established while porting: the DEFAULT dispatch is not that kernel.
+  `counter_calc_method` defaults to `SkipTest`
+  (`cat_feature_options.cpp:233`), which sends FeatureFreq to
+  `TWeightedBinFreqCalcer` and `WeightedBinFreqCtrsImpl` (`:56-67`),
+  `(binSums[bin] + prior) / (totalWeight + priorObservations)`. With no test
+  pool the two are the same number, because every learn weight is 1.0 and
+  `TotalWeight` is their sum (`dataset_helpers.cpp:24-39`).
 * CTR binarization default for FeatureFreq on GPU = **MinEntropy with 15
   borders** for SIMPLE ctrs (`Median` for tree ctrs), from
   `CreateDefaultCounter` (`catboost_options.cpp:392-415`) and re-applied by
   `SetDefaultBinarizationsIfNeeded` (`:418-427`).
   THIS FILE USED TO SAY `Uniform, 15`, citing `cat_feature_options.cpp:169`.
-  That line is real but it is the GENERIC `TCtrDescription` constructor
-  default, and the GPU path never reaches it for FeatureFreq. A correct
-  citation on the wrong code path reads as verified and is how it survived.
-  Borders now come from CatBoost's own quantizer rather than from a formula
-  reimplemented here, the same discipline `interleaved_prep.py` already uses
-  for the numeric grid, so there is no second implementation to drift.
+  That line is real, it is the GENERIC `TCtrDescription` constructor
+  default, and the GPU path never reaches it FOR FeatureFreq -- but it IS
+  the grid a **Borders** CTR column gets, because `SetCtrDefaults` builds
+  that description with the two-argument constructor and
+  `SetDefaultBinarizationsIfNeeded` only rewrites FeatureFreq ones. Both
+  grids are real defaults on real code paths and they are different.
+  Borders now comes from CatBoost's own quantizer here too, the same
+  discipline `interleaved_prep.py` uses for the numeric grid.
 * Category CODES are ours (sorted unique raw values -> 0..k-1); CatBoost
   hashes raw strings instead. The CTR VALUE only depends on counts, so
   the codes' order cannot change any ctr, only the (irrelevant) code
@@ -38,8 +64,8 @@ THE FORMULAS ARE THEIRS, PINNED FROM SOURCE (CatBoost 54a8143a):
 Outputs, in the interleaved-fixture format the Mojo harnesses already
 read -- the ctr columns become ordinary numeric features:
   <name>_folds_ctr.txt / <name>_bins_ctr.u8 / <name>_y.f32
-plus <name>_catcodes.u8 (dense codes per cat feature, for the future
-device CTR/one-hot paths) and <name>_MANIFEST_ctr.txt.
+plus <name>_catcodes.u8 (dense codes per cat feature, which is what
+`train(cat_features=...)` wants) and <name>_MANIFEST_ctr.txt.
 """
 import sys
 import numpy as np
@@ -47,7 +73,10 @@ import catboost
 import catboost.datasets
 
 
-def freq_ctr_column(codes: np.ndarray) -> np.ndarray:
+def _legacy_freq_ctr_column(codes: np.ndarray) -> np.ndarray:
+    """DEPRECATED. `gbdt/ctrs/ctr_calcers` is the implementation; this exists
+    only until `bench/interleaved/ctr_quality.mojo` calls
+    `train(cat_features=...)` instead of reading pre-binned columns."""
     n = len(codes)
     counts = np.bincount(codes)
     return (counts[codes].astype(np.float64) / (n + 1)).astype(np.float32)
@@ -123,7 +152,7 @@ def main():
             cols.append(np.searchsorted(bs, num[:, f], side="left"))
             folds.append(len(bs))
             kinds.append("num:%d" % f)
-    ctrs = np.column_stack([freq_ctr_column(codes[i])
+    ctrs = np.column_stack([_legacy_freq_ctr_column(codes[i])
                             for i in range(len(cat_cols))])
     ctr_grid = catboost_borders(ctrs, y, 15, "MinEntropy")
     for i in range(len(cat_cols)):
@@ -144,6 +173,11 @@ def main():
             fh.write("%d\n" % c)
     with open("%s/%s_MANIFEST_ctr.txt" % (d, name), "w") as fh:
         fh.write("rows %d\nfeatures %d\n" % (n, len(folds)))
+        # cardinalities, so the harness rewire can hand `train()` the raw
+        # codes and a cat_features flag list with nothing left to derive
+        fh.write("cat_features %d\n" % len(cat_cols))
+        for i, c in enumerate(cat_cols):
+            fh.write("cat %d %s %d\n" % (i, c, card[i]))
         for k in kinds:
             fh.write("%s\n" % k)
     print(name, ":", n, "rows,", len(folds), "features (",

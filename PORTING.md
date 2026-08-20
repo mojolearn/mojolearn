@@ -1060,3 +1060,100 @@ over an O(candidates) host readback of the candidates and weights -- host
 traffic `HOST_AND_DEVICE.md` permits, where upstream's float atomics need
 no scale at all (deviation: theirs never quantizes; ours inherits the
 fixed-point scheme every fit here uses).
+
+# Deviations added 2026-08-20 (the CTR block)
+
+## 49. The CTR bin ordering, the segmented scan and the freq calcer run on the HOST
+
+CatBoost computes all of this on the device. `TCtrBinBuilder::ProceedNewBins`
+(`ctrs/ctr_bins_builder.h:214-222`) gathers, calls their LSD radix
+`ReorderBins`, and marks segment boundaries with `UpdateBordersMask`;
+`TWeightedBinFreqCalcer::VisitEqualUpToPriorFreqCtrs`
+(`ctrs/ctr_calcers.h:307-341`) scans, reduces per segment and divides;
+`THistoryBasedCtrCalcer` runs `SegmentedScanAndScatterNonNegativeVector`
+three times.
+
+`gbdt/ctrs/ctr_bins_builder.mojo` and `gbdt/ctrs/ctr_calcers.mojo` do the
+same arithmetic in host loops. **The reason is scheduling, not design: the
+device radix sort and the segmented scan are being built by another lane in
+the same round, and blocking on them would have shipped nothing.**
+`RECON_CTRS.md` step 3 is that work; the unsegmented three-phase decoupled
+scan it composes from already exists in
+`gpu_util/kernel/reorder_one_bit.mojo`, as does the one-bit stable reorder.
+
+What is NOT host-side: the ten elementwise kernels of
+`ctrs/kernel/ctr_calcers.cu` are ported, enqueued and gated cell by cell by
+`mojo_only/ctr_kernels_check.mojo`. So the missing piece is the scan
+between them, not the arithmetic around it, and the swap is a body
+replacement -- the signatures, the bit-31 index packing, the segment
+definition and every call site are already theirs.
+
+Two consequences worth stating rather than discovering later:
+
+* `_stable_sort_by_bin` must stay STABLE when it becomes a radix sort. The
+  order of rows within a category IS the learn permutation, which is the
+  history an ordered target statistic reads. An unstable sort is invisible
+  to any FeatureFreq check (counts do not care about order) and silently
+  randomizes every `Borders` value.
+* `mojo_only/ctr_check.mojo` gates the host arithmetic against planted
+  counts and an independent O(n^2) tally, so the device version has a
+  reference to match rather than a claim to inherit.
+
+## 50. `model_size_reg` STOPPED being a no-op the day CTR columns appeared
+
+`UpdateFeatureWeightsForBestSplits` fills the feature-weight vector with
+1.0 and RETURNS EARLY when `GetCtrsCount() == 0`
+(`cuda/methods/update_feature_weights.cpp:20-22`). That early return is why
+`model_size_reg = 0.5` cost nothing here for as long as CTRs were unported,
+and `catboost_options.mojo` said so.
+
+With CTR columns present the early return is not taken, and every CTR
+column that is not yet USED gets
+`pow(1 + maxCtrUniqueValues / maxUniqueValues, -modelSizeReg)` instead of
+1.0 (`:27-44`), which the score kernel multiplies into every gain
+(`compute_scores.cu:136-137`). This port does not implement that function,
+so its CTR candidates are scored HIGHER than stock CatBoost's by exactly
+that factor.
+
+Live divergence, not a dormant one. The docstring in
+`gbdt/options/catboost_options.mojo` was rewritten rather than annotated.
+
+## 51. Mojo CONTRACTS the MinEntropy penalty into an FMA; clang does not
+
+Found while gating CTR target binarization, and it is the same defect class
+as the `std.math.log` one already recorded in
+`gbdt/grid_creator/binarization.mojo`: arithmetic noise re-deciding a
+tie-break on a dynamic-programming plateau.
+
+`_penalty_min_entropy(w)` is `w * log(w + 1e-8)` and the DP adds it to a
+precomputed term, `prev_error[i] + _penalty_min_entropy(total -
+sweights[i])`. **Mojo contracts that multiply-then-add into an FMA across
+the inlined penalty**, evaluating `fma(w, log(w), prev_error[i])` with the
+product kept at full width. C++ at clang's default `-ffp-contract=on`
+contracts only within one SOURCE expression, and `Penalty<type>(...)` is a
+separate call, so CatBoost adds the ROUNDED product.
+
+On a column of distinct values every weight is 1, so
+`Penalty(sweights[j] - sweights[i])` depends only on `j - i` and the
+objective is exactly symmetric. At 4001 distinct values and budget 1 the
+optimum sits at cut 1999 AND cut 2000, mathematically equal; under the FMA
+they differ by ONE ULP -- measured 30412.210990606218 against
+30412.210990606214 -- and the last match's `<` tie-break, which takes the
+FIRST index, takes the second one instead.
+
+PROVED BY CONSTRUCTION, not inferred: recomputing the same scan with the
+penalty marked `@no_inline` makes every symmetric pair bit-identical again
+(i = 1997/2002 and 1998/2001 collapse to one value each, 1999/2000 to
+another) and the first index wins as theirs does.
+
+**The one-line fix is `@no_inline` on `_penalty_min_entropy`, and this lane
+does not own that file.** Reported rather than applied. Four of the fifteen
+cases in `bench/ctr_target_oracle.txt` diverge by exactly one adjacent,
+equally optimal cut; `mojo_only/ctr_check.mojo` names them, still requires
+the divergence to be exactly one ADJACENT border, and FAILS if one of them
+ever matches exactly, so the allowance is deleted when the fix lands rather
+than left standing.
+
+It survived until now because `bench/minentropy_oracle.txt` never runs
+budget 1, where `bins == 2` makes the per-level loops execute zero times
+and the last match is the only comparison in the algorithm.

@@ -1,5 +1,9 @@
 from mojo_only.early_stop_check import check_early_stop_rollback
 from mojo_only.bootstrap_check import check_bootstrap
+from mojo_only.ctr_check import check_ctrs
+from mojo_only.ctr_kernels_check import check_ctr_kernels
+from mojo_only.ctr_train_check import check_ctr_train
+from mojo_only.one_hot_cardinality_check import check_one_hot_cardinality
 from mojo_only.one_hot_check import check_one_hot
 from mojo_only.train_api_check import check_train_api
 from mojo_only.launch_probe import probe
@@ -731,5 +735,18 @@ def main() raises:
     check_bootstrap()
 
     check_one_hot()
+
+    # One-hot across every step of `policy_for_fold_count`. The write and
+    # read layouts disagreed by one fold here and a 16-category feature was
+    # silently unlearnable; `check_one_hot` above never saw it because its
+    # fixture has three categories and its assertion is fit/predict
+    # consistency, which agrees on a wrong answer.
+    check_one_hot_cardinality()
+
+    # CTRs: the option surface and the two host calcers, then the ten
+    # elementwise device kernels of `ctrs/kernel/ctr_calcers.cu`.
+    check_ctrs()
+    check_ctr_kernels()
+    check_ctr_train()
 
     check_train_api()

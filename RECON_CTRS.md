@@ -30,6 +30,25 @@ BUILT:
   `methods/greedy_subsets_searcher/kernel/split_points.mojo`, and a
   segmented REDUCE in `gpu_util/partitions_reduce.mojo`.
 
+BUILT 2026-08-20, the CTR round:
+* **`gbdt/ctrs/`**, mirroring `catboost/cuda/ctrs/`: `ctr.mojo`
+  (`ctr.h` plus the ctr-type predicate tables), `ctr_bins_builder.mojo`,
+  `ctr_calcers.mojo` (`TWeightedBinFreqCalcer` and
+  `THistoryBasedCtrCalcer`), `index_wrapper.mojo`, `ctr_binarization.mojo`,
+  and `kernel/ctr_calcers.mojo` -- all TEN elementwise kernels of
+  `ctrs/kernel/ctr_calcers.cu`, enqueued and gated cell by cell by
+  `mojo_only/ctr_kernels_check.mojo`. The BIN ORDERING, the SEGMENTED SCAN
+  and the freq calcer run on the HOST pending the sort/scan lane;
+  `PORTING.md` deviation 49.
+* **Target binarization**, MinEntropy with one border, gated against
+  CatBoost's own borders in `bench/ctr_target_oracle.txt`.
+* **The CTR option surface**: `TCtrDescription`, `TCatFeatureParams`,
+  `GetDefaultPriors`, `CreateDefaultCounter`, `SetCtrDefaults`, and
+  `CreateCtrConfigsFromDescription`'s prior x target-bin fan-out, in
+  `options/catboost_options.mojo`.
+* **A categorical path through `train()`**: `cat_features` plus their
+  one-hot / CTR dispatch off `one_hot_max_size`.
+
 NOT BUILT, verified by search and not by memory:
 * **Segmented SCAN.** The device-wide scan above is unsegmented; the
   split-points one is a purpose-built partition, not a reusable primitive.
@@ -38,11 +57,16 @@ NOT BUILT, verified by search and not by memory:
 * **Radix sort.** `launch_reorder_one_bit` is the one-bit building block and
   `FAST_SORT_SIZE = 500000` is already there; the multi-bit LSD driver that
   loops it over key bits does not exist.
-* **Any CTR calcer.** There is no `gbdt/ctrs/`. `options/catboost_options.mojo`
-  carries only REFUSALS ("CTRs are not ported", `:509`), plus a note at `:260`
-  that `feature_weights` will diverge "the day CTRs land".
-* **Target binarization.** Nothing. No `binarized_target`, no `target_border`
-  anywhere in `gbdt/`.
+* **THE CTR ESTIMATION PERMUTATION.** Not on this list before, and it is a
+  SECOND seam in front of `Borders` that the sort/scan lane does not close.
+  Permutation-DEPENDENT CTRs are recomputed once per learn permutation over
+  `ds.GetCtrsEstimationPermutation()`
+  (`doc_parallel_dataset_builder.cpp:251-262`, `permutation_count`
+  defaulting to 4, `boosting_options.cpp:14`); only the
+  permutation-INDEPENDENT ones use the identity order (`:204-206`). Running
+  the ordered statistic in ROW order would be a different and worse
+  estimator, not a slower one, so `train()` RAISES on a Borders config
+  rather than substituting row order.
 * **MODEL SERIALIZATION OF ANY KIND.** `grep "open("` over `gbdt/` returns
   NOTHING. `TrainedModel` (`train.mojo:30`) is an in-memory struct holding the
   ensemble, fold counts, one-hot flags and borders. **So "model export with
@@ -65,15 +89,26 @@ NOT BUILT, verified by search and not by memory:
 3. SIMPLE CTRs for the rest. GPU defaults: `Borders` (binarized-target,
    permutation-DEPENDENT) + `FeatureFreq` (permutation-INDEPENDENT).
    The CTR VALUES are then float features, binarized and fed to the
-   numeric histogram pipeline unchanged. The CTR binarizer is NOT the
-   GreedyLogSum we ported for numeric features: it is UNIFORM with 15
-   borders (`private/libs/options/cat_feature_options.cpp:169`), at
-   `min + (max - min) * k / 16` for k = 1..15, duplicates dropped. The
-   FeatureFreq value itself is `(bin_count + prior) / (n_rows +
+   numeric histogram pipeline unchanged. **The CTR binarizer is not one
+   grid, it is TWO, and neither is the GreedyLogSum we ported for numeric
+   features.** `Borders` columns take `Uniform` with 15 borders, at
+   `min + (max - min) * k / 16` for k = 1..15 with duplicates dropped --
+   the two-argument `TCtrDescription` constructor's default
+   (`cat_feature_options.cpp:167-170`), which is the constructor
+   `SetCtrDefaults` builds the Borders description with. `FeatureFreq`
+   columns take `MinEntropy` with 15, passed explicitly by
+   `CreateDefaultCounter` (`catboost_options.cpp:392-415`) and re-applied
+   to FeatureFreq descriptions ONLY by `SetDefaultBinarizationsIfNeeded`
+   (`:418-427`). Both are real defaults on real code paths; this file
+   previously gave the Borders grid as the FeatureFreq one.
+   The FeatureFreq value itself is `(bin_count + prior) / (n_rows +
    prior_observations)`, default prior {0.0, 1}, so `count / (n + 1)`
    (`cuda/ctrs/kernel/ctr_calcers.cu:100`, defaults at
-   `cat_feature_options.cpp:127-129`). Both are implemented in
-   `tools/ctr_prep.py`.
+   `cat_feature_options.cpp:127-129`) -- though the DEFAULT dispatch is
+   `WeightedBinFreqCtrsImpl` (`:56-67`) rather than that kernel, because
+   `counter_calc_method` defaults to `SkipTest` and not `Full`; with no
+   test pool the two are the same number. All of it is implemented in
+   `gbdt/ctrs/`.
 4. TREE CTRs (feature combinations), DEFERRED; their own machinery
    (`tree_ctr_datasets_visitor`), not v1.
 5. MODEL/INFERENCE: applied models need the final CTR tables. DEFERRED
@@ -120,12 +155,9 @@ this is achievable in one source.
 ## Gates that exist to be reused
 
 * Oracle: `tools/catboost_oracle.py` can emit a fixture WITH cat
-  features and simple CTRs pinned (CPU CatBoost). CAUTION, the
-  mojotrees trap from memory: CPU and GPU CatBoost may binarize
-  targets/priors differently; verify their GPU defaults against the CPU
-  oracle on a TINY fixture before trusting split-level gating. If they
-  diverge (like bootstrap), fall back to the stochastic-style gate set:
-  exact per-step device checks against host tallies + holdout quality.
+  features and simple CTRs pinned (CPU CatBoost). THE CAUTION BELOW WAS
+  ACTED ON, on a tiny fixture, and it was warranted: CPU and GPU DO
+  binarize CTR values differently. See the Borders entry two bullets down.
 * CONSTRUCTED fixtures, not real datasets. Correctness gates on (a) an
   analytic answer written down in advance (`mojo_only/one_hot_check.mojo`
   is the model: the right answer is arithmetic, no fixture needed) and
@@ -137,13 +169,30 @@ this is achievable in one source.
   are hoping it covers the breaking case. See PORTING_RULES.md:229.
 * THERE IS NO CATBOOST FeatureFreq ORACLE ON THIS BOX. `simple_ctr=
   'FeatureFreq'` "is not implemented on CPU yet"
-  (`catboost_options.cpp:509`, verified in the shipped binary), and
-  their GPU arm does not run on Apple. The CPU spelling of the same
-  information is `Counter`, a different normalization of the same
-  counts, so a CPU CatBoost arm is the same INFORMATION CLASS, not the
-  same bits: quality bands compare, values do not. Any claim that our
-  FeatureFreq is bit-exact to theirs rests on reading their source, not
-  on a local oracle, and must say so.
+  (`catboost_options.cpp:509`, re-verified against the shipped 1.2.10
+  binary on 2026-08-20), and their GPU arm does not run on Apple
+  ("Environment for task type [GPU] not found", same run). The CPU
+  spelling of the same information is `Counter`, a different
+  normalization of the same counts, so a CPU CatBoost arm is the same
+  INFORMATION CLASS, not the same bits: quality bands compare, values do
+  not. Any claim that our FeatureFreq is bit-exact to theirs rests on
+  reading their source, not on a local oracle, and must say so.
+* THE Borders ORACLE QUESTION IS ANSWERED, on a tiny fixture as this file
+  demanded. `simple_ctr='Borders'` IS accepted on their CPU and does
+  train. What `save_model(format='json')` then exposes is the FINAL
+  apply-time table -- `ctr_data.hash_map` keyed by category hash, plus
+  per-config `prior_numerator` / `prior_denomerator` / `scale` / `shift`
+  under `features_info.ctrs` -- and NOT the per-row ordered statistic the
+  GPU calcer builds during training. It is still a real oracle for two
+  things and both were used: the resolved `cat_feature_params` printed the
+  three priors and both ctr binarization grids verbatim, and
+  `pool.quantize(feature_border_type='MinEntropy')` gates the target grid.
+  CPU and GPU DO diverge where this file warned they might -- the CPU
+  quantizes online CTR values on a fixed `scale 15, shift 0` grid over
+  [0,1] where the GPU builds Uniform-15 borders from the observed column.
+  So the CPU arm is a quality comparison, not a value oracle, and the
+  Borders VALUES are gated analytically instead, in
+  `mojo_only/ctr_check.mojo` against an independent O(n^2) tally.
 * Real datasets are for QUALITY and SPEED reporting, a SEPARATE purpose
   from correctness. Rules when that reporting happens: fix the dataset
   list BEFORE seeing the numbers; every dataset run goes in the table
@@ -162,19 +211,15 @@ this is achievable in one source.
 1. Prep + layout: cat bins into the compressed index; one-hot for
    card <= 2 end to end; oracle fixture with one-hot only. (Their
    dispatch: one-hot features never get CTRs.)
-2. DONE (21c70ce), host-side FeatureFreq in `tools/ctr_prep.py`,
-   permutation-independent so it is computed once with no device work.
-   OPEN QUESTION it leaves behind: the calcer lives in the Python prep
-   script, so categoricals work in the BENCHMARK but `train()` still has
-   no categorical path, and the arithmetic is a second hand-maintained
-   numpy/Mojo equivalence of the kind `tools/interleaved_prep.py`
-   already documents for `searchsorted` vs `binarization.binarize`.
-   Moving it to `gbdt/ctrs/`, mirroring their path and called from
-   `train.mojo` as one more host pass over `x_colmajor` beside the
-   existing `best_split` and one-hot scans, would make it ship and would
-   let the step-4 device port replace the body while call sites and
-   gates stay put. Not urgent, but decide it before step 4 rather than
-   after.
+2. DONE. Host-side FeatureFreq, first in `tools/ctr_prep.py` (21c70ce) and
+   now in `gbdt/ctrs/` where its mirror address is, called from
+   `train.mojo` as one more host pass over `x_colmajor` beside the existing
+   `best_split` and one-hot scans. `tools/ctr_prep.py` keeps a numpy copy
+   ONLY to generate the pre-binned fixture
+   `bench/interleaved/ctr_quality.mojo` still reads; that harness rewire
+   (hand `_catcodes.u8` and a `cat_features` flag list to `train()`)
+   deletes the duplicate, and the manifest now carries the cardinalities it
+   needs. OPEN, and owned by the bench lane.
 3. The segmented scan and the radix sort. Vendor check is DONE (above):
    both are ours to write, both are composition of pieces already in
    `gpu_util/kernel/reorder_one_bit.mojo`, and neither may assume a
@@ -183,18 +228,19 @@ this is achievable in one source.
    real parity item**: their GPU `simple_ctr` default is Borders plus
    FeatureFreq, and Borders is the ordered-target-statistic half that makes
    CatBoost a distinct algorithm rather than a GBDT with frequency
-   encoding. It needs, and none of these exist yet: target binarization
-   (their default is MinEntropy with ONE border, set on GPU via
-   `ctr_target_border_count`, with per-CTR target binarization REFUSED,
-   `catboost_options.cpp:505`); the THREE-prior fan-out
+   encoding. FOUR of the five pieces now exist: target binarization
+   (MinEntropy with ONE border, set on GPU via `ctr_target_border_count`,
+   per-CTR REFUSED at `catboost_options.cpp:505`); the THREE-prior fan-out
    ({0,1},{0.5,1},{1,1}, so Borders emits three columns per cat feature,
-   `cat_feature_options.cpp:117-129`); `THistoryBasedCtrCalcer`; and the
-   elementwise kernels of `ctr_calcers.cu` (`UpdateBordersMask`,
-   `MergeBins`, `MakeMeans`, `MakeMeansAndScatter`,
-   `FillBinarizedTargetsStats`, `ExtractBorderMasks`,
-   `GatherTrivialWeights`, `WriteMask`), every one of which is elementwise
-   or gather/scatter with no warp intrinsics and no shared-memory
-   accumulation, so this block should need NO new kernel-matrix rows.
+   `cat_feature_options.cpp:117-129`); `THistoryBasedCtrCalcer` itself,
+   over a host segmented scan; and every elementwise kernel of
+   `ctr_calcers.cu`. **The prediction that they need NO new kernel-matrix
+   rows HELD**: not one warp intrinsic, not one byte of shared memory and
+   not one atomic in any of the ten, `blockSize = 256` throughout.
+   WHAT REMAINS is the device segmented scan and radix sort (step 3) and,
+   newly identified, the CTR ESTIMATION PERMUTATION -- see the NOT BUILT
+   list above. `train()` raises on a Borders config rather than running
+   the ordered statistic in row order.
 5. MODEL SERIALIZATION, which is a prerequisite and not a CTR task. There
    is no model file format at all today, not even for numeric models, so
    this starts from zero and the CTR tables are an addition to it rather
@@ -209,6 +255,6 @@ this is achievable in one source.
    cannot be seen today, but a COMBINATION bin is formed from their hash, so
    step 6 forces the hash port that FeatureFreq let us skip. Plausibly
    larger than 3 through 5 combined.
-7. Move the calcer out of `tools/ctr_prep.py` into `gbdt/ctrs/`, called from
-   `train.mojo` as a host pass, so `train()` gains a categorical path and
-   the library ships what the benchmark already has.
+7. DONE, and folded into step 2: the calcer lives in `gbdt/ctrs/` and
+   `train(cat_features=...)` calls it, so the library ships the categorical
+   path rather than the benchmark alone.

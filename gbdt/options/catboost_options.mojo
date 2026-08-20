@@ -32,6 +32,27 @@ not always the line that names the option.
 """
 
 
+from gbdt.ctrs.ctr import (
+    CTR_BORDERS,
+    CTR_BUCKETS,
+    CTR_COUNTER,
+    CTR_FEATURE_FREQ,
+    TCtrConfig,
+    TPrior,
+    ctr_type_name,
+    get_default_priors,
+    is_supported_ctr_type_gpu,
+    need_target_classifier,
+)
+from gbdt.ctrs.ctr_binarization import (
+    BORDER_SELECTION_MEDIAN,
+    BORDER_SELECTION_MIN_ENTROPY,
+    BORDER_SELECTION_UNIFORM,
+    TBinarizationOptions,
+    border_selection_name,
+)
+
+
 # --- grow_policy -----------------------------------------------------------
 comptime GROW_SYMMETRIC = 0
 comptime GROW_DEPTHWISE = 1
@@ -256,12 +277,23 @@ struct CatBoostOptions(Copyable, Movable):
     feeds `UpdateFeatureWeightsForBestSplits`, which the score kernel then
     multiplies into every gain (`compute_scores.cu:136-137`).
 
-    NOT HONORED, and an exact no-op at present: that function fills the
-    weight vector with 1.0 and RETURNS EARLY when the CTR count is zero
-    (`update_feature_weights.cpp:14-22`), and CTRs are not ported. The score
-    kernel takes the weight buffer anyway so that this stops being a
-    divergence the day CTRs land. `check()` refuses any other value, because
-    any other value would be silently discarded."""
+    NOT HONORED, and **NO LONGER A NO-OP, as of the day `train()` gained a
+    categorical path.** The paragraph that stood here said the function
+    fills the weight vector with 1.0 and RETURNS EARLY when the CTR count is
+    zero, so that nothing diverged until CTRs landed. The first half is
+    still true and the conclusion is now false, so it is deleted rather than
+    annotated: with CTR columns present, `GetCtrsCount() != 0` and the early
+    return at `update_feature_weights.cpp:20-22` is not taken. Every CTR
+    column that is not yet USED then gets
+
+        pow(1 + maxCtrUniqueValues / maxUniqueValues, -modelSizeReg)
+
+    (`:27-44`) instead of 1.0, and the score kernel multiplies that into
+    every gain (`compute_scores.cu:136-137`). So a CTR fit here scores CTR
+    candidates HIGHER than stock CatBoost does, by exactly that factor, and
+    that is a live divergence rather than a dormant one. `check()` still
+    refuses any value but 0.5, which no longer makes the option safe -- it
+    only keeps it from being TWO divergences."""
 
     var border_count: Int
     """`border_count`. **Default 128, not 254.** The value is task-type
@@ -505,9 +537,11 @@ struct CatBoostOptions(Copyable, Movable):
             )
         if self.model_size_reg != 0.5:
             raise Error(
-                "model_size_reg is not ported; feature weights are all 1.0"
-                " because CTRs are not ported, so any value but the default"
-                " 0.5 would be silently discarded"
+                "model_size_reg is not ported; UpdateFeatureWeightsForBest"
+                "Splits is not written, so every feature weight is 1.0 and"
+                " any value but the default 0.5 would be silently discarded."
+                " NOTE that at 0.5 this is no longer a no-op either once a"
+                " fit has CTR columns -- see the option's docstring"
             )
         if self.min_data_in_leaf != 1:
             raise Error(
@@ -557,3 +591,415 @@ struct CatBoostOptions(Copyable, Movable):
             self.determinism > DETERMINISM_CROSS_DEVICE
         ):
             raise Error("determinism must be off, device or cross_device")
+
+
+# ==========================================================================
+# CATEGORICAL FEATURES AND CTRs
+# ==========================================================================
+#
+# MIRRORS `private/libs/options/cat_feature_options.{h,cpp}` and the two
+# functions of `catboost_options.cpp` that resolve their defaults:
+# `CreateDefaultCounter` (`:392-415`) and `SetCtrDefaults` (`:429-478`).
+#
+# THE ONE THING TO READ IF YOU READ NOTHING ELSE. Their GPU `simple_ctr`
+# default is TWO descriptions and the first of them has THREE priors, so a
+# categorical feature becomes FOUR numeric columns:
+#
+#     Borders      priors {0,1},{0.5,1},{1,1}   ctr_binarization Uniform 15
+#     FeatureFreq  prior  {0.0,1}               ctr_binarization MinEntropy 15
+#
+# Both binarizations are real defaults on real code paths and they are
+# DIFFERENT. `Uniform, 15` is the two-argument `TCtrDescription`
+# constructor's default (`cat_feature_options.cpp:167-170`), which is what
+# the Borders description is built with; `MinEntropy, 15` is passed
+# explicitly by `CreateDefaultCounter` for a SimpleCtr projection and
+# re-applied by `SetDefaultBinarizationsIfNeeded` to FeatureFreq
+# descriptions ONLY (`:418-427`, the guard is
+# `description.Type.Get() == ECtrType::FeatureFreq`). Reading either as
+# "the CTR binarizer" is wrong, and this repository has now made that
+# mistake in both directions.
+
+
+# --- EProjectionType ------------------------------------------------------
+#
+# The argument `CreateDefaultCounter` switches on, and the only thing that
+# separates the SIMPLE-ctr FeatureFreq grid (MinEntropy) from the TREE-ctr
+# one (Median).
+
+comptime PROJECTION_TREE_CTR = 0
+comptime PROJECTION_SIMPLE_CTR = 1
+
+
+# --- ECounterCalc ---------------------------------------------------------
+#
+# Decides WHICH FeatureFreq calcer runs. `SkipTest` is the default
+# (`cat_feature_options.cpp:233`) and sends the work to
+# `TWeightedBinFreqCalcer`; `Full` sends it to `TCtrBinBuilder`'s pure-freq
+# arm. Both are implemented in `gbdt/ctrs/`, and they agree exactly on a fit
+# with no test pool.
+
+comptime COUNTER_CALC_FULL = 0
+comptime COUNTER_CALC_SKIP_TEST = 1
+
+
+def counter_calc_method_name(m: Int) -> String:
+    if m == COUNTER_CALC_FULL:
+        return String("Full")
+    return String("SkipTest")
+
+
+@fieldwise_init
+struct TCtrDescription(Copyable, Movable):
+    """`NCatboostOptions::TCtrDescription` (`cat_feature_options.cpp:139-176`).
+
+    FOUR constructors chain in their source and the chain is where the
+    defaults come from, so it is worth spelling out which one supplies what:
+
+        (type, priors, ctrBinarization, targetBinarization)  the base
+        (type, priors, ctrBinarization) -> base with
+            targetBinarization = TBinarizationOptions(MinEntropy, 1)
+        (type, priors) -> the above with
+            ctrBinarization = TBinarizationOptions(Uniform, 15)
+        (type) -> (type, {})
+
+    `PriorEstimation` is `EPriorEstimation::No` in every one of them and is
+    not carried here: the GPU refuses anything else for every ctr type but
+    Borders (`catboost_options.cpp:524-533`), and no estimator is ported.
+    """
+
+    var ctr_type: Int
+    var priors: List[TPrior]
+    var ctr_binarization: TBinarizationOptions
+    var target_binarization: TBinarizationOptions
+
+    @staticmethod
+    def with_priors(ctr_type: Int) raises -> Self:
+        """Their two-argument constructor `TCtrDescription(type,
+        GetDefaultPriors(type))` (`cat_feature_options.cpp:167-170`), which
+        is exactly how `SetCtrDefaults` builds the Borders description --
+        and therefore where `Uniform, 15` enters."""
+        return Self(
+            ctr_type,
+            get_default_priors(ctr_type),
+            TBinarizationOptions(BORDER_SELECTION_UNIFORM, 15),
+            TBinarizationOptions(BORDER_SELECTION_MIN_ENTROPY, 1),
+        )
+
+
+def create_default_counter(projection_type: Int) raises -> TCtrDescription:
+    """`TCatBoostOptions::CreateDefaultCounter`
+    (`catboost_options.cpp:392-415`), the GPU branch.
+
+    Their CPU branch returns `TCtrDescription(Counter,
+    GetDefaultPriors(Counter))`, which is the CPU's spelling of the same
+    counts under a different normalization -- and the reason a local
+    CatBoost CPU arm can only be an information-matched comparison for our
+    FeatureFreq columns, never a bitwise oracle. This is the GPU port, so
+    this returns the GPU branch and `Counter` never appears.
+    """
+    var border_selection_type: Int
+    if projection_type == PROJECTION_TREE_CTR:
+        border_selection_type = BORDER_SELECTION_MEDIAN
+    elif projection_type == PROJECTION_SIMPLE_CTR:
+        border_selection_type = BORDER_SELECTION_MIN_ENTROPY
+    else:
+        raise Error("Unknown projection type " + String(projection_type))
+    return TCtrDescription(
+        CTR_FEATURE_FREQ,
+        get_default_priors(CTR_FEATURE_FREQ),
+        TBinarizationOptions(border_selection_type, 15),
+        TBinarizationOptions(BORDER_SELECTION_MIN_ENTROPY, 1),
+    )
+
+
+struct TCatFeatureParams(Copyable, Movable):
+    """`NCatboostOptions::TCatFeatureParams` (`cat_feature_options.cpp:226-239`)
+    with the fields this port can act on.
+
+    `PerFeatureCtrs`, `StoreAllSimpleCtrs`, `CtrLeafCountLimit` and
+    `CtrHistoryUnit` are deliberately ABSENT rather than present and
+    ignored, which is this file's standing rule. Each would need machinery
+    that does not exist: per-feature descriptions need a feature id map, the
+    leaf-count limit bounds a tree-ctr cache that is not built, and
+    `CtrHistoryUnit::Group` needs the four groupwise kernels
+    `gbdt/ctrs/kernel/ctr_calcers.mojo` documents as unported.
+    """
+
+    var simple_ctrs: List[TCtrDescription]
+    """`simple_ctrs`. Default on GPU is Borders (three priors) plus
+    `CreateDefaultCounter(SimpleCtr)` (`catboost_options.cpp:449-452`)."""
+
+    var combination_ctrs: List[TCtrDescription]
+    """`combinations_ctrs`. Same pair with `CreateDefaultCounter(TreeCtr)`.
+    NOT HONORED: feature combinations are not ported, and `check()` refuses
+    a `max_ctr_complexity` above 1 rather than accepting the descriptions
+    and computing nothing from them."""
+
+    var target_binarization: TBinarizationOptions
+    """`target_binarization`, whose plain-options spelling is
+    `ctr_target_border_count` (`plain_options_helper.cpp:421`). Default
+    `(MinEntropy, 1)` (`cat_feature_options.cpp:230`).
+
+    HONORED: `gbdt/ctrs/ctr_binarization.build_target_borders` is one call
+    into the MinEntropy DP that `pixi run check-minentropy` already gates
+    against CatBoost's own borders.
+
+    ONE grid for the whole fit. The GPU refuses a per-CTR override outright
+    (`catboost_options.cpp:505`), which is why `TCtrDescription` carries a
+    `target_binarization` field that this struct's value overrides."""
+
+    var max_tensor_complexity: Int
+    """`max_ctr_complexity`. CatBoost's default is 4
+    (`cat_feature_options.cpp:231`). **OURS IS 1**, because feature
+    combinations are not ported; `check()` refuses anything larger rather
+    than silently computing simple CTRs under a name that promises
+    combinations of up to four features."""
+
+    var one_hot_max_size: Int
+    """`one_hot_max_size`. Default 2 on GPU (`cat_feature_options.cpp:232`).
+    HONORED: `train()` takes a per-feature `one_hot` flag list, and a
+    feature at or below this cardinality gets equality splits instead of
+    CTRs -- their dispatch, where a one-hot feature never gets a CTR."""
+
+    var counter_calc_method: Int
+    """`counter_calc_method`. Default `SkipTest`
+    (`cat_feature_options.cpp:233`). HONORED, and both sides are
+    implemented (see the constants above); with no test pool they agree
+    exactly, which is what makes the default safe to exercise on either
+    arm."""
+
+    def __init__(
+        out self,
+        var simple_ctrs: List[TCtrDescription],
+        var combination_ctrs: List[TCtrDescription],
+        target_binarization: TBinarizationOptions,
+        max_tensor_complexity: Int,
+        one_hot_max_size: Int,
+        counter_calc_method: Int,
+    ):
+        self.simple_ctrs = simple_ctrs^
+        self.combination_ctrs = combination_ctrs^
+        self.target_binarization = target_binarization
+        self.max_tensor_complexity = max_tensor_complexity
+        self.one_hot_max_size = one_hot_max_size
+        self.counter_calc_method = counter_calc_method
+
+    @staticmethod
+    def default() raises -> Self:
+        """`SetCtrDefaults`'s `default:` branch
+        (`catboost_options.cpp:449-452`) for the GPU task type, plus their
+        constructor's values for the rest.
+
+        The loss switch above it sends PairLogit and PairLogitPairwise to a
+        counter-only pair; neither is a ported loss, so the `default:`
+        branch is the only one reachable here.
+
+        ONE DEPARTURE, the same shape as `bootstrap_type`'s:
+        `max_tensor_complexity` is 1 rather than CatBoost's 4, because
+        combinations are not ported and 4 is a value `check()` would refuse.
+        A default that fails its own validation is how a library ships an
+        unusable out-of-the-box configuration.
+        """
+        var simple = List[TCtrDescription]()
+        simple.append(TCtrDescription.with_priors(CTR_BORDERS))
+        simple.append(create_default_counter(PROJECTION_SIMPLE_CTR))
+
+        var combos = List[TCtrDescription]()
+        combos.append(TCtrDescription.with_priors(CTR_BORDERS))
+        combos.append(create_default_counter(PROJECTION_TREE_CTR))
+
+        return Self(
+            simple^,
+            combos^,
+            TBinarizationOptions(BORDER_SELECTION_MIN_ENTROPY, 1),
+            1,
+            2,
+            COUNTER_CALC_SKIP_TEST,
+        )
+
+    @staticmethod
+    def feature_freq_only() raises -> Self:
+        """`default()` WITH THE Borders DESCRIPTION REMOVED, which is what
+        `train()` ships and is a DEPARTURE from CatBoost, in the same class
+        as `bootstrap_type = No` was before Bayesian landed.
+
+        Why the departure is a departure and not a preference: `Borders` is
+        permutation DEPENDENT, and CatBoost recomputes it once per learn
+        permutation over `ds.GetCtrsEstimationPermutation()`
+        (`doc_parallel_dataset_builder.cpp:251-262`, `permutation_count`
+        defaulting to 4, `boosting_options.cpp:14`). This port has no
+        permutation machinery, and running the ordered statistic in ROW
+        order would not be a slower CatBoost, it would be a different and
+        much worse estimator -- on data sorted by target, every row's
+        statistic reads its own neighbourhood.
+
+        So the honest sentence for any comparison table: **a defaults run of
+        this port on categorical data computes the frequency half of
+        CatBoost's simple CTRs and not the ordered-target-statistic half.**
+        """
+        var simple = List[TCtrDescription]()
+        simple.append(create_default_counter(PROJECTION_SIMPLE_CTR))
+        var combos = List[TCtrDescription]()
+        combos.append(create_default_counter(PROJECTION_TREE_CTR))
+        return Self(
+            simple^,
+            combos^,
+            TBinarizationOptions(BORDER_SELECTION_MIN_ENTROPY, 1),
+            1,
+            2,
+            COUNTER_CALC_SKIP_TEST,
+        )
+
+    def simple_ctr_configs(self) raises -> List[TCtrConfig]:
+        """`TBinarizedFeaturesManager::CreateCtrConfigsFromDescription`
+        (`cuda/data/binarizations_manager.cpp:394-433`), for the simple-ctr
+        descriptions and ONE cat feature.
+
+        **This is the function that turns descriptions into COLUMNS**, and
+        the fan-out lives in two places at once:
+
+        * every prior gets its own config (`:395`, the outer loop);
+        * `Buckets` and `Borders` additionally get one config per target
+          bin, `numBins` being `TargetBorders.size() + 1` for Buckets and
+          `TargetBorders.size()` for Borders (`:415-419`), with the
+          0-class skipped for BINARY Buckets (`:422-424`).
+
+        At the GPU default -- one target border -- Borders emits ParamId 0
+        only, so the count is 3 priors x 1 bin + 1 FeatureFreq = FOUR
+        columns per categorical feature.
+
+        `CreateCtrConfigsFromDescription`'s first act is to `continue` on
+        any target-needing type when `!HasTargetBinarization()`
+        (`:397-399`); that is `need_target_classifier` here, and the guard
+        is why a fit with no target grid produces frequency columns only
+        rather than raising.
+        """
+        var target_border_count = self.target_binarization.border_count
+        var out = List[TCtrConfig]()
+        for d in range(len(self.simple_ctrs)):
+            ref desc = self.simple_ctrs[d]
+            if need_target_classifier(desc.ctr_type) and (
+                target_border_count == 0
+            ):
+                continue
+            for p in range(len(desc.priors)):
+                var prior = desc.priors[p]
+                # `if (defaultConfig.Prior.size() == 1) Prior.push_back(1)`
+                # (`:407-409`) -- our TPrior is always a pair, so their
+                # one-element case cannot arise.
+                if desc.ctr_type == CTR_BUCKETS or (
+                    desc.ctr_type == CTR_BORDERS
+                ):
+                    var num_bins: Int
+                    if desc.ctr_type == CTR_BUCKETS:
+                        num_bins = target_border_count + 1
+                    else:
+                        num_bins = target_border_count
+                    for i in range(num_bins):
+                        # "don't calc 0-class ctr for binary
+                        # classification, it's unneeded" (`:422-424`)
+                        if (
+                            i == 0
+                            and num_bins == 2
+                            and desc.ctr_type == CTR_BUCKETS
+                        ):
+                            continue
+                        out.append(TCtrConfig(desc.ctr_type, prior, i, d))
+                else:
+                    out.append(TCtrConfig(desc.ctr_type, prior, 0, d))
+        return out^
+
+    def ctr_binarization_for(
+        self, config: TCtrConfig
+    ) -> TBinarizationOptions:
+        """The grid a given output column is quantized with.
+
+        `TCtrConfig::CtrBinarizationConfigId` indexes the manager's list of
+        distinct binarization descriptions (`GetOrCreateCtrBinarizationId`,
+        `binarizations_manager.cpp:435-446`); here it indexes the
+        description that minted the config, which is the same mapping with
+        no deduplication step. Dedup saves memory in their manager and
+        decides nothing.
+        """
+        return self.simple_ctrs[
+            config.ctr_binarization_config_id
+        ].ctr_binarization
+
+    def check(self) raises:
+        """Refuse what is not honored, by name -- the same rule the rest of
+        this file follows."""
+        if self.max_tensor_complexity != 1:
+            raise Error(
+                "max_ctr_complexity="
+                + String(self.max_tensor_complexity)
+                + " is not ported; feature combinations (tree CTRs) need"
+                " their own tree_ctr_datasets_visitor machinery, so set it"
+                " to 1 rather than believing combinations were built."
+                " CatBoost's own default is 4, which means a defaults run"
+                " here is NOT a defaults run of CatBoost"
+            )
+        if self.one_hot_max_size < 0:
+            raise Error("one_hot_max_size must be non-negative")
+        if self.counter_calc_method != COUNTER_CALC_SKIP_TEST and (
+            self.counter_calc_method != COUNTER_CALC_FULL
+        ):
+            raise Error("counter_calc_method must be SkipTest or Full")
+        if (
+            self.target_binarization.border_selection_type
+            != BORDER_SELECTION_MIN_ENTROPY
+        ):
+            raise Error(
+                "target_binarization border_type="
+                + border_selection_name(
+                    self.target_binarization.border_selection_type
+                )
+                + " is not ported; CatBoost's default is MinEntropy with one"
+                " border (cat_feature_options.cpp:230) and the GPU takes its"
+                " count from ctr_target_border_count, a per-CTR override"
+                " being refused outright (catboost_options.cpp:505)"
+            )
+        if self.target_binarization.border_count < 1:
+            raise Error(
+                "ctr_target_border_count must be at least 1; got "
+                + String(self.target_binarization.border_count)
+            )
+        for i in range(len(self.simple_ctrs)):
+            ref d = self.simple_ctrs[i]
+            # `CB_ENSURE(IsSupportedCtrType(ETaskType::GPU, ctrType))`
+            # (`catboost_options.cpp:503`)
+            if not is_supported_ctr_type_gpu(d.ctr_type):
+                var extra = String("")
+                if d.ctr_type == CTR_COUNTER:
+                    extra = String(
+                        "; Counter is CatBoost's CPU spelling of the same"
+                        " counts and is not a GPU ctr type at all"
+                        " (restrictions.h:33-43) -- use FeatureFreq"
+                    )
+                raise Error(
+                    "Ctr type "
+                    + ctr_type_name(d.ctr_type)
+                    + " is not implemented on GPU yet"
+                    + extra
+                )
+            if d.ctr_type != CTR_BORDERS and d.ctr_type != CTR_FEATURE_FREQ:
+                raise Error(
+                    "simple_ctr="
+                    + ctr_type_name(d.ctr_type)
+                    + " is not ported; only Borders and FeatureFreq have a"
+                    " calcer in gbdt/ctrs/"
+                )
+            if len(d.priors) == 0:
+                raise Error("Provide at least one prior for CTR")
+            # Their `ValidateCtr` WARNS rather than refuses here, and the
+            # warning is worth carrying verbatim because it names both
+            # grids (`catboost_options.cpp:537-539`).
+            if (
+                d.ctr_type == CTR_FEATURE_FREQ
+                and d.ctr_binarization.border_selection_type
+                == BORDER_SELECTION_UNIFORM
+            ):
+                print(
+                    "warning: Uniform ctr binarization for featureFreq ctr"
+                    " is not good choice. Use MinEntropy for simpleCtrs and"
+                    " Median for combinations-ctrs instead"
+                )
