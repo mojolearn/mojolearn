@@ -88,5 +88,39 @@ catboost = ">=1.2"
 # the tree port; CatBoost is the oracle there.
 scikit-learn = "*"
 
+# THE GPU BASELINE ARM, added 2026-08-20. Its own feature, NOT added to
+# `bench`, and that separation is deliberate.
+#
+# `bench_sklearn.py` claimed in its docstring that scikit-learn has no GPU arm
+# on this machine. Checking that claim needs pytorch, and pytorch is a large
+# dependency that drags scipy and numpy solves with it. Adding it to `bench`
+# would re-solve the environment every recorded timing in this repository was
+# taken under, and a benchmark whose baseline moved is not a baseline.
+#
+# So `skgpu` is a SECOND environment. It resolves to the same sklearn 1.9.0,
+# numpy 2.5.2 and scipy 1.18.0 that `bench` already has (verified 2026-08-20),
+# which is what makes a number taken here comparable to one taken there. Those
+# three are pinned exactly rather than left open for that reason: if a future
+# solve moves them, the pin fails loudly instead of silently making the two
+# environments incomparable.
+[feature.skgpu.dependencies]
+python = "3.14.*"
+# Reaches Metal through torch's `mps` device. conda-forge's osx-arm64 build is
+# tagged `cpu_generic` but MPS is compiled in regardless; verified on
+# 2026-08-20 that `torch.backends.mps.is_available()` is True and a matmul
+# runs on device. Do not infer the answer from the build string.
+pytorch = ">=2.13"
+# Pinned to `bench`, not floating. See the note above.
+scikit-learn = "==1.9.0"
+numpy = "==2.5.2"
+scipy = "==1.18.0"
+
+[feature.skgpu.tasks]
+# scikit-learn CPU against scikit-learn MPS, same estimator both arms, so the
+# ratio is the device and nothing else. Prints REFUSED lines for the four
+# estimators that cannot reach the GPU at all, which is most of them.
+sklearn-gpu = "python bench/bench_sklearn_gpu.py"
+
 [environments]
 bench = ["bench"]
+skgpu = ["skgpu"]

@@ -12,8 +12,31 @@ timing loop, where it belongs.
 WHAT IS BEING COMPARED, AND WHAT IS NOT
 ---------------------------------------
 Our GPU against scikit-learn's CPU, on this Mac. That is the comparison the
-project exists to make: cuML and cuVS cannot run on Apple silicon at all, so
-there is no GPU arm on the other side to compare against.
+project exists to make: cuML and cuVS cannot run on Apple silicon at all.
+
+That used to be followed by "so there is no GPU arm on the other side to
+compare against", which was an ASSUMPTION and is now a MEASUREMENT. It was
+too strong. scikit-learn 1.9 has Array API dispatch, so a torch tensor on the
+`mps` device does reach the Apple GPU for some estimators. Measured
+2026-08-20 (bench/results/SKLEARN_GPU_BASELINE_2026-08-20.md,
+bench/bench_sklearn_gpu.py):
+
+  * `PCA(svd_solver="auto")` -- THEIR DEFAULT, and the `pca` arm below --
+    CANNOT reach it. `auto` resolves to `covariance_eigh` at our shape and
+    `aten::_linalg_eigh` is unimplemented on MPS.
+  * `Ridge(alpha=0, solver="cholesky")` -- the `ols_normal_eq` arm below, the
+    honest algorithm-matched denominator -- CANNOT reach it. Array API
+    dispatch supports only `svd`.
+  * `LinearRegression` -- the `ols` arm below -- CANNOT reach it. No Array API
+    support at all.
+  * `PCA(full)` and `Ridge(svd)` CAN, and both are ~1.2x SLOWER on MPS than
+    the same call on torch's CPU, because `linalg_svd` has no MPS kernel and
+    falls back to the host anyway.
+
+So every arm THIS file times is CPU-only on the other side for a reason that
+was checked rather than assumed, and turning scikit-learn's GPU support on
+makes their PCA about 10x worse rather than better. The comparison stands;
+the justification for it is no longer a guess.
 
 It is NOT a claim that we beat cuML. It is a claim about what a user on this
 machine can actually reach.
@@ -69,7 +92,7 @@ TWO THINGS THIS HARNESS DOES NOT TIME, STATED RATHER THAN BURIED
 ----------------------------------------------------------------
 1. **`n_jobs=-1` is now passed to every estimator that accepts it.** Their
    default is `None`, which means ONE CORE, and DBSCAN's and k-NN's whole cost
-   is neighbour queries. Racing a 10-core GPU against a single CPU core is the
+   is neighbor queries. Racing a 10-core GPU against a single CPU core is the
    same unfairness this file refuses when it declines to pass
    `algorithm='brute'`. `KMeans`, `PCA` and OLS reach OpenMP and LAPACK
    regardless.
@@ -188,7 +211,7 @@ def main():
         # anyway, so the claim stays checkable.
         t = time.perf_counter()
         PCA(n_components=pca_comp, svd_solver="covariance_eigh").fit(pc_x)
-        emit("pca", time.perf_counter() - t)
+        emit("pca_cov_eigh", time.perf_counter() - t)
 
         # THEIR DEFAULT. `auto` picks a kd-tree or ball tree and does
         # O(n log n) queries; it is what a user gets and it is the arm the
