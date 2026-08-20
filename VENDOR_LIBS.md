@@ -103,7 +103,9 @@ Grepped from their whole `catboost/cuda` tree.
 |---|---|---|---|
 | `greedy_subsets_searcher/kernel/split_points.cu` | `cub::DeviceRadixSort::SortPairs` | hand-written stable partition | **NO, see section 3** |
 | `greedy_subsets_searcher/kernel/split_points.cu` | `cub::DeviceScan::ExclusiveSum` | three-pass decoupled scan; its BLOCK scan is now `block.prefix_sum` | `nn.cumsum` is CPU-only, so the device-wide decoupling stays ours -- see 3b |
-| `cuda_util/kernel/scan.cu` | `cub::DeviceScan::{Inclusive,Exclusive}{Sum,Scan}` | not ported | same: no GPU form ships |
+| `cuda_util/kernel/scan.cu` | `cub::DeviceScan::{Inclusive,Exclusive}Sum` | not ported | same: no GPU form ships |
+| `cuda_util/kernel/scan.cu:47` + `cuda_util/kernel/segmented_scan.cu:22` | `cub::DeviceScan::InclusiveScan` under a CUSTOM OPERATOR (`TSegmentedSum`, `TNonNegativeSegmentedSum`) | PORTED 2026-08-20, `gbdt/gpu_util/kernel/segmented_scan.mojo`, three-phase decoupled | **NO, and not partly.** `block.prefix_sum` is ADDITION ONLY -- no operator parameter -- so even the BLOCK half has no counterpart, unlike the unsegmented scan next door. PORTING.md 49 |
+| `cuda_util/sort.cpp:544` (`ReorderBins`) | `cub::DeviceRadixSort::SortPairs` | PORTED 2026-08-20, `gbdt/gpu_util/kernel/radix_sort.mojo`: their own `ReorderOneBit<ui32,ui32>` looped LSD | no device sort ships; CUB is OPEN so this is a port, not a substitution. PORTING.md 50 |
 | `cuda_util/kernel/reduce.cu` | `cub::DeviceReduce::Reduce`, `ReduceByKey` | not ported | `algorithm.reductions.reduce_*`, which DOES ship with a GPU target. Nothing calls it yet |
 | `cuda_util/kernel/reduce.cu` | `cub::DeviceSegmentedReduce::Reduce` | hand-written `partitions_reduce`, per-block reduce now `block.sum` | nothing segmented ships; our segments are ragged leaf ranges and no dense-axis reduction expresses them |
 | `cuda_util/kernel/segmented_sort.cu` | `cub::DeviceSegmentedRadixSort::*` | not ported | nothing segmented found |

@@ -1060,3 +1060,111 @@ over an O(candidates) host readback of the candidates and weights -- host
 traffic `HOST_AND_DEVICE.md` permits, where upstream's float atomics need
 no scale at all (deviation: theirs never quantizes; ours inherits the
 fixed-point scheme every fit here uses).
+
+# Deviations added 2026-08-20 (the CTR block's two device primitives)
+
+## 49. The segmented scan's BLOCK-level half is hand-written: `prefix_sum` takes no operator
+
+`gbdt/gpu_util/kernel/segmented_scan.mojo`. Theirs is
+`cub::DeviceScan::InclusiveScan` under a CUSTOM ASSOCIATIVE OPERATOR --
+`TSegmentedSum` and `TNonNegativeSegmentedSum`,
+`cuda_util/kernel/segmented_scan_helpers.cuh:11,24` -- reached from
+`SegmentedScanVector` (`cuda_util/segmented_scan.h:8`) and
+`SegmentedScanAndScatterNonNegativeVector` (`cuda_util/kernel/scan.cu:47`).
+The combine is `newFlag = left.flag | right.flag` and
+`newValue = right.flag ? right.value : left.value + right.value`.
+
+`reorder_one_bit.mojo` calls `max.gpu.primitives.block.prefix_sum` for its
+block half and this file cannot: `prefix_sum` is ADDITION ONLY, with no
+operator parameter, so there is no shipped counterpart to stand in for a
+segmented combine. The in-block half is therefore a Hillis-Steele over
+their operator in threadgroup memory, which is what `cub::BlockScan` runs
+on their side. The three-launch device-wide decoupling around it is the
+same gap `reorder_one_bit.mojo` already records (VENDOR_LIBS.md 3b/3c),
+and phase 2 scans the per-block aggregates with one thread where CUB uses
+a decoupled lookback.
+
+**The library-call alternative was refused on arithmetic, not on taste.** A
+segmented scan can be faked from two UNSEGMENTED ones as
+`cum[i] - cum[start(i) - 1]`, which would let `prefix_sum` do all the work.
+It is a subtraction of two nearly equal floats: at 800k rows of unit
+weights `cum` reaches 8e5 while a segment sum is order 1, so float32 leaves
+roughly 0.06 of absolute error on a quantity of size 1, and CatBoost's
+`Eps` is 1e-12. Their operator accumulates FROM the segment start and
+carries no such term.
+
+Two of their behaviours are transliterated rather than tidied, and both are
+easy to mistake for bugs:
+
+* Neither entry point runs an exclusive scan. Both run an INCLUSIVE scan
+  written one slot to the right (`segmented_scan_helpers.cuh:206-209`,
+  `:68-73`), followed by `ZeroSegmentStartsImpl` (`segmented_scan.cu:11`)
+  or by a pre-fill (`scan.cu:59`).
+* `SegmentedScanVector` exclusive therefore NEVER WRITES SLOT 0. In their
+  code it is covered only because `UpdateBordersMaskImpl` flags `i == 0`
+  unconditionally (`ctrs/kernel/ctr_calcers.cu:139`). Ours leaves it alone
+  the same way.
+
+Gate: `pixi run check-segscan`, four arms
+({vector, scatter} x {inclusive, exclusive}) against a host tally cell by
+cell, on a fixture that forces a segment at index 0, at a scan-block
+boundary, one past one, at an emit-block boundary (a DIFFERENT block size,
+256 against 768), three starts in a row, and a `-0.0f` start. Six
+sabotages, all red: flags ignored in phase 1 (3807/4001), the phase-2 carry
+never resetting (13/4001), the phase-3 carry added unconditionally
+(3070/4001), the exclusive shift dropped (3524/4001), the scatter reading
+`indices[i]` instead of `indices[i + 1]` (3524/4001), and `raw < 0` in
+place of their `ExtractSignBit` bit test (253/4001 -- the `-0.0f` rows,
+which is why that helper is a bit test).
+
+**No kernel-matrix row was needed.** The block comes from
+`column_shared_limit` at 8 bytes a thread, which is 4096/6144/8192 on
+Apple/NVIDIA/AMD, and CatBoost's own `GetScanBlockSize()` of 768
+(`cuda_util/kernel/scan.cuh:7`) is below all three -- so the cap binds
+everywhere and the geometry is identical across the three columns.
+
+## 50. `ReorderBins` is their own one-bit reorder looped LSD, not CUB's multi-bit radix
+
+`gbdt/gpu_util/kernel/radix_sort.mojo`. The CTR bin builder sorts with
+`ReorderBins(Bins, Indices, 0, newBits, Tmp, DecompressedTempBins)`
+(`ctrs/ctr_bins_builder.h:223`), which is `TRadixSortKernel<ui32, ui32>` ->
+`cub::DeviceRadixSort::SortPairs` (`cuda_util/kernel/sort_templ.cuh:26`).
+CUB is OPEN and a port candidate under `PORTING_RULES.md` 0b-i, and MAX
+ships no device sort, so there is nothing to call.
+
+What is written is not a fresh design: it is CatBoost's OWN
+`NKernel::ReorderOneBit<ui32, ui32>` (`cuda_util/kernel/reorder_one_bit.cu
+:11`, instantiated at `:61`, exposed as `ReorderOneBit<TMapping>` in
+`cuda_util/reorder_bins.cpp:74`) driven over the bit range. Three named
+differences from their CUB call:
+
+1. ONE BIT PER PASS where CUB does a radix DIGIT (4-8 bits). Same answer --
+   LSD over stable one-bit passes is stable and total -- at `bits` passes
+   rather than `bits/5`. Priced, not measured; nothing calls this yet.
+2. PING-PONG rather than their single-bit wrapper's two `cudaMemcpyAsync`
+   per pass (`reorder_one_bit.cu:21-22`), which is what CUB does too
+   (`cub::DoubleBuffer`, `sort_templ.cuh:10`, with the conditional
+   copy-back at `:53` mirrored here). Mojo will not let two device pointers
+   of different origins swap in one variable, so the parity selects the
+   buffers instead of the pointers being exchanged.
+3. NO DESCENDING ARM. `TRadixSortContext::Descending` exists
+   (`cuda_util/kernel/sort.cuh:25`) and `ReorderBinsImpl` passes `false`
+   (`sort.cpp:558`). Unported rather than written blind.
+
+Gate: `pixi run check-radixsort`, three arms (6 passes even, 7 odd, and a
+`[2, 7)` window for their `offset` argument) against a host STABLE counting
+sort, comparing keys AND the value pairing cell by cell, plus conservation.
+Sortedness is computed and printed SEPARATELY, because it is the check that
+cannot see the failure that matters: under the value-routing sabotage the
+run prints `keys out of order: 0` and `keys wrong: 0` beside
+`stable pairing wrong: 4001 of 4001`.
+
+**A sabotage found a hole in the check itself and it is worth recording.**
+The odd-parity arm was first written as 37 keys over 7 bits, where bit 6 is
+zero in every key: the seventh pass was the identity, the sorted answer was
+already in the caller's buffer after six passes, and DELETING THE COPY-BACK
+CHANGED NOTHING -- green on a branch it never reached. The arm now uses 97
+keys, and `check_radix_sort` refuses any arm whose top bit is constant.
+With that fixed the copy-back sabotage prints 685 descending steps and
+3966/4001 keys wrong on the odd arms while the even arm stays green, which
+is reach per branch (`PORTING_RULES.md:8`) shown rather than claimed.

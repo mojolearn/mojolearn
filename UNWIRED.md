@@ -43,6 +43,32 @@ When the multi-block flush lands, `deterministic_flush` must be consulted at
 that site and this table must move it upstairs in the same commit.
 
 
+## The CTR block's two device primitives: PORTED, GATED, NOT REACHED
+
+Added 2026-08-20. Both are `gbdt/` files -- ports of real files of theirs --
+and NOTHING IN THE TREE CALLS EITHER. Rule 3 says a ported file no caller
+reaches is not done, so they are logged here rather than counted as
+finished.
+
+| file | theirs | what would call it |
+|---|---|---|
+| `gbdt/gpu_util/kernel/segmented_scan.mojo` | `cuda_util/kernel/segmented_scan.cu:22`, `cuda_util/kernel/scan.cu:47` | `THistoryBasedCtrCalcer` (`ctrs/ctr_calcers.h:75,93,137,182`), which needs `gbdt/ctrs/` and target binarization first |
+| `gbdt/gpu_util/kernel/radix_sort.mojo` | `cuda_util/sort.cpp:544` (`ReorderBins`) | `TCtrBinBuilder::ProceedNewBins` (`ctrs/ctr_bins_builder.h:223`), same block |
+
+What that costs, stated rather than hidden: their SHAPES are exercised only
+by `pixi run check-segscan` and `pixi run check-radixsort`, so the
+arguments a real caller would pass -- sizes, bit counts, the flag mask, who
+owns the temporaries -- have never been supplied by anything but a check.
+Both checks were sabotaged to prove they can fail (six sabotages and three
+respectively, PORTING.md 49 and 50), and one of those sabotages found a
+hole in a check rather than in a kernel, which is the whole reason the
+requirement exists.
+
+Neither has a timing number and neither should be quoted with one. The
+radix sort's pass count is `bits` where CUB's is about `bits/5`, and that
+is a priced difference, not a measured one.
+
+
 ## Placement audit, 2026-08-19
 
 Andrew asked whether things had been put in `mojo_only/` that belong in

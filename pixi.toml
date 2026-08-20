@@ -67,6 +67,22 @@ check-minentropy = "mojo run -I . mojo_only/min_entropy_check.mojo"
 check-greedylogsum = "mojo run -I . mojo_only/greedy_log_sum_check.mojo"
 check-gpu-lib-worker = "mojo run -I . mojo_only/gpu_lib_worker_check.mojo"
 
+# The segmented scan the CTR calcers run on -- a device-wide exclusive scan
+# whose carry resets at a segment start. Four arms ({vector, scatter} x
+# {inclusive, exclusive}) against a host tally CELL BY CELL, on a fixture
+# that forces a segment at index 0, at a scan-block boundary, one past one,
+# at an emit-block boundary, and three starts in a row. A scan that ignored
+# the flags would still produce the right grand total, which is why nothing
+# here compares a total.
+check-segscan = "mojo run -I . mojo_only/segmented_scan_check.mojo"
+
+# The LSD radix sort over (bin, permutation position). Gates STABILITY
+# separately from sortedness and prints both, because sortedness alone
+# cannot see a tie that moved -- and the tie order IS the second half of
+# the key the CTR block sorts by. Runs an even and an odd pass count, which
+# are the two sides of the ping-pong parity switch.
+check-radixsort = "mojo run -I . mojo_only/radix_sort_check.mojo"
+
 # What the host toolchain actually resolved to. Worth recording beside any
 # number, because `--target-cpu` and `--target-features` default to the HOST,
 # so every `mojo run` above is already a native build and a result carries the

@@ -41,4 +41,6 @@ ported/models/oblivious_model.mojo	catboost/cuda/models/oblivious_model.h	partia
 ported/models/kernel/add_bin_values.mojo	catboost/cuda/models/kernel/add_model_value.cu	partial	ComputeBins fused with the add; ordered predicate only
 ported/grid_creator/binarization.mojo	library/cpp/grid_creator/binarization.cpp	partial	GreedyLogSum only, their default; host-side as theirs is; priority queue replaced by a scanned List
 ported/gpu_util/kernel/reorder_one_bit.mojo	catboost/cuda/cuda_util/kernel/reorder_one_bit_impl.cuh	transliterated	ReorderOneBitImpl + SortWithoutCub; the scan is CUB in theirs and is written out here, see VENDOR_LIBS.md 3b
+gbdt/gpu_util/kernel/segmented_scan.mojo	catboost/cuda/cuda_util/kernel/segmented_scan.cu	transliterated	SegmentedScanVector + SegmentedScanAndScatterNonNegativeVector (scan.cu:47); their operators and output iterators are segmented_scan_helpers.cuh; the CUSTOM-OP block scan is CUB in theirs and is written out here, PORTING.md 49
+gbdt/gpu_util/kernel/radix_sort.mojo	catboost/cuda/cuda_util/kernel/reorder_one_bit.cu	transliterated	ReorderBins (sort.cpp:544) is cub::DeviceRadixSort::SortPairs in theirs; here it is their own ReorderOneBit<ui32,ui32> looped LSD over the bit range, PORTING.md 50
 ported/gpu_util/kernel/fill.mojo	catboost/cuda/cuda_util/kernel/fill.cu

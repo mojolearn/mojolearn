@@ -29,15 +29,20 @@ BUILT:
 * A leaf-segmented stable partition (count-chunks / scan-chunks / place) in
   `methods/greedy_subsets_searcher/kernel/split_points.mojo`, and a
   segmented REDUCE in `gpu_util/partitions_reduce.mojo`.
+* **A DEVICE-WIDE SEGMENTED SCAN**, `gbdt/gpu_util/kernel/segmented_scan.
+  mojo`: both of their entry points, `SegmentedScanVector`
+  (`cuda_util/segmented_scan.h:8`, flag in bit 31 of a separate word) and
+  `SegmentedScanAndScatterNonNegativeVector` (`cuda_util/kernel/scan.cu:47`,
+  flag in the value's sign bit, answer scattered through the permutation),
+  inclusive and exclusive. `pixi run check-segscan` gates all four arms
+  against a host tally cell by cell. PORTING.md 49.
+* **AN LSD RADIX SORT**, `gbdt/gpu_util/kernel/radix_sort.mojo`: their
+  `ReorderBins` (`cuda_util/sort.cpp:544`), built by looping their own
+  `ReorderOneBit<ui32, ui32>` over the bit range. `pixi run
+  check-radixsort` gates STABILITY separately from sortedness, on an even
+  and an odd pass count. PORTING.md 50.
 
 NOT BUILT, verified by search and not by memory:
-* **Segmented SCAN.** The device-wide scan above is unsegmented; the
-  split-points one is a purpose-built partition, not a reusable primitive.
-  What is needed is the flag-in-bit-31 variant, where the carry resets at a
-  segment start. That is a modification of the existing three-phase pattern.
-* **Radix sort.** `launch_reorder_one_bit` is the one-bit building block and
-  `FAST_SORT_SIZE = 500000` is already there; the multi-bit LSD driver that
-  loops it over key bits does not exist.
 * **Any CTR calcer.** There is no `gbdt/ctrs/`. `options/catboost_options.mojo`
   carries only REFUSALS ("CTRs are not ported", `:509`), plus a note at `:260`
   that `feature_weights` will diverge "the day CTRs land".
@@ -107,9 +112,11 @@ recorded rather than assumed:
   decoupled scan on top of it.
 
 So **the sort is no longer the long pole**. That sentence predated
-`reorder_one_bit` being ported. An LSD radix sort is a driver looping their
-one-bit stable reorder over key bits, and the segmented scan is the existing
-three-phase scan with a carry that resets on a flag. Both are composition.
+`reorder_one_bit` being ported. Both landed on 2026-08-20 as composition:
+the radix sort loops their one-bit stable reorder over key bits, and the
+segmented scan is the three-phase decoupled scan with a carry that resets on
+a flag. Only the segmented scan's BLOCK-level half had to be written out,
+because `prefix_sum` takes no custom operator.
 
 **Both must be GPU-agnostic from the first line** (standing rule): no
 wavefront-width assumption, 32 on NVIDIA and Apple against 64 on AMD, and
@@ -175,10 +182,17 @@ this is achievable in one source.
    let the step-4 device port replace the body while call sites and
    gates stay put. Not urgent, but decide it before step 4 rather than
    after.
-3. The segmented scan and the radix sort. Vendor check is DONE (above):
-   both are ours to write, both are composition of pieces already in
-   `gpu_util/kernel/reorder_one_bit.mojo`, and neither may assume a
-   wavefront width.
+3. DONE 2026-08-20. The segmented scan and the radix sort, both in
+   `gpu_util/kernel/`, both gated (`check-segscan`, `check-radixsort`),
+   neither assuming a wavefront width and neither needing a kernel-matrix
+   row -- the segmented scan's block comes from `column_shared_limit` at 8
+   bytes a thread, which CatBoost's own `GetScanBlockSize()` of 768 caps on
+   every vendor, so the geometry is identical across the three columns.
+   NOTHING CALLS EITHER YET, so both are `UNWIRED.md` entries by rule 3.
+   One correction to the vendor note above: `block.prefix_sum` carries the
+   radix sort's bit scan but CANNOT carry the segmented scan, because it
+   takes no operator and a segmented combine is not addition. See
+   PORTING.md 49 for why the two-unsegmented-scans trick was refused.
 4. History/Borders CTRs on device, learn-order permutation. **This is the
    real parity item**: their GPU `simple_ctr` default is Borders plus
    FeatureFreq, and Borders is the ordered-target-statistic half that makes
