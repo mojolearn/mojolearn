@@ -32,28 +32,17 @@ cp "$here/LICENSE" "$here/NOTICE" "$here/README.md" "$here/python/"
 
 ./bindings/build.sh
 
-rm -rf "$DYLIBS"
-mkdir -p "$DYLIBS"
+# The FULL transitive closure, walked rather than sampled. See
+# packaging/macos/stage_dylibs.py: reading only the extension's direct
+# dependencies staged 2 dylibs when the real closure is 4, and shipped a wheel
+# that failed on install with "Library not loaded:
+# @rpath/libMSupportGlobals.dylib, referenced from .dylibs/libAsyncRT...".
+# It also verifies statically that nothing is left unresolved, which is the
+# only form of this check that means anything on the build machine.
+pixi run -e pkg python "$here/packaging/macos/stage_dylibs.py" \
+    "$PKG/_mojolearn.so" "$ENV_LIB"
 
-# Exactly the two the extension names. Discovered rather than hardcoded, so a
-# toolchain that starts linking a third fails loudly here instead of shipping
-# a wheel that cannot import.
-NEEDED=$(otool -L "$PKG/_mojolearn.so" | awk '/@rpath\//{print $1}' | sed 's|@rpath/||')
-for lib in $NEEDED; do
-    if [ ! -f "$ENV_LIB/$lib" ]; then
-        echo "ERROR: $lib is linked by the extension but not in $ENV_LIB" >&2
-        exit 1
-    fi
-    cp "$ENV_LIB/$lib" "$DYLIBS/$lib"
-    codesign --force --sign - "$DYLIBS/$lib"
-done
 
-# Point the extension at its own directory. add_rpath rather than replacing,
-# because the original rpath is harmless once this one resolves first.
-install_name_tool -add_rpath "@loader_path/.dylibs" "$PKG/_mojolearn.so" 2>/dev/null || true
-codesign --force --sign - "$PKG/_mojolearn.so"
-
-echo "staged: $NEEDED"
 
 # THE TAG AND THE BINARY MUST AGREE, and nothing else checks this.
 # The wheel filename is what pip compares before it tries to load anything, so

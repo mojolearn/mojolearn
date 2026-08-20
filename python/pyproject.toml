@@ -14,7 +14,7 @@ build-backend = "setuptools.build_meta"
 name = "mojolearn"
 # Must agree with python/mojolearn/_version.py. Not made dynamic, so that a
 # version bump is a visible edit in both places rather than one.
-version = "0.1.0a1"
+version = "0.1.0a2"
 description = "GPU machine learning in Mojo, running on Apple Silicon"
 readme = "README.md"
 requires-python = ">=3.10"
