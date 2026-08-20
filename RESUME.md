@@ -256,3 +256,32 @@ ported; the reported loss moved in its 7th decimal, the model did not).
     covtype 581k x 53 @ 254:                      ours ~29 vs CPU ~10 -> 2.8x
 
 The morning started at 21x fixed / 2.1x variable and covtype 4.9x.
+
+### PARITY, end of 2026-08-19, and how to reproduce it
+
+After `482661e` (the Apple 2-warp-shared Int32 histogram arm), interleaved
+in one process, same rows and grid both arms, mse printed and matched to
+~7 decimals every rep:
+
+    800k x 100 @ 128 borders (their GPU default):
+        CatBoost CPU 31.0-31.4 ms/tree, ours 32.0-32.9 -> 1.02-1.05x
+    800k x 100 @ 254:  ~31.4 vs ~65.7 -> 2.1x  (254 family not yet shared-i32)
+    covtype   @ 128:  ~9.8  vs ~21.3 -> 2.2x
+    covtype   @ 254:  ~9.8  vs ~26.6 -> 2.7x
+
+Reproduce:
+    pixi run -e bench python tools/interleaved_prep.py <dir> synth
+    pixi run -e bench mojo run -I . \
+        bench/interleaved/catboost_interleaved.mojo <dir> synth 800000
+
+The Apple arm is deterministic run-to-run (associative integer
+accumulation), so this table is deterministic-vs-deterministic; CatBoost's
+CPU was measured bitwise stable across thread counts the same night, and
+its GPU (which cannot run here) is non_deterministic by their own tag.
+
+The day opened at 21x fixed / 2.1x variable and covtype 4.9x. Next known
+levers, in order: the 129-255-bin family gets the same shared-i32 arm
+(the 254 rows above), per-tree workspace reuse (~40 buffer creates/tree
+vs their once-per-fit), device-side split resolution (~2 ms, a marked
+deviation). Beyond this box: a Pro/Max chip multiplies OUR arm by 2-4x
+and theirs by ~1.5x.
