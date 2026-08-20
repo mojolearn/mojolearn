@@ -326,8 +326,37 @@ scales down to 9.7 and ours cannot follow. The lever list below
 attacks exactly this; the decisive per-phase attribution is a
 level_bench run on the covtype shape.
 
-Next known levers, in order: device-side split resolution (~2 ms, a
-marked deviation through the matrix), the predict/inference path
-(unmeasured; their model_evaluation_speed suite is the arena plan).
-Beyond this box: a Pro/Max chip multiplies OUR arm by 2-4x and theirs
-by ~1.5x.
+### 2026-08-20, later: THE SCALE WIN -- first decisive victories
+
+The covtype attribution said the gap was a FIXED ~9-11 ms/tree floor
+(scratchpad `fixedfloor_probe.mojo`: 581k/290k/145k rows at the covtype
+shape -> 19.7 ms/tree with a 9.3-11.5 ms intercept; the floor alone
+costs more than CatBoost CPU's whole covtype tree). Floors amortize, so
+the prediction was: bigger data, we win. MEASURED at 4M x 100
+(interleaved, same process, mse matched both arms every rep, 16 GB box
+at 78% free after the run, no thrash signature in the rep variance):
+
+    4M x 100 @ 128 (their GPU default):  0.47-0.56x
+        -- OURS IS 1.8-2.1x FASTER THAN CATBOOST CPU
+    4M x 100 @ 254:                      0.82-0.88x -- ours faster
+
+    (ours ~100 ms/tree at 5x the rows of the 800k parity run's ~31 --
+    sublinear, the floor amortizing; CatBoost CPU went 31 -> 184-210,
+    slightly superlinear.)
+
+Fixtures: tools/interleaved_prep.py <dir> synth 4000000 100. The
+resolution-aware `choose_scale(mag, n_rows)` holds at 4M rows: mse
+matches CatBoost to 6-7 decimals at both border counts.
+
+THE STANDINGS STORY IN ONE LINE: we now BEAT CatBoost's CPU wherever
+the data is big enough to fill the GPU (>= ~1M rows at their GPU
+default config), tie at 800k, and lose only where the per-tree
+launch/drain floor dominates (covtype-sized data) -- and their GPU arm
+cannot run on this machine at all.
+
+Next known levers, in order: device-side split resolution (attacks the
+covtype floor directly; a marked deviation through the matrix -- their
+design reads back per level too, `bestProps.Read`), the
+predict/inference path (unmeasured; their model_evaluation_speed suite
+is the arena plan). Beyond this box: a Pro/Max chip multiplies OUR arm
+by 2-4x and theirs by ~1.5x.
