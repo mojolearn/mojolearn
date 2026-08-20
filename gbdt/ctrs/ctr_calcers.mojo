@@ -21,17 +21,22 @@ dispatches on the CTR TYPE:
 frequency half of the GPU default lands on `TWeightedBinFreqCalcer` here.
 `ctr_bins_builder.mojo` carries the other arm.
 
-## HOST, AND THAT IS A DEVIATION
+## WHICH HALF RUNS WHERE, AND WHY
 
-Both classes are device code in CatBoost. Here the freq calcer runs on the
-host, and the history calcer's segmented scan does too, because the device
-radix sort and segmented scan belong to another lane this round.
-**Recorded as deviation 52 in `PORTING.md`.** The elementwise kernels these
-two classes call ARE ported and enqueued -- `gbdt/ctrs/kernel/ctr_calcers.
-mojo`, gated by `mojo_only/ctr_kernels_check.mojo` -- so what is missing is
-the scan between them, not the arithmetic around it.
+`THistoryBasedCtrCalcerGpu` is the port of `THistoryBasedCtrCalcer`: it runs
+`GatherTrivialWeights`, both segmented scans, `GetGatheredBinSample`,
+`FillBinarizedTargetsStats` and `DivideWithPriors` on the device, through
+the kernels their own code calls. It is what `train()` computes a `Borders`
+column with.
+
+`THistoryBasedCtrCalcer` above it -- no suffix -- is the HOST reference the
+device answer is gated against in `mojo_only/ctr_device_check.mojo`, and it
+is what `mojo_only/ctr_check.mojo` gates against an independent O(n^2)
+tally. `TWeightedBinFreqCalcer` is still host side and that is what remains
+of `PORTING.md` deviation 52.
 """
 
+from max.gpu.host import DeviceBuffer, DeviceContext
 from std.memory import bitcast
 
 from gbdt.ctrs.ctr import (
@@ -41,8 +46,22 @@ from gbdt.ctrs.ctr import (
     TCtrConfig,
     is_equal_up_to_prior_and_binarization,
 )
-from gbdt.ctrs.ctr_bins_builder import TCtrBinBuilder
-from gbdt.ctrs.index_wrapper import index_of, is_segment_start
+from gbdt.ctrs.ctr_bins_builder import TCtrBinBuilder, TCtrBinBuilderGpu
+from gbdt.ctrs.index_wrapper import (
+    CTR_INDEX_MASK,
+    index_of,
+    is_segment_start,
+)
+from gbdt.ctrs.kernel.ctr_calcers import (
+    launch_fill_binarized_targets_stats,
+    launch_gather_trivial_weights,
+    launch_make_means_and_scatter,
+)
+from gbdt.gpu_util.kernel.segmented_scan import (
+    SEG_SCAN_BLOCK,
+    launch_segmented_scan_and_scatter_non_negative,
+)
+from gbdt.gpu_util.kernel.transform import launch_gather_with_mask_u8
 
 
 def compute_simple_ctrs(
@@ -121,14 +140,15 @@ def compute_simple_ctrs(
                 "simple_ctr="
                 + String("Borders" if group[0].ctr_type == CTR_BORDERS
                          else "Buckets")
-                + " is not wired into train(): THistoryBasedCtrCalcer is"
-                " written and gated but needs two things this port does not"
-                " have -- the device segmented scan and radix sort another"
-                " lane is building, and the CTR ESTIMATION PERMUTATION"
-                " (doc_parallel_dataset_builder.cpp:251-262,"
-                " permutation_count default 4). Running the ordered"
-                " statistic in row order would be a different estimator,"
-                " not a slower one, so it raises instead"
+                + " is PERMUTATION DEPENDENT (IsPermutationDependentCtrType,"
+                " ctr_type.cpp:44-58) and cannot be written from this"
+                " function, which is their permutation-INDEPENDENT"
+                " writeCtrs call over the identity order"
+                " (doc_parallel_dataset_builder.cpp:206 and :229). Running"
+                " the ordered statistic in row order is a different and"
+                " worse estimator, not a slower one. Use"
+                " compute_simple_ctrs_gpu, which takes the CTR ESTIMATION"
+                " PERMUTATION their :251-262 loop supplies"
             )
         else:
             raise Error(
@@ -256,13 +276,12 @@ def segmented_scan_and_scatter_non_negative_vector(
     the packing legal: the real values are >= 0, so a negative value can
     only mean "segment start", and `abs()` recovers it.
 
-    **This host loop is a stand-in for a DEVICE three-phase decoupled
-    segmented scan that another lane is building** (`RECON_CTRS.md` step 3:
-    the unsegmented version already exists in
-    `gpu_util/kernel/reorder_one_bit.mojo` as
-    `block_scan_flags_kernel` / `scan_block_sums_kernel` /
-    `add_block_carry_kernel`, and the segmented one is that pattern with a
-    carry that resets on a flag). Deviation 49.
+    **This host loop is the REFERENCE for the device scan, not a stand-in
+    for a missing one.** The device version is
+    `launch_segmented_scan_and_scatter_non_negative`
+    (`gpu_util/kernel/segmented_scan.mojo`, deviation 49) and
+    `THistoryBasedCtrCalcerGpu` below is what calls it;
+    `mojo_only/ctr_device_check.mojo` compares the two cell by cell.
 
     The exclusive-and-restart semantics are what make the result an ORDERED
     statistic: position `i` receives the sum over the rows that PRECEDE it
@@ -334,21 +353,15 @@ struct THistoryBasedCtrCalcer(Movable):
     skipped -- `NeedFixForGroupwiseCtr()` is false for every configuration
     this port reaches, see `kernel/ctr_calcers.mojo`.
 
-    ## WHAT IS STILL MISSING, and it is not only the scan
+    ## THIS ONE IS THE HOST REFERENCE
 
-    This class is NOT wired into `train()`, and the reason is a second
-    seam that the sort/scan lane does not close. Their permutation-DEPENDENT
-    CTRs are computed once PER PERMUTATION, over
-    `ds.GetCtrsEstimationPermutation()`
-    (`doc_parallel_dataset_builder.cpp:251-262`), with
-    `permutation_count` defaulting to 4 (`boosting_options.cpp:14`); only
-    the permutation-INDEPENDENT ones (FeatureFreq) use the identity order
-    (`:204-206`). Feeding this calcer the identity order would not be a
-    slower CatBoost, it would be a different and worse estimator -- on a
-    dataset ordered by target, every row's statistic would read its own
-    neighbourhood. So `train()` ships the FeatureFreq half and this class
-    waits for the permutation machinery as well as for the device
-    primitives.
+    `THistoryBasedCtrCalcerGpu` at the bottom of this file is what `train()`
+    runs. This class computes the same statistic in host loops and exists to
+    be compared against it cell by cell
+    (`mojo_only/ctr_device_check.mojo`), and to be compared itself against
+    an independent O(n^2) tally (`mojo_only/ctr_check.mojo`). A host
+    reference used to CHECK a device answer is not a CPU path
+    (`PORTING_RULES.md` 0b-ii).
 
     `set_float_sample` / `VisitFloatFeatureMeanCtrs` (`:170-205`) is not
     ported: `FloatTargetMeanValue` is not in any default description.
@@ -512,3 +525,352 @@ struct THistoryBasedCtrCalcer(Movable):
                 )
             out.append(column^)
         return out^
+
+
+struct THistoryBasedCtrCalcerGpu(Movable):
+    """`THistoryBasedCtrCalcer<TMapping>` ON THE DEVICE, which is the port.
+
+    Their class, their buffers (`ctr_calcers.h:265-283`), their launch
+    order. The `Gpu` suffix is ours; CatBoost has one class because it has
+    no host arm.
+
+    Every step below is a kernel their own code calls, and none of them is
+    new: `GatherTrivialWeights`, `FillBinarizedTargetsStats`,
+    `MakeMeansAndScatter` and `GatherWithMask` were ported and gated by
+    `mojo_only/ctr_kernels_check.mojo`, and
+    `SegmentedScanAndScatterNonNegativeVector` by
+    `pixi run check-segscan`. What this class adds is the wiring, which was
+    the missing half.
+    """
+
+    var indices: DeviceBuffer[DType.uint32]
+    """Their `Indices`, a const view of the bin builder's -- taken by
+    `ConstCopyView()` in their constructor (`:42`). This port holds a copy
+    of the bin builder instead of a view, so the buffer below is the
+    builder's own and the builder must outlive the calcer."""
+
+    var gathered_weights_with_mask: DeviceBuffer[DType.float32]
+    var scanned_scattered_weights: DeviceBuffer[DType.float32]
+    var dst: DeviceBuffer[DType.float32]
+    var tmp: DeviceBuffer[DType.float32]
+    var gathered_binarized_sample: DeviceBuffer[DType.uint8]
+    var binarized_sample: DeviceBuffer[DType.uint8]
+
+    var scan_scanned: DeviceBuffer[DType.float32]
+    var scan_has_flag: DeviceBuffer[DType.uint8]
+    var scan_block_sums: DeviceBuffer[DType.float32]
+    var scan_block_flags: DeviceBuffer[DType.uint8]
+    """`context.PartResults` for the segmented scan (`scan.h:26-31`), split
+    across four buffers because our three-phase decoupling needs a value and
+    a flag per element and per block where CUB keeps one opaque byte
+    array."""
+
+    var size: Int
+    var first_zero_index: Int
+    """Their `firstZeroIndex`, which is `CtrTargets.LearnSlice.Size()`."""
+
+    var has_sample: Bool
+
+    def __init__(
+        out self, ctx: DeviceContext, builder: TCtrBinBuilderGpu
+    ) raises:
+        """Their trivial-weights constructor (`:52-63`) and the `Reset` it
+        calls (`:85-99`)."""
+        var n = builder.size
+        self.size = n
+        self.first_zero_index = builder.learn_size
+        self.has_sample = False
+
+        self.indices = builder.indices
+        self.gathered_weights_with_mask = ctx.enqueue_create_buffer[
+            DType.float32
+        ](n)
+        self.scanned_scattered_weights = ctx.enqueue_create_buffer[
+            DType.float32
+        ](n)
+        self.dst = ctx.enqueue_create_buffer[DType.float32](n)
+        self.tmp = ctx.enqueue_create_buffer[DType.float32](n)
+        self.gathered_binarized_sample = ctx.enqueue_create_buffer[
+            DType.uint8
+        ](n)
+        self.binarized_sample = ctx.enqueue_create_buffer[DType.uint8](n)
+
+        var n_blocks = (n + SEG_SCAN_BLOCK - 1) // SEG_SCAN_BLOCK
+        self.scan_scanned = ctx.enqueue_create_buffer[DType.float32](n)
+        self.scan_has_flag = ctx.enqueue_create_buffer[DType.uint8](n)
+        self.scan_block_sums = ctx.enqueue_create_buffer[DType.float32](
+            n_blocks
+        )
+        self.scan_block_flags = ctx.enqueue_create_buffer[DType.uint8](
+            n_blocks
+        )
+
+        self.reset(ctx)
+
+    def reset(mut self, ctx: DeviceContext) raises:
+        """`Reset(indices, firstZeroIndex, groupIds)` (`ctr_calcers.h:85-99`).
+
+        The two launches that survive when `groupIds` is null:
+
+            GatherTrivialWeights(GatheredWeightsWithMask, Indices,
+                                 firstZeroIndex, true, Stream)
+            SegmentedScanAndScatterNonNegativeVector(GatheredWeightsWithMask,
+                                                     Indices,
+                                                     ScannedScatteredWeights,
+                                                     false, Stream)
+
+        `ScannedScatteredWeights[r]` leaves holding the DENOMINATOR before
+        the prior: how many rows precede `r` in its category, in the CTR
+        estimation permutation's order. `NeedFixForGroupwiseCtr()` is false
+        for every configuration this port reaches, so the `FixGroupwiseCtr`
+        branch is unreachable rather than skipped -- see
+        `kernel/ctr_calcers.mojo`.
+        """
+        launch_gather_trivial_weights(
+            ctx,
+            self.indices,
+            self.size,
+            UInt32(self.first_zero_index),
+            True,
+            self.gathered_weights_with_mask,
+        )
+        launch_segmented_scan_and_scatter_non_negative(
+            ctx,
+            self.size,
+            False,
+            self.gathered_weights_with_mask,
+            self.indices,
+            self.scanned_scattered_weights,
+            self.scan_scanned,
+            self.scan_has_flag,
+            self.scan_block_sums,
+            self.scan_block_flags,
+        )
+        self.has_sample = False
+
+    def set_binarized_sample(
+        mut self, ctx: DeviceContext, sample: List[UInt8]
+    ) raises:
+        """`SetBinarizedSample` (`ctr_calcers.h:108-112`).
+
+        Theirs takes an already-device buffer; this uploads, because the
+        target binarization runs on the host (`ctr_binarization.mojo`,
+        their `BuildBinarizedTarget` is a host pass too --
+        `gpu_data/dataset_helpers.cpp`).
+        """
+        if len(sample) != self.size:
+            raise Error(
+                "binarized sample size "
+                + String(len(sample))
+                + " does not match the index size "
+                + String(self.size)
+            )
+        var h = ctx.enqueue_create_host_buffer[DType.uint8](self.size)
+        for i in range(self.size):
+            h.unsafe_ptr().unsafe_store(i, sample[i])
+        ctx.enqueue_copy(
+            dst_buf=self.binarized_sample, src_ptr=h.unsafe_ptr()
+        )
+        ctx.synchronize()
+        self.has_sample = True
+
+    def visit_cat_feature_ctr(
+        mut self, ctx: DeviceContext, ctr_configs: List[TCtrConfig]
+    ) raises -> List[List[Float32]]:
+        """`VisitCatFeatureCtr` (`ctr_calcers.h:121-153`), launch for launch.
+
+            gatheredSample = GetGatheredBinSample()
+            FillBinarizedTargetsStats(gatheredSample,
+                                      GatheredWeightsWithMask, Dst,
+                                      referenceCtrConfig.ParamId,
+                                      referenceCtrConfig.Type)
+            SegmentedScanAndScatterNonNegativeVector(Dst, Indices, Tmp)
+            for each config:
+                DivideWithPriors(Tmp, ScannedScatteredWeights,
+                                 GetNumeratorShift, GetDenumeratorShift,
+                                 Dst)
+                visitor(ctrConfig, Dst)
+
+        ONE scan, N columns -- their `IsEqualUpToPriorAndBinarization`
+        assert on every config is what makes that legal, and it is checked
+        below as they check it.
+
+        `DivideWithPriors`' five-argument overload is
+        `TMakeMeanAndScatterKernel` with NO map (`ctr_kernels.h:553-561`),
+        so the launch below passes `has_map=False` and the kernel's `m = i`
+        branch runs. The four-argument in-place overload (`:534-539`) is a
+        different function and is not the one this call site takes.
+        """
+        if len(ctr_configs) == 0:
+            raise Error("VisitCatFeatureCtr called with no configs")
+        if not self.has_sample:
+            raise Error(
+                "VisitCatFeatureCtr needs a binarized target sample the"
+                " size of the index"
+            )
+        ref reference = ctr_configs[0]
+        if reference.ctr_type != CTR_BORDERS and (
+            reference.ctr_type != CTR_BUCKETS
+        ):
+            raise Error(
+                "VisitCatFeatureCtr takes Borders or Buckets configs only"
+            )
+
+        # `GetGatheredBinSample` (`:258-265`)
+        launch_gather_with_mask_u8(
+            ctx,
+            self.gathered_binarized_sample,
+            self.binarized_sample,
+            self.indices,
+            self.size,
+            CTR_INDEX_MASK,
+        )
+
+        launch_fill_binarized_targets_stats(
+            ctx,
+            self.gathered_binarized_sample,
+            self.gathered_weights_with_mask,
+            self.size,
+            self.dst,
+            UInt32(reference.param_id),
+            reference.ctr_type == CTR_BORDERS,
+        )
+
+        launch_segmented_scan_and_scatter_non_negative(
+            ctx,
+            self.size,
+            False,
+            self.dst,
+            self.indices,
+            self.tmp,
+            self.scan_scanned,
+            self.scan_has_flag,
+            self.scan_block_sums,
+            self.scan_block_flags,
+        )
+
+        var out = List[List[Float32]]()
+        var host = ctx.enqueue_create_host_buffer[DType.float32](self.size)
+        for c in range(len(ctr_configs)):
+            ref config = ctr_configs[c]
+            if not is_equal_up_to_prior_and_binarization(config, reference):
+                raise Error(
+                    "VisitCatFeatureCtr: every config in one call must be"
+                    " equal up to prior and binarization"
+                )
+            launch_make_means_and_scatter(
+                ctx,
+                self.tmp,
+                self.scanned_scattered_weights,
+                self.size,
+                config.numerator_shift(),
+                config.denumerator_shift(),
+                self.indices,
+                False,
+                CTR_INDEX_MASK,
+                self.dst,
+            )
+            # their `visitor(ctrConfig, constDst, Stream)`
+            # (`ctr_calcers.h:149`), which for the batched calcer reads the
+            # column back to the host to binarize it
+            # (`batch_binarized_ctr_calcer.cpp:66-71`)
+            ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=self.dst)
+            ctx.synchronize()
+            var column = List[Float32]()
+            for r in range(self.size):
+                column.append(host.unsafe_ptr().unsafe_load(r))
+            out.append(column^)
+        return out^
+
+
+def compute_simple_ctrs_gpu(
+    ctx: DeviceContext,
+    cat_codes: List[UInt32],
+    unique_values: Int,
+    ctr_configs: List[TCtrConfig],
+    binarized_target: List[UInt8],
+    order: List[UInt32],
+) raises -> List[List[Float32]]:
+    """The PERMUTATION-DEPENDENT half of their two `writeCtrs` calls.
+
+    MIRRORS the same `TBatchedBinarizedCtrsCalcer::ComputeBinarizedCtrs`
+    driver `compute_simple_ctrs` above mirrors, with two differences that
+    are theirs and not ours:
+
+    * `order` is `ctrEstimationOrder` after
+      `ctrsEstimationPermutation.WriteOrder(ctrEstimationOrder)`
+      (`doc_parallel_dataset_builder.cpp:255`), where the host driver above
+      gets it after `MakeSequence` (`:206`). Same function, two calls, two
+      orders -- `:229` for the independent features and `:257` for the
+      dependent ones.
+    * every config here is a binarized-target one, so
+      `VisitEqualUpToPriorCtrs` takes the `IsBinarizedTargetCtr` arm
+      (`ctr_helper.h:112-119`) and nothing else.
+
+    A FeatureFreq config handed to this function is refused rather than
+    computed: it would be the right number from the wrong writer, and their
+    `SplitByPermutationDependence` (`doc_parallel_dataset_builder.cpp:81`)
+    cannot put one here.
+    """
+    var n = len(cat_codes)
+    if len(order) != n:
+        raise Error(
+            "ctr estimation order has "
+            + String(len(order))
+            + " entries for "
+            + String(n)
+            + " rows"
+        )
+    if len(binarized_target) != n:
+        raise Error(
+            "binarized target has "
+            + String(len(binarized_target))
+            + " entries for "
+            + String(n)
+            + " rows; a Borders ctr is a statistic OF the target and"
+            " cannot be computed without its grid"
+        )
+    for i in range(len(ctr_configs)):
+        if ctr_configs[i].ctr_type == CTR_FEATURE_FREQ:
+            raise Error(
+                "compute_simple_ctrs_gpu is their permutation-DEPENDENT"
+                " writeCtrs call; FeatureFreq is permutation independent"
+                " (ctr_type.cpp:52-55) and belongs in compute_simple_ctrs,"
+                " over the identity order"
+            )
+
+    var builder = TCtrBinBuilderGpu(ctx, order)
+    builder.add_cat_feature_bins(ctx, cat_codes, unique_values)
+
+    var out = List[List[Float32]]()
+    for _ in range(len(ctr_configs)):
+        out.append(List[Float32]())
+
+    # `CreateEqualUpToPriorAndBinarizationCtrsGroupping` (`ctr.h:60-68`),
+    # the same grouping the host driver above runs, so the expensive scan
+    # runs once per bucket and only the priors' divide repeats.
+    var done = List[Bool]()
+    for _ in range(len(ctr_configs)):
+        done.append(False)
+
+    var calcer = THistoryBasedCtrCalcerGpu(ctx, builder)
+    calcer.set_binarized_sample(ctx, binarized_target)
+
+    for i in range(len(ctr_configs)):
+        if done[i]:
+            continue
+        var group = List[TCtrConfig]()
+        var group_slots = List[Int]()
+        for j in range(i, len(ctr_configs)):
+            if not done[j] and is_equal_up_to_prior_and_binarization(
+                ctr_configs[j], ctr_configs[i]
+            ):
+                done[j] = True
+                group.append(ctr_configs[j])
+                group_slots.append(j)
+
+        var columns = calcer.visit_cat_feature_ctr(ctx, group)
+        for k in range(len(group_slots)):
+            out[group_slots[k]] = columns[k].copy()
+
+    return out^

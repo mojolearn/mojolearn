@@ -215,16 +215,24 @@ def build_feature_freq_tables(
     for i in range(len(ctr_configs)):
         ref cfg = ctr_configs[i]
         if cfg.ctr_type != CTR_FEATURE_FREQ:
-            # `THistoryBasedCtrCalcer`'s statistic is ORDERED, so its table
-            # is a per-target-class history and not a count. `train()`
-            # cannot build one yet (`compute_simple_ctrs` raises), and a
-            # table written as if it could would be a silently wrong model
-            # rather than a missing one.
-            raise Error(
-                "no apply-time table is built for ctr type "
-                + ctr_type_name(cfg.ctr_type)
-                + "; only FeatureFreq is wired through train()"
-            )
+            # NO TABLE FOR THIS CONFIG, and skipping is deliberate rather
+            # than a shrug. This used to raise, on the reasoning that
+            # `train()` could not produce a Borders column anyway; it can
+            # now, so raising here would make every default categorical
+            # fit die at the END of a successful training run.
+            #
+            # A skipped table is not a silent hole: `predict_floats`
+            # refuses a model whose CTR columns have no table, so a Borders
+            # model TRAINS and REFUSES TO SCORE, which is exactly what is
+            # true of it. Writing a count table here instead would be the
+            # dangerous option -- a wrong model rather than a missing one.
+            #
+            # What the real table needs is now known and is NOT ordered:
+            # their `TCtrValueTable` for Borders is a per-category
+            # histogram over TARGET CLASSES computed on the whole learn set
+            # (`static_ctr_provider.cpp:255-283`), so no permutation, scan
+            # or sort is involved. See RECON_CTRS.md.
+            continue
         out.append(
             TCtrValueTable(
                 first_column + i,

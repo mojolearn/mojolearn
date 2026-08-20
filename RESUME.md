@@ -545,10 +545,9 @@ Three things worth carrying forward:
 
 * **The kernel-matrix prediction held.** Not one warp intrinsic, not one
   byte of shared memory, not one atomic in the ten CTR kernels.
-* **Borders is not wired into `train()`** and the reason is a seam nobody
-  had listed: it needs the CTR ESTIMATION PERMUTATION as well as the
-  device sort and scan. Row order would be a different estimator, so it
-  raises.
+* **Borders was not wired into `train()`**, and the reason was a seam
+  nobody had listed: it needs the CTR ESTIMATION PERMUTATION as well as the
+  device sort and scan. Closed 2026-08-21, below.
 * **A shipped accuracy bug fell out of the cardinality sweep**: `train()`
   and `_build_cindex_from_floats` derived DIFFERENT fold counts for a
   one-hot feature, so the compressed index was written and read under
@@ -616,3 +615,67 @@ force), the CTR estimation permutation in front of `Borders`, the
 epsilon dataset.
 Beyond this box: a Pro/Max chip multiplies OUR arms by 2-4x and theirs
 by ~1.5x.
+
+### 2026-08-21: BORDERS, END TO END -- the ordered target statistic runs
+
+The last parity item in the CTR block. `train(cat_features=...,
+cat_feature_params=[TCatFeatureParams.default()])` now produces FOUR columns
+per categorical feature -- three `Borders` priors and one `FeatureFreq`,
+CatBoost's own GPU `simple_ctr` default -- and trains. Three things landed
+together and the middle one was the actual blocker.
+
+**THE CTR ESTIMATION PERMUTATION** (`gbdt/data/permutation.mojo`): their
+`TDataPermutation` over `Shuffle`, `TRandom` and MT19937-64, ported bit for
+bit. There is no live oracle for it -- their GPU learner will not run on
+Apple and their CPU learner never exposes an order -- so
+`tools/permutation_oracle/` compiles CatBoost's OWN
+`util/random/mersenne64.{h,cpp}` under a C++ transcription of the four short
+functions around it, and `pixi run check-permutation` compares the raw
+64-bit stream, `Uniform(t)` and whole orders cell by cell. Green on the
+first run.
+
+**THE DEVICE PRIMITIVES, WIRED.** `TCtrBinBuilderGpu` and
+`THistoryBasedCtrCalcerGpu` run `ReorderBins`, both calls to
+`SegmentedScanAndScatterNonNegativeVector`, `GatherWithMask`,
+`ScatterWithMask` and `ScanVector<ui32>` on the device. The last three had
+to be ported on the way (`gpu_util/kernel/transform.mojo` and
+`gpu_util/kernel/scan.mojo`): they are `cuda_util` functions the bin builder
+needs and nothing had written them. `PORTING.md` 52 shrinks to the
+FeatureFreq calcer alone. `launch_segmented_scan_vector` stays unwired --
+its only call site in all of `catboost/cuda` is `VisitFloatFeatureMeanCtrs`,
+and `FloatTargetMeanValue` has no calcer here.
+
+**WHY ROW ORDER IS NOT AN OPTION, MEASURED RATHER THAN ASSERTED.** Their
+permutation 0 IS the identity, and that is safe on their side only because
+`ShuffleLearnDataIfNeeded` shuffles the whole learn pool at load whenever
+the data has a categorical feature (`private/libs/algo/preprocess.cpp:183`).
+This port has no such stage. On a 4001-row target-sorted fixture whose
+category carries no information at all:
+
+    leak = mean(ctr | target bin 1) - mean(ctr | target bin 0)
+        row order (their id 0):        0.303
+        the shipped permutation (3):  -0.0027
+
+    train loss, categorical column as the ONLY feature, 30 trees depth 4:
+        under the permutation:  0.1234
+        in row order:           0.0606
+
+Row order fits a feature containing nothing twice as well, because the
+statistic reads the label it is estimating. `PORTING.md` 55.
+
+TWO THINGS STILL OWED. `train()`'s implicit fallback is still
+`feature_freq_only()`, because a Borders model cannot yet carry the
+apply-time CTR tables `predict_floats` needs; the flip is one line and
+belongs in the commit that closes that. And this port builds ONE CTR column
+set where their loop builds `permutation_count` of them (deviation 55a),
+which is the ordered-boosting loop and is separate work.
+
+WHAT A BORDERS APPLY-TIME TABLE ACTUALLY HOLDS is now written down in
+`RECON_CTRS.md`, read while it was cheap, and the headline is that it is
+NOT ordered: `TCtrValueTable` carries a per-category histogram over target
+classes computed on the whole learn set, and the permutation is a
+training-time device that never reaches the model file.
+
+Next known levers, in order: the Borders apply-time tables (RECON_CTRS.md
+step 5, now with the table's contents written down), then tree CTRs, then
+the epsilon dataset.

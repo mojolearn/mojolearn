@@ -49,9 +49,10 @@ BUILT 2026-08-20, the CTR round:
   `THistoryBasedCtrCalcer`), `index_wrapper.mojo`, `ctr_binarization.mojo`,
   and `kernel/ctr_calcers.mojo` -- all TEN elementwise kernels of
   `ctrs/kernel/ctr_calcers.cu`, enqueued and gated cell by cell by
-  `mojo_only/ctr_kernels_check.mojo`. The BIN ORDERING, the SEGMENTED SCAN
-  and the freq calcer run on the HOST pending the sort/scan lane;
-  `PORTING.md` deviation 49.
+  `mojo_only/ctr_kernels_check.mojo`. The BIN ORDERING and the SEGMENTED
+  SCAN moved to the DEVICE on 2026-08-21 (`TCtrBinBuilderGpu`,
+  `THistoryBasedCtrCalcerGpu`); the FeatureFreq calcer is still host side
+  and is all that is left of `PORTING.md` deviation 52.
 * **Target binarization**, MinEntropy with one border, gated against
   CatBoost's own borders in `bench/ctr_target_oracle.txt`.
 * **The CTR option surface**: `TCtrDescription`, `TCatFeatureParams`,
@@ -61,17 +62,97 @@ BUILT 2026-08-20, the CTR round:
 * **A categorical path through `train()`**: `cat_features` plus their
   one-hot / CTR dispatch off `one_hot_max_size`.
 
+BUILT 2026-08-21, the permutation round:
+* **THE CTR ESTIMATION PERMUTATION**, `gbdt/data/permutation.mojo`: their
+  `TDataPermutation` over `Shuffle` (`cuda/data/data_utils.h:21`), `TRandom`
+  and MT19937-64, bit for bit against their own generator
+  (`pixi run check-permutation`, oracle built by
+  `tools/permutation_oracle/`). `train()` now runs their TWO writers -- the
+  identity order for permutation-independent CTRs
+  (`doc_parallel_dataset_builder.cpp:206`, `:229`) and the estimation
+  permutation for the dependent ones (`:255`, `:257`) -- and `Borders`
+  trains rather than raising. ONE column set where their loop builds
+  `permutation_count`, and never their identity id 0: `PORTING.md` 55.
+* **THE BIN ORDERING AND THE HISTORY CALCER ON THE DEVICE**,
+  `TCtrBinBuilderGpu` and `THistoryBasedCtrCalcerGpu`, wiring
+  `check-segscan`'s scatter form and `check-radixsort`'s `ReorderBins` into
+  real callers. Gated by `pixi run check-ctr-device`, which compares the
+  device answer against the host reference AND an independent O(n^2) tally
+  over the permutation, then measures that ROW ORDER LEAKS THE LABEL (0.303
+  against the permutation's -0.0027) and that a `train()` fit in row order
+  reaches half the training loss on a feature carrying no information.
+
 NOT BUILT, verified by search and not by memory:
-* **THE CTR ESTIMATION PERMUTATION.** Not on this list before, and it is a
-  SECOND seam in front of `Borders` that the sort/scan lane does not close.
-  Permutation-DEPENDENT CTRs are recomputed once per learn permutation over
-  `ds.GetCtrsEstimationPermutation()`
-  (`doc_parallel_dataset_builder.cpp:251-262`, `permutation_count`
-  defaulting to 4, `boosting_options.cpp:14`); only the
-  permutation-INDEPENDENT ones use the identity order (`:204-206`). Running
-  the ordered statistic in ROW order would be a different and worse
-  estimator, not a slower one, so `train()` RAISES on a Borders config
-  rather than substituting row order.
+* **CTR TABLES IN A MODEL FILE.** The numeric half of this landed
+  2026-08-20: `gbdt/models/model_text.mojo` saves and loads a `TrainedModel`
+  (ensemble, leaf values in leaf order, borders, fold counts, one-hot flags,
+  losses) as plain text with every float carrying its IEEE-754 bits, gated
+  bit-exact end to end by `pixi run check-model-io`. What is still missing is
+  the CTR half: the per-categorical-feature category-to-value mapping an
+  applied model needs. The format reserves `ctr_table`, `ctr_entry` and
+  `ctr_borders` records and a `type` token on the `feature` record for
+  exactly that, and the seam is written down in that file's THE CTR SEAM
+  block. Nothing there is built.
+
+## THE Borders APPLY-TIME TABLE, read from their source 2026-08-21
+
+Captured while porting the estimation permutation, because that is the
+cheapest moment it will ever be, and because the single most surprising
+thing about it is worth stating first:
+
+**THE APPLY-TIME TABLE IS NOT ORDERED AND CONTAINS NO PERMUTATION.** The
+ordered statistic is a TRAINING-TIME device only. What an applied model
+carries for a `Borders` CTR is the FULL-LEARN-SET per-category histogram
+over target classes, and the permutation never enters it.
+
+`TCtrValueTable` (`catboost/libs/model/ctr_value_table.h:17-105`) is three
+things:
+
+* `IndexBuckets`, a dense index hash from the row's CATEGORY HASH to a
+  bucket index (`NCatboost::TDenseIndexHashView`, `GetIndexHashViewer()`);
+* `CTRBlob`, an untyped byte blob read as `int[uniqueHashes *
+  TargetClassesCount]` for Borders and Buckets -- one COUNT PER TARGET CLASS
+  per category (`static_ctr_provider.cpp:255-283` builds it);
+* two scalars, `CounterDenominator` (Counter/FeatureFreq only) and
+  `TargetClassesCount`.
+
+Apply, for one row and one `TModelCtr` (`static_ctr_provider.cpp:92-122`):
+
+    bucket = hashView.GetIndex(hashedCatFeature[doc])
+    if bucket == NotFoundIndex: value = ctr->Calc(0, 0)
+    else if TargetClassesCount > 2:
+        hist = &blob[bucket * TargetClassesCount]
+        total = sum(hist[0 .. TargetBorderIdx])
+        good  = sum(hist[TargetBorderIdx+1 .. end]);  total += good
+        value = ctr->Calc(good, total)
+    else:                              // the GPU default lands here
+        hist = &blob[bucket * 2]
+        value = ctr->Calc(hist[1], hist[0] + hist[1])
+
+and `Calc` is `((countInClass + PriorNum) / (totalCount + PriorDenom) +
+Shift) * Scale` (`online_ctr.h:289-292`).
+
+Four consequences for whoever builds this:
+
+1. At the GPU default `ctr_target_border_count = 1`, `TargetClassesCount`
+   is 2 and the table is just `{count of binarized target 0, count of 1}`
+   per category over the whole learn set. **No scan, no sort, no
+   permutation, no history** -- it is the FeatureFreq table with one extra
+   axis, and `build_feature_freq_tables` is most of it already.
+2. A category the model never saw is not an error: it scores
+   `Calc(0, 0)`, the prior alone.
+3. The three priors are three `TModelCtr`s over ONE table, exactly as the
+   three training columns are three divides over one scan.
+4. `Shift` and `Scale` come from the CTR VALUE binarization, and CPU and
+   GPU disagree there (the CPU's fixed `scale 15, shift 0` over [0,1]
+   against the GPU's Uniform-15 borders from the observed column, see the
+   oracle note below). A table written here carries this port's own
+   borders, so those two fields are ours to fill from
+   `compute_ctr_borders`, not theirs to copy.
+5. The KEY is their category hash and this port uses dense sorted-unique
+   codes. That is the same open question step 6 already names, and it
+   arrives one step earlier than expected: the table's key mapping has to
+   be decided before a categorical model can score raw data.
 
 ## What their GPU learner actually does with a cat feature
 
@@ -229,7 +310,12 @@ this is achievable in one source.
    row -- the segmented scan's block comes from `column_shared_limit` at 8
    bytes a thread, which CatBoost's own `GetScanBlockSize()` of 768 caps on
    every vendor, so the geometry is identical across the three columns.
-   NOTHING CALLS EITHER YET, so both are `UNWIRED.md` entries by rule 3.
+   WIRED 2026-08-21: `ReorderBins` by `TCtrBinBuilderGpu` and the scatter
+   form of the segmented scan by `THistoryBasedCtrCalcerGpu`, both reached
+   from `train(cat_features=...)`. `launch_segmented_scan_vector` is still
+   unreached and stays in `UNWIRED.md`: its only call site in all of
+   `catboost/cuda` is `VisitFloatFeatureMeanCtrs` (`ctr_calcers.h:182`),
+   and `FloatTargetMeanValue` has no calcer here.
    One correction to the vendor note above: `block.prefix_sum` carries the
    radix sort's bit scan but CANNOT carry the segmented scan, because it
    takes no operator and a segmented combine is not addition. See

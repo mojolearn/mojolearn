@@ -43,30 +43,49 @@ When the multi-block flush lands, `deterministic_flush` must be consulted at
 that site and this table must move it upstairs in the same commit.
 
 
-## The CTR block's two device primitives: PORTED, GATED, NOT REACHED
+## The CTR block's device primitives: WIRED 2026-08-21, one arm excepted
 
-Added 2026-08-20. Both are `gbdt/` files -- ports of real files of theirs --
-and NOTHING IN THE TREE CALLS EITHER. Rule 3 says a ported file no caller
-reaches is not done, so they are logged here rather than counted as
-finished.
+The entry that stood here said `gbdt/gpu_util/kernel/segmented_scan.mojo`
+and `gbdt/gpu_util/kernel/radix_sort.mojo` were ported, gated and reached by
+nothing. **Both now have the caller their own file named**, so that entry is
+deleted rather than annotated:
 
-| file | theirs | what would call it |
-|---|---|---|
-| `gbdt/gpu_util/kernel/segmented_scan.mojo` | `cuda_util/kernel/segmented_scan.cu:22`, `cuda_util/kernel/scan.cu:47` | `THistoryBasedCtrCalcer` (`ctrs/ctr_calcers.h:75,93,137,182`), which needs `gbdt/ctrs/` and target binarization first |
-| `gbdt/gpu_util/kernel/radix_sort.mojo` | `cuda_util/sort.cpp:544` (`ReorderBins`) | `TCtrBinBuilder::ProceedNewBins` (`ctrs/ctr_bins_builder.h:223`), same block |
+- `ReorderBins` is called by `TCtrBinBuilderGpu.add_cat_feature_bins`
+  (`gbdt/ctrs/ctr_bins_builder.mojo`), at `first_bit = 0` and
+  `last_bit = IntLog2(uniqueValues)`, which is theirs
+  (`ctr_bins_builder.h:216-219`).
+- `SegmentedScanAndScatterNonNegativeVector` is called twice by
+  `THistoryBasedCtrCalcerGpu` (`gbdt/ctrs/ctr_calcers.mojo`), at their
+  `ctr_calcers.h:93` and `:137`.
+- Both are reached from `train(cat_features=...)` under CatBoost's GPU
+  `simple_ctr` default, and `pixi run check-ctr-device` runs that path.
 
-What that costs, stated rather than hidden: their SHAPES are exercised only
-by `pixi run check-segscan` and `pixi run check-radixsort`, so the
-arguments a real caller would pass -- sizes, bit counts, the flag mask, who
-owns the temporaries -- have never been supplied by anything but a check.
-Both checks were sabotaged to prove they can fail (six sabotages and three
-respectively, PORTING.md 49 and 50), and one of those sabotages found a
-hole in a check rather than in a kernel, which is the whole reason the
-requirement exists.
+ONE ARM IS STILL UNREACHED, and it is a whole entry point rather than a
+detail:
 
-Neither has a timing number and neither should be quoted with one. The
-radix sort's pass count is `bits` where CUB's is about `bits/5`, and that
-is a priced difference, not a measured one.
+| file | symbol | theirs | what would call it |
+|---|---|---|---|
+| `gbdt/gpu_util/kernel/segmented_scan.mojo` | `launch_segmented_scan_vector` | `cuda_util/segmented_scan.h:8` -> `segmented_scan.cu:22` | `THistoryBasedCtrCalcer::VisitFloatFeatureMeanCtrs` (`ctr_calcers.h:182`), the ONLY call site of it in all of `catboost/cuda`. That method computes `FloatTargetMeanValue` CTRs, which appear in no default description and have no calcer here (`ctr_calcers.mojo` records `set_float_sample` as unported), so nothing this port can configure reaches it. |
+
+Its shape is exercised only by `pixi run check-segscan`, on both the
+inclusive and the exclusive arm, and the flag-mask argument a real caller
+would pass has still never been supplied by anything but a check. The
+scatter form beside it is now driven by real callers at real sizes, which
+is the difference.
+
+Neither primitive has a timing number and neither should be quoted with one.
+The radix sort's pass count is `bits` where CUB's is about `bits/5`, and
+that is a priced difference, not a measured one.
+
+Also added 2026-08-21 and reached from the first commit:
+`gbdt/gpu_util/kernel/transform.mojo` (`GatherWithMask`, `ScatterWithMask`)
+and `gbdt/gpu_util/kernel/scan.mojo` (`ScanVector<ui32>`), both called by
+`TCtrBinBuilderGpu` and both gated directly by `check-ctr-device` section 0
+as well as through it. Section 0 is not redundant: deleting the scan's
+device-wide block carry moves 3489 of 4001 cells there and leaves the
+builder's own section green, because a SIMPLE ctr feeds `ComputeCurrentBins`
+an array whose only end flag is the last one and every block carry is
+therefore zero. That half of the scan stays unreached until tree CTRs land.
 
 
 ## Placement audit, 2026-08-19

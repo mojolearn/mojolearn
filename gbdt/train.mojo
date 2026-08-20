@@ -23,11 +23,18 @@ from gbdt.gpu_data.kernel.binarize import (
     BINARIZE_DOCS_PER_THREAD,
     binarize_float_feature_kernel,
 )
+from gbdt.ctrs.ctr import TCtrConfig, is_permutation_dependent_ctr_type
 from gbdt.ctrs.ctr_binarization import (
     TBinarizationOptions,
+    build_binarized_target,
+    build_target_borders,
     compute_ctr_borders,
 )
-from gbdt.ctrs.ctr_calcers import compute_simple_ctrs
+from gbdt.ctrs.ctr_calcers import compute_simple_ctrs, compute_simple_ctrs_gpu
+from gbdt.data.permutation import (
+    DEFAULT_PERMUTATION_COUNT,
+    ctrs_estimation_permutation,
+)
 from gbdt.grid_creator.binarization import best_split
 from gbdt.models.ctr_value_table import (
     TCtrValueTable,
@@ -160,6 +167,7 @@ def train(
     score_function: Int = SCORE_FUNCTION_COSINE,
     cat_features: List[Bool] = List[Bool](),
     cat_feature_params: List[TCatFeatureParams] = List[TCatFeatureParams](),
+    ctr_estimation_permutation_id: Int = DEFAULT_PERMUTATION_COUNT - 1,
 ) raises -> TrainedModel:
     """Borders -> device quantization -> fit, one call.
 
@@ -183,14 +191,54 @@ def train(
     so a CTR-bearing categorical feature is REPLACED by its CTR columns
     rather than joined by them. Under `cat_feature_params`' shipped value
     that is ONE column per feature (FeatureFreq at one prior); under
-    CatBoost's own default it would be FOUR, three of them the ordered
-    target statistic -- see `TCatFeatureParams.feature_freq_only` for why
-    this port ships the frequency half only, and say so in any comparison.
+    `TCatFeatureParams.default()`, which is CatBoost's own GPU default, it
+    is FOUR -- three `Borders` priors plus one `FeatureFreq`.
+
+    ## The two writers, and the two orders
+
+    Their builder writes CTR columns TWICE, from the same driver and two
+    different orders (`doc_parallel_dataset_builder.cpp:190-262`):
+
+        MakeSequence(ctrEstimationOrder)            :206  identity
+        writeCtrs(..., permutationIndependent)      :229  FeatureFreq
+        for permutationId in [0, permutation_count):
+            ctrsEstimationPermutation.WriteOrder(ctrEstimationOrder)  :255
+            writeCtrs(..., permutationDependent)    :257  Borders
+
+    This function does the same split, off
+    `IsPermutationDependentCtrType` (`ctr_type.cpp:44-58`), which is what
+    their `SplitByPermutationDependence` (`:81`) keys on. The independent
+    half runs on the host (`compute_simple_ctrs`); the dependent half runs
+    on the device (`compute_simple_ctrs_gpu`) over
+    `ctrs_estimation_permutation(n_rows, ctr_estimation_permutation_id)`.
+
+    **`ctr_estimation_permutation_id` defaults to `permutation_count - 1`,
+    which is 3, and it is NOT the identity.** Their permutation 0 IS the
+    identity (`permutation.cpp:14-17`) and is safe on their side only
+    because the learn pool was already shuffled at load
+    (`private/libs/algo/preprocess.cpp:183-199`, which shuffles whenever the
+    data has a categorical feature and `has_time` is false). This port has
+    no such stage, so a caller can hand us rows sorted by target, where the
+    identity order makes every row's ordered statistic read its own
+    neighbourhood. `permutation_count - 1` is their ESTIMATION permutation,
+    `GetEstimationPermutation()` (`doc_parallel_boosting.h:101-103`), the
+    one whose model `Run()` exports. Only ONE of their four column sets is
+    built -- `PORTING.md` 55.
 
     `cat_feature_params` is a list because Mojo default arguments cannot
     call a raising constructor; EMPTY means
     `TCatFeatureParams.feature_freq_only()`, and more than one entry is
     refused. Pass exactly one to override.
+
+    **WHY THE FALLBACK IS NOT `TCatFeatureParams.default()`, WHICH IS
+    CATBOOST'S.** As of 2026-08-21 it could be: `default()` -- three
+    `Borders` priors plus `FeatureFreq` -- trains here and is gated by
+    `pixi run check-ctr-device`. It stays at `feature_freq_only()` for one
+    reason, and it is sequencing rather than capability: a `Borders` model
+    cannot yet carry the apply-time CTR tables `predict_floats` needs, so
+    flipping this fallback would ship a default that trains and cannot
+    score. The flip is this one line, and it belongs in the commit that
+    closes the apply side.
 
     A feature may be in `cat_features` OR in `one_hot`, not both: `one_hot`
     is the older hand-driven surface where the caller has already made the
@@ -236,6 +284,39 @@ def train(
     var ctr_tables = List[TCtrValueTable]()
 
     var configs = cat_params.simple_ctr_configs()
+
+    # `SplitByPermutationDependence` (`doc_parallel_dataset_builder.cpp:81`)
+    # over `IsPermutationDependentCtrType` (`ctr_type.cpp:44-58`), by config
+    # slot so the columns can be put back in config order afterwards.
+    var independent_slots = List[Int]()
+    var dependent_slots = List[Int]()
+    var independent_configs = List[TCtrConfig]()
+    var dependent_configs = List[TCtrConfig]()
+    for c in range(len(configs)):
+        if is_permutation_dependent_ctr_type(configs[c].ctr_type):
+            dependent_slots.append(c)
+            dependent_configs.append(configs[c])
+        else:
+            independent_slots.append(c)
+            independent_configs.append(configs[c])
+
+    # `BuildCtrTarget` -> `BuildBinarizedTarget`
+    # (`gpu_data/dataset_helpers.cpp:137-151`), the grid every
+    # binarized-target CTR reads. Built once for the fit, because the GPU
+    # refuses a per-CTR override outright (`catboost_options.cpp:505`).
+    # Skipped when nothing is permutation dependent, which is what their
+    # `CreateCtrConfigsFromDescription`'s `!HasTargetBinarization()`
+    # `continue` (`binarizations_manager.cpp:397-399`) amounts to here.
+    var binarized_target = List[UInt8]()
+    var ctr_order = List[UInt32]()
+    if len(dependent_configs) > 0:
+        var target_borders = build_target_borders(
+            y, cat_params.target_binarization
+        )
+        binarized_target = build_binarized_target(y, target_borders)
+        ctr_order = ctrs_estimation_permutation(
+            n_rows, ctr_estimation_permutation_id
+        ).fill_order()
 
     for f in range(n_features):
         var is_cat = len(cat_features) == n_features and cat_features[f]
@@ -290,13 +371,37 @@ def train(
         var codes = List[UInt32]()
         for r in range(n_rows):
             codes.append(UInt32(Int(col[r])))
-        var ctr_columns = compute_simple_ctrs(
-            codes,
-            unique_values,
-            configs,
-            List[UInt8](),
-            cat_params.counter_calc_method == COUNTER_CALC_FULL,
-        )
+
+        var ctr_columns = List[List[Float32]]()
+        for _ in range(len(configs)):
+            ctr_columns.append(List[Float32]())
+
+        if len(independent_configs) > 0:
+            # their `writeCtrs(..., permutationIndependent)` (`:229`),
+            # over the identity `ctrEstimationOrder` (`:206`)
+            var indep = compute_simple_ctrs(
+                codes,
+                unique_values,
+                independent_configs,
+                List[UInt8](),
+                cat_params.counter_calc_method == COUNTER_CALC_FULL,
+            )
+            for c in range(len(independent_slots)):
+                ctr_columns[independent_slots[c]] = indep[c].copy()
+
+        if len(dependent_configs) > 0:
+            # their `writeCtrs(..., permutationDependent)` (`:257`), over
+            # the CTR ESTIMATION PERMUTATION written at `:255`
+            var dep = compute_simple_ctrs_gpu(
+                ctx,
+                codes,
+                unique_values,
+                dependent_configs,
+                binarized_target,
+                ctr_order,
+            )
+            for c in range(len(dependent_slots)):
+                ctr_columns[dependent_slots[c]] = dep[c].copy()
         # the APPLY-TIME half of the same statistic: their
         # `CalcFinalCtrs` writes a `TCtrValueTable` beside every CTR the
         # model uses, because the learn column cannot score a new row.

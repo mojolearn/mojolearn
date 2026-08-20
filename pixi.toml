@@ -113,6 +113,24 @@ check-radixsort = "mojo run -I . mojo_only/radix_sort_check.mojo"
 # regenerate it with `ctr-target-oracle-gen`.
 check-ctr = "mojo run -I . mojo_only/ctr_check.mojo"
 
+# The CTR ESTIMATION PERMUTATION -- their TDataPermutation over MT19937-64 --
+# against CatBoost's OWN util/random/mersenne64.cpp, compiled by
+# tools/permutation_oracle/ into bench/permutation_oracle.txt. Compares the
+# raw 64-bit stream, Uniform(t) at a t where the rejection branch fires, and
+# whole orders cell by cell, plus the properties a cell compare cannot see
+# (bijection, identity iff id 0). Host-side, seconds, no GPU.
+check-permutation = "mojo run -I . mojo_only/ctr_permutation_check.mojo"
+
+# The CTR block ON THE DEVICE: the radix-sorted bin ordering, the segmented
+# scan, THistoryBasedCtrCalcerGpu, and the permutation that decides what
+# "before" means. Compares the device answer against the host reference AND
+# against an independent O(n^2) tally that walks the permutation, then makes
+# ROW ORDER produce a measurably worse (label-leaking) estimator and asserts
+# on the difference in both directions. Ends with train() under CatBoost's
+# GPU default: four columns per categorical feature. Own main(); a GPU and
+# about a minute.
+check-ctr-device = "mojo run -I . mojo_only/ctr_device_check.mojo"
+
 # The ten CTR elementwise kernels of `ctr_calcers.cu`, ENQUEUED on the
 # device and compared cell by cell against a host tally. Own main() because
 # it needs a DeviceContext and sixteen launches.
