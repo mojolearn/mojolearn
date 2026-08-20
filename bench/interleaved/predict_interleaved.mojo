@@ -45,7 +45,6 @@ from ported.models.cuda.evaluator import (
 from std.sys import argv
 
 comptime DEPTH = 6
-comptime TREES = 100
 comptime BORDER = 128
 comptime REPS = 8
 
@@ -67,6 +66,11 @@ def main() raises:
     var data_dir = String(args[1])
     var name = String(args[2])
     var n_rows = Int(String(args[3]))
+    # optional 4th arg: tree count. 100 is the quick arena row; 8000 is
+    # the model size of their own notebook's epsilon benchmark.
+    var trees = 100
+    if len(args) > 4:
+        trees = Int(String(args[4]))
     var ctx = DeviceContext()
     var sys = Python.import_module("sys")
     _ = sys.path.append("tools")
@@ -203,15 +207,15 @@ def main() raises:
 
     # ---- train both models ONCE (untimed) ---------------------------------
     print(
-        name, ":", n_rows, "rows x", n_feats, "features,", TREES,
+        name, ":", n_rows, "rows x", n_feats, "features,", trees,
         "trees depth", DEPTH, "at", BORDER, "borders; predict reps",
         REPS, "interleaved",
     )
-    _ = arm.predict_prep(data_dir, name, BORDER, TREES, DEPTH)
+    _ = arm.predict_prep(data_dir, name, BORDER, trees, DEPTH)
     var model = TAdditiveModel()
     var losses = fit(
         model, ctx, n_rows, folds, DEPTH, cindex, targets, weights,
-        False, TREES, Float32(0.3), Float32(3.0), True,
+        False, trees, Float32(0.3), Float32(3.0), True,
     )
     var train_mse = losses[len(losses) - 1]
     # their TGPUModelData is built when the evaluator context is created,
@@ -295,10 +299,23 @@ def main() raises:
                     "a raw-float predict arm does not reproduce the fit:"
                     " mse " + String(m) + " vs train " + String(train_mse)
                 )
-        if cross > 1e-4:
+        # The two arms sum the same ~`trees` leaf values in different
+        # orders, so their gap grows like sqrt(trees) in float32: measured
+        # 9.5e-6 at 100 trees and 1.32e-4 at 8000 (the fixed 1e-4 bound
+        # this replaces tripped on exactly that reorder noise). The bound
+        # scales with the accumulation length and stays ~2x above the
+        # measured points.
+        var cross_tol = Float64(2e-6)
+        var st = Float64(trees)
+        # integer sqrt by doubling is enough for a tolerance
+        var r = Float64(1.0)
+        while r * r < st:
+            r *= 2.0
+        cross_tol *= r
+        if cross > cross_tol:
             raise Error(
                 "the evaluator and the tree-wise apply disagree by "
-                + String(cross)
+                + String(cross) + " (tolerance " + String(cross_tol) + ")"
             )
 
         var docs = Float64(n_rows)

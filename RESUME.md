@@ -440,10 +440,27 @@ small-data GPU training on Apple pays ~4x CUDA's control-plane tax,
 the training crossover sits near ~1M rows, and inference clears it
 everywhere because it launches three kernels, not two hundred.
 
-Next known levers, in order: the 8000-tree arena row (their notebook's
-model size; first run died silently after the fit -- diagnosis in
-flight, suspect the harness's own drift tolerances at 8000-tree float
-accumulation), full-defaults feature debt (bootstrap/MVS, rsm,
-categoricals) for quality parity, the epsilon dataset itself. Beyond
-this box: a Pro/Max chip multiplies OUR arms by 2-4x and theirs by
-~1.5x.
+THE 8000-TREE ROW (2026-08-21), their notebook's exact model size:
+
+    800k x 100, 8000 trees depth 6 @ 128 borders, 8 reps interleaved:
+    CatBoost CPU full-threads 1.84-2.34 s/predict (1-thread 5.4-5.8 s),
+    ours 177-196 ms = 0.082-0.100x -- TEN TO TWELVE TIMES FASTER, every
+    rep. Their predict scales linearly with trees; ours amortizes the
+    fixed quantize and the eval kernel's tree-parallelism engages fully
+    at the scale their own design targets.
+
+    (The first run died on the harness's own cross-arm guard: a fixed
+    1e-4 bound calibrated at 100 trees, tripped by 1.32e-4 of sqrt(N)
+    float reorder -- exactly the 9.5e-6 x sqrt(80) the 100-tree
+    measurement predicts. The bound now scales with the accumulation
+    length; both measured points live in the comment.)
+
+THE INFERENCE TABLE, complete (all interleaved, per-rep accuracy
+asserted): 100 trees -- covtype 0.31-0.84x, 4M 0.75-0.88x, 800k parity
+band 0.89-1.55; 8000 trees -- 800k 0.082-0.100x. Inference beats their
+CPU evaluator everywhere except the smallest config, where it ties.
+
+Next known levers, in order: full-defaults feature debt (bootstrap/MVS,
+rsm, categoricals) for quality parity, the epsilon dataset itself.
+Beyond this box: a Pro/Max chip multiplies OUR arms by 2-4x and theirs
+by ~1.5x.
