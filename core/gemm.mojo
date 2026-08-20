@@ -15,7 +15,7 @@ their dispatch for pairwise distance under an argmin or a top-k does not call
 cuBLAS at all, it calls a FUSED kernel that never materializes the distance
 matrix, and a device-wide matmul cannot be fused into anything. Callers whose
 product is an intermediate inside a reduction belong on the fused kernel
-(`cluster/ported/distance/fused_distance_nn/simt_kernel.mojo`,
+(`cluster/gbdt/distance/fused_distance_nn/simt_kernel.mojo`,
 `neighbors/.../fused_l2_knn.mojo`), not here.
 
 A STANDALONE register-tiled contraction used to sit here as well, a port of
@@ -46,7 +46,7 @@ distance kernels instantiate:
     Nblk     = AccColsPerTh * AccThCols = 64
     SmemStride = Kblk + Veclen          = 36   (padding, not a rounding)
 
-These constants stay because `cluster/ported/distance/fused_distance_nn/
+These constants stay because `cluster/gbdt/distance/fused_distance_nn/
 simt_kernel.mojo` is instantiated at this policy and its callers compute their
 launch geometry from it. That kernel is NOT a substitution candidate under any
 version of the rule: RAFT fuses the argmin epilogue into the contraction and

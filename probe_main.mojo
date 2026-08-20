@@ -52,7 +52,7 @@ from mojo_only.hist_check import (
     check_subtraction,
     check_two_partitions,
 )
-from ported.methods.greedy_subsets_searcher.structure_searcher_template import (
+from gbdt.methods.greedy_subsets_searcher.structure_searcher_template import (
     grow_tree_schedule,
 )
 from mojo_only.fixed_point import (
@@ -102,18 +102,18 @@ from cluster.ported.distance.unfused_distance_nn import (
 )
 from dbscan.ported.dbscan.vertexdeg.algo import VD_TPB
 from decomposition.mojo_only.jacobi_eigh_device import JACOBI_TPB
-from ported.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
+from gbdt.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
     BLOCK_SIZE,
     HIST_SIZE,
     BUILD_MODE,
     LANE_WIDTH,
     REDUCE_WIDTH,
 )
-from ported.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
+from gbdt.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
     ONE_BYTE_BLOCK_SIZE,
     ONE_BYTE_HIST_SIZE,
 )
-from ported.methods.greedy_subsets_searcher.split_properties_helper import (
+from gbdt.methods.greedy_subsets_searcher.split_properties_helper import (
     HISTOGRAMS_PREVIOUS_PATH,
     HISTOGRAMS_ZEROES,
     LeafRecord,

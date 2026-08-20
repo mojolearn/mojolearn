@@ -5,7 +5,7 @@ Do not improve.
 
 WHY THIS FILE EXISTS, AND IT IS NOT A WRAPPER
 ---------------------------------------------
-`glm/ported/linalg/detail/lstsq.mojo` ports RAFT's `lstsqEig`, which is cuML's
+`glm/gbdt/linalg/detail/lstsq.mojo` ports RAFT's `lstsqEig`, which is cuML's
 `algo = 1`. It was reachable directly and nothing stood between a caller and
 it. **That skipped their dispatch, and their dispatch contains a correctness
 guard.** `ols.cuh:112-113`:

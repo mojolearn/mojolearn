@@ -17,7 +17,7 @@ placement and not just totals. It asserts three things:
 
 from max.gpu.host import DeviceContext
 
-from ported.methods.greedy_subsets_searcher.kernel.histogram_utils import (
+from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     copy_histograms_kernel,
 )
 

@@ -40,7 +40,7 @@
 # there is almost nothing to bind. A CPython binding wraps a callable Mojo
 # function, and as of 2026-08-20 this repository has two:
 #
-#   glm/ported/glm/ols.mojo:82            ols_fit
+#   glm/gbdt/glm/ols.mojo:82            ols_fit
 #   neighbors/estimator.mojo              knn_search
 #
 # k-means, DBSCAN and PCA have verified kernels and no assembled entry point

@@ -69,7 +69,7 @@ satisfies `WarpSelect`'s call contract in the first place.
 
 ## 2. WHAT I CHANGED, FILE BY FILE
 
-### `neighbors/ported/neighbors/detail/fused_l2_knn.mojo` — rewritten selector
+### `neighbors/gbdt/neighbors/detail/fused_l2_knn.mojo` — rewritten selector
 
 * Imports `WarpSelect` from `faiss_select/select.mojo`.
 * `fused_l2_knn_kernel[num_warp_q, num_thread_q]` — their two whole-kernel
@@ -128,17 +128,17 @@ satisfies `WarpSelect`'s call contract in the first place.
 
 Wires the three new checks. Docstring corrected (it said "the last three").
 
-### `neighbors/ported/neighbors/detail/faiss_select/select.mojo`
+### `neighbors/gbdt/neighbors/detail/faiss_select/select.mojo`
 
 Citation-only: nineteen `Select.cuh` line numbers corrected, plus the
 `fused_l2_knn.cuh` cross-block reference (`:147-185` and `:284-300`, since the
 cross-block merge is `add`, not `updateSortedWarpQ`). **No code change.**
 
-### `neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo`
+### `neighbors/gbdt/neighbors/detail/faiss_select/merge_network_warp.mojo`
 
 Citation-only: ten line numbers corrected. **No code change.**
 
-### `neighbors/ported/neighbors/detail/knn_brute_force.mojo`
+### `neighbors/gbdt/neighbors/detail/knn_brute_force.mojo`
 
 Untouched. Its dispatch already routes `k <= FKNN_MAX_NN && row_major` to
 `fused_l2_knn`, and that is verified by `check_dispatch_takes_fused`.
@@ -150,7 +150,7 @@ Untouched. Its dispatch already routes `k <= FKNN_MAX_NN && row_major` to
 `neighbors/PORTED_MAP.tsv` — **replace** the `fused_l2_knn.mojo` row:
 
 ```
-ported/neighbors/detail/fused_l2_knn.mojo	cuvs cpp/src/neighbors/detail/fused_l2_knn.cuh	partial	fusedL2kNN on Policy2x8 with faiss_select::WarpSelect in REGISTERS as the selector, at their two instantiations (:743-771). gridDim.x==1 only. Single-buffered: their SmemSize is 2 pages = 36,992 B against Metal's 32 KB
+gbdt/neighbors/detail/fused_l2_knn.mojo	cuvs cpp/src/neighbors/detail/fused_l2_knn.cuh	partial	fusedL2kNN on Policy2x8 with faiss_select::WarpSelect in REGISTERS as the selector, at their two instantiations (:743-771). gridDim.x==1 only. Single-buffered: their SmemSize is 2 pages = 36,992 B against Metal's 32 KB
 ```
 
 `neighbors/UNPORTED.tsv` — add:

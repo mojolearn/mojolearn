@@ -78,8 +78,8 @@ the split-K read) are both on that path. k-means took four separate lanes.
 ## What this run does NOT include
 
 The working tree had uncommitted changes when `build/bench_main` was built.
-All of them are on the CatBoost tree path -- `ported/gpu_data/`,
-`ported/methods/`, `ported/targets/`, `ported/models/`,
+All of them are on the CatBoost tree path -- `gbdt/gpu_data/`,
+`gbdt/methods/`, `gbdt/targets/`, `gbdt/models/`,
 `mojo_only/bootstrap_check.mojo`, `probe_main.mojo` -- and another session is
 writing them. None of the five arms above reaches any of those files: they
 live in `cluster/`, `neighbors/`, `decomposition/`, `dbscan/`, `glm/` and

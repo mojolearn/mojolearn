@@ -39,7 +39,7 @@ from mojo_only.kernel_matrix import (
     requires_uniform_iteration_for,
 )
 from mojo_only.numerics import NUMERIC_FAST, NUMERIC_IDENTICAL
-from ported.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
+from gbdt.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
     BLOCK_SIZE,
     HIST_SIZE,
     REDUCE_WIDTH,

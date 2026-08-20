@@ -15,10 +15,10 @@ places.
 
 from max.gpu.host import DeviceContext
 
-from ported.gpu_lib.device_id import TDeviceId
-from ported.gpu_lib.gpu_base import DEFAULT_STREAM
-from ported.gpu_lib.gpu_manager import TCudaManager
-from ported.gpu_lib.task import (
+from gbdt.gpu_lib.device_id import TDeviceId
+from gbdt.gpu_lib.gpu_base import DEFAULT_STREAM
+from gbdt.gpu_lib.gpu_manager import TCudaManager
+from gbdt.gpu_lib.task import (
     ECommandType,
     ECpuFuncType,
     TCommand,

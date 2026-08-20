@@ -63,13 +63,13 @@ spinning producer terminates only if its consumer runs. That is exactly what
 their `launchConfigGenerator` cap (`numSMs * blocksPerSM`) buys, which is why
 the launch computation is part of the merge's correctness, not a tuning knob.
 (The same distinction fixes a half-true sentence in
-`dbscan/ported/dbscan/adjgraph/algo.mojo` DEVIATION 32: device-scope
+`dbscan/gbdt/dbscan/adjgraph/algo.mojo` DEVIATION 32: device-scope
 acquire/release EXISTS; what decoupled lookback lacks is the capacity-capped
 grid, because its grid scales with data. Corrected in the same commit.)
 
 ## What was ported vs what upstream does
 
-`neighbors/ported/neighbors/detail/fused_l2_knn.mojo`, mirroring
+`neighbors/gbdt/neighbors/detail/fused_l2_knn.mojo`, mirroring
 `cuvs/cpp/src/neighbors/detail/fused_l2_knn.cuh` at `94c2819`:
 
 | upstream | ours |
@@ -80,7 +80,7 @@ grid, because its grid scales with data. Corrected in the same commit.)
 | `rowEpilog_lambda` `:224-338`: consumer loop (`atomicCAS(-2,-1)` spin, copy `numOfNN` pairs, `atomicExch(0)`, merge via `heapArr[i]->add`, needSort vote + `reduce`, `storeWarpQGmem`); producer (`atomicCAS(0,1)` spin, write pairs, `atomicExch(-2)`) | ported step for step; fences spelled as ACQUIRE load / weak RELAXED CAS / RELEASE store (see headline) |
 | consumer stages pairs `out -> regs -> shDumpKV -> regs` (`:258-276`, `:283-299`); producer reads its already-reduced queue from `shDumpKV` (`:325-330`) | DEVIATION BLOCK 1 continuation: our queues never spilled to shmem, so the consumer stops at the first registers and the producer `reduce()`s its registers before `write_out` — same pairs, same protocol steps, same order |
 | mutex workspace: `ceildiv(m, Mblk)` int32, memset 0 only when `grid.x > 1` (`fusedL2ExpKnnImpl:777-790`) | ported in `fused_l2_knn_launch`; buffer always allocated (their kernel signature also takes the pointer unconditionally), zeroed only when `grid_x > 1` |
-| `launchConfigGenerator` (`pairwise_distance_base.cuh:295-322`) | ported branch-for-branch in NEW `neighbors/ported/distance/detail/pairwise_distance_base.mojo`, M4 inputs (below) |
+| `launchConfigGenerator` (`pairwise_distance_base.cuh:295-322`) | ported branch-for-branch in NEW `neighbors/gbdt/distance/detail/pairwise_distance_base.mojo`, M4 inputs (below) |
 
 `gridDim.x == 1` behavior is unchanged: their `rowEpilog` returns immediately
 there (`:226`), the mutex array is never touched, and the column sweep is the
@@ -197,19 +197,19 @@ row tile.
 
 - NEW `neighbors/mutex_probe_main.mojo` — the soundness probe (kept: it is
   the evidence and the regression test for the spelling)
-- NEW `neighbors/ported/distance/__init__.mojo`, `.../detail/__init__.mojo`,
+- NEW `neighbors/gbdt/distance/__init__.mojo`, `.../detail/__init__.mojo`,
   `.../detail/pairwise_distance_base.mojo` — `launchConfigGenerator`, M4
   inputs in one place
-- `neighbors/ported/neighbors/detail/fused_l2_knn.mojo` — both grid-stride
+- `neighbors/gbdt/neighbors/detail/fused_l2_knn.mojo` — both grid-stride
   axes, the mutex merge, `fused_l2_knn_launch` (grid + sabotage pinnable by
   checks), grid computed by `launch_config_generator`; DEVIATION BLOCK 2
   rewritten (the "not ported / OPEN item" text it falsified is deleted)
-- `neighbors/ported/neighbors/detail/knn_brute_force.mojo` — DEVIATION 36
+- `neighbors/gbdt/neighbors/detail/knn_brute_force.mojo` — DEVIATION 36
   note updated (merge landed, table stale, default unchanged)
 - `neighbors/mojo_only/knn_check.mojo`, `neighbors/knn_main.mojo` — three
   new checks
 - `neighbors/PORTED_MAP.tsv`, `PORTING.md` (entry 36 corrected, entry 40
-  added), `dbscan/ported/dbscan/adjgraph/algo.mojo` (DEVIATION 32 sentence
+  added), `dbscan/gbdt/dbscan/adjgraph/algo.mojo` (DEVIATION 32 sentence
   corrected)
 
 ## Commit provenance (shared-checkout incident, recorded per the standing rule)

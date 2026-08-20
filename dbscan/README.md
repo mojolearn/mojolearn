@@ -54,9 +54,9 @@ GEMM, no distance matrix, no norms. Reusing the k-NN pipeline turned one
 kernel and one byte per pair into three kernels and sixteen.
 
 The fused kernel is now at
-`dbscan/ported/neighbors/epsilon_neighborhood.mojo`. The materialized path
+`dbscan/gbdt/neighbors/epsilon_neighborhood.mojo`. The materialized path
 survives ONLY as `vertexdeg/algo.mojo::eps_neighborhood_kernel`, which
-nothing in `ported/` calls: it is the reference the fused kernel is diffed
+nothing in `gbdt/` calls: it is the reference the fused kernel is diffed
 against, cell by cell, the same role `gemm_nt_kernel` used to play for the
 vendor matmul.
 

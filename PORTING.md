@@ -559,7 +559,7 @@ nobody hunts for them.
 
 ## 30. `logicalWarpReduce<P::AccThCols>` is a comptime-width shuffle group
 
-Lives at `dbscan/ported/neighbors/epsilon_neighborhood.mojo` (the
+Lives at `dbscan/gbdt/neighbors/epsilon_neighborhood.mojo` (the
 `updateVertexDegree` section): the sub-warp reduction's width is a comptime
 constant and every lane reaches every shuffle unconditionally, because a lane
 that skips a full-mask shuffle hangs the lanes that reach it. Its block-size
@@ -568,7 +568,7 @@ any K_LIB wiring of this kernel has to clear.
 
 ## 31. `vd` is memset once because the kernel ACCUMULATES
 
-Lives at `dbscan/ported/neighbors/epsilon_neighborhood.mojo`. Their contract
+Lives at `dbscan/gbdt/neighbors/epsilon_neighborhood.mojo`. Their contract
 is `cudaMemsetAsync(vd, 0, (m + 1) * sizeof(IdxT))` before
 `epsUnexpL2SqNeighborhood`, which adds into `vd` rather than writing it; ours
 is `ctx.enqueue_memset` in the same position. Dropping the zero looks fine on
@@ -580,20 +580,20 @@ the first batch and corrupts every later one.
 lookback, single pass). One threadgroup cannot do that shape on Metal, and
 the first port ran `grid_dim=(1,1,1)` -- one block scanning the whole array
 serially, twice per fit. Now a three-launch scan-then-propagate at
-`dbscan/ported/dbscan/adjgraph/algo.mojo`, verified exact at 2,000,000
+`dbscan/gbdt/dbscan/adjgraph/algo.mojo`, verified exact at 2,000,000
 entries across 977 blocks (LANE_dbscan-brute D3;
 `check_exclusive_scan_beyond_the_old_cap`).
 
 ## 33. `make_monotonic`'s unique-value step is replaced
 
-Lives at `dbscan/ported/label/classlabels.mojo`, which also records why the
+Lives at `dbscan/gbdt/label/classlabels.mojo`, which also records why the
 relabel is NOT optional (cuML runs `final_relabel` + `relabelForSkl` on every
 fit -- `runner.cuh:412` -- so label VALUES are API, not just the partition).
 The header says "do not improve"; read it before touching the file.
 
 ## 34. `adj_to_csr`: the warp-aggregated atomic and multi-block rows are unported, priced
 
-Lives at `dbscan/ported/dbscan/adjgraph/algo.mojo` (module docstring). The
+Lives at `dbscan/gbdt/dbscan/adjgraph/algo.mojo` (module docstring). The
 shared per-row cursor, chunked 16-bool loads and unordered output are theirs;
 the warp aggregation of the cursor atomic (needs `coalesced_threads()`) and
 the multi-block-per-row grid are not, and the docstring prices both. Label
@@ -602,7 +602,7 @@ wait, never an answer.
 
 ## 35. DBSCAN defaults to the ball cover; cuML defaults to brute force
 
-Lives in full at `dbscan/ported/dbscan/runner.mojo`, above `EPS_NN_BRUTE_FORCE`.
+Lives in full at `dbscan/gbdt/dbscan/runner.mojo`, above `EPS_NN_BRUTE_FORCE`.
 Short form: RBC beats our own brute force 2.70x to 27.53x from 16,000 points
 up and loses at no measured size, with labels identical point for point.
 
@@ -622,7 +622,7 @@ still returns a plausible labelling -- silently.
 
 ## 36. k-NN defaults to fused-iff-`grid_x == 1`; cuVS defaults to fused everywhere
 
-Lives in full at `neighbors/ported/neighbors/detail/knn_brute_force.mojo`,
+Lives in full at `neighbors/gbdt/neighbors/detail/knn_brute_force.mojo`,
 above `KNN_METHOD_FUSED`. This is entry 35 pointed the other way, and it is
 the more instructive of the two, because the port was CORRECT and the
 expectation was still wrong.
@@ -702,7 +702,7 @@ progress. The protocol's real precondition is CO-RESIDENCY: a spinning
 producer terminates only if its consumer runs, which is exactly why their
 `launchConfigGenerator` caps the grid at `numSMs * blocksPerSM`
 (`pairwise_distance_base.cuh:295-322`). That computation is ported with M4
-inputs in `neighbors/ported/distance/detail/pairwise_distance_base.mojo`:
+inputs in `neighbors/gbdt/distance/detail/pairwise_distance_base.mojo`:
 10 cores, thread-slot occupancy (3072 / 256 = 12 blocks per core), and the
 shared-memory term as a 32 KB validity wall rather than a divisor, because
 family-9 threadgroup memory is dynamically cached -- the measured query
@@ -752,7 +752,7 @@ batch. And a budget between the fixed cost and one row's cost yields
 divides by zero. Neither behavior is a design; both are what unsigned
 arithmetic does when nobody expected the input.
 
-`compute_batch_size` in `dbscan/ported/dbscan/dbscan.mojo` raises on both:
+`compute_batch_size` in `dbscan/gbdt/dbscan/dbscan.mojo` raises on both:
 budget at or under the fixed cost, and a computed batch under one row.
 Copying the wrap would make `max_mbytes_per_batch = 1` MEAN "unbatched", and
 `check_dbscan_tiny_budget_agrees` uses exactly that value to force many
@@ -770,7 +770,7 @@ machine-parseable wall-clock line instead:
 
 with `passes <p>` appended on `label.weak_cc`, the count their `WeakCC`
 range cannot show either. The full format and the range-for-range mapping
-are documented on `dbscan_fit` in `dbscan/ported/dbscan/runner.mojo`;
+are documented on `dbscan_fit` in `dbscan/gbdt/dbscan/runner.mojo`;
 `dbscan/phase_main.mojo` is the dedicated main. Every phase already ends on
 a `ctx.synchronize()` the port performs anyway, so the flag adds no
 synchronization, and off (the default) it prints nothing. Timestamps are
@@ -780,7 +780,7 @@ range brackets.
 
 ## 39. Batch 0's RBC fill runs after the CSR buffer is sized, not inside loop 1
 
-`dbscan/ported/dbscan/runner.mojo`. cuML's first batch loop fills batch 0's
+`dbscan/gbdt/dbscan/runner.mojo`. cuML's first batch loop fills batch 0's
 CSR columns as it counts it (`need_ja_compute`, `runner.cuh:257`, taking the
 two-pass arm of `vertexdeg/algo.cuh:137-163` which resizes `adj_graph` to
 batch 0's own edge count at `:150`), and `runner.cuh:317` then GROWS that
@@ -813,7 +813,7 @@ alternation (`pageWr`/`pageRd`, `detail/contractions.cuh:157-186`), so
 k-tile (`pairwise_distance_base.cuh:141-149`) and overlaps the next tile's
 global loads with the current tile's arithmetic. At `Policy4x4<float>` that
 is 36,864 bytes plus the norm rows, and Apple caps a threadgroup at 32,768,
-so `cluster/ported/distance/fused_distance_nn/simt_kernel.mojo` runs ONE
+so `cluster/gbdt/distance/fused_distance_nn/simt_kernel.mojo` runs ONE
 page pair (18,432 B + 512 B at veclen 4) with TWO barriers per k-tile.
 
 Priced: the deviation costs overlap only when `k > Kblk`, i.e. above 32

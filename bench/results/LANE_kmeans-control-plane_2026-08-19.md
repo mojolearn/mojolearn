@@ -116,7 +116,7 @@ one stays.
 
 ## 3. WHAT CHANGED, FILE BY FILE
 
-- **`cluster/ported/cluster/detail/kmeans.mojo`** — the lane's main change.
+- **`cluster/gbdt/cluster/detail/kmeans.mojo`** — the lane's main change.
   Loop tail rewritten to `detail/kmeans.cuh:453-497`: `mapThenSumReduce`-shaped
   shift (`:454-459`), D2H of the scalar (`:462`), D2D copy-back (`:464-465`),
   gated cost block (`:468-489`) including their `ASSERT` at `:480-482`, the
@@ -126,7 +126,7 @@ one stays.
   `_sum_device` takes a mode instead of a bool. Buffers `shift_cells`,
   `d_prior_cost`, `d_done`, `h_done` removed; `h_shift` added. Module docstring
   rewritten.
-- **`cluster/ported/cluster/detail/kmeans_common.mojo`** — `check_convergence_kernel`
+- **`cluster/gbdt/cluster/detail/kmeans_common.mojo`** — `check_convergence_kernel`
   **deleted**. `use_fused` **deleted**, replaced with `is_fused(metric)` from
   `kmeans_common.cuh:378-379`. `check_convergence` rewritten to
   `kmeans.cuh:466-492` with an `inertia_check` argument. `std.gpu` import
@@ -135,17 +135,17 @@ one stays.
   deleted; `sum_partials_kernel` gained `SUM_MODE_PLAIN/PRODUCT/SQDIFF`.
   `copy_f32_kernel` docstring corrected (theirs is `raft::copy` at `:464-465`,
   not a `std::swap` at `:907`, which is a log string).
-- **`cluster/ported/cluster/kmeans_params.mojo`** — `inertia_check: Bool`
+- **`cluster/gbdt/cluster/kmeans_params.mojo`** — `inertia_check: Bool`
   added (default `False`, `kmeans.hpp:120`); `init_size` and
   `device_buffer_samples` removed; metric refusal relabeled as ours;
   citations corrected.
-- **`cluster/ported/python/cluster/kmeans/kmeans.mojo`** — dropped the two
+- **`cluster/gbdt/python/cluster/kmeans/kmeans.mojo`** — dropped the two
   invented keywords; documented their real keyword list (`kmeans.pyx:98-129`,
   which includes `hierarchical`/`hierarchical_n_iters` we do not have).
-- **`cluster/ported/cluster/detail/min_cluster_distance_compute.mojo`**,
-  **`cluster/ported/distance/unfused_distance_nn.mojo`**,
-  **`cluster/ported/cluster/kmeans.mojo`**,
-  **`cluster/ported/distance/fused_distance_nn/simt_kernel.mojo`** —
+- **`cluster/gbdt/cluster/detail/min_cluster_distance_compute.mojo`**,
+  **`cluster/gbdt/distance/unfused_distance_nn.mojo`**,
+  **`cluster/gbdt/cluster/kmeans.mojo`**,
+  **`cluster/gbdt/distance/fused_distance_nn/simt_kernel.mojo`** —
   headers and citations remapped to files that exist. `simt_kernel.mojo` was
   touched in **comments only** (commit hash, two `Reducer` citations); no
   structural change, per the note that another lane reads it as a model.
@@ -160,7 +160,7 @@ Already applied to `cluster/PORTED_MAP.tsv` and `cluster/UNPORTED.tsv` (both
 are mine). New rows added there:
 
 ```
-ported/distance/fused_distance_nn/simt_kernel.mojo	cpp/src/distance/detail/fused_distance_nn/simt_kernel.cuh	partial	the SIMT fused kernel, no vendor call. Epilogue clamps on sign only; theirs also zeroes the bit-equal-norm self-neighbor case (distance_ops/l2_exp.cuh:132-134)
+gbdt/distance/fused_distance_nn/simt_kernel.mojo	cpp/src/distance/detail/fused_distance_nn/simt_kernel.cuh	partial	the SIMT fused kernel, no vendor call. Epilogue clamps on sign only; theirs also zeroes the bit-equal-norm self-neighbor case (distance_ops/l2_exp.cuh:132-134)
 ```
 ```
 cpp/src/cluster/detail/kmeans_common.cuh::checkWeight	not ported	RAFT_EXPECTS that the sample weights sum to n_samples, and rescales them if they do not (kmeans.cuh:872). Ours takes the caller's weights as given

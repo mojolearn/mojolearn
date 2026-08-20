@@ -5,7 +5,7 @@ with the whole of `raft/util/bitonic_sort.cuh` which it is built on. Partial:
 ONE of the four warp queues is ported, `warp_sort_immediate`. Do not improve.
 
 Same rule as its sibling `select_radix.mojo`: this is a RAFT file we READ AND
-TRANSLITERATE, not a RAFT call we stand in for, so it lives in `ported/` with
+TRANSLITERATE, not a RAFT call we stand in for, so it lives in `gbdt/` with
 raft as its upstream and carries the attribution duty that follows.
 
 WHY THIS FILE EXISTS AT ALL, AND WHY IT DID NOT UNTIL NOW

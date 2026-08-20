@@ -43,10 +43,10 @@ this lane; the orchestrator times.
 
 ### Which arm our fit takes: FUSED, before and after. No dispatch fix needed.
 
-- `cluster/ported/cluster/detail/kmeans.mojo:606` (Lloyd loop), `:292`
+- `cluster/gbdt/cluster/detail/kmeans.mojo:606` (Lloyd loop), `:292`
   (init path) and `:755` (final inertia assignment) all call
   `min_cluster_and_distance_compute`
-  (`cluster/ported/cluster/detail/min_cluster_distance_compute.mojo`),
+  (`cluster/gbdt/cluster/detail/min_cluster_distance_compute.mojo`),
   whose body enqueues `fused_distance_nn_kernel` unconditionally. Since
   only the two L2 metrics pass `validate()`, "unconditionally" coincides
   with their `is_fused` on every reachable input. Nothing in the tree calls
@@ -191,7 +191,7 @@ exact).
 - `cluster/mojo_only/reduce_by_key.mojo` -- privatized kernels, dispatch,
   matrix-sized grids, corrected upstream citation on the direct weight
   kernel.
-- `cluster/ported/cluster/detail/kmeans.mojo` -- Lloyd loop calls the
+- `cluster/gbdt/cluster/detail/kmeans.mojo` -- Lloyd loop calls the
   dispatch helpers; magic 1024 cap deleted.
 - `cluster/mojo_only/kmeans_check.mojo`, `cluster/kmeans_main.mojo` -- the
   two new checks.

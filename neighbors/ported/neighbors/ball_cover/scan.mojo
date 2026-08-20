@@ -19,7 +19,7 @@ There would in any case be nothing to substitute: `nn.cumsum.cumsum` and
 entry point, and it lists no device scan anywhere in the shipped kernel
 libraries.
 
-The shape is `dbscan/ported/dbscan/adjgraph/algo.mojo::exclusive_scan_kernel`
+The shape is `dbscan/gbdt/dbscan/adjgraph/algo.mojo::exclusive_scan_kernel`
 copied deliberately rather than imported: another lane owns that file this
 round and this one must not depend on its signature. The dynamic chunk is
 theirs and is load-bearing — a FIXED rows-per-thread silently stopped

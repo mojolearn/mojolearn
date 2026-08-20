@@ -4,7 +4,7 @@ THE GAP THIS FILLS
 ------------------
 Commit 47966cf replaced a hand-written `prefix_sum`-plus-broadcast with
 `max.gpu.primitives.block.sum` in BOTH kernels of
-`ported/gpu_util/partitions_reduce.mojo`, on the evidence that the symbol
+`gbdt/gpu_util/partitions_reduce.mojo`, on the evidence that the symbol
 exists and takes the parameters we pass it. Nothing in this tree then read
 the result of that reduction against anything.
 
@@ -80,7 +80,7 @@ the second. It is a reach test that fails loudly on the old code.
 from max.gpu.host import DeviceContext, HostBuffer
 from max.gpu.host.device_attribute import DeviceAttribute
 
-from ported.gpu_util.partitions_reduce import (
+from gbdt.gpu_util.partitions_reduce import (
     STATS_BLOCK,
     compute_partition_stats,
     partition_stats_chunks,

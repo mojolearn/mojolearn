@@ -16,12 +16,12 @@ Strongest remaining gap is complexity, not constant: this is still
 
 | # | What upstream does (file:line) | What ours did | Fixed? |
 |---|---|---|---|
-| D1 | `vertexdeg/algo.cuh:229` calls `epsUnexpL2SqNeighborhood`, a FUSED `Contractions_NT` tile kernel: `acc[i][j]` in registers (`epsilon_neighborhood.cuh:41`), `acc <= eps` in `epilog()` (`:106`), writes bool `adj` + reduces `vd` with `logicalWarpReduce`+`blockReduce`+atomics in the SAME kernel (`:137-160`). Never materializes a distance matrix. | `runner.mojo` ran `gemm_nt` (MAX matmul) into an `m x N` float32 `dist`, then `expand_distances_kernel` over it, then `eps_neighborhood_kernel` reading it back. 16 bytes/pair of traffic against their 1, three launches against one. | **FIXED.** New `dbscan/ported/neighbors/epsilon_neighborhood.mojo`. |
+| D1 | `vertexdeg/algo.cuh:229` calls `epsUnexpL2SqNeighborhood`, a FUSED `Contractions_NT` tile kernel: `acc[i][j]` in registers (`epsilon_neighborhood.cuh:41`), `acc <= eps` in `epilog()` (`:106`), writes bool `adj` + reduces `vd` with `logicalWarpReduce`+`blockReduce`+atomics in the SAME kernel (`:137-160`). Never materializes a distance matrix. | `runner.mojo` ran `gemm_nt` (MAX matmul) into an `m x N` float32 `dist`, then `expand_distances_kernel` over it, then `eps_neighborhood_kernel` reading it back. 16 bytes/pair of traffic against their 1, three launches against one. | **FIXED.** New `dbscan/gbdt/neighbors/epsilon_neighborhood.mojo`. |
 | D2 | `accumulate()` (`epsilon_neighborhood.cuh:129-130`) is `diff = regx - regy; acc += diff*diff` -- UNEXPANDED, straight from coordinates. | Expanded identity `\|\|x\|\|^2+\|\|y\|\|^2-2xy` through a GEMM. An ARITHMETIC change: cancels catastrophically in float32 when norms dominate distances (`PORTING.md 21`). | **FIXED.** Unexpanded. `row_norm_kernel`, `x_norm`, `x_alias`, `xn_alias` and `dist` all leave the DBSCAN path. |
 | D3 | `adjgraph/algo.cuh:65` `thrust::exclusive_scan` -> `cub::DeviceScan`, device-wide, single pass with decoupled lookback. | `exclusive_scan_kernel` launched at `grid_dim=(1,1,1)`: ONE threadgroup scanning the whole array serially, once per batch, twice per fit. | **FIXED.** Three-launch scan-then-propagate (deviation 32). Verified at 2,000,000 entries / 977 blocks. |
 | D4 | `runner.cuh:245-400`: two batch loops. Loop 1 REVERSED (`:247`, their comment copied verbatim) does vertexdeg -> read `vd[n_points]` -> corepoints. Loop 2 does vertexdeg (`i>0`) -> adjgraph -> `weak_cc_batched` into `labels` (`i==0`) or `labels_temp` -> `MergeLabels::run`. `adj_graph` is a LOCAL `rmm::device_uvector` resized to the largest batch (`:230`, `:317`). | One global `weak_cc` over a CSR built from every row, `MergeLabels` never ported, `col_ind` sized `N x N` by the caller. Correct, but gave back exactly the memory batching exists to save. | **FIXED.** `mergelabels/runner.mojo` + `label/merge_labels.mojo` ported; `col_ind` now allocated inside `dbscan_fit` for the largest batch, as theirs is. |
 | D4b | *(brief said this "halves the arithmetic")* `runner.cuh` still recomputes vertexdeg for every batch except batch 0 (`:328-350`). | -- | **The brief's premise is wrong and it is worth recording why.** The second pass is unavoidable in EITHER structure: `weak_cc`'s `filter_op` reads `core[j]` for neighbours `j` in every other batch, so the whole core mask must exist before any batch is labelled. Upstream does `2*n_batches - 1` neighborhood passes; we now do the same, where we did `2*n_batches`. The saving is one pass out of `2*n_batches`, not a halving. |
-| D5 | `dbscan.cuh:34` `compute_batch_size`: `est_mem_per_row = n_rows*sizeof(bool) + (neigh_per_row+2)*sizeof(Index_)`, `est_mem_fixed = n_rows*(sizeof(Index_)+sizeof(bool))`, budget = 80% of TOTAL device memory minus the dataset (`:157`), then the overflow guard `batch_size <= MAX_LABEL / n_rows`. | Not ported. `batch_size` was a hand-passed argument defaulting to "one batch", so `bench/bench_main.mojo` capped DBSCAN at 4,000 rows and `scaling_main.mojo` guessed 2048. | **FIXED.** `dbscan/ported/dbscan/dbscan.mojo`, including the overflow guard and `DeviceContext.get_memory_info()` in place of `cudaMemGetInfo`. Both bench harnesses now call `dbscan_fit_impl` and allocate nothing. |
+| D5 | `dbscan.cuh:34` `compute_batch_size`: `est_mem_per_row = n_rows*sizeof(bool) + (neigh_per_row+2)*sizeof(Index_)`, `est_mem_fixed = n_rows*(sizeof(Index_)+sizeof(bool))`, budget = 80% of TOTAL device memory minus the dataset (`:157`), then the overflow guard `batch_size <= MAX_LABEL / n_rows`. | Not ported. `batch_size` was a hand-passed argument defaulting to "one batch", so `bench/bench_main.mojo` capped DBSCAN at 4,000 rows and `scaling_main.mojo` guessed 2048. | **FIXED.** `dbscan/gbdt/dbscan/dbscan.mojo`, including the overflow guard and `DeviceContext.get_memory_info()` in place of `cudaMemGetInfo`. Both bench harnesses now call `dbscan_fit_impl` and allocate nothing. |
 | D6 | `runner.cuh:410-416`: `final_relabel` (`raft::label::make_monotonic`) then `relabelForSkl` (`MAX_LABEL -> -1`, else `--`). `dbscanFitImpl` hardcodes `algo_ccl = 2` (`dbscan.cuh:122`), so this is not optional. | Neither ported. `UNPORTED.tsv` excused it: "labels are arbitrary up to permutation, so the check compares the PARTITION". True of the check, false of the API. | **FIXED.** `label/classlabels.mojo` + `relabel_for_skl_kernel`. Check now asserts ids are exactly `{0,1,2}` and noise is `-1`. |
 | D7a | `raft/sparse/detail/csr.cuh:61-63`: `weak_cc_label_device` indexes the CSR by `tid` and `labels`/`filter_op` by `global_id = tid + start_vertex_id`. `weak_cc_batched` re-runs `weak_cc_init_all_kernel` over ALL `N` on every batch (`:149`). | Ours used `tid` for both and had no `start_vertex_id`. It was only correct because it was handed one global CSR; it could not have consumed a batch-local one. | **FIXED** as part of D4. |
 | D7b | `raft/sparse/convert/detail/adj_to_csr.cuh:67-109`: 512 threads, a SHARED per-row cursor bumped with `atomicIncWarp`, the row read in `chunk_size = 16` bool vector loads, output deliberately unordered. | 256 threads and a `block.prefix_sum` per 256-column window with TWO barriers per window, to produce ascending column order. At `n_cols = 200,000` that is 782 block scans and 1,564 barriers per row against their zero. The old README defended it as worth more than "their last increment of throughput". | **FIXED.** Shared cursor + `Atomic.fetch_add` + 16-bool chunk loads, unordered like theirs. Deviation 34 prices what is still missing (warp aggregation, multi-block-per-row grid). |
@@ -61,40 +61,40 @@ Audited every one in `dbscan/`. After this lane:
 
 **New**
 
-- `dbscan/ported/neighbors/epsilon_neighborhood.mojo` (~350 lines) --
+- `dbscan/gbdt/neighbors/epsilon_neighborhood.mojo` (~350 lines) --
   `raft/spatial/knn/detail/epsilon_neighborhood.cuh:31-238`. The fused kernel
   and its host wrapper. Policy4x4<float> constants restated locally rather
   than imported from `core/gemm.mojo`: a kernel whose correctness depends on
   `AccThCols == 16` (the `shuffle_xor` group width) must not read that 16 out
   of a file another lane is free to retune. Deviations 30, 31.
-- `dbscan/ported/label/merge_labels.mojo` --
+- `dbscan/gbdt/label/merge_labels.mojo` --
   `raft/label/detail/merge_labels.cuh:36-154`.
-- `dbscan/ported/label/classlabels.mojo` --
+- `dbscan/gbdt/label/classlabels.mojo` --
   `raft/label/detail/classlabels.cuh:122-166`. Deviation 33.
-- `dbscan/ported/dbscan/mergelabels/runner.mojo` --
+- `dbscan/gbdt/dbscan/mergelabels/runner.mojo` --
   `cuml/cpp/src/dbscan/mergelabels/runner.cuh:37-47`.
-- `dbscan/ported/dbscan/dbscan.mojo` -- `cuml/cpp/src/dbscan/dbscan.cuh:34-98`
+- `dbscan/gbdt/dbscan/dbscan.mojo` -- `cuml/cpp/src/dbscan/dbscan.cuh:34-98`
   (`compute_batch_size`) and `:101-217` (`dbscanFitImpl`).
 
 **Rewritten**
 
-- `dbscan/ported/dbscan/runner.mojo` -- `runner.cuh:109-447`. Both batch
+- `dbscan/gbdt/dbscan/runner.mojo` -- `runner.cuh:109-447`. Both batch
   loops, the reversed first one with their comment copied verbatim, the
   `vd[n_points]` readback at `:281`, `adj_graph` allocated locally at `:317`,
   per-batch `weak_cc` + `MergeLabels` at `:374-400`, `final_relabel` +
   `relabelForSkl` at `:410-416`. Signature changed: `x_norm`, `dist`,
   `x_alias`, `xn_alias`, `col_ind` OUT; `labels_temp`, `work_buffer`,
   `block_sums` IN.
-- `dbscan/ported/dbscan/adjgraph/algo.mojo` -- `adjgraph/algo.cuh:50-70` and
+- `dbscan/gbdt/dbscan/adjgraph/algo.mojo` -- `adjgraph/algo.cuh:50-70` and
   `raft/sparse/convert/detail/adj_to_csr.cuh:67-172`. Three-kernel device
   scan, and the compaction rebuilt on their shared cursor. Deviations 32, 34.
-- `dbscan/ported/sparse/detail/csr.mojo` -- `raft/sparse/detail/csr.cuh:50-168`.
+- `dbscan/gbdt/sparse/detail/csr.mojo` -- `raft/sparse/detail/csr.cuh:50-168`.
   `weak_cc_label_device` gets `start_vertex_id`/`batch_size`/`global_id`;
   `weak_cc_batched` added as a host function with the init inside it.
-- `dbscan/ported/dbscan/vertexdeg/algo.mojo` -- `vertexdeg/algo.cuh:170-232`.
+- `dbscan/gbdt/dbscan/vertexdeg/algo.mojo` -- `vertexdeg/algo.cuh:170-232`.
   `vertex_deg_run` is the L2 brute-force arm of their `launcher`. The old
   `eps_neighborhood_kernel` is retained and relabelled as the check oracle.
-- `dbscan/ported/dbscan/corepoints/compute.mojo` -- `compute.cuh:38-52`.
+- `dbscan/gbdt/dbscan/corepoints/compute.mojo` -- `compute.cuh:38-52`.
   Batch/dataset index split, plus a `core_points_compute` host wrapper.
 - `dbscan/mojo_only/dbscan_check.mojo` -- all four checks updated, one added.
 - `dbscan/README.md`, `dbscan/PORTED_MAP.tsv`, `dbscan/UNPORTED.tsv` --
@@ -221,7 +221,7 @@ $ ... mojo build -I . bench/scaling_main.mojo -o /tmp/scaling_probe   # clean
 ```
 
 `bench/bench_main.mojo` does **not** build, and not because of this lane: it
-fails in `glm/ported/linalg/detail/lstsq.mojo` with
+fails in `glm/gbdt/linalg/detail/lstsq.mojo` with
 `constraint failed: Wrong number of arguments to enqueue`, a file another lane
 last touched at 18:08. My edit to its DBSCAN section compiles past.
 

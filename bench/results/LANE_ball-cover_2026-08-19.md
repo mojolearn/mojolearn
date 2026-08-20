@@ -115,7 +115,7 @@ should not be wired.
 All four paths are new; no shared file was touched. `git status` confirms the
 only entries under my name are these.
 
-**`neighbors/ported/neighbors/ball_cover/common.mojo`** (new)
+**`neighbors/gbdt/neighbors/ball_cover/common.mojo`** (new)
 - `eps_dist_sq` — `registers_types.cuh:62-75` `EuclideanSqFunc`. The only
   functor their codegen instantiates for the eps path
   (`detail/ball_cover/registers_00_generate.py:116,148` → exactly one
@@ -124,13 +124,13 @@ only entries under my name are these.
 - The `NNComp` order (`common.cuh:26-37`) is documented here and produced in
   `ball_cover.mojo`.
 
-**`neighbors/ported/neighbors/ball_cover/scan.mojo`** (new)
+**`neighbors/gbdt/neighbors/ball_cover/scan.mojo`** (new)
 - `rbc_exclusive_scan_kernel` — `registers.cuh:1376`, `:1470`, and the scan
   inside `sorted_coo_to_csr`.
 - `rbc_max_reduce_kernel` — `registers.cuh:1453`.
 - `rbc_clamp_kernel` — `registers.cuh:1461-1467`.
 
-**`neighbors/ported/neighbors/ball_cover/registers.mojo`** (new)
+**`neighbors/gbdt/neighbors/ball_cover/registers.mojo`** (new)
 - `block_rbc_kernel_eps_csr_pass` — `registers.cuh:576-708`.
 - `block_rbc_kernel_eps_dense` — `registers.cuh:458-570`.
 - `block_rbc_kernel_eps_max_k` — `registers.cuh:859-980`.
@@ -142,7 +142,7 @@ only entries under my name are these.
 - `rbc_eps_pass_max_k` — `registers.cuh:1427-1482`, their exact order: run,
   max of the UNCLAMPED `vd`, clamp only on overflow, scan, compact.
 
-**`neighbors/ported/neighbors/ball_cover/ball_cover.mojo`** (new)
+**`neighbors/gbdt/neighbors/ball_cover/ball_cover.mojo`** (new)
 - `rbc_n_landmarks` — `ball_cover.hpp:62`.
 - `_floyd_sample` — `ball_cover.cuh:62-108`, see D1.
 - `rbc_copy_rows_kernel` — `raft::matrix::copy_rows`, used at
@@ -167,10 +167,10 @@ For `neighbors/PORTED_MAP.tsv` (tab separated, columns guessed from the
 existing file — re-tab if that file's schema differs):
 
 ```
-cuvs/cpp/src/neighbors/ball_cover/ball_cover.cuh	sample_landmarks, k_closest_landmarks, construct_landmark_1nn, compute_landmark_radii, rbc_build_index, rbc_eps_nn_query	neighbors/ported/neighbors/ball_cover/ball_cover.mojo	partial	94c2819	landmark draw is Floyd's on the host; 1-nn is fused instead of brute_force; in-group order is a counting sort plus rank instead of thrust::sort_by_key
-cuvs/cpp/src/neighbors/ball_cover/registers.cuh	block_rbc_kernel_eps_csr_pass, block_rbc_kernel_eps_dense, block_rbc_kernel_eps_max_k, block_rbc_kernel_eps_max_k_copy, rbc_eps_pass (both overloads)	neighbors/ported/neighbors/ball_cover/registers.mojo	partial	94c2819	ballot is warp.vote + count_trailing_zeros; 32 threads per block, one query per block
-cuvs/cpp/src/neighbors/ball_cover/registers_types.cuh	EuclideanSqFunc	neighbors/ported/neighbors/ball_cover/common.mojo	partial	94c2819	the only functor their codegen instantiates for the eps path
-cuvs/cpp/src/neighbors/ball_cover/common.cuh	NNComp	neighbors/ported/neighbors/ball_cover/common.mojo	partial	94c2819	the ORDER is ported, the comparator-taking sort is not
+cuvs/cpp/src/neighbors/ball_cover/ball_cover.cuh	sample_landmarks, k_closest_landmarks, construct_landmark_1nn, compute_landmark_radii, rbc_build_index, rbc_eps_nn_query	neighbors/gbdt/neighbors/ball_cover/ball_cover.mojo	partial	94c2819	landmark draw is Floyd's on the host; 1-nn is fused instead of brute_force; in-group order is a counting sort plus rank instead of thrust::sort_by_key
+cuvs/cpp/src/neighbors/ball_cover/registers.cuh	block_rbc_kernel_eps_csr_pass, block_rbc_kernel_eps_dense, block_rbc_kernel_eps_max_k, block_rbc_kernel_eps_max_k_copy, rbc_eps_pass (both overloads)	neighbors/gbdt/neighbors/ball_cover/registers.mojo	partial	94c2819	ballot is warp.vote + count_trailing_zeros; 32 threads per block, one query per block
+cuvs/cpp/src/neighbors/ball_cover/registers_types.cuh	EuclideanSqFunc	neighbors/gbdt/neighbors/ball_cover/common.mojo	partial	94c2819	the only functor their codegen instantiates for the eps path
+cuvs/cpp/src/neighbors/ball_cover/common.cuh	NNComp	neighbors/gbdt/neighbors/ball_cover/common.mojo	partial	94c2819	the ORDER is ported, the comparator-taking sort is not
 ```
 
 For `neighbors/UNPORTED.tsv`:
@@ -180,7 +180,7 @@ cuvs/cpp/src/neighbors/ball_cover/registers.cuh	block_rbc_kernel_eps_csr_pass_xd
 cuvs/cpp/src/neighbors/ball_cover/registers.cuh	block_rbc_kernel_registers, perform_post_filter_registers, compute_final_dists_registers	:305, :64, :153	the k-NN query passes; the eps query is what DBSCAN needs and is what landed. Also gated upstream by ASSERT(index.n <= 3) at ball_cover.cuh:393,457
 cuvs/cpp/src/neighbors/ball_cover/ball_cover.cuh	rbc_all_knn_query, rbc_knn_query, perform_rbc_query, compute_landmark_dists	:384, :446, :240, :501	the k-NN entry points; blocked on the three k-NN kernels above
 cuvs/cpp/src/neighbors/ball_cover/registers_types.cuh	HaversineFunc, EuclideanFunc, compute_distance_by_metric	:37, :47, :79	never instantiated for the eps path; registers_00_generate.py:148 ships EuclideanSqFunc only
-cub	DeviceRadixSort	cub/device/dispatch/dispatch_radix_sort.cuh	the device-wide sort thrust::sort_by_key and raft's sampleWithoutReplacement both call. Open and portable; the digit-histogram machinery is the same shape as the RAFT radix SELECT already at neighbors/ported/matrix/detail/select_radix.mojo. Not needed by ball_cover as built (a counting sort by landmark plus per-group rank gives the same order), but it is the general primitive this repo lacks and nn.argsort cannot stand in for it
+cub	DeviceRadixSort	cub/device/dispatch/dispatch_radix_sort.cuh	the device-wide sort thrust::sort_by_key and raft's sampleWithoutReplacement both call. Open and portable; the digit-histogram machinery is the same shape as the RAFT radix SELECT already at neighbors/gbdt/matrix/detail/select_radix.mojo. Not needed by ball_cover as built (a counting sort by landmark plus per-group rank gives the same order), but it is the general primitive this repo lacks and nn.argsort cannot stand in for it
 ```
 
 ---
@@ -411,7 +411,7 @@ correct `uint32` ballot mask. This is `PORTING.md 31` above.
 
 The insertion point is `cuml/cpp/src/dbscan/vertexdeg/algo.cuh:226-231`: the
 `if (data.rbc_index != nullptr)` branch. The other lane's
-`dbscan/ported/neighbors/epsilon_neighborhood.mojo` is the `else` branch of
+`dbscan/gbdt/neighbors/epsilon_neighborhood.mojo` is the `else` branch of
 that same `if`, so the two are complementary and neither replaces the other.
 `runner.cuh:234-242` builds the index ONCE, before the batch loop.
 
@@ -450,13 +450,13 @@ Four things the wiring must get right, all of them theirs:
 1. **`eps` is the RADIUS, not its square.** `algo.cuh:227` passes `data.eps`
    into `eps_nn` while the brute-force arm on the next line gets `eps2`. The
    query kernel squares it internally, once. The existing
-   `dbscan/ported/dbscan/runner.mojo` squares `eps` on the host before
+   `dbscan/gbdt/dbscan/runner.mojo` squares `eps` on the host before
    calling `vertexdeg`; that value must NOT be the one passed here.
 2. **`vd` must be `n_batch + 1` long.** `vd[n_batch]` receives the edge total
    and is what `algo.cuh:150` reads back with `update_host`.
 3. **`ex_scan` is `adj_ia` directly.** The count pass writes offsets into it,
    so DBSCAN's separate exclusive-scan step
-   (`dbscan/ported/dbscan/adjgraph/algo.mojo`) is NOT run on this path —
+   (`dbscan/gbdt/dbscan/adjgraph/algo.mojo`) is NOT run on this path —
    `algo.cuh` has no `adj_to_csr` in the rbc branch because the query emits
    CSR itself. Running both would double-scan.
 4. **RBC is only valid for L2.** `runner.cuh:152-153` disables it for any

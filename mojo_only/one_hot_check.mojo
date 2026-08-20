@@ -24,8 +24,8 @@ What it reaches, branch by branch:
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from mojo_only.hist2_check import build_cindex
-from ported.gpu_data.compressed_index_builder import build_layout
-from ported.methods.doc_parallel_boosting import TAdditiveModel, fit, predict
+from gbdt.gpu_data.compressed_index_builder import build_layout
+from gbdt.methods.doc_parallel_boosting import TAdditiveModel, fit, predict
 
 comptime OH_ROWS = 2048
 comptime OH_FEATURES = 4

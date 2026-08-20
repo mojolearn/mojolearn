@@ -103,21 +103,21 @@ from mojo_only.kernel_matrix import (
 )
 from mojo_only.numerics import NUMERIC_FAST, NUMERIC_IDENTICAL
 
-from ported.methods.greedy_subsets_searcher.kernel.histogram_utils import (
+from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     hist2_dither,
     hist2_quantize,
 )
-from ported.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_5bit import (
+from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_5bit import (
     hist2_add_points_5,
     hist2_reduce_tail_5,
     hist2_slice_offset_5,
 )
-from ported.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_6bit import (
+from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_6bit import (
     hist2_add_points_6,
     hist2_reduce_tail_6,
     hist2_slice_offset_6,
 )
-from ported.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_7bit import (
+from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_7bit import (
     hist2_add_points_7,
     hist2_reduce_tail_7,
     hist2_slice_offset_7,

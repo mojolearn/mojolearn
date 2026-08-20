@@ -64,7 +64,7 @@ print-target = "mojo build --print-effective-target"
 
 # Elaborates every module, including ones no check imports, so it catches a
 # file that only compiles because nothing reaches it. Stricter than `probe`.
-build-pkg = "mkdir -p build && mojo precompile -I . ported -o build/ported.mojopkg"
+build-pkg = "mkdir -p build && mojo precompile -I . gbdt -o build/gbdt.mojopkg"
 
 [feature.bench.tasks]
 # Runs CatBoost itself. Writes bench/oracle.txt (read by `oracle`) and

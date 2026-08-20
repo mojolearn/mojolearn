@@ -6,7 +6,7 @@ worse than one absent. This checks the refusals actually fire, because a
 keeps finding unwired.
 """
 
-from ported.options.catboost_options import (
+from gbdt.options.catboost_options import (
     CatBoostOptions,
     DETERMINISM_CROSS_DEVICE,
     DETERMINISM_DEVICE,

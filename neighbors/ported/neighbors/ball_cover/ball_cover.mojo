@@ -61,7 +61,7 @@ matrix. At m = 200,000 that is 200,000 x 447 float32 = 357 MB, for an argmin
 that keeps two values. `rbc_landmark_1nn_kernel` below computes the same
 argmin without materializing anything, which is the shape RAFT itself uses
 when k = 1 — `fusedDistanceNN`, already ported in this repository at
-`cluster/ported/distance/fused_distance_nn/simt_kernel.mojo`. It is not
+`cluster/gbdt/distance/fused_distance_nn/simt_kernel.mojo`. It is not
 tiled because it does not need to be: `n_landmarks` is sqrt(m) and the
 landmark matrix is small enough to stay in cache for every query row.
 
@@ -133,7 +133,7 @@ at 4.4 ms and 6.4 ms at m = 200,000.
 
 So a per-group bitonic sort, or a port of CUB's `DeviceRadixSort` (open, and
 the same digit-histogram shape as the RAFT radix SELECT already at
-`neighbors/ported/matrix/detail/select_radix.mojo`), is worth at most 1% of a
+`neighbors/gbdt/matrix/detail/select_radix.mojo`), is worth at most 1% of a
 fit here. `DeviceRadixSort` is still the general device sort this repository
 lacks — `nn.argsort[target="gpu"]` is wrong above 256 elements — and it
 should be ported for that reason, by whoever needs it. It should not be

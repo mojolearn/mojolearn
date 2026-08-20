@@ -138,7 +138,7 @@ in the file is the two SHARED-address-space halves, which is where RAFT's are.
 
 ## 2. WHAT I CHANGED, FILE BY FILE
 
-### `neighbors/ported/matrix/detail/select_warpsort.mojo` (edited)
+### `neighbors/gbdt/matrix/detail/select_warpsort.mojo` (edited)
 * `block_sort_done`: loop-update restated (`select_warpsort.cuh:709-710`), with
   the compiler-bug repro written into the file as a comment so the next reader
   does not "clean it up" back into a crash.
@@ -147,7 +147,7 @@ in the file is the two SHARED-address-space halves, which is where RAFT's are.
   174,190,230` and `__device__ inline` throughout `select_warpsort.cuh`.
 * Nothing else. No comparator, no network, no geometry.
 
-### `neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo` (new)
+### `neighbors/gbdt/neighbors/detail/faiss_select/merge_network_warp.mojo` (new)
 Port of `Comparators.cuh` (float only), `MergeNetworkUtils.cuh` in full, and
 `MergeNetworkWarp.cuh`'s power-of-two path in full:
 `warpBitonicMergeLE16` (`:83-136`), `BitonicMergeStep` pow-2 (`:146-212`),
@@ -155,7 +155,7 @@ Port of `Comparators.cuh` (float only), `MergeNetworkUtils.cuh` in full, and
 generic case and the `N==1` five-call specialization (`:440-503`),
 `warpSortAnyRegisters` (`:508-512`).
 
-### `neighbors/ported/neighbors/detail/faiss_select/select.mojo` (new)
+### `neighbors/gbdt/neighbors/detail/faiss_select/select.mojo` (new)
 Port of `Select.cuh:346-500`, the general `WarpSelect`: `__init__`,
 `add_thread_q`, `check_thread_q`, `merge_warp_q`, `add`, `reduce`, `write_out`.
 
@@ -172,10 +172,10 @@ placement.
 `neighbors/PORTED_MAP.tsv` (tab-separated):
 
 ```
-raft	cpp/include/raft/neighbors/detail/faiss_select/Comparators.cuh	neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo	PARTIAL	float only; Comparator<half> not ported
-raft	cpp/include/raft/neighbors/detail/faiss_select/MergeNetworkUtils.cuh	neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo	FULL	swap/assign, predicated
-raft	cpp/include/raft/neighbors/detail/faiss_select/MergeNetworkWarp.cuh	neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo	PARTIAL	power-of-two BitonicMergeStep only; non-pow2 specializations unreachable for every fused_l2_knn instantiation
-raft	cpp/include/raft/neighbors/detail/faiss_select/Select.cuh	neighbors/ported/neighbors/detail/faiss_select/select.mojo	PARTIAL	WarpSelect general specialization only
+raft	cpp/include/raft/neighbors/detail/faiss_select/Comparators.cuh	neighbors/gbdt/neighbors/detail/faiss_select/merge_network_warp.mojo	PARTIAL	float only; Comparator<half> not ported
+raft	cpp/include/raft/neighbors/detail/faiss_select/MergeNetworkUtils.cuh	neighbors/gbdt/neighbors/detail/faiss_select/merge_network_warp.mojo	FULL	swap/assign, predicated
+raft	cpp/include/raft/neighbors/detail/faiss_select/MergeNetworkWarp.cuh	neighbors/gbdt/neighbors/detail/faiss_select/merge_network_warp.mojo	PARTIAL	power-of-two BitonicMergeStep only; non-pow2 specializations unreachable for every fused_l2_knn instantiation
+raft	cpp/include/raft/neighbors/detail/faiss_select/Select.cuh	neighbors/gbdt/neighbors/detail/faiss_select/select.mojo	PARTIAL	WarpSelect general specialization only
 ```
 
 `neighbors/UNPORTED.tsv`:
@@ -250,7 +250,7 @@ DELETED, not annotated:
   round's rule change: a vendor top-k can never do the fused kernel's job, so
   three-way agreement is a correctness check, not a design option.
 
-**`neighbors/ported/matrix/detail/select_radix.mojo:38`** ends with "...and
+**`neighbors/gbdt/matrix/detail/select_radix.mojo:38`** ends with "...and
 warpsort IS now ported (`select_warpsort.mojo`) but cannot yet be instantiated
 at a launch site without crashing the compiler; see UNWIRED.md." That clause is
 false. I did not edit the file (not mine). Suggested replacement: "...and
@@ -426,7 +426,7 @@ needs a decision on the ballot. Reported, not guessed at.
 
 ## 9. AN OPERATIONAL WARNING FOR THE ORCHESTRATOR
 
-Three times during this session, `neighbors/ported/matrix/detail/select_warpsort.mojo`
+Three times during this session, `neighbors/gbdt/matrix/detail/select_warpsort.mojo`
 **and** `select_radix.mojo` were DELETED from the working tree by something
 outside this lane, and once my edited `select_warpsort.mojo` was reverted to
 HEAD mid-bisect. That reversion produced a fake result — a build that had been

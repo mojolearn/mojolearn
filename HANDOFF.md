@@ -95,7 +95,7 @@ the GatherInplace fast path) before a worktree bisect found it in minutes:
 
 ## The control plane, now COMPILED
 
-`ported/gpu_lib/` had never been compiled at all. It is compiled now and both
+`gbdt/gpu_lib/` had never been compiled at all. It is compiled now and both
 checks pass, as `pixi run check-gpu-lib` and `pixi run check-gpu-lib-worker`.
 They are separate tasks rather than part of `probe_main` because each carries
 its own `main()`.

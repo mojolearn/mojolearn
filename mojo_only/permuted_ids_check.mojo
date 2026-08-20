@@ -30,17 +30,17 @@ rebuilds a subset must leave the rest of the histogram alone.
 
 from max.gpu.host import DeviceContext
 
-from ported.gpu_data.compressed_index_builder import build_layout
-from ported.gpu_data.feature_blocks import blocks_for
-from ported.gpu_data.kernel.binarize import (
+from gbdt.gpu_data.compressed_index_builder import build_layout
+from gbdt.gpu_data.feature_blocks import blocks_for
+from gbdt.gpu_data.kernel.binarize import (
     WRITE_BLOCK_SIZE,
     write_compressed_index_kernel,
 )
-from ported.methods.greedy_subsets_searcher.greedy_search_helper import (
+from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
     launch_histograms_for_blocks,
     upload_blocks,
 )
-from ported.methods.greedy_subsets_searcher.kernel.histogram_utils import (
+from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     fixed_to_float_kernel,
 )
 

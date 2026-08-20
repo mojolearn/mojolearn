@@ -17,7 +17,7 @@ and makes n = 33 fail at `||V^T V - I|| = 0.61`.
 ## 0. THE ORCHESTRATOR'S FIRST MESSAGE IS A MISATTRIBUTION — READ THIS FIRST
 
 > "You edited files your brief put out of bounds: `core/gemm.mojo` (-280),
-> `core/column_stats.mojo` (-321), `glm/ported/linalg/detail/lstsq.mojo`."
+> `core/column_stats.mojo` (-321), `glm/gbdt/linalg/detail/lstsq.mojo`."
 
 **I did not.** Every write this lane made was to an explicit `decomposition/`
 path. `git status --porcelain -- decomposition/` is the complete list of my
@@ -26,8 +26,8 @@ work:
     M decomposition/mojo_only/jacobi_eigh.mojo
     M decomposition/mojo_only/jacobi_eigh_device.mojo
     M decomposition/mojo_only/pca_check.mojo
-    M decomposition/ported/linalg/detail/pca.mojo
-    M decomposition/ported/linalg/detail/tsvd.mojo
+    M decomposition/gbdt/linalg/detail/pca.mojo
+    M decomposition/gbdt/linalg/detail/tsvd.mojo
     M decomposition/PORTED_MAP.tsv          (assigned to me)
     M decomposition/README.md               (assigned to me)
     M decomposition/UNPORTED.tsv            (assigned to me)
@@ -36,7 +36,7 @@ work:
     ?? decomposition/pca_wide_main.mojo
     ?? decomposition/pca_wide_sklearn.py
 
-plus **one deliberate, minimal edit to `glm/ported/linalg/detail/lstsq.mojo`,
+plus **one deliberate, minimal edit to `glm/gbdt/linalg/detail/lstsq.mojo`,
 described in section 0b**, which is the fix for the build break.
 
 `core/gemm.mojo` last changed at 18:13:11 and `core/column_stats.mojo` at
@@ -48,7 +48,7 @@ did read `core/gemm.mojo` and `core/column_stats.mojo` as part of the limit
 hunt (section 2) and found no problem-dimension cap in either.
 
 One thing that lane's edit *did* do to my files: it removed `COV_TILE` from
-`decomposition/ported/linalg/detail/pca.mojo`'s import block. I picked that up
+`decomposition/gbdt/linalg/detail/pca.mojo`'s import block. I picked that up
 on a re-read and preserved it, so nothing was clobbered — but a peer is
 editing inside `decomposition/`, and that is worth knowing.
 
@@ -59,9 +59,9 @@ to enqueue` at `lstsq.mojo:134`. That is not the lstsq rewrite: it is **my**
 change to `jacobi_eigh_kernel`, which gained an `info_out` parameter (row 4).
 `lstsq_eig` launches that same kernel and was still passing five arguments.
 
-Fixed, minimally, in `glm/ported/linalg/detail/lstsq.mojo` — the only lines
+Fixed, minimally, in `glm/gbdt/linalg/detail/lstsq.mojo` — the only lines
 touched are the import, the `enqueue_function` argument list, and a
-non-convergence check on the returned info. `glm/ported/glm/ols.mojo`,
+non-convergence check on the returned info. `glm/gbdt/glm/ols.mojo`,
 `glm/mojo_only/ols_check.mojo` and `glm/ols_main.mojo` were **not** touched.
 
     check_ols_exact OK  |  check_ols_scale_invariant OK
@@ -138,7 +138,7 @@ with grid-covered dispatch. **No problem-dimension cap found in either.**
   (`eig.cuh:310`).
 - Dropped dead `block_dim`, `block_idx` imports.
 
-**`decomposition/ported/linalg/detail/pca.mojo`** (from `cuml/cpp/src/pca/pca.cuh`)
+**`decomposition/gbdt/linalg/detail/pca.mojo`** (from `cuml/cpp/src/pca/pca.cuh`)
 - Every `raft/linalg/detail/{pca,tsvd}.cuh` citation corrected to the cuML
   paths and re-derived line numbers; RAFT pin `9aa17e5` → cuML `00094f7`.
 - The fabricated `sign_flip_components` / `flip_signs_based_on_U` passage
@@ -151,7 +151,7 @@ with grid-covered dispatch. **No problem-dimension cap found in either.**
 - `noise_vars` guard completed (`pca.cuh:74-83`).
 - Dropped the dead `cluster.mojo_only.reduce_by_key` import.
 
-**`decomposition/ported/linalg/detail/tsvd.mojo`** — citations corrected to
+**`decomposition/gbdt/linalg/detail/tsvd.mojo`** — citations corrected to
 `cuml/cpp/src/tsvd/tsvd.cuh::tsvdFit`; dead import dropped.
 
 **`decomposition/mojo_only/jacobi_eigh.mojo`** — the "WHY THE HOST" section
@@ -173,7 +173,7 @@ substitute" sentence deleted.
 **`decomposition/README.md`**, **`PORTED_MAP.tsv`**, **`UNPORTED.tsv`** —
 corrected paths, the default-arm finding, the cap section, current results.
 
-**`glm/ported/linalg/detail/lstsq.mojo`** — section 0b.
+**`glm/gbdt/linalg/detail/lstsq.mojo`** — section 0b.
 
 ---
 

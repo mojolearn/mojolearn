@@ -10,13 +10,13 @@ copyright assignment.
 ## What we wrote, and whose designs it follows
 
 CORRECTED 2026-08-20. This section was headed "What is ours and what is not"
-and put everything under `ported/` on the "not ours" side. **That was wrong
+and put everything under `gbdt/` on the "not ours" side. **That was wrong
 and it undersold the work.** Every line of Mojo in this repository was written
 here. Nobody at YANDEX or NVIDIA or Meta wrote any of it, and Andrew Hendel
 holds the copyright in all of it.
 
 What the upstreams own is the DESIGN: the algorithm, the decomposition into
-kernels, the order of operations, the data layout. `ported/` **mirrors** those
+kernels, the order of operations, the data layout. `gbdt/` **mirrors** those
 designs, file for file, deliberately, under the rule COPY DO NOT IMPROVE,
 because a port that drifts cannot be checked against the original. The word
 for that relationship is mirroring, not "not ours".
@@ -41,19 +41,19 @@ the upstream never had to make.
 
 ### The designs we mirror
 
-**CatBoost.** `ported/` mirrors CatBoost's GPU oblivious tree learner, file
+**CatBoost.** `gbdt/` mirrors CatBoost's GPU oblivious tree learner, file
 for file. The tree-growing design, the packing policies, the histogram
 strategies, the smaller-sibling rule and the level loop are YANDEX's,
 Apache-2.0. `PORTED_MAP.tsv` names the source behind each file and flags where
 a port is partial or replaced.
 
-**cuVS.** `cluster/ported/` mirrors cuVS's k-means and `neighbors/ported/`
+**cuVS.** `cluster/gbdt/` mirrors cuVS's k-means and `neighbors/gbdt/`
 mirrors its brute-force k-NN and ball cover. The expanded distance identity,
 the tiling scheme, the greedy k-means++ trial rule, the two convergence tests
 and the empty-cluster rule are NVIDIA's, Apache-2.0. `cluster/UNPORTED.tsv`
 names what was deliberately left out.
 
-**cuML.** `dbscan/ported/` mirrors cuML's DBSCAN and `decomposition/ported/`
+**cuML.** `dbscan/gbdt/` mirrors cuML's DBSCAN and `decomposition/gbdt/`
 mirrors its PCA and truncated SVD. NVIDIA, Apache-2.0.
 
 **RAFT.** Eleven files across `dbscan/`, `decomposition/`, `glm/` and
@@ -61,7 +61,7 @@ mirrors its PCA and truncated SVD. NVIDIA, Apache-2.0.
 Apache-2.0.
 
 **FAISS, and this one is NOT Apache-2.0.**
-`neighbors/ported/neighbors/detail/faiss_select/` mirrors the FAISS
+`neighbors/gbdt/neighbors/detail/faiss_select/` mirrors the FAISS
 warp-select queue that RAFT vendors, which carries Facebook's copyright under
 the MIT license. MIT requires the notice to travel with substantial portions,
 so those two files carry it in their own headers. See NOTICE.
@@ -76,7 +76,7 @@ dropping it.
 All of it is code written here. The split below is by whether a file follows
 an upstream design or has no counterpart in any of them.
 
-    follows an upstream design (`*/ported/`)      29,518 lines
+    follows an upstream design (`*/gbdt/`)      29,518 lines
     no upstream counterpart at all                27,320 lines   48.1%
       of which library code                        5,875
       of which checks and probes                  21,445

@@ -6,7 +6,7 @@ PORT OF `cuml/cpp/src/dbscan/dbscan.cuh::compute_batch_size` and
 
 `eps_nn_method` defaults to RBC here and to BRUTE_FORCE in theirs; that
 DEVIATION and its measurement live at the top of
-`dbscan/ported/dbscan/runner.mojo`, not here.
+`dbscan/gbdt/dbscan/runner.mojo`, not here.
 
 THEIR FIXED ALGORITHM CODES, WHICH ARE NOT USER-VISIBLE (`dbscan.cuh:118-122`)
 

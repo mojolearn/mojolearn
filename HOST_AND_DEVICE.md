@@ -52,7 +52,7 @@ that is the API this wants, and the pin cannot call it yet. Until the pin
 moves, the host copies to learn a leaf's size, ONCE PER LEVEL, which is
 their count (`RebuildLeavesSizes`, `split_properties_helper.cpp:800-813`,
 called at `:950`). Search, citations and the ordering rule are in the
-DEVIATION BLOCK in `ported/gpu_util/gpu_data/partitions.mojo`; tracked in
+DEVIATION BLOCK in `gbdt/gpu_util/gpu_data/partitions.mojo`; tracked in
 UNWIRED.md.
 
 ## The second rule, added 2026-08-19
@@ -120,7 +120,7 @@ The other ~21 ms is launch COUNT, about 96 per tree, which enqueuing early
 does not reduce. Both halves are needed and neither alone closes the gap.
 
 **Already in flight:** a peer session is cutting the drains in
-`ported/methods/greedy_subsets_searcher/greedy_search_helper.mojo` right now,
+`gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo` right now,
 uncommitted in this shared checkout, with the removals annotated against
 `split_points.cu`. Do not duplicate that work. This document is the rule it
 should be checked against.

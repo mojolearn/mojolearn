@@ -20,11 +20,11 @@ GPU, row-major, L2, and the defaults in our own params structs.**
 
 | # | entry point (their public door) | their dispatch target at OUR parameters | ours | same? | file:line |
 |---|---|---|---|---|---|
-| 1 | `cuvs::cluster::kmeans::fit` (C++) | `detail::kmeans_fit` -> validate, weight fill, **`checkWeight`**, n_init loop, init dispatch, `kmeans_fit_main` | `cluster/ported/cluster/kmeans.mojo::fit` -> `kmeans_fit_main`, which has the wrapper folded in | **YES except `checkWeight`** | `cuvs .../detail/kmeans.cuh:812-951`; call at `:872` |
+| 1 | `cuvs::cluster::kmeans::fit` (C++) | `detail::kmeans_fit` -> validate, weight fill, **`checkWeight`**, n_init loop, init dispatch, `kmeans_fit_main` | `cluster/gbdt/cluster/kmeans.mojo::fit` -> `kmeans_fit_main`, which has the wrapper folded in | **YES except `checkWeight`** | `cuvs .../detail/kmeans.cuh:812-951`; call at `:872` |
 | 2 | k-means init, `init=KMeansPlusPlus` + `oversampling_factor=2.0` (both defaults) | **`initScalableKMeansPlusPlus` (k-means\|\|)**, NOT `kmeansPlusPlus` | RAISES by name | **NO — and we say so** | `detail/kmeans.cuh:910-915`; defaults `kmeans.hpp:75,105` |
 | 3 | k-means assignment, `metric=L2Expanded` (default) | `is_fused == true` -> **`fusedDistanceNNMinReduce`** (the fused SIMT arm) | `simt_kernel.mojo`, launched by `min_cluster_and_distance_compute` | **YES** | `kmeans_common.cuh:378-379`, fused arm `:430-449` |
 | 4 | k-means Lloyd loop, `inertia_check=false` (default) | cost reduction + `delta > 1-tol` test **skipped**; only `sqrdNormError < tol` stops it | same, gated on the same flag | **YES** | `detail/kmeans.cuh:468-492`; default `kmeans.hpp:120` |
-| 5 | `ML::Dbscan::fit`, `eps_nn_method=BRUTE_FORCE` (default, C++ and Python) | `epsUnexpL2SqNeighborhood` (fused, unexpanded, `eps2`) | `dbscan/ported/neighbors/epsilon_neighborhood.mojo`, reachable | **YES** | `dbscan.hpp:74`; `vertexdeg/algo.cuh:225,229-230` |
+| 5 | `ML::Dbscan::fit`, `eps_nn_method=BRUTE_FORCE` (default, C++ and Python) | `epsUnexpL2SqNeighborhood` (fused, unexpanded, `eps2`) | `dbscan/gbdt/neighbors/epsilon_neighborhood.mojo`, reachable | **YES** | `dbscan.hpp:74`; `vertexdeg/algo.cuh:225,229-230` |
 | 6 | `ML::Dbscan::fit`, `eps_nn_method=RBC` **at int32 labels** | **STILL `epsUnexpL2SqNeighborhood`.** RBC is disabled `constexpr` for `Index_ == int32_t` | **we default to RBC and run it** | **NO — deliberate, measured, documented** | `runner.cuh:143-150`, index build guard `:235` |
 | 7 | DBSCAN final labelling, `algo_ccl` | `algo_ccl` is hardcoded 2 -> `final_relabel` (make_monotonic) **always**, then `relabelForSkl` | `make_monotonic` then `relabel_for_skl_kernel`, same order | **YES** | `dbscan.cuh:122`; `runner.cuh:410-416` |
 | 8 | DBSCAN batch policy | `compute_batch_size` takes `eps_nn_method`; the `MAX_LABEL/n_rows` clamp is **skipped in RBC mode** | same: `eps_nn_method` threaded from `dbscan_fit_impl`, clamp gated (fixed by LANE_dbscan-batching_2026-08-19; was unconditional) | **YES** | `dbscan.cuh:71` |
@@ -53,7 +53,7 @@ fact that they reach the same `minClusterAndDistanceCompute` as `fit`; the
 
 | # | what upstream does (file:line) | what ours did | fixed? |
 |---|---|---|---|
-| D1 | `runner.cuh:143-150` disables RBC **`constexpr`** for `Index_ == int32_t`; `:235` builds the index only for `float && int64_t`. We are int32-label, so **cuML's dispatch can never send our parameters to RBC.** | `dbscan/ported/dbscan/runner.mojo` defaults to RBC and its DEVIATION 35 note claimed "We are float32, int32-label and L2 only, so those restrictions **cost us nothing**", and the inline fallback list claimed "the first two cannot fire here". Both are the exact opposite of `:143`. | **DOC FIXED.** The default is left at RBC (its 27x measurement and its point-for-point equality check stand), but the file now says plainly that their dispatch never reaches this arm at our parameters and that "we follow their dispatch" is NOT among the reasons. |
+| D1 | `runner.cuh:143-150` disables RBC **`constexpr`** for `Index_ == int32_t`; `:235` builds the index only for `float && int64_t`. We are int32-label, so **cuML's dispatch can never send our parameters to RBC.** | `dbscan/gbdt/dbscan/runner.mojo` defaults to RBC and its DEVIATION 35 note claimed "We are float32, int32-label and L2 only, so those restrictions **cost us nothing**", and the inline fallback list claimed "the first two cannot fire here". Both are the exact opposite of `:143`. | **DOC FIXED.** The default is left at RBC (its 27x measurement and its point-for-point equality check stand), but the file now says plainly that their dispatch never reaches this arm at our parameters and that "we follow their dispatch" is NOT among the reasons. |
 | D2 | `dbscan.cuh:71`: the `batch_size <= MAX_LABEL/n_rows` clamp is inside `if (eps_nn_method != RBC)`. RBC emits CSR directly and never materializes the `N*batch_size` dense adjacency the clamp protects. | `compute_batch_size` had no `eps_nn_method` parameter and clamped unconditionally. | **FIXED** by LANE_dbscan-batching_2026-08-19: parameter threaded in their order, clamp gated, reach checked on both sides (`check_dbscan_max_mbytes_moves_the_batch`). On this device the clamp never bound a default-budget run (the 80% budget cuts first at every n), so the fix changes dispatch fidelity and user-raised budgets, not the recorded timings. |
 | D3 | `detail/kmeans.cuh:872`: `kmeans_fit` calls `checkWeight` **unconditionally** on the default path. It is not an assertion — it cub-reduces the weights and rescales all of them by `n_samples/sum` when they disagree (`kmeans_common.cuh:160-172`). The rescale cancels in the centroids (`div_checkzero_op` at `detail/kmeans.cuh:326-331`) but **not** in the inertia, which is weighted at `:521-526` and is what `n_init` selects on and what `fit` reports. | `kmeans_fit_main` takes the caller's weights as given. | **NOT FIXED** (needs code; see §4 F2). `cluster/UNPORTED.tsv` row rewritten — it previously said "RAFT_EXPECTS", which is not what the function does. |
 | D4 | `pca.cuh:136`: `seqRoot(..., set_neg_zero=true)` turns a negative eigenvalue into a **zero** singular value (`math.cuh:86-95`). Reachable on any rank-deficient or badly scaled design. `tsvdFit` passes no such flag (`tsvd.cuh:237`). | `eig_and_truncate` does `sqrt(lam * scale)` with no clamp -> **NaN** where cuML returns 0, on both paths. | **NOT FIXED** (arithmetic; see §4 F3). Documented in `pca.mojo`. |
@@ -110,7 +110,7 @@ citations resolved and opened.**
 | `reduce_rows_by_key.cuh:300` = "lands with a global atomic add" | `IdxT ncols,` (a parameter) | `:287` (`raft::myAtomicAdd`) | `cluster/mojo_only/reduce_by_key.mojo` |
 | `reduce_rows_by_key.cuh:292` = "`gid = threadIdx.x + ...`" | `typename WeightT,` (a template param) | `:280` | `cluster/mojo_only/reduce_by_key.mojo` |
 | `reduce_rows_by_key.cuh:270-288` = the kernel | starts on template params | `:272-288` | `cluster/.../detail/kmeans.mojo` |
-| `runner.cuh:365` = the core-point `filter_op` | `n_points,` (an argument) | `:384-386` | `dbscan/ported/sparse/detail/csr.mojo` |
+| `runner.cuh:365` = the core-point `filter_op` | `n_points,` (an argument) | `:384-386` | `dbscan/gbdt/sparse/detail/csr.mojo` |
 | `detail/pca.cuh:189` = `sign_flip_components` | **file has never existed** — a live comment still carried the fabrication the same file's docstring denounces | deleted; replaced with `math.cuh:367` | `decomposition/.../pca.mojo` |
 | `detail/eig.cuh:79-82` = "`eigDC` aborts on `dev_info`" (x3) | `eigDC_legacy`'s ASSERT — nothing calls that function | `:149-151` | `lstsq.mojo`, `pca.mojo`, `decomposition/README.md` |
 | `ols.cuh:105` = "cuML's OLS solver algo = 1" | `n_rows,` (an argument) | `:120` | `glm/.../lstsq.mojo` |
@@ -144,7 +144,7 @@ load-bearing ones: `params.hpp:53`, `kmeans.hpp:28-121`/`:44-60`/`:120`,
 `eig.cuh:108-109`/`:276`/`:310-311`, `l2_exp.cuh:124-135`/`:132-134`.
 
 **Ambiguous but not wrong (NOT FIXED, low value):** a run of bare `` `:NNN` ``
-citations in `cluster/ported/cluster/detail/kmeans.mojo` and
+citations in `cluster/gbdt/cluster/detail/kmeans.mojo` and
 `kmeans_common.mojo` follow a `kmeans.hpp` citation but mean
 `detail/kmeans.cuh`. Every value is correct against `detail/kmeans.cuh`; only
 the implied file is ambiguous to a reader.
@@ -161,24 +161,24 @@ deleted and the reason recorded.
 ## 3. WHAT I CHANGED, file by file
 
 Docstrings, comments and TSV rows only. No kernel body, no launch geometry, no
-algorithm, nothing under `neighbors/`, `core/`, `bench/`, `ported/`,
+algorithm, nothing under `neighbors/`, `core/`, `bench/`, `gbdt/`,
 `mojo_only/`, or any root doc.
 
-1. **`dbscan/ported/dbscan/runner.mojo`** — DEVIATION 35 rewritten: the claim
+1. **`dbscan/gbdt/dbscan/runner.mojo`** — DEVIATION 35 rewritten: the claim
    that cuML's RBC restrictions "cost us nothing" is deleted and replaced with
    the `constexpr` downgrade at `runner.cuh:143-150` and the index-build guard
    at `:235`, stating that their dispatch never reaches RBC at int32 labels.
    The inline fallback list's "the first two cannot fire here" is deleted for
    the same reason. Query-view citations `algo.cuh:131`/`:146` -> `:132`/`:143`/`:161`;
    `:137-153` -> `:137-144`; `:195-200` -> `:194-200`.
-2. **`dbscan/ported/dbscan/dbscan.mojo`** — "brute force" removed from the
+2. **`dbscan/gbdt/dbscan/dbscan.mojo`** — "brute force" removed from the
    PORT OF scope line (the default is RBC now); their fixed `algo_vd`/
    `algo_adj`/`algo_ccl` recorded from `dbscan.cuh:118-122` with the note that
    `algo_ccl = 2` makes `final_relabel` non-optional; D2 written up on
    `compute_batch_size` from `dbscan.cuh:71`; memory-estimate citation
    `:147-151` -> `:157-158`.
-3. **`dbscan/ported/sparse/detail/csr.mojo`** — `runner.cuh:365` -> `:384-386`.
-4. **`decomposition/ported/linalg/detail/pca.mojo`** — new section answering
+3. **`dbscan/gbdt/sparse/detail/csr.mojo`** — `runner.cuh:365` -> `:384-386`.
+4. **`decomposition/gbdt/linalg/detail/pca.mojo`** — new section answering
    the DQ-vs-Jacobi question from `tsvd.cuh:98-126` (nothing downstream of the
    branch differs); new section on `set_neg_zero` (D4) from `pca.cuh:136` +
    `math.cuh:86-95`; sign-flip section extended with the fact that
@@ -188,23 +188,23 @@ algorithm, nothing under `neighbors/`, `core/`, `bench/`, `ported/`,
    the `nn.argsort` recommendation deleted; tol/sweeps provenance pinned to
    `pca.pyx:356-358,412-413` with the C++ `tol = 0.0` contrast from
    `params.hpp:44-45`.
-5. **`decomposition/ported/linalg/detail/tsvd.mojo`** — D5 written up from
+5. **`decomposition/gbdt/linalg/detail/tsvd.mojo`** — D5 written up from
    `tsvd.cuh:190-238` and `:272-276`, plus the `set_neg_zero` asymmetry.
 6. **`decomposition/README.md`** — `detail/eig.cuh:79-82` -> `:149-151`.
-7. **`glm/ported/glm/ols.mojo`** — D6 written up from
+7. **`glm/gbdt/glm/ols.mojo`** — D6 written up from
    `linear_regression.pyx:309` and `preprocess.cuh:98,100,115,117,148-176`,
    naming `ols.cuh:156` as the branch we do mirror; `:75-76` -> `:74-75`,
    `:120-125` -> `:116-126`, `:122-124` -> `:123-125`, `:98-110` -> `:99-110`.
-8. **`glm/ported/linalg/detail/lstsq.mojo`** — RAFT commit `9aa17e5`
+8. **`glm/gbdt/linalg/detail/lstsq.mojo`** — RAFT commit `9aa17e5`
    (not a valid object) -> `661a3b8`; `ols.cuh:105` -> `:120`;
    `eig.cuh:79-82` -> `:149-151` with `lstsq.cuh:315` naming the call site.
-9. **`cluster/ported/distance/fused_distance_nn/simt_kernel.mojo`** — D8:
+9. **`cluster/gbdt/distance/fused_distance_nn/simt_kernel.mojo`** — D8:
    `helper_structs.cuh:28-33` -> `:39-44`, and the tie-break re-attributed to
    `raft::argmin_op` (`raft/core/operators.hpp:198-205`, reached at
    `kmeans_common.cuh:474-489`) with a note that `MinAndDistanceReduceOpImpl`
    at `:47-97` is value-only.
 10. **`cluster/mojo_only/reduce_by_key.mojo`** — `:300` -> `:287`, `:292` -> `:280`.
-11. **`cluster/ported/cluster/detail/kmeans.mojo`** — `:270-288` -> `:272-288`.
+11. **`cluster/gbdt/cluster/detail/kmeans.mojo`** — `:270-288` -> `:272-288`.
 12. **`cluster/UNPORTED.tsv`** — `checkWeight` row rewritten (D3).
 13. **`dbscan/UNPORTED.tsv`** — `core_indices` row rewritten (D7).
 14. **`glm/UNPORTED.tsv`** — `preprocess.cuh` row rewritten (D6).
@@ -223,7 +223,7 @@ batch costs ~5*MAX_LABEL ~ 10.7 GB at every n, above the ~10.2 GB default
 budget), so no recorded timing's batch count moves.
 
 **F2 — `checkWeight` is not ported and is on cuVS's default path.**
-`cluster/ported/cluster/detail/kmeans.mojo::kmeans_fit_main`, immediately
+`cluster/gbdt/cluster/detail/kmeans.mojo::kmeans_fit_main`, immediately
 before the `n_init` loop. Sum `weights` on the device; if the sum differs from
 `n_samples`, scale every weight by `n_samples / sum`. Mirror of
 `detail/kmeans.cuh:872` -> `kmeans_common.cuh:136-173`. Effect: our reported
@@ -231,7 +231,7 @@ inertia stops being off by `sum/n_samples` for any weight vector that does not
 already sum to `n_samples`. No effect on centroids.
 
 **F3 — `set_neg_zero` on the PCA singular values.**
-`decomposition/ported/linalg/detail/pca.mojo::eig_and_truncate`, the
+`decomposition/gbdt/linalg/detail/pca.mojo::eig_and_truncate`, the
 `singular_vals.append(sqrt(lam * Float64(singular_scale)))` line. Mirror
 `math.cuh:86-95`: `0.0 if lam < 0.0 else sqrt(lam * scale)`. It must be
 conditional on the caller — `pcaFit` passes `true` (`pca.cuh:136`), `tsvdFit`
@@ -249,7 +249,7 @@ fields their function does not have. (b) is the smaller change and the more
 faithful one.
 
 **F5 — `fit_intercept` is cuML's Python default and we refuse it.**
-`glm/ported/glm/ols.mojo`. Needs `preProcessData`/`postProcessData` from
+`glm/gbdt/glm/ols.mojo`. Needs `preProcessData`/`postProcessData` from
 `preprocess.cuh`; the non-`normalize`, no-`sample_weight` arm is four steps:
 column means of X (`:98`), mean-center X (`:100`), mean of y (`:115`),
 mean-center y (`:117`); then after the solve, `intercept = mean(y) - mu_X . coef`
@@ -382,14 +382,14 @@ checks OK again (output above).
   concurrent lane.
 - **Did not audit `neighbors/`.** Another lane owns it, and the k-NN dispatch
   defect it was named for was already found and fixed in round 1.
-- **Did not audit `core/`, `ported/`, `mojo_only/`, `bench/` or any root doc.**
+- **Did not audit `core/`, `gbdt/`, `mojo_only/`, `bench/` or any root doc.**
   Out of scope; peer session holds several of them.
 - **Did not run timing benchmarks.** The 27.5x RBC table quoted in the DBSCAN
   deviation is a prior lane's measurement, restated, not re-measured.
 - **Did not re-derive the `nn.argsort` 256-element bug.** Taken from this
   round's addenda as given, per "do not rediscover these".
 - **Did not fix the ambiguous bare `` `:NNN` `` runs** in
-  `cluster/ported/cluster/detail/kmeans.mojo` and `kmeans_common.mojo`. Every
+  `cluster/gbdt/cluster/detail/kmeans.mojo` and `kmeans_common.mojo`. Every
   value is correct against `detail/kmeans.cuh`; only the implied filename is
   ambiguous, and rewriting ~15 comments in a file a peer lane is editing was
   the wrong trade.

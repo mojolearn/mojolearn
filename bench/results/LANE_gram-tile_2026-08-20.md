@@ -132,7 +132,7 @@ check_ols_dispatch_guard OK: n_cols>n_rows and n_cols==1 both refused, 256x4 acc
   WHOLE, per the brief's sanctioned dispatch-split option. Every ragged m
   is far from the bench shapes; if a ragged width ever ships hot, the
   edge-thread variant is the follow-up.
-- Did not touch neighbors/, ported/methods/ (peer in-progress work),
+- Did not touch neighbors/, gbdt/methods/ (peer in-progress work),
   SCOREBOARD, or PORTING.md (no caller-visible behavior change; the three
   new symbols -- `gram_splitk_cells_for`, `gram_splitk_reg_tile_side`,
   `gram_splitk_reg_tiled` -- are additive, no existing signature moved).

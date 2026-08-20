@@ -25,13 +25,13 @@ belonging to some other feature.
 Host arithmetic only. No device, no kernels. The bug was in the arithmetic.
 """
 
-from ported.gpu_data.compressed_index_builder import (
+from gbdt.gpu_data.compressed_index_builder import (
     CompressedIndexLayout,
     build_layout,
 )
-from ported.gpu_data.feature_blocks import blocks_for
-from ported.gpu_data.grid_policy import policy_name
-from ported.methods.greedy_subsets_searcher.greedy_search_helper import (
+from gbdt.gpu_data.feature_blocks import blocks_for
+from gbdt.gpu_data.grid_policy import policy_name
+from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
     resolve_split,
 )
 

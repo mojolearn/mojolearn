@@ -7,7 +7,7 @@ correct answer is not by itself evidence that the kernel ran.
 
 WHY THIS FILE EXISTS
 --------------------
-`neighbors/ported/matrix/detail/select_warpsort.mojo` was committed in a state
+`neighbors/gbdt/matrix/detail/select_warpsort.mojo` was committed in a state
 where `mojo build` CRASHED at any launch site, so it had never executed. The
 crash is fixed (see the loop-update note in `block_sort_done`); this file is
 the proof that the fix reaches the device and computes RAFT's answer.

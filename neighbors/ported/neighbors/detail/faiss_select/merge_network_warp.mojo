@@ -41,7 +41,7 @@ THIS IS NOT `matrix/detail/select_warpsort.cuh` AND NOT A RENAME OF IT
 RAFT ships the FAISS WarpSelect design TWICE, as two unrelated files:
 
   `matrix/detail/select_warpsort.cuh` + `util/bitonic_sort.cuh`
-      -> ported at `neighbors/ported/matrix/detail/select_warpsort.mojo`.
+      -> ported at `neighbors/gbdt/matrix/detail/select_warpsort.mojo`.
       A block-wide `block_kernel` that reads a materialized distance row
       from GLOBAL memory and tree-merges per-warp queues through SHARED
       memory. `select_k-inl.cuh:38` routes `2 < k <= 256` here.

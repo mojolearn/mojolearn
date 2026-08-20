@@ -31,7 +31,7 @@ smoke in §3 were re-taken on.
 
 ## 1. TASK 1 — THE AUDIT, IF-STATE BY IF-STATE
 
-`dbscan/ported/dbscan/dbscan.mojo` against
+`dbscan/gbdt/dbscan/dbscan.mojo` against
 `upstream/cuml/cpp/src/dbscan/dbscan.cuh` at `00094f7`, then the batch's path
 through `runner.mojo` against `runner.cuh`. Every row was read in their file,
 not recalled.
@@ -264,9 +264,9 @@ in §3.
 
 ## 6. FILES TOUCHED (this lane's only)
 
-- `dbscan/ported/dbscan/dbscan.mojo` — the `:71` gate, DEVIATION 37 note,
+- `dbscan/gbdt/dbscan/dbscan.mojo` — the `:71` gate, DEVIATION 37 note,
   knob citations, `phase_timing` plumb-through, budget print.
-- `dbscan/ported/dbscan/runner.mojo` — `phase_timing` + PHASE prints on
+- `dbscan/gbdt/dbscan/runner.mojo` — `phase_timing` + PHASE prints on
   cuML's nvtx boundaries; the scoped `runner.cuh:181` overflow raise; header
   now names the unported max_k dispatch (a peer had already removed the
   stale "ball-cover arm" entry from that header's NOT PORTED list).

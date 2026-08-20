@@ -24,7 +24,7 @@ nothing.
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import syncwarp
 
-from ported.methods.greedy_subsets_searcher.kernel.histogram_utils import (
+from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     hist2_smem_add,
 )
 

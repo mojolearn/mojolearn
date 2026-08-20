@@ -14,7 +14,7 @@ these parameters -- it is `algo.cuh:224-231`:
                n, m, k, eps2, stream);
 
 so that is what `vertex_deg_run` calls, and the kernel itself lives beside
-its own upstream in `dbscan/ported/neighbors/epsilon_neighborhood.mojo`.
+its own upstream in `dbscan/gbdt/neighbors/epsilon_neighborhood.mojo`.
 
 **`eps` is squared once on the host and never per pair** (`algo.cuh:225`).
 DBSCAN's radius is a distance and their accumulator is a squared distance;
@@ -101,7 +101,7 @@ def eps_neighborhood_kernel(
     why `core/gemm.mojo`'s standalone contraction is gone and this is not.
 
     It has no upstream counterpart: cuML never materializes this matrix.
-    Nothing in `dbscan/ported/` calls it and nothing should.
+    Nothing in `dbscan/gbdt/` calls it and nothing should.
     """
     var n_cols = Int(n_cols_in)
     var row = Int(block_idx.x)

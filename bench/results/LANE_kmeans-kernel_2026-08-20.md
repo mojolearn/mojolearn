@@ -1,6 +1,6 @@
 # LANE_kmeans-kernel 2026-08-20: line-by-line policy diff of the fused L2-NN port, and the fixes
 
-Assignment: diff our fused SIMT kernel (`cluster/ported/distance/
+Assignment: diff our fused SIMT kernel (`cluster/gbdt/distance/
 fused_distance_nn/simt_kernel.mojo`) against upstream
 (`cuvs/cpp/src/distance/detail/fused_distance_nn/simt_kernel.cuh`,
 `raft/cpp/include/raft/linalg/detail/contractions.cuh`,
@@ -23,7 +23,7 @@ PORTING.md 42 and 43.
 | 1b | veclen SELECTION | `fused_distance_nn-inl.cuh:107-110` (16 B: veclen 4), `:158` (8 B: veclen 2), `:210` (scalar), from `4k % {16,8}` AND both base-pointer alignments | none -- one scalar instantiation | **FIXED**: `fused_veclen_for(k, px, py)`, the computation not the constant; launcher and checks dispatch on the same function; scalar arm is the fallback exactly where theirs is |
 | 2 | Tile/thread policy | `Policy4x4<float>` = KernelPolicy<f32, v, 32, 4, 4, 16, 16> (`contractions.cuh:160-166`); `Policy4x4Skinny` = <f32, v, 8, 4, 4, 8, 8> at `k < 32` (`:183-196`, selected at `-inl.cuh:105`) | Policy4x4 constants correct, but hardwired; NO skinny arm, so `k < 32` ran the k=32 tiles their comment calls redundant | **FIXED**: kernel parameterized `[veclen, kblk, tr, tc]` (rpt=cpt=4, both their float policies); `fused_is_skinny(k) = k < 32` routes to Skinny. Not a hardware-derived number -- it is their k-shape selection, ported as a computation |
 | 2b | Row/col OWNERSHIP | STRIDED: `accrowid + i * AccThRows`, `acccolid + j * AccThCols` (`contractions.cuh:100-102`, lds/epilog/write indexing throughout) | BLOCKED: `tr * 4 + i`, `tc * 4 + j` | **FIXED**: strided, theirs. Argmin result unchanged (total order is partition-independent; per-cell dot order unchanged), smem/lane access pattern now theirs |
-| 3 | Launch grid | `launchConfigGenerator<P>(m, n, shmemSize, kernel)` (`pairwise_distance_base.cuh:295-322`, called at `fused_l2_nn.cuh:135-138`); kernel grid-strides BOTH axes (`run()`, `:131-186`) | hardcoded `grid = (1, ceil(m/64))`, kernel had NO m grid-stride | **FIXED**: `_launch_fused` calls the existing `launch_config_generator` port (M4 inputs via `hardware_matrix`, reused from `neighbors/ported/distance/detail/pairwise_distance_base.mojo`, not duplicated); kernel grid-strides m exactly as `run()` does, with the `val` reset per row tile (`simt_kernel.cuh:144-147`) that the stride requires. `grid.x` stays PINNED to 1 -- that is the pre-existing `updateReducedVal` mutex replacement, and their generator returns grid.x=1 at every shipped k-means shape anyway |
+| 3 | Launch grid | `launchConfigGenerator<P>(m, n, shmemSize, kernel)` (`pairwise_distance_base.cuh:295-322`, called at `fused_l2_nn.cuh:135-138`); kernel grid-strides BOTH axes (`run()`, `:131-186`) | hardcoded `grid = (1, ceil(m/64))`, kernel had NO m grid-stride | **FIXED**: `_launch_fused` calls the existing `launch_config_generator` port (M4 inputs via `hardware_matrix`, reused from `neighbors/gbdt/distance/detail/pairwise_distance_base.mojo`, not duplicated); kernel grid-strides m exactly as `run()` does, with the `val` reset per row tile (`simt_kernel.cuh:144-147`) that the stride requires. `grid.x` stays PINNED to 1 -- that is the pre-existing `updateReducedVal` mutex replacement, and their generator returns grid.x=1 at every shipped k-means shape anyway |
 | 4 | Smem staging | DOUBLE-buffered (`P::SmemSize = 2 * SmemPage`, `contractions.cuh:104`; `pageWr/pageRd`), one `__syncthreads` per k-tile; this IS their pre-Ampere/SIMT arm (no cp.async in it) | single page, two barriers per k-tile | **KEPT, now priced**: Policy4x4's double buffer is 36,864 B + norms and Apple caps a threadgroup at 32,768 B. Costs overlap only when `k > Kblk` (=32); every shipped shape has `k <= Kblk`, where their main loop body runs zero times. **DEVIATION 44** |
 | 4b | Vector smem traffic | `sts`/`lds` move `Veclen` floats (`detail/contractions.cuh:262-299`); `SmemStride = Kblk + Veclen` padding | scalar smem reads/writes; stride padding was already theirs | **FIXED**: vector sts and lds, register tile FMA per `accumulate_reg_tile` (`pairwise_distance_base.cuh:207-221`), `v` ascending inside ascending chunks so every accumulator cell keeps the identical k-ascending sum order |
 | 5 | Epilogue norms | staged through smem, `load_norms` (`pairwise_distance_base.cuh:243-274`), X row only on the first column tile | `xn`/`yn` read from GLOBAL per cell/column-tile (xn re-read from global for every column tile) | **FIXED**: ported `load_norms` including its first-tile guard; +512 B smem |
@@ -111,7 +111,7 @@ d62ab0e parent 10ae918   (git log -1 --format='%h parent %p')
 ```
 plus the report commit that follows it.
 
-Files: `cluster/ported/distance/fused_distance_nn/simt_kernel.mojo`,
-`cluster/ported/cluster/detail/min_cluster_distance_compute.mojo`,
+Files: `cluster/gbdt/distance/fused_distance_nn/simt_kernel.mojo`,
+`cluster/gbdt/cluster/detail/min_cluster_distance_compute.mojo`,
 `cluster/mojo_only/kmeans_check.mojo`, `cluster/kmeans_main.mojo`,
 `cluster/PORTED_MAP.tsv`, `PORTING.md` (deviations 42, 43), this report.

@@ -13,16 +13,16 @@ It checks REACHABILITY, not correctness. A kernel that enqueues can still
 compute nonsense; that is what the level loop's digests will be for.
 """
 
-from ported.options.catboost_options import SCORE_FUNCTION_COSINE
+from gbdt.options.catboost_options import SCORE_FUNCTION_COSINE
 from std.sys.info import size_of
-from ported.gpu_data.gpu_structures import CFeature
+from gbdt.gpu_data.gpu_structures import CFeature
 from max.gpu.host import DeviceContext
 
-from ported.methods.greedy_subsets_searcher.kernel.compute_scores import compute_optimal_splits_kernel
-from ported.methods.greedy_subsets_searcher.kernel.hist_binary import binary_hist_kernel
-from ported.methods.greedy_subsets_searcher.kernel.hist_half_byte import half_byte_hist_kernel
-from ported.methods.greedy_subsets_searcher.kernel.split_points import split_and_make_sequence_kernel
-from ported.methods.greedy_subsets_searcher.kernel.histogram_utils import (
+from gbdt.methods.greedy_subsets_searcher.kernel.compute_scores import compute_optimal_splits_kernel
+from gbdt.methods.greedy_subsets_searcher.kernel.hist_binary import binary_hist_kernel
+from gbdt.methods.greedy_subsets_searcher.kernel.hist_half_byte import half_byte_hist_kernel
+from gbdt.methods.greedy_subsets_searcher.kernel.split_points import split_and_make_sequence_kernel
+from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     scan_histograms_kernel,
     substract_histograms_kernel,
 )

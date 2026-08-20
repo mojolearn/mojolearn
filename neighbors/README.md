@@ -1,6 +1,6 @@
 # neighbors: exact brute-force k-NN, from cuVS and RAFT
 
-Third section, second and third upstream. Same rule as `ported/` and
+Third section, second and third upstream. Same rule as `gbdt/` and
 `cluster/`: **COPY, DO NOT IMPROVE.**
 
 ## The claim being tested
@@ -13,13 +13,13 @@ being faster, because it returns the RIGHT neighbors.
 
 ## Two upstreams, and a refinement to the layering rule
 
-`cluster/README.md` said a RAFT call is not a `ported/` file, because RAFT is
+`cluster/README.md` said a RAFT call is not a `gbdt/` file, because RAFT is
 a general library this tree does not mirror. That is still right for a call we
 merely stand in for. It is wrong for a file we read and transliterate, which
 is what `select_radix.mojo` is, and which makes it a derivative work of RAFT.
 
     a RAFT call we stand in for   ->  mojo_only/, naming the call
-    a RAFT file we transliterate  ->  ported/,  with raft as its upstream
+    a RAFT file we transliterate  ->  gbdt/,  with raft as its upstream
 
 `PORTED_MAP.tsv` names the upstream per row for that reason.
 

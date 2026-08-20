@@ -75,33 +75,33 @@ citations rather than leaving it to be assumed.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from ported.gpu_lib.gpu_manager import TCudaManager
-from ported.methods.greedy_subsets_searcher.greedy_search_helper import (
+from gbdt.gpu_lib.gpu_manager import TCudaManager
+from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
     run_tree_layout,
 )
-from ported.models.oblivious_model import (
+from gbdt.models.oblivious_model import (
     TAdditiveModel,
     TBinarySplit,
     TObliviousTreeModel,
     TObliviousTreeStructure,
 )
-from ported.gpu_data.compressed_index_builder import build_layout
-from ported.models.kernel.add_bin_values import compute_bins_and_add_kernel
+from gbdt.gpu_data.compressed_index_builder import build_layout
+from gbdt.models.kernel.add_bin_values import compute_bins_and_add_kernel
 from mojo_only.kernel_matrix import TARGET_COLUMN, deterministic_flush_for
 from mojo_only.numerics import NUMERIC_IDENTICAL
-from ported.gpu_util.kernel.fill import launch_make_sequence
-from ported.gpu_util.kernel.bootstrap import (
+from gbdt.gpu_util.kernel.fill import launch_make_sequence
+from gbdt.gpu_util.kernel.bootstrap import (
     bootstrap_grid_blocks,
     create_bootstrap_seeds,
     launch_bayesian_bootstrap,
 )
-from ported.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
+from gbdt.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
     BUILD_MODE as HIST_BUILD_MODE,
 )
-from ported.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_base import (
+from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_base import (
     HIST2_SMEM_IS_I32,
 )
-from ported.targets.kernel.pointwise_targets import (
+from gbdt.targets.kernel.pointwise_targets import (
     MSE_BLOCK_SIZE,
     deterministic_sum_lanes_kernel,
     mse_kernel,
@@ -210,7 +210,7 @@ def fit(
 
     # their `TGpuAwareRandom::GetGpuSeeds`: the per-thread RNG state of
     # the whole fit, created once and advanced in place by every draw
-    # (`ported/gpu_util/kernel/bootstrap.mojo`). One dummy word when
+    # (`gbdt/gpu_util/kernel/bootstrap.mojo`). One dummy word when
     # bootstrap is off.
     var boot_seeds: DeviceBuffer[DType.uint64]
     if bootstrap_bayesian:

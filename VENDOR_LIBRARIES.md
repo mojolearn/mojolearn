@@ -161,18 +161,18 @@ zeroed, untouched, so a caller reusing a buffer reads stale data and a caller
 with a fresh one reads whatever the allocator left. `n` is a user-facing count
 at every call site:
 
-    cluster/ported/cluster/detail/min_cluster_distance_compute.mojo:197
+    cluster/gbdt/cluster/detail/min_cluster_distance_compute.mojo:197
         gemm_nt(ctx, dist_buf, x_tile, c_tile, ns, nc, n_features)
         nc = min(centroid_batch, n_clusters - c_idx), so this is n = 1
         whenever n_clusters is 1 OR n_clusters % centroid_batch == 1.
         That is not an exotic input; it is a remainder.
-    glm/ported/linalg/detail/lstsq.mojo:120 and :193
+    glm/gbdt/linalg/detail/lstsq.mojo:120 and :193
         gemm_tn(..., n_cols, n_cols, n_rows) -- and gemm_tn ends in gemm_nt.
         Simple linear regression on ONE predictor is n = 1. No guard.
-    decomposition/ported/linalg/detail/pca.mojo:202
-    decomposition/ported/linalg/detail/tsvd.mojo:89
+    decomposition/gbdt/linalg/detail/pca.mojo:202
+    decomposition/gbdt/linalg/detail/tsvd.mojo:89
         same shape, n_cols again.
-    neighbors/ported/neighbors/detail/knn_brute_force.mojo:154
+    neighbors/gbdt/neighbors/detail/knn_brute_force.mojo:154
         gemm_nt(ctx, dist_tile, q_tile, index, rows, n_index, n_features)
         n_index = 1.
 
@@ -246,8 +246,8 @@ library. Listed so the distinction is explicit.
 
 | vendor call | Mojo equivalent | ours today |
 |---|---|---|
-| `cub::BlockReduce` | `max.gpu.primitives.block.sum[block_size=N](val)` **GPU, CORRECT**, TPB 32..1024 | **SUBSTITUTED** in `core/row_norms.mojo`, `core/column_stats.mojo` (2 kernels), `dbscan/vertexdeg`, `cluster/plus_plus`, `jacobi_eigh_device`, and now `ported/gpu_util/partitions_reduce.mojo`, which had been faking a reduce with a `prefix_sum` plus a `broadcast` on the belief that no block reduce shipped |
-| `cub::BlockScan` | `max.gpu.primitives.block.prefix_sum` **GPU, CORRECT**, TPB 32..1024, inclusive and exclusive | **SUBSTITUTED** in `dbscan/adjgraph`, the k-means++ device scan, and now `ported/gpu_util/kernel/reorder_one_bit.mojo` (a Hillis-Steele loop and its shared page, 16 barriers per block, down to one call). It is also substituted in `select_radix`, which stays |
+| `cub::BlockReduce` | `max.gpu.primitives.block.sum[block_size=N](val)` **GPU, CORRECT**, TPB 32..1024 | **SUBSTITUTED** in `core/row_norms.mojo`, `core/column_stats.mojo` (2 kernels), `dbscan/vertexdeg`, `cluster/plus_plus`, `jacobi_eigh_device`, and now `gbdt/gpu_util/partitions_reduce.mojo`, which had been faking a reduce with a `prefix_sum` plus a `broadcast` on the belief that no block reduce shipped |
+| `cub::BlockScan` | `max.gpu.primitives.block.prefix_sum` **GPU, CORRECT**, TPB 32..1024, inclusive and exclusive | **SUBSTITUTED** in `dbscan/adjgraph`, the k-means++ device scan, and now `gbdt/gpu_util/kernel/reorder_one_bit.mojo` (a Hillis-Steele loop and its shared page, 16 barriers per block, down to one call). It is also substituted in `select_radix`, which stays |
 | `cub::WarpScan` | `std.gpu.primitives.warp.prefix_sum` **GPU, CORRECT**, and it is INCLUSIVE | hand-written serial scan (boosting side, untouched) |
 | `cub::ShuffleIndex` / `raft::shfl` | `std.gpu.primitives.warp.shuffle_xor` **GPU, CORRECT** (butterfly min fold); `shuffle_idx`, `vote`, `warp.sum`, `lane_id` and `lane_group_min[8]` are CORRECT too | **SUBSTITUTED** in `unfused_distance_nn` and the fused SIMT kernel. `shuffle_xor` not `shuffle_idx`: theirs is a rotate relying on CUDA's `width` modulo, Mojo's `shuffle_idx` has no width parameter, and XOR over the same aligned group returns the identical pair because the reducer is an idempotent min over a total order. |
 | `cub::BlockReduce<KeyValuePair>` | none directly; built from `warp.shuffle_xor` + a 4-way block merge | **SUBSTITUTED**. `block.min` reduces VALUES only and cannot carry the key, which is why the plain block collectives never solved this. CUB's own default is `BLOCK_REDUCE_WARP_REDUCTIONS`, a two-stage warp-then-propagate shape, so the two-stage port is closer to theirs than the old whole-block tree was. |
@@ -408,7 +408,7 @@ Four kernels in this tree are a dense-axis reduction wearing a hand-written
 block reduce: `core/row_norms.mojo::row_norm_kernel`,
 `core/column_stats.mojo::column_mean_kernel`,
 `core/column_stats.mojo::xty_kernel`, and
-`cluster/ported/distance/unfused_distance_nn.mojo::reduce_min_kernel`.
+`cluster/gbdt/distance/unfused_distance_nn.mojo::reduce_min_kernel`.
 
 **None of them is a substitution candidate.** Their upstreams are
 `raft::linalg::norm`, `raft::stats::mean`, `raft::linalg::gemv(trans=true)`
@@ -977,7 +977,7 @@ were produced by searching three paths that do not exist. The real thing is a
 monoid trait plus `algorithm.rowwise.launch`, and ArgMin is exactly the
 key-carrying reduction k-means and k-NN need.
 
-That does NOT automatically mean we should switch. `cluster/ported/distance/`
+That does NOT automatically mean we should switch. `cluster/gbdt/distance/`
 now runs a warp-shuffle butterfly, which is what CUB's own default
 (`BLOCK_REDUCE_WARP_REDUCTIONS`) does underneath, so we are already close to
 their implementation rather than merely their call. Whether `rowwise.launch`

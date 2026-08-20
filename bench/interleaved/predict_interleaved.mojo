@@ -24,16 +24,16 @@ from max.gpu.host import DeviceContext
 from std.python import Python, PythonObject
 from std.time import perf_counter_ns
 
-from ported.gpu_data.compressed_index_builder import build_layout
-from ported.gpu_data.kernel.binarize import (
+from gbdt.gpu_data.compressed_index_builder import build_layout
+from gbdt.gpu_data.kernel.binarize import (
     BINARIZE_BLOCK_SIZE,
     BINARIZE_DOCS_PER_THREAD,
     WRITE_BLOCK_SIZE,
     binarize_float_feature_kernel,
     write_compressed_index_kernel,
 )
-from ported.methods.doc_parallel_boosting import TAdditiveModel, fit, predict
-from ported.models.cuda.evaluator import (
+from gbdt.methods.doc_parallel_boosting import TAdditiveModel, fit, predict
+from gbdt.models.cuda.evaluator import (
     GpuEvaluatorModel,
     launch_eval,
     launch_quantize,
@@ -239,7 +239,7 @@ def main() raises:
         var their_one = arm.predict_seconds(name, BORDER, 1).__float__()
 
         # THE EVALUATOR ARM: their own GPU inference design, ported
-        # (ported/models/cuda/evaluator.mojo) -- quantize once, one eval
+        # (gbdt/models/cuda/evaluator.mojo) -- quantize once, one eval
         # kernel over every tree, results back.
         var t0 = perf_counter_ns()
         launch_quantize(

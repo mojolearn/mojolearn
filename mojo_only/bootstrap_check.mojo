@@ -33,13 +33,13 @@ bootstrap, so there is no fixture to match. What IS checkable, and is:
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from mojo_only.hist2_check import build_cindex
-from ported.gpu_data.compressed_index_builder import build_layout
-from ported.gpu_util.kernel.bootstrap import (
+from gbdt.gpu_data.compressed_index_builder import build_layout
+from gbdt.gpu_util.kernel.bootstrap import (
     BOOTSTRAP_SEED_COUNT,
     create_bootstrap_seeds,
     launch_bayesian_bootstrap,
 )
-from ported.methods.doc_parallel_boosting import TAdditiveModel, fit
+from gbdt.methods.doc_parallel_boosting import TAdditiveModel, fit
 
 comptime BS_ROWS = 100000
 comptime FIT_ROWS = 2048

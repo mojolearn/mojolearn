@@ -12,7 +12,7 @@ the device path, and compares against a host partition element for element.
 
 from max.gpu.host import DeviceContext
 
-from ported.gpu_util.kernel.reorder_one_bit import (
+from gbdt.gpu_util.kernel.reorder_one_bit import (
     REORDER_BLOCK,
     launch_reorder_one_bit,
 )

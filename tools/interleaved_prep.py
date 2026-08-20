@@ -7,7 +7,7 @@ quantizer), pre-binned uint8 col-major for the Mojo arm, flat y.
 Both arms then train on the SAME rows with the SAME grid; the pool is
 quantized outside the timed region on both sides.
 np.searchsorted(borders, x, side='left') matches
-ported/grid_creator/binarization.binarize exactly (borders strictly below).
+gbdt/grid_creator/binarization.binarize exactly (borders strictly below).
 """
 import sys
 import numpy as np

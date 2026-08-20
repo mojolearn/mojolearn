@@ -6,7 +6,7 @@ then `PORTED_MAP.tsv`.
 ## What this repository is
 
 A port of **CatBoost's GPU oblivious (symmetric) tree learner**
-into Mojo, targeting Metal first. Nothing from mojotrees. `ported/` mirrors
+into Mojo, targeting Metal first. Nothing from mojotrees. `gbdt/` mirrors
 CatBoost's own paths file for file (their constant `catboost/cuda/` prefix
 dropped, and `cuda_util` renamed `gpu_util` because CUDA is not our
 vocabulary). `mojo_only/` is what CatBoost never had to write.
@@ -243,7 +243,7 @@ cross-window comparison taken in that hole was discarded.
 design: a 6.4 MB gradient readback plus an 800k-row host abs-scan feeding
 only the fixed-point scale (comptime-dead under FAST now), a 3.2 MB host
 identity upload per tree (their `MakeSequence` builds it on the device,
-`fill.cu:47` -> `ported/gpu_util/kernel/fill.mojo`), and an 800k-row host
+`fill.cu:47` -> `gbdt/gpu_util/kernel/fill.mojo`), and an 800k-row host
 SSE loop (their `functionValue` is a block reduce + one float atomicAdd
 inside the SAME gradient kernel, `pointwise_targets.cu:309-317`, now
 ported; the reported loss moved in its 7th decimal, the model did not).
@@ -400,7 +400,7 @@ thread. The arc, all in one bite:
     tree-wise apply (their training-side kernel, our drains/allocs
         deleted): 2.9x BEHIND their CPU evaluator -- 100 trees re-stream
         the cindex from DRAM per tree.
-    their OWN GPU evaluator ported (ported/models/cuda/evaluator.mojo,
+    their OWN GPU evaluator ported (gbdt/models/cuda/evaluator.mojo,
         from libs/model/cuda/evaluator.cu): eval kernel 2.7 ms for
         100 trees x 800k -- the cost was ALL in their linear-scan
         quantize (27-30 ms, the base M4's ALU floor; V100-class cards

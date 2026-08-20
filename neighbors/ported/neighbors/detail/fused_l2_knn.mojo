@@ -56,7 +56,7 @@ and `fusedL2ExpKnnImpl:743-771` instantiates the WHOLE KERNEL at exactly two
 That is copied literally: `fused_l2_knn_kernel` is parameterized on the same
 two integers and `fused_l2_knn` below picks between the same two
 instantiations at the same thresholds. The queue is
-`neighbors/ported/neighbors/detail/faiss_select/select.mojo`, a struct of
+`neighbors/gbdt/neighbors/detail/faiss_select/select.mojo`, a struct of
 `SIMD` values with no shared memory and no block phase; it is what makes the
 fusion pay, because a shared-memory or device-wide selector has to read its
 input from memory and therefore forces the distance matrix to exist.
@@ -146,7 +146,7 @@ returned value too). Same protocol in the C++11 model -- CUDA defines
 650 in-envelope contended handoff launches bit-exact against a host oracle
 over hashed payloads with a poisoned exchange buffer, and both sabotage
 arms (skipped words, release-before-write) caught every single time, so the
-probe demonstrably SEES violations. `cluster/ported/distance/
+probe demonstrably SEES violations. `cluster/gbdt/distance/
 fused_distance_nn/simt_kernel.mojo` still carries the old single-block
 deviation and can now cite this block instead of a wall.
 

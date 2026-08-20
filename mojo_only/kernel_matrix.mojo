@@ -779,7 +779,7 @@ def lib_spec_for(
 #   dbscan/UNPORTED.tsv:9
 #       "two smem pages at Policy4x4 is 32 KB, exactly Metal's threadgroup
 #        ceiling. Same gap core/gemm.mojo records"
-#   dbscan/ported/neighbors/epsilon_neighborhood.mojo:195
+#   dbscan/gbdt/neighbors/epsilon_neighborhood.mojo:195
 #       "exactly Metal's ceiling. That gap is recorded ..."
 #   neighbors/.../fused_l2_knn.mojo
 #       their SmemSize is 2 pages = 36,992 B against Metal's 32 KB, so ours

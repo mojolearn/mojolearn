@@ -79,16 +79,16 @@ reach is predicted per arm below rather than assumed shared).
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
-from ported.gpu_data.compressed_index_builder import (
+from gbdt.gpu_data.compressed_index_builder import (
     CompressedIndexLayout,
     build_layout,
 )
-from ported.gpu_data.feature_blocks import blocks_for
-from ported.gpu_data.grid_policy import (
+from gbdt.gpu_data.feature_blocks import blocks_for
+from gbdt.gpu_data.grid_policy import (
     POLICY_ONE_BYTE,
     policy_for_fold_count,
 )
-from ported.gpu_data.kernel.binarize import (
+from gbdt.gpu_data.kernel.binarize import (
     WRITE_BLOCK_SIZE,
     write_compressed_index_kernel,
 )
@@ -99,25 +99,25 @@ from mojo_only.kernel_matrix import (
     deterministic_flush_for,
 )
 from mojo_only.numerics import NUMERIC_IDENTICAL
-from ported.methods.greedy_subsets_searcher.greedy_search_helper import (
+from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
     DeviceBlock,
     launch_hist2_one_byte,
     launch_histograms_for_blocks,
     launch_one_byte,
     upload_blocks,
 )
-from ported.methods.greedy_subsets_searcher.kernel.histogram_utils import (
+from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     fixed_to_float_kernel,
     write_reduces_histograms_kernel,
     zero_buffer_kernel,
 )
-from ported.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_base import (
+from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_base import (
     BUILD_MODE as HIST2_BUILD_MODE,
     HIST2_MIN_DOCS_PER_BLOCK,
     HIST2_SMEM_MODE,
     hist2_min_docs,
 )
-from ported.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
+from gbdt.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
     ONE_BYTE_BLOCK_SIZE,
     one_byte_block_size,
 )

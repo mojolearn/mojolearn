@@ -369,7 +369,7 @@ def check_dbscan_batching_agrees() raises:
 def check_fused_eps_agrees_with_materialized() raises:
     """The FUSED neighborhood against the materialized one, CELL BY CELL.
 
-    `dbscan/ported/neighbors/epsilon_neighborhood.mojo` replaced a three-
+    `dbscan/gbdt/neighbors/epsilon_neighborhood.mojo` replaced a three-
     kernel path (`gemm_nt` -> `expand_distances_kernel` ->
     `eps_neighborhood_kernel`) with one kernel that never writes a float. The
     old path stays reachable precisely so this check can exist. That is what a

@@ -1,6 +1,6 @@
 # Built here, not yet reached
 
-**Two categories exist in this tree and only two:** `ported/` is a port of
+**Two categories exist in this tree and only two:** `gbdt/` is a port of
 a real file of theirs, and `mojo_only/` is something they never needed. There
 is no third category of "good idea worth adopting" -- if it is in their
 source it is simply PORTED or NOT PORTED YET, and this file tracks the
@@ -28,7 +28,7 @@ so this tree cannot repeat that quietly. **Audited by grep, not by memory.**
 | `deterministic_flush` (matrix row) | **WIRED**: `hist_binary.mojo` branches on `deterministic_flush_for[TARGET_COLUMN, ...]` at comptime | Forced true on apple because Metal has no float atomic; follows the mode on nvidia and amd. The multi-block path sums Int32 partials through an integer atomic and converts back in `fixed_to_float_kernel`. Exercised, and correct ONLY WHEN THE CALLER BOUNDS THE SCALE: `doc_parallel_boosting.fit` passed `0.0` for both magnitudes, which makes `choose_scale` return its LARGEST value, and every replicated half-byte flush overflowed Int32 from the moment `launch_histograms_for_blocks` started replicating that kernel. Fixed 2026-08-19; `fit` now reads the stats plane back and passes the two sums of magnitudes. `hist_replicas` defaults to 1 because 1 and 32 are INDISTINGUISHABLE interleaved at this shape, not because 32 is slower: the earlier 'slower' reading was cross-run noise. |
 | `mojo_only/fixed_point.mojo` | **WIRED**: `greedy_search_helper.run_tree` and `run_tree_layout` both call `choose_scale`, and `cluster/mojo_only/reduce_by_key.mojo` accumulates through the same scheme | It is also verified in isolation (overflow bound tight at 268,435,453 of 268,435,455; forward and reverse accumulation exact). The tree path used to INLINE the derivation instead of calling it, and the copy drifted: on an all-zero input `choose_scale` returns a scale of 1.0 while the inlined copy returned 268,435,455, the largest scale the type admits. The isolated check passed the whole time, because what was wrong was the wiring and not the unit. |
 | `column_lane_width` | `spec_for` only | Nothing needs a lane width while `sync_granularity` is `SYNC_BLOCK` everywhere. |
-| pinned host partitions (`partsCpu`) | the kernel writes them | `update_partitions_after_split_kernel` takes `host_offset` / `host_size` and writes them, so the device half is ported. **MEASURED 2026-08-19: on this stack the trick does NOT pay and the sentence that used to sit here was wrong.** A kernel handed an `enqueue_create_host_buffer` pointer writes NOTHING, silently, all zeros (64 of 64 wrong) -- another silent no-op in the family of `enqueue_copy(dst_buf=, src_ptr=device)`. The working route is `DeviceBuffer.map_to_host()`, which does see kernel output (0 of 64 wrong), but 54 of them cost 18-29 ms against 8-14 ms for 54 `enqueue_copy` + `synchronize`, so it is 2x SLOWER than the copy it was supposed to replace. CatBoost gets this for free because `PartitionsCpu` is `EPtrType::CudaHost` (`split_properties_helper.h:49`, allocated by `cudaHostAlloc` at `cuda_base.cpp:6`) and `TSplitPointsKernel` dereferences it on the host as a plain pointer (`split_points.cpp:56-62`, `split_points.cu:667`). **The gap is REAL on the pin and is CLOSING upstream.** `HostBuffer` does not conform to `DevicePassable`, which is why the kernel writes nothing, and no allocator on `DeviceContext` other than `enqueue_create_buffer`, `create_buffer_sync` and `enqueue_create_host_buffer` exists to try. But MAX **nightly** adds `DeviceBuffer.unsafe_host_ptr()`, which "on devices with unified memory (Apple silicon) returns a CPU-addressable pointer to the buffer, so the host can read a kernel's output after `DeviceContext.synchronize()` without an `enqueue_copy` round trip", and says it "suits small control records rather than bulk readback" -- a partition array being exactly that. It is NOT in the `26.5` reference and NOT in the shipped release notes, so `mojo 1.0.0` / `max 26.5.0` cannot call it. When the pin moves, `hp_off` / `hp_size` become the read side and the per-level `p_sz` copy goes away. Until then, keep the copies, cut their COUNT. Full search and ordering rules in the DEVIATION BLOCK in `ported/gpu_util/gpu_data/partitions.mojo`. |
+| pinned host partitions (`partsCpu`) | the kernel writes them | `update_partitions_after_split_kernel` takes `host_offset` / `host_size` and writes them, so the device half is ported. **MEASURED 2026-08-19: on this stack the trick does NOT pay and the sentence that used to sit here was wrong.** A kernel handed an `enqueue_create_host_buffer` pointer writes NOTHING, silently, all zeros (64 of 64 wrong) -- another silent no-op in the family of `enqueue_copy(dst_buf=, src_ptr=device)`. The working route is `DeviceBuffer.map_to_host()`, which does see kernel output (0 of 64 wrong), but 54 of them cost 18-29 ms against 8-14 ms for 54 `enqueue_copy` + `synchronize`, so it is 2x SLOWER than the copy it was supposed to replace. CatBoost gets this for free because `PartitionsCpu` is `EPtrType::CudaHost` (`split_properties_helper.h:49`, allocated by `cudaHostAlloc` at `cuda_base.cpp:6`) and `TSplitPointsKernel` dereferences it on the host as a plain pointer (`split_points.cpp:56-62`, `split_points.cu:667`). **The gap is REAL on the pin and is CLOSING upstream.** `HostBuffer` does not conform to `DevicePassable`, which is why the kernel writes nothing, and no allocator on `DeviceContext` other than `enqueue_create_buffer`, `create_buffer_sync` and `enqueue_create_host_buffer` exists to try. But MAX **nightly** adds `DeviceBuffer.unsafe_host_ptr()`, which "on devices with unified memory (Apple silicon) returns a CPU-addressable pointer to the buffer, so the host can read a kernel's output after `DeviceContext.synchronize()` without an `enqueue_copy` round trip", and says it "suits small control records rather than bulk readback" -- a partition array being exactly that. It is NOT in the `26.5` reference and NOT in the shipped release notes, so `mojo 1.0.0` / `max 26.5.0` cannot call it. When the pin moves, `hp_off` / `hp_size` become the read side and the per-level `p_sz` copy goes away. Until then, keep the copies, cut their COUNT. Full search and ordering rules in the DEVIATION BLOCK in `gbdt/gpu_util/gpu_data/partitions.mojo`. |
 
 **Consequence to state plainly, because it is the honest answer to "does the
 matrix drive the fixed-point path": IT DOES NOT, YET.** Under `FAST` the
@@ -46,18 +46,18 @@ that site and this table must move it upstairs in the same commit.
 ## Placement audit, 2026-08-19
 
 Andrew asked whether things had been put in `mojo_only/` that belong in
-`ported/`. Two had:
+`gbdt/`. Two had:
 
 - **The stable partition** replaces ONE CALL inside their `split_points.cu`
   (`cub::DeviceRadixSort::SortPairs`, `:658-689`). Splitting it out left the
   reorder incomplete in the file that owns it, so it now lives in
-  `ported/.../split_points.mojo` under an explicit DEVIATION BLOCK banner, so
+  `gbdt/.../split_points.mojo` under an explicit DEVIATION BLOCK banner, so
   a reviewer diffing against their file knows exactly where the port stops
-  being literal. It is the one place in `ported/` allowed to be better than
+  being literal. It is the one place in `gbdt/` allowed to be better than
   CatBoost, because there is no CatBoost code there to be faithful to.
 - **The level driver** is a port of `ComputeOptimalSplits` plus `SplitLeaves`
   (`greedy_search_helper.cpp:398`, `:534`) and was sitting in `mojo_only/`.
-  Moved to `ported/methods/greedy_subsets_searcher/greedy_search_helper.mojo`.
+  Moved to `gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo`.
 
 What is correctly in `mojo_only/`: `numerics` and `kernel_matrix` (they ship
 one vendor and need no columns), `fixed_point` (they use a hardware
@@ -96,7 +96,7 @@ failed; the measurement took one attempt.
   stat columns stayed unpermuted while the bins were permuted
 - `enqueue_copy(dst_buf=..., src_ptr=device_ptr)` silently did nothing; Mojo
   has no device-to-device form, and the gathered index and stats were never
-  written back. Now `ported/gpu_util/copy.mojo`
+  written back. Now `gbdt/gpu_util/copy.mojo`
 
 So the hunt paid even though the final cause was elsewhere.
 
@@ -280,7 +280,7 @@ it changed.
 | the whole `fit` path | **REACHED AND PASSING**, `cluster/kmeans_main.mojo` | `row_norms`, `gemm`, `reduce_min`, the fixed-point accumulate, `finalize_centroids`, `centroid_shift`, `finish_sum` and `check_convergence_kernel` all run in `check_kmeans_fit`. Reach proved by two sabotages predicting different movements, not by a digest. |
 | `kmeans_plus_plus` and its sampling kernels | **NOW REACHED AND PASSING** | `check_kmeans_plus_plus_init` runs a full fit through the k-means++ path with `oversampling_factor = 0` and recovers 4/4 centroids as a permutation. `check_device_inclusive_scan` checks the three-stage scan alone against a host scan at 20,000 elements, exact. The other checks still use `INIT_ARRAY` on purpose so a failure cannot hide in the draw; this one exists precisely because that left the whole initialization dark. |
 | `init_random` | **NOW REACHED** (2026-08-20) | `check_scalable_supplement_branch` starves the k-means\|\| rounds with `oversampling_factor = 1e-9`, which forces the fewer-than-k supplement arm (`detail/kmeans.cuh:755-777`) and that arm runs `init_random` for the missing centroids. The `init = Random` entry path itself still has no dedicated check. |
-| `use_fused` (`cluster/ported/cluster/detail/kmeans_common.mojo`) | nothing | Ported for the evidence it carries, not for its answer. We have no CUTLASS counterpart, so on every backend this tree targets the answer is False and the unfused path is the only path. It is a row that documents a decision of theirs rather than one that drives ours, and it should stay that way unless a fused kernel ever exists here. |
+| `use_fused` (`cluster/gbdt/cluster/detail/kmeans_common.mojo`) | nothing | Ported for the evidence it carries, not for its answer. We have no CUTLASS counterpart, so on every backend this tree targets the answer is False and the unfused path is the only path. It is a row that documents a decision of theirs rather than one that drives ours, and it should stay that way unless a fused kernel ever exists here. |
 | `sampling_probability` (k-means\|\| step 3) | nothing -- documentation row | `initScalableKMeansPlusPlus` is **PORTED AND REACHED** (2026-08-20): the default init runs, and both arms of their `oversampling_factor == 0` selection are checked (`check_scalable_kmeans_plus_plus_init`, `check_kmeans_plus_plus_init`). This Float64 helper itself is still called by nothing: Apple silicon has no device Float64, so the shipped predicate is the Float32 `scalable_keep` in `cluster/mojo_only/scalable_init.mojo`, which the check replays on the host element for element. The helper stays as the readable statement of `SamplingOp` (`kmeans_common.cuh:73-81`). The `== k` copy-out arm of the selection tail (`detail/kmeans.cuh:778-784`) is ported but UNREACHED -- no deterministic fixture pins the candidate count to exactly k. |
 | `init_size`, `device_buffer_samples` (`KMeansParams`) | nothing | Both belong to cuVS's host-resident arm, which is out of scope here. Carried so the params struct is theirs field for field; they will stay dead unless a host arm appears. |
 | `mojo_only/fixed_point.mojo` | **NOW READ**: `cluster/mojo_only/reduce_by_key.mojo` accumulates cluster sums through the same Int32 scheme | Moved upstairs from the NOT WIRED table. Its overflow argument transferred with one noun changed, leaf to cluster, which is the strongest evidence so far that the shared substrate is genuinely shared and not tree-shaped. Still unreached until the check runs. |
@@ -639,7 +639,7 @@ was simply not ported.
 
 ### `select_warpsort`, 2026-08-19: COMPILES, NEVER RUN
 
-`neighbors/ported/matrix/detail/select_warpsort.mojo` is a port of RAFT's
+`neighbors/gbdt/matrix/detail/select_warpsort.mojo` is a port of RAFT's
 `select_warpsort.cuh`, the family this repository ruled UNTRANSLATABLE on the
 claim that Mojo has no warp primitives. That claim was false and the port
 exists now.

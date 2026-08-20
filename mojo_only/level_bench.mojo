@@ -18,66 +18,66 @@ barrier because Mojo has no lane primitives, runs 16 times per row-batch in
 the inner loop and has never been measured.
 """
 
-from ported.models.oblivious_model import TBinarySplit
+from gbdt.models.oblivious_model import TBinarySplit
 from std.sys.info import size_of
-from ported.gpu_data.gpu_structures import CFeature
+from gbdt.gpu_data.gpu_structures import CFeature
 from std.time import perf_counter_ns
 
 from mojo_only.interleaved import ArmResult, report, summarize
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
-from ported.gpu_data.grid_policy import (
+from gbdt.gpu_data.grid_policy import (
     POLICY_BINARY,
     features_per_int,
     policy_mask,
     policy_shift,
 )
-from ported.gpu_data.kernel.binarize import (
+from gbdt.gpu_data.kernel.binarize import (
     WRITE_BLOCK_SIZE,
     write_compressed_index_kernel,
 )
-from ported.methods.greedy_subsets_searcher.kernel.split_points import (
+from gbdt.methods.greedy_subsets_searcher.kernel.split_points import (
     PARTITION_BLOCK,
     launch_stable_partition,
 )
-from ported.options.catboost_options import SCORE_FUNCTION_COSINE
-from ported.methods.greedy_subsets_searcher.kernel.compute_scores import (
+from gbdt.options.catboost_options import SCORE_FUNCTION_COSINE
+from gbdt.methods.greedy_subsets_searcher.kernel.compute_scores import (
     SCORE_BLOCK_SIZE,
     compute_optimal_splits_kernel,
 )
-from ported.methods.greedy_subsets_searcher.kernel.histogram_utils import (
+from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     scan_histograms_kernel,
     zero_histograms_kernel,
 )
-from ported.methods.greedy_subsets_searcher.kernel.split_points import (
+from gbdt.methods.greedy_subsets_searcher.kernel.split_points import (
     SPLIT_BLOCK_SIZE,
     gather_index_in_leaves_kernel,
     split_and_make_sequence_kernel,
     update_partitions_after_split_kernel,
 )
 from mojo_only.kernel_matrix import HIST_SMEM_WARP_PRIVATE_F32
-from ported.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
+from gbdt.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
     ONE_BYTE_BLOCK_SIZE,
     one_byte_hist_kernel,
 )
-from ported.methods.greedy_subsets_searcher.kernel.hist_binary import (
+from gbdt.methods.greedy_subsets_searcher.kernel.hist_binary import (
     binary_hist_kernel,
 )
-from ported.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
+from gbdt.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
     BLOCK_SIZE,
 )
-from ported.methods.greedy_subsets_searcher.kernel.split_points import (
+from gbdt.methods.greedy_subsets_searcher.kernel.split_points import (
     PARTITION_BLOCK,
     launch_stable_partition,
 )
-from ported.methods.greedy_subsets_searcher.greedy_search_helper import (
+from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
     run_one_level,
     run_tree,
     run_tree_layout,
 )
 
-from ported.gpu_data.compressed_index_builder import build_layout
+from gbdt.gpu_data.compressed_index_builder import build_layout
 
 
 def bench_level(n_rows: Int, repeats: Int) raises:

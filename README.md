@@ -23,7 +23,7 @@ anywhere. Both are fixed; see `NOTICE`.
 
 | directory | upstream | what |
 |---|---|---|
-| `ported/`, `mojo_only/` | CatBoost | the GPU oblivious (symmetric) tree learner, control plane included |
+| `gbdt/`, `mojo_only/` | CatBoost | the GPU oblivious (symmetric) tree learner, control plane included |
 | `cluster/` | cuVS | k-means |
 | `neighbors/` | cuVS, RAFT, FAISS (MIT) | brute-force k-NN, the fused L2 kernel, ball cover, top-k selection |
 | `dbscan/` | cuML, RAFT | DBSCAN, epsilon-neighborhood, label merging |
@@ -106,16 +106,16 @@ CatBoost commit `54a8143a`, `catboost/cuda/`. Symmetric (oblivious) growth,
 GPU, pointwise objectives.
 
 **The tree mirrors CatBoost's tree, file for file, with their constant `catboost/cuda/` prefix dropped**, so a reviewer can put
-`ported/methods/.../hist_binary.mojo` beside their `hist_binary.cu` and diff
+`gbdt/methods/.../hist_binary.mojo` beside their `hist_binary.cu` and diff
 them, and so "did we port this file?" is answered by `ls` rather than by
 reading. Anything with no CatBoost counterpart lives under `mojo_only/` and
 has to justify its existence there.
 
 | stage | CatBoost source | port |
 |---|---|---|
-| feature grouping and bit packing | `gpu_data/grid_policy.h` | `ported/gpu_data/grid_policy.mojo` |
-| leaf as a contiguous range | `cuda_util/gpu_data/partitions.h` | `ported/cuda_util/gpu_data/partitions.mojo` |
-| histogram, binary (32 features/ui32) | `methods/greedy_subsets_searcher/kernel/hist_binary.cu` | `ported/methods/greedy_subsets_searcher/kernel/hist_binary.mojo` |
+| feature grouping and bit packing | `gpu_data/grid_policy.h` | `gbdt/gpu_data/grid_policy.mojo` |
+| leaf as a contiguous range | `cuda_util/gpu_data/partitions.h` | `gbdt/cuda_util/gpu_data/partitions.mojo` |
+| histogram, binary (32 features/ui32) | `methods/greedy_subsets_searcher/kernel/hist_binary.cu` | `gbdt/methods/greedy_subsets_searcher/kernel/hist_binary.mojo` |
 | histogram, half-byte (8/ui32) | `.../hist_half_byte.cu`, `point_hist_half_byte_template.cuh` | `.../kernel/hist_half_byte.mojo` |
 | histogram, one-byte (4/ui32) | `.../hist_one_byte.cu`, `compute_hist_loop_two_stats.cuh` | `.../kernel/hist_one_byte.mojo` |
 | bin prefix scan, sibling subtraction | `.../histogram_utils.cu` | `.../kernel/histogram_utils.mojo` |
@@ -183,7 +183,7 @@ and nothing else moved. That also gives the file its first reader; it had
 none.
 
 k-means moved out of RAFT and into cuVS, so the mirror is two-layer:
-algorithms from cuVS into `cluster/ported/`, and the RAFT and cuBLAS
+algorithms from cuVS into `cluster/gbdt/`, and the RAFT and cuBLAS
 primitives they call into `cluster/mojo_only/`. See `cluster/README.md`.
 
 `cluster/` is LAUNCHED and passing: 4 of 4 centroids recovered as a
@@ -240,7 +240,7 @@ reads.
 Apache-2.0, in [LICENSE](LICENSE). [NOTICE](NOTICE) records what this derives
 from and must travel with any redistribution.
 
-**Everything under `ported/` is a derivative work of CatBoost**, Copyright
+**Everything under `gbdt/` is a derivative work of CatBoost**, Copyright
 2017-2026 YANDEX LLC, Apache-2.0, translated from CUDA C++ into Mojo at commit
 `54a8143a`. `PORTED_MAP.tsv` maps each file to its origin.
 

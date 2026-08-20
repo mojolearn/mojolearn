@@ -47,22 +47,22 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from mojo_only.fixed_point import choose_scale
 
-from ported.gpu_data.compressed_index_builder import build_layout
-from ported.gpu_data.feature_blocks import blocks_for
-from ported.gpu_data.grid_policy import (
+from gbdt.gpu_data.compressed_index_builder import build_layout
+from gbdt.gpu_data.feature_blocks import blocks_for
+from gbdt.gpu_data.grid_policy import (
     POLICY_HALF_BYTE,
     policy_for_fold_count,
 )
-from ported.gpu_data.kernel.binarize import (
+from gbdt.gpu_data.kernel.binarize import (
     WRITE_BLOCK_SIZE,
     write_compressed_index_kernel,
 )
-from ported.methods.greedy_subsets_searcher.greedy_search_helper import (
+from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
     DeviceBlock,
     launch_histograms_for_blocks,
     upload_blocks,
 )
-from ported.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
+from gbdt.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
     BLOCK_SIZE,
     BUILD_MODE,
     TARGET_COLUMN,

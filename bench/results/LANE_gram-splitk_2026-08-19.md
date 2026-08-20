@@ -91,7 +91,7 @@ Two kernels, one host wrapper:
 **Determinism.** The chunk count is a fixed function of the pinned
 hardware constants — `APPLE_M4_GPU_CORES * max_active_blocks_per_core(256,
 16 KB) * GRAM_OVERSUBSCRIBE = 10 * 12 * 2 = 240` — imported from
-`neighbors/ported/distance/detail/pairwise_distance_base.mojo`, not
+`neighbors/gbdt/distance/detail/pairwise_distance_base.mojo`, not
 restated. Same (m, k) therefore always yields the same partition; each
 cell is one serial fp32 chain per chunk in row order; the fold is serial
 ascending. No device-wide float atomics anywhere. Run-to-run bit-identical.
@@ -229,7 +229,7 @@ One add+commit; `git log -1 --format='%h parent %p'` reported in the lane
 message. Files: `core/gram_splitk.mojo` (new), `core/gemm.mojo`,
 `core/column_stats.mojo`, `mojo_only/kernel_matrix.mojo` (K_LIB_GRAM_SPLITK),
 `mojo_only/gram_splitk_check.mojo` (new), `mojo_only/vendor_correctness_check.mojo`,
-`decomposition/pca_main.mojo`, `decomposition/ported/linalg/detail/{pca,tsvd}.mojo`,
-`glm/ported/linalg/detail/lstsq.mojo`, `VENDOR_LIBRARIES.md`, `VENDOR_LIBS.md`,
+`decomposition/pca_main.mojo`, `decomposition/gbdt/linalg/detail/{pca,tsvd}.mojo`,
+`glm/gbdt/linalg/detail/lstsq.mojo`, `VENDOR_LIBRARIES.md`, `VENDOR_LIBS.md`,
 `PORTING.md`, this report. `neighbors/`, `dbscan/`, the scoreboard and
 `bench/bench_main.mojo` untouched.

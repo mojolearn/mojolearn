@@ -47,8 +47,8 @@ the split kernels expect), and the bin within the feature.
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 
-from ported.gpu_data.gpu_structures import CFeature
-from ported.methods.greedy_subsets_searcher.kernel.compute_scores import (
+from gbdt.gpu_data.gpu_structures import CFeature
+from gbdt.methods.greedy_subsets_searcher.kernel.compute_scores import (
     FLOAT32_MAX,
 )
 

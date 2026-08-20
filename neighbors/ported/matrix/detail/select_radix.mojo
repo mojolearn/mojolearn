@@ -3,8 +3,8 @@
 PORT OF `raft/matrix/detail/select_radix.cuh` at RAFT `9aa17e5`. Partial.
 Do not improve.
 
-**THIS IS A `ported/` FILE WHOSE UPSTREAM IS RAFT, WHICH REFINES THE RULE IN
-`cluster/README.md`.** That rule said a RAFT call is not a `ported/` file
+**THIS IS A `gbdt/` FILE WHOSE UPSTREAM IS RAFT, WHICH REFINES THE RULE IN
+`cluster/README.md`.** That rule said a RAFT call is not a `gbdt/` file
 because RAFT is a general library this tree does not mirror. That is still
 right for a call we merely STAND IN FOR, like `raft::linalg::norm`. It is
 wrong for a file we actually READ AND TRANSLITERATE, which is what this is,
@@ -12,7 +12,7 @@ and which makes it a derivative work of RAFT with the attribution duty that
 follows. The refined rule:
 
     a RAFT call we stand in for   ->  mojo_only/, naming the call
-    a RAFT file we transliterate  ->  ported/,  with raft as its upstream
+    a RAFT file we transliterate  ->  gbdt/,  with raft as its upstream
 
 WHY THIS ONE FIRST, AND THE OTHER ONE IS **NOT** RULED OUT
 ----------------------------------------------------------

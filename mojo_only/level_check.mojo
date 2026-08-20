@@ -6,21 +6,21 @@ one wrote. A failure here is a wiring failure, which is the whole reason the
 pieces were checked separately first.
 """
 
-from ported.models.oblivious_model import TBinarySplit
+from gbdt.models.oblivious_model import TBinarySplit
 from max.gpu.host import DeviceContext
 
-from ported.gpu_data.grid_policy import (
+from gbdt.gpu_data.grid_policy import (
     POLICY_BINARY,
     features_per_int,
     policy_mask,
     policy_shift,
 )
-from ported.gpu_data.compressed_index_builder import build_layout
-from ported.gpu_data.kernel.binarize import (
+from gbdt.gpu_data.compressed_index_builder import build_layout
+from gbdt.gpu_data.kernel.binarize import (
     WRITE_BLOCK_SIZE,
     write_compressed_index_kernel,
 )
-from ported.methods.greedy_subsets_searcher.greedy_search_helper import (
+from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
     run_one_level,
     run_tree,
     run_tree_layout,

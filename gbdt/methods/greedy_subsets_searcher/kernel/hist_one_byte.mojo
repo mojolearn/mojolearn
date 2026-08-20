@@ -67,7 +67,7 @@ from mojo_only.kernel_matrix import (
     hist_floats_per_thread_for,
     hist_smem_mode_for,
 )
-from ported.methods.greedy_subsets_searcher.kernel.histogram_utils import (
+from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     hist2_dither,
     hist2_quantize,
     hist2_smem_add,

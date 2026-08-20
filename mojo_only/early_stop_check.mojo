@@ -38,11 +38,11 @@ host arithmetic plus one upload, and nothing in it may depend on timing.
 from max.gpu.host import DeviceContext
 
 from mojo_only.hist2_check import build_cindex
-from ported.gpu_data.compressed_index_builder import build_layout
-from ported.methods.greedy_subsets_searcher.greedy_search_helper import (
+from gbdt.gpu_data.compressed_index_builder import build_layout
+from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
     run_tree_layout,
 )
-from ported.models.oblivious_model import TBinarySplit
+from gbdt.models.oblivious_model import TBinarySplit
 
 comptime ES_ROWS = 2048
 comptime ES_FEATURES = 4

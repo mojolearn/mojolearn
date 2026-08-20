@@ -12,21 +12,21 @@ because what is needed is the histogram AFTER a known partition, and
 
 from max.gpu.host import DeviceContext
 
-from ported.gpu_data.grid_policy import (
+from gbdt.gpu_data.grid_policy import (
     POLICY_BINARY,
     features_per_int,
     policy_mask,
     policy_shift,
 )
-from ported.gpu_data.kernel.binarize import (
+from gbdt.gpu_data.kernel.binarize import (
     WRITE_BLOCK_SIZE,
     write_compressed_index_kernel,
 )
-from ported.methods.greedy_subsets_searcher.kernel.hist_binary import (
+from gbdt.methods.greedy_subsets_searcher.kernel.hist_binary import (
     binary_hist_gather_kernel,
     binary_hist_kernel,
 )
-from ported.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
+from gbdt.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
     BLOCK_SIZE,
 )
 

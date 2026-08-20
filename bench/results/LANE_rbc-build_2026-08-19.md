@@ -132,7 +132,7 @@ machinery, not in this lane.**
 
 The residual is `weak_cc_batched` + `merge_labels` + `core_points_compute`,
 and the most likely mechanism is `weak_cc_batched`
-(`dbscan/ported/sparse/detail/csr.mojo:132`): it re-initialises **all N**
+(`dbscan/gbdt/sparse/detail/csr.mojo:132`): it re-initialises **all N**
 labels per batch and then iterates label propagation over the batch's
 sub-graph until nothing changes, with three host synchronisations per pass. A
 larger batch holds longer propagation chains, so it needs more passes. That
@@ -164,10 +164,10 @@ answer.
 
 | # | what upstream does (file:line) | what ours did | fixed, or why not |
 |---|---|---|---|
-| E1 | `cuml runner.cuh:141-150`: RBC is DISABLED for `Index_ = int32_t` — `if constexpr (is_same_v<Type_f,double> \|\| is_same_v<Index_,int32_t>) { sparse_rbc_mode = false; ... "RBC does not support double precision or int32 labels. Falling back to BRUTE_FORCE" }` | our port is Int32 throughout (`dbscan/ported/dbscan/dbscan.mojo` says so explicitly) and runs RBC anyway | **NOT FIXED, and it should not be.** An earlier version of this row claimed the int32 `MAX_LABEL/N` clamp "binds above n = 46,341" and "is why 50,000 is the first size with more than one batch". Arithmetic on this row's own numbers falsifies that: the clamp value at n = 50,000 is `2147483647 // 50000 = 42,949`, the recorded default batch is 40,669, and a clamp-bound batch would be exactly 42,949. The 80% memory budget cuts first — a clamped batch would cost `(MAX_LABEL/N)(5N + 8) ≈ 5·MAX_LABEL ≈ 10.7 GB` at every n, above this device's ~10.2 GB default budget — so the clamp never bound any default-budget run here, and 50,000 batches in two because one batch needs `50,000 × 250,008 B ≈ 12.5 GB`. The clamp is now gated on `eps_nn_method != RBC` exactly as `dbscan.cuh:71` gates it (LANE_dbscan-batching_2026-08-19), which changes no default-budget batch count on this device. |
+| E1 | `cuml runner.cuh:141-150`: RBC is DISABLED for `Index_ = int32_t` — `if constexpr (is_same_v<Type_f,double> \|\| is_same_v<Index_,int32_t>) { sparse_rbc_mode = false; ... "RBC does not support double precision or int32 labels. Falling back to BRUTE_FORCE" }` | our port is Int32 throughout (`dbscan/gbdt/dbscan/dbscan.mojo` says so explicitly) and runs RBC anyway | **NOT FIXED, and it should not be.** An earlier version of this row claimed the int32 `MAX_LABEL/N` clamp "binds above n = 46,341" and "is why 50,000 is the first size with more than one batch". Arithmetic on this row's own numbers falsifies that: the clamp value at n = 50,000 is `2147483647 // 50000 = 42,949`, the recorded default batch is 40,669, and a clamp-bound batch would be exactly 42,949. The 80% memory budget cuts first — a clamped batch would cost `(MAX_LABEL/N)(5N + 8) ≈ 5·MAX_LABEL ≈ 10.7 GB` at every n, above this device's ~10.2 GB default budget — so the clamp never bound any default-budget run here, and 50,000 batches in two because one batch needs `50,000 × 250,008 B ≈ 12.5 GB`. The clamp is now gated on `eps_nn_method != RBC` exactly as `dbscan.cuh:71` gates it (LANE_dbscan-batching_2026-08-19), which changes no default-budget batch count on this device. |
 | E2 | `registers.cuh:1332-1335` launches `tpb = 64`, two warps per block, `ceildiv(n_queries, 2)` blocks | 32 threads, one query per block | **DIVERGES, now MEASURED as well as argued.** The correctness argument (a 64-lane AMD wavefront would merge two queries' `vote` masks) stood alone before; it is now also free. Swept 32 / 64 / 128 / 256 on the M4: their 64 is never faster and is 1.54x slower at n = 16,000. Table is in `registers.mojo`'s DEVIATION 2 banner. The kernel was rewritten into THEIR shape (`RBC_QPB` is their `num_warps`, the query id is their `blockIdx.x * num_warps + threadIdx.x / WarpSize` from `:600`) so the only thing that differs now is one constant. |
 | E3 | `ball_cover.cuh:148-152` `thrust::sort_by_key` + `NNComp`, then `sorted_coo_to_csr` at `:155` | counting sort + exact per-group rank, `O(sum \|group\|^2)` | **DIVERGES, KEPT, AND NOW PRICED.** The previous lane recorded this as a follow-up that "will dominate the BUILD at large m". That is false and the false sentence is deleted from `ball_cover.mojo` in the same edit (§4). Measured: the rank is 13% of the build and 0.4% of a fit, and it cannot grow relative to the 1-nn kernel because both are `O(m^1.5)`. See §2. |
-| E4 | `cuml runner.cuh:257` `need_ja_compute = sparse_rbc_mode && ((i == 0) \|\| sample_weight)`; `:262` passes `max_k = 0`; `:289` `maxklen[i] = thrust::reduce(vd, vd+n_points, maximum{})`; `:327` `if (i > 0)`; `:335` passes `maxklen.at(i)` | `dbscan/ported/dbscan/runner.mojo` counts every batch in loop 1, then counts AND fills every batch in loop 2 — **three walks over the dataset where theirs does two** | **NOT FIXED HERE — `dbscan/` is not mine.** The port of the one-pass form already existed and was checked in isolation; what was missing was the DISPATCH. A new check now runs their exact two-loop sequence and proves it byte-identical. Exact call in §7. Worth ~20% of the fit at 200,000. |
+| E4 | `cuml runner.cuh:257` `need_ja_compute = sparse_rbc_mode && ((i == 0) \|\| sample_weight)`; `:262` passes `max_k = 0`; `:289` `maxklen[i] = thrust::reduce(vd, vd+n_points, maximum{})`; `:327` `if (i > 0)`; `:335` passes `maxklen.at(i)` | `dbscan/gbdt/dbscan/runner.mojo` counts every batch in loop 1, then counts AND fills every batch in loop 2 — **three walks over the dataset where theirs does two** | **NOT FIXED HERE — `dbscan/` is not mine.** The port of the one-pass form already existed and was checked in isolation; what was missing was the DISPATCH. A new check now runs their exact two-loop sequence and proves it byte-identical. Exact call in §7. Worth ~20% of the fit at 200,000. |
 | E5 | `registers.cuh:1427-1482` `rbc_eps_pass` max_k overload | `rbc_eps_pass_max_k`, ported, checked against a host oracle at ONE batch | **NOW CHECKED AT THEIR DISPATCH**, batched, byte-identical to the two-pass CSR, plus their `algo.cuh:135` equality assert and a sabotage on the bound. See §6. |
 | E6 | `algo.cuh:119-121` `spare_elemets_per_row = (batch_size * N - ja->capacity()) / n`, and the one-pass arm is taken when `0 < max_k < spare` | nothing — our runner never takes the one-pass arm | **NOT FIXED HERE.** Note what their guard actually guards: it is a MEMORY test on the `n × max_k` scratch (`registers.cuh:1431`), not a correctness test. Their `ja` view of `n * N` at `:130` is an upper bound they never fill. §7 gives the condition verbatim. |
 | E7 | `ball_cover.hpp:57-60` footprint comment `(2*sqrt(m)) + (n*sqrt(m)) + (2*m)` | — | **THEIRS IS WRONG**, already recorded by the previous lane: it omits `X_reordered`, another `n*m`, allocated six lines below at `:68`. Confirmed again by opening the file. |
@@ -220,7 +220,7 @@ general primitive, not as a ball-cover fix, because this repository genuinely
 lacks a device sort (`nn.argsort[target="gpu"]` is wrong above 256 elements)
 and the next section that needs one will need it properly. The plan:
 
-1. `neighbors/ported/matrix/detail/select_radix.mojo` is the working model
+1. `neighbors/gbdt/matrix/detail/select_radix.mojo` is the working model
    and is already checked on device. It is CUB's digit-histogram shape with a
    `SELECT_BLOCK = NUM_BUCKETS = 1 << 8` geometry
    (`mojo_only/kernel_matrix.mojo:566`, `K_LIB_SELECT_RADIX`), one thread per
@@ -251,7 +251,7 @@ That is the plan; it is not started, and nothing half-landed.
 Only the four paths this lane owns. `git status` shows no other file under my
 name.
 
-**`neighbors/ported/neighbors/ball_cover/registers.mojo`**
+**`neighbors/gbdt/neighbors/ball_cover/registers.mojo`**
 - Rewrote the query-id computation of all three query kernels
   (`block_rbc_kernel_eps_csr_pass`, `..._dense`, `..._max_k`) into cuVS's own
   form: `blockIdx.x * num_warps + threadIdx.x / WarpSize`, broadcast from
@@ -267,7 +267,7 @@ name.
 - Rewrote DEVIATION 2's banner to carry the measurement (§1 E2) instead of an
   argument alone.
 
-**`neighbors/ported/neighbors/ball_cover/ball_cover.mojo`**
+**`neighbors/gbdt/neighbors/ball_cover/ball_cover.mojo`**
 - DEVIATION 3: **deleted the false sentence** that the `O(m^1.5)` rank "will
   dominate the BUILD at large m" and replaced it with the stage table, the
   group-size tail measurement, and the structural reason it cannot dominate
@@ -294,14 +294,14 @@ For `neighbors/PORTED_MAP.tsv` — replaces the `registers.cuh` row the
 previous lane proposed, whose deviation text is now stale:
 
 ```
-cuvs/cpp/src/neighbors/ball_cover/registers.cuh	block_rbc_kernel_eps_csr_pass, block_rbc_kernel_eps_dense, block_rbc_kernel_eps_max_k, block_rbc_kernel_eps_max_k_copy, rbc_eps_pass (both overloads)	neighbors/ported/neighbors/ball_cover/registers.mojo	partial	94c2819	ballot is warp.vote + count_trailing_zeros; launch shape is theirs (RBC_QPB = num_warps) pinned to one query per block, measured no slower than their tpb=64 at four sizes and 1.54x faster at 16k
+cuvs/cpp/src/neighbors/ball_cover/registers.cuh	block_rbc_kernel_eps_csr_pass, block_rbc_kernel_eps_dense, block_rbc_kernel_eps_max_k, block_rbc_kernel_eps_max_k_copy, rbc_eps_pass (both overloads)	neighbors/gbdt/neighbors/ball_cover/registers.mojo	partial	94c2819	ballot is warp.vote + count_trailing_zeros; launch shape is theirs (RBC_QPB = num_warps) pinned to one query per block, measured no slower than their tpb=64 at four sizes and 1.54x faster at 16k
 ```
 
 For `neighbors/UNPORTED.tsv` — replaces the CUB row the previous lane
 proposed, which implied the ball cover wanted it:
 
 ```
-cub	DeviceRadixSort	cub/device/dispatch/dispatch_radix_sort.cuh	the device-wide sort thrust::sort_by_key and raft's sampleWithoutReplacement both call. Open, portable, and the same digit-histogram shape as the RAFT radix SELECT at neighbors/ported/matrix/detail/select_radix.mojo. It is the general device sort this repository lacks, since nn.argsort[target=gpu] is wrong above 256 elements. It is NOT wanted by ball_cover: the counting sort plus per-group rank it would replace is 13% of the index build and 0.4% of a DBSCAN fit, measured 2026-08-19, and cannot grow relative to the build because both are O(m^1.5)
+cub	DeviceRadixSort	cub/device/dispatch/dispatch_radix_sort.cuh	the device-wide sort thrust::sort_by_key and raft's sampleWithoutReplacement both call. Open, portable, and the same digit-histogram shape as the RAFT radix SELECT at neighbors/gbdt/matrix/detail/select_radix.mojo. It is the general device sort this repository lacks, since nn.argsort[target=gpu] is wrong above 256 elements. It is NOT wanted by ball_cover: the counting sort plus per-group rank it would replace is 13% of the index build and 0.4% of a DBSCAN fit, measured 2026-08-19, and cannot grow relative to the build because both are O(m^1.5)
 ```
 
 For `dbscan/UNPORTED.tsv` — the one-pass dispatch, now the largest known win:
@@ -429,7 +429,7 @@ the brief asked for and is not a comparison against any other library.
 
 ---
 
-## 7. TASK 3 — THE EXACT WIRING FOR `dbscan/ported/dbscan/runner.mojo`
+## 7. TASK 3 — THE EXACT WIRING FOR `dbscan/gbdt/dbscan/runner.mojo`
 
 Derived from their code, then verified against our port by
 `check_ball_cover_max_k_wiring`. **I did not edit `dbscan/`.**
@@ -545,7 +545,7 @@ if b2 > 0:
    build is also `O(m^1.5)` and is 6.4x larger at every size measured, so the
    ratio is fixed and the rank cannot come to dominate. Measured shares in
    §2. **Delete that sentence**; the rank is 13% of the build and 0.4% of a
-   fit. The same sentence in `neighbors/ported/neighbors/ball_cover/
+   fit. The same sentence in `neighbors/gbdt/neighbors/ball_cover/
    ball_cover.mojo` is mine and is already deleted.
 
 2. **`bench/results/DBSCAN_RBC_2026-08-19.md`**, "The 50,000 row, as it stood
@@ -569,7 +569,7 @@ if b2 > 0:
    text the previous lane proposed implies the ball cover wants a radix sort,
    and the measurement says it does not.
 
-6. **`dbscan/ported/dbscan/dbscan.mojo`** (another lane's file) states
+6. **`dbscan/gbdt/dbscan/dbscan.mojo`** (another lane's file) states
    *"Index type is Int32 throughout this port, so `sizeof(Index_) == 4` and
    `MAX_LABEL == 2147483647`."* True, but it omits that
    `cuml/cpp/src/dbscan/runner.cuh:141-150` **refuses to run RBC at all with

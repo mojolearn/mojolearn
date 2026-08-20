@@ -1,6 +1,6 @@
 # cluster: a port of cuVS k-means
 
-**Same strategy as `ported/`, different upstream.** This section mirrors
+**Same strategy as `gbdt/`, different upstream.** This section mirrors
 [rapidsai/cuvs](https://github.com/rapidsai/cuvs) at commit `94c2819`
 (branch-25.08, checked out at `~/CascadeProjects/upstream/cuvs`), file
 for file, so that "did we port this?" is answered by `ls` rather than by
@@ -18,10 +18,10 @@ mirrors:
 
 | layer | upstream | where it lands here |
 |---|---|---|
-| algorithm | cuVS `cpp/src/cluster/`, `cpp/src/distance/` | `ported/` |
+| algorithm | cuVS `cpp/src/cluster/`, `cpp/src/distance/` | `gbdt/` |
 | primitive | RAFT `linalg`, `matrix` | `mojo_only/` |
 
-A RAFT call is not itself a `ported/` file, because RAFT is a general library
+A RAFT call is not itself a `gbdt/` file, because RAFT is a general library
 this tree does not mirror file for file. **It is still readable, so it is a
 PORT candidate and not a substitution candidate**: RAFT, CUB and Thrust are
 open source and their kernels get transliterated. `mojo_only/` files name the
@@ -42,11 +42,11 @@ that is what took this arm from 450 ms to 175 ms.
 cuVS has two roots and both are kept, with their constant prefixes dropped
 the same way `catboost/cuda/` is dropped on the boosting side:
 
-    cpp/src/            ->  ported/
-    cpp/include/cuvs/   ->  ported/
-    python/cuvs/cuvs/   ->  ported/python/
+    cpp/src/            ->  gbdt/
+    cpp/include/cuvs/   ->  gbdt/
+    python/cuvs/cuvs/   ->  gbdt/python/
 
-So `cpp/src/cluster/detail/kmeans.cuh` is `ported/cluster/detail/kmeans.mojo`
+So `cpp/src/cluster/detail/kmeans.cuh` is `gbdt/cluster/detail/kmeans.mojo`
 and can be diffed against it side by side.
 
 ## The one rule still applies here
@@ -59,7 +59,7 @@ is named in `UNPORTED.tsv`.
 
 ## What runs and what does not
 
-`ported/cluster/kmeans.mojo::fit` is wired end to end: norms, the fused
+`gbdt/cluster/kmeans.mojo::fit` is wired end to end: norms, the fused
 distance-and-argmin kernel, fixed-point cluster accumulation, centroid
 finalize with the empty-cluster rule, the centroid-shift reduction, the
 host-side stopping rule, and the post-loop inertia pass.
@@ -80,7 +80,7 @@ to cuVS with citations that pointed at a function signature.
 
 **cuVS's DEFAULT initialization runs.** `oversampling_factor = 2.0` selects
 scalable k-means|| (`initScalableKMeansPlusPlus`,
-`detail/kmeans.cuh:568-785`), ported in `ported/cluster/detail/kmeans.mojo::
+`detail/kmeans.cuh:568-785`), ported in `gbdt/cluster/detail/kmeans.mojo::
 init_scalable_kmeans_plus_plus` with its vendor calls named kernel by kernel
 in `mojo_only/scalable_init.mojo` (PORTING.md 47 and 48 price the
 randomness and selection mechanisms). Until 2026-08-20 this arm raised

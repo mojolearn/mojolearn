@@ -401,7 +401,7 @@ def eval_oblivious_trees_kernel(
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from ported.models.oblivious_model import TAdditiveModel
+from gbdt.models.oblivious_model import TAdditiveModel
 
 
 @fieldwise_init

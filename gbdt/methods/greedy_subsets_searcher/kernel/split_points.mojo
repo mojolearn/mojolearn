@@ -31,7 +31,7 @@ DEVIATION (PORTING.md 4): there is no CUB in Mojo, and the sort is being used
 only as a stable 1-bit partition, so that is what is written.
 """
 
-from ported.gpu_data.gpu_structures import CFeature
+from gbdt.gpu_data.gpu_structures import CFeature
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.gpu.intrinsics import ldg
 from std.memory import stack_allocation
@@ -849,7 +849,7 @@ def launch_reorder_in_leaves(
 # step of THIS module, and moving it elsewhere would leave the reorder
 # incomplete in the file that owns it.
 #
-# It is also the one place in `ported/` allowed to be better than CatBoost,
+# It is also the one place in `gbdt/` allowed to be better than CatBoost,
 # because there is no CatBoost code to be faithful to. Their own comments ask
 # for exactly this:
 #

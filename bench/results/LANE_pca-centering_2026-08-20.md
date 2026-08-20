@@ -69,7 +69,7 @@ hand-written kernel. DEVIATION 42 (PORTING.md) records it.
   `gram_centered_splitk` / `gram_centered_splitk_into` mirror the plain
   pair (same width dispatch, same reduce, same workspace rule). OPT-IN
   ONLY: `gemm_tn`'s dispatch never takes the centered entry.
-- `decomposition/ported/linalg/detail/pca.mojo::compute_covariance`: arms
+- `decomposition/gbdt/linalg/detail/pca.mojo::compute_covariance`: arms
   split on the SAME `gram_splitk_applies(n_cols, n_cols, n_rows)` that
   `gemm_tn` asks (one predicate, both readers, no drift; no new target
   test). Fused arm: mean -> `gram_centered_splitk_into` (x_alias as

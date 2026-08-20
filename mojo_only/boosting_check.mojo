@@ -33,13 +33,13 @@ file grows a new assertion, ask which of the two halves it constrains.
 
 from max.gpu.host import DeviceContext
 
-from ported.gpu_data.compressed_index_builder import build_layout
-from ported.gpu_data.kernel.binarize import (
+from gbdt.gpu_data.compressed_index_builder import build_layout
+from gbdt.gpu_data.kernel.binarize import (
     WRITE_BLOCK_SIZE,
     write_compressed_index_kernel,
 )
-from ported.methods.doc_parallel_boosting import fit, predict
-from ported.models.oblivious_model import TAdditiveModel
+from gbdt.methods.doc_parallel_boosting import fit, predict
+from gbdt.models.oblivious_model import TAdditiveModel
 
 
 def check_boosting_learns(

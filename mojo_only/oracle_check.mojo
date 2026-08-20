@@ -40,13 +40,13 @@ never been comparable to theirs at any point in this port.
 
 from max.gpu.host import DeviceContext
 
-from ported.grid_creator.binarization import best_split, binarize
-from ported.gpu_data.compressed_index_builder import build_layout
-from ported.gpu_data.kernel.binarize import (
+from gbdt.grid_creator.binarization import best_split, binarize
+from gbdt.gpu_data.compressed_index_builder import build_layout
+from gbdt.gpu_data.kernel.binarize import (
     WRITE_BLOCK_SIZE,
     write_compressed_index_kernel,
 )
-from ported.methods.doc_parallel_boosting import TAdditiveModel, fit
+from gbdt.methods.doc_parallel_boosting import TAdditiveModel, fit
 
 
 struct Oracle(Movable):

@@ -5,10 +5,10 @@ every kernel then reads, so a wrong shift here is a wrong histogram
 everywhere and nothing downstream would look suspicious.
 """
 
-from ported.gpu_data.compressed_index_builder import build_layout
-from ported.gpu_data.feature_blocks import blocks_for
-from ported.methods.greedy_subsets_searcher.greedy_search_helper import resolve_split
-from ported.gpu_data.grid_policy import (
+from gbdt.gpu_data.compressed_index_builder import build_layout
+from gbdt.gpu_data.feature_blocks import blocks_for
+from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import resolve_split
+from gbdt.gpu_data.grid_policy import (
     POLICY_BINARY,
     POLICY_HALF_BYTE,
     POLICY_ONE_BYTE,

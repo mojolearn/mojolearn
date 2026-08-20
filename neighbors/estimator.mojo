@@ -7,7 +7,7 @@ was empty and every entry point under `neighbors/` was a `*_main.mojo` driver
 or a `mojo_only/*_check.mojo` verifier. Five algorithms measured, zero
 reachable.
 
-Nothing here is a port. `neighbors/ported/` mirrors cuVS and is governed by
+Nothing here is a port. `neighbors/gbdt/` mirrors cuVS and is governed by
 COPY, DO NOT IMPROVE; this file is host-side policy that cuVS does not have a
 counterpart for, in the same category as `mojo_only/`. Every choice it makes
 that a caller could observe is named in THE POLICY CHOICES below rather than

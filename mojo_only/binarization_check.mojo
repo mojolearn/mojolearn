@@ -15,7 +15,7 @@ implementation breaks:
   and the bin counts match a direct scan
 """
 
-from ported.grid_creator.binarization import best_split, binarize
+from gbdt.grid_creator.binarization import best_split, binarize
 
 
 def check_binarization() raises:

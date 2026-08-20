@@ -33,12 +33,12 @@ from max.gpu.host.device_attribute import DeviceAttribute
 
 from mojo_only.fixed_point import choose_scale
 
-from ported.gpu_lib.gpu_manager import TCudaManager
-from ported.methods.kernel_add_model_value import (
+from gbdt.gpu_lib.gpu_manager import TCudaManager
+from gbdt.methods.kernel_add_model_value import (
     add_model_value_kernel,
 )
-from ported.models.oblivious_model import TBinarySplit
-from ported.methods.greedy_subsets_searcher.split_properties_helper import (
+from gbdt.models.oblivious_model import TBinarySplit
+from gbdt.methods.greedy_subsets_searcher.split_properties_helper import (
     HISTOGRAMS_CURRENT_PATH,
     HISTOGRAMS_PREVIOUS_PATH,
     HISTOGRAMS_ZEROES,
@@ -48,30 +48,30 @@ from ported.methods.greedy_subsets_searcher.split_properties_helper import (
     zero_leaves,
 )
 from std.sys.info import size_of
-from ported.gpu_data.gpu_structures import CFeature
-from ported.methods.greedy_subsets_searcher.kernel.split_resolve import (
+from gbdt.gpu_data.gpu_structures import CFeature
+from gbdt.methods.greedy_subsets_searcher.kernel.split_resolve import (
     RESOLVE_BLOCK_SIZE,
     resolve_and_pack_kernel,
 )
 
-from ported.gpu_data.kernel.binarize import (
+from gbdt.gpu_data.kernel.binarize import (
     WRITE_BLOCK_SIZE,
     write_compressed_index_kernel,
 )
-from ported.options.catboost_options import (
+from gbdt.options.catboost_options import (
     SCORE_FUNCTION_COSINE,
     SCORE_FUNCTION_L2,
 )
-from ported.methods.greedy_subsets_searcher.kernel.compute_scores import (
+from gbdt.methods.greedy_subsets_searcher.kernel.compute_scores import (
     FLOAT32_MAX,
     SCORE_BLOCK_SIZE,
     compute_optimal_splits_kernel,
 )
-from ported.methods.greedy_subsets_searcher.kernel.hist_binary import (
+from gbdt.methods.greedy_subsets_searcher.kernel.hist_binary import (
     binary_hist_gather_kernel,
     binary_hist_kernel,
 )
-from ported.methods.greedy_subsets_searcher.kernel.histogram_utils import (
+from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     copy_histograms_kernel,
     fixed_to_float_kernel,
     scan_histograms_kernel,
@@ -81,39 +81,39 @@ from ported.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     zero_histogram_kernel,
     zero_histograms_kernel,
 )
-from ported.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
+from gbdt.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
     BLOCK_SIZE,
 )
-from ported.methods.leaves_estimation.leaves_estimation import (
+from gbdt.methods.leaves_estimation.leaves_estimation import (
     LEAF_BLOCK,
     compute_leaf_values_kernel,
 )
-from ported.gpu_data.grid_policy import (
+from gbdt.gpu_data.grid_policy import (
     POLICY_BINARY,
     POLICY_HALF_BYTE,
     POLICY_ONE_BYTE,
 )
-from ported.methods.greedy_subsets_searcher.kernel.hist_half_byte import (
+from gbdt.methods.greedy_subsets_searcher.kernel.hist_half_byte import (
     half_byte_hist_gather_kernel,
     half_byte_hist_kernel,
 )
-from ported.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
+from gbdt.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
     ONE_BYTE_BLOCK_SIZE,
     one_byte_block_size,
     one_byte_hist_gather_kernel,
     one_byte_hist_kernel,
 )
-from ported.gpu_data.feature_blocks import PolicyBlock, blocks_for
-from ported.gpu_data.compressed_index_builder import (
+from gbdt.gpu_data.feature_blocks import PolicyBlock, blocks_for
+from gbdt.gpu_data.compressed_index_builder import (
     CompressedIndexLayout,
     build_layout,
 )
-from ported.gpu_util.copy import (
+from gbdt.gpu_util.copy import (
     COPY_BLOCK,
     copy_f32_kernel,
     copy_u32_kernel,
 )
-from ported.gpu_util.partitions_reduce import (
+from gbdt.gpu_util.partitions_reduce import (
     STATS_BLOCK,
     compute_partition_stats,
 )
@@ -123,10 +123,10 @@ from mojo_only.kernel_matrix import (
     deterministic_flush_for,
 )
 from mojo_only.numerics import NUMERIC_IDENTICAL
-from ported.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
+from gbdt.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
     BUILD_MODE as HIST_BUILD_MODE,
 )
-from ported.methods.greedy_subsets_searcher.kernel.split_points import (
+from gbdt.methods.greedy_subsets_searcher.kernel.split_points import (
     launch_reorder_in_leaves,
     split_points_grid_x,
     SPLIT_BLOCK_SIZE,
@@ -135,46 +135,46 @@ from ported.methods.greedy_subsets_searcher.kernel.split_points import (
     split_and_make_sequence_kernel,
     update_partitions_after_split_kernel,
 )
-from ported.methods.leaves_estimation.leaves_estimation import (
+from gbdt.methods.leaves_estimation.leaves_estimation import (
     LEAF_BLOCK,
     compute_leaf_values_kernel,
 )
-from ported.gpu_data.grid_policy import (
+from gbdt.gpu_data.grid_policy import (
     POLICY_BINARY,
     POLICY_HALF_BYTE,
     POLICY_ONE_BYTE,
 )
-from ported.methods.greedy_subsets_searcher.kernel.hist_half_byte import (
+from gbdt.methods.greedy_subsets_searcher.kernel.hist_half_byte import (
     half_byte_hist_gather_kernel,
     half_byte_hist_kernel,
 )
-from ported.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
+from gbdt.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
     ONE_BYTE_BLOCK_SIZE,
     one_byte_block_size,
     one_byte_hist_gather_kernel,
     one_byte_hist_kernel,
 )
-from ported.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_base import (
+from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_base import (
     HIST2_SMEM_MODE,
     hist2_block_size,
     hist2_one_byte_gather_kernel,
     hist2_one_byte_kernel,
 )
-from ported.gpu_data.feature_blocks import PolicyBlock, blocks_for
-from ported.gpu_data.compressed_index_builder import (
+from gbdt.gpu_data.feature_blocks import PolicyBlock, blocks_for
+from gbdt.gpu_data.compressed_index_builder import (
     CompressedIndexLayout,
     build_layout,
 )
-from ported.gpu_util.copy import (
+from gbdt.gpu_util.copy import (
     COPY_BLOCK,
     copy_f32_kernel,
     copy_u32_kernel,
 )
-from ported.gpu_util.partitions_reduce import (
+from gbdt.gpu_util.partitions_reduce import (
     STATS_BLOCK,
     compute_partition_stats,
 )
-from ported.methods.greedy_subsets_searcher.kernel.split_points import (
+from gbdt.methods.greedy_subsets_searcher.kernel.split_points import (
     PARTITION_BLOCK,
     launch_stable_partition,
 )
@@ -539,7 +539,7 @@ def run_one_level(
 
     # `hp_off` / `hp_size` are their `partsCpu` and they are ORDINARY DEVICE
     # BUFFERS, which is a deviation and not a choice. Read the DEVIATION
-    # BLOCK in `ported/gpu_util/gpu_data/partitions.mojo` before assuming
+    # BLOCK in `gbdt/gpu_util/gpu_data/partitions.mojo` before assuming
     # otherwise. The kernel writes them (`split_points.cu:372`, `:379`) and
     # nothing on the host can address them, so the leaf size still comes back
     # through the `enqueue_copy` below.
@@ -1108,7 +1108,7 @@ def run_tree(
         # `hp_off` / `hp_size` are their `partsCpu`, and ours are ORDINARY
         # DEVICE BUFFERS that no host read reaches. That is a deviation and
         # not a choice, so read the DEVIATION BLOCK in
-        # `ported/gpu_util/gpu_data/partitions.mojo` before assuming the
+        # `gbdt/gpu_util/gpu_data/partitions.mojo` before assuming the
         # allocation could simply be moved. The kernel writes them where
         # theirs writes `partsCpu` (`split_points.cu:372`, `:379`).
         ctx.enqueue_function[update_partitions_after_split_kernel](
@@ -2724,7 +2724,7 @@ def run_tree_layout[
         # their write and we collect none of their benefit. That is a
         # deviation forced by the toolchain, not a choice; the search that
         # established it is the DEVIATION BLOCK in
-        # `ported/gpu_util/gpu_data/partitions.mojo`.
+        # `gbdt/gpu_util/gpu_data/partitions.mojo`.
         # their `:397`, the same machine-sized expression.
         ctx.enqueue_function[update_partitions_after_split_kernel](
             dense_ids.unsafe_ptr(), ids_c.unsafe_ptr(), Int32(n_live),
@@ -2781,8 +2781,8 @@ def run_tree_layout[
         # (`split_points.cu:372`, `:379`); ours moves device memory to host
         # memory. `hp_off` / `hp_size` are the mirror that was supposed to
         # remove that transfer and cannot, and the search behind that is the
-        # DEVIATION BLOCK in `ported/gpu_util/gpu_data/partitions.mojo`.
-        # It used to point at `ported/gpu_lib/NOT_PORTED.md`, which says
+        # DEVIATION BLOCK in `gbdt/gpu_util/gpu_data/partitions.mojo`.
+        # It used to point at `gbdt/gpu_lib/NOT_PORTED.md`, which says
         # nothing about any of this.
         #
         # ORDERING. The copy above is enqueued behind

@@ -1,7 +1,7 @@
 # What else the GPU is worth pointing at
 
 **Nothing here is in scope until it is promoted out of this file.** The tree
-under `ported/` is still a transliteration of CatBoost's symmetric learner and
+under `gbdt/` is still a transliteration of CatBoost's symmetric learner and
 "COPY, DO NOT IMPROVE" still governs every file in it. This document exists so
 a decision made later is made against a written list rather than a remembered
 one.
@@ -198,7 +198,7 @@ COST, several thousand lines before a number, rather than about a ceiling.
 
 Three corrections to what this document used to claim:
 
-1. **It is not "nearly free" and it reuses nothing from `ported/`.**
+1. **It is not "nearly free" and it reuses nothing from `gbdt/`.**
    `catboost_options.mojo:441` refuses `Depthwise` and `Lossguide`; the ported
    learner is oblivious-only. cuML reads raw floats with a per-row
    `lower_bound` into shared quantiles rather than a compressed bin index,

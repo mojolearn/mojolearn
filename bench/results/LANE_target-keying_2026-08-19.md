@@ -24,7 +24,7 @@ sections was touched or staged.
 
 The three debts, each now a reader of the table:
 
-- **(a) `neighbors/ported/distance/detail/pairwise_distance_base.mojo`**:
+- **(a) `neighbors/gbdt/distance/detail/pairwise_distance_base.mojo`**:
   `APPLE_M4_GPU_CORES` / `APPLE_M4_MAX_THREADS_PER_CORE` /
   `METAL_MAX_THREADGROUP_MEM` are DELETED. `TARGET_GPU_CORES =
   gpu_cores_for[TARGET_COLUMN]()` replaces the first;

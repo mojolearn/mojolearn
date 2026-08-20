@@ -827,7 +827,7 @@ def check_topk(mut rows: List[Verdict]) raises:
 # WIRED, and more widely than anything else here: `core/row_norms.mojo`,
 # `core/column_stats.mojo`, `dbscan/vertexdeg`, `dbscan/adjgraph`,
 # `cluster/plus_plus`, `decomposition/pca` sign-flip, `neighbors/ball_cover`
-# scan, `neighbors/select_radix`, `ported/gpu_util/partitions_reduce`.
+# scan, `neighbors/select_radix`, `gbdt/gpu_util/partitions_reduce`.
 #
 # The fixture is HASHED per thread and INTEGER-VALUED, so the host oracle is
 # exact and a float-association argument cannot explain away a mismatch. The
@@ -2247,16 +2247,16 @@ def check_compile_established(mut rows: List[Verdict]) raises:
 # `core/gemm.mojo::gemm_nt` is `matmul[transpose_b=True]` and nothing else,
 # and its `n` is a user-facing count at four call sites:
 #
-#   cluster/ported/cluster/detail/min_cluster_distance_compute.mojo:197
+#   cluster/gbdt/cluster/detail/min_cluster_distance_compute.mojo:197
 #       gemm_nt(ctx, dist_buf, x_tile, c_tile, ns, nc, n_features)
 #       -- `nc` is n_clusters. k-means with ONE cluster is n = 1.
-#   glm/ported/linalg/detail/lstsq.mojo:120 and :193
+#   glm/gbdt/linalg/detail/lstsq.mojo:120 and :193
 #       gemm_tn(ctx, cov_a, a, ..., n_cols, n_cols, n_rows)
 #       -- `n_cols` is the feature count. Simple linear regression on ONE
 #          predictor is n = 1, and `gemm_tn` finishes by calling `gemm_nt`.
-#   decomposition/ported/linalg/detail/pca.mojo:202, tsvd.mojo:89
+#   decomposition/gbdt/linalg/detail/pca.mojo:202, tsvd.mojo:89
 #       same shape, `n_cols` again.
-#   neighbors/ported/neighbors/detail/knn_brute_force.mojo:154
+#   neighbors/gbdt/neighbors/detail/knn_brute_force.mojo:154
 #       gemm_nt(ctx, dist_tile, q_tile, index, rows, n_index, n_features)
 #       -- `n_index` is the number of index points.
 #

@@ -125,13 +125,13 @@ reduction next to it is the same category error as hand-writing a GEMM.
 | `greedy_subsets_searcher/kernel/compute_scores.cu` | `cub::BlockReduce` | `block.sum` / `block.max` / `block.min` | hand-written tree reduction -- **SWAP OPEN**, boosting lane |
 | `greedy_subsets_searcher/kernel/histogram_utils.cu` | `cub::WarpScan` | `warp.prefix_sum` | hand-written serial scan -- **SWAP OPEN**, boosting lane |
 | `greedy_subsets_searcher/kernel/histogram_utils.cu` | `cub::ShuffleIndex` | `warp.shuffle_idx`, or `shuffle_xor` where the source lane is a fixed XOR partner | was recorded **BLOCKED, "no warp shuffles in Mojo 1.0"**. False; the import path was wrong. **SWAP OPEN**, boosting lane |
-| `cuda_util/kernel/partitions_reduce` call path | `cub::BlockReduce` | `block.sum` | **SUBSTITUTED** in `ported/gpu_util/partitions_reduce.mojo`. It had been faking a reduce with `prefix_sum` plus a `broadcast` of the last lane, on a note claiming Mojo exposed a scan and not a reduce |
-| `reorder_one_bit_impl.cuh` scan | `cub::BlockScan::ExclusiveSum` | `block.prefix_sum[exclusive=True]` | **SUBSTITUTED** in `ported/gpu_util/kernel/reorder_one_bit.mojo`, replacing a Hillis-Steele loop and its shared page |
+| `cuda_util/kernel/partitions_reduce` call path | `cub::BlockReduce` | `block.sum` | **SUBSTITUTED** in `gbdt/gpu_util/partitions_reduce.mojo`. It had been faking a reduce with `prefix_sum` plus a `broadcast` of the last lane, on a note claiming Mojo exposed a scan and not a reduce |
+| `reorder_one_bit_impl.cuh` scan | `cub::BlockScan::ExclusiveSum` | `block.prefix_sum[exclusive=True]` | **SUBSTITUTED** in `gbdt/gpu_util/kernel/reorder_one_bit.mojo`, replacing a Hillis-Steele loop and its shared page |
 | various | `cub::BlockRadixSort` | **NOT FOUND** | not ported |
 | various | `cub::ThreadLoad/ThreadStore`, `cub::CacheModified*Iterator` | **NOT FOUND** | plain loads; these are cache-modifier hints |
 | various | `cub::LoadDirectWarpStriped` | **NOT FOUND** | our striping is written out longhand |
 
-The three rows marked SWAP OPEN are in `ported/methods/`, which this pass does
+The three rows marked SWAP OPEN are in `gbdt/methods/`, which this pass does
 not own. The exact anchors are in the vendor lane's cross-file note.
 
 ---
@@ -245,7 +245,7 @@ plus a device-wide exclusive scan, with their 500,000-row switch to a 1-bit
 sort above it. The scan is the piece with no shipped GPU primitive, which is
 what section 3b established.
 
-That port exists: `ported/gpu_util/kernel/reorder_one_bit.mojo`. Its scan is
+That port exists: `gbdt/gpu_util/kernel/reorder_one_bit.mojo`. Its scan is
 three passes, and as of this round the WITHIN-BLOCK pass is
 `block.prefix_sum[exclusive=True]` rather than a hand-written Hillis-Steele
 loop over a shared page. What is still ours is the decoupling across blocks,
@@ -350,16 +350,16 @@ This list was wrong in two places and both were load-bearing. Corrected
 
 ### DEVIATION BLOCKS this pass added or corrected
 
-- `ported/gpu_util/partitions_reduce.mojo`, segmented reduce: the search is
+- `gbdt/gpu_util/partitions_reduce.mojo`, segmented reduce: the search is
   now written into the banner. `algorithm.reductions` reduces a dense axis;
   our segments are ragged leaf ranges; nothing shipped expresses that.
-- `ported/gpu_util/kernel/reorder_one_bit.mojo`, device-wide scan: `nn.cumsum`
+- `gbdt/gpu_util/kernel/reorder_one_bit.mojo`, device-wide scan: `nn.cumsum`
   has no `ctx` and no `target`, re-checked against the published signature.
   Only the cross-block decoupling is hand-written now.
 - `cluster/mojo_only/reduce_by_key.mojo`: the fixed-point accumulator was
   justified by "Metal has no float atomic add". That sentence is deleted, not
   annotated, and the determinism argument replaces it.
-- `ported/methods/greedy_subsets_searcher/kernel/split_points.mojo`,
+- `gbdt/methods/greedy_subsets_searcher/kernel/split_points.mojo`,
   `gather_inplace_kernel`: `WriteThrough`. The old text said "No Mojo
   spelling; a plain store" and named no search, which section 7 says is not
   evidence of anything. The three module paths searched are now written into
@@ -394,11 +394,11 @@ is reverted.
 
 | case | file | was | now calls |
 |---|---|---|---|
-| COLLECTIVE | `ported/gpu_util/kernel/reorder_one_bit.mojo` | Hillis-Steele block scan over a shared page, 9 iterations and 18 barriers | `max.gpu.primitives.block.prefix_sum[block_size=512, exclusive=True]` |
-| COLLECTIVE | `ported/gpu_util/partitions_reduce.mojo`, both kernels | `block.prefix_sum` followed by `block.broadcast` of the last lane, to fake a reduce | `max.gpu.primitives.block.sum[block_size=256]` |
+| COLLECTIVE | `gbdt/gpu_util/kernel/reorder_one_bit.mojo` | Hillis-Steele block scan over a shared page, 9 iterations and 18 barriers | `max.gpu.primitives.block.prefix_sum[block_size=512, exclusive=True]` |
+| COLLECTIVE | `gbdt/gpu_util/partitions_reduce.mojo`, both kernels | `block.prefix_sum` followed by `block.broadcast` of the last lane, to fake a reduce | `max.gpu.primitives.block.sum[block_size=256]` |
 | CLOSED | `core/column_stats.mojo` | `covariance_kernel` (RAFT's column-major contraction plus our split-K) and `covariance_reduce_kernel`, ~250 lines with no caller | nothing. Deleted. `raft::stats::cov` and `tsvd_fit` both call cuBLAS for this shape and materialize the result; `gemm_tn` now DISPATCHES — the hand-written split-K Gram kernel (`core/gram_splitk.mojo`, added 2026-08-19 after `linalg.matmul` measured ~25 GFLOP/s on the tile-starved 32x32x4M shape) on small outputs, transpose + `linalg.matmul` above that |
-| CLOSED | `glm/ported/linalg/detail/lstsq.mojo` step 6 | `use_vendor_gemv` flag with a ported contraction on the false arm | `linalg.gemv.gemv_gpu` only. `raft::linalg::gemv` is cuBLAS and is standalone in their code too |
-| CLOSED | `core/gemm.mojo` | `gemm_nt_kernel`, RAFT's register-tiled row-major contraction, kept as "the reference" and reached by nothing once the flag above went | nothing. Deleted. **The one to look at first if the rule change should undo more than the k-NN row**: RAFT's contraction is open source and portable, and the argument for deleting it is that the FUSED instantiation of the same policy already lives in `cluster/ported/distance/fused_distance_nn/simt_kernel.mojo`, which is the copy the new rule cares about. The standalone one was 16x slower than `linalg.matmul` at 1M x 128 and had no caller |
+| CLOSED | `glm/gbdt/linalg/detail/lstsq.mojo` step 6 | `use_vendor_gemv` flag with a ported contraction on the false arm | `linalg.gemv.gemv_gpu` only. `raft::linalg::gemv` is cuBLAS and is standalone in their code too |
+| CLOSED | `core/gemm.mojo` | `gemm_nt_kernel`, RAFT's register-tiled row-major contraction, kept as "the reference" and reached by nothing once the flag above went | nothing. Deleted. **The one to look at first if the rule change should undo more than the k-NN row**: RAFT's contraction is open source and portable, and the argument for deleting it is that the FUSED instantiation of the same policy already lives in `cluster/gbdt/distance/fused_distance_nn/simt_kernel.mojo`, which is the copy the new rule cares about. The standalone one was 16x slower than `linalg.matmul` at 1M x 128 and had no caller |
 | **neither** | `neighbors/` selection | `use_vendor_topk` flag, ported radix select as default | **PROPOSED AND REVERTED**, see the REJECTED table |
 
 ### REJECTED, with the reason

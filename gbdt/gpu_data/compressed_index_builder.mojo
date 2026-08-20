@@ -20,7 +20,7 @@ this is the single-device layout. Multi-device striping is a different
 function in the same header.
 """
 
-from ported.gpu_data.grid_policy import (
+from gbdt.gpu_data.grid_policy import (
     POLICY_BINARY,
     POLICY_HALF_BYTE,
     POLICY_ONE_BYTE,
@@ -29,7 +29,7 @@ from ported.gpu_data.grid_policy import (
     policy_mask,
     policy_shift,
 )
-from ported.gpu_data.gpu_structures import CFeature
+from gbdt.gpu_data.gpu_structures import CFeature
 
 
 @fieldwise_init

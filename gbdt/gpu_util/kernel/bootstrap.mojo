@@ -49,7 +49,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from ported.gpu_util.kernel.random_gen import next_uniform_f
+from gbdt.gpu_util.kernel.random_gen import next_uniform_f
 
 #: their launch shape (`bootstrap.cu:79-84`): block 256, grid
 #: `min(ceil(seeds/256), ceil(rows/256))`.

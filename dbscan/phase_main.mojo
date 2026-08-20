@@ -9,7 +9,7 @@ because the confirmation needs a timer inside the runner. This is that timer.
 Every fit here runs with `phase_timing = True`, which makes `dbscan_fit`
 print one line per phase per batch (the format and its mapping onto cuML's
 nvtx ranges are documented on `dbscan_fit` in
-`dbscan/ported/dbscan/runner.mojo`):
+`dbscan/gbdt/dbscan/runner.mojo`):
 
     PHASE budget mbytes <mb> batch <b>
     PHASE plan n_rows <N> batch <b> n_batches <nb> method <rbc|brute>

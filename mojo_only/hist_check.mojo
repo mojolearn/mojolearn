@@ -21,56 +21,56 @@ wrong count rather than as a crash.
 """
 
 from std.sys.info import size_of
-from ported.gpu_data.gpu_structures import CFeature
+from gbdt.gpu_data.gpu_structures import CFeature
 from max.gpu.host import DeviceContext
 
-from ported.methods.greedy_subsets_searcher.kernel.split_points import (
+from gbdt.methods.greedy_subsets_searcher.kernel.split_points import (
     PARTITION_BLOCK,
     launch_stable_partition,
 )
 
-from ported.gpu_data.grid_policy import (
+from gbdt.gpu_data.grid_policy import (
     POLICY_BINARY,
     POLICY_HALF_BYTE,
     features_per_int,
     policy_mask,
     policy_shift,
 )
-from ported.gpu_data.kernel.binarize import (
+from gbdt.gpu_data.kernel.binarize import (
     WRITE_BLOCK_SIZE,
     write_compressed_index_kernel,
 )
-from ported.methods.greedy_subsets_searcher.kernel.hist_binary import (
+from gbdt.methods.greedy_subsets_searcher.kernel.hist_binary import (
     binary_hist_gather_kernel,
     binary_hist_kernel,
 )
-from ported.methods.greedy_subsets_searcher.kernel.split_points import (
+from gbdt.methods.greedy_subsets_searcher.kernel.split_points import (
     split_and_make_sequence_kernel,
     update_partitions_after_split_kernel,
 )
-from ported.options.catboost_options import (
+from gbdt.options.catboost_options import (
     SCORE_FUNCTION_COSINE,
     SCORE_FUNCTION_L2,
 )
-from ported.methods.greedy_subsets_searcher.kernel.compute_scores import (
+from gbdt.methods.greedy_subsets_searcher.kernel.compute_scores import (
     compute_optimal_splits_kernel,
 )
-from ported.methods.greedy_subsets_searcher.kernel.histogram_utils import (
+from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     copy_histograms_kernel,
     scan_histograms_kernel,
     substract_histograms_kernel,
     zero_histograms_kernel,
 )
 from mojo_only.kernel_matrix import HIST_SMEM_WARP_PRIVATE_F32
-from ported.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
+from gbdt.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
     ONE_BYTE_BLOCK_SIZE,
     one_byte_hist_kernel,
 
 )
-from ported.methods.greedy_subsets_searcher.kernel.hist_half_byte import (
+from gbdt.methods.greedy_subsets_searcher.kernel.hist_half_byte import (
     half_byte_hist_kernel,
 )
-from ported.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
+from gbdt.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
     BLOCK_SIZE,
 )
 

@@ -58,7 +58,7 @@ lives in cuVS, which is why every citation above is cuVS/cuML.
 
 ## 2. What was wired, file by file
 
-**`dbscan/ported/dbscan/runner.mojo`** (the dispatch itself):
+**`dbscan/gbdt/dbscan/runner.mojo`** (the dispatch itself):
 
 - Loop 1 now measures `maxklen[i]` per batch: `rbc_max_reduce_kernel` (the
   existing port of `thrust::reduce(..., maximum{})`, `scan.mojo`) on the
@@ -199,7 +199,7 @@ matrix row first, with DEVIATION 30's sweep as the bar to clear.
   `rbc_eps_nn_query_*` are call-compatible; `rbc_take_one_pass` is additive.
 - No kernel changed: the three eps kernels, the scan, the max-reduce and the
   clamp are byte-for-byte the files the previous lane left.
-- `dbscan/ported/dbscan/dbscan.mojo`, `compute_batch_size`, the batching
+- `dbscan/gbdt/dbscan/dbscan.mojo`, `compute_batch_size`, the batching
   policy, `fused_l2_knn.mojo` and `faiss_select/` — untouched (other lanes').
 - No timing was run. Every run above is a correctness check.
 
@@ -235,7 +235,7 @@ between what was run and `83d4bd9` is an 8-line docstring reconciliation in
 then took. THIS commit therefore carries the lane's remaining truth:
 PORTING.md 39, the `registers.mojo` K_LIB banner, the `LANE_rbc-build` §9
 correction, the PORTED_MAP/UNPORTED rows, and this report. `neighbors/mutex_probe_main.mojo` and
-`neighbors/ported/distance/` were left unstaged -- another lane's
+`neighbors/gbdt/distance/` were left unstaged -- another lane's
 working-tree files.
 
 One caution for the §6 timing: `e4eb7cc` is the last commit before this

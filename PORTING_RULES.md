@@ -99,7 +99,7 @@ Two things this does NOT mean:
 
 A file in this tree is exactly one of two things:
 
-- `ported/` -- a port of a real file of theirs
+- `gbdt/` -- a port of a real file of theirs
 - `mojo_only/` -- something they never needed
 
 There is no third category of "good idea worth adopting."
@@ -155,7 +155,7 @@ annotate it.
 ## 2. The control plane is code too, and it gets ported like everything else
 
 `catboost/cuda/cuda_lib/` is 57 headers of scheduler and it is as much a part
-of CatBoost as the histogram kernels. It is ported into `ported/gpu_lib/`.
+of CatBoost as the histogram kernels. It is ported into `gbdt/gpu_lib/`.
 
 **If they do something on the GPU in the control plane, we do it on the GPU.**
 If they keep a decision on the device so the host never learns it, we keep it

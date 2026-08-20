@@ -78,8 +78,8 @@ part of an already-ported file and is not counted again.
 | `tasks_impl/cpu_func.h`, `host_tasks.h` | the host-task bodies the `HostTask` case runs | our `HostTask` case does the blocking guard and the caller runs the body |
 | `future/future.h`, `local_promise_future.h`, `promise_factory.h` | how a command returns a value to the host | `RequestStream` writes its answer into the command instead |
 | `kernel.h` | `NKernelHost::IMemoryManager` and the kernel-side context | pairs with `kernel_task.h` |
-| `kernel/kernel.cuh`, `kernel/reduce.cuh` | their device-side helpers | our kernels are in `ported/*/kernel/` |
-| `cache.h`, `helpers.h`, `column_aligment_helper.h` | small utilities: a guid-keyed cache, `ParseRangeString`, the 256-byte column alignment | pulled in as callers need them. The 256-byte alignment is the one with teeth, and `ported/gpu_data/` decides its own today |
+| `kernel/kernel.cuh`, `kernel/reduce.cuh` | their device-side helpers | our kernels are in `gbdt/*/kernel/` |
+| `cache.h`, `helpers.h`, `column_aligment_helper.h` | small utilities: a guid-keyed cache, `ParseRangeString`, the 256-byte column alignment | pulled in as callers need them. The 256-byte alignment is the one with teeth, and `gbdt/gpu_data/` decides its own today |
 
 The four groups plus the ported eleven plus `single_device.h` plus the three
 below account for every one of the 57:

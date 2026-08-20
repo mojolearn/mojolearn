@@ -8,10 +8,10 @@ never checked anything, so every line now carries an expected value and the
 CatBoost line that fixes it.
 """
 
-from ported.gpu_lib.fwd import EPtrType, is_host_ptr
-from ported.gpu_lib.gpu_base import TCudaStream, TCudaStreamsProvider, DEFAULT_STREAM
-from ported.gpu_lib.gpu_profiler import EProfileMode, TCudaProfiler
-from ported.gpu_lib.mapping import (
+from gbdt.gpu_lib.fwd import EPtrType, is_host_ptr
+from gbdt.gpu_lib.gpu_base import TCudaStream, TCudaStreamsProvider, DEFAULT_STREAM
+from gbdt.gpu_lib.gpu_profiler import EProfileMode, TCudaProfiler
+from gbdt.gpu_lib.mapping import (
     DEVICE_COUNT,
     TMirrorMapping,
     TSingleMapping,
@@ -19,9 +19,9 @@ from ported.gpu_lib.mapping import (
     TStripeMapping,
     TStripeMappingBuilder,
 )
-from ported.gpu_lib.slice import TSlice
-from ported.gpu_lib.device_id import TDeviceId
-from ported.gpu_lib.task import (
+from gbdt.gpu_lib.slice import TSlice
+from gbdt.gpu_lib.device_id import TDeviceId
+from gbdt.gpu_lib.task import (
     ECommandType,
     ECpuFuncType,
     TCommand,
@@ -29,7 +29,7 @@ from ported.gpu_lib.task import (
     stop_worker_command,
     wait_submit_command,
 )
-from ported.gpu_lib.tasks_queue.single_host_task_queue import TSingleHostTaskQueue
+from gbdt.gpu_lib.tasks_queue.single_host_task_queue import TSingleHostTaskQueue
 
 
 def expect(what: String, got: Int, want: Int) raises:

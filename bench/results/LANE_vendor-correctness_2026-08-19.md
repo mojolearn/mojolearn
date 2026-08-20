@@ -25,12 +25,12 @@ arrives from ordinary parameters.**
 
 | file:line | call | how `n` reaches 1 |
 |---|---|---|
-| `cluster/ported/cluster/detail/min_cluster_distance_compute.mojo:197` | `gemm_nt(ctx, dist_buf, x_tile, c_tile, ns, nc, n_features)` | `nc = min(centroid_batch, n_clusters - c_idx)` (`:183`). n=1 whenever `n_clusters == 1` **or `n_clusters % centroid_batch == 1`**. That is a remainder, not an exotic input. |
-| `glm/ported/linalg/detail/lstsq.mojo:120` | `gemm_tn(ctx, cov_a, a, a_alias, a_alias2, n_cols, n_cols, n_rows)`, and `gemm_tn` ends in `gemm_nt` (`core/gemm.mojo:148`) | simple linear regression on ONE predictor. No guard on `n_cols` anywhere in `lstsq.mojo`. |
-| `glm/ported/linalg/detail/lstsq.mojo:193` | `gemm_nt(ctx, inv, qs, q, n_cols, n_cols, n_cols)` | same |
-| `decomposition/ported/linalg/detail/pca.mojo:202` | `gemm_tn(ctx, cov, x, x_alias, x_alias2, n_cols, n_cols, n_rows)` | PCA on a one-column matrix |
-| `decomposition/ported/linalg/detail/tsvd.mojo:89` | `gemm_tn(ctx, gram, x, x_alias, x_alias2, n_cols, n_cols, n_rows)` | same |
-| `neighbors/ported/neighbors/detail/knn_brute_force.mojo:154` | `gemm_nt(ctx, dist_tile, q_tile, index, rows, n_index, n_features)` | one index point |
+| `cluster/gbdt/cluster/detail/min_cluster_distance_compute.mojo:197` | `gemm_nt(ctx, dist_buf, x_tile, c_tile, ns, nc, n_features)` | `nc = min(centroid_batch, n_clusters - c_idx)` (`:183`). n=1 whenever `n_clusters == 1` **or `n_clusters % centroid_batch == 1`**. That is a remainder, not an exotic input. |
+| `glm/gbdt/linalg/detail/lstsq.mojo:120` | `gemm_tn(ctx, cov_a, a, a_alias, a_alias2, n_cols, n_cols, n_rows)`, and `gemm_tn` ends in `gemm_nt` (`core/gemm.mojo:148`) | simple linear regression on ONE predictor. No guard on `n_cols` anywhere in `lstsq.mojo`. |
+| `glm/gbdt/linalg/detail/lstsq.mojo:193` | `gemm_nt(ctx, inv, qs, q, n_cols, n_cols, n_cols)` | same |
+| `decomposition/gbdt/linalg/detail/pca.mojo:202` | `gemm_tn(ctx, cov, x, x_alias, x_alias2, n_cols, n_cols, n_rows)` | PCA on a one-column matrix |
+| `decomposition/gbdt/linalg/detail/tsvd.mojo:89` | `gemm_tn(ctx, gram, x, x_alias, x_alias2, n_cols, n_cols, n_rows)` | same |
+| `neighbors/gbdt/neighbors/detail/knn_brute_force.mojo:154` | `gemm_nt(ctx, dist_tile, q_tile, index, rows, n_index, n_features)` | one index point |
 
 **Not fixed here.** `core/`, `cluster/`, `glm/`, `decomposition/` and
 `neighbors/` all belong to other lanes this round and my brief forbids
@@ -112,7 +112,7 @@ of it, not cuVS/cuML — this lane audits the vendor layer.
 | `VENDOR_LIBRARIES.md`: "`linalg.transpose` **SIGNALS at runtime**" | It **ABORTS the process**. Not a catchable raise; a `try` around it does not help. `_copy_with_strides rank=2 dtype=f32` -> "enqueue_cpu_range is only supported on CPU DeviceContexts". "Signals" reads like something a caller can fall back from. | Corrected. The probe is gated behind `vendor_main --transpose` precisely because it would take the table down. |
 | `VENDOR_LIBRARIES.md`: "## Also confirmed available, unused so far: `gather`, `top_k`, `softmax`, `concat`, `linalg.transpose`, `qr_factorization`" | Two of the six are unusable and one of those ABORTS. Presenting them as a menu is the failure mode this lane exists to close. | Section replaced with a verdict table. |
 | `VENDOR_LIBRARIES.md`: `cuSOLVER syevj` row -> "`linalg.qr_factorization` AVAILABLE", as the device-side consolation prize | **CPU ONLY**, confirmed by compile: passing a `DeviceContext` is an invalid call. (C1 later in the same file said so; the headline row still said otherwise.) | Row corrected. |
-| `decomposition/ported/linalg/detail/pca.mojo:299` comment: "Only thread 0 is promised the reduction's result by CUB's contract, so it is published through shared memory rather than assumed broadcast." | On this backend `block.sum` / `max` / `min` **do broadcast to all threads**, verified at TPB 32..1024. The comment states CUB's contract, which is a defensible reason to keep the shared-memory publish, but the empirical claim it implies about MAX is not what happens. | **Not edited** — `decomposition/` is another lane's. Reported here. |
+| `decomposition/gbdt/linalg/detail/pca.mojo:299` comment: "Only thread 0 is promised the reduction's result by CUB's contract, so it is published through shared memory rather than assumed broadcast." | On this backend `block.sum` / `max` / `min` **do broadcast to all threads**, verified at TPB 32..1024. The comment states CUB's contract, which is a defensible reason to keep the shared-memory publish, but the empirical claim it implies about MAX is not what happens. | **Not edited** — `decomposition/` is another lane's. Reported here. |
 | `VENDOR_LIBRARIES.md` A3 C6: "`lane_id` is not in `std.gpu.primitives.warp`" | `neighbors/.../ball_cover/registers.mojo:78` imports `lane_id` from `std.gpu.primitives.warp` and it compiles, so it is re-exported there. `std.gpu.primitives.id.lane_id` also compiles. Both work; C6 is right about the canonical home and wrong that the other path fails. | Left alone — harmless, and C6's advice (use `.id`) is what this lane's check does. |
 
 ---
@@ -228,22 +228,22 @@ on the strength of this measurement alone.
 
 ## 6. FALSE DOC SENTENCES I FOUND IN FILES I MAY NOT EDIT
 
-- `decomposition/ported/linalg/detail/pca.mojo:299-300` — "Only thread 0 is
+- `decomposition/gbdt/linalg/detail/pca.mojo:299-300` — "Only thread 0 is
   promised the reduction's result by CUB's contract, so it is published
   through shared memory rather than assumed broadcast." True about CUB's
   contract; on this backend MAX's `block_max`/`block_min` do broadcast. Not a
   bug, but the comment reads as a statement about MAX.
-- `neighbors/ported/neighbors/detail/knn_brute_force.mojo:50` — "`nn.topk.top_k`
+- `neighbors/gbdt/neighbors/detail/knn_brute_force.mojo:50` — "`nn.topk.top_k`
   stays reachable behind [the flag]". Fine as written, and now backed:
   `top_k` is **GPU, CORRECT** at batch=3 and n up to 100003, independently of
   the agreement-with-our-selector check that already existed.
-- `dbscan/ported/dbscan/adjgraph/algo.mojo:86-90` — "`nn.cumsum` is NOT the
+- `dbscan/gbdt/dbscan/adjgraph/algo.mojo:86-90` — "`nn.cumsum` is NOT the
   answer and was never available: it carries neither ... unlike
   `nn.argsort`/`nn.topk`/`nn.gather`, which take both". The `nn.cumsum` half
   is correct and re-confirmed. The clause treating `nn.argsort` as a
   functioning member of that list is now false; `argsort` takes both and is
   wrong.
-- `neighbors/ported/neighbors/ball_cover/scan.mojo:16` — "There would in any
+- `neighbors/gbdt/neighbors/ball_cover/scan.mojo:16` — "There would in any
   case be nothing to substitute: `nn.cumsum.cumsum` and ..." — correct for
   cumsum. But the tree's broader claim that no device sort exists is now
   false: `run_radix_sort_pairs_gpu` is one, at `BLOCK_SIZE <= 128`.
@@ -352,6 +352,6 @@ p_topk_gpu        COMPILES  (nn.topk.topk_gpu)
   replaced, that is noted and left.
 - **Did not edit `VENDOR_LIBS.md`, `PORTING.md`, `UNWIRED.md`, `PORTED_MAP.tsv`,
   or any kernel** in `cluster/ dbscan/ decomposition/ glm/ neighbors/ core/
-  ported/`. `mojo_only/vendor_correctness_check.mojo` IMPORTS
+  gbdt/`. `mojo_only/vendor_correctness_check.mojo` IMPORTS
   `core.gemm.gemm_nt` and `mojo_only.kernel_matrix`; it modifies neither.
 - **Did not `git` anything.**

@@ -37,7 +37,7 @@ check fixture was not random. It was affine in the row index, i.e. a lattice.
 
 ## 2. What I changed, file by file
 
-**`neighbors/ported/neighbors/detail/fused_l2_knn.mojo`** — NEW, ~460 lines.
+**`neighbors/gbdt/neighbors/detail/fused_l2_knn.mojo`** — NEW, ~460 lines.
 Port of `cuvs/cpp/src/neighbors/detail/fused_l2_knn.cuh::fusedL2kNN` plus its
 `fusedL2ExpKnn` driver.
 - Policy constants from `raft/linalg/contractions.cuh:203-206`
@@ -59,7 +59,7 @@ Port of `cuvs/cpp/src/neighbors/detail/fused_l2_knn.cuh::fusedL2kNN` plus its
 - Shared memory: 30,848 bytes of Metal's 32,768 (`sx` 1,088 + `sy` 17,408 +
   top-k lists 8,192 + staging 4,096 + counters 64). Sized for `FKNN_MAX_NN=64`.
 
-**`neighbors/ported/neighbors/detail/knn_brute_force.mojo`**
+**`neighbors/gbdt/neighbors/detail/knn_brute_force.mojo`**
 - Docstring: the "SUBSTITUTION AUDIT, 2026-08-19: NOTHING LEFT HERE" block is
   **deleted**, not annotated. Its conclusion was false — the thing left was the
   entire fused path — and it reasoned from the retired rule 2. Replaced with
@@ -80,7 +80,7 @@ Port of `cuvs/cpp/src/neighbors/detail/fused_l2_knn.cuh::fusedL2kNN` plus its
 
 **`neighbors/knn_main.mojo`** — the three new checks wired in.
 
-**`neighbors/ported/matrix/detail/select_radix.mojo`** — RESTORED from HEAD
+**`neighbors/gbdt/matrix/detail/select_radix.mojo`** — RESTORED from HEAD
 (byte-identical); it had been deleted in the working tree. Not otherwise
 touched; it is the warpsort lane's directory.
 
@@ -97,10 +97,10 @@ else in those files moved.
 `neighbors/PORTED_MAP.tsv`:
 
 ```
-cuvs/cpp/src/neighbors/detail/fused_l2_knn.cuh	neighbors/ported/neighbors/detail/fused_l2_knn.mojo	partial	fusedL2kNN + fusedL2ExpKnn driver; selector is a placeholder, not faiss_select::WarpSelect
-cuvs/cpp/src/neighbors/detail/knn_brute_force.cuh	neighbors/ported/neighbors/detail/knn_brute_force.mojo	partial	brute_force_knn_impl dispatch (:443) + tiled_brute_force_knn (:69-340), query-axis tiling only
-raft/cpp/include/raft/linalg/contractions.cuh	neighbors/ported/neighbors/detail/fused_l2_knn.mojo	partial	Policy2x8 + Contractions_NT, single-buffered (Metal 32KB)
-cuvs/cpp/src/distance/detail/distance_ops/l2_exp.cuh	neighbors/ported/neighbors/detail/fused_l2_knn.mojo	partial	l2_exp epilogue, both clamp clauses
+cuvs/cpp/src/neighbors/detail/fused_l2_knn.cuh	neighbors/gbdt/neighbors/detail/fused_l2_knn.mojo	partial	fusedL2kNN + fusedL2ExpKnn driver; selector is a placeholder, not faiss_select::WarpSelect
+cuvs/cpp/src/neighbors/detail/knn_brute_force.cuh	neighbors/gbdt/neighbors/detail/knn_brute_force.mojo	partial	brute_force_knn_impl dispatch (:443) + tiled_brute_force_knn (:69-340), query-axis tiling only
+raft/cpp/include/raft/linalg/contractions.cuh	neighbors/gbdt/neighbors/detail/fused_l2_knn.mojo	partial	Policy2x8 + Contractions_NT, single-buffered (Metal 32KB)
+cuvs/cpp/src/distance/detail/distance_ops/l2_exp.cuh	neighbors/gbdt/neighbors/detail/fused_l2_knn.mojo	partial	l2_exp epilogue, both clamp clauses
 ```
 
 `neighbors/UNPORTED.tsv`:

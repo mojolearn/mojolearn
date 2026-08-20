@@ -11,7 +11,7 @@ kernel parameter is a pointer or a scalar. This builds those arrays for one
 policy, restricted to the features that landed in it.
 """
 
-from ported.gpu_data.compressed_index_builder import CompressedIndexLayout
+from gbdt.gpu_data.compressed_index_builder import CompressedIndexLayout
 
 
 @fieldwise_init

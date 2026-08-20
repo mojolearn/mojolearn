@@ -4,7 +4,7 @@ PORT OF `cuvs::cluster::kmeans::params` (`cpp/include/cuvs/cluster/
 kmeans.hpp:28-121`) at cuVS `94c2819`. Transliterated. Do not improve.
 
 Every default here is theirs, including the ones that look arbitrary, for the
-same reason `ported/options/catboost_options.mojo` keeps CatBoost's: if a
+same reason `gbdt/options/catboost_options.mojo` keeps CatBoost's: if a
 measurement comes out badly we have to be able to say it is their
 configuration that is slow and not our taste in defaults.
 

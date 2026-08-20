@@ -86,7 +86,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
-from ported.options.catboost_options import (
+from gbdt.options.catboost_options import (
     SCORE_FUNCTION_COSINE,
     SCORE_FUNCTION_L2,
     SCORE_FUNCTION_NEWTON_COSINE,

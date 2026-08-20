@@ -34,14 +34,14 @@ That is a DIRECTORY problem, not a repository problem.
       core/          shared: device, launch policy, capability matrix,
                      numerics ladder, harness, machine lock
       boosting/
-        ported/      CatBoost derivative. COPY, DO NOT IMPROVE applies HERE
+        gbdt/      CatBoost derivative. COPY, DO NOT IMPROVE applies HERE
                      AND ONLY HERE, unchanged.
         mojo_only/   what CatBoost never had to write
       cluster/       k-means
       neighbors/     k-NN
       ensemble/      random forest
 
-The rule scopes to `boosting/ported/`. `PORTED_MAP.tsv` and `check_upstream.sh`
+The rule scopes to `boosting/gbdt/`. `PORTED_MAP.tsv` and `check_upstream.sh`
 keep working because they name files, not directories above them. Nothing about
 the port's control weakens.
 

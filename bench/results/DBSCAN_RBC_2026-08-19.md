@@ -111,7 +111,7 @@ max_k landing (LANE_rbc-maxk): see "The 50,000 row, explained" below.
 swing, and none of it came from tuning a kernel.
 
 RBC is now the DEFAULT (`EPS_NN_RBC`), which is a documented departure from
-cuML's `BRUTE_FORCE` and is DEVIATION 35 in `dbscan/ported/dbscan/runner.mojo`.
+cuML's `BRUTE_FORCE` and is DEVIATION 35 in `dbscan/gbdt/dbscan/runner.mojo`.
 The argument is entirely in the ours-against-ours column: there is no n at
 which brute force is the better choice for a user on this hardware, and the
 labels are identical point for point, so the flip cannot change any output --

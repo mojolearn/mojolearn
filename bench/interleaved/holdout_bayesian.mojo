@@ -20,12 +20,12 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from std.python import Python, PythonObject
 from std.time import perf_counter_ns
 
-from ported.gpu_data.compressed_index_builder import build_layout
-from ported.gpu_data.kernel.binarize import (
+from gbdt.gpu_data.compressed_index_builder import build_layout
+from gbdt.gpu_data.kernel.binarize import (
     WRITE_BLOCK_SIZE,
     write_compressed_index_kernel,
 )
-from ported.methods.doc_parallel_boosting import TAdditiveModel, fit, predict
+from gbdt.methods.doc_parallel_boosting import TAdditiveModel, fit, predict
 
 from std.sys import argv
 

@@ -10,7 +10,7 @@ selection are checked, all 12 cluster checks green. No timings were run.
     65327c5 parent f9f09c7   kmeans|| scalable init ported (kmeans.cuh:568-785)
 
 Files: `cluster/mojo_only/scalable_init.mojo` (new),
-`cluster/ported/cluster/detail/kmeans.mojo`,
+`cluster/gbdt/cluster/detail/kmeans.mojo`,
 `cluster/mojo_only/kmeans_check.mojo`, `cluster/kmeans_main.mojo`,
 `cluster/README.md`, `cluster/PORTED_MAP.tsv`, `cluster/UNPORTED.tsv`,
 `UNWIRED.md`, `PORTING.md` (deviations 47, 48).
