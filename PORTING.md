@@ -547,11 +547,54 @@ silently spills what the whole optimization was about.
 
 # Deviations added 2026-08-19, late round
 
-> **NUMBERING GAP, STATED RATHER THAN HIDDEN.** Entries 27 through 34 are
-> referenced from code (`deviation 30`, `31`, `33`, `34`) and were written up
-> in the lane files that produced them -- `LANE_dbscan-brute`,
-> `LANE_vendor-correctness`, `LANE_rbc-build` -- but have not been folded into
-> this file yet. The two below are here because nothing else records them.
+## 27-29. Never issued
+
+The deviation counter jumped from 26 to 30 during the 2026-08-19 lane
+fan-out; no code, lane file, or doc references 27, 28 or 29. Recorded so
+nobody hunts for them.
+
+## 30. `logicalWarpReduce<P::AccThCols>` is a comptime-width shuffle group
+
+Lives at `dbscan/ported/neighbors/epsilon_neighborhood.mojo` (the
+`updateVertexDegree` section): the sub-warp reduction's width is a comptime
+constant and every lane reaches every shuffle unconditionally, because a lane
+that skips a full-mask shuffle hangs the lanes that reach it. Its block-size
+sweep (cited by LANE_rbc-maxk: 142.10 against 129.08 ms at 200k) is the bar
+any K_LIB wiring of this kernel has to clear.
+
+## 31. `vd` is memset once because the kernel ACCUMULATES
+
+Lives at `dbscan/ported/neighbors/epsilon_neighborhood.mojo`. Their contract
+is `cudaMemsetAsync(vd, 0, (m + 1) * sizeof(IdxT))` before
+`epsUnexpL2SqNeighborhood`, which adds into `vd` rather than writing it; ours
+is `ctx.enqueue_memset` in the same position. Dropping the zero looks fine on
+the first batch and corrupts every later one.
+
+## 32. Their device-wide scan is three launches here
+
+`adjgraph/algo.cuh:65` runs `thrust::exclusive_scan` (CUB decoupled
+lookback, single pass). One threadgroup cannot do that shape on Metal, and
+the first port ran `grid_dim=(1,1,1)` -- one block scanning the whole array
+serially, twice per fit. Now a three-launch scan-then-propagate at
+`dbscan/ported/dbscan/adjgraph/algo.mojo`, verified exact at 2,000,000
+entries across 977 blocks (LANE_dbscan-brute D3;
+`check_exclusive_scan_beyond_the_old_cap`).
+
+## 33. `make_monotonic`'s unique-value step is replaced
+
+Lives at `dbscan/ported/label/classlabels.mojo`, which also records why the
+relabel is NOT optional (cuML runs `final_relabel` + `relabelForSkl` on every
+fit -- `runner.cuh:412` -- so label VALUES are API, not just the partition).
+The header says "do not improve"; read it before touching the file.
+
+## 34. `adj_to_csr`: the warp-aggregated atomic and multi-block rows are unported, priced
+
+Lives at `dbscan/ported/dbscan/adjgraph/algo.mojo` (module docstring). The
+shared per-row cursor, chunked 16-bool loads and unordered output are theirs;
+the warp aggregation of the cursor atomic (needs `coalesced_threads()`) and
+the multi-block-per-row grid are not, and the docstring prices both. Label
+propagation converges to the same fixed point either way, so this moves a
+wait, never an answer.
 
 ## 35. DBSCAN defaults to the ball cover; cuML defaults to brute force
 
