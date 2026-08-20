@@ -75,7 +75,7 @@ def newton_like_walker_estimate[
     iterations: Int,
     backtracking_type: Int,
     start_point: List[Float32],
-) -> List[Float32]:
+) raises -> List[Float32]:
     """`TNewtonLikeWalker::Estimate` (`descent_helpers.cpp:128-204`)."""
     var point_dim = oracle.point_dim()
 

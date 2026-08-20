@@ -149,6 +149,7 @@ check-ctr-train = "mojo run -I . mojo_only/ctr_train_check.mojo"
 check-onehot-cardinality = "mojo run -I . mojo_only/one_hot_cardinality_check.mojo"
 check-logloss-target = "mojo run -I . mojo_only/logloss_target_check.mojo"
 check-newton-walker = "mojo run -I . mojo_only/newton_walker_check.mojo"
+check-logloss-estimator = "mojo run -I . mojo_only/logloss_estimator_check.mojo"
 
 # What the host toolchain actually resolved to. Worth recording beside any
 # number, because `--target-cpu` and `--target-features` default to the HOST,

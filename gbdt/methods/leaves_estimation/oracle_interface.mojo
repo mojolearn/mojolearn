@@ -33,15 +33,15 @@ trait LeavesEstimationOracle:
     def point_dim(self) -> Int:
         ...
 
-    def move_to(mut self, point: List[Float32]):
+    def move_to(mut self, point: List[Float32]) raises:
         ...
 
     def write_value_and_first_derivatives(
         mut self, mut value: Float64, mut gradient: List[Float64]
-    ):
+    ) raises:
         ...
 
-    def write_second_derivatives(mut self, mut second_der: List[Float64]):
+    def write_second_derivatives(mut self, mut second_der: List[Float64]) raises:
         ...
 
     def regularize(self, mut point: List[Float32]):
