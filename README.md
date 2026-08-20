@@ -8,12 +8,24 @@ their algorithms, keep their control plane and their data plane, keep what
 they do on the GPU on the GPU and what they do on the host on the host, and
 adapt to Mojo only where the toolchain forces it.
 
-Two upstreams so far:
+Upstreams, corrected 2026-08-20. This table said "two upstreams so far" and
+listed two. There are five, and the omission was not cosmetic: cuML had no
+attribution section in `NOTICE` at all, which is an Apache-2.0 section 4
+obligation, and the MIT-licensed FAISS code RAFT vendors had no notice
+anywhere. Both are fixed; see `NOTICE`.
 
 | directory | upstream | what |
 |---|---|---|
 | `ported/`, `mojo_only/` | CatBoost | the GPU oblivious (symmetric) tree learner, control plane included |
 | `cluster/` | cuVS | k-means |
+| `neighbors/` | cuVS, RAFT, FAISS (MIT) | brute-force k-NN, the fused L2 kernel, ball cover, top-k selection |
+| `dbscan/` | cuML, RAFT | DBSCAN, epsilon-neighborhood, label merging |
+| `decomposition/` | cuML, RAFT | PCA and truncated SVD |
+| `glm/` | RAFT | ordinary least squares (`lstsqEig`, cuML's `olsFit` algo=1) |
+
+Every derivation is recorded per file in the `PORTED_MAP.tsv` beside each
+section, with a status of transliterated, partial, replaced, or substitute,
+and an `UNPORTED.tsv` naming what was deliberately left out.
 
 Renamed from `catboost-symmetric-trees` on 2026-08-19, because it stopped
 being one port.

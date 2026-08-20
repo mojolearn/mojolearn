@@ -6,3 +6,19 @@
 # because precompile will not create its own output directory and fails with
 # "cannot open output file" on a clean clone otherwise.
 build/
+
+# Python bytecode from the bench harness. `bench/` and `tools/` hold scripts
+# that the pixi bench and skgpu environments import, so running them leaves
+# these behind.
+__pycache__/
+*.pyc
+
+# `mojo build` output written next to the source rather than into build/.
+# These are native binaries for whichever chip built them; committing one
+# would ship a Mac-only artifact into a repository that claims portability.
+/kmeans_main
+/knn_main
+/probe_main
+/oracle_main
+/matrix_main
+/vendor_main

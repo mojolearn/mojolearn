@@ -2,10 +2,18 @@
 # TWO upstreams in one section, which is why the header names them per row:
 #   cuVS  pinned at 94c2819    (the algorithm; branch-25.08, cloned 2026-08-19)
 #   RAFT  pinned at 661a3b8    (the top-k primitive, TRANSLITERATED not stood in for)
+#   FAISS via RAFT's vendored copy under neighbors/detail/faiss_select/.
+#     ADDED 2026-08-20. Called "TWO upstreams" above; there are three, and the
+#     third is the one that matters most to get right because it is MIT, not
+#     Apache-2.0. RAFT's copy carries Facebook's copyright
+#     (raft/thirdparty/LICENSES/LICENSE.faiss), and MIT requires the notice to
+#     travel with substantial portions, so those files carry it in their own
+#     headers. See NOTICE, "Derived from FAISS".
 ported/neighbors/detail/fused_l2_knn.mojo	cuvs cpp/src/neighbors/detail/fused_l2_knn.cuh	partial	fusedL2kNN on Policy2x8; THE PATH THEIR DISPATCH TAKES for k<=64 + row-major + L2 (knn_brute_force.cuh:443). Both grid axes strided and the gridDim.x>1 mutex merge ported 2026-08-19 (fence spelled as ACQUIRE load / RELEASE store, the only Apple-legal spelling; probe: mutex_probe_main.mojo). Single-buffered: their SmemSize is 2 pages = 36,992 B against Metal's 32 KB
 ported/distance/detail/pairwise_distance_base.mojo	cuvs cpp/src/distance/detail/pairwise_distance_base.cuh	partial	launchConfigGenerator (:295-322) only, M4 inputs (10 cores x thread-slot occupancy; smem is a 32 KB validity wall, not a divisor, on family 9); the PairwiseDistances loop structure is inlined in fused_l2_knn.mojo
 ported/neighbors/detail/knn_brute_force.mojo	cuvs cpp/src/neighbors/detail/knn_brute_force.cuh	partial	tiled_brute_force_knn, their FALLBACK arm, plus brute_force_knn_impl's four-condition dispatch; query-axis tiling only
 ported/neighbors/detail/faiss_select/select.mojo	raft cpp/include/raft/neighbors/detail/faiss_select/Select.cuh	partial	WarpSelect at the two instantiations fused_l2_knn.cuh:743-771 uses; register-resident, which is what makes fusion possible
+ported/neighbors/detail/faiss_select/merge_network_warp.mojo	raft cpp/include/raft/neighbors/detail/faiss_select/MergeNetworkWarp.cuh	transliterated	ADDED TO THIS MAP 2026-08-20: the file existed and was derived, but had no row here, so nothing connected it to an upstream or to its MIT obligation. Also covers Comparators.cuh (the float specialization) and MergeNetworkUtils.cuh in full. FAISS-derived, MIT, NOT Apache-2.0
 ported/neighbors/ball_cover/**	cuvs cpp/src/neighbors/ball_cover/*	partial	RBC index build + the two eps paths cuML's DBSCAN actually calls (runner.cuh:262 max_k=0 two-pass, :335 max_k one-pass); exact, verified by per-row set equality
 ported/matrix/detail/select_radix.mojo	raft cpp/include/raft/matrix/detail/select_radix.cuh	partial	radix_topk_one_block only; BitsPerPass 8 not 11; CUB BlockScan replaced
 ported/matrix/detail/select_warpsort.mojo	raft cpp/include/raft/matrix/detail/select_warpsort.cuh	partial	warp_sort_immediate + block_sort + block_kernel (dense) only; the three set_k_th_ queues left out; host occupancy search replaced by a pinned geometry

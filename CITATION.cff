@@ -1,22 +1,35 @@
 cff-version: 1.2.0
 message: "If this is useful in your work, we would appreciate a citation."
 type: software
-title: "mojolearn: GPU oblivious gradient-boosted trees in Mojo"
+title: "mojolearn: GPU machine-learning algorithms in Mojo, portable to Apple Silicon"
 authors:
   - family-names: Hendel
     given-names: Andrew
     alias: ajhendel
 license: Apache-2.0
+repository-code: "https://github.com/mojolearn/mojolearn"
 abstract: >-
-  A port of CatBoost's GPU oblivious (symmetric) tree learner into Mojo,
-  targeting Apple Silicon via Metal first, with CUDA and ROCm from the same
-  source. The tree-growing algorithm is CatBoost's; see NOTICE and
-  PORTED_MAP.tsv for what derives from their work and what does not.
+  Ports of GPU machine-learning algorithms into Mojo from the CUDA
+  implementations that established them, targeting Apple Silicon via Metal
+  first and CUDA and ROCm from the same source. Covers gradient-boosted
+  oblivious (symmetric) trees from CatBoost; k-means and brute-force
+  k-nearest-neighbors from cuVS; DBSCAN and PCA from cuML; and ordinary least
+  squares and top-k selection primitives from RAFT. The algorithms are the
+  upstreams' work and every derivation is recorded per file in the PORTED_MAP
+  tables; see NOTICE for the license obligations each carries, including the
+  MIT-licensed FAISS warp-select queue that RAFT vendors. What is original is
+  the host-side control plane, the determinism ladder that the CUDA upstreams
+  have no counterpart for, and the deviations Metal forced.
 keywords:
-  - gradient boosting
-  - oblivious trees
-  - symmetric trees
+  - machine learning
   - GPU
   - Metal
   - Apple Silicon
   - Mojo
+  - clustering
+  - k-means
+  - DBSCAN
+  - nearest neighbors
+  - PCA
+  - gradient boosting
+  - oblivious trees

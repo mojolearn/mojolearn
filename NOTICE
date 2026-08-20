@@ -60,25 +60,138 @@ CORPORATION. "cuVS" and "RAFT" are used only to identify the software this
 work derives from.
 
 --------------------------------------------------------------------------
+Derived from cuML
+--------------------------------------------------------------------------
+
+CORRECTED 2026-08-20. This section did not exist, and its absence was an
+unmet obligation rather than a formatting gap: cuML is Apache-2.0, sections
+4(a) and 4(b) apply to every derivative work, and eight files here are
+derivative works of cuML that this file did not name.
+
+These are DERIVATIVE WORKS of cuML, translated from CUDA C++ into Mojo.
+`dbscan/PORTED_MAP.tsv` and `decomposition/PORTED_MAP.tsv` map each file to
+the cuML source it derives from and record whether the port is
+transliterated, partial, or replaced; `UNPORTED.tsv` beside each records what
+was deliberately left out.
+
+  at cuML commit 00094f7 (branch-25.08):
+
+    dbscan/ported/dbscan/vertexdeg/algo.mojo
+    dbscan/ported/dbscan/corepoints/compute.mojo
+    dbscan/ported/dbscan/adjgraph/algo.mojo
+    dbscan/ported/dbscan/runner.mojo
+    dbscan/ported/dbscan/dbscan.mojo
+    dbscan/ported/dbscan/mergelabels/runner.mojo
+    decomposition/ported/linalg/detail/pca.mojo
+    decomposition/ported/linalg/detail/tsvd.mojo
+
+    cuML
+    Copyright (c) 2018-2026, NVIDIA CORPORATION & AFFILIATES
+    Licensed under the Apache License, Version 2.0
+    https://github.com/rapidsai/cuml
+
+cuML ships no NOTICE file, so there is no attribution text of theirs to
+reproduce here. As with the derivations above, every one of these files is
+changed: it is a different language targeting a different GPU API.
+
+`decomposition/mojo_only/jacobi_eigh_device.mojo` is marked SUBSTITUTE rather
+than derived. It stands in for the `COV_EIG_JACOBI` arm of cuML's
+`tsvd.cuh::calEig`, which calls cuSOLVER; no cuML source was translated into
+it, and it reproduces the call's documented semantics rather than its code.
+
+--------------------------------------------------------------------------
 Derived from RAFT
 --------------------------------------------------------------------------
 
-These files are DERIVATIVE WORKS of RAFT, translated from CUDA C++ into Mojo
-at RAFT commit 9aa17e5:
+CORRECTED 2026-08-20. This section named two files. There are eleven
+derivation rows across four sections, and it also gave a single RAFT commit
+when the sections are pinned to two different ones. Both are fixed below;
+the old text is deleted rather than annotated.
 
+These are DERIVATIVE WORKS of RAFT, translated from CUDA C++ into Mojo. The
+`PORTED_MAP.tsv` in each section maps file to source and records the status.
+
+  at RAFT commit 661a3b8 (branch-25.08):
+
+    dbscan/ported/neighbors/epsilon_neighborhood.mojo
+    dbscan/ported/dbscan/adjgraph/algo.mojo
+    dbscan/ported/label/merge_labels.mojo
+    dbscan/ported/label/classlabels.mojo
+    dbscan/ported/sparse/detail/csr.mojo
+    decomposition/ported/linalg/detail/pca.mojo   (sign_flip_kernel only,
+        from raft matrix/detail/math.cuh:367 signFlipKernel)
+
+  at RAFT commit 9aa17e5:
+
+    glm/ported/linalg/detail/lstsq.mojo
+    neighbors/ported/neighbors/detail/faiss_select/select.mojo
     neighbors/ported/matrix/detail/select_radix.mojo
-    decomposition/ported/linalg/detail/pca.mojo
+    neighbors/ported/matrix/detail/select_warpsort.mojo
+        (from both select_warpsort.cuh and util/bitonic_sort.cuh)
 
     RAFT
     Copyright (c) NVIDIA CORPORATION & AFFILIATES
     Licensed under the Apache License, Version 2.0
     https://github.com/rapidsai/raft
 
-This is a separate obligation from the cuVS one above and is recorded
-separately because the two are different works. Files that merely STAND IN
-for a RAFT call, under `core/` and the various `mojo_only/` directories, are
-NOT derived from RAFT: no RAFT source was translated into them, and each
-names the call whose semantics it reproduces.
+`dbscan/ported/dbscan/adjgraph/algo.mojo` derives from cuML AND from RAFT
+and is listed under both sections.
+
+This is a separate obligation from the cuVS and cuML ones above and is
+recorded separately because the three are different works. Files that merely
+STAND IN for a RAFT call, under `core/` and the various `mojo_only/`
+directories, are NOT derived from RAFT: no RAFT source was translated into
+them, and each names the call whose semantics it reproduces.
+
+--------------------------------------------------------------------------
+Derived from FAISS (MIT, NOT Apache-2.0)
+--------------------------------------------------------------------------
+
+ADDED 2026-08-20. This is the one obligation in this file that is not
+Apache-2.0, and it was the one being missed. RAFT vendors FAISS's
+register-resident warp-select queue, and RAFT's copy carries Facebook's
+copyright and the MIT license, not NVIDIA's Apache-2.0 grant
+(`raft/thirdparty/LICENSES/LICENSE.faiss`). MIT requires the copyright
+notice and the permission notice to be included in all copies or SUBSTANTIAL
+PORTIONS of the software, and a transliteration of the algorithm into another
+language is a substantial portion. Reproducing it here, and in the headers of
+the two files themselves, is what discharges that.
+
+These files derive from RAFT's vendored FAISS at RAFT commit 9aa17e5:
+
+    neighbors/ported/neighbors/detail/faiss_select/select.mojo
+        <- raft/neighbors/detail/faiss_select/Select.cuh
+    neighbors/ported/neighbors/detail/faiss_select/merge_network_warp.mojo
+        <- raft/neighbors/detail/faiss_select/{Comparators,
+           MergeNetworkUtils, MergeNetworkWarp}.cuh
+
+    MIT License
+
+    Copyright (c) Facebook, Inc. and its affiliates.
+
+    Permission is hereby granted, free of charge, to any person obtaining a
+    copy of this software and associated documentation files (the
+    "Software"), to deal in the Software without restriction, including
+    without limitation the rights to use, copy, modify, merge, publish,
+    distribute, sublicense, and/or sell copies of the Software, and to permit
+    persons to whom the Software is furnished to do so, subject to the
+    following conditions:
+
+    The above copyright notice and this permission notice shall be included
+    in all copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+    OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+    NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+    DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+    OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+    USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+`neighbors/ported/matrix/detail/select_warpsort.mojo` is NOT covered by this
+section. RAFT ships the FAISS warp-select DESIGN twice, as two unrelated
+files, and that one is RAFT's own reimplementation under NVIDIA's copyright
+and Apache-2.0; it is listed under the RAFT section above.
 
 --------------------------------------------------------------------------
 Modular trademarks
