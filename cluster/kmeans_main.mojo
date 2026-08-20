@@ -5,6 +5,12 @@ boosting side's and is under active edit by another session in this shared
 checkout; a second section adding imports to it would collide for no benefit.
 """
 
+from cluster.mojo_only.estimator_check import (
+    check_kmeans_fit_recovers_planted,
+    check_kmeans_fit_rejects_bad_shapes,
+    check_kmeans_fit_weight_arms_agree,
+    check_plan_sum_scale,
+)
 from cluster.mojo_only.kmeans_check import (
     check_accumulate_veclen_dispatch,
     check_assignment_arm_dispatch,
@@ -34,3 +40,10 @@ def main() raises:
     check_fused_policy_dispatch()
     check_privatized_accumulate()
     check_accumulate_veclen_dispatch()
+
+    # The caller-facing surface, last: it is the only thing here a user can
+    # reach, and it is worth nothing if the kernels above are wrong.
+    check_plan_sum_scale()
+    check_kmeans_fit_recovers_planted()
+    check_kmeans_fit_weight_arms_agree()
+    check_kmeans_fit_rejects_bad_shapes()
