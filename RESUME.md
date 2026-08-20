@@ -354,9 +354,33 @@ default config), tie at 800k, and lose only where the per-tree
 launch/drain floor dominates (covtype-sized data) -- and their GPU arm
 cannot run on this machine at all.
 
-Next known levers, in order: device-side split resolution (attacks the
-covtype floor directly; a marked deviation through the matrix -- their
-design reads back per level too, `bestProps.Read`), the
-predict/inference path (unmeasured; their model_evaluation_speed suite
-is the arena plan). Beyond this box: a Pro/Max chip multiplies OUR arm
-by 2-4x and theirs by ~1.5x.
+### 2026-08-20, latest: device-side split resolution landed (3a5280d)
+
+A level now blocks the host ONCE where theirs blocks twice (marked
+deviation, `kernel/split_resolve.mojo`): the winner is reduced on the
+device in the host loop's exact order, descriptors pack from a
+once-per-tree bin-feature table, gates run post-drain with a one-level
+rollback that `mojo_only/early_stop_check.mojo` forces on purpose (no
+oracle fixture ever stops early, so the rollback needed its own reach
+check; building it also established that a constant-bin tree does NOT
+root-stop -- the full/empty split scores the parent's own score and
+stops one level later via the repeat rule).
+
+Quiet-window standings after the fold (interleaved, mse matched every
+rep):
+
+    800k x 100 @ 128:  0.89-0.98x -- ALL THREE REPS FASTER (was
+        0.97-1.05x; the parity row became a clean win)
+    800k x 100 @ 254:  1.41-1.53x   (was 1.54-1.59x)
+    covtype   @ 128:  1.80-2.11x, best rep 17.9 ms/tree (was
+        1.88-2.34x / 20.2) -- the predicted ~2 ms of drain fold, banked
+    covtype   @ 254:  1.97-2.33x   (was 2.29-2.61x)
+    4M x 100  @ 128:  0.47-0.51x -- 2.0-2.1x faster than CatBoost
+    4M x 100  @ 254:  0.76-0.88x
+
+Next known levers, in order: the remaining covtype floor is now
+launches + the level-plan drain (a full device-resident level plan
+would fold DRAIN 2 as well -- bigger bite, `build_necessary_histograms`
+on device); the predict/inference path (unmeasured; their
+model_evaluation_speed suite is the arena plan). Beyond this box: a
+Pro/Max chip multiplies OUR arm by 2-4x and theirs by ~1.5x.
