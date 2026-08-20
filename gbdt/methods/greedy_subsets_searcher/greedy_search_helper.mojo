@@ -53,6 +53,11 @@ from gbdt.methods.greedy_subsets_searcher.kernel.split_resolve import (
     RESOLVE_BLOCK_SIZE,
     resolve_and_pack_kernel,
 )
+from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_8bit import (
+    H8_BLOCK,
+    hist2_8bit_gather_kernel,
+    hist2_8bit_kernel,
+)
 
 from gbdt.gpu_data.kernel.binarize import (
     WRITE_BLOCK_SIZE,
@@ -1261,6 +1266,65 @@ def upload_blocks(
     return out^
 
 
+def launch_hist2_8bit(
+    ctx: DeviceContext,
+    mut blk: DeviceBlock,
+    depth: Int,
+    n_live: Int,
+    n_rows: Int,
+    stat_count: Int,
+    max_leaves: Int,
+    sm_count: Int,
+    line: Int,
+    base: Int,
+    mut cindex: DeviceBuffer[DType.uint32],
+    mut row_index: DeviceBuffer[DType.uint32],
+    mut stats: DeviceBuffer[DType.float32],
+    mut p_off: DeviceBuffer[DType.uint32],
+    mut p_sz: DeviceBuffer[DType.uint32],
+    mut ids: DeviceBuffer[DType.uint32],
+    mut block_hist: DeviceBuffer[DType.float32],
+    mut acc_i32: DeviceBuffer[DType.int32],
+    fixed_scale: Float32,
+) raises:
+    """The fused two-stat 8-bit arm (DEVIATION BLOCK in
+    `kernel/hist_2_one_byte_8bit.mojo`): one launch, grid z = 1, where
+    the PASS design launches z = stat_count walks. Reached only when the
+    `hist_smem_mode_for` row is the shared-Int32 arm; the float columns
+    dispatch `launch_one_byte[8]` exactly as CatBoost's ladder does."""
+    if stat_count != 2:
+        raise Error("the fused 8-bit arm is two-stat by construction")
+    var groups = feature_groups_for(POLICY_ONE_BYTE, Int(blk.n_features))
+    var replicas = replication_for(
+        groups, n_live, 1, sm_count, gather=(depth > 0)
+    )
+    if depth == 0:
+        ctx.enqueue_function[hist2_8bit_kernel](
+            blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
+            blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
+            Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
+            Int32(base), stats.unsafe_ptr(), Int32(n_rows),
+            p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
+            block_hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
+            Int32(max_leaves), Int32(stat_count),
+            grid_dim=(groups * replicas, n_live, 1),
+            block_dim=(H8_BLOCK, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[hist2_8bit_gather_kernel](
+            blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
+            blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
+            Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
+            Int32(base), row_index.unsafe_ptr(),
+            stats.unsafe_ptr(), Int32(n_rows),
+            p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
+            block_hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
+            Int32(max_leaves), Int32(stat_count),
+            grid_dim=(groups * replicas, n_live, 1),
+            block_dim=(H8_BLOCK, 1, 1),
+        )
+
+
 def launch_one_byte[bits: Int, smem_mode: Int = HIST2_SMEM_MODE](
     ctx: DeviceContext,
     mut blk: DeviceBlock,
@@ -1896,11 +1960,26 @@ def launch_histograms_for_blocks[
                     p_sz, ids, block_hist, acc_i32, fixed_scale,
                 )
             else:
-                launch_one_byte[8, hist2_smem_mode](
-                    ctx, blk, depth, n_live, n_rows, stat_count, max_leaves,
-                    sm_count, line, base, cindex, row_index, stats, p_off,
-                    p_sz, ids, block_hist, acc_i32, fixed_scale,
-                )
+
+                @parameter
+                if hist2_smem_mode == HIST_SMEM_SHARED2_I32:
+                    # the fused two-stat 8-bit arm: one walk over the
+                    # cindex where PASS(8) makes stat_count of them (its
+                    # DEVIATION BLOCK carries the shared-memory arithmetic
+                    # their ladder's fallback exists to avoid)
+                    launch_hist2_8bit(
+                        ctx, blk, depth, n_live, n_rows, stat_count,
+                        max_leaves, sm_count, line, base, cindex,
+                        row_index, stats, p_off, p_sz, ids, block_hist,
+                        acc_i32, fixed_scale,
+                    )
+                else:
+                    launch_one_byte[8, hist2_smem_mode](
+                        ctx, blk, depth, n_live, n_rows, stat_count,
+                        max_leaves, sm_count, line, base, cindex,
+                        row_index, stats, p_off, p_sz, ids, block_hist,
+                        acc_i32, fixed_scale,
+                    )
 
         # THE BRIDGE. Scatter this block's slice into the flat histogram the
         # score kernel reads. `skip_bridge` leaves the result in the
