@@ -153,3 +153,49 @@ def fit_seconds_and_mse_bayesian(scratch, prefix, border_count, trees, depth):
     dt = time.perf_counter() - t0
     mse = float(np.mean((m.predict(x) - y) ** 2))
     return [dt, mse]
+
+def fit_and_test_mse_bayesian(scratch, prefix, border_count, trees, depth,
+                              train_rows, seed):
+    """The holdout-quality arm: train on the first `train_rows` at
+    Bayesian temperature 1 with `seed`, quantized against the SAME
+    full-data borders tsv the Mojo arm binned with (`input_borders`), and
+    score the held-out tail. Returns [fit_seconds, train_mse, test_mse]."""
+    x = np.load("%s/%s_X.npy" % (scratch, prefix))
+    y = np.load("%s/%s_y.npy" % (scratch, prefix)).astype(np.float32)
+    tr = int(train_rows)
+    xt, yt = x[:tr], y[:tr]
+    xh, yh = x[tr:], y[tr:]
+    key = ("holdout", str(prefix), int(border_count), tr)
+    if key not in _CACHE:
+        p = catboost.Pool(xt, yt)
+        p.quantize(input_borders="%s/%s_borders_%d.tsv"
+                   % (scratch, prefix, int(border_count)))
+        _CACHE[key] = p
+    p = _CACHE[key]
+    m = catboost.CatBoostRegressor(
+        iterations=int(trees),
+        depth=int(depth),
+        learning_rate=0.3,
+        l2_leaf_reg=3.0,
+        border_count=int(border_count),
+        loss_function="RMSE",
+        grow_policy="SymmetricTree",
+        boosting_type="Plain",
+        bootstrap_type="Bayesian",
+        bagging_temperature=1.0,
+        rsm=1.0,
+        has_time=True,
+        random_seed=int(seed),
+        model_shrink_rate=0.0,
+        boost_from_average=False,
+        leaf_estimation_iterations=1,
+        random_strength=0.0,
+        logging_level="Silent",
+        allow_writing_files=False,
+    )
+    t0 = time.perf_counter()
+    m.fit(p)
+    dt = time.perf_counter() - t0
+    train_mse = float(np.mean((m.predict(xt) - yt) ** 2))
+    test_mse = float(np.mean((m.predict(xh) - yh) ** 2))
+    return [dt, train_mse, test_mse]
