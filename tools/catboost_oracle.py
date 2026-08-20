@@ -194,6 +194,18 @@ def main() -> int:
             rows, feats, depth, trees, learning_rate, l2, border_count))
         f.write("train_mse %.17g\n" % float(np.mean((preds - y) ** 2)))
         f.write("baseline_mse %.17g\n" % float(np.mean((y - np.mean(y)) ** 2)))
+        # SCALE AND BIAS, dumped so a reader can CHECK it rather than assume
+        # it. Their evaluator applies `scale * sum(leaves) + bias`
+        # (`scale_and_bias` in the model JSON). Everything downstream that
+        # compares our apply against their `pred` is only valid while this is
+        # the identity, and "it is probably 1 and 0" is not a fact about a
+        # fixture -- it is a guess that would silently absorb a real
+        # difference into a tolerance.
+        sb = raw.get("scale_and_bias", [1.0, [0.0]])
+        scale = float(sb[0])
+        bias = sb[1]
+        bias = float(bias[0]) if isinstance(bias, list) else float(bias)
+        f.write("scale_and_bias %.17g %.17g\n" % (scale, bias))
         for b in borders:
             f.write("borders %d %d %s\n" % (
                 b["feature_index"], len(b["borders"]),

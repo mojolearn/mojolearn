@@ -65,6 +65,14 @@ check-minentropy = "mojo run -I . mojo_only/min_entropy_check.mojo"
 # to tie. Budgets that cut a tier mid-way, plus budget 15 as the
 # order-invariant control. Host-side, seconds, no GPU.
 check-greedylogsum = "mojo run -I . mojo_only/greedy_log_sum_check.mojo"
+
+# OUR apply against CATBOOST'S OWN trained model and CATBOOST'S OWN
+# predictions, both already committed in bench/oracle.txt -- the `pred`
+# record has been written since the oracle was created and no reader ever
+# had a branch for it. Gates binarize, the split predicate, leaf indexing
+# and the ensemble sum in one shot, against them rather than against a
+# tally we wrote.
+check-catboost-apply = "mojo run -I . mojo_only/catboost_apply_check.mojo"
 # Model save and load. Trains, predicts, writes the file, reads it into a
 # fresh struct and requires BIT-IDENTICAL predictions out of both the host
 # apply and the device evaluator, plus field-by-field equality. Ends with
