@@ -1,0 +1,108 @@
+# Build the wheel on a hosted runner and verify it across every interpreter
+# the package claims.
+#
+# WHY THIS RUNS IN CI AND NOT ON A LAPTOP. The development machine is an M4
+# with python3.12, 3.13 and 3.14 on PATH. It cannot verify the two claims that
+# matter most about breadth:
+#
+#   * `requires-python >=3.10`. 3.10 and 3.11 are not installed there, so
+#     verify_wheel.sh reports SKIP for exactly the versions at the floor.
+#   * `macosx_11_0_arm64` and `--target-cpu apple-m1`. Every local check runs
+#     on the newest Apple silicon, which is the one chip that cannot fail a
+#     backward-compatibility claim.
+#
+# GitHub's hosted macOS runner is an **Apple M1 (Virtual)** -- measured, see
+# probe-hosted-metal.yml -- which is the baseline chip itself, and
+# actions/setup-python supplies the whole 3.10-3.14 range. So this job tests
+# the floor on the floor, which is the thing a laptop cannot do at all.
+#
+# It also proves the wheel is buildable somewhere other than one machine,
+# which is the precondition for releasing through the trusted publisher
+# already configured on PyPI and TestPyPI.
+
+name: Wheel CI
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "bindings/**"
+      - "packaging/**"
+      - "python/**"
+      - "pixi.toml"
+      - "pixi.lock"
+      - ".github/workflows/wheel-ci.yml"
+
+permissions: {}
+
+jobs:
+  wheel:
+    name: Build and verify on a hosted M1
+    runs-on: macos-15
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Runner facts
+        run: |
+          echo "chip:  $(sysctl -n machdep.cpu.brand_string)"
+          echo "macOS: $(sw_vers -productVersion)"
+
+      - name: Install pixi
+        uses: prefix-dev/setup-pixi@14c8aabd75893f83f4ab30c03e7cf853c8208961 # v0.8.10
+        with:
+          # Must match or exceed the pixi that wrote pixi.lock (version 7).
+          pixi-version: v0.76.2
+          cache: false
+
+      # Every interpreter the package claims, all on PATH at once, which is
+      # exactly the shape verify_wheel.sh already loops over.
+      - name: Install python 3.10 through 3.14
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: |
+            3.10
+            3.11
+            3.12
+            3.13
+            3.14
+
+      # Builds the extension at the portable baseline, stages the MAX runtime
+      # dylibs, re-signs, checks minos against the wheel tag, runs the ISA
+      # baseline disassembly, and packs.
+      - name: Build the wheel
+        run: ./packaging/macos/build_release_wheel.sh
+
+      # THE ANSWER. Clean venv per interpreter, install from the wheel, run a
+      # real fit: planted clusters that must be recovered and a point that
+      # must be its own nearest neighbour. An import-only test would pass on a
+      # wheel whose GPU path is dead.
+      - name: Verify on every claimed interpreter
+        run: ./packaging/macos/verify_wheel.sh
+
+      # A SKIP is not a pass. verify_wheel.sh reports absent interpreters
+      # rather than failing, which is right on a laptop and wrong here: the
+      # entire point of this job is that the floor versions are present.
+      - name: No interpreter may be skipped here
+        run: |
+          out=$(./packaging/macos/verify_wheel.sh)
+          echo "$out"
+          if echo "$out" | grep -q '^SKIP'; then
+            echo "::error::an interpreter the package claims was not tested"
+            exit 1
+          fi
+          for v in 3.10 3.11 3.12 3.13 3.14; do
+            echo "$out" | grep -q "PASS python$v" || {
+              echo "::error::python$v is claimed in pyproject.toml but did not pass"
+              exit 1
+            }
+          done
+
+      - name: Upload the wheel
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: mojolearn-wheel
+          path: python/dist/*.whl
+          if-no-files-found: error
