@@ -183,13 +183,19 @@ histogram accumulate ~68, zero ~8, fixed-to-float ~7, bridge ~2, reorder
    (`hist_one_byte.cu:356`); this port used the direct-load number for
    both arms. Fixed (no effect at this shape, where the other grid axes
    already fill the machine).
-3. **The `hist_2` fused-two-stat family is not ported and is THEIR PATH
-   for every `maxBins <= 128`** (`hist_one_byte.cu:315-323`:
-   `HIST2_PASS(5/6/7)`, falling back to the family we ported only at
-   129-255 bins). CatBoost's GPU default border_count is 128, so at their
-   own defaults we run a kernel family they would not. It fuses both
+3. **The `hist_2` fused-two-stat family is PORTED AND IS THE DISPATCH'S
+   PATH for every `maxBins <= 128`** (`hist_one_byte.cu:314-328`:
+   `HIST2_PASS(5/6/7)`, the PASS family only at 129-255 bins), matching
+   their ladder including at CatBoost's GPU default border_count of 128.
+   `hist_2_one_byte_base.mojo` + the `_5bit/_6bit/_7bit` files mirror
+   `hist_2_one_byte_base.cuh` + `hist_2_one_byte_{5,6,7}bit.cu`;
+   `launch_hist2_one_byte` in `greedy_search_helper.mojo` is their
+   `HIST2_PASS`, odd-numStats one-stat prelude included. It fuses both
    stats in one pass (half the bin reads, half the pass serialization).
-   This is the largest known missing port.
+   `pixi run check-hist2` proves exact cell-for-cell agreement with the
+   PASS family and the host tally at all three bit widths, direct and
+   gather, and FINGERPRINTS which family the dispatch launched (a planted
+   bin `(1 << bits) + 1` that hist_2 folds to fold 1 and PASS drops).
 
 A streaming probe on plain device buffers measured 90 GB/s at 20 blocks
 (M4 base, 10 GPU cores), so the substrate is not the problem; the

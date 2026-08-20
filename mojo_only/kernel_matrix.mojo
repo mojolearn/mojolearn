@@ -78,6 +78,12 @@ comptime K_SCAN = 3
 comptime K_SUBTRACT = 4
 comptime K_SCORES = 5
 comptime K_SPLIT_POINTS = 6
+#: `TPointHist2OneByte`, the FUSED TWO-STAT one-byte family CatBoost's
+#: dispatch takes at `maxBins <= 128` (`hist_one_byte.cu:315-322`). Same
+#: scratch shape as `K_HIST_ONE_BYTE` -- `BlockSize * 32` floats at their
+#: `BlockSize = 384` (`hist_2_one_byte_base.cuh:20-22`, `:169`) -- but a
+#: different kernel with a different slot layout, so it is its own row.
+comptime K_HIST_2_ONE_BYTE = 7
 
 #: NUMERIC. Lanes one private histogram copy is shared by. CatBoost's 32,
 #: pinned for every vendor because AMD's wavefront is 64 and letting it
@@ -212,7 +218,7 @@ def spec_for(kernel: Int, device: Int, mode: NumericMode) raises -> KernelSpec:
     var per_int = 8
     if kernel == K_HIST_BINARY:
         per_int = 32
-    elif kernel == K_HIST_ONE_BYTE:
+    elif kernel == K_HIST_ONE_BYTE or kernel == K_HIST_2_ONE_BYTE:
         floats_per_thread = 32
         per_int = 4
     elif kernel == K_HIST_HALF_BYTE:
@@ -225,7 +231,9 @@ def spec_for(kernel: Int, device: Int, mode: NumericMode) raises -> KernelSpec:
     # SCHEDULING: the largest block whose scratch fits this vendor, capped at
     # CatBoost's own choice because more threads than they use buys nothing
     # and costs a wider barrier.
-    var catboost_block = 384 if kernel == K_HIST_ONE_BYTE else 768
+    var catboost_block = 384 if (
+        kernel == K_HIST_ONE_BYTE or kernel == K_HIST_2_ONE_BYTE
+    ) else 768
     var block = catboost_block
     if floats_per_thread > 0:
         # SCHEDULING for the block count, but the LIMIT that bounds it is
@@ -301,14 +309,14 @@ comptime TARGET_COLUMN = COLUMN_APPLE
 
 def hist_floats_per_thread_for[kernel: Int]() -> Int:
     """Shared floats per thread. `GetHistSize()` is this times the block."""
-    if kernel == K_HIST_ONE_BYTE:
+    if kernel == K_HIST_ONE_BYTE or kernel == K_HIST_2_ONE_BYTE:
         return 32
     return 16
 
 
 def catboost_block_for[kernel: Int]() -> Int:
     """What CatBoost uses, before our shared-memory budget bites."""
-    if kernel == K_HIST_ONE_BYTE:
+    if kernel == K_HIST_ONE_BYTE or kernel == K_HIST_2_ONE_BYTE:
         return 384
     return 768
 

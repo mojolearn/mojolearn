@@ -138,6 +138,11 @@ from ported.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
     one_byte_hist_gather_kernel,
     one_byte_hist_kernel,
 )
+from ported.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_base import (
+    HIST2_BLOCK_SIZE,
+    hist2_one_byte_gather_kernel,
+    hist2_one_byte_kernel,
+)
 from ported.gpu_data.feature_blocks import PolicyBlock, blocks_for
 from ported.gpu_data.compressed_index_builder import (
     CompressedIndexLayout,
@@ -1247,9 +1252,18 @@ def launch_one_byte[bits: Int](
     mut block_hist: DeviceBuffer[DType.float32],
     mut acc_i32: DeviceBuffer[DType.int32],
     fixed_scale: Float32,
+    grid_z_stats: Int = -1,
 ) raises:
     """One one-byte launch at a comptime bit width. Direct at depth 0,
     indexed below it.
+
+    `grid_z_stats` is how many stat planes THIS LAUNCH covers, i.e. the
+    `NumStats` argument of their `PASS(Bits, NumStats)` macro
+    (`hist_one_byte.cu:283-304`). The default, `stat_count`, is their
+    `PASS(8, numStats)` arm. `launch_hist2_one_byte` passes 1 for the
+    odd-`numStats` prelude, their `PASS(Bits, 1)` inside `HIST2_PASS`
+    (`hist_one_byte.cu:306-312`), which covers stat 0 alone while the
+    kernel's `statCount` stride stays the full `stat_count`.
 
     OUR NAMES DO NOT MEAN THEIRS, AND THE MISMATCH IS A TRAP.
 
@@ -1291,6 +1305,9 @@ def launch_one_byte[bits: Int](
     `part.Size > FastSortSize()` at 500000 (`split_points.cu:737, :749`), and
     our leaves are far below it, so `SortWithoutCub` is their path too.
     """
+    var gz = stat_count
+    if grid_z_stats >= 0:
+        gz = grid_z_stats
     if depth == 0:
         ctx.enqueue_function[one_byte_hist_kernel[bits]](
             blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
@@ -1321,10 +1338,10 @@ def launch_one_byte[bits: Int](
                 feature_groups_for(POLICY_ONE_BYTE, Int(blk.n_features))
                 * replication_for(
                     feature_groups_for(POLICY_ONE_BYTE, Int(blk.n_features)),
-                    n_live, stat_count, sm_count,
+                    n_live, gz, sm_count,
                 ),
                 n_live,
-                stat_count,
+                gz,
             ),
             block_dim=(ONE_BYTE_BLOCK_SIZE, 1, 1),
         )
@@ -1359,14 +1376,134 @@ def launch_one_byte[bits: Int](
                 feature_groups_for(POLICY_ONE_BYTE, Int(blk.n_features))
                 * replication_for(
                     feature_groups_for(POLICY_ONE_BYTE, Int(blk.n_features)),
-                    n_live, stat_count, sm_count, gather=True,
+                    n_live, gz, sm_count, gather=True,
                 ),
                 n_live,
-                stat_count,
+                gz,
             ),
             block_dim=(ONE_BYTE_BLOCK_SIZE, 1, 1),
         )
 
+
+
+def launch_hist2_one_byte[bits: Int](
+    ctx: DeviceContext,
+    mut blk: DeviceBlock,
+    depth: Int,
+    n_live: Int,
+    n_rows: Int,
+    stat_count: Int,
+    max_leaves: Int,
+    sm_count: Int,
+    line: Int,
+    base: Int,
+    mut cindex: DeviceBuffer[DType.uint32],
+    mut row_index: DeviceBuffer[DType.uint32],
+    mut stats: DeviceBuffer[DType.float32],
+    mut p_off: DeviceBuffer[DType.uint32],
+    mut p_sz: DeviceBuffer[DType.uint32],
+    mut ids: DeviceBuffer[DType.uint32],
+    mut block_hist: DeviceBuffer[DType.float32],
+    mut acc_i32: DeviceBuffer[DType.int32],
+    fixed_scale: Float32,
+) raises:
+    """Their `HIST2_PASS(Bits)` macro plus `ComputeHist2OneByteBits`
+    (`hist_one_byte.cu:306-312` and `hist_2_one_byte_base.cuh:155-197`
+    direct / `:245-284` gather, the multi-part overloads), as one launcher.
+
+        if (numStats % 2 != 0) {
+            PASS(Bits, 1)                                   // stat 0 alone
+            ComputeHist2OneByteBits<Bits, true>(...);       // pairs, shifted
+        } else {
+            ComputeHist2OneByteBits<Bits, false>(...);      // pairs
+        }
+
+    Our boosting path runs `stat_count = 2`, so the even arm is what runs;
+    the odd arm is ported because the ladder is theirs, and the prelude goes
+    through `launch_one_byte[bits]` with `grid_z_stats = 1`, which is their
+    `PASS(Bits, 1)` at the same `bits`.
+
+    THE GRID (`hist_2_one_byte_base.cuh:172-180` direct, `:259-267` gather):
+
+        numBlocks.z = (numStats - IsOdd) / 2;               // STAT PAIRS
+        numBlocks.y = partCount;
+        numBlocks.x = (fCount + 3) / 4;
+        numBlocks.x *= CeilDivide(maxActiveBlocks, x * y * z);
+
+    Copied from THEIR file, not reused from the PASS family: `z` is the PAIR
+    count, not the stat count, and BOTH multi-part overloads divide the
+    plain `maxActiveBlocks` -- the gather arm does NOT get the PASS family's
+    doubled target (`:267` against `hist_one_byte.cu:356`), so
+    `replication_for` is called with `gather=False` on both arms here.
+    """
+    var is_odd = stat_count % 2
+    if is_odd == 1:
+        # `PASS(Bits, 1)`: the one-stat PASS-family kernel covers stat 0.
+        launch_one_byte[bits](
+            ctx, blk, depth, n_live, n_rows, stat_count, max_leaves,
+            sm_count, line, base, cindex, row_index, stats, p_off,
+            p_sz, ids, block_hist, acc_i32, fixed_scale, grid_z_stats=1,
+        )
+
+    var pairs = (stat_count - is_odd) // 2
+    if pairs == 0:
+        return
+
+    var groups = feature_groups_for(POLICY_ONE_BYTE, Int(blk.n_features))
+    var replicas = replication_for(groups, n_live, pairs, sm_count)
+
+    if depth == 0:
+        if is_odd == 1:
+            ctx.enqueue_function[hist2_one_byte_kernel[bits, True]](
+                blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
+                blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
+                Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
+                Int32(base), stats.unsafe_ptr(), Int32(n_rows),
+                p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
+                block_hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
+                Int32(max_leaves), Int32(stat_count),
+                grid_dim=(groups * replicas, n_live, pairs),
+                block_dim=(HIST2_BLOCK_SIZE, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[hist2_one_byte_kernel[bits, False]](
+                blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
+                blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
+                Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
+                Int32(base), stats.unsafe_ptr(), Int32(n_rows),
+                p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
+                block_hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
+                Int32(max_leaves), Int32(stat_count),
+                grid_dim=(groups * replicas, n_live, pairs),
+                block_dim=(HIST2_BLOCK_SIZE, 1, 1),
+            )
+    else:
+        if is_odd == 1:
+            ctx.enqueue_function[hist2_one_byte_gather_kernel[bits, True]](
+                blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
+                blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
+                Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
+                Int32(base), row_index.unsafe_ptr(),
+                stats.unsafe_ptr(), Int32(n_rows),
+                p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
+                block_hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
+                Int32(max_leaves), Int32(stat_count),
+                grid_dim=(groups * replicas, n_live, pairs),
+                block_dim=(HIST2_BLOCK_SIZE, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[hist2_one_byte_gather_kernel[bits, False]](
+                blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
+                blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
+                Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
+                Int32(base), row_index.unsafe_ptr(),
+                stats.unsafe_ptr(), Int32(n_rows),
+                p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids.unsafe_ptr(),
+                block_hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
+                Int32(max_leaves), Int32(stat_count),
+                grid_dim=(groups * replicas, n_live, pairs),
+                block_dim=(HIST2_BLOCK_SIZE, 1, 1),
+            )
 
 
 def feature_groups_for(policy: Int, n_features: Int) -> Int:
@@ -1679,40 +1816,44 @@ def launch_histograms_for_blocks(
                     block_dim=(BLOCK_SIZE, 1, 1),
                 )
         else:
-            # One-byte is comptime-parameterized by bit width, and the width
-            # must MATCH the block's fold count.
+            # THEIR maxBins LADDER, `ComputeHistOneByte`
+            # (`hist_one_byte.cu:314-328`):
             #
-            # This previously dispatched [8] for every one-byte block with a
-            # comment calling the width a tuning question. A byte-level probe
-            # falsified that: a 64-fold block dispatched at 8 bits returned 2
-            # of 4 features with wrong counts, while every standalone check
-            # passed at a width MATCHED to its folds and never mismatched.
+            #     maxBins <= 32   HIST2_PASS(5)
+            #     maxBins <= 64   HIST2_PASS(6)
+            #     maxBins <= 128  HIST2_PASS(7)
+            #     maxBins <= 255  PASS(8, numStats)
             #
-            # `bits` sets `InnerHistBitsCount = bits - 5`, which decides the
-            # slot arithmetic `(bin >> 5) & mask` AND the number of passes, so
-            # a width wider than the data changes where bins land.
-            var ob = 5
-            if blk.max_folds > 128:
-                ob = 8
-            elif blk.max_folds > 64:
-                ob = 7
-            elif blk.max_folds > 32:
-                ob = 6
-
-            if ob == 5:
-                launch_one_byte[5](
+            # Everything up to 128 bins -- their own GPU default border
+            # count included -- runs the FUSED TWO-STAT `TPointHist2OneByte`
+            # family; only 129-255 runs the one-stat `TPointHistOneByte`
+            # PASS family. This dispatch routed ALL one-byte shapes through
+            # the PASS family until 2026-08-19, a wrong-kernel-family misport
+            # of exactly the shape PORTING_RULES 0b-i names: the ported
+            # kernel was faithful and their dispatch never sends
+            # `maxBins <= 128` to it. `mojo_only/hist2_check.mojo` covers
+            # both families on the same input and fingerprints WHICH family
+            # this dispatch launched.
+            #
+            # `bits` must MATCH the block's fold count in either family: it
+            # decides the slot arithmetic and the skip value, so a width
+            # wider than the data changes where bins land. A byte-level
+            # probe established that for the PASS family (64-fold block at
+            # 8 bits: 2 of 4 features wrong).
+            if blk.max_folds <= 32:
+                launch_hist2_one_byte[5](
                     ctx, blk, depth, n_live, n_rows, stat_count, max_leaves,
                     sm_count, line, base, cindex, row_index, stats, p_off,
                     p_sz, ids, block_hist, acc_i32, fixed_scale,
                 )
-            elif ob == 6:
-                launch_one_byte[6](
+            elif blk.max_folds <= 64:
+                launch_hist2_one_byte[6](
                     ctx, blk, depth, n_live, n_rows, stat_count, max_leaves,
                     sm_count, line, base, cindex, row_index, stats, p_off,
                     p_sz, ids, block_hist, acc_i32, fixed_scale,
                 )
-            elif ob == 7:
-                launch_one_byte[7](
+            elif blk.max_folds <= 128:
+                launch_hist2_one_byte[7](
                     ctx, blk, depth, n_live, n_rows, stat_count, max_leaves,
                     sm_count, line, base, cindex, row_index, stats, p_off,
                     p_sz, ids, block_hist, acc_i32, fixed_scale,
