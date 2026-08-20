@@ -173,12 +173,21 @@ histogram accumulate ~68, zero ~8, fixed-to-float ~7, bridge ~2, reorder
 ~12, score ~11, partition stats ~5.4, split+sequence ~3.5, the rest under
 2. Three findings out of it, all against their source:
 
+0. **`ctx.get_attribute` costs 1.26 ms PER CALL on Metal** (measured: 100
+   calls, 126 ms). `compute_partition_stats` and `launch_reorder_in_leaves`
+   each queried MULTIPROCESSOR_COUNT once per level, ~16 ms/tree combined
+   on covtype. Their `TArchProps::SMCount()` is a CACHED static read once
+   at init, so threading one queried value through is THEIR behavior, not
+   a deviation. After caching: covtype partition stats 10.5 -> 2.0 ms,
+   reorder 12.3 -> 4.4 ms per tree. The reorder-is-at-the-machine-ceiling
+   conclusion drawn earlier the same day was WRONG for this reason: the
+   gather probe priced the kernels right (~4 ms), and the other 8 ms was
+   this host call hiding inside the phase.
 1. **The score kernel ran at grid (1,1,1).** Theirs is
    `argmaxBlockCount = min(ceil(binFeatureCount/256), 64)` blocks with one
    `TBestSplitProperties` per block and a host reduce
    (`greedy_search_helper.cpp:439`, `:513-529`). Fixed; 11 ms became 1.9,
-   oracle still 48 of 48. Curve after: {100k: 42.4, 200k: 48.2,
-   400k: 63.7, 800k: 107.1} ms/tree.
+   oracle still 48 of 48.
 2. **Every gather-arm histogram launch divides `2 * maxActiveBlocks`**
    (`hist_one_byte.cu:356`); this port used the direct-load number for
    both arms. Fixed (no effect at this shape, where the other grid axes
@@ -212,3 +221,18 @@ Two separate tracks, and they are not the same work:
 2. **To make it faster**: cut the per-level host round trips and launches.
    Pack the five split-descriptor copies into one. Keep the split resolution
    on the device so the argmax never returns to the host.
+
+### Where the numbers stand, end of 2026-08-19
+
+All same-window, interleaved where two arms are named. Synthetic 800k x 100
+depth 6 at 254 borders: 105 ms/tree in the morning, **91 after the evening
+round** (score dispatch, memset, FAST-skip, sm_count caching); at
+CatBoost's GPU-DEFAULT 128 borders the same tree is **~50 ms through the
+newly ported hist_2 family** (interleaved A/B: 0.52-0.57x of the 254 arm).
+**covtype 581k x 53, interleaved against CatBoost CPU on the same M4: ours
+37.5 ms/tree vs theirs 10.5 at 254 borders, 36.6 vs 10.1 at 128 — 3.5x
+behind, down from 4.9x at the morning baseline.** Phase split on covtype
+after the fixes: hist ~10.5, reorder ~4.4, splitseq ~4.5, pstats ~2.0,
+score 1.6, everything else under 2. The box's GPU window drifted ~4.5x for
+about an hour mid-evening (another session's GPU benchmark); every
+cross-window comparison taken in that hole was discarded.

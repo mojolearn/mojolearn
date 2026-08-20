@@ -991,6 +991,7 @@ def run_tree(
         compute_partition_stats(
             ctx, n_live, max_live_rows, stat_count, n_rows,
             ids_a, p_off, p_sz, stats, stat_partials, part_stats,
+            sm_count=sm_count,
         )
         ctx.synchronize()
 
@@ -1073,6 +1074,7 @@ def run_tree(
         _ = launch_reorder_in_leaves(
             ctx, n_live, wide, max_live_rows, stat_count, n_rows,
             ids_a, p_off, p_sz, stats, new_stats, row_index, new_index, gmap,
+            sm_count=sm_count,
         )
 
         # ---- 5. one leaf becomes two ------------------------------------
@@ -1155,6 +1157,7 @@ def run_tree(
     compute_partition_stats(
         ctx, n_live, max_live_rows, stat_count, n_rows,
         ids_a, p_off, p_sz, stats, stat_partials, part_stats,
+        sm_count=sm_count,
     )
     var leaf_values = ctx.enqueue_create_buffer[DType.float32](max_leaves)
     ctx.enqueue_function[compute_leaf_values_kernel](
@@ -2516,6 +2519,7 @@ def run_tree_layout(
         compute_partition_stats(
             ctx, n_live, max_live_rows, stat_count, n_rows,
             ids_a, p_off, p_sz, stats, stat_partials, part_stats,
+            sm_count=sm_count,
         )
         mgr.stream_kernel()
 
@@ -2741,6 +2745,7 @@ def run_tree_layout(
         var reorder_launches = launch_reorder_in_leaves(
             ctx, n_live, wide, max_live_rows, stat_count, n_rows,
             ids_a, p_off, p_sz, stats, new_stats, row_index, new_index, gmap,
+            sm_count=sm_count,
         )
         for _ in range(reorder_launches):
             mgr.stream_kernel()
@@ -2869,6 +2874,7 @@ def run_tree_layout(
         compute_partition_stats(
             ctx, n_live, max_live_rows, stat_count, n_rows,
             ids_a, p_off, p_sz, stats, stat_partials, part_stats,
+            sm_count=sm_count,
         )
         mgr.stream_kernel()
 

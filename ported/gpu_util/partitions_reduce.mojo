@@ -232,6 +232,7 @@ def compute_partition_stats(
     mut stats: DeviceBuffer[DType.float32],
     mut partials: DeviceBuffer[DType.float32],
     mut out_stats: DeviceBuffer[DType.float32],
+    sm_count: Int = -1,
 ) raises:
     """`ComputePartitionStats`, both phases.
 
@@ -261,9 +262,15 @@ def compute_partition_stats(
     moved. It did not (48 of 48 after this change).
     """
     _ = max_leaf_rows
-    var max_chunks = partition_stats_chunks(
-        ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT), n_stats
-    )
+    # `sm_count` is threaded in rather than queried here because ONE
+    # `ctx.get_attribute` costs 1.26 ms on this Metal device (measured, 100
+    # calls in 126 ms) and this function runs once per level. Their
+    # `TArchProps::SMCount()` is a CACHED static read once at init, so the
+    # caching is theirs; querying per call was ours and cost ~9 ms/tree.
+    var sm = sm_count
+    if sm < 0:
+        sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+    var max_chunks = partition_stats_chunks(sm, n_stats)
 
     ctx.enqueue_function[partition_stats_partial_kernel](
         leaves.unsafe_ptr(),

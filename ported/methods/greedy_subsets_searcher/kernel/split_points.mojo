@@ -670,6 +670,7 @@ def launch_reorder_in_leaves(
     mut row_index: DeviceBuffer[DType.uint32],
     mut temp_index: DeviceBuffer[DType.uint32],
     mut gather_map: DeviceBuffer[DType.uint32],
+    sm_count: Int = -1,
 ) raises -> Int:
     """`TSplitPointsKernel::Run` (`split_points.cpp:64-136`), the whole if/else.
 
@@ -763,9 +764,13 @@ def launch_reorder_in_leaves(
     # `wide` is still in this signature only because the call sites live in
     # `greedy_search_helper.mojo`, which another lane owns this round. It is
     # READ BY NOTHING now and the parameter should go with the call sites.
-    var grid_x = split_points_grid_x(
-        n_leaf_slots, ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
-    )
+    # Threaded in, queried only when the caller has nothing: one
+    # `ctx.get_attribute` costs 1.26 ms on Metal (measured) and this runs
+    # once per level. Their `TArchProps::SMCount()` is a cached static.
+    var sm = sm_count
+    if sm < 0:
+        sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+    var grid_x = split_points_grid_x(n_leaf_slots, sm)
 
     var launches = 0
     var first_stat = 0
