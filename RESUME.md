@@ -493,7 +493,26 @@ rep per arm, scored on the untouched 20%. Ours 0.0595-0.0610 test mse
 vs theirs 0.0605-0.0625 -- at or slightly below theirs every rep. The
 stochastic mode's quality claim rests on holdout now, not train mse.
 
-Next known levers, in order: categoricals/CTRs (multi-session; recon
-notes below when they exist), the epsilon dataset.
+### 2026-08-21, late (e726e11): one-hot, TRUE bit-determinism, the snap
+
+CTR RECON STEP 1 LANDED: one-hot categorical splits end to end
+(build_layout flags -> scan skip -> equality split -> predict's
+takeEqual), gated analytically -- a 3-category y=(cat==1) fixture that
+ONLY equality separates at depth 1 (6.4e-6 vs 0.167).
+
+AND THE DETERMINISM STORY CLOSED: a flaky bootstrap gate exposed that
+functionValue and the fixed-scale magnitudes ended in FLOAT ATOMICS
+(the historical last-bit loss jitter, and same-seed fits could differ).
+Fixed-order per-block folds replaced them; the corrected magnitude
+(exact vs float64) shifted the scale 1.3e-6 and re-rolled the dither,
+which moved a model 2.7% -- so choose_scale now SNAPS DOWN TO A POWER
+OF TWO, making the scale a step function immune to last-bit magnitude
+noise. Result: every rep's loss is BIT-IDENTICAL and the models match
+CatBoost closer than ever (synth@128 9 sig figs, @254 8, covtype 7-8;
+the halved resolution margin at 254 held).
+
+Next known levers, in order: CTR steps 2-5 (RECON_CTRS.md: FeatureFreq,
+then the radix-sort/segmented-scan vendor checks, then history CTRs),
+the epsilon dataset.
 Beyond this box: a Pro/Max chip multiplies OUR arms by 2-4x and theirs
 by ~1.5x.
