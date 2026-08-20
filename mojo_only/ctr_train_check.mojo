@@ -41,12 +41,18 @@ column rather than replacing it, turns all three assertions red at once:
 `loss/var` 0.4907 against the RAW arm's 0.4971 (so the 5x separation
 assertion fires), and `4 columns for 3 inputs`.
 
-## And four refusals, because a refusal nobody runs is an unchecked branch
+## Applying the CTR model, and three refusals
 
-* `predict_floats` on a model with CTR columns -- the CTR values are a
-  statistic of the LEARN pool, and scoring new rows needs the final CTR
-  tables a model file would carry. There is no model file format here for
-  the numeric case either (`RECON_CTRS.md` step 5), so it refuses.
+`predict_floats` on a CTR model USED TO REFUSE, because the CTR values are
+a statistic of the LEARN pool and scoring a new row needs the final tables.
+The tables landed (`gbdt/models/ctr_value_table.mojo`), so that line is
+gone rather than annotated: the model now scores raw rows, and this file
+asserts the applied mse reproduces the fit's. The refusal that remains is
+for a model whose tables are missing, and it lives beside its own gate in
+`mojo_only/ctr_apply_check.mojo`.
+
+Three refusals, because a refusal nobody runs is an unchecked branch:
+
 * a feature in BOTH `cat_features` and `one_hot`.
 * a constant categorical column -- their
   `CB_ENSURE(uniqueValues > 1, "Error: useless catFeature found")`.
@@ -224,14 +230,41 @@ def check_ctr_train() raises:
             + String(ctr_loss / variance)
         )
 
-    # --- the four refusals ---------------------------------------------
+    # --- APPLYING the CTR model, which used to be a refusal ------------
+    #
+    # `predict_floats` REFUSED a model with CTR columns for as long as the
+    # model carried no apply-time tables. It carries them now
+    # (`gbdt/models/ctr_value_table.mojo`, their `ctr_data.hash_map`), so
+    # the refusal has become an assertion that it SCORES: FeatureFreq is
+    # permutation-independent (`ctr_type.cpp:44-58`), so the table
+    # reproduces the learn column exactly and the applied model must
+    # reproduce the fit's own loss. The refusal that survives is the one
+    # for a model whose tables are MISSING, and
+    # `mojo_only/ctr_apply_check.mojo` holds both halves per row.
+    print("  applying the CTR model to raw rows:")
+    var ctr_preds = predict_floats(ctx, ctr_model, x, n)
+    var cse = Float64(0.0)
+    for r in range(n):
+        var d = Float64(ctr_preds[r]) - Float64(y[r])
+        cse += d * d
+    var ctr_pmse = cse / Float64(n)
+    var drift = ctr_pmse - ctr_loss
+    if drift < 0:
+        drift = -drift
+    if drift > 1e-12 + 1e-5 * ctr_loss:
+        failures.append(
+            String("predict_floats on the CTR model does not reproduce")
+            + String(" the fit: ")
+            + String(ctr_pmse)
+            + String(" vs ")
+            + String(ctr_loss)
+        )
+    else:
+        print("    raw rows scored through the CTR tables; mse",
+              ctr_pmse, "reproduces the fit's", ctr_loss)
+
+    # --- the three refusals that remain ---------------------------------
     print("  refusals:")
-    var r1 = False
-    try:
-        _ = predict_floats(ctx, ctr_model, x, n)
-    except:
-        r1 = True
-    _expect_raise(failures, r1, String("predict_floats on a CTR model"))
 
     var both = List[Bool]()
     for f in range(CTRT_FEATURES):

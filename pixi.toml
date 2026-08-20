@@ -80,6 +80,14 @@ check-catboost-apply = "mojo run -I . mojo_only/catboost_apply_check.mojo"
 # never seen to fail is not evidence. Own main(): it trains three models and
 # runs 400,000 float round trips.
 check-model-io = "mojo run -I . mojo_only/model_io_check.mojo"
+
+# A trained CATEGORICAL model saved, loaded and applied to RAW rows,
+# through the host apply AND the device evaluator, against an independent
+# host tally per row. Covers the CTR tables (their `ctr_data.hash_map`),
+# the split TYPE the model now carries, and the evaluator's XorMask
+# one-hot arm. Sweeps cardinality 1..255 across every `policy_for_fold_count`
+# step, and every sabotage is proved to turn it red.
+check-ctr-apply = "mojo run -I . mojo_only/ctr_apply_check.mojo"
 check-gpu-lib-worker = "mojo run -I . mojo_only/gpu_lib_worker_check.mojo"
 
 # The segmented scan the CTR calcers run on -- a device-wide exclusive scan

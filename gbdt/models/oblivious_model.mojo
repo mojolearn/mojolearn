@@ -28,16 +28,47 @@ for free, and it would not have if we had kept `2i` and `2i+1`.
 """
 
 
+# --- EBinSplitType (`cuda/data/feature.h:21-24`) -------------------------
+#
+# THEIR ORDER AND THEIR VALUES, so a number read out of one of their
+# structures means the same thing here.
+
+comptime BIN_SPLIT_TAKE_BIN = 0
+comptime BIN_SPLIT_TAKE_GREATER = 1
+
+
+def bin_split_type_name(t: Int) -> String:
+    if t == BIN_SPLIT_TAKE_BIN:
+        return String("TakeBin")
+    if t == BIN_SPLIT_TAKE_GREATER:
+        return String("TakeGreater")
+    return String("<unknown split type>")
+
+
 @fieldwise_init
 struct TBinarySplit(Copyable, ImplicitlyCopyable, Movable):
-    """Their `TBinarySplit`. `SplitType` is not carried: every split here is
-    a float feature compared against a border, which is their
-    `EBinSplitType::TakeBin` case. One-hot splits change the PREDICATE and
-    that lives in the kernels, so the day categorical features land this
-    struct grows a field."""
+    """Their `TBinarySplit` (`cuda/data/feature.h:35-38`), all three
+    members.
+
+    `split_type` is their `EBinSplitType`: `TakeGreater` compares the bin
+    against a border (`featureVal > value`) and `TakeBin` tests equality
+    (`featureVal == value`), which is the one-hot predicate. Their
+    `ToSplit` sets it from `manager.IsCat(props.FeatureId)`
+    (`cuda/methods/helpers.cpp:164-170`) and every consumer switches on it
+    (`add_oblivious_tree_model_doc_parallel.cpp:43`, `:139`).
+
+    **It used to be absent, and the predicate came off the LAYOUT.** That
+    is what their training-side apply does too, but theirs asserts the two
+    agree (`CB_ENSURE(dataSet.IsOneHot(split.FeatureId))`) and ours could
+    not, because the model did not know. A model read back from a file has
+    no layout in hand until one is rebuilt from its own fold counts, so a
+    predicate that lives only in the layout is a predicate the file does
+    not carry.
+    """
 
     var feature_id: Int32
     var bin_idx: Int32
+    var split_type: Int32
 
 
 struct TObliviousTreeStructure(Copyable, Movable):
@@ -57,11 +88,14 @@ struct TObliviousTreeStructure(Copyable, Movable):
         return 1 << self.get_depth()
 
     def has_split(self, candidate: TBinarySplit) -> Bool:
-        """Their `HasSplit`."""
+        """Their `HasSplit` (`oblivious_model.h:24-31`), which compares whole
+        `TBinarySplit`s -- and their `operator==` ties all THREE members
+        (`feature.h:59-61`), split type included."""
         for i in range(len(self.splits)):
             if (
                 self.splits[i].feature_id == candidate.feature_id
                 and self.splits[i].bin_idx == candidate.bin_idx
+                and self.splits[i].split_type == candidate.split_type
             ):
                 return True
         return False

@@ -58,9 +58,14 @@ tolerance on the model.
     features <n_features> <n_one_hot_flags>
     trees <n_trees>
     losses <n_losses>
-    feature <f> folds <k> one_hot <0|1> type float borders <n> <tok>...
+    ctr_columns <n>                        (only when n is non-zero)
+    feature <f> folds <k> one_hot <0|1> type <float|cat|ctr> borders <n> <tok>...
+    ctr_table <column> source <f> type <name> prior_num <tok> prior_denom <tok>
+              shift <tok> scale <tok> denom <int> entries <n>
+    ctr_entry <column> <category> <count>
     tree <t> depth <d> dim <k> weights <0|1>
     split <t> <level> <feature_id> <bin_idx>
+    split <t> <level> <feature_id> <bin_idx> split_type take_bin
     leaf <t> <leaf_index> <tok>
     weight <t> <leaf_index> <tok>          (only when weights is 1)
     loss <iteration> <tok64>
@@ -90,46 +95,66 @@ permutation is invisible to any check that sums, so the index is in the file
 where a diff can see it, and the loader requires it to be exactly the
 position it lands in.
 
-============================ THE CTR SEAM ============================
-A later lane needs to store CTR tables so a categorical model can score raw
-data (`RECON_CTRS.md` step 5). This is where they go and nothing here has to
-change for them to arrive.
+========================== THE CTR SEAM, BUILT =========================
+A trained CATEGORICAL model scores raw data through these records. Written
+as a plan in this block; this is what landed, and the plan is replaced
+rather than annotated.
 
-* The `feature` record already carries `type float`. A CTR-valued feature
-  writes `type ctr` and a raw categorical writes `type cat`. A reader of
-  this version REFUSES an unknown type by name, so an old reader never
-  half-loads a categorical model.
+* The `feature` record's `type` token is `float` for a numeric column,
+  `cat` for a one-hot categorical one (its values ARE its bins and its
+  splits are equality tests) and `ctr` for a CTR-valued column. A reader
+  REFUSES an unknown type by name, so an old reader never half-loads a
+  categorical model. `type cat` and the `one_hot` flag must agree, and the
+  loader raises if they do not: two spellings of one fact are two chances
+  to be wrong.
 * The CTR tables go in their own records AFTER the `feature` block and
-  before the first `tree`:
-
-      ctr_table <feature_id> <ctr_type> <prior_num>/<hex> <prior_denom>/<hex>
-      ctr_entry <feature_id> <category_hash> <value>/<hex>
-      ctr_borders <feature_id> <n> <tok>...
-
-  `ctr_table` mirrors their `TCtrFeature`'s `prior_numerator` /
-  `prior_denomerator` (`json_model_helpers.cpp:104-114`), `ctr_borders`
-  their `TCtrFeature::Borders` -- the CTR VALUE binarization, which is
-  Uniform-15 and NOT the GreedyLogSum of a numeric feature
-  (`cat_feature_options.cpp:169`) -- and `ctr_entry` is the category-to-value
-  mapping their `TCtrValueTable` holds, the thing an applied model cannot do
-  without.
-* A model with no categorical features writes NONE of these records, so
-  every file this version writes stays byte-identical when they land, and
-  the `format` version stays 1 for float-only models.
-* What must grow beside them, named so it is not rediscovered:
-  `TBinarySplit` needs the split TYPE their `TSplitType` carries (its
-  docstring in `oblivious_model.mojo` already says so), because a one-hot
-  split is a different predicate and today the predicate is recovered from
-  the LAYOUT rather than from the model. And `gbdt/models/cuda/evaluator.mojo`
-  has no one-hot arm at all: its `XorMask` slot is documented as staying
-  zero, so a categorical model cannot be scored through the device evaluator
-  until that lands. Neither is built here.
+  before the first `tree`. `ctr_table` mirrors their `TCtrFeature`'s
+  `prior_numerator` / `prior_denomerator` (`json_model_helpers.cpp:104-114`)
+  plus the `shift` and `scale` of their `TModelCtr` (`online_ctr.h:260-266`)
+  and the `CounterDenominator` of their `TCtrValueTable`; `ctr_entry` is
+  their `ctr_data.hash_map` (`json_model_helpers.cpp:440-482`), which for a
+  `FeatureFreq` or `Counter` table stores ONE INTEGER per category and not
+  a value. The value is formed at apply time by `TModelCtr::Calc`; see
+  `gbdt/models/ctr_value_table.mojo` for why the counts and not the values
+  are what travels.
+* **`ctr_borders` was in the plan and is NOT written**, because in this
+  format it would be the same numbers twice. Their `TCtrFeature::Borders`
+  exists because a CTR feature is not a `TFloatFeature` in their model and
+  carries its own binarization; here a CTR column IS a column of the
+  feature table, so its `feature` record already carries exactly those
+  borders -- `train()` gives it its own grid
+  (`batch_binarized_ctr_calcer.cpp:57-63`, MinEntropy-15 for FeatureFreq)
+  and stores it there. A second copy would be a second thing to corrupt.
+* A model with no categorical features writes NONE of these records and no
+  `split_type` token, so every file this format wrote before they landed
+  is byte-identical to what it writes now, and the `format` version stays
+  1 for float-only models. MEASURED, not asserted: an 8-tree float-only
+  model's 8022 bytes hash the same before and after this change.
+* `split` grows a TRAILING `split_type take_bin` pair, and only on a
+  one-hot split. Their `TBinarySplit` carries `EBinSplitType` as a member
+  (`cuda/data/feature.h:38`) and their `ToSplit` sets it from
+  `manager.IsCat` (`cuda/methods/helpers.cpp:164-170`); it is trailing and
+  conditional here for exactly the byte-identity rule above. The loader
+  cross-checks it against the feature's own type, which is their
+  `CB_ENSURE(dataSet.IsOneHot(split.FeatureId))`
+  (`add_oblivious_tree_model_doc_parallel.cpp:43`).
+* `ctr_columns` is the SAFETY field and it predates the tables: a model
+  that carries CTR columns and no tables must load as one that still
+  REFUSES to score. The refusal lifts because the tables are PRESENT and
+  cover every declared CTR column, never because the count went missing.
 ======================================================================
 """
 
 from std.memory import bitcast
 
+from gbdt.models.ctr_value_table import (
+    TCtrValueTable,
+    ctr_type_from_name,
+)
+from gbdt.ctrs.ctr import ctr_type_name
 from gbdt.models.oblivious_model import (
+    BIN_SPLIT_TAKE_BIN,
+    BIN_SPLIT_TAKE_GREATER,
     TAdditiveModel,
     TBinarySplit,
     TObliviousTreeModel,
@@ -304,16 +329,70 @@ def model_text(tm: TrainedModel) raises -> String:
     if tm.ctr_column_count != 0:
         out += String("ctr_columns ") + String(tm.ctr_column_count) + "\n"
 
+    # which columns a CTR table stands behind, so the `type` token can say
+    # so. A column is `ctr` iff a table names it; the count in the header is
+    # a SEPARATE, older field and the two are cross-checked on load.
+    var table_of_column = List[Int]()
+    for _ in range(n_features):
+        table_of_column.append(-1)
+    for i in range(len(tm.ctr_tables)):
+        var c = tm.ctr_tables[i].column
+        if c < 0 or c >= n_features:
+            raise Error(
+                "a CTR table names column " + String(c) + " of "
+                + String(n_features)
+            )
+        if table_of_column[c] != -1:
+            raise Error("two CTR tables name column " + String(c))
+        table_of_column[c] = i
+
     for f in range(n_features):
-        var flag = 1 if len(tm.one_hot) != 0 and tm.one_hot[f] else 0
+        var is_one_hot = len(tm.one_hot) != 0 and tm.one_hot[f]
+        var flag = 1 if is_one_hot else 0
+        var kind = String("float")
+        if table_of_column[f] >= 0:
+            if is_one_hot:
+                raise Error(
+                    "column " + String(f) + " is flagged one-hot AND carries"
+                    " a CTR table; their dispatch gives a one-hot feature no"
+                    " CTRs at all (binarizations_manager.cpp:106-109)"
+                )
+            kind = String("ctr")
+        elif is_one_hot:
+            kind = String("cat")
         var line = (
             String("feature ") + String(f) + " folds "
             + String(tm.fold_counts[f]) + " one_hot " + String(flag)
-            + " type float borders " + String(len(tm.borders[f]))
+            + " type " + kind + " borders " + String(len(tm.borders[f]))
         )
         for b in range(len(tm.borders[f])):
             line += " " + f32_token(tm.borders[f][b])
         out += line + "\n"
+
+    # the tables, in COLUMN order, each followed by its own entries. Their
+    # `ctr_data` is a map keyed by the ctr's identity; ours is keyed by the
+    # column, because a column is what this model applies.
+    for f in range(n_features):
+        var ti = table_of_column[f]
+        if ti < 0:
+            continue
+        ref tab = tm.ctr_tables[ti]
+        out += (
+            String("ctr_table ") + String(f)
+            + " source " + String(tab.source_feature)
+            + " type " + ctr_type_name(tab.ctr_type)
+            + " prior_num " + f32_token(tab.prior_num)
+            + " prior_denom " + f32_token(tab.prior_denom)
+            + " shift " + f32_token(tab.shift)
+            + " scale " + f32_token(tab.scale)
+            + " denom " + String(tab.counter_denominator)
+            + " entries " + String(len(tab.counts)) + "\n"
+        )
+        for c in range(len(tab.counts)):
+            out += (
+                String("ctr_entry ") + String(f) + " " + String(c) + " "
+                + String(tab.counts[c]) + "\n"
+            )
 
     for t in range(tm.model.size()):
         ref weak = tm.model.weak_models[t]
@@ -337,11 +416,24 @@ def model_text(tm: TrainedModel) raises -> String:
             + "\n"
         )
         for level in range(depth):
-            out += (
+            var line = (
                 String("split ") + String(t) + " " + String(level) + " "
                 + String(Int(weak.structure.splits[level].feature_id)) + " "
-                + String(Int(weak.structure.splits[level].bin_idx)) + "\n"
+                + String(Int(weak.structure.splits[level].bin_idx))
             )
+            # TRAILING AND CONDITIONAL, so a float-only model's bytes do not
+            # move. TakeGreater is the absent case because it is every split
+            # this format could carry before one-hot splits existed.
+            var st = Int(weak.structure.splits[level].split_type)
+            if st == BIN_SPLIT_TAKE_BIN:
+                line += " split_type take_bin"
+            elif st != BIN_SPLIT_TAKE_GREATER:
+                raise Error(
+                    "tree " + String(t) + " level " + String(level)
+                    + " has split type " + String(st)
+                    + ", which is neither TakeBin nor TakeGreater"
+                )
+            out += line + "\n"
         for i in range(n_leaves):
             out += (
                 String("leaf ") + String(t) + " " + String(i) + " "
@@ -421,6 +513,20 @@ def load_model_text(text: String) raises -> TrainedModel:
     var losses_seen = 0
     var line_no = 0
 
+    # the CTR half
+    var feature_kinds = List[String]()
+    var ctr_tables = List[TCtrValueTable]()
+    var ctr_columns = List[Int]()
+    var ctr_sources = List[Int]()
+    var ctr_types = List[Int]()
+    var ctr_prior_num = List[Float32]()
+    var ctr_prior_denom = List[Float32]()
+    var ctr_shift = List[Float32]()
+    var ctr_scale = List[Float32]()
+    var ctr_denom = List[Int]()
+    var ctr_declared = List[Int]()
+    var ctr_counts = List[List[Int]]()
+
     for raw in text.split("\n"):
         line_no += 1
         var line = String(raw)
@@ -483,17 +589,30 @@ def load_model_text(text: String) raises -> TrainedModel:
                 _expect(t, 2, String("folds"), String("feature"))
                 _expect(t, 4, String("one_hot"), String("feature"))
                 _expect(t, 6, String("type"), String("feature"))
-                if t[7] != String("float"):
+                if (
+                    t[7] != String("float")
+                    and t[7] != String("cat")
+                    and t[7] != String("ctr")
+                ):
                     raise Error(
                         "feature " + String(t[1]) + " has type '" + t[7]
-                        + "'. This reader carries float features only; a"
-                        " categorical or CTR-valued feature needs the CTR"
-                        " records described in gbdt/models/model_text.mojo"
+                        + "'. This reader knows float, cat and ctr, and"
+                        " REFUSES a type it does not understand rather than"
+                        " guessing at the predicate it implies"
+                    )
+                var flag_here = Int(t[5]) != 0
+                if (t[7] == String("cat")) != flag_here:
+                    raise Error(
+                        "feature " + String(t[1]) + " says type '" + t[7]
+                        + "' and one_hot " + String(t[5])
+                        + "; a one-hot column is exactly a `cat` column and"
+                        " the two spellings must agree"
                     )
                 _expect(t, 8, String("borders"), String("feature"))
                 fold_counts.append(Int(t[3]))
                 if n_flags != 0:
                     one_hot.append(Int(t[5]) != 0)
+                feature_kinds.append(t[7])
                 var n_b = Int(t[9])
                 if len(t) != 10 + n_b:
                     raise Error(
@@ -505,6 +624,84 @@ def load_model_text(text: String) raises -> TrainedModel:
                     bs.append(parse_f32(t[10 + i]))
                 borders.append(bs^)
                 features_seen += 1
+            elif kind == String("ctr_table"):
+                if features_seen != n_features:
+                    raise Error(
+                        "a `ctr_table` before the feature block ended: "
+                        + String(features_seen) + " of "
+                        + String(n_features) + " features so far"
+                    )
+                if trees_seen != 0:
+                    raise Error("a `ctr_table` after the first `tree`")
+                _expect(t, 2, String("source"), String("ctr_table"))
+                _expect(t, 4, String("type"), String("ctr_table"))
+                _expect(t, 6, String("prior_num"), String("ctr_table"))
+                _expect(t, 8, String("prior_denom"), String("ctr_table"))
+                _expect(t, 10, String("shift"), String("ctr_table"))
+                _expect(t, 12, String("scale"), String("ctr_table"))
+                _expect(t, 14, String("denom"), String("ctr_table"))
+                _expect(t, 16, String("entries"), String("ctr_table"))
+                if len(t) != 18:
+                    raise Error(
+                        "a `ctr_table` record has 18 fields, this one has "
+                        + String(len(t))
+                    )
+                var col = Int(t[1])
+                if col < 0 or col >= n_features:
+                    raise Error(
+                        "ctr_table names column " + String(col) + " of "
+                        + String(n_features)
+                    )
+                for k in range(len(ctr_columns)):
+                    if ctr_columns[k] == col:
+                        raise Error(
+                            "two `ctr_table` records for column "
+                            + String(col)
+                        )
+                if len(ctr_columns) != 0 and col <= ctr_columns[
+                    len(ctr_columns) - 1
+                ]:
+                    raise Error(
+                        "ctr_table records must arrive in ascending column"
+                        " order: " + String(col) + " after "
+                        + String(ctr_columns[len(ctr_columns) - 1])
+                    )
+                ctr_columns.append(col)
+                ctr_sources.append(Int(t[3]))
+                ctr_types.append(ctr_type_from_name(t[5]))
+                ctr_prior_num.append(parse_f32(t[7]))
+                ctr_prior_denom.append(parse_f32(t[9]))
+                ctr_shift.append(parse_f32(t[11]))
+                ctr_scale.append(parse_f32(t[13]))
+                ctr_denom.append(Int(t[15]))
+                var n_entries = Int(t[17])
+                if n_entries < 0:
+                    raise Error("ctr_table declares a negative entry count")
+                ctr_declared.append(n_entries)
+                ctr_counts.append(List[Int]())
+            elif kind == String("ctr_entry"):
+                if len(ctr_columns) == 0:
+                    raise Error("a `ctr_entry` before any `ctr_table`")
+                var last = len(ctr_columns) - 1
+                if Int(t[1]) != ctr_columns[last]:
+                    raise Error(
+                        "a `ctr_entry` for column " + String(t[1])
+                        + " under the `ctr_table` for column "
+                        + String(ctr_columns[last])
+                    )
+                if len(t) != 4:
+                    raise Error(
+                        "a `ctr_entry` record has 4 fields, this one has "
+                        + String(len(t))
+                    )
+                if Int(t[2]) != len(ctr_counts[last]):
+                    raise Error(
+                        "column " + String(ctr_columns[last])
+                        + " categories must arrive in order: expected "
+                        + String(len(ctr_counts[last])) + ", got "
+                        + String(t[2])
+                    )
+                ctr_counts[last].append(Int(t[3]))
             elif kind == String("tree"):
                 if Int(t[1]) != trees_seen:
                     raise Error(
@@ -538,8 +735,26 @@ def load_model_text(text: String) raises -> TrainedModel:
                         " order: expected " + String(splits_seen[ti])
                         + ", got " + String(t[2])
                     )
+                var st = BIN_SPLIT_TAKE_GREATER
+                if len(t) == 7:
+                    _expect(t, 5, String("split_type"), String("split"))
+                    if t[6] != String("take_bin"):
+                        raise Error(
+                            "a `split` record's split_type is `take_bin` or"
+                            " nothing at all (TakeGreater); got '" + t[6]
+                            + "'"
+                        )
+                    st = BIN_SPLIT_TAKE_BIN
+                elif len(t) != 5:
+                    raise Error(
+                        "a `split` record has 5 fields, or 7 with"
+                        " `split_type take_bin`; this one has "
+                        + String(len(t))
+                    )
                 model.weak_models[ti].structure.splits.append(
-                    TBinarySplit(Int32(Int(t[3])), Int32(Int(t[4])))
+                    TBinarySplit(
+                        Int32(Int(t[3])), Int32(Int(t[4])), Int32(st)
+                    )
                 )
                 splits_seen[ti] += 1
             elif kind == String("leaf"):
@@ -629,8 +844,86 @@ def load_model_text(text: String) raises -> TrainedModel:
                 + " leaf weights and carries " + String(weights_seen[t])
             )
 
+    # ---- the CTR half, checked as a whole because it is cross-referenced
+    for k in range(len(ctr_columns)):
+        if len(ctr_counts[k]) != ctr_declared[k]:
+            raise Error(
+                "ctr_table for column " + String(ctr_columns[k])
+                + " declares " + String(ctr_declared[k])
+                + " entries and carries " + String(len(ctr_counts[k]))
+            )
+        if feature_kinds[ctr_columns[k]] != String("ctr"):
+            raise Error(
+                "column " + String(ctr_columns[k]) + " carries a CTR table"
+                " and its `feature` record says type '"
+                + feature_kinds[ctr_columns[k]] + "'"
+            )
+        ctr_tables.append(
+            TCtrValueTable(
+                ctr_columns[k],
+                ctr_sources[k],
+                ctr_types[k],
+                ctr_prior_num[k],
+                ctr_prior_denom[k],
+                ctr_shift[k],
+                ctr_scale[k],
+                ctr_denom[k],
+                ctr_counts[k].copy(),
+            )
+        )
+    for f in range(features_seen):
+        if feature_kinds[f] == String("ctr"):
+            var found = False
+            for k in range(len(ctr_columns)):
+                if ctr_columns[k] == f:
+                    found = True
+            if not found:
+                raise Error(
+                    "column " + String(f) + " says type ctr and no"
+                    " `ctr_table` record names it. A CTR column without its"
+                    " table cannot score a raw row"
+                )
+    # `ctr_columns` in the header is the SAFETY count and it is older than
+    # the tables. It may exceed the table count -- that is a model which
+    # still refuses to score, and refusing is the point -- but it must never
+    # be SHORT of it, which would be a file claiming fewer CTR columns than
+    # it carries.
+    if len(ctr_tables) > ctr_column_count:
+        raise Error(
+            "the header declares " + String(ctr_column_count)
+            + " CTR columns and the file carries " + String(len(ctr_tables))
+            + " CTR tables"
+        )
+
+    # their `CB_ENSURE(dataSet.IsOneHot(split.FeatureId))` for a TakeBin
+    # split and `CB_ENSURE(!dataSet.IsOneHot(...))` for the other arm
+    # (`add_oblivious_tree_model_doc_parallel.cpp:43-47`), run against the
+    # feature table this file carries instead of against a live layout.
+    for t in range(trees_seen):
+        ref w = model.weak_models[t]
+        for lvl in range(len(w.structure.splits)):
+            var fid = Int(w.structure.splits[lvl].feature_id)
+            if fid < 0 or fid >= features_seen:
+                raise Error(
+                    "tree " + String(t) + " level " + String(lvl)
+                    + " splits on feature " + String(fid) + " of "
+                    + String(features_seen)
+                )
+            var is_bin = (
+                Int(w.structure.splits[lvl].split_type) == BIN_SPLIT_TAKE_BIN
+            )
+            if is_bin != (feature_kinds[fid] == String("cat")):
+                raise Error(
+                    "tree " + String(t) + " level " + String(lvl)
+                    + " is a "
+                    + String("TakeBin" if is_bin else "TakeGreater")
+                    + " split on feature " + String(fid)
+                    + ", whose type is '" + feature_kinds[fid] + "'"
+                )
+
     return TrainedModel(
-        model^, fold_counts^, one_hot^, borders^, losses^, ctr_column_count
+        model^, fold_counts^, one_hot^, borders^, losses^, ctr_column_count,
+        ctr_tables^,
     )
 
 

@@ -80,6 +80,7 @@ from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
     run_tree_layout,
 )
 from gbdt.models.oblivious_model import (
+    BIN_SPLIT_TAKE_BIN,
     TAdditiveModel,
     TBinarySplit,
     TObliviousTreeModel,
@@ -495,10 +496,33 @@ def predict(
             h_bin.unsafe_ptr().unsafe_store(
                 lvl, UInt32(Int(weak.structure.splits[level].bin_idx))
             )
-            # a feature is one-hot GLOBALLY (their TBinarizedFeature), so
-            # the per-level takeEqual comes off the layout, not the model
+            # THE PREDICATE COMES OFF THE MODEL, and the layout only
+            # confirms it. Their `TAddModelDocParallel::AddTask` switches
+            # on `split.SplitType` and asserts the dataset agrees --
+            # `if (split.SplitType == EBinSplitType::TakeBin)
+            #  CB_ENSURE(dataSet.IsOneHot(split.FeatureId)); else
+            #  CB_ENSURE(!dataSet.IsOneHot(...))`
+            # (`add_oblivious_tree_model_doc_parallel.cpp:139-144`). This
+            # used to read the layout alone, which is fine while the layout
+            # that grew the tree is still in hand and not fine for a model
+            # read back from a file: the file, not the caller's fold
+            # counts, has to say what the predicate is.
+            var take_bin = (
+                Int(weak.structure.splits[level].split_type)
+                == BIN_SPLIT_TAKE_BIN
+            )
+            if take_bin != cf.one_hot_feature:
+                raise Error(
+                    "tree " + String(t) + " level " + String(level)
+                    + " is a "
+                    + String("TakeBin" if take_bin else "TakeGreater")
+                    + " split on feature "
+                    + String(Int(weak.structure.splits[level].feature_id))
+                    + ", which the layout says is "
+                    + String("one-hot" if cf.one_hot_feature else "ordered")
+                )
             h_eq.unsafe_ptr().unsafe_store(
-                lvl, UInt8(1) if cf.one_hot_feature else UInt8(0)
+                lvl, UInt8(1) if take_bin else UInt8(0)
             )
             lvl += 1
         var n_leaves = 1 << depth

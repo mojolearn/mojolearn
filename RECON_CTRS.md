@@ -72,19 +72,6 @@ NOT BUILT, verified by search and not by memory:
   the ordered statistic in ROW order would be a different and worse
   estimator, not a slower one, so `train()` RAISES on a Borders config
   rather than substituting row order.
-* **CTR TABLES IN A MODEL FILE.** The numeric half of this landed
-  2026-08-20: `gbdt/models/model_text.mojo` saves and loads a `TrainedModel`
-  (ensemble, leaf values in leaf order, borders, fold counts, one-hot flags,
-  losses) as plain text with every float carrying its IEEE-754 bits, gated
-  bit-exact end to end by `pixi run check-model-io`. What is still missing is
-  the CTR half: the per-categorical-feature category-to-value mapping an
-  applied model needs. The format reserves `ctr_table`, `ctr_entry` and
-  `ctr_borders` records and a `type` token on the `feature` record for
-  exactly that, and the seam is written down in that file's THE CTR SEAM
-  block. Nothing there is built.
-* **A categorical path through `train()`.** It takes `one_hot: List[Bool]`
-  and nothing else; the FeatureFreq calcer lives in the Python prep script,
-  so categoricals work in the BENCHMARK and not in the library.
 
 ## What their GPU learner actually does with a cat feature
 
@@ -264,15 +251,37 @@ this is achievable in one source.
    newly identified, the CTR ESTIMATION PERMUTATION -- see the NOT BUILT
    list above. `train()` raises on a Borders config rather than running
    the ordered statistic in row order.
-5. MODEL SERIALIZATION, which was a prerequisite and not a CTR task. The
-   numeric file format LANDED 2026-08-20 (`gbdt/models/model_text.mojo`,
-   `pixi run check-model-io`), so what remains under this heading is the CTR
-   tables themselves, added at the seam that file documents. Two things
-   still block a categorical model from scoring raw data after that:
-   `TBinarySplit` carries no split TYPE, so the one-hot predicate is
-   recovered from the layout rather than from the model, and the device
-   evaluator (`models/cuda/evaluator.mojo`) has no one-hot arm at all -- its
-   `XorMask` slot is documented as staying zero.
+5. MODEL SERIALIZATION, **DONE 2026-08-20**. The numeric file format
+   landed first (`gbdt/models/model_text.mojo`, `pixi run check-model-io`),
+   then the CTR half at the seam it documented, and a trained categorical
+   model now saves, loads and scores RAW rows through both apply paths
+   (`pixi run check-ctr-apply`). What that took, all three pieces named in
+   the seam block:
+
+   * `gbdt/models/ctr_value_table.mojo`, their `TCtrValueTable` plus the
+     `TModelCtr` fields that turn its counts into a value, written to the
+     file as `ctr_table` / `ctr_entry` records -- their `ctr_data.hash_map`,
+     which for FeatureFreq stores ONE INTEGER per category and forms the
+     value at apply time with `TModelCtr::Calc`. `ctr_borders` was in the
+     plan and is NOT written: in this format a CTR column is a column of the
+     feature table, so its `feature` record already carries exactly the
+     borders their `TCtrFeature::Borders` does.
+   * `TBinarySplit` carries their `EBinSplitType`, set by their `ToSplit`
+     rule (`cuda/methods/helpers.cpp:164-170`) and written as a trailing
+     `split_type take_bin` token so a float-only model's file stays
+     byte-identical. The apply cross-checks it against the layout, which is
+     their `CB_ENSURE(dataSet.IsOneHot(...))`.
+   * The device evaluator has the one-hot arm its `XorMask` slot reserved.
+     Their GPU evaluator refuses categorical models outright, so the
+     predicate is transcribed from their CPU one
+     (`libs/model/model.cpp:566-572` for the repack,
+     `cpu/evaluator_impl.cpp:38` for the compare), under their own
+     `NeedXorMask` dispatch. PORTING.md 55.
+
+   Still open under this heading: nothing for FeatureFreq. A `Borders` CTR
+   table is a per-target-class history rather than a count, and
+   `build_feature_freq_tables` raises on one rather than writing a table
+   that would be silently wrong.
 6. Tree CTRs (feature combinations, `MaxTensorComplexity`, default 4).
    Their own `tree_ctr_datasets_visitor` machinery: combinations generated
    during tree growth, per level, with caching and memory limits

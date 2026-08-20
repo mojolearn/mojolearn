@@ -37,7 +37,11 @@ from gbdt.gpu_lib.gpu_manager import TCudaManager
 from gbdt.methods.kernel_add_model_value import (
     add_model_value_kernel,
 )
-from gbdt.models.oblivious_model import TBinarySplit
+from gbdt.models.oblivious_model import (
+    BIN_SPLIT_TAKE_BIN,
+    BIN_SPLIT_TAKE_GREATER,
+    TBinarySplit,
+)
 from gbdt.methods.greedy_subsets_searcher.split_properties_helper import (
     HISTOGRAMS_CURRENT_PATH,
     HISTOGRAMS_PREVIOUS_PATH,
@@ -2987,8 +2991,19 @@ def run_tree_layout[
             leaf_records = prev_records.copy()
             n_live = half
             break
+        # their `ToSplit` (`cuda/methods/helpers.cpp:164-170`): the split
+        # type is `TakeBin` for a categorical feature and `TakeGreater`
+        # otherwise, and `IsCat` here is the layout's one-hot flag.
         out_splits.append(
-            TBinarySplit(Int32(choice.feature), Int32(choice.bin))
+            TBinarySplit(
+                Int32(choice.feature),
+                Int32(choice.bin),
+                Int32(
+                    BIN_SPLIT_TAKE_BIN
+                    if layout.features[choice.feature].one_hot_feature
+                    else BIN_SPLIT_TAKE_GREATER
+                ),
+            )
         )
 
         # their `RebuildLeavesSizes` filling `Leaves[i].Size` (`:806`). The

@@ -1308,3 +1308,93 @@ than left standing.
 It survived until now because `bench/minentropy_oracle.txt` never runs
 budget 1, where `bins == 2` makes the per-level loops execute zero times
 and the last match is the only comparison in the algorithm.
+
+# Deviations added 2026-08-20 (the CTR apply seam)
+
+## 55. The GPU evaluator has a ONE-HOT arm. Theirs REFUSES the case entirely
+
+`TGPURepackedBin` carries three members and their kernel reads two.
+`FeatureXorMask` (`libs/model/cuda/evaluator.cuh:14`) is never touched by
+`CalcIndexesUnwrapped` or `CalcIndexesBase` (`evaluator.cu:128-156`),
+because their GPU evaluator declines a categorical model at construction:
+
+    CB_ENSURE(!model.HasCategoricalFeatures(),
+              "Model contains categorical features, GPU evaluation impossible")
+                                            (`libs/model/cuda/evaluator.cpp:22`)
+
+So the mask is not a hole in their kernel. It is a member their CPU
+evaluator uses and the GPU repack copies through unread.
+
+**This port takes the case they decline**, because `train(cat_features=...)`
+produces one-hot splits and the evaluator is our inference path. The
+predicate is therefore TRANSCRIBED FROM THEIR CPU EVALUATOR rather than
+invented. Their repack, `libs/model/model.cpp:566-572`:
+
+    if (feature.Type != ESplitType::OneHotFeature) {
+        rb.SplitIdx = featureIndex.SplitIdx;
+    } else {
+        rb.XorMask = ((~featureIndex.SplitIdx) & 0xff);
+        rb.SplitIdx = 0xff;
+    }
+
+and their compare, `libs/model/cpu/evaluator_impl.cpp:38`:
+
+    indexesVec[docId] |= ((binFeaturePtr[docId] ^ xorMask) >= borderVal)
+                         << depth;
+
+`(b ^ (~v & 0xff)) >= 0xff` holds exactly when `b == v` for a byte, so one
+branch-free compare covers both predicates and a float split is unchanged
+under `xorMask == 0`. Their CPU templates the mask away when no split needs
+it (`NeedXorMask`, `:16`, `:257`); `pack_model_for_evaluator` sets the same
+flag from the model and `launch_eval` dispatches on it, so a FLOAT-ONLY
+model runs the same kernel it ran before this arm existed.
+
+NO KERNEL-MATRIX ROW. The arm is one `xor` on a value already in a
+register: no warp width assumed, no wavefront primitive, no shared memory,
+no atomic beyond the one the file already had. Nothing about it is vendor
+specific.
+
+REACH IS PROVED, not asserted. `mojo_only/ctr_apply_check.mojo` flips every
+one-hot split's type to `TakeGreater` in a LOADED model and re-runs the
+evaluator, which has no layout to cross-check against: 405 of 512
+predictions move. A no-op arm would have been bit-identical and green.
+
+## 56. The CTR value table is keyed by the DENSE CODE, and `ctr_borders` is not written
+
+Their `TCtrValueTable` is keyed by a 64-bit hash of the raw categorical
+value and read through `TDenseIndexHashView::GetIndex` with a
+`NotFoundIndex` sentinel (`libs/model/static_ctr_provider.cpp:48-50`,
+`:66-70`). `train()` in this port takes DENSE CODES `0..k-1` and raises on a
+negative one, so there is no hash step to port: the code indexes the count
+array directly and out-of-range is their `NotFoundIndex`, taking the same
+`emptyVal = Calc(0, denominator)` branch. Same job, smaller structure.
+
+This is the same place the hash will have to arrive: `RECON_CTRS.md` step 6
+already records that a feature COMBINATION bin is formed from their hash,
+so tree CTRs force the port that FeatureFreq lets us skip. The seam is one
+function, `TCtrValueTable.value_for`.
+
+The rest of their decomposition IS ported rather than simplified: the table
+stores the raw statistic per category and the model carries `PriorNum`,
+`PriorDenom`, `Shift`, `Scale` and `CounterDenominator` beside it, with the
+value formed at apply time by `TModelCtr::Calc` (`online_ctr.h:289-292`).
+Storing the divided value instead would have been one number rather than
+five and would have made `Shift` and `Scale` unrepresentable -- their CPU
+learner fills both from `CalcNormalization` (`private/libs/algo/split.cpp:73-81`)
+and their GPU learner leaves them at `0` and `1`, which is what ours writes.
+
+`ctr_borders`, which `model_text.mojo`'s seam block planned, is NOT
+written. Their `TCtrFeature::Borders` exists because a CTR feature is not a
+`TFloatFeature` in their model and carries its own binarization; here a CTR
+column IS a column of the feature table and its `feature` record already
+carries exactly those borders, which `train()` computes from the CTR's own
+grid (`batch_binarized_ctr_calcer.cpp:57-63`). A second copy would be the
+same numbers twice and a second thing to corrupt. The plan sentence was
+deleted rather than annotated.
+
+MEASURED, because the format's own rule says a float-only model's file must
+not move: an 8-tree, 5-feature float-only model writes 8022 bytes with SHA-256
+`932fddfa04a970b3400244219cbe1b51d6f24b9a1162675e854aac0395534035` before and
+after this round. The `ctr_columns`, `ctr_table` and `ctr_entry` records are
+written only when non-empty and `split_type take_bin` is a TRAILING token on
+one-hot splits alone, which is what buys that.

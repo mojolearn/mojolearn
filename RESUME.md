@@ -571,8 +571,48 @@ histogram cells through bridge/score/convert -- structural, priced.
 ON-BOX TRAINING LEVERS ARE NOW EXHAUSTED: what remains is Pro/Max
 silicon, NVIDIA validation, and the CTR device kernels.
 
-Next known levers, in order: CTR steps 2-5 (RECON_CTRS.md: FeatureFreq,
-then the radix-sort/segmented-scan vendor checks, then history CTRs),
-the epsilon dataset.
+### 2026-08-20: A CATEGORICAL MODEL NOW SCORES RAW DATA
+
+Three things blocked it and all three landed, gated by
+`pixi run check-ctr-apply`:
+
+1. **The CTR tables are in the file.** `gbdt/models/ctr_value_table.mojo`
+   is their `TCtrValueTable` plus the `TModelCtr` fields that turn its
+   counts into a value, written as `ctr_table` / `ctr_entry` records --
+   their `ctr_data.hash_map`, which for FeatureFreq stores ONE INTEGER per
+   category, not a value. The value is formed at apply time by their
+   `Calc` (`online_ctr.h:289-292`), and an unseen category takes their
+   `emptyVal = Calc(0, denominator)` rather than a neighbour. Because
+   FeatureFreq is permutation-independent, the apply-time table reproduces
+   the LEARN column bit for bit, and that identity is asserted per row on
+   4096 learn rows rather than assumed.
+2. **`TBinarySplit` carries `EBinSplitType`**, set by their `ToSplit` rule
+   (`cuda/methods/helpers.cpp:164-170`). The apply now reads the predicate
+   off the MODEL and cross-checks it against the layout, which is their
+   `CB_ENSURE(dataSet.IsOneHot(...))`.
+3. **The device evaluator has the one-hot arm its `XorMask` slot
+   reserved.** Their GPU evaluator refuses categorical models outright, so
+   the predicate came from their CPU evaluator instead of being invented
+   (PORTING.md 55). Reach proved by flipping the predicate in a loaded
+   model: 405 of 512 rows move.
+
+`predict_floats` no longer refuses a CTR model; what it refuses now is a
+model whose tables are MISSING, which is the safety property
+`ctr_column_count` was carried for. A FLOAT-ONLY model's file is
+BYTE-IDENTICAL before and after (8022 bytes, same SHA-256), which is what
+made the trailing-token format choices worth making.
+
+The cardinality sweep at 1, 2, 3, 15, 16, 17, 31, 32, 254 and 255 runs on
+both the one-hot and the CTR feature and compares host and device against
+an independent host tally PER ROW. It also caught the check being wrong
+rather than the code: at k = 2 their `one_hot_max_size` dispatch sends a
+`cat_features` column to ONE-HOT and gives it no CTR at all
+(`binarizations_manager.cpp:106-109`), so the sweep prints which arm each
+row took.
+
+Next known levers, in order: CTR steps 3 and 6 (RECON_CTRS.md: the
+device radix-sort/segmented-scan swap, then the hash that tree CTRs
+force), the CTR estimation permutation in front of `Borders`, the
+epsilon dataset.
 Beyond this box: a Pro/Max chip multiplies OUR arms by 2-4x and theirs
 by ~1.5x.
