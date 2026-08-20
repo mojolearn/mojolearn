@@ -7,6 +7,11 @@ the path their dispatch actually takes for k <= 64 on row-major L2, which is
 """
 
 from mojo_only.hardware_matrix_check import check_hardware_matrix
+from neighbors.mojo_only.estimator_check import (
+    check_knn_search_arms_agree,
+    check_knn_search_matches_host,
+    check_plan_query_tile,
+)
 from neighbors.mojo_only.knn_check import (
     check_dispatch_takes_fused,
     check_fused_edge_shapes,
@@ -37,3 +42,8 @@ def main() raises:
     check_launch_config_values()
     check_fused_griddimx_merge()
     check_fused_griddimx_one_capped_y()
+    # The caller-facing surface, last: it is the only thing here a user
+    # can reach, and it is worth nothing if the kernels above are wrong.
+    check_plan_query_tile()
+    check_knn_search_matches_host()
+    check_knn_search_arms_agree()
