@@ -487,7 +487,13 @@ that this port lacks is CATEGORICALS/CTRs -- the one genuinely large
 remaining block -- plus a holdout-mse quality gate for the stochastic
 modes.
 
-Next known levers, in order: categoricals/CTRs (multi-session),
-holdout-mse quality gate for the bayesian mode, the epsilon dataset.
+THE HOLDOUT GATE LANDED (bench/interleaved/holdout_bayesian.mojo):
+both arms train on 80% at Bayesian T=1 on the same grid, fresh seed per
+rep per arm, scored on the untouched 20%. Ours 0.0595-0.0610 test mse
+vs theirs 0.0605-0.0625 -- at or slightly below theirs every rep. The
+stochastic mode's quality claim rests on holdout now, not train mse.
+
+Next known levers, in order: categoricals/CTRs (multi-session; recon
+notes below when they exist), the epsilon dataset.
 Beyond this box: a Pro/Max chip multiplies OUR arms by 2-4x and theirs
 by ~1.5x.
