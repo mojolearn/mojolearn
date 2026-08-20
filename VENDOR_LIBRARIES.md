@@ -128,7 +128,7 @@ M4, `WARP_SIZE = 32`.
 | `max.gpu.primitives.block.sum` | `cub::BlockReduce` | **GPU, CORRECT** | YES | TPB 32/64/128/256/512/1024, 37 blocks, exact integer-valued fixture. Result is **broadcast to all threads**, not thread 0 only. |
 | `max.gpu.primitives.block.max` | `cub::BlockReduce(Max)` | **GPU, CORRECT** | YES | same |
 | `max.gpu.primitives.block.min` | `cub::BlockReduce(Min)` | **GPU, CORRECT** | YES | same |
-| `max.gpu.primitives.block.prefix_sum` | `cub::BlockScan` | **GPU, CORRECT** | YES | same, inclusive AND exclusive, per lane |
+| `max.gpu.primitives.block.prefix_sum` | `cub::BlockScan::{Inclusive,Exclusive}Sum` ONLY | **GPU, CORRECT** | YES | same, inclusive AND exclusive, per lane. **IT IS ADDITION ONLY.** `cub::BlockScan` also takes a CUSTOM ASSOCIATIVE OPERATOR (`InclusiveScan(val, out, op)`); `prefix_sum` has no operator parameter, so a scan over anything but `+` has no counterpart here. That is why `gbdt/gpu_util/kernel/segmented_scan.mojo` writes its block half by hand where `reorder_one_bit.mojo` calls this. See PORTING.md 49 |
 | `std.gpu.primitives.id.lane_id` | `raft::laneId` | **GPU, CORRECT** | YES | 32 lanes, 104 warps |
 | `std.gpu.primitives.warp.sum` | `cub::WarpReduce` | **GPU, CORRECT** | YES | 32 lanes, 104 warps |
 | `std.gpu.primitives.warp.prefix_sum` | `cub::WarpScan` | **GPU, CORRECT** | YES | 32 lanes, 104 warps, **INCLUSIVE** |
