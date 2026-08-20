@@ -10,24 +10,33 @@
 # on 2026-08-20 and were absent until then, which alone would have made every
 # OIDC claim unacceptable.
 #
-# WHERE IT RUNS, AND WHY THAT IS SETTLED RATHER THAN ASSUMED. `macos-15`, a
-# GitHub-hosted Apple M1 (Virtual). Measured in probe-hosted-metal.yml: a bare
-# `mojo build` fails there with "Unknown GPU architecture detected", so the
-# accelerator must be NAMED, which bindings/build.sh does. With it named the
-# wheel builds. See wheel-ci.yml for the full build-and-verify job this
-# mirrors.
+# WHERE IT RUNS, AND WHY IT IS NOT A HOSTED RUNNER.
 #
-# WHAT THIS RUNNER CANNOT DO, stated because it bounds what a green run means.
-# It cannot create a Metal function using `block_sum`
-# (tools/hosted_block_probe.mojo fails there while the trivial kernel passes),
-# so it CANNOT run a fit. Every check below is one this runner can honestly
-# decide: build at the portable baseline, ISA disassembly, minos/tag
-# agreement, install and import on python 3.10 through 3.14.
+# This built on `macos-15` for exactly one release and that release was
+# BROKEN. GitHub's hosted macOS runner compiles the host half of the extension
+# and silently emits no Metal shader code at all -- `mojo build` exits 0. Same
+# commit, two machines:
 #
-# **GPU EXECUTION IS NOT VERIFIED BY THIS WORKFLOW.** Run
-# `packaging/macos/verify_wheel.sh` with no flag on real Apple silicon, on the
-# same commit, before dispatching a publish. That is a procedure and not a
-# gate, and calling it a gate would be a lie.
+#                              local (M4)     hosted runner
+#     __TEXT/__const            692,543 B          49,039 B
+#     AIR / metallib markers           98                 0
+#
+# TestPyPI 0.1.0a2 was that wheel. It passed every gate, published, installed
+# cleanly from the index, and died on the first fit with "Failed to create
+# Metal function". packaging/macos/check_gpu_embedded.py now refuses such a
+# build, but refusing is not producing: a release needs a machine with a real
+# Apple GPU.
+#
+# So the build job runs on a SELF-HOSTED, EPHEMERAL runner labelled
+# `real-gpu`. Ephemeral means it accepts one job and exits, so nothing is left
+# listening on anyone's laptop; start it deliberately before dispatching a
+# release. That is a real cost -- a release now depends on someone's machine
+# being awake -- and it is the cost of shipping a wheel that works.
+#
+# BECAUSE IT HAS A GPU, THIS WORKFLOW VERIFIES THAT THE WHEEL COMPUTES.
+# verify_wheel.sh runs with no flag, so every interpreter installs the wheel
+# into a clean venv and runs real fits. The hosted-runner version of this file
+# could only check that it imported.
 #
 # TRIGGERING. workflow_dispatch only. There is deliberately no `push` and no
 # `pull_request`: a pull request must never reach a job holding
@@ -61,7 +70,9 @@ concurrency:
 jobs:
   build:
     name: Build and verify the wheel
-    runs-on: macos-15
+    # Self-hosted and ephemeral. See the header: a hosted runner produces a
+    # wheel with no GPU kernels in it.
+    runs-on: [self-hosted, macos, arm64, metal, real-gpu]
     timeout-minutes: 60
     permissions:
       contents: read
@@ -100,12 +111,16 @@ jobs:
       - name: Build the wheel
         run: ./packaging/macos/build_release_wheel.sh
 
-      - name: Install and import on every claimed interpreter
-        run: ./packaging/macos/verify_wheel.sh --no-gpu
+      # NO --no-gpu. This runner has a real Apple GPU, so every interpreter
+      # installs the wheel into a clean venv and runs actual fits: planted
+      # clusters that must be recovered, and a point that must be its own
+      # nearest neighbor. This is the check TestPyPI 0.1.0a2 would have failed.
+      - name: Install and RUN on every claimed interpreter
+        run: ./packaging/macos/verify_wheel.sh
 
       - name: No interpreter may be skipped
         run: |
-          out=$(./packaging/macos/verify_wheel.sh --no-gpu)
+          out=$(./packaging/macos/verify_wheel.sh)
           echo "$out"
           echo "$out" | grep -q '^SKIP' && {
             echo "::error::an interpreter the package claims was not tested"
@@ -144,13 +159,9 @@ jobs:
             echo ""
             echo "\`${{ steps.digest.outputs.wheel_sha256 }}\`"
             echo ""
-            echo "Verified: portable-baseline build, ISA disassembly, minos/tag"
-            echo "agreement, twine metadata, install+import on python 3.10-3.14."
-            echo ""
-            echo "**NOT verified: that it computes.** This runner cannot create a"
-            echo "Metal function using \`block_sum\`. Run"
-            echo "\`packaging/macos/verify_wheel.sh\` on real Apple silicon at this"
-            echo "commit before treating this wheel as releasable."
+            echo "Verified on a real Apple GPU: portable-baseline build, ISA"
+            echo "disassembly, minos/tag agreement, GPU kernels embedded, twine"
+            echo "metadata, and real fits on every claimed interpreter."
           } >> "$GITHUB_STEP_SUMMARY"
 
   publish:
