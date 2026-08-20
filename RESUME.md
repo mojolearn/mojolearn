@@ -279,9 +279,39 @@ accumulation), so this table is deterministic-vs-deterministic; CatBoost's
 CPU was measured bitwise stable across thread counts the same night, and
 its GPU (which cannot run here) is non_deterministic by their own tag.
 
-The day opened at 21x fixed / 2.1x variable and covtype 4.9x. Next known
-levers, in order: the 129-255-bin family gets the same shared-i32 arm
-(the 254 rows above), per-tree workspace reuse (~40 buffer creates/tree
-vs their once-per-fit), device-side split resolution (~2 ms, a marked
-deviation). Beyond this box: a Pro/Max chip multiplies OUR arm by 2-4x
-and theirs by ~1.5x.
+The day opened at 21x fixed / 2.1x variable and covtype 4.9x.
+
+### 2026-08-20: the 129-255-bin family, and the resolution trap
+
+`d72bd97`: the per-tree histogram zero-fill became `enqueue_memset`
+(their `FillBuffer` is a device-side fill; ours staged 1.6-3.2M host
+stores per tree). The "per-tree workspace reuse" lever was REPRICED by
+probe and is OFF the queue: the whole ~40-buffer create/retire prologue
+measures 0.17 ms/tree -- MAX's allocator pools -- and the host zero
+loops (0.6+ ms, growing with border count) were the real cost hiding
+under that estimate.
+
+`992aa86`: the PASS family (`TPointHistOneByte`, the 129-255-bin range
+their ladder never sends to hist_2) got the same 2-warp-shared Int32
+arm as hist_2 -- one `hist_smem_mode_for` row for the whole one-byte
+family. It tripped a trap the oracles cannot see: with the blanket
+2^28 scale, dither noise flipped near-tied splits at 254 borders on
+synth (train mse 0.14375 vs CatBoost's 0.14145; covtype unaffected;
+all oracles green -- 4096 rows never builds the tie density). The
+harness's per-rep mse column caught it, the second live catch in two
+days. Fix: `choose_scale(mag, row_count)` spends the blanket headroom
+exactly (`mag*scale + row_count <= 2^30 - 1`), 4x finer, and synth@254
+returned to CatBoost's mse at 7 decimals. New coverage that gates the
+range: `bench/oracle254.txt` (48/48) and `check-hist2`'s bits-8
+both-modes section.
+
+Standings from the last quiet window (a peer bench loaded the box
+before the final rerun; re-verify the CPU-arm canary before quoting):
+synth@254 1.45-1.72x (from 2.1x), covtype@254 ~2.4x (from 2.7x),
+128-border rows unchanged (parity at synth, 2.0-2.2x covtype).
+
+Next known levers, in order: device-side split resolution (~2 ms, a
+marked deviation through the matrix), the predict/inference path
+(unmeasured; their model_evaluation_speed suite is the arena plan).
+Beyond this box: a Pro/Max chip multiplies OUR arm by 2-4x and theirs
+by ~1.5x.
