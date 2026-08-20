@@ -39,6 +39,12 @@ its planted membership through that permutation.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
+from std.atomic import Atomic
+from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
+from std.memory import stack_allocation
+
 from cluster.ported.distance.fused_distance_nn.simt_kernel import (
     fused_distance_nn_kernel,
 )
@@ -46,6 +52,18 @@ from core.gemm import GEMM_MBLK, GEMM_THREADS
 from cluster.ported.cluster.detail.min_cluster_distance_compute import (
     compute_centroid_norms,
     min_cluster_and_distance_compute,
+    min_cluster_and_distance_compute_unfused,
+)
+from cluster.mojo_only.reduce_by_key import (
+    PRIVATE_ACC_CELLS,
+    PRIVATE_MIN_WORK,
+    REDUCE_BY_KEY_TPB,
+    accumulate_centroid_sums_kernel,
+    accumulate_grid_blocks,
+    accumulate_weight_per_cluster_kernel,
+    launch_accumulate_centroid_sums,
+    launch_accumulate_weight_per_cluster,
+    zero_i32_kernel,
 )
 from cluster.ported.cluster.kmeans import fit
 from cluster.mojo_only.plus_plus import (
@@ -767,4 +785,428 @@ def check_fused_reduction_across_lanes() raises:
         "check_fused_reduction_across_lanes OK: " + String(n)
         + " rows x " + String(k) + " clusters match a host argmin, winners"
         " spread over " + String(lanes) + " lane groups"
+    )
+
+
+# --- assignment-arm dispatch ------------------------------------------------
+
+comptime ARM_ROWS = 512
+comptime ARM_FEATURES = 32
+comptime ARM_CLUSTERS = 64
+comptime ARM_SENTINEL = Float32(-777.25)
+
+
+def check_assignment_arm_dispatch() raises:
+    """Prove WHICH assignment arm the fit's entry point takes, by a sentinel
+    visible only through one arm.
+
+    cuVS's selector has two arms and one distinguishing side effect: the
+    unfused arm MATERIALIZES a `ns x nc` distance tile into
+    `L2NormBuf_OR_DistBuf` (`kmeans_common.cuh:450-491`); the fused arm
+    never writes a tile at all (`:430-449` -> `fusedDistanceNNMinReduce`).
+    So `dist_buf` is the sentinel carrier: fill it with a poison value, run
+    the entry `fit` calls (`detail/kmeans.mojo`, the Lloyd loop), and the
+    poison SURVIVING is the fused arm's signature, while the poison being
+    OVERWRITTEN is the unfused arm's.
+
+    The shape matches the fit's 4M x 32, k=64 bench arm in every
+    dispatch-relevant dimension -- d=32, k=64, metric L2Expanded, default
+    batch parameters -- scaled down only in rows, which appear in neither
+    their selector (`is_fused`, `kmeans_common.cuh:378-379`, a metric test
+    with nothing else in it) nor ours.
+
+    The check sabotages ITSELF: after the fused entry leaves the poison
+    intact, the unfused arm is run on the same inputs and MUST destroy it.
+    Without that half, a sentinel that nothing could ever overwrite (wrong
+    buffer, wrong size) would pass the first half forever.
+
+    Both arms must also AGREE here: same labels bitwise (planted separation
+    is 100 per cluster against jitter <= 1, so no near-ties; both arms
+    reduce with `raft::argmin_op`'s total order, PORTING.md 14), and
+    distances within float tolerance -- NOT bitwise, because the two arms
+    sum the dot product in different orders, exactly as upstream's two arms
+    do.
+    """
+    var ctx = DeviceContext()
+    var n = ARM_ROWS
+    var d = ARM_FEATURES
+    var k = ARM_CLUSTERS
+
+    var x = ctx.enqueue_create_buffer[DType.float32](n * d)
+    var c = ctx.enqueue_create_buffer[DType.float32](k * d)
+    var xn = ctx.enqueue_create_buffer[DType.float32](n)
+    var cn = ctx.enqueue_create_buffer[DType.float32](k)
+    # Sized exactly as `fit` sizes it: data_batch x centroid_batch at the
+    # default (0, 0) batch parameters = n * k.
+    var dist_buf = ctx.enqueue_create_buffer[DType.float32](n * k)
+    var labels = ctx.enqueue_create_buffer[DType.uint32](n)
+    var min_dist = ctx.enqueue_create_buffer[DType.float32](n)
+    ctx.synchronize()
+
+    var hx = ctx.enqueue_create_host_buffer[DType.float32](n * d)
+    var hc = ctx.enqueue_create_host_buffer[DType.float32](k * d)
+    for i in range(n):
+        var m = i % k  # planted membership, round robin over 64 clusters
+        for f in range(d):
+            hx.unsafe_ptr().unsafe_store(
+                i * d + f,
+                Float32(100 * (m + 1) + f) + _jitter(i, f),
+            )
+    for j in range(k):
+        for f in range(d):
+            hc.unsafe_ptr().unsafe_store(j * d + f, Float32(100 * (j + 1) + f))
+    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=c, src_ptr=hc.unsafe_ptr())
+    ctx.synchronize()
+
+    ctx.enqueue_function[row_norm_kernel](
+        xn.unsafe_ptr(), x.unsafe_ptr(), Int32(d), Int32(0),
+        grid_dim=(n, 1, 1), block_dim=(NORM_TPB, 1, 1),
+    )
+    compute_centroid_norms(ctx, c, cn, k, d, METRIC_L2_EXPANDED)
+    ctx.synchronize()
+
+    # --- poison the tile buffer -------------------------------------------
+    var hpoison = ctx.enqueue_create_host_buffer[DType.float32](n * k)
+    for i in range(n * k):
+        hpoison.unsafe_ptr().unsafe_store(i, ARM_SENTINEL)
+    ctx.enqueue_copy(dst_buf=dist_buf, src_ptr=hpoison.unsafe_ptr())
+    ctx.synchronize()
+
+    # --- the entry the fit calls -------------------------------------------
+    min_cluster_and_distance_compute(
+        ctx, x, xn, c, cn, dist_buf, labels, min_dist,
+        n, d, k, METRIC_L2_EXPANDED, 0, 0,
+    )
+    ctx.synchronize()
+
+    var hd = ctx.enqueue_create_host_buffer[DType.float32](n * k)
+    var hl = ctx.enqueue_create_host_buffer[DType.uint32](n)
+    var hm = ctx.enqueue_create_host_buffer[DType.float32](n)
+    ctx.enqueue_copy(dst_ptr=hd.unsafe_ptr(), src_buf=dist_buf)
+    ctx.enqueue_copy(dst_ptr=hl.unsafe_ptr(), src_buf=labels)
+    ctx.enqueue_copy(dst_ptr=hm.unsafe_ptr(), src_buf=min_dist)
+    ctx.synchronize()
+
+    var overwritten = 0
+    for i in range(n * k):
+        if hd.unsafe_ptr().unsafe_load(i) != ARM_SENTINEL:
+            overwritten += 1
+    if overwritten != 0:
+        raise Error(
+            "ASSIGNMENT TOOK THE UNFUSED ARM: the fit's entry point"
+            " materialized " + String(overwritten) + " cells of a distance"
+            " tile. cuVS's dispatch takes the FUSED arm for L2Expanded"
+            " (kmeans_common.cuh:378-379, :430-449); ours no longer does."
+        )
+
+    var mislabeled = 0
+    for i in range(n):
+        if Int(hl.unsafe_ptr().unsafe_load(i)) != i % k:
+            mislabeled += 1
+    if mislabeled != 0:
+        raise Error(
+            "fused arm mislabeled " + String(mislabeled) + " of " + String(n)
+            + " rows on a fixture separated by 100x the jitter"
+        )
+
+    # --- the sabotage half: the unfused arm MUST destroy the sentinel ------
+    var labels_u = ctx.enqueue_create_buffer[DType.uint32](n)
+    var min_dist_u = ctx.enqueue_create_buffer[DType.float32](n)
+    ctx.synchronize()
+    min_cluster_and_distance_compute_unfused(
+        ctx, x, xn, c, cn, dist_buf, labels_u, min_dist_u,
+        n, d, k, METRIC_L2_EXPANDED, 0, 0,
+    )
+    ctx.synchronize()
+    var hdu = ctx.enqueue_create_host_buffer[DType.float32](n * k)
+    var hlu = ctx.enqueue_create_host_buffer[DType.uint32](n)
+    var hmu = ctx.enqueue_create_host_buffer[DType.float32](n)
+    ctx.enqueue_copy(dst_ptr=hdu.unsafe_ptr(), src_buf=dist_buf)
+    ctx.enqueue_copy(dst_ptr=hlu.unsafe_ptr(), src_buf=labels_u)
+    ctx.enqueue_copy(dst_ptr=hmu.unsafe_ptr(), src_buf=min_dist_u)
+    ctx.synchronize()
+
+    var destroyed = 0
+    for i in range(n * k):
+        if hdu.unsafe_ptr().unsafe_load(i) != ARM_SENTINEL:
+            destroyed += 1
+    if destroyed == 0:
+        raise Error(
+            "SENTINEL CANNOT REGISTER: the unfused arm left the poison"
+            " intact, so the sentinel is watching the wrong buffer and the"
+            " fused-arm conclusion above is worthless."
+        )
+
+    var label_diff = 0
+    var worst_rel = Float64(0.0)
+    for i in range(n):
+        if hlu.unsafe_ptr().unsafe_load(i) != hl.unsafe_ptr().unsafe_load(i):
+            label_diff += 1
+        var a = Float64(hm.unsafe_ptr().unsafe_load(i))
+        var b = Float64(hmu.unsafe_ptr().unsafe_load(i))
+        var denom = abs(a) if abs(a) > 1.0e-6 else 1.0e-6
+        var rel = abs(a - b) / denom
+        if rel > worst_rel:
+            worst_rel = rel
+    if label_diff != 0:
+        raise Error(
+            "the two arms disagree on " + String(label_diff)
+            + " labels; they reduce with the same total order and must not"
+        )
+    if worst_rel > 1.0e-4:
+        raise Error(
+            "fused and unfused min_dist diverge, worst relative "
+            + String(worst_rel)
+        )
+
+    print(
+        "check_assignment_arm_dispatch OK: fused arm proved (0/"
+        + String(n * k)
+        + " tile cells written; unfused sabotage overwrote "
+        + String(destroyed)
+        + "); arms agree on all labels, min_dist worst rel "
+        + String(worst_rel)
+    )
+
+
+# --- privatized accumulation -------------------------------------------------
+
+comptime ACC_ROWS = 512
+comptime ACC_FEATURES = 32
+comptime ACC_CLUSTERS = 64
+comptime ACC_SCALE = Float32(1024.0)
+
+
+def _acc_label(i: Int) -> Int:
+    """Hashed, SCATTERED, and deliberately SKEWED labels.
+
+    Not uniform and not round robin: a check whose expected value is the
+    same in every cell verifies the total and nothing about placement (this
+    repository's uniform-fixture rule). The hash scatters rows across all 64
+    clusters in no spatial pattern, and every third row is forced onto
+    cluster 7 so one cell family carries ~3x the contention of the rest.
+    """
+    var h = (i * 2654435761) % 1000003
+    if h % 3 == 0:
+        return 7
+    return h % ACC_CLUSTERS
+
+
+def _privatized_sums_dropped_flush_kernel(
+    sums_i32: MutPointer[Int32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    labels: MutPointer[UInt32, MutAnyOrigin],
+    weights: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+    n_features_in: Int32,
+    n_clusters_in: Int32,
+    scale_in: Float32,
+):
+    """CHECK-LOCAL SABOTAGE COPY of `accumulate_centroid_sums_privatized_
+    kernel`, identical except that BLOCK 0 SKIPS ITS FLUSH. It exists only
+    so `check_privatized_accumulate` can prove the per-block flush is
+    load-bearing: a privatized kernel whose flush silently vanished would
+    otherwise be indistinguishable from a slow day. Never shipped, never
+    dispatched.
+    """
+    var n_rows = Int(n_rows_in)
+    var n_features = Int(n_features_in)
+    var used = Int(n_clusters_in) * n_features
+    var total = n_rows * n_features
+    var tid = Int(thread_idx.x)
+
+    var priv = stack_allocation[
+        PRIVATE_ACC_CELLS,
+        Scalar[DType.int32],
+        address_space = AddressSpace.SHARED,
+    ]()
+
+    var z = tid
+    while z < used:
+        priv.unsafe_store(z, Int32(0))
+        z += Int(block_dim.x)
+    barrier()
+
+    var gid = Int(block_idx.x) * Int(block_dim.x) + tid
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while gid < total:
+        var row = gid // n_features
+        var f = gid - row * n_features
+        var label = Int(labels.unsafe_load(row))
+        var w = weights.unsafe_load(row)
+        var q = Int32(x.unsafe_load(gid) * w * scale_in)
+        _ = Atomic.fetch_add(priv.unsafe_offset(label * n_features + f), q)
+        gid += stride
+    barrier()
+
+    if Int(block_idx.x) == 0:
+        return  # THE SABOTAGE: this block's partial never reaches global.
+
+    var cc = tid
+    while cc < used:
+        var v = priv.unsafe_load(cc)
+        if v != Int32(0):
+            _ = Atomic.fetch_add(sums_i32.unsafe_offset(cc), v)
+        cc += Int(block_dim.x)
+
+
+def _zero_and_wait(
+    ctx: DeviceContext, mut buf: DeviceBuffer[DType.int32], n: Int
+) raises:
+    ctx.enqueue_function[zero_i32_kernel](
+        buf.unsafe_ptr(),
+        Int32(n),
+        grid_dim=((n + 255) // 256, 1, 1),
+        block_dim=(256, 1, 1),
+    )
+
+
+def check_privatized_accumulate() raises:
+    """The privatized accumulate against the direct one: bit-identical Int32
+    totals on a hashed, scattered, skewed fixture; a dropped-flush sabotage
+    that must move them; and a run-twice determinism assertion.
+
+    Bit-identity is the DESIGN CLAIM of the privatized arm (integer adds
+    re-associated per block are the same multiset of adds), so it is
+    asserted exactly -- every cell, `!=` on Int32 -- with no tolerance.
+    The shape (512 x 32, k=64) satisfies the dispatch guard the same way
+    the fit's 4M x 32 k=64 bench arm does: cells 2048 <= PRIVATE_ACC_CELLS,
+    work 16384 >= PRIVATE_MIN_WORK. That is asserted too, so the fixture
+    cannot silently drift onto the other arm.
+    """
+    var ctx = DeviceContext()
+    var n = ACC_ROWS
+    var d = ACC_FEATURES
+    var k = ACC_CLUSTERS
+    var cd = k * d
+
+    if not (cd <= PRIVATE_ACC_CELLS and n * d >= PRIVATE_MIN_WORK):
+        raise Error(
+            "fixture no longer selects the privatized arm; the check is"
+            " testing nothing"
+        )
+
+    var x = ctx.enqueue_create_buffer[DType.float32](n * d)
+    var labels = ctx.enqueue_create_buffer[DType.uint32](n)
+    var weights = ctx.enqueue_create_buffer[DType.float32](n)
+    var sums = ctx.enqueue_create_buffer[DType.int32](cd)
+    var wsum = ctx.enqueue_create_buffer[DType.int32](k)
+    ctx.synchronize()
+
+    var hx = ctx.enqueue_create_host_buffer[DType.float32](n * d)
+    var hl = ctx.enqueue_create_host_buffer[DType.uint32](n)
+    var hw = ctx.enqueue_create_host_buffer[DType.float32](n)
+    for i in range(n):
+        hl.unsafe_ptr().unsafe_store(i, UInt32(_acc_label(i)))
+        hw.unsafe_ptr().unsafe_store(i, Float32(1.0) + Float32(i % 5) * 0.25)
+        for f in range(d):
+            hx.unsafe_ptr().unsafe_store(i * d + f, _jitter(i, f) * 10.0)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=labels, src_ptr=hl.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
+    ctx.synchronize()
+
+    var h_direct_s = ctx.enqueue_create_host_buffer[DType.int32](cd)
+    var h_direct_w = ctx.enqueue_create_host_buffer[DType.int32](k)
+    var h_priv_s = ctx.enqueue_create_host_buffer[DType.int32](cd)
+    var h_priv_w = ctx.enqueue_create_host_buffer[DType.int32](k)
+    var h_again_s = ctx.enqueue_create_host_buffer[DType.int32](cd)
+    var h_sab_s = ctx.enqueue_create_host_buffer[DType.int32](cd)
+
+    # --- run A: the DIRECT kernels, as the oracle -------------------------
+    _zero_and_wait(ctx, sums, cd)
+    _zero_and_wait(ctx, wsum, k)
+    ctx.enqueue_function[accumulate_centroid_sums_kernel](
+        sums.unsafe_ptr(), x.unsafe_ptr(), labels.unsafe_ptr(),
+        weights.unsafe_ptr(), Int32(n), Int32(d), ACC_SCALE,
+        grid_dim=(accumulate_grid_blocks(n * d, 0), 1, 1),
+        block_dim=(REDUCE_BY_KEY_TPB, 1, 1),
+    )
+    ctx.enqueue_function[accumulate_weight_per_cluster_kernel](
+        wsum.unsafe_ptr(), labels.unsafe_ptr(), weights.unsafe_ptr(),
+        Int32(n), ACC_SCALE,
+        grid_dim=((n + REDUCE_BY_KEY_TPB - 1) // REDUCE_BY_KEY_TPB, 1, 1),
+        block_dim=(REDUCE_BY_KEY_TPB, 1, 1),
+    )
+    ctx.enqueue_copy(dst_ptr=h_direct_s.unsafe_ptr(), src_buf=sums)
+    ctx.enqueue_copy(dst_ptr=h_direct_w.unsafe_ptr(), src_buf=wsum)
+    ctx.synchronize()
+
+    # --- run B: the shipped dispatch, which must take the privatized arm --
+    _zero_and_wait(ctx, sums, cd)
+    _zero_and_wait(ctx, wsum, k)
+    launch_accumulate_centroid_sums(
+        ctx, sums, x, labels, weights, n, d, k, ACC_SCALE
+    )
+    launch_accumulate_weight_per_cluster(
+        ctx, wsum, labels, weights, n, k, ACC_SCALE
+    )
+    ctx.enqueue_copy(dst_ptr=h_priv_s.unsafe_ptr(), src_buf=sums)
+    ctx.enqueue_copy(dst_ptr=h_priv_w.unsafe_ptr(), src_buf=wsum)
+    ctx.synchronize()
+
+    var s_diff = 0
+    for i in range(cd):
+        if h_priv_s.unsafe_ptr().unsafe_load(i) != h_direct_s.unsafe_ptr().unsafe_load(i):
+            s_diff += 1
+    var w_diff = 0
+    for i in range(k):
+        if h_priv_w.unsafe_ptr().unsafe_load(i) != h_direct_w.unsafe_ptr().unsafe_load(i):
+            w_diff += 1
+    if s_diff != 0 or w_diff != 0:
+        raise Error(
+            "privatized totals are NOT bit-identical to the direct kernel's:"
+            " " + String(s_diff) + " of " + String(cd) + " sum cells and "
+            + String(w_diff) + " of " + String(k) + " weight cells differ."
+            " Integer adds cannot do that, so one arm is visiting the wrong"
+            " cells."
+        )
+
+    # --- determinism: the same launch twice must match bitwise ------------
+    _zero_and_wait(ctx, sums, cd)
+    launch_accumulate_centroid_sums(
+        ctx, sums, x, labels, weights, n, d, k, ACC_SCALE
+    )
+    ctx.enqueue_copy(dst_ptr=h_again_s.unsafe_ptr(), src_buf=sums)
+    ctx.synchronize()
+    for i in range(cd):
+        if h_again_s.unsafe_ptr().unsafe_load(i) != h_priv_s.unsafe_ptr().unsafe_load(i):
+            raise Error(
+                "two identical privatized runs disagree at cell " + String(i)
+                + ": the accumulator is not order-independent after all"
+            )
+
+    # --- sabotage: drop block 0's flush; the totals MUST move -------------
+    _zero_and_wait(ctx, sums, cd)
+    ctx.enqueue_function[_privatized_sums_dropped_flush_kernel](
+        sums.unsafe_ptr(), x.unsafe_ptr(), labels.unsafe_ptr(),
+        weights.unsafe_ptr(), Int32(n), Int32(d), Int32(k), ACC_SCALE,
+        grid_dim=(
+            accumulate_grid_blocks(n * d, PRIVATE_ACC_CELLS * 4), 1, 1
+        ),
+        block_dim=(REDUCE_BY_KEY_TPB, 1, 1),
+    )
+    ctx.enqueue_copy(dst_ptr=h_sab_s.unsafe_ptr(), src_buf=sums)
+    ctx.synchronize()
+    var moved = 0
+    for i in range(cd):
+        if h_sab_s.unsafe_ptr().unsafe_load(i) != h_priv_s.unsafe_ptr().unsafe_load(i):
+            moved += 1
+    if moved == 0:
+        raise Error(
+            "SABOTAGE FAILED TO REGISTER: dropping one block's flush moved"
+            " no total, so either the flush is not load-bearing or every"
+            " partial in block 0 was zero and the fixture is too weak."
+        )
+
+    print(
+        "check_privatized_accumulate OK: "
+        + String(cd)
+        + " sum cells + "
+        + String(k)
+        + " weight cells bit-identical direct vs privatized, run-twice"
+        " bitwise equal, dropped flush moved "
+        + String(moved)
+        + " cells"
     )

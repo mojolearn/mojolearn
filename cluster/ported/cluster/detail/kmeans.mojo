@@ -72,11 +72,11 @@ from cluster.mojo_only.reduce_by_key import (
     SUM_MODE_PLAIN,
     SUM_MODE_PRODUCT,
     SUM_MODE_SQDIFF,
-    accumulate_centroid_sums_kernel,
-    accumulate_weight_per_cluster_kernel,
     copy_f32_kernel,
     finish_sum_kernel,
     finalize_centroids_kernel,
+    launch_accumulate_centroid_sums,
+    launch_accumulate_weight_per_cluster,
     sum_partials_kernel,
     zero_i32_kernel,
 )
@@ -620,38 +620,31 @@ def kmeans_fit_main(
                 params.batch_centroids,
             )
 
-            # Sized in CELLS now, not rows: `accumulate_centroid_sums_kernel`
-            # indexes `n_samples * n_features` the way RAFT's
-            # `sum_rows_by_key_direct_kernel`
-            # (`raft/linalg/detail/reduce_rows_by_key.cuh:272-288`) does,
-            # rather than striding rows and features separately.
-            #
-            # DEVIATION: theirs launches exactly one thread per cell and
-            # returns early; this grid-strides a capped grid. Same arithmetic
-            # and same atomic target, different launch shape.
-            var acc_cells = n_samples * n_features
-            var acc_blocks = min(
-                1024, max(1, (acc_cells + REDUCE_BY_KEY_TPB - 1) // REDUCE_BY_KEY_TPB)
-            )
-            ctx.enqueue_function[accumulate_centroid_sums_kernel](
-                sums_i32.unsafe_ptr(),
-                x.unsafe_ptr(),
-                labels.unsafe_ptr(),
-                weights.unsafe_ptr(),
-                Int32(n_samples),
-                Int32(n_features),
+            # `update_centroids`' two reductions, `detail/kmeans.cuh:300-318`.
+            # The dispatch (privatized block-local partials when they fit
+            # and the input is large, direct scatter-add otherwise), the
+            # grids (from the hardware matrix, replacing a magic 1024-block
+            # cap that lived here) and the bit-identity argument between the
+            # arms all live in `cluster/mojo_only/reduce_by_key.mojo`.
+            launch_accumulate_centroid_sums(
+                ctx,
+                sums_i32,
+                x,
+                labels,
+                weights,
+                n_samples,
+                n_features,
+                n_clusters,
                 sum_scale,
-                grid_dim=(acc_blocks, 1, 1),
-                block_dim=(REDUCE_BY_KEY_TPB, 1, 1),
             )
-            ctx.enqueue_function[accumulate_weight_per_cluster_kernel](
-                weight_i32.unsafe_ptr(),
-                labels.unsafe_ptr(),
-                weights.unsafe_ptr(),
-                Int32(n_samples),
+            launch_accumulate_weight_per_cluster(
+                ctx,
+                weight_i32,
+                labels,
+                weights,
+                n_samples,
+                n_clusters,
                 weight_scale,
-                grid_dim=((n_samples + 255) // 256, 1, 1),
-                block_dim=(256, 1, 1),
             )
 
             ctx.enqueue_function[finalize_centroids_kernel](

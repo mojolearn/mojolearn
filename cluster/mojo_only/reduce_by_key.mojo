@@ -52,10 +52,13 @@ listed it as verified in isolation and used by no kernel.
 from mojo_only.kernel_matrix import (
     K_LIB_REDUCE_BY_KEY,
     TARGET_COLUMN,
+    column_shared_limit,
     lib_block_size_for,
 )
+from mojo_only.hardware_matrix import gpu_cores_for, max_active_blocks_for
 
 
+from max.gpu.host import DeviceBuffer, DeviceContext
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.memory import AddressSpace
@@ -71,6 +74,25 @@ comptime REDUCE_BY_KEY_TPB = lib_block_size_for[
     K_LIB_REDUCE_BY_KEY, TARGET_COLUMN
 ]()
 
+#: Threadgroup-private accumulator cells (Int32) for the privatized arm.
+#: RAFT sizes its shared cache DYNAMICALLY at launch and guards the arm with
+#: "the cache fits in shared memory" -- `cache_size <= 49152ull`, the full
+#: default CUDA shared budget (`raft/linalg/detail/reduce_cols_by_key.cuh:
+#: 125-126`). Mojo's `stack_allocation` is comptime-sized, so the cap is
+#: pinned here instead, from the matrix's per-block shared limit: HALF the
+#: target's budget, in Int32 cells (4,096 cells / 16 KB on the Apple
+#: column's 32 KB). Half rather than all of it so the launch never sits on
+#: the validity wall; k-means' shipped shape (k=64 x d=32 = 2,048 cells,
+#: 8 KB) fits with headroom, exactly as the SCOREBOARD's privatization case
+#: priced it.
+comptime PRIVATE_ACC_CELLS = column_shared_limit(TARGET_COLUMN) // 8
+
+#: RAFT's "input is large enough to be worth the flush" guard, copied:
+#: `nrows * ncols >= IdxType{8192}` (`reduce_cols_by_key.cuh:126`, with
+#: their own comment: cached is slightly slower for small inputs, orders of
+#: magnitude faster for large ones).
+comptime PRIVATE_MIN_WORK = 8192
+
 
 def accumulate_centroid_sums_kernel(
     sums_i32: MutPointer[Int32, MutAnyOrigin],
@@ -82,6 +104,14 @@ def accumulate_centroid_sums_kernel(
     scale_in: Float32,
 ):
     """`reduce_rows_by_key`, as a quantized scatter-add.
+
+    This mirrors the arm THEIR dispatch takes at k-means' nkeys: the
+    small-nkeys kernel is gated `nkeys <= 4`, everything else falls to
+    `sum_rows_by_key_large_nkeys_rowmajor` (`raft/linalg/detail/
+    reduce_rows_by_key.cuh:354-363`). Measured contention-bound at the 4M
+    x 32 k=64 shape, so the SHIPPED dispatch (`launch_accumulate_centroid_
+    sums`) now prefers the bit-identical privatized kernel below and keeps
+    this one as the guard's fallback arm.
 
     **The atomic scatter-add itself is faithful, not a substitution gap.**
     RAFT's `reduce_rows_by_key.cuh:287` (`raft::myAtomicAdd`) also lands its
@@ -132,12 +162,15 @@ def accumulate_weight_per_cluster_kernel(
     n_rows_in: Int32,
     scale_in: Float32,
 ):
-    """`reduce_cols_by_key` over a single row of weights.
+    """`reduce_cols_by_key` over a single row of weights -- their DIRECT arm
+    (`reduce_cols_by_key_direct_kernel`, `raft/linalg/detail/
+    reduce_cols_by_key.cuh:35-47`).
 
-    Their call passes `n_rows = 1` and the weight vector as the matrix
-    (`kmeans_common.cuh`, the `reduce_cols_by_key` call), so this is the
+    Their call passes `nrows = 1` and the weight vector as the matrix
+    (`cuvs/src/cluster/detail/kmeans.cuh:312-318`), so this is the
     denominator of the centroid update and the empty-cluster test in one
-    array.
+    array. NOTE: at the fit's shape their dispatch takes the CACHED arm, not
+    this one; see `accumulate_weight_per_cluster_privatized_kernel`.
     """
     var n_rows = Int(n_rows_in)
     var row = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -145,6 +178,278 @@ def accumulate_weight_per_cluster_kernel(
         var label = Int(labels.unsafe_load(row))
         var q = Int32(weights.unsafe_load(row) * scale_in)
         _ = Atomic.fetch_add(weight_i32.unsafe_offset(label), q)
+
+
+def accumulate_centroid_sums_privatized_kernel(
+    sums_i32: MutPointer[Int32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    labels: MutPointer[UInt32, MutAnyOrigin],
+    weights: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+    n_features_in: Int32,
+    n_clusters_in: Int32,
+    scale_in: Float32,
+):
+    """The SMEM-privatized arm: block-local partials, one flush per block.
+
+    DEVIATION, and a measured one. RAFT's `reduce_rows_by_key` dispatch at
+    nkeys=64 takes `sum_rows_by_key_large_nkeys_kernel_rowmajor` -- the
+    small-nkeys arm is gated `nkeys <= 4` (`raft/linalg/detail/
+    reduce_rows_by_key.cuh:354-363`) -- which is exactly the direct global
+    scatter-add `accumulate_centroid_sums_kernel` above mirrors. Measured
+    here (SCOREBOARD_2026-08-19 item 1, 4M x 32, k=64) that arm is
+    contention-bound at 56 ms against a 15-20 ms traffic floor: 128M global
+    atomics landing on 2,048 cells.
+
+    The privatization STRUCTURE is still theirs, not invented: RAFT ships it
+    twice in the same two files, as `sum_rows_by_key_large_nkeys_kernel_
+    colmajor` (`reduce_rows_by_key.cuh:196-242`: `__shared__ local_sums`,
+    accumulate with shared atomics, flush non-zero cells to global atomics)
+    and as `reduce_cols_by_key_cached_kernel` (`reduce_cols_by_key.cuh:
+    51-81`, same three phases) -- the arm THEIR `reduce_cols_by_key`
+    dispatch takes for this fit's WEIGHT reduction. This kernel applies that
+    scheme to the row-major sums, keeping the direct arm's flat cell
+    indexing.
+
+    DETERMINISM IS PRESERVED, BY THE SAME ARGUMENT THAT PICKED Int32.
+    The addends are the identical quantized `Int32` values the direct kernel
+    forms, and Int32 addition (two's-complement, wrapping) is associative
+    and commutative. Grouping them into per-block partials and adding the
+    partials atomically is a re-association of the same multiset of adds, so
+    the totals are BIT-IDENTICAL to the direct kernel's and to themselves
+    run to run, at any grid size, under any scheduling. A float accumulator
+    would lose exactly this property, which is why privatizing it would have
+    needed a numerics argument and this needs one comment.
+
+    Skipping zero partials in the flush is theirs (`reduce_rows_by_key.cuh:
+    235`, `reduce_cols_by_key.cuh:78`) and is safe under the same argument:
+    adding zero is the identity, in integers exactly.
+
+    Requires `n_clusters * n_features <= PRIVATE_ACC_CELLS`; the host
+    dispatch in `launch_accumulate_centroid_sums` guards it, as theirs does.
+    """
+    var n_rows = Int(n_rows_in)
+    var n_features = Int(n_features_in)
+    var used = Int(n_clusters_in) * n_features
+    var total = n_rows * n_features
+    var tid = Int(thread_idx.x)
+
+    var priv = stack_allocation[
+        PRIVATE_ACC_CELLS,
+        Scalar[DType.int32],
+        address_space = AddressSpace.SHARED,
+    ]()
+
+    # `for (local_key = threadIdx.x; ...) local_sums[local_key] = 0.0;`
+    var z = tid
+    while z < used:
+        priv.unsafe_store(z, Int32(0))
+        z += Int(block_dim.x)
+    barrier()
+
+    # The direct arm's flat grid-stride over cells, atomics now landing in
+    # the block's own threadgroup memory (their `raft::myAtomicAdd(
+    # &local_sums[...])`, shared-memory atomic, `reduce_rows_by_key.cuh:227`).
+    var gid = Int(block_idx.x) * Int(block_dim.x) + tid
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while gid < total:
+        var row = gid // n_features
+        var f = gid - row * n_features
+        var label = Int(labels.unsafe_load(row))
+        var w = weights.unsafe_load(row)
+        var q = Int32(x.unsafe_load(gid) * w * scale_in)
+        _ = Atomic.fetch_add(priv.unsafe_offset(label * n_features + f), q)
+        gid += stride
+    barrier()
+
+    # One flush per block: `used` global atomics instead of one per element.
+    var c = tid
+    while c < used:
+        var v = priv.unsafe_load(c)
+        if v != Int32(0):
+            _ = Atomic.fetch_add(sums_i32.unsafe_offset(c), v)
+        c += Int(block_dim.x)
+
+
+def accumulate_weight_per_cluster_privatized_kernel(
+    weight_i32: MutPointer[Int32, MutAnyOrigin],
+    labels: MutPointer[UInt32, MutAnyOrigin],
+    weights: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+    n_clusters_in: Int32,
+    scale_in: Float32,
+):
+    """The weight denominator through the SAME privatization -- and for this
+    one it is not a deviation at all: the upstream call IS
+    `raft::linalg::reduce_cols_by_key` (`cuvs/src/cluster/detail/
+    kmeans.cuh:312-318`, nrows=1, ncols=n_samples, nkeys=n_clusters), whose
+    dispatch at this fit's shape (cache 4*k bytes <= 49152, work
+    n_samples >= 8192) takes `reduce_cols_by_key_cached_kernel`
+    (`reduce_cols_by_key.cuh:125-133`) -- the shared-memory arm. The direct
+    `accumulate_weight_per_cluster_kernel` above mirrored their OTHER arm.
+
+    Bit-identical to it anyway: same quantized Int32 addends, associative
+    and commutative, re-associated per block. See the sums kernel's comment.
+    """
+    var n_rows = Int(n_rows_in)
+    var used = Int(n_clusters_in)
+    var tid = Int(thread_idx.x)
+
+    var priv = stack_allocation[
+        PRIVATE_ACC_CELLS,
+        Scalar[DType.int32],
+        address_space = AddressSpace.SHARED,
+    ]()
+
+    var z = tid
+    while z < used:
+        priv.unsafe_store(z, Int32(0))
+        z += Int(block_dim.x)
+    barrier()
+
+    var row = Int(block_idx.x) * Int(block_dim.x) + tid
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while row < n_rows:
+        var label = Int(labels.unsafe_load(row))
+        var q = Int32(weights.unsafe_load(row) * scale_in)
+        _ = Atomic.fetch_add(priv.unsafe_offset(label), q)
+        row += stride
+    barrier()
+
+    var c = tid
+    while c < used:
+        var v = priv.unsafe_load(c)
+        if v != Int32(0):
+            _ = Atomic.fetch_add(weight_i32.unsafe_offset(c), v)
+        c += Int(block_dim.x)
+
+
+def accumulate_grid_blocks(work_items: Int, smem_bytes: Int) raises -> Int:
+    """Grid for the accumulate kernels, FROM THE MATRIX, replacing the magic
+    `min(1024, ...)` cap the launch site used to carry.
+
+    RAFT sizes the cached arm's grid from a runtime occupancy query:
+    `target_nblks = 4 * getMultiProcessorCount(); nblks = min(target_nblks,
+    ceildiv(work, TPB))` (`reduce_cols_by_key.cuh:127-131`). Metal exposes
+    no such query through Mojo, so the two factors are read from
+    `mojo_only/hardware_matrix.mojo`'s target column the way every other
+    launch in this tree reads them: cores x resident blocks per core, then
+    capped by the work. Their literal `4` is their occupancy guess for their
+    kernel; ours is the table's computed one (`max_active_blocks_for`), so
+    the same call is honest per vendor column instead of pinned to CUDA's.
+
+    For the DIRECT sums arm RAFT launches one thread per cell with no cap
+    (`reduce_rows_by_key.cuh:304-307`). That kernel here grid-strides
+    instead -- a recorded launch-shape deviation, same arithmetic and same
+    atomic targets -- and this function now sizes that grid too (pass
+    `smem_bytes = 0`), so no launch below restates a hardware number. The
+    direct WEIGHT kernel is one-thread-per-row like theirs and keeps its
+    ceildiv grid.
+    """
+    var per_core = max_active_blocks_for[TARGET_COLUMN](
+        REDUCE_BY_KEY_TPB, smem_bytes
+    )
+    var target = gpu_cores_for[TARGET_COLUMN]() * per_core
+    var by_work = (work_items + REDUCE_BY_KEY_TPB - 1) // REDUCE_BY_KEY_TPB
+    var blocks = target if by_work > target else by_work
+    if blocks < 1:
+        blocks = 1
+    return blocks
+
+
+def launch_accumulate_centroid_sums(
+    ctx: DeviceContext,
+    mut sums_i32: DeviceBuffer[DType.int32],
+    mut x: DeviceBuffer[DType.float32],
+    mut labels: DeviceBuffer[DType.uint32],
+    mut weights: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    n_features: Int,
+    n_clusters: Int,
+    sum_scale: Float32,
+) raises:
+    """The dispatch, shaped like RAFT's (`reduce_cols_by_key.cuh:125-139`):
+    privatized when the block-local cache fits and the input is large enough
+    to amortize the flush, direct scatter-add otherwise. Both arms produce
+    bit-identical Int32 totals (see the kernels), so this selector is
+    SCHEDULING: it can change the time, never the model.
+    """
+    var cells = n_samples * n_features
+    if (
+        n_clusters * n_features <= PRIVATE_ACC_CELLS
+        and cells >= PRIVATE_MIN_WORK
+    ):
+        ctx.enqueue_function[accumulate_centroid_sums_privatized_kernel](
+            sums_i32.unsafe_ptr(),
+            x.unsafe_ptr(),
+            labels.unsafe_ptr(),
+            weights.unsafe_ptr(),
+            Int32(n_samples),
+            Int32(n_features),
+            Int32(n_clusters),
+            sum_scale,
+            grid_dim=(
+                accumulate_grid_blocks(cells, PRIVATE_ACC_CELLS * 4),
+                1,
+                1,
+            ),
+            block_dim=(REDUCE_BY_KEY_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[accumulate_centroid_sums_kernel](
+            sums_i32.unsafe_ptr(),
+            x.unsafe_ptr(),
+            labels.unsafe_ptr(),
+            weights.unsafe_ptr(),
+            Int32(n_samples),
+            Int32(n_features),
+            sum_scale,
+            grid_dim=(accumulate_grid_blocks(cells, 0), 1, 1),
+            block_dim=(REDUCE_BY_KEY_TPB, 1, 1),
+        )
+
+
+def launch_accumulate_weight_per_cluster(
+    ctx: DeviceContext,
+    mut weight_i32: DeviceBuffer[DType.int32],
+    mut labels: DeviceBuffer[DType.uint32],
+    mut weights: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    n_clusters: Int,
+    weight_scale: Float32,
+) raises:
+    """Same dispatch for the denominator; upstream's own is
+    `reduce_cols_by_key` at nrows=1, so the guard terms are `n_clusters`
+    cells and `n_samples` work items."""
+    if n_clusters <= PRIVATE_ACC_CELLS and n_samples >= PRIVATE_MIN_WORK:
+        ctx.enqueue_function[accumulate_weight_per_cluster_privatized_kernel](
+            weight_i32.unsafe_ptr(),
+            labels.unsafe_ptr(),
+            weights.unsafe_ptr(),
+            Int32(n_samples),
+            Int32(n_clusters),
+            weight_scale,
+            grid_dim=(
+                accumulate_grid_blocks(n_samples, PRIVATE_ACC_CELLS * 4),
+                1,
+                1,
+            ),
+            block_dim=(REDUCE_BY_KEY_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[accumulate_weight_per_cluster_kernel](
+            weight_i32.unsafe_ptr(),
+            labels.unsafe_ptr(),
+            weights.unsafe_ptr(),
+            Int32(n_samples),
+            weight_scale,
+            grid_dim=(
+                (n_samples + REDUCE_BY_KEY_TPB - 1) // REDUCE_BY_KEY_TPB,
+                1,
+                1,
+            ),
+            block_dim=(REDUCE_BY_KEY_TPB, 1, 1),
+        )
 
 
 def finalize_centroids_kernel(
