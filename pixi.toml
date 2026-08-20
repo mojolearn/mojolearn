@@ -54,6 +54,12 @@ check-gpu-lib = "mojo run -I . mojo_only/gpu_lib_check.mojo"
 # fingerprint proving which kernel the dispatch launched. Own main() because
 # it launches the full histogram path many times over.
 check-hist2 = "mojo run -I . mojo_only/hist2_check.mojo"
+
+# Border selection for CTR values. MinEntropy is what their GPU uses for
+# FeatureFreq simple ctrs, it is NOT the GreedyLogSum we use for numeric
+# features, and this compares our exact-DP port against CatBoost's own
+# borders over six budgets. Host-side, seconds, no GPU.
+check-minentropy = "mojo run -I . mojo_only/min_entropy_check.mojo"
 check-gpu-lib-worker = "mojo run -I . mojo_only/gpu_lib_worker_check.mojo"
 
 # What the host toolchain actually resolved to. Worth recording beside any
