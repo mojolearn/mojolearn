@@ -199,3 +199,53 @@ def fit_and_test_mse_bayesian(scratch, prefix, border_count, trees, depth,
     train_mse = float(np.mean((m.predict(xt) - yt) ** 2))
     test_mse = float(np.mean((m.predict(xh) - yh) ** 2))
     return [dt, train_mse, test_mse]
+
+def fit_and_test_mse_cat(scratch, prefix, trees, depth, train_rows, seed):
+    """The CATEGORICAL arm: real cat features, their FeatureFreq simple
+    ctr ONLY (max_ctr_complexity=1 disables combinations), one_hot_max_size
+    2 -- the frequency information and nothing else, which is what the Mojo
+    arm's host-side freq-ctr fixture carries. 80/20 holdout quality."""
+    import catboost.datasets
+    if str(prefix) == "amazon":
+        train_df, _ = catboost.datasets.amazon()
+        y = train_df["ACTION"].to_numpy().astype(np.float32)
+        xdf = train_df.drop(columns=["ACTION"])
+        cat_idx = list(range(xdf.shape[1]))
+    elif str(prefix) == "adult":
+        train_df, _ = catboost.datasets.adult()
+        y = (train_df["income"] == ">50K").to_numpy().astype(np.float32)
+        xdf = train_df.drop(columns=["income"])
+        cat_idx = [i for i, c in enumerate(xdf.columns)
+                   if xdf[c].dtype == object]
+    else:
+        raise ValueError(prefix)
+    x = xdf.astype(str) if str(prefix) == "amazon" else xdf
+    tr = int(train_rows)
+    m = catboost.CatBoostRegressor(
+        iterations=int(trees),
+        depth=int(depth),
+        learning_rate=0.3,
+        l2_leaf_reg=3.0,
+        loss_function="RMSE",
+        grow_policy="SymmetricTree",
+        boosting_type="Plain",
+        bootstrap_type="No",
+        one_hot_max_size=2,
+        simple_ctr="FeatureFreq",
+        max_ctr_complexity=1,
+        rsm=1.0,
+        has_time=True,
+        random_seed=int(seed),
+        model_shrink_rate=0.0,
+        boost_from_average=False,
+        leaf_estimation_iterations=1,
+        random_strength=0.0,
+        logging_level="Silent",
+        allow_writing_files=False,
+    )
+    t0 = time.perf_counter()
+    m.fit(catboost.Pool(x[:tr], y[:tr], cat_features=cat_idx))
+    dt = time.perf_counter() - t0
+    train_mse = float(np.mean((m.predict(x[:tr]) - y[:tr]) ** 2))
+    test_mse = float(np.mean((m.predict(x[tr:]) - y[tr:]) ** 2))
+    return [dt, train_mse, test_mse]

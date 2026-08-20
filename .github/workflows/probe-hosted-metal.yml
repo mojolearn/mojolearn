@@ -54,10 +54,25 @@ jobs:
           pixi-version: v0.76.2
           cache: false
 
+      # THE TARGET IS NAMED EXPLICITLY, and that is the finding this probe
+      # already produced. A bare `mojo build` on this runner fails with
+      # "constraint failed: Unknown GPU architecture detected" -- at COMPILE
+      # time, not at run time -- because the hosted runner's virtualized GPU
+      # is not one Mojo recognizes. Naming the accelerator removes the need
+      # to detect one, which means a hosted runner CAN build a wheel even if
+      # it cannot run the result. The baseline matches bindings/build.sh.
       - name: Build the probe
-        run: pixi run mojo build -I . tools/hosted_gpu_probe.mojo -o hosted_gpu_probe
+        run: |
+          pixi run mojo build -I . \
+            --target-cpu apple-m1 --target-accelerator metal:1 \
+            tools/hosted_gpu_probe.mojo -o hosted_gpu_probe
 
-      # THE ANSWER. A non-zero exit here means hosted runners cannot do Metal
-      # compute and the release workflow needs a different home.
-      - name: Run the probe
+      # SEPARATE STEP, AND ALLOWED TO FAIL. Building and running are two
+      # different questions and this workflow exists to answer both
+      # independently. If the build passes and this fails, the release
+      # workflow can build on a hosted runner and must verify the wheel
+      # somewhere with a real GPU.
+      - name: Can it also RUN here?
+        continue-on-error: true
         run: ./hosted_gpu_probe
+
