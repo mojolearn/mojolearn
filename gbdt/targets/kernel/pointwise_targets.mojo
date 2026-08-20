@@ -3,9 +3,12 @@
 PORT OF `catboost/cuda/targets/kernel/pointwise_targets.cu` at CatBoost
 `54a8143a`. Transliterated. Do not improve.
 
-Only the RMSE objective is ported. It is the smallest correct starting point
-for a boosting loop, because its derivatives are exact rather than
-approximated and its Newton step needs no line search.
+RMSE and the cross-entropy pair (Logloss / CrossEntropy) are ported. RMSE
+came first because its derivatives are exact and its Newton step needs no
+line search; the cross-entropy kernel is below it, and its LEAF story is
+different -- their Logloss default is Newton with TEN estimation iterations
+(`catboost_options.cpp:157-164`), so its leaves are the estimator's job,
+not this file's.
 
 ## Which of their two MSE kernels this is, because they have two
 
@@ -48,6 +51,7 @@ here would silently invert every early-stopping comparison later.
 """
 
 from std.atomic import Atomic
+from std.math import exp, isfinite, log
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -252,3 +256,141 @@ def deterministic_sum_lanes_kernel[
         @parameter
         for lane in range(lanes):
             dst.unsafe_store(lane, red[lane * REDUCE_LANES_BLOCK])
+
+
+def cross_entropy_kernel[
+    has_border: Bool
+](
+    target_classes: MutPointer[Float32, MutAnyOrigin],
+    weights: MutPointer[Float32, MutAnyOrigin],
+    size_in: Int32,
+    predictions: MutPointer[Float32, MutAnyOrigin],
+    has_weights: Int32,
+    border: Float32,
+    stats: MutPointer[Float32, MutAnyOrigin],
+    function_value: MutPointer[Float32, MutAnyOrigin],
+    compute_fv: Int32,
+    plane_magnitudes: MutPointer[Float32, MutAnyOrigin],
+    compute_magnitudes: Int32,
+):
+    """`CrossEntropyImpl` (`pointwise_targets.cu:327-390`), the kernel
+    Logloss and CrossEntropy actually reach: `pointwise_target_impl.h:333-345`
+    dispatches both to `ApproximateCrossEntropy`, which launches this and
+    nothing else (`targets/kernel.h:49`, `:876`). `has_border` is their
+    `HAS_BORDER` template arm: Logloss thresholds the target at `border`
+    (`GetLogLossBorder`, default 0.5, `pointwise_target_impl.h:285-287`);
+    CrossEntropy takes the target as an already-soft class probability.
+
+    Per element, THEIR arithmetic, term for term (`:353-360`):
+
+        expVal = exp(val)                      // their __expf
+        p  = clamp(isfinite ? expVal/(1+expVal) : 1, [1e-40, 1-1e-40])
+        c  = has_border ? (targetClass > border) : targetClass
+        der  = weight * (c - p)
+        der2 = weight * (p * (1 - p))
+        score += weight * (c*val - log(1+expVal))   // isfinite ? : w*c*val-val
+
+    Note the SIGN convention matches `mse_kernel`: `score` is the
+    log-LIKELIHOOD (their `tmpScore`, `:363`), so downstream maximizes, and
+    the printed loss is its negation by the same reader that negates mse.
+
+    ================= DEVIATION BLOCK =================
+    Same three substitutions `mse_kernel` records, none new:
+
+    * STATS PLANES instead of their separate `der` buffer: plane 0 the
+      weight, plane 1 `weight * der` -- their own `StatsToAggregate` column
+      order under a NON-second-order score function
+      (`pointwise_target_impl.h:188-213`; Cosine and L2 are not second
+      order, `enum_helpers.cpp:829-841`). `der2` is NOT written here: the
+      split search never reads it under Cosine/L2, and the leaves estimator
+      recomputes it at its own point each Newton iteration, which is the
+      only place it is consumed. A NewtonCosine/NewtonL2 caller would need
+      the `secondDerAsWeights` flag, exactly as the mse block already says.
+    * PER-BLOCK PARTIALS instead of their block-reduce-plus-`atomicAdd`
+      tail (`:381-388`) for `function_value` AND the two fixed-point plane
+      magnitudes -- the 2026-08-21 determinism fix, same buffers, same
+      `deterministic_sum_lanes_kernel` fold.
+    * GRID: theirs is 512 threads x 2 elements each (`:396-397`); ours is
+      the file's one-element-per-thread shape at `MSE_BLOCK_SIZE`.
+      Scheduling only -- every per-document store is identical -- and the
+      fv/magnitude summation order is ours either way, because the partials
+      buffers already are.
+
+    And one of substance: `exp`/`log` here are `std.math`, where theirs are
+    CUDA's `__expf`/`__logf` fast-math approximations (~2 ulp). CatBoost
+    itself accepts approximate transcendentals at this exact site, so the
+    substitution is in-family, but the two arms' derivatives differ in last
+    bits BY CONSTRUCTION and no check may expect bitwise der parity against
+    a CatBoost fit. (The host-side `std.math.log` tie-decoding defect is a
+    different site and does not apply: nothing here decodes ties.)
+    ===================================================
+    """
+    var size = Int(size_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+
+    var in_range = i < size
+    var val = Float32(0.0)
+    var target_class = Float32(1.0)  # their `scale[j]` OOB default (`:346`)
+    var weight = Float32(1.0)
+    if in_range:
+        val = predictions.unsafe_load(i)
+        target_class = target_classes.unsafe_load(i)
+        if has_weights != Int32(0):
+            weight = weights.unsafe_load(i)
+
+    # `const float expVal = idx < size ? __expf(val) : 0;` (`:353`)
+    var exp_val = Float32(0.0)
+    if in_range:
+        exp_val = exp(val)
+    # `p = max(min(isfinite(expVal) ? expVal / (1.0f + expVal) : 1.0f,
+    #              1.0f - 1e-40f), 1e-40f)` (`:354`)
+    var p = Float32(1.0)
+    if isfinite(exp_val):
+        p = exp_val / (Float32(1.0) + exp_val)
+    p = max(min(p, Float32(1.0) - Float32(1e-40)), Float32(1e-40))
+
+    # `const float c = HAS_BORDER ? targetClass > border : targetClass;`
+    var c: Float32
+
+    @parameter
+    if has_border:
+        c = Float32(1.0) if target_class > border else Float32(0.0)
+    else:
+        c = target_class
+
+    var direction = c - p  # their `direction[j] = c - p` (`:358`)
+    var scale = p * (Float32(1.0) - p)  # their `scale[j]` (`:359`)
+
+    if in_range:
+        stats.unsafe_store(i, weight)
+        stats.unsafe_store(size + i, weight * direction)
+    # der2 = weight * scale is NOT stored; see the deviation block.
+    _ = scale
+
+    if compute_fv != Int32(0):
+        # `tmpScore += w * (c * val - __logf(1 + expVal))`, with their
+        # infinity fallback `logExpValPlusOne = isfinite ? ... : val`
+        # (`:362-364`).
+        var score = Float32(0.0)
+        if in_range:
+            var log_exp_val_plus_one = val
+            if isfinite(exp_val):
+                log_exp_val_plus_one = log(Float32(1.0) + exp_val)
+            score = weight * (c * val - log_exp_val_plus_one)
+        var total = block_sum[block_size=MSE_BLOCK_SIZE](score)
+        if thread_idx.x == 0:
+            function_value.unsafe_store(Int(block_idx.x), total)
+
+    if compute_magnitudes != Int32(0):
+        var w_abs = Float32(0.0)
+        var g_abs = Float32(0.0)
+        if in_range:
+            w_abs = abs(weight)
+            g_abs = abs(weight * direction)
+        var w_total = block_sum[block_size=MSE_BLOCK_SIZE](w_abs)
+        var g_total = block_sum[block_size=MSE_BLOCK_SIZE](g_abs)
+        if thread_idx.x == 0:
+            plane_magnitudes.unsafe_store(2 * Int(block_idx.x), w_total)
+            plane_magnitudes.unsafe_store(
+                2 * Int(block_idx.x) + 1, g_total
+            )

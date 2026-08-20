@@ -147,6 +147,7 @@ check-ctr-train = "mojo run -I . mojo_only/ctr_train_check.mojo"
 # index and the layout that READ it disagreed by one fold, which made a
 # 16-category feature silently unlearnable. Trains 13 models; a minute.
 check-onehot-cardinality = "mojo run -I . mojo_only/one_hot_cardinality_check.mojo"
+check-logloss-target = "mojo run -I . mojo_only/logloss_target_check.mojo"
 
 # What the host toolchain actually resolved to. Worth recording beside any
 # number, because `--target-cpu` and `--target-features` default to the HOST,
