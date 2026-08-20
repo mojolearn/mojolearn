@@ -29,7 +29,10 @@ Proven to have teeth, measured 2026-08-20: flipping the host reference's
 border compare from strict `>` to `>=` fails with 43 mismatches (the
 planted rows in both weighted modes, the fv/magnitude sums they feed, and
 the at-border anchor); scaling the reference der by (1 + 1e-5) fails with
-8,895; both restored and the check returned green before this landed.
+8,895; scaling the reference der2 by the same amount in the estimation
+section fails with 390 (the extremes sit in the zero band by design, the
+mid-range rows catch it); all restored and the check returned green
+before this landed.
 """
 from max.gpu.host import DeviceContext
 from std.math import exp, log
@@ -232,6 +235,126 @@ def main() raises:
             ):
                 print("mags mode", mode, hw, "got", mw_got, mg_got,
                       "want", mag_w_ref, mag_g_ref)
+                failures += 1
+
+    # ------- estimation mode: their ApproximateAt outputs -------------
+    # plane 0 = der = w*(c-p), plane 1 = der2 = w*p*(1-p). Weighted only:
+    # the mode exists for the leaves oracle, which always carries weights.
+    for mode in range(2):
+        var has_border = mode == 0
+        for i in range(N):
+            var v = Float32((frac(i, UInt64(11)) - 0.5) * 16.0)
+            if i % 97 == 0:
+                v = Float32(150.0) if i % 194 == 0 else Float32(-150.0)
+            var t: Float32
+            if has_border:
+                t = Float32(1.0) if frac(i, UInt64(22)) > 0.5 else (
+                    Float32(0.0)
+                )
+                if i % 211 == 0:
+                    t = Float32(0.5)
+            else:
+                t = Float32(frac(i, UInt64(33)))
+            var w = Float32(0.5 + 2.0 * frac(i, UInt64(44)))
+            if has_border and i < 5:
+                var av: InlineArray[Float32, 5] = [
+                    0.3, -1.7, 200.0, -200.0, 1.0
+                ]
+                var at: InlineArray[Float32, 5] = [
+                    1.0, 0.0, 0.0, 1.0, 0.5
+                ]
+                var aw: InlineArray[Float32, 5] = [
+                    1.0, 2.5, 1.0, 1.0, 1.0
+                ]
+                v = av[i]
+                t = at[i]
+                w = aw[i]
+            if (not has_border) and i == 0:
+                v = Float32(0.7)
+                t = Float32(0.3)
+                w = Float32(1.3)
+            h_p.unsafe_ptr().unsafe_store(i, v)
+            h_t.unsafe_ptr().unsafe_store(i, t)
+            h_w.unsafe_ptr().unsafe_store(i, w)
+        ctx.enqueue_copy(dst_buf=d_t, src_ptr=h_t.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d_w, src_ptr=h_w.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d_p, src_ptr=h_p.unsafe_ptr())
+        if has_border:
+            ctx.enqueue_function[cross_entropy_kernel[True, True]](
+                d_t.unsafe_ptr(), d_w.unsafe_ptr(), Int32(N),
+                d_p.unsafe_ptr(), Int32(1), Float32(0.5),
+                d_stats.unsafe_ptr(),
+                d_fv.unsafe_ptr(), Int32(1),
+                d_mag.unsafe_ptr(), Int32(0),
+                grid_dim=(BLOCKS, 1, 1),
+                block_dim=(MSE_BLOCK_SIZE, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[cross_entropy_kernel[False, True]](
+                d_t.unsafe_ptr(), d_w.unsafe_ptr(), Int32(N),
+                d_p.unsafe_ptr(), Int32(1), Float32(0.0),
+                d_stats.unsafe_ptr(),
+                d_fv.unsafe_ptr(), Int32(1),
+                d_mag.unsafe_ptr(), Int32(0),
+                grid_dim=(BLOCKS, 1, 1),
+                block_dim=(MSE_BLOCK_SIZE, 1, 1),
+            )
+        ctx.enqueue_copy(dst_ptr=h_stats.unsafe_ptr(), src_buf=d_stats)
+        ctx.enqueue_copy(dst_ptr=h_fv.unsafe_ptr(), src_buf=d_fv)
+        ctx.synchronize()
+
+        var fv_ref = Float64(0.0)
+        for i in range(N):
+            var v = Float64(h_p.unsafe_ptr().unsafe_load(i))
+            var t = Float64(h_t.unsafe_ptr().unsafe_load(i))
+            var w = Float64(h_w.unsafe_ptr().unsafe_load(i))
+            var ev = exp(v)
+            var pp = ev / (1.0 + ev)
+            if pp > 1.0 - 1e-40:
+                pp = 1.0 - 1e-40
+            if pp < 1e-40:
+                pp = 1e-40
+            var c = (1.0 if t > 0.5 else 0.0) if has_border else t
+            var der = w * (c - pp)
+            var der2 = w * pp * (1.0 - pp)
+            fv_ref += w * (c * v - log(1.0 + ev))
+            var got_d = Float64(h_stats.unsafe_ptr().unsafe_load(i))
+            var got_d2 = Float64(h_stats.unsafe_ptr().unsafe_load(N + i))
+            if not close(got_d, der, 3e-6):
+                if failures < 8:
+                    print("est der row", i, "got", got_d, "want", der)
+                failures += 1
+            if not close(got_d2, der2, 3e-6):
+                if failures < 8:
+                    print("est der2 row", i, "got", got_d2, "want", der2)
+                failures += 1
+        var fv_got = Float64(0.0)
+        for b in range(BLOCKS):
+            fv_got += Float64(h_fv.unsafe_ptr().unsafe_load(b))
+        if not close(fv_got, fv_ref, 2e-5):
+            print("est fv mode", mode, "got", fv_got, "want", fv_ref)
+            failures += 1
+
+        # der2 libm anchors (CPython float64, decimal-pasted). Slot 3's
+        # 1e-40 sits in the zero band by design: float32 flushes it.
+        if has_border:
+            var want2: InlineArray[Float64, 5] = [
+                0.24445831169074586,
+                0.32651436741552015,
+                0.0,
+                1e-40,
+                0.19661193324148185,
+            ]
+            for a in range(5):
+                var got = Float64(h_stats.unsafe_ptr().unsafe_load(N + a))
+                if not close(got, want2[a], 3e-6):
+                    print("libm der2 anchor", a, "got", got,
+                          "want", want2[a])
+                    failures += 1
+        else:
+            var got0 = Float64(h_stats.unsafe_ptr().unsafe_load(N))
+            if not close(got0, 0.28822673528104176, 3e-6):
+                print("libm soft der2 anchor got", got0)
                 failures += 1
 
     if failures != 0:

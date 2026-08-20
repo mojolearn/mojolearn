@@ -259,7 +259,8 @@ def deterministic_sum_lanes_kernel[
 
 
 def cross_entropy_kernel[
-    has_border: Bool
+    has_border: Bool,
+    estimation: Bool = False,
 ](
     target_classes: MutPointer[Float32, MutAnyOrigin],
     weights: MutPointer[Float32, MutAnyOrigin],
@@ -297,15 +298,24 @@ def cross_entropy_kernel[
     ================= DEVIATION BLOCK =================
     Same three substitutions `mse_kernel` records, none new:
 
-    * STATS PLANES instead of their separate `der` buffer: plane 0 the
-      weight, plane 1 `weight * der` -- their own `StatsToAggregate` column
-      order under a NON-second-order score function
-      (`pointwise_target_impl.h:188-213`; Cosine and L2 are not second
-      order, `enum_helpers.cpp:829-841`). `der2` is NOT written here: the
-      split search never reads it under Cosine/L2, and the leaves estimator
-      recomputes it at its own point each Newton iteration, which is the
-      only place it is consumed. A NewtonCosine/NewtonL2 caller would need
-      the `secondDerAsWeights` flag, exactly as the mse block already says.
+    * STATS PLANES instead of their separate output buffers, in TWO MODES,
+      because their one kernel serves two callers whose outputs differ:
+      - `estimation=False`, the SEARCH: plane 0 the weight, plane 1
+        `weight * der` -- their `StatsToAggregate` column order under a
+        NON-second-order score function (`pointwise_target_impl.h:188-213`;
+        Cosine and L2 are not second order, `enum_helpers.cpp:829-841`).
+        `der2` is not written: the search never reads it under Cosine/L2.
+        A NewtonCosine/NewtonL2 caller would need the `secondDerAsWeights`
+        flag, exactly as the mse block already says.
+      - `estimation=True`, the LEAVES ORACLE's `ApproximateAt`
+        (`pointwise_oracle.cpp:73-78`, the rowSize==1 "fast path" their
+        pointwise losses take): plane 0 their `der` buffer
+        (`weight * (c - p)`, `:370-372`) and plane 1 their `der2`
+        (`weight * p * (1 - p)`, `:373-375`), which
+        `WriteValueAndFirstDerivatives` reduces per bin and caches as the
+        Newton gradient and Hessian diagonal. Magnitudes are not computed
+        in this mode; the estimator's reduces run through
+        `compute_partition_stats`, not the fixed-point histograms.
     * PER-BLOCK PARTIALS instead of their block-reduce-plus-`atomicAdd`
       tail (`:381-388`) for `function_value` AND the two fixed-point plane
       magnitudes -- the 2026-08-21 determinism fix, same buffers, same
@@ -362,9 +372,15 @@ def cross_entropy_kernel[
     var scale = p * (Float32(1.0) - p)  # their `scale[j]` (`:359`)
 
     if in_range:
-        stats.unsafe_store(i, weight)
-        stats.unsafe_store(size + i, weight * direction)
-    # der2 = weight * scale is NOT stored; see the deviation block.
+
+        @parameter
+        if estimation:
+            stats.unsafe_store(i, weight * direction)
+            stats.unsafe_store(size + i, weight * scale)
+        else:
+            stats.unsafe_store(i, weight)
+            stats.unsafe_store(size + i, weight * direction)
+            # der2 is not stored in search mode; see the deviation block.
     _ = scale
 
     if compute_fv != Int32(0):
