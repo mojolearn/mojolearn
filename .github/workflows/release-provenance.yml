@@ -87,12 +87,24 @@ jobs:
           echo "chip:  $(sysctl -n machdep.cpu.brand_string)"
           echo "macOS: $(sw_vers -productVersion)"
 
-      - name: Install pixi
-        uses: prefix-dev/setup-pixi@14c8aabd75893f83f4ab30c03e7cf853c8208961 # v0.8.10
-        with:
-          # Must match or exceed the pixi that wrote pixi.lock (version 7).
-          pixi-version: v0.76.2
-          cache: false
+      # NOT setup-pixi. This runner is a developer machine that already has
+      # pixi, and the action refuses with "Destination file path
+      # /Users/<user>/.pixi/bin/pixi already exists" rather than using it.
+      # The self-hosted runner is the one place pixi is guaranteed present,
+      # so the step verifies rather than installs -- and fails loudly if the
+      # version predates the lock file, which is the actual requirement.
+      - name: Use the machine's pixi
+        run: |
+          export PATH="$HOME/.pixi/bin:$PATH"
+          echo "$HOME/.pixi/bin" >> "$GITHUB_PATH"
+          command -v pixi || { echo "::error::pixi not on this runner"; exit 1; }
+          pixi --version
+          have=$(pixi --version | awk '{print $2}')
+          need=0.76.2
+          [ "$(printf '%s\n%s\n' "$need" "$have" | sort -V | head -1)" = "$need" ] || {
+            echo "::error::pixi $have predates the lock file (need >= $need)"
+            exit 1
+          }
 
       - name: Install python 3.10 through 3.14
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
