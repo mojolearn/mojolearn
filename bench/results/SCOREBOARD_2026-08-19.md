@@ -79,13 +79,20 @@ given the d-sweep.
 
 ## What the table says to do next
 
-1. **kmeans, now attributed** (0.83x, clean loss): the ~120 ms iteration
-   is assignment 63 ms + accumulation 56 ms (norms 0.2). Assignment streams
-   a materialized distance tile where cuVS's k-means dispatches to its
-   FUSED L2-NN kernel; accumulation does 128M contended global atomics into
-   2,048 cells (privatization case: 8 KB threadgroup partials, ~2M flushes).
-   Ceiling ~35 ms/iter, which would put the fit near 0.7 s vs sklearn's
-   2.0 -- LANE_kmeans-iter in flight.
+1. **kmeans** (0.83x): the ~120 ms iteration is assignment 63 ms +
+   accumulation 56 ms (norms 0.2). The assignment "unfused dispatch" theory
+   was FALSE -- sentinel-proven fused before and after (LANE_kmeans-iter;
+   the 63 ms is the fused SIMT kernel's own efficiency, a future kernel
+   fight). Accumulation WAS the fixable half: 128M contended global atomics,
+   now privatized into 8 KB threadgroup partials (~260x fewer atomics),
+   bit-identical by the Int32 fixed-point argument. **Re-timed: NO CHANGE**
+   (55 ms before and after; the fit stays 0.81x) -- so atomics were not the
+   cost either. Two mechanism theories are now dead by measurement; both
+   phases run at ~10-20 GB/s effective on a ~120 GB/s device and the
+   remaining gap is in-kernel (the fused SIMT assignment and the accumulate
+   inner loop), a lower-confidence kernel fight. The privatized arm stays
+   (bit-identical, not slower, and the weight arm now mirrors RAFT's own
+   cached-SMEM dispatch where the old one deviated).
 2. **PCA's outright win**: fuse mean-subtract into the split-K Gram read and
    drop the restore pass (~100 ms of the remaining 166).
 3. **Target-keying debt: PAID 2026-08-19** (LANE_target-keying).
