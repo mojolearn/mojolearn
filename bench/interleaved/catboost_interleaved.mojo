@@ -39,7 +39,7 @@ def read_all(path: String) raises -> List[UInt8]:
     return b^
 
 
-def run_border(ctx: DeviceContext, arm: PythonObject, data_dir: String, name: String, n_rows: Int, border: Int) raises:
+def run_border(ctx: DeviceContext, arm: PythonObject, data_dir: String, name: String, n_rows: Int, border: Int, bayesian: Bool) raises:
     var folds = List[Int]()
     var f = open(data_dir + "/" + name + "_folds_" + String(border) + ".txt", "r")
     var txt = f.read()
@@ -105,7 +105,13 @@ def run_border(ctx: DeviceContext, arm: PythonObject, data_dir: String, name: St
     )
 
     for rep in range(REPS):
-        var res = arm.fit_seconds_and_mse(data_dir, name, border, TREES, DEPTH)
+        var res: PythonObject
+        if bayesian:
+            res = arm.fit_seconds_and_mse_bayesian(
+                data_dir, name, border, TREES, DEPTH
+            )
+        else:
+            res = arm.fit_seconds_and_mse(data_dir, name, border, TREES, DEPTH)
         var secs = res[0].__float__()
         var their_mse = res[1].__float__()
         var theirs_ms = secs * 1000.0 / Float64(TREES)
@@ -115,11 +121,21 @@ def run_border(ctx: DeviceContext, arm: PythonObject, data_dir: String, name: St
         var losses = fit(
             model, ctx, n_rows, folds, DEPTH, cindex, targets, weights,
             False, TREES, Float32(0.3), Float32(3.0), True,
+            bootstrap_bayesian=bayesian,
+            bagging_temperature=Float32(1.0),
+            random_seed=UInt64(rep),
         )
         var ours_ms = Float64(perf_counter_ns() - t0) / 1e6 / Float64(TREES)
         print(
+            # RATIO DIRECTION, fixed 2026-08-20. This printed
+            # `ours_ms / theirs_ms`, so "0.89x" meant ours was FASTER, while
+            # `run_bench.py` prints theirs/ours, where "3.26x" means ours is
+            # faster. Two tables in the same repository used the same symbol
+            # for opposite meanings, and the tree table was the one a reader
+            # would misread as a loss. One convention now, everywhere:
+            # SPEEDUP, and >1 means ours is faster.
             "  rep", rep, " catboost-cpu", theirs_ms, "ms/tree   ours-gpu",
-            ours_ms, "ms/tree   ratio", ours_ms / theirs_ms,
+            ours_ms, "ms/tree   speedup", theirs_ms / ours_ms, "x",
             "  our final mse", losses[len(losses) - 1],
             " catboost mse", their_mse,
         )
@@ -135,9 +151,16 @@ def main() raises:
     var data_dir = String(args[1])
     var name = String(args[2])
     var n_rows = Int(String(args[3]))
+    # optional: 'bayesian' runs BOTH arms at their GPU-default sampling
+    # (Bayesian, temperature 1). Stochastic, so the mse columns compare
+    # as BANDS between arms, not bits; each arm stays seeded and
+    # bit-reproducible on its own side.
+    var bayesian = False
+    if len(args) > 4 and String(args[4]) == String("bayesian"):
+        bayesian = True
     var ctx = DeviceContext()
     var sys = Python.import_module("sys")
     _ = sys.path.append("tools")
     var arm = Python.import_module("catboost_arm")
-    run_border(ctx, arm, data_dir, name, n_rows, 254)
-    run_border(ctx, arm, data_dir, name, n_rows, 128)
+    run_border(ctx, arm, data_dir, name, n_rows, 254, bayesian)
+    run_border(ctx, arm, data_dir, name, n_rows, 128, bayesian)

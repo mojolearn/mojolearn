@@ -119,3 +119,37 @@ def predict_seconds(prefix, border_count, threads):
     t0 = time.perf_counter()
     _ = m.predict(raw, thread_count=int(threads))
     return time.perf_counter() - t0
+
+def fit_seconds_and_mse_bayesian(scratch, prefix, border_count, trees, depth):
+    """The same pinned fit but at THEIR GPU-default sampling: Bayesian
+    bootstrap, temperature 1. Stochastic, so the harness compares mse
+    BANDS between arms, not bits."""
+    p = _pool(str(scratch), str(prefix), int(border_count))
+    x = np.load("%s/%s_X.npy" % (scratch, prefix))
+    y = np.load("%s/%s_y.npy" % (scratch, prefix)).astype(np.float32)
+    m = catboost.CatBoostRegressor(
+        iterations=int(trees),
+        depth=int(depth),
+        learning_rate=0.3,
+        l2_leaf_reg=3.0,
+        border_count=int(border_count),
+        loss_function="RMSE",
+        grow_policy="SymmetricTree",
+        boosting_type="Plain",
+        bootstrap_type="Bayesian",
+        bagging_temperature=1.0,
+        rsm=1.0,
+        has_time=True,
+        random_seed=0,
+        model_shrink_rate=0.0,
+        boost_from_average=False,
+        leaf_estimation_iterations=1,
+        random_strength=0.0,
+        logging_level="Silent",
+        allow_writing_files=False,
+    )
+    t0 = time.perf_counter()
+    m.fit(p)
+    dt = time.perf_counter() - t0
+    mse = float(np.mean((m.predict(x) - y) ** 2))
+    return [dt, mse]
