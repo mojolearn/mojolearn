@@ -61,8 +61,9 @@ tolerance on the model.
     ctr_columns <n>                        (only when n is non-zero)
     feature <f> folds <k> one_hot <0|1> type <float|cat|ctr> borders <n> <tok>...
     ctr_table <column> source <f> type <name> prior_num <tok> prior_denom <tok>
-              shift <tok> scale <tok> denom <int> entries <n>
-    ctr_entry <column> <category> <count>
+              shift <tok> scale <tok> denom <int> classes <int>
+              target_border <int> entries <n>
+    ctr_entry <column> <category> <count> [<count> ...]
     tree <t> depth <d> dim <k> weights <0|1>
     split <t> <level> <feature_id> <bin_idx>
     split <t> <level> <feature_id> <bin_idx> split_type take_bin
@@ -110,13 +111,24 @@ rather than annotated.
 * The CTR tables go in their own records AFTER the `feature` block and
   before the first `tree`. `ctr_table` mirrors their `TCtrFeature`'s
   `prior_numerator` / `prior_denomerator` (`json_model_helpers.cpp:104-114`)
-  plus the `shift` and `scale` of their `TModelCtr` (`online_ctr.h:260-266`)
-  and the `CounterDenominator` of their `TCtrValueTable`; `ctr_entry` is
-  their `ctr_data.hash_map` (`json_model_helpers.cpp:440-482`), which for a
-  `FeatureFreq` or `Counter` table stores ONE INTEGER per category and not
-  a value. The value is formed at apply time by `TModelCtr::Calc`; see
+  plus the `shift`, `scale` and `target_border` of their `TModelCtr`
+  (`online_ctr.h:260-266`) and the `CounterDenominator` and
+  `TargetClassesCount` of their `TCtrValueTable` (`ctr_value_table.h:104-105`);
+  `ctr_entry` is their `ctr_data.hash_map`
+  (`json_model_helpers.cpp:440-482`), which for a `FeatureFreq` or
+  `Counter` table stores ONE INTEGER per category and not a value. The
+  value is formed at apply time by `TModelCtr::Calc`; see
   `gbdt/models/ctr_value_table.mojo` for why the counts and not the values
   are what travels.
+* **`ctr_entry` CARRIES THE TARGET-CLASS AXIS, ONE RECORD PER CATEGORY.**
+  A `Borders` table's blob is `int[uniqueCategories * TargetClassesCount]`
+  (`online_ctr.cpp:910`), so its record carries `classes` counts and
+  `entries` stays the CATEGORY count -- the number of `ctr_entry` records,
+  not the blob length. `classes` is 0 on a `FeatureFreq` table, where their
+  own `TargetClassesCount` default stands, and one count per record. A
+  reader that dropped the axis would read a two-class histogram as twice as
+  many categories, which is why `entries * max(classes, 1)` is checked
+  against the blob it assembled rather than assumed.
 * **`ctr_borders` was in the plan and is NOT written**, because in this
   format it would be the same numbers twice. Their `TCtrFeature::Borders`
   exists because a CTR feature is not a `TFloatFeature` in their model and
@@ -377,6 +389,23 @@ def model_text(tm: TrainedModel) raises -> String:
         if ti < 0:
             continue
         ref tab = tm.ctr_tables[ti]
+        # the TARGET-CLASS AXIS of their blob. 0 on a FeatureFreq table,
+        # where their own `TargetClassesCount` default stands; on a Borders
+        # table it is the width of every `ctr_entry` record.
+        var classes = tab.target_classes_count
+        var per_entry = classes if classes > 0 else 1
+        if classes < 0:
+            raise Error(
+                "a CTR table for column " + String(f)
+                + " declares a negative target class count"
+            )
+        if len(tab.counts) % per_entry != 0:
+            raise Error(
+                "the CTR table for column " + String(f) + " carries "
+                + String(len(tab.counts)) + " counts, which is not a whole"
+                " number of " + String(per_entry) + "-class histograms"
+            )
+        var entries = len(tab.counts) // per_entry
         out += (
             String("ctr_table ") + String(f)
             + " source " + String(tab.source_feature)
@@ -386,13 +415,17 @@ def model_text(tm: TrainedModel) raises -> String:
             + " shift " + f32_token(tab.shift)
             + " scale " + f32_token(tab.scale)
             + " denom " + String(tab.counter_denominator)
-            + " entries " + String(len(tab.counts)) + "\n"
+            + " classes " + String(classes)
+            + " target_border " + String(tab.target_border_idx)
+            + " entries " + String(entries) + "\n"
         )
-        for c in range(len(tab.counts)):
-            out += (
-                String("ctr_entry ") + String(f) + " " + String(c) + " "
-                + String(tab.counts[c]) + "\n"
+        for c in range(entries):
+            var line = (
+                String("ctr_entry ") + String(f) + " " + String(c)
             )
+            for k in range(per_entry):
+                line += " " + String(tab.counts[c * per_entry + k])
+            out += line + "\n"
 
     for t in range(tm.model.size()):
         ref weak = tm.model.weak_models[t]
@@ -524,7 +557,10 @@ def load_model_text(text: String) raises -> TrainedModel:
     var ctr_shift = List[Float32]()
     var ctr_scale = List[Float32]()
     var ctr_denom = List[Int]()
+    var ctr_classes = List[Int]()
+    var ctr_border_idx = List[Int]()
     var ctr_declared = List[Int]()
+    var ctr_entries_seen = List[Int]()
     var ctr_counts = List[List[Int]]()
 
     for raw in text.split("\n"):
@@ -640,10 +676,12 @@ def load_model_text(text: String) raises -> TrainedModel:
                 _expect(t, 10, String("shift"), String("ctr_table"))
                 _expect(t, 12, String("scale"), String("ctr_table"))
                 _expect(t, 14, String("denom"), String("ctr_table"))
-                _expect(t, 16, String("entries"), String("ctr_table"))
-                if len(t) != 18:
+                _expect(t, 16, String("classes"), String("ctr_table"))
+                _expect(t, 18, String("target_border"), String("ctr_table"))
+                _expect(t, 20, String("entries"), String("ctr_table"))
+                if len(t) != 22:
                     raise Error(
-                        "a `ctr_table` record has 18 fields, this one has "
+                        "a `ctr_table` record has 22 fields, this one has "
                         + String(len(t))
                     )
                 var col = Int(t[1])
@@ -674,11 +712,27 @@ def load_model_text(text: String) raises -> TrainedModel:
                 ctr_shift.append(parse_f32(t[11]))
                 ctr_scale.append(parse_f32(t[13]))
                 ctr_denom.append(Int(t[15]))
-                var n_entries = Int(t[17])
+                var n_classes = Int(t[17])
+                if n_classes < 0 or n_classes == 1:
+                    raise Error(
+                        "ctr_table declares " + String(n_classes)
+                        + " target classes; it is 0 on a FeatureFreq table"
+                        " and at least 2 on a Borders one"
+                        " (libs/model/target_classifier.h:32-34)"
+                    )
+                ctr_classes.append(n_classes)
+                var border_idx = Int(t[19])
+                if border_idx < 0:
+                    raise Error(
+                        "ctr_table declares a negative target_border"
+                    )
+                ctr_border_idx.append(border_idx)
+                var n_entries = Int(t[21])
                 if n_entries < 0:
                     raise Error("ctr_table declares a negative entry count")
                 ctr_declared.append(n_entries)
                 ctr_counts.append(List[Int]())
+                ctr_entries_seen.append(0)
             elif kind == String("ctr_entry"):
                 if len(ctr_columns) == 0:
                     raise Error("a `ctr_entry` before any `ctr_table`")
@@ -689,19 +743,26 @@ def load_model_text(text: String) raises -> TrainedModel:
                         + " under the `ctr_table` for column "
                         + String(ctr_columns[last])
                     )
-                if len(t) != 4:
+                var per_entry = ctr_classes[last] if (
+                    ctr_classes[last] > 0
+                ) else 1
+                if len(t) != 3 + per_entry:
                     raise Error(
-                        "a `ctr_entry` record has 4 fields, this one has "
+                        "a `ctr_entry` record under a table declaring "
+                        + String(ctr_classes[last]) + " target classes has "
+                        + String(3 + per_entry) + " fields, this one has "
                         + String(len(t))
                     )
-                if Int(t[2]) != len(ctr_counts[last]):
+                if Int(t[2]) != ctr_entries_seen[last]:
                     raise Error(
                         "column " + String(ctr_columns[last])
                         + " categories must arrive in order: expected "
-                        + String(len(ctr_counts[last])) + ", got "
+                        + String(ctr_entries_seen[last]) + ", got "
                         + String(t[2])
                     )
-                ctr_counts[last].append(Int(t[3]))
+                for k in range(per_entry):
+                    ctr_counts[last].append(Int(t[3 + k]))
+                ctr_entries_seen[last] += 1
             elif kind == String("tree"):
                 if Int(t[1]) != trees_seen:
                     raise Error(
@@ -846,11 +907,24 @@ def load_model_text(text: String) raises -> TrainedModel:
 
     # ---- the CTR half, checked as a whole because it is cross-referenced
     for k in range(len(ctr_columns)):
-        if len(ctr_counts[k]) != ctr_declared[k]:
+        if ctr_entries_seen[k] != ctr_declared[k]:
             raise Error(
                 "ctr_table for column " + String(ctr_columns[k])
                 + " declares " + String(ctr_declared[k])
-                + " entries and carries " + String(len(ctr_counts[k]))
+                + " entries and carries " + String(ctr_entries_seen[k])
+            )
+        # the blob length is entries x the TARGET-CLASS AXIS, checked
+        # rather than assumed: a reader that dropped the axis would see a
+        # two-class histogram as twice as many categories and every value
+        # it produced afterwards would be a different category's
+        var per_entry = ctr_classes[k] if ctr_classes[k] > 0 else 1
+        if len(ctr_counts[k]) != ctr_declared[k] * per_entry:
+            raise Error(
+                "ctr_table for column " + String(ctr_columns[k])
+                + " declares " + String(ctr_declared[k]) + " entries x "
+                + String(per_entry) + " target classes = "
+                + String(ctr_declared[k] * per_entry)
+                + " counts and carries " + String(len(ctr_counts[k]))
             )
         if feature_kinds[ctr_columns[k]] != String("ctr"):
             raise Error(
@@ -868,6 +942,8 @@ def load_model_text(text: String) raises -> TrainedModel:
                 ctr_shift[k],
                 ctr_scale[k],
                 ctr_denom[k],
+                ctr_classes[k],
+                ctr_border_idx[k],
                 ctr_counts[k].copy(),
             )
         )

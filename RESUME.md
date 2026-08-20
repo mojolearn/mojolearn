@@ -663,12 +663,9 @@ category carries no information at all:
 Row order fits a feature containing nothing twice as well, because the
 statistic reads the label it is estimating. `PORTING.md` 55.
 
-TWO THINGS STILL OWED. `train()`'s implicit fallback is still
-`feature_freq_only()`, because a Borders model cannot yet carry the
-apply-time CTR tables `predict_floats` needs; the flip is one line and
-belongs in the commit that closes that. And this port builds ONE CTR column
-set where their loop builds `permutation_count` of them (deviation 55a),
-which is the ordered-boosting loop and is separate work.
+ONE THING STILL OWED: this port builds ONE CTR column set where their loop
+builds `permutation_count` of them (deviation 55a), which is the
+ordered-boosting loop and is separate work.
 
 WHAT A BORDERS APPLY-TIME TABLE ACTUALLY HOLDS is now written down in
 `RECON_CTRS.md`, read while it was cheap, and the headline is that it is
@@ -676,6 +673,42 @@ NOT ordered: `TCtrValueTable` carries a per-category histogram over target
 classes computed on the whole learn set, and the permutation is a
 training-time device that never reaches the model file.
 
-Next known levers, in order: the Borders apply-time tables (RECON_CTRS.md
-step 5, now with the table's contents written down), then tree CTRs, then
-the epsilon dataset.
+### 2026-08-20: THE Borders APPLY-TIME TABLE, AND THE DEFAULT FLIPPED
+
+The last gap in the categorical block. A `Borders` model TRAINED and could
+not SCORE, because `build_ctr_tables` (then
+`build_feature_freq_tables`) had no arm for it. It has one now, and the
+claim `RECON_CTRS.md` recorded held on contact: **the apply-time table is
+NOT ordered.** `TCtrValueTable` gained their `TargetClassesCount` axis and
+`TModelCtr::TargetBorderIdx`; the blob is their
+`int[uniqueCategories * TargetClassesCount]` filled by
+`++elem[targetClass[z]]` (`private/libs/algo/online_ctr.cpp:927-930`) over
+the whole learn set, with no permutation, scan or sort anywhere in it. The
+histogram is computed ONCE per categorical feature and shared by the three
+Borders priors, which are three `TModelCtr` over one table in their model
+too.
+
+`value_for` and `empty_value` now dispatch on `ctr_type` the way
+`TStaticCtrProvider::CalcCtrs` does, and the branch that matters is the
+UNSEEN category: `Borders` takes `Calc(0, 0)` -- the prior alone -- where
+`FeatureFreq` takes `Calc(0, denominator)`. At the {1, 1} prior of their
+own fan-out those are 1.0 and 1/(n+1), which on a 4096-row pool is 4097x
+apart, and a held-out set is full of exactly those rows.
+
+**AND `train()`'S IMPLICIT FALLBACK FLIPPED TO
+`TCatFeatureParams.default()`**, CatBoost's own GPU `simple_ctr`: a
+default categorical fit now emits FOUR columns per feature (three Borders
+priors plus FeatureFreq) where it emitted one. The switch was opt-in for
+exactly one reason -- Borders could not score -- and a switch that
+outlives its reason is a defect.
+
+One thing that follows and is worth stating because it will surprise
+someone: a `Borders` model's applied predictions do NOT reproduce its own
+fit's loss on the learn rows. The column it TRAINED on is the ordered
+statistic over the estimation permutation; the column an applied model
+carries is the full-learn-set histogram. That gap is CatBoost's design,
+not a defect here, and it is why `FeatureFreq`'s bit-identity gate could
+not simply be pointed at Borders.
+
+Next known levers, in order: tree CTRs (RECON_CTRS.md step 6, which forces
+the category hash), then the epsilon dataset.

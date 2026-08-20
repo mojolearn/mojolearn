@@ -819,35 +819,39 @@ struct TCatFeatureParams(Copyable, Movable):
 
     @staticmethod
     def feature_freq_only() raises -> Self:
-        """`default()` WITH THE Borders DESCRIPTION REMOVED. Still what
-        `train()` falls back to when no `cat_feature_params` is passed, and
-        still a DEPARTURE from CatBoost -- but no longer for the reason
-        that stood here, and that reason is deleted rather than annotated.
+        """`default()` WITH THE Borders DESCRIPTION REMOVED. An OPT-IN
+        surface, not the fallback: `train()` falls back to `default()`,
+        which is CatBoost's own GPU `simple_ctr`, and the two sentences
+        that used to stand here saying otherwise are deleted rather than
+        annotated.
 
-        It said this port had no permutation machinery, so running the
-        ordered statistic would mean running it in ROW order, which is a
-        different and much worse estimator rather than a slower one.
+        The first said this port had no permutation machinery, so the
+        ordered statistic would have to run in ROW order -- a different and
+        much worse estimator rather than a slower one.
         `gbdt/data/permutation.mojo` ported `TDataPermutation` on
-        2026-08-21 and `default()` -- three `Borders` priors plus
-        `FeatureFreq`, four columns per categorical feature -- now trains
-        end to end (`PORTING.md` 55, `pixi run check-ctr-device`).
+        2026-08-21 (`PORTING.md` 55). The second said a `Borders` model
+        could not carry its apply-time CTR tables, so the fallback stayed
+        here to avoid shipping a default that trains and cannot score;
+        `build_ctr_tables` grew the target-class histogram arm and that is
+        no longer true either.
 
-        What remains is a SEQUENCING departure and it is one line:
-        `train()`'s fallback stays here until a `Borders` model can carry
-        its apply-time CTR tables, because a model that trains and cannot
-        score is a worse default than one that trains on less information.
-        Pass `TCatFeatureParams.default()` explicitly to get CatBoost's own
-        configuration today.
+        What this configuration IS for: a fit restricted to FREQUENCY
+        information, which is the arm the AMAZON quality row compares
+        against CatBoost's CPU `Counter`, and the permutation-independent
+        half of the port on its own. It is one column per categorical
+        feature instead of four.
 
-        The smaller caveat that does survive: this port builds ONE set of
-        CTR columns where their loop builds `permutation_count` of them, so
-        a `Borders` fit here carries more of the ordered statistic's noise
-        than theirs. That is deviation 55a -- a quality difference on the
-        same estimator, not a different one.
+        The caveat that survives: this port builds ONE set of CTR columns
+        where their loop builds `permutation_count` of them, so a `Borders`
+        fit here carries more of the ordered statistic's noise than theirs.
+        That is deviation 55a -- a quality difference on the same
+        estimator, not a different one.
 
-        Both surfaces are exercised: `mojo_only/ctr_device_check.mojo` runs
-        `default()` and this one side by side, because a switch with one
-        side unexercised is an unchecked branch (`PORTING_RULES.md` 8).
+        Both surfaces are exercised: `mojo_only/ctr_device_check.mojo`,
+        `mojo_only/ctr_apply_check.mojo` and `mojo_only/ctr_train_check.mojo`
+        each run `default()` and this one side by side, because a switch
+        with one side unexercised is an unchecked branch
+        (`PORTING_RULES.md` 8).
         """
         var simple = List[TCtrDescription]()
         simple.append(create_default_counter(PROJECTION_SIMPLE_CTR))

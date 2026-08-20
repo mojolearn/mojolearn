@@ -295,6 +295,22 @@ def compare_models(a: TrainedModel, b: TrainedModel, label: String) raises:
             raise Error(label + ": CTR table " + String(k)
                         + " denominator " + String(ta.counter_denominator)
                         + " vs " + String(tb.counter_denominator))
+        # THE TARGET-CLASS AXIS. Without these two lines a round trip that
+        # dropped the axis passed field-by-field equality: the blob length
+        # is unchanged when a two-class histogram is written as twice as
+        # many one-count categories, so `counts` matched and only the shape
+        # was wrong. A source sabotage on the writer found this hole and it
+        # is closed rather than noted.
+        if ta.target_classes_count != tb.target_classes_count:
+            raise Error(label + ": CTR table " + String(k)
+                        + " TargetClassesCount "
+                        + String(ta.target_classes_count) + " vs "
+                        + String(tb.target_classes_count))
+        if ta.target_border_idx != tb.target_border_idx:
+            raise Error(label + ": CTR table " + String(k)
+                        + " TargetBorderIdx "
+                        + String(ta.target_border_idx) + " vs "
+                        + String(tb.target_border_idx))
         if not _same_f32(ta.prior_num, tb.prior_num):
             raise Error(label + ": CTR table " + String(k)
                         + " prior_num differs bitwise")
