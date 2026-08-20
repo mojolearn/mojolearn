@@ -24,6 +24,13 @@ jobs:
     name: Metal compute on a hosted runner
     runs-on: macos-15
     timeout-minutes: 30
+    # Deny-by-default at the workflow level, so each job adds back exactly
+    # what it needs. This job needs to read the repository and nothing else.
+    # Omitting it entirely is what made the first run fail: checkout got no
+    # token, and a private repo with no token reports "Repository not found"
+    # rather than "permission denied", which reads like the wrong URL.
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
