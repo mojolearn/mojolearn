@@ -13,7 +13,6 @@ a wrong reduction and an inert kernel both reported CORRECT by checks whose
 fixtures were uniform. Here the jitter differs per (row, feature), so a fit
 that assigned rows to the wrong centroid, or transposed the output, cannot
 produce a passing label vector.
-"""
 
 THE HOST-BUFFER LIFETIME TRAP, WHICH COST AN HOUR AND WILL COST ANOTHER
 -----------------------------------------------------------------------
@@ -35,6 +34,7 @@ would have reported OK.
 point it matters. Do that. Every pointer in this file is taken at its point
 of use for exactly that reason, and the redundant-looking
 `hx.unsafe_ptr().unsafe_store(...)` calls are not redundant.
+"""
 
 from max.gpu.host import DeviceContext
 
