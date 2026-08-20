@@ -118,17 +118,38 @@ def hist2_add_points_7[
             offset[k] = slice_base + f + 8 * (bin & 127) + flag
 
         # const int writeTime = (threadIdx.x >> 3) & 3;
+        #
+        # ================= DEVIATION BLOCK =================
+        # The write-turn gating and its syncwarps exist to keep PLAIN
+        # float adds from colliding across the warp's 8-thread groups;
+        # the Int32 arm's add is an ATOMIC, collisions are the
+        # hardware's problem, and integer addition is associative, so
+        # dropping the four turns changes NO bit of the histogram --
+        # `check-hist2` compares the arms cell-for-cell. The float
+        # columns keep their turns verbatim. (Same deviation as the PASS
+        # family's pass-loop skip in `hist_one_byte.mojo`.)
+        # ===================================================
         var write_time = (tid >> 3) & 3
 
         @parameter
-        for t in range(4):
-            if t > 0:
-                syncwarp()
-            if t == write_time:
+        if dt == DType.int32:
 
-                @parameter
-                for k in range(n):
-                    hist2_smem_add[dt](smem, offset[k], val1[k], qval1[k])
+            @parameter
+            for k in range(n):
+                hist2_smem_add[dt](smem, offset[k], val1[k], qval1[k])
+        else:
+
+            @parameter
+            for t in range(4):
+                if t > 0:
+                    syncwarp()
+                if t == write_time:
+
+                    @parameter
+                    for k in range(n):
+                        hist2_smem_add[dt](
+                            smem, offset[k], val1[k], qval1[k]
+                        )
 
         # int shift = flag ? -1 : 1;
         var shift = 1
@@ -139,16 +160,25 @@ def hist2_add_points_7[
         for k in range(n):
             offset[k] += shift
 
-        syncwarp()
-
         @parameter
-        for t in range(4):
-            if t == write_time:
+        if dt == DType.int32:
 
-                @parameter
-                for k in range(n):
-                    hist2_smem_add[dt](smem, offset[k], val2[k], qval2[k])
+            @parameter
+            for k in range(n):
+                hist2_smem_add[dt](smem, offset[k], val2[k], qval2[k])
+        else:
             syncwarp()
+
+            @parameter
+            for t in range(4):
+                if t == write_time:
+
+                    @parameter
+                    for k in range(n):
+                        hist2_smem_add[dt](
+                            smem, offset[k], val2[k], qval2[k]
+                        )
+                syncwarp()
 
 
 def hist2_reduce_tail_7[

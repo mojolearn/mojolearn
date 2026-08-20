@@ -327,14 +327,29 @@ def add_one_byte_point[
             stat_to_add = stat
             q_to_add = qstat
 
-        # The pass structure and the warp-local sync are theirs in BOTH
-        # modes; only where the add lands differs, and that one site is
-        # `hist2_smem_add` -- the same factored accumulation the hist_2
-        # family runs. `qstat` is the row's stat through `hist2_quantize`,
-        # computed once per (row, stat) at load time; the float arm ignores
-        # it, the Int32 arm adds it and ignores `stat`.
+        # The float arm keeps the pass structure and the warp-local sync
+        # exactly as theirs: the passes exist to serialize lanes whose
+        # PLAIN float adds would collide in the shared slice
+        # (`hist_one_byte.cu:96-101`), and at 8 bits that is 8 gated
+        # passes with a syncwarp each, per point, per feature.
+        #
+        # ================= DEVIATION BLOCK =================
+        # The Int32 arm SKIPS the pass loop: its add is an ATOMIC
+        # (`hist2_smem_add`'s `Atomic.fetch_add`), so lane collisions are
+        # resolved by the hardware and the serialization protects
+        # nothing. Integer addition is associative, so the histogram is
+        # BIT-IDENTICAL with or without the passes -- `check-hist2`'s
+        # bits-8 section compares this arm cell-for-cell against the
+        # float arm and the host tally, and the 254-border oracle gates
+        # the splits. The pass count is why 254 borders cost ~2x what
+        # 128 did (8 passes vs hist_2's 4 at 7 bits) while CatBoost's
+        # CPU pays nothing extra; measured standings live in RESUME.
+        # NVIDIA/AMD float columns compile the pass loop unchanged.
+        # ===================================================
         @parameter
-        if inner_bits == 0:
+        if dt == DType.int32:
+            hist2_smem_add[dt](smem, slot, stat_to_add, q_to_add)
+        elif inner_bits == 0:
             syncwarp()
             hist2_smem_add[dt](smem, slot, stat_to_add, q_to_add)
         else:
