@@ -1,6 +1,4 @@
 # our_file	catboost_file	status	notes
-# CatBoost pinned at 54a8143a. `tools/check_upstream.sh` diffs each mapped
-# source against a fresh checkout and reports which of ours need attention.
 gbdt/gpu_data/grid_policy.mojo	catboost/cuda/gpu_data/grid_policy.h	transliterated	1/4/8 bits per feature
 gbdt/gpu_data/kernel/binarize.mojo	catboost/cuda/gpu_data/kernel/binarize.cu	transliterated	WriteCompressedIndexImpl only
 gbdt/gpu_util/gpu_data/partitions.mojo	catboost/cuda/cuda_util/gpu_data/partitions.h	transliterated	TDataPartition
@@ -45,3 +43,9 @@ gbdt/gpu_util/kernel/reorder_one_bit.mojo	catboost/cuda/cuda_util/kernel/reorder
 gbdt/gpu_util/kernel/segmented_scan.mojo	catboost/cuda/cuda_util/kernel/segmented_scan.cu	transliterated	SegmentedScanVector + SegmentedScanAndScatterNonNegativeVector (scan.cu:47); their operators and output iterators are segmented_scan_helpers.cuh; the CUSTOM-OP block scan is CUB in theirs and is written out here, PORTING.md 49
 gbdt/gpu_util/kernel/radix_sort.mojo	catboost/cuda/cuda_util/kernel/reorder_one_bit.cu	transliterated	ReorderBins (sort.cpp:544) is cub::DeviceRadixSort::SortPairs in theirs; here it is their own ReorderOneBit<ui32,ui32> looped LSD over the bit range, PORTING.md 50
 gbdt/gpu_util/kernel/fill.mojo	catboost/cuda/cuda_util/kernel/fill.cu
+gbdt/ctrs/ctr.mojo	catboost/cuda/ctrs/ctr.h	transliterated	plus ctr_description/ctr_type.{h,cpp} and ctr_config.h; GetDefaultPriors lives in cat_feature_options.cpp and is here because it is what mints the configs
+gbdt/ctrs/ctr_bins_builder.mojo	catboost/cuda/ctrs/ctr_bins_builder.h	partial	learn-only, no test slice, no compressed-bin decompression; ReorderBins is a HOST counting sort pending the radix lane, PORTING.md 49
+gbdt/ctrs/ctr_calcers.mojo	catboost/cuda/ctrs/ctr_calcers.h	partial	TWeightedBinFreqCalcer + THistoryBasedCtrCalcer; the segmented scan is HOST pending the scan lane (PORTING.md 49); VisitFloatFeatureMeanCtrs and the groupwise fix unported; compute_simple_ctrs mirrors gpu_data/batch_binarized_ctr_calcer.cpp and belongs under gbdt/gpu_data/ when the lanes rejoin
+gbdt/ctrs/kernel/ctr_calcers.mojo	catboost/cuda/ctrs/kernel/ctr_calcers.cu	transliterated	all ten elementwise kernels; the four groupwise ones (ApplyGroupwiseCtrFix, MakeGroupStarts, FillBinIndices, CreateFixedIndices) are unported because no groupwise loss is
+gbdt/ctrs/index_wrapper.mojo	catboost/cuda/cuda_util/kernel/index_wrapper.cuh	transliterated	belongs at gbdt/gpu_util/kernel/index_wrapper.mojo; here because that directory is another lane's this round
+gbdt/ctrs/ctr_binarization.mojo	library/cpp/grid_creator/binarization.cpp	partial	TUniformBinarizer only, plus ComputeBorders (gpu_binarization_helpers.cpp) and BuildBinarizedTarget (gpu_data/dataset_helpers.cpp); uniform_borders belongs in grid_creator/binarization.mojo when the lanes rejoin

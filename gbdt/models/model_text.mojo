@@ -290,6 +290,19 @@ def model_text(tm: TrainedModel) raises -> String:
     )
     out += String("trees ") + String(tm.model.size()) + "\n"
     out += String("losses ") + String(len(tm.losses)) + "\n"
+    # CTR COLUMN COUNT. Written ONLY when non-zero, so a float-only model's
+    # file is byte-identical to what this format wrote before the field
+    # existed and the version stays 1 -- the rule THE CTR SEAM sets out.
+    #
+    # It must travel, and not merely for completeness: `predict_floats`
+    # REFUSES a model carrying CTR columns, because a CTR value is a
+    # statistic of the learn pool and scoring a new row needs the final CTR
+    # tables. A round trip that dropped the count would turn a model that
+    # correctly refuses into one that silently scores rows against a grid
+    # built for different values. Losing a safety refusal in serialization
+    # is worse than losing a leaf.
+    if tm.ctr_column_count != 0:
+        out += String("ctr_columns ") + String(tm.ctr_column_count) + "\n"
 
     for f in range(n_features):
         var flag = 1 if len(tm.one_hot) != 0 and tm.one_hot[f] else 0
@@ -389,6 +402,7 @@ def load_model_text(text: String) raises -> TrainedModel:
     var n_flags = -1
     var n_trees = -1
     var n_losses = -1
+    var ctr_column_count = 0
     var header_seen = 0
 
     var fold_counts = List[Int]()
@@ -454,6 +468,10 @@ def load_model_text(text: String) raises -> TrainedModel:
                     raise Error("`losses` must follow `trees`")
                 n_losses = Int(t[1])
                 header_seen = 4
+            elif kind == String("ctr_columns"):
+                if header_seen != 4:
+                    raise Error("`ctr_columns` must follow `losses`")
+                ctr_column_count = Int(t[1])
             elif kind == String("feature"):
                 if header_seen != 4:
                     raise Error("a `feature` record before the header ended")
@@ -612,7 +630,7 @@ def load_model_text(text: String) raises -> TrainedModel:
             )
 
     return TrainedModel(
-        model^, fold_counts^, one_hot^, borders^, losses^
+        model^, fold_counts^, one_hot^, borders^, losses^, ctr_column_count
     )
 
 

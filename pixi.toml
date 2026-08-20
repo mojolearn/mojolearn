@@ -89,6 +89,30 @@ check-segscan = "mojo run -I . mojo_only/segmented_scan_check.mojo"
 # the key the CTR block sorts by. Runs an even and an odd pass count, which
 # are the two sides of the ping-pong parity switch.
 check-radixsort = "mojo run -I . mojo_only/radix_sort_check.mojo"
+# The CTR option surface and the two host calcers: the three-prior fan-out,
+# target binarization against CatBoost's own borders, FeatureFreq against
+# PLANTED category counts over eleven cardinalities, and the Borders ordered
+# target statistic against an independent O(n^2) tally. Host-side, seconds,
+# no GPU. Needs `bench/ctr_target_oracle.txt`, which is committed;
+# regenerate it with `ctr-target-oracle-gen`.
+check-ctr = "mojo run -I . mojo_only/ctr_check.mojo"
+
+# The ten CTR elementwise kernels of `ctr_calcers.cu`, ENQUEUED on the
+# device and compared cell by cell against a host tally. Own main() because
+# it needs a DeviceContext and sixteen launches.
+check-ctr-kernels = "mojo run -I . mojo_only/ctr_kernels_check.mojo"
+
+# The categorical path through `train()` itself, which is WIRING rather
+# than arithmetic: a target that is a pure function of category FREQUENCY,
+# fitted by the CTR arm and provably not by the same codes as an ordinary
+# numeric column, plus the four refusals.
+check-ctr-train = "mojo run -I . mojo_only/ctr_train_check.mojo"
+
+# One-hot categoricals swept across every step of `policy_for_fold_count`.
+# Written to catch a shipped bug where the layout that WROTE the compressed
+# index and the layout that READ it disagreed by one fold, which made a
+# 16-category feature silently unlearnable. Trains 13 models; a minute.
+check-onehot-cardinality = "mojo run -I . mojo_only/one_hot_cardinality_check.mojo"
 
 # What the host toolchain actually resolved to. Worth recording beside any
 # number, because `--target-cpu` and `--target-features` default to the HOST,
@@ -104,6 +128,14 @@ build-pkg = "mkdir -p build && mojo precompile -I . gbdt -o build/gbdt.mojopkg"
 # Runs CatBoost itself. Writes bench/oracle.txt (read by `oracle`) and
 # bench/oracle.json (the same content, for humans and for diffing).
 oracle-gen = "python tools/catboost_oracle.py > bench/oracle.json"
+
+# CatBoost's OWN MinEntropy borders for the CTR TARGET grid, at budgets 1,
+# 2 and 3 over five target-shaped columns. Separate from
+# `bench/minentropy_oracle.txt` because budget 1 is a different code path:
+# `bins == 2` makes the DP's per-level loops run zero times and the answer
+# comes entirely from the last match, whose tie-break is the opposite of
+# theirs.
+ctr-target-oracle-gen = "python tools/ctr_target_oracle.py > bench/ctr_target_oracle.txt"
 
 # The root split recomputed in numpy from the oracle's own data, with no GPU
 # and no Mojo in the question. Its L2 line reproduces CatBoost's L2 root split

@@ -317,7 +317,7 @@ def assert_not_degenerate(tm: TrainedModel, label: String) raises -> Int:
 # ---------------------------------------------------------------------------
 
 
-def build_synthetic() raises -> TrainedModel:
+def build_synthetic(ctr_columns: Int = 0) raises -> TrainedModel:
     """Three features: 0 ordered with 16 borders, 1 CONSTANT with none, 2
     one-hot with three categories. Four trees at depths 1, 3, 4 and 6.
 
@@ -418,7 +418,8 @@ def build_synthetic() raises -> TrainedModel:
     losses.append(bitcast[DType.float64](UInt64(1)))
     losses.append(Float64(-0.0))
 
-    return TrainedModel(m^, fold_counts^, one_hot^, borders^, losses^)
+    return TrainedModel(m^, fold_counts^, one_hot^, borders^, losses^,
+                        ctr_columns)
 
 
 def check_synthetic_roundtrip(ctx: DeviceContext) raises:
@@ -1053,6 +1054,59 @@ def check_sabotages(ctx: DeviceContext) raises:
           s_after, "-- identical, which is why the comparison is per"
           " element")
 
+def check_ctr_column_count_travels(ctx: DeviceContext) raises:
+    """A CTR-bearing model must not round-trip into a SCOREABLE one.
+
+    `predict_floats` REFUSES a model with CTR columns, because a CTR value
+    is a statistic of the learn pool and scoring a new row needs the final
+    CTR tables. So the count is a SAFETY field, and a serializer that
+    dropped it would convert a model that correctly refuses into one that
+    silently scores rows against a grid built for different values. That is
+    a worse loss than a leaf value, because nothing downstream looks wrong.
+
+    The field is written ONLY when non-zero, so this also pins the other
+    half of that rule: a float-only model's bytes must be unchanged by the
+    field existing at all.
+    """
+    print("ctr_column_count survives the round trip:")
+    var tm = build_synthetic()
+    var float_only = model_text(tm)
+    if float_only.find(String("ctr_columns")) != -1:
+        raise Error(
+            "a float-only model wrote a ctr_columns record; the format's"
+            " own rule is that such a file stays byte-identical to what it"
+            " wrote before the field existed"
+        )
+    print("    float-only model writes no ctr_columns record")
+
+    var carrying = build_synthetic(3)
+    var text = model_text(carrying)
+    if text.find(String("ctr_columns 3")) == -1:
+        raise Error("a model with 3 CTR columns did not write the record")
+    var back = load_model_text(text)
+    if back.ctr_column_count != 3:
+        raise Error(
+            "ctr_column_count did not survive: wrote 3, read back "
+            + String(back.ctr_column_count)
+            + " -- the loaded model would SCORE where the original REFUSES"
+        )
+    print("    3 CTR columns written and read back as 3")
+
+    var refused = False
+    try:
+        var probe = List[Float32]()
+        for _ in range(len(back.fold_counts)):
+            probe.append(Float32(0.0))
+        _ = predict_floats(ctx, back, probe, 1)
+    except e:
+        refused = True
+    if not refused:
+        raise Error(
+            "the LOADED model scored rows; it must refuse exactly as the"
+            " original does, which is the whole point of carrying the count"
+        )
+    print("    the loaded model still REFUSES predict_floats")
+
 
 def main() raises:
     print("model save/load, exact round trip:")
@@ -1060,6 +1114,7 @@ def main() raises:
     var ctx = DeviceContext()
     check_synthetic_roundtrip(ctx)
     check_trained_roundtrip(ctx)
+    check_ctr_column_count_travels(ctx)
     check_evaluator_agrees(ctx)
     check_sabotages(ctx)
     print("model save/load: all parts green, all five sabotages red")
