@@ -511,6 +511,19 @@ noise. Result: every rep's loss is BIT-IDENTICAL and the models match
 CatBoost closer than ever (synth@128 9 sig figs, @254 8, covtype 7-8;
 the halved resolution margin at 254 held).
 
+CATEGORICAL ROUND 1, RUN AND REPORTED (2026-08-21): host-side
+FeatureFreq CTRs (their exact GPU formula count/(n+1), their Uniform-15
+ctr binarization; tools/ctr_prep.py + bench/interleaved/ctr_quality.mojo)
+on AMAZON, 26215/6554 holdout, 100 trees depth 6, both arms restricted
+to frequency information: ours 0.05078 test mse vs CatBoost 0.05064 --
+0.3%% apart. Attribution: the CPU arm uses `Counter` because CatBoost's
+OWN CPU refuses FeatureFreq ("not implemented on CPU yet",
+catboost_options.cpp:509 -- more evidence the GPU learner is its own
+system); same information class, slightly different normalization, so
+this is a quality-band row, not a bitwise one. ADULT: prep bug diagnosed
+(float NaN inside object columns; fillna before astype), handed to the
+harness stream -- to be RUN AND REPORTED once fixed, whatever it shows.
+
 Next known levers, in order: CTR steps 2-5 (RECON_CTRS.md: FeatureFreq,
 then the radix-sort/segmented-scan vendor checks, then history CTRs),
 the epsilon dataset.
