@@ -298,10 +298,7 @@ def run_one_level(
     # (`split_properties_helper.cpp:1061`). The histogram kernels do not
     # write a cell whose accumulator is zero, so an unfilled allocation is
     # read back as whatever the driver handed us.
-    var hzf = ctx.enqueue_create_host_buffer[DType.float32](hist_cells)
-    for i in range(hist_cells):
-        hzf.unsafe_ptr().unsafe_store(i, Float32(0.0))
-    ctx.enqueue_copy(dst_buf=hist, src_ptr=hzf.unsafe_ptr())
+    ctx.enqueue_memset(hist, Float32(0.0))
     # run_one_level is depth 0 with one block per partition, so the
     # multi-block flush never fires; the scratch satisfies the signature.
     var acc_scratch = ctx.enqueue_create_buffer[DType.int32](hist_cells)
@@ -671,10 +668,7 @@ def run_tree(
     # only the leaves a level rebuilds, and the histogram kernels skip a cell
     # whose accumulator is zero, so an unfilled allocation is never fully
     # overwritten.
-    var hzf = ctx.enqueue_create_host_buffer[DType.float32](hist_cells)
-    for i in range(hist_cells):
-        hzf.unsafe_ptr().unsafe_store(i, Float32(0.0))
-    ctx.enqueue_copy(dst_buf=hist, src_ptr=hzf.unsafe_ptr())
+    ctx.enqueue_memset(hist, Float32(0.0))
 
     # FIXED-POINT ACCUMULATOR for replicated blocks under
     # `NUMERIC_IDENTICAL`: partial histograms from blocks sharing a partition
@@ -683,10 +677,7 @@ def run_tree(
     # depend on which block lands first. `NUMERIC_FAST` leaves this buffer at
     # zero and takes CatBoost's float `atomicAdd`.
     var acc_i32 = ctx.enqueue_create_buffer[DType.int32](hist_cells)
-    var zi = ctx.enqueue_create_host_buffer[DType.int32](hist_cells)
-    for i in range(hist_cells):
-        zi.unsafe_ptr().unsafe_store(i, Int32(0))
-    ctx.enqueue_copy(dst_buf=acc_i32, src_ptr=zi.unsafe_ptr())
+    ctx.enqueue_memset(acc_i32, Int32(0))
 
     # The scale bounds every partial sum. A cell can hold at most the sum of
     # magnitudes of the plane it accumulates, and one scale serves both
@@ -2103,10 +2094,7 @@ def run_tree_layout[
     # only `plan.compute_ids`, by design, so every other slot holds whatever
     # the allocation came with until the bridge writes it, and the bridge
     # writes only the cells the kernels produced.
-    var hzf = ctx.enqueue_create_host_buffer[DType.float32](hist_cells)
-    for i in range(hist_cells):
-        hzf.unsafe_ptr().unsafe_store(i, Float32(0.0))
-    ctx.enqueue_copy(dst_buf=hist, src_ptr=hzf.unsafe_ptr())
+    ctx.enqueue_memset(hist, Float32(0.0))
 
     # Scratch for the per-block layout. Sized to the LARGEST block, since the
     # blocks are written one at a time and scattered before the next runs.
@@ -2121,10 +2109,7 @@ def run_tree_layout[
         max_leaves * stat_count * widest_block
     )
     var acc_i32 = ctx.enqueue_create_buffer[DType.int32](hist_cells)
-    var zi = ctx.enqueue_create_host_buffer[DType.int32](hist_cells)
-    for i in range(hist_cells):
-        zi.unsafe_ptr().unsafe_store(i, Int32(0))
-    ctx.enqueue_copy(dst_buf=acc_i32, src_ptr=zi.unsafe_ptr())
+    ctx.enqueue_memset(acc_i32, Int32(0))
 
     # See the note in `run_tree`: one scale serves both accumulated planes,
     # so the bound is the larger of the two sums of magnitudes, and
