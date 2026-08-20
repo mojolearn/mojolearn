@@ -65,6 +65,40 @@ like-for-like** and should not be quoted, including the 1.34x at 2M, which is
 a win on a model CatBoost did not train. The 4M and 800k rows at 254 borders
 are unaffected and stand.
 
+## The one asymmetry, and it favors us
+
+Audited 2026-08-20 after the numbers, by reading `tools/catboost_arm.py` and
+`bench/interleaved/catboost_interleaved.mojo` rather than vouching for them.
+
+Clean: CatBoost is given all ten cores, `thread_count` is set nowhere. Both
+arms warm up untimed for two trees. Both quantize outside the timed region,
+their `Pool.quantize()` cached and our compressed index uploaded and
+synchronized before `t0`. Their timed region is exactly `m.fit(p)`; ours is
+`fit(...)`, which carries a `ctx.synchronize()` per tree, so our number is
+executed GPU work and not enqueue time. Arms alternate in one process.
+
+**Not clean: the harness turns CatBoost's row subsampling off.** Read from an
+actual fit, CatBoost's shipped CPU defaults are `bootstrap_type=MVS` with
+`subsample=0.8`. This harness passes `bootstrap_type="No"`, so CatBoost
+processes every row where by default it would process four fifths of them.
+`random_strength` is likewise 0 here against a default of 1, and
+`boost_from_average` False against True.
+
+Those settings exist for a good reason. Both sides have to compute the same
+thing or the loss-parity check is meaningless, and that check is the only
+evidence that we are not winning by fitting something easier. But the
+consequence has to be said out loud beside every ratio in the table above:
+
+**These are numbers against CatBoost doing identical work, not against
+CatBoost as shipped.** What the difference is worth is UNMEASURED. It is one
+run to find out, and until someone does it, no ratio here should be quoted as
+beating CatBoost's defaults.
+
+One more thing that reading the defaults turned up. CatBoost's shipped
+`border_count` is 254. That is our weaker column at every shape, and it is the
+column where our model departs from theirs at two of five shapes. The defect
+recorded below sits on their default setting, not on an exotic one.
+
 ## What this does not say
 
 The large shapes are synthetic, drawn from `rng.normal` with a simple additive
