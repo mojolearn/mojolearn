@@ -39,9 +39,14 @@ from setuptools import setup
 from setuptools.dist import Distribution
 
 # Must equal the `minos` that `otool -l python/mojolearn/_mojolearn.so`
-# reports for LC_BUILD_VERSION. Nothing here reads the Mach-O header, so the
-# two are kept in step by the release procedure rather than by this file.
-DEFAULT_MACOS_TARGET = "26.0"
+# reports for LC_BUILD_VERSION, which bindings/build.sh sets via
+# MACOSX_DEPLOYMENT_TARGET. Nothing here reads the Mach-O header;
+# build_release_wheel.sh compares them after the build and refuses to
+# continue if they disagree.
+#
+# This read 26.0 until 2026-08-20, inherited from the host SDK, which made
+# the wheel installable only on a macOS released weeks earlier.
+DEFAULT_MACOS_TARGET = "11.0"
 TARGET_ENV_VAR = "MOJOLEARN_MACOS_DEPLOYMENT_TARGET"
 
 # MACOSX_DEPLOYMENT_TARGET is deliberately NOT consulted. Conda-style

@@ -55,6 +55,20 @@ codesign --force --sign - "$PKG/_mojolearn.so"
 
 echo "staged: $NEEDED"
 
+# THE TAG AND THE BINARY MUST AGREE, and nothing else checks this.
+# The wheel filename is what pip compares before it tries to load anything, so
+# a tag above the binary's floor turns installable Macs away and a tag below it
+# installs onto Macs where the extension cannot load. Both are silent on the
+# machine that built the wheel.
+BIN_MINOS=$(otool -l "$PKG/_mojolearn.so" | awk '/LC_BUILD_VERSION/{f=1} f&&/minos/{print $2; exit}')
+TAG_MINOS=$(grep -E '^DEFAULT_MACOS_TARGET' "$here/python/setup.py" | sed 's/[^0-9.]//g')
+if [ "$BIN_MINOS" != "$TAG_MINOS" ]; then
+    echo "ERROR: binary minos $BIN_MINOS but setup.py tags $TAG_MINOS" >&2
+    echo "       bindings/build.sh MACOS_FLOOR and setup.py DEFAULT_MACOS_TARGET must match" >&2
+    exit 1
+fi
+echo "macOS floor: binary minos $BIN_MINOS == wheel tag $TAG_MINOS"
+
 cd "$here/python"
 rm -rf dist build ./*.egg-info
 pixi run -e pkg python -m build --wheel --no-isolation

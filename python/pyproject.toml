@@ -17,7 +17,7 @@ name = "mojolearn"
 version = "0.1.0a1"
 description = "GPU machine learning in Mojo, running on Apple Silicon"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "Andrew Hendel" }]
@@ -51,6 +51,8 @@ classifiers = [
     # produced, so no Linux classifier is claimed.
     "Operating System :: MacOS :: MacOS X",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
@@ -71,6 +73,14 @@ classifiers = [
 # takes raw buffer addresses out of `__array_interface__`, and every estimator
 # returns arrays. There is no plain-sequence path to degrade to and pretending
 # otherwise would be a claim with nothing behind it.
+# 1.24 is a floor, not a measurement, and it is not a narrow one: numpy
+# publishes no arm64 wheel for 1.21 or 1.23 on any interpreter this package
+# supports (checked 2026-08-20 against py3.10 arm64, both refused with "no
+# matching distribution"), so nothing older is installable on the only
+# platform this wheel targets. The oldest actually verified is 1.26.4, on
+# python3.10, running the full smoke fit. The boundary uses only
+# `asarray`, `ascontiguousarray`, `empty`, `zeros`, `astype`, `.flags` and
+# `__array_interface__`, all of which long predate any of these.
 dependencies = ["numpy>=1.24"]
 
 [project.urls]

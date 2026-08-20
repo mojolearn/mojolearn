@@ -48,6 +48,29 @@ mkdir -p python/mojolearn
 # timing is attributed to this wheel rather than to a local build.
 TARGET_FLAGS="--target-cpu apple-m1 --target-accelerator metal:1"
 
+# THE macOS FLOOR, AND IT DEFAULTED ABSURDLY HIGH.
+#
+# `mojo build` takes its deployment target from the host SDK. On this machine
+# that produced an extension with `minos 26.0` -- a wheel installable only on
+# macOS 26, released weeks ago, which is very nearly nobody.
+#
+# The MAX runtime dylibs this links are built at `minos 11.0`. Modular shipped
+# them wide; only our own compile step was narrow. Measured 2026-08-20:
+# MACOSX_DEPLOYMENT_TARGET of 11.0, 13.0 and 14.0 each produce exactly that
+# minos, so the floor is ours to choose.
+#
+# 11.0 (Big Sur) is chosen because it is the FIRST macOS that runs on Apple
+# silicon at all. There is no Apple silicon Mac that can run anything older,
+# so this is the widest floor that means anything, and it matches the dylibs.
+#
+# setup.py's DEFAULT_MACOS_TARGET must equal this or the wheel TAG and the
+# BINARY disagree, which is a published lie in one of two directions: too low
+# and it installs where it cannot load, too high and it is refused by Macs
+# that could have run it. packaging/macos/build_release_wheel.sh checks that
+# they agree by reading the Mach-O header after the build.
+MACOS_FLOOR="11.0"
+export MACOSX_DEPLOYMENT_TARGET="$MACOS_FLOOR"
+
 # --emit shared-lib, not an executable: CPython dlopens this and calls
 # PyInit__mojolearn. The name of the file must match that symbol's suffix or
 # the import fails with "dynamic module does not define module export

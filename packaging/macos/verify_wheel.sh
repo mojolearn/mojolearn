@@ -21,7 +21,9 @@ WHEEL=$(ls "$here"/python/dist/mojolearn-*.whl 2>/dev/null | head -1)
 echo "wheel: $(basename "$WHEEL")"
 
 fails=0
-for py in python3.12 python3.13 python3.14; do
+# Every interpreter at or above the declared floor. Ones that are not
+# installed are SKIPPED and reported as skipped, never silently passed.
+for py in python3.10 python3.11 python3.12 python3.13 python3.14; do
     command -v "$py" >/dev/null 2>&1 || { echo "SKIP $py (not installed)"; continue; }
     tmp=$(mktemp -d)
     if ! "$py" -m venv "$tmp/venv" >/dev/null 2>&1; then
