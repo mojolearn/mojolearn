@@ -69,6 +69,12 @@ if [ "$BIN_MINOS" != "$TAG_MINOS" ]; then
 fi
 echo "macOS floor: binary minos $BIN_MINOS == wheel tag $TAG_MINOS"
 
+# THE ISA BASELINE, WHICH NO HEADER CAN SEE. arm64 Mach-O cpusubtype stays
+# ARM64_ALL whatever --target-cpu was, so this has to disassemble. Gates the
+# wheel: a binary carrying bf16, i8mm or SME instructions SIGILLs on the Macs
+# the macosx_11_0 tag invites in.
+pixi run -e pkg python "$here/packaging/isa_baseline.py" "$PKG/_mojolearn.so"
+
 cd "$here/python"
 rm -rf dist build ./*.egg-info
 pixi run -e pkg python -m build --wheel --no-isolation
