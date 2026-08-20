@@ -32,21 +32,6 @@ deviation BEYOND upstream -- their scalar reads lean on NVIDIA warp
 coalescing this device does not replicate). Steady-state iteration brackets:
 assignment ~27 ms, accumulate ~17 ms (was 63 + 54 two days ago).
 
-- **PCA 166 -> 75.8 ms** (was a 4x loss two days ago at 465): the ~100 ms of
-  center+restore passes are GONE -- the split-K kernel reads `x - mu[col]`
-  in registers (RAFT's own `stable=false` `@todo`, implemented; DEVIATION
-  42), X is never written, and `compute_covariance` measures 66 ms with the
-  eig at ~3.
-- **kmeans 2,448 -> 1,657.9 ms**: assignment 63 -> 21 ms/iter (phase
-  bracket, steady state). The fused L2-NN kernel was reading ONE float at a
-  time where upstream's `ldg` reads `Veclen` floats; LANE_kmeans-kernel
-  ported the vector load machinery, their veclen selection computation,
-  their strided ownership, their launch grid, and their smem-staged norms
-  (report has the full diff table). Two earlier mechanism theories (unfused
-  dispatch, atomic contention) had already died by measurement; the third
-  -- scalar loads in a "faithful" port -- was the real one, found by
-  line-by-line source diff, not by reasoning about our code.
-
 ## The dimensionality sweep (n = 200,000 fixed; 2026-08-19, still current)
 
 Every earlier row ran at d=8/32 -- the kd-tree's best regime. Trees degrade
