@@ -211,3 +211,19 @@ row tile.
 - `neighbors/PORTED_MAP.tsv`, `PORTING.md` (entry 36 corrected, entry 40
   added), `dbscan/ported/dbscan/adjgraph/algo.mojo` (DEVIATION 32 sentence
   corrected)
+
+## Commit provenance (shared-checkout incident, recorded per the standing rule)
+
+This lane's entire content was committed as `94fa7c7` — but under ANOTHER
+session's message ("README: the float-atomic flush IS reached on Apple"),
+because that session committed in the shared checkout during the window
+between this lane's `git add` (explicit paths only) and its `git commit`,
+sweeping the staged index. Verified afterward: the working tree is
+byte-identical to `94fa7c7` for every file of this lane, including the
+final acquire-load protocol in both the probe and the kernel, so nothing
+was lost or half-landed. The full intended commit message for the lane's
+content is reproduced in this file's sections above; this addendum commit
+exists so the lane has its own hash. The staged-index race is a THIRD
+shared-checkout hazard beside the two already on record (silent merge
+parents; anchored-edit clobbers): an explicit-path `git add` is not safe
+until the `git commit` that consumes it, so the two must be one command.
