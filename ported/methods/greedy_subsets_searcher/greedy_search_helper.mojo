@@ -112,8 +112,14 @@ from ported.gpu_util.partitions_reduce import (
     STATS_BLOCK,
     compute_partition_stats,
 )
+from mojo_only.kernel_matrix import TARGET_COLUMN, deterministic_flush_for
+from mojo_only.numerics import NUMERIC_IDENTICAL
+from ported.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
+    BUILD_MODE as HIST_BUILD_MODE,
+)
 from ported.methods.greedy_subsets_searcher.kernel.split_points import (
     launch_reorder_in_leaves,
+    split_points_grid_x,
     SPLIT_BLOCK_SIZE,
     gather_in_leaves_kernel,
     gather_index_in_leaves_kernel,
@@ -1704,12 +1710,16 @@ def launch_histograms_for_blocks(
         # two agree today and stop agreeing the moment `group_offset` is
         # nonzero, which is the moment a second device exists. Their call is
         # the whole-buffer one; this is now their call.
-        ctx.enqueue_function[zero_buffer_kernel](
-            block_hist.unsafe_ptr(),
-            Int32(block_cells),
-            grid_dim=(block_cells + 255) // 256,
-            block_dim=256,
-        )
+        #
+        # AND IT IS A MEMSET, NOT A KERNEL. Their `ZeroBuffer` is
+        # `cudaMemsetAsync` (`split_properties_helper.cpp:34-38`); this port
+        # launched a grid-stride kernel for it, which measured ~1.3 ms per
+        # level against `ctx.enqueue_memset`'s 0.2 ms for the same 3.26M
+        # cells (64 GB/s). The memset covers the WHOLE scratch rather than
+        # `block_cells` of it; that is their whole-buffer semantic exactly,
+        # and the cells past `block_cells` are ones no kernel writes and the
+        # bridge never reads.
+        ctx.enqueue_memset(block_hist, Float32(0.0))
 
         if blk.policy == POLICY_BINARY:
             if depth == 0:
@@ -1880,14 +1890,29 @@ def launch_histograms_for_blocks(
         # into the flat histogram. Converting it into the flat histogram
         # instead skips the bridge entirely, which is only correct when one
         # block spans everything.
-        ctx.enqueue_function[fixed_to_float_kernel](
-            acc_i32.unsafe_ptr(),
-            block_hist.unsafe_ptr(),
-            Int32(block_cells),
-            fixed_scale,
-            grid_dim=(block_cells + 255) // 256,
-            block_dim=256,
-        )
+        #
+        # AND IT DOES NOT RUN AT ALL UNDER `NUMERIC_FAST`. The FAST build
+        # flushes through CatBoost's float atomic and never writes
+        # `acc_i32`, so this kernel would read 3.26M zeros and store
+        # nothing -- measured at ~7 ms/tree of pure reading, with no
+        # CatBoost counterpart (their words in its own docstring). The
+        # branch is comptime, same truth the kernels' flush branches read,
+        # so the IDENTICAL build keeps the conversion and the FAST build
+        # never launches it.
+        comptime _flush_is_fixed_point = deterministic_flush_for[
+            TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
+        ]()
+
+        @parameter
+        if _flush_is_fixed_point:
+            ctx.enqueue_function[fixed_to_float_kernel](
+                acc_i32.unsafe_ptr(),
+                block_hist.unsafe_ptr(),
+                Int32(block_cells),
+                fixed_scale,
+                grid_dim=(block_cells + 255) // 256,
+                block_dim=256,
+            )
 
         # ============ THEIR `ReduceScatter` HAS NO COUNTERPART HERE ========
         # Between the histogram kernel and this writeback CatBoost runs
@@ -2668,12 +2693,16 @@ def run_tree_layout(
         ctx.enqueue_copy(dst_buf=ids_b, src_ptr=h_ids_b.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=ids_c, src_ptr=h_ids_c.unsafe_ptr())
 
+        # `numBlocks.x = (leavesCount > 4 ? 2 : 4) * TArchProps::SMCount()`
+        # (`split_points.cu:563`): MACHINE-sized, like every strided grid in
+        # their file; `wide` was data-sized and is not what their grid x
+        # means.
         ctx.enqueue_function[split_and_make_sequence_kernel](
             cindex.unsafe_ptr(), row_index.unsafe_ptr(),
             p_off.unsafe_ptr(), p_sz.unsafe_ptr(), ids_a.unsafe_ptr(),
             sp_feats.unsafe_ptr().bitcast[CFeature](), sp_bins.unsafe_ptr(),
             flags.unsafe_ptr(), seq.unsafe_ptr(),
-            grid_dim=(wide, n_live, 1),
+            grid_dim=(split_points_grid_x(n_live, sm_count), n_live, 1),
             block_dim=(SPLIT_BLOCK_SIZE, 1, 1),
         )
         mgr.stream_kernel()
@@ -2748,11 +2777,13 @@ def run_tree_layout(
         # deviation forced by the toolchain, not a choice; the search that
         # established it is the DEVIATION BLOCK in
         # `ported/gpu_util/gpu_data/partitions.mojo`.
+        # their `:397`, the same machine-sized expression.
         ctx.enqueue_function[update_partitions_after_split_kernel](
             ids_b.unsafe_ptr(), ids_c.unsafe_ptr(), Int32(n_live),
             sflags.unsafe_ptr(), p_off.unsafe_ptr(), p_sz.unsafe_ptr(),
             hp_off.unsafe_ptr(), hp_sz.unsafe_ptr(),
-            grid_dim=(wide, n_live, 1), block_dim=(512, 1, 1),
+            grid_dim=(split_points_grid_x(n_live, sm_count), n_live, 1),
+            block_dim=(512, 1, 1),
         )
         mgr.stream_kernel()
 
