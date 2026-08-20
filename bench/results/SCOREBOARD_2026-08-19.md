@@ -8,31 +8,42 @@ estimator that accepts it and their `algorithm='auto'` -- their best, not a
 crippled arm. Method: `bench/run_bench.py`, arms alternated per round inside
 one invocation, medians reported, a row is a finding only when the min..max
 ranges do NOT overlap. Apple M4 (10 cores, 16 GB), AC power, no thermal
-warnings. Re-verdicted 2026-08-19 late night at commit be226f8 (split-K Gram
-kernel in; k-NN AUTO; DBSCAN RBC + two-loop).
+warnings. Re-verdicted 2026-08-20 morning at commit 447b6c0 (PCA centering
+fused into the split-K read, DEVIATION 42; split-K floor knobs; kmeans fused
+L2-NN re-ported to upstream's Veclen policy, DEVIATIONS 44/45).
 
-## Fixed-size arms (3 rounds, n = 15/arm)
+## Fixed-size arms (3 rounds, n = 15/arm, window of 2026-08-20)
 
 | arm | shape | ours ms | sklearn ms | ratio | verdict |
 |---|---|---|---|---|---|
-| ols | 4M x 32 | 64.3 | 821.4 | 12.77x | **ours faster** |
-| ols vs `ols_normal_eq` | same | 64.3 | 143.0 | 2.2x | **ours faster** |
-| knn | 400k idx, 4k q, d=32, k=10 | 693.2 | 916.4 | 1.32x | **ours faster** |
-| pca | 4M x 32, 8 comp | 166.0 | 119.8 | 0.72x | INDISTINGUISHABLE |
-| dbscan | 4k x 16 | 11.2 | 8.9 | 0.80x | INDISTINGUISHABLE |
-| kmeans | 4M x 32, k=64, 20 iter | 2,427.2 | 2,016.6 | 0.83x | sklearn faster |
+| ols | 4M x 32 | 62.6 | 906.2 | 14.48x | **ours faster** |
+| ols vs `ols_normal_eq` | same | 62.6 | 151.5 | 2.42x | **ours faster** |
+| knn | 400k idx, 4k q, d=32, k=10 | 756.0 | 1,141.2 | 1.51x | **ours faster** |
+| pca | 4M x 32, 8 comp | 75.8 | 147.0 | **1.94x** | **ours faster** |
+| dbscan | 4k x 16 | 12.7 | 10.0 | 0.79x | INDISTINGUISHABLE |
+| kmeans | 4M x 32, k=64, 20 iter | 1,657.9 | 2,309.6 | **1.39x** | **ours faster** |
 
-**OLS flipped from the board's honest loss to its biggest win in one
-change.** Before the split-K Gram kernel: 362 ms of solve, 2.6x BEHIND
-`Ridge(alpha=0, solver="cholesky")` -- the same algorithm class as ours.
-After: 64 ms, 2.2x AHEAD of it, and 12.8x ahead of `LinearRegression`'s SVD
-route. **PCA moved 465 -> 166 ms in the same change**: from a clean 4x loss
-to range-overlap with scikit-learn (their LAPACK arm still medians ahead;
-the remaining ~100 ms of ours is two full centering passes over 512 MB, and
-fusing them into the Gram read is the named next step). kmeans is now the
-only clean fixed-size loss and the only unprofiled row.
+Ranges: kmeans [1541.7, 2036.0] vs [2053.1, 2784.5] -- DISJOINT, the row's
+first clean verdict in our favor. pca [67.4, 91.9] vs [118.1, 236.4] --
+DISJOINT. **The board's last loss and last big-arm tie both flipped in one
+round, and neither flip was a tuning constant: both were port fidelity.**
 
-## The dimensionality sweep (n = 200,000 fixed; NEW, and it redraws the map)
+- **PCA 166 -> 75.8 ms** (was a 4x loss two days ago at 465): the ~100 ms of
+  center+restore passes are GONE -- the split-K kernel reads `x - mu[col]`
+  in registers (RAFT's own `stable=false` `@todo`, implemented; DEVIATION
+  42), X is never written, and `compute_covariance` measures 66 ms with the
+  eig at ~3.
+- **kmeans 2,448 -> 1,657.9 ms**: assignment 63 -> 21 ms/iter (phase
+  bracket, steady state). The fused L2-NN kernel was reading ONE float at a
+  time where upstream's `ldg` reads `Veclen` floats; LANE_kmeans-kernel
+  ported the vector load machinery, their veclen selection computation,
+  their strided ownership, their launch grid, and their smem-staged norms
+  (report has the full diff table). Two earlier mechanism theories (unfused
+  dispatch, atomic contention) had already died by measurement; the third
+  -- scalar loads in a "faithful" port -- was the real one, found by
+  line-by-line source diff, not by reasoning about our code.
+
+## The dimensionality sweep (n = 200,000 fixed; 2026-08-19, still current)
 
 Every earlier row ran at d=8/32 -- the kd-tree's best regime. Trees degrade
 with d; a GPU's cost is d-linear. Measured (eps scaled sqrt(d/8) on both
@@ -50,60 +61,63 @@ sides, identical fixtures):
 scikit-learn's DBSCAN cost blows up 50x going d=8 -> 32 (the kd-tree
 collapses); ours grows ~7x. **The DBSCAN rows this file used to report as
 losses live entirely in the d=8 corner** -- the single regime most favorable
-to the incumbent -- and even there, 200k is a tie in this window. At any
-realistic feature width the fit is a multi-x win.
+to the incumbent -- and even there, 200k is a tie. At any realistic feature
+width the fit is a multi-x win.
 
-## Scaling arms at d=8 (2 rounds; the incumbent's best corner)
+## Scaling arms at d=8 (2 rounds; the incumbent's best corner; 2026-08-19)
 
 knn (d=32, k=10, 2,000 q): 1.41x / 1.36x / 1.79x / 1.48x ours at
 50k/100k/200k/400k, all clean. dbscan (d=8): ours 2.35x/1.74x at 4k/16k,
 parity 100k-200k, sklearn 0.70x-0.83x ahead at 400k-800k. Attribution
 (phase timer, 400k+800k): ~88% of phase time is the `vertexdeg`
 eps-neighborhood kernels -- a query-kernel constants fight against kd-tree
-asymptotics in their best regime, now the LOWEST-priority gap on the board
-given the d-sweep.
+asymptotics in their best regime, the LOWEST-priority gap on the board.
 
-## What moved this round, measured
+## The standing tally
 
-- **Split-K Gram kernel** (`core/gram_splitk.mojo`, LANE_gram-splitk): MAX's
-  matmul runs the 32x32x4M Gram shape at ~25 GFLOP/s because its Apple arm
-  launches one threadgroup per 64x64 output tile, and its split-K paths are
-  comptime-gated `not has_apple_gpu_accelerator()` (verified in Modular's
-  source at max/v26.5.0). Ours: 240 fixed k-chunks, deterministic ascending
-  fold, zero transposes. The Gram call: 345 -> 49 ms. OLS solve: 362 -> 65.
-  PCA fit: 465 -> 166.
-- **RBC two-loop max_k**: 1.31x-1.57x clean at 200k-800k, labels identical.
-- **k-NN AUTO default** (DEVIATION 36 revised): fused iff the ported launch
-  computation says grid_x == 1; verified across k=10..64.
-- **DBSCAN batch-size lever confirmed dead**; cuML's 80% default vindicated.
+**Five wins (OLS 2.4x/14.5x, PCA 1.9x, k-NN 1.3-1.8x, k-means 1.39x, DBSCAN
+2.6-6.9x at d>=32), one tie (DBSCAN in the d=8 corner, where large-n is
+attributed and deprioritized), zero losses.**
+
+## What moved the 2026-08-20 round, measured
+
+- **PCA centering fusion** (LANE_pca-centering, DEVIATION 42): RAFT
+  `cov.cuh`'s `stable=false` arm is `ASSERT(false)` + `@todo: implement
+  this using cutlass + customized epilogue!` -- their declared design,
+  unshippable for them because cuBLAS exposes no epilogue hook, implemented
+  here because the split-K kernel is ours. Bit-identical to
+  center-then-gemm (proven per cell on hashed data); X provably untouched
+  (worst element move exactly 0.0). Non-Apple targets keep their shipped
+  `stable=true` path verbatim, same predicate `gemm_tn` reads.
+- **Split-K floor knobs** (same lane, bit-identity FNV-hash-proven): the
+  inner unroll reloaded one shared address CELLS times per row whenever
+  `256 % m == 0` -- now one hoisted load; the 240-chunk workspace reuses
+  the `xt` scratch instead of allocating per call. `gemm_tn_alone` steady
+  state: 42.5 ms (first-shot 49 was partly alloc+cold).
+- **kmeans fused L2-NN re-port** (LANE_kmeans-kernel, DEVIATIONS 44/45):
+  Veclen vector loads + selection computation, `Policy4x4Skinny` arm,
+  strided accumulator ownership, launchConfigGenerator grid with m
+  grid-stride, smem-staged norms, self-neighbor round-off guard.
+  Assignment 63 -> 21 ms/iter. Accumulate side audited CLEAN against
+  upstream (their reads are scalar too).
 
 ## What the table says to do next
 
-1. **kmeans** (0.83x): the ~120 ms iteration is assignment 63 ms +
-   accumulation 56 ms (norms 0.2). The assignment "unfused dispatch" theory
-   was FALSE -- sentinel-proven fused before and after (LANE_kmeans-iter;
-   the 63 ms is the fused SIMT kernel's own efficiency, a future kernel
-   fight). Accumulation WAS the fixable half: 128M contended global atomics,
-   now privatized into 8 KB threadgroup partials (~260x fewer atomics),
-   bit-identical by the Int32 fixed-point argument. **Re-timed: NO CHANGE**
-   (55 ms before and after; the fit stays 0.81x) -- so atomics were not the
-   cost either. Two mechanism theories are now dead by measurement; both
-   phases run at ~10-20 GB/s effective on a ~120 GB/s device and the
-   remaining gap is in-kernel (the fused SIMT assignment and the accumulate
-   inner loop), a lower-confidence kernel fight. The privatized arm stays
-   (bit-identical, not slower, and the weight arm now mirrors RAFT's own
-   cached-SMEM dispatch where the old one deviated).
-2. **PCA's outright win**: fuse mean-subtract into the split-K Gram read and
-   drop the restore pass (~100 ms of the remaining 166).
-3. **Target-keying debt: PAID 2026-08-19** (LANE_target-keying).
-   `launch_config_generator`, the split-K dispatch/chunk count and the k-NN
-   AUTO decision read `mojo_only/hardware_matrix.mojo`'s target column;
-   non-Apple targets hand the Gram shape back to MAX's matmul; Apple
-   bit-identical (all pinned checks unchanged); nvidia/amd columns remain
-   supported-not-validated.
-4. **Upstream report to Modular**: two confirmed silent-wrong bugs
-   (`transpose_b` n==1 non-write; col-major views) + the Gram-shape gap,
-   with the 345 -> 49 ms reproducer.
-5. The split-K call itself has ~3x left to its traffic floor (~15 ms):
-   hoist the shared load when 256 % m == 0; move the workspace alloc off
-   the timed path.
+1. **kmeans accumulate is now the widest single bracket**: 54 ms/iter
+   against upstream-faithful code (audited line-by-line; their
+   `reduce_rows_by_key` reads are scalar too). Any further win there is a
+   deliberate deviation beyond upstream, not a fidelity fix -- price it
+   before fighting it.
+2. **`pca_transform` still centers the long way** (gemm_nt shape, different
+   epilogue): untouched by DEVIATION 42, a candidate for the same fusion if
+   transform latency ever matters on the board.
+3. **Upstream report to Modular: DRAFTED**, commit 1ca0eb5
+   (`bench/results/MODULAR_UPSTREAM_2026-08-20.md`) -- six probe-backed
+   defects + the split-K gap with the 345 -> 49 ms reproducer. Filing is
+   external and awaits Andrew's word.
+4. Split-K sits at 42.5 ms steady against a ~15 ms traffic floor (~2.8x):
+   the two named knobs are DONE; what remains is kernel-interior (wider
+   accumulation per thread, staging depth), unpriced.
+5. DBSCAN d=8 large-n `vertexdeg` constants: still the lowest priority.
+6. **kmeans|| init remains unported** (the cuVS default raises); RunPod
+   NVIDIA validation staged, awaiting Andrew's explicit word (billed).
