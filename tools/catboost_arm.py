@@ -80,3 +80,42 @@ def fit_seconds_and_mse(scratch, prefix, border_count, trees, depth):
     dt = time.perf_counter() - t0
     mse = float(np.mean((m.predict(x) - y) ** 2))
     return [dt, mse]
+
+def predict_prep(scratch, prefix, border_count, trees, depth):
+    """Train once and cache (model, RAW pool) for `predict_seconds`. The
+    raw pool mirrors their model_evaluation_speed notebook: `cb.Pool(X)`
+    built OUTSIDE the timed region, quantization inside `predict` against
+    the model's own borders."""
+    p = _pool(str(scratch), str(prefix), int(border_count))
+    m = catboost.CatBoostRegressor(
+        iterations=int(trees),
+        depth=int(depth),
+        learning_rate=0.3,
+        l2_leaf_reg=3.0,
+        border_count=int(border_count),
+        loss_function="RMSE",
+        grow_policy="SymmetricTree",
+        boosting_type="Plain",
+        bootstrap_type="No",
+        rsm=1.0,
+        has_time=True,
+        random_seed=0,
+        model_shrink_rate=0.0,
+        boost_from_average=False,
+        leaf_estimation_iterations=1,
+        random_strength=0.0,
+        logging_level="Silent",
+        allow_writing_files=False,
+    )
+    m.fit(p)
+    x = np.load("%s/%s_X.npy" % (scratch, prefix))
+    raw = catboost.Pool(x)
+    _CACHE[("predict", str(prefix), int(border_count))] = (m, raw)
+    return 0.0
+
+def predict_seconds(prefix, border_count, threads):
+    """One timed `model.predict(raw_pool)`, their notebook's timed line."""
+    m, raw = _CACHE[("predict", str(prefix), int(border_count))]
+    t0 = time.perf_counter()
+    _ = m.predict(raw, thread_count=int(threads))
+    return time.perf_counter() - t0

@@ -1,0 +1,572 @@
+"""CatBoost's GPU model evaluator, ported: quantize once, then every tree
+over cache-resident buckets.
+
+PORT OF `catboost/libs/model/cuda/evaluator.cu` + `.cuh` at CatBoost
+`54a8143a`. Transliterated. Do not improve.
+
+WHY THIS EXISTS BESIDE `predict`. `doc_parallel_boosting.predict` walks the
+TRAINING-side apply (`AddObliviousTreeImpl`), one kernel per tree over the
+full compressed index: 100 trees re-stream ~19 MB of cindex each, 1.9 GB of
+DRAM traffic for one model application, and it measured 2.9x BEHIND
+CatBoost's CPU evaluator on 800k x 100 (bench/interleaved, 2026-08-20).
+CatBoost's own inference path is THIS file: quantize the raw floats ONCE
+into a doc-tiled bucket layout, then evaluate blocks of trees against
+buckets that stay resident in cache -- the traffic no longer multiplies by
+the tree count. That is their design for exactly the problem we measured,
+so it is ported rather than reinvented (vendor rule).
+
+THE BUCKET LAYOUT (`TCudaQuantizationBucket = uchar4`): docs are tiled in
+groups of 128 = 32 lanes x 4 docs; one packed 4-byte word holds one
+feature's bin for a lane's 4 docs:
+
+    bucket[u32 units] = buckets_count * 32 * (doc // 128)
+                      + bucket_idx * 32 + (doc % 32)
+    byte j of it      = doc (doc//128)*128 + j*32 + (doc%32)
+
+`TGPURepackedBin.FeatureIdx` arrives PRE-MULTIPLIED by 32
+(`evaluator.cpp:32`, `cpuRepackedBin.FeatureIndex * WarpSize`), so the
+kernel adds it to the tile base directly. `FeatureVal` is the CPU
+repack's `SplitIdx` = training bin index + 1, because the split predicate
+is `bucket >= SplitIdx` where training stored `bin > bin_idx`. The
+`XorMask` member is one-hot machinery and stays zero here exactly as it
+is zero for their float splits.
+
+DEVIATIONS, all stated:
+* by-value structs -> parallel scalar arrays (as every kernel in this
+  port): repacked bins arrive as `bin_feature_idx` (u32, pre-scaled) +
+  `bin_feature_val` (u32) arrays; the uchar4 is a `UInt32` unpacked by
+  byte shifts.
+* their results pipeline converts to FLOAT64 with model scale/bias
+  (`ProcessResultsImpl`); Metal has no float64, our models have
+  scale 1 / bias 0, so the Float32 accumulator IS the prediction and
+  `ProcessResults` is not carried. The in-kernel accumulator is `float`
+  on their side too (`TCudaEvaluatorLeafType = float`, evaluator.cuh:26).
+* the one atomic is their `TAtomicAdd<float>` on global memory; Metal has
+  global float atomicAdd (measured), so it ports directly. Same
+  non-determinism class as their own GPU evaluator.
+
+RESULTS PADDING IS A CONTRACT: the reduce writes every doc slot of a
+128-doc block, in-range or not (theirs pads `ResultsFloatBuf` with
+`AlignBy<2048>`), so `results` must hold `ceil(docs/128)*128` floats and
+the caller reads only the first `docs`.
+"""
+
+from std.atomic import Atomic
+
+from mojo_only.kernel_matrix import (
+    QUANTIZE_SEARCH_TWO_LEVEL,
+    TARGET_COLUMN,
+    quantize_search_for,
+)
+from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from std.gpu.intrinsics import ldg
+from std.memory import stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
+
+#: `evaluator.cu:47-53`, their constants verbatim.
+comptime EVAL_OBJECTS_PER_THREAD = 4
+comptime EVAL_TREE_SUB_BLOCK_WIDTH = 8
+comptime EVAL_EXT_TREE_BLOCK_WIDTH = 128
+comptime EVAL_QUANT_DOC_BLOCK = 256
+comptime EVAL_BLOCK_WIDTH = 256
+comptime EVAL_DOC_BLOCK_SIZE = EVAL_BLOCK_WIDTH // EVAL_TREE_SUB_BLOCK_WIDTH
+comptime EVAL_WARP = 32
+
+comptime NEG_INFTY = Float32(-3.4028234663852886e38)
+
+
+def gpu_binarize_kernel[search_mode: Int = quantize_search_for[TARGET_COLUMN]()](
+    values: MutPointer[Float32, MutAnyOrigin],
+    value_stride_in: Int32,
+    feature_count_in: Int32,
+    object_count_in: Int32,
+    borders: MutPointer[Float32, MutAnyOrigin],
+    feature_border_offsets: MutPointer[UInt32, MutAnyOrigin],
+    feature_border_counts: MutPointer[UInt32, MutAnyOrigin],
+    float_feature_for_bucket: MutPointer[UInt32, MutAnyOrigin],
+    buckets_count_in: Int32,
+    target: MutPointer[UInt32, MutAnyOrigin],
+):
+    """`Binarize<ColumnFirst>` (`evaluator.cu:84-126`), copied.
+
+    grid = (ceil(docs / 1024), buckets); block = 256. Each thread bins 4
+    docs of one bucket's feature against the bucket's borders staged in
+    shared memory; out-of-range docs read `-inf` (their accessor's
+    `NegativeInfty()`), which no border exceeds, and the lane-guarded
+    store drops them.
+    """
+    var tid = Int(thread_idx.x)
+    var object_count = Int(object_count_in)
+    var buckets_count = Int(buckets_count_in)
+    var stride = Int(value_stride_in)
+
+    var blockby32 = Int(block_idx.x) * (
+        EVAL_QUANT_DOC_BLOCK // EVAL_WARP
+    ) + tid // EVAL_WARP
+    var first_doc = blockby32 * EVAL_WARP * EVAL_OBJECTS_PER_THREAD + (
+        tid % EVAL_WARP
+    )
+
+    var bucket = Int(block_idx.y)
+    var border_base = Int(feature_border_offsets.unsafe_load(bucket))
+    var border_count = Int(feature_border_counts.unsafe_load(bucket))
+    var feature = Int(float_feature_for_bucket.unsafe_load(bucket))
+
+    var borders_local = stack_allocation[
+        EVAL_QUANT_DOC_BLOCK,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    if tid < border_count:
+        borders_local[tid] = ldg(borders + (border_base + tid))
+    barrier()
+
+    var f = InlineArray[Float32, EVAL_OBJECTS_PER_THREAD](fill=NEG_INFTY)
+
+    @parameter
+    for j in range(EVAL_OBJECTS_PER_THREAD):
+        var doc = first_doc + j * EVAL_WARP
+        if doc < object_count:
+            f[j] = ldg(values + (feature * stride + doc))
+
+    var bins = InlineArray[UInt32, EVAL_OBJECTS_PER_THREAD](fill=0)
+
+    @parameter
+    if search_mode == QUANTIZE_SEARCH_TWO_LEVEL:
+        # The Apple arm of `quantize_search_for`: a PIVOT pass over every
+        # 8th border, then one 8-wide segment pass, both branchless
+        # independent compare-adds -- the linear scan's pipelined shape at
+        # ~a fifth of its compares. (A lower_bound binary search was tried
+        # first and measured 3.5x WORSE than the full scan: its eight
+        # dependent divergent loads stall where compare-adds pipeline.
+        # The matrix row carries both prices.)
+        var seg = InlineArray[UInt32, EVAL_OBJECTS_PER_THREAD](fill=0)
+        var p = 7
+        while p < border_count:
+            var pivot = borders_local[p]
+
+            @parameter
+            for j in range(EVAL_OBJECTS_PER_THREAD):
+                seg[j] += UInt32(Int(f[j] > pivot))
+            p += 8
+
+        @parameter
+        for j in range(EVAL_OBJECTS_PER_THREAD):
+            var base = Int(seg[j]) * 8
+            var count = UInt32(base)
+
+            @parameter
+            for u in range(8):
+                if base + u < border_count:
+                    count += UInt32(
+                        Int(f[j] > borders_local[base + u])
+                    )
+            # `seg` cleared pivots at indices 8s-1, so ALL borders below
+            # index 8s are below the value (sorted) and the segment pass
+            # covers exactly [8s, 8s+8); the next pivot bounds the value
+            # from above, so nothing past the segment can be cleared
+            bins[j] = count
+    else:
+        # `#pragma unroll 8` + `bins.x += features.x > border`
+        # (`evaluator.cu:117-121`): branchless, borders in unrolled chunks
+        # of 8. A branchy scalar first translation of this loop measured
+        # 40-46 ms; the shape is load-bearing, not style.
+        var border_id = 0
+        while border_id + 8 <= border_count:
+
+            @parameter
+            for u in range(8):
+                var border = borders_local[border_id + u]
+
+                @parameter
+                for j in range(EVAL_OBJECTS_PER_THREAD):
+                    bins[j] += UInt32(Int(f[j] > border))
+            border_id += 8
+        while border_id < border_count:
+            var border = borders_local[border_id]
+
+            @parameter
+            for j in range(EVAL_OBJECTS_PER_THREAD):
+                bins[j] += UInt32(Int(f[j] > border))
+            border_id += 1
+
+    if first_doc < object_count:
+        var packed = (
+            bins[0]
+            | (bins[1] << 8)
+            | (bins[2] << 16)
+            | (bins[3] << 24)
+        )
+        target.unsafe_store(
+            buckets_count * EVAL_WARP * blockby32
+            + bucket * EVAL_WARP
+            + (tid % EVAL_WARP),
+            packed,
+        )
+
+
+def _calc_tree_index[
+    unroll_depth: Int
+](
+    depth: Int,
+    bin_feature_idx: MutPointer[UInt32, MutAnyOrigin],
+    bin_feature_val: MutPointer[UInt32, MutAnyOrigin],
+    split_base: Int,
+    quantized: MutPointer[UInt32, MutAnyOrigin],
+    quant_base: Int,
+    mut idx: InlineArray[UInt32, EVAL_OBJECTS_PER_THREAD],
+):
+    """`CalcIndexesUnwrapped<TreeDepth>` / `CalcIndexesBase`
+    (`evaluator.cu:129-156`): the leaf index of 4 docs at once, one packed
+    bucket load per level. `unroll_depth > 0` is their comptime-unrolled
+    6/7/8 arm; 0 is the generic loop. Their `+=` instead of `|=` is an
+    A100 compiler workaround (MLTOOLS-6839) and either is exact here;
+    `+=` is kept verbatim.
+    """
+
+    @parameter
+    for k in range(EVAL_OBJECTS_PER_THREAD):
+        idx[k] = 0
+
+    @parameter
+    if unroll_depth > 0:
+
+        @parameter
+        for d in range(unroll_depth):
+            var fi = Int(ldg(bin_feature_idx + (split_base + d)))
+            var fv = ldg(bin_feature_val + (split_base + d))
+            var buckets = ldg(quantized + (quant_base + fi))
+
+            @parameter
+            for k in range(EVAL_OBJECTS_PER_THREAD):
+                var b = (buckets >> UInt32(8 * k)) & UInt32(255)
+                if b >= fv:
+                    idx[k] += UInt32(1 << d)
+    else:
+        for d in range(depth):
+            var fi = Int(ldg(bin_feature_idx + (split_base + d)))
+            var fv = ldg(bin_feature_val + (split_base + d))
+            var buckets = ldg(quantized + (quant_base + fi))
+
+            @parameter
+            for k in range(EVAL_OBJECTS_PER_THREAD):
+                var b = (buckets >> UInt32(8 * k)) & UInt32(255)
+                if b >= fv:
+                    idx[k] += UInt32(1 << d)
+
+
+def eval_oblivious_trees_kernel(
+    quantized: MutPointer[UInt32, MutAnyOrigin],
+    tree_sizes: MutPointer[UInt32, MutAnyOrigin],
+    tree_count_in: Int32,
+    tree_start_offsets: MutPointer[UInt32, MutAnyOrigin],
+    bin_feature_idx: MutPointer[UInt32, MutAnyOrigin],
+    bin_feature_val: MutPointer[UInt32, MutAnyOrigin],
+    first_leaf_offset: MutPointer[UInt32, MutAnyOrigin],
+    ext_tree_block_width_in: Int32,
+    buckets_count_in: Int32,
+    leaf_values: MutPointer[Float32, MutAnyOrigin],
+    document_count_in: Int32,
+    results: MutPointer[Float32, MutAnyOrigin],
+):
+    """`EvalObliviousTrees` (`evaluator.cu:172-249`), copied.
+
+    block = (32, 8): 32 doc-lanes x 8 tree sub-blocks; each thread owns 4
+    docs and walks its sub-block's tree range two at a time. The shared
+    reduce and the float atomicAdd into `results` are theirs line for
+    line, including the `[tid]` + `[tid + 128]` pairing of the final add.
+
+    ================= DEVIATION BLOCK =================
+    Their `ExtTreeBlockWidth` is a compile-time 128: a tree sub-block owns
+    `8 * 128 = 1024` trees, which is sized for their epsilon-class
+    8000-tree models. At a 100-tree model that leaves SEVEN of the eight
+    sub-blocks with `firstTreeIdx >= treeCount` -- 7/8 of every block's
+    compute idle, measured 2.0-2.7x behind CatBoost CPU on 800k x 100
+    (2026-08-20). The width is therefore a RUNTIME argument and the host
+    picks `ceil(tree_count / 64)`, which fills all eight sub-blocks at
+    any model size and reproduces their shape (W=125 vs their 128) at
+    8000 trees. Scheduling only: the per-tree walk, the reduce and the
+    atomic are unchanged, and the harness asserts this arm equals the
+    tree-wise apply bit for bit.
+    ===================================================
+    """
+    var tx = Int(thread_idx.x)
+    var ty = Int(thread_idx.y)
+    var tree_count = Int(tree_count_in)
+    var buckets_count = Int(buckets_count_in)
+    var document_count = Int(document_count_in)
+
+    var inner_block_by32 = tx // EVAL_WARP
+    var blockby32 = Int(block_idx.y) * (
+        EVAL_DOC_BLOCK_SIZE // EVAL_WARP
+    ) + inner_block_by32
+    var in_block_id = tx % EVAL_WARP
+    var first_doc = blockby32 * EVAL_WARP * EVAL_OBJECTS_PER_THREAD + in_block_id
+
+    var quant_base = buckets_count * EVAL_WARP * blockby32 + tx % EVAL_WARP
+
+    var ext_width = Int(ext_tree_block_width_in)
+    var first_tree = EVAL_TREE_SUB_BLOCK_WIDTH * ext_width * (
+        ty + EVAL_TREE_SUB_BLOCK_WIDTH * Int(block_idx.x)
+    )
+    var last_tree = first_tree + (
+        EVAL_TREE_SUB_BLOCK_WIDTH * ext_width
+    )
+    if last_tree > tree_count:
+        last_tree = tree_count
+
+    var local_result = InlineArray[Float32, EVAL_OBJECTS_PER_THREAD](
+        fill=Float32(0.0)
+    )
+
+    if first_tree < last_tree and first_doc < document_count:
+        var split_base = Int(ldg(tree_start_offsets + first_tree))
+        var leaf_base = Int(ldg(first_leaf_offset + first_tree))
+        var idx = InlineArray[UInt32, EVAL_OBJECTS_PER_THREAD](fill=0)
+        for tree in range(first_tree, last_tree):
+            var depth = Int(ldg(tree_sizes + tree))
+            if depth == 6:
+                _calc_tree_index[6](
+                    depth, bin_feature_idx, bin_feature_val, split_base,
+                    quantized, quant_base, idx,
+                )
+            elif depth == 7:
+                _calc_tree_index[7](
+                    depth, bin_feature_idx, bin_feature_val, split_base,
+                    quantized, quant_base, idx,
+                )
+            elif depth == 8:
+                _calc_tree_index[8](
+                    depth, bin_feature_idx, bin_feature_val, split_base,
+                    quantized, quant_base, idx,
+                )
+            else:
+                _calc_tree_index[0](
+                    depth, bin_feature_idx, bin_feature_val, split_base,
+                    quantized, quant_base, idx,
+                )
+
+            @parameter
+            for k in range(EVAL_OBJECTS_PER_THREAD):
+                local_result[k] += ldg(
+                    leaf_values + (leaf_base + Int(idx[k]))
+                )
+            split_base += depth
+            leaf_base += 1 << depth
+
+    # `reduceVals[...]` (`evaluator.cu:228-247`), their exact slots.
+    var reduce_vals = stack_allocation[
+        EVAL_DOC_BLOCK_SIZE
+        * EVAL_OBJECTS_PER_THREAD
+        * EVAL_TREE_SUB_BLOCK_WIDTH,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+
+    @parameter
+    for k in range(EVAL_OBJECTS_PER_THREAD):
+        reduce_vals[
+            inner_block_by32 * EVAL_WARP * EVAL_OBJECTS_PER_THREAD
+            + EVAL_WARP * k
+            + in_block_id
+            + ty * EVAL_DOC_BLOCK_SIZE * EVAL_OBJECTS_PER_THREAD
+        ] = local_result[k]
+    barrier()
+    var flat = tx + ty * EVAL_DOC_BLOCK_SIZE
+    var lr = reduce_vals[flat]
+
+    @parameter
+    for j in range(1, EVAL_OBJECTS_PER_THREAD):
+        lr += reduce_vals[j * 256 + flat]
+    reduce_vals[flat] = lr
+    barrier()
+    if ty < EVAL_OBJECTS_PER_THREAD:
+        _ = Atomic.fetch_add(
+            results.unsafe_offset(
+                blockby32 * EVAL_WARP * EVAL_OBJECTS_PER_THREAD
+                + tx
+                + ty * EVAL_DOC_BLOCK_SIZE
+            ),
+            reduce_vals[flat] + reduce_vals[flat + 128],
+        )
+
+
+# ---------------------------------------------------------------------------
+# HOST SIDE, their `TGPUCatboostEvaluationContext` (`evaluator.cpp`).
+# The model arrays are built ONCE, at model-pack time, exactly as their
+# `TGPUModelData` is built when the evaluator context is created -- never
+# per predict call.
+# ---------------------------------------------------------------------------
+
+from max.gpu.host import DeviceBuffer, DeviceContext
+
+from ported.models.oblivious_model import TAdditiveModel
+
+
+@fieldwise_init
+struct GpuEvaluatorModel(Movable):
+    """`TGPUModelData`, the members this port reaches: tree geometry,
+    repacked splits as two parallel arrays, flat leaves."""
+
+    var tree_sizes: DeviceBuffer[DType.uint32]
+    var tree_starts: DeviceBuffer[DType.uint32]
+    var first_leaf: DeviceBuffer[DType.uint32]
+    var bf_idx: DeviceBuffer[DType.uint32]
+    var bf_val: DeviceBuffer[DType.uint32]
+    var leaves: DeviceBuffer[DType.float32]
+    var tree_count: Int
+
+
+def pack_model_for_evaluator(
+    ctx: DeviceContext, model: TAdditiveModel
+) raises -> GpuEvaluatorModel:
+    """Their model repack (`evaluator.cpp:29-58`): `FeatureIdx` pre-scaled
+    by the warp width for the bucket tile stride, `FeatureVal` =
+    training bin index + 1 because `bucket >= val` must reproduce
+    training's `bin > bin_idx`. Buckets are our layout features one to
+    one (no unused-feature compaction yet: every kept feature has
+    borders)."""
+    var total_levels = 0
+    var total_leaves = 0
+    for t in range(model.size()):
+        total_levels += model.weak_models[t].structure.get_depth()
+        total_leaves += 1 << model.weak_models[t].structure.get_depth()
+    if total_levels == 0:
+        raise Error("empty model has nothing to pack")
+
+    var n_trees = model.size()
+    var tree_sizes = ctx.enqueue_create_buffer[DType.uint32](n_trees)
+    var tree_starts = ctx.enqueue_create_buffer[DType.uint32](n_trees)
+    var first_leaf = ctx.enqueue_create_buffer[DType.uint32](n_trees)
+    var bf_idx = ctx.enqueue_create_buffer[DType.uint32](total_levels)
+    var bf_val = ctx.enqueue_create_buffer[DType.uint32](total_levels)
+    var leaves = ctx.enqueue_create_buffer[DType.float32](total_leaves)
+
+    var h1 = ctx.enqueue_create_host_buffer[DType.uint32](n_trees)
+    var h2 = ctx.enqueue_create_host_buffer[DType.uint32](n_trees)
+    var h3 = ctx.enqueue_create_host_buffer[DType.uint32](n_trees)
+    var h4 = ctx.enqueue_create_host_buffer[DType.uint32](total_levels)
+    var h5 = ctx.enqueue_create_host_buffer[DType.uint32](total_levels)
+    var h6 = ctx.enqueue_create_host_buffer[DType.float32](total_leaves)
+
+    var lvl = 0
+    var leaf = 0
+    for t in range(n_trees):
+        ref weak = model.weak_models[t]
+        var depth = weak.structure.get_depth()
+        h1.unsafe_ptr().unsafe_store(t, UInt32(depth))
+        h2.unsafe_ptr().unsafe_store(t, UInt32(lvl))
+        h3.unsafe_ptr().unsafe_store(t, UInt32(leaf))
+        for level in range(depth):
+            h4.unsafe_ptr().unsafe_store(
+                lvl,
+                UInt32(Int(weak.structure.splits[level].feature_id))
+                * UInt32(EVAL_WARP),
+            )
+            h5.unsafe_ptr().unsafe_store(
+                lvl,
+                UInt32(Int(weak.structure.splits[level].bin_idx) + 1),
+            )
+            lvl += 1
+        var n_leaves = 1 << depth
+        for i in range(n_leaves):
+            var v = Float32(0.0)
+            if i < len(weak.leaf_values):
+                v = weak.leaf_values[i]
+            h6.unsafe_ptr().unsafe_store(leaf + i, v)
+        leaf += n_leaves
+    ctx.enqueue_copy(dst_buf=tree_sizes, src_ptr=h1.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=tree_starts, src_ptr=h2.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=first_leaf, src_ptr=h3.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=bf_idx, src_ptr=h4.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=bf_val, src_ptr=h5.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=leaves, src_ptr=h6.unsafe_ptr())
+    ctx.synchronize()
+    return GpuEvaluatorModel(
+        tree_sizes^, tree_starts^, first_leaf^, bf_idx^, bf_val^,
+        leaves^, n_trees,
+    )
+
+
+def quantized_buffer_u32s(buckets_count: Int, n_rows: Int) -> Int:
+    """`TCudaQuantizedData::SetDimensions` (`evaluator.cu:59-66`): 32
+    packed words per (128-doc block, bucket), 4 blocks of 32 docs each."""
+    return (
+        EVAL_WARP
+        * buckets_count
+        * ((n_rows + 127) // 128)
+        * EVAL_OBJECTS_PER_THREAD
+    )
+
+
+def padded_results(n_rows: Int) -> Int:
+    """The reduce writes whole 128-doc blocks (their `AlignBy<2048>` pad)."""
+    return ((n_rows + 127) // 128) * 128
+
+
+def launch_quantize(
+    ctx: DeviceContext,
+    mut xdev: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    n_feats: Int,
+    mut borders: DeviceBuffer[DType.float32],
+    mut border_offsets: DeviceBuffer[DType.uint32],
+    mut border_counts: DeviceBuffer[DType.uint32],
+    mut bucket_feature: DeviceBuffer[DType.uint32],
+    mut quantized: DeviceBuffer[DType.uint32],
+) raises:
+    """`QuantizeData` (`evaluator.cu:379-401`), the ColumnFirst arm; our
+    colmajor X has stride `n_rows`."""
+    ctx.enqueue_function[
+        gpu_binarize_kernel[quantize_search_for[TARGET_COLUMN]()]
+    ](
+        xdev.unsafe_ptr(), Int32(n_rows), Int32(n_feats), Int32(n_rows),
+        borders.unsafe_ptr(), border_offsets.unsafe_ptr(),
+        border_counts.unsafe_ptr(), bucket_feature.unsafe_ptr(),
+        Int32(n_feats), quantized.unsafe_ptr(),
+        grid_dim=(
+            (n_rows + EVAL_QUANT_DOC_BLOCK * EVAL_OBJECTS_PER_THREAD - 1)
+            // (EVAL_QUANT_DOC_BLOCK * EVAL_OBJECTS_PER_THREAD),
+            n_feats,
+            1,
+        ),
+        block_dim=(EVAL_QUANT_DOC_BLOCK, 1, 1),
+    )
+
+
+def launch_eval(
+    ctx: DeviceContext,
+    mut m: GpuEvaluatorModel,
+    mut quantized: DeviceBuffer[DType.uint32],
+    n_feats: Int,
+    n_rows: Int,
+    mut results: DeviceBuffer[DType.float32],
+) raises:
+    """`EvalQuantizedData` (`evaluator.cu:344-368`): clear results, one
+    kernel over (tree blocks, doc blocks)."""
+    ctx.enqueue_memset(results, Float32(0.0))
+    # the adaptive sub-block width of the kernel's DEVIATION BLOCK: fill
+    # all eight tree sub-blocks at any model size
+    var ext_width = (m.tree_count + 63) // 64
+    if ext_width < 1:
+        ext_width = 1
+    var tree_grid = (
+        m.tree_count
+        + EVAL_TREE_SUB_BLOCK_WIDTH * ext_width
+        - 1
+    ) // (EVAL_TREE_SUB_BLOCK_WIDTH * ext_width)
+    ctx.enqueue_function[eval_oblivious_trees_kernel](
+        quantized.unsafe_ptr(), m.tree_sizes.unsafe_ptr(),
+        Int32(m.tree_count), m.tree_starts.unsafe_ptr(),
+        m.bf_idx.unsafe_ptr(), m.bf_val.unsafe_ptr(),
+        m.first_leaf.unsafe_ptr(), Int32(ext_width), Int32(n_feats),
+        m.leaves.unsafe_ptr(), Int32(n_rows), results.unsafe_ptr(),
+        grid_dim=(
+            tree_grid,
+            (n_rows + EVAL_DOC_BLOCK_SIZE * EVAL_OBJECTS_PER_THREAD - 1)
+            // (EVAL_DOC_BLOCK_SIZE * EVAL_OBJECTS_PER_THREAD),
+            1,
+        ),
+        block_dim=(EVAL_DOC_BLOCK_SIZE, EVAL_TREE_SUB_BLOCK_WIDTH, 1),
+    )

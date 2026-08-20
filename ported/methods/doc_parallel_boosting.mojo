@@ -362,60 +362,98 @@ def predict(
     This is the path that works on rows the model was never grown on, which
     the partition-based `add_model_value_kernel` cannot do. On the learn set
     the two must agree exactly, and `boosting_check` asserts that.
-    """
+
+    THE ENSEMBLE IS PACKED ONCE. This used to create eight buffers, fill
+    them and `ctx.synchronize()` PER TREE, which at ~191 us per drain plus
+    the allocations made the host loop cost as much as the kernels: our
+    artifact, not theirs -- their evaluator holds the whole model resident
+    and their `AddObliviousTreeImpl` launches back to back on one stream.
+    Now the per-level split records of every tree and every tree's leaf
+    values go up in five copies total, the launches are enqueued back to
+    back exactly as their stream takes them, and the ONE drain at the end
+    is what makes `cursor` readable."""
     var layout = build_layout(fold_counts)
 
-    var h_zero = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
-    for i in range(n_rows):
-        h_zero.unsafe_ptr().unsafe_store(i, Float32(0.0))
-    ctx.enqueue_copy(dst_buf=cursor, src_ptr=h_zero.unsafe_ptr())
+    ctx.enqueue_memset(cursor, Float32(0.0))
 
+    # pack every tree's per-level records and leaf values, flat
+    var total_levels = 0
+    var total_leaves = 0
+    for t in range(model.size()):
+        total_levels += model.weak_models[t].structure.get_depth()
+        total_leaves += 1 << model.weak_models[t].structure.get_depth()
+    if total_levels == 0:
+        ctx.synchronize()
+        return
+
+    var d_off = ctx.enqueue_create_buffer[DType.uint32](total_levels)
+    var d_shift = ctx.enqueue_create_buffer[DType.uint32](total_levels)
+    var d_mask = ctx.enqueue_create_buffer[DType.uint32](total_levels)
+    var d_bin = ctx.enqueue_create_buffer[DType.uint32](total_levels)
+    var d_vals = ctx.enqueue_create_buffer[DType.float32](total_leaves)
+    var h_off = ctx.enqueue_create_host_buffer[DType.uint32](total_levels)
+    var h_shift = ctx.enqueue_create_host_buffer[DType.uint32](total_levels)
+    var h_mask = ctx.enqueue_create_host_buffer[DType.uint32](total_levels)
+    var h_bin = ctx.enqueue_create_host_buffer[DType.uint32](total_levels)
+    var h_vals = ctx.enqueue_create_host_buffer[DType.float32](total_leaves)
+
+    var lvl = 0
+    var leaf = 0
     for t in range(model.size()):
         ref weak = model.weak_models[t]
         var depth = weak.structure.get_depth()
-        if depth == 0:
-            continue
-
-        var d_off = ctx.enqueue_create_buffer[DType.uint32](depth)
-        var d_shift = ctx.enqueue_create_buffer[DType.uint32](depth)
-        var d_mask = ctx.enqueue_create_buffer[DType.uint32](depth)
-        var d_bin = ctx.enqueue_create_buffer[DType.uint32](depth)
-        var h_off = ctx.enqueue_create_host_buffer[DType.uint32](depth)
-        var h_shift = ctx.enqueue_create_host_buffer[DType.uint32](depth)
-        var h_mask = ctx.enqueue_create_host_buffer[DType.uint32](depth)
-        var h_bin = ctx.enqueue_create_host_buffer[DType.uint32](depth)
         for level in range(depth):
-            ref cf = layout.features[Int(weak.structure.splits[level].feature_id)]
+            ref cf = layout.features[
+                Int(weak.structure.splits[level].feature_id)
+            ]
             h_off.unsafe_ptr().unsafe_store(
-                level, cf.offset * UInt32(n_rows)
+                lvl, cf.offset * UInt32(n_rows)
             )
-            h_shift.unsafe_ptr().unsafe_store(level, cf.shift)
-            h_mask.unsafe_ptr().unsafe_store(level, cf.mask)
+            h_shift.unsafe_ptr().unsafe_store(lvl, cf.shift)
+            h_mask.unsafe_ptr().unsafe_store(lvl, cf.mask)
             h_bin.unsafe_ptr().unsafe_store(
-                level, UInt32(Int(weak.structure.splits[level].bin_idx))
+                lvl, UInt32(Int(weak.structure.splits[level].bin_idx))
             )
-        ctx.enqueue_copy(dst_buf=d_off, src_ptr=h_off.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=d_shift, src_ptr=h_shift.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=d_mask, src_ptr=h_mask.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=d_bin, src_ptr=h_bin.unsafe_ptr())
-
+            lvl += 1
         var n_leaves = 1 << depth
-        var d_vals = ctx.enqueue_create_buffer[DType.float32](n_leaves)
-        var h_vals = ctx.enqueue_create_host_buffer[DType.float32](n_leaves)
         for i in range(n_leaves):
             var v = Float32(0.0)
             if i < len(weak.leaf_values):
                 v = weak.leaf_values[i]
-            h_vals.unsafe_ptr().unsafe_store(i, v)
-        ctx.enqueue_copy(dst_buf=d_vals, src_ptr=h_vals.unsafe_ptr())
+            h_vals.unsafe_ptr().unsafe_store(leaf + i, v)
+        leaf += n_leaves
+    ctx.enqueue_copy(dst_buf=d_off, src_ptr=h_off.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=d_shift, src_ptr=h_shift.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=d_mask, src_ptr=h_mask.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=d_bin, src_ptr=h_bin.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=d_vals, src_ptr=h_vals.unsafe_ptr())
 
-        var wide = (n_rows + 255) // 256
-        if wide > 1024:
-            wide = 1024
-        ctx.enqueue_function[compute_bins_and_add_kernel](
-            cindex.unsafe_ptr(), d_off.unsafe_ptr(), d_shift.unsafe_ptr(),
-            d_mask.unsafe_ptr(), d_bin.unsafe_ptr(), Int32(depth),
-            d_vals.unsafe_ptr(), Int32(n_rows), cursor.unsafe_ptr(),
-            grid_dim=wide, block_dim=256,
-        )
-        ctx.synchronize()
+    # `AddObliviousTreeImpl` per tree, back to back on one stream, their
+    # own launch shape (`add_model_value.cu`); no drain between trees.
+    var wide = (n_rows + 255) // 256
+    if wide > 1024:
+        wide = 1024
+    lvl = 0
+    leaf = 0
+    for t in range(model.size()):
+        ref weak = model.weak_models[t]
+        var depth = weak.structure.get_depth()
+        # a depth-0 tree still packed one leaf slot above, so the offsets
+        # advance whether or not a kernel launches
+        if depth > 0:
+            ctx.enqueue_function[compute_bins_and_add_kernel](
+                cindex.unsafe_ptr(),
+                d_off.unsafe_ptr() + lvl,
+                d_shift.unsafe_ptr() + lvl,
+                d_mask.unsafe_ptr() + lvl,
+                d_bin.unsafe_ptr() + lvl,
+                Int32(depth),
+                d_vals.unsafe_ptr() + leaf,
+                Int32(n_rows),
+                cursor.unsafe_ptr(),
+                grid_dim=wide,
+                block_dim=256,
+            )
+        lvl += depth
+        leaf += 1 << depth
+    ctx.synchronize()

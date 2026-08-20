@@ -895,3 +895,53 @@ def lib_smem_pages_for[column: Int, page_bytes: Int]() -> Int:
     """
     comptime limit = column_shared_limit(column)
     return 2 if 2 * page_bytes <= limit else 1
+
+
+# ---------------------------------------------------------------------------
+# THE MODEL-EVALUATOR QUANTIZE SEARCH (Apple's ALU budget, priced)
+# ---------------------------------------------------------------------------
+
+#: CatBoost's `Binarize` scans every border linearly with a branchless
+#: compare-add (`libs/model/cuda/evaluator.cu:117-121`, `#pragma unroll 8`).
+comptime QUANTIZE_SEARCH_LINEAR = 0
+
+#: `lower_bound` binary search over the same sorted borders. MEASURED
+#: SLOWER AND DECLINED, see the row.
+comptime QUANTIZE_SEARCH_BINARY = 1
+
+#: Two-level scan: branchless pivot pass (every 8th border), then a
+#: branchless 8-wide segment pass. Same pipelined shape as theirs, ~5x
+#: fewer compares.
+comptime QUANTIZE_SEARCH_TWO_LEVEL = 2
+
+
+def quantize_search_for[column: Int]() -> Int:
+    """SCHEDULING row: HOW the evaluator's quantize finds a value's bin.
+
+    The result is IDENTICAL by construction, not by tolerance: every arm
+    computes the count of borders with `value > border` over the same
+    sorted array under the same strict compare -- no reduction, no
+    accumulation, no tie with two answers. So this row is pure scheduling
+    and the bit-identical column may take any arm.
+
+    THE MEASUREMENTS, 2026-08-20, 800k x 100 @ 128 borders, phase timers
+    in bench/interleaved/predict_interleaved.mojo (eval kernel 2.7 ms in
+    every window):
+
+        LINEAR (theirs, `evaluator.cu:117`, unroll-8 branchless): 27-30 ms
+            -- near the base M4's ALU floor for the ~10 Gops of compares
+            that a V100-class card absorbs for free.
+        BINARY (lower_bound, 8 steps): 90-110 ms. WORSE BY 3.5x: eight
+            SEQUENTIALLY DEPENDENT divergent shared loads stall where the
+            linear scan pipelines independent compare-adds. Declined at
+            that price; the constant stays for the record.
+        TWO_LEVEL (pivots then one segment): the Apple column's arm --
+            both passes keep the linear scan's branchless independent
+            shape, at ~24-40 compares instead of 127.
+
+    NVIDIA and AMD keep CatBoost's scan: on their ALU budgets it is free
+    and it is their measured design.
+    """
+    if column == COLUMN_APPLE:
+        return QUANTIZE_SEARCH_TWO_LEVEL
+    return QUANTIZE_SEARCH_LINEAR
