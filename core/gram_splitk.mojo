@@ -37,8 +37,10 @@ WHAT THIS KERNEL DOES
 Grid over k-chunks: `gram_splitk_chunk_count()` blocks, each owning one
 contiguous slice of X's rows. A block streams its slice through a shared
 staging tile (`GRAM_ROWS_TILE` rows at a time; the load is the linear copy
-of a row-major span, coalesced) and accumulates the full m x m partial Gram
-in registers, `CELLS` cells per thread, fp32. Partials land in a workspace
+of a row-major span, in `GRAM_STAGE_W`-float vectors whenever
+`m % GRAM_STAGE_W == 0` -- scalar global loads are measured ~3x slower on
+this device -- and scalar at ragged widths) and accumulates the full
+m x m partial Gram in registers, `CELLS` cells per thread, fp32. Partials land in a workspace
 at `partials[chunk * m*m + cell]`; a second small kernel folds them. X is
 read from DRAM EXACTLY ONCE, with no transposes -- the materialized route's
 two `transpose_kernel` passes (~22 ms at the bench shape) disappear as well.
@@ -130,6 +132,14 @@ comptime GRAM_MAX_COLS = 128
 
 comptime GRAM_STAGE_FLOATS = GRAM_ROWS_TILE * GRAM_MAX_COLS
 
+#: Floats per global load/store in the staging copy's vector arm: a
+#: 16-byte `SIMD[float32, 4]`. Scalar global loads cost ~3x on this device
+#: (LANE_kmeans-kernel, assignment kernel 63 -> 21 ms from vectorizing
+#: reads; upstream's scalar reads lean on NVIDIA warp-coalescing Apple
+#: does not replicate). DATA MOVEMENT ONLY: the arm split never touches
+#: accumulation arithmetic or order.
+comptime GRAM_STAGE_W = 4
+
 #: Chunks per resident-block slot. 2 gives the tail somewhere to hide: with
 #: exactly one chunk per slot the slowest block IS the runtime; with two,
 #: a finished slot picks up the next chunk. Larger factors shrink chunks
@@ -167,6 +177,21 @@ def gram_splitk_chunk_count() raises -> Int:
         * max_active_blocks_per_core(GRAM_TPB, GRAM_STAGE_FLOATS * 4)
         * GRAM_OVERSUBSCRIBE
     )
+
+
+@always_inline
+def gram_splitk_stage_vectorized(m: Int) -> Bool:
+    """True when the staging copy takes its `GRAM_STAGE_W`-float vector arm.
+
+    `m % GRAM_STAGE_W == 0` makes every chunk's span start (`t * m`), every
+    vector offset within it, and the span length multiples of GRAM_STAGE_W,
+    so no vector wraps a row remainder and every access is 16-byte aligned
+    off the buffer base; every other width takes the scalar arm whole. ONE
+    predicate, both readers: the kernel body branches on this and
+    `gram_splitk_check` asserts what it decides at the shipped and ragged
+    widths, so the check and the kernel cannot drift.
+    """
+    return (m % GRAM_STAGE_W) == 0
 
 
 def gram_splitk_applies(m: Int, n: Int, k: Int) raises -> Bool:
@@ -275,6 +300,10 @@ def _gram_splitk_partial_body[CELLS: Int, CENTERED: Bool](
     var uniform_jj = (GRAM_TPB % m) == 0
     var jm = tid % m
 
+    # The staging copy's width, decided once: block-uniform in m, so
+    # neither barrier below is divergent.
+    var stage_vec = gram_splitk_stage_vectorized(m)
+
     var t = chunk * kc
     var t_end = t + kc
     if t_end > k:
@@ -284,23 +313,51 @@ def _gram_splitk_partial_body[CELLS: Int, CENTERED: Bool](
         if rows > GRAM_ROWS_TILE:
             rows = GRAM_ROWS_TILE
         # Rows t..t+rows of row-major (k x m) are one contiguous span, so
-        # the cooperative load is a linear, coalesced copy.
+        # the cooperative load is a linear, coalesced copy. It is a PURE
+        # data movement: whichever arm runs, the SAME values land in the
+        # SAME tile slots between the SAME barriers, so the accumulation
+        # below sees identical inputs in an identical order and the output
+        # is bit-identical across arms (FNV bit dump,
+        # bench/results/LANE_splitk-interior_2026-08-20.md, plus the
+        # destructive reach probe recorded there).
         var span = rows * m
-        var i = tid
-        while i < span:
-            comptime if CENTERED:
-                # `t * m` is a multiple of m, so element i of the span sits
-                # in column `i % m`. This is the SAME fp32 subtraction
-                # `shift_columns_kernel` performs and stores (its runtime
-                # `x + (-1.0) * mu` is bitwise `x - mu`: the multiply by
-                # -1.0 is an exact sign flip and IEEE `a + (-b)` IS
-                # `a - b`), landed in the shared tile instead of back in
-                # DRAM. Bit-identity is proven per cell by
-                # `check_gram_centered_fused`, not argued.
-                tile[i] = x.unsafe_load(t * m + i) - mu.unsafe_load(i % m)
-            else:
-                tile[i] = x.unsafe_load(t * m + i)
-            i += GRAM_TPB
+        if stage_vec:
+            # Vector arm (`gram_splitk_stage_vectorized`): GRAM_STAGE_W
+            # floats per load/store. `t * m`, `e`, and `span` are all
+            # multiples of GRAM_STAGE_W here, so every access is 16-byte
+            # aligned off the buffer base and no vector splits a row.
+            var nvec = span // GRAM_STAGE_W
+            var vi = tid
+            while vi < nvec:
+                var e = vi * GRAM_STAGE_W
+                var v = x.unsafe_load[width=GRAM_STAGE_W](t * m + e)
+                comptime if CENTERED:
+                    # Element e sits in column `e % m` (t * m is a multiple
+                    # of m), and columns `e % m .. e % m + GRAM_STAGE_W - 1`
+                    # never wrap: e % m and m are both multiples of
+                    # GRAM_STAGE_W. The per-lane fp32 subtract is the same
+                    # IEEE op the scalar arm performs, lane by lane.
+                    v = v - mu.unsafe_load[width=GRAM_STAGE_W](e % m)
+                tile.unsafe_store(e, v)
+                vi += GRAM_TPB
+        else:
+            var i = tid
+            while i < span:
+                comptime if CENTERED:
+                    # `t * m` is a multiple of m, so element i of the span
+                    # sits in column `i % m`. This is the SAME fp32
+                    # subtraction `shift_columns_kernel` performs and
+                    # stores (its runtime `x + (-1.0) * mu` is bitwise
+                    # `x - mu`: the multiply by -1.0 is an exact sign flip
+                    # and IEEE `a + (-b)` IS `a - b`), landed in the shared
+                    # tile instead of back in DRAM. Bit-identity is proven
+                    # per cell by `check_gram_centered_fused`, not argued.
+                    tile[i] = (
+                        x.unsafe_load(t * m + i) - mu.unsafe_load(i % m)
+                    )
+                else:
+                    tile[i] = x.unsafe_load(t * m + i)
+                i += GRAM_TPB
         barrier()
         if uniform_jj:
             for r in range(rows):

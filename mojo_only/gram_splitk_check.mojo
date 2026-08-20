@@ -25,6 +25,10 @@ THE SHAPES ARE THE HAZARDS, not round numbers:
   are live.
 - m = 64 and m = 128: the CELLS = 16 and CELLS = 64 instantiations, which
   otherwise only wide fits would reach.
+- m = 3 and m = 12: the scalar and vector sides of the staging copy's
+  width split (`gram_splitk_stage_vectorized`, kernel-internal, keyed on
+  `m % GRAM_STAGE_W`), at a k whose chunks are short and never
+  tile-aligned. `check_gram_dispatch` asserts the predicate itself.
 
 THE CENTERED-FUSED ARM IS HELD TO `!=`, NOT TO A TOLERANCE.
 `check_gram_centered_fused` runs the exact shipped center pipeline
@@ -60,6 +64,7 @@ from core.gram_splitk import (
     gram_centered_splitk_into,
     gram_splitk_applies,
     gram_splitk_chunk_count,
+    gram_splitk_stage_vectorized,
 )
 
 
@@ -177,8 +182,10 @@ def check_gram_splitk_oracle() raises:
     shapes in the module docstring."""
     var ctx = DeviceContext()
     var n_chunks = gram_splitk_chunk_count()
-    var ms: List[Int] = [1, 8, 8, 8, 33, 32, 64, 128]
-    var ks: List[Int] = [7, 33, n_chunks - 1, n_chunks + 1, 257, 100003, 4001, 1025]
+    var ms: List[Int] = [1, 3, 8, 8, 8, 12, 33, 32, 64, 128]
+    var ks: List[Int] = [
+        7, 1021, 33, n_chunks - 1, n_chunks + 1, 1021, 257, 100003, 4001, 1025
+    ]
     for s in range(len(ms)):
         var err = _gram_one(ctx, ms[s], ks[s], ARM_SPLITK)
         if err != "":
@@ -192,8 +199,9 @@ def check_gram_splitk_oracle() raises:
             )
     print(
         "check_gram_splitk_oracle OK: split-K arm matches the Float64 oracle"
-        " per cell and is bitwise symmetric at 8 shapes (m 1..128 covering"
-        " all three CELLS widths; k odd, prime, below/above the "
+        " per cell and is bitwise symmetric at 10 shapes (m 1..128 covering"
+        " all three CELLS widths and both staging-copy arms; k odd, prime,"
+        " below/above the "
         + String(n_chunks)
         + "-chunk grid, and never a chunk multiple)"
     )
@@ -359,6 +367,25 @@ def check_gram_dispatch() raises:
     if gram_splitk_applies(8, 4, 100):
         raise Error("dispatch: m != n is not a Gram and must fall back")
 
+    # The staging copy's width split, same discipline: ONE predicate
+    # (`gram_splitk_stage_vectorized`, the same symbol the kernel body
+    # branches on) asserted here, and BOTH its arms held to the per-cell
+    # oracle by `check_gram_splitk_oracle`'s m = 12 (vector) and
+    # m = 3 / 33 / 1 (scalar) shapes. Reach of the vector arm was also
+    # proven destructively once: +1.0 planted in the vector load failed
+    # the oracle at every m % 4 == 0 shape and passed the scalar shapes
+    # (LANE_splitk-interior_2026-08-20.md).
+    if not gram_splitk_stage_vectorized(32):
+        raise Error("stage arms: m=32 (the bench width) must vectorize")
+    if not gram_splitk_stage_vectorized(4):
+        raise Error("stage arms: m=4 (the PCA checks' width) must vectorize")
+    if not gram_splitk_stage_vectorized(128):
+        raise Error("stage arms: m=128 (the widest fit) must vectorize")
+    if gram_splitk_stage_vectorized(33):
+        raise Error("stage arms: m=33 must take the scalar arm")
+    if gram_splitk_stage_vectorized(1):
+        raise Error("stage arms: m=1 must take the scalar arm")
+
     var ctx = DeviceContext()
     # One wrapper run per arm, same oracle machinery.
     var arm_a = String("split-K") if gram_splitk_applies(
@@ -385,8 +412,9 @@ def check_gram_dispatch() raises:
         )
     print(
         "check_gram_dispatch OK: predicate routes 32x32x4M/1x1x7/128x128 to"
-        " split-K and 129x129/768x768/m!=n to the fallback; wrapper verified"
-        " per cell on arm '"
+        " split-K and 129x129/768x768/m!=n to the fallback; staging copy"
+        " vectorizes m=32/4/128 and falls back scalar at m=33/1; wrapper"
+        " verified per cell on arm '"
         + arm_a
         + "' at 32x32x100003 and arm '"
         + arm_b
