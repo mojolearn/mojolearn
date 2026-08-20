@@ -460,7 +460,34 @@ asserted): 100 trees -- covtype 0.31-0.84x, 4M 0.75-0.88x, 800k parity
 band 0.89-1.55; 8000 trees -- 800k 0.082-0.100x. Inference beats their
 CPU evaluator everywhere except the smallest config, where it ties.
 
-Next known levers, in order: full-defaults feature debt (bootstrap/MVS,
-rsm, categoricals) for quality parity, the epsilon dataset itself.
+### 2026-08-21: the feature-debt ledger, re-scored from their source
+
+* BAYESIAN BOOTSTRAP: PORTED (b4152f3, their GPU default; MVS is
+  Y_ASSERTed away in their GPU oblivious searcher). Stochastic gate set
+  in mojo_only/bootstrap_check.mojo; harness 'bayesian' mode shows the
+  parity band holds with sampling on and the mse bands overlap.
+* RANDOM_STRENGTH: CLOSED WITH NO CODE. On their GPU symmetric path the
+  noise CANCELS BY CONSTRUCTION: `NextFeature` sets FeatureId, then
+  `beforeSplitCalcer = calcer` copies it, both calcers draw the
+  IDENTICAL normal (same GlobalSeed + FeatureId, score_calcers.cuh:
+  160-168), and the argmax compares `gain = score - scoreBefore`
+  (compute_scores.cu:131-142) where the draw subtracts out exactly.
+  Their default 1.0 changes nothing on their own GPU; we mirror by not
+  porting it.
+* RSM: CLOSED WITH NO CODE. `Rsm` appears in all of catboost/cuda ONLY
+  under pairwise_oblivious_trees; the plain GPU oblivious learner has
+  no feature sampling at all. Our rsm=1.0 pin IS their GPU behavior.
+* BOOST_FROM_AVERAGE / MODEL_SHRINK / LEAF_ESTIMATION: already at their
+  GPU-path values (see fit's cursor note; their options check refuses
+  boost_from_average on this path).
+
+So the pinned-settings comparison tables were never a handicap match:
+with Bayesian now ported, the ONLY feature CatBoost's GPU learner has
+that this port lacks is CATEGORICALS/CTRs -- the one genuinely large
+remaining block -- plus a holdout-mse quality gate for the stochastic
+modes.
+
+Next known levers, in order: categoricals/CTRs (multi-session),
+holdout-mse quality gate for the bayesian mode, the epsilon dataset.
 Beyond this box: a Pro/Max chip multiplies OUR arms by 2-4x and theirs
 by ~1.5x.
