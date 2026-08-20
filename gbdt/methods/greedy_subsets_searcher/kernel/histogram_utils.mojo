@@ -521,3 +521,85 @@ def write_reduces_histograms_kernel(
             + bin_feature_id
         )
         dst_histogram.unsafe_store(dst, val)
+
+
+def write_reduces_from_fixed_kernel(
+    hist_block_offset_in: Int32,
+    bin_features_in_block_in: Int32,
+    histogram_ids: MutPointer[UInt32, MutAnyOrigin],
+    acc_i32: MutPointer[Int32, MutAnyOrigin],
+    block_histogram: MutPointer[Float32, MutAnyOrigin],
+    fixed_scale: Float32,
+    bin_feature_count_in: Int32,
+    dst_histogram: MutPointer[Float32, MutAnyOrigin],
+):
+    """`WriteReducesHistogramsImpl` with `fixed_to_float_kernel` folded in.
+
+    ================= DEVIATION BLOCK =================
+    TWO parents, one pass. The IDENTICAL/shared-Int32 arms used to run
+
+        fixed_to_float_kernel   acc_i32 -> block_hist   (ours, no CatBoost
+                                counterpart: their accumulation is float)
+        write_reduces_histograms_kernel   block_hist -> flat histogram
+                                (theirs, `WriteReducesHistogramsImpl`)
+
+    back to back over the SAME cells -- between them sits only their
+    inter-device `ReduceScatter`, a no-op on one device
+    (`reduce_scatter.h:460-462`). That is one full extra read+write of
+    every histogram cell per level, PURE cell-proportional cost with no
+    CatBoost counterpart, and the cell count doubles at 254 borders. This
+    kernel is the writeback reading the accumulator directly: the
+    conversion is the SAME expression at the same cell
+    (`Float32(Int(q)) / fixed_scale`), so the flat histogram receives
+    identical bits and the float block scratch is never touched.
+
+    TWO SOURCES PER CELL, DISJOINT BY LEAF, because that is what the
+    writeback kernels leave behind (`hist_2_one_byte_base.mojo`'s
+    `hist2_add_to_global_memory` and the one-byte/8-bit twins): a leaf
+    whose rows span MULTIPLE thread blocks drains through Int32 atomics
+    into the ACCUMULATOR; a single-block leaf stores its dequantized
+    float STRAIGHT into the block scratch and never touches the
+    accumulator. So: a nonzero accumulator cell is converted (and
+    zeroed); a zero one falls through to the block scratch, which holds
+    either the single-block store or the level's memset zero. The first
+    version of this kernel read the accumulator alone and zeroed every
+    single-block leaf's histogram -- check-hist2's cross-family section
+    failed 799 of 1600 cells on the spot, which is exactly the catch it
+    exists for. What the fusion still deletes is the bridge's separate
+    full read-convert-write pass and its launch; the accumulator zeroing
+    rides along as before, only where the cell was nonzero.
+    ===================================================
+    """
+    var hist_block_offset = Int(hist_block_offset_in)
+    var bin_features_in_block = Int(bin_features_in_block_in)
+    var bin_feature_count = Int(bin_feature_count_in)
+
+    var bin_feature_id = Int(block_idx.x) * Int(block_dim.x) + Int(
+        thread_idx.x
+    )
+    var leaf_id = Int(block_idx.y)
+    var stat_id = Int(block_idx.z)
+    var stat_count = Int(grid_dim.z)
+    var dst_id = Int(histogram_ids.unsafe_load(leaf_id))
+
+    if bin_feature_id < bin_features_in_block:
+        var src = (
+            leaf_id * bin_features_in_block * stat_count
+            + bin_features_in_block * stat_id
+            + bin_feature_id
+        )
+        var q = acc_i32.unsafe_load(src)
+        var val: Float32
+        if q != Int32(0):
+            val = Float32(Int(q)) / fixed_scale
+            acc_i32.unsafe_store(src, Int32(0))
+        else:
+            val = block_histogram.unsafe_load(src)
+
+        var dst = (
+            dst_id * bin_feature_count * stat_count
+            + stat_id * bin_feature_count
+            + hist_block_offset
+            + bin_feature_id
+        )
+        dst_histogram.unsafe_store(dst, val)

@@ -86,6 +86,7 @@ from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     fixed_to_float_kernel,
     scan_histograms_kernel,
     substract_histograms_kernel,
+    write_reduces_from_fixed_kernel,
     write_reduces_histograms_kernel,
     zero_buffer_kernel,
     zero_histogram_kernel,
@@ -2031,15 +2032,12 @@ def launch_histograms_for_blocks[
             if blk.policy == POLICY_ONE_BYTE:
                 run_fixed_bridge = True
 
-        if run_fixed_bridge:
-            ctx.enqueue_function[fixed_to_float_kernel](
-                acc_i32.unsafe_ptr(),
-                block_hist.unsafe_ptr(),
-                Int32(block_cells),
-                fixed_scale,
-                grid_dim=(block_cells + 255) // 256,
-                block_dim=256,
-            )
+        # The bridge is FUSED into the writeback below when it would have
+        # run: `write_reduces_from_fixed_kernel` reads the accumulator
+        # directly, converts with the identical expression, and zeroes it
+        # -- one cell pass and one launch fewer per block per level, and
+        # the float block scratch is not touched at all on this arm. See
+        # its DEVIATION BLOCK for why the bits cannot move.
 
         # ============ THEIR `ReduceScatter` HAS NO COUNTERPART HERE ========
         # Between the histogram kernel and this writeback CatBoost runs
@@ -2068,16 +2066,34 @@ def launch_histograms_for_blocks[
         # this becomes a real gap, not a no-op, and it is where the port
         # would need `TReducer` from `gpu_lib`.
         # ==================================================================
-        ctx.enqueue_function[write_reduces_histograms_kernel](
-            Int32(block_first_bin),
-            Int32(blk.total_folds),
-            ids.unsafe_ptr(),
-            block_hist.unsafe_ptr(),
-            Int32(hist_cells_per_leaf),
-            hist.unsafe_ptr(),
-            grid_dim=((blk.total_folds + 127) // 128, n_live, stat_count),
-            block_dim=(128, 1, 1),
-        )
+        if run_fixed_bridge:
+            ctx.enqueue_function[write_reduces_from_fixed_kernel](
+                Int32(block_first_bin),
+                Int32(blk.total_folds),
+                ids.unsafe_ptr(),
+                acc_i32.unsafe_ptr(),
+                block_hist.unsafe_ptr(),
+                fixed_scale,
+                Int32(hist_cells_per_leaf),
+                hist.unsafe_ptr(),
+                grid_dim=(
+                    (blk.total_folds + 127) // 128, n_live, stat_count
+                ),
+                block_dim=(128, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[write_reduces_histograms_kernel](
+                Int32(block_first_bin),
+                Int32(blk.total_folds),
+                ids.unsafe_ptr(),
+                block_hist.unsafe_ptr(),
+                Int32(hist_cells_per_leaf),
+                hist.unsafe_ptr(),
+                grid_dim=(
+                    (blk.total_folds + 127) // 128, n_live, stat_count
+                ),
+                block_dim=(128, 1, 1),
+            )
         block_first_bin += blk.total_folds
 
 
