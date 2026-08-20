@@ -138,7 +138,7 @@ Four consequences for whoever builds this:
    is 2 and the table is just `{count of binarized target 0, count of 1}`
    per category over the whole learn set. **No scan, no sort, no
    permutation, no history** -- it is the FeatureFreq table with one extra
-   axis, and `build_feature_freq_tables` is most of it already.
+   axis, and `build_ctr_tables` builds both from one pass over the codes.
 2. A category the model never saw is not an error: it scores
    `Calc(0, 0)`, the prior alone.
 3. The three priors are three `TModelCtr`s over ONE table, exactly as the
@@ -364,10 +364,17 @@ this is achievable in one source.
      `cpu/evaluator_impl.cpp:38` for the compare), under their own
      `NeedXorMask` dispatch. PORTING.md 55.
 
-   Still open under this heading: nothing for FeatureFreq. A `Borders` CTR
-   table is a per-target-class history rather than a count, and
-   `build_feature_freq_tables` raises on one rather than writing a table
-   that would be silently wrong.
+   CLOSED 2026-08-20 for `Borders` as well. `build_ctr_tables` grew the
+   target-class axis their `CalcFinalCtrsImpl` allocates
+   (`online_ctr.cpp:909-910`), `TCtrValueTable.value_for` and
+   `empty_value` dispatch on `ctr_type` the way
+   `TStaticCtrProvider::CalcCtrs` does, and `train()`'s implicit fallback
+   moved to `TCatFeatureParams.default()` -- CatBoost's own GPU
+   `simple_ctr` -- because the reason it was not there is gone. The
+   apply-time table is the FULL-LEARN-SET histogram, so a `Borders`
+   model's learn-row predictions do NOT reproduce the fit's loss the way a
+   `FeatureFreq` model's do; the gate is an independent per-row tally
+   instead.
 6. Tree CTRs (feature combinations, `MaxTensorComplexity`, default 4).
    Their own `tree_ctr_datasets_visitor` machinery: combinations generated
    during tree growth, per level, with caching and memory limits

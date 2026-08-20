@@ -35,6 +35,39 @@ an error and does not fall back to a neighbour -- it gets
 `emptyVal = Calc(0, denominator)`, their own line, which for the GPU
 default prior `{0, 1}` is exactly zero frequency.
 
+## `Borders` IS THE SAME TABLE WITH ONE MORE AXIS, AND IT IS NOT ORDERED
+
+The single most surprising fact about the apply side, and it was read off
+their source rather than reasoned about: **a `Borders` model carries NO
+permutation, NO scan and NO history.** Its `TCtrValueTable` is a
+per-category HISTOGRAM OVER TARGET CLASSES computed on the WHOLE learn set
+(`CalcFinalCtrsImpl`, `online_ctr.cpp:909-930`), stored as a flat
+`int[uniqueCategories * TargetClassesCount]`. The ordered statistic that
+makes CatBoost a distinct algorithm is a TRAINING-TIME device and stops at
+the model file.
+
+Their apply reads it in two branches (`static_ctr_provider.cpp:91-122`):
+
+    TargetClassesCount == 2 (their GPU default, one target border):
+        hist = &blob[bucket * 2]
+        Calc(hist[1], hist[0] + hist[1])
+
+    TargetClassesCount > 2:
+        total = sum(hist[0 .. TargetBorderIdx])
+        good  = sum(hist[TargetBorderIdx + 1 .. end]);  total += good
+        Calc(good, total)
+
+and an unseen category takes `Calc(0, 0)` -- **the prior alone**, which is
+NOT FeatureFreq's `Calc(0, denominator)`. See `empty_value` for why that
+difference is worth a dispatch rather than a shared line.
+
+The numerator is the count of rows whose binarized target EXCEEDS
+`TargetBorderIdx`, which is exactly the predicate the training-side kernel
+tests per row (`target > binIndex`,
+`ctrs/kernel/ctr_calcers.mojo::fill_binarized_targets_stats_kernel`, their
+`FillBinarizedTargetsStatsImpl<IS_BORDERS>`). Same statistic, one over a
+prefix of the permutation and one over everything.
+
 Storing counts rather than values is what makes `Shift` and `Scale` mean
 anything, and it is why this file carries four floats it currently never
 varies: their CPU learner fills them from `CalcNormalization`
@@ -57,9 +90,14 @@ the same three operations on the same three Float32 values, so a learn row
 scored through this table lands on the SAME BITS the fit trained on --
 which `mojo_only/ctr_apply_check.mojo` asserts per row rather than
 assuming. FeatureFreq is permutation-independent
-(`ctr_type.cpp:44-58`), which is what makes that identity available at
-all; an ordered `Borders` statistic has no such property and this file
-refuses to write one.
+(`ctr_type.cpp:44-58`), which is what makes that identity available at all.
+
+**A `Borders` model has no such identity and must not be gated as though
+it did.** Its learn column is the ordered statistic over the estimation
+permutation; its apply column is the full-learn-set histogram above. The
+two are different numbers on the same learn rows, in CatBoost as much as
+here, so the gate for Borders is agreement with an INDEPENDENTLY COMPUTED
+full-set tally per row, never agreement with the fit's own loss.
 
 ## The category IS the dense code here
 
@@ -73,6 +111,8 @@ deviation rather than left to be discovered.
 """
 
 from gbdt.ctrs.ctr import (
+    CTR_BORDERS,
+    CTR_COUNTER,
     CTR_FEATURE_FREQ,
     TCtrConfig,
     ctr_type_name,
@@ -114,10 +154,36 @@ struct TCtrValueTable(Copyable, Movable):
     """`TModelCtr::Scale`. One on their GPU learner's path."""
     var counter_denominator: Int
     """`TCtrValueTable::CounterDenominator`; for FeatureFreq their
-    `static_cast<int>(totalSampleCount)` (`online_ctr.cpp:937-939`)."""
+    `static_cast<int>(totalSampleCount)` (`online_ctr.cpp:937-939`).
+
+    THEIR DEFAULT IS 0 AND A `Borders` TABLE NEVER LEAVES IT
+    (`ctr_value_table.h:104`, and `CalcFinalCtrsImpl` sets it only on the
+    `Counter`/`FeatureFreq` arm, `online_ctr.cpp:934-939`). Ours is 0 there
+    too, and nothing on the Borders path reads it."""
+    var target_classes_count: Int
+    """`TCtrValueTable::TargetClassesCount` (`ctr_value_table.h:105`), which
+    is `TTargetClassifier::GetClassesCount()` = `Borders.size() + 1`
+    (`libs/model/target_classifier.h:32-34`). ZERO on a `FeatureFreq` or
+    `Counter` table, where their default stands and the blob has one int
+    per category; on a `Borders` table it is the SECOND AXIS of the blob,
+    which their builder allocates as `leafCount * targetClassesCount`
+    (`online_ctr.cpp:909-910`). At the GPU default
+    `ctr_target_border_count = 1` it is 2."""
+    var target_border_idx: Int
+    """`TModelCtr::TargetBorderIdx` (`online_ctr.h:262`), the target bin
+    this column counts ABOVE. It is `TCtrConfig::ParamId`, and at one
+    target border it is always 0. A model field, not a table field: three
+    columns over one histogram may differ in nothing else."""
     var counts: List[Int]
     """Their blob, `GetTypedArrayRefForBlobData<int>()`, indexed by the
-    dense category code instead of by a hash bucket."""
+    dense category code instead of by a hash bucket.
+
+    ONE int per category for `FeatureFreq`/`Counter`. For `Borders` it is
+    their `int[uniqueCategories * TargetClassesCount]`, ROW-MAJOR BY
+    CATEGORY -- category `c`'s histogram is
+    `counts[c * target_classes_count ..][.. target_classes_count]`, which
+    is the addressing of `ctrIntArray.data() + targetClassesCount * elemId`
+    (`online_ctr.cpp:927-929`)."""
 
     def __init__(
         out self,
@@ -129,6 +195,8 @@ struct TCtrValueTable(Copyable, Movable):
         shift: Float32,
         scale: Float32,
         counter_denominator: Int,
+        target_classes_count: Int,
+        target_border_idx: Int,
         var counts: List[Int],
     ):
         self.column = column
@@ -139,6 +207,8 @@ struct TCtrValueTable(Copyable, Movable):
         self.shift = shift
         self.scale = scale
         self.counter_denominator = counter_denominator
+        self.target_classes_count = target_classes_count
+        self.target_border_idx = target_border_idx
         self.counts = counts^
 
     @no_inline
@@ -159,46 +229,165 @@ struct TCtrValueTable(Copyable, Movable):
         )
         return (ctr + self.shift) * self.scale
 
-    def empty_value(self) -> Float32:
-        """Their `emptyVal = ctr->Calc(0, denominator)`
-        (`static_ctr_provider.cpp:65`), the value a category the learn pool
-        never saw takes. Not an error, not a neighbour, not a NaN."""
-        return self.calc(Float32(0.0), Float32(self.counter_denominator))
+    def empty_value(self) raises -> Float32:
+        """The value a category the learn pool never saw takes. Not an
+        error, not a neighbour, not a NaN -- and **NOT ONE FORMULA**, which
+        is the trap this dispatch exists for.
 
-    def value_for(self, code: Int) -> Float32:
-        """One row's CTR value. Their loop is a hash lookup guarded by
-        `NotFoundIndex` (`static_ctr_provider.cpp:66-70`); ours is a range
-        test, because the key is the dense code."""
-        if code < 0 or code >= len(self.counts):
-            return self.empty_value()
-        return self.calc(
-            Float32(self.counts[code]), Float32(self.counter_denominator)
+        Their provider computes `emptyVal` once per CTR type, inside the
+        arm (`static_ctr_provider.cpp:63-122`):
+
+            Counter / FeatureFreq :65   emptyVal = ctr->Calc(0, denominator)
+            Buckets              :77   emptyVal = ctr->Calc(0, 0)
+            Borders (the else)   :95   emptyVal = ctr->Calc(0, 0)
+
+        A `Borders` table has NO denominator (their `CounterDenominator`
+        stays at its 0 default there), so `Calc(0, 0)` is the PRIOR ALONE:
+        `PriorNum / PriorDenom`. At the {0.5, 1} and {1, 1} priors of their
+        default fan-out that is 0.5 and 1.0, where FeatureFreq's
+        `Calc(0, n)` at the same priors is 0.5/(n+1) and 1/(n+1) -- three
+        orders of magnitude apart on a 4096-row pool. Reaching for the
+        FeatureFreq formula here would be a silent scoring bug on exactly
+        the rows a held-out set is made of.
+        """
+        if self.ctr_type == CTR_FEATURE_FREQ or (
+            self.ctr_type == CTR_COUNTER
+        ):
+            return self.calc(
+                Float32(0.0), Float32(self.counter_denominator)
+            )
+        if self.ctr_type == CTR_BORDERS:
+            return self.calc(Float32(0.0), Float32(0.0))
+        raise Error(
+            "no apply-time table arithmetic is ported for ctr type "
+            + ctr_type_name(self.ctr_type)
+            + "; their provider's other arms read a TCtrMeanHistory blob"
+            " (static_ctr_provider.cpp:53-62), which this format does not"
+            " carry"
         )
 
     def categories(self) -> Int:
+        """How many CATEGORIES the blob holds, which is not its length once
+        the target-class axis exists."""
+        if self.target_classes_count > 0:
+            return len(self.counts) // self.target_classes_count
         return len(self.counts)
 
+    def value_for(self, code: Int) raises -> Float32:
+        """One row's CTR value, their `TStaticCtrProvider::CalcCtrs` inner
+        loop (`static_ctr_provider.cpp:63-122`) transcribed arm for arm.
 
-def build_feature_freq_tables(
+        Their bucket lookup is a hash walk guarded by `NotFoundIndex`; ours
+        is a range test, because the key is the dense code (deviation 56).
+        Everything after the lookup is theirs.
+        """
+        if self.ctr_type == CTR_FEATURE_FREQ or (
+            self.ctr_type == CTR_COUNTER
+        ):
+            # `:63-71`
+            if code < 0 or code >= len(self.counts):
+                return self.empty_value()
+            return self.calc(
+                Float32(self.counts[code]),
+                Float32(self.counter_denominator),
+            )
+
+        if self.ctr_type == CTR_BORDERS:
+            # their `else` arm, `:91-122`
+            var classes = self.target_classes_count
+            if classes < 2:
+                raise Error(
+                    "a Borders table needs at least two target classes and"
+                    " has " + String(classes)
+                    + "; their TargetClassesCount is Borders.size() + 1"
+                    " (libs/model/target_classifier.h:32-34)"
+                )
+            if self.target_border_idx < 0 or (
+                self.target_border_idx >= classes
+            ):
+                raise Error(
+                    "TargetBorderIdx " + String(self.target_border_idx)
+                    + " is outside the " + String(classes)
+                    + " target classes this table carries"
+                )
+            if code < 0 or code >= self.categories():
+                return self.empty_value()
+            var base = code * classes
+            if classes > 2:
+                # `:97-113`
+                var total = 0
+                var good = 0
+                for class_id in range(self.target_border_idx + 1):
+                    total += self.counts[base + class_id]
+                for class_id in range(self.target_border_idx + 1, classes):
+                    good += self.counts[base + class_id]
+                total += good
+                return self.calc(Float32(good), Float32(total))
+            # `:115-121`, which is their GPU default: TargetClassesCount 2
+            return self.calc(
+                Float32(self.counts[base + 1]),
+                Float32(self.counts[base] + self.counts[base + 1]),
+            )
+
+        raise Error(
+            "no apply-time table arithmetic is ported for ctr type "
+            + ctr_type_name(self.ctr_type)
+            + "; TCatFeatureParams.check() admits only Borders and"
+            " FeatureFreq (catboost_options.mojo), so a table of any other"
+            " type is a corrupt file rather than a missing feature"
+        )
+
+
+def build_ctr_tables(
     cat_codes: List[UInt32],
     unique_values: Int,
     ctr_configs: List[TCtrConfig],
+    binarized_target: List[UInt8],
+    target_classes_count: Int,
     source_feature: Int,
     first_column: Int,
 ) raises -> List[TCtrValueTable]:
     """The apply-time tables for ONE categorical input feature, one per
     config, in the order `compute_simple_ctrs` emits its columns.
 
-    This is their `CalcFinalCtrsImpl` for the `FeatureFreq` arm
-    (`private/libs/algo/online_ctr.cpp:905-939`) reduced to what a dense
-    code needs: `++ctrIntArray[elemId]` per row, then
-    `CounterDenominator = totalSampleCount`. The learn-side column that
-    the same counts reproduce is computed by
-    `TWeightedBinFreqCalcer::visit_equal_up_to_prior_freq_ctrs`.
+    This is their `CalcFinalCtrsImpl`
+    (`private/libs/algo/online_ctr.cpp:875-939`) reduced to what a dense
+    code needs -- their bucket id `elemId` is our code -- with both arms of
+    its allocation and both arms of its accumulation loop:
+
+        FeatureFreq   blob int[leafCount]                       :906
+                      ++ctrIntArray[elemId]                     :922
+                      CounterDenominator = totalSampleCount     :938
+
+        Borders       TargetClassesCount = targetClassesCount   :909
+                      blob int[leafCount * targetClassesCount]  :910
+                      ++elem[targetClass[z]]                    :927-930
+
+    **THE Borders TABLE IS NOT ORDERED.** It is a histogram over target
+    classes on the WHOLE learn set: no permutation, no scan, no sort, no
+    history. The CTR ESTIMATION PERMUTATION that
+    `compute_simple_ctrs_gpu` runs is a TRAINING-TIME device and never
+    reaches the model file. That claim was read off their source rather
+    than inferred, and the consequence is measurable: the learn column a
+    `Borders` fit trains on is the ORDERED statistic, the column an applied
+    model reproduces is this UNORDERED one, and the two are different
+    numbers on the same rows. `FeatureFreq` has no such gap, which is why
+    its apply reproduces the fit bit for bit and Borders' cannot.
+
+    **THREE PRIORS ARE THREE `TModelCtr` OVER ONE TABLE.** Their `ctr_data`
+    is a map keyed by `TModelCtrBase`, and the three priors of their
+    default Borders fan-out are three `TModelCtr` sharing one
+    `TCtrValueTable`. The histogram below is therefore computed ONCE per
+    categorical feature and handed to every Borders config; only the priors
+    differ, and only at `Calc`. What each table then STORES is a copy,
+    because this format keys a table by the model COLUMN it feeds -- see
+    `PORTING.md` 58.
     """
     if unique_values <= 0:
         raise Error("a categorical feature with no categories has no table")
     var n_rows = len(cat_codes)
+
+    # `++ctrIntArray[elemId]` (`online_ctr.cpp:922`), the FeatureFreq arm
     var counts = List[Int]()
     for _ in range(unique_values):
         counts.append(0)
@@ -211,43 +400,86 @@ def build_feature_freq_tables(
             )
         counts[c] += 1
 
+    # `++elem[targetClass[z]]` (`online_ctr.cpp:927-930`), the Borders arm.
+    # Built once and shared by every Borders config, and only when one is
+    # present: a frequency-only fit has no binarized target at all.
+    var wants_histogram = False
+    for i in range(len(ctr_configs)):
+        if ctr_configs[i].ctr_type == CTR_BORDERS:
+            wants_histogram = True
+    var histogram = List[Int]()
+    if wants_histogram:
+        if target_classes_count < 2:
+            raise Error(
+                "a Borders CTR table needs at least two target classes and"
+                " was given " + String(target_classes_count)
+                + "; their TargetClassesCount is the target classifier's"
+                " Borders.size() + 1 (libs/model/target_classifier.h:32-34)"
+            )
+        if len(binarized_target) != n_rows:
+            raise Error(
+                "a Borders CTR table is a histogram OF the binarized"
+                " target and got " + String(len(binarized_target))
+                + " target classes for " + String(n_rows) + " rows"
+            )
+        for _ in range(unique_values * target_classes_count):
+            histogram.append(0)
+        for r in range(n_rows):
+            var cls = Int(binarized_target[r])
+            if cls < 0 or cls >= target_classes_count:
+                raise Error(
+                    "binarized target class " + String(cls) + " at row "
+                    + String(r) + " is outside 0.."
+                    + String(target_classes_count - 1)
+                )
+            histogram[Int(cat_codes[r]) * target_classes_count + cls] += 1
+
     var out = List[TCtrValueTable]()
     for i in range(len(ctr_configs)):
         ref cfg = ctr_configs[i]
-        if cfg.ctr_type != CTR_FEATURE_FREQ:
-            # NO TABLE FOR THIS CONFIG, and skipping is deliberate rather
-            # than a shrug. This used to raise, on the reasoning that
-            # `train()` could not produce a Borders column anyway; it can
-            # now, so raising here would make every default categorical
-            # fit die at the END of a successful training run.
-            #
-            # A skipped table is not a silent hole: `predict_floats`
-            # refuses a model whose CTR columns have no table, so a Borders
-            # model TRAINS and REFUSES TO SCORE, which is exactly what is
-            # true of it. Writing a count table here instead would be the
-            # dangerous option -- a wrong model rather than a missing one.
-            #
-            # What the real table needs is now known and is NOT ordered:
-            # their `TCtrValueTable` for Borders is a per-category
-            # histogram over TARGET CLASSES computed on the whole learn set
-            # (`static_ctr_provider.cpp:255-283`), so no permutation, scan
-            # or sort is involved. See RECON_CTRS.md.
-            continue
-        out.append(
-            TCtrValueTable(
-                first_column + i,
-                source_feature,
-                cfg.ctr_type,
-                cfg.numerator_shift(),
-                cfg.denumerator_shift(),
-                # their GPU learner never touches Shift/Scale; the CPU
-                # learner's `CalcNormalization` is what fills them
-                Float32(0.0),
-                Float32(1.0),
-                n_rows,
-                counts.copy(),
+        if cfg.ctr_type == CTR_FEATURE_FREQ:
+            out.append(
+                TCtrValueTable(
+                    first_column + i,
+                    source_feature,
+                    cfg.ctr_type,
+                    cfg.numerator_shift(),
+                    cfg.denumerator_shift(),
+                    # their GPU learner never touches Shift/Scale; the CPU
+                    # learner's `CalcNormalization` is what fills them
+                    Float32(0.0),
+                    Float32(1.0),
+                    n_rows,
+                    0,
+                    0,
+                    counts.copy(),
+                )
             )
-        )
+        elif cfg.ctr_type == CTR_BORDERS:
+            out.append(
+                TCtrValueTable(
+                    first_column + i,
+                    source_feature,
+                    cfg.ctr_type,
+                    cfg.numerator_shift(),
+                    cfg.denumerator_shift(),
+                    Float32(0.0),
+                    Float32(1.0),
+                    # their CalcFinalCtrsImpl leaves CounterDenominator at
+                    # its 0 default on this arm, and nothing reads it
+                    0,
+                    target_classes_count,
+                    cfg.param_id,
+                    histogram.copy(),
+                )
+            )
+        else:
+            raise Error(
+                "no apply-time CTR table is ported for ctr type "
+                + ctr_type_name(cfg.ctr_type)
+                + "; TCatFeatureParams.check() admits only Borders and"
+                " FeatureFreq, so this config never reached train()"
+            )
     return out^
 
 

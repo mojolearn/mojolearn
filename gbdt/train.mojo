@@ -38,7 +38,7 @@ from gbdt.data.permutation import (
 from gbdt.grid_creator.binarization import best_split
 from gbdt.models.ctr_value_table import (
     TCtrValueTable,
-    build_feature_freq_tables,
+    build_ctr_tables,
     column_plan,
     expand_raw_columns,
 )
@@ -189,10 +189,10 @@ def train(
                                         "Error: useless catFeature found")`
 
     so a CTR-bearing categorical feature is REPLACED by its CTR columns
-    rather than joined by them. Under `cat_feature_params`' shipped value
-    that is ONE column per feature (FeatureFreq at one prior); under
-    `TCatFeatureParams.default()`, which is CatBoost's own GPU default, it
-    is FOUR -- three `Borders` priors plus one `FeatureFreq`.
+    rather than joined by them. Under the default that is FOUR columns per
+    feature -- three `Borders` priors plus one `FeatureFreq`, CatBoost's
+    own GPU `simple_ctr` -- and under `TCatFeatureParams.feature_freq_only()`
+    it is ONE.
 
     ## The two writers, and the two orders
 
@@ -226,19 +226,29 @@ def train(
     built -- `PORTING.md` 55.
 
     `cat_feature_params` is a list because Mojo default arguments cannot
-    call a raising constructor; EMPTY means
-    `TCatFeatureParams.feature_freq_only()`, and more than one entry is
-    refused. Pass exactly one to override.
+    call a raising constructor; EMPTY means `TCatFeatureParams.default()`,
+    and more than one entry is refused. Pass exactly one to override.
 
-    **WHY THE FALLBACK IS NOT `TCatFeatureParams.default()`, WHICH IS
-    CATBOOST'S.** As of 2026-08-21 it could be: `default()` -- three
-    `Borders` priors plus `FeatureFreq` -- trains here and is gated by
-    `pixi run check-ctr-device`. It stays at `feature_freq_only()` for one
-    reason, and it is sequencing rather than capability: a `Borders` model
-    cannot yet carry the apply-time CTR tables `predict_floats` needs, so
-    flipping this fallback would ship a default that trains and cannot
-    score. The flip is this one line, and it belongs in the commit that
-    closes the apply side.
+    **THE FALLBACK IS `TCatFeatureParams.default()`, WHICH IS CATBOOST'S
+    OWN GPU `simple_ctr`**, as of the commit that built the `Borders`
+    apply-time tables. It was `feature_freq_only()` for one round, for one
+    reason -- a `Borders` model could train and not score, because
+    `build_ctr_tables` had no histogram arm -- and that reason is gone:
+    `predict_floats` now maps a raw category through a `Borders` table the
+    same way it does a `FeatureFreq` one. A switch that outlives its
+    reason is a defect (`PORTING_RULES.md` 8), so both sides stay
+    exercised: `mojo_only/ctr_apply_check.mojo` and
+    `mojo_only/ctr_train_check.mojo` each run the default AND
+    `feature_freq_only()` explicitly.
+
+    What this changes for a caller who passes nothing: four columns where
+    there was one, a device pass over the CTR estimation permutation where
+    there was a host frequency count, and an applied model whose learn-row
+    predictions no longer reproduce the fit's loss bit for bit -- because
+    the ordered statistic a `Borders` column is trained on is not the
+    full-learn-set histogram an applied model carries. That gap is
+    CatBoost's design, not a defect here; see
+    `gbdt/models/ctr_value_table.mojo`.
 
     A feature may be in `cat_features` OR in `one_hot`, not both: `one_hot`
     is the older hand-driven surface where the caller has already made the
@@ -264,7 +274,7 @@ def train(
     if len(cat_feature_params) == 1:
         cat_params = cat_feature_params[0].copy()
     else:
-        cat_params = TCatFeatureParams.feature_freq_only()
+        cat_params = TCatFeatureParams.default()
     cat_params.check()
 
     # --- the categorical pass, host side, over `x_colmajor` -------------
@@ -309,10 +319,18 @@ def train(
     # `continue` (`binarizations_manager.cpp:397-399`) amounts to here.
     var binarized_target = List[UInt8]()
     var ctr_order = List[UInt32]()
+    var target_classes_count = 0
     if len(dependent_configs) > 0:
         var target_borders = build_target_borders(
             y, cat_params.target_binarization
         )
+        # `TTargetClassifier::GetClassesCount()` is `Borders.ysize() + 1`
+        # (`libs/model/target_classifier.h:32-34`), and it is what
+        # `CalcFinalCtrsImpl` allocates the apply-time blob's second axis
+        # from (`private/libs/algo/online_ctr.cpp:909-910`). Taken from the
+        # borders MinEntropy actually returned rather than from the option,
+        # because their classifier counts the borders it holds.
+        target_classes_count = len(target_borders) + 1
         binarized_target = build_binarized_target(y, target_borders)
         ctr_order = ctrs_estimation_permutation(
             n_rows, ctr_estimation_permutation_id
@@ -405,11 +423,20 @@ def train(
         # the APPLY-TIME half of the same statistic: their
         # `CalcFinalCtrs` writes a `TCtrValueTable` beside every CTR the
         # model uses, because the learn column cannot score a new row.
-        # Built from the codes rather than from the columns, so it is the
-        # counts and the priors that travel and not the divided values --
-        # see gbdt/models/ctr_value_table.mojo.
-        var tables = build_feature_freq_tables(
-            codes, unique_values, configs, f, len(columns)
+        # Built from the codes and the BINARIZED TARGET computed above --
+        # the same one the Borders writer read -- rather than from the
+        # columns, so it is the counts and the priors that travel and not
+        # the divided values. See gbdt/models/ctr_value_table.mojo, and
+        # note that the Borders table is the FULL-LEARN-SET histogram and
+        # carries no permutation: the ordered statistic stops at training.
+        var tables = build_ctr_tables(
+            codes,
+            unique_values,
+            configs,
+            binarized_target,
+            target_classes_count,
+            f,
+            len(columns),
         )
         for c in range(len(tables)):
             ctr_tables.append(tables[c].copy())

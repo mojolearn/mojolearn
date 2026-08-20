@@ -17,9 +17,13 @@ function of its category's FREQUENCY:
 which is exactly the FeatureFreq CTR value. Two arms on the SAME data:
 
 * **CTR arm** -- the column is declared in `cat_features`, so `train()`
-  replaces it with its CTR column. The CTR value IS the target, quantized
+  replaces it with its CTR columns. One of them IS the target, quantized
   into 16 bins by MinEntropy 15, and a depth-6 oblivious tree over 16 bins
-  fits that exactly. Loss must fall to a rounding floor.
+  fits that exactly. Loss must fall to a rounding floor. Run TWICE, once
+  under the implicit fallback (`TCatFeatureParams.default()`, four columns:
+  three `Borders` priors and one `FeatureFreq`) and once under
+  `feature_freq_only()` (one column), because a switch with one side
+  unexercised is an unchecked branch (`PORTING_RULES.md` 8).
 * **RAW arm** -- the same integer codes handed in as an ordinary numeric
   feature. The category CODES are assigned so that frequency is NOT
   monotone in the code (a hashed permutation), so an ordered threshold on
@@ -45,11 +49,27 @@ assertion fires), and `4 columns for 3 inputs`.
 
 `predict_floats` on a CTR model USED TO REFUSE, because the CTR values are
 a statistic of the LEARN pool and scoring a new row needs the final tables.
-The tables landed (`gbdt/models/ctr_value_table.mojo`), so that line is
-gone rather than annotated: the model now scores raw rows, and this file
-asserts the applied mse reproduces the fit's. The refusal that remains is
-for a model whose tables are missing, and it lives beside its own gate in
+The tables landed for `FeatureFreq` and then for `Borders`
+(`gbdt/models/ctr_value_table.mojo`), so that line is gone rather than
+annotated: both configurations now score raw rows. The refusal that remains
+is for a model whose tables are missing, and it lives beside its own gate in
 `mojo_only/ctr_apply_check.mojo`.
+
+**AND THE TWO ARMS ARE GATED DIFFERENTLY, WHICH IS THE POINT.**
+`FeatureFreq` is permutation-independent (`ctr_type.cpp:44-58`), so its
+apply-time table reproduces the learn column BIT FOR BIT and the applied
+mse must equal the fit's loss to the last bit. `Borders` has no such
+identity: the column it trained on is the ordered statistic over the CTR
+estimation permutation, and the column an applied model carries is the
+FULL-LEARN-SET histogram (`private/libs/algo/online_ctr.cpp:909-930`).
+Pointing the bit-identity gate at Borders would be gating a property it
+does not have. MEASURED on this fixture, 19913 rows and 500 categories:
+
+    feature_freq_only()   fit 7.207e-09   applied 7.207e-09   identical
+    default()             fit 6.353e-09   applied 6.648e-09   +4.6%
+
+so the Borders arm is gated on SCORING and on still fitting, and the
+bit-identity claim stays with the arm that owns it.
 
 Three refusals, because a refusal nobody runs is an unchecked branch:
 
@@ -61,10 +81,10 @@ plus a POSITIVE case where a refusal used to stand:
 includes the three `Borders` descriptions. It used to raise, because the CTR
 estimation permutation was not ported and row order is a different
 estimator rather than a slower one. The permutation landed 2026-08-21
-(`gbdt/data/permutation.mojo`, `PORTING.md` 55), so the call now trains and
-emits four columns per categorical feature. The refusal sentence that stood
-here is deleted rather than annotated; the ordered statistic's VALUES are
-gated in `mojo_only/ctr_device_check.mojo`, not here.
+(`gbdt/data/permutation.mojo`, `PORTING.md` 55) and the apply-time tables
+after it, so `default()` is now what `train()` FALLS BACK TO and the
+`feature_freq_only()` arm is the one passed explicitly. The ordered
+statistic's VALUES are gated in `mojo_only/ctr_device_check.mojo`, not here.
 """
 
 from max.gpu.host import DeviceContext
@@ -165,6 +185,10 @@ def check_ctr_train() raises:
     for f in range(CTRT_FEATURES):
         cat_flags.append(f == 0)
 
+    # THE IMPLICIT FALLBACK, which is `TCatFeatureParams.default()` --
+    # CatBoost's own GPU `simple_ctr`, three Borders priors plus
+    # FeatureFreq. Passing nothing is the path a caller takes by default,
+    # so it is the path this arm runs.
     var ctr_model = train(
         ctx, x, y, n, CTRT_FEATURES,
         border_count=128,
@@ -175,6 +199,22 @@ def check_ctr_train() raises:
         cat_features=cat_flags,
     )
     var ctr_loss = ctr_model.losses[len(ctr_model.losses) - 1]
+
+    # AND THE OTHER SIDE OF THE SWITCH, explicitly.
+    var freq_params: List[TCatFeatureParams] = [
+        TCatFeatureParams.feature_freq_only()
+    ]
+    var freq_model = train(
+        ctx, x, y, n, CTRT_FEATURES,
+        border_count=128,
+        n_estimators=CTRT_TREES,
+        max_depth=CTRT_DEPTH,
+        learning_rate=Float32(0.7),
+        l2_leaf_reg=Float32(1.0),
+        cat_features=cat_flags,
+        cat_feature_params=freq_params,
+    )
+    var freq_loss = freq_model.losses[len(freq_model.losses) - 1]
 
     var raw_model = train(
         ctx, x, y, n, CTRT_FEATURES,
@@ -191,9 +231,16 @@ def check_ctr_train() raises:
         " var(y)", variance,
     )
     print(
-        "  CTR arm: columns", len(ctr_model.fold_counts),
+        "  CTR arm, IMPLICIT FALLBACK (their GPU simple_ctr default):"
+        " columns", len(ctr_model.fold_counts),
         "of which", ctr_model.ctr_column_count, "are CTR;  loss", ctr_loss,
         " loss/var", ctr_loss / variance,
+    )
+    print(
+        "  CTR arm, feature_freq_only(): columns",
+        len(freq_model.fold_counts),
+        "of which", freq_model.ctr_column_count, "are CTR;  loss",
+        freq_loss, " loss/var", freq_loss / variance,
     )
     print(
         "  RAW arm (same data, codes as an ordinary numeric feature):"
@@ -201,18 +248,38 @@ def check_ctr_train() raises:
         " loss", raw_loss, " loss/var", raw_loss / variance,
     )
 
-    # the CTR column replaces the categorical one rather than joining it
-    if ctr_model.ctr_column_count != 1:
+    # THE FALLBACK IS CATBOOST'S OWN GPU DEFAULT: three Borders priors and
+    # one FeatureFreq, so ONE categorical input becomes FOUR columns
+    # (`cat_feature_options.cpp:117-129` x `binarizations_manager.cpp:415`).
+    if ctr_model.ctr_column_count != 4:
         failures.append(
-            String("feature_freq_only should give exactly one CTR column;")
+            String("the implicit fallback is TCatFeatureParams.default(),")
+            + String(" which is three Borders priors plus FeatureFreq, so")
+            + String(" one categorical input must give FOUR CTR columns;")
             + String(" got ")
             + String(ctr_model.ctr_column_count)
         )
-    if len(ctr_model.fold_counts) != CTRT_FEATURES:
+    if len(ctr_model.fold_counts) != CTRT_FEATURES - 1 + 4:
+        failures.append(
+            String("the categorical column must be REPLACED by its CTR")
+            + String(" columns, not joined by them: ")
+            + String(len(ctr_model.fold_counts))
+            + String(" columns for ")
+            + String(CTRT_FEATURES)
+            + String(" inputs, two of them numeric")
+        )
+    # and the other side of the switch is one column and replaces likewise
+    if freq_model.ctr_column_count != 1:
+        failures.append(
+            String("feature_freq_only should give exactly one CTR column;")
+            + String(" got ")
+            + String(freq_model.ctr_column_count)
+        )
+    if len(freq_model.fold_counts) != CTRT_FEATURES:
         failures.append(
             String("the categorical column must be REPLACED by its CTR")
             + String(" column, not joined by it: ")
-            + String(len(ctr_model.fold_counts))
+            + String(len(freq_model.fold_counts))
             + String(" columns for ")
             + String(CTRT_FEATURES)
             + String(" inputs")
@@ -226,6 +293,14 @@ def check_ctr_train() raises:
             + String(" against variance ")
             + String(variance)
         )
+    if freq_loss / variance >= 0.05:
+        failures.append(
+            String("the feature_freq_only arm did not learn a target that")
+            + String(" IS the CTR value: loss ")
+            + String(freq_loss)
+            + String(" against variance ")
+            + String(variance)
+        )
     if raw_loss / variance <= 5.0 * (ctr_loss / variance):
         failures.append(
             String("the RAW arm did as well as the CTR arm, so the CTR")
@@ -233,6 +308,13 @@ def check_ctr_train() raises:
             + String(raw_loss / variance)
             + String(" against ")
             + String(ctr_loss / variance)
+        )
+    if raw_loss / variance <= 5.0 * (freq_loss / variance):
+        failures.append(
+            String("the RAW arm did as well as the feature_freq_only arm: ")
+            + String(raw_loss / variance)
+            + String(" against ")
+            + String(freq_loss / variance)
         )
 
     # --- APPLYING the CTR model, which used to be a refusal ------------
@@ -246,27 +328,62 @@ def check_ctr_train() raises:
     # reproduce the fit's own loss. The refusal that survives is the one
     # for a model whose tables are MISSING, and
     # `mojo_only/ctr_apply_check.mojo` holds both halves per row.
-    print("  applying the CTR model to raw rows:")
+    print("  applying the CTR models to raw rows:")
+
+    # FeatureFreq: permutation-independent, so the apply-time table
+    # reproduces the learn column and the applied mse must equal the fit's.
+    var freq_preds = predict_floats(ctx, freq_model, x, n)
+    var fse = Float64(0.0)
+    for r in range(n):
+        var d = Float64(freq_preds[r]) - Float64(y[r])
+        fse += d * d
+    var freq_pmse = fse / Float64(n)
+    var drift = freq_pmse - freq_loss
+    if drift < 0:
+        drift = -drift
+    if drift > 1e-12 + 1e-5 * freq_loss:
+        failures.append(
+            String("predict_floats on the feature_freq_only model does not")
+            + String(" reproduce the fit: ")
+            + String(freq_pmse)
+            + String(" vs ")
+            + String(freq_loss)
+        )
+    else:
+        print("    feature_freq_only: raw rows scored through the CTR"
+              " table; mse", freq_pmse, "reproduces the fit's", freq_loss)
+
+    # Borders: NO SUCH IDENTITY, and asserting one would be gating a
+    # property the estimator does not have. The fit trained on the ORDERED
+    # statistic over the CTR estimation permutation; the applied model
+    # carries the FULL-LEARN-SET histogram
+    # (`private/libs/algo/online_ctr.cpp:909-930`). What IS asserted is
+    # that it scores at all -- the refusal this round lifted -- and that
+    # the applied model still fits the target.
     var ctr_preds = predict_floats(ctx, ctr_model, x, n)
     var cse = Float64(0.0)
     for r in range(n):
         var d = Float64(ctr_preds[r]) - Float64(y[r])
         cse += d * d
     var ctr_pmse = cse / Float64(n)
-    var drift = ctr_pmse - ctr_loss
-    if drift < 0:
-        drift = -drift
-    if drift > 1e-12 + 1e-5 * ctr_loss:
+    var gap = (ctr_pmse - ctr_loss) / ctr_loss
+    print(
+        "    default() (three Borders priors + FeatureFreq): applied mse",
+        ctr_pmse, "against the fit's", ctr_loss, " gap", gap,
+    )
+    print(
+        "      the gap is CatBoost's design: the fit trained on the"
+        " ORDERED statistic, the applied model carries the"
+        " FULL-LEARN-SET histogram"
+    )
+    if ctr_pmse / variance >= 0.05:
         failures.append(
-            String("predict_floats on the CTR model does not reproduce")
-            + String(" the fit: ")
+            String("the applied Borders model does not fit the target:")
+            + String(" mse ")
             + String(ctr_pmse)
-            + String(" vs ")
-            + String(ctr_loss)
+            + String(" against variance ")
+            + String(variance)
         )
-    else:
-        print("    raw rows scored through the CTR tables; mse",
-              ctr_pmse, "reproduces the fit's", ctr_loss)
 
     # --- the three refusals that remain ---------------------------------
     print("  refusals:")
@@ -324,7 +441,7 @@ def check_ctr_train() raises:
         cat_features=cat_flags, cat_feature_params=borders_params,
     )
     print(
-        "    CatBoost's GPU default simple_ctr: columns",
+        "    CatBoost's GPU default simple_ctr, passed explicitly: columns",
         len(borders_model.fold_counts), "of which ctr",
         borders_model.ctr_column_count,
     )
@@ -334,6 +451,16 @@ def check_ctr_train() raises:
             + String(" FeatureFreq) must give FOUR columns for one")
             + String(" categorical feature; got ")
             + String(borders_model.ctr_column_count)
+        )
+    # explicit and implicit must be the SAME configuration, or the fallback
+    # is not what it says it is
+    if borders_model.ctr_column_count != ctr_model.ctr_column_count:
+        failures.append(
+            String("passing TCatFeatureParams.default() explicitly gives ")
+            + String(borders_model.ctr_column_count)
+            + String(" CTR columns and passing nothing gives ")
+            + String(ctr_model.ctr_column_count)
+            + String("; the implicit fallback is supposed to BE default()")
         )
 
     if len(failures) > 0:

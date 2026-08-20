@@ -1497,3 +1497,90 @@ That is what "a different and worse estimator, not a slower one" means, and
 it is why `ctr_estimation_permutation_id` defaults to 3 rather than to their
 0. The pool shuffle itself is not ported: it is not a `catboost/cuda` file,
 and reordering the caller's rows would change what `predict` returns.
+
+# Deviation added 2026-08-20 (the Borders apply-time table)
+
+## 58. One `TCtrValueTable` per model COLUMN, so three priors carry three copies of one histogram
+
+Their `ctr_data` is a map keyed by `TModelCtrBase`
+(`libs/model/ctr_provider.h`, walked by `TStaticCtrProvider::CalcCtrs`
+through `ctr.Base`), and the three priors of their default `Borders`
+fan-out are three `TModelCtr` values SHARING one `TCtrValueTable`. This
+format keys a table by the model COLUMN it feeds -- `ctr_table <column>`
+in `gbdt/models/model_text.mojo` -- because a column is what this model
+applies, and `column_plan` reconstructs the raw-input map by walking
+columns. So a categorical feature under their default writes the same
+`uniqueCategories * TargetClassesCount` histogram THREE TIMES, once per
+prior.
+
+What it costs: bytes in the file, and nothing else. A 255-category feature
+at two target classes is 510 ints stored three times instead of once,
+1530 integers, on a model that already carries a border list per column.
+
+What it does NOT cost: work. `build_ctr_tables` computes the histogram
+ONCE per categorical feature and hands the same `List[Int]` to every
+`Borders` config; only the prior differs, and only inside `Calc`. That is
+their decomposition, and `mojo_only/ctr_apply_check.mojo` asserts the
+three tables are bit-identical blobs producing three different columns,
+because a build that recomputed the histogram per prior would be doing
+three passes for one answer and nothing about the ANSWER would say so.
+
+Deviation 56 already records the other half of this table's shape: it is
+keyed by the DENSE CODE rather than by their 64-bit category hash. The two
+depart from the same place, which is that this port has no hash step.
+
+### 58a. What the Borders arm CLOSED, rather than added
+
+`train()`'s implicit fallback was `TCatFeatureParams.feature_freq_only()`
+for one round, which was itself a departure from their GPU `simple_ctr`
+default. The reason was sequencing: `Borders` trained and could not score,
+because the table builder had no target-class arm, so the default would
+have shipped a model that fits and refuses. That reason is gone and the
+fallback is `TCatFeatureParams.default()` -- three `Borders` priors plus
+one `FeatureFreq`, four columns per categorical feature, CatBoost's own.
+`feature_freq_only()` survives as an opt-in surface and both sides are
+exercised by name (`PORTING_RULES.md` 8).
+
+### 58b. A `Borders` model's apply does NOT reproduce its own fit, and that is theirs
+
+Worth writing down beside the deviation because it looks like one and is
+not. `FeatureFreq` is permutation-independent (`ctr_type.cpp:44-58`), so
+the apply-time table reproduces the learn column bit for bit and
+`mojo_only/ctr_train_check.mojo` gates exactly that. `Borders` has no such
+identity in CatBoost either: the column a fit trains on is the ORDERED
+statistic over the estimation permutation, and the column an applied model
+carries is the FULL-LEARN-SET histogram their `CalcFinalCtrsImpl` builds
+(`private/libs/algo/online_ctr.cpp:909-930`). MEASURED on
+`ctr_train_check`'s 19913-row fixture:
+
+    feature_freq_only()   fit 7.207e-09   applied 7.207e-09   identical
+    default()             fit 6.353e-09   applied 6.648e-09   +4.6%
+
+So the Borders gate is agreement with an independently computed full-set
+tally PER ROW, never agreement with the fit's loss. Pointing the
+bit-identity gate at Borders would have been gating a property the
+estimator does not have.
+
+### 58c. The `empty_value` dispatch is reached, and a sabotage had to prove it
+
+`empty_value` branches on `ctr_type` because their provider computes
+`emptyVal` inside each arm: `Calc(0, denominator)` for Counter/FeatureFreq
+(`static_ctr_provider.cpp:65`) and `Calc(0, 0)` -- the prior alone -- for
+Borders (`:95`). At their {1, 1} prior on a 4096-row pool those are 1.0
+and 2.4e-4, and an unseen category is what a held-out set is made of.
+
+**The first version of that gate could not fail.** Replacing the Borders
+`emptyVal` with FeatureFreq's, in the source, ran the whole
+`check-ctr-apply` file green with stdout bit-identical to the clean run,
+because every Borders table this port writes carries
+`CounterDenominator = 0` (their builder sets it only on the other arm,
+`online_ctr.cpp:934-939`) and `Calc(0, 0)` and `Calc(0, denominator)` are
+then the same number. The dispatch was correct and unreachable at once. It
+is now exercised on a table carrying a NONZERO denominator, where the two
+formulas separate, and the same sabotage turns that red.
+
+The same round of sabotage found `compare_models` blind to the new axis: a
+writer that dropped `TargetClassesCount` produced a file whose `counts`
+list was the same LENGTH (a two-class histogram read as twice as many
+one-count categories), so field-by-field equality passed. Both fields are
+compared now.
