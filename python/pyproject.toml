@@ -1,0 +1,93 @@
+# Distribution metadata for the `mojolearn` package on PyPI.
+#
+# setup.py holds only the two facts PEP 621 cannot express: the wheel is not
+# pure Python, and the macOS platform tag comes from the Mojo compile step
+# rather than from the building machine. Nothing is stated in both files.
+
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+# 77 is the floor because the PEP 639 `license` expression and `license-files`
+# below are only understood from that version.
+
+[project]
+name = "mojolearn"
+# Must agree with python/mojolearn/_version.py. Not made dynamic, so that a
+# version bump is a visible edit in both places rather than one.
+version = "0.1.0a1"
+description = "GPU machine learning in Mojo, running on Apple Silicon"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Andrew Hendel" }]
+maintainers = [{ name = "Andrew Hendel" }]
+keywords = [
+    "machine learning",
+    "gpu",
+    "metal",
+    "apple silicon",
+    "mojo",
+    "clustering",
+    "k-means",
+    "nearest neighbors",
+]
+
+# THE FLOOR IS 3.12 AND IT IS MEASURED, NOT GUESSED.
+# The extension links NO libpython (`otool -L` shows only the two MAX runtime
+# dylibs and libSystem), so it resolves CPython by name at runtime and one
+# artifact can serve several interpreters. That is the mechanism; the floor is
+# where it was actually tested. `packaging/macos/verify_wheel.sh` imports the
+# built wheel under every python3.N on the build machine and runs a fit; 3.12
+# and 3.13 and 3.14 are what this machine has. 3.10 and 3.11 are NOT claimed
+# because they were not run, and a floor is a promise.
+
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    # macOS on Apple silicon is the only platform with a wheel. The library
+    # builds for Linux from the same source but no Linux wheel has ever been
+    # produced, so no Linux classifier is claimed.
+    "Operating System :: MacOS :: MacOS X",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3 :: Only",
+    # Compiled by the Mojo toolchain against CPython, not the limited API.
+    # No PyPy, no free-threaded build: max 26.5.0 depends on python-gil.
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+# Not claimed, and each is a decision rather than an oversight:
+#   Environment :: GPU :: NVIDIA CUDA   no NVIDIA device has ever run this.
+#   Typing :: Typed                     no py.typed marker, no stubs.
+#   License :: ...                      PEP 639 forbids a license classifier
+#                                       beside the `license` expression.
+
+# numpy IS required, unlike mojotrees where it is optional. The boundary here
+# takes raw buffer addresses out of `__array_interface__`, and every estimator
+# returns arrays. There is no plain-sequence path to degrade to and pretending
+# otherwise would be a claim with nothing behind it.
+dependencies = ["numpy>=1.24"]
+
+[project.urls]
+Homepage = "https://github.com/mojolearn/mojolearn"
+Repository = "https://github.com/mojolearn/mojolearn"
+Issues = "https://github.com/mojolearn/mojolearn/issues"
+
+[tool.setuptools]
+# Listed explicitly rather than discovered, so a new subpackage is a
+# deliberate edit and not a silent addition to a published artifact.
+packages = ["mojolearn"]
+include-package-data = false
+
+[tool.setuptools.package-data]
+# The extension and the MAX runtime dylibs that
+# packaging/macos/build_release_wheel.sh stages beside it. Both are gitignored
+# build outputs, so this describes a BUILT tree rather than a checkout. A
+# wheel missing either is broken at import, and the clean-venv install in
+# verify_wheel.sh is what catches that.
+mojolearn = ["*.so", ".dylibs/*.dylib"]

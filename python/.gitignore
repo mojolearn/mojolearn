@@ -1,0 +1,8 @@
+LICENSE
+NOTICE
+README.md
+mojolearn/_mojolearn.so
+mojolearn/.dylibs/
+dist/
+build/
+*.egg-info/

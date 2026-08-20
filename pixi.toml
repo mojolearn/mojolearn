@@ -121,6 +121,18 @@ scipy = "==1.18.0"
 # estimators that cannot reach the GPU at all, which is most of them.
 sklearn-gpu = "python bench/bench_sklearn_gpu.py"
 
+# Wheel building only. setuptools 77 is the floor for the PEP 639 `license`
+# expression in python/pyproject.toml; `build` is the PEP 517 frontend.
+# Separate from `bench` so a wheel build cannot perturb the environment every
+# recorded timing was taken under.
+[feature.pkg.dependencies]
+python = "3.14.*"
+setuptools = ">=77"
+wheel = "*"
+python-build = "*"
+twine = "*"
+
 [environments]
 bench = ["bench"]
 skgpu = ["skgpu"]
+pkg = ["pkg"]
