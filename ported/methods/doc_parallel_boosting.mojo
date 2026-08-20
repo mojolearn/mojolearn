@@ -90,6 +90,10 @@ from ported.models.kernel.add_bin_values import compute_bins_and_add_kernel
 from mojo_only.kernel_matrix import TARGET_COLUMN, deterministic_flush_for
 from mojo_only.numerics import NUMERIC_IDENTICAL
 from ported.gpu_util.kernel.fill import launch_make_sequence
+from ported.gpu_util.kernel.bootstrap import (
+    create_bootstrap_seeds,
+    launch_bayesian_bootstrap,
+)
 from ported.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
     BUILD_MODE as HIST_BUILD_MODE,
 )
@@ -113,6 +117,9 @@ def fit(
     learning_rate: Float32 = Float32(0.03),
     l2_leaf_reg: Float32 = Float32(3.0),
     use_subtraction: Bool = True,
+    bootstrap_bayesian: Bool = False,
+    bagging_temperature: Float32 = Float32(1.0),
+    random_seed: UInt64 = UInt64(0),
 ) raises -> List[Float64]:
     """Their `Fit` (`doc_parallel_boosting.h:302`), one permutation.
 
@@ -186,6 +193,16 @@ def fit(
     var mags = ctx.enqueue_create_buffer[DType.float32](2)
     var h_mags = ctx.enqueue_create_host_buffer[DType.float32](2)
 
+    # their `TGpuAwareRandom::GetGpuSeeds`: the per-thread RNG state of
+    # the whole fit, created once and advanced in place by every draw
+    # (`ported/gpu_util/kernel/bootstrap.mojo`). One dummy word when
+    # bootstrap is off.
+    var boot_seeds: DeviceBuffer[DType.uint64]
+    if bootstrap_bayesian:
+        boot_seeds = create_bootstrap_seeds(ctx, random_seed)
+    else:
+        boot_seeds = ctx.enqueue_create_buffer[DType.uint64](1)
+
     var losses = List[Float64]()
     # their `TVector<TResultModel>* result`, the ensemble being built
 
@@ -205,10 +222,28 @@ def fit(
             stats.unsafe_ptr(),
             fv.unsafe_ptr(), Int32(1),
             mags.unsafe_ptr(),
-            Int32(1) if _needs_magnitudes else Int32(0),
+            # under bootstrap the magnitudes must bound the BOOTSTRAPPED
+            # planes (a Bayesian weight reaches ~46 at the tail), so the
+            # bootstrap kernel computes them AFTER its multiply instead
+            Int32(1) if (
+                _needs_magnitudes and not bootstrap_bayesian
+            ) else Int32(0),
             grid_dim=(n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE,
             block_dim=MSE_BLOCK_SIZE,
         )
+        if bootstrap_bayesian:
+            # their `BootstrapAndFilter`: one Bayesian draw per row
+            # multiplies BOTH planes; Bayesian never zeroes a weight so
+            # their filter branch does not exist here (bootstrap.mojo).
+            var compute_mags = False
+
+            @parameter
+            if _needs_magnitudes:
+                compute_mags = True
+            launch_bayesian_bootstrap(
+                ctx, boot_seeds, stats, n_rows, bagging_temperature,
+                mags, compute_mags,
+            )
         # stream-ordered behind the kernel; READ after `run_tree_layout`,
         # whose first drain settles it, so it costs no synchronize here.
         ctx.enqueue_copy(dst_ptr=h_fv.unsafe_ptr(), src_buf=fv)
