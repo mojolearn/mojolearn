@@ -93,12 +93,18 @@ right on this device too. Details in DBSCAN_RBC_2026-08-19.md.
 
 ## What the table says to do next
 
-1. **PCA is the worst row (0.25x) and the covariance matmul is NOT the
-   cause** (LANE_covariance-unblock: `gemm_tn` has served the T-N shape in
-   PCA/tSVD/OLS since 048f3da and caps at ~50-60 ms of the 520; the zero-copy
-   col-major route is BANNED, silently wrong across most shapes). The 4x and
-   the OLS 0.38x need a per-phase timer; the reading-visible suspects are
-   `xty_kernel`'s 32-block launch and the fit's sync/alloc pattern.
+1. **PCA (0.25x) and OLS (0.38x) lose in ONE place, and it is MAX's matmul
+   on the Gram shape.** Phase-bracketed at 4M x 32 (2026-08-19 late):
+   `matmul[transpose_b=True]` on the 32 x 32 x 4M product = 323 ms of PCA's
+   ~465 and ~90% of OLS's 362; the transposes are 11 ms each, the 32-block
+   `column_mean`/`xty` reductions 11-13 ms, eigen 3 ms. ~25 GFLOP/s against
+   the ~248 the same kernel gives square shapes: one 32 x 32 output tile
+   means one tile of parallelism, so the 4M-deep reduction runs starved --
+   the k-NN block-count disease on a matmul. The fix shape is split-K (what
+   cuBLAS does on this shape internally). The lane's earlier arithmetic
+   "caps at ~50-60 ms" and this file's previous suspects (`xty_kernel`,
+   sync/alloc) were both wrong; both died on the same phase timer. The
+   zero-copy col-major route stays BANNED (silently wrong at most shapes).
 2. **DBSCAN at 400k-800k trails 0.70x-0.83x**: sklearn's kd-tree asymptotics
    at d=8 against our RBC constants. The gap is flat, not diverging.
 3. **kmeans is a tie that shouldn't be**: 4M x 32 is exactly the shape a GPU

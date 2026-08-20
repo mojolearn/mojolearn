@@ -166,3 +166,23 @@ ceiling (~50-60 ms of the 520) says at least 4x of the gap is elsewhere.
 Candidates visible from reading, unmeasured: `xty_kernel` runs n_cols blocks
 (32 blocks x 256 threads for a 512 MB read at the OLS shape); Jacobi runs
 grid=(1,1,1); the fixed per-fit `ctx.synchronize()` count.
+
+## Orchestrator postscript, same evening: the phase timer ran, and the cap was wrong
+
+The report above reasons "the covariance product arithmetically caps at
+~50-60 ms". Measured (phase brackets at 4M x 32, 3 reps, sync per phase):
+
+    PHASE pca.mean_alone            11.4 ms   (the 32-block suspect: innocent)
+    PHASE pca.one_transpose         10.8 ms
+    PHASE pca.gemm_nt_core         322.9 ms   <- matmul[transpose_b] itself
+    PHASE pca.gemm_tn_alone        344.7 ms
+    PHASE pca.compute_covariance   459.3 ms
+    PHASE pca.eig_and_truncate       2.9 ms
+    PHASE ols.xty_alone             11.9 ms   (the report's suspect: innocent)
+    PHASE ols.lstsq_eig_total      361.7 ms
+
+The FLOP arithmetic assumed the vendor kernel's square-shape throughput
+(~248 GFLOP/s); on the 32 x 32 x 4,000,000 Gram shape it delivers ~25,
+because a single 32 x 32 output tile is a single tile of parallelism. Both
+this report's suspects and its cap died on the same measurement. Next: a
+split-K Gram path (LANE_gram-splitk).
