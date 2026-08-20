@@ -804,7 +804,7 @@ did three.
 
 # Deviations added 2026-08-20 (fused L2-NN policy diff)
 
-## 42. The fused L2-NN kernel is SINGLE-buffered: Apple's 32 KB wall
+## 44. The fused L2-NN kernel is SINGLE-buffered: Apple's 32 KB wall
 
 `Contractions_NT`'s smem budget is `P::SmemSize = 2 * SmemPage`
 (`raft/linalg/contractions.cuh:104`): TWO page pairs, written and read in
@@ -835,7 +835,7 @@ each call describes the kernel it launches. `grid.x` is pinned to 1 there;
 that is the PRE-existing `updateReducedVal` replacement (`PORTED_MAP.tsv`
 `replaced` row), not part of this entry.
 
-## 43. `sqrt` at the row write, not per accumulator cell
+## 45. `sqrt` at the row write, not per accumulator cell
 
 `l2_exp_distance_op::epilog` takes the square root of every accumulator
 cell before the min reduce when `sqrt` is requested
