@@ -3,109 +3,96 @@
 **The thesis this repo exists for is GPU ACCESS, not GPU tier: the
 incumbents' GPU arms cannot run on Apple silicon at all, so the comparison a
 Mac user actually lives with is our Metal path against their best CPU on the
-same machine.** This is that table, taken 2026-08-19 evening at the shipped
-defaults (commit b2d438c: DBSCAN = RBC + two-loop max_k, k-NN =
-KNN_METHOD_AUTO), against scikit-learn 1.9.0 with `n_jobs=-1` on every
+same machine.** Against scikit-learn 1.9.0 with `n_jobs=-1` on every
 estimator that accepts it and their `algorithm='auto'` -- their best, not a
-crippled arm.
-
-Method: `bench/run_bench.py`, arms alternated per round inside one
-invocation, medians reported, and a row is only a finding when the two
-min..max ranges do NOT overlap ("INDISTINGUISHABLE" otherwise). Environment
-at close: Apple M4 (10 cores, 16 GB), macOS 26.5.2, AC power, no thermal
-warning recorded, Python 3.14.6 / numpy 2.4.4 / scikit-learn 1.9.0.
+crippled arm. Method: `bench/run_bench.py`, arms alternated per round inside
+one invocation, medians reported, a row is a finding only when the min..max
+ranges do NOT overlap. Apple M4 (10 cores, 16 GB), AC power, no thermal
+warnings. Re-verdicted 2026-08-19 late night at commit be226f8 (split-K Gram
+kernel in; k-NN AUTO; DBSCAN RBC + two-loop).
 
 ## Fixed-size arms (3 rounds, n = 15/arm)
 
 | arm | shape | ours ms | sklearn ms | ratio | verdict |
 |---|---|---|---|---|---|
-| kmeans | 4M x 32, k=64, 20 iter | 2,700.2 | 2,127.4 | 0.79x | INDISTINGUISHABLE |
-| knn | 400k idx, 4k q, d=32, k=10 | 769.6 | 961.5 | 1.25x | **ours faster** |
-| pca | 4M x 32, 8 comp | 520.0 | 130.4 | 0.25x | sklearn faster |
-| ols | 4M x 32 | 397.8 | 866.2 | 2.18x | **ours faster** |
-| ols vs `ols_normal_eq` | same | 397.8 | 152.4 | 0.38x | sklearn faster |
-| dbscan | 4k x 16 | 9.5 | 9.1 | 0.95x | INDISTINGUISHABLE |
+| ols | 4M x 32 | 64.3 | 821.4 | 12.77x | **ours faster** |
+| ols vs `ols_normal_eq` | same | 64.3 | 143.0 | 2.2x | **ours faster** |
+| knn | 400k idx, 4k q, d=32, k=10 | 693.2 | 916.4 | 1.32x | **ours faster** |
+| pca | 4M x 32, 8 comp | 166.0 | 119.8 | 0.72x | INDISTINGUISHABLE |
+| dbscan | 4k x 16 | 11.2 | 8.9 | 0.80x | INDISTINGUISHABLE |
+| kmeans | 4M x 32, k=64, 20 iter | 2,427.2 | 2,016.6 | 0.83x | sklearn faster |
 
-**The honest OLS row is the last-but-one's neighbour, not the 2.18x.**
-`LinearRegression` takes LAPACK's SVD route; `Ridge(alpha=0,
-solver="cholesky")` forms X^T X and solves it -- the SAME algorithm class as
-our lstsq_eig -- and at 152.4 ms it beats us 2.6x. The 2.18x is a win over
-an algorithm we did not implement. Both are printed so the reader can pick,
-and the headline is the loss.
+**OLS flipped from the board's honest loss to its biggest win in one
+change.** Before the split-K Gram kernel: 362 ms of solve, 2.6x BEHIND
+`Ridge(alpha=0, solver="cholesky")` -- the same algorithm class as ours.
+After: 64 ms, 2.2x AHEAD of it, and 12.8x ahead of `LinearRegression`'s SVD
+route. **PCA moved 465 -> 166 ms in the same change**: from a clean 4x loss
+to range-overlap with scikit-learn (their LAPACK arm still medians ahead;
+the remaining ~100 ms of ours is two full centering passes over 512 MB, and
+fusing them into the Gram read is the named next step). kmeans is now the
+only clean fixed-size loss and the only unprofiled row.
 
-## Scaling arms (2 rounds, n = 6/arm, splitmix64 fixtures)
+## The dimensionality sweep (n = 200,000 fixed; NEW, and it redraws the map)
 
-k-NN: ours = the shipped AUTO dispatch (fused at these shapes), d=32, k=10,
-2,000 queries. sklearn = `NearestNeighbors(algorithm='auto', n_jobs=-1)`.
+Every earlier row ran at d=8/32 -- the kd-tree's best regime. Trees degrade
+with d; a GPU's cost is d-linear. Measured (eps scaled sqrt(d/8) on both
+sides, identical fixtures):
 
-| n index | ours ms | sklearn ms | ratio | verdict |
+| arm | ours ms | sklearn ms | ratio | verdict |
 |---|---|---|---|---|
-| 20,000 | 26.9 | 31.2 | 1.16x | INDISTINGUISHABLE |
-| 50,000 | 49.4 | 69.4 | 1.41x | **ours faster** |
-| 100,000 | 117.0 | 159.5 | 1.36x | **ours faster** |
-| 200,000 | 236.0 | 422.8 | 1.79x | **ours faster** |
-| 400,000 | 514.9 | 763.2 | 1.48x | **ours faster** |
+| dbscan d=8 | 478.9 | 473.2 | 0.99x | INDISTINGUISHABLE |
+| dbscan d=32 | 3,430.6 | 23,663.8 | **6.90x** | **ours faster** |
+| dbscan d=64 | 15,290.3 | 39,946.9 | **2.61x** | **ours faster** |
+| knn d=32 | 186.6 | 272.0 | 1.46x | **ours faster** |
+| knn d=64 | 361.6 | 468.0 | 1.29x | **ours faster** |
+| knn d=128 | 718.0 | 798.1 | 1.11x | INDISTINGUISHABLE |
 
-DBSCAN: ours = the shipped RBC default with the two-loop max_k dispatch,
-d=8, eps=0.30. sklearn = `DBSCAN(algorithm='auto', n_jobs=-1)` (a kd-tree
-at this dimensionality).
+scikit-learn's DBSCAN cost blows up 50x going d=8 -> 32 (the kd-tree
+collapses); ours grows ~7x. **The DBSCAN rows this file used to report as
+losses live entirely in the d=8 corner** -- the single regime most favorable
+to the incumbent -- and even there, 200k is a tie in this window. At any
+realistic feature width the fit is a multi-x win.
 
-| n | ours ms | sklearn ms | ratio | verdict |
-|---|---|---|---|---|
-| 4,000 | 7.9 | 18.6 | 2.35x | **ours faster** |
-| 16,000 | 22.7 | 39.4 | 1.74x | **ours faster** |
-| 50,000 | 121.3 | 92.7 | 0.76x | sklearn faster |
-| 100,000 | 228.9 | 216.1 | 0.94x | INDISTINGUISHABLE |
-| 200,000 | 528.8 | 514.3 | 0.97x | INDISTINGUISHABLE |
-| 400,000 | 1,615.8 | 1,345.8 | 0.83x | sklearn faster |
-| 800,000 | 5,052.8 | 3,539.4 | 0.70x | sklearn faster |
+## Scaling arms at d=8 (2 rounds; the incumbent's best corner)
 
-## What moved today, measured
+knn (d=32, k=10, 2,000 q): 1.41x / 1.36x / 1.79x / 1.48x ours at
+50k/100k/200k/400k, all clean. dbscan (d=8): ours 2.35x/1.74x at 4k/16k,
+parity 100k-200k, sklearn 0.70x-0.83x ahead at 400k-800k. Attribution
+(phase timer, 400k+800k): ~88% of phase time is the `vertexdeg`
+eps-neighborhood kernels -- a query-kernel constants fight against kd-tree
+asymptotics in their best regime, now the LOWEST-priority gap on the board
+given the d-sweep.
 
-**The RBC two-loop max_k dispatch (LANE_rbc-maxk) is a clean win at scale.**
-A/B at the scaling fixture, HEAD against pre-lane e4eb7cc, alternated,
-labels identical:
+## What moved this round, measured
 
-| n | before ms | after ms | speedup | verdict |
-|---|---|---|---|---|
-| 50,000 | 232.9 | 157.1 | 1.48x | overlap |
-| 200,000 | 900.2 | 588.5 | 1.53x | **after faster** |
-| 400,000 | 2,709.7 | 1,720.6 | 1.57x | **after faster** |
-| 800,000 | 7,375.8 | 5,620.0 | 1.31x | **after faster** |
-
-(The scoreboard's DBSCAN rows above were taken in a later, cooler window
-than this A/B; compare within a table, never across tables.)
-
-**The k-NN default flipped to AUTO (DEVIATION 36 revised, PORTING.md 36).**
-With their `launchConfigGenerator` ported and M4-fed, fused never loses a
-median in the `grid_x == 1` regime and wins 1.25x clean at 32,000 queries;
-the x-split regime loses catastrophically (0.19x at 500 queries), so AUTO
-takes fused iff the launch computation says `grid_x == 1`. At the fixed
-bench shape (400k x 4,000) a same-window interleaved check measured fused
-and tiled a dead tie (759 vs 750 ms median, full overlap), which also
-explains the knn fixed-row movement between windows as thermal drift, not
-the flip.
-
-**The DBSCAN batch-size lever is dead.** On the two-loop runner the phase
-timer attributes every added batch as pure re-run `vertexdeg` cost
-(`weak_cc` <= 1.3 ms/fit at 50k, acquitted); cuML's 80%-one-batch default is
-right on this device too. Details in DBSCAN_RBC_2026-08-19.md.
+- **Split-K Gram kernel** (`core/gram_splitk.mojo`, LANE_gram-splitk): MAX's
+  matmul runs the 32x32x4M Gram shape at ~25 GFLOP/s because its Apple arm
+  launches one threadgroup per 64x64 output tile, and its split-K paths are
+  comptime-gated `not has_apple_gpu_accelerator()` (verified in Modular's
+  source at max/v26.5.0). Ours: 240 fixed k-chunks, deterministic ascending
+  fold, zero transposes. The Gram call: 345 -> 49 ms. OLS solve: 362 -> 65.
+  PCA fit: 465 -> 166.
+- **RBC two-loop max_k**: 1.31x-1.57x clean at 200k-800k, labels identical.
+- **k-NN AUTO default** (DEVIATION 36 revised): fused iff the ported launch
+  computation says grid_x == 1; verified across k=10..64.
+- **DBSCAN batch-size lever confirmed dead**; cuML's 80% default vindicated.
 
 ## What the table says to do next
 
-1. **PCA (0.25x) and OLS (0.38x) lose in ONE place, and it is MAX's matmul
-   on the Gram shape.** Phase-bracketed at 4M x 32 (2026-08-19 late):
-   `matmul[transpose_b=True]` on the 32 x 32 x 4M product = 323 ms of PCA's
-   ~465 and ~90% of OLS's 362; the transposes are 11 ms each, the 32-block
-   `column_mean`/`xty` reductions 11-13 ms, eigen 3 ms. ~25 GFLOP/s against
-   the ~248 the same kernel gives square shapes: one 32 x 32 output tile
-   means one tile of parallelism, so the 4M-deep reduction runs starved --
-   the k-NN block-count disease on a matmul. The fix shape is split-K (what
-   cuBLAS does on this shape internally). The lane's earlier arithmetic
-   "caps at ~50-60 ms" and this file's previous suspects (`xty_kernel`,
-   sync/alloc) were both wrong; both died on the same phase timer. The
-   zero-copy col-major route stays BANNED (silently wrong at most shapes).
-2. **DBSCAN at 400k-800k trails 0.70x-0.83x**: sklearn's kd-tree asymptotics
-   at d=8 against our RBC constants. The gap is flat, not diverging.
-3. **kmeans is a tie that shouldn't be**: 4M x 32 is exactly the shape a GPU
-   should own; nobody has profiled the fit since the control-plane rounds.
+1. **kmeans, the last unprofiled row** (0.83x, clean loss this window):
+   per-iteration cost sits ~9x above its traffic bound -- the starved-
+   parallelism signature that explained every other gap this week.
+2. **PCA's outright win**: fuse mean-subtract into the split-K Gram read and
+   drop the restore pass (~100 ms of the remaining 166).
+3. **Target-keying debt**: `launch_config_generator`'s M4 constants, the
+   split-K dispatch predicate/chunk count, and the k-NN AUTO decision are
+   Apple-fed; on NVIDIA/AMD they must come from the kernel matrix's target
+   column, and non-Apple targets should hand the Gram shape back to MAX's
+   own split-K. Correctness is unaffected (scheduling only); NVIDIA/AMD
+   remain supported-not-validated.
+4. **Upstream report to Modular**: two confirmed silent-wrong bugs
+   (`transpose_b` n==1 non-write; col-major views) + the Gram-shape gap,
+   with the 345 -> 49 ms reproducer.
+5. The split-K call itself has ~3x left to its traffic floor (~15 ms):
+   hoist the shared load when 256 % m == 0; move the workspace alloc off
+   the timed path.
