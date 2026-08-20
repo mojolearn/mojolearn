@@ -68,12 +68,16 @@ dispatch prefers it for every k a k-NN user asks for.
 **Metal's missing float `atomicAdd` is a HARDWARE limit and is untouched by
 this.** `mojo_only/fixed_point.mojo` and its overflow proof stand.
 
-## 3. `float` accumulation, not fixed point
+## 3. `float` accumulation, not fixed point -- NOW PER COLUMN
 
 CatBoost accumulates in `float` in shared memory and flushes with a
 non-deterministic global `atomicAdd` guarded by `abs(val) > 1e-20f`. Copied
-as-is. This makes the port's histograms non-deterministic across runs, which
-is THEIR behavior; do not "fix" it to fixed point here.
+as-is on the NVIDIA and AMD columns, whose shared-memory budgets hold their
+design. On the APPLE column (and everywhere under `NUMERIC_IDENTICAL`) the
+hist_2 family's shared accumulation is Int32 fixed point instead, by
+measurement, per item 41 below; the sentence that stood here forbidding
+exactly that was written before Metal's 32 KB ceiling was priced and is
+deleted rather than annotated.
 
 ## 4. `cub::DeviceRadixSort::SortPairs` per leaf
 
@@ -704,6 +708,38 @@ shared-memory term as a 32 KB validity wall rather than a divisor, because
 family-9 threadgroup memory is dynamically cached -- the measured query
 sweep (entry 36) is only possible with many 18.5 KB blocks per core. The
 grid shape and every hardware input live in that ONE file.
+
+## 41. hist_2's Apple accumulation: 2-warp-shared Int32 slices, dither-quantized
+
+CatBoost's `TPointHist2OneByte` gives every warp a PRIVATE 1024-float
+shared-memory slice, 32 floats per thread (`hist_2_one_byte_base.cuh:20-22`).
+At Metal's 32 KB threadgroup ceiling that caps a core at 256 resident
+threads -- 12.5% occupancy, a wall built into the layout. The matrix row
+`hist_smem_mode_for` (NUMERIC: integer fixed point is a different arithmetic
+than float adds) keeps their design on NVIDIA/AMD `FAST` and, on Apple and
+under `NUMERIC_IDENTICAL`, shares each 1024-slot slice between TWO warps
+with LOCAL Int32 atomics -- Metal has no local float atomics -- halving
+shared bytes per thread so the block doubles to 512 at the same 32 KB.
+
+Measured: 46.5 -> 90.2 G updates/s on the accumulate probe (1.94x);
+43.5-48.9 -> 32.3-35.9 ms/tree whole-tree at 800k x 100 x 128 folds
+(1.33-1.51x), interleaved, identical trees both arms. 512 threads/32 KB and
+256 threads/16 KB (two resident blocks) measured indistinguishable -- both
+put 512 threads on a core, which is what pays.
+
+Pass structure, bin decode and slot arithmetic are theirs; what changed is
+WHERE the add lands, and the quantizer, which took three attempts and two
+measured failures to get right (`hist2_quantize`): plain truncation and
+round-to-nearest both accumulate a value-correlated bias LINEAR in the row
+count, which `compute_scores`'s exact `partStat - sumLeft` right side reads
+as phantom mass past every bin -- trees locked onto (feature, last bin) and
+stopped at depth 1 on three different 300k-650k datasets. The shipped rule
+is dithered floor keyed on the document position: exactly unbiased for any
+value distribution, deterministic run to run and vendor to vendor, and
+exact on integer-valued stats, which is what keeps `hist2_check` an exact
+`!=` compare. A side effect worth naming: integer accumulation is
+associative, so the Apple arm's histogram is deterministic run to run,
+which CatBoost's own float path is not.
 
 ## 37. A tiny DBSCAN batch budget raises here; theirs wraps `size_t` into a full batch
 

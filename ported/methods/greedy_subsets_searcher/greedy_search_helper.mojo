@@ -112,7 +112,11 @@ from ported.gpu_util.partitions_reduce import (
     STATS_BLOCK,
     compute_partition_stats,
 )
-from mojo_only.kernel_matrix import TARGET_COLUMN, deterministic_flush_for
+from mojo_only.kernel_matrix import (
+    HIST_SMEM_SHARED2_I32,
+    TARGET_COLUMN,
+    deterministic_flush_for,
+)
 from mojo_only.numerics import NUMERIC_IDENTICAL
 from ported.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
     BUILD_MODE as HIST_BUILD_MODE,
@@ -145,7 +149,8 @@ from ported.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
     one_byte_hist_kernel,
 )
 from ported.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_base import (
-    HIST2_BLOCK_SIZE,
+    HIST2_SMEM_MODE,
+    hist2_block_size,
     hist2_one_byte_gather_kernel,
     hist2_one_byte_kernel,
 )
@@ -1395,7 +1400,7 @@ def launch_one_byte[bits: Int](
 
 
 
-def launch_hist2_one_byte[bits: Int](
+def launch_hist2_one_byte[bits: Int, smem_mode: Int = HIST2_SMEM_MODE](
     ctx: DeviceContext,
     mut blk: DeviceBlock,
     depth: Int,
@@ -1445,6 +1450,8 @@ def launch_hist2_one_byte[bits: Int](
     doubled target (`:267` against `hist_one_byte.cu:356`), so
     `replication_for` is called with `gather=False` on both arms here.
     """
+    comptime BLOCK = hist2_block_size[smem_mode]()
+
     var is_odd = stat_count % 2
     if is_odd == 1:
         # `PASS(Bits, 1)`: the one-stat PASS-family kernel covers stat 0.
@@ -1463,7 +1470,7 @@ def launch_hist2_one_byte[bits: Int](
 
     if depth == 0:
         if is_odd == 1:
-            ctx.enqueue_function[hist2_one_byte_kernel[bits, True]](
+            ctx.enqueue_function[hist2_one_byte_kernel[bits, True, smem_mode]](
                 blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
                 blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
                 Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
@@ -1472,10 +1479,10 @@ def launch_hist2_one_byte[bits: Int](
                 block_hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
                 Int32(max_leaves), Int32(stat_count),
                 grid_dim=(groups * replicas, n_live, pairs),
-                block_dim=(HIST2_BLOCK_SIZE, 1, 1),
+                block_dim=(BLOCK, 1, 1),
             )
         else:
-            ctx.enqueue_function[hist2_one_byte_kernel[bits, False]](
+            ctx.enqueue_function[hist2_one_byte_kernel[bits, False, smem_mode]](
                 blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
                 blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
                 Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
@@ -1484,11 +1491,11 @@ def launch_hist2_one_byte[bits: Int](
                 block_hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
                 Int32(max_leaves), Int32(stat_count),
                 grid_dim=(groups * replicas, n_live, pairs),
-                block_dim=(HIST2_BLOCK_SIZE, 1, 1),
+                block_dim=(BLOCK, 1, 1),
             )
     else:
         if is_odd == 1:
-            ctx.enqueue_function[hist2_one_byte_gather_kernel[bits, True]](
+            ctx.enqueue_function[hist2_one_byte_gather_kernel[bits, True, smem_mode]](
                 blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
                 blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
                 Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
@@ -1498,10 +1505,10 @@ def launch_hist2_one_byte[bits: Int](
                 block_hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
                 Int32(max_leaves), Int32(stat_count),
                 grid_dim=(groups * replicas, n_live, pairs),
-                block_dim=(HIST2_BLOCK_SIZE, 1, 1),
+                block_dim=(BLOCK, 1, 1),
             )
         else:
-            ctx.enqueue_function[hist2_one_byte_gather_kernel[bits, False]](
+            ctx.enqueue_function[hist2_one_byte_gather_kernel[bits, False, smem_mode]](
                 blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
                 blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
                 Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
@@ -1511,7 +1518,7 @@ def launch_hist2_one_byte[bits: Int](
                 block_hist.unsafe_ptr(), acc_i32.unsafe_ptr(), fixed_scale,
                 Int32(max_leaves), Int32(stat_count),
                 grid_dim=(groups * replicas, n_live, pairs),
-                block_dim=(HIST2_BLOCK_SIZE, 1, 1),
+                block_dim=(BLOCK, 1, 1),
             )
 
 
@@ -1598,7 +1605,9 @@ def replication_for(
     return rep
 
 
-def launch_histograms_for_blocks(
+def launch_histograms_for_blocks[
+    hist2_smem_mode: Int = HIST2_SMEM_MODE
+](
     ctx: DeviceContext,
     mut blocks: List[DeviceBlock],
     depth: Int,
@@ -1854,19 +1863,19 @@ def launch_histograms_for_blocks(
             # probe established that for the PASS family (64-fold block at
             # 8 bits: 2 of 4 features wrong).
             if blk.max_folds <= 32:
-                launch_hist2_one_byte[5](
+                launch_hist2_one_byte[5, hist2_smem_mode](
                     ctx, blk, depth, n_live, n_rows, stat_count, max_leaves,
                     sm_count, line, base, cindex, row_index, stats, p_off,
                     p_sz, ids, block_hist, acc_i32, fixed_scale,
                 )
             elif blk.max_folds <= 64:
-                launch_hist2_one_byte[6](
+                launch_hist2_one_byte[6, hist2_smem_mode](
                     ctx, blk, depth, n_live, n_rows, stat_count, max_leaves,
                     sm_count, line, base, cindex, row_index, stats, p_off,
                     p_sz, ids, block_hist, acc_i32, fixed_scale,
                 )
             elif blk.max_folds <= 128:
-                launch_hist2_one_byte[7](
+                launch_hist2_one_byte[7, hist2_smem_mode](
                     ctx, blk, depth, n_live, n_rows, stat_count, max_leaves,
                     sm_count, line, base, cindex, row_index, stats, p_off,
                     p_sz, ids, block_hist, acc_i32, fixed_scale,
@@ -1906,8 +1915,24 @@ def launch_histograms_for_blocks(
             TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
         ]()
 
+        # The hist_2 family under `HIST_SMEM_SHARED2_I32` drains its
+        # replicated flush through the Int32 accumulator EVEN UNDER FAST
+        # (see the DEVIATION BLOCK in `hist2_add_to_global_memory`), so the
+        # conversion must run for exactly the blocks their ladder sends to
+        # that family -- `POLICY_ONE_BYTE` at `maxBins <= 128` -- and for
+        # nothing else, keeping the FAST float path's measured ~7 ms/tree of
+        # accumulator reading off the binary/half-byte blocks.
+        var run_fixed_bridge = _flush_is_fixed_point
+
         @parameter
-        if _flush_is_fixed_point:
+        if (
+            hist2_smem_mode == HIST_SMEM_SHARED2_I32
+            and not _flush_is_fixed_point
+        ):
+            if blk.policy == POLICY_ONE_BYTE and blk.max_folds <= 128:
+                run_fixed_bridge = True
+
+        if run_fixed_bridge:
             ctx.enqueue_function[fixed_to_float_kernel](
                 acc_i32.unsafe_ptr(),
                 block_hist.unsafe_ptr(),
@@ -1997,7 +2022,9 @@ def resolve_split(
     )
 
 
-def run_tree_layout(
+def run_tree_layout[
+    hist2_smem_mode: Int = HIST2_SMEM_MODE
+](
     ctx: DeviceContext,
     n_rows: Int,
     fold_counts: List[Int],
@@ -2410,7 +2437,7 @@ def run_tree_layout(
                 dst_buf=ids_compute, src_ptr=h_ids_compute.unsafe_ptr()
             )
 
-            launch_histograms_for_blocks(
+            launch_histograms_for_blocks[hist2_smem_mode](
                 ctx, dblocks, depth, n_compute, n_rows, stat_count, max_leaves,
                 sm_count, fixed_scale,
                 cindex, row_index, stats, p_off, p_sz, ids_compute, dense_ids,

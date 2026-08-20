@@ -19,8 +19,124 @@ a thread: it never has to walk bins in order, because the walking already
 happened here.
 """
 
+from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from std.math import floor
+from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
+
+
+@always_inline
+def hist2_dither(pos: Int) -> Float32:
+    """A deterministic hash of the DOCUMENT POSITION, uniform in [0, 1).
+
+    The dither for `hist2_quantize`. Keyed on the row's position so it is
+    deterministic run to run and vendor to vendor (it depends on the data
+    layout, never on the launch geometry), and so the same row quantizes
+    IDENTICALLY at every tree depth, which keeps parent = child + sibling
+    exact to the integer."""
+    var h = UInt32(pos) * UInt32(2654435761)
+    h ^= h >> 16
+    h = h * UInt32(2246822519)
+    h ^= h >> 13
+    return Float32(Int(h >> 8)) * Float32(5.9604645e-08)  # / 2^24
+
+
+@always_inline
+def hist2_quantize(val: Float32, fixed_scale: Float32, u: Float32) -> Int32:
+    """DETERMINISTIC DITHERED QUANTIZATION, `floor(val*scale + u(pos))` --
+    and every word of that is load-bearing, because both simpler rules
+    FAILED MEASURABLY:
+
+      TRUNCATION (`Int32(val * scale)`) loses up to `1/scale` per row,
+      always toward zero, so a leaf's histogram total ran ~0.16% short of
+      the EXACT `partStats` total that `compute_scores` subtracts it from
+      (`sumRight = partStat - sumLeft`, `compute_scores.cu:97-99`). The
+      deficit surfaces as phantom mass past every bin, largest at the last
+      one; measured at 300k-650k rows x 100 features, the fit locked onto
+      (feature 98, bin 127) on three DIFFERENT datasets and stopped at
+      depth 1.
+
+      ROUND-TO-NEAREST is still biased whenever a stat VALUE repeats (a
+      unit weight plane repeats it 800,000 times): every 1.0 became
+      537/536.87, measured +52 phantom weight per 217k rows.
+
+    `E[floor(x + U)] = x` exactly for uniform U in [0,1), for any value
+    distribution, so the dithered cell error is zero-mean and grows as
+    sqrt(rows), not rows. An integer-valued `val * scale` is unchanged by
+    any u < 1, which is what keeps `hist2_check`'s exactness argument
+    intact. The +1 worst case per row stays inside `choose_scale`'s three
+    headroom bits. Called ONCE per (row, stat) at load time -- computing it
+    at every add cost a measured quarter of the tree.
+
+    WRITTEN AS `floor(x)` PLUS A FRACTION COMPARE, not `floor(x + u)`: the
+    one-expression form ROUNDS in the addition before `floor` sees it, so an
+    integral `x` with `u` within half a Float32 spacing of 1 crossed the
+    integer boundary -- 14 cells of `check-hist2`'s exact fixture moved on
+    the first run. `x - floor(x)` is exact in Float32 (the operands are
+    within a factor of two), the compare never manufactures a crossing, and
+    an integral `x` has fraction 0, which no `u < 1` can lift to 1."""
+    var scaled = val * fixed_scale
+    var base = floor(scaled)
+    var q = Int32(base)
+    if scaled - base + u >= Float32(1.0):
+        q += Int32(1)
+    return q
+
+
+def hist2_smem_add[
+    dt: DType
+](
+    smem: UnsafePointer[
+        Scalar[dt],
+        address_space = AddressSpace.SHARED,
+        origin=MutUntrackedOrigin,
+    ],
+    offset: Int,
+    val: Float32,
+    qval: Int32,
+):
+    """THE one factored shared-memory accumulation site of the hist_2 family.
+
+    NO CATBOOST COUNTERPART for the Int32 arm. Every `AddPointsImpl` in
+    `hist_2_one_byte_{5,6,7}bit.cu` lands its stat with a plain float add
+    into a warp-PRIVATE slice; that is the `DType.float32` arm here,
+    verbatim. The `DType.int32` arm is the `HIST_SMEM_SHARED2_I32` matrix
+    row (`mojo_only/kernel_matrix.hist_smem_mode_for`): the slice is shared
+    by TWO warps, so the add must be atomic, and Metal has no local float
+    atomics ("Unsupported local float atomic operation", scratchpad
+    `histshare_probe.mojo`), so it is a local Int32 atomic in fixed point.
+    `qval` is the row's stat through `hist2_quantize`, computed once per
+    (row, stat) at load time; the float arm ignores it, the Int32 arm adds
+    it and ignores `val`.
+
+    ================= DEVIATION BLOCK =================
+    Theirs: `Histogram[offset] += stat;` -- private slice, plain float add.
+    Ours (Apple / bit-identical column only): `Atomic.fetch_add` of the
+    row's `hist2_quantize`d stat into a 2-warp-shared slice. Measured on the
+    M4 (100M hashed scatter-adds, interleaved, `histshare_probe.mojo`):
+    warp-private float 32 KB = 46.5 G upd/s, 2-warp-shared Int32 16 KB =
+    90.2 G upd/s -- 1.94x. NVIDIA/AMD columns compile the float arm and are
+    untouched. The `fixed_scale` behind `qval` must satisfy
+    `mojo_only/fixed_point.mojo`'s bound (`choose_scale` of the plane's sum
+    of |values|); every cell is a partial sum over a subset of all rows, so
+    it stays under 2^28 - 1 plus one dither unit per row and Int32 cannot
+    overflow.
+    ===================================================
+
+    Everything AROUND this call -- pass structure, bin decoding, slot
+    arithmetic, sync phases -- is theirs in both modes; only where the add
+    lands differs, which is why this is one function instead of a branch in
+    each accumulator.
+    """
+
+    @parameter
+    if dt == DType.int32:
+        _ = Atomic.fetch_add(
+            smem.unsafe_offset(offset), rebind[Scalar[dt]](qval)
+        )
+    else:
+        smem[offset] = smem[offset] + rebind[Scalar[dt]](val)
 
 
 def substract_histograms_kernel(

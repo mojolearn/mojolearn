@@ -65,6 +65,8 @@ def mse_kernel(
     stats: MutPointer[Float32, MutAnyOrigin],
     function_value: MutPointer[Float32, MutAnyOrigin],
     compute_fv: Int32,
+    plane_magnitudes: MutPointer[Float32, MutAnyOrigin],
+    compute_magnitudes: Int32,
 ):
     """`PointwiseTargetImpl<TRmseTarget>`, copied, writing straight into the
     stats planes. The name is kept from when this file cited `MseImpl`; see
@@ -110,6 +112,20 @@ def mse_kernel(
     The block reduce goes through `max.gpu.primitives.block.sum` where
     theirs is `FastInBlockReduce`, the same substitution
     `partitions_reduce.mojo` records.
+
+    `plane_magnitudes` / `compute_magnitudes` have NO CATBOOST COUNTERPART,
+    like the scale they feed: they are the two sums of absolute values --
+    `plane_magnitudes[0] = sum |weight plane|`, `[1] = sum |der plane|` --
+    that `mojo_only/fixed_point.choose_scale` is specified against, reduced
+    here by the SAME block-reduce-plus-one-atomicAdd shape as
+    `functionValue` so the fixed-point builds get real magnitudes with no
+    host loop and no full-stats readback (the host loop this replaces cost a
+    6.4 MB copy plus a 2 * n_rows walk per tree at 800k rows). Accumulated
+    in Float32 through a float atomic, so the total can round DOWN by a few
+    parts in 1e6 relative; `choose_scale`'s three headroom bits are a factor
+    of eight against exactly this kind of slack, as its contract audit in
+    `doc_parallel_boosting.mojo` prices out. `compute_magnitudes` stands in
+    for a null-pointer test, exactly as `compute_fv` does.
     ===================================================
     """
     var size = Int(size_in)
@@ -140,3 +156,17 @@ def mse_kernel(
         var total = block_sum[block_size=MSE_BLOCK_SIZE](score)
         if thread_idx.x == 0:
             _ = Atomic.fetch_add(function_value, total)
+
+    # the fixed-point scale's inputs: sum of |plane| for both stat planes,
+    # same reduce shape as `functionValue` above.
+    if compute_magnitudes != Int32(0):
+        var w_abs = Float32(0.0)
+        var g_abs = Float32(0.0)
+        if in_range:
+            w_abs = abs(weight)
+            g_abs = abs(weight * (relev - val))
+        var w_total = block_sum[block_size=MSE_BLOCK_SIZE](w_abs)
+        var g_total = block_sum[block_size=MSE_BLOCK_SIZE](g_abs)
+        if thread_idx.x == 0:
+            _ = Atomic.fetch_add(plane_magnitudes, w_total)
+            _ = Atomic.fetch_add(plane_magnitudes.unsafe_offset(1), g_total)

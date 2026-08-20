@@ -93,6 +93,9 @@ from ported.gpu_util.kernel.fill import launch_make_sequence
 from ported.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
     BUILD_MODE as HIST_BUILD_MODE,
 )
+from ported.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_base import (
+    HIST2_SMEM_IS_I32,
+)
 from ported.targets.kernel.pointwise_targets import MSE_BLOCK_SIZE, mse_kernel
 
 
@@ -164,19 +167,24 @@ def fit(
     var fv = ctx.enqueue_create_buffer[DType.float32](1)
     var h_fv = ctx.enqueue_create_host_buffer[DType.float32](1)
 
-    # THE FIXED-POINT BOUND, for the IDENTICAL build only. The integer
-    # flush needs a scale bounded by `sum over all rows of abs(plane)`,
-    # read back from the plane the target kernel actually wrote. The FAST
-    # build flushes through CatBoost's float atomic (which Metal HAS; the
-    # sentence that stood here claiming otherwise was the falsified import
-    # -path reading), never touches the accumulator, and skips the readback
-    # and both host scans at comptime.
+    # THE FIXED-POINT BOUND, for every build whose histogram quantizes: the
+    # IDENTICAL flush, and the Apple column's `HIST_SMEM_SHARED2_I32`
+    # shared-memory accumulation, which quantizes at `fixed_scale` even
+    # under FAST (`hist_smem_mode_for` in `mojo_only/kernel_matrix.mojo`).
+    # The scale must be bounded by `sum over all rows of abs(plane)`, and
+    # the two plane magnitudes are computed ON THE DEVICE by `mse_kernel`'s
+    # magnitude reduce -- the same block-reduce-plus-one-atomicAdd shape as
+    # its `functionValue` -- into TWO scalars read back below. This replaces
+    # a full-stats readback (6.4 MB at 800k rows) plus a `2 * n_rows` host
+    # loop per tree. A build that quantizes nothing (NVIDIA/AMD FAST, whose
+    # hist_2 arm keeps CatBoost's warp-private float design) skips the
+    # launch flag, the copy and the sync at comptime.
     comptime _flush_fixed = deterministic_flush_for[
         TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
     ]()
-    var h_stats = ctx.enqueue_create_host_buffer[DType.float32](
-        (stat_count * n_rows) if _flush_fixed else 1
-    )
+    comptime _needs_magnitudes = _flush_fixed or HIST2_SMEM_IS_I32
+    var mags = ctx.enqueue_create_buffer[DType.float32](2)
+    var h_mags = ctx.enqueue_create_host_buffer[DType.float32](2)
 
     var losses = List[Float64]()
     # their `TVector<TResultModel>* result`, the ensemble being built
@@ -189,12 +197,15 @@ def fit(
         # gradients, so the value this iteration reads is the loss of the
         # cursor as it stands -- i.e. after the PREVIOUS tree.
         ctx.enqueue_memset(fv, Float32(0.0))
+        ctx.enqueue_memset(mags, Float32(0.0))
         ctx.enqueue_function[mse_kernel](
             targets.unsafe_ptr(), weights.unsafe_ptr(), Int32(n_rows),
             cursor.unsafe_ptr(),
             Int32(1) if has_weights else Int32(0),
             stats.unsafe_ptr(),
             fv.unsafe_ptr(), Int32(1),
+            mags.unsafe_ptr(),
+            Int32(1) if _needs_magnitudes else Int32(0),
             grid_dim=(n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE,
             block_dim=MSE_BLOCK_SIZE,
         )
@@ -205,13 +216,6 @@ def fit(
         # growth reorders rows in place, so the index restarts each tree.
         # their `MakeSequence` (`fill.cu:47`), device-side.
         launch_make_sequence(ctx, UInt32(0), row_index, n_rows)
-
-        @parameter
-        if _flush_fixed:
-            # The gradients the histogram will accumulate, read back so the
-            # fixed-point scale can be bounded by them. IDENTICAL only.
-            ctx.enqueue_copy(dst_ptr=h_stats.unsafe_ptr(), src_buf=stats)
-            ctx.synchronize()
 
         # `sum over all rows of abs(...)`, per plane, which is what
         # `choose_scale` is specified against. Plane 0 is the WEIGHT plane
@@ -238,14 +242,21 @@ def fit(
         # SPLITS go bad. That is exactly a model that stays monotone, still
         # beats the mean, and is several times worse than it should be.
         #
-        # CONTRACT AUDIT, 2026-08-19. Every caller of `choose_scale` on the
-        # tree path was re-read against `mojo_only/fixed_point.mojo`'s stated
-        # precondition, "sum over all rows of abs(value) for the plane being
-        # accumulated":
+        # The `HIST_SMEM_SHARED2_I32` matrix row widened who depends on this:
+        # the Apple column's hist_2 kernels quantize IN SHARED MEMORY at
+        # `fixed_scale` even under `NUMERIC_FAST`, so an unbounded scale now
+        # breaks the shipped Apple build, not just the IDENTICAL opt-in.
+        # `_needs_magnitudes` above is that union.
         #
-        #   this file                      sum of |stats| read back from the
-        #                                  plane `mse_kernel` wrote, both
-        #                                  planes, per iteration -- SOUND
+        # CONTRACT AUDIT, 2026-08-19, updated for the device reduction.
+        # Every caller of `choose_scale` on the tree path against
+        # `mojo_only/fixed_point.mojo`'s stated precondition, "sum over all
+        # rows of abs(value) for the plane being accumulated":
+        #
+        #   this file                      sum of |stats| reduced ON DEVICE
+        #                                  by `mse_kernel` from the exact
+        #                                  planes it wrote, both planes, per
+        #                                  iteration -- SOUND
         #   mojo_only/level_check.mojo     abs-accumulates a signed generator
         #                                  at :210-218 and :344-352 -- SOUND
         #   mojo_only/level_bench.mojo     same, three sites -- SOUND
@@ -255,11 +266,11 @@ def fit(
         # bound: a gather is a bijection on rows, so the sum of magnitudes is
         # invariant, and the sibling subtraction cannot exceed the parent's
         # bound either. The three reserved headroom bits cover the rest,
-        # including the one place the bound is not exact: these sums are
-        # accumulated in Float64 and narrowed to Float32 at the call below, so
-        # a round DOWN yields a scale up to one part in 2^24 too large.
-        # `SCALE_HEADROOM_BITS = 3` is a factor of eight against a relative
-        # error of 6e-8.
+        # including the one place the bound is not exact: the device reduce
+        # accumulates in Float32 through block sums and a float atomic, so
+        # the total can round DOWN by a few parts in 1e6 relative -- a scale
+        # at most that much too large. `SCALE_HEADROOM_BITS = 3` is a factor
+        # of eight against it, five orders of magnitude of slack.
         #
         # If another lane restores the float atomic on the FAST arm, this
         # block does NOT become dead. `DETERMINISM_DEVICE` is the default and
@@ -270,18 +281,12 @@ def fit(
         var gradient_magnitude = Float64(0.0)
 
         @parameter
-        if _flush_fixed:
-            for i in range(n_rows):
-                var w = Float64(h_stats.unsafe_ptr().unsafe_load(i))
-                if w < 0.0:
-                    w = -w
-                weight_magnitude += w
-                var g = Float64(
-                    h_stats.unsafe_ptr().unsafe_load(n_rows + i)
-                )
-                if g < 0.0:
-                    g = -g
-                gradient_magnitude += g
+        if _needs_magnitudes:
+            # TWO floats, not 6.4 MB: the one drain the scale still costs.
+            ctx.enqueue_copy(dst_ptr=h_mags.unsafe_ptr(), src_buf=mags)
+            ctx.synchronize()
+            weight_magnitude = Float64(h_mags.unsafe_ptr().unsafe_load(0))
+            gradient_magnitude = Float64(h_mags.unsafe_ptr().unsafe_load(1))
 
         # `optimizer.Fit(...)` then `Estimate` then `Rescale` then
         # `AppendModels`, all four inside `run_tree_layout`, in their order.
@@ -327,6 +332,7 @@ def fit(
         Int32(1) if has_weights else Int32(0),
         stats.unsafe_ptr(),
         fv.unsafe_ptr(), Int32(1),
+        mags.unsafe_ptr(), Int32(0),
         grid_dim=(n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE,
         block_dim=MSE_BLOCK_SIZE,
     )

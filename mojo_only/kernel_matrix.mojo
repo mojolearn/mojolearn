@@ -436,6 +436,113 @@ def deterministic_flush_for[column: Int, identical: Bool]() -> Bool:
     """
     return identical
 
+
+# ---------------------------------------------------------------------------
+# THE hist_2 SHARED-MEMORY ACCUMULATION ROW (Apple's 32 KB wall, priced)
+# ---------------------------------------------------------------------------
+
+#: CatBoost's design: every warp accumulates into a PRIVATE 1024-float
+#: shared-memory slice with plain (non-atomic) float adds
+#: (`hist_2_one_byte_base.cuh:20-22`, the per-bit `SliceOffset`s).
+comptime HIST_SMEM_WARP_PRIVATE_F32 = 0
+
+#: The Apple variant: one 1024-slot slice is SHARED BY TWO WARPS and the
+#: adds are LOCAL Int32 atomics in fixed point, halving shared memory per
+#: thread. See `hist_smem_mode_for` for the measurement that bought it.
+comptime HIST_SMEM_SHARED2_I32 = 1
+
+
+def hist_smem_mode_for[column: Int, identical: Bool]() -> Int:
+    """NUMERIC row: HOW the hist_2 family accumulates in shared memory.
+
+    Integer fixed-point accumulation is a DIFFERENT ARITHMETIC than float
+    adds -- each stat value is quantized `Int32(val * fixed_scale)` before it
+    lands -- so this is a numeric row by the one question, not a scheduling
+    knob that happens to change occupancy.
+
+    WHY THE APPLE COLUMN LEAVES THEIR DESIGN. CatBoost's warp-private slices
+    cost 32 floats of shared memory per thread; NVIDIA's 48 KB and AMD's
+    64 KB hold that at their `BlockSize = 384`
+    (`hist_2_one_byte_base.cuh:169`). Metal's 32 KB threadgroup ceiling caps
+    the same design at 256 resident threads per core -- 12.5% occupancy, a
+    wall built into the layout, not a tuning knob. Measured on the M4
+    (scratchpad `histshare_probe.mojo`, 100M hashed scatter-adds,
+    interleaved): warp-private float at 32 KB = 46.5 G updates/s; ONE
+    histogram shared by TWO warps with local Int32 atomic adds at 16 KB =
+    90.2 G upd/s -- **1.94x**, because occupancy doubles and Metal's local
+    integer atomics are fast. Metal has NO local float atomics ("Unsupported
+    local float atomic operation"), so the shared-slice variant is only
+    reachable through the integer domain.
+
+    So: the APPLE column takes `HIST_SMEM_SHARED2_I32`; NVIDIA and AMD keep
+    CatBoost's `HIST_SMEM_WARP_PRIVATE_F32`, which their shared-memory
+    budgets fit and their measured design chose. `BIT_IDENTICAL` takes the
+    shared-Int32 variant too: integer addition is associative and exact, so
+    the accumulated histogram cannot depend on lane interleaving, block
+    arrival order, or vendor -- which also makes the Apple arm DETERMINISTIC
+    RUN TO RUN, unlike CatBoost's own float path.
+
+    THE RANGE CONTRACT RIDES ALONG. Quantizing at `fixed_scale` is safe only
+    under `mojo_only/fixed_point.mojo`'s bound: `fixed_scale` must come from
+    `choose_scale(sum over all rows of abs(plane))`, so every shared-memory
+    cell -- a partial sum over a SUBSET of one leaf's rows, and any leaf's
+    rows are a subset of all rows -- stays at or below `SCALE_LIMIT`
+    (2^28 - 1, three headroom bits; `hist2_quantize`'s dither adds at most
+    +1 per row, inside the same headroom). A caller that passes an unbounded
+    scale overflows Int32 silently; `doc_parallel_boosting.fit` computes the
+    two plane magnitudes on the device for exactly this row.
+
+    THE QUANTIZER IS `hist2_quantize` (histogram_utils.mojo), dithered floor
+    keyed on the document position -- NOT a bare `Int32(val * scale)`. Plain
+    truncation and round-to-nearest both accumulated a value-correlated bias
+    linear in the row count that `compute_scores`'s exact
+    `partStat - sumLeft` read as phantom mass; its docstring carries the
+    measured failures.
+    """
+
+    comptime if identical:
+        return HIST_SMEM_SHARED2_I32  # the BIT_IDENTICAL column's value
+    elif column == COLUMN_APPLE or column == COLUMN_BIT_IDENTICAL:
+        return HIST_SMEM_SHARED2_I32
+    else:
+        return HIST_SMEM_WARP_PRIVATE_F32
+
+
+def hist2_block_size_for[column: Int, smem_mode: Int]() -> Int:
+    """SCHEDULING row bounded by the NUMERIC budget, per accumulation mode.
+
+    Under `HIST_SMEM_WARP_PRIVATE_F32` this is `block_size_for` unchanged:
+    the largest block whose `32 * 4` bytes/thread fit the column's budget,
+    capped at CatBoost's 384 (256 on Apple's 32 KB).
+
+    Under `HIST_SMEM_SHARED2_I32` two warps share one 4 KB slice, so the
+    cost is 64 bytes/thread and the block can DOUBLE at the same footprint.
+    Capped at 512 rather than CatBoost's 384: the shared variant exists to
+    buy occupancy (the 1.94x probe above is an occupancy result), 512 is the
+    exact block that fills Apple's 32 KB, and the reduce/writeback stages'
+    256-thread participation caps are valid at any block at or above 256.
+    Measured on the M4, interleaved trees at 800k x 100 x 128 folds, two
+    builds ABAB: 512 threads/32 KB (one resident block) and 256 threads/
+    16 KB (two resident blocks) are INDISTINGUISHABLE -- i32 medians 32.1 /
+    33.1 vs 32.7 ms/tree, ranges fully overlapping -- because both put the
+    same 512 threads on a core, which is what the probe said pays. 512 is
+    kept as the single configuration; a future vendor measurement lands
+    here, not in a kernel.
+
+    In the shared-Int32 mode the block size (hence slice count) is PURE
+    scheduling: integer accumulation is associative, so how many slices the
+    adds spread over cannot change the reduced histogram. In the float mode
+    it is numeric via the replication count, which is why that side stays
+    pinned to `block_size_for`.
+    """
+
+    comptime if smem_mode == HIST_SMEM_SHARED2_I32:
+        comptime limit = column_shared_limit(column) // 64
+        return 512 if limit >= 512 else limit
+    else:
+        return block_size_for[K_HIST_2_ONE_BYTE, column]()
+
+
 def replicas_for(hist_cells: Int) -> Int:
     """DELETED IN SPIRIT. Do not call this.
 

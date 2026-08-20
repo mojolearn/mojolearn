@@ -19,7 +19,10 @@ WHY EXACTNESS IS AVAILABLE HERE, IN EITHER BUILD MODE. Every stat value is
 an INTEGER (hashed, scattered, but integral), every cell's sum of magnitudes
 stays far below 2^24, and `fixed_scale` is a power of two. Integer-valued
 Float32 sums below 2^24 are exact under ANY summation order, float atomics
-included, and `Int32(val * 64.0)` of such a value is exact too. So under
+included, and `hist2_quantize(val, 64.0, u)` of such a value is exact too
+for any dither u < 1 (an integral input has fraction zero, and the
+quantizer compares the fraction rather than adding u into the value, which
+is what makes that claim exact rather than approximate). So under
 `NUMERIC_FAST` (CatBoost's float atomic) and `NUMERIC_IDENTICAL` (the Int32
 flush) alike, both families must land on the identical bits, and the compare
 below is `!=`, not a tolerance. Hashed per-row values, never uniform:
@@ -48,11 +51,30 @@ vacuous if the dispatch quietly ran the same kernel twice:
    single-block store, `hist_2_one_byte_base.cuh:135-141`), so reach is
    per-branch.
 
-The level mixes block counts on purpose: leaf 0 replicates four ways, leaf 1
-two ways, leaf 2 cannot replicate, so the atomic and the plain-store flush
-are both exercised INSIDE each arm, for both families (both families'
-`BlockLoadSize` resolves to 4096 rows here, so the same sizes split the same
-way).
+The level mixes block counts on purpose: leaf 0 replicates in every arm and
+leaf 2 cannot replicate in any, so the atomic and the plain-store flush are
+both exercised INSIDE each arm, for both families AND both accumulation
+modes (each arm's `BlockLoadSize` is derived from its own block size, so the
+reach is predicted per arm below rather than assumed shared).
+
+3. ACCUMULATION MODES, per the `hist_smem_mode_for` matrix row
+   (PORTING_RULES 8: the row selects a kernel variant, so the checks
+   enumerate it). BOTH modes -- CatBoost's warp-private float
+   (`HIST_SMEM_WARP_PRIVATE_F32`) and the Apple/bit-identical 2-warp-shared
+   Int32 (`HIST_SMEM_SHARED2_I32`) -- run in this one binary through
+   `launch_hist2_one_byte[bits, mode]`, on the direct and gather arms, and
+   must agree EXACTLY with each other, with the host tally and with the
+   dispatch: the integer arm quantizes `Int32(val * 64.0)` of
+   integer-valued Float32, which is exact, so `!=` still applies.
+   Reach per mode is proven by a SCALE FINGERPRINT: a run with
+   `fixed_scale` poisoned to 2^30 must move the Int32 arm (its shared-
+   memory quantization wraps) and must NOT move the float arm under the
+   float flush (nothing on that path reads the scale). The DISPATCH arm is
+   run with the same poisoned scale and must move exactly iff the matrix
+   row (or the integer flush) says the build quantizes -- that is the
+   expectation FOLLOWING THE BUILD, and it is what proves the dispatch
+   launched the mode the row selects. The stat sabotage of REACH 2 is also
+   repeated per mode, so both flush branches are covered inside each mode.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
@@ -70,8 +92,16 @@ from ported.gpu_data.kernel.binarize import (
     WRITE_BLOCK_SIZE,
     write_compressed_index_kernel,
 )
+from mojo_only.kernel_matrix import (
+    HIST_SMEM_SHARED2_I32,
+    HIST_SMEM_WARP_PRIVATE_F32,
+    TARGET_COLUMN,
+    deterministic_flush_for,
+)
+from mojo_only.numerics import NUMERIC_IDENTICAL
 from ported.methods.greedy_subsets_searcher.greedy_search_helper import (
     DeviceBlock,
+    launch_hist2_one_byte,
     launch_histograms_for_blocks,
     launch_one_byte,
     upload_blocks,
@@ -82,7 +112,10 @@ from ported.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     zero_buffer_kernel,
 )
 from ported.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_base import (
+    BUILD_MODE as HIST2_BUILD_MODE,
     HIST2_MIN_DOCS_PER_BLOCK,
+    HIST2_SMEM_MODE,
+    hist2_min_docs,
 )
 from ported.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
     ONE_BYTE_BLOCK_SIZE,
@@ -112,6 +145,24 @@ comptime FINGERPRINT_ROWS = 64
 #: Integral sabotage, big enough that a moved cell cannot be mistaken for
 #: noise, small enough that every sum stays exact (PORTING.md 20).
 comptime POISON = 4096
+
+#: The per-mode `BlockLoadSize`s. The Int32 mode's doubled block doubles its
+#: value, so the partition sizes below are derived from the LARGER of the
+#: two and reach is predicted per mode.
+comptime MIN_DOCS_F32 = hist2_min_docs[HIST_SMEM_WARP_PRIVATE_F32]()
+comptime MIN_DOCS_I32 = hist2_min_docs[HIST_SMEM_SHARED2_I32]()
+
+#: The scale fingerprint: 2^30 wraps any cell holding more than a couple of
+#: units of stat, so a mode that quantizes in shared memory cannot return
+#: its good-run answer, and a mode that never reads the scale cannot move.
+comptime POISON_SCALE = Float32(1073741824.0)
+
+#: Whether the FLOAT-accumulation arm reads `fixed_scale` anywhere: only in
+#: its writeback, and only under the integer flush. The scale-fingerprint
+#: expectations follow the build through this and `HIST2_SMEM_MODE`.
+comptime FLUSH_IS_FIXED = deterministic_flush_for[
+    TARGET_COLUMN, HIST2_BUILD_MODE == NUMERIC_IDENTICAL
+]()
 
 
 def hash_bin(r: Int, f: Int, folds: Int) -> Int:
@@ -267,25 +318,29 @@ def check_hist2_one_byte[bits: Int](fold_count: Int) raises:
                 " policy; this check would be testing a different kernel"
             )
 
-    # Three partitions sized so the level mixes block counts. Both families'
-    # BlockLoadSize is 4096 rows here, asserted, so one size list exercises
-    # `blockCount > 1` and `blockCount == 1` in both.
-    if HIST2_MIN_DOCS_PER_BLOCK != PASS_MIN_DOCS_PER_BLOCK:
+    # Three partitions sized so the level mixes block counts IN EVERY ARM.
+    # The float mode's BlockLoadSize matches the PASS family's, asserted;
+    # the Int32 mode's doubled block doubles its own, so leaf 0 is sized by
+    # the LARGER of the two (multi-block everywhere) and leaf 2 one short of
+    # the SMALLER (single-block everywhere).
+    if MIN_DOCS_F32 != PASS_MIN_DOCS_PER_BLOCK:
         raise Error(
-            "the two families' BlockLoadSize diverged ("
-            + String(HIST2_MIN_DOCS_PER_BLOCK) + " vs "
+            "the float-mode hist_2 BlockLoadSize diverged from the PASS"
+            " family's (" + String(MIN_DOCS_F32) + " vs "
             + String(PASS_MIN_DOCS_PER_BLOCK)
             + "); re-derive this check's partition sizes"
         )
-    comptime MIN_DOCS = HIST2_MIN_DOCS_PER_BLOCK
+    comptime MIN_MAX = (
+        MIN_DOCS_I32 if MIN_DOCS_I32 > MIN_DOCS_F32 else MIN_DOCS_F32
+    )
     var off = List[Int]()
     var siz = List[Int]()
     off.append(0)
-    siz.append(4 * MIN_DOCS)
-    off.append(4 * MIN_DOCS)
-    siz.append(MIN_DOCS + 1)
-    off.append(5 * MIN_DOCS + 1)
-    siz.append(MIN_DOCS - 1)
+    siz.append(4 * MIN_MAX)
+    off.append(4 * MIN_MAX)
+    siz.append(MIN_DOCS_F32 + 1)
+    off.append(4 * MIN_MAX + MIN_DOCS_F32 + 1)
+    siz.append(MIN_DOCS_F32 - 1)
     var n_live = len(off)
     var n_rows = off[n_live - 1] + siz[n_live - 1]
 
@@ -303,31 +358,41 @@ def check_hist2_one_byte[bits: Int](fold_count: Int) raises:
     var groups = (N_FEATURES + 3) // 4
     var h2_rep = predicted_replicas(groups, n_live, STAT_COUNT // 2)
     var pass_rep = predicted_replicas(groups, n_live, STAT_COUNT)
-    var max_active = 1
-    var min_active = 1 << 30
-    for k in range(n_live):
-        var a = (siz[k] + MIN_DOCS - 1) // MIN_DOCS
-        if a > h2_rep:
-            a = h2_rep
-        print("    leaf", k, "size", siz[k], "-> active blocks", a)
-        if a > max_active:
-            max_active = a
-        if a < min_active:
-            min_active = a
+    var mode_min_docs = List[Int]()
+    mode_min_docs.append(MIN_DOCS_F32)
+    mode_min_docs.append(MIN_DOCS_I32)
+    for m in range(len(mode_min_docs)):
+        var min_docs = mode_min_docs[m]
+        var max_active = 1
+        var min_active = 1 << 30
+        for k in range(n_live):
+            var a = (siz[k] + min_docs - 1) // min_docs
+            if a > h2_rep:
+                a = h2_rep
+            print(
+                "    mode", m, "leaf", k, "size", siz[k],
+                "-> active blocks", a,
+            )
+            if a > max_active:
+                max_active = a
+            if a < min_active:
+                min_active = a
+        if max_active < 2:
+            raise Error(
+                "no partition replicates in mode " + String(m) + ", so its"
+                " multi-block flush is never reached; raise the partition"
+                " sizes"
+            )
+        if min_active > 1:
+            raise Error(
+                "every partition replicates in mode " + String(m) + ", so"
+                " its single-block store is never reached; shrink a"
+                " partition"
+            )
     print(
         "  replicas: hist_2 grid", h2_rep, "(pairs axis 1), PASS grid",
         pass_rep, "(stats axis 2)",
     )
-    if max_active < 2:
-        raise Error(
-            "no partition replicates, so the multi-block flush is never"
-            " reached; raise the partition sizes"
-        )
-    if min_active > 1:
-        raise Error(
-            "every partition replicates, so the single-block store is never"
-            " reached; shrink a partition"
-        )
 
     # ---- the two compressed indexes: base and fingerprint ---------------
     var host_bin = List[List[Int]]()
@@ -622,10 +687,184 @@ def check_hist2_one_byte[bits: Int](fold_count: Int) raises:
         " the hist_2 writeback are reached"
     )
 
+    # ---- REACH 3: BOTH ACCUMULATION MODES, exact, with a per-mode reach
+    # fingerprint. Everything below runs in this one binary; the matrix row
+    # only decides which mode the DISPATCH launches, and the last block
+    # proves it launched that one.
+    upload_stats(ctx, stats, host_w, host_g, n_rows)
+    print(
+        "  accumulation modes (hist_smem_mode_for row; the build's dispatch"
+        " mode is", HIST2_SMEM_MODE, "):",
+    )
+    var m_f32 = run_mode_arm[bits, HIST_SMEM_WARP_PRIVATE_F32](
+        ctx, dblocks, 0, n_live, n_rows, cindex_base, row_index, stats,
+        p_off, p_sz, ids, hist, acc, block_hist, cells, zf, zi,
+    )
+    var m_i32 = run_mode_arm[bits, HIST_SMEM_SHARED2_I32](
+        ctx, dblocks, 0, n_live, n_rows, cindex_base, row_index, stats,
+        p_off, p_sz, ids, hist, acc, block_hist, cells, zf, zi,
+    )
+    wrong = compare_exact(m_f32, want_base, String("warp-private f32 direct"))
+    wrong += compare_exact(
+        m_i32, want_base, String("2-warp-shared i32 direct")
+    )
+    var cross_mode = diff_cells(m_i32, m_f32, total)
+    var cross_disp = diff_cells(m_i32, b_h2, total)
+    print(
+        "    modes cross-agree on", total, "cells:",
+        len(cross_mode) == 0, " and match the dispatch:",
+        len(cross_disp) == 0,
+    )
+    if wrong != 0 or len(cross_mode) != 0 or len(cross_disp) != 0:
+        raise Error(
+            "the two hist_2 accumulation modes disagree (or miss the host"
+            " tally) on the DIRECT arm; the shared-Int32 variant is wrong"
+        )
+
+    for r in range(n_rows):
+        hi.unsafe_ptr().unsafe_store(r, UInt32(perm[r]))
+    ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
+    ctx.synchronize()
+    var mg_f32 = run_mode_arm[bits, HIST_SMEM_WARP_PRIVATE_F32](
+        ctx, dblocks, 1, n_live, n_rows, cindex_base, row_index, stats,
+        p_off, p_sz, ids, hist, acc, block_hist, cells, zf, zi,
+    )
+    var mg_i32 = run_mode_arm[bits, HIST_SMEM_SHARED2_I32](
+        ctx, dblocks, 1, n_live, n_rows, cindex_base, row_index, stats,
+        p_off, p_sz, ids, hist, acc, block_hist, cells, zf, zi,
+    )
+    wrong = compare_exact(mg_f32, want_perm, String("warp-private f32 gather"))
+    wrong += compare_exact(
+        mg_i32, want_perm, String("2-warp-shared i32 gather")
+    )
+    var cross_mode_g = diff_cells(mg_i32, mg_f32, total)
+    print(
+        "    gather modes cross-agree on", total, "cells:",
+        len(cross_mode_g) == 0,
+    )
+    if wrong != 0 or len(cross_mode_g) != 0:
+        raise Error(
+            "the two hist_2 accumulation modes disagree (or miss the host"
+            " tally) on the GATHER arm; the shared-Int32 variant is wrong"
+        )
+    for r in range(n_rows):
+        hi.unsafe_ptr().unsafe_store(r, UInt32(r))
+    ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
+    ctx.synchronize()
+
+    # THE SCALE FINGERPRINT: where does the add land? A poisoned
+    # `fixed_scale` (2^30) wraps any arm that QUANTIZES -- the Int32 mode in
+    # shared memory always, the float mode only in its writeback and only
+    # under the integer flush -- and cannot touch an arm that never reads
+    # the scale. Sabotage per branch, PORTING_RULES 7.
+    var sf_i32 = run_mode_arm[bits, HIST_SMEM_SHARED2_I32](
+        ctx, dblocks, 0, n_live, n_rows, cindex_base, row_index, stats,
+        p_off, p_sz, ids, hist, acc, block_hist, cells, zf, zi,
+        scale=POISON_SCALE,
+    )
+    var i32_moved = diff_cells(sf_i32, m_i32, total)
+    if len(i32_moved) == 0:
+        raise Error(
+            "a wrecked fixed_scale did not move the shared-Int32 arm, so"
+            " that arm is NOT quantizing in shared memory: the i32 mode's"
+            " adds are not landing where this check thinks"
+        )
+    var sf_f32 = run_mode_arm[bits, HIST_SMEM_WARP_PRIVATE_F32](
+        ctx, dblocks, 0, n_live, n_rows, cindex_base, row_index, stats,
+        p_off, p_sz, ids, hist, acc, block_hist, cells, zf, zi,
+        scale=POISON_SCALE,
+    )
+    var f32_moved = diff_cells(sf_f32, m_f32, total)
+
+    @parameter
+    if FLUSH_IS_FIXED:
+        if len(f32_moved) == 0:
+            raise Error(
+                "under the integer flush the float-accumulation arm must"
+                " quantize in its writeback, and a wrecked scale did not"
+                " move it"
+            )
+    else:
+        if len(f32_moved) != 0:
+            raise Error(
+                "the float-accumulation arm moved under a wrecked"
+                " fixed_scale, but nothing on its float-flush path reads"
+                " the scale; it is quantizing somewhere it must not"
+            )
+    var sf_disp = run_dispatch_arm(
+        ctx, dblocks, 0, n_live, n_rows, cindex_base, row_index, stats,
+        p_off, p_sz, ids, dense_ids, hist, acc, block_hist, cells, zf, zi,
+        scale=POISON_SCALE,
+    )
+    var disp_moved = diff_cells(sf_disp, b_h2, total)
+    comptime DISPATCH_QUANTIZES = (
+        HIST2_SMEM_MODE == HIST_SMEM_SHARED2_I32 or FLUSH_IS_FIXED
+    )
+
+    @parameter
+    if DISPATCH_QUANTIZES:
+        if len(disp_moved) == 0:
+            raise Error(
+                "THE DISPATCH DID NOT LAUNCH THE MODE THE MATRIX ROW"
+                " SELECTS: hist_smem_mode_for says this build quantizes,"
+                " and a wrecked fixed_scale did not move the dispatch arm"
+            )
+    else:
+        if len(disp_moved) != 0:
+            raise Error(
+                "THE DISPATCH DID NOT LAUNCH THE MODE THE MATRIX ROW"
+                " SELECTS: hist_smem_mode_for says this build takes the"
+                " float path, which never reads the scale, and the"
+                " dispatch arm moved under a wrecked one"
+            )
+    print(
+        "    scale fingerprint: wrecked scale moved i32 at",
+        len(i32_moved), "cells, f32 at", len(f32_moved),
+        "(flush fixed:", FLUSH_IS_FIXED, "), dispatch at", len(disp_moved),
+        "-> the dispatch runs the matrix row's mode",
+    )
+
+    # stat sabotage PER MODE: both flush branches inside each mode.
+    upload_stats_poisoned(ctx, stats, host_w, g_poison, n_rows)
+    var mp_f32 = run_mode_arm[bits, HIST_SMEM_WARP_PRIVATE_F32](
+        ctx, dblocks, 0, n_live, n_rows, cindex_base, row_index, stats,
+        p_off, p_sz, ids, hist, acc, block_hist, cells, zf, zi,
+    )
+    var mp_i32 = run_mode_arm[bits, HIST_SMEM_SHARED2_I32](
+        ctx, dblocks, 0, n_live, n_rows, cindex_base, row_index, stats,
+        p_off, p_sz, ids, hist, acc, block_hist, cells, zf, zi,
+    )
+    wrong = compare_exact(mp_f32, want_poison, String("f32 mode poisoned"))
+    wrong += compare_exact(mp_i32, want_poison, String("i32 mode poisoned"))
+    if wrong != 0:
+        raise Error("a mode arm missed the poisoned tally")
+    var moved_f32_mode = diff_cells(mp_f32, m_f32, total)
+    var moved_i32_mode = diff_cells(mp_i32, m_i32, total)
+    if len(moved_f32_mode) != len(predicted_moves) or len(
+        moved_i32_mode
+    ) != len(predicted_moves):
+        raise Error(
+            "the per-mode stat sabotage moved "
+            + String(len(moved_f32_mode)) + " (f32) / "
+            + String(len(moved_i32_mode)) + " (i32) cells where "
+            + String(len(predicted_moves)) + " were predicted"
+        )
+    for i in range(len(predicted_moves)):
+        if moved_f32_mode[i] != predicted_moves[i] or moved_i32_mode[
+            i
+        ] != predicted_moves[i]:
+            raise Error("a mode arm's sabotage moved an unpredicted cell")
+    print(
+        "    per-mode stat sabotage: every predicted cell moved and nothing"
+        " else did, in the multi-block leaf AND the one-block leaf, in BOTH"
+        " modes"
+    )
+
     print(
         "  hist_2 (maxBins <= 128, hist_2_one_byte_base.cuh) and PASS"
         " (hist_one_byte.cu) agree EXACTLY, cell for cell, direct and"
-        " gather, and the dispatch demonstrably runs hist_2"
+        " gather, in BOTH accumulation modes, and the dispatch demonstrably"
+        " runs hist_2 in the matrix row's mode"
     )
 
 
@@ -725,17 +964,96 @@ def run_dispatch_arm(
     hist_cells_per_leaf: Int,
     zf: HostBuffer[DType.float32],
     zi: HostBuffer[DType.int32],
+    scale: Float32 = FIXED_SCALE,
 ) raises -> HostBuffer[DType.float32]:
-    """The REAL one-byte launch path, dispatch included: what a fit runs."""
+    """The REAL one-byte launch path, dispatch included: what a fit runs.
+    `scale` exists for the scale fingerprint of REACH 3."""
     ctx.enqueue_copy(dst_buf=hist, src_ptr=zf.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=acc, src_ptr=zi.unsafe_ptr())
     ctx.synchronize()
 
     launch_histograms_for_blocks(
         ctx, dblocks, depth, n_live, n_rows, STAT_COUNT, MAX_LEAVES,
-        SM_COUNT, FIXED_SCALE,
+        SM_COUNT, scale,
         cindex, row_index, stats, p_off, p_sz, ids, dense_ids,
         hist, acc, block_hist, hist_cells_per_leaf,
+    )
+    ctx.synchronize()
+
+    var total = MAX_LEAVES * STAT_COUNT * hist_cells_per_leaf
+    var out = ctx.enqueue_create_host_buffer[DType.float32](total)
+    ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=hist)
+    ctx.synchronize()
+    return out^
+
+
+def run_mode_arm[
+    bits: Int, smem_mode: Int
+](
+    ctx: DeviceContext,
+    mut dblocks: List[DeviceBlock],
+    depth: Int,
+    n_live: Int,
+    n_rows: Int,
+    mut cindex: DeviceBuffer[DType.uint32],
+    mut row_index: DeviceBuffer[DType.uint32],
+    mut stats: DeviceBuffer[DType.float32],
+    mut p_off: DeviceBuffer[DType.uint32],
+    mut p_sz: DeviceBuffer[DType.uint32],
+    mut ids: DeviceBuffer[DType.uint32],
+    mut hist: DeviceBuffer[DType.float32],
+    mut acc: DeviceBuffer[DType.int32],
+    mut block_hist: DeviceBuffer[DType.float32],
+    hist_cells_per_leaf: Int,
+    zf: HostBuffer[DType.float32],
+    zi: HostBuffer[DType.int32],
+    scale: Float32 = FIXED_SCALE,
+) raises -> HostBuffer[DType.float32]:
+    """ONE accumulation mode of the hist_2 family, enqueued directly through
+    `launch_hist2_one_byte[bits, smem_mode]`, bypassing the dispatch's
+    default, plus the same bridge the helper runs: zero the scratch, kernel,
+    `fixed_to_float`, `write_reduces`. The `fixed_to_float` pass is a no-op
+    for an arm that never wrote the accumulator (it stores only nonzero
+    cells), so one bridge serves both modes. `scale` exists for the scale
+    fingerprint of REACH 3."""
+    ctx.enqueue_copy(dst_buf=hist, src_ptr=zf.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=acc, src_ptr=zi.unsafe_ptr())
+    ctx.synchronize()
+
+    ref blk = dblocks[0]
+    var total_folds = blk.total_folds
+    var block_cells = MAX_LEAVES * STAT_COUNT * total_folds
+    ctx.enqueue_function[zero_buffer_kernel](
+        block_hist.unsafe_ptr(),
+        Int32(block_cells),
+        grid_dim=(block_cells + 255) // 256,
+        block_dim=256,
+    )
+
+    launch_hist2_one_byte[bits, smem_mode](
+        ctx, dblocks[0], depth, n_live, n_rows, STAT_COUNT, MAX_LEAVES,
+        SM_COUNT, n_rows, n_rows * blk.first_column,
+        cindex, row_index, stats, p_off, p_sz, ids,
+        block_hist, acc, scale,
+    )
+
+    ctx.enqueue_function[fixed_to_float_kernel](
+        acc.unsafe_ptr(),
+        block_hist.unsafe_ptr(),
+        Int32(block_cells),
+        scale,
+        grid_dim=(block_cells + 255) // 256,
+        block_dim=256,
+    )
+    ctx.enqueue_function[write_reduces_histograms_kernel](
+        Int32(0),
+        Int32(total_folds),
+        ids.unsafe_ptr(),
+        block_hist.unsafe_ptr(),
+        Int32(hist_cells_per_leaf),
+        hist.unsafe_ptr(),
+        grid_dim=((total_folds + 127) // 128, n_live, STAT_COUNT),
+        block_dim=(128, 1, 1),
     )
     ctx.synchronize()
 

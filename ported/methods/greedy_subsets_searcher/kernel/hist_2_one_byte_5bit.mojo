@@ -36,6 +36,10 @@ serializing more lanes than necessary reorders nothing.
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import syncwarp
 
+from ported.methods.greedy_subsets_searcher.kernel.histogram_utils import (
+    hist2_smem_add,
+)
+
 
 def hist2_slice_offset_5(tid: Int) -> Int:
     """`TPointHist2OneByte<5>::SliceOffset()` (`hist_2_one_byte_5bit.cu:25-31`).
@@ -52,15 +56,17 @@ def hist2_slice_offset_5(tid: Int) -> Int:
 
 
 def hist2_add_points_5[
-    n: Int
+    n: Int, dt: DType
 ](
     ci: InlineArray[UInt32, n],
     s1: InlineArray[Float32, n],
     s2: InlineArray[Float32, n],
+    q1: InlineArray[Int32, n],
+    q2: InlineArray[Int32, n],
     tid: Int,
     slice_base: Int,
     smem: UnsafePointer[
-        Scalar[DType.float32],
+        Scalar[dt],
         address_space = AddressSpace.SHARED,
         origin=MutUntrackedOrigin,
     ],
@@ -71,21 +77,35 @@ def hist2_add_points_5[
     `pass[k] = bin != 32` is theirs and it is EXACTLY 32, not `bin > 31`:
     32 is the one encodable value past a full 5-bit feature, so it is the
     skip mark, while every smaller bin is real. Copied, not generalized.
+
+    `dt`, `q1` and `q2` exist for the `HIST_SMEM_SHARED2_I32` matrix row
+    (`q1`/`q2` are the batch's stats through `hist2_quantize`, computed once
+    per row at load time):
+    the pass structure, bin decode, parity trick and sync phases are theirs
+    in both modes, and WHERE the add lands is decided once in
+    `hist2_smem_add` (see its DEVIATION BLOCK for the probe numbers).
     """
     var flag = tid & 1
 
     # stat1[k] = flag ? s2[k] : s1[k];  stat2[k] = flag ? s1[k] : s2[k];
+    # The pre-quantized pair rides the same swap.
     var stat1 = InlineArray[Float32, n](fill=Float32(0.0))
     var stat2 = InlineArray[Float32, n](fill=Float32(0.0))
+    var qstat1 = InlineArray[Int32, n](fill=Int32(0))
+    var qstat2 = InlineArray[Int32, n](fill=Int32(0))
 
     @parameter
     for k in range(n):
         if flag == 1:
             stat1[k] = s2[k]
             stat2[k] = s1[k]
+            qstat1[k] = q2[k]
+            qstat2[k] = q1[k]
         else:
             stat1[k] = s1[k]
             stat2[k] = s2[k]
+            qstat1[k] = q1[k]
+            qstat2[k] = q2[k]
 
     @parameter
     for i in range(4):
@@ -108,9 +128,11 @@ def hist2_add_points_5[
         for k in range(n):
             var offset1 = slice_base + offsets[k] + flag
             var add1 = Float32(0.0)
+            var qadd1 = Int32(0)
             if keep[k]:
                 add1 = stat1[k]
-            smem[offset1] = smem[offset1] + add1
+                qadd1 = qstat1[k]
+            hist2_smem_add[dt](smem, offset1, add1, qadd1)
 
         syncwarp()
 
@@ -118,15 +140,19 @@ def hist2_add_points_5[
         for k in range(n):
             var offset2 = slice_base + offsets[k] + (1 - flag)
             var add2 = Float32(0.0)
+            var qadd2 = Int32(0)
             if keep[k]:
                 add2 = stat2[k]
-            smem[offset2] = smem[offset2] + add2
+                qadd2 = qstat2[k]
+            hist2_smem_add[dt](smem, offset2, add2, qadd2)
 
 
-def hist2_reduce_tail_5(
+def hist2_reduce_tail_5[
+    dt: DType
+](
     tid: Int,
     smem: UnsafePointer[
-        Scalar[DType.float32],
+        Scalar[dt],
         address_space = AddressSpace.SHARED,
         origin=MutUntrackedOrigin,
     ],
@@ -144,7 +170,7 @@ def hist2_reduce_tail_5(
     if tid < 256:
         var is_second_stat = tid & 1
         var f = tid // 64
-        var acc = Float32(0.0)
+        var acc = Scalar[dt](0)
         var fold = (tid >> 1) & 31
         comptime max_fold_count = 32
 

@@ -55,6 +55,31 @@ at or above Volta (`tuning_policy_enums.cuh:73-80`). This port takes the
 MODERN side of each arch test, the same choice `hist_one_byte.mojo` records
 for the PASS family: UNROLL 2, LOAD 4, batch 8. Scheduling, not numeric: the
 same values are added in the same per-lane order.
+
+DEVIATION (the `hist_smem_mode_for` NUMERIC row, 2026-08-19): on the APPLE
+column (and under `NUMERIC_IDENTICAL` on every column) the shared-memory
+accumulation is NOT theirs. Their warp-private float slices cap Apple at 256
+resident threads/core inside Metal's 32 KB threadgroup ceiling -- 12.5%
+occupancy by construction. The Apple arm shares each 1024-slot slice between
+TWO warps and accumulates with LOCAL Int32 atomics in fixed point (Metal has
+no local float atomics), halving shared memory per thread so the block
+doubles to 512 at the same 32 KB. Measured basis (scratchpad
+`histshare_probe.mojo`, interleaved): warp-private float 32 KB = 46.5 G
+updates/s, 2-warp-shared Int32 = 90.2 G upd/s, 1.94x. Whole-tree, this file,
+interleaved in one process at 800k x 100 x 128 folds, depth 6, identical
+trees both arms: 43.5-48.9 ms/tree float, 32.3-35.9 ms/tree Int32,
+1.33-1.51x. Pass structure, bin decoding and
+slice-offset arithmetic stay theirs; only WHERE the add lands (shared pair
+slice, atomic Int32) and the block size change. The mode branches are
+factored into `hist2_smem_add` + `hist2_quantize` (histogram_utils.mojo,
+whose docstrings carry the dither derivation and the two measured failure
+modes of simpler quantizers), the pair-granularity line of
+`hist2_slice_offset`, the guarded quantize-at-load lines of the two
+kernels, and the Int32 arm of `hist2_add_to_global_memory`; everything
+between them is mode-blind. The NVIDIA/AMD FAST columns compile their
+design unchanged. Because integer addition is associative and the dither is
+a pure function of the data position, the Apple arm's histogram is
+DETERMINISTIC run to run, which CatBoost's own float path is not.
 """
 
 from std.atomic import Atomic
@@ -66,16 +91,22 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from mojo_only.kernel_matrix import (
+    HIST_SMEM_SHARED2_I32,
     K_HIST_2_ONE_BYTE,
     TARGET_COLUMN,
-    block_size_for,
     deterministic_flush_for,
+    hist2_block_size_for,
     hist_floats_per_thread_for,
+    hist_smem_mode_for,
     lane_width_for,
     requires_uniform_iteration_for,
 )
 from mojo_only.numerics import NUMERIC_FAST, NUMERIC_IDENTICAL
 
+from ported.methods.greedy_subsets_searcher.kernel.histogram_utils import (
+    hist2_dither,
+    hist2_quantize,
+)
 from ported.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_5bit import (
     hist2_add_points_5,
     hist2_reduce_tail_5,
@@ -102,16 +133,58 @@ comptime LANE_WIDTH = lane_width_for[
     TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
 ]()
 
-#: READ FROM THE MATRIX. Theirs is 384 (`hist_2_one_byte_base.cuh:169`);
-#: Apple's 32 KB over 32 floats per thread yields 256. See the module
-#: docstring's first DEVIATION.
-comptime HIST2_BLOCK_SIZE = block_size_for[K_HIST_2_ONE_BYTE, TARGET_COLUMN]()
-
-#: `GetHistSize()` = `BlockSize * 32` (`hist_2_one_byte_base.cuh:20-22`),
-#: the 32 from the matrix.
-comptime HIST2_HIST_SIZE = HIST2_BLOCK_SIZE * hist_floats_per_thread_for[
-    K_HIST_2_ONE_BYTE
+#: THE ACCUMULATION-MODE ROW, read from the matrix once. Warp-private float
+#: (theirs) on NVIDIA/AMD FAST; 2-warp-shared Int32 fixed point on Apple and
+#: under `NUMERIC_IDENTICAL` everywhere. See the module docstring's last
+#: DEVIATION and `kernel_matrix.hist_smem_mode_for` for the probe numbers.
+comptime HIST2_SMEM_MODE = hist_smem_mode_for[
+    TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
 ]()
+
+#: Exported so `doc_parallel_boosting.fit` and the launch helper know the
+#: build needs real fixed-point magnitudes and the Int32->float bridge.
+comptime HIST2_SMEM_IS_I32 = HIST2_SMEM_MODE == HIST_SMEM_SHARED2_I32
+
+
+def hist2_block_size[smem_mode: Int]() -> Int:
+    """READ FROM THE MATRIX, per accumulation mode. Theirs is 384
+    (`hist_2_one_byte_base.cuh:169`); Apple's 32 KB over 32 floats per
+    thread yields 256 warp-private, 512 under the 2-warp-shared Int32 row.
+    See the module docstring's DEVIATIONs."""
+    return hist2_block_size_for[TARGET_COLUMN, smem_mode]()
+
+
+def hist2_acc_dtype[smem_mode: Int]() -> DType:
+    """The shared accumulator's element type: theirs is float, the shared
+    slice variant is Int32 fixed point (`hist2_smem_add`)."""
+
+    @parameter
+    if smem_mode == HIST_SMEM_SHARED2_I32:
+        return DType.int32
+    else:
+        return DType.float32
+
+
+def hist2_smem_slots[smem_mode: Int]() -> Int:
+    """`GetHistSize()` = `BlockSize * 32` (`hist_2_one_byte_base.cuh:20-22`)
+    in their design, i.e. one 1024-slot slice per warp. The shared-Int32
+    variant keeps 1024-slot slices but hands one to each warp PAIR, so it is
+    half as many slices at the doubled block: the same 8192 slots at 512
+    threads, or 4096 at 256."""
+    comptime block = hist2_block_size[smem_mode]()
+
+    @parameter
+    if smem_mode == HIST_SMEM_SHARED2_I32:
+        return (block // (2 * LANE_WIDTH)) * 1024
+    else:
+        return block * hist_floats_per_thread_for[K_HIST_2_ONE_BYTE]()
+
+
+#: The default-mode values, kept under their old names for readers and for
+#: `hist2_check`. Everything inside the kernels reads the mode-parameterized
+#: functions instead, so both modes can coexist in one binary.
+comptime HIST2_BLOCK_SIZE = hist2_block_size[HIST2_SMEM_MODE]()
+comptime HIST2_HIST_SIZE = hist2_smem_slots[HIST2_SMEM_MODE]()
 
 #: `Unroll(ECIndexLoadType)` (`hist_2_one_byte_base.cuh:28-35`): 1 below
 #: Volta, 2 at or above. The modern side, per the module docstring.
@@ -130,16 +203,21 @@ comptime HIST2_ADD_POINTS_BATCH = 8
 #: `loadSize * N`, the points one thread takes per iteration.
 comptime HIST2_POINTS_PER_ITER = HIST2_LOAD_SIZE * HIST2_UNROLL
 
-#: `BlockLoadSize(indexLoadType)` = `TLoadSizeHist2<LoadSize()>::Size() *
-#: BlockSize * Unroll(...)` (`hist_2_one_byte_base.cuh:49-51`). It is what
-#: decides `activeBlockCount`, and it is NOT `loadSize * BlockSize * Unroll`
-#: as the PASS family's is: the hist_2 batch size doubles it.
-comptime HIST2_MIN_DOCS_PER_BLOCK = (
-    HIST2_ADD_POINTS_BATCH * HIST2_BLOCK_SIZE * HIST2_UNROLL
-)
+def hist2_min_docs[smem_mode: Int]() -> Int:
+    """`BlockLoadSize(indexLoadType)` = `TLoadSizeHist2<LoadSize()>::Size()
+    * BlockSize * Unroll(...)` (`hist_2_one_byte_base.cuh:49-51`). It is what
+    decides `activeBlockCount`, and it is NOT `loadSize * BlockSize * Unroll`
+    as the PASS family's is: the hist_2 batch size doubles it. Their formula
+    scales with the block, so the shared-Int32 mode's doubled block doubles
+    it too."""
+    return HIST2_ADD_POINTS_BATCH * hist2_block_size[smem_mode]() * HIST2_UNROLL
 
 
-def hist2_slice_offset[bits: Int](tid: Int) -> Int:
+#: The default-mode value, kept under its old name for `hist2_check`.
+comptime HIST2_MIN_DOCS_PER_BLOCK = hist2_min_docs[HIST2_SMEM_MODE]()
+
+
+def hist2_slice_offset[bits: Int, smem_mode: Int](tid: Int) -> Int:
     """`TImpl::SliceOffset()`, resolved by `bits` the way their CRTP does.
 
     THE 1024 IS THEIRS AND IT IS 32-LANE: 32 lanes times the 32 floats per
@@ -147,6 +225,17 @@ def hist2_slice_offset[bits: Int](tid: Int) -> Int:
     slice and CatBoost never wrote that layout, so the assert makes it a
     compile error rather than two warps quietly sharing one private copy --
     the same guard `hist_one_byte.mojo` carries.
+
+    ================= DEVIATION BLOCK =================
+    Under `HIST_SMEM_SHARED2_I32` the slice a thread lands in is keyed by its
+    warp PAIR (`tid // 64`) instead of its warp (`tid // 32`): two warps
+    deliberately share one 1024-slot slice through the Int32 atomics of
+    `hist2_smem_add`, which is the measured 1.94x of the matrix row
+    (46.5 -> 90.2 G upd/s, scratchpad `histshare_probe.mojo`). The
+    within-slice arithmetic -- `innerHistStart`, feature/bin/parity slots --
+    is theirs unchanged, so the substitution below rewrites ONLY the
+    warp-offset term of their `SliceOffset`.
+    ===================================================
     """
     comptime assert LANE_WIDTH == 32, (
         "the hist_2 accumulator's slice layout is 32-lane by construction"
@@ -155,46 +244,61 @@ def hist2_slice_offset[bits: Int](tid: Int) -> Int:
         " wide-wavefront layout before letting LANE_WIDTH be 64"
     )
 
+    var off: Int
+
     @parameter
     if bits == 5:
-        return hist2_slice_offset_5(tid)
+        off = hist2_slice_offset_5(tid)
     elif bits == 6:
-        return hist2_slice_offset_6(tid)
+        off = hist2_slice_offset_6(tid)
     else:
-        return hist2_slice_offset_7(tid)
+        off = hist2_slice_offset_7(tid)
+
+    @parameter
+    if smem_mode == HIST_SMEM_SHARED2_I32:
+        # `1024 * (tid / 32)` becomes `1024 * (tid / 64)`; nothing else moves.
+        return off - 1024 * (tid // 32) + 1024 * (tid // 64)
+    else:
+        return off
 
 
 def hist2_add_points[
-    bits: Int, n: Int
+    bits: Int, n: Int, dt: DType
 ](
     ci: InlineArray[UInt32, n],
     s1: InlineArray[Float32, n],
     s2: InlineArray[Float32, n],
+    q1: InlineArray[Int32, n],
+    q2: InlineArray[Int32, n],
     tid: Int,
     slice_base: Int,
     smem: UnsafePointer[
-        Scalar[DType.float32],
+        Scalar[dt],
         address_space = AddressSpace.SHARED,
         origin=MutUntrackedOrigin,
     ],
 ):
     """`TImpl::AddPointsImpl<N>`, resolved by `bits`. At `n == 1` this is
     their `AddPoint` (`hist_2_one_byte_base.cuh:80-85`), which is what the
-    head/tail peel calls."""
+    head/tail peel calls. `dt` carries the accumulation mode and `q1`/`q2`
+    the pre-quantized stats (`hist2_quantize` at the load sites); the
+    per-bit bodies are mode-blind except the one `hist2_smem_add` call."""
 
     @parameter
     if bits == 5:
-        hist2_add_points_5[n](ci, s1, s2, tid, slice_base, smem)
+        hist2_add_points_5[n, dt](ci, s1, s2, q1, q2, tid, slice_base, smem)
     elif bits == 6:
-        hist2_add_points_6[n](ci, s1, s2, tid, slice_base, smem)
+        hist2_add_points_6[n, dt](ci, s1, s2, q1, q2, tid, slice_base, smem)
     else:
-        hist2_add_points_7[n](ci, s1, s2, tid, slice_base, smem)
+        hist2_add_points_7[n, dt](ci, s1, s2, q1, q2, tid, slice_base, smem)
 
 
-def hist2_reduce_to_one_warp(
+def hist2_reduce_to_one_warp[
+    dt: DType, smem_mode: Int
+](
     tid: Int,
     smem: UnsafePointer[
-        Scalar[DType.float32],
+        Scalar[dt],
         address_space = AddressSpace.SHARED,
         origin=MutUntrackedOrigin,
     ],
@@ -219,25 +323,35 @@ def hist2_reduce_to_one_warp(
     Their `Histogram -= impl->SliceOffset()` before the loop is the CRTP way
     of getting back to the raw buffer base; here the raw `smem` is passed
     directly, which is the same pointer.
+
+    Mode-blind by construction: the loop folds however many 1024-slot slices
+    exist (8 warp-private at 256 threads, or `block / 64` pair-shared under
+    `HIST_SMEM_SHARED2_I32`), in `dt`'s own arithmetic -- Int32 sums are
+    exact and associative, float sums are their order exactly. The
+    residue-class ownership argument above holds at any block size at or
+    above 256: `2048 + start` has residue `start` mod 1024, so only the
+    thread that owns that residue ever touches it.
     """
     barrier()
     comptime WARP_HIST_SIZE = 1024
+    comptime SLOTS = hist2_smem_slots[smem_mode]()
+    comptime BLOCK = hist2_block_size[smem_mode]()
     var start = tid
     while start < WARP_HIST_SIZE:
-        var acc = Float32(0.0)
+        var acc = Scalar[dt](0)
         var i = start
-        while i < HIST2_HIST_SIZE:
+        while i < SLOTS:
             acc += smem[i]
             i += WARP_HIST_SIZE
         smem[2048 + start] = acc
-        start += HIST2_BLOCK_SIZE
+        start += BLOCK
     barrier()
 
 
-def hist2_reduce[bits: Int](
+def hist2_reduce[bits: Int, dt: DType, smem_mode: Int](
     tid: Int,
     smem: UnsafePointer[
-        Scalar[DType.float32],
+        Scalar[dt],
         address_space = AddressSpace.SHARED,
         origin=MutUntrackedOrigin,
     ],
@@ -245,20 +359,20 @@ def hist2_reduce[bits: Int](
     """`TImpl::Reduce()`: `TParent::ReduceToOneWarp()` then the per-bit tail,
     then the tail's own trailing `__syncthreads()` (each `Reduce` ends with
     one; the tails leave it to this caller so it exists exactly once)."""
-    hist2_reduce_to_one_warp(tid, smem)
+    hist2_reduce_to_one_warp[dt, smem_mode](tid, smem)
 
     @parameter
     if bits == 5:
-        hist2_reduce_tail_5(tid, smem)
+        hist2_reduce_tail_5[dt](tid, smem)
     elif bits == 6:
-        hist2_reduce_tail_6(tid, smem)
+        hist2_reduce_tail_6[dt](tid, smem)
     else:
-        hist2_reduce_tail_7(tid, smem)
+        hist2_reduce_tail_7[dt](tid, smem)
     barrier()
 
 
 def hist2_add_to_global_memory[
-    bits: Int
+    bits: Int, dt: DType
 ](
     stat_id: Int,
     stat_count: Int,
@@ -276,7 +390,7 @@ def hist2_add_to_global_memory[
     fixed_scale: Float32,
     tid: Int,
     smem: UnsafePointer[
-        Scalar[DType.float32],
+        Scalar[dt],
         address_space = AddressSpace.SHARED,
         origin=MutUntrackedOrigin,
     ],
@@ -305,6 +419,22 @@ def hist2_add_to_global_memory[
     atomic verbatim; `NUMERIC_IDENTICAL` sends the replicated flush through
     the Int32 accumulator instead, because integer addition is associative
     and the histogram then does not depend on which block lands first.
+
+    ================= DEVIATION BLOCK =================
+    Under `HIST_SMEM_SHARED2_I32` (`dt == int32`) the shared histogram
+    already holds fixed-point Int32 at `fixed_scale`, so the flush changes
+    shape: the multi-block branch adds the Int32 cell DIRECTLY into the
+    accumulator (exact, no dequantize/requantize round trip), and the
+    single-block branch stores the dequantized `Float32(cell) / fixed_scale`.
+    This holds in BOTH numeric modes -- routing the Apple FAST arm's
+    replicated flush through a float atomic instead would re-lose the
+    run-to-run determinism the Int32 accumulation just bought, for no
+    measured gain. The launch helper runs `fixed_to_float_kernel` on hist_2
+    blocks whenever this arm is compiled, so the accumulator drains under
+    FAST exactly as it does under IDENTICAL. Their `abs(val) > 1e-20f` guard
+    becomes `cell != 0`, the same never-write-a-zero-cell contract in the
+    integer domain.
+    ===================================================
     """
     comptime hist_size = 1 << bits
 
@@ -340,35 +470,54 @@ def hist2_add_to_global_memory[
 
             var fold = first_fold_idx
             while fold < folds:
-                var val = smem[
+                var cell = smem[
                     is_second_stat * 4 * hist_size + fid * hist_size + fold
                 ]
-                if abs(val) > Float32(1e-20):
-                    comptime det = deterministic_flush_for[
-                        TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
-                    ]()
 
-                    @parameter
-                    if det:
+                @parameter
+                if dt == DType.int32:
+                    # The shared-Int32 arm: the cell is already fixed point
+                    # at `fixed_scale`. See the DEVIATION BLOCK above.
+                    var q = rebind[Scalar[DType.int32]](cell)
+                    if q != Int32(0):
                         if block_count > 1:
-                            # `NUMERIC_IDENTICAL`: partials sum as Int32.
-                            var q = Int32(val * fixed_scale)
                             _ = Atomic.fetch_add(
                                 acc_i32.unsafe_offset(dst_base + fold), q
                             )
                         else:
-                            dst.unsafe_store(fold, val)
-                    else:
-                        # `atomicAdd(dst + fold, val)`, theirs verbatim
-                        # (`hist_2_one_byte_base.cuh:137`).
-                        if block_count > 1:
-                            _ = Atomic.fetch_add(dst.unsafe_offset(fold), val)
+                            dst.unsafe_store(
+                                fold, Float32(Int(q)) / fixed_scale
+                            )
+                else:
+                    var val = rebind[Scalar[DType.float32]](cell)
+                    if abs(val) > Float32(1e-20):
+                        comptime det = deterministic_flush_for[
+                            TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
+                        ]()
+
+                        @parameter
+                        if det:
+                            if block_count > 1:
+                                # `NUMERIC_IDENTICAL`: partials sum as Int32.
+                                var q = Int32(val * fixed_scale)
+                                _ = Atomic.fetch_add(
+                                    acc_i32.unsafe_offset(dst_base + fold), q
+                                )
+                            else:
+                                dst.unsafe_store(fold, val)
                         else:
-                            dst.unsafe_store(fold, val)
+                            # `atomicAdd(dst + fold, val)`, theirs verbatim
+                            # (`hist_2_one_byte_base.cuh:137`).
+                            if block_count > 1:
+                                _ = Atomic.fetch_add(
+                                    dst.unsafe_offset(fold), val
+                                )
+                            else:
+                                dst.unsafe_store(fold, val)
                 fold += 32
 
 
-def hist2_one_byte_kernel[bits: Int, skip_first: Bool](
+def hist2_one_byte_kernel[bits: Int, skip_first: Bool, smem_mode: Int](
     # `TFeatureInBlock*`, flattened to four parallel arrays so the kernel
     # takes plain pointers, exactly as the PASS family's kernels do.
     feature_folds: MutPointer[UInt32, MutAnyOrigin],
@@ -432,9 +581,10 @@ def hist2_one_byte_kernel[bits: Int, skip_first: Bool](
         Int(block_idx.x) // max_blocks_per_part
     )
 
+    comptime MIN_DOCS = hist2_min_docs[smem_mode]()
     var local_block_idx = Int(block_idx.x) % max_blocks_per_part
     var active_block_count = min(
-        (p_size + HIST2_MIN_DOCS_PER_BLOCK - 1) // HIST2_MIN_DOCS_PER_BLOCK,
+        (p_size + MIN_DOCS - 1) // MIN_DOCS,
         max_blocks_per_part,
     )
     if local_block_idx >= active_block_count:
@@ -450,17 +600,20 @@ def hist2_one_byte_kernel[bits: Int, skip_first: Bool](
     #     for (i = threadIdx.x; i < histSize; i += BlockSize) hist[i] = 0;
     #     Histogram = hist + impl->SliceOffset();
     #     __syncthreads();
+    comptime BLOCK = hist2_block_size[smem_mode]()
+    comptime SLOTS = hist2_smem_slots[smem_mode]()
+    comptime DT = hist2_acc_dtype[smem_mode]()
     var smem = stack_allocation[
-        HIST2_HIST_SIZE,
-        Scalar[DType.float32],
+        SLOTS,
+        Scalar[DT],
         address_space = AddressSpace.SHARED,
     ]()
     var z = tid
-    while z < HIST2_HIST_SIZE:
-        smem[z] = Float32(0.0)
-        z += HIST2_BLOCK_SIZE
+    while z < SLOTS:
+        smem[z] = Scalar[DT](0)
+        z += BLOCK
     barrier()
-    var slice_base = hist2_slice_offset[bits](tid)
+    var slice_base = hist2_slice_offset[bits, smem_mode](tid)
 
     # --- AlignMemoryAccess, two-stat direct overload
     # (`compute_hist_loop_two_stats.cuh:57-108`): peel the unaligned HEAD and
@@ -488,6 +641,8 @@ def hist2_one_byte_kernel[bits: Int, skip_first: Bool](
         var hb = InlineArray[UInt32, 1](fill=UInt32(0))
         var hs1 = InlineArray[Float32, 1](fill=Float32(0.0))
         var hs2 = InlineArray[Float32, 1](fill=Float32(0.0))
+        var hq1 = InlineArray[Int32, 1](fill=Int32(0))
+        var hq2 = InlineArray[Int32, 1](fill=Int32(0))
         if local_block_idx == 0 and pe < head_len:
             # `Ldg(bins, idx)`, `Ldg(stats, idx)`,
             # `Ldg(stats, idx + statsLineSize)`
@@ -495,25 +650,43 @@ def hist2_one_byte_kernel[bits: Int, skip_first: Bool](
             hb[0] = ldg(bins_p + (p_offset + pe))
             hs1[0] = ldg(stats_p + (p_offset + pe))
             hs2[0] = ldg(stats_p + (p_offset + pe + stat_line_size))
-        hist2_add_points[bits, 1](hb, hs1, hs2, tid, slice_base, smem)
+
+            @parameter
+            if DT == DType.int32:
+                var u = hist2_dither(p_offset + pe)
+                hq1[0] = hist2_quantize(hs1[0], fixed_scale, u)
+                hq2[0] = hist2_quantize(hs2[0], fixed_scale, u)
+        hist2_add_points[bits, 1, DT](
+            hb, hs1, hs2, hq1, hq2, tid, slice_base, smem
+        )
 
         var tb = InlineArray[UInt32, 1](fill=UInt32(0))
         var ts1 = InlineArray[Float32, 1](fill=Float32(0.0))
         var ts2 = InlineArray[Float32, 1](fill=Float32(0.0))
+        var tq1 = InlineArray[Int32, 1](fill=Int32(0))
+        var tq2 = InlineArray[Int32, 1](fill=Int32(0))
         if local_block_idx == 0 and pe < tail_len:
             # `Ldg(bins, tailOffset + idx)` and the two stat loads
             # (`compute_hist_loop_two_stats.cuh:100-102`).
             tb[0] = ldg(bins_p + (tail_start + pe))
             ts1[0] = ldg(stats_p + (tail_start + pe))
             ts2[0] = ldg(stats_p + (tail_start + pe + stat_line_size))
-        hist2_add_points[bits, 1](tb, ts1, ts2, tid, slice_base, smem)
-        pe += HIST2_BLOCK_SIZE
+
+            @parameter
+            if DT == DType.int32:
+                var u = hist2_dither(tail_start + pe)
+                tq1[0] = hist2_quantize(ts1[0], fixed_scale, u)
+                tq2[0] = hist2_quantize(ts2[0], fixed_scale, u)
+        hist2_add_points[bits, 1, DT](
+            tb, ts1, ts2, tq1, tq2, tid, slice_base, smem
+        )
+        pe += BLOCK
 
     # the striped loop sees the ALIGNED MIDDLE only
     var aligned_offset = p_offset + head_len
     var aligned_size = body_size - tail_len
 
-    var warps_per_block = HIST2_BLOCK_SIZE // LANE_WIDTH
+    var warps_per_block = BLOCK // LANE_WIDTH
     var global_warp_id = local_block_idx * warps_per_block + (
         tid // LANE_WIDTH
     )
@@ -540,6 +713,7 @@ def hist2_one_byte_kernel[bits: Int, skip_first: Bool](
 
     var b_ptr = bins_p + base
     var s_ptr = stats_p + base
+    var pos_base = base
 
     for it in range(max_iters):
         var active = it < iter_count
@@ -549,6 +723,12 @@ def hist2_one_byte_kernel[bits: Int, skip_first: Bool](
         )
         var local_stats2 = InlineArray[Float32, HIST2_POINTS_PER_ITER](
             fill=Float32(0.0)
+        )
+        var local_q1 = InlineArray[Int32, HIST2_POINTS_PER_ITER](
+            fill=Int32(0)
+        )
+        var local_q2 = InlineArray[Int32, HIST2_POINTS_PER_ITER](
+            fill=Int32(0)
         )
 
         # `Ldg((uint4*) bins, warpSize * k)`, `Ldg((float4*) stats, ...)`,
@@ -573,6 +753,18 @@ def hist2_one_byte_kernel[bits: Int, skip_first: Bool](
                     local_bins[k * HIST2_LOAD_SIZE + e] = vb[e]
                     local_stats1[k * HIST2_LOAD_SIZE + e] = vs1[e]
                     local_stats2[k * HIST2_LOAD_SIZE + e] = vs2[e]
+
+                    @parameter
+                    if DT == DType.int32:
+                        var u = hist2_dither(
+                            pos_base + LANE_WIDTH * HIST2_LOAD_SIZE * k + e
+                        )
+                        local_q1[k * HIST2_LOAD_SIZE + e] = hist2_quantize(
+                            vs1[e], fixed_scale, u
+                        )
+                        local_q2[k * HIST2_LOAD_SIZE + e] = hist2_quantize(
+                            vs2[e], fixed_scale, u
+                        )
             else:
                 # No row: contribute zero, stay inside every sync.
                 @parameter
@@ -580,25 +772,29 @@ def hist2_one_byte_kernel[bits: Int, skip_first: Bool](
                     local_bins[k * HIST2_LOAD_SIZE + e] = UInt32(0)
                     local_stats1[k * HIST2_LOAD_SIZE + e] = Float32(0.0)
                     local_stats2[k * HIST2_LOAD_SIZE + e] = Float32(0.0)
+                    local_q1[k * HIST2_LOAD_SIZE + e] = Int32(0)
+                    local_q2[k * HIST2_LOAD_SIZE + e] = Int32(0)
 
         # `hist.AddPoints<loadSize * N>(...)`: batch size equals the whole
         # iteration here, so this is ONE `AddPointsImpl<8>` call, their
         # `AddPoints` loop unrolled at trip count one.
-        hist2_add_points[bits, HIST2_POINTS_PER_ITER](
-            local_bins, local_stats1, local_stats2, tid, slice_base, smem
+        hist2_add_points[bits, HIST2_POINTS_PER_ITER, DT](
+            local_bins, local_stats1, local_stats2, local_q1, local_q2,
+            tid, slice_base, smem,
         )
 
         b_ptr += stripe_size
         s_ptr += stripe_size
+        pos_base += stripe_size
 
     # `hist.Reduce()` then the kernel's own `__syncthreads()`
     # (`compute_hist_loop_two_stats.cuh:214-215`, `:546`).
-    hist2_reduce[bits](tid, smem)
+    hist2_reduce[bits, DT, smem_mode](tid, smem)
     barrier()
 
     # `hist.AddToGlobalMemory((SkipFirst ? 1 : 0) + 2 * blockIdx.z,
     #                         statCount, activeBlockCount, ...)` (`:550-556`)
-    hist2_add_to_global_memory[bits](
+    hist2_add_to_global_memory[bits, DT](
         skip_int + 2 * Int(block_idx.z),
         stat_count,
         active_block_count,
@@ -620,7 +816,9 @@ def hist2_one_byte_kernel[bits: Int, skip_first: Bool](
     )
 
 
-def hist2_one_byte_gather_kernel[bits: Int, skip_first: Bool](
+def hist2_one_byte_gather_kernel[
+    bits: Int, skip_first: Bool, smem_mode: Int
+](
     feature_folds: MutPointer[UInt32, MutAnyOrigin],
     feature_fold_offset: MutPointer[UInt32, MutAnyOrigin],
     feature_group_offset: MutPointer[UInt32, MutAnyOrigin],
@@ -667,9 +865,10 @@ def hist2_one_byte_gather_kernel[bits: Int, skip_first: Bool](
     )
     var idx_p = indices
 
+    comptime MIN_DOCS = hist2_min_docs[smem_mode]()
     var local_block_idx = Int(block_idx.x) % max_blocks_per_part
     var active_block_count = min(
-        (p_size + HIST2_MIN_DOCS_PER_BLOCK - 1) // HIST2_MIN_DOCS_PER_BLOCK,
+        (p_size + MIN_DOCS - 1) // MIN_DOCS,
         max_blocks_per_part,
     )
     if local_block_idx >= active_block_count:
@@ -678,17 +877,20 @@ def hist2_one_byte_gather_kernel[bits: Int, skip_first: Bool](
     comptime skip_int = 1 if skip_first else 0
     var stats_p = stats + (skip_int + 2 * Int(block_idx.z)) * stat_line_size
 
+    comptime BLOCK = hist2_block_size[smem_mode]()
+    comptime SLOTS = hist2_smem_slots[smem_mode]()
+    comptime DT = hist2_acc_dtype[smem_mode]()
     var smem = stack_allocation[
-        HIST2_HIST_SIZE,
-        Scalar[DType.float32],
+        SLOTS,
+        Scalar[DT],
         address_space = AddressSpace.SHARED,
     ]()
     var z = tid
-    while z < HIST2_HIST_SIZE:
-        smem[z] = Float32(0.0)
-        z += HIST2_BLOCK_SIZE
+    while z < SLOTS:
+        smem[z] = Scalar[DT](0)
+        z += BLOCK
     barrier()
-    var slice_base = hist2_slice_offset[bits](tid)
+    var slice_base = hist2_slice_offset[bits, smem_mode](tid)
 
     # --- AlignMemoryAccess, two-stat gather overload
     # (`compute_hist_loop_two_stats.cuh:110-163`).
@@ -712,6 +914,8 @@ def hist2_one_byte_gather_kernel[bits: Int, skip_first: Bool](
         var hb = InlineArray[UInt32, 1](fill=UInt32(0))
         var hs1 = InlineArray[Float32, 1](fill=Float32(0.0))
         var hs2 = InlineArray[Float32, 1](fill=Float32(0.0))
+        var hq1 = InlineArray[Int32, 1](fill=Int32(0))
+        var hq2 = InlineArray[Int32, 1](fill=Int32(0))
         if local_block_idx == 0 and pe < head_len:
             # `Ldg(indices, idx)`, `Ldg(cindex, loadIdx)`, both stat loads
             # (`compute_hist_loop_two_stats.cuh:134-137`).
@@ -719,24 +923,42 @@ def hist2_one_byte_gather_kernel[bits: Int, skip_first: Bool](
             hb[0] = ldg(cindex_p + hrow)
             hs1[0] = ldg(stats_p + (p_offset + pe))
             hs2[0] = ldg(stats_p + (p_offset + pe + stat_line_size))
-        hist2_add_points[bits, 1](hb, hs1, hs2, tid, slice_base, smem)
+
+            @parameter
+            if DT == DType.int32:
+                var u = hist2_dither(p_offset + pe)
+                hq1[0] = hist2_quantize(hs1[0], fixed_scale, u)
+                hq2[0] = hist2_quantize(hs2[0], fixed_scale, u)
+        hist2_add_points[bits, 1, DT](
+            hb, hs1, hs2, hq1, hq2, tid, slice_base, smem
+        )
 
         var tb = InlineArray[UInt32, 1](fill=UInt32(0))
         var ts1 = InlineArray[Float32, 1](fill=Float32(0.0))
         var ts2 = InlineArray[Float32, 1](fill=Float32(0.0))
+        var tq1 = InlineArray[Int32, 1](fill=Int32(0))
+        var tq2 = InlineArray[Int32, 1](fill=Int32(0))
         if local_block_idx == 0 and pe < tail_len:
             # (`compute_hist_loop_two_stats.cuh:154-157`)
             var trow = Int(ldg(indices + (tail_start + pe)))
             tb[0] = ldg(cindex_p + trow)
             ts1[0] = ldg(stats_p + (tail_start + pe))
             ts2[0] = ldg(stats_p + (tail_start + pe + stat_line_size))
-        hist2_add_points[bits, 1](tb, ts1, ts2, tid, slice_base, smem)
-        pe += HIST2_BLOCK_SIZE
+
+            @parameter
+            if DT == DType.int32:
+                var u = hist2_dither(tail_start + pe)
+                tq1[0] = hist2_quantize(ts1[0], fixed_scale, u)
+                tq2[0] = hist2_quantize(ts2[0], fixed_scale, u)
+        hist2_add_points[bits, 1, DT](
+            tb, ts1, ts2, tq1, tq2, tid, slice_base, smem
+        )
+        pe += BLOCK
 
     var aligned_offset = p_offset + head_len
     var aligned_size = body_size - tail_len
 
-    var warps_per_block = HIST2_BLOCK_SIZE // LANE_WIDTH
+    var warps_per_block = BLOCK // LANE_WIDTH
     var global_warp_id = local_block_idx * warps_per_block + (
         tid // LANE_WIDTH
     )
@@ -760,6 +982,7 @@ def hist2_one_byte_gather_kernel[bits: Int, skip_first: Bool](
 
     var i_ptr = idx_p + base
     var s_ptr = stats_p + base
+    var pos_base = base
 
     for it in range(max_iters):
         var active = it < iter_count
@@ -769,6 +992,12 @@ def hist2_one_byte_gather_kernel[bits: Int, skip_first: Bool](
         )
         var local_stats2 = InlineArray[Float32, HIST2_POINTS_PER_ITER](
             fill=Float32(0.0)
+        )
+        var local_q1 = InlineArray[Int32, HIST2_POINTS_PER_ITER](
+            fill=Int32(0)
+        )
+        var local_q2 = InlineArray[Int32, HIST2_POINTS_PER_ITER](
+            fill=Int32(0)
         )
 
         # Their gather batch (`compute_hist_loop_two_stats.cuh:424-449`):
@@ -794,6 +1023,18 @@ def hist2_one_byte_gather_kernel[bits: Int, skip_first: Bool](
                     )
                     local_stats1[k * HIST2_LOAD_SIZE + e] = vs1[e]
                     local_stats2[k * HIST2_LOAD_SIZE + e] = vs2[e]
+
+                    @parameter
+                    if DT == DType.int32:
+                        var u = hist2_dither(
+                            pos_base + LANE_WIDTH * HIST2_LOAD_SIZE * k + e
+                        )
+                        local_q1[k * HIST2_LOAD_SIZE + e] = hist2_quantize(
+                            vs1[e], fixed_scale, u
+                        )
+                        local_q2[k * HIST2_LOAD_SIZE + e] = hist2_quantize(
+                            vs2[e], fixed_scale, u
+                        )
             else:
 
                 @parameter
@@ -801,18 +1042,22 @@ def hist2_one_byte_gather_kernel[bits: Int, skip_first: Bool](
                     local_bins[k * HIST2_LOAD_SIZE + e] = UInt32(0)
                     local_stats1[k * HIST2_LOAD_SIZE + e] = Float32(0.0)
                     local_stats2[k * HIST2_LOAD_SIZE + e] = Float32(0.0)
+                    local_q1[k * HIST2_LOAD_SIZE + e] = Int32(0)
+                    local_q2[k * HIST2_LOAD_SIZE + e] = Int32(0)
 
-        hist2_add_points[bits, HIST2_POINTS_PER_ITER](
-            local_bins, local_stats1, local_stats2, tid, slice_base, smem
+        hist2_add_points[bits, HIST2_POINTS_PER_ITER, DT](
+            local_bins, local_stats1, local_stats2, local_q1, local_q2,
+            tid, slice_base, smem,
         )
 
         i_ptr += stripe_size
         s_ptr += stripe_size
+        pos_base += stripe_size
 
-    hist2_reduce[bits](tid, smem)
+    hist2_reduce[bits, DT, smem_mode](tid, smem)
     barrier()
 
-    hist2_add_to_global_memory[bits](
+    hist2_add_to_global_memory[bits, DT](
         skip_int + 2 * Int(block_idx.z),
         stat_count,
         active_block_count,
