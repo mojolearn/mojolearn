@@ -63,7 +63,7 @@ from layout.tile_layout import row_major
 from linalg.matmul import matmul
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from core.gram_splitk import gemm_tn_splitk, gram_splitk_applies
+from core.gram_splitk import gemm_tn_splitk_into, gram_splitk_applies
 
 
 # `KernelPolicy<float, 4, 32, 4, 4, 16, 16>`, RAFT's Policy4x4<float>.
@@ -146,7 +146,8 @@ def gemm_tn(
     Two arms, picked by `gram_splitk_applies` (a computed predicate, not a
     constant -- see its docstring):
 
-    - **Small output, any k** -> `core/gram_splitk.mojo::gemm_tn_splitk`.
+    - **Small output, any k** -> `core/gram_splitk.mojo::gemm_tn_splitk_into`
+      (the `xt`-scratch-reusing entry over the same kernel pair).
       The vendor matmul's only parallelism is output tiles, and a 32 x 32
       output is ONE tile: measured 322.9 ms (~25 GFLOP/s) at 32 x 32 x 4M
       against a ~10-15 ms bandwidth floor (`bench/results/
@@ -169,7 +170,11 @@ def gemm_tn(
     covers each through this wrapper (`check_matmul_colmajor`'s tail rows).
     """
     if gram_splitk_applies(m, n, k):
-        gemm_tn_splitk(ctx, z, x, m, k)
+        # `xt` is pure scratch on both arms and is sized `k * m`, so the
+        # split-K arm reuses it as the partials workspace whenever it
+        # covers (`gram_splitk_scratch_covers`) -- no per-call allocation
+        # on the shipped fit shapes.
+        gemm_tn_splitk_into(ctx, z, x, xt, m, k)
         return
     gemm_tn_via_transpose(ctx, z, x, xt, xt2, m, n, k)
 

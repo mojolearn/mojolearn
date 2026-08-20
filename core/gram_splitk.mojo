@@ -236,6 +236,19 @@ def gram_splitk_partial_kernel[CELLS: Int](
 
     var acc = SIMD[DType.float32, CELLS](0.0)
 
+    # FLOOR KNOB (SCOREBOARD_2026-08-19 item 5, first knob). When the block's
+    # thread count is an exact multiple of m -- true at every power-of-two
+    # width up to 128, including the shipped m = 32 -- then
+    # `jj[c] = (tid + c * GRAM_TPB) % m` is the SAME index for every c, so
+    # the second tile read of the inner unroll is ONE load per row, hoisted
+    # out of the comptime loop, instead of CELLS loads of the same address.
+    # Same address between the same barriers, same value, same multiply in
+    # the same order: bit-identical, proven by the before/after bit dump in
+    # bench/results/LANE_pca-centering_2026-08-20.md, not argued. The branch
+    # is block-uniform, so no barrier is divergent.
+    var uniform_jj = (GRAM_TPB % m) == 0
+    var jm = tid % m
+
     var t = chunk * kc
     var t_end = t + kc
     if t_end > k:
@@ -252,14 +265,22 @@ def gram_splitk_partial_kernel[CELLS: Int](
             tile[i] = x.unsafe_load(t * m + i)
             i += GRAM_TPB
         barrier()
-        for r in range(rows):
-            var base = r * m
-            comptime for c in range(CELLS):
-                if tid + c * GRAM_TPB < mn:
-                    acc[c] = (
-                        acc[c]
-                        + tile[base + Int(ii[c])] * tile[base + Int(jj[c])]
-                    )
+        if uniform_jj:
+            for r in range(rows):
+                var base = r * m
+                var xj = tile[base + jm]
+                comptime for c in range(CELLS):
+                    if tid + c * GRAM_TPB < mn:
+                        acc[c] = acc[c] + tile[base + Int(ii[c])] * xj
+        else:
+            for r in range(rows):
+                var base = r * m
+                comptime for c in range(CELLS):
+                    if tid + c * GRAM_TPB < mn:
+                        acc[c] = (
+                            acc[c]
+                            + tile[base + Int(ii[c])] * tile[base + Int(jj[c])]
+                        )
         barrier()
         t += rows
 
@@ -291,28 +312,26 @@ def gram_splitk_reduce_kernel(
     z.unsafe_store(cell, acc)
 
 
-def gemm_tn_splitk(
+def _splitk_launch(
     ctx: DeviceContext,
     mut z: DeviceBuffer[DType.float32],
     mut x: DeviceBuffer[DType.float32],
+    mut partials: DeviceBuffer[DType.float32],
     m: Int,
     k: Int,
 ) raises:
-    """`z[m x m] = x[k x m]^T . x[k x m]` on the split-K kernel pair.
+    """Enqueue the partial + reduce pair into a CALLER-OWNED workspace.
 
-    The partials workspace (`n_chunks * m * m` floats, at most 15.7 MB at
-    m = 128 and 240 KB at the bench's m = 32) is allocated here per call:
-    `gemm_tn`'s callers pass no workspace and their `xt` scratch is sized
-    `k * m`, which does NOT cover `n_chunks * m * m` at small k (PCA's own
-    4-column checks would overflow it). One allocation per fit, freed at
-    scope exit after the synchronize.
+    `partials` must hold at least `gram_splitk_chunk_count() * m * m`
+    floats. The caller synchronizes; nothing here waits. Which buffer the
+    partials land in is SCHEDULING, not numerics: the kernels, the chunk
+    partition and the ascending fold are identical whoever owns the memory.
     """
     var n_chunks = gram_splitk_chunk_count()
     var kc = (k + n_chunks - 1) // n_chunks
     if kc < 1:
         kc = 1
     var mn = m * m
-    var partials = ctx.enqueue_create_buffer[DType.float32](n_chunks * mn)
 
     # Three register widths, smallest that fits, so a 32 x 32 Gram does not
     # pay a 64-cell unroll's dead guards. The instantiation changes WHICH
@@ -362,4 +381,59 @@ def gemm_tn_splitk(
         grid_dim=((mn + GRAM_TPB - 1) // GRAM_TPB, 1, 1),
         block_dim=(GRAM_TPB, 1, 1),
     )
+
+
+def gram_splitk_scratch_covers(m: Int, k: Int) raises -> Bool:
+    """Whether a `k * m`-float scratch buffer (the `xt` contract every
+    `gemm_tn` caller already meets) covers the `n_chunks * m * m` partials
+    workspace. `k * m >= n_chunks * m * m  <=>  k >= n_chunks * m`; at the
+    bench's m = 32 that is k >= 7,680, so every shipped tall-skinny fit
+    reuses the scratch and never allocates on the fit path. A pure function
+    of (m, k): the same shape always lands the partials in the same place.
+    """
+    return k >= gram_splitk_chunk_count() * m
+
+
+def gemm_tn_splitk(
+    ctx: DeviceContext,
+    mut z: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    m: Int,
+    k: Int,
+) raises:
+    """`z[m x m] = x[k x m]^T . x[k x m]` on the split-K kernel pair,
+    allocating its own partials workspace (`n_chunks * m * m` floats, at
+    most 15.7 MB at m = 128 and 240 KB at the bench's m = 32), freed at
+    scope exit after the synchronize. The direct-call entry the checks
+    exercise by name; `gemm_tn` goes through `gemm_tn_splitk_into` so the
+    shipped fits reuse the `xt` scratch instead (FLOOR KNOB,
+    SCOREBOARD_2026-08-19 item 5, second knob).
+    """
+    var n_chunks = gram_splitk_chunk_count()
+    var partials = ctx.enqueue_create_buffer[DType.float32](n_chunks * m * m)
+    _splitk_launch(ctx, z, x, partials, m, k)
     ctx.synchronize()
+
+
+def gemm_tn_splitk_into(
+    ctx: DeviceContext,
+    mut z: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut scratch: DeviceBuffer[DType.float32],
+    m: Int,
+    k: Int,
+) raises:
+    """`gemm_tn_splitk`, but the partials land in `scratch` when it covers
+    them (`gram_splitk_scratch_covers`), skipping the per-call
+    `enqueue_create_buffer`. `scratch` is `gemm_tn`'s `xt` alias buffer:
+    at least `k * m` floats, pure scratch on this arm (the transpose arm
+    overwrites it wholesale too, so no caller may rely on its contents).
+    RAFT/cuML hand workspace buffers down the call chain the same way
+    rather than allocating inside a GEMM; small k, where `k * m` does not
+    cover `n_chunks * m * m` (PCA's own 4-column checks), still allocates.
+    """
+    if gram_splitk_scratch_covers(m, k):
+        _splitk_launch(ctx, z, x, scratch, m, k)
+        ctx.synchronize()
+        return
+    gemm_tn_splitk(ctx, z, x, m, k)
