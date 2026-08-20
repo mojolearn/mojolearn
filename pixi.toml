@@ -60,6 +60,14 @@ check-hist2 = "mojo run -I . mojo_only/hist2_check.mojo"
 # features, and this compares our exact-DP port against CatBoost's own
 # borders over six budgets. Host-side, seconds, no GPU.
 check-minentropy = "mojo run -I . mojo_only/min_entropy_check.mojo"
+
+# Model save and load. Trains, predicts, writes the file, reads it into a
+# fresh struct and requires BIT-IDENTICAL predictions out of both the host
+# apply and the device evaluator, plus field-by-field equality. Ends with
+# five deliberate sabotages that must each turn it red, because a check
+# never seen to fail is not evidence. Own main(): it trains three models and
+# runs 400,000 float round trips.
+check-model-io = "mojo run -I . mojo_only/model_io_check.mojo"
 check-gpu-lib-worker = "mojo run -I . mojo_only/gpu_lib_worker_check.mojo"
 
 # What the host toolchain actually resolved to. Worth recording beside any
