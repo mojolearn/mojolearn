@@ -64,6 +64,12 @@ echo "macOS floor: binary minos $BIN_MINOS == wheel tag $TAG_MINOS"
 # the macosx_11_0 tag invites in.
 pixi run -e pkg python "$here/packaging/isa_baseline.py" "$PKG/_mojolearn.so"
 
+# NO GPU KERNELS, NO WHEEL. A build on a machine without a usable Apple GPU
+# emits the host half and silently no Metal shader code, exits 0, and produces
+# a wheel that imports and then dies on the first fit. That shipped once, as
+# TestPyPI 0.1.0a2. See packaging/macos/check_gpu_embedded.py.
+pixi run -e pkg python "$here/packaging/macos/check_gpu_embedded.py" "$PKG/_mojolearn.so"
+
 cd "$here/python"
 rm -rf dist build ./*.egg-info
 pixi run -e pkg python -m build --wheel --no-isolation
