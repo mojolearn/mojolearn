@@ -64,9 +64,30 @@ asymptotics in their best regime, the LOWEST-priority gap on the board.
 
 ## The standing tally
 
-**Five wins (OLS 2.7x/14.7x, PCA 2.3x, k-NN 1.3-1.8x, k-means 3.3x, DBSCAN
-2.6-6.9x at d>=32), one tie (DBSCAN in the d=8 corner, where large-n is
-attributed and deprioritized), zero losses.**
+**Five wins (OLS 3.4x/19.8x, PCA 3.5x, k-NN 1.3-1.8x, k-means 2.8-3.3x,
+DBSCAN 2.6-6.9x at d>=32), one tie (DBSCAN in the d=8 corner, where large-n
+is attributed and deprioritized), zero losses.**
+
+## Gram register-tile window (2026-08-20 evening, commit a431631)
+
+The profile-funded cell-ownership remap (LANE_gram-tile: each thread owns a
+T x T register rectangle, T = sqrt(CELLS), FMA/shared-read up to 4.0 from
+~0.5-1.0; FNV bit-identical at 11 shapes, both arms reach-proven by
+sabotage) **HALVED the Gram kernel: `gemm_tn_alone` 44 -> 21.5 ms steady**
+-- now ~1.4x above the ~15 ms traffic floor, from 13x when the week
+started. Fixed-pair verdicts from this window, which ran under ambient load
+(the sklearn side inflated ~25% on every arm vs the afternoon window;
+alternation keeps within-window ratios fair, absolute ms are NOT comparable
+across windows):
+
+- pca 63.0 vs 220.5 = **3.50x**, ranges disjoint -- CLEAN.
+- ols 56.4 vs 1,116.7 = **19.8x** (vs `ols_normal_eq` 189.1 = **3.35x**),
+  disjoint -- CLEAN.
+- kmeans 1,102 vs 3,111 = 2.82x, disjoint -- CLEAN (absolute ms up from
+  764/2,488 purely with the window's load; the ratio held).
+- knn and dbscan: ranges OVERLAPPED in this noisy window -- no verdict
+  either way; their code is unchanged since their clean verdicts above,
+  which stand.
 
 ## What moved the 2026-08-20 round, measured
 
@@ -108,11 +129,15 @@ attributed and deprioritized), zero losses.**
 
 ## What the table says to do next
 
-1. **Split-K's remaining ~3x to floor now needs Instruments**, not
-   structure: staging vectorization was the last structural suspect and it
-   measured null. Profile before touching the kernel again.
-2. **kmeans|| init remains unported** (the cuVS default raises) -- now the
-   largest FUNCTIONAL gap on an otherwise all-green board.
+1. **Split-K is ~1.4x off its floor** (21.5 vs ~15 ms) after the
+   register tile; the priced-but-unshipped follow-up is the column-read
+   wide load (LANE_gram-tile report). Headless Instruments cannot see
+   limiter counters (GRAM_PROFILE_2026-08-20.md); further pushes should
+   re-run the elimination arithmetic first.
+2. **kmeans|| init: PORTED 2026-08-20** (LANE_kmeans-scalable-init,
+   deviations 47/48): the cuVS default `oversampling_factor=2.0` runs
+   end-to-end, run-twice bitwise, sampling round held to an exact host
+   replay. The bench pins `INIT_ARRAY`, so no board number moved.
 3. **Upstream report to Modular: DRAFTED**, commit 1ca0eb5
    (`bench/results/MODULAR_UPSTREAM_2026-08-20.md`) -- six probe-backed
    defects + the split-K gap with the 345 -> 49 ms reproducer. Filing is
