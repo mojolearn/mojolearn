@@ -1,47 +1,47 @@
 # our_file	catboost_file	status	notes
 # CatBoost pinned at 54a8143a. `tools/check_upstream.sh` diffs each mapped
 # source against a fresh checkout and reports which of ours need attention.
-ported/gpu_data/grid_policy.mojo	catboost/cuda/gpu_data/grid_policy.h	transliterated	1/4/8 bits per feature
-ported/gpu_data/kernel/binarize.mojo	catboost/cuda/gpu_data/kernel/binarize.cu	transliterated	WriteCompressedIndexImpl only
-ported/gpu_util/gpu_data/partitions.mojo	catboost/cuda/cuda_util/gpu_data/partitions.h	transliterated	TDataPartition
-ported/gpu_util/partitions_reduce.mojo	catboost/cuda/cuda_util/partitions_reduce.h	replaced	theirs is a CUB segmented reduce
-ported/gpu_util/copy.mojo	catboost/cuda/cuda_util/	replaced	Mojo has no device-to-device enqueue_copy
-ported/methods/greedy_subsets_searcher/kernel/point_hist_half_byte_template.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/point_hist_half_byte_template.cuh	transliterated	accumulator split into slot arithmetic, see PORTING.md 10
-ported/methods/greedy_subsets_searcher/kernel/hist_binary.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/hist_binary.cu	transliterated	direct AND gather variants
-ported/methods/greedy_subsets_searcher/kernel/hist_half_byte.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/hist_half_byte.cu	transliterated	direct AND gather variants; derived from hist_binary, see PORTING.md 13
-ported/methods/greedy_subsets_searcher/kernel/hist_one_byte.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/hist_one_byte.cu	transliterated	direct AND gather variants; inner-bits pass loop, 5 to 8 bits
-ported/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_base.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_base.cuh	transliterated	TPointHist2OneByteBase + ComputeHist2OneByteBits launch; two-stat loop from compute_hist_loop_two_stats.cuh inlined (PORTING.md 10/13)
-ported/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_5bit.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_5bit.cu	transliterated	TPointHist2OneByte<5>; tiled_partition<8> widened to syncwarp
-ported/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_6bit.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_6bit.cu	transliterated	TPointHist2OneByte<6>; tiled_partition<16> widened to syncwarp
-ported/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_7bit.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_7bit.cu	transliterated	TPointHist2OneByte<7>; their sync is already the full warp
-ported/methods/greedy_subsets_searcher/kernel/histogram_utils.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/histogram_utils.cu	partial	scan, subtract, zero, copy, WriteReducesHistograms. fixed_to_float has no counterpart
-ported/methods/greedy_subsets_searcher/kernel/compute_scores.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/compute_scores.cu	partial	L2 calcer only; no multiclass, feature weights or variance
-ported/methods/greedy_subsets_searcher/kernel/split_points.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/split_points.cu	partial+replaced	flags, gathers, partition update ported; the per-leaf CUB sort is replaced by a segmented stable partition
-ported/methods/greedy_subsets_searcher/split_properties_helper.mojo	catboost/cuda/methods/greedy_subsets_searcher/split_properties_helper.cpp	partial	BuildNecessaryHistograms classification only
-ported/methods/greedy_subsets_searcher/structure_searcher_template.mojo	catboost/cuda/methods/greedy_subsets_searcher/structure_searcher_template.h	partial	the schedule and its launch invariant
-ported/methods/greedy_subsets_searcher/greedy_search_helper.mojo	catboost/cuda/methods/greedy_subsets_searcher/greedy_search_helper.cpp	partial	ComputeOptimalSplits + SplitLeaves as one function
-ported/methods/leaves_estimation/leaves_estimation.mojo	catboost/cuda/methods/leaves_estimation/	partial	pointwise Newton step only; no descent loop, ordered, exact or backtracking
-ported/gpu_data/gpu_structures.mojo	catboost/cuda/gpu_data/gpu_structures.h	transliterated	TCFeature; Offset narrowed ui64 to UInt32
-ported/gpu_data/compressed_index_builder.mojo	catboost/cuda/gpu_data/compressed_index_builder.h	partial	layout decision only; single-device, no docParallel striping
-ported/gpu_data/feature_blocks.mojo	catboost/cuda/methods/greedy_subsets_searcher/split_properties_helper.cpp	partial	TFeatureInBlock assembly, one block per policy present
-ported/options/catboost_options.mojo	catboost/private/libs/options/	partial	their option names and defaults; two departures (random_strength 0.0, plus determinism which has no counterpart)
-ported/gpu_lib/fwd.mojo	catboost/cuda/cuda_lib/fwd.h	transliterated	EPtrType; dir renamed cuda_lib -> gpu_lib, classes keep CatBoost names
-ported/gpu_lib/gpu_base.mojo	catboost/cuda/cuda_lib/cuda_base.h	partial	streams only; Metal has ONE, ctx.stream() raises not-implemented
-ported/gpu_lib/slice.mojo	catboost/cuda/cuda_lib/slice.h	transliterated	TSlice
-ported/gpu_lib/device_id.mojo	catboost/cuda/cuda_lib/device_id.h	transliterated	host_id always -1
-ported/gpu_lib/task.mojo	catboost/cuda/cuda_lib/task.h	partial+replaced	ECommandType all 10; ICommand -> tagged union, Mojo has no trait objects
-ported/gpu_lib/tasks_queue/single_host_task_queue.mojo	catboost/cuda/cuda_lib/tasks_queue/single_host_task_queue.h	replaced	no thread; enqueue_function is already an async submit
-ported/gpu_lib/gpu_single_worker.mojo	catboost/cuda/cuda_lib/gpu_single_worker.cpp	partial	the ECommandType dispatch switch; sync_count/launch_count/sync_budget
-ported/gpu_lib/gpu_manager.mojo	catboost/cuda/cuda_lib/cuda_manager.h	partial	single device; owns the ONLY drain
-ported/targets/kernel/pointwise_targets.mojo	catboost/cuda/targets/kernel/pointwise_targets.cu	partial	MseImpl only; der/der2 written into the two stats planes, functionValue reduced on the host
-ported/methods/kernel_add_model_value.mojo	catboost/cuda/methods/doc_parallel_boosting.h	partial+replaced	AppendModels device side; leaf read off the partition, not by evaluating the tree
-ported/methods/doc_parallel_boosting.mojo	catboost/cuda/methods/doc_parallel_boosting.h	partial	the Fit loop; one permutation, no test cursor, no early stopping, no snapshots
-ported/methods/greedy_subsets_searcher/points_subsets.mojo	catboost/cuda/methods/greedy_subsets_searcher/split_properties_helper.h	partial	TPointsSubsets, TLeaf, TBestSplitProperties; PartitionsCpu not pinned, see NOT_PORTED.md
-ported/models/oblivious_model.mojo	catboost/cuda/models/oblivious_model.h	partial	TObliviousTreeStructure, TObliviousTreeModel, TAdditiveModel; no SplitType
-ported/models/kernel/add_bin_values.mojo	catboost/cuda/models/kernel/add_model_value.cu	partial	ComputeBins fused with the add; ordered predicate only
-ported/models/model_text.mojo	catboost/libs/model/	replaced	save/load. Theirs is flatbuffers (model.fbs) plus six exporters; ours is plain text with IEEE-754 bits per float. PORTING.md deviation 49
-ported/grid_creator/binarization.mojo	library/cpp/grid_creator/binarization.cpp	partial	GreedyLogSum only, their default; host-side as theirs is; priority queue replaced by a scanned List
-ported/gpu_util/kernel/reorder_one_bit.mojo	catboost/cuda/cuda_util/kernel/reorder_one_bit_impl.cuh	transliterated	ReorderOneBitImpl + SortWithoutCub; the scan is CUB in theirs and is written out here, see VENDOR_LIBS.md 3b
+gbdt/gpu_data/grid_policy.mojo	catboost/cuda/gpu_data/grid_policy.h	transliterated	1/4/8 bits per feature
+gbdt/gpu_data/kernel/binarize.mojo	catboost/cuda/gpu_data/kernel/binarize.cu	transliterated	WriteCompressedIndexImpl only
+gbdt/gpu_util/gpu_data/partitions.mojo	catboost/cuda/cuda_util/gpu_data/partitions.h	transliterated	TDataPartition
+gbdt/gpu_util/partitions_reduce.mojo	catboost/cuda/cuda_util/partitions_reduce.h	replaced	theirs is a CUB segmented reduce
+gbdt/gpu_util/copy.mojo	catboost/cuda/cuda_util/	replaced	Mojo has no device-to-device enqueue_copy
+gbdt/methods/greedy_subsets_searcher/kernel/point_hist_half_byte_template.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/point_hist_half_byte_template.cuh	transliterated	accumulator split into slot arithmetic, see PORTING.md 10
+gbdt/methods/greedy_subsets_searcher/kernel/hist_binary.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/hist_binary.cu	transliterated	direct AND gather variants
+gbdt/methods/greedy_subsets_searcher/kernel/hist_half_byte.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/hist_half_byte.cu	transliterated	direct AND gather variants; derived from hist_binary, see PORTING.md 13
+gbdt/methods/greedy_subsets_searcher/kernel/hist_one_byte.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/hist_one_byte.cu	transliterated	direct AND gather variants; inner-bits pass loop, 5 to 8 bits
+gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_base.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_base.cuh	transliterated	TPointHist2OneByteBase + ComputeHist2OneByteBits launch; two-stat loop from compute_hist_loop_two_stats.cuh inlined (PORTING.md 10/13)
+gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_5bit.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_5bit.cu	transliterated	TPointHist2OneByte<5>; tiled_partition<8> widened to syncwarp
+gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_6bit.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_6bit.cu	transliterated	TPointHist2OneByte<6>; tiled_partition<16> widened to syncwarp
+gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_7bit.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_7bit.cu	transliterated	TPointHist2OneByte<7>; their sync is already the full warp
+gbdt/methods/greedy_subsets_searcher/kernel/histogram_utils.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/histogram_utils.cu	partial	scan, subtract, zero, copy, WriteReducesHistograms. fixed_to_float has no counterpart
+gbdt/methods/greedy_subsets_searcher/kernel/compute_scores.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/compute_scores.cu	partial	L2 calcer only; no multiclass, feature weights or variance
+gbdt/methods/greedy_subsets_searcher/kernel/split_points.mojo	catboost/cuda/methods/greedy_subsets_searcher/kernel/split_points.cu	partial+replaced	flags, gathers, partition update ported; the per-leaf CUB sort is replaced by a segmented stable partition
+gbdt/methods/greedy_subsets_searcher/split_properties_helper.mojo	catboost/cuda/methods/greedy_subsets_searcher/split_properties_helper.cpp	partial	BuildNecessaryHistograms classification only
+gbdt/methods/greedy_subsets_searcher/structure_searcher_template.mojo	catboost/cuda/methods/greedy_subsets_searcher/structure_searcher_template.h	partial	the schedule and its launch invariant
+gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo	catboost/cuda/methods/greedy_subsets_searcher/greedy_search_helper.cpp	partial	ComputeOptimalSplits + SplitLeaves as one function
+gbdt/methods/leaves_estimation/leaves_estimation.mojo	catboost/cuda/methods/leaves_estimation/	partial	pointwise Newton step only; no descent loop, ordered, exact or backtracking
+gbdt/gpu_data/gpu_structures.mojo	catboost/cuda/gpu_data/gpu_structures.h	transliterated	TCFeature; Offset narrowed ui64 to UInt32
+gbdt/gpu_data/compressed_index_builder.mojo	catboost/cuda/gpu_data/compressed_index_builder.h	partial	layout decision only; single-device, no docParallel striping
+gbdt/gpu_data/feature_blocks.mojo	catboost/cuda/methods/greedy_subsets_searcher/split_properties_helper.cpp	partial	TFeatureInBlock assembly, one block per policy present
+gbdt/options/catboost_options.mojo	catboost/private/libs/options/	partial	their option names and defaults; two departures (random_strength 0.0, plus determinism which has no counterpart)
+gbdt/gpu_lib/fwd.mojo	catboost/cuda/cuda_lib/fwd.h	transliterated	EPtrType; dir renamed cuda_lib -> gpu_lib, classes keep CatBoost names
+gbdt/gpu_lib/gpu_base.mojo	catboost/cuda/cuda_lib/cuda_base.h	partial	streams only; Metal has ONE, ctx.stream() raises not-implemented
+gbdt/gpu_lib/slice.mojo	catboost/cuda/cuda_lib/slice.h	transliterated	TSlice
+gbdt/gpu_lib/device_id.mojo	catboost/cuda/cuda_lib/device_id.h	transliterated	host_id always -1
+gbdt/gpu_lib/task.mojo	catboost/cuda/cuda_lib/task.h	partial+replaced	ECommandType all 10; ICommand -> tagged union, Mojo has no trait objects
+gbdt/gpu_lib/tasks_queue/single_host_task_queue.mojo	catboost/cuda/cuda_lib/tasks_queue/single_host_task_queue.h	replaced	no thread; enqueue_function is already an async submit
+gbdt/gpu_lib/gpu_single_worker.mojo	catboost/cuda/cuda_lib/gpu_single_worker.cpp	partial	the ECommandType dispatch switch; sync_count/launch_count/sync_budget
+gbdt/gpu_lib/gpu_manager.mojo	catboost/cuda/cuda_lib/cuda_manager.h	partial	single device; owns the ONLY drain
+gbdt/targets/kernel/pointwise_targets.mojo	catboost/cuda/targets/kernel/pointwise_targets.cu	partial	MseImpl only; der/der2 written into the two stats planes, functionValue reduced on the host
+gbdt/methods/kernel_add_model_value.mojo	catboost/cuda/methods/doc_parallel_boosting.h	partial+replaced	AppendModels device side; leaf read off the partition, not by evaluating the tree
+gbdt/methods/doc_parallel_boosting.mojo	catboost/cuda/methods/doc_parallel_boosting.h	partial	the Fit loop; one permutation, no test cursor, no early stopping, no snapshots
+gbdt/methods/greedy_subsets_searcher/points_subsets.mojo	catboost/cuda/methods/greedy_subsets_searcher/split_properties_helper.h	partial	TPointsSubsets, TLeaf, TBestSplitProperties; PartitionsCpu not pinned, see NOT_PORTED.md
+gbdt/models/oblivious_model.mojo	catboost/cuda/models/oblivious_model.h	partial	TObliviousTreeStructure, TObliviousTreeModel, TAdditiveModel; no SplitType
+gbdt/models/kernel/add_bin_values.mojo	catboost/cuda/models/kernel/add_model_value.cu	partial	ComputeBins fused with the add; ordered predicate only
+gbdt/models/model_text.mojo	catboost/libs/model/	replaced	save/load. Theirs is flatbuffers (model.fbs) plus six exporters; ours is plain text with IEEE-754 bits per float. PORTING.md deviation 49
+gbdt/grid_creator/binarization.mojo	library/cpp/grid_creator/binarization.cpp	partial	GreedyLogSum only, their default; host-side as theirs is; priority queue replaced by a scanned List
+gbdt/gpu_util/kernel/reorder_one_bit.mojo	catboost/cuda/cuda_util/kernel/reorder_one_bit_impl.cuh	transliterated	ReorderOneBitImpl + SortWithoutCub; the scan is CUB in theirs and is written out here, see VENDOR_LIBS.md 3b
 gbdt/gpu_util/kernel/segmented_scan.mojo	catboost/cuda/cuda_util/kernel/segmented_scan.cu	transliterated	SegmentedScanVector + SegmentedScanAndScatterNonNegativeVector (scan.cu:47); their operators and output iterators are segmented_scan_helpers.cuh; the CUSTOM-OP block scan is CUB in theirs and is written out here, PORTING.md 49
 gbdt/gpu_util/kernel/radix_sort.mojo	catboost/cuda/cuda_util/kernel/reorder_one_bit.cu	transliterated	ReorderBins (sort.cpp:544) is cub::DeviceRadixSort::SortPairs in theirs; here it is their own ReorderOneBit<ui32,ui32> looped LSD over the bit range, PORTING.md 50
-ported/gpu_util/kernel/fill.mojo	catboost/cuda/cuda_util/kernel/fill.cu
+gbdt/gpu_util/kernel/fill.mojo	catboost/cuda/cuda_util/kernel/fill.cu
