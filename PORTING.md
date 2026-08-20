@@ -854,3 +854,43 @@ primitive right at the shape you tuned for and wrong at the shape a check
 uses cannot be guarded, because the guard would encode a closed
 implementation's internals. `check_matmul_colmajor` keeps four sentinel
 shapes in the vendor table so a toolchain that fixes this announces itself.
+
+## 42. PCA's covariance implements RAFT's `stable=false` @todo: the centering is FUSED into the split-K Gram read
+
+`raft::stats::detail::cov` has two arms
+(`raft/cpp/include/raft/stats/detail/cov.cuh`): the shipped `stable=true`
+path at `:58-66` -- `meanCenter` IN PLACE (`:61`), then the cuBLAS GEMM
+(`:65-66`), with cuML adding the mean back after (`pca.cuh:138`) -- and a
+`stable=false` arm at `:67-69` that is nothing but
+`///@todo: implement this using cutlass + customized epilogue!` over
+`ASSERT(false, "cov: Implement stable=false case!")`. Fusing the centering
+into the contraction's read is THEIR declared design; they never shipped it
+because cuBLAS exposes no epilogue hook. Our Gram kernel is hand-written
+(`core/gram_splitk.mojo`, the Apple column's arm), so the epilogue exists:
+`gram_splitk_partial_centered_kernel` reads every element as `x - mu[col]`
+into the staging tile -- both operand reads see centered values, X is NEVER
+written -- and `compute_covariance`'s split-K arm drops the center AND
+restore launches entirely (~100 ms of PCA's remaining 166 at the bench
+shape was those two passes).
+
+The arms split on ONE predicate, `gram_splitk_applies`, the same call
+`gemm_tn` makes -- so `compute_covariance` fuses exactly when `gemm_tn`
+would have taken split-K, and non-Apple targets (where the predicate is
+False at every shape) run the shipped `stable=true` path verbatim: center,
+`linalg.matmul` via transpose, restore.
+
+Bit-identity is proven by `check_gram_centered_fused`
+(`mojo_only/gram_splitk_check.mojo`), not argued: the shipped pipeline
+(`column_mean_kernel` -> `shift_columns_kernel(-1)` -> `gemm_tn_splitk`)
+against the fused arm on the same device mu and hashed, offset-mean data,
+every cell compared with `!=` -- the fused tile load performs the identical
+fp32 subtraction the center pass stores (`x + (-1.0) * mu` is bitwise
+`x - mu`), and products of bit-identical fp32 inputs in the same order are
+bit-identical. The same check asserts X is bit-identical after the fused
+call, and `check_covariance_fused_and_fallback_restore`
+(`decomposition/mojo_only/pca_check.mojo`) holds the wired arm to it while
+proving the fallback arm's center + restore pair still runs by sentinel
+(center must MOVE x when the restore is withheld). The fusion is OPT-IN:
+`gemm_tn` never dispatches to the centered entry, so OLS and tSVD are
+bit-for-bit untouched (ols_main 4/4 unchanged; plain-arm bit dump identical
+across the change).

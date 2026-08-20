@@ -180,9 +180,11 @@ broken ones:
   at all. Fails if the `n_rows - 1` normalization is wrong.
 - **Shift a column by 1000.** Nothing may change, because PCA centers. This
   is the reach evidence for the centering path: if `column_mean_kernel` were
-  a no-op then `mu` is zero, if `shift_columns_kernel` were a no-op the
-  centering never happens, and either way a column carrying a 1000 offset
-  dominates the covariance and the first component swings onto it.
+  a no-op then `mu` is zero, if the centered read were a no-op -- the fused
+  `x - mu` tile load on the split-K arm (DEVIATION 42), `shift_columns_kernel`
+  on the fallback arm -- the centering never happens, and either way a column
+  carrying a 1000 offset dominates the covariance and the first component
+  swings onto it.
 
 ## Three failures this section paid for
 

@@ -27,9 +27,18 @@ on an `n_cols x n_cols` matrix. That is the structural reason this algorithm
 suits a GPU so well: one bandwidth-bound pass and one big arithmetic-dense
 product, then a small dense problem that does not care where it runs.
 
-Step 6 is the one to not drop. `input` is an in-out parameter that must end
-the call unchanged, and a fit that leaves the caller's matrix centered is
-wrong in a way nothing in the fit itself will reveal.
+The `input`-unchanged CONTRACT is the one to not drop: `input` is an in-out
+parameter that must end the call unchanged, and a fit that leaves the
+caller's matrix centered is wrong in a way nothing in the fit itself will
+reveal. HOW the contract is met now depends on the arm (DEVIATION 42): on
+the split-K arm the centering is FUSED into the Gram kernel's read
+(`core/gram_splitk.mojo::gram_centered_splitk_into` -- RAFT's own
+`stable=false` @todo, `raft/stats/detail/cov.cuh:67-69`, that cuBLAS never
+let them ship), so steps 2 and 6 are not launched at all and x is
+bit-identical afterwards, not merely restored to within rounding. On the
+fallback arm steps 2 and 6 run exactly as cuML ships them, and there step 6
+is still the launch that is easy to drop and invisible when dropped
+(`check_covariance_fused_and_fallback_restore` watches both arms).
 
 COV_EIG_DQ vs COV_EIG_JACOBI: THE BRANCH IS THREE LINES WIDE AND NOTHING ELSE
 ------------------------------------------------------------------------------
@@ -132,6 +141,7 @@ from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
 from core.gemm import gemm_nt, gemm_tn
+from core.gram_splitk import gram_centered_splitk_into, gram_splitk_applies
 from core.column_stats import (
     STATS_TPB,
     column_mean_kernel,
@@ -173,7 +183,20 @@ def compute_covariance(
     n_cols: Int,
     restore_input: Bool = True,
 ) raises:
-    """Steps 1, 2, 3 and 6. The only part of PCA that scales with rows."""
+    """Steps 1, 2, 3 and 6. The only part of PCA that scales with rows.
+
+    TWO ARMS, ONE PREDICATE (DEVIATION 42). The branch below must take the
+    fused arm exactly when `gemm_tn` would take split-K for this shape, so
+    it asks the SAME `gram_splitk_applies(m, n, k)` that `gemm_tn` asks --
+    one predicate, both readers, no target test of our own. On the split-K
+    arm the centering is fused into the Gram kernel's read and x is NEVER
+    MODIFIED, so steps 2 and 6 are not launched (RAFT's own `stable=false`
+    design, `raft/stats/detail/cov.cuh:67-69`, that cuBLAS's missing
+    epilogue hook kept them from shipping; bit-identical to center-then-gemm
+    by `check_gram_centered_fused`). The fallback arm is their shipped
+    `stable=true` path exactly: meanCenter in place (`cov.cuh:61`), GEMM,
+    meanAdd restore (`pca.cuh:138`).
+    """
     ctx.enqueue_function[column_mean_kernel](
         mu.unsafe_ptr(),
         x.unsafe_ptr(),
@@ -183,24 +206,34 @@ def compute_covariance(
         block_dim=(STATS_TPB, 1, 1),
     )
     var cells = n_rows * n_cols
-    ctx.enqueue_function[shift_columns_kernel](
-        x.unsafe_ptr(),
-        mu.unsafe_ptr(),
-        Int32(n_rows),
-        Int32(n_cols),
-        Float32(-1.0),
-        grid_dim=((cells + 255) // 256, 1, 1),
-        block_dim=(256, 1, 1),
-    )
-    # `raft::stats::cov` is a GEMM with `CUBLAS_OP_T, CUBLAS_OP_N`, served by
-    # `gemm_tn`'s dispatch (split-K kernel at these output widths; the vendor
-    # matmul starves on one output tile — core/gram_splitk.mojo). This was
-    # the SECOND contraction-shaped kernel in `core/` and it is why PCA did
-    # not move for four benchmark rounds while the other one was being tuned.
-    #
-    # MAX's matmul has no `alpha`, so cuBLAS's scale becomes its own pass over
-    # `n_cols^2` elements. A deviation in launch count, not arithmetic.
-    gemm_tn(ctx, cov, x, x_alias, x_alias2, n_cols, n_cols, n_rows)
+    var fused = gram_splitk_applies(n_cols, n_cols, n_rows)
+    if fused:
+        # `x_alias` is pure scratch on every arm (the transpose arm
+        # overwrites it wholesale), so it doubles as the partials workspace
+        # exactly as `gemm_tn` feeds `xt` to `gemm_tn_splitk_into`.
+        gram_centered_splitk_into(
+            ctx, cov, x, mu, x_alias, n_cols, n_rows
+        )
+    else:
+        ctx.enqueue_function[shift_columns_kernel](
+            x.unsafe_ptr(),
+            mu.unsafe_ptr(),
+            Int32(n_rows),
+            Int32(n_cols),
+            Float32(-1.0),
+            grid_dim=((cells + 255) // 256, 1, 1),
+            block_dim=(256, 1, 1),
+        )
+        # `raft::stats::cov` is a GEMM with `CUBLAS_OP_T, CUBLAS_OP_N`,
+        # served by `gemm_tn`'s dispatch -- which re-asks the same predicate,
+        # answers False the same way, and lands on the transpose + matmul
+        # arm. This was the SECOND contraction-shaped kernel in `core/` and
+        # it is why PCA did not move for four benchmark rounds while the
+        # other one was being tuned.
+        gemm_tn(ctx, cov, x, x_alias, x_alias2, n_cols, n_cols, n_rows)
+    # MAX's matmul has no `alpha`, so cuBLAS's scale becomes its own pass
+    # over `n_cols^2` elements on both arms. A deviation in launch count,
+    # not arithmetic.
     ctx.enqueue_function[scale_in_place_kernel](
         cov.unsafe_ptr(),
         Int32(n_cols * n_cols),
@@ -208,8 +241,12 @@ def compute_covariance(
         grid_dim=((n_cols * n_cols + 255) // 256, 1, 1),
         block_dim=(256, 1, 1),
     )
-    if restore_input:
-        # `raft::stats::meanAdd`, `pca.cuh:138`. Do not drop this.
+    if restore_input and not fused:
+        # `raft::stats::meanAdd`, `pca.cuh:138`, ON THE ARM THAT CENTERED IN
+        # PLACE only. Do not drop this HERE. The fused arm never modified x,
+        # so there is nothing to restore there -- running this launch on
+        # that arm would ADD mu to pristine data and corrupt it, which is
+        # why the guard is `and not fused` and not a comment.
         ctx.enqueue_function[shift_columns_kernel](
             x.unsafe_ptr(),
             mu.unsafe_ptr(),

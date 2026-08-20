@@ -26,6 +26,16 @@ THE SHAPES ARE THE HAZARDS, not round numbers:
 - m = 64 and m = 128: the CELLS = 16 and CELLS = 64 instantiations, which
   otherwise only wide fits would reach.
 
+THE CENTERED-FUSED ARM IS HELD TO `!=`, NOT TO A TOLERANCE.
+`check_gram_centered_fused` runs the exact shipped center pipeline
+(`column_mean_kernel` then `shift_columns_kernel(-1)` then
+`gemm_tn_splitk`) against `gram_centered_splitk` on the SAME device mu and
+the same hashed X with a deliberately nonzero column mean, and compares
+every cell BITWISE -- the fused tile load performs the identical fp32
+subtraction the center pass stores, so any difference at all is a bug. It
+also asserts X is bit-identical after the fused call (the arm's whole
+point is that X is never written) and that the poison in z died (reach).
+
 TOLERANCE: mag-relative 1e-5 + 1e-6 absolute, the same budget as the
 `gemm_tn` vendor-table row and for the same reason -- the operands are one
 matrix, the diagonal is a same-sign sum, and the budget covers fp32
@@ -39,8 +49,15 @@ it by construction.
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.gemm import gemm_tn, gemm_tn_via_transpose
+from core.column_stats import (
+    STATS_TPB,
+    column_mean_kernel,
+    shift_columns_kernel,
+)
 from core.gram_splitk import (
     gemm_tn_splitk,
+    gram_centered_splitk,
+    gram_centered_splitk_into,
     gram_splitk_applies,
     gram_splitk_chunk_count,
 )
@@ -179,6 +196,126 @@ def check_gram_splitk_oracle() raises:
         " all three CELLS widths; k odd, prime, below/above the "
         + String(n_chunks)
         + "-chunk grid, and never a chunk multiple)"
+    )
+
+
+def _centered_one(
+    ctx: DeviceContext, m: Int, k: Int, use_into: Bool
+) raises -> String:
+    """Center-then-split-K vs fused-centered-split-K, all cells bitwise.
+
+    The fill is hashed AND given a per-column offset (`col * 0.25`) so every
+    column mean is decidedly nonzero: a fused arm that silently read RAW X
+    would differ in every cell, and a mu producer that returned zeros would
+    too. z2 is poisoned, so a fused arm that never ran cannot pass either.
+    """
+    var salt = m * 2000003 + k
+    var x = ctx.enqueue_create_buffer[DType.float32](k * m)
+    var xc = ctx.enqueue_create_buffer[DType.float32](k * m)
+    var mu = ctx.enqueue_create_buffer[DType.float32](m)
+    var z1 = ctx.enqueue_create_buffer[DType.float32](m * m)
+    var z2 = ctx.enqueue_create_buffer[DType.float32](m * m)
+    var scratch = ctx.enqueue_create_buffer[DType.float32](k * m)
+    var hx = ctx.enqueue_create_host_buffer[DType.float32](k * m)
+    var hz1 = ctx.enqueue_create_host_buffer[DType.float32](m * m)
+    var hz2 = ctx.enqueue_create_host_buffer[DType.float32](m * m)
+    var hx_after = ctx.enqueue_create_host_buffer[DType.float32](k * m)
+    ctx.synchronize()
+    for i in range(k * m):
+        hx.unsafe_ptr().unsafe_store(
+            i, _val_f32(i, salt) + Float32(i % m) * Float32(0.25)
+        )
+    for i in range(m * m):
+        hz1.unsafe_ptr().unsafe_store(i, Float32(-987654.0))
+    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=xc, src_ptr=hx.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=z1, src_ptr=hz1.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=z2, src_ptr=hz1.unsafe_ptr())
+    ctx.synchronize()
+
+    # mu from the REAL producer, on the UNCENTERED data -- exactly what
+    # compute_covariance feeds the fused arm.
+    ctx.enqueue_function[column_mean_kernel](
+        mu.unsafe_ptr(),
+        x.unsafe_ptr(),
+        Int32(k),
+        Int32(m),
+        grid_dim=(m, 1, 1),
+        block_dim=(STATS_TPB, 1, 1),
+    )
+    # Arm 1: the shipped center pass, then the plain split-K Gram.
+    ctx.enqueue_function[shift_columns_kernel](
+        xc.unsafe_ptr(),
+        mu.unsafe_ptr(),
+        Int32(k),
+        Int32(m),
+        Float32(-1.0),
+        grid_dim=((k * m + 255) // 256, 1, 1),
+        block_dim=(256, 1, 1),
+    )
+    gemm_tn_splitk(ctx, z1, xc, m, k)
+    # Arm 2: the fused centered read on RAW x + the same device mu.
+    if use_into:
+        gram_centered_splitk_into(ctx, z2, x, mu, scratch, m, k)
+    else:
+        gram_centered_splitk(ctx, z2, x, mu, m, k)
+    ctx.synchronize()
+    ctx.enqueue_copy(dst_ptr=hz1.unsafe_ptr(), src_buf=z1)
+    ctx.enqueue_copy(dst_ptr=hz2.unsafe_ptr(), src_buf=z2)
+    ctx.enqueue_copy(dst_ptr=hx_after.unsafe_ptr(), src_buf=x)
+    ctx.synchronize()
+
+    for i in range(m * m):
+        var b = hz2.unsafe_ptr().unsafe_load(i)
+        if b == Float32(-987654.0):
+            return (
+                "fused cell " + String(i)
+                + " was NEVER WRITTEN (poison survived)"
+            )
+        var a = hz1.unsafe_ptr().unsafe_load(i)
+        if a != b:
+            return (
+                "cell " + String(i) + " center-then-gemm " + String(a)
+                + " fused " + String(b) + " NOT bitwise equal"
+            )
+    for i in range(k * m):
+        if (
+            hx_after.unsafe_ptr().unsafe_load(i)
+            != hx.unsafe_ptr().unsafe_load(i)
+        ):
+            return (
+                "x[" + String(i) + "] was MODIFIED by the fused arm, which"
+                " promises a read-only X"
+            )
+    return String("")
+
+
+def check_gram_centered_fused() raises:
+    """The fused-epilogue arm (RAFT's `stable=false` @todo,
+    `raft/stats/detail/cov.cuh:67-69`; DEVIATION 42) is BIT-IDENTICAL to
+    the shipped center-then-split-K pipeline, and X survives untouched.
+
+    Shapes: the checks' 4-wide PCA shape; the bench-family 32-wide shape at
+    prime k through BOTH workspace paths (allocating and scratch-reusing);
+    and m = 33, which does not divide the 256-thread block, so the
+    non-hoisted accumulation column runs centered too.
+    """
+    var ms: List[Int] = [4, 32, 32, 33]
+    var ks: List[Int] = [8192, 100003, 100003, 257]
+    var intos: List[Bool] = [False, False, True, False]
+    var ctx = DeviceContext()
+    for i in range(len(ms)):
+        var err = _centered_one(ctx, ms[i], ks[i], intos[i])
+        if err != "":
+            raise Error(
+                "check_gram_centered_fused FAILED at m=" + String(ms[i])
+                + " k=" + String(ks[i])
+                + (" (into)" if intos[i] else "") + ": " + err
+            )
+    print(
+        "check_gram_centered_fused OK: fused centered read is bitwise equal"
+        " to center-then-split-K at every cell (m=4/32/33, k=8192/100003/257,"
+        " both workspace paths), and x is bit-identical afterwards"
     )
 
 

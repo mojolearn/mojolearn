@@ -6,6 +6,7 @@ both sides of `gemm_tn`'s split-K/vendor switch exercised by name.
 """
 
 from decomposition.mojo_only.pca_check import (
+    check_covariance_fused_and_fallback_restore,
     check_input_restored,
     check_covariance_is_symmetric,
     check_pca_fit,
@@ -13,6 +14,7 @@ from decomposition.mojo_only.pca_check import (
     check_tsvd_against_pca,
 )
 from mojo_only.gram_splitk_check import (
+    check_gram_centered_fused,
     check_gram_dispatch,
     check_gram_splitk_oracle,
     check_gram_vendor_arm,
@@ -25,7 +27,9 @@ def main() raises:
     check_gram_splitk_oracle()
     check_gram_vendor_arm()
     check_gram_dispatch()
+    check_gram_centered_fused()
     check_covariance_is_symmetric()
+    check_covariance_fused_and_fallback_restore()
     check_pca_fit()
     check_pca_invariants()
     check_input_restored()

@@ -77,6 +77,24 @@ O(k/chunks + chunks) rounding steps instead of the O(k) of one serial fp32
 chain, so it is BETTER conditioned than the route it replaces, not worse.
 `mojo_only/gram_splitk_check.mojo` proves it against a Float64 host oracle
 at shapes that force every chunk live.
+
+THE CENTERED READ: RAFT'S `stable=false` TODO, IMPLEMENTED
+----------------------------------------------------------
+`raft/stats/detail/cov.cuh:67-69` is the arm they DECLARED and never
+shipped: `///@todo: implement this using cutlass + customized epilogue!`
+over `ASSERT(false, "cov: Implement stable=false case!")`. cuBLAS exposes
+no epilogue hook, so their only shipped arm (`cov.cuh:58-66`,
+`stable=true`) mean-centers the input IN PLACE before the GEMM and cuML
+adds the mean back after (`pca.cuh:138`). This kernel is hand-written, so
+the epilogue exists here: `gram_splitk_partial_centered_kernel` reads
+every element as `x[t, j] - mu[j]` into the staging tile -- the SAME fp32
+subtraction `shift_columns_kernel` performs and stores, so the fused Gram
+is BIT-IDENTICAL to center-then-gemm (`check_gram_centered_fused`, per
+cell, `!=`) -- and X is NEVER WRITTEN. Bitwise symmetry is unchanged: the
+tile simply holds centered values, and cells (i, j) and (j, i) still
+multiply the same two tile loads in commuted order. OPT-IN ONLY:
+`gemm_tn`'s dispatch never takes it; `compute_covariance`'s split-K arm is
+the one caller, so OLS and tSVD are bit-for-bit untouched. DEVIATION 42.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
@@ -197,9 +215,11 @@ def gram_splitk_applies(m: Int, n: Int, k: Int) raises -> Bool:
     return vendor_tiles < block_slots
 
 
-def gram_splitk_partial_kernel[CELLS: Int](
+@always_inline
+def _gram_splitk_partial_body[CELLS: Int, CENTERED: Bool](
     partials: MutPointer[Float32, MutAnyOrigin],
     x: MutPointer[Float32, MutAnyOrigin],
+    mu: MutPointer[Float32, MutAnyOrigin],
     m_in: Int32,
     k_in: Int32,
     chunk_rows_in: Int32,
@@ -211,6 +231,12 @@ def gram_splitk_partial_kernel[CELLS: Int](
     including k smaller than the chunk count (then `chunk_rows = 1` and the
     trailing chunks are empty) and k not a multiple of the chunk size (the
     last live chunk is short: `t_end` is clamped to k).
+
+    `CENTERED` is the fused-epilogue arm (module header): the staging-tile
+    load subtracts `mu[column]` in registers, so BOTH operand reads of every
+    product see centered values and X is never written. `mu` is read on that
+    arm only; the plain entry passes a dead pointer the `comptime if`
+    eliminates.
     """
     var m = Int(m_in)
     var k = Int(k_in)
@@ -262,7 +288,18 @@ def gram_splitk_partial_kernel[CELLS: Int](
         var span = rows * m
         var i = tid
         while i < span:
-            tile[i] = x.unsafe_load(t * m + i)
+            comptime if CENTERED:
+                # `t * m` is a multiple of m, so element i of the span sits
+                # in column `i % m`. This is the SAME fp32 subtraction
+                # `shift_columns_kernel` performs and stores (its runtime
+                # `x + (-1.0) * mu` is bitwise `x - mu`: the multiply by
+                # -1.0 is an exact sign flip and IEEE `a + (-b)` IS
+                # `a - b`), landed in the shared tile instead of back in
+                # DRAM. Bit-identity is proven per cell by
+                # `check_gram_centered_fused`, not argued.
+                tile[i] = x.unsafe_load(t * m + i) - mu.unsafe_load(i % m)
+            else:
+                tile[i] = x.unsafe_load(t * m + i)
             i += GRAM_TPB
         barrier()
         if uniform_jj:
@@ -290,6 +327,38 @@ def gram_splitk_partial_kernel[CELLS: Int](
             partials.unsafe_store(chunk * mn + cell, acc[c])
 
 
+def gram_splitk_partial_kernel[CELLS: Int](
+    partials: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    k_in: Int32,
+    chunk_rows_in: Int32,
+):
+    """The plain entry: the Gram of X as stored. `x` fills the body's dead
+    `mu` slot; the `CENTERED=False` instantiation never reads it."""
+    _gram_splitk_partial_body[CELLS, False](
+        partials, x, x, m_in, k_in, chunk_rows_in
+    )
+
+
+def gram_splitk_partial_centered_kernel[CELLS: Int](
+    partials: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    mu: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    k_in: Int32,
+    chunk_rows_in: Int32,
+):
+    """The fused-epilogue entry: the Gram of `X - 1 mu^T`, X read-only.
+
+    RAFT's `stable=false` TODO (`raft/stats/detail/cov.cuh:67-69`),
+    implemented -- see the module header. DEVIATION 42.
+    """
+    _gram_splitk_partial_body[CELLS, True](
+        partials, x, mu, m_in, k_in, chunk_rows_in
+    )
+
+
 def gram_splitk_reduce_kernel(
     z: MutPointer[Float32, MutAnyOrigin],
     partials: MutPointer[Float32, MutAnyOrigin],
@@ -312,67 +381,66 @@ def gram_splitk_reduce_kernel(
     z.unsafe_store(cell, acc)
 
 
-def _splitk_launch(
+def _enqueue_partial[CELLS: Int](
     ctx: DeviceContext,
-    mut z: DeviceBuffer[DType.float32],
-    mut x: DeviceBuffer[DType.float32],
     mut partials: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
     m: Int,
     k: Int,
+    kc: Int,
+    n_chunks: Int,
 ) raises:
-    """Enqueue the partial + reduce pair into a CALLER-OWNED workspace.
+    """One width instantiation of the PLAIN partial kernel."""
+    comptime kern = gram_splitk_partial_kernel[CELLS]
+    ctx.enqueue_function[kern](
+        partials.unsafe_ptr(),
+        x.unsafe_ptr(),
+        Int32(m),
+        Int32(k),
+        Int32(kc),
+        grid_dim=(n_chunks, 1, 1),
+        block_dim=(GRAM_TPB, 1, 1),
+    )
 
-    `partials` must hold at least `gram_splitk_chunk_count() * m * m`
-    floats. The caller synchronizes; nothing here waits. Which buffer the
-    partials land in is SCHEDULING, not numerics: the kernels, the chunk
-    partition and the ascending fold are identical whoever owns the memory.
-    """
-    var n_chunks = gram_splitk_chunk_count()
+
+def _enqueue_partial_centered[CELLS: Int](
+    ctx: DeviceContext,
+    mut partials: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut mu: DeviceBuffer[DType.float32],
+    m: Int,
+    k: Int,
+    kc: Int,
+    n_chunks: Int,
+) raises:
+    """One width instantiation of the CENTERED partial kernel."""
+    comptime kern = gram_splitk_partial_centered_kernel[CELLS]
+    ctx.enqueue_function[kern](
+        partials.unsafe_ptr(),
+        x.unsafe_ptr(),
+        mu.unsafe_ptr(),
+        Int32(m),
+        Int32(k),
+        Int32(kc),
+        grid_dim=(n_chunks, 1, 1),
+        block_dim=(GRAM_TPB, 1, 1),
+    )
+
+
+def _splitk_chunk_rows(k: Int, n_chunks: Int) -> Int:
     var kc = (k + n_chunks - 1) // n_chunks
     if kc < 1:
         kc = 1
-    var mn = m * m
+    return kc
 
-    # Three register widths, smallest that fits, so a 32 x 32 Gram does not
-    # pay a 64-cell unroll's dead guards. The instantiation changes WHICH
-    # thread owns which cell, never the order any cell is accumulated in,
-    # so it is scheduling, not numerics.
-    if mn <= GRAM_TPB * 4:
-        comptime kernel4 = gram_splitk_partial_kernel[4]
-        ctx.enqueue_function[kernel4](
-            partials.unsafe_ptr(),
-            x.unsafe_ptr(),
-            Int32(m),
-            Int32(k),
-            Int32(kc),
-            grid_dim=(n_chunks, 1, 1),
-            block_dim=(GRAM_TPB, 1, 1),
-        )
-    elif mn <= GRAM_TPB * 16:
-        comptime kernel16 = gram_splitk_partial_kernel[16]
-        ctx.enqueue_function[kernel16](
-            partials.unsafe_ptr(),
-            x.unsafe_ptr(),
-            Int32(m),
-            Int32(k),
-            Int32(kc),
-            grid_dim=(n_chunks, 1, 1),
-            block_dim=(GRAM_TPB, 1, 1),
-        )
-    else:
-        comptime kernel64 = gram_splitk_partial_kernel[
-            GRAM_MAX_CELLS_PER_THREAD
-        ]
-        ctx.enqueue_function[kernel64](
-            partials.unsafe_ptr(),
-            x.unsafe_ptr(),
-            Int32(m),
-            Int32(k),
-            Int32(kc),
-            grid_dim=(n_chunks, 1, 1),
-            block_dim=(GRAM_TPB, 1, 1),
-        )
 
+def _enqueue_reduce(
+    ctx: DeviceContext,
+    mut z: DeviceBuffer[DType.float32],
+    mut partials: DeviceBuffer[DType.float32],
+    mn: Int,
+    n_chunks: Int,
+) raises:
     ctx.enqueue_function[gram_splitk_reduce_kernel](
         z.unsafe_ptr(),
         partials.unsafe_ptr(),
@@ -381,6 +449,69 @@ def _splitk_launch(
         grid_dim=((mn + GRAM_TPB - 1) // GRAM_TPB, 1, 1),
         block_dim=(GRAM_TPB, 1, 1),
     )
+
+
+def _splitk_launch(
+    ctx: DeviceContext,
+    mut z: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut partials: DeviceBuffer[DType.float32],
+    m: Int,
+    k: Int,
+) raises:
+    """Enqueue the plain partial + reduce pair into a CALLER-OWNED workspace.
+
+    `partials` must hold at least `gram_splitk_chunk_count() * m * m`
+    floats. The caller synchronizes; nothing here waits. Which buffer the
+    partials land in is SCHEDULING, not numerics: the kernels, the chunk
+    partition and the ascending fold are identical whoever owns the memory.
+    """
+    var n_chunks = gram_splitk_chunk_count()
+    var kc = _splitk_chunk_rows(k, n_chunks)
+    var mn = m * m
+
+    # Three register widths, smallest that fits, so a 32 x 32 Gram does not
+    # pay a 64-cell unroll's dead guards. The instantiation changes WHICH
+    # thread owns which cell, never the order any cell is accumulated in,
+    # so it is scheduling, not numerics.
+    if mn <= GRAM_TPB * 4:
+        _enqueue_partial[4](ctx, partials, x, m, k, kc, n_chunks)
+    elif mn <= GRAM_TPB * 16:
+        _enqueue_partial[16](ctx, partials, x, m, k, kc, n_chunks)
+    else:
+        _enqueue_partial[GRAM_MAX_CELLS_PER_THREAD](
+            ctx, partials, x, m, k, kc, n_chunks
+        )
+    _enqueue_reduce(ctx, z, partials, mn, n_chunks)
+
+
+def _splitk_launch_centered(
+    ctx: DeviceContext,
+    mut z: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut mu: DeviceBuffer[DType.float32],
+    mut partials: DeviceBuffer[DType.float32],
+    m: Int,
+    k: Int,
+) raises:
+    """`_splitk_launch` with the centered tile read (module header;
+    DEVIATION 42). Same width dispatch, same reduce, X read-only."""
+    var n_chunks = gram_splitk_chunk_count()
+    var kc = _splitk_chunk_rows(k, n_chunks)
+    var mn = m * m
+    if mn <= GRAM_TPB * 4:
+        _enqueue_partial_centered[4](
+            ctx, partials, x, mu, m, k, kc, n_chunks
+        )
+    elif mn <= GRAM_TPB * 16:
+        _enqueue_partial_centered[16](
+            ctx, partials, x, mu, m, k, kc, n_chunks
+        )
+    else:
+        _enqueue_partial_centered[GRAM_MAX_CELLS_PER_THREAD](
+            ctx, partials, x, mu, m, k, kc, n_chunks
+        )
+    _enqueue_reduce(ctx, z, partials, mn, n_chunks)
 
 
 def gram_splitk_scratch_covers(m: Int, k: Int) raises -> Bool:
@@ -437,3 +568,48 @@ def gemm_tn_splitk_into(
         ctx.synchronize()
         return
     gemm_tn_splitk(ctx, z, x, m, k)
+
+
+def gram_centered_splitk(
+    ctx: DeviceContext,
+    mut z: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut mu: DeviceBuffer[DType.float32],
+    m: Int,
+    k: Int,
+) raises:
+    """`z[m x m] = (X - 1 mu^T)^T (X - 1 mu^T)` with the centering FUSED
+    into the split-K read. X IS NEVER WRITTEN.
+
+    RAFT's own declared design for `cov`'s `stable=false` arm, which they
+    never shipped (`raft/stats/detail/cov.cuh:67-69`: the cutlass-epilogue
+    @todo over `ASSERT(false, ...)`; module header; DEVIATION 42).
+    Bit-identical to center-then-`gemm_tn_splitk` because the tile load
+    performs the exact fp32 subtraction `shift_columns_kernel` would have
+    stored -- proven per cell by `check_gram_centered_fused`. OPT-IN:
+    `gemm_tn` never dispatches here; `compute_covariance`'s split-K arm is
+    the one caller, so OLS/tSVD stay bit-for-bit on the plain kernel.
+    """
+    var n_chunks = gram_splitk_chunk_count()
+    var partials = ctx.enqueue_create_buffer[DType.float32](n_chunks * m * m)
+    _splitk_launch_centered(ctx, z, x, mu, partials, m, k)
+    ctx.synchronize()
+
+
+def gram_centered_splitk_into(
+    ctx: DeviceContext,
+    mut z: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut mu: DeviceBuffer[DType.float32],
+    mut scratch: DeviceBuffer[DType.float32],
+    m: Int,
+    k: Int,
+) raises:
+    """`gram_centered_splitk`, partials landing in `scratch` (>= k * m
+    floats, pure scratch) when `gram_splitk_scratch_covers`, exactly as
+    `gemm_tn_splitk_into` does for the plain arm; small k allocates."""
+    if gram_splitk_scratch_covers(m, k):
+        _splitk_launch_centered(ctx, z, x, mu, scratch, m, k)
+        ctx.synchronize()
+        return
+    gram_centered_splitk(ctx, z, x, mu, m, k)

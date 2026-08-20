@@ -31,11 +31,13 @@ stronger: they hold for the true algorithm and fail for most broken ones.
    variances, not the directions.
 
 Invariant 2 is the reach test for the centering path specifically. If
-`column_mean_kernel` were a no-op then `mu` is zero, if
-`shift_columns_kernel` were a no-op then the centering never happens, and in
-either case a column with a 1000 offset dominates the covariance and the
-first component swings onto it. There is no way to pass invariant 2 without
-both kernels running.
+`column_mean_kernel` were a no-op then `mu` is zero; if the centered read
+were a no-op -- the FUSED `x - mu[col]` tile load on the split-K arm
+(DEVIATION 42), `shift_columns_kernel` on the fallback arm -- then the
+centering never happens; and in either case a column with a 1000 offset
+dominates the covariance and the first component swings onto it. There is
+no way to pass invariant 2 without the mean and the centered read both
+live on whichever arm this shape dispatches to.
 
 Invariant 1 fails if the `n_rows - 1` normalization is wrong or missing.
 """
@@ -295,11 +297,17 @@ def check_pca_invariants() raises:
 
 
 def check_input_restored() raises:
-    """Step 6, the one that is easy to drop and invisible when dropped.
+    """The caller's matrix must end the fit unchanged, on EVERY arm.
 
-    `pca_fit` centers the caller's matrix in place and must add the mean back
-    (`pca.cuh:138`). A fit that forgets leaves the caller holding
-    centered data, and nothing inside the fit will ever reveal it.
+    On the fallback arm `pca_fit` centers the caller's matrix in place and
+    must add the mean back (`pca.cuh:138`); a fit that forgets leaves the
+    caller holding centered data, and nothing inside the fit will ever
+    reveal it. On the split-K arm (which this 4-column shape takes) the
+    centering is fused into the Gram read and x is never written at all
+    (DEVIATION 42), so the worst element move here is exactly 0 rather
+    than rounding-sized. `check_covariance_fused_and_fallback_restore`
+    holds the fused arm to that bitwise standard and exercises the
+    fallback arm's center + restore pair at a 129-column shape.
     """
     var ctx = DeviceContext()
     var x = ctx.enqueue_create_buffer[DType.float32](PCA_ROWS * PCA_COLS)
@@ -340,6 +348,148 @@ def check_input_restored() raises:
     print(
         "check_input_restored OK: worst element moved " + String(worst)
         + " after a full fit"
+    )
+
+
+def check_covariance_fused_and_fallback_restore() raises:
+    """Sentinels for BOTH `compute_covariance` arms, split by the SAME
+    predicate the code uses (`gram_splitk_applies`), so this check cannot
+    drift from the dispatch it watches.
+
+    FUSED ARM (4 columns): x must be BIT-IDENTICAL after the call -- the
+    arm's contract is a read-only X, so `!=` on every element, no
+    tolerance, with `restore_input` at both values (the flag is dead
+    there).
+
+    FALLBACK ARM (129 columns, one past `GRAM_MAX_COLS`): with
+    `restore_input=False` x MUST MOVE (the reach sentinel: the in-place
+    center pass really ran -- a no-op center would leave x untouched and
+    this check red), and with `restore_input=True` it must return to the
+    original within rounding. Together with the move sentinel, "returns to
+    original" is evidence of a real center + restore pair rather than of
+    two no-ops.
+    """
+    from core.gram_splitk import gram_splitk_applies
+
+    if not gram_splitk_applies(PCA_COLS, PCA_COLS, PCA_ROWS):
+        raise Error(
+            "fixture assumption broke: the 4-column shape no longer"
+            " dispatches to split-K, so this check tests nothing"
+        )
+    var ctx = DeviceContext()
+    var x = ctx.enqueue_create_buffer[DType.float32](PCA_ROWS * PCA_COLS)
+    var mu = ctx.enqueue_create_buffer[DType.float32](PCA_COLS)
+    var cov = ctx.enqueue_create_buffer[DType.float32](PCA_COLS * PCA_COLS)
+    var x_alias = ctx.enqueue_create_buffer[DType.float32](
+        PCA_ROWS * PCA_COLS
+    )
+    var x_alias2 = ctx.enqueue_create_buffer[DType.float32](
+        PCA_ROWS * PCA_COLS
+    )
+    ctx.synchronize()
+    _fill(ctx, x, 1.0, 7.5)
+
+    var before = ctx.enqueue_create_host_buffer[DType.float32](
+        PCA_ROWS * PCA_COLS
+    )
+    var after = ctx.enqueue_create_host_buffer[DType.float32](
+        PCA_ROWS * PCA_COLS
+    )
+    ctx.enqueue_copy(dst_ptr=before.unsafe_ptr(), src_buf=x)
+    ctx.synchronize()
+    for pass_idx in range(2):
+        compute_covariance(
+            ctx, x, x_alias, x_alias2, mu, cov, PCA_ROWS, PCA_COLS,
+            restore_input=(pass_idx == 1),
+        )
+        ctx.enqueue_copy(dst_ptr=after.unsafe_ptr(), src_buf=x)
+        ctx.synchronize()
+        for i in range(PCA_ROWS * PCA_COLS):
+            if (
+                after.unsafe_ptr().unsafe_load(i)
+                != before.unsafe_ptr().unsafe_load(i)
+            ):
+                raise Error(
+                    "FUSED arm modified x at element " + String(i)
+                    + " (restore_input=" + String(pass_idx == 1)
+                    + "); its contract is a read-only X, bitwise"
+                )
+
+    # FALLBACK ARM: one column past the split-K width cap.
+    comptime FB_ROWS = 512
+    comptime FB_COLS = 129
+    if gram_splitk_applies(FB_COLS, FB_COLS, FB_ROWS):
+        raise Error(
+            "fixture assumption broke: 129 columns dispatches to split-K"
+        )
+    var fx = ctx.enqueue_create_buffer[DType.float32](FB_ROWS * FB_COLS)
+    var fmu = ctx.enqueue_create_buffer[DType.float32](FB_COLS)
+    var fcov = ctx.enqueue_create_buffer[DType.float32](FB_COLS * FB_COLS)
+    var fa = ctx.enqueue_create_buffer[DType.float32](FB_ROWS * FB_COLS)
+    var fa2 = ctx.enqueue_create_buffer[DType.float32](FB_ROWS * FB_COLS)
+    var fh = ctx.enqueue_create_host_buffer[DType.float32](
+        FB_ROWS * FB_COLS
+    )
+    var fh_after = ctx.enqueue_create_host_buffer[DType.float32](
+        FB_ROWS * FB_COLS
+    )
+    ctx.synchronize()
+    for i in range(FB_ROWS * FB_COLS):
+        # Hashed, with a nonzero mean so the center pass has work to do.
+        var z = (UInt64(i + 1) * 0x9E3779B97F4A7C15) >> 33
+        fh.unsafe_ptr().unsafe_store(
+            i, Float32(Int(z % 1000)) * Float32(0.01) + Float32(3.0)
+        )
+    ctx.enqueue_copy(dst_buf=fx, src_ptr=fh.unsafe_ptr())
+    ctx.synchronize()
+
+    compute_covariance(
+        ctx, fx, fa, fa2, fmu, fcov, FB_ROWS, FB_COLS, restore_input=False
+    )
+    ctx.enqueue_copy(dst_ptr=fh_after.unsafe_ptr(), src_buf=fx)
+    ctx.synchronize()
+    var moved = 0
+    for i in range(FB_ROWS * FB_COLS):
+        if (
+            fh_after.unsafe_ptr().unsafe_load(i)
+            != fh.unsafe_ptr().unsafe_load(i)
+        ):
+            moved += 1
+    if moved == 0:
+        raise Error(
+            "FALLBACK arm with restore_input=False left x untouched: the"
+            " in-place center pass did not run, so the restore sentinel"
+            " below would be vacuous"
+        )
+
+    # Restore by hand (x is currently centered), then run the restoring
+    # variant end to end and demand it comes back within rounding.
+    ctx.enqueue_copy(dst_buf=fx, src_ptr=fh.unsafe_ptr())
+    ctx.synchronize()
+    compute_covariance(
+        ctx, fx, fa, fa2, fmu, fcov, FB_ROWS, FB_COLS, restore_input=True
+    )
+    ctx.enqueue_copy(dst_ptr=fh_after.unsafe_ptr(), src_buf=fx)
+    ctx.synchronize()
+    var worst = Float32(0.0)
+    for i in range(FB_ROWS * FB_COLS):
+        var d = abs(
+            fh_after.unsafe_ptr().unsafe_load(i)
+            - fh.unsafe_ptr().unsafe_load(i)
+        )
+        if d > worst:
+            worst = d
+    if worst > Float32(0.01):
+        raise Error(
+            "FALLBACK arm restore failed: worst element still off by "
+            + String(worst)
+        )
+    print(
+        "check_covariance_fused_and_fallback_restore OK: fused arm left x"
+        " bit-identical under both restore_input values; fallback arm's"
+        " center moved " + String(moved) + "/" + String(FB_ROWS * FB_COLS)
+        + " elements and its restore brought the worst back to "
+        + String(worst)
     )
 
 

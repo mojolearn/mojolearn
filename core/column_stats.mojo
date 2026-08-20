@@ -29,11 +29,15 @@ what put the small shapes on the hand-written kernel.
 
 THE ONE SEMANTIC THAT IS EASY TO GET WRONG
 ------------------------------------------
-`pca_fit` centers the input IN PLACE, computes the covariance from the
-centered data, and then calls `raft::stats::meanAdd` to put the input BACK
-(`detail/pca.cuh:186`). The input is an in-out parameter that ends the call
-unchanged. Skipping the restore leaves the caller's matrix silently centered,
-which is invisible until they use it for something else.
+THEIR `pca_fit` centers the input IN PLACE, computes the covariance from
+the centered data, and then calls `raft::stats::meanAdd` to put the input
+BACK (`pca.cuh:138`). The input is an in-out parameter that ends the call
+unchanged. Ours meets that contract per arm (DEVIATION 42): the split-K arm
+fuses the centering into the Gram kernel's read and never writes x, so
+`shift_columns_kernel` does not launch there at all; the fallback arm runs
+their center + restore pair exactly, and there skipping the restore leaves
+the caller's matrix silently centered, which is invisible until they use it
+for something else.
 
 `cov` uses the `n_rows - 1` denominator, the sample covariance, because
 `pca_fit` later multiplies the explained variances by exactly `n_rows - 1` to

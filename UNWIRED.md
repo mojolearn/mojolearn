@@ -375,7 +375,7 @@ dataset binned below 8 bits.
 
 | thing | state | note |
 |---|---|---|
-| `pca_fit`, `pca_transform`, `covariance_kernel`, `column_mean_kernel`, `shift_columns_kernel`, `jacobi_eigh` | **REACHED AND PASSING**, `decomposition/pca_main.mojo` | Reach for the centering path is proved by an INVARIANT rather than a corruption: a +1000 column shift must change nothing, which is impossible unless both the mean and the shift kernels run. |
+| `pca_fit`, `pca_transform`, `covariance_kernel`, `column_mean_kernel`, `shift_columns_kernel`, `jacobi_eigh` | **REACHED AND PASSING**, `decomposition/pca_main.mojo` | Reach for the centering path is proved by an INVARIANT rather than a corruption: a +1000 column shift must change nothing, which is impossible unless the mean kernel and the centered read both run (the FUSED `x - mu` tile load on the split-K arm, DEVIATION 42; `shift_columns_kernel` on the fallback arm, where `check_covariance_fused_and_fallback_restore` also proves the center + restore pair by sabotage-shaped sentinels). |
 | `pca_transform` | built, and its output is NOT yet checked | `pca_fit` is checked three ways; `pca_transform` compiles and is called by nothing in the checks. It reuses `core/gemm.mojo`, which is exercised elsewhere, but that is an argument and not evidence. Next check to write. |
 | `whiten`, `pca_inverse_transform` | NOT PORTED | see `decomposition/UNPORTED.tsv` |
 
