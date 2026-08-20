@@ -22,3 +22,6 @@ __pycache__/
 /oracle_main
 /matrix_main
 /vendor_main
+
+# Agent worktrees: transient, and each is its own git repo
+.claude/worktrees/
