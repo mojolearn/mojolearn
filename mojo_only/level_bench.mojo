@@ -1031,12 +1031,13 @@ def bench_tree_shapes(n_rows: Int, max_depth: Int, repeats: Int) raises:
             var scratch_cursor = ctx.enqueue_create_buffer[DType.float32](1)
             var _sp = List[TBinarySplit]()
             var _lv = List[Float32]()
+            var _lo = List[Int]()
             var sizes = run_tree_layout(
                 ctx, n_rows, fold_sets[s], max_depth,
                 cidx[s], stat[s], ridx[s],
                 scratch_cursor,
                 Float32(tws[s]), Float32(tgs[s]),
-                _sp, _lv,
+                _sp, _lv, _lo,
             )
             var dt = perf_counter_ns() - t0
             _ = len(sizes)
@@ -1101,10 +1102,11 @@ def bench_subtraction(
             var scratch_cursor = ctx.enqueue_create_buffer[DType.float32](1)
             var _sp = List[TBinarySplit]()
             var _lv = List[Float32]()
+            var _lo = List[Int]()
             var sizes = run_tree_layout(
                 ctx, n_rows, folds, max_depth, cidx, stat, ridx,
                 scratch_cursor,
-                Float32(tw), Float32(tg), _sp, _lv, arm == 0,
+                Float32(tw), Float32(tg), _sp, _lv, _lo, arm == 0,
             )
             var dt = perf_counter_ns() - t0
             samples[arm].append(Float64(dt) / 1.0e6)
@@ -1191,11 +1193,12 @@ def bench_realistic(n_rows: Int, n_features: Int, max_depth: Int, repeats: Int) 
         var scratch_cursor = ctx.enqueue_create_buffer[DType.float32](1)
         var _sp = List[TBinarySplit]()
         var _lv = List[Float32]()
+        var _lo = List[Int]()
         var sizes = run_tree_layout(
             ctx, n_rows, folds, max_depth, cindex, stats, row_index,
             scratch_cursor,
             Float32(tw), Float32(tg),
-            _sp, _lv,
+            _sp, _lv, _lo,
         )
         var dt = perf_counter_ns() - t0
         _ = len(sizes)

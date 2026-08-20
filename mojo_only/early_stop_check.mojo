@@ -85,9 +85,11 @@ def _fit(
     ctx.enqueue_memset(cursor, Float32(0.0))
     ctx.synchronize()
 
+    var _lo = List[Int]()
     var sizes = run_tree_layout(
         ctx, ES_ROWS, folds, 3, cindex, stats, row_index, cursor,
         Float32(ES_ROWS), Float32(gmag), out_splits, out_leaf_values,
+        _lo,
         apply_to_cursor=True, l2_leaf_reg=ES_L2,
     )
     return sizes^

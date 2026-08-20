@@ -74,8 +74,20 @@ citations rather than leaving it to be assumed.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host.device_attribute import DeviceAttribute
+from gbdt.methods.kernel_add_model_value import add_model_value_kernel
 
 from gbdt.gpu_lib.gpu_manager import TCudaManager
+from gbdt.gpu_util.kernel.transform import launch_gather_with_mask_f32
+from gbdt.methods.leaves_estimation.descent_helpers import (
+    newton_like_walker_estimate,
+)
+from gbdt.methods.leaves_estimation.pointwise_oracle import (
+    make_bin_optimized_oracle,
+)
+from gbdt.methods.leaves_estimation.step_estimator import (
+    BACKTRACKING_ANY_IMPROVEMENT,
+)
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
     run_tree_layout,
 )
@@ -105,6 +117,10 @@ from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_base import (
 )
 from gbdt.targets.kernel.pointwise_targets import (
     MSE_BLOCK_SIZE,
+    OBJECTIVE_CROSSENTROPY,
+    OBJECTIVE_LOGLOSS,
+    OBJECTIVE_RMSE,
+    cross_entropy_kernel,
     deterministic_sum_lanes_kernel,
     mse_kernel,
 )
@@ -129,8 +145,27 @@ def fit(
     random_seed: UInt64 = UInt64(0),
     one_hot: List[Bool] = List[Bool](),
     score_function: Int = SCORE_FUNCTION_COSINE,
+    objective: Int = OBJECTIVE_RMSE,
+    logloss_border: Float32 = Float32(0.5),
+    leaf_estimation_iterations: Int = -1,
 ) raises -> List[Float64]:
     """Their `Fit` (`doc_parallel_boosting.h:302`), one permutation.
+
+    `objective` selects the pointwise loss. RMSE keeps the closed-form
+    Newton leaf inside `run_tree_layout` (one iteration from zero IS the
+    closed form, `descent_helpers.cpp:151-156`). Logloss/CrossEntropy run
+    their `NeedEstimation` arm instead (`doc_parallel_boosting.h:371-385`):
+    structure only from the searcher, then `TDocParallelLeavesEstimator`
+    -- oracle over the bin-sorted rows, Newton walker, THEIR default of
+    TEN iterations (`GetEstimationMethodDefaults`,
+    `catboost_options.cpp:157-164`; `leaf_estimation_iterations = -1`
+    takes that default), then the rescaled model applied to the cursor.
+    UNDER BOOTSTRAP THE ESTIMATOR SEES THE PLAIN WEIGHTS: their
+    `AddEstimationTask` takes `learnTarget`, not the bootstrapped weak
+    target (`doc_parallel_boosting.h:377-383`) -- sampling shapes the
+    STRUCTURE only. The returned per-iteration losses are mean logloss
+    (their maximized log-likelihood, negated and divided by rows), the
+    same shape the RMSE column has.
 
     `learning_rate` is their `Config.LearningRate`, whose default is **0.03**
     (`boosting_options.cpp:10`). It stood at 0.3 here, a tenfold larger step
@@ -224,6 +259,12 @@ def fit(
         2 * bootstrap_grid_blocks(n_rows)
     )
 
+    # ONE device query for the estimator's reduces: `get_attribute` costs
+    # 1.26 ms on this Metal device and their `SMCount()` is a cached static.
+    var est_sm = -1
+    if objective != OBJECTIVE_RMSE:
+        est_sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+
     var losses = List[Float64]()
     # their `TVector<TResultModel>* result`, the ensemble being built
 
@@ -235,20 +276,47 @@ def fit(
         # gradients, so the value this iteration reads is the loss of the
         # cursor as it stands -- i.e. after the PREVIOUS tree.
         var mags_in_mse = _needs_magnitudes and not bootstrap_bayesian
-        ctx.enqueue_function[mse_kernel](
-            targets.unsafe_ptr(), weights.unsafe_ptr(), Int32(n_rows),
-            cursor.unsafe_ptr(),
-            Int32(1) if has_weights else Int32(0),
-            stats.unsafe_ptr(),
-            fv_part.unsafe_ptr(), Int32(1),
-            mag_part.unsafe_ptr(),
-            # under bootstrap the magnitudes must bound the BOOTSTRAPPED
-            # planes (a Bayesian weight reaches ~46 at the tail), so the
-            # bootstrap kernel computes them AFTER its multiply instead
-            Int32(1) if mags_in_mse else Int32(0),
-            grid_dim=mse_blocks,
-            block_dim=MSE_BLOCK_SIZE,
-        )
+        # under bootstrap the magnitudes must bound the BOOTSTRAPPED
+        # planes (a Bayesian weight reaches ~46 at the tail), so the
+        # bootstrap kernel computes them AFTER its multiply instead
+        if objective == OBJECTIVE_RMSE:
+            ctx.enqueue_function[mse_kernel](
+                targets.unsafe_ptr(), weights.unsafe_ptr(), Int32(n_rows),
+                cursor.unsafe_ptr(),
+                Int32(1) if has_weights else Int32(0),
+                stats.unsafe_ptr(),
+                fv_part.unsafe_ptr(), Int32(1),
+                mag_part.unsafe_ptr(),
+                Int32(1) if mags_in_mse else Int32(0),
+                grid_dim=mse_blocks,
+                block_dim=MSE_BLOCK_SIZE,
+            )
+        elif objective == OBJECTIVE_LOGLOSS:
+            ctx.enqueue_function[cross_entropy_kernel[True, False]](
+                targets.unsafe_ptr(), weights.unsafe_ptr(), Int32(n_rows),
+                cursor.unsafe_ptr(),
+                Int32(1) if has_weights else Int32(0),
+                logloss_border,
+                stats.unsafe_ptr(),
+                fv_part.unsafe_ptr(), Int32(1),
+                mag_part.unsafe_ptr(),
+                Int32(1) if mags_in_mse else Int32(0),
+                grid_dim=mse_blocks,
+                block_dim=MSE_BLOCK_SIZE,
+            )
+        else:
+            ctx.enqueue_function[cross_entropy_kernel[False, False]](
+                targets.unsafe_ptr(), weights.unsafe_ptr(), Int32(n_rows),
+                cursor.unsafe_ptr(),
+                Int32(1) if has_weights else Int32(0),
+                logloss_border,
+                stats.unsafe_ptr(),
+                fv_part.unsafe_ptr(), Int32(1),
+                mag_part.unsafe_ptr(),
+                Int32(1) if mags_in_mse else Int32(0),
+                grid_dim=mse_blocks,
+                block_dim=MSE_BLOCK_SIZE,
+            )
         ctx.enqueue_function[deterministic_sum_lanes_kernel[1]](
             fv_part.unsafe_ptr(), Int32(mse_blocks), fv.unsafe_ptr(),
             grid_dim=1, block_dim=256,
@@ -362,15 +430,110 @@ def fit(
         # `AppendModels`, all four inside `run_tree_layout`, in their order.
         var splits = List[TBinarySplit]()
         var leaf_values = List[Float32]()
+        var leaf_offsets = List[Int]()
         var sizes = run_tree_layout(
             ctx, n_rows, fold_counts, max_depth,
             cindex, stats, row_index, cursor,
             Float32(weight_magnitude), Float32(gradient_magnitude),
-            splits, leaf_values,
-            use_subtraction, True, learning_rate, l2_leaf_reg,
+            splits, leaf_values, leaf_offsets,
+            objective != OBJECTIVE_RMSE,
+            use_subtraction, objective == OBJECTIVE_RMSE,
+            learning_rate, l2_leaf_reg,
             one_hot=one_hot,
             score_function=score_function,
         )
+
+        if objective != OBJECTIVE_RMSE:
+            # their `weak->NeedEstimation()` arm (`doc_parallel_boosting.h:
+            # 371-385`): the searcher's leaf values are DISCARDED, the
+            # estimator recomputes them at the cursor, and only then does
+            # the rescaled model touch the cursor. `row_index` left the
+            # searcher bin-sorted, so target/weights/cursor gather straight
+            # into the oracle's order (their factory sorts; we inherit).
+            var n_leaves = len(sizes)
+            var iters = leaf_estimation_iterations
+            if iters < 0:
+                iters = 10  # Newton x10, catboost_options.cpp:157-164
+            var g_target = ctx.enqueue_create_buffer[DType.float32](n_rows)
+            var g_weights = ctx.enqueue_create_buffer[DType.float32](
+                n_rows
+            )
+            var g_cursor = ctx.enqueue_create_buffer[DType.float32](n_rows)
+            launch_gather_with_mask_f32(
+                ctx, g_target, targets, row_index, n_rows,
+                UInt32(0xFFFFFFFF),
+            )
+            if has_weights:
+                launch_gather_with_mask_f32(
+                    ctx, g_weights, weights, row_index, n_rows,
+                    UInt32(0xFFFFFFFF),
+                )
+            launch_gather_with_mask_f32(
+                ctx, g_cursor, cursor, row_index, n_rows,
+                UInt32(0xFFFFFFFF),
+            )
+            var d_p_off = ctx.enqueue_create_buffer[DType.uint32](n_leaves)
+            var d_p_sz = ctx.enqueue_create_buffer[DType.uint32](n_leaves)
+            var h_po = ctx.enqueue_create_host_buffer[DType.uint32](
+                n_leaves
+            )
+            var h_ps = ctx.enqueue_create_host_buffer[DType.uint32](
+                n_leaves
+            )
+            ctx.synchronize()
+            # THE DEVICE'S OWN OFFSETS: the final partitions sit in memory
+            # in bit-reversed leaf order, so a prefix sum of the sizes is
+            # the WRONG segmentation (see run_tree_layout's tail).
+            var widest = 1
+            for i in range(n_leaves):
+                h_po.unsafe_ptr().unsafe_store(
+                    i, UInt32(leaf_offsets[i])
+                )
+                h_ps.unsafe_ptr().unsafe_store(i, UInt32(sizes[i]))
+                if sizes[i] > widest:
+                    widest = sizes[i]
+            ctx.enqueue_copy(dst_buf=d_p_off, src_ptr=h_po.unsafe_ptr())
+            ctx.enqueue_copy(dst_buf=d_p_sz, src_ptr=h_ps.unsafe_ptr())
+
+            var oracle = make_bin_optimized_oracle(
+                ctx, n_rows, n_leaves, sizes,
+                g_target^, g_weights^, g_cursor^, d_p_off^, d_p_sz^,
+                has_weights,
+                objective == OBJECTIVE_LOGLOSS,
+                logloss_border,
+                Float64(l2_leaf_reg),
+                est_sm,
+            )
+            var estimated = newton_like_walker_estimate(
+                oracle, iters, BACKTRACKING_ANY_IMPROVEMENT,
+                List[Float32](),
+            )
+            leaf_values.clear()
+            for i in range(len(estimated)):
+                leaf_values.append(estimated[i])
+
+            # `AppendModels` for this arm: the ESTIMATED leaves, rescaled,
+            # onto the real cursor through the same kernel the RMSE arm
+            # uses inside `run_tree_layout`.
+            var d_est = ctx.enqueue_create_buffer[DType.float32](n_leaves)
+            var h_est = ctx.enqueue_create_host_buffer[DType.float32](
+                n_leaves
+            )
+            ctx.synchronize()
+            for i in range(n_leaves):
+                h_est.unsafe_ptr().unsafe_store(i, estimated[i])
+            ctx.enqueue_copy(dst_buf=d_est, src_ptr=h_est.unsafe_ptr())
+            ctx.enqueue_function[add_model_value_kernel](
+                oracle.d_p_off.unsafe_ptr(),
+                oracle.d_p_sz.unsafe_ptr(),
+                row_index.unsafe_ptr(),
+                d_est.unsafe_ptr(),
+                learning_rate,
+                cursor.unsafe_ptr(),
+                grid_dim=((widest + 255) // 256, n_leaves, 1),
+                block_dim=(256, 1, 1),
+            )
+            ctx.synchronize()
         _ = len(sizes)
 
         # their `result[i].AddWeakModel(iterationModels[i])` (`:398`).
@@ -401,16 +564,41 @@ def fit(
     # kernel now stores per-block partials, which under-read the loss by
     # ~n_blocks and wrote past the buffer (caught by the predict repro:
     # replay 36.52 vs a claimed 8.91 final loss, ratio ~= the block count).
-    ctx.enqueue_function[mse_kernel](
-        targets.unsafe_ptr(), weights.unsafe_ptr(), Int32(n_rows),
-        cursor.unsafe_ptr(),
-        Int32(1) if has_weights else Int32(0),
-        stats.unsafe_ptr(),
-        fv_part.unsafe_ptr(), Int32(1),
-        mag_part.unsafe_ptr(), Int32(0),
-        grid_dim=mse_blocks,
-        block_dim=MSE_BLOCK_SIZE,
-    )
+    if objective == OBJECTIVE_RMSE:
+        ctx.enqueue_function[mse_kernel](
+            targets.unsafe_ptr(), weights.unsafe_ptr(), Int32(n_rows),
+            cursor.unsafe_ptr(),
+            Int32(1) if has_weights else Int32(0),
+            stats.unsafe_ptr(),
+            fv_part.unsafe_ptr(), Int32(1),
+            mag_part.unsafe_ptr(), Int32(0),
+            grid_dim=mse_blocks,
+            block_dim=MSE_BLOCK_SIZE,
+        )
+    elif objective == OBJECTIVE_LOGLOSS:
+        ctx.enqueue_function[cross_entropy_kernel[True, False]](
+            targets.unsafe_ptr(), weights.unsafe_ptr(), Int32(n_rows),
+            cursor.unsafe_ptr(),
+            Int32(1) if has_weights else Int32(0),
+            logloss_border,
+            stats.unsafe_ptr(),
+            fv_part.unsafe_ptr(), Int32(1),
+            mag_part.unsafe_ptr(), Int32(0),
+            grid_dim=mse_blocks,
+            block_dim=MSE_BLOCK_SIZE,
+        )
+    else:
+        ctx.enqueue_function[cross_entropy_kernel[False, False]](
+            targets.unsafe_ptr(), weights.unsafe_ptr(), Int32(n_rows),
+            cursor.unsafe_ptr(),
+            Int32(1) if has_weights else Int32(0),
+            logloss_border,
+            stats.unsafe_ptr(),
+            fv_part.unsafe_ptr(), Int32(1),
+            mag_part.unsafe_ptr(), Int32(0),
+            grid_dim=mse_blocks,
+            block_dim=MSE_BLOCK_SIZE,
+        )
     ctx.enqueue_function[deterministic_sum_lanes_kernel[1]](
         fv_part.unsafe_ptr(), Int32(mse_blocks), fv.unsafe_ptr(),
         grid_dim=1, block_dim=256,

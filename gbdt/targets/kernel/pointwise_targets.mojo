@@ -62,6 +62,15 @@ from max.gpu.primitives.block import sum as block_sum
 #: needs the block size at comptime.
 comptime MSE_BLOCK_SIZE = 256
 
+#: the pointwise objectives this port trains. Their `ELossFunction`
+#: spellings: RMSE dispatches `TRmseTarget`; Logloss and CrossEntropy both
+#: dispatch `ApproximateCrossEntropy` (`pointwise_target_impl.h:333-345`),
+#: differing only in `UseBorder()` -- Logloss thresholds the target at the
+#: `GetLogLossBorder` default 0.5, CrossEntropy takes it as a probability.
+comptime OBJECTIVE_RMSE = 0
+comptime OBJECTIVE_LOGLOSS = 1
+comptime OBJECTIVE_CROSSENTROPY = 2
+
 
 def mse_kernel(
     relevs: MutPointer[Float32, MutAnyOrigin],

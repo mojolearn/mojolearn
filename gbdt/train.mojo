@@ -43,6 +43,11 @@ from gbdt.models.ctr_value_table import (
     expand_raw_columns,
 )
 from gbdt.methods.doc_parallel_boosting import TAdditiveModel, fit, predict
+from gbdt.targets.kernel.pointwise_targets import (
+    OBJECTIVE_CROSSENTROPY,
+    OBJECTIVE_LOGLOSS,
+    OBJECTIVE_RMSE,
+)
 from gbdt.options.catboost_options import (
     COUNTER_CALC_FULL,
     SCORE_FUNCTION_COSINE,
@@ -168,8 +173,19 @@ def train(
     cat_features: List[Bool] = List[Bool](),
     cat_feature_params: List[TCatFeatureParams] = List[TCatFeatureParams](),
     ctr_estimation_permutation_id: Int = DEFAULT_PERMUTATION_COUNT - 1,
+    loss: String = "RMSE",
+    leaf_estimation_iterations: Int = -1,
 ) raises -> TrainedModel:
     """Borders -> device quantization -> fit, one call.
+
+    `loss` takes their `ELossFunction` spellings: "RMSE", "Logloss",
+    "CrossEntropy". The classification losses train through their
+    NeedEstimation arm -- Newton leaves, ten iterations by their default
+    (`catboost_options.cpp:157-164`; override with
+    `leaf_estimation_iterations`). PREDICTIONS STAY RAW APPROXES for every
+    loss, exactly like their `predict` without a prediction_type: a
+    Logloss caller applies the sigmoid to `predict_floats` output, which
+    is also what keeps the harness adapters honest about what they time.
 
     `x_colmajor` is `[feature * n_rows + row]`. A feature marked in
     `one_hot` skips border search: its values ARE dense category codes
@@ -514,6 +530,17 @@ def train(
     ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
     ctx.synchronize()
 
+    var objective = OBJECTIVE_RMSE
+    if loss == "Logloss":
+        objective = OBJECTIVE_LOGLOSS
+    elif loss == "CrossEntropy":
+        objective = OBJECTIVE_CROSSENTROPY
+    elif loss != "RMSE":
+        raise Error(
+            "unknown loss '" + loss
+            + "': this port trains RMSE, Logloss and CrossEntropy"
+        )
+
     var model = TAdditiveModel()
     var losses = fit(
         model, ctx, n_rows, fold_counts, max_depth, cindex, targets,
@@ -523,6 +550,8 @@ def train(
         random_seed=random_seed,
         one_hot=column_one_hot,
         score_function=score_function,
+        objective=objective,
+        leaf_estimation_iterations=leaf_estimation_iterations,
     )
     return TrainedModel(
         model^,

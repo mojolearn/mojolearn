@@ -2136,6 +2136,8 @@ def run_tree_layout[
     gradient_magnitude: Float32,
     mut out_splits: List[TBinarySplit],
     mut out_leaf_values: List[Float32],
+    mut out_leaf_offsets: List[Int],
+    export_offsets: Bool = False,
     use_subtraction: Bool = True,
     apply_to_cursor: Bool = False,
     learning_rate: Float32 = Float32(0.3),
@@ -3066,4 +3068,25 @@ def run_tree_layout[
     var out = List[Int]()
     for i in range(n_live):
         out.append(Int(h_sz.unsafe_ptr().unsafe_load(i)))
+
+    # THE OFFSETS GO OUT WITH THE SIZES, and they are the DEVICE's, not a
+    # prefix sum. The level gather splits each parent's segment IN PLACE,
+    # so the final partitions sit in memory in BIT-REVERSED leaf order:
+    # partition half+i's rows live inside its parent's old span, not after
+    # partition half+i-1's. A caller that prefix-sums the sizes builds
+    # segments for the WRONG leaves -- the Logloss estimator did exactly
+    # that and trained a cursor its own model could not replay
+    # (logloss_train_check claim 2, 2026-08-20). Read AFTER the sizes,
+    # reusing h_sz, with a queue-ordered sync of its own: `wait_complete`
+    # does not order copies enqueued after it was armed, and an offsets
+    # copy slid in front of the sizes read handed the caller p_off twice
+    # (caught by the same check's coverage going 34x over the row count).
+    # Guarded because it costs one copy and one drain per tree, which the
+    # RMSE arm has no reason to pay: its cursor update happened above.
+    if export_offsets:
+        ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_off)
+        ctx.synchronize()
+        out_leaf_offsets.clear()
+        for i in range(n_live):
+            out_leaf_offsets.append(Int(h_sz.unsafe_ptr().unsafe_load(i)))
     return out^
