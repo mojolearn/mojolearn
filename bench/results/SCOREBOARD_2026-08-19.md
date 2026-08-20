@@ -8,25 +8,29 @@ estimator that accepts it and their `algorithm='auto'` -- their best, not a
 crippled arm. Method: `bench/run_bench.py`, arms alternated per round inside
 one invocation, medians reported, a row is a finding only when the min..max
 ranges do NOT overlap. Apple M4 (10 cores, 16 GB), AC power, no thermal
-warnings. Re-verdicted 2026-08-20 morning at commit 447b6c0 (PCA centering
-fused into the split-K read, DEVIATION 42; split-K floor knobs; kmeans fused
-L2-NN re-ported to upstream's Veclen policy, DEVIATIONS 44/45).
+warnings. Re-verdicted 2026-08-20 afternoon at commit ee05664 (kmeans
+accumulate reads X veclen-wide, DEVIATION 46; split-K staging copy
+vectorized, a measured NULL for time, kept as bit-identical hygiene; morning
+round: PCA centering fusion DEVIATION 42, kmeans Veclen re-port 44/45).
 
-## Fixed-size arms (3 rounds, n = 15/arm, window of 2026-08-20)
+## Fixed-size arms (3 rounds, n = 15/arm, window of 2026-08-20 afternoon)
 
 | arm | shape | ours ms | sklearn ms | ratio | verdict |
 |---|---|---|---|---|---|
-| ols | 4M x 32 | 62.6 | 906.2 | 14.48x | **ours faster** |
-| ols vs `ols_normal_eq` | same | 62.6 | 151.5 | 2.42x | **ours faster** |
-| knn | 400k idx, 4k q, d=32, k=10 | 756.0 | 1,141.2 | 1.51x | **ours faster** |
-| pca | 4M x 32, 8 comp | 75.8 | 147.0 | **1.94x** | **ours faster** |
-| dbscan | 4k x 16 | 12.7 | 10.0 | 0.79x | INDISTINGUISHABLE |
-| kmeans | 4M x 32, k=64, 20 iter | 1,657.9 | 2,309.6 | **1.39x** | **ours faster** |
+| ols | 4M x 32 | 62.0 | 913.1 | 14.73x | **ours faster** |
+| ols vs `ols_normal_eq` | same | 62.0 | 166.9 | 2.69x | **ours faster** |
+| knn | 400k idx, 4k q, d=32, k=10 | 705.7 | 1,196.4 | 1.70x | **ours faster** |
+| pca | 4M x 32, 8 comp | 63.9 | 144.4 | **2.26x** | **ours faster** |
+| dbscan | 4k x 16 | 10.5 | 10.2 | 0.98x | INDISTINGUISHABLE |
+| kmeans | 4M x 32, k=64, 20 iter | 764.4 | 2,488.4 | **3.26x** | **ours faster** |
 
-Ranges: kmeans [1541.7, 2036.0] vs [2053.1, 2784.5] -- DISJOINT, the row's
-first clean verdict in our favor. pca [67.4, 91.9] vs [118.1, 236.4] --
-DISJOINT. **The board's last loss and last big-arm tie both flipped in one
-round, and neither flip was a tuning constant: both were port fidelity.**
+Ranges: kmeans [749.4, 1246.9] vs [2022.3, 3405.4] -- DISJOINT. pca [60.3,
+80.9] vs [119.9, 282.7] -- DISJOINT. **kmeans went loss -> 1.39x -> 3.26x in
+one day**: the morning flip was port fidelity (vector loads in assignment),
+the afternoon jump is DEVIATION 46 (accumulate reads X veclen-wide, a priced
+deviation BEYOND upstream -- their scalar reads lean on NVIDIA warp
+coalescing this device does not replicate). Steady-state iteration brackets:
+assignment ~27 ms, accumulate ~17 ms (was 63 + 54 two days ago).
 
 - **PCA 166 -> 75.8 ms** (was a 4x loss two days ago at 465): the ~100 ms of
   center+restore passes are GONE -- the split-K kernel reads `x - mu[col]`
@@ -75,7 +79,7 @@ asymptotics in their best regime, the LOWEST-priority gap on the board.
 
 ## The standing tally
 
-**Five wins (OLS 2.4x/14.5x, PCA 1.9x, k-NN 1.3-1.8x, k-means 1.39x, DBSCAN
+**Five wins (OLS 2.7x/14.7x, PCA 2.3x, k-NN 1.3-1.8x, k-means 3.3x, DBSCAN
 2.6-6.9x at d>=32), one tie (DBSCAN in the d=8 corner, where large-n is
 attributed and deprioritized), zero losses.**
 
@@ -101,23 +105,36 @@ attributed and deprioritized), zero losses.**
   Assignment 63 -> 21 ms/iter. Accumulate side audited CLEAN against
   upstream (their reads are scalar too).
 
+## Afternoon round, measured
+
+- **kmeans accumulate veclen (DEVIATION 46, LANE_kmeans-accumulate)**:
+  ~17 ms/iter steady (was 54). One SIMD chunk + ONE label/weight read per
+  veclen cells; selection reuses the assignment port's `fused_veclen_for`
+  ladder; bit-identical on all three arms (fixed-point Int32 adds are
+  order-free), scalar arm proven at d=33, 2-wide at d=34. Fit: 1,658 ->
+  764 ms.
+- **Split-K staging vectorization (LANE_splitk-interior): NULL for time.**
+  `gemm_tn_alone` 42.5 -> 44-45 ms (drift-indistinguishable). The scalar
+  staging copy was real and is now 16-byte loads, FNV-bit-identical, kept
+  as free hygiene -- but it was NOT the bottleneck. The kernel still runs
+  ~11 GB/s effective; the lane's own caveat stands: the accumulation
+  loop's shared reads carry ~40x the staging op count, and the next step
+  there is Apple Instruments profiling, not structure.
+
 ## What the table says to do next
 
-1. **kmeans accumulate is now the widest single bracket**: 54 ms/iter
-   against upstream-faithful code (audited line-by-line; their
-   `reduce_rows_by_key` reads are scalar too). Any further win there is a
-   deliberate deviation beyond upstream, not a fidelity fix -- price it
-   before fighting it.
-2. **`pca_transform` still centers the long way** (gemm_nt shape, different
-   epilogue): untouched by DEVIATION 42, a candidate for the same fusion if
-   transform latency ever matters on the board.
+1. **Split-K's remaining ~3x to floor now needs Instruments**, not
+   structure: staging vectorization was the last structural suspect and it
+   measured null. Profile before touching the kernel again.
+2. **kmeans|| init remains unported** (the cuVS default raises) -- now the
+   largest FUNCTIONAL gap on an otherwise all-green board.
 3. **Upstream report to Modular: DRAFTED**, commit 1ca0eb5
    (`bench/results/MODULAR_UPSTREAM_2026-08-20.md`) -- six probe-backed
    defects + the split-K gap with the 345 -> 49 ms reproducer. Filing is
    external and awaits Andrew's word.
-4. Split-K sits at 42.5 ms steady against a ~15 ms traffic floor (~2.8x):
-   the two named knobs are DONE; what remains is kernel-interior (wider
-   accumulation per thread, staging depth), unpriced.
+4. **`pca_transform` still centers the long way** (gemm_nt shape):
+   untouched by DEVIATION 42, a candidate if transform latency ever
+   matters on the board.
 5. DBSCAN d=8 large-n `vertexdeg` constants: still the lowest priority.
-6. **kmeans|| init remains unported** (the cuVS default raises); RunPod
-   NVIDIA validation staged, awaiting Andrew's explicit word (billed).
+6. RunPod NVIDIA validation staged, awaiting Andrew's explicit word
+   (billed).
