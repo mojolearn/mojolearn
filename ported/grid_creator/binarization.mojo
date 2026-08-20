@@ -115,6 +115,49 @@ def _update_best_split(mut b: TFeatureBin, values: List[Float32]):
         b.best_score = score_right
 
 
+def _heap_push(mut a: List[TFeatureBin], var item: TFeatureBin):
+    """libc++ `push_heap`: sift the new element up while the parent is
+    STRICTLY smaller. On an equal score the new element stays below, which is
+    half of the tie behavior `best_split` must reproduce exactly."""
+    a.append(item^)
+    var hole = len(a) - 1
+    var v = a[hole].copy()
+    while hole > 0:
+        var parent = (hole - 1) // 2
+        if a[parent].best_score < v.best_score:
+            a[hole] = a[parent].copy()
+            hole = parent
+        else:
+            break
+    a[hole] = v^
+
+
+def _heap_pop(mut a: List[TFeatureBin]):
+    """libc++ `pop_heap` on a max-heap: the last element re-seats from the
+    root, descending toward the LARGER child, choosing the LEFT child on an
+    equal pair (`a[child] < a[child+1]` is false on a tie), and stopping only
+    when the child is STRICTLY smaller than the re-seating value."""
+    var n = len(a)
+    if n <= 1:
+        if n == 1:
+            _ = a.pop()
+        return
+    var v = a.pop()
+    n -= 1
+    var hole = 0
+    while True:
+        var child = 2 * hole + 1
+        if child >= n:
+            break
+        if child + 1 < n and a[child].best_score < a[child + 1].best_score:
+            child += 1
+        if a[child].best_score < v.best_score:
+            break
+        a[hole] = a[child].copy()
+        hole = child
+    a[hole] = v^
+
+
 def best_split(
     var values: List[Float32], max_borders_count: Int
 ) raises -> List[Float32]:
@@ -123,18 +166,26 @@ def best_split(
     `values` is consumed and sorted, as theirs is. NaNs are dropped, which is
     their `filterNans`.
 
-    ================= DEVIATION BLOCK =================
-    Theirs uses `std::priority_queue<TBinType>`. Mojo 1.0 has no heap in the
-    standard library, so the queue is a `List` scanned for its maximum each
-    round. That is O(bins) per pop against their O(log bins), and the loop
-    runs at most `max_borders_count` times, so at CatBoost's default of 254
-    it is about 32,000 comparisons for a whole column. The sort above it is
-    already O(n log n) over every row, so this is not the cost.
-
-    The ORDER of pops is identical whenever scores are distinct. On an exact
-    tie `std::priority_queue` gives no ordering guarantee either, so nothing
-    is being promised here that theirs promises.
-    ===================================================
+    The queue is `std::priority_queue` REPRODUCED, libc++ heap semantics
+    included, in `_heap_push` / `_heap_pop`. This file used to scan a List
+    for its maximum with a lowest-index tie-break, under a note claiming pop
+    order only matters when scores tie and that theirs promises nothing on a
+    tie either. **The first half of that note was the bug and the second
+    half was an excuse.** The score is `log(n) - log(l) - log(r)` over
+    INTEGER bin sizes, so equal-size bins tie EXACTLY, and they are the
+    common case, not the rare one: near-halving makes whole tiers of
+    same-size bins. A budget that lands on a complete tier (15 = 1+2+4+8)
+    is order-invariant, which is why the border-parity check passed for
+    months; budget 100 cuts mid-tier, and WHICH tied bins get split is
+    decided by the heap. Measured on the oracle fixture at budget 100: the
+    list scan got 1392 of 1600 borders wrong; a Python simulation with
+    libc++ `push_heap`/`pop_heap` semantics matched CatBoost's saved
+    borders on 16 of 16 features exactly. CatBoost wheels are built with
+    clang and libc++, so libc++'s tie behavior is the one to reproduce:
+    push sifts up on STRICTLY-smaller parents, pop re-seats the last
+    element from the root taking the LEFT child of an equal pair. The push
+    ORDER in the loop below (left, then the mutated right) is also load
+    bearing for the same reason.
     """
     # their `filterNans`
     var clean = List[Float32]()
@@ -154,32 +205,26 @@ def best_split(
     _update_best_split(root, clean)
 
     var bins = List[TFeatureBin]()
-    bins.append(root)
+    _heap_push(bins, root)
 
-    # their `while (splits.size() <= maxBordersCount && splits.top().CanSplit())`
-    while len(bins) <= max_borders_count:
-        var top = 0
-        for i in range(1, len(bins)):
-            if bins[i].best_score > bins[top].best_score:
-                top = i
-        if not bins[top].can_split():
-            break
+    # their `GreedySplit` (`binarization.cpp:1500-1511`), verbatim: check the
+    # TOP, pop it, split it, push LEFT then the mutated right.
+    while len(bins) <= max_borders_count and bins[0].can_split():
+        var top = bins[0].copy()
+        _heap_pop(bins)
 
         # their `Split()`: the LEFT half becomes a new bin, `this` keeps the
         # right half and is rescored.
-        var parent = bins[top].copy()
         var left = TFeatureBin()
-        left.bin_start = parent.bin_start
-        left.bin_end = parent.best_split
+        left.bin_start = top.bin_start
+        left.bin_end = top.best_split
         _update_best_split(left, clean)
 
-        var right = TFeatureBin()
-        right.bin_start = parent.best_split
-        right.bin_end = parent.bin_end
-        _update_best_split(right, clean)
+        top.bin_start = top.best_split
+        _update_best_split(top, clean)
 
-        bins[top] = right
-        bins.append(left)
+        _heap_push(bins, left)
+        _heap_push(bins, top)
 
     # their border loop: every bin but the first contributes its LEFT edge,
     # placed midway between the last value below and the first value in it.

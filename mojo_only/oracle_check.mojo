@@ -174,14 +174,14 @@ def load_oracle(path: String) raises -> Oracle:
     return o^
 
 
-def check_border_parity() raises:
+def check_border_parity(path: String = String("bench/oracle.txt")) raises:
     """OUR GreedyLogSum against the borders CatBoost actually chose.
 
     Their `border_count` is a BUDGET and not a count. A feature with few
     distinct values gets fewer, so the comparison is on the list and never on
     its length alone.
     """
-    var o = load_oracle(String("bench/oracle.txt"))
+    var o = load_oracle(path)
     print(
         "  oracle:", o.rows, "rows x", o.feats, "features, border budget",
         o.border_count, ", CatBoost train mse", o.train_mse,
@@ -247,7 +247,7 @@ def check_border_parity() raises:
     )
 
 
-def check_oracle_is_not_degenerate() raises:
+def check_oracle_is_not_degenerate(path: String = String("bench/oracle.txt")) raises:
     """The oracle has to be worth comparing against.
 
     A fixture CatBoost cannot learn, or one where every feature carries the
@@ -256,7 +256,7 @@ def check_oracle_is_not_degenerate() raises:
     expected value is the same everywhere verifies the total and nothing
     about placement.
     """
-    var o = load_oracle(String("bench/oracle.txt"))
+    var o = load_oracle(path)
 
     if not (o.train_mse < 0.25 * o.baseline_mse):
         raise Error(
@@ -288,14 +288,14 @@ def check_oracle_is_not_degenerate() raises:
     print("  the oracle is a fixture worth comparing against")
 
 
-def print_catboost_structure() raises:
+def print_catboost_structure(path: String = String("bench/oracle.txt")) raises:
     """CatBoost's own trees, so a human can read them beside ours.
 
     Not an assertion. The assertion that matches structure needs our port fed
     THEIR borders, which is the next step and is not this one; printing them
     is what makes the gap visible instead of theoretical.
     """
-    var o = load_oracle(String("bench/oracle.txt"))
+    var o = load_oracle(path)
     for t in range(min(3, o.trees)):
         var line = String("    tree ") + String(t) + ": "
         for d in range(len(o.split_feature[t])):
@@ -307,7 +307,7 @@ def print_catboost_structure() raises:
         print(line)
 
 
-def check_tree_structure() raises:
+def check_tree_structure(path: String = String("bench/oracle.txt")) raises:
     """OUR TREES against CATBOOST'S TREES, on the same data and the same grid.
 
     This is the comparison border parity exists to make possible. Both sides
@@ -373,7 +373,7 @@ def check_tree_structure() raises:
     counts the FIRST divergence rather than a total: the depth at which the
     two first disagree is the number that means something.
     """
-    var o = load_oracle(String("bench/oracle.txt"))
+    var o = load_oracle(path)
 
     var ctx = DeviceContext()
     var n_rows = o.rows

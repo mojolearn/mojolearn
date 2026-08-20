@@ -17,11 +17,25 @@ from mojo_only.oracle_check import (
 
 
 def main() raises:
-    print("CATBOOST DIFFERENTIAL, against bench/oracle.txt:")
-    check_oracle_is_not_degenerate()
-    print("  CatBoost's own first three trees:")
-    print_catboost_structure()
-    check_border_parity()
-    print()
-    print("  OUR TREES against THEIRS, same data, same grid, same parameters:")
-    check_tree_structure()
+    # Two fixtures, two grouping policies. 15 borders is the HALF-BYTE
+    # policy; 100 borders is ONE-BYTE and sits inside `maxBins <= 128`,
+    # which is the range CatBoost's own dispatch sends to the hist_2
+    # family (`hist_one_byte.cu:315-323`). A port of that family passes
+    # this suite against CatBoost itself or it does not ship.
+    var fixtures = List[String]()
+    fixtures.append(String("bench/oracle.txt"))
+    fixtures.append(String("bench/oracle100.txt"))
+    for i in range(len(fixtures)):
+        var path = fixtures[i].copy()
+        print("CATBOOST DIFFERENTIAL, against " + path + ":")
+        check_oracle_is_not_degenerate(path)
+        print("  CatBoost's own first three trees:")
+        print_catboost_structure(path)
+        check_border_parity(path)
+        print()
+        print(
+            "  OUR TREES against THEIRS, same data, same grid, same"
+            " parameters:"
+        )
+        check_tree_structure(path)
+        print()
