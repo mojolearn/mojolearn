@@ -267,6 +267,19 @@ def tiled_brute_force_knn(
 #:   - `KNN_METHOD_FUSED` restores cuVS's dispatch exactly, x-split included.
 #:   - `KNN_METHOD_TILED` restores the 2026-08-19-morning default.
 #:
+#: THE k HOLE, CLOSED. The tables above are all k = 10, and fused's domain
+#: runs to k = 64 with register queues that grow with k, so AUTO could have
+#: been shipping an unmeasured high-k loss. Swept 2026-08-19 late evening,
+#: interleaved, 2,000 queries (grid (1, 120)), fused/tiled median ratios:
+#:
+#:     k      100,000 idx   400,000 idx
+#:     10        1.13x         1.06x
+#:     32        1.10x         1.00x
+#:     64        1.04x         1.05x
+#:
+#: No k-degradation; every range overlaps (INDISTINGUISHABLE singly), fused
+#: never behind on a median. AUTO holds across the whole fused k domain.
+#:
 #: This does not change any answer. Both arms match the host Float64 oracle
 #: slot for slot on the same fixtures (`check_fused_l2_knn`,
 #: `check_fused_griddimx_merge`, `check_fused_edge_shapes`), so the switch
