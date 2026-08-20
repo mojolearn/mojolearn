@@ -81,20 +81,30 @@ transfers and buys nothing.
 
 Every PCA arm available on this machine, same data, same shape:
 
-    ours, GPU                              63.9 ms
-    sklearn default (covariance_eigh) CPU 144.4 ms   <- their best
+    ours, GPU                              37.5 ms
+    sklearn default (covariance_eigh) CPU 136.6 ms   <- their best
     sklearn full, torch CPU              1215   ms
     sklearn full, MPS                    1485   ms
     sklearn full, numpy CPU              3965   ms
 
-**Enabling scikit-learn's GPU support makes their PCA about 10x worse**, because
+**Enabling scikit-learn's GPU support makes their PCA about 11x worse**, because
 the only solver that reaches the GPU is `full`, and `full` is far more
 expensive than the `covariance_eigh` their default already chooses. We are
-compared against their best arm at 144.4 ms. **2.26x stands.**
+compared against their best arm at 136.6 ms. **3.64x stands.**
 
-Same shape for OLS. Their matched arm (`Ridge` cholesky, 167 ms) and their
-default (`LinearRegression`, 913 ms) both cannot reach the GPU; the only arm
-that can is 1430 ms. **2.69x and 14.7x both stand.**
+Same shape for OLS. Their matched arm (`Ridge` cholesky, 150.2 ms) and their
+default (`LinearRegression`, 878.3 ms) both cannot reach the GPU; the only arm
+that can is 1430 ms. **4.33x and 25.32x both stand.**
+
+NUMBERS UPDATED 2026-08-20 afternoon. This section first quoted ours at 63.9
+and 62.0 ms and their arms at 144.4 / 167 / 913, from
+`WINDOW_2026-08-20_post-lane.md`. Two things moved and both are recorded in
+`WINDOW_2026-08-20_pca-arm-split.md`: the scikit-learn PCA figure was a median
+across TWO different algorithms sharing one arm name, and the Gram split-K
+lane (`50451a9`, `10ae918`) roughly halved our PCA and OLS. The conclusion of
+this file is unchanged in every direction -- their GPU path is still the worst
+option available to them -- but the numbers it cited were stale and are
+replaced rather than annotated.
 
 ## Standing rule this creates
 
