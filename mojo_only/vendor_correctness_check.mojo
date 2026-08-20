@@ -37,7 +37,7 @@ from std.math import sqrt
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 from layout import TileTensor
-from layout.tile_layout import row_major
+from layout.tile_layout import col_major, row_major
 
 from nn.argsort import argsort
 from linalg.matmul import matmul
@@ -66,7 +66,7 @@ from nn.gather_scatter import gather
 from linalg.bmm import batched_matmul
 from linalg.transpose import transpose
 from nn.cumsum import cumsum
-from core.gemm import gemm_nt
+from core.gemm import gemm_nt, gemm_tn
 
 
 # ---------------------------------------------------------------------------
@@ -322,6 +322,7 @@ def run_vendor_correctness() raises -> Int:
     check_argsort(rows)
     check_matmul(rows)
     check_wired_gemm_at_n1(rows)
+    check_matmul_colmajor(rows)
     check_gemv(rows)
     check_topk(rows)
     check_block(rows)
@@ -2345,6 +2346,300 @@ def check_wired_gemm_at_n1(mut rows: List[Verdict]) raises:
                     " tsvd.mojo:89), k-NN with one index point"
                     " (knn_brute_force.mojo:154)"
                 ),
+                True,
+            )
+        )
+
+
+# ---------------------------------------------------------------------------
+# linalg.matmul with a COL-MAJOR first operand  --  the covariance dead end.
+#
+# The T-N Gram shape (`raft::stats::cov` cov.cuh:65-66, `lstsqEig`'s first
+# gemm lstsq.cuh:293-305) begs for a zero-copy transposed view:
+# `matmul[transpose_a=True]` is refused at compile time, but a
+# `col_major(m, k)` TileTensor over X's buffer IS `X^T`, and cuBLAS's OP_T is
+# exactly this trick -- same bytes, swapped strides.
+#
+# PROBED 2026-08-19 AND UNWIREABLE: the dispatcher honors the view's strides
+# on SOME arms and silently IGNORES them on others, writing plausible wrong
+# numbers. Correct at 32x32x100003, 33x17x255, 8x8x8, 129x127x513; WRONG at
+# EVERY CELL across the whole m=n in {4..64} x k in {64..2048} band
+# (8x8x512, 32x32x2048, 64x64x64, ...), at n=1 with m>1 (8x1x33), and in
+# `gemv_gpu` at every output. The ok/wrong boundary zigzags with shape and
+# matches no predicate worth trusting across a toolchain update, so
+# `core/gemm.mojo::gemm_tn` stays on the materialized-transpose route and
+# these rows exist so nobody re-tries the view without re-running this.
+# ---------------------------------------------------------------------------
+
+
+def _matmul_colmajor_one(
+    ctx: DeviceContext, m: Int, n: Int, k: Int
+) raises -> String:
+    """a stored row-major (k x m), viewed `col_major(m, k)`; b stored
+    row-major (k x n); z poisoned; every cell against a Float64 oracle."""
+    var a = ctx.enqueue_create_buffer[DType.float32](k * m)
+    var b = ctx.enqueue_create_buffer[DType.float32](k * n)
+    var z = ctx.enqueue_create_buffer[DType.float32](m * n)
+    var ha = ctx.enqueue_create_host_buffer[DType.float32](k * m)
+    var hb = ctx.enqueue_create_host_buffer[DType.float32](k * n)
+    var hz = ctx.enqueue_create_host_buffer[DType.float32](m * n)
+    ctx.synchronize()
+    for i in range(k * m):
+        ha.unsafe_ptr().unsafe_store(i, _val_f32(i, 71))
+    for i in range(k * n):
+        hb.unsafe_ptr().unsafe_store(i, _val_f32(i, 72))
+    for i in range(m * n):
+        hz.unsafe_ptr().unsafe_store(i, Float32(-987654.0))
+    ctx.enqueue_copy(dst_buf=a, src_ptr=ha.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=b, src_ptr=hb.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=z, src_ptr=hz.unsafe_ptr())
+    ctx.synchronize()
+
+    matmul[transpose_b=False, target="gpu"](
+        TileTensor(z, row_major(m, n)),
+        TileTensor(a, col_major(m, k)),
+        TileTensor(b, row_major(k, n)),
+        ctx,
+    )
+    ctx.synchronize()
+    ctx.enqueue_copy(dst_ptr=hz.unsafe_ptr(), src_buf=z)
+    ctx.synchronize()
+
+    for i in range(m):
+        for j in range(n):
+            var acc = Float64(0.0)
+            var mag = Float64(0.0)
+            for t in range(k):
+                var av = Float64(ha.unsafe_ptr().unsafe_load(t * m + i))
+                var bv = Float64(hb.unsafe_ptr().unsafe_load(t * n + j))
+                acc += av * bv
+                mag += abs(av * bv)
+            var got = Float64(hz.unsafe_ptr().unsafe_load(i * n + j))
+            if got == Float64(-987654.0):
+                return (
+                    "cell ("
+                    + String(i)
+                    + ", "
+                    + String(j)
+                    + ") was NEVER WRITTEN (poison survived)"
+                )
+            var tol = mag * 1.0e-5 + 1.0e-6
+            if abs(got - acc) > tol:
+                return (
+                    "cell ("
+                    + String(i)
+                    + ", "
+                    + String(j)
+                    + ") device "
+                    + String(got)
+                    + " host "
+                    + String(acc)
+                    + " tol "
+                    + String(tol)
+                )
+    return String("")
+
+
+def check_matmul_colmajor(mut rows: List[Verdict]) raises:
+    var ctx = DeviceContext()
+
+    # One shape the dispatcher gets RIGHT and two from the wrong band, plus
+    # the n=1 arm. If every one of these ever comes back correct, the
+    # toolchain changed underneath us -- the verdict flips to CORRECT and the
+    # view becomes worth re-probing ACROSS THE WHOLE SWEEP before any wiring.
+    var ok_large = _matmul_colmajor_one(ctx, 32, 32, 100003)
+    var band1 = _matmul_colmajor_one(ctx, 8, 8, 512)
+    var band2 = _matmul_colmajor_one(ctx, 32, 32, 2048)
+    var n1 = _matmul_colmajor_one(ctx, 8, 1, 33)
+    print(
+        "  matmul colmajor-A 32x32x100003:",
+        ("ok" if ok_large == "" else "FAIL " + ok_large),
+    )
+    print(
+        "  matmul colmajor-A 8x8x512:",
+        ("ok" if band1 == "" else "WRONG, as recorded"),
+    )
+    print(
+        "  matmul colmajor-A 32x32x2048:",
+        ("ok" if band2 == "" else "WRONG, as recorded"),
+    )
+    print(
+        "  matmul colmajor-A 8x1x33:",
+        ("ok" if n1 == "" else "WRONG, as recorded"),
+    )
+    if band1 == "" and band2 == "" and n1 == "" and ok_large == "":
+        rows.append(
+            Verdict(
+                "linalg.matmul[A col_major view] (T-N)",
+                "cublasGemmEx (OP_T, strides)",
+                V_CORRECT,
+                "HAZARD GONE at 4 probe shapes -- re-run the full sweep"
+                " (LANE_covariance-unblock) before wiring",
+                False,
+            )
+        )
+    else:
+        rows.append(
+            Verdict(
+                "linalg.matmul[A col_major view] (T-N)",
+                "cublasGemmEx (OP_T, strides)",
+                V_WRONG,
+                "arm-dependent: ok at 32x32x100003 yet EVERY cell wrong"
+                " across m=n 4..64 x k 64..2048 and at n=1; UNWIREABLE",
+                False,
+            )
+        )
+
+    # gemv_gpu on a col-major view: stride-blind at every output. This is
+    # why the zero-copy X^T y has NO vendor route and
+    # `column_stats.mojo::xty_kernel` stays hand-written.
+    var kb = 4001
+    var mb = 8
+    var a2 = ctx.enqueue_create_buffer[DType.float32](kb * mb)
+    var b2 = ctx.enqueue_create_buffer[DType.float32](kb)
+    var c2 = ctx.enqueue_create_buffer[DType.float32](mb)
+    var ha2 = ctx.enqueue_create_host_buffer[DType.float32](kb * mb)
+    var hb2 = ctx.enqueue_create_host_buffer[DType.float32](kb)
+    var hc2 = ctx.enqueue_create_host_buffer[DType.float32](mb)
+    ctx.synchronize()
+    for i in range(kb * mb):
+        ha2.unsafe_ptr().unsafe_store(i, _val_f32(i, 92))
+    for i in range(kb):
+        hb2.unsafe_ptr().unsafe_store(i, _val_f32(i, 93))
+    for i in range(mb):
+        hc2.unsafe_ptr().unsafe_store(i, Float32(-987654.0))
+    ctx.enqueue_copy(dst_buf=a2, src_ptr=ha2.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=b2, src_ptr=hb2.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=c2, src_ptr=hc2.unsafe_ptr())
+    ctx.synchronize()
+    gemv_gpu[transpose_b=False](
+        TileTensor(c2, row_major(mb, Int(1))),
+        TileTensor(a2, col_major(mb, kb)),
+        TileTensor(b2, row_major(kb, Int(1))),
+        ctx,
+    )
+    ctx.synchronize()
+    ctx.enqueue_copy(dst_ptr=hc2.unsafe_ptr(), src_buf=c2)
+    ctx.synchronize()
+    var gemv_bad = 0
+    for i in range(mb):
+        var acc = Float64(0.0)
+        var mag = Float64(0.0)
+        for t in range(kb):
+            acc += Float64(ha2.unsafe_ptr().unsafe_load(t * mb + i)) * Float64(
+                hb2.unsafe_ptr().unsafe_load(t)
+            )
+            mag += abs(
+                Float64(ha2.unsafe_ptr().unsafe_load(t * mb + i))
+            ) * abs(Float64(hb2.unsafe_ptr().unsafe_load(t)))
+        var got = Float64(hc2.unsafe_ptr().unsafe_load(i))
+        if got == Float64(-987654.0) or abs(got - acc) > mag * 2.0e-6 + 1.0e-6:
+            gemv_bad += 1
+    if gemv_bad == 0:
+        print("  gemv_gpu colmajor-A ok (HAZARD GONE)")
+        rows.append(
+            Verdict(
+                "linalg.gemv.gemv_gpu[A col_major view]",
+                "cublasgemv (OP_T)",
+                V_CORRECT,
+                "8 outputs, k=4001",
+                False,
+            )
+        )
+    else:
+        print(
+            "  gemv_gpu colmajor-A WRONG at",
+            gemv_bad,
+            "of",
+            mb,
+            "outputs, as recorded",
+        )
+        rows.append(
+            Verdict(
+                "linalg.gemv.gemv_gpu[A col_major view]",
+                "cublasgemv (OP_T)",
+                V_WRONG,
+                "wrong at "
+                + String(gemv_bad)
+                + " of 8 outputs, k=4001; strides ignored -- xty_kernel"
+                " stays hand-written",
+                False,
+            )
+        )
+
+    # THE WIRED PATH: gemm_tn through the real wrapper -- two device
+    # transposes (core/column_stats.mojo::transpose_kernel) + gemm_nt.
+    # Operands are the SAME matrix, so the diagonal is a same-sign sum and
+    # the tolerance must cover plain accumulation-order spread: measured
+    # worst 4.09e-6 relative at 32x32x10007 (and identical, bit for bit, to
+    # the col-major-view route where that route works), so the budget is
+    # 1e-5, not the 2e-6 the cancellation-shaped checks use. Output AND both
+    # alias buffers pre-poisoned: a transpose that does not run cannot pass.
+    var km = 10007
+    var mm = 32
+    var x = ctx.enqueue_create_buffer[DType.float32](km * mm)
+    var xa = ctx.enqueue_create_buffer[DType.float32](km * mm)
+    var xa2 = ctx.enqueue_create_buffer[DType.float32](km * mm)
+    var z = ctx.enqueue_create_buffer[DType.float32](mm * mm)
+    var hx = ctx.enqueue_create_host_buffer[DType.float32](km * mm)
+    var hz = ctx.enqueue_create_host_buffer[DType.float32](mm * mm)
+    var hpois = ctx.enqueue_create_host_buffer[DType.float32](km * mm)
+    ctx.synchronize()
+    for i in range(km * mm):
+        hx.unsafe_ptr().unsafe_store(i, _val_f32(i, 91))
+        hpois.unsafe_ptr().unsafe_store(i, Float32(-123456.0))
+    for i in range(mm * mm):
+        hz.unsafe_ptr().unsafe_store(i, Float32(-987654.0))
+    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=z, src_ptr=hz.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=xa, src_ptr=hpois.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=xa2, src_ptr=hpois.unsafe_ptr())
+    ctx.synchronize()
+
+    gemm_tn(ctx, z, x, xa, xa2, mm, mm, km)
+    ctx.enqueue_copy(dst_ptr=hz.unsafe_ptr(), src_buf=z)
+    ctx.synchronize()
+
+    var tn_bad = 0
+    for i in range(mm):
+        for j in range(mm):
+            var acc = Float64(0.0)
+            var mag = Float64(0.0)
+            for t in range(km):
+                var av = Float64(hx.unsafe_ptr().unsafe_load(t * mm + i))
+                var bv = Float64(hx.unsafe_ptr().unsafe_load(t * mm + j))
+                acc += av * bv
+                mag += abs(av * bv)
+            var got = Float64(hz.unsafe_ptr().unsafe_load(i * mm + j))
+            if got == Float64(-987654.0):
+                tn_bad += 1
+            elif abs(got - acc) > mag * 1.0e-5 + 1.0e-6:
+                tn_bad += 1
+    if tn_bad == 0:
+        print("  core/gemm.mojo::gemm_tn (transpose x2 + gemm_nt) ok")
+        rows.append(
+            Verdict(
+                "core/gemm.mojo::gemm_tn (WIRED PATH)",
+                "raft::stats::cov / lstsqEig gemm (OP_T)",
+                V_CORRECT,
+                "32x32x10007 through the real wrapper, aliases pre-poisoned",
+                True,
+            )
+        )
+    else:
+        print(
+            "  core/gemm.mojo::gemm_tn FAIL at",
+            tn_bad,
+            "of",
+            mm * mm,
+            "cells",
+        )
+        rows.append(
+            Verdict(
+                "core/gemm.mojo::gemm_tn (WIRED PATH)",
+                "raft::stats::cov / lstsqEig gemm (OP_T)",
+                V_WRONG,
+                String(tn_bad) + " of " + String(mm * mm) + " cells wrong",
                 True,
             )
         )

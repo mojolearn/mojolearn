@@ -103,8 +103,10 @@ rather than trusting this file:**
       mojo build -I . vendor_main.mojo -o /tmp/vendor_probe
     /tmp/vendor_probe
 
-It exits non-zero when a primitive WIRED into this tree tests WRONG. It exits
-non-zero today; the first row is why.
+It exits non-zero when a primitive WIRED into this tree tests WRONG. It
+exits ZERO as of the 2026-08-19 evening re-run: the `gemm_nt` n=1 defect that
+made it fail is guarded now (n=1 routes to `gemv_n`), and the wired row below
+records the guard passing through the real wrapper.
 
 Every row: symbol | CUDA counterpart | verdict | wired | sizes tested. Date on
 all of them is **2026-08-19**, toolchain mojo 1.0.0 / max 26.5.0, device Apple
@@ -112,10 +114,13 @@ M4, `WARP_SIZE = 32`.
 
 | symbol | CUDA counterpart | verdict | wired | sizes tested / evidence |
 |---|---|---|---|---|
-| `core/gemm.mojo::gemm_nt` at `n = 1` | `cublasGemmEx` degenerate | **GPU, WRONG** | **YES** | m=64 n=1 k=32 through the real wrapper: **63 of 64 outputs NEVER WRITTEN**. Reachable from ordinary parameters — see the section under the table. |
+| `core/gemm.mojo::gemm_nt` at `n = 1` | `cublasGemmEx` degenerate | **GPU, CORRECT** | **YES** | m=64 n=1 k=32 through the real wrapper, output poisoned: the wrapper now routes `n = 1` to `gemv_n`, so the raw defect two rows down is guarded. Before the guard this row read **63 of 64 outputs NEVER WRITTEN**. |
 | `nn.argsort.argsort` | `cub::DeviceRadixSort::SortKeys` | **GPU, WRONG** | no | correct at 1, 2, 255, 256; **NOT MONOTONE at 257** and at every larger size tried, first inversion always at output index 256. Reads as a single-block sort with no cross-block merge. |
 | `linalg.matmul.matmul[transpose_b=True]` at `n = 1` | `cublasGemmEx` degenerate | **GPU, WRONG** | no (reached via `gemm_nt`) | 64x1x32: output rows are **never written**, not written zero. The same product with `transpose_b=False` is CORRECT, so this belongs to `transpose_b`, not to `n = 1`. |
-| `linalg.transpose.transpose` | `raft::linalg::transpose` | **GPU, WRONG** | no | 257x129 device buffers: **ABORTS the process**, not a catchable raise, inside `linalg::transpose::_copy_with_strides rank=2 dtype=f32` — "enqueue_cpu_range is only supported on CPU DeviceContexts". `vendor_main --transpose` reproduces it. |
+| `linalg.transpose.transpose` | `raft::linalg::transpose` | **GPU, WRONG** | no | 257x129 device buffers: **ABORTS the process**, not a catchable raise, inside `linalg::transpose::_copy_with_strides rank=2 dtype=f32` — "enqueue_cpu_range is only supported on CPU DeviceContexts". `vendor_main --transpose` reproduces it. Re-verified 2026-08-19 evening (LANE covariance-unblock): still exit 133, same abort. |
+| `linalg.matmul` with a **`col_major` view** as operand A (zero-copy T-N) | `cublasGemmEx` (OP_T strides) | **GPU, WRONG — ARM-DEPENDENT** | no | The dispatcher honors the view's strides on some arms and silently IGNORES them on others, writing plausible wrong numbers: correct at 32x32x100003, 33x17x255, 8x8x8, 129x127x513; **EVERY cell wrong across m=n in {4..64} x k in {64..2048}** (8x8x512, 32x32x2048, 64x64x64...) and at n=1 with m>1 (8x1x33, WRITTEN wrong, not unwritten). The ok/wrong boundary zigzags with shape and matches no predicate, so the view is **UNWIREABLE**; `gemm_tn` stays on the materialized transpose. Full sweep in `bench/results/LANE_covariance-unblock_2026-08-19.md`. |
+| `linalg.gemv.gemv_gpu` with a **`col_major` view** as A | `cublasSgemv` (OP_T) | **GPU, WRONG** | no | wrong at 8 of 8 outputs, k=4001: the GEMV kernel indexes A as row-major raw memory, ignoring the layout. This is why the zero-copy `X^T y` has NO vendor route and `column_stats.mojo::xty_kernel` stays hand-written. |
+| `core/gemm.mojo::gemm_tn` (transpose x2 + `gemm_nt`) | `raft::stats::cov` / `lstsqEig` gemm (`OP_T, OP_N`) | **GPU, CORRECT** | **YES** | 32x32x10007 through the real wrapper, output AND both alias buffers pre-poisoned. Tolerance is mag-relative 1e-5, not the 2e-6 of the cancellation-shaped checks: operands are the SAME matrix, so the diagonal is a same-sign sum, and the measured accumulation-order spread is 4.09e-6 relative — identical, bit for bit, to the col-major-view route where that route works. |
 | `linalg.matmul.matmul[transpose_b=True]` | `cublasGemmEx` (N-T) | **GPU, CORRECT** | YES | 1x1x1, 1x8x3, 255x255x33, 256x256x64, 257x257x65, 513x129x127, 1024x512x32, 100003x4x8, vs a Float64 host triple loop |
 | `linalg.gemv.gemv_gpu[transpose_b=False]` | `raft::linalg::gemv` / `cublasSgemv` | **GPU, CORRECT** | YES | m in {1, 2, 255, 256, 257, 512, 513, 1023, 1024, 1025, 4096, 100003}, k in {3..9}; plus m=1000 k=1025 |
 | `nn.topk.top_k[largest=False]` | `cub::DeviceSelect` / `raft::select_k` | **GPU, CORRECT** | YES | batch=3, n in {1..100003}, k in {1, 4, 32}; values strict, indices up to ties |
@@ -230,7 +235,7 @@ determinism, not a workaround for missing hardware.
 | RAFT `lstsq.cuh` | `raft::linalg::gemv` | **`linalg.gemv.gemv` IS HOST-ONLY** (no `ctx`, no `target`; its docstring opens "Computes a CPU matrix-vector product"). The GPU counterpart is **`linalg.gemv.gemv_gpu`**, `gemv_gpu[transpose_b](c, a, b, ctx)`. | **WIRED and now the only path.** `glm/.../lstsq.mojo` step 6. The `use_vendor_gemv=False` arm and the ported contraction behind it are deleted. |
 | RAFT `pca.cuh` | cuSOLVER `syevj` | **NOT FOUND.** No dense eigensolver, SVD, Cholesky, LU, triangular solve or lstsq ships anywhere. `linalg.qr_factorization` is **CPU ONLY** (passing a `DeviceContext` is an invalid call) and is not a device-side consolation prize. | `jacobi_eigh_device.mojo` |
 | CatBoost multiclass | cuSOLVER dense Newton solve | same gap | not ported |
-| RAFT distance | `raft::stats::cov` (`OP_T, OP_N`) | **NOT BLOCKED, AND IT IS ON THE TUNED MATMUL NOW.** `transpose_a` is still refused by `linalg.matmul`, but `transpose(X) . transpose(X)^T` is the same matrix in the N-T shape it does support, and a transpose is two passes against an `O(rows * cols^2)` product. | **`core/gemm.mojo::gemm_tn`, on `linalg.matmul`.** The ported column-major contraction (`covariance_kernel`) and its split-K reduction are DELETED: about 250 lines that nothing called once `gemm_tn` took this route. |
+| RAFT distance | `raft::stats::cov` (`OP_T, OP_N`) | **NOT BLOCKED, AND IT IS ON THE TUNED MATMUL NOW.** `transpose_a` is still refused by `linalg.matmul`, but `transpose(X) . transpose(X)^T` is the same matrix in the N-T shape it does support, and a transpose is two passes against an `O(rows * cols^2)` product. (A zero-copy `col_major` view would skip even those passes and is UNWIREABLE — arm-dependent stride handling, probed 2026-08-19; see the correctness table.) | **`core/gemm.mojo::gemm_tn`, on `linalg.matmul`.** The ported column-major contraction (`covariance_kernel`) and its split-K reduction are DELETED: about 250 lines that nothing called once `gemm_tn` took this route. |
 
 ## Block and warp scope: ordinary kernel code, not swap candidates
 
@@ -334,15 +339,17 @@ supported N-T one), it compiled, and it died on execution.
 `linalg.transpose` takes an `Optional[DeviceContext]`, and **accepting one is
 not the same as dispatching on it.**
 
-**RESOLVED, and by neither of those routes.** The framing was wrong in the
-same way the CUB framing was wrong: I was shopping for a vendor call to reach
-a shape their own source already handles. RAFT ships `ColKernelPolicy`
-alongside `KernelPolicy` (`raft/linalg/contractions.cuh:96`), and a row-major
-`X` viewed column-major turns `X^T X` into the N-T shape. `covariance_kernel`
-is now a port of that policy. No transpose, no `transpose_a`, no vendor call.
-
-That is three times in one session that the answer was in their source and I
-was looking for a library call instead.
+**RESOLVED, twice over.** First by porting RAFT's `ColKernelPolicy`
+(`raft/linalg/contractions.cuh:96`) into `covariance_kernel` — since DELETED
+when it measured ~15 GFLOP/s against `linalg.matmul`'s ~248. The route that
+stands is `core/gemm.mojo::gemm_tn`: materialize the transpose with
+`column_stats.mojo::transpose_kernel`, then the tuned N-T matmul. A ZERO-COPY
+`col_major` TileTensor view was probed as the third route on 2026-08-19
+(LANE covariance-unblock) and is **UNWIREABLE**: matmul's stride handling is
+arm-dependent — see the correctness table. It produced a bit-identical Gram
+matrix where it worked and a non-symmetric wrong one at PCA's and OLS's own
+check shapes, caught by `check_covariance_is_symmetric` and the Jacobi
+convergence gate on the first run.
 
 ## Limits of the ones we do use, both compiler-verified
 
@@ -362,8 +369,9 @@ above) and calls `gemm_nt`. PCA, OLS and truncated SVD all reach it.
 Measured 2026-08-19 at m=64, n=1, k=32: 63 of 64 rows still held the poison
 value the buffer was initialized with. RAFT does not call gemm there either;
 it calls `gemv`, and `core/gemm.mojo::gemv_n` wraps `gemv_gpu` and tests
-CORRECT. **`gemm_nt` does not take that route yet**, and `n = 1` is reachable
-from ordinary parameters at five call sites — listed under the correctness
+CORRECT. **`gemm_nt` routes `n = 1` to `gemv_n` now**, and the wired row in
+the correctness table proves the guard through the real wrapper; the five
+call sites that reach `n = 1` from ordinary parameters are listed under the
 table at the top of this file.
 
 ## The device-wide reduce: what actually ships, and what does not
@@ -815,14 +823,12 @@ unsupported**"
 ([docs](https://max.modular.com/api/mojo/linalg/bmm/batched_matmul.md)). So it
 is a documented product limit across the whole matmul family, not a local
 quirk — and `transpose_b` is supported everywhere, including `gemv_gpu` and
-`enqueue_apple_matmul`. Note that a peer resolved the T-N Gram shape while
-this appendix was being written, via RAFT's `ColKernelPolicy` and no transpose
-at all; **the "Limits of the ones we do use" section above is stale where it
-still says "The answer is `linalg.transpose` followed by an N-T matmul, and it
-is not yet wired"** — that sentence is contradicted by the RESOLVED note a few
-paragraphs earlier in the same file, and whoever owns that section should
-delete it. What C8 adds is only that `transpose_a` will not arrive by upgrade
-either, so no future round should re-plan around it.
+`enqueue_apple_matmul`. The T-N Gram shape is served today by
+`gemm_tn`'s materialized transpose (the `ColKernelPolicy` port that once
+served it is deleted; the zero-copy `col_major` view probed 2026-08-19 is
+UNWIREABLE — see the correctness table). What C8 adds is only that
+`transpose_a` will not arrive by upgrade either, so no future round should
+re-plan around it.
 
 **C9. `linalg.transpose` has siblings, and they have the same suspect shape.**
 The module also ships `transpose_2d`, `transpose_3d_swap_inner`,

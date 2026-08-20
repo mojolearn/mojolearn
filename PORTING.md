@@ -743,3 +743,32 @@ at every m from 1 to 100,003.
 
 **Rule: a vendor primitive is UNCHECKED until a poisoned output has survived
 it.** A signature proves reach; only a run proves the answer.
+
+## Hazard: a `col_major` TileTensor view is honored by SOME matmul arms and silently ignored by OTHERS
+
+Probed 2026-08-19 (LANE covariance-unblock), chasing the zero-copy T-N Gram
+shape: a `col_major(m, k)` view over X's row-major buffer IS `X^T`, which is
+exactly how cuBLAS serves `CUBLAS_OP_T`, and `matmul[transpose_b=False]`
+accepts it and is CORRECT at 32x32x100003, 33x17x255, 8x8x8, 129x127x513 —
+per-cell against a Float64 oracle, bit-identical to `gemm_tn`'s materialized
+route at 32x32x10007.
+
+**And it is WRONG at EVERY CELL across the whole m=n in {4..64} x
+k in {64..2048} band**, at n=1 with m>1, and in `gemv_gpu` at every output.
+Written wrong, never unwritten: the losing arms index the operand as raw
+row-major memory and produce PLAUSIBLE, NON-SYMMETRIC numbers. The ok/wrong
+boundary zigzags (33x17x255 ok, 33x33x512 wrong; 8x8x8 ok, 8x8x64 wrong) and
+matches no predicate worth trusting across a toolchain update, so the view is
+UNWIREABLE and `gemm_tn` stays on `transpose_kernel` + `gemm_nt`.
+
+Two lessons beyond the verdict. **A probe battery that passes is evidence
+about ITS shapes only** — the first battery (eight shapes, all correct except
+n=1) missed the wrong band entirely because none of its shapes landed in it;
+the checks that caught it were PCA's `check_covariance_is_symmetric`
+(bitwise) and OLS's Jacobi convergence gate, on the first wired run, exactly
+as PORTING.md 23 predicts a transposed/garbled contraction surfaces. And
+**dispatch-arm-dependent correctness is disqualifying by itself**: a
+primitive right at the shape you tuned for and wrong at the shape a check
+uses cannot be guarded, because the guard would encode a closed
+implementation's internals. `check_matmul_colmajor` keeps four sentinel
+shapes in the vendor table so a toolchain that fixes this announces itself.
