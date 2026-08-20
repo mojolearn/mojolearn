@@ -175,6 +175,7 @@ def train(
     ctr_estimation_permutation_id: Int = DEFAULT_PERMUTATION_COUNT - 1,
     loss: String = "RMSE",
     leaf_estimation_iterations: Int = -1,
+    class_weights: List[Float32] = List[Float32](),
 ) raises -> TrainedModel:
     """Borders -> device quantization -> fit, one call.
 
@@ -519,13 +520,35 @@ def train(
         ctx, flat, n_rows, borders, fold_counts
     )
 
+    # `class_weights`: their `MakeClassificationWeights` applied at pool
+    # build -- `weight_i = rawWeight_i * classWeights[class_i]`
+    # (`target/data_providers.cpp:158-176`). Python's `scale_pos_weight=w`
+    # is the two-class spelling `class_weights=[1, w]`, and their check
+    # demands exactly two entries for Logloss (`catboost_options.cpp:
+    # 617-623`). The class index takes the same 0.5 threshold the Logloss
+    # border defaults to.
+    var use_class_weights = len(class_weights) > 0
+    if use_class_weights:
+        if len(class_weights) != 2:
+            raise Error(
+                "class_weights takes exactly two entries [w0, w1] here,"
+                " their binary-Logloss contract"
+            )
+        if loss == "RMSE":
+            raise Error(
+                "class weights take effect only with Logloss, their"
+                " option check's words (catboost_options.cpp:617)"
+            )
     var targets = ctx.enqueue_create_buffer[DType.float32](n_rows)
     var weights = ctx.enqueue_create_buffer[DType.float32](n_rows)
     var ht = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
     var hw = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
     for r in range(n_rows):
         ht.unsafe_ptr().unsafe_store(r, y[r])
-        hw.unsafe_ptr().unsafe_store(r, Float32(1.0))
+        var w = Float32(1.0)
+        if use_class_weights:
+            w = class_weights[1 if y[r] > Float32(0.5) else 0]
+        hw.unsafe_ptr().unsafe_store(r, w)
     ctx.enqueue_copy(dst_buf=targets, src_ptr=ht.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
     ctx.synchronize()
@@ -544,7 +567,8 @@ def train(
     var model = TAdditiveModel()
     var losses = fit(
         model, ctx, n_rows, fold_counts, max_depth, cindex, targets,
-        weights, False, n_estimators, learning_rate, l2_leaf_reg, True,
+        weights, use_class_weights, n_estimators, learning_rate,
+        l2_leaf_reg, True,
         bootstrap_bayesian=bootstrap_bayesian,
         bagging_temperature=bagging_temperature,
         random_seed=random_seed,

@@ -15,10 +15,14 @@ features, logits in a range whose Bayes logloss is well under log 2):
    the model keeps the searcher's discarded RMSE-formula leaves, or vice
    versa.
 3. GENERALIZATION: held-out logloss must beat the train-mean predictor.
-4. THE KNOB REACHES: leaf_estimation_iterations=1 must produce a
-   BITWISE-different ensemble from the default ten (same seed, same
-   data), and ten must not be meaningfully worse on train loss -- the
-   backtracked Newton rounds only ever accept non-decreasing value.
+4. THE KNOBS REACH: leaf_estimation_iterations=1 must produce a
+   BITWISE-different ensemble from the default ten, and that arm runs at
+   max_depth=8 -- gbm-bench's pinned depth, the 256-leaf regime where
+   empty leaves are the common case -- and must still learn.
+5. CLASS WEIGHTS, their MakeClassificationWeights semantics
+   (`data_providers.cpp:158-176`; scale_pos_weight=3 is [1, 3]): the
+   weighted model's mean predicted probability on held-out POSITIVE rows
+   must sit strictly above the unweighted model's.
 Plus the borderless arm: loss="CrossEntropy" on SOFT targets must learn
 through the same stack (has_border=False all the way down).
 
@@ -136,22 +140,52 @@ def main() raises:
         failures += 1
 
     # 4: the iterations knob reaches the estimator
+    # max_depth=8 HERE ON PURPOSE: gbm-bench pins depth 8, this is the
+    # 256-leaf regime's gate through the full stack (search, estimation
+    # with mostly-empty leaves, apply).
     var tm1 = train(
         ctx, x, y, n, f,
-        border_count=32, n_estimators=30, max_depth=6,
+        border_count=32, n_estimators=30, max_depth=8,
         learning_rate=Float32(0.3), l2_leaf_reg=Float32(1.0),
         loss="Logloss", leaf_estimation_iterations=1,
     )
     var last1 = tm1.losses[len(tm1.losses) - 1]
-    print("ten-iteration", last, "one-iteration", last1)
+    print("ten-iteration d6", last, "one-iteration d8", last1)
     if last == last1:
         print("FAIL: iterations knob changed nothing (bitwise equal loss)")
         failures += 1
-    if last > last1 + 0.02:
-        print("FAIL: ten Newton iterations meaningfully worse than one")
+    if not (last1 < 0.6 and last1 < first):
+        print("FAIL: depth-8 one-iteration arm did not learn")
         failures += 1
 
-    # 5: the borderless CrossEntropy arm on SOFT targets
+    # 5: class weights, their MakeClassificationWeights semantics
+    # (scale_pos_weight=3 spelled [1, 3]): the model must shift toward
+    # the positive class -- mean predicted p on the held-out POSITIVE
+    # rows strictly above the unweighted model's.
+    var tmw = train(
+        ctx, x, y, n, f,
+        border_count=32, n_estimators=30, max_depth=6,
+        learning_rate=Float32(0.3), l2_leaf_reg=Float32(1.0),
+        loss="Logloss", class_weights=[Float32(1.0), Float32(3.0)],
+    )
+    var w_scores = predict_floats(ctx, tmw, xt, n_test)
+    var mean_p_w = Float64(0.0)
+    var mean_p_u = Float64(0.0)
+    var pos = 0
+    for i in range(n_test):
+        if yt[i] > Float32(0.5):
+            mean_p_w += 1.0 / (1.0 + exp(-Float64(w_scores[i])))
+            mean_p_u += 1.0 / (1.0 + exp(-Float64(test_scores[i])))
+            pos += 1
+    mean_p_w /= Float64(pos)
+    mean_p_u /= Float64(pos)
+    print("positive-row mean p: weighted", mean_p_w,
+          "unweighted", mean_p_u)
+    if not (mean_p_w > mean_p_u):
+        print("FAIL: class weight [1,3] did not shift toward positives")
+        failures += 1
+
+    # 6: the borderless CrossEntropy arm on SOFT targets
     var tms = train(
         ctx, x, soft, n, f,
         border_count=32, n_estimators=20, max_depth=6,
