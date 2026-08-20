@@ -912,7 +912,9 @@ def build_cindex(
 
     var hb = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
     var dev_bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
-    for f in range(N_FEATURES):
+    # sized by the CALLER's bin table, not this module's fixture constant:
+    # `early_stop_check` reuses this helper with a different feature count.
+    for f in range(len(bins)):
         ref cf = lay.features[f]
         for r in range(n_rows):
             hb.unsafe_ptr().unsafe_store(r, UInt8(bins[f][r]))
