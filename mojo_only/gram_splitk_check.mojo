@@ -63,7 +63,9 @@ from core.gram_splitk import (
     gram_centered_splitk,
     gram_centered_splitk_into,
     gram_splitk_applies,
+    gram_splitk_cells_for,
     gram_splitk_chunk_count,
+    gram_splitk_reg_tiled,
     gram_splitk_stage_vectorized,
 )
 
@@ -386,6 +388,32 @@ def check_gram_dispatch() raises:
     if gram_splitk_stage_vectorized(1):
         raise Error("stage arms: m=1 must take the scalar arm")
 
+    # The accumulation loop's ownership split, same discipline a third
+    # time: ONE predicate (`gram_splitk_reg_tiled`, the symbol the kernel
+    # body branches on) asserted here, with `gram_splitk_cells_for` (the
+    # function the launchers call) pinning which CELLS instantiation each
+    # width reaches, and BOTH ownership arms held to the per-cell oracle by
+    # `check_gram_splitk_oracle`'s m = 8/12/32/64/128 (register-tile) and
+    # m = 1/3/33 (strided) shapes. Reach of the register-tile arm was also
+    # proven destructively once: +1.0 planted in its inner FMA failed the
+    # oracle at every tiled shape and left the strided shapes' bits
+    # untouched, and the mirrored sabotage of the strided arm inverted
+    # that split (LANE_gram-tile_2026-08-20.md).
+    if gram_splitk_cells_for(32) != 4 or gram_splitk_cells_for(33) != 16:
+        raise Error("reg tile: the CELLS width dispatch moved (narrow)")
+    if gram_splitk_cells_for(64) != 16 or gram_splitk_cells_for(128) != 64:
+        raise Error("reg tile: the CELLS width dispatch moved (wide)")
+    if not gram_splitk_reg_tiled[4](32):
+        raise Error("reg tile: m=32 (the bench width) must take the 2x2 arm")
+    if not gram_splitk_reg_tiled[16](64):
+        raise Error("reg tile: m=64 must take the 4x4 arm")
+    if not gram_splitk_reg_tiled[64](128):
+        raise Error("reg tile: m=128 must take the 8x8 arm")
+    if gram_splitk_reg_tiled[4](1) or gram_splitk_reg_tiled[4](3):
+        raise Error("reg tile: m=1/3 must keep the strided arm")
+    if gram_splitk_reg_tiled[16](33):
+        raise Error("reg tile: m=33 must keep the strided arm")
+
     var ctx = DeviceContext()
     # One wrapper run per arm, same oracle machinery.
     var arm_a = String("split-K") if gram_splitk_applies(
@@ -413,7 +441,9 @@ def check_gram_dispatch() raises:
     print(
         "check_gram_dispatch OK: predicate routes 32x32x4M/1x1x7/128x128 to"
         " split-K and 129x129/768x768/m!=n to the fallback; staging copy"
-        " vectorizes m=32/4/128 and falls back scalar at m=33/1; wrapper"
+        " vectorizes m=32/4/128 and falls back scalar at m=33/1; register"
+        " tile owns m=32/64/128 (2x2/4x4/8x8) and declines m=1/3/33 to the"
+        " strided arm; wrapper"
         " verified per cell on arm '"
         + arm_a
         + "' at 32x32x100003 and arm '"

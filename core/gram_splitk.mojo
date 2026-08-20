@@ -40,7 +40,15 @@ staging tile (`GRAM_ROWS_TILE` rows at a time; the load is the linear copy
 of a row-major span, in `GRAM_STAGE_W`-float vectors whenever
 `m % GRAM_STAGE_W == 0` -- scalar global loads are measured ~3x slower on
 this device -- and scalar at ragged widths) and accumulates the full
-m x m partial Gram in registers, `CELLS` cells per thread, fp32. Partials land in a workspace
+m x m partial Gram in registers, `CELLS` cells per thread, fp32. Cell
+ownership is a SQUARE REGISTER TILE whenever the tile side
+`T = sqrt(CELLS)` divides m (`gram_splitk_reg_tiled`): each thread owns a
+T x T rectangle of the output and feeds T*T FMAs from 2T shared reads per
+staged row -- the remap `bench/results/GRAM_PROFILE_2026-08-20.md` funded
+after eliminating fp32 throughput and DRAM as the limiter at the bench
+shape. Ragged widths keep the strided-singles ownership whole. Either way
+the accumulation ORDER per cell is k-ascending and identical. Partials
+land in a workspace
 at `partials[chunk * m*m + cell]`; a second small kernel folds them. X is
 read from DRAM EXACTLY ONCE, with no transposes -- the materialized route's
 two `transpose_kernel` passes (~22 ms at the bench shape) disappear as well.
@@ -59,7 +67,10 @@ BITWISE SYMMETRY, WHICH `check_covariance_is_symmetric` ENFORCES
 ----------------------------------------------------------------
 Cell (i, j) accumulates `tile[r*m + i] * tile[r*m + j]` and cell (j, i)
 accumulates the same two loads multiplied in the other order, over the same
-rows in the same sequence. IEEE float multiply is exactly commutative, so
+rows in the same sequence -- in EVERY ownership arm: the register-tile arm
+forms the identical two loads, merely staged through registers, with the
+i-operand first exactly as the strided arms multiply. IEEE float multiply
+is exactly commutative, so
 the two partials are bit-identical, and the reduce folds both in the same
 chunk order, so the output is bit-identical across the diagonal by
 construction.
@@ -194,6 +205,51 @@ def gram_splitk_stage_vectorized(m: Int) -> Bool:
     return (m % GRAM_STAGE_W) == 0
 
 
+@always_inline
+def gram_splitk_cells_for(m: Int) -> Int:
+    """The CELLS width the launch dispatch instantiates for an m x m output.
+
+    Smallest of {4, 16, 64} whose `GRAM_TPB * CELLS` covers m*m, so a
+    32 x 32 Gram does not pay a 64-cell unroll's dead guards. ONE function,
+    three readers (both `_splitk_launch` bodies and `check_gram_dispatch`),
+    so the register-tile predicate below can never drift from the width the
+    dispatch actually picks.
+    """
+    if m * m <= GRAM_TPB * 4:
+        return 4
+    if m * m <= GRAM_TPB * 16:
+        return 16
+    return GRAM_MAX_CELLS_PER_THREAD
+
+
+@always_inline
+def gram_splitk_reg_tile_side(cells: Int) -> Int:
+    """Side of the square register tile that factors one CELLS width.
+
+    2x2, 4x4, 8x8 are exactly the square factorizations of the existing
+    {4, 16, 64} cell counts: the accumulator register count per thread is
+    UNCHANGED by the register-tile arm; only the shared-read pattern moves.
+    """
+    if cells == 4:
+        return 2
+    if cells == 16:
+        return 4
+    return 8
+
+
+@always_inline
+def gram_splitk_reg_tiled[CELLS: Int](m: Int) -> Bool:
+    """True when the accumulation loop takes the register-tile arm.
+
+    The arm needs the tile side to divide m so every thread's rectangle is
+    full; every other width keeps the strided-singles arms whole, exactly
+    the staging copy's vector/scalar split style. ONE predicate, both
+    readers: the kernel body branches on this and `check_gram_dispatch`
+    asserts what it decides at the shipped and ragged widths.
+    """
+    return (m % gram_splitk_reg_tile_side(CELLS)) == 0
+
+
 def gram_splitk_applies(m: Int, n: Int, k: Int) raises -> Bool:
     """True when `gemm_tn` should take the split-K path.
 
@@ -276,25 +332,63 @@ def _gram_splitk_partial_body[CELLS: Int, CENTERED: Bool](
         address_space = AddressSpace.SHARED,
     ]()
 
+    # REGISTER-TILE cell ownership (GRAM_PROFILE_2026-08-20.md: at the bench
+    # shape neither fp32 throughput nor DRAM binds; the limiter by
+    # elimination is the accumulation loop's shared-read rate). When the
+    # tile side T divides m, each thread owns a T x T RECTANGLE of the
+    # output instead of CELLS strided singles: per staged row it loads the
+    # rectangle's T column values and T row values from shared into
+    # registers and does T*T FMAs -- T/2 FMA per shared read (2x2 = 1.0,
+    # 4x4 = 2.0, 8x8 = 4.0) against the strided singles' ~0.5. T*T == CELLS
+    # exactly, so the accumulator count per thread is unchanged. The remap
+    # moves WHICH thread owns a cell, never the k-ascending order that
+    # cell's products are added in, and each partial still lands at the
+    # same `chunk * mn + i*m + j` slot, so writer and reader agree and the
+    # output is bit-identical (before/after FNV dump,
+    # bench/results/LANE_gram-tile_2026-08-20.md, not argued). Ragged m
+    # keeps the strided arms below, whole -- the staging copy's
+    # vector/scalar split style. Block-uniform in m: no divergent barrier.
+    comptime T = gram_splitk_reg_tile_side(CELLS)
+    var tiled = gram_splitk_reg_tiled[CELLS](m)
+    var mt = 1
+    var bi0 = 0
+    var bj0 = 0
+    var own_tile = False
+    if tiled:
+        mt = m // T  # rectangles per side; tiled implies m >= T, so mt >= 1
+        # `mt * mt = m*m / CELLS <= GRAM_TPB` under the launch dispatch, so
+        # every rectangle has an owning thread and the m x m output is
+        # covered exactly once.
+        own_tile = tid < mt * mt
+        if own_tile:
+            bi0 = (tid // mt) * T
+            bj0 = (tid % mt) * T
+
     # Cell coordinates are invariant over the whole row loop; hoist them.
+    # Strided arms only: the tiled arm indexes off (bi0, bj0) and must not
+    # carry 2 * CELLS dead int32 lanes of register pressure.
     var ii = SIMD[DType.int32, CELLS](0)
     var jj = SIMD[DType.int32, CELLS](0)
-    comptime for c in range(CELLS):
-        var cell = tid + c * GRAM_TPB
-        if cell < mn:
-            ii[c] = Int32(cell // m)
-            jj[c] = Int32(cell % m)
+    if not tiled:
+        comptime for c in range(CELLS):
+            var cell = tid + c * GRAM_TPB
+            if cell < mn:
+                ii[c] = Int32(cell // m)
+                jj[c] = Int32(cell % m)
 
     var acc = SIMD[DType.float32, CELLS](0.0)
 
     # FLOOR KNOB (SCOREBOARD_2026-08-19 item 5, first knob). When the block's
-    # thread count is an exact multiple of m -- true at every power-of-two
-    # width up to 128, including the shipped m = 32 -- then
-    # `jj[c] = (tid + c * GRAM_TPB) % m` is the SAME index for every c, so
-    # the second tile read of the inner unroll is ONE load per row, hoisted
-    # out of the comptime loop, instead of CELLS loads of the same address.
-    # Same address between the same barriers, same value, same multiply in
-    # the same order: bit-identical, proven by the before/after bit dump in
+    # thread count is an exact multiple of m AND the register-tile arm
+    # declined the shape, `jj[c] = (tid + c * GRAM_TPB) % m` is the SAME
+    # index for every c, so the second tile read of the inner unroll is ONE
+    # load per row, hoisted out of the comptime loop, instead of CELLS loads
+    # of the same address. Since the register-tile arm took every width
+    # whose tile side divides m, this arm now serves only m = 1 among the
+    # 256-dividing widths; it stays because it is still the better read
+    # pattern wherever it applies. Same address between the same barriers,
+    # same value, same multiply in the same order: bit-identical, proven by
+    # the before/after bit dump in
     # bench/results/LANE_pca-centering_2026-08-20.md, not argued. The branch
     # is block-uniform, so no barrier is divergent.
     var uniform_jj = (GRAM_TPB % m) == 0
@@ -359,7 +453,24 @@ def _gram_splitk_partial_body[CELLS: Int, CENTERED: Bool](
                     tile[i] = x.unsafe_load(t * m + i)
                 i += GRAM_TPB
         barrier()
-        if uniform_jj:
+        if tiled:
+            # Register-tile arm: T column values into `cv`, then per owned
+            # row one scalar `xi`; every product is the SAME
+            # `tile[base + i] * tile[base + j]` (i-operand first) the
+            # strided arms form, read through registers -- a load cannot
+            # change a value, and each cell's chain still runs r ascending
+            # within the tile and t ascending across tiles.
+            if own_tile:
+                for r in range(rows):
+                    var base = r * m
+                    var cv = SIMD[DType.float32, T](0.0)
+                    comptime for b in range(T):
+                        cv[b] = tile[base + bj0 + b]
+                    comptime for a in range(T):
+                        var xi = tile[base + bi0 + a]
+                        comptime for b in range(T):
+                            acc[a * T + b] = acc[a * T + b] + xi * cv[b]
+        elif uniform_jj:
             for r in range(rows):
                 var base = r * m
                 var xj = tile[base + jm]
@@ -378,10 +489,20 @@ def _gram_splitk_partial_body[CELLS: Int, CENTERED: Bool](
         barrier()
         t += rows
 
-    comptime for c in range(CELLS):
-        var cell = tid + c * GRAM_TPB
-        if cell < mn:
-            partials.unsafe_store(chunk * mn + cell, acc[c])
+    # The writeback mirrors the ownership arm, and BOTH arms address a cell
+    # as `chunk * mn + i*m + j`: the reduce reads the identical slot per
+    # cell whichever arm produced it, in the same ascending-chunk order.
+    if tiled:
+        if own_tile:
+            comptime for a in range(T):
+                comptime for b in range(T):
+                    var cell = (bi0 + a) * m + (bj0 + b)
+                    partials.unsafe_store(chunk * mn + cell, acc[a * T + b])
+    else:
+        comptime for c in range(CELLS):
+            var cell = tid + c * GRAM_TPB
+            if cell < mn:
+                partials.unsafe_store(chunk * mn + cell, acc[c])
 
 
 def gram_splitk_partial_kernel[CELLS: Int](
@@ -527,13 +648,15 @@ def _splitk_launch(
     var kc = _splitk_chunk_rows(k, n_chunks)
     var mn = m * m
 
-    # Three register widths, smallest that fits, so a 32 x 32 Gram does not
-    # pay a 64-cell unroll's dead guards. The instantiation changes WHICH
-    # thread owns which cell, never the order any cell is accumulated in,
-    # so it is scheduling, not numerics.
-    if mn <= GRAM_TPB * 4:
+    # Three register widths, smallest that fits (`gram_splitk_cells_for`,
+    # one function with the checks), so a 32 x 32 Gram does not pay a
+    # 64-cell unroll's dead guards. The instantiation changes WHICH thread
+    # owns which cell, never the order any cell is accumulated in, so it is
+    # scheduling, not numerics.
+    var cells = gram_splitk_cells_for(m)
+    if cells == 4:
         _enqueue_partial[4](ctx, partials, x, m, k, kc, n_chunks)
-    elif mn <= GRAM_TPB * 16:
+    elif cells == 16:
         _enqueue_partial[16](ctx, partials, x, m, k, kc, n_chunks)
     else:
         _enqueue_partial[GRAM_MAX_CELLS_PER_THREAD](
@@ -556,11 +679,12 @@ def _splitk_launch_centered(
     var n_chunks = gram_splitk_chunk_count()
     var kc = _splitk_chunk_rows(k, n_chunks)
     var mn = m * m
-    if mn <= GRAM_TPB * 4:
+    var cells = gram_splitk_cells_for(m)
+    if cells == 4:
         _enqueue_partial_centered[4](
             ctx, partials, x, mu, m, k, kc, n_chunks
         )
-    elif mn <= GRAM_TPB * 16:
+    elif cells == 16:
         _enqueue_partial_centered[16](
             ctx, partials, x, mu, m, k, kc, n_chunks
         )
