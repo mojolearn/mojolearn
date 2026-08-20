@@ -115,6 +115,7 @@ from gbdt.gpu_util.copy import (
     copy_u32_kernel,
 )
 from gbdt.gpu_util.partitions_reduce import (
+    partition_stats_chunks,
     STATS_BLOCK,
     compute_partition_stats,
 )
@@ -740,7 +741,23 @@ def run_tree(
     var part_stats = ctx.enqueue_create_buffer[DType.float32](
         max_leaves * stat_count
     )
+    # SIZED BY THE MACHINE CHUNK COUNT, NOT THE DATA. The kernels index
+    # `(leaf * n_stats + stat) * max_chunks + chunk` with `max_chunks =
+    # partition_stats_chunks(sm_count, n_stats)` -- their machine-sized
+    # grid -- and this buffer was still sized by `ceil(n_rows /
+    # STATS_BLOCK)` from the data-sized era. Whenever the data count was
+    # SMALLER (every fit under ~5k rows on this box), the deep-level
+    # writes ran past the end: leaf 15, stat 1, chunk 9 lands at slot 319
+    # of a 256-float buffer at depth 6 on 4096 rows. The scribble was
+    # SELF-CONSISTENT (phase 2 reads the same out-of-bounds slots), so
+    # the 4096-row oracle fixtures passed over it for days; it surfaced
+    # as NaN leaf values only when the allocator placed something
+    # volatile after the buffer (caught by the train-api check,
+    # 2026-08-21). The larger of the two counts is always safe.
     var stat_chunks = (n_rows + STATS_BLOCK - 1) // STATS_BLOCK
+    var machine_chunks = partition_stats_chunks(sm_count, stat_count)
+    if machine_chunks > stat_chunks:
+        stat_chunks = machine_chunks
     var stat_partials = ctx.enqueue_create_buffer[DType.float32](
         max_leaves * stat_count * stat_chunks
     )
@@ -2137,7 +2154,23 @@ def run_tree_layout[
     var part_stats = ctx.enqueue_create_buffer[DType.float32](
         max_leaves * stat_count
     )
+    # SIZED BY THE MACHINE CHUNK COUNT, NOT THE DATA. The kernels index
+    # `(leaf * n_stats + stat) * max_chunks + chunk` with `max_chunks =
+    # partition_stats_chunks(sm_count, n_stats)` -- their machine-sized
+    # grid -- and this buffer was still sized by `ceil(n_rows /
+    # STATS_BLOCK)` from the data-sized era. Whenever the data count was
+    # SMALLER (every fit under ~5k rows on this box), the deep-level
+    # writes ran past the end: leaf 15, stat 1, chunk 9 lands at slot 319
+    # of a 256-float buffer at depth 6 on 4096 rows. The scribble was
+    # SELF-CONSISTENT (phase 2 reads the same out-of-bounds slots), so
+    # the 4096-row oracle fixtures passed over it for days; it surfaced
+    # as NaN leaf values only when the allocator placed something
+    # volatile after the buffer (caught by the train-api check,
+    # 2026-08-21). The larger of the two counts is always safe.
     var stat_chunks = (n_rows + STATS_BLOCK - 1) // STATS_BLOCK
+    var machine_chunks = partition_stats_chunks(sm_count, stat_count)
+    if machine_chunks > stat_chunks:
+        stat_chunks = machine_chunks
     var stat_partials = ctx.enqueue_create_buffer[DType.float32](
         max_leaves * stat_count * stat_chunks
     )
@@ -2664,6 +2697,7 @@ def run_tree_layout[
         )
         mgr.stream_kernel()
 
+
         # `numBlocks.x = (leavesCount > 4 ? 2 : 4) * TArchProps::SMCount()`
         # (`split_points.cu:563`): MACHINE-sized, like every strided grid in
         # their file; `wide` was data-sized and is not what their grid x
@@ -2838,12 +2872,15 @@ def run_tree_layout[
             best_bin_u == UInt32(0xFFFFFFFF)
             or Int(best_bin_u) >= hist_cells_per_leaf
         ):
+
             # their `CB_ENSURE(bestSplits[0].FeatureId != (ui32)-1, ...)`
             raise Error(
                 "All splits have infinite score. Probably, numerical"
                 " overflow occurs in loss function and/or split score"
                 " calculation. Try increasing l2_leaf_reg, and/or"
                 " decreasing learning_rate, etc."
+                " [level " + String(depth) + ", live leaves "
+                + String(n_live // 2) + "]"
             )
         var choice = resolve_split(layout, Int(best_bin_u))
         # improving-score gate; for an oblivious tree all leaves share one

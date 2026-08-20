@@ -356,7 +356,6 @@ def fit(
             ctx.synchronize()
             weight_magnitude = Float64(h_mags.unsafe_ptr().unsafe_load(0))
             gradient_magnitude = Float64(h_mags.unsafe_ptr().unsafe_load(1))
-            print("MAGS", weight_magnitude, gradient_magnitude)  # TEMP
 
         # `optimizer.Fit(...)` then `Estimate` then `Rescale` then
         # `AppendModels`, all four inside `run_tree_layout`, in their order.
