@@ -280,12 +280,26 @@ def binarize(value: Float32, borders: List[Float32]) -> Int:
     return b
 
 
+@no_inline
 def _penalty_min_entropy(weight: Float64) -> Float64:
     """`Penalty<EPenaltyType::MinEntropy>` (`binarization.cpp:175`).
 
     The `1e-8` is theirs, and unlike `MaxSumLog`'s it is not only guarding
     zero: `w * log(w)` is already 0 at w=0 by limit, so the epsilon is a
     plain reproduction, not a fix.
+
+    ## Why `@no_inline`, and it is NOT a performance hint
+
+    **Mojo contracts this multiply-then-add into an FMA across the inlined
+    call, and clang does not.** The DP evaluates `prev_error[i] +
+    _penalty_min_entropy(...)`; inlined, Mojo emits `fma(w, log(w),
+    prev_error[i])` keeping the product at full width, while C++ at clang's
+    default `-ffp-contract=on` contracts only within ONE SOURCE EXPRESSION
+    and `Penalty<type>(...)` is a separate call, so CatBoost adds the
+    ROUNDED product. One ULP, and it lands exactly where it does damage: on
+    a plateau the two arms of a symmetric pair stop being equal and the
+    tie-break fires on the difference. `@no_inline` restores every
+    symmetric pair bit-identically. Recorded as PORTING.md 54.
 
     ## Why this calls libm instead of `std.math.log`
 

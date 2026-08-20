@@ -216,56 +216,22 @@ def _check_fan_out(mut failures: List[String]) raises:
 
 
 
-def _is_known_fma_case(col_id: Int, budget: Int) -> Bool:
-    """The four (column, budget) pairs where our border is an adjacent,
-    EQUALLY OPTIMAL cut rather than CatBoost's.
-
-    ## The cause, measured rather than guessed
-
-    `_penalty_min_entropy(w)` is `w * log(w + 1e-8)`, and the DP adds it to
-    a precomputed term: `prev_error[i] + _penalty_min_entropy(total -
-    sweights[i])`. **Mojo CONTRACTS that multiply-then-add into an FMA
-    across the inlined penalty**, so what is evaluated is
-    `fma(w, log(w), prev_error[i])` -- the product kept at full width. C++
-    at clang's default `-ffp-contract=on` contracts only within one SOURCE
-    expression, and `Penalty<type>(...)` is a separate call, so CatBoost
-    gets the rounded product plus the term.
-
-    On a column of DISTINCT values every weight is 1, so
-    `Penalty(sweights[j] - sweights[i])` depends only on `j - i` and the
-    objective is exactly symmetric: at 4001 values and budget 1 the optimum
-    sits at cut 1999 AND cut 2000, mathematically equal. Under the FMA the
-    two differ by ONE ULP -- measured 30412.210990606218 against
-    30412.210990606214 -- and the last match's `<` tie-break, which takes
-    the FIRST index, picks the second one instead.
-
-    Proved by construction, not by inference: recomputing the same scan
-    with the penalty marked `@no_inline` makes every symmetric pair
-    bit-identical again (i = 1997/2002 and 1998/2001 both collapse to one
-    value, and 1999/2000 to another), and the first index wins as theirs
-    does. The one-line fix is `@no_inline` on `_penalty_min_entropy` in
-    `gbdt/grid_creator/binarization.mojo`, WHICH THIS LANE DOES NOT OWN --
-    reported instead of applied.
-
-    This is the same defect class the file's own docstring already records
-    for `std.math.log`: arithmetic noise four orders of magnitude above
-    their `Eps = 1e-12` re-deciding a tie on a DP plateau. That one was
-    found and fixed; this is the next one, and it survived because
-    `bench/minentropy_oracle.txt` never runs budget 1, where the per-level
-    loops do not execute at all and the last match is the ONLY comparison.
-
-    The gate is not disabled for these four: the divergence still has to be
-    exactly one border and that border still has to be an ADJACENT cut, and
-    if a pair ever matches exactly the check FAILS so the allowance is
-    deleted rather than left standing.
-    """
-    if col_id == 0 and (budget == 1 or budget == 2):
-        return True
-    if col_id == 3 and (budget == 1 or budget == 2):
-        return True
-    return False
-
-
+#: THE FMA ALLOWANCE IS GONE, AND ITS REMOVAL IS THE RESULT.
+#:
+#: Four (column, budget) pairs used to land on an adjacent, equally-optimal
+#: cut rather than CatBoost's, because Mojo CONTRACTED `_penalty_min_entropy`'s
+#: multiply-then-add into an FMA across the inlined call while clang, at its
+#: default `-ffp-contract=on`, contracts only within one SOURCE expression and
+#: `Penalty<type>(...)` is a separate call. One ULP, landing on a symmetric
+#: plateau where the last match's `<` tie-break then picked the other arm:
+#: measured 30412.210990606218 against 30412.210990606214 at 4001 distinct
+#: values and budget 1, where cuts 1999 and 2000 are mathematically equal.
+#:
+#: `@no_inline` on `_penalty_min_entropy` (PORTING.md 54) fixed it, and this
+#: check is what proved it: it was written to FAIL if a known-diverging pair
+#: ever matched exactly, so that the allowance could not outlive the defect it
+#: described. It did fail, on all four pairs at once, which is why there is
+#: nothing left here to allow. All 15 cases are now compared exactly.
 def _adjacent_cut(
     values: List[Float32], ours: Float32, theirs: Float32
 ) raises -> Bool:
@@ -343,7 +309,6 @@ def _check_target_binarization(mut failures: List[String]) raises:
     pos += 1
 
     var exact = 0
-    var known = 0
     for _ in range(n_cases):
         var hc = lines[pos].split(" ")
         var col_id = Int(String(hc[1]))
@@ -359,7 +324,6 @@ def _check_target_binarization(mut failures: List[String]) raises:
             columns[col_id],
             TBinarizationOptions(BORDER_SELECTION_MIN_ENTROPY, budget),
         )
-        var is_known = _is_known_fma_case(col_id, budget)
         if len(got) != len(want):
             failures.append(
                 String("target borders, column ")
@@ -386,17 +350,7 @@ def _check_target_binarization(mut failures: List[String]) raises:
                     detail += String(Float64(want[i]))
                     if not _adjacent_cut(columns[col_id], got[i], want[i]):
                         adjacent = False
-            if is_known and adjacent:
-                known += 1
-                print(
-                    "    KNOWN FMA DIVERGENCE, column",
-                    col_id,
-                    "budget",
-                    budget,
-                    "--",
-                    detail,
-                )
-            else:
+            if True:
                 failures.append(
                     String("target borders, column ")
                     + String(col_id)
@@ -418,17 +372,6 @@ def _check_target_binarization(mut failures: List[String]) raises:
                 )
         else:
             exact += 1
-            if is_known:
-                failures.append(
-                    String("column ")
-                    + String(col_id)
-                    + String(" budget ")
-                    + String(budget)
-                    + String(" now MATCHES CatBoost exactly. The FMA")
-                    + String(" contraction fix has landed; delete this pair")
-                    + String(" from _is_known_fma_case. A switch that")
-                    + String(" outlives its measurement is a defect")
-                )
 
         # and the BINARIZATION itself, per row, against a second tally
         if budget == 1 and len(got) == 1:
@@ -464,9 +407,7 @@ def _check_target_binarization(mut failures: List[String]) raises:
         exact,
         "of",
         n_cases,
-        "cases match CatBoost's own MinEntropy borders exactly,",
-        known,
-        "diverge by ONE adjacent equally-optimal cut (the FMA plateau)",
+        "cases match CatBoost's own MinEntropy borders exactly",
     )
 
 
