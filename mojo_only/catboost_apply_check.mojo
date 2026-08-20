@@ -50,7 +50,9 @@ from std.math import sqrt
 
 from max.gpu.host import DeviceContext
 
+from gbdt.models.ctr_value_table import TCtrValueTable
 from gbdt.models.oblivious_model import (
+    BIN_SPLIT_TAKE_GREATER,
     TAdditiveModel,
     TBinarySplit,
     TObliviousTreeModel,
@@ -178,7 +180,14 @@ def check_catboost_apply(ctx: DeviceContext) raises:
             if bin_idx < 0:
                 unmatched += 1
                 continue
-            st.splits.append(TBinarySplit(Int32(fi), Int32(bin_idx)))
+            # TakeGreater: their oracle model is float-only, so every
+            # split is `featureVal > border`. A one-hot model would carry
+            # TakeBin here, and the fixture has no categorical feature.
+            st.splits.append(
+                TBinarySplit(
+                    Int32(fi), Int32(bin_idx), Int32(BIN_SPLIT_TAKE_GREATER)
+                )
+            )
         var wm = TObliviousTreeModel(st^)
         wm.leaf_values = leaf_values[t].copy()
         model.add_weak_model(wm^)
@@ -196,7 +205,8 @@ def check_catboost_apply(ctx: DeviceContext) raises:
         one_hot.append(False)
 
     var tm = TrainedModel(
-        model^, fold_counts^, one_hot^, borders^, List[Float64](), 0
+        model^, fold_counts^, one_hot^, borders^, List[Float64](), 0,
+        List[TCtrValueTable]()
     )
     var ours = predict_floats(ctx, tm, x_colmajor, rows)
     if len(ours) != rows:
