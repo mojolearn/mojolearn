@@ -24,6 +24,20 @@ require a derivative work to carry the license and to state that files were
 changed, and every file under `ported/` is changed: it is a different
 language targeting a different GPU API.
 
+TWO FILES ARE NOT A TRANSLATION, THEY ARE THEIRS VERBATIM.
+`tools/permutation_oracle/mersenne64.h` and
+`tools/permutation_oracle/mersenne64.cpp` are CatBoost's own
+`util/random/mersenne64.{h,cpp}` at commit 54a8143a, redistributed under the
+same Apache License, Version 2.0, and CHANGED in two ways which are recorded
+here as section 4(b) requires: two `util/` includes are replaced by a local
+`shim.h` that supplies `ui64` and `ULL`, and the `IInputStream` constructor is
+removed because it needs their stream library and nothing here calls it.
+
+They are not part of the library. They build a test oracle -- the check that
+`gbdt/data/permutation.mojo` reproduces their random permutation -- and they
+are included verbatim on purpose: an oracle written from their code is
+evidence, and one paraphrased from it is a second guess.
+
 This project is not affiliated with, endorsed by, or sponsored by YANDEX LLC.
 "CatBoost" is used only to identify the software this work derives from.
 
