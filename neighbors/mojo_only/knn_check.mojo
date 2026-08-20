@@ -926,8 +926,13 @@ def check_dispatch_takes_fused() raises:
       - at k = 65, one past their `k <= 64` at `:443`, the dispatch must fall
         through EVEN WITH `KNN_METHOD_FUSED` asked for, so `out_idx32` must
         come back correct and `out_idx` must still hold the sentinel;
-      - at k = 8 with the argument OMITTED, the tiled arm must run, because
-        DEVIATION 36 makes `KNN_METHOD_TILED` this port's default.
+      - at k = 8 with the argument OMITTED, the AUTO default must consult
+        `fused_l2_knn_grid`: at THIS fixture (53 x 4,093) the computation
+        picks grid (16, 4) -- the x-split regime -- so the TILED arm must
+        run; and at a fourth fixture built to sit in the `grid_x == 1`
+        regime (1,920 queries), the same omitted-argument call must take
+        the FUSED arm. Together they assert the default is AUTO and that
+        AUTO reads the geometry, not a constant.
 
     The first two together are what stops the arm selection being wired to a
     constant: one direction alone would pass either way. The third is what
@@ -1077,7 +1082,7 @@ def check_dispatch_takes_fused() raises:
             " `:443` bound is k <= 64 and 65 must fall through."
         )
 
-    # --- k = 8, ARGUMENT OMITTED: DEVIATION 36's default, the tiled arm ---
+    # --- k = 8, ARGUMENT OMITTED, x-split shape: AUTO must pick TILED ---
     #
     # Same k, same fixture, same buffers as the first call. The ONLY thing
     # that differs is that `knn_method` is not passed, so this asserts the
@@ -1100,9 +1105,11 @@ def check_dispatch_takes_fused() raises:
             untouched3 += 1
     if untouched3 != FCHK_QUERIES * kf:
         raise Error(
-            "DEFAULT DISPATCH at k=8 wrote out_idx, so the FUSED arm ran."
-            " DEVIATION 36 says the default is KNN_METHOD_TILED; either the"
-            " default moved or the switch is not reaching the dispatch."
+            "DEFAULT DISPATCH at k=8 on the (53 x 4,093) fixture wrote"
+            " out_idx, so the FUSED arm ran. fused_l2_knn_grid picks"
+            " grid (16, 4) here, the x-split regime, and DEVIATION 36's AUTO"
+            " default must send that to TILED; either the default moved or"
+            " AUTO is not consulting the launch computation."
         )
     var bad3 = 0
     for i in range(FCHK_QUERIES):
@@ -1121,12 +1128,74 @@ def check_dispatch_takes_fused() raises:
             " running but wrong"
         )
 
+    # --- k = 8, ARGUMENT OMITTED, grid_x == 1 shape: AUTO must pick FUSED --
+    #
+    # 1,920 queries = 120 y-chunks at Mblk 16, exactly minGridSize on the M4,
+    # so `fused_l2_knn_grid` returns grid_x == 1 (pinned in
+    # check_launch_config_values) and the AUTO default must take the fused
+    # arm. Only WHICH buffer was written is asserted here; the fused arm's
+    # answers are oracle-checked elsewhere on their own fixtures.
+    var big_q = 1920
+    var bqueries = ctx.enqueue_create_buffer[DType.float32](
+        big_q * FCHK_FEATURES
+    )
+    var bqnorm = ctx.enqueue_create_buffer[DType.float32](big_q)
+    var bod = ctx.enqueue_create_buffer[DType.float32](big_q * kf)
+    var boi = ctx.enqueue_create_buffer[DType.uint32](big_q * kf)
+    var boi32 = ctx.enqueue_create_buffer[DType.int32](big_q * kf)
+    var bdist = ctx.enqueue_create_buffer[DType.float32](tile * FCHK_INDEX)
+    ctx.synchronize()
+    var hbq = ctx.enqueue_create_host_buffer[DType.float32](
+        big_q * FCHK_FEATURES
+    )
+    for i in range(big_q):
+        for f in range(FCHK_FEATURES):
+            hbq.unsafe_ptr().unsafe_store(
+                i * FCHK_FEATURES + f, _fchk_coord(i, f, 9)
+            )
+    ctx.enqueue_copy(dst_buf=bqueries, src_ptr=hbq.unsafe_ptr())
+    var hbu = ctx.enqueue_create_host_buffer[DType.uint32](big_q * kf)
+    var hbi = ctx.enqueue_create_host_buffer[DType.int32](big_q * kf)
+    for i in range(big_q * kf):
+        hbu.unsafe_ptr().unsafe_store(i, UInt32(0xDEADBEEF))
+        hbi.unsafe_ptr().unsafe_store(i, Int32(-77))
+    ctx.enqueue_copy(dst_buf=boi, src_ptr=hbu.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=boi32, src_ptr=hbi.unsafe_ptr())
+    ctx.synchronize()
+    compute_norms(ctx, bqueries, bqnorm, big_q, FCHK_FEATURES, False)
+    brute_force_knn_impl(
+        ctx, bqueries, bqnorm, index, inorm, bdist, bv, bi, bod, boi, boi32,
+        big_q, FCHK_INDEX, FCHK_FEATURES, kf, tile, buf_len, False,
+        True,
+    )
+    ctx.enqueue_copy(dst_ptr=hbu.unsafe_ptr(), src_buf=boi)
+    ctx.enqueue_copy(dst_ptr=hbi.unsafe_ptr(), src_buf=boi32)
+    ctx.synchronize()
+    var fused_wrote = 0
+    for i in range(big_q * kf):
+        if hbu.unsafe_ptr().unsafe_load(i) != UInt32(0xDEADBEEF):
+            fused_wrote += 1
+    var tiled_untouched = 0
+    for i in range(big_q * kf):
+        if hbi.unsafe_ptr().unsafe_load(i) == Int32(-77):
+            tiled_untouched += 1
+    if fused_wrote != big_q * kf or tiled_untouched != big_q * kf:
+        raise Error(
+            "DEFAULT DISPATCH at k=8 with 1,920 queries: expected the FUSED"
+            " arm (grid_x == 1 regime), but out_idx has "
+            + String(big_q * kf - fused_wrote)
+            + " sentinel slots left and out_idx32 has "
+            + String(big_q * kf - tiled_untouched)
+            + " written slots; AUTO is not reading the geometry"
+        )
+
     print(
         "check_dispatch_takes_fused OK: with KNN_METHOD_FUSED, k=8 wrote"
         " out_idx and left out_idx32 at its sentinel and k=65 did the"
         " opposite, so the `k <= 64` branch at knn_brute_force.cuh:443 is"
-        " wired both ways; with the argument omitted, k=8 took the TILED arm,"
-        " which is DEVIATION 36's default"
+        " wired both ways; with the argument omitted, the AUTO default took"
+        " TILED on the (53 x 4,093) x-split shape and FUSED on the"
+        " 1,920-query grid_x == 1 shape, which is DEVIATION 36 (revised)"
     )
 
 

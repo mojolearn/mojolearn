@@ -573,7 +573,7 @@ overflow rather than wrapping, mirroring their brute-arm assertion at
 `:180-184`. Without it the offsets wrap, the CSR is garbage, and `weak_cc`
 still returns a plausible labelling -- silently.
 
-## 36. k-NN defaults to the TILED arm; cuVS defaults to the FUSED one
+## 36. k-NN defaults to fused-iff-`grid_x == 1`; cuVS defaults to fused everywhere
 
 Lives in full at `neighbors/ported/neighbors/detail/knn_brute_force.mojo`,
 above `KNN_METHOD_FUSED`. This is entry 35 pointed the other way, and it is
@@ -599,12 +599,25 @@ queries, 0.86x at 2,000, 0.92x at 8,000, 0.93x at 32,000) and never crosses.
 
 **Rule: a traffic model that does not count blocks can predict the wrong
 SIGN, not merely the wrong magnitude.** Their `gridDim.x > 1` split LANDED on
-2026-08-19 (entry 40), so the geometry those numbers were taken on is stale;
-the default stays TILED until both arms are re-timed, and the fused arm stays
-reachable through `knn_method` so that re-measuring costs one argument rather
-than a revert. Note the ported `launchConfigGenerator` still picks
-`grid_x == 1` at the 2,000-query bench shape (125 y-chunks >= the M4's
-120-block capacity); the x-split engages below ~1,905 queries.
+2026-08-19 (entry 40) and both arms were RE-TIMED the same evening, arms
+interleaved, both orders pooled. The sign flips with the grid shape the
+ported `launchConfigGenerator` picks:
+
+- `grid_x == 1` (2,000+ queries at the bench shapes): fused is at worst a tie
+  and at 32,000 queries a clean non-overlapping 1.25x win; medians favor it
+  at every index size from 50,000 up (1.07x-1.19x).
+- x-split engaged (below ~1,905 queries): fused LOSES, and at 500-1,000
+  queries catastrophically (0.19x-0.22x; worst sample 2.1 s against tiled's
+  43 ms). The mutex merge is correct on Metal (entry 40) but serialized
+  per-row merges cost far more than the occupancy the split buys.
+
+So the REVISED default is `KNN_METHOD_AUTO`: consult `fused_l2_knn_grid` --
+the exact computation the launch itself uses -- and take fused iff it says
+`grid_x == 1`, tiled otherwise. `KNN_METHOD_FUSED` still restores cuVS's
+dispatch exactly, `KNN_METHOD_TILED` the 2026-08-19-morning default. The full
+tables live above `KNN_METHOD_FUSED` in `knn_brute_force.mojo`;
+`check_dispatch_takes_fused` asserts the AUTO default on both sides of the
+boundary by which output buffer comes back written.
 
 ## 40. The cross-block merge's `__threadfence` is SPELLED as acquire/release, because Apple legalizes nothing else
 

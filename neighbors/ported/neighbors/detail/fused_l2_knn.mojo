@@ -732,6 +732,18 @@ def sqrt_postprocess_kernel(
     out_dists.unsafe_store(idx, sqrt(v))
 
 
+def fused_l2_knn_grid(n_queries: Int, n_index: Int) raises -> Tuple[Int, Int]:
+    """The exact `(grid_x, grid_y)` a `fused_l2_knn` call at this shape will
+    launch with. One source of truth: `fused_l2_knn` itself calls this, and
+    the dispatch in `knn_brute_force.mojo` consults it to decide the AUTO
+    arm (DEVIATION 36), so the number the default flips on is by construction
+    the number the launch uses."""
+    var smem_bytes = (FKNN_SMEM_PAGE_X + FKNN_SMEM_PAGE_Y) * 4
+    return launch_config_generator(
+        n_queries, n_index, FKNN_MBLK, FKNN_NBLK, FKNN_THREADS, smem_bytes
+    )
+
+
 def fused_l2_knn(
     ctx: DeviceContext,
     mut queries: DeviceBuffer[DType.float32],
@@ -787,10 +799,7 @@ def fused_l2_knn(
     # `shDumpKV` (DEVIATION BLOCKS 1 and 3), where theirs adds
     # `Mblk * numOfNN * sizeof(Pair)` for the shmem queue dump it has and we
     # do not.
-    var smem_bytes = (FKNN_SMEM_PAGE_X + FKNN_SMEM_PAGE_Y) * 4
-    var cfg = launch_config_generator(
-        n_queries, n_index, FKNN_MBLK, FKNN_NBLK, FKNN_THREADS, smem_bytes
-    )
+    var cfg = fused_l2_knn_grid(n_queries, n_index)
     fused_l2_knn_launch(
         ctx,
         queries,

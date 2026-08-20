@@ -101,10 +101,11 @@ After the fix, 50,000 goes 0.90x -> 1.06x against scikit-learn and 231.7 ->
 196.3 ms, and the sublinearity between 50,000 and 100,000 that made the row
 suspicious (231.7 -> 323.1 for twice the data) largely dissolves: 196.3 ->
 316.9 -> 632.7 is 1.61x then 2.00x. **The rest of that row has since been
-chased and found (2026-08-19, LANE_rbc-build), and the sentence that used to
-sit here -- "whatever remains at 50,000 costs a user nothing ... logged rather
-than chased" -- was wrong on both halves.** It costs 1.4x to 2.0x, and it is
-reachable from a public argument. See "The 50,000 row, explained" below.
+chased twice (2026-08-19, LANE_rbc-build and then the evening phase-timer
+round), and both sentences that sat here in turn were wrong.** The first said
+it was not worth chasing; the second said batch size was a 1.4x-2.0x lever.
+The lever was measured on the three-walk runner and DIED with the two-loop
+max_k landing (LANE_rbc-maxk): see "The 50,000 row, explained" below.
 
 **At 200,000 points we went from 37x SLOWER to 2.08x FASTER.** That is a ~77x
 swing, and none of it came from tuning a kernel.
@@ -184,18 +185,29 @@ across those same shapes:
     25,002             106-130
     12,502              90-112
 
-Two batches of 40,669 and two of 25,002 are the same batch COUNT, so the axis is
-batch SIZE and the ball cover is insensitive to it. Sixty to seventy percent of
-the 50,000 fit is outside the neighbourhood search. The suspect is
-`weak_cc_batched`, which re-initialises all N labels per batch, iterates
-propagation, and takes three host syncs per pass -- a bigger batch holds longer
-label chains. **That is measured but NOT explained**; confirming it needs a timer
-inside `dbscan/ported/dbscan/runner.mojo`.
+Two batches of 40,669 and two of 25,002 are the same batch COUNT, so the axis
+was batch SIZE and the ball cover was insensitive to it. The suspect named
+here was `weak_cc_batched`.
 
-The actionable consequence: `compute_batch_size` spends 80% of device memory on
-one batch, and on this device the biggest batch is the slowest. Exposing
-`max_mbytes_per_batch`, or wiring cuML's own `neigh_per_row` `///@todo`, is
-worth 1.4x to 2.0x at 50,000 and cannot change the answer.
+**RESOLVED 2026-08-19 EVENING, and the suspect is acquitted.** The table above
+was taken on the three-walk runner. After the two-loop max_k dispatch landed
+(LANE_rbc-maxk) the phase timer (`dbscan/phase_main.mojo`, cuML's own nvtx
+boundaries) attributed the fit at the same fixture:
+
+    50,000, forced batches      phase-sum ms   weak_cc share
+    2 (default, 80% budget)         38.5           1.3 ms
+    2 (6,251 MB... 2 batches)       46.7           1.2 ms
+    4 (3,126 MB)                    65.0           3.1 ms
+    16,000: 1 / 2 / 8 batches       8.4 / 15.5 / 43.5
+
+`weak_cc` never exceeds 1.3 ms on a default fit; `vertexdeg` dominates and is
+RE-RUN per batch, so on the two-loop runner every added batch is a pure cost.
+The old lever is INVERTED: cuML's one-big-batch 80% default is the right
+policy on this device too, `max_mbytes_per_batch` stays exposed for memory
+control only, and the `neigh_per_row` todo buys nothing here. The 50,000
+anomaly itself largely dissolved with the two-loop landing: per-point medians
+run 2.34 / 1.96 / 3.14 / 2.95 / 2.94 us at 4k / 16k / 50k / 100k / 200k, so
+50,000 now sits in line with its neighbours instead of 1.4x-2.0x above them.
 
 ## What is still not ported
 

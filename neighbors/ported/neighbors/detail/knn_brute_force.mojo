@@ -80,6 +80,7 @@ from neighbors.ported.matrix.detail.select_radix import (
 from neighbors.ported.neighbors.detail.fused_l2_knn import (
     FKNN_MAX_NN,
     fused_l2_knn,
+    fused_l2_knn_grid,
 )
 
 
@@ -211,68 +212,68 @@ def tiled_brute_force_knn(
 
 #: WHICH SIDE OF `knn_brute_force.cuh:443` THIS PORT TAKES BY DEFAULT.
 #:
-#: DEVIATION 36: WE DEFAULT TO THE TILED ARM AND cuVS DEFAULTS TO THE FUSED
-#: ONE. Their dispatch sends `k <= 64` + row-major + L2 to `fusedL2Knn`; ours
-#: sends it to `tiledBruteForceKnn`, their `else`. Both arms are theirs. Only
-#: which one runs unasked has changed.
+#: DEVIATION 36 (REVISED 2026-08-19, second measurement round): cuVS sends
+#: `k <= 64` + row-major + L2 to `fusedL2Knn` unconditionally; we send it
+#: there ONLY when `fused_l2_knn_grid` -- their own `launchConfigGenerator`,
+#: M4-fed -- picks `grid_x == 1`, and to `tiledBruteForceKnn` (their `else`)
+#: when it would engage the x-split. Both arms are theirs; which one runs
+#: unasked is decided by their launch computation evaluated on our hardware.
 #:
-#: Measured on an M4, 32 features, k = 10, 2,000 queries, ARMS INTERLEAVED
-#: INSIDE THE REPEAT LOOP, min of 3, and RE-RUN WITH THE ARMS IN THE OPPOSITE
-#: ORDER (the second run agreed with the first to about 1%, so the ordering is
-#: not carrying the result). OURS AGAINST OURS:
+#: HISTORY, because this default has now flipped once and the reason matters.
+#: The first port ran the fused kernel at a fixed `grid = (1, ceil(m/16))`
+#: (~125 blocks at 2,000 queries, independent of index size) and measured
+#: 0.84x-0.88x against tiled at every index size 20k-400k, both arm orders.
+#: That table set the original DEVIATION 36 default = TILED. It was a
+#: measurement of the WRONG GEOMETRY: the launch computation is part of their
+#: algorithm, and porting its A100 output instead of the computation itself
+#: starved the M4. With `launchConfigGenerator` ported (grid capped at
+#: minGridSize = 120 with a row grid-stride) the same kernel re-measured
+#: 2026-08-19 evening, arms interleaved in the repeat loop, BOTH orders
+#: pooled, n = 6/size, 32 features, k = 10, 2,000 queries:
 #:
-#:     n index     tiled ms   fused ms   fused/tiled
-#:      20,000        15.64      18.55       0.84x
-#:      50,000        39.60      45.39       0.87x
-#:     100,000        79.44      90.34       0.88x
-#:     200,000       155.25     180.22       0.86x
-#:     400,000       306.10     359.47       0.85x
+#:     n index    tiled med ms   fused med ms   fused/tiled
+#:      20,000          23.8           26.1        0.91x
+#:      50,000          67.9           63.6        1.07x
+#:     100,000         174.2          154.4        1.13x
+#:     200,000         323.9          274.1        1.18x
+#:     400,000         615.7          517.9        1.19x
 #:
-#: **The fused kernel is slower at every size measured and faster at none.**
-#: That is the same shape of argument the DBSCAN default rests on (DEVIATION
-#: 35), pointed the other way, and it was a surprise: fusion was expected to
-#: win by removing the distance matrix entirely.
+#: Per-size ranges overlap (a noisy thermal window), so no single row is a
+#: verdict; the query sweep at a fixed 200,000-row index is, in both
+#: directions at once:
 #:
-#: WHY IT LOSES, AS FAR AS IT HAS BEEN MEASURED. The ported `fusedL2Knn` runs
-#: at `gridDim.x == 1`, so its block count is `ceil(n_queries / Mblk)` and does
-#: NOT depend on n_index: at 2,000 queries that is ~125 blocks whether the
-#: index holds 20,000 rows or 400,000, and each block streams the whole index.
-#: Holding n_index at 200,000 and raising the query count confirms this is part
-#: of it, because the deficit shrinks monotonically as blocks are added:
+#:     queries    tiled med ms   fused med ms   fused/tiled   grid
+#:         64            10.6           11.4        0.93x     (16, 4)
+#:        250            40.8           48.6        0.84x     (7, 16)
+#:        500            56.5          293.7        0.19x     (4, 32)
+#:      1,000           111.0          499.7        0.22x     (2, 63)
+#:      2,000           268.0          264.6        1.01x     (1, 120)
+#:      8,000         1,247.7        1,121.2        1.11x     (1, 120)
+#:     32,000         5,575.6        4,445.3        1.25x     (1, 120)
 #:
-#:     queries     tiled ms   fused ms   fused/tiled
-#:        500         39.60      59.91       0.66x
-#:      2,000        154.89     180.12       0.86x
-#:      8,000        618.95     673.95       0.92x
-#:     32,000      2,498.22   2,696.12       0.93x
+#: THE SIGN FLIPS WITH THE GRID SHAPE. Everywhere the computation picks
+#: `grid_x == 1` the fused kernel is at worst a tie and at 32,000 queries a
+#: clean non-overlapping 1.25x win; everywhere it engages the x-split the
+#: mutex merge is a loss, and at 500-1,000 queries a CATASTROPHIC one (down
+#: to 0.19x, with a 2.1-second worst sample at 500 queries against tiled's
+#: 43 ms). The mutex protocol is CORRECT on Metal (the acquire-load spin /
+#: weak-CAS / release-store spelling, probe-verified under contention), but
+#: paying serialized cross-block merges per row costs more here than the
+#: occupancy it buys. So:
 #:
-#: **but it never crosses.** It asymptotes near 0.93x, so under-parallelisation
-#: explains the size of the gap and not its sign. The leading hypothesis for
-#: the residual is that the tiled arm's contraction is `linalg.matmul` while
-#: the fused arm's is our transliteration of RAFT's Policy4x4 tile, and
-#: `core/gemm.mojo` already records those measured at 248 against 15 GFLOP/s on
-#: a standalone product. **That is a hypothesis, not a measurement of THIS
-#: kernel**, and it is not what decided the default; the table above is.
+#:   - `KNN_METHOD_AUTO` (the DEFAULT): fused iff `fused_l2_knn_grid` says
+#:     `grid_x == 1`, else tiled. The number the default flips on is by
+#:     construction the number the launch would use.
+#:   - `KNN_METHOD_FUSED` restores cuVS's dispatch exactly, x-split included.
+#:   - `KNN_METHOD_TILED` restores the 2026-08-19-morning default.
 #:
-#: WHAT WOULD REVERSE THIS: their `gridDim.x > 1` split (the mutex protocol
-#: at `fused_l2_knn.cuh:241-338`) LANDED on 2026-08-19, along with their
-#: `launchConfigGenerator` (M4 inputs, `pairwise_distance_base.mojo`), so the
-#: fused arm now fields the grid their computation chooses instead of a fixed
-#: 1 x ceil(m/16). NOTE WHAT THAT COMPUTATION SAYS AT THE BENCH SHAPE: 2,000
-#: queries is 125 y-chunks against a 120-block capacity, so it still picks
-#: `grid_x == 1` there (with `grid_y` capped at 120 and a row grid-stride);
-#: the x-split engages below ~1,905 queries, e.g. (16, 4) at 53 queries. The
-#: table above is therefore STALE in its launch geometry but not yet
-#: re-measured; the default stays TILED until the orchestrator re-times both
-#: arms. It stays reachable through `knn_method` precisely so that measuring
-#: it again costs one argument rather than a revert.
-#:
-#: This does not change any answer. `check_fused_l2_knn` and
-#: `check_fused_edge_shapes` match the host Float64 oracle slot for slot and in
-#: order, on the same fixtures the tiled arm is checked against, so the flip
+#: This does not change any answer. Both arms match the host Float64 oracle
+#: slot for slot on the same fixtures (`check_fused_l2_knn`,
+#: `check_fused_griddimx_merge`, `check_fused_edge_shapes`), so the switch
 #: changes a wait and not an output.
 comptime KNN_METHOD_FUSED = 0
 comptime KNN_METHOD_TILED = 1
+comptime KNN_METHOD_AUTO = 2
 
 
 def brute_force_knn_impl(
@@ -297,7 +298,7 @@ def brute_force_knn_impl(
     use_vendor_topk: Bool = False,
     row_major_query: Bool = True,
     row_major_index: Bool = True,
-    knn_method: Int = KNN_METHOD_TILED,
+    knn_method: Int = KNN_METHOD_AUTO,
 ) raises:
     """`brute_force_knn_impl`'s dispatch, `knn_brute_force.cuh:443-447`.
 
@@ -356,13 +357,18 @@ def brute_force_knn_impl(
 
     # Their four conditions, unchanged, AND our own method switch. The
     # switch is a separate clause rather than a rewrite of theirs so that
-    # `knn_method = KNN_METHOD_FUSED` restores their dispatch exactly. See
-    # DEVIATION 36 above the constants for why the default is the other side.
+    # `knn_method = KNN_METHOD_FUSED` restores their dispatch exactly. The
+    # AUTO default asks the launch computation itself which regime this shape
+    # is in; see DEVIATION 36 above the constants for the measurements.
+    var want_fused = knn_method == KNN_METHOD_FUSED
+    if knn_method == KNN_METHOD_AUTO:
+        var g = fused_l2_knn_grid(n_queries, n_index)
+        want_fused = g[0] == 1
     var fused_ok = (
         k <= FKNN_MAX_NN
         and row_major_query == row_major_index
         and row_major_query
-        and knn_method == KNN_METHOD_FUSED
+        and want_fused
     )
     if fused_ok:
         fused_l2_knn(

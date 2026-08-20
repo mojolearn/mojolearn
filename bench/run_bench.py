@@ -47,7 +47,7 @@ def rows(ours, theirs):
     for arm in sorted(set(ours) | set(theirs), key=arm_order):
         a, b = ours.get(arm), theirs.get(arm)
         if not a or not b:
-            yield (arm, a or b, None, None, "ONE-SIDED")
+            yield (arm, a, b, None, "ONE-SIDED")
             continue
         ma, mb = statistics.median(a), statistics.median(b)
         overlap = not (max(a) < min(b) or max(b) < min(a))
@@ -100,8 +100,15 @@ def main():
           "|---|---|---|---|---|---|---|---|"]
     for arm, a, b, ratio, verdict in rows(ours, theirs):
         if ratio is None:
-            print(f"{arm:16} {'--':>12} {'--':>12}           {verdict}")
-            md.append(f"| {arm} | -- | -- | -- | {verdict} | | | |")
+            side = a or b
+            m = statistics.median(side)
+            which = "ours" if a else "sklearn"
+            print(f"{arm:16} {m:12.2f} ({which} only)  {verdict}"
+                  f"  [{min(side):.2f}, {max(side):.2f}] n={len(side)}")
+            ma_s = f"{m:.2f}" if a else "--"
+            mb_s = f"{m:.2f}" if b else "--"
+            md.append(f"| {arm} | {ma_s} | {mb_s} | -- | {verdict} "
+                      f"| [{min(side):.2f}, {max(side):.2f}] n={len(side)} | | |")
             continue
         ma, mb = statistics.median(a), statistics.median(b)
         print(f"{arm:16} {ma:12.2f} {mb:12.2f} {ratio:8.2f}x  {verdict}")
