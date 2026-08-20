@@ -105,7 +105,9 @@ def run_border(ctx: DeviceContext, arm: PythonObject, data_dir: String, name: St
     )
 
     for rep in range(REPS):
-        var secs = arm.fit_seconds(data_dir, name, border, TREES, DEPTH).__float__()
+        var res = arm.fit_seconds_and_mse(data_dir, name, border, TREES, DEPTH)
+        var secs = res[0].__float__()
+        var their_mse = res[1].__float__()
         var theirs_ms = secs * 1000.0 / Float64(TREES)
 
         var model = TAdditiveModel()
@@ -119,6 +121,7 @@ def run_border(ctx: DeviceContext, arm: PythonObject, data_dir: String, name: St
             "  rep", rep, " catboost-cpu", theirs_ms, "ms/tree   ours-gpu",
             ours_ms, "ms/tree   ratio", ours_ms / theirs_ms,
             "  our final mse", losses[len(losses) - 1],
+            " catboost mse", their_mse,
         )
 
 
