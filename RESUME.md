@@ -305,10 +305,26 @@ returned to CatBoost's mse at 7 decimals. New coverage that gates the
 range: `bench/oracle254.txt` (48/48) and `check-hist2`'s bits-8
 both-modes section.
 
-Standings from the last quiet window (a peer bench loaded the box
-before the final rerun; re-verify the CPU-arm canary before quoting):
-synth@254 1.45-1.72x (from 2.1x), covtype@254 ~2.4x (from 2.7x),
-128-border rows unchanged (parity at synth, 2.0-2.2x covtype).
+Quiet-window standings after both commits (interleaved, one process,
+CPU-arm canary at its usual 31 / 9.7-10.7 ms/tree, mse printed both
+arms every rep):
+
+    800k x 100 @ 128 (their GPU default):  0.97-1.05x -- two of three
+        reps FASTER than CatBoost, mse matched to 7 decimals
+    800k x 100 @ 254:  1.54-1.59x  (was 2.1x), mse 7 decimals
+    covtype   @ 128:  1.88-2.34x, mse 6-7 decimals
+    covtype   @ 254:  2.29-2.61x  (was 2.7x), mse 6 decimals
+
+WHERE COVTYPE'S GAP LIVES, derived from measured constants rather than
+assumed: scaling synth@128's 31 ms/tree by covtype's rows (x0.73) and
+features (x0.53) predicts ~12 ms of variable cost, yet we run ~21 --
+about 8 ms/tree does not scale with data. That matches the fixed
+control plane at THIS BOX's measured prices (launch 21-23 us, drain
+191 us, ~30-40 launches per level x 6 levels + 12 drains): CatBoost's
+CPU arm pays no launch floor at all, which is why ITS covtype cost
+scales down to 9.7 and ours cannot follow. The lever list below
+attacks exactly this; the decisive per-phase attribution is a
+level_bench run on the covtype shape.
 
 Next known levers, in order: device-side split resolution (~2 ms, a
 marked deviation through the matrix), the predict/inference path
