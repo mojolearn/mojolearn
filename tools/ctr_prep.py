@@ -19,9 +19,17 @@ THE FORMULAS ARE THEIRS, PINNED FROM SOURCE (CatBoost 54a8143a):
   with the default prior {0.0, 1}:  count / (n + 1)
   (`cuda/ctrs/kernel/ctr_calcers.cu:100` NonWeightedBinFreqCtrsImpl;
   default priors `private/libs/options/cat_feature_options.cpp:127-129`).
-* CTR binarization default = UNIFORM with 15 borders
-  (`cat_feature_options.cpp:169`): borders at
-  min + (max - min) * k / 16, k = 1..15, duplicates dropped.
+* CTR binarization default for FeatureFreq on GPU = **MinEntropy with 15
+  borders** for SIMPLE ctrs (`Median` for tree ctrs), from
+  `CreateDefaultCounter` (`catboost_options.cpp:392-415`) and re-applied by
+  `SetDefaultBinarizationsIfNeeded` (`:418-427`).
+  THIS FILE USED TO SAY `Uniform, 15`, citing `cat_feature_options.cpp:169`.
+  That line is real but it is the GENERIC `TCtrDescription` constructor
+  default, and the GPU path never reaches it for FeatureFreq. A correct
+  citation on the wrong code path reads as verified and is how it survived.
+  Borders now come from CatBoost's own quantizer rather than from a formula
+  reimplemented here, the same discipline `interleaved_prep.py` already uses
+  for the numeric grid, so there is no second implementation to drift.
 * Category CODES are ours (sorted unique raw values -> 0..k-1); CatBoost
   hashes raw strings instead. The CTR VALUE only depends on counts, so
   the codes' order cannot change any ctr, only the (irrelevant) code
@@ -45,13 +53,32 @@ def freq_ctr_column(codes: np.ndarray) -> np.ndarray:
     return (counts[codes].astype(np.float64) / (n + 1)).astype(np.float32)
 
 
-def uniform_borders(values: np.ndarray, count: int = 15) -> np.ndarray:
-    lo, hi = float(values.min()), float(values.max())
-    if hi <= lo:
-        return np.array([], dtype=np.float32)
-    bs = [lo + (hi - lo) * k / (count + 1) for k in range(1, count + 1)]
-    out = sorted(set(np.float32(b) for b in bs))
-    return np.array(out, dtype=np.float32)
+def catboost_borders(matrix, y, border_count, border_type=None):
+    """CatBoost's OWN borders for each column of `matrix`, as a dict.
+
+    Used for both grids here: the numeric columns take their default
+    (GreedyLogSum) at 128, the ctr columns take MinEntropy at 15. Asking
+    their quantizer beats reimplementing either formula, and it is what
+    keeps our arm and theirs splitting on the same grid.
+    """
+    import os
+    import tempfile
+    pool = catboost.Pool(matrix, y)
+    if border_type is None:
+        pool.quantize(border_count=border_count)
+    else:
+        pool.quantize(border_count=border_count,
+                      feature_border_type=border_type)
+    grid = {}
+    with tempfile.TemporaryDirectory() as td:
+        bp = os.path.join(td, "b.tsv")
+        pool.save_quantization_borders(bp)
+        for line in open(bp):
+            line = line.strip()
+            if line:
+                fi, bv = line.split("\t")
+                grid.setdefault(int(fi), []).append(float(bv))
+    return {f: np.sort(np.array(v, dtype=np.float32)) for f, v in grid.items()}
 
 
 def main():
@@ -81,37 +108,29 @@ def main():
         codes[i] = inv
         card.append(len(uniq))
 
-    # numeric features keep CatBoost's own quantization grid, exactly as
-    # interleaved_prep does; ctr columns get the UNIFORM-15 ctr grid.
+    # BOTH grids are CatBoost's own, exactly as interleaved_prep does for
+    # numeric: 128 GreedyLogSum for numeric columns, 15 MinEntropy for ctr
+    # columns, which is their GPU FeatureFreq simple-ctr binarization.
     cols = []
     folds = []
     kinds = []
     if num.shape[1] > 0:
-        pool = catboost.Pool(num, y)
-        pool.quantize(border_count=128)
-        import tempfile, os
-        with tempfile.TemporaryDirectory() as td:
-            bp = os.path.join(td, "b.tsv")
-            pool.save_quantization_borders(bp)
-            grid = {}
-            for line in open(bp):
-                line = line.strip()
-                if line:
-                    fi, bv = line.split("\t")
-                    grid.setdefault(int(fi), []).append(float(bv))
+        grid = catboost_borders(num, y, 128)
         for f in range(num.shape[1]):
-            bs = np.sort(np.array(grid.get(f, []), dtype=np.float32))
+            bs = grid.get(f, np.array([], dtype=np.float32))
             if len(bs) == 0:
                 continue
             cols.append(np.searchsorted(bs, num[:, f], side="left"))
             folds.append(len(bs))
             kinds.append("num:%d" % f)
+    ctrs = np.column_stack([freq_ctr_column(codes[i])
+                            for i in range(len(cat_cols))])
+    ctr_grid = catboost_borders(ctrs, y, 15, "MinEntropy")
     for i in range(len(cat_cols)):
-        ctr = freq_ctr_column(codes[i])
-        bs = uniform_borders(ctr, 15)
+        bs = ctr_grid.get(i, np.array([], dtype=np.float32))
         if len(bs) == 0:
             continue
-        cols.append(np.searchsorted(bs, ctr, side="left"))
+        cols.append(np.searchsorted(bs, ctrs[:, i], side="left"))
         folds.append(len(bs))
         kinds.append("freqctr:%s(card %d)" % (cat_cols[i], card[i]))
 
