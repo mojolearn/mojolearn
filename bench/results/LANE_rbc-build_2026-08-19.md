@@ -593,16 +593,18 @@ if b2 > 0:
   per-phase timer inside `runner.mojo`, which is another lane's file. The
   suspect and the reasoning are in §0.4, labelled as unconfirmed.
 - **Did not change `RBC_TPB` to the kernel matrix's `K_LIB_BALL_COVER_EPS`
-  row.** That row exists (`mojo_only/kernel_matrix.mojo:489`) and is
-  **unread** — this kernel types its own 32 — which is a live violation of
-  the "do not type a constant" rule. But the row's current value is the
-  table's fall-through 128, and 128 is measurably the WORST of the four block
-  sizes at 200,000 (142.10 ms against 129.08). Wiring the kernel to the table
-  as it stands would be a 10% regression. The table is another session's file
-  and needs `lib_block_size` to return 32 for `K_LIB_BALL_COVER_EPS` first,
-  with the sweep in §5 deviation 30 as the reason. **Flagged for the
-  orchestrator; not worked around locally, because an `if` at the call site
-  is exactly what the rule forbids.**
+  row.** That row exists (`mojo_only/kernel_matrix.mojo:489`) and is unread.
+  RESOLVED 2026-08-19 by the rbc-maxk lane, from upstream rather than from
+  the rule: cuVS's own block-size source is a launcher-local constant —
+  `int tpb = 64;` at `registers.cuh:1330`, in the same file as the kernels
+  — so a `comptime RBC_TPB` in `registers.mojo`, the file holding our
+  `rbc_eps_pass_*` launchers, mirrors their structure file for file, and
+  wiring the matrix row would not. The row's fall-through 128 is also the
+  measured WORST of the four block sizes at 200,000 (142.10 ms against
+  129.08), so wiring it as it stands is a priced ~10% regression. The row
+  stays unwired, the reasoning lives in `registers.mojo`'s DEVIATION 2
+  banner, and a vendor measurement that wants a different value lands in
+  that row first. See `LANE_rbc-maxk_2026-08-19.md`.
 - **Did not shrink the host readback in `rbc_eps_pass_count` /
   `rbc_eps_pass_max_k`.** Both copy the whole `adj_ia` (`n_queries + 1`
   Int32) to the host to read one element. It is bounded at ~0.26 ms per call

@@ -639,6 +639,30 @@ host wall clock, which on one queue with a sync at each boundary is the
 phase's device time plus its enqueue overhead -- the same thing their nvtx
 range brackets.
 
+## 39. Batch 0's RBC fill runs after the CSR buffer is sized, not inside loop 1
+
+`dbscan/ported/dbscan/runner.mojo`. cuML's first batch loop fills batch 0's
+CSR columns as it counts it (`need_ja_compute`, `runner.cuh:257`, taking the
+two-pass arm of `vertexdeg/algo.cuh:137-163` which resizes `adj_graph` to
+batch 0's own edge count at `:150`), and `runner.cuh:317` then GROWS that
+buffer to `maxadjlen` -- legal because `rmm::device_uvector::resize`
+preserves contents when growing. `DeviceBuffer` has no growing resize, so
+ours sizes `col_ind` at `maxadjlen` first and runs batch 0's fill immediately
+after, against the `ex_scan` and `vd` that loop 1's last, reversed iteration
+left resident. Same single fill of batch 0 per fit, and the device state at
+loop 2's entry is identical byte for byte --
+`check_ball_cover_max_k_wiring` reads batch 0's resident CSR at the top of
+its loop two and byte-compares it against a fresh two-pass answer, and a
+sabotage that skips the fill fails `check_dbscan` outright ("blobs 0 and 1
+were merged").
+
+The dispatch this placement serves is a PORT, not a deviation: loop 1
+measures `maxklen[i]` (`:289`), loop 2 skips batch 0 (`:327`) and sends every
+other batch down the ONE-PASS `max_k` arm whenever `algo.cuh:119`'s spare
+guard admits it (`rbc_take_one_pass`), falling back to count + fill when it
+does not. Two walks over the dataset per RBC fit where this port previously
+did three.
+
 ## Hazard: `linalg.matmul[transpose_b=True]` at `n == 1` does not write
 
 Not a deviation from an upstream, a defect in a vendor primitive we call, and

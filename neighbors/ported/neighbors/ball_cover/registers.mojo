@@ -83,6 +83,21 @@ Their 64 is not faster than our 32 anywhere on this device and is 1.54x
 slower at 16,000. **This kernel is not block-shape bound**, so the deviation
 costs nothing here and the portability argument decides it unopposed.
 
+WHY `RBC_TPB` IS TYPED HERE AND NOT READ FROM THE KERNEL MATRIX. cuVS types
+`int tpb = 64;` at the launch site, `registers.cuh:1330`, in this same file
+as the kernels -- their block-size source IS a launcher-local constant, and
+a `comptime` in the file that holds our `rbc_eps_pass_*` launchers mirrors
+that file for file. The matrix row `K_LIB_BALL_COVER_EPS`
+(`mojo_only/kernel_matrix.mojo:489`) is therefore deliberately UNWIRED: it
+resolves to the table's fall-through 128 today, which the sweep above
+measures as the WORST of the four shapes at 200,000 (142.10 ms against
+129.08), so wiring it as it stands is a priced ~10% regression, and wiring
+it at 32 would replace their structure with a table they do not have.
+Re-derived 2026-08-19 with the two-loop max_k dispatch landed: that change
+adds no launch site and moves no shape, so nothing about this conclusion
+moved. A vendor measurement that wants a different value lands in that row
+first, with this banner's sweep as the bar to clear.
+
 NOT PORTED
 ----------
 `block_rbc_kernel_eps_csr_pass_xd` (`:714`), which is this kernel with the
