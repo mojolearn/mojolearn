@@ -201,10 +201,16 @@ def fit_and_test_mse_bayesian(scratch, prefix, border_count, trees, depth,
     return [dt, train_mse, test_mse]
 
 def fit_and_test_mse_cat(scratch, prefix, trees, depth, train_rows, seed):
-    """The CATEGORICAL arm: real cat features, their FeatureFreq simple
-    ctr ONLY (max_ctr_complexity=1 disables combinations), one_hot_max_size
-    2 -- the frequency information and nothing else, which is what the Mojo
-    arm's host-side freq-ctr fixture carries. 80/20 holdout quality."""
+    """The CATEGORICAL arm: real cat features, frequency information ONLY
+    (max_ctr_complexity=1 disables combinations), one_hot_max_size 2.
+
+    PINNED FROM THEIR OWN ERROR: `FeatureFreq` -- the GPU learner's
+    frequency ctr and the formula our fixture carries -- "is not
+    implemented on CPU yet" (catboost_options.cpp:509). The CPU spelling
+    of the same information is `Counter` (a slightly different
+    normalization of the same counts), so this arm is the same
+    INFORMATION CLASS, not the same bits: quality bands compare, values
+    do not."""
     import catboost.datasets
     if str(prefix) == "amazon":
         train_df, _ = catboost.datasets.amazon()
@@ -231,7 +237,7 @@ def fit_and_test_mse_cat(scratch, prefix, trees, depth, train_rows, seed):
         boosting_type="Plain",
         bootstrap_type="No",
         one_hot_max_size=2,
-        simple_ctr="FeatureFreq",
+        simple_ctr="Counter",
         max_ctr_complexity=1,
         rsm=1.0,
         has_time=True,
