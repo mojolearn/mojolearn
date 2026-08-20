@@ -61,6 +61,7 @@ from gbdt.gpu_data.kernel.binarize import (
 from gbdt.options.catboost_options import (
     SCORE_FUNCTION_COSINE,
     SCORE_FUNCTION_L2,
+    SCORE_FUNCTION_NEWTON_L2,
 )
 from gbdt.methods.greedy_subsets_searcher.kernel.compute_scores import (
     FLOAT32_MAX,
@@ -2041,6 +2042,7 @@ def run_tree_layout[
     l2_leaf_reg: Float32 = Float32(3.0),
     sync_budget: Int = -1,
     one_hot: List[Bool] = List[Bool](),
+    score_function: Int = SCORE_FUNCTION_COSINE,
 ) raises -> List[Int]:
     """`FitImpl` over a LAYOUT: mixed feature widths, one launch per policy.
 
@@ -2599,18 +2601,40 @@ def run_tree_layout[
         # `ComputeOptimalSplits` reads them as its two arguments at
         # `greedy_search_helper.cpp:455-456` and allocates neither. NOTHING
         # in this loop is allocated any more.
-        ctx.enqueue_function[
-            compute_optimal_splits_kernel[SCORE_FUNCTION_COSINE]
-        ](
-            skip.unsafe_ptr(), Int32(hist_cells_per_leaf),
-            bff.unsafe_ptr(), ffw.unsafe_ptr(),
-            hist.unsafe_ptr(),
-            part_stats.unsafe_ptr(), Int32(stat_count), dense_ids.unsafe_ptr(),
-            Int32(n_live), l2_leaf_reg,
-            out_score.unsafe_ptr(), out_bin.unsafe_ptr(),
-            grid_dim=(argmax_blocks, 1, 1),
-            block_dim=(SCORE_BLOCK_SIZE, 1, 1),
-        )
+        # `switch (scoreFunction)` (`compute_scores.cu:201-219`): their
+        # runtime option selects the calcer; ours selects the comptime
+        # kernel arm. Cosine is their GPU default and pairs with
+        # NewtonCosine onto one calcer, L2 with NewtonL2 onto the other,
+        # exactly as the kernel's docstring lays out.
+        if (
+            score_function == SCORE_FUNCTION_L2
+            or score_function == SCORE_FUNCTION_NEWTON_L2
+        ):
+            ctx.enqueue_function[
+                compute_optimal_splits_kernel[SCORE_FUNCTION_L2]
+            ](
+                skip.unsafe_ptr(), Int32(hist_cells_per_leaf),
+                bff.unsafe_ptr(), ffw.unsafe_ptr(),
+                hist.unsafe_ptr(),
+                part_stats.unsafe_ptr(), Int32(stat_count), dense_ids.unsafe_ptr(),
+                Int32(n_live), l2_leaf_reg,
+                out_score.unsafe_ptr(), out_bin.unsafe_ptr(),
+                grid_dim=(argmax_blocks, 1, 1),
+                block_dim=(SCORE_BLOCK_SIZE, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[
+                compute_optimal_splits_kernel[SCORE_FUNCTION_COSINE]
+            ](
+                skip.unsafe_ptr(), Int32(hist_cells_per_leaf),
+                bff.unsafe_ptr(), ffw.unsafe_ptr(),
+                hist.unsafe_ptr(),
+                part_stats.unsafe_ptr(), Int32(stat_count), dense_ids.unsafe_ptr(),
+                Int32(n_live), l2_leaf_reg,
+                out_score.unsafe_ptr(), out_bin.unsafe_ptr(),
+                grid_dim=(argmax_blocks, 1, 1),
+                block_dim=(SCORE_BLOCK_SIZE, 1, 1),
+            )
         mgr.stream_kernel()
 
         # THE WINNER IS RESOLVED ON THE DEVICE and the split descriptors

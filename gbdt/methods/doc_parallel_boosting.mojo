@@ -88,6 +88,7 @@ from gbdt.models.oblivious_model import (
 from gbdt.gpu_data.compressed_index_builder import build_layout
 from gbdt.models.kernel.add_bin_values import compute_bins_and_add_kernel
 from mojo_only.kernel_matrix import TARGET_COLUMN, deterministic_flush_for
+from gbdt.options.catboost_options import SCORE_FUNCTION_COSINE
 from mojo_only.numerics import NUMERIC_IDENTICAL
 from gbdt.gpu_util.kernel.fill import launch_make_sequence
 from gbdt.gpu_util.kernel.bootstrap import (
@@ -126,6 +127,7 @@ def fit(
     bagging_temperature: Float32 = Float32(1.0),
     random_seed: UInt64 = UInt64(0),
     one_hot: List[Bool] = List[Bool](),
+    score_function: Int = SCORE_FUNCTION_COSINE,
 ) raises -> List[Float64]:
     """Their `Fit` (`doc_parallel_boosting.h:302`), one permutation.
 
@@ -367,6 +369,7 @@ def fit(
             splits, leaf_values,
             use_subtraction, True, learning_rate, l2_leaf_reg,
             one_hot=one_hot,
+            score_function=score_function,
         )
         _ = len(sizes)
 
