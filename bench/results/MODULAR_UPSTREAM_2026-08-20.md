@@ -1,8 +1,17 @@
-# DRAFT upstream report to Modular, 2026-08-20 — NOT YET FILED
+# Upstream report to Modular, 2026-08-20 — FILED
 
-STATUS: draft for Andrew's review. Filing (GitHub issue / forum post) is an
-external action and waits for his explicit word. Every finding below is a
-transcript of a probe that ran on this box; nothing is speculated.
+STATUS: FILED 2026-08-20 on Andrew's explicit word, as two GitHub issues on
+modular/modular (account ajhendel):
+
+- Correctness (findings 1-6): https://github.com/modular/modular/issues/6932
+- Performance (finding 7, with the 21 ms split-K evidence and the
+  performance-state-ramp measurement note): 
+  https://github.com/modular/modular/issues/6933
+
+Every finding below is a transcript of a probe that ran on this box; nothing
+is speculated. The filed bodies are external-audience adaptations of this
+file (internal paths replaced with self-contained reproduction steps; the
+split-K evidence updated to the register-tiled kernel's 21 ms).
 
 ## Environment (pin)
 
