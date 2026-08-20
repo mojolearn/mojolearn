@@ -59,7 +59,9 @@ struct CompressedIndexLayout(Copyable, Movable):
         return n
 
 
-def build_layout(fold_counts: List[Int]) raises -> CompressedIndexLayout:
+def build_layout(
+    fold_counts: List[Int], one_hot: List[Bool] = List[Bool]()
+) raises -> CompressedIndexLayout:
     """Assign policies and lay out columns and histogram slices.
 
     Their rule, from `grid_policy.h` plus the builder's grouping: a feature
@@ -120,6 +122,19 @@ def build_layout(fold_counts: List[Int]) raises -> CompressedIndexLayout:
         else:
             policy_of.append(policy_for_fold_count(folds))
 
+    # `one_hot` marks CATEGORICAL features whose splits are EQUALITY
+    # tests (their `TBinarizedFeature::OneHotFeature`). Empty means all
+    # ordered, which is every caller before categoricals landed. The flag
+    # changes NOTHING here -- policies, columns and bins are decided by
+    # the fold count exactly as for an ordered feature -- it rides on the
+    # CFeature so the scan skips the prefix sum, the split kernels take
+    # `==`, and predict takes `==`, all of which already read it.
+    if len(one_hot) != 0 and len(one_hot) != n:
+        raise Error(
+            "one_hot flags must be empty or one per feature: got "
+            + String(len(one_hot)) + " for " + String(n)
+        )
+
     # Pass 2: THE walk. Placeholders first so a feature can be written at its
     # input index while the walk runs in policy order.
     var features = List[CFeature]()
@@ -154,13 +169,16 @@ def build_layout(fold_counts: List[Int]) raises -> CompressedIndexLayout:
             var local = used_in_col
             used_in_col = local + 1
 
+            var is_one_hot = False
+            if len(one_hot) == n:
+                is_one_hot = one_hot[i]
             features[i] = CFeature(
                 UInt32(col),
                 policy_mask(policy),
                 UInt32(policy_shift(policy, local)),
                 UInt32(fold_cursor),
                 UInt32(folds),
-                False,
+                is_one_hot,
             )
             fold_cursor += folds
 

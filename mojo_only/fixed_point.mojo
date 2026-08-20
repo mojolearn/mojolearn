@@ -80,11 +80,38 @@ def choose_scale(
         )
     if sum_of_magnitudes == 0.0:
         return 1.0
+    var raw: Float64
     if row_count > 0:
         var limit = Float64((1 << 30) - 1 - row_count)
         if limit > SCALE_LIMIT:
-            return limit / sum_of_magnitudes
-    return SCALE_LIMIT / sum_of_magnitudes
+            raw = limit / sum_of_magnitudes
+        else:
+            raw = SCALE_LIMIT / sum_of_magnitudes
+    else:
+        raw = SCALE_LIMIT / sum_of_magnitudes
+
+    # SNAPPED DOWN TO A POWER OF TWO (2026-08-21). A continuous scale is a
+    # LEVER ARM for the last bits of `sum_of_magnitudes`: the dithered
+    # quantizer's whole realization -- every cell's +-1 -- is a function of
+    # the scale, so a 1e-6 wobble in the magnitude reduce re-rolled every
+    # dither draw and could flip a knife-edge split. Measured the day this
+    # landed: replacing the float-atomic magnitude reduce with an exact
+    # fixed-order fold moved the magnitude by 1.3e-6 relative (the NEW
+    # value was the correct one to seven digits against a float64 host
+    # sum) and the 800k x 100 @ 128 model moved 2.7% train mse off its
+    # CatBoost-matching realization. Snapping makes the scale a STEP
+    # function of the magnitude -- identical bits for any magnitude within
+    # a 2x band -- so the realization is pinned across runs, reduce
+    # implementations, and platforms. Costs at most one bit of resolution;
+    # the bound only gets safer (the snap is downward).
+    var snapped = 1.0
+    if raw >= 1.0:
+        while snapped * 2.0 <= raw:
+            snapped *= 2.0
+    else:
+        while snapped > raw:
+            snapped /= 2.0
+    return snapped
 
 
 def quantize(value: Float64, scale: Float64) -> Int32:

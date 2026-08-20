@@ -34,6 +34,7 @@ def compute_bins_and_add_kernel(
     feature_shift: MutPointer[UInt32, MutAnyOrigin],
     feature_mask: MutPointer[UInt32, MutAnyOrigin],
     split_bin: MutPointer[UInt32, MutAnyOrigin],
+    take_equal: MutPointer[UInt8, MutAnyOrigin],
     depth_in: Int32,
     leaf_values: MutPointer[Float32, MutAnyOrigin],
     n_rows_in: Int32,
@@ -73,10 +74,16 @@ def compute_bins_and_add_kernel(
             var mask = feature_mask.unsafe_load(level) << shift
             var value = split_bin.unsafe_load(level) << shift
             var feature_val = compressed_index.unsafe_load(off + i) & mask
-            # `> value` is the ordered-feature predicate, their
-            # `EBinSplitType::TakeBin`. One-hot flips this to `==` and is not
-            # reachable until categorical features land.
-            if feature_val > value:
+            # their `takeEqual[level] ? (featureVal == value) : (featureVal
+            # > value)` (`add_model_value.cu:110`): `>` is the ordered
+            # predicate (`EBinSplitType::TakeBin`), `==` the one-hot one
+            # (`TakeVal`), per LEVEL exactly as their mask arrays carry it.
+            var split: Bool
+            if take_equal.unsafe_load(level) != UInt8(0):
+                split = feature_val == value
+            else:
+                split = feature_val > value
+            if split:
                 leaf += 1 << level
         cursor.unsafe_store(
             i, cursor.unsafe_load(i) + leaf_values.unsafe_load(leaf)

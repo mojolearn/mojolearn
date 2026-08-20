@@ -2040,6 +2040,7 @@ def run_tree_layout[
     learning_rate: Float32 = Float32(0.3),
     l2_leaf_reg: Float32 = Float32(3.0),
     sync_budget: Int = -1,
+    one_hot: List[Bool] = List[Bool](),
 ) raises -> List[Int]:
     """`FitImpl` over a LAYOUT: mixed feature widths, one launch per policy.
 
@@ -2064,7 +2065,7 @@ def run_tree_layout[
     var stat_count = 2
     var max_leaves = 1 << max_depth
 
-    var layout = build_layout(fold_counts)
+    var layout = build_layout(fold_counts, one_hot)
     var blocks = blocks_for(layout, n_rows)
     var dblocks = upload_blocks(ctx, blocks)
     var hist_cells_per_leaf = layout.hist_cells

@@ -1,5 +1,6 @@
 from mojo_only.early_stop_check import check_early_stop_rollback
 from mojo_only.bootstrap_check import check_bootstrap
+from mojo_only.one_hot_check import check_one_hot
 from mojo_only.launch_probe import probe
 from mojo_only.permuted_ids_check import check_permuted_leaf_ids
 from mojo_only.replicated_half_byte_check import (
@@ -727,3 +728,5 @@ def main() raises:
     check_early_stop_rollback()
 
     check_bootstrap()
+
+    check_one_hot()

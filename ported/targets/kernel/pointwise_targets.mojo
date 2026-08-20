@@ -48,6 +48,9 @@ here would silently invert every early-stopping comparison later.
 """
 
 from std.atomic import Atomic
+from std.memory import stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.primitives.block import sum as block_sum
 
@@ -151,13 +154,25 @@ def mse_kernel(
     # `if (functionValue) { tmpScores[tid] = -w * (val - relev)^2; ...
     # FastInBlockReduce; if (tid == 0) atomicAdd(functionValue, val); }`
     # (`pointwise_targets.cu:309-317`).
+    # ============ DETERMINISM FIX, 2026-08-21 ============
+    # These two reduces ENDED IN A FLOAT ATOMIC (their `atomicAdd`,
+    # `pointwise_targets.cu:317`), so `functionValue` and, worse, the
+    # fixed-point scale's magnitudes depended on block arrival order --
+    # the same-seed-twice bootstrap gate caught two fits differing, and
+    # the long-observed rep-to-rep last-bit jitter of the loss column was
+    # exactly this. Every block now STORES its partial at its own slot
+    # and `deterministic_sum_lanes_kernel` folds them in one fixed order,
+    # so a seeded fit is bit-reproducible end to end. `function_value`
+    # and `plane_magnitudes` are therefore PER-BLOCK PARTIALS buffers
+    # (`n_blocks` and `2 * n_blocks`), not scalars.
+    # =====================================================
     if compute_fv != Int32(0):
         var score = Float32(0.0)
         if in_range:
             score = -weight * (val - relev) * (val - relev)
         var total = block_sum[block_size=MSE_BLOCK_SIZE](score)
         if thread_idx.x == 0:
-            _ = Atomic.fetch_add(function_value, total)
+            function_value.unsafe_store(Int(block_idx.x), total)
 
     # the fixed-point scale's inputs: sum of |plane| for both stat planes,
     # same reduce shape as `functionValue` above.
@@ -170,5 +185,70 @@ def mse_kernel(
         var w_total = block_sum[block_size=MSE_BLOCK_SIZE](w_abs)
         var g_total = block_sum[block_size=MSE_BLOCK_SIZE](g_abs)
         if thread_idx.x == 0:
-            _ = Atomic.fetch_add(plane_magnitudes, w_total)
-            _ = Atomic.fetch_add(plane_magnitudes.unsafe_offset(1), g_total)
+            plane_magnitudes.unsafe_store(
+                2 * Int(block_idx.x), w_total
+            )
+            plane_magnitudes.unsafe_store(
+                2 * Int(block_idx.x) + 1, g_total
+            )
+
+
+comptime REDUCE_LANES_BLOCK = 256
+
+
+def deterministic_sum_lanes_kernel[
+    lanes: Int
+](
+    partials: MutPointer[Float32, MutAnyOrigin],
+    count_in: Int32,
+    dst: MutPointer[Float32, MutAnyOrigin],
+):
+    """Fold interleaved per-block partials in ONE FIXED ORDER.
+
+    NO CATBOOST COUNTERPART: they accept the float atomic's arrival-order
+    nondeterminism in `functionValue`; this port cannot, because the
+    magnitudes feed `fixed_scale` and the dithered histograms behind the
+    bit-reproducibility claim. One block; thread `t` walks slots
+    `t, t + 256, ...` in ascending order and the shared tree fold has one
+    shape -- same inputs, same bits, every run.
+
+    `partials` is `[i * lanes + lane]` for `count_in` blocks."""
+    var tid = Int(thread_idx.x)
+    var count = Int(count_in)
+
+    var acc = InlineArray[Float32, lanes](fill=Float32(0.0))
+    var i = tid
+    while i < count:
+
+        @parameter
+        for lane in range(lanes):
+            acc[lane] += partials.unsafe_load(i * lanes + lane)
+        i += REDUCE_LANES_BLOCK
+
+    var red = stack_allocation[
+        lanes * REDUCE_LANES_BLOCK,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+
+    @parameter
+    for lane in range(lanes):
+        red[lane * REDUCE_LANES_BLOCK + tid] = acc[lane]
+    barrier()
+    var step = REDUCE_LANES_BLOCK // 2
+    while step > 0:
+        if tid < step:
+
+            @parameter
+            for lane in range(lanes):
+                red[lane * REDUCE_LANES_BLOCK + tid] = (
+                    red[lane * REDUCE_LANES_BLOCK + tid]
+                    + red[lane * REDUCE_LANES_BLOCK + tid + step]
+                )
+        barrier()
+        step //= 2
+    if tid == 0:
+
+        @parameter
+        for lane in range(lanes):
+            dst.unsafe_store(lane, red[lane * REDUCE_LANES_BLOCK])

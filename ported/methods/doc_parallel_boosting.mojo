@@ -91,6 +91,7 @@ from mojo_only.kernel_matrix import TARGET_COLUMN, deterministic_flush_for
 from mojo_only.numerics import NUMERIC_IDENTICAL
 from ported.gpu_util.kernel.fill import launch_make_sequence
 from ported.gpu_util.kernel.bootstrap import (
+    bootstrap_grid_blocks,
     create_bootstrap_seeds,
     launch_bayesian_bootstrap,
 )
@@ -100,7 +101,11 @@ from ported.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
 from ported.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_base import (
     HIST2_SMEM_IS_I32,
 )
-from ported.targets.kernel.pointwise_targets import MSE_BLOCK_SIZE, mse_kernel
+from ported.targets.kernel.pointwise_targets import (
+    MSE_BLOCK_SIZE,
+    deterministic_sum_lanes_kernel,
+    mse_kernel,
+)
 
 
 def fit(
@@ -120,6 +125,7 @@ def fit(
     bootstrap_bayesian: Bool = False,
     bagging_temperature: Float32 = Float32(1.0),
     random_seed: UInt64 = UInt64(0),
+    one_hot: List[Bool] = List[Bool](),
 ) raises -> List[Float64]:
     """Their `Fit` (`doc_parallel_boosting.h:302`), one permutation.
 
@@ -173,6 +179,15 @@ def fit(
     # was never their design.
     var fv = ctx.enqueue_create_buffer[DType.float32](1)
     var h_fv = ctx.enqueue_create_host_buffer[DType.float32](1)
+    # per-block partials for `mse_kernel`'s reduces, folded in one fixed
+    # order by `deterministic_sum_lanes_kernel`: the float-atomic combine
+    # they use made same-seed fits differ in the last bits of
+    # `fixed_scale` (bootstrap_check caught it, 2026-08-21)
+    var mse_blocks = (n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
+    var fv_part = ctx.enqueue_create_buffer[DType.float32](mse_blocks)
+    var mag_part = ctx.enqueue_create_buffer[DType.float32](
+        2 * mse_blocks
+    )
 
     # THE FIXED-POINT BOUND, for every build whose histogram quantizes: the
     # IDENTICAL flush, and the Apple column's `HIST_SMEM_SHARED2_I32`
@@ -202,6 +217,9 @@ def fit(
         boot_seeds = create_bootstrap_seeds(ctx, random_seed)
     else:
         boot_seeds = ctx.enqueue_create_buffer[DType.uint64](1)
+    var boot_mag_part = ctx.enqueue_create_buffer[DType.float32](
+        2 * bootstrap_grid_blocks(n_rows)
+    )
 
     var losses = List[Float64]()
     # their `TVector<TResultModel>* result`, the ensemble being built
@@ -213,24 +231,31 @@ def fit(
         # their `functionValue` is accumulated in the SAME launch as the
         # gradients, so the value this iteration reads is the loss of the
         # cursor as it stands -- i.e. after the PREVIOUS tree.
-        ctx.enqueue_memset(fv, Float32(0.0))
-        ctx.enqueue_memset(mags, Float32(0.0))
+        var mags_in_mse = _needs_magnitudes and not bootstrap_bayesian
         ctx.enqueue_function[mse_kernel](
             targets.unsafe_ptr(), weights.unsafe_ptr(), Int32(n_rows),
             cursor.unsafe_ptr(),
             Int32(1) if has_weights else Int32(0),
             stats.unsafe_ptr(),
-            fv.unsafe_ptr(), Int32(1),
-            mags.unsafe_ptr(),
+            fv_part.unsafe_ptr(), Int32(1),
+            mag_part.unsafe_ptr(),
             # under bootstrap the magnitudes must bound the BOOTSTRAPPED
             # planes (a Bayesian weight reaches ~46 at the tail), so the
             # bootstrap kernel computes them AFTER its multiply instead
-            Int32(1) if (
-                _needs_magnitudes and not bootstrap_bayesian
-            ) else Int32(0),
-            grid_dim=(n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE,
+            Int32(1) if mags_in_mse else Int32(0),
+            grid_dim=mse_blocks,
             block_dim=MSE_BLOCK_SIZE,
         )
+        ctx.enqueue_function[deterministic_sum_lanes_kernel[1]](
+            fv_part.unsafe_ptr(), Int32(mse_blocks), fv.unsafe_ptr(),
+            grid_dim=1, block_dim=256,
+        )
+        if mags_in_mse:
+            ctx.enqueue_function[deterministic_sum_lanes_kernel[2]](
+                mag_part.unsafe_ptr(), Int32(mse_blocks),
+                mags.unsafe_ptr(),
+                grid_dim=1, block_dim=256,
+            )
         if bootstrap_bayesian:
             # their `BootstrapAndFilter`: one Bayesian draw per row
             # multiplies BOTH planes; Bayesian never zeroes a weight so
@@ -242,8 +267,15 @@ def fit(
                 compute_mags = True
             launch_bayesian_bootstrap(
                 ctx, boot_seeds, stats, n_rows, bagging_temperature,
-                mags, compute_mags,
+                boot_mag_part, compute_mags,
             )
+            if compute_mags:
+                ctx.enqueue_function[deterministic_sum_lanes_kernel[2]](
+                    boot_mag_part.unsafe_ptr(),
+                    Int32(bootstrap_grid_blocks(n_rows)),
+                    mags.unsafe_ptr(),
+                    grid_dim=1, block_dim=256,
+                )
         # stream-ordered behind the kernel; READ after `run_tree_layout`,
         # whose first drain settles it, so it costs no synchronize here.
         ctx.enqueue_copy(dst_ptr=h_fv.unsafe_ptr(), src_buf=fv)
@@ -322,6 +354,7 @@ def fit(
             ctx.synchronize()
             weight_magnitude = Float64(h_mags.unsafe_ptr().unsafe_load(0))
             gradient_magnitude = Float64(h_mags.unsafe_ptr().unsafe_load(1))
+            print("MAGS", weight_magnitude, gradient_magnitude)  # TEMP
 
         # `optimizer.Fit(...)` then `Estimate` then `Rescale` then
         # `AppendModels`, all four inside `run_tree_layout`, in their order.
@@ -333,6 +366,7 @@ def fit(
             Float32(weight_magnitude), Float32(gradient_magnitude),
             splits, leaf_values,
             use_subtraction, True, learning_rate, l2_leaf_reg,
+            one_hot=one_hot,
         )
         _ = len(sizes)
 
@@ -359,17 +393,24 @@ def fit(
                 losses.append(-v / Float64(n_rows))
 
     # the final tree's loss: one more `functionValue` pass over the settled
-    # cursor. The gradient planes it writes feed nothing.
-    ctx.enqueue_memset(fv, Float32(0.0))
+    # cursor, through the SAME per-block-partials + fixed-order fold as the
+    # loop's pass -- this launch still handed the 1-float `fv` where the
+    # kernel now stores per-block partials, which under-read the loss by
+    # ~n_blocks and wrote past the buffer (caught by the predict repro:
+    # replay 36.52 vs a claimed 8.91 final loss, ratio ~= the block count).
     ctx.enqueue_function[mse_kernel](
         targets.unsafe_ptr(), weights.unsafe_ptr(), Int32(n_rows),
         cursor.unsafe_ptr(),
         Int32(1) if has_weights else Int32(0),
         stats.unsafe_ptr(),
-        fv.unsafe_ptr(), Int32(1),
-        mags.unsafe_ptr(), Int32(0),
-        grid_dim=(n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE,
+        fv_part.unsafe_ptr(), Int32(1),
+        mag_part.unsafe_ptr(), Int32(0),
+        grid_dim=mse_blocks,
         block_dim=MSE_BLOCK_SIZE,
+    )
+    ctx.enqueue_function[deterministic_sum_lanes_kernel[1]](
+        fv_part.unsafe_ptr(), Int32(mse_blocks), fv.unsafe_ptr(),
+        grid_dim=1, block_dim=256,
     )
     ctx.enqueue_copy(dst_ptr=h_fv.unsafe_ptr(), src_buf=fv)
     ctx.synchronize()
@@ -387,6 +428,7 @@ def predict(
     fold_counts: List[Int],
     mut cindex: DeviceBuffer[DType.uint32],
     mut cursor: DeviceBuffer[DType.float32],
+    one_hot: List[Bool] = List[Bool](),
 ) raises:
     """Apply a stored ensemble by EVALUATING every tree.
 
@@ -407,7 +449,7 @@ def predict(
     values go up in five copies total, the launches are enqueued back to
     back exactly as their stream takes them, and the ONE drain at the end
     is what makes `cursor` readable."""
-    var layout = build_layout(fold_counts)
+    var layout = build_layout(fold_counts, one_hot)
 
     ctx.enqueue_memset(cursor, Float32(0.0))
 
@@ -425,11 +467,13 @@ def predict(
     var d_shift = ctx.enqueue_create_buffer[DType.uint32](total_levels)
     var d_mask = ctx.enqueue_create_buffer[DType.uint32](total_levels)
     var d_bin = ctx.enqueue_create_buffer[DType.uint32](total_levels)
+    var d_eq = ctx.enqueue_create_buffer[DType.uint8](total_levels)
     var d_vals = ctx.enqueue_create_buffer[DType.float32](total_leaves)
     var h_off = ctx.enqueue_create_host_buffer[DType.uint32](total_levels)
     var h_shift = ctx.enqueue_create_host_buffer[DType.uint32](total_levels)
     var h_mask = ctx.enqueue_create_host_buffer[DType.uint32](total_levels)
     var h_bin = ctx.enqueue_create_host_buffer[DType.uint32](total_levels)
+    var h_eq = ctx.enqueue_create_host_buffer[DType.uint8](total_levels)
     var h_vals = ctx.enqueue_create_host_buffer[DType.float32](total_leaves)
 
     var lvl = 0
@@ -449,6 +493,11 @@ def predict(
             h_bin.unsafe_ptr().unsafe_store(
                 lvl, UInt32(Int(weak.structure.splits[level].bin_idx))
             )
+            # a feature is one-hot GLOBALLY (their TBinarizedFeature), so
+            # the per-level takeEqual comes off the layout, not the model
+            h_eq.unsafe_ptr().unsafe_store(
+                lvl, UInt8(1) if cf.one_hot_feature else UInt8(0)
+            )
             lvl += 1
         var n_leaves = 1 << depth
         for i in range(n_leaves):
@@ -461,6 +510,7 @@ def predict(
     ctx.enqueue_copy(dst_buf=d_shift, src_ptr=h_shift.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_mask, src_ptr=h_mask.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_bin, src_ptr=h_bin.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=d_eq, src_ptr=h_eq.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_vals, src_ptr=h_vals.unsafe_ptr())
 
     # `AddObliviousTreeImpl` per tree, back to back on one stream, their
@@ -482,6 +532,7 @@ def predict(
                 d_shift.unsafe_ptr() + lvl,
                 d_mask.unsafe_ptr() + lvl,
                 d_bin.unsafe_ptr() + lvl,
+                d_eq.unsafe_ptr() + lvl,
                 Int32(depth),
                 d_vals.unsafe_ptr() + leaf,
                 Int32(n_rows),

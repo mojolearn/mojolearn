@@ -108,7 +108,11 @@ def bayesian_bootstrap_kernel(
     seeds.unsafe_store(gid, s)
 
     if compute_mags_in != Int32(0):
-        # the same reduce shape as `mse_kernel`'s magnitude tail
+        # the same reduce shape as `mse_kernel`'s magnitude tail; the
+        # block total is STORED at this block's slot and folded in one
+        # fixed order by `deterministic_sum_lanes_kernel`, because these
+        # magnitudes feed `fixed_scale` and a float-atomic combine made
+        # same-seed fits differ (caught by bootstrap_check 2026-08-21).
         var red = stack_allocation[
             2 * BOOTSTRAP_BLOCK_SIZE,
             Scalar[DType.float32],
@@ -128,9 +132,9 @@ def bayesian_bootstrap_kernel(
             barrier()
             step //= 2
         if tid == 0:
-            _ = Atomic.fetch_add(mags.unsafe_offset(0), red[0])
-            _ = Atomic.fetch_add(
-                mags.unsafe_offset(1), red[BOOTSTRAP_BLOCK_SIZE]
+            mags.unsafe_store(2 * Int(block_idx.x), red[0])
+            mags.unsafe_store(
+                2 * Int(block_idx.x) + 1, red[BOOTSTRAP_BLOCK_SIZE]
             )
 
 
@@ -159,6 +163,19 @@ def create_bootstrap_seeds(
     return seeds^
 
 
+def bootstrap_grid_blocks(n_rows: Int) -> Int:
+    """Their grid formula, exported so the caller sizes the partials
+    buffer the reduce reads."""
+    var by_seeds = BOOTSTRAP_SEED_COUNT // BOOTSTRAP_BLOCK_SIZE
+    var by_rows = (n_rows + BOOTSTRAP_BLOCK_SIZE - 1) // BOOTSTRAP_BLOCK_SIZE
+    var blocks = by_seeds
+    if by_rows < blocks:
+        blocks = by_rows
+    if blocks < 1:
+        blocks = 1
+    return blocks
+
+
 def launch_bayesian_bootstrap(
     ctx: DeviceContext,
     mut seeds: DeviceBuffer[DType.uint64],
@@ -170,13 +187,7 @@ def launch_bayesian_bootstrap(
 ) raises:
     """Their launch (`bootstrap.cu:79-84`): grid
     `min(ceil(seeds/256), ceil(rows/256))` blocks of 256."""
-    var by_seeds = BOOTSTRAP_SEED_COUNT // BOOTSTRAP_BLOCK_SIZE
-    var by_rows = (n_rows + BOOTSTRAP_BLOCK_SIZE - 1) // BOOTSTRAP_BLOCK_SIZE
-    var blocks = by_seeds
-    if by_rows < blocks:
-        blocks = by_rows
-    if blocks < 1:
-        blocks = 1
+    var blocks = bootstrap_grid_blocks(n_rows)
     ctx.enqueue_function[bayesian_bootstrap_kernel](
         seeds.unsafe_ptr(), stats.unsafe_ptr(), Int32(n_rows), temperature,
         mags.unsafe_ptr(), Int32(1) if compute_mags else Int32(0),
