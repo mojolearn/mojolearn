@@ -1168,3 +1168,46 @@ keys, and `check_radix_sort` refuses any arm whose top bit is constant.
 With that fixed the copy-back sabotage prints 685 descending steps and
 3966/4001 keys wrong on the odd arms while the even arm stays green, which
 is reach per branch (`PORTING_RULES.md:8`) shown rather than claimed.
+
+## 51. Model serialization is OURS, in plain text, because theirs is flatbuffers
+
+CatBoost persists a model with flatbuffers
+(`catboost/libs/model/flatbuffers/model.fbs`, written and read by
+`libs/model/model.cpp`) and exports six more formats from
+`libs/model/model_export/` -- JSON, CoreML, ONNX, PMML, C++ and Python.
+`gbdt/models/model_text.mojo` ports NONE of that. It writes a format of our
+own.
+
+What is taken from them is the CONTENT list, not the encoding. Their
+`TModelTrees` carries `TreeSplits`, `TreeSizes`, `LeafValues`, `LeafWeights`
+and `FloatFeatures` -- borders included -- because an applied model has to
+quantize raw floats against the grid it was trained on. `TrainedModel`
+carries the same set and so does the file.
+
+WHY NOT PORT THE FLATBUFFERS FORMAT. Three reasons, in order of weight.
+Their `.fbs` compiles through `flatc` into generated C++ that this toolchain
+has no counterpart for, so a port is a hand-written encoder for a schema we
+do not control. Their `TModelTrees` is a superset of everything this port
+can build (`NonSymmetricStepNodes`, `TextFeatures`, `EstimatedFeatures`,
+`EmbeddingFeatures`, `MultiBias`, `CtrFeatures`), so a faithful writer
+mostly writes empty vectors and a faithful READER has to refuse most files
+it is handed. And a binary format cannot be read in a failure, which is the
+opposite of what every other fixture in this tree is for.
+
+WHY TEXT WITH THE BITS SPELLED OUT. `String(x)` in this toolchain does NOT
+round-trip: measured over 200,000 random bit patterns per width, 917 of
+199,223 float32 values and 212 of 199,907 float64 values come back one ULP
+wrong, and `String(Float32(1.4e-45))` is `"0.0"`. So each float is written
+`<decimal>/<IEEE-754 bits in hex>`, the bits are what loads, and the decimal
+is checked against them to one ULP so a hand edit cannot drift unseen. For
+the record of what a correct decimal writer looks like, CatBoost's own JSON
+export pins `FloatNDigits = 9` and `DoubleNDigits = 17`
+(`libs/helpers/json_helpers.h:22-32`), which are the round-trip digit
+counts; theirs honors them and ours does not.
+
+Gated by `pixi run check-model-io`: bit-identical predictions through both
+the host apply and the device evaluator, field-by-field struct equality, and
+five sabotages that each turn it red. The float-precision sabotage -- rewrite
+every token's bits from its own decimal half, which is exactly what a
+decimal-only format stores -- moves 150 of 512 predictions, which is the
+measurement that pays for the format.

@@ -48,11 +48,16 @@ NOT BUILT, verified by search and not by memory:
   that `feature_weights` will diverge "the day CTRs land".
 * **Target binarization.** Nothing. No `binarized_target`, no `target_border`
   anywhere in `gbdt/`.
-* **MODEL SERIALIZATION OF ANY KIND.** `grep "open("` over `gbdt/` returns
-  NOTHING. `TrainedModel` (`train.mojo:30`) is an in-memory struct holding the
-  ensemble, fold counts, one-hot flags and borders. **So "model export with
-  CTR tables" is not a CTR task with a numeric baseline to extend: there is no
-  model file format for the numeric case either, and that has to come first.**
+* **CTR TABLES IN A MODEL FILE.** The numeric half of this landed
+  2026-08-20: `gbdt/models/model_text.mojo` saves and loads a `TrainedModel`
+  (ensemble, leaf values in leaf order, borders, fold counts, one-hot flags,
+  losses) as plain text with every float carrying its IEEE-754 bits, gated
+  bit-exact end to end by `pixi run check-model-io`. What is still missing is
+  the CTR half: the per-categorical-feature category-to-value mapping an
+  applied model needs. The format reserves `ctr_table`, `ctr_entry` and
+  `ctr_borders` records and a `type` token on the `feature` record for
+  exactly that, and the seam is written down in that file's THE CTR SEAM
+  block. Nothing there is built.
 * **A categorical path through `train()`.** It takes `one_hot: List[Bool]`
   and nothing else; the FeatureFreq calcer lives in the Python prep script,
   so categoricals work in the BENCHMARK and not in the library.
@@ -209,11 +214,15 @@ this is achievable in one source.
    `GatherTrivialWeights`, `WriteMask`), every one of which is elementwise
    or gather/scatter with no warp intrinsics and no shared-memory
    accumulation, so this block should need NO new kernel-matrix rows.
-5. MODEL SERIALIZATION, which is a prerequisite and not a CTR task. There
-   is no model file format at all today, not even for numeric models, so
-   this starts from zero and the CTR tables are an addition to it rather
-   than the point of it. Until it exists a trained categorical model cannot
-   score raw data.
+5. MODEL SERIALIZATION, which was a prerequisite and not a CTR task. The
+   numeric file format LANDED 2026-08-20 (`gbdt/models/model_text.mojo`,
+   `pixi run check-model-io`), so what remains under this heading is the CTR
+   tables themselves, added at the seam that file documents. Two things
+   still block a categorical model from scoring raw data after that:
+   `TBinarySplit` carries no split TYPE, so the one-hot predicate is
+   recovered from the layout rather than from the model, and the device
+   evaluator (`models/cuda/evaluator.mojo`) has no one-hot arm at all -- its
+   `XorMask` slot is documented as staying zero.
 6. Tree CTRs (feature combinations, `MaxTensorComplexity`, default 4).
    Their own `tree_ctr_datasets_visitor` machinery: combinations generated
    during tree growth, per level, with caching and memory limits
