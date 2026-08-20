@@ -484,11 +484,14 @@ def hist_smem_mode_for[column: Int, identical: Bool]() -> Int:
 
     THE RANGE CONTRACT RIDES ALONG. Quantizing at `fixed_scale` is safe only
     under `mojo_only/fixed_point.mojo`'s bound: `fixed_scale` must come from
-    `choose_scale(sum over all rows of abs(plane))`, so every shared-memory
-    cell -- a partial sum over a SUBSET of one leaf's rows, and any leaf's
-    rows are a subset of all rows -- stays at or below `SCALE_LIMIT`
-    (2^28 - 1, three headroom bits; `hist2_quantize`'s dither adds at most
-    +1 per row, inside the same headroom). A caller that passes an unbounded
+    `choose_scale(sum over all rows of abs(plane), n_rows)`, so every
+    shared-memory cell -- a partial sum over a SUBSET of one leaf's rows,
+    and any leaf's rows are a subset of all rows -- stays under 2^30 with
+    `hist2_quantize`'s worst-case +1 dither unit per row accounted
+    EXPLICITLY in the limit (see `choose_scale`'s docstring for why the
+    resolution is load-bearing: the blanket 2^28 scale's dither noise
+    flipped near-tied splits at 254 borders, -1.6% train mse, measured
+    2026-08-20). A caller that passes an unbounded
     scale overflows Int32 silently; `doc_parallel_boosting.fit` computes the
     two plane magnitudes on the device for exactly this row.
 

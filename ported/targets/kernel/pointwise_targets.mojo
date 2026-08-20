@@ -122,9 +122,11 @@ def mse_kernel(
     host loop and no full-stats readback (the host loop this replaces cost a
     6.4 MB copy plus a 2 * n_rows walk per tree at 800k rows). Accumulated
     in Float32 through a float atomic, so the total can round DOWN by a few
-    parts in 1e6 relative; `choose_scale`'s three headroom bits are a factor
-    of eight against exactly this kind of slack, as its contract audit in
-    `doc_parallel_boosting.mojo` prices out. `compute_magnitudes` stands in
+    parts in 1e6 relative; `choose_scale`'s remaining safety bit is a factor
+    of TWO against exactly this kind of slack (a millionfold margin -- the
+    row-count-aware limit spends the other two former headroom bits on
+    resolution, with the dither's +1/row accounted separately), as its
+    contract audit in `doc_parallel_boosting.mojo` prices out. `compute_magnitudes` stands in
     for a null-pointer test, exactly as `compute_fv` does.
     ===================================================
     """

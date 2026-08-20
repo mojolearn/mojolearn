@@ -25,6 +25,9 @@ def main() raises:
     var fixtures = List[String]()
     fixtures.append(String("bench/oracle.txt"))
     fixtures.append(String("bench/oracle100.txt"))
+    # border 254: the PASS(8) one-byte range (129-255), which their ladder
+    # never sends to hist_2, so no smaller fixture reaches those kernels.
+    fixtures.append(String("bench/oracle254.txt"))
     for i in range(len(fixtures)):
         var path = fixtures[i].copy()
         print("CATBOOST DIFFERENTIAL, against " + path + ":")

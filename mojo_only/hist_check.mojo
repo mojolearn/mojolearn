@@ -61,9 +61,11 @@ from ported.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     substract_histograms_kernel,
     zero_histograms_kernel,
 )
+from mojo_only.kernel_matrix import HIST_SMEM_WARP_PRIVATE_F32
 from ported.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
     ONE_BYTE_BLOCK_SIZE,
     one_byte_hist_kernel,
+
 )
 from ported.methods.greedy_subsets_searcher.kernel.hist_half_byte import (
     half_byte_hist_kernel,
@@ -1428,7 +1430,9 @@ def check_one_byte_bits[bits: Int](n_stats: Int = 1, rows_per_fold: Int = 10, sc
     )
     ctx.synchronize()
 
-    ctx.enqueue_function[one_byte_hist_kernel[bits]](
+    ctx.enqueue_function[
+        one_byte_hist_kernel[bits, HIST_SMEM_WARP_PRIVATE_F32]
+    ](
         folds.unsafe_ptr(),
         fold_off.unsafe_ptr(),
         grp_off.unsafe_ptr(),

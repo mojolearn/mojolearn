@@ -65,8 +65,9 @@ def hist2_quantize(val: Float32, fixed_scale: Float32, u: Float32) -> Int32:
     distribution, so the dithered cell error is zero-mean and grows as
     sqrt(rows), not rows. An integer-valued `val * scale` is unchanged by
     any u < 1, which is what keeps `hist2_check`'s exactness argument
-    intact. The +1 worst case per row stays inside `choose_scale`'s three
-    headroom bits. Called ONCE per (row, stat) at load time -- computing it
+    intact. The +1 worst case per row is accounted for EXACTLY by
+    `choose_scale`'s `row_count` allowance (its blanket headroom covers
+    callers that state none). Called ONCE per (row, stat) at load time -- computing it
     at every add cost a measured quarter of the tree.
 
     WRITTEN AS `floor(x)` PLUS A FRACTION COMPARE, not `floor(x + u)`: the

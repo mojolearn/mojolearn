@@ -119,6 +119,7 @@ from ported.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_base import (
 )
 from ported.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
     ONE_BYTE_BLOCK_SIZE,
+    one_byte_block_size,
 )
 
 #: `TPointHistOneByte::BlockLoadSize(Direct)` = `LoadSize * BlockSize *
@@ -126,6 +127,14 @@ from ported.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
 #: arms; constants in `hist_one_byte.mojo`). What decides the PASS family's
 #: `activeBlockCount`, restated here so the check predicts its own reach.
 comptime PASS_MIN_DOCS_PER_BLOCK = 4 * ONE_BYTE_BLOCK_SIZE * 4
+
+#: The PASS family's shared-Int32 arm doubles the block, so its
+#: `BlockLoadSize` doubles with it; the bits-8 fixture below sizes its
+#: partitions from the larger of the two, exactly as the hist_2 fixture
+#: does with `MIN_DOCS_I32`.
+comptime PASS_MIN_DOCS_I32 = 4 * one_byte_block_size[
+    HIST_SMEM_SHARED2_I32
+]() * 4
 
 comptime N_FEATURES = 8
 comptime STAT_COUNT = 2
@@ -1064,7 +1073,9 @@ def run_mode_arm[
     return out^
 
 
-def run_pass_arm[bits: Int](
+def run_pass_arm[
+    bits: Int, smem_mode: Int = HIST_SMEM_WARP_PRIVATE_F32
+](
     ctx: DeviceContext,
     mut dblocks: List[DeviceBlock],
     depth: Int,
@@ -1082,13 +1093,16 @@ def run_pass_arm[bits: Int](
     hist_cells_per_leaf: Int,
     zf: HostBuffer[DType.float32],
     zi: HostBuffer[DType.int32],
+    scale: Float32 = FIXED_SCALE,
 ) raises -> HostBuffer[DType.float32]:
     """The PASS family (`TPointHistOneByte` at the same `bits`) enqueued
     DIRECTLY,
     bypassing the dispatch, plus the same bridge the helper runs: zero the
     scratch, kernel, `fixed_to_float`, `write_reduces`. This is what the
     dispatch used to run for these parameters, kept reachable here as the
-    reference arm."""
+    reference arm. `smem_mode` selects the accumulation arm (the
+    `hist_smem_mode_for` row applies to this family too) and `scale` exists
+    for the scale fingerprint."""
     ctx.enqueue_copy(dst_buf=hist, src_ptr=zf.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=acc, src_ptr=zi.unsafe_ptr())
     ctx.synchronize()
@@ -1103,18 +1117,18 @@ def run_pass_arm[bits: Int](
         block_dim=256,
     )
 
-    launch_one_byte[bits](
+    launch_one_byte[bits, smem_mode](
         ctx, dblocks[0], depth, n_live, n_rows, STAT_COUNT, MAX_LEAVES,
         SM_COUNT, n_rows, n_rows * blk.first_column,
         cindex, row_index, stats, p_off, p_sz, ids,
-        block_hist, acc, FIXED_SCALE,
+        block_hist, acc, scale,
     )
 
     ctx.enqueue_function[fixed_to_float_kernel](
         acc.unsafe_ptr(),
         block_hist.unsafe_ptr(),
         Int32(block_cells),
-        FIXED_SCALE,
+        scale,
         grid_dim=(block_cells + 255) // 256,
         block_dim=256,
     )
@@ -1137,6 +1151,346 @@ def run_pass_arm[bits: Int](
     return out^
 
 
+def check_pass_family_modes[bits: Int](fold_count: Int) raises:
+    """The PASS family's OWN two accumulation modes at 129-255 bins, exact.
+
+    CatBoost's ladder sends `maxBins <= 128` to hist_2, so everything above
+    128 runs `TPointHistOneByte` PASS(8) -- the family the hist_2 sections
+    of this check use only as a reference arm, at widths where no hist_2
+    kernel exists to cross it against. What replaces the family cross-check
+    here: BOTH PASS modes against the SAME exact host tally, against each
+    other, and against the real dispatch; the scale fingerprint proving
+    which arm quantizes (and that the dispatch launched the matrix row's
+    mode); and the per-branch stat sabotage. The family fingerprint has no
+    bits-8 form -- a u8 bin cannot hold `(1 << 8) + 1` -- and nothing is
+    lost: it existed to prove the DISPATCH picked a family, and above 128
+    folds there is only one family the dispatch can pick, which the scale
+    fingerprint pins to the mode as well."""
+    var ctx = DeviceContext()
+    print("  == bits", bits, ": max_folds", fold_count, " (PASS family,"
+          " both accumulation modes) ==")
+    if fold_count > (1 << bits) or fold_count <= (1 << bits) // 2:
+        raise Error("fold_count does not select bits "
+                    + String(bits) + "; fixture bug")
+    var folds = List[Int]()
+    for _ in range(N_FEATURES):
+        folds.append(fold_count)
+    for f in range(N_FEATURES):
+        if policy_for_fold_count(folds[f]) != POLICY_ONE_BYTE:
+            raise Error("feature " + String(f) + " did not land in the"
+                        " one-byte policy")
+
+    # Partition sizes from the LARGER BlockLoadSize, so leaf 0 replicates
+    # in both modes and leaf 2 replicates in neither.
+    comptime MIN_MAX = (
+        PASS_MIN_DOCS_I32
+        if PASS_MIN_DOCS_I32 > PASS_MIN_DOCS_PER_BLOCK
+        else PASS_MIN_DOCS_PER_BLOCK
+    )
+    var off = List[Int]()
+    var siz = List[Int]()
+    off.append(0)
+    siz.append(4 * MIN_MAX)
+    off.append(4 * MIN_MAX)
+    siz.append(PASS_MIN_DOCS_PER_BLOCK + 1)
+    off.append(4 * MIN_MAX + PASS_MIN_DOCS_PER_BLOCK + 1)
+    siz.append(PASS_MIN_DOCS_PER_BLOCK - 1)
+    var n_live = len(off)
+    var n_rows = off[n_live - 1] + siz[n_live - 1]
+
+    var lay = build_layout(folds)
+    var blocks = blocks_for(lay, n_rows)
+    if len(blocks) != 1:
+        raise Error("expected exactly one policy block, got "
+                    + String(len(blocks)))
+    var dblocks = upload_blocks(ctx, blocks)
+    if dblocks[0].max_folds != fold_count:
+        raise Error("max_folds is not the fold count; dispatch would move")
+
+    # ---- REACH, per mode, computed before anything runs -----------------
+    var groups = (N_FEATURES + 3) // 4
+    var pass_rep = predicted_replicas(groups, n_live, STAT_COUNT)
+    var mode_min_docs = List[Int]()
+    mode_min_docs.append(PASS_MIN_DOCS_PER_BLOCK)
+    mode_min_docs.append(PASS_MIN_DOCS_I32)
+    for m in range(len(mode_min_docs)):
+        var min_docs = mode_min_docs[m]
+        var max_active = 1
+        var min_active = 1 << 30
+        for k in range(n_live):
+            var a = (siz[k] + min_docs - 1) // min_docs
+            if a > pass_rep:
+                a = pass_rep
+            if a > max_active:
+                max_active = a
+            if a < min_active:
+                min_active = a
+        if max_active < 2:
+            raise Error("no partition replicates in PASS mode "
+                        + String(m) + "; raise the partition sizes")
+        if min_active > 1:
+            raise Error("every partition replicates in PASS mode "
+                        + String(m) + "; shrink a partition")
+    print("    replicas: PASS grid", pass_rep, ", rows", n_rows)
+
+    # ---- data, index, partitions ----------------------------------------
+    var host_bin = List[List[Int]]()
+    for f in range(N_FEATURES):
+        var col = List[Int]()
+        for r in range(n_rows):
+            col.append(hash_bin(r, f, fold_count))
+        host_bin.append(col^)
+    var cindex_base = build_cindex(ctx, lay, host_bin, n_rows)
+
+    var host_w = List[Int]()
+    var host_g = List[Int]()
+    for r in range(n_rows):
+        host_w.append(hash_w(r))
+        host_g.append(hash_g(r))
+    var stats = ctx.enqueue_create_buffer[DType.float32](STAT_COUNT * n_rows)
+    upload_stats(ctx, stats, host_w, host_g, n_rows)
+
+    var perm = List[Int]()
+    for pos in range(n_rows):
+        perm.append((pos * 7919 + 13) % n_rows)
+
+    var row_index = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+    var hi = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
+    for r in range(n_rows):
+        hi.unsafe_ptr().unsafe_store(r, UInt32(r))
+    ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
+
+    var p_off = ctx.enqueue_create_buffer[DType.uint32](MAX_LEAVES)
+    var p_sz = ctx.enqueue_create_buffer[DType.uint32](MAX_LEAVES)
+    var ho = ctx.enqueue_create_host_buffer[DType.uint32](MAX_LEAVES)
+    var hz = ctx.enqueue_create_host_buffer[DType.uint32](MAX_LEAVES)
+    for i in range(MAX_LEAVES):
+        ho.unsafe_ptr().unsafe_store(i, UInt32(0))
+        hz.unsafe_ptr().unsafe_store(i, UInt32(0))
+    for i in range(n_live):
+        ho.unsafe_ptr().unsafe_store(i, UInt32(off[i]))
+        hz.unsafe_ptr().unsafe_store(i, UInt32(siz[i]))
+    ctx.enqueue_copy(dst_buf=p_off, src_ptr=ho.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=p_sz, src_ptr=hz.unsafe_ptr())
+
+    var ids = ctx.enqueue_create_buffer[DType.uint32](MAX_LEAVES)
+    var dense_ids = ctx.enqueue_create_buffer[DType.uint32](MAX_LEAVES)
+    var hid = ctx.enqueue_create_host_buffer[DType.uint32](MAX_LEAVES)
+    for i in range(MAX_LEAVES):
+        hid.unsafe_ptr().unsafe_store(i, UInt32(i))
+    ctx.enqueue_copy(dst_buf=ids, src_ptr=hid.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=dense_ids, src_ptr=hid.unsafe_ptr())
+
+    var cells = lay.hist_cells
+    var total = MAX_LEAVES * STAT_COUNT * cells
+    var hist = ctx.enqueue_create_buffer[DType.float32](total)
+    var acc = ctx.enqueue_create_buffer[DType.int32](total)
+    var block_hist = ctx.enqueue_create_buffer[DType.float32](total)
+    var zf = ctx.enqueue_create_host_buffer[DType.float32](total)
+    var zi = ctx.enqueue_create_host_buffer[DType.int32](total)
+    for i in range(total):
+        zf.unsafe_ptr().unsafe_store(i, Float32(0.0))
+        zi.unsafe_ptr().unsafe_store(i, Int32(0))
+    ctx.synchronize()
+
+    # ---- exact expectations ----------------------------------------------
+    var noperm = List[Int]()
+    var want_base = host_tally(
+        host_bin, host_w, host_g, off, siz, noperm, False, False, lay,
+        bits, fold_count
+    )
+    var want_perm = host_tally(
+        host_bin, host_w, host_g, off, siz, perm, True, False, lay,
+        bits, fold_count
+    )
+
+    # ---- direct arms, both modes, plus the real dispatch ------------------
+    print("    direct arms (depth 0):")
+    var p_f32 = run_pass_arm[bits, HIST_SMEM_WARP_PRIVATE_F32](
+        ctx, dblocks, 0, n_live, n_rows, cindex_base, row_index, stats,
+        p_off, p_sz, ids, hist, acc, block_hist, cells, zf, zi,
+    )
+    var p_i32 = run_pass_arm[bits, HIST_SMEM_SHARED2_I32](
+        ctx, dblocks, 0, n_live, n_rows, cindex_base, row_index, stats,
+        p_off, p_sz, ids, hist, acc, block_hist, cells, zf, zi,
+    )
+    var b_disp = run_dispatch_arm(
+        ctx, dblocks, 0, n_live, n_rows, cindex_base, row_index, stats,
+        p_off, p_sz, ids, dense_ids, hist, acc, block_hist, cells, zf, zi,
+    )
+    var wrong = compare_exact(
+        p_f32, want_base, String("PASS warp-private f32 direct")
+    )
+    wrong += compare_exact(
+        p_i32, want_base, String("PASS 2-warp-shared i32 direct")
+    )
+    wrong += compare_exact(b_disp, want_base, String("dispatch direct"))
+    var cross = diff_cells(p_i32, p_f32, total)
+    print("      modes cross-agree on", total, "cells:", len(cross) == 0)
+    if wrong != 0 or len(cross) != 0:
+        raise Error("the PASS family's two accumulation modes disagree (or"
+                    " miss the host tally) on the DIRECT arm")
+
+    # ---- gather arms, both modes ------------------------------------------
+    for r in range(n_rows):
+        hi.unsafe_ptr().unsafe_store(r, UInt32(perm[r]))
+    ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
+    ctx.synchronize()
+    print("    gather arms (depth 1, permuted index):")
+    var g_f32 = run_pass_arm[bits, HIST_SMEM_WARP_PRIVATE_F32](
+        ctx, dblocks, 1, n_live, n_rows, cindex_base, row_index, stats,
+        p_off, p_sz, ids, hist, acc, block_hist, cells, zf, zi,
+    )
+    var g_i32 = run_pass_arm[bits, HIST_SMEM_SHARED2_I32](
+        ctx, dblocks, 1, n_live, n_rows, cindex_base, row_index, stats,
+        p_off, p_sz, ids, hist, acc, block_hist, cells, zf, zi,
+    )
+    wrong = compare_exact(
+        g_f32, want_perm, String("PASS f32 gather")
+    )
+    wrong += compare_exact(
+        g_i32, want_perm, String("PASS i32 gather")
+    )
+    var cross_g = diff_cells(g_i32, g_f32, total)
+    print("      gather modes cross-agree on", total, "cells:",
+          len(cross_g) == 0)
+    if wrong != 0 or len(cross_g) != 0:
+        raise Error("the PASS family's two accumulation modes disagree (or"
+                    " miss the host tally) on the GATHER arm")
+    var perm_moved = diff_cells(g_i32, p_i32, total)
+    if len(perm_moved) == 0:
+        raise Error("the permuted gather arm equals the direct arm, so the"
+                    " index indirection was never exercised")
+    for r in range(n_rows):
+        hi.unsafe_ptr().unsafe_store(r, UInt32(r))
+    ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
+    ctx.synchronize()
+
+    # ---- the scale fingerprint: which arm quantizes, and what the
+    # dispatch launched ------------------------------------------------------
+    var sf_i32 = run_pass_arm[bits, HIST_SMEM_SHARED2_I32](
+        ctx, dblocks, 0, n_live, n_rows, cindex_base, row_index, stats,
+        p_off, p_sz, ids, hist, acc, block_hist, cells, zf, zi,
+        scale=POISON_SCALE,
+    )
+    var i32_moved = diff_cells(sf_i32, p_i32, total)
+    if len(i32_moved) == 0:
+        raise Error("a wrecked fixed_scale did not move the PASS"
+                    " shared-Int32 arm, so it is NOT quantizing in shared"
+                    " memory")
+    var sf_f32 = run_pass_arm[bits, HIST_SMEM_WARP_PRIVATE_F32](
+        ctx, dblocks, 0, n_live, n_rows, cindex_base, row_index, stats,
+        p_off, p_sz, ids, hist, acc, block_hist, cells, zf, zi,
+        scale=POISON_SCALE,
+    )
+    var f32_moved = diff_cells(sf_f32, p_f32, total)
+
+    @parameter
+    if FLUSH_IS_FIXED:
+        if len(f32_moved) == 0:
+            raise Error("under the integer flush the PASS float arm must"
+                        " quantize in its writeback, and a wrecked scale"
+                        " did not move it")
+    else:
+        if len(f32_moved) != 0:
+            raise Error("the PASS float arm moved under a wrecked"
+                        " fixed_scale, but nothing on its float-flush path"
+                        " reads the scale")
+    var sf_disp = run_dispatch_arm(
+        ctx, dblocks, 0, n_live, n_rows, cindex_base, row_index, stats,
+        p_off, p_sz, ids, dense_ids, hist, acc, block_hist, cells, zf, zi,
+        scale=POISON_SCALE,
+    )
+    var disp_moved = diff_cells(sf_disp, b_disp, total)
+    comptime DISPATCH_QUANTIZES = (
+        HIST2_SMEM_MODE == HIST_SMEM_SHARED2_I32 or FLUSH_IS_FIXED
+    )
+
+    @parameter
+    if DISPATCH_QUANTIZES:
+        if len(disp_moved) == 0:
+            raise Error("THE DISPATCH DID NOT LAUNCH THE MODE THE MATRIX"
+                        " ROW SELECTS at 129-255 bins: the row says this"
+                        " build quantizes and the dispatch arm did not"
+                        " move")
+    else:
+        if len(disp_moved) != 0:
+            raise Error("THE DISPATCH DID NOT LAUNCH THE MODE THE MATRIX"
+                        " ROW SELECTS at 129-255 bins: the float path never"
+                        " reads the scale and the dispatch arm moved")
+    print(
+        "      scale fingerprint: wrecked scale moved i32 at",
+        len(i32_moved), "cells, f32 at", len(f32_moved),
+        "(flush fixed:", FLUSH_IS_FIXED, "), dispatch at", len(disp_moved),
+        "-> the dispatch runs the matrix row's mode",
+    )
+
+    # ---- stat sabotage per mode, both flush branches ----------------------
+    var poison_rows = List[Int]()
+    poison_rows.append(off[0] + 37)
+    poison_rows.append(off[2] + 100)
+    var g_poison = List[Int]()
+    for r in range(n_rows):
+        g_poison.append(host_g[r])
+    for i in range(len(poison_rows)):
+        g_poison[poison_rows[i]] += POISON
+    var want_poison = host_tally(
+        host_bin, host_w, g_poison, off, siz, noperm, False, False, lay,
+        bits, fold_count
+    )
+    var predicted_moves = List[Int]()
+    for i in range(total):
+        if want_poison[i] != want_base[i]:
+            predicted_moves.append(i)
+    if len(predicted_moves) == 0:
+        raise Error("the sabotage predicts nothing; fixture bug")
+    var saw_leaf0 = False
+    var saw_leaf2 = False
+    for i in range(len(predicted_moves)):
+        var leaf = predicted_moves[i] // (STAT_COUNT * cells)
+        if leaf == 0:
+            saw_leaf0 = True
+        if leaf == 2:
+            saw_leaf2 = True
+    if not (saw_leaf0 and saw_leaf2):
+        raise Error("the sabotage did not span both flush branches")
+
+    upload_stats_poisoned(ctx, stats, host_w, g_poison, n_rows)
+    var mp_f32 = run_pass_arm[bits, HIST_SMEM_WARP_PRIVATE_F32](
+        ctx, dblocks, 0, n_live, n_rows, cindex_base, row_index, stats,
+        p_off, p_sz, ids, hist, acc, block_hist, cells, zf, zi,
+    )
+    var mp_i32 = run_pass_arm[bits, HIST_SMEM_SHARED2_I32](
+        ctx, dblocks, 0, n_live, n_rows, cindex_base, row_index, stats,
+        p_off, p_sz, ids, hist, acc, block_hist, cells, zf, zi,
+    )
+    wrong = compare_exact(mp_f32, want_poison, String("PASS f32 poisoned"))
+    wrong += compare_exact(mp_i32, want_poison, String("PASS i32 poisoned"))
+    if wrong != 0:
+        raise Error("a PASS mode arm missed the poisoned tally")
+    var moved_f = diff_cells(mp_f32, p_f32, total)
+    var moved_i = diff_cells(mp_i32, p_i32, total)
+    if len(moved_f) != len(predicted_moves) or len(moved_i) != len(
+        predicted_moves
+    ):
+        raise Error("the per-mode sabotage moved " + String(len(moved_f))
+                    + " (f32) / " + String(len(moved_i)) + " (i32) cells"
+                    " where " + String(len(predicted_moves))
+                    + " were predicted")
+    for i in range(len(predicted_moves)):
+        if moved_f[i] != predicted_moves[i] or moved_i[
+            i
+        ] != predicted_moves[i]:
+            raise Error("a PASS mode arm's sabotage moved an unpredicted"
+                        " cell")
+    upload_stats(ctx, stats, host_w, host_g, n_rows)
+    print(
+        "      per-mode stat sabotage: every predicted cell moved and"
+        " nothing else did, in the multi-block leaf AND the one-block"
+        " leaf, in BOTH modes"
+    )
+
+
 def main() raises:
     print("hist_2 one-byte family check: bits 5 / 6 / 7 against the PASS"
           " family")
@@ -1147,4 +1501,7 @@ def main() raises:
     check_hist2_one_byte[5](25)
     check_hist2_one_byte[6](60)
     check_hist2_one_byte[7](100)
+    # 129-255 bins never reach hist_2 -- their ladder's PASS(8) arm -- so
+    # the coverage there is the PASS family's own two accumulation modes.
+    check_pass_family_modes[8](200)
     print("check-hist2: PASS")

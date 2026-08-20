@@ -95,6 +95,7 @@ from ported.methods.greedy_subsets_searcher.kernel.hist_half_byte import (
 )
 from ported.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
     ONE_BYTE_BLOCK_SIZE,
+    one_byte_block_size,
     one_byte_hist_gather_kernel,
     one_byte_hist_kernel,
 )
@@ -145,6 +146,7 @@ from ported.methods.greedy_subsets_searcher.kernel.hist_half_byte import (
 )
 from ported.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
     ONE_BYTE_BLOCK_SIZE,
+    one_byte_block_size,
     one_byte_hist_gather_kernel,
     one_byte_hist_kernel,
 )
@@ -699,7 +701,7 @@ def run_tree(
         gmag = -gmag
     if gmag > mag:
         mag = gmag
-    var fixed_scale = Float32(choose_scale(mag))
+    var fixed_scale = Float32(choose_scale(mag, n_rows))
 
     # REPLICATION: how many blocks share one partition. CatBoost sizes this
     # to fill the SMs (`hist_binary.cu:90-95`). A PARAMETER of this function,
@@ -1237,7 +1239,7 @@ def upload_blocks(
     return out^
 
 
-def launch_one_byte[bits: Int](
+def launch_one_byte[bits: Int, smem_mode: Int = HIST2_SMEM_MODE](
     ctx: DeviceContext,
     mut blk: DeviceBlock,
     depth: Int,
@@ -1314,7 +1316,7 @@ def launch_one_byte[bits: Int](
     if grid_z_stats >= 0:
         gz = grid_z_stats
     if depth == 0:
-        ctx.enqueue_function[one_byte_hist_kernel[bits]](
+        ctx.enqueue_function[one_byte_hist_kernel[bits, smem_mode]](
             blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
             blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
             Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
@@ -1348,10 +1350,10 @@ def launch_one_byte[bits: Int](
                 n_live,
                 gz,
             ),
-            block_dim=(ONE_BYTE_BLOCK_SIZE, 1, 1),
+            block_dim=(one_byte_block_size[smem_mode](), 1, 1),
         )
     else:
-        ctx.enqueue_function[one_byte_hist_gather_kernel[bits]](
+        ctx.enqueue_function[one_byte_hist_gather_kernel[bits, smem_mode]](
             blk.folds.unsafe_ptr(), blk.fold_off.unsafe_ptr(),
             blk.grp_off.unsafe_ptr(), blk.grp_sz.unsafe_ptr(),
             Int32(blk.n_features), cindex.unsafe_ptr(), Int32(line),
@@ -1386,7 +1388,7 @@ def launch_one_byte[bits: Int](
                 n_live,
                 gz,
             ),
-            block_dim=(ONE_BYTE_BLOCK_SIZE, 1, 1),
+            block_dim=(one_byte_block_size[smem_mode](), 1, 1),
         )
 
 
@@ -1446,7 +1448,7 @@ def launch_hist2_one_byte[bits: Int, smem_mode: Int = HIST2_SMEM_MODE](
     var is_odd = stat_count % 2
     if is_odd == 1:
         # `PASS(Bits, 1)`: the one-stat PASS-family kernel covers stat 0.
-        launch_one_byte[bits](
+        launch_one_byte[bits, smem_mode](
             ctx, blk, depth, n_live, n_rows, stat_count, max_leaves,
             sm_count, line, base, cindex, row_index, stats, p_off,
             p_sz, ids, block_hist, acc_i32, fixed_scale, grid_z_stats=1,
@@ -1872,7 +1874,7 @@ def launch_histograms_for_blocks[
                     p_sz, ids, block_hist, acc_i32, fixed_scale,
                 )
             else:
-                launch_one_byte[8](
+                launch_one_byte[8, hist2_smem_mode](
                     ctx, blk, depth, n_live, n_rows, stat_count, max_leaves,
                     sm_count, line, base, cindex, row_index, stats, p_off,
                     p_sz, ids, block_hist, acc_i32, fixed_scale,
@@ -1906,13 +1908,14 @@ def launch_histograms_for_blocks[
             TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
         ]()
 
-        # The hist_2 family under `HIST_SMEM_SHARED2_I32` drains its
+        # BOTH one-byte families under `HIST_SMEM_SHARED2_I32` drain their
         # replicated flush through the Int32 accumulator EVEN UNDER FAST
-        # (see the DEVIATION BLOCK in `hist2_add_to_global_memory`), so the
-        # conversion must run for exactly the blocks their ladder sends to
-        # that family -- `POLICY_ONE_BYTE` at `maxBins <= 128` -- and for
-        # nothing else, keeping the FAST float path's measured ~7 ms/tree of
-        # accumulator reading off the binary/half-byte blocks.
+        # (see the DEVIATION BLOCKs in `hist2_add_to_global_memory` and
+        # `hist_one_byte.mojo`'s writeback), so the conversion must run for
+        # every `POLICY_ONE_BYTE` block -- hist_2 at `maxBins <= 128` and
+        # the PASS family at 129-255 alike -- and for nothing else, keeping
+        # the FAST float path's measured ~7 ms/tree of accumulator reading
+        # off the binary/half-byte blocks.
         var run_fixed_bridge = _flush_is_fixed_point
 
         @parameter
@@ -1920,7 +1923,7 @@ def launch_histograms_for_blocks[
             hist2_smem_mode == HIST_SMEM_SHARED2_I32
             and not _flush_is_fixed_point
         ):
-            if blk.policy == POLICY_ONE_BYTE and blk.max_folds <= 128:
+            if blk.policy == POLICY_ONE_BYTE:
                 run_fixed_bridge = True
 
         if run_fixed_bridge:
@@ -2122,7 +2125,7 @@ def run_tree_layout[
         gmag = -gmag
     if gmag > mag:
         mag = gmag
-    var fixed_scale = Float32(choose_scale(mag))
+    var fixed_scale = Float32(choose_scale(mag, n_rows))
 
     var part_stats = ctx.enqueue_create_buffer[DType.float32](
         max_leaves * stat_count

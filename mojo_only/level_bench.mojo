@@ -56,6 +56,7 @@ from ported.methods.greedy_subsets_searcher.kernel.split_points import (
     split_and_make_sequence_kernel,
     update_partitions_after_split_kernel,
 )
+from mojo_only.kernel_matrix import HIST_SMEM_WARP_PRIVATE_F32
 from ported.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
     ONE_BYTE_BLOCK_SIZE,
     one_byte_hist_kernel,
@@ -823,7 +824,9 @@ def bench_wide_histogram_interleaved(n_rows: Int, repeats: Int) raises:
         for arm in range(2):
             var reps = 1 if arm == 0 else 16
             var t0 = perf_counter_ns()
-            ctx.enqueue_function[one_byte_hist_kernel[8]](
+            ctx.enqueue_function[
+                one_byte_hist_kernel[8, HIST_SMEM_WARP_PRIVATE_F32]
+            ](
                 folds.unsafe_ptr(), fold_off.unsafe_ptr(),
                 grp_off.unsafe_ptr(), grp_sz.unsafe_ptr(),
                 Int32(n_features), cindex.unsafe_ptr(), Int32(n_rows),

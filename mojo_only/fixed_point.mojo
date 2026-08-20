@@ -42,13 +42,32 @@ comptime SCALE_HEADROOM_BITS = 3
 comptime SCALE_LIMIT = Float64((1 << (31 - SCALE_HEADROOM_BITS)) - 1)
 
 
-def choose_scale(sum_of_magnitudes: Float64) raises -> Float64:
+def choose_scale(
+    sum_of_magnitudes: Float64, row_count: Int = 0
+) raises -> Float64:
     """The multiplier that makes overflow impossible for this round.
 
     `sum_of_magnitudes` is `sum over all rows of abs(value)` for the plane
     being accumulated, computed on the host before the round. Every partial
     sum the device forms is over a SUBSET of those rows, so its magnitude is
-    at most this, and scaling it to `SCALE_LIMIT` bounds every slot.
+    at most this, and scaling it to the limit bounds every slot.
+
+    `row_count` sharpens the bound. The blanket three headroom bits exist
+    to absorb, among other things, the dithered quantizer's worst case of
+    +1 unit per row (`histogram_utils.hist2_quantize`) at ANY row count.
+    When the caller states its row count the allowance becomes exact:
+
+        cell  <  sum_of_magnitudes * scale  +  row_count
+              <=  (2^30 - 1 - row_count)    +  row_count   =  2^30 - 1
+
+    which keeps one full bit of safety under Int32 and buys a scale 4x
+    finer than the blanket limit. RESOLUTION IS NOT A LUXURY HERE: at 254
+    borders on 800k x 100 (bench/interleaved, 2026-08-20) the blanket
+    scale's dither noise flipped near-tied splits and cost 1.6% train mse
+    against CatBoost (0.14375 vs 0.14145), while the row-count-aware scale
+    reproduces CatBoost's mse to 7 decimals at the same speed. Callers
+    that cannot state a row count get the old blanket limit, never a
+    weaker scale than before.
 
     Returns a scale of 1.0 for an all-zero plane rather than dividing by
     zero: the accumulation is then exactly zero at any scale.
@@ -61,6 +80,10 @@ def choose_scale(sum_of_magnitudes: Float64) raises -> Float64:
         )
     if sum_of_magnitudes == 0.0:
         return 1.0
+    if row_count > 0:
+        var limit = Float64((1 << 30) - 1 - row_count)
+        if limit > SCALE_LIMIT:
+            return limit / sum_of_magnitudes
     return SCALE_LIMIT / sum_of_magnitudes
 
 

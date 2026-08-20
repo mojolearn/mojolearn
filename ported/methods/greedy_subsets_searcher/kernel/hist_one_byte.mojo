@@ -59,10 +59,18 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier, syncwarp
 
 from mojo_only.kernel_matrix import (
+    HIST_SMEM_SHARED2_I32,
     K_HIST_ONE_BYTE,
     TARGET_COLUMN,
     block_size_for,
+    hist2_block_size_for,
     hist_floats_per_thread_for,
+    hist_smem_mode_for,
+)
+from ported.methods.greedy_subsets_searcher.kernel.histogram_utils import (
+    hist2_dither,
+    hist2_quantize,
+    hist2_smem_add,
 )
 
 
@@ -125,9 +133,52 @@ comptime LOAD_SIZE = 4
 #: `loadSize * N`, the points one thread takes per iteration.
 comptime POINTS_PER_ITER = UNROLL * LOAD_SIZE
 
+#: The `hist_smem_mode_for` matrix row, cached the way
+#: `hist_2_one_byte_base.mojo` caches it as `HIST2_SMEM_MODE`. It is ONE
+#: row for the whole one-byte family: both families take 32 floats of
+#: shared memory per thread, so Apple's 32 KB wall and the measured 1.94x
+#: of the 2-warp-shared Int32 slice (scratchpad `histshare_probe.mojo`)
+#: apply to the PASS kernels exactly as they applied to hist_2.
+comptime ONE_BYTE_SMEM_MODE = hist_smem_mode_for[
+    TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
+]()
 
 
-def one_byte_slice_offset[bits: Int](tid: Int) -> Int:
+def one_byte_block_size[smem_mode: Int]() -> Int:
+    """The PASS family's block, per accumulation mode.
+
+    Float mode is `ONE_BYTE_BLOCK_SIZE` unchanged (their 384, 256 under
+    Apple's 32 KB). The shared-Int32 mode reads `hist2_block_size_for`,
+    which is the same 32-floats-per-thread arithmetic -- 64 bytes/thread
+    under 2-warp sharing, capped at the 512 that exactly fills 32 KB. The
+    two kernel keys resolve to the same float block (`block_size_for`
+    treats `K_HIST_ONE_BYTE` and `K_HIST_2_ONE_BYTE` as one geometry), so
+    the row is the family's, not hist_2's.
+    """
+    if smem_mode == HIST_SMEM_SHARED2_I32:
+        return hist2_block_size_for[TARGET_COLUMN, smem_mode]()
+    return ONE_BYTE_BLOCK_SIZE
+
+
+def one_byte_smem_slots[smem_mode: Int]() -> Int:
+    """`GetHistSize()` per mode: 32 floats/thread warp-private, or one
+    1024-slot slice per WARP PAIR under `HIST_SMEM_SHARED2_I32`."""
+    comptime block = one_byte_block_size[smem_mode]()
+    if smem_mode == HIST_SMEM_SHARED2_I32:
+        return (block // 64) * 1024
+    return block * hist_floats_per_thread_for[K_HIST_ONE_BYTE]()
+
+
+def one_byte_acc_dtype[smem_mode: Int]() -> DType:
+    """Float32 shared memory in their design; the 2-warp-shared slice
+    variant is Int32 fixed point (`hist2_smem_add`)."""
+    if smem_mode == HIST_SMEM_SHARED2_I32:
+        return DType.int32
+    return DType.float32
+
+
+
+def one_byte_slice_offset[bits: Int, smem_mode: Int](tid: Int) -> Int:
     """`TPointHistOneByte::SliceOffset()`, copied.
 
         const int warpOffset = 1024 * (threadIdx.x / 32);
@@ -154,7 +205,22 @@ def one_byte_slice_offset[bits: Int](tid: Int) -> Int:
         " write the wide-wavefront layout before letting LANE_WIDTH be 64"
     )
     comptime inner_bits = bits - 5
-    var warp_offset = 1024 * (tid // LANE_WIDTH)
+
+    # ================= DEVIATION BLOCK =================
+    # Under `HIST_SMEM_SHARED2_I32` the slice a thread lands in is keyed by
+    # its warp PAIR (`tid // 64`) instead of its warp (`tid // 32`): two
+    # warps deliberately share one 1024-slot slice through the Int32 atomics
+    # of `hist2_smem_add`, exactly as `hist2_slice_offset` does it. The
+    # within-slice arithmetic -- `innerHistStart`, the sub-copy blocks --
+    # is theirs unchanged.
+    # ===================================================
+    var warp_offset: Int
+
+    @parameter
+    if smem_mode == HIST_SMEM_SHARED2_I32:
+        warp_offset = 1024 * (tid // 64)
+    else:
+        warp_offset = 1024 * (tid // LANE_WIDTH)
     comptime blocks = 8 >> inner_bits
     var inner_hist_start = tid & ((blocks - 1) << (inner_bits + 2))
     return warp_offset + inner_hist_start
@@ -192,14 +258,15 @@ def one_byte_bin_offset[bits: Int](ci: UInt32, tid: Int, i: Int) -> Int:
 
 
 def add_one_byte_point[
-    bits: Int
+    bits: Int, dt: DType
 ](
     ci: UInt32,
     stat: Float32,
+    qstat: Int32,
     tid: Int,
     slice_base: Int,
     smem: UnsafePointer[
-        Scalar[DType.float32],
+        Scalar[dt],
         address_space = AddressSpace.SHARED,
         origin=MutUntrackedOrigin,
     ],
@@ -255,13 +322,21 @@ def add_one_byte_point[
         # `Bits == 8` the test is always true and this costs nothing, which is
         # why the omission could sit under the 8-bit path unseen.
         var stat_to_add = Float32(0.0)
+        var q_to_add = Int32(0)
         if (one_byte_bin(ci, tid, i) >> bits) == 0:
             stat_to_add = stat
+            q_to_add = qstat
 
+        # The pass structure and the warp-local sync are theirs in BOTH
+        # modes; only where the add lands differs, and that one site is
+        # `hist2_smem_add` -- the same factored accumulation the hist_2
+        # family runs. `qstat` is the row's stat through `hist2_quantize`,
+        # computed once per (row, stat) at load time; the float arm ignores
+        # it, the Int32 arm adds it and ignores `stat`.
         @parameter
         if inner_bits == 0:
             syncwarp()
-            smem[slot] = smem[slot] + stat_to_add
+            hist2_smem_add[dt](smem, slot, stat_to_add, q_to_add)
         else:
             var higher = one_byte_higher_bin[bits](ci, tid, i)
             comptime mask = (1 << inner_bits) - 1
@@ -271,7 +346,7 @@ def add_one_byte_point[
                 var p = ((tid >> 2) + kk) & mask
                 syncwarp()
                 if p == higher:
-                    smem[slot] = smem[slot] + stat_to_add
+                    hist2_smem_add[dt](smem, slot, stat_to_add, q_to_add)
 
 
 def one_byte_higher_bin[bits: Int](ci: UInt32, tid: Int, i: Int) -> Int:
@@ -282,7 +357,7 @@ def one_byte_higher_bin[bits: Int](ci: UInt32, tid: Int, i: Int) -> Int:
     return (one_byte_bin(ci, tid, i) >> 5) & mask
 
 
-def one_byte_hist_kernel[bits: Int](
+def one_byte_hist_kernel[bits: Int, smem_mode: Int](
     # `TFeatureInBlock*`, flattened to four parallel arrays so the kernel
     # takes plain pointers.
     feature_folds: MutPointer[UInt32, MutAnyOrigin],
@@ -325,6 +400,10 @@ def one_byte_hist_kernel[bits: Int](
     var stat_count = Int(stat_count_in)
     var tid = Int(thread_idx.x)
 
+    comptime BLOCK = one_byte_block_size[smem_mode]()
+    comptime SLOTS = one_byte_smem_slots[smem_mode]()
+    comptime DT = one_byte_acc_dtype[smem_mode]()
+
     var part_id = Int(part_ids.unsafe_load(Int(block_idx.y)))
     var p_offset = Int(part_offset.unsafe_load(part_id))
     var p_size = Int(part_size.unsafe_load(part_id))
@@ -350,7 +429,7 @@ def one_byte_hist_kernel[bits: Int](
     # launch, no dependence on how unbalanced the level is.
     var local_block_idx = Int(block_idx.x) % max_blocks_per_part
     var min_docs_per_block = LANE_WIDTH * UNROLL * LOAD_SIZE * (
-        ONE_BYTE_BLOCK_SIZE // LANE_WIDTH
+        BLOCK // LANE_WIDTH
     )
     var active_block_count = min(
         (p_size + min_docs_per_block - 1) // min_docs_per_block,
@@ -366,16 +445,16 @@ def one_byte_hist_kernel[bits: Int](
     #     __syncthreads();
     #     Histogram = buff + SliceOffset();
     var smem = stack_allocation[
-        ONE_BYTE_HIST_SIZE,
-        Scalar[DType.float32],
+        SLOTS,
+        Scalar[DT],
         address_space = AddressSpace.SHARED,
     ]()
     var z = tid
-    while z < ONE_BYTE_HIST_SIZE:
-        smem[z] = Float32(0.0)
-        z += ONE_BYTE_BLOCK_SIZE
+    while z < SLOTS:
+        smem[z] = Scalar[DT](0)
+        z += BLOCK
     barrier()
-    var slice_base = one_byte_slice_offset[bits](tid)
+    var slice_base = one_byte_slice_offset[bits, smem_mode](tid)
 
     # --- AlignMemoryAccess, ported (`compute_hist_loop_two_stats.cuh:57`) --
     #
@@ -416,6 +495,7 @@ def one_byte_hist_kernel[bits: Int](
     while pe < ALIGN_SIZE:
         var hb = UInt32(0)
         var hs = Float32(0.0)
+        var hq = Int32(0)
         if local_block_idx == 0 and pe < head_len:
             # `Ldg(bins, idx)` and `Ldg(stats, idx)`
             # (`compute_hist_loop_one_stat.cuh:80-81`). `Ldg` is
@@ -424,23 +504,36 @@ def one_byte_hist_kernel[bits: Int](
             # its Mojo spelling.
             hb = ldg(bins_p + (p_offset + pe))
             hs = ldg(stats_p + (p_offset + pe))
-        add_one_byte_point[bits](hb, hs, tid, slice_base, smem)
+
+            @parameter
+            if DT == DType.int32:
+                hq = hist2_quantize(
+                    hs, fixed_scale, hist2_dither(p_offset + pe)
+                )
+        add_one_byte_point[bits, DT](hb, hs, hq, tid, slice_base, smem)
 
         var tb = UInt32(0)
         var ts = Float32(0.0)
+        var tq = Int32(0)
         if local_block_idx == 0 and pe < tail_len:
             # `Ldg(bins, tailOffset + idx)` and `Ldg(stats, tailOffset + idx)`
             # (`compute_hist_loop_one_stat.cuh:98-99`).
             tb = ldg(bins_p + (tail_start + pe))
             ts = ldg(stats_p + (tail_start + pe))
-        add_one_byte_point[bits](tb, ts, tid, slice_base, smem)
-        pe += ONE_BYTE_BLOCK_SIZE
+
+            @parameter
+            if DT == DType.int32:
+                tq = hist2_quantize(
+                    ts, fixed_scale, hist2_dither(tail_start + pe)
+                )
+        add_one_byte_point[bits, DT](tb, ts, tq, tid, slice_base, smem)
+        pe += BLOCK
 
     # the striped loop sees the ALIGNED MIDDLE only
     var aligned_offset = p_offset + head_len
     var aligned_size = body_size - tail_len
 
-    var warps_per_block = ONE_BYTE_BLOCK_SIZE // LANE_WIDTH
+    var warps_per_block = BLOCK // LANE_WIDTH
     var global_warp_id = local_block_idx * warps_per_block + (tid // LANE_WIDTH)
     var entries_per_warp = LANE_WIDTH * UNROLL * LOAD_SIZE
     var stripe_size = entries_per_warp * warps_per_block * active_block_count
@@ -484,6 +577,9 @@ def one_byte_hist_kernel[bits: Int](
 
     var b_ptr = bins_p + base
     var s_ptr = stats_p + base
+    # The dither key for the Int32 arm: the storage POSITION each element
+    # was loaded from, exactly as `hist_2_one_byte_base.mojo` keys it.
+    var pos_base = base
 
     for it in range(max_iters):
         var active = it < iter_count
@@ -491,6 +587,7 @@ def one_byte_hist_kernel[bits: Int](
         # that order because it is what keeps the loads in flight.
         var local_bins = InlineArray[UInt32, POINTS_PER_ITER](fill=0)
         var local_stats = InlineArray[Float32, POINTS_PER_ITER](fill=0)
+        var local_q = InlineArray[Int32, POINTS_PER_ITER](fill=0)
 
         # `Ldg((uint4*) bins, warpSize * k)` and its `float4` twin
         # (`compute_hist_loop_two_stats.cuh:293`). Indexing a `uint4*` by
@@ -525,6 +622,15 @@ def one_byte_hist_kernel[bits: Int](
                 for e in range(LOAD_SIZE):
                     local_bins[k * LOAD_SIZE + e] = vb[e]
                     local_stats[k * LOAD_SIZE + e] = vs[e]
+
+                    @parameter
+                    if DT == DType.int32:
+                        var u = hist2_dither(
+                            pos_base + LANE_WIDTH * LOAD_SIZE * k + e
+                        )
+                        local_q[k * LOAD_SIZE + e] = hist2_quantize(
+                            vs[e], fixed_scale, u
+                        )
             else:
                 # No row: contribute zero. Harmless, and it keeps this lane
                 # inside every barrier below.
@@ -532,17 +638,20 @@ def one_byte_hist_kernel[bits: Int](
                 for e in range(LOAD_SIZE):
                     local_bins[k * LOAD_SIZE + e] = UInt32(0)
                     local_stats[k * LOAD_SIZE + e] = Float32(0.0)
+                    local_q[k * LOAD_SIZE + e] = Int32(0)
 
         # `hist.AddPoints<loadSize * N>(...)`: every point the batch loaded,
         # through the same `AddPoint` the peel calls.
         @parameter
         for k in range(POINTS_PER_ITER):
-            add_one_byte_point[bits](
-                local_bins[k], local_stats[k], tid, slice_base, smem
+            add_one_byte_point[bits, DT](
+                local_bins[k], local_stats[k], local_q[k], tid, slice_base,
+                smem,
             )
 
         b_ptr += stripe_size
         s_ptr += stripe_size
+        pos_base += stripe_size
 
     # `TPointHistOneByte::Reduce` (`hist_one_byte.cu:177-230`), copied. TWO
     # stages, and they are not interchangeable with one strided fold.
@@ -564,13 +673,13 @@ def one_byte_hist_kernel[bits: Int](
     barrier()
     var start = tid
     while start < WARP_HIST_SIZE:
-        var acc = Float32(0.0)
+        var acc = Scalar[DT](0)
         var j = start
-        while j < ONE_BYTE_HIST_SIZE:
+        while j < SLOTS:
             acc += smem[j]
             j += WARP_HIST_SIZE
         smem[WARP_HIST_SIZE + start] = acc
-        start += ONE_BYTE_BLOCK_SIZE
+        start += BLOCK
     barrier()
 
     # Stage 2: UN-SCRAMBLE. The slot for feature `f`, bin `b` is
@@ -580,7 +689,7 @@ def one_byte_hist_kernel[bits: Int](
     comptime warp_hist_block_count = 8 >> inner_bits
     comptime sub_block = 4 * (1 << inner_bits)
     var fold_r = tid
-    var sums = InlineArray[Float32, 4](fill=Float32(0.0))
+    var sums = InlineArray[Scalar[DT], 4](fill=Scalar[DT](0))
     if fold_r < hist_size_bins:
         var lower_bits_offset = (fold_r & 31) << 5
         var higher_bin = (fold_r >> 5) & ((1 << inner_bits) - 1)
@@ -613,83 +722,101 @@ def one_byte_hist_kernel[bits: Int](
             var group_size = Int(feature_group_size.unsafe_load(feature_offset + fid))
             var device_offset = group_offset * stat_count * leaf_count
             var entries_per_leaf = stat_count * group_size
-            var dst = (
-                bin_sums
-                + device_offset
-                # `blockIdx.y`, DENSE, not `partIds[blockIdx.y]`. See the
-                # note above `entries_per_leaf`.
+            # `blockIdx.y`, DENSE, not `partIds[blockIdx.y]`. See the
+            # note above `entries_per_leaf`.
+            var dst_base = (
+                device_offset
                 + Int(block_idx.y) * entries_per_leaf
                 + Int(block_idx.z) * group_size
                 + Int(feature_fold_offset.unsafe_load(feature_offset + fid))
             )
+            var dst = bin_sums + dst_base
 
-            var val = smem[fid * hist_size_bins + fold]
+            var cell = smem[fid * hist_size_bins + fold]
 
-            if abs(val) > Float32(1e-20):
-                # THE FLUSH. `AddToGlobalMemory`, their multi-block branch
-                # (`hist_one_byte.cu:253-259`):
-                #
-                #     if (blockCount > 1) { atomicAdd(dst + fold, val); }
-                #     else               { dst[fold] = val; }
-                #
-                # A plain store is only correct when ONE block owns the
-                # partition. Replicating blocks across a partition, which is
-                # what fills the machine, makes every block hold a PARTIAL
-                # histogram, and partials must be summed.
-                comptime det = deterministic_flush_for[
-                    TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
-                ]()
-
-                @parameter
-                if det:
+            @parameter
+            if DT == DType.int32:
+                # The shared-Int32 arm: the cell is already fixed point at
+                # `fixed_scale`, and the flush follows
+                # `hist2_add_to_global_memory`'s DEVIATION BLOCK exactly --
+                # the multi-block branch adds the Int32 cell DIRECTLY into
+                # the accumulator (exact, no dequantize/requantize round
+                # trip), the single-block branch stores the dequantized
+                # value, and `cell != 0` is their never-write-a-zero-cell
+                # guard in the integer domain. The launch helper runs
+                # `fixed_to_float_kernel` on every one-byte block whenever
+                # this arm is compiled, so the accumulator drains under
+                # FAST exactly as it does under IDENTICAL.
+                var q = rebind[Scalar[DType.int32]](cell)
+                if q != Int32(0):
                     if active_block_count > 1:
-                        # `NUMERIC_IDENTICAL`. Partials sum as Int32 through
-                        # an integer atomic, which is associative, so the
-                        # histogram does not depend on which block lands
-                        # first. That is the property CatBoost's float atomic
-                        # gives up.
-                        var q = Int32(val * fixed_scale)
                         _ = Atomic.fetch_add(
-                            acc_i32.unsafe_offset(
-                                device_offset
-                                + Int(block_idx.y) * entries_per_leaf
-                                + Int(block_idx.z) * group_size
-                                + Int(
-                                    feature_fold_offset.unsafe_load(
-                                        feature_offset + fid
-                                    )
-                                )
-                                + fold
-                            ),
-                            q,
+                            acc_i32.unsafe_offset(dst_base + fold), q
                         )
                     else:
-                        dst.unsafe_store(fold, val)
-                else:
-                    # `atomicAdd(dst + fold, val)`, theirs verbatim.
+                        dst.unsafe_store(
+                            fold, Float32(Int(q)) / fixed_scale
+                        )
+            else:
+                var val = rebind[Scalar[DType.float32]](cell)
+                if abs(val) > Float32(1e-20):
+                    # THE FLUSH. `AddToGlobalMemory`, their multi-block branch
+                    # (`hist_one_byte.cu:253-259`):
                     #
-                    # THIS BRANCH USED TO BE A PLAIN STORE. The condition was
-                    # written `if det and active_block_count > 1`, so with
-                    # `det` false and the block replicated it fell through to
-                    # `dst[fold] = val` and left ONE block's partial
-                    # histogram standing while every other block's was
-                    # overwritten. It was a store where CatBoost has an
-                    # atomic, which is not a deviation, it is a wrong answer.
+                    #     if (blockCount > 1) { atomicAdd(dst + fold, val); }
+                    #     else               { dst[fold] = val; }
                     #
-                    # This is what held `deterministic_flush_for` at a
-                    # hardcoded `True`: with the fixed-point path forced on,
-                    # `det` was never false and the store was never taken, so
-                    # flipping the row to the mode's answer was reported as
-                    # "the float atomic breaks the mixed tree" -- 16 non-empty
-                    # leaves at depth 4 dropping to 4. It was not the atomic.
-                    # It was this branch not having one.
-                    if active_block_count > 1:
-                        _ = Atomic.fetch_add(dst.unsafe_offset(fold), val)
+                    # A plain store is only correct when ONE block owns the
+                    # partition. Replicating blocks across a partition, which
+                    # is what fills the machine, makes every block hold a
+                    # PARTIAL histogram, and partials must be summed.
+                    comptime det = deterministic_flush_for[
+                        TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
+                    ]()
+
+                    @parameter
+                    if det:
+                        if active_block_count > 1:
+                            # `NUMERIC_IDENTICAL`. Partials sum as Int32
+                            # through an integer atomic, which is
+                            # associative, so the histogram does not depend
+                            # on which block lands first. That is the
+                            # property CatBoost's float atomic gives up.
+                            var q = Int32(val * fixed_scale)
+                            _ = Atomic.fetch_add(
+                                acc_i32.unsafe_offset(dst_base + fold), q
+                            )
+                        else:
+                            dst.unsafe_store(fold, val)
                     else:
-                        dst.unsafe_store(fold, val)
+                        # `atomicAdd(dst + fold, val)`, theirs verbatim.
+                        #
+                        # THIS BRANCH USED TO BE A PLAIN STORE. The condition
+                        # was written `if det and active_block_count > 1`, so
+                        # with `det` false and the block replicated it fell
+                        # through to `dst[fold] = val` and left ONE block's
+                        # partial histogram standing while every other
+                        # block's was overwritten. It was a store where
+                        # CatBoost has an atomic, which is not a deviation,
+                        # it is a wrong answer.
+                        #
+                        # This is what held `deterministic_flush_for` at a
+                        # hardcoded `True`: with the fixed-point path forced
+                        # on, `det` was never false and the store was never
+                        # taken, so flipping the row to the mode's answer was
+                        # reported as "the float atomic breaks the mixed
+                        # tree" -- 16 non-empty leaves at depth 4 dropping to
+                        # 4. It was not the atomic. It was this branch not
+                        # having one.
+                        if active_block_count > 1:
+                            _ = Atomic.fetch_add(
+                                dst.unsafe_offset(fold), val
+                            )
+                        else:
+                            dst.unsafe_store(fold, val)
 
 
-def one_byte_hist_gather_kernel[bits: Int](
+def one_byte_hist_gather_kernel[bits: Int, smem_mode: Int](
     # `TFeatureInBlock*`, flattened to four parallel arrays so the kernel
     # takes plain pointers.
     feature_folds: MutPointer[UInt32, MutAnyOrigin],
@@ -736,6 +863,10 @@ def one_byte_hist_gather_kernel[bits: Int](
     var stat_count = Int(stat_count_in)
     var tid = Int(thread_idx.x)
 
+    comptime BLOCK = one_byte_block_size[smem_mode]()
+    comptime SLOTS = one_byte_smem_slots[smem_mode]()
+    comptime DT = one_byte_acc_dtype[smem_mode]()
+
     var part_id = Int(part_ids.unsafe_load(Int(block_idx.y)))
     var p_offset = Int(part_offset.unsafe_load(part_id))
     var p_size = Int(part_size.unsafe_load(part_id))
@@ -759,7 +890,7 @@ def one_byte_hist_gather_kernel[bits: Int](
     # launch, no dependence on how unbalanced the level is.
     var local_block_idx = Int(block_idx.x) % max_blocks_per_part
     var min_docs_per_block = LANE_WIDTH * UNROLL * LOAD_SIZE * (
-        ONE_BYTE_BLOCK_SIZE // LANE_WIDTH
+        BLOCK // LANE_WIDTH
     )
     var active_block_count = min(
         (p_size + min_docs_per_block - 1) // min_docs_per_block,
@@ -775,16 +906,16 @@ def one_byte_hist_gather_kernel[bits: Int](
     #     __syncthreads();
     #     Histogram = buff + SliceOffset();
     var smem = stack_allocation[
-        ONE_BYTE_HIST_SIZE,
-        Scalar[DType.float32],
+        SLOTS,
+        Scalar[DT],
         address_space = AddressSpace.SHARED,
     ]()
     var z = tid
-    while z < ONE_BYTE_HIST_SIZE:
-        smem[z] = Float32(0.0)
-        z += ONE_BYTE_BLOCK_SIZE
+    while z < SLOTS:
+        smem[z] = Scalar[DT](0)
+        z += BLOCK
     barrier()
-    var slice_base = one_byte_slice_offset[bits](tid)
+    var slice_base = one_byte_slice_offset[bits, smem_mode](tid)
 
     # --- AlignMemoryAccess (gather), ported
     # (`compute_hist_loop_two_stats.cuh:110`). Same peel as the direct
@@ -808,6 +939,7 @@ def one_byte_hist_gather_kernel[bits: Int](
     while pe < ALIGN_SIZE:
         var hb = UInt32(0)
         var hs = Float32(0.0)
+        var hq = Int32(0)
         if local_block_idx == 0 and pe < head_len:
             # `Ldg(indices, idx)`, `Ldg(cindex, loadIdx)`, `Ldg(stats, idx)`
             # (`compute_hist_loop_one_stat.cuh:130-132`). All three streams
@@ -816,10 +948,17 @@ def one_byte_hist_gather_kernel[bits: Int](
             var hrow = Int(ldg(indices + (p_offset + pe)))
             hb = ldg(cindex_p + hrow)
             hs = ldg(stats_p + (p_offset + pe))
-        add_one_byte_point[bits](hb, hs, tid, slice_base, smem)
+
+            @parameter
+            if DT == DType.int32:
+                hq = hist2_quantize(
+                    hs, fixed_scale, hist2_dither(p_offset + pe)
+                )
+        add_one_byte_point[bits, DT](hb, hs, hq, tid, slice_base, smem)
 
         var tb = UInt32(0)
         var ts = Float32(0.0)
+        var tq = Int32(0)
         if local_block_idx == 0 and pe < tail_len:
             # `Ldg(indices, tailOffset + idx)`, `Ldg(cindex, loadIdx)`,
             # `Ldg(stats, tailOffset + idx)`
@@ -827,13 +966,19 @@ def one_byte_hist_gather_kernel[bits: Int](
             var trow = Int(ldg(indices + (tail_start + pe)))
             tb = ldg(cindex_p + trow)
             ts = ldg(stats_p + (tail_start + pe))
-        add_one_byte_point[bits](tb, ts, tid, slice_base, smem)
-        pe += ONE_BYTE_BLOCK_SIZE
+
+            @parameter
+            if DT == DType.int32:
+                tq = hist2_quantize(
+                    ts, fixed_scale, hist2_dither(tail_start + pe)
+                )
+        add_one_byte_point[bits, DT](tb, ts, tq, tid, slice_base, smem)
+        pe += BLOCK
 
     var aligned_offset = p_offset + head_len
     var aligned_size = body_size - tail_len
 
-    var warps_per_block = ONE_BYTE_BLOCK_SIZE // LANE_WIDTH
+    var warps_per_block = BLOCK // LANE_WIDTH
     var global_warp_id = local_block_idx * warps_per_block + (tid // LANE_WIDTH)
     var entries_per_warp = LANE_WIDTH * UNROLL * LOAD_SIZE
     var stripe_size = entries_per_warp * warps_per_block * active_block_count
@@ -877,6 +1022,10 @@ def one_byte_hist_gather_kernel[bits: Int](
 
     var i_ptr = idx_p + base
     var s_ptr = stats_p + base
+    # The dither key for the Int32 arm: the storage POSITION, not the
+    # gathered document id, exactly as `hist_2_one_byte_base.mojo`'s gather
+    # arm keys it.
+    var pos_base = base
 
     for it in range(max_iters):
         var active = it < iter_count
@@ -884,6 +1033,7 @@ def one_byte_hist_gather_kernel[bits: Int](
         # that order because it is what keeps the loads in flight.
         var local_bins = InlineArray[UInt32, POINTS_PER_ITER](fill=0)
         var local_stats = InlineArray[Float32, POINTS_PER_ITER](fill=0)
+        var local_q = InlineArray[Int32, POINTS_PER_ITER](fill=0)
 
         # Their gather batch (`compute_hist_loop_two_stats.cuh:410`):
         #
@@ -927,21 +1077,33 @@ def one_byte_hist_gather_kernel[bits: Int](
                         cindex_p + Int(vi[e])
                     )
                     local_stats[k * LOAD_SIZE + e] = vs[e]
+
+                    @parameter
+                    if DT == DType.int32:
+                        var u = hist2_dither(
+                            pos_base + LANE_WIDTH * LOAD_SIZE * k + e
+                        )
+                        local_q[k * LOAD_SIZE + e] = hist2_quantize(
+                            vs[e], fixed_scale, u
+                        )
             else:
                 @parameter
                 for e in range(LOAD_SIZE):
                     local_bins[k * LOAD_SIZE + e] = UInt32(0)
                     local_stats[k * LOAD_SIZE + e] = Float32(0.0)
+                    local_q[k * LOAD_SIZE + e] = Int32(0)
 
         # `hist.AddPoints<loadSize * N>(...)`
         @parameter
         for k in range(POINTS_PER_ITER):
-            add_one_byte_point[bits](
-                local_bins[k], local_stats[k], tid, slice_base, smem
+            add_one_byte_point[bits, DT](
+                local_bins[k], local_stats[k], local_q[k], tid, slice_base,
+                smem,
             )
 
         i_ptr += stripe_size
         s_ptr += stripe_size
+        pos_base += stripe_size
 
     # `TPointHistOneByte::Reduce` (`hist_one_byte.cu:177-230`), copied. TWO
     # stages, and they are not interchangeable with one strided fold.
@@ -963,13 +1125,13 @@ def one_byte_hist_gather_kernel[bits: Int](
     barrier()
     var start = tid
     while start < WARP_HIST_SIZE:
-        var acc = Float32(0.0)
+        var acc = Scalar[DT](0)
         var j = start
-        while j < ONE_BYTE_HIST_SIZE:
+        while j < SLOTS:
             acc += smem[j]
             j += WARP_HIST_SIZE
         smem[WARP_HIST_SIZE + start] = acc
-        start += ONE_BYTE_BLOCK_SIZE
+        start += BLOCK
     barrier()
 
     # Stage 2: UN-SCRAMBLE. The slot for feature `f`, bin `b` is
@@ -979,7 +1141,7 @@ def one_byte_hist_gather_kernel[bits: Int](
     comptime warp_hist_block_count = 8 >> inner_bits
     comptime sub_block = 4 * (1 << inner_bits)
     var fold_r = tid
-    var sums = InlineArray[Float32, 4](fill=Float32(0.0))
+    var sums = InlineArray[Scalar[DT], 4](fill=Scalar[DT](0))
     if fold_r < hist_size_bins:
         var lower_bits_offset = (fold_r & 31) << 5
         var higher_bin = (fold_r >> 5) & ((1 << inner_bits) - 1)
@@ -1012,77 +1174,95 @@ def one_byte_hist_gather_kernel[bits: Int](
             var group_size = Int(feature_group_size.unsafe_load(feature_offset + fid))
             var device_offset = group_offset * stat_count * leaf_count
             var entries_per_leaf = stat_count * group_size
-            var dst = (
-                bin_sums
-                + device_offset
-                # `blockIdx.y`, DENSE, not `partIds[blockIdx.y]`. See the
-                # note above `entries_per_leaf`.
+            # `blockIdx.y`, DENSE, not `partIds[blockIdx.y]`. See the
+            # note above `entries_per_leaf`.
+            var dst_base = (
+                device_offset
                 + Int(block_idx.y) * entries_per_leaf
                 + Int(block_idx.z) * group_size
                 + Int(feature_fold_offset.unsafe_load(feature_offset + fid))
             )
+            var dst = bin_sums + dst_base
 
-            var val = smem[fid * hist_size_bins + fold]
+            var cell = smem[fid * hist_size_bins + fold]
 
-            if abs(val) > Float32(1e-20):
-                # THE FLUSH. `AddToGlobalMemory`, their multi-block branch
-                # (`hist_one_byte.cu:253-259`):
-                #
-                #     if (blockCount > 1) { atomicAdd(dst + fold, val); }
-                #     else               { dst[fold] = val; }
-                #
-                # A plain store is only correct when ONE block owns the
-                # partition. Replicating blocks across a partition, which is
-                # what fills the machine, makes every block hold a PARTIAL
-                # histogram, and partials must be summed.
-                comptime det = deterministic_flush_for[
-                    TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
-                ]()
-
-                @parameter
-                if det:
+            @parameter
+            if DT == DType.int32:
+                # The shared-Int32 arm: the cell is already fixed point at
+                # `fixed_scale`, and the flush follows
+                # `hist2_add_to_global_memory`'s DEVIATION BLOCK exactly --
+                # the multi-block branch adds the Int32 cell DIRECTLY into
+                # the accumulator (exact, no dequantize/requantize round
+                # trip), the single-block branch stores the dequantized
+                # value, and `cell != 0` is their never-write-a-zero-cell
+                # guard in the integer domain. The launch helper runs
+                # `fixed_to_float_kernel` on every one-byte block whenever
+                # this arm is compiled, so the accumulator drains under
+                # FAST exactly as it does under IDENTICAL.
+                var q = rebind[Scalar[DType.int32]](cell)
+                if q != Int32(0):
                     if active_block_count > 1:
-                        # `NUMERIC_IDENTICAL`. Partials sum as Int32 through
-                        # an integer atomic, which is associative, so the
-                        # histogram does not depend on which block lands
-                        # first. That is the property CatBoost's float atomic
-                        # gives up.
-                        var q = Int32(val * fixed_scale)
                         _ = Atomic.fetch_add(
-                            acc_i32.unsafe_offset(
-                                device_offset
-                                + Int(block_idx.y) * entries_per_leaf
-                                + Int(block_idx.z) * group_size
-                                + Int(
-                                    feature_fold_offset.unsafe_load(
-                                        feature_offset + fid
-                                    )
-                                )
-                                + fold
-                            ),
-                            q,
+                            acc_i32.unsafe_offset(dst_base + fold), q
                         )
                     else:
-                        dst.unsafe_store(fold, val)
-                else:
-                    # `atomicAdd(dst + fold, val)`, theirs verbatim.
+                        dst.unsafe_store(
+                            fold, Float32(Int(q)) / fixed_scale
+                        )
+            else:
+                var val = rebind[Scalar[DType.float32]](cell)
+                if abs(val) > Float32(1e-20):
+                    # THE FLUSH. `AddToGlobalMemory`, their multi-block branch
+                    # (`hist_one_byte.cu:253-259`):
                     #
-                    # THIS BRANCH USED TO BE A PLAIN STORE. The condition was
-                    # written `if det and active_block_count > 1`, so with
-                    # `det` false and the block replicated it fell through to
-                    # `dst[fold] = val` and left ONE block's partial
-                    # histogram standing while every other block's was
-                    # overwritten. It was a store where CatBoost has an
-                    # atomic, which is not a deviation, it is a wrong answer.
+                    #     if (blockCount > 1) { atomicAdd(dst + fold, val); }
+                    #     else               { dst[fold] = val; }
                     #
-                    # This is what held `deterministic_flush_for` at a
-                    # hardcoded `True`: with the fixed-point path forced on,
-                    # `det` was never false and the store was never taken, so
-                    # flipping the row to the mode's answer was reported as
-                    # "the float atomic breaks the mixed tree" -- 16 non-empty
-                    # leaves at depth 4 dropping to 4. It was not the atomic.
-                    # It was this branch not having one.
-                    if active_block_count > 1:
-                        _ = Atomic.fetch_add(dst.unsafe_offset(fold), val)
+                    # A plain store is only correct when ONE block owns the
+                    # partition. Replicating blocks across a partition, which
+                    # is what fills the machine, makes every block hold a
+                    # PARTIAL histogram, and partials must be summed.
+                    comptime det = deterministic_flush_for[
+                        TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
+                    ]()
+
+                    @parameter
+                    if det:
+                        if active_block_count > 1:
+                            # `NUMERIC_IDENTICAL`. Partials sum as Int32
+                            # through an integer atomic, which is
+                            # associative, so the histogram does not depend
+                            # on which block lands first. That is the
+                            # property CatBoost's float atomic gives up.
+                            var q = Int32(val * fixed_scale)
+                            _ = Atomic.fetch_add(
+                                acc_i32.unsafe_offset(dst_base + fold), q
+                            )
+                        else:
+                            dst.unsafe_store(fold, val)
                     else:
-                        dst.unsafe_store(fold, val)
+                        # `atomicAdd(dst + fold, val)`, theirs verbatim.
+                        #
+                        # THIS BRANCH USED TO BE A PLAIN STORE. The condition
+                        # was written `if det and active_block_count > 1`, so
+                        # with `det` false and the block replicated it fell
+                        # through to `dst[fold] = val` and left ONE block's
+                        # partial histogram standing while every other
+                        # block's was overwritten. It was a store where
+                        # CatBoost has an atomic, which is not a deviation,
+                        # it is a wrong answer.
+                        #
+                        # This is what held `deterministic_flush_for` at a
+                        # hardcoded `True`: with the fixed-point path forced
+                        # on, `det` was never false and the store was never
+                        # taken, so flipping the row to the mode's answer was
+                        # reported as "the float atomic breaks the mixed
+                        # tree" -- 16 non-empty leaves at depth 4 dropping to
+                        # 4. It was not the atomic. It was this branch not
+                        # having one.
+                        if active_block_count > 1:
+                            _ = Atomic.fetch_add(
+                                dst.unsafe_offset(fold), val
+                            )
+                        else:
+                            dst.unsafe_store(fold, val)
