@@ -84,12 +84,12 @@ given the d-sweep.
    parallelism signature that explained every other gap this week.
 2. **PCA's outright win**: fuse mean-subtract into the split-K Gram read and
    drop the restore pass (~100 ms of the remaining 166).
-3. **Target-keying debt**: `launch_config_generator`'s M4 constants, the
-   split-K dispatch predicate/chunk count, and the k-NN AUTO decision are
-   Apple-fed; on NVIDIA/AMD they must come from the kernel matrix's target
-   column, and non-Apple targets should hand the Gram shape back to MAX's
-   own split-K. Correctness is unaffected (scheduling only); NVIDIA/AMD
-   remain supported-not-validated.
+3. **Target-keying debt: PAID 2026-08-19** (LANE_target-keying).
+   `launch_config_generator`, the split-K dispatch/chunk count and the k-NN
+   AUTO decision read `mojo_only/hardware_matrix.mojo`'s target column;
+   non-Apple targets hand the Gram shape back to MAX's matmul; Apple
+   bit-identical (all pinned checks unchanged); nvidia/amd columns remain
+   supported-not-validated.
 4. **Upstream report to Modular**: two confirmed silent-wrong bugs
    (`transpose_b` n==1 non-write; col-major views) + the Gram-shape gap,
    with the 345 -> 49 ms reproducer.
