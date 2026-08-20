@@ -45,7 +45,13 @@ jobs:
       - name: Install pixi
         uses: prefix-dev/setup-pixi@14c8aabd75893f83f4ab30c03e7cf853c8208961 # v0.8.10
         with:
-          pixi-version: v0.49.0
+          # MUST MATCH OR EXCEED THE PIXI THAT WROTE pixi.lock. The lock file
+          # is version 7 and pixi v0.49.0 reads up to 6, so the pinned
+          # version from mojotrees failed with "lock file version is 7". The
+          # local toolchain is 0.76.2; pinning to it means CI resolves the
+          # same environment every recorded result was produced under, which
+          # is the whole reason the lock file is committed.
+          pixi-version: v0.76.2
           cache: false
 
       - name: Build the probe
