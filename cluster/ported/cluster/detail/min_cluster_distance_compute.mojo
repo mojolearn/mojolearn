@@ -49,7 +49,7 @@ what must fit the index type.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from core.gemm import GEMM_MBLK, GEMM_THREADS, gemm_nt
+from core.gemm import gemm_nt
 from core.row_norms import NORM_TPB, row_norm_kernel
 from cluster.ported.cluster.detail.kmeans_common import (
     centroid_norms_take_sqrt,
@@ -60,7 +60,18 @@ from cluster.ported.cluster.kmeans_params import (
     get_data_batch_size,
 )
 from cluster.ported.distance.fused_distance_nn.simt_kernel import (
+    FUSED_NORMAL_KBLK,
+    FUSED_NORMAL_TC,
+    FUSED_NORMAL_TR,
+    FUSED_SKINNY_KBLK,
+    FUSED_SKINNY_TC,
+    FUSED_SKINNY_TR,
     fused_distance_nn_kernel,
+    fused_is_skinny,
+    fused_veclen_for,
+)
+from neighbors.ported.distance.detail.pairwise_distance_base import (
+    launch_config_generator,
 )
 from cluster.ported.distance.unfused_distance_nn import (
     REDUCE_MIN_TPB,
@@ -87,6 +98,67 @@ def compute_centroid_norms(
         Int32(1 if centroid_norms_take_sqrt(metric) else 0),
         grid_dim=(n_clusters, 1, 1),
         block_dim=(NORM_TPB, 1, 1),
+    )
+
+
+def _launch_fused[
+    veclen: Int, kblk: Int, tr: Int, tc: Int
+](
+    ctx: DeviceContext,
+    mut out_key: DeviceBuffer[DType.uint32],
+    mut out_value: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut centroids: DeviceBuffer[DType.float32],
+    mut x_norm: DeviceBuffer[DType.float32],
+    mut centroid_norm: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    n_clusters: Int,
+    n_features: Int,
+    is_sqrt: Int32,
+) raises:
+    """One policy instantiation of the fused kernel, launched with THEIR grid
+    computation: `launchConfigGenerator<P>(m, n, shmemSize, kernel)` at
+    `fused_l2_nn.cuh:135-138`, ported (M4 inputs) in
+    `neighbors/ported/distance/detail/pairwise_distance_base.mojo`.
+
+    `grid.x` is PINNED to 1: the cross-block merge (`updateReducedVal`'s
+    mutex) is the `replaced` row in `PORTED_MAP.tsv`, so a `grid.x > 1`
+    launch would race the per-row writes. Their generator returns
+    `grid.x == 1` anyway whenever the row tiles alone fill the device, which
+    is every k-means shape this repo ships; the pin only bites at small `m`,
+    where their kernel would split the column axis and ours runs fewer
+    blocks. `grid.y` is theirs, and the kernel grid-strides the row axis
+    exactly as `PairwiseDistances::run()` does, so `grid.y` is occupancy,
+    not coverage.
+
+    The smem argument is the kernel's ACTUAL single-buffered footprint
+    (`fused_smem_bytes`' terms, inlined comptime here), which is what their
+    call feeds the occupancy query -- theirs passes the double-buffered
+    `P::SmemSize` because that is what their kernel allocates.
+    """
+    comptime nthreads = tr * tc
+    comptime mblk = 4 * tr
+    comptime nblk = 4 * tc
+    comptime smem_stride = kblk + veclen
+    comptime smem_bytes = (mblk + nblk) * smem_stride * 4 + (mblk + nblk) * 4
+
+    var cfg = launch_config_generator(
+        n_samples, n_clusters, mblk, nblk, nthreads, smem_bytes
+    )
+    comptime kern = fused_distance_nn_kernel[veclen, kblk, tr, tc]
+    ctx.enqueue_function[kern](
+        out_key.unsafe_ptr(),
+        out_value.unsafe_ptr(),
+        x.unsafe_ptr(),
+        centroids.unsafe_ptr(),
+        x_norm.unsafe_ptr(),
+        centroid_norm.unsafe_ptr(),
+        Int32(n_samples),
+        Int32(n_clusters),
+        Int32(n_features),
+        is_sqrt,
+        grid_dim=(1, cfg[1], 1),
+        block_dim=(nthreads, 1, 1),
     )
 
 
@@ -131,22 +203,61 @@ def min_cluster_and_distance_compute(
     # the one that never writes the distance tile. See
     # `distance/fused_distance_nn/simt_kernel.mojo`.
     #
+    # The INSTANTIATION is their selection computation, not a constant:
+    # `fused_veclen_for` (the 16/8/1-byte alignment ladder of
+    # `fused_distance_nn-inl.cuh:107-110/158/210`, fed the real base
+    # addresses) times `fused_is_skinny` (`:105`, `k < 32` takes
+    # Policy4x4Skinny). `check_fused_policy_dispatch` pins both.
+    #
     # `dist_buf` is now unused on this path and is kept in the signature so
     # the unfused arm stays reachable for differential testing.
-    ctx.enqueue_function[fused_distance_nn_kernel](
-        out_key.unsafe_ptr(),
-        out_value.unsafe_ptr(),
-        x.unsafe_ptr(),
-        centroids.unsafe_ptr(),
-        x_norm.unsafe_ptr(),
-        centroid_norm.unsafe_ptr(),
-        Int32(n_samples),
-        Int32(n_clusters),
-        Int32(n_features),
-        is_sqrt,
-        grid_dim=(1, (n_samples + GEMM_MBLK - 1) // GEMM_MBLK, 1),
-        block_dim=(GEMM_THREADS, 1, 1),
+    var vl = fused_veclen_for(
+        n_features, Int(x.unsafe_ptr()), Int(centroids.unsafe_ptr())
     )
+    if fused_is_skinny(n_features):
+        if vl == 4:
+            _launch_fused[
+                4, FUSED_SKINNY_KBLK, FUSED_SKINNY_TR, FUSED_SKINNY_TC
+            ](
+                ctx, out_key, out_value, x, centroids, x_norm, centroid_norm,
+                n_samples, n_clusters, n_features, is_sqrt,
+            )
+        elif vl == 2:
+            _launch_fused[
+                2, FUSED_SKINNY_KBLK, FUSED_SKINNY_TR, FUSED_SKINNY_TC
+            ](
+                ctx, out_key, out_value, x, centroids, x_norm, centroid_norm,
+                n_samples, n_clusters, n_features, is_sqrt,
+            )
+        else:
+            _launch_fused[
+                1, FUSED_SKINNY_KBLK, FUSED_SKINNY_TR, FUSED_SKINNY_TC
+            ](
+                ctx, out_key, out_value, x, centroids, x_norm, centroid_norm,
+                n_samples, n_clusters, n_features, is_sqrt,
+            )
+    else:
+        if vl == 4:
+            _launch_fused[
+                4, FUSED_NORMAL_KBLK, FUSED_NORMAL_TR, FUSED_NORMAL_TC
+            ](
+                ctx, out_key, out_value, x, centroids, x_norm, centroid_norm,
+                n_samples, n_clusters, n_features, is_sqrt,
+            )
+        elif vl == 2:
+            _launch_fused[
+                2, FUSED_NORMAL_KBLK, FUSED_NORMAL_TR, FUSED_NORMAL_TC
+            ](
+                ctx, out_key, out_value, x, centroids, x_norm, centroid_norm,
+                n_samples, n_clusters, n_features, is_sqrt,
+            )
+        else:
+            _launch_fused[
+                1, FUSED_NORMAL_KBLK, FUSED_NORMAL_TR, FUSED_NORMAL_TC
+            ](
+                ctx, out_key, out_value, x, centroids, x_norm, centroid_norm,
+                n_samples, n_clusters, n_features, is_sqrt,
+            )
 
 
 def min_cluster_and_distance_compute_unfused(

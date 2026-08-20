@@ -802,6 +802,53 @@ guard admits it (`rbc_take_one_pass`), falling back to count + fill when it
 does not. Two walks over the dataset per RBC fit where this port previously
 did three.
 
+# Deviations added 2026-08-20 (fused L2-NN policy diff)
+
+## 42. The fused L2-NN kernel is SINGLE-buffered: Apple's 32 KB wall
+
+`Contractions_NT`'s smem budget is `P::SmemSize = 2 * SmemPage`
+(`raft/linalg/contractions.cuh:104`): TWO page pairs, written and read in
+alternation (`pageWr`/`pageRd`, `detail/contractions.cuh:157-186`), so
+`PairwiseDistances::run()`'s main loop needs ONE `__syncthreads()` per
+k-tile (`pairwise_distance_base.cuh:141-149`) and overlaps the next tile's
+global loads with the current tile's arithmetic. At `Policy4x4<float>` that
+is 36,864 bytes plus the norm rows, and Apple caps a threadgroup at 32,768,
+so `cluster/ported/distance/fused_distance_nn/simt_kernel.mojo` runs ONE
+page pair (18,432 B + 512 B at veclen 4) with TWO barriers per k-tile.
+
+Priced: the deviation costs overlap only when `k > Kblk`, i.e. above 32
+features on the normal policy. Every shipped k-means shape has `k <= Kblk`,
+where their main loop body executes zero times and the two structures are
+the same kernel. Everything else in the load machinery is theirs at the
+matching line: `ldgX`/`ldgY`'s `Veclen`-wide loads with zero-fill
+(`detail/contractions.cuh:189-259`), `sts`/`lds` vector smem traffic
+(`:262-299`), `srowid/scolid/accrowid/acccolid` thread partitions
+(`:96-102`), and the STRIDED row/column ownership (`accrowid + i *
+AccThRows`). The pre-rewrite kernel read scalars where their `ldg` reads
+`float4` and owned columns in blocked runs; both were transcription errors,
+not decisions, and are gone.
+
+The launcher (`min_cluster_distance_compute.mojo::_launch_fused`) feeds
+their `launchConfigGenerator` port the kernel's ACTUAL single-buffered
+footprint where theirs passes `P::SmemSize` (`fused_l2_nn.cuh:135-136`) --
+each call describes the kernel it launches. `grid.x` is pinned to 1 there;
+that is the PRE-existing `updateReducedVal` replacement (`PORTED_MAP.tsv`
+`replaced` row), not part of this entry.
+
+## 43. `sqrt` at the row write, not per accumulator cell
+
+`l2_exp_distance_op::epilog` takes the square root of every accumulator
+cell before the min reduce when `sqrt` is requested
+(`distance_ops/l2_exp.cuh:137-145`). The port takes it once per row at the
+final write. `sqrt` is monotone and injective on `[0, inf)` under IEEE
+round-to-nearest, so the argmin, the tie set (and therefore the key
+tie-break), and the written value `sqrt(min v) == min(sqrt v)` are all
+bit-identical; the cost drops from `AccRowsPerTh * AccColsPerTh` sqrts per
+thread per column tile to `AccRowsPerTh` per row. The rest of the epilog is
+theirs verbatim, including the self-neighbor round-off guard
+(`val * (val > 0) * !((val * val < 1e-6) * (xn == yn))`, `:127-135`), which
+the pre-rewrite kernel had dropped.
+
 ## Hazard: `linalg.matmul[transpose_b=True]` at `n == 1` does not write
 
 Not a deviation from an upstream, a defect in a vendor primitive we call, and

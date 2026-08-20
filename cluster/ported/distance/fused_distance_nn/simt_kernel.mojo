@@ -1,7 +1,9 @@
 """Distance and argmin FUSED, so the distance matrix is never written.
 
 PORT OF `cuvs/src/distance/detail/fused_distance_nn/simt_kernel.cuh` at cuVS
-`94c2819`, built on their `linalg/contractions.cuh` policy. Partial.
+`94c2819`, built on their `linalg/contractions.cuh` policy and the
+`PairwiseDistances` loop structure of
+`raft/distance/detail/pairwise_distance_base.cuh`. Partial.
 Do not improve.
 
 WHY THIS EXISTS AND THE UNFUSED PATH WAS NOT ENOUGH
@@ -24,14 +26,55 @@ fused arm is what runs on the hardware most people have, and its CUTLASS
 version is unportable but THIS one is not: `simt_kernel.cuh` is the SIMT
 path, plain CUDA cores, no tensor-core instructions anywhere.
 
-THE CROSS-THREAD MERGE IS NOW THEIRS. THE CROSS-BLOCK ONE STILL IS NOT
+THE POLICY IS A PARAMETER AND THE SELECTION IS THEIRS
+------------------------------------------------------
+The kernel is parameterized on `[veclen, kblk, tr, tc]`, which is
+`KernelPolicy<float, _veclen, _kblk, 4, 4, _tr, _tc>`
+(`raft/linalg/contractions.cuh:63-107`; `AccRowsPerTh = AccColsPerTh = 4` in
+both policies their float dispatch instantiates, so those two are fixed
+here). The host picks the instantiation with THEIR selection computation,
+transcribed in `fused_veclen_for` and `fused_is_skinny` below from
+`cuvs/src/distance/fused_distance_nn-inl.cuh:102-233`:
+
+- veclen 4 when `4k % 16 == 0` and both base pointers are 16-byte aligned
+  (`:110`), else 2 on the 8-byte test (`:158`), else 1 (`:210`). The
+  divisibility test is what makes a `veclen`-wide load never straddle `k`,
+  so the vector arm needs no per-load tail handling and the scalar arm IS
+  the tail handling.
+- `Policy4x4Skinny` (Kblk=8, 8x8 threads, `contractions.cuh:183-196`) when
+  `k < 32` (`is_skinny`, `-inl.cuh:105`), `Policy4x4` (Kblk=32, 16x16
+  threads, `contractions.cuh:160-166`) otherwise.
+
+An earlier version of this file was a single instantiation that read one
+float at a time where their `ldg` reads `Veclen` (`raft::TxN_t`, used by
+`ldgX`/`ldgY` at `raft/linalg/detail/contractions.cuh:189-259`), and owned
+rows/columns in BLOCKED runs (`tr * AccRowsPerTh + i`) where theirs are
+STRIDED (`accrowid + i * P::AccThRows`, `acccolid + j * P::AccThCols`,
+`contractions.cuh:100-102` and the lds/epilog indexing everywhere). Both of
+those were port errors, not decisions, and both are now theirs.
+
+THE LOOP STRUCTURE IS `PairwiseDistances::run()`, SINGLE-BUFFERED
+------------------------------------------------------------------
+The m axis and the n axis both grid-stride exactly as `run()` does
+(`pairwise_distance_base.cuh:131-186`), the norms are staged through shared
+memory (`load_norms`, `:243-274`), and the epilogue is
+`l2_exp_distance_op::epilog` (`distance_ops/l2_exp.cuh:117-146`) including
+its self-neighbor round-off guard. What is NOT theirs is the buffering:
+their `P::SmemSize` is TWO pages (`2 * SmemPage`, `contractions.cuh:104`,
+36,864 bytes at Policy4x4<float> plus the norm rows) and Apple caps a
+threadgroup at 32,768, so this kernel runs one page with a second barrier
+per k-tile where their double buffer needs one. PORTING.md 42. At the
+shipped k-means shapes `k <= Kblk`, so their main loop body runs zero times
+and nothing is lost; the deviation is priced for large k in the entry.
+
+THE CROSS-THREAD MERGE IS THEIRS. THE CROSS-BLOCK ONE STILL IS NOT
 -----------------------------------------------------------------------
 `rowEpilog_lambda` does two separate things and only the second one is
 unportable. Keeping them apart is the whole content of this section.
 
 1. **The intra-warp merge, `simt_kernel.cuh:119-130`.** The `P::AccThCols`
    threads that share a row hold partial `(value, key)` minima, and they are
-   combined with `raft::shfl` on the key AND on the value. **That is now
+   combined with `raft::shfl` on the key AND on the value. **That is
    ported.** It used to be a shared-memory transpose plus a serial 16-way
    scan, justified by a claim that Mojo has no lane primitives. **The claim
    was false** (`PORTING.md` 2): `std.gpu.primitives.warp` has the shuffles,
@@ -66,31 +109,40 @@ unportable. Keeping them apart is the whole content of this section.
    (This paragraph used to attribute the tie-break to
    `MinAndDistanceReduceOpImpl` at `helper_structs.cuh:39-62`. That struct is
    at `:47-97` and it is VALUE-ONLY too -- `if (other.value < out->value)`,
-   `:52` and `:59` -- so it was never the source of a key tie-break.) That was already true of the shared-memory
-   merge this replaced, and it is load-bearing rather than tidiness
-   (`PORTING.md` 14).
+   `:52` and `:59` -- so it was never the source of a key tie-break.) That
+   is load-bearing rather than tidiness (`PORTING.md` 14).
 
-   Two things this relies on, both true here: `GEMM_ACC_TH_COLS` is a power of
-   two no larger than the lane width, and `tc = tid % GEMM_ACC_TH_COLS`, so
-   the threads sharing a row are CONTIGUOUS and aligned and never straddle a
-   warp boundary. Change either and the shuffle silently reduces the wrong
-   set.
+   Two things this relies on, both true for BOTH policies: `tc`
+   (`P::AccThCols`) is a power of two no larger than the lane width, and
+   `acccolid = tid % tc`, so the threads sharing a row are CONTIGUOUS and
+   aligned and never straddle a warp boundary. Change either and the
+   shuffle silently reduces the wrong set. The `comptime assert` in the
+   kernel pins the first.
 
 2. **The cross-block merge, `updateReducedVal` (`simt_kernel.cuh:25-47`).**
    Still replaced, and for a reason that has nothing to do with Mojo. It
    serializes per-row global updates with a mutex array and `atomicCAS`;
    their own comment calls it a workaround for pre-Volta hang behavior and
-   says a 64-bit `atomicCAS` would eliminate it. We make the column axis a
-   grid-stride loop INSIDE the block and launch one block per row tile, so
-   every row is owned by exactly one block and there is nothing to serialize.
-   Their kernel grid-strides both axes and therefore needs one. This is the
-   `replaced` row in `PORTED_MAP.tsv`, and it costs parallelism when `n` is
-   large and `m` is small, which is the opposite of every shape in this
-   repository.
+   says a 64-bit `atomicCAS` would eliminate it. The launcher instead PINS
+   `grid.x = 1` -- the rest of the grid shape is their
+   `launchConfigGenerator`, see `min_cluster_distance_compute.mojo` -- so
+   every row is owned by exactly one block and there is nothing to
+   serialize. Their kernel grid-strides both axes and therefore needs the
+   mutex. This is the `replaced` row in `PORTED_MAP.tsv`, and it costs
+   parallelism when `n` is large and `m` is small, which is the opposite of
+   every shape in this repository.
 
    What survives from `updateReducedVal` is its LANE STRUCTURE: the lanes it
    lets write are `lid == j * P::AccThCols`, the first lane of each group,
-   each writing its own `P::AccRowsPerTh` rows. That is `tc == 0` below.
+   each writing its own `P::AccRowsPerTh` rows. That is `acccolid == 0`
+   below.
+
+One more deliberate difference: when `sqrt` is requested, their epilog takes
+it per accumulator CELL before the min reduce (`l2_exp.cuh:137-145`); this
+kernel takes it once per ROW at the final write. `sqrt` is monotone and
+injective on `[0, inf)`, so the argmin, the tie set, and the written value
+are all bit-identical, and `AccRowsPerTh * AccColsPerTh` sqrts per thread
+per tile become `AccRowsPerTh` per row. PORTING.md 43.
 """
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
@@ -100,25 +152,77 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
-from core.gemm import (
-    GEMM_ACC_COLS_PER_TH,
-    GEMM_ACC_ROWS_PER_TH,
-    GEMM_ACC_TH_COLS,
-    GEMM_ACC_TH_ROWS,
-    GEMM_KBLK,
-    GEMM_MBLK,
-    GEMM_NBLK,
-    GEMM_SMEM_PAGE_X,
-    GEMM_SMEM_PAGE_Y,
-    GEMM_SMEM_STRIDE,
-    GEMM_THREADS,
-)
-
 
 comptime FUSED_MAX = Float32(3.4028234663852886e38)
 
+#: `get_clamp_precision<float>()`, `distance_ops/l2_exp.cuh:36`: the
+#: round-off tolerance of the self-neighbor guard in the epilog.
+comptime FUSED_CLAMP_PRECISION = Float32(1.0e-6)
 
-def fused_distance_nn_kernel(
+# `Policy4x4<float, _veclen>`: KernelPolicy<float, v, 32, 4, 4, 16, 16>
+# (`raft/linalg/contractions.cuh:160-166`).
+comptime FUSED_NORMAL_KBLK = 32
+comptime FUSED_NORMAL_TR = 16
+comptime FUSED_NORMAL_TC = 16
+
+# `Policy4x4Skinny<float, _veclen>`: KernelPolicy<float, v, 8, 4, 4, 8, 8>
+# (`raft/linalg/contractions.cuh:183-196`), "faster for fusedL2NN on skinny
+# matrices, i.e., matrices with a small k dimension" (`:177-181`).
+comptime FUSED_SKINNY_KBLK = 8
+comptime FUSED_SKINNY_TR = 8
+comptime FUSED_SKINNY_TC = 8
+
+
+def fused_is_skinny(k: Int) -> Bool:
+    """`bool is_skinny = k < 32;`, `fused_distance_nn-inl.cuh:105`, with
+    their own comment: at k below 32 the Policy4x4 tiles waste work on
+    padding, so a Kblk=8 policy with 8x8 threads is used instead."""
+    return k < 32
+
+
+def fused_veclen_for(k: Int, x_addr: Int, y_addr: Int) -> Int:
+    """Their veclen selection, `fused_distance_nn-inl.cuh:107-110` (16-byte
+    arm), `:158` (8-byte arm), `:210` (scalar arm), for float32.
+
+        size_t bytes = sizeof(DataT) * k;
+        if (16 % sizeof(DataT) == 0 && bytes % 16 == 0 && px % 16 == 0
+                                                       && py % 16 == 0) -> 4
+        else if (8 % ... && bytes % 8 == 0 && px % 8 == 0 && py % 8 == 0) -> 2
+        else -> 1
+
+    `x_addr`/`y_addr` are the BYTE addresses of the two base pointers, their
+    `reinterpret_cast<uintptr_t>`. The `bytes % 16` term is the load-safety
+    term: with `k` a multiple of the veclen, a vector load that starts in
+    bounds ends in bounds, which is why the kernel's `ldg` needs no tail arm.
+    The launcher and the checks call THIS function, so the arm the bench
+    takes is the arm the check pins.
+    """
+    var bytes = 4 * k
+    if bytes % 16 == 0 and x_addr % 16 == 0 and y_addr % 16 == 0:
+        return 4
+    if bytes % 8 == 0 and x_addr % 8 == 0 and y_addr % 8 == 0:
+        return 2
+    return 1
+
+
+def fused_smem_bytes(skinny: Bool, veclen: Int) -> Int:
+    """The kernel's ACTUAL threadgroup footprint: one X page, one Y page
+    (`SmemStride * (Mblk + Nblk)` floats, single-buffered -- PORTING.md 42),
+    plus the two norm rows (`(Mblk + Nblk)` floats, their
+    `shared_mem_size()` addend at `l2_exp.cuh:98-101`). Fed to the occupancy
+    term of `launch_config_generator`, which is what their
+    `launchConfigGenerator<P>(m, n, shmemSize, kernel)` call does with
+    `shmemSize` at `fused_l2_nn.cuh:135-136`."""
+    var kblk = FUSED_SKINNY_KBLK if skinny else FUSED_NORMAL_KBLK
+    var mblk = 4 * (FUSED_SKINNY_TR if skinny else FUSED_NORMAL_TR)
+    var nblk = 4 * (FUSED_SKINNY_TC if skinny else FUSED_NORMAL_TC)
+    var stride = kblk + veclen
+    return (mblk + nblk) * stride * 4 + (mblk + nblk) * 4
+
+
+def fused_distance_nn_kernel[
+    veclen: Int, kblk: Int, tr: Int, tc: Int
+](
     out_key: MutPointer[UInt32, MutAnyOrigin],
     out_value: MutPointer[Float32, MutAnyOrigin],
     x: MutPointer[Float32, MutAnyOrigin],
@@ -130,204 +234,266 @@ def fused_distance_nn_kernel(
     k_in: Int32,
     is_sqrt_in: Int32,
 ):
-    """`fusedDistanceNNkernel` with the L2-expanded op and a min reduce.
+    """`fusedDistanceNNkernel` with the L2-expanded op and a min reduce, at
+    `KernelPolicy<float, veclen, kblk, 4, 4, tr, tc>`.
 
-    One block per row tile, grid-striding the column axis internally.
-    Launch `grid_dim = (1, ceil(m / GEMM_MBLK), 1)`,
-    `block_dim = (GEMM_THREADS, 1, 1)`.
-
-    The row epilogue is a warp shuffle, so `block_dim` is not free: it must be
-    `GEMM_THREADS`, and `GEMM_ACC_TH_COLS` must stay a power of two no larger
-    than the hardware lane width. See the module docstring, part 1.
+    Launch `block_dim = (tr * tc, 1, 1)` and a grid from
+    `launch_config_generator` with `grid_dim.x` PINNED to 1 (module
+    docstring, part 2): both axes grid-stride as `PairwiseDistances::run()`
+    does, but a `grid_dim.x > 1` launch would race the per-row writes that
+    replaced their mutex. `k % veclen == 0` is the caller's contract, from
+    `fused_veclen_for`.
     """
+    # Their Policy enums, `raft/linalg/contractions.cuh:63-107`.
+    comptime rpt = 4  # AccRowsPerTh, both float policies
+    comptime cpt = 4  # AccColsPerTh, both float policies
+    comptime nthreads = tr * tc
+    comptime mblk = rpt * tr
+    comptime nblk = cpt * tc
+    comptime ldg_th_row = kblk // veclen
+    comptime ldg_per_th_x = (mblk * ldg_th_row) // nthreads
+    comptime ldg_rows_x = mblk // ldg_per_th_x
+    comptime ldg_per_th_y = (nblk * ldg_th_row) // nthreads
+    comptime ldg_rows_y = nblk // ldg_per_th_y
+    comptime smem_stride = kblk + veclen  # padding, not a rounding
+    comptime page_x = smem_stride * mblk
+    comptime page_y = smem_stride * nblk
+
+    comptime assert kblk % veclen == 0, "Kblk must be a Veclen multiple"
+    comptime assert (mblk * ldg_th_row) % nthreads == 0, "LdgPerThX frac"
+    comptime assert (nblk * ldg_th_row) % nthreads == 0, "LdgPerThY frac"
+    comptime assert (tc & (tc - 1)) == 0 and tc <= 32, (
+        "the rowEpilog shuffle needs AccThCols to be a power of two no"
+        " larger than the lane width"
+    )
+
     var m = Int(m_in)
     var n = Int(n_in)
     var k = Int(k_in)
-
     var tid = Int(thread_idx.x)
-    var tr = tid // GEMM_ACC_TH_COLS
-    var tc = tid % GEMM_ACC_TH_COLS
-    var m0 = Int(block_idx.y) * GEMM_MBLK
+
+    # `Contractions_NT` thread ids, `contractions.cuh:96-102`: the LDG
+    # assignment (srowid/scolid) and the accumulation assignment
+    # (accrowid/acccolid) are different partitions of the same threads.
+    var srowid = tid // ldg_th_row
+    var scolid = (tid % ldg_th_row) * veclen
+    var accrowid = tid // tc
+    var acccolid = tid % tc
 
     var sx = stack_allocation[
-        GEMM_SMEM_PAGE_X,
+        page_x,
         Scalar[DType.float32],
         address_space = AddressSpace.SHARED,
     ]()
     var sy = stack_allocation[
-        GEMM_SMEM_PAGE_Y,
+        page_y,
         Scalar[DType.float32],
         address_space = AddressSpace.SHARED,
     ]()
-    # The cross-thread merge at the end needs NO shared memory: it is a warp
-    # shuffle, `simt_kernel.cuh:125-126`. The 64 x 16 pair of scratch arrays
-    # that used to sit here cost 8 KB of the 32 KB Apple allows a threadgroup,
-    # which the two GEMM pages already spend 18 KB of.
+    # `load_norms`' rows, their `&smem[P::SmemSize]` region
+    # (`pairwise_distance_base.cuh:245-246`), separate allocations here.
+    var s_xnorm = stack_allocation[
+        mblk,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var s_ynorm = stack_allocation[
+        nblk,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
 
-    # `KVPair val[P::AccRowsPerTh]`, in registers. This is the whole point.
-    var val0 = FUSED_MAX
-    var val1 = FUSED_MAX
-    var val2 = FUSED_MAX
-    var val3 = FUSED_MAX
-    var key0 = UInt32(0xFFFFFFFF)
-    var key1 = UInt32(0xFFFFFFFF)
-    var key2 = UInt32(0xFFFFFFFF)
-    var key3 = UInt32(0xFFFFFFFF)
+    # `run()`'s grid offsets and strides, `pairwise_distance_base.cuh:121-124`.
+    var grid_offset_m = Int(block_idx.y) * mblk
+    var grid_stride_m = Int(grid_dim.y) * mblk
+    var grid_offset_n = Int(block_idx.x) * nblk
+    var grid_stride_n = Int(grid_dim.x) * nblk
 
-    var n0 = 0
-    while n0 < n:
-        var acc0 = SIMD[DType.float32, GEMM_ACC_COLS_PER_TH](0.0)
-        var acc1 = SIMD[DType.float32, GEMM_ACC_COLS_PER_TH](0.0)
-        var acc2 = SIMD[DType.float32, GEMM_ACC_COLS_PER_TH](0.0)
-        var acc3 = SIMD[DType.float32, GEMM_ACC_COLS_PER_TH](0.0)
+    var tile_m = grid_offset_m
+    while tile_m < m:
+        # `KVPair val[P::AccRowsPerTh]`, in registers, reset per row tile
+        # (`simt_kernel.cuh:79-82` init, `:144-147` reset). Lane `i` of the
+        # SIMD is row `accrowid + i * tr` of the tile.
+        var val = SIMD[DType.float32, rpt](FUSED_MAX)
+        var key = SIMD[DType.uint32, rpt](0xFFFFFFFF)
 
-        var kt = 0
-        while kt < k:
-            var e = tid
-            while e < GEMM_MBLK * GEMM_KBLK:
-                var r = e // GEMM_KBLK
-                var c = e % GEMM_KBLK
-                var v = Float32(0.0)
-                if m0 + r < m and kt + c < k:
-                    v = x.unsafe_load((m0 + r) * k + kt + c)
-                sx[r * GEMM_SMEM_STRIDE + c] = v
-                e += GEMM_THREADS
-            e = tid
-            while e < GEMM_NBLK * GEMM_KBLK:
-                var r2 = e // GEMM_KBLK
-                var c2 = e % GEMM_KBLK
-                var v2 = Float32(0.0)
-                if n0 + r2 < n and kt + c2 < k:
-                    v2 = y.unsafe_load((n0 + r2) * k + kt + c2)
-                sy[r2 * GEMM_SMEM_STRIDE + c2] = v2
-                e += GEMM_THREADS
+        var tile_n = grid_offset_n
+        while tile_n < n:
+            var acc0 = SIMD[DType.float32, cpt](0.0)
+            var acc1 = SIMD[DType.float32, cpt](0.0)
+            var acc2 = SIMD[DType.float32, cpt](0.0)
+            var acc3 = SIMD[DType.float32, cpt](0.0)
+
+            var kt = 0
+            while kt < k:
+                # --- ldgX + stsX (`contractions.cuh:189-216, 262-269`):
+                # `LdgPerThX` vector loads of `Veclen` floats, zero-filled
+                # out of bounds exactly where theirs is. `koff < k` never
+                # splits a vector: `k % veclen == 0` by selection.
+                var koff = kt + scolid
+                comptime for li in range(ldg_per_th_x):
+                    var xrow = tile_m + srowid + li * ldg_rows_x
+                    var vx = SIMD[DType.float32, veclen](0.0)
+                    if koff < k and xrow < m:
+                        vx = x.unsafe_load[width=veclen](xrow * k + koff)
+                    sx.unsafe_store(
+                        (srowid + li * ldg_rows_x) * smem_stride + scolid, vx
+                    )
+                # --- ldgY + stsY (`contractions.cuh:225-259, 271-278`).
+                comptime for li in range(ldg_per_th_y):
+                    var yrow = tile_n + srowid + li * ldg_rows_y
+                    var vy = SIMD[DType.float32, veclen](0.0)
+                    if koff < k and yrow < n:
+                        vy = y.unsafe_load[width=veclen](yrow * k + koff)
+                    sy.unsafe_store(
+                        (srowid + li * ldg_rows_y) * smem_stride + scolid, vy
+                    )
+                barrier()
+
+                # --- accumulate (`pairwise_distance_base.cuh:207-236`):
+                # `ldsXY` a Veclen chunk per accumulator row/col
+                # (`contractions.cuh:281-299`), then the register-tile FMA of
+                # `accumulate_reg_tile` with `l2_exp_distance_op::core`
+                # (`l2_exp.cuh:103-109`, `acc += x * y`). The `v` loop is
+                # ascending inside ascending chunks, so every accumulator
+                # cell sums its k terms in the same order at every veclen.
+                comptime for kc in range(kblk // veclen):
+                    var rx0 = sx.unsafe_load[width=veclen](
+                        (accrowid + 0 * tr) * smem_stride + kc * veclen
+                    )
+                    var rx1 = sx.unsafe_load[width=veclen](
+                        (accrowid + 1 * tr) * smem_stride + kc * veclen
+                    )
+                    var rx2 = sx.unsafe_load[width=veclen](
+                        (accrowid + 2 * tr) * smem_stride + kc * veclen
+                    )
+                    var rx3 = sx.unsafe_load[width=veclen](
+                        (accrowid + 3 * tr) * smem_stride + kc * veclen
+                    )
+                    var ry0 = sy.unsafe_load[width=veclen](
+                        (acccolid + 0 * tc) * smem_stride + kc * veclen
+                    )
+                    var ry1 = sy.unsafe_load[width=veclen](
+                        (acccolid + 1 * tc) * smem_stride + kc * veclen
+                    )
+                    var ry2 = sy.unsafe_load[width=veclen](
+                        (acccolid + 2 * tc) * smem_stride + kc * veclen
+                    )
+                    var ry3 = sy.unsafe_load[width=veclen](
+                        (acccolid + 3 * tc) * smem_stride + kc * veclen
+                    )
+                    comptime for v in range(veclen):
+                        var yv = SIMD[DType.float32, cpt](
+                            ry0[v], ry1[v], ry2[v], ry3[v]
+                        )
+                        acc0 += SIMD[DType.float32, cpt](rx0[v]) * yv
+                        acc1 += SIMD[DType.float32, cpt](rx1[v]) * yv
+                        acc2 += SIMD[DType.float32, cpt](rx2[v]) * yv
+                        acc3 += SIMD[DType.float32, cpt](rx3[v]) * yv
+                # Second barrier per k-tile: the single-buffer deviation
+                # (PORTING.md 42). Their double buffer writes the NEXT page
+                # while this one is read and needs one sync; one page cannot.
+                barrier()
+                kt += kblk
+
+            # --- load_norms (`pairwise_distance_base.cuh:243-274`): both
+            # norm rows staged through shared memory, the X row only on the
+            # first column tile of this pass, exactly their guard.
+            if tile_n == grid_offset_n:
+                var i = tid
+                while i < mblk:
+                    var idx = tile_m + i
+                    # Explicit `if`, not a conditional expression: the load
+                    # must not be reachable out of bounds (PORTING.md 19).
+                    var nv = Float32(0.0)
+                    if idx < m:
+                        nv = xn.unsafe_load(idx)
+                    s_xnorm[i] = nv
+                    i += nthreads
+            var i2 = tid
+            while i2 < nblk:
+                var idx2 = tile_n + i2
+                var nv2 = Float32(0.0)
+                if idx2 < n:
+                    nv2 = yn.unsafe_load(idx2)
+                s_ynorm[i2] = nv2
+                i2 += nthreads
             barrier()
 
-            var xb = tr * GEMM_ACC_ROWS_PER_TH
-            var yb = tc * GEMM_ACC_COLS_PER_TH
-            for kk in range(GEMM_KBLK):
-                var regy = SIMD[DType.float32, GEMM_ACC_COLS_PER_TH](0.0)
-                for j in range(GEMM_ACC_COLS_PER_TH):
-                    regy[j] = sy[(yb + j) * GEMM_SMEM_STRIDE + kk]
-                acc0 += sx[(xb + 0) * GEMM_SMEM_STRIDE + kk] * regy
-                acc1 += sx[(xb + 1) * GEMM_SMEM_STRIDE + kk] * regy
-                acc2 += sx[(xb + 2) * GEMM_SMEM_STRIDE + kk] * regy
-                acc3 += sx[(xb + 3) * GEMM_SMEM_STRIDE + kk] * regy
-            barrier()
-            kt += GEMM_KBLK
+            var rxn = SIMD[DType.float32, rpt](0.0)
+            var ryn = SIMD[DType.float32, rpt](0.0)
+            comptime for i in range(rpt):
+                # `regxn[i] = sxNorm[i * P::AccThRows + tid / P::AccThCols]`
+                rxn[i] = s_xnorm[i * tr + accrowid]
+            comptime for j in range(cpt):
+                # `regyn[i] = syNorm[i * P::AccThCols + tid % P::AccThCols]`
+                ryn[j] = s_ynorm[j * tc + acccolid]
 
-        # --- THE EPILOGUE, in registers. `l2_exp_distance_op` then the
-        # min reduce, applied to this column tile before it is discarded.
-        for j in range(GEMM_ACC_COLS_PER_TH):
-            var col = n0 + tc * GEMM_ACC_COLS_PER_TH + j
-            if col >= n:
-                continue
-            var ynv = yn.unsafe_load(col)
-
-            for i in range(GEMM_ACC_ROWS_PER_TH):
-                var row = m0 + tr * GEMM_ACC_ROWS_PER_TH + i
-                if row >= m:
-                    continue
-                var dot = acc0[j]
-                if i == 1:
-                    dot = acc1[j]
+            # --- THE EPILOGUE, in registers: `l2_exp_distance_op::epilog`
+            # (`l2_exp.cuh:117-136`) then the intra-thread reduce of
+            # `epilog_lambda` (`simt_kernel.cuh:101-117`), applied to this
+            # column tile before it is discarded. Their epilog does not
+            # guard the row axis and neither does this: an out-of-range row
+            # accumulates zeros and is dropped at the write.
+            comptime for i in range(rpt):
+                var acc_row = acc0
+                comptime if i == 1:
+                    acc_row = acc1
                 elif i == 2:
-                    dot = acc2[j]
+                    acc_row = acc2
                 elif i == 3:
-                    dot = acc3[j]
-                var d = xn.unsafe_load(row) + ynv - Float32(2.0) * dot
-                if d <= Float32(0.0):
-                    d = Float32(0.0)
+                    acc_row = acc3
+                comptime for j in range(cpt):
+                    # `tmpkey = acccolid + j * P::AccThCols + gridStrideX`
+                    var col = tile_n + acccolid + j * tc
+                    if col < n:
+                        var d = rxn[i] + ryn[j] - Float32(2.0) * acc_row[j]
+                        # `val * (val > 0) * !((val*val < eps) * (xn == yn))`
+                        # -- the positivity clamp and the self-neighbor
+                        # round-off guard, `l2_exp.cuh:127-135`.
+                        if d <= Float32(0.0) or (
+                            d * d < FUSED_CLAMP_PRECISION and rxn[i] == ryn[j]
+                        ):
+                            d = Float32(0.0)
+                        # `raft::argmin_op`'s total order (module docstring,
+                        # part 1): lowest value, then lowest key.
+                        if d < val[i] or (d == val[i] and UInt32(col) < key[i]):
+                            val[i] = d
+                            key[i] = UInt32(col)
+            tile_n += grid_stride_n
 
-                # Strict `<`, so the lowest column wins a tie, matching
-                # `unfused_distance_nn.mojo` and their Reducer's total order.
-                if i == 0:
-                    if d < val0:
-                        val0 = d
-                        key0 = UInt32(col)
-                elif i == 1:
-                    if d < val1:
-                        val1 = d
-                        key1 = UInt32(col)
-                elif i == 2:
-                    if d < val2:
-                        val2 = d
-                        key2 = UInt32(col)
-                else:
-                    if d < val3:
-                        val3 = d
-                        key3 = UInt32(col)
-        n0 += GEMM_NBLK
+        # --- `rowEpilog_lambda`, `simt_kernel.cuh:119-130` -------------------
+        # Merge the `tc` column-threads that share each row, one butterfly
+        # pass per accumulator row, key and value shuffled together, with
+        # the argmin_op total order (module docstring, part 1). Every
+        # thread reaches every shuffle: the loop bound is a comptime
+        # constant and nothing here is conditional. That is required,
+        # because a lane that skips a full-mask shuffle hangs the lanes
+        # that reach it.
+        var lane_offset = 1
+        while lane_offset < tc:
+            comptime for i in range(rpt):
+                var cur_v = val[i]
+                var cur_k = key[i]
+                var o_v = shuffle_xor(cur_v, UInt32(lane_offset))
+                var o_k = shuffle_xor(cur_k, UInt32(lane_offset))
+                if o_v < cur_v or (o_v == cur_v and o_k < cur_k):
+                    val[i] = o_v
+                    key[i] = o_k
+            lane_offset *= 2
 
-    # --- `rowEpilog_lambda`, `simt_kernel.cuh:119-130` -------------------
-    # Merge the GEMM_ACC_TH_COLS column-threads that share each row, one
-    # butterfly pass per accumulator row, key and value shuffled together.
-    # The comparator is NOT literally theirs, and this is the one place in
-    # this kernel where that is deliberate. `KVPMinReduceImpl`
-    # (`detail/fused_distance_nn/helper_structs.cuh:39-44`) is
-    # `b.value < a.value ? b : a`, VALUE ONLY, so on a tie their shuffled
-    # partner wins and the answer depends on the shuffle shape. This tree
-    # uses the total order their UNFUSED arm reduces with, `raft::argmin_op`
-    # (`raft/core/operators.hpp:202`, handed to `coalescedReduction` at
-    # `kmeans_common.cuh:488`), in both kernels instead:
-    #     (a.value < b.value) || (a.value == b.value && a.key < b.key)
-    # That is what makes the fused and unfused arms diffable against each
-    # other, and it is what makes any reduction shape return the same pair.
-    # It was already the rule in the shared-memory merge this replaced.
-    #
-    # Every thread reaches every shuffle: the loop bound is a comptime
-    # constant and nothing here is conditional. That is required, because a
-    # lane that skips a full-mask shuffle hangs the lanes that reach it.
-    var lane_offset = 1
-    while lane_offset < GEMM_ACC_TH_COLS:
-        var o0v = shuffle_xor(val0, UInt32(lane_offset))
-        var o0k = shuffle_xor(key0, UInt32(lane_offset))
-        if o0v < val0 or (o0v == val0 and o0k < key0):
-            val0 = o0v
-            key0 = o0k
-
-        var o1v = shuffle_xor(val1, UInt32(lane_offset))
-        var o1k = shuffle_xor(key1, UInt32(lane_offset))
-        if o1v < val1 or (o1v == val1 and o1k < key1):
-            val1 = o1v
-            key1 = o1k
-
-        var o2v = shuffle_xor(val2, UInt32(lane_offset))
-        var o2k = shuffle_xor(key2, UInt32(lane_offset))
-        if o2v < val2 or (o2v == val2 and o2k < key2):
-            val2 = o2v
-            key2 = o2k
-
-        var o3v = shuffle_xor(val3, UInt32(lane_offset))
-        var o3k = shuffle_xor(key3, UInt32(lane_offset))
-        if o3v < val3 or (o3v == val3 and o3k < key3):
-            val3 = o3v
-            key3 = o3k
-
-        lane_offset *= 2
-
-    # `updateReducedVal`'s lane structure without its mutex: the first lane
-    # of each column group writes the `GEMM_ACC_ROWS_PER_TH` rows that group
-    # owns. Every lane holds the winner after the butterfly, so `tc == 0` is
-    # a choice of writer and not a reduction step.
-    if tc == 0:
-        for i in range(GEMM_ACC_ROWS_PER_TH):
-            var row2 = m0 + tr * GEMM_ACC_ROWS_PER_TH + i
-            if row2 < m:
-                var best_v = val0
-                var best_k = key0
-                if i == 1:
-                    best_v = val1
-                    best_k = key1
-                elif i == 2:
-                    best_v = val2
-                    best_k = key2
-                elif i == 3:
-                    best_v = val3
-                    best_k = key3
-                if is_sqrt_in != 0:
-                    if best_v <= Float32(0.0):
-                        best_v = Float32(0.0)
-                    best_v = sqrt(best_v)
-                out_value.unsafe_store(row2, best_v)
-                out_key.unsafe_store(row2, best_k)
+        # `updateReducedVal`'s lane structure without its mutex: the first
+        # lane of each column group writes the `rpt` rows that group owns.
+        # Every lane holds the winner after the butterfly, so
+        # `acccolid == 0` is a choice of writer and not a reduction step.
+        # The value is already non-negative: the epilog clamped it.
+        if acccolid == 0:
+            comptime for i in range(rpt):
+                var row = tile_m + accrowid + i * tr
+                if row < m:
+                    var best_v = val[i]
+                    if is_sqrt_in != 0:
+                        best_v = sqrt(best_v)
+                    out_value.unsafe_store(row, best_v)
+                    out_key.unsafe_store(row, key[i])
+        tile_m += grid_stride_m

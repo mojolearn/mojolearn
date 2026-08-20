@@ -46,9 +46,17 @@ from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
 from cluster.ported.distance.fused_distance_nn.simt_kernel import (
+    FUSED_NORMAL_KBLK,
+    FUSED_NORMAL_TC,
+    FUSED_NORMAL_TR,
     fused_distance_nn_kernel,
+    fused_is_skinny,
+    fused_smem_bytes,
+    fused_veclen_for,
 )
-from core.gemm import GEMM_MBLK, GEMM_THREADS
+from neighbors.ported.distance.detail.pairwise_distance_base import (
+    launch_config_generator,
+)
 from cluster.ported.cluster.detail.min_cluster_distance_compute import (
     compute_centroid_norms,
     min_cluster_and_distance_compute,
@@ -681,18 +689,27 @@ def check_fused_reduction_across_lanes() raises:
 
     **This check exists because a sabotage came back clean and that was the
     check's fault, not the code's.** Skipping a partner lane in the fused
-    butterfly changed nothing, because at `CHECK_CLUSTERS = 4` every valid
-    column lands in ONE lane group: `GEMM_ACC_COLS_PER_TH = 4` columns per
-    thread means `tc = col // 4`, so columns 0..3 are all `tc == 0` and the
-    other fifteen lanes hold nothing but `FUSED_MAX`. The merge was
-    degenerate and a broken merge could not show.
+    butterfly changed nothing, because at `CHECK_CLUSTERS = 4` almost every
+    lane held nothing but `FUSED_MAX`: with column ownership
+    `lane = col % AccThCols` (their strided assignment,
+    `contractions.cuh:102`), columns 0..3 occupy lanes 0..3 and the other
+    twelve lanes of the group are empty. The merge was near-degenerate and
+    a broken merge could not reliably show.
 
     That is the same failure the repository already has a name for: a fixture
     whose structure hides the thing under test. Here it hid a whole reduction
     stage rather than a permutation.
 
-    So: 40 clusters, spreading real values over ten lane groups, checked
-    against a host argmin. Now a broken cross-lane merge has to show.
+    So: 40 clusters, spreading real values over ALL 16 lanes of the
+    `AccThCols = 16` group, checked against a host argmin. Now a broken
+    cross-lane merge has to show.
+
+    The kernel is instantiated DIRECTLY at the NORMAL policy
+    (`Policy4x4<float, 4>`): the launcher's own selection would route
+    `k = 4` features to the skinny 8-wide policy (`fused_is_skinny`), and
+    this check is about the 16-wide merge. The skinny merge is exercised
+    through the launcher by `check_kmeans_fit` and the policy selection
+    itself by `check_fused_policy_dispatch`.
     """
     var ctx = DeviceContext()
     var n = 512
@@ -732,12 +749,17 @@ def check_fused_reduction_across_lanes() raises:
         grid_dim=(k, 1, 1), block_dim=(NORM_TPB, 1, 1),
     )
     ctx.synchronize()
-    ctx.enqueue_function[fused_distance_nn_kernel](
+    comptime lanes_kern = fused_distance_nn_kernel[
+        4, FUSED_NORMAL_KBLK, FUSED_NORMAL_TR, FUSED_NORMAL_TC
+    ]
+    comptime lanes_mblk = 4 * FUSED_NORMAL_TR
+    comptime lanes_threads = FUSED_NORMAL_TR * FUSED_NORMAL_TC
+    ctx.enqueue_function[lanes_kern](
         okey.unsafe_ptr(), oval.unsafe_ptr(), x.unsafe_ptr(), c.unsafe_ptr(),
         xn.unsafe_ptr(), cn.unsafe_ptr(),
         Int32(n), Int32(k), Int32(d), Int32(0),
-        grid_dim=(1, (n + GEMM_MBLK - 1) // GEMM_MBLK, 1),
-        block_dim=(GEMM_THREADS, 1, 1),
+        grid_dim=(1, (n + lanes_mblk - 1) // lanes_mblk, 1),
+        block_dim=(lanes_threads, 1, 1),
     )
     ctx.synchronize()
 
@@ -765,14 +787,16 @@ def check_fused_reduction_across_lanes() raises:
         var got = Int(hk.unsafe_ptr().unsafe_load(i))
         if got != best:
             wrong += 1
-        spread[best // 4] = 1
+        # The lane that owns column `best` is `best % AccThCols` (strided
+        # ownership, `contractions.cuh:102`).
+        spread[best % 16] = 1
     var lanes = 0
     for t in range(16):
         lanes += spread[t]
 
     if lanes < 4:
         raise Error(
-            "the fixture only used " + String(lanes) + " lane groups; it"
+            "the fixture only used " + String(lanes) + " owner lanes; it"
             " cannot exercise a cross-lane merge"
         )
     if wrong != 0:
@@ -784,7 +808,7 @@ def check_fused_reduction_across_lanes() raises:
     print(
         "check_fused_reduction_across_lanes OK: " + String(n)
         + " rows x " + String(k) + " clusters match a host argmin, winners"
-        " spread over " + String(lanes) + " lane groups"
+        " spread over " + String(lanes) + " owner lanes"
     )
 
 
@@ -1209,4 +1233,210 @@ def check_privatized_accumulate() raises:
         " bitwise equal, dropped flush moved "
         + String(moved)
         + " cells"
+    )
+
+
+# --- fused policy selection --------------------------------------------------
+
+comptime POL_ROWS = 8256  # 129 row tiles of Mblk=64: more than the M4's
+#                           minGridSize of 120 blocks at 256 threads, so the
+#                           launcher's grid.y is capped BELOW the tile count
+#                           and the kernel's m grid-stride loop must cover
+#                           the rest. The check verifies that inequality at
+#                           runtime rather than trusting this comment.
+comptime POL_CLUSTERS = 40
+
+
+def _policy_arm_correct(d: Int, expect_veclen: Int) raises:
+    """Run the REAL launcher at a feature count that selects the given
+    veclen arm, and require (1) the selection function -- the same one the
+    launcher dispatches on -- returns `expect_veclen` for the real buffers,
+    (2) every planted label is recovered, including rows beyond
+    `grid.y * Mblk`, which only the m grid-stride loop can reach, and
+    (3) the unfused arm agrees bitwise on every label (both arms reduce
+    with `raft::argmin_op`'s total order and the planted separation is
+    ~330,000 squared against a float32 error orders smaller, so equality is
+    the expectation, not luck)."""
+    var ctx = DeviceContext()
+    var n = POL_ROWS
+    var k = POL_CLUSTERS
+
+    var x = ctx.enqueue_create_buffer[DType.float32](n * d)
+    var c = ctx.enqueue_create_buffer[DType.float32](k * d)
+    var xn = ctx.enqueue_create_buffer[DType.float32](n)
+    var cn = ctx.enqueue_create_buffer[DType.float32](k)
+    var dist_buf = ctx.enqueue_create_buffer[DType.float32](n * k)
+    var labels = ctx.enqueue_create_buffer[DType.uint32](n)
+    var min_dist = ctx.enqueue_create_buffer[DType.float32](n)
+    var labels_u = ctx.enqueue_create_buffer[DType.uint32](n)
+    var min_dist_u = ctx.enqueue_create_buffer[DType.float32](n)
+    ctx.synchronize()
+
+    # The selection the launcher will make, asserted BEFORE the run so a
+    # failure names the arm rather than the symptom.
+    var vl = fused_veclen_for(d, Int(x.unsafe_ptr()), Int(c.unsafe_ptr()))
+    if vl != expect_veclen:
+        raise Error(
+            "fused_veclen_for(k=" + String(d) + ") on real buffers returned "
+            + String(vl) + ", expected " + String(expect_veclen)
+            + " -- the intended arm is not the one the launcher takes"
+        )
+    if fused_is_skinny(d):
+        raise Error(
+            "fixture d=" + String(d) + " unexpectedly selects the skinny"
+            " policy; this helper pins the normal-policy arms"
+        )
+
+    # The fixture must actually exercise the m grid-stride: the launcher's
+    # grid.y (their launchConfigGenerator, M4 inputs) must be SMALLER than
+    # the number of row tiles.
+    var y_chunks = (n + 4 * FUSED_NORMAL_TR - 1) // (4 * FUSED_NORMAL_TR)
+    var cfg = launch_config_generator(
+        n,
+        k,
+        4 * FUSED_NORMAL_TR,
+        4 * FUSED_NORMAL_TC,
+        FUSED_NORMAL_TR * FUSED_NORMAL_TC,
+        fused_smem_bytes(False, expect_veclen),
+    )
+    if cfg[1] >= y_chunks:
+        raise Error(
+            "fixture too small: grid.y " + String(cfg[1]) + " covers all "
+            + String(y_chunks) + " row tiles, so the m grid-stride loop"
+            " would go unexercised"
+        )
+
+    # Planted membership round robin over the clusters, hashed jitter so no
+    # two rows are identical (uniform data hides placement bugs).
+    var hx = ctx.enqueue_create_host_buffer[DType.float32](n * d)
+    var hc = ctx.enqueue_create_host_buffer[DType.float32](k * d)
+    for i in range(n):
+        var mem = i % k
+        for f in range(d):
+            hx.unsafe_ptr().unsafe_store(
+                i * d + f, Float32(100 * (mem + 1) + f) + _jitter(i, f)
+            )
+    for j in range(k):
+        for f in range(d):
+            hc.unsafe_ptr().unsafe_store(j * d + f, Float32(100 * (j + 1) + f))
+    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=c, src_ptr=hc.unsafe_ptr())
+    ctx.synchronize()
+
+    ctx.enqueue_function[row_norm_kernel](
+        xn.unsafe_ptr(), x.unsafe_ptr(), Int32(d), Int32(0),
+        grid_dim=(n, 1, 1), block_dim=(NORM_TPB, 1, 1),
+    )
+    compute_centroid_norms(ctx, c, cn, k, d, METRIC_L2_EXPANDED)
+    ctx.synchronize()
+
+    min_cluster_and_distance_compute(
+        ctx, x, xn, c, cn, dist_buf, labels, min_dist,
+        n, d, k, METRIC_L2_EXPANDED, 0, 0,
+    )
+    min_cluster_and_distance_compute_unfused(
+        ctx, x, xn, c, cn, dist_buf, labels_u, min_dist_u,
+        n, d, k, METRIC_L2_EXPANDED, 0, 0,
+    )
+    ctx.synchronize()
+
+    var hl = ctx.enqueue_create_host_buffer[DType.uint32](n)
+    var hlu = ctx.enqueue_create_host_buffer[DType.uint32](n)
+    ctx.enqueue_copy(dst_ptr=hl.unsafe_ptr(), src_buf=labels)
+    ctx.enqueue_copy(dst_ptr=hlu.unsafe_ptr(), src_buf=labels_u)
+    ctx.synchronize()
+
+    var mislabeled = 0
+    var tail_checked = 0
+    var arm_diff = 0
+    var stride_floor = cfg[1] * 4 * FUSED_NORMAL_TR
+    for i in range(n):
+        if Int(hl.unsafe_ptr().unsafe_load(i)) != i % k:
+            mislabeled += 1
+        if i >= stride_floor:
+            tail_checked += 1
+        if hl.unsafe_ptr().unsafe_load(i) != hlu.unsafe_ptr().unsafe_load(i):
+            arm_diff += 1
+    if mislabeled != 0:
+        raise Error(
+            "veclen=" + String(expect_veclen) + " arm mislabeled "
+            + String(mislabeled) + " of " + String(n) + " rows at d="
+            + String(d)
+        )
+    if tail_checked == 0:
+        raise Error(
+            "no row beyond grid.y * Mblk existed; the grid-stride tail was"
+            " not checked"
+        )
+    if arm_diff != 0:
+        raise Error(
+            "fused and unfused labels differ on " + String(arm_diff)
+            + " rows at d=" + String(d)
+        )
+    print(
+        "  veclen=" + String(expect_veclen) + " arm at d=" + String(d)
+        + ": " + String(n) + " labels correct (grid.y " + String(cfg[1])
+        + " of " + String(y_chunks) + " tiles, " + String(tail_checked)
+        + " rows past the resident grid), fused == unfused"
+    )
+
+
+def check_fused_policy_dispatch() raises:
+    """Pin the policy/veclen selection (`fused_distance_nn-inl.cuh:102-233`)
+    and prove the non-default arms are CORRECT where their selection takes
+    them.
+
+    The selection values are pinned against hand-transcribed upstream
+    behavior; the launcher dispatches on the SAME two functions, so a pin
+    here is a pin on the arm the bench takes. A policy change nothing
+    exercises proves nothing, so the scalar (k=33) and 2-wide (k=34) arms
+    are then run for real through the launcher, at a row count that forces
+    the m grid-stride loop, against planted labels and the unfused arm.
+    """
+    # --- the selection computation, at pinned inputs ----------------------
+    # 16-byte arm: 4*k % 16 == 0 and both pointers 16-aligned -> veclen 4.
+    if fused_veclen_for(32, 0, 0) != 4:
+        raise Error("k=32 aligned must take veclen 4 (-inl.cuh:110)")
+    if fused_veclen_for(4, 0, 0) != 4:
+        raise Error("k=4 aligned must take veclen 4: 16 bytes per row")
+    # Misalignment demotes: a 4-mod-16 pointer fails both vector tests.
+    if fused_veclen_for(32, 4, 0) != 1:
+        raise Error("a 4-byte-misaligned x must fall to the scalar arm")
+    # 8-byte arm: 4*k % 8 == 0 with 8-aligned pointers -> veclen 2.
+    if fused_veclen_for(32, 8, 8) != 2:
+        raise Error("8-aligned pointers at k=32 must take veclen 2")
+    if fused_veclen_for(34, 0, 0) != 2:
+        raise Error("k=34 (136 bytes) must take veclen 2 (-inl.cuh:158)")
+    # Scalar arm: odd k.
+    if fused_veclen_for(33, 0, 0) != 1:
+        raise Error("k=33 (132 bytes) must take veclen 1 (-inl.cuh:210)")
+    # Skinny selection is `k < 32` (-inl.cuh:105), nothing else.
+    if not fused_is_skinny(31) or fused_is_skinny(32):
+        raise Error("is_skinny must be exactly k < 32")
+
+    # --- the bench alignment takes the vectorized arm on REAL buffers -----
+    var ctx = DeviceContext()
+    var probe_x = ctx.enqueue_create_buffer[DType.float32](64 * 32)
+    var probe_c = ctx.enqueue_create_buffer[DType.float32](64 * 32)
+    ctx.synchronize()
+    var bench_vl = fused_veclen_for(
+        32, Int(probe_x.unsafe_ptr()), Int(probe_c.unsafe_ptr())
+    )
+    if bench_vl != 4:
+        raise Error(
+            "THE BENCH SHAPE (k=32) DOES NOT TAKE THE VECTORIZED ARM on"
+            " real device buffers: veclen came back " + String(bench_vl)
+            + ". Either the allocator stopped 16-byte-aligning or the"
+            " selection regressed."
+        )
+
+    # --- the fallback arms, run for real ----------------------------------
+    _policy_arm_correct(33, 1)
+    _policy_arm_correct(34, 2)
+
+    print(
+        "check_fused_policy_dispatch OK: selection pinned (4/2/1 by k and"
+        " alignment, skinny at k<32), bench alignment k=32 takes veclen 4"
+        " on real buffers, scalar and 2-wide arms correct through the"
+        " launcher with the m grid-stride exercised"
     )
