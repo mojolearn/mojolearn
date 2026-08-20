@@ -27,6 +27,35 @@
 # runner, or an environment, and the only reliable way to guarantee that is to
 # have no event that a fork can cause. See docs/RELEASE_SECURITY.md section 7.
 
+# ============================================================================
+# THIS WORKFLOW CANNOT RUN YET. Retargeted to mojolearn 2026-08-20; the
+# mojotrees strings are gone, but the pipeline behind it does not exist here.
+#
+# Missing, and each is a real piece of work rather than a copy:
+#   packaging/macos/build_release_wheel.sh   called at the Build step below
+#   python/pyproject.toml, python/setup.py   no distribution metadata
+#   bindings/                                no PythonModuleBuilder glue
+#
+# AND THE BLOCKER UNDER THOSE, which is the one that decides the schedule:
+# there is almost nothing to bind. A CPython binding wraps a callable Mojo
+# function, and as of 2026-08-20 this repository has two:
+#
+#   glm/ported/glm/ols.mojo:82            ols_fit
+#   neighbors/estimator.mojo              knn_search
+#
+# k-means, DBSCAN and PCA have verified kernels and no assembled entry point
+# at all: their fit loops live inside the `main()` of a benchmark harness
+# (cluster/kmeans_main.mojo:24, dbscan/dbscan_main.mojo:16,
+# decomposition/pca_main.mojo:25) alongside data generation, timing and
+# printing. You cannot bind a main(). Those three need a `knn_search`-shaped
+# surface written first, and that is the gate on a first release, not the
+# packaging.
+#
+# The trusted publishers on PyPI and TestPyPI are configured and point at
+# this file (mojolearn/mojolearn, environments `pypi` and `testpypi`), so the
+# OIDC half is done and waiting on the build half.
+# ============================================================================
+
 name: Release provenance
 
 on:
@@ -140,7 +169,7 @@ jobs:
       # rather than a field left empty or invented here.
       - name: Provenance sidecar exists
         run: |
-          WHEEL=$(ls python/dist/mojotrees-*.whl)
+          WHEEL=$(ls python/dist/mojolearn-*.whl)
           test -f "$WHEEL.provenance.json" || {
             echo "missing $WHEEL.provenance.json"
             echo "packaging/build_wheel.sh must write it; see handoffs/task18_platform.md edit 4"
@@ -156,7 +185,7 @@ jobs:
       - name: Clean install smoke test
         run: |
           env -u CONDA_PREFIX bash packaging/matrix/smoke/clean_install_macos.sh \
-            "$(ls python/dist/mojotrees-*.whl)" clean-install.txt
+            "$(ls python/dist/mojolearn-*.whl)" clean-install.txt
 
       # The digest is computed here, on the machine that produced the file, and
       # carried forward as a job output. Every later job checks what it
@@ -165,7 +194,7 @@ jobs:
       - name: Hash manifest
         id: digest
         run: |
-          WHEEL=$(ls python/dist/mojotrees-*.whl)
+          WHEEL=$(ls python/dist/mojolearn-*.whl)
           python3 packaging/security/hash_manifest.py write \
             python/dist/SHA256SUMS "$WHEEL" "$WHEEL.provenance.json"
           cat python/dist/SHA256SUMS
@@ -305,7 +334,7 @@ jobs:
     timeout-minutes: 15
     environment:
       name: ${{ inputs.publish }}
-      url: https://pypi.org/p/mojotrees
+      url: https://pypi.org/p/mojolearn
     permissions:
       # id-token only. No contents, because this job does not check the
       # repository out. There is no PyPI API token in this workflow, in a
