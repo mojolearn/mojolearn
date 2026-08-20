@@ -57,6 +57,9 @@ from mojo_only.kernel_matrix import (
 )
 from mojo_only.hardware_matrix import gpu_cores_for, max_active_blocks_for
 
+from cluster.ported.distance.fused_distance_nn.simt_kernel import (
+    fused_veclen_for,
+)
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.atomic import Atomic
@@ -180,7 +183,9 @@ def accumulate_weight_per_cluster_kernel(
         _ = Atomic.fetch_add(weight_i32.unsafe_offset(label), q)
 
 
-def accumulate_centroid_sums_privatized_kernel(
+def accumulate_centroid_sums_privatized_kernel[
+    veclen: Int
+](
     sums_i32: MutPointer[Int32, MutAnyOrigin],
     x: MutPointer[Float32, MutAnyOrigin],
     labels: MutPointer[UInt32, MutAnyOrigin],
@@ -208,8 +213,31 @@ def accumulate_centroid_sums_privatized_kernel(
     and as `reduce_cols_by_key_cached_kernel` (`reduce_cols_by_key.cuh:
     51-81`, same three phases) -- the arm THEIR `reduce_cols_by_key`
     dispatch takes for this fit's WEIGHT reduction. This kernel applies that
-    scheme to the row-major sums, keeping the direct arm's flat cell
-    indexing.
+    scheme to the row-major sums, walking the direct arm's flat cell
+    order `veclen` cells per thread step.
+
+    THE `veclen`-WIDE X READ IS A SECOND DELIBERATE DEVIATION BEYOND
+    UPSTREAM (PORTING.md 46). RAFT's rowmajor kernel reads ONE element per
+    thread (`SumsT val = d_A[j + lda * i]`, `reduce_rows_by_key.cuh:285`;
+    no `TxN_t`/`ldg` anywhere in that file) and loses nothing by it on
+    NVIDIA, where a warp's 32 scalar reads coalesce into full
+    transactions. On this Apple device the same scalar-to-vector swap was
+    MEASURED 3x on the assignment kernel (63 -> 21 ms/iter, re-verdict
+    2026-08-20), so the hardware premise upstream's scalar reads rest on
+    does not hold here. The instantiation contract is the SAME ladder the
+    assignment port dispatches on (`fused_veclen_for`, their
+    `fused_distance_nn-inl.cuh:107-110` selection, fed x's base address
+    for both pointer terms): it guarantees `n_features % veclen == 0`, so
+    a chunk of `veclen` cells never straddles a row (one label and one
+    weight read serve the whole chunk), and a `4 * veclen`-byte aligned
+    load that starts in bounds ends in bounds. `veclen = 1` IS the old
+    scalar body, and it is the arm the dispatch takes whenever the ladder
+    says the row length or alignment forbids wider. A vector load returns
+    the same bits as `veclen` scalar loads and each lane's quantization
+    is the identical scalar fp32 expression, so bit-identity is untouched
+    -- proven by `check_privatized_accumulate` (veclen=4 pinned) and
+    `check_accumulate_veclen_dispatch` (veclen=1 at d=33, veclen=2 at
+    d=34), each held bitwise to the direct scatter-add oracle.
 
     DETERMINISM IS PRESERVED, BY THE SAME ARGUMENT THAT PICKED Int32.
     The addends are the identical quantized `Int32` values the direct kernel
@@ -247,18 +275,27 @@ def accumulate_centroid_sums_privatized_kernel(
         z += Int(block_dim.x)
     barrier()
 
-    # The direct arm's flat grid-stride over cells, atomics now landing in
-    # the block's own threadgroup memory (their `raft::myAtomicAdd(
+    # The direct arm's flat grid-stride, walked `veclen` cells per step:
+    # ONE `SIMD[float32, veclen]` x read and one label/weight read per
+    # chunk (`n_features % veclen == 0` is the dispatch contract, so a
+    # chunk never straddles a row), then `veclen` atomics landing in the
+    # block's own threadgroup memory (their `raft::myAtomicAdd(
     # &local_sums[...])`, shared-memory atomic, `reduce_rows_by_key.cuh:227`).
+    var chunks = total // veclen
     var gid = Int(block_idx.x) * Int(block_dim.x) + tid
     var stride = Int(grid_dim.x) * Int(block_dim.x)
-    while gid < total:
-        var row = gid // n_features
-        var f = gid - row * n_features
+    while gid < chunks:
+        var base = gid * veclen
+        var row = base // n_features
+        var f = base - row * n_features
         var label = Int(labels.unsafe_load(row))
         var w = weights.unsafe_load(row)
-        var q = Int32(x.unsafe_load(gid) * w * scale_in)
-        _ = Atomic.fetch_add(priv.unsafe_offset(label * n_features + f), q)
+        var xv = x.unsafe_load[width=veclen](base)
+        comptime for j in range(veclen):
+            var q = Int32(xv[j] * w * scale_in)
+            _ = Atomic.fetch_add(
+                priv.unsafe_offset(label * n_features + f + j), q
+            )
         gid += stride
     barrier()
 
@@ -357,6 +394,45 @@ def accumulate_grid_blocks(work_items: Int, smem_bytes: Int) raises -> Int:
     return blocks
 
 
+def _enqueue_privatized_sums[
+    veclen: Int
+](
+    ctx: DeviceContext,
+    mut sums_i32: DeviceBuffer[DType.int32],
+    mut x: DeviceBuffer[DType.float32],
+    mut labels: DeviceBuffer[DType.uint32],
+    mut weights: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    n_features: Int,
+    n_clusters: Int,
+    sum_scale: Float32,
+) raises:
+    """One privatized-arm launch, bound at a comptime `veclen`. Exists so
+    `launch_accumulate_centroid_sums`' runtime ladder result can meet the
+    kernel's comptime parameter without repeating the argument list three
+    times (the shape `min_cluster_distance_compute.mojo`'s `_launch_fused`
+    uses for the same reason)."""
+    comptime kern = accumulate_centroid_sums_privatized_kernel[veclen]
+    ctx.enqueue_function[kern](
+        sums_i32.unsafe_ptr(),
+        x.unsafe_ptr(),
+        labels.unsafe_ptr(),
+        weights.unsafe_ptr(),
+        Int32(n_samples),
+        Int32(n_features),
+        Int32(n_clusters),
+        sum_scale,
+        grid_dim=(
+            accumulate_grid_blocks(
+                (n_samples * n_features) // veclen, PRIVATE_ACC_CELLS * 4
+            ),
+            1,
+            1,
+        ),
+        block_dim=(REDUCE_BY_KEY_TPB, 1, 1),
+    )
+
+
 def launch_accumulate_centroid_sums(
     ctx: DeviceContext,
     mut sums_i32: DeviceBuffer[DType.int32],
@@ -370,31 +446,37 @@ def launch_accumulate_centroid_sums(
 ) raises:
     """The dispatch, shaped like RAFT's (`reduce_cols_by_key.cuh:125-139`):
     privatized when the block-local cache fits and the input is large enough
-    to amortize the flush, direct scatter-add otherwise. Both arms produce
-    bit-identical Int32 totals (see the kernels), so this selector is
-    SCHEDULING: it can change the time, never the model.
+    to amortize the flush, direct scatter-add otherwise. The privatized
+    arm's X read width comes from the same selection ladder the assignment
+    launcher dispatches on (`fused_veclen_for`, fed x's address for both
+    pointer terms because this kernel reads one matrix; PORTING.md 46).
+    Both arms -- and every `veclen` instantiation of the privatized one --
+    produce bit-identical Int32 totals (see the kernels), so this selector
+    is SCHEDULING: it can change the time, never the model.
     """
     var cells = n_samples * n_features
     if (
         n_clusters * n_features <= PRIVATE_ACC_CELLS
         and cells >= PRIVATE_MIN_WORK
     ):
-        ctx.enqueue_function[accumulate_centroid_sums_privatized_kernel](
-            sums_i32.unsafe_ptr(),
-            x.unsafe_ptr(),
-            labels.unsafe_ptr(),
-            weights.unsafe_ptr(),
-            Int32(n_samples),
-            Int32(n_features),
-            Int32(n_clusters),
-            sum_scale,
-            grid_dim=(
-                accumulate_grid_blocks(cells, PRIVATE_ACC_CELLS * 4),
-                1,
-                1,
-            ),
-            block_dim=(REDUCE_BY_KEY_TPB, 1, 1),
+        var vl = fused_veclen_for(
+            n_features, Int(x.unsafe_ptr()), Int(x.unsafe_ptr())
         )
+        if vl == 4:
+            _enqueue_privatized_sums[4](
+                ctx, sums_i32, x, labels, weights,
+                n_samples, n_features, n_clusters, sum_scale,
+            )
+        elif vl == 2:
+            _enqueue_privatized_sums[2](
+                ctx, sums_i32, x, labels, weights,
+                n_samples, n_features, n_clusters, sum_scale,
+            )
+        else:
+            _enqueue_privatized_sums[1](
+                ctx, sums_i32, x, labels, weights,
+                n_samples, n_features, n_clusters, sum_scale,
+            )
     else:
         ctx.enqueue_function[accumulate_centroid_sums_kernel](
             sums_i32.unsafe_ptr(),

@@ -6,6 +6,7 @@ checkout; a second section adding imports to it would collide for no benefit.
 """
 
 from cluster.mojo_only.kmeans_check import (
+    check_accumulate_veclen_dispatch,
     check_assignment_arm_dispatch,
     check_device_inclusive_scan,
     check_fused_policy_dispatch,
@@ -26,3 +27,4 @@ def main() raises:
     check_assignment_arm_dispatch()
     check_fused_policy_dispatch()
     check_privatized_accumulate()
+    check_accumulate_veclen_dispatch()

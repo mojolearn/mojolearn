@@ -1017,7 +1017,9 @@ def _acc_label(i: Int) -> Int:
     return h % ACC_CLUSTERS
 
 
-def _privatized_sums_dropped_flush_kernel(
+def _privatized_sums_dropped_flush_kernel[
+    veclen: Int
+](
     sums_i32: MutPointer[Int32, MutAnyOrigin],
     x: MutPointer[Float32, MutAnyOrigin],
     labels: MutPointer[UInt32, MutAnyOrigin],
@@ -1028,7 +1030,9 @@ def _privatized_sums_dropped_flush_kernel(
     scale_in: Float32,
 ):
     """CHECK-LOCAL SABOTAGE COPY of `accumulate_centroid_sums_privatized_
-    kernel`, identical except that BLOCK 0 SKIPS ITS FLUSH. It exists only
+    kernel`, identical except that BLOCK 0 SKIPS ITS FLUSH (the `veclen`
+    read parameter is mirrored so the copy stays identical to the shipped
+    body -- PORTING.md 46). It exists only
     so `check_privatized_accumulate` can prove the per-block flush is
     load-bearing: a privatized kernel whose flush silently vanished would
     otherwise be indistinguishable from a slow day. Never shipped, never
@@ -1052,15 +1056,21 @@ def _privatized_sums_dropped_flush_kernel(
         z += Int(block_dim.x)
     barrier()
 
+    var chunks = total // veclen
     var gid = Int(block_idx.x) * Int(block_dim.x) + tid
     var stride = Int(grid_dim.x) * Int(block_dim.x)
-    while gid < total:
-        var row = gid // n_features
-        var f = gid - row * n_features
+    while gid < chunks:
+        var base = gid * veclen
+        var row = base // n_features
+        var f = base - row * n_features
         var label = Int(labels.unsafe_load(row))
         var w = weights.unsafe_load(row)
-        var q = Int32(x.unsafe_load(gid) * w * scale_in)
-        _ = Atomic.fetch_add(priv.unsafe_offset(label * n_features + f), q)
+        var xv = x.unsafe_load[width=veclen](base)
+        comptime for j in range(veclen):
+            var q = Int32(xv[j] * w * scale_in)
+            _ = Atomic.fetch_add(
+                priv.unsafe_offset(label * n_features + f + j), q
+            )
         gid += stride
     barrier()
 
@@ -1117,6 +1127,19 @@ def check_privatized_accumulate() raises:
     var sums = ctx.enqueue_create_buffer[DType.int32](cd)
     var wsum = ctx.enqueue_create_buffer[DType.int32](k)
     ctx.synchronize()
+
+    # The read-width arm this fixture pins (PORTING.md 46): d=32 on real
+    # device buffers must take the veclen=4 instantiation. The dispatch
+    # routes on this same function, so run B below exercises the VECTOR
+    # arm, and the bitwise comparison against the scalar direct oracle is
+    # what proves that arm visits every cell exactly once -- on hashed
+    # scattered data a misindexed or dropped lane cannot cancel.
+    var vl = fused_veclen_for(d, Int(x.unsafe_ptr()), Int(x.unsafe_ptr()))
+    if vl != 4:
+        raise Error(
+            "fixture no longer selects the veclen=4 read arm (got "
+            + String(vl) + "); the vector load path would go untested"
+        )
 
     var hx = ctx.enqueue_create_host_buffer[DType.float32](n * d)
     var hl = ctx.enqueue_create_host_buffer[DType.uint32](n)
@@ -1203,11 +1226,12 @@ def check_privatized_accumulate() raises:
 
     # --- sabotage: drop block 0's flush; the totals MUST move -------------
     _zero_and_wait(ctx, sums, cd)
-    ctx.enqueue_function[_privatized_sums_dropped_flush_kernel](
+    comptime sab_kern = _privatized_sums_dropped_flush_kernel[4]
+    ctx.enqueue_function[sab_kern](
         sums.unsafe_ptr(), x.unsafe_ptr(), labels.unsafe_ptr(),
         weights.unsafe_ptr(), Int32(n), Int32(d), Int32(k), ACC_SCALE,
         grid_dim=(
-            accumulate_grid_blocks(n * d, PRIVATE_ACC_CELLS * 4), 1, 1
+            accumulate_grid_blocks((n * d) // 4, PRIVATE_ACC_CELLS * 4), 1, 1
         ),
         block_dim=(REDUCE_BY_KEY_TPB, 1, 1),
     )
@@ -1232,7 +1256,148 @@ def check_privatized_accumulate() raises:
         + " weight cells bit-identical direct vs privatized, run-twice"
         " bitwise equal, dropped flush moved "
         + String(moved)
-        + " cells"
+        + " cells, veclen=4 read arm pinned"
+    )
+
+
+def _accumulate_arm_correct(d: Int, expect_veclen: Int) raises:
+    """Run the REAL accumulate dispatch at a feature count whose read-width
+    selection lands on `expect_veclen`, and hold its totals bitwise to the
+    scalar direct-kernel oracle on the hashed, scattered, skewed fixture.
+
+    Mirrors `_policy_arm_correct`'s method: (1) the selection function --
+    the same `fused_veclen_for` the dispatch routes on -- must return
+    `expect_veclen` on the real buffer, so the arm named is the arm run;
+    (2) the fixture must satisfy the privatized guard, so the dispatch
+    cannot silently fall to the direct arm and compare the oracle against
+    itself; (3) the oracle totals must be nonzero somewhere, so a dispatch
+    that silently launched nothing cannot pass. Bit-identity is the design
+    claim, so every cell compares with `!=`, no tolerance.
+    """
+    var ctx = DeviceContext()
+    var n = ACC_ROWS
+    var k = ACC_CLUSTERS
+    var cd = k * d
+
+    if not (cd <= PRIVATE_ACC_CELLS and n * d >= PRIVATE_MIN_WORK):
+        raise Error(
+            "arm fixture d=" + String(d) + " does not select the privatized"
+            " arm; the check would compare the oracle to itself"
+        )
+
+    var x = ctx.enqueue_create_buffer[DType.float32](n * d)
+    var labels = ctx.enqueue_create_buffer[DType.uint32](n)
+    var weights = ctx.enqueue_create_buffer[DType.float32](n)
+    var sums = ctx.enqueue_create_buffer[DType.int32](cd)
+    var wsum = ctx.enqueue_create_buffer[DType.int32](k)
+    ctx.synchronize()
+
+    var vl = fused_veclen_for(d, Int(x.unsafe_ptr()), Int(x.unsafe_ptr()))
+    if vl != expect_veclen:
+        raise Error(
+            "fused_veclen_for(d=" + String(d) + ") on the real buffer"
+            " returned " + String(vl) + ", expected "
+            + String(expect_veclen)
+            + " -- the intended read arm is not the one the dispatch takes"
+        )
+
+    var hx = ctx.enqueue_create_host_buffer[DType.float32](n * d)
+    var hl = ctx.enqueue_create_host_buffer[DType.uint32](n)
+    var hw = ctx.enqueue_create_host_buffer[DType.float32](n)
+    for i in range(n):
+        hl.unsafe_ptr().unsafe_store(i, UInt32(_acc_label(i)))
+        hw.unsafe_ptr().unsafe_store(i, Float32(1.0) + Float32(i % 5) * 0.25)
+        for f in range(d):
+            hx.unsafe_ptr().unsafe_store(i * d + f, _jitter(i, f) * 10.0)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=labels, src_ptr=hl.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
+    ctx.synchronize()
+
+    var h_direct_s = ctx.enqueue_create_host_buffer[DType.int32](cd)
+    var h_direct_w = ctx.enqueue_create_host_buffer[DType.int32](k)
+    var h_arm_s = ctx.enqueue_create_host_buffer[DType.int32](cd)
+    var h_arm_w = ctx.enqueue_create_host_buffer[DType.int32](k)
+
+    _zero_and_wait(ctx, sums, cd)
+    _zero_and_wait(ctx, wsum, k)
+    ctx.enqueue_function[accumulate_centroid_sums_kernel](
+        sums.unsafe_ptr(), x.unsafe_ptr(), labels.unsafe_ptr(),
+        weights.unsafe_ptr(), Int32(n), Int32(d), ACC_SCALE,
+        grid_dim=(accumulate_grid_blocks(n * d, 0), 1, 1),
+        block_dim=(REDUCE_BY_KEY_TPB, 1, 1),
+    )
+    ctx.enqueue_function[accumulate_weight_per_cluster_kernel](
+        wsum.unsafe_ptr(), labels.unsafe_ptr(), weights.unsafe_ptr(),
+        Int32(n), ACC_SCALE,
+        grid_dim=((n + REDUCE_BY_KEY_TPB - 1) // REDUCE_BY_KEY_TPB, 1, 1),
+        block_dim=(REDUCE_BY_KEY_TPB, 1, 1),
+    )
+    ctx.enqueue_copy(dst_ptr=h_direct_s.unsafe_ptr(), src_buf=sums)
+    ctx.enqueue_copy(dst_ptr=h_direct_w.unsafe_ptr(), src_buf=wsum)
+    ctx.synchronize()
+
+    var nonzero = 0
+    for i in range(cd):
+        if h_direct_s.unsafe_ptr().unsafe_load(i) != Int32(0):
+            nonzero += 1
+    if nonzero == 0:
+        raise Error(
+            "oracle produced all-zero sums at d=" + String(d)
+            + "; the fixture is too weak to catch a no-op arm"
+        )
+
+    _zero_and_wait(ctx, sums, cd)
+    _zero_and_wait(ctx, wsum, k)
+    launch_accumulate_centroid_sums(
+        ctx, sums, x, labels, weights, n, d, k, ACC_SCALE
+    )
+    launch_accumulate_weight_per_cluster(
+        ctx, wsum, labels, weights, n, k, ACC_SCALE
+    )
+    ctx.enqueue_copy(dst_ptr=h_arm_s.unsafe_ptr(), src_buf=sums)
+    ctx.enqueue_copy(dst_ptr=h_arm_w.unsafe_ptr(), src_buf=wsum)
+    ctx.synchronize()
+
+    var s_diff = 0
+    for i in range(cd):
+        if h_arm_s.unsafe_ptr().unsafe_load(i) != h_direct_s.unsafe_ptr().unsafe_load(i):
+            s_diff += 1
+    var w_diff = 0
+    for i in range(k):
+        if h_arm_w.unsafe_ptr().unsafe_load(i) != h_direct_w.unsafe_ptr().unsafe_load(i):
+            w_diff += 1
+    if s_diff != 0 or w_diff != 0:
+        raise Error(
+            "veclen=" + String(expect_veclen) + " read arm at d=" + String(d)
+            + " is NOT bit-identical to the direct oracle: " + String(s_diff)
+            + " of " + String(cd) + " sum cells and " + String(w_diff)
+            + " of " + String(k) + " weight cells differ"
+        )
+    print(
+        "  veclen=" + String(expect_veclen) + " accumulate arm at d="
+        + String(d) + ": " + String(cd) + " sum cells + " + String(k)
+        + " weight cells bit-identical to the direct oracle ("
+        + String(nonzero) + " nonzero)"
+    )
+
+
+def check_accumulate_veclen_dispatch() raises:
+    """Pin the accumulate read-width dispatch's NON-DEFAULT arms where the
+    selection ladder takes them (PORTING.md 46): d=33 rejects both vector
+    widths (132 bytes per row is neither a 16- nor an 8-byte multiple), and
+    d=34 takes the 2-wide arm. The default veclen=4 arm is pinned inside
+    `check_privatized_accumulate`, on the same fixture that proves the
+    privatized structure. An arm nothing exercises proves nothing, so both
+    are run for real through the shipped dispatch against the scalar
+    direct-kernel oracle on scattered hashed data.
+    """
+    _accumulate_arm_correct(33, 1)
+    _accumulate_arm_correct(34, 2)
+    print(
+        "check_accumulate_veclen_dispatch OK: scalar read arm"
+        " reached-and-correct at d=33, 2-wide arm at d=34, 4-wide arm"
+        " pinned in check_privatized_accumulate"
     )
 
 

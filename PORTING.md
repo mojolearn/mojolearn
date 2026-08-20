@@ -941,3 +941,62 @@ proving the fallback arm's center + restore pair still runs by sentinel
 `gemm_tn` never dispatches to the centered entry, so OLS and tSVD are
 bit-for-bit untouched (ols_main 4/4 unchanged; plain-arm bit dump identical
 across the change).
+
+## 46. The k-means accumulate reads X `veclen`-wide: upstream's scalar-read premise is NVIDIA's, not Apple's
+
+RAFT's `reduce_rows_by_key` accumulate reads ONE element per thread:
+`SumsT val = d_A[j + lda * i];`
+(`raft/cpp/include/raft/linalg/detail/reduce_rows_by_key.cuh:285`, in
+`sum_rows_by_key_large_nkeys_kernel_rowmajor`; the colmajor arm `:213-227`
+and `reduce_cols_by_key.cuh` are scalar likewise -- no `TxN_t`, no `ldg`
+anywhere in either file). That is not an omission on their part: on NVIDIA
+a warp's 32 adjacent scalar reads coalesce into full memory transactions,
+so scalar-per-thread IS the full-bandwidth pattern and a veclen buys them
+nothing. The LANE_kmeans-kernel audit (2026-08-20, table row 6) confirmed
+our port faithful to those scalar reads.
+
+On this Apple M4 the premise does not hold, and that is measured, not
+argued: the assignment kernel's re-port to upstream's `Veclen` `ldg`
+pattern -- the same scalar-to-vector swap and nothing else on the read
+path -- took assignment from 63 to 21 ms/iter (re-verdict 2026-08-20,
+commit ef0c4ba), while the faithful-scalar accumulate sat at 54 ms/iter =
+~9.5 GB/s effective on a ~120 GB/s device at 4M x 32 float32. So the
+privatized centroid-sum kernel
+(`cluster/mojo_only/reduce_by_key.mojo::accumulate_centroid_sums_
+privatized_kernel`) now takes a comptime `veclen` and reads X as
+`SIMD[float32, veclen]`, one chunk of `veclen` consecutive cells per
+thread step -- a DELIBERATE DEVIATION BEYOND upstream, priced here, not a
+fidelity fix.
+
+The selection is not new machinery: the dispatch
+(`launch_accumulate_centroid_sums`) routes on `fused_veclen_for` -- the
+SAME 16/8/1-byte ladder upstream selects their assignment veclen with
+(`fused_distance_nn-inl.cuh:107-110`) and the assignment port already
+transcribed -- fed x's base address for both pointer terms because this
+kernel reads one matrix. The ladder's `4 * n_features % 16 == 0` term is
+the load-safety contract, exactly as it is upstream: `n_features` a
+multiple of `veclen` means a chunk never straddles a row (so ONE label and
+ONE weight read serve the whole chunk -- the scalar body re-read both per
+CELL) and an aligned load that starts in bounds ends in bounds. Rows that
+fail the ladder take `veclen = 1`, which is the old scalar body verbatim.
+
+Bit-identity is untouched, by construction and then by check: a vector
+load returns the same bits as `veclen` scalar loads; each lane's
+quantization `Int32(x * w * scale)` is the identical scalar fp32
+expression on identical bits in the identical order; and everything after
+the quantization is Int32 addition, associative and commutative, so chunk
+order cannot move a total. Proven, not argued:
+`check_privatized_accumulate` pins the veclen=4 arm at the fit's d=32 on
+real device buffers and holds it bitwise (`!=`, no tolerance) to the
+scalar direct scatter-add oracle on hashed, scattered, skewed data, plus
+run-twice equality and the dropped-flush sabotage;
+`check_accumulate_veclen_dispatch` proves the scalar arm
+reached-and-correct at d=33 (ladder rejects both widths) and the 2-wide
+arm at d=34, each against the same oracle with a nonzero-oracle guard so a
+silently-launched-nothing arm cannot pass.
+
+Deliberately NOT widened: the weight-per-cluster kernel reads no X (8
+bytes per row against the sums kernel's 128 at d=32, 1/16 the traffic)
+and stays scalar; the direct scatter-add fallback arm is the
+upstream-faithful kernel and stays verbatim -- it is also the oracle the
+checks compare against, which it can only be while it stays scalar.
