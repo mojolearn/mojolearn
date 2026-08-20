@@ -84,10 +84,13 @@ leaf through a one-block grid to keep it from becoming one again.
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host.device_attribute import DeviceAttribute
 from max.gpu.primitives.block import sum as block_sum
 
 
-comptime STATS_BLOCK = 256
+# `const ui32 blockSize = 512` (`update_part_props.cu:209`). Was 256, which
+# was ours, not theirs.
+comptime STATS_BLOCK = 512
 
 
 def partition_stats_partial_kernel(
@@ -205,6 +208,18 @@ def partition_stats_finish_kernel(
         out_stats.unsafe_store(leaf_id * n_stats + stat, total)
 
 
+def partition_stats_chunks(sm_count: Int, n_stats: Int) -> Int:
+    """`numBlocks.x = CeilDivide(2 * TArchProps::SMCount(), statCount)`
+    (`update_part_props.cu:215`). Exported so the check derives its expected
+    `partials` layout from the SAME formula the launch uses; an expectation
+    that recomputes this its own way is an expectation that follows nothing.
+    """
+    var chunks = (2 * sm_count + n_stats - 1) // n_stats
+    if chunks < 1:
+        chunks = 1
+    return chunks
+
+
 def compute_partition_stats(
     ctx: DeviceContext,
     n_leaf_slots: Int,
@@ -226,17 +241,29 @@ def compute_partition_stats(
     caller that under-reports the widest leaf pays in occupancy, not in
     dropped rows.
 
-    OPEN, and recorded rather than fixed here: theirs sizes this grid from
-    the MACHINE, `numBlocks.x = CeilDivide(2 * TArchProps::SMCount(),
-    statCount)` (`update_part_props.cu`, `UpdatePartitionsProps`), and ours
-    sizes it from the data. At depth 0 on 800k rows ours asks for 3125 blocks
-    in x where theirs would ask for a few dozen. Switching to their formula is
-    a launch-shape change with a timing consequence and no measurement behind
-    it yet, so it is not made in the same commit as a correctness fix.
+    THE GRID IS NOW THEIRS: `numBlocks.x = CeilDivide(2 *
+    TArchProps::SMCount(), statCount)` at `blockSize = 512`
+    (`update_part_props.cu:209-215`), MACHINE-sized. This stood as an OPEN
+    deviation, data-sized at `ceil(max_leaf_rows / STATS_BLOCK)`, waiting
+    for a measurement; the 2026-08-19 phase itemization supplied one (5.4
+    ms/tree at 800k x 100 depth 6, ~40x under the streaming bandwidth this
+    box measures on the same buffers). At depth 0 on 800k rows the old
+    formula asked for 3125 blocks in x where theirs asks for a few dozen.
+
+    `max_leaf_rows` is no longer read; the parameter stays because the call
+    sites live in `greedy_search_helper.mojo` and are not this file's to
+    edit this round.
+
+    NUMERIC NOTE, not scheduling: the x count is a summation-order choice
+    for a FLOAT tree reduction, so moving it moves last bits. That is
+    THEIR design too -- their count reads `SMCount()` on whatever device
+    they run -- and the oracle gate is the arbiter of whether the model
+    moved. It did not (48 of 48 after this change).
     """
-    var max_chunks = (max_leaf_rows + STATS_BLOCK - 1) // STATS_BLOCK
-    if max_chunks < 1:
-        max_chunks = 1
+    _ = max_leaf_rows
+    var max_chunks = partition_stats_chunks(
+        ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT), n_stats
+    )
 
     ctx.enqueue_function[partition_stats_partial_kernel](
         leaves.unsafe_ptr(),

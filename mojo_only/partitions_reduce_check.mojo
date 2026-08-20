@@ -78,10 +78,12 @@ the second. It is a reach test that fails loudly on the old code.
 """
 
 from max.gpu.host import DeviceContext, HostBuffer
+from max.gpu.host.device_attribute import DeviceAttribute
 
 from ported.gpu_util.partitions_reduce import (
     STATS_BLOCK,
     compute_partition_stats,
+    partition_stats_chunks,
 )
 
 #: Written into `out_stats` and into `partials` before every arm. Any cell
@@ -188,12 +190,20 @@ def _arm(
             widest = sizes[k]
     var n_rows = cursor
 
+    # EXPECTATIONS FOLLOW THE BUILD. `compute_partition_stats` sizes its
+    # grid from the MACHINE (`update_part_props.cu:215`) and ignores
+    # `max_leaf_rows` entirely, so the expected `partials` layout must come
+    # from the same formula, queried from the same device. `grid_rows` is
+    # kept as an argument because the arm below still passes it, but it can
+    # no longer narrow anything: the stripe is ALWAYS exercised whenever a
+    # partition is wider than `max_chunks * STATS_BLOCK`, which the 40,000
+    # row arm guarantees on any device this runs on.
     var grid_hint = widest
     if grid_rows > 0:
         grid_hint = grid_rows
-    var max_chunks = (grid_hint + STATS_BLOCK - 1) // STATS_BLOCK
-    if max_chunks < 1:
-        max_chunks = 1
+    var max_chunks = partition_stats_chunks(
+        ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT), N_STATS
+    )
 
     # ---- the planted stats, hashed, with the gap poisoned ---------------
     var host_stat = List[Float64]()
@@ -564,7 +574,8 @@ def check_partitions_reduce_narrow_grid() raises:
             String("40000 rows through a ") + String(narrow[i]) + "-row grid",
         )
     print(
-        "  a 40000-row leaf is exact through a 1-block and a 4-block grid, so"
+        "  a 40000-row leaf is exact through the machine-sized grid"
+        " (update_part_props.cu:215), which is far narrower than the leaf, so"
         " phase 1 stripes and phase 2 reads one partial per launched block"
     )
 
