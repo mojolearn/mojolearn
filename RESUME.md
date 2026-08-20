@@ -524,6 +524,20 @@ this is a quality-band row, not a bitwise one. ADULT: prep bug diagnosed
 (float NaN inside object columns; fillna before astype), handed to the
 harness stream -- to be RUN AND REPORTED once fixed, whatever it shows.
 
+### 2026-08-21, the 254 lever closed out (9b2b64e + 8010b2f)
+
+The Int32 arms dropped the collision serialization their atomics make
+redundant (pass loops, write turns): 800k@254 1.25-1.36x (from
+1.4-1.5x), covtype@254 1.87-2.02x, every mse column bit-unchanged. Then
+the fused two-stat 8-bit arm (the >128 fusion their ladder cannot do
+warp-private) landed BIT-IDENTICAL with half the launches -- and FLAT
+speed, because the walk it removes was latency-hidden on this box (the
+traffic-model lesson, again); kept for the launch count and for
+bandwidth-tighter machines. The remaining 254-over-128 delta is 2x
+histogram cells through bridge/score/convert -- structural, priced.
+ON-BOX TRAINING LEVERS ARE NOW EXHAUSTED: what remains is Pro/Max
+silicon, NVIDIA validation, and the CTR device kernels.
+
 Next known levers, in order: CTR steps 2-5 (RECON_CTRS.md: FeatureFreq,
 then the radix-sort/segmented-scan vendor checks, then history CTRs),
 the epsilon dataset.
