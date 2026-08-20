@@ -15,10 +15,21 @@
 # classifiers in pyproject.toml list exactly those and no others.
 set -eu
 
+# --no-gpu: verify build, install and API on every interpreter, but do not
+# attempt a fit. For environments with no usable GPU, which on this project
+# means GitHub's virtualized runners. See packaging/macos/smoke.py.
+SMOKE_ARGS=""
+MODE="full (device fits)"
+if [ "${1:-}" = "--no-gpu" ]; then
+    SMOKE_ARGS="--no-gpu"
+    MODE="--no-gpu (import and API only, DEVICE NOT TESTED)"
+fi
+
 here=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 WHEEL=$(ls "$here"/python/dist/mojolearn-*.whl 2>/dev/null | head -1)
 [ -n "$WHEEL" ] || { echo "no wheel in python/dist; run build_release_wheel.sh" >&2; exit 1; }
 echo "wheel: $(basename "$WHEEL")"
+echo "mode:  $MODE"
 
 fails=0
 # Every interpreter at or above the declared floor. Ones that are not
@@ -36,7 +47,7 @@ for py in python3.10 python3.11 python3.12 python3.13 python3.14; do
     # cd to /tmp so the repository's ./python/mojolearn cannot shadow the
     # installed package. Without this the test can pass on source that is not
     # in the wheel at all.
-    if out=$(cd "$tmp" && "$tmp/venv/bin/python" "$here/packaging/macos/smoke.py" 2>&1); then
+    if out=$(cd "$tmp" && "$tmp/venv/bin/python" "$here/packaging/macos/smoke.py" $SMOKE_ARGS 2>&1); then
         echo "PASS $py  $out"
     else
         echo "FAIL $py"; echo "$out" | tail -5; fails=$((fails+1))

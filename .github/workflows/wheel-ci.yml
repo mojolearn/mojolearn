@@ -75,47 +75,45 @@ jobs:
       - name: Build the wheel
         run: ./packaging/macos/build_release_wheel.sh
 
-      # WHAT THE VIRTUAL GPU CAN ACTUALLY DO. The trivial probe kernel runs
-      # here (probe-hosted-metal.yml) but the library's row_norm_kernel fails
-      # with "Failed to create Metal function". Those two facts together mean
-      # the runner has SOME Metal and not all of it, so the diagnostic goes in
-      # the log before anything depends on it.
-      - name: GPU diagnostic
+      # WHAT THIS RUNNER CAN AND CANNOT ANSWER, measured rather than assumed.
+      #
+      #   trivial elementwise kernel   RUNS   (tools/hosted_gpu_probe.mojo)
+      #   one block_sum               FAILS   (tools/hosted_block_probe.mojo)
+      #
+      # `block_sum` is the only structural difference between the library
+      # kernel that fails here and the probe that passes, so it is the line.
+      # Informational: the job does not depend on it, it records what the
+      # runner could do on the day.
+      - name: GPU capability of this runner
         continue-on-error: true
-        env:
-          MODULAR_DEBUG: device-sync-mode
         run: |
           pixi run mojo build -I . --target-cpu apple-m1 --target-accelerator metal:1 \
             tools/hosted_gpu_probe.mojo -o hosted_gpu_probe
           echo "--- trivial kernel ---"
-          ./hosted_gpu_probe || echo "trivial kernel FAILED here too"
-          echo "--- block-primitive kernel (the one that failed) ---"
-          pixi run mojo run -I . tools/hosted_block_probe.mojo || \
-            echo "block primitive FAILED"
+          ./hosted_gpu_probe || echo "TRIVIAL KERNEL FAILED"
+          echo "--- one block_sum ---"
+          pixi run mojo run -I . tools/hosted_block_probe.mojo || echo "BLOCK_SUM FAILED"
 
-      # THE ANSWER. Clean venv per interpreter, install from the wheel, run a
-      # real fit: planted clusters that must be recovered and a point that
-      # must be its own nearest neighbour. An import-only test would pass on a
-      # wheel whose GPU path is dead.
+      # THE BLOCKING CHECK, and it is scoped to what this runner can honestly
+      # decide. Clean venv per interpreter, install from the wheel, import the
+      # extension, exercise the API and the validation paths. That covers the
+      # dylib staging, the wheel tag, requires-python and the macOS floor --
+      # every breadth claim except one.
       #
-      # NOT BLOCKING, and the reason is specific rather than convenient: this
-      # runner is a VIRTUALIZED M1 that reports no GPU to system_profiler at
-      # all, and it fails to create a Metal function that real Apple silicon
-      # creates fine. That makes a failure here evidence about GitHub's
-      # virtualization, not about the wheel. The build steps above ARE
-      # blocking, because they are the part this runner can answer honestly.
-      - name: Verify on every claimed interpreter
-        continue-on-error: true
-        run: ./packaging/macos/verify_wheel.sh
+      # It does NOT run a fit, because this runner cannot. An earlier version
+      # ran the full smoke test under continue-on-error and produced a GREEN
+      # run in which all five interpreters had failed. A green badge that
+      # means nothing is worse than a red one; a check that cannot run must
+      # say so rather than be allowed to fail quietly.
+      - name: Install and verify on every claimed interpreter
+        run: ./packaging/macos/verify_wheel.sh --no-gpu
 
-      # A SKIP is not a pass. verify_wheel.sh reports absent interpreters
-      # rather than failing, which is right on a laptop and wrong here: the
-      # entire point of this job is that the floor versions are present.
-      # Also non-blocking while the GPU question above is open.
+      # A SKIP is not a pass. The script reports absent interpreters rather
+      # than failing, which is right on a laptop and wrong here: the entire
+      # point of this job is that the floor versions are present.
       - name: No interpreter may be skipped here
-        continue-on-error: true
         run: |
-          out=$(./packaging/macos/verify_wheel.sh)
+          out=$(./packaging/macos/verify_wheel.sh --no-gpu)
           echo "$out"
           if echo "$out" | grep -q '^SKIP'; then
             echo "::error::an interpreter the package claims was not tested"
@@ -127,6 +125,20 @@ jobs:
               exit 1
             }
           done
+
+      - name: Say plainly what was not verified
+        run: |
+          {
+            echo "### Wheel CI"
+            echo ""
+            echo "Verified here: build at the portable baseline, ISA disassembly,"
+            echo "minos/tag agreement, install and import on python 3.10-3.14."
+            echo ""
+            echo "**NOT verified here: that it computes.** This runner is a"
+            echo "virtualized M1 that cannot create a Metal function using"
+            echo "\`block_sum\`. GPU execution is verified on real Apple silicon"
+            echo "by \`packaging/macos/verify_wheel.sh\` with no flag."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload the wheel
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
