@@ -79,9 +79,13 @@ given the d-sweep.
 
 ## What the table says to do next
 
-1. **kmeans, the last unprofiled row** (0.83x, clean loss this window):
-   per-iteration cost sits ~9x above its traffic bound -- the starved-
-   parallelism signature that explained every other gap this week.
+1. **kmeans, now attributed** (0.83x, clean loss): the ~120 ms iteration
+   is assignment 63 ms + accumulation 56 ms (norms 0.2). Assignment streams
+   a materialized distance tile where cuVS's k-means dispatches to its
+   FUSED L2-NN kernel; accumulation does 128M contended global atomics into
+   2,048 cells (privatization case: 8 KB threadgroup partials, ~2M flushes).
+   Ceiling ~35 ms/iter, which would put the fit near 0.7 s vs sklearn's
+   2.0 -- LANE_kmeans-iter in flight.
 2. **PCA's outright win**: fuse mean-subtract into the split-K Gram read and
    drop the restore pass (~100 ms of the remaining 166).
 3. **Target-keying debt: PAID 2026-08-19** (LANE_target-keying).
