@@ -7,81 +7,93 @@ Every contributor retains copyright in their contribution. Git history is the
 authoritative record of individual changes. The project does not require
 copyright assignment.
 
-## What is ours and what is not
+## What we wrote, and whose designs it follows
 
-This distinction is the point of the repository layout, so it belongs here
-rather than only in [NOTICE](NOTICE).
+CORRECTED 2026-08-20. This section was headed "What is ours and what is not"
+and put everything under `ported/` on the "not ours" side. **That was wrong
+and it undersold the work.** Every line of Mojo in this repository was written
+here. Nobody at YANDEX or NVIDIA or Meta wrote any of it, and Andrew Hendel
+holds the copyright in all of it.
 
-**Not ours.** Everything under `ported/` implements CatBoost's algorithms and
-follows CatBoost's structure, file for file. The tree-growing design, the
-packing policies, the histogram strategies, the smaller-sibling rule and the
-level loop are YANDEX's work, Apache-2.0, and `PORTED_MAP.tsv` names the
-source file behind each of ours. Where a port is partial or replaced, that
-column says so.
+What the upstreams own is the DESIGN: the algorithm, the decomposition into
+kernels, the order of operations, the data layout. `ported/` **mirrors** those
+designs, file for file, deliberately, under the rule COPY DO NOT IMPROVE,
+because a port that drifts cannot be checked against the original. The word
+for that relationship is mirroring, not "not ours".
 
-**Not ours, second upstream.** Everything under `cluster/ported/` implements
-cuVS's k-means and follows cuVS's structure, file for file. The expanded
-distance identity, the tiling scheme, the greedy k-means++ trial rule, the
-two convergence tests and the empty-cluster rule are NVIDIA's work,
-Apache-2.0, and `cluster/PORTED_MAP.tsv` names the source file behind each of
-ours. `cluster/UNPORTED.tsv` names what was deliberately left out.
+The distinction that does survive is a legal one and it is narrow: mirroring a
+copyrighted work closely enough produces a DERIVATIVE WORK, and Apache-2.0
+section 4 attaches obligations to a derivative work no matter who typed it.
+That is why [NOTICE](NOTICE) says "derivative work" in the places it does. It
+is a statement about license obligations, not about who did the work, and
+those two questions have different answers here:
 
-**Not ours, third upstream: cuML.** `dbscan/ported/` implements cuML's DBSCAN
-and `decomposition/ported/` implements cuML's PCA and truncated SVD, both
-following cuML's structure. Apache-2.0, NVIDIA.
+  * **Who wrote this code?** Andrew Hendel. All of it.
+  * **Whose design does it follow, and what does that oblige us to do?** The
+    five upstreams below, and it obliges us to carry their license and say
+    the files are changed. NOTICE does that.
 
-**Not ours, fourth upstream: RAFT.** Eleven files across `dbscan/`,
-`decomposition/`, `glm/` and `neighbors/` derive from RAFT, pinned at two
-different commits. Apache-2.0, NVIDIA.
+And a port is not transcription. CUDA has float64, streams, warp-local
+synchronization and shared-memory budgets that Metal and Mojo 1.0 do not, so
+whole kernels needed constructs their source does not contain; about
+thirty-six such deviations are recorded in `PORTING.md`, each one a decision
+the upstream never had to make.
 
-**Not ours, fifth upstream, and NOT Apache-2.0: FAISS.**
-`neighbors/ported/neighbors/detail/faiss_select/` derives from the FAISS
+### The designs we mirror
+
+**CatBoost.** `ported/` mirrors CatBoost's GPU oblivious tree learner, file
+for file. The tree-growing design, the packing policies, the histogram
+strategies, the smaller-sibling rule and the level loop are YANDEX's,
+Apache-2.0. `PORTED_MAP.tsv` names the source behind each file and flags where
+a port is partial or replaced.
+
+**cuVS.** `cluster/ported/` mirrors cuVS's k-means and `neighbors/ported/`
+mirrors its brute-force k-NN and ball cover. The expanded distance identity,
+the tiling scheme, the greedy k-means++ trial rule, the two convergence tests
+and the empty-cluster rule are NVIDIA's, Apache-2.0. `cluster/UNPORTED.tsv`
+names what was deliberately left out.
+
+**cuML.** `dbscan/ported/` mirrors cuML's DBSCAN and `decomposition/ported/`
+mirrors its PCA and truncated SVD. NVIDIA, Apache-2.0.
+
+**RAFT.** Eleven files across `dbscan/`, `decomposition/`, `glm/` and
+`neighbors/` mirror RAFT primitives, pinned at two different commits. NVIDIA,
+Apache-2.0.
+
+**FAISS, and this one is NOT Apache-2.0.**
+`neighbors/ported/neighbors/detail/faiss_select/` mirrors the FAISS
 warp-select queue that RAFT vendors, which carries Facebook's copyright under
 the MIT license. MIT requires the notice to travel with substantial portions,
-so those files carry it in their own headers. See NOTICE.
+so those two files carry it in their own headers. See NOTICE.
 
-CORRECTED 2026-08-20: this section said "third upstream" and named RAFT, with
-two files. There are five upstreams and RAFT alone has eleven files. cuML had
-no attribution anywhere in the project and FAISS had none either, which was a
-license obligation unmet rather than a documentation gap. The
-`PORTED_MAP.tsv` beside each section names the upstream per row, because
-three of the five sections draw from more than one project at once.
+Until 2026-08-20 cuML had no attribution anywhere in this project and FAISS
+had none either. Those were license obligations unmet, and they are the reason
+this section is careful about the derivative-work language rather than
+dropping it.
 
-**Ours.** The translation itself, which is not mechanical: CUDA has warp-local
-synchronization and float atomics that Mojo 1.0 and Metal do not, so several
-kernels required a construct their source does not contain. `PORTING.md`
-records each such deviation and why.
+### The line counts
 
-Everything in these directories is original work. None of it is derived from
-any upstream, and that includes the checks: the upstreams all ship their own
-test suites, and not one line of those was ported. Ours were written from
+All of it is code written here. The split below is by whether a file follows
+an upstream design or has no counterpart in any of them.
+
+    follows an upstream design (`*/ported/`)      29,518 lines
+    no upstream counterpart at all                27,320 lines   48.1%
+      of which library code                        5,875
+      of which checks and probes                  21,445
+
+The checks are original in the fullest sense: every upstream ships its own
+test suite and not one line of those was ported. Ours were written from
 scratch against hand-computed expectations and against CatBoost as an oracle.
+Seven real bugs were caught by them, two of which were invisible to the checks
+written to catch them until the test data changed from uniform to scattered
+hashed values, and a third of which was a kernel with no caller at all, found
+by sabotaging the path and watching whether anything moved.
 
-    original, no upstream counterpart   27,320 lines   48.1% of the repository
-    transliterated from the upstreams   29,518 lines
+The library/checks split is not a discount on either. It is there so a claim
+about the SHIPPING LIBRARY cites 5,875 and a claim about AUTHORSHIP cites
+27,320 or 56,838, rather than one number quietly serving both.
 
-Within the original half, two kinds, because the two answer different
-questions and a claim should cite the right one:
-
-| | lines | |
-|---|---|---|
-| library code | 5,875 | host layer, shared kernels, the stand-ins |
-| checks and probes | 21,445 | verification |
-
-Both are ours. The split is not a discount, it is so that a claim about the
-SHIPPING LIBRARY cites 5,875 and a claim about AUTHORSHIP cites 27,320,
-rather than one number being quietly used for both.
-
-The verification half is the larger one and that is deliberate rather than
-embarrassing. Seven real bugs in this project were found by those checks. Two
-of them were invisible to the checks written to catch them until the test data
-changed from uniform to scattered hashed values, and a third was a kernel
-that had no caller at all and was only found by sabotaging the path and
-watching whether anything moved. A port whose correctness rests on reading
-the original carefully is a port that is wrong; this is the machinery that
-made it not wrong.
-
-Where the original code sits:
+Where the no-counterpart code sits:
 
 | directory | library | checks | what |
 |---|---|---|---|

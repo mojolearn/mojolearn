@@ -1,15 +1,22 @@
 # mojolearn
 
-**Ports of GPU machine-learning algorithms into Mojo, taken from the sources
-that already got them right.**
+**GPU machine-learning algorithms in Mojo, running on hardware the originals
+cannot reach.**
 
-The rule for every one of them is in `PORTING_RULES.md`: take their code and
-their algorithms, keep their control plane and their data plane, keep what
-they do on the GPU on the GPU and what they do on the host on the host, and
-adapt to Mojo only where the toolchain forces it.
+Every line here is written in this repository. What it mirrors is the DESIGN
+of the implementations that already got these algorithms right, and the rule
+for doing that is in `PORTING_RULES.md`: follow their algorithm, keep their
+control plane and their data plane, keep what they do on the GPU on the GPU
+and what they do on the host on the host, and adapt to Mojo only where the
+toolchain forces it. The mirroring is deliberate. A port that drifts cannot be
+checked against the original, and this one is checked against it constantly.
 
-Upstreams, corrected 2026-08-20. This table said "two upstreams so far" and
-listed two. There are five, and the omission was not cosmetic: cuML had no
+The point is the target. Every design below was written for CUDA, and none of
+those implementations runs on Apple silicon at all. This one does, from a
+single source that also targets CUDA and ROCm.
+
+Designs mirrored, table corrected 2026-08-20. It said "two upstreams so far"
+and listed two. There are five, and the omission was not cosmetic: cuML had no
 attribution section in `NOTICE` at all, which is an Apache-2.0 section 4
 obligation, and the MIT-licensed FAISS code RAFT vendors had no notice
 anywhere. Both are fixed; see `NOTICE`.
