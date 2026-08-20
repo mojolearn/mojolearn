@@ -78,11 +78,19 @@ There is no device-side convergence kernel in cuVS and no flag read one
 iteration late; an earlier version of this port had both and attributed them
 to cuVS with citations that pointed at a function signature.
 
-**It refuses cuVS's DEFAULT initialization.** `oversampling_factor = 2.0`
-selects scalable k-means|| and that is not ported, so `kmeans_fit_main`
-raises instead of quietly running classic k-means++ and reporting the
-inertia. Set `oversampling_factor = 0` for classic k-means++, which is
-ported, or `init = Random`.
+**cuVS's DEFAULT initialization runs.** `oversampling_factor = 2.0` selects
+scalable k-means|| (`initScalableKMeansPlusPlus`,
+`detail/kmeans.cuh:568-785`), ported in `ported/cluster/detail/kmeans.mojo::
+init_scalable_kmeans_plus_plus` with its vendor calls named kernel by kernel
+in `mojo_only/scalable_init.mojo` (PORTING.md 47 and 48 price the
+randomness and selection mechanisms). Until 2026-08-20 this arm raised
+rather than silently substituting classic k-means++; `oversampling_factor =
+0` still switches to the classic sequential variant, exactly as their
+dispatch at `:910-915` does. `check_scalable_sampling_selection` holds the
+sampling round to an exact host replay of the same predicate and sabotages
+the candidate costs; `check_scalable_kmeans_plus_plus_init` runs the default
+config end to end, run-twice bitwise; `check_scalable_supplement_branch`
+starves the rounds to reach the fewer-than-k random-supplement arm.
 
 **It has now been LAUNCHED and it passes.** `cluster/kmeans_main.mojo` builds
 and runs `cluster/mojo_only/kmeans_check.mojo`:

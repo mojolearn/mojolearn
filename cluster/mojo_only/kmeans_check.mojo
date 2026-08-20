@@ -80,6 +80,12 @@ from cluster.mojo_only.plus_plus import (
     scan_chunk_offsets_kernel,
     write_inclusive_scan_kernel,
 )
+from cluster.mojo_only.scalable_init import (
+    sample_flags_kernel,
+    scalable_keep,
+    scalable_uniform,
+    select_scatter_kernel,
+)
 from cluster.ported.cluster.kmeans_params import (
     INIT_KMEANS_PLUS_PLUS,
     INIT_ARRAY,
@@ -1604,4 +1610,541 @@ def check_fused_policy_dispatch() raises:
         " alignment, skinny at k<32), bench alignment k=32 takes veclen 4"
         " on real buffers, scalar and 2-wide arms correct through the"
         " launcher with the m grid-stride exercised"
+    )
+
+
+# --- scalable k-means|| ------------------------------------------------------
+
+comptime SCAL_N = 4000
+
+
+def _scal_cost(i: Int) -> Float32:
+    """Hashed, scattered, POSITIVE planted candidate costs.
+
+    Not uniform on purpose: a uniform cost vector gives every point the same
+    selection probability and a kernel that reads the wrong element still
+    draws from the right distribution. Hashed values make the selected SET
+    depend on placement."""
+    return Float32((i * 2654435761 + 13) % 2039) / Float32(2039.0) * Float32(
+        3.0
+    ) + Float32(0.01)
+
+
+def _scal_preflagged(i: Int) -> Bool:
+    """Every 97th sample is already a centroid, so the exclusion half of
+    `SamplingOp` (`!flag[a.key]`) has real work to refuse."""
+    return i % 97 == 0
+
+
+def _run_scalable_selection(
+    ctx: DeviceContext,
+    mut min_dist: DeviceBuffer[DType.float32],
+    mut is_centroid: DeviceBuffer[DType.int32],
+    mut flags: DeviceBuffer[DType.float32],
+    mut chunk_totals: DeviceBuffer[DType.float32],
+    mut chunk_offsets: DeviceBuffer[DType.float32],
+    mut csum: DeviceBuffer[DType.float32],
+    n: Int,
+    psi: Float32,
+    lk: Float32,
+    seed_lo: Int32,
+    seed_hi: Int32,
+) raises -> Int:
+    """One k-means|| sampling round exactly as the shipped init launches it:
+    flags, the three-stage scan, and the ONE-float count readback. A free
+    function because Mojo 1.0 cannot infer a capture convention for a
+    `DeviceContext` in a nested `def`."""
+    var chunk = PLUS_PLUS_TPB
+    var n_chunks = (n + chunk - 1) // chunk
+    ctx.enqueue_function[sample_flags_kernel](
+        flags.unsafe_ptr(),
+        min_dist.unsafe_ptr(),
+        is_centroid.unsafe_ptr(),
+        Int32(n),
+        psi,
+        lk,
+        seed_lo,
+        seed_hi,
+        grid_dim=((n + 255) // 256, 1, 1),
+        block_dim=(256, 1, 1),
+    )
+    ctx.enqueue_function[chunk_sums_kernel](
+        chunk_totals.unsafe_ptr(), flags.unsafe_ptr(), Int32(n), Int32(chunk),
+        grid_dim=(n_chunks, 1, 1), block_dim=(PLUS_PLUS_TPB, 1, 1),
+    )
+    ctx.enqueue_function[scan_chunk_offsets_kernel](
+        chunk_offsets.unsafe_ptr(), chunk_totals.unsafe_ptr(),
+        Int32(n_chunks),
+        grid_dim=(1, 1, 1), block_dim=(PLUS_PLUS_TPB, 1, 1),
+    )
+    ctx.enqueue_function[write_inclusive_scan_kernel](
+        csum.unsafe_ptr(), flags.unsafe_ptr(), chunk_offsets.unsafe_ptr(),
+        Int32(n), Int32(chunk),
+        grid_dim=(n_chunks, 1, 1), block_dim=(PLUS_PLUS_TPB, 1, 1),
+    )
+    var tail = csum.create_sub_buffer[DType.float32](n - 1, 1)
+    var h_count = ctx.enqueue_create_host_buffer[DType.float32](1)
+    ctx.enqueue_copy(dst_ptr=h_count.unsafe_ptr(), src_buf=tail)
+    ctx.synchronize()
+    return Int(h_count.unsafe_ptr().unsafe_load(0))
+
+
+def check_scalable_sampling_selection() raises:
+    """The k-means|| round machinery against an exact host replay, then a
+    cost sabotage that must move the selection in the predicted shape.
+
+    `scalable_uniform` and `scalable_keep` are plain `def`s, so the host can
+    run THE SAME predicate the device runs and the expected selection is an
+    exact set, not a distribution: same count, same indices, same order
+    (`DeviceSelect::If` stability), flags updated exactly on selected union
+    preflagged. Note the replay shares the predicate CODE with the kernel on
+    purpose -- this check pins the selection/compaction machinery around the
+    predicate, and the fit-level checks pin the algorithm's output against
+    independent oracles.
+
+    THE SABOTAGE: zero the planted cost of every third sample and rerun with
+    the SAME seed and the SAME psi. `prob_x = lk * 0 / psi = 0` and the
+    comparison is strict, so a zero-cost sample can NEVER be drawn: the
+    predicted movement is exactly the baseline selection minus the zeroed
+    rows, nothing else -- every other sample's uniform and probability are
+    unchanged. A selection that ignores `min_dist` passes the baseline count
+    by luck at best and cannot pass both halves.
+    """
+    var ctx = DeviceContext()
+    var n = SCAL_N
+    var chunk = PLUS_PLUS_TPB
+    var n_chunks = (n + chunk - 1) // chunk
+
+    var min_dist = ctx.enqueue_create_buffer[DType.float32](n)
+    var is_centroid = ctx.enqueue_create_buffer[DType.int32](n)
+    var flags = ctx.enqueue_create_buffer[DType.float32](n)
+    var chunk_totals = ctx.enqueue_create_buffer[DType.float32](n_chunks)
+    var chunk_offsets = ctx.enqueue_create_buffer[DType.float32](n_chunks)
+    var csum = ctx.enqueue_create_buffer[DType.float32](n)
+    ctx.synchronize()
+
+    var hd = ctx.enqueue_create_host_buffer[DType.float32](n)
+    var hp = ctx.enqueue_create_host_buffer[DType.int32](n)
+    var psi64 = Float64(0.0)
+    for i in range(n):
+        hd.unsafe_ptr().unsafe_store(i, _scal_cost(i))
+        hp.unsafe_ptr().unsafe_store(
+            i, Int32(1) if _scal_preflagged(i) else Int32(0)
+        )
+        psi64 += Float64(_scal_cost(i))
+    ctx.enqueue_copy(dst_buf=min_dist, src_ptr=hd.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=is_centroid, src_ptr=hp.unsafe_ptr())
+    ctx.synchronize()
+
+    var psi = Float32(psi64)
+    var lk = Float32(16.0)  # oversampling_factor 2.0 at k = 8
+    var round_seed = UInt64(0x9E3779B97F4A7C15) ^ UInt64(20260820)
+    var seed_lo = round_seed.cast[DType.uint32]().cast[DType.int32]()
+    var seed_hi = (round_seed >> 32).cast[DType.uint32]().cast[DType.int32]()
+
+    # --- the exact expected selection, replayed on the host ----------------
+    var expected = List[Int]()
+    for i in range(n):
+        var u = scalable_uniform(seed_lo, seed_hi, i)
+        if not _scal_preflagged(i) and scalable_keep(
+            _scal_cost(i), psi, lk, u
+        ):
+            expected.append(i)
+    if len(expected) == 0:
+        raise Error("fixture too weak: the host replay selects nothing")
+    var expected_div3 = 0
+    for e in range(len(expected)):
+        if expected[e] % 3 == 0:
+            expected_div3 += 1
+    if expected_div3 == 0:
+        raise Error(
+            "fixture too weak: no baseline selection at i % 3 == 0, so the"
+            " sabotage below could not register"
+        )
+
+    var n_sel = _run_scalable_selection(
+        ctx, min_dist, is_centroid, flags, chunk_totals, chunk_offsets, csum,
+        n, psi, lk, seed_lo, seed_hi,
+    )
+    if n_sel != len(expected):
+        raise Error(
+            "device selected " + String(n_sel) + " where the host replay of"
+            " the same predicate selects " + String(len(expected))
+        )
+    var sel_index = ctx.enqueue_create_buffer[DType.uint32](n_sel)
+    ctx.synchronize()
+    ctx.enqueue_function[select_scatter_kernel](
+        sel_index.unsafe_ptr(), is_centroid.unsafe_ptr(), flags.unsafe_ptr(),
+        csum.unsafe_ptr(), Int32(n),
+        grid_dim=((n + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+    )
+    var h_sel = ctx.enqueue_create_host_buffer[DType.uint32](n_sel)
+    var h_flag = ctx.enqueue_create_host_buffer[DType.int32](n)
+    ctx.enqueue_copy(dst_ptr=h_sel.unsafe_ptr(), src_buf=sel_index)
+    ctx.enqueue_copy(dst_ptr=h_flag.unsafe_ptr(), src_buf=is_centroid)
+    ctx.synchronize()
+
+    for e in range(len(expected)):
+        if Int(h_sel.unsafe_ptr().unsafe_load(e)) != expected[e]:
+            raise Error(
+                "selection slot " + String(e) + " holds "
+                + String(Int(h_sel.unsafe_ptr().unsafe_load(e)))
+                + ", host replay expects " + String(expected[e])
+                + " -- order or placement is wrong"
+            )
+    # Flags must now be exactly preflagged union selected.
+    var cursor = 0
+    for i in range(n):
+        var want = Int32(0)
+        if _scal_preflagged(i):
+            want = Int32(1)
+        elif cursor < len(expected) and expected[cursor] == i:
+            want = Int32(1)
+            cursor += 1
+        if h_flag.unsafe_ptr().unsafe_load(i) != want:
+            raise Error(
+                "isSampleCentroid wrong at " + String(i)
+                + ": the scatter's flag update (their thrust::for_each_n,"
+                " kmeans_common.cuh:270-276) is not doing what it says"
+            )
+
+    # --- SABOTAGE: zero every third cost; those rows must vanish -----------
+    for i in range(n):
+        if i % 3 == 0:
+            hd.unsafe_ptr().unsafe_store(i, Float32(0.0))
+    ctx.enqueue_copy(dst_buf=min_dist, src_ptr=hd.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=is_centroid, src_ptr=hp.unsafe_ptr())  # reset
+    ctx.synchronize()
+
+    var sab_expected = List[Int]()
+    for e in range(len(expected)):
+        if expected[e] % 3 != 0:
+            sab_expected.append(expected[e])
+
+    var sab_sel = _run_scalable_selection(
+        ctx, min_dist, is_centroid, flags, chunk_totals, chunk_offsets, csum,
+        n, psi, lk, seed_lo, seed_hi,
+    )
+    if sab_sel == n_sel:
+        raise Error(
+            "SABOTAGE FAILED TO REGISTER: zeroing " + String(n // 3)
+            + " costs left the selected count at " + String(n_sel)
+            + ", so the sampling is not reading the cost vector"
+        )
+    if sab_sel != len(sab_expected):
+        raise Error(
+            "sabotaged selection count " + String(sab_sel)
+            + " is not the predicted baseline-minus-zeroed "
+            + String(len(sab_expected))
+        )
+    var sab_index = ctx.enqueue_create_buffer[DType.uint32](sab_sel)
+    ctx.synchronize()
+    ctx.enqueue_function[select_scatter_kernel](
+        sab_index.unsafe_ptr(), is_centroid.unsafe_ptr(), flags.unsafe_ptr(),
+        csum.unsafe_ptr(), Int32(n),
+        grid_dim=((n + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+    )
+    var h_sab = ctx.enqueue_create_host_buffer[DType.uint32](sab_sel)
+    ctx.enqueue_copy(dst_ptr=h_sab.unsafe_ptr(), src_buf=sab_index)
+    ctx.synchronize()
+    for e in range(sab_sel):
+        var got = Int(h_sab.unsafe_ptr().unsafe_load(e))
+        if got % 3 == 0:
+            raise Error(
+                "a zero-cost sample " + String(got) + " was selected: the"
+                " strict `prob_x > rnd` comparison is not being applied to"
+                " the cost"
+            )
+        if got != sab_expected[e]:
+            raise Error(
+                "sabotaged selection diverged from the predicted set at slot "
+                + String(e)
+            )
+
+    print(
+        "check_scalable_sampling_selection OK: " + String(n_sel) + "/"
+        + String(n) + " drawn exactly as the host replay predicts (order,"
+        " flags, count); zeroing 1/3 of the costs moved the selection to"
+        " exactly baseline-minus-zeroed (" + String(sab_sel) + "), "
+        + String(expected_div3) + " rows vanished as predicted"
+    )
+
+
+def check_scalable_kmeans_plus_plus_init() raises:
+    """The DEFAULT configuration -- the one that raised until k-means||
+    landed -- run end to end, twice.
+
+    `oversampling_factor` is left at cuVS's default 2.0, which selects
+    `initScalableKMeansPlusPlus` (`detail/kmeans.cuh:910-915`); both arms of
+    that selection predicate are pinned here first. The fit must recover the
+    planted centers as a permutation, its inertia must match the analytic
+    expectation, and a second identical run must reproduce the inertia
+    BITWISE (every reduction in the path is either fixed-shape or exact
+    integer arithmetic, so determinism is a design claim, not luck).
+
+    THE TOLERANCE IS FROM A MEASURED ORACLE SPREAD, NOT A GUESS: sklearn
+    1.9.0 `KMeans(n_clusters=4, init='k-means++', n_init=1, max_iter=50)` on
+    this exact fixture returns inertia 171.193649 on ALL of seeds 0..9 --
+    seed-to-seed spread ZERO -- so the whole 2% budget is our float32 /
+    fixed-point arithmetic, which the classic-init path measures at 0.0029
+    relative on the same fixture.
+    """
+    var ctx = DeviceContext()
+    var cd = CHECK_CLUSTERS * CHECK_FEATURES
+
+    var x = ctx.enqueue_create_buffer[DType.float32](
+        CHECK_ROWS * CHECK_FEATURES
+    )
+    var weights = ctx.enqueue_create_buffer[DType.float32](CHECK_ROWS)
+    var centroids = ctx.enqueue_create_buffer[DType.float32](cd)
+    var labels = ctx.enqueue_create_buffer[DType.uint32](CHECK_ROWS)
+    ctx.synchronize()
+
+    var magnitude = _fill_fixture(ctx, x, weights)
+    var sum_scale = Float32(choose_scale(magnitude))
+    var weight_scale = Float32(choose_scale(Float64(CHECK_ROWS)))
+
+    var params = KMeansParams.default()
+    params.n_clusters = CHECK_CLUSTERS
+    params.metric = METRIC_L2_EXPANDED
+    params.max_iter = 50
+    params.seed = 20260820
+    # oversampling_factor stays at the DEFAULT 2.0. Pin both arms of their
+    # selection predicate (`:910-915`) before running one of them.
+    if not params.uses_scalable_plus_plus():
+        raise Error(
+            "oversampling_factor=2.0 must select scalable k-means||"
+        )
+    var classic = params
+    classic.oversampling_factor = 0.0
+    if classic.uses_scalable_plus_plus():
+        raise Error(
+            "oversampling_factor=0 must select classic k-means++, exactly"
+            " as their `if (iter_params.oversampling_factor == 0)`"
+        )
+
+    var result = fit(
+        ctx, x, weights, centroids, labels, params,
+        CHECK_ROWS, CHECK_FEATURES, sum_scale, weight_scale,
+    )
+
+    var out_c = ctx.enqueue_create_host_buffer[DType.float32](cd)
+    var out_l = ctx.enqueue_create_host_buffer[DType.uint32](CHECK_ROWS)
+    ctx.enqueue_copy(dst_ptr=out_c.unsafe_ptr(), src_buf=centroids)
+    ctx.enqueue_copy(dst_ptr=out_l.unsafe_ptr(), src_buf=labels)
+    ctx.synchronize()
+
+    # --- permutation recovery, matched exactly once each ------------------
+    var used = List[Int]()
+    for _c in range(CHECK_CLUSTERS):
+        used.append(0)
+    var mapping = List[Int]()
+    for slot in range(CHECK_CLUSTERS):
+        var best = -1
+        var best_err = Float64(1.0e30)
+        for planted in range(CHECK_CLUSTERS):
+            var err = Float64(0.0)
+            for f in range(CHECK_FEATURES):
+                var dd = Float64(
+                    out_c.unsafe_ptr().unsafe_load(slot * CHECK_FEATURES + f)
+                    - _planted_center(planted, f)
+                )
+                err += dd * dd
+            if err < best_err:
+                best_err = err
+                best = planted
+        if best_err > 1.0:
+            raise Error(
+                "k-means|| init: centroid " + String(slot)
+                + " is not near any planted center, squared error "
+                + String(best_err)
+            )
+        if used[best] != 0:
+            raise Error(
+                "k-means|| init: two centroids matched planted center "
+                + String(best) + ", the fit collapsed"
+            )
+        used[best] = 1
+        mapping.append(best)
+
+    var wrong = 0
+    for i in range(CHECK_ROWS):
+        var slot = Int(out_l.unsafe_ptr().unsafe_load(i))
+        if slot < 0 or slot >= CHECK_CLUSTERS:
+            raise Error("label out of range at row " + String(i))
+        if mapping[slot] != i % CHECK_CLUSTERS:
+            wrong += 1
+    if wrong != 0:
+        raise Error(
+            String(wrong) + " of " + String(CHECK_ROWS)
+            + " rows landed in the wrong cluster through k-means||"
+        )
+
+    # --- inertia against the analytic expectation -------------------------
+    var expected = Float64(0.0)
+    for i in range(CHECK_ROWS):
+        for f in range(CHECK_FEATURES):
+            var c = i % CHECK_CLUSTERS
+            var mean = Float64(0.0)
+            var count = 0
+            for j in range(CHECK_ROWS):
+                if j % CHECK_CLUSTERS == c:
+                    mean += Float64(_jitter(j, f))
+                    count += 1
+            mean /= Float64(count)
+            var dd = Float64(_jitter(i, f)) - mean
+            expected += dd * dd
+    var rel = abs(result.inertia - expected) / expected
+    if rel > 0.02:
+        raise Error(
+            "k-means|| inertia " + String(result.inertia)
+            + " against expected " + String(expected) + ", relative "
+            + String(rel) + " (sklearn oracle spread on this fixture is 0,"
+            " so this is arithmetic error, not draw variance)"
+        )
+
+    # --- determinism: same seed twice, bitwise-equal inertia --------------
+    var again = fit(
+        ctx, x, weights, centroids, labels, params,
+        CHECK_ROWS, CHECK_FEATURES, sum_scale, weight_scale,
+    )
+    if again.inertia != result.inertia:
+        raise Error(
+            "two identical k-means|| fits disagree: " + String(result.inertia)
+            + " then " + String(again.inertia)
+            + " -- something in the init is not a function of the seed"
+        )
+
+    print(
+        "check_scalable_kmeans_plus_plus_init OK: DEFAULT config"
+        " (oversampling_factor=2.0) ran end to end, 4/4 centroids as a"
+        " permutation, 0/" + String(CHECK_ROWS) + " rows misassigned,"
+        " inertia " + String(result.inertia) + " vs expected "
+        + String(expected) + " (rel " + String(rel)
+        + "), run-twice bitwise equal, " + String(result.n_iter)
+        + " iterations"
+    )
+
+
+comptime SUPP_CLUSTERS = 8
+
+
+def check_scalable_supplement_branch() raises:
+    """Prove `oversampling_factor`'s VALUE reaches the sampling, and reach
+    the fewer-than-k supplement arm (`detail/kmeans.cuh:755-777`), which no
+    healthy run takes.
+
+    At `oversampling_factor = 1e-9` the per-point probability is ~1e-12
+    against 24-bit uniforms with a STRICT comparison, so no round can draw a
+    candidate: the init reaches the selection tail with exactly the one
+    step-1 centroid and MUST take the random-supplement arm.
+
+    The fixture plants EIGHT clusters, not the usual four, and that is the
+    load-bearing choice: the first version of this check used the 4-cluster
+    fixture and the supplement arm's four starting rows happened to cover
+    all four basins, so both arms converged to the SAME optimum and their
+    inertias tied BITWISE -- legitimately. At k = 8, seven uniform rows
+    cover the seven remaining planted clusters with probability
+    7!/7^7 ~= 0.6%, so the predicted shape is a starved fit that lands in a
+    WORSE basin: inertia strictly greater than the default arm's (a missed
+    planted cluster costs on the order of the 100-per-cluster separation
+    squared, orders above the jitter inertia). Recovery is deliberately NOT
+    asserted -- duplicate coverage with the old-centroid empty-cluster rule
+    is cuVS's behavior, not a defect. Also held: the fit completes (this
+    exact config raised before the port), labels stay in range, and a
+    second run reproduces the inertia bitwise.
+    """
+    var ctx = DeviceContext()
+    var k = SUPP_CLUSTERS
+    var d = CHECK_FEATURES
+    var cd = k * d
+
+    var x = ctx.enqueue_create_buffer[DType.float32](CHECK_ROWS * d)
+    var weights = ctx.enqueue_create_buffer[DType.float32](CHECK_ROWS)
+    var centroids = ctx.enqueue_create_buffer[DType.float32](cd)
+    var labels = ctx.enqueue_create_buffer[DType.uint32](CHECK_ROWS)
+    ctx.synchronize()
+
+    # Eight planted clusters, round robin, hashed jitter -- the same
+    # construction as `_fill_fixture` at a different k.
+    var hx = ctx.enqueue_create_host_buffer[DType.float32](CHECK_ROWS * d)
+    var hw = ctx.enqueue_create_host_buffer[DType.float32](CHECK_ROWS)
+    var magnitude = Float64(0.0)
+    for f in range(d):
+        var column = Float64(0.0)
+        for i in range(CHECK_ROWS):
+            var c = i % k
+            var v = Float32(100 * (c + 1) + f) + _jitter(i, f)
+            hx.unsafe_ptr().unsafe_store(i * d + f, v)
+            column += Float64(abs(v))
+        if column > magnitude:
+            magnitude = column
+    for i in range(CHECK_ROWS):
+        hw.unsafe_ptr().unsafe_store(i, Float32(1.0))
+    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
+    ctx.synchronize()
+    var sum_scale = Float32(choose_scale(magnitude))
+    var weight_scale = Float32(choose_scale(Float64(CHECK_ROWS)))
+
+    var params = KMeansParams.default()
+    params.n_clusters = k
+    params.metric = METRIC_L2_EXPANDED
+    params.max_iter = 50
+    params.seed = 20260820
+
+    var base = fit(
+        ctx, x, weights, centroids, labels, params,
+        CHECK_ROWS, d, sum_scale, weight_scale,
+    )
+
+    var starved = params
+    starved.oversampling_factor = 1.0e-9
+    if not starved.uses_scalable_plus_plus():
+        raise Error("a tiny positive oversampling_factor must stay scalable")
+
+    var r1 = fit(
+        ctx, x, weights, centroids, labels, starved,
+        CHECK_ROWS, d, sum_scale, weight_scale,
+    )
+    var out_l = ctx.enqueue_create_host_buffer[DType.uint32](CHECK_ROWS)
+    ctx.enqueue_copy(dst_ptr=out_l.unsafe_ptr(), src_buf=labels)
+    ctx.synchronize()
+    for i in range(CHECK_ROWS):
+        if Int(out_l.unsafe_ptr().unsafe_load(i)) >= k:
+            raise Error(
+                "label out of range at row " + String(i)
+                + " through the supplement arm"
+            )
+    if not (r1.inertia > 0.0 and r1.inertia < 1.0e30):
+        raise Error(
+            "supplement-arm inertia is not a finite positive number: "
+            + String(r1.inertia)
+        )
+
+    var r2 = fit(
+        ctx, x, weights, centroids, labels, starved,
+        CHECK_ROWS, d, sum_scale, weight_scale,
+    )
+    if r2.inertia != r1.inertia:
+        raise Error(
+            "two identical supplement-arm fits disagree: "
+            + String(r1.inertia) + " then " + String(r2.inertia)
+        )
+    if not (r1.inertia > base.inertia):
+        raise Error(
+            "oversampling_factor 1e-9 gave inertia " + String(r1.inertia)
+            + " against the default arm's " + String(base.inertia)
+            + ": a starved init that does no worse than the full one means"
+            " the factor's value is not reaching the sampling probability"
+            " (or seven random rows covered seven basins, p ~= 0.6% --"
+            " reseed the check if the fixture ever changes)"
+        )
+
+    print(
+        "check_scalable_supplement_branch OK: oversampling_factor=1e-9"
+        " starves every round, the < k supplement arm ran and landed in a"
+        " worse basin as predicted (inertia " + String(r1.inertia)
+        + " vs default-arm " + String(base.inertia)
+        + "), run-twice bitwise equal, labels in range"
     )

@@ -269,17 +269,19 @@ per-level syncs are pure ordering we are paying for by hand.**
 
 ## `cluster/` (cuVS k-means), added 2026-08-19
 
-**Everything in this section is UNREACHED.** Not "untested": unreached. No
-kernel in `cluster/` has been enqueued, and this tree's rule is that a kernel
-is not ported until it has been (`PORTING.md 9`). Compiling is not evidence.
+**When first written, everything in this section was UNREACHED.** Not
+"untested": unreached. No kernel in `cluster/` had been enqueued, and this
+tree's rule is that a kernel is not ported until it has been (`PORTING.md
+9`). Compiling is not evidence. The rows below carry the per-item status as
+it changed.
 
 | thing | read by | why not, and what would change it |
 |---|---|---|
 | the whole `fit` path | **REACHED AND PASSING**, `cluster/kmeans_main.mojo` | `row_norms`, `gemm`, `reduce_min`, the fixed-point accumulate, `finalize_centroids`, `centroid_shift`, `finish_sum` and `check_convergence_kernel` all run in `check_kmeans_fit`. Reach proved by two sabotages predicting different movements, not by a digest. |
 | `kmeans_plus_plus` and its sampling kernels | **NOW REACHED AND PASSING** | `check_kmeans_plus_plus_init` runs a full fit through the k-means++ path with `oversampling_factor = 0` and recovers 4/4 centroids as a permutation. `check_device_inclusive_scan` checks the three-stage scan alone against a host scan at 20,000 elements, exact. The other checks still use `INIT_ARRAY` on purpose so a failure cannot hide in the draw; this one exists precisely because that left the whole initialization dark. |
-| `init_random` | STILL UNREACHED | Same reason. |
+| `init_random` | **NOW REACHED** (2026-08-20) | `check_scalable_supplement_branch` starves the k-means\|\| rounds with `oversampling_factor = 1e-9`, which forces the fewer-than-k supplement arm (`detail/kmeans.cuh:755-777`) and that arm runs `init_random` for the missing centroids. The `init = Random` entry path itself still has no dedicated check. |
 | `use_fused` (`cluster/ported/cluster/detail/kmeans_common.mojo`) | nothing | Ported for the evidence it carries, not for its answer. We have no CUTLASS counterpart, so on every backend this tree targets the answer is False and the unfused path is the only path. It is a row that documents a decision of theirs rather than one that drives ours, and it should stay that way unless a fused kernel ever exists here. |
-| `sampling_probability` (k-means\|\| step 3) | nothing | `initScalableKMeansPlusPlus` is NOT PORTED, and it is cuVS's DEFAULT init at `oversampling_factor = 2.0`. `kmeans_fit_main` RAISES on the default rather than substituting classic k-means++, which is the whole point: a substituted initialization that still reports an inertia is exactly the silent deviation this file exists to prevent. |
+| `sampling_probability` (k-means\|\| step 3) | nothing -- documentation row | `initScalableKMeansPlusPlus` is **PORTED AND REACHED** (2026-08-20): the default init runs, and both arms of their `oversampling_factor == 0` selection are checked (`check_scalable_kmeans_plus_plus_init`, `check_kmeans_plus_plus_init`). This Float64 helper itself is still called by nothing: Apple silicon has no device Float64, so the shipped predicate is the Float32 `scalable_keep` in `cluster/mojo_only/scalable_init.mojo`, which the check replays on the host element for element. The helper stays as the readable statement of `SamplingOp` (`kmeans_common.cuh:73-81`). The `== k` copy-out arm of the selection tail (`detail/kmeans.cuh:778-784`) is ported but UNREACHED -- no deterministic fixture pins the candidate count to exactly k. |
 | `init_size`, `device_buffer_samples` (`KMeansParams`) | nothing | Both belong to cuVS's host-resident arm, which is out of scope here. Carried so the params struct is theirs field for field; they will stay dead unless a host arm appears. |
 | `mojo_only/fixed_point.mojo` | **NOW READ**: `cluster/mojo_only/reduce_by_key.mojo` accumulates cluster sums through the same Int32 scheme | Moved upstairs from the NOT WIRED table. Its overflow argument transferred with one noun changed, leaf to cluster, which is the strongest evidence so far that the shared substrate is genuinely shared and not tree-shaped. Still unreached until the check runs. |
 

@@ -1000,3 +1000,63 @@ bytes per row against the sums kernel's 128 at d=32, 1/16 the traffic)
 and stays scalar; the direct scatter-add fallback arm is the
 upstream-faithful kernel and stays verbatim -- it is also the oracle the
 checks compare against, which it can only be while it stays scalar.
+
+## 47. k-means||'s per-sample uniforms are a splitmix64 counter hash, not Philox, and its probability is formed in f32
+
+`initScalableKMeansPlusPlus` draws one uniform PER SAMPLE per round with
+`raft::random::uniform` (`cuvs/src/cluster/detail/kmeans.cuh:689-690`) -- a
+counter-based device generator whose stream nothing in Mojo reproduces
+(deviation 17 already prices the host-side half of the RNG story). Two
+constraints pin the replacement: `HOST_AND_DEVICE.md` forbids the host
+manufacturing O(rows) randomness, and validation needs the draw to be a pure
+function of (seed, index). `cluster/mojo_only/scalable_init.mojo::
+scalable_uniform` is splitmix64 -- the same finalizer `HostRng` uses, short
+enough to audit -- as a counter hash of `(round_seed, sample_index)`, with
+the host contributing ONE 64-bit seed per round. Same mechanism class as
+Philox (counter-based, stateless per element), different stream, so cuVS and
+this port sample DIFFERENT candidate sets from the same seed; comparisons
+are over inertia across seeds, never draw for draw, which deviation 17
+already made the rule.
+
+Second half: `SamplingOp` forms `prob_x = (oversampling_factor * n_clusters
+* a.value) / cluster_cost` with the `double` factor promoting the arithmetic
+before truncating to DataT (`kmeans_common.cuh:73-81`). Apple silicon has no
+device Float64, so `scalable_keep` computes in Float32 with
+`oversampling_factor * n_clusters` pre-multiplied in Float64 on the host.
+The difference is at most an ulp at the probability threshold, i.e. it can
+flip a draw only when the uniform lands within one ulp of the probability --
+and the check does not depend on that never happening, because
+`check_scalable_sampling_selection`'s host replay runs the SAME f32
+expression, not their double one.
+
+## 48. `cub::DeviceSelect::If` becomes flags + the f32 scan + a rank scatter, exact below 2^24 rows
+
+`sampleCentroids` compacts the selected samples with `cub::DeviceSelect::If`
+over an `ArgIndexInputIterator` and reads back the count
+(`kmeans_common.cuh:228-269`), then marks the selection flags with
+`thrust::for_each_n` (`:270-276`). Neither ships here. The replacement is
+the operation spelled out: `sample_flags_kernel` writes {0,1} flags, the
+THREE-STAGE INCLUSIVE SCAN k-means++ already ships (and
+`check_device_inclusive_scan` already holds to a host scan element by
+element) ranks them, and `select_scatter_kernel` writes each selected index
+at `csum[i] - 1`, folding the thrust flag update into the same pass.
+Stability -- selected samples land in index order -- is `DeviceSelect::If`'s
+contract and survives by construction.
+
+The price: the scan carries counts in Float32, which is exact only while
+every partial count fits 24 bits, so `init_scalable_kmeans_plus_plus`
+RAISES at `n_samples >= 2^24` rather than mis-scattering silently. The same
+bound covers `count_labels_kernel` (their `countLabels` /
+`cub::DeviceHistogram::HistogramEven`, `:95-135`, float counters as theirs):
+atomic adds of exact integer-valued floats below 2^24 commute exactly,
+which is why the step-7 weights are deterministic with no ordering
+guarantee. Raising the row bound means an integer scan, not a tolerance.
+
+One more mechanism swap inside the same function: the step-8 Lloyd pass
+over the weighted candidates needs its own fixed-point scales (the
+candidate matrix weighted by counts up to n_samples is a different
+magnitude bound than the caller's), and they are chosen by `choose_scale`
+over an O(candidates) host readback of the candidates and weights -- host
+traffic `HOST_AND_DEVICE.md` permits, where upstream's float atomics need
+no scale at all (deviation: theirs never quantizes; ours inherits the
+fixed-point scheme every fit here uses).

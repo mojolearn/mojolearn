@@ -5,8 +5,9 @@ Do not improve.
 
 Their file is 1242 lines and most of it is host bookkeeping for cases this
 tree does not have: multi-GPU partitioned fits, `kmeans_transform`, and the
-`kmeans_auto_find_k` driver. What is ported is the algorithm: the two
-initializations and the iteration.
+`kmeans_auto_find_k` driver. What is ported is the algorithm: the three
+initializations (random, classic k-means++, scalable k-means||) and the
+iteration.
 
 THE ITERATION, THEIR ORDER, WHICH IS NOT THE TEXTBOOK ORDER
 -----------------------------------------------------------
@@ -80,10 +81,18 @@ from cluster.mojo_only.reduce_by_key import (
     sum_partials_kernel,
     zero_i32_kernel,
 )
+from cluster.mojo_only.scalable_init import (
+    count_labels_kernel,
+    sample_flags_kernel,
+    select_scatter_kernel,
+    set_flag_kernel,
+    zero_f32_kernel,
+)
 from core.row_norms import NORM_TPB, row_norm_kernel
 from cluster.ported.cluster.detail.kmeans_common import (
     check_convergence,
 )
+from mojo_only.fixed_point import choose_scale
 from cluster.ported.cluster.detail.min_cluster_distance_compute import (
     compute_centroid_norms,
     min_cluster_and_distance_compute,
@@ -266,11 +275,9 @@ def kmeans_plus_plus(
     k-means++ and not greedy against vanilla.
 
     This is the `oversampling_factor == 0` arm. The DEFAULT arm is scalable
-    k-means|| (`initScalableKMeansPlusPlus`) and is NOT PORTED; see
-    `UNWIRED.md`. `kmeans_fit_main` therefore refuses the default until it
-    lands rather than silently substituting this one, because substituting a
-    different initialization and reporting the inertia would be exactly the
-    kind of quiet deviation this tree exists to avoid.
+    k-means|| (`init_scalable_kmeans_plus_plus` below), selected exactly as
+    theirs selects it: `oversampling_factor == 0` picks this one, anything
+    else picks the scalable one (`detail/kmeans.cuh:910-915`).
     """
     var n_trials = 2 + Int(ceil(log(Float64(params.n_clusters))))
 
@@ -455,6 +462,430 @@ def kmeans_plus_plus(
         picked += 1
 
 
+def _assign_to_candidates(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    mut x_norm: DeviceBuffer[DType.float32],
+    mut cand: DeviceBuffer[DType.float32],
+    mut dist_buf: DeviceBuffer[DType.float32],
+    mut labels: DeviceBuffer[DType.uint32],
+    mut min_dist: DeviceBuffer[DType.float32],
+    params: KMeansParams,
+    n_samples: Int,
+    n_features: Int,
+    cand_count: Int,
+) raises:
+    """One `minClusterDistanceCompute` round against the candidate set.
+
+    Theirs (`detail/kmeans.cuh:629-640`, `:664-676`) computes distances only;
+    the fused assignment this tree already ships computes the label too, at
+    no extra traffic, so the label lands in `labels` and step 7 reads it
+    instead of running their separate `minClusterAndDistanceCompute`
+    (`countSamplesInCluster`, `kmeans_common.cuh:615-668`, whose assignment
+    is this exact computation). The candidate norms are recomputed each call
+    because the candidate set grew.
+    """
+    var cand_norm = ctx.enqueue_create_buffer[DType.float32](cand_count)
+    ctx.synchronize()
+    compute_centroid_norms(
+        ctx, cand, cand_norm, cand_count, n_features, params.metric
+    )
+    min_cluster_and_distance_compute(
+        ctx,
+        x,
+        x_norm,
+        cand,
+        cand_norm,
+        dist_buf,
+        labels,
+        min_dist,
+        n_samples,
+        n_features,
+        cand_count,
+        params.metric,
+        params.batch_samples,
+        params.batch_centroids,
+    )
+
+
+def init_scalable_kmeans_plus_plus(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    mut x_norm: DeviceBuffer[DType.float32],
+    mut centroids: DeviceBuffer[DType.float32],
+    mut dist_buf: DeviceBuffer[DType.float32],
+    mut min_dist: DeviceBuffer[DType.float32],
+    mut labels: DeviceBuffer[DType.uint32],
+    mut partials: DeviceBuffer[DType.float32],
+    params: KMeansParams,
+    n_samples: Int,
+    n_features: Int,
+    mut rng: HostRng,
+) raises:
+    """`initScalableKMeansPlusPlus`, `detail/kmeans.cuh:568-785`. The DEFAULT
+    initialization (`oversampling_factor = 2.0` selects it, `:910-915`).
+
+    Bahmani et al.'s k-means|| (arXiv:1203.6402), their numbering:
+
+        1  C = one point uniformly at random          (`:585-609`)
+        2  psi = phi_X(C)                             (`:629-650`)
+        3  for min(8, ceil(log psi)) rounds           (`:656`, `:660`)
+        4      draw each x with prob l*k*d2(x,C)/phi  (`:689-707`)
+        5      C = C u C'                             (`:713-719`)
+        7  w_x = |points nearest x| for x in C        (`:730-733`)
+        8  recluster the weighted C into k            (`:738-753`)
+
+    Two things about their step 8 that a from-the-paper reimplementation
+    gets wrong and this copies exactly:
+
+    - The k-means++ over the candidate set is UNWEIGHTED: `kmeansPlusPlus`
+      takes no weight argument (`:738-739`). The weights enter only in the
+      Lloyd pass that follows.
+    - That Lloyd pass runs under FRESH DEFAULT params with only `n_clusters`
+      copied (`:743-744`), so its metric is L2Expanded and its stopping rule
+      is the default even when the outer fit's are not. Their call goes
+      straight to the Lloyd loop with the k-means++ result already in place;
+      this tree's flattened `kmeans_fit_main` expresses exactly that as
+      `INIT_ARRAY` (start from the given centroids, `n_init` collapses to 1).
+
+    And one thing about the tail: FEWER than k candidates is not an error.
+    Their `< n_clusters` arm fills the FIRST `k - |C|` centroid rows with
+    random init and copies the candidates after them (`:755-777`); `== k`
+    copies the candidates straight out (`:778-784`).
+
+    The per-round buffer churn is theirs: `rmm::device_uvector::resize` on
+    the append (`:713`) allocates and copies too, and the per-round `CpRaw`
+    and candidate-norm buffers are fresh in their loop as well.
+
+    Fixed-point scales for the step-8 Lloyd pass cannot be the caller's: the
+    inner data are the candidates WEIGHTED BY COUNTS up to `n_samples`, a
+    different magnitude bound than the outer fit's. They are chosen by
+    `choose_scale` over an O(candidates) readback of the candidate matrix
+    and weights, which is host traffic the rule permits.
+
+    DEVIATIONS: PORTING.md 47 (counter-hash uniforms, f32 probability),
+    48 (selection as flags + f32 scan + scatter, exact below 2^24 rows,
+    guarded here; float-histogram counts share the bound).
+    """
+    if n_samples >= (1 << 24):
+        raise Error(
+            "scalable k-means++ selection scan counts in Float32 and is"
+            " exact only below 2^24 rows (PORTING.md 48); got "
+            + String(n_samples)
+        )
+
+    var k = params.n_clusters
+    var d = n_features
+
+    # <<< Step-1 >>> (`:585-609`): one uniform point, flagged so no round
+    # can re-draw it.
+    var c_idx = rng.next_index(n_samples)
+    var is_centroid = ctx.enqueue_create_buffer[DType.int32](n_samples)
+    var cand_buf = ctx.enqueue_create_buffer[DType.float32](d)
+
+    var flags = ctx.enqueue_create_buffer[DType.float32](n_samples)
+    var chunk = PLUS_PLUS_TPB
+    var n_chunks = (n_samples + chunk - 1) // chunk
+    var chunk_totals = ctx.enqueue_create_buffer[DType.float32](n_chunks)
+    var chunk_offsets = ctx.enqueue_create_buffer[DType.float32](n_chunks)
+    var csum = ctx.enqueue_create_buffer[DType.float32](n_samples)
+    # A distinct one-element buffer for `sum_partials_kernel`'s unused arm
+    # (PORTING.md 24), as in `kmeans_fit_main`.
+    var ones = ctx.enqueue_create_buffer[DType.float32](1)
+    var d_psi = ctx.enqueue_create_buffer[DType.float32](1)
+    var h_psi = ctx.enqueue_create_host_buffer[DType.float32](1)
+    var h_count = ctx.enqueue_create_host_buffer[DType.float32](1)
+    ctx.synchronize()
+
+    ctx.enqueue_function[zero_i32_kernel](
+        is_centroid.unsafe_ptr(),
+        Int32(n_samples),
+        grid_dim=((n_samples + 255) // 256, 1, 1),
+        block_dim=(256, 1, 1),
+    )
+    ctx.enqueue_function[set_flag_kernel](
+        is_centroid.unsafe_ptr(),
+        Int32(c_idx),
+        grid_dim=(1, 1, 1),
+        block_dim=(1, 1, 1),
+    )
+    ctx.enqueue_function[copy_f32_kernel](
+        cand_buf.unsafe_ptr(),
+        x.unsafe_ptr().unsafe_offset(c_idx * d),
+        Int32(d),
+        grid_dim=((d + 255) // 256, 1, 1),
+        block_dim=(256, 1, 1),
+    )
+    ctx.synchronize()
+    var cand_count = 1
+
+    # <<< Step-2 >>> (`:629-650`): psi = phi_X(C), one full assignment plus
+    # `computeClusterCost` with `identity_op` -- an UNWEIGHTED sum -- and the
+    # scalar comes to the host exactly as their `clusterCost.value(stream)`
+    # does.
+    _assign_to_candidates(
+        ctx, x, x_norm, cand_buf, dist_buf, labels, min_dist,
+        params, n_samples, d, cand_count,
+    )
+    _sum_device(
+        ctx, min_dist, ones, partials, d_psi, n_samples, SUM_MODE_PLAIN
+    )
+    ctx.enqueue_copy(dst_ptr=h_psi.unsafe_ptr(), src_buf=d_psi)
+    ctx.synchronize()
+    var psi = Float64(h_psi.unsafe_ptr().unsafe_load(0))
+
+    # `:656`: `min(8, (int)ceil(log(psi)))`. For psi in (0, 1) theirs goes
+    # negative and the loop body never runs; same here. psi == 0 is UB in
+    # their cast and zero rounds here, which is the only reading that
+    # terminates.
+    var niter = 0
+    if psi > 0.0:
+        var lp = ceil(log(psi))
+        if lp >= 8.0:
+            niter = 8
+        elif lp > 0.0:
+            niter = Int(lp)
+
+    # <<< Step-3 >>> (`:660-720`): each round recomputes the distances and
+    # the cost against the WHOLE current candidate set -- theirs is not
+    # incremental across rounds and neither is this.
+    for _iter in range(niter):
+        _assign_to_candidates(
+            ctx, x, x_norm, cand_buf, dist_buf, labels, min_dist,
+            params, n_samples, d, cand_count,
+        )
+        _sum_device(
+            ctx, min_dist, ones, partials, d_psi, n_samples, SUM_MODE_PLAIN
+        )
+        ctx.enqueue_copy(dst_ptr=h_psi.unsafe_ptr(), src_buf=d_psi)
+        ctx.synchronize()
+        psi = Float64(h_psi.unsafe_ptr().unsafe_load(0))
+
+        # <<< Step-4 >>> (`:689-707`): one 64-bit round seed from the host
+        # (O(1), where theirs advances a device Philox state), hashed per
+        # sample on device; then `DeviceSelect::If` as flags + the existing
+        # three-stage scan + a rank scatter. PORTING.md 47/48.
+        var round_seed = rng.next_u64()
+        var seed_lo = round_seed.cast[DType.uint32]().cast[DType.int32]()
+        var seed_hi = (round_seed >> 32).cast[
+            DType.uint32
+        ]().cast[DType.int32]()
+        var lk = Float32(params.oversampling_factor * Float64(k))
+
+        ctx.enqueue_function[sample_flags_kernel](
+            flags.unsafe_ptr(),
+            min_dist.unsafe_ptr(),
+            is_centroid.unsafe_ptr(),
+            Int32(n_samples),
+            Float32(psi),
+            lk,
+            seed_lo,
+            seed_hi,
+            grid_dim=((n_samples + 255) // 256, 1, 1),
+            block_dim=(256, 1, 1),
+        )
+        ctx.enqueue_function[chunk_sums_kernel](
+            chunk_totals.unsafe_ptr(),
+            flags.unsafe_ptr(),
+            Int32(n_samples),
+            Int32(chunk),
+            grid_dim=(n_chunks, 1, 1),
+            block_dim=(PLUS_PLUS_TPB, 1, 1),
+        )
+        ctx.enqueue_function[scan_chunk_offsets_kernel](
+            chunk_offsets.unsafe_ptr(),
+            chunk_totals.unsafe_ptr(),
+            Int32(n_chunks),
+            grid_dim=(1, 1, 1),
+            block_dim=(PLUS_PLUS_TPB, 1, 1),
+        )
+        ctx.enqueue_function[write_inclusive_scan_kernel](
+            csum.unsafe_ptr(),
+            flags.unsafe_ptr(),
+            chunk_offsets.unsafe_ptr(),
+            Int32(n_samples),
+            Int32(chunk),
+            grid_dim=(n_chunks, 1, 1),
+            block_dim=(PLUS_PLUS_TPB, 1, 1),
+        )
+        # The selected count, ONE float, is their `nPtsSampledInRank`
+        # readback-and-sync (`kmeans_common.cuh:267-269`).
+        var count_tail = csum.create_sub_buffer[DType.float32](
+            n_samples - 1, 1
+        )
+        ctx.enqueue_copy(dst_ptr=h_count.unsafe_ptr(), src_buf=count_tail)
+        ctx.synchronize()
+        var n_selected = Int(h_count.unsafe_ptr().unsafe_load(0))
+
+        if n_selected > 0:
+            # <<< Step-5 >>> (`:713-719`): append, preserving index order,
+            # which is `DeviceSelect::If`'s stability.
+            var sel_index = ctx.enqueue_create_buffer[DType.uint32](
+                n_selected
+            )
+            var grown = ctx.enqueue_create_buffer[DType.float32](
+                (cand_count + n_selected) * d
+            )
+            ctx.synchronize()
+            ctx.enqueue_function[select_scatter_kernel](
+                sel_index.unsafe_ptr(),
+                is_centroid.unsafe_ptr(),
+                flags.unsafe_ptr(),
+                csum.unsafe_ptr(),
+                Int32(n_samples),
+                grid_dim=((n_samples + 255) // 256, 1, 1),
+                block_dim=(256, 1, 1),
+            )
+            ctx.enqueue_function[copy_f32_kernel](
+                grown.unsafe_ptr(),
+                cand_buf.unsafe_ptr(),
+                Int32(cand_count * d),
+                grid_dim=((cand_count * d + 255) // 256, 1, 1),
+                block_dim=(256, 1, 1),
+            )
+            ctx.enqueue_function[gather_rows_kernel](
+                grown.unsafe_ptr().unsafe_offset(cand_count * d),
+                x.unsafe_ptr(),
+                sel_index.unsafe_ptr(),
+                Int32(d),
+                grid_dim=(n_selected, 1, 1),
+                block_dim=(PLUS_PLUS_TPB, 1, 1),
+            )
+            ctx.synchronize()
+            cand_buf = grown^
+            cand_count += n_selected
+
+    if cand_count > k:
+        # <<< Step-7 >>> (`:730-733`): w_x = points nearest each candidate.
+        # `countSamplesInCluster`'s own assignment is the same fused pass,
+        # then `countLabels` becomes the float histogram.
+        var weight = ctx.enqueue_create_buffer[DType.float32](cand_count)
+        ctx.synchronize()
+        ctx.enqueue_function[zero_f32_kernel](
+            weight.unsafe_ptr(),
+            Int32(cand_count),
+            grid_dim=((cand_count + 255) // 256, 1, 1),
+            block_dim=(256, 1, 1),
+        )
+        _assign_to_candidates(
+            ctx, x, x_norm, cand_buf, dist_buf, labels, min_dist,
+            params, n_samples, d, cand_count,
+        )
+        ctx.enqueue_function[count_labels_kernel](
+            weight.unsafe_ptr(),
+            labels.unsafe_ptr(),
+            Int32(n_samples),
+            grid_dim=((n_samples + 255) // 256, 1, 1),
+            block_dim=(256, 1, 1),
+        )
+        ctx.synchronize()
+
+        # <<< Step-8 >>> (`:738-753`): UNWEIGHTED classic k-means++ over the
+        # candidates, under the OUTER params (theirs passes `params` there),
+        # then Lloyd over the weighted candidates under fresh defaults.
+        var cand_norm_rows = ctx.enqueue_create_buffer[DType.float32](
+            cand_count
+        )
+        var cand_labels = ctx.enqueue_create_buffer[DType.uint32](cand_count)
+        var cand_min = ctx.enqueue_create_buffer[DType.float32](cand_count)
+        var cand_dist = ctx.enqueue_create_buffer[DType.float32](
+            cand_count * k
+        )
+        var kpp_centroid_norm = ctx.enqueue_create_buffer[DType.float32](k)
+        var h_cand = ctx.enqueue_create_host_buffer[DType.float32](
+            cand_count * d
+        )
+        var h_weight = ctx.enqueue_create_host_buffer[DType.float32](
+            cand_count
+        )
+        ctx.synchronize()
+
+        ctx.enqueue_function[row_norm_kernel](
+            cand_norm_rows.unsafe_ptr(),
+            cand_buf.unsafe_ptr(),
+            Int32(d),
+            Int32(0),
+            grid_dim=(cand_count, 1, 1),
+            block_dim=(NORM_TPB, 1, 1),
+        )
+        ctx.synchronize()
+        kmeans_plus_plus(
+            ctx,
+            cand_buf,
+            cand_norm_rows,
+            centroids,
+            kpp_centroid_norm,
+            cand_dist,
+            cand_min,
+            cand_labels,
+            partials,
+            params,
+            cand_count,
+            d,
+            rng,
+        )
+
+        # The step-8 Lloyd scales: sum over candidates of |value| * weight
+        # per feature bounds every fixed-point cell, and the weights sum to
+        # n_samples exactly. O(candidates) readback.
+        ctx.enqueue_copy(dst_ptr=h_cand.unsafe_ptr(), src_buf=cand_buf)
+        ctx.enqueue_copy(dst_ptr=h_weight.unsafe_ptr(), src_buf=weight)
+        ctx.synchronize()
+        var worst = Float64(0.0)
+        for f in range(d):
+            var column = Float64(0.0)
+            for c in range(cand_count):
+                column += Float64(
+                    abs(h_cand.unsafe_ptr().unsafe_load(c * d + f))
+                ) * Float64(h_weight.unsafe_ptr().unsafe_load(c))
+            if column > worst:
+                worst = column
+        var inner_sum_scale = Float32(choose_scale(worst))
+        var inner_weight_scale = Float32(choose_scale(Float64(n_samples)))
+
+        # `:743-753`: fresh defaults, only `n_clusters` copied; `INIT_ARRAY`
+        # is this tree's spelling of "no init, start from centroidsRawData".
+        var inner = KMeansParams.default()
+        inner.n_clusters = k
+        inner.init = INIT_ARRAY
+        _ = kmeans_fit_main(
+            ctx,
+            cand_buf,
+            weight,
+            centroids,
+            cand_labels,
+            inner,
+            cand_count,
+            d,
+            inner_sum_scale,
+            inner_weight_scale,
+        )
+    elif cand_count < k:
+        # `:755-777`: supplement with random into the FIRST `k - |C|` rows,
+        # candidates after them. Their warning log is a debug line; the
+        # arithmetic is what matters.
+        var n_random = k - cand_count
+        init_random(ctx, x, centroids, n_samples, d, n_random, rng)
+        ctx.enqueue_function[copy_f32_kernel](
+            centroids.unsafe_ptr().unsafe_offset(n_random * d),
+            cand_buf.unsafe_ptr(),
+            Int32(cand_count * d),
+            grid_dim=((cand_count * d + 255) // 256, 1, 1),
+            block_dim=(256, 1, 1),
+        )
+        ctx.synchronize()
+    else:
+        # `:778-784`: exactly k candidates ARE the centroids.
+        ctx.enqueue_function[copy_f32_kernel](
+            centroids.unsafe_ptr(),
+            cand_buf.unsafe_ptr(),
+            Int32(k * d),
+            grid_dim=((k * d + 255) // 256, 1, 1),
+            block_dim=(256, 1, 1),
+        )
+        ctx.synchronize()
+
+
 def kmeans_fit_main(
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32],
@@ -480,12 +911,6 @@ def kmeans_fit_main(
     which is theirs (`:916-924`), and on return it holds the best restart.
     """
     params.validate()
-    if params.init == INIT_KMEANS_PLUS_PLUS and params.uses_scalable_plus_plus():
-        raise Error(
-            "scalable k-means++ (oversampling_factor > 0) is NOT PORTED; see"
-            " UNWIRED.md. Set oversampling_factor=0 for classic k-means++ or"
-            " init=Random."
-        )
 
     var n_clusters = params.n_clusters
     var cd = n_clusters * n_features
@@ -555,6 +980,24 @@ def kmeans_fit_main(
         elif params.init == INIT_RANDOM:
             init_random(
                 ctx, x, cur_centroids, n_samples, n_features, n_clusters, rng
+            )
+        elif params.uses_scalable_plus_plus():
+            # `detail/kmeans.cuh:910-915`: `oversampling_factor == 0` picks
+            # the classic sequential variant, anything else -- including the
+            # DEFAULT 2.0 -- picks scalable k-means||.
+            init_scalable_kmeans_plus_plus(
+                ctx,
+                x,
+                x_norm,
+                cur_centroids,
+                dist_buf,
+                min_dist,
+                labels,
+                partials,
+                params,
+                n_samples,
+                n_features,
+                rng,
             )
         else:
             kmeans_plus_plus(

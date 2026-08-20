@@ -15,6 +15,9 @@ from cluster.mojo_only.kmeans_check import (
     check_kmeans_plus_plus_init,
     check_privatized_accumulate,
     check_reach_by_sabotage,
+    check_scalable_kmeans_plus_plus_init,
+    check_scalable_sampling_selection,
+    check_scalable_supplement_branch,
 )
 
 
@@ -23,6 +26,9 @@ def main() raises:
     check_kmeans_fit()
     check_device_inclusive_scan()
     check_kmeans_plus_plus_init()
+    check_scalable_sampling_selection()
+    check_scalable_kmeans_plus_plus_init()
+    check_scalable_supplement_branch()
     check_fused_reduction_across_lanes()
     check_assignment_arm_dispatch()
     check_fused_policy_dispatch()
