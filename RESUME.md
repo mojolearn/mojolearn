@@ -424,8 +424,26 @@ the batched ensemble pack in `predict`, and the adaptive
 ExtTreeBlockWidth (their 128 idles 7/8 tree sub-blocks below ~1000
 trees; runtime width, their shape at their scale).
 
-Next known levers, in order: launch-count fusion for the covtype
-training floor, the device-resident level plan (priced above), the
-epsilon 8000-tree arena config (their notebook's exact model size --
-needs the epsilon download to fit the box). Beyond this box: a Pro/Max
-chip multiplies OUR arms by 2-4x and theirs by ~1.5x.
+COVTYPE INFERENCE (2026-08-21): ALL EIGHT REPS FASTER, 0.31-0.84x
+(median ~0.44) -- ours 50-74 M docs/s vs their 23-26. On the real
+dataset where TRAINING trails 2x behind their CPU, inference wins
+outright: a model application is three launches, so the launch floor
+that decides small-data training does not exist at predict time.
+
+LAUNCH FUSION IS PRICED AND DECLINED (2026-08-21). Counted, the
+per-level chain is ~20 launches and every one of them is CatBoost's own
+kernel granularity except `fixed_to_float` (ours, 1/level ~ 0.15
+ms/tree if fused into the bridge). The covtype training floor is
+METAL'S LAUNCH PRICE (21-23 us vs CUDA's ~5) on THEIR launch count --
+a platform constant, not fusable waste. The honest paper sentence:
+small-data GPU training on Apple pays ~4x CUDA's control-plane tax,
+the training crossover sits near ~1M rows, and inference clears it
+everywhere because it launches three kernels, not two hundred.
+
+Next known levers, in order: the 8000-tree arena row (their notebook's
+model size; first run died silently after the fit -- diagnosis in
+flight, suspect the harness's own drift tolerances at 8000-tree float
+accumulation), full-defaults feature debt (bootstrap/MVS, rsm,
+categoricals) for quality parity, the epsilon dataset itself. Beyond
+this box: a Pro/Max chip multiplies OUR arms by 2-4x and theirs by
+~1.5x.
