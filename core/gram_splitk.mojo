@@ -62,8 +62,17 @@ the two partials are bit-identical, and the reduce folds both in the same
 chunk order, so the output is bit-identical across the diagonal by
 construction.
 
-ACCURACY. The split sum (chunk partials of ~k/240 terms, then a 240-term
-fold) is a two-level pairwise-style summation: its error grows like
+THIS KERNEL IS THE APPLE COLUMN'S ARM. The closed-library exception above
+is an APPLE fact: MAX's split-K arms are comptime-gated
+`not has_apple_gpu_accelerator()`, so on NVIDIA and AMD the gate is open
+and the vendor rule resumes. `gram_splitk_applies` consults
+`hardware_matrix.gram_splitk_is_target_arm` and answers False for non-Apple
+target columns, sending the shape back to `linalg.matmul` through
+`gemm_tn_via_transpose`.
+
+ACCURACY. The split sum (chunk partials of ~k/chunks terms, then a fold
+over the chunks -- 240 of them on the Apple column) is a two-level
+pairwise-style summation: its error grows like
 O(k/chunks + chunks) rounding steps instead of the O(k) of one serial fp32
 chain, so it is BETTER conditioned than the route it replaces, not worse.
 `mojo_only/gram_splitk_check.mojo` proves it against a Float64 host oracle
@@ -76,13 +85,14 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
+from mojo_only.hardware_matrix import gram_splitk_is_target_arm
 from mojo_only.kernel_matrix import (
     K_LIB_GRAM_SPLITK,
     TARGET_COLUMN,
     lib_block_size_for,
 )
 from neighbors.ported.distance.detail.pairwise_distance_base import (
-    APPLE_M4_GPU_CORES,
+    TARGET_GPU_CORES,
     max_active_blocks_per_core,
 )
 
@@ -126,13 +136,16 @@ comptime VENDOR_MATMUL_TILE = 64
 def gram_splitk_chunk_count() raises -> Int:
     """The FIXED number of k-chunks, from the machine constants.
 
-    `blocks-that-fit x GRAM_OVERSUBSCRIBE`, computed from the SAME constants
-    `pairwise_distance_base.mojo` pins (10 cores x 3072-thread slots / 256
-    threads = 120 resident blocks, x2 = 240). Fixed means deterministic:
-    the summation split never depends on anything measured at runtime.
+    `blocks-that-fit x GRAM_OVERSUBSCRIBE`, computed from the SAME
+    target-keyed readers `pairwise_distance_base.mojo` exposes (on the Apple
+    column: 10 cores x 3072-thread slots / 256 threads = 120 resident
+    blocks, x2 = 240, and `hardware_matrix_check` pins that 240). Fixed
+    means deterministic: the summation split never depends on anything
+    measured at runtime, and the same build always produces the same
+    partition.
     """
     return (
-        APPLE_M4_GPU_CORES
+        TARGET_GPU_CORES
         * max_active_blocks_per_core(GRAM_TPB, GRAM_STAGE_FLOATS * 4)
         * GRAM_OVERSUBSCRIBE
     )
@@ -141,10 +154,20 @@ def gram_splitk_chunk_count() raises -> Int:
 def gram_splitk_applies(m: Int, n: Int, k: Int) raises -> Bool:
     """True when `gemm_tn` should take the split-K path.
 
+    THE TARGET DECIDES FIRST, IN ONE PLACE: this kernel is the APPLE
+    column's arm only. MAX's matmul has no split-K reachable on Apple (every
+    such arm is comptime-gated `not has_apple_gpu_accelerator()`,
+    `matmul/gpu/__init__.mojo:725`/`:1368` at `max/v26.5.0`, read in source
+    by LANE_gram-splitk), which is why this kernel exists; on NVIDIA and AMD
+    that gate is open and the vendor rule resumes -- hand the Gram shape
+    back to `linalg.matmul` via `gemm_tn_via_transpose` and let THEIR
+    dispatch split k. `hardware_matrix.gram_splitk_is_target_arm` is that
+    row; no other site may branch on the vendor.
+
     THE THRESHOLD IS COMPUTED, NOT A CONSTANT: the vendor matmul parallelizes
     over output tiles of `VENDOR_MATMUL_TILE^2` only, so when the output has
     fewer tiles than the device has resident-block slots
-    (`APPLE_M4_GPU_CORES * max_active_blocks_per_core`), the vendor kernel
+    (`TARGET_GPU_CORES * max_active_blocks_per_core`), the vendor kernel
     cannot fill the machine at ANY k and the k-axis is the only parallelism
     left. That is exactly the split-K kernel's regime. `k` is accepted and
     deliberately unused: starvation is a property of the output shape alone,
@@ -153,6 +176,10 @@ def gram_splitk_applies(m: Int, n: Int, k: Int) raises -> Bool:
     The two capacity bounds are the kernel's own: one staged row per tile
     line (`m <= GRAM_MAX_COLS`) and `m*n` register cells across the block.
     """
+    comptime if not gram_splitk_is_target_arm[TARGET_COLUMN]():
+        # Non-Apple target: MAX's own split-K machinery exists there, so
+        # the vendor matmul is preferred at every shape.
+        return False
     if m != n:
         # Two DIFFERENT operand views cannot be a Gram; only the Gram shape
         # ships through gemm_tn, but refuse rather than assume.
@@ -164,7 +191,7 @@ def gram_splitk_applies(m: Int, n: Int, k: Int) raises -> Bool:
     var vendor_tiles = (
         (m + VENDOR_MATMUL_TILE - 1) // VENDOR_MATMUL_TILE
     ) * ((n + VENDOR_MATMUL_TILE - 1) // VENDOR_MATMUL_TILE)
-    var block_slots = APPLE_M4_GPU_CORES * max_active_blocks_per_core(
+    var block_slots = TARGET_GPU_CORES * max_active_blocks_per_core(
         GRAM_TPB, GRAM_STAGE_FLOATS * 4
     )
     return vendor_tiles < block_slots

@@ -18,6 +18,8 @@ so this tree cannot repeat that quietly. **Audited by grep, not by memory.**
 | `hist_floats_per_thread_for` | same | same |
 | `reduce_width_for` | `point_hist_half_byte_template` | same |
 | `requires_uniform_iteration_for` | `hist_binary`, `hist_half_byte` | kernel refuses at comptime if the row ever says lane-sync |
+| `hardware_matrix` occupancy rows (`gpu_cores_for`, `max_threads_per_core_for`, `threadgroup_limit_for`, `smem_statically_partitioned_for`, `smem_per_core_for`, `max_active_blocks_for`) | `pairwise_distance_base` (`TARGET_GPU_CORES`, `max_active_blocks_per_core`, hence `launch_config_generator`), `core/gram_splitk` (`gram_splitk_chunk_count`, `gram_splitk_applies`), and through the first `fused_l2_knn_grid` + the k-NN AUTO default | `check_hardware_matrix` (runs in `knn_main` AND `pca_main`) RAISES if any reader disagrees with the table, pins the Apple column to the pre-keying constants bit-for-bit, and resolves the nvidia/amd columns on the host (structural, NOT hardware validation) |
+| `gram_splitk_is_target_arm` | `gram_splitk_applies` (comptime gate: non-Apple targets return False at every shape) | same check: apple must route 32x32x4M to split-K; nvidia/amd columns must answer False, because MAX's own split-K arms are comptime-gated `not has_apple_gpu_accelerator()` (LANE_gram-splitk finding 1) |
 
 ## NOT wired
 

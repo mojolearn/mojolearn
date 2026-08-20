@@ -118,7 +118,8 @@ SPELLING deviates.** Theirs grid-strides BOTH axes and serializes the
 per-row merge across column blocks with a mutex array,
 `atomicCAS`/`atomicExch` and `__threadfence` (`:241-281`, `:313-338`); so
 does this kernel, and the grid comes from their `launchConfigGenerator`
-(`pairwise_distance_base.mojo`, M4 inputs) so that every block is resident,
+(`pairwise_distance_base.mojo`, target-column hardware inputs; Apple column
+= the M4's) so that every block is resident,
 which is the protocol's progress guarantee. At `gridDim.x == 1` -- which is
 what that computation picks whenever the row tiles alone fill the device --
 their `rowEpilog_lambda` opens `if (gridDim.x == 1) { return; }` (`:226`),
@@ -793,7 +794,8 @@ def fused_l2_knn(
         )
 
     # `dim3 grid = launchConfigGenerator<KPolicy>(m, n, sharedMemSize,
-    # fusedL2ExpKnnRowMajor);` (`:775-776`), with M4 inputs; see
+    # fusedL2ExpKnnRowMajor);` (`:775-776`), with the target column's
+    # hardware inputs; see
     # `pairwise_distance_base.mojo`. The shared size handed to the occupancy
     # computation is OUR kernel's footprint: one single-buffered page and no
     # `shDumpKV` (DEVIATION BLOCKS 1 and 3), where theirs adds

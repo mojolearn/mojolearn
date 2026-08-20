@@ -215,7 +215,9 @@ def tiled_brute_force_knn(
 #: DEVIATION 36 (REVISED 2026-08-19, second measurement round): cuVS sends
 #: `k <= 64` + row-major + L2 to `fusedL2Knn` unconditionally; we send it
 #: there ONLY when `fused_l2_knn_grid` -- their own `launchConfigGenerator`,
-#: M4-fed -- picks `grid_x == 1`, and to `tiledBruteForceKnn` (their `else`)
+#: fed the hardware matrix's target column (Apple column = the M4 values
+#: every table below was measured on) -- picks `grid_x == 1`, and to
+#: `tiledBruteForceKnn` (their `else`)
 #: when it would engage the x-split. Both arms are theirs; which one runs
 #: unasked is decided by their launch computation evaluated on our hardware.
 #:

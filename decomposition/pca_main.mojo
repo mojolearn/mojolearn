@@ -17,9 +17,11 @@ from mojo_only.gram_splitk_check import (
     check_gram_splitk_oracle,
     check_gram_vendor_arm,
 )
+from mojo_only.hardware_matrix_check import check_hardware_matrix
 
 
 def main() raises:
+    check_hardware_matrix()
     check_gram_splitk_oracle()
     check_gram_vendor_arm()
     check_gram_dispatch()

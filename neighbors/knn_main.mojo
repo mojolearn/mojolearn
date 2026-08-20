@@ -6,6 +6,7 @@ the path their dispatch actually takes for k <= 64 on row-major L2, which is
 `faiss_select::WarpSelect` in registers as its selector.
 """
 
+from mojo_only.hardware_matrix_check import check_hardware_matrix
 from neighbors.mojo_only.knn_check import (
     check_dispatch_takes_fused,
     check_fused_edge_shapes,
@@ -23,6 +24,7 @@ from neighbors.mojo_only.knn_check import (
 
 
 def main() raises:
+    check_hardware_matrix()
     check_knn()
     check_knn_reach_by_sabotage()
     check_vendor_topk_matches_ported()

@@ -156,6 +156,14 @@ def gemm_tn(
     - **Output big enough to fill the device** -> `gemm_tn_via_transpose`
       below, the tuned vendor matmul behind two device transposes.
 
+    The split-K arm is the APPLE target column's only: on nvidia/amd
+    `gram_splitk_applies` is False at every shape
+    (`hardware_matrix.gram_splitk_is_target_arm`), because MAX's matmul has
+    its own split-K machinery there -- it is comptime-gated
+    `not has_apple_gpu_accelerator()` in Modular's source, verified by
+    LANE_gram-splitk -- so those targets hand the Gram shape back to
+    `linalg.matmul` through the transpose route.
+
     Both arms are exercised by name: `mojo_only/gram_splitk_check.mojo`
     runs each directly against a Float64 host oracle, and the vendor table
     covers each through this wrapper (`check_matmul_colmajor`'s tail rows).
