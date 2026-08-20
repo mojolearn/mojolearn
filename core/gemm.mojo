@@ -3,9 +3,12 @@
 WHAT IS LEFT IN THIS FILE, AND WHY THE KERNEL IS NOT
 -----------------------------------------------------
 Where cuVS and cuML call cuBLAS for a STANDALONE matrix product, they call a
-library with no source, so there is nothing to port and `linalg.matmul` is the
-faithful mirror. That is the Gram product PCA, truncated SVD and OLS need, and
-those three go through `gemm_tn` here.
+library with no source, so there is nothing to port and `linalg.matmul` is
+the default mirror. The Gram product PCA, truncated SVD and OLS need goes
+through `gemm_tn` here, which dispatches: the tuned matmul where the output
+has enough tiles to fill the device, and `core/gram_splitk.mojo` where it
+does not (measured 13x off bandwidth on the vendor kernel at the shipped
+shapes; the closed-library exception, argued in that file's header).
 
 **It is not the rule for a distance step.** `VENDOR_LIBS.md` opens with why:
 their dispatch for pairwise distance under an argmin or a top-k does not call
@@ -24,8 +27,13 @@ step 6 went to `gemv_gpu`, it was measured at about 15 GFLOP/s against
 policy, which is the one RAFT's dispatch actually runs, lives in
 `simt_kernel.mojo` and is untouched.
 
-If a later round wants the standalone contraction back, take it from
-`simt_kernel.mojo` or from git history rather than rewriting it.
+The vendor matmul's 248 GFLOP/s is a SQUARE-shape number. On the Gram shape
+PCA/tSVD/OLS actually ship (tiny output, k in the millions) it delivers ~25,
+because its only parallelism is output tiles and a 32 x 32 output is one
+tile. That regime now goes to `core/gram_splitk.mojo`, a hand-written
+split-K Gram kernel under the closed-library exception -- see its header
+for the measurements and for why every MAX route was exhausted first.
+`gemm_tn` below dispatches between the two.
 
 THEIR POLICY IS STILL HERE, BECAUSE THE FUSED KERNEL NEEDS IT
 --------------------------------------------------------------
@@ -54,6 +62,8 @@ from layout import TileTensor
 from layout.tile_layout import row_major
 from linalg.matmul import matmul
 from max.gpu.host import DeviceBuffer, DeviceContext
+
+from core.gram_splitk import gemm_tn_splitk, gram_splitk_applies
 
 
 # `KernelPolicy<float, 4, 32, 4, 4, 16, 16>`, RAFT's Policy4x4<float>.
@@ -131,6 +141,41 @@ def gemm_tn(
     n: Int,
     k: Int,
 ) raises:
+    """`z[m x n] = x[k x m]^T . x[k x n]`: the Gram shape, DISPATCHED.
+
+    Two arms, picked by `gram_splitk_applies` (a computed predicate, not a
+    constant -- see its docstring):
+
+    - **Small output, any k** -> `core/gram_splitk.mojo::gemm_tn_splitk`.
+      The vendor matmul's only parallelism is output tiles, and a 32 x 32
+      output is ONE tile: measured 322.9 ms (~25 GFLOP/s) at 32 x 32 x 4M
+      against a ~10-15 ms bandwidth floor (`bench/results/
+      LANE_covariance-unblock_2026-08-19.md`, orchestrator postscript). The
+      split-K kernel parallelizes the k axis instead, reads X once, and
+      needs neither transpose nor the alias buffers.
+    - **Output big enough to fill the device** -> `gemm_tn_via_transpose`
+      below, the tuned vendor matmul behind two device transposes.
+
+    Both arms are exercised by name: `mojo_only/gram_splitk_check.mojo`
+    runs each directly against a Float64 host oracle, and the vendor table
+    covers each through this wrapper (`check_matmul_colmajor`'s tail rows).
+    """
+    if gram_splitk_applies(m, n, k):
+        gemm_tn_splitk(ctx, z, x, m, k)
+        return
+    gemm_tn_via_transpose(ctx, z, x, xt, xt2, m, n, k)
+
+
+def gemm_tn_via_transpose(
+    ctx: DeviceContext,
+    mut z: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut xt: DeviceBuffer[DType.float32],
+    mut xt2: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+) raises:
     """`z[m x n] = x[k x m]^T . x[k x n]`, ON MAX'S TUNED MATMUL.
 
     **This route was abandoned twice and both times for a bad reason.**
@@ -144,13 +189,15 @@ def gemm_tn(
     device transpose, and `core/column_stats.mojo::transpose_kernel` is
     twenty lines.
 
-    WHY IT MATTERS, MEASURED. Scaling the benchmark to 1M x 128 put k-NN at
-    2.70x over scikit-learn while PCA fell to 0.12x and OLS to 1.64x. k-NN
-    goes through MAX's matmul; PCA and OLS went through our hand-written
-    contraction. Same machine, same round: about 248 GFLOP/s on the vendor
-    kernel against about 15 on ours. Register tiling and split-K narrowed
-    that gap and did not close it, and the honest reading is that a tuned
-    matmul is not something to reimplement when one ships.
+    WHERE THE VENDOR KERNEL WINS, AND WHERE IT STARVES -- BOTH MEASURED.
+    At 1M x 128 the vendor matmul ran ~248 GFLOP/s against ~15 on the
+    hand-written contraction this file used to carry, which is why that
+    contraction was deleted. But its throughput is per-OUTPUT-TILE
+    parallelism (64 x 64 tiles on Apple; `max/kernels/src/linalg/matmul/
+    gpu/__init__.mojo:663-688` at `max/v26.5.0`), so on a small output it
+    starves: 322.9 ms, ~25 GFLOP/s, at 32 x 32 x 4M (LANE_covariance-unblock
+    postscript). So `gemm_tn` sends tile-starved outputs to the split-K
+    kernel and this route serves the rest.
 
     `transpose_a` is STILL unsupported and this does not use it. The transpose
     is two extra passes over `k x m` floats against a product that is
@@ -189,7 +236,7 @@ def gemm_tn(
     ctx.synchronize()
 
 
-# `gemm_tn` IS ON THE VENDOR PATH. `transpose_a` IS THE THING THAT IS NOT.
+# THE GRAM SHAPE'S UPSTREAM ROUTE IS CLOSED. `transpose_a` IS STILL REFUSED.
 #
 # `raft::stats::cov`, `lstsqEig`'s first step and cuML's `tsvd_fit` all ask
 # cuBLAS for `CUBLAS_OP_T, CUBLAS_OP_N`: the Gram shape `A^T A`, contracting
@@ -199,11 +246,12 @@ def gemm_tn(
 #     max/kernels/src/linalg/matmul/__init__.mojo:110:9:
 #     note: constraint failed: transpose_a not yet supported
 #
-# What does NOT follow, and was believed here for two rounds, is that the Gram
-# shape therefore needs a hand-written kernel. `transpose(X) . transpose(X)^T`
-# is the same matrix and is the N-T shape, so one twenty-line transpose puts
-# the T-N users on the tuned matmul too. `gemm_tn` above does exactly that,
-# and the ported column-major contraction it replaced is deleted.
+# `transpose(X) . transpose(X)^T` is the same matrix in the N-T shape, so
+# one twenty-line transpose puts T-N users on the tuned matmul -- and that
+# is `gemm_tn_via_transpose`, the arm for outputs with enough tiles to fill
+# the device. On the tile-starved outputs the shipped fits actually have,
+# the tuned matmul is measured 13x off the bandwidth floor, and `gemm_tn`
+# dispatches those to `core/gram_splitk.mojo` instead.
 #
 # The N-T route is still the one to prefer where a caller can choose it: it
 # skips the transpose entirely.

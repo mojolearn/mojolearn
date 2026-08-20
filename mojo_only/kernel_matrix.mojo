@@ -496,6 +496,7 @@ comptime K_LIB_SELECT_RADIX = 110
 comptime K_LIB_SELECT_WARPSORT = 111
 comptime K_LIB_BALL_COVER_EPS = 112
 comptime K_LIB_JACOBI_EIGH = 113
+comptime K_LIB_GRAM_SPLITK = 114
 
 
 #: NUMERIC. The reduction width every cross-lane fold in these sections uses.
@@ -586,6 +587,13 @@ def lib_block_size(kernel: Int, column: Int) -> Int:
     if kernel == K_LIB_GEMM_CONTRACTION or kernel == K_LIB_FUSED_DISTANCE_NN:
         #: Policy4x4: AccThRows * AccThCols threads cover the tile.
         return 16 * 16
+    if kernel == K_LIB_GRAM_SPLITK:
+        #: `core/gram_splitk.mojo`. 256 threads x its CELLS unroll covers
+        #: the m x m output; the chunk count derives from this via
+        #: `max_active_blocks_per_core`, so this row is also the one input
+        #: to that (NUMERIC) computation -- change it and the summation
+        #: split changes with it.
+        return 256
     return 128
 
 
@@ -734,6 +742,10 @@ def lib_block_size_for[kernel: Int, column: Int]() -> Int:
         return 32
     if kernel == K_LIB_GEMM_CONTRACTION or kernel == K_LIB_FUSED_DISTANCE_NN:
         #: Policy4x4: AccThRows * AccThCols threads cover one tile.
+        return 256
+    if kernel == K_LIB_GRAM_SPLITK:
+        #: `core/gram_splitk.mojo`; see the runtime row above for why this
+        #: one is also a NUMERIC input (it feeds the chunk count).
         return 256
     return 128
 

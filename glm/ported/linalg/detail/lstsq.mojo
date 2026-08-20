@@ -51,9 +51,12 @@ symbol got recorded as the finished form. That row and the `linalg.matmul` at
 `n = 1` row are corrected. `bench/results/VENDOR_PATH_2026-08-19.md` carries
 the same stale sentence and is not this lane's to edit.
 
-**STEP 1 IS ON THE VENDOR MATMUL TOO, AND STEP 6 HAS NO SECOND ARM ANY MORE.**
-`gemm_tn` transposes and calls `linalg.matmul`, so `covA <- A^T A` is tuned;
-`transpose_a` is still refused and is not used. Step 6 called
+**STEP 1 GOES THROUGH `gemm_tn`'s DISPATCH, AND STEP 6 HAS NO SECOND ARM ANY
+MORE.** At OLS's shipped shapes (n_cols <= 128) `gemm_tn` takes the split-K
+Gram kernel (`core/gram_splitk.mojo`) — the vendor matmul measured ~25
+GFLOP/s there, one output tile being its only parallelism — and the
+transpose + `linalg.matmul` arm serves larger outputs; `transpose_a` is
+still refused and is not used on either arm. Step 6 called
 `gemv_gpu` or a ported RAFT contraction depending on a `use_vendor_gemv` flag,
 and the flag and the contraction are both deleted. What checks the vendor call
 is `check_ols_beats_truth_on_noise`, which recomputes both residuals on the
@@ -107,13 +110,14 @@ def lstsq_eig(
 ) raises:
     """`w = inv(A^T A) A^T b`, their step order.
 
-    Steps 1, 5 and 6 are all on MAX's tuned kernels, which is what their
-    cuBLAS calls are. There is no second implementation of any of them here
-    any more; the flag that used to select one is gone with the kernel.
+    Steps 5 and 6 are on MAX's tuned kernels, which is what their cuBLAS
+    calls are; step 1 goes through `gemm_tn`, which dispatches the shipped
+    small-output Gram shapes to the split-K kernel (see the module
+    docstring). There is no second implementation selected by any flag; the
+    old `use_vendor_gemv` flag and its contraction are gone.
     """
-    # covA <- A^T A. alpha = 1, so scale 1: a Gram matrix, not a covariance.
-    # covA <- A^T A. `raft::linalg::gemm(CUBLAS_OP_T, CUBLAS_OP_N, alpha=1)`,
-    # so the tuned matmul with `transpose_a` and no scale. This is the ONLY
+    # covA <- A^T A. `raft::linalg::gemm(CUBLAS_OP_T, CUBLAS_OP_N, alpha=1)`
+    # — a Gram matrix, not a covariance, so no scale. This is the ONLY
     # step here that touches rows, and it was still on the hand-written
     # contraction while every other section had moved: OLS sat at 28 ms
     # across five benchmark rounds because nothing I changed was on its path.

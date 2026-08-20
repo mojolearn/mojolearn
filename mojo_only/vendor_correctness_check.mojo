@@ -66,7 +66,8 @@ from nn.gather_scatter import gather
 from linalg.bmm import batched_matmul
 from linalg.transpose import transpose
 from nn.cumsum import cumsum
-from core.gemm import gemm_nt, gemm_tn
+from core.gemm import gemm_nt, gemm_tn, gemm_tn_via_transpose
+from core.gram_splitk import gram_splitk_applies
 
 
 # ---------------------------------------------------------------------------
@@ -2567,14 +2568,18 @@ def check_matmul_colmajor(mut rows: List[Verdict]) raises:
             )
         )
 
-    # THE WIRED PATH: gemm_tn through the real wrapper -- two device
-    # transposes (core/column_stats.mojo::transpose_kernel) + gemm_nt.
-    # Operands are the SAME matrix, so the diagonal is a same-sign sum and
-    # the tolerance must cover plain accumulation-order spread: measured
-    # worst 4.09e-6 relative at 32x32x10007 (and identical, bit for bit, to
-    # the col-major-view route where that route works), so the budget is
-    # 1e-5, not the 2e-6 the cancellation-shaped checks use. Output AND both
-    # alias buffers pre-poisoned: a transpose that does not run cannot pass.
+    # THE WIRED PATH: gemm_tn through the real wrapper. At 32x32x10007 the
+    # dispatch takes the SPLIT-K arm (core/gram_splitk.mojo) -- printed
+    # below from the same predicate -- and the vendor arm
+    # (transpose_kernel x2 + gemm_nt) is then run EXPLICITLY at the same
+    # shape, because a dispatched wrapper run covers one arm only
+    # (PORTING_RULES.md 8). Operands are the SAME matrix, so the diagonal is
+    # a same-sign sum and the tolerance must cover plain accumulation-order
+    # spread: measured worst 4.09e-6 relative at 32x32x10007 on two
+    # independent routes, so the budget is 1e-5, not the 2e-6 the
+    # cancellation-shaped checks use. Output AND both alias buffers
+    # pre-poisoned: on the vendor arm a transpose that does not run cannot
+    # pass (the split-K arm never touches the aliases, by design).
     var km = 10007
     var mm = 32
     var x = ctx.enqueue_create_buffer[DType.float32](km * mm)
@@ -2596,6 +2601,10 @@ def check_matmul_colmajor(mut rows: List[Verdict]) raises:
     ctx.enqueue_copy(dst_buf=xa2, src_ptr=hpois.unsafe_ptr())
     ctx.synchronize()
 
+    var wrapper_arm = String("split-K") if gram_splitk_applies(
+        mm, mm, km
+    ) else String("transpose+matmul")
+
     gemm_tn(ctx, z, x, xa, xa2, mm, mm, km)
     ctx.enqueue_copy(dst_ptr=hz.unsafe_ptr(), src_buf=z)
     ctx.synchronize()
@@ -2616,19 +2625,19 @@ def check_matmul_colmajor(mut rows: List[Verdict]) raises:
             elif abs(got - acc) > mag * 1.0e-5 + 1.0e-6:
                 tn_bad += 1
     if tn_bad == 0:
-        print("  core/gemm.mojo::gemm_tn (transpose x2 + gemm_nt) ok")
+        print("  core/gemm.mojo::gemm_tn (arm: " + wrapper_arm + ") ok")
         rows.append(
             Verdict(
                 "core/gemm.mojo::gemm_tn (WIRED PATH)",
                 "raft::stats::cov / lstsqEig gemm (OP_T)",
                 V_CORRECT,
-                "32x32x10007 through the real wrapper, aliases pre-poisoned",
+                "32x32x10007 through the real wrapper, arm: " + wrapper_arm,
                 True,
             )
         )
     else:
         print(
-            "  core/gemm.mojo::gemm_tn FAIL at",
+            "  core/gemm.mojo::gemm_tn (arm: " + wrapper_arm + ") FAIL at",
             tn_bad,
             "of",
             mm * mm,
@@ -2639,7 +2648,70 @@ def check_matmul_colmajor(mut rows: List[Verdict]) raises:
                 "core/gemm.mojo::gemm_tn (WIRED PATH)",
                 "raft::stats::cov / lstsqEig gemm (OP_T)",
                 V_WRONG,
-                String(tn_bad) + " of " + String(mm * mm) + " cells wrong",
+                String(tn_bad)
+                + " of "
+                + String(mm * mm)
+                + " cells wrong, arm: "
+                + wrapper_arm,
+                True,
+            )
+        )
+
+    # The VENDOR ARM, explicitly: re-poison output and aliases, then call
+    # gemm_tn_via_transpose by name. This is the row that keeps the
+    # transpose_kernel x2 + gemm_nt route covered now that the wrapper
+    # dispatches this shape to split-K.
+    ctx.enqueue_copy(dst_buf=xa, src_ptr=hpois.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=xa2, src_ptr=hpois.unsafe_ptr())
+    for i in range(mm * mm):
+        hz.unsafe_ptr().unsafe_store(i, Float32(-987654.0))
+    ctx.enqueue_copy(dst_buf=z, src_ptr=hz.unsafe_ptr())
+    ctx.synchronize()
+
+    gemm_tn_via_transpose(ctx, z, x, xa, xa2, mm, mm, km)
+    ctx.enqueue_copy(dst_ptr=hz.unsafe_ptr(), src_buf=z)
+    ctx.synchronize()
+
+    var arm_bad = 0
+    for i in range(mm):
+        for j in range(mm):
+            var acc = Float64(0.0)
+            var mag = Float64(0.0)
+            for t in range(km):
+                var av = Float64(hx.unsafe_ptr().unsafe_load(t * mm + i))
+                var bv = Float64(hx.unsafe_ptr().unsafe_load(t * mm + j))
+                acc += av * bv
+                mag += abs(av * bv)
+            var got = Float64(hz.unsafe_ptr().unsafe_load(i * mm + j))
+            if got == Float64(-987654.0):
+                arm_bad += 1
+            elif abs(got - acc) > mag * 1.0e-5 + 1.0e-6:
+                arm_bad += 1
+    if arm_bad == 0:
+        print("  core/gemm.mojo::gemm_tn_via_transpose (vendor arm) ok")
+        rows.append(
+            Verdict(
+                "core/gemm.mojo::gemm_tn_via_transpose (vendor arm)",
+                "raft::stats::cov / lstsqEig gemm (OP_T)",
+                V_CORRECT,
+                "32x32x10007 called by name, aliases pre-poisoned",
+                True,
+            )
+        )
+    else:
+        print(
+            "  core/gemm.mojo::gemm_tn_via_transpose FAIL at",
+            arm_bad,
+            "of",
+            mm * mm,
+            "cells",
+        )
+        rows.append(
+            Verdict(
+                "core/gemm.mojo::gemm_tn_via_transpose (vendor arm)",
+                "raft::stats::cov / lstsqEig gemm (OP_T)",
+                V_WRONG,
+                String(arm_bad) + " of " + String(mm * mm) + " cells wrong",
                 True,
             )
         )

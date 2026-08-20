@@ -192,10 +192,11 @@ def compute_covariance(
         grid_dim=((cells + 255) // 256, 1, 1),
         block_dim=(256, 1, 1),
     )
-    # `raft::stats::cov` is a GEMM with `CUBLAS_OP_T, CUBLAS_OP_N`, so it goes
-    # through the same tuned matmul as everything else. This was the SECOND
-    # contraction-shaped kernel in `core/` and it is why PCA did not move for
-    # four benchmark rounds while the other one was being tuned.
+    # `raft::stats::cov` is a GEMM with `CUBLAS_OP_T, CUBLAS_OP_N`, served by
+    # `gemm_tn`'s dispatch (split-K kernel at these output widths; the vendor
+    # matmul starves on one output tile — core/gram_splitk.mojo). This was
+    # the SECOND contraction-shaped kernel in `core/` and it is why PCA did
+    # not move for four benchmark rounds while the other one was being tuned.
     #
     # MAX's matmul has no `alpha`, so cuBLAS's scale becomes its own pass over
     # `n_cols^2` elements. A deviation in launch count, not arithmetic.

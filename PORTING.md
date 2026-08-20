@@ -802,7 +802,10 @@ Written wrong, never unwritten: the losing arms index the operand as raw
 row-major memory and produce PLAUSIBLE, NON-SYMMETRIC numbers. The ok/wrong
 boundary zigzags (33x17x255 ok, 33x33x512 wrong; 8x8x8 ok, 8x8x64 wrong) and
 matches no predicate worth trusting across a toolchain update, so the view is
-UNWIREABLE and `gemm_tn` stays on `transpose_kernel` + `gemm_nt`.
+UNWIREABLE. `gemm_tn`'s vendor arm stays on `transpose_kernel` + `gemm_nt`;
+its default arm for the shipped small-output Gram shapes is the split-K
+kernel (`core/gram_splitk.mojo`, LANE gram-splitk), which needs no view and
+no transpose.
 
 Two lessons beyond the verdict. **A probe battery that passes is evidence
 about ITS shapes only** — the first battery (eight shapes, all correct except

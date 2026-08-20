@@ -15,12 +15,17 @@ split-K row partition of our own on top, on the belief that MAX's matmul could
 not do it because `transpose_a` is unsupported. **`transpose_a` is still
 unsupported and that belief was still wrong**: `Xt = transpose(X)` makes
 `Xt . Xt^T` the N-T shape MAX does support, and `transpose_kernel` below is
-the twenty lines that get there. `core/gemm.mojo::gemm_tn` takes that route
-and calls `linalg.matmul`, so the ported contraction and its split-K reduction
-were dead code and are deleted. About 250 lines, none of it reached.
+the twenty lines that get there. The ported contraction and its split-K
+reduction were dead code by then and are deleted. About 250 lines, none of
+it reached.
 
-That is the standing vendor rule applied to the one shape that had resisted
-it: they call a tuned BLAS, so we call ours.
+`core/gemm.mojo::gemm_tn` now DISPATCHES that shape: the transpose route
+above for outputs with enough tiles to fill the device, and the split-K
+Gram kernel in `core/gram_splitk.mojo` for the tile-starved outputs the
+shipped fits actually have, where the vendor matmul measured ~25 GFLOP/s
+(one 32x32 output = one tile of parallelism). The tuned-BLAS rule stands
+where the tuned kernel has parallelism; the measurement, not the rule, is
+what put the small shapes on the hand-written kernel.
 
 THE ONE SEMANTIC THAT IS EASY TO GET WRONG
 ------------------------------------------

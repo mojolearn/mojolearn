@@ -83,9 +83,10 @@ def tsvd_fit(
     if n_components > n_cols:
         raise Error("n_components cannot exceed n_cols")
 
-    # Step 1. `alpha = 1`, so scale 1: the raw Gram matrix, not a covariance.
-    # Same tuned matmul as PCA, with alpha = 1 and no centering. Their
-    # `tsvd_fit` asks cuBLAS for exactly this: CUBLAS_OP_T, CUBLAS_OP_N.
+    # Step 1. `alpha = 1`, so scale 1: the raw Gram matrix, not a covariance,
+    # and no centering. Their `tsvd_fit` asks cuBLAS for exactly this:
+    # CUBLAS_OP_T, CUBLAS_OP_N. Same `gemm_tn` dispatch as PCA (split-K
+    # kernel at these output widths; see core/gram_splitk.mojo).
     gemm_tn(ctx, gram, x, x_alias, x_alias2, n_cols, n_cols, n_rows)
 
     ctx.synchronize()
