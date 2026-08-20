@@ -26,21 +26,29 @@ WHAT MOJO EXPOSES ON APPLE, ESTABLISHED BY COMPILATION NOT DOCS
   `"threadfence is only implemented on NVIDIA GPUs"`
   (`stdlib/std/gpu/intrinsics.mojo:790-792` at Mojo 1.0). There is NO
   standalone device-scope fence for Metal.
-- `std.atomic.Atomic.compare_exchange[success_ordering, failure_ordering]`
-  and `Atomic.store[ordering]` DO take explicit `Ordering.ACQUIRE` /
-  `Ordering.RELEASE` and lower through `pop.atomic.cmpxchg` /
-  `pop.atomic.store` with the ordering attribute
-  (`stdlib/std/atomic/atomic.mojo:749-817`). The Apple DEFAULT ordering is
-  RELAXED (`atomic.mojo:34`), so the ordering must be SPELLED.
+- `pop.atomic.cmpxchg` is legalized for Apple ONLY as `weak` and ONLY
+  relaxed: the backend rejects, by name, a strong exchange ("Apple GPU only
+  supports `weak` compare-exchange; AIR exposes no strong compare-exchange
+  primitive") and any acquire/acq_rel success ordering ("Apple GPU does not
+  support `acquire` atomic ordering"). Both messages are from the Mojo 1.0
+  compiler itself, reproduced by this file's history.
+- `Atomic.load[Ordering.ACQUIRE]` and `Atomic.store[Ordering.RELEASE]` (and
+  SEQUENTIAL for both) DO legalize and run on the Apple target. Verified by
+  enqueue, not by host compile.
 
 So the only expressible translation folds their `__threadfence` into the
-mutex operations themselves: acquire on the winning CAS, release on the
-handoff store. That is the same protocol in the C++11 model -- CUDA's own
-documentation defines `__threadfence()` as `cuda::atomic_thread_fence(
-memory_order_seq_cst, thread_scope_device)` -- and their `atomicExch`
-release becomes `Atomic.store[RELEASE]`, which is legal because only the
-mutex HOLDER ever writes the release value and the returned old value is
-discarded (`:277`, `:337` discard it too).
+mutex accesses as a TEST-AND-TEST-AND-SET: spin on an ACQUIRE load until
+the mutex shows the awaited state, claim it with a weak RELAXED
+compare-exchange (a failed claim just re-enters the spin), and hand it off
+with a RELEASE store. The synchronizes-with edge is load-acquire observing
+the value that store-release published, which is the C++11 statement of
+what their `atomicCAS`-spin plus `__threadfence` accomplishes -- CUDA
+defines `__threadfence()` as `cuda::atomic_thread_fence(seq_cst,
+thread_scope_device)`. Their `atomicExch` release becomes the RELEASE
+store, which is legal because only the mutex HOLDER writes the release
+value and theirs discards the returned old value too (`:277`, `:337`).
+No ABA hides in the relaxed claim: each state value has exactly one writer
+role, and the single consumer is the only block that ever consumes a `-2`.
 
 WHAT THIS PROBE ESTABLISHES OR REFUTES
 ---------------------------------------
@@ -133,11 +141,16 @@ def mutex_probe_kernel(
         while processed < x_blocks - 1:
             if tid == 0:
                 # `while (atomicCAS(mutex, -2, -1) != -2);` + the
-                # `__threadfence()` acquire that follows, `:251-255`.
+                # `__threadfence()` acquire that follows, `:251-255`, as
+                # acquire-load spin + weak relaxed claim (module docstring).
                 while True:
+                    if Atomic.load[ordering = Ordering.ACQUIRE](
+                        mtx
+                    ) != Int32(-2):
+                        continue
                     var expected = Int32(-2)
                     if Atomic.compare_exchange[
-                        success_ordering = Ordering.ACQUIRE,
+                        success_ordering = Ordering.RELAXED,
                         failure_ordering = Ordering.RELAXED,
                         weak=True,
                     ](mtx, expected, Int32(-1)):
@@ -159,11 +172,14 @@ def mutex_probe_kernel(
     else:
         # --- producer, their `:313-338` ---
         if tid == 0:
-            # `while (atomicCAS(mutex, 0, 1) != 0);` + acquire, `:314-318`.
+            # `while (atomicCAS(mutex, 0, 1) != 0);` + acquire, `:314-318`,
+            # same acquire-load spin + weak relaxed claim.
             while True:
+                if Atomic.load[ordering = Ordering.ACQUIRE](mtx) != Int32(0):
+                    continue
                 var expected = Int32(0)
                 if Atomic.compare_exchange[
-                    success_ordering = Ordering.ACQUIRE,
+                    success_ordering = Ordering.RELAXED,
                     failure_ordering = Ordering.RELAXED,
                     weak=True,
                 ](mtx, expected, Int32(1)):

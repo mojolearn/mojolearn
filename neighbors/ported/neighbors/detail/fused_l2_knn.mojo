@@ -113,23 +113,41 @@ element enters the thread queue that theirs would have rejected; the cost is
 the vote in `checkThreadQ`, which is 8 per row per column tile. Not measured
 separately.
 
-**DEVIATION BLOCK 2 - the cross-block merge is not ported.** Theirs
-grid-strides BOTH axes and serializes the per-row merge across column blocks
-with a mutex array, `atomicCAS`/`atomicExch` and `__threadfence`
-(`:241-281`, `:313-338`). We launch `gridDim.x == 1` and grid-stride the
-column axis INSIDE the block, so every row is owned by exactly one block and
-there is nothing to serialize. **This is their own configuration, not an
-invention**: their `rowEpilog_lambda` opens `if (gridDim.x == 1) { return; }`
-(`:226`) and their final store is guarded by
-`(gridStrideX + Nblk * gridDim.x) >= n && gridDim.x == 1` (`:479`), so at
-`gridDim.x == 1` their kernel IS this kernel. Their
-`launchConfigGenerator` picks `grid.x > 1` when `m` is small; we never do,
-which costs parallelism when `m` is small and `n` is huge. Same deviation,
-same reason, as `cluster/ported/distance/fused_distance_nn/simt_kernel.mojo`.
-What blocks it is the mutex protocol itself and nothing else: its merge is
-plain `heapArr[i]->add` (`:284-300`), which IS ported, so if a spin on
-`atomicCAS` plus `__threadfence` is ever established as sound on Metal this
-is reachable. That is an OPEN item, not a wall.
+**DEVIATION BLOCK 2 - the cross-block merge IS ported; only the FENCE
+SPELLING deviates.** Theirs grid-strides BOTH axes and serializes the
+per-row merge across column blocks with a mutex array,
+`atomicCAS`/`atomicExch` and `__threadfence` (`:241-281`, `:313-338`); so
+does this kernel, and the grid comes from their `launchConfigGenerator`
+(`pairwise_distance_base.mojo`, M4 inputs) so that every block is resident,
+which is the protocol's progress guarantee. At `gridDim.x == 1` -- which is
+what that computation picks whenever the row tiles alone fill the device --
+their `rowEpilog_lambda` opens `if (gridDim.x == 1) { return; }` (`:226`),
+the final store is guarded by
+`(gridStrideX + Nblk * gridDim.x) >= n && gridDim.x == 1` (`:479`), and the
+mutex array is never touched: that arm is byte-for-byte the kernel this
+file always had.
+
+What deviates is only how the fence is SAID. Apple's backend legalizes
+neither their spelling nor any standalone fence: Mojo 1.0's `threadfence`
+is comptime-asserted `"only implemented on NVIDIA GPUs"`
+(`stdlib/std/gpu/intrinsics.mojo:790-792`), AIR has no strong
+compare-exchange ("Apple GPU only supports `weak` compare-exchange"), and
+acquire/acq_rel orderings on RMW ops are rejected by name ("Apple GPU does
+not support `acquire` atomic ordering") -- all three are the Metal
+backend's own errors. What it DOES legalize is `Atomic.load[ACQUIRE]` and
+`Atomic.store[RELEASE]`. So their `atomicCAS` spin + `__threadfence`
+acquire is spelled as an ACQUIRE-load spin with a weak RELAXED
+compare-exchange claim, and their `atomicExch` + `__threadfence` release as
+a RELEASE store (legal: only the holder writes it, and theirs discards the
+returned value too). Same protocol in the C++11 model -- CUDA defines
+`__threadfence()` as `atomic_thread_fence(seq_cst, thread_scope_device)`.
+`neighbors/mutex_probe_main.mojo` established the spelling sound on the M4:
+650 in-envelope contended handoff launches bit-exact against a host oracle
+over hashed payloads with a poisoned exchange buffer, and both sabotage
+arms (skipped words, release-before-write) caught every single time, so the
+probe demonstrably SEES violations. `cluster/ported/distance/
+fused_distance_nn/simt_kernel.mojo` still carries the old single-block
+deviation and can now cite this block instead of a wall.
 
 **DEVIATION BLOCK 3 - single-buffered shared pages.** Their
 `Policy::SmemSize` is `2 * SmemPage` because `Contractions_NT` is DOUBLE
@@ -170,7 +188,8 @@ zero-distance duplicate and the fused path does not. This kernel copies both
 clauses. See the lane file; `core/` is another lane's.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from std.atomic import Atomic, Ordering
+from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.gpu.primitives.warp import max as warp_max
 from std.math import sqrt
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -178,6 +197,9 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
+from neighbors.ported.distance.detail.pairwise_distance_base import (
+    launch_config_generator,
+)
 from neighbors.ported.neighbors.detail.faiss_select.select import WarpSelect
 
 
@@ -247,9 +269,11 @@ def fused_l2_knn_kernel[
     n_in: Int32,
     d_in: Int32,
     num_nn_in: Int32,
+    mutexes: MutPointer[Int32, MutAnyOrigin],
+    sabotage_in: Int32,
 ):
     """`fusedL2kNN<..., NumWarpQ, NumThreadQ, ...>` with
-    `l2_exp_distance_op`, at `gridDim.x == 1`.
+    `l2_exp_distance_op`, at any grid `launch_config_generator` produces.
 
     `x` is the QUERIES (`m x d`) and `y` is the INDEX (`n x d`), which is
     their argument order at `fused_l2_knn.cuh:1003-1004`
@@ -265,9 +289,19 @@ def fused_l2_knn_kernel[
     template arguments, and `num_nn_in` must be `<= num_warp_q`. The host
     picks between `<32, 2>` and `<64, 3>` exactly as `:765-771` does.
 
-    Launch `grid_dim = (1, ceil(m / FKNN_MBLK), 1)`,
-    `block_dim = (FKNN_THREADS, 1, 1)`. `grid_dim.x` must be 1; see
-    DEVIATION BLOCK 2.
+
+    Launch with `launch_config_generator`'s grid and
+    `block_dim = (FKNN_THREADS, 1, 1)`. At `grid_dim.x == 1` every row is
+    owned by one block and `mutexes` is never touched; at `grid_dim.x > 1`
+    the blocks sharing a row tile merge through `mutexes` -- their
+    `volatile int* mutexes` argument (`:211`), one `Int32` per row tile,
+    ZEROED BY THE HOST exactly as `fusedL2ExpKnnImpl:788` memsets it.
+
+    `sabotage_in` is CHECK infrastructure, not theirs: nonzero makes the
+    LAST producer hand over identity/keyMax instead of its queue, so
+    `knn_check` can prove the merge is reached (PORTING_RULES 6). The
+    production entry point hard-codes 0, and at `grid_dim.x == 1` the
+    value is never read.
 
     Output is `m x num_nn`, SORTED ascending by distance, which is what
     their `WarpSelect::reduce()` produces for `Dir == false`.
@@ -282,7 +316,13 @@ def fused_l2_knn_kernel[
     # one `tr` and all 32 `tc`, which is why the queues below are per-warp.
     var tr = tid // FKNN_ACC_TH_COLS
     var tc = tid % FKNN_ACC_TH_COLS
-    var m0 = Int(block_idx.y) * FKNN_MBLK
+    # `const int lid = threadIdx.x % warpSize;` (`:232`, their rowEpilog).
+    var lid = tid % 32
+    var gdx = Int(grid_dim.x)
+    var sabotage = Int(sabotage_in)
+    # `kNumWarpQRegisters = NumWarpQ / WarpSize`, `Select.cuh:360`; the
+    # merge stages exactly this many pairs per row in registers.
+    comptime n_regs = num_warp_q // 32
 
     var sx = stack_allocation[
         FKNN_SMEM_PAGE_X,
@@ -295,165 +335,380 @@ def fused_l2_knn_kernel[
         address_space = AddressSpace.SHARED,
     ]()
 
-    # `myWarpSelect heapArr1(identity, keyMax, numOfNN);`
-    # `myWarpSelect heapArr2(identity, keyMax, numOfNN);`
-    # `myWarpSelect* heapArr[] = {&heapArr1, &heapArr2};`, `:359-361`.
-    # Theirs are re-declared inside `epilog_lambda` and therefore once per
-    # column tile; ours are declared once, outside the column sweep. That is
-    # DEVIATION BLOCK 1 and it is the whole point of the file.
-    var heap0 = WarpSelect[num_warp_q, num_thread_q, False](
-        FKNN_IDENTITY, FKNN_KEY_MAX, num_nn
-    )
-    var heap1 = WarpSelect[num_warp_q, num_thread_q, False](
-        FKNN_IDENTITY, FKNN_KEY_MAX, num_nn
-    )
 
-    # `const IdxT starty = gridStrideY + (threadIdx.x / Policy::AccThCols);`
-    # `:355`, then `gmemRowId = starty + i * Policy::AccThRows` `:457`.
-    # Both are warp-uniform, which is what makes the `< m` guards below safe
-    # to wrap around a queue method that votes.
-    var row0 = m0 + tr
-    var row1 = m0 + tr + FKNN_ACC_TH_ROWS
-    var have0 = row0 < m
-    var have1 = row1 < m
+    # `for (auto tile_idx_m = grid_offset_m; tile_idx_m < this->m;
+    #      tile_idx_m += grid_stride_m)`, `pairwise_distance_base.cuh:129`,
+    # with `grid_offset_m = Mblk * blockIdx.y` and
+    # `grid_stride_m = Mblk * gridDim.y` (`:120`, `:122`). The launch caps
+    # `grid_y` at `minGridSize`, so this loop can take several row tiles.
+    var m0 = Int(block_idx.y) * FKNN_MBLK
+    while m0 < m:
+        # `myWarpSelect heapArr2(identity, keyMax, numOfNN);`
+        # `myWarpSelect* heapArr[] = {&heapArr1, &heapArr2};`, `:359-361`.
+        # Theirs are re-declared inside `epilog_lambda` and therefore once per
+        # column tile; ours are declared once, outside the column sweep. That is
+        # DEVIATION BLOCK 1 and it is the whole point of the file.
+        var heap0 = WarpSelect[num_warp_q, num_thread_q, False](
+            FKNN_IDENTITY, FKNN_KEY_MAX, num_nn
+        )
+        var heap1 = WarpSelect[num_warp_q, num_thread_q, False](
+            FKNN_IDENTITY, FKNN_KEY_MAX, num_nn
+        )
 
-    var xn0 = Float32(0.0)
-    if have0:
-        xn0 = xn.unsafe_load(row0)
-    var xn1 = Float32(0.0)
-    if have1:
-        xn1 = xn.unsafe_load(row1)
+        # `const IdxT starty = gridStrideY + (threadIdx.x / Policy::AccThCols);`
+        # `:355`, then `gmemRowId = starty + i * Policy::AccThRows` `:457`.
+        # Both are warp-uniform, which is what makes the `< m` guards below safe
+        # to wrap around a queue method that votes.
+        var row0 = m0 + tr
+        var row1 = m0 + tr + FKNN_ACC_TH_ROWS
+        var have0 = row0 < m
+        var have1 = row1 < m
 
-    # The grid-stride over the column axis, pulled inside the block.
-    var n0 = 0
-    while n0 < n:
-        var acc0 = SIMD[DType.float32, FKNN_ACC_COLS_PER_TH](0.0)
-        var acc1 = SIMD[DType.float32, FKNN_ACC_COLS_PER_TH](0.0)
+        var xn0 = Float32(0.0)
+        if have0:
+            xn0 = xn.unsafe_load(row0)
+        var xn1 = Float32(0.0)
+        if have1:
+            xn1 = xn.unsafe_load(row1)
 
-        var kt = 0
-        while kt < d:
-            # `ldgXY` (`:150-165`) + `stsXY` (`:166-175`, and the `stsX`
-            # at `:261` / `stsY` at `:270`), as a flat
-            # strided sweep. `Veclen == 1` here, so there is no vector load
-            # to lose.
-            var ex = tid
-            while ex < FKNN_MBLK * FKNN_KBLK:
-                var r = ex // FKNN_KBLK
-                var c = ex % FKNN_KBLK
-                var v = Float32(0.0)
-                if m0 + r < m and kt + c < d:
-                    v = x.unsafe_load((m0 + r) * d + kt + c)
-                sx[r * FKNN_SMEM_STRIDE + c] = v
-                ex += FKNN_THREADS
-            var ey = tid
-            while ey < FKNN_NBLK * FKNN_KBLK:
-                var r2 = ey // FKNN_KBLK
-                var c2 = ey % FKNN_KBLK
-                var v2 = Float32(0.0)
-                if n0 + r2 < n and kt + c2 < d:
-                    v2 = y.unsafe_load((n0 + r2) * d + kt + c2)
-                sy[r2 * FKNN_SMEM_STRIDE + c2] = v2
-                ey += FKNN_THREADS
-            barrier()
 
-            # `ldsXY`, `detail/contractions.cuh:176-180`, and the `ldsX`
-            # (`:279-298`) / `ldsY` (`:299-317`) it calls. The row a thread
-            # owns is `accrowid + i * AccThRows` and the column is
-            # `acccolid + j * AccThCols`: STRIDED, not blocked. That mapping
-            # is not cosmetic here, because their epilogue at
-            # `fused_l2_knn.cuh:355-356` recomputes the same expressions to
-            # decide which global row and column an accumulator belongs to.
-            for kk in range(FKNN_KBLK):
-                var regy = SIMD[DType.float32, FKNN_ACC_COLS_PER_TH](0.0)
+        # `for (auto tile_idx_n = grid_offset_n; tile_idx_n < this->n;
+        #      tile_idx_n += grid_stride_n)`, `pairwise_distance_base.cuh:131`,
+        # with `grid_offset_n = Nblk * blockIdx.x` and
+        # `grid_stride_n = Nblk * gridDim.x` (`:121`, `:123`).
+        var n0 = Int(block_idx.x) * FKNN_NBLK
+        while n0 < n:
+            var acc0 = SIMD[DType.float32, FKNN_ACC_COLS_PER_TH](0.0)
+            var acc1 = SIMD[DType.float32, FKNN_ACC_COLS_PER_TH](0.0)
 
+            var kt = 0
+            while kt < d:
+                # `ldgXY` (`:150-165`) + `stsXY` (`:166-175`, and the `stsX`
+                # at `:261` / `stsY` at `:270`), as a flat
+                # strided sweep. `Veclen == 1` here, so there is no vector load
+                # to lose.
+                var ex = tid
+                while ex < FKNN_MBLK * FKNN_KBLK:
+                    var r = ex // FKNN_KBLK
+                    var c = ex % FKNN_KBLK
+                    var v = Float32(0.0)
+                    if m0 + r < m and kt + c < d:
+                        v = x.unsafe_load((m0 + r) * d + kt + c)
+                    sx[r * FKNN_SMEM_STRIDE + c] = v
+                    ex += FKNN_THREADS
+                var ey = tid
+                while ey < FKNN_NBLK * FKNN_KBLK:
+                    var r2 = ey // FKNN_KBLK
+                    var c2 = ey % FKNN_KBLK
+                    var v2 = Float32(0.0)
+                    if n0 + r2 < n and kt + c2 < d:
+                        v2 = y.unsafe_load((n0 + r2) * d + kt + c2)
+                    sy[r2 * FKNN_SMEM_STRIDE + c2] = v2
+                    ey += FKNN_THREADS
+                barrier()
+
+                # `ldsXY`, `detail/contractions.cuh:176-180`, and the `ldsX`
+                # (`:279-298`) / `ldsY` (`:299-317`) it calls. The row a thread
+                # owns is `accrowid + i * AccThRows` and the column is
+                # `acccolid + j * AccThCols`: STRIDED, not blocked. That mapping
+                # is not cosmetic here, because their epilogue at
+                # `fused_l2_knn.cuh:355-356` recomputes the same expressions to
+                # decide which global row and column an accumulator belongs to.
+                for kk in range(FKNN_KBLK):
+                    var regy = SIMD[DType.float32, FKNN_ACC_COLS_PER_TH](0.0)
+
+                    @parameter
+                    for j in range(FKNN_ACC_COLS_PER_TH):
+                        regy[j] = sy[
+                            (tc + j * FKNN_ACC_TH_COLS) * FKNN_SMEM_STRIDE + kk
+                        ]
+                    acc0 += sx[(tr + 0) * FKNN_SMEM_STRIDE + kk] * regy
+                    acc1 += (
+                        sx[(tr + FKNN_ACC_TH_ROWS) * FKNN_SMEM_STRIDE + kk] * regy
+                    )
+                barrier()
+                kt += FKNN_KBLK
+
+            # --- `epilog_lambda`, `fused_l2_knn.cuh:341-484` -----------------
+            # The `gridStrideX == blockIdx.x * Policy::Nblk` arm, `:454-477`,
+            # which for us is EVERY column tile. DEVIATION BLOCK 1.
+            #
+            # `regyn`, the per-column norms their contraction hands the lambda
+            # as `OutT* regyn` (`:346`).
+            var regyn = SIMD[DType.float32, FKNN_ACC_COLS_PER_TH](0.0)
+
+            @parameter
+            for j in range(FKNN_ACC_COLS_PER_TH):
+                var cj = n0 + tc + j * FKNN_ACC_TH_COLS
+                if cj < n:
+                    regyn[j] = yn.unsafe_load(cj)
+
+            # `for (int i = 0; i < Policy::AccRowsPerTh; ++i)` `:456`, unrolled
+            # by hand because `acc0`/`acc1` are separate SIMD values. The
+            # `if (gmemRowId < m)` guard is `:459` and is warp-uniform.
+            if have0:
                 @parameter
                 for j in range(FKNN_ACC_COLS_PER_TH):
-                    regy[j] = sy[
-                        (tc + j * FKNN_ACC_TH_COLS) * FKNN_SMEM_STRIDE + kk
-                    ]
-                acc0 += sx[(tr + 0) * FKNN_SMEM_STRIDE + kk] * regy
-                acc1 += (
-                    sx[(tr + FKNN_ACC_TH_ROWS) * FKNN_SMEM_STRIDE + kk] * regy
-                )
-            barrier()
-            kt += FKNN_KBLK
+                    # `Pair otherKV = {keyMax, identity};` `:463`, overwritten
+                    # only when `colId < ldd`. The out-of-range lane still calls
+                    # `add`, which is both their code and the call contract
+                    # `checkThreadQ`'s warp vote requires.
+                    var col = n0 + tc + j * FKNN_ACC_TH_COLS
+                    var key = FKNN_IDENTITY
+                    var val = FKNN_KEY_MAX
+                    if col < n:
+                        key = l2_exp_epilog(xn0, regyn[j], acc0[j])
+                        val = UInt32(col)
+                    heap0.add(key, val)
+            if have1:
+                @parameter
+                for j in range(FKNN_ACC_COLS_PER_TH):
+                    var col1 = n0 + tc + j * FKNN_ACC_TH_COLS
+                    var key1 = FKNN_IDENTITY
+                    var val1 = FKNN_KEY_MAX
+                    if col1 < n:
+                        key1 = l2_exp_epilog(xn1, regyn[j], acc1[j])
+                        val1 = UInt32(col1)
+                    heap1.add(key1, val1)
 
-        # --- `epilog_lambda`, `fused_l2_knn.cuh:341-484` -----------------
-        # The `gridStrideX == blockIdx.x * Policy::Nblk` arm, `:454-477`,
-        # which for us is EVERY column tile. DEVIATION BLOCK 1.
+            n0 += FKNN_NBLK * gdx
+
+        # `bool needSort = (heapArr[i]->numVals > 0);`
+        # `needSort = __any_sync(mask, needSort);`
+        # `if (needSort) { heapArr[i]->reduce(); }`, `:471-473`. Theirs runs
+        # it per column tile because the queue is about to be spilled; ours
+        # runs it once, because the queue was never spilled.
         #
-        # `regyn`, the per-column norms their contraction hands the lambda
-        # as `OutT* regyn` (`:346`).
-        var regyn = SIMD[DType.float32, FKNN_ACC_COLS_PER_TH](0.0)
+        # Then `storeWarpQGmem`, `:95-117`, reached through their guard
+        # `((gridStrideX + Policy::Nblk * gridDim.x) >= n) && gridDim.x ==
+        # 1` at `:479`: only the single-column-block configuration stores
+        # here, and only after its last column tile, which is where this
+        # code sits. `writeOut` places register `i` of lane `l` at output
+        # slot `i * 32 + l`, exactly the `idx = j * warpSize + lid` of
+        # `:109`.
+        if gdx == 1:
+            if have0:
+                var f0 = Int32(0)
+                if heap0.num_vals > 0:
+                    f0 = Int32(1)
+                if warp_max(f0) != Int32(0):
+                    heap0.reduce()
+                heap0.write_out(
+                    out_dists.unsafe_offset(row0 * num_nn),
+                    out_inds.unsafe_offset(row0 * num_nn),
+                    num_nn,
+                )
+            if have1:
+                var f1 = Int32(0)
+                if heap1.num_vals > 0:
+                    f1 = Int32(1)
+                if warp_max(f1) != Int32(0):
+                    heap1.reduce()
+                heap1.write_out(
+                    out_dists.unsafe_offset(row1 * num_nn),
+                    out_inds.unsafe_offset(row1 * num_nn),
+                    num_nn,
+                )
+        else:
+            # ---- `rowEpilog_lambda`, `fused_l2_knn.cuh:224-338` ----------
+            # The merge PROTOCOL is theirs; only the FENCE SPELLING is
+            # Metal's. Their `atomicCAS` spin plus `__threadfence` acquire
+            # becomes an ACQUIRE load spin + weak RELAXED compare-exchange
+            # claim; their `atomicExch` plus `__threadfence` release
+            # becomes a RELEASE store. The Apple backend legalizes NO other
+            # spelling: `threadfence` is comptime-asserted NVIDIA-only,
+            # strong compare-exchange does not exist in AIR, and
+            # acquire/acq_rel orderings on RMW ops are rejected by name.
+            # `neighbors/mutex_probe_main.mojo` established this spelling
+            # sound under contention on the M4. See DEVIATION BLOCK 2.
+            #
+            # Deviation-1 consequence, acting here: theirs stages every
+            # handoff through `shDumpKV` because its queues LIVE there;
+            # ours never spilled the queues. So the producer first
+            # `reduce()`s its registers (their epilog had already reduced
+            # into shmem) and hands them over directly, and the consumer
+            # stages the incoming pairs in registers (theirs copies
+            # `out -> regs -> shmem -> regs`, `:258-276` then `:283-299`;
+            # ours stops at the first regs). Same pairs, same protocol
+            # steps, same step order.
+            var mtx = mutexes.unsafe_offset(m0 // FKNN_MBLK)
+            if Int(block_idx.x) == 0:
+                # consumer, `:241-312`. Its own candidates are already in
+                # `heap0`/`heap1` (theirs reloads them from shmem, `:247`).
+                var processed = 0  # `auto cta_processed = 0;` `:242`
+                while processed < gdx - 1:  # `:249`
+                    if tid == 0:
+                        # `while (atomicCAS(&mutexes[...], -2, -1) != -2);`
+                        # `:251-253` + the `__threadfence()` at `:255`.
+                        while True:
+                            if Atomic.load[ordering = Ordering.ACQUIRE](
+                                mtx
+                            ) != Int32(-2):
+                                continue
+                            var expected = Int32(-2)
+                            if Atomic.compare_exchange[
+                                success_ordering = Ordering.RELAXED,
+                                failure_ordering = Ordering.RELAXED,
+                                weak=True,
+                            ](mtx, expected, Int32(-1)):
+                                break
+                    barrier()  # `__syncthreads()` `:256`
 
-        @parameter
-        for j in range(FKNN_ACC_COLS_PER_TH):
-            var cj = n0 + tc + j * FKNN_ACC_TH_COLS
-            if cj < n:
-                regyn[j] = yn.unsafe_load(cj)
+                    # `:258-276`: pull the producer's numOfNN pairs for
+                    # this warp's rows. Their `Pair otherKV` defaults,
+                    # their `idx = j * warpSize + lid`.
+                    var oth_k0 = SIMD[DType.float32, n_regs](FKNN_IDENTITY)
+                    var oth_v0 = SIMD[DType.uint32, n_regs](FKNN_KEY_MAX)
+                    var oth_k1 = SIMD[DType.float32, n_regs](FKNN_IDENTITY)
+                    var oth_v1 = SIMD[DType.uint32, n_regs](FKNN_KEY_MAX)
 
-        # `for (int i = 0; i < Policy::AccRowsPerTh; ++i)` `:456`, unrolled
-        # by hand because `acc0`/`acc1` are separate SIMD values. The
-        # `if (gmemRowId < m)` guard is `:459` and is warp-uniform.
-        if have0:
-            @parameter
-            for j in range(FKNN_ACC_COLS_PER_TH):
-                # `Pair otherKV = {keyMax, identity};` `:463`, overwritten
-                # only when `colId < ldd`. The out-of-range lane still calls
-                # `add`, which is both their code and the call contract
-                # `checkThreadQ`'s warp vote requires.
-                var col = n0 + tc + j * FKNN_ACC_TH_COLS
-                var key = FKNN_IDENTITY
-                var val = FKNN_KEY_MAX
-                if col < n:
-                    key = l2_exp_epilog(xn0, regyn[j], acc0[j])
-                    val = UInt32(col)
-                heap0.add(key, val)
-        if have1:
-            @parameter
-            for j in range(FKNN_ACC_COLS_PER_TH):
-                var col1 = n0 + tc + j * FKNN_ACC_TH_COLS
-                var key1 = FKNN_IDENTITY
-                var val1 = FKNN_KEY_MAX
-                if col1 < n:
-                    key1 = l2_exp_epilog(xn1, regyn[j], acc1[j])
-                    val1 = UInt32(col1)
-                heap1.add(key1, val1)
+                    @parameter
+                    for j in range(n_regs):
+                        var idx = j * 32 + lid
+                        if idx < num_nn:
+                            if have0:
+                                oth_k0[j] = out_dists.unsafe_load(
+                                    row0 * num_nn + idx
+                                )
+                                oth_v0[j] = out_inds.unsafe_load(
+                                    row0 * num_nn + idx
+                                )
+                            if have1:
+                                oth_k1[j] = out_dists.unsafe_load(
+                                    row1 * num_nn + idx
+                                )
+                                oth_v1[j] = out_inds.unsafe_load(
+                                    row1 * num_nn + idx
+                                )
+                    barrier()  # `__syncthreads()` `:280`
+                    if tid == 0:
+                        # `atomicExch(&mutexes[...], 0)` +
+                        # `__threadfence()`, `:281-282`: hand the buffer
+                        # back BEFORE merging, exactly as theirs does.
+                        Atomic.store[ordering = Ordering.RELEASE](
+                            mtx, Int32(0)
+                        )
 
-        n0 += FKNN_NBLK
+                    # `:283-300`: merge into the queues. Uniform `add`
+                    # calls, the contract `checkThreadQ`'s vote requires.
+                    if have0:
 
-    # `bool needSort = (heapArr[i]->numVals > 0);`
-    # `needSort = __any_sync(mask, needSort);`
-    # `if (needSort) { heapArr[i]->reduce(); }`, `:471-473`. Theirs runs it
-    # per column tile because the queue is about to be spilled; ours runs it
-    # once, because the queue was never spilled.
-    #
-    # Then `storeWarpQGmem`, `:95-117`, reached through their
-    # `gridDim.x == 1` final-iteration guard at `:479`. `writeOut` places
-    # register `i` of lane `l` at output slot `i * 32 + l`, which is exactly
-    # the `idx = j * warpSize + lid` of `:109`.
-    if have0:
-        var f0 = Int32(0)
-        if heap0.num_vals > 0:
-            f0 = Int32(1)
-        if warp_max(f0) != Int32(0):
-            heap0.reduce()
-        heap0.write_out(
-            out_dists.unsafe_offset(row0 * num_nn),
-            out_inds.unsafe_offset(row0 * num_nn),
-            num_nn,
-        )
-    if have1:
-        var f1 = Int32(0)
-        if heap1.num_vals > 0:
-            f1 = Int32(1)
-        if warp_max(f1) != Int32(0):
-            heap1.reduce()
-        heap1.write_out(
-            out_dists.unsafe_offset(row1 * num_nn),
-            out_inds.unsafe_offset(row1 * num_nn),
-            num_nn,
-        )
+                        @parameter
+                        for j in range(n_regs):
+                            heap0.add(oth_k0[j], oth_v0[j])
+                    if have1:
+
+                        @parameter
+                        for j in range(n_regs):
+                            heap1.add(oth_k1[j], oth_v1[j])
+                    processed += 1  # `cta_processed++;` `:301`
+
+                # `:303-311`, the needSort vote + reduce, then
+                # `storeWarpQGmem` `:312`.
+                if have0:
+                    var f0 = Int32(0)
+                    if heap0.num_vals > 0:
+                        f0 = Int32(1)
+                    if warp_max(f0) != Int32(0):
+                        heap0.reduce()
+                    heap0.write_out(
+                        out_dists.unsafe_offset(row0 * num_nn),
+                        out_inds.unsafe_offset(row0 * num_nn),
+                        num_nn,
+                    )
+                if have1:
+                    var f1 = Int32(0)
+                    if heap1.num_vals > 0:
+                        f1 = Int32(1)
+                    if warp_max(f1) != Int32(0):
+                        heap1.reduce()
+                    heap1.write_out(
+                        out_dists.unsafe_offset(row1 * num_nn),
+                        out_inds.unsafe_offset(row1 * num_nn),
+                        num_nn,
+                    )
+            else:
+                # producer, `:313-338`. Reduce first: their shDumpKV held
+                # the already-reduced queue; our registers only do after
+                # `reduce()` (the vote is `:471-473`'s).
+                if have0:
+                    var p0 = Int32(0)
+                    if heap0.num_vals > 0:
+                        p0 = Int32(1)
+                    if warp_max(p0) != Int32(0):
+                        heap0.reduce()
+                if have1:
+                    var p1 = Int32(0)
+                    if heap1.num_vals > 0:
+                        p1 = Int32(1)
+                    if warp_max(p1) != Int32(0):
+                        heap1.reduce()
+                if tid == 0:
+                    # `while (atomicCAS(&mutexes[...], 0, 1) != 0);`
+                    # `:314-316` + `__threadfence()` `:318`.
+                    while True:
+                        if Atomic.load[ordering = Ordering.ACQUIRE](
+                            mtx
+                        ) != Int32(0):
+                            continue
+                        var expected = Int32(0)
+                        if Atomic.compare_exchange[
+                            success_ordering = Ordering.RELAXED,
+                            failure_ordering = Ordering.RELAXED,
+                            weak=True,
+                        ](mtx, expected, Int32(1)):
+                            break
+                barrier()  # `__syncthreads()` `:319`
+                # `:321-331`: write this block's pairs for its rows into
+                # the output buffer, which doubles as the exchange buffer
+                # exactly as theirs does. `write_out` places register `j`
+                # of lane `l` at slot `j * 32 + l`, their `:328`.
+                #
+                # SABOTAGE (checks only, see the docstring): the LAST
+                # producer hands over identity/keyMax instead of its queue.
+                if sabotage != 0 and Int(block_idx.x) == gdx - 1:
+
+                    @parameter
+                    for j in range(n_regs):
+                        var idx = j * 32 + lid
+                        if idx < num_nn:
+                            if have0:
+                                out_dists.unsafe_store(
+                                    row0 * num_nn + idx, FKNN_IDENTITY
+                                )
+                                out_inds.unsafe_store(
+                                    row0 * num_nn + idx, FKNN_KEY_MAX
+                                )
+                            if have1:
+                                out_dists.unsafe_store(
+                                    row1 * num_nn + idx, FKNN_IDENTITY
+                                )
+                                out_inds.unsafe_store(
+                                    row1 * num_nn + idx, FKNN_KEY_MAX
+                                )
+                else:
+                    if have0:
+                        heap0.write_out(
+                            out_dists.unsafe_offset(row0 * num_nn),
+                            out_inds.unsafe_offset(row0 * num_nn),
+                            num_nn,
+                        )
+                    if have1:
+                        heap1.write_out(
+                            out_dists.unsafe_offset(row1 * num_nn),
+                            out_inds.unsafe_offset(row1 * num_nn),
+                            num_nn,
+                        )
+                barrier()  # `__syncthreads()` `:332`
+                if tid == 0:
+                    # `atomicExch(&mutexes[...], -2)` + `__threadfence()`,
+                    # `:336-337`.
+                    Atomic.store[ordering = Ordering.RELEASE](
+                        mtx, Int32(-2)
+                    )
+
+        m0 += FKNN_MBLK * Int(grid_dim.y)
+
 
 
 def sqrt_postprocess_kernel(
@@ -525,7 +780,69 @@ def fused_l2_knn(
             " this to tiled_brute_force_knn, which fills the short rows"
         )
 
-    var grid_y = (n_queries + FKNN_MBLK - 1) // FKNN_MBLK
+    # `dim3 grid = launchConfigGenerator<KPolicy>(m, n, sharedMemSize,
+    # fusedL2ExpKnnRowMajor);` (`:775-776`), with M4 inputs; see
+    # `pairwise_distance_base.mojo`. The shared size handed to the occupancy
+    # computation is OUR kernel's footprint: one single-buffered page and no
+    # `shDumpKV` (DEVIATION BLOCKS 1 and 3), where theirs adds
+    # `Mblk * numOfNN * sizeof(Pair)` for the shmem queue dump it has and we
+    # do not.
+    var smem_bytes = (FKNN_SMEM_PAGE_X + FKNN_SMEM_PAGE_Y) * 4
+    var cfg = launch_config_generator(
+        n_queries, n_index, FKNN_MBLK, FKNN_NBLK, FKNN_THREADS, smem_bytes
+    )
+    fused_l2_knn_launch(
+        ctx,
+        queries,
+        query_norm,
+        index,
+        index_norm,
+        out_dist,
+        out_idx,
+        n_queries,
+        n_index,
+        n_features,
+        k,
+        is_sqrt,
+        cfg[0],
+        cfg[1],
+        0,
+    )
+
+
+def fused_l2_knn_launch(
+    ctx: DeviceContext,
+    mut queries: DeviceBuffer[DType.float32],
+    mut query_norm: DeviceBuffer[DType.float32],
+    mut index: DeviceBuffer[DType.float32],
+    mut index_norm: DeviceBuffer[DType.float32],
+    mut out_dist: DeviceBuffer[DType.float32],
+    mut out_idx: DeviceBuffer[DType.uint32],
+    n_queries: Int,
+    n_index: Int,
+    n_features: Int,
+    k: Int,
+    is_sqrt: Bool,
+    grid_x: Int,
+    grid_y: Int,
+    sabotage: Int,
+) raises:
+    """The workspace-and-launch tail of `fusedL2ExpKnnImpl` (`:773-790`
+    mutex workspace, `:822-838` launch), with the grid handed in so
+    `knn_check` can pin it on BOTH sides of the `grid_x == 1` switch
+    (PORTING_RULES 8: a parameter that selects a kernel path is a parameter
+    the checks enumerate). Production enters through `fused_l2_knn` above,
+    which computes the grid with `launch_config_generator` and hard-codes
+    `sabotage = 0`; nothing else may choose a grid.
+    """
+    # `if (grid.x > 1) { numMutexes = raft::ceildiv<int>(m, KPolicy::Mblk);
+    # ... cudaMemsetAsync(mutexes, 0, ...); }`, `:777-790`. The buffer is
+    # allocated unconditionally (their kernel signature takes the pointer
+    # unconditionally too); the ZEROING is what only `grid.x > 1` needs.
+    var n_mutexes = (n_queries + FKNN_MBLK - 1) // FKNN_MBLK
+    var mutexes = ctx.enqueue_create_buffer[DType.int32](n_mutexes)
+    if grid_x > 1:
+        ctx.enqueue_memset(mutexes, Int32(0))
 
     # `if (numOfNN <= 32) { ...Knn32RowMajor } else if (numOfNN <= 64)
     # { ...Knn64RowMajor }`, `fusedL2ExpKnnImpl:765-771`. Two whole-kernel
@@ -542,7 +859,9 @@ def fused_l2_knn(
             Int32(n_index),
             Int32(n_features),
             Int32(k),
-            grid_dim=(1, grid_y, 1),
+            mutexes.unsafe_ptr(),
+            Int32(sabotage),
+            grid_dim=(grid_x, grid_y, 1),
             block_dim=(FKNN_THREADS, 1, 1),
         )
     else:
@@ -557,7 +876,9 @@ def fused_l2_knn(
             Int32(n_index),
             Int32(n_features),
             Int32(k),
-            grid_dim=(1, grid_y, 1),
+            mutexes.unsafe_ptr(),
+            Int32(sabotage),
+            grid_dim=(grid_x, grid_y, 1),
             block_dim=(FKNN_THREADS, 1, 1),
         )
 

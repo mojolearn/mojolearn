@@ -75,9 +75,14 @@ def scan_blocks_needed(n: Int) -> Int:
 #   lookback rests on. It needs a forward-progress guarantee between blocks
 #   (a block spins on a flag written by a lower-numbered block) plus a memory
 #   fence with release/acquire ordering across threadgroups. Metal makes no
-#   such scheduling promise and Mojo exposes no device-scope acquire/release
-#   fence, so a literal port of the lookback loop can deadlock rather than
-#   run slowly. Scan-then-propagate is the same algorithm with the
+#   such scheduling promise. (Device-scope release/acquire itself IS
+#   expressible -- `Atomic.store[RELEASE]` / `Atomic.load[ACQUIRE]` legalize
+#   on the Apple target and `neighbors/mutex_probe_main.mojo` established
+#   them sound on 2026-08-19 -- but only under the co-residency that
+#   `launchConfigGenerator`-capped grids guarantee. Lookback's grid scales
+#   with the DATA, not the device, so a block can spin on a predecessor the
+#   scheduler has not started, and a literal port can deadlock rather than
+#   run slowly.) Scan-then-propagate is the same algorithm with the
 #   inter-block communication moved into a second launch, which the driver
 #   orders for us. Cost: one extra read and write of `ex_scan`, `batch_size`
 #   elements, against a kernel that is `batch_size * N` bytes of adjacency in

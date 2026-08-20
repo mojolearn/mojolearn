@@ -194,11 +194,18 @@ unknown, and this repository's rule is that only interleaved arms inside one
 process compare. Correctness checks are verdicts and do not care about the
 machine's mood.
 
-**Two of this port's deviations are currently justified by reasoning that has
+**One of this port's deviations is currently justified by reasoning that has
 never executed on another vendor**, which is what the script exists to fix:
 `replication_lanes` is pinned at 32 so AMD's 64-wide wavefront cannot change
-the reduction geometry, and the float-atomic flush branch is unreachable on
-Apple and is exactly what NVIDIA and AMD would take under `determinism=off`.
+the reduction geometry.
+
+This paragraph used to name a second one, that "the float-atomic flush
+branch is unreachable on Apple". **That is false and it is deleted rather
+than annotated**: the histogram kernels build at `BUILD_MODE = NUMERIC_FAST`
+and `deterministic_flush_for` returns `identical`, so the FAST build runs
+CatBoost's verbatim `atomicAdd` on `float` on Apple too (float atomics work
+on Metal; the old "absent" reading was a wrong import path). The
+fixed-point branch is what `IDENTICAL` builds take, on every vendor.
 
 ## License and attribution
 

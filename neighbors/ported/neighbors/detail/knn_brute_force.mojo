@@ -254,13 +254,18 @@ def tiled_brute_force_knn(
 #: a standalone product. **That is a hypothesis, not a measurement of THIS
 #: kernel**, and it is not what decided the default; the table above is.
 #:
-#: WHAT WOULD REVERSE THIS, and it is a real possibility rather than a hedge:
-#: porting their `gridDim.x > 1` split (the mutex plus `__threadfence`
-#: protocol at `fused_l2_knn.cuh:284-300`, unported) gives the fused kernel the
-#: second parallel axis the tiled arm already has. Until that lands the fused
-#: arm cannot use more than ~125 blocks at a normal query count. It stays
-#: reachable through `knn_method` precisely so that measuring it again after
-#: that lands costs one argument rather than a revert.
+#: WHAT WOULD REVERSE THIS: their `gridDim.x > 1` split (the mutex protocol
+#: at `fused_l2_knn.cuh:241-338`) LANDED on 2026-08-19, along with their
+#: `launchConfigGenerator` (M4 inputs, `pairwise_distance_base.mojo`), so the
+#: fused arm now fields the grid their computation chooses instead of a fixed
+#: 1 x ceil(m/16). NOTE WHAT THAT COMPUTATION SAYS AT THE BENCH SHAPE: 2,000
+#: queries is 125 y-chunks against a 120-block capacity, so it still picks
+#: `grid_x == 1` there (with `grid_y` capped at 120 and a row grid-stride);
+#: the x-split engages below ~1,905 queries, e.g. (16, 4) at 53 queries. The
+#: table above is therefore STALE in its launch geometry but not yet
+#: re-measured; the default stays TILED until the orchestrator re-times both
+#: arms. It stays reachable through `knn_method` precisely so that measuring
+#: it again costs one argument rather than a revert.
 #:
 #: This does not change any answer. `check_fused_l2_knn` and
 #: `check_fused_edge_shapes` match the host Float64 oracle slot for slot and in

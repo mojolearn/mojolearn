@@ -591,16 +591,63 @@ sweep re-run with the arms in the opposite order.
 **The estimate going in was 6x to 10x faster.** It was arithmetic over memory
 traffic: the fused kernel never writes the ~23 GB distance matrix, so it
 "must" win. What that model left out is how many blocks the kernel can field.
-At `gridDim.x == 1` -- their cross-block merge protocol is a mutex plus
-`__threadfence` and is unported -- the block count is `ceil(n_queries / Mblk)`
-and does not depend on the index size at all. Holding the index at 200,000 and
+At `gridDim.x == 1` -- the only configuration ported at the time the numbers
+were taken -- the block count was `ceil(n_queries / Mblk)` and did not depend
+on the index size at all. Holding the index at 200,000 and
 raising the query count shrinks the deficit monotonically (0.66x at 500
 queries, 0.86x at 2,000, 0.92x at 8,000, 0.93x at 32,000) and never crosses.
 
 **Rule: a traffic model that does not count blocks can predict the wrong
-SIGN, not merely the wrong magnitude.** Porting their `gridDim.x > 1` split
-is what would reverse this, and the arm stays reachable through `knn_method`
-so that re-measuring it then costs one argument rather than a revert.
+SIGN, not merely the wrong magnitude.** Their `gridDim.x > 1` split LANDED on
+2026-08-19 (entry 40), so the geometry those numbers were taken on is stale;
+the default stays TILED until both arms are re-timed, and the fused arm stays
+reachable through `knn_method` so that re-measuring costs one argument rather
+than a revert. Note the ported `launchConfigGenerator` still picks
+`grid_x == 1` at the 2,000-query bench shape (125 y-chunks >= the M4's
+120-block capacity); the x-split engages below ~1,905 queries.
+
+## 40. The cross-block merge's `__threadfence` is SPELLED as acquire/release, because Apple legalizes nothing else
+
+`fusedL2kNN`'s `gridDim.x > 1` arm serializes per-row merges with a mutex
+array: producer blocks hand their per-row top-k to consumer block 0 through
+the output buffer, guarded by `atomicCAS` / `atomicExch` spins with
+`__threadfence` on both sides (`fused_l2_knn.cuh:241-338`). Porting it needed
+a device-scope fence, and the repo's standing note said that was an OPEN
+question on Metal. It is now CLOSED, in three compiler-verified parts and one
+probe:
+
+- `std.gpu.intrinsics.threadfence` is comptime-asserted
+  `"only implemented on NVIDIA GPUs"` (Mojo 1.0,
+  `stdlib/std/gpu/intrinsics.mojo:790-792`). No standalone device fence
+  exists for the Apple target.
+- The Metal backend rejects a STRONG compare-exchange ("Apple GPU only
+  supports `weak` compare-exchange; AIR exposes no strong compare-exchange
+  primitive") and rejects acquire/acq_rel orderings on RMW ops ("Apple GPU
+  does not support `acquire` atomic ordering").
+- It DOES legalize `Atomic.load[Ordering.ACQUIRE]` and
+  `Atomic.store[Ordering.RELEASE]` (SEQUENTIAL too), verified by enqueue.
+
+So the port spells their protocol as a test-and-test-and-set: spin on an
+ACQUIRE load, claim with a weak RELAXED compare-exchange, release with a
+RELEASE store. Same protocol in the C++11 model (CUDA defines
+`__threadfence()` as `atomic_thread_fence(seq_cst, thread_scope_device)`);
+no ABA hides in the relaxed claim because each mutex state has one writer
+role. `neighbors/mutex_probe_main.mojo` is the evidence: 650 in-envelope
+contended handoff launches bit-exact against a host oracle over HASHED
+payloads with a POISONED exchange buffer, plus two sabotage arms -- a
+producer that skips half its words and a producer that releases BEFORE
+writing -- each caught on EVERY iteration (25/25 and 200/200), so the probe
+demonstrably sees violations, and a 2.1x-oversubscribed grid still made
+progress. The protocol's real precondition is CO-RESIDENCY: a spinning
+producer terminates only if its consumer runs, which is exactly why their
+`launchConfigGenerator` caps the grid at `numSMs * blocksPerSM`
+(`pairwise_distance_base.cuh:295-322`). That computation is ported with M4
+inputs in `neighbors/ported/distance/detail/pairwise_distance_base.mojo`:
+10 cores, thread-slot occupancy (3072 / 256 = 12 blocks per core), and the
+shared-memory term as a 32 KB validity wall rather than a divisor, because
+family-9 threadgroup memory is dynamically cached -- the measured query
+sweep (entry 36) is only possible with many 18.5 KB blocks per core. The
+grid shape and every hardware input live in that ONE file.
 
 ## 37. A tiny DBSCAN batch budget raises here; theirs wraps `size_t` into a full batch
 

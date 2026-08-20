@@ -44,7 +44,18 @@ from std.math import sqrt
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.row_norms import NORM_TPB, row_norm_kernel
-from neighbors.ported.neighbors.detail.fused_l2_knn import fused_l2_knn
+from neighbors.ported.distance.detail.pairwise_distance_base import (
+    launch_config_generator,
+)
+from neighbors.ported.neighbors.detail.fused_l2_knn import (
+    FKNN_MBLK,
+    FKNN_NBLK,
+    FKNN_SMEM_PAGE_X,
+    FKNN_SMEM_PAGE_Y,
+    FKNN_THREADS,
+    fused_l2_knn,
+    fused_l2_knn_launch,
+)
 from neighbors.ported.neighbors.detail.knn_brute_force import (
     KNN_METHOD_FUSED,
     brute_force_knn_impl,
@@ -1635,4 +1646,391 @@ def check_fused_k_ceiling() raises:
     print(
         "check_fused_k_ceiling OK: k = 64 accepted, k = 65 refused with"
         " their ASSERT message"
+    )
+
+
+# ---------------------------------------------------------------------------
+# THE CROSS-BLOCK (`gridDim.x > 1`) ARM AND ITS LAUNCH COMPUTATION.
+# `launchConfigGenerator` (`pairwise_distance_base.cuh:295-322`, M4 inputs)
+# now chooses the grid, and `grid_x` selects between the single-block column
+# sweep and the mutex merge -- a parameter that selects a kernel path, so
+# the checks below enumerate BOTH sides of it explicitly (PORTING_RULES 8).
+# ---------------------------------------------------------------------------
+
+
+comptime FKNN_SMEM_BYTES = (FKNN_SMEM_PAGE_X + FKNN_SMEM_PAGE_Y) * 4
+
+
+def check_launch_config_values() raises:
+    """`launch_config_generator` at pinned inputs, against hand-transcribed
+    evaluations of `pairwise_distance_base.cuh:308-319` with the M4 numbers
+    (10 cores x 12 blocks of 256 threads = minGridSize 120).
+
+    These are the branch cases: y-chunks alone fill the device (grid_x
+    stays 1, grid_y capped), y-chunks exactly equal capacity, y-chunks just
+    below (the smallest split, grid_x = 2), a small-m shape where the
+    x-chunk cap binds, and the bench shape itself.
+    """
+
+    def expect(m: Int, n: Int, want_x: Int, want_y: Int) raises:
+        var cfg = launch_config_generator(
+            m, n, FKNN_MBLK, FKNN_NBLK, FKNN_THREADS, FKNN_SMEM_BYTES
+        )
+        if cfg[0] != want_x or cfg[1] != want_y:
+            raise Error(
+                "check_launch_config_values FAIL: m="
+                + String(m)
+                + " n="
+                + String(n)
+                + " got ("
+                + String(cfg[0])
+                + ", "
+                + String(cfg[1])
+                + ") want ("
+                + String(want_x)
+                + ", "
+                + String(want_y)
+                + ")"
+            )
+
+    # The bench shape: 2,000 queries is 125 y-chunks > 120, so THEIR OWN
+    # COMPUTATION keeps gridDim.x == 1 there and caps grid_y at 120.
+    expect(2000, 200000, 1, 120)
+    expect(2000, 20000, 1, 120)
+    # Exactly at capacity: 1,920 queries = 120 chunks, still no split.
+    expect(1920, 200000, 1, 120)
+    # Just below: 1,904 queries = 119 chunks; smallest i with 119*i >= 120
+    # is 2, and x-chunks is huge, so grid_x = 2.
+    expect(1904, 200000, 2, 119)
+    # Small m: 53 queries = 4 chunks; smallest i with 4*i >= 120 is 30,
+    # capped by x-chunks = ceil(4093 / 256) = 16.
+    expect(53, 4093, 16, 4)
+    # 100 queries = 7 chunks; i = 18, x-chunks caps at 16.
+    expect(100, 4093, 16, 7)
+    # Their `grid.x = i >= xChunks ? xChunks : i` arm where i binds:
+    # 640 queries = 40 chunks; smallest i with 40*i >= 120 is 3 < 16.
+    expect(640, 4093, 3, 40)
+
+    # The 32 KB per-threadgroup wall raises rather than mislaunching.
+    var walled = False
+    try:
+        _ = launch_config_generator(
+            64, 4096, FKNN_MBLK, FKNN_NBLK, FKNN_THREADS, 32769
+        )
+    except:
+        walled = True
+    if not walled:
+        raise Error(
+            "check_launch_config_values FAIL: a 32769-byte threadgroup"
+            " request did not raise"
+        )
+    print(
+        "check_launch_config_values OK: bench shape (2,000 q) computes"
+        " grid (1, 120); 1,904 q is the smallest-split boundary (2, 119);"
+        " 53 q gives (16, 4) with the x-chunk cap binding; 640 q gives"
+        " (3, 40) with the occupancy term binding; 32 KB wall raises"
+    )
+
+
+def check_fused_griddimx_merge() raises:
+    """The mutex merge, on the FCHK fixture, both reached and correct.
+
+    Four launches on identical inputs:
+      1. the PUBLIC entry (grid computed: (16, 4) here, asserted) must
+         match the host Float64 oracle per slot and in order;
+      2. `sabotage = 1` at the same grid must MOVE the output (the last
+         producer hands over identity/keyMax, so its candidates vanish) --
+         reach-by-sabotage for the producer write AND the consumer merge;
+      3. a FORCED `grid_x = 5` (a divisor the computation never picks, with
+         a partial last x-tile at n = 4093) must match the oracle exactly;
+      4. `sabotage = 1` at a FORCED `grid_x = 1` must NOT move anything,
+         because the single-block arm never reads the mutex or the
+         sabotage -- the other side of the switch, checked by name.
+    """
+    var ctx = DeviceContext()
+    comptime K = 10
+
+    var index = ctx.enqueue_create_buffer[DType.float32](
+        FCHK_INDEX * FCHK_FEATURES
+    )
+    var queries = ctx.enqueue_create_buffer[DType.float32](
+        FCHK_QUERIES * FCHK_FEATURES
+    )
+    var inorm = ctx.enqueue_create_buffer[DType.float32](FCHK_INDEX)
+    var qnorm = ctx.enqueue_create_buffer[DType.float32](FCHK_QUERIES)
+    var od = ctx.enqueue_create_buffer[DType.float32](FCHK_QUERIES * K)
+    var oi = ctx.enqueue_create_buffer[DType.uint32](FCHK_QUERIES * K)
+    ctx.synchronize()
+
+    var hi = ctx.enqueue_create_host_buffer[DType.float32](
+        FCHK_INDEX * FCHK_FEATURES
+    )
+    for j in range(FCHK_INDEX):
+        for f in range(FCHK_FEATURES):
+            hi.unsafe_ptr().unsafe_store(
+                j * FCHK_FEATURES + f, _fchk_coord(j, f, 3)
+            )
+    ctx.enqueue_copy(dst_buf=index, src_ptr=hi.unsafe_ptr())
+    var hq = ctx.enqueue_create_host_buffer[DType.float32](
+        FCHK_QUERIES * FCHK_FEATURES
+    )
+    for i in range(FCHK_QUERIES):
+        for f in range(FCHK_FEATURES):
+            hq.unsafe_ptr().unsafe_store(
+                i * FCHK_FEATURES + f, _fchk_coord(i, f, 11)
+            )
+    ctx.enqueue_copy(dst_buf=queries, src_ptr=hq.unsafe_ptr())
+    ctx.synchronize()
+
+    compute_norms(ctx, index, inorm, FCHK_INDEX, FCHK_FEATURES, False)
+    compute_norms(ctx, queries, qnorm, FCHK_QUERIES, FCHK_FEATURES, False)
+    ctx.synchronize()
+
+    var truth = _fchk_oracle(hq.unsafe_ptr(), hi.unsafe_ptr())
+    var ho = ctx.enqueue_create_host_buffer[DType.uint32](FCHK_QUERIES * K)
+
+    # 1. Public entry. Guard first that the computation still picks a
+    # multi-block grid here; if the M4 inputs ever change this, the check
+    # must be re-pointed rather than silently degrade to grid_x == 1.
+    var cfg = launch_config_generator(
+        FCHK_QUERIES, FCHK_INDEX, FKNN_MBLK, FKNN_NBLK, FKNN_THREADS,
+        FKNN_SMEM_BYTES,
+    )
+    if cfg[0] <= 1:
+        raise Error(
+            "check_fused_griddimx_merge FAIL: the computed grid_x is not"
+            " > 1 on the FCHK shape; this check no longer covers the merge"
+        )
+    fused_l2_knn(
+        ctx, queries, qnorm, index, inorm, od, oi,
+        FCHK_QUERIES, FCHK_INDEX, FCHK_FEATURES, K, False,
+    )
+    ctx.enqueue_copy(dst_ptr=ho.unsafe_ptr(), src_buf=oi)
+    ctx.synchronize()
+    var bad = 0
+    for i in range(FCHK_QUERIES):
+        for s in range(K):
+            if Int(ho.unsafe_ptr().unsafe_load(i * K + s)) != truth[
+                i * FCHK_MAX_K + s
+            ]:
+                bad += 1
+    if bad != 0:
+        raise Error(
+            "check_fused_griddimx_merge FAIL: public entry at grid_x="
+            + String(cfg[0])
+            + " has "
+            + String(bad)
+            + " wrong slots against the host oracle"
+        )
+
+    # 2. Sabotaged merge at the same grid must move the output.
+    fused_l2_knn_launch(
+        ctx, queries, qnorm, index, inorm, od, oi,
+        FCHK_QUERIES, FCHK_INDEX, FCHK_FEATURES, K, False,
+        cfg[0], cfg[1], 1,
+    )
+    ctx.enqueue_copy(dst_ptr=ho.unsafe_ptr(), src_buf=oi)
+    ctx.synchronize()
+    var moved = 0
+    for i in range(FCHK_QUERIES):
+        for s in range(K):
+            if Int(ho.unsafe_ptr().unsafe_load(i * K + s)) != truth[
+                i * FCHK_MAX_K + s
+            ]:
+                moved += 1
+    if moved == 0:
+        raise Error(
+            "check_fused_griddimx_merge FAIL: poisoning the last producer's"
+            " handoff moved nothing, so the merge path is not carrying the"
+            " output"
+        )
+
+    # 3. A forced grid the computation never picks: grid_x = 5 leaves a
+    # ragged block-to-column mapping and the last x-tile at 4093 partial.
+    fused_l2_knn_launch(
+        ctx, queries, qnorm, index, inorm, od, oi,
+        FCHK_QUERIES, FCHK_INDEX, FCHK_FEATURES, K, False,
+        5, cfg[1], 0,
+    )
+    ctx.enqueue_copy(dst_ptr=ho.unsafe_ptr(), src_buf=oi)
+    ctx.synchronize()
+    var bad5 = 0
+    for i in range(FCHK_QUERIES):
+        for s in range(K):
+            if Int(ho.unsafe_ptr().unsafe_load(i * K + s)) != truth[
+                i * FCHK_MAX_K + s
+            ]:
+                bad5 += 1
+    if bad5 != 0:
+        raise Error(
+            "check_fused_griddimx_merge FAIL: forced grid_x=5 has "
+            + String(bad5)
+            + " wrong slots"
+        )
+
+    # 4. The other side of the switch: at grid_x = 1 the sabotage value is
+    # never read, so a sabotaged single-block launch must be EXACT.
+    fused_l2_knn_launch(
+        ctx, queries, qnorm, index, inorm, od, oi,
+        FCHK_QUERIES, FCHK_INDEX, FCHK_FEATURES, K, False,
+        1, (FCHK_QUERIES + FKNN_MBLK - 1) // FKNN_MBLK, 1,
+    )
+    ctx.enqueue_copy(dst_ptr=ho.unsafe_ptr(), src_buf=oi)
+    ctx.synchronize()
+    var bad1 = 0
+    for i in range(FCHK_QUERIES):
+        for s in range(K):
+            if Int(ho.unsafe_ptr().unsafe_load(i * K + s)) != truth[
+                i * FCHK_MAX_K + s
+            ]:
+                bad1 += 1
+    if bad1 != 0:
+        raise Error(
+            "check_fused_griddimx_merge FAIL: grid_x=1 with sabotage=1"
+            " should be exact (the value is never read there) but has "
+            + String(bad1)
+            + " wrong slots"
+        )
+
+    print(
+        "check_fused_griddimx_merge OK: computed grid ("
+        + String(cfg[0])
+        + ", "
+        + String(cfg[1])
+        + ") matches the oracle per slot at k=10; poisoning the last"
+        " producer moved "
+        + String(moved)
+        + " slots; forced grid_x=5 with a partial last x-tile is exact;"
+        " grid_x=1 ignores the sabotage entirely"
+    )
+
+
+comptime GX1_QUERIES = 2000
+comptime GX1_INDEX = 1013
+comptime GX1_FEATURES = 13
+comptime GX1_K = 10
+
+
+def check_fused_griddimx_one_capped_y() raises:
+    """The `grid_x == 1` side AT SCALE, where `launchConfigGenerator` caps
+    `grid_y` below the y-chunk count and the kernel's NEW outer m-loop
+    (`pairwise_distance_base.cuh:129`) must grid-stride the rows.
+
+    2,000 queries is 125 y-chunks against a 120-block cap, so five blocks
+    take a second row tile -- the bench shape's exact control flow. Every
+    slot must match a host Float64 oracle, in order.
+    """
+    var ctx = DeviceContext()
+
+    var cfg = launch_config_generator(
+        GX1_QUERIES, GX1_INDEX, FKNN_MBLK, FKNN_NBLK, FKNN_THREADS,
+        FKNN_SMEM_BYTES,
+    )
+    if cfg[0] != 1 or cfg[1] >= (GX1_QUERIES + FKNN_MBLK - 1) // FKNN_MBLK:
+        raise Error(
+            "check_fused_griddimx_one_capped_y FAIL: expected grid_x == 1"
+            " with grid_y capped below the y-chunk count, got ("
+            + String(cfg[0])
+            + ", "
+            + String(cfg[1])
+            + ")"
+        )
+
+    var index = ctx.enqueue_create_buffer[DType.float32](
+        GX1_INDEX * GX1_FEATURES
+    )
+    var queries = ctx.enqueue_create_buffer[DType.float32](
+        GX1_QUERIES * GX1_FEATURES
+    )
+    var inorm = ctx.enqueue_create_buffer[DType.float32](GX1_INDEX)
+    var qnorm = ctx.enqueue_create_buffer[DType.float32](GX1_QUERIES)
+    var od = ctx.enqueue_create_buffer[DType.float32](GX1_QUERIES * GX1_K)
+    var oi = ctx.enqueue_create_buffer[DType.uint32](GX1_QUERIES * GX1_K)
+    ctx.synchronize()
+
+    var hi = ctx.enqueue_create_host_buffer[DType.float32](
+        GX1_INDEX * GX1_FEATURES
+    )
+    for j in range(GX1_INDEX):
+        for f in range(GX1_FEATURES):
+            hi.unsafe_ptr().unsafe_store(
+                j * GX1_FEATURES + f, _fchk_coord(j, f, 31)
+            )
+    ctx.enqueue_copy(dst_buf=index, src_ptr=hi.unsafe_ptr())
+    var hq = ctx.enqueue_create_host_buffer[DType.float32](
+        GX1_QUERIES * GX1_FEATURES
+    )
+    for i in range(GX1_QUERIES):
+        for f in range(GX1_FEATURES):
+            hq.unsafe_ptr().unsafe_store(
+                i * GX1_FEATURES + f, _fchk_coord(i, f, 47)
+            )
+    ctx.enqueue_copy(dst_buf=queries, src_ptr=hq.unsafe_ptr())
+    ctx.synchronize()
+
+    compute_norms(ctx, index, inorm, GX1_INDEX, GX1_FEATURES, False)
+    compute_norms(ctx, queries, qnorm, GX1_QUERIES, GX1_FEATURES, False)
+    ctx.synchronize()
+
+    fused_l2_knn(
+        ctx, queries, qnorm, index, inorm, od, oi,
+        GX1_QUERIES, GX1_INDEX, GX1_FEATURES, GX1_K, False,
+    )
+    var ho = ctx.enqueue_create_host_buffer[DType.uint32](
+        GX1_QUERIES * GX1_K
+    )
+    ctx.enqueue_copy(dst_ptr=ho.unsafe_ptr(), src_buf=oi)
+    ctx.synchronize()
+
+    var bad = 0
+    for i in range(GX1_QUERIES):
+        # Host Float64 top-k for this row, direct formula.
+        var best_idx = List[Int]()
+        var best_d = List[Float64]()
+        for _s in range(GX1_K):
+            best_idx.append(-1)
+            best_d.append(1.0e30)
+        for j in range(GX1_INDEX):
+            var d = Float64(0.0)
+            for f in range(GX1_FEATURES):
+                var diff = Float64(
+                    hq.unsafe_ptr().unsafe_load(i * GX1_FEATURES + f)
+                ) - Float64(
+                    hi.unsafe_ptr().unsafe_load(j * GX1_FEATURES + f)
+                )
+                d += diff * diff
+            if d < best_d[GX1_K - 1]:
+                var pos = GX1_K - 1
+                while pos > 0 and best_d[pos - 1] > d:
+                    best_d[pos] = best_d[pos - 1]
+                    best_idx[pos] = best_idx[pos - 1]
+                    pos -= 1
+                best_d[pos] = d
+                best_idx[pos] = j
+        for s in range(GX1_K):
+            if Int(
+                ho.unsafe_ptr().unsafe_load(i * GX1_K + s)
+            ) != best_idx[s]:
+                bad += 1
+    if bad != 0:
+        raise Error(
+            "check_fused_griddimx_one_capped_y FAIL: "
+            + String(bad)
+            + " wrong slots at grid ("
+            + String(cfg[0])
+            + ", "
+            + String(cfg[1])
+            + ") over "
+            + String(GX1_QUERIES)
+            + " queries"
+        )
+    print(
+        "check_fused_griddimx_one_capped_y OK: 2,000 queries x 1,013 index"
+        " ran at computed grid (1, "
+        + String(cfg[1])
+        + ") -- 125 row tiles over "
+        + String(cfg[1])
+        + " blocks, so the new outer grid-stride loop carried five blocks"
+        " to a second tile -- and every slot matches the host oracle in"
+        " order"
     )
