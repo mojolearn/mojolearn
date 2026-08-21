@@ -39,13 +39,26 @@ and its contract audit is written out at the call site.
 Two of the four this file used to list turned out not to be divergences at
 all in the configuration this port runs, and saying so is part of the audit:
 
-- **Permutations. NOT A DIVERGENCE HERE.** `Config.PermutationCount` defaults
-  to 4 (`boosting_options.cpp:14`), but `UpdateGpuSpecificDefaults` sets it
-  back to 1 whenever the dataset has no permutation-dependent features and
-  boosting is Plain, which is the default (`cuda/train_lib/train.cpp:102-108`,
-  "No catFeatures for ctrs found and don't look ahead is disabled. Fallback to
-  one permutation"). No CTRs are ported, so stock CatBoost on this input keeps
-  exactly one cursor too. One is theirs, not a simplification of theirs.
+- **Permutations. A DIVERGENCE THE MOMENT THE FIT IS CATEGORICAL, and this
+  entry used to deny it.** `Config.PermutationCount` defaults to 4
+  (`boosting_options.cpp:14`), and `UpdateGpuSpecificDefaults` sets it back to
+  1 only when `HasPermutationFeatures` is FALSE and boosting is Plain
+  (`cuda/train_lib/train.cpp:100-108`, "No catFeatures for ctrs found and
+  don't look ahead is disabled. Fallback to one permutation").
+  `HasPermutationFeatures` is true as soon as a cat feature is used for a CTR
+  (`:86-98`).
+
+  **CTRs are ported now**, so on a categorical fit stock CatBoost keeps FOUR
+  permutations where this keeps one. Four permutations means four learn
+  cursors, four ensembles, leaf values estimated separately on each, the
+  structure searched on a RANDOM non-estimation permutation (`:349-351`), and
+  the exported model taken from permutation `count - 1` (`:527`). On a
+  numeric-only fit the old sentence is still true and one cursor is still
+  theirs.
+
+  This is the largest remaining gap inside this file. It is not ordered
+  boosting -- see PORTING.md 88 for why that is a different learner
+  entirely -- but it is the machinery ordered boosting is built on.
 - **`CalcScoreModelLengthMult` (`:358`). NOT A DIVERGENCE HERE, and it is not
   model-size regularization.** Its only consumer is `ComputeScoreStdDev`,
   which returns 0 unconditionally when `modelLengthMult * randomStrength` is
@@ -56,10 +69,14 @@ all in the configuration this port runs, and saying so is part of the audit:
   whole quantity is an exact no-op. It becomes a divergence the day random
   strength lands, and not before. (`model_size_reg` is a different option
   entirely and lives on the feature weights.)
-- **Test cursor and early stopping. A REAL GAP.** `ShouldStop()` is a fixed
-  iteration count here, and `TrackTestErrors` / `IsBestTestIteration` /
-  `BestTestCursor` have no counterpart. Nothing selects a best iteration, so
-  a fit runs the full budget.
+- **Test cursor and early stopping. PORTED 2026-08-21**, and this entry used
+  to say otherwise. `fit_with_test` carries their `testCursor`,
+  `TrackTestErrors` is `_test_loss` through the same target kernel the learn
+  loss uses, `ShouldStop()` is the overfitting detector, and
+  `ShrinkToBestIteration` runs in `gbdt/train.mojo` where their
+  `train_template.h:127-137` runs it. **`BestTestCursor` is still absent**
+  (`:220-222`, `:441-443`): it exists to EXPORT the test predictions taken at
+  the best iteration, and nothing here exports test approxes at all.
 - **Snapshotting. A REAL GAP**, and a cosmetic one: `MaybeSaveSnapshot` and
   `MaybeRestoreFromSnapshot` change no model, only whether a run can resume.
 

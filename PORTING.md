@@ -2516,3 +2516,111 @@ this.
 `mojo_only/overfitting_detector_check.mojo` gate 5 pins the refusal, beside
 the same gate for `od_type` without an eval set, which this port already
 refused for the same reason.
+
+## 88. Ordered boosting is not in the learner this port mirrors, and their file says so
+
+Scoping, 2026-08-21, before any code. **`boosting_type=Ordered` cannot be
+added to `gbdt/methods/doc_parallel_boosting.mojo`, because CatBoost does not
+have it there either.**
+
+`catboost/cuda/train_lib/train_template_pointwise_greedy_subsets_searcher.h`
+opens with their own comment:
+
+    /*
+    * New implementation of doc-parallel training with support for any type of
+    * trees and multiclassification
+    * But no ordered boosting
+    */
+
+and both of its entry points refuse it outright (`:34`, `:79`):
+
+    CB_ENSURE(catBoostOptions.BoostingOptions->BoostingType ==
+              EBoostingType::Plain, "Only plain boosting is supported in
+              current mode");
+
+`TGreedySubsetsSearcher` is the weak learner this repository ported. So the
+learner we mirror is CatBoost's PLAIN learner, and adding ordered boosting to
+it would not be porting CatBoost -- it would be inventing a variant they
+decided not to build.
+
+### Where theirs actually is
+
+`ELossFunction::RMSE` on GPU with symmetric trees does not reach that file at
+all. `pointwise.cpp` registers `TGpuTrainer<TPointwiseTargetsImpl>` from
+`train_template_pointwise.h`, which dispatches on the DATA PARTITION
+(`:27-48`):
+
+    DataPartitionType == FeatureParallel  ->  TDynamicBoosting
+                                              + TFeatureParallelPointwiseObliviousTree
+    otherwise                             ->  TBoosting (doc_parallel_boosting.h)
+                                              + TDocParallelObliviousTree
+
+and `EDataPartitionType` defaults to **FeatureParallel**
+(`boosting_options.cpp:25`). `UpdateDataPartitionType`
+(`cuda/train_lib/train.cpp:73-84`) moves it to DocParallel only when boosting
+is Plain. Boosting type in turn defaults to **Ordered** on GPU for every
+non-multiclass loss (`catboost_options.cpp:803-807`).
+
+**So CatBoost's shipped GPU default for RMSE is feature-parallel dynamic
+boosting, and this port is their `boosting_type=Plain` arm.** That is worth
+saying plainly: it is the arm you get from CatBoost by asking for Plain, by
+training multiclass, or by choosing a non-symmetric grow policy -- not a
+reduced version of their default, but a different one of their two.
+
+### What ordered boosting is, in their code
+
+`CreateFolds` (`dynamic_boosting.h:189-223`) cuts the already-permuted
+documents into NESTED PREFIX folds that grow geometrically by
+`fold_len_multiplier` (2.0) from `min_fold_size` (100):
+
+    fold 0   estimate [0, m)              evaluate [m, m*r)
+    fold i   estimate [0, prev.Right)     evaluate [prev.Right, prev.Right*r)
+
+roughly `log2(n/m)` of them. Each fold and permutation gets its OWN cursor
+(`TFoldAndPermutationStorage`, `:97-118`). The structure search then adds ONE
+TASK PER FOLD (`:314-330`): gradients from the fold's prefix cursor, score on
+the samples after it. That is the don't-look-ahead property -- a document's
+gradient never comes from a model that has seen it.
+
+The `Plain` arm of the same file collapses to a single fold covering
+everything (`:205-209`), which is what this port already does.
+
+### The price, counted
+
+| what | lines |
+|---|---|
+| `dynamic_boosting.h` | 673 |
+| `feature_parallel_pointwise_oblivious_tree.{h,cpp}` | ~150 |
+| `oblivious_tree_structure_searcher.{h,cpp}` | 713 |
+| `pointwise_optimization_subsets.{h,cpp}` | 184 |
+| `pointwise_scores_calcer.h` + `pointwise_score_calcer.cpp` | 125 |
+| `histograms_helper.{h,cpp}` | 519 |
+| `helpers.{h,cpp}` | 277 |
+| `pointwise_kernels.{h,cpp}` | 699 |
+| `add_oblivious_tree_model_feature_parallel.{h,cpp}` | 133 |
+| `feature_parallel_dataset{,_builder}.{h,cpp}` | 583 |
+
+about **4,000 lines of host code**, plus the feature-parallel histogram
+kernels under `methods/kernel/`, which are a SECOND histogram family --
+`greedy_subsets_searcher/kernel/` is the one this repository ported, and
+neither is a configuration of the other.
+
+**The multi-task structure searcher is the part that has no counterpart
+here.** Ours searches one (target, dataset) pair. Theirs takes N fold tasks
+and sums their scores, which is why their greedy-subsets learner refuses
+ordered boosting rather than approximating it.
+
+### What is worth doing instead, and first
+
+`permutation_count > 1` inside `doc_parallel_boosting.h`, which this port
+already mirrors and already runs at one permutation. It is the same
+machinery -- per-permutation cursors, per-permutation ensembles, structure
+searched on a permutation that is not the estimation one -- without the fold
+prefixes, and CatBoost reaches it in PLAIN mode as soon as the data has a
+categorical feature (`cuda/train_lib/train.cpp:100-108`). Since CTRs landed
+here, that is now a live divergence on every categorical fit, and it is
+recorded as such in `doc_parallel_boosting.mojo`'s audit list.
+
+Ordered boosting is not refused here yet; nothing in this port accepts a
+`boosting_type` at all. It should stay that way until either the option
+exists and refuses Ordered by name, or the learner behind it does.
