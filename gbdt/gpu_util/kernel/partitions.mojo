@@ -109,8 +109,38 @@ def launch_update_partition_offsets(
         PARTITIONS_BLOCK_SIZE
     )
     if num_blocks == 0:
-        # their else-arm zeroes TDataPartition records; the ui32 entry has
-        # no work to do on an empty input
+        # ========================= CORRECTED 2026-08-21 =================
+        # This used to `return`, with a comment claiming the `ui32` entry
+        # "has no work to do on an empty input". That was wrong. THEIR else
+        # arm is not empty (`partitions.cu:176`):
+        #
+        #     } else {
+        #         FillBuffer(partOffsets, static_cast<ui32>(0), partCount,
+        #                    stream);
+        #     }
+        #
+        # It ZEROES all `partCount` offsets. Returning early leaves them
+        # holding whatever was there before, so a caller that reads
+        # `[starts[s], starts[s+1])` on an empty input reads garbage
+        # instead of a run of empty segments.
+        #
+        # Unreached today -- the CTR path never passes size 0 -- which is
+        # exactly why it survived: a divergence in a branch nothing takes
+        # is invisible until something takes it. Found by the lane porting
+        # `pointwise_optimization_subsets`, which needs this entry.
+        # ================================================================
+        ctx.enqueue_function[_fill_u32_kernel](
+            part_offsets.unsafe_ptr(),
+            UInt32(0),
+            Int32(part_count),
+            grid_dim=(
+                (part_count + PARTITIONS_BLOCK_SIZE - 1)
+                // PARTITIONS_BLOCK_SIZE,
+                1,
+                1,
+            ),
+            block_dim=(PARTITIONS_BLOCK_SIZE, 1, 1),
+        )
         return
     var skip_suffix = part_count == size
     if skip_suffix:
