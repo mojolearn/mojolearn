@@ -453,6 +453,52 @@ int main()
   // len = n_sampled_rows. `n_rows = 1` and `n_rows = 2` are in here because a
   // one-row problem makes diff == 1, where the reduction returns `start`
   // unconditionally and a broken port looks perfect.
+  // ---- raft::random::uniform<double> ---------------------------------
+  // next_u64 pairs two next_u32 LOW WORD FIRST (rng_device.cuh:455-463);
+  // next_double is (next_u64() >> 11) / 2^53 (:491-497); custom_next for
+  // UniformDistParams multiplies by the SPAN and then adds the start
+  // (:163-173). All three are separable failure modes, so all three are
+  // printed. Doubles as decimal AND hex bits; the checker reads the hex.
+  printf("section udbl\n");
+  {
+    struct DC { uint64_t seed; uint64_t sub; double start; double end; };
+    const DC cases[] = {
+      {12345ull, 0ull, 0.0, 1.0},
+      {12345ull, 0ull, 0.0, 100.0},
+      {12345ull, 7ull, 0.0, 1234.5},
+      {0ull, 0ull, -5.0, 5.0},
+      {16045690984503098046ull, 3ull, 0.0, 987654.321},
+      {2615243109ull, 0ull, 0.0, 600.0},
+    };
+    for (const DC& c : cases) {
+      PhiloxGenerator g(c.seed, c.sub, 0ull);
+      printf("udbl %llu %llu %.17g %.17g",
+             (unsigned long long)c.seed, (unsigned long long)c.sub,
+             c.start, c.end);
+      for (int i = 0; i < 8; i++) {
+        // rng_device.cuh:455-463 then :491-497 then :163-173, verbatim
+        uint32_t a = g.next_u32(), b = g.next_u32();
+        uint64_t u = (uint64_t)a | ((uint64_t)b << 32);
+        double res = (double)(u >> 11) / (double)(uint64_t(1) << 53);
+        double v = (res * (c.end - c.start)) + c.start;
+        uint64_t vb; memcpy(&vb, &v, 8);
+        printf(" %.17g/%016llx", v, (unsigned long long)vb);
+      }
+      printf("\n");
+    }
+    // the raw u64 pairing, on its own
+    {
+      PhiloxGenerator g(12345ull, 0ull, 0ull);
+      printf("u64 12345 0");
+      for (int i = 0; i < 6; i++) {
+        uint32_t a = g.next_u32(), b = g.next_u32();
+        printf(" %llu",
+               (unsigned long long)((uint64_t)a | ((uint64_t)b << 32)));
+      }
+      printf("\n");
+    }
+  }
+
   printf("section e2e\n");
   {
     struct Case {

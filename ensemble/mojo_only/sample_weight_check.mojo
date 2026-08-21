@@ -34,10 +34,8 @@ trained and looked plausible".
      them, so passing them to the objective as well would apply them twice.
      A port that always passed them down would double-count on the DEFAULT
      path and merely look "differently regularised". Checked in both
-     directions in principle -- but see the arm: the ON direction is not
-     REACHABLE in this port yet, because their dispatch sends
-     bootstrap+weights to the unported weighted-bootstrap arm. The OFF
-     direction is checked; the ON direction is recorded as a gap.
+     directions, both now reachable: weighted bootstrap is ported, so
+     bootstrap+weights runs their `:125-138` arm instead of raising.
 
   D. THE WEIGHTED BINS ARE REACHABLE AND ARE ACTUALLY READ. They have been
      ported since this morning and no caller could construct one.
@@ -434,34 +432,43 @@ def arm_c_double_counting(ctx: DeviceContext) raises -> Int:
             " dataset.sample_weight, so the whole weighted path is inert."
         )
 
-    # and the unreachable direction must still be unreachable BY NAME,
-    # not silently producing something.
-    var raised = False
-    try:
-        var _boot = _fit[WtObj](
-            ctx, d[0], d[1], n_rows, n_cols, 3, True, obj, w
-        )
-    except e:
-        raised = True
-        if String(e).find("weighted bootstrap") < 0:
-            fails += 1
-            print("  arm C: bootstrap+weights raised, but not by name:", e)
-    if not raised:
+    # THE OTHER DIRECTION, reachable now that weighted bootstrap is ported.
+    # With bootstrap ON the objective must NOT see the weights
+    # (tree_sample_weight() returns nullptr, randomforest.cuh:167) -- the
+    # weights are already in the DRAW. So a fit with varied weights and a
+    # fit with all-ones weights must differ ONLY through the row sample,
+    # never through the objective. The way to see that: the weighted
+    # bootstrap draws rows in proportion to the weights, so the two forests
+    # DIFFER -- but the objective contribution is identical, which shows up
+    # as both being reproducible and neither carrying a weighted histogram.
+    #
+    # The sharp assertion available here: run the SAME weighted bootstrap
+    # twice with the weighted bin and with the PLAIN bin. If the objective
+    # were seeing the weights, those two would differ; since it is not, the
+    # row sample is the only input and both must produce the same tree.
+    var plain = PlainObj(Int32(3), Int32(1), Int32(GINI), Float32(0.0))
+    var boot_wt = _fit[WtObj](ctx, d[0], d[1], n_rows, n_cols, 3, True, obj, w)
+    var boot_pl = _fit[PlainObj](
+        ctx, d[0], d[1], n_rows, n_cols, 3, True, plain, w
+    )
+    if _same(boot_wt, boot_pl) != 0:
         fails += 1
         print(
-            "  arm C FAILED: bootstrap=True WITH weights did not raise. It"
-            " must: their dispatch sends that combination to the weighted"
-            " bootstrap arm, which is not ported, and silently taking a"
-            " different arm would train on rows nobody asked for."
+            "  arm C FAILED: with bootstrap ON, the WEIGHTED bin and the"
+            " PLAIN bin gave different forests on the same weighted draw."
+            " tree_sample_weight() returns nullptr when bootstrapping"
+            " (randomforest.cuh:167), so the objective must see no weights"
+            " and the bin type must not matter. This is the"
+            " double-counting their rule exists to prevent."
         )
 
     if fails == 0:
         print(
-            "  arm C OK: with bootstrap OFF the weights change the forest"
-            " (so the objective reads them); bootstrap ON with weights"
-            " raises by name. GAP RECORDED: the nullptr direction of their"
-            " tree_sample_weight rule is implemented and UNCHECKED until"
-            " weighted bootstrap lands."
+            "  arm C OK: BOTH directions of their tree_sample_weight rule."
+            " With bootstrap OFF the weights change the forest, so the"
+            " objective reads them. With bootstrap ON the weighted bin and"
+            " the plain bin give the SAME forest, so the objective does"
+            " not -- no double counting."
         )
     return fails
 

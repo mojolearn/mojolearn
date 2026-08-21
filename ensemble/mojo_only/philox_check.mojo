@@ -61,6 +61,11 @@ SIX LAYERS, SEPARATELY COUNTED, so a failure names its layer:
 
 from ensemble.mojo_only.philox import (
     PhiloxState,
+    custom_next_uniform_double,
+    philox_next_u64,
+)
+from ensemble.mojo_only.philox import (
+    PhiloxState,
     RNG_BLOCK_THREADS,
     RNG_STRIDE,
     U32Stream,
@@ -131,6 +136,41 @@ def _u64(s: String) raises -> UInt64:
     for i in range(s.byte_length()):
         var d = Int(atol(String(s[byte=i])))
         v = v * 10 + UInt64(d)
+    return v
+
+
+@always_inline
+def _d2b(v: Float64) -> UInt64:
+    var b = UInt64(0)
+    var p = MutPointer(to=b).unsafe_bitcast[Float64]()
+    p[unsafe_offset=0] = v
+    return b
+
+
+def _parse_u64(tok: String) raises -> UInt64:
+    var v = UInt64(0)
+    for i in range(tok.byte_length()):
+        v = v * 10 + UInt64(Int(atol(String(tok[byte=i]))))
+    return v
+
+
+def _hex64_of(tok: String) raises -> UInt64:
+    var slash = -1
+    for i in range(tok.byte_length()):
+        if String(tok[byte=i]) == "/":
+            slash = i
+            break
+    if slash < 0:
+        raise Error("token has no /hexbits: " + tok)
+    var v = UInt64(0)
+    for i in range(slash + 1, tok.byte_length()):
+        var c = String(tok[byte=i])
+        var d = 0
+        if c >= "0" and c <= "9":
+            d = Int(atol(c))
+        else:
+            d = 10 + (Int(ord(c)) - Int(ord("a")))
+        v = v * 16 + UInt64(d)
     return v
 
 
@@ -390,7 +430,57 @@ def main() raises:
     )
 
     var parsed = ctr_rows + raw_rows + lem_rows + uint_rows + fill_rows + e2e_rows
-    var total = (
+    # ---- layer 8: raft::random::uniform<double> -------------------------
+    # next_u64's LOW-WORD-FIRST pairing, next_double's (>>11)/2^53, and
+    # custom_next's multiply-by-span-then-add-start, each a separable
+    # failure mode. Doubles compared as RAW BITS.
+    var udbl_rows = 0
+    var udbl_cells = 0
+    var udbl_wrong = 0
+    var u64_wrong = 0
+    for li in range(len(lines)):
+        var line = String(lines[li])
+        if line.byte_length() < 4:
+            continue
+        var t = _split_ws(line)
+        if len(t) == 0:
+            continue
+        if t[0] == "u64":
+            var g = PhiloxState.init(UInt64(12345), UInt64(0), UInt64(0))
+            for j in range(6):
+                var want = _parse_u64(t[3 + j])
+                if philox_next_u64(g) != want:
+                    u64_wrong += 1
+        elif t[0] == "udbl":
+            udbl_rows += 1
+            var seed = _parse_u64(t[1])
+            var sub = _parse_u64(t[2])
+            var lo = _hex64_of(t[5])
+            var g2 = PhiloxState.init(seed, sub, UInt64(0))
+            # start/end are recoverable from the first row token pair; the
+            # oracle prints them in decimal, and both are exactly
+            # representable in every case it uses.
+            var start = Float64(atof(t[3]))
+            var end = Float64(atof(t[4]))
+            for j in range(8):
+                var want_bits = _hex64_of(t[5 + j])
+                var got = custom_next_uniform_double(g2, start, end)
+                udbl_cells += 1
+                if _d2b(got) != want_bits:
+                    udbl_wrong += 1
+                    if first_fail == "":
+                        first_fail = (
+                            "udbl seed=" + String(seed) + " i=" + String(j)
+                            + " got bits " + String(_d2b(got))
+                            + " want " + String(want_bits)
+                        )
+            _ = lo
+    print(
+        "  layer 8 udbl  :", udbl_rows, "streams,", udbl_cells, "values,",
+        udbl_wrong, "wrong;  next_u64 pairing:", u64_wrong, "wrong",
+    )
+
+    var total = udbl_wrong + u64_wrong + (
         ctr_wrong + raw_wrong + lem_wrong + uint_wrong + fill_wrong + e2e_wrong
     )
 

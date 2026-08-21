@@ -456,18 +456,34 @@ def arm_d_unported_arms(ctx: DeviceContext) raises -> Int:
             " across", oracle_rows, "cuML call sites",
         )
 
+    # Weighted bootstrap is PORTED now (`randomforest.cuh:125-138`), so it
+    # must draw rather than raise -- and every drawn index must be a legal
+    # row. Its distributional behaviour is checked in `sample_weight_check`;
+    # what matters here is that all four arms of their dispatch produce
+    # something usable.
     var s2 = RowSampler(ctx, True, UInt64(7), 100, 100, True)
-    var raised2 = False
-    try:
-        s2.sample(ctx, Int32(0))
-    except e:
-        raised2 = True
-        if String(e).find("weighted bootstrap") < 0:
-            fails += 1
-            print("  arm D: weighted arm raised, but not by name:", e)
-    if not raised2:
+    var w2 = List[Float32]()
+    for i in range(100):
+        w2.append(Float32(1 + (i % 3)))
+    s2.prepare_weights(ctx, w2)
+    s2.sample(ctx, Int32(0))
+    var h2 = ctx.enqueue_create_host_buffer[DType.int32](100)
+    ctx.enqueue_copy(dst_buf=h2, src_buf=s2.selected_rows)
+    ctx.synchronize()
+    var oob = 0
+    for i in range(100):
+        var v = Int(h2.unsafe_ptr().unsafe_load(i))
+        if v < 0 or v >= 100:
+            oob += 1
+    if oob != 0:
         fails += 1
-        print("  arm D FAILED: weighted bootstrap did not raise")
+        print(
+            "  arm D FAILED: weighted bootstrap produced", oob,
+            "row ids outside [0, 100) -- their upper_bound over the CDF"
+            " cannot return one",
+        )
+    _ = s2^
+    _ = h2^
 
     # The zero-weight arm (`randomforest.cuh:144-154`) IS PORTED now, so it
     # must NOT raise -- but it must also refuse to run before
@@ -510,10 +526,10 @@ def arm_d_unported_arms(ctx: DeviceContext) raises -> Int:
 
     if fails == 0:
         print(
-            "  arm D OK: the bootstrap arm matches RAFT per cell, weighted"
-            " bootstrap raises by name, zero-weight removal selects 80 of"
-            " 100, and the no-bootstrap arm is the identity in all 100"
-            " cells"
+            "  arm D OK: all four RowSampler arms -- uniform bootstrap"
+            " matching RAFT per cell, weighted bootstrap drawing 100 legal"
+            " rows, zero-weight removal selecting 80 of 100, and the"
+            " no-bootstrap identity in all 100 cells"
         )
     return fails
 

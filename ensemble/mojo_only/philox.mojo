@@ -861,3 +861,98 @@ def launch_uniform_int(
     launch_uniform_int_ex(
         ctx, out_buf, n, start, end, seed, UInt64(0), RNG_STRIDE
     )
+
+
+# ===========================================================================
+# `raft::random::uniform<double>`, and the pieces `next(double&)` needs.
+# `rng_device.cuh:455-463`, `:491-497`, `:511-515`; `rng_device.cuh:163-173`.
+#
+# WHY THIS IS HOST-ONLY, and it is the whole of DEVIATION 306. These produce
+# a `double`, and this device has no float64 at all -- not a precision
+# preference, an absent type. Their generator, their pairing, their divisor
+# and their affine map are transcribed EXACTLY; only the machine they run on
+# moves. The one caller is the weighted bootstrap, which draws
+# `n_sampled_rows` values ONCE PER TREE and then does a binary search per
+# draw -- work that is O(n log n) on a vector their own code also brings
+# back through a `thrust::upper_bound`, so the host is not an unreasonable
+# place for it. PRICE: one host pass per tree instead of one device launch,
+# and `n_sampled_rows` Int32 row ids copied up instead of drawn in place.
+# ===========================================================================
+
+
+@always_inline
+def philox_next_u64(mut gen: PhiloxState) -> UInt64:
+    """`PhiloxGenerator::next_u64`, `rng_device.cuh:455-463`.
+
+        a = next_u32(); b = next_u32();
+        ret = uint64_t(a) | (uint64_t(b) << 32);
+
+    THE FIRST DRAW IS THE LOW WORD. A port that swaps them passes every
+    distributional test and produces a different stream; the oracle compares
+    the pairing directly for that reason.
+    """
+    var a = gen.next_u32().cast[DType.uint64]() & 0xFFFFFFFF
+    var b = gen.next_u32().cast[DType.uint64]() & 0xFFFFFFFF
+    return a | (b << 32)
+
+
+@always_inline
+def philox_next_double(mut gen: PhiloxState) -> Float64:
+    """`PhiloxGenerator::next_double`, `rng_device.cuh:491-497`.
+
+        uint64_t val = next_u64() >> 11;
+        ret = double(val) / double(uint64_t(1) << 53);
+
+    53 bits over 2^53, so the result is in [0, 1) and every value is exactly
+    representable. Their commented-out alternative on `:513` is
+    `curand_uniform_double`, which they did NOT take -- it returns (0, 1].
+    """
+    var v = philox_next_u64(gen) >> 11
+    return Float64(Int(v)) / Float64(Int(UInt64(1) << 53))
+
+
+@always_inline
+def custom_next_uniform_double(
+    mut gen: PhiloxState, start: Float64, end: Float64
+) -> Float64:
+    """`custom_next` for `UniformDistParams<double>`,
+    `rng_device.cuh:163-173`:
+
+        OutType res; gen.next(res);
+        *val = (res * (params.end - params.start)) + params.start;
+
+    Note the ORDER: multiply by the span, THEN add the start. Distributing
+    it differently is a different float.
+    """
+    var res = philox_next_double(gen)
+    return (res * (end - start)) + start
+
+
+def uniform_double_host(
+    seed: UInt64,
+    base_subsequence: UInt64,
+    stride: Int,
+    n: Int,
+    start: Float64,
+    end: Float64,
+) -> List[Float64]:
+    """`raft::random::uniform<double>`, `rng_impl.cuh:78-86`, on the host.
+
+    Same thread-to-index mapping as `uniform_int_host`: thread `tid` owns
+    subsequence `base + tid` and writes `idx = tid, tid + stride, ...`
+    (`rng_device.cuh:680-694`). See DEVIATION 184 for why `stride` is pinned.
+    """
+    var out = List[Float64]()
+    for _ in range(n):
+        out.append(Float64(0.0))
+    for tid in range(stride):
+        if tid >= n:
+            break
+        var gen = PhiloxState.init(
+            seed, base_subsequence + UInt64(tid), UInt64(0)
+        )
+        var idx = tid
+        while idx < n:
+            out[idx] = custom_next_uniform_double(gen, start, end)
+            idx += stride
+    return out^

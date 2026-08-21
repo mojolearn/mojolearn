@@ -302,7 +302,11 @@ from ensemble.decisiontree.batched_levelalgo.quantiles import (
 from ensemble.decisiontree.batched_levelalgo.random_utils import (
     fnv1a32_hash_seed_tree,
 )
-from ensemble.mojo_only.philox import RNG_STRIDE, launch_uniform_int
+from ensemble.mojo_only.philox import (
+    RNG_STRIDE,
+    launch_uniform_int,
+    uniform_double_host,
+)
 from std.ffi import external_call
 from std.math import isfinite, isinf, sqrt
 
@@ -1229,6 +1233,10 @@ struct RowSampler(Movable):
     # arm produces FEWER rows than `n_sampled_rows`, and the builder must
     # be told how many, or it reads past the live entries.
     var n_selected: Int
+    # `:223` -- `rmm::device_uvector<double> sample_weight_cdf_`, and `:222`
+    # `double sample_weight_sum_`. Float64 on the HOST; see DEVIATION 306.
+    var weight_cdf: List[Float64]
+    var weight_sum: Float64
     # `:224` -- one `device_uvector<int>` per stream. One stream here.
     var selected_rows: DeviceBuffer[DType.int32]
     var h_rows: HostBuffer[DType.int32]
@@ -1249,6 +1257,8 @@ struct RowSampler(Movable):
         self.n_sampled_rows = n_sampled_rows
         self.has_sample_weight = has_sample_weight
         self.n_selected = n_sampled_rows
+        self.weight_cdf = List[Float64]()
+        self.weight_sum = Float64(0.0)
         var n = n_sampled_rows if n_sampled_rows > 0 else 1
         self.selected_rows = ctx.enqueue_create_buffer[DType.int32](n)
         self.h_rows = ctx.enqueue_create_host_buffer[DType.int32](n)
@@ -1311,6 +1321,19 @@ struct RowSampler(Movable):
             )
         self.n_selected = min(kept, self.n_sampled_rows)
 
+        # `:84-89` -- the weighted-bootstrap CDF, an inclusive scan over the
+        # weights, and `:91` takes the total from its LAST ELEMENT rather
+        # than from a separate reduction. Kept: a separate sum could differ
+        # in the last bits from the scan's running total, and their
+        # `upper_bound` searches the SCAN.
+        if self.bootstrap:
+            self.weight_cdf = List[Float64]()
+            var run = Float64(0.0)
+            for i in range(self.n_rows):
+                run += Float64(weights[i])
+                self.weight_cdf.append(run)
+            self.weight_sum = self.weight_cdf[self.n_rows - 1]
+
     def rng_seed_for(self, tree_id: Int32) -> UInt32:
         """`:120-123`, the per-tree seed, exposed so a check can hold it to
         the same value the sampler uses."""
@@ -1323,15 +1346,50 @@ struct RowSampler(Movable):
         the struct docstring and DEVIATION 181.
         """
         if self.bootstrap and self.has_sample_weight:
-            raise Error(
-                "weighted bootstrap is NOT PORTED YET"
-                " (randomforest.cuh:125-138). sample_weight IS accepted"
-                " now and the CDF scan and upper_bound are both host work;"
-                " what is missing is raft::random::uniform<double>, whose"
-                " bit-exact port was declined under DEVIATION 187c. Until"
-                " it lands, use bootstrap=False with weights (their"
-                " :144-154 arm), or bootstrap=True without them."
+            # `:125-138` -- "Draw bootstrap rows according to sample
+            # weights."
+            #
+            #   raft::random::uniform<double>(res, rng, scratch.data(),
+            #       scratch.size(), 0.0, sample_weight_sum_);
+            #   thrust::upper_bound(policy, cdf.data(), cdf.data() + n_rows,
+            #       scratch.begin(), scratch.end(), selected_rows.begin());
+            #
+            # `upper_bound` returns the index of the FIRST cdf entry
+            # STRICTLY GREATER than the draw, which is what makes a row's
+            # probability its own weight over the total. A `lower_bound`
+            # here would hand every zero-weight row the mass of its
+            # predecessor.
+            if len(self.weight_cdf) < self.n_rows:
+                raise Error(
+                    "weighted bootstrap needs prepare_weights first"
+                )
+            var draws = uniform_double_host(
+                UInt64(Int(self.rng_seed_for(tree_id))),
+                UInt64(0),
+                RNG_STRIDE,
+                self.n_sampled_rows,
+                Float64(0.0),
+                self.weight_sum,
             )
+            var p = self.h_rows.unsafe_ptr()
+            for i in range(self.n_sampled_rows):
+                # std::upper_bound over the cdf
+                var lo = 0
+                var hi = self.n_rows
+                var d = draws[i]
+                while lo < hi:
+                    var mid = (lo + hi) // 2
+                    if self.weight_cdf[mid] <= d:
+                        lo = mid + 1
+                    else:
+                        hi = mid
+                p.unsafe_store(i, Int32(lo))
+            self.n_selected = self.n_sampled_rows
+            ctx.enqueue_copy(
+                dst_buf=self.selected_rows, src_ptr=self.h_rows.unsafe_ptr()
+            )
+            ctx.synchronize()
+            return
         if self.bootstrap:
             # `:140-142` -- THE DEFAULT ARM.
             #
