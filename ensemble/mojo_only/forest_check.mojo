@@ -58,7 +58,10 @@ from ensemble.randomforest import (
     RandomForest,
     RandomForestMetaData,
     RowSampler,
+    check_random_seed,
     fit_forest,
+    min_samples_leaf_fraction,
+    min_samples_split_fraction,
     n_sampled_rows_for,
 )
 
@@ -83,6 +86,7 @@ def _rf_params(
     max_features: Float32,
     max_depth: Int = 4,
     max_samples: Float32 = 1.0,
+    max_n_bins: Int = 16,
 ) -> RF_params:
     return RF_params(
         n_trees=Int32(n_trees),
@@ -94,7 +98,7 @@ def _rf_params(
             max_depth=Int32(max_depth),
             max_leaves=Int32(-1),
             max_features=max_features,
-            max_n_bins=Int32(16),
+            max_n_bins=Int32(max_n_bins),
             min_samples_leaf=Int32(1),
             min_samples_split=Int32(2),
             split_criterion=GINI,
@@ -658,6 +662,163 @@ def _trees_equal_across(
     return diff
 
 
+def arm_g_python_layer_params() raises -> Int:
+    """`randomforest_common.pyx:520-536` and `internals/validation.py:73-79`.
+
+    Four transforms cuML applies BETWEEN a user's arguments and the C++
+    `RF_params`. They are not decoration: each one changes the model a
+    user gets, and none of them is in their C++ layer, so a port that
+    stops at the C-API shape silently drops all four.
+
+    The expected values are arithmetic and written out by hand, not read
+    back from the functions under test."""
+    print()
+    print("ARM G -- the Python layer's derived parameters")
+    var wrong = 0
+
+    # `:520-523` -- ceil(fraction * n_rows), NOT round and NOT truncate.
+    # 0.1 * 400 = 40 exactly, so it must NOT become 41.
+    var cases_leaf = [
+        (0.1, 400, 40),
+        (0.25, 401, 101),   # 100.25 -> 101
+        (0.5, 401, 201),    # 200.5  -> 201, so it is not round-half-even
+        (0.001, 100, 1),    # 0.1    -> 1, a fraction below one row
+    ]
+    for c in cases_leaf:
+        var got = Int(min_samples_leaf_fraction(c[0], c[1]))
+        print(
+            "    min_samples_leaf_fraction(",
+            c[0],
+            ",",
+            c[1],
+            ") =",
+            got,
+            "want",
+            c[2],
+        )
+        if got != c[2]:
+            wrong += 1
+
+    # `:524-527` -- the same, with max(2, ...) on top. Their
+    # `validity_check` refuses below 2, so the floor is load-bearing.
+    var cases_split = [(0.001, 100, 2), (0.1, 400, 40), (0.25, 401, 101)]
+    for c in cases_split:
+        var got = Int(min_samples_split_fraction(c[0], c[1]))
+        print(
+            "    min_samples_split_fraction(",
+            c[0],
+            ",",
+            c[1],
+            ") =",
+            got,
+            "want",
+            c[2],
+        )
+        if got != c[2]:
+            wrong += 1
+    if Int(min_samples_leaf_fraction(0.001, 100)) != 1:
+        wrong += 1
+    else:
+        print(
+            "    ...and the floor is the only difference between them at"
+            " 0.001 x 100: leaf 1, split 2"
+        )
+
+    # `validation.py:73-79` -- 0 and 2**32 - 1 in, -1 and 2**32 out.
+    if check_random_seed(0) != UInt64(0):
+        print("      FAIL: seed 0 rejected")
+        wrong += 1
+    if check_random_seed(4294967295) != UInt64(4294967295):
+        print("      FAIL: seed 2**32 - 1 rejected")
+        wrong += 1
+    var refused = 0
+    try:
+        _ = check_random_seed(-1)
+        print("      FAIL: seed -1 accepted")
+        wrong += 1
+    except:
+        refused += 1
+    try:
+        _ = check_random_seed(4294967296)
+        print("      FAIL: seed 2**32 accepted")
+        wrong += 1
+    except:
+        refused += 1
+    print(
+        "    check_random_seed: 0 and 2**32-1 accepted,",
+        refused,
+        "of 2 out-of-range seeds refused -- this is WHY their one-round"
+        " fnv1a32 fold of the seed is lossless",
+    )
+
+    if wrong == 0:
+        print(
+            "  arm G OK: ceil (not round, not truncate), the max(2, ...)"
+            " floor, and the seed range that makes the fold lossless"
+        )
+    return wrong
+
+
+def arm_h_n_bins_clamp(ctx: DeviceContext) raises -> Int:
+    """`randomforest_common.pyx:529-536`. n_bins is clamped to n_rows, with
+    a warning, INSIDE the fit -- the only place n_rows is known.
+
+    Their C++ never checks it: `validity_check` only bounds n_bins to
+    (0, 1024] (`decisiontree.cu:26-27`), so asking for 500 bins over 100
+    rows passes every C-side gate and then asks the quantile pass for more
+    bins than there are values to put in them.
+
+    The clamp is observable two ways and this arm wants both: the params
+    struct must come back MUTATED (theirs mutates too, which is what makes
+    a later read see the corrected value), and the fit must still produce
+    the same forest as asking for exactly n_rows bins in the first place.
+    """
+    print()
+    print("ARM H -- n_bins is clamped to n_rows")
+    var wrong = 0
+    var d = _hashed_data(100, 4, 3)
+
+    var p_big = _rf_params(2, False, Float32(1.0), max_n_bins=500)
+    var f_big = _fit(ctx, d, p_big)
+    print(
+        "    asked for 500 bins over 100 rows -> params.max_n_bins is now",
+        p_big.tree_params.max_n_bins,
+    )
+    if p_big.tree_params.max_n_bins != Int32(100):
+        print("      FAIL: n_bins was not clamped to n_rows")
+        wrong += 1
+
+    var p_exact = _rf_params(2, False, Float32(1.0), max_n_bins=100)
+    var f_exact = _fit(ctx, d, p_exact)
+    if _trees_equal_across(f_big, f_exact, 0) != 0:
+        print(
+            "      FAIL: the clamped fit differs from asking for n_rows"
+            " bins directly"
+        )
+        wrong += 1
+
+    # and the clamp must not fire when it should not
+    var p_small = _rf_params(2, False, Float32(1.0), max_n_bins=16)
+    var f_small = _fit(ctx, d, p_small)
+    if p_small.tree_params.max_n_bins != Int32(16):
+        print("      FAIL: n_bins was clamped when it was already below n_rows")
+        wrong += 1
+    if _trees_equal_across(f_small, f_exact, 0) == 0:
+        print(
+            "      FAIL: 16 bins and 100 bins give the same forest, so the"
+            " equality above proves nothing"
+        )
+        wrong += 1
+
+    if wrong == 0:
+        print(
+            "  arm H OK: 500 bins over 100 rows became 100, gave the same"
+            " forest as asking for 100, and 16 bins was left alone and"
+            " gives a different forest"
+        )
+    return wrong
+
+
 def main() raises:
     print("forest_check: ensemble/randomforest.mojo")
     print("  RowSampler (randomforest.cuh:62-226) and the forest loop (:286-370)")
@@ -669,6 +830,8 @@ def main() raises:
     fails += arm_d_unported_arms(ctx)
     fails += arm_e_fit_then_predict(ctx)
     fails += arm_f_bootstrapped_forest(ctx)
+    fails += arm_g_python_layer_params()
+    fails += arm_h_n_bins_clamp(ctx)
     if fails == 0:
         print("forest_check: ALL OK")
     else:

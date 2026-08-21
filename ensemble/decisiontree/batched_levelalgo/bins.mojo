@@ -178,6 +178,15 @@ def _quantize(value: Float32, scale: Float32) -> Int32:
 
 
 @always_inline
+def _dequantize_wide(raw: Int64, scale: Float32) -> Float32:
+    """`_dequantize` for a value that has already been SUBTRACTED at
+    storage width. `Int32 - Int32` can leave the type (labels may be
+    negative, so the two operands can straddle zero), hence Int64 in and
+    exactly one rounding out."""
+    return Float32(Int(raw)) / scale
+
+
+@always_inline
 def _dequantize(raw: Int32, scale: Float32) -> Float32:
     """Fixed-point back to a real. The division is EXACT: `choose_scale`
     snaps the scale down to a power of two, so only the `Int32 -> Float32`
@@ -271,6 +280,31 @@ trait RegressionBinLike(Bin):
 
     def LabelSum(self, scales: BinScales) -> Float32:
         """`bins.cuh:117, 164`, plus DEVIATION 101b's `scales`."""
+        ...
+
+    def LabelSumMinus(self, other: Self, scales: BinScales) -> Float32:
+        """`self.LabelSum() - other.LabelSum()`, taken at STORAGE width.
+
+        NOT a separate function in their source, and it does not need to
+        be: `objectives.cuh:249`, `:277` and `:304` write
+
+            DataT right_label_sum =
+              DataT(hist[n_bins - 1].LabelSum() - hist[i].LabelSum());
+
+        and their `LabelSum()` returns the `double` that IS the storage,
+        so the subtraction already happens at full storage width and is
+        narrowed exactly once.
+
+        Ours stores Int32 fixed point, so `LabelSum()` has to round on the
+        way out. Calling it twice and subtracting the results puts two
+        roundings in front of a CANCELLATION -- the one place a lost low
+        bit is amplified rather than absorbed. Subtracting the raw
+        integers instead is EXACT and narrows once, which is the same
+        shape their line has.
+
+        This exists on the trait rather than at the call site because the
+        raw field is private to each bin.
+        """
         ...
 
 
@@ -524,6 +558,15 @@ struct RegressionBin(RegressionBinLike):
         return _dequantize(self.label_sum, scales.label_scale)
 
     @always_inline
+    def LabelSumMinus(self, other: Self, scales: BinScales) -> Float32:
+        """`objectives.cuh:249`, `:277`, `:304` -- their subtraction at
+        storage width, narrowed once. See the trait for why."""
+        return _dequantize_wide(
+            Int64(Int(self.label_sum)) - Int64(Int(other.label_sum)),
+            scales.label_scale,
+        )
+
+    @always_inline
     def Count(self) -> UInt32:
         """`bins.cuh:118`."""
         return self.count
@@ -586,7 +629,25 @@ struct WeightedRegressionBin(RegressionBinLike):
     ):
         """`bins.cuh:153-157` -- `AtomicAdd(hist + b, {label * weight, 1,
         weight})`. The product is theirs; it is what makes `label_sum`
-        need its OWN scale rather than the label's."""
+        need its OWN scale rather than the label's.
+
+        THE PRODUCT'S WIDTH IS NOT THEIRS, and it is not fixable here.
+        Both of their operands are `double` -- `sample_weight` is declared
+        `const double*` (`dataset.h:22`) -- so their multiply is exact and
+        lands in a `double` field. Ours multiplies two Float32s and then
+        truncates into Int32, which is two roundings where they have none.
+
+        This is the COMPOSITION of two already-priced deviations rather
+        than a third one: DEVIATION 100 narrows the weight to Float32
+        because this device has no float64, and DEVIATION 101b turns the
+        accumulator into fixed point because it has no float64 atomic.
+        Neither block says they stack on this one value, so it is said
+        here. There is no higher-precision product available to reach for:
+        every wider path runs through float64.
+
+        Only the WEIGHTED regression bin is affected. The unweighted one
+        (`:504`) quantizes the label alone, and both classification bins
+        count integers."""
         WeightedRegressionBin.AtomicAdd(
             hist.unsafe_offset(Int(b)),
             WeightedRegressionBin(
@@ -620,6 +681,15 @@ struct WeightedRegressionBin(RegressionBinLike):
     def LabelSum(self, scales: BinScales) -> Float32:
         """`bins.cuh:164`, dequantized."""
         return _dequantize(self.label_sum, scales.label_scale)
+
+    @always_inline
+    def LabelSumMinus(self, other: Self, scales: BinScales) -> Float32:
+        """`objectives.cuh:249`, `:277`, `:304` -- their subtraction at
+        storage width, narrowed once. See the trait for why."""
+        return _dequantize_wide(
+            Int64(Int(self.label_sum)) - Int64(Int(other.label_sum)),
+            scales.label_scale,
+        )
 
     @always_inline
     def Count(self) -> UInt32:

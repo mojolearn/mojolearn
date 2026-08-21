@@ -713,6 +713,89 @@ def n_sampled_cols(max_features: Float32, n_cols: Int) -> Int32:
 # ---------------------------------------------------------------------------
 
 
+def min_samples_leaf_fraction(fraction: Float64, n_rows: Int) raises -> Int32:
+    """`randomforest_common.pyx:520-523`, the FLOAT arm:
+
+        min_samples_leaf = (
+            self.min_samples_leaf if isinstance(self.min_samples_leaf, int)
+            else math.ceil(self.min_samples_leaf * n_rows))
+
+    A Python caller may pass `min_samples_leaf` as a fraction of the
+    training set and get an absolute count back, resolved at fit time
+    against `n_rows`. Their C++ `DecisionTreeParams::min_samples_leaf` is
+    an `int` (`decisiontree.hpp:39`) and never sees the fraction.
+
+    Mojo has no `int | float` parameter, so the two arms are two entry
+    points rather than one: the integer arm IS just passing the Int32, and
+    this is the other. `ceil`, not round and not truncate.
+    """
+    if not (fraction > 0.0):
+        raise Error(
+            "min_samples_leaf fraction must be positive, got "
+            + String(fraction)
+        )
+    var x = fraction * Float64(n_rows)
+    var f = Float64(Int(x))
+    var c = Int(f) if x == f else Int(f) + 1
+    return Int32(c)
+
+
+def min_samples_split_fraction(
+    fraction: Float64, n_rows: Int
+) raises -> Int32:
+    """`randomforest_common.pyx:524-527`, the FLOAT arm:
+
+        min_samples_split = (
+            self.min_samples_split if isinstance(..., int)
+            else max(2, math.ceil(self.min_samples_split * n_rows)))
+
+    Same shape as `min_samples_leaf_fraction` with `max(2, ...)` on top --
+    their `validity_check` refuses anything below 2 (`decisiontree.cu:33`),
+    so the floor is what keeps a small fraction from failing that check
+    rather than a separate opinion about small splits.
+    """
+    var c = Int(min_samples_leaf_fraction(fraction, n_rows))
+    return Int32(2) if c < 2 else Int32(c)
+
+
+def check_random_seed(random_state: Int) raises -> UInt64:
+    """`internals/validation.py:73-79`.
+
+        if random_state < 0 or random_state >= 2**32:
+            raise ValueError(
+                f"Expected `0 <= random_state <= 2**32 - 1`, ...")
+
+    WHY THIS MATTERS MORE THAN IT LOOKS. Their per-tree seed chain folds
+    the user seed in ONE round of `fnv1a32` (`randomforest.cuh:121` calls
+    `fnv1a32` directly, not `fnv1a32_combine`), so the high 32 bits are
+    DISCARDED. That is lossless only because this check ran first and
+    capped the seed below 2^32. A caller who reaches the C API directly
+    silently loses half their seed, and this port reproduces that
+    truncation faithfully (`random_utils.mojo:107-120`).
+
+    So this is not a bounds check for its own sake -- it is the reason the
+    truncation upstream is harmless, and a caller building `RF_params` by
+    hand should run it. `RF_params.seed` stays a full UInt64 because their
+    C++ field is a `uint64_t`; the restriction is the Python layer's.
+
+    Their `random_state=None` arm draws a seed from numpy. Ours does not
+    have one: `default_rf_params_*` uses 0, which is what
+    `randomforest_common.pyx:517` maps None to. Unseeded does not mean
+    randomly seeded on either side.
+    """
+    if random_state < 0:
+        raise Error(
+            "Expected `0 <= random_state <= 2**32 - 1`, got "
+            + String(random_state)
+        )
+    if UInt64(random_state) >= UInt64(4294967296):
+        raise Error(
+            "Expected `0 <= random_state <= 2**32 - 1`, got "
+            + String(random_state)
+        )
+    return UInt64(random_state)
+
+
 def default_rf_params_classifier(n_cols: Int) raises -> RF_params:
     """`RandomForestClassifier.__init__`, `randomforestclassifier.py:209-230`,
     marshalled through `randomforest_common.pyx:477-554`.
@@ -1566,6 +1649,22 @@ def fit_forest[
         raise Error("Invalid n_cols " + String(n_cols))
     rf_params.validity_check()
     rf_params.check()
+
+    # `randomforest_common.pyx:529-536`. THE PYTHON LAYER CLAMPS n_bins TO
+    # n_rows, with a warning, and it does it HERE -- inside `_fit_forest`,
+    # where n_rows is finally known -- not in `__init__`. Their C++ side
+    # never checks it: `validity_check` only bounds it to (0, 1024]
+    # (`decisiontree.cu:26-27`), so a C-API caller keeps whatever they
+    # passed. This port sits at the C-API shape but is the only door a
+    # caller has, so the clamp lives here or nowhere, and without it the
+    # quantile pass below asks for more bins than there are rows.
+    if rf_params.tree_params.max_n_bins > Int32(n_rows):
+        print(
+            "WARN: The number of bins, `n_bins` is greater than the number"
+            " of samples used for training. Changing `n_bins` to number of"
+            " training samples."
+        )
+        rf_params.tree_params.max_n_bins = Int32(n_rows)
 
     # `:298-309`
     if not rf_params.bootstrap and rf_params.max_samples != Float32(1.0):

@@ -827,10 +827,20 @@ struct RegressionObjectiveFunction[
         var left_label_sum = hist[unsafe_offset = Int(i)].LabelSum(
             self.scales
         ).cast[Self.dtype]()
-        var right_label_sum = (
-            hist[unsafe_offset = Int(n_bins) - 1].LabelSum(self.scales)
-            - hist[unsafe_offset = Int(i)].LabelSum(self.scales)
-        ).cast[Self.dtype]()
+        # THE SUBTRACTION IS AT STORAGE WIDTH, narrowed once -- theirs is
+        # `DataT(hist[n_bins - 1].LabelSum() - hist[i].LabelSum())`, and
+        # their `LabelSum()` returns the `double` that IS their storage.
+        # Ours stores Int32 fixed point, so calling `LabelSum` twice and
+        # subtracting the results would put two roundings in front of a
+        # cancellation. `LabelSumMinus` subtracts the raw integers, which
+        # is exact, and rounds once. NOTE `MSEGain` does NOT do this: their
+        # `:228` subtracts the already-narrowed `DataT` values, and that
+        # inconsistency in their source is theirs to keep.
+        var right_label_sum = hist[
+            unsafe_offset = Int(n_bins) - 1
+        ].LabelSumMinus(hist[unsafe_offset = Int(i)], self.scales).cast[
+            Self.dtype
+        ]()
 
         # `:251-253` -- label sum cannot be non-positive
         if (
@@ -885,10 +895,20 @@ struct RegressionObjectiveFunction[
         var left_label_sum = hist[unsafe_offset = Int(i)].LabelSum(
             self.scales
         ).cast[Self.dtype]()
-        var right_label_sum = (
-            hist[unsafe_offset = Int(n_bins) - 1].LabelSum(self.scales)
-            - hist[unsafe_offset = Int(i)].LabelSum(self.scales)
-        ).cast[Self.dtype]()
+        # THE SUBTRACTION IS AT STORAGE WIDTH, narrowed once -- theirs is
+        # `DataT(hist[n_bins - 1].LabelSum() - hist[i].LabelSum())`, and
+        # their `LabelSum()` returns the `double` that IS their storage.
+        # Ours stores Int32 fixed point, so calling `LabelSum` twice and
+        # subtracting the results would put two roundings in front of a
+        # cancellation. `LabelSumMinus` subtracts the raw integers, which
+        # is exact, and rounds once. NOTE `MSEGain` does NOT do this: their
+        # `:228` subtracts the already-narrowed `DataT` values, and that
+        # inconsistency in their source is theirs to keep.
+        var right_label_sum = hist[
+            unsafe_offset = Int(n_bins) - 1
+        ].LabelSumMinus(hist[unsafe_offset = Int(i)], self.scales).cast[
+            Self.dtype
+        ]()
 
         # `:279-281` -- label sum cannot be non-positive
         if (
@@ -945,10 +965,20 @@ struct RegressionObjectiveFunction[
         var left_label_sum = hist[unsafe_offset = Int(i)].LabelSum(
             self.scales
         ).cast[Self.dtype]()
-        var right_label_sum = (
-            hist[unsafe_offset = Int(n_bins) - 1].LabelSum(self.scales)
-            - hist[unsafe_offset = Int(i)].LabelSum(self.scales)
-        ).cast[Self.dtype]()
+        # THE SUBTRACTION IS AT STORAGE WIDTH, narrowed once -- theirs is
+        # `DataT(hist[n_bins - 1].LabelSum() - hist[i].LabelSum())`, and
+        # their `LabelSum()` returns the `double` that IS their storage.
+        # Ours stores Int32 fixed point, so calling `LabelSum` twice and
+        # subtracting the results would put two roundings in front of a
+        # cancellation. `LabelSumMinus` subtracts the raw integers, which
+        # is exact, and rounds once. NOTE `MSEGain` does NOT do this: their
+        # `:228` subtracts the already-narrowed `DataT` values, and that
+        # inconsistency in their source is theirs to keep.
+        var right_label_sum = hist[
+            unsafe_offset = Int(n_bins) - 1
+        ].LabelSumMinus(hist[unsafe_offset = Int(i)], self.scales).cast[
+            Self.dtype
+        ]()
 
         # `:306-308` -- label sum cannot be non-positive
         if (
