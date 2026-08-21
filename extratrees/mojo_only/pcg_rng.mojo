@@ -10,19 +10,19 @@ Every arithmetic line below is a transcription of an upstream, pinned:
 * RAFT `661a3b840c3300f95f053812a560c952c9d049a4`
   * `cpp/include/raft/random/detail/rng_device.cuh:546` `struct PCGenerator`
     * `:576-593`  `skipahead`   -> `PCGenerator.skipahead`
-    * `:599-609`  `next_u32`    -> `PCGenerator.next_u32`
-    * `:610-618`  `next_u64`    -> `PCGenerator.next_u64`
-    * `:620-627`  `next_i32`    -> `PCGenerator.next_i32`
-    * `:628-636`  `next_i64`    -> `PCGenerator.next_i64`
+    * `:599-608`  `next_u32`    -> `PCGenerator.next_u32`
+    * `:609-617`  `next_u64`    -> `PCGenerator.next_u64`
+    * `:619-626`  `next_i32`    -> `PCGenerator.next_i32`
+    * `:628-635`  `next_i64`    -> `PCGenerator.next_i64`
     * `:637-643`  `next_float`  -> `PCGenerator.next_float`
     * `:645-651`  `next_double` -> `PCGenerator.next_double`
     * `:671-680`  `_init_pcg`   -> `PCGenerator.__init__`
-  * `:174-183` `custom_next(UniformDistParams<OutType>)`            -> `uniform_float`
-  * `:186-207` `custom_next(UniformIntDistParams<OutType,uint32_t>)` -> `uniform_int_u32`
-  * `:209-231` `custom_next(UniformIntDistParams<OutType,uint64_t>)` -> `uniform_int_u64`
-  * `cpp/include/raft/util/integer_utils.hpp:206-238` `wmul_64bit`   -> `wmul_64bit`
+  * `:173-183` `custom_next(UniformDistParams<OutType>)`             -> `uniform_float`
+  * `:185-206` `custom_next(UniformIntDistParams<OutType,uint32_t>)` -> `uniform_int_u32`
+  * `:208-230` `custom_next(UniformIntDistParams<OutType,uint64_t>)` -> `uniform_int_u64`
+  * `cpp/include/raft/util/integer_utils.hpp:207-237` `wmul_64bit`   -> `wmul_64bit`
 * cuML `00094f7e4e4b5da3a968d193a4da6085fa38f11b`
-  * `cpp/src/decisiontree/batched-levelalgo/kernels/builder_kernels.cuh:97-112`
+  * `cpp/src/decisiontree/batched-levelalgo/kernels/builder_kernels.cuh:100-113`
     `fnv1a32_prime` / `fnv1a32_basis` / `fnv1a32` -> `FNV1A32_PRIME`,
     `FNV1A32_BASIS`, `fnv1a32`
   * same file `:165-176`, the call site in
@@ -39,7 +39,7 @@ Checked cell-for-cell against the upstreams' own arithmetic by
 """
 
 
-# cuML kernels/builder_kernels.cuh:97-98.
+# cuML kernels/builder_kernels.cuh:100-101.
 comptime FNV1A32_PRIME: UInt32 = 16777619
 comptime FNV1A32_BASIS: UInt32 = 2166136261
 
@@ -47,7 +47,7 @@ comptime FNV1A32_BASIS: UInt32 = 2166136261
 def fnv1a32(hash: UInt32, txt: UInt32) -> UInt32:
     """One 32-bit FNV-1a step over the four bytes of `txt`.
 
-    cuML `kernels/builder_kernels.cuh:99-112`, byte for byte. Note the order:
+    cuML `kernels/builder_kernels.cuh:102-113`, byte for byte. Note the order:
     they mix the LOW byte first, and they do not mask the multiply because
     `uint32_t` arithmetic already wraps.
     """
@@ -67,7 +67,7 @@ struct PCGenerator(Copyable, Movable):
     """RAFT's PCG, `rng_device.cuh:546-683`.
 
     Constructed from `(seed, subsequence, offset)` exactly as their lower-level
-    constructor at `:568-571`. Their other constructor, which takes a
+    constructor at `:569-572`. Their other constructor, which takes a
     `DeviceState<PCGenerator>` and adds `rng_state.base_subsequence`, is not
     ported; see DEVIATION 141.
     """
@@ -115,7 +115,7 @@ struct PCGenerator(Copyable, Movable):
         self.pcg_state = self.pcg_state * G + C
 
     def next_u32(mut self) -> UInt32:
-        """rng_device.cuh:599-609.
+        """rng_device.cuh:599-608.
 
         The output comes from the OLD state, and the rotate distance also comes
         from the OLD state's top 5 bits. `(-rot) & 31` is unsigned negation.
@@ -127,18 +127,18 @@ struct PCGenerator(Copyable, Movable):
         return (xorshifted >> rot) | (xorshifted << ((UInt32(0) - rot) & 31))
 
     def next_u64(mut self) -> UInt64:
-        """rng_device.cuh:610-618. FIRST draw is the LOW half."""
+        """rng_device.cuh:609-617. FIRST draw is the LOW half."""
         var a = self.next_u32()
         var b = self.next_u32()
         return a.cast[DType.uint64]() | (b.cast[DType.uint64]() << 32)
 
     def next_i32(mut self) -> Int32:
-        """rng_device.cuh:620-627. Sign bit cleared, not shifted away."""
+        """rng_device.cuh:619-626. Sign bit cleared, not shifted away."""
         var val = self.next_u32()
         return (val & 0x7FFFFFFF).cast[DType.int32]()
 
     def next_i64(mut self) -> Int64:
-        """rng_device.cuh:628-636."""
+        """rng_device.cuh:628-635."""
         var val = self.next_u64()
         return (val & 0x7FFFFFFFFFFFFFFF).cast[DType.int64]()
 
@@ -157,10 +157,10 @@ struct PCGenerator(Copyable, Movable):
         return val.cast[DType.float64]() / Float64(1 << 53)
 
 
-def wmul_64bit(a: UInt64, b: UInt64) -> (UInt64, UInt64):
+def wmul_64bit(a: UInt64, b: UInt64) -> Tuple[UInt64, UInt64]:
     """Wide 64x64 -> 128 multiply. Returns `(hi, lo)`.
 
-    raft/util/integer_utils.hpp:206-238. See DEVIATION 140: their `__CUDA_ARCH__`
+    raft/util/integer_utils.hpp:207-237. See DEVIATION 140: their `__CUDA_ARCH__`
     branch is `mul.hi.u64` / `mul.lo.u64` PTX; this transcribes their portable
     `#else` branch, which is the same product.
     """
@@ -187,11 +187,11 @@ def wmul_64bit(a: UInt64, b: UInt64) -> (UInt64, UInt64):
 
     # No need to worry about carry in this addition
     var res_hi = (t1 >> 32) + (t2 >> 32) + t3 + carry
-    return (res_hi, res_lo)
+    return Tuple(res_hi, res_lo)
 
 
 def uniform_int_u32(mut gen: PCGenerator, start: UInt32, diff: UInt32) -> UInt32:
-    """rng_device.cuh:186-207, `custom_next` for `UniformIntDistParams<_, uint32_t>`.
+    """rng_device.cuh:185-206, `custom_next` for `UniformIntDistParams<_, uint32_t>`.
 
     Lemire's multiply-shift with the rejection loop, drawing in `[start, start+diff)`.
     It is NOT `x % diff`, and the rejection threshold is `(-diff) % diff`, i.e.
@@ -211,7 +211,7 @@ def uniform_int_u32(mut gen: PCGenerator, start: UInt32, diff: UInt32) -> UInt32
 
 
 def uniform_int_u64(mut gen: PCGenerator, start: UInt64, diff: UInt64) -> UInt64:
-    """rng_device.cuh:209-231, `custom_next` for `UniformIntDistParams<_, uint64_t>`.
+    """rng_device.cuh:208-230, `custom_next` for `UniformIntDistParams<_, uint64_t>`.
 
     This is the overload cuML's feature sampler actually instantiates
     (`builder_kernels.cuh:173`, `UniformIntDistParams<IdxT, uint64_t>`). Same
@@ -245,7 +245,7 @@ def _product_f32(res: Float32, span: Float32) -> Float32:
 
 
 def uniform_float(mut gen: PCGenerator, start: Float32, end: Float32) -> Float32:
-    """rng_device.cuh:174-183, `custom_next` for `UniformDistParams<float>`.
+    """rng_device.cuh:173-183, `custom_next` for `UniformDistParams<float>`.
 
     `(res * (end - start)) + start` with `res = next_float()`, so the result is
     in `[start, end)` for `start <= end`. Their expression rescales the [0,1)
@@ -338,7 +338,7 @@ def uniform_threshold(key: SplitKey, min_value: Float32, max_value: Float32) -> 
 #
 # 140. The wide 64-bit multiply has no PTX fast path.
 #
-#   Theirs. `raft/util/integer_utils.hpp:207-238` picks between two
+#   Theirs. `raft/util/integer_utils.hpp:207-237` picks between two
 #   implementations on `__CUDA_ARCH__`: two inline-PTX instructions
 #   (`mul.hi.u64`, `mul.lo.u64`) on device, and a four-partial-product
 #   schoolbook expansion with an explicit carry on host.
@@ -388,7 +388,7 @@ def uniform_threshold(key: SplitKey, min_value: Float32, max_value: Float32) -> 
 #
 #   Theirs, twice over. sklearn's `rand_uniform` (`_utils.pyx:57-61`) is
 #   `float64_t` throughout. RAFT's `custom_next` for `UniformDistParams<OutType>`
-#   (`rng_device.cuh:174-183`) is generic in `OutType` and would happily be
+#   (`rng_device.cuh:173-183`) is generic in `OutType` and would happily be
 #   instantiated at `double`, and writes the rescale as one C++ expression,
 #   `(res * (params.end - params.start)) + params.start`, which both nvcc
 #   (`--fmad=true` by default) and clang (`-ffp-contract=on`) may contract into
@@ -401,16 +401,27 @@ def uniform_threshold(key: SplitKey, min_value: Float32, max_value: Float32) -> 
 #   add: Mojo contracts multiply-then-add ACROSS statements, so writing the two
 #   halves on separate lines is not enough.
 #
-#   Why the fusion matters. FMA and mul-then-add differ by one rounding of the
-#   product. On a threshold that is compared with `<=` against feature values,
-#   one rounding decides which side a row falls on when the threshold lands
-#   exactly on a value -- and ExtraTrees draws thresholds in the OPEN interval
-#   between the observed min and max, so landing on a value is not rare.
-#   Unfused is the choice because it is the reproducible one: it is what the
-#   reference is built with (`build.sh` passes `-ffp-contract=off`) and it does
-#   not depend on whether a given backend felt like fusing.
+#   What was actually measured, because this is easy to overclaim. Three runs of
+#   `pcg_rng_check.mojo`:
+#     * unfused Mojo vs unfused reference -- 0 of 2658 cells differ. Shipped.
+#     * FUSED Mojo (the `@no_inline` removed, written as one expression) vs the
+#       unfused reference -- 99 cells differ, every one of them by one ULP. So
+#       Mojo does contract here, and the `@no_inline` barrier is load-bearing,
+#       not defensive.
+#     * fused Mojo vs a reference built WITHOUT `-ffp-contract=off` -- also 0
+#       of 2658. Both toolchains lower the fused form to the same arm64
+#       `fmadd`, so fused-vs-fused agrees on this box.
 #
-#   Price. One extra rounding of accuracy against a `float64` sklearn, and one
-#   un-inlinable call in the threshold path. Both are measured against the
-#   oracle rather than argued about; the accuracy one is a quality-band
-#   question that DEVIATION 130 already put out of gate scope.
+#   So unfused is a CHOICE, not the only thing that works. It is chosen because
+#   the fused form's agreement is an accident of two compilers making the same
+#   optimisation decision on one target, and it would have to be re-established
+#   on every backend; the unfused form is determined by the source. FMA and
+#   mul-then-add differ by one rounding of the product, and on a threshold
+#   compared with `<=` against feature values, one rounding decides which side
+#   a row falls on when the threshold lands exactly on a value -- which, for a
+#   threshold drawn between the observed min and max, is not rare.
+#
+#   Price. One extra rounding of accuracy against a `float64` sklearn, one
+#   un-inlinable call in the threshold path, and a build flag in
+#   `tools/rng_oracle/build.sh` that must not be dropped. The accuracy one is a
+#   quality-band question that DEVIATION 130 already put out of gate scope.

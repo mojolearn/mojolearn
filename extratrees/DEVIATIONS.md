@@ -251,3 +251,174 @@ algorithms.
 `GAMMA` and `INVERSE_GAUSSIAN` exist in `algo_helper.h:20-29` with real kernels
 (`kernels/poisson-*.cu` and siblings) and are refused here rather than
 downgraded to MSE. `MAE` is refused by cuML itself (`decisiontree.cu:38`).
+
+---
+
+## 140. RAFT's wide 64-bit multiply has no PTX fast path here
+
+**Theirs.** `raft/util/integer_utils.hpp:207-237` (`wmul_64bit`) picks between
+two implementations on `__CUDA_ARCH__`: two inline-PTX instructions
+(`mul.hi.u64`, `mul.lo.u64`) on device, and a four-partial-product schoolbook
+expansion with an explicit carry on host.
+
+**Ours.** Only the schoolbook expansion, transcribed line for line. Mojo has no
+inline PTX, and under the ALWAYS-GPU-AGNOSTIC rule an `if nvidia:` arm would be
+forbidden even if it did.
+
+**Why it is safe.** The two branches compute the same 128-bit product — a
+code-generation difference, not an arithmetic one. The oracle exercises the
+result through `uniform_int_u64` over seven ranges (including `diff = 2^63 + 1`,
+which puts a bit in every position of the high word) across nine streams, plus
+four hand-written cells pinning the low word.
+
+**Price.** On device this is several instructions instead of two. Perf is
+deferred; when it stops being deferred this is a KERNEL MATRIX row, not a file
+edit.
+
+---
+
+## 141. Only PCGenerator's three-argument constructor is ported, and there is no `half`
+
+**Theirs.** `PCGenerator` has a second constructor taking
+`DeviceState<PCGenerator>` (`rng_device.cuh:557-560`) which forms
+`_init_pcg(state.seed, state.base_subsequence + subsequence, subsequence)` —
+note it passes the subsequence AGAIN as the offset. It also has `next_half`
+(`:653-657`).
+
+**Ours.** Only `PCGenerator(seed, subsequence, offset)`, which is the one cuML's
+decision-tree code calls (`builder_kernels.cuh:172`), and no `half`.
+
+**Why.** `DeviceState` and `Rng` are RAFT's whole-array RNG driver, one
+generator per thread of a fill kernel. Nothing in this lane fills an array with
+noise; every draw is keyed. `half` has no use either — thresholds are compared
+against `Float32` feature values.
+
+**Price.** Anyone later porting RAFT's `Rng` array fills must port the
+`DeviceState` constructor AND notice that its offset argument is the
+subsequence, not zero. An omission, not a behaviour change: no ported call site
+takes the missing path.
+
+---
+
+## 142. Thresholds are Float32, and the rescale is not allowed to fuse
+
+**Theirs, twice over.** sklearn's `rand_uniform` (`_utils.pyx:57-61`) is
+`float64_t` throughout. RAFT's `custom_next` for `UniformDistParams<OutType>`
+(`rng_device.cuh:173-183`) writes the rescale as ONE C++ expression,
+`(res * (params.end - params.start)) + params.start`, which both nvcc
+(`--fmad=true`) and clang (`-ffp-contract=on`) may contract into a single FMA.
+
+**Ours.** `Float32`, because there is no `float64` on device. And the multiply
+is isolated in a `@no_inline` helper so the product is rounded before the add —
+Mojo contracts multiply-then-add ACROSS STATEMENTS, so putting the two halves
+on separate lines is not enough. This is the third sibling in this repository's
+FMA-contraction family.
+
+**Measured, because it is easy to overclaim.** Unfused Mojo vs unfused
+reference: 0 of 2658 cells differ. Fused Mojo vs unfused reference: 99 cells
+differ, each by exactly one ULP — so the barrier is load-bearing. Fused Mojo vs
+a reference built WITHOUT `-ffp-contract=off`: also 0 of 2658, because both
+toolchains lower the fused form to the same arm64 `fmadd`.
+
+**So unfused is a CHOICE, not the only thing that works.** It is chosen because
+the fused form's agreement is an accident of two compilers making the same
+decision on one target, and would have to be re-established on every backend;
+the unfused form is determined by the source. FMA versus mul-then-add differ by
+one rounding of the product, and on a threshold compared with `<=` against
+feature values, one rounding decides which side a row falls on when the
+threshold lands exactly on a value — which, for a threshold drawn between the
+observed min and max, is not rare.
+
+**Price.** One extra rounding against a `float64` sklearn, one un-inlinable
+call in the threshold path, and a build flag in `tools/rng_oracle/build.sh`
+that must not be dropped.
+
+---
+
+## 146. `TreeMetaDataNode` is reduced: `train_time` is not ported
+
+**Theirs.** `decisiontree.hpp:101-109` has seven members, including
+`double train_time`, a wall-clock figure the builder stamps and the text/JSON
+dumps print.
+
+**Ours.** Six members; `train_time` is absent.
+
+**Why.** Timing is deferred in this lane by explicit instruction, so a seconds
+field would be written by nothing and read by nothing, and rule 3 says an
+unported thing must be VISIBLE rather than present-but-dead. It is also the one
+member that could not survive a move to device memory (no `float64` on device).
+
+**Price.** `get_tree_summary_text` / `get_tree_json` (`decisiontree.hpp:119`,
+`:139`) would print a train time we cannot print. No such dump exists here yet,
+so the price is currently zero and becomes one line when there is one.
+
+**NOT a deviation:** `std::vector` -> `List` (same contiguous owning array),
+and the member ORDER differing, because nothing indexes this struct by offset;
+the node array's own layout is untouched.
+
+---
+
+## 147. `predict_one` accumulates and never zeroes; we mirror that and add a zeroing entry point beside it
+
+**Theirs.** `decisiontree.cuh:410-412` is
+`preds_out[i] += tree.vector_leaf[idx * num_outputs + i];` — `+=`, not `=` — and
+`predict_all` (`:382-392`) does not zero `preds` either. The reason is one level
+up: `RandomForest::predict` declares `std::vector<T> row_prediction(num_outputs)`
+INSIDE the row loop (`randomforest.cuh:229`), which value-initialises to zero,
+calls the tree predictor once per tree into that same buffer (`:231-237`), then
+divides by `n_trees` (`:240-242`). **The accumulation across trees IS the forest
+sum, and the only thing that ever zeroes the buffer is `std::vector`'s
+constructor.** Hand `predict_all` a dirty buffer and it silently adds to garbage.
+
+**Ours.** `predict_one_accumulate` / `predict_all_accumulate` are theirs, `+=`
+and no zeroing. `predict_all` — the name a caller reaches for first — zeroes
+`preds` and then calls the accumulating form.
+
+**Why.** The "output must already be zero" contract is invisible in the
+signature and documented nowhere in their header, and it is exactly the kind of
+thing a check cannot see: a check that allocates a fresh zero buffer passes
+under both behaviours.
+
+**Price.** Two names where cuML has one. A lane porting `RandomForest::predict`
+later MUST reach for the accumulating one or the forest sum is lost. Both
+behaviours are checked: the check dirties the buffer, confirms `predict_all`
+overwrites, then confirms a second accumulating pass exactly doubles.
+
+---
+
+## 148. The node's template shape is narrowed: `LabelT` dropped, `IdxT` fixed to Int32
+
+**Theirs.**
+`template <typename DataT, typename LabelT, typename IdxT = int> struct SparseTreeNode`
+(`flatnode.h:33`). `LabelT` appears in none of the five fields (`:36-40`) and
+none of the accessors (`:52-57`); it exists only so `TreeMetaDataNode<T,L>` can
+spell a matching node type. Both factories spell their return type
+`SparseTreeNode<DataT, LabelT>` (`:62`, `:67`), **dropping `IdxT`** — so a
+caller who instantiated with a non-default `IdxT` gets a different type back
+from `CreateSplitNode`. Nobody upstream does, so it never fires.
+
+**Ours.** One parameter carrying `DataT`. `LabelT` is not modelled. `IdxT` is
+`Int32` everywhere, spelled out.
+
+**Why.** `LabelT` is a phantom parameter Mojo would force onto every use site of
+a struct that never reads it. Fixing `IdxT` removes their latent factory bug by
+construction. `int` is 32-bit on every platform cuML builds for, so `Int32` is
+what `IdxT = int` means, not a narrowing.
+
+**Price.** No 64-bit node indices — but cuML cannot have them either, since
+`left_child_id` is `IdxT` (`flatnode.h:39`), so their tree is already capped at
+2^31 nodes whatever you pass. The cap is theirs; we only stopped pretending it
+is configurable.
+
+**Explicitly NOT a deviation, mirrored exactly:** their `LeftChildId()` /
+`RightChildId()` return `int64_t` (`:55-56`) out of an `IdxT` field, and their
+constructor takes `int64_t left_child_id` (`:42`) and narrows it into the
+`IdxT` field (`:46`) unchecked. Ours does the same. Rule: transcribe, do not
+tidy.
+
+**Also recorded, and it is a behaviour we inherited rather than chose:** cuML's
+argmax at a leaf (`randomforest.cuh:243-253`) initialises `best_prob` to `0.0`,
+not `-inf`, and tests strictly greater while scanning `k` ascending. So an exact
+tie keeps the LOWEST class index, and a leaf whose scores are all `<= 0` returns
+class 0 by default without the comparison ever firing. Ported as written, and
+both cases are in the check.

@@ -8,14 +8,14 @@
 //
 // Pins:
 //   RAFT 661a3b840c3300f95f053812a560c952c9d049a4
-//     cpp/include/raft/random/detail/rng_device.cuh:545-683  (struct PCGenerator)
-//     cpp/include/raft/random/detail/rng_device.cuh:174-183   (custom_next, UniformDistParams)
-//     cpp/include/raft/random/detail/rng_device.cuh:186-207   (custom_next, UniformIntDistParams<_,uint32_t>)
-//     cpp/include/raft/random/detail/rng_device.cuh:209-231   (custom_next, UniformIntDistParams<_,uint64_t>)
-//     cpp/include/raft/util/integer_utils.hpp:206-238         (wmul_64bit)
+//     cpp/include/raft/random/detail/rng_device.cuh:546-683  (struct PCGenerator)
+//     cpp/include/raft/random/detail/rng_device.cuh:173-183   (custom_next, UniformDistParams)
+//     cpp/include/raft/random/detail/rng_device.cuh:185-206   (custom_next, UniformIntDistParams<_,uint32_t>)
+//     cpp/include/raft/random/detail/rng_device.cuh:208-230   (custom_next, UniformIntDistParams<_,uint64_t>)
+//     cpp/include/raft/util/integer_utils.hpp:207-237         (wmul_64bit)
 //   cuML 00094f7e4e4b5da3a968d193a4da6085fa38f11b
-//     cpp/src/decisiontree/batched-levelalgo/kernels/builder_kernels.cuh:97-112 (fnv1a32)
-//     cpp/src/decisiontree/batched-levelalgo/kernels/builder_kernels.cuh:165-176 (the key chain + PCGenerator ctor)
+//     cpp/src/decisiontree/batched-levelalgo/kernels/builder_kernels.cuh:100-113 (fnv1a32)
+//     cpp/src/decisiontree/batched-levelalgo/kernels/builder_kernels.cuh:167-172 (the key chain + PCGenerator ctor)
 //
 // Build with tools/rng_oracle/build.sh. No CUDA toolkit is needed: every line
 // below is plain C++ once HDI is defined away.
@@ -28,7 +28,7 @@
 #define DI inline
 
 // ---------------------------------------------------------------------------
-// raft/util/integer_utils.hpp:206-238, the non-__CUDA_ARCH__ branch verbatim.
+// raft/util/integer_utils.hpp:207-237, the non-__CUDA_ARCH__ branch verbatim.
 // The __CUDA_ARCH__ branch is two PTX `mul.hi.u64` / `mul.lo.u64` instructions
 // computing the same product.
 // ---------------------------------------------------------------------------
@@ -61,7 +61,7 @@ HDI void wmul_64bit(uint64_t& res_hi, uint64_t& res_lo, uint64_t a, uint64_t b)
 }
 
 // ---------------------------------------------------------------------------
-// raft/random/detail/rng_device.cuh:545-683, verbatim minus the `half` members
+// raft/random/detail/rng_device.cuh:546-683, verbatim minus the `half` members
 // and the DeviceState-taking constructor (neither has a Mojo counterpart).
 // ---------------------------------------------------------------------------
 struct PCGenerator {
@@ -180,7 +180,7 @@ struct UniformIntDistParams {
   DiffType diff;
 };
 
-// raft/random/detail/rng_device.cuh:174-183
+// raft/random/detail/rng_device.cuh:173-183
 template <typename GenType, typename OutType, typename LenType>
 HDI void custom_next(GenType& gen,
                      OutType* val,
@@ -193,7 +193,7 @@ HDI void custom_next(GenType& gen,
   *val = (res * (params.end - params.start)) + params.start;
 }
 
-// raft/random/detail/rng_device.cuh:186-207
+// raft/random/detail/rng_device.cuh:185-206
 template <typename GenType, typename OutType, typename LenType>
 HDI void custom_next(GenType& gen,
                      OutType* val,
@@ -217,7 +217,7 @@ HDI void custom_next(GenType& gen,
   *val = OutType(m >> 32) + params.start;
 }
 
-// raft/random/detail/rng_device.cuh:209-231
+// raft/random/detail/rng_device.cuh:208-230
 template <typename GenType, typename OutType, typename LenType>
 HDI void custom_next(GenType& gen,
                      OutType* val,
@@ -242,7 +242,7 @@ HDI void custom_next(GenType& gen,
 }
 
 // ---------------------------------------------------------------------------
-// cuML kernels/builder_kernels.cuh:97-112
+// cuML kernels/builder_kernels.cuh:100-113
 // ---------------------------------------------------------------------------
 const uint32_t fnv1a32_prime = uint32_t(16777619);
 const uint32_t fnv1a32_basis = uint32_t(2166136261);

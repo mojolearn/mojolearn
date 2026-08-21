@@ -1,0 +1,6 @@
+*
+!.gitignore
+!main.cpp
+!build.sh
+!README.md
+!pcg_reference.txt

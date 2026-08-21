@@ -30,9 +30,12 @@ nothing here may break it.
 (`decisiontree.cuh:403-404`), and their treelite export writes the same
 predicate as `tl::Operator::kLE` on the numerical test
 (`decisiontree.cuh:214-215`). scikit-learn `1.9.0`'s `partition_samples` sends
-`feature_value <= threshold` LEFT (`sklearn/tree/_partitioner.pyx:236-240`,
-inside the `partition_samples` at `:217-245`). **They agree.** `x <= quesval`
-goes LEFT; there was nothing to choose between and no deviation was needed.
+`feature_value <= threshold` LEFT: `sklearn/tree/_partitioner.pyx:238`, inside
+`DensePartitioner.partition_samples` at `:217-246`, and the same predicate
+again at `:272` (`partition_samples_final`) and at `:488`
+(`SparsePartitioner.partition_samples`), so all three of sklearn's partition
+sites agree with each other. **cuML and sklearn agree.** `x <= quesval` goes
+LEFT; there was nothing to choose between and no deviation was needed.
 
 **The struct is POD on purpose.** Five scalar fields, no `String`, no `List`,
 no heap, so a kernel can be handed `tree.sparsetree.unsafe_ptr()` and read it.
@@ -473,7 +476,7 @@ def predict_one_accumulate[
     """`predict_one`, `decisiontree.cuh:394-413`. ACCUMULATES (`+=`), and
     does NOT zero `preds_out`. See DEVIATION 147."""
     var idx = predict_leaf(tree, row, row_offset)
-    var base = idx * num_outputs
+    var base = tree.leaf_base(idx)
     for i in range(num_outputs):
         preds_out[preds_offset + i] += tree.vector_leaf[base + i]
 

@@ -6,13 +6,19 @@
 # plain C++.
 #
 # -ffp-contract=off is deliberate and load-bearing. RAFT's uniform-float
-# expression is `(res * (end - start)) + start`, which clang is otherwise free
-# to contract into a single FMA; the Mojo side is written to NOT contract, so
-# the reference must not either or the two disagree by one rounding of the
-# product. See DEVIATION 142 in ../../mojo_only/pcg_rng.mojo.
+# expression is `(res * (end - start)) + start`, which clang at its default
+# `-ffp-contract=on` DOES contract into a single FMA -- measured: dropping this
+# flag changes the `uf` lines of pcg_reference.txt. The Mojo side is written
+# not to contract, so the reference must not either. See DEVIATION 142 in
+# ../../mojo_only/pcg_rng.mojo.
+#
+# The compiled binary is a build artifact and is deleted again; only
+# pcg_reference.txt is meant to be kept.
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 cd "$here"
-/usr/bin/clang++ -std=c++17 -O2 -ffp-contract=off -Wall -o rng_oracle main.cpp
-./rng_oracle
+bin=$(mktemp -t rng_oracle)
+trap 'rm -f "$bin"' EXIT INT TERM
+/usr/bin/clang++ -std=c++17 -O2 -ffp-contract=off -Wall -o "$bin" main.cpp
+"$bin"
 wc -l pcg_reference.txt
