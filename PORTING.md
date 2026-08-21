@@ -90,17 +90,38 @@ Mojo. Port writes a stable 1-bit partition per leaf range, which is what the
 sort is being used for.
 
 
-## 5. Vector loads not ported
+## 5. Vector loads: PORTED (this entry was stale). The one residue is the
+## alignment CLAIM, measured a wash 2026-08-21
 
-CatBoost instantiates a different `TComputeHistogramImpl` per load width and
-picks 2 or 4 elements by arch (`point_hist_half_byte_template.cuh:34-41`).
-The port takes the `OneElement` specialization only. Scheduling, not numeric:
-the same values are added in the same order, fewer at a time.
+This entry used to say the port takes the `OneElement` specialization only.
+That was falsified by the code long before it was falsified in this file:
+every histogram family now carries the `FourElements` loop -- `LOAD_SIZE =
+4`, the warp-stripe layout, the `Unroll` batches, `ldg[width=4]` -- ported
+from `compute_hist_loop_two_stats.cuh` / `_one_stat.cuh`, with the item-6
+peel. What their arch pick chooses (`point_hist_half_byte_template.cuh:34-41`:
+FourElements on modern arch) is what the port runs.
 
-## 6. `AlignMemoryAccess` peel omitted
+What did NOT come across is their 16-byte alignment GUARANTEE. Their column
+stride is `AlignedColumnSize()`, so `(uint4*)` casts are legal at any
+partition offset; our columns stride at raw `n_rows`
+(`greedy_search_helper.mojo`), so the loads are stated `alignment=4`.
+MEASURED 2026-08-21, isolated stripe-read at the hist loop's exact access
+shape, 128 MB, arms alternated in one process: `alignment=4` ~52 GB/s
+median against `alignment=16` ~56 GB/s, ranges overlapping heavily
+(35-62 vs 50-64). Even reading the 8% edge as real, deviation 60's
+calibration (5.9x isolated became 2.7% end-to-end) bounds it far under 1%
+of a tree. **Porting `AlignedColumnSize()` padding to buy the claim is
+therefore DECLINED, priced here.** The width was the money; the claim is
+noise on this box.
 
-It exists to align the vector loads of item 5. At one element per load there
-is nothing to align. Required the moment the load width moves above 1.
+## 6. `AlignMemoryAccess` peel: PORTED with the loads of item 5
+
+The original entry recorded the peel as omitted because at one element per
+load there was nothing to align. The `FourElements` port brought it across:
+block 0 walks the unaligned head and tail through scalar `AddPoint` and the
+striped loop sees the aligned middle only, which is what makes the 4-wide
+load legal (no per-element bounds test in the body). Their two-macro shape
+(`ALIGN_MEMORY` / `ALIGN_MEMORY_GATHER`) is mirrored in each kernel file.
 
 ## 7. THE FLOAT ATOMIC FLUSH (THE PREMISE WAS WRONG)
 
