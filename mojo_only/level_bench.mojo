@@ -72,6 +72,7 @@ from gbdt.methods.greedy_subsets_searcher.kernel.split_points import (
     launch_stable_partition,
 )
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
+    upload_scale,
     TTreeWorkspace,
     run_one_level,
     run_tree,
@@ -231,6 +232,14 @@ def bench_histogram_only(n_rows: Int, repeats: Int) raises:
     )
     ctx.synchronize()
 
+    # DEVIATION 95: `fixed_scale` is a DEVICE pointer. Built ONCE, OUTSIDE
+    # the timing loop -- `upload_scale` drains, and a drain inside the
+    # timed region would be measured as histogram time. The hold is after
+    # the loop, past the LAST launch that reads it.
+    var scale_keep = upload_scale(ctx, Float32(1.0))
+    var scale_ptr = rebind[MutPointer[Float32, MutAnyOrigin]](
+        scale_keep.unsafe_ptr()
+    )
     var best = 0
     for i in range(repeats + 1):
         var t0 = perf_counter_ns()
@@ -250,7 +259,7 @@ def bench_histogram_only(n_rows: Int, repeats: Int) raises:
             p_ids.unsafe_ptr(),
             hist.unsafe_ptr(),
             acc_scratch.unsafe_ptr(),
-            Float32(1.0),
+            scale_ptr,
             Int32(1),
             Int32(stat_count),
             grid_dim=(1, 1, stat_count),
@@ -262,6 +271,7 @@ def bench_histogram_only(n_rows: Int, repeats: Int) raises:
             best = dt
         elif i > 1 and dt < best:
             best = dt
+    _ = scale_keep^
 
     var ms = Float64(best) / 1.0e6
     var cells = Float64(n_rows) * Float64(n_features)
@@ -822,6 +832,14 @@ def bench_wide_histogram_interleaved(n_rows: Int, repeats: Int) raises:
     # accumulator, so this bench measures the flush as well as the loads.
     var acc_rep = ctx.enqueue_create_buffer[DType.int32](n_features * 256)
     ctx.synchronize()
+    # DEVIATION 95, and this arm is the one that MATTERS for the scale: at
+    # 16 blocks the fixed-point flush engages and the kernel reads it every
+    # launch. Built once outside the timed region (`upload_scale` drains)
+    # and held past the whole rep/arm loop below.
+    var scale_keep = upload_scale(ctx, Float32(1.0))
+    var scale_ptr = rebind[MutPointer[Float32, MutAnyOrigin]](
+        scale_keep.unsafe_ptr()
+    )
     for rep in range(repeats + 1):
         for arm in range(2):
             var reps = 1 if arm == 0 else 16
@@ -835,7 +853,7 @@ def bench_wide_histogram_interleaved(n_rows: Int, repeats: Int) raises:
                 Int32(0),
                 stats.unsafe_ptr(), Int32(n_rows),
                 p_off.unsafe_ptr(), p_sz.unsafe_ptr(), p_ids.unsafe_ptr(),
-                sums.unsafe_ptr(), acc_rep.unsafe_ptr(), Float32(1.0),
+                sums.unsafe_ptr(), acc_rep.unsafe_ptr(), scale_ptr,
                 Int32(1), Int32(1),
                 grid_dim=(reps, 1, 1),
                 block_dim=(ONE_BYTE_BLOCK_SIZE, 1, 1),
@@ -848,6 +866,7 @@ def bench_wide_histogram_interleaved(n_rows: Int, repeats: Int) raises:
                 s1.append(dt)
             else:
                 s16.append(dt)
+    _ = scale_keep^
 
     var arms = List[ArmResult]()
     arms.append(summarize(String("1 block  "), s1))

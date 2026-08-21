@@ -390,3 +390,10 @@ def check_bernoulli_and_poisson(ctx: DeviceContext) raises:
         )
     print("  poisson: lambda 1 -> mean", mean, ", integer weights,",
           zeros, "zeros and", big, "draws >= 3 -- both planes identical")
+
+
+def main() raises:
+    # STANDALONE DRIVER, the same call `probe_main.mojo` makes.
+    # `check_bootstrap` builds the `DeviceContext` and hands it to
+    # `check_bernoulli_and_poisson` itself, so this must NOT build one.
+    check_bootstrap()

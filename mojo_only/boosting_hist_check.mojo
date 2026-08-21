@@ -578,3 +578,14 @@ def compare_cells(
         "at cell", worst_cell,
     )
     return wrong
+
+
+def main() raises:
+    # STANDALONE DRIVER, the same call `probe_main.mojo` makes under
+    # "half-byte histogram at TWO FEATURE GROUPS vs a host tally (GPU)".
+    # Defaults only: 8192 rows x 16 half-byte features at 15 folds is the
+    # shape that takes TWO compressed-index columns, which is the whole
+    # point of the fixture -- a smaller feature count would run one group
+    # and check nothing this file exists for.
+    print("half-byte histogram at TWO FEATURE GROUPS vs a host tally (GPU):")
+    check_boosting_histogram()

@@ -99,3 +99,10 @@ def check_binarization() raises:
         raise Error("a skewed column produced no borders")
 
     print("  border selection behaves like GreedyLogSum")
+
+
+def main() raises:
+    # STANDALONE DRIVER, the same call `probe_main.mojo` makes under
+    # "border selection (host, as theirs is)".
+    print("border selection (host, as theirs is):")
+    check_binarization()

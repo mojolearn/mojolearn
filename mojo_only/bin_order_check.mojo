@@ -263,3 +263,13 @@ def check_bin_order_has_teeth() raises:
                 "build_layout is still numbering bins in input order"
             )
     print("  the check has teeth: the old numbering fails, the new one holds")
+
+
+def main() raises:
+    # STANDALONE DRIVER. Nothing else in the tree calls this file: it has
+    # never had a caller, in `probe_main` or anywhere else, so registering
+    # `check-bin-order` without one meant the module could not run at all.
+    # Host arithmetic only, so there is no `DeviceContext` to build.
+    print("flat-bin numbering, input order NOT block order (host):")
+    check_bin_order()
+    check_bin_order_has_teeth()

@@ -67,6 +67,9 @@ from gbdt.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
     one_byte_hist_kernel,
 
 )
+from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
+    upload_scale,
+)
 from gbdt.methods.greedy_subsets_searcher.kernel.hist_half_byte import (
     half_byte_hist_kernel,
 )
@@ -163,6 +166,16 @@ def check_binary_histogram() raises:
     ctx.enqueue_copy(dst_buf=sums, src_ptr=zerof.unsafe_ptr())
     ctx.synchronize()
 
+    # DEVIATION 95: the histogram kernels read `fixed_scale` from DEVICE
+    # memory. `upload_scale` returns the buffer and the CALLER keeps it
+    # alive: Mojo frees at its last use, and `.unsafe_ptr()` is a use, so
+    # without the `_ = scale_keep^` below the buffer is dead before the
+    # kernel runs and the next allocation lands on it.
+    var scale_keep = upload_scale(ctx, Float32(1.0))
+    var scale_ptr = rebind[MutPointer[Float32, MutAnyOrigin]](
+        scale_keep.unsafe_ptr()
+    )
+
     ctx.enqueue_function[binary_hist_kernel](
         folds.unsafe_ptr(),
         fold_off.unsafe_ptr(),
@@ -179,13 +192,14 @@ def check_binary_histogram() raises:
         p_ids.unsafe_ptr(),
         sums.unsafe_ptr(),
         acc_scratch.unsafe_ptr(),
-        Float32(1.0),
+        scale_ptr,
         Int32(1),
         Int32(1),
         grid_dim=(1, 1, 1),
         block_dim=(BLOCK_SIZE, 1, 1),
     )
     ctx.synchronize()
+    _ = scale_keep^
 
     var out = ctx.enqueue_create_host_buffer[DType.float32](n_features)
     ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=sums)
@@ -308,6 +322,15 @@ def check_two_partitions() raises:
     ctx.enqueue_copy(dst_buf=sums, src_ptr=zerof.unsafe_ptr())
     ctx.synchronize()
 
+    # DEVIATION 95: the histogram kernels read `fixed_scale` from DEVICE
+    # memory. `upload_scale` returns the buffer and the CALLER keeps it
+    # alive: Mojo frees at its last use, and `.unsafe_ptr()` is a use, so
+    # without the `_ = scale_keep^` below the buffer is dead before the
+    # kernel runs and the next allocation lands on it.
+    var scale_keep = upload_scale(ctx, Float32(1.0))
+    var scale_ptr = rebind[MutPointer[Float32, MutAnyOrigin]](
+        scale_keep.unsafe_ptr()
+    )
     # grid y = 2: BOTH leaves in ONE launch. That is the design property.
     ctx.enqueue_function[binary_hist_kernel](
         folds.unsafe_ptr(),
@@ -325,13 +348,14 @@ def check_two_partitions() raises:
         p_ids.unsafe_ptr(),
         sums.unsafe_ptr(),
         acc_scratch.unsafe_ptr(),
-        Float32(1.0),
+        scale_ptr,
         Int32(2),
         Int32(1),
         grid_dim=(1, 2, 1),
         block_dim=(BLOCK_SIZE, 1, 1),
     )
     ctx.synchronize()
+    _ = scale_keep^
 
     var out = ctx.enqueue_create_host_buffer[DType.float32](2 * n_features)
     ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=sums)
@@ -450,6 +474,16 @@ def check_half_byte_histogram() raises:
     ctx.enqueue_copy(dst_buf=sums, src_ptr=zerof.unsafe_ptr())
     ctx.synchronize()
 
+    # DEVIATION 95: the histogram kernels read `fixed_scale` from DEVICE
+    # memory. `upload_scale` returns the buffer and the CALLER keeps it
+    # alive: Mojo frees at its last use, and `.unsafe_ptr()` is a use, so
+    # without the `_ = scale_keep^` below the buffer is dead before the
+    # kernel runs and the next allocation lands on it.
+    var scale_keep = upload_scale(ctx, Float32(1.0))
+    var scale_ptr = rebind[MutPointer[Float32, MutAnyOrigin]](
+        scale_keep.unsafe_ptr()
+    )
+
     ctx.enqueue_function[half_byte_hist_kernel](
         folds.unsafe_ptr(),
         fold_off.unsafe_ptr(),
@@ -466,13 +500,14 @@ def check_half_byte_histogram() raises:
         p_ids.unsafe_ptr(),
         sums.unsafe_ptr(),
         hb_acc.unsafe_ptr(),
-        Float32(1.0),
+        scale_ptr,
         Int32(1),
         Int32(1),
         grid_dim=(1, 1, 1),
         block_dim=(BLOCK_SIZE, 1, 1),
     )
     ctx.synchronize()
+    _ = scale_keep^
 
     var out = ctx.enqueue_create_host_buffer[DType.float32](group_size)
     ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=sums)
@@ -1431,6 +1466,16 @@ def check_one_byte_bits[bits: Int](n_stats: Int = 1, rows_per_fold: Int = 10, sc
     )
     ctx.synchronize()
 
+    # DEVIATION 95: the histogram kernels read `fixed_scale` from DEVICE
+    # memory. `upload_scale` returns the buffer and the CALLER keeps it
+    # alive: Mojo frees at its last use, and `.unsafe_ptr()` is a use, so
+    # without the `_ = scale_keep^` below the buffer is dead before the
+    # kernel runs and the next allocation lands on it.
+    var scale_keep = upload_scale(ctx, Float32(1.0))
+    var scale_ptr = rebind[MutPointer[Float32, MutAnyOrigin]](
+        scale_keep.unsafe_ptr()
+    )
+
     ctx.enqueue_function[
         one_byte_hist_kernel[bits, HIST_SMEM_WARP_PRIVATE_F32]
     ](
@@ -1451,13 +1496,14 @@ def check_one_byte_bits[bits: Int](n_stats: Int = 1, rows_per_fold: Int = 10, sc
         # grid.x is 1 here, so the fixed-point flush never engages and the
         # accumulator is only along for the signature.
         acc_unused.unsafe_ptr(),
-        Float32(1.0),
+        scale_ptr,
         Int32(1),
         Int32(n_stats),
         grid_dim=(1, 1, n_stats),
         block_dim=(ONE_BYTE_BLOCK_SIZE, 1, 1),
     )
     ctx.synchronize()
+    _ = scale_keep^
 
     var out = ctx.enqueue_create_host_buffer[DType.float32](
         n_stats * group_size
@@ -1590,6 +1636,15 @@ def check_gather_matches_direct() raises:
     var hidx = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
     var out = ctx.enqueue_create_host_buffer[DType.float32](n_features)
 
+    # DEVIATION 95: the histogram kernels read `fixed_scale` from DEVICE
+    # memory. `upload_scale` returns the buffer and the CALLER keeps it
+    # alive: Mojo frees at its last use, and `.unsafe_ptr()` is a use, so
+    # without the `_ = scale_keep^` below the buffer is dead before the
+    # kernel runs and the next allocation lands on it.
+    var scale_keep = upload_scale(ctx, Float32(1.0))
+    var scale_ptr = rebind[MutPointer[Float32, MutAnyOrigin]](
+        scale_keep.unsafe_ptr()
+    )
     # direct
     ctx.enqueue_copy(dst_buf=sums, src_ptr=zf.unsafe_ptr())
     ctx.synchronize()
@@ -1598,7 +1653,7 @@ def check_gather_matches_direct() raises:
         grp_sz.unsafe_ptr(), Int32(n_features), cindex.unsafe_ptr(),
         Int32(n_rows), Int32(0), stats.unsafe_ptr(), Int32(n_rows),
         p_off.unsafe_ptr(), p_sz.unsafe_ptr(), p_ids.unsafe_ptr(),
-        sums.unsafe_ptr(), acc_scratch.unsafe_ptr(), Float32(1.0),
+        sums.unsafe_ptr(), acc_scratch.unsafe_ptr(), scale_ptr,
         Int32(1), Int32(1),
         grid_dim=(1, 1, 1), block_dim=(BLOCK_SIZE, 1, 1),
     )
@@ -1625,7 +1680,7 @@ def check_gather_matches_direct() raises:
             Int32(n_rows), Int32(0), idx.unsafe_ptr(), stats.unsafe_ptr(),
             Int32(n_rows), p_off.unsafe_ptr(), p_sz.unsafe_ptr(),
             p_ids.unsafe_ptr(), sums.unsafe_ptr(), acc_scratch.unsafe_ptr(),
-            Float32(1.0), Int32(1), Int32(1),
+            scale_ptr, Int32(1), Int32(1),
             grid_dim=(1, 1, 1), block_dim=(BLOCK_SIZE, 1, 1),
         )
         ctx.synchronize()
@@ -1638,7 +1693,38 @@ def check_gather_matches_direct() raises:
                 wrong += 1
         print("    gather with", label, "index vs direct: wrong", wrong)
         bad += wrong
+    # the gather launches above are the LAST readers of the scale; the
+    # hold goes past the loop, not past the first launch inside it.
+    _ = scale_keep^
 
     if bad != 0:
         raise Error("the gather histogram disagrees with the direct one")
     print("  gather matches direct under identity AND permutation")
+
+
+def main() raises:
+    # STANDALONE DRIVER. Every call `probe_main.mojo` makes under "binary
+    # histogram correctness (GPU)", in its order and with its arguments --
+    # including the four one-byte accumulator widths, the two-stat arms,
+    # the 2048-row arm that accumulates four times rather than twice, and
+    # the SCATTERED arm where lanes can collide on one slot.
+    print("binary histogram correctness (GPU):")
+    check_binary_histogram()
+    check_gather_matches_direct()
+    check_two_partitions()
+    check_half_byte_histogram()
+    check_one_byte_bits[5]()
+    check_one_byte_bits[6]()
+    check_one_byte_bits[7]()
+    check_one_byte_bits[8]()
+    check_one_byte_bits[6](2)
+    check_one_byte_bits[8](2)
+    check_one_byte_bits[6](2, 32)
+    check_one_byte_bits[6](2, 32, True)
+    check_subtraction()
+    check_scan()
+    check_scores()
+    check_split_points()
+    check_partition_update()
+    check_zero_and_copy()
+    check_stable_partition()

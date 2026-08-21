@@ -120,3 +120,11 @@ def check_copy_histograms() raises:
     if source_wrong != 0 or bystander_wrong != 0:
         raise Error("copy_histograms disturbed a leaf it was not given")
     print("  parent histogram lands in the right slot, nothing else moves")
+
+
+def main() raises:
+    # STANDALONE DRIVER, the same call `probe_main.mojo` makes under
+    # "copy_histograms in isolation". The check builds its own
+    # `DeviceContext` internally, so there is nothing to set up here.
+    print("copy_histograms in isolation:")
+    check_copy_histograms()

@@ -95,3 +95,10 @@ def check_packing() raises:
             + " wrong feature values"
         )
     print("  32 features per UInt32 round-trip exactly")
+
+
+def main() raises:
+    # STANDALONE DRIVER, the same call `probe_main.mojo` makes under
+    # "packing round trip (GPU)".
+    print("packing round trip (GPU):")
+    check_packing()

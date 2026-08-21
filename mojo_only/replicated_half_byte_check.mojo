@@ -555,3 +555,11 @@ def compare(
         "at cell", worst_cell,
     )
     return wrong
+
+
+def main() raises:
+    # STANDALONE DRIVER, the same call `probe_main.mojo` makes under
+    # "REPLICATED half-byte histogram vs a host tally (GPU)". Its third arm
+    # sabotages the fixed-point scale and requires the result to move.
+    print("REPLICATED half-byte histogram vs a host tally (GPU):")
+    check_replicated_half_byte()

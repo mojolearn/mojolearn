@@ -111,3 +111,12 @@ def check_reorder_one_bit(n: Int = 20000, offset: Int = 37) raises:
     if flagwrong != 0:
         raise Error("reorder did not move the flags with the values")
     print("  ReorderOneBitImpl matches a host stable partition")
+
+
+def main() raises:
+    # STANDALONE DRIVER. BOTH arms `probe_main.mojo` runs under "their
+    # reorder path (SortWithoutCub)": the large multi-block one and the
+    # 513-row one that straddles the block width at offset 0.
+    print("their reorder path (SortWithoutCub):")
+    check_reorder_one_bit(20000, 37)
+    check_reorder_one_bit(513, 0)

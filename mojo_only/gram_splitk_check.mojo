@@ -450,3 +450,12 @@ def check_gram_dispatch() raises:
         + arm_b
         + "' at 768x768x257"
     )
+
+
+def main() raises:
+    # STANDALONE DRIVER. The four calls `decomposition/pca_main.mojo`
+    # makes, in its order. Each builds its own `DeviceContext`.
+    check_gram_splitk_oracle()
+    check_gram_vendor_arm()
+    check_gram_dispatch()
+    check_gram_centered_fused()

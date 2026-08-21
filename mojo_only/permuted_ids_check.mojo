@@ -284,3 +284,20 @@ def check_permuted_leaf_ids(depth: Int = 0, replicas: Int = 1, permute: Bool = T
             + " cells of a leaf it was not asked to build"
         )
     print("  non-contiguous leaf ids land in the right slots")
+
+
+def main() raises:
+    # STANDALONE DRIVER. The bare call `probe_main.mojo` makes under
+    # "non-contiguous leaf ids (GPU)", then the FOUR-ARM leaf-id /
+    # replication matrix it runs afterwards. Both are needed: the
+    # dense-vs-looked-up writeback shows only on a PERMUTED id list, and
+    # the unreplicable one-byte store needs replicas > 1.
+    print("non-contiguous leaf ids (GPU):")
+    check_permuted_leaf_ids()
+    print()
+    print("leaf-id / replication matrix (GPU):")
+    check_permuted_leaf_ids(0, 1, True)
+    check_permuted_leaf_ids(1, 1, True)
+    check_permuted_leaf_ids(0, 16, False)
+    check_permuted_leaf_ids(0, 16, True)
+    check_permuted_leaf_ids(1, 16, True)

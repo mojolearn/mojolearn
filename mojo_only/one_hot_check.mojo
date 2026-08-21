@@ -142,3 +142,10 @@ def check_one_hot() raises:
         " -- equality reachable only through the flag, and predict"
         " agrees with the fit under both predicates",
     )
+
+
+def main() raises:
+    # STANDALONE DRIVER, the same call `probe_main.mojo` makes. The
+    # cardinality sweep is a DIFFERENT module (`one_hot_cardinality_check`,
+    # `pixi run check-onehot-cardinality`) and stays there.
+    check_one_hot()

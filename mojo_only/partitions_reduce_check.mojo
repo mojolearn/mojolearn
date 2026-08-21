@@ -744,3 +744,13 @@ def check_partitions_reduce_sabotage() raises:
         "  both kernels are REACHED: a single perturbed row moves exactly one"
         " leaf total, from lane 0, lane 255, the second block and the last row"
     )
+
+
+def main() raises:
+    # STANDALONE DRIVER. All three arms `probe_main.mojo` runs under
+    # "ComputePartitionStats vs an exact host tally (GPU)", in its order:
+    # the size sweep, then the two reach arms.
+    print("ComputePartitionStats vs an exact host tally (GPU):")
+    check_partitions_reduce()
+    check_partitions_reduce_sabotage()
+    check_partitions_reduce_narrow_grid()

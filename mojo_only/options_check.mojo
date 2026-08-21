@@ -17,6 +17,7 @@ from gbdt.options.catboost_options import (
     GROW_DEPTHWISE,
     GROW_LOSSGUIDE,
     GROW_SYMMETRIC,
+    SCORE_FUNCTION_NEWTON_L2,
     determinism_name,
     grow_policy_name,
 )
@@ -86,9 +87,22 @@ def check_options() raises:
     c5.leaf_estimation_iterations = -5
     expect_refusal(c5, String("leaf_estimation_iterations=-5"))
 
+    # `random_strength` IS PORTED NOW, so 1.0 at the default score
+    # function must be ACCEPTED. What stays refused is the pairing where
+    # no calcer of CatBoost's carries a noise term at all.
+    var e_ok = CatBoostOptions.default()
+    e_ok.random_strength = 1.0
+    e_ok.check()
+    print("    accepted: random_strength=1.0 at score_function=Cosine")
+
     var e = CatBoostOptions.default()
     e.random_strength = 1.0
-    expect_refusal(e, String("random_strength=1.0"))
+    e.score_function = SCORE_FUNCTION_NEWTON_L2
+    expect_refusal(e, String("random_strength=1.0 under NewtonL2"))
+
+    var e_neg = CatBoostOptions.default()
+    e_neg.random_strength = -1.0
+    expect_refusal(e_neg, String("random_strength=-1.0"))
 
     var f = CatBoostOptions.default()
     f.rsm = 0.8
@@ -113,3 +127,9 @@ def check_options() raises:
         k.check()
     print("    all three determinism levels accepted")
     print("  every unported option refuses by name")
+
+
+def main() raises:
+    # STANDALONE DRIVER, the same call `probe_main.mojo` makes first.
+    print("options:")
+    check_options()

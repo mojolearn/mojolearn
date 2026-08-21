@@ -123,3 +123,8 @@ def check_train_api() raises:
         pmse, "); held-out mse", test_mse, "vs variance", test_var,
         "-- grid, quantize, one-hot column and apply agree end to end",
     )
+
+
+def main() raises:
+    # STANDALONE DRIVER, the last call `probe_main.mojo` makes.
+    check_train_api()

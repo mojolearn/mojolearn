@@ -22,6 +22,9 @@ from gbdt.gpu_data.kernel.binarize import (
     WRITE_BLOCK_SIZE,
     write_compressed_index_kernel,
 )
+from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
+    upload_scale,
+)
 from gbdt.methods.greedy_subsets_searcher.kernel.hist_binary import (
     binary_hist_gather_kernel,
     binary_hist_kernel,
@@ -136,6 +139,15 @@ def check_hist_depends_on_partition() raises:
         zf.unsafe_ptr().unsafe_store(i, Float32(0.0))
     ctx.enqueue_copy(dst_buf=hist, src_ptr=zf.unsafe_ptr())
     ctx.synchronize()
+    # DEVIATION 95: `fixed_scale` is read from DEVICE memory now. ONE
+    # buffer serves BOTH cases below, and the hold is placed after CASE B
+    # -- the last launch that reads it -- not after case A. Mojo frees at
+    # the last use and `.unsafe_ptr()` is a use, so a hold placed at the
+    # first launch would leave case B reading freed memory.
+    var scale_keep = upload_scale(ctx, Float32(1.0))
+    var scale_ptr = rebind[MutPointer[Float32, MutAnyOrigin]](
+        scale_keep.unsafe_ptr()
+    )
 
     ctx.enqueue_function[binary_hist_gather_kernel](
         folds.unsafe_ptr(), fold_off.unsafe_ptr(), grp_off.unsafe_ptr(),
@@ -143,7 +155,7 @@ def check_hist_depends_on_partition() raises:
         Int32(n_rows), Int32(0), row_index.unsafe_ptr(), stats.unsafe_ptr(),
         Int32(n_rows), p_off.unsafe_ptr(), p_sz.unsafe_ptr(),
         ids.unsafe_ptr(), hist.unsafe_ptr(), acc_scratch.unsafe_ptr(),
-        Float32(1.0), Int32(max_leaves), Int32(stat_count),
+        scale_ptr, Int32(max_leaves), Int32(stat_count),
         grid_dim=(1, 1, 1), block_dim=(BLOCK_SIZE, 1, 1),
     )
     ctx.synchronize()
@@ -166,12 +178,13 @@ def check_hist_depends_on_partition() raises:
         Int32(n_rows), Int32(0), row_index.unsafe_ptr(), stats.unsafe_ptr(),
         Int32(n_rows), p_off.unsafe_ptr(), p_sz.unsafe_ptr(),
         ids.unsafe_ptr(), hist.unsafe_ptr(), acc_scratch.unsafe_ptr(),
-        Float32(1.0), Int32(max_leaves), Int32(stat_count),
+        scale_ptr, Int32(max_leaves), Int32(stat_count),
         grid_dim=(1, 2, 1), block_dim=(BLOCK_SIZE, 1, 1),
     )
     ctx.synchronize()
     ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=hist)
     ctx.synchronize()
+    _ = scale_keep^
     var half0 = out.unsafe_ptr().unsafe_load(0)
     var half1 = out.unsafe_ptr().unsafe_load(n_features)
 
@@ -187,3 +200,10 @@ def check_hist_depends_on_partition() raises:
             " histogram: the kernel is IGNORING the partition size"
         )
     print("  the histogram tracks the partition")
+
+
+def main() raises:
+    # STANDALONE DRIVER. `probe_main.mojo` calls this first inside
+    # "ONE FULL LEVEL (GPU, end to end)"; it owns its own `DeviceContext`.
+    print("histogram vs partition (GPU):")
+    check_hist_depends_on_partition()

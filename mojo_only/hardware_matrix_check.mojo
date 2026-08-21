@@ -441,3 +441,11 @@ def check_hardware_matrix() raises:
         + " vendor columns meet it, the portable baseline is REFUSED, apple/nvidia/amd smem modes unchanged"
         " by the budget rewrite"
     )
+
+
+def main() raises:
+    # STANDALONE DRIVER. `decomposition/pca_main.mojo` and
+    # `neighbors/knn_main.mojo` both call this first; neither is a
+    # registered task, so until now the only way to run it was to run a
+    # whole other section's suite.
+    check_hardware_matrix()

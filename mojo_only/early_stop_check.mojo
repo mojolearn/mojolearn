@@ -194,3 +194,8 @@ def check_early_stop_rollback() raises:
     ):
         raise Error("mid stop: two runs through the rollback differ")
     print("  rerun bit-identical: the rollback is deterministic")
+
+
+def main() raises:
+    # STANDALONE DRIVER, the same call `probe_main.mojo` makes.
+    check_early_stop_rollback()

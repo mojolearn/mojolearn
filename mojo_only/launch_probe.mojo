@@ -22,6 +22,9 @@ from gbdt.methods.greedy_subsets_searcher.kernel.compute_scores import compute_o
 from gbdt.methods.greedy_subsets_searcher.kernel.hist_binary import binary_hist_kernel
 from gbdt.methods.greedy_subsets_searcher.kernel.hist_half_byte import half_byte_hist_kernel
 from gbdt.methods.greedy_subsets_searcher.kernel.split_points import split_and_make_sequence_kernel
+from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
+    upload_scale,
+)
 from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     scan_histograms_kernel,
     substract_histograms_kernel,
@@ -108,6 +111,16 @@ def probe() raises:
     var p_ids = ctx.enqueue_create_buffer[DType.uint32](64)
     var stats_buf = ctx.enqueue_create_buffer[DType.float32](4096)
     var sums = ctx.enqueue_create_buffer[DType.float32](4096)
+    # DEVIATION 95: `fixed_scale` is a DEVICE pointer now. ONE buffer for
+    # both histogram probes below; the hold sits after the FINAL
+    # `ctx.synchronize()` at the end of `probe()`, because this function
+    # enqueues everything and drains ONCE at the bottom -- the kernels are
+    # still in flight when the second one is enqueued, so an earlier hold
+    # would free the scale under a launch that has not run yet.
+    var scale_keep = upload_scale(ctx, Float32(1.0))
+    var scale_ptr = rebind[MutPointer[Float32, MutAnyOrigin]](
+        scale_keep.unsafe_ptr()
+    )
 
     ctx.enqueue_function[binary_hist_kernel](
         folds.unsafe_ptr(),
@@ -125,7 +138,7 @@ def probe() raises:
         p_ids.unsafe_ptr(),
         sums.unsafe_ptr(),
         acc_scratch.unsafe_ptr(),
-        Float32(1.0),
+        scale_ptr,
         Int32(4),
         Int32(2),
         grid_dim=(1, 1, 1),
@@ -163,7 +176,7 @@ def probe() raises:
         # grid.x is 1, so the fixed-point flush never engages; the
         # accumulator is only along for the signature.
         hb_acc.unsafe_ptr(),
-        Float32(1.0),
+        scale_ptr,
         Int32(4),
         Int32(2),
         grid_dim=(1, 1, 1),
@@ -198,4 +211,5 @@ def probe() raises:
     print("  split_and_make_seq     enqueued")
 
     ctx.synchronize()
+    _ = scale_keep^
     print("all ported kernels enqueued and the queue drained")

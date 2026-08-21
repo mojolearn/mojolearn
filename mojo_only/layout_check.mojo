@@ -247,3 +247,12 @@ def check_split_resolution() raises:
     if wrong != 0:
         raise Error("split resolution is wrong")
     print("  every feature boundary and policy crossing resolves correctly")
+
+
+def main() raises:
+    # STANDALONE DRIVER. The three calls `probe_main.mojo` makes under
+    # "compressed index layout (host)", in that order.
+    print("compressed index layout (host):")
+    check_layout()
+    check_feature_blocks()
+    check_split_resolution()
