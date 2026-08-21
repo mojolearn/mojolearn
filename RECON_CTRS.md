@@ -378,12 +378,37 @@ this is achievable in one source.
 6. Tree CTRs (feature combinations, `MaxTensorComplexity`, default 4).
    Their own `tree_ctr_datasets_visitor` machinery: combinations generated
    during tree growth, per level, with caching and memory limits
-   (`ctr_leaf_count_limit`, `store_all_simple_ctr`). **This is where our
-   category codes stop being harmless.** We use sorted-unique dense codes
-   and they hash; the CTR VALUE depends only on counts so the difference
-   cannot be seen today, but a COMBINATION bin is formed from their hash, so
-   step 6 forces the hash port that FeatureFreq let us skip. Plausibly
-   larger than 3 through 5 combined.
+   (`ctr_leaf_count_limit`, `store_all_simple_ctr`).
+
+   RE-SCOPED 2026-08-21 from their source; this entry used to say a
+   combination bin is formed from their hash, and that is FALSE for
+   training. `TFeatureTensorTracker::AddFeatureTensor`
+   (`gpu_data/oblivious_tree_bin_builder.cpp:123-186`) composes a tensor by
+   feeding each cat feature's DENSE COMPRESSED BINS and each binary
+   split's bits into `TCtrBinBuilder::AddCompressedBins` -- device
+   reindexing over exactly the bin-builder primitive `TCtrBinBuilderGpu`
+   already ports. No hash is computed anywhere on the training path, so
+   our dense codes stay harmless through tree-CTR TRAINING too.
+
+   Where the hash IS the key is the MODEL/APPLY half: a tree-CTR table is
+   looked up by folding `CalcHash(acc, element)` over the combination's
+   elements -- each cat element a `CalcCatFeatureHash` (= their own
+   CityHash64 1.0 variant, low 32 bits) sign-extended through
+   `(ui64)(int)`, each binary-split element a bare 0/1
+   (`libs/model/ctr_provider.h:94-122`, `libs/model/hash.h:11-14`,
+   `libs/cat_feature/cat_feature.cpp:6-8`). THAT STACK IS PORTED AND GATED
+   (2026-08-21): `gbdt/digest/city.mojo`, `gbdt/cat_feature/
+   cat_feature.mojo`, `gbdt/models/hash.mojo`, `pixi run check-cityhash`
+   against their own `city.cpp` compiled by `tools/cityhash_oracle/`.
+   Public CityHash vectors would have been the WRONG oracle -- their
+   `city.h` states its results differ from mainline CityHash -- and the
+   chain rows caught a real defect on first contact (a Mojo cast chain
+   zero-extending where `(ui64)(int)` sign-extends).
+
+   What remains of step 6 is the machinery itself: the visitor, the
+   memory estimator, per-level combination generation and caching, CTR
+   borders per tree ctr, and the apply-side `CalcHashes` + tree-CTR
+   tables in the model file.
 7. DONE, and folded into step 2: the calcer lives in `gbdt/ctrs/` and
    `train(cat_features=...)` calls it, so the library ships the categorical
    path rather than the benchmark alone.

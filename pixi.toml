@@ -113,6 +113,14 @@ check-radixsort = "mojo run -I . mojo_only/radix_sort_check.mojo"
 # regenerate it with `ctr-target-oracle-gen`.
 check-ctr = "mojo run -I . mojo_only/ctr_check.mojo"
 
+# The CATEGORY HASH STACK -- their CityHash64 1.0 variant (which public
+# CityHash vectors do NOT match), CalcCatFeatureHash's low-32 truncation,
+# and the model-side CalcHash combination fold with its (ui64)(int) sign
+# extension -- against CatBoost's OWN util/digest/city.cpp compiled by
+# tools/cityhash_oracle/ into bench/cityhash_oracle.txt. Host-side,
+# seconds, no GPU.
+check-cityhash = "mojo run -I . mojo_only/cityhash_check.mojo"
+
 # The CTR ESTIMATION PERMUTATION -- their TDataPermutation over MT19937-64 --
 # against CatBoost's OWN util/random/mersenne64.cpp, compiled by
 # tools/permutation_oracle/ into bench/permutation_oracle.txt. Compares the

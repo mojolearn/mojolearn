@@ -712,3 +712,43 @@ not simply be pointed at Borders.
 
 Next known levers, in order: tree CTRs (RECON_CTRS.md step 6, which forces
 the category hash), then the epsilon dataset.
+
+### 2026-08-21: the category-hash stack, and step 6 re-scoped from source
+
+The recon read for tree CTRs (RECON_CTRS.md step 6) falsified this file's
+own next-lever line: "forces the category hash" was WRONG for training.
+`TFeatureTensorTracker::AddFeatureTensor` builds a combination's bins by
+feeding dense compressed bins into `TCtrBinBuilder::AddCompressedBins`
+(`gpu_data/oblivious_tree_bin_builder.cpp:123-186`) -- the primitive
+`TCtrBinBuilderGpu` already ports -- so NO hash exists anywhere on their
+training path and our dense codes stay harmless through tree-CTR training.
+The hash is the MODEL/APPLY key: `CalcHash(acc, element)` folded over
+sign-extended category hashes and bare 0/1 split arms
+(`libs/model/ctr_provider.h:94-122`).
+
+That stack is now PORTED AND GATED (`pixi run check-cityhash`):
+`gbdt/digest/city.mojo` (their CityHash **1.0**, whose results their own
+header says DIFFER from mainline CityHash -- public vectors are the wrong
+oracle), `gbdt/cat_feature/cat_feature.mojo` (`CalcCatFeatureHash`, the
+low 32 bits), `gbdt/models/hash.mojo` (`CalcHash` + the `(ui64)(int)`
+widening). The oracle is their own `city.cpp` compiled byte-for-byte by
+`tools/cityhash_oracle/` into `bench/cityhash_oracle.txt`: 43 strings
+covering every length branch, 5 combination chains. Unwired by design
+(UNWIRED.md): training needs no hash; it goes live with tree-CTR model
+tables or raw-string scoring.
+
+THE CHECK EARNED ITS KEEP ON FIRST RUN, and the defect joins the Mojo
+numeric-trap family: a SIMD cast chain `uint32 -> int32 -> int64 ->
+uint64` ZERO-extends where C++ `(ui64)(int)` sign-extends. All 43 string
+rows passed while every chain row containing a hash >= 2^31 failed in
+exactly the high 32 bits; the fix is an explicit branch
+(`cat_hash_chain_element`), not a cast chain. Assume stdlib numerics are
+approximate until measured -- now including casts.
+
+What remains of step 6 is the machinery, not the primitives: the
+`TTreeCtrDataSetsHelper` / dataset / visitor system (`methods/
+tree_ctrs.cpp` 534 lines, `tree_ctrs_dataset.h` 210,
+`tree_ctr_datasets_visitor.cpp` 168, the memory estimator 156) --
+per-split tensor extension, per-device dataset packs, lazy compressed
+indices, score-calcer reuse, and the visitor's cross-device best-split
+race. Every device primitive it stands on is already ported.
