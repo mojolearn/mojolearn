@@ -179,6 +179,15 @@ check-loss-oracle = "mojo run -I . mojo_only/loss_oracle_check.mojo"
 # when od_type is asked for without an eval set. Own main(); a GPU, ~1 min.
 check-overfitting-detector = "mojo run -I . mojo_only/overfitting_detector_check.mojo"
 
+# `permutation_count`: CatBoost builds four datasets differing only in their
+# permutation-dependent CTR columns, and the model comes from the last one.
+# The gate is an IDENTITY -- one permutation must equal four read at
+# permutation 0, bit for bit -- with a control at permutation 1 that must
+# come out different, so the equality is a real constraint. Plus the
+# numeric-only case, where their `UpdateGpuSpecificDefaults` ASSIGNS 1 and
+# discards an explicit 4. Own main(); a GPU, ~1 min.
+check-permutation-count = "mojo run -I . mojo_only/permutation_count_check.mojo"
+
 # The LSD radix sort over (bin, permutation position). Gates STABILITY
 # separately from sortedness and prints both, because sortedness alone
 # cannot see a tie that moved -- and the tie order IS the second half of

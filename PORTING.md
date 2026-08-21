@@ -1457,7 +1457,7 @@ one-hot splits alone, which is what buys that.
 
 # Deviations added 2026-08-21 (the CTR estimation permutation)
 
-## 57. ONE CTR estimation permutation, not `permutation_count` of them, and it is never their id 0
+## 57. The CTR estimation permutation, which is never their id 0
 
 `gbdt/data/permutation.mojo` ports `TDataPermutation`
 (`cuda/data/permutation.{h,cpp}`) and everything under it -- their
@@ -1470,7 +1470,7 @@ orders against CatBoost's own generator compiled by
 
 **Two things around it are.**
 
-### 55a. One column set where they build `permutation_count` of them
+### 55a. The column sets are built; the LOOP that uses them is not
 
 Their builder loops (`gpu_data/doc_parallel_dataset_builder.cpp:251-262`):
 
@@ -1487,18 +1487,34 @@ permutation per iteration and estimates leaves on
 `GetEstimationPermutation()`, which is `PermutationsCount() - 1`
 (`methods/doc_parallel_boosting.h:101-103`, `:344-352`).
 
-**`gbdt/methods/doc_parallel_boosting.fit` holds ONE dataset and has no
-permutation machinery**, so `train()` builds ONE set of columns, over
-`ctr_estimation_permutation_id`, defaulting to `permutation_count - 1` --
-their estimation permutation, the one whose model `Run()` exports
-(`doc_parallel_boosting.h:526-528`). Porting the other three sets is
-porting the ordered-boosting loop, which is a different piece of work.
+**Half of this landed 2026-08-21 and the paragraph that said otherwise is
+deleted rather than annotated.** `train()` now builds all
+`permutation_count` sets, one compressed index each (DEVIATION 89), with
+`permutation_count` resolved exactly as `UpdateGpuSpecificDefaults` resolves
+it -- 4 by default, ASSIGNED down to 1 with no CTR-bearing categorical
+feature, an assignment that discards an explicit 4
+(`cuda/train_lib/train.cpp:99-108`). All of them are binarized against
+PERMUTATION 0'S borders, because their border builder caches by feature id
+and permutation 0 fills the cache first (`gpu_binarization_helpers.cpp:
+31-54`, `doc_parallel_dataset_builder.cpp:250`). `pixi run
+check-permutation-count` gates it on an identity: `permutation_count=1` and
+`permutation_count=4` read at permutation 0 must produce the same model bit
+for bit, with permutation 1 as the control that must differ.
 
-What this costs, stated rather than hidden: their ordered boosting averages
-the ordered-statistic noise over four independent orders and ours does not,
-so a `Borders` fit here carries more of it. It is a QUALITY difference on
-the same estimator, not a different estimator -- unlike substituting row
-order, which is 55b.
+**WHAT IS STILL MISSING IS THE LOOP.** Their `Fit`
+(`doc_parallel_boosting.h:345-395`) keeps one cursor and one ensemble PER
+PERMUTATION, searches the structure on a random permutation that is not the
+estimation one, estimates leaf values separately on every permutation, and
+exports the estimation permutation's ensemble. This port runs one cursor and
+one ensemble, so the other sets are built and unused.
+
+What that costs, stated rather than hidden: their loop searches structures
+against ordered statistics the exported model was not fitted on, which is
+what makes the structure choice independent of the leaf values it will get.
+Ours searches and estimates on the same columns. It is a QUALITY difference
+on the same estimator, not a different estimator -- unlike substituting row
+order, which is 55b. It is also NOT ordered boosting, which is a different
+learner entirely; see 88.
 
 ### 55b. Their permutation 0 is the identity and this port must not use it
 
@@ -2624,3 +2640,38 @@ recorded as such in `doc_parallel_boosting.mojo`'s audit list.
 Ordered boosting is not refused here yet; nothing in this port accepts a
 `boosting_type` at all. It should stay that way until either the option
 exists and refuses Ordered by name, or the learner behind it does.
+
+## 89. A permutation costs a whole compressed index here, not just its CTR columns
+
+Their builder splits the features by permutation dependence and gives each
+permutation a compressed-index dataset holding ONLY the dependent ones
+(`doc_parallel_dataset_builder.cpp:104-124`):
+
+    permutationIndependentCompressedDataSetId   float, one-hot, FeatureFreq
+                                                -- built once, shared
+    dataSet.PermutationDependentFeatures        Borders CTRs -- one per
+                                                permutation
+
+This port packs every column of a fit into ONE compressed index and the
+histogram kernels read it as one buffer, so there is nowhere to put a
+per-permutation slice. `train` therefore builds `permutation_count` COMPLETE
+indices.
+
+**The price is memory, and only on a categorical fit**, because
+`permutation_count` collapses to 1 without a CTR-bearing feature
+(`cuda/train_lib/train.cpp:99-108`). At their default of 4 it is 4x the
+compressed index where theirs is 1x plus four copies of the dependent
+columns alone. On a pool whose CTR columns are a small share of the width --
+which is the common case, since a categorical feature becomes 4 CTR columns
+among however many numeric ones -- the difference is close to the whole 4x.
+
+It is not a correctness difference: the four indices hold exactly the values
+their four datasets hold.
+
+**What would fix it** is a compressed index that can be assembled from two
+buffers, one shared and one per-permutation, which means teaching the
+histogram kernels a second base pointer and a per-feature selector. That is
+a change to the hottest kernel family in the repository, so it wants a
+measurement showing the memory actually binds before it is made -- and the
+measurement is available: a categorical fit that fits at
+`permutation_count=1` and OOMs at 4 is the whole argument.

@@ -303,7 +303,7 @@ def train(
     `ctrs_estimation_permutation(n_rows, ctr_estimation_permutation_id)`.
 
     **`ctr_estimation_permutation_id` defaults to `permutation_count - 1`,
-    which is 3, and it is NOT the identity.** Their permutation 0 IS the
+    and it is NOT the identity.** Their permutation 0 IS the
     identity (`permutation.cpp:14-17`) and is safe on their side only
     because the learn pool was already shuffled at load
     (`private/libs/algo/preprocess.cpp:183-199`, which shuffles whenever the
@@ -312,8 +312,26 @@ def train(
     identity order makes every row's ordered statistic read its own
     neighbourhood. `permutation_count - 1` is their ESTIMATION permutation,
     `GetEstimationPermutation()` (`doc_parallel_boosting.h:101-103`), the
-    one whose model `Run()` exports. Only ONE of their four column sets is
-    built -- `PORTING.md` 55.
+    one whose model `Run()` exports.
+
+    **ALL `permutation_count` COLUMN SETS ARE BUILT** as of 2026-08-21, one
+    compressed index each (DEVIATION 89), where this used to build only the
+    estimation permutation's -- the sentence PORTING.md 55 recorded, now
+    false. `permutation_count` resolves the way `UpdateGpuSpecificDefaults`
+    resolves it (`cuda/train_lib/train.cpp:99-108`): their default of 4,
+    ASSIGNED down to 1 when no categorical feature feeds a CTR -- an
+    assignment, so an explicit 4 is discarded too. The
+    permutation-dependent columns are the only thing that varies between
+    the sets, and they all take PERMUTATION 0'S BORDERS, because their
+    border builder caches by feature id and permutation 0 is the one that
+    fills the cache (`gpu_binarization_helpers.cpp:31-54`,
+    `doc_parallel_dataset_builder.cpp:250`).
+
+    **THE BOOSTING LOOP STILL RUNS ONE OF THEM.** Their loop searches the
+    structure on a random non-estimation permutation and estimates leaf
+    values on every permutation separately
+    (`doc_parallel_boosting.h:345-390`); that half is not ported yet, so
+    the sets other than the estimation one are built and unused.
 
     `cat_feature_params` is a list because Mojo default arguments cannot
     call a raising constructor; EMPTY means `TCatFeatureParams.default()`,
@@ -416,6 +434,17 @@ def train(
     var ctr_column_count = 0
     var ctr_tables = List[TCtrValueTable]()
 
+    #: the PERMUTATION-DEPENDENT columns, one set per permutation, and
+    #: where each one sits in `columns`. Their
+    #: `dataSet.PermutationDependentFeatures` is a separate compressed-index
+    #: dataset per permutation while the float, one-hot and FeatureFreq
+    #: columns are shared (`doc_parallel_dataset_builder.cpp:104-124`), so
+    #: this is the only thing that varies. `columns` itself holds the
+    #: ESTIMATION permutation's values, which is the set the exported model
+    #: is trained on.
+    var dep_col_index = List[Int]()
+    var dep_by_perm = List[List[List[Float32]]]()
+
     var configs = cat_params.simple_ctr_configs()
 
     # `SplitByPermutationDependence` (`doc_parallel_dataset_builder.cpp:81`)
@@ -498,6 +527,9 @@ def train(
             + " is outside the " + String(perm_count)
             + " permutations this fit builds"
         )
+
+    for _ in range(perm_count):
+        dep_by_perm.append(List[List[Float32]]())
 
     var binarized_target = List[UInt8]()
     var ctr_orders = List[List[UInt32]]()
@@ -595,18 +627,24 @@ def train(
                 ctr_columns[independent_slots[c]] = indep[c].copy()
 
         if len(dependent_configs) > 0:
-            # their `writeCtrs(..., permutationDependent)` (`:257`), over
-            # the CTR ESTIMATION PERMUTATION written at `:255`
-            var dep = compute_simple_ctrs_gpu(
-                ctx,
-                codes,
-                unique_values,
-                dependent_configs,
-                binarized_target,
-                ctr_order,
-            )
-            for c in range(len(dependent_slots)):
-                ctr_columns[dependent_slots[c]] = dep[c].copy()
+            # their `writeCtrs(..., permutationDependent)` (`:257`), ONCE
+            # PER PERMUTATION, over that permutation's order written at
+            # `:255`. `columns` takes the estimation permutation's values;
+            # the rest are kept beside it for the boosting loop, which
+            # estimates leaf values separately on each.
+            for p in range(perm_count):
+                var dep = compute_simple_ctrs_gpu(
+                    ctx,
+                    codes,
+                    unique_values,
+                    dependent_configs,
+                    binarized_target,
+                    ctr_orders[p],
+                )
+                for c in range(len(dependent_slots)):
+                    dep_by_perm[p].append(dep[c].copy())
+                    if p == est_perm:
+                        ctr_columns[dependent_slots[c]] = dep[c].copy()
         # the APPLY-TIME half of the same statistic: their
         # `CalcFinalCtrs` writes a `TCtrValueTable` beside every CTR the
         # model uses, because the learn column cannot score a new row.
@@ -627,6 +665,9 @@ def train(
         )
         for c in range(len(tables)):
             ctr_tables.append(tables[c].copy())
+        var base_col = len(columns)
+        for c in range(len(dependent_slots)):
+            dep_col_index.append(base_col + dependent_slots[c])
         for c in range(len(ctr_columns)):
             columns.append(ctr_columns[c].copy())
             column_one_hot.append(False)
@@ -635,10 +676,15 @@ def train(
             ctr_column_count += 1
 
     var n_columns = len(columns)
-    var flat = List[Float32]()
-    for c in range(n_columns):
-        for r in range(n_rows):
-            flat.append(columns[c][r])
+
+    # column index -> its ordinal among the permutation-dependent columns,
+    # or -1. Built here rather than carried, because the column positions
+    # are only final once every feature has been walked.
+    var dep_ordinal_of_column = List[Int]()
+    for _ in range(n_columns):
+        dep_ordinal_of_column.append(-1)
+    for k in range(len(dep_col_index)):
+        dep_ordinal_of_column[dep_col_index[k]] = k
 
     var borders = List[List[Float32]]()
     var fold_counts = List[Int]()
@@ -659,6 +705,21 @@ def train(
             for c in range(maxc):
                 bs.append(Float32(c) + Float32(0.5))
             fold_counts.append(len(bs) + 1 if len(bs) > 0 else 0)
+            borders.append(bs^)
+        elif column_ctr_grid[f] >= 0 and dep_ordinal_of_column[f] >= 0:
+            # A PERMUTATION-DEPENDENT CTR COLUMN TAKES PERMUTATION 0'S
+            # BORDERS, and every other permutation is binarized against
+            # them. That is `TGpuBordersBuilder::GetOrComputeBorders`
+            # (`gpu_binarization_helpers.cpp:31-54`) caching by FEATURE ID
+            # in the features manager, hit by whichever permutation was
+            # written first -- and their loop starts at 0
+            # (`doc_parallel_dataset_builder.cpp:250`). The grid is a
+            # property of the feature, not of the permutation.
+            var bs = compute_ctr_borders(
+                dep_by_perm[0][dep_ordinal_of_column[f]],
+                ctr_grids[column_ctr_grid[f]],
+            )
+            fold_counts.append(len(bs))
             borders.append(bs^)
         elif column_ctr_grid[f] >= 0:
             # A CTR column takes its OWN grid, not the numeric one:
@@ -686,9 +747,29 @@ def train(
     # = k bins reached by k-1 synthetic borders, and its fold count must
     # cover bin k-1 for the equality candidates, hence len+1 above.
 
-    var cindex = _build_cindex_from_floats(
-        ctx, flat, n_rows, borders, fold_counts
-    )
+    # ONE COMPRESSED INDEX PER PERMUTATION. Theirs shares the
+    # permutation-INDEPENDENT columns between them and gives each
+    # permutation its own dataset for the dependent ones
+    # (`doc_parallel_dataset_builder.cpp:104-124`); this port packs every
+    # column into one buffer, so a permutation costs a whole index rather
+    # than the dependent slice of one. DEVIATION 89.
+    var cindexes = List[DeviceBuffer[DType.uint32]]()
+    for p in range(perm_count):
+        var flat = List[Float32]()
+        for c in range(n_columns):
+            var ord = dep_ordinal_of_column[c]
+            if ord >= 0:
+                for r in range(n_rows):
+                    flat.append(dep_by_perm[p][ord][r])
+            else:
+                for r in range(n_rows):
+                    flat.append(columns[c][r])
+        cindexes.append(
+            _build_cindex_from_floats(
+                ctx, flat, n_rows, borders, fold_counts
+            )
+        )
+    var cindex = cindexes[est_perm].copy()
 
     # `class_weights` and `sample_weight`: their
     # `MakeClassificationWeights` applied at pool build. Both fold into
