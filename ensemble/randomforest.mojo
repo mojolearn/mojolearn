@@ -825,32 +825,48 @@ struct RandomForest[dtype: DType, label_dtype: DType](
         if not (n_cols > 0):
             raise Error("Invalid n_cols " + String(n_cols))
 
-    def fit(self) raises:
+    def fit[
+        O: ObjectiveLike
+    ](
+        mut self,
+        ctx: DeviceContext,
+        mut x: DeviceBuffer[DType.float32],
+        mut y: DeviceBuffer[O.LabelT],
+        mut sample_weight: DeviceBuffer[DType.float32],
+        n_rows: Int,
+        n_cols: Int,
+        n_unique_labels: Int,
+        objective: O,
+        row_major: Bool = False,
+    ) raises -> RandomForestMetaData[O.DataT, O.LabelT] where (
+        O.DataT == DType.float32
+    ):
         """`RandomForest::fit`, `randomforest.cuh:286-370`.
 
-        THE FOREST LOOP IS PORTED, as the free function `fit_forest` below;
-        this METHOD still raises, and the difference is not laziness.
-        `RandomForest` is parameterized on `[dtype, label_dtype]`, matching
-        their `RandomForest<T, L>`, but a fit also needs the BIN type, and
-        the launchers underneath are overloaded on the concrete objective
-        because Mojo traits are nominal (their DEVIATION 129a). So the
-        entry point that works today is `fit_forest[label_dtype, BinT]`,
-        which names the bin explicitly.
+        THIS USED TO RAISE. The body is now `fit_forest`, which IS the port
+        of their `:286-370` -- error checking, `n_sampled_rows`, quantiles
+        once for the whole forest, the row sampler, and the per-tree loop.
+        It is a free function because the objective type has to come from
+        somewhere and `RandomForest[T, L]` carries only two of the three
+        types a fit needs; this method is the estimator-shaped door onto it
+        and takes the third as a parameter.
 
-        Collapsing the two -- declaring the objective structs conformant to
-        a trait the launchers can dispatch on -- deletes two adapters, six
-        launcher overloads, `Builder`'s classification-only restriction AND
-        this method's raise together. It is the highest-value cleanup left
-        in this directory and is recorded in `ensemble/PLAN.md`.
+        `self.rf_params` is passed by reference and CAN BE MUTATED, exactly
+        as theirs is: their `:301-306` overwrites `max_samples` to 1.0 with
+        a warning when `bootstrap` is off. A caller that reads the params
+        back afterwards sees the corrected value on both sides.
         """
-        self.rf_params.check_fit_supported()
-        raise Error(
-            "RandomForest.fit is not the ported entry point; call"
-            " fit_forest[label_dtype, BinT](ctx, x, y, sample_weight,"
-            " n_rows, n_cols, n_unique_labels, rf_params) instead. This"
-            " method needs the bin type, which RandomForest[T, L] does not"
-            " carry, and cannot dispatch generically until objectives.mojo"
-            " declares an objective trait."
+        return fit_forest[O](
+            ctx,
+            x,
+            y,
+            sample_weight,
+            n_rows,
+            n_cols,
+            n_unique_labels,
+            self.rf_params,
+            objective,
+            row_major,
         )
 
     def predict(

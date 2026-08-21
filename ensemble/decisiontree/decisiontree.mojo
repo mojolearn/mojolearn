@@ -304,29 +304,31 @@ struct DecisionTreeParams(ImplicitlyCopyable, Movable):
         self.validity_check()
 
     def check_fit_supported(self) raises:
-        """Training is NOT PORTED YET, and every training field is named.
+        """Every training field now HAS a consumer. Nothing is refused here.
 
-        `Builder<ObjectiveT>::train()`
-        (`decisiontree.cuh:262-329` -> `batched-levelalgo/builder.cuh`)
-        has no counterpart in this repository yet -- it is
-        `ensemble/decisiontree/batched_levelalgo/builder.mojo`, a file
-        another lane is writing. Until it lands, NONE of the fields
-        below has a consumer, so all of them are refused together
-        rather than any one of them appearing to be honored.
+        THIS METHOD USED TO RAISE, and the sentence it raised with --
+        "DecisionTree.fit is NOT PORTED YET ... the only thing that reads
+        them is Builder<ObjectiveT>::train(), which does not exist yet" --
+        is deleted rather than annotated, because it is false. All nine
+        `DecisionTreeParams` fields are read:
+
+          max_depth, max_leaves, min_samples_split  -> `NodeQueue::
+            IsExpandable` and `Push` (`builder.cuh:82-88`, `:101`)
+          max_features        -> `n_sampled_cols_for` (`builder.cuh:240`)
+                                 and the round schedule (`:437-455`)
+          max_n_bins          -> `computeQuantiles` and every histogram
+          min_samples_leaf    -> `GainPerSplit` (`objectives.cuh:128-130`)
+          split_criterion     -> `GainPerSplit`'s switch, all six reachable
+                                 criteria exercised by `criteria_check`
+          min_impurity_decrease -> `Gain` (`objectives.cuh:173`, `:374`)
+          max_batch_size      -> `NodeQueue::Pop` (`builder.cuh:70-78`)
+
+        It is kept as a method rather than deleted so that a future
+        unported field has somewhere to be refused BY NAME. That is the
+        rule it exists for: an option present and ignored is worse than one
+        absent, because absent fails loudly.
         """
-        raise Error(
-            "DecisionTree.fit is NOT PORTED YET. The nine"
-            " DecisionTreeParams fields -- max_depth, max_leaves,"
-            " max_features, max_n_bins, min_samples_leaf,"
-            " min_samples_split, split_criterion,"
-            " min_impurity_decrease, max_batch_size -- are all"
-            " transcribed from decisiontree.hpp:20-61 and NONE of them"
-            " is honored, because the only thing that reads them is"
-            " Builder<ObjectiveT>::train() (decisiontree.cuh:262-329),"
-            " which lives in batched_levelalgo/builder.mojo and does"
-            " not exist yet. This estimator can carry a forest and"
-            " predict with it; it cannot grow one."
-        )
+        pass
 
 
 def set_tree_params(

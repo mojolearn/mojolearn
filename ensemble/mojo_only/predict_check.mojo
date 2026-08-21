@@ -970,17 +970,19 @@ def main() raises:
     else:
         print("set_rf_params clamped cfg_n_streams=4 to 1, as theirs does")
 
-    # ---------------- fit refuses by name ------------------------------
-    var fit_refused = False
-    try:
-        rf.fit()
-    except e:
-        fit_refused = True
-    if not fit_refused:
-        failures += 1
-        print("  FAIL: RandomForest.fit() did not raise; it is NOT PORTED")
-    else:
-        print("RandomForest.fit() raises NOT PORTED YET, by name")
+    # ---------------- fit is PORTED now --------------------------------
+    # This block used to assert that `RandomForest.fit()` RAISES. It no
+    # longer does: the method forwards to `fit_forest`, the port of
+    # `randomforest.cuh:286-370`. The assertion is deleted rather than
+    # inverted, because what `fit` DOES is checked where it can be checked
+    # properly -- `forest_check` (classification, bagged, per cell against
+    # RAFT's own row sample), `regression_check` (the method itself, plus
+    # predict's regression arm) and `criteria_check` (all six criteria). A
+    # one-line "it did not raise" here would add nothing and go stale again.
+    print(
+        "RandomForest.fit is PORTED; behaviour is checked in forest_check,"
+        " regression_check and criteria_check"
+    )
 
     # ---------------- The default table --------------------------------
     #
@@ -1347,13 +1349,24 @@ def main() raises:
         dp.check_fit_supported()
     except e:
         fitp_refused = True
-    if not fitp_refused:
+    # INVERTED, deliberately: `check_fit_supported` used to refuse all nine
+    # training fields because none had a consumer. Every one of them is
+    # read now -- max_depth/max_leaves/min_samples_split by NodeQueue,
+    # max_features by the round schedule, max_n_bins by the quantiles,
+    # min_samples_leaf and min_impurity_decrease by the gains,
+    # split_criterion by their switch, max_batch_size by Pop. So it must
+    # NOT raise. The method stays, so a future unported field has somewhere
+    # to be refused BY NAME.
+    if fitp_refused:
         failures += 1
-        print("  FAIL: DecisionTreeParams.check_fit_supported must raise")
+        print(
+            "  FAIL: DecisionTreeParams.check_fit_supported raised, but"
+            " every training field it names now has a consumer"
+        )
 
     print(get_tree_summary_text(tree_a), end="")
     print_metrics(set_all_rf_metrics(CLASSIFICATION, 0.8, -1.0, -1.0, -1.0))
-    print("MAE refused, get_tree_json refused, check_fit_supported refused")
+    print("MAE refused, get_tree_json refused, training params honored")
 
     print("")
     if failures == 0:

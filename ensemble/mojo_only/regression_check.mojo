@@ -47,7 +47,13 @@ from ensemble.decisiontree.batched_levelalgo.objectives import (
     machine_epsilon,
 )
 from ensemble.decisiontree.decisiontree import DecisionTreeParams, MSE
-from ensemble.randomforest import RF_params, RandomForestMetaData, fit_forest
+from ensemble.randomforest import (
+    REGRESSION,
+    RF_params,
+    RandomForest,
+    RandomForestMetaData,
+    fit_forest,
+)
 
 comptime DT = DType.float32
 comptime LT = DType.float32
@@ -523,6 +529,92 @@ def arm_e_epsilon() raises -> Int:
     return fails
 
 
+def arm_f_estimator_predict(ctx: DeviceContext) raises -> Int:
+    """Fit through the ESTIMATOR METHOD, then predict, then check values.
+
+    Two things here that no other arm covers:
+
+      * `RandomForest.fit` as a METHOD. It raised until today; this is the
+        path a user actually takes, and a method that forwards to the wrong
+        thing would still compile.
+      * `predict`'s REGRESSION arm. Their classifier arm does an argmax
+        over `num_outputs` (`randomforest.cuh:417-427`); the regressor arm
+        reads `row_prediction[0]` and nothing else (`:429`). Those are
+        different code, and until now only the classifier arm had ever run.
+
+    The fixture is the step function, so the answer is known exactly: every
+    row in the low half must predict 5.0 and every row in the high half
+    20.0, whatever the tree's shape, because every leaf below the root
+    holds rows from one half only and the mean of a constant is that
+    constant. Averaging N such trees changes nothing.
+    """
+    var n_rows = 400
+    var n_cols = 3
+    var x = _step_x(n_rows, n_cols)
+    var y = _step_data(n_rows, Float32(5.0), Float32(20.0))
+
+    var hx = ctx.enqueue_create_host_buffer[DT](n_rows * n_cols)
+    for i in range(n_rows * n_cols):
+        hx.unsafe_ptr().unsafe_store(i, x[i])
+    var dx = ctx.enqueue_create_buffer[DT](n_rows * n_cols)
+    ctx.enqueue_copy(dst_buf=dx, src_ptr=hx.unsafe_ptr())
+    var hy = ctx.enqueue_create_host_buffer[LT](n_rows)
+    for i in range(n_rows):
+        hy.unsafe_ptr().unsafe_store(i, y[i])
+    var dy = ctx.enqueue_create_buffer[LT](n_rows)
+    ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
+    var dsw = ctx.enqueue_create_buffer[DT](1)
+    ctx.synchronize()
+
+    var p = _rf(3, False, 4)
+    var rf = RandomForest[DT, LT](p.copy(), REGRESSION)
+    var obj = ObjT(Int32(1), Int32(1), Int32(MSE), Float32(0.0))
+    var f = rf.fit[ObjT](ctx, dx, dy, dsw, n_rows, n_cols, 1, obj)
+
+    var fails = 0
+    if len(f.trees) != 3:
+        fails += 1
+        print("  arm F: expected 3 trees from the method, got", len(f.trees))
+        return fails
+
+    # predict wants ROW-MAJOR (`randomforest.cuh:399, 407`)
+    var rm = List[Float32]()
+    rm.resize(n_rows * n_cols, Float32(0))
+    for r in range(n_rows):
+        for c in range(n_cols):
+            rm[r * n_cols + c] = x[c * n_rows + r]
+    var preds = List[Float32]()
+    preds.resize(n_rows, Float32(-1))
+    rf.predict(rm, n_rows, n_cols, preds, f)
+
+    var wrong = 0
+    for r in range(n_rows):
+        var want = Float32(5.0) if r < n_rows // 2 else Float32(20.0)
+        if preds[r] != want:
+            wrong += 1
+            if wrong <= 2:
+                print("  arm F: row", r, "predicted", preds[r], "want", want)
+    if wrong != 0:
+        fails += 1
+        print(
+            "  arm F FAILED:", wrong, "of", n_rows,
+            "regression predictions wrong on a fixture whose answer is two"
+            " constants",
+        )
+    _ = dx^
+    _ = dy^
+    _ = dsw^
+    _ = hx^
+    _ = hy^
+    if fails == 0:
+        print(
+            "  arm F OK: RandomForest.fit as a METHOD gave 3 trees, and"
+            " predict's REGRESSION arm returned exactly 5.0 / 20.0 for all",
+            n_rows, "rows",
+        )
+    return fails
+
+
 def main() raises:
     print("regression_check: a REGRESSION forest, through the generic Builder")
     print("  RegressionObjectiveFunction + RegressionBin, MSE criterion")
@@ -534,6 +626,7 @@ def main() raises:
     fails += arm_c_determinism(ctx)
     fails += arm_d_forest(ctx)
     fails += arm_e_epsilon()
+    fails += arm_f_estimator_predict(ctx)
     if fails == 0:
         print("regression_check: ALL OK")
     else:
