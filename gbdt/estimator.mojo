@@ -175,15 +175,13 @@ def gbdt_fit(
             cats.append((w & UInt32(1)) != UInt32(0))
             one_hot.append((w & UInt32(2)) != UInt32(0))
 
-    # `class_weights` is the only per-row weighting `train` accepts today;
-    # a general per-row weight column is NOT WIRED through it, so a caller
-    # asking for one is refused rather than silently ignored.
+    # THEIR PRODUCT (`target/data_providers.cpp:168`): the row weight and
+    # the class weight multiply. `n_weights == 0` means unit weights and
+    # `weights` is never read, the same contract `kmeans_fit` has.
+    var ws = List[Float32]()
     if n_weights != 0:
-        raise Error(
-            "gbdt_fit: per-row weights are not wired through train() yet;"
-            " pass n_weights = 0. See UNWIRED.md."
-        )
-    _ = weights
+        for i in range(n_rows):
+            ws.append(weights.unsafe_load(i))
 
     var tm = train(
         ctx, xs, ys, n_rows, n_features,
@@ -196,6 +194,7 @@ def gbdt_fit(
         random_seed=params.random_seed,
         score_function=params.score_function,
         cat_features=cats,
+        sample_weight=ws,
         loss=params.loss,
         loss_alpha=params.loss_alpha,
         loss_q=params.loss_q,

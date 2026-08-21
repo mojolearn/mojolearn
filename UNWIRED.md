@@ -743,11 +743,11 @@ hypotheses that died on it. `python/mojolearn/ensemble.py` is written and
 correct; `mojolearn.GradientBoosting` is listed as a named absence with
 that reason until the loader is fixed.
 
-**Per-row weights through `train()`.** `gbdt_fit` takes an `n_weights`
-argument and REFUSES anything but zero, because `train()` accepts only
-`class_weights` and there is no per-row weight column threaded through it.
-The oracle and every kernel already take a weight plane; it is the host
-signature that stops.
+**Per-row weights through `train()`** -- WIRED 2026-08-21. `train` takes
+`sample_weight` and multiplies it with `class_weights`, which is their own
+combination at pool build (`target/data_providers.cpp:168`). Their
+group-weight factor is absent because this port carries no `group_id`.
+`sample_weight` of all ones is BIT-IDENTICAL to passing none.
 
 **`FilterZeroEntries` for Bernoulli and Poisson.** DEVIATION 69: the draws
 are ported and the zero-weight rows are not filtered out, which is

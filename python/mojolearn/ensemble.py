@@ -265,7 +265,7 @@ class GradientBoosting:
     # `bindings/_mojolearn.mojo:gbdt_fit_binding` writes this same order in
     # the same words. A silent reordering here is a wrong answer, not a
     # failure, which is why it is spelled out in both places.
-    def _params(self, n_rows, n_features, n_flags):
+    def _params(self, n_rows, n_features, n_flags, n_weights=0):
         def f(v):
             return _UNSET if v is None else float(v)
 
@@ -277,7 +277,7 @@ class GradientBoosting:
         return [
             n_rows,                                     # 0
             n_features,                                 # 1
-            0,                                          # 2  n_weights
+            int(n_weights),                             # 2  n_weights
             n_flags,                                    # 3
             int(self.border_count),                     # 4
             int(self.n_estimators),                     # 5
@@ -320,8 +320,17 @@ class GradientBoosting:
             flags[i] |= 2
         return flags
 
-    def fit(self, X, y):
-        """Fit the ensemble. `X` is (n_samples, n_features), `y` is 1-D."""
+    def fit(self, X, y, sample_weight=None):
+        """Fit the ensemble. `X` is (n_samples, n_features), `y` is 1-D.
+
+        `sample_weight` is a per-row weight, `None` meaning all ones. It
+        MULTIPLIES with `class_weights` where both are given, which is
+        their own combination at pool build
+        (`target/data_providers.cpp:168`:
+        `rawWeights[i] * rawGroupWeights[i] * classWeights[...]`). Their
+        group-weight factor is absent because this port carries no
+        `group_id`.
+        """
         Xa, _ = as_f32_c(X, "X")
         n_rows, n_features = Xa.shape
 
@@ -340,13 +349,31 @@ class GradientBoosting:
         n_flags = 0 if flags is None else n_features
         flags_holder = flags if flags is not None else np.zeros(1, np.uint32)
 
-        params = self._params(n_rows, n_features, n_flags)
+        if sample_weight is None:
+            wa = Xcol[:1]  # unread while params[2] == 0
+            n_weights = 0
+        else:
+            wa = np.ascontiguousarray(
+                np.asarray(sample_weight).ravel(), dtype=np.float32
+            )
+            if wa.shape[0] != n_rows:
+                raise ValueError(
+                    f"mojolearn: sample_weight has {wa.shape[0]} entries "
+                    f"for {n_rows} rows"
+                )
+            if (wa < 0).any():
+                raise ValueError(
+                    "mojolearn: sample_weight has negative entries"
+                )
+            n_weights = n_rows
+
+        params = self._params(n_rows, n_features, n_flags, n_weights)
         strs = [self.loss, self.bootstrap_type or ""]
 
         self.model_ = _mojolearn.gbdt_fit(
             _addr_ro(Xcol),
             _addr_ro(ya),
-            _addr_ro(Xcol),   # weights unread while params[2] == 0
+            _addr_ro(wa),
             _addr_ro(flags_holder),
             params,
             strs,
