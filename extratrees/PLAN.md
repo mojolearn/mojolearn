@@ -226,46 +226,53 @@ re-drawing when every sampled column is constant, which neither upstream does.
 ## Where this stands against the plan above
 
 The design sketch at the top of this file listed five steps, a set of defaults
-and three oracles. Measured against it:
+and three oracles. Every one of them now exists on BOTH the host and the GPU.
 
 | plan item | host | device |
 |---|---|---|
-| 1. range pass (min/max per node, feature) | DONE | in flight |
-| 2. threshold draw, keyed counter-based | DONE | — |
-| 3. score pass (a few accumulators, no histogram) | DONE | — |
-| 4. select, total-order tie-break | DONE | — |
-| 5. stable partition, children join the frontier | DONE (cuML's swap partition, ported) | — |
-| breadth-first frontier | DONE | — |
-| `bootstrap=False` | DONE (`True` refused by name) | — |
-| `max_features` sqrt/1.0 | DONE as a ratio; the `sqrt` name is the caller's to resolve | — |
-| oracle 1: exact host transcription | DONE | — |
-| oracle 2: analytic + adversarial fixtures | DONE | — |
-| oracle 3: sklearn quality band | in flight | — |
+| 1. range pass (min/max per node, feature) | DONE | DONE |
+| 2. threshold draw, keyed counter-based | DONE | DONE |
+| 3. score pass (a few accumulators, no histogram) | DONE | DONE |
+| 4. select, total-order tie-break | DONE | DONE |
+| 5. partition, children join the frontier | DONE | DONE |
+| leaf values | DONE | DONE |
+| breadth-first frontier | DONE | host, as cuML's is |
+| `bootstrap=False` | DONE | DONE |
+| `max_features` sqrt/1.0 | DONE | DONE |
+| oracle 1: exact host transcription | DONE | it IS the device's oracle |
+| oracle 2: analytic + adversarial fixtures | DONE | DONE |
+| oracle 3: sklearn quality band | DONE | via the host, which is identical |
 
-**The learner works end to end and so does the forest.** A separable fixture
-comes out exactly right at every seed, a regression step function is fitted
-exactly, an all-constant fixture yields a single leaf, and a 12-tree forest has
-no two trees alike and votes the average of its trees per cell. Fifteen checks,
-run by `tools/check.sh`, every one with a sabotage per mechanism that was seen
-to turn it red.
+**THE HEADLINE: a tree grown on the GPU is the SAME TREE as one grown on the
+host.** 9 configurations, 747 nodes, 0 differing in `(colid, quesval,
+left_child_id, instance_count)`, 0 differing row predictions, 0 of 2241 leaf
+values differing — and since deviation 183 closed, that holds with cuML's
+zero-gain gate ON as well, 689 nodes against 689.
 
-**What is NOT done, stated as the gap it is:**
+That identity is not luck. It is what three earlier decisions bought:
+deviation 135's fixed point made the accumulators integers, deviation 142's
+amendment put the same explicit `fma` on both sides of the draw, and deviation
+144's exact rational made the comparison exact rather than approximate. Each
+was argued at the time as a determinism decision; this is the thing they were
+determinism decisions FOR.
 
-1. **No kernel has been enqueued.** This is the whole thesis — GPU access on a
-   machine where the incumbents' GPU arms refuse to run — and none of it
-   exists yet. One kernel (the range pass) is in flight. `PORTING_RULES.md` is
-   explicit that a kernel is not ported until it has been enqueued, and
-   compiling is not evidence.
-2. **No number has been measured, deliberately.** Perf is deferred by the repo
-   owner. Nothing in this directory quotes a duration and nothing should until
-   that is lifted.
-3. **The sklearn quality band has not been run**, so "our trees are shallower
-   than sklearn's on constant-heavy data" (deviations 132 and 151) is a
-   prediction, not a measurement.
-4. **The deviation range 130-159 is FULL.** The device work is using 160+.
-5. **No Python binding**, and deviation 154 records a debt against it:
-   `min_weight_fraction_leaf` and `monotonic_cst` have no field to refuse and
-   therefore no error.
+**Twenty-two checks, run by `tools/check.sh`, five of them enqueuing kernels**,
+every one with a sabotage per mechanism that was seen to turn it red.
+
+## What is NOT done, stated as the gap it is
+
+1. **No number has been measured, deliberately.** Perf is deferred by the repo
+   owner. Nothing in this directory quotes a duration, and the thesis number —
+   our GPU against sklearn's CPU on this Mac — has not been taken.
+2. **The forest and the estimator do not use the device path yet.** One tree
+   does; `fit_classification` still calls the host trainer per tree.
+3. **Regression is host-only on the device path.** Every kernel supports it,
+   but the finalize kernel publishes no exact rational for MSE, so the device
+   reduction cannot rank regression candidates.
+4. **Deviation 151** — we stop when every sampled column is constant and
+   sklearn keeps drawing. Priced, measured on `shaped_constant_heavy`, not
+   fixed.
+5. **No Python binding.**
 
 ## Rules this lane earned, beyond the ones it inherited
 
