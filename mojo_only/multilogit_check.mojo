@@ -511,17 +511,33 @@ def check_search_mode(ctx: DeviceContext, num_classes: Int) raises -> Int:
     var reported = Float64(0.0)
     for b in range(blocks):
         reported += Float64(h_m.unsafe_ptr().unsafe_load(2 * b + 1))
+    var tightest = Float64(0.0)
     for k in range(eff):
         var plane_sum = Float64(0.0)
         for i in range(n):
             var v = Float64(h_s.unsafe_ptr().unsafe_load((1 + k) * n + i))
             plane_sum += v if v > 0.0 else -v
+        if plane_sum > tightest:
+            tightest = plane_sum
         if plane_sum > reported * 1.000001:
             print(
                 "    plane", k, "sums to", plane_sum,
                 "which EXCEEDS the reported bound", reported,
             )
             bad += 1
+
+    # DEVIATION 79, MEASURED. The bound is `sum_rows max_k |der_k|`; the
+    # TIGHTEST valid per-plane bound is `max_k sum_rows |der_k|`. Their
+    # ratio is exactly the fixed-point resolution this port gives up by
+    # carrying one number instead of `numClasses` reduction lanes. The
+    # deviation priced it "loose by at most a factor of numClasses"; this
+    # is what it actually costs on a hashed fixture.
+    if tightest > 0.0:
+        print(
+            "       [deviation 79] bound", reported, "/ tightest",
+            tightest, "= ", reported / tightest,
+            "x  (worst case", eff, "x)",
+        )
     return bad
 
 

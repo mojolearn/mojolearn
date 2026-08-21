@@ -2160,13 +2160,24 @@ histogram, and `greedy_search_helper` already maxes the weight and gradient
 magnitudes before calling it, so per-plane sums would be collapsed to their
 max anyway.
 
-WHAT IT COSTS: the bound is loose by at most a factor of `numClasses`
-against the tightest per-plane sum, so the scale can be up to `numClasses`
-times smaller than it needed to be -- three bits of resolution at seven
-classes, out of the margin `choose_scale` documents as millionfold.
-**UNMEASURED** against a per-plane version; the alternative needs
-`numClasses` reduction lanes where the deterministic fold is comptime-fixed
-at two. **OPEN ITEM.**
+WHAT IT COSTS, **MEASURED 2026-08-21** rather than bounded. The bound is
+`sum_rows max_k |der_k|`; the tightest valid per-plane bound is
+`max_k sum_rows |der_k|`. Their ratio IS the resolution given up, and
+`mojo_only/multilogit_check.mojo` prints it on every run. On 2,053 hashed
+rows:
+
+    numClasses  2    1.0000x     worst case 1x    0.00 bits
+    numClasses  3    1.366x      worst case 2x    0.45 bits
+    numClasses  7    3.084x      worst case 6x    1.62 bits
+
+So it runs at about HALF the theoretical worst case, and at seven classes
+costs 1.62 bits out of the margin `choose_scale` documents as millionfold
+(~20 bits). Two classes is exactly tight, as it must be: with one free
+plane the max over planes IS that plane.
+
+**CLOSED.** The per-plane alternative would need `numClasses` reduction
+lanes where the deterministic fold is comptime-fixed at two, and it would
+buy back under two bits of a twenty-bit margin.
 
 `mojo_only/multilogit_check.mojo` verifies the bound actually bounds: every
 class plane's own sum of absolute values is checked against the reported
