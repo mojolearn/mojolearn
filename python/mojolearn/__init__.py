@@ -35,9 +35,17 @@ upstream each algorithm mirrors, not scikit-learn's**, and where those differ
 it is documented on the class. `KMeans.n_init` is the one that will surprise
 you: cuVS's default is 1 and scikit-learn's is 10.
 
-Not validated outside Apple Silicon. One source targets CPU, Metal, CUDA and
-ROCm, and this has been measured on exactly one M4. Support is not
-validation.
+Not validated outside Apple Silicon. One source targets Metal, CUDA and ROCm,
+and this has been measured on exactly one M4. Support is not validation.
+
+**There is no CPU path, and this docstring used to say there was.** The
+sentence read "One source targets CPU, Metal, CUDA and ROCm", which was true
+of the predecessor library and was carried across the rename. It is false
+here: every estimator in this package requires a GPU, `kernel_matrix.mojo`
+states "There is no CPU column. This tree has no CPU path," and no CPU kernel
+exists to fall back to. A user reading a promise of CPU support in the
+package's own docstring would discover otherwise at the first call, which is
+the worst place in the tree for that sentence to have been.
 """
 
 from ._version import __version__

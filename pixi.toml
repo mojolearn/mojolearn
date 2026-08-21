@@ -208,6 +208,18 @@ check-leaf-partition = "mojo run -I . mojo_only/leaf_partition_check.mojo"
 # refused. Own main(); a GPU, ~2 min.
 check-nan-mode = "mojo run -I . mojo_only/nan_mode_check.mojo"
 
+# The offset arithmetic of CatBoost's OTHER histogram family, the one both
+# of their oblivious searchers share (PORTING.md 91 B, rung 1). Six gates:
+# the fold stripe is a power-of-two rounding that a histogram offset does
+# NOT apply and conflating them is invisible at every power-of-two fold
+# count; the document-block multiplier against a hand trace including both
+# its exit conditions; the partial pass must read the SMALLER child while
+# writing the RIGHT one; and the bin prefix scan against a host prefix over
+# HASHED per-cell plants, with a separate gate on the stat axis because the
+# pointwise histogram is stat-MINOR where the greedy-subsets one is
+# stat-major and a transposed scan moves no total. Own main(); a GPU, ~20 s.
+check-pointwise-offsets = "mojo run -I . mojo_only/pointwise_offsets_check.mojo"
+
 # The LSD radix sort over (bin, permutation position). Gates STABILITY
 # separately from sortedness and prints both, because sortedness alone
 # cannot see a tie that moved -- and the tie order IS the second half of

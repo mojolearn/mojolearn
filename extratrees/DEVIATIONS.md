@@ -121,26 +121,38 @@ candidates are reduced in an unspecified order, and cuML already wrote it.
 
 ---
 
-## 134. The partition is stable; sklearn's is not
+## 134. NOT a deviation: the partition is cuML's swap partition, ported
 
-**Theirs.** `partition_samples` (`_partitioner.pyx:217-245`) walks two pointers
-and SWAPS, so the within-child order of `samples` is neither the input order
-nor any other stated order. `partition_samples_final` (`:247-282`) does the
-same.
+This entry started life as a deviation ("ours will be a stable partition") and
+is kept, rewritten, because reading the upstream killed it — which is the
+outcome rule 1 predicts and rule 10 says to write down rather than quietly drop.
 
-**Ours.** A stable partition: within each child, rows keep their parent-order.
+**What reading `builder_kernels_impl.cuh:43-88` (`partitionSamples`) found.**
+cuML does the split partition IN PLACE on `dataset.row_ids`, with a two-pointer
+block algorithm: each side scans for "misfits" (`col[row_ids[loff]] >
+split.quesval` on the left, `col[row_ids[roff]] <= split.quesval` on the right),
+compacts them through two `cub::BlockScan` exclusive sums, and SWAPS the paired
+misfits. It is not stable, and it does not need to be.
 
-**Reason.** Rule 8 says a check must be able to fail per cell. An unstable
-partition makes the row order inside a node an implementation detail that the
-oracle cannot predict, which would force every downstream comparison to be
-order-insensitive — exactly the "same value in every cell" weakness that hid a
-490-of-512 defect once already. Stability also makes the accumulate order fixed,
-which is what 135 needs.
+**Two things that fall out of their code and are worth stating.**
 
-**Price.** A stable partition costs a scan where a swap loop costs nothing.
-Unmeasured, deliberately: this lane is not taking timing numbers yet.
+1. **Left is `<= quesval`.** `builder_kernels_impl.cuh:65-66` tests
+   `col[...] > quesval` for a left-side misfit, so a row equal to the threshold
+   stays left. That is the same convention as sklearn's `partition_samples`
+   (`_partitioner.pyx:233-236`, `feature_values[...] <= threshold` goes left).
+   **The two upstreams agree**, so the boundary row has one answer here and no
+   deviation is needed for it.
+2. **Their partition is deterministic.** Given the block size, the sequence of
+   scans, compactions and swaps is fixed; nothing about it depends on warp
+   scheduling. So the row order inside a child is reproducible, and the host
+   oracle can transcribe it exactly rather than being forced to compare
+   order-insensitively. A stable partition of our own would have bought the
+   same property at the cost of departing from the upstream for no measured
+   reason, which is the trade rule 1 forbids.
 
----
+**Ours.** Theirs, transcribed, with the `cub::BlockScan` exclusive sums written
+against `max.gpu.primitives.block` — a language-level counterpart, explicitly
+allowed by `PORTING_RULES.md` 0b-i and not a vendor-library substitution.
 
 ## 135. OPEN — score accumulation precision on device
 

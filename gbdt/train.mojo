@@ -55,6 +55,7 @@ from gbdt.overfitting_detector.overfitting_detector import (
     od_type_from_name,
 )
 from gbdt.gpu_util.kernel.radix_sort import DeviceFloatSorter
+from std.time import perf_counter_ns  # TEMP
 from max.algorithm import sync_parallelize
 from gbdt.data.permutation import TRandom
 from gbdt.gpu_util.kernel.bootstrap import (
@@ -237,6 +238,99 @@ def _build_cindex_from_floats(
             block_dim=(BINARIZE_BLOCK_SIZE, 1, 1),
         )
         ctx.synchronize()
+    return cindex^
+
+
+def _build_cindex_from_columns(
+    ctx: DeviceContext,
+    columns: List[List[Float32]],
+    n_rows: Int,
+    borders: List[List[Float32]],
+    fold_counts: List[Int],
+    nan_treatment: List[Int],
+) raises -> DeviceBuffer[DType.uint32]:
+    """`_build_cindex_from_floats` without the flat pack and without the
+    per-feature drain. The flat buffer exists so PERMUTATION-DEPENDENT
+    columns can be substituted per permutation; when there are none, it
+    is a 200M-element copy of data this function can read in place. The
+    per-feature `synchronize` becomes a PING-PONG: two staging slots, and
+    the drain before reusing a slot waits on work enqueued two features
+    back -- which is already finished, so the wait is the drain price
+    alone. Same kernels, same borders, same writes: bit-identical output
+    to the flat-path builder, which the train-mse gate holds.
+    """
+    var n_features = len(borders)
+    if len(fold_counts) != n_features:
+        raise Error("fold_counts/borders length mismatch")
+    var lay = build_layout(fold_counts)
+    var cindex = ctx.enqueue_create_buffer[DType.uint32](
+        n_rows * lay.columns
+    )
+    ctx.enqueue_memset(cindex, UInt32(0))
+
+    var xdev_a = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    var xdev_b = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    var hx_a = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
+    var hx_b = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
+    var hbo_a = ctx.enqueue_create_host_buffer[DType.float32](256)
+    var hbo_b = ctx.enqueue_create_host_buffer[DType.float32](256)
+    var bdev_a = ctx.enqueue_create_buffer[DType.float32](256)
+    var bdev_b = ctx.enqueue_create_buffer[DType.float32](256)
+    ctx.synchronize()
+    comptime BIN_GRID = BINARIZE_BLOCK_SIZE * BINARIZE_DOCS_PER_THREAD
+    var staged = 0
+    for f in range(n_features):
+        if len(borders[f]) == 0:
+            continue
+        ref cf = lay.features[f]
+        var treat = NAN_TREATMENT_AS_IS
+        if len(nan_treatment) == n_features:
+            treat = nan_treatment[f]
+        var sub = nan_substitution(treat)
+        var use_a = (staged & 1) == 0
+        if staged >= 2:
+            # the slot being reused carries work from two features back;
+            # everything since has also drained, which is fine -- the
+            # point is the WAIT is near zero, not the drain count
+            ctx.synchronize()
+        var hx = hx_a.unsafe_ptr() if use_a else hx_b.unsafe_ptr()
+        var hbo = hbo_a.unsafe_ptr() if use_a else hbo_b.unsafe_ptr()
+        var src = columns[f].unsafe_ptr()
+        for r in range(n_rows):
+            var v = src.unsafe_load(r)
+            if v != v:
+                if treat == NAN_TREATMENT_AS_IS:
+                    raise Error(
+                        "There are NaNs in feature number " + String(f)
+                        + " but there were no NaNs in the learn dataset"
+                    )
+                v = sub
+            hx.unsafe_store(r, v)
+        hbo.unsafe_store(0, Float32(len(borders[f])))
+        for b in range(len(borders[f])):
+            hbo.unsafe_store(1 + b, borders[f][b])
+        if use_a:
+            ctx.enqueue_copy(dst_buf=xdev_a, src_ptr=hx)
+            ctx.enqueue_copy(dst_buf=bdev_a, src_ptr=hbo)
+            ctx.enqueue_function[binarize_float_feature_kernel](
+                Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
+                xdev_a.unsafe_ptr(), Int32(n_rows),
+                bdev_a.unsafe_ptr(), cindex.unsafe_ptr(),
+                grid_dim=(n_rows + BIN_GRID - 1) // BIN_GRID,
+                block_dim=(BINARIZE_BLOCK_SIZE, 1, 1),
+            )
+        else:
+            ctx.enqueue_copy(dst_buf=xdev_b, src_ptr=hx)
+            ctx.enqueue_copy(dst_buf=bdev_b, src_ptr=hbo)
+            ctx.enqueue_function[binarize_float_feature_kernel](
+                Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
+                xdev_b.unsafe_ptr(), Int32(n_rows),
+                bdev_b.unsafe_ptr(), cindex.unsafe_ptr(),
+                grid_dim=(n_rows + BIN_GRID - 1) // BIN_GRID,
+                block_dim=(BINARIZE_BLOCK_SIZE, 1, 1),
+            )
+        staged += 1
+    ctx.synchronize()
     return cindex^
 
 
@@ -477,6 +571,7 @@ def train(
     # OWN grid, `cat_params.ctr_binarization_for(config)`, which is
     # MinEntropy 15 for FeatureFreq and Uniform 15 for Borders, not the
     # `border_count` GreedyLogSum the numeric columns take.
+    var _t0 = perf_counter_ns()  # TEMP
     var columns = List[List[Float32]]()
     var column_one_hot = List[Bool]()
     var column_ctr_grid = List[Int]()
@@ -767,6 +862,23 @@ def train(
             sd = 6364136223846793005 * sd + 1442695040888963407
         return sd
 
+    def _sample_slice(
+        fcol: Int,
+        cols: List[List[Float32]],
+        pre: List[Float32],
+        slot_of: List[Int],
+        sample_n: Int,
+        nr: Int,
+    ) raises -> List[Float32]:
+        if sample_n == nr:
+            return cols[fcol].copy()
+        var k = slot_of[fcol]
+        var out = List[Float32](capacity=sample_n)
+        var pp = pre.unsafe_ptr()
+        for i in range(sample_n):
+            out.append(pp.unsafe_load(k * sample_n + i))
+        return out^
+
     def _border_sample(
         fcol: Int,
         cols: List[List[Float32]],
@@ -806,15 +918,78 @@ def train(
                 out[0] = Float32(0.0) / Float32(0.0)
         return out^
 
-    # phase-A/B scratch: how many float columns, and one flat buffer
+    # phase-A/B scratch: which columns are float, and one flat buffer
     # holding every sorted float column back to back
     var n_float_prescan = 0
+    var float_slot_of = List[Int]()
+    var float_idx = List[Int]()
     for f in range(n_columns):
         if not column_one_hot[f] and column_ctr_grid[f] < 0:
+            float_slot_of.append(n_float_prescan)
+            float_idx.append(f)
             n_float_prescan += 1
+        else:
+            float_slot_of.append(-1)
     var float_cols = List[Int]()
     var sorted_flat = List[Float32](capacity=n_float_prescan * border_sample_n)
     sorted_flat.resize(n_float_prescan * border_sample_n, Float32(0.0))
+
+    # PHASE 0, sampling only: every float column's border sample drawn IN
+    # PARALLEL (the draws are 50M serial host RNG calls otherwise), same
+    # discipline as phase B -- disjoint flat slots, no device inside,
+    # per-slot error flags re-raised after the join. Draw semantics
+    # unchanged: their SampleArray per column, seeded per (random_seed,
+    # feature), NaN pre-scan included, so the borders -- and the model --
+    # are bit-identical to the serial draw's.
+    var _t1 = perf_counter_ns()  # TEMP
+    print("[p] columns+prescan", Float64(_t1 - _t0) / 1e9)  # TEMP
+    var predrawn = List[Float32]()
+    if border_sample_n < n_rows and n_float_prescan > 0:
+        predrawn.resize(n_float_prescan * border_sample_n, Float32(0.0))
+        var pd = predrawn.unsafe_ptr()
+        var fi = float_idx.unsafe_ptr()
+        var colp = columns.unsafe_ptr()
+        var sn = border_sample_n
+        var nrr = n_rows
+        var sd0 = random_seed
+        var flags = List[Int]()
+        flags.resize(n_float_prescan, 0)
+        var flg = flags.unsafe_ptr()
+
+        def _draw_task(
+            k: Int
+        ) {imm pd, imm fi, imm colp, imm sn, imm nrr, imm sd0, imm flg}:
+            var fcol = fi.unsafe_load(k)
+            var rnd = TRandom(_generate_seed(sd0 + UInt64(fcol)))
+            var src = (colp + fcol)[].unsafe_ptr()
+            for i in range(sn):
+                pd.unsafe_store(
+                    k * sn + i,
+                    src.unsafe_load(
+                        Int(rnd.next_uniform_l() % UInt64(nrr))
+                    ),
+                )
+            var has_nan = False
+            for r in range(nrr):
+                var v = src.unsafe_load(r)
+                if v != v:
+                    has_nan = True
+                    break
+            if has_nan:
+                var sample_has = False
+                for i in range(sn):
+                    var v2 = pd.unsafe_load(k * sn + i)
+                    if v2 != v2:
+                        sample_has = True
+                        break
+                if not sample_has:
+                    pd.unsafe_store(k * sn, Float32(0.0) / Float32(0.0))
+                flg.unsafe_store(k, 1)
+
+        sync_parallelize(_draw_task, n_float_prescan)
+        _ = flags^
+    var _t2 = perf_counter_ns()  # TEMP
+    print("[p] predraw", Float64(_t2 - _t1) / 1e9)  # TEMP
     var border_sorter = DeviceFloatSorter(ctx, n_rows)
     # their `TFloatFeature::NanValueTreatment`, one per COLUMN. One-hot and
     # CTR columns stay `AsIs`: a one-hot column holds dense codes and a CTR
@@ -899,12 +1074,24 @@ def train(
             # inside the parallel region (the sync_parallelize deadlock
             # rule mojotrees recorded).
             if not border_sorter.has_pending:
-                border_sorter.begin(ctx, _border_sample(f, columns, border_sample_n, n_rows, random_seed))
+                border_sorter.begin(
+                    ctx,
+                    _sample_slice(
+                        f, columns, predrawn, float_slot_of,
+                        border_sample_n, n_rows,
+                    ),
+                )
             var col = border_sorter.finish(ctx)
             var g = f + 1
             while g < n_columns:
                 if not column_one_hot[g] and column_ctr_grid[g] < 0:
-                    border_sorter.begin(ctx, _border_sample(g, columns, border_sample_n, n_rows, random_seed))
+                    border_sorter.begin(
+                        ctx,
+                        _sample_slice(
+                            g, columns, predrawn, float_slot_of,
+                            border_sample_n, n_rows,
+                        ),
+                    )
                     break
                 g += 1
             var slot = len(float_cols)
@@ -924,6 +1111,8 @@ def train(
     # = k bins reached by k-1 synthetic borders, and its fold count must
     # cover bin k-1 for the equality candidates, hence len+1 above.
 
+    var _t3 = perf_counter_ns()  # TEMP
+    print("[p] border loop (non-B)", Float64(_t3 - _t2) / 1e9)  # TEMP
     # PHASE B: every float column's calc_quantization in parallel, disjoint
     # flat output slots, errors carried out through a per-slot flag and
     # re-raised after the join.
@@ -982,6 +1171,8 @@ def train(
             borders[f2] = bs2^
 
 
+    var _t4 = perf_counter_ns()  # TEMP
+    print("[p] phase B", Float64(_t4 - _t3) / 1e9)  # TEMP
     # ONE COMPRESSED INDEX PER PERMUTATION. Theirs shares the
     # permutation-INDEPENDENT columns between them and gives each
     # permutation its own dataset for the dependent ones
@@ -989,7 +1180,22 @@ def train(
     # column into one buffer, so a permutation costs a whole index rather
     # than the dependent slice of one. DEVIATION 89.
     var cindexes = List[DeviceBuffer[DType.uint32]]()
+    var any_dep = False
+    for c in range(n_columns):
+        if dep_ordinal_of_column[c] >= 0:
+            any_dep = True
     for p in range(perm_count):
+        if not any_dep:
+            # no permutation-dependent columns: read `columns` in place,
+            # skip the 200M-element flat pack and the per-feature drain
+            # (see _build_cindex_from_columns)
+            cindexes.append(
+                _build_cindex_from_columns(
+                    ctx, columns, n_rows, borders, fold_counts,
+                    column_nan_treatment,
+                )
+            )
+            continue
         var flat = List[Float32]()
         for c in range(n_columns):
             var ord = dep_ordinal_of_column[c]
@@ -1006,6 +1212,8 @@ def train(
             )
         )
     var cindex = cindexes[est_perm].copy()
+    var _t5 = perf_counter_ns()  # TEMP
+    print("[p] cindex", Float64(_t5 - _t4) / 1e9)  # TEMP
 
     # `class_weights` and `sample_weight`: their
     # `MakeClassificationWeights` applied at pool build. Both fold into
@@ -1281,6 +1489,7 @@ def train(
     )
 
     var model = TAdditiveModel()
+    print("[p] tail", Float64(perf_counter_ns() - _t5) / 1e9)  # TEMP
     var fit_result = fit_with_test(
         model, ctx, n_rows, fold_counts, max_depth, cindex, targets,
         weights, use_class_weights or use_sample_weight,
