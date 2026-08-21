@@ -1051,6 +1051,42 @@ comptime HIST_SMEM_WARP_PRIVATE_F32 = 0
 comptime HIST_SMEM_SHARED2_I32 = 1
 
 
+def pointwise_one_byte_fixed_for[column: Int, identical: Bool]() -> Bool:
+    """NUMERIC row: whether the POINTWISE one-byte family routes EVERY
+    width through the 8-bit fixed-point accumulator.
+
+    CatBoost's dispatch hands each feature to the narrowest accumulator
+    that fits it (5/6/7/8 bits), and the narrow ones accumulate floats
+    with warp-synchronous turn-taking -- free on hardware where a warp
+    executes in lockstep. Mojo has no warp barrier, so the port raises
+    each turn's sync to a FULL THREADGROUP `barrier()` inside
+    `add_point` -- up to eight per point -- and the narrow accumulators
+    arrive 4-7x off pace on Apple (measured 2026-08-21: the pointwise
+    searcher's histogram phase at 105 ms/tree on eps500, 95% of its
+    3.5x arm gap, every feature on the 7-bit float path). The 8-bit
+    accumulator already holds Int32 fixed point with LOCAL INTEGER
+    ATOMICS and no per-point barrier (DEVIATION 93), which is the same
+    substitution `HIST_SMEM_SHARED2_I32` measured at 1.94x for the
+    greedy family.
+
+    So the APPLE column routes all one-byte widths to the 8-bit
+    fixed-point kernel: `pw_bounds[8]` widens to (15, 256] and the
+    5/6/7 launches are skipped. `IDENTICAL` takes the same route
+    everywhere -- integer accumulation is the cross-device arithmetic.
+    NVIDIA and AMD under FAST keep CatBoost's dispatch: their warps ARE
+    in lockstep and their turn-taking is genuinely free.
+
+    A NUMERIC row, not a scheduling one: float adds become quantized
+    Int32 adds, the same trade DEVIATION 93 already made for 8-bit
+    features -- and on Apple it makes the pointwise arm's histogram
+    arithmetic IDENTICAL to the greedy arm's, which the two-searcher
+    bit-identity gate then checks for free.
+    """
+    comptime if identical:
+        return True
+    return column == COLUMN_APPLE
+
+
 def hist_smem_mode_for[column: Int, identical: Bool]() -> Int:
     """NUMERIC row: HOW the hist_2 family accumulates in shared memory.
 

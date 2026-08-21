@@ -168,6 +168,12 @@ atomic, so the 8-bit accumulator is Int32 fixed point); this layer only
 threads the value through.
 """
 
+from mojo_only.kernel_matrix import (
+    TARGET_COLUMN,
+    pointwise_one_byte_fixed_for,
+)
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE as HIST_BUILD_MODE
+from mojo_only.numerics import NUMERIC_IDENTICAL
 from max.gpu.host import DeviceContext
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 
@@ -1389,30 +1395,65 @@ def compute_hist2[
         # `DISPATCH_ONE_BYTE(ComputeHist2NonBinary, 4, 5)` and the three
         # that follow (`:57-60`). Note the 4 in the first: see
         # `FoldsHistogram`.
-        compute_hist2_non_binary[5](
-            ctx, feature_offset, feature_first_fold_index, feature_folds,
-            feature_count, cindex, target, weight, indices, size, partition,
-            part_count, fold_count, full_pass, hist_line_size, bin_sums,
-            folds_hist.feature_count_for_bits(4, 5), sm_count, fixed_scale,
-        )
-        compute_hist2_non_binary[6](
-            ctx, feature_offset, feature_first_fold_index, feature_folds,
-            feature_count, cindex, target, weight, indices, size, partition,
-            part_count, fold_count, full_pass, hist_line_size, bin_sums,
-            folds_hist.feature_count_for_bits(6, 6), sm_count, fixed_scale,
-        )
-        compute_hist2_non_binary[7](
-            ctx, feature_offset, feature_first_fold_index, feature_folds,
-            feature_count, cindex, target, weight, indices, size, partition,
-            part_count, fold_count, full_pass, hist_line_size, bin_sums,
-            folds_hist.feature_count_for_bits(7, 7), sm_count, fixed_scale,
-        )
-        compute_hist2_non_binary[8](
-            ctx, feature_offset, feature_first_fold_index, feature_folds,
-            feature_count, cindex, target, weight, indices, size, partition,
-            part_count, fold_count, full_pass, hist_line_size, bin_sums,
-            folds_hist.feature_count_for_bits(8, 8), sm_count, fixed_scale,
-        )
+        # the Apple/IDENTICAL routing row sends every one-byte width
+        # through the 8-bit fixed-point kernel (its `pw_bounds` widen to
+        # match); the narrow float accumulators' turn-taking costs a full
+        # threadgroup barrier per turn on a column with no warp barrier.
+        # See `pointwise_one_byte_fixed_for`.
+        comptime if pointwise_one_byte_fixed_for[
+            TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
+        ]():
+            compute_hist2_non_binary[8](
+                ctx, feature_offset, feature_first_fold_index,
+                feature_folds,
+                feature_count, cindex, target, weight, indices, size,
+                partition,
+                part_count, fold_count, full_pass, hist_line_size,
+                bin_sums,
+                folds_hist.feature_count_for_bits(4, 8), sm_count,
+                fixed_scale,
+            )
+        else:
+            compute_hist2_non_binary[5](
+                ctx, feature_offset, feature_first_fold_index,
+                feature_folds,
+                feature_count, cindex, target, weight, indices, size,
+                partition,
+                part_count, fold_count, full_pass, hist_line_size,
+                bin_sums,
+                folds_hist.feature_count_for_bits(4, 5), sm_count,
+                fixed_scale,
+            )
+            compute_hist2_non_binary[6](
+                ctx, feature_offset, feature_first_fold_index,
+                feature_folds,
+                feature_count, cindex, target, weight, indices, size,
+                partition,
+                part_count, fold_count, full_pass, hist_line_size,
+                bin_sums,
+                folds_hist.feature_count_for_bits(6, 6), sm_count,
+                fixed_scale,
+            )
+            compute_hist2_non_binary[7](
+                ctx, feature_offset, feature_first_fold_index,
+                feature_folds,
+                feature_count, cindex, target, weight, indices, size,
+                partition,
+                part_count, fold_count, full_pass, hist_line_size,
+                bin_sums,
+                folds_hist.feature_count_for_bits(7, 7), sm_count,
+                fixed_scale,
+            )
+            compute_hist2_non_binary[8](
+                ctx, feature_offset, feature_first_fold_index,
+                feature_folds,
+                feature_count, cindex, target, weight, indices, size,
+                partition,
+                part_count, fold_count, full_pass, hist_line_size,
+                bin_sums,
+                folds_hist.feature_count_for_bits(8, 8), sm_count,
+                fixed_scale,
+            )
     else:
         # `CB_ENSURE(false, "Unexpected feature grouping policy")` (`:64`)
         raise Error(

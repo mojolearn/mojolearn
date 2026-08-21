@@ -61,6 +61,12 @@ from std.atomic import Atomic
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
+from mojo_only.kernel_matrix import (
+    TARGET_COLUMN,
+    pointwise_one_byte_fixed_for,
+)
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+
 from gbdt.methods.kernel.compute_point_hist2_loop import (
     compute_histogram,
     compute_histogram_2,
@@ -198,6 +204,12 @@ def pw_bounds[bits: Int]() -> Tuple[Int, Int]:
     5, because both tests are strict on one side.
     """
     comptime upper = 1 << bits
+    # the Apple/IDENTICAL routing row widens the 8-bit kernel to accept
+    # every one-byte width; see `pointwise_one_byte_fixed_for`
+    comptime if bits == 8 and pointwise_one_byte_fixed_for[
+        TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    ]():
+        return (15, upper)
     comptime lower = (upper // 2) if bits > 5 else 15
     return (lower, upper)
 
