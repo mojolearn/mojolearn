@@ -495,6 +495,7 @@ Numbers as actually used, which is what PORTING.md takes:
 | 307 | `builder.mojo` | `CRITERION_END` resolves in `Builder`'s constructor. Theirs resolves it in `DecisionTree::fit` (`decisiontree.cuh:251-256`), which also dispatches the objective FAMILY on the same integer-label test; ours has the family fixed by `O`, so the constructor is the first point that sees both `params` and `O.LabelT` |
 | 308 | `randomforest.mojo` | `fit_forest` / `RandomForest.fit` take `BinScales`, not an objective. Theirs has no caller-supplied objective at all — `builder.cuh:592-596` builds it from `params` — so after that rewiring the scales are the only thing a caller still supplies |
 | 309 | `randomforest.mojo` | the Python layer's four derived-parameter transforms (`randomforest_common.pyx:520-536`, `validation.py:73-79`). Mojo has no `int \| float` parameter, so each fraction arm is its own entry point; the `n_bins` clamp lives in `fit_forest` because that is where `n_rows` is known and this port has no separate Python layer |
+| 311 | `randomforest.mojo` | OOB. The mask buffer is allocated by `fit_forest`, not by a caller, and `oob_score_` / `oob_decision_function_` / `oob_prediction_` land on `RandomForestMetaData` rather than on an estimator object -- they are Python ATTRIBUTES there, not C++ members. The per-tree predictions come from the host tree walk rather than `nvforest.predict_per_tree` (which is DEVIATION 119b's declined path), and the whole scoring pass is on the host where theirs is cupy on device |
 | 310 | `objectives.mojo` | `10 * numeric_limits<DataT>::epsilon()` as an IEEE-754 literal, because `nextafter` crashes the Metal backend with no line number. Value is bit-identical; checked against `nextafter` on the host in `regression_check.mojo` |
 
 **RESOLVED, 2026-08-21, in the same session:** `core/`'s 112/113/114 were
@@ -730,13 +731,13 @@ bit-identical.
    and the plain bin give the same forest, so nothing is counted twice.
    The CDF is a host scan rather than their device one (DEVIATION 306).
 
-   **The real remaining gap in this area is OOB.**
-   `RowSampler::store_bootstrap_mask` (`randomforest.cuh:170-183`) and the
-   `bootstrap_masks` buffer threaded through their `fit` are not ported at
-   all, so `oob_score_` (`randomforest_common.pyx:748`) has nothing to read.
-   That is a feature decision, not a defect: it needs a per-tree mask buffer
-   sized `n_trees x n_rows` and a scoring pass, and nothing else in this
-   directory depends on it.
+   **OOB IS DONE TOO.** `store_bootstrap_mask` (`randomforest.cuh:170-183`)
+   is two kernels in their order (fill, then scatter a constant, which is
+   idempotent so the duplicate ids a bootstrap produces are not a race), and
+   it is called from `sample()` AFTER the four-way dispatch as theirs is at
+   `:163`, so every arm records a mask. `fit_forest(oob_score=True)`
+   allocates the `n_trees x n_rows` buffer and runs `compute_oob_score`,
+   the port of `randomforest_common.pyx:695-753`. `oob_check` covers it.
 2. **Inference is the host walk only.** cuML's production path is
    treelite -> nvForest and is not ported and not planned. Any inference
    comparison must say which of the two it ran. OPEN: whether a device

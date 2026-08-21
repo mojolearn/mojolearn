@@ -301,6 +301,8 @@ three.
 =================================================================
 """
 
+from std.gpu import global_idx
+from std.math import ceildiv as _ceildiv
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from ensemble.decisiontree.batched_levelalgo.bins import Bin
@@ -873,6 +875,43 @@ struct RandomForestMetaData[dtype: DType, label_dtype: DType](
     # `= 0` in their header and set by `fit` (`randomforest.cuh:334`)
     var n_features: Int32
 
+    # --- OOB. NOT in their C++ struct ------------------------------------
+    # These are Python ATTRIBUTES on the estimator, set by
+    # `_compute_oob_score` (`randomforest_common.pyx:741-753`): the C++
+    # side only ever fills the mask buffer. This port has no Python layer,
+    # so they land on the thing a fit returns. DEVIATION 311.
+    #
+    # `has_oob` is False unless `fit_forest(oob_score=True)` ran, and the
+    # three fields below are meaningless when it is False. Their absence
+    # is `hasattr(self, 'oob_score_')` on the Python side
+    # (`:276`, `:299`).
+    var has_oob: Bool
+    # `:748` / `:753` -- accuracy for a classifier, R^2 for a regressor.
+    var oob_score_: Float64
+    # `:742` -- classifier only: the averaged per-class OOB probabilities,
+    # n_rows x num_outputs, row-major.
+    var oob_decision_function_: List[Float64]
+    # `:750` -- regressor only: the averaged OOB prediction per row.
+    var oob_prediction_: List[Float64]
+
+    def __init__(
+        out self,
+        var trees: List[TreeMetaDataNode[Self.dtype]],
+        rf_params: RF_params,
+        n_features: Int32,
+    ):
+        """Their three real members. The OOB fields default to absent,
+        which is what `hasattr(self, 'oob_score_')` tests on the Python
+        side (`randomforest_common.pyx:276`, `:299`) -- they exist only
+        after `_compute_oob_score` has run."""
+        self.trees = trees^
+        self.rf_params = rf_params
+        self.n_features = n_features
+        self.has_oob = False
+        self.oob_score_ = Float64(0.0)
+        self.oob_decision_function_ = List[Float64]()
+        self.oob_prediction_ = List[Float64]()
+
 
 # ---------------------------------------------------------------------------
 # class RandomForest -- `randomforest.cuh:229-483`
@@ -1143,6 +1182,256 @@ struct RandomForest[dtype: DType, label_dtype: DType](
 
 # ---------------------------------------------------------------------------
 # compute_feature_importances -- `randomforest.cu:797-860`
+
+# ---------------------------------------------------------------------------
+# store_bootstrap_mask's two device ops -- `randomforest.cuh:170-183`
+# ---------------------------------------------------------------------------
+# Theirs is a `thrust::fill` followed by a `thrust::scatter` of a
+# `constant_iterator(true)`. Two ops there, two kernels here, in their
+# order: the fill must complete before the scatter, because a row drawn
+# twice must stay `true` and a row never drawn must end `false`.
+
+
+def bootstrap_mask_fill_kernel(
+    masks: MutPointer[UInt8, MutAnyOrigin],
+    offset: Int64,
+    n_rows: Int32,
+):
+    """`:180` -- `thrust::fill(policy, tree_mask, tree_mask + n_rows_,
+    false)`."""
+    var i = Int(global_idx.x)
+    if i < Int(n_rows):
+        masks[unsafe_offset = Int(offset) + i] = UInt8(0)
+
+
+def bootstrap_mask_scatter_kernel(
+    masks: MutPointer[UInt8, MutAnyOrigin],
+    offset: Int64,
+    rows: MutPointer[Int32, MutAnyOrigin],
+    n_selected: Int32,
+    n_rows: Int32,
+):
+    """`:181-185`:
+
+        thrust::scatter(policy,
+                        thrust::make_constant_iterator(true),
+                        thrust::make_constant_iterator(true) + selected_rows.size(),
+                        selected_rows.data(),
+                        tree_mask);
+
+    A scatter of a CONSTANT is idempotent, so the duplicate row ids a
+    bootstrap draw produces are not a race: every writer writes the same
+    byte. That is why theirs needs no atomic and neither does this.
+
+    The `n_rows` bound has no counterpart -- theirs would scatter out of
+    bounds on a bad row id and this refuses to. It cannot fire: every arm
+    of `sample` produces ids in `[0, n_rows)`.
+    """
+    var i = Int(global_idx.x)
+    if i < Int(n_selected):
+        var r = Int(rows[unsafe_offset=i])
+        if r >= 0 and r < Int(n_rows):
+            masks[unsafe_offset = Int(offset) + r] = UInt8(1)
+
+
+
+def compute_oob_score[
+    O: ObjectiveLike, sabotage: Int = 0
+](
+    ctx: DeviceContext,
+    mut forest: RandomForestMetaData[O.DataT, O.LabelT],
+    sampler: RowSampler,
+    mut x: DeviceBuffer[DType.float32],
+    mut y: DeviceBuffer[O.LabelT],
+    n_rows: Int,
+    n_cols: Int,
+    row_major: Bool,
+) raises where O.DataT == DType.float32:
+    """`RandomForestClassifier/Regressor._compute_oob_score`,
+    `randomforest_common.pyx:695-753`.
+
+    Their loop, verbatim:
+
+        oob_predictions = cp.zeros(output_shape, dtype=cp.float64)
+        oob_counts      = cp.zeros(n_samples, dtype=cp.int32)
+        for tree_idx in range(self.n_estimators):
+            in_bag_mask = bootstrap_masks_cp[tree_idx]
+            oob_mask    = ~in_bag_mask
+            oob_predictions[oob_mask] += per_tree_preds[oob_mask, tree_idx]
+            oob_counts[oob_mask] += 1
+        valid_oob = oob_counts > 0
+        ...
+        oob_predictions[valid_oob] /= oob_counts[valid_oob]
+
+    THE MASK IS INVERTED HERE (`:718`) and nowhere else: the buffer holds
+    IN-BAG, a tree scores only the rows it never saw, and forgetting the
+    `~` would report a memorization score.
+
+    ACCUMULATION IS FLOAT64 (`:711`) while the per-tree predictions are
+    the model's own dtype -- so the widening happens on the way IN to the
+    sum, once per tree per row, and the division at the end is float64.
+
+    TWO DEVIATIONS, both in where the numbers come from rather than what
+    is done to them:
+
+      * PER-TREE PREDICTIONS. Theirs calls `nvforest_model
+        .predict_per_tree(X)` (`:703`), the treelite/nvForest path this
+        port declines (DEVIATION 119b). Ours walks each tree on the host
+        with `DecisionTree.predict_one`, which is the same traversal
+        their `decisiontree.cuh:370-389` defines -- `<=` goes left, right
+        is `left_child_id + 1`, a leaf adds its whole `vector_leaf` row
+        with `+=`. Same values, different executor.
+      * THE WHOLE PASS IS ON THE HOST. Theirs is cupy on device. The
+        accumulation order therefore differs from theirs: ours is
+        tree-major then row, theirs is a vectorised add per tree. Both
+        are float64 and both are sequential in the tree index, so the
+        only float difference available is within a row's class vector,
+        which is added in class order on both sides. DEVIATION 311.
+    """
+    var n_trees = len(forest.trees)
+    if n_trees == 0:
+        raise Error("cannot compute an OOB score for an empty forest")
+    var num_outputs = Int(forest.trees[0].num_outputs)
+
+    # The masks, back on the host. `:717` indexes them per tree.
+    var hm = ctx.enqueue_create_host_buffer[DType.uint8](n_trees * n_rows)
+    ctx.enqueue_copy(dst_buf=hm, src_buf=sampler.bootstrap_masks)
+
+    # X, row-major, because `predict_one` walks a row (`:366` does the
+    # same pointer arithmetic). Training may have been column-major.
+    var hx = ctx.enqueue_create_host_buffer[DType.float32](n_rows * n_cols)
+    ctx.enqueue_copy(dst_buf=hx, src_buf=x)
+
+    var hy = ctx.enqueue_create_host_buffer[O.LabelT](n_rows)
+    ctx.enqueue_copy(dst_buf=hy, src_buf=y)
+    ctx.synchronize()
+
+    var rows = List[Scalar[O.DataT]]()
+    for r in range(n_rows):
+        for c in range(n_cols):
+            var src = r * n_cols + c if row_major else c * n_rows + r
+            rows.append(
+                rebind[Scalar[O.DataT]](hx.unsafe_ptr().unsafe_load(src))
+            )
+
+    # `:711-712`
+    var oob_predictions = List[Float64]()
+    for _ in range(n_rows * num_outputs):
+        oob_predictions.append(Float64(0.0))
+    var oob_counts = List[Int]()
+    for _ in range(n_rows):
+        oob_counts.append(0)
+
+    var scratch = List[Scalar[O.DataT]]()
+    for _ in range(num_outputs):
+        scratch.append(Scalar[O.DataT](0))
+
+    # `:715-722`
+    for t in range(n_trees):
+        for r in range(n_rows):
+            # `:717-718` -- oob_mask = ~in_bag_mask
+            #
+            # CHECK HOOK. 1 drops the `~`, scoring each tree on the rows
+            # it was TRAINED on. That is the failure this line exists to
+            # prevent and it does not look like a failure -- it reports a
+            # better number.
+            var in_bag = hm.unsafe_ptr().unsafe_load(t * n_rows + r) != UInt8(
+                0
+            )
+            comptime if sabotage == 1:
+                if not in_bag:
+                    continue
+            else:
+                if in_bag:
+                    continue
+            for k in range(num_outputs):
+                scratch[k] = Scalar[O.DataT](0)
+            DecisionTree.predict_one[O.DataT](
+                rows, r * n_cols, forest.trees[t], scratch, 0, num_outputs
+            )
+            # `:721` -- += , and the widening happens here
+            for k in range(num_outputs):
+                oob_predictions[r * num_outputs + k] += Float64(scratch[k])
+            # `:722`
+            oob_counts[r] += 1
+
+    # `:725-732`
+    var n_valid = 0
+    for r in range(n_rows):
+        if oob_counts[r] > 0:
+            n_valid += 1
+    if n_valid != n_rows:
+        print(
+            "WARN: Some inputs do not have OOB scores. This probably means"
+            " too few trees were used to compute any reliable OOB"
+            " estimates."
+        )
+    if n_valid == 0:
+        raise Error(
+            "no sample was out of bag for any tree, so there is no OOB"
+            " score to report"
+        )
+
+    # `:734-738`
+    for r in range(n_rows):
+        if oob_counts[r] > 0:
+            var d = Float64(oob_counts[r])
+            for k in range(num_outputs):
+                oob_predictions[r * num_outputs + k] /= d
+
+    forest.has_oob = True
+    comptime if O.LabelT.is_integral():
+        # `:741-748` -- argmax over the averaged class probabilities, then
+        # accuracy. `cp.argmax` keeps the FIRST maximum on a tie, which is
+        # what a strict `>` from index 0 does.
+        forest.oob_decision_function_ = oob_predictions.copy()
+        var correct = 0
+        for r in range(n_rows):
+            if oob_counts[r] <= 0:
+                continue
+            var best = 0
+            var best_p = oob_predictions[r * num_outputs]
+            for k in range(1, num_outputs):
+                if oob_predictions[r * num_outputs + k] > best_p:
+                    best_p = oob_predictions[r * num_outputs + k]
+                    best = k
+            if Int(hy.unsafe_ptr().unsafe_load(r)) == best:
+                correct += 1
+        # `_classification.py:102` -- float(cp.average(correct))
+        forest.oob_score_ = Float64(correct) / Float64(n_valid)
+    else:
+        # `:750-753` -- r2_score over the valid rows only.
+        forest.oob_prediction_ = oob_predictions.copy()
+        var mean = Float64(0.0)
+        for r in range(n_rows):
+            if oob_counts[r] > 0:
+                mean += Float64(hy.unsafe_ptr().unsafe_load(r))
+        mean /= Float64(n_valid)
+        # `metrics/regression.py:136-140`
+        var numerator = Float64(0.0)
+        var denominator = Float64(0.0)
+        for r in range(n_rows):
+            if oob_counts[r] <= 0:
+                continue
+            var yt = Float64(hy.unsafe_ptr().unsafe_load(r))
+            var d1 = yt - oob_predictions[r * num_outputs]
+            numerator += d1 * d1
+            var d2 = yt - mean
+            denominator += d2 * d2
+        # `:145-157`, force_finite=True: numerator == 0 -> 1;
+        # numerator != 0 and denominator == 0 -> 0; else 1 - num/den.
+        if numerator == Float64(0.0):
+            forest.oob_score_ = Float64(1.0)
+        elif denominator == Float64(0.0):
+            forest.oob_score_ = Float64(0.0)
+        else:
+            forest.oob_score_ = Float64(1.0) - numerator / denominator
+
+    _ = hm^
+    _ = hx^
+    _ = hy^
+
+
 # ---------------------------------------------------------------------------
 
 
@@ -1286,9 +1575,16 @@ struct RowSampler(Movable):
          drops the zero-weight rows (`:144-154`).
       4. otherwise -- `thrust::sequence`, the identity (`:155-157`).
 
-    Arms 1 and 3 need `sample_weight`, which this port does not accept yet
-    (DEVIATION 100 carries the field as Float32 and nothing fills it), so
-    they raise by name rather than silently behaving like arm 2 or 4.
+    ALL FOUR ARMS RUN. This paragraph used to say arms 1 and 3 "raise by
+    name" because `sample_weight` was not accepted; both halves stopped
+    being true and the sentence stayed.
+
+    AND EVERY ARM RECORDS ITS BOOTSTRAP MASK. `store_bootstrap_mask` is
+    called at `:163` -- after the dispatch, outside the branch -- so the
+    non-bootstrap arms record one too. Their Python refuses `oob_score`
+    without `bootstrap` (`randomforest_common.pyx:498`), so those masks
+    are never read; recording them anyway is theirs, and it is the reason
+    the call site is one line rather than four.
 
     THE SEED CHAIN IS PER TREE AND IS NOT A STREAM (`:119-123`):
 
@@ -1326,6 +1622,13 @@ struct RowSampler(Movable):
     # `:224` -- one `device_uvector<int>` per stream. One stream here.
     var selected_rows: DeviceBuffer[DType.int32]
     var h_rows: HostBuffer[DType.int32]
+    # `:70`, `:81` -- `bool* bootstrap_masks_`, an `n_trees x n_rows`
+    # DEVICE buffer the CALLER owns; theirs asserts it is a device
+    # pointer (`:82-83`) and treats null as "OOB not requested".
+    # `MutPointer` is non-null, so the null test becomes a Bool, the same
+    # substitution DEVIATION 100 made for `sample_weight`.
+    var bootstrap_masks: DeviceBuffer[DType.uint8]
+    var has_masks: Bool
 
     def __init__(
         out self,
@@ -1335,8 +1638,18 @@ struct RowSampler(Movable):
         n_rows: Int,
         n_sampled_rows: Int,
         has_sample_weight: Bool = False,
+        n_trees_for_masks: Int = 0,
     ) raises:
-        """`:63-105`, their constructor, minus the weighted machinery."""
+        """`:63-105`, their constructor.
+
+        `n_trees_for_masks` is 0 when OOB was not asked for, which is
+        their `bootstrap_masks == nullptr`. Theirs is allocated by the
+        PYTHON layer (`randomforest_common.pyx:568`,
+        `cp.zeros((n_estimators, n_rows), bool)`) and passed in; this port
+        has no Python layer, so `fit_forest` allocates it and hands the
+        size here -- the same place the `n_bins` clamp went, and for the
+        same reason (DEVIATION 309).
+        """
         self.bootstrap = bootstrap
         self.seed = seed
         self.n_rows = n_rows
@@ -1348,6 +1661,9 @@ struct RowSampler(Movable):
         var n = n_sampled_rows if n_sampled_rows > 0 else 1
         self.selected_rows = ctx.enqueue_create_buffer[DType.int32](n)
         self.h_rows = ctx.enqueue_create_host_buffer[DType.int32](n)
+        self.has_masks = n_trees_for_masks > 0
+        var m = n_trees_for_masks * n_rows if self.has_masks else 1
+        self.bootstrap_masks = ctx.enqueue_create_buffer[DType.uint8](m)
         ctx.synchronize()
 
     def prepare_weights(
@@ -1426,11 +1742,68 @@ struct RowSampler(Movable):
         return fnv1a32_hash_seed_tree(self.seed, tree_id)
 
     def sample(mut self, ctx: DeviceContext, tree_id: Int32) raises:
-        """`RowSampler::sample`, `:110-165`. Fills `selected_rows`.
+        """`RowSampler::sample`, `:110-165`.
 
-        Their four-way dispatch, in their order. Arms 1 and 3 raise; see
-        the struct docstring and DEVIATION 181.
+        Their body is the four-way dispatch followed by ONE call to
+        `store_bootstrap_mask` at `:163`, outside the branch, so every arm
+        records its mask -- including the two that are not bootstraps at
+        all. That placement is the whole reason the mask is trustworthy,
+        and it is why the dispatch is a separate method here: ours has an
+        early `return` in each arm, so a call per arm would be four
+        chances to forget one.
         """
+        self._sample_rows(ctx, tree_id)
+        # `:163`
+        self.store_bootstrap_mask(ctx, tree_id)
+
+    def store_bootstrap_mask(
+        mut self, ctx: DeviceContext, tree_id: Int32
+    ) raises:
+        """`RowSampler::store_bootstrap_mask`, `:170-183`.
+
+            if (bootstrap_masks_ == nullptr) { return; }
+            bool* tree_mask = bootstrap_masks_ + checked_mul(tree_id, n_rows_);
+            thrust::fill(policy, tree_mask, tree_mask + n_rows_, false);
+            thrust::scatter(policy, constant_iterator(true),
+                            constant_iterator(true) + selected_rows.size(),
+                            selected_rows.data(), tree_mask);
+
+        THE MASK IS IN-BAG, NOT OUT-OF-BAG. `true` means the row was
+        DRAWN for this tree; the OOB set is its complement, and their
+        Python takes that complement at `randomforest_common.pyx:718`
+        (`oob_mask = ~in_bag_mask`). Getting this backwards would score
+        every tree on the rows it memorized and report a great number.
+
+        Note it scatters `selected_rows.size()` entries, which for the
+        zero-weight arm is the RESIZED count, not `n_sampled_rows`. Ours
+        passes `n_selected` for the same reason.
+        """
+        if not self.has_masks:
+            return
+        # `:178` -- `checked_mul<std::size_t>(tree_id, n_rows_)`
+        var offset = Int64(Int(tree_id)) * Int64(self.n_rows)
+        ctx.enqueue_function[bootstrap_mask_fill_kernel](
+            self.bootstrap_masks.unsafe_ptr(),
+            offset,
+            Int32(self.n_rows),
+            grid_dim=_ceildiv(self.n_rows, 256),
+            block_dim=256,
+        )
+        if self.n_selected > 0:
+            ctx.enqueue_function[bootstrap_mask_scatter_kernel](
+                self.bootstrap_masks.unsafe_ptr(),
+                offset,
+                self.selected_rows.unsafe_ptr(),
+                Int32(self.n_selected),
+                Int32(self.n_rows),
+                grid_dim=_ceildiv(self.n_selected, 256),
+                block_dim=256,
+            )
+        ctx.synchronize()
+
+    def _sample_rows(mut self, ctx: DeviceContext, tree_id: Int32) raises:
+        """`:112-161`, the four-way dispatch in their order. All four arms
+        run; see the struct docstring."""
         if self.bootstrap and self.has_sample_weight:
             # `:125-138` -- "Draw bootstrap rows according to sample
             # weights."
@@ -1574,7 +1947,7 @@ def n_sampled_rows_for(
 
 
 def fit_forest[
-    O: ObjectiveLike
+    O: ObjectiveLike, oob_sabotage: Int = 0
 ](
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32],
@@ -1587,6 +1960,7 @@ def fit_forest[
     scales: BinScales = BinScales(1.0, 1.0),
     sample_weight_host: List[Float32] = List[Float32](),
     row_major: Bool = False,
+    oob_score: Bool = False,
 ) raises -> RandomForestMetaData[O.DataT, O.LabelT] where (
     O.DataT == DType.float32
 ):
@@ -1639,6 +2013,15 @@ def fit_forest[
         raise Error("Invalid n_cols " + String(n_cols))
     rf_params.validity_check()
     rf_params.check()
+
+    # `randomforest_common.pyx:497-499` -- "Out of bag estimation only
+    # available if bootstrap=True". Without a bootstrap every tree sees
+    # every row, so no row is ever out of bag and the score would be
+    # computed over an empty set. Refused rather than returned as a NaN.
+    if oob_score and not rf_params.bootstrap:
+        raise Error(
+            "Out of bag estimation only available if bootstrap=True"
+        )
 
     # `randomforest_common.pyx:529-536`. THE PYTHON LAYER CLAMPS n_bins TO
     # n_rows, with a warning, and it does it HERE -- inside `_fit_forest`,
@@ -1703,7 +2086,13 @@ def fit_forest[
 
     var has_sw = len(sample_weight_host) > 0
     var sampler = RowSampler(
-        ctx, rf_params.bootstrap, rf_params.seed, n_rows, n_sampled, has_sw
+        ctx,
+        rf_params.bootstrap,
+        rf_params.seed,
+        n_rows,
+        n_sampled,
+        has_sw,
+        Int(rf_params.n_trees) if oob_score else 0,
     )
     if has_sw:
         sampler.prepare_weights(ctx, sample_weight_host)
@@ -1767,6 +2156,14 @@ def fit_forest[
         _ = builder^
 
     ctx.synchronize()
+
+    # `randomforest_common.pyx:669-670` -- after the tree loop, and only
+    # if it was asked for.
+    if oob_score:
+        compute_oob_score[O, oob_sabotage](
+            ctx, forest, sampler, x, y, n_rows, n_cols, row_major
+        )
+
     # Mojo frees a value at its LAST USE, and every buffer above reached a
     # kernel as a raw pointer. These uses keep them alive past the final
     # synchronize. Measured hazard, not a precaution.
