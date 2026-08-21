@@ -116,6 +116,15 @@ def main() raises:
     _knn_d(ctx, 200000, 2000, 32)
     _knn_d(ctx, 200000, 2000, 64)
     _knn_d(ctx, 200000, 2000, 128)
+    # LARGE-n AT HIGH d, added 2026-08-20. Every d>=32 cell on the board ran
+    # at n = 200,000, and every large-n cell ran at d = 8. Those are the two
+    # halves of the claim measured separately: "we win at width" and "we lose
+    # at size in their best corner". Nothing had ever run at both at once, so
+    # whether the width win SURVIVES scale was unmeasured and was being
+    # assumed. These rows measure it.
+    _knn_d(ctx, 1000000, 2000, 32)
     _dbscan_d(ctx, 200000, 8)
     _dbscan_d(ctx, 200000, 32)
     _dbscan_d(ctx, 200000, 64)
+    _dbscan_d(ctx, 400000, 32)
+    _dbscan_d(ctx, 800000, 32)

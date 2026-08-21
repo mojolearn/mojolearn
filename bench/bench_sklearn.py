@@ -24,11 +24,8 @@ bench/bench_sklearn_gpu.py):
   * `PCA(svd_solver="auto")` -- THEIR DEFAULT, and the `pca` arm below --
     CANNOT reach it. `auto` resolves to `covariance_eigh` at our shape and
     `aten::_linalg_eigh` is unimplemented on MPS.
-  * `Ridge(alpha=0, solver="cholesky")` -- the `ols_normal_eq` arm below, the
-    honest algorithm-matched denominator -- CANNOT reach it. Array API
-    dispatch supports only `svd`.
-  * `LinearRegression` -- the `ols` arm below -- CANNOT reach it. No Array API
-    support at all.
+  * `Ridge(alpha=0, solver="cholesky")` -- the `ols` arm below, and the only
+    one -- CANNOT reach it. Array API dispatch supports only `svd`.
   * `PCA(full)` and `Ridge(svd)` CAN, and both are ~1.2x SLOWER on MPS than
     the same call on torch's CPU, because `linalg_svd` has no MPS kernel and
     falls back to the host anyway.
@@ -55,19 +52,29 @@ file used to do, is not enough: the number still went into a table.
 So each of those two now emits TWO measurements, and a reader can see the
 algorithm penalty and the hardware difference separately:
 
-    pca            PCA()                 svd_solver='auto'. THEIR DEFAULT.
-    pca_cov_eigh   PCA(covariance_eigh)  Forms the covariance and
-                                         eigendecomposes it -- OUR route.
+    pca            PCA()                 svd_solver='auto'. THEIR DEFAULT,
+                                         and asserted at run time to resolve
+                                         to covariance_eigh -- OUR route.
 
-    ols            LinearRegression      LAPACK gelsd, an SVD route.
-                                         THEIR DEFAULT: what a user gets.
-    ols_normal_eq  Ridge(alpha=0,        Forms X^T X and solves it. The SAME
+    ols            Ridge(alpha=0,        Forms X^T X and solves it. The SAME
                    solver="cholesky")    algorithm class as our lstsq_eig,
                                          so this ratio is hardware only.
+                                         The `LinearRegression` gelsd arm was
+                                         DELETED 2026-08-20: an SVD of the
+                                         full design is a different algorithm
+                                         doing more work, and its 25.6x was
+                                         not a device result. See the note at
+                                         the call site.
 
     dbscan         algorithm="auto"      A kd-tree/ball-tree, O(n log n)
-                                         queries. THEIR DEFAULT.
-    dbscan_brute   algorithm="brute"     All n^2 pairs, like ours.
+                                         queries. THEIR DEFAULT, and the
+                                         MATCHED arm: their spatial index
+                                         against our ball cover (EPS_NN_RBC).
+
+Every arm this file emits is algorithm-matched. Two were deleted on
+2026-08-20 for failing that bar: `ols` as `LinearRegression` (gelsd SVD, a
+different decomposition) and `dbscan_brute` (their unindexed path against our
+ball cover). Both were unfair in OUR favour.
 
 **The default arm is the honest headline and the matched arm is the
 diagnostic.** A user choosing a library gets the default; forcing scikit-learn
@@ -113,7 +120,7 @@ import time
 import numpy as np
 from sklearn.cluster import DBSCAN, KMeans
 from sklearn.decomposition import PCA
-from sklearn.linear_model import LinearRegression, Ridge
+from sklearn.linear_model import Ridge
 from sklearn.neighbors import NearestNeighbors
 
 REPEATS = 5
@@ -167,6 +174,29 @@ def main():
     ol_w = 1.0 + 0.1 * np.arange(ols_cols)
     ol_b = np.ascontiguousarray(ol_a @ ol_w, dtype=np.float32)
 
+    # THE PCA ARM'S FAIRNESS, ASSERTED RATHER THAN TIMED.
+    #
+    # `pca` above passes their default `svd_solver="auto"`. That is only
+    # apples-to-apples if `auto` picks `covariance_eigh`, which forms the
+    # covariance matrix and eigendecomposes it -- our route. This file used
+    # to time a second `pca_cov_eigh` arm to keep that checkable, but a
+    # one-sided row on the board is noise, and two timings of the SAME solver
+    # invited exactly the misreading it was meant to prevent (they differed
+    # 34% on one run, purely from sampling).
+    #
+    # So it is a check now, not an arm. Probed 2026-08-20 at both 200,000 x 32
+    # and 4,000,000 x 32: `auto` resolves to `covariance_eigh` at both. If
+    # scikit-learn's heuristic ever moves, this stops the run instead of
+    # silently making the `pca` ratio an algorithm comparison.
+    _solver = PCA(n_components=pca_comp).fit(pc_x[:200000])._fit_svd_solver
+    if _solver != "covariance_eigh":
+        raise SystemExit(
+            "pca arm is no longer algorithm-matched: sklearn's auto chose "
+            f"{_solver!r}, not 'covariance_eigh'. Our route is the covariance "
+            "eigendecomposition. Fix the arm before quoting the ratio."
+        )
+    print(f"# pca: auto resolves to {_solver!r} -- algorithm-matched", flush=True)
+
     for _ in range(REPEATS):
         t = time.perf_counter()
         KMeans(n_clusters=km_k, init=km_init, n_init=1,
@@ -192,26 +222,6 @@ def main():
         PCA(n_components=pca_comp).fit(pc_x)
         emit("pca", time.perf_counter() - t)
 
-        # ALGORITHM-MATCHED. `covariance_eigh` forms the covariance matrix
-        # and eigendecomposes it, which is our route.
-        #
-        # This file previously ran ONLY this arm and reported it as "pca".
-        # Probed on sklearn 1.9.0 at 200,000 x 32: `auto` RESOLVES TO
-        # `covariance_eigh` at this shape, so the hardcode moved no number and
-        # was not a bias in either direction -- the same finding as the k-NN
-        # `algorithm="brute"` hardcode above. It was still wrong for the same
-        # reason: a harness that asserts their choice instead of reporting it
-        # stops tracking them the moment their heuristic changes, and this one
-        # would have gone on printing "sklearn PCA" for a solver sklearn no
-        # longer picks.
-        #
-        # The useful consequence: **PCA is already apples-to-apples.** Their
-        # default and ours are the same algorithm, so that ratio needs no
-        # second arm to be honest -- unlike DBSCAN and OLS. Both are emitted
-        # anyway, so the claim stays checkable.
-        t = time.perf_counter()
-        PCA(n_components=pca_comp, svd_solver="covariance_eigh").fit(pc_x)
-        emit("pca_cov_eigh", time.perf_counter() - t)
 
         # THEIR DEFAULT. `auto` picks a kd-tree or ball tree and does
         # O(n log n) queries; it is what a user gets and it is the arm the
@@ -220,24 +230,42 @@ def main():
         DBSCAN(eps=0.35, min_samples=5, n_jobs=-1).fit(db_x)
         emit("dbscan", time.perf_counter() - t)
 
-        # ALGORITHM-MATCHED. All n^2 pairs, like ours. The gap between this
-        # and `dbscan` above is the index, not the hardware.
-        t = time.perf_counter()
-        DBSCAN(eps=0.35, min_samples=5, algorithm="brute", n_jobs=-1).fit(db_x)
-        emit("dbscan_brute", time.perf_counter() - t)
+        # `dbscan_brute` (`algorithm="brute"`) WAS TIMED HERE AND IS DELETED,
+        # 2026-08-20. Its comment claimed "all n^2 pairs, LIKE OURS", which
+        # has been false since RBC became our default: `bench_main.mojo:252`
+        # calls `dbscan_fit_impl` with `eps_nn_method=EPS_NN_RBC`, a
+        # ball-cover INDEX. So it timed their UNINDEXED path against our
+        # INDEXED one -- unfair in OUR favour, and it printed as a one-sided
+        # row a reader could mistake for a win.
+        #
+        # The matched arm is `dbscan` above: their spatial index (auto picks
+        # a kd-tree or ball tree) against our ball cover, each side's own
+        # best structure, device the only variable. Do not re-add this.
 
-        # THEIR DEFAULT. LAPACK gelsd: an SVD of the full 4,000,000 x 32
-        # design. Much more work than ours, and stable on collinear X.
-        t = time.perf_counter()
-        LinearRegression(fit_intercept=False).fit(ol_a, ol_b)
-        emit("ols", time.perf_counter() - t)
-
-        # ALGORITHM-MATCHED. `Ridge(alpha=0, solver="cholesky")` forms X^T X
-        # and solves it -- the normal equations, which is our route. alpha=0
-        # makes it ordinary least squares rather than ridge.
+        # ALGORITHM-MATCHED, AND THE ONLY OLS ARM. `Ridge(alpha=0,
+        # solver="cholesky")` forms X^T X and solves it -- the normal
+        # equations, which is our route. alpha=0 makes it ordinary least
+        # squares rather than ridge.
+        #
+        # WHAT WAS DELETED HERE, 2026-08-20, AND WHY IT MUST NOT COME BACK.
+        # This file also ran `LinearRegression(fit_intercept=False)`, which
+        # is LAPACK `gelsd`: an SVD of the full 4,000,000 x 32 design. It was
+        # emitted as `ols` and it was the headline number on the board at
+        # 25.6x. That ratio was NOT the device. It was mostly SVD against
+        # normal equations -- a different algorithm doing substantially more
+        # work, and the more numerically stable one. We are partly faster
+        # there because we do less and are more fragile on collinear X, and
+        # quoting it as a GPU result was measuring the wrong variable.
+        #
+        # The rule this now follows, Andrew 2026-08-20: the comparison holds
+        # everything the same and varies the DEVICE. An arm where their side
+        # runs a different decomposition cannot be on the board, however
+        # flattering. If someone wants the gelsd figure for a
+        # what-does-a-user-get note, take it somewhere that is not this
+        # table and label it as a solver difference, not a speedup.
         t = time.perf_counter()
         Ridge(alpha=0.0, solver="cholesky", fit_intercept=False).fit(ol_a, ol_b)
-        emit("ols_normal_eq", time.perf_counter() - t)
+        emit("ols", time.perf_counter() - t)
 
 
 if __name__ == "__main__":

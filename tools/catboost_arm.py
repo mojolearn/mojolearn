@@ -5,9 +5,35 @@ pool is quantized OUTSIDE the timed region on both sides of the comparison:
 the Mojo side consumes a prebuilt compressed index, so CatBoost gets the
 same courtesy.
 """
+import os
 import time
 import numpy as np
 import catboost
+
+# WHICH DEVICE CATBOOST RUNS ON, added 2026-08-20 for the NVIDIA column.
+#
+# Every number this repository has recorded was taken on Apple silicon, where
+# CatBoost has NO GPU arm at all -- `task_type="GPU"` raises there -- so the
+# CPU arm was not a choice, it was the only thing that existed. That is the
+# whole thesis and it is why the default here stays "CPU": flipping it would
+# silently change what every existing result means.
+#
+# On NVIDIA the thesis does not hold. CatBoost ships a real CUDA learner, it
+# is the arm any NVIDIA user would actually run, and conda-forge's linux-64
+# build in this repository's own lock is `catboost-1.2.10-cuda129`. Quoting
+# our GPU against their CPU on a box where their GPU is one keyword away
+# would be picking the weaker opponent. So on NVIDIA the honest arm is
+# `MOJOLEARN_CATBOOST_TASK_TYPE=GPU`, and we expect to LOSE that one --
+# recording the size of the loss is the point of running it.
+_TASK_TYPE = os.environ.get("MOJOLEARN_CATBOOST_TASK_TYPE", "CPU").upper()
+if _TASK_TYPE not in ("CPU", "GPU"):
+    raise SystemExit("MOJOLEARN_CATBOOST_TASK_TYPE must be CPU or GPU, got "
+                     + _TASK_TYPE)
+
+def task_type():
+    """Read back by the harness so the printed table names the arm it timed.
+    A device is not something a reader should have to infer from a filename."""
+    return _TASK_TYPE
 
 _CACHE = {}
 
@@ -42,6 +68,7 @@ def fit_seconds(scratch, prefix, border_count, trees, depth):
         random_strength=0.0,
         logging_level="Silent",
         allow_writing_files=False,
+        task_type=_TASK_TYPE,
     )
     t0 = time.perf_counter()
     m.fit(p)
@@ -74,6 +101,7 @@ def fit_seconds_and_mse(scratch, prefix, border_count, trees, depth):
         random_strength=0.0,
         logging_level="Silent",
         allow_writing_files=False,
+        task_type=_TASK_TYPE,
     )
     t0 = time.perf_counter()
     m.fit(p)
@@ -106,6 +134,7 @@ def predict_prep(scratch, prefix, border_count, trees, depth):
         random_strength=0.0,
         logging_level="Silent",
         allow_writing_files=False,
+        task_type=_TASK_TYPE,
     )
     m.fit(p)
     x = np.load("%s/%s_X.npy" % (scratch, prefix))
@@ -147,6 +176,7 @@ def fit_seconds_and_mse_bayesian(scratch, prefix, border_count, trees, depth):
         random_strength=0.0,
         logging_level="Silent",
         allow_writing_files=False,
+        task_type=_TASK_TYPE,
     )
     t0 = time.perf_counter()
     m.fit(p)
@@ -192,6 +222,7 @@ def fit_and_test_mse_bayesian(scratch, prefix, border_count, trees, depth,
         random_strength=0.0,
         logging_level="Silent",
         allow_writing_files=False,
+        task_type=_TASK_TYPE,
     )
     t0 = time.perf_counter()
     m.fit(p)
@@ -268,6 +299,7 @@ def fit_and_test_mse_cat(scratch, prefix, trees, depth, train_rows, seed):
         random_strength=0.0,
         logging_level="Silent",
         allow_writing_files=False,
+        task_type=_TASK_TYPE,
     )
     t0 = time.perf_counter()
     m.fit(catboost.Pool(x[:tr], y[:tr], cat_features=cat_idx))

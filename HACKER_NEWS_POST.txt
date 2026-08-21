@@ -1,0 +1,18 @@
+I just released MojoLearn 0.1.0a3, an experimental collection of GPU machine-learning algorithms written natively in Mojo.
+
+The project grew out of MojoTrees and takes a different approach: instead of inventing new implementations, it closely ports the designs of established CUDA libraries—including CatBoost, cuVS, RAFT, cuML, and FAISS—into a single Mojo codebase that can run on the Metal GPU in Apple Silicon Macs and target CUDA and ROCm as well.
+
+The first Python release exposes two scikit-learn-shaped estimators: cuVS-style k-means and exact brute-force k-nearest neighbors. The repository also contains work on DBSCAN, PCA and truncated SVD, ordinary least squares, and CatBoost-style symmetric gradient-boosted trees, but those do not all have public Python APIs yet.
+
+A self-contained wheel is available for CPython 3.10 through 3.14 on Apple Silicon with macOS 11 or newer:
+
+pip install mojolearn
+
+This has been developed and measured on an Apple M4. The same Mojo source targets NVIDIA and AMD GPUs, but those paths are explicitly unvalidated.
+
+I am looking for technical feedback, reproducible bug reports, results from other Apple hardware, and contributors—especially around additional Python estimators, persistent GPU execution, broader real-data benchmarks, more wheel targets, and cross-device validation.
+
+https://github.com/mojolearn/mojolearn
+https://pypi.org/project/mojolearn/
+
+This is an experimental public alpha. It is not a production-readiness claim, a drop-in scikit-learn replacement, or a claim of performance parity with the CUDA projects whose designs it mirrors.

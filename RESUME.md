@@ -121,9 +121,15 @@ leaving it in charges CatBoost for work we do not do (it cost them 10 ms/tree).
     our GPU port        50.0 ms/tree
     CatBoost CPU        30.1 ms/tree   (10 cores)
 
-**1.66x behind, and the comparison FLATTERS US.** CatBoost's 30 ms is a whole
-boosting iteration: gradients, tree, model update. Our 50 ms is tree growth
-alone with the gradients handed to it. We have no boosting loop to charge.
+**1.66x behind, and this figure is SUPERSEDED -- see
+`bench/results/WINDOW_2026-08-20_interleaved-254.md`, which reads 35.35
+ms/tree against their 30.06 on the same data (1.18x).** Two sentences that
+stood here are now false and are deleted rather than annotated: this 50 ms
+was tree growth alone with the gradients handed to it, and there was no
+boosting loop to charge. The loop was ported later the same night (see "And
+then the boosting loop gave back 17 ms/tree" below), so the interleaved
+harness times `fit` -- gradients, tree, model update -- and the
+flatters-us caveat does not apply to any interleaved number in this file.
 
 CatBoost's GPU arm cannot run on this box at all, so this is our GPU against
 their CPU.

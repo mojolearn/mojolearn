@@ -40,6 +40,13 @@ def read_all(path: String) raises -> List[UInt8]:
 
 
 def run_border(ctx: DeviceContext, arm: PythonObject, data_dir: String, name: String, n_rows: Int, border: Int, bayesian: Bool) raises:
+    # WHICH DEVICE THEIR ARM RAN ON. Hardcoded as "cpu" until 2026-08-20,
+    # which was true on Apple because CatBoost has no GPU arm there at all.
+    # It is NOT true on NVIDIA, where `MOJOLEARN_CATBOOST_TASK_TYPE=GPU`
+    # gives them their CUDA learner, so the label is read from the arm
+    # rather than asserted here. A table that names the wrong opponent is
+    # worse than no table.
+    var their_device = String(arm.task_type()).lower()
     var folds = List[Int]()
     var f = open(data_dir + "/" + name + "_folds_" + String(border) + ".txt", "r")
     var txt = f.read()
@@ -134,7 +141,8 @@ def run_border(ctx: DeviceContext, arm: PythonObject, data_dir: String, name: St
             # for opposite meanings, and the tree table was the one a reader
             # would misread as a loss. One convention now, everywhere:
             # SPEEDUP, and >1 means ours is faster.
-            "  rep", rep, " catboost-cpu", theirs_ms, "ms/tree   ours-gpu",
+            "  rep", rep, " catboost-" + their_device, theirs_ms,
+            "ms/tree   ours-gpu",
             ours_ms, "ms/tree   speedup", theirs_ms / ours_ms, "x",
             "  our final mse", losses[len(losses) - 1],
             " catboost mse", their_mse,

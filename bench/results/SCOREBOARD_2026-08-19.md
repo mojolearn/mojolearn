@@ -64,9 +64,22 @@ asymptotics in their best regime, the LOWEST-priority gap on the board.
 
 ## The standing tally
 
-**Five wins (OLS 3.4x/19.8x, PCA 3.5x, k-NN 1.3-1.8x, k-means 2.8-3.3x,
-DBSCAN 2.6-6.9x at d>=32), one tie (DBSCAN in the d=8 corner, where large-n
-is attributed and deprioritized), zero losses.**
+**SUPERSEDED 2026-08-20 by `BOARD_2026-08-20_algorithm-matched.md`. Two
+claims below are wrong and are corrected rather than annotated.**
+
+The OLS figures (3.4x/19.8x) came from an arm that has since been DELETED:
+`LinearRegression` is LAPACK `gelsd`, an SVD of the full design, which is a
+different algorithm doing more work. The matched OLS number is **4.31x**.
+PCA re-reads at **3.38x** with `auto` probed and confirmed to be our solver.
+
+"zero losses" was FALSE ON THIS FILE'S OWN EVIDENCE. Eight lines above it,
+the d=8 scaling row records "sklearn 0.70x-0.83x ahead at 400k-800k". That
+is a loss, and calling it part of "one tie" understated it.
+
+Standing, corrected: **four wins (OLS 4.31x, PCA 3.38x, k-means 2.73x, k-NN
+1.35x), DBSCAN a tie at 4k x 16 and a LOSS at d=8 above 400k, and DBSCAN's
+d>=32 wins now unverified at scale** -- the cell that would confirm them
+crashes, see `DEFECT_2026-08-20_dbscan-rbc-maxk-large-highd.md`.
 
 ## Gram register-tile window (2026-08-20 evening, commit a431631)
 

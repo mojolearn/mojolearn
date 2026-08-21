@@ -24,9 +24,17 @@ def u01(rows, cols, salt):
     return (z >> np.uint64(11)).astype(np.float64) * (1.0 / 9007199254740992.0)
 
 
+# (n, d) cells, MATCHED EXACTLY to bench/dsweep_main.mojo's main(). The
+# large-n high-d rows were added 2026-08-20: every d>=32 cell had run at
+# n=200,000 and every large-n cell at d=8, so whether the width win survives
+# scale had never been measured on either side.
+KNN_CELLS = ((200000, 32), (200000, 64), (200000, 128), (1000000, 32))
+DBSCAN_CELLS = ((200000, 8), (200000, 32), (200000, 64),
+                (400000, 32), (800000, 32))
+
+
 def main():
-    n = 200000
-    for d in (32, 64, 128):
+    for n, d in KNN_CELLS:
         idx = np.ascontiguousarray(u01(n, d, 1), dtype=np.float32)
         q = np.ascontiguousarray(u01(2000, d, 2), dtype=np.float32)
         for _ in range(REPEATS):
@@ -37,7 +45,7 @@ def main():
             print(f"ARM knn_d{d}@{n} {dt*1000:.4f}", flush=True)
         print(f"# knn d={d}: auto chose {nn._fit_method}", flush=True)
 
-    for d in (8, 32, 64):
+    for n, d in DBSCAN_CELLS:
         x = np.ascontiguousarray(u01(n, d, 4) * 4.0, dtype=np.float32)
         eps = 0.30 * math.sqrt(d / 8.0)
         for _ in range(REPEATS):
