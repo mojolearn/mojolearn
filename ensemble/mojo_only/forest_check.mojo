@@ -32,8 +32,13 @@ Together they pin the seed chain from both sides: it must reach the sampler
   B. IDENTITY TWO, and that the difference is deterministic across fits.
   C. `n_sampled_rows_for`'s round-half-away, and the `max_samples`
      overwrite-and-warn that their `else` branch performs.
-  D. The three unported `RowSampler` arms raise BY NAME rather than
-     silently behaving like the arm that does work.
+  D. `RowSampler`'s four arms. The bootstrap arm is compared PER CELL
+     against RAFT's own compiled output (`ensemble/bench/philox_oracle.txt`,
+     driven through cuML's real `fnv1a32(fnv1a32(basis, seed), tree_id)`
+     chain), so it holds the seed chain, the bounds and the stride together
+     rather than agreeing with the function it calls. The two
+     weight-dependent arms still raise by name. The no-bootstrap arm is the
+     identity.
   E. FIT THEN PREDICT: train a forest on a separable fixture and predict it
      back through the ported traversal. Every row must be classified
      correctly -- this is the only arm that runs the estimator end to end.
@@ -43,6 +48,7 @@ from max.gpu.host import DeviceContext
 
 from ensemble.decisiontree.batched_levelalgo.bins import ClassificationBin
 from ensemble.decisiontree.decisiontree import DecisionTreeParams, GINI
+from ensemble.mojo_only.philox import RNG_STRIDE
 from ensemble.randomforest import (
     CLASSIFICATION,
     RF_params,
@@ -351,20 +357,94 @@ def arm_d_unported_arms(ctx: DeviceContext) raises -> Int:
     """
     var fails = 0
 
-    var s1 = RowSampler(ctx, True, UInt64(7), 100, 100, False)
-    var raised1 = False
-    try:
-        s1.sample(ctx, Int32(0))
-    except e:
-        raised1 = True
-        if String(e).find("bootstrap row sampling") < 0:
-            fails += 1
-            print("  arm D: bootstrap arm raised, but not by name:", e)
-    if not raised1:
+    # The bootstrap arm is WIRED now, and is compared PER CELL against
+    # RAFT's own compiled output rather than against itself. The oracle
+    # rows come from `ensemble/bench/philox_oracle.txt`'s `e2e` section,
+    # which drives RAFT's `uniformInt` through cuML's real seed chain
+    # `fnv1a32(fnv1a32(basis, seed), tree_id)` -- so this holds the
+    # SAMPLER's seed chain, bounds and stride together, and is not the
+    # tautology "the sampler agrees with the function it calls".
+    var oracle_rows = 0
+    var oracle_wrong = 0
+    var text: String
+    with open("ensemble/bench/philox_oracle.txt", "r") as fh:
+        text = fh.read()
+    var lines = text.split("\n")
+    for li in range(len(lines)):
+        var line = String(lines[li])
+        if line.byte_length() < 4 or String(line[byte=0]) != "e":
+            continue
+        var t = List[String]()
+        var cur = String("")
+        for i in range(line.byte_length()):
+            var ch = String(line[byte=i])
+            if ch == " ":
+                if cur.byte_length() > 0:
+                    t.append(cur)
+                    cur = String("")
+            else:
+                cur += ch
+        if cur.byte_length() > 0:
+            t.append(cur)
+        if len(t) < 8 or t[0] != "e2e":
+            continue
+        # `atol` raises above Int64's range and one oracle seed is
+        # 0xDEADBEEFCAFEBABE. Parsed digit by digit in UInt64, where it
+        # fits -- the same trap `shuffle_check` hit.
+        var seed = UInt64(0)
+        for di in range(t[1].byte_length()):
+            seed = seed * 10 + UInt64(Int(atol(String(t[1][byte=di]))))
+        var tree_id = Int(atol(t[2]))
+        var nr = Int(atol(t[3]))
+        var ns = Int(atol(t[4]))
+        var stride = Int(atol(t[5]))
+        var n_vals = len(t) - 7
+        if n_vals <= 0:
+            continue
+        # SKIP rows taken at a non-default stride. The oracle deliberately
+        # includes some -- `launch_uniform_int_ex` takes a stride so another
+        # device's geometry is one call away (DEVIATION 184) -- but
+        # `RowSampler` calls `launch_uniform_int`, which is pinned to
+        # RNG_STRIDE. Feeding it a stride-256 row compared two different
+        # launch geometries and reported 444 wrong rows; the port was right
+        # and this filter is the fix. The mismatch began at index 256
+        # exactly, which is what a stride difference looks like.
+        if stride != RNG_STRIDE:
+            continue
+        var smp = RowSampler(ctx, True, seed, nr, ns, False)
+        smp.sample(ctx, Int32(tree_id))
+        var hb = ctx.enqueue_create_host_buffer[DType.int32](ns)
+        ctx.enqueue_copy(dst_buf=hb, src_buf=smp.selected_rows)
+        ctx.synchronize()
+        oracle_rows += 1
+        for i in range(min(n_vals, ns)):
+            var want = Int(atol(t[7 + i]))
+            if Int(hb.unsafe_ptr().unsafe_load(i)) != want:
+                oracle_wrong += 1
+                if oracle_wrong <= 2:
+                    print(
+                        "  arm D bootstrap MISMATCH seed", seed, "tree",
+                        tree_id, "i", i, "got",
+                        hb.unsafe_ptr().unsafe_load(i), "want", want,
+                    )
+        _ = smp^
+        _ = hb^
+    if oracle_rows < 5:
         fails += 1
         print(
-            "  arm D FAILED: bootstrap=True SILENTLY produced rows. It is"
-            " not ported; it must raise."
+            "  arm D: parsed only", oracle_rows,
+            "oracle rows -- a check that reads nothing cannot fail",
+        )
+    if oracle_wrong != 0:
+        fails += 1
+        print(
+            "  arm D FAILED:", oracle_wrong,
+            "bootstrap rows disagree with RAFT's compiled output",
+        )
+    else:
+        print(
+            "  arm D: bootstrap sampler matches RAFT's own output per cell"
+            " across", oracle_rows, "cuML call sites",
         )
 
     var s2 = RowSampler(ctx, True, UInt64(7), 100, 100, True)
@@ -411,7 +491,8 @@ def arm_d_unported_arms(ctx: DeviceContext) raises -> Int:
 
     if fails == 0:
         print(
-            "  arm D OK: all three unported arms raise by name; the ported"
+            "  arm D OK: the bootstrap arm matches RAFT per cell, the two"
+            " weight-dependent arms raise by name, and the no-bootstrap"
             " arm is the identity in all 100 cells"
         )
     return fails
@@ -470,6 +551,83 @@ def arm_e_fit_then_predict(ctx: DeviceContext) raises -> Int:
     return fails
 
 
+def arm_f_bootstrapped_forest(ctx: DeviceContext) raises -> Int:
+    """A forest trained cuML's DEFAULT way: bootstrap on.
+
+    With bagging the trees must differ EVEN AT max_features=1.0 -- that is
+    the whole point of bagging, and it is the arm that proves the sampler
+    reaches the builder rather than merely producing plausible row ids in a
+    buffer nobody reads. Arm A's identity is the same fixture with
+    bootstrap OFF, so the two together separate "bagging works" from
+    "bagging is wired but ignored".
+    """
+    var d = _hashed_data(600, 5, 3)
+    var p = _rf_params(6, True, Float32(1.0))
+    var f = _fit(ctx, d, p)
+    var fails = 0
+
+    if len(f.trees) != 6:
+        fails += 1
+        print("  arm F: expected 6 trees, got", len(f.trees))
+        return fails
+    var differing = 0
+    for t in range(1, 6):
+        if _trees_equal(f, 0, t) != 0:
+            differing += 1
+    if differing == 0:
+        fails += 1
+        print(
+            "  arm F FAILED: every tree is identical WITH BOOTSTRAP ON at"
+            " max_features=1.0. The row sample is being produced and then"
+            " ignored -- arm A cannot see this, because identical is arm"
+            " A's expected answer."
+        )
+    # and it must still be reproducible
+    var p2 = _rf_params(6, True, Float32(1.0))
+    var f2 = _fit(ctx, d, p2)
+    var repro = 0
+    if len(f2.trees) != len(f.trees):
+        repro += 1
+    else:
+        for t in range(len(f.trees)):
+            repro += _trees_equal_across(f, f2, t)
+    if repro != 0:
+        fails += 1
+        print(
+            "  arm F FAILED: two bootstrapped fits differ in", repro,
+            "places -- the per-tree seed chain is not deterministic",
+        )
+    if fails == 0:
+        print(
+            "  arm F OK: bootstrap ON gives", differing,
+            "of 5 tree pairs differing at max_features=1.0 (bagging is the"
+            " only source of variation there), and two fits are"
+            " bit-identical",
+        )
+    return fails
+
+
+def _trees_equal_across(
+    a: RandomForestMetaData[DT, LT],
+    b: RandomForestMetaData[DT, LT],
+    t: Int,
+) -> Int:
+    ref ta = a.trees[t]
+    ref tb = b.trees[t]
+    if len(ta.sparsetree) != len(tb.sparsetree):
+        return 1
+    var diff = 0
+    for i in range(len(ta.sparsetree)):
+        if ta.sparsetree[i].ColumnId() != tb.sparsetree[i].ColumnId():
+            diff += 1
+        if ta.sparsetree[i].QueryValue() != tb.sparsetree[i].QueryValue():
+            diff += 1
+    for i in range(len(ta.vector_leaf)):
+        if ta.vector_leaf[i] != tb.vector_leaf[i]:
+            diff += 1
+    return diff
+
+
 def main() raises:
     print("forest_check: ensemble/randomforest.mojo")
     print("  RowSampler (randomforest.cuh:62-226) and the forest loop (:286-370)")
@@ -480,6 +638,7 @@ def main() raises:
     fails += arm_c_sampled_rows()
     fails += arm_d_unported_arms(ctx)
     fails += arm_e_fit_then_predict(ctx)
+    fails += arm_f_bootstrapped_forest(ctx)
     if fails == 0:
         print("forest_check: ALL OK")
     else:

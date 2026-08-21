@@ -301,6 +301,7 @@ from ensemble.decisiontree.batched_levelalgo.quantiles import (
 from ensemble.decisiontree.batched_levelalgo.random_utils import (
     fnv1a32_hash_seed_tree,
 )
+from ensemble.mojo_only.philox import RNG_STRIDE, launch_uniform_int
 from std.ffi import external_call
 from std.math import isfinite, isinf, sqrt
 
@@ -1249,15 +1250,28 @@ struct RowSampler(Movable):
                 " float64 prefix scan, which this device cannot run."
             )
         if self.bootstrap:
-            # `:140-143` -- THE DEFAULT ARM.
-            raise Error(
-                "bootstrap row sampling is NOT WIRED YET"
-                " (randomforest.cuh:140-142:"
-                " raft::random::uniformInt<int>(rng, rows, n, 0, n_rows)"
-                " under GenPhilox). The generator is being ported"
-                " bit-exactly against a compiled RAFT oracle; until it"
-                " lands, fit with bootstrap=False."
+            # `:140-142` -- THE DEFAULT ARM.
+            #
+            #   raft::random::uniformInt<int>(
+            #       stream_resources, rng_state,
+            #       selected_rows.data(), selected_rows.size(), 0, n_rows_);
+            #
+            # `rng_state` is a FRESH `RngState(rs, GenPhilox)` local, built
+            # at `:123` and dead at the end of this call, so its
+            # `base_subsequence` is 0 on every launch and the advance
+            # `call_rng_kernel` performs writes into an object nobody reads
+            # again. Hence no state is threaded here -- verified in RAFT
+            # rather than assumed.
+            launch_uniform_int(
+                ctx,
+                self.selected_rows,
+                self.n_sampled_rows,
+                Int32(0),
+                Int32(self.n_rows),
+                UInt64(Int(self.rng_seed_for(tree_id))),
             )
+            ctx.synchronize()
+            return
         if self.has_sample_weight:
             raise Error(
                 "zero-weight row removal is NOT PORTED YET"

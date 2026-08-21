@@ -591,24 +591,52 @@ Metal/CUDA/HIP, and against cuML itself, still needs the NVIDIA column.
 
 ## What is NOT done
 
+0. **BOOTSTRAP NOW WORKS** (2026-08-21, later). `RowSampler`'s default arm
+   is wired to a bit-exact port of RAFT's Philox `uniformInt`, held to
+   RAFT's own compiled output per cell at 10 cuML call sites. `fit_forest`
+   trains cuML's DEFAULT configuration. Twelve checks green.
+
+   **AND IT SURFACED A FINDING ABOUT cuML ITSELF THAT THE PAPER SHOULD
+   CARRY.** `raft::random::uniformInt` launches `4 * SM_count` blocks of
+   256 threads and gives thread `tid` Philox subsequence `base + tid`,
+   striding by `gridDim.x * blockDim.x` (`rng_impl.cuh:70-71`,
+   `rng_device.cuh:675-694`). **The stride, and therefore which subsequence
+   produces which row id, is a function of the GPU MODEL.** An A100 (108 SM)
+   and an H100 (132 SM) draw different bootstrap samples from the same seed,
+   so cuML's RF trains different forests on the same data, same seed, same
+   version, on different NVIDIA parts. That is a stronger statement than
+   "GPU results are nondeterministic": it is architecture-dependent output
+   from a deterministic algorithm, in the row sampler rather than in a float
+   reduction. DEVIATION 184 freezes 4x108x256 and prices the loss of
+   bit-identity with cuML off a 108-SM device — which no choice avoids,
+   because theirs is not a fixed target.
+
+   Second finding, same read: cuML **truncates the user's 64-bit seed to 32
+   bits** (`randomforest.cuh:121` calls `fnv1a32` directly rather than
+   `fnv1a32_combine`), so `seed = 0` and `seed = 2^32` give the identical
+   forest. Their per-NODE chain does fold both halves; the asymmetry is
+   theirs and is transcribed.
+
 1. **Regression does not train.** `Builder` is classification-only. Theirs
    is `Builder<ObjectiveT>`; ours cannot be until `objectives.mojo` declares
    a trait the launchers can dispatch on — Mojo traits are nominal, so the
    launchers are overloaded on the concrete objective type instead. One
    change deletes two adapters, six launcher overloads and this restriction
    together. It is the single highest-value cleanup left.
-2. **`RowSampler` is not ported** (`randomforest.cuh:63-226`), so `fit()` on
-   the estimator still raises and there is no bootstrap. `train_check` uses
-   the `bootstrap=False` shape (`thrust::sequence` row ids). The sampler
-   needs RAFT's Philox `uniformInt` transcribed bit-exactly — the same
-   problem shape as PCGenerator and `shuffle_iterator`, and it should get
-   the same treatment: compile their generator as an oracle and diff draw
-   for draw.
-3. **The forest loop** — `RandomForest::fit`'s per-tree loop — is above the
-   builder and is what turns one tree into a forest.
-4. **No timing measurement exists for any of this**, by instruction. The
-   Step 0 gather probe still has not run. Nothing here may be quoted as a
-   performance result.
+2. **Weighted bootstrap and zero-weight row removal** are not ported; both
+   need `sample_weight`, which this port does not accept, and the first also
+   needs a float64 prefix scan. Both raise by name.
+3. **NOTHING HAS EVER BEEN COMPARED AGAINST cuML.** Every check here is
+   either an ANALYTIC fixture or a diff against a LIBRARY PRIMITIVE's
+   compiled output (CCCL's `shuffle_iterator`, RAFT's Philox). That
+   establishes a faithful, self-consistent port. **It is not parity.**
+   Parity needs cuML's own per-node histograms, chosen splits and leaf
+   values, dumped on the NVIDIA column via `tools/remote_gpu.sh`, and that
+   has never been run. `bench/results/` still contains no RF file.
+4. **No accuracy comparison** against sklearn as a quality band.
+5. **No timing measurement of any kind exists**, by instruction. The Step 0
+   gather probe still has not run. Nothing here may be quoted as a
+   performance result, in either direction.
 
 ## Merge-time items still open
 
