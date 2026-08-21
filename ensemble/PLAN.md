@@ -481,10 +481,11 @@ Numbers as actually used, which is what PORTING.md takes:
 | 124 | `core/block_reduce.mojo`, `core/block_scan.mojo` | queried warp width (was 112) |
 | 125 | `core/block_reduce.mojo` | 32-bit flush atomic (was 113) |
 | 126 | `core/block_scan.mojo` | CUB's unpadded `HAS_IDENTITY == false` arm (was 114) |
-| 130 | `builder.mojo` | `n_streams` absent from the builder; priced at 117 |
-| 131 | `builder.mojo` | the four kernel launches not wired yet; `train()` raises by name |
-| 132 | `builder.mojo` | the distributed all-reduce path not ported; workspace total unchanged on one device |
-| 133 | `builder.mojo` | `TimerCPU`/`train_time` not ported |
+| 176 | `builder.mojo` | `n_streams` absent from the builder; priced at 117 |
+| 177 | `builder.mojo` | the four kernel launches (CLOSED — they are wired; what remains open is classification-only `Builder`) |
+| 178 | `builder.mojo` | the distributed all-reduce path not ported; workspace total unchanged on one device |
+| 179 | `builder.mojo` | `TimerCPU`/`train_time` not ported |
+| 180 | `builder.mojo` | `enqueue_memset` takes a buffer, not a range, so the histogram workspace is zeroed whole |
 
 **RESOLVED, 2026-08-21, in the same session:** `core/`'s 112/113/114 were
 renumbered to **124/125/126** in `core/block_reduce.mojo` and
@@ -625,3 +626,31 @@ Metal/CUDA/HIP, and against cuML itself, still needs the NVIDIA column.
 - `ensemble/mojo_only/` can never be `mojo precompile`d while its checks
   carry `main()`.
 - No `pixi.toml` task exists for any check here; all ten run by path.
+
+
+---
+
+# THE SECOND NUMBERING COLLISION, and it was the same mistake
+
+`builder.mojo` was written with DEVIATIONS 130-134. **The ExtraTrees lane
+holds 130-175**, reserved in this very file's lane-split section, and 130-134
+are five LIVE deviations of theirs — sklearn's draw order, the feature
+sampler, constant-feature rediscovery, the tie-break, and the swap
+partition. A verbatim five-way collision.
+
+Renumbered to **176-180**. `ensemble/` had used its whole reserved 100-129
+range and this lane took "the next number after 129" without checking who
+owned it.
+
+**That is the same mistake as the 112-114 collision earlier the same day**,
+and the earlier note — "the orchestrator must not spend numbers from a range
+it has already handed out" — was not enough, because this time the range had
+been handed out to a lane in a DIFFERENT DIRECTORY and the lane was not
+running. The rule that would actually have prevented both:
+
+> Before spending a deviation number, grep the WHOLE REPOSITORY for it, not
+> just the files you are writing. A reserved range is only as real as the
+> check that reads it.
+
+`ensemble/` now owns **100-129 and 176-199**. 181-189 are taken by the row
+sampler and the forest loop; 190-199 stay free.

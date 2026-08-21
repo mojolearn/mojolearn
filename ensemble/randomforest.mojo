@@ -201,19 +201,29 @@ so neither was edited; this is the report.
 DEVIATION 119. What sits behind this estimator that is NOT PORTED YET,
 each refused by name at its own call site rather than quietly missing.
 
-(a) `fit`. `RandomForest::fit` (`randomforest.cuh:286-370`) needs four
-things this repository does not have yet: `DT::computeQuantiles`
-(`randomforest.cuh:318-325`), `detail::RowSampler`
-(`randomforest.cuh:63-226`), `DT::DecisionTree::fit`'s four `Builder`
-instantiations (`decisiontree.cuh:259-332`), and the stream pool. The
-first three are `batched_levelalgo/quantiles.mojo`, a row sampler that
-does not exist, and `batched_levelalgo/builder.mojo` -- files another
-lane is writing. `RandomForest.fit` below is a DECLARED CALL SITE whose
-body raises naming all of them, and `DecisionTreeParams
-.check_fit_supported()` names every training field that therefore has
-no consumer. PRICE: this estimator can hold a forest and predict with
-it and cannot grow one, and says so loudly instead of returning an
-empty forest.
+(a) `fit`. LARGELY CLOSED. `RandomForest::fit`
+(`randomforest.cuh:286-370`) is ported as the free function `fit_forest`
+below, and `detail::RowSampler` (`:62-226`) as `RowSampler`;
+`computeQuantiles` and the builder both exist now. A forest trains, and
+`ensemble/mojo_only/forest_check.mojo` fits one and predicts it back.
+
+THREE THINGS ARE STILL OUT, each raising by name rather than behaving
+like a neighbouring arm:
+
+  * BOOTSTRAP. `RowSampler::sample`'s default arm is
+    `raft::random::uniformInt` under `GenPhilox` (`:140-142`), and that
+    generator is being ported bit-exactly against a compiled RAFT oracle.
+    Until it lands, only `bootstrap=False` fits -- their
+    `thrust::sequence` arm (`:155-157`). PRICE: no bagging, so a forest
+    of identical trees unless `max_features < 1.0` supplies the only
+    remaining source of per-tree variation. That is a real statistical
+    difference and it is why the arm raises rather than silently using
+    the identity.
+  * WEIGHTED BOOTSTRAP (`:125-138`) and ZERO-WEIGHT REMOVAL (`:144-154`).
+    Both need `sample_weight`, which this port does not accept, and the
+    first also needs a float64 prefix scan this device cannot run.
+  * The METHOD `RandomForest.fit` versus the free function; see its
+    docstring.
 
 (b) The treelite export surface -- `build_treelite_tree`
 (`decisiontree.cuh:154-230`), `build_treelite_forest` and `fit_treelite`
@@ -279,6 +289,18 @@ three.
 =================================================================
 """
 
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+
+from ensemble.decisiontree.batched_levelalgo.bins import Bin
+from ensemble.decisiontree.batched_levelalgo.builder import Builder
+from ensemble.decisiontree.batched_levelalgo.dataset import DatasetView
+from ensemble.decisiontree.batched_levelalgo.quantiles import (
+    compute_quantiles,
+    Quantiles,
+)
+from ensemble.decisiontree.batched_levelalgo.random_utils import (
+    fnv1a32_hash_seed_tree,
+)
 from std.ffi import external_call
 from std.math import isfinite, isinf, sqrt
 
@@ -802,12 +824,32 @@ struct RandomForest[dtype: DType, label_dtype: DType](
             raise Error("Invalid n_cols " + String(n_cols))
 
     def fit(self) raises:
-        """`RandomForest::fit`, `randomforest.cuh:286-370`. NOT PORTED YET.
+        """`RandomForest::fit`, `randomforest.cuh:286-370`.
 
-        The declared call site. DEVIATION 119a; the body names what is
-        missing.
+        THE FOREST LOOP IS PORTED, as the free function `fit_forest` below;
+        this METHOD still raises, and the difference is not laziness.
+        `RandomForest` is parameterized on `[dtype, label_dtype]`, matching
+        their `RandomForest<T, L>`, but a fit also needs the BIN type, and
+        the launchers underneath are overloaded on the concrete objective
+        because Mojo traits are nominal (their DEVIATION 129a). So the
+        entry point that works today is `fit_forest[label_dtype, BinT]`,
+        which names the bin explicitly.
+
+        Collapsing the two -- declaring the objective structs conformant to
+        a trait the launchers can dispatch on -- deletes two adapters, six
+        launcher overloads, `Builder`'s classification-only restriction AND
+        this method's raise together. It is the highest-value cleanup left
+        in this directory and is recorded in `ensemble/PLAN.md`.
         """
         self.rf_params.check_fit_supported()
+        raise Error(
+            "RandomForest.fit is not the ported entry point; call"
+            " fit_forest[label_dtype, BinT](ctx, x, y, sample_weight,"
+            " n_rows, n_cols, n_unique_labels, rf_params) instead. This"
+            " method needs the bin type, which RandomForest[T, L] does not"
+            " carry, and cannot dispatch generically until objectives.mojo"
+            " declares an objective trait."
+        )
 
     def predict(
         self,
@@ -1108,3 +1150,310 @@ def compute_feature_importances[
     else:
         for i in range(n_cols):
             importances[i] = 0
+
+
+# ===========================================================================
+# `detail::RowSampler`, `randomforest.cuh:62-226`, and the forest loop,
+# `RandomForest::fit`, `randomforest.cuh:286-370`.
+# ===========================================================================
+
+
+struct RowSampler(Movable):
+    """`ML::DT::detail::RowSampler`, `randomforest.cuh:62-226`.
+
+    THEIR FOUR ARMS, and which one a default fit takes. `sample()`
+    (`:110-165`) is a four-way branch and the ORDER of the tests is the
+    dispatch:
+
+      1. `use_weighted_bootstrap()` -- `bootstrap && sample_weight != nullptr`
+         (`:214`). Draws `uniform<double>` into `[0, weight_sum)` and
+         `thrust::upper_bound`s it against a prefix-summed weight CDF
+         (`:125-138`).
+      2. `bootstrap_` -- `raft::random::uniformInt<int>(..., 0, n_rows_)`
+         (`:140-143`). **THIS IS THE DEFAULT**, because `bootstrap` defaults
+         True and `sample_weight` defaults null.
+      3. `sample_weight_ != nullptr` without bootstrap -- `thrust::copy_if`
+         drops the zero-weight rows (`:144-154`).
+      4. otherwise -- `thrust::sequence`, the identity (`:155-157`).
+
+    Arms 1 and 3 need `sample_weight`, which this port does not accept yet
+    (DEVIATION 100 carries the field as Float32 and nothing fills it), so
+    they raise by name rather than silently behaving like arm 2 or 4.
+
+    THE SEED CHAIN IS PER TREE AND IS NOT A STREAM (`:119-123`):
+
+        rs = fnv1a32_basis
+        rs = fnv1a32(rs, seed_)      // ONE round on the low 32 bits
+        rs = fnv1a32(rs, tree_id)
+        RngState(rs, GenPhilox)
+
+    Their comment at `:119` says why: "Hash these together so per-tree row
+    samples are uncorrelated." Tree 7's rows are a pure function of
+    `(seed, 7)`, so they do not depend on how many streams built the forest,
+    on the order the trees were built, or on anything else. That is what
+    makes DEVIATION 117 free.
+
+    Note `fnv1a32_hash_seed_tree` folds the uint64 seed in ONE round on its
+    low 32 bits and DISCARDS the high half -- because this call site uses
+    `fnv1a32` directly rather than `fnv1a32_combine`. That asymmetry with
+    the per-node chain (which folds both halves) is theirs and is
+    transcribed, not corrected.
+    """
+
+    var bootstrap: Bool
+    var seed: UInt64
+    var n_rows: Int
+    var n_sampled_rows: Int
+    var has_sample_weight: Bool
+    # `:224` -- one `device_uvector<int>` per stream. One stream here.
+    var selected_rows: DeviceBuffer[DType.int32]
+    var h_rows: HostBuffer[DType.int32]
+
+    def __init__(
+        out self,
+        ctx: DeviceContext,
+        bootstrap: Bool,
+        seed: UInt64,
+        n_rows: Int,
+        n_sampled_rows: Int,
+        has_sample_weight: Bool = False,
+    ) raises:
+        """`:63-105`, their constructor, minus the weighted machinery."""
+        self.bootstrap = bootstrap
+        self.seed = seed
+        self.n_rows = n_rows
+        self.n_sampled_rows = n_sampled_rows
+        self.has_sample_weight = has_sample_weight
+        var n = n_sampled_rows if n_sampled_rows > 0 else 1
+        self.selected_rows = ctx.enqueue_create_buffer[DType.int32](n)
+        self.h_rows = ctx.enqueue_create_host_buffer[DType.int32](n)
+        ctx.synchronize()
+
+    def rng_seed_for(self, tree_id: Int32) -> UInt32:
+        """`:120-123`, the per-tree seed, exposed so a check can hold it to
+        the same value the sampler uses."""
+        return fnv1a32_hash_seed_tree(self.seed, tree_id)
+
+    def sample(mut self, ctx: DeviceContext, tree_id: Int32) raises:
+        """`RowSampler::sample`, `:110-165`. Fills `selected_rows`.
+
+        Their four-way dispatch, in their order. Arms 1 and 3 raise; see
+        the struct docstring and DEVIATION 181.
+        """
+        if self.bootstrap and self.has_sample_weight:
+            raise Error(
+                "weighted bootstrap is NOT PORTED YET"
+                " (randomforest.cuh:125-138: raft::random::uniform<double>"
+                " into a thrust::upper_bound over a weight CDF). It needs"
+                " sample_weight, which this port does not accept, and a"
+                " float64 prefix scan, which this device cannot run."
+            )
+        if self.bootstrap:
+            # `:140-143` -- THE DEFAULT ARM.
+            raise Error(
+                "bootstrap row sampling is NOT WIRED YET"
+                " (randomforest.cuh:140-142:"
+                " raft::random::uniformInt<int>(rng, rows, n, 0, n_rows)"
+                " under GenPhilox). The generator is being ported"
+                " bit-exactly against a compiled RAFT oracle; until it"
+                " lands, fit with bootstrap=False."
+            )
+        if self.has_sample_weight:
+            raise Error(
+                "zero-weight row removal is NOT PORTED YET"
+                " (randomforest.cuh:144-154: thrust::copy_if over"
+                " NonzeroSampleWeight). It needs sample_weight, which this"
+                " port does not accept."
+            )
+        # `:155-157` -- `thrust::sequence`, the identity. This is the arm
+        # `bootstrap=False` takes, and it is the only one that runs today.
+        var p = self.h_rows.unsafe_ptr()
+        for i in range(self.n_sampled_rows):
+            p.unsafe_store(i, Int32(i))
+        ctx.enqueue_copy(
+            dst_buf=self.selected_rows, src_ptr=self.h_rows.unsafe_ptr()
+        )
+        ctx.synchronize()
+
+    @always_inline
+    def rows_ptr(mut self) -> MutPointer[Int32, MutUntrackedOrigin]:
+        return (
+            self.selected_rows.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin]()
+        )
+
+
+def n_sampled_rows_for(
+    bootstrap: Bool, max_samples: Float32, n_rows: Int
+) -> Int:
+    """`randomforest.cuh:299-309`.
+
+        if (bootstrap) n_sampled_rows = std::round(max_samples * n_rows);
+        else           n_sampled_rows = n_rows;
+
+    THEIR ROUND IS `std::round`, i.e. round-half-AWAY-from-zero, and it is
+    written out here rather than delegated to a Mojo stdlib rounding mode:
+    this repository has been bitten once by assuming a Mojo numeric matched
+    libm. `max_samples` is a float32 and non-negative at this call site
+    (`RF_params::validity_check` refuses otherwise), so `floor(x) + (frac
+    >= 0.5)` IS round-half-away here.
+
+    Their `else` branch also WARNS and overwrites `max_samples` to 1.0 when
+    it was not 1.0 (`:301-306`) -- the caller does that, because it mutates
+    the params.
+    """
+    if not bootstrap:
+        return n_rows
+    var x = Float64(max_samples) * Float64(n_rows)
+    var f = Float64(Int(x))
+    if x - f >= 0.5:
+        return Int(f) + 1
+    return Int(f)
+
+
+def fit_forest[
+    lt: DType, B: Bin
+](
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    mut y: DeviceBuffer[lt],
+    mut sample_weight: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    n_cols: Int,
+    n_unique_labels: Int,
+    mut rf_params: RF_params,
+    row_major: Bool = False,
+) raises -> RandomForestMetaData[DType.float32, lt]:
+    """`RandomForest::fit`, `randomforest.cuh:286-370`. THE FOREST LOOP.
+
+    FLOAT32 ONLY, and that is inherited rather than chosen here. cuML
+    instantiates this for `float` and `double` (their `-double.cu` TUs);
+    this port has no float64 on device at all, so `computeQuantiles` is
+    float32-only upstream of this function and the `double` instantiations
+    are declined where the bins are (DEVIATION 114). Recorded so a reader
+    does not read the missing `dt` parameter as an oversight.
+
+    Their body, in their order, with the two things that are easy to get
+    wrong called out:
+
+    1. **THE QUANTILES ARE COMPUTED ONCE FOR THE WHOLE FOREST** (`:317-325`),
+       before the tree loop and outside it, from the FULL dataset and the
+       FOREST's seed -- not per tree and not from the tree's bootstrap
+       sample. Every tree in the forest bins against the same edges. A port
+       that recomputed them per tree would produce a defensible-looking
+       forest that is not theirs, and nothing downstream would say so.
+       Note also the hard-coded `4` at `:322`: `oversampling_factor` is a
+       literal at this call site, never the signature default.
+
+    2. **`max_samples` IS IGNORED AND OVERWRITTEN when bootstrap is off**
+       (`:301-306`), with a warning. Theirs mutates `rf_params`, so a caller
+       that reads it back afterwards sees 1.0; ours does the same, which is
+       why `rf_params` is `mut`.
+
+    The `#pragma omp parallel for num_threads(n_streams)` at `:337` is
+    DEVIATION 117: one stream here, so the loop is serial, and no output bit
+    depends on it because every tree's rows and every node's columns are
+    pure hashes of `(seed, tree_id)` and `(seed, tree_id, node_id)`.
+
+    Their `DT::DecisionTree::fit` call (`:353-366`) passes the FOREST seed
+    and the tree INDEX separately; the per-tree hashing happens below, in
+    `RowSampler` and in the builder's feature sampler. Passing an
+    already-hashed seed down would double-hash and produce a different
+    forest.
+    """
+    if n_rows <= 0:
+        raise Error("Invalid n_rows " + String(n_rows))
+    if n_cols <= 0:
+        raise Error("Invalid n_cols " + String(n_cols))
+    rf_params.validity_check()
+    rf_params.check()
+
+    # `:298-309`
+    if not rf_params.bootstrap and rf_params.max_samples != Float32(1.0):
+        print(
+            "WARN: If bootstrap sampling is disabled, max_samples value is"
+            " ignored and whole dataset is used for building each tree"
+        )
+        rf_params.max_samples = Float32(1.0)
+    var n_sampled = n_sampled_rows_for(
+        rf_params.bootstrap, rf_params.max_samples, n_rows
+    )
+    if n_sampled <= 0:
+        raise Error(
+            "max_samples "
+            + String(rf_params.max_samples)
+            + " x n_rows "
+            + String(n_rows)
+            + " rounds to "
+            + String(n_sampled)
+            + " sampled rows; a tree needs at least one"
+        )
+
+    # `:317-325` -- ONCE, for the whole forest, with their literal 4.
+    var qr = compute_quantiles(
+        ctx,
+        x,
+        Int(rf_params.tree_params.max_n_bins),
+        n_rows,
+        n_cols,
+        4,
+        rf_params.seed,
+        row_major,
+    )
+    var quantiles = Quantiles[DType.float32](
+        qr.quantiles_array.unsafe_ptr()
+        .unsafe_origin_cast[MutUntrackedOrigin](),
+        qr.n_bins_array.unsafe_ptr()
+        .unsafe_origin_cast[MutUntrackedOrigin](),
+    )
+
+    var sampler = RowSampler(
+        ctx, rf_params.bootstrap, rf_params.seed, n_rows, n_sampled
+    )
+
+    var forest = RandomForestMetaData[DType.float32, lt](
+        List[TreeMetaDataNode[DType.float32]](),
+        rf_params,
+        Int32(n_cols),
+    )
+
+    # `:337-367` -- their tree loop, serial here (DEVIATION 117).
+    for i in range(Int(rf_params.n_trees)):
+        sampler.sample(ctx, Int32(i))
+        var dataset = DatasetView[DType.float32, lt](
+            x.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+            y.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+            sample_weight.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin](),
+            Int64(n_rows),
+            Int64(n_cols),
+            # `builder.cuh:238-239` -- row_major picks the strides.
+            Int64(n_cols) if row_major else Int64(1),
+            Int64(1) if row_major else Int64(n_rows),
+            Int32(n_sampled),
+            Int32(n_cols),
+            sampler.rows_ptr(),
+            Int32(n_unique_labels),
+            False,
+        )
+        var builder = Builder[DType.float32, lt, B](
+            ctx,
+            rf_params.tree_params,
+            Int32(i),
+            rf_params.seed,
+            n_sampled,
+            n_cols,
+            Int32(n_unique_labels),
+        )
+        var tree = builder.train(ctx, dataset, quantiles)
+        tree.treeid = Int32(i)
+        forest.trees.append(tree^)
+        _ = builder^
+
+    ctx.synchronize()
+    # Mojo frees a value at its LAST USE, and every buffer above reached a
+    # kernel as a raw pointer. These uses keep them alive past the final
+    # synchronize. Measured hazard, not a precaution.
+    _ = qr^
+    _ = sampler^
+    return forest^
