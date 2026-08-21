@@ -3183,3 +3183,103 @@ Sabotages run, each caught by a different gate:
 The second is the one to remember. Net zero: the mass moved rather than
 vanished, and every total in the histogram is correct. A check that summed
 would have passed it.
+
+## 100. The pointwise host launchers use the kernel matrix's block sizes, not CatBoost's literals
+
+THEIRS: `const int blockSize = 384;` for the one-byte family
+(`pointwise_hist2_one_byte_templ.cuh:238`) and `const int blockSize = 768;`
+for both small-bin families (`pointwise_hist2_binary.cu:141`,
+`pointwise_hist2_half_byte.cu:145`).
+
+OURS: `PW_HIST2_BLOCK` (256) and `PW_HB_BLOCK` (512), imported from the kernel
+files rather than restated in `gbdt/methods/pointwise_kernels.mojo`, so a
+launcher cannot drift from the kernel it launches.
+
+MEASURED REASON: the accumulators are sized per thread -- 32 floats each for
+the one-byte family, 16 for the small-bin one. At 768 the small-bin
+accumulator wants 16 x 768 x 4 = 49,152 bytes of threadgroup memory against
+Apple's 32,768; at 384 the one-byte accumulator wants 32 x 384 x 4 = 49,152
+against the same limit. The matrix resolves both, and 512 is a FLOOR as well
+as a budget: `pointwise_hist2_half_byte_template.mojo` carries a
+`comptime assert` because that family's `Reduce` folds its warp slices under
+`if (threadIdx.x < 512)`.
+
+WHAT IT DOES AND DOES NOT CHANGE. It does not change any grid: every
+`numBlocks` expression is in FEATURES and PARTS, never in threads. It does not
+change the multiplier -- `EstimateBlockPerFeatureMultiplier` counts blocks. It
+DOES change how many blocks the scan launch needs
+(`ceil(featureCount / blockSize)`), and the number of warp slices each
+accumulator folds, which is a float summation order already recorded at the
+accumulators.
+
+## 101. `exit(1)` and `CB_ENSURE_INTERNAL` become raised errors
+
+THEIRS: the multiplier ladder ends `} else { exit(1); }`
+(`pointwise_hist2_one_byte_templ.cuh:266`, `_binary.cu:174`,
+`_half_byte.cu:175`) -- a bare process abort with no message. The `histCount`
+guards end `CB_ENSURE_INTERNAL(false, ...)` (`pointwise_hist2.cu:99`, `:129`).
+
+OURS: both raise, and the multiplier one names the offending value.
+
+REASON: not a choice about behaviour. Mojo has no `exit` inside a `def` that
+already `raises`, and a library that kills the process instead of returning an
+error cannot be gated. Both are unreachable by construction --
+`EstimateBlockPerFeatureMultiplier` only doubles from 1 and is clamped to 64,
+so it is always a power of two in [1, 64]; `histCount` is 2 at the only
+caller. `mojo_only/pointwise_dispatch_check.mojo` F7 sweeps 245
+configurations, finds 12 that return 128 BEFORE the clamp, and asserts every
+clamped value is one of the seven -- so the clamp is live and the raise is not.
+
+## 102. `TComputeHist2Kernel` becomes a function
+
+THEIRS: `TComputeHist2Kernel : TStatelessKernel` holds thirteen members,
+declares `Y_SAVELOAD_DEFINE` over all of them, registers in a global table as
+`REGISTER_KERNEL(0x420000, ...)`, and is dispatched by
+`LaunchKernels<TKernel>(targets.NonEmptyDevices(), ...)`.
+
+OURS: `compute_hist2(...)`, taking the same thirteen values as arguments, on
+one device.
+
+REASON: `Y_SAVELOAD_DEFINE` and `REGISTER_KERNEL` serialize a kernel
+invocation so it can be sent to another PROCESS -- CatBoost's multi-host path.
+There is no such path here and porting the table without it would be porting a
+name. `TCudaBufferPtr<T>` carries a pointer and a size; ours are separate
+arguments (PORTING.md 9). `NonEmptyDevices()` is the multi-device fan-out,
+settled by PORTING.md 91 A: at device count 1 the layouts coincide.
+
+TWO CONSEQUENCES, both real ports of theirs:
+
+* `TFoldsHistogram` (`gpu_data/folds_histogram.h`) is ported into
+  `gbdt/methods/pointwise_kernels.mojo`, not `gbdt/gpu_data/`, because the
+  one-byte fan-out cannot be written without it and that lane owned two files.
+  27 lines; move it to `gbdt/gpu_data/folds_histogram.mojo` the moment
+  anything else needs it.
+* `TComputeHist1Kernel` is NOT ported: `pointwise_hist1.cu` is dead in the
+  upstream (PORTING.md 91 D, `gbdt/UNPORTED.tsv`).
+
+INHERITED, NOT NEW: the scan launch's `numBlocks.x` loses their `* 32`,
+because PORTING.md 8 replaced their warp-per-feature scan with one thread per
+feature. The grid is the last place that substitution surfaces. And the 8-bit
+path takes a `fixed_scale` their kernels have no parameter for -- DEVIATION 93;
+this layer only threads it through.
+
+### 102a. THE HOST ECHO OF THE `15`, verified from both sides
+
+`pointwise_kernels.cpp:57-60` dispatches the one-byte family as
+
+    DISPATCH_ONE_BYTE(ComputeHist2NonBinary, 4, 5)
+    DISPATCH_ONE_BYTE(ComputeHist2NonBinary, 6, 6)
+    DISPATCH_ONE_BYTE(ComputeHist2NonBinary, 7, 7)
+    DISPATCH_ONE_BYTE(ComputeHist2NonBinary, 8, 8)
+
+**The 5-bit kernel's feature count spans bits FOUR AND FIVE**, and the ranges
+are not uniform. That is the same fact as the device-side
+`lowerBound = BITS > 5 ? upperBound / 2 : 15` recorded at the driver, seen
+from the other end: a feature with 16 folds has `IntLog2 == 4` and belongs to
+the 5-bit kernel. Reading the range as `5,5` under-counts, the multiplier
+comes out too small, and the 16-fold features go unsplit.
+
+The two halves were found independently -- the device bound while porting the
+driver, the host range while porting the launcher -- and they corroborate.
+PORTING.md 91 F's fixture group 2 exists for the device half;
+`pointwise_dispatch_check.mojo` F6 exists for this one.

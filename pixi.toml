@@ -333,6 +333,19 @@ check-pointwise-small-bin-driver = "mojo run -I . mojo_only/pointwise_small_bin_
 # `if (GetGridSize(Policy))`). Own main(); host only, instant.
 check-histograms-helper = "mojo run -I . mojo_only/histograms_helper_check.mojo"
 
+# The pointwise host launch layer: TComputeHist2Kernel's fan-out, the three
+# per-policy launchers with their grid arithmetic and multiplier ladders,
+# UpdateFoldBins, UpdatePointwiseHistograms and the scan launch. This is the
+# first check in which the WHOLE family runs together -- binary, half-byte
+# and all four one-byte widths over one mixed fixture, 3,686 cells exact
+# after the scan. F2c is the subtle one: the multiplier's VALUE reaches
+# output through exactly one channel, the writeback (plain store at M == 1,
+# atomicAdd above), so the gate seeds the histogram to make those two
+# different programs. F6 pins that the 5-bit kernel's feature count spans
+# bits 4 AND 5 -- the host-side echo of `lowerBound = BITS > 5 ? ... : 15`.
+# Own main(); a GPU, ~6 s.
+check-pointwise-dispatch = "mojo run -I . mojo_only/pointwise_dispatch_check.mojo"
+
 # The LSD radix sort over (bin, permutation position). Gates STABILITY
 # separately from sortedness and prints both, because sortedness alone
 # cannot see a tie that moved -- and the tie order IS the second half of
