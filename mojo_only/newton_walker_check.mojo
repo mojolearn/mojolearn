@@ -281,6 +281,7 @@ def expect(cond: Bool, mut failures: Int, msg: String):
 
 
 def main() raises:
+    var _not_pd = 0
     var failures = 0
 
     # 1: quadratic, 10 iterations
@@ -289,7 +290,7 @@ def main() raises:
     var q = QuadraticOracle(a, m, -1)
     var start = List[Float32]()
     var leaves = newton_like_walker_estimate(
-        q, 10, BACKTRACKING_ANY_IMPROVEMENT, start
+        q, 10, BACKTRACKING_ANY_IMPROVEMENT, start, _not_pd
     )
     for i in range(3):
         expect(
@@ -300,7 +301,7 @@ def main() raises:
     # 2: cliff + underreported Hessian, AnyImprovement, iterations=3
     var c = CliffOracle()
     var got = newton_like_walker_estimate(
-        c, 3, BACKTRACKING_ANY_IMPROVEMENT, List[Float32]()
+        c, 3, BACKTRACKING_ANY_IMPROVEMENT, List[Float32](), _not_pd
     )
     expect(got[0] == Float32(0.6), failures,
            "cliff endpoint " + String(got[0]) + " != Float32(0.6)")
@@ -310,7 +311,7 @@ def main() raises:
     # 3: same cliff, backtracking NONE: the overshoot is accepted
     var c2 = CliffOracle()
     var got2 = newton_like_walker_estimate(
-        c2, 3, BACKTRACKING_NONE, List[Float32]()
+        c2, 3, BACKTRACKING_NONE, List[Float32](), _not_pd
     )
     expect(got2[0] == Float32(2.4), failures,
            "no-backtracking endpoint " + String(got2[0]) + " != 2.4")
@@ -320,7 +321,7 @@ def main() raises:
     # 4: iterations=1 shortcut + regularize survival
     var q2 = QuadraticOracle(a, m, 1)
     var got3 = newton_like_walker_estimate(
-        q2, 1, BACKTRACKING_ANY_IMPROVEMENT, List[Float32]()
+        q2, 1, BACKTRACKING_ANY_IMPROVEMENT, List[Float32](), _not_pd
     )
     expect(q2.moves == 1, failures,
            "shortcut move_to count " + String(q2.moves) + " != 1")
@@ -338,7 +339,7 @@ def main() raises:
     for row_size in [2, 3, 6]:
         var bq = BlockedQuadraticOracle(row_size, 4, 0)
         var gotb = newton_like_walker_estimate(
-            bq, 1, BACKTRACKING_ANY_IMPROVEMENT, List[Float32]()
+            bq, 1, BACKTRACKING_ANY_IMPROVEMENT, List[Float32](), _not_pd
         )
         var worst = Float64(0.0)
         for i in range(len(gotb)):
@@ -353,7 +354,7 @@ def main() raises:
     #     dividing by the diagonal CANNOT land on `m`.
     var b1 = BlockedQuadraticOracle(3, 4, 1)
     var g1 = newton_like_walker_estimate(
-        b1, 1, BACKTRACKING_ANY_IMPROVEMENT, List[Float32]()
+        b1, 1, BACKTRACKING_ANY_IMPROVEMENT, List[Float32](), _not_pd
     )
     var moved1 = Float64(0.0)
     for i in range(len(g1)):
@@ -368,7 +369,7 @@ def main() raises:
     #     longer the matrix the gradient came from.
     var b2 = BlockedQuadraticOracle(3, 4, 2)
     var g2 = newton_like_walker_estimate(
-        b2, 1, BACKTRACKING_ANY_IMPROVEMENT, List[Float32]()
+        b2, 1, BACKTRACKING_ANY_IMPROVEMENT, List[Float32](), _not_pd
     )
     var moved2 = Float64(0.0)
     for i in range(len(g2)):

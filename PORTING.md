@@ -2049,11 +2049,26 @@ the right-hand side still holding the raw GRADIENT, and that leaf takes a
 gradient step instead of a Newton one. This port does the same and returns
 the `info` so a caller that wants to count it can.
 
-It is reachable in principle: `diag(p) - p p^T` is positive SEMI-definite,
-and only the `+ lambda` on the diagonal (`pointwise_oracle.cpp:178`) makes it
-definite. At `l2_leaf_reg = 0` with a saturated probability it can go
-indefinite in float64. **UNMEASURED: no fit has been instrumented to count
-how often `info > 0` fires. OPEN ITEM.**
+**MEASURED 2026-08-21, AND IT IS NOT OPEN ANY MORE.** The walker now counts
+the blocks whose factorization failed and the boosting loop reports the
+total once per fit. A 4,096 x 5 hashed fixture, 7 classes, 25 trees at
+depth 5, learning rate 0.5:
+
+    l2_leaf_reg = 3.0 (their default)   0 blocks       final loss 0.0440
+    l2_leaf_reg = 0.0                   772 blocks     final loss 7.09e+18
+
+So the fallback is **unreachable at the shipped default and catastrophic
+without the L2 term**, which is exactly what the theory predicted:
+`diag(p) - p p^T` is positive SEMI-definite, and only the `+ lambda` on the
+diagonal (`pointwise_oracle.cpp:178`) makes it definite. At lambda 0 the
+Hessian is singular by construction -- the softmax's shift invariance is a
+null direction -- Cholesky stops, 772 leaves take the raw gradient as their
+step, and the fit diverges.
+
+**That is a reason to treat `l2_leaf_reg = 0` as unsupported for MultiClass
+rather than as a tuning choice**, and it is CatBoost's position too: their
+`CB_ENSURE(info >= 0)` passing on failure means their own fit would diverge
+the same way, silently. Ours at least says so.
 
 ## 75. The blocked Hessian is reduced one row at a time, into its own buffer
 

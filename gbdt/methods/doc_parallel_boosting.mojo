@@ -344,6 +344,8 @@ def fit(
         est_sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
 
     var losses = List[Float64]()
+    var not_pd_blocks = 0
+    var not_pd_total = 0
     # their `TVector<TResultModel>* result`, the ensemble being built
 
     # THE POOL OF ONE, see `TTreeWorkspace`: the tree planes are the FIT's,
@@ -597,14 +599,20 @@ def fit(
             #                                  backtrackingType);
             #         point = walker.Estimate(startPoint);
             #     }
+            # DEVIATION 74's counter: how many leaves took their silent
+            # gradient fallback because Cholesky found the Hessian not
+            # positive definite. Accumulated across the whole fit and
+            # reported once, because the number that matters is whether
+            # it is ever nonzero.
             var estimated: List[Float32]
             if leaf_estimation_method == LEAF_ESTIMATION_EXACT:
                 estimated = oracle.estimate_exact()
             else:
                 estimated = newton_like_walker_estimate(
                     oracle, iters, BACKTRACKING_ANY_IMPROVEMENT,
-                    List[Float32](),
+                    List[Float32](), not_pd_blocks,
                 )
+            not_pd_total += not_pd_blocks
             leaf_values.clear()
             for i in range(len(estimated)):
                 leaf_values.append(estimated[i])
@@ -708,6 +716,19 @@ def fit(
     losses.append(
         -Float64(h_fv.unsafe_ptr().unsafe_load(0)) / Float64(n_rows)
     )
+    # DEVIATION 74, MEASURED RATHER THAN ARGUED. A nonzero count means
+    # some leaf's Hessian was not positive definite, Cholesky stopped, and
+    # that leaf took a gradient step instead of a Newton one -- silently,
+    # because their `CB_ENSURE(info >= 0)` passes on exactly that. Printed
+    # rather than raised, because the behaviour is THEIRS and the point is
+    # to know whether it happens at all.
+    if not_pd_total != 0:
+        print(
+            "  [deviation 74] Cholesky found a non-positive-definite"
+            " Hessian in", not_pd_total,
+            "leaf-blocks over this fit; those leaves took their gradient"
+            " fallback, as CatBoost's own dposv does",
+        )
 
     return losses^
 

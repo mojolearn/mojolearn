@@ -267,9 +267,10 @@ def main() raises:
             Float32(0.5),
             LAMBDA, -1, LEAF_ESTIMATION_NEWTON,
         )
+        var _not_pd = 0
         var got = newton_like_walker_estimate(
             oracle, ITERATIONS, BACKTRACKING_ANY_IMPROVEMENT,
-            List[Float32](),
+            List[Float32](), _not_pd,
         )
         var want = sim_estimate(
             targets, weights, cursor0, leaf_of, leaf_sizes, has_weights

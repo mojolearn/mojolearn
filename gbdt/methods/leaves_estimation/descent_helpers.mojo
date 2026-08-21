@@ -87,6 +87,7 @@ def _blocked_hessian_direction(
     gradient: List[Float64],
     hessian: List[Float64],
     hessian_block_size: Int,
+    mut out_not_pd: Int,
 ) raises -> List[Float32]:
     """`UpdateMoveDirectionBlockedHessian` (`descent_helpers.cpp:91-117`).
 
@@ -119,6 +120,15 @@ def _blocked_hessian_direction(
     for _ in range(len(gradient)):
         direction.append(Float32(0.0))
 
+    # DEVIATION 74's counter. `dposv` returns `info > 0` when the leading
+    # minor of order `info` is not positive definite, leaves the
+    # right-hand side UNTOUCHED, and their `CB_ENSURE(info >= 0)` PASSES
+    # -- so that leaf silently takes a GRADIENT step instead of a Newton
+    # one. The behaviour is theirs and is copied; what was missing was any
+    # way to know whether it ever happens, which made it an unmeasured
+    # deviation sitting under every MultiClass number.
+    var not_pd = 0
+
     for block_id in range(num_blocks):
         var sigma = List[Float64]()
         for i in range(row_size * row_size):
@@ -127,11 +137,14 @@ def _blocked_hessian_direction(
         for i in range(row_size):
             solution.append(gradient[block_id * row_size + i])
 
-        _ = solve_linear_system_cholesky(sigma, solution)
+        var info = solve_linear_system_cholesky(sigma, solution)
+        if info != 0:
+            not_pd += 1
 
         for i in range(row_size):
             direction[block_id * row_size + i] = Float32(solution[i])
 
+    out_not_pd = not_pd
     return direction^
 
 
@@ -139,12 +152,17 @@ def _update_move_direction(
     gradient: List[Float64],
     hessian: List[Float64],
     hessian_block_size: Int,
+    mut out_not_pd: Int,
 ) raises -> List[Float32]:
-    """`UpdateMoveDirection` (`descent_helpers.cpp:75-81`), the switch."""
+    """`UpdateMoveDirection` (`descent_helpers.cpp:75-81`), the switch.
+
+    `out_not_pd` counts the blocks whose Cholesky failed and therefore
+    took their silent gradient fallback; see DEVIATION 74.
+    """
     if hessian_block_size == 1:
         return _diagonal_direction(gradient, hessian)
     return _blocked_hessian_direction(
-        gradient, hessian, hessian_block_size
+        gradient, hessian, hessian_block_size, out_not_pd
     )
 
 
@@ -167,6 +185,7 @@ def newton_like_walker_estimate[
     iterations: Int,
     backtracking_type: Int,
     start_point: List[Float32],
+    mut out_not_pd: Int,
 ) raises -> List[Float32]:
     """`TNewtonLikeWalker::Estimate` (`descent_helpers.cpp:128-204`)."""
     var point_dim = oracle.point_dim()
@@ -185,9 +204,12 @@ def newton_like_walker_estimate[
     oracle.move_to(cur_point)
     oracle.write_value_and_first_derivatives(cur_value, cur_grad)
     oracle.write_second_derivatives(cur_hess)
+    var not_pd_total = 0
+    var not_pd_here = 0
     var direction = _update_move_direction(
-        cur_grad, cur_hess, oracle.hessian_block_size()
+        cur_grad, cur_hess, oracle.hessian_block_size(), not_pd_here
     )
+    not_pd_total += not_pd_here
 
     if iterations == 1:
         # `:151-156`: one full step, regularize, no re-evaluation, and
@@ -195,6 +217,7 @@ def newton_like_walker_estimate[
         # part of the RETURN, not of the caller.
         var result = _move(cur_point, direction, 1.0)
         oracle.regularize(result)
+        out_not_pd = not_pd_total
         return oracle.make_estimation_result(result)
 
     var updated = False
@@ -223,8 +246,10 @@ def newton_like_walker_estimate[
                 cur_value = next_value
                 cur_grad = next_grad.copy()
                 direction = _update_move_direction(
-                    cur_grad, cur_hess, oracle.hessian_block_size()
+                    cur_grad, cur_hess, oracle.hessian_block_size(),
+                    not_pd_here,
                 )
+                not_pd_total += not_pd_here
                 iteration += 1
                 updated = True
                 accepted = True
@@ -239,4 +264,5 @@ def newton_like_walker_estimate[
     # (`:204`). Identity for every single-dimensional loss; for MultiClass
     # it is the gauge projection, and omitting it hands the caller a vector
     # one component too wide.
+    out_not_pd = not_pd_total
     return oracle.make_estimation_result(cur_point)
