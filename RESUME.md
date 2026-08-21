@@ -797,3 +797,29 @@ rows-x-features product the same code wins 3.3x at the same border
 count -- feature width amortizes the fixed floor as effectively as row
 count. The scale story is now three measured points: parity near
 800k x 100, 1.8-2.1x at 4M x 100, 3.3-3.4x at 400k x 2000.
+
+### 2026-08-21, later: the epsilon tree decomposed -- 83% accumulate, and the density cliff
+
+`mojo_only/shape_sweep.mojo` over prefix-slices of the epsilon fixtures
+(full record `bench/results/SHAPE_SWEEP_2026-08-21_epsilon.md`), three
+findings, each measured:
+
+1. **t = a + b*R + c*F + d*R*F at the full shape: floor 6%, rows 1%,
+   feature-scaled cell passes 10%, ACCUMULATE 83%** (~26.5 GB/s effective
+   against the 90 GB/s streaming ceiling).
+2. **Sibling subtraction is alive and worth exactly 1.96x** at this shape
+   (OFF: 240-252 ms/tree vs ON: 124-128), with BIT-IDENTICAL mse both
+   arms -- on the Int32 accumulate the subtraction is exact, so the
+   equality is the correctness proof. Their policy mirrored:
+   build-smaller-and-subtract, `split_properties_helper.cpp:1283-1355`.
+3. **The density cliff**: depth differencing (30.7 / 67.9 / 123.4 ms/tree
+   at depths 2/4/6) gives per-level cost 11.5 -> 18.6 -> 27.8 ms while
+   built rows per level stay ~constant -- cache-line utilization collapses
+   as leaves fragment the indexed reads. Their `GatherBins` arm is a
+   checked dead end at 2 stats (same amplified read plus a dense
+   write+re-read; their own statCount > 2 threshold encodes exactly this),
+   so the cliff is unaddressed in their design and merely tolerable on
+   V100-class bandwidth. A density-triggered level compaction is PRICED
+   AND DEFERRED (~1.6x theoretical ceiling at depth 6, sketch nets
+   15-30%, we stand 3.3-3.4x ahead); it reopens at depth 8+ or on a
+   bandwidth-tighter GPU.
