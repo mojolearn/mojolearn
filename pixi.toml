@@ -282,6 +282,20 @@ check-pointwise-hist2 = "mojo run -I . mojo_only/pointwise_hist2_check.mojo"
 # ~20 s.
 check-pointwise-hist2-8bit = "mojo run -I . mojo_only/pointwise_hist2_8bit_check.mojo"
 
+# TPointHistHalfByte: ONE accumulator serving BOTH of CatBoost's small-bin
+# pointwise kernels, which differ only in how they READ the reduced block --
+# half-byte takes one cell per (feature, fold), binary recovers a one-bit
+# feature by summing the eight nibble values whose bit is clear. Sixteen
+# threads share an inner copy and the thing that keeps them apart is a
+# ROTATION rather than a turn-taking flag, so a wrong rotation shuffles mass
+# between features and leaves the grand total intact. Gated per cell for
+# both readers, plus a same-group transposition detector for the binary bit
+# numbering (theirs is most-significant-first, and a transposed order is a
+# permutation within the group that no group total can see). Block 512 is a
+# FLOOR here, not just a budget -- their Reduce folds under
+# `threadIdx.x < 512`. Own main(); a GPU, ~20 s.
+check-pointwise-hist2-half-byte = "mojo run -I . mojo_only/pointwise_hist2_half_byte_check.mojo"
+
 # The LSD radix sort over (bin, permutation position). Gates STABILITY
 # separately from sortedness and prints both, because sortedness alone
 # cannot see a tie that moved -- and the tie order IS the second half of

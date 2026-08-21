@@ -260,6 +260,24 @@ comptime K_HIST_2_ONE_BYTE = 7
 #: row because a shared row would invite sharing the writeback.
 comptime K_POINTWISE_HIST_2 = 8
 
+#: `TPointHistHalfByte<BlockSize>`, the pointwise family's OTHER accumulator.
+#: One struct serves BOTH of their small-bin kernels -- binary (32 one-bit
+#: features per block) and half-byte (8 features of up to 16 bins) -- which
+#: differ only in how they READ the reduced result, never in how they build
+#: it (`pointwise_hist2_binary.cu:39` and `pointwise_hist2_half_byte.cu:42`
+#: both instantiate `THist = TPointHistHalfByte<BlockSize>`).
+#:
+#: 16 floats per thread, not 32: half the bins, half the scratch. CatBoost
+#: launches both at 768; the 32 KB ceiling over 16 floats gives 512, which
+#: is exactly 32,768 bytes.
+#:
+#: 512 IS A FLOOR HERE AND NOT ONLY A BUDGET, which no other row can say.
+#: Their `Reduce` folds the warp slices with `if (threadIdx.x < 512)`
+#: (`pointwise_hist2_half_byte_template.cuh:78`), so a block below 512
+#: leaves the top of the first slice unfolded and silently loses every fold
+#: above the block size. The accumulator asserts it.
+comptime K_POINTWISE_HIST_2_HALF_BYTE = 9
+
 #: NUMERIC. Lanes one private histogram copy is shared by. CatBoost's 32,
 #: pinned for every vendor because AMD's wavefront is 64 and letting it
 #: follow the hardware changes the reduction tree. See the module docstring.
