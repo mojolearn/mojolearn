@@ -212,6 +212,13 @@ check-radixsort = "mojo run -I . mojo_only/radix_sort_check.mojo"
 # regenerate it with `ctr-target-oracle-gen`.
 check-ctr = "mojo run -I . mojo_only/ctr_check.mojo"
 
+# IDENTITY_PATHS rows 9 and 10 on THIS backend: division, sqrt and the
+# two exact score-kernel expression shapes against correctly-rounded
+# references (one f64 op, one rounding -- exact for all five ops), plus
+# the a*b+c contraction canary judged against BOTH the fused and unfused
+# exact references. Run on every backend the kernel matrix carries.
+check-ieee-arith = "mojo run -I . mojo_only/ieee_arith_check.mojo"
+
 # The DEVICE FeatureFreq calcer -- TWeightedBinFreqCalcerGpu and its
 # compute_simple_ctrs_device driver -- against the host driver PER CELL
 # (bit-equal: trivial weights make every float sum exact) and an

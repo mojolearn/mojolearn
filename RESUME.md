@@ -929,3 +929,24 @@ route unconditionally, and MultiClass arrived later in another lane.
 Fixed in the same commit: multi-stat shapes route to the PASS family's
 z-axis stat pairs; reach proved by the raise-then-run, correctness by
 the 7-figure loss column against CatBoost's own output.
+
+### 2026-08-21, identity lane assist: rows 9 and 10 measured on Apple
+
+`mojo_only/ieee_arith_check.mojo` (`pixi run check-ieee-arith`): 2^20
+hashed bit patterns through raw div, raw sqrt, the two exact
+score-kernel expression shapes, and an a*b+c contraction canary judged
+against BOTH exact references. Verdict on Metal through MAX:
+
+* **Correctly rounded on every normal input** -- zero non-denormal
+  divergence, so no fast reciprocal and no rsqrt substitution. Row 10's
+  feared failure mode does not exist on Apple.
+* **Every one of the 48,904 + 4,137 + 2,182 mismatches is denormal
+  flush** (operands, intermediates and results), which Metal documents.
+  The cross-vendor identity hazard is DENORMAL POLICY, not fast-math:
+  CUDA's default honors denormals, so IDENTICAL mode needs a
+  source-level flush on non-FTZ backends, or a no-denormals proof.
+* **No FMA contraction on Metal** (fused 0 / unfused 1,046,394): row
+  9's pin exists to hold OTHER backends to this measured baseline.
+
+The check is per-backend by construction; running it is the first hour
+of every new kernel-matrix column.
