@@ -346,6 +346,17 @@ check-histograms-helper = "mojo run -I . mojo_only/histograms_helper_check.mojo"
 # Own main(); a GPU, ~6 s.
 check-pointwise-dispatch = "mojo run -I . mojo_only/pointwise_dispatch_check.mojo"
 
+# The pointwise SCORER: all five calcers, the single-fold and both dynamic
+# split kernels, the gather-by-leaves transpose and the partition reducer.
+# KEEPS CATBOOST'S SIGN CONVENTION -- FLT_MAX sentinel, `gain < bestGain`,
+# lower is better -- which is the OPPOSITE of
+# greedy_subsets_searcher/kernel/compute_scores.mojo, whose host folds in a
+# negation. Anything wiring a searcher must not assume the two agree.
+# The dynamic gates run at foldCount 6, not 4, because at every POWER-OF-TWO
+# fold count the histogram offset and the data-partition offset coincide and
+# the offset-confusion sabotage measures green. Own main(); a GPU, ~2 s.
+check-pointwise-scores = "mojo run -I . mojo_only/pointwise_scores_check.mojo"
+
 # The LSD radix sort over (bin, permutation position). Gates STABILITY
 # separately from sortedness and prints both, because sortedness alone
 # cannot see a tie that moved -- and the tie order IS the second half of

@@ -3283,3 +3283,134 @@ The two halves were found independently -- the device bound while porting the
 driver, the host range while porting the launcher -- and they corroborate.
 PORTING.md 91 F's fixture group 2 exists for the device half;
 `pointwise_dispatch_check.mojo` F6 exists for this one.
+
+## 94. No float64 anywhere in the pointwise scorer; theirs accumulates in double
+
+`gbdt/methods/kernel/pointwise_scores.mojo`, port of
+`catboost/cuda/methods/kernel/pointwise_scores.cu` + `score_calcers.cuh`.
+
+Metal has no fp64 at any cost, so every `double` in those two files is
+`Float32` here. Theirs, by citation:
+
+* `struct TPartitionStatistics { double Weight; double Sum; double Count; }`
+  (`gpu_data/gpu_structures.h:113-116`) -- the per-partition totals every
+  kernel subtracts the left child from.
+* `void AddLeaf(double sum, double weight)` in all five calcers and
+  `double Score; double DenumSqr;` in `TCosineScoreCalcer`
+  (`score_calcers.cuh:22, 53, 83, 114, 152, 182-183`).
+* `double scoreBeforeSplit`, `double l2`, `double scoreStdDev` as kernel
+  arguments (`pointwise_scores.cu:50`, `:325-326`).
+* `__shared__ volatile double localBuffer[BLOCK_SIZE]` and
+  `Reduce<double, BLOCK_SIZE>` in `PartitionUpdateImpl` (`:637`, `:644`),
+  which is where the partition totals are MADE. This one compounds: a
+  Float32 total then feeds the Float32 subtraction above.
+
+WHAT IT COSTS. The right child is derived as `part.Sum - sumLeft`
+(`:263`, `:369`), the cancellation step of the whole scorer. Theirs cancels
+in double and narrows afterwards; ours cancels in Float32 throughout. So a
+split CHOICE can differ from CatBoost's whenever two candidates sit within
+Float32 epsilon after cancellation, and the gap widens with `pCount` and
+with `foldCount`. Same deviation the greedy-subsets scorer already carries;
+recorded again because it is a different file with a different cancellation
+depth.
+
+NOT FAKED: no Float64 appears pretending to be theirs. The gate's host
+reference is Float32 for the same reason, and its exactness (S1 and L1
+report a worst relative discrepancy of 0.0) is measured, not assumed.
+
+### 94a. THE TWO SCORERS IN THIS TREE HAVE OPPOSITE SIGNS
+
+Verified at both sites while merging, and it is the single most dangerous
+thing to assume about this file.
+
+    pointwise_scores.mojo (this one)   FLT_MAX sentinel, `gain < bestGain`,
+                                       LOWER IS BETTER -- CatBoost's own
+    greedy_subsets_searcher/kernel/    larger is better, every comparison
+      compute_scores.mojo              FLIPPED, one negation folded into the
+                                       host (its docstring says so at :36-42)
+
+Both are correct for their own callers. Neither is wrong. But a searcher
+that reads a best-split record from one and compares it with the other's
+convention picks the WORST split at every level and still returns a
+well-formed tree.
+
+## 95. The pointwise scorer's struct pointers become flat typed arrays
+
+A Mojo kernel argument cannot be a pointer to a non-trivial struct, and
+PORTING_RULES 4 already records that `enqueue_function` refuses derived
+pointers as aliasing. The four struct arguments of `pointwise_scores.cu` are
+passed as the flat arrays their C++ memory image already is:
+
+| theirs | ours |
+|---|---|
+| `const TCBinFeature* bf` | `MutPointer[UInt32]`, 3 words: `[3b]=FeatureId`, `[3b+1]=BinId`, `[3b+2]=SkipInScoreCount`. `{ui32; ui32; bool;}` is 12 bytes with the bool in the low byte of word 3, so this is byte-identical, not a re-encoding |
+| `const TPartitionStatistics* parts` | `MutPointer[Float32]`, 3 per entry: Weight, Sum, Count (Float32 by 94) |
+| `const TDataPartition* parts` | `MutPointer[UInt32]`, 2 per entry: Offset, Size -- the same encoding `split_properties_helpers.mojo` already uses |
+| `TBestSplitProperties* result` | TWO pointers: `result_ids` (UInt32, 2/block) and `result_scores` (Float32, 2/block). `result += blockIdx.x` becomes `2 * blockIdx.x` into each |
+
+Their `TScoreCalcer calcer` is also a by-value kernel argument (`:250`,
+`:481`). Mojo has no by-value user struct across the launch boundary, so the
+calcer's CONFIGURATION crosses as scalars (`lambda_l2`, `meta_exponent`,
+`normalize`, `score_std_dev`, `global_seed`) and the calcer is constructed
+inside the kernel. Every decision that was host-side upstream stays
+host-side, in particular the `MetaExponent` coin flip (`:507`), which is
+`meta_exponent_draw` and is gated on both arms.
+
+The five calcer CLASSES become one comptime-tagged `ScoreCalcer[
+score_function]` -- PORTING_RULES 4's "tagged union, which is what their
+worker switches on anyway", and their host does switch on it at `:483`.
+
+## 96. `StreamLoad` and `__ldg` have no portable spelling
+
+`ComputeSum` loads through `NKernel::StreamLoad` (`pointwise_scores.cu:27`),
+which is `cub::ThreadLoad<cub::LOAD_CS>` -- PTX `ld.global.cs`, a
+cache-streaming hint that evicts the line early so a one-pass sum does not
+displace the working set. `LdgWithFallback` is
+`cub::ThreadLoad<cub::LOAD_LDG>`, the read-only data cache path. Both are
+NVIDIA cache-policy PTX with no counterpart on Metal.
+
+* `LdgWithFallback` / `__ldg` -> `std.gpu.intrinsics.ldg`. Kept: it is the
+  Mojo spelling of the same intrinsic and lowers to a plain load where the
+  target has none, so it is language-level, not a library standing in for an
+  algorithm.
+* `StreamLoad` -> a plain `unsafe_load`. A HINT ONLY: `LOAD_CS` and a normal
+  load return the same bytes, so the arithmetic is unchanged and only cache
+  residency differs. Recorded rather than silently dropped.
+
+The 16-wide manual unroll around it IS ported (`:23-32`) as a `comptime for`,
+because the unroll fixes the ORDER of a float summation and collapsing it
+into the tail loop would give a different sum. Their own comment attributes
+it to nvcc 11.4+ refusing `#pragma unroll 16`; the reason it is ported is the
+summation order, not the compiler. Gate R1 uses a 20000-row partition, which
+exceeds `15 * 1024` and reaches the unrolled loop at their block size; a
+500-row partition reaches only the tail. Sabotaging the unrolled stride moves
+4 cells.
+
+### 96a. Four things in `pointwise_scores.cu` that are theirs and look wrong
+
+Transcribed as written, all verified against the source while merging.
+
+1. **`GatherHistogramByLeaves` cannot reach leaves past 1023.** The launcher
+   sets `numBlocks.z = ceil(leafCount / 1024)` (`:600`) and the kernel's only
+   z term is `threadIdx.z * BLOCK_SIZE` (`:565`) -- `threadIdx`, not
+   `blockIdx` -- in a one-dimensional block, so it is always 0. The extra z
+   blocks recompute leaves 0-1023 and leaves 1024+ are never written.
+   Unreachable in a default fit; the dead term is transcribed, not "fixed".
+2. **`FindOptimalSplitSolarImpl` does not compute `TSolarScoreCalcer`'s
+   formula.** The calcer is a per-leaf `-sum^2 (1 + 2 log(w+1)) / w`; the
+   dynamic kernel is a held-out estimate `-2 mu sumTest + wTest mu^2` scaled
+   by `(1 + 2 log(totalTestWeight + 1))` only when that weight exceeds 2.
+   Same name, different objective, selected purely by `foldCount == 1`.
+3. **`denumSqr` is seeded `1e-20f` in the dynamic cosine kernel (`:344`) and
+   `1e-10f` in `TCosineScoreCalcer::NextFeature` (`score_calcers.cuh:149`)**,
+   under the same `> 1e-15f` guard -- so the dynamic path falls through to
+   `FLT_MAX` on an all-empty feature and the single-fold path never does.
+4. **The `ScoreStdDev` noise enters at a different point in the two cosine
+   paths**: dynamic does `score *= catWeight` then adds noise; single-fold
+   adds noise inside `GetScore()` then multiplies. With a cat-feature weight
+   other than 1 those are different distributions.
+
+Also: `FindOptimalSplitDynamic` supports only 3 of the 7 score functions
+(SolarL2, Cosine, NewtonCosine). `L2`, `NewtonL2`, `SatL2` and `LOOL2` throw
+the moment `foldCount > 1`, and `find_optimal_split_dynamic` raises in the
+same place.
