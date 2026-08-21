@@ -75,7 +75,7 @@ and `leaves_estimation.mojo` carries the derivation and the two file:line
 citations rather than leaving it to be assumed.
 """
 
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.host.device_attribute import DeviceAttribute
 from gbdt.methods.kernel_add_model_value import add_model_value_kernel
 
@@ -104,7 +104,10 @@ from gbdt.models.oblivious_model import (
     TObliviousTreeModel,
     TObliviousTreeStructure,
 )
-from gbdt.gpu_data.compressed_index_builder import build_layout
+from gbdt.gpu_data.compressed_index_builder import (
+    CompressedIndexLayout,
+    build_layout,
+)
 from gbdt.models.kernel.add_bin_values import compute_bins_and_add_kernel
 from mojo_only.kernel_matrix import TARGET_COLUMN, deterministic_flush_for
 from gbdt.options.catboost_options import SCORE_FUNCTION_COSINE
@@ -123,6 +126,12 @@ from gbdt.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
 )
 from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_base import (
     HIST2_SMEM_IS_I32,
+)
+from gbdt.overfitting_detector.overfitting_detector import (
+    OD_DEFAULT_STOP_PVALUE,
+    OD_DEFAULT_WAIT_ITERATIONS,
+    OD_NONE,
+    make_overfitting_detector,
 )
 from gbdt.options.catboost_options import (
     LEAF_ESTIMATION_EXACT,
@@ -145,7 +154,253 @@ from gbdt.targets.kernel.pointwise_targets import (
 )
 
 
-def fit(
+@fieldwise_init
+struct TestArm(Movable):
+    """Their `testCursor` and the detector that reads it.
+
+    `AppendModels(dataSet, iterationModels, ..., learnCursors, testCursor)`
+    (`doc_parallel_boosting.h:391-396`) applies each new weak model to the
+    TEST cursor as well as the learn one, and their training loop feeds the
+    resulting error to `DetectOverfitting`
+    (`overfitting_detector.h:25-34`). This struct is that pair.
+
+    `n_rows == 0` means NO TEST SET, and every buffer here is then unread
+    -- the same contract `n_weights == 0` has for the weight column. A
+    detector built without a test set is inert by construction
+    (`overfitting_detector.cpp:122-124`), so the two agree.
+
+    THE TEST ROWS MUST BE QUANTIZED AGAINST THE MODEL'S OWN BORDERS.
+    `gbdt/train.mojo` does that, because it is the only place that owns
+    them; handing this struct a `cindex` built against different borders
+    would score every split against the wrong bins and nothing would
+    assert.
+    """
+
+    var n_rows: Int
+    var cindex: DeviceBuffer[DType.uint32]
+    var targets: DeviceBuffer[DType.float32]
+    var weights: DeviceBuffer[DType.float32]
+    var cursor: DeviceBuffer[DType.float32]
+    var stats: DeviceBuffer[DType.float32]
+    var fv_part: DeviceBuffer[DType.float32]
+    var fv: DeviceBuffer[DType.float32]
+    var h_fv: HostBuffer[DType.float32]
+    var mag_dummy: DeviceBuffer[DType.float32]
+    #: the per-tree apply's packed records, one tree at a time
+    var d_off: DeviceBuffer[DType.uint32]
+    var d_shift: DeviceBuffer[DType.uint32]
+    var d_mask: DeviceBuffer[DType.uint32]
+    var d_bin: DeviceBuffer[DType.uint32]
+    var d_eq: DeviceBuffer[DType.uint8]
+    var d_vals: DeviceBuffer[DType.float32]
+    var h_off: HostBuffer[DType.uint32]
+    var h_shift: HostBuffer[DType.uint32]
+    var h_mask: HostBuffer[DType.uint32]
+    var h_bin: HostBuffer[DType.uint32]
+    var h_eq: HostBuffer[DType.uint8]
+    var h_vals: HostBuffer[DType.float32]
+
+
+def make_test_arm(
+    ctx: DeviceContext,
+    n_rows: Int,
+    var cindex: DeviceBuffer[DType.uint32],
+    var targets: DeviceBuffer[DType.float32],
+    approx_dim: Int,
+    stat_count: Int,
+    max_depth: Int,
+) raises -> TestArm:
+    """Size the held-out arm. `n_rows == 0` still allocates one word per
+    buffer, because a struct field cannot be absent and the contract is
+    that nothing reads them."""
+    var n = n_rows if n_rows > 0 else 1
+    var blocks = (n + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
+    if multilogit_blocks(n) > blocks:
+        blocks = multilogit_blocks(n)
+    var max_leaves = 1 << max_depth
+    var w = ctx.enqueue_create_buffer[DType.float32](n)
+    ctx.enqueue_memset(w, Float32(1.0))
+    return TestArm(
+        n_rows,
+        cindex^, targets^, w^,
+        ctx.enqueue_create_buffer[DType.float32](approx_dim * n),
+        ctx.enqueue_create_buffer[DType.float32](stat_count * n),
+        ctx.enqueue_create_buffer[DType.float32](blocks),
+        ctx.enqueue_create_buffer[DType.float32](1),
+        ctx.enqueue_create_host_buffer[DType.float32](blocks),
+        ctx.enqueue_create_buffer[DType.float32](2),
+        ctx.enqueue_create_buffer[DType.uint32](max_depth),
+        ctx.enqueue_create_buffer[DType.uint32](max_depth),
+        ctx.enqueue_create_buffer[DType.uint32](max_depth),
+        ctx.enqueue_create_buffer[DType.uint32](max_depth),
+        ctx.enqueue_create_buffer[DType.uint8](max_depth),
+        ctx.enqueue_create_buffer[DType.float32](max_leaves * approx_dim),
+        ctx.enqueue_create_host_buffer[DType.uint32](max_depth),
+        ctx.enqueue_create_host_buffer[DType.uint32](max_depth),
+        ctx.enqueue_create_host_buffer[DType.uint32](max_depth),
+        ctx.enqueue_create_host_buffer[DType.uint32](max_depth),
+        ctx.enqueue_create_host_buffer[DType.uint8](max_depth),
+        ctx.enqueue_create_host_buffer[DType.float32](
+            max_leaves * approx_dim
+        ),
+    )
+
+
+def _apply_last_tree_to_test(
+    ctx: DeviceContext,
+    model: TAdditiveModel,
+    layout: CompressedIndexLayout,
+    mut test: TestArm,
+    approx_dim: Int,
+    learning_rate: Float32,
+) raises:
+    """One tree onto the held-out cursor, their `AddObliviousTree`.
+
+    The LAST weak model only. `predict` packs the whole ensemble because
+    it is called once; this runs per iteration, so it packs one tree --
+    `depth` level records and `2^depth * dim` values -- and launches once.
+
+    THE LEAF VALUES ALREADY CARRY THE LEARNING RATE. `fit` stores
+    `leaf_values[i] * learning_rate` on the weak model (their
+    `Rescale(step)` folded in), so this passes 1.0 and must NOT reapply
+    it. Reapplying would make the held-out curve fall at a different rate
+    from the learn curve, and the detector would stop on the wrong shape.
+    """
+    var t = model.size() - 1
+    if t < 0:
+        return
+    ref weak = model.weak_models[t]
+    var depth = weak.structure.get_depth()
+    if depth == 0:
+        return
+    var n = test.n_rows
+
+    for level in range(depth):
+        ref cf = layout.features[
+            Int(weak.structure.splits[level].feature_id)
+        ]
+        test.h_off.unsafe_ptr().unsafe_store(
+            level, cf.offset * UInt32(n)
+        )
+        test.h_shift.unsafe_ptr().unsafe_store(level, cf.shift)
+        test.h_mask.unsafe_ptr().unsafe_store(level, cf.mask)
+        test.h_bin.unsafe_ptr().unsafe_store(
+            level, UInt32(Int(weak.structure.splits[level].bin_idx))
+        )
+        var take_bin = (
+            Int(weak.structure.splits[level].split_type)
+            == BIN_SPLIT_TAKE_BIN
+        )
+        test.h_eq.unsafe_ptr().unsafe_store(
+            level, UInt8(1) if take_bin else UInt8(0)
+        )
+    var n_values = (1 << depth) * approx_dim
+    for i in range(n_values):
+        var v = Float32(0.0)
+        if i < len(weak.leaf_values):
+            v = weak.leaf_values[i]
+        test.h_vals.unsafe_ptr().unsafe_store(i, v)
+
+    ctx.enqueue_copy(dst_buf=test.d_off, src_ptr=test.h_off.unsafe_ptr())
+    ctx.enqueue_copy(
+        dst_buf=test.d_shift, src_ptr=test.h_shift.unsafe_ptr()
+    )
+    ctx.enqueue_copy(dst_buf=test.d_mask, src_ptr=test.h_mask.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=test.d_bin, src_ptr=test.h_bin.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=test.d_eq, src_ptr=test.h_eq.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=test.d_vals, src_ptr=test.h_vals.unsafe_ptr())
+
+    var wide = (n + 255) // 256
+    if wide > 1024:
+        wide = 1024
+    ctx.enqueue_function[compute_bins_and_add_kernel](
+        test.cindex.unsafe_ptr(),
+        test.d_off.unsafe_ptr(),
+        test.d_shift.unsafe_ptr(),
+        test.d_mask.unsafe_ptr(),
+        test.d_bin.unsafe_ptr(),
+        test.d_eq.unsafe_ptr(),
+        Int32(depth),
+        test.d_vals.unsafe_ptr(),
+        Int32(n),
+        test.cursor.unsafe_ptr(),
+        Int32(approx_dim),
+        Int32(n),
+        # 1.0: the rate is already inside the stored leaf values
+        grid_dim=(wide, approx_dim, 1),
+        block_dim=(256, 1, 1),
+    )
+
+
+def _test_loss(
+    ctx: DeviceContext,
+    mut test: TestArm,
+    objective: Int,
+    num_classes: Int,
+    alpha: Float32,
+    logloss_border: Float32,
+    approx_dim: Int,
+) raises -> Float64:
+    """The held-out loss, through the SAME target kernel the learn loss
+    uses, so the two curves are the same quantity.
+
+    Their `functionValue` with the sign flipped and divided by the row
+    count, exactly as the learn loss is -- which is what makes the
+    detector's comparison meaningful.
+    """
+    var n = test.n_rows
+    var blocks = (n + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
+    if objective == OBJECTIVE_MULTICLASS:
+        blocks = multilogit_blocks(n)
+        launch_multilogit_value_and_der_search(
+            ctx, num_classes, n, test.targets, test.weights, False,
+            test.cursor, n, test.cindex, False,
+            test.fv_part, True, test.stats, n, test.mag_dummy, False,
+        )
+    elif objective == OBJECTIVE_MULTICLASS_OVA:
+        blocks = multilogit_blocks(n)
+        launch_one_vs_all_value_and_der[True](
+            ctx, num_classes, n, test.targets, test.weights, False,
+            test.cursor, n, test.cindex, False,
+            test.fv_part, True, test.stats, n, test.mag_dummy, False,
+        )
+    else:
+        launch_approximate[False](
+            ctx, objective, test.targets, test.weights, Int32(n),
+            test.cursor, Int32(0), alpha, logloss_border,
+            test.stats, test.fv_part, Int32(1),
+            test.mag_dummy, Int32(0), blocks,
+        )
+    ctx.enqueue_function[deterministic_sum_lanes_kernel[1]](
+        test.fv_part.unsafe_ptr(), Int32(blocks), test.fv.unsafe_ptr(),
+        grid_dim=1, block_dim=256,
+    )
+    ctx.enqueue_copy(dst_ptr=test.h_fv.unsafe_ptr(), src_buf=test.fv)
+    ctx.synchronize()
+    return -Float64(test.h_fv.unsafe_ptr().unsafe_load(0)) / Float64(n)
+
+
+@fieldwise_init
+struct FitResult(Movable):
+    """What a fit reports beyond the model itself.
+
+    `fit` returns only `learn_losses`, which is what its nine existing
+    call sites expect; `fit_with_test` returns this.
+    """
+
+    var learn_losses: List[Float64]
+    #: empty when there is no held-out set
+    var test_losses: List[Float64]
+    #: the index of the lowest TEST loss, or of the lowest learn loss when
+    #: there is no test set. Their `TLearnProgress`'s best-iteration
+    #: bookkeeping, kept in the detector here because it is the only
+    #: object that already knows when a new best arrived.
+    var best_iteration: Int
+    #: True when the detector fired before `n_estimators` was reached
+    var stopped_early: Bool
+
+
+def fit_with_test(
     mut model: TAdditiveModel,
     ctx: DeviceContext,
     n_rows: Int,
@@ -173,7 +428,15 @@ def fit(
     leaf_estimation_method: Int = LEAF_ESTIMATION_NEWTON,
     alpha: Float32 = Float32(0.0),
     estimator_alpha: Float32 = Float32(0.5),
-) raises -> List[Float64]:
+    # THE HELD-OUT ARM IS OPTIONAL AND EVERY EXISTING CALLER IS
+    # UNCHANGED. `fit` has nine call sites across checks, benches and
+    # `train`, one of which belongs to another session, so these are
+    # additive with defaults rather than a new required argument.
+    var test: Optional[TestArm] = None,
+    od_type: Int = OD_NONE,
+    od_pvalue: Float64 = OD_DEFAULT_STOP_PVALUE,
+    od_wait: Int = OD_DEFAULT_WAIT_ITERATIONS,
+) raises -> FitResult:
     """Their `Fit` (`doc_parallel_boosting.h:302`), one permutation.
 
     `objective` selects the loss and `alpha` is the one float its kernel
@@ -354,6 +617,27 @@ def fit(
         est_sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
 
     var losses = List[Float64]()
+    var test_losses = List[Float64]()
+    # `CreateOverfittingDetector(options, maxIsOptimal, hasTest)`
+    # (`overfitting_detector.cpp:205-207`). EVERY loss this port trains is
+    # MINIMIZED, so `maxIsOptimal` is False; a detector built without a
+    # test set is inert whatever was asked (`:122-124`).
+    var has_test = test.__bool__() and test.value().n_rows > 0
+    var detector = make_overfitting_detector(
+        od_type, False, od_pvalue, od_wait, has_test
+    )
+    if od_type != OD_NONE and not has_test:
+        raise Error(
+            "od_type is set but there is no held-out set. Stopping on the"
+            " LEARN loss would stop on a curve that falls almost by"
+            " construction; their own detector is inert without a test"
+            " set (overfitting_detector.cpp:122-124) and this refuses"
+            " rather than silently never firing."
+        )
+    var stopped_early = False
+    # the SAME layout the searcher uses; the test rows were quantized
+    # against the same borders, so the same feature offsets apply
+    var layout_for_test = build_layout(fold_counts, one_hot)
     var not_pd_blocks = 0
     var not_pd_total = 0
     # their `TVector<TResultModel>* result`, the ensemble being built
@@ -696,6 +980,28 @@ def fit(
             weak.leaf_values.append(leaf_values[i] * learning_rate)
         model.add_weak_model(weak^)
 
+        # ---- their `AppendModels(..., learnCursors, testCursor)` -----
+        # (`doc_parallel_boosting.h:391-396`): the SAME weak model goes on
+        # to the held-out cursor. One tree at a time, through the
+        # ROW-WISE apply, because the partition-wise one only knows rows
+        # the tree was grown on.
+        if has_test:
+            _apply_last_tree_to_test(
+                ctx, model, layout_for_test, test.value(), approx_dim,
+                learning_rate,
+            )
+            var t_loss = _test_loss(
+                ctx, test.value(), objective, num_classes, alpha,
+                logloss_border, approx_dim,
+            )
+            test_losses.append(t_loss)
+            # `DetectOverfitting(testError, detector, ...)`
+            # (`overfitting_detector.h:25-34`)
+            detector.add_error(t_loss)
+            if detector.is_need_stop():
+                stopped_early = True
+                break
+
         # the device `functionValue` read alongside this iteration's
         # gradients: the loss AFTER THE PREVIOUS TREE (their accumulation
         # is `-w * (val - relev)^2`, `pointwise_targets.cu:311`, so the
@@ -764,7 +1070,9 @@ def fit(
             " fallback, as CatBoost's own dposv does",
         )
 
-    return losses^
+    return FitResult(
+        losses^, test_losses^, detector.best_iteration, stopped_early
+    )
 
 
 def model_approx_dim(model: TAdditiveModel) raises -> Int:
@@ -940,3 +1248,69 @@ def predict(
         lvl += depth
         leaf += (1 << depth) * approx_dim
     ctx.synchronize()
+
+def fit(
+    mut model: TAdditiveModel,
+    ctx: DeviceContext,
+    n_rows: Int,
+    fold_counts: List[Int],
+    max_depth: Int,
+    mut cindex: DeviceBuffer[DType.uint32],
+    mut targets: DeviceBuffer[DType.float32],
+    mut weights: DeviceBuffer[DType.float32],
+    has_weights: Bool,
+    n_estimators: Int,
+    learning_rate: Float32 = Float32(0.03),
+    l2_leaf_reg: Float32 = Float32(3.0),
+    use_subtraction: Bool = True,
+    bootstrap_bayesian: Bool = False,
+    bagging_temperature: Float32 = Float32(1.0),
+    bootstrap_type: Int = -1,
+    bootstrap_param: Float32 = Float32(1.0),
+    random_seed: UInt64 = UInt64(0),
+    one_hot: List[Bool] = List[Bool](),
+    score_function: Int = SCORE_FUNCTION_COSINE,
+    objective: Int = OBJECTIVE_RMSE,
+    num_classes: Int = 0,
+    logloss_border: Float32 = Float32(0.5),
+    leaf_estimation_iterations: Int = 1,
+    leaf_estimation_method: Int = LEAF_ESTIMATION_NEWTON,
+    alpha: Float32 = Float32(0.0),
+    estimator_alpha: Float32 = Float32(0.5),) raises -> List[Float64]:
+    """`fit_with_test` with no held-out set and no detector.
+
+    THIS WRAPPER EXISTS SO NINE CALL SITES DID NOT HAVE TO CHANGE when the
+    test arm landed -- checks, benches, and another session's interleaved
+    harness. Its signature and return are exactly what they were.
+    """
+    var r = fit_with_test(
+        model=model,
+        ctx=ctx,
+        n_rows=n_rows,
+        fold_counts=fold_counts,
+        max_depth=max_depth,
+        cindex=cindex,
+        targets=targets,
+        weights=weights,
+        has_weights=has_weights,
+        n_estimators=n_estimators,
+        learning_rate=learning_rate,
+        l2_leaf_reg=l2_leaf_reg,
+        use_subtraction=use_subtraction,
+        bootstrap_bayesian=bootstrap_bayesian,
+        bagging_temperature=bagging_temperature,
+        bootstrap_type=bootstrap_type,
+        bootstrap_param=bootstrap_param,
+        random_seed=random_seed,
+        one_hot=one_hot,
+        score_function=score_function,
+        objective=objective,
+        num_classes=num_classes,
+        logloss_border=logloss_border,
+        leaf_estimation_iterations=leaf_estimation_iterations,
+        leaf_estimation_method=leaf_estimation_method,
+        alpha=alpha,
+        estimator_alpha=estimator_alpha,
+    )
+    var out = r.learn_losses.copy()
+    return out^

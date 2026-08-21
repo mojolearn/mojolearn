@@ -12,3 +12,4 @@ catboost/cuda/cuda_util/kernel/bootstrap.cu	GammaBootstrapImpl	its only call is 
 catboost/cuda/cuda_util/kernel/segmented_sort.cu	SortPairsDescending arm	ComputeWeightedQuantile passes compareGreater=false; a branch no caller reaches
 catboost/cuda/methods/leaves_estimation/leaves_estimation_helper.h	MakeSupportPairsMatrix / ReorderPairs / FilterZeroLeafBins	pairwise and groupwise oracles, which are not ported
 catboost/cuda/targets/kernel/	pair_logit.cu, query_rmse.cu, query_softmax.cu, yeti_rank_pointwise.cu, pfound_f.cu, query_cross_entropy.cu, dcg.cu	the querywise/ranking family; needs group_id in the pool, which the data layout does not carry
+catboost/libs/overfitting_detector/overfitting_detector.cpp	TOverfittingDetectorWilcoxon	needs NStatistics::Wilcoxon from library/cpp/statistics, outside catboost/; nothing this port runs selects it

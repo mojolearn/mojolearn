@@ -45,9 +45,14 @@ from gbdt.models.ctr_value_table import (
 from std.math import exp
 from gbdt.methods.doc_parallel_boosting import (
     TAdditiveModel,
-    fit,
+    fit_with_test,
+    make_test_arm,
     model_approx_dim,
     predict,
+)
+from gbdt.overfitting_detector.overfitting_detector import (
+    OD_NONE,
+    od_type_from_name,
 )
 from gbdt.gpu_util.kernel.bootstrap import (
     BOOTSTRAP_KERNEL_BAYESIAN,
@@ -85,6 +90,16 @@ struct TrainedModel(Movable):
     var one_hot: List[Bool]
     var borders: List[List[Float32]]
     var losses: List[Float64]
+    #: the HELD-OUT loss per iteration, empty when no eval set was given.
+    #: Their `TestCursor`'s error curve, which is what the overfitting
+    #: detector reads and what a caller should plot -- the learn curve
+    #: falls almost by construction and says nothing about stopping.
+    var test_losses: List[Float64]
+    #: the index of the lowest TEST loss, or of the lowest learn loss with
+    #: no eval set. Their `TLearnProgress` best-iteration bookkeeping.
+    var best_iteration: Int
+    #: True when the detector fired before `n_estimators` was reached
+    var stopped_early: Bool
     var ctr_column_count: Int
     """How many of the columns above are CTR values rather than raw input
     features. It is a SAFETY count: a model that declares CTR columns and
@@ -204,6 +219,11 @@ def train(
     leaf_estimation_method: Int = -1,
     class_weights: List[Float32] = List[Float32](),
     sample_weight: List[Float32] = List[Float32](),
+    eval_x_colmajor: List[Float32] = List[Float32](),
+    eval_y: List[Float32] = List[Float32](),
+    od_type: String = String("None"),
+    od_pvalue: Float64 = 0.0,
+    od_wait: Int = 20,
 ) raises -> TrainedModel:
     """Borders -> device quantization -> fit, one call.
 
@@ -740,8 +760,70 @@ def train(
                 + "': Bayesian, Bernoulli, Poisson, No"
             )
 
+    # ---- the HELD-OUT set, quantized against THIS MODEL'S BORDERS ----
+    # That is the whole reason this lives in `train` and not in `fit`:
+    # `borders` is built here, from the learn rows, and a `cindex` built
+    # against any other borders would score every split against the wrong
+    # bins with nothing to assert on it.
+    var eval_rows = 0
+    if len(eval_y) > 0:
+        eval_rows = len(eval_y)
+        var want = eval_rows * n_features
+        if len(eval_x_colmajor) != want:
+            raise Error(
+                "eval_x_colmajor has " + String(len(eval_x_colmajor))
+                + " values for " + String(eval_rows) + " rows x "
+                + String(n_features) + " features"
+            )
+    elif len(eval_x_colmajor) > 0:
+        raise Error("eval_x_colmajor given without eval_y")
+
+    var od_kind = od_type_from_name(od_type)
+    if od_kind != OD_NONE and eval_rows == 0:
+        raise Error(
+            "od_type='" + od_type + "' needs an eval set: pass"
+            " eval_x_colmajor and eval_y. Stopping on the learn loss"
+            " would stop on a curve that falls by construction."
+        )
+
+    var t_rows = eval_rows if eval_rows > 0 else 1
+    var eval_expanded: List[Float32]
+    if eval_rows > 0 and ctr_column_count != 0:
+        eval_expanded = expand_raw_columns(
+            ctr_tables, len(fold_counts), eval_x_colmajor, eval_rows
+        )
+    elif eval_rows > 0:
+        eval_expanded = eval_x_colmajor.copy()
+    else:
+        eval_expanded = List[Float32]()
+        for _ in range(len(fold_counts)):
+            eval_expanded.append(Float32(0.0))
+
+    var test_cindex = _build_cindex_from_floats(
+        ctx, eval_expanded, t_rows, borders, fold_counts
+    )
+    var test_targets = ctx.enqueue_create_buffer[DType.float32](t_rows)
+    var h_ty = ctx.enqueue_create_host_buffer[DType.float32](t_rows)
+    for r in range(t_rows):
+        h_ty.unsafe_ptr().unsafe_store(
+            r, eval_y[r] if eval_rows > 0 else Float32(0.0)
+        )
+    ctx.enqueue_copy(dst_buf=test_targets, src_ptr=h_ty.unsafe_ptr())
+    ctx.synchronize()
+
+    var approx_dim = 1
+    if objective == OBJECTIVE_MULTICLASS:
+        approx_dim = num_classes - 1
+    elif objective == OBJECTIVE_MULTICLASS_OVA:
+        approx_dim = num_classes
+
+    var test_arm = make_test_arm(
+        ctx, eval_rows, test_cindex^, test_targets^,
+        approx_dim, 1 + approx_dim, max_depth,
+    )
+
     var model = TAdditiveModel()
-    var losses = fit(
+    var fit_result = fit_with_test(
         model, ctx, n_rows, fold_counts, max_depth, cindex, targets,
         weights, use_class_weights or use_sample_weight,
         n_estimators, learning_rate,
@@ -766,13 +848,22 @@ def train(
         # (`loss_description.cpp:95-102`). They coincide for MAE and
         # Quantile and differ for MAPE, whose kernel alpha is 0.
         estimator_alpha=loss_desc.get_alpha(),
+        test=Optional(test_arm^),
+        od_type=od_kind,
+        od_pvalue=od_pvalue,
+        od_wait=od_wait,
     )
+    var losses = fit_result.learn_losses.copy()
+    var t_losses = fit_result.test_losses.copy()
     return TrainedModel(
         model^,
         fold_counts^,
         column_one_hot^,
         borders^,
         losses^,
+        t_losses^,
+        fit_result.best_iteration,
+        fit_result.stopped_early,
         ctr_column_count,
         ctr_tables^,
     )

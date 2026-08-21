@@ -169,6 +169,16 @@ check-multiclass-train = "mojo run -I . mojo_only/multiclass_train_check.mojo"
 # `loss-oracle-gen`. Ends with four sabotages. Own main(); a GPU, ~14 fits.
 check-loss-oracle = "mojo run -I . mojo_only/loss_oracle_check.mojo"
 
+# The overfitting detector and the HELD-OUT cursor that feeds it. Its
+# centrepiece is an exact identity rather than a tolerance: train with the
+# eval set EQUAL to the learn set and the two loss curves must agree, since
+# one comes off the partition-wise apply and the other off the row-wise one.
+# Plus the detector's wait arithmetic at four waits, controls that must NOT
+# fire (a falling curve, None, no test set), an end-to-end fixture whose
+# held-out curve really turns while the learn curve does not, and a refusal
+# when od_type is asked for without an eval set. Own main(); a GPU, ~1 min.
+check-overfitting-detector = "mojo run -I . mojo_only/overfitting_detector_check.mojo"
+
 # The LSD radix sort over (bin, permutation position). Gates STABILITY
 # separately from sortedness and prints both, because sortedness alone
 # cannot see a tie that moved -- and the tie order IS the second half of

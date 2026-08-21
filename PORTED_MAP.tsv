@@ -66,3 +66,4 @@ gbdt/targets/multiclass_targets.mojo	catboost/cuda/targets/multiclass_targets.{h
 gbdt/targets/kernel/multilogit.mojo	catboost/cuda/targets/kernel/multilogit.cu	partial	MultiLogit and MultiClassOneVsAll pairs; adds a search=True mode standing for TMultiClassificationTargets::StochasticDer (multiclass_targets.cpp:22-49)
 gbdt/models/kernel/add_bin_values.mojo	catboost/cuda/models/kernel/add_model_value.cu	transliterated	deviation 81: the approx dimension is block_idx.y where theirs is a buffer column count
 tools/catboost_loss_oracle.py	(none)	tool	runs CatBoost CPU for the nine new losses; writes bench/oracle_losses.txt
+gbdt/overfitting_detector/overfitting_detector.mojo	catboost/libs/overfitting_detector/overfitting_detector.{h,cpp}	partial	None, IncToDec and Iter; Wilcoxon unported
