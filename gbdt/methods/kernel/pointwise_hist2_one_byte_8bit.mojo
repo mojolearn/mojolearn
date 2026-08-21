@@ -13,11 +13,11 @@ out of room.
       7        1024          1                32
       8        4096          2                64
 
-`OUTER_HIST_BITS_COUNT = 2` makes the slice four times as wide, so at a
-256-thread block only `256 * 32 / 4096 = 2` slices exist for 8 warps: four
-warps share each one, and with two inner copies that is 64 threads per copy.
-Turn-taking would need 64 turns. So CatBoost drops the tile syncs entirely
-and does two other things instead:
+`OUTER_HIST_BITS_COUNT = 2` makes the slice four times as wide, so at
+CatBoost's 384-thread block only `384 * 32 / 4096 = 3` slices exist for 12
+warps: four warps share each one, and with two inner copies that is 64
+threads per copy. Turn-taking would need 64 turns. So CatBoost drops the
+tile syncs entirely and does two other things instead:
 
 1. `Add` becomes `atomicAdd`.
 2. `AddPoint` DEFERS. It keeps `mostRecentBin[i]` and a running
@@ -88,9 +88,13 @@ comptime PW8_INNER_BITS = 1
 #: `const int warpHistSize = 1024 << OUTER_HIST_BITS_COUNT;`
 comptime PW8_WARP_HIST_SIZE = 1024 << PW8_OUTER_BITS
 
-#: `BLOCK_SIZE * 32 / (1024 << OUTER_HIST_BITS_COUNT)` (`:53`). At the
-#: resolved block of 256 this is 2, so four warps share each slice -- which
-#: is the whole reason this accumulator needs atomics.
+#: `BLOCK_SIZE * 32 / (1024 << OUTER_HIST_BITS_COUNT)` (`:53`), stated here
+#: as scratch-slots over slice width so it tracks the matrix. On Apple this
+#: is 2 (8192-slot scratch), so four warps share each slice -- which is
+#: the whole reason this accumulator needs atomics. The `% maxBlocks` wrap
+#: in `SliceOffset` tolerates ANY number of warps per slice, which is what
+#: let the doubled-block experiment run correctness-free before it was
+#: measured a no-op (see `pw_hist2_block_size_for`).
 comptime PW8_MAX_BLOCKS = PW_HIST2_SMEM_FLOATS // PW8_WARP_HIST_SIZE
 
 #: `1 << (5 + INNER + OUTER)` (`:176`).
@@ -141,6 +145,14 @@ struct PointHist8[origin: MutOrigin](PointHist2):
         scale: Float32,
     ):
         """Their constructor (`:65-83`), zero fill and pending state."""
+        comptime assert PW_HIST2_SMEM_FLOATS >= 2 * PW8_WARP_HIST_SIZE, (
+            "PointHist8 needs two warp-hist slices: Reduce stage 1 folds"
+            " slice 0 onto slice 1 IN PLACE at offset PW8_WARP_HIST_SIZE."
+            " A column whose shared-memory budget resolves the scratch"
+            " below 8192 slots cannot host this accumulator at any block"
+            " size and must not take the fixed one-byte route; see"
+            " pw_hist2_block_size_for."
+        )
         var tid = Int(thread_idx.x)
         var i = tid
         while i < PW_HIST2_SMEM_FLOATS:

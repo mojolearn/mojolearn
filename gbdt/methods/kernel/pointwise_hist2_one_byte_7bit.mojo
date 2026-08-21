@@ -42,8 +42,8 @@ from max.gpu.sync import barrier
 
 from gbdt.methods.kernel.compute_point_hist2_loop import PointHist2
 from gbdt.methods.kernel.pointwise_hist2_one_byte_5bit import (
-    PW_HIST2_BLOCK,
-    PW_HIST2_SMEM_FLOATS,
+    PW_HIST2_FLOAT_BLOCK,
+    PW_HIST2_FLOAT_SMEM_FLOATS,
     PW_WARP_HIST_SIZE,
 )
 
@@ -70,9 +70,9 @@ struct PointHist7[origin: MutOrigin](PointHist2):
     ):
         var tid = Int(thread_idx.x)
         var i = tid
-        while i < PW_HIST2_SMEM_FLOATS:
+        while i < PW_HIST2_FLOAT_SMEM_FLOATS:
             buff.unsafe_store(i, 0.0)
-            i += PW_HIST2_BLOCK
+            i += PW_HIST2_FLOAT_BLOCK
         self.base = buff
         self.buffer_offset = pw_hist2_slice_offset_7(tid)
         barrier()
@@ -163,11 +163,11 @@ struct PointHist7[origin: MutOrigin](PointHist2):
         while start < PW_WARP_HIST_SIZE:
             var acc = Float32(0.0)
             var i = start
-            while i < PW_HIST2_SMEM_FLOATS:
+            while i < PW_HIST2_FLOAT_SMEM_FLOATS:
                 acc += self.base.unsafe_load(i)
                 i += PW_WARP_HIST_SIZE
             self.base.unsafe_store(PW_WARP_HIST_SIZE + start, acc)
-            start += PW_HIST2_BLOCK
+            start += PW_HIST2_FLOAT_BLOCK
 
         barrier()
 

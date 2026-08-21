@@ -171,6 +171,12 @@ RUN IT
 
 from max.gpu.host import DeviceContext
 
+from mojo_only.kernel_matrix import (
+    TARGET_COLUMN,
+    pointwise_one_byte_fixed_for,
+)
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+
 from gbdt.gpu_data.grid_policy import (
     POLICY_BINARY,
     POLICY_HALF_BYTE,
@@ -722,20 +728,48 @@ def main() raises:
     #     estimate on ceil(16 / 4) = 4 blocks  ->  M = 1   (stores)
     # so a launcher that sizes its estimate on `nbCount` fails here and
     # nowhere else.
-    var sm_one = 1
-    var m_correct = estimate_block_per_feature_multiplier(
-        1, 1, 1, N_ROWS, sm_one
-    )
-    var m_if_wrong = estimate_block_per_feature_multiplier(
-        4, 1, 1, N_ROWS, sm_one
-    )
-    if m_correct <= 1 or m_if_wrong != 1:
-        print(
-            "FAIL F2c: the shape does not separate the two feature counts"
-            " -- sizing on featureCountForBits gives M =", m_correct,
-            "and sizing on nbCount gives M =", m_if_wrong,
+    # ROUTE-AWARE (the fixed one-byte route, `pointwise_one_byte_fixed_for`):
+    # under that route the shipped dispatch is ONE launch whose estimate
+    # count EQUALS its launch count -- every one-byte feature -- so the
+    # estimate-vs-launch discrimination this gate was built on does not
+    # exist on such a build: sized either way, the grids agree. What stays
+    # observable is the M-path itself: at M > 1 the writeback is an
+    # atomicAdd and the seed survives, and a driver that lost the
+    # multiplier would store and erase it. The discrimination arm still
+    # runs as written on columns under their dispatch.
+    comptime pw_routed = pointwise_one_byte_fixed_for[
+        TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    ]()
+    var sm_2c: Int
+    var m_2c: Int
+    comptime if pw_routed:
+        sm_2c = SM_COUNT
+        m_2c = estimate_block_per_feature_multiplier(
+            (ob_hist.feature_count_for_bits(4, 8) + 3) // 4, 1, 1,
+            N_ROWS, sm_2c,
         )
-        failures += 1
+        if m_2c <= 1:
+            print(
+                "FAIL F2c: the routed shape cannot force M > 1 -- the"
+                " atomic writeback is then indistinguishable from a store"
+                " and this gate holds nothing. M =", m_2c,
+            )
+            failures += 1
+    else:
+        sm_2c = 1
+        m_2c = estimate_block_per_feature_multiplier(
+            1, 1, 1, N_ROWS, sm_2c
+        )
+        var m_if_wrong = estimate_block_per_feature_multiplier(
+            4, 1, 1, N_ROWS, sm_2c
+        )
+        if m_2c <= 1 or m_if_wrong != 1:
+            print(
+                "FAIL F2c: the shape does not separate the two feature"
+                " counts -- sizing on featureCountForBits gives M =", m_2c,
+                "and sizing on nbCount gives M =", m_if_wrong,
+            )
+            failures += 1
 
     var seed2 = zeros(line2)
     for k in range(line2):
@@ -746,38 +780,52 @@ def main() raises:
         want2c[k] = seed2[k] + raw_ob[k]
 
     ctx.enqueue_copy(dst_buf=d_ob, src_ptr=seed2.unsafe_ptr())
-    compute_hist2_non_binary[5](
-        ctx, d_ob_off.unsafe_ptr(), d_ob_first.unsafe_ptr(),
-        d_ob_folds.unsafe_ptr(), N_OB, d_ci.unsafe_ptr(),
-        d_tgt.unsafe_ptr(), d_wt.unsafe_ptr(), d_idx.unsafe_ptr(),
-        N_ROWS, d_parts1.unsafe_ptr(), 1, 1, True, fx.ob_line,
-        d_ob.unsafe_ptr(), ob_hist.feature_count_for_bits(4, 5), sm_one,
-        FIXED_SCALE,
-    )
-    compute_hist2_non_binary[6](
-        ctx, d_ob_off.unsafe_ptr(), d_ob_first.unsafe_ptr(),
-        d_ob_folds.unsafe_ptr(), N_OB, d_ci.unsafe_ptr(),
-        d_tgt.unsafe_ptr(), d_wt.unsafe_ptr(), d_idx.unsafe_ptr(),
-        N_ROWS, d_parts1.unsafe_ptr(), 1, 1, True, fx.ob_line,
-        d_ob.unsafe_ptr(), ob_hist.feature_count_for_bits(6, 6), sm_one,
-        FIXED_SCALE,
-    )
-    compute_hist2_non_binary[7](
-        ctx, d_ob_off.unsafe_ptr(), d_ob_first.unsafe_ptr(),
-        d_ob_folds.unsafe_ptr(), N_OB, d_ci.unsafe_ptr(),
-        d_tgt.unsafe_ptr(), d_wt.unsafe_ptr(), d_idx.unsafe_ptr(),
-        N_ROWS, d_parts1.unsafe_ptr(), 1, 1, True, fx.ob_line,
-        d_ob.unsafe_ptr(), ob_hist.feature_count_for_bits(7, 7), sm_one,
-        FIXED_SCALE,
-    )
-    compute_hist2_non_binary[8](
-        ctx, d_ob_off.unsafe_ptr(), d_ob_first.unsafe_ptr(),
-        d_ob_folds.unsafe_ptr(), N_OB, d_ci.unsafe_ptr(),
-        d_tgt.unsafe_ptr(), d_wt.unsafe_ptr(), d_idx.unsafe_ptr(),
-        N_ROWS, d_parts1.unsafe_ptr(), 1, 1, True, fx.ob_line,
-        d_ob.unsafe_ptr(), ob_hist.feature_count_for_bits(8, 8), sm_one,
-        FIXED_SCALE,
-    )
+    comptime if pw_routed:
+        # The shipped dispatch under the route: one launch, every one-byte
+        # feature, and the widened `pw_bounds[8]` claims all four groups --
+        # so every cell still gets tallied exactly once and `want2c` is
+        # the same value the four-launch arm builds.
+        compute_hist2_non_binary[8](
+            ctx, d_ob_off.unsafe_ptr(), d_ob_first.unsafe_ptr(),
+            d_ob_folds.unsafe_ptr(), N_OB, d_ci.unsafe_ptr(),
+            d_tgt.unsafe_ptr(), d_wt.unsafe_ptr(), d_idx.unsafe_ptr(),
+            N_ROWS, d_parts1.unsafe_ptr(), 1, 1, True, fx.ob_line,
+            d_ob.unsafe_ptr(), ob_hist.feature_count_for_bits(4, 8),
+            sm_2c, FIXED_SCALE,
+        )
+    else:
+        compute_hist2_non_binary[5](
+            ctx, d_ob_off.unsafe_ptr(), d_ob_first.unsafe_ptr(),
+            d_ob_folds.unsafe_ptr(), N_OB, d_ci.unsafe_ptr(),
+            d_tgt.unsafe_ptr(), d_wt.unsafe_ptr(), d_idx.unsafe_ptr(),
+            N_ROWS, d_parts1.unsafe_ptr(), 1, 1, True, fx.ob_line,
+            d_ob.unsafe_ptr(), ob_hist.feature_count_for_bits(4, 5), sm_2c,
+            FIXED_SCALE,
+        )
+        compute_hist2_non_binary[6](
+            ctx, d_ob_off.unsafe_ptr(), d_ob_first.unsafe_ptr(),
+            d_ob_folds.unsafe_ptr(), N_OB, d_ci.unsafe_ptr(),
+            d_tgt.unsafe_ptr(), d_wt.unsafe_ptr(), d_idx.unsafe_ptr(),
+            N_ROWS, d_parts1.unsafe_ptr(), 1, 1, True, fx.ob_line,
+            d_ob.unsafe_ptr(), ob_hist.feature_count_for_bits(6, 6), sm_2c,
+            FIXED_SCALE,
+        )
+        compute_hist2_non_binary[7](
+            ctx, d_ob_off.unsafe_ptr(), d_ob_first.unsafe_ptr(),
+            d_ob_folds.unsafe_ptr(), N_OB, d_ci.unsafe_ptr(),
+            d_tgt.unsafe_ptr(), d_wt.unsafe_ptr(), d_idx.unsafe_ptr(),
+            N_ROWS, d_parts1.unsafe_ptr(), 1, 1, True, fx.ob_line,
+            d_ob.unsafe_ptr(), ob_hist.feature_count_for_bits(7, 7), sm_2c,
+            FIXED_SCALE,
+        )
+        compute_hist2_non_binary[8](
+            ctx, d_ob_off.unsafe_ptr(), d_ob_first.unsafe_ptr(),
+            d_ob_folds.unsafe_ptr(), N_OB, d_ci.unsafe_ptr(),
+            d_tgt.unsafe_ptr(), d_wt.unsafe_ptr(), d_idx.unsafe_ptr(),
+            N_ROWS, d_parts1.unsafe_ptr(), 1, 1, True, fx.ob_line,
+            d_ob.unsafe_ptr(), ob_hist.feature_count_for_bits(8, 8), sm_2c,
+            FIXED_SCALE,
+        )
     ctx.enqueue_copy(dst_buf=h_ob, src_buf=d_ob)
     ctx.synchronize()
 
@@ -798,7 +846,7 @@ def main() raises:
         print(
             "  ok   F2c --", line2,
             "cells exact: the estimate is sized on featureCountForBits, so"
-            " M =", m_correct, "here and the seed survives under the atomic",
+            " M =", m_2c, "here and the seed survives under the atomic",
         )
 
     # =============================================================== F3
@@ -873,9 +921,18 @@ def main() raises:
         )
 
     # =============================================================== F4
-    # each bit width alone; which groups did it write?
+    # each bit width alone; which groups did it write? Under the fixed
+    # one-byte route the 8-bit kernel's bounds widen to (15, 256] and it
+    # claims EVERY group -- that is the routing row working, not a leak.
+    # The 5/6/7 kernels keep their own bounds in any build, so their
+    # claims do not move.
+    var expect_8: String
+    comptime if pw_routed:
+        expect_8 = String("0,1,2,3")
+    else:
+        expect_8 = String("3")
     var expect_claims: List[String] = [
-        String("0"), String("1"), String("2"), String("3"),
+        String("0"), String("1"), String("2"), expect_8,
     ]
     var widths: List[Int] = [5, 6, 7, 8]
     for wi in range(len(widths)):

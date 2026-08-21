@@ -69,7 +69,25 @@ GATES:
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from gbdt.methods.kernel.pointwise_hist2_one_byte_5bit import PW_HIST2_BLOCK
+from mojo_only.kernel_matrix import (
+    TARGET_COLUMN,
+    pointwise_one_byte_fixed_for,
+)
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+
+from gbdt.methods.kernel.pointwise_hist2_one_byte_5bit import (
+    PW_HIST2_BLOCK,
+    PW_HIST2_FLOAT_BLOCK,
+)
+
+#: Whether this build routes every one-byte width through the 8-bit
+#: fixed-point accumulator (`pointwise_one_byte_fixed_for`): its bounds
+#: then widen to (15, 256] and it claims EVERY group, so any gate that
+#: launches it TOGETHER with the float widths onto one buffer under an
+#: atomicAdd writeback would double-count by construction.
+comptime PW_ROUTED = pointwise_one_byte_fixed_for[
+    TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+]()
 from gbdt.methods.kernel.pointwise_hist2_one_byte_templ import (
     compute_split_properties_nb_kernel,
 )
@@ -109,11 +127,20 @@ def _launch[
     gy: Int,
 ) raises:
     """One launch of the driver. A module-level function rather than a
-    nested one because a closure here cannot capture `DeviceContext`."""
+    nested one because a closure here cannot capture `DeviceContext`.
+
+    THE BLOCK IS PER BIT WIDTH, exactly as `run_compute_hist2_non_binary`
+    resolves it: the 8-bit width at the route-keyed block, the float
+    widths at their dispatch's. Launching a float width at the fixed
+    route's wider block would run threads whose slice offsets fall off
+    the scratch."""
+    comptime nb_block = PW_HIST2_BLOCK if bits == 8 else (
+        PW_HIST2_FLOAT_BLOCK
+    )
     ctx.enqueue_function[compute_split_properties_nb_kernel[bits, full, m]](
         p_off, p_ffi, p_folds, Int32(N_FEATURES), p_ci, p_tgt, p_wt,
         p_idx, p_part, p_sums, Int32(total_bin_features), scale,
-        grid_dim=(gx, gy, 1), block_dim=(PW_HIST2_BLOCK, 1, 1),
+        grid_dim=(gx, gy, 1), block_dim=(nb_block, 1, 1),
     )
 
 
@@ -220,8 +247,15 @@ def main() raises:
     var scale = Float32(4.0)
 
     # ---- D2 explicit: each width alone, and what it claims ----------
+    # Under the fixed one-byte route the 8-bit kernel claims every group;
+    # the float widths keep their own bounds in any build.
+    var expect_8: String
+    comptime if PW_ROUTED:
+        expect_8 = String("0,1,2,3")
+    else:
+        expect_8 = String("3")
     var expect_claims: List[String] = [
-        String("0,2"), String(""), String("1"), String("3"),
+        String("0,2"), String(""), String("1"), expect_8,
     ]
     var widths: List[Int] = [5, 6, 7, 8]
     for wi in range(len(widths)):
@@ -353,26 +387,35 @@ def main() raises:
         )
 
     # ================================================================ D3
-    # M = 4: the document axis splits four ways and the writes collide
+    # M = 4: the document axis splits four ways and the writes collide.
+    # ROUTE-AWARE: at M > 1 the writeback is an atomicAdd, so under the
+    # fixed route -- where the 8-bit kernel claims every group -- adding
+    # the float widths on top would double-count groups 0/1/2 by
+    # construction. The shipped dispatch under the route IS the single
+    # 8-bit launch, and it alone covers every group, so `want` is the
+    # same value either way. (D1 above tolerates the overlap because its
+    # M == 1 writeback is a plain store and both claimants store the
+    # same exact cells.)
     ctx.enqueue_memset(d_sums, Float32(0.0))
-    _launch[5, True, 4](ctx, d_off.unsafe_ptr(), d_ffi.unsafe_ptr(),
-                          d_folds.unsafe_ptr(), d_ci.unsafe_ptr(),
-                          d_tgt.unsafe_ptr(),
-                          d_wt.unsafe_ptr(), d_idx.unsafe_ptr(),
-                          d_part.unsafe_ptr(), d_sums.unsafe_ptr(),
-                          total_bin_features, scale, N_GROUPS * 4, 1)
-    _launch[6, True, 4](ctx, d_off.unsafe_ptr(), d_ffi.unsafe_ptr(),
-                          d_folds.unsafe_ptr(), d_ci.unsafe_ptr(),
-                          d_tgt.unsafe_ptr(),
-                          d_wt.unsafe_ptr(), d_idx.unsafe_ptr(),
-                          d_part.unsafe_ptr(), d_sums.unsafe_ptr(),
-                          total_bin_features, scale, N_GROUPS * 4, 1)
-    _launch[7, True, 4](ctx, d_off.unsafe_ptr(), d_ffi.unsafe_ptr(),
-                          d_folds.unsafe_ptr(), d_ci.unsafe_ptr(),
-                          d_tgt.unsafe_ptr(),
-                          d_wt.unsafe_ptr(), d_idx.unsafe_ptr(),
-                          d_part.unsafe_ptr(), d_sums.unsafe_ptr(),
-                          total_bin_features, scale, N_GROUPS * 4, 1)
+    comptime if not PW_ROUTED:
+        _launch[5, True, 4](ctx, d_off.unsafe_ptr(), d_ffi.unsafe_ptr(),
+                              d_folds.unsafe_ptr(), d_ci.unsafe_ptr(),
+                              d_tgt.unsafe_ptr(),
+                              d_wt.unsafe_ptr(), d_idx.unsafe_ptr(),
+                              d_part.unsafe_ptr(), d_sums.unsafe_ptr(),
+                              total_bin_features, scale, N_GROUPS * 4, 1)
+        _launch[6, True, 4](ctx, d_off.unsafe_ptr(), d_ffi.unsafe_ptr(),
+                              d_folds.unsafe_ptr(), d_ci.unsafe_ptr(),
+                              d_tgt.unsafe_ptr(),
+                              d_wt.unsafe_ptr(), d_idx.unsafe_ptr(),
+                              d_part.unsafe_ptr(), d_sums.unsafe_ptr(),
+                              total_bin_features, scale, N_GROUPS * 4, 1)
+        _launch[7, True, 4](ctx, d_off.unsafe_ptr(), d_ffi.unsafe_ptr(),
+                              d_folds.unsafe_ptr(), d_ci.unsafe_ptr(),
+                              d_tgt.unsafe_ptr(),
+                              d_wt.unsafe_ptr(), d_idx.unsafe_ptr(),
+                              d_part.unsafe_ptr(), d_sums.unsafe_ptr(),
+                              total_bin_features, scale, N_GROUPS * 4, 1)
     _launch[8, True, 4](ctx, d_off.unsafe_ptr(), d_ffi.unsafe_ptr(),
                           d_folds.unsafe_ptr(), d_ci.unsafe_ptr(),
                           d_tgt.unsafe_ptr(),

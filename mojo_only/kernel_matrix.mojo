@@ -1251,6 +1251,56 @@ def hist2_block_size_for[column: Int, smem_mode: Int]() -> Int:
         return block_size_for[K_HIST_2_ONE_BYTE, column]()
 
 
+def pw_hist2_block_size_for[column: Int, fixed: Bool]() -> Int:
+    """SCHEDULING row for the POINTWISE one-byte family's block, per route.
+
+    BOTH ARMS RESOLVE TO CATBOOST'S OWN GEOMETRY (`block_size_for`: 32
+    shared floats per thread, capped at their 384, 256 under Apple's
+    32 KB), and the `fixed` parameter exists because the ROUTES ARE
+    DIFFERENT PROGRAMS and their geometries must be free to differ -- the
+    8-bit accumulator's atomic Int32 slices tolerate any number of warps
+    wrapping onto them, the float accumulators' non-wrapping slice offsets
+    do not -- so every consumer must say which program it is sizing.
+
+    ============== MEASURED NEGATIVE (2026-08-21, M4) ==============
+    The obvious occupancy purchase WAS TRIED AND DOES NOT PAY. Under the
+    fixed route the block was doubled to 512 at 16 slots/thread -- same
+    32 KB, same two 4096-slot slices, twice the resident threads, the
+    exact shape of `hist2_block_size_for`'s measured 1.94x for the greedy
+    family, and correctness-free here because the adds are associative
+    Int32 atomics (every gate stayed green, fit bit-identical). ABAB in
+    one window, eps500 400k x 500 @128, interleaved arms, settled half:
+    baseline pointwise fit 1.181/1.193 s, doubled-block 1.183/1.247 s --
+    INDISTINGUISHABLE. This kernel is not occupancy-bound at that shape:
+    its deferred flush (one atomic per RUN of equal bins, not per point)
+    keeps shared-atomic work low, so the wall the greedy probe measured
+    is not the wall here, and doubling warps-per-slice doubles slice
+    contention in exchange. The same lesson as the fused-kernel traffic
+    model: a bound TRANSFERRED from another kernel is a hypothesis, not
+    a diagnosis, until this kernel measures it. Do not re-raise the
+    block without an ABAB showing a win at a shipped shape.
+    ================================================================
+
+    THE 8-BIT ACCUMULATOR NEEDS TWO 4096-SLOT SLICES: its `Reduce`
+    stage 1 folds slice 0 onto slice 1 in place, so
+    `pw_hist2_smem_floats_for` must return at least 8192. Every founding
+    column provides that (Apple 256 x 32 = 8192; NVIDIA/AMD 384 x 32 =
+    12288). A column whose budget cannot hold 32 KB cannot host this
+    accumulator at any block size -- that column must not take the fixed
+    route, and `PointHist8`'s constructor refuses it at compile time.
+    """
+    return block_size_for[K_POINTWISE_HIST_2, column]()
+
+
+def pw_hist2_smem_floats_for[column: Int, fixed: Bool]() -> Int:
+    """Companion to `pw_hist2_block_size_for`: the shared scratch, in
+    4-byte slots. Their `HIST_SIZE = 32 * BLOCK_SIZE`
+    (`pointwise_hist2_one_byte_templ.cuh:62`), both routes -- see the
+    measured negative on the block row for why the fixed route's slots-
+    per-thread did not stay halved."""
+    return 32 * pw_hist2_block_size_for[column, fixed]()
+
+
 def replicas_for(hist_cells: Int) -> Int:
     """DELETED IN SPIRIT. Do not call this.
 

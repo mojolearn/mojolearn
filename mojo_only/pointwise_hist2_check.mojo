@@ -62,8 +62,8 @@ from gbdt.methods.kernel.compute_point_hist2_loop import (
     compute_histogram_4,
 )
 from gbdt.methods.kernel.pointwise_hist2_one_byte_5bit import (
-    PW_HIST2_BLOCK,
-    PW_HIST2_SMEM_FLOATS,
+    PW_HIST2_FLOAT_BLOCK,
+    PW_HIST2_FLOAT_SMEM_FLOATS,
     PointHist5,
 )
 from gbdt.methods.kernel.pointwise_hist2_one_byte_6bit import PointHist6
@@ -83,32 +83,32 @@ def hist_kernel_5[variant: Int](
     out_buf: MutPointer[Float32, MutAnyOrigin],
 ):
     var smem = stack_allocation[
-        PW_HIST2_SMEM_FLOATS, Float32, address_space = AddressSpace.SHARED
+        PW_HIST2_FLOAT_SMEM_FLOATS, Float32, address_space = AddressSpace.SHARED
     ]()
     var hist = PointHist5(smem)
     comptime if variant == 1:
-        compute_histogram[PW_HIST2_BLOCK, 1, 1, 1, 1](
+        compute_histogram[PW_HIST2_FLOAT_BLOCK, 1, 1, 1, 1](
             hist, indices, UInt32(offset), UInt32(ds_size), target, weight,
             cindex,
         )
     elif variant == 4:
-        compute_histogram[PW_HIST2_BLOCK, 1, 4, 1, 1](
+        compute_histogram[PW_HIST2_FLOAT_BLOCK, 1, 4, 1, 1](
             hist, indices, UInt32(offset), UInt32(ds_size), target, weight,
             cindex,
         )
     elif variant == 12:
-        compute_histogram_2[PW_HIST2_BLOCK, 1, 1, 1](
+        compute_histogram_2[PW_HIST2_FLOAT_BLOCK, 1, 1, 1](
             hist, indices, UInt32(offset), UInt32(ds_size), target, weight,
             cindex,
         )
     else:
-        compute_histogram_4[PW_HIST2_BLOCK, 1, 1, 1](
+        compute_histogram_4[PW_HIST2_FLOAT_BLOCK, 1, 1, 1](
             hist, indices, UInt32(offset), UInt32(ds_size), target, weight,
             cindex,
         )
     barrier()
     var t = Int(thread_idx.x)
-    var per = 256 // PW_HIST2_BLOCK
+    var per = 256 // PW_HIST2_FLOAT_BLOCK
     if per < 1:
         per = 1
     for k in range(per):
@@ -127,33 +127,33 @@ def hist_kernel_6[variant: Int](
     out_buf: MutPointer[Float32, MutAnyOrigin],
 ):
     var smem = stack_allocation[
-        PW_HIST2_SMEM_FLOATS, Float32, address_space = AddressSpace.SHARED
+        PW_HIST2_FLOAT_SMEM_FLOATS, Float32, address_space = AddressSpace.SHARED
     ]()
     var hist = PointHist6(smem)
     comptime if variant == 1:
-        compute_histogram[PW_HIST2_BLOCK, 1, 1, 1, 1](
+        compute_histogram[PW_HIST2_FLOAT_BLOCK, 1, 1, 1, 1](
             hist, indices, UInt32(offset), UInt32(ds_size), target, weight,
             cindex,
         )
     elif variant == 4:
-        compute_histogram[PW_HIST2_BLOCK, 1, 4, 1, 1](
+        compute_histogram[PW_HIST2_FLOAT_BLOCK, 1, 4, 1, 1](
             hist, indices, UInt32(offset), UInt32(ds_size), target, weight,
             cindex,
         )
     elif variant == 12:
-        compute_histogram_2[PW_HIST2_BLOCK, 1, 1, 1](
+        compute_histogram_2[PW_HIST2_FLOAT_BLOCK, 1, 1, 1](
             hist, indices, UInt32(offset), UInt32(ds_size), target, weight,
             cindex,
         )
     else:
-        compute_histogram_4[PW_HIST2_BLOCK, 1, 1, 1](
+        compute_histogram_4[PW_HIST2_FLOAT_BLOCK, 1, 1, 1](
             hist, indices, UInt32(offset), UInt32(ds_size), target, weight,
             cindex,
         )
     barrier()
     var t = Int(thread_idx.x)
-    for k in range(512 // PW_HIST2_BLOCK):
-        var at = t + k * PW_HIST2_BLOCK
+    for k in range(512 // PW_HIST2_FLOAT_BLOCK):
+        var at = t + k * PW_HIST2_FLOAT_BLOCK
         if at < 512:
             out_buf.unsafe_store(at, smem.unsafe_load(at))
 
@@ -168,33 +168,33 @@ def hist_kernel_7[variant: Int](
     out_buf: MutPointer[Float32, MutAnyOrigin],
 ):
     var smem = stack_allocation[
-        PW_HIST2_SMEM_FLOATS, Float32, address_space = AddressSpace.SHARED
+        PW_HIST2_FLOAT_SMEM_FLOATS, Float32, address_space = AddressSpace.SHARED
     ]()
     var hist = PointHist7(smem)
     comptime if variant == 1:
-        compute_histogram[PW_HIST2_BLOCK, 1, 1, 1, 1](
+        compute_histogram[PW_HIST2_FLOAT_BLOCK, 1, 1, 1, 1](
             hist, indices, UInt32(offset), UInt32(ds_size), target, weight,
             cindex,
         )
     elif variant == 4:
-        compute_histogram[PW_HIST2_BLOCK, 1, 4, 1, 1](
+        compute_histogram[PW_HIST2_FLOAT_BLOCK, 1, 4, 1, 1](
             hist, indices, UInt32(offset), UInt32(ds_size), target, weight,
             cindex,
         )
     elif variant == 12:
-        compute_histogram_2[PW_HIST2_BLOCK, 1, 1, 1](
+        compute_histogram_2[PW_HIST2_FLOAT_BLOCK, 1, 1, 1](
             hist, indices, UInt32(offset), UInt32(ds_size), target, weight,
             cindex,
         )
     else:
-        compute_histogram_4[PW_HIST2_BLOCK, 1, 1, 1](
+        compute_histogram_4[PW_HIST2_FLOAT_BLOCK, 1, 1, 1](
             hist, indices, UInt32(offset), UInt32(ds_size), target, weight,
             cindex,
         )
     barrier()
     var t = Int(thread_idx.x)
-    for k in range(1024 // PW_HIST2_BLOCK):
-        var at = t + k * PW_HIST2_BLOCK
+    for k in range(1024 // PW_HIST2_FLOAT_BLOCK):
+        var at = t + k * PW_HIST2_FLOAT_BLOCK
         if at < 1024:
             out_buf.unsafe_store(at, smem.unsafe_load(at))
 
@@ -297,7 +297,7 @@ def main() raises:
                         d_tgt.unsafe_ptr(), d_wt.unsafe_ptr(),
                         d_ci.unsafe_ptr(), d_out.unsafe_ptr(),
                         grid_dim=(1, 1, 1),
-                        block_dim=(PW_HIST2_BLOCK, 1, 1),
+                        block_dim=(PW_HIST2_FLOAT_BLOCK, 1, 1),
                     )
                 elif v == 4:
                     ctx.enqueue_function[hist_kernel_5[4]](
@@ -305,7 +305,7 @@ def main() raises:
                         d_tgt.unsafe_ptr(), d_wt.unsafe_ptr(),
                         d_ci.unsafe_ptr(), d_out.unsafe_ptr(),
                         grid_dim=(1, 1, 1),
-                        block_dim=(PW_HIST2_BLOCK, 1, 1),
+                        block_dim=(PW_HIST2_FLOAT_BLOCK, 1, 1),
                     )
                 elif v == 12:
                     ctx.enqueue_function[hist_kernel_5[12]](
@@ -313,7 +313,7 @@ def main() raises:
                         d_tgt.unsafe_ptr(), d_wt.unsafe_ptr(),
                         d_ci.unsafe_ptr(), d_out.unsafe_ptr(),
                         grid_dim=(1, 1, 1),
-                        block_dim=(PW_HIST2_BLOCK, 1, 1),
+                        block_dim=(PW_HIST2_FLOAT_BLOCK, 1, 1),
                     )
                 else:
                     ctx.enqueue_function[hist_kernel_5[14]](
@@ -321,7 +321,7 @@ def main() raises:
                         d_tgt.unsafe_ptr(), d_wt.unsafe_ptr(),
                         d_ci.unsafe_ptr(), d_out.unsafe_ptr(),
                         grid_dim=(1, 1, 1),
-                        block_dim=(PW_HIST2_BLOCK, 1, 1),
+                        block_dim=(PW_HIST2_FLOAT_BLOCK, 1, 1),
                     )
             elif bits == 6:
                 if v == 1:
@@ -330,7 +330,7 @@ def main() raises:
                         d_tgt.unsafe_ptr(), d_wt.unsafe_ptr(),
                         d_ci.unsafe_ptr(), d_out.unsafe_ptr(),
                         grid_dim=(1, 1, 1),
-                        block_dim=(PW_HIST2_BLOCK, 1, 1),
+                        block_dim=(PW_HIST2_FLOAT_BLOCK, 1, 1),
                     )
                 elif v == 4:
                     ctx.enqueue_function[hist_kernel_6[4]](
@@ -338,7 +338,7 @@ def main() raises:
                         d_tgt.unsafe_ptr(), d_wt.unsafe_ptr(),
                         d_ci.unsafe_ptr(), d_out.unsafe_ptr(),
                         grid_dim=(1, 1, 1),
-                        block_dim=(PW_HIST2_BLOCK, 1, 1),
+                        block_dim=(PW_HIST2_FLOAT_BLOCK, 1, 1),
                     )
                 elif v == 12:
                     ctx.enqueue_function[hist_kernel_6[12]](
@@ -346,7 +346,7 @@ def main() raises:
                         d_tgt.unsafe_ptr(), d_wt.unsafe_ptr(),
                         d_ci.unsafe_ptr(), d_out.unsafe_ptr(),
                         grid_dim=(1, 1, 1),
-                        block_dim=(PW_HIST2_BLOCK, 1, 1),
+                        block_dim=(PW_HIST2_FLOAT_BLOCK, 1, 1),
                     )
                 else:
                     ctx.enqueue_function[hist_kernel_6[14]](
@@ -354,7 +354,7 @@ def main() raises:
                         d_tgt.unsafe_ptr(), d_wt.unsafe_ptr(),
                         d_ci.unsafe_ptr(), d_out.unsafe_ptr(),
                         grid_dim=(1, 1, 1),
-                        block_dim=(PW_HIST2_BLOCK, 1, 1),
+                        block_dim=(PW_HIST2_FLOAT_BLOCK, 1, 1),
                     )
             else:
                 if v == 1:
@@ -363,7 +363,7 @@ def main() raises:
                         d_tgt.unsafe_ptr(), d_wt.unsafe_ptr(),
                         d_ci.unsafe_ptr(), d_out.unsafe_ptr(),
                         grid_dim=(1, 1, 1),
-                        block_dim=(PW_HIST2_BLOCK, 1, 1),
+                        block_dim=(PW_HIST2_FLOAT_BLOCK, 1, 1),
                     )
                 elif v == 4:
                     ctx.enqueue_function[hist_kernel_7[4]](
@@ -371,7 +371,7 @@ def main() raises:
                         d_tgt.unsafe_ptr(), d_wt.unsafe_ptr(),
                         d_ci.unsafe_ptr(), d_out.unsafe_ptr(),
                         grid_dim=(1, 1, 1),
-                        block_dim=(PW_HIST2_BLOCK, 1, 1),
+                        block_dim=(PW_HIST2_FLOAT_BLOCK, 1, 1),
                     )
                 elif v == 12:
                     ctx.enqueue_function[hist_kernel_7[12]](
@@ -379,7 +379,7 @@ def main() raises:
                         d_tgt.unsafe_ptr(), d_wt.unsafe_ptr(),
                         d_ci.unsafe_ptr(), d_out.unsafe_ptr(),
                         grid_dim=(1, 1, 1),
-                        block_dim=(PW_HIST2_BLOCK, 1, 1),
+                        block_dim=(PW_HIST2_FLOAT_BLOCK, 1, 1),
                     )
                 else:
                     ctx.enqueue_function[hist_kernel_7[14]](
@@ -387,7 +387,7 @@ def main() raises:
                         d_tgt.unsafe_ptr(), d_wt.unsafe_ptr(),
                         d_ci.unsafe_ptr(), d_out.unsafe_ptr(),
                         grid_dim=(1, 1, 1),
-                        block_dim=(PW_HIST2_BLOCK, 1, 1),
+                        block_dim=(PW_HIST2_FLOAT_BLOCK, 1, 1),
                     )
             ctx.enqueue_copy(dst_buf=h_out, src_buf=d_out)
             ctx.synchronize()

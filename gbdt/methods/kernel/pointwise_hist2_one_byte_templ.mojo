@@ -77,6 +77,8 @@ from gbdt.methods.kernel.split_properties_helpers import (
 )
 from gbdt.methods.kernel.pointwise_hist2_one_byte_5bit import (
     PW_HIST2_BLOCK,
+    PW_HIST2_FLOAT_BLOCK,
+    PW_HIST2_FLOAT_SMEM_FLOATS,
     PW_HIST2_SMEM_FLOATS,
     PointHist5,
 )
@@ -276,10 +278,24 @@ def compute_split_properties_nb_kernel[
 
     # ONE allocation, read through a `bitcast` at each use. The 8-bit
     # accumulator holds Int32 and the other three hold Float32 (DEVIATION
-    # 93); both are 4 bytes, so the scratch is the same 32 KB either way and
-    # only its interpretation changes.
+    # 93); both are 4 bytes, so within one bit width only the
+    # interpretation changes. THE SIZE AND BLOCK ARE PER BIT WIDTH: the
+    # 8-bit accumulator takes the route-keyed geometry
+    # (`pw_hist2_block_size_for`), the float turn-taking accumulators
+    # ALWAYS take their dispatch's -- their slice offsets do not wrap, so
+    # only the 8-bit accumulator may ever run at a block its own row
+    # widens. The two currently resolve to the same value (the doubled
+    # fixed-route block was measured a no-op and reverted; the negative
+    # is on the row), and this split is what makes any future divergence
+    # land here instead of in a kernel.
+    comptime nb_smem = PW_HIST2_SMEM_FLOATS if bits == 8 else (
+        PW_HIST2_FLOAT_SMEM_FLOATS
+    )
+    comptime nb_block = PW_HIST2_BLOCK if bits == 8 else (
+        PW_HIST2_FLOAT_BLOCK
+    )
     var smem = stack_allocation[
-        PW_HIST2_SMEM_FLOATS,
+        nb_smem,
         Float32,
         address_space = AddressSpace.SHARED,
     ]()
@@ -311,31 +327,31 @@ def compute_split_properties_nb_kernel[
         var hist = PointHist8(smem.unsafe_bitcast[Int32](), fixed_scale)
         comptime if full_pass:
             # `TLoadEntriesTrait<3, true>`: TwoElements
-            compute_histogram_2[PW_HIST2_BLOCK, 1, 1, m](
+            compute_histogram_2[nb_block, 1, 1, m](
                 hist, indices, UInt32(part_offset), UInt32(part_size),
                 target, weight, ci,
             )
         else:
             # `TLoadEntriesTrait<3, false>`: OneElement, outer unroll 2
-            compute_histogram[PW_HIST2_BLOCK, 2, 1, 1, m](
+            compute_histogram[nb_block, 2, 1, 1, m](
                 hist, indices, UInt32(part_offset), UInt32(part_size),
                 target, weight, ci,
             )
     elif bits == 5:
         var hist = PointHist5(smem.unsafe_bitcast[Float32]())
-        compute_histogram_4[PW_HIST2_BLOCK, 1, 1, m](
+        compute_histogram_4[nb_block, 1, 1, m](
             hist, indices, UInt32(part_offset), UInt32(part_size),
             target, weight, ci,
         )
     elif bits == 6:
         var hist = PointHist6(smem.unsafe_bitcast[Float32]())
-        compute_histogram_4[PW_HIST2_BLOCK, 1, 1, m](
+        compute_histogram_4[nb_block, 1, 1, m](
             hist, indices, UInt32(part_offset), UInt32(part_size),
             target, weight, ci,
         )
     else:
         var hist = PointHist7(smem.unsafe_bitcast[Float32]())
-        compute_histogram_4[PW_HIST2_BLOCK, 1, 1, m](
+        compute_histogram_4[nb_block, 1, 1, m](
             hist, indices, UInt32(part_offset), UInt32(part_size),
             target, weight, ci,
         )

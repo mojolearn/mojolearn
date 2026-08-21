@@ -86,9 +86,11 @@ THEIRS: `const int blockSize = 384;` for the one-byte family
         `const int blockSize = 768;` for both small-bin families
         (`pointwise_hist2_binary.cu:141`, `pointwise_hist2_half_byte.cu:145`).
 
-OURS:   `PW_HIST2_BLOCK` (256) and `PW_HB_BLOCK` (512), READ FROM THE KERNEL
-        FILES rather than restated here, so a launcher cannot drift from the
-        kernel it launches.
+OURS:   `PW_HIST2_BLOCK` (256 on Apple, via `pw_hist2_block_size_for` --
+        which also records the measured-negative doubled-block experiment)
+        and `PW_HB_BLOCK` (512), READ FROM THE KERNEL FILES rather than
+        restated here, so a launcher cannot drift from the kernel it
+        launches.
 
 MEASURED REASON: the accumulators are sized per thread -- 32 floats each for
 the one-byte family, 16 for the small-bin one. At CatBoost's 768 the
@@ -187,7 +189,10 @@ from gbdt.methods.kernel.split_properties_helpers import (
     estimate_block_per_feature_multiplier,
     scan_pointwise_histograms_kernel,
 )
-from gbdt.methods.kernel.pointwise_hist2_one_byte_5bit import PW_HIST2_BLOCK
+from gbdt.methods.kernel.pointwise_hist2_one_byte_5bit import (
+    PW_HIST2_BLOCK,
+    PW_HIST2_FLOAT_BLOCK,
+)
 from gbdt.methods.kernel.pointwise_hist2_half_byte_template import PW_HB_BLOCK
 from gbdt.methods.kernel.pointwise_hist2_one_byte_templ import (
     compute_split_properties_nb_kernel,
@@ -733,7 +738,15 @@ def run_compute_hist2_non_binary_kernel[
 
     A `bool` selecting between two template instantiations, which is what
     theirs is and all that theirs is.
+
+    THE BLOCK IS PER BIT WIDTH, matching the kernel's own geometry: the
+    8-bit width takes the route-keyed block (`pw_hist2_block_size_for`),
+    the float widths always take their dispatch's. Under their dispatch
+    the two are the same value.
     """
+    comptime nb_block = PW_HIST2_BLOCK if bits == 8 else (
+        PW_HIST2_FLOAT_BLOCK
+    )
     if full_pass:
         ctx.enqueue_function[
             compute_split_properties_nb_kernel[
@@ -753,7 +766,7 @@ def run_compute_hist2_non_binary_kernel[
             Int32(bin_feature_count),
             fixed_scale,
             grid_dim=(nx, ny, nz),
-            block_dim=(PW_HIST2_BLOCK, 1, 1),
+            block_dim=(nb_block, 1, 1),
         )
     else:
         ctx.enqueue_function[
@@ -774,7 +787,7 @@ def run_compute_hist2_non_binary_kernel[
             Int32(bin_feature_count),
             fixed_scale,
             grid_dim=(nx, ny, nz),
-            block_dim=(PW_HIST2_BLOCK, 1, 1),
+            block_dim=(nb_block, 1, 1),
         )
 
 

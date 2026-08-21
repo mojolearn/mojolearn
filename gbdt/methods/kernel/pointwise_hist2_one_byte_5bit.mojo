@@ -47,11 +47,16 @@ hundred-line loop `PORTING.md` 13 is about.
 
 DEVIATION (PORTING.md 1, same arithmetic as the other family): CatBoost runs
 this at `BlockSize = 384` (`pointwise_hist2_one_byte_templ.cuh:236`), so
-`384 * 32` floats is 49,152 bytes against Apple's 32,768. The matrix row
-`K_POINTWISE_HIST_2` resolves the block to 256, which asks for exactly 32,768
-and leaves their per-warp slice arithmetic intact: 8 warps x 1024 floats. The
+`384 * 32` floats is 49,152 bytes against Apple's 32,768. The matrix
+resolves the block to the largest that fits the budget (256 on 32 KB) and
+leaves their per-warp slice arithmetic intact: 8 warps x 1024 floats. The
 BLOCK shrinks, the LAYOUT does not, and their reduce already caps
-participation at `threadIdx.x < 256`.
+participation at `threadIdx.x < 256`. The geometry is PER ROUTE in name
+(`PW_HIST2_BLOCK` for the 8-bit accumulator's launches,
+`PW_HIST2_FLOAT_BLOCK` for the float accumulators', whose slice offsets do
+not wrap) even though both currently resolve to the same value: doubling
+the fixed route's block was measured a no-op and reverted -- the negative
+is recorded on `pw_hist2_block_size_for`.
 
 DEVIATION (PORTING.md 11 and 92): their `thread_block_tile<8>::sync()`
 (`:79`, `:99`, `:178`) becomes a threadgroup `barrier()`, which is the only
@@ -72,22 +77,48 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from mojo_only.kernel_matrix import (
-    K_POINTWISE_HIST_2,
     TARGET_COLUMN,
-    block_size_for,
     lane_width_for,
+    pointwise_one_byte_fixed_for,
+    pw_hist2_block_size_for,
+    pw_hist2_smem_floats_for,
 )
 from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 from gbdt.methods.kernel.compute_point_hist2_loop import PointHist2
 
 
-#: The resolved block, 256 on Apple against CatBoost's 384. See the module
-#: docstring's first DEVIATION.
-comptime PW_HIST2_BLOCK = block_size_for[K_POINTWISE_HIST_2, TARGET_COLUMN]()
+#: Whether this build routes every one-byte width through the 8-bit
+#: fixed-point accumulator; the block and scratch rows key on it.
+comptime PW_ONE_BYTE_FIXED = pointwise_one_byte_fixed_for[
+    TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+]()
+
+#: The resolved block: CatBoost's 384-capped `block_size_for` (256 under
+#: Apple's 32 KB) on BOTH routes -- doubling it under the fixed route was
+#: measured a no-op; the negative is recorded on `pw_hist2_block_size_for`.
+comptime PW_HIST2_BLOCK = pw_hist2_block_size_for[
+    TARGET_COLUMN, PW_ONE_BYTE_FIXED
+]()
 
 #: `const int HIST_SIZE = 32 * BLOCK_SIZE;` (`:62`).
-comptime PW_HIST2_SMEM_FLOATS = 32 * PW_HIST2_BLOCK
+comptime PW_HIST2_SMEM_FLOATS = pw_hist2_smem_floats_for[
+    TARGET_COLUMN, PW_ONE_BYTE_FIXED
+]()
+
+#: The geometry the FLOAT turn-taking accumulators (5/6/7 bit) are built
+#: for: their dispatch's resolution, ALWAYS. These accumulators only launch
+#: under their dispatch, where `PW_HIST2_BLOCK` equals this by definition;
+#: under the fixed 8-bit route they are dead code kept compiling for the
+#: columns that do launch them, and their slice offsets DO NOT WRAP (only
+#: the 8-bit accumulator's does), so they must NEVER be built against a
+#: block their own dispatch did not resolve -- a wider fixed-route block
+#: would run their upper warps off the scratch. Their per-cell check
+#: launches them at THIS block for the same reason.
+comptime PW_HIST2_FLOAT_BLOCK = pw_hist2_block_size_for[
+    TARGET_COLUMN, False
+]()
+comptime PW_HIST2_FLOAT_SMEM_FLOATS = 32 * PW_HIST2_FLOAT_BLOCK
 
 #: `const int warpHistSize = 1024;` (`:210`). Not a tunable: it is 32 lanes
 #: times the 32 floats per thread this accumulator takes, and their reduce
@@ -118,8 +149,10 @@ struct PointHist5[origin: MutOrigin](PointHist2):
     """`TPointHist<0, 0, BLOCK_SIZE>` (`:50-247`).
 
     Construct AFTER the caller has a zeroed shared buffer of
-    `PW_HIST2_SMEM_FLOATS` floats; the constructor zeroes it exactly as
-    theirs does (`:60-70`) and takes the trailing `__syncthreads()`.
+    `PW_HIST2_FLOAT_SMEM_FLOATS` floats; the constructor zeroes it exactly
+    as theirs does (`:60-70`) and takes the trailing `__syncthreads()`.
+    Built against the FLOAT geometry, always: this accumulator only
+    launches under their dispatch and its slice offset does not wrap.
     """
 
     var base: MutPointer[
@@ -136,9 +169,9 @@ struct PointHist5[origin: MutOrigin](PointHist2):
         """Their constructor (`:60-70`), including the zero fill."""
         var tid = Int(thread_idx.x)
         var i = tid
-        while i < PW_HIST2_SMEM_FLOATS:
+        while i < PW_HIST2_FLOAT_SMEM_FLOATS:
             buff.unsafe_store(i, 0.0)
-            i += PW_HIST2_BLOCK
+            i += PW_HIST2_FLOAT_BLOCK
         self.base = buff
         self.buffer_offset = pw_hist2_slice_offset_5(tid)
         barrier()
@@ -264,11 +297,11 @@ struct PointHist5[origin: MutOrigin](PointHist2):
         while start < PW_WARP_HIST_SIZE:
             var acc = Float32(0.0)
             var i = start
-            while i < PW_HIST2_SMEM_FLOATS:
+            while i < PW_HIST2_FLOAT_SMEM_FLOATS:
                 acc += self.base.unsafe_load(i)
                 i += PW_WARP_HIST_SIZE
             self.base.unsafe_store(PW_WARP_HIST_SIZE + start, acc)
-            start += PW_HIST2_BLOCK
+            start += PW_HIST2_FLOAT_BLOCK
 
         barrier()
 
