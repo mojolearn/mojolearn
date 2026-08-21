@@ -905,22 +905,32 @@ def partition_count_chunks_kernel(
     var offset = Int(part_offset.unsafe_load(leaf_id))
     var size = Int(part_size.unsafe_load(leaf_id))
 
-    var chunk = Int(block_idx.x)
     var tid = Int(thread_idx.x)
-    var i = chunk * PARTITION_BLOCK + tid
-
-    var v = Int32(0)
-    if i < size:
-        if flags.unsafe_load(offset + i) == UInt8(0):
-            v = Int32(1)
-    var inc = block_prefix_sum[block_size=PARTITION_BLOCK, exclusive=False](v)
-    var total = block_broadcast[block_size=PARTITION_BLOCK](
-        inc, src_thread = PARTITION_BLOCK - 1
-    )
-    if tid == 0:
-        chunk_zeros.unsafe_store(
-            leaf_slot * max_chunks + chunk, UInt32(Int(total))
+    # GRID-STRIDE over chunks: with the blind level loop (DEVIATION 94)
+    # the grid is machine-sized against an n_rows chunk bound, so a block
+    # walks every `grid_dim.x`-th chunk of its leaf and an oversized
+    # bound costs nothing. A full-coverage grid strides exactly once,
+    # which is the old behaviour bit for bit. The loop condition is
+    # uniform across the block, so the collectives inside stay sound.
+    var chunk = Int(block_idx.x)
+    while chunk * PARTITION_BLOCK < size:
+        var i = chunk * PARTITION_BLOCK + tid
+        var v = Int32(0)
+        if i < size:
+            if flags.unsafe_load(offset + i) == UInt8(0):
+                v = Int32(1)
+        var inc = block_prefix_sum[
+            block_size=PARTITION_BLOCK, exclusive=False
+        ](v)
+        var total = block_broadcast[block_size=PARTITION_BLOCK](
+            inc, src_thread = PARTITION_BLOCK - 1
         )
+        if tid == 0:
+            chunk_zeros.unsafe_store(
+                leaf_slot * max_chunks + chunk, UInt32(Int(total))
+            )
+        barrier()
+        chunk += Int(grid_dim.x)
 
 
 def partition_scan_chunks_kernel(
@@ -1008,41 +1018,44 @@ def partition_place_kernel(
     var offset = Int(part_offset.unsafe_load(leaf_id))
     var size = Int(part_size.unsafe_load(leaf_id))
 
-    var chunk = Int(block_idx.x)
     var tid = Int(thread_idx.x)
-    var i = chunk * PARTITION_BLOCK + tid
-
     var n_zeros = Int(leaf_total_zeros.unsafe_load(leaf_slot))
-    var zeros_before = Int(
-        chunk_zero_offsets.unsafe_load(leaf_slot * max_chunks + chunk)
-    )
-    var elems_before = chunk * PARTITION_BLOCK
-    if elems_before > size:
-        elems_before = size
-    var ones_before = elems_before - zeros_before
-
-    var in_range = i < size
-    var is_zero = Int32(0)
-    if in_range:
-        if flags.unsafe_load(offset + i) == UInt8(0):
-            is_zero = Int32(1)
-
-    var inc_zero = block_prefix_sum[
-        block_size=PARTITION_BLOCK, exclusive=False
-    ](is_zero)
-    var rank_zero = Int(inc_zero) - Int(is_zero)
-    var rank_one = tid - rank_zero
-
-    if in_range:
-        var dst = 0
-        if is_zero == Int32(1):
-            dst = zeros_before + rank_zero
-        else:
-            dst = n_zeros + ones_before + rank_one
-        gather_map.unsafe_store(offset + dst, UInt32(i))
-        sorted_flags.unsafe_store(
-            offset + dst, UInt8(0) if is_zero == Int32(1) else UInt8(1)
+    # GRID-STRIDE over chunks, same shape and same reasoning as phase 1.
+    var chunk = Int(block_idx.x)
+    while chunk * PARTITION_BLOCK < size:
+        var i = chunk * PARTITION_BLOCK + tid
+        var zeros_before = Int(
+            chunk_zero_offsets.unsafe_load(leaf_slot * max_chunks + chunk)
         )
+        var elems_before = chunk * PARTITION_BLOCK
+        if elems_before > size:
+            elems_before = size
+        var ones_before = elems_before - zeros_before
+
+        var in_range = i < size
+        var is_zero = Int32(0)
+        if in_range:
+            if flags.unsafe_load(offset + i) == UInt8(0):
+                is_zero = Int32(1)
+
+        var inc_zero = block_prefix_sum[
+            block_size=PARTITION_BLOCK, exclusive=False
+        ](is_zero)
+        var rank_zero = Int(inc_zero) - Int(is_zero)
+        var rank_one = tid - rank_zero
+
+        if in_range:
+            var dst = 0
+            if is_zero == Int32(1):
+                dst = zeros_before + rank_zero
+            else:
+                dst = n_zeros + ones_before + rank_one
+            gather_map.unsafe_store(offset + dst, UInt32(i))
+            sorted_flags.unsafe_store(
+                offset + dst, UInt8(0) if is_zero == Int32(1) else UInt8(1)
+            )
+        barrier()
+        chunk += Int(grid_dim.x)
 
 
 def launch_stable_partition(
@@ -1058,8 +1071,16 @@ def launch_stable_partition(
     mut leaf_zeros: DeviceBuffer[DType.uint32],
     mut gather_map: DeviceBuffer[DType.uint32],
     mut sorted_flags: DeviceBuffer[DType.uint8],
+    sm_count: Int = -1,
 ) raises:
     """The three phases in order. Callers should not launch them by hand.
+
+    `sm_count > 0` machine-sizes the chunk grid of phases 1 and 3 (their
+    occupancy-target pattern, `split_points_grid_x`) and the kernels
+    stride the rest; the blind level loop (DEVIATION 94) passes it
+    because its `max_leaf_rows` is the whole-dataset bound and a
+    full-coverage grid against that bound is mostly empty blocks. The
+    default keeps full coverage, where the stride runs exactly once.
 
     `max_leaf_rows` sizes the grid and the scratch: it is the largest leaf in
     the level, so a level of small leaves does not pay for the depth-0 shape.
@@ -1082,6 +1103,11 @@ def launch_stable_partition(
     var max_chunks = (max_leaf_rows + PARTITION_BLOCK - 1) // PARTITION_BLOCK
     if max_chunks < 1:
         max_chunks = 1
+    var chunk_grid = max_chunks
+    if sm_count > 0:
+        var target = split_points_grid_x(n_leaf_slots, sm_count)
+        if target < chunk_grid:
+            chunk_grid = target
 
     ctx.enqueue_function[partition_count_chunks_kernel](
         leaves.unsafe_ptr(),
@@ -1090,7 +1116,7 @@ def launch_stable_partition(
         flags.unsafe_ptr(),
         chunk_zeros.unsafe_ptr(),
         Int32(max_chunks),
-        grid_dim=(max_chunks, n_leaf_slots, 1),
+        grid_dim=(chunk_grid, n_leaf_slots, 1),
         block_dim=(PARTITION_BLOCK, 1, 1),
     )
     ctx.enqueue_function[partition_scan_chunks_kernel](
@@ -1113,6 +1139,6 @@ def launch_stable_partition(
         gather_map.unsafe_ptr(),
         sorted_flags.unsafe_ptr(),
         Int32(max_chunks),
-        grid_dim=(max_chunks, n_leaf_slots, 1),
+        grid_dim=(chunk_grid, n_leaf_slots, 1),
         block_dim=(PARTITION_BLOCK, 1, 1),
     )

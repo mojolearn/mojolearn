@@ -2991,6 +2991,7 @@ def run_tree_layout[
         launch_stable_partition(
             ctx, n_live, max_live_rows, dense_ids, p_off, p_sz, flags,
             chunk_zeros, chunk_offsets, leaf_zeros, gmap, sflags,
+            sm_count=sm_count,
         )
         mgr.stream_kernel()
 
