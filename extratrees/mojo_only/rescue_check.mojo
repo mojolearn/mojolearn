@@ -21,7 +21,15 @@ from extratrees.ported.decisiontree.batched_levelalgo.builder import (
     train_classification,
 )
 from extratrees.ported.decisiontree.batched_levelalgo.dataset import Dataset
-from extratrees.ported.decisiontree.decisiontree import DecisionTreeParams
+from extratrees.mojo_only.fixed_point import choose_scale, quantize
+from extratrees.ported.decisiontree.batched_levelalgo.builder import (
+    train_regression,
+    train_regression_device,
+)
+from extratrees.ported.decisiontree.decisiontree import (
+    CRITERION_MSE,
+    DecisionTreeParams,
+)
 from extratrees.ported.decisiontree.batched_levelalgo.builder import (
     train_classification_device,
 )
@@ -168,6 +176,112 @@ def identity(
     return bad
 
 
+def reg_params() -> DecisionTreeParams:
+    var p = DecisionTreeParams()
+    p.max_depth = 12
+    p.max_features = 0.15
+    p.split_criterion = CRITERION_MSE
+    return p^
+
+
+def fit_reg_host(
+    fx: FixtureDataset, seed: UInt64, rescue: Bool
+) raises -> TreeMetaDataNode[DType.float32]:
+    var x = List[Float32](length=fx.n_rows * fx.n_cols, fill=Float32(0.0))
+    for r in range(fx.n_rows):
+        for c in range(fx.n_cols):
+            x[c * fx.n_rows + r] = fx.value(r, c)
+    var y = List[Float32]()
+    for r in range(fx.n_rows):
+        y.append(fx.y[r])
+    var rows = List[Int32]()
+    for r in range(fx.n_rows):
+        rows.append(Int32(r))
+    var ds = Dataset(
+        rebind[MutPointer[Float32, MutUntrackedOrigin]](x.unsafe_ptr()),
+        rebind[MutPointer[Float32, MutUntrackedOrigin]](y.unsafe_ptr()),
+        Int32(fx.n_rows), Int32(fx.n_cols), Int32(fx.n_rows),
+        Int32(fx.n_cols),
+        rebind[MutPointer[Int32, MutUntrackedOrigin]](rows.unsafe_ptr()),
+        Int32(1),
+    )
+    var t = train_regression(ds, reg_params(), 0, seed, rescue=rescue)
+    _ = x.unsafe_ptr()
+    _ = y.unsafe_ptr()
+    _ = rows.unsafe_ptr()
+    return t^
+
+
+def fit_reg_device(
+    ctx: DeviceContext, fx: FixtureDataset, seed: UInt64
+) raises -> TreeMetaDataNode[DType.float32]:
+    var x = List[Float32](length=fx.n_rows * fx.n_cols, fill=Float32(0.0))
+    for r in range(fx.n_rows):
+        for c in range(fx.n_cols):
+            x[c * fx.n_rows + r] = fx.value(r, c)
+    var mag = Float64(0.0)
+    for r in range(fx.n_rows):
+        var v = Float64(fx.y[r])
+        mag += v if v >= 0.0 else -v
+    var sc = choose_scale(mag, fx.n_rows)
+    var q = List[Int32]()
+    for r in range(fx.n_rows):
+        q.append(Int32(quantize(Float64(fx.y[r]), sc)))
+    var rows = List[Int32]()
+    for r in range(fx.n_rows):
+        rows.append(Int32(r))
+    var t = train_regression_device(
+        ctx, x, q, sc, rows, Int32(fx.n_rows), Int32(fx.n_cols),
+        reg_params(), 0, seed,
+    )
+    _ = x.unsafe_ptr()
+    _ = rows.unsafe_ptr()
+    return t^
+
+
+def regression_arms(
+    ctx: DeviceContext, name: String, fx: FixtureDataset
+) raises -> Tuple[Int, Int]:
+    """`(seeds where the rescue moved the tree, seeds where host != device)`.
+
+    The clause lives in `node_split_random`, which sklearn shares between both
+    criteria (`_splitter.pyx:507-736` is reached by `RandomSplitter` for
+    regression and classification alike), so a regression tree stops early for
+    the same reason. This is that, measured rather than assumed.
+    """
+    var moved = 0
+    var bad = 0
+    for s in range(4):
+        var seed = UInt64(s * 7919 + 11)
+        var off = fit_reg_host(fx, seed, False)
+        var on = fit_reg_host(fx, seed, True)
+        var dev = fit_reg_device(ctx, fx, seed)
+        if off.num_nodes() != on.num_nodes():
+            moved += 1
+        var diff = 0
+        if on.num_nodes() != dev.num_nodes():
+            diff = -1
+        else:
+            for i in range(on.num_nodes()):
+                var a = on.sparsetree[i]
+                var b = dev.sparsetree[i]
+                if (
+                    a.ColumnId() != b.ColumnId()
+                    or a.QueryValue().to_bits() != b.QueryValue().to_bits()
+                    or a.LeftChildId() != b.LeftChildId()
+                    or a.InstanceCount() != b.InstanceCount()
+                ):
+                    diff += 1
+        if diff != 0:
+            bad += 1
+        print(
+            "      ", name, "seed", s, " host rescue OFF nodes",
+            off.num_nodes(), "-> ON", on.num_nodes(),
+            " device", dev.num_nodes(), " host-vs-device differ", diff,
+        )
+    return (moved, bad)
+
+
 def report(name: String, fx: FixtureDataset, n_classes: Int32) raises -> Int:
     var moved = 0
     for s in range(4):
@@ -212,6 +326,29 @@ def main() raises:
             "the host and device rescues chose DIFFERENT columns. They call"
             " the same rescue_pick on the same key, so a difference here is a"
             " difference in the non-constant SET or its order"
+        )
+
+    print("")
+    print("[regression] the same clause, the MSE criterion")
+    var rheavy = shaped_dataset(seed, 512, const_heavy_shapes())
+    var r1 = regression_arms(ctx, "shaped_constant_heavy", rheavy)
+    var rallc = analytic_all_constant().data.copy()
+    var r2 = regression_arms(ctx, "all_constant", rallc)
+    if r1[0] == 0:
+        raise Error(
+            "the REGRESSION rescue changed nothing on the constant-heavy"
+            " fixture. The clause is in node_split_random, which sklearn"
+            " shares between both criteria, so a regression tree that never"
+            " moves means the rescue is not reached on this path"
+        )
+    if r2[0] != 0:
+        raise Error(
+            "the regression rescue moved all_constant, where every column is"
+            " constant and sklearn stops too"
+        )
+    if r1[1] != 0 or r2[1] != 0:
+        raise Error(
+            "the host and device REGRESSION rescues chose different columns"
         )
 
     print("")

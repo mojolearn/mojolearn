@@ -464,7 +464,9 @@ def n_sampled_cols_for(params: DecisionTreeParams, n_cols: Int32) -> Int32:
     return 1 if k < 1 else k
 
 
-def _all_constant(result: HostSplitResult[DType.float32]) -> Bool:
+def _all_constant[
+    dtype: DType
+](result: HostSplitResult[dtype]) -> Bool:
     """Whether EVERY column this node sampled was constant on its rows.
 
     Not "no valid split was found": a non-constant column rejected by
@@ -611,7 +613,7 @@ def train_classification(
             # uniform over the node's non-constant columns, and `rescue_pick`
             # draws it. The rule lives in ONE place because the device path
             # must land on the same column.
-            if rescue and _all_constant(result) and item.instances.count > 0:
+            if rescue and _all_constant[DType.float32](result) and item.instances.count > 0:
                 var nonconst = rescue_columns(dataset, item)
                 if len(nonconst) > 0:
                     var u = rescue_pick(
@@ -648,6 +650,7 @@ def train_regression(
     params: DecisionTreeParams,
     tree_id: Int32,
     seed: UInt64,
+    rescue: Bool = True,
 ) raises -> TreeMetaDataNode[DType.float32]:
     """The same loop for MSE. See `train_classification` for the structure and
     for why the partition precedes the push."""
@@ -685,6 +688,29 @@ def train_regression(
             var result = node_split_random_mse[DType.float64](
                 dataset, item, my_colids, objective, seed, tree_id
             )
+
+            # DEVIATION 205, the regression half. The clause
+            # (`_splitter.pyx:573-577`) is in `node_split_random`, which
+            # sklearn shares between both criteria -- it is not a
+            # classification rule -- so a regression tree stops early for the
+            # same reason and is fixed the same way. Same `rescue_columns`,
+            # same `rescue_pick`, same key.
+            if (
+                rescue
+                and _all_constant[DType.float64](result)
+                and item.instances.count > 0
+            ):
+                var nonconst = rescue_columns(dataset, item)
+                if len(nonconst) > 0:
+                    var u = rescue_pick(
+                        rescue_key(seed, tree_id, UInt32(Int(item.idx))),
+                        len(nonconst),
+                    )
+                    var one = List[Int32]()
+                    one.append(nonconst[u])
+                    result = node_split_random_mse[DType.float64](
+                        dataset, item, one, objective, seed, tree_id
+                    )
             splits.append(result.split)
 
             if not split_not_valid(
@@ -2138,6 +2164,370 @@ def dataset_len_ok(
     return len(x_col_major) == Int(n_rows) * Int(n_cols)
 
 
+def search_batch_regression(
+    ctx: DeviceContext,
+    mut ws: LevelWorkspace,
+    mut dataset: DeviceDataset,
+    mut d_row_ids: DeviceBuffer[DType.int32],
+    work_items: List[NodeWorkItem],
+    k: Int,
+    params: DecisionTreeParams,
+    n_rows: Int32,
+    n_cols: Int32,
+    tree_id: Int32,
+    seed: UInt64,
+    use_sampler: Bool,
+    host_colids: List[Int32],
+    range_only: Bool,
+) raises -> Tuple[
+    List[Split], List[Int32], List[Float32], List[Float32], List[Int32]
+]:
+    """One batch through the REGRESSION split search.
+
+    `search_batch`'s twin, and it exists for the same reason: DEVIATION 205's
+    rescue has to run the SAME passes on a sub-batch, and a second copy of the
+    launch code would drift. The two are not merged because the score pass is
+    genuinely different -- fixed-point sums (DEVIATION 135) against class
+    counts, and cuML's MSE gain against Gini (DEVIATION 189) -- and merging
+    them would mean a runtime branch inside every launch rather than one
+    function per objective, which is how cuML templates it
+    (`builder.cuh:142`).
+    """
+    comptime TPB = DEVICE_TPB
+    comptime MAX_ACC = DEVICE_MAX_ACC
+    var n_nodes = len(work_items)
+    var plan = build_workload_info(work_items, TPB)
+    var n_cells = n_nodes * Int(k)
+
+    ref d_min = ws.d_min
+    ref d_max = ws.d_max
+    ref d_missing = ws.d_missing
+    ref d_merges = ws.d_merges
+    ref d_minkey = ws.d_minkey
+    ref d_maxkey = ws.d_maxkey
+    ref d_nleft = ws.d_nleft
+    ref d_ntotal = ws.d_ntotal
+    ref d_accl = ws.d_accl
+    ref d_acct = ws.d_acct
+    ref d_nblocks = ws.d_nblocks
+    ref d_status = ws.d_status
+    ref d_thresh = ws.d_thresh
+    ref d_gnum = ws.d_gnum
+    ref d_gden = ws.d_gden
+    ref c_q = ws.c_q
+    ref c_c = ws.c_c
+    ref c_m = ws.c_m
+    ref c_l = ws.c_l
+    ref c_nu = ws.c_nu
+    ref c_de = ws.c_de
+    ref c_v = ws.c_v
+    ref r_q = ws.r_q
+    ref r_c = ws.r_c
+    ref r_m = ws.r_m
+    ref r_l = ws.r_l
+    ref r_nu = ws.r_nu
+    ref r_de = ws.r_de
+    ref r_v = ws.r_v
+    ref r_mg = ws.r_mg
+    ref r_nw = ws.r_nw
+    ref r_mx = ws.r_mx
+    ref d_nb = ws.d_nb
+    ref d_nc = ws.d_nc
+    ref d_colids = ws.d_colids
+    ref d_samp_scratch = ws.d_samp_scratch
+    ref d_samp_report = ws.d_samp_report
+    ref d_items = ws.d_items
+    ref d_wl = ws.d_wl
+    ref h_colids = ws.h_colids
+    ref h_items = ws.h_items
+    ref h_wl = ws.h_wl
+    ref h_nb = ws.h_nb
+    ref h_nc = ws.h_nc
+    ctx.synchronize()
+    stage_batch(ctx, ws, work_items, plan, Int(k))
+
+    if not use_sampler:
+        # DEVIATION 205's rescue chose these columns on the host, from the
+        # survey's own cells. Nothing draws here.
+        if len(host_colids) != n_cells:
+            raise Error(
+                "host_colids must be n_nodes * k long; got "
+                + String(len(host_colids))
+                + " for "
+                + String(n_cells)
+            )
+        for i in range(n_cells):
+            h_colids.unsafe_ptr().unsafe_store(i, host_colids[i])
+        ctx.enqueue_copy(dst_buf=d_colids, src_ptr=h_colids.unsafe_ptr())
+        ctx.synchronize()
+    else:
+        # --- feature sampling, WHERE cuML DOES IT (deviation 201) --------
+        # `d_report` is the DEVICE's own statement of which kernel ran, so it
+        # is seeded with a value no kernel can produce.
+        ctx.enqueue_memset(d_samp_report, SAMPLER_UNVISITED)
+        _ = sample_features_for_device(
+            ctx,
+            d_colids,
+            d_samp_scratch.unsafe_ptr(),
+            d_samp_report.unsafe_ptr(),
+            d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            h_colids,
+            work_items,
+            tree_id,
+            seed,
+            Int(n_cols),
+            Int(k),
+        )
+
+    ctx.enqueue_function[node_feature_range_init_kernel](
+        d_min.unsafe_ptr(),
+        d_max.unsafe_ptr(),
+        d_minkey.unsafe_ptr(),
+        d_maxkey.unsafe_ptr(),
+        d_missing.unsafe_ptr(),
+        d_merges.unsafe_ptr(),
+        Int32(n_cells),
+        grid_dim=ceildiv(n_cells, 64),
+        block_dim=64,
+    )
+    ctx.enqueue_function[node_feature_range_kernel[TPB]](
+        d_minkey.unsafe_ptr(),
+        d_maxkey.unsafe_ptr(),
+        d_missing.unsafe_ptr(),
+        d_merges.unsafe_ptr(),
+        dataset.d_data.unsafe_ptr(),
+        d_row_ids.unsafe_ptr(),
+        d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+        d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
+        d_colids.unsafe_ptr(),
+        n_rows,
+        n_cols,
+        Int32(k),
+        Int32(0),
+        grid_dim=(plan.n_blocks_dimx, Int(k), 1),
+        block_dim=(TPB, 1, 1),
+    )
+    # DEVIATION 204: the merge produced order-preserving KEYS; this
+    # turns them back into the `(min, max)` floats every later pass
+    # reads, and applies the empty-cell sentinel.
+    ctx.enqueue_function[node_feature_range_decode_kernel](
+        d_min.unsafe_ptr(),
+        d_max.unsafe_ptr(),
+        d_minkey.unsafe_ptr(),
+        d_maxkey.unsafe_ptr(),
+        Int32(n_cells),
+        Int32(RANGE_SAB_NONE),
+        grid_dim=ceildiv(n_cells, 64),
+        block_dim=64,
+    )
+
+    # --- DID ANY SAMPLED COLUMN VARY? (DEVIATION 205) -----------------
+    ctx.enqueue_memset(ws.d_nonconst, Int32(0))
+    ctx.enqueue_function[node_nonconstant_flag_kernel](
+        ws.d_nonconst.unsafe_ptr(),
+        d_min.unsafe_ptr(),
+        d_max.unsafe_ptr(),
+        d_missing.unsafe_ptr(),
+        ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+        Int32(n_cells),
+        Int32(k),
+        grid_dim=ceildiv(n_cells, 64),
+        block_dim=64,
+    )
+    ctx.enqueue_copy(dst_buf=ws.h_nonconst, src_buf=ws.d_nonconst)
+    if range_only:
+        ctx.enqueue_copy(dst_buf=ws.o_rmin, src_buf=d_min)
+        ctx.enqueue_copy(dst_buf=ws.o_rmax, src_buf=d_max)
+        ctx.enqueue_copy(dst_buf=ws.o_rmiss, src_buf=d_missing)
+    ctx.synchronize()
+    var any_nonconst = List[Int32](length=n_nodes, fill=Int32(0))
+    for i in range(n_nodes):
+        any_nonconst[i] = ws.h_nonconst.unsafe_ptr()[unsafe_offset=i]
+
+    if range_only:
+        var rmin = List[Float32](length=n_cells, fill=Float32(0.0))
+        var rmax = List[Float32](length=n_cells, fill=Float32(0.0))
+        var rmiss = List[Int32](length=n_cells, fill=Int32(0))
+        for i in range(n_cells):
+            rmin[i] = ws.o_rmin.unsafe_ptr()[unsafe_offset=i]
+            rmax[i] = ws.o_rmax.unsafe_ptr()[unsafe_offset=i]
+            rmiss[i] = ws.o_rmiss.unsafe_ptr()[unsafe_offset=i]
+        return (List[Split](), any_nonconst^, rmin^, rmax^, rmiss^)
+    ctx.enqueue_function[node_feature_score_init_kernel](
+        d_status.unsafe_ptr(),
+        d_thresh.unsafe_ptr(),
+        d_nleft.unsafe_ptr(),
+        d_ntotal.unsafe_ptr(),
+        d_gnum.unsafe_ptr(),
+        d_gden.unsafe_ptr(),
+        d_nblocks.unsafe_ptr(),
+        d_accl.unsafe_ptr(),
+        d_acct.unsafe_ptr(),
+        Int32(n_cells),
+        Int32(n_cells),
+        grid_dim=ceildiv(n_cells, 64),
+        block_dim=64,
+    )
+    ctx.enqueue_function[
+        node_feature_score_kernel[TPB, MAX_ACC, False]
+    ](
+        d_nleft.unsafe_ptr(),
+        d_ntotal.unsafe_ptr(),
+        d_accl.unsafe_ptr(),
+        d_acct.unsafe_ptr(),
+        d_nblocks.unsafe_ptr(),
+        d_min.unsafe_ptr(),
+        d_max.unsafe_ptr(),
+        d_missing.unsafe_ptr(),
+        dataset.d_data.unsafe_ptr(),
+        d_row_ids.unsafe_ptr(),
+        dataset.d_labels.unsafe_ptr(),
+        d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+        d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
+        d_colids.unsafe_ptr(),
+        n_rows,
+        Int32(k),
+        Int32(1),
+        seed,
+        tree_id,
+        Int32(0),
+        grid_dim=(plan.n_blocks_dimx, Int(k), 1),
+        block_dim=(TPB, 1, 1),
+    )
+    ctx.enqueue_function[
+        node_feature_score_finalize_kernel[MAX_ACC, False]
+    ](
+        d_status.unsafe_ptr(),
+        d_thresh.unsafe_ptr(),
+        d_gnum.unsafe_ptr(),
+        d_gden.unsafe_ptr(),
+        d_nleft.unsafe_ptr(),
+        d_ntotal.unsafe_ptr(),
+        d_accl.unsafe_ptr(),
+        d_acct.unsafe_ptr(),
+        d_min.unsafe_ptr(),
+        d_max.unsafe_ptr(),
+        d_missing.unsafe_ptr(),
+        d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+        d_colids.unsafe_ptr(),
+        Int32(n_cells),
+        Int32(k),
+        Int32(1),
+        seed,
+        tree_id,
+        params.min_samples_leaf,
+        Int32(0),
+        grid_dim=ceildiv(n_cells, 64),
+        block_dim=64,
+    )
+    # The regression candidate carries cuML's MSE gain as its exact key
+    # (DEVIATION 189), so the conversion is the classification one with
+    # `n_classes = 1`: the accumulator loop runs once and the metric is
+    # the gain in SCALED units, which is monotone in the label's own units
+    # and therefore orders identically.
+    ctx.enqueue_function[score_to_candidate_kernel](
+        c_q.unsafe_ptr(),
+        c_c.unsafe_ptr(),
+        c_m.unsafe_ptr(),
+        c_l.unsafe_ptr(),
+        c_nu.unsafe_ptr(),
+        c_de.unsafe_ptr(),
+        c_v.unsafe_ptr(),
+        d_status.unsafe_ptr(),
+        d_thresh.unsafe_ptr(),
+        d_nleft.unsafe_ptr(),
+        d_ntotal.unsafe_ptr(),
+        d_accl.unsafe_ptr(),
+        d_acct.unsafe_ptr(),
+        d_gnum.unsafe_ptr(),
+        d_gden.unsafe_ptr(),
+        d_colids.unsafe_ptr(),
+        Int32(n_cells),
+        Int32(1),
+        params.min_samples_leaf,
+        grid_dim=ceildiv(n_cells, 64),
+        block_dim=64,
+    )
+    var bpn = ceildiv(Int(k), TPB)
+    if bpn < 1:
+        bpn = 1
+    ctx.enqueue_memset(r_mx, Int32(0))
+    ctx.enqueue_function[split_reduce_init_kernel](
+        r_q.unsafe_ptr(),
+        r_c.unsafe_ptr(),
+        r_m.unsafe_ptr(),
+        r_l.unsafe_ptr(),
+        r_nu.unsafe_ptr(),
+        r_de.unsafe_ptr(),
+        r_v.unsafe_ptr(),
+        r_mg.unsafe_ptr(),
+        r_nw.unsafe_ptr(),
+        Int32(n_nodes),
+        grid_dim=ceildiv(n_nodes, 64),
+        block_dim=64,
+    )
+    ctx.enqueue_function[split_reduce_kernel[TPB]](
+        r_q.unsafe_ptr(),
+        r_c.unsafe_ptr(),
+        r_m.unsafe_ptr(),
+        r_l.unsafe_ptr(),
+        r_nu.unsafe_ptr(),
+        r_de.unsafe_ptr(),
+        r_v.unsafe_ptr(),
+        r_mg.unsafe_ptr(),
+        r_nw.unsafe_ptr(),
+        r_mx.unsafe_ptr(),
+        c_q.unsafe_ptr(),
+        c_c.unsafe_ptr(),
+        c_m.unsafe_ptr(),
+        c_l.unsafe_ptr(),
+        c_nu.unsafe_ptr(),
+        c_de.unsafe_ptr(),
+        c_v.unsafe_ptr(),
+        d_nb.unsafe_ptr(),
+        d_nc.unsafe_ptr(),
+        Int32(bpn),
+        Int32(0),
+        grid_dim=(bpn, n_nodes, 1),
+        block_dim=(TPB, 1, 1),
+    )
+
+    ref o_q = ws.o_q
+    ref o_c = ws.o_c
+    ref o_l = ws.o_l
+    ref o_v = ws.o_v
+    ref o_m = ws.o_m
+    ctx.enqueue_copy(dst_buf=o_q, src_buf=r_q)
+    ctx.enqueue_copy(dst_buf=o_c, src_buf=r_c)
+    ctx.enqueue_copy(dst_buf=o_l, src_buf=r_l)
+    ctx.enqueue_copy(dst_buf=o_v, src_buf=r_v)
+    ctx.enqueue_copy(dst_buf=o_m, src_buf=r_m)
+    ctx.synchronize()
+
+    var splits = List[Split]()
+    for i in range(n_nodes):
+        var colid = o_c.unsafe_ptr()[unsafe_offset=i]
+        var metric = o_m.unsafe_ptr()[unsafe_offset=i]
+        if o_v.unsafe_ptr()[unsafe_offset=i] == 0 or colid < 0:
+            metric = Float32.MIN_FINITE
+        splits.append(
+            Split(
+                o_q.unsafe_ptr()[unsafe_offset=i],
+                colid,
+                metric,
+                o_l.unsafe_ptr()[unsafe_offset=i],
+            )
+        )
+
+    return (
+        splits^,
+        any_nonconst^,
+        List[Float32](),
+        List[Float32](),
+        List[Int32](),
+    )
+
+
 def train_regression_device(
     ctx: DeviceContext,
     x_col_major: List[Float32],
@@ -2199,310 +2589,105 @@ def train_regression_device(
     )
     _ = row_ids
 
+    # THE WORKSPACE, ONCE, as `assignWorkspace` does (`builder.cuh:302-341`).
+    # DEVIATION 202, which the classification trainer took in the previous
+    # round and this one did not. `n_classes` is 1 here: the regression score
+    # pass accumulates ONE fixed-point sum per cell (deviation 135), where the
+    # classification pass accumulates a class count each.
+    var ws = make_level_workspace(
+        ctx, Int(params.max_batch_size), n_rows, n_cols, 1, Int(k), TPB
+    )
+
     while queue.has_work():
         var work_items = queue.pop()
         var n_nodes = len(work_items)
 
-        var plan = build_workload_info(work_items, TPB)
-        var n_cells = n_nodes * Int(k)
-
-        var d_min = ctx.enqueue_create_buffer[DType.float32](n_cells)
-        var d_max = ctx.enqueue_create_buffer[DType.float32](n_cells)
-        var d_missing = ctx.enqueue_create_buffer[DType.int32](n_cells)
-        var d_merges = ctx.enqueue_create_buffer[DType.int32](n_cells)
-        var d_minkey = ctx.enqueue_create_buffer[DType.uint32](n_cells)
-        var d_maxkey = ctx.enqueue_create_buffer[DType.uint32](n_cells)
-        var d_nleft = ctx.enqueue_create_buffer[DType.int32](n_cells)
-        var d_ntotal = ctx.enqueue_create_buffer[DType.int32](n_cells)
-        var d_accl = ctx.enqueue_create_buffer[DType.int32](n_cells)
-        var d_acct = ctx.enqueue_create_buffer[DType.int32](n_cells)
-        var d_nblocks = ctx.enqueue_create_buffer[DType.int32](n_cells)
-        var d_status = ctx.enqueue_create_buffer[DType.int32](n_cells)
-        var d_thresh = ctx.enqueue_create_buffer[DType.float32](n_cells)
-        var d_gnum = ctx.enqueue_create_buffer[DType.int64](n_cells)
-        var d_gden = ctx.enqueue_create_buffer[DType.int64](n_cells)
-        var c_q = ctx.enqueue_create_buffer[DType.float32](n_cells)
-        var c_c = ctx.enqueue_create_buffer[DType.int32](n_cells)
-        var c_m = ctx.enqueue_create_buffer[DType.float32](n_cells)
-        var c_l = ctx.enqueue_create_buffer[DType.int32](n_cells)
-        var c_nu = ctx.enqueue_create_buffer[DType.int64](n_cells)
-        var c_de = ctx.enqueue_create_buffer[DType.int64](n_cells)
-        var c_v = ctx.enqueue_create_buffer[DType.int32](n_cells)
-        var r_q = ctx.enqueue_create_buffer[DType.float32](n_nodes)
-        var r_c = ctx.enqueue_create_buffer[DType.int32](n_nodes)
-        var r_m = ctx.enqueue_create_buffer[DType.float32](n_nodes)
-        var r_l = ctx.enqueue_create_buffer[DType.int32](n_nodes)
-        var r_nu = ctx.enqueue_create_buffer[DType.int64](n_nodes)
-        var r_de = ctx.enqueue_create_buffer[DType.int64](n_nodes)
-        var r_v = ctx.enqueue_create_buffer[DType.int32](n_nodes)
-        var r_mg = ctx.enqueue_create_buffer[DType.int32](n_nodes)
-        var r_nw = ctx.enqueue_create_buffer[DType.int32](n_nodes)
-        var r_mx = ctx.enqueue_create_buffer[DType.int32](n_nodes)
-        var d_nb = ctx.enqueue_create_buffer[DType.int32](n_nodes)
-        var d_nc = ctx.enqueue_create_buffer[DType.int32](n_nodes)
-        var d_colids = ctx.enqueue_create_buffer[DType.int32](n_cells)
-        var d_samp_scratch = ctx.enqueue_create_buffer[DType.int32](
-            sampler_scratch_len(n_nodes, Int(n_cols), Int(k))
-        )
-        var d_samp_report = ctx.enqueue_create_buffer[DType.int32](
-            sampler_report_len(n_nodes)
-        )
-        var d_items = ctx.enqueue_create_buffer[DType.uint8](
-            n_nodes * size_of[NodeWorkItem]()
-        )
-        var d_wl = ctx.enqueue_create_buffer[DType.uint8](
-            plan.n_blocks_dimx * size_of[WorkloadInfo]()
-        )
-        var h_colids = ctx.enqueue_create_host_buffer[DType.int32](n_cells)
-        var h_items = ctx.enqueue_create_host_buffer[DType.uint8](
-            n_nodes * size_of[NodeWorkItem]()
-        )
-        var h_wl = ctx.enqueue_create_host_buffer[DType.uint8](
-            plan.n_blocks_dimx * size_of[WorkloadInfo]()
-        )
-        var h_nb = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
-        var h_nc = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
-        ctx.synchronize()
-
-        var items_ptr = h_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem]()
-        for i in range(n_nodes):
-            items_ptr[unsafe_offset=i] = work_items[i]
-        var wl_ptr = h_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo]()
-        for i in range(plan.n_blocks_dimx):
-            wl_ptr[unsafe_offset=i] = plan.info[i]
-        for i in range(n_nodes):
-            h_nb.unsafe_ptr().unsafe_store(i, Int32(i * Int(k)))
-            h_nc.unsafe_ptr().unsafe_store(i, Int32(Int(k)))
-        ctx.enqueue_copy(dst_buf=d_items, src_ptr=h_items.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=d_wl, src_ptr=h_wl.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=d_nb, src_ptr=h_nb.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=d_nc, src_ptr=h_nc.unsafe_ptr())
-        ctx.synchronize()
-
-        # --- feature sampling, WHERE cuML DOES IT (deviation 201) --------
-        # `d_report` is the DEVICE's own statement of which kernel ran, so it
-        # is seeded with a value no kernel can produce.
-        ctx.enqueue_memset(d_samp_report, SAMPLER_UNVISITED)
-        _ = sample_features_for_device(
+        var rfound = search_batch_regression(
             ctx,
-            d_colids,
-            d_samp_scratch.unsafe_ptr(),
-            d_samp_report.unsafe_ptr(),
-            d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
-            h_colids,
+            ws,
+            dataset,
+            d_row_ids,
             work_items,
-            tree_id,
-            seed,
-            Int(n_cols),
             Int(k),
-        )
-
-        ctx.enqueue_function[node_feature_range_init_kernel](
-            d_min.unsafe_ptr(),
-            d_max.unsafe_ptr(),
-            d_minkey.unsafe_ptr(),
-            d_maxkey.unsafe_ptr(),
-            d_missing.unsafe_ptr(),
-            d_merges.unsafe_ptr(),
-            Int32(n_cells),
-            grid_dim=ceildiv(n_cells, 64),
-            block_dim=64,
-        )
-        ctx.enqueue_function[node_feature_range_kernel[TPB]](
-            d_minkey.unsafe_ptr(),
-            d_maxkey.unsafe_ptr(),
-            d_missing.unsafe_ptr(),
-            d_merges.unsafe_ptr(),
-            dataset.d_data.unsafe_ptr(),
-            d_row_ids.unsafe_ptr(),
-            d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
-            d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
-            d_colids.unsafe_ptr(),
+            params,
             n_rows,
             n_cols,
-            k,
-            Int32(0),
-            grid_dim=(plan.n_blocks_dimx, Int(k), 1),
-            block_dim=(TPB, 1, 1),
-        )
-        # DEVIATION 204: the merge produced order-preserving KEYS; this
-        # turns them back into the `(min, max)` floats every later pass
-        # reads, and applies the empty-cell sentinel.
-        ctx.enqueue_function[node_feature_range_decode_kernel](
-            d_min.unsafe_ptr(),
-            d_max.unsafe_ptr(),
-            d_minkey.unsafe_ptr(),
-            d_maxkey.unsafe_ptr(),
-            Int32(n_cells),
-            Int32(RANGE_SAB_NONE),
-            grid_dim=ceildiv(n_cells, 64),
-            block_dim=64,
-        )
-        ctx.enqueue_function[node_feature_score_init_kernel](
-            d_status.unsafe_ptr(),
-            d_thresh.unsafe_ptr(),
-            d_nleft.unsafe_ptr(),
-            d_ntotal.unsafe_ptr(),
-            d_gnum.unsafe_ptr(),
-            d_gden.unsafe_ptr(),
-            d_nblocks.unsafe_ptr(),
-            d_accl.unsafe_ptr(),
-            d_acct.unsafe_ptr(),
-            Int32(n_cells),
-            Int32(n_cells),
-            grid_dim=ceildiv(n_cells, 64),
-            block_dim=64,
-        )
-        ctx.enqueue_function[
-            node_feature_score_kernel[TPB, MAX_ACC, False]
-        ](
-            d_nleft.unsafe_ptr(),
-            d_ntotal.unsafe_ptr(),
-            d_accl.unsafe_ptr(),
-            d_acct.unsafe_ptr(),
-            d_nblocks.unsafe_ptr(),
-            d_min.unsafe_ptr(),
-            d_max.unsafe_ptr(),
-            d_missing.unsafe_ptr(),
-            dataset.d_data.unsafe_ptr(),
-            d_row_ids.unsafe_ptr(),
-            dataset.d_labels.unsafe_ptr(),
-            d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
-            d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
-            d_colids.unsafe_ptr(),
-            n_rows,
-            k,
-            Int32(1),
-            seed,
             tree_id,
-            Int32(0),
-            grid_dim=(plan.n_blocks_dimx, Int(k), 1),
-            block_dim=(TPB, 1, 1),
-        )
-        ctx.enqueue_function[
-            node_feature_score_finalize_kernel[MAX_ACC, False]
-        ](
-            d_status.unsafe_ptr(),
-            d_thresh.unsafe_ptr(),
-            d_gnum.unsafe_ptr(),
-            d_gden.unsafe_ptr(),
-            d_nleft.unsafe_ptr(),
-            d_ntotal.unsafe_ptr(),
-            d_accl.unsafe_ptr(),
-            d_acct.unsafe_ptr(),
-            d_min.unsafe_ptr(),
-            d_max.unsafe_ptr(),
-            d_missing.unsafe_ptr(),
-            d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
-            d_colids.unsafe_ptr(),
-            Int32(n_cells),
-            k,
-            Int32(1),
             seed,
-            tree_id,
-            params.min_samples_leaf,
-            Int32(0),
-            grid_dim=ceildiv(n_cells, 64),
-            block_dim=64,
+            True,
+            List[Int32](),
+            False,
         )
-        # The regression candidate carries cuML's MSE gain as its exact key
-        # (DEVIATION 189), so the conversion is the classification one with
-        # `n_classes = 1`: the accumulator loop runs once and the metric is
-        # the gain in SCALED units, which is monotone in the label's own units
-        # and therefore orders identically.
-        ctx.enqueue_function[score_to_candidate_kernel](
-            c_q.unsafe_ptr(),
-            c_c.unsafe_ptr(),
-            c_m.unsafe_ptr(),
-            c_l.unsafe_ptr(),
-            c_nu.unsafe_ptr(),
-            c_de.unsafe_ptr(),
-            c_v.unsafe_ptr(),
-            d_status.unsafe_ptr(),
-            d_thresh.unsafe_ptr(),
-            d_nleft.unsafe_ptr(),
-            d_ntotal.unsafe_ptr(),
-            d_accl.unsafe_ptr(),
-            d_acct.unsafe_ptr(),
-            d_gnum.unsafe_ptr(),
-            d_gden.unsafe_ptr(),
-            d_colids.unsafe_ptr(),
-            Int32(n_cells),
-            Int32(1),
-            params.min_samples_leaf,
-            grid_dim=ceildiv(n_cells, 64),
-            block_dim=64,
-        )
-        var bpn = ceildiv(Int(k), TPB)
-        if bpn < 1:
-            bpn = 1
-        ctx.enqueue_memset(r_mx, Int32(0))
-        ctx.enqueue_function[split_reduce_init_kernel](
-            r_q.unsafe_ptr(),
-            r_c.unsafe_ptr(),
-            r_m.unsafe_ptr(),
-            r_l.unsafe_ptr(),
-            r_nu.unsafe_ptr(),
-            r_de.unsafe_ptr(),
-            r_v.unsafe_ptr(),
-            r_mg.unsafe_ptr(),
-            r_nw.unsafe_ptr(),
-            Int32(n_nodes),
-            grid_dim=ceildiv(n_nodes, 64),
-            block_dim=64,
-        )
-        ctx.enqueue_function[split_reduce_kernel[TPB]](
-            r_q.unsafe_ptr(),
-            r_c.unsafe_ptr(),
-            r_m.unsafe_ptr(),
-            r_l.unsafe_ptr(),
-            r_nu.unsafe_ptr(),
-            r_de.unsafe_ptr(),
-            r_v.unsafe_ptr(),
-            r_mg.unsafe_ptr(),
-            r_nw.unsafe_ptr(),
-            r_mx.unsafe_ptr(),
-            c_q.unsafe_ptr(),
-            c_c.unsafe_ptr(),
-            c_m.unsafe_ptr(),
-            c_l.unsafe_ptr(),
-            c_nu.unsafe_ptr(),
-            c_de.unsafe_ptr(),
-            c_v.unsafe_ptr(),
-            d_nb.unsafe_ptr(),
-            d_nc.unsafe_ptr(),
-            Int32(bpn),
-            Int32(0),
-            grid_dim=(bpn, n_nodes, 1),
-            block_dim=(TPB, 1, 1),
-        )
+        var splits = rfound[0].copy()
+        var any_nonconst = rfound[1].copy()
 
-        var o_q = ctx.enqueue_create_host_buffer[DType.float32](n_nodes)
-        var o_c = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
-        var o_l = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
-        var o_v = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
-        var o_m = ctx.enqueue_create_host_buffer[DType.float32](n_nodes)
-        ctx.enqueue_copy(dst_buf=o_q, src_buf=r_q)
-        ctx.enqueue_copy(dst_buf=o_c, src_buf=r_c)
-        ctx.enqueue_copy(dst_buf=o_l, src_buf=r_l)
-        ctx.enqueue_copy(dst_buf=o_v, src_buf=r_v)
-        ctx.enqueue_copy(dst_buf=o_m, src_buf=r_m)
-        ctx.synchronize()
-
-        var splits = List[Split]()
+        # --- DEVIATION 205, the regression half --------------------------
+        # Identical in shape to the classification trainer's, and it calls the
+        # same `rescue_pick` on the same key, so the two objectives cannot
+        # drift apart on WHICH column a rescued node takes.
+        var retry = List[Int]()
         for i in range(n_nodes):
-            var colid = o_c.unsafe_ptr()[unsafe_offset=i]
-            var metric = o_m.unsafe_ptr()[unsafe_offset=i]
-            if o_v.unsafe_ptr()[unsafe_offset=i] == 0 or colid < 0:
-                metric = Float32.MIN_FINITE
-            splits.append(
-                Split(
-                    o_q.unsafe_ptr()[unsafe_offset=i],
-                    colid,
-                    metric,
-                    o_l.unsafe_ptr()[unsafe_offset=i],
-                )
+            if any_nonconst[i] == 0 and work_items[i].instances.count > 0:
+                retry.append(i)
+
+        if len(retry) > 0:
+            var sub = List[NodeWorkItem]()
+            for j in range(len(retry)):
+                sub.append(work_items[retry[j]])
+            var ident = List[Int32](
+                length=len(sub) * Int(n_cols), fill=Int32(0)
             )
+            for j in range(len(sub)):
+                for c in range(Int(n_cols)):
+                    ident[j * Int(n_cols) + c] = Int32(c)
+            var survey = search_batch_regression(
+                ctx, ws, dataset, d_row_ids, sub, Int(n_cols), params,
+                n_rows, n_cols, tree_id, seed, False, ident, True,
+            )
+            var s_min = survey[2].copy()
+            var s_max = survey[3].copy()
+            var s_miss = survey[4].copy()
+
+            var chosen_items = List[NodeWorkItem]()
+            var chosen_cols = List[Int32]()
+            var chosen_slot = List[Int]()
+            for j in range(len(sub)):
+                var nonconst = List[Int32]()
+                for c in range(Int(n_cols)):
+                    var idx = j * Int(n_cols) + c
+                    var extent = FeatureRange(
+                        s_min[idx], s_max[idx], s_miss[idx]
+                    )
+                    if not node_feature_is_constant(
+                        extent, sub[j].instances.count
+                    ):
+                        nonconst.append(Int32(c))
+                if len(nonconst) == 0:
+                    continue
+                var u = rescue_pick(
+                    rescue_key(seed, tree_id, UInt32(Int(sub[j].idx))),
+                    len(nonconst),
+                )
+                chosen_items.append(sub[j])
+                chosen_cols.append(nonconst[u])
+                chosen_slot.append(retry[j])
+
+            if len(chosen_items) > 0:
+                var res2 = search_batch_regression(
+                    ctx, ws, dataset, d_row_ids, chosen_items, 1, params,
+                    n_rows, n_cols, tree_id, seed, False, chosen_cols, False,
+                )
+                var rescued = res2[0].copy()
+                for t in range(len(chosen_slot)):
+                    splits[chosen_slot[t]] = rescued[t]
+
+        var plan = build_workload_info(work_items, TPB)
+        var n_cells = n_nodes * Int(k)
+        if len(retry) > 0:
+            # The sub-batches left THEIR work items on the device and the
+            # partition below reads them.
+            stage_batch(ctx, ws, work_items, plan, Int(k))
+
 
         var d_splits = ctx.enqueue_create_buffer[DType.uint8](
             n_nodes * size_of[Split]()
@@ -2517,22 +2702,64 @@ def train_regression_device(
         for i in range(n_nodes):
             splits_ptr[unsafe_offset=i] = splits[i]
         ctx.enqueue_copy(dst_buf=d_splits, src_ptr=h_splits.unsafe_ptr())
-        ctx.enqueue_memset(d_iters, PARTITION_UNVISITED)
-        ctx.enqueue_function[node_split_kernel[TPB]](
+        # DEVIATION 203, the regression half: blocks over ROWS instead of one
+        # block per node. Same kernels, same grid, same reason.
+        ctx.enqueue_function[partition_count_kernel[TPB]](
+            ws.d_blk_left.unsafe_ptr(),
             d_row_ids.unsafe_ptr(),
-            d_iters.unsafe_ptr(),
-            d_swaps.unsafe_ptr(),
             dataset.d_data.unsafe_ptr(),
-            d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            ws.d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
             d_splits.unsafe_ptr().unsafe_bitcast[Split](),
             n_rows,
             params.min_impurity_decrease,
             params.min_samples_leaf,
-            PART_SAB_NONE,
+            PART_MB_SAB_NONE,
+            grid_dim=(plan.n_blocks_dimx, 1, 1),
+            block_dim=(TPB, 1, 1),
+        )
+        ctx.enqueue_function[partition_scan_kernel[TPB]](
+            ws.d_blk_off.unsafe_ptr(),
+            ws.d_blk_left.unsafe_ptr(),
+            ws.d_blk_base.unsafe_ptr(),
+            ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            d_splits.unsafe_ptr().unsafe_bitcast[Split](),
+            params.min_impurity_decrease,
+            params.min_samples_leaf,
+            PART_MB_SAB_NONE,
             grid_dim=(n_nodes, 1, 1),
             block_dim=(TPB, 1, 1),
         )
+        ctx.enqueue_function[partition_scatter_kernel[TPB]](
+            ws.d_row_alt.unsafe_ptr(),
+            d_row_ids.unsafe_ptr(),
+            ws.d_blk_off.unsafe_ptr(),
+            dataset.d_data.unsafe_ptr(),
+            ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            ws.d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
+            d_splits.unsafe_ptr().unsafe_bitcast[Split](),
+            n_rows,
+            params.min_impurity_decrease,
+            params.min_samples_leaf,
+            PART_MB_SAB_NONE,
+            grid_dim=(plan.n_blocks_dimx, 1, 1),
+            block_dim=(TPB, 1, 1),
+        )
+        ctx.enqueue_function[partition_writeback_kernel[TPB]](
+            d_row_ids.unsafe_ptr(),
+            ws.d_row_alt.unsafe_ptr(),
+            ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            ws.d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
+            d_splits.unsafe_ptr().unsafe_bitcast[Split](),
+            params.min_impurity_decrease,
+            params.min_samples_leaf,
+            PART_MB_SAB_NONE,
+            grid_dim=(plan.n_blocks_dimx, 1, 1),
+            block_dim=(TPB, 1, 1),
+        )
         ctx.synchronize()
+        _ = d_iters
+        _ = d_swaps
         queue.push(work_items, splits)
 
     var tree = queue.get_tree()
