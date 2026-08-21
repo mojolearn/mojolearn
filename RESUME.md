@@ -871,7 +871,10 @@ Newton-10, so the ratio barely moves from the RMSE rows.
 
 **BAYESIAN (their GPU-default sampling): 3.26-4.41x, the widest training
 margin in the record** -- their CPU arm's per-tree weight resampling
-costs it 1.5-2x while our device bootstrap kernel costs ~30-50 ms/tree,
+costs it 1.5-2x, our sampling costs NOTHING MEASURABLE
+(`bootstrap_delta_probe`: det 125.5-128.1 vs bayes 125.4-128.8 ms/tree
+interleaved one process; the ~30-50 ms this section first attributed to
+our bootstrap was a cross-window thermal artifact, deleted per rule 7),
 and our mse BAND sits at or below theirs at both borders. The pinned
 deterministic rows therefore UNDERSTATE epsilon: at the configuration
 their GPU would actually run, the margin is 3.3-4.4x.

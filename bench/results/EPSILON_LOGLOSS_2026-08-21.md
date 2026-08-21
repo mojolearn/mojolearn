@@ -75,7 +75,18 @@ border counts. THE POINT THIS ROW MAKES: the pinned deterministic
 comparison UNDERSTATES the epsilon gap. Bayesian temperature 1 is what
 `task_type="GPU"` would actually run (their GPU default; MVS is
 Y_ASSERTed away on their GPU oblivious path), and at that configuration
-their CPU arm's per-tree weight resampling costs it 1.5-2x while our
-device bootstrap kernel costs ~30-50 ms/tree -- so the honest
-"their-shipped-GPU-config on the machine their GPU cannot reach" margin
-is 3.3-4.4x, the widest training margin in the record.
+their CPU arm's per-tree weight resampling costs it 1.5-2x -- so the
+honest "their-shipped-GPU-config on the machine their GPU cannot reach"
+margin is 3.3-4.4x, the widest training margin in the record.
+
+CORRECTED SAME NIGHT: this section first said our bootstrap costs
+~30-50 ms/tree, read off the gap between this run's absolutes and the
+earlier quiet deterministic run's -- a cross-window A/B, exactly what
+rule 7 forbids. `mojo_only/bootstrap_delta_probe.mojo` alternated the
+two arms in ONE process: deterministic 125.5-128.1 ms/tree, Bayesian
+125.4-128.8 -- INDISTINGUISHABLE. Sampling costs our arm nothing
+measurable; the hot window (this run started right after the Logloss
+run) inflated both arms' absolutes. The RATIOS above are within-window
+and stand. The false sentence is deleted rather than kept beside its
+refutation; the per-seed mse values also reproduced bit-for-bit across
+processes.
