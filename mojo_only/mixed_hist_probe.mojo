@@ -19,6 +19,7 @@ from gbdt.gpu_data.kernel.binarize import (
     write_compressed_index_kernel,
 )
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
+    upload_scale,
     launch_histograms_for_blocks,
     upload_blocks,
 )
@@ -138,12 +139,15 @@ def probe_mixed_histogram(binary: Int = 8, half: Int = 4, one: Int = 4, pre_brid
     ctx.enqueue_copy(dst_buf=dense_ids, src_ptr=h_dense.unsafe_ptr())
     ctx.synchronize()
 
+    var scale_keep = upload_scale(ctx, Float32(1.0))
     launch_histograms_for_blocks(
-        ctx, dblocks, 0, 1, n_rows, stat_count, max_leaves, 1, Float32(1.0),
+        ctx, dblocks, 0, 1, n_rows, stat_count, max_leaves, 1,
+        rebind[MutPointer[Float32, MutAnyOrigin]](scale_keep.unsafe_ptr()),
         cindex, row_index, stats, p_off, p_sz, ids, dense_ids, hist, acc,
         block_hist, lay.hist_cells, pre_bridge,
     )
     ctx.synchronize()
+    _ = scale_keep^
 
     # PRE-BRIDGE reads what the KERNEL wrote, in the per-block layout.
     # POST-BRIDGE reads the flat histogram the scorer sees. Comparing the two

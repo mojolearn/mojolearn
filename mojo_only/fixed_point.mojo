@@ -80,15 +80,13 @@ def choose_scale(
         )
     if sum_of_magnitudes == 0.0:
         return 1.0
-    var raw: Float64
+    var limit: Float64
     if row_count > 0:
-        var limit = Float64((1 << 30) - 1 - row_count)
-        if limit > SCALE_LIMIT:
-            raw = limit / sum_of_magnitudes
-        else:
-            raw = SCALE_LIMIT / sum_of_magnitudes
+        limit = Float64((1 << 30) - 1 - row_count)
+        if limit < SCALE_LIMIT:
+            limit = SCALE_LIMIT
     else:
-        raw = SCALE_LIMIT / sum_of_magnitudes
+        limit = SCALE_LIMIT
 
     # SNAPPED DOWN TO A POWER OF TWO (2026-08-21). A continuous scale is a
     # LEVER ARM for the last bits of `sum_of_magnitudes`: the dithered
@@ -104,12 +102,23 @@ def choose_scale(
     # a 2x band -- so the realization is pinned across runs, reduce
     # implementations, and platforms. Costs at most one bit of resolution;
     # the bound only gets safer (the snap is downward).
+    # EXACT FORM (2026-08-21): the snap used to compare `snapped` against
+    # the ROUNDED quotient `limit / mag`, whose last ulp could flip the
+    # chosen power at an exact-ratio boundary depending on the platform's
+    # division. The comparison is now `mag * snapped <= limit`, in which
+    # every operation is exact (a power-of-two multiply reshuffles the
+    # exponent, and `limit < 2^30` is exactly representable), so the
+    # chosen power is a pure function of the magnitude's BITS -- which is
+    # what lets `choose_scale_kernel` reproduce this host function
+    # bit-for-bit on a device with no Float64. Identical result except
+    # within one f64 ulp of an exact power-of-two ratio, where THIS form
+    # is the correct one.
     var snapped = 1.0
-    if raw >= 1.0:
-        while snapped * 2.0 <= raw:
+    if sum_of_magnitudes <= limit:
+        while sum_of_magnitudes * (snapped * 2.0) <= limit:
             snapped *= 2.0
     else:
-        while snapped > raw:
+        while sum_of_magnitudes * snapped > limit:
             snapped /= 2.0
     return snapped
 

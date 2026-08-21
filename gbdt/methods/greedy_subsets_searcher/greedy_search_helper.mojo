@@ -53,6 +53,9 @@ from gbdt.methods.greedy_subsets_searcher.split_properties_helper import (
 )
 from std.sys.info import size_of
 from gbdt.gpu_data.gpu_structures import CFeature
+from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
+    choose_scale_kernel,
+)
 from gbdt.methods.greedy_subsets_searcher.kernel.split_resolve import (
     RESOLVE_BLOCK_SIZE,
     plan_level_kernel,
@@ -597,6 +600,26 @@ def run_one_level(
     )
 
 
+def upload_scale(
+    ctx: DeviceContext, value: Float32
+) raises -> DeviceBuffer[DType.float32]:
+    """One host-computed scale into a 1-float device buffer (DEVIATION
+    95: the histogram kernels read the scale from device memory), for
+    the checks and probes that derive their scale on the host. The
+    settling drain inside makes the staging safe to drop. THE CALLER
+    KEEPS THE RETURNED BUFFER ALIVE past its last enqueued kernel
+    (`_ = keep^` at the end of the function): dropping the only handle
+    before the launches would free the memory under them. A drain per
+    call is check-tier cost; the training path never comes through
+    here."""
+    var d = ctx.enqueue_create_buffer[DType.float32](1)
+    var h = ctx.enqueue_create_host_buffer[DType.float32](1)
+    h.unsafe_ptr().unsafe_store(0, value)
+    ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())
+    ctx.synchronize()
+    return d^
+
+
 def run_tree(
     ctx: DeviceContext,
     n_rows: Int,
@@ -721,7 +744,14 @@ def run_tree(
         gmag = -gmag
     if gmag > mag:
         mag = gmag
-    var fixed_scale = Float32(choose_scale(mag, n_rows))
+    # the kernels read the scale from device memory now (DEVIATION 95);
+    # this checked path keeps the host derivation and uploads the value
+    var scale_val = Float32(choose_scale(mag, n_rows))
+    var scale_dev_local = ctx.enqueue_create_buffer[DType.float32](1)
+    var h_scale_local = ctx.enqueue_create_host_buffer[DType.float32](1)
+    h_scale_local.unsafe_ptr().unsafe_store(0, scale_val)
+    ctx.enqueue_copy(dst_buf=scale_dev_local, src_ptr=h_scale_local.unsafe_ptr())
+    var fixed_scale = scale_dev_local.unsafe_ptr()
 
     # REPLICATION: how many blocks share one partition. CatBoost sizes this
     # to fill the SMs (`hist_binary.cu:90-95`). A PARAMETER of this function,
@@ -1212,6 +1242,9 @@ def run_tree(
     var out = List[Int]()
     for i in range(n_live):
         out.append(Int(h_sz.unsafe_ptr().unsafe_load(i)))
+    # keep the scale staging alive past every enqueued kernel
+    _ = scale_dev_local^
+    _ = h_scale_local^
     return out^
 
 
@@ -1295,7 +1328,7 @@ def launch_hist2_8bit(
     mut ids: DeviceBuffer[DType.uint32],
     mut block_hist: DeviceBuffer[DType.float32],
     mut acc_i32: DeviceBuffer[DType.int32],
-    fixed_scale: Float32,
+    fixed_scale: MutPointer[Float32, MutAnyOrigin],
 ) raises:
     """The fused two-stat 8-bit arm (DEVIATION BLOCK in
     `kernel/hist_2_one_byte_8bit.mojo`): one launch, grid z = 1, where
@@ -1354,7 +1387,7 @@ def launch_one_byte[bits: Int, smem_mode: Int = HIST2_SMEM_MODE](
     mut ids: DeviceBuffer[DType.uint32],
     mut block_hist: DeviceBuffer[DType.float32],
     mut acc_i32: DeviceBuffer[DType.int32],
-    fixed_scale: Float32,
+    fixed_scale: MutPointer[Float32, MutAnyOrigin],
     grid_z_stats: Int = -1,
 ) raises:
     """One one-byte launch at a comptime bit width. Direct at depth 0,
@@ -1508,7 +1541,7 @@ def launch_hist2_one_byte[bits: Int, smem_mode: Int = HIST2_SMEM_MODE](
     mut ids: DeviceBuffer[DType.uint32],
     mut block_hist: DeviceBuffer[DType.float32],
     mut acc_i32: DeviceBuffer[DType.int32],
-    fixed_scale: Float32,
+    fixed_scale: MutPointer[Float32, MutAnyOrigin],
 ) raises:
     """Their `HIST2_PASS(Bits)` macro plus `ComputeHist2OneByteBits`
     (`hist_one_byte.cu:306-312` and `hist_2_one_byte_base.cuh:155-197`
@@ -1705,7 +1738,7 @@ def launch_histograms_for_blocks[
     stat_count: Int,
     max_leaves: Int,
     sm_count: Int,
-    fixed_scale: Float32,
+    fixed_scale: MutPointer[Float32, MutAnyOrigin],
     mut cindex: DeviceBuffer[DType.uint32],
     mut row_index: DeviceBuffer[DType.uint32],
     mut stats: DeviceBuffer[DType.float32],
@@ -2274,6 +2307,8 @@ struct TTreeWorkspace(Movable):
     var bfr_folds: DeviceBuffer[DType.uint32]
     var bfr_oh: DeviceBuffer[DType.uint8]
     var bfr_bin: DeviceBuffer[DType.uint32]
+    var scale_dev: DeviceBuffer[DType.float32]
+    var h_scale: HostBuffer[DType.float32]
 
     def __init__(
         out self,
@@ -2423,6 +2458,8 @@ struct TTreeWorkspace(Movable):
         self.bfr_bin = ctx.enqueue_create_buffer[DType.uint32](
             hist_cells_per_leaf
         )
+        self.scale_dev = ctx.enqueue_create_buffer[DType.float32](1)
+        self.h_scale = ctx.enqueue_create_host_buffer[DType.float32](1)
         self.dblocks = upload_blocks(ctx, blocks)
 
         # ---- constant fills: staged locally, settled by the one drain ----
@@ -2547,6 +2584,7 @@ def run_tree_layout[
     score_function: Int = SCORE_FUNCTION_COSINE,
     approx_dim: Int = 1,
     multiclass_optimization: Bool = False,
+    mags_dev: Optional[DeviceBuffer[DType.float32]] = None,
 ) raises -> List[Int]:
     """`FitImpl` over a LAYOUT: mixed feature widths, one launch per policy.
 
@@ -2688,15 +2726,49 @@ def run_tree_layout[
     # See the note in `run_tree`: one scale serves both accumulated planes,
     # so the bound is the larger of the two sums of magnitudes, and
     # `choose_scale` owns the derivation rather than a fourth copy of it.
-    var mag = Float64(weight_magnitude)
-    if mag < 0.0:
-        mag = -mag
-    var gmag = Float64(gradient_magnitude)
-    if gmag < 0.0:
-        gmag = -gmag
-    if gmag > mag:
-        mag = gmag
-    var fixed_scale = Float32(choose_scale(mag, n_rows))
+    # ================= DEVIATION 95 =================
+    # THE SCALE IS DERIVED ON THE DEVICE when the caller hands the
+    # magnitudes buffer: `choose_scale_kernel` reproduces the host
+    # function bit-for-bit (both are the same exact integer search once
+    # the snap is a power of two), and the kernels read the scale from
+    # device memory -- so the boosting loop's per-tree magnitudes drain,
+    # the LAST drain besides the tree's own, is gone. This whole
+    # apparatus is OURS, not CatBoost's: their GPU histograms are float
+    # atomicAdd, tagged non_deterministic, and need no scale at all. The
+    # fixed-point accumulator is the price of the bitwise-determinism
+    # thesis; this deviation makes that price one kernel launch instead
+    # of a drain. Callers without a magnitudes buffer (the checks) keep
+    # the host derivation and pay one async upload, no drain.
+    # ================================================
+    var fixed_scale = rebind[MutPointer[Float32, MutAnyOrigin]](
+        ws[0].scale_dev.unsafe_ptr()
+    )
+    if mags_dev:
+        ctx.enqueue_function[choose_scale_kernel](
+            rebind[MutPointer[Float32, MutAnyOrigin]](
+                mags_dev.value().unsafe_ptr()
+            ),
+            Int32(n_rows), fixed_scale,
+            grid_dim=(1, 1, 1),
+            block_dim=(1, 1, 1),
+        )
+        # enqueued before `mgr` exists; the launch counter misses this
+        # one launch, which is a diagnostic and not a budget
+    else:
+        var mag = Float64(weight_magnitude)
+        if mag < 0.0:
+            mag = -mag
+        var gmag = Float64(gradient_magnitude)
+        if gmag < 0.0:
+            gmag = -gmag
+        if gmag > mag:
+            mag = gmag
+        ws[0].h_scale.unsafe_ptr().unsafe_store(
+            0, Float32(choose_scale(mag, n_rows))
+        )
+        ctx.enqueue_copy(
+            dst_buf=ws[0].scale_dev, src_ptr=ws[0].h_scale.unsafe_ptr()
+        )
 
     # ================================================================
     # Their `TGreedyTreeLikeStructureSearcher::FitImpl`

@@ -182,13 +182,14 @@ def hist2_8bit_kernel(
     part_ids: MutPointer[UInt32, MutAnyOrigin],
     bin_sums: MutPointer[Float32, MutAnyOrigin],
     acc_i32: MutPointer[Int32, MutAnyOrigin],
-    fixed_scale: Float32,
+    fixed_scale_ptr: MutPointer[Float32, MutAnyOrigin],
     leaf_count_in: Int32,
     stat_count_in: Int32,
 ):
     """Direct loads (depth 0). Same partition walk as the PASS family's
     direct kernel; the differences are the second stat plane loaded per
     point (as the hist_2 kernels load it) and grid z = 1."""
+    var fixed_scale = fixed_scale_ptr.unsafe_load(0)
     var f_count_in = Int(f_count_in32)
     var bins_line_size = Int(bins_line_size_in)
     var stat_line_size = Int(stat_line_size_in)
@@ -355,13 +356,14 @@ def hist2_8bit_gather_kernel(
     part_ids: MutPointer[UInt32, MutAnyOrigin],
     bin_sums: MutPointer[Float32, MutAnyOrigin],
     acc_i32: MutPointer[Int32, MutAnyOrigin],
-    fixed_scale: Float32,
+    fixed_scale_ptr: MutPointer[Float32, MutAnyOrigin],
     leaf_count_in: Int32,
     stat_count_in: Int32,
 ):
     """Indexed loads (below the root): bins through `indices`, stats
     contiguous, dither keyed on the storage position -- the same
     conventions as every gather kernel in this package."""
+    var fixed_scale = fixed_scale_ptr.unsafe_load(0)
     var f_count_in = Int(f_count_in32)
     var bins_line_size = Int(bins_line_size_in)
     var stat_line_size = Int(stat_line_size_in)

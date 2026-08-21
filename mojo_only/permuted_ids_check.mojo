@@ -37,6 +37,7 @@ from gbdt.gpu_data.kernel.binarize import (
     write_compressed_index_kernel,
 )
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
+    upload_scale,
     launch_histograms_for_blocks,
     upload_blocks,
 )
@@ -194,16 +195,22 @@ def check_permuted_leaf_ids(depth: Int = 0, replicas: Int = 1, permute: Bool = T
     # is the GATHER variant, which reads rows through `row_index`. With
     # `row_index` the identity the two must agree cell for cell, so running
     # both is a differential on the gather path alone.
+    var scale_keep = upload_scale(ctx, Float32(1.0))
+    var scale_ptr = rebind[MutPointer[Float32, MutAnyOrigin]](
+        scale_keep.unsafe_ptr()
+    )
     launch_histograms_for_blocks(
         ctx, dblocks, depth, n_live, n_rows, stat_count, max_leaves,
-        replicas, Float32(1.0), cindex, row_index, stats, p_off, p_sz, ids, dense_ids,
+        replicas, scale_ptr, cindex, row_index, stats, p_off, p_sz, ids,
+        dense_ids,
         hist, acc, block_hist, lay.hist_cells,
     )
     ctx.enqueue_function[fixed_to_float_kernel](
-        acc.unsafe_ptr(), hist.unsafe_ptr(), Int32(hist_cells), Float32(1.0),
+        acc.unsafe_ptr(), hist.unsafe_ptr(), Int32(hist_cells), scale_ptr,
         grid_dim=(hist_cells + 255) // 256, block_dim=256,
     )
     ctx.synchronize()
+    _ = scale_keep^
 
     var out = ctx.enqueue_create_host_buffer[DType.float32](hist_cells)
     ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=hist)

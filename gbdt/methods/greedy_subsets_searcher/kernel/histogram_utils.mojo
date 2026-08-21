@@ -536,7 +536,7 @@ def fixed_to_float_kernel(
     acc_i32: MutPointer[Int32, MutAnyOrigin],
     bin_sums: MutPointer[Float32, MutAnyOrigin],
     n_cells_in: Int32,
-    fixed_scale: Float32,
+    fixed_scale_ptr: MutPointer[Float32, MutAnyOrigin],
 ):
     """Convert the fixed-point accumulator back to the float histogram.
 
@@ -550,6 +550,7 @@ def fixed_to_float_kernel(
     Also zeroes the accumulator, so the next level does not inherit it. A
     separate zeroing launch would cost a kernel for nothing.
     """
+    var fixed_scale = fixed_scale_ptr.unsafe_load(0)
     var n = Int(n_cells_in)
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(block_dim.x) * Int(grid_dim.x)
@@ -632,7 +633,7 @@ def write_reduces_from_fixed_kernel[
     histogram_ids: MutPointer[UInt32, MutAnyOrigin],
     acc_i32: MutPointer[Int32, MutAnyOrigin],
     block_histogram: MutPointer[Float32, MutAnyOrigin],
-    fixed_scale: Float32,
+    fixed_scale_ptr: MutPointer[Float32, MutAnyOrigin],
     bin_feature_count_in: Int32,
     dst_histogram: MutPointer[Float32, MutAnyOrigin],
 ):
@@ -673,6 +674,7 @@ def write_reduces_from_fixed_kernel[
     rides along as before, only where the cell was nonzero.
     ===================================================
     """
+    var fixed_scale = fixed_scale_ptr.unsafe_load(0)
     var hist_block_offset = Int(hist_block_offset_in)
     var bin_features_in_block = Int(bin_features_in_block_in)
     var bin_feature_count = Int(bin_feature_count_in)
@@ -714,3 +716,65 @@ def write_reduces_from_fixed_kernel[
             + bin_feature_id
         )
         dst_histogram.unsafe_store(dst, val)
+
+
+def choose_scale_kernel(
+    mags: MutPointer[Float32, MutAnyOrigin],
+    row_count: Int32,
+    scale_out: MutPointer[Float32, MutAnyOrigin],
+):
+    """`choose_scale` on the device, bit-for-bit, so the boosting loop
+    never drains for the magnitudes (the last per-tree drain besides the
+    tree's own).
+
+    The host function's snap is `largest 2^k with mag * 2^k <= limit`,
+    every operation exact -- so with `mag = S * 2^e2` read straight from
+    the float's bits, the whole derivation is the integer search for the
+    largest `t = e2 + k` with `S << t <= limit`. `S < 2^24 <= limit`
+    guarantees `t >= 0`, and `limit < 2^30` with `S >= 1` bounds it by
+    30, so the search is a short walk down from 30. The final
+    `2^k` is built by exact doubling/halving, which saturates to inf
+    past 2^127 and walks the subnormals below 2^-126 exactly as the
+    host's `Float32(...)` cast of the f64 power does.
+
+    One thread does everything: this is control plane, not compute.
+    """
+    if Int(thread_idx.x) != 0 or Int(block_idx.x) != 0:
+        return
+    var w = mags.unsafe_load(0)
+    var g = mags.unsafe_load(1)
+    var m = w
+    if g > m:
+        m = g
+    if m == Float32(0.0):
+        scale_out.unsafe_store(0, Float32(1.0))
+        return
+    # the host's `max((1 << 30) - 1 - row_count, SCALE_LIMIT)`
+    var limit = Int64((1 << 30) - 1) - Int64(Int(row_count))
+    var floor_limit = Int64((1 << 28) - 1)
+    if limit < floor_limit:
+        limit = floor_limit
+    # |m| = S * 2^e2, exactly, from the bits
+    var mbits = UInt32(m.to_bits())
+    var exp_field = Int((mbits >> 23) & UInt32(0xFF))
+    var mant = Int64(Int(mbits & UInt32(0x7FFFFF)))
+    var s_int: Int64
+    var e2: Int
+    if exp_field == 0:
+        s_int = mant
+        e2 = -149
+    else:
+        s_int = mant + Int64(1 << 23)
+        e2 = exp_field - 150
+    var t = 30
+    while (s_int << Int64(t)) > limit:
+        t -= 1
+    var k = t - e2
+    var scale = Float32(1.0)
+    if k >= 0:
+        for _ in range(k):
+            scale = scale * Float32(2.0)
+    else:
+        for _ in range(-k):
+            scale = scale * Float32(0.5)
+    scale_out.unsafe_store(0, scale)

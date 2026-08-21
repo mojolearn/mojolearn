@@ -100,6 +100,7 @@ from mojo_only.kernel_matrix import (
 )
 from mojo_only.numerics import NUMERIC_IDENTICAL
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
+    upload_scale,
     DeviceBlock,
     launch_hist2_one_byte,
     launch_histograms_for_blocks,
@@ -983,9 +984,11 @@ def run_dispatch_arm(
     ctx.enqueue_copy(dst_buf=acc, src_ptr=zi.unsafe_ptr())
     ctx.synchronize()
 
+    var scale_keep = upload_scale(ctx, scale)
     launch_histograms_for_blocks(
         ctx, dblocks, depth, n_live, n_rows, STAT_COUNT, MAX_LEAVES,
-        SM_COUNT, scale,
+        SM_COUNT,
+        rebind[MutPointer[Float32, MutAnyOrigin]](scale_keep.unsafe_ptr()),
         cindex, row_index, stats, p_off, p_sz, ids, dense_ids,
         hist, acc, block_hist, hist_cells_per_leaf,
     )
@@ -995,6 +998,7 @@ def run_dispatch_arm(
     var out = ctx.enqueue_create_host_buffer[DType.float32](total)
     ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=hist)
     ctx.synchronize()
+    _ = scale_keep^
     return out^
 
 
@@ -1041,18 +1045,22 @@ def run_mode_arm[
         block_dim=256,
     )
 
+    var scale_keep = upload_scale(ctx, scale)
+    var scale_ptr = rebind[MutPointer[Float32, MutAnyOrigin]](
+        scale_keep.unsafe_ptr()
+    )
     launch_hist2_one_byte[bits, smem_mode](
         ctx, dblocks[0], depth, n_live, n_rows, STAT_COUNT, MAX_LEAVES,
         SM_COUNT, n_rows, n_rows * blk.first_column,
         cindex, row_index, stats, p_off, p_sz, ids,
-        block_hist, acc, scale,
+        block_hist, acc, scale_ptr,
     )
 
     ctx.enqueue_function[fixed_to_float_kernel](
         acc.unsafe_ptr(),
         block_hist.unsafe_ptr(),
         Int32(block_cells),
-        scale,
+        scale_ptr,
         grid_dim=(block_cells + 255) // 256,
         block_dim=256,
     )
@@ -1072,6 +1080,7 @@ def run_mode_arm[
     var out = ctx.enqueue_create_host_buffer[DType.float32](total)
     ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=hist)
     ctx.synchronize()
+    _ = scale_keep^
     return out^
 
 
@@ -1119,18 +1128,22 @@ def run_pass_arm[
         block_dim=256,
     )
 
+    var scale_keep = upload_scale(ctx, scale)
+    var scale_ptr = rebind[MutPointer[Float32, MutAnyOrigin]](
+        scale_keep.unsafe_ptr()
+    )
     launch_one_byte[bits, smem_mode](
         ctx, dblocks[0], depth, n_live, n_rows, STAT_COUNT, MAX_LEAVES,
         SM_COUNT, n_rows, n_rows * blk.first_column,
         cindex, row_index, stats, p_off, p_sz, ids,
-        block_hist, acc, scale,
+        block_hist, acc, scale_ptr,
     )
 
     ctx.enqueue_function[fixed_to_float_kernel](
         acc.unsafe_ptr(),
         block_hist.unsafe_ptr(),
         Int32(block_cells),
-        scale,
+        scale_ptr,
         grid_dim=(block_cells + 255) // 256,
         block_dim=256,
     )
@@ -1150,6 +1163,7 @@ def run_pass_arm[
     var out = ctx.enqueue_create_host_buffer[DType.float32](total)
     ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=hist)
     ctx.synchronize()
+    _ = scale_keep^
     return out^
 
 

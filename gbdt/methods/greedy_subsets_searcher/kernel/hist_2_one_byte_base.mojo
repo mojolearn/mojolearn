@@ -544,7 +544,7 @@ def hist2_one_byte_kernel[bits: Int, skip_first: Bool, smem_mode: Int](
     part_ids: MutPointer[UInt32, MutAnyOrigin],
     bin_sums: MutPointer[Float32, MutAnyOrigin],
     acc_i32: MutPointer[Int32, MutAnyOrigin],
-    fixed_scale: Float32,
+    fixed_scale_ptr: MutPointer[Float32, MutAnyOrigin],
     leaf_count_in: Int32,
     stat_count_in: Int32,
 ):
@@ -567,6 +567,7 @@ def hist2_one_byte_kernel[bits: Int, skip_first: Bool, smem_mode: Int](
     takes it that way; the launch constructs the grid from the same number,
     so the two agree by construction.
     """
+    var fixed_scale = fixed_scale_ptr.unsafe_load(0)
     var f_count_in = Int(f_count_in32)
     var bins_line_size = Int(bins_line_size_in)
     var stat_line_size = Int(stat_line_size_in)
@@ -844,7 +845,7 @@ def hist2_one_byte_gather_kernel[
     part_ids: MutPointer[UInt32, MutAnyOrigin],
     bin_sums: MutPointer[Float32, MutAnyOrigin],
     acc_i32: MutPointer[Int32, MutAnyOrigin],
-    fixed_scale: Float32,
+    fixed_scale_ptr: MutPointer[Float32, MutAnyOrigin],
     leaf_count_in: Int32,
     stat_count_in: Int32,
 ):
@@ -853,6 +854,7 @@ def hist2_one_byte_gather_kernel[
     Identical to the direct kernel except the bin is read through `indices`
     (their `LoadByIndexBins`; see `launch_one_byte`'s naming note, which
     applies to this family unchanged)."""
+    var fixed_scale = fixed_scale_ptr.unsafe_load(0)
     var f_count_in = Int(f_count_in32)
     var bins_line_size = Int(bins_line_size_in)
     var stat_line_size = Int(stat_line_size_in)

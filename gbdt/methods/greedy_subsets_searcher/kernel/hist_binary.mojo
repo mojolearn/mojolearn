@@ -111,7 +111,7 @@ def binary_hist_kernel(
     part_ids: MutPointer[UInt32, MutAnyOrigin],
     bin_sums: MutPointer[Float32, MutAnyOrigin],
     acc_i32: MutPointer[Int32, MutAnyOrigin],
-    fixed_scale: Float32,
+    fixed_scale_ptr: MutPointer[Float32, MutAnyOrigin],
     leaf_count_in: Int32,
     stat_count_in: Int32,
 ):
@@ -125,6 +125,7 @@ def binary_hist_kernel(
     dataset size. That is the design point (`compute_by_blocks_helper.h:87-92`
     states it outright) and it is the opposite of a per-leaf launch.
     """
+    var fixed_scale = fixed_scale_ptr.unsafe_load(0)
     var f_count_in = Int(f_count_in32)
     var bins_line_size = Int(bins_line_size_in)
     var stat_line_size = Int(stat_line_size_in)
@@ -544,7 +545,7 @@ def binary_hist_gather_kernel(
     part_ids: MutPointer[UInt32, MutAnyOrigin],
     bin_sums: MutPointer[Float32, MutAnyOrigin],
     acc_i32: MutPointer[Int32, MutAnyOrigin],
-    fixed_scale: Float32,
+    fixed_scale_ptr: MutPointer[Float32, MutAnyOrigin],
     leaf_count_in: Int32,
     stat_count_in: Int32,
 ):
@@ -581,6 +582,7 @@ def binary_hist_gather_kernel(
     dataset size. That is the design point (`compute_by_blocks_helper.h:87-92`
     states it outright) and it is the opposite of a per-leaf launch.
     """
+    var fixed_scale = fixed_scale_ptr.unsafe_load(0)
     var f_count_in = Int(f_count_in32)
     var bins_line_size = Int(bins_line_size_in)
     var stat_line_size = Int(stat_line_size_in)

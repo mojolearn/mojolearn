@@ -1097,16 +1097,15 @@ def fit_with_test(
         # it pins the integer flush on every backend, so the contract still
         # governs the shipped configuration; only the `OFF` arm escapes it.
         # ===========================================================
-        var weight_magnitude = Float64(0.0)
-        var gradient_magnitude = Float64(0.0)
+        # DEVIATION 95: the scale is derived on the device inside
+        # `run_tree_layout` from the magnitudes buffer, so the per-tree
+        # drain that used to read two floats back is gone -- the tree's
+        # own drain is now the loop's only one.
+        var mags_opt = Optional[DeviceBuffer[DType.float32]]()
 
         @parameter
         if _needs_magnitudes:
-            # TWO floats, not 6.4 MB: the one drain the scale still costs.
-            ctx.enqueue_copy(dst_ptr=h_mags.unsafe_ptr(), src_buf=mags)
-            ctx.synchronize()
-            weight_magnitude = Float64(h_mags.unsafe_ptr().unsafe_load(0))
-            gradient_magnitude = Float64(h_mags.unsafe_ptr().unsafe_load(1))
+            mags_opt = Optional(mags.copy())
 
         # `optimizer.Fit(...)` then `Estimate` then `Rescale` then
         # `AppendModels`, all four inside `run_tree_layout`, in their order.
@@ -1116,7 +1115,7 @@ def fit_with_test(
         var sizes = run_tree_layout(
             ctx, n_rows, fold_counts, max_depth,
             lc, stats, row_index, lcur,
-            Float32(weight_magnitude), Float32(gradient_magnitude),
+            Float32(0.0), Float32(0.0),
             splits, leaf_values, leaf_offsets, ws,
             need_estimation,
             use_subtraction, not need_estimation,
@@ -1124,6 +1123,7 @@ def fit_with_test(
             one_hot=one_hot,
             score_function=score_function,
             approx_dim=approx_dim,
+            mags_dev=mags_opt^,
             # `MultiLogitOptimization` is set ONLY for MultiClass
             # (`multiclass_targets.cpp:32-35`); OneVsAll has no pinned
             # class, so its histogram carries every plane and the score

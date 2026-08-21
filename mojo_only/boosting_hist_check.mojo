@@ -96,6 +96,7 @@ from gbdt.gpu_data.kernel.binarize import (
     write_compressed_index_kernel,
 )
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
+    upload_scale,
     DeviceBlock,
     launch_histograms_for_blocks,
     upload_blocks,
@@ -227,7 +228,10 @@ def check_boosting_histogram(
     if g_mag > mag:
         mag = g_mag
     var scale = choose_scale(mag)
-    var fixed_scale = Float32(scale)
+    var scale_keep = upload_scale(ctx, Float32(scale))
+    var fixed_scale = rebind[MutPointer[Float32, MutAnyOrigin]](
+        scale_keep.unsafe_ptr()
+    )
     print("  sum of magnitudes: weights", w_mag, " gradients", g_mag)
     print("  fixed_scale", scale)
 
@@ -475,6 +479,7 @@ def check_boosting_histogram(
         "feature groups, and the sabotage moves", moved_g1,
         "cells past column 0 and none inside it, so both groups are reached",
     )
+    _ = scale_keep^
 
 
 def run_hist_arm(
@@ -485,7 +490,7 @@ def run_hist_arm(
     stat_count: Int,
     max_leaves: Int,
     sm_count: Int,
-    fixed_scale: Float32,
+    fixed_scale: MutPointer[Float32, MutAnyOrigin],
     mut cindex: DeviceBuffer[DType.uint32],
     mut row_index: DeviceBuffer[DType.uint32],
     mut stats: DeviceBuffer[DType.float32],
