@@ -74,6 +74,10 @@ from extratrees.ported.decisiontree.flatnode import (
     predict_one_accumulate,
 )
 from extratrees.ported.decisiontree.batched_levelalgo.builder import (
+    make_level_workspace,
+    train_regression_device_resident,
+    n_sampled_cols_for,
+    DEVICE_TPB,
     train_classification,
     train_classification_device,
     train_classification_device_resident,
@@ -444,6 +448,60 @@ def fit_regression(
             train_regression(dataset, params, Int32(tree_id), seed)
         )
         _ = row_ids.unsafe_ptr()
+    forest.n_trees = n_trees
+    return forest^
+
+
+def fit_regression_device(
+    ctx: DeviceContext,
+    x_col_major: List[Float32],
+    labels_q: List[Int32],
+    scale: Float64,
+    n_rows: Int32,
+    n_cols: Int32,
+    params: DecisionTreeParams,
+    n_trees: Int32,
+    seed: UInt64,
+    bootstrap: Bool = BOOTSTRAP_DEFAULT,
+) raises -> Forest:
+    """A regression forest with its split search on the GPU.
+
+    `fit_classification_device`'s twin, and it exists for DEVIATION 184's
+    reason: the dataset is immutable across trees, so it is uploaded ONCE, and
+    the level workspace is allocated once for the same reason DEVIATION 202
+    allocates it once per tree rather than once per level. Going through
+    `train_regression_device` per tree instead uploads the same
+    `4*n_rows*n_cols + 4*n_rows` bytes `n_trees` times and rebuilds the
+    workspace `n_trees` times -- MEASURED at roughly 100 ms per tree of pure
+    floor at 100,000 rows, which is most of what a shallow regression tree
+    costs.
+
+    `labels_q` is already quantized (DEVIATION 135); `scale` puts the leaf
+    values back in the label's units.
+    """
+    error_checking(n_rows, n_cols, n_trees)
+    validity_check(params)
+    var dataset = upload_dataset(
+        ctx, x_col_major, labels_q, n_rows, n_cols, 1
+    )
+    var ws = make_level_workspace(
+        ctx,
+        Int(params.max_batch_size),
+        n_rows,
+        n_cols,
+        1,
+        Int(n_sampled_cols_for(params, n_cols)),
+        DEVICE_TPB,
+    )
+    var forest = Forest(1)
+    for tree_id in range(Int(n_trees)):
+        var row_ids = row_sample_for(n_rows, bootstrap)
+        forest.trees.append(
+            train_regression_device_resident(
+                ctx, dataset, ws, scale, row_ids, n_rows, n_cols, params,
+                Int32(tree_id), seed,
+            )
+        )
     forest.n_trees = n_trees
     return forest^
 

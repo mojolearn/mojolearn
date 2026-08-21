@@ -28,7 +28,7 @@ comparison. Both are run and both are reported.
 import time
 
 import numpy as np
-from sklearn.ensemble import ExtraTreesClassifier
+from sklearn.ensemble import ExtraTreesClassifier, ExtraTreesRegressor
 
 _CACHE = {}
 
@@ -124,6 +124,58 @@ def fit_seconds_and_accuracy(
     acc = float((clf.predict(x) == y).mean())
     nodes = int(sum(t.tree_.node_count for t in clf.estimators_))
     return (secs, acc, nodes)
+
+
+def load_regression(data_dir, name, n_rows, n_features):
+    """The same matrix, with COLUMN 0 as the target and the rest as features.
+
+    THE TARGET IS CHOSEN BY POSITION, NOT BY RESULT. covtype's column 0 is
+    Elevation, a genuine continuous quantity, and it is column 0 -- picked
+    before any number existed, which is what keeps this from being a dataset
+    built to flatter us. The remaining 53 columns are the features.
+    """
+    key = ("reg", data_dir, name, n_rows, n_features)
+    if key in _CACHE:
+        return _CACHE[key]
+    xcol = np.memmap(
+        "%s/%s_Xcol.f32" % (data_dir, name), dtype=np.float32, mode="r"
+    )
+    total_rows = xcol.shape[0] // n_features
+    view = xcol.reshape(n_features, total_rows)[:, :n_rows]
+    y = np.ascontiguousarray(view[0]).astype(np.float64)
+    x = np.ascontiguousarray(view[1:].T)
+    del xcol
+    _CACHE[key] = (x, y)
+    return x, y
+
+
+def fit_regression_seconds_and_mse(
+    data_dir, name, n_rows, n_features, n_trees, depth, seed, n_jobs, spec
+):
+    """`(seconds, train_mse, total_nodes)` for one ExtraTreesRegressor fit.
+
+    Same parameter matching as the classifier arm, and `criterion` is
+    `squared_error`, which is what our CRITERION_MSE is.
+    """
+    x, y = load_regression(data_dir, name, n_rows, n_features)
+    reg = ExtraTreesRegressor(
+        n_estimators=n_trees,
+        criterion="squared_error",
+        max_depth=depth,
+        min_samples_split=2,
+        min_samples_leaf=1,
+        max_features=_max_features(spec),
+        bootstrap=False,
+        random_state=seed,
+        n_jobs=n_jobs,
+    )
+    t0 = time.perf_counter()
+    reg.fit(x, y)
+    secs = time.perf_counter() - t0
+    pred = reg.predict(x)
+    mse = float(((pred - y) ** 2).mean())
+    nodes = int(sum(t.tree_.node_count for t in reg.estimators_))
+    return (secs, mse, nodes)
 
 
 def threads_available():

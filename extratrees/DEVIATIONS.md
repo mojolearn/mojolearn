@@ -2316,3 +2316,60 @@ sklearn's first clause fails too), and a fixture with no constant column is
 bit-identical. It then fits host against device WITH the rescue firing and
 asserts 0 of 549 nodes differ -- which `device_tree_check` could not have
 caught, because its fixtures never trigger the clause.
+
+---
+
+## DEVIATION 206 -- regression takes 184, 202, 203 and 205, which it never had
+
+The previous rounds landed on the classification device path only. This one
+brings regression level, and the reason it is one entry rather than four is
+that nothing about any of them is regression-specific -- each is the same
+change against the same loop.
+
+**205, THE CLAUSE.** sklearn's constant-feature loop lives in
+`node_split_random` (`_splitter.pyx:507-736`), which `RandomSplitter` reaches
+for BOTH criteria. It is not a classification rule. A regression tree stopped
+early for exactly the same reason and is fixed with the same
+`rescue_columns`, the same `rescue_pick` and the same key. Measured on
+`shaped_constant_heavy` at `max_features=0.15`, MSE criterion: 11 -> 805 nodes
+at seed 0, 1 -> 681, 1 -> 671, 3 -> 751. Host against device with the rescue
+firing: **0 of 805 nodes differ**, every seed. Inert on `all_constant`.
+
+**202, THE WORKSPACE.** It allocated ~50 buffers per LEVEL. It now shares the
+same `LevelWorkspace`, allocated once per tree, with `n_classes = 1` because
+the regression score pass accumulates ONE fixed-point sum per cell
+(DEVIATION 135) where the classification pass accumulates a class count.
+
+**203, THE PARTITION.** It still used the one-block-per-node kernel. Same
+multi-block count/scan/scatter/writeback now.
+
+**184, THE DATASET, AND THIS ONE HAD A MEASURED PRICE.** There was no
+forest-level regression entry point at all, so a caller fitting `n_trees`
+trees uploaded the same immutable matrix `n_trees` times and rebuilt the
+workspace `n_trees` times. At 100,000 rows that floor was about **100 ms per
+tree** -- most of what a depth-8 regression tree costs. `train_regression_device`
+is now a wrapper over `train_regression_device_resident`, exactly as
+DEVIATION 184 split the classification pair, and
+`fit_regression_device` uploads once for the whole forest. Depth 8 at 100,000
+rows went from 182 ms/tree to 76-128. The answers are unchanged.
+
+**MEASURED against scikit-learn's `ExtraTreesRegressor`, covtype 581,012 rows,
+column 0 (Elevation) as the target and the other 53 as features, 10 trees,
+depth 12, interleaved in one process.** The target is column 0 because that is
+where it is, not because of anything it showed.
+
+| `max_features` | ours ms/tree | vs their 1 core | **vs their 10 cores** | our MSE | their MSE |
+|---|---|---|---|---|---|
+| 7 (sqrt) | 165-421 | 1.8-3.3x | 0.69-0.84x | 22,051-22,722 | 21,645-22,348 |
+| 27 | 155-186 | 7.7-9.8x | **2.60-2.87x** | 19,043-19,100 | 18,674-18,922 |
+| 53 (all) | 232-250 | 8.5-15.3x | **3.42-3.48x** | 17,715-17,735 | 17,985-18,295 |
+
+At every setting the node counts match theirs within a few percent (60,518
+against 60,066 at `all`), and at `all` our MSE is LOWER than theirs. This is
+the widest margin against scikit-learn recorded in this lane.
+
+**AND THE SCALE STORY IS THE SAME ONE.** At 100,000 rows the same code is
+0.06-0.29x against their ten cores. That is not a regression-specific
+weakness: classification at 100,000 rows was also about 0.25x. The GPU is
+starved below a few hundred thousand rows for both objectives, and every
+winning number in this file is at 581,012.

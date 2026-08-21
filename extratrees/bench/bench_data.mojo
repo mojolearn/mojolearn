@@ -9,6 +9,7 @@ the same category as `mojo_only/fixtures.mojo`.
 """
 
 from extratrees.estimator import (
+    count_to_ratio,
     MAX_FEATURES_ALL,
     MAX_FEATURES_LOG2,
     MAX_FEATURES_SQRT,

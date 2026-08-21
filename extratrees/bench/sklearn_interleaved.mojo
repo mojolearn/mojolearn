@@ -39,6 +39,7 @@ from std.sys import argv
 from std.time import perf_counter_ns
 
 from extratrees.bench.bench_data import (
+    count_to_ratio,
     all_digits,
     dense_class_ids,
     max_features_code,
@@ -52,7 +53,17 @@ from extratrees.estimator import (
     fit_extra_trees_classifier,
     fit_extra_trees_classifier_device,
 )
-from extratrees.ported.randomforest.randomforest import predict_class_forest
+from extratrees.mojo_only.fixed_point import choose_scale, quantize
+from extratrees.ported.randomforest.randomforest import fit_regression_device
+from extratrees.ported.decisiontree.decisiontree import (
+    CRITERION_MSE,
+    DecisionTreeParams,
+)
+from extratrees.ported.randomforest.randomforest import (
+    Forest,
+    predict_class_forest,
+    predict_regression_forest,
+)
 
 comptime DEFAULT_REPS = 3
 
@@ -82,12 +93,19 @@ def main() raises:
     # integer sets the rep count. Three reps is the default because one rep of
     # anything on this box is a sample of the window, not of the code.
     var want_host = False
+    var want_regression = False
     var reps = DEFAULT_REPS
     var mf_specs = List[String]()
     for i in range(8, len(args)):
         var a = String(args[i])
         if a == String("host"):
             want_host = True
+        elif a == String("regression"):
+            # COLUMN 0 IS THE TARGET and the rest are the features, on both
+            # sides. `sklearn_arm.load_regression` takes the same split, and
+            # it is column 0 because that is where it is, not because of
+            # anything it showed.
+            want_regression = True
         elif all_digits(a):
             reps = Int(a)
         else:
@@ -152,6 +170,107 @@ def main() raises:
 
     var cfg = ExtraTreesConfig()
     cfg.n_estimators = Int32(trees)
+
+    if want_regression:
+        var n_feat = n_features - 1
+        var xr_cols = List[Float32](
+            length=n_rows * n_feat, fill=Float32(0.0)
+        )
+        var target = List[Float32](length=n_rows, fill=Float32(0.0))
+        for r in range(n_rows):
+            target[r] = x[r]
+        for c in range(n_feat):
+            for r in range(n_rows):
+                xr_cols[c * n_rows + r] = x[(c + 1) * n_rows + r]
+        # DEVIATION 135: the device sums labels in FIXED POINT, so the target
+        # is quantized once, outside every timed region, on the WHOLE column's
+        # magnitude -- which is the bound that makes overflow impossible
+        # rather than unlikely.
+        var mag = Float64(0.0)
+        for r in range(n_rows):
+            var v = Float64(target[r])
+            mag += v if v >= 0.0 else -v
+        var sc = choose_scale(mag, n_rows)
+        var q = List[Int32]()
+        for r in range(n_rows):
+            q.append(Int32(quantize(Float64(target[r]), sc)))
+        var rows0 = List[Int32]()
+        for r in range(n_rows):
+            rows0.append(Int32(r))
+        var xrow = row_major(xr_cols, n_rows, n_feat)
+        print(
+            "[regression] target is column 0;",
+            n_feat,
+            "features. quantization step",
+            1.0 / sc,
+        )
+        for mi in range(len(mf_specs)):
+            var mf_spec = mf_specs[mi]
+            for di in range(len(depths)):
+                var depth = depths[di]
+                var rp = DecisionTreeParams()
+                rp.max_depth = Int32(depth)
+                rp.split_criterion = CRITERION_MSE
+                rp.max_features = count_to_ratio(
+                    resolve_max_features(
+                        max_features_code(mf_spec, n_feat), 0.0, n_feat
+                    ),
+                    n_feat,
+                )
+                print(
+                    "[max_features",
+                    mf_spec,
+                    "  depth",
+                    depth,
+                    "]",
+                )
+                for rep in range(reps):
+                    var t1 = arm.fit_regression_seconds_and_mse(
+                        data_dir, name, n_rows, n_features, trees, depth,
+                        rep, 1, mf_spec,
+                    )
+                    var tn = arm.fit_regression_seconds_and_mse(
+                        data_dir, name, n_rows, n_features, trees, depth,
+                        rep, -1, mf_spec,
+                    )
+                    var t0 = perf_counter_ns()
+                    var forest = fit_regression_device(
+                        ctx, xr_cols, q, sc, Int32(n_rows), Int32(n_feat),
+                        rp, Int32(trees), UInt64(rep),
+                    )
+                    var ours_ms = Float64(
+                        perf_counter_ns() - t0
+                    ) / 1e6 / Float64(trees)
+                    var se = Float64(0.0)
+                    for r in range(n_rows):
+                        var d = Float64(
+                            predict_regression_forest(
+                                forest, xrow, r * n_feat
+                            )
+                        ) - Float64(target[r])
+                        se += d * d
+                    var our_mse = se / Float64(n_rows)
+                    var onodes = 0
+                    for t in range(len(forest.trees)):
+                        onodes += forest.trees[t].num_nodes()
+                    print(
+                        "  rep", rep,
+                        " sklearn-1core", t1[0].__float__() * 1000.0
+                        / Float64(trees), "ms/tree  mse", t1[1].__float__(),
+                        " sklearn-10core", tn[0].__float__() * 1000.0
+                        / Float64(trees), "ms/tree",
+                        " ours-gpu", ours_ms, "ms/tree  mse", our_mse,
+                        " speedup vs 1core",
+                        t1[0].__float__() * 1000.0 / Float64(trees) / ours_ms,
+                        "x  vs 10core",
+                        tn[0].__float__() * 1000.0 / Float64(trees) / ours_ms,
+                        "x  nodes theirs", t1[2].__float__(),
+                        "ours", onodes,
+                    )
+        _ = xr_cols.unsafe_ptr()
+        _ = xrow.unsafe_ptr()
+        _ = target.unsafe_ptr()
+        return
 
     for mi in range(len(mf_specs)):
      var mf_spec = mf_specs[mi]

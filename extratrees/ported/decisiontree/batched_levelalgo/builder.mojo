@@ -2540,6 +2540,51 @@ def train_regression_device(
     tree_id: Int32,
     seed: UInt64,
 ) raises -> TreeMetaDataNode[DType.float32]:
+    """One regression tree, uploading the dataset and building the workspace.
+
+    DEVIATION 184's shape, which regression did not have: the upload and the
+    workspace belong to the FIT, not to the tree, so `_resident` takes both
+    and this two-line wrapper survives for callers that fit a single tree --
+    `device_regression_check` is one, and it is untouched by the split.
+    An `n_trees`-tree forest through here would upload the same immutable
+    matrix `n_trees` times; `fit_regression_device` is the entry point that
+    does not.
+    """
+    if len(x_col_major) != Int(n_rows) * Int(n_cols):
+        raise Error("x_col_major must be n_rows * n_cols long, column major")
+    if len(labels_q) != Int(n_rows):
+        raise Error("labels_q must be n_rows long")
+    validity_check(params)
+    var dataset = upload_dataset(
+        ctx, x_col_major, labels_q, n_rows, n_cols, 1
+    )
+    var ws = make_level_workspace(
+        ctx,
+        Int(params.max_batch_size),
+        n_rows,
+        n_cols,
+        1,
+        Int(n_sampled_cols_for(params, n_cols)),
+        DEVICE_TPB,
+    )
+    return train_regression_device_resident(
+        ctx, dataset, ws, scale, row_ids, n_rows, n_cols, params, tree_id,
+        seed,
+    )
+
+
+def train_regression_device_resident(
+    ctx: DeviceContext,
+    mut dataset: DeviceDataset,
+    mut ws: LevelWorkspace,
+    scale: Float64,
+    mut row_ids: List[Int32],
+    n_rows: Int32,
+    n_cols: Int32,
+    params: DecisionTreeParams,
+    tree_id: Int32,
+    seed: UInt64,
+) raises -> TreeMetaDataNode[DType.float32]:
     """One regression ExtraTree with its split search on the GPU.
 
     The SAME loop as `train_classification_device_resident` -- `Builder::train`
@@ -2564,10 +2609,6 @@ def train_regression_device(
     ranks regression candidates by their quantity, which is the one this
     builder is templated on anyway.
     """
-    if len(x_col_major) != Int(n_rows) * Int(n_cols):
-        raise Error("x_col_major must be n_rows * n_cols long, column major")
-    if len(labels_q) != Int(n_rows):
-        raise Error("labels_q must be n_rows long")
     validity_check(params)
 
     comptime TPB = DEVICE_TPB
@@ -2575,10 +2616,6 @@ def train_regression_device(
 
     var k = n_sampled_cols_for(params, n_cols)
     var queue = NodeQueue[DType.float32](params, n_rows, 1, tree_id)
-
-    var dataset = upload_dataset(
-        ctx, x_col_major, labels_q, n_rows, n_cols, 1
-    )
 
     var d_row_ids = ctx.enqueue_create_buffer[DType.int32](Int(n_rows))
     ctx.enqueue_function[row_ids_sequence_kernel](
@@ -2594,9 +2631,6 @@ def train_regression_device(
     # round and this one did not. `n_classes` is 1 here: the regression score
     # pass accumulates ONE fixed-point sum per cell (deviation 135), where the
     # classification pass accumulates a class count each.
-    var ws = make_level_workspace(
-        ctx, Int(params.max_batch_size), n_rows, n_cols, 1, Int(k), TPB
-    )
 
     while queue.has_work():
         var work_items = queue.pop()
