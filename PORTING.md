@@ -2480,3 +2480,39 @@ That anchor's first version read zeros from both kernels, because it filled
 ONE host staging buffer three times between three `enqueue_copy` calls.
 An enqueue is a promise, not a read; the copies raced the refills. Three
 buffers now.
+
+## 87. `use_best_model` without a test set: they warn, this refuses
+
+`UpdateUseBestModel` (`libs/train_lib/options_helper.cpp:109-112`):
+
+    if (!hasTest && outputFilesOptions->UseBestModel) {
+        CATBOOST_WARNING_LOG << "You should provide test set for use best
+            model. use_best_model parameter has been switched to false
+            value." << Endl;
+        outputFilesOptions->UseBestModel = false;
+    }
+
+`gbdt/train.mojo` raises there instead.
+
+**The price**: a caller who passes `use_best_model=1` with no eval set gets
+an exception where CatBoost gets a model. That is a real behavioural
+difference and it is the reason this is numbered.
+
+**Why it is worth paying.** Their warning goes to a console that a person
+running `catboost fit` is watching. This is a library call whose result is a
+model object: the switch-off leaves no trace on it, so the caller receives
+the LAST-iteration ensemble while believing they asked for and received the
+best-iteration one. There is nothing on the returned value to check -- no
+field says "your option was ignored" -- and the two models differ in exactly
+the way the caller was trying to avoid. A silent downgrade of an explicit
+request is the one case where their leniency cannot survive the change of
+medium.
+
+**It applies only to the EXPLICIT arm.** Unset stays unset and resolves by
+their own data-dependent rule (`:106-108`), so the default path is
+bit-identical to theirs and nothing that does not name the option can hit
+this.
+
+`mojo_only/overfitting_detector_check.mojo` gate 5 pins the refusal, beside
+the same gate for `od_type` without an eval set, which this port already
+refused for the same reason.
