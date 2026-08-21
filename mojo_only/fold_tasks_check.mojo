@@ -26,6 +26,14 @@ GATES:
       the arm every fit in this repository takes today.
   G5  the device bins really carry 0..2N-1 in the right ranges, checked per
       document.
+  G7  `create_subsets` ACCEPTS the layout: `fold_count` and `fold_bits`
+      reach the subsets, `max_part_count` becomes `1 << (fold_bits +
+      max_depth)` rather than `1 << max_depth`, the root level already has
+      `1 << fold_bits` partitions rather than one, and the initial bins
+      carry the task sizes. Gated because every one of those is a place a
+      single-task assumption survives unnoticed -- a `max_part_count` that
+      forgot `fold_bits` allocates a quarter of what a 2-fold tree needs and
+      corrupts silently at depth.
   G6  the fold STRIPE is live at a ragged fold count. With 3 tasks the fold
       count is 6 and `PointwisePartOffsetsHelper`'s data-partition offset
       rounds the fold axis up to 8 while its histogram offset packs tight.
@@ -38,6 +46,10 @@ from max.gpu.host import DeviceContext
 
 from gbdt.methods.kernel.split_properties_helpers import (
     PointwisePartOffsetsHelper,
+)
+from gbdt.methods.pointwise_optimization_subsets import (
+    TL2Target,
+    create_subsets,
 )
 from gbdt.methods.oblivious_tree_fold_tasks import (
     FoldTask,
@@ -220,7 +232,76 @@ def main() raises:
             " stripe is live",
         )
 
+    # ---------------------------------------------------------------- G7
+    var g7_tasks: List[FoldTask] = [FoldTask(400, 200), FoldTask(300, 150)]
+    var g7 = plan_fold_layout(g7_tasks)
+    var n7 = g7.total_indices
+    var w7 = ctx.enqueue_create_buffer[DType.float32](n7)
+    var t7 = ctx.enqueue_create_buffer[DType.float32](n7)
+    var h7 = ctx.enqueue_create_host_buffer[DType.float32](n7)
+    for r in range(n7):
+        h7.unsafe_ptr().unsafe_store(r, Float32(1.0))
+    ctx.enqueue_copy(dst_buf=w7, src_ptr=h7.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=t7, src_ptr=h7.unsafe_ptr())
+    ctx.synchronize()
+    var src7 = TL2Target(w7^, t7^, n7)
+    comptime G7_DEPTH = 4
+    var subs = create_subsets(
+        ctx, G7_DEPTH, src7, g7.fold_count, g7.fold_bits
+    )
+    var bad7 = 0
+    if Int(subs.fold_count) != g7.fold_count:
+        print("FAIL G7: fold_count reached the subsets as", subs.fold_count)
+        bad7 += 1
+    if Int(subs.fold_bits) != g7.fold_bits:
+        print("FAIL G7: fold_bits reached the subsets as", subs.fold_bits)
+        bad7 += 1
+    var want_mpc = 1 << (g7.fold_bits + G7_DEPTH)
+    if subs.max_part_count != want_mpc:
+        print(
+            "FAIL G7: max_part_count is", subs.max_part_count, "expected",
+            want_mpc,
+            "-- `1 << (FoldBits + maxDepth)`. Forgetting fold_bits"
+            " allocates a fraction of what a folded tree needs and"
+            " corrupts at depth rather than at allocation.",
+        )
+        bad7 += 1
+    if subs.current_part_count() != (1 << g7.fold_bits):
+        print(
+            "FAIL G7: the ROOT level has", subs.current_part_count(),
+            "partitions, expected", 1 << g7.fold_bits,
+            "-- with folds the tree starts with one partition per fold,"
+            " not one",
+        )
+        bad7 += 1
+    write_fold_based_initial_bins(ctx, g7, subs.bins)
+    var hb7 = ctx.enqueue_create_host_buffer[DType.uint32](n7)
+    ctx.enqueue_copy(dst_buf=hb7, src_buf=subs.bins)
+    ctx.synchronize()
+    var tally = List[Int]()
+    for _ in range(len(g7.parts)):
+        tally.append(0)
+    for r in range(n7):
+        if Int(hb7[r]) < len(g7.parts):
+            tally[Int(hb7[r])] += 1
+    for p in range(len(g7.parts)):
+        if tally[p] != Int(g7.parts[p].size):
+            print(
+                "FAIL G7: bin", p, "holds", tally[p], "documents, expected",
+                g7.parts[p].size,
+            )
+            bad7 += 1
+    failures += bad7
+    if bad7 == 0:
+        print(
+            "  ok   G7 -- create_subsets takes the layout: fold_count",
+            subs.fold_count, "fold_bits", subs.fold_bits,
+            "max_part_count", subs.max_part_count, ", root level",
+            subs.current_part_count(), "partitions, bins carry the task"
+            " sizes",
+        )
+
     _ = d_bins^
     if failures != 0:
         raise Error(String(failures) + " gate(s) failed")
-    print("fold task layout: G1-G6 pass")
+    print("fold task layout: G1-G7 pass")

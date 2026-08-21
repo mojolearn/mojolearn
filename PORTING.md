@@ -4072,3 +4072,257 @@ on it (`dynamic_boosting.h:378-396`) and the model added back to it
 (`:286-289`). Transcribed verbatim; a port using `% learnPermutationCount`
 would train a different model on the default config. Gated: over 1,000 draws
 the structure search reaches rows 0 and 1 and never 2.
+
+## 113. The categorical oracle is ONE-HOT ONLY, and that is their CPU learner's limit rather than a fixture chosen to pass
+
+`bench/oracle_cat.txt` puts three categorical columns (k = 3, 5, 8) beside
+eight numeric ones so the searcher has to weigh EQUALITY candidates against
+ordered ones inside one tree, and so the compressed index carries two grid
+policies at once. It contains no CTR features. That is a restriction on what
+CatBoost can be asked for on this machine, and it is worth writing down
+precisely, because "we compared against the subset that agreed" is exactly
+the failure mode [[no-dataset-cherry-picking]] names.
+
+Two independent blockers, both in their source:
+
+- **`FeatureFreq` is not a CPU CTR.** The default this port mirrors is their
+  GPU `simple_ctr`, which is `Borders` plus `FeatureFreq`
+  (`cat_feature_options.cpp:231`). `IsSupportedCtrType(CPU, FeatureFreq)`
+  returns FALSE (`private/libs/options/restrictions.h:18-48`). Ask their CPU
+  learner for the set we implement and it refuses to start.
+- **`max_ctr_complexity` above 1 is refused on CPU** where their own default
+  is 4, so feature combinations cannot be exercised either.
+
+Their GPU arm has both. Their GPU arm cannot run on this machine
+(DEVIATION 109). So the honest description is: the ONE-HOT half of our
+categorical path is checked against CatBoost's own decisions, 21 of 21, and
+the CTR half is checked against everything else in `mojo_only/ctr_*` and
+against no CatBoost output at all. The CTR half is not oracle-covered, and
+DEVIATION 109's "their CPU arm is the comparison" does not repair that --
+this is the one place where their CPU arm is not merely slower than their
+GPU arm but cannot express the feature.
+
+Recorded rather than worked around. A fixture that dropped the categorical
+columns entirely would have been green too, and would have missed 114.
+
+### 113a. A one-hot split is compared per TYPE, not only per (feature, bin)
+
+`catsplit <tree> <flat_feature_index> <code>` is an equality level, written
+interleaved with `split` in depth order. The comparison had to grow a third
+axis to be worth running: `> code` and `== code` name the SAME (feature,
+bin) pair and partition the rows differently. A checker that matched on
+(feature, bin) alone would have called 114 a pass.
+
+## 114. The scorer's one-hot flag array was a hardcoded constant, and both gates on that kernel handed the array in by hand
+
+`scan_pointwise_histograms_kernel` skips the bin prefix scan when a feature
+is one-hot, mirroring `split_properties_helpers.cuh:126`
+(`if (!feature->OneHotFeature)`). A one-hot bin is an equality test, so a
+running prefix across its bins is not a quantity that means anything.
+
+`PolicyScoreHelper.__init__` built the flag array the kernel reads with a
+hardcoded `oh.append(UInt8(0))` -- on the line AFTER the same loop read
+`layout.features[block.feature_ids[i]].offset` off the layout, where
+`.one_hot_feature` was sitting unread two fields away. Every one-hot feature
+was therefore prefix-summed and its equality candidates scored as
+thresholds.
+
+Symptom, from `bench/oracle_cat.txt` the first time it ran: **0 of 18**
+one-hot splits matching CatBoost, train mse 2.30 against their 0.147. Not a
+subtle drift -- the tree was picking a different feature at nearly every
+level. After the fix, 21 of 21, and 192 of 192 splits across all four
+fixtures on both searchers, mse 0.14671102 against their 0.14671103.
+
+### Why nothing already in the repository could see it
+
+The skip IS gated, twice. `pointwise_offsets_check` plants
+`[0, 0, 0, 1, 0, 0]`. `pointwise_dispatch_check` plants a one-hot feature
+per policy. Both are correct and both still pass with the defect in place,
+because **both construct the flag array themselves and hand it straight to
+the kernel.** The kernel was right, the gates on the kernel were right, and
+the array the PRODUCT passed was a constant.
+
+This is [[mojotrees-verify-reach-not-output]] with a sharper edge: reach was
+never the problem. The constructor ran, on every call, in every fixture. It
+computed the wrong thing, and no gate had ever asked it to compute anything
+-- they all went around it.
+
+`PORTING_RULES` 3 and 8 at once: the file had a caller, it was not in
+`UNWIRED.md`, the suite was green, and the branch the suite ran was not the
+branch the product ran. Sixth instance of **"reached but inert"** in this
+port.
+
+## 115. A gate that builds the kernel's inputs cannot check the caller that normally builds them
+
+The general shape behind 114, worth its own number because it recurs and
+because the fix is mechanical.
+
+A kernel gate has to construct inputs. That construction is a SECOND
+implementation of whatever the product does to produce them, and it is
+usually the better one -- written deliberately, by hand, with the values
+chosen to be discriminating. So the gate proves the kernel correct with
+respect to inputs the product never passes, and the real constructor sits
+underneath, unexamined, for as long as its output is well-formed enough not
+to crash.
+
+`mojo_only/one_hot_flags_check.mojo` is the countermeasure for this one:
+it hands `PolicyScoreHelper` a LAYOUT and reads back off the device what the
+constructor actually built.
+
+  - **H1** per-feature flags for a layout with one-hot features in it.
+  - **H2** all zeros for a layout with none, so a constructor that flags
+    everything cannot pass.
+  - **H3** the flags survive the POLICY SPLIT -- a flagged feature sits at
+    its within-policy index, which is not its global feature id. That
+    indexing is where a per-policy table goes wrong and it is invisible to
+    any fixture with one policy.
+
+Sabotaged: restoring the `UInt8(0)` fails H1 on exactly the three flagged
+features, at the right positions, while H2 and H3 stay green -- so H1 is
+carrying the gate and the other two are not passing it by accident
+([[sabotage-when-required]]: the bound was ours and the path was new).
+
+The rule to apply forward: when a check plants a kernel input BY HAND, ask
+what builds that input in the product, and whether anything reads it back
+from there. If nothing does, the constructor is unchecked no matter how
+green the kernel is.
+
+## 116. `TFeatureTensor` lives with the batch builder, and its splits are `Int32`
+
+THEIRS: `TFeatureTensor` and `TBinarySplit` are both in
+`catboost/cuda/data/feature.h`, and all three members of `TBinarySplit` are
+`ui32`.
+
+OURS: `TBinarySplit` landed earlier in `gbdt/models/oblivious_model.mojo`
+with `Int32` fields, because the model is where this port first needed it.
+`TFeatureTensor` is in `gbdt/methods/batch_feature_tensor_builder.mojo`
+rather than a new `gbdt/data/feature.mojo`, because the lane that ported it
+shipped two files and a third would have been a directory decision.
+
+WHY IT MATTERS: `Int32` is the wrong signedness for BOTH the comparator and
+the hash. `std::tie(FeatureId, BinIdx, SplitType)` orders `0x80000001` ABOVE
+`0x7fffffff`; read as `Int32` it orders below, which reverses the canonical
+form and therefore the hash and therefore the tree-CTR dataset cache key. So
+every field read in that file goes through `_as_u32`, and
+`mojo_only/feature_tensor_check.mojo` fixtures 41 and 42 exist to fail if
+one of those reads is ever dropped (sabotage: they turn gates 1, 2, 4 and 5
+red). Moving `TBinarySplit` to `UInt32` is the real fix and belongs to
+whoever next touches the model.
+
+**A Mojo defect rode in on that fixture and is worth more than the deviation:
+`UInt64(f(x))` SIGN-EXTENDS when `f`'s body is a same-width `Int32 -> UInt32`
+cast** -- the cast is elided at the call site and the constructor binds
+against the original `Int32`. `UInt64(f())` for an `f` returning a UInt32
+LITERAL is correct, and so is binding the intermediate to a `var`. It
+produced a wrong `TBinarySplit::GetHash()` for every split with a field at or
+above 2^31 and MOVED NOTHING ELSE, because the canonical form, the
+comparator, `IsSubset` and every scalar compare two values mangled
+identically. Defended twice: `@no_inline` on `_as_u32`, and a `_widen_u32`
+that masks to 32 bits so the answer is right whichever way the constructor
+resolves. Third member of the family `PORTING.md` 17 and
+`gbdt/models/hash.mojo` opened: assume Mojo's numeric conversions are
+approximate until an external oracle says otherwise.
+
+### 116a. `GetComplexity()` counts all the splits as ONE
+
+`feature.h:89-188`. `GetComplexity()` is
+`CatFeatures.size() + min(Splits.size(), 1)`, and `Size()` -- the plain sum
+-- sits two lines away. A depth-6 tree's six splits plus one cat feature is
+complexity **2**, not 7. That is what `max_ctr_complexity` is counting, so a
+port that reached for `Size()` would refuse tree CTRs their config permits.
+Sabotage: returning `Size()` turns gates 2, 5 and 7 red.
+
+`IsSimple()` is likewise a SIZE-1 test, not a "one cat feature" test -- a
+one-split, no-cat tensor is simple too, which is why `IsTreeCtr` is
+`IsCtr && !IsSimple`.
+
+### 116b. Their canonicalisation is order-INDEPENDENT, and the hash has three traps
+
+Every mutator ends in `SortUniqueSplits()` / `SortUniqueCatFeatures()` =
+`Sort` then `Unique`, so insertion order is ERASED. The check builds the same
+tensor by six routes and demands one hash (260 rebuilds).
+
+`GetHash` = `MultiHash(TVecHash<TBinarySplit>()(Splits), VecCityHash(CatFeatures))`,
+and all three of these are load-bearing:
+
+- `MultiHash` folds from the **tail**: split type hashed first, feature id
+  XORed last.
+- `TVecHash` accumulates in **ui32**, so each split's 64-bit hash is
+  truncated, and it returns **`int`** -- a result at or above 2^31 enters
+  sign-extended as `0xffffffff________`.
+- `VecCityHash` hashes the **raw bytes** of the ui32 vector, so empty gives
+  `k2`, not 0.
+
+800 pairwise-different tensors, 0 colliding hashes. Sabotaging `GetHash` to a
+constant produces **319,600** colliding pairs, which is the measurement that
+says gate 6 is discriminating rather than lucky.
+
+Two sabotages moved NOTHING and are recorded as honest zeroes: accumulating
+`TVecHash` in ui64 and truncating once at the end (truncation commutes with a
+`*`/`+` fold -- it is the same function), and merging the two inner loops of
+`VisitCtrBinBuilders` (see 117).
+
+## 117. `RequestStream` returns a batch width, not a stream
+
+THEIRS: `TBatchFeatureTensorBuilder::RequestStream`
+(`batch_feature_tensor_builder.cpp:67-77`) calls
+`GetCudaManager().RequestStream()` once per new slot and hands each
+`TCtrBinBuilder` its stream id, so the first inner loop of
+`VisitCtrBinBuilders` submits `buildStreams` independent bin builds
+concurrently and the second consumes them. Their `:24` comment forbids
+merging the two loops for exactly that reason.
+
+OURS: there are no streams (`ctx.stream()` raises on Metal, DEVIATION 119),
+so `builder_streams[j]` holds the slot index `j` and the batch is serial. The
+BATCH WIDTH and the two-loop structure are both kept, because `buildStreams`
+decides which builder object serves which feature -- a grouping that is
+observable to the visitor whether or not the passes overlap in time.
+
+COST: none in output; `buildStreams` passes of latency instead of one.
+
+MEASURED: merging the two inner loops was sabotaged and moved NO gate, which
+is the honest statement -- at one queue it changes nothing any check can see,
+and it is kept apart on their authority rather than on ours. What the width
+DOES change is coverage: with 7 features at width 3 the loop runs three
+groups and slot 0 serves features 11, 14 and 17. Three separate batch
+sabotages (never re-running `SetIndices`, indexing the cat column by batch
+position instead of feature id, advancing the outer loop by 1) are each
+invisible in the first group and each caught in the second. That fixture
+shape is the whole reason gate 8 has teeth.
+
+`RequestStream` only ever GROWS the pool, so the returned width can be
+smaller than the pool, and builders keep the previous batch's state until
+`SetIndices` -- which is what makes the first of those three sabotages a
+silent wrong answer rather than a crash.
+
+## 118. Dense cat codes and no `currentBins` cache in the batch builder
+
+THEIRS: `VisitCtrBinBuilders` reads `TCompressedCatFeatureDataSet` (packed
+`ui64` blocks, GPU- or CPU-resident) and calls
+`AddCompressedBinsWithCurrentBinsCache(currentBins, ...)`
+(`ctr_bins_builder.h:113-125`) with a `currentBins` computed ONCE before the
+loop.
+
+OURS: `gbdt/ctrs/ctr_bins_builder.mojo` holds dense category codes rather
+than packed blocks (that decompression deviation is already recorded there),
+and its `add_cat_feature_bins` is their `ProceedNewBins(uniqueValues)` -- the
+arm that recomputes `CurrentBins` from its own `Indices` first. The two
+things the builder actually reads off their manager and dataset
+(`GetFeatureCpu(id)`, `GetBinCount(id)`) are passed in directly, indexed BY
+FEATURE ID as both of their accessors are.
+
+WHY VALUE-IDENTICAL, not merely close: the loop resets the builder to
+`baseTensorIndices` immediately before every add, so
+`ComputeCurrentBins(Indices)` and `ComputeCurrentBins(baseTensorIndices)`
+read the same array. The cache is a saved pass, not a different answer.
+
+COST: one extra O(rows) pass per categorical feature instead of one per
+batch. `_set_indices` is their `SetIndices` (`ctr_bins_builder.h:32-52`)
+written as a free function so the lane touched no file in `gbdt/ctrs/`.
+
+### 118a. `NCB::IsSubset` reads backwards at the call site
+
+`NCB::IsSubset(Splits, other.Splits)` asks whether OURS is contained in
+THEIRS -- two `std::includes`, subset first. Reversing it turns gates 4 and 5
+red, and it is the kind of argument order a port gets wrong silently because
+both arguments have the same type.

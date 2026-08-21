@@ -36,6 +36,29 @@ Not that a kernel is wrong. That the quantization our whole compressed index
 is built on does not agree with theirs, which would make every split index in
 every comparison downstream meaningless, and would also mean our accuracy has
 never been comparable to theirs at any point in this port.
+
+THE CATEGORICAL FIXTURE, AND WHY IT IS ONE-HOT ONLY
+----------------------------------------------------
+`bench/oracle_cat.txt` adds three ONE-HOT categorical columns (k = 3, 5, 8)
+beside eight numeric ones. Two records carry it and both are additive, so
+the three numeric fixtures parse and run exactly as they always did:
+`cat <flat_feature_index> <k>` declares a column categorical, and
+`catsplit <tree> <flat_feature_index> <code>` is an equality level, written
+interleaved with `split` in depth order.
+
+It is one-hot only because CatBoost's CPU learner cannot be asked for the
+CTR set this port mirrors. `TCatFeatureParams.default()` here is their GPU
+`simple_ctr` -- `Borders` plus `FeatureFreq` -- and
+`IsSupportedCtrType(CPU, FeatureFreq)` is FALSE
+(`private/libs/options/restrictions.h:18-48`). Their GPU arm, which does
+have it, cannot run on this machine (`PORTING.md` 109). Feature
+combinations are a second, independent blocker: `max_ctr_complexity` is
+refused above 1 here where CatBoost defaults to 4. `PORTING.md` 113 and
+`tools/catboost_cat_oracle.py` carry the full argument.
+
+A one-hot split is compared the same way a numeric one is -- per feature,
+per bin, AND per split TYPE, because `> code` and `== code` name the same
+(feature, bin) pair and partition the rows differently.
 """
 
 from max.gpu.host import DeviceContext
@@ -47,6 +70,11 @@ from gbdt.gpu_data.kernel.binarize import (
     write_compressed_index_kernel,
 )
 from gbdt.methods.doc_parallel_boosting import TAdditiveModel, fit
+from gbdt.models.oblivious_model import (
+    BIN_SPLIT_TAKE_BIN,
+    BIN_SPLIT_TAKE_GREATER,
+    bin_split_type_name,
+)
 
 
 struct Oracle(Movable):
@@ -71,6 +99,16 @@ struct Oracle(Movable):
     var y: List[Float32]
     #: `leaf_values[t]`, in CatBoost's own leaf order.
     var leaf_values: List[List[Float32]]
+    #: `cat_cardinality[f]` is 0 for a NUMERIC column and `k` for a
+    #: ONE-HOT categorical one, from the `cat` records
+    #: `tools/catboost_cat_oracle.py` writes. A fixture with none of them
+    #: is a numeric fixture and every path below behaves as it always has.
+    var cat_cardinality: List[Int]
+    #: `split_is_cat[t][d]`, parallel to `split_feature` / `split_border`.
+    #: For a categorical level the `split_border` slot holds the dense
+    #: CATEGORY CODE rather than a threshold, because that is what a
+    #: one-hot split tests.
+    var split_is_cat: List[List[Bool]]
 
     def __init__(out self):
         self.rows = 0
@@ -86,6 +124,8 @@ struct Oracle(Movable):
         self.split_border = List[List[Float32]]()
         self.y = List[Float32]()
         self.leaf_values = List[List[Float32]]()
+        self.cat_cardinality = List[Int]()
+        self.split_is_cat = List[List[Bool]]()
 
 
 def _fields(line: String) raises -> List[String]:
@@ -129,9 +169,11 @@ def load_oracle(path: String) raises -> Oracle:
             for _ in range(o.feats):
                 o.borders.append(List[Float32]())
                 o.x.append(List[Float32]())
+                o.cat_cardinality.append(0)
             for _ in range(o.trees):
                 o.split_feature.append(List[Int]())
                 o.split_border.append(List[Float32]())
+                o.split_is_cat.append(List[Bool]())
                 o.leaf_values.append(List[Float32]())
         elif kind == String("train_mse"):
             o.train_mse = Float64(t[1])
@@ -142,10 +184,25 @@ def load_oracle(path: String) raises -> Oracle:
             var n = Int(t[2])
             for i in range(n):
                 o.borders[f].append(Float32(Float64(t[3 + i])))
+        elif kind == String("cat"):
+            # `cat <flat_feature_index> <cardinality>`: the column is a
+            # ONE-HOT categorical, `k` folds, bins `0..k-1`, split by
+            # equality. Only `tools/catboost_cat_oracle.py` writes it.
+            o.cat_cardinality[Int(t[1])] = Int(t[2])
         elif kind == String("split"):
             var ti = Int(t[1])
             o.split_feature[ti].append(Int(t[2]))
             o.split_border[ti].append(Float32(Float64(t[3])))
+            o.split_is_cat[ti].append(False)
+        elif kind == String("catsplit"):
+            # `catsplit <tree> <flat_feature_index> <code>`. Written
+            # INTERLEAVED with `split` in depth order, so appending in file
+            # order reconstructs the tree's levels without the reader
+            # needing to know which kind came next.
+            var ct = Int(t[1])
+            o.split_feature[ct].append(Int(t[2]))
+            o.split_border[ct].append(Float32(Float64(t[3])))
+            o.split_is_cat[ct].append(True)
         elif kind == String("leaves"):
             var lt = Int(t[1])
             for i in range(2, len(t)):
@@ -193,8 +250,18 @@ def check_border_parity(path: String = String("bench/oracle.txt")) raises:
     var count_wrong = 0
     var worst = Float64(0.0)
     var worst_feature = -1
+    var numeric = 0
 
     for f in range(o.feats):
+        # A ONE-HOT CATEGORICAL COLUMN HAS NO BORDERS AND IS NOT
+        # BINARIZED. Its bins ARE its dense category codes, so there is
+        # nothing here for `best_split` to reproduce; the thing that has to
+        # agree for it is the CARDINALITY, which is checked where it is
+        # used (`check_tree_structure` builds `folds[f]` from it and a
+        # wrong one changes every split index on the column).
+        if o.cat_cardinality[f] != 0:
+            continue
+        numeric += 1
         var ours = best_split(o.x[f].copy(), o.border_count)
         ref theirs = o.borders[f]
 
@@ -227,7 +294,8 @@ def check_border_parity(path: String = String("bench/oracle.txt")) raises:
             features_wrong += 1
 
     print(
-        "  features whose borders differ:", features_wrong, "of", o.feats,
+        "  features whose borders differ:", features_wrong, "of", numeric,
+        "numeric (", o.feats - numeric, "one-hot categorical, no borders)",
         " (count mismatches", count_wrong, ", value mismatches", borders_wrong,
         ")",
     )
@@ -301,8 +369,15 @@ def print_catboost_structure(path: String = String("bench/oracle.txt")) raises:
         for d in range(len(o.split_feature[t])):
             line += String("(")
             line += String(o.split_feature[t][d])
-            line += String(" @ ")
-            line += String(o.split_border[t][d])
+            # `== code` for a one-hot level, `@ border` for an ordered
+            # one. Printing them the same way would hide the only
+            # difference this fixture exists to check.
+            if o.split_is_cat[t][d]:
+                line += String(" == ")
+                line += String(Int(Float64(o.split_border[t][d]) + 0.5))
+            else:
+                line += String(" @ ")
+                line += String(o.split_border[t][d])
             line += String(") ")
         print(line)
 
@@ -362,6 +437,36 @@ def check_tree_structure(
     second divergence lived at depth 3, and that it implicated the 1024-row
     `GatherInplaceLeqSize` threshold. Both were the same artifact.
 
+    THE CATEGORICAL FIXTURE SPLITS THE TWO SEARCHERS, 2026-08-21.
+
+        bench/oracle_cat.txt   greedy-subsets  48/48  (21/21 one-hot)
+                               pointwise        1/42  ( 0/18 one-hot)
+
+    The greedy arm's loss lands on CatBoost's to eight digits
+    (0.14671102 against 0.14671103); the pointwise arm reaches 2.30 and
+    stops trees early, because a repeated split is their stopping rule and
+    it keeps choosing the same wrong bins. DEVIATION 114 has the cause and
+    the raise below names it. Nothing was tuned to produce this: the
+    fixture's pins were fixed before it was ever run.
+
+    THE SABOTAGES THAT ESTABLISHED THE CATEGORICAL COMPARISON CAN FAIL,
+    one per mechanism, all run 2026-08-21 against the greedy arm (the one
+    that is green, since sabotaging a red path proves nothing):
+
+      * a CATEGORY CODE moved in the fixture (`catsplit 0 8 1` -> `... 2`)
+        -> 47 of 48, 20 of 21 one-hot, first divergence tree 0 depth 0.
+      * the ONE-HOT FLAGS withheld from `fit`, everything else identical
+        -> 1 of 48, 0 of 21 one-hot. **This is also the sabotage that
+        proves the split-TYPE comparison earns its place**: with the flags
+        off the searcher produced `(10>6)` at tree 2 depth 2 where
+        CatBoost has `(10==6)` -- the SAME feature and the SAME bin, a
+        different partition of the rows. A comparison on (feature, bin)
+        alone would have scored that a match.
+      * a NUMERIC split's border moved one border up in the SAME mixed
+        fixture -> 47 of 48, 21 of 21 one-hot, first divergence tree 0
+        depth 1, which is the numeric half still being read in a fixture
+        whose `split` and `catsplit` records interleave.
+
     THE RULE THIS EARNS. An oracle has a configuration, and every default it
     leaves standing is a claim that we implement that default. Anything the
     port refuses by name must be turned OFF in the oracle and said out loud,
@@ -385,11 +490,28 @@ def check_tree_structure(
     # THEIR grid, not ours. `check_border_parity` establishes that our
     # `best_split` reproduces it, so using theirs removes binarization as a
     # variable and leaves only the tree search under test.
+    #
+    # A ONE-HOT CATEGORICAL COLUMN gets `k` folds and no borders, which is
+    # `GetBucketCount`'s `OnLearnOnly` unique count (`split.cpp:110-114`)
+    # and gives it `k` candidate splits where an ordered feature of the
+    # same fold count has `k - 1` (`score_calcers.cpp:58-61`). The flags
+    # are what make the searcher emit `TakeBin` instead of `TakeGreater`.
     var folds = List[Int]()
+    var one_hot = List[Bool]()
+    var n_cat = 0
     for f in range(n_features):
-        folds.append(len(o.borders[f]))
+        if o.cat_cardinality[f] != 0:
+            folds.append(o.cat_cardinality[f])
+            one_hot.append(True)
+            n_cat += 1
+        else:
+            folds.append(len(o.borders[f]))
+            one_hot.append(False)
 
-    var lay = build_layout(folds)
+    # All-False flags produce a bit-identical layout to the empty list --
+    # `is_one_hot` is read per feature -- so the three numeric fixtures go
+    # down the path they always did.
+    var lay = build_layout(folds, one_hot)
     var cindex = ctx.enqueue_create_buffer[DType.uint32](n_rows * lay.columns)
     var z = ctx.enqueue_create_host_buffer[DType.uint32](n_rows * lay.columns)
     for i in range(n_rows * lay.columns):
@@ -402,9 +524,23 @@ def check_tree_structure(
     for f in range(n_features):
         ref cf = lay.features[f]
         for r in range(n_rows):
-            hb.unsafe_ptr().unsafe_store(
-                r, UInt8(binarize(o.x[f][r], o.borders[f]))
-            )
+            # A categorical column's compressed-index value IS its dense
+            # code; there is no binarization step for it on either side.
+            var bin_value: Int
+            if o.cat_cardinality[f] != 0:
+                bin_value = Int(Float64(o.x[f][r]) + 0.5)
+                if bin_value < 0 or bin_value >= o.cat_cardinality[f]:
+                    raise Error(
+                        String("categorical column ")
+                        + String(f)
+                        + " carries code "
+                        + String(bin_value)
+                        + " outside 0.."
+                        + String(o.cat_cardinality[f] - 1)
+                    )
+            else:
+                bin_value = binarize(o.x[f][r], o.borders[f])
+            hb.unsafe_ptr().unsafe_store(r, UInt8(bin_value))
         ctx.enqueue_copy(dst_buf=bins, src_ptr=hb.unsafe_ptr())
         ctx.enqueue_function[write_compressed_index_kernel](
             Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
@@ -429,6 +565,7 @@ def check_tree_structure(
     var losses = fit(
         model, ctx, n_rows, folds, o.depth, cindex, targets, weights, False,
         o.trees, Float32(0.3), Float32(3.0), True,
+        one_hot=one_hot,
         use_pointwise_searcher=use_pointwise_searcher,
     )
 
@@ -441,6 +578,8 @@ def check_tree_structure(
     var first_divergence = -1
     var matched = 0
     var compared = 0
+    var cat_compared = 0
+    var cat_matched = 0
     for t in range(min(o.trees, model.size())):
         ref ours = model.weak_models[t].structure.splits
         var line_them = String("      catboost ")
@@ -448,17 +587,62 @@ def check_tree_structure(
         for d in range(len(o.split_feature[t])):
             var f = o.split_feature[t][d]
             var want_bin = -1
-            for i in range(len(o.borders[f])):
-                if abs(Float64(o.borders[f][i]) - Float64(o.split_border[t][d])) <= 1e-9:
-                    want_bin = i
-            line_them += String("(") + String(f) + String(",") + String(want_bin) + String(") ")
+            var want_type = BIN_SPLIT_TAKE_GREATER
+            var is_cat = o.split_is_cat[t][d]
+            if is_cat:
+                # A one-hot split IS its category code, and the code is
+                # already in our encoding -- the oracle resolved
+                # CatBoost's hash back to it and proved the resolution by
+                # replaying the whole model against their own predictions.
+                want_bin = Int(Float64(o.split_border[t][d]) + 0.5)
+                want_type = BIN_SPLIT_TAKE_BIN
+                if want_bin < 0 or want_bin >= o.cat_cardinality[f]:
+                    raise Error(
+                        String("oracle names one-hot code ")
+                        + String(want_bin)
+                        + " on column "
+                        + String(f)
+                        + " whose declared cardinality is "
+                        + String(o.cat_cardinality[f])
+                    )
+            else:
+                for i in range(len(o.borders[f])):
+                    if abs(Float64(o.borders[f][i]) - Float64(o.split_border[t][d])) <= 1e-9:
+                        want_bin = i
+            line_them += (
+                String("(")
+                + String(f)
+                + (String("==") if is_cat else String(">"))
+                + String(want_bin)
+                + String(") ")
+            )
             if d < len(ours):
                 var gf = Int(ours[d].feature_id)
                 var gb = Int(ours[d].bin_idx)
-                line_us += String("(") + String(gf) + String(",") + String(gb) + String(") ")
+                var gt = Int(ours[d].split_type)
+                line_us += (
+                    String("(")
+                    + String(gf)
+                    + (
+                        String("==")
+                        if gt == BIN_SPLIT_TAKE_BIN
+                        else String(">")
+                    )
+                    + String(gb)
+                    + String(") ")
+                )
                 compared += 1
-                if gf == f and gb == want_bin:
+                if is_cat:
+                    cat_compared += 1
+                # THE SPLIT TYPE IS PART OF THE SPLIT. Comparing only
+                # (feature, bin) would let an ORDERED `> code` stand in
+                # for an EQUALITY `== code` on the same column and bin,
+                # which is a different partition of the rows and is the
+                # one thing this fixture exists to catch.
+                if gf == f and gb == want_bin and gt == want_type:
                     matched += 1
+                    if is_cat:
+                        cat_matched += 1
                 elif first_divergence < 0:
                     first_divergence = t * 100 + d
         if t < 3:
@@ -466,11 +650,24 @@ def check_tree_structure(
             print(line_them)
             print(line_us)
 
+    # REACH, per branch. A fixture that declares categorical columns and
+    # never gets a one-hot split compared is a numeric fixture wearing a
+    # categorical name, and it would report a green tick for coverage it
+    # does not have.
+    if n_cat != 0 and cat_compared == 0:
+        raise Error(
+            String("this fixture declares ")
+            + String(n_cat)
+            + " one-hot categorical columns and not one one-hot split was"
+            " compared, so nothing about the categorical path was checked"
+        )
+
     var arm = String("pointwise") if use_pointwise_searcher else String(
         "greedy-subsets"
     )
     print(
         "    splits matching CatBoost exactly:", matched, "of", compared,
+        "  (", cat_matched, "of", cat_compared, "one-hot )",
         "  [", arm, "searcher ]",
     )
     if first_divergence >= 0:
@@ -478,6 +675,45 @@ def check_tree_structure(
             "    first divergence: tree", first_divergence // 100,
             "depth", first_divergence % 100,
         )
+        var where = (
+            String(" splits match, first divergence at tree ")
+            + String(first_divergence // 100)
+            + " depth "
+            + String(first_divergence % 100)
+        )
+        if n_cat != 0 and use_pointwise_searcher and cat_matched == 0:
+            # THE LOCATED DEFECT. Not a mystery and not a fixture problem:
+            # see DEVIATION 114. `TScoreHelper.__init__`
+            # (`gbdt/methods/pointwise_scores_calcer.mojo`, the
+            # `oh.append(UInt8(0))` in the table-building loop) fills the
+            # scorer's per-feature one-hot flags with a CONSTANT ZERO
+            # instead of reading `layout.features[...].one_hot_feature`,
+            # which is read on the line above it for the offset. That
+            # array's only consumer is `scan_pointwise_histograms_kernel`'s
+            # skip (`split_properties_helpers.mojo:350`, theirs at
+            # `split_properties_helpers.cuh:126`), so every one-hot
+            # feature gets PREFIX-SUMMED and its equality candidates score
+            # as thresholds.
+            raise Error(
+                String("the pointwise searcher does not reproduce")
+                + " CatBoost's one-hot splits: "
+                + String(cat_matched)
+                + " of "
+                + String(cat_compared)
+                + " one-hot and "
+                + String(matched)
+                + " of "
+                + String(compared)
+                + where
+                + ". DEVIATION 114 locates this in TScoreHelper's"
+                " constructor, which builds the scorer's one-hot flag"
+                " array as a constant zero; the greedy-subsets searcher"
+                " reads the same flag off the layout and matches CatBoost"
+                " on this fixture. This is the FIRST check to hand a"
+                " one-hot feature to the pointwise SCORER -- every"
+                " existing gate on that skip passes the flag array in by"
+                " hand and so never reached the constant"
+            )
         raise Error(
             String("the ")
             + arm
@@ -485,10 +721,7 @@ def check_tree_structure(
             + String(matched)
             + " of "
             + String(compared)
-            + " splits match, first divergence at tree "
-            + String(first_divergence // 100)
-            + " depth "
-            + String(first_divergence % 100)
+            + where
             + ". This matched 48 of 48 on 2026-08-19, so a mismatch here is"
             " a REGRESSION and not a known gap. Before suspecting the port,"
             " check that bench/oracle.txt was generated with every CatBoost"

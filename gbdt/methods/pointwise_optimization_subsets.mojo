@@ -1250,7 +1250,11 @@ def update_subsets_stats(
 
 
 def create_subsets(
-    ctx: DeviceContext, max_depth: Int, mut source: TL2Target
+    ctx: DeviceContext,
+    max_depth: Int,
+    mut source: TL2Target,
+    fold_count: Int = 0,
+    fold_bits: Int = 0,
 ) raises -> TOptimizationSubsets:
     """`TSubsetsHelper<TStripeMapping>::CreateSubsets`
     (`pointwise_optimization_subsets.cpp:4-24`), line for line.
@@ -1291,7 +1295,7 @@ def create_subsets(
 
     # `ui32 maxPartCount = 1 << (subsets.FoldBits + maxDepth)`, with
     # FoldBits == 0 on this path.
-    var max_part_count = 1 << max_depth
+    var max_part_count = 1 << (fold_bits + max_depth)
 
     var bins = ctx.enqueue_create_buffer[DType.uint32](doc_count)
     var indices = ctx.enqueue_create_buffer[DType.uint32](doc_count)
@@ -1364,8 +1368,23 @@ def create_subsets(
         sm_count,
     )
 
-    # `FillBuffer(subsets.Bins, 0u)` (`cuda_util/fill.cu`). One root
-    # partition, no folds.
+    subsets.fold_count = UInt32(fold_count)
+    subsets.fold_bits = UInt32(fold_bits)
+
+    # `FillBuffer(subsets.Bins, 0u)` (`cuda_util/fill.cu`).
+    #
+    # ONE ROOT PARTITION unless a caller passed folds. Their Stripe
+    # specialization hardcodes `FoldCount = 0; FoldBits = 0;`
+    # (`pointwise_optimization_subsets.cpp:12-14`) and their MIRROR one
+    # takes them from `WriteFoldBasedInitialBins`
+    # (`oblivious_tree_structure_searcher.cpp:36-37`). The two arms differ
+    # in exactly these two fields and the initial bin fill; everything else
+    # in this function is shared, which is why the fold arm is a parameter
+    # here rather than a second copy of 90 lines.
+    #
+    # A caller with folds overwrites the bins afterwards with
+    # `write_fold_based_initial_bins`; the memset is still correct as a
+    # floor and costs one launch.
     ctx.enqueue_memset(subsets.bins, UInt32(0))
     # `MakeSequence(subsets.Indices)` (`fill.cu:47-55`).
     launch_make_sequence(ctx, UInt32(0), subsets.indices, doc_count)

@@ -214,7 +214,18 @@ struct PolicyScoreHelper(Movable):
             )
             first.append(block.fold_offset[i])
             fol.append(block.folds[i])
-            oh.append(UInt8(0))
+            # OFF THE LAYOUT, the same place the offset two lines above
+            # comes from. This was a hardcoded `UInt8(0)` and every one-hot
+            # feature therefore got PREFIX-SUMMED -- its equality
+            # candidates scored as thresholds. See DEVIATION 114 for how a
+            # gated skip stayed broken: both checks on it hand the flag
+            # array in BY HAND, so no check ever built one through this
+            # constructor.
+            oh.append(
+                UInt8(1) if layout.features[
+                    block.feature_ids[i]
+                ].one_hot_feature else UInt8(0)
+            )
             var gid = UInt32(global_feature_ids[block.feature_ids[i]])
             for b in range(Int(block.folds[i])):
                 bf.append(gid)

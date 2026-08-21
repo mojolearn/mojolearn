@@ -534,6 +534,19 @@ check-logloss-estimator = "mojo run -I . mojo_only/logloss_estimator_check.mojo"
 check-logloss-train = "mojo run -I . mojo_only/logloss_train_check.mojo"
 estimation-bench = "mojo run -I . mojo_only/estimation_bench.mojo"
 
+# What `PolicyScoreHelper.__init__` ACTUALLY builds, read back off the device.
+# Two gates already plant one-hot flags for the scan kernel and both hand the
+# array in by hand, so the constructor that builds it in the product was a
+# hardcoded zero for as long as it existed. DEVIATION 114/115.
+check-one-hot-flags = "mojo run -I . mojo_only/one_hot_flags_check.mojo"
+
+# TFeatureTensor: canonical form, the three-trap hash, order independence over
+# six build routes, 800-tensor collision sweep, and the batch builder at a
+# width that runs three groups. Oracle is CatBoost's own source compiled by
+# clang. DEVIATION 116-118.
+check-feature-tensor = "mojo run -I . mojo_only/feature_tensor_check.mojo"
+
+
 # What the host toolchain actually resolved to. Worth recording beside any
 # number, because `--target-cpu` and `--target-features` default to the HOST,
 # so every `mojo run` above is already a native build and a result carries the

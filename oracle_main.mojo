@@ -17,7 +17,7 @@ from mojo_only.oracle_check import (
 
 
 def main() raises:
-    # Two fixtures, two grouping policies. 15 borders is the HALF-BYTE
+    # Four fixtures. 15 borders is the HALF-BYTE
     # policy; 100 borders is ONE-BYTE and sits inside `maxBins <= 128`,
     # which is the range CatBoost's own dispatch sends to the hist_2
     # family (`hist_one_byte.cu:315-323`). A port of that family passes
@@ -28,6 +28,18 @@ def main() raises:
     # border 254: the PASS(8) one-byte range (129-255), which their ladder
     # never sends to hist_2, so no smaller fixture reaches those kernels.
     fixtures.append(String("bench/oracle254.txt"))
+    # THE CATEGORICAL FIXTURE. Eight numeric columns at a 100-border grid
+    # and three ONE-HOT categorical columns at k = 3, 5 and 8, so the
+    # searcher weighs equality candidates against ordered ones in the same
+    # tree and the compressed index carries two grid policies at once.
+    #
+    # ONE-HOT ONLY, and that is a statement about what CatBoost's CPU
+    # learner can be asked for rather than a fixture picked to pass: the
+    # CTR set this port mirrors is their GPU one, whose frequency column is
+    # `FeatureFreq`, and `IsSupportedCtrType(CPU, FeatureFreq)` is FALSE
+    # (`private/libs/options/restrictions.h:18-48`). See DEVIATION 113 and
+    # the module note in `tools/catboost_cat_oracle.py`.
+    fixtures.append(String("bench/oracle_cat.txt"))
     for i in range(len(fixtures)):
         var path = fixtures[i].copy()
         print("CATBOOST DIFFERENTIAL, against " + path + ":")
