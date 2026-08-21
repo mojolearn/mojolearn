@@ -134,8 +134,20 @@ export MACOSX_DEPLOYMENT_TARGET="$MACOS_FLOOR"
 # all three estimators -- copyml2, mlext_a, _mojolear, mojolear, copyml3 and
 # gbdtext all give zero, so the list below is a lottery ticket and not a fix.
 # See PORTING.md 70.
-PRIMARY_STEM="copyml2"
-ALT_STEMS="_mojolear mlext_a mlext_b mlext_c mlext_d"
+# RE-MEASURED 2026-08-22 after the source changed under it, which is exactly
+# the "the lottery may move when the source changes" case above. Every stem in
+# the previous list had gone bad: copyml2 and _mojolear dropped CLUSTER to 0,
+# mlext_a..d dropped GBDT to 0, and the build failed with no artifact. Swept
+# fresh candidates at 33s a build, counting AIR blobs per subsystem:
+#
+#                    gbdt  cluster  neighbors  core  total
+#   copyml             56       22          4     2     84
+#
+# The old list is kept BELOW the new primary rather than deleted: a stem that
+# is dead today has been alive before, and re-measuring is cheaper than
+# inventing names.
+PRIMARY_STEM="copyml"
+ALT_STEMS="copyml3 copyml4 cml2 mojoext pyext_a copyml2 _mojolear mlext_a mlext_b mlext_c mlext_d"
 
 # --emit shared-lib, not an executable: CPython dlopens this and calls
 # PyInit__mojolearn. The name of the file must match that symbol's suffix or
