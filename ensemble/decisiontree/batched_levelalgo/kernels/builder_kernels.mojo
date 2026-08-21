@@ -112,6 +112,13 @@ standard semantics will get the last bin wrong.
 =================================================================
 """
 
+# All four structs below are `ImplicitlyCopyable`, not merely `Copyable`.
+# Theirs are C++ aggregates of scalars -- trivially copyable PODs passed and
+# returned by value throughout `builder.cuh` (`:70-78`, `:91-143`, `:393-407`)
+# -- so requiring an explicit `.copy()` at every read would be this port
+# imposing a ceremony their code does not have, on types where a copy is a
+# register move.
+
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 
 from ensemble.decisiontree.batched_levelalgo.random_utils import (
@@ -121,7 +128,7 @@ from ensemble.mojo_only.shuffle_iterator import shuffled_feature
 
 
 @fieldwise_init
-struct InstanceRange(Copyable, Movable):
+struct InstanceRange(ImplicitlyCopyable, Movable):
     """`builder_kernels.cuh:31-34`. A range in the device array
     `dataset.row_ids`. Their fields are `std::size_t`."""
 
@@ -130,7 +137,7 @@ struct InstanceRange(Copyable, Movable):
 
 
 @fieldwise_init
-struct NodeWorkItem(Copyable, Movable):
+struct NodeWorkItem(ImplicitlyCopyable, Movable):
     """`builder_kernels.cuh:36-40`.
 
     `idx` is the node's index IN THE TREE (`tree->sparsetree`), not its
@@ -149,7 +156,7 @@ struct NodeWorkItem(Copyable, Movable):
 
 
 @fieldwise_init
-struct WorkloadInfo(Copyable, Movable):
+struct WorkloadInfo(ImplicitlyCopyable, Movable):
     """`builder_kernels.cuh:46-52`, with IdxT = Int32.
 
     Their comment: "This struct has information about workload of a single
@@ -167,7 +174,7 @@ struct WorkloadInfo(Copyable, Movable):
 
 
 @fieldwise_init
-struct SharedMemoryConfig(Copyable, Movable):
+struct SharedMemoryConfig(ImplicitlyCopyable, Movable):
     """`builder_kernels.cuh:54-57`. Computed once per batch by
     `Builder::computeSharedMemoryConfig` (`builder.cuh:522-551`) and
     passed down, rather than recomputed per launch."""
