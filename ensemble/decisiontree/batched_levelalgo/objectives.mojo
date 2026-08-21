@@ -75,14 +75,15 @@ error rather than a wrong model.
 and so every objective carries one. That is DEVIATION 101b's consequence,
 priced there.
 
-(d) `detail::CountLeft` (`split.cuh:19-27`) is DUPLICATED into this file
-as `_count_left`. `split.mojo` carries a `count_left` too, but its
-signature takes a plane of `UInt32` counts while theirs takes `BinT
-const*` and calls `.Count()` -- and `Gain` (`:168`, `:369`) hands it the
-BIN histogram. The bin-typed form is what this file needs, and
-`split.mojo` belongs to another lane. PRICE: one nine-line function
-exists twice, so a change to their `:19-27` has to land in two places.
-Reconciling the two into one bin-typed helper is an OPEN MERGE-TIME ITEM.
+(d) CLOSED. `detail::CountLeft` (`split.cuh:19-27`) was briefly duplicated
+into this file as `_count_left`, because `split.mojo`'s `count_left` had
+the wrong signature -- a plane of `UInt32` counts, where theirs takes
+`BinT const*` and calls `.Count()`, and where `Gain` (`:168`, `:369`)
+hands it the BIN histogram. The duplicate is gone: `split.mojo`'s is now
+bin-typed and this file imports it, which is their own arrangement
+(`split.cuh` includes `bins.cuh` at `:8`; `objectives.cuh` includes both
+and calls `detail::CountLeft`). Nothing is duplicated and nothing is
+unreached.
 
 (e) Both objective structs carry `where dtype.is_floating_point()`. Mojo
 requires the evidence before `std.math.log` will resolve. It restricts
@@ -180,7 +181,7 @@ from ensemble.decisiontree.batched_levelalgo.bins import (
     RegressionBinLike,
 )
 from ensemble.decisiontree.batched_levelalgo.dataset import DatasetView
-from ensemble.decisiontree.batched_levelalgo.split import Split
+from ensemble.decisiontree.batched_levelalgo.split import Split, count_left
 
 
 # ----------------------------------------------------------------- CRITERION --
@@ -196,36 +197,6 @@ comptime CRITERION_POISSON = Int32(4)
 comptime CRITERION_GAMMA = Int32(5)
 comptime CRITERION_INVERSE_GAUSSIAN = Int32(6)
 comptime CRITERION_END = Int32(7)
-
-
-@always_inline
-def _count_left[
-    BinT: Bin, ho: MutOrigin, aspace: AddressSpace, //
-](
-    hist: MutPointer[BinT, ho, address_space=aspace],
-    i: Int32,
-    n_bins: Int32,
-    n_outputs: Int32,
-) -> Int64:
-    """`detail::CountLeft`, `split.cuh:19-27`.
-
-    DUPLICATED HERE ON PURPOSE. `split.mojo` also carries a `count_left`,
-    but its signature takes a plane of `UInt32` counts rather than a
-    pointer to bins, and their `CountLeft` takes `BinT const*` and calls
-    `.Count()`. `Gain` (`objectives.cuh:168`, `:369`) hands it the bin
-    histogram, so this file needs the bin-typed form. Duplicated rather
-    than edited into `split.mojo`, which is another lane's file.
-
-    Their accumulator is `BinCountT` (`unsigned long long`) widened to
-    `std::int64_t` at `:26`; the sum over classes at one bin is the row
-    count of that partition, bounded by `n_sampled_rows`.
-    """
-    var n_left = UInt64(Int(hist[unsafe_offset = Int(i)].Count()))
-    for j in range(1, Int(n_outputs)):
-        n_left += UInt64(
-            Int(hist[unsafe_offset = j * Int(n_bins) + Int(i)].Count())
-        )
-    return Int64(Int(n_left))
 
 
 # ------------------------------------- ClassificationObjectiveFunction --
@@ -497,7 +468,7 @@ struct ClassificationObjectiveFunction[
         var i = Int32(Int(thread_idx.x))
         while i < n_bins:
             # `:168-169`
-            var nLeft = _count_left(shist, i, n_bins, self.nclasses)
+            var nLeft = count_left(shist, i, n_bins, self.nclasses)
             var nRight = len - nLeft
             # `:170-174`
             if nLeft >= Int64(Int(self.min_samples_leaf)) and nRight >= Int64(
@@ -908,7 +879,7 @@ struct RegressionObjectiveFunction[
         var i = Int32(Int(thread_idx.x))
         while i < n_bins:
             # `:369-370`
-            var nLeft = _count_left(shist, i, n_bins, Int32(1))
+            var nLeft = count_left(shist, i, n_bins, Int32(1))
             var nRight = len - nLeft
             # `:371-375`
             if nLeft >= Int64(Int(self.min_samples_leaf)) and nRight >= Int64(

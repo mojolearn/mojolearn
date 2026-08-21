@@ -148,6 +148,11 @@ counts, and local counts are filled just before partitioning."
 
 from std.atomic import Atomic, Ordering
 from max.gpu.memory import AddressSpace
+
+# `split.cuh:8` includes `bins.cuh`, because `detail::CountLeft` is
+# bin-typed. Same direction here; `bins.mojo` imports nothing from this
+# file, so there is no cycle -- exactly their arrangement.
+from ensemble.decisiontree.batched_levelalgo.bins import Bin
 from std.gpu import WARP_SIZE, block_dim, thread_idx
 from std.gpu.primitives.id import lane_id
 from std.gpu.primitives.warp import shuffle_idx
@@ -156,9 +161,9 @@ from max.gpu.sync import barrier
 
 @always_inline
 def count_left[
-    dtype: DType, ho: MutOrigin, //
+    BinT: Bin, ho: MutOrigin, aspace: AddressSpace, //
 ](
-    hist_count: MutPointer[UInt32, ho],
+    hist: MutPointer[BinT, ho, address_space=aspace],
     i: Int32,
     n_bins: Int32,
     n_outputs: Int32,
@@ -166,19 +171,28 @@ def count_left[
     """`detail::CountLeft`, `split.cuh:19-27`.
 
     Their loop sums `hist[n_bins * j + i].Count()` over the output classes,
-    starting from `j = 0` and adding `j = 1 ..< n_outputs`. The histogram
-    is CUMULATIVE by the time this runs, so cell `i` already holds the
-    left partition's count.
+    starting from `j = 0` and adding `j = 1 ..< n_outputs`. The histogram is
+    CUMULATIVE by the time this runs, so cell `i` already holds the left
+    partition's count.
 
-    Their `BinT::Count()` returns `BinCountT` = `unsigned long long`. The
-    counter width this port carries is the bins lane's to decide (see
-    `bins.mojo`); this signature takes the counts as UInt32 and widens to
-    Int64 for the sum, which is their `static_cast<std::int64_t>` at `:26`.
+    IT IS BIN-TYPED, and the first version of this file got that wrong. It
+    took a plane of `UInt32` counts, which no caller could use: their
+    `CountLeft` takes `BinT const*` and calls `.Count()`, and `Gain`
+    (`objectives.cuh:168`, `:369`) hands it the bin histogram directly. The
+    wrong-shaped version sat here unreached while `objectives.mojo` carried
+    a private duplicate of the right one -- an unported file is visible, a
+    MIS-ported one is not, and an unreached one hides the mismatch. Their
+    layout is restored: `CountLeft` lives in `split.cuh` (which
+    `#include`s `bins.cuh` at `:8`) and `objectives.cuh` calls it.
+
+    Their accumulator is `BinCountT` (`unsigned long long`) widened to
+    `std::int64_t` at `:26`. The sum over classes at one bin is the row
+    count of that partition, bounded by `n_sampled_rows`.
     """
-    var n_left = UInt64(Int(hist_count[unsafe_offset = Int(i)]))
+    var n_left = UInt64(Int(hist[unsafe_offset = Int(i)].Count()))
     for j in range(1, Int(n_outputs)):
         n_left += UInt64(
-            Int(hist_count[unsafe_offset = j * Int(n_bins) + Int(i)])
+            Int(hist[unsafe_offset = j * Int(n_bins) + Int(i)].Count())
         )
     return Int64(Int(n_left))
 
