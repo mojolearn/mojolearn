@@ -120,8 +120,29 @@ trait PointHist2(Movable):
       is what the peel feeds threads outside the head or tail (`:36-39`).
     """
 
-    def add_point(mut self, ci: UInt32, t: Float32, w: Float32):
-        """`AddPoint(ci, wt, w)`."""
+    def add_point(mut self, ci: UInt32, t: Float32, w: Float32, row: UInt32):
+        """`AddPoint(ci, wt, w)`, plus a row id CatBoost does not pass.
+
+        ============== DEVIATION BLOCK (PORTING.md 93) ==============
+        `row` is `indices[position]` -- the gathered document id, NOT the
+        position. It exists for exactly one implementor: `PointHist8`
+        accumulates in FIXED POINT because its design calls `atomicAdd` on
+        threadgroup memory and Metal has none ("Unsupported local float
+        atomic operation for given target", probed 2026-08-21), and the
+        dither that makes fixed-point quantization unbiased has to be keyed
+        on something stable per row.
+
+        IT MUST BE THE ROW AND NOT THE POSITION. A document's position in
+        the index array is reordered at every level; its id is not. Key the
+        dither on the position and the same row quantizes differently at
+        different depths, which breaks `parent == child + sibling` -- and
+        that identity is what lets the partial pass compute one child and
+        subtract for the other.
+
+        The 5-, 6- and 7-bit accumulators ignore it entirely: they add
+        floats into private or turn-taken slots and need no atomic.
+        =============================================================
+        """
         ...
 
     def add_point_2(
@@ -129,6 +150,7 @@ trait PointHist2(Movable):
         ci: SIMD[DType.uint32, 2],
         t: SIMD[DType.float32, 2],
         w: SIMD[DType.float32, 2],
+        rows: SIMD[DType.uint32, 2],
     ):
         """`AddPoint2(bin, localTarget, localWeight)`."""
         ...
@@ -138,6 +160,7 @@ trait PointHist2(Movable):
         ci: SIMD[DType.uint32, 4],
         t: SIMD[DType.float32, 4],
         w: SIMD[DType.float32, 4],
+        rows: SIMD[DType.uint32, 4],
     ):
         """`AddPoint4(bin, localTarget, localWeight)`."""
         ...
@@ -212,12 +235,13 @@ def _peel[
         var ci = UInt32(0)
         var w = Float32(0.0)
         var wt = Float32(0.0)
+        var row = UInt32(0)
         if col < span and col < valid:
-            var index = ldg(indices.unsafe_offset(at + col))
-            ci = ldg(cindex.unsafe_offset(Int(index)))
+            row = ldg(indices.unsafe_offset(at + col))
+            ci = ldg(cindex.unsafe_offset(Int(row)))
             w = ldg(weight.unsafe_offset(at + col))
             wt = ldg(target.unsafe_offset(at + col))
-        hist.add_point(ci, wt, w)
+        hist.add_point(ci, wt, w, row)
         col += col_step
 
 
@@ -271,7 +295,7 @@ def compute_histogram[
         # UNCONDITIONAL, exactly as theirs is: a thread outside the head
         # still calls AddPoint, with a zero bin and zero stats. Guarding it
         # would drop a barrier that the accumulators take inside AddPoint.
-        hist.add_point(ci, wt, w)
+        hist.add_point(ci, wt, w, index)
 
     ds_size = ds_size - last_id if ds_size > last_id else 0
     base += last_id
@@ -290,7 +314,7 @@ def compute_histogram[
                 ci = ldg(cindex.unsafe_offset(Int(index)))
                 w = ldg(weight.unsafe_offset(base + tail_offset + i))
                 wt = ldg(target.unsafe_offset(base + tail_offset + i))
-            hist.add_point(ci, wt, w)
+            hist.add_point(ci, wt, w, index)
     ds_size -= unaligned_tail
 
     if bpf_id == 0 and ds_size <= 0:
@@ -347,12 +371,14 @@ def compute_histogram[
             var local_ci = SIMD[DType.uint32, n](0)
             var local_w = SIMD[DType.float32, n](0)
             var local_wt = SIMD[DType.float32, n](0)
+            var local_row = SIMD[DType.uint32, n](0)
 
             comptime for k in range(n):
                 if done + k < own_iters:
                     var idx = ldg(
                         indices.unsafe_offset(cur + stripe * k)
                     )
+                    local_row[k] = idx
                     local_ci[k] = ldg(cindex.unsafe_offset(Int(idx)))
                     local_w[k] = ldg(
                         weight.unsafe_offset(cur + stripe * k)
@@ -365,20 +391,23 @@ def compute_histogram[
             done += n
 
             comptime for k in range(n):
-                hist.add_point(local_ci[k], local_wt[k], local_w[k])
+                hist.add_point(
+                    local_ci[k], local_wt[k], local_w[k], local_row[k]
+                )
 
         for _ in range(blocked_iters * n, max_iters):
             var ci = UInt32(0)
             var w = Float32(0.0)
             var wt = Float32(0.0)
+            var index = UInt32(0)
             if done < own_iters:
-                var index = ldg(indices.unsafe_offset(cur))
+                index = ldg(indices.unsafe_offset(cur))
                 ci = ldg(cindex.unsafe_offset(Int(index)))
                 w = ldg(weight.unsafe_offset(cur))
                 wt = ldg(target.unsafe_offset(cur))
             cur += stripe
             done += 1
-            hist.add_point(ci, wt, w)
+            hist.add_point(ci, wt, w, index)
 
         barrier()
         hist.reduce()
@@ -469,8 +498,9 @@ def compute_histogram_2[
             var bins = SIMD[DType.uint32, 2](0)
             var lt = SIMD[DType.float32, 2](0)
             var lw = SIMD[DType.float32, 2](0)
+            var li = SIMD[DType.uint32, 2](0)
             if j < own_iters:
-                var li = SIMD[DType.uint32, 2](
+                li = SIMD[DType.uint32, 2](
                     ldg(indices.unsafe_offset(cur)),
                     ldg(indices.unsafe_offset(cur + 1)),
                 )
@@ -487,7 +517,7 @@ def compute_histogram_2[
                     ldg(weight.unsafe_offset(cur + 1)),
                 )
             cur += stripe
-            hist.add_point_2(bins, lt, lw)
+            hist.add_point_2(bins, lt, lw, li)
 
         barrier()
         hist.reduce()
@@ -580,8 +610,9 @@ def compute_histogram_4[
             var bins = SIMD[DType.uint32, 4](0)
             var lt = SIMD[DType.float32, 4](0)
             var lw = SIMD[DType.float32, 4](0)
+            var li = SIMD[DType.uint32, 4](0)
             if j < own_iters:
-                var li = SIMD[DType.uint32, 4](
+                li = SIMD[DType.uint32, 4](
                     ldg(indices.unsafe_offset(cur)),
                     ldg(indices.unsafe_offset(cur + 1)),
                     ldg(indices.unsafe_offset(cur + 2)),
@@ -606,7 +637,7 @@ def compute_histogram_4[
                     ldg(weight.unsafe_offset(cur + 3)),
                 )
             cur += stripe
-            hist.add_point_4(bins, lt, lw)
+            hist.add_point_4(bins, lt, lw, li)
 
         barrier()
         hist.reduce()

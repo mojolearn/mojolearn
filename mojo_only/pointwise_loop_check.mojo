@@ -134,7 +134,10 @@ struct TallyHist[origin: MutOrigin](PointHist2):
     ):
         self.buf = buf
 
-    def add_point(mut self, ci: UInt32, t: Float32, w: Float32):
+    def add_point(
+        mut self, ci: UInt32, t: Float32, w: Float32, row: UInt32
+    ):
+        _ = row
         var b = Int(ci) % NBINS
         # ONE TALLY PER THREAD, and that is not a detail. The first version
         # of this check folded threads onto 32 lane slots, so with a
@@ -153,20 +156,22 @@ struct TallyHist[origin: MutOrigin](PointHist2):
         ci: SIMD[DType.uint32, 2],
         t: SIMD[DType.float32, 2],
         w: SIMD[DType.float32, 2],
+        rows: SIMD[DType.uint32, 2],
     ):
-        self.add_point(ci[0], t[0], w[0])
-        self.add_point(ci[1], t[1], w[1])
+        self.add_point(ci[0], t[0], w[0], rows[0])
+        self.add_point(ci[1], t[1], w[1], rows[1])
 
     def add_point_4(
         mut self,
         ci: SIMD[DType.uint32, 4],
         t: SIMD[DType.float32, 4],
         w: SIMD[DType.float32, 4],
+        rows: SIMD[DType.uint32, 4],
     ):
-        self.add_point(ci[0], t[0], w[0])
-        self.add_point(ci[1], t[1], w[1])
-        self.add_point(ci[2], t[2], w[2])
-        self.add_point(ci[3], t[3], w[3])
+        self.add_point(ci[0], t[0], w[0], rows[0])
+        self.add_point(ci[1], t[1], w[1], rows[1])
+        self.add_point(ci[2], t[2], w[2], rows[2])
+        self.add_point(ci[3], t[3], w[3], rows[3])
 
     def reduce(mut self):
         barrier()
@@ -198,7 +203,10 @@ struct BarrierTallyHist[origin: MutOrigin](PointHist2):
     ):
         self.buf = buf
 
-    def add_point(mut self, ci: UInt32, t: Float32, w: Float32):
+    def add_point(
+        mut self, ci: UInt32, t: Float32, w: Float32, row: UInt32
+    ):
+        _ = row
         var b = Int(ci) % NBINS
         var slot = Int(thread_idx.x) * NBINS * 2 + b * 2
         barrier()
@@ -211,20 +219,22 @@ struct BarrierTallyHist[origin: MutOrigin](PointHist2):
         ci: SIMD[DType.uint32, 2],
         t: SIMD[DType.float32, 2],
         w: SIMD[DType.float32, 2],
+        rows: SIMD[DType.uint32, 2],
     ):
-        self.add_point(ci[0], t[0], w[0])
-        self.add_point(ci[1], t[1], w[1])
+        self.add_point(ci[0], t[0], w[0], rows[0])
+        self.add_point(ci[1], t[1], w[1], rows[1])
 
     def add_point_4(
         mut self,
         ci: SIMD[DType.uint32, 4],
         t: SIMD[DType.float32, 4],
         w: SIMD[DType.float32, 4],
+        rows: SIMD[DType.uint32, 4],
     ):
-        self.add_point(ci[0], t[0], w[0])
-        self.add_point(ci[1], t[1], w[1])
-        self.add_point(ci[2], t[2], w[2])
-        self.add_point(ci[3], t[3], w[3])
+        self.add_point(ci[0], t[0], w[0], rows[0])
+        self.add_point(ci[1], t[1], w[1], rows[1])
+        self.add_point(ci[2], t[2], w[2], rows[2])
+        self.add_point(ci[3], t[3], w[3], rows[3])
 
     def reduce(mut self):
         barrier()

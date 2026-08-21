@@ -3100,3 +3100,86 @@ about the contention that the code exists to manage.
 The secondary rule still holds: a gate whose sabotage does not move it is not
 coverage, and the check should say so rather than let a green tick imply
 otherwise.
+
+## 93. Metal has no THREADGROUP float atomics, and the 8-bit accumulator is the file that needs them
+
+Probed 2026-08-21, porting `TPointHist<2,1,BlockSize>`.
+
+`Atomic.fetch_add` on a `Float32` in `AddressSpace.SHARED` does not compile:
+
+    Failed to create compute pipeline state (GPU machine code generation):
+    Unsupported local float atomic operation for given target.
+
+**This is narrower than "Metal has no float atomics" and the difference
+matters.** Global float atomics work. Warp primitives work. It is
+specifically the threadgroup float case, which is the one every shared
+histogram wants. `metal-hardware-gaps` already carried this for the
+greedy-subsets family; it is restated here because a reader arriving at
+`pointwise_hist2_one_byte_8bit.mojo` will not have read that.
+
+### Why only the 8-bit accumulator cares
+
+The other three never need an atomic, and their reason is structural. A warp
+slice is 1024 floats, so wider bins buy fewer private copies:
+
+    bits   copies   threads per copy   how they avoid collisions
+      5       4             8          they cannot collide: (f, flag) is
+                                       distinct across the 8
+      6       2            16          `writeFirstFlag`, two turns
+      7       1            32          `writeTime`, four turns
+      8       2            64          NEITHER -- CatBoost calls atomicAdd
+
+At 8 bits `OUTER_HIST_BITS_COUNT = 2` makes the slice 4096 wide, so a
+256-thread block has 2 slices for 8 warps and 64 threads land on each copy.
+Turn-taking would need 64 turns.
+
+### The substitution
+
+Int32 fixed point through `histogram_utils.hist2_quantize` and
+`hist2_dither` -- the SAME quantizer the greedy-subsets family uses, not a
+second one. There must be exactly one dithered quantizer in this tree or the
+two families will drift apart in the last bits and nobody will know which is
+right.
+
+`PointHist2.add_point` grew a `row` argument to carry this, and **it is the
+document id, not the position.** A document's position in the index array is
+reordered at every level; its id is not. Key the dither on the position and
+the same row quantizes differently at different depths, which breaks
+`parent == child + sibling` -- and that identity is what lets the partial
+pass compute one child and subtract for the other. The 5/6/7 accumulators
+ignore the argument.
+
+### What it costs and what it buys
+
+COSTS quantization error, which the dither makes zero-mean and
+O(sqrt(rows)) rather than O(rows). Measured in
+`mojo_only/pointwise_hist2_8bit_check.mojo` B3: signed error **-0.0105 per
+row-stat** over 28,000 of them, and 680 of 1,224 non-exact cells erring
+negative. Truncation, sabotaged in, gives **1,224 of 1,224 negative**.
+
+BUYS reproducibility CatBoost does not have. Integer addition is
+associative, so the shared accumulation is order-independent. The check
+proves it the hard way: the four loop entry points assign DIFFERENT points
+to different threads, so their deferred runs differ completely, and every
+one of the 2,048 cells still lands on the same total.
+
+### The gate that would not have worked
+
+Scale 1.0 with integer stats makes the quantizer exact -- `floor(x)` plus a
+fraction compare cannot move an integer -- so B1 compares all 2,048 cells
+with no numeric slack. That is what catches placement. It does NOT catch a
+biased quantizer, because at scale 1.0 truncation and dither agree. B3 is
+the other half, and its sharp gate is the SIGN SPLIT rather than the
+magnitude: a dither rounds up about half the time, truncation never does,
+and that test is independent of how many rows are in a cell.
+
+Sabotages run, each caught by a different gate:
+
+    Reduce's pending flush deleted     B1, 48 cells, short by 209,152
+    flush attributes to the NEW bin    B1, 1,224 cells, SHORT BY ZERO
+    quantizer truncates                B3 sign split, 1224/1224
+    dither constant across rows        B3 sign split, 1224/1224
+
+The second is the one to remember. Net zero: the mass moved rather than
+vanished, and every total in the histogram is correct. A check that summed
+would have passed it.

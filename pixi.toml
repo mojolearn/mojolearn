@@ -269,6 +269,19 @@ check-divergent-barrier = "mojo run -I . mojo_only/divergent_barrier_probe.mojo"
 # broken and its fixed form (PORTING.md 92). Own main(); a GPU, ~30 s.
 check-pointwise-hist2 = "mojo run -I . mojo_only/pointwise_hist2_check.mojo"
 
+# The 8-bit pointwise accumulator, which is a different design rather than
+# the 5/6/7 progression continued: 64 threads share an inner copy, so
+# CatBoost drops the tile syncs, calls atomicAdd, and DEFERS -- a run of
+# equal bins accumulates in registers and only reaches shared memory when
+# the bin changes, which makes Reduce's pending flush load-bearing. Metal
+# has no threadgroup float atomics (probed), so ours holds Int32 fixed point
+# through the repo's one dithered quantizer (DEVIATION 93). Gated exactly at
+# scale 1.0 with integer stats, where the dither provably cannot move a
+# value, plus a two-sided-rounding gate that separates a dither from a
+# truncation and that scale-1.0 exactness cannot see. Own main(); a GPU,
+# ~20 s.
+check-pointwise-hist2-8bit = "mojo run -I . mojo_only/pointwise_hist2_8bit_check.mojo"
+
 # The LSD radix sort over (bin, permutation position). Gates STABILITY
 # separately from sortedness and prints both, because sortedness alone
 # cannot see a tie that moved -- and the tie order IS the second half of

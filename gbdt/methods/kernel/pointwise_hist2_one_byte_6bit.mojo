@@ -93,7 +93,9 @@ struct PointHist6[origin: MutOrigin](PointHist2):
         var at = self.buffer_offset + slot
         self.base.unsafe_store(at, self.base.unsafe_load(at) + val)
 
-    def add_point(mut self, ci: UInt32, t: Float32, w: Float32):
+    def add_point(
+        mut self, ci: UInt32, t: Float32, w: Float32, row: UInt32
+    ):
         """`AddPoint`, copied including the four syncs.
 
         `writeFirstFlag` is theirs and it is the whole reason this is not
@@ -106,6 +108,9 @@ struct PointHist6[origin: MutOrigin](PointHist2):
         either way, and changing which one runs is a change to what nvcc was
         measured against.
         """
+        # `row` is unused here: this accumulator adds floats into private
+        # or turn-taken slots and needs no atomic. See `PointHist2`.
+        _ = row
         var tid = Int(thread_idx.x)
         var flag = (tid & 1) != 0
         var stat1 = t if flag else w
@@ -145,20 +150,22 @@ struct PointHist6[origin: MutOrigin](PointHist2):
         ci: SIMD[DType.uint32, 2],
         t: SIMD[DType.float32, 2],
         w: SIMD[DType.float32, 2],
+        rows: SIMD[DType.uint32, 2],
     ):
-        self.add_point(ci[0], t[0], w[0])
-        self.add_point(ci[1], t[1], w[1])
+        self.add_point(ci[0], t[0], w[0], rows[0])
+        self.add_point(ci[1], t[1], w[1], rows[1])
 
     def add_point_4(
         mut self,
         ci: SIMD[DType.uint32, 4],
         t: SIMD[DType.float32, 4],
         w: SIMD[DType.float32, 4],
+        rows: SIMD[DType.uint32, 4],
     ):
-        self.add_point(ci[0], t[0], w[0])
-        self.add_point(ci[1], t[1], w[1])
-        self.add_point(ci[2], t[2], w[2])
-        self.add_point(ci[3], t[3], w[3])
+        self.add_point(ci[0], t[0], w[0], rows[0])
+        self.add_point(ci[1], t[1], w[1], rows[1])
+        self.add_point(ci[2], t[2], w[2], rows[2])
+        self.add_point(ci[3], t[3], w[3], rows[3])
 
     def reduce(mut self):
         """`Reduce`, copied.
