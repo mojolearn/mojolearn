@@ -3636,3 +3636,62 @@ this repo has lost to twice on the greedy path.
 Not acted on, because the decision needs a measurement rather than an
 argument and no benchmark is authorised. The swap is one call in
 `update_subsets_stats` and the kernel is already written.
+
+## 106. `fit`'s pointwise arm, and the three things that only wiring could find
+
+`gbdt/methods/doc_parallel_boosting.fit` and `fit_with_test` take
+`use_pointwise_searcher`, defaulting to False. True selects
+`TDocParallelObliviousTreeSearcher` -- CatBoost's learner for SINGLE-TARGET
+symmetric trees at `boosting_type=Plain` (`PORTING.md` 91 F) -- in place of
+`TGreedySubsetsSearcher`, which is what they run for MULTICLASS symmetric
+trees and what this repository has always used.
+
+Gated by `pixi run check-fit-pointwise`: the same data both ways, and the
+loss curves agree to the bit over twenty iterations. The two arms share the
+compressed index, the weak target, the bootstrap, leaf estimation, the apply
+and the loss; only the structure searcher differs.
+
+### The arm does NOT reuse the searcher's own partition
+
+Their `FitImpl` estimates leaves inside the searcher; ours returns the
+structure only (DEVIATION 104) and re-derives the partition through
+`compute_bins_for_model` + `partition_from_bins`, which is the SAME path the
+non-estimation permutations already take. Deliberate: it means the pointwise
+arm shares every line of leaf estimation with the greedy arm, so any
+difference between them can only come from the structure.
+
+### DEVIATION 64 does not apply to this arm
+
+Item 64 skips leaf estimation entirely for RMSE + Newton at one iteration and
+one permutation, because the GREEDY searcher's leaf already IS the Newton
+step. The pointwise searcher produces no leaf, so the estimator must run
+whatever item 64 says -- and `est_sm`, which item 64's branch leaves at -1,
+has to be queried for this arm too.
+
+### Three bugs the wiring found, none of them in a ported kernel
+
+Every one of the fifteen gates below was green throughout.
+
+1. **`IntLog2` is `ceil`, not floor.** A 100-fold feature was counted under
+   bit 6, launching the 6-bit kernel, whose device bound `(32, 64]` rejected
+   it -- while the 7-bit kernel never launched because
+   `if (featureCountForBits)` saw zero. Every one-byte feature whose fold
+   count is not a power of two went unhistogrammed, silently.
+2. **`result_size` IS the scorer's grid.** Each block writes its own record
+   at `2 * blockIdx.x` and `ReadOptimalSplit` folds them
+   (`histograms_helper.h:205-208` sizes it
+   `min(CeilDivide(count, 128), 32)`). Reading block 0 is an argmin over the
+   first 128 bin features. The number named it: the searcher picked feature 7
+   bin 27, and bin 27 is the last bin of feature 7 inside block 0.
+3. **`BIN_SPLIT_TAKE_BIN` is 0 and `BIN_SPLIT_TAKE_GREATER` is 1**, which is
+   the opposite of what the names suggest. Writing `1 if one_hot else 0`
+   makes every ORDINARY feature an equality test. The tree still had the
+   right depth and the right splits in the right order -- and partitioned the
+   rows completely differently, 8 non-empty leaves instead of 12. Found by
+   comparing tree 0's LEAF VALUES after its structure had already matched.
+
+And one that was a wall rather than a bug: `TCFeature::Offset` is an ELEMENT
+offset while this tree's layout stores a COLUMN index. The multiply by
+`n_rows` was present in the score helper and absent in `split_subsets`, so
+the split read column 0's bits with another feature's shift, every document
+went one way, and `HasSplit` stopped the tree at depth 1.

@@ -398,6 +398,20 @@ check-cindex-packing = "mojo run -I . mojo_only/cindex_packing_check.mojo"
 # Own main(); a GPU, ~15 s.
 check-pointwise-vs-greedy = "mojo run -I . mojo_only/pointwise_vs_greedy_check.mojo"
 
+# `fit` actually runs CatBoost's single-target symmetric learner. The last
+# wiring step: doc_parallel_boosting.fit takes use_pointwise_searcher, and
+# this fits the SAME data both ways. The two arms share the compressed
+# index, the weak target, the bootstrap, leaf estimation, the apply and the
+# loss -- they differ in the STRUCTURE SEARCHER and nothing else -- so the
+# loss curves must agree. A boosting loop amplifies: one different split at
+# iteration 3 changes every later residual, so twenty identical iterations
+# is a far stronger statement than one matching tree. W2a pins tree 0 alone
+# (splits, split types, every leaf value) so a failure names the tree rather
+# than the curve, and W3 changes the score function to prove the knob
+# actually reaches the searcher -- without it, W2 could pass because the
+# flag was ignored. Own main(); a GPU, ~40 s.
+check-fit-pointwise = "mojo run -I . mojo_only/fit_pointwise_check.mojo"
+
 # The LSD radix sort over (bin, permutation position). Gates STABILITY
 # separately from sortedness and prints both, because sortedness alone
 # cannot see a tie that moved -- and the tie order IS the second half of

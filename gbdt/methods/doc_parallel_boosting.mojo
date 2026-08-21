@@ -129,6 +129,10 @@ from gbdt.methods.leaves_estimation.pointwise_oracle import (
 from gbdt.methods.leaves_estimation.step_estimator import (
     BACKTRACKING_ANY_IMPROVEMENT,
 )
+from gbdt.methods.oblivious_tree_doc_parallel_structure_searcher import (
+    fit_oblivious_tree_structure,
+    split_stat_planes,
+)
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
     run_tree_layout,
     TTreeWorkspace,
@@ -658,6 +662,24 @@ def fit_with_test(
         DeviceBuffer[DType.uint32]
     ](),
     est_permutation: Int = -1,
+    # WHICH STRUCTURE SEARCHER GROWS THE TREE. False is
+    # `TGreedySubsetsSearcher`, which is what this repository has always
+    # run and what CatBoost runs for MULTICLASS symmetric trees. True is
+    # `TDocParallelObliviousTreeSearcher`, which is what CatBoost runs for
+    # SINGLE-TARGET symmetric trees at `boosting_type=Plain`
+    # (`PORTING.md` 91 F) -- the arm every matched benchmark pins CatBoost
+    # to.
+    #
+    # Additive with a default, like `test` above and for the same reason:
+    # `fit` has nine call sites and one belongs to another session.
+    #
+    # DEFAULT IS FALSE, and that is not timidity. The two searchers pick
+    # IDENTICAL splits (`pixi run check-pointwise-vs-greedy`), so this is
+    # not a correctness switch -- but the pointwise arm currently pays a
+    # host round trip per tree to split the weak target into two buffers
+    # (`split_stat_planes`), which the greedy arm does not. Flipping the
+    # default is a MEASUREMENT's job, and no benchmark is authorised.
+    use_pointwise_searcher: Bool = False,
     od_type: Int = OD_NONE,
     od_pvalue: Float64 = OD_DEFAULT_STOP_PVALUE,
     od_wait: Int = OD_DEFAULT_WAIT_ITERATIONS,
@@ -880,7 +902,15 @@ def fit_with_test(
         if perm_count > 1:
             need_estimation = True
     var est_sm = -1
-    if need_estimation:
+    # `use_pointwise_searcher` ALSO needs it, and that is DEVIATION 64
+    # meeting DEVIATION 104. Item 64 skips estimation for RMSE + Newton at
+    # one iteration and one permutation, because the GREEDY searcher's leaf
+    # already IS the Newton step. `TDocParallelObliviousTreeSearcher`
+    # returns the STRUCTURE ONLY -- theirs calls a separate
+    # `ReadAndEstimateLeaves` -- so the pointwise arm has no leaf to reuse
+    # and must run the estimator whatever item 64 says. Leaving `est_sm` at
+    # -1 hands the estimator's reduce an invalid block count.
+    if need_estimation or use_pointwise_searcher:
         est_sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
 
     var losses = List[Float64]()
@@ -1117,24 +1147,73 @@ def fit_with_test(
         var splits = List[TBinarySplit]()
         var leaf_values = List[Float32]()
         var leaf_offsets = List[Int]()
-        var sizes = run_tree_layout(
-            ctx, n_rows, fold_counts, max_depth,
-            lc, stats, row_index, lcur,
-            Float32(0.0), Float32(0.0),
-            splits, leaf_values, leaf_offsets, ws,
-            need_estimation,
-            use_subtraction, not need_estimation,
-            learning_rate, l2_leaf_reg,
-            one_hot=one_hot,
-            score_function=score_function,
-            approx_dim=approx_dim,
-            mags_dev=mags_opt^,
-            # `MultiLogitOptimization` is set ONLY for MultiClass
-            # (`multiclass_targets.cpp:32-35`); OneVsAll has no pinned
-            # class, so its histogram carries every plane and the score
-            # needs no extra leaf contribution.
-            multiclass_optimization=objective == OBJECTIVE_MULTICLASS,
-        )
+        var sizes = List[Int]()
+
+        if use_pointwise_searcher:
+            # ---- CatBoost's SINGLE-TARGET symmetric learner -----------
+            # `TDocParallelObliviousTreeSearcher::FitImpl` returns the
+            # STRUCTURE only (DEVIATION 104). The partition it grew is not
+            # reused: the leaves are re-derived from the structure through
+            # `compute_bins_for_model` + `partition_from_bins`, which is
+            # the SAME path the non-estimation permutations below already
+            # take. That is deliberate -- it means the pointwise arm shares
+            # every line of leaf estimation with the greedy arm, so a
+            # difference between the two arms can only come from the
+            # structure.
+            var planes = split_stat_planes(ctx, stats, n_rows)
+            splits = fit_oblivious_tree_structure(
+                ctx, layout_for_test, n_rows, max_depth, lc,
+                planes[0], planes[1],
+                est_sm if est_sm > 0 else 1,
+                Float32(1.0),
+                score_function,
+                l2_leaf_reg,
+                one_hot=one_hot,
+            )
+            var d_bins = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+            compute_bins_for_model(
+                ctx, layout_for_test, splits, len(splits), lc, n_rows,
+                d_bins,
+            )
+            var part = partition_from_bins(
+                ctx, d_bins, n_rows, 1 << len(splits)
+            )
+            sizes = part.sizes.copy()
+            leaf_offsets = part.offsets.copy()
+            row_index = part.row_index.copy()
+            if not need_estimation:
+                # the greedy arm estimates and applies INSIDE
+                # `run_tree_layout` when the method is Simple; this arm has
+                # to do it explicitly, through the same estimator.
+                _estimate_and_apply(
+                    ctx, n_rows, approx_dim, len(sizes), sizes,
+                    leaf_offsets, row_index, targets, weights, has_weights,
+                    lcur, objective, alpha, estimator_alpha,
+                    logloss_border, l2_leaf_reg, est_sm,
+                    leaf_estimation_method, num_classes,
+                    leaf_estimation_iterations, learning_rate,
+                    leaf_values, not_pd_total,
+                )
+        else:
+            sizes = run_tree_layout(
+                ctx, n_rows, fold_counts, max_depth,
+                lc, stats, row_index, lcur,
+                Float32(0.0), Float32(0.0),
+                splits, leaf_values, leaf_offsets, ws,
+                need_estimation,
+                use_subtraction, not need_estimation,
+                learning_rate, l2_leaf_reg,
+                one_hot=one_hot,
+                score_function=score_function,
+                approx_dim=approx_dim,
+                mags_dev=mags_opt^,
+                # `MultiLogitOptimization` is set ONLY for MultiClass
+                # (`multiclass_targets.cpp:32-35`); OneVsAll has no pinned
+                # class, so its histogram carries every plane and the
+                # score needs no extra leaf contribution.
+                multiclass_optimization=objective
+                == OBJECTIVE_MULTICLASS,
+            )
 
         if need_estimation:
             # ---- their estimation loop (`doc_parallel_boosting.h:
@@ -1514,7 +1593,10 @@ def fit(
     leaf_estimation_iterations: Int = 1,
     leaf_estimation_method: Int = LEAF_ESTIMATION_NEWTON,
     alpha: Float32 = Float32(0.0),
-    estimator_alpha: Float32 = Float32(0.5),) raises -> List[Float64]:
+    estimator_alpha: Float32 = Float32(0.5),
+    # forwarded; see `fit_with_test` for what it selects and why the
+    # default is False
+    use_pointwise_searcher: Bool = False,) raises -> List[Float64]:
     """`fit_with_test` with no held-out set and no detector.
 
     THIS WRAPPER EXISTS SO NINE CALL SITES DID NOT HAVE TO CHANGE when the
@@ -1549,6 +1631,7 @@ def fit(
         leaf_estimation_method=leaf_estimation_method,
         alpha=alpha,
         estimator_alpha=estimator_alpha,
+        use_pointwise_searcher=use_pointwise_searcher,
     )
     var out = r.learn_losses.copy()
     return out^

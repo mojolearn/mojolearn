@@ -79,7 +79,11 @@ from gbdt.methods.pointwise_optimization_subsets import (
     split_subsets,
 )
 from gbdt.methods.pointwise_scores_calcer import ScoresCalcerOnCompressedDataSet
-from gbdt.models.oblivious_model import TBinarySplit
+from gbdt.models.oblivious_model import (
+    BIN_SPLIT_TAKE_BIN,
+    BIN_SPLIT_TAKE_GREATER,
+    TBinarySplit,
+)
 
 
 def fit_oblivious_tree_structure(
@@ -205,13 +209,67 @@ def fit_oblivious_tree_structure(
             UInt32(best.bin_id),
             subsets,
         )
-        # `split_type`: TakeBin (one-hot equality) or TakeGreater
+        # `split_type`, and the constants are NOT in the order the names
+        # suggest: `BIN_SPLIT_TAKE_BIN` is 0 and `BIN_SPLIT_TAKE_GREATER`
+        # is 1 (`oblivious_model.mojo:36-37`). Writing `1 if one_hot else 0`
+        # makes every ORDINARY feature an equality test, which still grows a
+        # well-formed tree of the right depth with the right splits and
+        # partitions the rows completely differently -- 8 non-empty leaves
+        # instead of 12. That is how this was found: identical structure,
+        # different leaf values.
         structure.append(
             TBinarySplit(
                 Int32(fid),
                 best.bin_id,
-                Int32(1) if is_one_hot else Int32(0),
+                Int32(BIN_SPLIT_TAKE_BIN) if is_one_hot else Int32(
+                    BIN_SPLIT_TAKE_GREATER
+                ),
             )
         )
 
     return structure^
+
+
+def split_stat_planes(
+    ctx: DeviceContext,
+    mut stats: DeviceBuffer[DType.float32],
+    n_rows: Int,
+) raises -> Tuple[
+    DeviceBuffer[DType.float32], DeviceBuffer[DType.float32]
+]:
+    """Two columns of one buffer into two buffers, because they have to be.
+
+    NO CATBOOST COUNTERPART -- upstream `TL2Target` is already two separate
+    `TCudaBuffer<float>` and no split is needed. It exists because THIS tree
+    carries the weak target as one two-plane buffer everywhere else
+    (`greedy_search_helper`'s `stats`, plane 0 the weight and plane 1 the
+    gradient), and the pointwise kernels cannot take two views of one
+    buffer: they declare `target` and `weight` on independent origins and
+    Mojo refuses the aliasing at `enqueue_function` itself (DEVIATION 97.2,
+    `PORTING_RULES` 4).
+
+    So this is a BRIDGE between two internal conventions, not a port of
+    anything, and it is PRICED HERE RATHER THAN HIDDEN: it costs a round
+    trip through host memory of `2 * n_rows` floats per tree, because
+    `enqueue_copy` has no device-to-device form taking a source POINTER and
+    a sub-buffer view is not available either. At 800k rows that is 6.4 MB
+    down and back per tree, and unlike a device copy it also SERIALISES --
+    two synchronize calls the greedy arm does not make.
+
+    That is a real cost and it is the reason this arm is opt-in rather than
+    the default. It disappears entirely the moment the boosting loop carries
+    the weak target as two buffers throughout, which is the right fix and is
+    not attempted here because `stats` is read by the greedy searcher, the
+    estimator and the bootstrap.
+    """
+    var w = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    var t = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    var host = ctx.enqueue_create_host_buffer[DType.float32](2 * n_rows)
+    ctx.enqueue_copy(dst_buf=host, src_buf=stats)
+    ctx.synchronize()
+    ctx.enqueue_copy(dst_buf=w, src_ptr=host.unsafe_ptr())
+    ctx.enqueue_copy(
+        dst_buf=t, src_ptr=host.unsafe_ptr().unsafe_offset(n_rows)
+    )
+    ctx.synchronize()
+    return (w^, t^)
