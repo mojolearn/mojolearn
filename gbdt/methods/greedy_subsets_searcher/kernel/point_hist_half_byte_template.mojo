@@ -59,9 +59,24 @@ comptime BLOCK_SIZE = block_size_for[K_HIST_HALF_BYTE, TARGET_COLUMN]()
 
 #: The mode this build compiles against. See `mojo_only/numerics.mojo`. FAST
 #: is the default, and under FAST the flush is CatBoost's own float
-#: `atomicAdd` (`hist_half_byte.cu:45-51`) on every vendor including Apple.
-#: No vendor forces the deterministic row. The fixed-point Int32 accumulator
-#: is what IDENTICAL selects, and it is dead code in this build.
+#: `atomicAdd` (`hist_half_byte.cu:45-51`) on every vendor Mojo builds for.
+#: The fixed-point Int32 accumulator is what IDENTICAL selects, and it is
+#: dead code in this build.
+#:
+#: "No vendor forces the deterministic row" stood here and is deleted rather
+#: than annotated (2026-08-21): the `qualcomm` column and the portable
+#: baseline have no CORE float atomic -- it arrives through an optional
+#: extension -- so `deterministic_flush_for` returns True for them in BOTH
+#: modes. That row is a vendor override now, not only a mode's choice.
+#:
+#: WORTH KNOWING WHERE THIS FILE SITS IN THE IDENTITY ARGUMENT. The flush is
+#: fixed point under IDENTICAL, but the SHARED-MEMORY accumulation in this
+#: family is float (`smem[slot] = smem[slot] + stat`, below), unlike the
+#: hist_2 family's shared Int32. So for THIS family the block size is a
+#: NUMERIC row -- it sets how many private slices exist, hence which floats
+#: add to which -- and that is what the identity floor's 32 KB is protecting.
+#: On the hist_2 path the same knob is pure scheduling, because integer
+#: addition is associative. Two families, two answers, one table.
 comptime BUILD_MODE = NUMERIC_FAST
 
 #: Lanes moving in lockstep. READ FROM THE MATRIX, not pinned here.

@@ -172,6 +172,40 @@ Both resolvers and the runtime one now clamp. `check_hardware_matrix` pins
 apple at 512/512/256/512 and nvidia at 384 across the change, so the fix is
 proved to have moved nothing on any column that runs today.
 
+### Which rows actually have to match, and which are free
+
+The floor is short because most of the table does not need to agree. One
+question sorts every row: **does it change the sequence or the precision of
+the arithmetic?**
+
+| free to differ per vendor | must match |
+|---|---|
+| grid shape, block count, which thread does which work | the shared-memory budget, because it sets the block, which sets how many private histogram slices exist |
+| double buffering (RAFT's two smem pages) | the replication lane count |
+| the quantize search strategy in the evaluator | the reduction stage width |
+| launch and drain policy | the accumulator TYPE (float atomic vs fixed point) |
+
+And one row moves between the columns depending on the kernel, which is the
+part worth understanding:
+
+- The **hist_2 family** (CatBoost's fused two-stat path, taken at every
+  `maxBins <= 128`, so the common case) accumulates in **shared Int32**.
+  Integer addition is associative, so the number of slices cannot change the
+  total: **block size there is pure scheduling** and a vendor may pick any.
+- The **binary / half-byte / wide one-byte families** accumulate in **shared
+  float** (`smem[slot] = smem[slot] + stat`) and only flush through fixed
+  point. There the block size decides which floats add to which, so it is
+  **numeric** — and that is precisely what the identity floor's 32 KB is
+  protecting.
+
+So the floor is load-bearing for one half of the kernel set and redundant for
+the other. **That is a live design lead, not a settled fact:** moving the
+remaining families to shared fixed point would make the block scheduling
+everywhere, which would let a much lower floor still be bit-identical — and
+would make the `spec-baseline` column admissible instead of refused. Nobody
+has costed it. It is written here rather than acted on because it is a profile
+question, and profile questions are decided deliberately.
+
 ### What a portable profile would cost, now that it can be priced
 
 If `IDENTICAL` ever has to reach a spec-minimum device, profile 2 would be
