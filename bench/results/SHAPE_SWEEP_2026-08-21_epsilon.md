@@ -75,12 +75,42 @@ port. On V100-class bandwidth the cliff is tolerable; on Apple it is the
 
 A perfect density fix would flatten levels 3+ to the level-2 cost:
 depth-6 tree ~123 -> ~76 ms, roughly 1.6x, growing with depth. The
-candidate (level-wise bin compaction: partition the cindex rows alongside
-the docs, so deep-level reads stay dense) is a DEVIATION -- CatBoost has
-no such code at 2 stats -- and its own traffic (read+write 800MB/level
-dense) eats most of the win at depth 6 unless triggered only below a
-density threshold; the sketch nets ~15-30%. DEFERRED at that price while
-we stand 3.3-3.4x ahead at this shape; it becomes interesting again at
-depth 8+ or on a bandwidth-tighter GPU. If someone picks it up: trigger
-compaction when leaf density crosses ~1/8, and re-measure the depth
-differencing FIRST on that machine.
+candidate (level-wise bin compaction) was priced here at 15-30% when
+this file was first written; THE ADDENDUM BELOW REFUTES IT BY
+MEASUREMENT the same day -- the dense copy costs more than the
+amplification it recovers at depth 6 -- and the estimate is deleted
+rather than kept beside its refutation.
+
+## Addendum, same day: the cliff has no profitable on-box fix -- probed
+
+`mojo_only/density_probe.mojo` measured the mechanism directly: indexed
+sums over hashed ascending subsets of a 400k x 500-uint32 buffer, against
+dense reads and against the gather arm's true cost (the same amplified
+read + dense write + dense re-read), alternated in one process.
+
+    density   indexed useful-BW    indexed / gather-arm cost
+      1/1        104.6 GB/s              0.29x
+      1/2         51.7                   0.45x
+      1/8         14.8                   0.68x
+      1/32         7.3                   0.75x
+      1/64         5.6                   0.75x
+
+Two conclusions, both negative and both final for this box:
+
+1. **Their 2-stat threshold holds on Apple.** Even at 1/64 density,
+   where the indexed read is ~18x amplified, GatherBins would still cost
+   ~1.33x more, because its gather step pays the identical amplification
+   before adding a write and a re-read. No kernel-matrix flip exists.
+2. **Level compaction is dead by the probe's own numbers**: moving the
+   800MB bin matrix densely costs ~16-18 ms/level, more than the ~5-9
+   ms/level that depth-6 amplification actually loses (27.8 measured vs
+   ~19-23 dense-ideal). It could only pay at depths where amplification
+   losses exceed a full dense copy -- far beyond depth 6.
+
+So the density cliff is STRUCTURAL on this device at CatBoost's GPU
+depth, the accumulate's indexed load is already the best arm at every
+density, and the on-box speed hunt at the epsilon shape closes with a
+measured answer at every door: floor priced, dispatch priced, cell
+passes 10%, subtraction proven, gather refuted, compaction refuted. The
+cliff re-opens only on other memory systems (measure the depth
+differencing there first) or at much greater depths.
