@@ -1523,7 +1523,7 @@ outcome the host reaches by never producing a candidate.
 
 ---
 
-## 183. OPEN — the device does not apply cuML's zero-gain gate, and that is the ONLY difference between the two paths
+## 183. CLOSED — the device applies cuML's zero-gain gate, from exact integers on the host
 
 **Theirs.** `split_not_valid` (`kernels/builder_kernels.cuh:59-67`) rejects a
 split whose `best_metric_val` is `<= min_impurity_decrease`. cuML's Gini gain
@@ -1551,33 +1551,48 @@ the whole of the remaining difference. The direction is asserted, not assumed:
 the gate can only ever REJECT, so the device can only ever have more nodes, and
 a single configuration where it had fewer would mean something else diverging.
 
-**How to close it, with the algebra worked out so the next round does not have
-to.** The gate is decidable from what the device already has, WITHOUT the
-float. Writing `sq_total` for the node's `sum_j t_j^2`:
+**THE FIX, AND IT NEEDED NO FLOAT ON THE DEVICE AND NO 128-BIT COMPARE.**
+Writing `sq_total` for the node's `sum_j t_j^2`:
 
     cuML gain = parent_gini + sklearn_proxy / n
               = (1 - sq_total/n^2) + (num/den - n)/n
               = num/(den*n) - sq_total/n^2
 
-    gain > 0  <=>  num * n > sq_total * den
+Every quantity on the right is an exact integer the score pass ALREADY
+computed: `num` and `den` come back with the winning split, and `sq_total` and
+`n` are the NODE's totals, which `out_acc_total` and `out_n_total` hold for
+every scored cell of that node — the same values in each, because they are the
+node's own class counts.
 
-All integers, and `out_acc_total` already carries the class counts the device
-would need. Two cautions for whoever does it: the products reach `n^4/4`, which
-is `2^82` at `SCORE_MAX_ROWS_EXACT = 2^21` and therefore needs the hand-widened
-128-bit compare of deviation 167 rather than `Int64` (it fits `Int64` only for
-`n <= 2^15`); and the test belongs in `score_to_candidate_kernel` rather than
-on the winner, which is EQUIVALENT because `sq_total/n^2` is constant within a
-node, so the gain is monotone in `num/den` and the max-gain candidate is the
-max-proxy candidate.
+So the gain is formed on the HOST, in `Float64`, from integers that carry no
+rounding, and `split_not_valid` applies unchanged.
 
-**Price until then.** A device tree is DEEPER than a host tree on data that
-produces zero-gain splits: 747 nodes against 689 on this fixture. It is not
-wrong — every node still splits on a real threshold and every row still lands
-in one leaf — but it is not the same model, and `min_impurity_decrease` is
-silently inert on the device path. **That makes this the one place in the lane
-where a parameter is accepted and not honoured**, which is the thing
-`estimator.mojo` exists to prevent; the estimator does not expose the device
-path yet, and it must not until this is closed.
+**The first sketch of this fix was worse and it is worth recording why.** It
+put the comparison on the device as `num * n > sq_total * den`, which is the
+same inequality — but `num * n` reaches `2^82` at `SCORE_MAX_ROWS_EXACT`, so it
+needed deviation 167's hand-widened 128-bit multiply inside a kernel. Bringing
+three small arrays back per level instead makes that unnecessary: `Int128`
+works fine on the host. **The cheaper fix was the one that moved less code, not
+the one that stayed on the device.**
+
+**Measured, before and after, on the same fixture:**
+
+    before:  689 host nodes against 747 device nodes,
+             4 of 9 configurations identical in node count
+    after:   689 against 689, 9 of 9 identical,
+             0 nodes differing in any compared field,
+             0 of 2241 leaf values differing
+
+**What is still not bit-identical, and it is smaller than what it replaced.**
+The host's `best_metric_val` is cuML's `GainPerSplit` accumulated in `Float32`
+from float reciprocals (`objectives.cuh:52-83`); the device path's is the same
+quantity formed in `Float64` from exact integers. They agree far inside the
+gate's resolution but not in the last bits, so `device_tree_check` still
+excludes the FIELD while now requiring the DECISION it drives to agree.
+
+**`min_impurity_decrease` is therefore honoured on the device path**, and the
+one place in this lane where a parameter was accepted and not honoured is
+gone.
 
 ---
 

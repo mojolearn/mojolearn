@@ -13,21 +13,21 @@ exactly — which it can, because deviation 142's amendment put the same explici
 `fma` on both sides of the draw and deviation 135's fixed point made the
 accumulators integers.
 
-**AND THE ONE THING THAT IS NOT IDENTICAL IS NAMED, MEASURED AND EXPLAINED.**
-`split_not_valid` rejects a split whose `best_metric_val` is `<=
-min_impurity_decrease`, and cuML's Gini gain is `>= 0` always, so at the
-default `0.0` the HOST rejects a zero-gain split — one that does not reduce
-impurity at all — and turns the node into a leaf. The DEVICE cannot: it does
-not compute the float gain (deviations 175 and 182), so it publishes a
-constant and splits anyway. That is deviation 183, it is the ONLY difference
-between the two paths, and this file proves it is the only one by running both
-arms:
+**THE GATE AGREES TOO, SINCE DEVIATION 183 WAS CLOSED.** `split_not_valid`
+rejects a split whose `best_metric_val` is `<= min_impurity_decrease`, and
+cuML's Gini gain is `>= 0` always, so at the default `0.0` a zero-gain split
+becomes a leaf. The device could not apply that gate while it did not compute
+the gain — 747 device nodes against 689 host nodes — and now forms the gain on
+the host from the exact integers the score pass already produced. Both arms
+are kept, and the reason is diagnostic rather than historical:
 
-* **arm 2a**, the gate disabled on the host: the trees must be identical, node
-  for node. If anything else ever diverged, this arm is where it would show;
-* **arm 2b**, the gate at its default: the difference is MEASURED, and the
-  direction is asserted — the device can only ever have MORE nodes, never
-  fewer, because the gate can only ever reject.
+* **arm 2a**, the gate DISABLED on the host: isolates the split search;
+* **arm 2b**, the gate at its DEFAULT: exercises the gate as well.
+
+A change that breaks only the gate turns 2b red while 2a stays green, which
+localises it. Arm 2b also asserts the gate FIRES on this fixture — 2a's node
+count must exceed 2b's — because an equality no zero-gain split ever tested
+would be an equality about nothing.
 
 `best_metric_val` itself is excluded from the comparison in both arms, stated
 rather than quietly skipped.
@@ -287,12 +287,24 @@ def main() raises:
     )
     cells += 5
 
-    # ---------------- 2b. the gate at its DEFAULT: the one difference ------
-    # DEVIATION 183, measured rather than asserted away. The device cannot
-    # apply cuML's `min_impurity_decrease` gate because it does not compute
-    # the float gain, so it splits where the host makes a leaf. The gate can
-    # only ever REJECT, so the device can only ever have MORE nodes.
-    print("[deviation 183] the gate at its default, measured")
+    # ---------------- 2b. the gate at its DEFAULT ------------------------
+    # THIS ARM USED TO MEASURE A GAP AND NOW ASSERTS ITS ABSENCE. DEVIATION
+    # 183 was open when it was written: the device could not apply cuML's
+    # zero-gain gate because it did not compute the float gain, so it split
+    # where the host made a leaf -- 747 device nodes against 689 host nodes on
+    # this fixture. The arm therefore asserted the DIRECTION (the device can
+    # only ever have more, never fewer) and required the difference to be
+    # visible at all, so that the cost could not go unmeasured.
+    #
+    # 183 is closed: the gain is now formed on the host from the exact
+    # integers the score pass already produced, so `split_not_valid` applies
+    # unchanged. The arm asserts identity instead.
+    #
+    # BOTH ARMS ARE KEPT ON PURPOSE. 2a runs with the gate disabled and 2b
+    # with it at its default, so a future change that breaks only the gate
+    # turns 2b red while 2a stays green -- which localises it to the gate
+    # rather than to the split search.
+    print("[deviation 183] the gate at its default -- CLOSED, asserted here")
     var gated_configs = 0
     var device_more = 0
     var device_fewer = 0
@@ -332,19 +344,33 @@ def main() raises:
         "device nodes",
     )
     assert_equal(
-        device_fewer,
+        device_more + device_fewer,
         0,
-        "the zero-gain gate can only ever REJECT a split, so the device --"
-        " which does not apply it -- can only ever have MORE nodes. Fewer"
-        " means something other than DEVIATION 183 is diverging.",
+        "with DEVIATION 183 closed the device and host must agree in node"
+        " count at the DEFAULT gate too. More nodes on the device means the"
+        " gain is not reaching split_not_valid; fewer means it is rejecting"
+        " splits the host keeps.",
     )
+    assert_equal(
+        host_total,
+        dev_total,
+        "and the totals must match: 689 against 689 when this was closed,"
+        " where it was 689 against 747 before",
+    )
+    # The gate must also be DOING something on this fixture, or the arm is
+    # asserting an equality that no zero-gain split ever tested. Arm 2a runs
+    # the same configurations with the gate disabled; if the gate never fires,
+    # the two arms grow the same trees and 2b proves nothing.
     assert_true(
-        device_more > 0,
-        "if the device never has more nodes then this fixture never produces"
-        " a zero-gain split, and arm 2b is measuring nothing -- DEVIATION"
-        " 183's cost would be invisible here",
+        total_nodes > host_total,
+        "arm 2a (gate disabled) grew "
+        + String(total_nodes)
+        + " nodes and arm 2b (gate on) grew "
+        + String(host_total)
+        + "; if those are equal the gate never fired and this arm is"
+        " measuring nothing",
     )
-    cells += 2
+    cells += 3
 
     # ---------------- 3. structural invariants on the device path ---------
     print("[invariants] the device tree on its own terms")
