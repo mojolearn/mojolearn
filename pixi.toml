@@ -321,6 +321,18 @@ check-pointwise-driver = "mojo run -I . mojo_only/pointwise_driver_check.mojo"
 # GPU, ~20 s.
 check-pointwise-small-bin-driver = "mojo run -I . mojo_only/pointwise_small_bin_driver_check.mojo"
 
+# TComputeHistogramsHelper's state machine, which decides the FULL-PASS flag
+# -- the single most consequential bit in the histogram family. True computes
+# every part; False computes only the smaller sibling of each pair and leaves
+# a subtraction to recover the other, so a wrong flag gives a histogram that
+# is right at one depth and quietly wrong after it. No GPU: every decision is
+# a pure function of the sequence of depths the helper is called with, so the
+# gate enumerates transitions a fit would take days to reach -- a second tree,
+# a skipped level, a re-entry at the same depth, and a policy with no
+# features (whose flag must NOT clear, because their assignment sits inside
+# `if (GetGridSize(Policy))`). Own main(); host only, instant.
+check-histograms-helper = "mojo run -I . mojo_only/histograms_helper_check.mojo"
+
 # The LSD radix sort over (bin, permutation position). Gates STABILITY
 # separately from sortedness and prints both, because sortedness alone
 # cannot see a tie that moved -- and the tie order IS the second half of
