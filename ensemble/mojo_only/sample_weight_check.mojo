@@ -135,7 +135,6 @@ def _fit[
     n_cols: Int,
     n_classes: Int,
     bootstrap: Bool,
-    objective: O,
     weights: List[Float32],
 ) raises -> RandomForestMetaData[O.DataT, O.LabelT] where O.DataT == DT:
     var hx = ctx.enqueue_create_host_buffer[DT](n_rows * n_cols)
@@ -159,7 +158,8 @@ def _fit[
 
     var p = _params(bootstrap)
     var f = fit_forest[O](
-        ctx, dx, dy, dw, n_rows, n_cols, n_classes, p, objective, weights
+        ctx, dx, dy, dw, n_rows, n_cols, n_classes, p,
+        sample_weight_host=weights
     )
     _ = dx^
     _ = dy^
@@ -272,9 +272,8 @@ def arm_a_zero_weight_drop(ctx: DeviceContext) raises -> Int:
     _ = hb^
 
     # --- and the builder sees exactly that many rows ----------------------
-    var obj = PlainObj(Int32(3), Int32(1), Int32(GINI), Float32(0.0))
     var f = _fit[PlainObj](
-        ctx, d[0], d[1], n_rows, n_cols, 3, False, obj, w
+        ctx, d[0], d[1], n_rows, n_cols, 3, False, w
     )
     if Int(f.trees[0].sparsetree[0].InstanceCount()) != n_keep:
         fails += 1
@@ -286,7 +285,7 @@ def arm_a_zero_weight_drop(ctx: DeviceContext) raises -> Int:
     # and it must DIFFER from the unweighted fit, or the drop never reached
     # the builder at all
     var f_all = _fit[PlainObj](
-        ctx, d[0], d[1], n_rows, n_cols, 3, False, obj, List[Float32]()
+        ctx, d[0], d[1], n_rows, n_cols, 3, False, List[Float32]()
     )
     if Int(f_all.trees[0].sparsetree[0].InstanceCount()) != n_rows:
         fails += 1
@@ -415,14 +414,11 @@ def arm_c_double_counting(ctx: DeviceContext) raises -> Int:
         w.append(Float32(1 + Int(_mix(UInt64(r) + 3) % 3)))
         ones.append(Float32(1.0))
 
-    var obj = WtObj(
-        Int32(3), Int32(1), Int32(GINI), Float32(0.0), BinScales(1.0, 1.0)
-    )
     var fails = 0
 
-    var nb_w = _fit[WtObj](ctx, d[0], d[1], n_rows, n_cols, 3, False, obj, w)
+    var nb_w = _fit[WtObj](ctx, d[0], d[1], n_rows, n_cols, 3, False, w)
     var nb_1 = _fit[WtObj](
-        ctx, d[0], d[1], n_rows, n_cols, 3, False, obj, ones
+        ctx, d[0], d[1], n_rows, n_cols, 3, False, ones
     )
     if _same(nb_w, nb_1) == 0:
         fails += 1
@@ -447,9 +443,9 @@ def arm_c_double_counting(ctx: DeviceContext) raises -> Int:
     # were seeing the weights, those two would differ; since it is not, the
     # row sample is the only input and both must produce the same tree.
     var plain = PlainObj(Int32(3), Int32(1), Int32(GINI), Float32(0.0))
-    var boot_wt = _fit[WtObj](ctx, d[0], d[1], n_rows, n_cols, 3, True, obj, w)
+    var boot_wt = _fit[WtObj](ctx, d[0], d[1], n_rows, n_cols, 3, True, w)
     var boot_pl = _fit[PlainObj](
-        ctx, d[0], d[1], n_rows, n_cols, 3, True, plain, w
+        ctx, d[0], d[1], n_rows, n_cols, 3, True, w
     )
     if _same(boot_wt, boot_pl) != 0:
         fails += 1
@@ -481,11 +477,8 @@ def arm_d_weighted_bins_train(ctx: DeviceContext) raises -> Int:
     var w = List[Float32]()
     for r in range(n_rows):
         w.append(Float32(1 + Int(_mix(UInt64(r) + 11) % 4)))
-    var obj = WtObj(
-        Int32(3), Int32(1), Int32(GINI), Float32(0.0), BinScales(1.0, 1.0)
-    )
-    var f1 = _fit[WtObj](ctx, d[0], d[1], n_rows, n_cols, 3, False, obj, w)
-    var f2 = _fit[WtObj](ctx, d[0], d[1], n_rows, n_cols, 3, False, obj, w)
+    var f1 = _fit[WtObj](ctx, d[0], d[1], n_rows, n_cols, 3, False, w)
+    var f2 = _fit[WtObj](ctx, d[0], d[1], n_rows, n_cols, 3, False, w)
     var fails = 0
     if len(f1.trees) != 2 or len(f1.trees[0].sparsetree) < 5:
         fails += 1

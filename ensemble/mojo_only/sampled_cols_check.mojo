@@ -145,17 +145,11 @@ def _fit[sabotage: Int](ctx: DeviceContext) raises -> FitOut:
         False,
     )
 
-    var objective = ClassificationObjectiveFunction[DT, LT, ClassificationBin](
-        Int32(N_CLASSES),
-        params.min_samples_leaf,
-        Int32(params.split_criterion),
-        Scalar[DT](0.0),
-    )
     var builder = Builder[
         ClassificationObjectiveFunction[DT, LT, ClassificationBin]
     ](
         ctx, params, Int32(0), UInt64(42), N_ROWS, N_COLS,
-        Int32(N_CLASSES), objective^,
+        Int32(N_CLASSES),
     )
     var tree = builder.train[sabotage](ctx, dataset, quantiles)
 

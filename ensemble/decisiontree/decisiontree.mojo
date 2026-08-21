@@ -478,17 +478,28 @@ struct DecisionTree:
 
     @staticmethod
     def fit[dtype: DType](params: DecisionTreeParams) raises:
-        """`DecisionTree::fit`, `decisiontree.cuh:234-333`. NOT PORTED YET.
+        """`DecisionTree::fit`, `decisiontree.cuh:234-333`. NOT PORTED.
 
-        The declared call site. Their body resolves `CRITERION_END` to
-        GINI/MSE (`:251-256`) and then dispatches to one of four
-        `Builder<ObjectiveT>` instantiations (`:259-332`). Both steps
-        need `batched_levelalgo/builder.mojo` and
-        `batched_levelalgo/objectives.mojo`, which another lane is
-        writing; until they land this raises by name rather than
-        returning an empty tree.
+        Their body does two things: resolve `CRITERION_END` to GINI/MSE
+        (`:251-256`) and dispatch to one of four `Builder<ObjectiveT>`
+        instantiations (`:259-332`). BOTH now live elsewhere in this port
+        -- the resolution in `Builder`'s constructor, the dispatch in the
+        `O` a caller picks -- so this single-tree entry point has nothing
+        left of its own and no callers.
+
+        IT RAISES RATHER THAN RETURNING. This docstring used to say it
+        raised while the body was `params.check_fit_supported()`, which is
+        `pass`: it accepted every call and silently did nothing. A door
+        that is not wired has to say so, because a caller cannot tell a
+        successful no-op from a successful fit.
         """
-        params.check_fit_supported()
+        raise Error(
+            "DecisionTree.fit is not ported: fit a one-tree forest through"
+            " ensemble.randomforest.fit_forest instead. Their"
+            " decisiontree.cuh:251-256 criterion resolution lives in"
+            " Builder's constructor and their :259-332 objective dispatch"
+            " is the type parameter O."
+        )
 
     @staticmethod
     def predict[

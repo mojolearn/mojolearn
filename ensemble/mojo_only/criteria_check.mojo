@@ -53,6 +53,7 @@ from ensemble.decisiontree.batched_levelalgo.objectives import (
     RegressionObjectiveFunction,
 )
 from ensemble.decisiontree.decisiontree import (
+    CRITERION_END,
     DecisionTreeParams,
     ENTROPY,
     GAMMA,
@@ -83,7 +84,7 @@ def _mix(x: UInt64) -> UInt64:
     return h
 
 
-def _params(criterion: Int) -> RF_params:
+def _params(criterion: Int, min_samples_leaf: Int = 1) -> RF_params:
     return RF_params(
         n_trees=Int32(1),
         bootstrap=False,
@@ -95,7 +96,7 @@ def _params(criterion: Int) -> RF_params:
             max_leaves=Int32(-1),
             max_features=Float32(1.0),
             max_n_bins=Int32(16),
-            min_samples_leaf=Int32(1),
+            min_samples_leaf=Int32(min_samples_leaf),
             min_samples_split=Int32(2),
             split_criterion=criterion,
             min_impurity_decrease=Float32(0.0),
@@ -147,6 +148,7 @@ def _fit_cls(
     n_cols: Int,
     n_classes: Int,
     criterion: Int,
+    min_samples_leaf: Int = 1,
 ) raises -> Shape:
     var hx = ctx.enqueue_create_host_buffer[DT](n_rows * n_cols)
     for i in range(n_rows * n_cols):
@@ -160,12 +162,9 @@ def _fit_cls(
     ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
     var dsw = ctx.enqueue_create_buffer[DT](1)
     ctx.synchronize()
-    var p = _params(criterion)
-    var obj = ClsObj(
-        Int32(n_classes), Int32(1), Int32(criterion), Float32(0.0)
-    )
+    var p = _params(criterion, min_samples_leaf)
     var f = fit_forest[ClsObj](
-        ctx, dx, dy, dsw, n_rows, n_cols, n_classes, p, obj
+        ctx, dx, dy, dsw, n_rows, n_cols, n_classes, p
     )
     var s = _shape_of(f)
     _ = dx^
@@ -183,6 +182,7 @@ def _fit_reg(
     n_rows: Int,
     n_cols: Int,
     criterion: Int,
+    min_samples_leaf: Int = 1,
 ) raises -> Shape:
     var hx = ctx.enqueue_create_host_buffer[DT](n_rows * n_cols)
     for i in range(n_rows * n_cols):
@@ -196,9 +196,8 @@ def _fit_reg(
     ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
     var dsw = ctx.enqueue_create_buffer[DT](1)
     ctx.synchronize()
-    var p = _params(criterion)
-    var obj = RegObj(Int32(1), Int32(1), Int32(criterion), Float32(0.0))
-    var f = fit_forest[RegObj](ctx, dx, dy, dsw, n_rows, n_cols, 1, p, obj)
+    var p = _params(criterion, min_samples_leaf)
+    var f = fit_forest[RegObj](ctx, dx, dy, dsw, n_rows, n_cols, 1, p)
     var s = _shape_of(f)
     _ = dx^
     _ = dy^
@@ -408,6 +407,141 @@ def arm_d_mae_refused() raises -> Int:
     return 0
 
 
+def arm_e_criterion_end(ctx: DeviceContext) raises -> Int:
+    """`decisiontree.cuh:251-256`. CRITERION_END is the sentinel their
+    header defaults `split_criterion` to (`decisiontree.hpp:89`), and they
+    resolve it to GINI for an integer LabelT and MSE for a float one
+    before any objective is built.
+
+    This port carried the sentinel and resolved it NOWHERE: a params struct
+    left at the C++ default reached training with `split_criterion == 7`
+    and passed every validator on the way. So the resolution is checked by
+    the only thing that can see it -- the TREE. Fitting at CRITERION_END
+    must give bit-identically the tree that GINI gives (classification) or
+    MSE gives (regression), and the comparison is only worth anything
+    because a DIFFERENT criterion gives a different tree, which arms A and
+    B already establish and this arm re-establishes locally."""
+    print()
+    print("ARM E -- CRITERION_END resolves to GINI / MSE")
+    var wrong = 0
+
+    var n_rows = 400
+    var n_cols = 3
+    var xs = List[Float32]()
+    var ys = List[Int32]()
+    for j in range(n_cols):
+        for i in range(n_rows):
+            var h = _mix(UInt64(i * 31 + j * 7 + 1))
+            xs.append(Float32(Int(h % UInt64(1000))) / Float32(1000.0))
+    for i in range(n_rows):
+        ys.append(Int32(i % 3))
+
+    var end_cls = _fit_cls(ctx, xs, ys, n_rows, n_cols, 3, CRITERION_END)
+    var gini = _fit_cls(ctx, xs, ys, n_rows, n_cols, 3, GINI)
+    var entropy = _fit_cls(ctx, xs, ys, n_rows, n_cols, 3, ENTROPY)
+    print(
+        "    classification: CRITERION_END ->",
+        end_cls.n_nodes,
+        "nodes, GINI ->",
+        gini.n_nodes,
+        "nodes, ENTROPY ->",
+        entropy.n_nodes,
+        "nodes",
+    )
+    if end_cls.differs_from(gini):
+        print("      FAIL: CRITERION_END did not resolve to GINI")
+        wrong += 1
+    if not gini.differs_from(entropy):
+        print(
+            "      FAIL: GINI and ENTROPY agree on this fixture, so the"
+            " equality above proves nothing"
+        )
+        wrong += 1
+
+    var yr = List[Float32]()
+    for i in range(n_rows):
+        yr.append(Float32(i % 5) * Float32(1.5))
+    var end_reg = _fit_reg(ctx, xs, yr, n_rows, n_cols, CRITERION_END)
+    var mse = _fit_reg(ctx, xs, yr, n_rows, n_cols, MSE)
+    var poisson = _fit_reg(ctx, xs, yr, n_rows, n_cols, POISSON)
+    print(
+        "    regression:     CRITERION_END ->",
+        end_reg.n_nodes,
+        "nodes, MSE ->",
+        mse.n_nodes,
+        "nodes, POISSON ->",
+        poisson.n_nodes,
+        "nodes",
+    )
+    if end_reg.differs_from(mse):
+        print("      FAIL: CRITERION_END did not resolve to MSE")
+        wrong += 1
+    if not mse.differs_from(poisson):
+        print(
+            "      FAIL: MSE and POISSON agree here, so the equality above"
+            " proves nothing"
+        )
+        wrong += 1
+
+    if wrong == 0:
+        print(
+            "  arm E OK: CRITERION_END gives GINI's tree for an integer"
+            " label and MSE's for a float one, and both differ from a"
+            " neighbouring criterion"
+        )
+    return wrong
+
+
+def arm_f_params_reach_the_device(ctx: DeviceContext) raises -> Int:
+    """`builder.cuh:592-596` builds the objective from `params` INSIDE
+    `computeSplit`, which is what makes `params` the single source of
+    truth for `min_samples_leaf`, `split_criterion` and
+    `min_impurity_decrease`.
+
+    Ours used to take a pre-built objective from the caller and never read
+    those three from `params` at all, so setting them there was silently
+    ignored. Nothing caught it because every caller happened to build its
+    objective out of the same params.
+
+    So this arm passes NO objective -- there is nowhere left to pass one --
+    and requires `params.min_samples_leaf` to move the tree on its own."""
+    print()
+    print("ARM F -- params reach the device with no objective in sight")
+    var wrong = 0
+    var n_rows = 400
+    var n_cols = 3
+    var xs = List[Float32]()
+    var ys = List[Int32]()
+    for j in range(n_cols):
+        for i in range(n_rows):
+            var h = _mix(UInt64(i * 17 + j * 101 + 5))
+            xs.append(Float32(Int(h % UInt64(1000))) / Float32(1000.0))
+    for i in range(n_rows):
+        ys.append(Int32(i % 3))
+
+    var loose = _fit_cls(ctx, xs, ys, n_rows, n_cols, 3, GINI, 1)
+    var tight = _fit_cls(ctx, xs, ys, n_rows, n_cols, 3, GINI, 150)
+    print(
+        "    min_samples_leaf 1 ->",
+        loose.n_nodes,
+        "nodes; min_samples_leaf 150 ->",
+        tight.n_nodes,
+        "nodes",
+    )
+    if tight.n_nodes >= loose.n_nodes:
+        print(
+            "      FAIL: raising params.min_samples_leaf did not shrink the"
+            " tree, so params is not reaching GainPerSplit"
+        )
+        wrong += 1
+    if wrong == 0:
+        print(
+            "  arm F OK: params.min_samples_leaf alone moved the tree,"
+            " so the objective is built from params"
+        )
+    return wrong
+
+
 def main() raises:
     print("criteria_check: every split criterion cuML accepts, actually run")
     var ctx = DeviceContext()
@@ -416,6 +550,8 @@ def main() raises:
     fails += arm_b_regression(ctx)
     fails += arm_c_domain_guards(ctx)
     fails += arm_d_mae_refused()
+    fails += arm_e_criterion_end(ctx)
+    fails += arm_f_params_reach_the_device(ctx)
     if fails == 0:
         print("criteria_check: ALL OK")
     else:

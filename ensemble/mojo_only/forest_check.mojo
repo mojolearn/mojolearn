@@ -153,15 +153,9 @@ def _fit(
     var dsw = ctx.enqueue_create_buffer[DT](1)
     ctx.synchronize()
 
-    var objective = ClassificationObjectiveFunction[DT, LT, ClassificationBin](
-        Int32(d.n_classes),
-        p.tree_params.min_samples_leaf,
-        Int32(p.tree_params.split_criterion),
-        Scalar[DT](Float64(p.tree_params.min_impurity_decrease)),
-    )
     var forest = fit_forest[
         ClassificationObjectiveFunction[DT, LT, ClassificationBin]
-    ](ctx, dx, dy, dsw, d.n_rows, d.n_cols, d.n_classes, p, objective)
+    ](ctx, dx, dy, dsw, d.n_rows, d.n_cols, d.n_classes, p)
     # Mojo frees a value at its LAST USE; every buffer here reached a kernel
     # as a raw pointer.
     _ = dx^

@@ -163,7 +163,10 @@ from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import
     launch_node_split_kernel,
 )
 from ensemble.decisiontree.decisiontree import (
+    CRITERION_END,
     DecisionTreeParams,
+    GINI,
+    MSE,
     TreeMetaDataNode,
 )
 from ensemble.flatnode import SparseTreeNode
@@ -814,23 +817,21 @@ struct Builder[O: ObjectiveLike](Movable):
     them once in `assignWorkspace` (`:334-372`), because a kernel inside a
     tree builder must not allocate.
 
-    PARAMETERIZED ON CLASSIFICATION ONLY, and that is an OPEN ITEM rather
-    than a design. Theirs is `Builder<ObjectiveT>`, generic over the
-    objective. Ours cannot be yet: the launchers in
-    `kernels/builder_kernels_impl.mojo` are OVERLOADED on the concrete
-    objective type (their DEVIATION 129a) because `objectives.mojo` declares
-    no trait and Mojo traits are nominal, so a generic `Builder` has nothing
-    to dispatch on. The one-line upstream fix -- declare the two objective
-    structs conformant to an objective trait, moved out of
-    `builder_kernels_impl.mojo` so `objectives.mojo` can import it without a
-    cycle -- deletes the adapters, the six launcher overloads AND this
-    restriction together. Recorded in `ensemble/PLAN.md`.
+    GENERIC OVER THE OBJECTIVE, as theirs is. `Builder<ObjectiveT>` gets
+    that from an unconstrained `typename`; ours gets it from
+    `ObjectiveLike` in `objectives.mojo`, which closed DEVIATION 129a and
+    took the adapters and the launcher overloads with it. Regression and
+    classification are the same code with a different `O`.
 
-    Until then this builder trains CLASSIFICATION forests, which is the
-    ship-first path this directory was planned around for an independent
-    reason: `ClassificationBin` is an integer counter with an integer
-    atomic, so its histogram is order-independent by construction.
-    """
+    THE OBJECTIVE IS BUILT FROM `params`, not handed in. `builder.cuh:592-596`
+    constructs `ObjectiveT` fresh inside `computeSplit` from
+    `params.min_samples_leaf`, `params.split_criterion` and
+    `params.min_impurity_decrease`, and `:642` builds a three-argument one
+    for the leaf pass. That is what makes `params` the single source of
+    truth for those three settings, and it is why their two objective
+    constructors take the same four arguments even though the regression
+    one never stores the first.
+"""
 
     var params: DecisionTreeParams
     var treeid: Int32
@@ -839,15 +840,19 @@ struct Builder[O: ObjectiveLike](Movable):
     var n_cols: Int
     var original_n_sampled_cols: Int
     var num_outputs: Int32
-    # THEIRS constructs the objective FRESH inside `computeSplit`
-    # (`builder.cuh:592-596`) from `params`, every level, every column
-    # block. It is the same value every time -- `params`, `num_outputs`
-    # and the scales do not move inside a fit -- so ours is constructed
-    # once by the caller and stored. Same value, one construction; a
-    # spelling difference, and the only reason to note it is that a reader
-    # diffing `computeSplit` will find their four-argument constructor
-    # missing from ours.
-    var objective: Self.O
+    # DEVIATION 101b/112c's fixed-point scales -- the ONE input to the
+    # objective that is not in `params` and has no cuML counterpart.
+    # Everything else the objective needs comes from `params`, as theirs
+    # does: `builder.cuh:592-596` constructs `ObjectiveT` fresh inside
+    # `computeSplit` from `params.min_samples_leaf`,
+    # `params.split_criterion` and `params.min_impurity_decrease`.
+    #
+    # This used to be a whole pre-built `objective` handed in by the
+    # caller, and that was not a spelling difference: it gave those three
+    # settings a SECOND source of truth. Setting them on `params` was
+    # silently ignored, because nothing read them from there and nothing
+    # checked that the two agreed.
+    var scales: BinScales
 
     # --- the workspace, `builder.cuh:176-212` ---------------------------
     var histograms: DeviceBuffer[DType.uint8]
@@ -877,7 +882,7 @@ struct Builder[O: ObjectiveLike](Movable):
         n_sampled_rows: Int,
         n_cols: Int,
         num_outputs: Int32,
-        var objective: Self.O,
+        scales: BinScales = BinScales(1.0, 1.0),
     ) raises:
         """`builder.cuh:213-261`, their constructor.
 
@@ -891,7 +896,31 @@ struct Builder[O: ObjectiveLike](Movable):
         self.n_sampled_rows = n_sampled_rows
         self.n_cols = n_cols
         self.num_outputs = num_outputs
-        self.objective = objective^
+        self.scales = scales
+
+        # `decisiontree.cuh:251-256`. CRITERION_END is the "unset" sentinel
+        # their header defaults `split_criterion` to (`decisiontree.hpp:89`),
+        # and THEY resolve it before the objective is ever built:
+        #
+        #   if (params.split_criterion == CRITERION::CRITERION_END) {
+        #     CRITERION default_criterion =
+        #       (std::numeric_limits<LabelT>::is_integer) ? GINI : MSE;
+        #     params.split_criterion = default_criterion;
+        #   }
+        #
+        # They do it in `DecisionTree::fit`, which sits between their
+        # `RandomForest::fit` and this constructor and also dispatches the
+        # objective FAMILY on the same test. Ours has the family already
+        # fixed by `O`, so only the value is left to resolve, and this is
+        # the first point that both sees `params` and knows `O.LabelT`.
+        # Their mutation of the params is kept: it is what makes the
+        # resolved value the one every later read gets.
+        if self.params.split_criterion == CRITERION_END:
+            comptime if Self.O.LabelT.is_integral():
+                self.params.split_criterion = GINI
+            else:
+                self.params.split_criterion = MSE
+
         self.original_n_sampled_cols = n_sampled_cols_for(
             params.max_features, n_cols
         )
@@ -991,9 +1020,45 @@ struct Builder[O: ObjectiveLike](Movable):
         )
 
     def _objective(self) -> Self.O:
-        """`builder.cuh:592-596`. See the field's comment for why this
-        returns the stored one rather than constructing a new one."""
-        return self.objective.copy()
+        """`builder.cuh:592-596`, their four-argument construction:
+
+            ObjectiveT objective(dataset.num_outputs,
+                                 params.min_samples_leaf,
+                                 params.split_criterion,
+                                 params.min_impurity_decrease);
+
+        Built FRESH from `params` on every call, as theirs is -- once per
+        column block inside `computeSplit`. The value cannot move inside a
+        fit, so constructing it once would give the same answer; it is
+        built here anyway because `params` being the only source is the
+        property worth keeping, not the call count."""
+        return Self.O(
+            self.num_outputs,
+            self.params.min_samples_leaf,
+            Int32(self.params.split_criterion),
+            Scalar[Self.O.DataT](self.params.min_impurity_decrease),
+            self.scales,
+        )
+
+    def _leaf_objective(self) -> Self.O:
+        """`builder.cuh:642` -- THREE arguments, not four:
+
+            ObjectiveT objective(dataset.num_outputs,
+                                 params.min_samples_leaf,
+                                 params.split_criterion);
+
+        so `min_impurity_decrease` takes its default of `DataT{0}`
+        (`objectives.cuh:142`, `:344`). The asymmetry with `_objective`
+        above is theirs and is kept. It is inert -- `SetLeafVector` reads
+        neither field -- but a reader diffing the two call sites should
+        find the same difference here that is in their source."""
+        return Self.O(
+            self.num_outputs,
+            self.params.min_samples_leaf,
+            Int32(self.params.split_criterion),
+            Scalar[Self.O.DataT](0),
+            self.scales,
+        )
 
     def _upload_work_items(
         mut self, ctx: DeviceContext, items: List[NodeWorkItem]
@@ -1390,7 +1455,7 @@ struct Builder[O: ObjectiveLike](Movable):
         )
         var d_leaves = ctx.enqueue_create_buffer[Self.O.DataT](batch * n_out)
         var h_leaves = ctx.enqueue_create_host_buffer[Self.O.DataT](batch * n_out)
-        var objective = self._objective()
+        var objective = self._leaf_objective()
         # `:652` -- their smem is `sizeof(BinT) * num_outputs`.
         var smem_size = size_of[Self.O.BinT]() * n_out
 

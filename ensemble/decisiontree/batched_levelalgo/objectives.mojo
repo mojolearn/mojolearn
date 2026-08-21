@@ -253,6 +253,33 @@ trait ObjectiveLike(Copyable & Deinitable):
     comptime LabelT: DType
     comptime BinT: Bin
 
+    def __init__(
+        out self,
+        nclasses: Int32,
+        min_samples_leaf: Int32,
+        criterion: Int32,
+        min_impurity_decrease: Scalar[Self.DataT],
+        scales: BinScales,
+    ):
+        """`objectives.cuh:139-148` / `:341-349`.
+
+        THIS IS WHY THEIR TWO CONSTRUCTORS TAKE THE SAME FOUR ARGUMENTS
+        even though the regression one never stores the first: `Builder`
+        constructs `ObjectiveT` generically from `params`
+        (`builder.cuh:592-596`), so the signature has to be uniform. The
+        unnamed `IdxT` on the regression constructor at `:341` exists
+        purely to make that one call compile for both families.
+
+        Requiring it here is what lets our `Builder` do the same. Without
+        it a `Builder` can only be handed a pre-built objective, and then
+        `params.min_samples_leaf`, `params.split_criterion` and
+        `params.min_impurity_decrease` have a second source of truth that
+        can silently disagree with the one the caller set.
+
+        `scales` is ours (DEVIATION 101b/112c) and has no counterpart.
+        """
+        ...
+
     def NumClasses(self) -> Int32:
         """`objectives.cuh:150` / `:361`."""
         ...

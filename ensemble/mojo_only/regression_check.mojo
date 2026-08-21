@@ -120,18 +120,8 @@ def _fit(
     var dsw = ctx.enqueue_create_buffer[DT](1)
     ctx.synchronize()
 
-    # `num_outputs` is 1 for regression (`objectives.cuh:351`), and their
-    # `RegressionObjectiveFunction` takes an UNNAMED first parameter it
-    # never stores, so that both objectives construct identically from
-    # `Builder` (`objectives.cuh:341`). Passing 1 keeps that shape.
-    var objective = ObjT(
-        Int32(1),
-        p.tree_params.min_samples_leaf,
-        Int32(p.tree_params.split_criterion),
-        Scalar[DT](Float64(p.tree_params.min_impurity_decrease)),
-    )
     var forest = fit_forest[ObjT](
-        ctx, dx, dy, dsw, n_rows, n_cols, 1, p, objective
+        ctx, dx, dy, dsw, n_rows, n_cols, 1, p
     )
     # Mojo frees a value at its LAST USE; all of these reached a kernel.
     _ = dx^
@@ -568,8 +558,7 @@ def arm_f_estimator_predict(ctx: DeviceContext) raises -> Int:
 
     var p = _rf(3, False, 4)
     var rf = RandomForest[DT, LT](p.copy(), REGRESSION)
-    var obj = ObjT(Int32(1), Int32(1), Int32(MSE), Float32(0.0))
-    var f = rf.fit[ObjT](ctx, dx, dy, dsw, n_rows, n_cols, 1, obj)
+    var f = rf.fit[ObjT](ctx, dx, dy, dsw, n_rows, n_cols, 1)
 
     var fails = 0
     if len(f.trees) != 3:

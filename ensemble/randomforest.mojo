@@ -71,9 +71,13 @@ and nothing at all for the forest half.
 3. `split_criterion`. CRITERION_END in the header, which is a SENTINEL
    resolved later to GINI for an integer label type and MSE otherwise
    (`decisiontree.cuh:251-256`). Python sends the resolved string
-   directly. Same outcome by two routes; this port carries
-   CRITERION_END in `RF_params` and resolves it at the same place they
-   do.
+   directly. Same outcome by two routes. This port carries CRITERION_END
+   in `RF_params` and resolves it in `Builder`'s constructor -- theirs
+   does it in `DecisionTree::fit`, which sits between their
+   `RandomForest::fit` and that constructor and dispatches the objective
+   FAMILY on the same integer-label test. Ours has the family fixed by
+   `O` already, so only the value is left to resolve, and the constructor
+   is the first point that sees both `params` and `O.LabelT`.
 4. `n_streams`. 4 in Python, 1 here. DEVIATION 117.
 
 `random_state=None` mapping to seed 0 (`randomforest_common.pyx:517-519`)
@@ -293,6 +297,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from ensemble.decisiontree.batched_levelalgo.bins import Bin
 from ensemble.decisiontree.batched_levelalgo.builder import Builder
+from ensemble.decisiontree.batched_levelalgo.bins import BinScales
 from ensemble.decisiontree.batched_levelalgo.objectives import ObjectiveLike
 from ensemble.decisiontree.batched_levelalgo.dataset import DatasetView
 from ensemble.decisiontree.batched_levelalgo.quantiles import (
@@ -840,7 +845,7 @@ struct RandomForest[dtype: DType, label_dtype: DType](
         n_rows: Int,
         n_cols: Int,
         n_unique_labels: Int,
-        objective: O,
+        scales: BinScales = BinScales(1.0, 1.0),
         sample_weight_host: List[Float32] = List[Float32](),
         row_major: Bool = False,
     ) raises -> RandomForestMetaData[O.DataT, O.LabelT] where (
@@ -870,7 +875,7 @@ struct RandomForest[dtype: DType, label_dtype: DType](
             n_cols,
             n_unique_labels,
             self.rf_params,
-            objective,
+            scales,
             sample_weight_host,
             row_major,
         )
@@ -1506,7 +1511,7 @@ def fit_forest[
     n_cols: Int,
     n_unique_labels: Int,
     mut rf_params: RF_params,
-    objective: O,
+    scales: BinScales = BinScales(1.0, 1.0),
     sample_weight_host: List[Float32] = List[Float32](),
     row_major: Bool = False,
 ) raises -> RandomForestMetaData[O.DataT, O.LabelT] where (
@@ -1665,7 +1670,7 @@ def fit_forest[
             sampler.n_selected,
             n_cols,
             Int32(n_unique_labels),
-            objective.copy(),
+            scales,
         )
         var tree = builder.train(ctx, dataset, quantiles)
         tree.treeid = Int32(i)
