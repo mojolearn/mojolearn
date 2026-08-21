@@ -140,3 +140,71 @@ struct NumericMode(Copyable, Movable):
         them is numeric.
         """
         return True
+
+
+# ============ THE TWO SOURCE-LEVEL CONSTRUCTIONS ==========================
+# The header above names two things no mode row can reach: float atomics
+# (REPLACED by the fixed-point accumulator elsewhere) and the pair below,
+# which exist so that IDENTICAL's arithmetic is ONE arithmetic on every
+# backend. Both are comptime no-ops under FAST.
+
+
+def ftz(x: Float32) -> Float32:
+    """IDENTITY_PATHS row 10's construction: the denormal policy.
+
+    MEASURED, NOT DESIGNED. `check-ieee-arith` (2^20 hashed patterns)
+    found Metal through MAX correctly rounded on every normal input with
+    FLUSH-TO-ZERO on denormal operands, intermediates and results -- and
+    this exact model (flush operands to SIGNED zero, correctly-rounded
+    op, flush result) reproduced ALL 53,041 observed divergences bit for
+    bit. CUDA's default honors denormals, so without this the same fit
+    diverges across vendors on any pathway a denormal can reach.
+
+    Under IDENTICAL, apply at every float SEAM a kernel writes for
+    another kernel or the host to read (the row-10 checklist in
+    IDENTITY_PATHS.md). On an FTZ backend the flush is bitwise a no-op
+    -- flushing what hardware already flushed -- so Apple's IDENTICAL
+    bits do not move; on a denormal-honoring backend it aligns them to
+    the FTZ ones. Under FAST it compiles away entirely.
+
+    Intermediates INSIDE an expression cannot be reached this way on a
+    non-FTZ backend; row 10's checklist therefore also requires that
+    pinned expressions be written with their intermediates stored
+    through `ftz` (one extra local per step), which is exactly how the
+    check's model computes.
+    """
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        if abs(x) < Float32(1.1754943508222875e-38) and x != Float32(0.0):
+            if x < Float32(0.0):
+                return Float32(-0.0)
+            return Float32(0.0)
+    return x
+
+
+def identical_mul_add(a: Float32, b: Float32, c: Float32) -> Float32:
+    """IDENTITY_PATHS row 9's construction: the contraction pin.
+
+    `a*b + c` is one rounding or two at the CODEGEN'S whim, and the whim
+    differs: Metal measured UNFUSED on 2^20 patterns (`check-ieee-arith`,
+    fused 0 / unfused 1,046,394), CUDA's compiler contracts by default,
+    and Mojo has been seen contracting ACROSS expressions where clang
+    would not (the mojotrees plateau-tie incident). No flag pins this
+    from a mode table.
+
+    Under IDENTICAL every enumerated multiply-add seam calls this and
+    gets `fma` -- ONE rounding, identical on every backend that
+    implements IEEE fma, which Metal, PTX and AMDGPU all do. Under FAST
+    it is the naive chain and the backend does whatever it measures
+    fastest. IDENTICAL-mode bits therefore differ from FAST-mode bits on
+    Apple BY DESIGN; the property purchased is that IDENTICAL's bits are
+    the same bits everywhere.
+    """
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        return _fma_f32(a, b, c)
+    return a * b + c
+
+
+def _fma_f32(a: Float32, b: Float32, c: Float32) -> Float32:
+    from std.math import fma
+
+    return fma(a, b, c)

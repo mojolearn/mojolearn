@@ -186,6 +186,8 @@ def main() raises:
     var denorm_div = 0
     var denorm_sqrt = 0
     var denorm_neither = 0
+    var ftz_model_hits = 0
+    var ftz_model_misses = 0
 
     for i in range(N):
         var av = ha.unsafe_ptr().unsafe_load(i)
@@ -205,8 +207,21 @@ def main() raises:
         var ref_unfused = Float32(Float64(t_ab) + Float64(cv))
         var ref_fused = fma(av, bv, cv)
 
+        # THE FTZ MODEL: flush denormal operands, compute the correctly
+        # rounded op, flush a denormal result. If this reproduces the
+        # device bit-for-bit on every divergence, then a source-level
+        # ftz() IS Metal's arithmetic, measured -- which is what lets
+        # IDENTICAL mode impose the same flush on non-FTZ backends.
+        var ftz_div = _ftz(
+            Float32(Float64(_ftz(av)) / Float64(_ftz(bv)))
+        )
+        var ftz_sqrt = _ftz(Float32(sqrt(Float64(abs(_ftz(av))))))
         if q_div.unsafe_load(i) != _bits(ref_div):
             wrong_div += 1
+            if q_div.unsafe_load(i) == _bits(ftz_div):
+                ftz_model_hits += 1
+            else:
+                ftz_model_misses += 1
             if _is_denormal_involved(av, bv, ref_div):
                 denorm_div += 1
             if shown < 6:
@@ -218,6 +233,10 @@ def main() raises:
                 shown += 1
         if q_sqrt.unsafe_load(i) != _bits(ref_sqrt):
             wrong_sqrt += 1
+            if q_sqrt.unsafe_load(i) == _bits(ftz_sqrt):
+                ftz_model_hits += 1
+            else:
+                ftz_model_misses += 1
             if _is_denormal_involved(av, av, ref_sqrt):
                 denorm_sqrt += 1
             if shown_sq < 3:
@@ -263,6 +282,11 @@ def main() raises:
         " (ties where both references agree count as unfused)",
     )
     print(
+        "  ftz model: reproduces", ftz_model_hits, "of",
+        ftz_model_hits + ftz_model_misses,
+        "div/sqrt divergences bit-for-bit",
+    )
+    print(
         "  denormal-involved:  div", denorm_div, "of", wrong_div,
         "  sqrt", denorm_sqrt, "of", wrong_sqrt, "  neither",
         denorm_neither, "of", neither,
@@ -300,6 +324,18 @@ def main() raises:
         "UNFUSED" if fused == 0 else "FUSED" if unfused == 0 else "MIXED",
         "on this backend",
     )
+
+
+def _ftz(x: Float32) -> Float32:
+    # the flush Metal's hardware applies: magnitude below FLT_MIN becomes
+    # a SIGNED zero
+    var bits = _bits(x)
+    if (bits >> 23) & UInt32(0xFF) == UInt32(0):
+        if bits & UInt32(0x7FFFFF) != UInt32(0):
+            var z = List[UInt32]()
+            z.append(bits & UInt32(0x80000000))
+            return z.unsafe_ptr().unsafe_bitcast[Float32]().unsafe_load(0)
+    return x
 
 
 def _is_denorm(v: Float32) -> Bool:

@@ -58,6 +58,17 @@ paper.
    result GBDT papers do not usually carry. Evidence:
    SHAPE_SWEEP_2026-08-21, `mojo_only/density_probe.mojo`.
 
+10. **A measured, bit-exact model of a GPU's denormal behavior as the
+   portability construction itself.** Instead of designing a denormal
+   policy, the policy was MEASURED: a source-level flush-op-flush model
+   reproduced all 53,041 observed Metal divergences bit for bit across
+   2^20 hashed patterns (`check-ieee-arith`'s ftz-model arm), and that
+   model IS the IDENTICAL-mode helper (`numerics.ftz`) -- provably
+   inert on FTZ hardware, alignment on denormal-honoring hardware. We
+   are not aware of prior work deriving a cross-vendor float contract
+   for a training system by bit-exact behavioral modeling of one
+   vendor. PRIOR-ART CHECK NEEDED.
+
 ## B. Methodological contributions (novel-ish practice, not theorems)
 
 6. **A benchmark protocol that catches its own lies.** Both arms
