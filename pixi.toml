@@ -437,6 +437,24 @@ probe-pointwise-default = "mojo run -I . mojo_only/pointwise_default_probe.mojo"
 # nothing downstream can tell them apart. Own main(); a GPU, ~5 s.
 check-fold-tasks = "mojo run -I . mojo_only/fold_tasks_check.mojo"
 
+# CreateFolds and MinEstimationSize -- how many folds ordered boosting builds
+# and how long each is. Nested prefixes growing geometrically by
+# fold_len_multiplier from min_fold_size. HOST ONLY: the fold boundaries are
+# a closed form, so the gate compares against an independently written
+# formula rather than a fixture, and can sweep 3,400 series.
+#
+# Two things in their code that look like something else: their
+# NextQueryOffsetForLine is Min(line + 1, DocCount) with no groups, so it
+# does ARITHMETIC on the default path and every fold edge is one past the
+# geometric value; and MinEstimationSize has a hard CLIFF at 500 documents,
+# not a taper -- n=499 estimates on 2 documents and gives 8 folds, n=500
+# estimates on 11 and gives 6. Both verified against the source at merge.
+#
+# Carries an iteration bound their loop does not have, because two of its ten
+# sabotages turn the recurrence into a fixed point and the gate has to be able
+# to FAIL rather than hang. Own main(); no GPU, ~2 s.
+check-dynamic-boosting-folds = "mojo run -I . mojo_only/dynamic_boosting_folds_check.mojo"
+
 # The LSD radix sort over (bin, permutation position). Gates STABILITY
 # separately from sortedness and prints both, because sortedness alone
 # cannot see a tie that moved -- and the tie order IS the second half of

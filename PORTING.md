@@ -3975,3 +3975,100 @@ The layout is in and gated (`pixi run check-fold-tasks`). What is left is
 wiring it: a `create_subsets` that takes a `FoldLayout` instead of assuming
 one task, and a searcher loop that carries `fold_count > 1` through to the
 dynamic scorer. Both are small; neither is a second searcher.
+
+## 110. `IQueriesGrouping` is a tagged union, not a virtual interface
+
+`gbdt/methods/dynamic_boosting_folds.mojo`.
+
+THEIRS: an abstract class with five pure virtuals and two implementations,
+`TWithoutQueriesGrouping` and `TQueriesGrouping` (`gpu_data/samples_grouping.h
+:13-58`, `:60-127`), passed to `CreateFolds` by `const&`.
+
+OURS: one struct with a `kind` tag, dispatching on it. `PORTING_RULES` rule 4
+names this workaround -- Mojo has no dynamic trait objects, and a tagged union
+is what their worker switches on anyway. NOT ARITHMETIC: all five accessors
+are transcribed branch for branch, including the two DIFFERENT out-of-range
+answers (`GetQueryOffset` returns the DOC count, `GetQueryId` the GROUP count).
+
+NOT BUILT, stated rather than left to be found: `TQueriesGrouping`'s pair
+vectors, read only by the pairwise losses, and `TDataPermutation::FillGroupOrder`'s
+shuffle. Ours takes group sizes already in their final order. A caller cannot
+use this to PERMUTE groups, only to describe a grouping already permuted.
+
+Both arms are gated separately (F3 ungrouped, F6 grouped); sabotaging the
+grouped accessor leaves F3 green, which is rule 8's reach-is-per-branch in one
+measurement.
+
+## 111. `ui32`/`ui64` widths become `Int`, and `IntLog2` is reused
+
+THEIRS: `ui32` throughout `MinEstimationSize` and `CreateFolds`, and one
+narrowing cast -- `static_cast<ui32>(minEstimationSize * growthRate)`
+(`dynamic_boosting.h:211`, `:217`), a `double` multiply truncated toward zero
+and wrapped to 32 bits.
+
+OURS: `Int`, matching `gbdt/gpu_lib/slice.mojo`. `Int(Float64)` truncates
+toward zero, so the truncation is identical; the WRAP is not carried.
+UNREACHABLE IN EITHER TREE: firing it needs `sampleCount * growthRate >= 2^32`
+with `growthRate > 1`, which their own `ui32 sampleCount` cannot supply. NOT
+GATED for that reason, and the check says so.
+
+`NCB::IntLog2` is `(ui32)ceil(log2(x))` in `double`. This file CALLS
+`gbdt/ctrs/ctr_bins_builder.int_log2`, already in this tree, which computes it
+as the bit length of `x - 1` -- that identity holds for every `x >= 1`.
+Re-verified over all of `[1, 1 << 20]` against a third spelling and at the four
+powers of two `MinEstimationSize`'s `>= maxFolds` threshold lands on, because
+that threshold is exactly where a float `ceil(log2)` lands a hair off. It is a
+DIFFERENT function from the `1 << (ui32)ceil(log2((float)FoldCount))` inside
+`PointwisePartOffsetsHelper`, which is a DEVICE expression in `float`.
+
+## 112. `CreateFolds`' growth loop carries an iteration bound theirs does not
+
+THEIRS: the loop (`dynamic_boosting.h:215-222`) has no bound. It terminates
+because `NextQueryOffsetForLine` is strictly increasing below `sampleCount` in
+both groupings.
+
+OURS: the same loop with `max_iterations = sample_count + 2` and a `raise`.
+Not a knob -- it is the longest sequence their own termination argument
+permits, since the right edge is a strictly increasing integer in
+`[1, sample_count]`.
+
+MEASURED, AND THE ONLY REASON IT EXISTS IS THAT A GATE HAS TO BE ABLE TO FAIL
+RATHER THAN HANG. Two of the check's ten sabotages turn the recurrence into a
+fixed point -- dropping the `+ 1` from `NextQueryOffsetForLine` (at
+`g = 1.05, r = 1`, `floor(r * g) == r`) and stepping from `min_estimation`
+instead of the previous right edge. Without the guard both HANG; with it they
+raise at 502 passes over 499 samples and 9 over 6, and the run goes red by
+name in two seconds.
+
+Unsabotaged it has never fired: 4,899 folds at `n = 5,000, g = 1.0000001`
+against a bound of 5,002; 6 at the default `g = 2.0`.
+
+### 112a. Three things in `CreateFolds` that look like something else
+
+Verified against the source at merge.
+
+1. **`NextQueryOffsetForLine` is the whole off-by-one.** With no groups it is
+   `Min<ui32>(line + 1, DocCount)` (`samples_grouping.h:52-54`), so it does
+   ARITHMETIC on the default path while looking like a group-snapping call.
+   Every fold edge is one past the geometric value: `2 * (m0 + 1) - 1`, not
+   `2 * m0`.
+2. **`MinEstimationSize` has a CLIFF at 500, not a taper** (`:177-185`).
+   `n = 499` estimates the first fold on 2 documents and produces 8 folds;
+   `n = 500` estimates on 11 and produces 6.
+3. **The `folds >= maxFolds` arm needs `n > 13,107,200`** at the default
+   `min_fold_size` of 100, and it LOWERS the first fold size (100 -> 51),
+   which is the opposite of what "cap the fold count" suggests.
+
+And `CB_ENSURE(minEstimationSize, ...)` (`:201`) is UNREACHABLE: the
+group-count ensure precedes it, every `MinEstimationSize` arm returns at least
+1, and `NextQueryOffsetForLine(>= 1)` is at least 2. Transcribed; the check
+states it is not gated.
+
+### 112b. `learnPermutationCount - 1` in full
+
+Permutation 2 of 4 has folds built, cursors allocated, leaf values estimated
+on it (`dynamic_boosting.h:378-396`) and the model added back to it
+(`:447-465`). It is only the STRUCTURE SEARCH that never sees it
+(`:286-289`). Transcribed verbatim; a port using `% learnPermutationCount`
+would train a different model on the default config. Gated: over 1,000 draws
+the structure search reaches rows 0 and 1 and never 2.
