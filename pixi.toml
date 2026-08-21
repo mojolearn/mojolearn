@@ -296,6 +296,20 @@ check-pointwise-hist2-8bit = "mojo run -I . mojo_only/pointwise_hist2_8bit_check
 # `threadIdx.x < 512`. Own main(); a GPU, ~20 s.
 check-pointwise-hist2-half-byte = "mojo run -I . mojo_only/pointwise_hist2_half_byte_check.mojo"
 
+# The one-byte DRIVER: everything the accumulators are not -- slice the
+# feature array, pick the partition and histogram slot, REFUSE the blocks
+# belonging to another bit width, run the loop, write out. The dispatch is
+# the interesting part: every bit width's kernel is launched over every
+# block and each returns unless the block's WIDEST feature is in its range,
+# so the four partition the work at runtime with no host coordination. The
+# fixture has four feature groups whose maxima are 32, 128, 16 and 256, and
+# the gate asserts each width's claim set exactly -- group 2's max of 16
+# exists solely to pin `lowerBound = BITS > 5 ? upperBound / 2 : 15`, and
+# group 3 exists because without it the 8-bit fixed-point path was launched
+# and returned every time. Runs at scale 4, not 1, so the fixed-point
+# writeback's division is load-bearing. Own main(); a GPU, ~30 s.
+check-pointwise-driver = "mojo run -I . mojo_only/pointwise_driver_check.mojo"
+
 # The LSD radix sort over (bin, permutation position). Gates STABILITY
 # separately from sortedness and prints both, because sortedness alone
 # cannot see a tie that moved -- and the tie order IS the second half of
