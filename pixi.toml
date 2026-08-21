@@ -70,6 +70,44 @@ check-onebyte-reach = "mojo run -I . mojo_only/onebyte_reach_check.mojo"
 # MOJOLEARN_SOAK_REPS and MOJOLEARN_SOAK_FIXTURE override.
 soak-determinism = "mojo run -I . mojo_only/determinism_soak.mojo"
 
+# ---------------------------------------------------------------------------
+# REGISTERED 2026-08-21. These 22 checks existed in `mojo_only/` with NO pixi
+# task, which in this repository means nobody ran them: there is no aggregate
+# runner that globs the directory, so a file without a line here is reachable
+# only by someone who already knows it is there. That is the same defect class
+# as DEVIATION 114 one level up -- the code is present, has a caller in
+# principle, and no path leads to it.
+#
+# THEY ARE REGISTERED, NOT VERIFIED. None was run at the time of registration
+# (a 22-check GPU sweep would have confounded a determinism measurement that
+# was in flight). Several predate large refactors of the files they exercise
+# and some may not compile. Whoever runs them first owns triaging that, and a
+# check that turns out to be superseded should be DELETED rather than left
+# registered and red.
+# ---------------------------------------------------------------------------
+check-bin-order = "mojo run -I . mojo_only/bin_order_check.mojo"
+check-binarization = "mojo run -I . mojo_only/binarization_check.mojo"
+check-boosting-hist = "mojo run -I . mojo_only/boosting_hist_check.mojo"
+check-bootstrap = "mojo run -I . mojo_only/bootstrap_check.mojo"
+check-copy-histograms = "mojo run -I . mojo_only/copy_histograms_check.mojo"
+check-early-stop = "mojo run -I . mojo_only/early_stop_check.mojo"
+check-gram-splitk = "mojo run -I . mojo_only/gram_splitk_check.mojo"
+check-hardware-matrix = "mojo run -I . mojo_only/hardware_matrix_check.mojo"
+check-hist = "mojo run -I . mojo_only/hist_check.mojo"
+check-hist-dump = "mojo run -I . mojo_only/hist_dump_check.mojo"
+check-layout = "mojo run -I . mojo_only/layout_check.mojo"
+check-level = "mojo run -I . mojo_only/level_check.mojo"
+check-one-hot = "mojo run -I . mojo_only/one_hot_check.mojo"
+check-options = "mojo run -I . mojo_only/options_check.mojo"
+check-pack = "mojo run -I . mojo_only/pack_check.mojo"
+check-partitions-reduce = "mojo run -I . mojo_only/partitions_reduce_check.mojo"
+check-permuted-ids = "mojo run -I . mojo_only/permuted_ids_check.mojo"
+check-reorder = "mojo run -I . mojo_only/reorder_check.mojo"
+check-replicated-half-byte = "mojo run -I . mojo_only/replicated_half_byte_check.mojo"
+check-searcher-parity-covtype = "mojo run -I . mojo_only/searcher_parity_covtype_check.mojo"
+check-train-api = "mojo run -I . mojo_only/train_api_check.mojo"
+check-vendor-correctness = "mojo run -I . mojo_only/vendor_correctness_check.mojo"
+
 # The control plane, which is host-side and has its own `main()` rather than
 # a function `probe_main` could call, so it runs as its own task instead of
 # being folded in. Until 2026-08-19 neither of these had ever been compiled.
