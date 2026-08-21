@@ -34,6 +34,20 @@ structure searcher differs.
     check-pointwise-vs-greedy         RUNG 1's GATE: two searchers, one tree
     check-fit-pointwise               `fit` both ways, 20 iterations identical
 
+## OPEN DEFECT, blocking the covtype leg of the searcher-parity claim
+
+`mojo_only/searcher_parity_covtype_check.mojo` (performance lane,
+2026-08-22): the two searchers are bit-identical at eps500 and on the
+oracle fixtures, but at covtype (43 BINARY-policy features, 581k rows)
+the pointwise arm produces a WORSE model -- mse 1.184 vs greedy's
+0.9486, and without the Apple i32 routing row it also wobbles run to
+run (float-atomic flush in the binary family). Established in a clean
+worktree with the routing row disabled, so it is not the row. The
+suspect is the pointwise BINARY path (or mixed-policy interaction) at
+scales the oracle fixtures never reach. The rung-1 "two arms
+bit-identical" claim holds only on shapes without binary-policy
+features until this is found.
+
 ## WHAT IS LEFT
 
 ### Rung 2 -- DONE 2026-08-21. `TFeatureParallelObliviousTreeSearcher` at ONE fold
