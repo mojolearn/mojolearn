@@ -1,0 +1,8 @@
+# Files this section deliberately does NOT port, and why.
+# A file absent from both this list and PORTED_MAP.tsv has simply not been
+# looked at, which is a different and worse state. Keep both complete.
+cpp/src/decisiontree/batched-levelalgo/quantiles.cuh	deliberate	cuML	THE FILE THIS FORMULATION EXISTS TO DELETE. Geurts draws a real-valued threshold inside the node's own [min,max]; there is no global quantile set and no bin index anywhere in this directory. Porting it would make this the histogram algorithm, which is the OTHER product (ensemble/ Step 2).
+cpp/src/decisiontree/batched-levelalgo/quantiles.h	deliberate	cuML	header for the above
+sklearn/tree/_partitioner.pyx::SparsePartitioner	deliberate	sklearn	CSC input. cuML's builder is dense-only too; sparse is unsupported in LightGBM's CUDA learner as well (#6725). No sparse path is planned here.
+sklearn/tree/_criterion.pyx::MAE	deliberate	sklearn	absolute-error criterion needs an order statistic per candidate, not an accumulator; it is a different kernel shape and is out of scope for the first port.
+sklearn/tree/_splitter.pyx::node_split_best	deliberate	sklearn	the exhaustive splitter. That is RandomForest, which is the ensemble/ lane's port of cuML, not this one.

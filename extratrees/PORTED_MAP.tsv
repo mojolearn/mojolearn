@@ -1,0 +1,9 @@
+# our_file	upstream_file	upstream	status	notes
+# cuML pinned at 00094f7 (branch-25.08) at ~/CascadeProjects/upstream/cuml.
+# RAFT pinned at 661a3b8 at ~/CascadeProjects/upstream/raft.
+# scikit-learn pinned at tag 1.9.0 (77def0e) at ~/CascadeProjects/upstream/scikit-learn;
+#   byte-identical to the .pyx shipped in this repo's `bench` pixi env (diffed 2026-08-21).
+# Paths are relative to each upstream repository root.
+# DIRECTORY RENAME: cuML's `batched-levelalgo` becomes `batched_levelalgo` here,
+#   because a Mojo package directory cannot contain a dash. Same reason
+#   `cuda_lib` became `gpu_lib` in gbdt/: the name is mechanical, not semantic.
