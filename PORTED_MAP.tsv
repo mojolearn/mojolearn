@@ -67,3 +67,4 @@ gbdt/targets/kernel/multilogit.mojo	catboost/cuda/targets/kernel/multilogit.cu	p
 gbdt/models/kernel/add_bin_values.mojo	catboost/cuda/models/kernel/add_model_value.cu	transliterated	deviation 81: the approx dimension is block_idx.y where theirs is a buffer column count
 tools/catboost_loss_oracle.py	(none)	tool	runs CatBoost CPU for the nine new losses; writes bench/oracle_losses.txt
 gbdt/overfitting_detector/overfitting_detector.mojo	catboost/libs/overfitting_detector/overfitting_detector.{h,cpp}	partial	None, IncToDec and Iter; Wilcoxon unported
+gbdt/methods/batch_feature_tensor_builder.mojo	catboost/cuda/data/feature.h + catboost/cuda/ctrs/batch_feature_tensor_builder.{h,cpp}	partial	TFeatureTensor half of feature.h plus the batch builder; deviations 116-118 (Int32 splits read through _as_u32, no streams so RequestStream is a batch width, dense cat codes with no currentBins cache)

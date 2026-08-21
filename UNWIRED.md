@@ -841,3 +841,31 @@ Two siblings, same audit, not fixed either: FMA contraction is a codegen
 decision no matrix row can reach, and `compute_scores`' division and `sqrt`
 are IEEE-correct only if no backend substitutes a fast approximation. See
 `VENDOR_COLUMNS.md`.
+
+## `gbdt/methods/batch_feature_tensor_builder.mojo`
+
+Ported, gated by `pixi run check-feature-tensor`, and **called by nothing**.
+
+`TFeatureTensor` plus `TBatchFeatureTensorBuilder` are the front half of tree
+CTRs. The only producer of the `baseTensorIndices` this builder consumes is
+`TFeatureTensorTracker` (`gpu_data/oblivious_tree_bin_builder.h:32-90`), which
+is driven by `TFeatureParallelObliviousTreeSearcher` -- rung 2 of
+`NEXT_TWO.md`, unported. Tree CTRs live nowhere else in their tree.
+
+**Not reachable by flipping a flag.** `TCatFeatureParams.check()` in
+`gbdt/options/catboost_options.mojo` raises on `max_ctr_complexity` above 1,
+and that guard should come off LAST. What has to exist first, in order:
+
+1. a `TBinarizedFeaturesManager` carrying the tensor -> feature-id map
+   (`InverseCtrs`, `binarizations_manager.h:80-100`), which is what makes
+   `IsTreeCtr(featureId)` answerable at all;
+2. `tree_ctrs_dataset.{h,cpp}` + `tree_ctrs.{h,cpp}` -- the per-device dataset
+   cache keyed by this tensor's hash, plus the memory estimator;
+3. `ctr_from_tensor_calcer.h`, the real `TFeatureTensorVisitor`;
+4. `TFeatureTensorTracker`;
+5. the feature-parallel searcher.
+
+Until 1-5 exist the builder is correct and inert, which is the state this file
+exists to record. Its hash is a CACHE KEY, so getting it wrong later is a
+silent wrong-dataset bug rather than a crash -- hence the 800-tensor collision
+sweep in the check.
