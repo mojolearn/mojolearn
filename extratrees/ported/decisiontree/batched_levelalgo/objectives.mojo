@@ -802,13 +802,14 @@ struct MSEObjectiveFunction[dtype: DType](Copyable, Movable):
     score pass carries `(count, sum)` per candidate and only the winner needs
     `(count, sum, sum_of_squares)`.
 
-    PRECISION IS NOT SETTLED HERE. `dtype` is a parameter, and DEVIATION 135
-    in `extratrees/DEVIATIONS.md` is OPEN: sklearn accumulates in `float64`,
-    there is no `float64` on device, and the candidates (`Float32`, a
-    compensated sum, `gbdt/`'s fixed-point label scaling) are a decision
-    recorded in `PLAN.md`. Hard-coding `Float32` here would settle by
-    accident a question that is deliberately open, so this file never names a
-    concrete type.
+    PRECISION IS RULED AND `dtype` STAYS A PARAMETER FOR A DIFFERENT REASON.
+    DEVIATION 135 is closed: the device accumulates in FIXED POINT
+    (`mojo_only/fixed_point.mojo`), because integer addition is associative
+    and exact and a parallel float reduction has no fixed order. `dtype`
+    remains a parameter because the two sides now legitimately differ -- the
+    host oracle runs at `Float64`, matching sklearn, while the device runs
+    over quantized integers -- and this file must serve both without naming
+    either.
     """
 
     comptime DataT = Scalar[Self.dtype]

@@ -38,7 +38,14 @@ in lockstep and stay the same length -- which is what lets
 `SetLeafPredictions` zip them (`builder.cuh:562-563` asserts exactly that).
 """
 
-from extratrees.ported.decisiontree.decisiontree import DecisionTreeParams
+from extratrees.mojo_only.host_splitter import (
+    node_split_random_gini,
+    node_split_random_mse,
+)
+from extratrees.ported.decisiontree.decisiontree import (
+    DecisionTreeParams,
+    validity_check,
+)
 from extratrees.ported.decisiontree.flatnode import (
     SparseTreeNode,
     TreeMetaDataNode,
@@ -54,7 +61,11 @@ from extratrees.ported.decisiontree.batched_levelalgo.split import Split
 from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels import (
     InstanceRange,
     NodeWorkItem,
+    sample_features,
     split_not_valid,
+)
+from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import (
+    partition_samples,
 )
 
 
@@ -392,6 +403,195 @@ def set_leaf_predictions_regression(
         )
         for c in range(k):
             tree.vector_leaf[node_id * k + c] = Float32(out[c])
+
+
+def n_sampled_cols_for(params: DecisionTreeParams, n_cols: Int32) -> Int32:
+    """`builder.cuh:222`: `max(1, IdxT(params.max_features * n_cols))`.
+
+    Truncation, not rounding, and a floor of one. Transcribed rather than
+    tidied: at `max_features = 0.3` on 3 columns theirs gives 1 candidate, not
+    the 0.9 that rounds to 1 by coincidence.
+    """
+    var k = Int32(params.max_features * Float32(n_cols))
+    return 1 if k < 1 else k
+
+
+def train_classification(
+    dataset: Dataset,
+    params: DecisionTreeParams,
+    tree_id: Int32,
+    seed: UInt64,
+    n_classes: Int32,
+) raises -> TreeMetaDataNode[DType.float32]:
+    """One ExtraTree, end to end. `Builder::train`, `builder.cuh:344-359`.
+
+    Their loop, which this transcribes exactly::
+
+        NodeQueue queue(params, maxNodes(), n_sampled_rows, num_outputs);
+        while (queue.HasWork()) {
+          auto work_items = queue.Pop();
+          auto [splits_host_ptr, splits_count] = doSplit(work_items);
+          queue.Push(work_items, splits_host_ptr);
+        }
+        auto tree = queue.GetTree();
+        this->SetLeafPredictions(tree, queue.GetInstanceRanges());
+
+    `doSplit` (`builder.cuh:379-475`) is inlined below because its device half
+    is unported: theirs samples features, launches `computeSplitKernel` per
+    column block, then launches `nodeSplitKernel` which partitions. Ours does
+    the same three steps in the same order with the host forms, which are the
+    oracles the kernels will be checked against.
+
+    **WHAT IS LOAD-BEARING ABOUT THE ORDER, MEASURED RATHER THAN ASSUMED.**
+    This docstring used to say that partitioning before `Push` was essential
+    because `Push` computes the children's ranges from `split.n_left`
+    (`builder.cuh:117-131`). A sabotage moving the partition to AFTER
+    `queue.push` left `tree_check` green, so that claim was false and is
+    deleted rather than annotated (rule 10). `Push` records only `(begin,
+    count)`; the partition mutates `row_ids` and touches no range, so within
+    one batch iteration the two commute.
+
+    The real constraint is one step weaker and one step later: **every node in
+    a batch must be partitioned before the NEXT `pop`**, because that is when
+    its children become work items and start reading `row_ids` over the ranges
+    `Push` recorded. Deferring the partitions past the loop is what breaks it,
+    and `tree_check`'s pure-leaf assertions are what see it — the tree stays
+    structurally perfect, every count conserves, and every piece-wise check
+    stays green.
+
+    Both orders inside the batch are therefore correct; theirs is kept
+    (partition inside `doSplit`, `nodeSplitKernel`,
+    `builder_kernels_impl.cuh:89-107`) because it is theirs.
+
+    **AND THE VALIDITY GUARD AROUND THE PARTITION IS NOT OBSERVABLE EITHER**,
+    which is also measured: partitioning an INVALID split was sabotaged in and
+    the check stayed green. A partition only permutes rows inside the node's
+    own range, and an invalid split leaves the node a leaf whose value depends
+    on the SET of rows in that range and not their order. The guard is kept
+    because `nodeSplitKernel` has it (`:100-104`), not because anything here
+    can tell the difference.
+
+    `dataset.row_ids` IS MUTATED. Theirs mutates it too — it is the array the
+    whole frontier partitions in place.
+    """
+    if dataset.num_outputs != n_classes:
+        raise Error(
+            "dataset.num_outputs is "
+            + String(dataset.num_outputs)
+            + " but n_classes is "
+            + String(n_classes)
+        )
+    validity_check(params)
+
+    var objective = GiniObjectiveFunction[DType.float32](
+        n_classes, params.min_samples_leaf
+    )
+    var k = n_sampled_cols_for(params, dataset.n)
+    var queue = NodeQueue[DType.float32](
+        params, dataset.n_sampled_rows, n_classes, tree_id
+    )
+
+    while queue.has_work():
+        var work_items = queue.pop()
+
+        # `builder.cuh:398-471` -- feature sampling, one row of `colids` per
+        # work item. The plan is returned so a caller can say which sampler
+        # ran, which rule 8 requires of a switch that selects a kernel.
+        var colids = List[Int32](
+            length=len(work_items) * Int(k), fill=Int32(0)
+        )
+        _ = sample_features(
+            colids, work_items, tree_id, seed, Int(dataset.n), Int(k)
+        )
+
+        var splits = List[Split]()
+        for i in range(len(work_items)):
+            var item = work_items[i]
+            var my_colids = List[Int32]()
+            for c in range(Int(k)):
+                my_colids.append(colids[i * Int(k) + c])
+
+            # `computeSplitKernel`'s replacement, DEVIATION 137.
+            var result = node_split_random_gini[DType.float32](
+                dataset, item, my_colids, objective, seed, tree_id
+            )
+            splits.append(result.split)
+
+            # `nodeSplitKernel`, `builder_kernels_impl.cuh:89-107`: check
+            # validity, then partition. Theirs returns early on an invalid
+            # split and leaves `row_ids` alone; so does this.
+            if not split_not_valid(
+                result.split,
+                params.min_impurity_decrease,
+                params.min_samples_leaf,
+                item.instances.count,
+            ):
+                partition_samples(dataset, result.split, item)
+
+        queue.push(work_items, splits)
+
+    var tree = queue.get_tree()
+    set_leaf_predictions_classification(dataset, tree, queue.node_instances)
+    return tree^
+
+
+def train_regression(
+    dataset: Dataset,
+    params: DecisionTreeParams,
+    tree_id: Int32,
+    seed: UInt64,
+) raises -> TreeMetaDataNode[DType.float32]:
+    """The same loop for MSE. See `train_classification` for the structure and
+    for why the partition precedes the push."""
+    if dataset.num_outputs != 1:
+        raise Error(
+            "regression wants one output; dataset.num_outputs is "
+            + String(dataset.num_outputs)
+        )
+    validity_check(params)
+
+    var objective = MSEObjectiveFunction[DType.float64](
+        params.min_samples_leaf
+    )
+    var k = n_sampled_cols_for(params, dataset.n)
+    var queue = NodeQueue[DType.float32](
+        params, dataset.n_sampled_rows, 1, tree_id
+    )
+
+    while queue.has_work():
+        var work_items = queue.pop()
+        var colids = List[Int32](
+            length=len(work_items) * Int(k), fill=Int32(0)
+        )
+        _ = sample_features(
+            colids, work_items, tree_id, seed, Int(dataset.n), Int(k)
+        )
+
+        var splits = List[Split]()
+        for i in range(len(work_items)):
+            var item = work_items[i]
+            var my_colids = List[Int32]()
+            for c in range(Int(k)):
+                my_colids.append(colids[i * Int(k) + c])
+
+            var result = node_split_random_mse[DType.float64](
+                dataset, item, my_colids, objective, seed, tree_id
+            )
+            splits.append(result.split)
+
+            if not split_not_valid(
+                result.split,
+                params.min_impurity_decrease,
+                params.min_samples_leaf,
+                item.instances.count,
+            ):
+                partition_samples(dataset, result.split, item)
+
+        queue.push(work_items, splits)
+
+    var tree = queue.get_tree()
+    set_leaf_predictions_regression(dataset, tree, queue.node_instances)
+    return tree^
 
 
 def train_loop_shape() -> String:
