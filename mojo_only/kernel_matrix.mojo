@@ -8,6 +8,22 @@ kernel takes is declared here, once, with its vendor column and its class.
 
 There is no CPU column. This tree has no CPU path.
 
+THREE COLUMNS BUILD TODAY; THREE MORE ARE DECLARED AND DO NOT
+--------------------------------------------------------------
+`apple`, `nvidia` and `amd` are what Mojo emits code for. `qualcomm`,
+`intel` and `arm` are declared with their documented minimums and their
+admission verdict, and `column_is_buildable` says which is which.
+
+A declared column is not decoration and it is not a promise of support. It
+answers the one question that has to be answered BEFORE a target exists:
+**would admitting this vendor change the models we have already shipped?**
+Under the old design -- safe column = intersection of the vendors present --
+the answer depended on who showed up, and a routine act of maintenance could
+silently rewrite every reproducible fit. It cannot now: see THE IDENTITY
+FLOOR below. Declaring the vendors is how that stops being a judgement call
+taken later under pressure, and it is why this is worth doing while the
+answer is free.
+
 CLASSIFICATION, the one question
 --------------------------------
 Each row is NUMERIC or SCHEDULING by the single test:
@@ -37,28 +53,88 @@ So `replication_lanes` is a declared NUMERIC row pinned to 32, rather than
 `warp_size` read from the device. AMD pays a wider sync for it. That is the
 cost of the product property, and it is a number we can measure rather than
 an argument we have to have.
+
+**AND ON TWO OF THE DECLARED VENDORS THE HAZARD IS WORSE THAN A DIFFERENT
+CONSTANT: THE WIDTH IS NOT A CONSTANT.** Adreno's wave is 8, 16, 32, 64 or
+128 depending on the part AND ON THE COMPILER'S DECISION; Intel's sub-group
+is 8, 16 or 32 and their compiler picks it from register pressure unless a
+kernel demands one. A design that reads the hardware width would not merely
+disagree across vendors there, it could disagree across two builds of the
+same kernel for the same device. Pinning was the right answer for AMD and is
+the only possible answer for those two. See `column_lane_width`.
 """
 
 from mojo_only.numerics import NumericMode, NUMERIC_FAST, NUMERIC_IDENTICAL
 
 
-# --- the four columns ----------------------------------------------------
+# --- the columns ---------------------------------------------------------
 #
 # BIT_IDENTICAL is a real column, not a mode flag. It holds the value every
-# vendor can meet, so it is the INTERSECTION of the other three: where they
-# disagree it takes the most restrictive. That is what makes it safe, and it
-# is why it can be read, printed and diffed against a vendor column to show
-# exactly what identity costs on that device.
+# ADMITTED vendor can meet, and it can be read, printed and diffed against a
+# vendor column to show exactly what identity costs on that device.
+#
+# **IT IS NO LONGER `min()` OVER WHATEVER COLUMNS HAPPEN TO EXIST, AND THAT
+# CHANGE IS THE WHOLE POINT OF THE VENDOR ADDITIONS BELOW.** It used to be
+# described as "the INTERSECTION of the other three", which was true and was
+# a trap: a fourth vendor with a smaller budget would have lowered the
+# intersection, and lowering the intersection changes the block size, hence
+# the replication factor, hence WHICH PARTIAL SUMS COMBINE -- so every model
+# this library had ever produced under `IDENTICAL` would silently stop
+# matching the ones produced after the addition. That is not an API break a
+# caller could see. It is a bit break with no signal at all.
+#
+# So the safe column is now a FROZEN, VERSIONED PROFILE (`IDENTITY_PROFILE`,
+# below) whose values are the intersection AS OF THE FOUNDING THREE, and a
+# new vendor does one of exactly two things:
+#
+#   (a) meets the floor -> it joins `IDENTICAL` and NOT ONE BIT MOVES, or
+#   (b) does not        -> it is REFUSED for `IDENTICAL` by name and runs
+#                          `FAST` only, which is still a working library on
+#                          that device.
+#
+# Never (c) lower the floor to fit it. Lowering the floor is a NEW GUARANTEE
+# and takes a profile bump, which renames the property rather than quietly
+# redefining it. See `column_meets_identity_floor`.
 comptime COLUMN_BIT_IDENTICAL = 0
 comptime COLUMN_APPLE = 1
 comptime COLUMN_NVIDIA = 2
 comptime COLUMN_AMD = 3
 
-#: Kept as aliases so kernel code can name the API it targets rather than the
-#: company. Metal is Apple's, CUDA is NVIDIA's, HIP is AMD's.
+# --- vendors declared but NOT REACHABLE FROM THIS TOOLCHAIN TODAY --------
+#
+# Mojo compiles to PTX (NVIDIA), AMDGPU IR (AMD) and Metal (Apple), and the
+# system requirements page lists those three and no others as of 2026-08-21.
+# These columns therefore compile nothing today. They exist because the cost
+# of adding a column LATER is not the column -- it is that every reader has
+# to re-derive whether the safe column still means what it meant, and by then
+# there are shipped models that answer depends on.
+#
+# Declaring them now, with their documented minimums and their admission
+# verdict, is what makes the answer "the floor was frozen before you arrived"
+# instead of a judgement call taken under pressure. Adding the target later
+# is then a build, not a redesign.
+#
+# Qualcomm is first for a reason that is not technical: Qualcomm ACQUIRED
+# Modular in July 2026 and open-sourced Mojo and MAX at ModCon in August, so
+# Adreno is the likeliest fourth target of any GPU on this list.
+comptime COLUMN_QUALCOMM = 4
+comptime COLUMN_INTEL = 5
+comptime COLUMN_ARM = 6
+
+#: The count, so a report or a check loops instead of listing. Raise this and
+#: `column_name` and every row below must answer for the new value; the
+#: check in `mojo_only/hardware_matrix_check.mojo` enforces that they do.
+comptime COLUMN_COUNT = 7
+
+#: Kept as aliases so kernel code can name the API or the part it targets
+#: rather than the company. Metal is Apple's, CUDA is NVIDIA's, HIP is AMD's;
+#: Adreno is Qualcomm's GPU, Xe is Intel's, Mali is Arm's.
 comptime COLUMN_METAL = COLUMN_APPLE
 comptime COLUMN_CUDA = COLUMN_NVIDIA
 comptime COLUMN_HIP = COLUMN_AMD
+comptime COLUMN_ADRENO = COLUMN_QUALCOMM
+comptime COLUMN_XE = COLUMN_INTEL
+comptime COLUMN_MALI = COLUMN_ARM
 
 
 def column_name(column: Int) -> String:
@@ -68,7 +144,36 @@ def column_name(column: Int) -> String:
         return String("apple")
     if column == COLUMN_NVIDIA:
         return String("nvidia")
-    return String("amd")
+    if column == COLUMN_AMD:
+        return String("amd")
+    if column == COLUMN_QUALCOMM:
+        return String("qualcomm")
+    if column == COLUMN_INTEL:
+        return String("intel")
+    if column == COLUMN_ARM:
+        return String("arm")
+    return String("unknown")
+
+
+def column_is_buildable(column: Int) -> Bool:
+    """Whether Mojo can emit a kernel for this column TODAY.
+
+    `False` is not a criticism of the column and does not make it decoration:
+    an unbuildable column still answers "would identity survive this vendor",
+    which is the question that has to be answered BEFORE the target exists,
+    not after.
+
+    Source: Mojo system requirements (read 2026-08-21) lists NVIDIA (Turing
+    through Blackwell, driver 580+), AMD (RDNA2 through CDNA4, ROCm 6.3.3+)
+    and Apple silicon (M1-M5, macOS 15+, Xcode 16+). No Qualcomm, Intel or
+    Arm GPU target is listed.
+    """
+    return (
+        column == COLUMN_BIT_IDENTICAL
+        or column == COLUMN_APPLE
+        or column == COLUMN_NVIDIA
+        or column == COLUMN_AMD
+    )
 
 # --- the kernels ---------------------------------------------------------
 comptime K_HIST_BINARY = 0
@@ -140,13 +245,173 @@ struct KernelSpec(Copyable, Movable):
         return self.block_size * self.hist_floats_per_thread * 4
 
 
-def column_shared_limit(column: Int) -> Int:
-    """Threadgroup / shared / LDS bytes a single block may claim.
+# =========================================================================
+# THE IDENTITY FLOOR: a frozen profile, so a future vendor cannot move bits
+# =========================================================================
+#
+# WHAT WENT WRONG IN THE OLD DESIGN, stated plainly because it never fired
+# and therefore never taught anybody anything. The safe column was defined as
+# the INTERSECTION of the vendor columns. With three vendors that produced 32
+# KB, 32 lanes, 512-wide folds -- correct values, arrived at correctly. But
+# the DEFINITION says: add a vendor with less, and the safe column shrinks.
+# A smaller shared budget gives a smaller block, a smaller block gives a
+# different replication factor, and a different replication factor sums a
+# different set of partials. Every `IDENTICAL` model produced before the
+# addition would disagree with every one produced after it, on every device,
+# with no version, no error, and no way for a user to notice except by
+# keeping an old model file and re-running it.
+#
+# The property this library sells is "the same fit gives the same model". A
+# definition under which a routine act of maintenance -- supporting one more
+# GPU -- rewrites that answer for everybody is not a safe column. It is a
+# tripwire with a three-vendor fuse.
+#
+# SO THE FLOOR IS FROZEN AND VERSIONED. These constants ARE the guarantee.
+# They do not derive from the vendor rows and no vendor row may change them.
+#
+#   A new vendor MEETS the floor  -> it joins `IDENTICAL`, no bit moves.
+#   A new vendor MISSES the floor -> `IDENTICAL` REFUSES it, by name, and it
+#                                    runs `FAST`, which is a working library.
+#
+# There is no third option, and in particular there is no "lower the floor a
+# little". Lowering it is a DIFFERENT GUARANTEE about a different set of
+# models, so it takes a profile bump, and models built under profile N and
+# profile N+1 are not comparable and must never be compared. A profile bump
+# is a product decision with a migration, not a patch.
+#
+# **THE HOLE THIS LEAVES, AND IT IS REAL: the serialized model does not carry
+# the profile id yet.** Until it does, profile 1 and a future profile 2 model
+# are distinguishable only by provenance, which is exactly the kind of thing
+# that gets lost. Recorded in `UNWIRED.md`; it is a header field and an hour's
+# work, and it should be done before any second profile exists rather than
+# after.
 
-    `BIT_IDENTICAL` takes the MINIMUM across the three, which is Apple's 32
-    KB, because a shared-memory budget decides the replication factor and the
-    replication factor is numeric. A safe column that let NVIDIA claim 48 KB
-    would not be safe.
+#: The version of the bit-identity guarantee. Bump ONLY to widen the floor
+#: for a vendor that cannot meet it, and only with a migration note. Every
+#: model produced under `IDENTICAL` is a model under THIS profile.
+comptime IDENTITY_PROFILE = 1
+
+#: Frozen. Threadgroup bytes the safe column allows a block to claim. Was the
+#: three-vendor intersection (Apple's Metal ceiling) on the day it froze, and
+#: is now simply the number.
+comptime IDENTITY_FLOOR_SHARED_BYTES = 32 * 1024
+
+#: Frozen. The logical replication group width. `PINNED_REPLICATION_LANES`
+#: must equal this; `hardware_matrix_check` asserts it, because two names for
+#: one guarantee is how a guarantee drifts.
+comptime IDENTITY_FLOOR_LANES = 32
+
+#: Frozen. The block the safe column's hist_2 arm runs, so a vendor whose
+#: dispatch cannot reach it cannot reproduce the accumulation.
+comptime IDENTITY_FLOOR_BLOCK = 512
+
+
+def column_meets_identity_floor(column: Int) -> Bool:
+    """Whether this vendor can join `IDENTICAL` without the floor moving.
+
+    Four questions, and a column has to pass all four:
+
+      1. threadgroup bytes >= the floor. Below it the block shrinks and the
+         replication factor with it.
+      2. threadgroup INT atomics. The safe column's accumulator is Int32 in
+         shared memory; there is no substitute that keeps associativity.
+      3. a block of `IDENTITY_FLOOR_BLOCK` threads is dispatchable.
+      4. the lane group is not WIDER than the pinned group in a way the
+         kernels cannot subdivide -- which, under `SYNC_BLOCK`, none is,
+         because the pinned group is logical. Kept as an explicit clause
+         rather than an omission so that it is re-examined on the day lane
+         primitives arrive (see `column_lane_width`).
+
+    Today every declared vendor passes, INCLUDING the three that cannot be
+    built for. That is the useful answer and it was not the expected one:
+    Adreno's 32 KB matches Apple's exactly, Mali's advertised 32 KB does too,
+    and Intel's 64 KB is above. The design turns out to have been floored by
+    the most constrained mainstream GPU memory hierarchy already, which is
+    why freezing it costs nothing today and is worth doing precisely now,
+    while it costs nothing.
+
+    A column that fails belongs in `FAST` and the failure must be reported by
+    name, never absorbed. `identity_refusal_reason` is that name.
+    """
+    return (
+        column_shared_limit(column) >= IDENTITY_FLOOR_SHARED_BYTES
+        and column_has_threadgroup_int_atomics(column)
+        and column_max_block_size(column) >= IDENTITY_FLOOR_BLOCK
+    )
+
+
+def identity_refusal_reason(column: Int) -> String:
+    """Why `IDENTICAL` refuses this column, or empty if it does not.
+
+    A refusal a user can act on: it names the row, the column's value and the
+    floor's, so the answer to "why can't I get reproducible fits on this
+    laptop" is one sentence and not a support thread.
+    """
+    if column_shared_limit(column) < IDENTITY_FLOOR_SHARED_BYTES:
+        return (
+            column_name(column)
+            + " allows "
+            + String(column_shared_limit(column) // 1024)
+            + " KB of threadgroup memory per block; the identity floor"
+            " (profile "
+            + String(IDENTITY_PROFILE)
+            + ") needs "
+            + String(IDENTITY_FLOOR_SHARED_BYTES // 1024)
+            + " KB, because the block size it buys decides the replication"
+            " factor and the replication factor decides which partial sums"
+            " combine"
+        )
+    if not column_has_threadgroup_int_atomics(column):
+        return (
+            column_name(column)
+            + " has no threadgroup integer atomic add; the identity column"
+            " accumulates the histogram in shared Int32 and there is no"
+            " substitute that keeps addition associative"
+        )
+    if column_max_block_size(column) < IDENTITY_FLOOR_BLOCK:
+        return (
+            column_name(column)
+            + " dispatches at most "
+            + String(column_max_block_size(column))
+            + " threads per block; the identity column's hist_2 arm runs "
+            + String(IDENTITY_FLOOR_BLOCK)
+        )
+    return String("")
+
+
+def column_shared_limit(column: Int) -> Int:
+    """Threadgroup / shared / LDS / SLM bytes a single block may claim.
+
+    Per-vendor, with the document each number came from. Only the first three
+    have ever run a kernel from this tree; the rest are transcriptions, and
+    `column_is_buildable` says so.
+
+    - apple    32 KB. Metal threadgroup memory limit, family 9 (M3/M4).
+               VALIDATED on this box.
+    - nvidia   48 KB. Default per-block shared memory; the opt-in carveout
+               above it (`cudaFuncAttributeMaxDynamicSharedMemorySize`, 164 KB
+               at CC 8.0) is deliberately NOT modeled, because taking it
+               changes occupancy and this row bounds a numeric one.
+    - amd      64 KB. LDS per workgroup, GCN through CDNA/RDNA.
+    - qualcomm 32 KB. Adreno's per-workgroup OpenCL local memory allocation
+               (Adreno 6xx/X1 class; the GPU-wide pool is larger -- 64 KB on
+               Adreno 640 -- but a single workgroup may claim 32 KB).
+               Qualcomm Snapdragon OpenCL general programming guide.
+    - intel    64 KB. A work-group's SLM allocation on Xe; the Xe-core pool
+               is 128 KB and Intel's own occupancy example splits it as
+               64 + 64 for two resident groups (oneAPI GPU optimization
+               guide, "Shared Local Memory").
+    - arm      32 KB. Mali's advertised compute shared-memory size, AND SEE
+               `column_has_dedicated_shared_memory`: on Mali this is not a
+               scratchpad at all. Arm's own best-practices guide says "Arm
+               GPUs do not implement dedicated on-chip shared memory for
+               compute shaders. The shared memory that is available to use is
+               system RAM that is backed up by the load-store cache." The
+               BYTES are available; the SPEED the histogram design assumes is
+               not.
+
+    `BIT_IDENTICAL` returns the FROZEN floor, not a `min()` over these. See
+    `IDENTITY_FLOOR_SHARED_BYTES`.
     """
     if column == COLUMN_APPLE:
         return 32 * 1024
@@ -154,14 +419,21 @@ def column_shared_limit(column: Int) -> Int:
         return 48 * 1024
     if column == COLUMN_AMD:
         return 64 * 1024
-    return 32 * 1024  # BIT_IDENTICAL: the intersection, Apple-bound
+    if column == COLUMN_QUALCOMM:
+        return 32 * 1024
+    if column == COLUMN_INTEL:
+        return 64 * 1024
+    if column == COLUMN_ARM:
+        return 32 * 1024
+    return IDENTITY_FLOOR_SHARED_BYTES  # BIT_IDENTICAL: frozen, not derived
 
 
 def column_has_float_atomics(column: Int) -> Bool:
     """Whether this vendor can do `atomicAdd` on a `float` at all.
 
-    **ALL THREE CAN, APPLE INCLUDED.** This row said "APPLE CANNOT. Metal has
-    no floating-point atomic add" and that was FALSE. Probed 2026-08-19:
+    **ALL THREE FOUNDING COLUMNS CAN, APPLE INCLUDED.** This row said "APPLE
+    CANNOT. Metal has no floating-point atomic add" and that was FALSE.
+    Probed 2026-08-19:
 
         Atomic.fetch_add(dst, Float32(1.0))   // 1024 threads
         -> 1024.0, exact
@@ -172,30 +444,162 @@ def column_has_float_atomics(column: Int) -> Bool:
     does not have -- a magnitude that failed to bound the partials overflowed
     Int32 and produced a dead histogram, which took a bisect to find.
 
-    So `deterministic_flush` is a row every column CAN negotiate: `FAST`
-    leaves all three on CatBoost's float atomic
+    So `deterministic_flush` is a row every FOUNDING column can negotiate:
+    `FAST` leaves all three on CatBoost's float atomic
     (`atomicAdd(dst + fold, val)`, every `AddToGlobalMemory`), and
-    `IDENTICAL` pins all three to the integer path so they agree bit for bit.
+    `IDENTICAL` pins them to the integer path so they agree bit for bit.
 
-    Their float atomic is order-nondeterministic and CatBoost ships it that
-    way; matching them is the default, and reproducibility is what the
-    `IDENTICAL` mode is for.
+    **THE DECLARED VENDORS ARE WHERE THIS ROW STOPS BEING TRIVIAL, AND IT IS
+    WHY `flush_forced_by_vendor` EXISTS.** On Adreno and Mali, float atomic
+    add is not core OpenCL: it arrives through `cl_ext_float_atomics`, which
+    requires OpenCL 2.0+ and is optional per device and per memory scope
+    (Khronos OpenCL extension registry). A device without it CANNOT run
+    `FAST` as written and must take the fixed-point flush -- which is the
+    vendor forcing the mode's hand, exactly the case that field was built for
+    and that no founding column exercises.
+
+    Conservative until queried: `False` for the unbuildable columns. That is
+    a claim about the WEAKEST device in the family, not about the best one,
+    and bring-up replaces it with a device query rather than an opinion.
+    """
+    return (
+        column == COLUMN_BIT_IDENTICAL
+        or column == COLUMN_APPLE
+        or column == COLUMN_NVIDIA
+        or column == COLUMN_AMD
+        or column == COLUMN_INTEL
+    )
+
+
+def column_has_threadgroup_int_atomics(column: Int) -> Bool:
+    """Whether a block can `atomicAdd` an `Int32` in THREADGROUP memory.
+
+    **THIS IS THE ONE CAPABILITY `IDENTICAL` CANNOT DO WITHOUT.** The safe
+    column accumulates the hist_2 family in shared Int32 slices
+    (`HIST_SMEM_SHARED2_I32`), because integer addition is associative and
+    that is what makes the histogram independent of arrival order. A device
+    without local integer atomics cannot take that path, and there is no
+    substitute that keeps the property at a tolerable cost.
+
+    True everywhere it has been checked, and it is a low bar by construction:
+    integer atomics on local memory are CORE OpenCL 1.2 (`atomic_add` on
+    `__local int`), core CUDA, core HIP, and Metal's `atomic_fetch_add_explicit`
+    on `threadgroup atomic_int`. Metal is the interesting one, because Metal
+    has NO local FLOAT atomic ("Unsupported local float atomic operation")
+    while having the integer one -- which is precisely why the Apple column's
+    fast path and the safe column's path are the same code.
     """
     return True
 
+
+def column_has_dedicated_shared_memory(column: Int) -> Bool:
+    """Whether "shared memory" is an on-chip scratchpad or just cached RAM.
+
+    SCHEDULING by the one question -- it changes what the histogram COSTS,
+    never what it sums -- and it is recorded because it is the difference
+    between a column that is admissible and a column that is admissible and
+    also worth shipping.
+
+    Arm's GPU best-practices guide, verbatim: "Arm GPUs do not implement
+    dedicated on-chip shared memory for compute shaders. The shared memory
+    that is available to use is system RAM that is backed up by the
+    load-store cache."
+
+    A replicated-histogram design is a bet that private scratch is much
+    faster than the memory it spares. On Mali that bet is off: the
+    replication still gives the same ANSWER (identity is unaffected) and
+    buys much less than it does elsewhere. Whoever brings that column up
+    should expect to re-measure the replication factor, not to inherit it.
+    """
+    return column != COLUMN_ARM
+
+
+def column_max_block_size(column: Int) -> Int:
+    """Largest threadgroup the vendor will dispatch, before our budget bites.
+
+    - apple / nvidia / amd / qualcomm / intel: 1024.
+      (Adreno 5xx and later report a 1024 max OpenCL workgroup size; older
+      parts are far smaller -- 128 on Adreno 320, 512 on Adreno 420 -- and
+      are out of scope for a training library.)
+    - arm: 512. Arm's own guidance is a 64-thread baseline and register
+      pressure bites well before the advertised maximum.
+
+    This bounds nothing today: every block this tree launches is <= 768, and
+    the shared-memory budget binds first on every column. It is declared so
+    that the FLOOR below can be checked against something rather than
+    assumed, since the safe column's hist_2 block is 512.
+    """
+    if column == COLUMN_ARM:
+        return 512
+    return 1024
+
+
 def column_lane_width(column: Int) -> Int:
     """Hardware lanes that move in lockstep: warp on NVIDIA, SIMD group on
-    Apple, WAVEFRONT on AMD.
+    Apple, WAVEFRONT on AMD, wave on Adreno, sub-group on Intel, warp on Mali.
 
-    **This is the cross-vendor hazard in one number.** 32, 32, 64. CatBoost
-    hardcodes 32 throughout, which is right on two of the three. Reading it
-    from the device would change the replication geometry on AMD and silently
-    move the last bits, so `BIT_IDENTICAL` pins 32 and AMD pays a wider sync
-    for it.
+    **This is the cross-vendor hazard in one number.** CatBoost hardcodes 32
+    throughout, which is right on Apple and NVIDIA and wrong on AMD, whose
+    wavefront is 64. Reading it from the device would change the replication
+    geometry and silently move the last bits, so `BIT_IDENTICAL` pins 32 and
+    AMD pays a wider sync for it.
+
+    **AND ON TWO OF THE DECLARED VENDORS THIS NUMBER IS NOT A CONSTANT AT
+    ALL, WHICH IS THE MOST IMPORTANT THING ON THIS PAGE.** It is not merely
+    a different number per part:
+
+    - qualcomm: Qualcomm's own OpenCL optimization guidance says the wave
+      size "depends on Adreno GPU series and tiers AS WELL AS THE COMPILER;
+      values could be 8, 16, 32, 64, 128". The Adreno X1 in Snapdragon X
+      Elite runs 64- or 128-wide. So the same kernel, same device, different
+      compiler decision, different width.
+    - intel: the sub-group size is 8, 16 or 32 and Intel's compiler CHOOSES
+      it from register pressure unless the kernel demands one explicitly
+      (oneAPI GPU optimization guide, "Sub-groups and SIMD Vectorization").
+    - arm: 8 on Bifrost (G52, G76), 16 on Valhall. Both BELOW the pinned 32.
+
+    The values returned here are the documented MINIMUM for each family,
+    which is the only safe reading for anything that sizes a buffer.
+
+    **WHY THIS DOES NOT BREAK THE IDENTITY CLAIM, WHICH IS WORTH STATING
+    PRECISELY BECAUSE IT LOOKS LIKE IT SHOULD.** `PINNED_REPLICATION_LANES`
+    is a LOGICAL group width, not a hardware sync assumption. Every kernel in
+    this tree syncs at `SYNC_BLOCK` -- Mojo exposes no warp primitive on any
+    vendor (`sync_granularity_for`) -- so a pinned 32-lane replication group
+    is threadgroup-synchronized arithmetic that happens to be 32 wide, and it
+    stays 32 wide whether the hardware runs 8, 16, 64 or 128 lanes in
+    lockstep underneath. A variable hardware width would be fatal to a
+    warp-primitive design and is merely a scheduling fact for this one.
+
+    That is a real property of the port, but it is not one to take on trust:
+    the day Mojo exposes lane primitives and `sync_granularity_for` stops
+    returning `SYNC_BLOCK`, this paragraph expires and these three columns
+    become unsafe until re-argued. Said here rather than in a commit message
+    because that is where whoever wires the primitive will look.
     """
     if column == COLUMN_AMD:
         return 64
+    if column == COLUMN_QUALCOMM:
+        return 8
+    if column == COLUMN_INTEL:
+        return 8
+    if column == COLUMN_ARM:
+        return 8
     return 32
+
+
+def column_lane_width_is_fixed(column: Int) -> Bool:
+    """Whether `column_lane_width` is a property of the DEVICE or a decision
+    the vendor's compiler makes per kernel.
+
+    False for qualcomm and intel. Any code that indexes by hardware lane
+    ("which lane am I") must read this first: on a variable-width column the
+    only correct answers are to demand a width from the compiler where the
+    API allows it (`intel_reqd_sub_group_size`, Metal-style attributes) or to
+    stop indexing by lane. Nothing in this tree indexes by hardware lane
+    today, because `SYNC_BLOCK` left it with no reason to.
+    """
+    return column != COLUMN_QUALCOMM and column != COLUMN_INTEL
 
 
 def spec_for(kernel: Int, device: Int, mode: NumericMode) raises -> KernelSpec:
@@ -503,9 +907,27 @@ def hist_smem_mode_for[column: Int, identical: Bool]() -> Int:
     measured failures.
     """
 
+    #: CatBoost's warp-private layout at their own block: 384 threads x 32
+    #: shared floats x 4 bytes = 49,152. A column that cannot hold that
+    #: cannot run their design at their block size, and the shared-Int32
+    #: variant is what it takes instead.
+    comptime CATBOOST_PRIVATE_BYTES = 384 * 32 * 4
+    #: Same idiom `block_size_for` uses, and for the same reason: the budget
+    #: has to be a comptime value because what it decides is a threadgroup
+    #: allocation size.
+    comptime limit = column_shared_limit(column)
+
     comptime if identical:
         return HIST_SMEM_SHARED2_I32  # the BIT_IDENTICAL column's value
-    elif column == COLUMN_APPLE or column == COLUMN_BIT_IDENTICAL:
+    elif limit < CATBOOST_PRIVATE_BYTES:
+        #: Apple (32 KB) took this arm by measurement. It is now stated as
+        #: the BUDGET rule that produced that answer rather than as the
+        #: vendor's name, which is what makes it extend: Adreno's 32 KB and
+        #: Mali's 32 KB land here too, and NVIDIA's 48 KB (exactly their
+        #: layout) and AMD's and Intel's 64 KB do not. **The resolved value
+        #: for every founding column is unchanged by this rewrite** -- apple
+        #: shared-Int32, nvidia and amd warp-private -- which is the only
+        #: acceptable outcome for an edit to a NUMERIC row.
         return HIST_SMEM_SHARED2_I32
     else:
         return HIST_SMEM_WARP_PRIVATE_F32
@@ -941,6 +1363,14 @@ def quantize_search_for[column: Int]() -> Int:
 
     NVIDIA and AMD keep CatBoost's scan: on their ALU budgets it is free
     and it is their measured design.
+
+    THE DECLARED VENDORS KEEP THE SCAN TOO, AND THAT IS AN ADMISSION RATHER
+    THAN A CHOICE. Adreno and Mali are mobile ALU budgets and are far closer
+    to the M4 than to a datacenter card, so the two-level arm is the one to
+    expect there. Expecting is not measuring, and this row is cheap to flip
+    once a device exists: it is scheduling, the result is identical by
+    construction on every arm, so a bring-up measurement changes one line
+    here and no kernel anywhere.
     """
     if column == COLUMN_APPLE:
         return QUANTIZE_SEARCH_TWO_LEVEL

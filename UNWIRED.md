@@ -769,3 +769,25 @@ port has no metric path for it to arrive by.
 
 **`GammaBootstrapImpl`.** In their `bootstrap.cu:21-33` and not ported,
 because the only call to it is COMMENTED OUT in their own file (`:82`).
+
+## `IDENTITY_PROFILE` is not written into the serialized model
+
+Added 2026-08-21 with the vendor columns. `kernel_matrix.IDENTITY_PROFILE`
+names the version of the bit-identity guarantee: the frozen floor (32 KB
+threadgroup, 32 logical replication lanes, block 512, threadgroup Int32
+atomics) that every `IDENTICAL` model is produced under. A vendor that cannot
+meet the floor is refused by name and runs `FAST`; the floor is never
+lowered to fit one, because lowering it changes which partial sums combine
+and therefore every model already produced.
+
+**The model file does not record which profile produced it.** So a profile-1
+model and a future profile-2 model are distinguishable only by provenance,
+which is precisely the thing that goes missing. The whole point of freezing
+the floor is that a user can hold two model files and know whether they are
+comparable; without the field they have to know when each was trained.
+
+It is a header field and about an hour of work, and the deadline is real
+rather than notional: it must land BEFORE a second profile exists, because
+after that there are unlabelled models in the field and no way to label them
+retroactively. `VENDOR_COLUMNS.md` carries the same warning where a reader
+adding a vendor will hit it.

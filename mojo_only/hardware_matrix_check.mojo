@@ -45,9 +45,27 @@ from mojo_only.hardware_matrix import (
 from mojo_only.kernel_matrix import (
     COLUMN_AMD,
     COLUMN_APPLE,
+    COLUMN_ARM,
+    COLUMN_BIT_IDENTICAL,
+    COLUMN_COUNT,
+    COLUMN_INTEL,
     COLUMN_NVIDIA,
+    COLUMN_QUALCOMM,
+    HIST_SMEM_SHARED2_I32,
+    HIST_SMEM_WARP_PRIVATE_F32,
+    IDENTITY_FLOOR_BLOCK,
+    IDENTITY_FLOOR_LANES,
+    IDENTITY_FLOOR_SHARED_BYTES,
+    K_HIST_2_ONE_BYTE,
+    PINNED_REPLICATION_LANES,
     TARGET_COLUMN,
+    column_max_block_size,
+    column_meets_identity_floor,
     column_name,
+    column_shared_limit,
+    hist2_block_size_for,
+    hist_smem_mode_for,
+    identity_refusal_reason,
 )
 from neighbors.ported.distance.detail.pairwise_distance_base import (
     TARGET_GPU_CORES,
@@ -231,6 +249,106 @@ def check_hardware_matrix() raises:
                 " that regime off Apple"
             )
 
+    # ---- 5. THE IDENTITY FLOOR, and the regression it guards -----------
+    #
+    # Three vendor columns were added on 2026-08-21 without a target to
+    # build for, and `hist_smem_mode_for` was rewritten from "is this the
+    # apple column" to "is this column's budget under CatBoost's layout" so
+    # that it would extend to them. **That is an edit to a NUMERIC row, so
+    # the only acceptable outcome is that every founding column resolves to
+    # exactly what it resolved to before.** These pins are that proof, and
+    # they are the reason the rewrite is allowed to stand.
+    _pin(
+        "apple hist2 smem mode (shared Int32)",
+        hist_smem_mode_for[COLUMN_APPLE, False](),
+        HIST_SMEM_SHARED2_I32,
+    )
+    _pin(
+        "nvidia hist2 smem mode (CatBoost warp-private f32)",
+        hist_smem_mode_for[COLUMN_NVIDIA, False](),
+        HIST_SMEM_WARP_PRIVATE_F32,
+    )
+    _pin(
+        "amd hist2 smem mode (CatBoost warp-private f32)",
+        hist_smem_mode_for[COLUMN_AMD, False](),
+        HIST_SMEM_WARP_PRIVATE_F32,
+    )
+    _pin(
+        "identical hist2 smem mode (shared Int32)",
+        hist_smem_mode_for[COLUMN_BIT_IDENTICAL, True](),
+        HIST_SMEM_SHARED2_I32,
+    )
+    _pin(
+        "apple hist2 block (512 fills Metal's 32 KB)",
+        hist2_block_size_for[COLUMN_APPLE, HIST_SMEM_SHARED2_I32](),
+        512,
+    )
+    _pin(
+        "nvidia hist2 block (CatBoost's 384)",
+        hist2_block_size_for[COLUMN_NVIDIA, HIST_SMEM_WARP_PRIVATE_F32](),
+        384,
+    )
+
+    # The floor is FROZEN. These are not "the current values", they are the
+    # guarantee, and an edit to one of them is a profile bump with a
+    # migration -- not a patch that happens to fail a test.
+    _pin("identity floor shared bytes", IDENTITY_FLOOR_SHARED_BYTES, 32768)
+    _pin("identity floor lanes", IDENTITY_FLOOR_LANES, 32)
+    _pin("identity floor block", IDENTITY_FLOOR_BLOCK, 512)
+    _pin(
+        "the safe column reads the FROZEN floor, not a min() over vendors",
+        column_shared_limit(COLUMN_BIT_IDENTICAL),
+        IDENTITY_FLOOR_SHARED_BYTES,
+    )
+    # Two names for one guarantee is how a guarantee drifts.
+    _pin(
+        "PINNED_REPLICATION_LANES == IDENTITY_FLOOR_LANES",
+        PINNED_REPLICATION_LANES,
+        IDENTITY_FLOOR_LANES,
+    )
+
+    # Every column answers every row: a new column must not fall through to
+    # another vendor's value by accident, which is exactly how the machine
+    # rows silently returned Apple's 10 cores for NVIDIA until 2026-08-19.
+    for c in range(COLUMN_COUNT):
+        if column_name(c) == String("unknown"):
+            raise Error(
+                "check_hardware_matrix FAIL: column "
+                + String(c)
+                + " is inside COLUMN_COUNT and has no name; every row in"
+                " kernel_matrix.mojo must answer for it"
+            )
+        if column_shared_limit(c) <= 0 or column_max_block_size(c) <= 0:
+            raise Error(
+                "check_hardware_matrix FAIL: column "
+                + column_name(c)
+                + " has no declared shared-memory or block-size minimum"
+            )
+        # The verdict and the reason must agree. A column refused with no
+        # reason is a support ticket; a column admitted WITH a reason is a
+        # bug in the floor.
+        var refused = identity_refusal_reason(c).byte_length() > 0
+        if refused == column_meets_identity_floor(c):
+            raise Error(
+                "check_hardware_matrix FAIL: column "
+                + column_name(c)
+                + " disagrees with itself about identity admission"
+            )
+
+    # Today's finding, pinned so that a change to it is deliberate: every
+    # declared vendor MEETS the floor. Adreno and Mali advertise the same
+    # 32 KB Apple does, and Intel more, so the design was already floored by
+    # the most constrained mainstream GPU memory hierarchy.
+    for c in range(COLUMN_COUNT):
+        if not column_meets_identity_floor(c):
+            raise Error(
+                "check_hardware_matrix FAIL: "
+                + identity_refusal_reason(c)
+                + " -- if this is a NEW vendor that genuinely cannot meet"
+                " the floor, it belongs in FAST and this loop needs an"
+                " explicit exception naming it, NOT a lower floor"
+            )
+
     print(
         "check_hardware_matrix OK: apple column = the old constants"
         " bit-for-bit (10 cores, 3072 threads/core, 32 KB wall, occupancy"
@@ -242,4 +360,9 @@ def check_hardware_matrix() raises:
         + ", gram dispatch, fused_l2_knn_grid) all agree with the table;"
         " build column "
         + column_name(TARGET_COLUMN)
+        + "; identity floor frozen at profile 1 (32 KB / 32 lanes / block"
+        " 512) and all "
+        + String(COLUMN_COUNT - 1)
+        + " vendor columns meet it, apple/nvidia/amd smem modes unchanged"
+        " by the budget rewrite"
     )

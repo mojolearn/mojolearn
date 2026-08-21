@@ -28,17 +28,34 @@ from mojo_only.kernel_matrix import (
     COLUMN_AMD,
     COLUMN_APPLE,
     COLUMN_BIT_IDENTICAL,
+    COLUMN_COUNT,
     COLUMN_NVIDIA,
+    IDENTITY_FLOOR_BLOCK,
+    IDENTITY_FLOOR_LANES,
+    IDENTITY_FLOOR_SHARED_BYTES,
+    IDENTITY_PROFILE,
     K_LIB_SELECT_WARPSORT,
     PINNED_LIB_REDUCE_LANES,
     TARGET_COLUMN,
+    column_has_dedicated_shared_memory,
+    column_has_float_atomics,
+    column_has_threadgroup_int_atomics,
+    column_is_buildable,
     column_lane_width,
+    column_lane_width_is_fixed,
+    column_max_block_size,
+    column_meets_identity_floor,
     column_name,
     column_shared_limit,
+    identity_refusal_reason,
     lib_block_size_for,
     lib_lane_width_for,
     lib_smem_pages_for,
 )
+
+
+def _yn(b: Bool) -> String:
+    return String("yes") if b else String("NO")
 
 #: RAFT's Policy4x4 shared page, in bytes. Two of these is their double
 #: buffer: 36,992, which is over Metal's 32 KB and under NVIDIA's 48 KB.
@@ -105,4 +122,72 @@ def main() raises:
     print(
         "  Not one of those is a literal in its own file. Each is"
         " lib_*_for[..., TARGET_COLUMN]()."
+    )
+
+    # ---------------------------------------------------------------------
+    # THE VENDOR MINIMUMS, INCLUDING THE COLUMNS NOTHING CAN BUILD FOR YET.
+    #
+    # This is the table to read before adding a target, and the reason it
+    # prints the unbuildable columns is that the question it answers is due
+    # BEFORE the target exists: does admitting this vendor move anybody's
+    # bits? The floor below is frozen, so the answer is no by construction --
+    # a vendor either meets it and joins, or is refused by name.
+    # ---------------------------------------------------------------------
+    print()
+    print(
+        "  vendor minimums. 'build' = Mojo emits code for it today;"
+        " everything else is the vendor's documented floor."
+    )
+    print()
+    print(
+        "  column         build  smem   lanes    maxblk  f32atom"
+        "  i32atom  smem-hw  IDENTICAL"
+    )
+    for c in range(COLUMN_COUNT):
+        var lanes = String(column_lane_width(c))
+        if not column_lane_width_is_fixed(c):
+            #: The width is the COMPILER's decision on this vendor, not the
+            #: device's. Printed with the marker because a reader who takes
+            #: it for a constant has misread the most dangerous cell here.
+            lanes = lanes + "+var"
+        print(
+            "  ",
+            column_name(c),
+            "\t",
+            _yn(column_is_buildable(c)),
+            "\t",
+            column_shared_limit(c) // 1024,
+            "KB\t",
+            lanes,
+            "\t",
+            column_max_block_size(c),
+            "\t",
+            _yn(column_has_float_atomics(c)),
+            "\t",
+            _yn(column_has_threadgroup_int_atomics(c)),
+            "\t",
+            _yn(column_has_dedicated_shared_memory(c)),
+            "\t",
+            _yn(column_meets_identity_floor(c)),
+        )
+        var why = identity_refusal_reason(c)
+        if why.byte_length() > 0:
+            print("      refused:", why)
+
+    print()
+    print(
+        "  identity floor, profile",
+        IDENTITY_PROFILE,
+        ": ",
+        IDENTITY_FLOOR_SHARED_BYTES // 1024,
+        "KB threadgroup,",
+        IDENTITY_FLOOR_LANES,
+        "logical lanes, block",
+        IDENTITY_FLOOR_BLOCK,
+        ", threadgroup int atomics.",
+    )
+    print(
+        "  FROZEN. A vendor that misses it is refused for IDENTICAL and runs"
+        " FAST; the floor never drops to fit one, because dropping it"
+        " changes every model already produced under this profile."
     )

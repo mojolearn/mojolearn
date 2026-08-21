@@ -131,11 +131,27 @@ on the same device can differ in the last bits. We ship Metal, CUDA and HIP
 from one source, so we need "the same fit gives the same model" to be
 available.
 
-The design is a four-column table: **bit-identical**, apple, nvidia, amd.
+The design is a table: **bit-identical**, apple, nvidia, amd, and -- declared
+2026-08-21, with no target to build for yet -- qualcomm, intel and arm.
 The bit-identical column is not a mode flag, it is a real column holding the
-value every vendor can meet, so it is the INTERSECTION of the other three and
-can be printed and diffed against a device column to show exactly what
-identity costs there.
+value every ADMITTED vendor can meet, and it can be printed and diffed
+against a device column to show exactly what identity costs there.
+
+**It is a FROZEN, VERSIONED FLOOR and no longer the intersection of whoever
+is in the table.** As an intersection it was a tripwire: adding one vendor
+with a smaller shared-memory budget would have shrunk the safe column, which
+changes the block size, the replication factor, and therefore which partial
+sums combine -- so every model ever produced under `IDENTICAL` would have
+stopped matching the ones produced afterwards, with no error and no version
+to notice it by. A new vendor now either meets the floor and joins with no
+bit moving, or is refused for `IDENTICAL` by name and runs `FAST`. The floor
+never drops to fit one; widening it is a profile bump, which is a different
+guarantee about a different set of models.
+
+Today every declared vendor meets it, including the three nothing can build
+for: Adreno and Mali advertise the same 32 KB per workgroup that Metal does,
+and Intel more. `mojo build -I . matrix_main.mojo` prints the whole table
+with each vendor's minimums and its admission verdict, and touches no device.
 
 Resolution substitutes per ROW, not per spec: a scheduling row always comes
 from the device's column, and a numeric row comes from the device's column

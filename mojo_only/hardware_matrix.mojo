@@ -39,6 +39,13 @@ VALIDATION HONESTY, which is this repo's stated posture
   column is right on the pinned device and merely reasonable elsewhere.
   When Mojo exposes the device queries, these rows become the fallback and
   the queries become the truth, in that order.
+- QUALCOMM, INTEL and ARM are DECLARED-NOT-BUILDABLE: Mojo emits no code for
+  them today (`kernel_matrix.column_is_buildable`). Their KERNEL rows in
+  `kernel_matrix.mojo` are documented vendor minimums with a citation each,
+  because those decide an admission question that has to be settled in
+  advance. Their MACHINE rows here are mostly conservative PLACEHOLDERS and
+  are labelled individually, because "how many cores does a Qualcomm GPU
+  have" has no single answer worth pinning and no bit depends on it.
 
 WHAT IS DELIBERATELY NOT MODELED (all three columns)
 -----------------------------------------------------
@@ -54,8 +61,11 @@ launch does not trust this table past what it knows.
 from mojo_only.kernel_matrix import (
     COLUMN_AMD,
     COLUMN_APPLE,
+    COLUMN_ARM,
     COLUMN_BIT_IDENTICAL,
+    COLUMN_INTEL,
     COLUMN_NVIDIA,
+    COLUMN_QUALCOMM,
     column_name,
     column_shared_limit,
 )
@@ -70,6 +80,16 @@ def gpu_cores_for[column: Int]() -> Int:
     - nvidia: 108 SMs, A100 (NVIDIA A100 Tensor Core GPU Architecture
       whitepaper, GA100 at 108 of 128 SMs enabled). UNVALIDATED.
     - amd: 110 CUs per MI250X GCD (AMD CDNA2 whitepaper). UNVALIDATED.
+    - qualcomm, intel, arm: **CONSERVATIVE PLACEHOLDERS, NOT TRANSCRIPTIONS,
+      and they are marked as such at the call site.** These families span an
+      enormous range -- an Adreno in a phone and an Adreno X1 in a laptop are
+      both "qualcomm" -- and picking a representative part the way the NVIDIA
+      and AMD rows do would state a precision this table does not have. Every
+      one of them is deliberately LOW, so a grid computed from it under-asks
+      for the machine (slow, correct) rather than over-asks (a launch that
+      fails on a device nobody here can test). They are SCHEDULING rows, so
+      no answer they give can move a bit; replace them with the device query
+      at bring-up rather than with a better guess.
 
     SCHEDULING rows have no bit-identical value to take -- the device column
     always answers -- but the column resolves to the intersection (the
@@ -80,6 +100,12 @@ def gpu_cores_for[column: Int]() -> Int:
         return 108
     if column == COLUMN_AMD:
         return 110
+    if column == COLUMN_QUALCOMM:
+        return 6  # PLACEHOLDER, see below
+    if column == COLUMN_INTEL:
+        return 8  # PLACEHOLDER, see below
+    if column == COLUMN_ARM:
+        return 4  # PLACEHOLDER, see below
     return 10  # apple, and the bit-identical intersection
 
 
@@ -97,6 +123,10 @@ def max_threads_per_core_for[column: Int]() -> Int:
     """
     if column == COLUMN_APPLE:
         return 3072
+    if column == COLUMN_QUALCOMM or column == COLUMN_INTEL:
+        return 1024  # conservative placeholder, see `gpu_cores_for`
+    if column == COLUMN_ARM:
+        return 512  # conservative placeholder, see `gpu_cores_for`
     return 2048  # nvidia, amd, and the bit-identical intersection
 
 
@@ -126,9 +156,20 @@ def smem_statically_partitioned_for[column: Int]() -> Bool:
       that resident blocks split, and `cudaOccupancyMaxActiveBlocksPer-
       Multiprocessor` includes exactly this term. UNVALIDATED here.
 
+    - qualcomm, intel: True. Both partition a per-core local-memory pool
+      between resident work-groups; Intel's guide computes occupancy from
+      exactly that division. UNVALIDATED.
+    - arm: **False, and for a different reason than Apple's.** Mali has no
+      dedicated compute scratchpad at all -- Arm's best-practices guide says
+      the shared memory "is system RAM that is backed up by the load-store
+      cache" -- so there is no per-core pool for resident groups to divide.
+      It is not a divisor because it is not a partition, which is the same
+      answer Apple gives from the opposite premise. See
+      `kernel_matrix.column_has_dedicated_shared_memory`.
+
     The bit-identical intersection is True (the restrictive reading).
     """
-    return column != COLUMN_APPLE
+    return column != COLUMN_APPLE and column != COLUMN_ARM
 
 
 def smem_per_core_for[column: Int]() -> Int:
@@ -146,6 +187,15 @@ def smem_per_core_for[column: Int]() -> Int:
         return 164 * 1024
     if column == COLUMN_AMD:
         return 64 * 1024
+    if column == COLUMN_INTEL:
+        #: 128 KB of SLM per Xe-core, which Intel's own occupancy example
+        #: splits as 64 + 64 between two resident work-groups (oneAPI GPU
+        #: optimization guide, "Shared Local Memory"). The one row on the
+        #: declared vendors that is a real transcription rather than a
+        #: placeholder.
+        return 128 * 1024
+    if column == COLUMN_QUALCOMM or column == COLUMN_ARM:
+        return 32 * 1024  # conservative; see `gpu_cores_for`
     return 32 * 1024  # apple, and the bit-identical intersection
 
 
