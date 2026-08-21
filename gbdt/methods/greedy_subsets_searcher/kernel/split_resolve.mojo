@@ -131,3 +131,39 @@ def resolve_and_pack_kernel(
         # sequence the caller already holds.
         ids_c.unsafe_store(i, UInt32(n_live + i))
         i += RESOLVE_BLOCK_SIZE
+
+
+def plan_level_kernel(
+    part_size: MutPointer[UInt32, MutAnyOrigin],
+    half_in: Int32,
+    ids_compute: MutPointer[UInt32, MutAnyOrigin],
+    sub_from: MutPointer[UInt32, MutAnyOrigin],
+    sub_what: MutPointer[UInt32, MutAnyOrigin],
+):
+    """`BuildNecessaryHistograms`' smaller-child choice, on the device.
+
+    Their `:1318` rule over each sibling pair (left = slot i, right =
+    slot half + i, siblings by construction of the split chain): the
+    SMALLER child is computed and the larger derived by subtraction, and
+    the left child wins a tie (their comparison is strict `<` on the
+    sibling). The host used to make this choice from a per-level size
+    read; DEVIATION 94 enqueues levels blind, so the choice moves here,
+    reading the same `p_sz` the partition-update kernel just wrote. The
+    CHOICE cannot change a histogram bit -- the Int32 fixed-point
+    accumulator makes sibling subtraction exact -- but making THEIR
+    choice keeps the computed set the smaller half, which is the whole
+    point of the halving.
+    """
+    var half = Int(half_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < half:
+        var left_sz = part_size.unsafe_load(i)
+        var right_sz = part_size.unsafe_load(half + i)
+        var small = i
+        var big = half + i
+        if right_sz < left_sz:
+            small = half + i
+            big = i
+        ids_compute.unsafe_store(i, UInt32(small))
+        sub_from.unsafe_store(i, UInt32(big))
+        sub_what.unsafe_store(i, UInt32(small))

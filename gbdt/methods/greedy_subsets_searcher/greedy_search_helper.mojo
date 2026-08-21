@@ -55,6 +55,7 @@ from std.sys.info import size_of
 from gbdt.gpu_data.gpu_structures import CFeature
 from gbdt.methods.greedy_subsets_searcher.kernel.split_resolve import (
     RESOLVE_BLOCK_SIZE,
+    plan_level_kernel,
     resolve_and_pack_kernel,
 )
 from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_8bit import (
@@ -2429,6 +2430,15 @@ struct TTreeWorkspace(Movable):
         for i in range(max_leaves):
             h_dense.unsafe_ptr().unsafe_store(i, UInt32(i))
         ctx.enqueue_copy(dst_buf=self.dense_ids, src_ptr=h_dense.unsafe_ptr())
+        # a second copy of the dense sequence: the blind level plan
+        # (DEVIATION 94) passes an id list and the dense list to the same
+        # call, and the exclusivity checker refuses one buffer twice
+        ctx.enqueue_copy(
+            dst_buf=self.ids_compute, src_ptr=h_dense.unsafe_ptr()
+        )
+        # ...and a third: the static plan (depth 0, or subtraction off)
+        # needs an id list DISTINCT from `dense_ids` for the same reason
+        ctx.enqueue_copy(dst_buf=self.zero_ids, src_ptr=h_dense.unsafe_ptr())
         var hsk = ctx.enqueue_create_host_buffer[DType.uint8](
             hist_cells_per_leaf
         )
@@ -2701,13 +2711,12 @@ def run_tree_layout[
     # Two phases per level. Theirs blocks the host exactly TWICE in them:
     # `bestProps.Read(propsCpu)` (`greedy_search_helper.cpp:517`) and the
     # leaf-size read in `RebuildLeavesSizes`
-    # (`split_properties_helper.cpp:802`). This loop blocks ONCE: the
-    # winner is resolved and packed on the device
-    # (`kernel/split_resolve.mojo`, DEVIATION BLOCK -- a drain on this box
-    # costs ~191 us plus the queue-empty bubble, and the covtype fixed
-    # floor those drains sit in is half the tree) and rides home in the
-    # same drain as the sizes, with the gates applied post-drain and a
-    # one-level rollback on the rare stop.
+    # (`split_properties_helper.cpp:802`). This loop blocks NOT AT ALL:
+    # the winner is resolved and packed on the device
+    # (`kernel/split_resolve.mojo`, DEVIATION BLOCK), every level is
+    # enqueued blind (DEVIATION 94 inside the loop), and the single drain
+    # of the whole tree sits after the loop, where the gates walk the
+    # winner records level by level.
     #
     # THE BUDGET IS NOT ARMED HERE, AND THAT IS DELIBERATE.
     #
@@ -2733,14 +2742,10 @@ def run_tree_layout[
     var mgr = TCudaManager(ctx.copy(), sync_budget=sync_budget)
 
     var n_live = 1
+    # grid sizing bound: with no per-level size read (DEVIATION 94) the
+    # largest live leaf is unknown until the tree is done, and `n_rows`
+    # bounds it at every level; the kernels stride actual leaf ranges.
     var max_live_rows = n_rows
-
-    # their `subsets->Leaves`. The root holds every row and its histogram slot
-    # is empty, which is `EHistogramsType::Zeroes`.
-    var leaf_records = List[LeafRecord]()
-    leaf_records.append(
-        LeafRecord(UInt32(n_rows), HISTOGRAMS_ZEROES, 0, False)
-    )
 
     for depth in range(max_depth):
         # ============ ComputeOptimalSplits ============
@@ -2755,146 +2760,122 @@ def run_tree_layout[
         # `parent - smaller`, because the larger's slot already holds the
         # parent, put there by `copy_histograms_kernel` at split time (their
         # `CopyHistogram`, `split_points.cpp:326`).
-        var plan = build_necessary_histograms(leaf_records)
-        var n_pairs = len(plan.subtract_from)
-
-        # ============================================================
-        # THE ZERO-LEAF SPLIT, `split_properties_helper.cpp:1342-1350`:
+        # ================= DEVIATION 94 =================
+        # ONE DRAIN PER TREE, NOT PER LEVEL. Their host blocks every level
+        # (`bestProps.Read` + `RebuildLeavesSizes`) because a CUDA
+        # pinned-memory read costs ~5 us; this box's drain costs ~191 us
+        # plus a queue-empty bubble, and at covtype scale those six waits
+        # were the largest term of the tree. So every level is enqueued
+        # BLIND -- no host read anywhere in this loop -- and the winners,
+        # final sizes and gates are handled ONCE after it. What made the
+        # per-level sizes load-bearing, and what replaces each use:
         #
-        #     auto nonZeroComputeLeaves =
-        #         NonZeroLeaves(*subsets, computeLeaves);
-        #     auto zeroLeaves = ZeroLeaves(*subsets, computeLeaves);
-        #     ComputeSplitProperties(loadPolicy, nonZeroComputeLeaves, subsets);
-        #     ZeroLeavesHistograms(zeroLeaves, subsets);
-        #
-        # **AN EMPTY LEAF'S HISTOGRAM IS ALL ZEROS BY DEFINITION AND
-        # CATBOOST NEVER BUILDS IT.** It zeroes the slot and moves on. This
-        # loop used to hand the whole of `computeLeaves` to the histogram
-        # builder, so every empty leaf bought a full accumulation over every
-        # row and every feature to produce a result known in advance. At
-        # depth 6 this port's own checks report 56 of 64 leaves non-empty on
-        # one fixture and 46 of 64 on another.
-        #
-        # This is safe only because `leaf_records[i].size` is REBUILT from
-        # the partition sizes at the foot of every level, which is their
-        # `RebuildLeavesSizes` (`:800-812`). If it were stale, the partition
-        # here would be wrong AND the smaller-child choice at `:1318` would
-        # already be being made on bad data.
-        # ============================================================
-        var compute_nonzero = non_zero_leaves(leaf_records, plan.compute_ids)
-        var compute_zero = zero_leaves(leaf_records, plan.compute_ids)
-        var n_compute = len(compute_nonzero)
-        var n_zero = len(compute_zero)
-
-        # their `ComputeSplitProperties(loadPolicy, nonZeroComputeLeaves,
-        # subsets)` (`:1346`), whose first statement is
-        # `if (leavesToCompute.size() == 0) { return; }` (`:1089-1091`).
-        if n_compute > 0:
-            for i in range(n_compute):
-                h_ids_compute.unsafe_ptr().unsafe_store(i, compute_nonzero[i])
-            ctx.enqueue_copy(
-                dst_buf=ids_compute, src_ptr=h_ids_compute.unsafe_ptr()
+        # * their smaller-child choice (`:1318`) picked which sibling to
+        #   COMPUTE, the other derived by subtraction. The Int32
+        #   fixed-point accumulator makes the subtraction EXACT (see
+        #   `mojo_only/fixed_point.mojo`), so WHICH sibling is computed
+        #   cannot change a bit of either histogram; the plan is now
+        #   static -- always the LEFT child, right = parent - left --
+        #   and the train-mse gates hold bit-for-bit through the swap.
+        # * their `NonZeroLeaves`/`ZeroLeaves` split skipped empty
+        #   leaves' builds and zeroed their slots. The compute slots are
+        #   now zeroed UNCONDITIONALLY before the build (the builder
+        #   writes nothing for an empty range, so the zero IS the empty
+        #   leaf's histogram), which subsumes that logic without sizes.
+        # * grid sizing used the level's largest leaf; it now uses
+        #   `n_rows`, a safe upper bound (kernels stride leaf ranges).
+        # * the gates and the split record move to the post-loop walk,
+        #   with a MULTI-level rollback on the rare stop (the same
+        #   left-child-keeps-parent-offset argument as the old one-level
+        #   rollback, applied k times).
+        # `dense_ids` holds 0..max_leaves-1, so the left children ARE its
+        # prefix and the right children ARE `dense_ids + half`: the whole
+        # level plan costs no host fill and no upload.
+        # ================================================================
+        var half = n_live // 2
+        var planned = use_subtraction and depth > 0
+        var n_compute = n_live
+        if planned:
+            n_compute = half
+            # their smaller-child choice (`:1318`), from `p_sz` on the
+            # device -- see `plan_level_kernel`'s docstring
+            ctx.enqueue_function[plan_level_kernel](
+                p_sz.unsafe_ptr(), Int32(half),
+                ids_compute.unsafe_ptr(),
+                sub_from.unsafe_ptr(), sub_what.unsafe_ptr(),
+                grid_dim=((half + 63) // 64, 1, 1),
+                block_dim=(64, 1, 1),
+            )
+            mgr.stream_kernel()
+        var level_ids = ids_compute.unsafe_ptr()
+        if not planned:
+            # the static plan: the dense prefix (`zero_ids` holds a copy
+            # of the dense sequence; `ids_compute` holds the planner's
+            # output from some earlier level and cannot be trusted here)
+            level_ids = rebind[type_of(level_ids)](
+                zero_ids.unsafe_ptr()
             )
 
+        # zero the compute slots (their `ZeroLeavesHistograms`, applied to
+        # every compute slot rather than the empty ones the host no longer
+        # knows about; a computed slot is overwritten either way, and an
+        # empty one's zeros ARE its histogram)
+        ctx.enqueue_function[zero_histograms_kernel](
+            level_ids,
+            Int32(hist_cells_per_leaf),
+            hist.unsafe_ptr(),
+            grid_dim=(
+                (hist_cells_per_leaf + 255) // 256, n_compute, stat_count
+            ),
+            block_dim=(256, 1, 1),
+        )
+        mgr.stream_kernel()
+
+        if planned:
             launch_histograms_for_blocks[hist2_smem_mode](
-                ctx, dblocks, depth, n_compute, n_rows, stat_count, max_leaves,
-                sm_count, fixed_scale,
-                cindex, row_index, stats, p_off, p_sz, ids_compute, dense_ids,
+                ctx, dblocks, depth, n_compute, n_rows, stat_count,
+                max_leaves, sm_count, fixed_scale,
+                cindex, row_index, stats, p_off, p_sz, ids_compute,
+                dense_ids,
                 hist, acc_i32, block_hist, hist_cells_per_leaf,
             )
-            mgr.stream_kernel()
-
-            # their `TScanHistogramsKernel` over `*leavesGpu` (`:1262`), the
-            # LAST statement of `ComputeSplitProperties` and therefore over
-            # the NON-ZERO set too. It runs on the leaves JUST COMPUTED and
-            # BEFORE the subtraction. A prefix sum is linear, so
-            # `scan(parent) - scan(small)` is already `scan(big)` and the
-            # derived child needs no further scan.
-            # `numBlocks.x = CeilDivide(fCount * 32, blockSize)`
-            # (`histogram_utils.cu:442`), theirs at one WARP per feature.
-            # Ours is one THREAD per feature, so the same rule is
-            # `ceil(fCount / blockSize)`. The kernel guards with
-            # `feature_id >= feature_count` and has no grid-stride loop, so
-            # grid x of 1 left every feature from 256 up unscanned, holding
-            # raw per-bin counts while the score kernel read them as prefix
-            # sums.
-            ctx.enqueue_function[scan_histograms_kernel](
-                ids_compute.unsafe_ptr(),
-                flat_first.unsafe_ptr(), flat_folds.unsafe_ptr(),
-                flat_one_hot.unsafe_ptr(),
-                Int32(len(fold_counts)), Int32(hist_cells_per_leaf),
-                hist.unsafe_ptr(),
-                grid_dim=(
-                    (len(fold_counts) + 255) // 256, n_compute, stat_count
-                ),
-                block_dim=(256, 1, 1),
+        else:
+            launch_histograms_for_blocks[hist2_smem_mode](
+                ctx, dblocks, depth, n_compute, n_rows, stat_count,
+                max_leaves, sm_count, fixed_scale,
+                cindex, row_index, stats, p_off, p_sz, zero_ids,
+                dense_ids,
+                hist, acc_i32, block_hist, hist_cells_per_leaf,
             )
-            mgr.stream_kernel()
+        mgr.stream_kernel()
 
-        # their `ZeroLeavesHistograms(zeroLeaves, subsets)` (`:1348`), the
-        # whole of `:1375-1400` including its dispatch, which is the part
-        # that is easy to skip:
-        #
-        #     if (leaves.size() <= 2) { one TZeroHistogramKernel per leaf }
-        #     else { ids.Write(leaves); one TZeroHistogramsKernel }
-        #
-        # The small case avoids the host id-buffer write and its copy, which
-        # cost more than the extra launch at one or two ids. It runs AFTER
-        # the build and BEFORE the subtraction, and the order matters in one
-        # direction: an empty leaf can be the SMALLER child of a pair, and
-        # `substract_histograms_kernel` reads its slot.
-        if n_zero > 0:
-            if n_zero <= 2:
-                # `TZeroHistogramKernel`, leaf id BY VALUE, `numBlocks.y = 1`
-                # (`histogram_utils.cu:268-284`).
-                for i in range(n_zero):
-                    ctx.enqueue_function[zero_histogram_kernel](
-                        UInt32(compute_zero[i]),
-                        Int32(hist_cells_per_leaf),
-                        hist.unsafe_ptr(),
-                        grid_dim=(
-                            (hist_cells_per_leaf + 255) // 256, 1, stat_count
-                        ),
-                        block_dim=(256, 1, 1),
-                    )
-                    mgr.stream_kernel()
-            else:
-                # `ids.Write(leaves)` then `TZeroHistogramsKernel` (`:1391`).
-                for i in range(n_zero):
-                    h_zero_ids.unsafe_ptr().unsafe_store(i, compute_zero[i])
-                ctx.enqueue_copy(
-                    dst_buf=zero_ids, src_ptr=h_zero_ids.unsafe_ptr()
-                )
-                ctx.enqueue_function[zero_histograms_kernel](
-                    zero_ids.unsafe_ptr(),
-                    Int32(hist_cells_per_leaf),
-                    hist.unsafe_ptr(),
-                    grid_dim=(
-                        (hist_cells_per_leaf + 255) // 256, n_zero, stat_count
-                    ),
-                    block_dim=(256, 1, 1),
-                )
-                mgr.stream_kernel()
+        # their `TScanHistogramsKernel` (`:1262`), over the computed set;
+        # a prefix sum is linear, so the derived sibling needs no scan.
+        ctx.enqueue_function[scan_histograms_kernel](
+            level_ids,
+            flat_first.unsafe_ptr(), flat_folds.unsafe_ptr(),
+            flat_one_hot.unsafe_ptr(),
+            Int32(len(fold_counts)), Int32(hist_cells_per_leaf),
+            hist.unsafe_ptr(),
+            grid_dim=(
+                (len(fold_counts) + 255) // 256, n_compute, stat_count
+            ),
+            block_dim=(256, 1, 1),
+        )
+        mgr.stream_kernel()
 
         # their `SubstractHistograms(bigLeaves, smallLeaves, subsets)`
-        # (`:1354`). `from - what`, in place, one launch for all pairs.
-        if n_pairs > 0:
-            for i in range(n_pairs):
-                h_sub_from.unsafe_ptr().unsafe_store(i, plan.subtract_from[i])
-                h_sub_what.unsafe_ptr().unsafe_store(i, plan.subtract_what[i])
-            ctx.enqueue_copy(dst_buf=sub_from, src_ptr=h_sub_from.unsafe_ptr())
-            ctx.enqueue_copy(dst_buf=sub_what, src_ptr=h_sub_what.unsafe_ptr())
-            # WIDTH DISPATCH, see `substract_histograms_vec4_kernel`'s
-            # deviation block: 4 bin-features per thread where the stat
-            # plane base is 16-byte aligned, their 1-per-thread kernel
-            # otherwise. Same cells, same order, same `max(., 0)`.
+        # (`:1354`). `from - what`, in place, one launch for all pairs:
+        # from = the right children (`dense_ids + half`, whose slots hold
+        # the parent via `copy_histograms`), what = the computed left.
+        if planned and half > 0:
             if hist_cells_per_leaf % 4 == 0:
                 ctx.enqueue_function[substract_histograms_vec4_kernel](
                     sub_from.unsafe_ptr(), sub_what.unsafe_ptr(),
                     Int32(hist_cells_per_leaf), hist.unsafe_ptr(),
                     grid_dim=(
                         (hist_cells_per_leaf // 4 + 255) // 256,
-                        n_pairs, stat_count
+                        half, stat_count
                     ),
                     block_dim=(256, 1, 1),
                 )
@@ -2903,18 +2884,12 @@ def run_tree_layout[
                     sub_from.unsafe_ptr(), sub_what.unsafe_ptr(),
                     Int32(hist_cells_per_leaf), hist.unsafe_ptr(),
                     grid_dim=(
-                        (hist_cells_per_leaf + 255) // 256, n_pairs, stat_count
+                        (hist_cells_per_leaf + 255) // 256,
+                        half, stat_count
                     ),
                     block_dim=(256, 1, 1),
                 )
             mgr.stream_kernel()
-
-        # their `allUpdatedLeaves` loop (`:1359`)
-        var updated = plan.updated_ids()
-        for i in range(len(updated)):
-            leaf_records[Int(updated[i])].histograms_type = (
-                HISTOGRAMS_CURRENT_PATH
-            )
 
         # their `AllReduceThroughMaster(subsets->CurrentPartStats(), ...)`
         compute_partition_stats(
@@ -3108,99 +3083,53 @@ def run_tree_layout[
         )
         mgr.stream_kernel()
 
-        # their `SplitLeaf` (`split_properties_helper.cpp:786`):
-        #
-        #     if (leaf.HistogramsType == EHistogramsType::CurrentPath)
-        #         newLeaf.HistogramsType = EHistogramsType::PreviousPath;
-        #
-        # Both children of leaf `i` group on the parent's path, which is `i`.
-        var prev_records = leaf_records.copy()
-        leaf_records = List[LeafRecord]()
-        for _ in range(2 * n_live):
-            leaf_records.append(
-                LeafRecord(UInt32(0), HISTOGRAMS_ZEROES, 0, False)
-            )
-        for i in range(n_live):
-            # `use_subtraction=False` keeps every child at `Zeroes`, so the
-            # planner finds no pairs and the level rebuilds all `2^depth`
-            # histograms. It exists so the two can be measured INTERLEAVED
-            # inside one process; this box drifts 2-3x across time windows
-            # and sequential arms do not compare.
-            var t = HISTOGRAMS_ZEROES
-            if (
-                use_subtraction
-                and prev_records[i].histograms_type
-                == HISTOGRAMS_CURRENT_PATH
-            ):
-                t = HISTOGRAMS_PREVIOUS_PATH
-            leaf_records[i] = LeafRecord(UInt32(0), t, i, False)
-            leaf_records[n_live + i] = LeafRecord(UInt32(0), t, i, False)
-
         n_live = n_live * 2
-        ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
-        # ...and the winner records ride home in the SAME drain, which is
-        # the whole fold: two blocking reads per level become one.
-        ctx.enqueue_copy(dst_ptr=h_wsc.unsafe_ptr(), src_buf=winners_score)
-        ctx.enqueue_copy(dst_ptr=h_wbf.unsafe_ptr(), src_buf=winners_bf)
 
-        # THE ONE DRAIN OF THE LEVEL. Their `RebuildLeavesSizes`
-        # (`split_properties_helper.cpp:800-813`), which is also ONE blocking
-        # partition read per level on their side, at `:950`. So this drain is
-        # their count and not an artifact of ours.
-        #
-        # What IS an artifact is the transfer under it. Their `Read` moves
-        # host memory to host memory, because `PartitionsCpu` is
-        # `EPtrType::CudaHost` and the split kernel already wrote it
-        # (`split_points.cu:372`, `:379`); ours moves device memory to host
-        # memory. `hp_off` / `hp_size` are the mirror that was supposed to
-        # remove that transfer and cannot, and the search behind that is the
-        # DEVIATION BLOCK in `gbdt/gpu_util/gpu_data/partitions.mojo`.
-        # It used to point at `gbdt/gpu_lib/NOT_PORTED.md`, which says
-        # nothing about any of this.
-        #
-        # ORDERING. The copy above is enqueued behind
-        # `update_partitions_after_split_kernel` on the same queue, so it
-        # cannot read a size the kernel has not written; this drain is only
-        # what makes the copy's result readable on the host. The same
-        # property is what makes their stream-ordered `Read` safe.
-        mgr.wait_complete()
+    # ---- THE ONE DRAIN OF THE TREE (DEVIATION 94) --------------------
+    # Their per-level `bestProps.Read` and `RebuildLeavesSizes` reads,
+    # folded into one: the winner records hold every level, the partition
+    # sizes hold the final leaves, and both ride home behind everything
+    # the loop enqueued.
+    ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
+    ctx.enqueue_copy(dst_ptr=h_wsc.unsafe_ptr(), src_buf=winners_score)
+    ctx.enqueue_copy(dst_ptr=h_wbf.unsafe_ptr(), src_buf=winners_bf)
+    mgr.wait_complete()
 
-        # ============ THE GATES, POST-DRAIN =============================
-        # Their host applies these BEFORE splitting
-        # (`greedy_search_helper.cpp:535-539` the sentinel ENSURE, `:360-364`
-        # the `Score < 0` gate -- ours is `best_score > 0`, the sign flipped
-        # as everywhere in this port -- and
-        # `oblivious_tree_doc_parallel_structure_searcher.cpp:134` the
-        # repeat-split stop). With the pack device-side the level's split
-        # chain has already run when the host first sees the score, so a
-        # stop ROLLS BACK the one speculative level: the left child kept
-        # the parent's offset, so restoring `p_sz[i] = sz[i] + sz[half+i]`
-        # restores the parent partitions exactly; the reorder permuted rows
-        # only WITHIN parent ranges so every leaf sum the tail computes is
-        # unchanged; the right-child histogram slots `copy_histograms`
-        # polluted are read by nothing after the break. Gate semantics are
-        # unchanged: a stopped level's split is never appended, exactly as
-        # before.
-        var best_score = h_wsc.unsafe_ptr().unsafe_load(depth)
-        var best_bin_u = h_wbf.unsafe_ptr().unsafe_load(depth)
+    # ============ THE GATES, POST-TREE ================================
+    # Their host applies these BEFORE each split
+    # (`greedy_search_helper.cpp:535-539` the sentinel ENSURE, `:360-364`
+    # the `Score < 0` gate -- ours is `best_score > 0`, the sign flipped
+    # as everywhere in this port -- and
+    # `oblivious_tree_doc_parallel_structure_searcher.cpp:134` the
+    # repeat-split stop). The walk applies them in LEVEL ORDER, so the
+    # first stop at level k discards levels k.. exactly as their loop
+    # would never have grown them, and the model is unchanged. The
+    # rollback is the old one-level argument applied (max_depth - k)
+    # times: the left child kept the parent's offset at every level, so
+    # slot i < 2^k still holds level-k leaf i's offset, pairwise-merging
+    # the final sizes (max_depth - k) times restores level-k sizes
+    # exactly, and the reorders permuted rows only within ancestor
+    # ranges, so every leaf sum the tail computes is unchanged.
+    var grown = 0
+    for depth2 in range(max_depth):
+        var best_score = h_wsc.unsafe_ptr().unsafe_load(depth2)
+        var best_bin_u = h_wbf.unsafe_ptr().unsafe_load(depth2)
         if (
             best_bin_u == UInt32(0xFFFFFFFF)
             or Int(best_bin_u) >= hist_cells_per_leaf
         ):
-
             # their `CB_ENSURE(bestSplits[0].FeatureId != (ui32)-1, ...)`
             raise Error(
                 "All splits have infinite score. Probably, numerical"
                 " overflow occurs in loss function and/or split score"
                 " calculation. Try increasing l2_leaf_reg, and/or"
                 " decreasing learning_rate, etc."
-                " [level " + String(depth) + ", live leaves "
-                + String(n_live // 2) + "]"
+                " [level " + String(depth2) + ", live leaves "
+                + String(1 << depth2) + "]"
             )
         var choice = resolve_split(layout, Int(best_bin_u))
         # improving-score gate; for an oblivious tree all leaves share one
-        # BestSplit, so one test is the whole gate (see the old host-side
-        # note, now in git history at 992aa86's parent).
+        # BestSplit, so one test is the whole gate.
         var stop_level = not (best_score > Float32(0.0))
         # their repeat-split stop: a repeat means no candidate improved on
         # a split whose gain is already spent.
@@ -3211,21 +3140,7 @@ def run_tree_layout[
             ):
                 stop_level = True
         if stop_level:
-            var half = n_live // 2
-            for i in range(half):
-                var merged = (
-                    h_sz.unsafe_ptr().unsafe_load(i)
-                    + h_sz.unsafe_ptr().unsafe_load(half + i)
-                )
-                h_sz.unsafe_ptr().unsafe_store(i, merged)
-            ctx.enqueue_copy(dst_buf=p_sz, src_ptr=h_sz.unsafe_ptr())
-            ctx.synchronize()
-            leaf_records = prev_records.copy()
-            n_live = half
             break
-        # their `ToSplit` (`cuda/methods/helpers.cpp:164-170`): the split
-        # type is `TakeBin` for a categorical feature and `TakeGreater`
-        # otherwise, and `IsCat` here is the layout's one-hot flag.
         out_splits.append(
             TBinarySplit(
                 Int32(choice.feature),
@@ -3237,16 +3152,23 @@ def run_tree_layout[
                 ),
             )
         )
+        grown += 1
 
-        # their `RebuildLeavesSizes` filling `Leaves[i].Size` (`:806`). The
-        # pairing rule reads these to pick the smaller child, so a stale size
-        # here silently builds the wrong one.
-        max_live_rows = 1
-        for i in range(n_live):
-            var s = Int(h_sz.unsafe_ptr().unsafe_load(i))
-            leaf_records[i].size = UInt32(s)
-            if s > max_live_rows:
-                max_live_rows = s
+    if grown < max_depth:
+        # merge the final sizes pairwise once per discarded level
+        var live = n_live
+        for _ in range(max_depth - grown):
+            var h2 = live // 2
+            for i in range(h2):
+                var merged = (
+                    h_sz.unsafe_ptr().unsafe_load(i)
+                    + h_sz.unsafe_ptr().unsafe_load(h2 + i)
+                )
+                h_sz.unsafe_ptr().unsafe_store(i, merged)
+            live = h2
+        ctx.enqueue_copy(dst_buf=p_sz, src_ptr=h_sz.unsafe_ptr())
+        ctx.synchronize()
+        n_live = live
 
     # ================================================================
     # their `estimator.Estimate(...)` then `AppendModels(...)`
