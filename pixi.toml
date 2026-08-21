@@ -412,6 +412,16 @@ check-pointwise-vs-greedy = "mojo run -I . mojo_only/pointwise_vs_greedy_check.m
 # flag was ignored. Own main(); a GPU, ~40 s.
 check-fit-pointwise = "mojo run -I . mojo_only/fit_pointwise_check.mojo"
 
+# The two measurements PORTING.md 98a and 106 said were a measurement's job.
+# Both interleave their arms and report the MIN of each, because another
+# session runs GPU work on this box and a sequential A-then-B measurement
+# here has drifted a result 4.5x invisibly before. Neither can change a
+# result: both reducers are gated correct and both fit arms are
+# bit-identical, so these decide speed only. Probes, not checks -- they
+# print numbers rather than pass or fail.
+probe-partition-reducer = "mojo run -I . mojo_only/partition_reducer_probe.mojo"
+probe-pointwise-default = "mojo run -I . mojo_only/pointwise_default_probe.mojo"
+
 # The LSD radix sort over (bin, permutation position). Gates STABILITY
 # separately from sortedness and prints both, because sortedness alone
 # cannot see a tie that moved -- and the tie order IS the second half of

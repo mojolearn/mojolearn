@@ -3746,3 +3746,77 @@ splits.
 code groups -- the second word, the second block, the second group -- because
 the first is where every off-by-a-base-address is invisible. Same family as
 [[reached-but-inert]].
+
+## 98 (CLOSED 2026-08-21 by measurement): we now call THEIR reducer
+
+DEVIATION 98 declined `UpdatePartitionProps` -- the reducer
+`UpdateSubsetsStats` actually dispatches -- on occupancy grounds: at depth 0
+there is one partition, so their grid is a single threadgroup for the whole
+dataset, and this repository had lost to that shape twice on the greedy path.
+It was recorded as PRICED AND UNMEASURED, and 98a said the number had moved.
+
+**Measured** (`pixi run probe-partition-reducer`; 200k rows, 10 SMs, 5
+interleaved reps, min of each):
+
+    parts     theirs      ours (2 chunked calls)    theirs/ours
+        1     0.225 ms        0.220 ms                 1.02
+        2     0.219           0.233                    0.94
+        4     0.201           0.398                    0.51
+        8     0.230           0.292                    0.79
+       16     0.182           0.276                    0.66
+       32     0.225           0.398                    0.57
+       64     0.197           0.904                    0.22
+
+**A TIE at the one shape the objection was about, and up to 4.6x faster
+everywhere else.** The occupancy fear does not materialise: at one partition
+their single threadgroup and our chunked grid land within 2% of each other,
+and from four partitions on their one launch beats our six.
+
+Switched. `update_subsets_stats` now calls `update_partition_props`, and the
+de-interleave adapter, the pack adapter and one of the two reduce calls are
+gone with it -- six launches to one, two scratch buffers freed, and the
+chunk-count numeric note that block used to carry no longer applies because
+`statCount` is 2 again.
+
+Verified by the gates that could have seen a change: `check-pointwise-subsets`
+is still exact per cell, and **`check-fit-pointwise` still requires the two
+`fit` arms to be BIT-IDENTICAL over twenty iterations and still passes** --
+so the different summation order changed nothing observable at this fixture's
+magnitudes.
+
+## 106a. The `use_pointwise_searcher` default STAYS FALSE, and now for a priced reason
+
+`PORTING.md` 106 shipped it defaulting to False and said the flip was a
+measurement's job.
+
+**Measured** (`pixi run probe-pointwise-default`; 60k rows x 16 features
+spanning all three policies, depth 6, 25 iterations, 3 interleaved reps):
+
+    greedy-subsets   221-308 ms
+    pointwise        371-412 ms
+    ratio            1.34x - 1.68x, pointwise SLOWER
+
+with **identical final loss on every run**, which the probe asserts before it
+reports a ratio.
+
+So the decline is priced: the pointwise arm costs between a third and two
+thirds more for output that cannot differ. The spread is wide because another
+session is running GPU work on this machine -- the greedy baseline itself
+moved 221 to 308 ms between runs -- so the direction is solid and the
+magnitude is not. **A tighter number needs a quiet box.**
+
+The known cost inside that gap is `split_stat_planes`: a host round trip of
+`2 * n_rows` floats per tree, because this tree carries the weak target as
+one two-plane buffer and the pointwise kernels cannot take two views of one
+buffer (97.2). Removing it means the boosting loop carrying the weak target
+as two buffers throughout, which `stats`'s other three readers make a real
+change rather than a rename. That is the first thing to try before measuring
+again.
+
+### And the probe found a correctness bug, which is why it is kept
+
+`probe-pointwise-default` asserts the two arms end at the SAME loss before it
+reports a ratio. Its first run came back `0.128` against `107.04` -- and that
+is how `PORTING.md` 107 was found, with two gates green. A timing probe that
+does not check what it is timing measures two different computations and
+reports their ratio as if it meant something.

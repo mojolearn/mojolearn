@@ -403,6 +403,7 @@ from gbdt.gpu_util.kernel.fill import launch_make_sequence
 from gbdt.gpu_util.kernel.radix_sort import launch_radix_sort_bins
 from gbdt.gpu_util.kernel.reorder_one_bit import REORDER_BLOCK
 from gbdt.gpu_util.kernel.transform import launch_gather_with_mask_f32
+from gbdt.methods.kernel.pointwise_scores import update_partition_props
 from gbdt.gpu_util.partitions_reduce import (
     compute_partition_stats,
     partition_stats_chunks,
@@ -534,6 +535,13 @@ struct TOptimizationSubsets(Movable):
     """`PartitionStats`, `[part * PARTITION_STAT_STRIDE + stat]`, three wide.
     DEVIATION 97.4 and 97.5."""
 
+    var count_dummy: DeviceBuffer[DType.float32]
+    """Their `counts` argument, which `pointwise_kernels.h:240` passes as
+    `nullptr` on this path so `PartitionUpdateImpl` takes
+    `else { tmp = size; }`. Mojo has no null device pointer, so a
+    one-element buffer stands in and `have_counts` is False -- the kernel
+    never reads it."""
+
     var gathered_weight: DeviceBuffer[DType.float32]
     var gathered_target: DeviceBuffer[DType.float32]
     """`Weights` and `WeightedTarget` AFTER `GatherTarget`, in current
@@ -627,6 +635,7 @@ struct TOptimizationSubsets(Movable):
         var indices: DeviceBuffer[DType.uint32],
         var partitions: DeviceBuffer[DType.uint32],
         var partition_stats: DeviceBuffer[DType.float32],
+        var count_dummy: DeviceBuffer[DType.float32],
         var gathered_weight: DeviceBuffer[DType.float32],
         var gathered_target: DeviceBuffer[DType.float32],
         var tmp_bins: DeviceBuffer[DType.uint32],
@@ -647,6 +656,7 @@ struct TOptimizationSubsets(Movable):
         self.indices = indices^
         self.partitions = partitions^
         self.partition_stats = partition_stats^
+        self.count_dummy = count_dummy^
         self.gathered_weight = gathered_weight^
         self.gathered_target = gathered_target^
         self.tmp_bins = tmp_bins^
@@ -1173,17 +1183,6 @@ def update_subsets_stats(
         subsets.doc_count,
     )
 
-    # ADAPTER, not theirs: split `TDataPartition[]` into the parallel pair
-    # `compute_partition_stats` takes. See DEVIATION 98.
-    ctx.enqueue_function[deinterleave_partitions_kernel](
-        subsets.partitions.unsafe_ptr(),
-        subsets.reduce_offsets.unsafe_ptr(),
-        subsets.reduce_sizes.unsafe_ptr(),
-        Int32(part_count),
-        grid_dim=(adapt_blocks, 1, 1),
-        block_dim=(SPLIT_BLOCK_SIZE, 1, 1),
-    )
-
     # `GatherTarget(WeightedTarget, Weights, source, Indices)`
     # (`weak_target_helpers.h:17-30`), whose body is literally their two
     # `Gather` calls:
@@ -1213,62 +1212,40 @@ def update_subsets_stats(
     )
 
     # `UpdatePartitionStats(PartitionStats, currentParts, WeightedTarget,
-    #  Weights)`. DEVIATION 98 is which of their two reducers this is and
-    #  why, and what running it twice costs.
+    #  Weights)` -- **THEIR kernel, the one their dispatch names**
+    #  (`pointwise_optimization_subsets.h:66` -> `UpdatePartitionProps`,
+    #  `methods/kernel/pointwise_scores.cu:681`). One block per partition,
+    #  1024 threads, both columns and the Count arm in ONE launch.
     #
-    #  ONCE PER COLUMN, at `n_stats = 1`. `compute_partition_stats` reads its
-    #  planes as `stats[stat * line_size + row]`, so a second plane has to
-    #  live `line_size` floats after the first; two separate allocations
-    #  cannot satisfy that. Their own kernel reduces both in one launch.
+    #  DEVIATION 98 USED TO DECLINE THIS and the reason was occupancy: at
+    #  depth 0 there is exactly one partition, so their grid is a single
+    #  threadgroup for the whole dataset, and this repository has lost to
+    #  that shape twice on the greedy path. **Measured 2026-08-21 and the
+    #  fear does not materialise** (`mojo_only/partition_reducer_probe.mojo`,
+    #  200k rows, 10 SMs, 5 interleaved reps, min of each):
     #
-    #  NUMERIC NOTE, and it is not cosmetic: the chunk count is
-    #  `CeilDivide(2 * SMCount, statCount)` (`update_part_props.cu:215`), so
-    #  passing 1 where 2 was passed DOUBLES it and changes the shape of the
-    #  float summation tree. It stays deterministic and stays pinned under
-    #  `NUMERIC_IDENTICAL` -- `partition_stats_chunks` is the single place the
-    #  formula lives -- but the last bits of a partition stat are not the
-    #  same as they were before the buffers were split. The gate's integer
-    #  plants are exact under either shape, so no check can see this; it is
-    #  recorded because nothing else would record it.
-    compute_partition_stats(
+    #      parts     theirs    ours (2 chunked calls)   theirs/ours
+    #          1     0.225 ms      0.220 ms                1.02
+    #          2     0.219         0.233                   0.94
+    #          4     0.201         0.398                   0.51
+    #         16     0.182         0.276                   0.66
+    #         64     0.197         0.904                   0.22
+    #
+    #  A TIE at the one shape the objection was about, and up to 4.6x faster
+    #  everywhere else. It also removes the de-interleave adapter, the pack
+    #  adapter and one of the two reduce calls -- six launches to one -- and
+    #  with them the chunk-count numeric note this block used to carry.
+    update_partition_props(
         ctx,
-        part_count,
-        subsets.doc_count,
-        1,
-        subsets.doc_count,
-        subsets.part_ids,
-        subsets.reduce_offsets,
-        subsets.reduce_sizes,
-        subsets.gathered_weight,
-        subsets.stat_partials,
-        subsets.reduce_weight,
-        subsets.sm_count,
-    )
-    compute_partition_stats(
-        ctx,
-        part_count,
-        subsets.doc_count,
-        1,
-        subsets.doc_count,
-        subsets.part_ids,
-        subsets.reduce_offsets,
-        subsets.reduce_sizes,
         subsets.gathered_target,
-        subsets.stat_partials,
-        subsets.reduce_target,
-        subsets.sm_count,
-    )
-
-    # ADAPTER + their `else { tmp = size; }` Count arm: collect the two
-    # stride-1 answers into `TPartitionStatistics`'s stride 3.
-    ctx.enqueue_function[pack_partition_stats_kernel](
-        subsets.reduce_weight.unsafe_ptr(),
-        subsets.reduce_target.unsafe_ptr(),
-        subsets.partitions.unsafe_ptr(),
-        subsets.partition_stats.unsafe_ptr(),
-        Int32(part_count),
-        grid_dim=(adapt_blocks, 1, 1),
-        block_dim=(SPLIT_BLOCK_SIZE, 1, 1),
+        subsets.gathered_weight,
+        subsets.count_dummy,
+        True,
+        True,
+        False,
+        subsets.partitions,
+        subsets.partition_stats,
+        part_count,
     )
 
 
@@ -1361,11 +1338,15 @@ def create_subsets(
     var reduce_weight = ctx.enqueue_create_buffer[DType.float32](max_part_count)
     var reduce_target = ctx.enqueue_create_buffer[DType.float32](max_part_count)
 
+    # their `counts` argument, passed as `nullptr` upstream; see the field
+    var count_dummy = ctx.enqueue_create_buffer[DType.float32](1)
+
     var subsets = TOptimizationSubsets(
         bins^,
         indices^,
         partitions^,
         part_stats^,
+        count_dummy^,
         gathered_weight^,
         gathered_target^,
         tmp_bins^,
