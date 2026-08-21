@@ -62,6 +62,7 @@ comptime DEFAULT_SUBSAMPLE = Float32(0.66)
 from gbdt.targets.kernel.pointwise_targets import (
     OBJECTIVE_LOGLOSS,
     OBJECTIVE_MULTICLASS,
+    OBJECTIVE_MULTICLASS_OVA,
     OBJECTIVE_RMSE,
 )
 from gbdt.options.loss_description import make_loss_description
@@ -600,7 +601,7 @@ def train(
     # CLASS, so how many entries it needs depends on the loss: two for the
     # binarized classification targets, `numClasses` for MultiClass.
     var n_class_slots = 2
-    if loss == "MultiClass":
+    if loss == "MultiClass" or loss == "MultiClassOneVsAll":
         var mxc = -1
         for r in range(n_rows):
             var iv = Int(y[r])
@@ -629,7 +630,7 @@ def train(
             # their `targetClassesArray`: the dense class code for
             # MultiClass, the binarized target otherwise
             var cls: Int
-            if loss == "MultiClass":
+            if loss == "MultiClass" or loss == "MultiClassOneVsAll":
                 cls = Int(y[r])
             else:
                 cls = 1 if y[r] > Float32(0.5) else 0
@@ -660,7 +661,10 @@ def train(
     # indexes prediction planes with. A non-integral or negative label is
     # refused here rather than truncated silently on the device.
     var num_classes = 0
-    if objective == OBJECTIVE_MULTICLASS:
+    if (
+        objective == OBJECTIVE_MULTICLASS
+        or objective == OBJECTIVE_MULTICLASS_OVA
+    ):
         var mx = -1
         for r in range(n_rows):
             var v = y[r]
@@ -681,8 +685,8 @@ def train(
         num_classes = mx + 1
         if num_classes < 2:
             raise Error(
-                "MultiClass needs at least two classes; the labels"
-                " reach only " + String(num_classes)
+                "the multiclass family needs at least two classes; the"
+                " labels reach only " + String(num_classes)
             )
     var estimation = set_leaves_estimation_default(
         loss_desc,

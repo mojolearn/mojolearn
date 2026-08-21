@@ -2366,3 +2366,49 @@ model that the evaluator packs normally. Only three classes and up are
 refused. The check gates both sides, and the first version of that gate --
 which expected every MultiClass model to be refused -- failed at two
 classes, correctly.
+
+
+## 86. MultiClassOneVsAll: the same chassis, four differences that all matter
+
+PORT OF `MultiClassOneVsAllValAndFirstDerImpl` (`multilogit.cu:613-673`) and
+`MultiClassOneVsAllSecondDerImpl` (`:675-704`), plus the `StochasticDer` arm
+that reaches them (`multiclass_targets.cpp:46-49`).
+
+It rides everything MultiClass built -- the multi-plane cursor, the
+multi-dimensional model and text format, `predict_multi_floats` -- and
+differs in four places, none of which is optional:
+
+1. **NO PINNED CLASS.** `GetDim()` returns `NumClasses`, not
+   `NumClasses - 1` (`multiclass_targets.h:129-134`). So `SingleBinDim()
+   == cursorDim`, the gradient is `(*gradient) = *DerAtPoint` with no
+   reconstructed last component, `MakeEstimationResult` is the identity,
+   and there is NO GAUGE TO FIX. A check asserting shift-invariance here
+   would be asserting something false.
+2. **DIAGONAL HESSIAN.** `GetHessianType()` is `Diagonal`
+   (`:118-123`), so `HessianBlockSize()` is 1 and the walker takes its
+   diagonal arm -- no Cholesky runs. Their generic blocked path reaches
+   the same place at `blockCount == rowSize`, degenerating to one launch
+   at row 0 producing `rowSize` columns, which IS the OneVsAll second-der
+   kernel writing every plane at once.
+3. **NO `MultiLogitOptimization`.** It is set only for MultiClass
+   (`multiclass_targets.cpp:32-35`), so the score kernel needs no extra
+   leaf contribution: the histogram already carries every class plane.
+4. **NO MAX SUBTRACTION**, because each plane is its own sigmoid rather
+   than a shared softmax. Overflow is handled by their `isfinite(expVal)`
+   fallback, exactly as `CrossEntropyImpl` does.
+
+**AND ONE CONSTANT THAT IS NOT THE ONE NEXT DOOR.** Its per-plane
+arithmetic is `CrossEntropyImpl`'s term for term, so reusing that kernel is
+tempting -- and would be wrong: their `ClipProb`
+(`cuda_util/kernel/kernel_helpers.cuh:228-230`) clamps the probability at
+**1e-7**, where `CrossEntropyImpl`'s inline clamp is **1e-40**
+(`pointwise_targets.cu:354`). `mojo_only/multilogit_check.mojo` gates both
+halves of that: the two kernels must AGREE per plane on a fixture inside
++-6 where neither clamp bites, and must DISAGREE at an approx of -40, where
+they read 1.0e-7 and 4.2e-18 -- ten orders of magnitude, which is the clamp
+being real rather than assumed.
+
+That anchor's first version read zeros from both kernels, because it filled
+ONE host staging buffer three times between three `enqueue_copy` calls.
+An enqueue is a promise, not a read; the copies raced the refills. Three
+buffers now.

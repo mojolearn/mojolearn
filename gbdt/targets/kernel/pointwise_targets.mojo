@@ -85,6 +85,12 @@ comptime OBJECTIVE_HUBER = 11
 #: kernels in `targets/kernel/multilogit.cu`.
 comptime OBJECTIVE_MULTICLASS = 12
 
+#: `MultiClassOneVsAll`: `numClasses` INDEPENDENT logistic regressions, one
+#: per class, with NO pinned class and a DIAGONAL Hessian
+#: (`multiclass_targets.h:118-134`). Reaches
+#: `one_vs_all_val_and_first_der_kernel`, not either kernel in this file.
+comptime OBJECTIVE_MULTICLASS_OVA = 13
+
 #: `NumErrors` is in their kernel switch (`pointwise_targets.cu:497-501`)
 #: and is deliberately NOT here: `TPointwiseTargetsImpl::Init`
 #: (`pointwise_target_impl.h:259-299`) has no `NumErrors` case, so its
@@ -128,10 +134,12 @@ def objective_from_name(name: String) raises -> Int:
         return OBJECTIVE_HUBER
     if name == "MultiClass":
         return OBJECTIVE_MULTICLASS
+    if name == "MultiClassOneVsAll":
+        return OBJECTIVE_MULTICLASS_OVA
     raise Error(
         "unknown loss '" + name + "': this port trains RMSE, Logloss,"
         " CrossEntropy, Quantile, MAE, LogLinQuantile, MAPE, Poisson, Lq,"
-        " Expectile, Tweedie, Huber and MultiClass"
+        " Expectile, Tweedie, Huber, MultiClass and MultiClassOneVsAll"
     )
 
 
@@ -163,6 +171,8 @@ def objective_name(objective: Int) -> String:
         return String("Huber")
     if objective == OBJECTIVE_MULTICLASS:
         return String("MultiClass")
+    if objective == OBJECTIVE_MULTICLASS_OVA:
+        return String("MultiClassOneVsAll")
     return String("<unknown>")
 
 
@@ -913,10 +923,13 @@ def launch_pointwise_target_kernel[
         _go[OBJECTIVE_TWEEDIE]()
     elif objective == OBJECTIVE_HUBER:
         _go[OBJECTIVE_HUBER]()
-    elif objective == OBJECTIVE_MULTICLASS:
+    elif (
+        objective == OBJECTIVE_MULTICLASS
+        or objective == OBJECTIVE_MULTICLASS_OVA
+    ):
         raise Error(
-            "MultiClass does not reach PointwiseTargetKernel: it is"
-            " TMultiClassificationTargets, whose kernels are"
+            "the multiclass family does not reach PointwiseTargetKernel:"
+            " it is TMultiClassificationTargets, whose kernels are"
             " targets/kernel/multilogit.cu"
         )
     else:

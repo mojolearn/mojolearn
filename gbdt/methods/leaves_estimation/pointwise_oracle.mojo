@@ -82,11 +82,14 @@ from gbdt.methods.leaves_estimation.leaves_estimation_helper import (
 from gbdt.targets.kernel.multilogit import (
     launch_multilogit_second_der,
     launch_multilogit_value_and_der,
+    launch_one_vs_all_second_der,
+    launch_one_vs_all_value_and_der,
     multilogit_blocks,
 )
 from gbdt.targets.kernel.pointwise_targets import (
     OBJECTIVE_MAPE,
     OBJECTIVE_MULTICLASS,
+    OBJECTIVE_MULTICLASS_OVA,
 )
 from gbdt.targets.kernel.pointwise_targets import (
     MSE_BLOCK_SIZE,
@@ -202,8 +205,12 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         if self.estimation_method != LEAF_ESTIMATION_NEWTON:
             return 1
         if self.objective != OBJECTIVE_MULTICLASS:
-            # every pointwise loss: `GetDim()` is 1, so `SingleBinDim()`
-            # is 1 and the blocked arm would be a 1x1 Cholesky anyway
+            # `GetHessianType()` is Diagonal for MultiClassOneVsAll
+            # (`multiclass_targets.h:118-123`) -- its classes are
+            # INDEPENDENT logistic regressions, so the Hessian has no
+            # off-diagonal to solve -- and every pointwise loss has
+            # `SingleBinDim() == 1`, where the blocked arm would be a 1x1
+            # Cholesky anyway.
             return 1
         return self.single_bin_dim
 
@@ -345,23 +352,35 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                 value += Float64(self.h_fv.unsafe_ptr().unsafe_load(b))
             return
 
-        # ---- the rowSize > 1 arm: MultiClass ------------------------
-        if self.objective != OBJECTIVE_MULTICLASS:
+        # ---- the rowSize > 1 arm: the multiclass family --------------
+        var is_ova = self.objective == OBJECTIVE_MULTICLASS_OVA
+        if self.objective != OBJECTIVE_MULTICLASS and not is_ova:
             raise Error(
-                "the multi-dimensional oracle arm is MultiClass only;"
-                " objective " + String(self.objective)
+                "the multi-dimensional oracle arm is the multiclass"
+                " family only; objective " + String(self.objective)
                 + " has SingleBinDim > 1 without a der calcer"
             )
         var ml_blocks = multilogit_blocks(self.n_rows)
-        launch_multilogit_value_and_der(
-            self.ctx, self.num_classes, self.n_rows,
-            self.d_target, self.d_weights, self.has_weights,
-            self.d_cursor, self.n_rows,
-            self.d_identity, False,
-            self.d_fv, True,
-            self.d_multi_der, self.n_rows,
-            self.d_mag_dummy, False,
-        )
+        if is_ova:
+            launch_one_vs_all_value_and_der[False](
+                self.ctx, self.num_classes, self.n_rows,
+                self.d_target, self.d_weights, self.has_weights,
+                self.d_cursor, self.n_rows,
+                self.d_identity, False,
+                self.d_fv, True,
+                self.d_multi_der, self.n_rows,
+                self.d_mag_dummy, False,
+            )
+        else:
+            launch_multilogit_value_and_der(
+                self.ctx, self.num_classes, self.n_rows,
+                self.d_target, self.d_weights, self.has_weights,
+                self.d_cursor, self.n_rows,
+                self.d_identity, False,
+                self.d_fv, True,
+                self.d_multi_der, self.n_rows,
+                self.d_mag_dummy, False,
+            )
         # `ComputePartitionStats(der, Offsets, &reducedDer)` (`:83`), with
         # `cursorDim` columns instead of one
         compute_partition_stats(
@@ -386,18 +405,30 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                 Float64(self.h_multi_stats.unsafe_ptr().unsafe_load(i))
             )
 
-        # their MultiClass reconstruction (`:93-101`)
+        # their MultiClass reconstruction (`:93-101`), gated on the LOSS
+        # exactly as theirs is: `if (DerCalcer->GetType() ==
+        # ELossFunction::MultiClass)`. MultiClassOneVsAll has no pinned
+        # class, so `SingleBinDim() == cursorDim` and the gradient is
+        # their `(*gradient) = *DerAtPoint` (`:102-104`) unchanged.
         gradient.clear()
         for _ in range(self.bin_count * self.single_bin_dim):
             gradient.append(Float64(0.0))
-        for bin in range(self.bin_count):
-            var total = Float64(0.0)
-            for dim in range(self.cursor_dim):
-                var val = self.der_at_point[bin * self.cursor_dim + dim]
-                gradient[bin * self.single_bin_dim + dim] = val
-                total += val
-            # `sum of der is equal to zero` (`:100`)
-            gradient[bin * self.single_bin_dim + self.cursor_dim] = -total
+        if is_ova:
+            for i in range(self.bin_count * self.cursor_dim):
+                gradient[i] = self.der_at_point[i]
+        else:
+            for bin in range(self.bin_count):
+                var total = Float64(0.0)
+                for dim in range(self.cursor_dim):
+                    var val = self.der_at_point[
+                        bin * self.cursor_dim + dim
+                    ]
+                    gradient[bin * self.single_bin_dim + dim] = val
+                    total += val
+                # `sum of der is equal to zero` (`:100`)
+                gradient[
+                    bin * self.single_bin_dim + self.cursor_dim
+                ] = -total
 
         # der2 is NOT cached on this arm; `write_second_derivatives`
         # recomputes it row by row, exactly as theirs does
@@ -451,6 +482,43 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         # ---- the BLOCKED arm (`pointwise_oracle.cpp:125-184`) --------
         if self.hessian_block_size() > 1:
             self._write_blocked_second_derivatives(second_der)
+            return
+
+        # ---- DIAGONAL but MULTI-COLUMN: MultiClassOneVsAll -----------
+        # `hessianBlockSize == 1` with `rowSize > 1` is their generic
+        # blocked path at `blockCount == rowSize` (`:129-133`), which
+        # degenerates to one launch of `ComputeSecondDerRowLowerTriangle`
+        # at row 0 producing `rowSize` columns. That IS the OneVsAll
+        # second-der kernel, which writes every class plane in one go
+        # because its Hessian has no off-diagonal.
+        if self.objective == OBJECTIVE_MULTICLASS_OVA:
+            launch_one_vs_all_second_der(
+                self.ctx, self.num_classes, self.n_rows,
+                self.d_weights, self.has_weights,
+                self.d_cursor, self.n_rows,
+                self.d_multi_der, self.n_rows,
+            )
+            compute_partition_stats(
+                self.ctx, self.bin_count, 0, self.cursor_dim,
+                self.n_rows,
+                self.d_leaves, self.d_p_off, self.d_p_sz,
+                self.d_multi_der, self.d_multi_partials,
+                self.d_multi_stats,
+                sm_count=self.sm_count,
+            )
+            self.ctx.enqueue_copy(
+                dst_ptr=self.h_multi_stats.unsafe_ptr(),
+                src_buf=self.d_multi_stats,
+            )
+            self.ctx.synchronize()
+            second_der.clear()
+            for i in range(self.bin_count * self.cursor_dim):
+                second_der.append(
+                    Float64(
+                        self.h_multi_stats.unsafe_ptr().unsafe_load(i)
+                    )
+                    + self.lambda_reg
+                )
             return
 
         if len(self.cached_der2) != self.bin_count:
@@ -694,6 +762,17 @@ def make_bin_optimized_oracle(
                 + String(num_classes)
             )
         cursor_dim = num_classes - 1
+        single_bin_dim = num_classes
+    elif objective == OBJECTIVE_MULTICLASS_OVA:
+        # `GetDim()` is `NumClasses` here, not `NumClasses - 1`
+        # (`multiclass_targets.h:129-134`): no pinned class, so
+        # `SingleBinDim() == cursorDim` and there is no gauge to fix.
+        if num_classes < 2:
+            raise Error(
+                "MultiClassOneVsAll oracle needs num_classes >= 2, got "
+                + String(num_classes)
+            )
+        cursor_dim = num_classes
         single_bin_dim = num_classes
     # one buffer wide enough for both the value pass (`cursor_dim`
     # planes) and the widest Hessian row (`single_bin_dim` columns)

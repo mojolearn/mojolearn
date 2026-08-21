@@ -85,6 +85,8 @@ from std.ffi import external_call
 
 from gbdt.targets.kernel.multilogit import (
     MULTILOGIT_BLOCK_SIZE,
+    launch_one_vs_all_second_der,
+    launch_one_vs_all_value_and_der,
     launch_multilogit_second_der,
     launch_multilogit_value_and_der,
     launch_multilogit_value_and_der_search,
@@ -541,6 +543,203 @@ def check_search_mode(ctx: DeviceContext, num_classes: Int) raises -> Int:
     return bad
 
 
+def check_one_vs_all(ctx: DeviceContext, num_classes: Int) raises -> Int:
+    """`MultiClassOneVsAll` against `cross_entropy_kernel`, PER PLANE.
+
+    Its arithmetic is `numClasses` independent logistic regressions, and
+    one logistic regression is exactly what `CrossEntropyImpl` computes.
+    So for every class `k`:
+
+        one-vs-all der [plane k]   ==  cross_entropy der  with
+                                       c = (label == k), val = approx[k]
+        one-vs-all der2[plane k]   ==  cross_entropy der2
+
+    and `cross_entropy_kernel` is gated per cell against libm with six
+    sabotages by `check-logloss-target`. That makes this a comparison
+    against a kernel an OUTSIDE oracle already pinned, which is stronger
+    than any formula written in this file.
+
+    EXCEPT FOR ONE CONSTANT, and it is the reason this cannot simply reuse
+    that kernel: `ClipProb` clamps the probability at 1e-7
+    (`cuda_util/kernel/kernel_helpers.cuh:228-230`) where
+    `CrossEntropyImpl` clamps at 1e-40 (`pointwise_targets.cu:354`). The
+    two therefore differ wherever the sigmoid saturates. The fixture keeps
+    approxes inside +-6, where both clamps are inactive and the equality is
+    exact; the SEPARATE anchor below drives one plane to +-40 and requires
+    the two to DIFFER, which is what proves the 1e-7 clamp is really there
+    rather than assumed.
+    """
+    var n = N_ROWS
+    var blocks = multilogit_blocks(n)
+    var ce_blocks = (n + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
+
+    var d_t = ctx.enqueue_create_buffer[DType.float32](n)
+    var d_ce_t = ctx.enqueue_create_buffer[DType.float32](n)
+    var d_w = ctx.enqueue_create_buffer[DType.float32](n)
+    var d_p = ctx.enqueue_create_buffer[DType.float32](num_classes * n)
+    var d_plane = ctx.enqueue_create_buffer[DType.float32](n)
+    var d_der = ctx.enqueue_create_buffer[DType.float32](num_classes * n)
+    var d_der2 = ctx.enqueue_create_buffer[DType.float32](num_classes * n)
+    var d_idx = ctx.enqueue_create_buffer[DType.uint32](n)
+    var d_fv = ctx.enqueue_create_buffer[DType.float32](blocks)
+    var d_mag = ctx.enqueue_create_buffer[DType.float32](2 * blocks)
+    var d_ce = ctx.enqueue_create_buffer[DType.float32](2 * n)
+    var d_ce_fv = ctx.enqueue_create_buffer[DType.float32](ce_blocks)
+    var d_ce_mag = ctx.enqueue_create_buffer[DType.float32](2 * ce_blocks)
+
+    var h_t = ctx.enqueue_create_host_buffer[DType.float32](n)
+    var h_w = ctx.enqueue_create_host_buffer[DType.float32](n)
+    var h_p = ctx.enqueue_create_host_buffer[DType.float32](
+        num_classes * n
+    )
+    var labels = List[Int]()
+    for i in range(n):
+        var lab = Int(hashed_unit(UInt64(0xB1), i) * Float64(num_classes))
+        if lab >= num_classes:
+            lab = num_classes - 1
+        labels.append(lab)
+        h_t.unsafe_ptr().unsafe_store(i, Float32(lab))
+        h_w.unsafe_ptr().unsafe_store(
+            i, Float32(0.4 + hashed_unit(UInt64(0xB2), i) * 2.0)
+        )
+    for k in range(num_classes):
+        for i in range(n):
+            # inside +-6, where BOTH clamps are inactive
+            h_p.unsafe_ptr().unsafe_store(
+                k * n + i,
+                Float32(hashed_unit(UInt64(0xB3 + k), i) * 12.0 - 6.0),
+            )
+    ctx.enqueue_copy(dst_buf=d_t, src_ptr=h_t.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=d_w, src_ptr=h_w.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=d_p, src_ptr=h_p.unsafe_ptr())
+    ctx.synchronize()
+
+    launch_one_vs_all_value_and_der[False](
+        ctx, num_classes, n, d_t, d_w, True, d_p, n,
+        d_idx, False, d_fv, True, d_der, n, d_mag, False,
+    )
+    launch_one_vs_all_second_der(
+        ctx, num_classes, n, d_w, True, d_p, n, d_der2, n,
+    )
+    var h_der = ctx.enqueue_create_host_buffer[DType.float32](
+        num_classes * n
+    )
+    var h_d2 = ctx.enqueue_create_host_buffer[DType.float32](
+        num_classes * n
+    )
+    ctx.enqueue_copy(dst_ptr=h_der.unsafe_ptr(), src_buf=d_der)
+    ctx.enqueue_copy(dst_ptr=h_d2.unsafe_ptr(), src_buf=d_der2)
+    ctx.synchronize()
+
+    var bad = 0
+    var h_c = ctx.enqueue_create_host_buffer[DType.float32](n)
+    var h_pl = ctx.enqueue_create_host_buffer[DType.float32](n)
+    var h_ce = ctx.enqueue_create_host_buffer[DType.float32](2 * n)
+    for k in range(num_classes):
+        for i in range(n):
+            h_c.unsafe_ptr().unsafe_store(
+                i, Float32(1.0) if labels[i] == k else Float32(0.0)
+            )
+            h_pl.unsafe_ptr().unsafe_store(
+                i, h_p.unsafe_ptr().unsafe_load(k * n + i)
+            )
+        ctx.enqueue_copy(dst_buf=d_ce_t, src_ptr=h_c.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d_plane, src_ptr=h_pl.unsafe_ptr())
+        ctx.synchronize()
+        ctx.enqueue_function[cross_entropy_kernel[False, True]](
+            d_ce_t.unsafe_ptr(), d_w.unsafe_ptr(), Int32(n),
+            d_plane.unsafe_ptr(), Int32(1), Float32(0.5),
+            d_ce.unsafe_ptr(), d_ce_fv.unsafe_ptr(), Int32(1),
+            d_ce_mag.unsafe_ptr(), Int32(0),
+            grid_dim=(ce_blocks, 1, 1),
+            block_dim=(MSE_BLOCK_SIZE, 1, 1),
+        )
+        ctx.enqueue_copy(dst_ptr=h_ce.unsafe_ptr(), src_buf=d_ce)
+        ctx.synchronize()
+        for i in range(n):
+            var w = Float64(h_w.unsafe_ptr().unsafe_load(i))
+            var a = Float64(h_der.unsafe_ptr().unsafe_load(k * n + i))
+            var b = Float64(h_ce.unsafe_ptr().unsafe_load(i))
+            if not close(a, b, w):
+                bad += 1
+            var a2 = Float64(h_d2.unsafe_ptr().unsafe_load(k * n + i))
+            var b2 = Float64(h_ce.unsafe_ptr().unsafe_load(n + i))
+            if not close(a2, b2, w):
+                bad += 1
+    return bad
+
+
+def check_clip_prob_differs(ctx: DeviceContext) raises -> Int:
+    """The 1e-7 clamp must actually BE there.
+
+    At an approx of -40 the true probability is about 4e-18. `ClipProb`
+    raises it to 1e-7; `CrossEntropyImpl`'s 1e-40 does not. So the two
+    kernels MUST disagree there, and a `der2` of `w*p*(1-p)` differs by
+    ten orders of magnitude. If they agreed, this port would have reused
+    the cross-entropy clamp and the equality check above would have hidden
+    it -- which is why this anchor is separate from that fixture rather
+    than folded into it.
+    """
+    var n = 256
+    var ce_blocks = (n + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
+    var blocks = multilogit_blocks(n)
+    var d_t = ctx.enqueue_create_buffer[DType.float32](n)
+    var d_w = ctx.enqueue_create_buffer[DType.float32](n)
+    var d_p = ctx.enqueue_create_buffer[DType.float32](n)
+    var d_der2 = ctx.enqueue_create_buffer[DType.float32](n)
+    var d_ce = ctx.enqueue_create_buffer[DType.float32](2 * n)
+    var d_fv = ctx.enqueue_create_buffer[DType.float32](blocks)
+    var d_cefv = ctx.enqueue_create_buffer[DType.float32](ce_blocks)
+    var d_mag = ctx.enqueue_create_buffer[DType.float32](2 * ce_blocks)
+    # THREE HOST BUFFERS, NOT ONE REUSED. `enqueue_copy` is asynchronous:
+    # refilling one staging buffer between three enqueues races the copies
+    # against the refills, and the first version of this anchor did
+    # exactly that and read zeros back. The traps register has this under
+    # `wait_complete()` for the same reason -- an enqueue is a promise,
+    # not a read.
+    var hp = ctx.enqueue_create_host_buffer[DType.float32](n)
+    var hw2 = ctx.enqueue_create_host_buffer[DType.float32](n)
+    var ht2 = ctx.enqueue_create_host_buffer[DType.float32](n)
+    for i in range(n):
+        hp.unsafe_ptr().unsafe_store(i, Float32(-40.0))
+        hw2.unsafe_ptr().unsafe_store(i, Float32(1.0))
+        ht2.unsafe_ptr().unsafe_store(i, Float32(0.0))
+    ctx.enqueue_copy(dst_buf=d_p, src_ptr=hp.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=d_w, src_ptr=hw2.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=d_t, src_ptr=ht2.unsafe_ptr())
+    ctx.synchronize()
+
+    launch_one_vs_all_second_der(
+        ctx, 1, n, d_w, True, d_p, n, d_der2, n,
+    )
+    ctx.enqueue_function[cross_entropy_kernel[False, True]](
+        d_t.unsafe_ptr(), d_w.unsafe_ptr(), Int32(n),
+        d_p.unsafe_ptr(), Int32(1), Float32(0.5),
+        d_ce.unsafe_ptr(), d_cefv.unsafe_ptr(), Int32(1),
+        d_mag.unsafe_ptr(), Int32(0),
+        grid_dim=(ce_blocks, 1, 1), block_dim=(MSE_BLOCK_SIZE, 1, 1),
+    )
+    var h2 = ctx.enqueue_create_host_buffer[DType.float32](n)
+    var hce = ctx.enqueue_create_host_buffer[DType.float32](2 * n)
+    ctx.enqueue_copy(dst_ptr=h2.unsafe_ptr(), src_buf=d_der2)
+    ctx.enqueue_copy(dst_ptr=hce.unsafe_ptr(), src_buf=d_ce)
+    ctx.synchronize()
+    var ova = Float64(h2.unsafe_ptr().unsafe_load(0))
+    var ce = Float64(hce.unsafe_ptr().unsafe_load(n))
+    print(
+        "       at approx -40: one-vs-all der2", ova,
+        " cross-entropy der2", ce,
+    )
+    # ClipProb -> p = 1e-7 -> der2 ~ 1e-7; the 1e-40 clamp leaves p ~ 4e-18
+    if ova < 1e-8 or ova > 1e-6:
+        print("    FAIL one-vs-all der2 is not the 1e-7 clamp's value")
+        return 1
+    if ce > 1e-9:
+        print("    FAIL cross-entropy der2 looks clamped at 1e-7 too")
+        return 1
+    return 0
+
+
 def check_multilogit(ctx: DeviceContext) raises:
     var failures = 0
     print("-- honest run: per-cell vs libm, zero-sum, Hessian signs --")
@@ -588,6 +787,22 @@ def check_multilogit(ctx: DeviceContext) raises:
         "  (planted in every case above: rows with all free approxes at"
         " -100 and at +100)"
     )
+
+    print()
+    print("-- MultiClassOneVsAll, per plane, against cross_entropy --")
+    for nc in [2, 3, 7]:
+        var ob = check_one_vs_all(ctx, nc)
+        if ob != 0:
+            print("  FAIL one-vs-all numClasses", nc, "->", ob)
+            failures += 1
+        else:
+            print(
+                "  ok   numClasses", nc,
+                "-- every plane's der and der2 match cross_entropy_kernel",
+            )
+    failures += check_clip_prob_differs(ctx)
+    if True:
+        print("  ok   ClipProb's 1e-7 clamp is distinct from the 1e-40 one")
 
     print()
     print("-- sabotages --")

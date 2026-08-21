@@ -46,6 +46,7 @@ from gbdt.targets.kernel.pointwise_targets import (
     OBJECTIVE_MAE,
     OBJECTIVE_MAPE,
     OBJECTIVE_MULTICLASS,
+    OBJECTIVE_MULTICLASS_OVA,
     OBJECTIVE_POISSON,
     OBJECTIVE_QUANTILE,
     OBJECTIVE_RMSE,
@@ -1133,8 +1134,10 @@ def get_estimation_method_defaults(
         method = LEAF_ESTIMATION_NEWTON
         newton = 1
         gradient = 1
-    elif f == OBJECTIVE_MULTICLASS:
-        # `:106-112`. NEWTON AT ONE ITERATION, which is what makes the
+    elif f == OBJECTIVE_MULTICLASS or f == OBJECTIVE_MULTICLASS_OVA:
+        # `:106-112`, whose case list is
+        # `case MultiClass: case MultiClassOneVsAll:` -- one arm, both
+        # losses. NEWTON AT ONE ITERATION, which is what makes the
         # blocked Cholesky worth having: one solve per leaf, once per tree.
         method = LEAF_ESTIMATION_NEWTON
         newton = 1

@@ -132,11 +132,13 @@ from gbdt.options.catboost_options import (
 )
 from gbdt.targets.kernel.multilogit import (
     launch_multilogit_value_and_der_search,
+    launch_one_vs_all_value_and_der,
     multilogit_blocks,
 )
 from gbdt.targets.kernel.pointwise_targets import (
     MSE_BLOCK_SIZE,
     OBJECTIVE_MULTICLASS,
+    OBJECTIVE_MULTICLASS_OVA,
     OBJECTIVE_RMSE,
     deterministic_sum_lanes_kernel,
     launch_approximate,
@@ -234,6 +236,14 @@ def fit(
                 + String(num_classes)
             )
         approx_dim = num_classes - 1
+    elif objective == OBJECTIVE_MULTICLASS_OVA:
+        # `GetDim()` is `NumClasses` -- no pinned class
+        if num_classes < 2:
+            raise Error(
+                "MultiClassOneVsAll needs num_classes >= 2, got "
+                + String(num_classes)
+            )
+        approx_dim = num_classes
     var stat_count = 1 + approx_dim
 
     # their `cursor`: the running prediction for every row. Zeros is THEIR
@@ -370,6 +380,17 @@ def fit(
             # (`multiclass_targets.cpp:22-45`): column 0 the weights,
             # columns 1.. the ders, one per FREE class.
             launch_multilogit_value_and_der_search(
+                ctx, num_classes, n_rows, targets, weights, has_weights,
+                cursor, n_rows, row_index, False,
+                fv_part, True,
+                stats, n_rows,
+                mag_part, mags_in_mse,
+            )
+        elif objective == OBJECTIVE_MULTICLASS_OVA:
+            # the same `StochasticDer`, its `MultiClassOneVsAll` arm
+            # (`:46-49`), where `statCount` keeps the full
+            # `1 + NumClasses` because there is no pinned class to drop.
+            launch_one_vs_all_value_and_der[True](
                 ctx, num_classes, n_rows, targets, weights, has_weights,
                 cursor, n_rows, row_index, False,
                 fv_part, True,
@@ -516,6 +537,10 @@ def fit(
             one_hot=one_hot,
             score_function=score_function,
             approx_dim=approx_dim,
+            # `MultiLogitOptimization` is set ONLY for MultiClass
+            # (`multiclass_targets.cpp:32-35`); OneVsAll has no pinned
+            # class, so its histogram carries every plane and the score
+            # needs no extra leaf contribution.
             multiclass_optimization=objective == OBJECTIVE_MULTICLASS,
         )
 
@@ -689,7 +714,16 @@ def fit(
     # ~n_blocks and wrote past the buffer (caught by the predict repro:
     # replay 36.52 vs a claimed 8.91 final loss, ratio ~= the block count).
     var final_blocks = mse_blocks
-    if objective == OBJECTIVE_MULTICLASS:
+    if objective == OBJECTIVE_MULTICLASS_OVA:
+        final_blocks = multilogit_blocks(n_rows)
+        launch_one_vs_all_value_and_der[True](
+            ctx, num_classes, n_rows, targets, weights, has_weights,
+            cursor, n_rows, row_index, False,
+            fv_part, True,
+            stats, n_rows,
+            mag_part, False,
+        )
+    elif objective == OBJECTIVE_MULTICLASS:
         final_blocks = multilogit_blocks(n_rows)
         launch_multilogit_value_and_der_search(
             ctx, num_classes, n_rows, targets, weights, has_weights,

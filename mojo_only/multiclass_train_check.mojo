@@ -155,6 +155,104 @@ def accuracy(
     return Float64(correct) / Float64(N_ROWS)
 
 
+def check_one_vs_all_train(ctx: DeviceContext) raises -> Int:
+    """`MultiClassOneVsAll` end to end, and what it does NOT share.
+
+    The gates that carry over: the loss falls, a learnable label is
+    learned while a random control is not, the two apply paths agree, and
+    the save/load round trip is bit-identical.
+
+    The gates that DO NOT apply, and saying so is the point:
+
+      * `dim` is `numClasses`, not `numClasses - 1`
+        (`multiclass_targets.h:129-134`). There is no pinned class.
+      * There is therefore NO gauge to fix: `MakeEstimationResult` is the
+        identity, and adding a constant to a leaf's approxes CHANGES the
+        prediction rather than leaving it alone. A check that asserted
+        shift-invariance here would be asserting something false.
+      * The probabilities are `numClasses` INDEPENDENT sigmoids and do NOT
+        sum to one. `multiclass_probabilities`' softmax is MultiClass's
+        and must not be applied to this model.
+    """
+    var bad = 0
+    var x = build_x()
+    var nc = 5
+    var y = learnable_labels(nc)
+    var tm = train(
+        ctx, x, y, N_ROWS, N_FEATURES,
+        border_count=32, n_estimators=20, max_depth=4,
+        loss="MultiClassOneVsAll", learning_rate=Float32(0.3),
+    )
+    var dim = tm.model.weak_models[0].dim
+    if dim != nc:
+        print("  FAIL one-vs-all dim is", dim, "and should be", nc)
+        bad += 1
+    var first = tm.losses[0]
+    var last = tm.losses[len(tm.losses) - 1]
+    if not (last < first):
+        print("  FAIL one-vs-all loss did not fall:", first, "->", last)
+        bad += 1
+
+    var ap = predict_multi_floats(ctx, tm, x, N_ROWS)
+    # THE ARGMAX IS OVER THE RAW APPROXES, because each plane's sigmoid is
+    # monotone in its own approx and the classes are independent -- there
+    # is no shared denominator to normalise by.
+    var correct = 0
+    for r in range(N_ROWS):
+        var best = 0
+        for k in range(1, nc):
+            if ap[r * nc + k] > ap[r * nc + best]:
+                best = k
+        if best == Int(y[r]):
+            correct += 1
+    var acc = Float64(correct) / Float64(N_ROWS)
+    if acc < 1.0 / Float64(nc) + 0.25:
+        print("  FAIL one-vs-all accuracy", acc, "is not above chance")
+        bad += 1
+
+    var yr = random_labels(nc)
+    var tmr = train(
+        ctx, x, yr, N_ROWS, N_FEATURES,
+        border_count=32, n_estimators=20, max_depth=4,
+        loss="MultiClassOneVsAll", learning_rate=Float32(0.3),
+    )
+    var apr = predict_multi_floats(ctx, tmr, x, N_ROWS)
+    var rc = 0
+    for r in range(N_ROWS):
+        var best = 0
+        for k in range(1, nc):
+            if apr[r * nc + k] > apr[r * nc + best]:
+                best = k
+        if best == Int(yr[r]):
+            rc += 1
+    var accr = Float64(rc) / Float64(N_ROWS)
+    if accr > acc - 0.2:
+        print(
+            "  FAIL the one-vs-all RANDOM control reached", accr,
+            "against the learnable", acc,
+        )
+        bad += 1
+
+    var text = model_text(tm)
+    var reloaded = load_model_text(text)
+    var ap2 = predict_multi_floats(ctx, reloaded, x, N_ROWS)
+    var moved = 0
+    for i in range(len(ap)):
+        if ap[i] != ap2[i]:
+            moved += 1
+    if moved != 0:
+        print("  FAIL one-vs-all save/load moved", moved, "approxes")
+        bad += 1
+
+    if bad == 0:
+        print(
+            "  ok   one-vs-all: dim", dim, ", loss", first, "->", last,
+            ", accuracy", acc, "vs random", accr,
+            ", save/load bit-identical",
+        )
+    return bad
+
+
 def check_multiclass_train(ctx: DeviceContext) raises:
     var failures = 0
     var x = build_x()
@@ -358,6 +456,10 @@ def check_multiclass_train(ctx: DeviceContext) raises:
                         "  ok   T" + String(sab), "moves the host loss to",
                         bad_loss,
                     )
+
+    print()
+    print("-- MultiClassOneVsAll: no pinned class, no gauge --")
+    failures += check_one_vs_all_train(ctx)
 
     if failures != 0:
         raise Error(

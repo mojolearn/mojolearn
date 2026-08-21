@@ -5,7 +5,6 @@
 catboost/cuda/targets/kernel/multilogit.cu	RMSEWithUncertaintyValAndFirstDerImpl / SecondDerRow	a different ELossFunction; its dispatch is not reached
 catboost/cuda/targets/kernel/multilogit.cu	MultiCrossEntropyValueAndDerImpl / SecondDerImpl	MultiCrossEntropy is not among the losses this port trains
 catboost/cuda/targets/kernel/multilogit.cu	MultiRMSEValueAndDerImpl / SecondDerImpl	MultiRMSE is not among the losses this port trains
-catboost/cuda/targets/kernel/multilogit.cu	MultiClassOneVsAllValAndFirstDerImpl / SecondDerImpl	a separate ELossFunction from MultiClass; port with it if it is ever wanted
 catboost/cuda/targets/kernel/multilogit.cu	BuildConfusionMatrixBinsImpl	a METRIC kernel; this port has no metric path
 catboost/cuda/targets/kernel/pointwise_targets.cu	TNumErrorsMetric	in their kernel switch, but their own Init rejects it, so training cannot reach it
 catboost/cuda/targets/kernel/pointwise_targets.cu	MseImpl / MseTargetKernel	UNREACHED IN THEIR OWN TREE: ApproximateMse has no caller anywhere in catboost/
