@@ -3914,3 +3914,64 @@ The speed side of the same comparison is a BENCHMARK and is not run here.
 
 Whether CatBoost's own two arms agree with each other is a question about
 CatBoost, is unanswerable on this hardware, and is not this port's business.
+
+## 119. RUNG 2 IS NOT A SECOND SEARCHER, and the fold layout is what it actually costs
+
+`NEXT_TWO.md` priced rung 2 as porting `TFeatureParallelObliviousTreeSearcher`
+-- 713 lines beside the doc-parallel searcher already here. Reading it says
+otherwise.
+
+**Their searcher is ONE object with TWO modes**
+(`oblivious_tree_structure_searcher.h:88-100`):
+
+    SetTarget(target)                  SingleTaskTarget   ONE task, PLAIN
+    AddTask(learnTarget, testTarget)   FoldBasedTasks     N pairs, ORDERED
+
+and `CreateSubsets` chooses between them with one ternary (`:30-31`):
+
+    SingleTaskTarget == nullptr ? WriteFoldBasedInitialBins(subsets.Bins)
+                                : WriteSingleTaskInitialBins(subsets.Bins)
+
+Everything after that line -- the depth loop, the histograms, the scorer, the
+`TakeBest` fold, the split -- is the same code on both arms. With `PORTING.md`
+91 A (the two data layouts build a bit-identical compressed index at device
+count 1) and 91 B (the two searchers share their whole stack), what rung 2
+costs is the fold LAYOUT plus wiring, not a second searcher.
+
+`gbdt/methods/oblivious_tree_fold_tasks.mojo` is that layout.
+
+### The encoding, and why the pairing is load-bearing
+
+`WriteFoldBasedInitialBins` (`:338-364`) walks the tasks and per task `k`:
+
+    learn slice -> bin 2k        parts.push_back({cursor, learn size})
+    test  slice -> bin 2k + 1    parts.push_back({cursor, test  size})
+
+So N tasks give **2N partitions**, alternating, over ONE concatenated
+document array. `FoldCount` is 2N and `FoldBits` is `IntLog2(2N)` -- CEIL,
+the same function `PORTING.md` 107 records costing a day when it was read as
+floor.
+
+**THE DYNAMIC SCORER ALREADY DEPENDS ON THIS.**
+`find_optimal_split_solar_kernel` and the dynamic cosine one read folds
+`(f, f + 1)` as `(estimate, test)` and step by two -- ported and gated before
+this file existed. Fold `2k` is task `k`'s estimate half, `2k + 1` its test
+half. The two halves of ordered boosting meet exactly here: this file lays
+the pairs out, that kernel consumes them. Put the test half first and the
+scorer evaluates every split against the wrong half of every fold, with
+finite scores and a well-formed tree to show for it.
+
+### DEVIATION 119: no streams
+
+`ForeachOptimizationPartTask` runs the per-task fills on up to 8 CUDA streams
+(`RunInStreams(tasks.size(), Min<ui32>(tasks.size(), 8), ...)`). There are no
+streams on Metal, so the walk is sequential. It changes nothing: `cursor` and
+`currentBin` are captured by reference and advanced in task order in their
+code too, so the streams overlap the FILLS and never the layout.
+
+### What remains of rung 2
+
+The layout is in and gated (`pixi run check-fold-tasks`). What is left is
+wiring it: a `create_subsets` that takes a `FoldLayout` instead of assuming
+one task, and a searcher loop that carries `fold_count > 1` through to the
+dynamic scorer. Both are small; neither is a second searcher.

@@ -422,6 +422,21 @@ check-fit-pointwise = "mojo run -I . mojo_only/fit_pointwise_check.mojo"
 probe-partition-reducer = "mojo run -I . mojo_only/partition_reducer_probe.mojo"
 probe-pointwise-default = "mojo run -I . mojo_only/pointwise_default_probe.mojo"
 
+# RUNG 2's core: the fold layout ordered boosting grows trees on. N tasks
+# become 2N partitions over one concatenated document array, LEARN at even
+# folds and TEST at odd ones -- and that pairing is why the dynamic scorer
+# (ported and gated before this file existed) reads folds (f, f+1) as
+# (estimate, test) and steps by two. Put the test half first and the scorer
+# evaluates every split against the wrong half of every fold, with finite
+# scores and a well-formed tree to show for it.
+#
+# G2 walks a per-document ownership array rather than comparing a sum,
+# because a layout that covers one range twice and skips another has exactly
+# the right total. G6 uses a fold count that is NOT a power of two on
+# purpose: at a power of two the striped and tight offsets coincide and
+# nothing downstream can tell them apart. Own main(); a GPU, ~5 s.
+check-fold-tasks = "mojo run -I . mojo_only/fold_tasks_check.mojo"
+
 # The LSD radix sort over (bin, permutation position). Gates STABILITY
 # separately from sortedness and prints both, because sortedness alone
 # cannot see a tie that moved -- and the tie order IS the second half of
