@@ -109,17 +109,41 @@ exists, zero warp intrinsics, smem from queried budget):
 
 - `n_streams` OpenMP fan-out over CUDA streams: no streams on Metal
   (PORTING_RULES.md:195). Faithful port gets zero cross-tree parallelism and
-  it does not matter — the intra-tree grid (up to 4096 nodes x columns x
-  row-blocks) is already full, and cuML's own docs say `n_streams=1` for
-  reproducibility (`randomforestclassifier.pyx:182`). Our only mode IS their
-  reproducible mode. Deviation, priced at ~nothing, worth a paper sentence.
+  it changes no OUTPUT bit, for two reasons verified in their source
+  2026-08-21: their own non-OpenMP build defines `omp_get_max_threads()` to
+  1 (`randomforest.cuh:38-43`) and `set_rf_params` takes
+  `min(cfg_n_streams, omp_get_max_threads())` (`randomforest.cu:584`), so a
+  cuML built without OpenMP is single-stream regardless of what the user
+  passed; and both RNG draws are pure hashes of `(seed, tree_id)`
+  (`randomforest.cuh:120-122`) and `(seed, treeid, nodeid)`
+  (`builder_kernels.cuh:88`) rather than a stream drawn in order, so tree
+  7's rows and node 12's columns are the same values whether 1 stream or 8
+  produced them. DEVIATION 117, worth a paper sentence.
+
+  **The earlier justification here was FALSE and is deleted rather than
+  annotated:** it claimed "cuML's own docs say `n_streams=1` for
+  reproducibility (`randomforestclassifier.pyx:182`)". That file does not
+  exist at this pin (both estimators are plain `.py`), its `n_streams`
+  docstring is `randomforestclassifier.py:94-95` and says only "Number of
+  parallel streams used for forest building", and a grep for
+  `reproduc|deterministic` across their ensemble, randomforest and
+  decisiontree trees returns nothing of the kind for RF. The claim had also
+  propagated into `random_utils.mojo`, where it has been struck too.
 - Multi-GPU quantile path (raft comms): out of scope, single-device library.
 - Inference: cuML's own path is treelite -> nvForest (in-repo FIL is
-  REMOVED on main). We will not port treelite. Port the C-API `predict()`
-  traversal in `randomforest.cu` (host/device flat-tree walk over
-  `SparseTreeNode`) — the gbdt evaluator is oblivious-shaped and does not
-  fit deep unbalanced trees. OPEN DECISION: whether a device evaluator is
-  worth it at v1 or host predict suffices behind the estimator.
+  REMOVED on main). We will not port treelite. The C-API `predict()`
+  traversal is ported — and it is NOT in `randomforest.cu`, as this line
+  used to say. `randomforest.cu` holds only the C-API wrappers; they
+  forward to `RandomForest::predict` (`randomforest.cuh:382-436`), which
+  calls the per-tree walk `DT::DecisionTree::predict_one`
+  (`decisiontree.cuh:370-389`). Both halves are ported, each in the file
+  that mirrors it. The gbdt evaluator is oblivious-shaped and does not fit
+  deep unbalanced trees. OPEN DECISION, unchanged: whether a device
+  evaluator is worth it at v1 or host predict suffices behind the
+  estimator — noting that cuML's host walk is a legitimate port target (it
+  is what their C-API and their own tests exercise) but is NOT what a cuML
+  user timing inference runs, so any inference comparison must say which of
+  the two it ran.
 
 **Ship classification first.** `ClassificationBin{count}` is integer
 `atomicAdd` — order-independent by construction, bit-identical across
@@ -414,3 +438,123 @@ reverted for one of them, and its message describes none of what it carried.
 This is the `git add -A` failure the standing orders forbid by name, from
 the other side. No action needed beyond knowing it happened; this lane
 commits by explicit path.
+
+---
+
+# The deviation ledger for this directory, RECONCILED
+
+Five lanes ran in parallel and the numbering collided, exactly as rule 3
+warns and as the five-lane round before this one did. **The collision was
+this lane's fault, not the lanes':** 105-107 were handed to the
+bins/objectives lane in its brief and then used by `split.mojo`, written
+concurrently by the orchestrator. The bins lane found the clash itself, kept
+101 as assigned, and moved to the next free numbers rather than overwriting.
+
+Numbers as actually used, which is what PORTING.md takes:
+
+| # | file | what |
+|---|---|---|
+| 100 | `dataset.mojo` | `sample_weight` float64 -> Float32 |
+| 101 | `bins.mojo` | counter width 64 -> 32 (exact); the four float64 accumulators -> Int32 fixed point; reduction buffers not ported |
+| 102 | `dataset.mojo` | Int64/Int32 field widths, spelling only |
+| 103 | — | RETIRED. Was reserved for `n_streams`; that landed as 117. |
+| 104 | `split.mojo` | queried `WARP_SIZE`, not their hardcoded 32 |
+| 105 | `split.mojo` | their reduction operator is not associative (MEASURED) |
+| 106 | `split.mojo` | their `atomicCAS`/`threadfence`/`atomicExch` mutex as acquire-load + weak relaxed CAS + release store |
+| 107 | `split.mojo` | `printSplits` declined, priced |
+| 108 | `quantiles.mojo` | the distributed arm not ported; `comm_size` still a parameter that RAISES |
+| 109 | `quantiles.mojo` | their two-element `thrust::inclusive_scan` runs on the host |
+| 110 | `quantiles.mojo` | `double bin_width` + `round` as a host Float64 index table |
+| 111 | `quantiles.mojo` | `cub::DeviceSegmentedRadixSort::SortKeys` hand-written |
+| 112 | `objectives.mojo` **and** `core/block_reduce.mojo` | **COLLIDED.** objectives: the ten `.cu` TUs collapse into comptime specialization. core: queried warp width. |
+| 113 | `objectives.mojo` **and** `core/block_reduce.mojo` | **COLLIDED.** objectives: `raft::log` -> `std.math.log`. core: 32-bit flush atomic. |
+| 114 | `objectives.mojo` **and** `core/block_scan.mojo` | **COLLIDED.** objectives: float64 per site. core: CUB's unpadded `HAS_IDENTITY == false` arm. |
+| 115 | `core/scan_by_key.mojo` | three-phase decoupling instead of CUB's lookback; the functor travels in a device buffer |
+| 116 | `flatnode.mojo` | private fields, the phantom `LabelT`, their asymmetric widths |
+| 117 | `randomforest.mojo` | `n_streams` |
+| 118 | `decisiontree.mojo` | phantom `L`; tree dumps not ported; `train_time` inert |
+| 119 | `randomforest.mojo` | `fit` not ported; treelite not ported; the device-pointer boundary; float64 per site; summation order in `score` |
+| 120 | `kernels/builder_kernels.mojo` | `alignPointer` declined, padding still transcribed |
+| 121 | `kernels/builder_kernels.mojo` | `sample_features` — OPENED, then CLOSED |
+| 122 | `kernels/builder_kernels.mojo` | multi-GPU pack/unpack declined |
+| **123** | `quantiles.mojo` | **NEW, assigned here: the subnormal flush. See below.** |
+
+**RESOLUTION, for whoever merges:** `core/`'s 112/113/114 renumber to
+**124/125/126**, because `objectives.mojo`'s were written first and because
+`core/` is one file tree away from the rest of this ledger. 127-129 stay
+free. The lesson is not "assign numbers up front" — they WERE assigned up
+front. It is that the orchestrator must not spend numbers from a range it
+has already handed out.
+
+## DEVIATION 123 — this GPU flushes float32 subnormals in arithmetic
+
+Found by the quantiles lane, measured rather than inferred, and it is the
+only deviation this round that changes an OUTPUT rather than a spelling.
+
+**Measured with a two-kernel probe:** a float32 subnormal survives host ->
+device -> kernel -> host BIT FOR BIT, through `enqueue_copy`, a Float32
+load/store and a bitcast. But in ARITHMETIC and COMPARISON it is flushed:
+the same subnormal compares equal to `+0.0`, to `-0.0`, and to a DIFFERENT
+subnormal (`0x006CE3EE == 0x00000001` returned true), and
+`subnormal + (-0.0)` returned `+0.0`. The smallest normal, `0x00800000`, is
+correct throughout, so the boundary is exactly the subnormal range.
+
+**Where it bites: one line.** `thrust::unique` at `quantiles.cuh:104`, which
+collapses duplicate quantiles. Any feature carrying subnormals gets a
+SMALLER `n_bins_array[col]` here than on CUDA — measured 5 vs 6, 4 vs 6,
+5 vs 7, 5 vs 7 across four shapes. It does NOT touch the sort (integer keys;
+the same column matches cell for cell) nor the `quantiles_array` values
+(gathered, never arithmetic).
+
+**It cannot be engineered away.** Comparing bit patterns instead would stop
+`-0.0`/`+0.0` collapsing, which cuML DOES collapse — so that would be a
+different function from theirs, not a fix. The check therefore runs TWO host
+references, one IEEE (what cuML computes) and one with the measured flush,
+gates the port on what it controls, and prints the divergence per column as
+a named line rather than folding it into a pass/fail.
+
+**This belongs in `mojo_only/kernel_matrix.mojo` as a CAPABILITY row** — not
+a NUMERIC or SCHEDULING row, because those are knobs this project chooses
+and nobody chose this. It is stated in `quantiles.mojo` for now. **OPEN
+merge-time item.**
+
+## Other open merge-time items, from the lanes' reports
+
+- **`DatasetView` cannot be passed to a kernel as written.** A Mojo struct
+  is refused as a kernel argument unless it conforms to `DevicePassable`,
+  which the core lane could not satisfy from outside the stdlib. Their
+  workaround (`core/scan_by_key.mojo`) puts the struct in a one-element
+  device buffer and loads it in the kernel's first line. `dataset.mojo` is
+  `(Copyable, Movable)` and will hit this the first time the histogram
+  kernel tries to take it. Decide once, apply everywhere.
+- **`count_left` is duplicated and the two disagree.** `split.mojo`'s takes
+  a plane of `UInt32` counts; cuML's `detail::CountLeft` (`split.cuh:19-27`)
+  takes `BinT const*` and calls `.Count()`, which is what `objectives.cuh`
+  passes it. The objectives lane duplicated a bin-typed one rather than call
+  the wrong-shaped one. **Theirs is right and `split.mojo` is wrong** — fix
+  `split.mojo` to be bin-typed and delete the duplicate.
+- **`ensemble/mojo_only/` can never be `mojo precompile`d.** Every check
+  file has a `main()`, which the packager rejects. Three lanes hit this and
+  all three reported it as somebody else's failure. Either checks move to a
+  sibling outside the package or that command leaves the briefs.
+- **`gbdt/gpu_util/kernel/segmented_sort.mojo` is duplicated** into
+  `ensemble/mojo_only/segmented_sort.mojo`, deliberately, because
+  `ensemble/` must not import `gbdt/`. Collapse at merge.
+- **`Split` should reconcile with the ET lane's**, which is writing its own
+  under `extratrees/`.
+- No `pixi.toml` task exists for any check in this directory; all of them
+  run by path. Adding them is a single-file edit nobody could make safely
+  while five sessions were open.
+
+## Corrections to this file, made in the same round that falsified them
+
+- The `n_streams` justification cited "cuML's own docs say `n_streams=1` for
+  reproducibility (`randomforestclassifier.pyx:182`)". **That file does not
+  exist at this pin and cuML says no such thing.** Deleted above, and in
+  `random_utils.mojo` where it had propagated. The deviation survives on
+  their `#else` branch and on the RNG being a pure hash.
+- "Port the C-API `predict()` traversal in `randomforest.cu`" named the
+  wrong file; the per-tree walk is `decisiontree.cuh:370-389`. Corrected
+  above.
+- "the eight per-objective `.cu` instantiation TUs" — there are TEN.
+- The bins caution and the Step 0 gate: see the session log above.

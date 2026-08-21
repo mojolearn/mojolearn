@@ -22,11 +22,28 @@ row samples are uncorrelated"): the RNG is not a stream that threads
 draw from in order, it is a PURE FUNCTION of (seed, treeid, nodeid).
 There is no draw order to reproduce, so nothing here depends on launch
 order, block count, warp width or stream count. This is the reason
-`n_streams` can be dropped on Metal (DEVIATION 103, `builder.mojo`)
-without touching a single output bit: their own docs already tell users
-to set `n_streams=1` for reproducibility
-(`randomforestclassifier.pyx:182`), and the seed chain says why that is
-even possible.
+`n_streams` can be dropped on Metal (DEVIATION 117, `randomforest.mojo`)
+without touching a single output bit.
+
+A CORRECTION, because the sentence that stood here was FALSE and a
+falsified sentence gets deleted rather than annotated. It read: "their own
+docs already tell users to set `n_streams=1` for reproducibility
+(`randomforestclassifier.pyx:182`)". **cuML says no such thing at this
+pin.** The file is `randomforestclassifier.py`, not `.pyx`; its `n_streams`
+documentation is two lines at `:94-95` and reads, in full, "Number of
+parallel streams used for forest building." Grepping
+`reproduc|deterministic` across `python/cuml/cuml/ensemble/`,
+`cpp/src/randomforest/` and `cpp/src/decisiontree/` finds no such guidance
+for RF anywhere.
+
+The conclusion survives on better evidence than a docstring, both of it
+verified in their source: their own non-OpenMP build defines
+`omp_get_max_threads()` to 1 (`randomforest.cuh:38-43`) and `set_rf_params`
+takes `min(cfg_n_streams, omp_get_max_threads())` (`randomforest.cu:584`),
+so a cuML compiled without OpenMP runs single-stream no matter what the
+user passed; and both RNG draws are pure hashes of `(seed, tree_id)` and
+`(seed, treeid, nodeid)`, so no output bit can depend on stream count at
+all.
 
 `fnv1a32_combine` (`random_utils.cuh:33-41`) folds a value in 32 bits at
 a time, low half first, and adds the high half ONLY when
