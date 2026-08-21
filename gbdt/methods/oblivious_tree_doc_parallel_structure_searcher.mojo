@@ -130,7 +130,7 @@ def fit_oblivious_tree_structure(
     var target = TL2Target(weights^, weighted_target^, n_rows)
     var subsets = create_subsets(ctx, max_depth, target)
     var calcer = ScoresCalcerOnCompressedDataSet(
-        ctx, blocks, n_rows, max_depth, global_ids
+        ctx, blocks, layout, n_rows, max_depth, global_ids
     )
 
     var structure = List[TBinarySplit]()

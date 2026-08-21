@@ -3695,3 +3695,54 @@ offset while this tree's layout stores a COLUMN index. The multiply by
 `n_rows` was present in the score helper and absent in `split_subsets`, so
 the split read column 0's bits with another feature's shift, every document
 went one way, and `HasSplit` stopped the tree at depth 1.
+
+## 107. `PolicyBlock.group_offset` is not a group index, and two gates passed while it was read as one
+
+Found 2026-08-21 by a measurement, not by a check.
+
+`PolicyScoreHelper` built `TCFeature::Offset` as
+
+    (block.first_column + block.group_offset[i]) * n_rows
+
+**`PolicyBlock.group_offset` is 0 for EVERY feature.** It is not a group
+index. A feature's compressed-index column lives in
+`layout.features[f].offset`, and the two agree only while a policy fits in
+ONE word:
+
+    4 one-byte features per UInt32, 8 half-byte, 32 binary
+
+So any policy with more than that had every feature past the first group
+reading the FIRST group's column -- correct bins for a different feature,
+histogrammed into the right slot. The searcher then split on a feature whose
+data it had never seen.
+
+### It survived two gates, and the reason is the point
+
+`check-pointwise-vs-greedy` and `check-fit-pointwise` both planted their
+signal on features inside the first group of their policy. The wrong column
+was therefore never the one carrying the answer: the tree still grew, still
+matched the greedy searcher, and still drove the loss down.
+
+It was caught by `mojo_only/pointwise_default_probe.mojo` -- a TIMING probe
+-- because that probe asserts the two arms end at the same loss before it
+reports a ratio. The fixture it happened to use put the signal on the fifth
+one-byte feature.
+
+Localisation took three steps, each cheap: a depth-and-rows sweep showed the
+disagreement at EVERY shape, which cleared scale; a threshold sweep cleared
+split balance; and a per-bit-width sweep showed all ten widths failing, which
+cleared the bit dispatch and left the fixture shape itself. Dumping the
+layout then showed `group_offset` flat at 0 with the real column in
+`cf.offset`.
+
+### Both gates now carry a feature past the first group
+
+`check-pointwise-vs-greedy` and `check-fit-pointwise` both use SIX one-byte
+features and put their strongest signal on the sixth. Verified: restoring the
+old expression makes the first fail on tree depth and the second on tree 0's
+splits.
+
+**The rule this earns**: a fixture must exercise the SECOND of anything the
+code groups -- the second word, the second block, the second group -- because
+the first is where every off-by-a-base-address is invisible. Same family as
+[[reached-but-inert]].

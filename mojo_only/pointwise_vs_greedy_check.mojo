@@ -72,7 +72,12 @@ def main() raises:
     var ctx = DeviceContext()
 
     # binary, half-byte, and one-byte across the 5/6/7-bit ranges
-    var folds: List[Int] = [1, 1, 12, 9, 20, 32, 48, 100]
+    # SIX one-byte features on purpose: 4 fit in one cindex word, so
+    # features 5 and 6 of the policy live in the NEXT column. A fixture
+    # whose signal all sits in the first group cannot see a feature_offset
+    # computed from the policy's first column instead of the feature's own
+    # -- which is exactly the bug this gate missed once.
+    var folds: List[Int] = [1, 1, 12, 9, 20, 32, 48, 100, 64, 127]
     var n_features = len(folds)
     var lay = build_layout(folds)
 
@@ -117,11 +122,13 @@ def main() raises:
     var tg = Float64(0.0)
     for r in range(N_ROWS):
         var g = Float64(0.0)
-        if host_bins[7][r] > 50:
+        # feature 9 is the SIXTH one-byte feature and lives in the second
+        # cindex column of its policy; it carries the strongest signal
+        if host_bins[9][r] > 60:
             g += 8.0
         if host_bins[2][r] > 6:
             g += 3.0
-        if host_bins[5][r] > 16:
+        if host_bins[8][r] > 30:
             g += 1.0
         g -= 6.0
         hs.unsafe_ptr().unsafe_store(r, Float32(1.0))

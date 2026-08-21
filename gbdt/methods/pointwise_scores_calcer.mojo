@@ -54,6 +54,9 @@ ordered on the one queue. Nothing else about the class changes.
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
+from gbdt.gpu_data.compressed_index_builder import (
+    CompressedIndexLayout,
+)
 from gbdt.gpu_data.feature_blocks import PolicyBlock
 from gbdt.methods.helpers import TBestSplitProperties, take_best
 from gbdt.methods.histograms_helper import (
@@ -157,6 +160,7 @@ struct PolicyScoreHelper(Movable):
         out self,
         ctx: DeviceContext,
         block: PolicyBlock,
+        layout: CompressedIndexLayout,
         n_rows: Int,
         max_depth: Int,
         global_feature_ids: List[Int],
@@ -166,9 +170,23 @@ struct PolicyScoreHelper(Movable):
 
         `feature_offset` is `TCFeature::Offset` -- the compressed-index
         COLUMN base in elements. This tree stores the index column-major
-        with a stride of `n_rows` (`greedy_search_helper` passes `n_rows` as
-        `bins_line_size`), so a group's base is `column * n_rows`, which is
-        exactly what `cindex += feature->Offset` expects.
+        with a stride of `n_rows`, so a feature's base is
+        `layout.features[f].offset * n_rows`.
+
+        **IT COMES FROM THE LAYOUT, PER FEATURE, and an earlier version
+        computed it as `block.first_column + block.group_offset[i]`.**
+        `PolicyBlock.group_offset` is 0 for EVERY feature -- it is not a
+        group index -- so that formula returned the policy's FIRST column
+        for all of them. A policy with more features than fit in one word
+        (5 one-byte, 9 half-byte, 33 binary) had every feature past the
+        first group reading the wrong column.
+
+        It survived two gates. `check-pointwise-vs-greedy` and
+        `check-fit-pointwise` both happened to plant their signal on
+        features inside the first group of their policy, so the wrong
+        column was never the one carrying the answer. Found by a THIRD
+        fixture whose signal sat on the fifth one-byte feature; both gates
+        now carry such a feature.
         """
         self.policy = block.policy
         self.feature_count = block.count()
@@ -188,7 +206,12 @@ struct PolicyScoreHelper(Movable):
         var bf = List[UInt32]()
         for i in range(self.feature_count):
             # the column this feature's GROUP occupies, times the row stride
-            off.append(UInt32((block.first_column + Int(block.group_offset[i])) * n_rows))
+            off.append(
+                UInt32(
+                    Int(layout.features[block.feature_ids[i]].offset)
+                    * n_rows
+                )
+            )
             first.append(block.fold_offset[i])
             fol.append(block.folds[i])
             oh.append(UInt8(0))
@@ -384,6 +407,7 @@ struct ScoresCalcerOnCompressedDataSet(Movable):
         out self,
         ctx: DeviceContext,
         blocks: List[PolicyBlock],
+        layout: CompressedIndexLayout,
         n_rows: Int,
         max_depth: Int,
         global_feature_ids: List[Int],
@@ -395,7 +419,8 @@ struct ScoresCalcerOnCompressedDataSet(Movable):
         for i in range(len(blocks)):
             self.helpers.append(
                 PolicyScoreHelper(
-                    ctx, blocks[i], n_rows, max_depth, global_feature_ids
+                    ctx, blocks[i], layout, n_rows, max_depth,
+                    global_feature_ids,
                 )
             )
 

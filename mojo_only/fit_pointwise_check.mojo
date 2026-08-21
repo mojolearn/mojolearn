@@ -62,7 +62,10 @@ comptime MAX_DEPTH = 4
 
 def main() raises:
     var ctx = DeviceContext()
-    var folds: List[Int] = [1, 12, 9, 20, 32, 48, 100, 64]
+    # SIX one-byte features: 4 fit in one cindex word, so features 8 and 9
+    # live in the SECOND column of their policy. The signal is put there on
+    # purpose -- see the note in pointwise_vs_greedy_check.
+    var folds: List[Int] = [1, 12, 9, 20, 32, 48, 100, 64, 127, 96]
     var n_features = len(folds)
     var lay = build_layout(folds)
 
@@ -101,11 +104,11 @@ def main() raises:
     var mean = Float64(0.0)
     for r in range(N_ROWS):
         var y = (
-            Float32(host_bin[6][r]) * 0.4
+            Float32(host_bin[9][r]) * 0.4
             - Float32(host_bin[1][r]) * 1.5
-            + Float32(host_bin[4][r]) * 0.6
+            + Float32(host_bin[8][r]) * 0.6
         )
-        if host_bin[6][r] > 50 and host_bin[1][r] > 6:
+        if host_bin[9][r] > 45 and host_bin[1][r] > 6:
             y += 5.0
         ht.unsafe_ptr().unsafe_store(r, y)
         hw.unsafe_ptr().unsafe_store(r, Float32(1.0))
