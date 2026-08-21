@@ -4850,6 +4850,40 @@ written; the claim is at minimum scoped more narrowly than it reads. That file
 belongs to another session and was flagged rather than edited
 ([[fix-docs-on-discovery]] wants it fixed by whoever owns it).
 
+### 134a. MEASURED: 600 warm reps clean, which RULES OUT the warm-process arm
+
+`pixi run soak-determinism`, 600 reps of the exact cell, both searchers, one
+process:
+
+    runs disagreeing with CatBoost   0
+    runs where the ARMS disagreed    0
+    distinct greedy losses:     4.1332526206970215  x 600
+    distinct pointwise losses:  4.1332526206970215  x 600
+
+**EXACTLY ONE distinct loss per arm, 600 times each.** If the event were an
+independent per-fit event at the observed rate of about one in a hundred, a
+clean run of 600 has probability 0.99^600, which is under a quarter of one
+percent. So it is not a per-fit event inside a warm process, and the
+order-nondeterministic float atomic -- which fires on EVERY fit, warm or cold
+-- is now a poor fit for the greedy arm as well as for the pointwise one. A
+float reduction that reordered would show up here as a second loss value
+differing in the last few bits, and there is no second value.
+
+That is consistent with the one thing the original sighting said about itself:
+**it was the FIRST work its process did.** So the hunt moves to cold
+processes, which is the configuration it was seen in and the one the earlier
+~100 runs mostly were not (six of them were cold, which at this rate is nearly
+uninformative).
+
+This also raises the prior on a defect whose window is process startup or
+first-allocation rather than arithmetic -- a device buffer freed at its last
+use with the next allocation landing on it, say, which is intermittent,
+allocation-order dependent, produces plausible-but-wrong values rather than
+crashes, and would strike whichever arm happened to land on the stale block.
+That last property is the only account so far of why BOTH arms were wrong and
+wrong DIFFERENTLY. A confirmed instance of exactly that bug was found and
+fixed in `write_fold_based_initial_bins` the same day (DEVIATION 125a).
+
 WHAT WOULD CLOSE IT, cheapest first: build once at
 `GLOBAL_NUMERIC_MODE = NUMERIC_IDENTICAL` and soak `d1_f8` a few thousand
 times. If the greedy arm goes silent and the pointwise arm still drifts, there
