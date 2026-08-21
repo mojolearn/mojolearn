@@ -220,6 +220,17 @@ check-nan-mode = "mojo run -I . mojo_only/nan_mode_check.mojo"
 # stat-major and a transposed scan moves no total. Own main(); a GPU, ~20 s.
 check-pointwise-offsets = "mojo run -I . mojo_only/pointwise_offsets_check.mojo"
 
+# PORTING.md 13 asserted that a shared-memory pointer cannot cross a function
+# boundary in Mojo, and that assertion is why every histogram kernel in
+# greedy_subsets_searcher/kernel/ carries its own copy of CatBoost's one
+# shared loop -- a duplication that already shipped one wrong-histogram bug.
+# It is false: stack_allocation yields MutUntrackedOrigin and a callee
+# annotated MutAnyOrigin rejects it because that is a different origin, not a
+# wildcard. Parameterize and it works. Gated PER SLOT, not on a total, so a
+# callee that wrote nothing or wrote the wrong slot fails. Own main(); a GPU,
+# a few seconds.
+check-shared-pointer = "mojo run -I . mojo_only/shared_pointer_probe.mojo"
+
 # The LSD radix sort over (bin, permutation position). Gates STABILITY
 # separately from sortedness and prints both, because sortedness alone
 # cannot see a tie that moved -- and the tie order IS the second half of

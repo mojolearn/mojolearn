@@ -258,16 +258,55 @@ three histogram kernels share ONE loop, `ComputeSplitPropertiesDirectLoadsImpl
 <THist, blockSize, GroupSize>`, instantiated per policy. The loop exists once;
 only the accumulator type and the writeback differ. A fix lands in one place.
 
-We cannot do that yet, and the blocker is item 10: Mojo cannot pass a
-shared-memory pointer across a function boundary without a concrete origin,
-so the loop had to be inlined into each kernel. The duplication is a
-CONSEQUENCE of that language limit, not a choice, and it is the second cost
-that limit has imposed after the accumulator split.
+### CORRECTED 2026-08-21: there is no language limit, and there never was
 
-Until it can be unified, treat the two files as one: any change to the loop
-in either must be applied to both in the same commit, and the launch probe
-must exercise both. The right fix is a comptime-parameterized loop shared the
-way CatBoost's template shares it, once shared pointers can cross a boundary.
+This entry used to say the loop could not be shared because "Mojo cannot pass
+a shared-memory pointer across a function boundary without a concrete origin"
+and cited item 10. **Both halves are wrong.** There is no item 10 in this
+file -- the numbering goes 9, 11 -- so the citation pointed at nothing, and
+the claim it stood in for is false.
+
+A shared-memory pointer crosses a function boundary today. The whole of it is
+that `stack_allocation` yields `MutUntrackedOrigin`, and a callee written as
+
+    def f(smem: MutPointer[Float32, MutAnyOrigin, address_space = ...SHARED])
+
+rejects it -- not because the pointer cannot cross, but because
+`MutAnyOrigin` is a DIFFERENT origin, not a wildcard. Parameterize instead
+and it compiles and runs:
+
+    def f[origin: MutOrigin, //](
+        smem: MutPointer[Float32, origin, address_space = AddressSpace.SHARED]
+    )
+
+Measured, not argued: `mojo_only/shared_pointer_probe.mojo` allocates a
+threadgroup buffer, accumulates into it through exactly such a callee, and
+reads back the 64 expected values. `pixi run check-shared-pointer`.
+
+This is the fourth "Mojo cannot" in this file to fail on inspection (item 2's
+warp primitives, item 8's scan, item 14's block reduce, and now this one),
+and the third to fail because an ANNOTATION was mistaken for a capability.
+The standing lesson is the one `mojotrees-code-not-source-of-truth` records:
+a limit this repository asserts about its own toolchain is a measurement that
+has expired, not a fact.
+
+### What still stands, and what it now costs
+
+Everything above the correction is unchanged: the derive-by-copy bug was
+real, it shipped, and a grep found seven references to the fix in one file
+and zero in the other. What changes is the remedy. CatBoost's shape -- one
+loop, instantiated per accumulator -- is available to this port and was
+available all along.
+
+The NEW pointwise family (`gbdt/methods/kernel/`, rung 1 of `NEXT_TWO.md`) is
+being written that way from the start, which is most of why its line estimate
+is below the greedy-subsets family's 1.2x expansion over the CUDA it mirrors.
+
+Unifying the EXISTING greedy-subsets loop is a separate, larger change to
+files another session is working in, and it is NOT done here. Until it is,
+the original rule stands for those files and only those: treat
+`hist_binary.mojo` and `hist_half_byte.mojo` as one file, apply any loop
+change to both in the same commit, and exercise both in the launch probe.
 
 ---
 
