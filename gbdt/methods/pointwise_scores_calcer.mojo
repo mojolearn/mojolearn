@@ -155,6 +155,12 @@ struct PolicyScoreHelper(Movable):
     var d_result_scores: DeviceBuffer[DType.float32]
     var h_result_ids: HostBuffer[DType.uint32]
     var h_result_scores: HostBuffer[DType.float32]
+    # `TScoreHelper`'s third constructor argument
+    # (`histograms_helper.h:361-365`), handed to BOTH halves: it sizes the
+    # histogram and becomes `gridDim.z`, and `foldCount == 1` IS the dispatch
+    # between the plain and the dynamic scorer. Was a literal 1 at three
+    # sites -- DEVIATION 126.
+    var fold_count: Int
 
     def __init__(
         out self,
@@ -164,6 +170,7 @@ struct PolicyScoreHelper(Movable):
         n_rows: Int,
         max_depth: Int,
         global_feature_ids: List[Int],
+        fold_count: Int = 1,
     ) raises:
         """`CreateScoreHelper` (`pointwise_scores_calcer.h:11-27`) plus the
         host-side tables their `TCompressedDataSet` already holds.
@@ -189,6 +196,7 @@ struct PolicyScoreHelper(Movable):
         now carry such a feature.
         """
         self.policy = block.policy
+        self.fold_count = fold_count
         self.feature_count = block.count()
         self.folds_hist = folds_histogram_for(block.folds)
 
@@ -197,7 +205,9 @@ struct PolicyScoreHelper(Movable):
             total += Int(block.folds[i])
         self.bin_feature_count = total
 
-        self.hist_helper = ComputeHistogramsHelper(block.policy, 1, max_depth)
+        self.hist_helper = ComputeHistogramsHelper(
+            block.policy, fold_count, max_depth
+        )
 
         var off = List[UInt32]()
         var first = List[UInt32]()
@@ -324,7 +334,7 @@ struct PolicyScoreHelper(Movable):
             n_rows,
             parts_p,
             plan.part_count,
-            1,
+            self.fold_count,
             self.d_hist.unsafe_ptr(),
             self.bin_feature_count,
             plan.build_from_scratch,
@@ -359,7 +369,7 @@ struct PolicyScoreHelper(Movable):
             self.d_hist,
             part_stats,
             part_count,
-            1,
+            self.fold_count,
             score_before_split,
             self.d_result_ids,
             self.d_result_scores,
@@ -422,6 +432,7 @@ struct ScoresCalcerOnCompressedDataSet(Movable):
         n_rows: Int,
         max_depth: Int,
         global_feature_ids: List[Int],
+        fold_count: Int = 1,
     ) raises:
         """Their constructor (`:35-59`): a helper per policy whose
         `GetGridSize` is non-zero. `blocks_for` already omits empty
@@ -431,7 +442,7 @@ struct ScoresCalcerOnCompressedDataSet(Movable):
             self.helpers.append(
                 PolicyScoreHelper(
                     ctx, blocks[i], layout, n_rows, max_depth,
-                    global_feature_ids,
+                    global_feature_ids, fold_count,
                 )
             )
 

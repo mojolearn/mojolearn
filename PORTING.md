@@ -4912,18 +4912,34 @@ one deserves a real hunt rather than another hundred green runs.
 `FindOptimalSplit`, whose `foldCount == 1` test IS the dispatch between the
 plain and the dynamic scorer (`pointwise_scores.cu:537`).
 
-OURS hard-codes 1 at three sites in `pointwise_scores_calcer.mojo`. Since
-`ComputeHistogramsHelper` already TAKES `fold_count` and already multiplies
-both size expressions by it, and both kernels already take it as an argument,
-this is four literals rather than a port.
+OURS hard-coded 1 at three sites in `pointwise_scores_calcer.mojo`.
 
-Until they change, the searcher asks the calcer what fold count it was built
-at and RAISES if it disagrees with the layout, rather than growing a tree whose
-histograms are a fold axis short -- which would be finite, well formed, and
-wrong at every split. The guard dissolves on its own the moment the calcer
-carries folds; it is a cross-check between two ported objects, not a stub.
-Gated both ways by `check-ordered-boosting` O7: it fires with folds and does
-NOT fire without them.
+**CLOSED the same day it was opened.** `PolicyScoreHelper` and
+`ScoresCalcerOnCompressedDataSet` now take `fold_count` (defaulting to 1,
+their argument order: `TScoreHelper(policy, dataSet, foldCount, maxDepth,
+...)`), it is stored as a field, and it reaches all three sites --
+`ComputeHistogramsHelper`, `compute_hist2`'s `gridDim.z`, and
+`find_optimal_split`'s plain-versus-dynamic dispatch. Nothing else changed:
+`histogram_alloc_size` already multiplied by `fold_count`, so `d_hist` grows
+on its own.
+
+Why it mattered enough to fix rather than leave guarded: **none of the three
+crashes at `FoldCount > 1`.** The histogram would be allocated a
+`FoldCount`-th of the size it needs, the launch grid would be one fold deep,
+and the scorer would take the PLAIN arm over a partition array whose leaf
+stride is `1 << FoldBits`. The tree comes out well formed. That is the same
+failure mode as DEVIATION 114's hardcoded one-hot flag, in the same file, four
+hours apart -- a constant standing in for a value the caller owns.
+
+The guard stays. It is now a cross-check between two ported objects rather
+than a refusal: the searcher asks the calcer what fold count it was built at
+and raises if it disagrees with the layout, which costs one host comparison
+per tree and means the first caller to pass folds gets a named error instead
+of a plausible tree. Gated both ways by `check-ordered-boosting` O7: it fires
+with folds and does NOT fire without them.
+
+Verified after the change: the CatBoost differential holds at 288 of 288
+across six fixtures on both searchers, and O7 still fires.
 
 ## 127. THE DOC-PARALLEL SEARCHER IS THE WRONG HOME FOR FOLDS, and its fold arm is a deviation scheduled for deletion
 
