@@ -43,6 +43,13 @@ from extratrees.ported.decisiontree.flatnode import (
     SparseTreeNode,
     TreeMetaDataNode,
 )
+from extratrees.ported.decisiontree.batched_levelalgo.dataset import Dataset
+from extratrees.ported.decisiontree.batched_levelalgo.objectives import (
+    AggregateBin,
+    CountBin,
+    GiniObjectiveFunction,
+    MSEObjectiveFunction,
+)
 from extratrees.ported.decisiontree.batched_levelalgo.split import Split
 from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels import (
     InstanceRange,
@@ -271,6 +278,120 @@ struct NodeQueue[dtype: DType](Movable):
             # `:135-136`
             if item.depth + 1 > self.tree.depth_counter:
                 self.tree.depth_counter = item.depth + 1
+
+
+def set_leaf_predictions_classification(
+    dataset: Dataset,
+    mut tree: TreeMetaDataNode[DType.float32],
+    node_instances: List[InstanceRange],
+) raises:
+    """`builder.cuh:556-599` (`SetLeafPredictions`) plus the `leafKernel` it
+    launches (`kernels/builder_kernels_impl.cuh:391-417`), for the
+    classification objective.
+
+    Their structure, which is the part that matters:
+
+    * `vector_leaf` is sized `sparsetree.size() * num_outputs` and ZEROED
+      (`builder.cuh:558`, `:582`), so every node gets a slot whether or not it
+      is a leaf;
+    * `leafKernel` runs ONE BLOCK PER NODE and returns immediately for a node
+      that is not a leaf (`:403`), so an internal node's slot keeps the zeros;
+    * the leaf's rows are read through `dataset.row_ids` over the node's own
+      `InstanceRange` (`:409-412`), NOT over a contiguous row range -- this is
+      why `SetLeafPredictions` asserts `sparsetree.size() ==
+      instance_ranges.size()` (`builder.cuh:562-563`) and why the partition
+      must have left `row_ids` in the state the ranges describe;
+    * the per-class tally is a `CountBin` histogram of width `num_outputs`
+      (their `IncrementHistogram(histogram, 1, 0, label)` -- note `n_bins = 1`
+      and `bin = 0`, so it is a plain per-class counter, not a histogram over
+      thresholds), and `SetLeafVector` turns it into probabilities
+      (`objectives.cuh:97-107`).
+
+    This is the HOST form; the device kernel lands beside `partition_samples`
+    in `kernels/builder_kernels_impl.mojo` and is checked against this one.
+    """
+    var n_nodes = tree.num_nodes()
+    if len(node_instances) != n_nodes:
+        raise Error(
+            "SetLeafPredictions: "
+            + String(n_nodes)
+            + " nodes but "
+            + String(len(node_instances))
+            + " instance ranges -- builder.cuh:562-563 asserts these are equal"
+        )
+    var k = Int(tree.num_outputs)
+
+    # `builder.cuh:558` sizes it, `:582` zeroes it. Both, in that order.
+    tree.vector_leaf = List[Float32](length=n_nodes * k, fill=Float32(0.0))
+
+    var counts = List[CountBin](length=k, fill=CountBin())
+    for node_id in range(n_nodes):
+        # `builder_kernels_impl.cuh:403`, the early return.
+        if not tree.sparsetree[node_id].IsLeaf():
+            continue
+        for c in range(k):
+            counts[c] = CountBin()
+        var rng = node_instances[node_id]
+        for i in range(Int(rng.begin), Int(rng.begin) + Int(rng.count)):
+            var row = Int(dataset.row_ids[unsafe_offset=i])
+            var label = Int(dataset.labels[unsafe_offset=row])
+            counts[label].x += 1
+        GiniObjectiveFunction[DType.float32].SetLeafVector(
+            Pointer(to=counts[0]),
+            Int32(k),
+            Pointer(to=tree.vector_leaf[node_id * k]),
+        )
+
+
+def set_leaf_predictions_regression(
+    dataset: Dataset,
+    mut tree: TreeMetaDataNode[DType.float32],
+    node_instances: List[InstanceRange],
+) raises:
+    """The same pass for the MSE objective: the leaf value is the mean of its
+    rows' labels (`objectives.cuh:259-264`).
+
+    The accumulator is `AggregateBin[DType.float64]` here BECAUSE THIS IS THE
+    HOST ORACLE and DEVIATION 135 -- what the device accumulates in -- is
+    open. The device form must not silently inherit this choice.
+    """
+    var n_nodes = tree.num_nodes()
+    if len(node_instances) != n_nodes:
+        raise Error(
+            "SetLeafPredictions: "
+            + String(n_nodes)
+            + " nodes but "
+            + String(len(node_instances))
+            + " instance ranges -- builder.cuh:562-563 asserts these are equal"
+        )
+    var k = Int(tree.num_outputs)
+    if k != 1:
+        raise Error(
+            "regression leaves are one value per node; num_outputs is "
+            + String(k)
+        )
+
+    tree.vector_leaf = List[Float32](length=n_nodes * k, fill=Float32(0.0))
+
+    var acc = List[AggregateBin[DType.float64]](
+        length=k, fill=AggregateBin[DType.float64]()
+    )
+    for node_id in range(n_nodes):
+        if not tree.sparsetree[node_id].IsLeaf():
+            continue
+        for c in range(k):
+            acc[c] = AggregateBin[DType.float64]()
+        var rng = node_instances[node_id]
+        for i in range(Int(rng.begin), Int(rng.begin) + Int(rng.count)):
+            var row = Int(dataset.row_ids[unsafe_offset=i])
+            acc[0].label_sum += Float64(dataset.labels[unsafe_offset=row])
+            acc[0].count += 1
+        var out = List[Float64](length=k, fill=Float64(0.0))
+        MSEObjectiveFunction[DType.float64].SetLeafVector(
+            Pointer(to=acc[0]), Int32(k), Pointer(to=out[0])
+        )
+        for c in range(k):
+            tree.vector_leaf[node_id * k + c] = Float32(out[c])
 
 
 def train_loop_shape() -> String:
