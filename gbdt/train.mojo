@@ -450,6 +450,20 @@ def train(
     # float rounding. It is a real knob on the doc-parallel searcher,
     # which `train` does not currently select.
     random_strength: Float32 = Float32(0.0),
+    # `TDocParallelObliviousTreeSearcher`, CatBoost's SINGLE-TARGET
+    # symmetric learner, in place of the greedy subsets searcher. Both are
+    # theirs and both are reachable on their GPU; `fit_with_test` has taken
+    # this since the pointwise family shipped and `train` did not pass it,
+    # which made the whole arm unreachable from every caller that goes
+    # through this function -- the CPython binding included. Forwarded at
+    # the single `fit_with_test` call site below.
+    #
+    # The two arms differ in what they RETURN, not only in how they search:
+    # the pointwise searcher returns the STRUCTURE ONLY (DEVIATION 104), so
+    # it always runs the leaf estimator, where the greedy arm can reuse the
+    # leaf it already grew. That is why it cannot take DEVIATION 64's
+    # estimation shortcut.
+    use_pointwise_searcher: Bool = False,
 ) raises -> TrainedModel:
     """Borders -> device quantization -> fit, one call.
 
@@ -1559,6 +1573,7 @@ def train(
         od_pvalue=od_pvalue,
         od_wait=od_wait,
         random_strength=random_strength,
+        use_pointwise_searcher=use_pointwise_searcher,
     )
     var losses = fit_result.learn_losses.copy()
     var t_losses = fit_result.test_losses.copy()

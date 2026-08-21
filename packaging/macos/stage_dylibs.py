@@ -152,26 +152,56 @@ def verify_closed(ext, dylibs_dir):
 
 
 def main():
-    ext = pathlib.Path(sys.argv[1])
-    env_lib = pathlib.Path(sys.argv[2])
-    dylibs = ext.parent / ".dylibs"
+    # ONE `.dylibs` SERVES EVERY EXTENSION IN THE PACKAGE, so every extension
+    # has to be staged in ONE call.
+    #
+    # This took a list of exactly one until 2026-08-21, when GBDT moved into a
+    # second extension. Calling it twice does not work and fails in the worst
+    # available way: the first line of `main` WIPES `.dylibs`, so the second
+    # call would delete the first extension's staged closure and verify only
+    # its own. On the build machine the deleted dylibs are still resolvable
+    # through the pixi environment, so the wheel would import perfectly here
+    # and die on a user's Mac -- which is the exact trap this file's docstring
+    # was written about, one extension wider.
+    #
+    # So: the closure is the UNION over all of them, and `verify_closed` runs
+    # for EACH, because a union that satisfies one extension and not another
+    # is still a broken wheel.
+    exts = [pathlib.Path(a) for a in sys.argv[1:-1]]
+    env_lib = pathlib.Path(sys.argv[-1])
+    dylibs = exts[0].parent / ".dylibs"
+    for ext in exts:
+        if not ext.exists():
+            raise SystemExit(f"stage_dylibs: no such extension: {ext}")
+        if ext.parent != exts[0].parent:
+            raise SystemExit(
+                "stage_dylibs: every extension must sit in one package "
+                f"directory; {ext} is not beside {exts[0]}"
+            )
 
     if dylibs.exists():
         shutil.rmtree(dylibs)
     dylibs.mkdir(parents=True)
 
-    needed = closure(ext, env_lib)
+    needed = []
+    for ext in exts:
+        for name in closure(ext, env_lib):
+            if name not in needed:
+                needed.append(name)
     for name in needed:
         shutil.copy2(env_lib / name, dylibs / name)
         # They reference EACH OTHER, so each needs to find its siblings.
         add_rpath(dylibs / name, "@loader_path")
         sign(dylibs / name)
 
-    add_rpath(ext, "@loader_path/.dylibs")
-    dropped = strip_build_rpaths(ext)
+    dropped = []
+    for ext in exts:
+        add_rpath(ext, "@loader_path/.dylibs")
+        dropped += strip_build_rpaths(ext)
     for name in needed:
         dropped += strip_build_rpaths(dylibs / name)
-    sign(ext)
+    for ext in exts:
+        sign(ext)
     for name in needed:
         sign(dylibs / name)
     if dropped:
@@ -180,11 +210,16 @@ def main():
             print("   ", d)
 
     print(f"  staged {len(needed)}: {', '.join(needed)}")
-    verify_closed(ext, dylibs)
+    for ext in exts:
+        print(f"  for {ext.name}:")
+        verify_closed(ext, dylibs)
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("usage: stage_dylibs.py <extension.so> <env_lib_dir>")
+    if len(sys.argv) < 3:
+        print(
+            "usage: stage_dylibs.py <extension.so> [<extension.so> ...]"
+            " <env_lib_dir>"
+        )
         raise SystemExit(2)
     main()

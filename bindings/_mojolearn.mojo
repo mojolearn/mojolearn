@@ -12,18 +12,23 @@ That contract is the wrapper's to honor and it is stated in
 
 WHAT IS EXPOSED, AND WHAT IS NOT
 ---------------------------------
-`knn_search`, `kmeans_fit`, `gbdt_fit` and `gbdt_predict`. Those are the
-algorithms in this repository with a caller-facing surface: they take host
-pointers, own their device work, and have checks covering the policy they add.
+`knn_search` and `kmeans_fit`. Those are the algorithms with a caller-facing
+surface in THIS extension: they take host pointers, own their device work, and
+have checks covering the policy they add.
+
+**GBDT MOVED OUT.** It lives in `bindings/_mojolearn_gbdt.mojo`, built by
+`bindings/build_gbdt.sh` into a second extension, for the reason
+`bindings/_mojolearn_estimators.mojo` gives for the third: an independently
+changing binding should not be a merge point. GBDT is the fastest-moving
+surface in this repository and every parameter added to `GbdtFitParams` used
+to have to be unpacked in TWO files that could silently disagree about the
+order of a flat list -- which is a wrong answer, not a failure. Now there is
+one. Do not re-add a gbdt import here.
+
 DBSCAN, PCA and OLS have verified kernels and no such surface yet, so binding
 them would mean inventing one here, at the boundary, where no check can see
 it. They are named in the wrapper's `__all__` as absent rather than silently
 missing.
-
-THE GBDT MODEL CROSSES AS TEXT, NOT AS A HANDLE, and `gbdt/estimator.mojo`
-argues why: an integer handle into a table of live models on this side would
-put object lifetime across the CPython boundary where nothing here can check
-it. The text format is the one `check-model-io` already gates bit-for-bit.
 
 THE DEVICE CONTEXT IS CREATED PER CALL, AND THAT IS A REAL COST
 ----------------------------------------------------------------
@@ -63,14 +68,6 @@ from std.python.bindings import PythonModuleBuilder
 from max.gpu.host import DeviceContext
 
 from cluster.estimator import kmeans_fit
-from gbdt.estimator import (
-    GbdtFitParams,
-    GbdtFitResult,
-    gbdt_fit,
-    gbdt_model_dim,
-    gbdt_predict,
-    gbdt_predict_multi,
-)
 from neighbors.estimator import knn_search
 
 
@@ -212,234 +209,12 @@ def kmeans_fit_binding(
     return out
 
 
-def gbdt_fit_binding(
-    x_addr: PythonObject,
-    y_addr: PythonObject,
-    weights_addr: PythonObject,
-    cat_flags_addr: PythonObject,
-    eval_x_addr: PythonObject,
-    eval_y_addr: PythonObject,
-    params: PythonObject,
-    strs: PythonObject,
-) raises -> PythonObject:
-    """Fit a gradient-boosted ensemble.
-
-    Returns `[model_text, best_iteration, stopped_early, learn_losses,
-    test_losses]`. It used to return the text alone; the four that follow
-    it are what a caller needs to tell a model that STOPPED from one that
-    ran out of iterations, and to plot the curve that made it stop.
-
-    `params` is, in this exact order -- and the wrapper names the same
-    order in the same words, because a silent reordering here is a wrong
-    answer rather than a failure:
-
-         0  n_rows
-         1  n_features
-         2  n_weights        (0 means unit weights; weights_addr unread)
-         3  n_flags          (0 means all-numeric; cat_flags_addr unread)
-         4  border_count
-         5  n_estimators
-         6  max_depth
-         7  learning_rate    (float)
-         8  l2_leaf_reg      (float)
-         9  random_seed
-        10  score_function
-        11  loss_alpha       (float, -1 = unset)
-        12  loss_q           (float, -1 = unset)
-        13  loss_delta       (float, -1 = unset)
-        14  loss_variance_power (float, -1 = unset)
-        15  loss_border      (float, -1 = unset)
-        16  leaf_estimation_iterations  (-1 = unset, the loss decides)
-        17  leaf_estimation_method      (-1 = unset, the loss decides)
-        18  bagging_temperature (float)
-        19  subsample        (float, -1 = unset)
-        20  n_eval_rows      (0 means no held-out set; the eval addresses
-                              are unread)
-        21  od_pvalue        (float, -1 = unset)
-        22  od_wait          (-1 = unset)
-        23  use_best_model   (-1 = unset, 0 off, 1 on)
-        24  best_model_min_trees
-
-    `strs` is `[loss, bootstrap_type, od_type]`, their `ELossFunction`,
-    `EBootstrapType` and `EOverfittingDetectorType` spellings. An empty
-    `bootstrap_type` means none, and an empty `od_type` means UNSET --
-    which is not the same as `None`: their `Load`
-    (`overfitting_detector_options.cpp:24-32`) picks the type from
-    whichever of the other two was given, so an unset type with a wait is
-    `Iter`.
-
-    EVERY `-1` ABOVE IS THEIR `TOption::NotSet()`, not a magic number: the
-    loss picks the leaf estimator and its iteration count through
-    `set_leaves_estimation_default`, which is the port of
-    `catboost_options.cpp:273-360`. A caller that passes explicit values
-    is overriding CatBoost's own defaults and should know it.
-    """
-    if len(params) != 25:
-        raise Error(
-            "gbdt_fit: params must hold 25 values, got "
-            + String(len(params))
-        )
-    if len(strs) != 3:
-        raise Error(
-            "gbdt_fit: strs must hold [loss, bootstrap_type, od_type],"
-            " got " + String(len(strs))
-        )
-    var xp = _f32_ptr(Int(py=x_addr))
-    var yp = _f32_ptr(Int(py=y_addr))
-    # unread when n_weights / n_flags is 0; the wrapper passes the X
-    # address rather than allocating a throwaway, as `kmeans_fit` does,
-    # and `_f32_ptr` still refuses a null.
-    var wp = _f32_ptr(Int(py=weights_addr))
-    var cp = _u32_ptr(Int(py=cat_flags_addr))
-    # unread when params[20] is 0, the same contract the weights have;
-    # the wrapper passes the X address rather than allocating a throwaway
-    var ep = _f32_ptr(Int(py=eval_x_addr))
-    var eyp = _f32_ptr(Int(py=eval_y_addr))
-
-    var n_rows = Int(py=params[0])
-    var n_features = Int(py=params[1])
-    var n_weights = Int(py=params[2])
-    var n_flags = Int(py=params[3])
-
-    var fp = GbdtFitParams(
-        Int(py=params[4]),
-        Int(py=params[5]),
-        Int(py=params[6]),
-        Float32(Float64(py=params[7])),
-        Float32(Float64(py=params[8])),
-        UInt64(Int(py=params[9])),
-        Int(py=params[10]),
-        String(py=strs[0]),
-        Float32(Float64(py=params[11])),
-        Float32(Float64(py=params[12])),
-        Float32(Float64(py=params[13])),
-        Float32(Float64(py=params[14])),
-        Float32(Float64(py=params[15])),
-        Int(py=params[16]),
-        Int(py=params[17]),
-        String(py=strs[1]),
-        Float32(Float64(py=params[18])),
-        Float32(Float64(py=params[19])),
-        String(py=strs[2]),
-        Float64(py=params[21]),
-        Int(py=params[22]),
-        Int(py=params[23]),
-        Int(py=params[24]),
-    )
-    var n_eval_rows = Int(py=params[20])
-
-    var result: GbdtFitResult
-    with GILReleased(Python()):
-        var ctx = DeviceContext()
-        result = gbdt_fit(
-            ctx, xp, n_rows, n_features, yp, wp, n_weights,
-            cp, n_flags, ep, eyp, n_eval_rows, fp,
-        )
-
-    var learn = Python.list()
-    for i in range(len(result.learn_losses)):
-        learn.append(PythonObject(result.learn_losses[i]))
-    var test = Python.list()
-    for i in range(len(result.test_losses)):
-        test.append(PythonObject(result.test_losses[i]))
-
-    var out = Python.list()
-    out.append(PythonObject(result.text))
-    out.append(PythonObject(result.best_iteration))
-    out.append(PythonObject(result.stopped_early))
-    out.append(learn)
-    out.append(test)
-    return out
-
-
-def gbdt_predict_binding(
-    model: PythonObject,
-    x_addr: PythonObject,
-    out_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """Apply a model returned by `gbdt_fit`. Returns rows written.
-
-    `params` is `[n_rows]`. The feature count is not passed: it comes from
-    the MODEL, which is the only place that cannot disagree with the
-    quantization grid the model was fitted on.
-
-    PREDICTIONS ARE RAW APPROXES for every loss, exactly as their `predict`
-    without a `prediction_type` is. A Logloss caller applies the sigmoid.
-    """
-    if len(params) != 1:
-        raise Error(
-            "gbdt_predict: params must hold [n_rows], got "
-            + String(len(params))
-        )
-    var text = String(py=model)
-    var xp = _f32_ptr(Int(py=x_addr))
-    var op = _f32_ptr(Int(py=out_addr))
-    var n_rows = Int(py=params[0])
-
-    var wrote: Int
-    with GILReleased(Python()):
-        var ctx = DeviceContext()
-        wrote = gbdt_predict(ctx, text, xp, n_rows, op)
-    return PythonObject(wrote)
-
-
-def gbdt_model_dim_binding(model: PythonObject) raises -> PythonObject:
-    """The model's approx dimension: 1, or `numClasses - 1` for MultiClass.
-
-    The wrapper calls this once after `fit` to size its output arrays and
-    to recover `n_classes` as `dim + 1`. It parses the model text, which
-    is the price of the handle-free boundary `gbdt/estimator.mojo`
-    argues for.
-    """
-    return PythonObject(gbdt_model_dim(String(py=model)))
-
-
-def gbdt_predict_multi_binding(
-    model: PythonObject,
-    x_addr: PythonObject,
-    out_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """Apply a multi-dimensional model. Returns the width written.
-
-    `params` is `[n_rows, mode]`, where mode is 0 RAW, 1 SOFTMAX, 2
-    SIGMOID -- their `RawFormulaVal`, `Probability` and `MultiProbability`
-    (`libs/model/eval_processing.h:186-226`).
-
-    RAW and SIGMOID write `n_rows * dim`; SOFTMAX writes
-    `n_rows * (dim + 1)`, because MultiClass's pinned class is a real
-    class whose approx is zero. The caller must size `out_addr` for the
-    widest case it may ask for; the return says which it got.
-    """
-    if len(params) != 2:
-        raise Error(
-            "gbdt_predict_multi: params must hold [n_rows,"
-            " as_probabilities], got " + String(len(params))
-        )
-    var text = String(py=model)
-    var xp = _f32_ptr(Int(py=x_addr))
-    var op = _f32_ptr(Int(py=out_addr))
-    var n_rows = Int(py=params[0])
-    var mode = Int(py=params[1])
-
-    var width: Int
-    with GILReleased(Python()):
-        var ctx = DeviceContext()
-        width = gbdt_predict_multi(ctx, text, xp, n_rows, op, mode)
-    return PythonObject(width)
-
-
 @export
 def PyInit__mojolearn() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn")
         m.def_function[knn_search_binding]("knn_search")
         m.def_function[kmeans_fit_binding]("kmeans_fit")
-        m.def_function[gbdt_fit_binding]("gbdt_fit")
-        m.def_function[gbdt_predict_binding]("gbdt_predict")
-        m.def_function[gbdt_model_dim_binding]("gbdt_model_dim")
-        m.def_function[gbdt_predict_multi_binding]("gbdt_predict_multi")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn module: ", e))

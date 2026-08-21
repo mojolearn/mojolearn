@@ -780,17 +780,33 @@ positional arguments but 8 were given` -- because the build could no longer
 be replaced.
 
 The cause was NOT the basename lottery running out of tickets, which is what
-`2cb82ac` recorded. Measured across the history, the gbdt blob count DECLINES
-CONTINUOUSLY as the module grows: 85 (shipped) -> 73 (`2cb82ac~1`) -> 58
-(`9ab10bc`) -> 56 (HEAD). No stem fixes that and neither does deleting one
-kernel family.
+`2cb82ac` recorded -- **and it was not the module outgrowing a budget either,
+which is what this paragraph said next.** The decline it quoted, 85 (shipped)
+-> 73 (`2cb82ac~1`) -> 58 (`9ab10bc`) -> 56 (HEAD), is real as a series of
+measurements and wrong as an explanation: those counts were read out of a
+COMPILER CACHE, not produced by those builds.
 
-GBDT now has its own extension, `bindings/_mojolearn_gbdt.mojo` +
-`build_gbdt.sh`, the same split `_mojolearn_estimators` already used: **141
-gbdt blobs, 41 of them greedy_subsets, against 85 and 37 in the last artifact
-that ever worked.** RMSE, Logloss, MAE and MultiClass all fit and predict
-from Python; `MultiClassOneVsAll` refuses by name. PORTING.md 70 keeps the
-five hypotheses that died on the original measurement.
+The actual cause, measured with the cache cleared before each build:
+`MACOSX_DEPLOYMENT_TARGET` set in the environment -- at ANY value -- makes
+`mojo build` write an empty 134-byte metallib for every kernel and embed
+nothing. `$MODULAR_HOME/cache/.mojo_cache` does not key on the deployment
+target, so one such build poisons those keys for every later build whatever
+its flags. The "basename lottery" was which names happened to hash to keys
+still holding real metallibs from an older configuration; the "continuous
+decline" was those surviving entries being invalidated one source change at a
+time. Full account and the single-variable table: PORTING.md 70. The fix is to
+pass the floor to the linker instead, `-Xlinker -platform_version`, which
+keeps `minos 11.0` and every kernel at once.
+
+GBDT still has its own extension, `bindings/_mojolearn_gbdt.mojo` +
+`build_gbdt.sh` -- **not for the capacity reason it was commissioned under,
+which does not exist, but for the one `_mojolearn_estimators` already had:**
+an independently changing binding should not be a merge point. It carries
+**141 gbdt blobs, 41 of them greedy_subsets, against 85 and 37 in the last
+artifact that ever worked.** RMSE, Logloss, MAE and MultiClass all fit and
+predict from Python; `MultiClassOneVsAll` refuses by name, for a reason that
+is now about `predict_proba`'s missing sigmoid route rather than about
+kernels.
 
 **Per-row weights through `train()`** -- WIRED 2026-08-21. `train` takes
 `sample_weight` and multiplies it with `class_weights`, which is their own

@@ -30,7 +30,14 @@ DYLIBS="$PKG/.dylibs"
 # PyPI. python/.gitignore keeps them out of the checkout.
 cp "$here/LICENSE" "$here/NOTICE" "$here/README.md" "$here/python/"
 
+# EVERY EXTENSION IN THE WHEEL IS BUILT HERE. `pyproject.toml`'s
+# package-data globs `*.so`, so an extension that is NOT built here is not
+# absent from the wheel -- it is shipped STALE, whatever happens to be sitting
+# in the working tree from an earlier build. That is how `_mojolearn.so` came
+# to ship an artifact predating `eval_x`/`eval_y`, where every `fit` raised
+# "takes 6 positional arguments but 8 were given".
 ./bindings/build.sh
+./bindings/build_gbdt.sh
 
 # The FULL transitive closure, walked rather than sampled. See
 # packaging/macos/stage_dylibs.py: reading only the extension's direct
@@ -39,8 +46,12 @@ cp "$here/LICENSE" "$here/NOTICE" "$here/README.md" "$here/python/"
 # @rpath/libMSupportGlobals.dylib, referenced from .dylibs/libAsyncRT...".
 # It also verifies statically that nothing is left unresolved, which is the
 # only form of this check that means anything on the build machine.
+# BOTH EXTENSIONS IN ONE CALL, because there is one `.dylibs` and the script
+# wipes it before staging. Two calls would leave the first extension's closure
+# deleted -- invisibly, because on THIS machine the original rpath still
+# resolves into the pixi environment.
 pixi run -e pkg python "$here/packaging/macos/stage_dylibs.py" \
-    "$PKG/_mojolearn.so" "$ENV_LIB"
+    "$PKG/_mojolearn.so" "$PKG/_mojolearn_gbdt.so" "$ENV_LIB"
 
 
 
@@ -49,26 +60,33 @@ pixi run -e pkg python "$here/packaging/macos/stage_dylibs.py" \
 # a tag above the binary's floor turns installable Macs away and a tag below it
 # installs onto Macs where the extension cannot load. Both are silent on the
 # machine that built the wheel.
-BIN_MINOS=$(otool -l "$PKG/_mojolearn.so" | awk '/LC_BUILD_VERSION/{f=1} f&&/minos/{print $2; exit}')
+# CHECKED FOR EVERY EXTENSION, not just the first: one wheel carries one tag,
+# and the tag is only honest if it is the floor of EVERYTHING inside.
 TAG_MINOS=$(grep -E '^DEFAULT_MACOS_TARGET' "$here/python/setup.py" | sed 's/[^0-9.]//g')
-if [ "$BIN_MINOS" != "$TAG_MINOS" ]; then
-    echo "ERROR: binary minos $BIN_MINOS but setup.py tags $TAG_MINOS" >&2
-    echo "       bindings/build.sh MACOS_FLOOR and setup.py DEFAULT_MACOS_TARGET must match" >&2
-    exit 1
-fi
-echo "macOS floor: binary minos $BIN_MINOS == wheel tag $TAG_MINOS"
+for so in "$PKG/_mojolearn.so" "$PKG/_mojolearn_gbdt.so"; do
+    BIN_MINOS=$(otool -l "$so" | awk '/LC_BUILD_VERSION/{f=1} f&&/minos/{print $2; exit}')
+    if [ "$BIN_MINOS" != "$TAG_MINOS" ]; then
+        echo "ERROR: $(basename "$so") minos $BIN_MINOS but setup.py tags $TAG_MINOS" >&2
+        echo "       MACOS_FLOOR in bindings/build.sh and bindings/build_gbdt.sh" >&2
+        echo "       and DEFAULT_MACOS_TARGET in python/setup.py must all match" >&2
+        exit 1
+    fi
+    echo "macOS floor: $(basename "$so") minos $BIN_MINOS == wheel tag $TAG_MINOS"
+done
 
 # THE ISA BASELINE, WHICH NO HEADER CAN SEE. arm64 Mach-O cpusubtype stays
 # ARM64_ALL whatever --target-cpu was, so this has to disassemble. Gates the
 # wheel: a binary carrying bf16, i8mm or SME instructions SIGILLs on the Macs
 # the macosx_11_0 tag invites in.
-pixi run -e pkg python "$here/packaging/isa_baseline.py" "$PKG/_mojolearn.so"
+pixi run -e pkg python "$here/packaging/isa_baseline.py" \
+    "$PKG/_mojolearn.so" "$PKG/_mojolearn_gbdt.so"
 
 # NO GPU KERNELS, NO WHEEL. A build on a machine without a usable Apple GPU
 # emits the host half and silently no Metal shader code, exits 0, and produces
 # a wheel that imports and then dies on the first fit. That shipped once, as
 # TestPyPI 0.1.0a2. See packaging/macos/check_gpu_embedded.py.
-pixi run -e pkg python "$here/packaging/macos/check_gpu_embedded.py" "$PKG/_mojolearn.so"
+pixi run -e pkg python "$here/packaging/macos/check_gpu_embedded.py" \
+    "$PKG/_mojolearn.so" "$PKG/_mojolearn_gbdt.so"
 
 cd "$here/python"
 rm -rf dist build ./*.egg-info

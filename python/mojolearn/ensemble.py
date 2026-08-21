@@ -56,9 +56,13 @@ carries `k - 1`. Therefore:
                         predict_classes  (n,)                class codes
 
 `MultiClassOneVsAll` is implemented and gated in the Mojo layer but is NOT
-reachable from Python: its kernels do not fit in the CPython extension under
-any basename `bindings/build.sh` has measured (PORTING.md 70). Asking for it
-raises with that reason.
+reachable from Python. **The reason recorded here until 2026-08-21 was wrong**
+-- it said the kernels did not fit in the extension under any measured
+basename, which was the basename theory PORTING.md 70 has since retracted.
+What actually blocks it is this wrapper: `predict_proba` would have to route
+through the elementwise sigmoid over `n_classes` INDEPENDENT approxes instead
+of MultiClass's softmax over `n_classes - 1`, and nothing gates that yet.
+Asking for it raises with that reason.
 
 Dropping MultiClass's last probability column and renormalising the rest
 gives a different and wrong answer: the pinned class is a real class whose
@@ -69,13 +73,17 @@ derives it.
 
 import numpy as np
 
-# GBDT HAS ITS OWN EXTENSION, and `bindings/build_gbdt.sh` explains why:
-# Mojo 1.0 sizes the ahead-of-time Metal compilation from the entry file's
-# basename, and in the COMBINED module that budget had been squeezing GBDT
-# kernels out as the module grew (85 -> 73 -> 58 -> 56 blobs across four
-# points in the history). A smaller entry module carries them all. This
-# import is the whole of the Python-side change; every signature below is
-# the one `bindings/_mojolearn.mojo` exported before the split.
+# GBDT HAS ITS OWN EXTENSION, built by `bindings/build_gbdt.sh`, for the
+# reason `_mojolearn_estimators` has one: an independently changing binding
+# should not be a merge point. Every parameter added to `GbdtFitParams` used
+# to have to be unpacked in two files that could silently disagree about the
+# order of a flat list, which is a wrong answer rather than a failure.
+#
+# It was COMMISSIONED for a different reason -- a supposed per-module cap on
+# ahead-of-time Metal compilation, keyed on the entry file's basename -- and
+# that reason turned out not to exist. See PORTING.md 70: the kernels were
+# being lost to `MACOSX_DEPLOYMENT_TARGET` in the environment plus a compiler
+# cache that does not key on it, and the basename never mattered.
 from . import _mojolearn_gbdt
 from ._arrays import _addr, _addr_ro, as_f32_c
 
@@ -107,20 +115,27 @@ LOSSES = (
 MULTI_OUTPUT_LOSSES = ("MultiClass",)
 
 #: `MultiClassOneVsAll` IS IMPLEMENTED AND GATED IN THE MOJO LAYER and is
-#: NOT REACHABLE FROM PYTHON. Its two kernels push the CPython extension
-#: past what any measured basename can carry -- see PORTING.md 70, where
-#: the AOT kernel count is a function of the entry file's NAME. Every stem
-#: `bindings/build.sh` tries now drops a subsystem, so the build refuses to
-#: install rather than shipping an artifact that dies at the first launch.
+#: NOT REACHABLE FROM PYTHON. **The reason recorded here until 2026-08-21 was
+#: wrong**: it said the two kernels did not fit in the extension under any
+#: measured basename, which was the basename theory PORTING.md 70 has since
+#: retracted. The artifact carries every gbdt kernel the module contains.
+#:
+#: What actually blocks it is THIS FILE. `predict_proba` would have to route
+#: through the ELEMENTWISE sigmoid over `n_classes` independent approxes
+#: (`multiclass_targets.h:129-134`) instead of MultiClass's softmax over
+#: `n_classes - 1`, and nothing here gates that. Reopening it means FITTING
+#: it under a check, not deleting this entry.
 #:
 #: Named here rather than accepted and then failing inside Metal. Use it
 #: from Mojo (`gbdt/train.mojo`, `loss="MultiClassOneVsAll"`), where
 #: `check-multilogit` and `check-multiclass-train` gate it.
 _UNREACHABLE_LOSSES = {
     "MultiClassOneVsAll": (
-        "its kernels do not fit in the CPython extension under any "
-        "basename bindings/build.sh has measured; see PORTING.md 70. "
-        "It works and is gated from Mojo."
+        "it has no check on the Python surface yet: predict_proba would "
+        "have to route through the ELEMENTWISE sigmoid over n_classes "
+        "independent approxes rather than MultiClass's softmax over "
+        "n_classes - 1, and nothing here gates that. It works and is gated "
+        "from Mojo (gbdt/train.mojo, loss=\"MultiClassOneVsAll\")."
     ),
 }
 
@@ -158,8 +173,92 @@ _LEAF_ESTIMATION_NAMES = {
     "Simple": LEAF_ESTIMATION_SIMPLE,
 }
 
-#: `EScoreFunction`. Cosine is CatBoost's shipped GPU default.
+#: `EScoreFunction` (`enums.h`), CatBoost's own codes. Cosine is their
+#: shipped GPU default.
+SCORE_FUNCTION_SOLAR_L2 = 0
 SCORE_FUNCTION_COSINE = 1
+SCORE_FUNCTION_NEWTON_L2 = 2
+SCORE_FUNCTION_NEWTON_COSINE = 3
+SCORE_FUNCTION_LOO_L2 = 4
+SCORE_FUNCTION_SAT_L2 = 5
+SCORE_FUNCTION_L2 = 6
+
+#: The two score functions this port ACTUALLY COMPUTES. Both have a real
+#: calcer in the split kernel: Cosine is `TCosineScoreCalcer`
+#: (`score_calcers.cuh:152-167`) and L2 is `TL2ScoreCalcer` (`:40-69`).
+SCORE_FUNCTIONS = ("Cosine", "L2")
+
+_SCORE_FUNCTION_NAMES = {
+    "Cosine": SCORE_FUNCTION_COSINE,
+    "L2": SCORE_FUNCTION_L2,
+}
+
+#: THE OTHER FIVE ARE REFUSED BY NAME, AND THIS IS THE WHOLE REASON THE
+#: OPTION COULD NOT SIMPLY BE FORWARDED.
+#:
+#: `score_function` was hard-coded to Cosine here for exactly as long as it
+#: took someone to look at what the other values do on the way down. They do
+#: not fail. They produce a DIFFERENT MODEL THAN THE ONE ASKED FOR, silently,
+#: and in two distinct ways:
+#:
+#: SolarL2, LOOL2, SatL2 -- the greedy subsets searcher, which is the arm
+#: `train` runs, dispatches on `score_function` with an `if L2 or NewtonL2
+#: ... else Cosine` (`greedy_search_helper.mojo:3134-3162`). There is no arm
+#: for these three, so they land in the `else` and fit a COSINE model. The
+#: split kernel's own `comptime assert` would have caught it
+#: (`compute_scores.mojo:205-212`) and never sees them, because the host
+#: chose the Cosine instantiation before the kernel was reached. Their
+#: calcers DO exist on the pointwise searcher
+#: (`pointwise_scores.mojo:1569-1616`), which is why "it is implemented"
+#: and "it is honored" are different sentences here.
+#:
+#: NewtonCosine, NewtonL2 -- these pair onto the Cosine and L2 calcers
+#: deliberately, which is CatBoost's own structure: the Newton spellings
+#: differ only in WHICH DERIVATIVE the caller put in the stat planes
+#: (`compute_scores.cu:201-219`). That choice is
+#: `secondDerAsWeights = IsSecondOrderScoreFunction(scoreFunction)`
+#: (`greedy_search_helper.cpp:286-296`) and IT IS NOT PORTED: the target
+#: kernel always writes the weight in plane 0 and never `der2`
+#: (`pointwise_targets.mojo:476-485`). So asking for NewtonCosine gets a
+#: Cosine model and asking for NewtonL2 gets an L2 one.
+#:
+#: For RMSE alone the Newton distinction is invisible, because
+#: `TRmseTarget::Der2` returns 1.0 -- which is precisely the configuration
+#: a check would be written in, and precisely why this is refused on the
+#: source rather than waved through on a green test.
+_UNPORTED_SCORE_FUNCTIONS = {
+    "SolarL2": (
+        "the greedy searcher this port runs has no SolarL2 arm and falls "
+        "through to Cosine (greedy_search_helper.mojo:3134-3162), so the "
+        "fit would silently be a Cosine fit. Its calcer exists only on the "
+        "pointwise searcher (pointwise_scores.mojo:1569)"
+    ),
+    "LOOL2": (
+        "the greedy searcher this port runs has no LOOL2 arm and falls "
+        "through to Cosine (greedy_search_helper.mojo:3134-3162), so the "
+        "fit would silently be a Cosine fit"
+    ),
+    "SatL2": (
+        "the greedy searcher this port runs has no SatL2 arm and falls "
+        "through to Cosine (greedy_search_helper.mojo:3134-3162), so the "
+        "fit would silently be a Cosine fit"
+    ),
+    "NewtonCosine": (
+        "secondDerAsWeights is not ported -- the target kernel never "
+        "writes der2 into the stat planes (pointwise_targets.mojo:476-485) "
+        "-- so this would fit an ordinary Cosine model under a Newton name"
+    ),
+    "NewtonL2": (
+        "secondDerAsWeights is not ported -- the target kernel never "
+        "writes der2 into the stat planes (pointwise_targets.mojo:476-485) "
+        "-- so this would fit an ordinary L2 model under a Newton name"
+    ),
+}
+
+#: their `ENanMode` spellings (`data_processing_options.cpp:26`). 'Forbidden'
+#: RAISES on a NaN rather than binning it, which is CatBoost's behavior and
+#: not a validation nicety of ours.
+NAN_MODES = ("Min", "Max", "Forbidden")
 
 _UNSET = -1.0
 
@@ -261,6 +360,60 @@ class GradientBoosting:
         (`output_file_options.cpp:77`,
         `boosting_progress_tracker.cpp:162`).
 
+    score_function : {'Cosine', 'L2'}, default 'Cosine'
+        The split score. Cosine is CatBoost's shipped GPU default
+        (`oblivious_tree_options.cpp:20`) and `TCosineScoreCalcer` is the
+        only one of their five calcers that carries the `random_strength`
+        noise term (`score_calcers.cuh:152-167`); `TL2ScoreCalcer` (`:40-69`)
+        has none. CatBoost's other five spellings -- SolarL2, LOOL2, SatL2,
+        NewtonCosine, NewtonL2 -- ARE REFUSED BY NAME rather than accepted,
+        because on this port each of them silently fits a different model
+        than the one asked for. See `_UNPORTED_SCORE_FUNCTIONS` for which,
+        and why.
+    nan_mode : {'Min', 'Max', 'Forbidden'}, default 'Min'
+        Where a NaN sorts against the borders
+        (`data_processing_options.cpp:26`). 'Min' puts it below every
+        border, 'Max' above; 'Forbidden' RAISES on a NaN instead of binning
+        it, which is CatBoost's behavior.
+    random_strength : float, default 0.0
+        CatBoost's `random_strength` (`oblivious_tree_options.cpp:17`).
+        **THIS DEFAULT IS NOT CatBoost's, which is 1.0**, and the difference
+        is deliberate rather than an oversight: on the greedy searcher this
+        wrapper runs by default, CatBoost's own noise cancels in the gain
+        (`compute_scores.cu:84-134`), so a non-zero value there changes only
+        float rounding. It is a live knob on `use_pointwise_searcher=True`,
+        where the noise is drawn before the bootstrap
+        (`oblivious_tree_doc_parallel_structure_searcher.cpp:200-218`).
+        Refused above 0.0 with `score_function='L2'`, because the L2 calcer
+        has no noise term and CatBoost itself would discard it.
+    use_pointwise_searcher : bool, default False
+        Grow with `TDocParallelObliviousTreeSearcher`, CatBoost's
+        single-target symmetric learner, instead of the greedy subsets
+        searcher. Both are theirs and both are reachable on their GPU. The
+        pointwise arm returns the STRUCTURE ONLY, so it always runs the leaf
+        estimator where the greedy arm can reuse the leaf it grew.
+    border_build_max_samples : int, default 200000
+        How many rows the BORDER SEARCH subsamples
+        (`data_processing_options.cpp:37`). It does not subsample training;
+        every row is still fitted. 0 means use every row for the borders
+        too.
+    class_weights : sequence of float, optional
+        One weight per class slot, MULTIPLIED into the row weight rather
+        than substituted for it (`target/data_providers.cpp:168`), so it
+        composes with `sample_weight`. The length must match the label set
+        or the fit raises. Refused with `loss='RMSE'`, which CatBoost also
+        refuses.
+    permutation_count : int, optional
+        CatBoost's `permutation_count` (`boosting_options.cpp:16`). None
+        (default) lets `UpdateGpuSpecificDefaults` resolve it. **ONLY THE
+        CATEGORICAL PATH READS IT** -- with no `cat_features` it is inert,
+        and it is refused there rather than accepted and ignored.
+    ctr_estimation_permutation_id : int, optional
+        Which permutation estimates the CTRs
+        (`doc_parallel_boosting.h:101-103`). None (default) means
+        `permutation_count - 1`, their estimation permutation. **ONLY THE
+        CATEGORICAL PATH READS IT**, and it is refused otherwise.
+
     Attributes
     ----------
     model_ : str
@@ -313,6 +466,14 @@ class GradientBoosting:
         od_wait=None,
         use_best_model=None,
         best_model_min_trees=1,
+        score_function="Cosine",
+        nan_mode="Min",
+        random_strength=0.0,
+        use_pointwise_searcher=False,
+        border_build_max_samples=200000,
+        class_weights=None,
+        permutation_count=None,
+        ctr_estimation_permutation_id=None,
     ):
         if loss in _UNREACHABLE_LOSSES:
             raise NotImplementedError(
@@ -349,6 +510,88 @@ class GradientBoosting:
                     f"{leaf_estimation_method!r}"
                 )
 
+        # AN OPTION ACCEPTED AND IGNORED IS WORSE THAN ONE ABSENT. Each
+        # refusal below names the value the caller passed and the file:line
+        # that makes it a lie, because "not supported" without a reason is
+        # indistinguishable from "not implemented yet" and gets retried.
+        if score_function in _UNPORTED_SCORE_FUNCTIONS:
+            raise NotImplementedError(
+                f"mojolearn: score_function={score_function!r} is not "
+                f"honored here -- {_UNPORTED_SCORE_FUNCTIONS[score_function]}"
+                f". Reachable values are {SCORE_FUNCTIONS}."
+            )
+        if score_function not in _SCORE_FUNCTION_NAMES:
+            raise ValueError(
+                f"mojolearn: score_function must be one of "
+                f"{SCORE_FUNCTIONS}, got {score_function!r}"
+            )
+        if nan_mode not in NAN_MODES:
+            raise ValueError(
+                f"mojolearn: nan_mode must be one of {NAN_MODES}, got "
+                f"{nan_mode!r}"
+            )
+        if random_strength < 0.0:
+            raise ValueError(
+                f"mojolearn: random_strength must be >= 0, got "
+                f"{random_strength}"
+            )
+        if random_strength != 0.0 and score_function == "L2":
+            # CatBoost accepts this pair and discards the value: only
+            # `TCosineScoreCalcer` has a noise term
+            # (`score_calcers.cuh:159-167`), `TL2ScoreCalcer` (`:40-69`)
+            # has none. Copying that silence would leave a knob that reads
+            # as live and is not, so this port refuses where CatBoost does
+            # not. The same refusal is in `CatBoostOptions.validate`.
+            raise ValueError(
+                f"mojolearn: random_strength={random_strength} does nothing "
+                "under score_function='L2' -- only TCosineScoreCalcer "
+                "carries the noise term (score_calcers.cuh:159-167). Use "
+                "score_function='Cosine' or random_strength=0.0."
+            )
+        if border_build_max_samples < 0:
+            raise ValueError(
+                f"mojolearn: border_build_max_samples must be >= 0 (0 means "
+                f"every row), got {border_build_max_samples}"
+            )
+        if class_weights is not None:
+            if len(class_weights) == 0:
+                raise ValueError(
+                    "mojolearn: class_weights is empty; pass None for none"
+                )
+            if any(float(w) < 0 for w in class_weights):
+                raise ValueError(
+                    "mojolearn: class_weights has negative entries"
+                )
+            if loss == "RMSE":
+                # `train` raises on this pair too; caught here so the
+                # message names the Python keyword.
+                raise ValueError(
+                    "mojolearn: class_weights is not accepted with "
+                    "loss='RMSE', which has no class structure to weight"
+                )
+        # THE TWO CTR PERMUTATION KNOBS ARE INERT WITHOUT CATEGORICALS.
+        # Nothing outside the CTR path reads either one, so accepting them
+        # on an all-numeric fit would be accepting an option that cannot do
+        # anything. `cat_features` is checked rather than `one_hot_features`
+        # because a one-hot column never grows CTRs either.
+        for _name, _val in (
+            ("permutation_count", permutation_count),
+            ("ctr_estimation_permutation_id", ctr_estimation_permutation_id),
+        ):
+            if _val is None:
+                continue
+            if int(_val) < 0:
+                raise ValueError(
+                    f"mojolearn: {_name} must be >= 0 when given, got {_val}"
+                )
+            if not cat_features:
+                raise ValueError(
+                    f"mojolearn: {_name} is read only by the categorical "
+                    "path (doc_parallel_dataset_builder.cpp:190-262); with "
+                    "no cat_features it would be accepted and ignored. Pass "
+                    "cat_features= or leave it unset."
+                )
+
         self.loss = loss
         self.n_estimators = n_estimators
         self.max_depth = max_depth
@@ -373,6 +616,17 @@ class GradientBoosting:
         self.od_wait = od_wait
         self.use_best_model = use_best_model
         self.best_model_min_trees = int(best_model_min_trees)
+        self.score_function = score_function
+        self.nan_mode = nan_mode
+        self.random_strength = float(random_strength)
+        self.use_pointwise_searcher = bool(use_pointwise_searcher)
+        self.border_build_max_samples = int(border_build_max_samples)
+        self.class_weights = (
+            None if class_weights is None
+            else [float(w) for w in class_weights]
+        )
+        self.permutation_count = permutation_count
+        self.ctr_estimation_permutation_id = ctr_estimation_permutation_id
 
         self.model_ = None
         self.loss_curve_ = None
@@ -391,11 +645,16 @@ class GradientBoosting:
     # `bindings/_mojolearn_gbdt.mojo:gbdt_fit_binding` writes this same order in
     # the same words. A silent reordering here is a wrong answer, not a
     # failure, which is why it is spelled out in both places.
+    #
+    # SLOTS 0..30 ARE FIXED AND SLOT 30 IS A COUNT: everything after it is
+    # the class-weight tail, and the binding checks the length against it
+    # rather than trusting it.
     def _params(self, n_rows, n_features, n_flags, n_weights=0,
                 n_eval_rows=0):
         def f(v):
             return _UNSET if v is None else float(v)
 
+        cw = self.class_weights or ()
         method = self.leaf_estimation_method
         method_code = (
             -1 if method is None else _LEAF_ESTIMATION_NAMES[method]
@@ -412,7 +671,7 @@ class GradientBoosting:
             float(self.learning_rate),                  # 7
             float(self.l2_leaf_reg),                    # 8
             int(self.random_state),                     # 9
-            SCORE_FUNCTION_COSINE,                      # 10
+            _SCORE_FUNCTION_NAMES[self.score_function],  # 10
             f(self.loss_alpha),                         # 11
             f(self.loss_q),                             # 12
             f(self.loss_delta),                         # 13
@@ -428,6 +687,23 @@ class GradientBoosting:
             else int(self.od_wait),                     # 22
             _tri(self.use_best_model),                  # 23
             int(self.best_model_min_trees),             # 24
+            float(self.random_strength),                # 25
+            1 if self.use_pointwise_searcher else 0,    # 26
+            int(self.border_build_max_samples),         # 27
+            -1 if self.permutation_count is None
+            else int(self.permutation_count),           # 28
+            -1 if self.ctr_estimation_permutation_id is None
+            else int(self.ctr_estimation_permutation_id),  # 29
+            len(cw),                                    # 30  n_class_weights
+            # ---- and then `n_class_weights` MORE, the weights themselves.
+            # They ride in this list rather than at a seventh buffer address
+            # because `gbdt_fit` already takes eight arguments and
+            # `PythonModuleBuilder.def_function` stops inferring a signature
+            # at around nine. A Python float reaches Mojo's `Float64(py=)`
+            # exactly; the same number written into a string and parsed back
+            # would not, and a class weight is the caller's number, not ours
+            # to round.
+            *cw,
         ]
 
     def _flags(self, n_features):
@@ -534,6 +810,31 @@ class GradientBoosting:
                 f"mojolearn: y has {ya.shape[0]} values for {n_rows} rows"
             )
 
+        # `nan_mode='Forbidden'` MEANS "THERE ARE NO NaNs", AND IT HAS TO BE
+        # CHECKED HERE OR IT MEANS NOTHING.
+        #
+        # CatBoost raises on this pair. This port does not: `calc_quantization`
+        # (`gbdt/data/quantization.mojo:134-168`) takes the Forbidden branch,
+        # allocates no NaN bin, and `best_split` filters the NaNs out of the
+        # border search -- so the fit SUCCEEDS and every NaN silently lands in
+        # whichever bin the comparison happens to put it in. That is a
+        # different model than the caller asked for, delivered without a
+        # word, which is the exact failure this wrapper refuses to pass on.
+        #
+        # Checked at the Python surface because that is where the array is
+        # already materialised and one pass is cheap. **The Mojo `train` still
+        # does not enforce it** -- a Mojo caller passing Forbidden with NaNs
+        # gets the old silent behavior. That is an OPEN item and belongs in
+        # `gbdt/data/quantization.mojo`, beside their own CB_ENSURE.
+        if self.nan_mode == "Forbidden" and not np.isfinite(Xa).all():
+            if np.isnan(Xa).any():
+                raise ValueError(
+                    "mojolearn: nan_mode='Forbidden' but X contains NaN. "
+                    "CatBoost refuses this pair; this port would otherwise "
+                    "bin the NaNs silently with no NaN bin. Use "
+                    "nan_mode='Min' or 'Max', or clean the column."
+                )
+
         # COLUMN-MAJOR is what the quantizer walks. This is the transpose
         # the module docstring prices; `ascontiguousarray` on the .T view
         # is what materialises it.
@@ -571,7 +872,12 @@ class GradientBoosting:
                 f"mojolearn: od_type must be one of {OD_TYPES}, got "
                 f"{self.od_type!r}"
             )
-        strs = [self.loss, self.bootstrap_type or "", self.od_type or ""]
+        strs = [
+            self.loss,
+            self.bootstrap_type or "",
+            self.od_type or "",
+            self.nan_mode,
+        ]
 
         # THE EVAL ADDRESSES ARE UNREAD WHEN params[20] IS 0, and the
         # learn buffer stands in so nothing has to allocate a throwaway --

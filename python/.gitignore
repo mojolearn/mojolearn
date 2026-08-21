@@ -2,6 +2,7 @@ LICENSE
 NOTICE
 README.md
 mojolearn/_mojolearn.so
+mojolearn/_mojolearn_gbdt.so
 mojolearn/.dylibs/
 dist/
 build/

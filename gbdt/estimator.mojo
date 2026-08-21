@@ -82,12 +82,17 @@ comptime PREDICT_SIGMOID = 2
 
 
 @fieldwise_init
-struct GbdtFitParams(Copyable, ImplicitlyCopyable, Movable):
+struct GbdtFitParams(Copyable, Movable):
     """Everything `train` takes that is not an array.
 
     Their spellings where they have one; this struct exists so the CPython
     binding's flat parameter list is unpacked ONCE, here, rather than at
     every call site.
+
+    NOT `ImplicitlyCopyable`, and `class_weights` is why: a `List[Float32]`
+    field cannot synthesize an implicit copy constructor, so the struct
+    cannot either. Copies are explicit at the call sites instead, which is
+    the right way round for a field that owns a heap allocation.
     """
 
     var border_count: Int
@@ -122,6 +127,36 @@ struct GbdtFitParams(Copyable, ImplicitlyCopyable, Movable):
     var use_best_model: Int
     #: their `best_model_min_trees`, default 1 (`output_file_options.cpp:77`)
     var best_model_min_trees: Int
+    #: their `ENanMode` spelling -- "Min", "Max" or "Forbidden".
+    #: `data_processing_options.cpp:26` defaults it to Min, and so does
+    #: `train`. Forbidden RAISES on a NaN rather than binning it, which is
+    #: their behavior and not a validation nicety.
+    var nan_mode: String
+    #: their `random_strength` (`oblivious_tree_options.cpp:17`), CatBoost
+    #: default 1.0 and OURS 0.0 -- `train`'s own default, kept here so the
+    #: binding does not quietly disagree with the function it calls. On the
+    #: GREEDY searcher the noise cancels in the gain
+    #: (`compute_scores.cu:84-134`) so a non-zero value moves only float
+    #: rounding; it is a real knob on the pointwise searcher.
+    var random_strength: Float32
+    #: `TDocParallelObliviousTreeSearcher` instead of the greedy subsets
+    #: searcher. Both are CatBoost's.
+    var use_pointwise_searcher: Bool
+    #: their `border_build_max_samples`, the subsample the BORDER SEARCH
+    #: runs on, default 200000 (`data_processing_options.cpp:37`). 0 means
+    #: "every row", which is `train`'s documented restore.
+    var border_build_max_samples: Int
+    #: their `permutation_count` (`boosting_options.cpp:16`), -1 UNSET so
+    #: `UpdateGpuSpecificDefaults` resolves it. Only the CTR path reads it.
+    var permutation_count: Int
+    #: their estimation permutation (`doc_parallel_boosting.h:101-103`),
+    #: -1 UNSET meaning `permutation_count - 1`. Only the CTR path reads it.
+    var ctr_estimation_permutation_id: Int
+    #: their `class_weights` (`data_processing_options.cpp:52`), EMPTY for
+    #: none. Multiplied into the row weight, not substituted for it
+    #: (`target/data_providers.cpp:168`). One entry per class slot; `train`
+    #: raises if the length disagrees with the label set.
+    var class_weights: List[Float32]
 
 
 def default_gbdt_fit_params() -> GbdtFitParams:
@@ -141,6 +176,18 @@ def default_gbdt_fit_params() -> GbdtFitParams:
         String(""), Float32(1.0), Float32(-1.0),
         String(""), Float64(-1.0), -1,
         -1, 1,
+        # nan_mode, random_strength, use_pointwise_searcher,
+        # border_build_max_samples, permutation_count,
+        # ctr_estimation_permutation_id, class_weights.
+        #
+        # EVERY ONE OF THESE IS `train`'s OWN DEFAULT, not CatBoost's where
+        # the two differ, because this struct's job is to reproduce a bare
+        # `train(...)` call and a second opinion about a default is a second
+        # answer. `random_strength` is the one that differs: CatBoost ships
+        # 1.0 (`oblivious_tree_options.cpp:17`) and `train` ships 0.0.
+        String("Min"), Float32(0.0), False,
+        200_000, -1, -1,
+        List[Float32](),
     )
 
 
@@ -294,6 +341,13 @@ def gbdt_fit(
         od_wait=od.iterations_wait,
         use_best_model=params.use_best_model,
         best_model_min_trees=params.best_model_min_trees,
+        nan_mode=params.nan_mode,
+        random_strength=params.random_strength,
+        use_pointwise_searcher=params.use_pointwise_searcher,
+        border_build_max_samples=params.border_build_max_samples,
+        permutation_count=params.permutation_count,
+        ctr_estimation_permutation_id=params.ctr_estimation_permutation_id,
+        class_weights=params.class_weights.copy(),
     )
     var learn_losses = tm.losses.copy()
     var test_losses = tm.test_losses.copy()

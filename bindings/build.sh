@@ -2,12 +2,16 @@
 # Build the CPython extension into python/mojolearn/_mojolearn.so.
 # Run from anywhere; requires pixi.
 #
+# THIS EXTENSION IS k-MEANS AND k-NN. GBDT moved to its own extension in
+# `bindings/_mojolearn_gbdt.mojo` / `bindings/build_gbdt.sh`; DBSCAN, PCA,
+# tSVD and OLS live in `bindings/_mojolearn_estimators.mojo`. Each is built
+# separately so an independently changing binding does not become a merge
+# point, and all three land in one wheel.
+#
 # Two include paths, both required. `-I .` is the mojolearn package root, so
 # `cluster.estimator` and `neighbors.estimator` resolve. `-I bindings` is this
-# directory: `_mojolearn.mojo` is the entry point, and if this project grows
-# capability modules beside it the way mojotrees' bindings did, they resolve
-# as top-level imports only when this directory is on the path. It costs
-# nothing now and its absence would fail confusingly later.
+# directory: capability modules placed beside the entry point resolve as
+# top-level imports only when this directory is on the path.
 #
 # packaging/macos/build_release_wheel.sh runs this script rather than
 # repeating the command, so the flags live in exactly one place.
@@ -18,13 +22,95 @@ cd "$here"
 
 mkdir -p python/mojolearn
 
-# THE TARGET IS PINNED TO A PORTABLE BASELINE, NOT LEFT AT THE HOST.
+# ============================================================================
+# MACOSX_DEPLOYMENT_TARGET IN THE ENVIRONMENT SUPPRESSES AHEAD-OF-TIME METAL
+# COMPILATION ENTIRELY. THAT -- NOT THE ENTRY FILE'S BASENAME -- IS THE BUG.
+# ============================================================================
+#
+# **THIS FILE PREVIOUSLY ARGUED, AT LENGTH AND WITH NUMBERS, THAT THE COUNT OF
+# COMPILED METAL FUNCTIONS DEPENDED ON THE BASENAME OF THE ENTRY FILE.** It
+# compiled a copy under a measured stem, verified the artifact, and retried
+# over a list of eleven alternates. That explanation is WRONG and the whole
+# apparatus is gone; PORTING.md 70 has been corrected to match.
+#
+# Measured 2026-08-21 on `bindings/_mojolearn_gbdt.mojo`, one variable at a
+# time, WITH THE COMPILER CACHE CLEARED BEFORE EACH BUILD -- the step every
+# earlier experiment omitted, and the reason they all read wrong:
+#
+#   MACOSX_DEPLOYMENT_TARGET   --target-cpu    AIR blobs
+#   11.0                       apple-m1            0
+#   12.0                       apple-m1            0
+#   (unset)                    apple-m1          141
+#   11.0                       (host)              0
+#   (unset)                    (host)            141
+#
+# `--target-cpu apple-m1` is innocent. The VALUE of the deployment target is
+# innocent -- 12.0 fails exactly as 11.0 does. SETTING THE VARIABLE AT ALL is
+# what does it: with it set, `mojo build` emits an EMPTY 134-byte metallib for
+# every kernel and embeds nothing, and the extension then imports cleanly and
+# dies at the first launch with "Failed to create Metal function".
+#
+# Four different basenames built cold with the variable set all give 0; the
+# same four built cold with it unset all give 141. So this script compiles the
+# entry file UNDER ITS OWN NAME, IN PLACE, and there is no stem loop.
+#
+# WHY EVERY EARLIER MEASUREMENT DISAGREED: THE CACHE.
+#
+# `$MODULAR_HOME/cache/.mojo_cache` is content-addressed and ITS KEY DOES NOT
+# INCLUDE THE DEPLOYMENT TARGET. An empty metallib produced by a build with
+# the variable set is therefore served to every later build that hashes to the
+# same key, whatever ITS flags are. When this was found that cache held 40,772
+# files, of which 20,682 were 134-byte empty metallibs.
+#
+# That one fact explains the entire history. A "good" basename was one whose
+# kernels happened to hash to keys still holding REAL metallibs from an older
+# configuration; a "bad" one hashed to poisoned keys. The famous decline --
+# 113 blobs, then 101, then 86, then 84 across four points in the history --
+# was not the module outgrowing a budget. It was CACHE ATTRITION: each source
+# change invalidated more of the surviving real entries, each rebuild replaced
+# them with empties, and nothing could refill them because every build set the
+# variable. Those counts were archaeology, not compilation.
+#
+# **Clear the cache before any build whose kernel count you intend to
+# believe**, or the number is fiction. With a warm cache, `12.0` measured 141
+# and looked like the fix; it was reading back the `(unset)` build from one
+# minute earlier.
+#
+# ----------------------------------------------------------------------------
+# THE macOS FLOOR IS SET AT THE LINKER INSTEAD, WHICH KEEPS BOTH PROPERTIES
+# ----------------------------------------------------------------------------
+#
+# The deployment target still has to be low. `mojo build` takes it from the
+# host SDK, which here means `minos 26.0` -- a wheel installable only on macOS
+# 26, which is very nearly nobody. The MAX runtime dylibs this links are built
+# at `minos 11.0`; only our own compile step was narrow. 11.0 (Big Sur) is the
+# FIRST macOS that runs on Apple silicon at all, so it is the widest floor
+# that means anything, and it matches the dylibs.
+#
+# `ld -platform_version macos 11.0 <sdk>` stamps LC_BUILD_VERSION exactly as
+# the environment variable would, and the Metal compile step never sees it.
+# Measured on a cold cache: every kernel AND `minos 11.0`, together.
+#
+# setup.py's DEFAULT_MACOS_TARGET must equal MACOS_FLOOR or the wheel TAG and
+# the BINARY disagree, which is a published lie in one of two directions: too
+# low and it installs where it cannot load, too high and it is refused by Macs
+# that could have run it. THIS SCRIPT AND bindings/build_gbdt.sh MUST AGREE
+# WITH EACH OTHER TOO -- the two .so files land in one wheel under one tag,
+# and the tag is the lower bound of what is inside it.
+MACOS_FLOOR="11.0"
+
+# NOT EXPORTED, DELIBERATELY -- see above. Unset it if the caller had it set,
+# because inheriting it from an outer shell silently reproduces the bug.
+unset MACOSX_DEPLOYMENT_TARGET
+
+MACOS_SDK=$(xcrun --sdk macosx --show-sdk-version)
+LINK_FLAGS="-Xlinker -platform_version -Xlinker macos -Xlinker $MACOS_FLOOR -Xlinker $MACOS_SDK"
+
+# THE CPU TARGET IS PINNED TO A PORTABLE BASELINE, NOT LEFT AT THE HOST.
 #
 # `mojo build` defaults --target-cpu and --target-features to WHATEVER CHIP
-# RAN THE COMPILER. On this development machine that is:
-#
-#   --target-cpu apple-m4
-#   --target-features ...,+bf16,+i8mm,+sme,+sme-f64f64,+sme-i16i64,+sme2
+# RAN THE COMPILER. On this development machine that is `apple-m4` with
+# +bf16, +i8mm, +sme, +sme-f64f64, +sme-i16i64, +sme2.
 #
 # +sme and +sme2 do not exist on M1, M2 or M3; +bf16 and +i8mm do not exist on
 # M1. LLVM does not need to be ASKED to use an enabled feature -- it emits
@@ -47,107 +133,14 @@ mkdir -p python/mojolearn
 # re-measured for mojolearn's kernels, and it should be before any published
 # timing is attributed to this wheel rather than to a local build.
 #
-# THERE IS NO --target-accelerator FLAG HERE AND THERE MUST NOT BE.
-#
-# This script carried `--target-accelerator metal:1` from the first commit.
-# `metal:1` is not a target the compiler knows -- `mojo build
-# --print-supported-accelerators` lists `apple-m1` .. `apple-m5-metal4` and no
-# `metal:1` -- but that is the smaller half of the finding. Measured
-# 2026-08-21, on this exact source, with `--target-cpu apple-m1` held fixed:
-#
-#   (no --target-accelerator)          113 AIR blobs   every kernel loads
-#   --target-accelerator metal:1         0 AIR blobs   nothing loads
-#   --target-accelerator apple-m1        0 AIR blobs   nothing loads
-#
-# An AIR blob is a compiled Metal function embedded in the binary; the count
-# is `strings -a <so> | grep -oE '[0-9A-Za-z_]+_[0-9a-f]{16}air' | sort -u |
-# wc -l`, which is what verify_kernels below does. PASSING THE FLAG AT ALL,
-# right value or wrong, suppresses ahead-of-time Metal compilation entirely
-# and the extension dies at the first launch with
-#
-#   Failed to create Metal function: <mangled kernel name>
-#
-# With the flag gone, `--target-cpu apple-m1` alone still produces `minos 11.0`
-# and the portable CPU baseline this comment is about, so nothing is lost.
+# THERE IS NO --target-accelerator FLAG HERE AND THERE MUST NOT BE. Measured
+# 2026-08-21 with --target-cpu apple-m1 held fixed: no flag gives every
+# kernel, `--target-accelerator metal:1` gives 0 and `--target-accelerator
+# apple-m1` gives 0. `metal:1` is not a target the compiler knows -- `mojo
+# build --print-supported-accelerators` lists `apple-m1` .. `apple-m5-metal4`
+# -- but that is the smaller half: PASSING THE FLAG AT ALL, right value or
+# wrong, suppresses ahead-of-time Metal compilation.
 TARGET_FLAGS="--target-cpu apple-m1"
-
-# THE macOS FLOOR, AND IT DEFAULTED ABSURDLY HIGH.
-#
-# `mojo build` takes its deployment target from the host SDK. On this machine
-# that produced an extension with `minos 26.0` -- a wheel installable only on
-# macOS 26, released weeks ago, which is very nearly nobody.
-#
-# The MAX runtime dylibs this links are built at `minos 11.0`. Modular shipped
-# them wide; only our own compile step was narrow. Measured 2026-08-20:
-# MACOSX_DEPLOYMENT_TARGET of 11.0, 13.0 and 14.0 each produce exactly that
-# minos, so the floor is ours to choose.
-#
-# 11.0 (Big Sur) is chosen because it is the FIRST macOS that runs on Apple
-# silicon at all. There is no Apple silicon Mac that can run anything older,
-# so this is the widest floor that means anything, and it matches the dylibs.
-#
-# setup.py's DEFAULT_MACOS_TARGET must equal this or the wheel TAG and the
-# BINARY disagree, which is a published lie in one of two directions: too low
-# and it installs where it cannot load, too high and it is refused by Macs
-# that could have run it. packaging/macos/build_release_wheel.sh checks that
-# they agree by reading the Mach-O header after the build.
-MACOS_FLOOR="11.0"
-export MACOSX_DEPLOYMENT_TARGET="$MACOS_FLOOR"
-
-# THE ENTRY FILE IS COMPILED UNDER A DIFFERENT BASENAME, AND THAT IS NOT
-# COSMETIC.
-#
-# Mojo 1.0.0 (ed45d567) decides how many kernels to compile ahead of time from
-# THE BASENAME OF THE FILE IT IS HANDED. Measured 2026-08-21: three
-# byte-identical copies of bindings/_mojolearn.mojo (md5
-# ebdff6092a117fbd7e836bead0883f12) in one directory, built with one command
-# that differed only in which of them it named:
-#
-#   copyml2.mojo        113 AIR blobs   everything loads
-#   _mojolearn.mojo      29 AIR blobs   GBDT dies, k-means and k-NN load
-#   mojolearn_ext.mojo    0 AIR blobs   nothing loads
-#
-# Same directory, same flags, same include paths, same second, same bytes.
-# `-j 1` does not change it, a different `-o` name does not change it, an
-# empty MODULAR_HOME cache does not change it, and editing the source does not
-# change it: the outcome tracks the basename and nothing else. `_mojolear`
-# gets 84 where `_mojolearn` gets 67 on a smaller variant, so it is not a rule
-# about leading underscores or about any readable property of the name.
-#
-# This is a toolchain defect, it is upstream, and it has no fix here. What it
-# has is a workaround: hand the compiler a name that lands well, and CHECK the
-# artifact afterwards rather than trusting that it did. The name below is
-# measured, not chosen -- and because the lottery may move when the source
-# changes, ALT_STEMS are tried in turn and verify_kernels decides.
-#
-# The output file keeps its real name. CPython only requires that the .so be
-# called _mojolearn.so and export PyInit__mojolearn; the SOURCE it was compiled
-# from is invisible to the import machinery, and both of those are unchanged.
-# MEASURED 2026-08-21 on a GBDT-only entry file, one byte-identical source
-# copied under twelve names, counting gbdt_ AIR blobs (reference: 91):
-#
-#   _mojolear 72   copyml2 17   and TEN OTHERS AT ZERO, including
-#   a, ab, abc, mlext_a, mlgbdt, zz9, q7x, gbdtext, _mojolearn_gbdt,
-#   mojolearn_ext_gbdt_module
-#
-# Deterministic on repeat and corroborated by file size. On THIS module --
-# all three estimators -- copyml2, mlext_a, _mojolear, mojolear, copyml3 and
-# gbdtext all give zero, so the list below is a lottery ticket and not a fix.
-# See PORTING.md 70.
-# RE-MEASURED 2026-08-22 after the source changed under it, which is exactly
-# the "the lottery may move when the source changes" case above. Every stem in
-# the previous list had gone bad: copyml2 and _mojolear dropped CLUSTER to 0,
-# mlext_a..d dropped GBDT to 0, and the build failed with no artifact. Swept
-# fresh candidates at 33s a build, counting AIR blobs per subsystem:
-#
-#                    gbdt  cluster  neighbors  core  total
-#   copyml             56       22          4     2     84
-#
-# The old list is kept BELOW the new primary rather than deleted: a stem that
-# is dead today has been alive before, and re-measuring is cheaper than
-# inventing names.
-PRIMARY_STEM="copyml"
-ALT_STEMS="copyml3 copyml4 cml2 mojoext pyext_a copyml2 _mojolear mlext_a mlext_b mlext_c mlext_d"
 
 # --emit shared-lib, not an executable: CPython dlopens this and calls
 # PyInit__mojolearn. The name of the file must match that symbol's suffix or
@@ -156,24 +149,29 @@ ALT_STEMS="copyml3 copyml4 cml2 mojoext pyext_a copyml2 _mojolear mlext_a mlext_
 
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/mojolearn-build.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT INT TERM
+out="$tmpdir/_mojolearn.so"
+
+# shellcheck disable=SC2086  # both flag strings are deliberately word-split
+pixi run mojo build --emit shared-lib \
+    $TARGET_FLAGS \
+    $LINK_FLAGS \
+    -I . -I bindings \
+    bindings/_mojolearn.mojo \
+    -o "$out"
 
 # COUNTING BLOBS IS A PRE-FILTER, NOT THE GATE.
 #
 # The first version of this function asked only whether each subsystem had at
-# least one AIR blob, and the 29-blob build PASSED IT: the stem that loses
-# GBDT keeps exactly one `gbdt_` blob out of 85, so presence-of-one is
-# satisfied by the artifact that shipped broken for weeks. Measured
-# 2026-08-21 against the three reproducer builds, per subsystem:
+# least one AIR blob, and a known-broken artifact PASSED IT: the build that
+# lost GBDT kept exactly 1 of 85 `gbdt_` blobs, so presence-of-one was
+# satisfied by the artifact that shipped broken for weeks. The floor has to
+# sit well above 1 -- and even then it is only a way to skip smoke-testing a
+# hopeless build. THE GATE IS run_smoke BELOW, because the failure being
+# guarded against is precisely that a .so imports cleanly and dies at the
+# first launch.
 #
-#             gbdt  cluster  neighbors  core
-#   good        85       22          4     2
-#   29-blob      1       22          4     2
-#   0-blob       0        0          0     0
-#
-# So the cheap filter needs a floor that sits between 1 and 85 (10 below), and
-# even then it is only a way to skip smoke-testing a hopeless build. THE GATE
-# IS run_smoke BELOW, because the failure being guarded against is precisely
-# that a .so imports cleanly and dies at the first launch.
+# `gbdt` is no longer in this list because it is no longer in this module.
+# `bindings/build_gbdt.sh` carries its own floor, measured on its own module.
 #
 # `_gpu_shared_mem` is a prefix the compiler puts on the blob symbol; it is not
 # part of the Metal function name.
@@ -186,8 +184,10 @@ air_blobs() {
 
 kernels_plausible() {
     _air=$(air_blobs "$1")
-    # subsystem:floor -- floors are a filter, never the proof
-    for _pair in gbdt:10 cluster:5 neighbors:1 core:1; do
+    # subsystem:floor -- floors are a filter, never the proof. A good build
+    # measured 22 cluster, 4 neighbors and 2 core; a suppressed one has 0 of
+    # everything.
+    for _pair in cluster:15 neighbors:3 core:1; do
         _sub=${_pair%%:*}
         _min=${_pair#*:}
         _n=$(printf '%s\n' "$_air" | grep -c "^${_sub}" || true)
@@ -200,11 +200,29 @@ kernels_plausible() {
     return 0
 }
 
-# THE REAL GATE: import the extension and launch one kernel from each of the
-# three estimators. Every broken build in this bug's history imported fine and
-# raised "Failed to create Metal function" at the first launch, so nothing
-# short of launching proves anything. Kept tiny on purpose -- 512x3, two
-# trees -- because this runs on every build and the GPU is shared.
+# THE MACH-O FLOOR IS READ BACK, NOT ASSUMED. The linker flag is the only
+# thing setting it now, and a silently dropped `-Xlinker` would publish a
+# wheel whose tag and binary disagree -- exactly the failure the flag exists
+# to prevent.
+minos_matches() {
+    _got=$(otool -l "$1" \
+        | awk '/LC_BUILD_VERSION/{f=1} f && /minos/{print $2; exit}')
+    if [ "$_got" != "$MACOS_FLOOR" ]; then
+        printf '  minos is %s, want %s\n' "$_got" "$MACOS_FLOOR" >&2
+        return 1
+    fi
+    return 0
+}
+
+# THE REAL GATE: import the extension and launch one kernel from each
+# estimator it carries. Every broken build in this bug's history imported fine
+# and raised "Failed to create Metal function" at the first launch, so nothing
+# short of launching proves anything. Kept tiny on purpose -- 512x3 -- because
+# this runs on every build and the GPU is shared.
+#
+# THERE ARE NO GBDT ROWS HERE ANY MORE. They moved with the code, to
+# `bindings/build_gbdt.sh`, which fits one model per loss family. A smoke test
+# for kernels that are not in the artifact would be a gate that cannot fail.
 run_smoke() {
     MOJOLEARN_SMOKE_SO="$1" python3 - <<'PY'
 import os, shutil, sys, tempfile
@@ -216,105 +234,37 @@ shutil.copyfile(os.environ["MOJOLEARN_SMOKE_SO"],
                 os.path.join(pkg, "_mojolearn.so"))
 sys.path.insert(0, tmp)
 import numpy as np
-import mojolearn.ensemble as ens, mojolearn.cluster as clu
+import mojolearn.cluster as clu
 import mojolearn.neighbors as nbr
 X = np.random.default_rng(0).random((512, 3), dtype=np.float32)
-m = ens.GradientBoosting(loss="RMSE", n_estimators=2, max_depth=3,
-                         border_count=16).fit(X, X[:, 0])
-m.predict(X)
-
-# ONE LOSS PER KERNEL FAMILY, because a family the smoke test never fits
-# is a family whose kernels can be missing from the artifact while this
-# gate says PASS. That is not hypothetical: for one build this test fit
-# RMSE only, `MultiClassOneVsAll`'s kernels were absent, every floor and
-# the smoke test passed, and the failure surfaced in a user's fit.
-#
-#   RMSE                pointwise_target_kernel
-#   Logloss             cross_entropy_kernel
-#   MAE                 the EXACT estimator -- segmented sort, scan,
-#                       need-weights, binary search
-#   MultiClass          multilogit_val_and_first_der / second_der_row
-#   MultiClassOneVsAll  one_vs_all_val_and_first_der / second_der -- NOT
-#                       IN THE ARTIFACT; the row below asserts the refusal
-#
-# Add a row here whenever a kernel family is added. Two trees each; the
-# point is to LAUNCH them, not to fit anything.
-yb = (X[:, 0] > 0.5).astype(np.float32)
-ens.GradientBoosting(loss="Logloss", n_estimators=2, max_depth=3,
-                     border_count=16).fit(X, yb).predict(X)
-ens.GradientBoosting(loss="MAE", n_estimators=2, max_depth=3,
-                     border_count=16).fit(X, X[:, 0]).predict(X)
-yc = (X[:, 0] * 3).astype(np.int32).clip(0, 2).astype(np.float32)
-mm = ens.GradientBoosting(loss="MultiClass", n_estimators=2, max_depth=3,
-                          border_count=16).fit(X, yc)
-mm.predict(X)
-mm.predict_proba(X)
-
-# MultiClassOneVsAll IS THE ROW THAT CANNOT BE FITTED. Its two kernels
-# did not fit in the artifact under any measured stem (PORTING.md 70), so
-# `ensemble.py` refuses it by name. The smoke test asserts THE REFUSAL,
-# because the alternative -- fitting it -- is a gate that can never pass,
-# and a gate that can never pass stops being read.
-try:
-    ens.GradientBoosting(loss="MultiClassOneVsAll")
-except NotImplementedError:
-    pass
-else:
-    raise SystemExit("smoke: MultiClassOneVsAll was accepted from Python")
-
-# THE HELD-OUT PATH, which crosses two addresses and five parameters that
-# nothing else in this file exercises. Their default `use_best_model` is
-# ON with an eval set, so the fitted model must be SHORTER than the
-# iteration count unless the last iteration happened to be the best.
-Xe = np.random.default_rng(7).random((128, 3), dtype=np.float32)
-me = ens.GradientBoosting(loss="RMSE", n_estimators=6, max_depth=3,
-                          border_count=16, od_wait=2)
-me.fit(X, X[:, 0], eval_set=(Xe, Xe[:, 0]))
-if me.test_loss_curve_ is None or len(me.test_loss_curve_) == 0:
-    raise SystemExit("smoke: eval_set produced no held-out curve")
-if len(me.loss_curve_) != len(me.test_loss_curve_):
-    raise SystemExit("smoke: the two loss curves have different lengths")
-if not 0 <= me.best_iteration_ < len(me.test_loss_curve_):
-    raise SystemExit("smoke: best_iteration_ is outside the curve")
-me.predict(X)
-
 clu.KMeans(n_clusters=4, random_state=0).fit(X)
 nbr.NearestNeighbors(n_neighbors=3).fit(X).kneighbors(X[:2])
 shutil.rmtree(tmp, ignore_errors=True)
 PY
 }
 
-built=""
-count=""
-for stem in $PRIMARY_STEM $ALT_STEMS; do
-    src="$tmpdir/$stem.mojo"
-    cp bindings/_mojolearn.mojo "$src"
-    out="$tmpdir/$stem.so"
-
-    # shellcheck disable=SC2086  # TARGET_FLAGS is deliberately word-split
-    pixi run mojo build --emit shared-lib \
-        $TARGET_FLAGS \
-        -I . -I bindings \
-        "$src" \
-        -o "$out"
-
-    if kernels_plausible "$out" && run_smoke "$out"; then
-        count=$(air_blobs "$out" | wc -l | tr -d ' ')
-        mv "$out" python/mojolearn/_mojolearn.so
-        built="$stem"
-        break
-    fi
-    printf 'kernel emission incomplete for stem "%s"; retrying\n' "$stem" >&2
-done
-
-if [ -z "$built" ]; then
+if ! kernels_plausible "$out" || ! minos_matches "$out" || ! run_smoke "$out"; then
     printf '%s\n' \
-      "FAILED: no candidate basename produced a working extension." \
-      "Every attempt either dropped a subsystem's Metal functions or died" \
-      "at the first kernel launch with 'Failed to create Metal function'." \
-      "Add another stem to ALT_STEMS and re-run; see the basename comment" \
-      "above for why this is a lottery rather than a bug in the source." >&2
+      "" \
+      "FAILED: the extension did not come out complete." \
+      "" \
+      "THE FIRST THING TO SUSPECT IS THE COMPILER CACHE, not this source." \
+      "\$MODULAR_HOME/cache/.mojo_cache is content-addressed and its key does" \
+      "NOT include the macOS deployment target, so ONE build made with" \
+      "MACOSX_DEPLOYMENT_TARGET set poisons those keys with empty 134-byte" \
+      "metallibs and every later build reads them back. Find them with" \
+      "" \
+      "  find \"\$MODULAR_HOME/cache/.mojo_cache\" -type f -size -200c \\\\" \
+      "    -exec sh -c 'head -c4 \"\$1\" | grep -q MTLB && echo \"\$1\"' _ {} \\;" \
+      "" \
+      "and if there are any, move the whole cache aside and build again." \
+      "The cache is regenerable; a poisoned one is not detectable any other" \
+      "way, because the build succeeds and the artifact merely does not work." \
+      "" \
+      "See the comment at the top of this script and PORTING.md 70." >&2
     exit 1
 fi
 
-echo "built python/mojolearn/_mojolearn.so ($count AIR blobs, stem $built)"
+count=$(air_blobs "$out" | wc -l | tr -d ' ')
+mv "$out" python/mojolearn/_mojolearn.so
+echo "built python/mojolearn/_mojolearn.so ($count AIR blobs, minos $MACOS_FLOOR)"

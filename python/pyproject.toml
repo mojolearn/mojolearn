@@ -95,9 +95,19 @@ packages = ["mojolearn"]
 include-package-data = false
 
 [tool.setuptools.package-data]
-# The extension and the MAX runtime dylibs that
-# packaging/macos/build_release_wheel.sh stages beside it. Both are gitignored
-# build outputs, so this describes a BUILT tree rather than a checkout. A
-# wheel missing either is broken at import, and the clean-venv install in
-# verify_wheel.sh is what catches that.
+# The extensions and the MAX runtime dylibs that
+# packaging/macos/build_release_wheel.sh stages beside them. All are
+# gitignored build outputs, so this describes a BUILT tree rather than a
+# checkout. A wheel missing any of them is broken at import, and the
+# clean-venv install in verify_wheel.sh is what catches that.
+#
+# THE `*.so` GLOB IS WHY build_release_wheel.sh MUST BUILD EVERY EXTENSION.
+# It does not ship what is missing -- it ships whatever .so happens to be
+# sitting in the working tree, however old. `_mojolearn.so` shipped that way
+# once, predating eval_x/eval_y, and every user's fit raised "takes 6
+# positional arguments but 8 were given". As of 2026-08-21 the extensions are
+# `_mojolearn.so` (k-means, k-NN) and `_mojolearn_gbdt.so` (the ensemble);
+# `_mojolearn_estimators.so` is built by bindings/build_estimators.sh, which
+# build_release_wheel.sh does NOT call -- so it is shipped from the tree and
+# is an OPEN packaging item, not a claim this file makes.
 mojolearn = ["*.so", ".dylibs/*.dylib"]

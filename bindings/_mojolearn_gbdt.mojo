@@ -126,14 +126,33 @@ def gbdt_fit_binding(
         22  od_wait          (-1 = unset)
         23  use_best_model   (-1 = unset, 0 off, 1 on)
         24  best_model_min_trees
+        25  random_strength  (float)
+        26  use_pointwise_searcher  (0 or 1)
+        27  border_build_max_samples  (0 = every row)
+        28  permutation_count            (-1 = unset)
+        29  ctr_estimation_permutation_id (-1 = unset)
+        30  n_class_weights  (0 means none)
 
-    `strs` is `[loss, bootstrap_type, od_type]`, their `ELossFunction`,
-    `EBootstrapType` and `EOverfittingDetectorType` spellings. An empty
-    `bootstrap_type` means none, and an empty `od_type` means UNSET --
-    which is not the same as `None`: their `Load`
-    (`overfitting_detector_options.cpp:24-32`) picks the type from
+    AND THEN `n_class_weights` MORE VALUES, the class weights themselves,
+    at `params[31 .. 31 + n_class_weights)`. They ride in this list rather
+    than at a seventh buffer address for two reasons. The arity: this
+    function already takes eight arguments and
+    `PythonModuleBuilder.def_function` stops inferring a signature at
+    around nine. And the ROUND TRIP: a Python float reaches `Float64(py=)`
+    exactly, where a float written into a string and parsed back does not
+    -- `String(Float32)` on this toolchain returns a one-ULP-wrong value
+    for 0.46% of float32 values, and a class weight is a user's number,
+    not ours to round.
+
+    `strs` is `[loss, bootstrap_type, od_type, nan_mode]`, their
+    `ELossFunction`, `EBootstrapType`, `EOverfittingDetectorType` and
+    `ENanMode` spellings. An empty `bootstrap_type` means none, and an
+    empty `od_type` means UNSET -- which is not the same as `None`: their
+    `Load` (`overfitting_detector_options.cpp:24-32`) picks the type from
     whichever of the other two was given, so an unset type with a wait is
-    `Iter`.
+    `Iter`. `nan_mode` is "Min", "Max" or "Forbidden"; an empty string is
+    read as Min by `nan_mode_from_name`, which is their default
+    (`data_processing_options.cpp:26`).
 
     EVERY `-1` ABOVE IS THEIR `TOption::NotSet()`, not a magic number: the
     loss picks the leaf estimator and its iteration count through
@@ -141,15 +160,32 @@ def gbdt_fit_binding(
     `catboost_options.cpp:273-360`. A caller that passes explicit values
     is overriding CatBoost's own defaults and should know it.
     """
-    if len(params) != 25:
+    # 31 FIXED SLOTS PLUS ONE PER CLASS WEIGHT. The count is checked
+    # against slot 30 rather than assumed, because a wrapper that appended
+    # the wrong number of weights would otherwise read whatever followed
+    # them -- and for a weight that is a wrong answer, not a failure.
+    if len(params) < 31:
         raise Error(
-            "gbdt_fit: params must hold 25 values, got "
+            "gbdt_fit: params must hold at least 31 values, got "
             + String(len(params))
         )
-    if len(strs) != 3:
+    var n_class_weights = Int(py=params[30])
+    if n_class_weights < 0:
         raise Error(
-            "gbdt_fit: strs must hold [loss, bootstrap_type, od_type],"
-            " got " + String(len(strs))
+            "gbdt_fit: n_class_weights must not be negative, got "
+            + String(n_class_weights)
+        )
+    if len(params) != 31 + n_class_weights:
+        raise Error(
+            "gbdt_fit: params must hold 31 + n_class_weights ("
+            + String(31 + n_class_weights)
+            + ") values, got "
+            + String(len(params))
+        )
+    if len(strs) != 4:
+        raise Error(
+            "gbdt_fit: strs must hold [loss, bootstrap_type, od_type,"
+            " nan_mode], got " + String(len(strs))
         )
     var xp = _f32_ptr(Int(py=x_addr))
     var yp = _f32_ptr(Int(py=y_addr))
@@ -167,6 +203,13 @@ def gbdt_fit_binding(
     var n_features = Int(py=params[1])
     var n_weights = Int(py=params[2])
     var n_flags = Int(py=params[3])
+
+    # Read BEFORE the GIL is released, like every other Python value here:
+    # `params` is a Python list and touching it without the GIL is a data
+    # race, not a slow path.
+    var class_weights = List[Float32]()
+    for i in range(n_class_weights):
+        class_weights.append(Float32(Float64(py=params[31 + i])))
 
     var fp = GbdtFitParams(
         Int(py=params[4]),
@@ -192,6 +235,13 @@ def gbdt_fit_binding(
         Int(py=params[22]),
         Int(py=params[23]),
         Int(py=params[24]),
+        String(py=strs[3]),
+        Float32(Float64(py=params[25])),
+        Int(py=params[26]) != 0,
+        Int(py=params[27]),
+        Int(py=params[28]),
+        Int(py=params[29]),
+        class_weights^,
     )
     var n_eval_rows = Int(py=params[20])
 

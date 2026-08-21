@@ -30,13 +30,27 @@ quantile estimator for MAE, MAPE and Quantile.
 Around it: `border_count` and the GreedyLogSum grid, one-hot features, simple
 CTRs (three `Borders` priors plus `FeatureFreq`, their GPU `simple_ctr`) with
 apply-time tables, `permutation_count` with per-permutation cursors, sample
-and class weights, Bayesian / Bernoulli / Poisson bootstrap, Cosine /
-NewtonCosine / L2 / NewtonL2 score functions, eval sets, the overfitting
-detector (`IncToDec`, `Iter`), `use_best_model`, and model text that round
-trips bit-for-bit.
+and class weights, Bayesian / Bernoulli / Poisson bootstrap, Cosine and L2
+score functions, eval sets, the overfitting detector (`IncToDec`, `Iter`),
+`use_best_model`, and model text that round trips bit-for-bit.
+
+**`NewtonCosine` and `NewtonL2` are NO LONGER CLAIMED HERE, and the line above
+used to claim them.** They dispatch onto the Cosine and L2 calcers, which is
+CatBoost's own structure -- the Newton spellings differ only in which
+derivative the caller put in the stat planes -- but that choice is
+`secondDerAsWeights` and it is not ported
+(`gbdt/targets/kernel/pointwise_targets.mojo:476-485`), so asking for either
+fits an ordinary Cosine or L2 model under a Newton name. `SolarL2`, `LOOL2`
+and `SatL2` fall through the greedy searcher's dispatch to Cosine the same
+way. All five are refused by name from Python as of 2026-08-21 rather than
+accepted and silently substituted.
 
 `MultiClassOneVsAll` trains and is gated in Mojo but is NOT reachable from
-Python: its kernels do not fit in the CPython extension (PORTING.md 70).
+Python: `predict_proba` would have to route through the elementwise sigmoid
+over `n_classes` independent approxes rather than MultiClass's softmax, and
+nothing gates that yet. (The reason recorded here until 2026-08-21 -- that its
+kernels did not fit in the extension -- was the basename theory PORTING.md 70
+has retracted.)
 
 ## 2. The gap inside their GPU learner, and it is the default
 

@@ -2008,204 +2008,121 @@ it is NOT WIRED in this port's searcher — grep `greedy_search_helper.mojo` and
 there is nothing. **If `min_data_in_leaf` is ever wired, this deviation stops
 being output-identical and the filter becomes required.**
 
-## 70. FIXED: the extension dropped its Metal kernels, for two toolchain reasons
+## 70. FIXED: the extension emitted no Metal kernels, and the cause was not what this section said twice
 
-**This section previously said the CPython extension could not load the GBDT
-kernels and named five dead hypotheses. It was right that it was a toolchain
-problem and WRONG about which one, in both halves.** Replaced rather than
-annotated, per rule 10. `GradientBoosting` fits and predicts from Python.
+**THIS SECTION HAS BEEN WRONG TWICE AND IS REWRITTEN, NOT ANNOTATED.** The
+first version blamed GBDT's kernel count and named five dead hypotheses. The
+second blamed THE BASENAME OF THE ENTRY FILE, on the strength of
+byte-identical sources under different names producing 113 / 29 / 0 compiled
+Metal functions, and built a whole apparatus around it: a stem loop, eleven
+alternate names, and a "size cliff" the module was said to be outgrowing.
+
+**The basename is innocent. So is the size cliff. Both were reading a poisoned
+compiler cache.** `GradientBoosting` fits and predicts from Python; the stem
+loop is gone from `bindings/build.sh` and was never added to
+`bindings/build_gbdt.sh`.
 
 ### Cause 1: `--target-accelerator`, at ANY value, suppresses AOT Metal compilation
 
-With `--target-cpu apple-m1` held fixed on one source, counting compiled
-Metal functions (the mangled name with an `air` suffix):
+With `--target-cpu apple-m1` held fixed on one source, counting compiled Metal
+functions (the mangled name with an `air` suffix):
 
-    no --target-accelerator            113 AIR blobs   everything loads
+    no --target-accelerator            every kernel loads
     --target-accelerator metal:1         0 AIR blobs   nothing loads
     --target-accelerator apple-m1-metal4 0 AIR blobs   nothing loads
 
-So `metal:1` being an unrecognised string was the SMALLER half. Fixing it to
-a real target does not help; REMOVING it does. It is gone from
-`bindings/build.sh`. Reproduced independently 2026-08-21.
+So `metal:1` being an unrecognised string was the SMALLER half. Fixing it to a
+real target does not help; REMOVING it does. Still true, independently
+reproduced, and still the reason `_mojolearn_estimators.so` is broken (below).
 
-### Cause 2: the AOT kernel count depends on the BASENAME of the entry file
+### Cause 2: `MACOSX_DEPLOYMENT_TARGET` in the ENVIRONMENT does the same thing
 
-Three copies of `bindings/_mojolearn.mojo` with the SAME md5, in one
-directory, built with one command differing only in which file it names:
+Measured 2026-08-21 on `bindings/_mojolearn_gbdt.mojo`, one variable at a
+time, **with the compiler cache cleared before each build** -- the step every
+earlier experiment omitted, and the reason they all read wrong:
 
-    copyml2.mojo         113 AIR blobs, 85 of them gbdt   everything loads
-    _mojolearn.mojo       29 AIR blobs,  1 of them gbdt   GBDT dies,
-                                                          k-means and k-NN load
-    mojolearn_ext.mojo     0 AIR blobs,  0 of them gbdt   nothing loads
+    MACOSX_DEPLOYMENT_TARGET   --target-cpu    AIR blobs
+    11.0                       apple-m1            0
+    12.0                       apple-m1            0
+    (unset)                    apple-m1          141
+    11.0                       (host)              0
+    (unset)                    (host)            141
 
-Same flags, same include paths. **That middle row is the reported symptom
-exactly**, and it is why the failure looked like it was about GBDT or about
-shared memory when it was about neither. `-j 1`, a different `-o`, an empty
-`MODULAR_HOME` cache and editing the source all change nothing. On a
-GBDT-only entry point `_mojolear` gets 84 blobs where `_mojolearn` gets 67,
-so it is not leading underscores or any readable property of the name.
+`--target-cpu apple-m1` is innocent -- it was only ever guilty by proximity,
+sitting in the same flag string as `--target-accelerator`. The VALUE of the
+deployment target is innocent too: 12.0 fails exactly as 11.0 does. **SETTING
+THE VARIABLE AT ALL is what does it.** With it set, `mojo build` writes an
+EMPTY 134-byte metallib for every kernel and embeds nothing; the extension
+imports cleanly and dies at the first launch with "Failed to create Metal
+function".
 
-**No small reproducer exists**: a two-kernel file emits both blobs under
-either name. It takes scale. Mojo 1.0.0 (ed45d567).
+Four different basenames built cold with the variable set all give 0. The same
+four built cold with it unset all give 141. **The basename does nothing.**
 
-`bindings/build.sh` now compiles a copy under a measured basename into a
-temporary directory, gates the artifact with a per-subsystem blob floor plus
-a smoke test that actually launches one kernel from each estimator, and
-retries over alternative stems before hard-failing.
+### Why every earlier measurement disagreed: the cache
 
-### What the five hypotheses actually were
+`$MODULAR_HOME/cache/.mojo_cache` is content-addressed and **its key does not
+include the macOS deployment target**. An empty metallib produced by a build
+with the variable set is therefore served to every later build that hashes to
+the same key, whatever ITS flags are. When this was found that cache held
+40,772 files, of which **20,682 were 134-byte empty metallibs**, the oldest
+stamped 05:58 that morning.
 
-1. `--target-cpu` pinning -- dead, correctly. `--target-cpu` is innocent;
-   `--target-accelerator` was sitting next to it in the same flag string.
-2. Kernel-count capacity -- **dead, and the earlier negative was wrong**: a
-   shared-lib exposing only `gbdt_fit` carries 84 blobs and fits from
-   Python. That experiment had been run under the poisoned basename.
-3. `GILReleased` -- dead, re-confirmed cleanly: adding it to a working
-   three-estimator shared-lib changes the count by zero.
-4. Module entry shape / `--emit shared-lib` -- **dead AND BACKWARDS.** An
-   executable built WITH the target flags fails at the same kernel; a
-   shared-lib built from a differently-named copy works. `--emit shared-lib`
-   was never the variable. The original "executable works, shared-lib
-   fails" compared an executable built WITHOUT the flags against a
-   shared-lib built WITH them -- two variables moved at once, which is the
-   mistake rule 6 exists to prevent.
-5. `metal:1` is not a real target -- confirmed, and promoted from a
-   tidiness note to Cause 1.
+That one fact explains the entire history:
 
-**The `_gpu_shared_mem` discriminator was a red herring.** It is a prefix on
-the BLOB symbol, not on the lookup name. The broken artifact keeps twenty
-shared-memory blobs from `cluster/` and `neighbors/` while losing every
-GBDT one, shared-memory or not. A correlation across 118 names that meant
-nothing.
+* A "good" basename was one whose kernels happened to hash to keys still
+  holding REAL metallibs from an older, working configuration. A "bad" one
+  hashed to poisoned keys. Deterministic on repeat, because a cache is.
+* The famous decline -- 113 blobs, then 101, then 86, then 84 across four
+  points in the history -- was **cache attrition, not a size cliff**. Each
+  source change invalidated more of the surviving real entries, each rebuild
+  replaced them with empties, and nothing could refill them because every
+  build set the variable. Those counts were archaeology, not compilation.
+* `mojo run` was unaffected and every check passed, because JIT compilation
+  goes down a different path and writes REAL metallibs. That is also where
+  the good cache entries came from in the first place.
 
-### The gate's own sabotage
+**Clear the cache before any build whose kernel count you intend to believe,
+or the number is fiction.** With a warm cache, `MACOSX_DEPLOYMENT_TARGET=12.0`
+measured 141 and looked like the fix; it was reading back the `(unset)` build
+from one minute earlier. That near-miss is the reason this section now leads
+with the cache.
 
-The first artifact gate -- "at least one blob per subsystem" -- **PASSED the
-broken 29-blob artifact**, because that build keeps exactly 1 of 85 `gbdt_`
-blobs. Caught by running the gate against the known-bad reproducer, and
-replaced. The replacement was then sabotaged both ways: forcing the poisoned
-stems makes the loop reject them and land on a good one, and the smoke test
-in isolation gives PASS / FAIL / FAIL across the three reproducer artifacts.
+### The fix, which keeps both properties
 
-### The gate had to be widened again when the kernel set grew
+The deployment target still has to be low -- `mojo build` takes it from the
+host SDK, which means `minos 26.0` and a wheel installable on almost nothing.
+Pass it to the LINKER instead:
 
-**2026-08-21, second occurrence.** Adding `MultiClassOneVsAll`'s two kernels
-produced an artifact that passed every floor AND the smoke test, and then
-failed in a user's fit with `Failed to create Metal function:
-gbdt_targets_kernel_multilogi...`. The smoke test fit **RMSE only**, so it
-never launched a multiclass kernel, and a family it does not fit is a family
-whose kernels can be absent while the gate says PASS.
+    -Xlinker -platform_version -Xlinker macos -Xlinker 11.0 -Xlinker <sdk>
 
-That is the SAME failure the blob floor had -- a gate that cannot fail for
-the thing it guards -- and it recurred because the artifact's contents
-depend on a basename nobody can predict, so every added kernel family is a
-new way for the build to silently lose code.
+`ld` stamps LC_BUILD_VERSION exactly as the environment variable would, and
+the Metal compile step never sees it. Measured on a cold cache: **141 AIR
+blobs AND `minos 11.0`, together.** Both `bindings/build.sh` and
+`bindings/build_gbdt.sh` do this, both read the Mach-O header back rather than
+assuming, and both fail with a message that names the cache first.
 
-The smoke test now fits ONE LOSS PER KERNEL FAMILY -- RMSE, Logloss, MAE
-(the Exact estimator), MultiClass and MultiClassOneVsAll -- and
-`build.sh` carries a table saying to add a row whenever a family is added.
-Two trees each; the point is to launch them, not to fit anything.
+### What the split was, and was not, for
 
-### THE LOTTERY HAS NO WINNER FOR THE CURRENT KERNEL SET
-
-**2026-08-21, and this is the load-bearing consequence.** After
-`MultiClassOneVsAll` added two kernels, `bindings/build.sh` tried all five
-of its measured stems and **every one failed** -- each either dropped a
-subsystem's Metal functions or died at the first launch. It refused to
-install, so the artifact on disk stayed the previous good one.
-
-That is the mitigation working, and it is also the ceiling: the retry loop
-buys nothing once no stem carries the whole set, and each attempt is a full
-package compile of about two minutes. **Adding stems is not a fix, it is
-another spin.**
-
-So `MultiClassOneVsAll` is IMPLEMENTED AND GATED IN MOJO and is NOT
-REACHABLE FROM PYTHON. `python/mojolearn/ensemble.py` refuses it by name
-with this reason rather than accepting it and dying inside Metal.
-
-**2026-08-21, later still, and THE CAPACITY READING WAS WRONG.** An earlier
-version of this paragraph argued the ceiling was capacity rather than a
-basename lottery, on the evidence that a source change adding no kernels did
-not move any stem off zero. That inference is deleted: it was one
-observation with two variables in it, and a directed measurement says
-otherwise.
-
-Measured with `--target-cpu apple-m1`, no `--target-accelerator`, one
-byte-identical GBDT-only entry file copied under twelve basenames, counting
-`gbdt_` AIR blobs:
-
-    _mojolear                   72        mlgbdt                     0
-    copyml2                     17        _mojolearn_gbdt            0
-    a                            0        zz9                        0
-    ab                           0        q7x                        0
-    abc                          0        mojolearn_ext_gbdt_module  0
-    mlext_a                      0        gbdtext                    0
-
-**Deterministic**: `copyml2` gives 17 on three consecutive builds and
-`_mojolear` gives 72 on three. **Corroborated by size** rather than by the
-symbol scan alone -- 1.337 MB at zero blobs, 1.706 MB at 17, 2.388 MB at 72
--- so the blobs are genuinely absent, not merely unnamed. **No cache is
-involved**: there is no `MODULAR_HOME` and no Modular build-cache directory
-on this machine.
-
-THE REFERENCE COUNT IS 91. An executable built from
-`mojo_only/nan_mode_check.mojo`, which reaches the same import graph, embeds
-91 `gbdt_` blobs. No shared library under any name has reached it; the best
-is `_mojolear` at 72, missing fourteen `greedy_subsets_searcher` kernels,
-two `add_bin_values` and three `multilogit`.
-
-**It is not the emit mode.** `--emit object` on the same file under the same
-basename also gives 72. **It is not `--target-cpu`.** And the accelerator
-flag is now confirmed at ONE variable, which it never was before: the same
-basename `_mojolear`, the only change being `--target-accelerator apple-m4`
--- the CORRECT accelerator for this machine, not the bogus `metal:1` -- goes
-from 72 blobs and 2.388 MB to **0 blobs and 1.342 MB**.
-
-**The size cliff is real too, and it is separate.** Six basenames on the
-THREE-estimator module (`copyml2`, `mlext_a`, `_mojolear`, `mojolear`,
-`copyml3`, `gbdtext`) all give zero, including the two that are the only
-non-zero names on the smaller module. So both the name and the module's
-size are in it, and neither explains the other.
-
-**`mojo run` is unaffected**, which is why every check in this repository
-passes: it JIT-compiles kernels on demand and never consults an embedded
-blob. Only AOT artifacts -- the wheel -- are hit.
-
-The consequence for the Python surface: `GradientBoosting.fit(...,
-eval_set=...)` is written, its marshalling is checked, and the Mojo side is
-gated by `check-overfitting-detector` -- but no artifact carries it yet, and
-the `.so` on disk is the older one, whose `gbdt_fit` takes six arguments
-where the wrapper now passes eight. **The installed extension and the
-checked-in wrapper are one build apart and cannot be used together.**
-
-**Splitting the extension is no longer a fix on its own.** It was proposed
-here on the strength of an old 84-blob GBDT-only measurement; today's
-GBDT-only module tops out at 72 of 91 under the best of twelve names, so a
-split would ship a module that still dies at the first missing kernel. It
-stays on the list only as a way to get UNDER the size cliff, which a split
-does do -- the small module has two working names where the large one has
-none -- but it needs a name that reaches 91 to be worth doing.
-
-**This is a toolchain defect and the reproducer above is the deliverable.**
-One file, twelve names, deterministic, size-corroborated, no cache, and a
-clean single-variable result for the accelerator flag. It is worth sending
-to Modular as it stands; nothing in this repository can fix a compiler
-deciding which kernels to emit from the name of the file it was asked to
-compile.
-
-**What would ALSO fix it** is upstream: the AOT kernel count must stop
-depending on the entry file's basename. Until then the extension has a hard
-capacity that nobody can predict, and every kernel family added is a new
-chance to lose one silently -- which is why the smoke test now fits one
-loss per family and why it must keep being extended.
+GBDT moved to `bindings/_mojolearn_gbdt.mojo` on 2026-08-21. It was
+commissioned as a way under a size cliff that does not exist, so **that is not
+why it is worth keeping.** It is worth keeping for the reason
+`bindings/_mojolearn_estimators.mojo` gives: an independently changing binding
+should not be a merge point. Every parameter added to `GbdtFitParams` used to
+have to be unpacked in two files that could silently disagree about the order
+of a flat list, which is a wrong answer rather than a failure. Now there is
+one.
 
 ### Still broken the same way, and not ours to fix
 
-`bindings/build_estimators.sh:11` passes
-`--target-cpu apple-m1 --target-accelerator metal:1`, and
-`python/mojolearn/_mojolearn_estimators.so` has **0 AIR blobs**. Dropping
-`--target-accelerator` is the same one-line fix. That file belongs to
-another session; flagged, not touched.
+`bindings/build_estimators.sh:8,11` does BOTH things at once -- it exports
+`MACOSX_DEPLOYMENT_TARGET="11.0"` and passes `--target-accelerator metal:1` --
+and `python/mojolearn/_mojolearn_estimators.so` has **0 AIR blobs**. Verified
+2026-08-21 from a clean-venv install of the built wheel: DBSCAN, PCA and
+LinearRegression all fail with "Failed to create Metal function" while
+GradientBoosting, KMeans and NearestNeighbors all pass. It has been that way
+since the artifact was built, independent of any cache. The fix is two lines,
+both above. That file belongs to another session; flagged, not touched.
 
 ## 71. `multilogit`'s `functionValue` is per-block partials
 

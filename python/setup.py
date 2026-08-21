@@ -1,9 +1,9 @@
 """Wheel shape for the prebuilt Mojo extension.
 
-setuptools compiles nothing. `bindings/build.sh` builds the extension with the
-Mojo toolchain and `packaging/macos/build_release_wheel.sh` stages it, plus the
-MAX runtime dylibs it links through @rpath, into python/mojolearn/ before this
-file runs. There is no source build and no way to make one that works without
+setuptools compiles nothing. `bindings/build.sh` and `bindings/build_gbdt.sh`
+build the two extensions with the Mojo toolchain and
+`packaging/macos/build_release_wheel.sh` stages them, plus the MAX runtime
+dylibs they link through @rpath, into python/mojolearn/ before this file runs. There is no source build and no way to make one that works without
 the Mojo toolchain, which is why no sdist is published.
 
 All distribution metadata is in pyproject.toml. This file carries only the two
@@ -38,11 +38,21 @@ import sys
 from setuptools import setup
 from setuptools.dist import Distribution
 
-# Must equal the `minos` that `otool -l python/mojolearn/_mojolearn.so`
-# reports for LC_BUILD_VERSION, which bindings/build.sh sets via
-# MACOSX_DEPLOYMENT_TARGET. Nothing here reads the Mach-O header;
-# build_release_wheel.sh compares them after the build and refuses to
-# continue if they disagree.
+# Must equal the `minos` that `otool -l` reports for LC_BUILD_VERSION on
+# EVERY extension in the wheel -- `_mojolearn.so` and `_mojolearn_gbdt.so` --
+# because one wheel carries one tag and the tag is only honest if it is the
+# floor of everything inside. Nothing here reads the Mach-O header;
+# build_release_wheel.sh compares them after the build, for each, and refuses
+# to continue if any disagrees.
+#
+# THE BUILD SCRIPTS SET IT AT THE LINKER, NOT THROUGH THE ENVIRONMENT, and
+# that is not a style choice. Measured 2026-08-21 on a cold compiler cache:
+# exporting MACOSX_DEPLOYMENT_TARGET at ANY value suppresses ahead-of-time
+# Metal compilation entirely -- `mojo build` writes an empty 134-byte metallib
+# per kernel and the extension dies at the first launch. Passing
+# `-Xlinker -platform_version -Xlinker macos -Xlinker <floor> -Xlinker <sdk>`
+# stamps the same LC_BUILD_VERSION and leaves the Metal step alone. See the
+# comment block at the top of bindings/build.sh.
 #
 # This read 26.0 until 2026-08-20, inherited from the host SDK, which made
 # the wheel installable only on a macOS released weeks earlier.

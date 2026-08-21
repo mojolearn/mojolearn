@@ -56,7 +56,7 @@ def markers(path):
     return n
 
 
-def main(path):
+def check(path):
     n = markers(path)
     if n < MIN_MARKERS:
         print(
@@ -67,12 +67,20 @@ def main(path):
             file=sys.stderr,
         )
         return 1
-    print(f"  GPU kernels embedded: {n} AIR/metallib markers")
+    print(f"  {path}: GPU kernels embedded, {n} AIR/metallib markers")
     return 0
 
 
+def main(paths):
+    # EVERY EXTENSION IN THE WHEEL, not the first one. The failure this file
+    # exists to catch is a whole build emitting no Metal at all, which would
+    # hit every extension at once -- but a wheel now carries more than one,
+    # and checking a subset is how a gate stops covering what it names.
+    return max(check(p) for p in paths)
+
+
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("usage: check_gpu_embedded.py <extension.so>")
+    if len(sys.argv) < 2:
+        print("usage: check_gpu_embedded.py <extension.so> [<extension.so> ...]")
         raise SystemExit(2)
-    raise SystemExit(main(sys.argv[1]))
+    raise SystemExit(main(sys.argv[1:]))
