@@ -23,6 +23,8 @@ extratrees/mojo_only/partition_check.mojo
 extratrees/mojo_only/range_draw_check.mojo
 extratrees/mojo_only/builder_check.mojo
 extratrees/mojo_only/leaf_check.mojo
+extratrees/mojo_only/feature_sampler_check.mojo
+extratrees/mojo_only/host_splitter_check.mojo
 "
 
 failed=0

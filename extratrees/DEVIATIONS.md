@@ -61,7 +61,7 @@ keyed draws — see `mojo_only/host_splitter.mojo`.
 
 **Theirs (sklearn).** Fisher-Yates without replacement over a persistent
 `features` array, interleaved with constant-feature bookkeeping, drawing
-`max_features` survivors (`_splitter.pyx:566-624`).
+`max_features` survivors (`_splitter.pyx:573-626`, the draw itself at `:592-593`).
 
 **Theirs (cuML).** `excess_sample_with_replacement_kernel` /
 `algo_L_sample_kernel` (`kernels/builder_kernels.cuh:152`, `:246`), selected by
@@ -545,7 +545,7 @@ each one silently changes an answer.
    and call constant what sklearn splits further out.**
 3. **`rand_uniform` can return `high`.** `_utils.pyx:57-61` is
    `(high-low) * our_rand_r() / RAND_R_MAX + low` and `our_rand_r` can return
-   exactly `RAND_R_MAX`. sklearn guards it at `_splitter.pyx:651-652`:
+   exactly `RAND_R_MAX`. sklearn guards it at `_splitter.pyx:653-654`:
    `if threshold == max_feature_value: threshold = min_feature_value` — the
    draw is replaced by **min**, not by max, turning a degenerate
    everything-left into only-the-min-valued-rows-left. **Any splitter port
@@ -694,3 +694,290 @@ reduction must carry the four accumulator fields (`sq_L`, `nL`, `sq_R`, `nR`)
 alongside the `Split`, not just the score. **A score pass that reduces
 classification candidates on the float field alone is using the wrong
 comparator.** Cost unmeasured, deliberately.
+
+---
+
+## 151. The supplied column list IS the search; sklearn's "keep drawing until one is non-constant" is gone
+
+**Theirs.** `_splitter.pyx:573-577`, the loop guard, holds two separate facts:
+(a) it stops early when every remaining feature is known constant; (b) the
+second disjunct keeps drawing PAST `max_features` for as long as every feature
+drawn so far was constant, up to all `n_features`. The guarantee that buys: if
+any non-constant feature exists anywhere, sklearn finds one and the node
+splits.
+
+**Ours.** Evaluate every supplied `colid` exactly once, in the supplied order
+(which must not matter, and a check proves it does not). No re-draw. If every
+supplied column is constant, the node is a leaf.
+
+**The analogue, stated precisely.** `len(colids)` plays `max_features`. Fact
+(a) is subsumed — a constant column costs one range pass and no score pass.
+**Fact (b) has no analogue and is genuinely gone.**
+
+**Why it cannot be emulated.** The extension is a property of a sequential
+sampler that still holds un-drawn features. cuML's samplers commit to
+`n_sampled_cols` per node on the device before any range is known
+(`kernels/builder_kernels.cuh:152`, `:246`, launched at `builder.cuh:427`);
+nothing downstream can ask for more. Re-invoking the sampler under a different
+key appears in neither upstream, so it would be invention. **Declined**, and
+the decline is priced below rather than left open.
+
+**Which upstream this sides with.** cuML's: their kernel scores the sampled
+`colids` and a node with no valid split becomes a leaf via `split_not_valid`.
+Not a third, invented behaviour.
+
+**Price.** A node all of whose SAMPLED columns are constant becomes a leaf
+where sklearn would keep drawing. This compounds with deviation 132. On data
+with many constant columns our trees are SHALLOWER than sklearn's at the same
+`max_features` — a quality difference, not a rounding one. `n_constant` is
+reported per node so a builder can count how often it bites.
+
+---
+
+## 152. The candidate scan COUNTS; only the winner is partitioned
+
+**Theirs.** Every candidate calls `partition_samples` (`_splitter.pyx:656-659`),
+which reorders `samples[start:end]` and returns `pos`; `n_left = pos - start`;
+the criterion then accumulates over the freshly partitioned array. After the
+loop they re-partition if the last candidate examined is not the winner
+(`:705-710`).
+
+**Ours.** One pass per candidate over the node's rows, counting and
+accumulating, moving nothing. The winner is handed to cuML's
+`partition_samples` (`builder_kernels_impl.cuh:43-88`) by the caller, once.
+
+**Why, and it is forced rather than chosen.** cuML's `partitionSamples` takes
+`split.nLeft` as an INPUT (`:52`), so it cannot discover the count. Something
+has to count first, and that is the score pass, which walks the rows anyway.
+Their `:705-710` re-partition then has nothing to undo.
+
+**Price, two parts.** (1) Row order inside a child is cuML's, not sklearn's —
+already deviation 134. (2) **The accumulation ORDER differs**: sklearn sums the
+left child in post-partition order, we sum in `row_ids` order skipping
+right-going rows, and the device will use a third order (a tree reduction).
+That is nil for classification, where the accumulators are integers
+(deviation 144), and it is exactly the ground deviation 135 rules on for
+regression — which is why the accumulator type is a parameter and the host
+oracle drives it at `Float64`.
+
+---
+
+## 153. Regression selects on sklearn's MSE proxy and REPORTS cuML's gain
+
+**Theirs, and they are two different quantities.** sklearn selects on
+`sum_L^2/n_L + sum_R^2/n_R` (`_splitter.pyx:691` over `_criterion.pyx:944-973`).
+cuML selects on `0.5/n * (that - S^2/n)` (`objectives.cuh:225-244`). The two are
+affine with positive slope and a within-node constant offset: same argmax,
+different value, different float tie sets.
+
+**Ours.** The reduction key is sklearn's proxy. `Split.best_metric_val` carries
+cuML's `GainPerSplit` for reporting, for `min_impurity_decrease` (whose
+threshold in `split_not_valid` is scaled to THEIR gain) and for
+`feature_importances_`.
+
+**Why this is not just deviation 145.** 145 is argued from an exact integer
+comparator existing for Gini. None exists for MSE. This is a choice between two
+FLOAT quantities with the same argmax, settled by which upstream is the spec
+for the split rule: this file transcribes `node_split_random`, so it compares
+what `:691` compares.
+
+**Price.** On a near-tie the two forms can disagree and we take sklearn's
+feature rather than cuML's. Both numbers are carried per candidate, so the rate
+is countable whenever someone wants it. Unmeasured, deliberately.
+
+---
+
+## 154. Two of sklearn's four rejection branches are absent because their inputs do not exist
+
+**Theirs.** Four rejections, in order: `min_samples_leaf` (`:664-666`),
+`min_weight_leaf` (`:674-677`), monotonicity (`:679-689`), and the `>` at
+`:693`.
+
+**Ours.** The first and the last only.
+
+- `min_weight_leaf` is unreachable in the only configuration this port
+  supports: `sample_weight=None` makes `weighted_n_left == n_left`, and
+  sklearn's own `min_weight_fraction_leaf=0.0` makes the threshold zero.
+  `sample_weight` is already in `UNPORTED.tsv`.
+- `monotonic_cst` has no field in `DecisionTreeParams` and no counterpart in
+  cuML at all.
+
+**Why not refuse by name, the way deviation 138 refuses `max_n_bins`.** There
+is no name to refuse: neither parameter exists in this port's parameter struct.
+
+**Price, and it is a real gap with an owner.** A user arriving from sklearn who
+sets `min_weight_fraction_leaf` or `monotonic_cst` gets no error from this
+layer. **Whoever writes the Python binding owes both names an explicit
+refusal**; this entry is the record of that debt.
+
+**Also recorded here because it is the same shape.** `Split.update`'s third
+arm, the `quesval` tie-break (`split.cuh:86-88`), can only fire on equal
+`colid`s, which a sampler never produces. The only reachable case is a caller
+supplying a duplicated column, and then the two candidates tie in every field
+and the incumbent survives. The check pins that behaviour as one cell rather
+than pretending the arm is exercised.
+
+---
+
+## 156. The `k == n` guard moved into the sampler, and materializes an identity
+
+**Theirs.** The guard is in the CALLER: `builder.cuh:399`,
+`if (dataset.n_sampled_cols != dataset.N) { ...sample... }`. When they are
+equal neither kernel launches and `colids` is left untouched — holding whatever
+the previous batch wrote. The consumer then tests the same condition itself
+(`builder_kernels_impl.cuh:250-254`) and uses `colStart + blockIdx.y` directly
+instead of reading `colids`.
+
+**Ours.** `plan_feature_sampling` reports a third arm, `SAMPLE_ALL_FEATURES`,
+and `sample_features` fills `colids` with `0..k-1` for every work item.
+
+**Why.** The consumer branch does not exist in this lane yet — the score pass
+of deviation 137 is unported — so there is nothing to carry their two-place
+test. One place keeps `colids` meaning the same thing on every arm, which is
+what lets one check assert the same properties across all three.
+
+**Why it is safe.** The candidate column set is identical either way: theirs is
+`0..N-1` implicitly, ours is `0..N-1` written down.
+
+**Price, and it is a trap for whoever writes the device version.** One write of
+`len(work_items) * n` int32s that theirs does not do, on the one configuration
+where sampling is off. When the device version lands, whoever writes it must
+decide whether to keep the fill or restore their two-place branch — **and if
+they restore it they must restore BOTH halves**: the guard alone, without the
+consumer's `if`, reads an uninitialized `colids`.
+
+---
+
+## 157. The block collectives are explicit loops, and the block width is a parameter
+
+**Theirs.** `excess_sample_with_replacement_kernel` is one CUDA block per node
+over a `BLOCK_THREADS x MAX_SAMPLES_PER_THREAD` register array, using three CUB
+block-wide collectives — `BlockRadixSort::Sort` (`:224`),
+`BlockAdjacentDifference::SubtractLeft` (`:231-232`) and
+`BlockScan::ExclusiveSum` (`:237`) — sharing one `union` of temp storage
+(`:216-221`) with a `__syncthreads()` between each.
+
+**Ours.** A host function over one flat `List` of
+`block_threads * max_samples_per_thread` slots in THEIR blocked arrangement,
+with the sort done by Mojo's `sort`, the adjacent difference by a descending
+loop mirroring CUB's own write order, and the exclusive sum by the running
+prefix it is defined to be. `block_threads` and `max_samples_per_thread` are
+ARGUMENTS rather than template parameters, so the dispatch's choice between
+instantiation 1 and instantiation 72 is a value a check can enumerate.
+
+**Why.** The same reason `partition_samples` is a host function: this is the
+ORACLE the device kernel is checked against, and `PORTING_RULES.md` 0b-ii says
+an oracle is not a CPU path and stays. Both samplers are deterministic given
+the block width — nothing depends on warp scheduling — so the host form
+reproduces the device form's exact output, not merely an equivalent sample.
+
+**Why the sort substitution cannot change an answer.** `BlockRadixSort::Sort`
+sorts KEYS ONLY here (`:224` passes one array) and the keys are the column ids
+themselves. Two equal keys are indistinguishable, so every ascending sort
+produces the identical array; there is no payload whose permutation could
+differ. This is the one collective not transcribed instruction for instruction,
+and it is the one where that is provably free.
+
+**Price.** `n_slots` int32s of host memory per block instead of registers, and
+an O(n log n) sort where theirs is a radix pass. No timing claim attached. The
+device kernel will need `max.gpu.primitives.block` and a real block radix sort,
+which is a KERNEL MATRIX row.
+
+---
+
+## 158. `log`, `exp` and `ceil` come from libm through FFI, not `std.math`
+
+**Theirs.** `raft::log` / `raft::exp` (`raft/core/math.hpp:324-331`) are
+`std::log` / `std::exp` on host and `::log` / `::exp` on device, plus
+`std::ceil` at `builder.cuh:420`.
+
+**Ours.** `external_call["log"|"logf"|"expf"|"ceil"]`, the same libm the C++
+host build links against, keeping the float/double split of their expressions
+exactly.
+
+**Why, and it is this repository's standing finding rather than caution.**
+`std.math.log` carries ~5e-8 ABSOLUTE error against libm, enough to re-decide a
+tie. **Both call sites turn a log into an INTEGER**: `n_parallel_samples_for`
+takes `ceil` of a ratio of logs, so an error near an integer flips the sample
+count and — at the measured boundaries 9216 and 128 — flips WHICH KERNEL RUNS;
+`algo_l_sample` truncates `log(u)/log(1-W)` to an int, so an error near an
+integer picks a different column. Neither is a rounding-quality question.
+
+**Price.** Four un-inlinable calls per use and a dependency on the host libm.
+The device version cannot use FFI and will have to re-establish this; the jump
+line is the one to check.
+
+---
+
+## 159. Index widths, and a bound on their unbounded loop
+
+**Theirs.** `IdxT` is `int` throughout the sampler. The retry loop
+`do { } while (n_uniques < k)` (`:188-241`) has NO iteration bound, and the
+dispatch's inputs are trusted — `k > n` would make `log(1 - k/n)` a NaN and
+`k < 1` is meaningless.
+
+**Ours.** Column ids stay `Int32` (their `IdxT`, and the width `colids` is);
+counts and loop indices are Mojo's 64-bit `Int`. `EXCESS_MAX_ITERATIONS = 1024`
+bounds the do-while and RAISES instead of hanging, and `plan_feature_sampling`
+REFUSES `k < 1` or `k > n` by name rather than returning a NaN-derived arm.
+
+**Why the width choice is free.** `n_parallel_samples` is about
+`n*ln(n/(n-k))`, so overflowing int32 needs `n` around 1e8 columns — a dataset
+that cannot be held. Every value the two agree on is identical.
+
+**Why the bound and the refusal exist.** This is a host oracle a check runs
+unattended: **a hang is a failure mode a check cannot report.** cuML reaches
+neither state because `max_features` is clamped into `[1, N]` before `doSplit`
+sees it.
+
+**Price, and it is a warning to the device port.** Three departures from their
+control flow that must NOT be carried over blindly: an `Error` cannot be raised
+from a kernel, so the device version needs the bound expressed some other way,
+or dropped with the argument that the dispatch guarantees termination written
+down.
+
+---
+
+# What porting the samplers found in cuML itself
+
+Not deviations — findings about the upstream, transcribed rather than fixed
+(rule 1: theirs is right and ours is wrong, and "right" means "what their file
+does"). Each is ASSERTED in `feature_sampler_check.mojo`, so a later
+"improvement" turns the check red.
+
+1. **`SubtractLeft`'s tile predecessor is `mask[0]`, not an item**
+   (`builder_kernels.cuh:231-232`). CUB computes
+   `output[0] = difference_op(input[0], tile_predecessor_item)` on thread 0
+   (`cub/block/block_adjacent_difference.cuh:393-419`), so the block MINIMUM is
+   compared against the previous iteration's FLAG — a 0 or a 1 — and is marked
+   a duplicate when it equals it. Measured consequence: at `n=2, k=1` their
+   kernel returns column **1 for all 64 nodes and never column 0**; at
+   `n=64, k=8` over 4096 nodes, column 0 is chosen **2 times against 512
+   expected**. This is a real statistical defect in cuML.
+2. **Slots past `n_parallel_samples` are filled with `n-1`, not left idle**
+   (`:201-203`), so column `n-1` is in the block's sample on every iteration
+   and wins whenever the loop stops at exactly `k` uniques — measured 662
+   against 512 expected.
+3. **The output is the `k` SMALLEST uniques**, not a random `k` of them
+   (`:243-246`): the gather index is the prefix sum and everything `>= k` is
+   simply not written.
+4. **The items migrate between threads.** `BlockRadixSort::Sort` re-blocks the
+   whole array, so after the first sort the slot a thread redraws is not the
+   slot it drew. A port that kept each thread's samples thread-local is a
+   different algorithm.
+5. **algo-L's fill loop leaves `col` at `k-1`, not `k`** (`:293-301`).
+   Textbook Algorithm L sets `i = k`; theirs relies on the `+1` in the jump.
+   Writing `k` skips a column.
+6. **algo-L's mixed float/double types decide the answer.** `logf(fp)/k`
+   divides in FLOAT while `log(1-W)` is DOUBLE; the numerator is promoted and
+   the quotient is `static_cast<int>`-truncated. Computing that line entirely
+   in float, or entirely in double, moves the truncation boundary onto a
+   different column.
+7. **The two samplers key DIFFERENTLY.** Excess uses the fnv1a32
+   three-component chain; algo-L uses a plain `(treeid << 32) | nodeid` bit
+   pack. Using one chain for both passes every property test.
+8. **There are THREE dispatch arms, not two.** The excess kernel is
+   instantiated at two different `MAX_SAMPLES_PER_THREAD` (`builder.cuh:434`),
+   and the two consume the RNG at different rates, so they return DIFFERENT
+   column sets for the same key — measured, 158 of 160 slots differ at
+   `n=1000, k=20`.

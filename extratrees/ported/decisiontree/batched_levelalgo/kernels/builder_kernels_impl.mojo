@@ -313,7 +313,7 @@ def draw_threshold(key: SplitKey, extent: FeatureRange) -> Float32:
     """One threshold for one (node, feature), keyed rather than streamed.
 
     `_splitter.pyx:632-637` draws `rand_uniform(min, max, random_state)`, and
-    `:651-652` then applies a guard that is easy to miss and changes an
+    `:653-654` then applies a guard that is easy to miss and changes an
     answer::
 
         if current_split.threshold == max_feature_value:

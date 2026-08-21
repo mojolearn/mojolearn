@@ -25,7 +25,7 @@ pinned down and checkable on the host.
 # ==========================================================================
 # DEVIATION BLOCK 133 -- the tie-break is a total order, sklearn's is not
 #
-# THEIRS (sklearn, `_splitter.pyx:690`): `if current_proxy_improvement >
+# THEIRS (sklearn, `_splitter.pyx:693`): `if current_proxy_improvement >
 #   best_proxy_improvement` -- strictly greater, so a tie is resolved by
 #   whichever candidate the SEQUENTIAL draw loop reached first. That is a
 #   statement about loop order, not an order on the candidates.

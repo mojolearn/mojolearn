@@ -17,7 +17,7 @@ authority:
 
 The last one carries the question that cannot be settled by reading:
 sklearn's `if threshold == max_feature_value: threshold = min_feature_value`
-guard (`_splitter.pyx:651-652`) exists because THEIR uniform can return
+guard (`_splitter.pyx:653-654`) exists because THEIR uniform can return
 exactly `max`. Ours comes from RAFT's `next_float`, whose range is
 `[0, 1 - 2^-24]`, so the mathematical product is strictly inside — but the
 float32 rounding of `min + res * span` can still land on `max`. This check
@@ -228,7 +228,7 @@ def main() raises:
                 assert_true(
                     t != extent.max_value,
                     "a threshold equal to max sends EVERY row left; sklearn's"
-                    " guard (_splitter.pyx:651-652) exists to prevent it",
+                    " guard (_splitter.pyx:653-654) exists to prevent it",
                 )
                 if raw == extent.max_value:
                     n_raw_hit_max += 1
