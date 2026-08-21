@@ -518,19 +518,33 @@ struct CatBoostOptions(Copyable, Movable):
                 + "; got "
                 + String(self.max_leaves)
             )
-        if self.leaf_estimation_method != LEAF_ESTIMATION_NEWTON:
+        # `leaf_estimation_method` and `leaf_estimation_iterations` were
+        # REFUSED HERE until 2026-08-21, when the descent walker, the
+        # Gradient arm and the Exact weighted-quantile estimator landed.
+        # The refusals are deleted rather than annotated, per the rule
+        # that a document a result falsifies is part of the result.
+        #
+        # WHAT IS STILL REFUSED IS `Simple`, and it is refused because
+        # nothing reaches it: `NeedEstimation()` is
+        # `LeavesEstimationMethod != Simple`
+        # (`greedy_subsets_searcher.h:67-69`), so choosing it turns the
+        # estimator OFF and leaves the searcher's own leaf values
+        # standing. That path exists here -- it is the RMSE shortcut of
+        # DEVIATION 64 -- but it has never been exercised through this
+        # option, and PORTING_RULES 8 says an unexercised branch is an
+        # unchecked one.
+        if self.leaf_estimation_method == LEAF_ESTIMATION_SIMPLE:
             raise Error(
-                "leaf_estimation_method="
-                + leaf_estimation_method_name(self.leaf_estimation_method)
-                + " is not ported; only Newton has an implementation, and"
-                " Newton is CatBoost's own default for RMSE"
+                "leaf_estimation_method=Simple is not wired through this"
+                " option; it turns the estimator off"
+                " (greedy_subsets_searcher.h:67-69) and that path has no"
+                " check of its own. Newton, Gradient and Exact all work."
             )
-        if self.leaf_estimation_iterations != 1:
+        if self.leaf_estimation_iterations < -1:
             raise Error(
-                "leaf_estimation_iterations="
+                "leaf_estimation_iterations must be -1 (their"
+                " TOption::NotSet, letting the loss decide) or >= 0; got "
                 + String(self.leaf_estimation_iterations)
-                + " is not ported; the leaf estimator is a single Newton"
-                " step and the descent loop is not written"
             )
         if self.random_strength != 0.0:
             raise Error(

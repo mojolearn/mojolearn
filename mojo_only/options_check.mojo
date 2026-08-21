@@ -7,6 +7,9 @@ keeps finding unwired.
 """
 
 from gbdt.options.catboost_options import (
+    LEAF_ESTIMATION_EXACT,
+    LEAF_ESTIMATION_GRADIENT,
+    LEAF_ESTIMATION_SIMPLE,
     CatBoostOptions,
     DETERMINISM_CROSS_DEVICE,
     DETERMINISM_DEVICE,
@@ -54,9 +57,34 @@ def check_options() raises:
     b.grow_policy = GROW_DEPTHWISE
     expect_refusal(b, String("grow_policy=Depthwise"))
 
+    # `leaf_estimation_iterations` and `leaf_estimation_method` were
+    # REFUSALS until 2026-08-21 and are now features: the descent walker,
+    # the Gradient arm and the Exact weighted-quantile estimator all
+    # landed. This check asserted the refusal and correctly went red when
+    # it was deleted, which is what a refusal check is for -- it fails
+    # both when a refusal wrongly disappears AND when a capability
+    # wrongly arrives.
     var c = CatBoostOptions.default()
     c.leaf_estimation_iterations = 10
-    expect_refusal(c, String("leaf_estimation_iterations=10"))
+    c.check()  # must NOT raise: ten Newton steps is their Logloss default
+    var c2 = CatBoostOptions.default()
+    c2.leaf_estimation_method = LEAF_ESTIMATION_GRADIENT
+    c2.check()
+    var c3 = CatBoostOptions.default()
+    c3.leaf_estimation_method = LEAF_ESTIMATION_EXACT
+    c3.check()
+    print("    accepted: leaf_estimation Newton x10, Gradient, Exact")
+
+    # `Simple` IS still refused, and for a reason that is not "unported":
+    # it turns the estimator OFF (`greedy_subsets_searcher.h:67-69`) and
+    # that branch has no check of its own.
+    var c4 = CatBoostOptions.default()
+    c4.leaf_estimation_method = LEAF_ESTIMATION_SIMPLE
+    expect_refusal(c4, String("leaf_estimation_method=Simple"))
+
+    var c5 = CatBoostOptions.default()
+    c5.leaf_estimation_iterations = -5
+    expect_refusal(c5, String("leaf_estimation_iterations=-5"))
 
     var e = CatBoostOptions.default()
     e.random_strength = 1.0
