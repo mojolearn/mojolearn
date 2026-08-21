@@ -87,6 +87,22 @@ paper.
    including the (ui64)(int) sign-extension chain. The CityHash gate
    caught a real Mojo cast-chain zero-extension on first contact.
 
+7b. **Scale decides WHICH of the incumbent's designs to port.**
+   CatBoost quantizes two ways -- GPU `ComputeBorders` (device
+   RadixSort, full data) and CPU (100k subsample, host sort inside the
+   DP) -- and the faithful port of each is fastest in a different
+   regime: at 400k values/column the device sort cut the border build
+   4x, but at the subsample's 100k the SAME device sort is
+   launch-floor-bound (Metal ~21 us/launch + per-column sync; 500
+   columns = 1.8 s of pure control plane) and the host path wins.
+   "Copy, do not improve" therefore needs a scale annotation: the
+   mechanism to copy is scale-dependent, and the honest port carries
+   BOTH of their paths with the incumbent's own switch (their
+   subsample bound) deciding. Measured 2026-08-21, prep bill
+   3.4 -> 1.2-1.6 s, both paths gated bit-exact. Related: the
+   four-axes floor-amortization law (A.2) -- this is its quantization
+   corollary.
+
 ## C. Toolchain findings (report upstream, never paper claims)
 
 8. **The basename lottery, now with a mechanism profile.** Mojo 1.0
