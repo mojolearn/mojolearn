@@ -689,3 +689,70 @@ running. The rule that would actually have prevented both:
 
 `ensemble/` now owns **100-129 and 176-199**. 181-189 are taken by the row
 sampler and the forest loop; 190-199 stay free.
+
+
+---
+
+# What is left, 2026-08-21 end of session
+
+Fourteen checks pass: `split`, `shuffle`, `atomic_width_probe`,
+`objectives`, `quantiles`, `core_primitives`, `predict`, `builder`,
+`builder_kernels`, `train`, `forest`, `philox`, `regression`, `criteria`.
+
+**Classification and regression forests both train, bagged, and predict.**
+All six criteria cuML accepts are exercised; MAE is refused as cuML refuses
+it. `RandomForest.fit` works as a method. Two fits of the same data are
+bit-identical.
+
+## Functional gaps, in the order they block a user
+
+1. **`sample_weight` is not accepted anywhere.** It is the single largest
+   remaining feature gap and it blocks three things at once: weighted
+   bootstrap (`randomforest.cuh:125-138`), zero-weight row removal
+   (`:144-154`), and the two WEIGHTED bin types, which are ported but
+   unreachable. All three raise by name. Wiring it means a `double`
+   parameter their code carries, a float64 prefix scan this device cannot
+   run for the CDF, and a decision about the weight's precision on device
+   (DEVIATION 100 already prices Float32).
+2. **Inference is the host walk only.** cuML's production path is
+   treelite -> nvForest and is not ported and not planned. Any inference
+   comparison must say which of the two it ran. OPEN: whether a device
+   evaluator is worth v1.
+3. **float64 features are declined** (no float64 on device), so their
+   `-double.cu` instantiations have no counterpart. Multi-GPU likewise.
+4. `max_leaves` and `max_batch_size` are honoured and unit-checked in
+   `builder_check`, but no end-to-end fit varies them. Cheap to add.
+
+## The gap that is not functional, and matters more than all of the above
+
+**NOTHING HAS EVER BEEN COMPARED AGAINST cuML.** Every check here is an
+ANALYTIC fixture or a diff against a LIBRARY PRIMITIVE's compiled output
+(CCCL's `shuffle_iterator`, RAFT's Philox). That is a faithful,
+self-consistent, well-checked port. **It is not parity, and no number in
+this repository says otherwise.**
+
+What would change that, and it is one specific piece of work: run cuML on
+the NVIDIA column via `tools/remote_gpu.sh` at `n_streams=1` with a fixed
+seed, dump quantiles, per-node histograms, chosen splits and leaf values on
+4096-row hashed fixtures, and diff per cell. `bench/results/` still contains
+no RF file. It also settles the DEVIATION 105 tie-class question, which
+bounds what bit-identity can even mean.
+
+Below that: sklearn as a quality band, then timing -- the Step 0 gather
+probe first, since it prices everything downstream. **No timing measurement
+of any kind exists**, by instruction, so nothing here may be quoted as a
+performance result in either direction.
+
+## Merge-time cleanups, none blocking
+
+- `DatasetView` is not `DevicePassable`; every kernel takes it through a
+  one-element device-buffer blob.
+- `lower_bound` needs an `address_space` parameter; the kernels file
+  carries a duplicate for want of it.
+- `Bin` could conform to `BlockScanElement` directly, deleting `ScanBin`.
+- The subnormal-flush row (DEVIATION 123) belongs in
+  `mojo_only/kernel_matrix.mojo` as a CAPABILITY row.
+- `ensemble/mojo_only/segmented_sort.mojo` duplicates the `gbdt/` one.
+- `ensemble/mojo_only/` cannot be `mojo precompile`d while its checks carry
+  `main()`; all fourteen run by path, and no `pixi.toml` task exists for
+  any of them.
