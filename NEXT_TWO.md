@@ -49,18 +49,41 @@ Every rung ships and is gated on its own. Deviation numbers start at **92**;
 This is CatBoost's `boosting_type=Plain` GPU oblivious learner: the arm every
 matched benchmark in this repository already pins CatBoost to.
 
-**LANDED 2026-08-21** (`check-pointwise-offsets`, `check-pointwise-loop`):
+**LANDED 2026-08-21.** Checks: `check-pointwise-offsets`,
+`check-pointwise-loop`, `check-pointwise-hist2`,
+`check-pointwise-hist2-8bit`, `check-divergent-barrier`.
 
-    split_properties_helpers.cuh   -> gbdt/methods/kernel/, pointwise part
-    compute_point_hist2_loop.cuh   -> all three entry points, ONE shared
+    split_properties_helpers.cuh      pointwise part
+    compute_point_hist2_loop.cuh      all three entry points, ONE shared
                                       loop behind a `PointHist2` trait
+    pointwise_hist2_one_byte_5bit.cu  TPointHist<0,0,B>
+    pointwise_hist2_one_byte_6bit.cu  TPointHist<0,1,B>
+    pointwise_hist2_one_byte_7bit.cu  TPointHist<0,2,B>
+    pointwise_hist2_one_byte_8bit.cu  TPointHist<2,1,B>, Int32 fixed point
+
+Three findings from that stretch, all in `PORTING.md`:
+
+* **91** the layouts coincide at one device, so rung 2 is cheap.
+* **92** a divergent threadgroup barrier is benign until the barrier is
+  LOAD-BEARING, and then it drops points. `PORTING.md` 11 was right; this
+  entry's own first conclusion was not. The rule that survives: **gate a
+  kernel against a REAL accumulator, not a convenient one** -- a
+  private-slot tally is the histogram equivalent of uniform test data.
+* **93** Metal has no THREADGROUP float atomics (global ones are fine), so
+  the 8-bit accumulator is Int32 fixed point and `add_point` carries a row
+  id for the dither.
 
 **NEXT, in this order:**
 
-1. `pointwise_hist2_one_byte_templ.cuh` + the 5/6/7/8-bit accumulators.
-   These are `PointHist2` implementors and nothing else -- the loop is
-   done, so each one is `AddPoint`, `Reduce` and a writeback.
-2. `pointwise_hist2_binary.cu`, `pointwise_hist2_half_byte.cu`.
+1. `pointwise_hist2_binary.cu`, `pointwise_hist2_half_byte.cu` and
+   `pointwise_hist2_half_byte_template.cuh` -- the last two accumulators,
+   for 1-bit and 2-to-4-bit features.
+2. `pointwise_hist2_one_byte_templ.cuh`'s `ComputeSplitPropertiesPass` and
+   `ComputeSplitPropertiesNBImpl`: the pass driver, the `GetMaxBinCount`
+   dispatch bounds, and the global writeback (`atomicAdd` above one
+   block per feature, `WriteThrough` below).
+   NOTE: the 8-bit writeback must divide by the fixed-point scale, so
+   there are two writeback shapes and the driver has to know which.
 3. `pointwise_hist2.cu`, the dispatcher, plus `pointwise_scores.cu` and
    `score_calcers.cuh`.
 4. `pointwise_kernels.{h,cpp}` host wrappers, then `histograms_helper`,
