@@ -1938,62 +1938,92 @@ it is NOT WIRED in this port's searcher — grep `greedy_search_helper.mojo` and
 there is nothing. **If `min_data_in_leaf` is ever wired, this deviation stops
 being output-identical and the filter becomes required.**
 
-## 70. NOT a deviation: `mojo build --emit shared-lib` cannot load the GBDT kernels
+## 70. FIXED: the extension dropped its Metal kernels, for two toolchain reasons
 
-Recorded here because it looks like a port defect and is not, and because five
-hypotheses died on it — rule 10 exists so nobody re-runs them.
+**This section previously said the CPython extension could not load the GBDT
+kernels and named five dead hypotheses. It was right that it was a toolchain
+problem and WRONG about which one, in both halves.** Replaced rather than
+annotated, per rule 10. `GradientBoosting` fits and predicts from Python.
 
-**The symptom.** `python/mojolearn/ensemble.py` calls `_mojolearn.gbdt_fit`
-and the extension raises
+### Cause 1: `--target-accelerator`, at ANY value, suppresses AOT Metal compilation
 
-    Failed to create Metal function:
-    gbdt_gpu_data_kernel_binarize6A6A6A6A6A6A_7ea3b6461ee80dec
+With `--target-cpu apple-m1` held fixed on one source, counting compiled
+Metal functions (the mangled name with an `air` suffix):
 
-**Where it does and does not happen**, measured 2026-08-21 on the M4, all with
-the same `gbdt/estimator.mojo` entry point and the same fixture:
+    no --target-accelerator            113 AIR blobs   everything loads
+    --target-accelerator metal:1         0 AIR blobs   nothing loads
+    --target-accelerator apple-m1-metal4 0 AIR blobs   nothing loads
 
-    mojo run                      WORKS
-    mojo build (executable)       WORKS   (`EXE OK bytes 2070`)
-    mojo build --emit shared-lib  FAILS
+So `metal:1` being an unrecognised string was the SMALLER half. Fixing it to
+a real target does not help; REMOVING it does. It is gone from
+`bindings/build.sh`. Reproduced independently 2026-08-21.
 
-**What is actually in the binaries.** Counting AIR blobs (compiled Metal
-functions, which appear as the kernel's mangled name with an `air` suffix):
+### Cause 2: the AOT kernel count depends on the BASENAME of the entry file
 
-    executable      81 AIR blobs, 188 kernel names
-    shared-lib       0 AIR blobs, 118 kernel names
+Three copies of `bindings/_mojolearn.mojo` with the SAME md5, in one
+directory, built with one command differing only in which file it names:
 
-So the shared library carries every kernel's LOOKUP NAME and none of their
-compiled code, and must JIT at load. The JIT succeeds for the k-means and
-k-NN kernels — `KMeans(...).fit(X)` through the same extension works — and
-fails for the GBDT ones. **Every name in the diff carries the
-`_gpu_shared_mem` prefix**, which is the discriminating fact: the kernels that
-fail are the shared-memory ones.
+    copyml2.mojo         113 AIR blobs, 85 of them gbdt   everything loads
+    _mojolearn.mojo       29 AIR blobs,  1 of them gbdt   GBDT dies,
+                                                          k-means and k-NN load
+    mojolearn_ext.mojo     0 AIR blobs,  0 of them gbdt   nothing loads
 
-**Five hypotheses, all killed by measurement, none by reasoning:**
+Same flags, same include paths. **That middle row is the reported symptom
+exactly**, and it is why the failure looked like it was about GBDT or about
+shared memory when it was about neither. `-j 1`, a different `-o`, an empty
+`MODULAR_HOME` cache and editing the source all change nothing. On a
+GBDT-only entry point `_mojolear` gets 84 blobs where `_mojolearn` gets 67,
+so it is not leading underscores or any readable property of the name.
 
-1. *The `--target-cpu apple-m1` baseline pinning.* Rebuilt with no target
-   flags at all: fails identically.
-2. *Kernel-count capacity — GBDT adds hundreds of histogram instantiations.*
-   Built a shared-lib exposing ONLY `gbdt_fit`, nothing else: fails
-   identically.
-3. *`GILReleased` hides the call graph from the AOT kernel collector.*
-   Removed it: fails identically.
-4. *The module entry shape — `@export PyInit_` versus `main()`.* This is what
-   the executable test isolates, and the executable WORKS, so the entry shape
-   is not sufficient on its own to explain it; what tracks is `--emit
-   shared-lib` specifically.
-5. *`--target-accelerator metal:1` is not a real target.* It is not:
-   `--print-supported-accelerators` lists `apple-m1-metal4` .. `apple-m5-metal4`
-   and no `metal:1`. Rebuilt with `apple-m1-metal4`: still 0 AIR blobs, still
-   fails. **`bindings/build.sh` has passed an unrecognised accelerator string
-   this whole time**, and that is worth fixing on its own — but it is not this
-   bug.
+**No small reproducer exists**: a two-kernel file emits both blobs under
+either name. It takes scale. Mojo 1.0.0 (ed45d567).
 
-**Consequence for the release.** `GradientBoosting` is written, correct, and
-proven end to end through the executable build; it is not reachable from the
-CPython extension on this toolchain. It is listed in the wrapper's named
-absences with this reason rather than shipped as a class that dies with a
-Metal error.
+`bindings/build.sh` now compiles a copy under a measured basename into a
+temporary directory, gates the artifact with a per-subsystem blob floor plus
+a smoke test that actually launches one kernel from each estimator, and
+retries over alternative stems before hard-failing.
+
+### What the five hypotheses actually were
+
+1. `--target-cpu` pinning -- dead, correctly. `--target-cpu` is innocent;
+   `--target-accelerator` was sitting next to it in the same flag string.
+2. Kernel-count capacity -- **dead, and the earlier negative was wrong**: a
+   shared-lib exposing only `gbdt_fit` carries 84 blobs and fits from
+   Python. That experiment had been run under the poisoned basename.
+3. `GILReleased` -- dead, re-confirmed cleanly: adding it to a working
+   three-estimator shared-lib changes the count by zero.
+4. Module entry shape / `--emit shared-lib` -- **dead AND BACKWARDS.** An
+   executable built WITH the target flags fails at the same kernel; a
+   shared-lib built from a differently-named copy works. `--emit shared-lib`
+   was never the variable. The original "executable works, shared-lib
+   fails" compared an executable built WITHOUT the flags against a
+   shared-lib built WITH them -- two variables moved at once, which is the
+   mistake rule 6 exists to prevent.
+5. `metal:1` is not a real target -- confirmed, and promoted from a
+   tidiness note to Cause 1.
+
+**The `_gpu_shared_mem` discriminator was a red herring.** It is a prefix on
+the BLOB symbol, not on the lookup name. The broken artifact keeps twenty
+shared-memory blobs from `cluster/` and `neighbors/` while losing every
+GBDT one, shared-memory or not. A correlation across 118 names that meant
+nothing.
+
+### The gate's own sabotage
+
+The first artifact gate -- "at least one blob per subsystem" -- **PASSED the
+broken 29-blob artifact**, because that build keeps exactly 1 of 85 `gbdt_`
+blobs. Caught by running the gate against the known-bad reproducer, and
+replaced. The replacement was then sabotaged both ways: forcing the poisoned
+stems makes the loop reject them and land on a good one, and the smoke test
+in isolation gives PASS / FAIL / FAIL across the three reproducer artifacts.
+
+### Still broken the same way, and not ours to fix
+
+`bindings/build_estimators.sh:11` passes
+`--target-cpu apple-m1 --target-accelerator metal:1`, and
+`python/mojolearn/_mojolearn_estimators.so` has **0 AIR blobs**. Dropping
+`--target-accelerator` is the same one-line fix. That file belongs to
+another session; flagged, not touched.
 
 ## 71. `multilogit`'s `functionValue` is per-block partials
 
