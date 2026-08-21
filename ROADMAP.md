@@ -298,19 +298,26 @@ scikit-learn's ExtraTrees at a fixed seed.**
 | **Bootstrap, permutation tests, Monte Carlo** | **trivial, and still unclaimed** | Embarrassingly parallel by construction, compute-bound if the statistic is, and statisticians run them on laptops constantly. Least glamorous entry, possibly the best ratio of user-visible speedup to difficulty. A good filler between phases. |
 | **IVF index for k-NN** | **only if brute force stops winning** | Distances to centroids are a matmul, selecting `nprobe` lists is a top-k, the search inside is brute force. Dense and regular. FAISS-GPU implements IVFFlat and IVFPQ. Measure where exact brute force stops winning first. |
 | **HNSW** | **never** | Graph traversal: pointer chasing, irregular access, every hop dependent on the last. Close to the worst case for a wide machine. FAISS ships HNSW CPU-only for exactly this reason. |
+| **GBDT pointwise loss extras** (Quantile, MAE, Poisson, Tweedie, Huber, Expectile, Lq, MAPE) | **first in line when a user or dataset asks** | Their GPU arm ships all of these through the same pointwise target the Logloss port mirrored (`pointwise_target_impl.h:261-293`). The Logloss work built the whole chassis -- the NeedEstimation arm, the Newton walker, the device oracle -- so each of these is mostly a new der/der2 formula in the existing kernel switch, plus its libm-anchored check. Poisson/Tweedie are the insurance standard, Quantile is how prediction intervals are done. Best work-to-audience ratio of the loss list. Zero effect on any current benchmark row; this is admission, not speed. |
+| **GBDT MultiClass** | **medium shelf: common task, real port** | Not rare -- third most common task after binary and regression (covtype is natively 7-class; benchmarks binarize it). But it is a genuine port, not a formula: its own kernel family (`multiclass_kernels.cu`), multi-dimensional leaf values, matrix second derivatives in estimation. Take it after the pointwise extras, before ranking. |
+| **GBDT querywise / ranking** (QueryRMSE, PairLogit, QuerySoftMax, YetiRank -- `querywise_targets_impl.h:92-271`) | **long-term maybe, dated 2026-08-21** | Genuinely niche: applies only to query-grouped data (`group_id`), which means search and recsys teams. No benchmark in our arena exercises it, and it carries the most machinery (pairwise oracles, per-query kernels). Worst work-to-audience ratio on the loss list. Revisit only if a real ranking user shows up. |
 
-## The uncomfortable note, now measured rather than argued
+## The uncomfortable note: MEASURED FALSE, then measured the other way
 
-**Gradient boosting is the weakest entry on this list for GPU acceleration**,
-and `e4eb7cc` turned that from an argument into a measurement: dispatch is
-3.79 ms of a 41.7 ms per-tree fixed cost, the other ~38 ms is kernel time on
-the row-independent histogram footprint, and per-row work is 2.1x CatBoost CPU
-so **no dataset scale closes the gap on its own**.
+An earlier version of this section said, from the `e4eb7cc` measurement
+(41.7 ms per-tree fixed cost, per-row work 2.1x behind CatBoost CPU), that
+**no dataset scale closes the gap on its own**. That was true when measured
+and is false now, so the sentence is replaced rather than kept:
+`PERF_2026-08-20_fixed-cost.md` has the current decomposition -- per-row
+work about 2x FASTER than their CPU, fixed cost 9.43 ms against their 2.20
+-- and the alternated windows read 1.25-1.32x ahead at 800k, 1.35-1.51x at
+2M, 1.8-2.1x at 4M, MSE matching to eight significant figures. Scale is
+exactly what closes the gap; the crossover sits near 436k rows and small
+datasets below it are conceded to the launch floor.
 
-That is not an argument to abandon it -- it is the hardest and most competitive
-target and therefore the most convincing if it lands. It is an argument against
-believing that finishing it is the only thing standing between here and a
-product. Phase 0 says the same thing more bluntly.
+What survives of the original point: GBDT remains the hardest, most
+competitive target on this list, and finishing it is still not the only
+thing between here and a product. Phase 0 says the same thing more bluntly.
 
 ## On maintenance, which is the real objection to a broad scope
 
