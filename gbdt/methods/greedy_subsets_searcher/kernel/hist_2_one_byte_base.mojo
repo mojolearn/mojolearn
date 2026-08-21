@@ -101,7 +101,7 @@ from mojo_only.kernel_matrix import (
     lane_width_for,
     requires_uniform_iteration_for,
 )
-from mojo_only.numerics import NUMERIC_FAST, NUMERIC_IDENTICAL
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 
 from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     hist2_dither,
@@ -126,7 +126,7 @@ from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_7bit import (
 
 #: Same build mode as the other histogram kernels; the flush follows the
 #: matrix.
-comptime BUILD_MODE = NUMERIC_FAST
+comptime BUILD_MODE = GLOBAL_NUMERIC_MODE
 
 #: Lanes moving in lockstep. READ FROM THE MATRIX, not pinned here.
 comptime LANE_WIDTH = lane_width_for[

@@ -1087,6 +1087,55 @@ def hist_smem_mode_for[column: Int, identical: Bool]() -> Int:
         return HIST_SMEM_WARP_PRIVATE_F32
 
 
+# ---------------------------------------------------------------------------
+# THE PARTITION-STATS CHUNK COUNT, and the misclassification it corrects
+# ---------------------------------------------------------------------------
+
+#: NUMERIC, and it spent this project's whole life classified as SCHEDULING.
+#:
+#: `partition_stats_chunks(sm_count, n_stats)` is CatBoost's
+#: `CeilDivide(2 * TArchProps::SMCount(), statCount)`
+#: (`update_part_props.cu:215`): the number of chunks a leaf's rows are split
+#: into before `block.sum` reduces each one in FLOAT. **So the machine's core
+#: count decides how a float sum is partitioned, and the partition of a float
+#: sum decides its last bits.** Apple's 10 cores and an A100's 108 SMs give
+#: different chunk counts, different partials, and therefore different
+#: per-leaf stats -- which become the LEAF VALUES, which are the model.
+#:
+#: `hardware_matrix.gpu_cores_for` declares itself SCHEDULING: "the device
+#: column always answers". True of every other reader it has and FALSE of
+#: this one. `numerics.mojo` opens by warning about exactly this mistake --
+#: "a block count is a summation order" -- and the mistake was in the tree
+#: anyway, one indirection away, which is how it survived a matrix, a check
+#: and two audits.
+#:
+#: Found 2026-08-21 chasing "will the identical column actually be identical
+#: across GPUs". It is the largest reason the answer was no, and it is the
+#: one hole that is pure pinning rather than a new kernel: the reduction is
+#: already deterministic GIVEN a chunk count, so pinning the count closes it.
+comptime PINNED_PARTITION_CHUNKS_SM = 32
+
+
+def partition_chunks_sm_for[identical: Bool](device_sm: Int) -> Int:
+    """The `sm_count` the partition-stats chunk formula is fed.
+
+    Under `FAST`, the device's own core count: CatBoost's behaviour, and what
+    fills the machine. Under `IDENTICAL`, a PINNED value, so the float
+    partition has the same shape on every vendor.
+
+    32 rather than any real device's count, deliberately: it is above Apple's
+    10 and below a datacenter part's 108, so no column runs the pinned arm at
+    its own number and nobody can mistake the pin for a measurement. The cost
+    is a grid that under-fills a large GPU and over-fills a small one, on the
+    opt-in arm only -- a chunk count, not a kernel, so measuring it is a
+    parameter sweep and it has not been run.
+    """
+    comptime if identical:
+        return PINNED_PARTITION_CHUNKS_SM
+    else:
+        return device_sm
+
+
 def hist2_block_size_for[column: Int, smem_mode: Int]() -> Int:
     """SCHEDULING row bounded by the NUMERIC budget, per accumulation mode.
 

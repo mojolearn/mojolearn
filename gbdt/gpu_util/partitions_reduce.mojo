@@ -87,6 +87,9 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.host.device_attribute import DeviceAttribute
 from max.gpu.primitives.block import sum as block_sum
 
+from mojo_only.kernel_matrix import partition_chunks_sm_for
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+
 
 # `const ui32 blockSize = 512` (`update_part_props.cu:209`). Was 256, which
 # was ours, not theirs.
@@ -213,8 +216,25 @@ def partition_stats_chunks(sm_count: Int, n_stats: Int) -> Int:
     (`update_part_props.cu:215`). Exported so the check derives its expected
     `partials` layout from the SAME formula the launch uses; an expectation
     that recomputes this its own way is an expectation that follows nothing.
+
+    **AND IT IS A NUMERIC ROW, WHICH IS WHY THE PIN IS APPLIED HERE AND NOT
+    AT A CALL SITE.** The chunk count partitions a FLOAT sum -- each chunk is
+    reduced by `block.sum` and the partials are added in phase 2 -- so the
+    machine's core count decides the last bits of every per-leaf stat, and
+    per-leaf stats are the LEAF VALUES. Under `IDENTICAL` the count therefore
+    comes from `kernel_matrix.partition_chunks_sm_for`, pinned, so the
+    partition has one shape on every vendor.
+
+    This function is the only place the formula lives, and both readers --
+    the launch and the `stat_partials` buffer sizing in
+    `greedy_search_helper` -- go through it. That matters more than it looks:
+    if the pin were applied at the launch only, the buffer would be sized
+    from the device count and the kernel would index past it. One formula,
+    one pin, both readers.
     """
-    var chunks = (2 * sm_count + n_stats - 1) // n_stats
+    comptime _identical = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    var sm = partition_chunks_sm_for[_identical](sm_count)
+    var chunks = (2 * sm + n_stats - 1) // n_stats
     if chunks < 1:
         chunks = 1
     return chunks

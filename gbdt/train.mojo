@@ -211,7 +211,8 @@ def train(
     score_function: Int = SCORE_FUNCTION_COSINE,
     cat_features: List[Bool] = List[Bool](),
     cat_feature_params: List[TCatFeatureParams] = List[TCatFeatureParams](),
-    ctr_estimation_permutation_id: Int = DEFAULT_PERMUTATION_COUNT - 1,
+    ctr_estimation_permutation_id: Int = -1,
+    permutation_count: Int = -1,
     loss: String = "RMSE",
     loss_alpha: Float32 = Float32(-1.0),
     loss_q: Float32 = Float32(-1.0),
@@ -439,8 +440,67 @@ def train(
     # Skipped when nothing is permutation dependent, which is what their
     # `CreateCtrConfigsFromDescription`'s `!HasTargetBinarization()`
     # `continue` (`binarizations_manager.cpp:397-399`) amounts to here.
+    # ---- `UpdateGpuSpecificDefaults` (`cuda/train_lib/train.cpp:99-108`)
+    #
+    #     if (!HasPermutationFeatures(featuresManager) &&
+    #         options.BoostingOptions->BoostingType == EBoostingType::Plain) {
+    #         options.BoostingOptions->PermutationCount = 1;
+    #     }
+    #
+    # **That is an ASSIGNMENT, not a `SetDefault`**: with no CTR-bearing
+    # categorical feature it overrides an explicit `permutation_count`
+    # too, because four identical permutations of a dataset with no
+    # permutation-dependent column are four identical datasets. This port
+    # is Plain (PORTING.md 88), so the second half of their condition
+    # holds unconditionally here.
+    #
+    # `HasPermutationFeatures` (`:86-98`) is "some cat feature is used for
+    # a CTR". A feature is used for a CTR exactly when its cardinality is
+    # above `one_hot_max_size` (`binarizations_manager.cpp:106-115`), so
+    # this pre-pass reads cardinalities and nothing else -- their features
+    # manager makes the same decision before their options are resolved,
+    # in the same order.
+    var has_permutation_features = False
+    if len(dependent_configs) > 0:
+        for f in range(n_features):
+            if not (len(cat_features) == n_features and cat_features[f]):
+                continue
+            var maxc = 0
+            for r in range(n_rows):
+                var c = Int(x_colmajor[f * n_rows + r])
+                if c > maxc:
+                    maxc = c
+            if maxc + 1 > cat_params.one_hot_max_size:
+                has_permutation_features = True
+                break
+
+    var perm_count = permutation_count
+    if perm_count == -1:
+        perm_count = DEFAULT_PERMUTATION_COUNT
+    if perm_count < 1:
+        # `CB_ENSURE(PermutationCount.Get() > 0)` (`boosting_options.cpp:67`)
+        raise Error(
+            "Permutation count should be positive, got "
+            + String(perm_count)
+        )
+    if not has_permutation_features:
+        perm_count = 1
+
+    # their estimation permutation, `GetEstimationPermutation()`
+    # (`doc_parallel_boosting.h:101-103`). It is a caller argument only so
+    # that `ctr_device_check` can pin permutation 0; -1 means "theirs".
+    var est_perm = ctr_estimation_permutation_id
+    if est_perm == -1:
+        est_perm = perm_count - 1
+    if est_perm < 0 or est_perm >= perm_count:
+        raise Error(
+            "ctr_estimation_permutation_id " + String(est_perm)
+            + " is outside the " + String(perm_count)
+            + " permutations this fit builds"
+        )
+
     var binarized_target = List[UInt8]()
-    var ctr_order = List[UInt32]()
+    var ctr_orders = List[List[UInt32]]()
     var target_classes_count = 0
     if len(dependent_configs) > 0:
         var target_borders = build_target_borders(
@@ -454,9 +514,14 @@ def train(
         # because their classifier counts the borders it holds.
         target_classes_count = len(target_borders) + 1
         binarized_target = build_binarized_target(y, target_borders)
-        ctr_order = ctrs_estimation_permutation(
-            n_rows, ctr_estimation_permutation_id
-        ).fill_order()
+        # ONE ORDER PER PERMUTATION, their loop's
+        # `ctrsEstimationPermutation.WriteOrder(ctrEstimationOrder)`
+        # (`doc_parallel_dataset_builder.cpp:255`) with the permutation
+        # from `GetPermutation(DataProvider, permutationId)` (`:48`).
+        for p in range(perm_count):
+            ctr_orders.append(
+                ctrs_estimation_permutation(n_rows, p).fill_order()
+            )
 
     for f in range(n_features):
         var is_cat = len(cat_features) == n_features and cat_features[f]

@@ -53,7 +53,7 @@ from mojo_only.kernel_matrix import (
     deterministic_flush_for,
     requires_uniform_iteration_for,
 )
-from mojo_only.numerics import NUMERIC_FAST, NUMERIC_IDENTICAL
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier, syncwarp
@@ -78,7 +78,7 @@ from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
 #: thread yields 256, which is exactly 32,768 bytes and keeps their per-warp
 #: slice arithmetic intact at 8 warps of 1024 floats.
 #: Same build mode as `hist_binary.mojo`; the flush follows the matrix.
-comptime BUILD_MODE = NUMERIC_FAST
+comptime BUILD_MODE = GLOBAL_NUMERIC_MODE
 
 #: Lanes moving in lockstep. READ FROM THE MATRIX, not pinned here.
 #:

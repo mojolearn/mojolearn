@@ -54,6 +54,26 @@ two modes interleaved and report the ratio.
 #: alone, and a regression test cannot assert on exact predictions. This is
 #: CatBoost's shipped behavior, so it is a defensible default rather than a
 #: novel one.
+#: **THE SWITCH. One line, the whole build.**
+#:
+#: It did not exist until 2026-08-21 and the mode was therefore NOT REACHABLE:
+#: five kernel files each declared their own `comptime BUILD_MODE =
+#: NUMERIC_FAST`, so selecting `IDENTICAL` meant editing five files and
+#: knowing which five. A toggle a user cannot flip is a toggle that does not
+#: exist, and every claim made about "the IDENTICAL mode" was a claim about a
+#: configuration nobody had ever built.
+#:
+#: Found by Andrew asking whether the toggle actually works. It did not.
+#:
+#: Every site that used to hardcode `NUMERIC_FAST` now reads this, so the
+#: default is unchanged bit for bit and flipping this one line rebuilds the
+#: whole tree in the other mode. Comptime, because the two modes are
+#: different code (a float atomic and a fixed-point accumulator are not one
+#: configured value), which is the same reason `TARGET_COLUMN` is a build
+#: rather than a flag.
+comptime GLOBAL_NUMERIC_MODE = NUMERIC_FAST
+
+
 comptime NUMERIC_FAST = 0
 
 #: Opt in when reproducibility is needed: numeric rows are read from

@@ -38,7 +38,7 @@ from mojo_only.kernel_matrix import (
     deterministic_flush_for,
     requires_uniform_iteration_for,
 )
-from mojo_only.numerics import NUMERIC_FAST, NUMERIC_IDENTICAL
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from gbdt.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
     BLOCK_SIZE,
     HIST_SIZE,
@@ -76,7 +76,7 @@ comptime POINTS_PER_ITER = UNROLL * LOAD_SIZE
 
 
 #: The mode this build compiles against; see `mojo_only/numerics.mojo`.
-comptime BUILD_MODE = NUMERIC_FAST
+comptime BUILD_MODE = GLOBAL_NUMERIC_MODE
 
 #: Lanes moving in lockstep. READ FROM THE MATRIX, not pinned here.
 #:

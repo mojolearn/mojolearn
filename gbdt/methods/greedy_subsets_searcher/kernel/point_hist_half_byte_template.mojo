@@ -47,7 +47,7 @@ from mojo_only.kernel_matrix import (
     block_size_for,
     hist_floats_per_thread_for,
 )
-from mojo_only.numerics import NUMERIC_IDENTICAL, NUMERIC_FAST
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 
 
 #: READ FROM THE MATRIX, not restated here. `mojo_only/kernel_matrix.mojo`
@@ -77,7 +77,7 @@ comptime BLOCK_SIZE = block_size_for[K_HIST_HALF_BYTE, TARGET_COLUMN]()
 #: add to which -- and that is what the identity floor's 32 KB is protecting.
 #: On the hist_2 path the same knob is pure scheduling, because integer
 #: addition is associative. Two families, two answers, one table.
-comptime BUILD_MODE = NUMERIC_FAST
+comptime BUILD_MODE = GLOBAL_NUMERIC_MODE
 
 #: Lanes moving in lockstep. READ FROM THE MATRIX, not pinned here.
 #:
