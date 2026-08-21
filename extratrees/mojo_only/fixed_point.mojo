@@ -174,16 +174,28 @@ def choose_scale(sum_of_magnitudes: Float64, row_count: Int) raises -> Float64:
             + String(bits)
             + " bits"
         )
-    var raw = limit / sum_of_magnitudes
-
     # SNAP DOWN to a power of two. See the module docstring: a continuous
     # scale is a lever arm for the last bits of `sum_of_magnitudes`.
+    #
+    # THE COMPARISON IS EXACT, AND THAT IS NOT COSMETIC. This used to compute
+    # `raw = limit / sum_of_magnitudes` and snap against that quotient, whose
+    # last ulp can flip the chosen power at an exact-ratio boundary depending
+    # on the platform's division. Written as `mag * snapped <= limit` every
+    # operation is exact -- multiplying by a power of two only reshuffles the
+    # exponent, and `limit < 2^30` is exactly representable -- so the chosen
+    # power is a pure function of the magnitude's BITS. That is what a device
+    # implementation with no `Float64` would have to reproduce, and it is what
+    # makes the scale identical across platforms rather than merely close.
+    #
+    # Adopted from the root `mojo_only/fixed_point.mojo`, which took the same
+    # refinement on 2026-08-21 for the same reason; this file's copy had the
+    # rounded-quotient form until now.
     var snapped = 1.0
-    if raw >= 1.0:
-        while snapped * 2.0 <= raw:
+    if sum_of_magnitudes <= limit:
+        while sum_of_magnitudes * (snapped * 2.0) <= limit:
             snapped *= 2.0
     else:
-        while snapped > raw:
+        while sum_of_magnitudes * snapped > limit:
             snapped /= 2.0
     return snapped
 

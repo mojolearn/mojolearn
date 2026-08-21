@@ -586,6 +586,24 @@ measured), so plain operators are the only correct spelling.
 `to_bits` is `from std.memory import bitcast` then
 `bitcast[DType.float32](u32)`.
 
+**`Int128` MULTIPLIED INSIDE A DEVICE KERNEL DOES NOT COMPILE.** A kernel
+containing `Int128(a) * Int128(b)` fails at Metal pipeline-state creation with
+`Compilation failed due to an interrupted connection:
+XPC_ERROR_CONNECTION_INTERRUPTED. This error occurred after multiple retries.`
+The identical kernel with `Int64` products builds and runs, so the 128-bit
+multiply is the failure and not the harness. Reproduced twice on 2026-08-21 in
+a 35-line standalone probe, Mojo 1.0.0 (ed45d567). **The error message names a
+connection, not a type**, which is what makes this expensive to diagnose — it
+reads as a flaky toolchain rather than as an unsupported operation. Deviation
+167 hand-widens from 32-bit limbs instead. Same shape of backend refusal as the
+whole-struct kernel argument in deviation 162.
+
+**`DeviceAttribute.WARP_SIZE` is not queryable on Apple** (`Attribute
+"WARP_SIZE" not supported for Apple GPU`). `MAX_THREADS_PER_BLOCK` (1024) and
+`MAX_SHARED_MEMORY_PER_BLOCK` (32768) do work. A check that wants the width
+must catch and REPORT it as unchecked rather than skip silently;
+`std.gpu.WARP_SIZE` is the compile-time value to build against.
+
 **A struct field cannot expose `MutAnyOrigin`** ("struct fields cannot expose
 AnyOrigin in their type"). Use `MutUntrackedOrigin` for non-owning views whose
 lifetime is managed explicitly. `UnsafePointer` is deprecated in favour of
@@ -1185,3 +1203,149 @@ column id survives it, sorts to the tail, and is identified by one comparison.
 
 **Guarded by** `feature_sampler_check`, which asserts column `n - 1` is under
 1.25x expectation.
+
+---
+
+# The device split reduction — deviations 166-169
+
+## 166. The reduction carries the EXACT RATIONAL KEY beside the `Split`, and `Split.update` becomes its tie-break
+
+**Theirs.** `warpReduce` (`split.cuh:92-105`) shuffles four fields and `update`
+decides on the first it can. The score IS the key: one `DataT`.
+
+**Ours.** The reduced payload is `SplitExact` — their four fields plus
+`ExactKey(num, den, valid)` — compared by (1) `compare_exact_key`, deviation
+145's cross-multiply, and then, ONLY on an exact tie, (2) `Split.update`'s
+chain, unchanged and **called rather than re-transcribed**: the tie branch
+copies its own `Split`, calls the checked `Split.update`, uses only the boolean
+it returns as a predicate, then assigns the whole payload so the key travels
+with its split. The shipping path therefore executes the one transcription
+`split_check` already validates; there is no second copy to drift.
+
+**Why it had to be carried at all.** Two candidates whose exact proxies differ
+can round to the same `Float32` — 24 mantissa bits against counts reaching
+2^26 — and a float-keyed reduction then falls through to `colid` and picks by
+feature index. Measured in this fixture: **946 candidate pairs are bit-equal in
+`Float32` and 80 of them have different exact proxies.** No single scalar can
+stand in for the rational: `num/den` in `Float32` is the very rounding being
+avoided, `Float64` does not exist on device, and normalising to a common
+denominator hits the same overflow the cross-multiply was sized against.
+
+**Regression is the same code with the key switched off.** A caller with no
+exact key passes `ExactKey()` (valid = 0); every comparison then ties and the
+order degenerates to `Split.update` — cuML's own reduction, exactly. One
+kernel, no branch on task, and the check asserts the degenerate case equals a
+plain `Split.update` fold.
+
+**The order is total, with an exact condition.** Lexicographic on (rational,
+metric, colid, quesval); its only ties are payloads equal in all four, which
+could still differ in `n_left`. Unreachable in the pipeline because (colid,
+quesval) plus the node's rows determine `n_left` — and the check ASSERTS the
+fixture contains no such pair rather than assuming it.
+
+**Price.** 36-byte payload instead of 16, so seven shuffles per butterfly step
+instead of four and 36 bytes of shared per warp (288 B at TPB 256, against a
+queried 32768 B budget); two 64x64->128 multiplies per keyed comparison;
+`Int64` lane shuffles. No timing number, and none until the perf round.
+
+---
+
+## 167. The Int128 cross-multiply is HAND-WIDENED from 64-bit limbs, because Int128 in a device kernel does not compile
+
+**Theirs.** None — they compare one float.
+
+**Ours on host.** `Int128(a.num) * Int128(b.den)` against
+`Int128(b.num) * Int128(a.den)`, exact to `MAX_ROWS_EXACT = 2^26` rows
+(deviation 135's derivation).
+
+**Ours on device.** The same comparison built from 32-bit limbs into a
+(hi, lo) pair compared lexicographically: four 32x32->64 multiplies, two adds,
+two shifts, nothing vendor-specific.
+
+**Why — a MEASURED toolchain wall, not a preference.** A kernel containing an
+`Int128` multiply fails to BUILD: Metal pipeline-state creation dies with
+`Compilation failed due to an interrupted connection:
+XPC_ERROR_CONNECTION_INTERRUPTED. This error occurred after multiple retries.`
+The identical kernel with `Int64` products builds and runs, so the 128-bit
+multiply is the failure and not the harness. Reproduced twice on 2026-08-21,
+Mojo 1.0.0 (ed45d567), in a 35-line standalone probe. Same shape of Metal
+backend refusal deviation 162 records for a whole-struct kernel argument.
+
+**Not an invention under the vendor rule.** There is no MAX entry point and no
+vendor intrinsic for a 128-bit integer product on any of the three targets —
+the TYPE is what the backend refuses, so there is nothing to call.
+
+**Why it is safe to believe.** The check runs it against the host's `Int128`
+form pairwise, per cell: **490,000 ordered pairs, 0 disagreements**, over
+products deliberately built to exceed 2^64 — and it counts how many were
+decided by the high limb alone (487,790), so the wide path is demonstrably
+exercised rather than assumed.
+
+**Also ours:** the sign split covers a negative numerator, which Gini cannot
+produce. It is there because deviation 153 leaves the regression key open and
+an MSE numerator is not sign-constrained, and the fixture carries a mixed-sign
+node so the branch is not dead code.
+
+---
+
+## 168. `warpReduce` is a `shuffle_xor` butterfly with NO ASSUMED WARP WIDTH
+
+**Theirs.** `for (int i = raft::WarpSize/2; i >= 1; i /= 2) { auto id = lane + i; ... }`
+with `WarpSize` a compile-time 32.
+
+**Ours.** The same loop with `warp.shuffle_xor` over `std.gpu.WARP_SIZE` — the
+target's width, 32 on NVIDIA and Apple, 64 on AMD CDNA, never a literal.
+
+**Why XOR rather than their `lane + i`.** For lane 0 the two are the same
+permutation at every step (`0 + i == 0 XOR i`), so lane 0's result is
+bit-identical to theirs and their "best split will be with 0th lane" note still
+holds. They differ for the other lanes, where theirs leaves partials and XOR
+leaves the full answer everywhere — a strengthening, and it matters because
+this reduction is called twice in a row.
+
+**Why not a MAX collective.** `max.gpu.primitives` offers `sum`/`max`/`min`/
+`broadcast`/`prefix_sum` over a SCALAR; this reduces a 36-byte record under a
+four-level lexicographic order and no MAX collective takes a user comparator.
+The shuffle primitives ARE the vendor library here and they are what is called;
+only the combine is ours, and the combine is `Split.update`.
+
+**Price.** `log2(WARP_SIZE)` steps of seven shuffles — one more step on a
+64-wide wavefront, which is correct behaviour rather than a cost.
+
+---
+
+## 169. `evalBestSplit`'s publish: a portable mutex, a struct-of-arrays cell, and the device's own report of which path it ran
+
+Same six steps in the same order as `split.cuh:107-152`. Three things are
+spelled differently and each is forced:
+
+**(a) The lock.** `threadfence` is comptime-asserted NVIDIA-only and Metal
+rejects a strong compare-exchange by name, so the established translation is
+used — already enqueued twice in this repo (cuVS's cross-block mutex, and
+`node_feature_range_kernel` under deviation 161): spin on an ACQUIRE load,
+claim with a WEAK RELAXED compare-exchange, hand back with a RELEASE store,
+which is where their `__threadfence(); atomicExch()` goes. Only thread 0 of a
+block ever takes it, exactly as theirs does, so no two threads of one warp
+contend and the spin cannot livelock a warp.
+
+**(b) The cell is seven arrays**, not one `volatile Split*` — deviation 162's
+measured Metal failure on whole-struct pointer access. Their code is already
+field-by-field because of `volatile`, so it is the same shape for a different
+reason.
+
+**(c) Two counters with no cuML counterpart**, written unconditionally by the
+shipping kernel: `out_n_merges` (blocks that published) and `out_n_warps`
+(warps that carried a valid candidate into the cross-warp combine). **A
+reduction check that cannot NAME the path it ran can pass about a path it never
+took** — with one warp per block the cross-warp step is a no-op that copies
+lane 0's own value. The device reports the path; the host does not infer it.
+
+**Why the publish order cannot change the answer.** The merge is `update` under
+166's total order, and a maximum under a total order is independent of arrival
+order — the same argument 161 makes for min/max, made for a lexicographic one.
+The check proves it by PERMUTING (eight permutations x two block shapes, 1120
+field comparisons, not one bit moved) rather than by asserting it.
+
+**Price.** One `Int32` mutex per node the caller must zero, one init launch,
+and a serialized publish per block instead of a wait-free atomic — which no
+float rational could have used anyway.

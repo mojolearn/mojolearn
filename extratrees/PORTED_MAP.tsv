@@ -7,7 +7,7 @@
 # DIRECTORY RENAME: cuML's `batched-levelalgo` becomes `batched_levelalgo` here,
 #   because a Mojo package directory cannot contain a dash. Same reason
 #   `cuda_lib` became `gpu_lib` in gbdt/: the name is mechanical, not semantic.
-extratrees/ported/decisiontree/batched_levelalgo/split.mojo	cpp/src/decisiontree/batched-levelalgo/split.cuh:32-90	cuML	ported	Split + the total-order update; warpReduce/evalBestSplit still unported
+extratrees/ported/decisiontree/batched_levelalgo/split.mojo	cpp/src/decisiontree/batched-levelalgo/split.cuh:32-90	cuML	ported	Split + the total-order update + the DEVICE reduction (split.cuh:92-152); deviations 166-169
 extratrees/ported/decisiontree/batched_levelalgo/dataset.mojo	cpp/src/decisiontree/batched-levelalgo/dataset.h:22-38	cuML	ported	field for field; column-major
 extratrees/ported/decisiontree/batched_levelalgo/objectives.mojo	cpp/src/decisiontree/batched-levelalgo/objectives.cuh + bins.cuh	cuML+sklearn	ported	Gini and MSE only; shape theirs, arithmetic sklearn's _criterion.pyx
 extratrees/ported/decisiontree/batched_levelalgo/builder.mojo	cpp/src/decisiontree/batched-levelalgo/builder.cuh:44-135,:556-599	cuML	partial	NodeQueue + SetLeafPredictions; Builder's device half unported
