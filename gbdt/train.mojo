@@ -42,7 +42,7 @@ from gbdt.models.ctr_value_table import (
     column_plan,
     expand_raw_columns,
 )
-from std.math import exp
+from std.math import exp, log2
 from gbdt.methods.doc_parallel_boosting import (
     TAdditiveModel,
     fit_with_test,
@@ -329,6 +329,78 @@ def _build_cindex_from_columns(
     return cindex^
 
 
+def generate_seed_for_borders(from_seed: UInt64) -> UInt64:
+    """Their `TRandom::GenerateSeed` (`libs/helpers/cpu_random.h:88-94`):
+    five LCG steps. Module level so `sample_indices_for_borders` and the
+    check that gates it use THE SAME derivation, not two copies."""
+    var sd = from_seed
+    for _ in range(5):
+        sd = 6364136223846793005 * sd + 1442695040888963407
+    return sd
+
+
+def sample_indices_for_borders(
+    nrr: Int, sn: Int, sd0: UInt64
+) -> List[UInt32]:
+    """`SampleIndices<ui32>(n, k, rand)` -- `libs/helpers/sample.h:20-43`,
+    both branches, their predicate `k > 1 && k > (n / log2(k))`.
+
+    ONE subset for the whole dataset, drawn WITHOUT REPETITION. It is the
+    sampling half of `GetSubsetForBuildBorders`
+    (`libs/data/quantization.cpp:118-141`), whose subset every float
+    column then gathers through.
+
+    DEVIATION 135 covers what still differs: their engine is
+    `TRestorableFastRng64` and ours is `TRandom`, so the SET drawn is not
+    theirs at the same seed -- only the SEMANTICS (size, no repetition,
+    shared across features) match. The rejection branch returns hash
+    order upstream and insertion order here, which is order-equivalent
+    because the sample is sorted before borders are built.
+
+    MODULE LEVEL ON PURPOSE. It used to be inline in `train()`, which
+    meant the only way to gate it was to re-type it into the check --
+    and a check that builds its own copy of the thing it checks cannot
+    catch the copy drifting. `mojo_only/sample_indices_check.mojo`
+    imports THIS function.
+    """
+    var sample_idx = List[UInt32]()
+    var rnd0 = TRandom(generate_seed_for_borders(sd0))
+    # their `CB_ENSURE_INTERNAL(n >= k)` (`sample.h:21`) has no
+    # counterpart here, so this branch is `>=` where theirs is `n == k`:
+    # the caller's invariant is `sn <= nrr`, and if it were ever broken
+    # the Fisher-Yates branch would run `nrr - i` negative. Same
+    # behavior under the invariant, a guard instead of a crash outside
+    # it.
+    if sn >= nrr:
+        for i in range(nrr):
+            sample_idx.append(UInt32(i))
+    elif sn > 1 and Float64(sn) > Float64(nrr) / log2(Float64(sn)):
+        # their partial Fisher-Yates over an iota: `std::swap(result[i],
+        # result[rand->Uniform(i, n)])` for i in [0, k)
+        sample_idx.resize(nrr, UInt32(0))
+        for i in range(nrr):
+            sample_idx[i] = UInt32(i)
+        for i in range(sn):
+            var j = i + Int(rnd0.next_uniform_l() % UInt64(nrr - i))
+            var t = sample_idx[i]
+            sample_idx[i] = sample_idx[j]
+            sample_idx[j] = t
+        sample_idx.resize(sn, UInt32(0))
+    else:
+        # their rejection loop into a set, `while (sampleSet.size() < k)
+        # sampleSet.insert(rand->Uniform(n))`. A membership byte array
+        # stands in for THashSet: same accept/reject sequence.
+        var seen = List[Bool]()
+        seen.resize(nrr, False)
+        while len(sample_idx) < sn:
+            var c = Int(rnd0.next_uniform_l() % UInt64(nrr))
+            if not seen[c]:
+                seen[c] = True
+                sample_idx.append(UInt32(c))
+        _ = seen^
+    return sample_idx^
+
+
 def train(
     ctx: DeviceContext,
     x_colmajor: List[Float32],
@@ -336,7 +408,7 @@ def train(
     n_rows: Int,
     n_features: Int,
     border_count: Int = 128,
-    border_build_max_samples: Int = 100_000,
+    border_build_max_samples: Int = 200_000,
     n_estimators: Int = 100,
     max_depth: Int = 6,
     learning_rate: Float32 = Float32(0.03),
@@ -370,6 +442,14 @@ def train(
     od_wait: Int = 20,
     use_best_model: Int = -1,
     best_model_min_trees: Int = 1,
+    # `random_strength` (`oblivious_tree_options.cpp:17`). CatBoost's
+    # default is 1.0 and this one is 0.0; see
+    # `CatBoostOptions.random_strength`, and note that on the GREEDY
+    # searcher this train() runs, CatBoost's own noise cancels in the gain
+    # (`compute_scores.cu:84-134`) so a non-zero value here changes only
+    # float rounding. It is a real knob on the doc-parallel searcher,
+    # which `train` does not currently select.
+    random_strength: Float32 = Float32(0.0),
 ) raises -> TrainedModel:
     """Borders -> device quantization -> fit, one call.
 
@@ -839,29 +919,44 @@ def train(
     # every float column below (see DeviceFloatSorter's docstring for the
     # churn crash that makes the hoist load-bearing)
     # THEIR CPU QUANTIZER'S SUBSAMPLE, adopted for the user-facing path.
-    # Their own `GetSampleSizeForBorderSelectionType` is
-    # `Min(vecSize, slowSubsetSize)` with slowSubsetSize defaulting to
-    # 100,000 (`private/libs/quantization/utils.h:132-136`), and their
-    # `SampleArray` draws WITH REPLACEMENT through
-    # `TRandom(seed).NextUniformL() % n` (`utils.cpp:14-24`), seeded by
-    # `TRandom::GenerateSeed` (`cpu_random.h:88-94`). Their GPU
-    # `ComputeBorders` full-sorts instead; both are their real paths, and
-    # the END-TO-END row (`END2END` results) showed the full-data DP
-    # losing the user-facing fight 3-4x to exactly this subsample on
-    # their CPU arm. `border_build_max_samples = 0` restores the
-    # full-data GPU-pipeline behavior; the default matches the arm a
-    # user actually compares against. Borders from a sample are seeded
-    # and bit-deterministic given (random_seed, feature index).
+    #
+    # CORRECTED 2026-08-22, DEVIATION 135. The three sentences that stood
+    # here cited `GetSampleSizeForBorderSelectionType`
+    # (`private/libs/quantization/utils.h:132-136`) and `SampleArray`
+    # (`utils.cpp:14-24`) -- a REAL pair of functions ON THE WRONG CODE
+    # PATH. `SampleArray` is reached from `NCB::BuildBorders`, which in
+    # this tree is called only by a unit test and by the GPU CTR border
+    # builder. The TRAINING pipeline goes
+    # `GetSubsetForBuildBorders` (`libs/data/quantization.cpp:118-141`)
+    # -> `GetArraySubsetForBuildBorders` (`utils.cpp:25-51`), and it
+    # differs from that helper in all three of the ways that matter:
+    #
+    #   size          `TQuantizationOptions::MaxSubsetSizeForBuild
+    #                 BordersAlgorithms = 200000` (`libs/data/
+    #                 quantization.h:37`), not the helper's 100000
+    #                 DEFAULT ARGUMENT, which the pipeline overrides.
+    #   replacement   `SampleIndices` (`libs/helpers/sample.h:20-43`),
+    #                 "Sample k element indices without repetition".
+    #                 `SampleArray` draws WITH replacement.
+    #   sharing       ONE subset for the whole dataset, built once at
+    #                 `quantization.cpp:127` and reused by every float
+    #                 column. Ours drew a fresh sample per feature.
+    #
+    # The old draw was therefore a different estimator of the border set
+    # than CatBoost's on any pool above the cap: 100k with replacement
+    # covers ~63.2% of distinct rows, 200k without replacement covers
+    # exactly 200k. `border_build_max_samples = 0` still restores the
+    # full-data GPU-pipeline behavior (`ComputeBorders`,
+    # `gpu_binarization_helpers.cpp:10-16`, which full-sorts).
+    #
+    # NOT REACHED BY `bench/interleaved`, which quantizes with CATBOOST'S
+    # OWN quantizer and hands both arms the same pre-binned uint8
+    # (`tools/interleaved_prep.py:1-10`). This is the user-facing
+    # `train()`/estimator path and the end-to-end arm, not the
+    # standing benchmark numbers.
     var border_sample_n = n_rows
     if border_build_max_samples > 0 and border_build_max_samples < n_rows:
         border_sample_n = border_build_max_samples
-
-    def _generate_seed(from_seed: UInt64) -> UInt64:
-        # their TRandom::GenerateSeed (cpu_random.h:88-94): five LCG steps
-        var sd = from_seed
-        for _ in range(5):
-            sd = 6364136223846793005 * sd + 1442695040888963407
-        return sd
 
     # phase-A/B scratch: which columns are float, and one flat buffer
     # holding every sorted float column back to back
@@ -878,13 +973,14 @@ def train(
     if border_sample_n == n_rows:
         sorted_flat.resize(n_float_prescan * border_sample_n, Float32(0.0))
 
-    # PHASE 0, sampling only: every float column's border sample drawn IN
-    # PARALLEL (the draws are 50M serial host RNG calls otherwise), same
-    # discipline as phase B -- disjoint flat slots, no device inside,
-    # per-slot error flags re-raised after the join. Draw semantics
-    # unchanged: their SampleArray per column, seeded per (random_seed,
-    # feature), NaN pre-scan included, so the borders -- and the model --
-    # are bit-identical to the serial draw's.
+    # PHASE 0, sampling only. ONE index subset for the whole dataset,
+    # drawn WITHOUT REPLACEMENT, then every float column gathers through
+    # it -- their `GetSubsetForBuildBorders`
+    # (`libs/data/quantization.cpp:118-141`), which builds
+    # `subsetIndexing` ONCE and hands the same one to every feature. The
+    # per-column GATHER stays parallel (it is `n_float * 200k` loads);
+    # only the DRAW is serial, because it is one draw now and not one
+    # per feature. Per-slot error flags re-raised after the join.
     var predrawn = List[Float32]()
     if border_sample_n < n_rows and n_float_prescan > 0:
         predrawn.resize(n_float_prescan * border_sample_n, Float32(0.0))
@@ -898,18 +994,18 @@ def train(
         flags.resize(n_float_prescan, 0)
         var flg = flags.unsafe_ptr()
 
+        var sample_idx = sample_indices_for_borders(nrr, sn, sd0)
+        var sidx = sample_idx.unsafe_ptr()
+
         def _draw_task(
             k: Int
-        ) {imm pd, imm fi, imm colp, imm sn, imm nrr, imm sd0, imm flg}:
+        ) {imm pd, imm fi, imm colp, imm sn, imm nrr, imm sidx, imm flg}:
             var fcol = fi.unsafe_load(k)
-            var rnd = TRandom(_generate_seed(sd0 + UInt64(fcol)))
             var src = (colp + fcol)[].unsafe_ptr()
             for i in range(sn):
                 pd.unsafe_store(
                     k * sn + i,
-                    src.unsafe_load(
-                        Int(rnd.next_uniform_l() % UInt64(nrr))
-                    ),
+                    src.unsafe_load(Int(sidx.unsafe_load(i))),
                 )
             var has_nan = False
             for r in range(nrr):
@@ -930,6 +1026,7 @@ def train(
 
         sync_parallelize(_draw_task, n_float_prescan)
         _ = flags^
+        _ = sample_idx^
     var border_sorter = DeviceFloatSorter(
         ctx, n_rows if border_sample_n == n_rows else 1
     )
@@ -1461,6 +1558,7 @@ def train(
         od_type=od_kind,
         od_pvalue=od_pvalue,
         od_wait=od_wait,
+        random_strength=random_strength,
     )
     var losses = fit_result.learn_losses.copy()
     var t_losses = fit_result.test_losses.copy()

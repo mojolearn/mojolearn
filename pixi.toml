@@ -103,6 +103,7 @@ soak-determinism = "mojo run -I . mojo_only/determinism_soak.mojo"
 # for.
 # ---------------------------------------------------------------------------
 check-bin-order = "mojo run -I . mojo_only/bin_order_check.mojo"
+check-sample-indices = "mojo run -I . mojo_only/sample_indices_check.mojo"
 check-binarization = "mojo run -I . mojo_only/binarization_check.mojo"
 check-boosting-hist = "mojo run -I . mojo_only/boosting_hist_check.mojo"
 check-bootstrap = "mojo run -I . mojo_only/bootstrap_check.mojo"
@@ -656,6 +657,15 @@ print-target = "mojo build --print-effective-target"
 # Elaborates every module, including ones no check imports, so it catches a
 # file that only compiles because nothing reaches it. Stricter than `probe`.
 build-pkg = "mkdir -p build && mojo precompile -I . gbdt -o build/gbdt.mojopkg"
+
+# `random_strength`, CatBoost's randomized-score noise, through a REAL fit
+# on both structure searchers. R1 the zero path is bit-identical; R2 the
+# doc-parallel arm's splits move; R2G the greedy arm's do NOT, because
+# `beforeSplitCalcer` draws the same normal and `gain = score - scoreBefore`
+# cancels it (`compute_scores.cu:85`, `:134`) -- that identity is the gate,
+# not a hole; R3 determinism; R4 the seed is `GlobalSeed + FeatureId`,
+# checked by predicting the WINNING FEATURE at every level from the host.
+check-random-strength = "mojo run -I . mojo_only/random_strength_check.mojo"
 
 [feature.bench.tasks]
 # Runs CatBoost itself. Writes bench/oracle.txt (read by `oracle`) and
