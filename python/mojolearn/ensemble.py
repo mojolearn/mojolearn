@@ -4,10 +4,22 @@
 change results rather than just speed:
 
     learning_rate   CatBoost 0.03      sklearn 0.1
-    n_estimators    CatBoost 100       sklearn 100
+    n_estimators    CatBoost 1000      sklearn 100   (OURS IS 100, see below)
     max_depth       CatBoost 6         sklearn 3
     l2_leaf_reg     CatBoost 3.0       sklearn (none)
     border_count    CatBoost 128       sklearn (none)
+
+**TWO OF OURS ARE NOT CatBoost's, and the table above used to hide it.**
+`n_estimators` is 100 here and 1000 in CatBoost
+(`boosting_options.cpp:13`). `learning_rate` is 0.03 here, which is
+CatBoost's CONSTRUCTOR value (`boosting_options.cpp:10`) but not the
+value a CatBoost user gets: with `learning_rate` unset CatBoost fits it
+from the pool, `exp(A*log(n) + B)` scaled by the iteration count
+(`libs/train_lib/options_helper.cpp:252-288`), which at 800k rows and
+1000 iterations is about 0.097 and at 100 iterations about 0.38. That
+retune is not ported. So these defaults equal a CatBoost user who
+passed `learning_rate=0.03, iterations=100` explicitly -- they are not
+"CatBoost's defaults", and any comparison run should pin both arms.
 
 The tree shape is OBLIVIOUS (symmetric): every node at a level takes the same
 split, which is CatBoost's structure and not scikit-learn's. A comparison

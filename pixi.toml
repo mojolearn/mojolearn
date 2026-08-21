@@ -71,19 +71,36 @@ check-onebyte-reach = "mojo run -I . mojo_only/onebyte_reach_check.mojo"
 soak-determinism = "mojo run -I . mojo_only/determinism_soak.mojo"
 
 # ---------------------------------------------------------------------------
-# REGISTERED 2026-08-21. These 22 checks existed in `mojo_only/` with NO pixi
-# task, which in this repository means nobody ran them: there is no aggregate
-# runner that globs the directory, so a file without a line here is reachable
-# only by someone who already knows it is there. That is the same defect class
-# as DEVIATION 114 one level up -- the code is present, has a caller in
-# principle, and no path leads to it.
+# REGISTERED 2026-08-21, VERIFIED 2026-08-22. These 22 checks existed in
+# `mojo_only/` with NO pixi task, which in this repository means nobody ran
+# them: there is no aggregate runner that globs the directory, so a file
+# without a line here is reachable only by someone who already knows it is
+# there. That is the same defect class as DEVIATION 114 one level up.
 #
-# THEY ARE REGISTERED, NOT VERIFIED. None was run at the time of registration
-# (a 22-check GPU sweep would have confounded a determinism measurement that
-# was in flight). Several predate large refactors of the files they exercise
-# and some may not compile. Whoever runs them first owns triaging that, and a
-# check that turns out to be superseded should be DELETED rather than left
-# registered and red.
+# WHEN FIRST REGISTERED, 21 OF THE 22 FAILED INSTANTLY with "module does not
+# define a `main` function" -- they are libraries of check functions driven by
+# `probe_main.mojo`, not programs, and they were registered without one of
+# them being run. Each now carries a `def main()` making exactly the calls
+# `probe_main` makes with the same arguments: a check run in a different
+# configuration than the one it was written for is not the same check.
+# `check-vendor-correctness` was the exception -- its driver already existed
+# as `vendor_main.mojo`, which also owns the `--transpose` arm and the exit-1
+# gate, and the task now points there instead of at the library.
+#
+# EVERY ONE HAS NOW BEEN RUN. 18 pass. THREE ARE RED AND STAY REGISTERED RED:
+# `check-hist`, `check-hist-dump` and `check-level` are stale call sites left
+# by d25adb4 (DEVIATION 95, the scale derived on the device), which moved
+# `fixed_scale` from a scalar to a device pointer, updated the shipped path,
+# and left the check and bench surface passing `Float32(1.0)` where the
+# kernels now take `MutPointer[Float32]`. `pixi run probe` has not compiled
+# since that commit and nothing reported it -- the same defect class as these
+# tasks, one level up. The fix pattern is `upload_scale(ctx, value)` per
+# `permuted_ids_check.mojo:198`, whose buffer must outlive the launch.
+#
+# A check that turns out to be superseded should be DELETED rather than left
+# registered and red. None of these is superseded; the red ones are red
+# because the code under them is broken, which is what registering them was
+# for.
 # ---------------------------------------------------------------------------
 check-bin-order = "mojo run -I . mojo_only/bin_order_check.mojo"
 check-binarization = "mojo run -I . mojo_only/binarization_check.mojo"
@@ -106,7 +123,10 @@ check-reorder = "mojo run -I . mojo_only/reorder_check.mojo"
 check-replicated-half-byte = "mojo run -I . mojo_only/replicated_half_byte_check.mojo"
 check-searcher-parity-covtype = "mojo run -I . mojo_only/searcher_parity_covtype_check.mojo"
 check-train-api = "mojo run -I . mojo_only/train_api_check.mojo"
-check-vendor-correctness = "mojo run -I . mojo_only/vendor_correctness_check.mojo"
+# CHANGED 2026-08-22: the check module is a library; `vendor_main.mojo` is its
+# driver and always was. It also takes `--transpose` and exits 1 on a WRONG
+# verdict for a WIRED primitive, neither of which a bare `main()` would carry.
+check-vendor-correctness = "mojo run -I . vendor_main.mojo"
 
 # The control plane, which is host-side and has its own `main()` rather than
 # a function `probe_main` could call, so it runs as its own task instead of

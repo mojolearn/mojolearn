@@ -40,8 +40,24 @@ Python: its kernels do not fit in the CPython extension (PORTING.md 70).
 
 ## 2. The gap inside their GPU learner, and it is the default
 
-**`boosting_type=Ordered` is CatBoost's shipped GPU default** for every
-non-multiclass loss (`catboost_options.cpp:803-807`), and it is not here.
+**`boosting_type=Ordered` is CatBoost's GPU default only on SMALL pools**,
+and the flat claim that used to stand here was wrong. `catboost_options.cpp:806`
+does set `Ordered` for every non-multiclass GPU loss -- and then
+`UpdateBoostingTypeOption` (`private/libs/options/defaults_helper.h:33-42`)
+flips it straight back:
+
+    if (boostingTypeOption.NotSet() &&
+        (learnSampleCount >= 50000 || IterationCount < 500) && ...)
+        boostingTypeOption = EBoostingType::Plain;
+
+called from `SetDataDependentDefaults` (`options_helper.cpp:416`), which
+`train_model.cpp:1128` runs BEFORE the CPU/GPU trainer is chosen, so it
+applies to their GPU arm. **At every size this repository benchmarks --
+800k synthetic, covtype's 464k -- CatBoost's own default IS Plain, which
+is our arm.** Ordered is their default only for a pool under 50,000 rows
+run for at least 500 iterations.
+
+That does not make the port complete: `Ordered` is still unreachable here,
 It is not a switch we failed to wire: it lives in a different boosting class
 over a different data layout (`dynamic_boosting.h` + the feature-parallel
 learner), and the learner this repository ported refuses it in their own
@@ -97,9 +113,16 @@ not. Verified from their source:
 
 * `rsm` -- appears in all of `catboost/cuda` only under
   pairwise oblivious trees. Their plain GPU learner has no feature sampling.
-* `random_strength` -- a NO-OP on their GPU symmetric path: the noise draw is
-  identical in `score` and `scoreBefore` and cancels in the gain the argmax
-  compares (`score_calcers.cuh:160-168`, `compute_scores.cu:131-142`).
+* `random_strength` -- a NO-OP on their GREEDY symmetric searcher, and only
+  there: `beforeSplitCalcer` is copied from the calcer after `NextFeature`
+  (`compute_scores.cu:85`), so both carry the same `GlobalSeed + FeatureId`,
+  both draw the same normal, and `gain = score - scoreBefore` (`:134`)
+  cancels it. It is NOT a no-op on their doc-parallel searcher, which is the
+  one CatBoost uses for single-target symmetric trees: there the gain is
+  `noisyScore - scoreBeforeSplit` against an unnoised host scalar carried
+  from the previous level (`kernel/pointwise_scores.cu:396-402`), so the
+  draw survives into the argmin. Both arms are ported and both behave that
+  way here; see `pixi run check-random-strength`.
 * `min_data_in_leaf` -- CatBoost itself ignores it under SymmetricTree
   (`greedy_search_helper.cpp:691-694`).
 * `max_leaves` -- for a symmetric tree this IS `2^depth`; their own check
