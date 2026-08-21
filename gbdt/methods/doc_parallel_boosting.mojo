@@ -129,6 +129,7 @@ from gbdt.methods.leaves_estimation.pointwise_oracle import (
 from gbdt.methods.leaves_estimation.step_estimator import (
     BACKTRACKING_ANY_IMPROVEMENT,
 )
+from mojo_only.fixed_point import choose_scale
 from gbdt.methods.oblivious_tree_doc_parallel_structure_searcher import (
     fit_oblivious_tree_structure,
     split_stat_planes,
@@ -1160,12 +1161,48 @@ def fit_with_test(
             # every line of leaf estimation with the greedy arm, so a
             # difference between the two arms can only come from the
             # structure.
+            # ===================== THE FIXED-POINT SCALE ==============
+            # The 8-bit accumulator holds Int32 fixed point (DEVIATION 93,
+            # Metal has no threadgroup float atomics), so it needs the same
+            # scale the greedy path derives: `choose_scale` over the LARGER
+            # of the two planes' sums of magnitudes.
+            #
+            # This passed a hardcoded 1.0 and the symptom is the one
+            # DEVIATION 95's block warns about in as many words -- "the tree
+            # still learns, because the leaf VALUES come from
+            # `compute_partition_stats` and never touch the accumulator;
+            # only the SPLITS go bad". It reproduced CatBoost 48/48 at 15
+            # and 100 borders and 7/48 at 254, because 254 borders is the
+            # only fixture that reaches the 8-bit kernel at all.
+            #
+            # PRICED: this drains once per tree to read two floats, which
+            # the greedy path stopped doing in DEVIATION 95 by deriving the
+            # scale on the device. It cannot do the same yet because
+            # `compute_hist2` takes `fixed_scale` as a HOST scalar
+            # (`pointwise_kernels.mojo:1318`); making it a device pointer is
+            # the fix and is not attempted here.
+            var scale = Float32(1.0)
+            @parameter
+            if _needs_magnitudes:
+                var hm = ctx.enqueue_create_host_buffer[DType.float32](2)
+                ctx.enqueue_copy(dst_buf=hm, src_buf=mags)
+                ctx.synchronize()
+                var m0 = Float64(hm[0])
+                if m0 < 0.0:
+                    m0 = -m0
+                var m1 = Float64(hm[1])
+                if m1 < 0.0:
+                    m1 = -m1
+                scale = Float32(
+                    choose_scale(m1 if m1 > m0 else m0, n_rows)
+                )
+
             var planes = split_stat_planes(ctx, stats, n_rows)
             splits = fit_oblivious_tree_structure(
                 ctx, layout_for_test, n_rows, max_depth, lc,
                 planes[0], planes[1],
                 est_sm if est_sm > 0 else 1,
-                Float32(1.0),
+                scale,
                 score_function,
                 l2_leaf_reg,
                 one_hot=one_hot,

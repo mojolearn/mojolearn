@@ -307,7 +307,10 @@ def print_catboost_structure(path: String = String("bench/oracle.txt")) raises:
         print(line)
 
 
-def check_tree_structure(path: String = String("bench/oracle.txt")) raises:
+def check_tree_structure(
+    path: String = String("bench/oracle.txt"),
+    use_pointwise_searcher: Bool = False,
+) raises:
     """OUR TREES against CATBOOST'S TREES, on the same data and the same grid.
 
     This is the comparison border parity exists to make possible. Both sides
@@ -426,6 +429,7 @@ def check_tree_structure(path: String = String("bench/oracle.txt")) raises:
     var losses = fit(
         model, ctx, n_rows, folds, o.depth, cindex, targets, weights, False,
         o.trees, Float32(0.3), Float32(3.0), True,
+        use_pointwise_searcher=use_pointwise_searcher,
     )
 
     print(
@@ -462,8 +466,12 @@ def check_tree_structure(path: String = String("bench/oracle.txt")) raises:
             print(line_them)
             print(line_us)
 
+    var arm = String("pointwise") if use_pointwise_searcher else String(
+        "greedy-subsets"
+    )
     print(
         "    splits matching CatBoost exactly:", matched, "of", compared,
+        "  [", arm, "searcher ]",
     )
     if first_divergence >= 0:
         print(
@@ -471,7 +479,9 @@ def check_tree_structure(path: String = String("bench/oracle.txt")) raises:
             "depth", first_divergence % 100,
         )
         raise Error(
-            String("the port no longer reproduces CatBoost's trees: ")
+            String("the ")
+            + arm
+            + String(" searcher no longer reproduces CatBoost's trees: ")
             + String(matched)
             + " of "
             + String(compared)
@@ -486,4 +496,7 @@ def check_tree_structure(path: String = String("bench/oracle.txt")) raises:
             " already produced one convincing false alarm"
         )
     else:
-        print("    every split matches CatBoost, feature and bin")
+        print(
+            "    every split matches CatBoost, feature and bin  [", arm,
+            "]",
+        )

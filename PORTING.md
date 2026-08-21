@@ -3820,3 +3820,58 @@ reports a ratio. Its first run came back `0.128` against `107.04` -- and that
 is how `PORTING.md` 107 was found, with two gates green. A timing probe that
 does not check what it is timing measures two different computations and
 reports their ratio as if it meant something.
+
+## 108. The pointwise searcher against CATBOOST'S OWN TREES: 144 of 144, and the one that was not
+
+Until 2026-08-21 every gate on the pointwise family compared it against a
+HOST RECOMPUTATION of CatBoost's formula, or differentially against this
+repository's other searcher. Neither is a comparison with CatBoost.
+
+`oracle_main.mojo` now runs BOTH searchers against `bench/oracle*.txt` --
+splits CatBoost itself produced and `tools/catboost_oracle.py` dumped:
+
+    fixture          borders  policy reached        greedy   pointwise
+    oracle.txt          15    half-byte              48/48     48/48
+    oracle100.txt      100    one-byte, 7-bit        48/48     48/48
+    oracle254.txt      254    one-byte, 8-bit        48/48     48/48
+
+**The 254 fixture is the only one that reaches the 8-bit kernel at all**, and
+it is the one that failed: 7 of 48 on the first run, first divergence at tree
+0 depth 1.
+
+### The bug, and DEVIATION 95 had already written its symptom down
+
+`fit`'s pointwise arm passed a hardcoded `Float32(1.0)` as `fixed_scale`. The
+8-bit accumulator holds Int32 fixed point (DEVIATION 93, because Metal has no
+threadgroup float atomics), so at scale 1.0 every gradient below 1.0
+quantizes to zero.
+
+DEVIATION 95's block describes the failure mode exactly, for the same
+accumulator on the greedy path: *"The tree still learns, because the leaf
+VALUES come from `compute_partition_stats` and never touch the accumulator;
+only the SPLITS go bad. That is exactly a model that stays monotone, still
+beats the mean, and is several times worse than it should be."*
+
+Which is why nothing else caught it. `check-fit-pointwise` requires the two
+arms to be BIT-IDENTICAL and passed, because its fixture's widest feature has
+127 folds and never reaches the 8-bit kernel. `check-pointwise-hist2-8bit`
+gates that accumulator exactly -- but it is handed a scale, and gates the
+arithmetic at whatever scale it is given.
+
+Fixed by deriving the scale the way the greedy path does: `choose_scale` over
+the larger of the two planes' sums of magnitudes, which `fit` already reduces
+on the device into `mags`.
+
+**PRICED**: the pointwise arm now drains once per tree to read those two
+floats. DEVIATION 95 removed exactly that drain from the greedy path by
+deriving the scale ON the device, and this arm cannot do the same yet because
+`compute_hist2` takes `fixed_scale` as a host scalar. Making it a device
+pointer is the fix and is not attempted here.
+
+### What this changes about every earlier claim
+
+Every "the pointwise family is gated" statement before this one meant gated
+against our own arithmetic. This is the first that means gated against
+CatBoost. The gap was named in `NEXT_TWO.md` rung 5 and in `PORTING.md` 91 F
+the whole time; it is now closed for the CPU oracle, and `task_type="GPU"`
+remains unrun.

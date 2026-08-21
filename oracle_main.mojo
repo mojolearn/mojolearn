@@ -40,5 +40,12 @@ def main() raises:
             "  OUR TREES against THEIRS, same data, same grid, same"
             " parameters:"
         )
-        check_tree_structure(path)
+        # BOTH SEARCHERS against CatBoost's own dumped decisions. The
+        # greedy one is what this repository has always shipped; the
+        # pointwise one is the port of the learner CatBoost itself uses for
+        # single-target symmetric trees (`PORTING.md` 91 F), and until this
+        # ran, every gate on it compared it against a host recomputation or
+        # against the other searcher -- never against CatBoost's output.
+        check_tree_structure(path, False)
+        check_tree_structure(path, True)
         print()
