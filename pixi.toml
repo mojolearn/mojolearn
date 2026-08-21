@@ -231,6 +231,17 @@ check-pointwise-offsets = "mojo run -I . mojo_only/pointwise_offsets_check.mojo"
 # a few seconds.
 check-shared-pointer = "mojo run -I . mojo_only/shared_pointer_probe.mojo"
 
+# CatBoost's one pointwise histogram loop and the only thing it promises:
+# every point in [offset, offset+dsSize) reaches AddPoint exactly once, with
+# the bin its index gathers. That promise is carried by a head/tail alignment
+# peel with DIFFERENT quanta per entry point (32/32, 128/64, 128/128), a
+# blockIdx.x % BLOCKS_PER_FEATURE gate on the peels, and a strided body.
+# Gated PER BIN against a host tally over hashed plants -- a totals check
+# would pass a loop that delivered every point to the wrong bin. 160
+# (offset, size) cases per entry point, chosen to hit every branch, plus a
+# 4-block partition case. Own main(); a GPU, ~1 min.
+check-pointwise-loop = "mojo run -I . mojo_only/pointwise_loop_check.mojo"
+
 # The LSD radix sort over (bin, permutation position). Gates STABILITY
 # separately from sortedness and prints both, because sortedness alone
 # cannot see a tie that moved -- and the tie order IS the second half of
