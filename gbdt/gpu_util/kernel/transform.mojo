@@ -118,6 +118,31 @@ def gather_with_mask_f32_kernel(
         i += Int(grid_dim.x) * Int(block_dim.x)
 
 
+def split_planes_f32_kernel(
+    dst_a: MutPointer[Float32, MutAnyOrigin],
+    dst_b: MutPointer[Float32, MutAnyOrigin],
+    src: MutPointer[Float32, MutAnyOrigin],
+    size_in: Int32,
+    stride_in: Int32,
+):
+    """Two planes of one buffer into two buffers, on the device.
+
+    NO CATBOOST COUNTERPART, deliberately: upstream never packs the two
+    stat planes into one buffer, so it never unpacks them. This kernel
+    exists for `split_stat_planes`' bridge between this tree's
+    two-plane convention and the pointwise kernels' two-buffer one
+    (DEVIATION 97.2) -- previously a host round trip of both planes
+    with two drains per tree, priced in that function's history. Three
+    distinct buffers, so no aliasing at the launch."""
+    var size = Int(size_in)
+    var stride = Int(stride_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    while i < size:
+        dst_a.unsafe_store(i, src.unsafe_load(i))
+        dst_b.unsafe_store(i, src.unsafe_load(stride + i))
+        i += Int(grid_dim.x) * Int(block_dim.x)
+
+
 def scatter_with_mask_u32_kernel(
     dst: MutPointer[UInt32, MutAnyOrigin],
     src: MutPointer[UInt32, MutAnyOrigin],
@@ -226,6 +251,27 @@ def launch_gather_planes_with_mask_f32(
         dst.unsafe_ptr(), src.unsafe_ptr(), map_buf.unsafe_ptr(),
         Int32(size), mask, Int32(n_planes), Int32(stride),
         grid_dim=(blocks, n_planes, 1),
+        block_dim=(TRANSFORM_BLOCK_SIZE, 1, 1),
+    )
+
+
+def launch_split_planes_f32(
+    ctx: DeviceContext,
+    mut dst_a: DeviceBuffer[DType.float32],
+    mut dst_b: DeviceBuffer[DType.float32],
+    mut src: DeviceBuffer[DType.float32],
+    size: Int,
+    stride: Int,
+) raises:
+    """Plane 0 of `src` into `dst_a`, plane 1 into `dst_b`. One launch,
+    no drain; see `split_planes_f32_kernel`."""
+    var blocks = _transform_blocks(size)
+    if blocks == 0:
+        return
+    ctx.enqueue_function[split_planes_f32_kernel](
+        dst_a.unsafe_ptr(), dst_b.unsafe_ptr(), src.unsafe_ptr(),
+        Int32(size), Int32(stride),
+        grid_dim=(blocks, 1, 1),
         block_dim=(TRANSFORM_BLOCK_SIZE, 1, 1),
     )
 

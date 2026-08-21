@@ -99,7 +99,10 @@ from gbdt.methods.pointwise_optimization_subsets import (
     split_subsets,
 )
 from gbdt.methods.pointwise_scores_calcer import ScoresCalcerOnCompressedDataSet
-from gbdt.gpu_util.kernel.transform import launch_gather_with_mask_u32
+from gbdt.gpu_util.kernel.transform import (
+    launch_gather_with_mask_u32,
+    launch_split_planes_f32,
+)
 from gbdt.methods.pointwise_optimization_subsets import GATHER_NO_MASK
 from gbdt.methods.dynamic_boosting_folds import TFold
 from gbdt.methods.kernel.pointwise_scores import (
@@ -517,27 +520,20 @@ def split_stat_planes(
     `PORTING_RULES` 4).
 
     So this is a BRIDGE between two internal conventions, not a port of
-    anything, and it is PRICED HERE RATHER THAN HIDDEN: it costs a round
-    trip through host memory of `2 * n_rows` floats per tree, because
-    `enqueue_copy` has no device-to-device form taking a source POINTER and
-    a sub-buffer view is not available either. At 800k rows that is 6.4 MB
-    down and back per tree, and unlike a device copy it also SERIALISES --
-    two synchronize calls the greedy arm does not make.
+    anything. It cost a full round trip through HOST memory when it was
+    written -- `enqueue_copy` has no device-to-device form taking a source
+    pointer -- which at 800k rows was 6.4 MB down and back per tree plus
+    TWO drains the greedy arm never makes. `split_planes_f32_kernel` is
+    the repair: the same split as one device launch, no host copy, no
+    drain. What remains is two `n_rows` allocations per tree, which the
+    pool does not yet own because `TL2Target` CONSUMES these buffers.
 
-    That is a real cost and it is the reason this arm is opt-in rather than
-    the default. It disappears entirely the moment the boosting loop carries
-    the weak target as two buffers throughout, which is the right fix and is
-    not attempted here because `stats` is read by the greedy searcher, the
+    It all disappears the moment the boosting loop carries the weak
+    target as two buffers throughout, which is the right fix and is not
+    attempted here because `stats` is read by the greedy searcher, the
     estimator and the bootstrap.
     """
     var w = ctx.enqueue_create_buffer[DType.float32](n_rows)
     var t = ctx.enqueue_create_buffer[DType.float32](n_rows)
-    var host = ctx.enqueue_create_host_buffer[DType.float32](2 * n_rows)
-    ctx.enqueue_copy(dst_buf=host, src_buf=stats)
-    ctx.synchronize()
-    ctx.enqueue_copy(dst_buf=w, src_ptr=host.unsafe_ptr())
-    ctx.enqueue_copy(
-        dst_buf=t, src_ptr=host.unsafe_ptr().unsafe_offset(n_rows)
-    )
-    ctx.synchronize()
+    launch_split_planes_f32(ctx, w, t, stats, n_rows, n_rows)
     return (w^, t^)

@@ -714,10 +714,12 @@ def fit_with_test(
     #
     # DEFAULT IS FALSE, and that is not timidity. The two searchers pick
     # IDENTICAL splits (`pixi run check-pointwise-vs-greedy`), so this is
-    # not a correctness switch -- but the pointwise arm currently pays a
-    # host round trip per tree to split the weak target into two buffers
-    # (`split_stat_planes`), which the greedy arm does not. Flipping the
-    # default is a MEASUREMENT's job, and no benchmark is authorised.
+    # not a correctness switch. The arm's old per-tree overheads are
+    # falling -- the host round trip in `split_stat_planes` became a
+    # device launch, DEVIATION 143 pools its per-tree construction --
+    # but the arm still trails the greedy searcher at the measured
+    # shapes, and flipping the default is a MEASUREMENT's job in a
+    # settled window: bit-identity plus a speed win, or it stays False.
     use_pointwise_searcher: Bool = False,
     od_type: Int = OD_NONE,
     od_pvalue: Float64 = OD_DEFAULT_STOP_PVALUE,
