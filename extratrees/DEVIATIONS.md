@@ -1490,9 +1490,13 @@ by feature index, silently. `MAX_ROWS_EXACT` is now `2^21` with the measurement
 in its docstring. **A bound that permits garbage is worse than no bound**, and
 this one was written by the same lane three commits earlier.
 
-**MSE publishes no rational**: its numerator needs `Int128` by deviation 135's
-derivation, so the four accumulators ARE the score and `mse_proxy_exact` forms
-it on the host in one multiply each.
+**MSE publishes no rational** — TRUE WHEN WRITTEN, FALSE NOW, and replaced
+rather than annotated. Deviation 189 gives regression a publishable `Int64`
+key, so `out_gini_num`/`out_gini_den` carry a real regression score and a
+caller no longer forms one with `mse_proxy_exact`. The two field names are
+misnamed on that path and are deliberately NOT renamed: the rename would cross
+into `builder.mojo` and `score_kernel_check.mojo`, and a documented misnomer is
+cheaper than a three-file rename mid-round.
 
 ---
 
