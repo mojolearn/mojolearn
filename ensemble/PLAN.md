@@ -31,17 +31,35 @@ mirroring the incumbent's own written design, and possibly their code if the
 PR lands before we get there. **Check #8133 for a linked PR before starting
 Step 2.**
 
-## Step 0 — the gate, unchanged and still unrun
+## Step 0 — the gate, DEFERRED by Andrew on 2026-08-21
 
 The gather probe (ROADMAP.md, "The open gate"): random-index gather of
-4M x 32 floats, GPU vs CPU, achieved GB/s. Half a day. It prices RF, ET and
-all future histogram work at once. **Nothing below starts before it runs.**
-No `bench/results/` file covers it as of this writing (checked).
+4M x 32 floats, GPU vs CPU, achieved GB/s. It prices RF, ET and all future
+histogram work at once, and it has still never run.
+
+**It no longer gates the port.** Andrew's instruction on 2026-08-21 was to
+get the basics mirroring cuML first and to take no timing measurement at
+all this round. The probe moves to the first timing round; nothing below
+waits on it, and no number from this directory may be quoted until it has
+run. See the session log at the end of this file.
+
+Their gather shape, now read rather than assumed, is
+`kernels/builder_kernels_impl.cuh:336-341`: per sampled instance, TWO
+random-index gathers — one into the feature column via
+`dataset.value(row, col)` and one into `dataset.labels[row]` — where `row`
+comes from `row_ids`, which at the root is `raft::random::uniformInt`
+output (`randomforest.cuh:140-142`), i.e. unsorted uniform draws WITH
+replacement. Deeper nodes see an ascending, gapped subset instead, because
+their partition is a stable scan. Both shapes belong in the probe.
 
 ## Step 1 — Random Forest, from cuML
 
-**Pin**: rapidsai/cuml v26.08.00 (main was `c068a20`, 2026-08-20, structurally
-identical for RF). Cite everything `file.cuh:line` against the pin, per
+**Pin**: rapidsai/cuml v26.08.00, commit
+`265b9da6a0e75dbef071a3168398b993a5ff6f0e`, cloned read-only on 2026-08-21
+to `~/CascadeProjects/upstream/cuml-v26.08.00` — a SEPARATE checkout from
+`~/CascadeProjects/upstream/cuml`, which stays at `00094f7` because
+`PORTING_RULES.md:0a` pins that one for `dbscan/`, `decomposition/` and
+`glm/`. Cite everything `file.cuh:line` against the v26.08.00 path, per
 STANDING_ORDERS day-one rule 1.
 
 **Mirror** (their `cpp/src/` prefix dropped, the way `gbdt/` drops
@@ -65,9 +83,12 @@ STANDING_ORDERS day-one rule 1.
 Their public header `include/cuml/ensemble/randomforest.hpp` shapes the
 estimator surface (`RF_params`, `fit`, `predict`, `score`).
 
-Port-time caveat from the recon: `dataset.h`, `quantiles.h`, `flatnode.h` and
-the `kernels/*.cu` TU roles were inferred from names/sizes — re-read those
-five small files against the pin before citing them.
+All five files the recon had only inferred — `dataset.h`, `quantiles.h`,
+`flatnode.h` and the `kernels/*.cu` TUs — have now been read against the
+pin; what they contain is in the session log at the end of this file. There
+are TEN instantiation TUs, not eight: {classification, weighted-
+classification, regression, weighted-regression} x {float, double}, plus
+`node-split.cu`.
 
 **Vendor-call mapping** (rule: port the CALL; MAX has no device sort and no
 device scan, checked 2026-08-20 — hand-write portably only where nothing
@@ -105,9 +126,19 @@ exists, zero warp intrinsics, smem from queried budget):
 Metal/CUDA/HIP with no fixed-point machinery, and `split.cuh` breaks ties on
 a total order (metric, colid, quesval). The cleanest IDENTICAL column in the
 library, against NVIDIA's flagship being nondeterministic at its own defaults.
-CAUTION from the recon: PR #8132's weighted bin variants widened counts to
-double (their own ~20% cost) — verify at the pin which bin type the UNWEIGHTED
-path instantiates before claiming the integer-atomics story.
+VERIFIED at the pin, 2026-08-21, and the caution is discharged:
+`bins.cuh:14` makes `BinCountT` an `unsigned long long int` and `:31` adds
+to it with an integer `atomicAdd`. PR #8132's `double` is a separate
+`weight` field on `WeightedClassificationBin` (`:55-57`) that the unweighted
+path never instantiates — and `bootstrap=True`, their default, forces the
+unweighted path regardless, because `tree_sample_weight()` returns
+`nullptr` whenever bootstrapping is on (`randomforest.cuh:167`). The
+integer-atomics story holds.
+
+What does NOT hold is the 64-bit width: this device has no 64-bit integer
+atomic at all (measured — see the session log). A 32-bit counter is exact
+here rather than approximate, because a bin count is bounded by
+`n_sampled_rows` and `IdxT` is `int` in every cuML RF instantiation.
 
 **Oracles and gates** (rule 4: analytic answers + the competitor's own
 output, never real datasets):
@@ -206,3 +237,180 @@ ROADMAP order stands: Phase 0 bindings and Phase 1 HDBSCAN outrank this
 directory. This plan exists so that when RF's turn comes, the first hour is
 the gather probe and the second is `git clone` at the pin — not a research
 round.
+
+---
+
+# Session log: 2026-08-21, the RF lane opens
+
+## What changed in the brief, and by whom
+
+**Step 0's gather probe is DEFERRED, by Andrew, mid-session.** The
+instruction was explicit: *"DO NOT DO NOT check for time in subagents or in
+your flow. this should be getting the basics. I will optimize time later.
+but you should be mirroring what cuml does."* So no timing number was taken
+this round, by this lane or by any subagent it launched, and
+`bench/results/GATHER_PROBE_2026-08-XX.md` **does not exist and was not
+written**. The ET lane was told this file would gate its kernel work; it
+does not, this round. Nothing in this session may be quoted as a
+performance result, because nothing in this session measured one.
+
+The gate itself is not cancelled, only deferred — it still prices RF, ET
+and all future histogram work at once, and it still has to run before any
+number from this directory is quoted. It moves to the first timing round.
+
+## The pin, and why it is not where the brief said to put it
+
+`~/CascadeProjects/upstream/cuml` **already existed** at `00094f7`
+(branch-25.08), and `PORTING_RULES.md:0a` pins exactly that checkout as the
+upstream for `dbscan/`, `decomposition/` and `glm/`. Checking out a
+different tag in it would have silently moved three other sections' upstream
+out from under them — file convergence, the one thing rule 12 says predicts
+integration pain.
+
+So this lane cloned a SECOND, separate read-only checkout:
+
+    ~/CascadeProjects/upstream/cuml-v26.08.00
+    tag v26.08.00, commit 265b9da6a0e75dbef071a3168398b993a5ff6f0e
+
+Every citation in `ensemble/` is against that path and that commit.
+`PORTING_RULES.md:0a`'s table needs a row for it at merge time; this lane
+did not edit that file because other sessions are in it.
+
+## Five files verified against the pin, the ones the recon flagged as inferred
+
+`dataset.h`, `quantiles.h`, `flatnode.h` and the `kernels/*.cu` TUs were
+recorded in the plan above as inferred from names and sizes. All read now:
+
+- **`dataset.h` is 48 lines**: a struct of pointers and strides plus one
+  accessor, `value(row, col) = data[row*row_stride + col*col_stride]`. That
+  accessor is the memory shape of the whole learner.
+- **`quantiles.h` is 20 lines**: `{DataT* quantiles_array (col-major);
+  IdxT* n_bins_array}`. The per-feature bin count is a real array, not a
+  constant — a feature with fewer distinct values than `max_n_bins` gets
+  fewer bins, via a `thrust::unique` inside their batched kernel.
+- **`flatnode.h` is 66 lines**: `SparseTreeNode` with private fields behind
+  accessors, `left_child_id == -1` marking a leaf and
+  `RightChildId() == LeftChildId() + 1`.
+- **The ten `kernels/*.cu` TUs** are instantiation-only: classification /
+  weighted-classification / regression / weighted-regression x float/double,
+  plus `node-split.cu`. They collapse into comptime specialization.
+
+## THE CAUTION IN STEP 1 IS RESOLVED, and the answer is the good one
+
+The plan above warned: *"PR #8132's weighted bin variants widened counts to
+double — verify at the pin which bin type the UNWEIGHTED path
+instantiates."* Verified at `bins.cuh`:
+
+    using BinCountT = unsigned long long int;            // :14
+    struct ClassificationBin { BinCountT count; ... }     // :17-18
+    atomicAdd(&address->count, val.count);                // :31
+
+The unweighted classification bin is **a 64-bit unsigned INTEGER with an
+integer atomicAdd**. #8132's widening to `double` is a separate `weight`
+field on `WeightedClassificationBin` (`:55-57`), which the unweighted path
+never instantiates — and `bootstrap=True`, their default, forces the
+unweighted path anyway, because `RowSampler::tree_sample_weight()` returns
+`nullptr` whenever bootstrapping is on (`randomforest.cuh:167`).
+
+So the integer-atomics story survives contact with the source. **Ship
+classification first** stands, and it stands for the stated reason rather
+than a hoped-for one.
+
+## MEASURED: this device has no 64-bit integer atomic, and it says so loudly
+
+`ensemble/mojo_only/atomic_width_probe.mojo`. `Atomic.fetch_add` on a
+`UInt64` is a hard **compile** error on the Apple target:
+
+    error: Atomic operation is not supported for this type on Apple GPU
+    error: failed to legalize operation 'pop.atomic.rmw' ...
+
+This is the best kind of denial — it cannot be mistaken for a working
+kernel that drops writes. Two call sites depend on it: `ClassificationBin::
+AtomicAdd` (`bins.cuh:31`) and `countLocalLeftKernel`'s
+`atomicAdd(reinterpret_cast<unsigned long long*>(&splits[nid].local_nLeft),
+...)` (`kernels/builder_kernels_impl.cuh:79-81`).
+
+The resolution is EXACT rather than approximate and the argument comes from
+their own types: both quantities are bounded by `n_sampled_rows`, `IdxT` is
+instantiated as `int` throughout cuML's RF, so neither can exceed 2^31-1 and
+neither can overflow a 32-bit counter. Their 64-bit width buys headroom
+their own index type never lets them reach. Priced under DEVIATION 101 (bins
+lane) and under the kernels lane's numbers for `local_nLeft`.
+
+## MEASURED, and it is a finding rather than a port detail
+
+Two things came out of `ensemble/mojo_only/split_check.mojo`, both by
+running rather than by reasoning:
+
+1. **Their split reduction operator is NOT associative.** `Split::update`
+   merges an equivalent threshold range only when two candidates agree on
+   `global_nLeft` (`split.cuh:174-177`) and otherwise falls through to a
+   `quesval` maximum. Three candidates with equal gain and equal column —
+   X(nLeft 5,[1,1],q10), X2(nLeft 5,[3,3],q30), Y(nLeft 7,[2,2],q20) — give
+   **bin 2, quesval 20** under one grouping and **bin 3, quesval 30** under
+   the other. Arm B of the check runs both groupings and passes only when
+   they DISAGREE, so if a future edit accidentally makes the operator
+   associative, the check fails and says why.
+
+   Why it matters: `evalBestSplit` merges blocks into the node's global slot
+   under `while (atomicCAS(mutex, 0, 1))` (`:251`), which orders blocks by
+   arrival. Their comment at `:123-125` says the midpoint rule exists "so
+   deterministic tie-breaking does not pick an edge", so determinism is
+   plainly their intent.
+
+   **OPEN ITEM (Andrew's, or the NVIDIA column's).** Whether cuML's GPU RF
+   is in fact reproducible run-to-run in this tie class is a question about
+   THEIR binary, and this repository settles those exactly one way: run
+   their binary on a constructed fixture in this tie class on the NVIDIA
+   column via `tools/remote_gpu.sh` with `n_streams=1` and a fixed seed, and
+   read their per-cell output. Not by reasoning — reasoning is what produced
+   the paragraph above, and see finding 2 for what reasoning is worth here.
+   Until that runs, this port claims bit-identity **to itself across
+   backends**, and makes no claim of bit-identity **to cuML** inside this
+   tie class. Recorded so the paper cannot quietly claim the stronger one.
+
+2. **`select_split_range_midpoint` republishes the threshold even on a unit
+   range.** The check's arm D(iii) was written predicting *no movement*, on
+   the reasoning that their rule maps `[b,b]` to bin `b + (b-b+1)/2 = b` and
+   is therefore the identity. It measured **35 of 37 nodes moved**, and the
+   measurement was right: `:126-134` picks the bin and then assigns
+   `quesval = quantiles[bin]`. The rule is the identity on the BIN INDEX and
+   is not the identity on the THRESHOLD.
+
+   The consequence is a semantic worth knowing before porting the kernels: a
+   candidate's `quesval` exists only as a tie-break key; the threshold
+   finally published for a node is always read back out of the quantiles
+   array. The arm now holds that to an exact per-node count rather than to
+   "most of them".
+
+## Lane state
+
+DONE and checked on device: `dataset.mojo`, `random_utils.mojo`,
+`split.mojo` (+ `split_check.mojo`, four arms, three sabotages, all green),
+`atomic_width_probe.mojo`.
+
+IN FLIGHT, one dedicated session each, non-converging files: `bins.mojo` +
+`objectives.mojo`; `quantiles.mojo`; `core/block_reduce.mojo` +
+`core/block_scan.mojo` + `core/scan_by_key.mojo`; `randomforest.mojo` +
+`decisiontree/decisiontree.mojo` + `flatnode.mojo`.
+
+NOT STARTED, deliberately serial because every file it touches is a file
+above: `builder.mojo` and `kernels/builder_kernels{,_impl}.mojo`.
+
+Deviation numbers issued from the reserved 100-129 range: 100/102 dataset,
+101/105-107 bins+objectives and split, 108-111 quantiles, 112-115 core
+primitives, 116-119 estimator surface, 103 + 120-129 held for builder and
+kernels.
+
+## A shared-checkout incident, recorded because rule 12 predicted it
+
+Commit `974e4fb` ("The package promised CPU support it does not have"),
+written by a concurrent session, swept this lane's in-progress `ensemble/`
+files — `PLAN.md`, `dataset.mojo`, `random_utils.mojo`,
+`atomic_width_probe.mojo` and four `__init__.mojo` — into a commit about
+`gbdt/`, `extratrees/`, `pixi.toml` and `python/`. Nothing was lost and
+nothing was corrupted, but a commit that spans four sections cannot be
+reverted for one of them, and its message describes none of what it carried.
+This is the `git add -A` failure the standing orders forbid by name, from
+the other side. No action needed beyond knowing it happened; this lane
+commits by explicit path.
