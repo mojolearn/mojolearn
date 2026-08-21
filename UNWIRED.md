@@ -811,3 +811,31 @@ report:
 They are declared facts for a bring-up, not inputs to a decision the code
 makes today. Recorded here rather than described as load-bearing, because
 this file exists to stop exactly that inflation.
+
+## The identity claim's scale hazard
+
+Found 2026-08-21 by reading the training path to answer "will the identical
+column actually be identical across GPUs".
+
+The histogram accumulation is exact integer arithmetic and cannot depend on
+arrival order. **The scale that quantizes floats into it can.**
+`doc_parallel_boosting` derives `fixed_scale` from a device reduction that
+accumulates in Float32 through block sums and a float atomic, and that is
+order-dependent by construction.
+
+`choose_scale` snapping to a power of two contains it: a perturbation of a few
+parts in 1e6 moves the snapped scale only when `raw` lands that close to a
+power-of-two boundary. Order 1e-6 per round, order 1e-4 per hundred-tree fit.
+When it does fire, the entire histogram shifts by a factor of two and near-tied
+splits can flip.
+
+**Fix before any cross-vendor identity claim is published:** make the magnitude
+reduction order-independent -- the same fixed-point accumulator the histogram
+already uses, or a deterministic tree reduce with a fixed shape. Then the
+probability is zero rather than small, and the construction argument covers the
+whole path instead of most of it.
+
+Two siblings, same audit, not fixed either: FMA contraction is a codegen
+decision no matrix row can reach, and `compute_scores`' division and `sqrt`
+are IEEE-correct only if no backend substitutes a fast approximation. See
+`VENDOR_COLUMNS.md`.
