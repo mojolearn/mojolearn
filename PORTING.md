@@ -2084,16 +2084,53 @@ So `MultiClassOneVsAll` is IMPLEMENTED AND GATED IN MOJO and is NOT
 REACHABLE FROM PYTHON. `python/mojolearn/ensemble.py` refuses it by name
 with this reason rather than accepting it and dying inside Metal.
 
-**2026-08-21, later: the ceiling is not a lottery that a new spin can win.**
-The held-out surface (`eval_set`, the overfitting detector's three options,
-`use_best_model`, `best_model_min_trees`) added no kernels at all -- five
-scalars, two buffer addresses and a richer return -- and all five stems
-still reported `gbdt: 0 AIR blobs`. A basename lottery would be expected to
-move under a source change of that size. It did not. **So the reachable
-reading is CAPACITY, with the basename as the thing that decides which
-subsystem gets dropped rather than whether one does**, and hypothesis 2's
-"dead" verdict below applies only to a GBDT-ONLY entry point, which is what
-it measured.
+**2026-08-21, later still, and THE CAPACITY READING WAS WRONG.** An earlier
+version of this paragraph argued the ceiling was capacity rather than a
+basename lottery, on the evidence that a source change adding no kernels did
+not move any stem off zero. That inference is deleted: it was one
+observation with two variables in it, and a directed measurement says
+otherwise.
+
+Measured with `--target-cpu apple-m1`, no `--target-accelerator`, one
+byte-identical GBDT-only entry file copied under twelve basenames, counting
+`gbdt_` AIR blobs:
+
+    _mojolear                   72        mlgbdt                     0
+    copyml2                     17        _mojolearn_gbdt            0
+    a                            0        zz9                        0
+    ab                           0        q7x                        0
+    abc                          0        mojolearn_ext_gbdt_module  0
+    mlext_a                      0        gbdtext                    0
+
+**Deterministic**: `copyml2` gives 17 on three consecutive builds and
+`_mojolear` gives 72 on three. **Corroborated by size** rather than by the
+symbol scan alone -- 1.337 MB at zero blobs, 1.706 MB at 17, 2.388 MB at 72
+-- so the blobs are genuinely absent, not merely unnamed. **No cache is
+involved**: there is no `MODULAR_HOME` and no Modular build-cache directory
+on this machine.
+
+THE REFERENCE COUNT IS 91. An executable built from
+`mojo_only/nan_mode_check.mojo`, which reaches the same import graph, embeds
+91 `gbdt_` blobs. No shared library under any name has reached it; the best
+is `_mojolear` at 72, missing fourteen `greedy_subsets_searcher` kernels,
+two `add_bin_values` and three `multilogit`.
+
+**It is not the emit mode.** `--emit object` on the same file under the same
+basename also gives 72. **It is not `--target-cpu`.** And the accelerator
+flag is now confirmed at ONE variable, which it never was before: the same
+basename `_mojolear`, the only change being `--target-accelerator apple-m4`
+-- the CORRECT accelerator for this machine, not the bogus `metal:1` -- goes
+from 72 blobs and 2.388 MB to **0 blobs and 1.342 MB**.
+
+**The size cliff is real too, and it is separate.** Six basenames on the
+THREE-estimator module (`copyml2`, `mlext_a`, `_mojolear`, `mojolear`,
+`copyml3`, `gbdtext`) all give zero, including the two that are the only
+non-zero names on the smaller module. So both the name and the module's
+size are in it, and neither explains the other.
+
+**`mojo run` is unaffected**, which is why every check in this repository
+passes: it JIT-compiles kernels on demand and never consults an embedded
+blob. Only AOT artifacts -- the wheel -- are hit.
 
 The consequence for the Python surface: `GradientBoosting.fit(...,
 eval_set=...)` is written, its marshalling is checked, and the Mojo side is
@@ -2102,13 +2139,20 @@ the `.so` on disk is the older one, whose `gbdt_fit` takes six arguments
 where the wrapper now passes eight. **The installed extension and the
 checked-in wrapper are one build apart and cannot be used together.**
 
-**The fix that follows from capacity** is to stop putting three estimators'
-kernels in one module: a GBDT-only entry point measured 84 blobs and fit
-from Python, so splitting the extension is the move that has evidence behind
-it. It is a packaging change, it touches `python/mojolearn/__init__.py` and
-the wheel script, and `bindings/build_estimators.sh` is another session's
-lane -- so it is written down here rather than started in the middle of a
-port.
+**Splitting the extension is no longer a fix on its own.** It was proposed
+here on the strength of an old 84-blob GBDT-only measurement; today's
+GBDT-only module tops out at 72 of 91 under the best of twelve names, so a
+split would ship a module that still dies at the first missing kernel. It
+stays on the list only as a way to get UNDER the size cliff, which a split
+does do -- the small module has two working names where the large one has
+none -- but it needs a name that reaches 91 to be worth doing.
+
+**This is a toolchain defect and the reproducer above is the deliverable.**
+One file, twelve names, deterministic, size-corroborated, no cache, and a
+clean single-variable result for the accelerator flag. It is worth sending
+to Modular as it stands; nothing in this repository can fix a compiler
+deciding which kernels to emit from the name of the file it was asked to
+compile.
 
 **What would ALSO fix it** is upstream: the AOT kernel count must stop
 depending on the entry file's basename. Until then the extension has a hard

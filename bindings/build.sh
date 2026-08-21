@@ -123,8 +123,19 @@ export MACOSX_DEPLOYMENT_TARGET="$MACOS_FLOOR"
 # The output file keeps its real name. CPython only requires that the .so be
 # called _mojolearn.so and export PyInit__mojolearn; the SOURCE it was compiled
 # from is invisible to the import machinery, and both of those are unchanged.
+# MEASURED 2026-08-21 on a GBDT-only entry file, one byte-identical source
+# copied under twelve names, counting gbdt_ AIR blobs (reference: 91):
+#
+#   _mojolear 72   copyml2 17   and TEN OTHERS AT ZERO, including
+#   a, ab, abc, mlext_a, mlgbdt, zz9, q7x, gbdtext, _mojolearn_gbdt,
+#   mojolearn_ext_gbdt_module
+#
+# Deterministic on repeat and corroborated by file size. On THIS module --
+# all three estimators -- copyml2, mlext_a, _mojolear, mojolear, copyml3 and
+# gbdtext all give zero, so the list below is a lottery ticket and not a fix.
+# See PORTING.md 70.
 PRIMARY_STEM="copyml2"
-ALT_STEMS="mlext_a mlext_b mlext_c mlext_d"
+ALT_STEMS="_mojolear mlext_a mlext_b mlext_c mlext_d"
 
 # --emit shared-lib, not an executable: CPython dlopens this and calls
 # PyInit__mojolearn. The name of the file must match that symbol's suffix or
