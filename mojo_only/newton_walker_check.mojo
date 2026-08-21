@@ -59,6 +59,14 @@ struct QuadraticOracle(LeavesEstimationOracle):
     def point_dim(self) -> Int:
         return len(self.a)
 
+    def hessian_block_size(self) -> Int:
+        return 1
+
+    def make_estimation_result(
+        self, point: List[Float32]
+    ) -> List[Float32]:
+        return point.copy()
+
     def move_to(mut self, point: List[Float32]):
         self.point = point.copy()
         self.moves += 1
@@ -94,6 +102,14 @@ struct CliffOracle(LeavesEstimationOracle):
     def point_dim(self) -> Int:
         return 1
 
+    def hessian_block_size(self) -> Int:
+        return 1
+
+    def make_estimation_result(
+        self, point: List[Float32]
+    ) -> List[Float32]:
+        return point.copy()
+
     def move_to(mut self, point: List[Float32]):
         self.point = point.copy()
         self.moves += 1
@@ -113,6 +129,146 @@ struct CliffOracle(LeavesEstimationOracle):
     def write_second_derivatives(mut self, mut second_der: List[Float64]):
         second_der.clear()
         second_der.append(0.5)  # the LIE: true curvature is 2
+
+    def regularize(self, mut point: List[Float32]):
+        pass
+
+
+struct BlockedQuadraticOracle(LeavesEstimationOracle):
+    """A BLOCK-quadratic whose exact minimizer is known, per block.
+
+        f(x)      = -1/2 * sum_b (x_b - m_b)^T H_b (x_b - m_b)
+        gradient  =  H_b (m_b - x_b)          -- their sign convention:
+                                                 `Der` is the NEGATIVE
+                                                 gradient, so the walker
+                                                 ASCENDS
+        Hessian   =  H_b                       (row-major, per block)
+
+    THE ANALYTIC GATE: the Newton direction is `H^-1 * H (m - x) = m - x`,
+    so ONE FULL STEP from ANY start lands exactly on `m`, for every SPD
+    `H`. That answer does not depend on this file's solver, on the block
+    size, or on the starting point -- which is what makes it a gate rather
+    than a tally.
+
+    `H` is deliberately NOT diagonal. A diagonal `H` would make the blocked
+    arm and the diagonal arm agree, and the check would pass with the
+    Cholesky never reached.
+    """
+
+    var row_size: Int
+    var n_blocks: Int
+    var h: List[Float64]
+    var m: List[Float64]
+    var point: List[Float32]
+    var sabotage: Int
+
+    def __init__(
+        out self, row_size: Int, n_blocks: Int, sabotage: Int
+    ):
+        self.row_size = row_size
+        self.n_blocks = n_blocks
+        self.sabotage = sabotage
+        self.point = List[Float32]()
+        self.h = List[Float64]()
+        self.m = List[Float64]()
+        # a diagonally dominant symmetric matrix per block, with DIFFERENT
+        # numbers per block so no two blocks share an expectation
+        for b in range(n_blocks):
+            for i in range(row_size):
+                for j in range(row_size):
+                    if i == j:
+                        self.h.append(4.0 + Float64(b) + Float64(i) * 0.5)
+                    else:
+                        var off = 0.75 / (1.0 + Float64(i + j + b))
+                        self.h.append(off)
+            for i in range(row_size):
+                self.m.append(
+                    1.0 + Float64(b) * 2.0 - Float64(i) * 0.6
+                )
+
+    def point_dim(self) -> Int:
+        return self.row_size * self.n_blocks
+
+    def make_estimation_result(
+        self, point: List[Float32]
+    ) -> List[Float32]:
+        return point.copy()
+
+    def hessian_block_size(self) -> Int:
+        # B1: claim the Hessian is diagonal. The walker then divides by
+        # the diagonal instead of solving, which cannot land on `m`
+        # unless the off-diagonals are zero -- and they are not.
+        if self.sabotage == 1:
+            return 1
+        return self.row_size
+
+    def move_to(mut self, point: List[Float32]):
+        self.point = point.copy()
+
+    def write_value_and_first_derivatives(
+        mut self, mut value: Float64, mut gradient: List[Float64]
+    ):
+        value = 0.0
+        gradient.clear()
+        for _ in range(self.point_dim()):
+            gradient.append(0.0)
+        for b in range(self.n_blocks):
+            for i in range(self.row_size):
+                var acc = 0.0
+                for j in range(self.row_size):
+                    var d = (
+                        self.m[b * self.row_size + j]
+                        - Float64(self.point[b * self.row_size + j])
+                    )
+                    acc += (
+                        self.h[
+                            b * self.row_size * self.row_size
+                            + i * self.row_size
+                            + j
+                        ]
+                        * d
+                    )
+                gradient[b * self.row_size + i] = acc
+                var di = (
+                    self.m[b * self.row_size + i]
+                    - Float64(self.point[b * self.row_size + i])
+                )
+                value += -acc * di / 2.0
+
+    def write_second_derivatives(mut self, mut second_der: List[Float64]):
+        second_der.clear()
+        for b in range(self.n_blocks):
+            for i in range(self.row_size):
+                for j in range(self.row_size):
+                    var v = self.h[
+                        b * self.row_size * self.row_size
+                        + i * self.row_size
+                        + j
+                    ]
+                    # B2: flip one off-diagonal's sign, which makes the
+                    # reported Hessian a DIFFERENT matrix from the one the
+                    # gradient came from, so the step cannot land on `m`.
+                    if self.sabotage == 2 and i != j:
+                        v = -v
+                    second_der.append(v)
+        # `write_second_derivatives` under B1 must return the DIAGONAL
+        # shape the walker will then expect, or the shape check fires
+        # instead of the arithmetic differing -- and a shape error is not
+        # the mechanism this sabotage is aimed at.
+        if self.sabotage == 1:
+            var diag = List[Float64]()
+            for b in range(self.n_blocks):
+                for i in range(self.row_size):
+                    diag.append(
+                        self.h[
+                            b * self.row_size * self.row_size
+                            + i * self.row_size
+                            + i
+                        ]
+                    )
+            second_der.clear()
+            for i in range(len(diag)):
+                second_der.append(diag[i])
 
     def regularize(self, mut point: List[Float32]):
         pass
@@ -172,9 +328,61 @@ def main() raises:
     expect(abs(Float64(got3[0]) - m[0]) < 1e-6, failures,
            "shortcut leaf 0 " + String(got3[0]))
 
+    # 5: THE BLOCKED-HESSIAN ARM, which the diagonal cases never reach.
+    #    PORTING_RULES 8: a non-default path is an unchecked path, and
+    #    every switch is exercised on BOTH sides by a named check per side.
+    #
+    #    The gate is analytic: the Newton direction for a block-quadratic
+    #    is `H^-1 H (m - x) = m - x`, so ONE step lands exactly on `m` for
+    #    every SPD `H`, whatever this file's solver does.
+    for row_size in [2, 3, 6]:
+        var bq = BlockedQuadraticOracle(row_size, 4, 0)
+        var gotb = newton_like_walker_estimate(
+            bq, 1, BACKTRACKING_ANY_IMPROVEMENT, List[Float32]()
+        )
+        var worst = Float64(0.0)
+        for i in range(len(gotb)):
+            var d = abs(Float64(gotb[i]) - bq.m[i])
+            if d > worst:
+                worst = d
+        expect(worst < 1e-4, failures,
+               "blocked rowSize " + String(row_size)
+               + " did not land on the minimizer, worst " + String(worst))
+
+    # B1: claim the Hessian is diagonal. The off-diagonals are non-zero, so
+    #     dividing by the diagonal CANNOT land on `m`.
+    var b1 = BlockedQuadraticOracle(3, 4, 1)
+    var g1 = newton_like_walker_estimate(
+        b1, 1, BACKTRACKING_ANY_IMPROVEMENT, List[Float32]()
+    )
+    var moved1 = Float64(0.0)
+    for i in range(len(g1)):
+        var d = abs(Float64(g1[i]) - b1.m[i])
+        if d > moved1:
+            moved1 = d
+    expect(moved1 > 1e-3, failures,
+           "B1: reporting hessian_block_size 1 changed nothing, so the"
+           " blocked arm is not reached -- worst " + String(moved1))
+
+    # B2: flip the reported off-diagonals' sign, so the Hessian is no
+    #     longer the matrix the gradient came from.
+    var b2 = BlockedQuadraticOracle(3, 4, 2)
+    var g2 = newton_like_walker_estimate(
+        b2, 1, BACKTRACKING_ANY_IMPROVEMENT, List[Float32]()
+    )
+    var moved2 = Float64(0.0)
+    for i in range(len(g2)):
+        var d = abs(Float64(g2[i]) - b2.m[i])
+        if d > moved2:
+            moved2 = d
+    expect(moved2 > 1e-3, failures,
+           "B2: flipping the off-diagonals changed nothing -- worst "
+           + String(moved2))
+
     if failures != 0:
         raise Error(
             "newton walker check FAILED with " + String(failures)
         )
     print("newton walker check: quadratic, cliff backtracking, "
-          "no-backtracking control, shortcut+regularize -- all match")
+          "no-backtracking control, shortcut+regularize, "
+          "BLOCKED Hessian at rowSize 2/3/6 + 2 sabotages -- all match")

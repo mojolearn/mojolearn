@@ -730,3 +730,42 @@ The suspect is the recursive parametric bitonic network: `bitonic_merge` and
 would explain a compiler death rather than a diagnostic. **Unverified** —
 narrowing it means bisecting the network with a standalone harness, which is
 the next step and is not this session's.
+
+## 2026-08-21: what the loss-breadth round left unreached
+
+**`gbdt/estimator.mojo` -> the CPython extension.** `gbdt_fit` and
+`gbdt_predict` are written, wired into `bindings/_mojolearn.mojo`, and
+proven end to end from a `mojo build` executable. They are NOT reachable
+from Python: `mojo build --emit shared-lib` embeds no compiled Metal code
+(0 AIR blobs against an executable's 81) and the runtime JIT fails on the
+shared-memory GBDT kernels. PORTING.md 70 has the measurement and the five
+hypotheses that died on it. `python/mojolearn/ensemble.py` is written and
+correct; `mojolearn.GradientBoosting` is listed as a named absence with
+that reason until the loader is fixed.
+
+**Per-row weights through `train()`.** `gbdt_fit` takes an `n_weights`
+argument and REFUSES anything but zero, because `train()` accepts only
+`class_weights` and there is no per-row weight column threaded through it.
+The oracle and every kernel already take a weight plane; it is the host
+signature that stops.
+
+**`FilterZeroEntries` for Bernoulli and Poisson.** DEVIATION 69: the draws
+are ported and the zero-weight rows are not filtered out, which is
+output-identical and costs the histogram time on rows that contribute
+nothing. Their `BootstrapAndFilter` compacts (`gpu_data/bootstrap.h:104-122`)
+and returns `isContinuousIndices = false`, which selects a different
+histogram arm on their side.
+
+**`min_data_in_leaf`.** Not wired in the searcher, and DEVIATION 69 depends
+on it staying that way: it is the one score-side test that counts ROWS
+rather than summing WEIGHTS, so wiring it makes the unfiltered bootstrap
+stop being output-identical.
+
+**`NumErrors`.** In their target kernel's switch
+(`pointwise_targets.cu:497-501`) and deliberately not ported: their own
+`Init` (`pointwise_target_impl.h:259-299`) has no case for it, so training
+cannot reach it. It is a metric that borrows the target kernel, and this
+port has no metric path for it to arrive by.
+
+**`GammaBootstrapImpl`.** In their `bootstrap.cu:21-33` and not ported,
+because the only call to it is COMMENTED OUT in their own file (`:82`).

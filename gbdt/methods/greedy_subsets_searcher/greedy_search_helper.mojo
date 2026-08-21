@@ -442,6 +442,7 @@ def run_one_level(
         Int32(stat_count),
         leaf0.unsafe_ptr(),
         Int32(1),
+        Int32(0),  # multiclassOptimization
         Float32(1.0),
         out_score.unsafe_ptr(),
         out_bin.unsafe_ptr(),
@@ -1047,6 +1048,7 @@ def run_tree(
             Int32(stat_count),
             ids_a.unsafe_ptr(),
             Int32(n_live),
+            Int32(0),  # multiclassOptimization
             Float32(1.0),
             out_score.unsafe_ptr(),
             out_bin.unsafe_ptr(),
@@ -2224,6 +2226,8 @@ def run_tree_layout[
     sync_budget: Int = -1,
     one_hot: List[Bool] = List[Bool](),
     score_function: Int = SCORE_FUNCTION_COSINE,
+    approx_dim: Int = 1,
+    multiclass_optimization: Bool = False,
 ) raises -> List[Int]:
     """`FitImpl` over a LAYOUT: mixed feature widths, one launch per policy.
 
@@ -2245,7 +2249,13 @@ def run_tree_layout[
     largest cell -- and passing zero asks for the largest scale the type
     admits. See `mojo_only/fixed_point.mojo`.
     """
-    var stat_count = 2
+    # `statCount` is `1 + point.GetColumnCount()` -- their `StochasticDer`
+    # sizes `StatsToAggregate` as one weight column plus one der column
+    # per APPROX DIMENSION (`pointwise_target_impl.h:186-188`, and
+    # `multiclass_targets.cpp:31-42` for the multi-dimensional case, where
+    # it is `1 + NumClasses` minus one for MultiClass's pinned class).
+    # Every single-dimensional loss is 2 and that is the default.
+    var stat_count = 1 + approx_dim
     var max_leaves = 1 << max_depth
 
     var layout = build_layout(fold_counts, one_hot)
@@ -2841,7 +2851,9 @@ def run_tree_layout[
                 bff.unsafe_ptr(), ffw.unsafe_ptr(),
                 hist.unsafe_ptr(),
                 part_stats.unsafe_ptr(), Int32(stat_count), dense_ids.unsafe_ptr(),
-                Int32(n_live), l2_leaf_reg,
+                Int32(n_live),
+                Int32(1) if multiclass_optimization else Int32(0),
+                l2_leaf_reg,
                 out_score.unsafe_ptr(), out_bin.unsafe_ptr(),
                 grid_dim=(argmax_blocks, 1, 1),
                 block_dim=(SCORE_BLOCK_SIZE, 1, 1),
@@ -2854,7 +2866,9 @@ def run_tree_layout[
                 bff.unsafe_ptr(), ffw.unsafe_ptr(),
                 hist.unsafe_ptr(),
                 part_stats.unsafe_ptr(), Int32(stat_count), dense_ids.unsafe_ptr(),
-                Int32(n_live), l2_leaf_reg,
+                Int32(n_live),
+                Int32(1) if multiclass_optimization else Int32(0),
+                l2_leaf_reg,
                 out_score.unsafe_ptr(), out_bin.unsafe_ptr(),
                 grid_dim=(argmax_blocks, 1, 1),
                 block_dim=(SCORE_BLOCK_SIZE, 1, 1),
@@ -3174,6 +3188,7 @@ def run_tree_layout[
         ctx.enqueue_function[add_model_value_kernel](
             p_off.unsafe_ptr(), p_sz.unsafe_ptr(), row_index.unsafe_ptr(),
             leaf_values.unsafe_ptr(), learning_rate, cursor.unsafe_ptr(),
+            Int32(1), Int32(0),
             grid_dim=(wide, n_live, 1), block_dim=(256, 1, 1),
         )
         mgr.stream_kernel()

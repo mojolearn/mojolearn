@@ -42,16 +42,34 @@ from gbdt.models.ctr_value_table import (
     column_plan,
     expand_raw_columns,
 )
-from gbdt.methods.doc_parallel_boosting import TAdditiveModel, fit, predict
+from std.math import exp
+from gbdt.methods.doc_parallel_boosting import (
+    TAdditiveModel,
+    fit,
+    model_approx_dim,
+    predict,
+)
+from gbdt.gpu_util.kernel.bootstrap import (
+    BOOTSTRAP_KERNEL_BAYESIAN,
+    BOOTSTRAP_KERNEL_BERNOULLI,
+    BOOTSTRAP_KERNEL_POISSON,
+)
+
+#: `subsample`'s default, 0.66 (`bootstrap_options.h:15`). Their own
+#: `SetDefault(0.8)` at `catboost_options.cpp:798` is the MVS arm only,
+#: and MVS does not reach their GPU oblivious searcher.
+comptime DEFAULT_SUBSAMPLE = Float32(0.66)
 from gbdt.targets.kernel.pointwise_targets import (
-    OBJECTIVE_CROSSENTROPY,
     OBJECTIVE_LOGLOSS,
+    OBJECTIVE_MULTICLASS,
     OBJECTIVE_RMSE,
 )
+from gbdt.options.loss_description import make_loss_description
 from gbdt.options.catboost_options import (
     COUNTER_CALC_FULL,
     SCORE_FUNCTION_COSINE,
     TCatFeatureParams,
+    set_leaves_estimation_default,
 )
 
 
@@ -168,25 +186,52 @@ def train(
     one_hot: List[Bool] = List[Bool](),
     bootstrap_bayesian: Bool = False,
     bagging_temperature: Float32 = Float32(1.0),
+    bootstrap_type: String = String(""),
+    subsample: Float32 = Float32(-1.0),
     random_seed: UInt64 = UInt64(0),
     score_function: Int = SCORE_FUNCTION_COSINE,
     cat_features: List[Bool] = List[Bool](),
     cat_feature_params: List[TCatFeatureParams] = List[TCatFeatureParams](),
     ctr_estimation_permutation_id: Int = DEFAULT_PERMUTATION_COUNT - 1,
     loss: String = "RMSE",
+    loss_alpha: Float32 = Float32(-1.0),
+    loss_q: Float32 = Float32(-1.0),
+    loss_delta: Float32 = Float32(-1.0),
+    loss_variance_power: Float32 = Float32(-1.0),
+    loss_border: Float32 = Float32(-1.0),
     leaf_estimation_iterations: Int = -1,
+    leaf_estimation_method: Int = -1,
     class_weights: List[Float32] = List[Float32](),
 ) raises -> TrainedModel:
     """Borders -> device quantization -> fit, one call.
 
-    `loss` takes their `ELossFunction` spellings: "RMSE", "Logloss",
-    "CrossEntropy". The classification losses train through their
-    NeedEstimation arm -- Newton leaves, ten iterations by their default
-    (`catboost_options.cpp:157-164`; override with
-    `leaf_estimation_iterations`). PREDICTIONS STAY RAW APPROXES for every
-    loss, exactly like their `predict` without a prediction_type: a
-    Logloss caller applies the sigmoid to `predict_floats` output, which
-    is also what keeps the harness adapters honest about what they time.
+    `loss` takes their `ELossFunction` spellings, and every objective their
+    GPU pointwise target ships is here:
+
+        RMSE  Logloss  CrossEntropy  Quantile  MAE  LogLinQuantile  MAPE
+        Poisson  Lq  Expectile  Tweedie  Huber
+
+    Four of them REQUIRE a parameter, as theirs do: `Lq` needs `loss_q`,
+    `Huber` needs `loss_delta`, `Tweedie` needs `loss_variance_power`,
+    `Expectile` needs `loss_alpha`. `Quantile` and `LogLinQuantile` take
+    `loss_alpha` and default it to 0.5; `Logloss` takes `loss_border` and
+    defaults it to 0.5. A missing mandatory parameter raises here, where
+    theirs raises (`catboost_options.cpp:82`, `:126`, `:222`).
+
+    THE LEAF ESTIMATOR IS CHOSEN BY THE LOSS, not by this signature.
+    `set_leaves_estimation_default` is the port of their
+    `SetLeavesEstimationDefault` (`catboost_options.cpp:273-360`) and it
+    is what decides Newton vs Gradient vs Exact and how many iterations --
+    ten for Logloss, twenty for Tweedie, one for RMSE, and Exact for MAE /
+    MAPE / Quantile. `leaf_estimation_method` and
+    `leaf_estimation_iterations` override it and default to -1 meaning
+    "unset", which is their `TOption::NotSet()`.
+
+    PREDICTIONS STAY RAW APPROXES for every loss, exactly like their
+    `predict` without a prediction_type: a Logloss caller applies the
+    sigmoid to `predict_floats` output, a Poisson caller applies `exp`,
+    and that is also what keeps the harness adapters honest about what
+    they time.
 
     `x_colmajor` is `[feature * n_rows + row]`. A feature marked in
     `one_hot` skips border search: its values ARE dense category codes
@@ -553,16 +598,102 @@ def train(
     ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
     ctx.synchronize()
 
-    var objective = OBJECTIVE_RMSE
-    if loss == "Logloss":
-        objective = OBJECTIVE_LOGLOSS
-    elif loss == "CrossEntropy":
-        objective = OBJECTIVE_CROSSENTROPY
-    elif loss != "RMSE":
-        raise Error(
-            "unknown loss '" + loss
-            + "': this port trains RMSE, Logloss and CrossEntropy"
-        )
+    var loss_desc = make_loss_description(
+        loss,
+        alpha=loss_alpha,
+        q=loss_q,
+        delta=loss_delta,
+        variance_power=loss_variance_power,
+        border=loss_border,
+    )
+    var objective = loss_desc.loss_function
+
+    # THE CLASS COUNT COMES FROM THE LABEL COLUMN, as their
+    # `TClassificationTargetHelper` derives it, and it is derived rather
+    # than taken as a parameter because a count that disagrees with the
+    # data is a wrong model rather than an error.
+    #
+    # Their labels for MultiClass are DENSE CLASS CODES `0..k-1`, which is
+    # what `MultiLogitValAndFirstDerImpl` reads with
+    # `static_cast<ui16>(targetClasses[idx])` (`multilogit.cu:41`) and
+    # indexes prediction planes with. A non-integral or negative label is
+    # refused here rather than truncated silently on the device.
+    var num_classes = 0
+    if objective == OBJECTIVE_MULTICLASS:
+        var mx = -1
+        for r in range(n_rows):
+            var v = y[r]
+            if v < Float32(0.0):
+                raise Error(
+                    "MultiClass label at row " + String(r)
+                    + " is negative; labels are dense class codes 0..k-1"
+                )
+            var iv = Int(v)
+            if Float32(iv) != v:
+                raise Error(
+                    "MultiClass label at row " + String(r)
+                    + " is not an integer; labels are dense class codes"
+                    " 0..k-1"
+                )
+            if iv > mx:
+                mx = iv
+        num_classes = mx + 1
+        if num_classes < 2:
+            raise Error(
+                "MultiClass needs at least two classes; the labels"
+                " reach only " + String(num_classes)
+            )
+    var estimation = set_leaves_estimation_default(
+        loss_desc,
+        method_override=leaf_estimation_method,
+        iterations_override=leaf_estimation_iterations,
+    )
+
+    # `TCatBoostOptions::SetLeavesEstimationDefault`'s sibling for
+    # sampling (`catboost_options.cpp:779-800`), the two lines of it this
+    # port can reach. `bootstrap_type` empty means "take the
+    # `bootstrap_bayesian` shorthand", which is what every existing caller
+    # passes; a name selects one of their three GPU draws.
+    var boot_kind = -1
+    var boot_param = bagging_temperature
+    if bootstrap_type != String(""):
+        if bootstrap_type == "Bayesian":
+            boot_kind = BOOTSTRAP_KERNEL_BAYESIAN
+            boot_param = bagging_temperature
+            if subsample >= Float32(0.0):
+                # their own validator, verbatim in intent
+                # (`catboost_options.cpp:795`)
+                raise Error(
+                    "Error: default bootstrap type (bayesian) doesn't"
+                    " support 'subsample' option"
+                )
+        elif bootstrap_type == "Bernoulli":
+            boot_kind = BOOTSTRAP_KERNEL_BERNOULLI
+            boot_param = (
+                subsample if subsample >= Float32(0.0)
+                else DEFAULT_SUBSAMPLE
+            )
+        elif bootstrap_type == "Poisson":
+            boot_kind = BOOTSTRAP_KERNEL_POISSON
+            boot_param = (
+                subsample if subsample >= Float32(0.0)
+                else DEFAULT_SUBSAMPLE
+            )
+        elif bootstrap_type == "No":
+            boot_kind = -1
+        elif bootstrap_type == "MVS":
+            # `Y_ASSERT(config.GetBootstrapType() != EBootstrapType::MVS)`
+            # (`weak_objective_impl.h:30`): their own GPU oblivious
+            # searcher refuses MVS, so this port has nothing to port.
+            raise Error(
+                "MVS is not reachable from their GPU oblivious searcher"
+                " (weak_objective_impl.h:30 asserts it away)"
+            )
+        else:
+            raise Error(
+                "unknown bootstrap_type '" + bootstrap_type
+                + "': Bayesian, Bernoulli, Poisson, No"
+            )
 
     var model = TAdditiveModel()
     var losses = fit(
@@ -571,11 +702,24 @@ def train(
         l2_leaf_reg, True,
         bootstrap_bayesian=bootstrap_bayesian,
         bagging_temperature=bagging_temperature,
+        bootstrap_type=boot_kind,
+        bootstrap_param=boot_param,
         random_seed=random_seed,
         one_hot=column_one_hot,
         score_function=score_function,
         objective=objective,
-        leaf_estimation_iterations=leaf_estimation_iterations,
+        num_classes=num_classes,
+        logloss_border=loss_desc.get_logloss_border(),
+        leaf_estimation_iterations=estimation.iterations,
+        leaf_estimation_method=estimation.method,
+        alpha=loss_desc.kernel_alpha(),
+        # THEIR SECOND ALPHA. `ComputeWeightedQuantile` reads the quantile
+        # level from the loss params map, default 0.5
+        # (`leaves_estimation_helper.h:72-74`), NOT from the float the
+        # target kernel receives. `get_alpha()` IS that accessor
+        # (`loss_description.cpp:95-102`). They coincide for MAE and
+        # Quantile and differ for MAPE, whose kernel alpha is 0.
+        estimator_alpha=loss_desc.get_alpha(),
     )
     return TrainedModel(
         model^,
@@ -661,6 +805,19 @@ def predict_floats(
     var cindex = _build_cindex_from_floats(
         ctx, expanded, n_rows, tm.borders, tm.fold_counts
     )
+    # A MULTI-DIMENSIONAL MODEL RETURNS `n_rows * approx_dim` VALUES, and
+    # they come back PLANE-MAJOR -- `[dim * n_rows + row]` -- because that
+    # is the cursor's layout and `predict_multi` is what reshapes it. This
+    # entry point keeps its one-dimensional contract and refuses anything
+    # wider rather than silently returning the first class's approxes.
+    var approx_dim = model_approx_dim(tm.model)
+    if approx_dim != 1:
+        raise Error(
+            "predict_floats is one-dimensional; this model has"
+            " approx_dim " + String(approx_dim)
+            + ". Use predict_multi_floats, which returns"
+            " [row * approx_dim + dim]."
+        )
     var cursor = ctx.enqueue_create_buffer[DType.float32](n_rows)
     predict(
         tm.model, ctx, n_rows, tm.fold_counts, cindex, cursor,
@@ -672,4 +829,96 @@ def predict_floats(
     var out = List[Float32]()
     for r in range(n_rows):
         out.append(hc.unsafe_ptr().unsafe_load(r))
+    return out^
+
+
+def predict_multi_floats(
+    ctx: DeviceContext,
+    tm: TrainedModel,
+    x_colmajor: List[Float32],
+    n_rows: Int,
+) raises -> List[Float32]:
+    """`predict_floats` for a multi-dimensional model, ROW-MAJOR out.
+
+    Returns `n_rows * approx_dim` values as `[row * approx_dim + dim]`,
+    which is the layout a caller iterating rows wants and the layout the
+    MODEL stores its leaves in. The cursor is PLANE-MAJOR on the device;
+    the transpose happens here, once, on the host.
+
+    FOR MULTICLASS `approx_dim` IS `numClasses - 1`, not `numClasses`. The
+    last class's approx is pinned at zero and is not stored -- that is the
+    gauge the whole port trains in. A caller turning these into
+    probabilities appends a zero and softmaxes over all `numClasses`;
+    `multiclass_probabilities` does exactly that.
+
+    RAW APPROXES, like every other predict here and like their `predict`
+    without a `prediction_type`.
+    """
+    var approx_dim = model_approx_dim(tm.model)
+    var expanded_x: List[Float32]
+    if len(tm.ctr_tables) != 0:
+        expanded_x = expand_raw_columns(
+            tm.ctr_tables, len(tm.fold_counts), x_colmajor, n_rows
+        )
+    else:
+        expanded_x = x_colmajor.copy()
+    var cindex = _build_cindex_from_floats(
+        ctx, expanded_x, n_rows, tm.borders, tm.fold_counts
+    )
+    var cursor = ctx.enqueue_create_buffer[DType.float32](
+        approx_dim * n_rows
+    )
+    predict(
+        tm.model, ctx, n_rows, tm.fold_counts, cindex, cursor,
+        one_hot=tm.one_hot,
+    )
+    var hc = ctx.enqueue_create_host_buffer[DType.float32](
+        approx_dim * n_rows
+    )
+    ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=cursor)
+    ctx.synchronize()
+    var out = List[Float32]()
+    for r in range(n_rows):
+        for d in range(approx_dim):
+            out.append(hc.unsafe_ptr().unsafe_load(d * n_rows + r))
+    return out^
+
+
+def multiclass_probabilities(
+    approxes: List[Float32], n_rows: Int, num_classes: Int
+) raises -> List[Float32]:
+    """The softmax their `prediction_type='Probability'` applies.
+
+    `approxes` is `predict_multi_floats`' output, `numClasses - 1` wide;
+    the output is `numClasses` wide as `[row * numClasses + class]`. The
+    LAST class is the pinned one, whose approx is zero by construction --
+    which is why this function exists rather than the caller reshaping.
+
+    The max subtraction is `multilogit.cu:41-53`'s, seeded at ZERO because
+    zero IS the pinned class's approx, so it is a max over all
+    `numClasses` and not only the stored ones.
+    """
+    var eff = num_classes - 1
+    if len(approxes) != n_rows * eff:
+        raise Error(
+            "multiclass_probabilities: got " + String(len(approxes))
+            + " approxes for " + String(n_rows) + " rows x "
+            + String(eff) + " free classes"
+        )
+    var out = List[Float32]()
+    for r in range(n_rows):
+        var mx = Float64(0.0)
+        for k in range(eff):
+            var v = Float64(approxes[r * eff + k])
+            if v > mx:
+                mx = v
+        var se = Float64(0.0)
+        for k in range(eff):
+            se += exp(Float64(approxes[r * eff + k]) - mx)
+        se += exp(-mx)
+        for k in range(eff):
+            out.append(
+                Float32(exp(Float64(approxes[r * eff + k]) - mx) / se)
+            )
+        out.append(Float32(exp(-mx) / se))
     return out^

@@ -99,6 +99,76 @@ check-gpu-lib-worker = "mojo run -I . mojo_only/gpu_lib_worker_check.mojo"
 # here compares a total.
 check-segscan = "mojo run -I . mojo_only/segmented_scan_check.mojo"
 
+# Every pointwise objective's Score/Der/Der2 against a float64 libm oracle
+# reached through `external_call`, per cell, on hashed scattered data, in
+# both plane layouts and both weightings -- plus Lq at q = 1, 1.5 and 2.5,
+# which are its three Der2 regimes. Ends with six sabotages that must each
+# turn it red, and PRINTS the worst honest relative gap beside the tolerance
+# so the tolerance is a measurement rather than a claim. Own main(); a GPU
+# and a few seconds.
+check-pointwise-target = "mojo run -I . mojo_only/pointwise_target_check.mojo"
+
+# `ELeavesEstimation::Exact` -- CatBoost's DEFAULT leaf estimator for MAE,
+# MAPE and Quantile -- against an ANALYTIC weighted quantile computed on the
+# host by an O(n^2) insertion sort that shares no code with the device. Ten
+# ragged leaves including an EMPTY one, a one-row one and a 513-row one that
+# crosses the sort's block boundary; hashed non-uniform weights, because with
+# unit weights the weighted quantile degenerates to the ordinary one and a
+# defect in the weight scan would be invisible. Four alphas, then four
+# sabotages that each perturb the DEVICE side only. Own main(); a GPU and
+# seconds.
+check-exact-estimation = "mojo run -I . mojo_only/exact_estimation_check.mojo"
+
+# MultiClass's two kernels -- the softmax value/gradient and one
+# lower-triangular Hessian row -- gated four ways: per cell against libm
+# through FFI over numClasses 2/3/7/12; the ZERO-SUM identity their oracle
+# relies on when it reconstructs the pinned class's gradient component; the
+# TWO-CLASS COLLAPSE against `cross_entropy_kernel`, which an outside oracle
+# already pinned; and the Hessian's sign structure. Rows with every free
+# approx at +-100 are planted, because that is where their `maxApprox = 0`
+# seed is load-bearing. Three sabotages; the fourth is recorded as
+# impossible rather than shipped unable to fire. Own main(); a GPU, seconds.
+check-multilogit = "mojo run -I . mojo_only/multilogit_check.mojo"
+
+# The MultiClass oracle's rowSize > 1 arm -- the branches every pointwise
+# loss skips. Five gates, three of them ANALYTIC rather than a transcription
+# of the code under test: the gradient sums to zero across all numClasses,
+# every blocked-Hessian row sums to exactly lambda (which is algebra about
+# diag(p) - p p^T, and pins the fact that the Hessian is numClasses wide
+# INCLUDING the pinned class), the Hessian is symmetric cell for cell, the
+# first cursorDim gradient components match an independent per-leaf float64
+# tally, and the gauge projection is invariant to a common shift. Ragged
+# leaves including an empty one. Three sabotages, each perturbing the DEVICE
+# side only. Own main(); a GPU, seconds.
+check-multiclass-oracle = "mojo run -I . mojo_only/multiclass_oracle_check.mojo"
+
+# The score kernel's MultiClass arm -- the extra leaf contribution that
+# stands for the PINNED class, whose gradient is not stored because it is
+# minus the sum of the others. Gated by two EXACT analytic identities rather
+# than by a reference: at two classes the arm multiplies the reported score
+# by exactly 2 (L2) or exactly sqrt(2) (Cosine) and must not move the argmax,
+# and the score is symmetric under permuting which class is pinned. Own
+# main(); a GPU, seconds.
+check-multiclass-score = "mojo run -I . mojo_only/multiclass_score_check.mojo"
+
+# MultiClass END TO END: train, predict, serialize, reload. The gate the
+# kernel-level checks cannot reach is the CROSS-CHECK between the two apply
+# paths -- training walks PARTITIONS, prediction walks ROWS and re-derives
+# each leaf, and on the learn set the loss they produce must agree. That is
+# what catches a plane-major buffer read as bin-major. Plus: probabilities
+# sum to one, the model's dim is numClasses-1, a learnable label is learned
+# while a RANDOM control is not, and the multi-dimensional save/load round
+# trip is bit-identical. Two sabotages on the host expectation. numClasses
+# 2, 3 and 7. Own main(); a GPU, under a minute.
+check-multiclass-train = "mojo run -I . mojo_only/multiclass_train_check.mojo"
+
+# The nine losses ported on 2026-08-21 against CATBOOST'S OWN CPU OUTPUT --
+# grid per cell, tree 0's splits and leaf values, all 48 splits with the
+# first divergent tree, every row, and their own objective on both fits.
+# Needs bench/oracle_losses.txt, which is committed; regenerate with
+# `loss-oracle-gen`. Ends with four sabotages. Own main(); a GPU, ~14 fits.
+check-loss-oracle = "mojo run -I . mojo_only/loss_oracle_check.mojo"
+
 # The LSD radix sort over (bin, permutation position). Gates STABILITY
 # separately from sortedness and prints both, because sortedness alone
 # cannot see a tie that moved -- and the tie order IS the second half of
@@ -184,6 +254,9 @@ build-pkg = "mkdir -p build && mojo precompile -I . gbdt -o build/gbdt.mojopkg"
 [feature.bench.tasks]
 # Runs CatBoost itself. Writes bench/oracle.txt (read by `oracle`) and
 # bench/oracle.json (the same content, for humans and for diffing).
+# Runs CatBoost CPU for the nine losses ported 2026-08-21. Writes
+# bench/oracle_losses.txt (read by `check-loss-oracle`).
+loss-oracle-gen = "python tools/catboost_loss_oracle.py"
 oracle-gen = "python tools/catboost_oracle.py > bench/oracle.json"
 
 # CatBoost's OWN MinEntropy borders for the CTR TARGET grid, at budgets 1,

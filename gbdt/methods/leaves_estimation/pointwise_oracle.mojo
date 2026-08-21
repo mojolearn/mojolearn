@@ -66,9 +66,31 @@ from gbdt.methods.kernel_add_model_value import add_model_value_kernel
 from gbdt.methods.leaves_estimation.oracle_interface import (
     LeavesEstimationOracle,
 )
+from gbdt.options.catboost_options import (
+    LEAF_ESTIMATION_EXACT,
+    LEAF_ESTIMATION_GRADIENT,
+    LEAF_ESTIMATION_NEWTON,
+)
+from gbdt.methods.kernel.exact_estimation import (
+    compute_exact_value_kernel,
+)
+from gbdt.methods.leaves_estimation.leaves_estimation_helper import (
+    ExactQuantileScratch,
+    compute_exact_approx,
+    make_exact_quantile_scratch,
+)
+from gbdt.targets.kernel.multilogit import (
+    launch_multilogit_second_der,
+    launch_multilogit_value_and_der,
+    multilogit_blocks,
+)
+from gbdt.targets.kernel.pointwise_targets import (
+    OBJECTIVE_MAPE,
+    OBJECTIVE_MULTICLASS,
+)
 from gbdt.targets.kernel.pointwise_targets import (
     MSE_BLOCK_SIZE,
-    cross_entropy_kernel,
+    launch_approximate,
 )
 
 
@@ -80,8 +102,53 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
     var n_rows: Int
     var bin_count: Int
     var has_weights: Bool
-    var has_border: Bool
+    #: their `SingleBinDim()` (`pointwise_oracle.h:57-64`): the number of
+    #: approxes per LEAF. `cursorDim` for every pointwise loss, and
+    #: `cursorDim + 1` for MultiClass -- the leaf carries ONE MORE
+    #: dimension than the cursor, because the walker solves in the full
+    #: `numClasses`-dimensional space and `make_estimation_result`
+    #: projects back by subtracting the pinned component.
+    var single_bin_dim: Int
+    #: `Cursor.GetColumnCount()`: 1 for every pointwise loss,
+    #: `numClasses - 1` for MultiClass.
+    var cursor_dim: Int
+    #: `numClasses`, needed by the multilogit kernels. 0 when not
+    #: MultiClass.
+    var num_classes: Int
+    #: the der / der2 plane buffer for the multi-dimensional path
+    var d_multi_der: DeviceBuffer[DType.float32]
+    var h_multi_stats: HostBuffer[DType.float32]
+    var d_multi_stats: DeviceBuffer[DType.float32]
+    var d_multi_partials: DeviceBuffer[DType.float32]
+    #: `DerAtPoint`, kept because MultiClass's gradient reconstruction
+    #: reads it back (`pointwise_oracle.cpp:93-101`) and their
+    #: `WriteSecondDerivatives` CB_ENSUREs it is defined (`:119`)
+    var der_at_point: List[Float64]
+    var objective: Int
+    #: THE KERNEL'S alpha -- their `GetAlpha()`, the ONE float
+    #: `PointwiseTargetKernel` receives (`pointwise_targets.cu:451`).
+    var alpha: Float32
+    #: THE ESTIMATOR'S alpha, WHICH IS A DIFFERENT NUMBER, and conflating
+    #: them was a real defect for a day.
+    #:
+    #: `ComputeWeightedQuantile` does NOT take the kernel's float. It reads
+    #: the quantile level out of the loss params map with its own default:
+    #:
+    #:     auto it = params.find("alpha");
+    #:     float alpha = it == params.end() ? 0.5 : FromString<float>(...);
+    #:                                    (`leaves_estimation_helper.h:72-74`)
+    #:
+    #: For MAE and Quantile the two coincide and nothing shows. For MAPE
+    #: they do not: `Init`'s MAPE case is a bare `break`
+    #: (`pointwise_target_impl.h:261-266`), so the KERNEL gets the member's
+    #: declared `0` -- harmless, MAPE's kernel never reads it -- while the
+    #: ESTIMATOR gets 0.5. Feeding the kernel's 0 to the quantile search
+    #: makes `needWeights` zero and collapses it to the segment start, so
+    #: every MAPE leaf became its leaf's MINIMUM residual instead of the
+    #: MAPE-weighted median.
+    var estimator_alpha: Float32
     var border: Float32
+    var estimation_method: Int
     var lambda_reg: Float64
     var min_leaf_weight: Float64
     var wide: Int
@@ -108,16 +175,70 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
     var weights_cpu: List[Float64]
     var cached_der2: List[Float64]
 
+    #: allocated only when the resolved method is Exact; an
+    #: `Optional` because the Newton and Gradient paths must not pay
+    #: nineteen buffers of `n_rows` they never read.
+    var exact: Optional[ExactQuantileScratch]
+    var max_leaf_size: Int
+
     def point_dim(self) -> Int:
-        return self.bin_count
+        return self.bin_count * self.single_bin_dim
+
+    def hessian_block_size(self) -> Int:
+        """`HessianBlockSize()` (`pointwise_oracle.h:30-39`), their test
+        in their order:
+
+            if (method != Newton)                 return 1;
+            if (GetHessianType() == Diagonal)     return 1;
+            else                                  return SingleBinDim();
+
+        SO A GRADIENT-METHOD MULTICLASS FIT IS DIAGONAL, not blocked --
+        the blocked Cholesky is a property of the METHOD as much as of the
+        loss, and reading it as "MultiClass is blocked" would send a
+        Gradient fit down the wrong arm. Every pointwise loss reports
+        `EHessianType::Symmetric` but has `SingleBinDim() == 1`, so the
+        second test is what keeps them diagonal, not the first.
+        """
+        if self.estimation_method != LEAF_ESTIMATION_NEWTON:
+            return 1
+        if self.objective != OBJECTIVE_MULTICLASS:
+            # every pointwise loss: `GetDim()` is 1, so `SingleBinDim()`
+            # is 1 and the blocked arm would be a 1x1 Cholesky anyway
+            return 1
+        return self.single_bin_dim
 
     def move_to(mut self, point: List[Float32]) raises:
-        """`TBinOptimizedOracle::MoveTo` (`pointwise_oracle.cpp:35-57`)."""
+        """`TBinOptimizedOracle::MoveTo` (`pointwise_oracle.cpp:35-57`).
+
+        THE POINT ARRIVES IN THE WALKER'S GAUGE AND THE CURSOR LIVES IN
+        ANOTHER ONE. `point` has `SingleBinDim()` components per bin;
+        `CurrentPoint` and the cursor have `cursorDim`. Their very first
+        line of work is `MakeEstimationResult(point)` (`:43`), which
+        projects one into the other, and the shift is taken between two
+        vectors that are BOTH in the cursor's gauge. For every pointwise
+        loss the projection is the identity and the distinction is
+        invisible; for MultiClass it is the whole reason the approxes do
+        not drift.
+
+        THE TWO LAYOUTS: the shift is BIN-MAJOR
+        (`newPoint[bin * cursorDim + dim]`) and the cursor is
+        PLANE-MAJOR. `add_model_value_kernel`'s z axis is where they meet.
+        """
+        if len(point) != self.bin_count * self.single_bin_dim:
+            raise Error(
+                "MoveTo: point holds " + String(len(point))
+                + " for " + String(self.bin_count) + " bins x "
+                + String(self.single_bin_dim) + " dims"
+            )
+        # `TVector<float> newPoint = MakeEstimationResult(point);` (`:43`)
+        var new_point = self.make_estimation_result(point)
+
         # the last eval's synchronize is what makes h_shift reusable here;
         # the walker is strictly move -> eval -> move.
-        for i in range(self.bin_count):
+        var shift_len = self.bin_count * self.cursor_dim
+        for i in range(shift_len):
             self.h_shift.unsafe_ptr().unsafe_store(
-                i, point[i] - self.current_point[i]
+                i, new_point[i] - self.current_point[i]
             )
         self.ctx.enqueue_copy(
             dst_buf=self.d_shift, src_ptr=self.h_shift.unsafe_ptr()
@@ -129,94 +250,209 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             self.d_shift.unsafe_ptr(),
             Float32(1.0),
             self.d_cursor.unsafe_ptr(),
-            grid_dim=(self.wide, self.bin_count, 1),
+            Int32(self.cursor_dim),
+            Int32(self.n_rows),
+            grid_dim=(self.wide, self.bin_count, self.cursor_dim),
             block_dim=(256, 1, 1),
         )
         # `DerAtPoint.Clear(); Der2AtPoint.Clear();` (`:54-55`)
         self.cached_der2.clear()
+        self.der_at_point.clear()
         self.current_point.clear()
-        for i in range(self.bin_count):
-            self.current_point.append(point[i])
+        for i in range(shift_len):
+            self.current_point.append(new_point[i])
 
     def write_value_and_first_derivatives(
         mut self, mut value: Float64, mut gradient: List[Float64]
     ) raises:
-        """`WriteValueAndFirstDerivatives`, rowSize==1 (`:59-112`)."""
+        """`WriteValueAndFirstDerivatives` (`pointwise_oracle.cpp:59-112`).
+
+        TWO ARMS, theirs, on `rowSize == 1` (`:70-77`):
+
+          rowSize == 1  the FAST PATH for pools with few features and many
+                        docs: `ApproximateAt(cursor, &value, &der, &der2)`
+                        computes value, der AND der2 in ONE kernel, and
+                        `Der2AtPoint` is cached with lambda added.
+          rowSize >  1  `ComputeValueAndDerivative(cursor, &value, &der)`
+                        only. der2 is NOT computed here; it costs a launch
+                        per Hessian row and is paid for in
+                        `write_second_derivatives`.
+
+        THE MULTICLASS GRADIENT HAS ONE MORE COMPONENT THAN THE KERNEL
+        WRITES (`:93-101`). The cursor carries `cursorDim = numClasses - 1`
+        free classes; the leaf carries `SingleBinDim() = cursorDim + 1`.
+        The missing component is not computed, it is RECONSTRUCTED:
+
+            total = sum over dim of DerAtPoint[bin*cursorDim + dim]
+            gradient[bin*rowSize + cursorDim] = -total
+
+        which is exact because the multinomial gradient sums to zero over
+        ALL numClasses. `mojo_only/multilogit_check.mojo` gates that
+        identity on the kernel directly, which is what makes this line
+        safe to write rather than merely plausible.
+        """
         var blocks = (
             self.n_rows + MSE_BLOCK_SIZE - 1
         ) // MSE_BLOCK_SIZE
-        if self.has_border:
-            self.ctx.enqueue_function[cross_entropy_kernel[True, True]](
-                self.d_target.unsafe_ptr(),
-                self.d_weights.unsafe_ptr(),
-                Int32(self.n_rows),
-                self.d_cursor.unsafe_ptr(),
+
+        if self.single_bin_dim == 1:
+            launch_approximate[True](
+                self.ctx, self.objective,
+                self.d_target, self.d_weights, Int32(self.n_rows),
+                self.d_cursor,
                 Int32(1) if self.has_weights else Int32(0),
-                self.border,
-                self.d_eval_stats.unsafe_ptr(),
-                self.d_fv.unsafe_ptr(),
-                Int32(1),
-                self.d_mag_dummy.unsafe_ptr(),
-                Int32(0),
-                grid_dim=(blocks, 1, 1),
-                block_dim=(MSE_BLOCK_SIZE, 1, 1),
+                self.alpha, self.border,
+                self.d_eval_stats, self.d_fv, Int32(1),
+                self.d_mag_dummy, Int32(0),
+                blocks,
             )
-        else:
-            self.ctx.enqueue_function[cross_entropy_kernel[False, True]](
-                self.d_target.unsafe_ptr(),
-                self.d_weights.unsafe_ptr(),
-                Int32(self.n_rows),
-                self.d_cursor.unsafe_ptr(),
-                Int32(1) if self.has_weights else Int32(0),
-                self.border,
-                self.d_eval_stats.unsafe_ptr(),
-                self.d_fv.unsafe_ptr(),
-                Int32(1),
-                self.d_mag_dummy.unsafe_ptr(),
-                Int32(0),
-                grid_dim=(blocks, 1, 1),
-                block_dim=(MSE_BLOCK_SIZE, 1, 1),
+            compute_partition_stats(
+                self.ctx, self.bin_count, 0, 2, self.n_rows,
+                self.d_leaves, self.d_p_off, self.d_p_sz,
+                self.d_eval_stats, self.d_partials, self.d_part_stats,
+                sm_count=self.sm_count,
             )
+            self.ctx.enqueue_copy(
+                dst_ptr=self.h_part_stats.unsafe_ptr(),
+                src_buf=self.d_part_stats,
+            )
+            self.ctx.enqueue_copy(
+                dst_ptr=self.h_fv.unsafe_ptr(), src_buf=self.d_fv
+            )
+            self.ctx.synchronize()
+
+            gradient.clear()
+            self.cached_der2.clear()
+            for leaf in range(self.bin_count):
+                gradient.append(
+                    Float64(
+                        self.h_part_stats.unsafe_ptr().unsafe_load(
+                            2 * leaf
+                        )
+                    )
+                )
+                # `(*Der2AtPoint)[i] += lambda` (`:86-89`)
+                self.cached_der2.append(
+                    Float64(
+                        self.h_part_stats.unsafe_ptr().unsafe_load(
+                            2 * leaf + 1
+                        )
+                    )
+                    + self.lambda_reg
+                )
+            value = 0.0
+            for b in range(blocks):
+                value += Float64(self.h_fv.unsafe_ptr().unsafe_load(b))
+            return
+
+        # ---- the rowSize > 1 arm: MultiClass ------------------------
+        if self.objective != OBJECTIVE_MULTICLASS:
+            raise Error(
+                "the multi-dimensional oracle arm is MultiClass only;"
+                " objective " + String(self.objective)
+                + " has SingleBinDim > 1 without a der calcer"
+            )
+        var ml_blocks = multilogit_blocks(self.n_rows)
+        launch_multilogit_value_and_der(
+            self.ctx, self.num_classes, self.n_rows,
+            self.d_target, self.d_weights, self.has_weights,
+            self.d_cursor, self.n_rows,
+            self.d_identity, False,
+            self.d_fv, True,
+            self.d_multi_der, self.n_rows,
+            self.d_mag_dummy, False,
+        )
+        # `ComputePartitionStats(der, Offsets, &reducedDer)` (`:83`), with
+        # `cursorDim` columns instead of one
         compute_partition_stats(
-            self.ctx, self.bin_count, 0, 2, self.n_rows,
+            self.ctx, self.bin_count, 0, self.cursor_dim, self.n_rows,
             self.d_leaves, self.d_p_off, self.d_p_sz,
-            self.d_eval_stats, self.d_partials, self.d_part_stats,
+            self.d_multi_der, self.d_multi_partials, self.d_multi_stats,
             sm_count=self.sm_count,
         )
         self.ctx.enqueue_copy(
-            dst_ptr=self.h_part_stats.unsafe_ptr(),
-            src_buf=self.d_part_stats,
+            dst_ptr=self.h_multi_stats.unsafe_ptr(),
+            src_buf=self.d_multi_stats,
         )
         self.ctx.enqueue_copy(
             dst_ptr=self.h_fv.unsafe_ptr(), src_buf=self.d_fv
         )
         self.ctx.synchronize()
 
+        # `DerAtPoint = ReadReduce(reducedDer)` (`:84`)
+        self.der_at_point.clear()
+        for i in range(self.bin_count * self.cursor_dim):
+            self.der_at_point.append(
+                Float64(self.h_multi_stats.unsafe_ptr().unsafe_load(i))
+            )
+
+        # their MultiClass reconstruction (`:93-101`)
         gradient.clear()
+        for _ in range(self.bin_count * self.single_bin_dim):
+            gradient.append(Float64(0.0))
+        for bin in range(self.bin_count):
+            var total = Float64(0.0)
+            for dim in range(self.cursor_dim):
+                var val = self.der_at_point[bin * self.cursor_dim + dim]
+                gradient[bin * self.single_bin_dim + dim] = val
+                total += val
+            # `sum of der is equal to zero` (`:100`)
+            gradient[bin * self.single_bin_dim + self.cursor_dim] = -total
+
+        # der2 is NOT cached on this arm; `write_second_derivatives`
+        # recomputes it row by row, exactly as theirs does
         self.cached_der2.clear()
-        for leaf in range(self.bin_count):
-            gradient.append(
-                Float64(
-                    self.h_part_stats.unsafe_ptr().unsafe_load(2 * leaf)
-                )
-            )
-            # `(*Der2AtPoint)[i] += lambda` (`:86-89`)
-            self.cached_der2.append(
-                Float64(
-                    self.h_part_stats.unsafe_ptr().unsafe_load(
-                        2 * leaf + 1
-                    )
-                )
-                + self.lambda_reg
-            )
+
         value = 0.0
-        for b in range(
-            (self.n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
-        ):
+        for b in range(ml_blocks):
             value += Float64(self.h_fv.unsafe_ptr().unsafe_load(b))
 
     def write_second_derivatives(mut self, mut second_der: List[Float64]) raises:
-        """`WriteSecondDerivatives`, the Newton cache arm (`:114-117`)."""
+        """`WriteSecondDerivatives` (`pointwise_oracle.cpp:114-195`).
+
+        TWO ARMS, theirs, keyed on `LeavesEstimationConfig
+        .LeavesEstimationMethod`:
+
+        * NEWTON (`:122-124`) returns the `Der2AtPoint` cache the eval
+          pass filled -- the reduced `weight * Der2` per bin, plus lambda.
+        * GRADIENT (`:185-193`) IGNORES the second derivative entirely and
+          returns `WeightsCpu[bin] + lambda`. The walker's
+          `MoveDirection = Gradient / (Hessian + 1e-20)` then becomes a
+          weight-normalized gradient step, which is what "gradient
+          descent on the leaves" means in their code.
+
+        That second arm is why four objectives whose `Der2` is identically
+        zero -- Quantile, MAE, MAPE, LogLinQuantile -- can be trained at
+        all: under Newton their Hessian would be `lambda` alone, and the
+        leaf value would be the summed gradient over the L2 term rather
+        than anything scaled to the leaf.
+
+        Their `CB_ENSURE(method != Exact)` (`:121`) is here too: Exact
+        never reaches the walker, it replaces it (`EstimateExact`,
+        `:204-213`).
+        """
+        if self.estimation_method == LEAF_ESTIMATION_GRADIENT:
+            # `:185-193`, and note the INNER LOOP over `rowSize`: the
+            # weight is repeated across every approx dimension, so a
+            # multi-dimensional Gradient fit gets `rowSize` copies of its
+            # leaf weight rather than one.
+            second_der.clear()
+            for leaf in range(self.bin_count):
+                var w = self.weights_cpu[leaf] + self.lambda_reg
+                for _ in range(self.single_bin_dim):
+                    second_der.append(w)
+            return
+        if self.estimation_method != LEAF_ESTIMATION_NEWTON:
+            raise Error(
+                "WriteSecondDerivatives: only Newton and Gradient reach"
+                " the walker; Exact replaces it"
+            )
+
+        # ---- the BLOCKED arm (`pointwise_oracle.cpp:125-184`) --------
+        if self.hessian_block_size() > 1:
+            self._write_blocked_second_derivatives(second_der)
+            return
+
         if len(self.cached_der2) != self.bin_count:
             raise Error(
                 "WriteSecondDerivatives before WriteValueAndFirst"
@@ -226,11 +462,201 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         for leaf in range(self.bin_count):
             second_der.append(self.cached_der2[leaf])
 
+    def estimate_exact(mut self) raises -> List[Float32]:
+        """`TBinOptimizedOracle::EstimateExact`
+        (`pointwise_oracle.cpp:204-213`).
+
+            auto values  = TStripeBuffer<float>::CopyMapping(Bins);
+            auto weights = TStripeBuffer<float>::CopyMapping(Bins);
+            DerCalcer->ComputeExactValue(Cursor.AsConstBuf(), &values,
+                                         &weights);
+            TVector<float> point(BinCount * SingleBinDim());
+            ComputeExactApprox(Bins, values, weights, BinCount, point,
+                               LossDescription);
+            MoveTo(point);
+            return MakeEstimationResult(point);
+
+        `MoveTo` at the end is not decoration: the walker never runs for
+        this method, so this is the only place the oracle's cursor copy
+        learns the value it just produced, and `WeightsCpu`-based
+        regularization is applied by the caller exactly as
+        `MakeEstimationResult` -> `RegularizeImpl` does for the others.
+        """
+        if self.estimation_method != LEAF_ESTIMATION_EXACT:
+            raise Error(
+                "estimate_exact called with a non-Exact estimation method"
+            )
+        if not self.exact:
+            raise Error(
+                "estimate_exact: the Exact scratch was never allocated;"
+                " make_bin_optimized_oracle was told a different method"
+            )
+        var blocks = (self.n_rows + 255) // 256
+        if blocks < 1:
+            blocks = 1
+        # `DerCalcer->ComputeExactValue(Cursor, &values, &weights)`
+        self.ctx.enqueue_function[compute_exact_value_kernel](
+            self.d_target.unsafe_ptr(),
+            self.d_cursor.unsafe_ptr(),
+            self.d_weights.unsafe_ptr(),
+            Int32(self.n_rows),
+            Int32(1) if self.has_weights else Int32(0),
+            self.exact.value().residuals.unsafe_ptr(),
+            self.exact.value().residual_weights.unsafe_ptr(),
+            grid_dim=blocks, block_dim=256,
+        )
+        var point = List[Float32]()
+        compute_exact_approx(
+            self.ctx,
+            self.objective,
+            self.objective == OBJECTIVE_MAPE,
+            self.n_rows,
+            self.bin_count,
+            self.max_leaf_size,
+            self.estimator_alpha,
+            self.d_p_off,
+            self.d_p_sz,
+            self.exact.value(),
+            point,
+        )
+        # `MoveTo(point)` (`:211`)
+        self.move_to(point)
+        # `MakeEstimationResult(point)` -> `RegularizeImpl`
+        self.regularize(point)
+        return point^
+
+    def _write_blocked_second_derivatives(
+        mut self, mut second_der: List[Float64]
+    ) raises:
+        """The blocked lower-triangular Hessian (`:125-184`).
+
+        Their shape, and every constant in it:
+
+            hessianBlockSize          = SingleBinDim()  = numClasses
+            matrixSize                = hbs * hbs
+            blockCount                = rowSize / hbs   = 1 here
+            lowTriangleMatrixSize     = hbs * (hbs + 1) / 2
+
+        then one launch per Hessian ROW (`:140-151`), each producing
+        `hessianBlockRow + 1` columns, each reduced per bin; then the
+        lower triangle is MIRRORED into the upper one and `lambda` is
+        added to the diagonal (`:159-181`).
+
+        NOTE WHICH ROWS EXIST. The loop runs `hessianBlockRow` over
+        `[0, numClasses)`, so its LAST iteration asks
+        `MultiLogitSecondDerRowImpl` for row `numClasses - 1`, which is
+        `der2Row == effectiveClassCount` -- the arm that reads
+        `exp(-maxApprox)` instead of a prediction plane
+        (`multilogit.cu:157-158`). That branch is not defensive: it is the
+        PINNED class's row, and the Hessian is `numClasses x numClasses`
+        even though the cursor has `numClasses - 1` planes. A port that
+        stopped the loop at `cursorDim` would build a matrix one row
+        short and the Cholesky would solve a different system.
+
+        ================= DEVIATION BLOCK =================
+        DEVIATION 75: ONE REDUCE PER ROW INTO ITS OWN BUFFER, where theirs
+        reduces every row into disjoint SLICES of one
+        `reducedHessianGpu` and reads the whole thing back once
+        (`:135-157`). Their slice arithmetic exists because `ReadReduce`
+        is one call over one buffer; ours reads each row's reduce as it is
+        produced, which is `numClasses` copies of `binCount * (row + 1)`
+        floats instead of one copy of `binCount * lowTriangleMatrixSize`.
+        SAME NUMBERS, same order within a row. It costs `numClasses - 1`
+        extra device-to-host copies per estimation iteration and buys not
+        having to reproduce their `offset` bookkeeping, which is the part
+        of their function most likely to be transcribed wrong.
+        ===================================================
+        """
+        var hbs = self.single_bin_dim
+        var matrix_size = hbs * hbs
+
+        # `secondDer->resize(singleBinBlockedMatrixSize * BinCount)`
+        second_der.clear()
+        for _ in range(matrix_size * self.bin_count):
+            second_der.append(Float64(0.0))
+
+        for row in range(hbs):
+            var column_count = row + 1
+            launch_multilogit_second_der(
+                self.ctx, self.num_classes, self.n_rows,
+                self.d_weights, self.has_weights,
+                self.d_cursor, self.n_rows,
+                self.d_multi_der, row, self.n_rows,
+            )
+            compute_partition_stats(
+                self.ctx, self.bin_count, 0, column_count, self.n_rows,
+                self.d_leaves, self.d_p_off, self.d_p_sz,
+                self.d_multi_der, self.d_multi_partials,
+                self.d_multi_stats,
+                sm_count=self.sm_count,
+            )
+            self.ctx.enqueue_copy(
+                dst_ptr=self.h_multi_stats.unsafe_ptr(),
+                src_buf=self.d_multi_stats,
+            )
+            self.ctx.synchronize()
+
+            # mirror this row into both triangles (`:166-180`)
+            for bin in range(self.bin_count):
+                var base = bin * matrix_size
+                for col in range(column_count):
+                    var val = Float64(
+                        self.h_multi_stats.unsafe_ptr().unsafe_load(
+                            bin * column_count + col
+                        )
+                    )
+                    if col == row:
+                        # `sigma[row*hbs + row] = ... + lambda` (`:178`)
+                        second_der[base + row * hbs + row] = (
+                            val + self.lambda_reg
+                        )
+                    else:
+                        second_der[base + row * hbs + col] = val
+                        second_der[base + col * hbs + row] = val
+
+    def make_estimation_result(
+        self, point: List[Float32]
+    ) -> List[Float32]:
+        """`MakeEstimationResult` (`pointwise_oracle.cpp:18-33`).
+
+        Identity for every single-dimensional loss. For MultiClass it is
+        the GAUGE FIXING that makes the whole scheme work:
+
+            newPoint[bin*cursorDim + dim] =
+                point[bin*SingleBinDim() + dim]
+              - point[bin*SingleBinDim() + cursorDim]
+
+        The walker solves in the full `numClasses`-dimensional space,
+        where the softmax's shift invariance leaves the Hessian singular
+        and only `+ lambda` makes it solvable. Subtracting the pinned
+        component re-pins the last class at zero, which is the gauge the
+        CURSOR is stored in. Without it the approxes drift by a common
+        constant every iteration -- invisibly, since the predictions do
+        not change -- until the exponentials leave float32 range.
+        """
+        if self.objective != OBJECTIVE_MULTICLASS:
+            return point.copy()
+        var out = List[Float32]()
+        for bin in range(self.bin_count):
+            for dim in range(self.cursor_dim):
+                out.append(
+                    point[bin * self.single_bin_dim + dim]
+                    - point[bin * self.single_bin_dim + self.cursor_dim]
+                )
+        return out^
+
     def regularize(self, mut point: List[Float32]):
-        """`RegularizeImpl` (`oracle_interface.h:43-52`)."""
+        """`RegularizeImpl` (`oracle_interface.h:43-52`), with their
+        `approxDim` argument (`pointwise_oracle.cpp:13-16`).
+
+        A leaf under `MinLeafWeight` is zeroed in EVERY approx dimension,
+        not only the first -- their inner `for dim` loop (`:48-50`).
+        """
+        var dim_count = self.single_bin_dim
         for bin in range(self.bin_count):
             if self.weights_cpu[bin] < self.min_leaf_weight:
-                point[bin] = Float32(0.0)
+                for dim in range(dim_count):
+                    point[bin * dim_count + dim] = Float32(0.0)
 
 
 def make_bin_optimized_oracle(
@@ -244,14 +670,35 @@ def make_bin_optimized_oracle(
     var d_p_off: DeviceBuffer[DType.uint32],
     var d_p_sz: DeviceBuffer[DType.uint32],
     has_weights: Bool,
-    has_border: Bool,
+    objective: Int,
+    alpha: Float32,
+    estimator_alpha: Float32,
     border: Float32,
     lambda_reg: Float64,
     sm_count: Int,
+    estimation_method: Int = LEAF_ESTIMATION_NEWTON,
+    num_classes: Int = 0,
 ) raises -> BinOptimizedOracle:
     """Their ctor (`pointwise_oracle.cpp:218-246`): allocate the eval
     buffers, seed `CurrentPoint` at zero, and settle `WeightsCpu` once --
     the weights never move during estimation."""
+    # `SingleBinDim()` and `Cursor.GetColumnCount()` (`pointwise_oracle.h
+    # :57-64`): MultiClass carries `numClasses - 1` cursor planes and
+    # `numClasses` leaf dimensions; everything else is 1 and 1.
+    var cursor_dim = 1
+    var single_bin_dim = 1
+    if objective == OBJECTIVE_MULTICLASS:
+        if num_classes < 2:
+            raise Error(
+                "MultiClass oracle needs num_classes >= 2, got "
+                + String(num_classes)
+            )
+        cursor_dim = num_classes - 1
+        single_bin_dim = num_classes
+    # one buffer wide enough for both the value pass (`cursor_dim`
+    # planes) and the widest Hessian row (`single_bin_dim` columns)
+    var multi_planes = single_bin_dim
+
     var d_identity = ctx.enqueue_create_buffer[DType.uint32](n_rows)
     launch_make_sequence(ctx, UInt32(0), d_identity, n_rows)
 
@@ -261,8 +708,12 @@ def make_bin_optimized_oracle(
         h_leaves.unsafe_ptr().unsafe_store(i, UInt32(i))
     ctx.enqueue_copy(dst_buf=d_leaves, src_ptr=h_leaves.unsafe_ptr())
 
-    var d_shift = ctx.enqueue_create_buffer[DType.float32](bin_count)
-    var h_shift = ctx.enqueue_create_host_buffer[DType.float32](bin_count)
+    var d_shift = ctx.enqueue_create_buffer[DType.float32](
+        bin_count * cursor_dim
+    )
+    var h_shift = ctx.enqueue_create_host_buffer[DType.float32](
+        bin_count * cursor_dim
+    )
     var d_eval_stats = ctx.enqueue_create_buffer[DType.float32](2 * n_rows)
     var blocks = (n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
     var d_fv = ctx.enqueue_create_buffer[DType.float32](blocks)
@@ -278,6 +729,16 @@ def make_bin_optimized_oracle(
     if bin_count * 1 * chunks1 > partials_len:
         partials_len = bin_count * 1 * chunks1
     var d_partials = ctx.enqueue_create_buffer[DType.float32](partials_len)
+    # the multi-dimensional reduce needs its own partials, sized for the
+    # WIDEST stat count it will ever be asked for
+    var multi_partials_len = 1
+    for sc in range(1, multi_planes + 1):
+        var need = bin_count * sc * partition_stats_chunks(sm, sc)
+        if need > multi_partials_len:
+            multi_partials_len = need
+    var d_multi_partials = ctx.enqueue_create_buffer[DType.float32](
+        multi_partials_len
+    )
     var d_part_stats = ctx.enqueue_create_buffer[DType.float32](
         2 * bin_count
     )
@@ -285,8 +746,22 @@ def make_bin_optimized_oracle(
         2 * bin_count
     )
 
+    # allocated ONCE per tree rather than per Hessian row
+    var d_multi_der = ctx.enqueue_create_buffer[DType.float32](
+        multi_planes * n_rows
+    )
+    var d_multi_stats = ctx.enqueue_create_buffer[DType.float32](
+        multi_planes * bin_count
+    )
+    var h_multi_stats = ctx.enqueue_create_host_buffer[DType.float32](
+        multi_planes * bin_count
+    )
+
+    # `CurrentPoint` lives in the CURSOR's gauge -- `cursorDim` per bin,
+    # not `SingleBinDim()` -- because `MoveTo` projects before it
+    # subtracts (`pointwise_oracle.cpp:43-47`).
     var current_point = List[Float32]()
-    for _ in range(bin_count):
+    for _ in range(bin_count * cursor_dim):
         current_point.append(Float32(0.0))
 
     # WeightsCpu (`:236-243`): the weighted arm reduces the real weights;
@@ -321,13 +796,31 @@ def make_bin_optimized_oracle(
     if wide < 1:
         wide = 1
 
+    # the Exact scratch, and ONLY when Exact is the resolved method
+    var exact = Optional[ExactQuantileScratch](None)
+    if estimation_method == LEAF_ESTIMATION_EXACT:
+        exact = Optional(
+            make_exact_quantile_scratch(ctx, n_rows, bin_count, max_leaf)
+        )
+
     return BinOptimizedOracle(
         ctx,
         n_rows,
         bin_count,
         has_weights,
-        has_border,
+        single_bin_dim,
+        cursor_dim,
+        num_classes,
+        d_multi_der^,
+        h_multi_stats^,
+        d_multi_stats^,
+        d_multi_partials^,
+        List[Float64](),
+        objective,
+        alpha,
+        estimator_alpha,
         border,
+        estimation_method,
         lambda_reg,
         1e-20,  # MinLeafWeight, their hardcoded default
         wide,
@@ -351,4 +844,6 @@ def make_bin_optimized_oracle(
         current_point^,
         weights_cpu^,
         List[Float64](),
+        exact^,
+        max_leaf,
     )

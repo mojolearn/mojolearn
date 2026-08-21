@@ -3,13 +3,35 @@
 PORT OF `catboost/cuda/methods/leaves_estimation/descent_helpers.{h,cpp}` at
 CatBoost `54a8143a`. Transliterated. Do not improve.
 
-DIAGONAL ONLY. Their `TDirectionEstimator` switches on `HessianBlockSize`
-(`descent_helpers.cpp:76-81`); the blocked arm solves per-block Cholesky
-systems and is reached by MultiClass. Every pointwise loss is diagonal:
+BOTH ARMS. Their `TDirectionEstimator::UpdateMoveDirection` switches on
+`HessianBlockSize` (`descent_helpers.cpp:75-81`):
 
-    MoveDirection[i] = Hessian[i] > 0
-        ? Gradient[i] / (Hessian[i] + 1e-20f)     // :83-90
-        : 0
+    == 1   DIAGONAL, every pointwise loss (`:82-90`)
+             MoveDirection[i] = Hessian[i] > 0
+                 ? Gradient[i] / (Hessian[i] + 1e-20f)
+                 : 0
+
+    >  1   BLOCKED, MultiClass (`:91-117`). The Hessian is
+           `HessianBlockSize x HessianBlockSize` PER BLOCK and one dense
+           Cholesky system is solved per block:
+             sigma    <- Hessian[block]              (rowSize^2 doubles)
+             solution <- Gradient[block]             (rowSize doubles)
+             SolveLinearSystemCholesky(&sigma, &solution)
+             MoveDirection[block] = (float)solution
+
+           For MultiClass a BLOCK IS A LEAF and `rowSize` is
+           `numClasses - 1`, so this is a six-by-six solve per leaf on a
+           seven-class problem. Their `ParallelFor` over blocks (`:98`) is
+           a serial loop here; the solves are independent and the answer
+           does not depend on the order.
+
+NOTE WHAT THE BLOCKED ARM DOES *NOT* DO: there is no `Hessian > 0` guard and
+no `+ 1e-20`. Where the diagonal arm zeroes a direction whose curvature is
+non-positive, the blocked arm hands the system to Cholesky and takes
+whatever comes back -- including, when the factorization fails, the raw
+gradient, because `dposv` leaves the right-hand side untouched and their
+`CB_ENSURE(info >= 0)` passes on failure. `gbdt/lapack/linear_system.mojo`
+DEVIATION 74 has the full account.
 
 CONTROL FLOW, kept quirk for quirk (`descent_helpers.cpp:128-204`):
 
@@ -25,6 +47,10 @@ CONTROL FLOW, kept quirk for quirk (`descent_helpers.cpp:128-204`):
 * Only an ACCEPTED point gets second derivatives and becomes current
   (`:189-201`); the FINAL point is returned WITHOUT another regularize --
   it was regularized before its accepting evaluation.
+* BOTH EXITS RETURN `Oracle.MakeEstimationResult(...)` (`:153`, `:204`).
+  That is the identity for every single-dimensional loss and the gauge
+  projection for MultiClass, and it belongs to the walker rather than to
+  its caller.
 * The walker moves in float: `point[leaf] += step * MoveDirection[leaf]`
   (`:69-71`) is a double product assigned into a float element, mirrored
   here as `Float32(Float64(p) + step * Float64(d))`.
@@ -39,6 +65,7 @@ from gbdt.methods.leaves_estimation.oracle_interface import (
 from gbdt.methods.leaves_estimation.step_estimator import (
     create_step_estimator,
 )
+from gbdt.lapack.linear_system import solve_linear_system_cholesky
 
 
 def _diagonal_direction(
@@ -54,6 +81,71 @@ def _diagonal_direction(
         else:
             direction.append(Float32(0.0))
     return direction^
+
+
+def _blocked_hessian_direction(
+    gradient: List[Float64],
+    hessian: List[Float64],
+    hessian_block_size: Int,
+) raises -> List[Float32]:
+    """`UpdateMoveDirectionBlockedHessian` (`descent_helpers.cpp:91-117`).
+
+    Their two `CB_ENSURE`s first (`:94-96`), because a shape mismatch here
+    is a silent wrong answer rather than a crash:
+
+        rowSize * rowSize * numBlocks == Hessian.size()
+        rowSize * numBlocks           == Point.size()
+
+    then one Cholesky solve per block. `sigma` is COPIED per block because
+    the factorization is destructive and the caller's Hessian is reused by
+    the next accepted point.
+    """
+    var row_size = hessian_block_size
+    var num_blocks = len(gradient) // row_size
+    if row_size * row_size * num_blocks != len(hessian):
+        raise Error(
+            "blocked hessian: rowSize^2 * numBlocks is "
+            + String(row_size * row_size * num_blocks)
+            + " but the Hessian holds " + String(len(hessian))
+        )
+    if row_size * num_blocks != len(gradient):
+        raise Error(
+            "blocked hessian: rowSize * numBlocks is "
+            + String(row_size * num_blocks)
+            + " but the gradient holds " + String(len(gradient))
+        )
+
+    var direction = List[Float32]()
+    for _ in range(len(gradient)):
+        direction.append(Float32(0.0))
+
+    for block_id in range(num_blocks):
+        var sigma = List[Float64]()
+        for i in range(row_size * row_size):
+            sigma.append(hessian[block_id * row_size * row_size + i])
+        var solution = List[Float64]()
+        for i in range(row_size):
+            solution.append(gradient[block_id * row_size + i])
+
+        _ = solve_linear_system_cholesky(sigma, solution)
+
+        for i in range(row_size):
+            direction[block_id * row_size + i] = Float32(solution[i])
+
+    return direction^
+
+
+def _update_move_direction(
+    gradient: List[Float64],
+    hessian: List[Float64],
+    hessian_block_size: Int,
+) raises -> List[Float32]:
+    """`UpdateMoveDirection` (`descent_helpers.cpp:75-81`), the switch."""
+    if hessian_block_size == 1:
+        return _diagonal_direction(gradient, hessian)
+    return _blocked_hessian_direction(
+        gradient, hessian, hessian_block_size
+    )
 
 
 def _move(
@@ -93,13 +185,17 @@ def newton_like_walker_estimate[
     oracle.move_to(cur_point)
     oracle.write_value_and_first_derivatives(cur_value, cur_grad)
     oracle.write_second_derivatives(cur_hess)
-    var direction = _diagonal_direction(cur_grad, cur_hess)
+    var direction = _update_move_direction(
+        cur_grad, cur_hess, oracle.hessian_block_size()
+    )
 
     if iterations == 1:
-        # `:151-156`: one full step, regularize, no re-evaluation
+        # `:151-156`: one full step, regularize, no re-evaluation, and
+        # `return Oracle.MakeEstimationResult(result)` -- the projection is
+        # part of the RETURN, not of the caller.
         var result = _move(cur_point, direction, 1.0)
         oracle.regularize(result)
-        return result^
+        return oracle.make_estimation_result(result)
 
     var updated = False
     var iteration = 0
@@ -126,7 +222,9 @@ def newton_like_walker_estimate[
                 cur_point = next_point.copy()
                 cur_value = next_value
                 cur_grad = next_grad.copy()
-                direction = _diagonal_direction(cur_grad, cur_hess)
+                direction = _update_move_direction(
+                    cur_grad, cur_hess, oracle.hessian_block_size()
+                )
                 iteration += 1
                 updated = True
                 accepted = True
@@ -137,4 +235,8 @@ def newton_like_walker_estimate[
         if not accepted:
             break
 
-    return cur_point^
+    # `return Oracle.MakeEstimationResult(estimator.GetCurrentPoint().Point)`
+    # (`:204`). Identity for every single-dimensional loss; for MultiClass
+    # it is the gauge projection, and omitting it hands the caller a vector
+    # one component too wide.
+    return oracle.make_estimation_result(cur_point)

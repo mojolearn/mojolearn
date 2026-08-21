@@ -1711,3 +1711,565 @@ this cost.
 
 Their accumulator is `double` and ours is `float32`, which is a real
 fidelity gap and is NOT closable here: this target has no float64.
+
+## 62. Tweedie's `variance_power` reaches our kernel; on their GPU it reaches nothing
+
+`TPointwiseTargetsImpl::Init` reads the parameter into the member
+`VariancePower` (`pointwise_target_impl.h:288-291`) and **nothing ever reads
+that member again.** The only float handed to the target kernel is
+`GetAlpha()` (`:151-166`, `:346-356`), and `Init`'s Tweedie case never sets
+`Alpha`, so it stays at its declared `0` (`:364`). Their GPU Tweedie therefore
+trains at `variancePower = 0` whatever the user asked for, which is not
+Tweedie: at p = 0 the loss degenerates to `-y*e^f + e^{2f}/2`.
+
+Verified by grep against the pinned checkout: `GetTweedieParam` has exactly
+two callers in `catboost/`, one of which is its own declaration
+(`loss_description.h:144`), and the other two live sites are
+`pointwise_target_impl.h:290` (the dead store) and
+`private/libs/algo/tensor_search_helpers.cpp:308` — **their CPU**, which uses
+it correctly.
+
+This port threads it. Two reasons, and both have to hold:
+
+1. **The arm we are measured against is their CPU.** Their GPU cannot run on
+   Apple silicon at all — that is the entire thesis — so every Tweedie number
+   this repository ever quotes is against a CatBoost CPU fit, and their CPU
+   honours `variance_power`. Porting the GPU's dead store would make the two
+   arms run different objectives and MSE parity would never close.
+2. A loss whose defining parameter is ignored is not that loss.
+
+**The arithmetic is unchanged.** `target_score` / `target_der` /
+`target_der2` are `TTweedieTarget`'s three methods transcribed term for term
+(`pointwise_targets.cu:34-57`). Only the VALUE of the parameter differs, and
+it differs toward their own CPU.
+
+This is the one deviation in this round that changes a number CatBoost's GPU
+would produce. **IT IS NO LONGER AN OPEN ITEM**: section "62 (CLOSED)" below
+carries the measurement -- 0 of 48 splits wrong against their CPU, and their
+GPU's own `variance_power = 0` refusing to train at all.
+
+## 63. The objective is a comptime parameter, not a host template switch
+
+`PointwiseTargetKernel` (`pointwise_targets.cu:447-519`) is a host switch on
+`ELossFunction` that constructs one of nine objective structs and passes it BY
+VALUE into `PointwiseTargetImpl<TTarget, BLOCK_SIZE>`. Mojo has no zero-cost
+struct-by-value kernel argument of that shape, so the switch became a comptime
+parameter and the three methods became three comptime-dispatched functions
+(`target_score`, `target_der`, `target_der2`).
+
+Same specialization, moved one step earlier: theirs picks the template
+instantiation on the host at run time, ours picks it at compile time. The host
+switch itself is still ported, as `launch_pointwise_target_kernel`, in their
+case order, so a reader can diff it arm for arm. No arithmetic difference.
+
+## 64. RMSE at Newton-1 skips the estimator their code runs
+
+Their `NeedEstimation()` is `LeavesEstimationMethod != Simple`
+(`greedy_subsets_searcher.h:67-69`), which is TRUE for RMSE, so their boosting
+loop runs the leaves estimator and OVERWRITES the leaf value the searcher
+wrote (`doc_parallel_leaves_estimator.cpp:39`). This port does not.
+
+The argument: for RMSE the two answers are the same number. The searcher
+writes `stats / (w + L2Reg)` (`greedy_search_helper.cpp:646-647`); one Newton
+step from zero writes `Gradient / (Hessian + 1e-20)` where
+`Hessian = sum(weight * Der2) + L2Reg` and `TRmseTarget::Der2` returns `1.0f`
+(`pointwise_targets.cu:188-190`), so `Hessian = w + L2Reg` and the two differ
+only by the `1e-20` in the denominator.
+
+**BEFORE 2026-08-21 THE SKIP WAS CONDITIONED ON THE OBJECTIVE ALONE**, which
+was wrong the moment the estimation method became configurable: a caller
+asking RMSE for Gradient leaves, or for more than one iteration, would have
+silently got neither. It is now conditioned on the objective AND `Newton` AND
+`iterations == 1`, which is the exact set the argument covers.
+
+**MEASURED 2026-08-21, and the argument holds.** 8,192 rows x 6 features,
+20 trees at depth 5, hashed fixture, RMSE. The skip condition was disabled in
+the source and the identical configuration re-fitted with the estimator
+running at Newton x 1:
+
+    bit-identical predictions   8192 of 8192
+    worst relative difference   0.0
+
+So at the configuration this deviation is conditioned on, it is not an
+approximation, it is the same arithmetic reached by a shorter route.
+
+**AND THE CONJUNCTS ARE LOAD-BEARING, which the same probe measured.** The
+first attempt at this compared the skip against the estimator at TWO
+iterations, on the reasoning that their walker's second step "only moves if
+the first did not already land". That was wrong: 0 of 8192 predictions
+matched and the worst relative difference was 6.0%, with the two-iteration
+arm reaching a slightly LOWER loss (15.7158 against 15.7422). Their walker at
+`Iterations > 1` does not take the `:151-156` shortcut at all -- it
+backtracks and re-evaluates -- so it is a different estimator, not the same
+one run longer. **That is exactly why the skip is conditioned on
+`iterations == 1` and not on the objective alone**, and before 2026-08-21 it
+was conditioned on the objective alone.
+
+## 65. `SegmentedRadixSort` is CatBoost's own one-bit reorder, batched over segments
+
+`ComputeWeightedQuantile` calls
+`SegmentedRadixSort(orderedTargets, orderedWeights, tmpTargets, tmpWeights,
+binsOffsets, binCount, 10, 32)` (`leaves_estimation_helper.h:110-112`), which
+is `cub::DeviceSegmentedRadixSort::SortPairs`. CUB is OPEN and therefore a
+port candidate under PORTING_RULES 0b-i, and MAX ships no device sort
+(VENDOR_LIBS.md, re-checked 2026-08-20), so there is nothing to call.
+
+`gbdt/gpu_util/kernel/segmented_sort.mojo` is the same construction
+`radix_sort.mojo` already carries — their `NKernel::ReorderOneBit`
+(`reorder_one_bit.cu:11`) looped over a bit range — with a segment axis on
+`block_idx.y`. **The segment axis is a shape their code already has**: their
+own driver runs that reorder once per leaf (`SortWithoutCub`,
+`split_points.cu:692-700`).
+
+WHY BATCHED RATHER THAN THEIR PER-LEAF LOOP: their shape costs
+`4 * bits * segments` launches. At depth 6 and their bit range that is
+4 x 22 x 64 = 5,632 launches per tree, against a whole per-tree fixed-cost
+budget of 9.43 ms (`PERF_2026-08-20_fixed-cost.md`). Batched it is 88,
+independent of depth. **That is launch arithmetic, not a measurement** — the
+5,632-launch variant was never built and timed. **OPEN ITEM**, though a cheap
+one to close if anyone doubts it.
+
+Two details of theirs that are copied and that a reader will want flagged:
+
+* **Bits [10, 32), not the whole key.** Their call drops the bottom ten
+  mantissa bits, so the exact leaf value is the weighted quantile of the
+  targets rounded to about four significant decimal digits.
+* CUB's float key decode (`NumericTraits<float>::Digit`) is applied
+  explicitly here as `float_to_sortable`, because passing a float key to CUB
+  applies it invisibly and their call site says nothing about it.
+
+## 66. `ComputeNeedWeights`' early return moved below its barrier
+
+Theirs (`exact_estimation.cu:51-73`):
+
+    const ui32 begin = beginOffsets[blockIdx.x] + threadIdx.x;
+    const ui32 end   = endOffsets[blockIdx.x];
+    __shared__ float localBuffer[BLOCK_SIZE];
+    localBuffer[threadIdx.x] = 0;
+    if (begin >= end) { return; }            // BEFORE the barrier
+    ...
+    __syncthreads();
+
+A leaf with fewer rows than the block width makes `begin >= end` true for some
+threads and false for others, so the survivors reach `__syncthreads()` with
+part of the block already retired. CUDA calls that undefined; NVIDIA's
+hardware survives it. Metal promises nothing, and a barrier some threads never
+reach is the one Metal failure mode that HANGS rather than returning a wrong
+number.
+
+Ours keeps every thread alive to the reduce and lets the out-of-range ones
+contribute zero — the shape `pointwise_target_kernel` already uses for its own
+tail, and their own idiom in their own file (`pointwise_targets.cu:255-257`).
+**The sum is unchanged**: the threads that returned early in theirs had nothing
+to add.
+
+## 67. The quantile search is bounded by the BIN count, not their object count
+
+`ComputeWeightedQuantileWithBinarySearchImpl` guards with
+
+    const ui32 i = blockIdx.x * BLOCK_SIZE + threadIdx.x;
+    if (i >= objectsCount) { return; }
+
+and then indexes `beginOffsets[i]`, `endOffsets[i]` and `point[i]`, **all of
+which are per-BIN**. It is launched at `CeilDivide(binCount, 256)` blocks
+(`:148`) and passed `Targets.Size()` as `objectsCount`
+(`exact_estimation.h:113`). With `binCount` far below `objectsCount` the guard
+never fires, and the threads of the last block read `beginOffsets` past
+`binCount + 1` and WRITE `point` past `binCount`. On a 64-leaf tree that is
+192 slots of overrun.
+
+It cannot be copied: `point` here is the leaf-value buffer, so the overrun
+would be into live data. Ours bounds by `bin_count`. Every in-range thread
+computes exactly their arithmetic.
+
+## 68. Never issued
+
+Withdrawn before it landed. It claimed their GPU MAPE exact estimator divides
+by `max(1, |residual|)` where `TMAPETarget::Der` divides by
+`max(1, |raw target|)` (`pointwise_targets.cu:151-154`), and proposed passing
+the raw column. Reading their CPU killed it: `CalcExactLeafDeltas` fills
+`leafSamples[i]` with `targets[i] - approxes[i]`
+(`private/libs/algo/approx_calcer.cpp:693`) and hands it to
+`CalcOneDimensionalOptimumConstApprox`, whose MAPE arm is
+`weightsWithTarget[idx] /= Max(1.0f, Abs(target[idx]))`
+(`libs/metrics/optimal_const_for_loss.h:112-114`) — the residual again. **Both
+of their arms agree**, so ours does too, and the number is retired rather than
+reused.
+
+## 69. Bernoulli and Poisson do not filter their zero-weight rows
+
+`AreZeroWeightsAfterBootstrap` is true for exactly those two
+(`enum_helpers.cpp:849-856`), so their `BootstrapAndFilter` runs
+`FilterZeroEntries`, gathers the der / weight / index columns down to the
+survivors, and returns `isContinuousIndices = false`
+(`gpu_data/bootstrap.h:126-153`, `weak_objective_impl.h:30-45`). Their
+searcher then works on a SMALLER row set through a non-contiguous index list.
+
+This port multiplies and stops. **The model is the same model**: a row whose
+bootstrap weight is zero contributes `0` to its weight plane and `0` to its
+gradient plane, so it adds nothing to any histogram cell, nothing to any leaf
+sum, and nothing to either fixed-point magnitude (`|0| == 0`, so the scale is
+unchanged too). Filtering is a way of not paying for those rows, not a way of
+getting a different answer.
+
+Pinned analytically, 2026-08-21, on a 4,096 x 4 hashed fixture, 6 trees:
+
+    subsample = 1.0   `u < 1.0` true for every draw in [0,1)
+                      -> 0 of 4096 predictions differ from bootstrap OFF
+    subsample = 0.0   `u < 0.0` false for every draw
+                      -> 0 of 4096 predictions are nonzero, i.e. every
+                         weight AND every gradient was zeroed, so no split
+                         scored
+    subsample = 0.5   -> 4096 of 4096 predictions differ from OFF
+
+The first two are exact identities forced by their own kernel's arithmetic,
+so they are reach proofs rather than a tally of ours. The third only shows the
+draw scatters.
+
+**THE COST, unmeasured:** at `subsample = 0.66` we stream 100% of the rows
+through the histogram where they stream 66%. The sampling buys accuracy here
+and buys accuracy AND about a third of the histogram time there. **OPEN
+ITEM.**
+
+**THE ONE PLACE THE ANSWER COULD DIVERGE, and it cannot today:** a score-side
+test that counts ROWS rather than summing WEIGHTS would see the filtered count
+on their side and the full count on ours. `min_data_in_leaf` is that test and
+it is NOT WIRED in this port's searcher — grep `greedy_search_helper.mojo` and
+there is nothing. **If `min_data_in_leaf` is ever wired, this deviation stops
+being output-identical and the filter becomes required.**
+
+## 70. NOT a deviation: `mojo build --emit shared-lib` cannot load the GBDT kernels
+
+Recorded here because it looks like a port defect and is not, and because five
+hypotheses died on it — rule 10 exists so nobody re-runs them.
+
+**The symptom.** `python/mojolearn/ensemble.py` calls `_mojolearn.gbdt_fit`
+and the extension raises
+
+    Failed to create Metal function:
+    gbdt_gpu_data_kernel_binarize6A6A6A6A6A6A_7ea3b6461ee80dec
+
+**Where it does and does not happen**, measured 2026-08-21 on the M4, all with
+the same `gbdt/estimator.mojo` entry point and the same fixture:
+
+    mojo run                      WORKS
+    mojo build (executable)       WORKS   (`EXE OK bytes 2070`)
+    mojo build --emit shared-lib  FAILS
+
+**What is actually in the binaries.** Counting AIR blobs (compiled Metal
+functions, which appear as the kernel's mangled name with an `air` suffix):
+
+    executable      81 AIR blobs, 188 kernel names
+    shared-lib       0 AIR blobs, 118 kernel names
+
+So the shared library carries every kernel's LOOKUP NAME and none of their
+compiled code, and must JIT at load. The JIT succeeds for the k-means and
+k-NN kernels — `KMeans(...).fit(X)` through the same extension works — and
+fails for the GBDT ones. **Every name in the diff carries the
+`_gpu_shared_mem` prefix**, which is the discriminating fact: the kernels that
+fail are the shared-memory ones.
+
+**Five hypotheses, all killed by measurement, none by reasoning:**
+
+1. *The `--target-cpu apple-m1` baseline pinning.* Rebuilt with no target
+   flags at all: fails identically.
+2. *Kernel-count capacity — GBDT adds hundreds of histogram instantiations.*
+   Built a shared-lib exposing ONLY `gbdt_fit`, nothing else: fails
+   identically.
+3. *`GILReleased` hides the call graph from the AOT kernel collector.*
+   Removed it: fails identically.
+4. *The module entry shape — `@export PyInit_` versus `main()`.* This is what
+   the executable test isolates, and the executable WORKS, so the entry shape
+   is not sufficient on its own to explain it; what tracks is `--emit
+   shared-lib` specifically.
+5. *`--target-accelerator metal:1` is not a real target.* It is not:
+   `--print-supported-accelerators` lists `apple-m1-metal4` .. `apple-m5-metal4`
+   and no `metal:1`. Rebuilt with `apple-m1-metal4`: still 0 AIR blobs, still
+   fails. **`bindings/build.sh` has passed an unrecognised accelerator string
+   this whole time**, and that is worth fixing on its own — but it is not this
+   bug.
+
+**Consequence for the release.** `GradientBoosting` is written, correct, and
+proven end to end through the executable build; it is not reachable from the
+CPython extension on this toolchain. It is listed in the wrapper's named
+absences with this reason rather than shipped as a class that dies with a
+Metal error.
+
+## 71. `multilogit`'s `functionValue` is per-block partials
+
+Same substitution `pointwise_targets.mojo` and `bootstrap.mojo` record, for
+the same reason: theirs ends in a block reduce plus a float `atomicAdd`
+(`multilogit.cu:96-99`), which makes the sum depend on block arrival order.
+Their `FillBuffer(functionValue, 0.0f, 1, stream)` prologue (`:186-188`)
+exists only because that atomic accumulates and is not ported -- each block
+writes its own slot.
+
+## 72. `ElementsPerThread` is comptime, and both of their launchers pass 1
+
+Theirs is a template parameter (`multilogit.cu:9`, `:103`) and both
+`MultiLogitValueAndDer` and `MultiLogitSecondDer` instantiate it at 1
+(`:181`, `:205`). The per-element arrays are `InlineArray`, which is
+registers at that size. The unrolled shape is kept rather than collapsed to
+a scalar because their `#pragma unroll` loops are the file's structure and a
+reader diffing against `:59-92` has to find them.
+
+## 73. `__ldg` is a plain load; the align sizes are still arguments
+
+Mojo 1.0 ships no read-only-cache or non-temporal load hint, the deviation
+`transform.mojo` and `fill.mojo` already record.
+`predictionsAlignSize` / `derAlignSize` / `der2AlignSize` are passed exactly
+as theirs are, so a caller that pads its planes still works; every caller in
+this port passes `size`.
+
+## 74. `SolveLinearSystemCholesky` is transcribed, not called
+
+Theirs is LAPACK's `dposv_` (`private/libs/lapack/linear_system.cpp:46-47`)
+through the clapack vendored at `contrib/libs/clapack`. clapack is OPEN, so
+under PORTING_RULES 0b-i it is a port candidate rather than a call to make --
+the "call the platform's equivalent" exception is for CLOSED libraries
+(cuBLAS, cuSOLVER) where there is nothing to read. The shape rules a vendor
+call out anyway: this runs on the HOST, once per leaf, on a
+`(numClasses - 1 + 1) x (numClasses - 1 + 1)` matrix -- seven by seven for
+covtype. A device linalg call would be a round trip per leaf to solve a 7x7.
+
+`dposv` is `dpotrf` (Cholesky) followed by `dpotrs` (two triangular solves);
+both are transcribed in the textbook form LAPACK's own reference
+implementation uses.
+
+**THEIR FAILURE BEHAVIOUR IS COPIED AND IT IS NOT WHAT IT LOOKS LIKE.**
+`dposv` returns `info > 0` when the leading minor of order `info` is not
+positive definite, stops factorizing, and **leaves the right-hand side
+UNMODIFIED**. Their check is
+
+    CB_ENSURE(info >= 0, "LAPACK dposv_ failed with status " << info);
+
+which PASSES for every positive `info`. So when the Hessian is not positive
+definite CatBoost does not raise and does not fall back -- it proceeds with
+the right-hand side still holding the raw GRADIENT, and that leaf takes a
+gradient step instead of a Newton one. This port does the same and returns
+the `info` so a caller that wants to count it can.
+
+It is reachable in principle: `diag(p) - p p^T` is positive SEMI-definite,
+and only the `+ lambda` on the diagonal (`pointwise_oracle.cpp:178`) makes it
+definite. At `l2_leaf_reg = 0` with a saturated probability it can go
+indefinite in float64. **UNMEASURED: no fit has been instrumented to count
+how often `info > 0` fires. OPEN ITEM.**
+
+## 75. The blocked Hessian is reduced one row at a time, into its own buffer
+
+Theirs reduces every Hessian row into disjoint SLICES of one
+`reducedHessianGpu` and reads the whole thing back once
+(`pointwise_oracle.cpp:135-157`), with an `offset` accumulator threading
+`columnCount * blockCount` per row. That bookkeeping exists because
+`ReadReduce` is one call over one buffer.
+
+Ours reads each row's reduce as it is produced: `numClasses` copies of
+`binCount * (row + 1)` floats instead of one copy of
+`binCount * lowTriangleMatrixSize`. **Same numbers, same order within a
+row.** It costs `numClasses - 1` extra device-to-host copies per estimation
+iteration -- at their Logloss default of ten iterations and seven classes
+that is 60 extra copies per tree, each a few hundred bytes -- and buys not
+reproducing the `offset` arithmetic, which is the part of their function most
+likely to be transcribed wrong.
+
+**UNMEASURED.** The extra copies have not been timed. **OPEN ITEM**, and a
+cheap one to close: the alternative is their single-buffer form, which is
+maybe thirty lines.
+
+## 76. `add_model_value_kernel` gained an approx-dimension axis
+
+Their `AddBinModelValues` takes a `TCudaBuffer` whose column count carries
+the approx dimension; ours takes `dim_count` and `cursor_stride` and puts the
+dimension on `block_idx.z`. `dim_count == 1, cursor_stride == 0` is the
+single-dimensional path and produces exactly the arithmetic the kernel had
+before the axis existed.
+
+THE TWO LAYOUTS DIFFER AND THAT IS THEIRS. The shift is BIN-MAJOR --
+`newPoint[bin * cursorDim + dim]` (`pointwise_oracle.cpp:41-47`) -- and the
+cursor is PLANE-MAJOR, one contiguous column per class. Reading both as the
+same layout would train a model with the classes rotated and nothing would
+assert.
+
+## 77-78. Reserved for the parallel lanes
+
+77 is the CPython shared-lib loader lane, 78 the CatBoost-oracle lane. Both
+were assigned before those lanes started, per PORTING_RULES 3: a five-lane
+round once produced a three-way number collision because they were not.
+
+## 79. MultiClass's search magnitude is ONE bound for all class planes
+
+NO CATBOOST COUNTERPART, like the fixed-point accumulator it feeds: their
+histograms flush with a float `atomicAdd` and need no bound at all.
+
+`multilogit_val_and_first_der_kernel[.., search=True]` reports
+`sum over rows of max over classes |w * der_k|` as its single gradient
+magnitude, rather than one sum per plane.
+
+WHY IT IS VALID FOR EVERY PLANE: for any class `k`,
+`sum_rows |der_k| <= sum_rows max_j |der_j|`, so the bound holds for all
+planes at once and overflow stays impossible -- which is the only property
+`mojo_only/fixed_point.mojo` requires of it.
+
+WHY IT IS ONE NUMBER: `choose_scale` takes ONE scale for the whole
+histogram, and `greedy_search_helper` already maxes the weight and gradient
+magnitudes before calling it, so per-plane sums would be collapsed to their
+max anyway.
+
+WHAT IT COSTS: the bound is loose by at most a factor of `numClasses`
+against the tightest per-plane sum, so the scale can be up to `numClasses`
+times smaller than it needed to be -- three bits of resolution at seven
+classes, out of the margin `choose_scale` documents as millionfold.
+**UNMEASURED** against a per-plane version; the alternative needs
+`numClasses` reduction lanes where the deterministic fold is comptime-fixed
+at two. **OPEN ITEM.**
+
+`mojo_only/multilogit_check.mojo` verifies the bound actually bounds: every
+class plane's own sum of absolute values is checked against the reported
+magnitude, at 2, 3 and 7 classes.
+
+## 80. NOT a deviation: the walker projects on the way out, and this port did not
+
+Recorded because it was a real defect for a day and the shape of it will
+recur.
+
+`TNewtonLikeWalker::Estimate` returns `Oracle.MakeEstimationResult(...)` at
+BOTH of its exits -- the `Iterations == 1` shortcut (`descent_helpers.cpp
+:153`) and the loop (`:204`). For every single-dimensional loss that is the
+identity, so the port returned the raw point and nothing noticed. For
+MultiClass it is the GAUGE PROJECTION from the walker's `numClasses`-wide
+point down to the cursor's `numClasses - 1`, and returning the raw point
+hands the caller a vector one component too wide in a gauge the cursor
+cannot read.
+
+**The identity is why it survived**: a projection that is the identity on
+every path a test exercises is invisible until the day it is not. It was
+found by reading their file for a different reason, which is rule 1 doing
+what it is for.
+
+## 81. `add_bin_values` gained an approx-dimension axis, and the two layouts differ
+
+Their `AddObliviousTree` takes a `TCudaBuffer` cursor whose COLUMN COUNT
+carries the dimension and adds every column (`models/add_bin_values.h`,
+`add_model_value.cu`). Ours takes a pointer plus a stride, so the dimension
+is `block_idx.y` -- the same axis `add_model_value_kernel` grew, for the same
+reason.
+
+THE TWO LAYOUTS DIFFER AND THAT IS THEIRS. `leaf_values` is BIN-MAJOR,
+`[leaf * dim + d]`, which is what `MakeEstimationResult` produces and what
+the model stores; the cursor is PLANE-MAJOR, one contiguous column per class.
+A port that read both the same way would predict with the classes rotated
+and nothing would assert. `check-multiclass-train`'s cross-check between the
+two apply paths is what would catch it.
+
+THE LEAF INDEX IS COMPUTED ONCE PER ROW and shared by every dimension,
+because an oblivious tree's structure does not depend on the approx: all
+`dim` values of a row come out of the same leaf.
+
+## 82. The text format wrote `n_leaves` values per tree, not `n_leaves * dim`
+
+Found by `check-multiclass-train`'s round-trip gate on the day MultiClass
+first trained. `model_text` already carried `dim` in its `tree` record --
+the format was written for this -- but both the writer's loop and the
+loader's count validation used `1 << depth`, so **a MultiClass model would
+have lost every dimension but the first, silently, on save**, and reloaded
+as a model whose leaf-value count disagreed with its own declared `dim`.
+
+Both sides count `(1 << depth) * dim` now. `leaf_weights` still counts
+`1 << depth`, because a leaf has ONE weight and `dim` values -- their
+`CB_ENSURE(task.Model->BinCount() == weights.size())`
+(`doc_parallel_leaves_estimator.cpp:21-23`) says exactly that.
+
+A one-dimensional model's bytes are unchanged: the record index is the flat
+`leaf * dim + d`, which is `leaf` when `dim == 1`. `check-model-io` stayed
+green through the change, which is the evidence for that sentence.
+
+## 83. THE MAPE DEFECT: their estimator's alpha is a DIFFERENT FLOAT from their kernel's
+
+Found 2026-08-21 by `check-loss-oracle`, against CatBoost's own CPU output.
+It is the most expensive kind of defect this port can have -- a wrong number
+produced by correct kernels -- and it survived every gate that existed.
+
+**CatBoost carries two alphas and this port carried one.**
+
+The KERNEL's alpha is `GetAlpha()`, the single float
+`PointwiseTargetKernel` receives (`pointwise_targets.cu:451`). For MAPE,
+`TPointwiseTargetsImpl::Init`'s case is a bare `break`
+(`pointwise_target_impl.h:261-266`), so it is the member's declared `0`
+(`:364`) -- harmless, because `TMAPETarget` never reads it.
+
+The ESTIMATOR's alpha is read somewhere else entirely
+(`leaves_estimation_helper.h:72-74`):
+
+    const auto &params = lossDescription.GetLossParamsMap();
+    auto it = params.find("alpha");
+    float alpha = it == params.end() ? 0.5 : FromString<float>(it->second);
+
+**out of the loss params map, defaulting to 0.5.** For MAE and Quantile the
+two coincide, so nothing showed. For MAPE the estimator wants 0.5 and the
+kernel's is 0.
+
+This port fed the kernel's float to `ComputeWeightedQuantile`. At alpha 0,
+`ComputeNeedWeights` produces zero and their binary search collapses to the
+segment start, so **every MAPE leaf value was that leaf's MINIMUM residual
+instead of its MAPE-weighted median.** Measured before the fix: 37 of 48
+splits wrong from tree 2 on, prediction relative RMS 0.64, objective
+relative gap 1.55. After: **0 of 48 splits wrong.**
+
+WHY NOTHING CAUGHT IT, and this is the part worth keeping:
+
+* `check-pointwise-target` gates the target KERNEL, which was correct.
+* `check-exact-estimation` gates `compute_weighted_quantile`, which was
+  correct -- and it passes alpha EXPLICITLY, so it could not see a wrong
+  alpha arriving. It also ran `use_mape_weights=False` on every arm, so
+  **the MAPE branch had no caller in any check**, which is PORTING_RULES 8
+  verbatim.
+* Both were right about their own piece. The defect lived in the WIRING
+  between them, which is the seam an analytic gate cannot reach and only
+  the incumbent's own output can.
+
+`BinOptimizedOracle` now carries `estimator_alpha` beside `alpha`, fed from
+`TLossDescription.get_alpha()` -- which IS their `GetAlpha(lossDescription)`
+(`loss_description.cpp:95-102`), the same accessor with the same 0.5
+default.
+
+## 62 (CLOSED). Tweedie's `variance_power`, now measured both ways
+
+The entry above records the argument. `check-loss-oracle` measured it,
+2026-08-21, our GPU against their CPU on a 3,000 x 8 constructed fixture,
+12 trees, identical configuration on both arms:
+
+    variance_power threaded (ours)   0 of 48 splits wrong
+                                     prediction relative RMS  8.2e-08
+                                     objective relative gap   1.7e-11
+
+the tightest agreement of any of the ten arms.
+
+**The counterfactual is stronger than the agreement.** Training our arm at
+`variance_power = 0` -- their GPU's actual behaviour, since `Init` reads the
+parameter into a member nothing ever reads again -- does not fit a different
+Tweedie. It **refuses to train**: "All splits have infinite score ... [level
+0, live leaves 1]". At p = 0 the loss degenerates to `-y*e^f + e^(2f)/2`,
+whose second derivative grows as `2*e^(2f)`, and on a positive target every
+candidate overflows at level 0.
+
+So their GPU's dropped parameter is not a variant of Tweedie; on this
+fixture it is not a model at all. Threading it is what makes a Tweedie fit
+exist. **DEVIATION 62 IS CLOSED.**
+
+## 84. Their Tweedie iteration count differs BETWEEN THEIR OWN ARMS, and we take the GPU's
+
+`GetEstimationMethodDefaults` keys Tweedie on task type
+(`catboost_options.cpp:221-231`): the CPU takes **1** Newton iteration, the
+GPU takes **20**. `set_leaves_estimation_default` takes the GPU's 20, which
+is faithful -- we are the GPU.
+
+But **the arm we are measured against is their CPU**, so a DEFAULTED Tweedie
+fit here does not run the same number of estimation iterations as a
+defaulted CatBoost CPU fit, and a like-for-like comparison has to set the
+count explicitly on both sides. `check-loss-oracle` does exactly that, which
+is why deviation 62's numbers above are not confounded by it.
+
+Recorded here because it is the second time Tweedie's defaults have differed
+between their arms in a way that only shows up in a comparison, and because
+STANDING_ORDERS rule 5 -- same everything except the device -- is what makes
+it matter.

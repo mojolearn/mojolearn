@@ -3,56 +3,51 @@
 PORT OF `catboost/cuda/targets/kernel/pointwise_targets.cu` at CatBoost
 `54a8143a`. Transliterated. Do not improve.
 
-RMSE and the cross-entropy pair (Logloss / CrossEntropy) are ported. RMSE
-came first because its derivatives are exact and its Newton step needs no
-line search; the cross-entropy kernel is below it, and its LEAF story is
-different -- their Logloss default is Newton with TEN estimation iterations
-(`catboost_options.cpp:157-164`), so its leaves are the estimator's job,
-not this file's.
+## The two kernels, and their fork
 
-## Which of their two MSE kernels this is, because they have two
+`TPointwiseTargetsImpl::Approximate` (`pointwise_target_impl.h:307-358`)
+sends every objective down exactly one of two paths:
 
-`MseImpl` (`pointwise_targets.cu:285-321`) is the obvious one to port and it
-is UNREACHED IN THEIR OWN TREE. Its only entry point is `MseTargetKernel`
-(`:415-428`) behind `ApproximateMse` (`targets/kernel.h:828`), and
-`ApproximateMse` has no caller anywhere in `catboost/`. This file used to cite
-it, and the citation was to dead code.
+    Logloss, CrossEntropy   ->  ApproximateCrossEntropy  ->  CrossEntropyImpl
+    everything else         ->  ApproximatePointwise     ->  PointwiseTargetImpl
 
-What RMSE actually reaches is the generic
-`PointwiseTargetImpl<TTarget, BLOCK_SIZE>` (`:246-281`), dispatched at
-`case ELossFunction::RMSE: TRmseTarget target;` (`:496-500`) out of
-`PointwiseTargetKernel`, which `ApproximatePointwise`
-(`targets/kernel.h:840`) launches. The objective is a three-method struct
-(`:178-191`):
+so this file holds two kernels, one per arm, and `objective_is_cross_entropy`
+is that fork. `pointwise_target_kernel` is the generic one, comptime-
+specialized on the objective where theirs is a host switch that instantiates
+a template (`pointwise_targets.cu:447-519`); `cross_entropy_kernel` is the
+other. Eleven trainable objectives reach them:
 
-    Score(t, p) = (t - p) * (t - p)
-    Der  (t, p) = t - p
-    Der2 (_, p) = 1.0f
+    RMSE  Quantile  MAE  LogLinQuantile  MAPE  Poisson  Lq  Expectile
+    Tweedie  Huber                        -> pointwise_target_kernel
+    Logloss  CrossEntropy                 -> cross_entropy_kernel
 
-and the generic kernel multiplies each by the weight (`:259-271`):
+RMSE and the cross-entropy pair came first because RMSE's derivatives are
+exact and its Newton step needs no line search, and because the cross-entropy
+pair built the estimation chassis the rest of them ride on: their Logloss
+default is Newton with TEN estimation iterations
+(`catboost_options.cpp:157-164`), so its leaves are the estimator's job, not
+this file's. The other nine arrived after, as `target_score` / `target_der` /
+`target_der2` arms, because the chassis was already there.
 
-    const float weight = (weights && (i < size)) ? weights[i] : 1.0f;
-    if (der)  der[i]  = weight * target.Der(relev, val);
-    if (der2) der2[i] = weight * target.Der2(relev, val);
-    functionValue += -weight * target.Score(relev, val);
+THE OBJECTIVE DOES NOT DECIDE THE LEAF ALONE. Four of the nine have a
+second derivative that is identically zero, and CatBoost gives those a
+GRADIENT or an EXACT leaf estimator rather than a Newton one
+(`catboost_options.cpp:113-131`, `:289-300`).
+`gbdt/options/leaf_estimation_defaults.mojo` is where that table lives; a
+reader who takes the derivative formula here as the whole of a loss will get
+the leaf values wrong.
 
-**The two kernels compute the same three numbers**, term for term, which is
-why the port was numerically right while its citation was wrong. It is
-transcribed from the reachable one now, because a reader diffing against
-`MseImpl` is diffing against a file CatBoost never runs.
-
-So the FIRST derivative is the weighted residual and the SECOND is just the
-weight. That is why an MSE tree's leaf value is a plain weighted mean and why
-this objective is the one to build the loop against before anything harder.
-
-Note the SIGN on `functionValue`: theirs accumulates the NEGATIVE squared
-error, because everything downstream maximizes. Kept, because flipping it
-here would silently invert every early-stopping comparison later.
+Note the SIGN on `functionValue`: the pointwise kernel accumulates the
+NEGATIVE score and the cross-entropy kernel accumulates the POSITIVE one,
+because everything downstream maximizes and their `CrossEntropy::Score` is
+already a log-likelihood. Both are theirs. Flipping either here would
+silently invert every early-stopping comparison later.
 """
 
 from std.atomic import Atomic
 from std.math import exp, isfinite, log
 from std.memory import stack_allocation
+from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.gpu import block_dim, block_idx, thread_idx
@@ -70,86 +65,482 @@ comptime MSE_BLOCK_SIZE = 256
 comptime OBJECTIVE_RMSE = 0
 comptime OBJECTIVE_LOGLOSS = 1
 comptime OBJECTIVE_CROSSENTROPY = 2
+comptime OBJECTIVE_QUANTILE = 3
+comptime OBJECTIVE_MAE = 4
+comptime OBJECTIVE_LOGLINQUANTILE = 5
+comptime OBJECTIVE_MAPE = 6
+comptime OBJECTIVE_POISSON = 7
+comptime OBJECTIVE_LQ = 8
+comptime OBJECTIVE_EXPECTILE = 9
+comptime OBJECTIVE_TWEEDIE = 10
+comptime OBJECTIVE_HUBER = 11
+
+#: MultiClass reaches NEITHER kernel in this file. It is here so that one
+#: enumeration covers every loss the trainer accepts, and so that
+#: `launch_approximate` can refuse it by name rather than by falling into
+#: the pointwise arm: their `Approximate` fork
+#: (`pointwise_target_impl.h:307-358`) belongs to `TPointwiseTargetsImpl`,
+#: and MultiClass is `TMultiClassificationTargets`
+#: (`targets/multiclass_targets.h`) with its own der calcer and its own
+#: kernels in `targets/kernel/multilogit.cu`.
+comptime OBJECTIVE_MULTICLASS = 12
+
+#: `NumErrors` is in their kernel switch (`pointwise_targets.cu:497-501`)
+#: and is deliberately NOT here: `TPointwiseTargetsImpl::Init`
+#: (`pointwise_target_impl.h:259-299`) has no `NumErrors` case, so its
+#: `default:` arm throws "Unsupported loss function" before training can
+#: reach it. It is a METRIC that borrows the target kernel, and this port
+#: has no metric path for it to arrive by. Porting the arm would leave a
+#: branch no caller reaches, which PORTING_RULES 3 forbids.
 
 
-def mse_kernel(
+def objective_from_name(name: String) raises -> Int:
+    """Their `ELossFunction` spelling -> the comptime tag above.
+
+    The spellings are theirs exactly (`enums.h`, `ELossFunction`), because
+    a user who reads CatBoost's documentation must be able to paste the
+    name across. Anything not listed raises rather than falling back to a
+    default, mirroring their `Init` (`pointwise_target_impl.h:295-297`).
+    """
+    if name == "RMSE":
+        return OBJECTIVE_RMSE
+    if name == "Logloss":
+        return OBJECTIVE_LOGLOSS
+    if name == "CrossEntropy":
+        return OBJECTIVE_CROSSENTROPY
+    if name == "Quantile":
+        return OBJECTIVE_QUANTILE
+    if name == "MAE":
+        return OBJECTIVE_MAE
+    if name == "LogLinQuantile":
+        return OBJECTIVE_LOGLINQUANTILE
+    if name == "MAPE":
+        return OBJECTIVE_MAPE
+    if name == "Poisson":
+        return OBJECTIVE_POISSON
+    if name == "Lq":
+        return OBJECTIVE_LQ
+    if name == "Expectile":
+        return OBJECTIVE_EXPECTILE
+    if name == "Tweedie":
+        return OBJECTIVE_TWEEDIE
+    if name == "Huber":
+        return OBJECTIVE_HUBER
+    if name == "MultiClass":
+        return OBJECTIVE_MULTICLASS
+    raise Error(
+        "unknown loss '" + name + "': this port trains RMSE, Logloss,"
+        " CrossEntropy, Quantile, MAE, LogLinQuantile, MAPE, Poisson, Lq,"
+        " Expectile, Tweedie, Huber and MultiClass"
+    )
+
+
+def objective_name(objective: Int) -> String:
+    """The inverse, for messages and for the benchmark's path line."""
+    if objective == OBJECTIVE_RMSE:
+        return String("RMSE")
+    if objective == OBJECTIVE_LOGLOSS:
+        return String("Logloss")
+    if objective == OBJECTIVE_CROSSENTROPY:
+        return String("CrossEntropy")
+    if objective == OBJECTIVE_QUANTILE:
+        return String("Quantile")
+    if objective == OBJECTIVE_MAE:
+        return String("MAE")
+    if objective == OBJECTIVE_LOGLINQUANTILE:
+        return String("LogLinQuantile")
+    if objective == OBJECTIVE_MAPE:
+        return String("MAPE")
+    if objective == OBJECTIVE_POISSON:
+        return String("Poisson")
+    if objective == OBJECTIVE_LQ:
+        return String("Lq")
+    if objective == OBJECTIVE_EXPECTILE:
+        return String("Expectile")
+    if objective == OBJECTIVE_TWEEDIE:
+        return String("Tweedie")
+    if objective == OBJECTIVE_HUBER:
+        return String("Huber")
+    if objective == OBJECTIVE_MULTICLASS:
+        return String("MultiClass")
+    return String("<unknown>")
+
+
+def objective_is_cross_entropy(objective: Int) -> Bool:
+    """Which of their TWO kernels this objective reaches.
+
+    `pointwise_target_impl.h:333-345` sends Logloss and CrossEntropy to
+    `ApproximateCrossEntropy` and everything else to `ApproximatePointwise`
+    (`:346-357`). That fork is the only reason this file holds two kernels.
+    """
+    return (
+        objective == OBJECTIVE_LOGLOSS
+        or objective == OBJECTIVE_CROSSENTROPY
+    )
+
+
+# =========================================================================
+# THE OBJECTIVES: `Score`, `Der`, `Der2`, one comptime arm each.
+#
+# PORT OF the nine objective structs of `pointwise_targets.cu:11-240`.
+# Theirs are C++ structs with three `__device__ __forceinline__` methods,
+# instantiated by `PointwiseTargetKernel`'s switch (`:447-519`) and passed
+# BY VALUE into the one generic kernel. Mojo has no zero-cost struct-by-
+# value kernel argument of that shape, so the switch moves to a comptime
+# parameter and the three methods become three comptime-dispatched
+# functions. THE ARITHMETIC IS TRANSCRIBED, term for term, including the
+# order of operations, which is why each arm carries its own line cite.
+#
+# THEIR ONE FLOAT PARAMETER. Their kernel takes a single `float alpha`
+# (`:451`) and every parameterized objective reads it: Quantile/MAE/
+# LogLinQuantile/Expectile as the quantile level, Lq as `q`, Huber as
+# `delta`, Tweedie as `variancePower`. This port keeps that one slot.
+# =========================================================================
+
+
+@always_inline
+def _target_sign(x: Float32) -> Float32:
+    """Their `sign` (`pointwise_targets.cu:193-195`).
+
+    NOTE `sign(0) == -1`, because theirs is `x > 0 ? 1.0f : -1.0f` with no
+    zero arm. Lq's `Der` multiplies by it, so an exactly-zero residual
+    takes the negative branch in their arithmetic and must here too.
+    """
+    return Float32(1.0) if x > Float32(0.0) else Float32(-1.0)
+
+
+@always_inline
+def target_score[objective: Int](
+    t: Float32, p: Float32, alpha: Float32
+) -> Float32:
+    """`TTarget::Score(target, prediction)`, per objective."""
+
+    @parameter
+    if objective == OBJECTIVE_RMSE:
+        # `TRmseTarget::Score` (`:180-182`)
+        return (t - p) * (t - p)
+    elif objective == OBJECTIVE_QUANTILE or objective == OBJECTIVE_MAE:
+        # `TQuantileTarget::Score` (`:18-22`). MAE IS Quantile at
+        # alpha 0.5: `Init` sets `Alpha = 0.5` for MAE
+        # (`pointwise_target_impl.h:272-275`) and the kernel switch falls
+        # MAE through to `TQuantileTarget` (`:483-489`).
+        var val = t - p
+        var multiplier = (
+            alpha if val > Float32(0.0) else -(Float32(1.0) - alpha)
+        )
+        return multiplier * val
+    elif objective == OBJECTIVE_LOGLINQUANTILE:
+        # `TLogLinQuantileTarget::Score` (`:126-131`)
+        var val = t - exp(p)
+        var multiplier = (
+            alpha if val > Float32(0.0) else -(Float32(1.0) - alpha)
+        )
+        return val * multiplier
+    elif objective == OBJECTIVE_MAPE:
+        # `TMAPETarget::Score` (`:147-149`)
+        return abs(t - p) / max(Float32(1.0), abs(t))
+    elif objective == OBJECTIVE_POISSON:
+        # `TPoissonTarget::Score` (`:164-166`)
+        return exp(p) - t * p
+    elif objective == OBJECTIVE_LQ:
+        # `TLqTarget::Score` (`:204-207`); their `__powf`
+        var abs_loss = abs(t - p)
+        return abs_loss**alpha
+    elif objective == OBJECTIVE_EXPECTILE:
+        # `TExpectileTarget::Score` (`:102-106`)
+        var val = t - p
+        var multiplier = (
+            alpha if val > Float32(0.0) else (Float32(1.0) - alpha)
+        )
+        return multiplier * val * val
+    elif objective == OBJECTIVE_TWEEDIE:
+        # `TTweedieTarget::Score` (`:40-44`), `alpha` IS their
+        # `VariancePower` -- see the deviation block on the kernel.
+        var val = (
+            -t
+            * exp((Float32(1.0) - alpha) * p)
+            / (Float32(1.0) - alpha)
+        )
+        var delta = exp((Float32(2.0) - alpha) * p) / (Float32(2.0) - alpha)
+        return val + delta
+    elif objective == OBJECTIVE_HUBER:
+        # `THuberTarget::Score` (`:68-75`), `alpha` is their `Delta`
+        var mismatch = abs(t - p)
+        if mismatch < alpha:
+            return Float32(0.5) * mismatch * mismatch
+        return alpha * (mismatch - Float32(0.5) * alpha)
+    else:
+        return Float32(0.0)
+
+
+@always_inline
+def target_der[objective: Int](
+    t: Float32, p: Float32, alpha: Float32
+) -> Float32:
+    """`TTarget::Der(target, prediction)`, per objective.
+
+    SIGN CONVENTION, theirs: `Der` is the NEGATIVE gradient of the loss --
+    `TRmseTarget::Der` is `target - prediction` (`:184-186`), not
+    `prediction - target`. Everything downstream ascends. Each arm below
+    keeps their spelling, so the convention is inherited rather than
+    re-decided.
+    """
+
+    @parameter
+    if objective == OBJECTIVE_RMSE:
+        # `:184-186`
+        return t - p
+    elif objective == OBJECTIVE_QUANTILE or objective == OBJECTIVE_MAE:
+        # `:24-27`
+        var val = t - p
+        return alpha if val > Float32(0.0) else -(Float32(1.0) - alpha)
+    elif objective == OBJECTIVE_LOGLINQUANTILE:
+        # `:133-136`
+        var exp_pred = exp(p)
+        if t - exp_pred > Float32(0.0):
+            return alpha * exp_pred
+        return -(Float32(1.0) - alpha) * exp_pred
+    elif objective == OBJECTIVE_MAPE:
+        # `:151-154`
+        if t - p > Float32(0.0):
+            return Float32(1.0) / max(Float32(1.0), abs(t))
+        return Float32(-1.0) / max(Float32(1.0), abs(t))
+    elif objective == OBJECTIVE_POISSON:
+        # `:168-171`
+        return t - exp(p)
+    elif objective == OBJECTIVE_LQ:
+        # `:209-213`
+        var abs_loss = abs(t - p)
+        var abs_loss_q = abs_loss ** (alpha - Float32(1.0))
+        return alpha * _target_sign(t - p) * abs_loss_q
+    elif objective == OBJECTIVE_EXPECTILE:
+        # `:108-112`
+        var val = t - p
+        var multiplier = (
+            alpha if val > Float32(0.0) else (Float32(1.0) - alpha)
+        )
+        return Float32(2.0) * multiplier * val
+    elif objective == OBJECTIVE_TWEEDIE:
+        # `:46-50`
+        var der = t * exp((Float32(1.0) - alpha) * p)
+        var delta = exp((Float32(2.0) - alpha) * p)
+        return der - delta
+    elif objective == OBJECTIVE_HUBER:
+        # `:77-84`
+        var diff = t - p
+        if abs(diff) < alpha:
+            return diff
+        return alpha if diff > Float32(0.0) else -alpha
+    else:
+        return Float32(0.0)
+
+
+@always_inline
+def target_der2[objective: Int](
+    t: Float32, p: Float32, alpha: Float32
+) -> Float32:
+    """`TTarget::Der2(target, prediction)`, per objective.
+
+    FOUR OF THESE RETURN A HARD ZERO -- Quantile, MAE, MAPE and
+    LogLinQuantile (`:29-31`, `:138-140`, `:156-158`). That is not an
+    omission: their second derivative is zero almost everywhere, which is
+    exactly why `catboost_options.cpp:113-124` gives those losses a
+    GRADIENT default and `:289-300` upgrades three of them to EXACT. A
+    Newton step on them divides by `lambda` alone.
+    """
+
+    @parameter
+    if objective == OBJECTIVE_RMSE:
+        # `:188-190`
+        return Float32(1.0)
+    elif (
+        objective == OBJECTIVE_QUANTILE
+        or objective == OBJECTIVE_MAE
+        or objective == OBJECTIVE_LOGLINQUANTILE
+        or objective == OBJECTIVE_MAPE
+    ):
+        return Float32(0.0)
+    elif objective == OBJECTIVE_POISSON:
+        # `:173-175`
+        return exp(p)
+    elif objective == OBJECTIVE_LQ:
+        # `:215-218`: BELOW q = 2 their second derivative is the constant
+        # 1, not the true one. Copied, because it is what their Newton
+        # step divides by.
+        var abs_loss = abs(t - p)
+        if alpha >= Float32(2.0):
+            return (
+                alpha
+                * (alpha - Float32(1.0))
+                * abs_loss ** (alpha - Float32(2.0))
+            )
+        return Float32(1.0)
+    elif objective == OBJECTIVE_EXPECTILE:
+        # `:114-118`
+        var val = t - p
+        var multiplier = (
+            alpha if val > Float32(0.0) else (Float32(1.0) - alpha)
+        )
+        return Float32(2.0) * multiplier
+    elif objective == OBJECTIVE_TWEEDIE:
+        # `:52-56`
+        var der2 = (
+            t
+            * exp((Float32(1.0) - alpha) * p)
+            * (Float32(1.0) - alpha)
+        )
+        var delta = (
+            exp((Float32(2.0) - alpha) * p) * (Float32(2.0) - alpha)
+        )
+        return -der2 + delta
+    elif objective == OBJECTIVE_HUBER:
+        # `:86-93`. Theirs writes `-HUBER_DER2` where
+        # `HUBER_DER2 = -1.0` (`:62`), i.e. 1.0; the double negation is
+        # kept so a reader diffing against their file finds the same
+        # expression.
+        var diff = t - p
+        if abs(diff) < alpha:
+            return -Float32(HUBER_DER2)
+        return Float32(0.0)
+    else:
+        return Float32(0.0)
+
+
+#: `THuberTarget::HUBER_DER2` (`pointwise_targets.cu:62`). Their constant
+#: is negative and every use negates it.
+comptime HUBER_DER2 = -1.0
+
+
+def pointwise_target_kernel[
+    objective: Int,
+    estimation: Bool = False,
+](
     relevs: MutPointer[Float32, MutAnyOrigin],
     weights: MutPointer[Float32, MutAnyOrigin],
     size_in: Int32,
     predictions: MutPointer[Float32, MutAnyOrigin],
     has_weights: Int32,
+    alpha: Float32,
     stats: MutPointer[Float32, MutAnyOrigin],
     function_value: MutPointer[Float32, MutAnyOrigin],
     compute_fv: Int32,
     plane_magnitudes: MutPointer[Float32, MutAnyOrigin],
     compute_magnitudes: Int32,
 ):
-    """`PointwiseTargetImpl<TRmseTarget>`, copied, writing straight into the
-    stats planes. The name is kept from when this file cited `MseImpl`; see
-    the module docstring for why that citation was to dead code and why the
-    two kernels agree term for term anyway.
+    """`PointwiseTargetImpl<TTarget, BLOCK_SIZE>` (`pointwise_targets.cu:
+    246-281`), the ONE generic kernel every non-cross-entropy pointwise
+    loss reaches, writing straight into the stats planes.
+
+    Their `PointwiseTargetKernel` (`:447-519`) is a switch that constructs
+    a `TTarget` and calls `RunPointwiseTargetKernel<blockSize>` with it;
+    here the switch IS the `objective` comptime parameter and the three
+    methods are `target_score` / `target_der` / `target_der2` above.
+
+    ## Which of their two MSE kernels this is, because they have two
+
+    `MseImpl` (`pointwise_targets.cu:285-321`) is the obvious one to port
+    and it is UNREACHED IN THEIR OWN TREE. Its only entry point is
+    `MseTargetKernel` (`:415-428`) behind `ApproximateMse`
+    (`targets/kernel.h:828`), and `ApproximateMse` has no caller anywhere
+    in `catboost/`. This file used to cite it, and the citation was to
+    dead code.
+
+    What RMSE actually reaches is this generic kernel, dispatched at
+    `case ELossFunction::RMSE: TRmseTarget target;` (`:496-500`) out of
+    `PointwiseTargetKernel`, which `ApproximatePointwise`
+    (`targets/kernel.h:840`) launches. **The two kernels compute the same
+    three numbers**, term for term, which is why the RMSE port was
+    numerically right while its citation was wrong.
 
     ================= DEVIATION BLOCK =================
     Theirs writes `der` and `der2` into two separate buffers and sums
     `functionValue` with a block reduce and an `atomicAdd`.
 
-    Ours writes the two derivatives into the ONE `stats` buffer the histogram
-    kernels already read, in the layout they already expect:
+    Ours writes the two derivatives into the ONE `stats` buffer the
+    histogram kernels already read, in the layout they already expect,
+    IN TWO MODES, because their one kernel serves two callers whose
+    outputs differ (the same two modes `cross_entropy_kernel` records):
 
-        stats[0 * size + i]  = the WEIGHT plane
-        stats[1 * size + i]  = der = weight * (y - pred)
+      - `estimation=False`, the SEARCH: plane 0 the WEIGHT, plane 1
+        `weight * Der`. That is their own `StatsToAggregate` column order
+        under a NON-second-order score function
+        (`pointwise_target_impl.h:188-213`): `ComputeTarget` passes
+        `secondDerAsWeights = IsSecondOrderScoreFunction(scoreFunction)`
+        (`greedy_search_helper.cpp:286-296`), and Cosine, the shipped
+        default, is NOT second order (`enum_helpers.cpp:829-841`), so
+        plane 0 is `weightsView.Copy(weightsForIndices)`.
+        `der2` is not written; the search never reads it under Cosine/L2.
+        A NewtonCosine/NewtonL2 caller would need the `secondDerAsWeights`
+        flag, and for RMSE alone the distinction is invisible because
+        `TRmseTarget::Der2` returns `1.0f`.
+      - `estimation=True`, the LEAVES ORACLE's `ApproximateAt`
+        (`pointwise_oracle.cpp:73-78`, the rowSize==1 fast path): plane 0
+        their `der` buffer and plane 1 their `der2`, which
+        `WriteValueAndFirstDerivatives` reduces per bin and caches as the
+        Newton gradient and Hessian diagonal. Magnitudes are not computed
+        in this mode.
 
-    That is not a redesign, it is their own layout: `StochasticDer` builds
-    `StatsToAggregate` with column 0 the weights and columns 1.. the ders
-    (`targets/pointwise_target_impl.h:188-213`), and that buffer IS what their
-    histogram kernels consume.
+    DEVIATION 62: TWEEDIE'S `variance_power` REACHES THIS KERNEL, AND ON
+    THEIR GPU IT DOES NOT. `TPointwiseTargetsImpl::Init` reads it into the
+    member `VariancePower` (`pointwise_target_impl.h:288-291`) and NOTHING
+    EVER READS THAT MEMBER AGAIN -- the only value handed to the kernel is
+    `GetAlpha()` (`:151-166`, `:346-356`), and `Init`'s Tweedie case never
+    sets `Alpha`, so it stays at its declared `0` (`:364`). Their GPU
+    Tweedie therefore trains at `variancePower = 0` whatever the user
+    asked for. Their CPU reads it correctly
+    (`algo/tensor_search_helpers.cpp:308`).
+    We thread the parameter, for two reasons that both have to hold: the
+    arm we are measured against IS their CPU (their GPU cannot run on this
+    machine at all, which is the entire thesis), and their CPU honours it;
+    and a loss whose defining parameter is ignored is not the loss. The
+    ARITHMETIC in `target_score`/`target_der`/`target_der2` is their GPU
+    struct's, unchanged -- only the value of the parameter differs, and it
+    differs toward their own CPU.
 
-    WHAT GOES IN PLANE 0 DEPENDS ON THE SCORE FUNCTION, and this port writes
-    the branch CatBoost's default takes. `ComputeTarget` passes
-    `secondDerAsWeights = IsSecondOrderScoreFunction(scoreFunction)`
-    (`greedy_search_helper.cpp:286-296`), and Cosine, the shipped default, is
-    NOT second order (`enum_helpers.cpp:829-841`), so plane 0 is
-    `weightsView.Copy(weightsForIndices)` -- the sample weight -- and not
-    `der2`. Under NewtonCosine or NewtonL2 it would be `der2` instead. For
-    RMSE the distinction is invisible because `TRmseTarget::Der2` returns
-    `1.0f`, so `weight * der2 == weight`; for any objective whose second
-    derivative is not constant it is two different numbers and this kernel
-    would need the flag.
+    DEVIATION 63: `alpha` IS A KERNEL ARGUMENT, as theirs is (`:451`), but
+    the objective is a COMPTIME parameter where theirs is a runtime
+    `ELossFunction` switch on the host that then instantiates a template.
+    Same specialisation, moved one step earlier: theirs picks the template
+    instantiation on the host, ours picks it at compile time. No
+    arithmetic difference; one launch shape per objective instead of one.
 
-    `functionValue` IS computed here now, as theirs is
-    (`pointwise_targets.cu:309-317`): every in-range thread contributes
-    `-weight * (val - relev)^2`, the block reduces, and thread 0 does one
-    float `atomicAdd` into the scalar. `compute_fv` stands in for their
-    null-pointer test on `functionValue`. The paragraph that stood here said
-    the host reduction was free because "the boosting loop already reads the
-    cursor back" -- that host read WAS the cost, ~5 ms/tree of host loop
-    over 800k rows per iteration, and it is deleted with this.
+    * PER-BLOCK PARTIALS instead of their block-reduce-plus-`atomicAdd`
+      tail for `function_value` AND the two fixed-point plane magnitudes
+      -- the 2026-08-21 determinism fix, same buffers, same
+      `deterministic_sum_lanes_kernel` fold.
+    * `exp` and `**` here are `std.math` / Mojo's operator, where theirs
+      are a MIXTURE of CUDA fast-math and libm within a single file:
+      `TPoissonTarget` and `TLogLinQuantileTarget` use `__expf`,
+      `TTweedieTarget` uses `std::exp`, `TLqTarget::Score` uses `__powf`
+      and its `Der`/`Der2` use `powf`. CatBoost accepts approximate
+      transcendentals at this exact site, so the substitution is
+      in-family, but the two arms' derivatives differ in last bits BY
+      CONSTRUCTION and no check may expect bitwise der parity against a
+      CatBoost fit.
+    ===================================================
 
-    The block reduce goes through `max.gpu.primitives.block.sum` where
-    theirs is `FastInBlockReduce`, the same substitution
-    `partitions_reduce.mojo` records.
+    ## The fixed-point scale, which is a NEW risk for the exponentials
 
     `plane_magnitudes` / `compute_magnitudes` have NO CATBOOST COUNTERPART,
     like the scale they feed: they are the two sums of absolute values --
     `plane_magnitudes[0] = sum |weight plane|`, `[1] = sum |der plane|` --
-    that `mojo_only/fixed_point.choose_scale` is specified against, reduced
-    here by the SAME block-reduce-plus-one-atomicAdd shape as
-    `functionValue` so the fixed-point builds get real magnitudes with no
-    host loop and no full-stats readback (the host loop this replaces cost a
-    6.4 MB copy plus a 2 * n_rows walk per tree at 800k rows). Accumulated
-    in Float32 through a float atomic, so the total can round DOWN by a few
-    parts in 1e6 relative; `choose_scale`'s remaining safety bit is a factor
-    of TWO against exactly this kind of slack (a millionfold margin -- the
-    row-count-aware limit spends the other two former headroom bits on
-    resolution, with the dither's +1/row accounted separately), as its
-    contract audit in `doc_parallel_boosting.mojo` prices out. `compute_magnitudes` stands in
-    for a null-pointer test, exactly as `compute_fv` does.
-    ===================================================
+    that `mojo_only/fixed_point.choose_scale` is specified against,
+    reduced here by the same shape as `functionValue`. `compute_magnitudes`
+    stands in for a null-pointer test, exactly as `compute_fv` does.
+
+    RMSE's der is a residual and Logloss's is bounded in [-1, 1]. POISSON,
+    TWEEDIE AND LOGLINQUANTILE ARE EXPONENTIAL IN THE PREDICTION, so a few
+    drifted rows can dominate `sum |der|` and drive the scale down until
+    ordinary gradients quantize toward zero. CatBoost never meets this
+    because it flushes histograms with a float `atomicAdd`, so there is no
+    source to port an answer from. `mojo_only/pointwise_target_check.mojo`
+    measures the surviving resolution per objective; read it before
+    trusting a fit on one of the three.
     """
     var size = Int(size_in)
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
 
-    # their `(i < size) ? ... : 0` ternaries (`:296-299`): out-of-range
+    # their `(i < size) ? ... : 0` ternaries (`:255-257`): out-of-range
     # threads stay alive to take part in the reduce, contributing zero.
     var in_range = i < size
     var val = Float32(0.0)
@@ -160,29 +551,50 @@ def mse_kernel(
         relev = relevs.unsafe_load(i)
         if has_weights != Int32(0):
             weight = weights.unsafe_load(i)
-        var direction = relev - val
-        stats.unsafe_store(i, weight)
-        stats.unsafe_store(size + i, weight * direction)
 
-    # `if (functionValue) { tmpScores[tid] = -w * (val - relev)^2; ...
+    # `der[i] = weight * target.Der(relev, val)` (`:265-266`)
+    # `der2[i] = weight * target.Der2(relev, val)` (`:268-269`)
+    var der = weight * target_der[objective](relev, val, alpha)
+
+    if in_range:
+
+        @parameter
+        if estimation:
+            stats.unsafe_store(i, der)
+            stats.unsafe_store(
+                size + i,
+                weight * target_der2[objective](relev, val, alpha),
+            )
+        else:
+            stats.unsafe_store(i, weight)
+            stats.unsafe_store(size + i, der)
+            # der2 is not stored in search mode; see the deviation block.
+
+    # `if (functionValue) { tmpScores[tid] = -w * target.Score(...); ...
     # FastInBlockReduce; if (tid == 0) atomicAdd(functionValue, val); }`
-    # (`pointwise_targets.cu:309-317`).
+    # (`pointwise_targets.cu:271-280`).
     # ============ DETERMINISM FIX, 2026-08-21 ============
     # These two reduces ENDED IN A FLOAT ATOMIC (their `atomicAdd`,
-    # `pointwise_targets.cu:317`), so `functionValue` and, worse, the
-    # fixed-point scale's magnitudes depended on block arrival order --
-    # the same-seed-twice bootstrap gate caught two fits differing, and
-    # the long-observed rep-to-rep last-bit jitter of the loss column was
-    # exactly this. Every block now STORES its partial at its own slot
-    # and `deterministic_sum_lanes_kernel` folds them in one fixed order,
-    # so a seeded fit is bit-reproducible end to end. `function_value`
-    # and `plane_magnitudes` are therefore PER-BLOCK PARTIALS buffers
+    # `:277`), so `functionValue` and, worse, the fixed-point scale's
+    # magnitudes depended on block arrival order -- the same-seed-twice
+    # bootstrap gate caught two fits differing, and the long-observed
+    # rep-to-rep last-bit jitter of the loss column was exactly this.
+    # Every block now STORES its partial at its own slot and
+    # `deterministic_sum_lanes_kernel` folds them in one fixed order, so a
+    # seeded fit is bit-reproducible end to end. `function_value` and
+    # `plane_magnitudes` are therefore PER-BLOCK PARTIALS buffers
     # (`n_blocks` and `2 * n_blocks`), not scalars.
+    #
+    # NOTE THE SIGN: theirs accumulates the NEGATIVE score, because
+    # everything downstream MAXIMIZES. Kept, because flipping it here
+    # would silently invert every early-stopping comparison later. The
+    # cross-entropy kernel below accumulates the POSITIVE score for the
+    # same reason -- its `Score` already IS a log-likelihood.
     # =====================================================
     if compute_fv != Int32(0):
         var score = Float32(0.0)
         if in_range:
-            score = -weight * (val - relev) * (val - relev)
+            score = -weight * target_score[objective](relev, val, alpha)
         var total = block_sum[block_size=MSE_BLOCK_SIZE](score)
         if thread_idx.x == 0:
             function_value.unsafe_store(Int(block_idx.x), total)
@@ -194,7 +606,7 @@ def mse_kernel(
         var g_abs = Float32(0.0)
         if in_range:
             w_abs = abs(weight)
-            g_abs = abs(weight * (relev - val))
+            g_abs = abs(der)
         var w_total = block_sum[block_size=MSE_BLOCK_SIZE](w_abs)
         var g_total = block_sum[block_size=MSE_BLOCK_SIZE](g_abs)
         if thread_idx.x == 0:
@@ -419,3 +831,146 @@ def cross_entropy_kernel[
             plane_magnitudes.unsafe_store(
                 2 * Int(block_idx.x) + 1, g_total
             )
+
+
+# =========================================================================
+# THE HOST DISPATCH: their `PointwiseTargetKernel` switch and the
+# CrossEntropy/Pointwise fork above it, both ported as host functions.
+#
+# `PointwiseTargetKernel` (`pointwise_targets.cu:447-519`) is a HOST switch
+# on `ELossFunction` that constructs the objective struct and launches the
+# one generic template. `TPointwiseTargetsImpl::Approximate`
+# (`pointwise_target_impl.h:307-358`) is the fork above it that decides
+# whether the launch is that kernel or `CrossEntropyImpl` instead.
+#
+# Both are transcribed here rather than open-coded at each call site,
+# because their two call sites -- the boosting loop's search pass and the
+# leaves oracle -- differ only in `estimation`, exactly as their
+# `StochasticDer` and `ApproximateAt` differ only in which buffers they
+# hand over.
+# =========================================================================
+
+
+def launch_pointwise_target_kernel[
+    estimation: Bool
+](
+    ctx: DeviceContext,
+    objective: Int,
+    mut relevs: DeviceBuffer[DType.float32],
+    mut weights: DeviceBuffer[DType.float32],
+    size: Int32,
+    mut predictions: DeviceBuffer[DType.float32],
+    has_weights: Int32,
+    alpha: Float32,
+    mut stats: DeviceBuffer[DType.float32],
+    mut function_value: DeviceBuffer[DType.float32],
+    compute_fv: Int32,
+    mut plane_magnitudes: DeviceBuffer[DType.float32],
+    compute_magnitudes: Int32,
+    blocks: Int,
+) raises:
+    """`PointwiseTargetKernel` (`pointwise_targets.cu:447-519`).
+
+    Their switch picks a template instantiation on the host; this one picks
+    a comptime specialization on the host. `NumErrors` is absent for the
+    reason recorded beside the objective constants, and their `default:`
+    `Y_ABORT_UNLESS(false, "Unknown target")` becomes a raise.
+    """
+
+    @parameter
+    def _go[obj: Int]() raises:
+        ctx.enqueue_function[
+            pointwise_target_kernel[obj, estimation]
+        ](
+            relevs, weights, size, predictions, has_weights, alpha,
+            stats, function_value, compute_fv,
+            plane_magnitudes, compute_magnitudes,
+            grid_dim=(blocks, 1, 1),
+            block_dim=(MSE_BLOCK_SIZE, 1, 1),
+        )
+
+    # their case order, `:455-518`
+    if objective == OBJECTIVE_EXPECTILE:
+        _go[OBJECTIVE_EXPECTILE]()
+    elif objective == OBJECTIVE_QUANTILE:
+        _go[OBJECTIVE_QUANTILE]()
+    elif objective == OBJECTIVE_MAE:
+        # theirs falls MAE through to `TQuantileTarget` (`:483-489`);
+        # the alpha it falls through WITH is 0.5, set by `Init`, and
+        # `TLossDescription.kernel_alpha` is where that happens here
+        _go[OBJECTIVE_MAE]()
+    elif objective == OBJECTIVE_LOGLINQUANTILE:
+        _go[OBJECTIVE_LOGLINQUANTILE]()
+    elif objective == OBJECTIVE_MAPE:
+        _go[OBJECTIVE_MAPE]()
+    elif objective == OBJECTIVE_POISSON:
+        _go[OBJECTIVE_POISSON]()
+    elif objective == OBJECTIVE_LQ:
+        _go[OBJECTIVE_LQ]()
+    elif objective == OBJECTIVE_RMSE:
+        _go[OBJECTIVE_RMSE]()
+    elif objective == OBJECTIVE_TWEEDIE:
+        _go[OBJECTIVE_TWEEDIE]()
+    elif objective == OBJECTIVE_HUBER:
+        _go[OBJECTIVE_HUBER]()
+    elif objective == OBJECTIVE_MULTICLASS:
+        raise Error(
+            "MultiClass does not reach PointwiseTargetKernel: it is"
+            " TMultiClassificationTargets, whose kernels are"
+            " targets/kernel/multilogit.cu"
+        )
+    else:
+        raise Error(
+            "Unknown target: objective " + String(objective)
+            + " does not reach PointwiseTargetKernel"
+        )
+
+
+def launch_approximate[
+    estimation: Bool
+](
+    ctx: DeviceContext,
+    objective: Int,
+    mut relevs: DeviceBuffer[DType.float32],
+    mut weights: DeviceBuffer[DType.float32],
+    size: Int32,
+    mut predictions: DeviceBuffer[DType.float32],
+    has_weights: Int32,
+    alpha: Float32,
+    border: Float32,
+    mut stats: DeviceBuffer[DType.float32],
+    mut function_value: DeviceBuffer[DType.float32],
+    compute_fv: Int32,
+    mut plane_magnitudes: DeviceBuffer[DType.float32],
+    compute_magnitudes: Int32,
+    blocks: Int,
+) raises:
+    """`TPointwiseTargetsImpl::Approximate` (`pointwise_target_impl.h:
+    307-358`): the fork between their two kernels.
+
+    `UseBorder()` is `Type == ELossFunction::Logloss` (`:303-305`), so
+    Logloss thresholds the target and CrossEntropy takes it soft; both
+    land on the same kernel. Everything else goes to the generic one.
+    """
+    if objective == OBJECTIVE_LOGLOSS:
+        ctx.enqueue_function[cross_entropy_kernel[True, estimation]](
+            relevs, weights, size, predictions, has_weights, border,
+            stats, function_value, compute_fv,
+            plane_magnitudes, compute_magnitudes,
+            grid_dim=(blocks, 1, 1),
+            block_dim=(MSE_BLOCK_SIZE, 1, 1),
+        )
+    elif objective == OBJECTIVE_CROSSENTROPY:
+        ctx.enqueue_function[cross_entropy_kernel[False, estimation]](
+            relevs, weights, size, predictions, has_weights, border,
+            stats, function_value, compute_fv,
+            plane_magnitudes, compute_magnitudes,
+            grid_dim=(blocks, 1, 1),
+            block_dim=(MSE_BLOCK_SIZE, 1, 1),
+        )
+    else:
+        launch_pointwise_target_kernel[estimation](
+            ctx, objective, relevs, weights, size, predictions,
+            has_weights, alpha, stats, function_value, compute_fv,
+            plane_magnitudes, compute_magnitudes, blocks,
+        )

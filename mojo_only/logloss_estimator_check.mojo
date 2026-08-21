@@ -37,6 +37,12 @@ from gbdt.methods.leaves_estimation.descent_helpers import (
 from gbdt.methods.leaves_estimation.pointwise_oracle import (
     make_bin_optimized_oracle,
 )
+from gbdt.options.catboost_options import (
+    LEAF_ESTIMATION_NEWTON,
+)
+from gbdt.targets.kernel.pointwise_targets import (
+    OBJECTIVE_LOGLOSS,
+)
 from gbdt.methods.leaves_estimation.step_estimator import (
     BACKTRACKING_ANY_IMPROVEMENT,
 )
@@ -251,7 +257,15 @@ def main() raises:
         var oracle = make_bin_optimized_oracle(
             ctx, n, LEAVES, leaf_sizes,
             d_target^, d_weights^, d_cursor^, d_p_off^, d_p_sz^,
-            has_weights, True, Float32(0.5), LAMBDA, -1,
+            # `has_border=True` became `objective=OBJECTIVE_LOGLOSS`
+            # plus the kernel's one alpha slot on 2026-08-21, when the
+            # oracle stopped being cross-entropy-only. Logloss takes no
+            # alpha, so it is their declared 0 (`pointwise_target_impl.h
+            # :364`), and the estimation method is Newton, which is what
+            # this check's `newton_like_walker_estimate` exercises.
+            has_weights, OBJECTIVE_LOGLOSS, Float32(0.0), Float32(0.5),
+            Float32(0.5),
+            LAMBDA, -1, LEAF_ESTIMATION_NEWTON,
         )
         var got = newton_like_walker_estimate(
             oracle, ITERATIONS, BACKTRACKING_ANY_IMPROVEMENT,

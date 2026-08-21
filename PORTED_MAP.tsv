@@ -22,7 +22,7 @@ gbdt/methods/leaves_estimation/leaves_estimation.mojo	catboost/cuda/methods/leav
 gbdt/gpu_data/gpu_structures.mojo	catboost/cuda/gpu_data/gpu_structures.h	transliterated	TCFeature; Offset narrowed ui64 to UInt32
 gbdt/gpu_data/compressed_index_builder.mojo	catboost/cuda/gpu_data/compressed_index_builder.h	partial	layout decision only; single-device, no docParallel striping
 gbdt/gpu_data/feature_blocks.mojo	catboost/cuda/methods/greedy_subsets_searcher/split_properties_helper.cpp	partial	TFeatureInBlock assembly, one block per policy present
-gbdt/options/catboost_options.mojo	catboost/private/libs/options/	partial	their option names and defaults; two departures (random_strength 0.0, plus determinism which has no counterpart)
+gbdt/options/catboost_options.mojo	catboost/private/libs/options/catboost_options.{h,cpp}	partial	their option names and defaults, plus GetEstimationMethodDefaults and SetLeavesEstimationDefault (:30-360); two departures (random_strength 0.0, plus determinism which has no counterpart)
 gbdt/gpu_lib/fwd.mojo	catboost/cuda/cuda_lib/fwd.h	transliterated	EPtrType; dir renamed cuda_lib -> gpu_lib, classes keep CatBoost names
 gbdt/gpu_lib/gpu_base.mojo	catboost/cuda/cuda_lib/cuda_base.h	partial	streams only; Metal has ONE, ctx.stream() raises not-implemented
 gbdt/gpu_lib/slice.mojo	catboost/cuda/cuda_lib/slice.h	transliterated	TSlice
@@ -55,3 +55,14 @@ gbdt/gpu_util/kernel/scan.mojo	catboost/cuda/cuda_util/kernel/scan.cu	partial	Sc
 gbdt/digest/city.mojo	util/digest/city.cpp	partial	CityHash64 unseeded only, the entry CalcCatFeatureHash uses; their CityHash 1.0 whose results DIFFER from mainline CityHash, so public vectors are the wrong oracle; gated cell for cell by check-cityhash against their own city.cpp compiled by tools/cityhash_oracle/
 gbdt/cat_feature/cat_feature.mojo	catboost/libs/cat_feature/cat_feature.cpp	partial	CalcCatFeatureHash only; the float bit-punning pair unported (their pool storage decision, not adopted here)
 gbdt/models/hash.mojo	catboost/libs/model/hash.h	transliterated	CalcHash and the (ui64)(int) sign-extension of ctr_provider.h:107 as cat_hash_chain_element; check-cityhash chain rows caught a Mojo cast chain ZERO-extending on first run
+gbdt/options/loss_description.mojo	catboost/private/libs/options/loss_description.{h,cpp}	transliterated	loss function + its four parameter accessors
+gbdt/methods/kernel/exact_estimation.mojo	catboost/cuda/methods/kernel/exact_estimation.cu	transliterated	4 kernels; deviations 66 (barrier) and 67 (bounds)
+gbdt/methods/leaves_estimation/leaves_estimation_helper.mojo	catboost/cuda/methods/leaves_estimation/leaves_estimation_helper.h:64-185	partial	ComputeWeightedQuantile + ComputeExactApprox only; pairwise/groupwise unported
+gbdt/gpu_util/kernel/segmented_sort.mojo	catboost/cuda/cuda_util/kernel/segmented_sort.cu	replaced	deviation 65: theirs is cub::DeviceSegmentedRadixSort; ours is their ReorderOneBit with a segment axis
+gbdt/estimator.mojo	(none)	mojo_only	caller-facing surface, like cluster/estimator.mojo
+gbdt/targets/kernel/multilogit.mojo	catboost/cuda/targets/kernel/multilogit.cu	partial	MultiLogit val/first-der and second-der-row only; RMSEWithUncertainty, MultiCrossEntropy, MultiRMSE, MultiClassOneVsAll, BuildConfusionMatrixBins unported
+gbdt/lapack/linear_system.mojo	catboost/private/libs/lapack/linear_system.{h,cpp}	replaced	deviation 74: theirs is LAPACK dposv_ through clapack; SolveLinearSystem (packed) unported
+gbdt/targets/multiclass_targets.mojo	catboost/cuda/targets/multiclass_targets.{h,cpp}	NOT PORTED	the search-side StochasticDer wiring; kernels and oracle arm are done
+gbdt/targets/kernel/multilogit.mojo	catboost/cuda/targets/kernel/multilogit.cu	partial	adds a search=True mode standing for TMultiClassificationTargets::StochasticDer (multiclass_targets.cpp:22-45)
+gbdt/models/kernel/add_bin_values.mojo	catboost/cuda/models/kernel/add_model_value.cu	transliterated	deviation 81: the approx dimension is block_idx.y where theirs is a buffer column count
+tools/catboost_loss_oracle.py	(none)	tool	runs CatBoost CPU for the nine new losses; writes bench/oracle_losses.txt

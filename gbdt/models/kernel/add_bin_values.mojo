@@ -39,6 +39,8 @@ def compute_bins_and_add_kernel(
     leaf_values: MutPointer[Float32, MutAnyOrigin],
     n_rows_in: Int32,
     cursor: MutPointer[Float32, MutAnyOrigin],
+    dim_count_in: Int32,
+    cursor_stride_in: Int32,
 ):
     """Their `AddObliviousTreeImpl`, transcribed.
 
@@ -60,9 +62,37 @@ def compute_bins_and_add_kernel(
 
     The split arrays are parallel and one entry per LEVEL, which is the whole
     of an oblivious tree's structure.
+
+    ## THE APPROX DIMENSION IS `block_idx.y`
+
+    Their `AddObliviousTree` takes a `TCudaBuffer` cursor whose COLUMN COUNT
+    carries the dimension and adds every column
+    (`add_model_value.cu`, `models/add_bin_values.h`). Ours takes a pointer
+    plus a stride, so the dimension is an axis, exactly as
+    `add_model_value_kernel` grew one for the same reason.
+
+    THE TWO LAYOUTS DIFFER AND THAT IS THEIRS, and it is the same pairing
+    as the estimator's: `leaf_values` is BIN-MAJOR --
+    `[leaf * dimCount + dim]`, which is what `MakeEstimationResult`
+    produced and what the model stores -- while the cursor is PLANE-MAJOR,
+    one contiguous column per class. A port that read both the same way
+    would predict with the classes rotated and nothing would assert.
+
+    `dim_count_in == 1, cursor_stride_in == 0` is the single-dimensional
+    path, and `block_idx.y` is 0 there, so the arithmetic is exactly what
+    this kernel had before the axis existed.
+
+    THE LEAF INDEX IS COMPUTED ONCE PER ROW AND SHARED BY EVERY DIMENSION,
+    because an oblivious tree's structure does not depend on the approx:
+    all `dimCount` values of a row come out of the SAME leaf. Recomputing
+    it per dimension would be correct and would read the compressed index
+    `dimCount` times for one answer.
     """
     var depth = Int(depth_in)
     var n_rows = Int(n_rows_in)
+    var dim = Int(block_idx.y)
+    var dim_count = Int(dim_count_in)
+    var plane = dim * Int(cursor_stride_in)
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)
 
@@ -86,6 +116,8 @@ def compute_bins_and_add_kernel(
             if split:
                 leaf += 1 << level
         cursor.unsafe_store(
-            i, cursor.unsafe_load(i) + leaf_values.unsafe_load(leaf)
+            plane + i,
+            cursor.unsafe_load(plane + i)
+            + leaf_values.unsafe_load(leaf * dim_count + dim),
         )
         i += stride

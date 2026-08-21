@@ -174,6 +174,62 @@ def launch_gather_with_mask_u8(
     )
 
 
+def gather_planes_with_mask_f32_kernel(
+    dst: MutPointer[Float32, MutAnyOrigin],
+    src: MutPointer[Float32, MutAnyOrigin],
+    map_ptr: MutPointer[UInt32, MutAnyOrigin],
+    size_in: Int32,
+    mask: UInt32,
+    n_planes_in: Int32,
+    stride_in: Int32,
+):
+    """`GatherWithMask` over a MULTI-COLUMN buffer.
+
+    Their `Gather` takes a `TCudaBuffer` and moves every column
+    (`multiclass_targets.cpp:30`, `pointwise_oracle`'s factory), because a
+    column count is a property of the buffer there. Ours is a pointer plus
+    a stride, so the plane count is an argument and `block_idx.y` is the
+    plane -- the same axis `add_model_value_kernel` grew for the same
+    reason.
+
+    `n_planes == 1` reproduces `gather_with_mask_f32_kernel` exactly.
+    """
+    var size = Int(size_in)
+    var stride = Int(stride_in)
+    var plane = Int(block_idx.y)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var step = Int(grid_dim.x) * Int(block_dim.x)
+    while i < size:
+        var srow = Int(map_ptr.unsafe_load(i) & mask)
+        dst.unsafe_store(
+            plane * stride + i, src.unsafe_load(plane * stride + srow)
+        )
+        i += step
+    _ = n_planes_in
+
+
+def launch_gather_planes_with_mask_f32(
+    ctx: DeviceContext,
+    mut dst: DeviceBuffer[DType.float32],
+    mut src: DeviceBuffer[DType.float32],
+    mut map_buf: DeviceBuffer[DType.uint32],
+    size: Int,
+    mask: UInt32,
+    n_planes: Int,
+    stride: Int,
+) raises:
+    """`Gather(dst, src, indices)` over `n_planes` columns."""
+    var blocks = _transform_blocks(size)
+    if blocks == 0 or n_planes <= 0:
+        return
+    ctx.enqueue_function[gather_planes_with_mask_f32_kernel](
+        dst.unsafe_ptr(), src.unsafe_ptr(), map_buf.unsafe_ptr(),
+        Int32(size), mask, Int32(n_planes), Int32(stride),
+        grid_dim=(blocks, n_planes, 1),
+        block_dim=(TRANSFORM_BLOCK_SIZE, 1, 1),
+    )
+
+
 def launch_gather_with_mask_f32(
     ctx: DeviceContext,
     mut dst: DeviceBuffer[DType.float32],

@@ -45,8 +45,24 @@ def add_model_value_kernel(
     leaf_values: MutPointer[Float32, MutAnyOrigin],
     learning_rate: Float32,
     cursor: MutPointer[Float32, MutAnyOrigin],
+    dim_count_in: Int32,
+    cursor_stride_in: Int32,
 ):
-    """Grid y is the LEAF, x strides that leaf's rows.
+    """Grid y is the LEAF, x strides that leaf's rows, **z is the APPROX
+    DIMENSION**.
+
+    THE TWO LAYOUTS ARE DIFFERENT AND THAT IS THEIRS. Their `shift` is
+    BIN-MAJOR -- `newPoint[bin * cursorDim + dim]`
+    (`pointwise_oracle.cpp:41-47`) -- while the cursor is PLANE-MAJOR,
+    one contiguous column per class. So the value for (leaf, dim) is read
+    at `leaf * dimCount + dim` and written into `dim * cursorStride + row`.
+    Reading both as the same layout is the kind of mistake that trains a
+    model with the classes rotated and no assertion fires.
+
+    `dim_count_in == 1` with `cursor_stride_in == 0` is the single-
+    dimensional path every pointwise loss takes, and it produces exactly
+    the arithmetic this kernel had before the z axis existed: `block_idx.z`
+    is 0, so the read is `leaf * 1 + 0` and the write offset is 0.
 
     `Rescale(step)` is folded in as `learning_rate` rather than mutating the
     stored leaf values, so the model keeps the UNSCALED estimate and the rate
@@ -55,13 +71,18 @@ def add_model_value_kernel(
     yet and an unscaled leaf is the more useful thing to inspect.
     """
     var leaf = Int(block_idx.y)
+    var dim = Int(block_idx.z)
+    var dim_count = Int(dim_count_in)
+    var plane = dim * Int(cursor_stride_in)
     var offset = Int(part_offset.unsafe_load(leaf))
     var size = Int(part_size.unsafe_load(leaf))
-    var value = leaf_values.unsafe_load(leaf) * learning_rate
+    var value = (
+        leaf_values.unsafe_load(leaf * dim_count + dim) * learning_rate
+    )
 
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)
     while i < size:
-        var row = Int(row_index.unsafe_load(offset + i))
+        var row = plane + Int(row_index.unsafe_load(offset + i))
         cursor.unsafe_store(row, cursor.unsafe_load(row) + value)
         i += stride

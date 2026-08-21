@@ -37,7 +37,10 @@ from gbdt.gpu_data.compressed_index_builder import build_layout
 from gbdt.gpu_util.kernel.bootstrap import (
     BOOTSTRAP_SEED_COUNT,
     create_bootstrap_seeds,
-    launch_bayesian_bootstrap,
+    BOOTSTRAP_KERNEL_BAYESIAN,
+    BOOTSTRAP_KERNEL_BERNOULLI,
+    BOOTSTRAP_KERNEL_POISSON,
+    launch_bootstrap,
 )
 from gbdt.methods.doc_parallel_boosting import TAdditiveModel, fit
 
@@ -138,8 +141,9 @@ def check_bootstrap() raises:
     var mags = ctx.enqueue_create_buffer[DType.float32](2)
     ctx.enqueue_memset(mags, Float32(0.0))
     var stats = _ones_stats(ctx)
-    launch_bayesian_bootstrap(
-        ctx, s1, stats, BS_ROWS, Float32(1.0), mags, True,
+    launch_bootstrap(
+        ctx, BOOTSTRAP_KERNEL_BAYESIAN, s1, stats, BS_ROWS,
+        Float32(1.0), mags, True,
     )
     var v = _read(ctx, stats, 2 * BS_ROWS)
     var total = Float64(0.0)
@@ -174,8 +178,9 @@ def check_bootstrap() raises:
     # ---- 4: the seeds are STATE ------------------------------------------
     var stats2 = _ones_stats(ctx)
     ctx.enqueue_memset(mags, Float32(0.0))
-    launch_bayesian_bootstrap(
-        ctx, s1, stats2, BS_ROWS, Float32(1.0), mags, True,
+    launch_bootstrap(
+        ctx, BOOTSTRAP_KERNEL_BAYESIAN, s1, stats2, BS_ROWS,
+        Float32(1.0), mags, True,
     )
     var v2 = _read(ctx, stats2, BS_ROWS)
     var moved = 0
@@ -188,8 +193,9 @@ def check_bootstrap() raises:
     var s1b = create_bootstrap_seeds(ctx, UInt64(7))
     var stats3 = _ones_stats(ctx)
     ctx.enqueue_memset(mags, Float32(0.0))
-    launch_bayesian_bootstrap(
-        ctx, s1b, stats3, BS_ROWS, Float32(1.0), mags, True,
+    launch_bootstrap(
+        ctx, BOOTSTRAP_KERNEL_BAYESIAN, s1b, stats3, BS_ROWS,
+        Float32(1.0), mags, True,
     )
     var v3 = _read(ctx, stats3, BS_ROWS)
     for i in range(BS_ROWS):
@@ -242,3 +248,145 @@ def check_bootstrap() raises:
     print("  fit: T=0 reproduces bootstrap-off to tolerance; seed 7 is"
           " bit-reproducible; seed 8 changes the model -- the draw"
           " reaches the histograms")
+    check_bernoulli_and_poisson(ctx)
+
+
+def check_bernoulli_and_poisson(ctx: DeviceContext) raises:
+    """The two arms `launch_bootstrap` gained on 2026-08-21.
+
+    PORTING_RULES 8: every switch is exercised on BOTH sides by a named
+    check per side, and "the suite covers it" is not coverage. Bayesian was
+    the only arm this file ran, so adding two arms to the kernel without
+    adding them here would have left them on the unchecked side of exactly
+    the switch that rule is about.
+
+    Each arm is pinned against an ANALYTIC property of their own kernel
+    rather than against a tally of ours:
+
+      BERNOULLI (`UniformBootstrapImpl`, `bootstrap.cu:51-62`)
+        sampleRate = 1.0 -> `NextUniform(&s) < 1.0` is true for every draw
+                            in [0, 1), so EVERY weight is exactly 1.0 and
+                            both planes are untouched
+        sampleRate = 0.0 -> false for every draw, so EVERY weight is
+                            exactly 0.0
+        sampleRate = 0.5 -> the surviving fraction is binomial with mean
+                            0.5 and se ~ 1/(2*sqrt(n)); the check bands it
+                            rather than fixing it, because a fixed count
+                            would be asserting our own RNG stream
+
+      POISSON (`PoissonBootstrapImpl`, `:7-19`, via `NextPoisson`,
+      `random_gen.cuh:57-72`)
+        lambda <= 20     -> their small-alpha arm returns `k - 1` from a
+                            product-of-uniforms loop, so every weight is a
+                            NON-NEGATIVE INTEGER, and the mean is lambda
+        lambda = 1       -> mean 1, and a Poisson(1) sample must contain
+                            both zeros (p = 0.368) and values >= 3
+                            (p = 0.080), which a constant or a uniform
+                            would not
+
+    Both planes must take the SAME draw, which is their two
+    `MultiplyVector`s against one `BootstrappedWeights` buffer
+    (`gpu_data/bootstrap.h:100-102`).
+    """
+    var seeds = create_bootstrap_seeds(ctx, UInt64(11))
+    var mags = ctx.enqueue_create_buffer[DType.float32](2)
+
+    # -- Bernoulli, the two exact identities -----------------------------
+    for rate_i in range(2):
+        var rate = Float32(1.0) if rate_i == 0 else Float32(0.0)
+        var want = Float32(1.0) if rate_i == 0 else Float32(0.0)
+        var st = _ones_stats(ctx)
+        ctx.enqueue_memset(mags, Float32(0.0))
+        launch_bootstrap(
+            ctx, BOOTSTRAP_KERNEL_BERNOULLI, seeds, st, BS_ROWS, rate,
+            mags, True,
+        )
+        var v = _read(ctx, st, 2 * BS_ROWS)
+        for i in range(BS_ROWS):
+            if v[i] != want or v[BS_ROWS + i] != want:
+                raise Error(
+                    "Bernoulli at rate " + String(rate)
+                    + " is not the exact identity/annihilator at row "
+                    + String(i) + ": " + String(v[i]) + " / "
+                    + String(v[BS_ROWS + i])
+                )
+    print("  bernoulli: rate 1.0 leaves both planes exactly 1.0;"
+          " rate 0.0 zeroes both exactly")
+
+    # -- Bernoulli at 0.5: the draw must SCATTER -------------------------
+    var st5 = _ones_stats(ctx)
+    ctx.enqueue_memset(mags, Float32(0.0))
+    launch_bootstrap(
+        ctx, BOOTSTRAP_KERNEL_BERNOULLI, seeds, st5, BS_ROWS,
+        Float32(0.5), mags, True,
+    )
+    var v5 = _read(ctx, st5, 2 * BS_ROWS)
+    var kept = 0
+    for i in range(BS_ROWS):
+        if v5[i] != v5[BS_ROWS + i]:
+            raise Error(
+                "the two planes took different Bernoulli draws at row "
+                + String(i)
+            )
+        if v5[i] != Float32(0.0) and v5[i] != Float32(1.0):
+            raise Error(
+                "a Bernoulli weight is neither 0 nor 1: " + String(v5[i])
+            )
+        if v5[i] == Float32(1.0):
+            kept += 1
+    var frac = Float64(kept) / Float64(BS_ROWS)
+    if frac < 0.47 or frac > 0.53:
+        raise Error(
+            "Bernoulli at 0.5 kept " + String(frac)
+            + " of the rows, which is outside the binomial band"
+        )
+    print("  bernoulli: rate 0.5 kept", kept, "of", BS_ROWS,
+          "(fraction", frac, "), both planes identical")
+
+    # -- Poisson: integer weights, mean lambda, a real tail --------------
+    var stp = _ones_stats(ctx)
+    ctx.enqueue_memset(mags, Float32(0.0))
+    launch_bootstrap(
+        ctx, BOOTSTRAP_KERNEL_POISSON, seeds, stp, BS_ROWS,
+        Float32(1.0), mags, True,
+    )
+    var vp = _read(ctx, stp, 2 * BS_ROWS)
+    var total = Float64(0.0)
+    var zeros = 0
+    var big = 0
+    for i in range(BS_ROWS):
+        var w = vp[i]
+        if w != vp[BS_ROWS + i]:
+            raise Error(
+                "the two planes took different Poisson draws at row "
+                + String(i)
+            )
+        if w < Float32(0.0):
+            raise Error("a Poisson weight is negative: " + String(w))
+        # their small-alpha arm returns `k - 1`, an integer
+        if w != Float32(Int(w)):
+            raise Error(
+                "a Poisson weight is not an integer: " + String(w)
+            )
+        total += Float64(w)
+        if w == Float32(0.0):
+            zeros += 1
+        if w >= Float32(3.0):
+            big += 1
+    var mean = total / Float64(BS_ROWS)
+    if mean < 0.94 or mean > 1.06:
+        raise Error(
+            "Poisson(1) draw mean " + String(mean) + " is not 1"
+        )
+    if zeros < BS_ROWS // 5:
+        raise Error(
+            "Poisson(1) produced " + String(zeros)
+            + " zeros; p(0) = 0.368 so a real sample has far more"
+        )
+    if big < BS_ROWS // 40:
+        raise Error(
+            "Poisson(1) produced no tail: " + String(big)
+            + " draws >= 3, where p = 0.080"
+        )
+    print("  poisson: lambda 1 -> mean", mean, ", integer weights,",
+          zeros, "zeros and", big, "draws >= 3 -- both planes identical")

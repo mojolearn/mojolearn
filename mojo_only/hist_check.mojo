@@ -799,6 +799,7 @@ def check_scores() raises:
         Int32(stat_count),
         part_ids.unsafe_ptr(),
         Int32(n_leaves),
+        Int32(0),  # multiclassOptimization
         lambda_l2,
         out_score.unsafe_ptr(),
         out_bin.unsafe_ptr(),

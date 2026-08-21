@@ -103,6 +103,56 @@ comptime SCORE_BLOCK_SIZE = 128
 comptime FLOAT32_MAX = Float32(3.4028234663852886e38)
 
 
+@always_inline
+def _add_leaf[
+    score_function: Int, normalize: Bool
+](
+    sum: Float32,
+    weight: Float32,
+    lambda_l2: Float32,
+    mut score: Float32,
+    mut denum_sqr: Float32,
+):
+    """`calcer.AddLeaf(sum, weight)` -- one score calcer's accumulation.
+
+    Factored out of the split loop because their `AddLeaf` is called from
+    THREE places once MultiClass exists: the left side, the right side,
+    and the pinned class's reconstructed contribution
+    (`compute_scores.cu:101-102`, `:107-108`). Writing it three times is
+    how the three drift apart.
+    """
+    comptime cosine = (
+        score_function == SCORE_FUNCTION_COSINE
+        or score_function == SCORE_FUNCTION_NEWTON_COSINE
+    )
+
+    comptime if cosine:
+        # `TCosineScoreCalcer::AddLeaf` -- `score_calcers.cuh:152-157`:
+        #     double lambda = Normalize ? Lambda * weight : Lambda;
+        #     mu = weight > 0.0f ? sum / (weight + lambda) : 0.0f;
+        #     Score += sum * mu;
+        #     DenumSqr += weight * mu * mu;
+        var lam = lambda_l2
+        comptime if normalize:
+            lam = lambda_l2 * weight
+        var mu = Float32(0.0)
+        if weight > Float32(0.0):
+            mu = sum / (weight + lam)
+        score += sum * mu
+        denum_sqr += weight * mu * mu
+    else:
+        # `TL2ScoreCalcer::AddLeaf` at `MetaExponent == 1`:
+        # `leafScore = (weight > 1e-20f ? (-sum*sum)/(weight+Lambda) : 0)`
+        # -- `score_calcers.cuh:54`. Every calcer of theirs carries this
+        # guard. Ours divided unconditionally: the weights are
+        # `max(.., 0)` clamped but the SUMS are not, so a side whose
+        # weight cancels to zero with a non-zero residual contributed
+        # `sum^2 / lambda` here and 0 in theirs, and divides by zero
+        # outright if lambda is ever 0.
+        if weight > Float32(1e-20):
+            score += (sum * sum) / (weight + lambda_l2)
+
+
 def compute_optimal_splits_kernel[
     score_function: Int = SCORE_FUNCTION_COSINE,
     normalize: Bool = False,
@@ -116,6 +166,7 @@ def compute_optimal_splits_kernel[
     stat_count_in: Int32,
     part_ids: MutPointer[UInt32, MutAnyOrigin],
     p_count_in: Int32,
+    multiclass_optimization: Int32,
     lambda_l2: Float32,
     out_score: MutPointer[Float32, MutAnyOrigin],
     out_bin: MutPointer[UInt32, MutAnyOrigin],
@@ -220,6 +271,13 @@ def compute_optimal_splits_kernel[
                 Float32(0.0),
             )
 
+            # their `double totalSumLeft` / `double totalSumPart`
+            # (`compute_scores.cu:93-94`). The width follows the same
+            # recorded deviation as `partStat` above: theirs are double
+            # and this port is float32 throughout the score path.
+            var total_sum_left = Float32(0.0)
+            var total_sum_part = Float32(0.0)
+
             for stat_id in range(1, stat_count):
                 # `float sumLeft = __ldg(histograms + ...)` and
                 # `double partStat = __ldg(partStats + ...)`
@@ -240,49 +298,47 @@ def compute_optimal_splits_kernel[
                 # `calcer.AddLeaf(sumLeft, weightLeft)` then
                 # `calcer.AddLeaf(sumRight, weightRight)`
                 # -- `compute_scores.cu:101-102`.
-                comptime if cosine:
-                    # `TCosineScoreCalcer::AddLeaf` --
-                    # `score_calcers.cuh:152-157`:
-                    #     double lambda = Normalize ? Lambda * weight
-                    #                               : Lambda;
-                    #     mu = weight > 0.0f ? sum / (weight + lambda) : 0.0f;
-                    #     Score += sum * mu;
-                    #     DenumSqr += weight * mu * mu;
-                    var lam_l = lambda_l2
-                    comptime if normalize:
-                        lam_l = lambda_l2 * weight_left
-                    var mu_l = Float32(0.0)
-                    if weight_left > Float32(0.0):
-                        mu_l = sum_left / (weight_left + lam_l)
-                    score += sum_left * mu_l
-                    denum_sqr += weight_left * mu_l * mu_l
+                _add_leaf[score_function, normalize](
+                    sum_left, weight_left, lambda_l2, score, denum_sqr
+                )
+                _add_leaf[score_function, normalize](
+                    sum_right, weight_right, lambda_l2, score, denum_sqr
+                )
+                # `totalSumLeft += sumLeft` (`:103`)
+                total_sum_left += sum_left
+                total_sum_part += part_stat
 
-                    var lam_r = lambda_l2
-                    comptime if normalize:
-                        lam_r = lambda_l2 * weight_right
-                    var mu_r = Float32(0.0)
-                    if weight_right > Float32(0.0):
-                        mu_r = sum_right / (weight_right + lam_r)
-                    score += sum_right * mu_r
-                    denum_sqr += weight_right * mu_r * mu_r
-                else:
-                    # `TL2ScoreCalcer::AddLeaf` at `MetaExponent == 1`:
-                    # `leafScore = (weight > 1e-20f ? (-sum*sum)/
-                    #  (weight+Lambda) : 0)` -- `score_calcers.cuh:54`.
-                    # Every calcer of theirs carries this guard. Ours divided
-                    # unconditionally. The weights are `max(.., 0)` clamped
-                    # but the SUMS are not, so a side whose weight cancels to
-                    # zero with a non-zero residual contributed
-                    # `sum^2 / lambda` here and 0 in theirs, and divides by
-                    # zero outright if lambda is ever 0.
-                    if weight_left > Float32(1e-20):
-                        score += (sum_left * sum_left) / (
-                            weight_left + lambda_l2
-                        )
-                    if weight_right > Float32(1e-20):
-                        score += (sum_right * sum_right) / (
-                            weight_right + lambda_l2
-                        )
+            # THE MULTICLASS ARM (`compute_scores.cu:105-110`).
+            #
+            #     if (multiclassOptimization) {
+            #         double totalSumRight = totalSumPart - totalSumLeft;
+            #         calcer.AddLeaf(-totalSumLeft, weightLeft);
+            #         calcer.AddLeaf(-totalSumRight, weightRight);
+            #     }
+            #
+            # ONE MORE LEAF CONTRIBUTION PER SIDE, and it is the PINNED
+            # class's. The cursor carries `numClasses - 1` free approxes,
+            # so the histogram has `numClasses - 1` gradient planes; the
+            # missing one is not stored because the multinomial gradient
+            # sums to zero over ALL numClasses, which makes it exactly
+            # `-sum of the others`. The same identity the estimator's
+            # `gradient[bin*rowSize + cursorDim] = -total` uses
+            # (`pointwise_oracle.cpp:100`), applied on the search side.
+            #
+            # A port that skipped this would score every split as if the
+            # last class did not exist, which is not a small error: for a
+            # binary-ish 7-class problem the pinned class can carry most
+            # of the mass.
+            if multiclass_optimization != Int32(0):
+                var total_sum_right = total_sum_part - total_sum_left
+                _add_leaf[score_function, normalize](
+                    -total_sum_left, weight_left, lambda_l2,
+                    score, denum_sqr,
+                )
+                _add_leaf[score_function, normalize](
+                    -total_sum_right, weight_right, lambda_l2,
+                    score, denum_sqr,
+                )
 
         # `float score = calcer.GetScore()` -- `compute_scores.cu:131`.
         var final_score = score

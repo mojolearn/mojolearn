@@ -431,12 +431,25 @@ def model_text(tm: TrainedModel) raises -> String:
         ref weak = tm.model.weak_models[t]
         var depth = weak.structure.get_depth()
         var n_leaves = 1 << depth
+        # A LEAF CARRIES `dim` VALUES, NOT ONE. `dim` is their
+        # `OutputDim()` (`oblivious_model.h:130-133`) -- 1 for every
+        # single-dimensional loss and `numClasses - 1` for MultiClass --
+        # and the values are BIN-MAJOR, `[leaf * dim + d]`, which is the
+        # layout `MakeEstimationResult` produces and both apply kernels
+        # read. The record index below is that flat index, so a
+        # one-dimensional model's bytes do not move.
+        if weak.dim < 1:
+            raise Error(
+                "tree " + String(t) + " has dim " + String(weak.dim)
+            )
+        var n_values = n_leaves * weak.dim
         var has_weights = 1 if len(weak.leaf_weights) != 0 else 0
-        if len(weak.leaf_values) != n_leaves:
+        if len(weak.leaf_values) != n_values:
             raise Error(
                 "tree " + String(t) + " has depth " + String(depth)
-                + " and " + String(len(weak.leaf_values))
-                + " leaf values, not " + String(n_leaves)
+                + ", dim " + String(weak.dim) + " and "
+                + String(len(weak.leaf_values))
+                + " leaf values, not " + String(n_values)
             )
         if has_weights == 1 and len(weak.leaf_weights) != n_leaves:
             raise Error(
@@ -467,7 +480,7 @@ def model_text(tm: TrainedModel) raises -> String:
                     + ", which is neither TakeBin nor TakeGreater"
                 )
             out += line + "\n"
-        for i in range(n_leaves):
+        for i in range(n_values):
             out += (
                 String("leaf ") + String(t) + " " + String(i) + " "
                 + f32_token(weak.leaf_values[i]) + "\n"
@@ -887,7 +900,13 @@ def load_model_text(text: String) raises -> TrainedModel:
             + String(losses_seen)
         )
     for t in range(trees_seen):
-        var want_leaves = 1 << depths[t]
+        # `dim` values per leaf; see the writer's note on the layout
+        var want_leaves = (1 << depths[t]) * model.weak_models[t].dim
+        if model.weak_models[t].dim < 1:
+            raise Error(
+                "tree " + String(t) + " declared dim "
+                + String(model.weak_models[t].dim)
+            )
         if splits_seen[t] != depths[t]:
             raise Error(
                 "tree " + String(t) + " declared depth " + String(depths[t])
@@ -898,7 +917,13 @@ def load_model_text(text: String) raises -> TrainedModel:
                 "tree " + String(t) + " needs " + String(want_leaves)
                 + " leaves and carries " + String(leaves_seen[t])
             )
-        var want_weights = want_leaves if weights_declared[t] == 1 else 0
+        # LEAF WEIGHTS ARE PER LEAF, NOT PER VALUE: their `LeafWeights` is
+        # `BinCount()` long whatever `Dim` is
+        # (`doc_parallel_leaves_estimator.cpp:21-23` CB_ENSUREs exactly
+        # that), because a leaf has one weight and `dim` values.
+        var want_weights = (
+            (1 << depths[t]) if weights_declared[t] == 1 else 0
+        )
         if weights_seen[t] != want_weights:
             raise Error(
                 "tree " + String(t) + " needs " + String(want_weights)

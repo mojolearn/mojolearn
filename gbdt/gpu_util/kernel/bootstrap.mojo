@@ -1,7 +1,8 @@
-"""Bayesian bootstrap: CatBoost's GPU default sampling, ported.
+"""The row-sampling draws: Bayesian, Bernoulli and Poisson.
 
 PORT OF `BayesianBootstrapImpl` (`catboost/cuda/cuda_util/kernel/
-bootstrap.cu:35-49`) and the weight application around it
+bootstrap.cu:35-49`), `UniformBootstrapImpl` (`:51-62`) and
+`PoissonBootstrapImpl` (`:7-19`), and the weight application around them
 (`gpu_data/bootstrap.h`: `BootstrappedWeights` fills ones, `Bootstrap`
 draws, `BootstrapAndFilter` multiplies BOTH the der plane and the weight
 plane by the same draw; Bayesian never produces zero weights, so their
@@ -10,7 +11,17 @@ is false for it and this port carries none of that machinery).
 
 Their GPU oblivious searcher takes Bayesian by default and ASSERTS MVS
 away (`greedy_subsets_searcher/weak_objective_impl.h:30`), so Bayesian is
-the parity target, not one option of many. CatBoost's own CPU and GPU
+the parity target; Bernoulli and Poisson are the two other arms of the
+same `Bootstrap` dispatch (`gpu_data/bootstrap.h:41-92`), and
+`GammaBootstrapImpl` (`:21-33`) is NOT ported because their own
+`BayesianBootstrap` has the only call to it COMMENTED OUT (`:82`).
+
+WHAT BERNOULLI IS, since the name differs from their kernel's:
+`EBootstrapType::Bernoulli` dispatches to `UniformBootstrap`
+(`bootstrap.h:60-66`), whose kernel draws `w * (u < sampleRate ? 1 : 0)`.
+It is the `subsample` knob every GBDT user knows: each tree sees a
+different random `subsample` fraction of the rows. It is REGULARIZATION,
+not speed -- see DEVIATION 69 for why it is not speed HERE in particular. CatBoost's own CPU and GPU
 produce DIFFERENT models under bootstrap (different RNG streams), so a
 split-level oracle against CPU CatBoost cannot exist for this feature
 even in principle; the gates are instead: the device stream is their
@@ -21,6 +32,37 @@ fit is bit-reproducible, the draw distribution is Exp(1) at temperature
 bootstrap-off fit bit for bit.
 
 ================= DEVIATION BLOCK =================
+DEVIATION 69: THE ZERO-WEIGHT ROWS ARE NOT FILTERED OUT.
+
+For Bernoulli and Poisson their `BootstrapAndFilter` does not stop at the
+multiply. `AreZeroWeightsAfterBootstrap` is true for exactly those two
+(`enum_helpers.cpp:849-856`), so they run `FilterZeroEntries`, gather the
+der/weight/index columns down to the surviving rows, and return
+`isContinuousIndices = false` (`gpu_data/bootstrap.h:126-153`,
+`weak_objective_impl.h:30-45`). The searcher then works on a SMALLER row
+set addressed through a non-contiguous index list.
+
+This port multiplies and stops. THE MODEL IS THE SAME MODEL: a row whose
+bootstrap weight is zero contributes `0` to its weight plane and `0` to
+its gradient plane, so it adds nothing to any histogram cell, nothing to
+any leaf sum, and nothing to either fixed-point magnitude (`|0| == 0`, so
+the scale is unchanged too). Filtering is a way of not paying for those
+rows, not a way of getting a different answer.
+
+WHAT IT COSTS: at `subsample = 0.66` we stream 100% of the rows through
+the histogram where they stream 66%, so the sampling buys accuracy here
+and buys accuracy AND about a third of the histogram time there. That is
+the whole of the difference and it is a real one to close.
+
+THE ONE PLACE THE ANSWER COULD DIVERGE, and it cannot today: a score-side
+test that counts ROWS rather than summing WEIGHTS would see the filtered
+count on their side and the full count on ours. `min_data_in_leaf` is
+that test, and it is NOT WIRED in this port's searcher -- grep
+`greedy_search_helper.mojo` for it and there is nothing. **If
+`min_data_in_leaf` is ever wired, this deviation stops being
+output-identical and the filter becomes required.** That sentence is the
+whole reason this paragraph exists.
+
 ONE kernel where they launch three. Theirs: `BayesianBootstrapImpl` over
 a ones buffer, then `MultiplyVector` twice (der, weights). Ours folds the
 two multiplies into the draw loop -- the draw stream is UNCHANGED (same
@@ -49,7 +91,18 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from gbdt.gpu_util.kernel.random_gen import next_uniform_f
+from gbdt.gpu_util.kernel.random_gen import (
+    next_poisson_f,
+    next_uniform_f,
+)
+
+#: the three arms of their `Bootstrap` dispatch this file draws
+#: (`gpu_data/bootstrap.h:41-92`). The names are their `EBootstrapType`
+#: spellings, not their kernel names: `Bernoulli` dispatches to
+#: `UniformBootstrap`.
+comptime BOOTSTRAP_KERNEL_BAYESIAN = 0
+comptime BOOTSTRAP_KERNEL_BERNOULLI = 1
+comptime BOOTSTRAP_KERNEL_POISSON = 2
 
 #: their launch shape (`bootstrap.cu:79-84`): block 256, grid
 #: `min(ceil(seeds/256), ceil(rows/256))`.
@@ -59,26 +112,41 @@ comptime BOOTSTRAP_BLOCK_SIZE = 256
 comptime BOOTSTRAP_SEED_COUNT = 65536
 
 
-def bayesian_bootstrap_kernel(
+def bootstrap_kernel[bootstrap_type: Int](
     seeds: MutPointer[UInt64, MutAnyOrigin],
     stats: MutPointer[Float32, MutAnyOrigin],
     n_rows_in: Int32,
-    temperature: Float32,
+    param: Float32,
     mags: MutPointer[Float32, MutAnyOrigin],
     compute_mags_in: Int32,
 ):
-    """`BayesianBootstrapImpl`, with the two `MultiplyVector`s folded in.
+    """Their three draw kernels, with the two `MultiplyVector`s folded in.
 
-    Their loop (`bootstrap.cu:41-47`):
+    Their three loops, term for term:
 
+      BAYESIAN (`bootstrap.cu:41-47`), `param` is `bagging_temperature`
         const float tmp = (-log(NextUniform(&s) + 1e-20f));
-        weights[i] = w * (temperature != 1.0f ? powf(tmp, temperature) : tmp);
+        weights[i] = w * (temperature != 1.0f
+                          ? powf(tmp, temperature) : tmp);
+
+      BERNOULLI (`UniformBootstrapImpl`, `:56-60`), `param` is `subsample`
+        const float flag = (NextUniform(&s) < sampleRate) ? 1.0f : 0.0f;
+        weights[i] = w * flag;
+
+      POISSON (`PoissonBootstrapImpl`, `:12-16`), `param` is `lambda`
+        weights[i] = w * NextPoisson(&s, lambda);
 
     One draw per ROW in one grid-stride walk, per-thread seed advanced in
     registers and written back at the end -- the write-back is the RNG
     state between trees. `stats` is the two-plane layout `mse_kernel`
-    writes: plane 0 (weights) and plane 1 (der) are both multiplied by
-    the same draw, their `BootstrapAndFilter`'s two `MultiplyVector`s.
+    (now `pointwise_target_kernel`) writes: plane 0 (weights) and plane 1
+    (der) are both multiplied by the same draw, their
+    `BootstrapAndFilter`'s two `MultiplyVector`s.
+
+    NOTE THE SEED BASE DIFFERS BETWEEN THEIR OWN ARMS and is copied:
+    Bayesian and Poisson do `seeds += blockIdx.x * blockDim.x +
+    threadIdx.x` (`:9`, `:37`), Uniform does `seeds += i` where `i` is the
+    same expression (`:53-54`). Same address, written twice.
     """
     var n = Int(n_rows_in)
     var tid = Int(thread_idx.x)
@@ -91,13 +159,25 @@ def bayesian_bootstrap_kernel(
     var i = gid
     var stride = Int(grid_dim.x) * BOOTSTRAP_BLOCK_SIZE
     while i < n:
-        var draw = next_uniform_f(s)
-        var u = draw[0]
-        s = draw[1]
-        var tmp = -log(u + Float32(1e-20))
-        var bw = tmp
-        if temperature != Float32(1.0):
-            bw = tmp**temperature
+        var bw: Float32
+
+        @parameter
+        if bootstrap_type == BOOTSTRAP_KERNEL_BAYESIAN:
+            var draw = next_uniform_f(s)
+            s = draw[1]
+            var tmp = -log(draw[0] + Float32(1e-20))
+            bw = tmp
+            if param != Float32(1.0):
+                bw = tmp**param
+        elif bootstrap_type == BOOTSTRAP_KERNEL_BERNOULLI:
+            var draw = next_uniform_f(s)
+            s = draw[1]
+            bw = Float32(1.0) if draw[0] < param else Float32(0.0)
+        else:
+            var draw = next_poisson_f(s, param)
+            s = draw[1]
+            bw = draw[0]
+
         var w = stats.unsafe_load(i) * bw
         var g = stats.unsafe_load(n + i) * bw
         stats.unsafe_store(i, w)
@@ -176,21 +256,54 @@ def bootstrap_grid_blocks(n_rows: Int) -> Int:
     return blocks
 
 
-def launch_bayesian_bootstrap(
+def launch_bootstrap(
     ctx: DeviceContext,
+    bootstrap_type: Int,
     mut seeds: DeviceBuffer[DType.uint64],
     mut stats: DeviceBuffer[DType.float32],
     n_rows: Int,
-    temperature: Float32,
+    param: Float32,
     mut mags: DeviceBuffer[DType.float32],
     compute_mags: Bool,
 ) raises:
-    """Their launch (`bootstrap.cu:79-84`): grid
-    `min(ceil(seeds/256), ceil(rows/256))` blocks of 256."""
+    """`TBootstrap::Bootstrap`'s switch (`gpu_data/bootstrap.h:41-92`)
+    over their three launches (`bootstrap.cu:64-84`), each grid
+    `min(ceil(seeds/256), ceil(rows/256))` blocks of 256.
+
+    `param` is whichever of their three scalars the arm takes:
+    `bagging_temperature`, `subsample`, or `lambda`. Their config reads
+    them from three different option fields and hands each kernel one
+    float, which is the shape kept here.
+    """
     var blocks = bootstrap_grid_blocks(n_rows)
-    ctx.enqueue_function[bayesian_bootstrap_kernel](
-        seeds.unsafe_ptr(), stats.unsafe_ptr(), Int32(n_rows), temperature,
-        mags.unsafe_ptr(), Int32(1) if compute_mags else Int32(0),
-        grid_dim=(blocks, 1, 1),
-        block_dim=(BOOTSTRAP_BLOCK_SIZE, 1, 1),
-    )
+    if bootstrap_type == BOOTSTRAP_KERNEL_BAYESIAN:
+        ctx.enqueue_function[
+            bootstrap_kernel[BOOTSTRAP_KERNEL_BAYESIAN]
+        ](
+            seeds.unsafe_ptr(), stats.unsafe_ptr(), Int32(n_rows), param,
+            mags.unsafe_ptr(), Int32(1) if compute_mags else Int32(0),
+            grid_dim=(blocks, 1, 1),
+            block_dim=(BOOTSTRAP_BLOCK_SIZE, 1, 1),
+        )
+    elif bootstrap_type == BOOTSTRAP_KERNEL_BERNOULLI:
+        ctx.enqueue_function[
+            bootstrap_kernel[BOOTSTRAP_KERNEL_BERNOULLI]
+        ](
+            seeds.unsafe_ptr(), stats.unsafe_ptr(), Int32(n_rows), param,
+            mags.unsafe_ptr(), Int32(1) if compute_mags else Int32(0),
+            grid_dim=(blocks, 1, 1),
+            block_dim=(BOOTSTRAP_BLOCK_SIZE, 1, 1),
+        )
+    elif bootstrap_type == BOOTSTRAP_KERNEL_POISSON:
+        ctx.enqueue_function[
+            bootstrap_kernel[BOOTSTRAP_KERNEL_POISSON]
+        ](
+            seeds.unsafe_ptr(), stats.unsafe_ptr(), Int32(n_rows), param,
+            mags.unsafe_ptr(), Int32(1) if compute_mags else Int32(0),
+            grid_dim=(blocks, 1, 1),
+            block_dim=(BOOTSTRAP_BLOCK_SIZE, 1, 1),
+        )
+    else:
+        raise Error(
+            "unknown bootstrap kernel type " + String(bootstrap_type)
+        )

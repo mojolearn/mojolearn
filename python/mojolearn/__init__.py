@@ -10,6 +10,15 @@ Two estimators: `NearestNeighbors` and `KMeans`. Both are backed by kernels
 verified against hand-computed expectations and, for k-means, against
 CatBoost and cuVS behaviour.
 
+`GradientBoosting` -- the CatBoost oblivious-tree learner, trained on twelve
+of their loss functions -- IS WRITTEN AND IS NOT LOADABLE FROM PYTHON YET.
+`mojolearn.ensemble.GradientBoosting` exists and is correct: the identical
+entry point runs end to end from a `mojo build` executable. What fails is the
+CPython extension, which carries no compiled Metal code (0 AIR blobs against
+the executable's 81) and cannot JIT the shared-memory GBDT kernels at load.
+PORTING.md 70 has the measurement and the five hypotheses that died on it.
+Importing it raises with that reason rather than dying inside Metal.
+
 **DBSCAN, PCA and OLS are NOT here**, and they are named rather than left
 out silently. Their kernels exist in the repository, are verified, and are
 benchmarked -- the PCA and OLS numbers quoted in the README come from them --
@@ -41,6 +50,14 @@ __all__ = ["KMeans", "NearestNeighbors", "__version__"]
 # AttributeError, because "why is DBSCAN missing" is a question the answer to
 # is interesting and short.
 _NOT_YET = {
+    "GradientBoosting": (
+        "gbdt/estimator.mojo:gbdt_fit -- WRITTEN AND WORKING, but the "
+        "CPython extension cannot load its Metal kernels: "
+        "`mojo build --emit shared-lib` embeds 0 compiled kernels against "
+        "an executable's 81, and the runtime JIT fails on the "
+        "shared-memory ones. See PORTING.md 70. Use it from Mojo until "
+        "the loader is fixed."
+    ),
     "DBSCAN": "dbscan/ported/dbscan/dbscan.mojo:132 (dbscan_fit_impl)",
     "PCA": "decomposition/ported/linalg/detail/pca.mojo:262 (pca_fit)",
     "LinearRegression": "glm/ported/glm/ols.mojo:82 (ols_fit)",

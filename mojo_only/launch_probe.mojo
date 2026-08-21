@@ -86,6 +86,7 @@ def probe() raises:
         Int32(2),
         u32a.unsafe_ptr(),
         Int32(4),
+        Int32(0),  # multiclassOptimization
         Float32(1.0),
         f32c.unsafe_ptr(),
         u32c.unsafe_ptr(),

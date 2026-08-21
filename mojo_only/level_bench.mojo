@@ -485,7 +485,8 @@ def bench_remaining_phases(n_rows: Int, repeats: Int) raises:
             sb_bff.unsafe_ptr(), sb_ffw.unsafe_ptr(),
             hist.unsafe_ptr(),
             pstats.unsafe_ptr(), Int32(stat_count), one.unsafe_ptr(),
-            Int32(1), Float32(1.0), oscore.unsafe_ptr(), obin.unsafe_ptr(),
+            Int32(1), Int32(0), Float32(1.0), oscore.unsafe_ptr(),
+            obin.unsafe_ptr(),
             grid_dim=(1, 1, 1), block_dim=(SCORE_BLOCK_SIZE, 1, 1),
         )
         ctx.synchronize()

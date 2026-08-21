@@ -7,13 +7,6 @@ is a shape.
 
 WHAT IS DELIBERATELY NOT HERE, so nobody goes looking:
 
-* `HessianBlockSize()` -- the blocked-Hessian arm of the walker is
-  MultiClass-only (`descent_helpers.cpp:92-118` solves per-block Cholesky
-  systems); pointwise losses are `HessianBlockSize == 1` and this port
-  raises on anything else by not offering the hook.
-* `MakeEstimationResult` -- identity for every single-dim loss
-  (`pointwise_oracle.cpp:18-33`; the non-identity arm is MultiClass's
-  last-dimension elimination).
 * `AddLangevinNoiseToDerivatives` -- a no-op unless
   `boostingOptions.Langevin` (posterior sampling) is on
   (`pointwise_oracle.cpp:199-204`), which no configuration this
@@ -33,6 +26,17 @@ trait LeavesEstimationOracle:
     def point_dim(self) -> Int:
         ...
 
+    def hessian_block_size(self) -> Int:
+        """`HessianBlockSize()` (`oracle_interface.h`).
+
+        ONE for every single-dimensional loss, which sends the walker down
+        `UpdateMoveDirectionDiagonal`; `numClasses - 1` for MultiClass,
+        which sends it down the per-leaf Cholesky solve. Their
+        `TBinOptimizedOracle` derives it from the target
+        (`pointwise_oracle.h`), and so does ours.
+        """
+        ...
+
     def move_to(mut self, point: List[Float32]) raises:
         ...
 
@@ -42,6 +46,23 @@ trait LeavesEstimationOracle:
         ...
 
     def write_second_derivatives(mut self, mut second_der: List[Float64]) raises:
+        ...
+
+    def make_estimation_result(
+        self, point: List[Float32]
+    ) -> List[Float32]:
+        """`MakeEstimationResult` (`pointwise_oracle.cpp:18-33`).
+
+        Identity for every single-dimensional loss. For MultiClass it
+        projects the walker's `numClasses`-wide point down to the cursor's
+        `numClasses - 1` by subtracting the pinned component.
+
+        THE WALKER APPLIES IT ON THE WAY OUT, at BOTH of its exits
+        (`descent_helpers.cpp:153` and `:204`), so what a caller receives
+        is always in the CURSOR's gauge and never in the walker's. This
+        port returned the raw point at first, which for MultiClass is a
+        vector one component too wide in a gauge the cursor cannot read.
+        """
         ...
 
     def regularize(self, mut point: List[Float32]):

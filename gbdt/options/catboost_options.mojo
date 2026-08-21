@@ -32,6 +32,25 @@ not always the line that names the option.
 """
 
 
+# THEIR INCLUDE, IN THEIR DIRECTION: `catboost_options.h` includes
+# `loss_description.h` and `loss_description.cpp` includes nothing of
+# theirs back, so this edge points one way and the graph stays acyclic.
+from gbdt.options.loss_description import TLossDescription
+from gbdt.targets.kernel.pointwise_targets import (
+    OBJECTIVE_CROSSENTROPY,
+    OBJECTIVE_EXPECTILE,
+    OBJECTIVE_HUBER,
+    OBJECTIVE_LOGLINQUANTILE,
+    OBJECTIVE_LOGLOSS,
+    OBJECTIVE_LQ,
+    OBJECTIVE_MAE,
+    OBJECTIVE_MAPE,
+    OBJECTIVE_MULTICLASS,
+    OBJECTIVE_POISSON,
+    OBJECTIVE_QUANTILE,
+    OBJECTIVE_RMSE,
+    OBJECTIVE_TWEEDIE,
+)
 from gbdt.ctrs.ctr import (
     CTR_BORDERS,
     CTR_BUCKETS,
@@ -1019,3 +1038,219 @@ struct TCatFeatureParams(Copyable, Movable):
                     " is not good choice. Use MinEntropy for simpleCtrs and"
                     " Median for combinations-ctrs instead"
                 )
+
+
+# =========================================================================
+# THE LEAF-ESTIMATION DEFAULTS.
+#
+# PORT OF `GetEstimationMethodDefaults` (`catboost_options.cpp:30-271`) and
+# `TCatBoostOptions::SetLeavesEstimationDefault` (`:273-360`).
+#
+# THEY LIVE HERE BECAUSE THEY LIVE THERE. Both were written into
+# `gbdt/options/loss_description.mojo` first, beside the loss parameters
+# they read, and that was a mirror violation: `loss_description.cpp` holds
+# the PARAMETER ACCESSORS and nothing else, and these two are
+# `catboost_options.cpp`'s. PORTING_RULES 4 -- their paths are our paths --
+# is not a filing preference, it is what makes a reviewer able to open one
+# of their files beside one of ours and diff branch for branch.
+# =========================================================================
+
+
+@fieldwise_init
+struct TLeavesEstimationDefaults(Copyable, Movable):
+    """The tuple their helper returns (`catboost_options.cpp:30-271`)."""
+
+    var newton_iterations: Int
+    var gradient_iterations: Int
+    var estimation_method: Int
+    var l2_reg: Float32
+
+
+def get_estimation_method_defaults(
+    loss: TLossDescription,
+) raises -> TLeavesEstimationDefaults:
+    """`GetEstimationMethodDefaults(ETaskType::GPU, loss)`.
+
+    Transcribed branch for branch from their switch, GPU arm taken at every
+    `taskType` test, for the twelve objectives this port trains. Their
+    remaining cases are ranking, multi-target and user-defined losses that
+    do not reach this file; each is `NOT PORTED` rather than defaulted,
+    which is why the tail raises instead of falling through to the initial
+    values.
+    """
+    # Their four initializers (`:34-37`) are `1, 1, Newton, 3.0`. Every
+    # branch below assigns all four, because the twelve objectives this
+    # port trains are exactly the ones whose cases are complete in their
+    # switch; declaring without initializing keeps that fact checkable by
+    # the compiler instead of hiding a missed assignment behind a default.
+    var newton: Int
+    var gradient: Int
+    var method: Int
+    var l2 = Float32(3.0)
+    var f = loss.loss_function
+
+    if f == OBJECTIVE_RMSE:
+        # `:59-64`
+        method = LEAF_ESTIMATION_NEWTON
+        newton = 1
+        gradient = 1
+    elif f == OBJECTIVE_LQ:
+        # `:82-93`: the method depends on the PARAMETER, not the loss
+        method = LEAF_ESTIMATION_NEWTON
+        if loss.get_lq_param() < Float32(2.0):
+            method = LEAF_ESTIMATION_GRADIENT
+        newton = 1
+        gradient = 1
+    elif (
+        f == OBJECTIVE_MAE
+        or f == OBJECTIVE_MAPE
+        or f == OBJECTIVE_QUANTILE
+        or f == OBJECTIVE_LOGLINQUANTILE
+    ):
+        # `:113-124`
+        method = LEAF_ESTIMATION_GRADIENT
+        newton = 1
+        gradient = 1
+    elif f == OBJECTIVE_EXPECTILE:
+        # `:125-132`
+        if not loss.has_alpha:
+            raise Error("Param alpha is mandatory for expectile loss")
+        newton = 5
+        gradient = 10
+        method = LEAF_ESTIMATION_NEWTON
+    elif f == OBJECTIVE_POISSON:
+        # `:151-156`
+        method = LEAF_ESTIMATION_NEWTON
+        newton = 10
+        gradient = 1
+    elif f == OBJECTIVE_LOGLOSS or f == OBJECTIVE_CROSSENTROPY:
+        # `:157-164`
+        newton = 10
+        gradient = 40
+        method = LEAF_ESTIMATION_NEWTON
+    elif f == OBJECTIVE_HUBER:
+        # `:187-192`
+        method = LEAF_ESTIMATION_NEWTON
+        newton = 1
+        gradient = 1
+    elif f == OBJECTIVE_MULTICLASS:
+        # `:106-112`. NEWTON AT ONE ITERATION, which is what makes the
+        # blocked Cholesky worth having: one solve per leaf, once per tree.
+        method = LEAF_ESTIMATION_NEWTON
+        newton = 1
+        gradient = 10
+    elif f == OBJECTIVE_TWEEDIE:
+        # `:221-231`. THE GPU ARM: twenty iterations, where their CPU
+        # takes one. We are a GPU, so twenty.
+        _ = loss.get_tweedie_param()
+        method = LEAF_ESTIMATION_NEWTON
+        newton = 20
+        gradient = 20
+    else:
+        raise Error(
+            "no leaf-estimation default for loss '" + loss.name() + "'"
+        )
+
+    return TLeavesEstimationDefaults(newton, gradient, method, l2)
+
+
+def use_exact_leaves(loss: TLossDescription) -> Bool:
+    """Their `useExact` (`catboost_options.cpp:289-295`), GPU + Plain arm.
+
+        const bool useExact = EqualToOneOf(loss, MAE, MAPE, RMSPE,
+                Quantile, GroupQuantile, MultiQuantile)
+            && SystemOptions->IsSingleHost()
+            && ((TaskType == GPU && BoostingType == Plain) || ...)
+
+    Both trailing conjuncts are constants here. `IsSingleHost` is true --
+    this port has one device and no distributed mode. `BoostingType` is
+    Plain -- `gbdt/methods/doc_parallel_boosting.mojo` IS their plain
+    doc-parallel loop and ordered boosting is NOT PORTED, so there is no
+    configuration in this tree where the test could go the other way.
+
+    NOTE WHAT IS NOT ON THE LIST: `LogLinQuantile`. It shares the Gradient
+    default with the other quantile losses and does NOT get upgraded to
+    Exact, because their exact estimator solves a weighted quantile of the
+    TARGETS and LogLinQuantile's residual is `target - exp(prediction)`.
+    Reading their list as "the quantile family" instead of as the six
+    literal names would put a wrong estimator on it.
+
+    A reader comparing against CatBoost's own GPU defaults should know that
+    their GPU picks ORDERED boosting by default for these losses
+    (`catboost_options.cpp:802-807`), under which their own `useExact` is
+    false and Gradient stands. Their CPU -- the arm this port is measured
+    against, because their GPU does not run on this machine -- takes the
+    Exact branch (`:293`), so Exact is what the comparison needs.
+    """
+    var f = loss.loss_function
+    return (
+        f == OBJECTIVE_MAE
+        or f == OBJECTIVE_MAPE
+        or f == OBJECTIVE_QUANTILE
+    )
+
+
+@fieldwise_init
+struct TResolvedLeavesEstimation(Copyable, Movable):
+    """What the boosting loop actually needs: a method and a count."""
+
+    var method: Int
+    var iterations: Int
+    var l2_reg: Float32
+
+
+def set_leaves_estimation_default(
+    loss: TLossDescription,
+    method_override: Int = -1,
+    iterations_override: Int = -1,
+    l2_override: Float32 = Float32(-1.0),
+) raises -> TResolvedLeavesEstimation:
+    """`TCatBoostOptions::SetLeavesEstimationDefault` (`:273-360`).
+
+    Their `TOption` carries "is set" with the value, so the body reads
+    `NotSet()` / `SetDefault()`; ours takes explicit overrides with a
+    sentinel meaning unset, which is the same two states.
+
+    The order is theirs and it matters: `useExact` REPLACES the method the
+    switch chose and resets both iteration counts to one (`:296-300`)
+    BEFORE the override is consulted, so an explicit
+    `leaf_estimation_iterations` still wins over the exact default.
+    """
+    var d = get_estimation_method_defaults(loss)
+    var method = d.estimation_method
+    var newton = d.newton_iterations
+    var gradient = d.gradient_iterations
+
+    if use_exact_leaves(loss):
+        # `:296-300`
+        method = LEAF_ESTIMATION_EXACT
+        newton = 1
+        gradient = 1
+
+    var l2 = d.l2_reg
+    if l2_override >= Float32(0.0):
+        l2 = l2_override
+
+    if method_override >= 0:
+        method = method_override
+
+    var iterations: Int
+    if method == LEAF_ESTIMATION_NEWTON:
+        iterations = newton
+    elif method == LEAF_ESTIMATION_GRADIENT:
+        iterations = gradient
+    else:
+        # `:326-330`: Exact and Simple are one iteration, always
+        iterations = 1
+
+    if iterations_override >= 0:
+        iterations = iterations_override
+
+    if method == LEAF_ESTIMATION_SIMPLE and iterations != 1:
+        # `:338-341`
+        raise Error(
+            "Leaves estimation iterations can't be greater, than 1 for"
+            " Simple leaf-estimation mode"
+        )
+
+    return TResolvedLeavesEstimation(method, iterations, l2)

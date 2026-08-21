@@ -21,7 +21,9 @@ target is rebuilt from the CURSOR at the top of every iteration, which is
 what makes this gradient boosting rather than a forest: each tree fits the
 residual left by all the trees before it.
 
-`TTargetAtPointTrait::Create(objective, cursor)` is `mse_kernel` here. `RMSE`
+`TTargetAtPointTrait::Create(objective, cursor)` is `launch_approximate`
+here -- their `Approximate` fork (`pointwise_target_impl.h:307-358`) between
+`CrossEntropyImpl` and the generic `PointwiseTargetImpl<TTarget>`. `RMSE`
 resolves to `PointwiseTargetImpl<TRmseTarget>`, dispatched at
 `pointwise_targets.cu:496-500`, and NOT to `MseImpl`, which nothing in their
 tree calls; see the module docstring of `pointwise_targets.mojo`.
@@ -78,7 +80,10 @@ from max.gpu.host.device_attribute import DeviceAttribute
 from gbdt.methods.kernel_add_model_value import add_model_value_kernel
 
 from gbdt.gpu_lib.gpu_manager import TCudaManager
-from gbdt.gpu_util.kernel.transform import launch_gather_with_mask_f32
+from gbdt.gpu_util.kernel.transform import (
+    launch_gather_planes_with_mask_f32,
+    launch_gather_with_mask_f32,
+)
 from gbdt.methods.leaves_estimation.descent_helpers import (
     newton_like_walker_estimate,
 )
@@ -108,7 +113,10 @@ from gbdt.gpu_util.kernel.fill import launch_make_sequence
 from gbdt.gpu_util.kernel.bootstrap import (
     bootstrap_grid_blocks,
     create_bootstrap_seeds,
-    launch_bayesian_bootstrap,
+    BOOTSTRAP_KERNEL_BAYESIAN,
+    BOOTSTRAP_KERNEL_BERNOULLI,
+    BOOTSTRAP_KERNEL_POISSON,
+    launch_bootstrap,
 )
 from gbdt.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
     BUILD_MODE as HIST_BUILD_MODE,
@@ -116,14 +124,22 @@ from gbdt.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
 from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_base import (
     HIST2_SMEM_IS_I32,
 )
+from gbdt.options.catboost_options import (
+    LEAF_ESTIMATION_EXACT,
+    LEAF_ESTIMATION_GRADIENT,
+    LEAF_ESTIMATION_NEWTON,
+    LEAF_ESTIMATION_SIMPLE,
+)
+from gbdt.targets.kernel.multilogit import (
+    launch_multilogit_value_and_der_search,
+    multilogit_blocks,
+)
 from gbdt.targets.kernel.pointwise_targets import (
     MSE_BLOCK_SIZE,
-    OBJECTIVE_CROSSENTROPY,
-    OBJECTIVE_LOGLOSS,
+    OBJECTIVE_MULTICLASS,
     OBJECTIVE_RMSE,
-    cross_entropy_kernel,
     deterministic_sum_lanes_kernel,
-    mse_kernel,
+    launch_approximate,
 )
 
 
@@ -143,30 +159,51 @@ def fit(
     use_subtraction: Bool = True,
     bootstrap_bayesian: Bool = False,
     bagging_temperature: Float32 = Float32(1.0),
+    bootstrap_type: Int = -1,
+    bootstrap_param: Float32 = Float32(1.0),
     random_seed: UInt64 = UInt64(0),
     one_hot: List[Bool] = List[Bool](),
     score_function: Int = SCORE_FUNCTION_COSINE,
     objective: Int = OBJECTIVE_RMSE,
+    num_classes: Int = 0,
     logloss_border: Float32 = Float32(0.5),
-    leaf_estimation_iterations: Int = -1,
+    leaf_estimation_iterations: Int = 1,
+    leaf_estimation_method: Int = LEAF_ESTIMATION_NEWTON,
+    alpha: Float32 = Float32(0.0),
+    estimator_alpha: Float32 = Float32(0.5),
 ) raises -> List[Float64]:
     """Their `Fit` (`doc_parallel_boosting.h:302`), one permutation.
 
-    `objective` selects the pointwise loss. RMSE keeps the closed-form
-    Newton leaf inside `run_tree_layout` (one iteration from zero IS the
-    closed form, `descent_helpers.cpp:151-156`). Logloss/CrossEntropy run
-    their `NeedEstimation` arm instead (`doc_parallel_boosting.h:371-385`):
-    structure only from the searcher, then `TDocParallelLeavesEstimator`
-    -- oracle over the bin-sorted rows, Newton walker, THEIR default of
-    TEN iterations (`GetEstimationMethodDefaults`,
-    `catboost_options.cpp:157-164`; `leaf_estimation_iterations = -1`
-    takes that default), then the rescaled model applied to the cursor.
+    `objective` selects the loss and `alpha` is the one float its kernel
+    takes; `leaf_estimation_method` and `leaf_estimation_iterations` come
+    from `set_leaves_estimation_default`, which is where CatBoost decides
+    them per loss (`catboost_options.cpp:273-360`). THE CALLER RESOLVES
+    THEM -- this function does not re-derive a default, because a default
+    derived in two places drifts in one of them.
+
+    Every loss but one runs their `NeedEstimation` arm
+    (`doc_parallel_boosting.h:371-385`): structure only from the searcher,
+    then `TDocParallelLeavesEstimator` -- oracle over the bin-sorted rows,
+    the walker, then the rescaled model applied to the cursor.
+
+    DEVIATION 64: RMSE AT NEWTON-1 SKIPS THE ESTIMATOR. Their
+    `NeedEstimation()` is `LeavesEstimationMethod != Simple`
+    (`greedy_subsets_searcher.h:67-69`), which is TRUE for RMSE, so theirs
+    runs the estimator and overwrites the searcher's leaf. This port does
+    not, because for RMSE alone the two answers are the same number:
+    the searcher writes `stats / (w + L2Reg)`
+    (`greedy_search_helper.cpp:646-647`) and one Newton step from zero
+    writes `Gradient / (Hessian + 1e-20)` with `Hessian = w + L2Reg`,
+    since `TRmseTarget::Der2` returns `1.0f` and the kernel stores
+    `weight * Der2` -- they agree to every representable digit. The skip
+    is conditioned on BOTH the objective AND `Newton` at ONE iteration,
+    so a caller who asks RMSE for Gradient leaves, or for more than one
+    iteration, gets the estimator like everyone else.
+
     UNDER BOOTSTRAP THE ESTIMATOR SEES THE PLAIN WEIGHTS: their
     `AddEstimationTask` takes `learnTarget`, not the bootstrapped weak
     target (`doc_parallel_boosting.h:377-383`) -- sampling shapes the
-    STRUCTURE only. The returned per-iteration losses are mean logloss
-    (their maximized log-likelihood, negated and divided by rows), the
-    same shape the RMSE column has.
+    STRUCTURE only.
 
     `learning_rate` is their `Config.LearningRate`, whose default is **0.03**
     (`boosting_options.cpp:10`). It stood at 0.3 here, a tenfold larger step
@@ -174,19 +211,30 @@ def fit(
     not pass one. See `CatBoostOptions.learning_rate` for the data-dependent
     retune (`options_helper.cpp:269-288`) that is deliberately not ported.
 
-    Returns the weighted squared error per row after each iteration, computed
-    on the host from the cursor. That is their `functionValue`
-    (`pointwise_targets.cu:271`) with the sign flipped and divided by the row
-    count: theirs accumulates `-weight * (val - relev)^2` because everything
-    downstream of it maximizes, and a caller here wants a number that falls.
-    The reduction moves to the host because their kernel-side version needs a
-    block reduce plus a float `atomicAdd` into one scalar, and pulling it back
-    costs one copy per iteration on no hot path.
+    Returns the loss per row after each iteration: their `functionValue`
+    (`pointwise_targets.cu:271`, `:363` for the cross-entropy arm) with the
+    sign flipped and divided by the row count, because everything
+    downstream of theirs maximizes and a caller here wants a number that
+    falls. It is computed IN THE SAME LAUNCH as the gradients, as theirs
+    is, and folded from per-block partials in one fixed order; the host
+    loop this replaced cost about 5 ms/tree at 800k rows.
 
     The loss is returned rather than printed because the thing worth
     asserting is that it DECREASES, and an assertion needs the numbers.
     """
-    var stat_count = 2
+    # `GetDim()` (`multiclass_targets.h:129-133`): `numClasses - 1` for
+    # MultiClass, 1 for everything else. The cursor carries this many
+    # planes and the stats carry one more -- their `statCount` is
+    # `1 + point.GetColumnCount()` (`pointwise_target_impl.h:186`).
+    var approx_dim = 1
+    if objective == OBJECTIVE_MULTICLASS:
+        if num_classes < 2:
+            raise Error(
+                "MultiClass needs num_classes >= 2, got "
+                + String(num_classes)
+            )
+        approx_dim = num_classes - 1
+    var stat_count = 1 + approx_dim
 
     # their `cursor`: the running prediction for every row. Zeros is THEIR
     # default branch, not a simplification of it: with no baseline column and
@@ -196,11 +244,11 @@ def fit(
     # (`doc_parallel_boosting.h:180-186`). `boost_from_average` true would
     # seed it with `CalcOptimumConstApprox` and is refused by
     # `CatBoostOptions.check()`.
-    var cursor = ctx.enqueue_create_buffer[DType.float32](n_rows)
-    var h_zero = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
-    for i in range(n_rows):
-        h_zero.unsafe_ptr().unsafe_store(i, Float32(0.0))
-    ctx.enqueue_copy(dst_buf=cursor, src_ptr=h_zero.unsafe_ptr())
+    var cursor = ctx.enqueue_create_buffer[DType.float32](
+        approx_dim * n_rows
+    )
+    # every plane, not only the first
+    ctx.enqueue_memset(cursor, Float32(0.0))
 
     # their der/der2 buffers, in the two-plane layout the histogram kernels
     # already read. See the DEVIATION BLOCK in `pointwise_targets.mojo`.
@@ -212,20 +260,26 @@ def fit(
     # host-built identity, 3.2 MB of H2D per tree at 800k rows.
     var row_index = ctx.enqueue_create_buffer[DType.uint32](n_rows)
 
-    # their `functionValue`: ONE float, accumulated by `mse_kernel`'s block
+    # their `functionValue`: ONE float, accumulated by `pointwise_target_kernel`'s block
     # reduce + atomicAdd (`pointwise_targets.cu:309-317`). This replaces a
     # HOST loop over every row per iteration (~5 ms/tree at 800k), which
     # was never their design.
     var fv = ctx.enqueue_create_buffer[DType.float32](1)
     var h_fv = ctx.enqueue_create_host_buffer[DType.float32](1)
-    # per-block partials for `mse_kernel`'s reduces, folded in one fixed
+    # per-block partials for `pointwise_target_kernel`'s reduces, folded in one fixed
     # order by `deterministic_sum_lanes_kernel`: the float-atomic combine
     # they use made same-seed fits differ in the last bits of
     # `fixed_scale` (bootstrap_check caught it, 2026-08-21)
     var mse_blocks = (n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
-    var fv_part = ctx.enqueue_create_buffer[DType.float32](mse_blocks)
+    # MultiClass launches at `multilogit_blocks`, which is the same 256
+    # threads x 1 element shape today; sized from the max so the partials
+    # buffers stay right if either constant ever moves.
+    var part_blocks = mse_blocks
+    if multilogit_blocks(n_rows) > part_blocks:
+        part_blocks = multilogit_blocks(n_rows)
+    var fv_part = ctx.enqueue_create_buffer[DType.float32](part_blocks)
     var mag_part = ctx.enqueue_create_buffer[DType.float32](
-        2 * mse_blocks
+        2 * part_blocks
     )
 
     # THE FIXED-POINT BOUND, for every build whose histogram quantizes: the
@@ -233,7 +287,7 @@ def fit(
     # shared-memory accumulation, which quantizes at `fixed_scale` even
     # under FAST (`hist_smem_mode_for` in `mojo_only/kernel_matrix.mojo`).
     # The scale must be bounded by `sum over all rows of abs(plane)`, and
-    # the two plane magnitudes are computed ON THE DEVICE by `mse_kernel`'s
+    # the two plane magnitudes are computed ON THE DEVICE by `pointwise_target_kernel`'s
     # magnitude reduce -- the same block-reduce-plus-one-atomicAdd shape as
     # its `functionValue` -- into TWO scalars read back below. This replaces
     # a full-stats readback (6.4 MB at 800k rows) plus a `2 * n_rows` host
@@ -251,8 +305,20 @@ def fit(
     # the whole fit, created once and advanced in place by every draw
     # (`gbdt/gpu_util/kernel/bootstrap.mojo`). One dummy word when
     # bootstrap is off.
+    # `bootstrap_type` is the real switch; `bootstrap_bayesian` predates
+    # it and stays as the shorthand every existing caller and check
+    # passes. `-1` means "take the bool", so no caller changes meaning.
+    var boot_kind = bootstrap_type
+    var boot_param = bootstrap_param
+    if boot_kind < 0:
+        boot_kind = (
+            BOOTSTRAP_KERNEL_BAYESIAN if bootstrap_bayesian else -1
+        )
+        boot_param = bagging_temperature
+    var bootstrap_on = boot_kind >= 0
+
     var boot_seeds: DeviceBuffer[DType.uint64]
-    if bootstrap_bayesian:
+    if bootstrap_on:
         boot_seeds = create_bootstrap_seeds(ctx, random_seed)
     else:
         boot_seeds = ctx.enqueue_create_buffer[DType.uint64](1)
@@ -262,8 +328,19 @@ def fit(
 
     # ONE device query for the estimator's reduces: `get_attribute` costs
     # 1.26 ms on this Metal device and their `SMCount()` is a cached static.
+    # their `weak->NeedEstimation()` (`greedy_subsets_searcher.h:67-69`)
+    # is `LeavesEstimationMethod != Simple`; DEVIATION 64 in the docstring
+    # is the one subtraction from it, and it is conditioned on the
+    # iteration count as well as on the objective.
+    var need_estimation = leaf_estimation_method != LEAF_ESTIMATION_SIMPLE
+    if (
+        objective == OBJECTIVE_RMSE
+        and leaf_estimation_method == LEAF_ESTIMATION_NEWTON
+        and leaf_estimation_iterations == 1
+    ):
+        need_estimation = False
     var est_sm = -1
-    if objective != OBJECTIVE_RMSE:
+    if need_estimation:
         est_sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
 
     var losses = List[Float64]()
@@ -282,69 +359,57 @@ def fit(
         # their `functionValue` is accumulated in the SAME launch as the
         # gradients, so the value this iteration reads is the loss of the
         # cursor as it stands -- i.e. after the PREVIOUS tree.
-        var mags_in_mse = _needs_magnitudes and not bootstrap_bayesian
+        var mags_in_mse = _needs_magnitudes and not bootstrap_on
         # under bootstrap the magnitudes must bound the BOOTSTRAPPED
         # planes (a Bayesian weight reaches ~46 at the tail), so the
         # bootstrap kernel computes them AFTER its multiply instead
-        if objective == OBJECTIVE_RMSE:
-            ctx.enqueue_function[mse_kernel](
-                targets.unsafe_ptr(), weights.unsafe_ptr(), Int32(n_rows),
-                cursor.unsafe_ptr(),
-                Int32(1) if has_weights else Int32(0),
-                stats.unsafe_ptr(),
-                fv_part.unsafe_ptr(), Int32(1),
-                mag_part.unsafe_ptr(),
-                Int32(1) if mags_in_mse else Int32(0),
-                grid_dim=mse_blocks,
-                block_dim=MSE_BLOCK_SIZE,
-            )
-        elif objective == OBJECTIVE_LOGLOSS:
-            ctx.enqueue_function[cross_entropy_kernel[True, False]](
-                targets.unsafe_ptr(), weights.unsafe_ptr(), Int32(n_rows),
-                cursor.unsafe_ptr(),
-                Int32(1) if has_weights else Int32(0),
-                logloss_border,
-                stats.unsafe_ptr(),
-                fv_part.unsafe_ptr(), Int32(1),
-                mag_part.unsafe_ptr(),
-                Int32(1) if mags_in_mse else Int32(0),
-                grid_dim=mse_blocks,
-                block_dim=MSE_BLOCK_SIZE,
+        if objective == OBJECTIVE_MULTICLASS:
+            # `TMultiClassificationTargets::StochasticDer`
+            # (`multiclass_targets.cpp:22-45`): column 0 the weights,
+            # columns 1.. the ders, one per FREE class.
+            launch_multilogit_value_and_der_search(
+                ctx, num_classes, n_rows, targets, weights, has_weights,
+                cursor, n_rows, row_index, False,
+                fv_part, True,
+                stats, n_rows,
+                mag_part, mags_in_mse,
             )
         else:
-            ctx.enqueue_function[cross_entropy_kernel[False, False]](
-                targets.unsafe_ptr(), weights.unsafe_ptr(), Int32(n_rows),
-                cursor.unsafe_ptr(),
+            launch_approximate[False](
+                ctx, objective, targets, weights, Int32(n_rows), cursor,
                 Int32(1) if has_weights else Int32(0),
-                logloss_border,
-                stats.unsafe_ptr(),
-                fv_part.unsafe_ptr(), Int32(1),
-                mag_part.unsafe_ptr(),
-                Int32(1) if mags_in_mse else Int32(0),
-                grid_dim=mse_blocks,
-                block_dim=MSE_BLOCK_SIZE,
+                alpha, logloss_border,
+                stats, fv_part, Int32(1),
+                mag_part, Int32(1) if mags_in_mse else Int32(0),
+                mse_blocks,
             )
+        var fv_blocks = mse_blocks
+        if objective == OBJECTIVE_MULTICLASS:
+            fv_blocks = multilogit_blocks(n_rows)
         ctx.enqueue_function[deterministic_sum_lanes_kernel[1]](
-            fv_part.unsafe_ptr(), Int32(mse_blocks), fv.unsafe_ptr(),
+            fv_part.unsafe_ptr(), Int32(fv_blocks), fv.unsafe_ptr(),
             grid_dim=1, block_dim=256,
         )
         if mags_in_mse:
             ctx.enqueue_function[deterministic_sum_lanes_kernel[2]](
-                mag_part.unsafe_ptr(), Int32(mse_blocks),
+                mag_part.unsafe_ptr(), Int32(fv_blocks),
                 mags.unsafe_ptr(),
                 grid_dim=1, block_dim=256,
             )
-        if bootstrap_bayesian:
-            # their `BootstrapAndFilter`: one Bayesian draw per row
-            # multiplies BOTH planes; Bayesian never zeroes a weight so
-            # their filter branch does not exist here (bootstrap.mojo).
+        if bootstrap_on:
+            # their `BootstrapAndFilter`: one draw per row multiplies
+            # BOTH planes. Bayesian never zeroes a weight, so their
+            # filter branch cannot fire for it; Bernoulli and Poisson do
+            # zero weights and this port still does not filter, which is
+            # DEVIATION 69 in `bootstrap.mojo` -- same model, more rows
+            # streamed than theirs.
             var compute_mags = False
 
             @parameter
             if _needs_magnitudes:
                 compute_mags = True
-            launch_bayesian_bootstrap(
-                ctx, boot_seeds, stats, n_rows, bagging_temperature,
+            launch_bootstrap(
+                ctx, boot_kind, boot_seeds, stats, n_rows, boot_param,
                 boot_mag_part, compute_mags,
             )
             if compute_mags:
@@ -365,7 +430,7 @@ def fit(
         # `sum over all rows of abs(...)`, per plane, which is what
         # `choose_scale` is specified against. Plane 0 is the WEIGHT plane
         # and plane 1 is `der`, laid out `stats[s * n_rows + i]` by
-        # `mse_kernel`, which is their `StatsToAggregate` column order
+        # `pointwise_target_kernel`, which is their `StatsToAggregate` column order
         # (`pointwise_target_impl.h:188-192`). Plane 0 is the sample weight
         # rather than `der2` under Cosine, their default score function, and
         # the two coincide for RMSE; see `pointwise_targets.mojo`.
@@ -399,7 +464,7 @@ def fit(
         # rows of abs(value) for the plane being accumulated":
         #
         #   this file                      sum of |stats| reduced ON DEVICE
-        #                                  by `mse_kernel` from the exact
+        #                                  by `pointwise_target_kernel` from the exact
         #                                  planes it wrote, both planes, per
         #                                  iteration -- SOUND
         #   mojo_only/level_check.mojo     abs-accumulates a signed generator
@@ -443,14 +508,16 @@ def fit(
             cindex, stats, row_index, cursor,
             Float32(weight_magnitude), Float32(gradient_magnitude),
             splits, leaf_values, leaf_offsets, ws,
-            objective != OBJECTIVE_RMSE,
-            use_subtraction, objective == OBJECTIVE_RMSE,
+            need_estimation,
+            use_subtraction, not need_estimation,
             learning_rate, l2_leaf_reg,
             one_hot=one_hot,
             score_function=score_function,
+            approx_dim=approx_dim,
+            multiclass_optimization=objective == OBJECTIVE_MULTICLASS,
         )
 
-        if objective != OBJECTIVE_RMSE:
+        if need_estimation:
             # their `weak->NeedEstimation()` arm (`doc_parallel_boosting.h:
             # 371-385`): the searcher's leaf values are DISCARDED, the
             # estimator recomputes them at the cursor, and only then does
@@ -459,13 +526,13 @@ def fit(
             # into the oracle's order (their factory sorts; we inherit).
             var n_leaves = len(sizes)
             var iters = leaf_estimation_iterations
-            if iters < 0:
-                iters = 10  # Newton x10, catboost_options.cpp:157-164
             var g_target = ctx.enqueue_create_buffer[DType.float32](n_rows)
             var g_weights = ctx.enqueue_create_buffer[DType.float32](
                 n_rows
             )
-            var g_cursor = ctx.enqueue_create_buffer[DType.float32](n_rows)
+            var g_cursor = ctx.enqueue_create_buffer[DType.float32](
+                approx_dim * n_rows
+            )
             launch_gather_with_mask_f32(
                 ctx, g_target, targets, row_index, n_rows,
                 UInt32(0xFFFFFFFF),
@@ -475,9 +542,13 @@ def fit(
                     ctx, g_weights, weights, row_index, n_rows,
                     UInt32(0xFFFFFFFF),
                 )
-            launch_gather_with_mask_f32(
+            # EVERY PLANE. The oracle owns a COPY of the cursor that it
+            # shifts (`AddBinModelValues` inside `MoveTo`), so this cannot
+            # be a gather-on-read view; for MultiClass that copy is
+            # `numClasses - 1` planes wide.
+            launch_gather_planes_with_mask_f32(
                 ctx, g_cursor, cursor, row_index, n_rows,
-                UInt32(0xFFFFFFFF),
+                UInt32(0xFFFFFFFF), approx_dim, n_rows,
             )
             var d_p_off = ctx.enqueue_create_buffer[DType.uint32](n_leaves)
             var d_p_sz = ctx.enqueue_create_buffer[DType.uint32](n_leaves)
@@ -506,15 +577,34 @@ def fit(
                 ctx, n_rows, n_leaves, sizes,
                 g_target^, g_weights^, g_cursor^, d_p_off^, d_p_sz^,
                 has_weights,
-                objective == OBJECTIVE_LOGLOSS,
+                objective,
+                alpha,
+                estimator_alpha,
                 logloss_border,
                 Float64(l2_leaf_reg),
                 est_sm,
+                leaf_estimation_method,
+                num_classes,
             )
-            var estimated = newton_like_walker_estimate(
-                oracle, iters, BACKTRACKING_ANY_IMPROVEMENT,
-                List[Float32](),
-            )
+            # `TDocParallelLeavesEstimator::Estimate`
+            # (`doc_parallel_leaves_estimator.cpp:9-16`): Exact REPLACES
+            # the walker, it does not configure it.
+            #
+            #     if (LeavesEstimationMethod == Exact) {
+            #         point = derCalcer->EstimateExact();
+            #     } else {
+            #         TNewtonLikeWalker walker(*derCalcer, iterations,
+            #                                  backtrackingType);
+            #         point = walker.Estimate(startPoint);
+            #     }
+            var estimated: List[Float32]
+            if leaf_estimation_method == LEAF_ESTIMATION_EXACT:
+                estimated = oracle.estimate_exact()
+            else:
+                estimated = newton_like_walker_estimate(
+                    oracle, iters, BACKTRACKING_ANY_IMPROVEMENT,
+                    List[Float32](),
+                )
             leaf_values.clear()
             for i in range(len(estimated)):
                 leaf_values.append(estimated[i])
@@ -522,12 +612,24 @@ def fit(
             # `AppendModels` for this arm: the ESTIMATED leaves, rescaled,
             # onto the real cursor through the same kernel the RMSE arm
             # uses inside `run_tree_layout`.
-            var d_est = ctx.enqueue_create_buffer[DType.float32](n_leaves)
+            # `estimated` arrives in the CURSOR's gauge -- the walker
+            # applied `MakeEstimationResult` on its way out
+            # (`descent_helpers.cpp:153`, `:204`) -- so it is
+            # `n_leaves * approx_dim` and is BIN-MAJOR, which is the layout
+            # `add_model_value_kernel`'s z axis reads.
+            var est_len = n_leaves * approx_dim
+            var d_est = ctx.enqueue_create_buffer[DType.float32](est_len)
             var h_est = ctx.enqueue_create_host_buffer[DType.float32](
-                n_leaves
+                est_len
             )
             ctx.synchronize()
-            for i in range(n_leaves):
+            if len(estimated) != est_len:
+                raise Error(
+                    "the estimator returned " + String(len(estimated))
+                    + " leaf values for " + String(n_leaves) + " leaves x "
+                    + String(approx_dim) + " dims"
+                )
+            for i in range(est_len):
                 h_est.unsafe_ptr().unsafe_store(i, estimated[i])
             ctx.enqueue_copy(dst_buf=d_est, src_ptr=h_est.unsafe_ptr())
             ctx.enqueue_function[add_model_value_kernel](
@@ -537,7 +639,8 @@ def fit(
                 d_est.unsafe_ptr(),
                 learning_rate,
                 cursor.unsafe_ptr(),
-                grid_dim=((widest + 255) // 256, n_leaves, 1),
+                Int32(approx_dim), Int32(n_rows),
+                grid_dim=((widest + 255) // 256, n_leaves, approx_dim),
                 block_dim=(256, 1, 1),
             )
             ctx.synchronize()
@@ -550,6 +653,12 @@ def fit(
         for i in range(len(splits)):
             structure.splits.append(splits[i])
         var weak = TObliviousTreeModel(structure^)
+        # their `Dim` / `OutputDim()` (`oblivious_model.h:130-133`): the
+        # number of approxes a leaf carries. `MakeEstimationResult` already
+        # projected the walker's `numClasses`-wide point down to this, so
+        # a MultiClass leaf holds `numClasses - 1` values and the model's
+        # dimension matches the CURSOR's, not the walker's.
+        weak.dim = approx_dim
         for i in range(len(leaf_values)):
             weak.leaf_values.append(leaf_values[i] * learning_rate)
         model.add_weak_model(weak^)
@@ -571,43 +680,27 @@ def fit(
     # kernel now stores per-block partials, which under-read the loss by
     # ~n_blocks and wrote past the buffer (caught by the predict repro:
     # replay 36.52 vs a claimed 8.91 final loss, ratio ~= the block count).
-    if objective == OBJECTIVE_RMSE:
-        ctx.enqueue_function[mse_kernel](
-            targets.unsafe_ptr(), weights.unsafe_ptr(), Int32(n_rows),
-            cursor.unsafe_ptr(),
-            Int32(1) if has_weights else Int32(0),
-            stats.unsafe_ptr(),
-            fv_part.unsafe_ptr(), Int32(1),
-            mag_part.unsafe_ptr(), Int32(0),
-            grid_dim=mse_blocks,
-            block_dim=MSE_BLOCK_SIZE,
-        )
-    elif objective == OBJECTIVE_LOGLOSS:
-        ctx.enqueue_function[cross_entropy_kernel[True, False]](
-            targets.unsafe_ptr(), weights.unsafe_ptr(), Int32(n_rows),
-            cursor.unsafe_ptr(),
-            Int32(1) if has_weights else Int32(0),
-            logloss_border,
-            stats.unsafe_ptr(),
-            fv_part.unsafe_ptr(), Int32(1),
-            mag_part.unsafe_ptr(), Int32(0),
-            grid_dim=mse_blocks,
-            block_dim=MSE_BLOCK_SIZE,
+    var final_blocks = mse_blocks
+    if objective == OBJECTIVE_MULTICLASS:
+        final_blocks = multilogit_blocks(n_rows)
+        launch_multilogit_value_and_der_search(
+            ctx, num_classes, n_rows, targets, weights, has_weights,
+            cursor, n_rows, row_index, False,
+            fv_part, True,
+            stats, n_rows,
+            mag_part, False,
         )
     else:
-        ctx.enqueue_function[cross_entropy_kernel[False, False]](
-            targets.unsafe_ptr(), weights.unsafe_ptr(), Int32(n_rows),
-            cursor.unsafe_ptr(),
+        launch_approximate[False](
+            ctx, objective, targets, weights, Int32(n_rows), cursor,
             Int32(1) if has_weights else Int32(0),
-            logloss_border,
-            stats.unsafe_ptr(),
-            fv_part.unsafe_ptr(), Int32(1),
-            mag_part.unsafe_ptr(), Int32(0),
-            grid_dim=mse_blocks,
-            block_dim=MSE_BLOCK_SIZE,
+            alpha, logloss_border,
+            stats, fv_part, Int32(1),
+            mag_part, Int32(0),
+            mse_blocks,
         )
     ctx.enqueue_function[deterministic_sum_lanes_kernel[1]](
-        fv_part.unsafe_ptr(), Int32(mse_blocks), fv.unsafe_ptr(),
+        fv_part.unsafe_ptr(), Int32(final_blocks), fv.unsafe_ptr(),
         grid_dim=1, block_dim=256,
     )
     ctx.enqueue_copy(dst_ptr=h_fv.unsafe_ptr(), src_buf=fv)
@@ -617,6 +710,28 @@ def fit(
     )
 
     return losses^
+
+
+def model_approx_dim(model: TAdditiveModel) raises -> Int:
+    """`OutputDim()` of the ensemble (`oblivious_model.h:130-133`).
+
+    Every weak model in one ensemble has the same `Dim`; disagreement is a
+    corrupted model rather than a case to handle, so it raises. An empty
+    ensemble is one-dimensional, which is what a zero-tree predict returns.
+    """
+    if model.size() == 0:
+        return 1
+    var d = model.weak_models[0].dim
+    for t in range(1, model.size()):
+        if model.weak_models[t].dim != d:
+            raise Error(
+                "tree " + String(t) + " has dim "
+                + String(model.weak_models[t].dim)
+                + " but tree 0 has " + String(d)
+            )
+    if d < 1:
+        raise Error("model dim is " + String(d))
+    return d
 
 
 def predict(
@@ -648,15 +763,19 @@ def predict(
     back exactly as their stream takes them, and the ONE drain at the end
     is what makes `cursor` readable."""
     var layout = build_layout(fold_counts, one_hot)
+    var approx_dim = model_approx_dim(model)
 
     ctx.enqueue_memset(cursor, Float32(0.0))
 
-    # pack every tree's per-level records and leaf values, flat
+    # pack every tree's per-level records and leaf values, flat.
+    # `total_leaves` counts VALUES, so it carries the approx dimension.
     var total_levels = 0
     var total_leaves = 0
     for t in range(model.size()):
         total_levels += model.weak_models[t].structure.get_depth()
-        total_leaves += 1 << model.weak_models[t].structure.get_depth()
+        total_leaves += (
+            (1 << model.weak_models[t].structure.get_depth()) * approx_dim
+        )
     if total_levels == 0:
         ctx.synchronize()
         return
@@ -720,13 +839,13 @@ def predict(
                 lvl, UInt8(1) if take_bin else UInt8(0)
             )
             lvl += 1
-        var n_leaves = 1 << depth
-        for i in range(n_leaves):
+        var n_values = (1 << depth) * approx_dim
+        for i in range(n_values):
             var v = Float32(0.0)
             if i < len(weak.leaf_values):
                 v = weak.leaf_values[i]
             h_vals.unsafe_ptr().unsafe_store(leaf + i, v)
-        leaf += n_leaves
+        leaf += n_values
     ctx.enqueue_copy(dst_buf=d_off, src_ptr=h_off.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_shift, src_ptr=h_shift.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_mask, src_ptr=h_mask.unsafe_ptr())
@@ -758,9 +877,11 @@ def predict(
                 d_vals.unsafe_ptr() + leaf,
                 Int32(n_rows),
                 cursor.unsafe_ptr(),
-                grid_dim=wide,
-                block_dim=256,
+                Int32(approx_dim),
+                Int32(n_rows),
+                grid_dim=(wide, approx_dim, 1),
+                block_dim=(256, 1, 1),
             )
         lvl += depth
-        leaf += 1 << depth
+        leaf += (1 << depth) * approx_dim
     ctx.synchronize()
