@@ -188,6 +188,14 @@ check-overfitting-detector = "mojo run -I . mojo_only/overfitting_detector_check
 # discards an explicit 4. Own main(); a GPU, ~1 min.
 check-permutation-count = "mojo run -I . mojo_only/permutation_count_check.mojo"
 
+# Which leaf a row falls in, computed from the compressed index, against the
+# leaf the SEARCHER put it in by moving rows. Two paths that share only the
+# index and the split list, compared row by row over 4096 rows -- the second
+# path is what every permutation but the one the tree was grown on needs.
+# Two sabotages: a split's bin moved by one, and a reversed bit order, which
+# conserves every leaf SIZE and is why the gate is row-wise. Own main().
+check-leaf-partition = "mojo run -I . mojo_only/leaf_partition_check.mojo"
+
 # The LSD radix sort over (bin, permutation position). Gates STABILITY
 # separately from sortedness and prints both, because sortedness alone
 # cannot see a tie that moved -- and the tie order IS the second half of

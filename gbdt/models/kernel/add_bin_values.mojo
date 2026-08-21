@@ -121,3 +121,54 @@ def compute_bins_and_add_kernel(
             + leaf_values.unsafe_load(leaf * dim_count + dim),
         )
         i += stride
+
+
+def compute_bins_kernel(
+    compressed_index: MutPointer[UInt32, MutAnyOrigin],
+    feature_offset: MutPointer[UInt32, MutAnyOrigin],
+    feature_shift: MutPointer[UInt32, MutAnyOrigin],
+    feature_mask: MutPointer[UInt32, MutAnyOrigin],
+    split_bin: MutPointer[UInt32, MutAnyOrigin],
+    take_equal: MutPointer[UInt8, MutAnyOrigin],
+    depth_in: Int32,
+    n_rows_in: Int32,
+    out_bins: MutPointer[UInt32, MutAnyOrigin],
+):
+    """Their `ComputeObliviousTreeBinsImpl`
+    (`models/kernel/add_model_value.cu:123-166`).
+
+    THE SAME LOOP AS `compute_bins_and_add_kernel`, ending in a WRITE
+    instead of an add -- and they are two kernels in CatBoost for the same
+    reason they are two here (`:150-164` against `:106-118`). One is the
+    apply; this one is the question "which leaf does this row fall in",
+    which is what the leaves ESTIMATOR asks of a dataset the tree was not
+    grown on (`doc_parallel_leaves_estimator.cpp:45-49`, where every
+    estimation task computes its own bins before the oracle sees it).
+
+    It has no approx-dimension axis and cannot have one: an oblivious
+    tree's structure does not depend on the approx, so one leaf index
+    serves every plane. Their `readIndices`/`writeIndices` are null on
+    this path, as they are for the apply.
+    """
+    var depth = Int(depth_in)
+    var n_rows = Int(n_rows_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+
+    while i < n_rows:
+        var leaf = 0
+        for level in range(depth):
+            var off = Int(feature_offset.unsafe_load(level))
+            var shift = feature_shift.unsafe_load(level)
+            var mask = feature_mask.unsafe_load(level) << shift
+            var value = split_bin.unsafe_load(level) << shift
+            var feature_val = compressed_index.unsafe_load(off + i) & mask
+            var split: Bool
+            if take_equal.unsafe_load(level) != UInt8(0):
+                split = feature_val == value
+            else:
+                split = feature_val > value
+            if split:
+                leaf += 1 << level
+        out_bins.unsafe_store(i, UInt32(leaf))
+        i += stride

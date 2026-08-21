@@ -2675,3 +2675,42 @@ a change to the hottest kernel family in the repository, so it wants a
 measurement showing the memory actually binds before it is made -- and the
 measurement is available: a categorical fit that fits at
 `permutation_count=1` and OOMs at 4 is the whole argument.
+
+## 90. The per-permutation leaf partition is built on the HOST
+
+Their leaves estimator hands the oracle a `bins` buffer -- one leaf index
+per row, computed on the device by `ComputeBinsForModel`
+(`doc_parallel_leaves_estimator.cpp:45-49`) -- and the oracle partitions off
+it, on the device, itself.
+
+This port's oracle takes rows ALREADY GROUPED BY LEAF, with per-leaf offsets
+and sizes, because that is what the searcher produces as a by-product of
+growing the tree and the gather kernels were written against that shape. So
+for a dataset the tree was NOT grown on there is nothing to inherit, and
+`partition_from_bins`
+(`gbdt/methods/leaves_estimation/doc_parallel_leaves_estimator.mojo`) builds
+the grouping with a **stable counting sort on the host**: bins back, count
+into `2^depth` buckets, row order out.
+
+**The price**, per permutation per tree: two host passes over `n_rows` and
+one round trip each way. On unified memory the copies are memcpy rather than
+bus traffic, so the host passes dominate; it lands on the fixed-cost side of
+`ms/tree = a + b*rows`, which is the side this repository is already losing
+on (`RESUME.md`).
+
+It is STABLE deliberately. Rows keep ascending order within a leaf, so the
+oracle's per-leaf float sums are formed in a fixed order. An unstable sort
+would make a fit's leaf values depend on scatter order, and a model that
+changes between two runs of the same command is not a model this repository
+can gate.
+
+**The learn permutation does not go through it at all**: it keeps the
+searcher's own partition, so a one-permutation fit is unchanged to the bit.
+That is not an optimization either -- routing it through a second grouping
+would re-order the sums and move every number in the fit for nothing.
+
+**What would remove it** is a device radix sort on a `depth`-bit key. The
+pieces are in this repository already (`gbdt/gpu_util/kernel/segmented_sort.mojo`
+and the LSD radix sort behind the searcher), so this is a wiring job, not a
+new kernel -- held until a measurement shows the host sort costing something
+that matters.
