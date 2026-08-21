@@ -61,6 +61,7 @@ the class assignment and not merely a magnitude.
 from max.gpu.host import DeviceContext
 from std.math import log
 
+from gbdt.models.cuda.evaluator import pack_model_for_evaluator
 from gbdt.models.model_text import load_model_text, model_text
 from gbdt.train import (
     multiclass_probabilities,
@@ -288,6 +289,55 @@ def check_multiclass_train(ctx: DeviceContext) raises:
                 "  ok   save/load is BIT-IDENTICAL over", len(ap),
                 "approxes",
             )
+
+        # THE DEVICE EVALUATOR MUST REFUSE THIS MODEL, and refusing is the
+        # PORTED behaviour rather than a limitation of ours: their own
+        # `libs/model/cuda/evaluator.cpp:28` is
+        #
+        #     CB_ENSURE(ModelTrees->GetDimensionsCount() == 1,
+        #               "Model is not one-dimensional, GPU evaluation is
+        #                not supported yet");
+        #
+        # and their kernel agrees structurally -- `EvalObliviousTrees`
+        # advances `leafValues += (1 << curTreeDepth)` per tree
+        # (`evaluator.cu:222`), one value per leaf with no dimension
+        # stride. A model whose `leaf_values` is `n_leaves * dim` fed to
+        # that walk would silently predict the FIRST class's approxes.
+        #
+        # PORTING_RULES 8: both sides of the switch, by a named check per
+        # side. `check-model-io` and `check-catboost-apply` exercise the
+        # one-dimensional side; this is the other one.
+        # BOTH SIDES, and numClasses = 2 is what supplies the second one:
+        # a two-class MultiClass model has `dim == numClasses - 1 == 1`,
+        # so it IS one-dimensional and the evaluator must PACK it. Only
+        # `dim > 1` may be refused. The first version of this gate
+        # expected a refusal for every MultiClass model and failed at
+        # nc=2 -- correctly, because a binary MultiClass fit is an
+        # ordinary one-dimensional model and refusing it would be a
+        # regression rather than fidelity.
+        var refused = False
+        try:
+            var _packed = pack_model_for_evaluator(ctx, tm.model)
+        except e:
+            refused = True
+        if dim == 1:
+            if refused:
+                print(
+                    "  FAIL the device evaluator refused a dim-1 model,"
+                    " which is one-dimensional and must pack",
+                )
+                failures += 1
+            else:
+                print("  ok   dim 1 packs, as a one-dimensional model must")
+        else:
+            if not refused:
+                print(
+                    "  FAIL the device evaluator PACKED a dim-", dim,
+                    "model; theirs refuses it and ours must",
+                )
+                failures += 1
+            else:
+                print("  ok   the device evaluator refuses dim", dim)
 
         # SABOTAGES, on the host expectation only
         if nc >= 3:

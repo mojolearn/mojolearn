@@ -2273,3 +2273,40 @@ Recorded here because it is the second time Tweedie's defaults have differed
 between their arms in a way that only shows up in a comparison, and because
 STANDING_ORDERS rule 5 -- same everything except the device -- is what makes
 it matter.
+
+## 85. The device evaluator refuses a multi-output model, because THEIRS does
+
+`gbdt/models/cuda/evaluator.mojo` was one-dimensional and would have
+silently predicted the FIRST class's approxes from a MultiClass model,
+because its tree walk reads `leaf_values[leaf]` where such a model stores
+`n_leaves * dim`. Nothing routed a MultiClass model to it, which is exactly
+the condition PORTING_RULES 8 names.
+
+The fix was NOT to make it multi-dimensional. Their own GPU evaluator
+refuses the case (`libs/model/cuda/evaluator.cpp:28`):
+
+    CB_ENSURE(ModelTrees->GetDimensionsCount() == 1,
+              "Model is not one-dimensional, GPU evaluation is not
+               supported yet");
+
+and their kernel agrees structurally: `EvalObliviousTrees` advances
+`leafValues += (1 << curTreeDepth)` per tree (`evaluator.cu:222`) -- one
+value per leaf, no dimension stride -- and accumulates into a scalar per
+document. `ApproxDimension` appears in that file only inside
+`ProcessResults`, the prediction-type post-processing, and never in the
+tree walk.
+
+So there is no multi-dimensional path of theirs to port here, and building
+one would be inventing. `pack_model_for_evaluator` now refuses with their
+message and a citation to their line.
+
+MULTICLASS PREDICTION HAS ITS OWN APPLY and always did:
+`predict_multi_floats` goes through `compute_bins_and_add_kernel`, which IS
+multi-dimensional (DEVIATION 81) and is gated by `check-multiclass-train`.
+
+NOTE WHICH MODELS ARE ACTUALLY REFUSED. `dim` is `numClasses - 1`, so a
+TWO-class MultiClass fit has `dim == 1` and is an ordinary one-dimensional
+model that the evaluator packs normally. Only three classes and up are
+refused. The check gates both sides, and the first version of that gate --
+which expected every MultiClass model to be refused -- failed at two
+classes, correctly.

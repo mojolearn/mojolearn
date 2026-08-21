@@ -451,6 +451,7 @@ def eval_oblivious_trees_kernel[need_xor_mask: Bool = False](
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
+from gbdt.methods.doc_parallel_boosting import model_approx_dim
 from gbdt.models.oblivious_model import (
     BIN_SPLIT_TAKE_BIN,
     TAdditiveModel,
@@ -484,7 +485,45 @@ def pack_model_for_evaluator(
     training bin index + 1 because `bucket >= val` must reproduce
     training's `bin > bin_idx`. Buckets are our layout features one to
     one (no unused-feature compaction yet: every kept feature has
-    borders)."""
+    borders).
+
+    ## ONE-DIMENSIONAL ONLY, AND THAT IS THEIRS RATHER THAN OURS
+
+    Their GPU evaluator refuses a multi-output model outright:
+
+        CB_ENSURE(ModelTrees->GetDimensionsCount() == 1,
+                  "Model is not one-dimensional, GPU evaluation is not
+                   supported yet");
+                                    -- `libs/model/cuda/evaluator.cpp:28`
+
+    and their kernel says the same thing structurally: `EvalObliviousTrees`
+    advances `leafValues += (1 << curTreeDepth)` per tree
+    (`evaluator.cu:222`), ONE value per leaf with no dimension stride, and
+    accumulates into a scalar per document. `ApproxDimension` appears in
+    that file only in `ProcessResults`, the prediction-type
+    post-processing, never in the tree walk.
+
+    So there is no multi-dimensional path of theirs to port here. This
+    refuses where they refuse, with their message, RATHER THAN silently
+    predicting the first class's approxes -- which is what a model whose
+    `leaf_values` is `n_leaves * dim` would get from a walk that reads
+    `leaf_values[leaf]`.
+
+    MULTICLASS PREDICTION GOES THROUGH THE OTHER APPLY:
+    `gbdt/train.mojo`'s `predict_multi_floats`, over
+    `compute_bins_and_add_kernel`, which IS multi-dimensional
+    (DEVIATION 81). `mojo_only/multiclass_train_check.mojo` gates it.
+    """
+    var approx_dim = model_approx_dim(model)
+    if approx_dim != 1:
+        raise Error(
+            "Model is not one-dimensional (dim " + String(approx_dim)
+            + "), GPU evaluation is not supported yet -- their own"
+            " `libs/model/cuda/evaluator.cpp:28` refuses the same case."
+            " Use predict_multi_floats, which goes through the"
+            " multi-dimensional apply."
+        )
+
     var total_levels = 0
     var total_leaves = 0
     for t in range(model.size()):
