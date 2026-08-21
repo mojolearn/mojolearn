@@ -6,6 +6,10 @@ why every other check in this repository cannot do what this one does.
 
     pixi run -e bench python tools/catboost_oracle.py > bench/oracle.json
     pixi run oracle
+
+The DEPTH and FEATURE-COUNT sweep is a second driver,
+`mojo_only/oracle_sweep_main.mojo` (`pixi run oracle-sweep`), because it is
+fifteen fixtures rather than six and its fixtures vary a different axis.
 """
 
 from mojo_only.oracle_check import (
@@ -13,20 +17,34 @@ from mojo_only.oracle_check import (
     check_oracle_is_not_degenerate,
     check_tree_structure,
     print_catboost_structure,
+    print_policy_reach,
 )
 
 
 def main() raises:
-    # Four fixtures. 15 borders is the HALF-BYTE
-    # policy; 100 borders is ONE-BYTE and sits inside `maxBins <= 128`,
-    # which is the range CatBoost's own dispatch sends to the hist_2
-    # family (`hist_one_byte.cu:315-323`). A port of that family passes
-    # this suite against CatBoost itself or it does not ship.
+    # SIX FIXTURES, and between them every grid policy and every one-byte
+    # accumulator. 15 borders is the HALF-BYTE policy; everything above 15
+    # is ONE-BYTE (`SplitByPolicy`, `compressed_index_builder.h:66-70`,
+    # against `MaxFolds()` at `grid_policy.h:62-64`), and WITHIN one byte
+    # CatBoost runs four different accumulators chosen by fold count:
+    #
+    #   16..32   5-bit    bench/oracle24.txt
+    #   33..64   6-bit    bench/oracle48.txt
+    #   65..128  7-bit    bench/oracle100.txt
+    #   129..256 8-bit    bench/oracle254.txt
+    #
+    # from `pointwise_kernels.cpp:57-60` on the host and the bounds at
+    # `pointwise_hist2_one_byte_templ.cuh:179-183` on the device. The two
+    # middle fixtures were added 2026-08-21: before them the 6-bit
+    # accumulator had NO differential against CatBoost at all, and
+    # `PORTING.md` 108 is the record of what a kernel reached by exactly one
+    # fixture costs. Which accumulator each fixture actually enters is
+    # OBSERVED, not assumed -- `pixi run check-onebyte-reach`.
     var fixtures = List[String]()
     fixtures.append(String("bench/oracle.txt"))
+    fixtures.append(String("bench/oracle24.txt"))
+    fixtures.append(String("bench/oracle48.txt"))
     fixtures.append(String("bench/oracle100.txt"))
-    # border 254: the PASS(8) one-byte range (129-255), which their ladder
-    # never sends to hist_2, so no smaller fixture reaches those kernels.
     fixtures.append(String("bench/oracle254.txt"))
     # THE CATEGORICAL FIXTURE. Eight numeric columns at a 100-border grid
     # and three ONE-HOT categorical columns at k = 3, 5 and 8, so the
@@ -47,6 +65,10 @@ def main() raises:
         print("  CatBoost's own first three trees:")
         print_catboost_structure(path)
         check_border_parity(path)
+        # PORTING_RULES 8: the harness prints which path it took, beside the
+        # result. A differential that cannot name the accumulator it ran can
+        # publish a green tick about a different one.
+        print_policy_reach(path)
         print()
         print(
             "  OUR TREES against THEIRS, same data, same grid, same"

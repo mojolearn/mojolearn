@@ -4613,3 +4613,251 @@ specialised to 1 here), and `split_subsets_mirror` beside `split_subsets` in
 specialization.** Moving them is a pure rename plus the `PORTED_MAP.tsv` rows
 and is not attempted while three lanes are writing this directory. **This
 paragraph is the debt; a later round that moves them deletes it.**
+
+## 130. THEIR one-byte dispatch is in TWO places, and two of the four accumulators had no fixture
+
+`PORTING.md` 108 shipped three fixtures and named the 8-bit accumulator as
+"the only one that reaches it at all". The same sentence is a statement about
+the other three, and it was not checked: at 15, 100 and 254 borders the 5-bit
+and 6-bit accumulators were never entered by any differential against
+CatBoost.
+
+Their rule, read out of their source rather than inferred from ours:
+
+HOST, `pointwise_kernels.cpp:57-60`. All four widths are launched
+unconditionally, each with its own count:
+
+    DISPATCH_ONE_BYTE(ComputeHist2NonBinary, 4, 5)
+    DISPATCH_ONE_BYTE(ComputeHist2NonBinary, 6, 6)
+    DISPATCH_ONE_BYTE(ComputeHist2NonBinary, 7, 7)
+    DISPATCH_ONE_BYTE(ComputeHist2NonBinary, 8, 8)
+
+`FeatureCountForBits` (`folds_histogram.h:16-24`) sums `Counts[bit]`, and
+`Counts` is filled at `feature_layout.cpp:23-32` by
+`Counts[NCB::IntLog2(foldCount)]++`. **`IntLog2` is CEIL**
+(`libs/helpers/math_utils.h:14-16`), which is the same trap that already cost
+this port a day on the fold count. The only host gate is
+`if (featureCountForBits)` (`pointwise_hist2_one_byte_templ.cuh:226`).
+
+DEVICE, `pointwise_hist2_one_byte_templ.cuh:179-183`. Each launched kernel
+refuses the blocks that are not its own:
+
+    constexpr ui32 upperBound = (1 << BITS);
+    constexpr ui32 lowerBound = BITS > 5 ? upperBound / 2 : 15;
+    if (maxBinCount <= lowerBound || maxBinCount > upperBound) return;
+
+with `maxBinCount` the MAX `TCFeature::Folds` over the block's four
+CONSECUTIVE features (`GetMaxBinCount`, `split_properties_helpers.cuh:25-45`;
+`feature += (blockIdx.x / M) * 4`, `:169`). So the ranges, in FOLDS -- which
+for a float feature is the border count, `GetFoldsCount` returning
+`binCount - 1` (`feature_layout.cpp:49-58`):
+
+    5 bit    16..32    bench/oracle24.txt     NEW
+    6 bit    33..64    bench/oracle48.txt     NEW
+    7 bit    65..128   bench/oracle100.txt
+    8 bit   129..256   bench/oracle254.txt
+
+NOTE THE 15 AND NOT 16 in `lowerBound`: a feature with exactly 16 folds
+belongs to the 5-bit kernel. Folds at or below 15 never reach this family --
+`SplitByPolicy` (`compressed_index_builder.h:66-70`) against `MaxFolds()`
+(`grid_policy.h:62-64`) sends them to HalfByte.
+
+The host and device rules agree: `ceil(log2(f))` is 4 or 5 exactly on 9..32,
+6 on 33..64, 7 on 65..128, 8 on 129..256.
+
+BOTH NEW FIXTURES MATCHED CATBOOST ON THE FIRST RUN, 48 of 48 on both
+searchers. **The gate is now 288 of 288 across six fixtures.** That the 6-bit
+accumulator was correct is not what the item bought; that nothing could have
+said so is.
+
+`oracle_main.mojo` now PRINTS the accumulator each fixture reaches beside its
+result (`PORTING_RULES` 8), and refuses to continue if any one-byte
+4-feature group falls outside every range -- a group nobody claims has no
+histogram written, and every split below it is a decision taken on zeros.
+
+## 131. A GREEN DIFFERENTIAL IS NOT A REACH PROOF, and the four widths compute the same answer
+
+The fixture built for the 6-bit accumulator that silently lands on the 5-bit
+one still matches CatBoost split for split, because **both accumulators
+compute the same histogram**. The whole point of having four is collision
+avoidance -- copies per thread, threads per group, how two threads writing
+one bin are resolved -- and none of that changes a value. So 48 of 48 on
+`bench/oracle48.txt` is not evidence that the 6-bit kernel ran, and a fixture
+that landed one width low would have been indistinguishable from one that
+did not.
+
+`mojo_only/onebyte_reach_check.mojo` is the observation
+(`pixi run check-onebyte-reach`). DEVIATION 115's rule decides what it may
+build: everything that DECIDES the dispatch comes from the product --
+`build_layout` assigns the policy, and `PolicyScoreHelper.__init__` builds
+both `d_folds` (the array `GetMaxBinCount` reduces) and `folds_hist` (the
+host gate). What the check plants is only what is INERT to both gates: the
+target, the weight, the document order, one whole-dataset partition.
+
+It then runs the four widths ONE AT A TIME into a zeroed histogram.
+
+    R1   bench/oracle24.txt    24 folds -> 5bit:768   6bit:0     7bit:0     8bit:0
+         bench/oracle48.txt    48 folds -> 5bit:0     6bit:1536  7bit:0     8bit:0
+         bench/oracle100.txt  100 folds -> 5bit:0     6bit:0     7bit:3200  8bit:0
+         bench/oracle254.txt  254 folds -> 5bit:0     6bit:0     7bit:0     8bit:8128
+
+Each count is `2 * 16 features * folds` exactly, so the claiming width wrote
+the WHOLE histogram and the other three wrote nothing. Two non-empty would
+mean our ranges overlap; four empty would mean the fixture reaches no
+accumulator and its differential result is about a histogram of zeros.
+
+R2 IS THE SABOTAGE, and R1 is a constant without it. One fixture's data --
+`oracle24`, whose bins run 0..24 -- re-declared at four fold counts, RAISED
+only so no planted bin leaves its slot:
+
+    24 -> 5bit:768   40 -> 6bit:800   80 -> 7bit:800   200 -> 8bit:800
+
+The claim walks 5 -> 6 -> 7 -> 8 as only the declared fold count moves. (800
+is `2 * 16 * 25` occupied bins, so the arithmetic is right as well as the
+dispatch.)
+
+## 132. The depth and feature-count sweep, and why the sabotage runs at EVERY cell
+
+`NEXT_TWO.md` rung 5's second item. `pixi run oracle` varies the border
+budget and nothing else: one depth (4) and one feature count (16). Both are
+structural. Depth decides how many partitions the histogram helper carries
+and therefore when the subtraction trick replaces a full pass. Feature count
+decides how a policy's features are cut into four-feature blocks and how many
+blocks the multiplier spreads over the document axis. Neither had ever been
+varied against CatBoost.
+
+`tools/catboost_oracle.py` now reads `ORACLE_DEPTH`, `ORACLE_FEATS`,
+`ORACLE_ROWS` and `ORACLE_TREES` from the environment, the same mechanism
+`ORACLE_BORDERS` already used. **`bench/oracle_d4_f16.txt` is BYTE-IDENTICAL
+to `bench/oracle.txt`**, which is the check that the plumbing changed nothing
+at the defaults. `ORACLE_FEATS` below 8 is refused rather than silently
+reshaped: the target is drawn from columns 0, 3 and 7, and a fixture whose
+target changed with its width would make every cell a different question.
+
+`mojo_only/oracle_sweep_main.mojo` (`pixi run oracle-sweep`) runs five depths
+(1, 2, 4, 6, 8) by three feature counts (8, 16, 32), both searchers.
+**Thirty cells, 1512 splits, ZERO disagreeing** in the stable state, losses
+matching CatBoost to 8-9 significant figures at every cell.
+
+IT DOES NOT RAISE ON A DISAGREEING CELL. `pixi run oracle` is the gate; this
+is a matrix, and a matrix that stops at its first red cell reports one number
+instead of thirty. Every cell prints at full strength whether it agrees or
+not ([[no-dataset-cherry-picking]]); the driver exits non-zero at the end.
+
+THE SABOTAGE RUNS AT EVERY CELL RATHER THAN ONCE, and that is the entry's
+point. Fifteen cells of 96/96 with nothing checking them is exactly the shape
+of a check that went quiet at parameters nobody had run before
+([[sabotage-when-required]]: the path is new). Moving the EXPECTED bin of
+tree 0 depth 0 up by one must cost exactly one match and put the first
+divergence at (0, 0), per cell. Every cell did. The sharp expectation is what
+earns it: a comparison that is REACHED but not POSITIONED -- one that tallies
+totals, or compares the tree as a SET of splits -- passes the green run and
+passes a loose sabotage too.
+
+## 133. The one-byte accumulators at DEPTH 8, the cell both sweeps left empty
+
+The four bit-width fixtures (DEVIATION 130) are all at depth 4. The
+depth-by-features matrix (DEVIATION 132) is all at 15 borders. So after both,
+the HALF-BYTE kernel was still the only one that had ever run at a depth
+other than 4, and the intersection was empty.
+
+That intersection is not a formality. Depth is what decides when the
+histogram helper stops doing full passes and starts recovering a sibling by
+SUBTRACTION, and the 8-bit accumulator is the one holding Int32 fixed point
+(DEVIATION 93). A subtraction of two quantized histograms is exactly where
+that representation would show, and nothing had asked it to.
+
+Four more fixtures, depth 8, 16 features, one per accumulator, in
+`oracle-sweep`:
+
+    5bit    24 borders   96/96 greedy, 96/96 pointwise   0.2671046853   vs 0.2671046536
+    6bit    48 borders   96/96 greedy, 96/96 pointwise   0.2117507160   vs 0.2117507078
+    7bit   100 borders   96/96 greedy, 96/96 pointwise   0.1910397112   vs 0.1910397046
+    8bit   254 borders   96/96 greedy, 96/96 pointwise   0.1910049319   vs 0.1910049232
+
+768 more splits, no divergence. The sweep stands at 38 cells and 2280 splits,
+and with the gate's 576 the port reproduces CatBoost on 2856 splits across ten
+fixtures, three grid policies and all four one-byte accumulators.
+
+### 133a. What is still NOT covered: mixed-width feature groups
+
+Their guard claims a block by the WIDEST of its four consecutive features, so
+features of 3, 5, 40 and 200 folds all go to the 8-bit kernel together. Every
+fixture here is uniform-width, so that per-group behaviour is printed but not
+differentially checked. It needs an oracle whose columns get DIFFERENT border
+budgets, which `pool.quantize(border_count=)` does not express directly.
+Recorded as a hole, not as coverage.
+
+## 134. OPEN, AND THE MOST IMPORTANT RESULT OF THIS ROUND: an intermittent, one run in ~100, on BOTH searchers at once
+
+While building DEVIATION 132's matrix, one sweep run came back with its FIRST
+cell wrong, and it has not come back since:
+
+    depth 1, 8 features   |  2/12  first div t2d0  |  8/12  first div t8d0
+    greedy mse    4.679346084594727
+    pointwise mse 4.383606433868408
+    CatBoost      4.133252577078921
+    correct, every other run: 12/12 and 12/12, both arms 4.1332526206970215
+
+Three things about it, in order of how much they matter.
+
+1. **THE TWO SEARCHERS DISAGREED WITH EACH OTHER.** `check-fit-pointwise`
+   requires them to be BIT-IDENTICAL over twenty iterations. On this run they
+   were not, and they diverged from CatBoost at DIFFERENT trees.
+2. The model was coherent and wrong, not garbage -- a real tree, monotone,
+   still beating the mean, several percent worse than it should be. That is
+   DEVIATION 95's failure signature word for word, and it is the signature
+   that nothing but a differential can see.
+3. It was the FIRST cell of the process, so it is not accumulated state.
+
+NOT REPRODUCED in ~100 further executions of that exact cell: three more full
+sweep runs, thirty warm iterations of `d1_f8` plus thirty of `d1_f16` and
+thirty of `d2_f8` inside one process (all clean, and the two arms
+bit-identical in all ninety), and six FORCED COLD-RECOMPILE single-cell runs.
+
+WHAT IS ESTABLISHED ABOUT THE MECHANISM, and it is half an answer.
+
+`GLOBAL_NUMERIC_MODE = NUMERIC_FAST` is the shipping default
+(`mojo_only/numerics.mojo:74`). Under FAST on a column that HAS float atomics
+-- Apple does -- `deterministic_flush_for` (`mojo_only/kernel_matrix.mojo:1003`)
+returns False and the GREEDY family's multi-block histogram flush takes
+CatBoost's float `atomicAdd` (`hist_half_byte.mojo:527-528`, same shape at
+`hist_binary.mojo:524` and `hist_2_one_byte_base.mojo:484-521`). The file says
+so itself: *"Order-nondeterministic, exactly as theirs is, and CatBoost ships
+it that way."* And that branch is LIVE at exactly this cell:
+`active_block_count = min(ceil(p_size / (4 * BLOCK_SIZE)), max_blocks_per_part)`
+(`hist_half_byte.mojo:170-176`), so a 4096-row root partition at depth 1 puts
+about four blocks into every float cell in arbitrary order. Depth 1 with 8
+features is the smallest grid in the matrix and the maximum contention on that
+flush.
+
+**IT DOES NOT EXPLAIN THE POINTWISE ARM, AND THAT IS THE ALARMING HALF.**
+The pointwise family's atomic is `comptime if m > 1`
+(`pointwise_hist2_one_byte_templ.mojo:393-398`,
+`pointwise_hist2_half_byte.mojo:162-165`), and `m` comes from
+`estimate_block_per_feature_multiplier`, whose loop is gated on
+`(dsSize / multiplier) > 10000` (`split_properties_helpers.mojo:228`). At 4096
+rows that is false on the FIRST test, so `multiplier == 1` always and the
+pointwise flush is a plain store. Sweeping `gbdt/` for every other float
+atomic leaves `histogram_utils.mojo:136`, which is Int32 and therefore
+order-independent, and `models/cuda/evaluator.mojo:435`, which is in the device
+evaluator and not on `fit`'s apply path (`compute_bins_and_add_kernel`). So
+there is no known mechanism for the pointwise arm's half of that run.
+
+`RESUME.md:509-518` records the determinism story as closed on 2026-08-21 --
+"every rep's loss is BIT-IDENTICAL". This observation contradicts that as
+written; the claim is at minimum scoped more narrowly than it reads. That file
+belongs to another session and was flagged rather than edited
+([[fix-docs-on-discovery]] wants it fixed by whoever owns it).
+
+WHAT WOULD CLOSE IT, cheapest first: build once at
+`GLOBAL_NUMERIC_MODE = NUMERIC_IDENTICAL` and soak `d1_f8` a few thousand
+times. If the greedy arm goes silent and the pointwise arm still drifts, there
+is a second defect and it is not the histogram flush. **Nothing was tuned,
+dropped or deferred to make the cell green; it stays in the matrix at full
+strength.**
+
+**NO SPEED NUMBER AND NO PARITY CLAIM SHOULD BE QUOTED PAST THIS ENTRY UNTIL
+IT IS CLOSED.** A learner that produces a different model one run in a hundred
+does not have a loss to compare, and the two searchers disagreeing with each
+other is the specific thing `check-fit-pointwise` exists to forbid.

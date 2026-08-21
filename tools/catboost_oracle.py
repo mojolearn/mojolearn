@@ -77,8 +77,29 @@ def build(rows: int, feats: int, seed: int) -> tuple:
 
 def main() -> int:
     import os
-    rows, feats = 4096, 16
-    depth, trees = 4, 12
+    # EVERY PIN THE FIXTURE VARIES IS AN ENVIRONMENT VARIABLE, and the
+    # defaults are the committed fixture's, so a bare run still writes
+    # exactly `bench/oracle.txt`.
+    #
+    # ORACLE_DEPTH and ORACLE_FEATS are the DEPTH AND FEATURE-COUNT SWEEP
+    # (`NEXT_TWO.md` rung 5). They are the same shape of change as
+    # ORACLE_BORDERS, which was already here, and they are read here rather
+    # than passed on the command line so the generator and the Mojo reader
+    # agree on one mechanism.
+    #
+    # THE TARGET READS COLUMNS 0, 3 AND 7, so ORACLE_FEATS below 8 would
+    # build a target out of columns that do not exist. Refused rather than
+    # silently reshaped, because a fixture whose target changed with its
+    # width would make every cell of the sweep a different question.
+    rows = int(os.environ.get("ORACLE_ROWS", "4096"))
+    feats = int(os.environ.get("ORACLE_FEATS", "16"))
+    depth = int(os.environ.get("ORACLE_DEPTH", "4"))
+    trees = int(os.environ.get("ORACLE_TREES", "12"))
+    if feats < 8:
+        raise SystemExit(
+            "ORACLE_FEATS must be at least 8: `build` draws the target from"
+            " columns 0, 3 and 7"
+        )
     learning_rate, l2 = 0.3, 3.0
     # Default 15 keeps the committed fixture stable (half-byte policy).
     # ORACLE_BORDERS=100 generates the ONE-BYTE fixture (bench/oracle100.txt),

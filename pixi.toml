@@ -44,6 +44,23 @@ probe = "mojo run -I . probe_main.mojo"
 # moves, and read the diff, because that diff IS the behaviour change.
 oracle = "mojo run -I . oracle_main.mojo"
 
+# The DEPTH and FEATURE-COUNT sweep of the same differential: five depths by
+# three feature counts, both searchers, plus the four one-byte accumulators at
+# depth 8. Own main() because it is 38 cells and does NOT raise on a
+# disagreeing one -- `oracle` is the gate, this is the matrix, and a matrix
+# that stops at its first red cell reports one number instead of thirty. Ends
+# with a per-cell sabotage that must cost exactly one match at exactly
+# (tree 0, depth 0). A GPU, ~80 fits. PORTING.md 132-134.
+oracle-sweep = "mojo run -I . mojo_only/oracle_sweep_main.mojo"
+
+# WHICH of the four one-byte accumulators each fixture actually enters,
+# observed rather than assumed: the four widths run one at a time into a zeroed
+# histogram, on the layout and folds the PRODUCT'S constructor built, and
+# exactly one may come back non-empty. A fixture that lands one bit width low
+# still matches CatBoost, because all four compute the same histogram -- so a
+# green differential is not a reach proof. PORTING.md 130-131.
+check-onebyte-reach = "mojo run -I . mojo_only/onebyte_reach_check.mojo"
+
 # The control plane, which is host-side and has its own `main()` rather than
 # a function `probe_main` could call, so it runs as its own task instead of
 # being folded in. Until 2026-08-19 neither of these had ever been compiled.
@@ -572,6 +589,29 @@ build-pkg = "mkdir -p build && mojo precompile -I . gbdt -o build/gbdt.mojopkg"
 # bench/oracle_losses.txt (read by `check-loss-oracle`).
 loss-oracle-gen = "python tools/catboost_loss_oracle.py"
 oracle-gen = "python tools/catboost_oracle.py > bench/oracle.json"
+
+# The 5-bit and 6-bit one-byte fixtures. 24 folds lands in 16..32 and 48 in
+# 33..64, which are the ranges `pointwise_hist2_one_byte_templ.cuh:179-183`
+# gives those two accumulators; before these, neither had a differential
+# against CatBoost at all (PORTING.md 130).
+oracle24-gen = "ORACLE_BORDERS=24 ORACLE_OUT=bench/oracle24.txt python tools/catboost_oracle.py > bench/oracle24.json"
+oracle48-gen = "ORACLE_BORDERS=48 ORACLE_OUT=bench/oracle48.txt python tools/catboost_oracle.py > bench/oracle48.json"
+
+# Every fixture `oracle-sweep` reads. `bench/oracle_d4_f16.txt` must come out
+# BYTE-IDENTICAL to `bench/oracle.txt` -- that identity is the check that the
+# ORACLE_DEPTH / ORACLE_FEATS plumbing changed nothing at the defaults, and the
+# `cmp` at the end is what enforces it.
+oracle-sweep-gen = """
+for d in 1 2 4 6 8; do for f in 8 16 32; do
+  ORACLE_DEPTH=$d ORACLE_FEATS=$f ORACLE_OUT=bench/oracle_d${d}_f${f}.txt \
+    python tools/catboost_oracle.py > bench/oracle_d${d}_f${f}.json
+done; done
+for b in 24 48 100 254; do
+  ORACLE_DEPTH=8 ORACLE_BORDERS=$b ORACLE_OUT=bench/oracle_d8_b${b}.txt \
+    python tools/catboost_oracle.py > bench/oracle_d8_b${b}.json
+done
+cmp bench/oracle.txt bench/oracle_d4_f16.txt
+"""
 
 # CatBoost's OWN MinEntropy borders for the CTR TARGET grid, at budgets 1,
 # 2 and 3 over five target-shaped columns. Separate from

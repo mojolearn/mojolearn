@@ -65,6 +65,8 @@ from max.gpu.host import DeviceContext
 
 from gbdt.grid_creator.binarization import best_split, binarize
 from gbdt.gpu_data.compressed_index_builder import build_layout
+from gbdt.gpu_data.feature_blocks import blocks_for
+from gbdt.gpu_data.grid_policy import POLICY_ONE_BYTE, policy_name
 from gbdt.gpu_data.kernel.binarize import (
     WRITE_BLOCK_SIZE,
     write_compressed_index_kernel,
@@ -382,10 +384,167 @@ def print_catboost_structure(path: String = String("bench/oracle.txt")) raises:
         print(line)
 
 
+def onebyte_width_for(folds: Int) raises -> Int:
+    """CatBoost's bound, on the host: which one-byte accumulator claims a
+    block whose widest feature has `folds` folds.
+
+        constexpr ui32 upperBound = (1 << BITS);
+        constexpr ui32 lowerBound = BITS > 5 ? upperBound / 2 : 15;
+        if (maxBinCount <= lowerBound || maxBinCount > upperBound) return;
+
+    `pointwise_hist2_one_byte_templ.cuh:179-183`, with `maxBinCount` the
+    MAXIMUM `TCFeature::Folds` over the block's four features
+    (`GetMaxBinCount`, `split_properties_helpers.cuh:25-45`). Returns 0 for a
+    fold count no one-byte accumulator claims, which for a feature that
+    reached this policy at all can only mean a fold count above 256.
+    """
+    if folds > 15 and folds <= 32:
+        return 5
+    if folds > 32 and folds <= 64:
+        return 6
+    if folds > 64 and folds <= 128:
+        return 7
+    if folds > 128 and folds <= 256:
+        return 8
+    return 0
+
+
+def print_policy_reach(path: String = String("bench/oracle.txt")) raises:
+    """WHICH KERNELS THIS FIXTURE REACHES, printed beside its result.
+
+    PORTING_RULES 8: "the benchmark prints which path it took, beside the
+    timing. A harness that cannot name the kernel it ran can publish a number
+    about a different one." The same applies to a differential, and
+    `PORTING.md` 108 is what it costs when it does not -- three fixtures
+    covering three of the four one-byte accumulators, with nobody able to say
+    from the output which was which.
+
+    This is a REPORT of what the layout implies, from the product's own
+    `build_layout` and `blocks_for`. The OBSERVATION that the named
+    accumulator is the one that actually writes the histogram is
+    `mojo_only/onebyte_reach_check.mojo`, which runs the four widths one at a
+    time and requires exactly one of them to come back non-empty. Do not read
+    this line as the observation; it is the label.
+    """
+    var o = load_oracle(path)
+    var folds = List[Int]()
+    var one_hot = List[Bool]()
+    for f in range(o.feats):
+        if o.cat_cardinality[f] != 0:
+            folds.append(o.cat_cardinality[f])
+            one_hot.append(True)
+        else:
+            folds.append(len(o.borders[f]))
+            one_hot.append(False)
+    var lay = build_layout(folds, one_hot)
+    var blocks = blocks_for(lay, o.rows)
+
+    for b in range(len(blocks)):
+        ref blk = blocks[b]
+        var line = String("  policy ") + policy_name(blk.policy) + ": "
+        line += String(blk.count()) + " features"
+        if blk.policy != POLICY_ONE_BYTE:
+            var lo = 1 << 30
+            var hi = 0
+            for i in range(blk.count()):
+                var fc = Int(blk.folds[i])
+                if fc < lo:
+                    lo = fc
+                if fc > hi:
+                    hi = fc
+            line += ", folds " + String(lo) + ".." + String(hi)
+            print(line)
+            continue
+
+        # ONE BYTE: four accumulators, and a block of FOUR CONSECUTIVE
+        # features is claimed by its widest (`feature += (blockIdx.x / M) *
+        # 4` at `pointwise_hist2_one_byte_templ.cuh:169`). Reported per
+        # group, because a fixture whose features have mixed widths reaches
+        # more than one accumulator and saying "the widest feature" would be
+        # a different claim.
+        var reach = List[Int]()
+        for _ in range(4):
+            reach.append(0)
+        var unclaimed = 0
+        var g = 0
+        while g < blk.count():
+            var widest = 0
+            var i = g
+            while i < g + 4 and i < blk.count():
+                if Int(blk.folds[i]) > widest:
+                    widest = Int(blk.folds[i])
+                i += 1
+            var w = onebyte_width_for(widest)
+            if w == 0:
+                unclaimed += 1
+            else:
+                reach[w - 5] += 1
+            g += 4
+        line += ", 4-feature groups by accumulator:"
+        for w in range(4):
+            line += " " + String(5 + w) + "bit=" + String(reach[w])
+        if unclaimed != 0:
+            line += "  UNCLAIMED=" + String(unclaimed)
+        print(line)
+        if unclaimed != 0:
+            raise Error(
+                String(unclaimed)
+                + " one-byte feature group(s) in "
+                + path
+                + " fall outside every accumulator's range, so their"
+                " histogram is never written and every split below is a"
+                " decision taken on zeros"
+            )
+
+
+struct TreeDiffResult(Copyable, Movable):
+    """What one (fixture, searcher) cell of the differential came back with.
+
+    `check_tree_structure` throws away everything but the pass/fail, which is
+    right for a gate and useless for a SWEEP: a matrix needs the numbers of
+    the cells that disagreed, not an exception from the first one. So the
+    body below returns this and the gate is a thin wrapper that raises on it.
+    """
+
+    var matched: Int
+    var compared: Int
+    var cat_matched: Int
+    var cat_compared: Int
+    #: `tree * 100 + depth` of the FIRST disagreement, or -1. Encoded the way
+    #: the printer already encoded it rather than as two fields, so the two
+    #: cannot drift apart.
+    var first_divergence: Int
+    var our_mse: Float64
+    var their_mse: Float64
+    var baseline_mse: Float64
+
+    def __init__(out self):
+        self.matched = 0
+        self.compared = 0
+        self.cat_matched = 0
+        self.cat_compared = 0
+        self.first_divergence = -1
+        self.our_mse = 0.0
+        self.their_mse = 0.0
+        self.baseline_mse = 0.0
+
+
 def check_tree_structure(
     path: String = String("bench/oracle.txt"),
     use_pointwise_searcher: Bool = False,
 ) raises:
+    """THE GATE. `tree_structure_diff` with `strict`, which raises on any
+    disagreement. Every caller that wants the numbers instead calls that."""
+    _ = tree_structure_diff(path, use_pointwise_searcher, True, True)
+
+
+def tree_structure_diff(
+    path: String,
+    use_pointwise_searcher: Bool,
+    strict: Bool,
+    verbose: Bool,
+    sabotage_first_split: Bool = False,
+) raises -> TreeDiffResult:
     """OUR TREES against CATBOOST'S TREES, on the same data and the same grid.
 
     This is the comparison border parity exists to make possible. Both sides
@@ -569,10 +728,11 @@ def check_tree_structure(
         use_pointwise_searcher=use_pointwise_searcher,
     )
 
-    print(
-        "    our final mse", losses[len(losses) - 1],
-        " CatBoost", o.train_mse, " mean baseline", o.baseline_mse,
-    )
+    if verbose:
+        print(
+            "    our final mse", losses[len(losses) - 1],
+            " CatBoost", o.train_mse, " mean baseline", o.baseline_mse,
+        )
 
     # Their border value -> the bin index our side would name for it.
     var first_divergence = -1
@@ -609,6 +769,15 @@ def check_tree_structure(
                 for i in range(len(o.borders[f])):
                     if abs(Float64(o.borders[f][i]) - Float64(o.split_border[t][d])) <= 1e-9:
                         want_bin = i
+            # THE SABOTAGE, and it is a knob rather than a temporary edit
+            # because it has to be runnable at every cell of the sweep.
+            # Moving the EXPECTED bin of tree 0 depth 0 by one must cost
+            # exactly one match and put the first divergence at (0, 0). A
+            # comparison that is reached but not positioned -- one that
+            # counts totals, or that compares the tree as a set -- passes
+            # the green run and passes this one too.
+            if sabotage_first_split and t == 0 and d == 0 and want_bin >= 0:
+                want_bin += 1
             line_them += (
                 String("(")
                 + String(f)
@@ -645,7 +814,7 @@ def check_tree_structure(
                         cat_matched += 1
                 elif first_divergence < 0:
                     first_divergence = t * 100 + d
-        if t < 3:
+        if t < 3 and verbose:
             print("    tree", t)
             print(line_them)
             print(line_us)
@@ -665,11 +834,27 @@ def check_tree_structure(
     var arm = String("pointwise") if use_pointwise_searcher else String(
         "greedy-subsets"
     )
-    print(
-        "    splits matching CatBoost exactly:", matched, "of", compared,
-        "  (", cat_matched, "of", cat_compared, "one-hot )",
-        "  [", arm, "searcher ]",
-    )
+    var result = TreeDiffResult()
+    result.matched = matched
+    result.compared = compared
+    result.cat_matched = cat_matched
+    result.cat_compared = cat_compared
+    result.first_divergence = first_divergence
+    result.our_mse = Float64(losses[len(losses) - 1])
+    result.their_mse = o.train_mse
+    result.baseline_mse = o.baseline_mse
+
+    if verbose:
+        print(
+            "    splits matching CatBoost exactly:", matched, "of", compared,
+            "  (", cat_matched, "of", cat_compared, "one-hot )",
+            "  [", arm, "searcher ]",
+        )
+    if not strict:
+        # THE SWEEP PATH. A cell that disagrees is a FINDING and the matrix
+        # needs the rest of its cells, so nothing is raised here and nothing
+        # is tuned to make the number go green.
+        return result^
     if first_divergence >= 0:
         print(
             "    first divergence: tree", first_divergence // 100,
@@ -733,3 +918,4 @@ def check_tree_structure(
             "    every split matches CatBoost, feature and bin  [", arm,
             "]",
         )
+    return result^
