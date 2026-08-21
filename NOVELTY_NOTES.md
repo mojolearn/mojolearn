@@ -80,6 +80,15 @@ paper.
    flattered us because the CPU arm suffers memory pressure more than
    the GPU arm. Evidence: results files' correction addenda -- the
    protocol's paper section writes itself from them.
+   THE PROTOCOL'S OWN FAILURE MODE, found 2026-08-21 (PREP_BILL step
+   7): when the two arms' combined resident set crowds physical RAM,
+   the shared process inflates BOTH arms (ours 3.5-4x, theirs 2-3x at
+   200k x 2000 on 16 GB) and the interleaved ratio is garbage --
+   pageouts barely move, so the mechanism is compression pressure and
+   a pageout check does not clear the window. Validity condition:
+   combined footprint well under RAM; otherwise isolated per-arm runs
+   with the cross-window caveat stated. A protocol whose validity
+   envelope is measured and stated is part of the contribution.
 
 7. **Oracle-compiled gates for ported numerics**: compiling the
    incumbent's own source (their MT19937-64, their CityHash 1.0 -- a
