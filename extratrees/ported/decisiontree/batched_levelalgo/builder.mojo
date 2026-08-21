@@ -1426,6 +1426,431 @@ def dataset_len_ok(
     return len(x_col_major) == Int(n_rows) * Int(n_cols)
 
 
+def train_regression_device(
+    ctx: DeviceContext,
+    x_col_major: List[Float32],
+    labels_q: List[Int32],
+    scale: Float64,
+    mut row_ids: List[Int32],
+    n_rows: Int32,
+    n_cols: Int32,
+    params: DecisionTreeParams,
+    tree_id: Int32,
+    seed: UInt64,
+) raises -> TreeMetaDataNode[DType.float32]:
+    """One regression ExtraTree with its split search on the GPU.
+
+    The SAME loop as `train_classification_device_resident` -- `Builder::train`
+    (`builder.cuh:344-359`) around `doSplit` (`:379-494`) -- with the two
+    kernels instantiated for `CLASSIFICATION = False` and cuML's
+    `MSEObjectiveFunction` in place of their Gini one. Their builder is a
+    template over `ObjectiveT` for exactly this reason
+    (`builder.cuh:142 template <typename ObjectiveT> struct Builder`), so
+    swapping the objective and keeping the loop is their structure, not a
+    parallel implementation.
+
+    `labels_q` is the label vector ALREADY QUANTIZED by
+    `fixed_point.choose_scale` / `quantize` -- deviation 135's ruling, and
+    deviation 174's rule that the device sees only integers. `scale` is the
+    multiplier that produced it, needed only to put leaf values back in the
+    label's own units.
+
+    THE REGRESSION KEY IS cuML's OWN MSE GAIN, not sklearn's proxy: deviation
+    189 measured that sklearn's numerator is unpublishable in `Int64` above
+    NINE ROWS and wraps negative, and that cuML's gain -- which is that proxy
+    minus two node constants -- fits with no row cap at all. So the reduction
+    ranks regression candidates by their quantity, which is the one this
+    builder is templated on anyway.
+    """
+    if len(x_col_major) != Int(n_rows) * Int(n_cols):
+        raise Error("x_col_major must be n_rows * n_cols long, column major")
+    if len(labels_q) != Int(n_rows):
+        raise Error("labels_q must be n_rows long")
+    validity_check(params)
+
+    comptime TPB = 128
+    comptime MAX_ACC = 32
+
+    var k = n_sampled_cols_for(params, n_cols)
+    var queue = NodeQueue[DType.float32](params, n_rows, 1, tree_id)
+
+    var dataset = upload_dataset(
+        ctx, x_col_major, labels_q, n_rows, n_cols, 1
+    )
+
+    var d_row_ids = ctx.enqueue_create_buffer[DType.int32](Int(n_rows))
+    ctx.enqueue_function[row_ids_sequence_kernel](
+        d_row_ids.unsafe_ptr(),
+        n_rows,
+        grid_dim=ceildiv(Int(n_rows), 128),
+        block_dim=128,
+    )
+    _ = row_ids
+
+    while queue.has_work():
+        var work_items = queue.pop()
+        var n_nodes = len(work_items)
+        var colids = List[Int32](
+            length=n_nodes * Int(k), fill=Int32(0)
+        )
+        _ = sample_features(
+            colids, work_items, tree_id, seed, Int(n_cols), Int(k)
+        )
+        var plan = build_workload_info(work_items, TPB)
+        var n_cells = n_nodes * Int(k)
+
+        var d_min = ctx.enqueue_create_buffer[DType.float32](n_cells)
+        var d_max = ctx.enqueue_create_buffer[DType.float32](n_cells)
+        var d_missing = ctx.enqueue_create_buffer[DType.int32](n_cells)
+        var d_merges = ctx.enqueue_create_buffer[DType.int32](n_cells)
+        var d_cell_mutex = ctx.enqueue_create_buffer[DType.int32](n_cells)
+        var d_nleft = ctx.enqueue_create_buffer[DType.int32](n_cells)
+        var d_ntotal = ctx.enqueue_create_buffer[DType.int32](n_cells)
+        var d_accl = ctx.enqueue_create_buffer[DType.int32](n_cells)
+        var d_acct = ctx.enqueue_create_buffer[DType.int32](n_cells)
+        var d_nblocks = ctx.enqueue_create_buffer[DType.int32](n_cells)
+        var d_status = ctx.enqueue_create_buffer[DType.int32](n_cells)
+        var d_thresh = ctx.enqueue_create_buffer[DType.float32](n_cells)
+        var d_gnum = ctx.enqueue_create_buffer[DType.int64](n_cells)
+        var d_gden = ctx.enqueue_create_buffer[DType.int64](n_cells)
+        var c_q = ctx.enqueue_create_buffer[DType.float32](n_cells)
+        var c_c = ctx.enqueue_create_buffer[DType.int32](n_cells)
+        var c_m = ctx.enqueue_create_buffer[DType.float32](n_cells)
+        var c_l = ctx.enqueue_create_buffer[DType.int32](n_cells)
+        var c_nu = ctx.enqueue_create_buffer[DType.int64](n_cells)
+        var c_de = ctx.enqueue_create_buffer[DType.int64](n_cells)
+        var c_v = ctx.enqueue_create_buffer[DType.int32](n_cells)
+        var r_q = ctx.enqueue_create_buffer[DType.float32](n_nodes)
+        var r_c = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+        var r_m = ctx.enqueue_create_buffer[DType.float32](n_nodes)
+        var r_l = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+        var r_nu = ctx.enqueue_create_buffer[DType.int64](n_nodes)
+        var r_de = ctx.enqueue_create_buffer[DType.int64](n_nodes)
+        var r_v = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+        var r_mg = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+        var r_nw = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+        var r_mx = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+        var d_nb = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+        var d_nc = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+        var d_colids = ctx.enqueue_create_buffer[DType.int32](n_cells)
+        var d_items = ctx.enqueue_create_buffer[DType.uint8](
+            n_nodes * size_of[NodeWorkItem]()
+        )
+        var d_wl = ctx.enqueue_create_buffer[DType.uint8](
+            plan.n_blocks_dimx * size_of[WorkloadInfo]()
+        )
+        var h_colids = ctx.enqueue_create_host_buffer[DType.int32](n_cells)
+        var h_items = ctx.enqueue_create_host_buffer[DType.uint8](
+            n_nodes * size_of[NodeWorkItem]()
+        )
+        var h_wl = ctx.enqueue_create_host_buffer[DType.uint8](
+            plan.n_blocks_dimx * size_of[WorkloadInfo]()
+        )
+        var h_nb = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
+        var h_nc = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
+        ctx.synchronize()
+
+        for i in range(n_cells):
+            h_colids.unsafe_ptr().unsafe_store(i, colids[i])
+        var items_ptr = h_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem]()
+        for i in range(n_nodes):
+            items_ptr[unsafe_offset=i] = work_items[i]
+        var wl_ptr = h_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo]()
+        for i in range(plan.n_blocks_dimx):
+            wl_ptr[unsafe_offset=i] = plan.info[i]
+        for i in range(n_nodes):
+            h_nb.unsafe_ptr().unsafe_store(i, Int32(i * Int(k)))
+            h_nc.unsafe_ptr().unsafe_store(i, Int32(Int(k)))
+        ctx.enqueue_copy(dst_buf=d_colids, src_ptr=h_colids.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d_items, src_ptr=h_items.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d_wl, src_ptr=h_wl.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d_nb, src_ptr=h_nb.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d_nc, src_ptr=h_nc.unsafe_ptr())
+        ctx.synchronize()
+
+        ctx.enqueue_memset(d_cell_mutex, Int32(0))
+        ctx.enqueue_function[node_feature_range_init_kernel](
+            d_min.unsafe_ptr(),
+            d_max.unsafe_ptr(),
+            d_missing.unsafe_ptr(),
+            d_merges.unsafe_ptr(),
+            Int32(n_cells),
+            grid_dim=ceildiv(n_cells, 64),
+            block_dim=64,
+        )
+        ctx.enqueue_function[node_feature_range_kernel[TPB]](
+            d_min.unsafe_ptr(),
+            d_max.unsafe_ptr(),
+            d_missing.unsafe_ptr(),
+            d_merges.unsafe_ptr(),
+            d_cell_mutex.unsafe_ptr(),
+            dataset.d_data.unsafe_ptr(),
+            d_row_ids.unsafe_ptr(),
+            d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
+            d_colids.unsafe_ptr(),
+            n_rows,
+            n_cols,
+            k,
+            Int32(0),
+            grid_dim=(plan.n_blocks_dimx, Int(k), 1),
+            block_dim=(TPB, 1, 1),
+        )
+        ctx.enqueue_function[node_feature_score_init_kernel](
+            d_status.unsafe_ptr(),
+            d_thresh.unsafe_ptr(),
+            d_nleft.unsafe_ptr(),
+            d_ntotal.unsafe_ptr(),
+            d_gnum.unsafe_ptr(),
+            d_gden.unsafe_ptr(),
+            d_nblocks.unsafe_ptr(),
+            d_accl.unsafe_ptr(),
+            d_acct.unsafe_ptr(),
+            Int32(n_cells),
+            Int32(n_cells),
+            grid_dim=ceildiv(n_cells, 64),
+            block_dim=64,
+        )
+        ctx.enqueue_function[
+            node_feature_score_kernel[TPB, MAX_ACC, False]
+        ](
+            d_nleft.unsafe_ptr(),
+            d_ntotal.unsafe_ptr(),
+            d_accl.unsafe_ptr(),
+            d_acct.unsafe_ptr(),
+            d_nblocks.unsafe_ptr(),
+            d_min.unsafe_ptr(),
+            d_max.unsafe_ptr(),
+            d_missing.unsafe_ptr(),
+            dataset.d_data.unsafe_ptr(),
+            d_row_ids.unsafe_ptr(),
+            dataset.d_labels.unsafe_ptr(),
+            d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
+            d_colids.unsafe_ptr(),
+            n_rows,
+            k,
+            Int32(1),
+            seed,
+            tree_id,
+            Int32(0),
+            grid_dim=(plan.n_blocks_dimx, Int(k), 1),
+            block_dim=(TPB, 1, 1),
+        )
+        ctx.enqueue_function[
+            node_feature_score_finalize_kernel[MAX_ACC, False]
+        ](
+            d_status.unsafe_ptr(),
+            d_thresh.unsafe_ptr(),
+            d_gnum.unsafe_ptr(),
+            d_gden.unsafe_ptr(),
+            d_nleft.unsafe_ptr(),
+            d_ntotal.unsafe_ptr(),
+            d_accl.unsafe_ptr(),
+            d_acct.unsafe_ptr(),
+            d_min.unsafe_ptr(),
+            d_max.unsafe_ptr(),
+            d_missing.unsafe_ptr(),
+            d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            d_colids.unsafe_ptr(),
+            Int32(n_cells),
+            k,
+            Int32(1),
+            seed,
+            tree_id,
+            params.min_samples_leaf,
+            Int32(0),
+            grid_dim=ceildiv(n_cells, 64),
+            block_dim=64,
+        )
+        # The regression candidate carries cuML's MSE gain as its exact key
+        # (DEVIATION 189), so the conversion is the classification one with
+        # `n_classes = 1`: the accumulator loop runs once and the metric is
+        # the gain in SCALED units, which is monotone in the label's own units
+        # and therefore orders identically.
+        ctx.enqueue_function[score_to_candidate_kernel](
+            c_q.unsafe_ptr(),
+            c_c.unsafe_ptr(),
+            c_m.unsafe_ptr(),
+            c_l.unsafe_ptr(),
+            c_nu.unsafe_ptr(),
+            c_de.unsafe_ptr(),
+            c_v.unsafe_ptr(),
+            d_status.unsafe_ptr(),
+            d_thresh.unsafe_ptr(),
+            d_nleft.unsafe_ptr(),
+            d_ntotal.unsafe_ptr(),
+            d_accl.unsafe_ptr(),
+            d_acct.unsafe_ptr(),
+            d_gnum.unsafe_ptr(),
+            d_gden.unsafe_ptr(),
+            d_colids.unsafe_ptr(),
+            Int32(n_cells),
+            Int32(1),
+            params.min_samples_leaf,
+            grid_dim=ceildiv(n_cells, 64),
+            block_dim=64,
+        )
+        var bpn = ceildiv(Int(k), TPB)
+        if bpn < 1:
+            bpn = 1
+        ctx.enqueue_memset(r_mx, Int32(0))
+        ctx.enqueue_function[split_reduce_init_kernel](
+            r_q.unsafe_ptr(),
+            r_c.unsafe_ptr(),
+            r_m.unsafe_ptr(),
+            r_l.unsafe_ptr(),
+            r_nu.unsafe_ptr(),
+            r_de.unsafe_ptr(),
+            r_v.unsafe_ptr(),
+            r_mg.unsafe_ptr(),
+            r_nw.unsafe_ptr(),
+            Int32(n_nodes),
+            grid_dim=ceildiv(n_nodes, 64),
+            block_dim=64,
+        )
+        ctx.enqueue_function[split_reduce_kernel[TPB]](
+            r_q.unsafe_ptr(),
+            r_c.unsafe_ptr(),
+            r_m.unsafe_ptr(),
+            r_l.unsafe_ptr(),
+            r_nu.unsafe_ptr(),
+            r_de.unsafe_ptr(),
+            r_v.unsafe_ptr(),
+            r_mg.unsafe_ptr(),
+            r_nw.unsafe_ptr(),
+            r_mx.unsafe_ptr(),
+            c_q.unsafe_ptr(),
+            c_c.unsafe_ptr(),
+            c_m.unsafe_ptr(),
+            c_l.unsafe_ptr(),
+            c_nu.unsafe_ptr(),
+            c_de.unsafe_ptr(),
+            c_v.unsafe_ptr(),
+            d_nb.unsafe_ptr(),
+            d_nc.unsafe_ptr(),
+            Int32(bpn),
+            Int32(0),
+            grid_dim=(bpn, n_nodes, 1),
+            block_dim=(TPB, 1, 1),
+        )
+
+        var o_q = ctx.enqueue_create_host_buffer[DType.float32](n_nodes)
+        var o_c = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
+        var o_l = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
+        var o_v = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
+        var o_m = ctx.enqueue_create_host_buffer[DType.float32](n_nodes)
+        ctx.enqueue_copy(dst_buf=o_q, src_buf=r_q)
+        ctx.enqueue_copy(dst_buf=o_c, src_buf=r_c)
+        ctx.enqueue_copy(dst_buf=o_l, src_buf=r_l)
+        ctx.enqueue_copy(dst_buf=o_v, src_buf=r_v)
+        ctx.enqueue_copy(dst_buf=o_m, src_buf=r_m)
+        ctx.synchronize()
+
+        var splits = List[Split]()
+        for i in range(n_nodes):
+            var colid = o_c.unsafe_ptr()[unsafe_offset=i]
+            var metric = o_m.unsafe_ptr()[unsafe_offset=i]
+            if o_v.unsafe_ptr()[unsafe_offset=i] == 0 or colid < 0:
+                metric = Float32.MIN_FINITE
+            splits.append(
+                Split(
+                    o_q.unsafe_ptr()[unsafe_offset=i],
+                    colid,
+                    metric,
+                    o_l.unsafe_ptr()[unsafe_offset=i],
+                )
+            )
+
+        var d_splits = ctx.enqueue_create_buffer[DType.uint8](
+            n_nodes * size_of[Split]()
+        )
+        var d_iters = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+        var d_swaps = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+        var h_splits = ctx.enqueue_create_host_buffer[DType.uint8](
+            n_nodes * size_of[Split]()
+        )
+        ctx.synchronize()
+        var splits_ptr = h_splits.unsafe_ptr().unsafe_bitcast[Split]()
+        for i in range(n_nodes):
+            splits_ptr[unsafe_offset=i] = splits[i]
+        ctx.enqueue_copy(dst_buf=d_splits, src_ptr=h_splits.unsafe_ptr())
+        ctx.enqueue_memset(d_iters, PARTITION_UNVISITED)
+        ctx.enqueue_function[node_split_kernel[TPB]](
+            d_row_ids.unsafe_ptr(),
+            d_iters.unsafe_ptr(),
+            d_swaps.unsafe_ptr(),
+            dataset.d_data.unsafe_ptr(),
+            d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            d_splits.unsafe_ptr().unsafe_bitcast[Split](),
+            n_rows,
+            params.min_impurity_decrease,
+            params.min_samples_leaf,
+            PART_SAB_NONE,
+            grid_dim=(n_nodes, 1, 1),
+            block_dim=(TPB, 1, 1),
+        )
+        ctx.synchronize()
+        queue.push(work_items, splits)
+
+    var tree = queue.get_tree()
+    var n_nodes_final = tree.num_nodes()
+    var d_nodes = ctx.enqueue_create_buffer[DType.uint8](
+        n_nodes_final * size_of[SparseTreeNode[DType.float32]]()
+    )
+    var d_ranges = ctx.enqueue_create_buffer[DType.uint8](
+        n_nodes_final * size_of[InstanceRange]()
+    )
+    var d_leaves = ctx.enqueue_create_buffer[DType.float32](n_nodes_final)
+    var d_visit = ctx.enqueue_create_buffer[DType.int32](n_nodes_final)
+    var h_nodes = ctx.enqueue_create_host_buffer[DType.uint8](
+        n_nodes_final * size_of[SparseTreeNode[DType.float32]]()
+    )
+    var h_ranges = ctx.enqueue_create_host_buffer[DType.uint8](
+        n_nodes_final * size_of[InstanceRange]()
+    )
+    var h_leaves = ctx.enqueue_create_host_buffer[DType.float32](
+        n_nodes_final
+    )
+    ctx.synchronize()
+    var nodes_ptr = h_nodes.unsafe_ptr().unsafe_bitcast[
+        SparseTreeNode[DType.float32]
+    ]()
+    for i in range(n_nodes_final):
+        nodes_ptr[unsafe_offset=i] = tree.sparsetree[i]
+    var ranges_ptr = h_ranges.unsafe_ptr().unsafe_bitcast[InstanceRange]()
+    for i in range(n_nodes_final):
+        ranges_ptr[unsafe_offset=i] = queue.node_instances[i]
+    ctx.enqueue_copy(dst_buf=d_nodes, src_ptr=h_nodes.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=d_ranges, src_ptr=h_ranges.unsafe_ptr())
+    ctx.enqueue_memset(d_leaves, Float32(0.0))
+    ctx.enqueue_memset(d_visit, Int32(0))
+    # `inv_scale` puts the fixed-point mean back into the label's own units --
+    # DEVIATION 179. This is the one place the scale is needed after
+    # quantization.
+    ctx.enqueue_function[leaf_kernel[TPB, LEAF_MAX_OUT_DEFAULT, False]](
+        d_leaves.unsafe_ptr(),
+        d_visit.unsafe_ptr(),
+        d_nodes.unsafe_ptr().unsafe_bitcast[SparseTreeNode[DType.float32]](),
+        d_ranges.unsafe_ptr().unsafe_bitcast[InstanceRange](),
+        d_row_ids.unsafe_ptr(),
+        dataset.d_labels.unsafe_ptr(),
+        Int32(1),
+        Float32(1.0 / scale),
+        LEAF_SAB_NONE,
+        grid_dim=(n_nodes_final, 1, 1),
+        block_dim=(TPB, 1, 1),
+    )
+    ctx.enqueue_copy(dst_buf=h_leaves, src_buf=d_leaves)
+    ctx.synchronize()
+    tree.vector_leaf = List[Float32](
+        length=n_nodes_final, fill=Float32(0.0)
+    )
+    for i in range(n_nodes_final):
+        tree.vector_leaf[i] = h_leaves.unsafe_ptr()[unsafe_offset=i]
+    return tree^
+
+
 def train_loop_shape() -> String:
     """`builder.cuh:344-359`, `Builder::train`, quoted rather than executed.
 
