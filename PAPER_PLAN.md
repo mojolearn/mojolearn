@@ -132,7 +132,31 @@ system.** Not before.
 - Items 6 and 7 (benchmark protocol, oracle-compiled gates): methods sections
   in Papers 1 and 2. Kalibera & Jones and Mytkowicz et al. own the first;
   differential testing owns the second.
-- The library itself: JOSS, already deferred, correctly.
+- **The library itself: JMLR MLOSS or JOSS. Deferred, and now with the exact
+  bar written down rather than a feeling.** MLOSS is four pages plus
+  references, and the cover letter must state the license, the project URL,
+  the version under review, and **"evidence of an active user community"** ---
+  demonstrated by active developer count, stars, or similar. Review criteria
+  include freedom from proprietary dependence.
+
+  Two of those block today. There is **no user community**: no non-author has
+  used this, which is the same reason JOSS was deferred and it has not
+  changed. And the **Python extension does not build at HEAD**, so a reviewer
+  who tries to install it fails --- for a track that reviews the software as
+  much as the paper, that is disqualifying rather than embarrassing.
+
+  The proprietary-dependence criterion may have just stopped applying:
+  Qualcomm open-sourced Mojo under Apache-2.0 in August 2026. **Verify exactly
+  what is covered** --- the language, the compiler, the runtime, the kernel
+  library --- before relying on it, because "the platform is open source now"
+  is the kind of sentence that is 80% true.
+
+  **MLOSS is not a competitor to the conference paper, it is a different
+  question.** The conference asks whether the result is true and interesting;
+  MLOSS asks whether the software is real and used. For a library author the
+  software paper is often the one that accumulates citations, because every
+  user cites it --- but only once there are users. Sequence it after adoption,
+  not before.
 
 ## The ordering that gets one thing submitted
 
