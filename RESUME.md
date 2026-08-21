@@ -819,7 +819,12 @@ findings, each measured:
    checked dead end at 2 stats (same amplified read plus a dense
    write+re-read; their own statCount > 2 threshold encodes exactly this),
    so the cliff is unaddressed in their design and merely tolerable on
-   V100-class bandwidth. A density-triggered level compaction is PRICED
-   AND DEFERRED (~1.6x theoretical ceiling at depth 6, sketch nets
-   15-30%, we stand 3.3-3.4x ahead); it reopens at depth 8+ or on a
-   bandwidth-tighter GPU.
+   V100-class bandwidth. A density-triggered level compaction was
+   priced at 15-30% and then REFUTED the same day by
+   `mojo_only/density_probe.mojo`: indexed loads beat the gather arm at
+   EVERY density (0.29-0.75x of its cost) and a dense 800MB/level copy
+   exceeds depth-6 amplification losses, so the cliff is STRUCTURAL on
+   this box and the on-box speed hunt at this shape closes with a
+   measured answer at every door. It reopens only on other memory
+   systems (re-run the depth differencing there first) or at much
+   greater depths.
