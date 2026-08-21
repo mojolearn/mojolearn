@@ -3414,3 +3414,138 @@ Also: `FindOptimalSplitDynamic` supports only 3 of the 7 score functions
 (SolarL2, Cosine, NewtonCosine). `L2`, `NewtonL2`, `SatL2` and `LOOL2` throw
 the moment `foldCount > 1`, and `find_optimal_split_dynamic` raises in the
 same place.
+
+## 97. `TOptimizationSubsets` state layout
+
+`gbdt/methods/pointwise_optimization_subsets.mojo`.
+
+**Theirs.** Six device buffers, two of them arrays of structs:
+`TBuffer<ui32> Bins/Indices`, `TBuffer<TDataPartition> Partitions`
+(`{ui32 Offset, Size}`), `TBuffer<TPartitionStatistics> PartitionStats`
+(`{double Weight, Sum, Count}`), and `TL2Target`'s two separate
+`TCudaBuffer<float>` columns (`pointwise_optimization_subsets.h:14-24`,
+`weak_target_helpers.h:11-14`, `gpu_data/gpu_structures.h:113-116`).
+
+**Ours**, five departures, none arithmetic:
+
+1. `Partitions` is ONE `UInt32` buffer, `partitions[2p] = Offset`,
+   `[2p + 1] = Size` -- `TDataPartition[]` reinterpreted, in their field
+   order. An earlier draft used two parallel arrays, arguing from the greedy
+   searcher's convention; that was OVERRULED and the reversal is recorded
+   rather than dropped. It mirrors `TDataPartition` exactly (the tie-breaker
+   under COPY-DO-NOT-IMPROVE), and it is already the GATED CONTRACT of two
+   layers that landed first -- `kernel/split_properties_helpers.mojo:193,196`
+   and `kernel/pointwise_hist2_one_byte_templ.mojo:291-292`, with
+   `mojo_only/pointwise_dispatch_check.mojo` green on 3,686 and 12,360 cells.
+   **Cost, named:** the offsets kernel is PORTED, not reused. In a
+   parallel-array layout `TPartitionOffsetWriter::Write` and
+   `TVecOffsetWriter::Write` collapse to one store; interleaved they do not,
+   which is why CatBoost instantiates the template twice.
+2. `WeightedTarget`/`Weights` are two columns of ONE buffer. The shape is
+   CatBoost's own (`TOptimizationTarget::StatsToAggregate`,
+   `greedy_subsets_searcher/split_properties_helper.h:41`).
+3. Source plane 0 is the WEIGHT, plane 1 the weighted target -- the reverse
+   of `TL2Target`'s declaration order, matching
+   `TPartitionStatistics{Weight, Sum}` and `greedy_search_helper.mojo:244`.
+4. `PartitionStats` is Float32, not `double` (Metal has no float64).
+   **COST UNPRICED**: no measurement against a Float64 host reduction of a
+   real fixture. The gate sidesteps it with integer plants under 2^24.
+5. `PartitionStats` is STRIDE 3 and **plane 2 is dead weight, stored anyway.**
+   Their `Count` is never reduced on this path (`counts == nullptr`,
+   `pointwise_kernels.h:240`, so `PartitionUpdateImpl` takes
+   `else { tmp = size; }` at `methods/kernel/pointwise_scores.cu:668-676`),
+   AND no scorer ever reads it -- theirs touches `.Weight`/`.Sum` at
+   `pointwise_scores.cu:89,92,260,263,359,362` and `.Count` nowhere; the
+   ported scorer indexes `3*off + 0` and `3*off + 1` only
+   (`kernel/pointwise_scores.mojo:700-703`, `:884-885`, `:1011-1014`). The
+   plane carries no information into any consumer. It is three wide because
+   `TPartitionStatistics` is three doubles wide and the ported scorer's
+   reader is compiled against that stride; a stride-2 record would be
+   arithmetically complete and would silently misalign every read in that
+   file. It starts carrying a reduction when the PAIRWISE family lands.
+
+Two adapters exist for this and are labelled not-a-port:
+`deinterleave_partitions_kernel` splits the record for
+`compute_partition_stats` (whose signature is the greedy searcher's live
+contract), and `pack_partition_stats_kernel` widens stride 2 to 3 and writes
+the Count arm. Both run at most `max_part_count` threads: 64 at depth 6.
+
+Gated per cell by `mojo_only/pointwise_subsets_check.mojo`, whose
+`check_layout_contract` pins the record with `comptime assert` against
+literals taken from the call sites above -- because the first version of that
+check spelled the layout with this file's own constants, and a swap of
+`PART_OFFSET`/`PART_SIZE` moved ZERO cells. It was verifying
+self-consistency, which a swap preserves perfectly. The contract now fails at
+BUILD time and names the call site it contradicts.
+
+## 98. Which partition reducer `UpdateSubsetsStats` calls
+
+CatBoost has two similarly-named, different kernels:
+
+| symbol | file | shape |
+|---|---|---|
+| `UpdatePartitionProps` | `methods/kernel/pointwise_scores.cu:681` | `<<<partsCount, 1024>>>`, ONE BLOCK PER PARTITION, three sequential `double` reductions |
+| `UpdatePartitionsProps` | `cuda_util/kernel/update_part_props.cu:197` | grid-strided over (chunk, part, stat) at 512, plus a `SaveResultsImpl` phase |
+
+`UpdateSubsetsStats` (`pointwise_optimization_subsets.h:66`) dispatches the
+FIRST. **We call the SECOND -- `gbdt/gpu_util/partitions_reduce
+.compute_partition_stats` -- deliberately, and the faithful port of the first
+exists in-tree and is not called.** `partition_update_kernel` /
+`update_partition_props` landed in `gbdt/methods/kernel/pointwise_scores.mojo`
+(`:1290`, `:1800`) with the three null arms and the `tmp = size` Count arm
+intact; it is a correct port of the function their dispatch names.
+
+Why we do not call it:
+
+* their form puts the WHOLE DATASET through ONE THREADGROUP at depth 0, since
+  the grid is `partsCount` and that is 1 there;
+* this repo has built that shape twice and measured against it twice
+  (`gbdt/gpu_util/partitions_reduce.mojo`);
+* the arithmetic is the same either way, and the `double`-vs-Float32 gap
+  (97.4) puts bit-parity with their kernel out of reach on this target
+  regardless, so there is nothing to buy.
+
+**PRICED, AND UNMEASURED ON THIS PATH.** The two cited measurements are on the
+greedy path and are cited, not re-taken; nothing calls this file yet, so a
+timing here would mean nothing. What IS counted is launches: their `Split` is
+10, ours is 9 -- the two adapters are not bought at the cost of a launch
+budget. If a measurement later favours the one-block form, the swap is one
+call in `update_subsets_stats` and the kernel is already written.
+
+Summation order differs from theirs and can differ across machines. That is
+true of their own code too (`UpdatePartitionsProps` sizes its grid from
+`TArchProps::SMCount()`), and `partition_stats_chunks` is pinned under
+`NUMERIC_IDENTICAL` for exactly that reason.
+
+## 99. `methods/helpers.mojo`, three non-arithmetic departures
+
+1. **`GetBinsForModel` and `CacheBinsForModel` are NOT PORTED**
+   (`helpers.cpp:3-58`). They need `TScopedCacheHolder`, `TTreeUpdater` and
+   `TFeatureParallelDataSet`, all unported, and their four call sites are all
+   in the FEATURE-PARALLEL learner. They belong with rung 2 of section 91 E.
+2. **`TBinarizedFeaturesManager` is unwrapped into parameters.** `ToSplit`,
+   both `SplitConditionToString` overloads, `PrintBestScore` and
+   `HasPermutationDependentSplit` take the values they would have read.
+   Arithmetic unchanged. One real consequence: `to_split` has NO
+   feature-bundle arm (`helpers.cpp:159-161`) and RAISES on one;
+   `PrintBestScore`'s CTR tensor tail is likewise absent.
+3. **Float-to-text is Mojo's, not C++ `ostream`'s** -- six significant digits
+   there, shortest round-tripping form here. LOG TEXT ONLY. The gate checks
+   which border index and which comparator, not the digits.
+
+Also transcribed but with NO caller in either tree: `ReverseBits`,
+`GetOddBits`, `GetEvenBits`, `MergeBits` (`helpers.h:53-101`). Checked:
+`ReverseBits` has no `catboost/cuda/` caller (the one at
+`private/libs/data_types/groupid.h:14` is a different, one-argument
+function); `GetOddBits`/`GetEvenBits` are called only from
+`methods/ut/test_pairwise_tree_searcher.cpp:152-153`; `MergeBits` has none
+(the `MergeBits` in `ctrs/ctr_kernels.h:170` is an unrelated device kernel).
+Ported for completeness of the assigned file, gated against an independent
+oracle, and their lack of a caller is stated rather than left to be found.
+
+### 99a. Their two `ToSplit` clamps are asymmetric, and their comment does not say why
+
+`helpers.cpp` clamps a categorical split to `GetBinCount(f)` and a float
+split to `GetBorders(f).size() - 1`. Their comment explains why a clamp
+exists at all, not why the two differ by one. Transcribed as written; gated
+both ways.

@@ -357,6 +357,19 @@ check-pointwise-dispatch = "mojo run -I . mojo_only/pointwise_dispatch_check.moj
 # the offset-confusion sabotage measures green. Own main(); a GPU, ~2 s.
 check-pointwise-scores = "mojo run -I . mojo_only/pointwise_scores_check.mojo"
 
+# TOptimizationSubsets and methods/helpers: CreateSubsets, Split,
+# UpdateSubsetsStats, TakeBest, ToSplit and the bit helpers. Two independent
+# per-cell tallies at every level, CONTENT (membership, offsets, sizes, stats,
+# the poisoned tail) and ORDER (positions, bins, gathered stats) -- because
+# making ReorderBins UNSTABLE moves 5,958 ORDER cells and exactly ZERO
+# CONTENT cells, and only the second tally can see it. Also carries a
+# `comptime assert` layout contract pinned against literals taken from the
+# call sites that hardcode the record, after a swap of PART_OFFSET/PART_SIZE
+# moved zero cells: the check had spelled the layout with the library's own
+# constants, so it was verifying self-consistency, which a swap preserves.
+# Own main(); a GPU, ~10 s.
+check-pointwise-subsets = "mojo run -I . mojo_only/pointwise_subsets_check.mojo"
+
 # The LSD radix sort over (bin, permutation position). Gates STABILITY
 # separately from sortedness and prints both, because sortedness alone
 # cannot see a tie that moved -- and the tie order IS the second half of
