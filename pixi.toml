@@ -344,6 +344,14 @@ check-shared-pointer = "mojo run -I . mojo_only/shared_pointer_probe.mojo"
 # 4-block partition case. Own main(); a GPU, ~1 min.
 check-pointwise-loop = "mojo run -I . mojo_only/pointwise_loop_check.mojo"
 
+# The pointwise cross-tree pool's reset contract (DEVIATION 143):
+# reset_subsets after two real splits over a different target must be
+# BIT-IDENTICAL to create_subsets fresh -- teeth first (every mutable
+# region must diverge before the reset counts), then 6k u32 + 4k f32
+# cells compared exactly; plus the hist state machine replaying a fresh
+# helper's plan sequence after reset(). Own main(); a GPU, seconds.
+check-pointwise-pool = "mojo run -I . mojo_only/pointwise_pool_check.mojo"
+
 # The tripwire under PORTING.md 11 and 92. Two histogram families here run
 # one iteration count per BLOCK rather than CatBoost's per-thread counts,
 # because their AddPoint syncs an 8-lane tile and ours can only take a

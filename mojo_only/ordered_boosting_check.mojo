@@ -85,6 +85,7 @@ from gbdt.methods.kernel.pointwise_scores import (
 )
 from gbdt.gpu_data.compressed_index_builder import build_layout
 from gbdt.methods.oblivious_tree_doc_parallel_structure_searcher import (
+    PointwiseTreeWorkspace,
     fit_oblivious_tree_structure,
 )
 from gbdt.methods.pointwise_kernels import compute_hist2
@@ -949,9 +950,10 @@ def main() raises:
         ctx.enqueue_memset(w1, Float32(1.0))
         ctx.enqueue_memset(t1, Float32(1.0))
         ctx.synchronize()
+        var pool_a = List[PointwiseTreeWorkspace]()
         _ = fit_oblivious_tree_structure(
             ctx, lay2, N_ROWS, MAX_DEPTH, d_ci2, w1^, t1^, SM_COUNT,
-            Float32(1.0), SCORE_FUNCTION_L2, folds=folds,
+            Float32(1.0), SCORE_FUNCTION_L2, pool_a, folds=folds,
         )
     except e:
         msg_a = String(e)
@@ -969,9 +971,10 @@ def main() raises:
         ctx.enqueue_memset(w2, Float32(1.0))
         ctx.enqueue_memset(t2, Float32(1.0))
         ctx.synchronize()
+        var pool_b = List[PointwiseTreeWorkspace]()
         _ = fit_oblivious_tree_structure(
             ctx, lay2, N_ROWS, MAX_DEPTH, d_ci2, w2^, t2^, SM_COUNT,
-            Float32(1.0), SCORE_FUNCTION_SOLAR_L2, folds=folds,
+            Float32(1.0), SCORE_FUNCTION_SOLAR_L2, pool_b, folds=folds,
         )
     except e:
         msg_b = String(e)
@@ -991,9 +994,10 @@ def main() raises:
         ctx.enqueue_memset(w3, Float32(1.0))
         ctx.enqueue_memset(t3, Float32(1.0))
         ctx.synchronize()
+        var pool_c = List[PointwiseTreeWorkspace]()
         _ = fit_oblivious_tree_structure(
             ctx, lay2, N_ROWS, MAX_DEPTH, d_ci2, w3^, t3^, SM_COUNT,
-            Float32(1.0), SCORE_FUNCTION_L2,
+            Float32(1.0), SCORE_FUNCTION_L2, pool_c,
         )
     except e:
         msg_c = String(e)

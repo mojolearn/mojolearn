@@ -137,6 +137,7 @@ from gbdt.methods.random_score_helper import (
     compute_score_std_dev,
 )
 from gbdt.methods.oblivious_tree_doc_parallel_structure_searcher import (
+    PointwiseTreeWorkspace,
     fit_oblivious_tree_structure,
     split_stat_planes,
 )
@@ -993,6 +994,8 @@ def fit_with_test(
     # not the tree's, so growing tree 2 allocates nothing.
 
     var ws = List[TTreeWorkspace]()
+    # the pointwise arm's pool of one (DEVIATION 143), same span: the FIT's
+    var pw_pool = List[PointwiseTreeWorkspace]()
 
     for iteration in range(n_estimators):
         # ---- which permutation the STRUCTURE is searched on ----------
@@ -1291,6 +1294,7 @@ def fit_with_test(
                 est_sm if est_sm > 0 else 1,
                 scale,
                 score_function,
+                pw_pool,
                 l2_leaf_reg,
                 score_std_dev=pointwise_score_std_dev,
                 seed=tree_seed,

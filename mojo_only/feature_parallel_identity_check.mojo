@@ -160,6 +160,7 @@ from gbdt.methods.oblivious_tree_bin_builder import (
     create_compressed_split,
 )
 from gbdt.methods.oblivious_tree_doc_parallel_structure_searcher import (
+    PointwiseTreeWorkspace,
     fit_oblivious_tree_structure,
 )
 from gbdt.methods.oblivious_tree_structure_searcher import (
@@ -251,9 +252,10 @@ def run_case(ctx: DeviceContext, n_rows: Int) raises -> Int:
     )
     ctx.synchronize()
     print("arm A: TDocParallelObliviousTreeSearcher (UpdateBinFromCompressedIndex)")
+    var dp_pool = List[PointwiseTreeWorkspace]()
     var dp_splits = fit_oblivious_tree_structure(
         ctx, lay, N_ROWS, MAX_DEPTH, cindex, a_w^, a_g^, 10, Float32(1.0),
-        SCORE_FUNCTION_COSINE,
+        SCORE_FUNCTION_COSINE, dp_pool,
     )
 
     # ---- arm B: the FEATURE-PARALLEL searcher (rung 2) -------------------

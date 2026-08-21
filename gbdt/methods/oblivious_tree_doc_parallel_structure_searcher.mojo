@@ -95,6 +95,7 @@ from gbdt.methods.pointwise_optimization_subsets import (
     TL2Target,
     TOptimizationSubsets,
     create_subsets,
+    reset_subsets,
     split_subsets,
 )
 from gbdt.methods.pointwise_scores_calcer import ScoresCalcerOnCompressedDataSet
@@ -121,6 +122,67 @@ from gbdt.models.oblivious_model import (
 )
 
 
+struct PointwiseTreeWorkspace(Movable):
+    """DEVIATION 143: the pointwise searcher's CROSS-TREE POOL.
+
+    CatBoost never rebuilds this state per tree -- its `TCudaManager`
+    memory pool hands `CreateSubsets` and the score helpers recycled
+    device memory, so their per-tree cost is a handful of fills. This
+    port has no manager, and constructing fresh was measured at 17-26
+    ms/tree (PREP_BILL step 21: ~17 buffer allocations in
+    `create_subsets`, ~10 more plus four layout uploads AND a full
+    drain per `PolicyScoreHelper`, per tree). Same shape as the greedy
+    family's `TTreeWorkspace`, for the same reason: a POOL OF ONE,
+    owned by the caller for the span of a fit, keyed on the shapes that
+    size the buffers, rebuilt whole on any mismatch.
+
+    A `List` of at most one element rather than an `Optional` for the
+    reason `TTreeWorkspace` records: the caller declares an empty list,
+    the first tree fills it, later trees hit the key check and reset
+    instead.
+
+    ONLY THE SINGLE-TASK ARM POOLS. `fold_count > 1` (ordered boosting)
+    stores its fresh build here too -- one location for the `ref`
+    bindings -- but its key can never hit (`fold_count_key > 1` fails
+    the check), so every fold-arm tree constructs exactly as before.
+    Pooling that arm needs `write_fold_based_initial_bins` replayed
+    after the reset and a gate that holds it; neither exists yet, and
+    an arm that silently skipped its fold seeding would be
+    [[reached-but-inert]] in the worst way.
+
+    The per-tree reset contract is CONSTRUCTOR POSTCONDITIONS
+    (`reset_subsets` + `reset_for_tree`), held bit-exactly by
+    `mojo_only/pointwise_pool_check.mojo` and end-to-end by the
+    pooled-vs-fresh identity of whole fits.
+    """
+
+    var subsets: TOptimizationSubsets
+    var calcer: ScoresCalcerOnCompressedDataSet
+    var doc_count_key: Int
+    var n_rows_key: Int
+    var max_depth_key: Int
+    var n_features_key: Int
+    var fold_count_key: Int
+
+    def __init__(
+        out self,
+        var subsets: TOptimizationSubsets,
+        var calcer: ScoresCalcerOnCompressedDataSet,
+        doc_count: Int,
+        n_rows: Int,
+        max_depth: Int,
+        n_features: Int,
+        fold_count: Int,
+    ):
+        self.subsets = subsets^
+        self.calcer = calcer^
+        self.doc_count_key = doc_count
+        self.n_rows_key = n_rows
+        self.max_depth_key = max_depth
+        self.n_features_key = n_features
+        self.fold_count_key = fold_count
+
+
 def fit_oblivious_tree_structure(
     ctx: DeviceContext,
     layout: CompressedIndexLayout,
@@ -132,6 +194,7 @@ def fit_oblivious_tree_structure(
     sm_count: Int,
     fixed_scale: Float32,
     score_function: Int,
+    mut pool: List[PointwiseTreeWorkspace],
     l2_leaf_reg: Float32 = Float32(3.0),
     score_std_dev: Float32 = Float32(0.0),
     seed: UInt64 = 0,
@@ -215,12 +278,40 @@ def fit_oblivious_tree_structure(
     # at one task and different at N, because the fold estimate slices are
     # nested prefixes -- see `fold_tasks_from_folds`.
     var target = TL2Target(weights^, weighted_target^, doc_count)
-    var subsets = create_subsets(ctx, max_depth, target) if (
-        fold_count == 1
-    ) else create_fold_based_subsets(ctx, max_depth, target, fold_layout)
-    var calcer = ScoresCalcerOnCompressedDataSet(
-        ctx, blocks, layout, n_rows, max_depth, global_ids
+
+    # ---- DEVIATION 143: reset the pooled pair, or build it -------------
+    # The key check is the whole dispatch; see `PointwiseTreeWorkspace`
+    # for why the fold arm can never hit.
+    var pooled_hit = (
+        len(pool) != 0
+        and fold_count == 1
+        and pool[0].fold_count_key == 1
+        and pool[0].doc_count_key == doc_count
+        and pool[0].n_rows_key == n_rows
+        and pool[0].max_depth_key == max_depth
+        and pool[0].n_features_key == len(layout.features)
     )
+    if pooled_hit:
+        reset_subsets(ctx, pool[0].subsets, target)
+        pool[0].calcer.reset_for_tree(ctx)
+    else:
+        pool.clear()
+        var subsets_new = create_subsets(ctx, max_depth, target) if (
+            fold_count == 1
+        ) else create_fold_based_subsets(
+            ctx, max_depth, target, fold_layout
+        )
+        var calcer_new = ScoresCalcerOnCompressedDataSet(
+            ctx, blocks, layout, n_rows, max_depth, global_ids
+        )
+        pool.append(
+            PointwiseTreeWorkspace(
+                subsets_new^, calcer_new^, doc_count, n_rows, max_depth,
+                len(layout.features), fold_count,
+            )
+        )
+    ref subsets = pool[0].subsets
+    ref calcer = pool[0].calcer
 
     # DEVIATION 126, and it dissolves the moment the calcer carries folds.
     # `TScoreHelper` takes `foldCount` and hands it to BOTH halves

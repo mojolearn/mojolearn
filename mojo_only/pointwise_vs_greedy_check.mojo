@@ -59,6 +59,7 @@ from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
     run_tree_layout,
 )
 from gbdt.methods.oblivious_tree_doc_parallel_structure_searcher import (
+    PointwiseTreeWorkspace,
     fit_oblivious_tree_structure,
 )
 from gbdt.models.oblivious_model import TBinarySplit
@@ -169,9 +170,10 @@ def main() raises:
     )
     ctx.synchronize()
 
+    var pw_pool = List[PointwiseTreeWorkspace]()
     var pw_splits = fit_oblivious_tree_structure(
         ctx, lay, N_ROWS, MAX_DEPTH, cindex, d_w^, d_g^, 10, Float32(1.0),
-        SCORE_FUNCTION_COSINE,
+        SCORE_FUNCTION_COSINE, pw_pool,
     )
 
     # ---- compare -----------------------------------------------------
