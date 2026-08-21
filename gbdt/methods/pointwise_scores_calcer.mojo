@@ -412,6 +412,24 @@ struct PolicyScoreHelper(Movable):
             )
         return best
 
+    def reset_for_tree(mut self, ctx: DeviceContext) raises:
+        """CONSTRUCTOR POSTCONDITIONS a new tree reads, for the pooled
+        calcer: the histogram zeroed (`:263`'s memset) and the full-pass
+        state machine at `CurrentBit = -1` / `BuildFromScratch = true`.
+
+        Nothing else the constructor built moves between trees: the
+        layout uploads (`d_offset`/`d_first_fold`/`d_folds`/`d_one_hot`/
+        `d_bf`), the constant-ones fills (`d_cat_w`/`d_bin_w`) and the
+        result scratch (overwritten by every `compute_optimal_split`,
+        read only after it) are tree-invariant. The histogram memset is
+        NOT an optimization to skip: the M > 1 writeback is an atomicAdd
+        (`pointwise_hist2_one_byte_templ.mojo`'s writeback), so a
+        from-scratch level adds onto whatever the buffer holds, and
+        after a tree it holds the previous tree's SCANNED sums.
+        """
+        ctx.enqueue_memset(self.d_hist, Float32(0.0))
+        self.hist_helper.reset()
+
 
 struct ScoresCalcerOnCompressedDataSet(Movable):
     """`TScoresCalcerOnCompressedDataSet<TDocParallelLayout>`
@@ -509,3 +527,13 @@ struct ScoresCalcerOnCompressedDataSet(Movable):
         for i in range(len(self.helpers)):
             best = take_best(self.helpers[i].read_optimal_split(ctx), best)
         return best
+
+    def reset_for_tree(mut self, ctx: DeviceContext) raises:
+        """The pooled calcer's per-tree reset: each helper back to its
+        constructor postconditions. See `PolicyScoreHelper.reset_for_tree`
+        for what that is and why the histogram memset is load-bearing.
+        No drain: the memsets are enqueued and ordered before the next
+        tree's launches by the queue, exactly like the constructor's own
+        memset was."""
+        for i in range(len(self.helpers)):
+            self.helpers[i].reset_for_tree(ctx)

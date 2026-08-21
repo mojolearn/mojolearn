@@ -167,6 +167,22 @@ struct ComputeHistogramsHelper(Copyable, Movable):
         """
         self.build_from_scratch = False
 
+    def reset(mut self):
+        """Back to the CONSTRUCTOR's state, for cross-tree reuse: the
+        pooled calcer keeps this helper alive across trees, and a new
+        tree must see exactly what a freshly built helper shows --
+        `CurrentBit = -1`, `BuildFromScratch = true` (`:23-24`).
+
+        `plan` would in fact self-heal at the next depth-0 call (its
+        `current_bit != subsets_current_depth` test fires when the bit
+        runs past a new tree's depth 0), but the pool's contract is
+        CONSTRUCTOR POSTCONDITIONS, not "a state the next call happens
+        to recover from" -- the self-heal is an implementation detail of
+        `plan` and this reset does not lean on it.
+        """
+        self.current_bit = -1
+        self.build_from_scratch = True
+
     def histogram_view_size(self, current_bit: Int, bin_features: Int) -> Int:
         """`(1 << CurrentBit) * FoldCount * features.Size() * 2` (`:57-62`).
 

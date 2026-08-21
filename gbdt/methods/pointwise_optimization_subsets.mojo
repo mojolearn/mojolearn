@@ -1368,6 +1368,46 @@ def create_subsets(
         sm_count,
     )
 
+    reset_subsets(ctx, subsets, source, fold_count, fold_bits)
+    return subsets^
+
+
+def reset_subsets(
+    ctx: DeviceContext,
+    mut subsets: TOptimizationSubsets,
+    mut source: TL2Target,
+    fold_count: Int = 0,
+    fold_bits: Int = 0,
+) raises:
+    """`CreateSubsets`' STATE half, split from its ALLOCATION half so a
+    pooled `TOptimizationSubsets` can be reused across trees: every buffer
+    is shape-keyed (`doc_count`, `max_part_count`) and only what this
+    function writes depends on the TREE -- the target changes with every
+    boosting iteration, the counters and seeds do not carry.
+
+    `create_subsets` calls this as its tail, so the fresh-build path and
+    the pooled path run THE SAME statements in the same order and cannot
+    drift. The contract is CONSTRUCTOR POSTCONDITIONS: after this call the
+    struct is indistinguishable from a freshly created one over the same
+    source (`mojo_only/pointwise_pool_check.mojo` holds that bit-exactly).
+
+    A caller with folds overwrites the bins afterwards with
+    `write_fold_based_initial_bins`, exactly as after `create_subsets` --
+    the pooled path owes that call too.
+    """
+    if source.line_size != subsets.doc_count:
+        raise Error(
+            "reset_subsets: source has "
+            + String(source.line_size)
+            + " documents but the pooled subsets were built for "
+            + String(subsets.doc_count)
+            + " -- the pool key must include doc_count"
+        )
+
+    # `subsets.CurrentDepth = 0` (`pointwise_optimization_subsets.cpp:12`).
+    # The constructor starts there; a reused struct ended the last tree at
+    # max_depth.
+    subsets.current_depth = 0
     subsets.fold_count = UInt32(fold_count)
     subsets.fold_bits = UInt32(fold_bits)
 
@@ -1379,22 +1419,19 @@ def create_subsets(
     # takes them from `WriteFoldBasedInitialBins`
     # (`oblivious_tree_structure_searcher.cpp:36-37`). The two arms differ
     # in exactly these two fields and the initial bin fill; everything else
-    # in this function is shared, which is why the fold arm is a parameter
-    # here rather than a second copy of 90 lines.
-    #
-    # A caller with folds overwrites the bins afterwards with
-    # `write_fold_based_initial_bins`; the memset is still correct as a
-    # floor and costs one launch.
+    # in `create_subsets` is shared, which is why the fold arm is a
+    # parameter here rather than a second copy of 90 lines.
     ctx.enqueue_memset(subsets.bins, UInt32(0))
     # `MakeSequence(subsets.Indices)` (`fill.cu:47-55`).
-    launch_make_sequence(ctx, UInt32(0), subsets.indices, doc_count)
+    launch_make_sequence(ctx, UInt32(0), subsets.indices, subsets.doc_count)
     # `partIds`: the identity, standing in for `PartitionUpdateImpl`'s
     # `blockIdx.x`. See the field docstring.
-    launch_make_sequence(ctx, UInt32(0), subsets.part_ids, max_part_count)
+    launch_make_sequence(
+        ctx, UInt32(0), subsets.part_ids, subsets.max_part_count
+    )
 
     # `UpdateSubsetsStats(src, &subsets)`
     update_subsets_stats(ctx, source, subsets)
-    return subsets^
 
 
 def split_subsets(
