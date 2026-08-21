@@ -383,7 +383,7 @@ def scan_by_key_block_kernel[
 
 
 def scan_by_key_carry_kernel[
-    T: ScanByKeyElement, sabotage: Int = 0
+    T: ScanByKeyElement, TPB: Int, sabotage: Int = 0
 ](
     block_agg: MutPointer[T, MutAnyOrigin],
     block_head: MutPointer[UInt8, MutAnyOrigin],
@@ -391,30 +391,116 @@ def scan_by_key_carry_kernel[
 ):
     """Phase 2: the same operator again, over the per-block aggregates.
 
-    One thread, serial -- the shape `seg_scan_block_sums_kernel`
-    (`gbdt/gpu_util/kernel/segmented_scan.mojo`) already runs, and the
-    reason it is not a recursion is DEVIATION 115a. `block_agg[b]` leaves
-    holding the carry INTO block `b`, and the carry dies at a block that
-    contains a segment head -- past that head nothing earlier is in the
-    segment any more.
+    `block_agg[b]` leaves holding the carry INTO block `b`, and the carry
+    dies at a block that contains a segment head -- past that head nothing
+    earlier is in the segment any more.
+
+    ONE BLOCK, TPB THREADS. This used to be one block of ONE thread
+    walking the aggregates serially, which is a real serialization
+    `thrust::inclusive_scan_by_key` does not have and which DEVIATION
+    115a's price list did not mention. The loop length is the phase-1
+    block count -- `n_slots / TPB`, so roughly `n_sampled_rows / TPB` per
+    level -- and at 800k rows that is thousands of dependent steps on one
+    lane, every level of every tree.
+
+    The recurrence is unchanged, only its shape:
+
+        out[b]  = running_before(b)
+        running_after(b) = head[b] ? v[b] : running_before(b).combine(v[b])
+
+    `running_after` IS a segmented inclusive scan of `v` that resets at
+    each head, and `running_before(b)` is `running_after(b-1)`. So this
+    computes the same in-block Hillis-Steele segmented scan phase 1 uses,
+    chunk by chunk with a carry between chunks, and writes the value
+    SHIFTED BY ONE. A head block still receives the previous segment's
+    total rather than the identity, exactly as the serial loop left it --
+    phase 3 gates on the head flag and never reads it.
     """
-    if Int(thread_idx.x) != 0 or Int(block_idx.x) != 0:
+    if Int(block_idx.x) != 0:
         return
+
+    var s_val = stack_allocation[
+        TPB, T, address_space = AddressSpace.SHARED
+    ]()
+    var s_flg = stack_allocation[
+        TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    # The inclusive value at the end of the previous chunk.
+    var s_run = stack_allocation[
+        1, T, address_space = AddressSpace.SHARED
+    ]()
+
     var n = Int(n_blocks_in)
-    var running = T.zero()
-    for b in range(n):
-        var v = block_agg[unsafe_offset=b]
-        var f = block_head[unsafe_offset=b]
-        block_agg[unsafe_offset=b] = running
+    var tid = Int(thread_idx.x)
+
+    if tid == 0:
+        s_run[unsafe_offset=0] = T.zero()
+    barrier()
+
+    var n_chunks = (n + TPB - 1) // TPB
+    for chunk in range(n_chunks):
+        var i = chunk * TPB + tid
+        # Padding contributes the identity and cannot start a segment, so
+        # a partial final chunk still leaves the true last value in
+        # `s_val[TPB - 1]`. Same argument as phase 1's.
+        var v = T.zero()
+        var flag = Int32(0)
+        if i < n:
+            v = block_agg[unsafe_offset=i]
+            if block_head[unsafe_offset=i] != UInt8(0):
+                flag = Int32(1)
+        s_val[unsafe_offset=tid] = v
+        s_flg[unsafe_offset=tid] = flag
+        barrier()
+
+        # Phase 1's loop, unchanged: `d` is uniform, so every barrier is
+        # reached by every thread of the block.
+        var d = 1
+        while d < TPB:
+            var lv = T.zero()
+            var lf = Int32(0)
+            if tid >= d:
+                lv = s_val[unsafe_offset = tid - d]
+                lf = s_flg[unsafe_offset = tid - d]
+            barrier()
+            if tid >= d and s_flg[unsafe_offset=tid] == Int32(0):
+                s_val[unsafe_offset=tid] = lv.combine(
+                    s_val[unsafe_offset=tid]
+                )
+                s_flg[unsafe_offset=tid] = lf
+            barrier()
+            d *= 2
+
+        # Fold in the carry from the previous chunk, for the threads that
+        # have not yet met a head.
+        var carry = s_run[unsafe_offset=0]
+        barrier()
+        if s_flg[unsafe_offset=tid] == Int32(0):
+            s_val[unsafe_offset=tid] = carry.combine(
+                s_val[unsafe_offset=tid]
+            )
+        barrier()
+
+        # `s_val[tid]` is now the inclusive value at `i`; the output is
+        # the inclusive value at `i - 1`.
+        var prev = T.zero()
+        if tid > 0:
+            prev = s_val[unsafe_offset = tid - 1]
+        elif chunk > 0:
+            prev = carry
         comptime if sabotage == 2:
-            # SABOTAGE: the carry never leaves block 0, so every block
-            # after the first starts its open segment from the identity.
-            running = T.zero()
-        else:
-            if f != UInt8(0):
-                running = v
-            else:
-                running = running.combine(v)
+            # SABOTAGE: the carry never leaves the first slot, so every
+            # block after it starts its open segment from the identity.
+            if i > 0:
+                prev = T.zero()
+        barrier()
+        if i < n:
+            block_agg[unsafe_offset=i] = prev
+        barrier()
+
+        if tid == TPB - 1:
+            s_run[unsafe_offset=0] = s_val[unsafe_offset = TPB - 1]
+        barrier()
 
 
 def scan_by_key_emit_kernel[
@@ -499,13 +585,13 @@ def launch_inclusive_scan_by_key[
         block_dim=TPB,
     )
 
-    comptime k2 = scan_by_key_carry_kernel[F.Elem, sabotage]
+    comptime k2 = scan_by_key_carry_kernel[F.Elem, TPB, sabotage]
     ctx.enqueue_function[k2](
         agg_p,
         block_head.unsafe_ptr(),
         Int32(n_blocks),
         grid_dim=1,
-        block_dim=1,
+        block_dim=TPB,
     )
 
     comptime k3 = scan_by_key_emit_kernel[F, TPB, sabotage]

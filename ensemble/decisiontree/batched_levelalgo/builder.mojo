@@ -857,6 +857,21 @@ struct Builder[O: ObjectiveLike](Movable):
     var scales: BinScales
 
     # --- the workspace, `builder.cuh:176-212` ---------------------------
+    # `:207-209` -- `rmm::device_uvector<char> d_buff` and
+    # `pinned_host_vector<char> h_buff`. ONE device allocation and one
+    # host allocation for the whole builder; everything below is a VIEW
+    # carved out of them by `assignWorkspace` (`:334-368`), 512-byte
+    # aligned, in their order.
+    #
+    # This used to be ten separate allocations, with `workspace_layout`
+    # computing the arena and nobody calling it -- so `builder_check` was
+    # verifying that dead code agreed with their sizing. A Builder is
+    # constructed once per TREE, so that was ten allocations per tree
+    # instead of two, and it gave up the property their design is for:
+    # no allocation inside the tree loop.
+    var d_buff: DeviceBuffer[DType.uint8]
+    var h_buff: HostBuffer[DType.uint8]
+
     var histograms: DeviceBuffer[DType.uint8]
     var mutex: DeviceBuffer[DType.int32]
     var splits: DeviceBuffer[DType.uint8]
@@ -948,33 +963,62 @@ struct Builder[O: ObjectiveLike](Movable):
             * Int(num_outputs)
         )
 
-        self.histograms = ctx.enqueue_create_buffer[DType.uint8](
-            size_of[Self.O.BinT]() * max_len_histograms
+        # `:252-255` -- size the two buffers, then `:334-368` carve them.
+        # ONE arithmetic, not two: `workspace_layout` returns the offsets
+        # their `assignWorkspace` recomputes.
+        var wl = workspace_layout(
+            self.params.max_batch_size,
+            self.params.max_n_bins,
+            num_outputs,
+            n_sampled_rows,
+            self.original_n_sampled_cols,
+            size_of[Self.O.BinT](),
+            size_of[Split[Self.O.DataT]](),
+            size_of[NodeWorkItem](),
+            size_of[WorkloadInfo](),
+            4,  # sizeof(IdxT), IdxT = int
         )
-        self.mutex = ctx.enqueue_create_buffer[DType.int32](max_batch)
-        self.splits = ctx.enqueue_create_buffer[DType.uint8](
-            size_of[Split[Self.O.DataT]]() * max_batch
+        self.d_buff = ctx.enqueue_create_buffer[DType.uint8](wl.device_total)
+        self.h_buff = ctx.enqueue_create_host_buffer[DType.uint8](
+            wl.host_total
         )
-        self.d_work_items = ctx.enqueue_create_buffer[DType.uint8](
-            size_of[NodeWorkItem]() * max_batch
+
+        # `:340-366`, in their order. Every offset is 512-byte aligned
+        # (`:202`), so the int32 views below divide exactly by 4.
+        self.histograms = self.d_buff.create_sub_buffer[DType.uint8](
+            wl.histograms, size_of[Self.O.BinT]() * max_len_histograms
         )
-        self.workload_info = ctx.enqueue_create_buffer[DType.uint8](
-            size_of[WorkloadInfo]() * max_blocks
+        self.mutex = self.d_buff.create_sub_buffer[DType.int32](
+            wl.mutex // 4, max_batch
         )
-        self.column_samples = ctx.enqueue_create_buffer[DType.int32](
-            max_batch * self.original_n_sampled_cols
+        self.splits = self.d_buff.create_sub_buffer[DType.uint8](
+            wl.splits, size_of[Split[Self.O.DataT]]() * max_batch
         )
-        self.partition_row_ids = ctx.enqueue_create_buffer[DType.int32](
-            n_sampled_rows if n_sampled_rows > 0 else 1
+        self.d_work_items = self.d_buff.create_sub_buffer[DType.uint8](
+            wl.d_work_items, size_of[NodeWorkItem]() * max_batch
         )
+        self.workload_info = self.d_buff.create_sub_buffer[DType.uint8](
+            wl.workload_info, size_of[WorkloadInfo]() * max_blocks
+        )
+        self.column_samples = self.d_buff.create_sub_buffer[DType.int32](
+            wl.column_samples // 4,
+            max_batch * self.original_n_sampled_cols,
+        )
+        self.partition_row_ids = self.d_buff.create_sub_buffer[DType.int32](
+            wl.partition_row_ids // 4,
+            n_sampled_rows if n_sampled_rows > 0 else 1,
+        )
+        self.h_workload_info = self.h_buff.create_sub_buffer[DType.uint8](
+            wl.h_workload_info, size_of[WorkloadInfo]() * max_blocks
+        )
+        self.h_splits = self.h_buff.create_sub_buffer[DType.uint8](
+            wl.h_splits, size_of[Split[Self.O.DataT]]() * max_batch
+        )
+        # NOT in their arena: theirs copies `d_work_items` from a pageable
+        # `std::vector` (`:467`), so there is no host staging to carve.
+        # `enqueue_copy` here is host<->device only, so ours needs one.
         self.h_work_items = ctx.enqueue_create_host_buffer[DType.uint8](
             size_of[NodeWorkItem]() * max_batch
-        )
-        self.h_workload_info = ctx.enqueue_create_host_buffer[DType.uint8](
-            size_of[WorkloadInfo]() * max_blocks
-        )
-        self.h_splits = ctx.enqueue_create_host_buffer[DType.uint8](
-            size_of[Split[Self.O.DataT]]() * max_batch
         )
 
         self.hist_args = DeviceArgs[HistogramArgs[Self.O]](ctx)
@@ -1065,28 +1109,48 @@ struct Builder[O: ObjectiveLike](Movable):
     def _upload_work_items(
         mut self, ctx: DeviceContext, items: List[NodeWorkItem]
     ) raises:
-        """`raft::update_device(d_work_items, ...)`, `:466`, `:492`."""
+        """`raft::update_device(d_work_items, work_items.data(),
+        work_items.size(), stream)`, `:466`, `:492`.
+
+        THEIR COUNT IS `work_items.size()`, not the buffer's capacity.
+        The buffer is sized for `max_batch_size` (4096 by default) and a
+        batch is usually far smaller, so copying the whole thing moved up
+        to 4096 items where theirs moves `n`. Correctness was never at
+        stake -- the kernels index `[0, n)` -- only bandwidth, on a copy
+        that happens once per sampling round per level."""
         var p = self.h_work_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem]()
         for i in range(len(items)):
             p[unsafe_offset=i] = items[i]
+        var nbytes = len(items) * size_of[NodeWorkItem]()
+        if nbytes == 0:
+            return
+        var dst = self.d_work_items.create_sub_buffer[DType.uint8](0, nbytes)
         ctx.enqueue_copy(
-            dst_buf=self.d_work_items,
-            src_ptr=self.h_work_items.unsafe_ptr(),
+            dst_buf=dst, src_ptr=self.h_work_items.unsafe_ptr()
         )
+        _ = dst^
 
     def _upload_workload(
         mut self, ctx: DeviceContext, wl: List[WorkloadInfo]
     ) raises:
-        """`raft::update_device(workload_info, ...)`, `:405`."""
+        """`raft::update_device(workload_info, h_workload_info,
+        n_blocks_dimx, stream)`, `:405`. Their count is `n_blocks_dimx`;
+        the buffer holds `max_blocks_dimx`. See `_upload_work_items`."""
         var p = (
             self.h_workload_info.unsafe_ptr().unsafe_bitcast[WorkloadInfo]()
         )
         for i in range(len(wl)):
             p[unsafe_offset=i] = wl[i]
-        ctx.enqueue_copy(
-            dst_buf=self.workload_info,
-            src_ptr=self.h_workload_info.unsafe_ptr(),
+        var nbytes = len(wl) * size_of[WorkloadInfo]()
+        if nbytes == 0:
+            return
+        var dst = self.workload_info.create_sub_buffer[DType.uint8](
+            0, nbytes
         )
+        ctx.enqueue_copy(
+            dst_buf=dst, src_ptr=self.h_workload_info.unsafe_ptr()
+        )
+        _ = dst^
 
     def _download_splits(
         mut self, ctx: DeviceContext, n: Int
@@ -1094,8 +1158,17 @@ struct Builder[O: ObjectiveLike](Movable):
         """`raft::update_host(h_splits, splits, ...)` + `sync_stream`,
         `:479-480`, `:676-677`. Their host copy is what `NodeQueue::Push`
         reads, projected onto the six fields it touches."""
-        ctx.enqueue_copy(dst_buf=self.h_splits, src_buf=self.splits)
-        ctx.synchronize()
+        var nbytes = n * size_of[Split[Self.O.DataT]]()
+        if nbytes > 0:
+            # `:479` -- their count is `work_items.size()`.
+            var hdst = self.h_splits.create_sub_buffer[DType.uint8](0, nbytes)
+            var dsrc = self.splits.create_sub_buffer[DType.uint8](0, nbytes)
+            ctx.enqueue_copy(dst_buf=hdst, src_buf=dsrc)
+            ctx.synchronize()
+            _ = hdst^
+            _ = dsrc^
+        else:
+            ctx.synchronize()
         var p = self.h_splits.unsafe_ptr().unsafe_bitcast[Split[Self.O.DataT]]()
         var out = List[SplitSummary[Self.O.DataT]]()
         for i in range(n):
@@ -1353,9 +1426,17 @@ struct Builder[O: ObjectiveLike](Movable):
                 Int32(-1),
                 Int32(-1),
             )
-        ctx.enqueue_copy(
-            dst_buf=self.splits, src_ptr=self.h_splits.unsafe_ptr()
-        )
+        # `:462-466` -- `sizeof(SplitT) * work_items.size()`, not the
+        # buffer.
+        var sp_bytes = n * size_of[Split[Self.O.DataT]]()
+        if sp_bytes > 0:
+            var sdst = self.splits.create_sub_buffer[DType.uint8](
+                0, sp_bytes
+            )
+            ctx.enqueue_copy(
+                dst_buf=sdst, src_ptr=self.h_splits.unsafe_ptr()
+            )
+            _ = sdst^
         self._upload_work_items(ctx, work_items)
         var wl = List[WorkloadInfo]()
         var n_partition_blocks = update_workload_info(work_items, wl)
