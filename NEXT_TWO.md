@@ -60,6 +60,11 @@ matched benchmark in this repository already pins CatBoost to.
     pointwise_hist2_one_byte_6bit.cu  TPointHist<0,1,B>
     pointwise_hist2_one_byte_7bit.cu  TPointHist<0,2,B>
     pointwise_hist2_one_byte_8bit.cu  TPointHist<2,1,B>, Int32 fixed point
+    pointwise_hist2_half_byte_        TPointHistHalfByte<B> + BOTH readers
+      template.cuh                    (binary and half-byte)
+
+**ALL SIX ACCUMULATORS ARE IN.** What is left of the kernel family is the
+two DRIVERS that wrap them, not more accumulators.
 
 Three findings from that stretch, all in `PORTING.md`:
 
@@ -75,20 +80,32 @@ Three findings from that stretch, all in `PORTING.md`:
 
 **NEXT, in this order:**
 
-1. `pointwise_hist2_binary.cu`, `pointwise_hist2_half_byte.cu` and
-   `pointwise_hist2_half_byte_template.cuh` -- the last two accumulators,
-   for 1-bit and 2-to-4-bit features.
-2. `pointwise_hist2_one_byte_templ.cuh`'s `ComputeSplitPropertiesPass` and
-   `ComputeSplitPropertiesNBImpl`: the pass driver, the `GetMaxBinCount`
-   dispatch bounds, and the global writeback (`atomicAdd` above one
-   block per feature, `WriteThrough` below).
-   NOTE: the 8-bit writeback must divide by the fixed-point scale, so
-   there are two writeback shapes and the driver has to know which.
-3. `pointwise_hist2.cu`, the dispatcher, plus `pointwise_scores.cu` and
+1. THE DRIVERS. `pointwise_hist2_one_byte_templ.cuh`'s
+   `ComputeSplitPropertiesPass` and `ComputeSplitPropertiesNBImpl` for the
+   one-byte family, and the two kernel bodies in
+   `pointwise_hist2_binary.cu` / `pointwise_hist2_half_byte.cu` for the
+   small-bin one. Each needs: `ShiftPartAndBinSumsPtr` (ported),
+   the feature-block slicing (`feature += (blockIdx.x / M) * 4` / `* 8` /
+   `* 32`), `GetMaxBinCount` and the dispatch bounds
+   (`maxBinCount <= lowerBound || > upperBound -> return`), and the global
+   writeback: `atomicAdd` when `BLOCKS_PER_FEATURE > 1`, `WriteThrough`
+   below, both under `abs(val) > 1e-20f`.
+
+   TWO WRITEBACK SHAPES, and the driver has to know which. The 8-bit
+   accumulator leaves Int32 fixed point and its writeback divides by the
+   scale; the other five leave float and their writeback does not.
+
+   `GetMaxBinCount` and the device `HasOneHotFeatures` are the two helpers
+   `split_properties_helpers.mojo` deliberately left unported -- both
+   reduce over exactly four shared slots while every thread writes one, so
+   their contract depends on the caller's features-per-block. The drivers
+   are those callers.
+
+2. `pointwise_hist2.cu`, the dispatcher, plus `pointwise_scores.cu` and
    `score_calcers.cuh`.
-4. `pointwise_kernels.{h,cpp}` host wrappers, then `histograms_helper`,
+3. `pointwise_kernels.{h,cpp}` host wrappers, then `histograms_helper`,
    `pointwise_optimization_subsets`, `pointwise_scores_calcer`.
-5. `oblivious_tree_doc_parallel_structure_searcher` and the 85-line weak
+4. `oblivious_tree_doc_parallel_structure_searcher` and the 85-line weak
    learner, at which point the rung-1 gate (agreement with the
    greedy-subsets histograms cell for cell) becomes runnable.
 
