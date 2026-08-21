@@ -64,7 +64,7 @@ the feature), and every kernel in this lane keeps it.
 | step | their line | cuML | ours | verdict |
 |---|---|---|---|---|
 | the tree loop | `:165` | HOST, `#pragma omp parallel for` over `n_streams` | HOST, serial | **Metal has no streams** — traps register. Trees are independent, so the answer does not depend on order. |
-| `get_row_sample`, `bootstrap=false` | `:68-70` | `thrust::sequence` on DEVICE | host `List`, uploaded once | MINOR DRIFT, noted below |
+| `get_row_sample`, `bootstrap=false` | `:68-70` | `thrust::sequence` on DEVICE | `row_ids_sequence_kernel` on DEVICE | MIRRORED (deviation 200) |
 | the dataset | `dataset.h:22-38` | resident for the whole fit | resident for the whole fit | MIRRORED (deviation 184, closed) |
 | `predict` | `:229-242` | HOST loop, `+=` per tree | HOST loop, `+=` per tree | MIRRORED (deviation 147) |
 
@@ -72,6 +72,9 @@ the feature), and every kernel in this lane keeps it.
 fills it on the device, which is what `thrust::sequence` does. What remains is
 a LIFETIME difference — their buffer is owned by `fit`, ours by the trainer —
 not a host/device one.
+
+**Every rule-2 drift this audit found is now closed.** The three are listed
+below with what each turned out to be.
 
 ## What was WRONG and is now fixed
 
