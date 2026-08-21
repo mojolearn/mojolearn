@@ -49,6 +49,26 @@ Every rung ships and is gated on its own. Deviation numbers start at **92**;
 This is CatBoost's `boosting_type=Plain` GPU oblivious learner: the arm every
 matched benchmark in this repository already pins CatBoost to.
 
+**LANDED 2026-08-21** (`check-pointwise-offsets`, `check-pointwise-loop`):
+
+    split_properties_helpers.cuh   -> gbdt/methods/kernel/, pointwise part
+    compute_point_hist2_loop.cuh   -> all three entry points, ONE shared
+                                      loop behind a `PointHist2` trait
+
+**NEXT, in this order:**
+
+1. `pointwise_hist2_one_byte_templ.cuh` + the 5/6/7/8-bit accumulators.
+   These are `PointHist2` implementors and nothing else -- the loop is
+   done, so each one is `AddPoint`, `Reduce` and a writeback.
+2. `pointwise_hist2_binary.cu`, `pointwise_hist2_half_byte.cu`.
+3. `pointwise_hist2.cu`, the dispatcher, plus `pointwise_scores.cu` and
+   `score_calcers.cuh`.
+4. `pointwise_kernels.{h,cpp}` host wrappers, then `histograms_helper`,
+   `pointwise_optimization_subsets`, `pointwise_scores_calcer`.
+5. `oblivious_tree_doc_parallel_structure_searcher` and the 85-line weak
+   learner, at which point the rung-1 gate (agreement with the
+   greedy-subsets histograms cell for cell) becomes runnable.
+
 | piece | their file | lines |
 |---|---|---|
 | the subsets | `methods/pointwise_optimization_subsets.{h,cpp}` | 184 |
