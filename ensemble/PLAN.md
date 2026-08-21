@@ -569,3 +569,59 @@ merge-time item.**
   above.
 - "the eight per-objective `.cu` instantiation TUs" — there are TEN.
 - The bins caution and the Step 0 gate: see the session log above.
+
+---
+
+# State at the end of 2026-08-21: the directory trains
+
+`ensemble/mojo_only/train_check.mojo` grows real trees on the device, end to
+end — quantiles, feature sampling, histogram, cdf, gain, split reduction,
+partition, leaf. All **ten** checks in this directory pass together:
+`split`, `shuffle`, `atomic_width_probe`, `objectives`, `quantiles`,
+`core_primitives`, `predict`, `builder`, `builder_kernels`, `train`.
+
+**The identity claim has its first end-to-end evidence.** Two fits of a
+3-class, 4-feature hashed dataset produce 53 nodes and 159 leaf values that
+are BIT-IDENTICAL. That is the property the classification path was chosen
+for — an integer counter under an integer atomic, so the histogram cannot
+depend on block arrival order, plus `Split::update`'s total-order tie-break.
+It is evidence about THIS port on THIS backend; bit-identity across
+Metal/CUDA/HIP, and against cuML itself, still needs the NVIDIA column.
+
+## What is NOT done
+
+1. **Regression does not train.** `Builder` is classification-only. Theirs
+   is `Builder<ObjectiveT>`; ours cannot be until `objectives.mojo` declares
+   a trait the launchers can dispatch on — Mojo traits are nominal, so the
+   launchers are overloaded on the concrete objective type instead. One
+   change deletes two adapters, six launcher overloads and this restriction
+   together. It is the single highest-value cleanup left.
+2. **`RowSampler` is not ported** (`randomforest.cuh:63-226`), so `fit()` on
+   the estimator still raises and there is no bootstrap. `train_check` uses
+   the `bootstrap=False` shape (`thrust::sequence` row ids). The sampler
+   needs RAFT's Philox `uniformInt` transcribed bit-exactly — the same
+   problem shape as PCGenerator and `shuffle_iterator`, and it should get
+   the same treatment: compile their generator as an oracle and diff draw
+   for draw.
+3. **The forest loop** — `RandomForest::fit`'s per-tree loop — is above the
+   builder and is what turns one tree into a forest.
+4. **No timing measurement exists for any of this**, by instruction. The
+   Step 0 gather probe still has not run. Nothing here may be quoted as a
+   performance result.
+
+## Merge-time items still open
+
+- `DatasetView` is not `DevicePassable`; every kernel takes it through a
+  one-element device-buffer blob. Making it `TrivialRegisterPassable` would
+  delete that indirection and the four duplicated fields in the scan functor.
+- `lower_bound` needs an `address_space` parameter in `builder_kernels.mojo`;
+  the kernels file carries a duplicate for want of it.
+- `Bin` could conform to `core/block_scan.BlockScanElement` directly,
+  deleting the `ScanBin` adapter.
+- The subnormal-flush row (DEVIATION 123) belongs in
+  `mojo_only/kernel_matrix.mojo` as a CAPABILITY row.
+- `ensemble/mojo_only/segmented_sort.mojo` duplicates
+  `gbdt/gpu_util/kernel/segmented_sort.mojo`.
+- `ensemble/mojo_only/` can never be `mojo precompile`d while its checks
+  carry `main()`.
+- No `pixi.toml` task exists for any check here; all ten run by path.
