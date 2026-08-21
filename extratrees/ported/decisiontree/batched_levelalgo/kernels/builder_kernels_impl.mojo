@@ -1277,25 +1277,224 @@ def build_workload_info(
 #     where the kernel that publishes the field can be read; acting on it
 #     in `objectives.mojo` is not this sub-lane's file to touch.
 #
-#     MSE IS DIFFERENT AND IS NOT PUBLISHED AS A RATIONAL. DEVIATION
-#     135's own derivation is why: the MSE proxy's numerator is
+#     MSE IS DIFFERENT AND SKLEARN'S PROXY IS NOT WHAT IS PUBLISHED.
+#     DEVIATION 135's own derivation is why: the MSE proxy's numerator is
 #     `sum_L^2 * n_R + sum_R^2 * n_L` over FIXED-POINT sums bounded by
-#     `2^SLOT_BITS = 2^30`, so it needs up to `2*2^60*n` -- past `Int64`
-#     for any node above four rows, which is precisely why
+#     `2^SLOT_BITS = 2^30`, so it needs up to `2^60 * n` -- past `Int64`
+#     at TEN ROWS IN A NODE, measured, which is precisely why
 #     `fixed_point.mojo::mse_proxy_exact` returns `Int128`. There is no
-#     `Int128` device buffer to publish it into, and there is no need for
-#     one: `mse_proxy_exact(sum_left, n_left, sum_right, n_right)` forms
-#     the pair from four small integers in one multiply each, so THE FOUR
-#     ACCUMULATORS ARE THE SCORE. The regression instantiation leaves
-#     `out_gini_num` and `out_gini_den` at their initialized zeros, and
-#     the status -- not the rational -- is what says a candidate was
-#     scored.
+#     `Int128` device buffer to publish it into and no `Int128` multiply
+#     that compiles in a kernel (DEVIATION 167).
 #
-#     PRICE. A caller reducing regression candidates must call
-#     `mse_proxy_exact` itself instead of comparing a published pair; and
-#     a classification node above 2^21 rows must be refused or the
-#     comparison silently wraps. `score_row_bound_ok` makes the second
-#     one a checkable precondition rather than a comment.
+#     **THIS PARAGRAPH USED TO END "the regression instantiation leaves
+#     `out_gini_num` and `out_gini_den` at their initialized zeros", AND
+#     THAT IS NO LONGER TRUE.** DEVIATION BLOCKS 189-193 below publish a
+#     regression key that DOES fit `Int64`, by publishing cuML's own MSE
+#     gain rather than sklearn's proxy. The sentence is deleted rather
+#     than annotated, per LANE_RULES 17. The same sentence still stands in
+#     `extratrees/DEVIATIONS.md` entry 175, which is not this sub-lane's
+#     file to edit and is reported as an OPEN item for its owner.
+#
+#     PRICE. A classification node above 2^21 rows must be refused or the
+#     comparison silently wraps. `score_row_bound_ok` makes that a
+#     checkable precondition rather than a comment.
+#     ==================================================================
+#
+#     ==================================================================
+#     DEVIATION BLOCK 189 -- the REGRESSION key is cuML's OWN MSE gain as
+#     an exact rational, not sklearn's proxy, and that is what makes it
+#     fit `Int64`
+#
+#     THEIRS. `MSEObjectiveFunction::GainPerSplit`
+#     (`objectives.cuh:225-244`) is
+#
+#         gain = (-sum_T^2/n - (-sum_L^2/n_L - sum_R^2/n_R)) * 0.5/n
+#
+#     i.e. sklearn's proxy MINUS the parent term `sum_T^2/n`, times the
+#     node constant `0.5/n`. sklearn's `_criterion.pyx:944-973` proxy is
+#     `sum_L^2/n_L + sum_R^2/n_R` with both of those constants dropped --
+#     exactly the relation DEVIATION 144 records for classification
+#     (`cuML_gain == parent_gini + sklearn_proxy / n`), one objective
+#     over.
+#
+#     OURS. The published pair is cuML's gain with its node-constant
+#     factor dropped, written over the fixed-point sums:
+#
+#         A   = sum_L * n_R - sum_R * n_L         (= n_L n_R (mean_L - mean_R))
+#         num = (|A| >> j)^2                      den = n_L * n_R
+#
+#     `A^2/(n_L n_R)` is `n` times cuML's gain and `n` is a NODE constant,
+#     so within one node this orders candidates EXACTLY as sklearn's proxy
+#     does: the two differ by `sum_T^2/n`, a constant of the node, and a
+#     constant shift cannot reorder anything. The reduction only ever
+#     compares candidates of ONE node (`split_reduce_kernel`'s
+#     `block_idx.y`), so nothing ever compares across the constant.
+#
+#     WHY THE CENTERED FORM AND NOT THE PROXY -- IT IS THE WIDTH, AND THE
+#     WIDTH IS THE WHOLE PROBLEM. sklearn's numerator carries the parent
+#     term, which is the biggest thing in it: at the shipped `2^30` slot
+#     `sum_L^2 * n_R` alone reaches `2^60 * n`. cuML's gain has that term
+#     SUBTRACTED OFF, and what is left is a perfect square of a quantity
+#     bounded by `n * 2^30` -- so it can be shrunk by shrinking ONE
+#     number before squaring it, instead of by shrinking the labels.
+#     ==================================================================
+#
+#     ==================================================================
+#     DEVIATION BLOCK 190 -- MEASURED: sklearn's proxy wraps `Int64` at
+#     TEN ROWS, and narrowing the accumulator instead loses 274 of 780
+#     orderings
+#
+#     THE WRAP, computed in `Int128` and read back through `Int64`, not
+#     asserted from algebra. With `|sum| <= 2^30 - 1` (what `choose_scale`
+#     guarantees) and the worst case `sum_L = 2^30-1, sum_R = 0, n_L = 1`:
+#
+#         n =  9   num =  9223372019674906632   Int64 agrees
+#         n = 10   num = 10376293522134269961   Int64 reads
+#                        -8070450551575281655   *** WRAPPED, AND NEGATIVE ***
+#
+#     Negative matters twice over: `compare_exact_key`'s sign split then
+#     ranks that candidate BELOW every other one, so the wrap does not
+#     merely lose precision, it inverts the answer.
+#
+#     SO PUBLISHING SKLEARN'S PROXY IS NOT AVAILABLE AT ANY USEFUL ROW
+#     COUNT, and the only lever left for it is a narrower fixed-point
+#     scale: `2b + log2(n) <= 63` gives `b = 21` at a million rows against
+#     the `b = 30` DEVIATION 135 chooses. **That was measured against a
+#     `Float64` ground truth rather than argued**, and
+#     `regression_score_check.mojo` arm G recomputes it every run rather
+#     than quoting it. At n = 1,048,576, over 190 ordered pairs of hashed
+#     candidates of ONE node, counting the pairs each key gets backwards:
+#
+#         b = 30 exact Int128 proxy (the ceiling)      0 of 190
+#         THIS FILE'S published key                    0 of 190
+#         narrower accumulator, b = 21 (route 1)      60 of 190
+#         shifting the SUMS, keeping sklearn's proxy  42 of 190
+#
+#     and at n = 65,536, `0 / 0 / 2 / 0`. The published key is as good as
+#     the `Int128` form it cannot afford to publish; the two narrowing
+#     routes lose a third and a fifth of the orderings at a million rows.
+#     **The number decided this, not taste.** The reason the narrowed
+#     accumulator does worst is that truncation there costs up to ONE UNIT
+#     PER ROW, while truncating `A` once costs one unit of `A`.
+#     ==================================================================
+#
+#     ==================================================================
+#     DEVIATION BLOCK 191 -- the shift is NODE-UNIFORM and derived from
+#     the row count ALONE, so no caller argument and no new buffer
+#
+#     `|A| <= max(n_L,n_R) * (|sum_L| + |sum_R|) <= n * 2^30`, so
+#     `|A| >> j` fits `REGRESSION_KEY_BITS = 31` bits -- and its square
+#     fits `Int64` with a bit to spare -- as soon as
+#
+#         j >= ceil_log2(n) + REGRESSION_SUM_BITS - REGRESSION_KEY_BITS
+#
+#     which at the shipped `2^30` slot is `j = ceil_log2(n) - 1`.
+#
+#     IT HAS TO BE THE SAME `j` FOR EVERY CANDIDATE OF A NODE or the
+#     published ratios are not comparable, and that is the whole reason it
+#     is derived from `range_len` -- a NODE constant every finalize thread
+#     already reads out of `work_items` -- rather than from the cell's own
+#     magnitudes, which would be sharper and would silently make two
+#     candidates of one node incommensurable. A per-node minimum `j` would
+#     need a pass over the node's cells; this needs nothing.
+#
+#     AND IT IS WHY THERE IS NO ROW CAP. `j` grows with the row count, so
+#     the numerator never wraps at any `n`; what a bigger node costs is
+#     resolution in `A`, and even that barely moves, because one unit of
+#     `sum_L` is `n_R` units of `A` and `j` is only `log2(n) - 1`. A
+#     one-unit change in a fixed-point sum therefore moves `A'` by about
+#     two at EVERY node size -- which is why the check's adversarial arm,
+#     which builds pairs specifically to collapse into one `A'` bucket,
+#     reports ZERO ties at n = 1024, 65,536 and 1,048,576 across ~59,000
+#     pairs. The truncation costs order, never resolution.
+#
+#     TRUNCATION IS ON `|A|`, so negating every label gives a
+#     bit-identical key. An arithmetic shift of the signed `A` would not:
+#     it floors, so `-5 >> 2` is `-2` where `5 >> 2` is `1`. `quantize`
+#     truncates toward zero for the same reason (DEVIATION 135), and this
+#     keeps that invariance one step further down the pipeline.
+#     ==================================================================
+#
+#     ==================================================================
+#     DEVIATION BLOCK 192 -- WHAT THE KEY IS NOT: it is not exactly
+#     order-preserving, and this is the honest size of that
+#
+#     `A' = |A| >> j` is a truncation, so two candidates whose exact
+#     `Int128` proxies differ by less than it can tie or swap. That cannot
+#     be argued away and it is not hidden behind a "should be fine":
+#     `regression_score_check.mojo` arm C MEASURES it, on pairs built to
+#     be as close as the arithmetic allows -- adjacent `n_left`, the second
+#     candidate's `A` solved for so that it lands in the first one's
+#     truncation bucket:
+#
+#         n =     1024:        0 of 19,955 adversarial pairs invert
+#         n =    65,536:       3 of 18,520
+#         n = 1,048,576:      18 of 20,000        (0.09%)
+#
+#     and on ordinary hashed candidates of one node, at every size, ZERO
+#     of 1,128.
+#
+#     THE PHRASE "OF ONE NODE" IS LOAD-BEARING AND THE CHECK LEARNED IT BY
+#     FAILING. Its first run drew an independent `sum_total` per candidate
+#     and reported 66 of 1,128 inversions. Nothing was wrong with the key:
+#     the parent term this form drops is a NODE constant, so candidates
+#     from different nodes are not comparable through it -- and never are
+#     compared, because `split_reduce_kernel` reduces one node per
+#     `block_idx.y`. Arm C now carries that as a named CONTROL: the same
+#     candidates with per-candidate totals must come out badly wrong, and
+#     if they do not, the fixture cannot tell a node-local key from a
+#     global one.
+#
+#     **NO KEY IN TWO `Int64` FIELDS CAN DO BETTER THAN "approximate"
+#     HERE, AND THAT IS THE FINDING, NOT AN EXCUSE.** An exact
+#     order-preserving encoding would have to be a rational equal to the
+#     proxy, whose reduced denominator is `n_L n_R / gcd` -- unbounded --
+#     or a common-denominator rescale, which needs MORE bits than the
+#     proxy, not fewer: two proxies of one node that differ at all differ
+#     by at least `16/n^4`, so a shared denominator resolving them is
+#     `n^4/16`. The exact form is available only below ten rows. So the
+#     question was never "exact or not", it was "which approximation",
+#     and DEVIATION 190 is the measurement that answers it.
+#
+#     A tie here is not a coin flip: it falls through to `Split.update`'s
+#     chain (DEVIATION 166), which is cuML's own reduction.
+#     ==================================================================
+#
+#     ==================================================================
+#     DEVIATION BLOCK 193 -- the slot precondition is a REFUSAL STATUS,
+#     and the gain gate is formed on the HOST, DEVIATION 183's shape
+#
+#     The derivation above needs `|sum_L| <= 2^30` and `|sum_R| <= 2^30`,
+#     which is exactly what `choose_scale` guarantees for every partial
+#     sum of every node (DEVIATION 135: the bound comes from the WHOLE
+#     dataset once). A caller that quantized some other way would silently
+#     get a wrapped numerator, so the kernel TESTS it -- and a kernel
+#     cannot raise, so the cell becomes `SCORE_STATUS_REGRESSION_REFUSED`
+#     and `score_to_candidate_kernel` turns it into the default `Split`,
+#     which loses to every scored candidate. A refusal, never a
+#     truncation; the same shape DEVIATION 174 gives the missing-value
+#     refusal.
+#
+#     One test suffices for both, and that is derived rather than
+#     hopeful: `|A| <= n_R |sum_L| + n_L |sum_R| <= n * 2^30 <= 2^(L+30)`,
+#     so the slot test on the two sums IMPLIES `A' <= 2^31`.
+#
+#     THE GAIN GATE. `split_not_valid` needs cuML's float gain, and
+#     DEVIATION 183 already settled where that is formed for
+#     classification: on the HOST, in `Float64`, from the exact integers
+#     the score pass published, because bringing three small arrays back
+#     per level is cheaper than a 128-bit multiply in a kernel.
+#     `mse_gain_from_exact_totals` below is the regression counterpart --
+#     `0.5 * A^2 / (n^2 n_L n_R)` in the LABEL's units, so it takes
+#     `inv_scale` the way `leaf_values_host` does (DEVIATION 179).
+#
+#     THE FIELD NAMES ARE NOW WRONG AND ARE DELIBERATELY NOT CHANGED.
+#     `out_gini_num`, `out_gini_den` and `ScoredCandidate.gini_num` carry
+#     the MSE key on this path. Renaming them would touch
+#     `builder.mojo`'s `score_to_candidate_kernel` and
+#     `score_kernel_check.mojo`, neither of which is this sub-lane's file.
+#     Recorded here as an OPEN item rather than done badly across an
+#     ownership line.
 #     ==================================================================
 # ============================================================================
 
@@ -1331,6 +1530,20 @@ comptime SCORE_STATUS_REJECTED_MIN_SAMPLES_LEAF: Int32 = 4
 and the accumulators ARE published -- `CandidateRecord` reports them for a
 rejected candidate too -- but the score is invalid."""
 
+comptime SCORE_STATUS_REGRESSION_REFUSED: Int32 = 5
+"""REGRESSION ONLY, and OURS: a partial sum larger than the fixed-point slot,
+so the published key would wrap. DEVIATION BLOCK 193. A caller that quantized
+with `fixed_point.mojo::choose_scale` cannot reach this -- the whole point of
+that function is that no node's partial sum can leave the slot -- so a cell in
+this state means the labels did not come through the fixed-point contract. The
+rows WERE read and the accumulators ARE published; only the key is withheld.
+
+There were four statuses here until 2026-08-21 and now there are five. A caller
+enumerating them (`_status_name`, `score_to_candidate_kernel`'s `!= SCORED`
+test) needs no change to be CORRECT -- anything not `SCORED` is already the
+default `Split` -- but a caller PRINTING them will show `?` until it learns
+this one."""
+
 
 comptime SCORE_MAX_ACC_DEFAULT: Int = 16
 """Default comptime bound on `n_acc` (classes, or 1 for regression). See
@@ -1361,6 +1574,109 @@ def score_row_bound_ok(row_count: Int) -> Bool:
     var n = Int128(row_count)
     var worst = (n * n * n) // Int128(4)
     return worst <= (Int128(1) << Int128(63)) - Int128(1)
+
+
+# ---------------------------------------------------------------------------
+# THE REGRESSION KEY. DEVIATION BLOCKS 189-193 above are the derivation; this
+# is the arithmetic, shared verbatim between the host oracle and the kernel so
+# there is no second copy to drift.
+# ---------------------------------------------------------------------------
+
+comptime REGRESSION_SUM_BITS: Int = 30
+"""The fixed-point slot a partial label sum must fit, `2^REGRESSION_SUM_BITS`.
+
+The same number as `fixed_point.mojo::SLOT_BITS`, and it is DELIBERATELY not
+imported from there: `fixed_point` is a host module whose functions `raise`,
+and this constant is read inside a kernel. It is the caller's contract, not a
+free choice -- `choose_scale` guarantees it for every partial sum of every node
+of the whole fit, which is why no row cap is needed here (DEVIATION 191)."""
+
+comptime REGRESSION_KEY_BITS: Int = 31
+"""Bits `|A| >> j` is allowed to occupy, so `num = (|A| >> j)^2 <= 2^62`.
+
+One bit under `Int64`'s `2^63`, held back the way `accumulator_bits_for` holds
+two back, so that a later term added to `num` does not silently cross."""
+
+
+def regression_key_shift(row_count: Int) -> Int:
+    """`j`, the NODE-UNIFORM right shift on `|A|`. DEVIATION BLOCK 191.
+
+    `j = ceil_log2(n) + REGRESSION_SUM_BITS - REGRESSION_KEY_BITS`, clamped at
+    zero. Called from a kernel, so it cannot raise and it cannot use
+    `fixed_point.mojo::ceil_log2`; the loop is that function's, and it is a
+    loop for that function's reason -- a bound must not depend on a
+    transcendental (`std.math.log` carries ~5e-8 of absolute error in this
+    toolchain and has already re-decided a tie once in this repository).
+
+    `row_count` is the NODE's row count, read from `work_items`, and NOT the
+    accumulated `n_total`: it is the same number in every cell of the node by
+    construction, which is the property the whole scheme rests on.
+    """
+    var bits = 0
+    var acc = 1
+    while acc < row_count:
+        acc *= 2
+        bits += 1
+    var j = bits + REGRESSION_SUM_BITS - REGRESSION_KEY_BITS
+    return j if j > 0 else 0
+
+
+def regression_key_bound_ok(row_count: Int, max_abs_sum: Int) -> Bool:
+    """Does the published `Int64` numerator hold at this node size and this
+    largest partial-sum magnitude?
+
+    HOST-side and computed in `Int128`, the way `score_row_bound_ok` and
+    `fixed_point.mojo::comparator_product_fits` are, so DEVIATION BLOCK 191's
+    algebra is a CHECKED claim: form the worst case `|A| = n * max_abs_sum`,
+    shift it, square it in `Int128` and compare against `Int64`.
+    """
+    if row_count <= 0:
+        return True
+    var j = regression_key_shift(row_count)
+    var worst = Int128(row_count) * Int128(max_abs_sum)
+    var scaled = worst >> Int128(j)
+    return scaled * scaled <= (Int128(1) << Int128(63)) - Int128(1)
+
+
+def mse_gain_from_exact_totals(
+    sum_left: Int64,
+    sum_total: Int64,
+    n_left: Int,
+    n_right: Int,
+    inv_scale: Float64,
+) -> Float32:
+    """cuML's `MSEObjectiveFunction::GainPerSplit` for the winning candidate,
+    from EXACT INTEGERS, in the LABEL's own units.
+
+    The regression counterpart of `builder.mojo::gain_from_exact_totals`, and
+    it exists for DEVIATION 183's reason: `split_not_valid` compares this
+    against `min_impurity_decrease`, the device does not compute a float gain,
+    and forming it on the host from integers that carry no rounding is both
+    cheaper and more exact than putting it in a kernel.
+
+    `objectives.cuh:234-241` is `0.5/n * (sum_L^2/n_L + sum_R^2/n_R -
+    sum_T^2/n)`, which is `0.5 * A^2 / (n^2 n_L n_R)`. `inv_scale` is
+    `1 / scale` for the scale DEVIATION 135 chose, and it enters SQUARED
+    because the gain is quadratic in the label -- the same dequantization
+    `leaf_values_host` applies once (DEVIATION 179).
+
+    Returns `0.0` for an empty child rather than cuML's `+inf`: their float
+    form divides by `nLeft` (`objectives.cuh:57` for Gini, the same shape
+    here), and a caller reaching this with an empty child has already been
+    rejected by `min_samples_leaf`.
+    """
+    if n_left <= 0 or n_right <= 0:
+        return Float32(0.0)
+    var nl = Float64(n_left)
+    var nr = Float64(n_right)
+    var n = nl + nr
+    var sum_right = sum_total - sum_left
+    var a = Float64(sum_left) * nr - Float64(sum_right) * nl
+    # Divided by `n` BEFORE squaring: `A` reaches 2^62 and `Float64` carries 53
+    # bits, so squaring first would round away what the division then cannot
+    # restore.
+    var t = a / n * inv_scale
+    return Float32(0.5 * t * t / (n * nl * nr))
 
 
 # Sabotage selectors, one per MECHANISM. A kernel ARGUMENT and not a comptime
@@ -1417,6 +1733,95 @@ comptime SCORE_SAB_TOTAL_IS_LEFT: Int32 = 9
 """Accumulate the node TOTALS over left-going rows only, so `total - left` --
 cuML's own recovery of the right child (`objectives.cuh:72-73`, DEVIATION 143)
 -- is zero."""
+
+# The REGRESSION KEY's mechanisms, one selector each. DEVIATION BLOCKS 189-193.
+# They sit here, apart from the constants above, only because they arrived with
+# the regression key; they are kernel ARGUMENTS for the same reason all of the
+# others are -- a sabotage compiled into a different binary proves nothing
+# about the binary that ships.
+comptime SCORE_SAB_REG_NO_SHIFT: Int32 = 10
+"""Regression: publish `|A|^2` with NO shift, i.e. `j = 0`. DEVIATION BLOCK
+191's shift is what keeps the numerator inside `Int64`, so this is the wrap
+itself, running in the shipping kernel."""
+
+comptime SCORE_SAB_REG_NO_CENTER: Int32 = 11
+"""Regression: `A = sum_L * n_R` instead of `sum_L * n_R - sum_R * n_L`, i.e.
+cuML's gain without the right child's term (`objectives.cuh:237-238`). The
+result is still a valid-looking rational, which is exactly why it needs a
+sabotage rather than a bounds check."""
+
+comptime SCORE_SAB_REG_DEN_ONE: Int32 = 12
+"""Regression: publish `den = 1`, so the key becomes `A'^2` and the
+`n_L n_R` weighting -- the difference between cuML's gain and the squared mean
+gap -- disappears."""
+
+comptime SCORE_SAB_REG_NO_SLOT_GUARD: Int32 = 13
+"""Regression: skip the fixed-point slot precondition of DEVIATION BLOCK 193,
+so a partial sum outside the slot publishes a WRAPPED numerator instead of
+`SCORE_STATUS_REGRESSION_REFUSED`. Invisible unless the fixture actually
+violates the contract, which is why `regression_score_check.mojo` carries a
+second label plane that does."""
+
+
+def regression_key(
+    sum_left: Int64,
+    sum_total: Int64,
+    n_left: Int,
+    n_right: Int,
+    row_count: Int,
+    sabotage: Int32,
+    mut out_num: Int64,
+    mut out_den: Int64,
+) -> Bool:
+    """cuML's MSE gain as an exact rational in `Int64`. DEVIATION BLOCK 189.
+
+        A   = sum_L * n_R - sum_R * n_L        num = (|A| >> j)^2
+                                               den = n_L * n_R
+
+    Returns whether the fixed-point precondition held. On `False` the pair is
+    `(0, 0)` -- an INVALID key, which `compare_exact_key` ranks below every
+    valid one -- and the caller publishes `SCORE_STATUS_REGRESSION_REFUSED`.
+
+    NO `Int128` ANYWHERE, deliberately: this runs inside a kernel and a kernel
+    containing a 128-bit multiply does not build (DEVIATION 167). Every
+    intermediate is bounded under the precondition -- `|sum| <= 2^30` and
+    `n <= 2^31` give `|sum_L * n_R| <= 2^61` and `|A| <= 2^62` -- which is why
+    the precondition is tested BEFORE the multiply and not after it.
+
+    `sabotage` selects the arms; `SCORE_SAB_NONE` is the shipping path.
+    """
+    var sum_right = sum_total - sum_left
+    if sabotage != SCORE_SAB_REG_NO_SLOT_GUARD:
+        var abs_left = sum_left if sum_left >= 0 else -sum_left
+        var abs_right = sum_right if sum_right >= 0 else -sum_right
+        var slot = Int64(1) << Int64(REGRESSION_SUM_BITS)
+        if abs_left > slot or abs_right > slot:
+            out_num = Int64(0)
+            out_den = Int64(0)
+            return False
+
+    var nl = Int64(n_left)
+    var nr = Int64(n_right)
+    # `objectives.cuh:236-239` with the parent term subtracted and the node
+    # constant `0.5/n` dropped; `A = n_L n_R (mean_L - mean_R)`.
+    var a = sum_left * nr - sum_right * nl
+    if sabotage == SCORE_SAB_REG_NO_CENTER:
+        a = sum_left * nr
+    if a < 0:
+        a = -a
+    var j = regression_key_shift(row_count)
+    if sabotage == SCORE_SAB_REG_NO_SHIFT:
+        j = 0
+    # The magnitude is taken FIRST, so the truncation is toward zero and the
+    # key is invariant under negating every label. DEVIATION BLOCK 191.
+    var scaled = a >> Int64(j)
+    out_num = scaled * scaled
+    out_den = nl * nr
+    if sabotage == SCORE_SAB_REG_DEN_ONE:
+        out_den = Int64(1)
+    return True
+
+
 
 
 def draw_threshold_device(
@@ -1568,8 +1973,10 @@ def node_feature_score_host(
     5. `:664-666` `min_samples_leaf` -> a `continue`, not a redraw, and the
        accumulators are still reported;
     6. `:691` the score, as the exact rational of DEVIATION 144 for
-       classification and as the accumulators themselves for regression
-       (DEVIATION BLOCK 175).
+       classification and as cuML's own MSE gain, `(|A| >> j)^2 / (n_L n_R)`,
+       for regression (DEVIATION BLOCKS 189-193). Both go into the same two
+       fields, whose `gini_` names are now a misnomer on the regression path
+       and are left alone deliberately -- see DEVIATION BLOCK 193.
 
     A label outside `[0, n_acc)` is SKIPPED rather than accumulated, on both
     sides, because on the device it would be an out-of-bounds write into a
@@ -1644,6 +2051,20 @@ def node_feature_score_host(
         var nr = Int64(n_right)
         num = sq_left * nr + sq_right * nl
         den = nl * nr
+    elif status == SCORE_STATUS_SCORED:
+        # DEVIATION BLOCKS 189-193: cuML's MSE gain as an exact rational, from
+        # the SAME function the kernel calls -- not a second transcription.
+        if not regression_key(
+            Int64(Int(acc_left[0])),
+            Int64(Int(acc_total[0])),
+            n_left,
+            n_right,
+            range_len,
+            SCORE_SAB_NONE,
+            num,
+            den,
+        ):
+            status = SCORE_STATUS_REGRESSION_REFUSED
 
     return ScoredCandidate(
         status,
@@ -2036,6 +2457,13 @@ def node_feature_score_finalize_kernel[
     `_splitter.pyx`'S: refuse missing, then constant, then draw, then
     `min_samples_leaf`, then score. A `continue` in their loop is a status
     here (DEVIATION 174).
+
+    BOTH OBJECTIVES PUBLISH A RATIONAL KEY. Classification's is sklearn's
+    proxy (DEVIATION 144); regression's is cuML's own MSE gain with its
+    node-constant factor dropped, `(|A| >> j)^2 / (n_L n_R)` (DEVIATION BLOCKS
+    189-193). Regression is the ONE branch that can turn a scored cell back
+    into a refusal, and only when the caller's labels left the fixed-point
+    slot -- `SCORE_STATUS_REGRESSION_REFUSED`, DEVIATION BLOCK 193.
     """
     var n_cells = Int(n_cells_in)
     var n_sampled_cols = Int(n_sampled_cols_in)
@@ -2124,6 +2552,31 @@ def node_feature_score_finalize_kernel[
             var nr = Int64(n_right)
             out_gini_num[unsafe_offset=slot] = sq_left * nr + sq_right * nl
             out_gini_den[unsafe_offset=slot] = nl * nr
+        else:
+            # DEVIATION BLOCKS 189-193: cuML's own MSE gain
+            # (`objectives.cuh:225-244`) as an exact rational, with its
+            # node-constant factor dropped. This USED to publish nothing --
+            # every regression candidate then carried an invalid key, every
+            # comparison in `split_reduce_kernel` tied, and the winner fell to
+            # `Split.update`'s `colid` arm, i.e. was decided by feature index.
+            var key_num = Int64(0)
+            var key_den = Int64(0)
+            var key_ok = regression_key(
+                Int64(Int(out_acc_left[unsafe_offset = slot * n_acc])),
+                Int64(Int(out_acc_total[unsafe_offset = slot * n_acc])),
+                n_left,
+                n_right,
+                range_len,
+                sabotage,
+                key_num,
+                key_den,
+            )
+            if not key_ok:
+                out_status[unsafe_offset=slot] = (
+                    SCORE_STATUS_REGRESSION_REFUSED
+                )
+            out_gini_num[unsafe_offset=slot] = key_num
+            out_gini_den[unsafe_offset=slot] = key_den
         slot += stride
 
 

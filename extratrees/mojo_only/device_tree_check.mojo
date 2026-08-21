@@ -29,8 +29,9 @@ localises it. Arm 2b also asserts the gate FIRES on this fixture — 2a's node
 count must exceed 2b's — because an equality no zero-gain split ever tested
 would be an equality about nothing.
 
-`best_metric_val` itself is excluded from the comparison in both arms, stated
-rather than quietly skipped.
+`best_metric_val` used to be excluded from the comparison; it is now ASSERTED,
+because the gain is computed on the device from cuML's expression and both
+sides accumulate it with an explicit `fma`.
 
 Analytic fixtures are asserted outright, because their answer does not depend
 on any of that: a separable fixture must come out perfect on the device too.
@@ -190,6 +191,8 @@ def main() raises:
     var pred_diff = 0
     var leaf_diff = 0
     var leaf_cells = 0
+    var metric_diff = 0
+    var metric_worst = 0
     var configs = 0
     for depth in [Int32(3), Int32(5), Int32(7)]:
         for seed_i in range(3):
@@ -215,7 +218,15 @@ def main() raises:
                     total_nodes += 1
                     var a = ht.sparsetree[i]
                     var b = dt.sparsetree[i]
-                    # best_metric_val is EXCLUDED, deviation 182.
+                    if a.BestMetric().to_bits() != b.BestMetric().to_bits():
+                        metric_diff += 1
+                        var dd = Int(a.BestMetric().to_bits()) - Int(
+                            b.BestMetric().to_bits()
+                        )
+                        if dd < 0:
+                            dd = -dd
+                        if dd > metric_worst:
+                            metric_worst = dd
                     if (
                         a.ColumnId() != b.ColumnId()
                         or a.QueryValue().to_bits() != b.QueryValue().to_bits()
@@ -255,7 +266,11 @@ def main() raises:
         leaf_diff,
         "of",
         leaf_cells,
-        "LEAF VALUES differ (device leaf_kernel against the host pass)",
+        "LEAF VALUES differ (device leaf_kernel against the host pass);",
+        metric_diff,
+        "best_metric_val differ, worst",
+        metric_worst,
+        "ulp",
     )
     assert_equal(
         shape_diff,
@@ -275,6 +290,16 @@ def main() raises:
         pred_diff,
         0,
         "and therefore every row prediction must agree",
+    )
+    assert_equal(
+        metric_diff,
+        0,
+        "best_metric_val must agree BIT FOR BIT too. It used to be excluded --"
+        " the device published a constant and the host cuML's GainPerSplit --"
+        " and it is not excluded any more: the gain is computed on the device"
+        " from their expression (DEVIATION 183, second form) and both sides"
+        " accumulate it with an explicit fma (DEVIATION 142's reason), so the"
+        " same source produces the same bits on both.",
     )
     assert_equal(
         leaf_diff,

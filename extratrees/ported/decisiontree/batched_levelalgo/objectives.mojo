@@ -97,6 +97,9 @@ pointers. Nothing allocates, nothing raises, nothing touches `List`, `String`
 or any other host-only type, so each is callable unchanged from a kernel.
 """
 
+from std.math import fma
+
+
 
 # ==========================================================================
 # DEVIATION BLOCK 143 -- histogram-free: the accumulators ARE the arguments
@@ -484,6 +487,18 @@ struct GiniObjectiveFunction[dtype: DType](Copyable, Movable):
         `MIN_FINITE` here, the same bit pattern (`split.mojo` records the same
         spelling).
 
+        THE THREE ACCUMULATIONS ARE EXPLICIT `fma`s, FOR DEVIATION 142's
+        REASON. `gain += lval * invLeft * lval * invLen` is a multiply chain
+        followed by an add, and a GPU backend contracts the LAST multiply with
+        the add whatever the source says -- six source-level barriers were
+        measured doing exactly that on the threshold draw. Written as
+        `fma(prod, invLen, gain)` the rounding is fixed by the SOURCE on every
+        backend, and it is also what nvcc's default `--fmad=true` makes of
+        their expression, so it is what cuML computes on the hardware they ship
+        for. MEASURED while this was mismatched: the host and device forms
+        disagreed on 1655 of 4000 hashed candidates, and 11 of 747 tree nodes
+        chose a different split as a result.
+
         Their `invLeft` and `invRight` are computed BEFORE the
         `min_samples_leaf` test (`:56-58` precede `:62`), so with
         `min_samples_leaf == 0` and an empty child they are `+inf` on the way
@@ -505,17 +520,17 @@ struct GiniObjectiveFunction[dtype: DType](Copyable, Movable):
             var val_i: Int32 = 0
             var lval_i = hist_left[unsafe_offset=j].x
             var lval = Scalar[Self.dtype](Int(lval_i))
-            gain += lval * invLeft * lval * invLen
+            gain = fma(lval * invLeft * lval, invLen, gain)
 
             val_i += lval_i
             var total_sum = hist_total[unsafe_offset=j].x
             var rval_i = total_sum - lval_i
             var rval = Scalar[Self.dtype](Int(rval_i))
-            gain += rval * invRight * rval * invLen
+            gain = fma(rval * invRight * rval, invLen, gain)
 
             val_i += rval_i
             var val = Scalar[Self.dtype](Int(val_i)) * invLen
-            gain -= val * val
+            gain = fma(-val, val, gain)
 
         return gain
 

@@ -89,7 +89,7 @@ from extratrees.ported.decisiontree.batched_levelalgo.split import (
 )
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.math import ceildiv
+from std.math import ceildiv, fma
 from std.sys.info import size_of
 
 
@@ -634,6 +634,80 @@ def train_regression(
 # the draw, the score pass and the split reduction.
 
 
+def gain_per_split(
+    acc_left: MutPointer[Int32, MutAnyOrigin],
+    acc_total: MutPointer[Int32, MutAnyOrigin],
+    base: Int,
+    nclasses: Int,
+    len_in: Int32,
+    n_left_in: Int32,
+    min_samples_leaf: Int32,
+) -> Float32:
+    """`GiniObjectiveFunction::GainPerSplit`, `objectives.cuh:52-83`, on device.
+
+    Transcribed statement for statement, including the order the three terms
+    accumulate into `gain` and including their `invLen`/`invLeft`/`invRight`
+    reciprocals rather than divisions -- float division and
+    multiply-by-reciprocal are different roundings, and this quantity feeds
+    `split_not_valid`.
+
+    The one shape difference is deviation 143's, already recorded: theirs
+    indexes a prefix-summed histogram as `hist[n_bins*j + i]` for the left and
+    `hist[n_bins*j + n_bins-1]` for the total, ours takes the left and total
+    accumulators directly, because there is no bin dimension.
+
+    ==================================================================
+    DEVIATION BLOCK 183, SECOND FORM -- the gain is computed ON THE
+    DEVICE, which is where cuML computes it.
+
+    THE FIRST FIX WAS ON THE HOST AND IT WAS A RULE-2 VIOLATION.
+    `PORTING_RULES.md` 2: "If they do something on the GPU in the control
+    plane, we do it on the GPU. If they keep a decision on the device so
+    the host never learns it, we keep it on the device." cuML computes
+    `GainPerSplit` inside `computeSplitKernel` and the host never sees a
+    per-candidate gain. The first closure of 183 copied `status`,
+    `n_total` and `acc_total` back per level -- `n_cells * (2 +
+    n_classes)` ints that their design never moves -- and formed the gain
+    in `Float64` on the host. It was correct and it was the wrong shape,
+    and the commit that introduced it argued "the cheaper fix moved less
+    code", which optimises for the porter rather than for the port.
+
+    THIS FORM: the gain is computed here, in `Float32`, from their
+    expression, and travels with the candidate into the reduction. The
+    three readbacks are gone; the only thing that crosses per level is
+    the batch's chosen splits, which is what `builder.cuh:492-494` copies
+    back anyway.
+
+    A SIDE EFFECT WORTH NAMING: `best_metric_val` is now the same
+    quantity computed the same way on both paths, so it stops being a
+    field `device_tree_check` has to exclude for a reason it cannot
+    check.
+    ==================================================================
+    """
+    var length = Int(len_in)
+    var n_left = Int(n_left_in)
+    var n_right = length - n_left
+    # `:61-63`, and note it is checked BEFORE the reciprocals are used.
+    if n_left_in < min_samples_leaf or Int32(n_right) < min_samples_leaf:
+        return Float32.MIN_FINITE
+    var one = Float32(1.0)
+    var inv_len = one / Float32(length)
+    var inv_left = one / Float32(n_left)
+    var inv_right = one / Float32(n_right)
+    var gain = Float32(0.0)
+    for j in range(nclasses):
+        var lval_i = acc_left[unsafe_offset = base + j]
+        var lval = Float32(Int(lval_i))
+        gain = fma(lval * inv_left * lval, inv_len, gain)
+        var total_sum = acc_total[unsafe_offset = base + j]
+        var rval_i = total_sum - lval_i
+        var rval = Float32(Int(rval_i))
+        gain = fma(rval * inv_right * rval, inv_len, gain)
+        var val = Float32(Int(lval_i + rval_i)) * inv_len
+        gain = fma(-val, val, gain)
+    return gain
+
+
 def score_to_candidate_kernel(
     cand_quesval: MutPointer[Float32, MutAnyOrigin],
     cand_colid: MutPointer[Int32, MutAnyOrigin],
@@ -645,10 +719,15 @@ def score_to_candidate_kernel(
     in_status: MutPointer[Int32, MutAnyOrigin],
     in_threshold: MutPointer[Float32, MutAnyOrigin],
     in_n_left: MutPointer[Int32, MutAnyOrigin],
+    in_n_total: MutPointer[Int32, MutAnyOrigin],
+    in_acc_left: MutPointer[Int32, MutAnyOrigin],
+    in_acc_total: MutPointer[Int32, MutAnyOrigin],
     in_gini_num: MutPointer[Int64, MutAnyOrigin],
     in_gini_den: MutPointer[Int64, MutAnyOrigin],
     colids: MutPointer[Int32, MutAnyOrigin],
     n_cells_in: Int32,
+    n_classes_in: Int32,
+    min_samples_leaf_in: Int32,
 ):
     """Scored cells into reduction candidates, elementwise.
 
@@ -693,13 +772,23 @@ def score_to_candidate_kernel(
     ==================================================================
     """
     var n_cells = Int(n_cells_in)
+    var n_classes = Int(n_classes_in)
+    var min_samples_leaf = min_samples_leaf_in
     var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)
     while idx < n_cells:
         if in_status[unsafe_offset=idx] == SCORE_STATUS_SCORED:
             cand_quesval[unsafe_offset=idx] = in_threshold[unsafe_offset=idx]
             cand_colid[unsafe_offset=idx] = colids[unsafe_offset=idx]
-            cand_metric[unsafe_offset=idx] = Float32(0.0)
+            cand_metric[unsafe_offset=idx] = gain_per_split(
+                in_acc_left,
+                in_acc_total,
+                idx * n_classes,
+                n_classes,
+                in_n_total[unsafe_offset=idx],
+                in_n_left[unsafe_offset=idx],
+                min_samples_leaf,
+            )
             cand_nleft[unsafe_offset=idx] = in_n_left[unsafe_offset=idx]
             cand_num[unsafe_offset=idx] = in_gini_num[unsafe_offset=idx]
             cand_den[unsafe_offset=idx] = in_gini_den[unsafe_offset=idx]
@@ -713,91 +802,6 @@ def score_to_candidate_kernel(
             cand_den[unsafe_offset=idx] = Int64(0)
             cand_valid[unsafe_offset=idx] = Int32(0)
         idx += stride
-
-
-def gain_from_exact_totals(
-    num: Int64,
-    den: Int64,
-    status: MutPointer[Int32, MutUntrackedOrigin],
-    n_total: MutPointer[Int32, MutUntrackedOrigin],
-    acc_total: MutPointer[Int32, MutUntrackedOrigin],
-    nid: Int,
-    n_sampled_cols: Int,
-    n_classes: Int,
-) -> Float32:
-    """cuML's `GainPerSplit` for the winning candidate, from EXACT INTEGERS.
-
-    ==================================================================
-    DEVIATION BLOCK 183 -- CLOSED. The device path applies cuML's
-    zero-gain gate after all.
-
-    THE PROBLEM. `split_not_valid` (`kernels/builder_kernels.cuh:59-67`)
-    rejects a split whose `best_metric_val` is `<=
-    min_impurity_decrease`, and cuML's Gini gain is `>= 0` always, so at
-    the default `0.0` a ZERO-GAIN split -- one that does not reduce
-    impurity at all -- becomes a leaf. The device does not compute the
-    float gain (DEVIATION 175), so it published a constant and the gate
-    could not fire. Measured then: 689 host nodes against 747 device
-    nodes on the same fixture, i.e. the device grew a DIFFERENT, deeper
-    model and `min_impurity_decrease` was silently inert.
-
-    THE FIX, AND WHY IT NEEDS NO FLOAT ON THE DEVICE AND NO 128-BIT
-    COMPARE. Writing `sq_total` for the node's `sum_j t_j^2`:
-
-        cuML gain = parent_gini + sklearn_proxy / n
-                  = (1 - sq_total/n^2) + (num/den - n)/n
-                  = num/(den*n) - sq_total/n^2
-
-    Every quantity on the right is an exact integer the score pass
-    already computed: `num` and `den` come back with the winning split,
-    and `sq_total` and `n` are the NODE's totals, which `out_acc_total`
-    and `out_n_total` hold for every scored cell of that node -- the same
-    values in each, because they are the node's own class counts.
-
-    So the gain is formed HERE, on the host, in `Float64`, from integers
-    that carry no rounding at all. The earlier sketch of this fix put the
-    comparison on the device and needed DEVIATION 167's hand-widened
-    128-bit multiply, because `num * n` reaches `2^82`. Bringing three
-    small arrays back per level instead makes that unnecessary: `Int128`
-    works fine on the host, and the products are formed there.
-
-    WHY ANY SCORED CELL WILL DO. `sq_total` and `n` are properties of the
-    NODE, not of the candidate feature, so every scored cell of a node
-    carries the same pair. A node with no scored cell has no valid split
-    either, and this function is not reached for it.
-
-    THE ONE THING THAT IS STILL NOT BIT-IDENTICAL TO THE HOST PATH, and
-    it is smaller than what it replaced: the host's `best_metric_val` is
-    cuML's `GainPerSplit` accumulated in `Float32` from float
-    reciprocals (`objectives.cuh:52-83`); this is the same quantity
-    formed in `Float64` from exact integers. They agree to well within
-    the gate's resolution but not in the last bits, so
-    `device_tree_check` still excludes the field itself while now
-    requiring the DECISION it drives to agree.
-    ==================================================================
-    """
-    var base = nid * n_sampled_cols
-    var n = 0
-    var sq_total = Int128(0)
-    var found = False
-    for fslot in range(n_sampled_cols):
-        var slot = base + fslot
-        if status[unsafe_offset=slot] != SCORE_STATUS_SCORED:
-            continue
-        n = Int(n_total[unsafe_offset=slot])
-        for c in range(n_classes):
-            var t = Int128(
-                Int(acc_total[unsafe_offset = slot * n_classes + c])
-            )
-            sq_total += t * t
-        found = True
-        break
-    if not found or n <= 0 or den <= 0:
-        return Float32.MIN_FINITE
-    # gain = num/(den*n) - sq_total/n^2, in Float64 from exact integers.
-    var lhs = Float64(num) / (Float64(den) * Float64(n))
-    var rhs = Float64(sq_total) / (Float64(n) * Float64(n))
-    return Float32(lhs - rhs)
 
 
 @fieldwise_init
@@ -1173,10 +1177,15 @@ def train_classification_device_resident(
             d_status.unsafe_ptr(),
             d_thresh.unsafe_ptr(),
             d_nleft.unsafe_ptr(),
+            d_ntotal.unsafe_ptr(),
+            d_accl.unsafe_ptr(),
+            d_acct.unsafe_ptr(),
             d_gnum.unsafe_ptr(),
             d_gden.unsafe_ptr(),
             d_colids.unsafe_ptr(),
             Int32(n_cells),
+            n_classes,
+            params.min_samples_leaf,
             grid_dim=ceildiv(n_cells, 64),
             block_dim=64,
         )
@@ -1227,31 +1236,25 @@ def train_classification_device_resident(
         )
 
         # --- 7. the splits come back to the host, as `:492-494` does ------
-        # The node TOTALS come back too, and that is DEVIATION 183's fix: the
-        # gate needs `sq_total` and `n`, both of which the score pass already
-        # computed. They are the same for every cell of a node -- they are the
-        # node's own class counts -- so any SCORED cell of the node carries
-        # them.
+        # ONLY THE SPLITS CROSS, which is exactly what
+        # `raft::update_host(h_splits, splits, work_items.size())` copies back
+        # at `builder.cuh:492-494`. The gain travels WITH the candidate now
+        # (DEVIATION 183, second form), so no per-level readback of the node
+        # totals is needed and none happens.
         var o_q = ctx.enqueue_create_host_buffer[DType.float32](n_nodes)
         var o_c = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
         var o_l = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
         var o_nu = ctx.enqueue_create_host_buffer[DType.int64](n_nodes)
         var o_de = ctx.enqueue_create_host_buffer[DType.int64](n_nodes)
         var o_v = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
-        var o_st = ctx.enqueue_create_host_buffer[DType.int32](n_cells)
-        var o_nt = ctx.enqueue_create_host_buffer[DType.int32](n_cells)
-        var o_at = ctx.enqueue_create_host_buffer[DType.int32](
-            n_cells * Int(n_classes)
-        )
+        var o_m = ctx.enqueue_create_host_buffer[DType.float32](n_nodes)
         ctx.enqueue_copy(dst_buf=o_q, src_buf=r_q)
         ctx.enqueue_copy(dst_buf=o_c, src_buf=r_c)
         ctx.enqueue_copy(dst_buf=o_l, src_buf=r_l)
         ctx.enqueue_copy(dst_buf=o_nu, src_buf=r_nu)
         ctx.enqueue_copy(dst_buf=o_de, src_buf=r_de)
         ctx.enqueue_copy(dst_buf=o_v, src_buf=r_v)
-        ctx.enqueue_copy(dst_buf=o_st, src_buf=d_status)
-        ctx.enqueue_copy(dst_buf=o_nt, src_buf=d_ntotal)
-        ctx.enqueue_copy(dst_buf=o_at, src_buf=d_acct)
+        ctx.enqueue_copy(dst_buf=o_m, src_buf=r_m)
         ctx.synchronize()
 
         # --- 8. build the batch's splits on the host, as `:492-494` does --
@@ -1259,24 +1262,12 @@ def train_classification_device_resident(
         for i in range(n_nodes):
             var colid = o_c.unsafe_ptr()[unsafe_offset=i]
             var n_left = o_l.unsafe_ptr()[unsafe_offset=i]
-            var metric = Float32.MIN_FINITE
-            if o_v.unsafe_ptr()[unsafe_offset=i] != 0 and colid >= 0:
-                metric = gain_from_exact_totals(
-                    o_nu.unsafe_ptr()[unsafe_offset=i],
-                    o_de.unsafe_ptr()[unsafe_offset=i],
-                    rebind[MutPointer[Int32, MutUntrackedOrigin]](
-                        o_st.unsafe_ptr()
-                    ),
-                    rebind[MutPointer[Int32, MutUntrackedOrigin]](
-                        o_nt.unsafe_ptr()
-                    ),
-                    rebind[MutPointer[Int32, MutUntrackedOrigin]](
-                        o_at.unsafe_ptr()
-                    ),
-                    i,
-                    Int(k),
-                    Int(n_classes),
-                )
+            # The winning candidate's gain came off the DEVICE with it --
+            # `r_m`, written by `score_to_candidate_kernel` and carried
+            # through the reduction. `split_not_valid` below is unchanged.
+            var metric = o_m.unsafe_ptr()[unsafe_offset=i]
+            if o_v.unsafe_ptr()[unsafe_offset=i] == 0 or colid < 0:
+                metric = Float32.MIN_FINITE
             splits.append(
                 Split(
                     o_q.unsafe_ptr()[unsafe_offset=i], colid, metric, n_left

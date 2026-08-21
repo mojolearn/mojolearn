@@ -1831,3 +1831,139 @@ the host regressor hands them a host fit under a device name — the same class
 of defect as a parameter accepted and ignored. It raises unconditionally,
 before `refuse_unported`, because the gap is not a property of the
 configuration.
+
+---
+
+# The regression key, and the tie-break — deviations 189-194
+
+## 189. The regression key is cuML's OWN MSE gain, not sklearn's proxy
+
+**The problem.** sklearn's proxy numerator `sum_L^2*n_R + sum_R^2*n_L` over
+sums bounded by the `2^30` slot needs `2b + log2(n) <= 63`, i.e. `log2(n) <= 3`
+at `b = 30`. **Measured, in `Int128` and read back through `Int64`:**
+
+    n =  9   true 9223372019674906632     Int64 agrees
+    n = 10   true 10376293522134269961
+             Int64 reads -8070450551575281655   *** WRAPPED, AND NEGATIVE ***
+
+**Unpublishable above NINE ROWS**, and the wrap is negative, so
+`compare_exact_key`'s sign split would rank the wrapped candidate BELOW every
+other one — an inversion, not a rounding.
+
+**The fix is to publish THEIR quantity instead of sklearn's.** cuML's
+`MSEObjectiveFunction::GainPerSplit` (`objectives.cuh:225-244`) is sklearn's
+proxy minus `sum_T^2/n`, times `0.5/n` — both node constants — which is exactly
+the relation deviation 144 already records for Gini. Dropping node constants
+cannot reorder anything within a node, and the reduction only ever compares
+within a node. The parent term is the BIGGEST thing in sklearn's numerator;
+subtracting it leaves a perfect square of a quantity bounded by `n * 2^30`,
+which can be shrunk by truncating ONE number ONCE instead of every label.
+
+    A = sum_L*n_R - sum_R*n_L     num = (|A| >> j)^2     den = n_L*n_R
+
+---
+
+## 190. MEASURED: the alternatives lose orderings and this one does not
+
+Against a `Float64` ground truth, 190 ordered pairs of one node at
+n = 1,048,576:
+
+    exact Int128 proxy at b=30 (does NOT fit Int64)   0 pairs backwards
+    THIS key (Int64)                                   0 pairs backwards
+    route 1, narrowed accumulator b=21 (Int64)        60 pairs backwards
+    route 2b, sklearn's proxy on sums >> 9 (Int64)    42 pairs backwards
+
+**The published key is as good as the `Int128` form it cannot afford to
+publish**, and both narrowing routes lose a third and a fifth of the orderings
+at a million rows. Narrowing the accumulator does worst because its truncation
+costs up to one unit PER ROW.
+
+**Route 3 is also true and is stated in the code**: exact order preservation in
+two `Int64` fields is impossible above ten rows, and not for want of
+cleverness — an exact rational equal to the proxy has reduced denominator
+`n_L n_R / gcd`, unbounded, and a common-denominator rescale needs MORE bits,
+since two distinct proxies of one node differ by at least `16/n^4`. The question
+was never "exact or not", it was "which approximation", and it was measured.
+
+---
+
+## 191. The shift is node-uniform and derived, so there is no row cap
+
+`j = ceil_log2(n) + REGRESSION_SUM_BITS - 31` comes from the node's row count
+and the slot width alone — no caller argument, no extra pass, and **no row cap
+at all**, because `j` grows with `n`. The single precondition is
+`|sum_L|, |sum_R| <= 2^30`, which `choose_scale` already guarantees.
+
+The truncation is on `|A|`, so the key is invariant under negating every label.
+An arithmetic shift floors and would not be.
+
+---
+
+## 192. What the key is NOT: order preservation, measured
+
+Hashed candidates of one node: **0 of 1,128 inverted** at n = 1024 / 65,536 /
+1,048,576. Adversarial — adjacent `n_left`, with the second `A` solved into the
+first's truncation bucket — **0 / 19,955, 3 / 18,520, 18 / 20,000 (0.09%)**, and
+**0 ties anywhere**.
+
+**A cross-node control is part of the fixture and must FAIL**: comparing
+candidates of different nodes through a form that drops a node constant inverts
+175 of 1,128. Without it the fixture could not tell a node-local key from a
+global one — and the check's first draft made exactly that mistake, drawing an
+independent `sum_total` per candidate and reporting 66 "inversions" that were
+the fixture's fault, not the key's.
+
+---
+
+## 193. The precondition is a refusal STATUS, and the gate is host-side
+
+`SCORE_STATUS_REGRESSION_REFUSED = 5`. A kernel cannot raise, so a violated
+slot precondition is a status in the same position the host raise occupies —
+deviation 174's shape. Any existing `!= SCORED` test is already correct.
+
+The `min_impurity_decrease` gate for regression is `mse_gain_from_exact_totals`
+on the host, which is deviation 183's shape applied to MSE.
+
+---
+
+## 194. On an exact tie between two VALID rationals, the metric arm is skipped
+
+**Theirs.** `Split::update` (`split.cuh:78-90`) tests `best_metric_val`, then
+`colid`, then `quesval`. For cuML that is right: the metric IS their key.
+
+**Ours.** The exact rational is the key (deviation 145), and
+`host_splitter.mojo::_wins_on_total_order` already ordered an exact tie by
+`(colid, quesval)` with the metric arm dropped. The DEVICE reduction still
+called `Split.update`, which had it — harmless while the device published a
+constant metric, and not harmless once deviation 183's second form made it
+real.
+
+**MEASURED, which is how it was found.** The device and host metrics then
+differed on 4 of 747 nodes by at most 4 ulp — a float DIVISION rounds
+differently on Metal than on the host — and those 4 flipped exact-rational
+ties, cascading into **11 of 747 nodes with a different split and 18 differing
+leaf values**.
+
+**Why dropping it is more correct, not a concession.** Within a node,
+`gain = num/(den*n) - sq_total/n^2` and `sq_total/n` is a node constant, so the
+gain is a strictly increasing function of the exact rational. Two candidates
+whose rationals are EQUAL therefore have EQUAL true gains, and any difference
+between their floats is pure rounding. Ordering by it is ordering by noise,
+which is what deviation 145 exists to forbid — 145 argued it from a `Float32`
+collision, and this is the same argument with a second measurement.
+
+**THE CONDITION IS "BOTH KEYS VALID", NOT "EXACT TIE", AND THE FIRST VERSION
+GOT THAT WRONG.** Written as an unconditional skip it also stripped the metric
+from the NO-KEY path — where `compare_exact_key` ties every pair and the metric
+is the only ranking that exists — so a caller with no exact key would have
+ranked by feature index alone. `split_reduce_check`'s arm A' caught it: "no-key
+node did not degenerate to Split.update".
+
+**And it moved a sabotage's meaning, which had to be restored.** The
+`SPLIT_SAB_FLOAT_KEY` arm means "reduce on `best_metric_val` alone", and forcing
+the rational to tie is only half of that now; the arm also takes the no-key path
+so that it really is a float-keyed fold.
+
+**What it bought.** `best_metric_val` is now bit-identical between the two
+paths — 0 of 747, 0 ulp — so `device_tree_check` ASSERTS it instead of
+excluding it.

@@ -552,6 +552,13 @@ struct SplitExact(ImplicitlyCopyable, Movable):
         """
         var c = compare_exact_key(other.key, self.key)
         if sabotage == SPLIT_SAB_FLOAT_KEY:
+            # THE SABOTAGE MEANS "reduce on best_metric_val alone", which is
+            # cuML's own key. Forcing the rational to tie is only half of that
+            # now: since DEVIATION 194 the tie branch SKIPS the metric when
+            # both keys are valid, so `c = 0` on its own would produce a
+            # colid-keyed fold rather than a float-keyed one. The arm
+            # therefore also takes the no-key path below, which is
+            # `Split.update` untouched -- and that IS reducing on the float.
             c = Int32(0)
 
         var update_result = False
@@ -580,8 +587,74 @@ struct SplitExact(ImplicitlyCopyable, Movable):
                         ):
                             update_result = True
             else:
-                var probe = self.split
-                update_result = probe.update(other.split)
+                # ==========================================================
+                # DEVIATION BLOCK 194 -- on an exact tie the metric arm is
+                # SKIPPED, on this side as it already was on the host's.
+                #
+                # THEIRS: `Split::update` (`split.cuh:78-90`) tests
+                #   best_metric_val, then colid, then quesval. For cuML that
+                #   is right, because the metric IS their key.
+                # OURS: the exact rational is the key (DEVIATION 145), and
+                #   `host_splitter.mojo::_wins_on_total_order` already orders
+                #   an exact tie by (colid, quesval) with the metric arm
+                #   dropped. This side called `Split.update`, which still had
+                #   it -- harmless while the device published a constant
+                #   metric, and not harmless once it published a real one.
+                #
+                # MEASURED, which is how it was found. Computing cuML's
+                # GainPerSplit on the device (DEVIATION 183, second form) made
+                # the device metric real; the device and host metrics then
+                # differed on 4 of 747 nodes by at most 4 ulp -- a float
+                # DIVISION rounds differently on Metal than on the host -- and
+                # those 4 flipped exact-rational ties, cascading into 11 of
+                # 747 nodes with a different split and 18 differing leaf
+                # values.
+                #
+                # WHY DROPPING IT IS MORE CORRECT, NOT A CONCESSION. Within a
+                # node, gain = num/(den*n) - sq_total/n^2 and sq_total/n is a
+                # node constant, so the gain is a strictly increasing function
+                # of the exact rational. Two candidates whose rationals are
+                # EQUAL therefore have EQUAL true gains, and any difference
+                # between their floats is pure rounding. Ordering by it is
+                # ordering by noise, which is the thing DEVIATION 145 exists
+                # to forbid -- 145 argued it from a Float32 collision, and
+                # this is the same argument with a second measurement.
+                #
+                # THE CONDITION IS "BOTH KEYS VALID", NOT "EXACT TIE", AND
+                # THE FIRST VERSION OF THIS BLOCK GOT THAT WRONG. Written as
+                # an unconditional skip it also stripped the metric from the
+                # NO-KEY path -- where `compare_exact_key` ties every pair and
+                # the metric is the only ranking that exists -- so a caller
+                # with no exact key would have ranked by feature index alone.
+                # `split_reduce_check`'s arm A' is what caught it: "no-key node
+                # did not degenerate to Split.update".
+                #
+                # `Split.update` itself is UNCHANGED, still checked by
+                # `split_check`, and still the whole tie-break when there is no
+                # rational to reason from.
+                # ==========================================================
+                if (
+                    other.key.valid != 0
+                    and self.key.valid != 0
+                    and sabotage != SPLIT_SAB_FLOAT_KEY
+                ):
+                    # BOTH rationals are valid and EQUAL, so the true gains
+                    # are equal and any float difference is noise: skip the
+                    # metric arm.
+                    if other.split.colid > self.split.colid:
+                        update_result = True
+                    elif other.split.colid == self.split.colid:
+                        if other.split.quesval > self.split.quesval:
+                            update_result = True
+                else:
+                    # NO rational to reason from -- `compare_exact_key` ties
+                    # every pair when a key is invalid -- so the metric is the
+                    # only ranking there is, and `Split.update` is exactly
+                    # cuML's. This is the arm a caller with no exact key takes,
+                    # and it must NOT be weakened: dropping the metric there
+                    # would rank by feature index alone.
+                    var probe = self.split
+                    update_result = probe.update(other.split)
 
         if update_result:
             self = other
