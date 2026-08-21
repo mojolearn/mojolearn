@@ -1087,9 +1087,9 @@ def train(
             k: Int
         ) {imm sfp2, imm obp, imm ocp, imm omp, imm nr2, imm bc2, imm nm2, imm cap2}:
             try:
-                var col2 = List[Float32](capacity=nr2)
-                for r in range(nr2):
-                    col2.append(sfp2.unsafe_load(k * nr2 + r))
+                var col2 = List[Float32]()
+                col2.resize(nr2, Float32(0.0))
+                memcpy(dest=col2.unsafe_ptr(), src=sfp2 + k * nr2, count=nr2)
                 var q2 = calc_quantization(col2^, bc2, nm2)
                 var nb = len(q2[0])
                 if nb > cap2:
