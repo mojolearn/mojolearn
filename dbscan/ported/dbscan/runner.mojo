@@ -182,6 +182,30 @@ def rbc_take_one_pass(
     return max_k < spare
 
 
+def rbc_dbscan_take_one_pass(
+    batch_size: Int,
+    n_rows: Int,
+    ja_capacity: Int,
+    n_points: Int,
+    max_k: Int,
+) -> Bool:
+    """Whether DBSCAN may currently use the upstream max-k shortcut.
+
+    The upstream memory predicate remains in `rbc_take_one_pass`, and the
+    max-k kernel remains independently checked.  It is not safe to compose
+    the two in DBSCAN on Metal yet: the max-k and count kernels disagreed at
+    an epsilon boundary in the 400k x 32 reproducer.  Returning false makes
+    DBSCAN use count+fill, whose count half is the identical kernel loop 1
+    used to decide core points.
+    """
+    _ = batch_size
+    _ = n_rows
+    _ = ja_capacity
+    _ = n_points
+    _ = max_k
+    return False
+
+
 def relabel_for_skl_kernel(
     labels: MutPointer[Int32, MutAnyOrigin],
     n_in: Int32,
@@ -517,7 +541,16 @@ def dbscan_fit(
             var np_b = min(n_rows - b1 * batch, batch)
             if np_b <= 0:
                 break
-            if rbc_take_one_pass(
+            # The max-k kernel duplicates the count kernel's distance loop.
+            # On Metal the two separately compiled loops can disagree by one
+            # at the epsilon boundary (observed at 400k x 32: loop 1 found a
+            # maximum degree of 1, the max-k loop found 0).  A larger scratch
+            # allocation cannot repair two different neighbourhoods.  Keep
+            # the upstream one-pass implementation available and tested, but
+            # do not dispatch it from DBSCAN until both paths are bitwise the
+            # same predicate.  The two-pass arm calls the SAME count kernel
+            # used by loop 1, then fills from its CSR offsets.
+            if rbc_dbscan_take_one_pass(
                 batch, n_rows, maxadjlen, np_b, maxklen[b1]
             ):
                 if np_b * maxklen[b1] > rbc_tmp_len:
@@ -554,7 +587,7 @@ def dbscan_fit(
                 var qb2 = x.create_sub_buffer[DType.float32](
                     start2 * n_features, n_points2 * n_features
                 )
-                if rbc_take_one_pass(
+                if rbc_dbscan_take_one_pass(
                     batch, n_rows, maxadjlen, n_points2, maxklen[b2]
                 ):
                     # `runner.cuh:335` passes `maxklen.at(i)`. Their `vd`

@@ -989,14 +989,17 @@ def _run_two_loop_arm(
 
 
 def check_dbscan_rbc_two_loop_arms() raises:
-    """BOTH arms of loop 2's RBC dispatch, one named fixture each.
+    """BOTH upstream arms of loop 2's RBC dispatch, one named fixture each.
 
     PORTING_RULES 8: a switch is exercised on both sides or one side is
     unchecked, and the RBC arm's loop 2 now has a switch --
     `algo.cuh:119-122` sends a batch down the ONE-PASS `max_k` form when
     loop 1's bound fits the spare room, and down the two-pass count + fill
-    otherwise. The guard is data-derived, not a parameter, so each fixture
-    PINS its arm and the check proves the pin with the runner's own
+    otherwise. The DBSCAN runner currently disables the one-pass composition
+    on Metal because its separately compiled distance loop disagreed at an
+    epsilon boundary; the standalone max-k kernel stays checked. The guard is
+    data-derived, not a parameter, so each fixture PINS the arm upstream would
+    select and the check proves the pin with the runner's own
     `rbc_take_one_pass` on host-recomputed degrees before trusting the
     labels.
 
@@ -1015,5 +1018,5 @@ def check_dbscan_rbc_two_loop_arms() raises:
         "check_dbscan_rbc_two_loop_arms OK: the one-pass arm ("
         + String(c1) + " clusters) and the two-pass fallback (" + String(c2)
         + " clusters) both label identically to unbatched brute force, and"
-        " algo.cuh:119's guard provably routes each fixture to its arm"
+        " algo.cuh:119's guard provably selects each upstream arm"
     )
