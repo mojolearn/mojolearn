@@ -4,7 +4,12 @@ Written 2026-08-21 after a second prior-art pass over `NOVELTY_NOTES.md`.
 That file is the INVENTORY of candidate findings. This is the PLAN: how they
 group, how many survive as papers, and the work each one is missing.
 
-**Answer: two papers, one section, and a pile of bug reports.** Not five, not
+**REVISED 2026-08-21, same day, after Andrew asked whether the FTZ
+construction is enough to carry a paper. It is not, and the honest answer to
+"is this a BS paper" is that Paper 2 as scoped is at real risk of being one.
+See the section at the end. Default is now ONE paper.**
+
+**Original answer: two papers, one section, and a pile of bug reports.** Not five, not
 ten. Most of `NOVELTY_NOTES` is evidence for those two, which is what evidence
 is for.
 
@@ -136,3 +141,70 @@ items 1 and 2 are the only hard blockers, and item 1 is a bug fix. Paper 2 is
 the better paper and needs two rented GPUs and four code items first. **Do not
 start Paper 2's write-up until Paper 1 has a complete draft**; three paper
 repositories with nothing submitted is this project's own recorded failure.
+
+
+---
+
+# REVISION: is Paper 2 a real paper? Argued against, honestly.
+
+Andrew: *"is the ftz construction enough to carry the paper? seems like bs
+paper no?"* The case against is stronger than I had been treating it.
+
+## The case that Paper 2 is thin
+
+1. **The FTZ construction is a few lines.** `ftz(x)` flushes subnormals.
+   Applied at seams. Dressing it as "deriving a cross-vendor numeric contract"
+   is framing, and a reviewer is entitled to see through framing.
+2. **The measurement confirms documented behaviour.** Metal flushes
+   denormals; Apple says so. That a flush model reproduces 53,041 of 53,041
+   flush divergences is a validation of an implementation, not a discovery.
+   The number is impressive-looking and it is checking that flush-to-zero
+   behaves like flush-to-zero.
+3. **The rest of the machinery is standard.** Fixed-point accumulation for
+   order-independence is textbook. Pinning machine-derived parameters is
+   obvious once the problem is named. The "enumeration discipline" is, in
+   plain words, *make a list and check it*.
+4. **E1 is a hash comparison.** It is evidence, not method. A paper whose
+   headline experiment is `sha256(model_a) == sha256(model_b)` needs its
+   contribution to be somewhere else entirely.
+5. **The negative-cost result is an implementation detail of one backend.**
+   Stated without its scope it is a slogan; stated with its scope it is "our
+   port had an occupancy problem on Metal and the integer layout fixed it."
+6. **Nobody may want the property.** "No one has done it" and "no one needs
+   it" are indistinguishable from inside, and we have not talked to a single
+   user who asked for cross-vendor bit identity.
+
+## What is actually strong, and note where it sits
+
+- **Trees are not networks.** Reproducibility results from deep learning do
+  not transfer to discrete-structure learners, because an argmax converts a
+  one-ULP difference into a different model rather than a perturbed one. This
+  is the one argument that survives every prior-art check.
+- **The float audit's negative results.** Three of four conventional hazards
+  do not occur on this stack; the fourth accounts for everything. That
+  contradicts folk knowledge and is a measurement, not a construction.
+- **The two enumeration failures.** A mechanism that was correct and
+  unreachable; a parameter classified as scheduling that was setting leaf
+  values. Transferable, concrete, and honest.
+
+**Notice that all three are findings and failures, not the FTZ construction.**
+The construction is the least interesting thing in the paper it was going to
+be named after.
+
+## The revision
+
+**Default to ONE paper: Paper 1, enriched.** It is 7 pages of a 10-page
+budget. The determinism material --- argmax amplification, the float audit,
+the accumulator, the enumeration failures --- is 2-3 pages of genuinely strong
+content that turns a good short paper into a full one, and it fits the same
+thesis rather than competing with it: *what happens when you take a GBDT to a
+platform nobody targeted, and what portability actually costs there.*
+
+**Split back into two only if E1 runs and comes back clean.** Three GPU
+vendors emitting one hash is a headline result that deserves its own paper.
+Until then, Paper 2 is a design and an argument, and one system plus one small
+construction is thin for a venue accepting 22%.
+
+**And if E1 fails or stays unrun, the determinism material still ships** ---
+inside Paper 1, where it is supporting evidence and does not have to carry
+anything on its own.
