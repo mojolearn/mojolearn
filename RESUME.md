@@ -854,3 +854,30 @@ moved cells all in the right rows. WHAT REMAINS IS ONE LINE in
 `gbdt/train.mojo` (the other lane's file): swap the independent-half
 call to `compute_simple_ctrs_device(ctx, ...)`; handoff note in the
 driver's docstring, UNWIRED.md carries the row until it lands.
+
+### 2026-08-21, night: the new chassis benchmarked -- Logloss and Bayesian epsilon rows
+
+Both from a CLEAN WORKTREE at HEAD (`cf750b0`), so the numbers benchmark
+the commits while the feature lane's working files stay out of the
+binary. Full record `bench/results/EPSILON_LOGLOSS_2026-08-21.md`.
+
+**LOGLOSS (epsilon's native task; first benchmark of the loss chassis):**
+Newton-10 estimation on BOTH arms (their Logloss GPU default -- pinning 1
+would be the priced cheat): medians 2.30x @254 / 2.69x @128, losses
+matched to 7 significant figures under 200 Newton steps of exposure, our
+arm bit-identical rep to rep. The estimator bill at 400k rows is the few
+ms/tree the 0.50 ms/iteration pricing predicted; their arm pays its own
+Newton-10, so the ratio barely moves from the RMSE rows.
+
+**BAYESIAN (their GPU-default sampling): 3.26-4.41x, the widest training
+margin in the record** -- their CPU arm's per-tree weight resampling
+costs it 1.5-2x while our device bootstrap kernel costs ~30-50 ms/tree,
+and our mse BAND sits at or below theirs at both borders. The pinned
+deterministic rows therefore UNDERSTATE epsilon: at the configuration
+their GPU would actually run, the margin is 3.3-4.4x.
+
+New files: `bench/interleaved/logloss_interleaved.mojo` +
+`tools/catboost_logloss_arm.py` (separate from catboost_arm.py so the
+NVIDIA lane's uncommitted work cannot collide). Not run on purpose: the
+other nine new losses -- epsilon poses no quantile/Poisson task, and the
+dataset for those gets chosen BEFORE any number exists.
