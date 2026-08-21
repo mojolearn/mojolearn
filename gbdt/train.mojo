@@ -56,6 +56,7 @@ from gbdt.overfitting_detector.overfitting_detector import (
 )
 from gbdt.gpu_util.kernel.radix_sort import DeviceFloatSorter
 from max.algorithm import sync_parallelize
+from gbdt.data.permutation import TRandom
 from gbdt.gpu_util.kernel.bootstrap import (
     BOOTSTRAP_KERNEL_BAYESIAN,
     BOOTSTRAP_KERNEL_BERNOULLI,
@@ -246,6 +247,7 @@ def train(
     n_rows: Int,
     n_features: Int,
     border_count: Int = 128,
+    border_build_max_samples: Int = 100_000,
     n_estimators: Int = 100,
     max_depth: Int = 6,
     learning_rate: Float32 = Float32(0.03),
@@ -740,6 +742,70 @@ def train(
     # their ComputeBorders' device RadixSort, scratch hoisted once for
     # every float column below (see DeviceFloatSorter's docstring for the
     # churn crash that makes the hoist load-bearing)
+    # THEIR CPU QUANTIZER'S SUBSAMPLE, adopted for the user-facing path.
+    # Their own `GetSampleSizeForBorderSelectionType` is
+    # `Min(vecSize, slowSubsetSize)` with slowSubsetSize defaulting to
+    # 100,000 (`private/libs/quantization/utils.h:132-136`), and their
+    # `SampleArray` draws WITH REPLACEMENT through
+    # `TRandom(seed).NextUniformL() % n` (`utils.cpp:14-24`), seeded by
+    # `TRandom::GenerateSeed` (`cpu_random.h:88-94`). Their GPU
+    # `ComputeBorders` full-sorts instead; both are their real paths, and
+    # the END-TO-END row (`END2END` results) showed the full-data DP
+    # losing the user-facing fight 3-4x to exactly this subsample on
+    # their CPU arm. `border_build_max_samples = 0` restores the
+    # full-data GPU-pipeline behavior; the default matches the arm a
+    # user actually compares against. Borders from a sample are seeded
+    # and bit-deterministic given (random_seed, feature index).
+    var border_sample_n = n_rows
+    if border_build_max_samples > 0 and border_build_max_samples < n_rows:
+        border_sample_n = border_build_max_samples
+
+    def _generate_seed(from_seed: UInt64) -> UInt64:
+        # their TRandom::GenerateSeed (cpu_random.h:88-94): five LCG steps
+        var sd = from_seed
+        for _ in range(5):
+            sd = 6364136223846793005 * sd + 1442695040888963407
+        return sd
+
+    def _border_sample(
+        fcol: Int,
+        cols: List[List[Float32]],
+        sample_n: Int,
+        nr: Int,
+        seed0: UInt64,
+    ) raises -> List[Float32]:
+        if sample_n == nr:
+            return cols[fcol].copy()
+        var rnd = TRandom(_generate_seed(seed0 + UInt64(fcol)))
+        var src = cols[fcol].unsafe_ptr()
+        var out = List[Float32](capacity=sample_n)
+        for _ in range(sample_n):
+            out.append(
+                src.unsafe_load(
+                    Int(rnd.next_uniform_l() % UInt64(nr))
+                )
+            )
+        # a rare NaN the draw missed would flip the column's NaN mode;
+        # their CPU computes the mode from the pool's own NaN accounting,
+        # so the guarantee is reproduced by a full-column scan
+        var has_nan = False
+        for r in range(nr):
+            var v = src.unsafe_load(r)
+            if v != v:
+                has_nan = True
+                break
+        if has_nan:
+            var probe = out.unsafe_ptr()
+            var sample_has = False
+            for i in range(sample_n):
+                var v2 = probe.unsafe_load(i)
+                if v2 != v2:
+                    sample_has = True
+                    break
+            if not sample_has:
+                out[0] = Float32(0.0) / Float32(0.0)
+        return out^
+
     # phase-A/B scratch: how many float columns, and one flat buffer
     # holding every sorted float column back to back
     var n_float_prescan = 0
@@ -747,8 +813,8 @@ def train(
         if not column_one_hot[f] and column_ctr_grid[f] < 0:
             n_float_prescan += 1
     var float_cols = List[Int]()
-    var sorted_flat = List[Float32](capacity=n_float_prescan * n_rows)
-    sorted_flat.resize(n_float_prescan * n_rows, Float32(0.0))
+    var sorted_flat = List[Float32](capacity=n_float_prescan * border_sample_n)
+    sorted_flat.resize(n_float_prescan * border_sample_n, Float32(0.0))
     var border_sorter = DeviceFloatSorter(ctx, n_rows)
     # their `TFloatFeature::NanValueTreatment`, one per COLUMN. One-hot and
     # CTR columns stay `AsIs`: a one-hot column holds dense codes and a CTR
@@ -833,20 +899,22 @@ def train(
             # inside the parallel region (the sync_parallelize deadlock
             # rule mojotrees recorded).
             if not border_sorter.has_pending:
-                border_sorter.begin(ctx, columns[f].copy())
+                border_sorter.begin(ctx, _border_sample(f, columns, border_sample_n, n_rows, random_seed))
             var col = border_sorter.finish(ctx)
             var g = f + 1
             while g < n_columns:
                 if not column_one_hot[g] and column_ctr_grid[g] < 0:
-                    border_sorter.begin(ctx, columns[g].copy())
+                    border_sorter.begin(ctx, _border_sample(g, columns, border_sample_n, n_rows, random_seed))
                     break
                 g += 1
             var slot = len(float_cols)
             float_cols.append(f)
             var sfp = sorted_flat.unsafe_ptr()
             var cp2 = col.unsafe_ptr()
-            for r in range(n_rows):
-                sfp.unsafe_store(slot * n_rows + r, cp2.unsafe_load(r))
+            for r in range(border_sample_n):
+                sfp.unsafe_store(
+                    slot * border_sample_n + r, cp2.unsafe_load(r)
+                )
             _ = col^
             fold_counts.append(0)  # placeholder, phase B fills it
             borders.append(List[Float32]())  # placeholder
@@ -872,7 +940,7 @@ def train(
         var obp = out_borders.unsafe_ptr()
         var ocp = out_counts.unsafe_ptr()
         var omp = out_modes.unsafe_ptr()
-        var nr2 = n_rows
+        var nr2 = border_sample_n
         var bc2 = border_count
         var nm2 = nan_mode_opt
         var cap2 = out_cap
