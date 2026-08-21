@@ -229,20 +229,18 @@ places, all of them the same shape: their template parameter is
 constrained by nothing and satisfied structurally, and Mojo's traits are
 nominal.
 
---- 129a. `ObjectiveLike` AND TWO FORWARDING ADAPTERS --------------
+--- 129a. `ObjectiveLike` -- CLOSED ---------------------------------
 `buildHistogramsKernel`, `findBestSplitsKernel` and `leafKernel` are
-templated on `typename ObjectiveT` with no constraint. `objectives.mojo`
-declares no trait -- its two structs conform to `Copyable, Movable` only
--- and this lane does not own that file, so the trait is declared HERE
-along with `ClassificationObjective` / `RegressionObjective`, which hold
-one of theirs and forward the five members these kernels touch.
-PRICE: two forwarding structs, roughly 60 lines, zero in value. The
-launchers are OVERLOADED on the concrete objective type and wrap
-internally, so `builder.mojo` passes
-`ClassificationObjectiveFunction[...]` exactly as their `builder.cuh`
-passes `ObjectiveT` and never mentions the adapter. MERGE-TIME item: if
-`objectives.mojo` later declares conformance to this trait directly, the
-adapters and the overloads delete and the generic launcher stays.
+templated on `typename ObjectiveT` with no constraint; Mojo traits are
+nominal, so that list has to be written down somewhere.
+
+It is written down in `objectives.mojo` as `trait ObjectiveLike`, and
+every launcher here is generic on `O: ObjectiveLike`. The merge-time
+item this block used to describe -- two forwarding adapter structs and
+six overloaded launchers, pending someone moving the trait -- HAPPENED.
+The adapters and the overloads are gone; there is nothing left to
+delete. The paragraph describing them is deleted rather than annotated,
+because it described code that is not in this file.
 
 --- 129b. `ScanBin`, SO `pdf_to_cdf` CAN SEE A BIN ------------------
 `core/block_scan.pdf_to_cdf` -- which IS `:259-283`, already ported, and

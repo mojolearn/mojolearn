@@ -25,9 +25,11 @@ is complete:
   * `sampled_cols_for` and the multi-round feature-resampling schedule.
 
 The four kernel LAUNCHES (`doSplit`, `computeBestSplits`, `computeSplit`,
-`SetLeafPredictions`) are NOT wired here yet; see DEVIATION 300's note at the
-end of the deviation block. They are the next commit, and the launcher
-contract they will call is written down there so the two halves cannot drift.
+`SetLeafPredictions`) ARE wired -- DEVIATION 301 is closed. This paragraph
+used to say they were "NOT wired here yet ... the next commit", and it
+contradicted the deviation block sixty lines below it that recorded the
+closure. The launch schedule this file enqueues, level by level, is the one
+`builder.cuh:410-483` enqueues.
 
 THE THING MOST LIKELY TO BE MISSED IN THIS FILE, said up front
 ---------------------------------------------------------------

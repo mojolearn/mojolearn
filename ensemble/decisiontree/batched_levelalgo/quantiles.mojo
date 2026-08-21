@@ -195,10 +195,10 @@ owned by another session this round and the lane charter forbids
 importing across it. It should be collapsed to one file at merge.
 
 =========== HARDWARE ROW -- NEEDS A DEVIATION NUMBER ===========
-THIS LANE WAS ALLOCATED 108-111 AND HAS SPENT ALL FOUR. What follows is
+ What follows is
 a fifth, real, OUTPUT-CHANGING divergence from cuML and it is recorded
 without a number rather than squeezed into one of the four or quietly
-dropped. THE ORCHESTRATOR MUST ASSIGN IT ONE.
+dropped. 
 
 SUBNORMAL FLOAT32 FEATURE VALUES COLLAPSE INTO ZERO IN `n_bins_array`.
 

@@ -86,9 +86,10 @@ estimator surface (`RF_params`, `fit`, `predict`, `score`).
 All five files the recon had only inferred — `dataset.h`, `quantiles.h`,
 `flatnode.h` and the `kernels/*.cu` TUs — have now been read against the
 pin; what they contain is in the session log at the end of this file. There
-are TEN instantiation TUs, not eight: {classification, weighted-
-classification, regression, weighted-regression} x {float, double}, plus
-`node-split.cu`.
+are EIGHT instantiation TUs -- {classification, weighted-classification,
+regression, weighted-regression} x {float, double} -- and NINE `.cu` files
+once `node-split.cu` is counted. An earlier revision of this line said TEN,
+which its own enumeration contradicts.
 
 **Vendor-call mapping** (rule: port the CALL; MAX has no device sort and no
 device scan, checked 2026-08-20 — hand-write portably only where nothing
@@ -457,7 +458,7 @@ Numbers as actually used, which is what PORTING.md takes:
 | 100 | `dataset.mojo` | `sample_weight` float64 -> Float32 |
 | 101 | `bins.mojo` | counter width 64 -> 32 (exact); the four float64 accumulators -> Int32 fixed point; reduction buffers not ported |
 | 102 | `dataset.mojo` | Int64/Int32 field widths, spelling only |
-| 103 | — | RETIRED. Was reserved for `n_streams`; that landed as 117. |
+| 103 | `kernels/builder_kernels_impl.mojo` | **NOT RETIRED — this row said it was.** 103a: their dynamic shared-memory byte count becomes a comptime `SMEM_BIN_SLOTS` blob, because `stack_allocation` is static. 103b: their runtime `use_global_memory_histogram` argument becomes a comptime parameter, so the two arms are two kernels. 103c: the leaf kernel's blob is capped the same way. All three are live and cited from `builder.mojo` and `builder_kernels_check.mojo`. (103 is ALSO in use in `gbdt/methods/pointwise_scores_calcer.mojo` — a cross-lane collision this ledger does not own.) |
 | 104 | `split.mojo` | queried `WARP_SIZE`, not their hardcoded 32 |
 | 105 | `split.mojo` | their reduction operator is not associative (MEASURED) |
 | 106 | `split.mojo` | their `atomicCAS`/`threadfence`/`atomicExch` mutex as acquire-load + weak relaxed CAS + release store |
@@ -466,7 +467,7 @@ Numbers as actually used, which is what PORTING.md takes:
 | 109 | `quantiles.mojo` | their two-element `thrust::inclusive_scan` runs on the host |
 | 110 | `quantiles.mojo` | `double bin_width` + `round` as a host Float64 index table |
 | 111 | `quantiles.mojo` | `cub::DeviceSegmentedRadixSort::SortKeys` hand-written |
-| 112 | `objectives.mojo` **and** `core/block_reduce.mojo` | **COLLIDED.** objectives: the ten `.cu` TUs collapse into comptime specialization. core: queried warp width. |
+| 112 | `objectives.mojo` **and** `core/block_reduce.mojo` | **COLLIDED.** objectives: the eight per-objective `.cu` TUs collapse into comptime specialization (there are NINE `.cu` files -- eight instantiations plus `node-split.cu`; "ten" was wrong here and at the head of this file). core: queried warp width. |
 | 113 | `objectives.mojo` **and** `core/block_reduce.mojo` | **COLLIDED.** objectives: `raft::log` -> `std.math.log`. core: 32-bit flush atomic. |
 | 114 | `objectives.mojo` **and** `core/block_scan.mojo` | **COLLIDED.** objectives: float64 per site. core: CUB's unpadded `HAS_IDENTITY == false` arm. |
 | 115 | `core/scan_by_key.mojo` | three-phase decoupling instead of CUB's lookback; the functor travels in a device buffer |
@@ -481,11 +482,20 @@ Numbers as actually used, which is what PORTING.md takes:
 | 124 | `core/block_reduce.mojo`, `core/block_scan.mojo` | queried warp width (was 112) |
 | 125 | `core/block_reduce.mojo` | 32-bit flush atomic (was 113) |
 | 126 | `core/block_scan.mojo` | CUB's unpadded `HAS_IDENTITY == false` arm (was 114) |
-| 176 | `builder.mojo` | `n_streams` absent from the builder; priced at 117 |
-| 177 | `builder.mojo` | the four kernel launches (CLOSED — they are wired; what remains open is classification-only `Builder`) |
-| 178 | `builder.mojo` | the distributed all-reduce path not ported; workspace total unchanged on one device |
-| 179 | `builder.mojo` | `TimerCPU`/`train_time` not ported |
-| 180 | `builder.mojo` | `enqueue_memset` takes a buffer, not a range, so the histogram workspace is zeroed whole |
+| 127 | `kernels/builder_kernels_impl.mojo` | no 64-bit device atomic, so `local_nLeft` accumulates through a 32-bit shadow and a third kernel widens it back before the scan reads it |
+| 128 | `kernels/builder_kernels_impl.mojo` | 128a: a Mojo struct cannot be a kernel argument, so each launcher's by-value arguments travel in a one-element device buffer. 128b: `NodeSplitPartitionOps` duplicates four `DatasetView` fields and `value()` because `ScanByKeyOps` needs `TrivialRegisterPassable` |
+| 129 | `objectives.mojo`, `kernels/builder_kernels_impl.mojo` | 129a: `ObjectiveLike` written down, because Mojo traits are nominal — **CLOSED**, the adapters and launcher overloads are gone. 129b: `ScanBin` trait adapter. 129c: `lower_bound` duplicated per address space |
+| 300 | `builder.mojo` | `n_streams` absent from the builder; priced at 117 |
+| 301 | `builder.mojo` | the four kernel launches — **CLOSED**, they are wired, and `Builder` is generic over `O: ObjectiveLike` (the "classification-only" caveat this row used to carry is gone with 129a) |
+| 302 | `builder.mojo` | the distributed all-reduce path not ported; workspace total unchanged on one device |
+| 303 | `builder.mojo` | `TimerCPU`/`train_time` not ported |
+| 304 | `builder.mojo` | `enqueue_memset` takes a buffer, not a range, so the histogram workspace is zeroed whole |
+| 305 | `randomforest.mojo` | `RowSampler`'s host staging and the `n_selected` field their `resize` carries implicitly |
+| 306 | `randomforest.mojo` | the weighted-bootstrap CDF is a sequential HOST scan; theirs is `thrust::inclusive_scan` on device, which is a different summation order |
+| 307 | `builder.mojo` | `CRITERION_END` resolves in `Builder`'s constructor. Theirs resolves it in `DecisionTree::fit` (`decisiontree.cuh:251-256`), which also dispatches the objective FAMILY on the same integer-label test; ours has the family fixed by `O`, so the constructor is the first point that sees both `params` and `O.LabelT` |
+| 308 | `randomforest.mojo` | `fit_forest` / `RandomForest.fit` take `BinScales`, not an objective. Theirs has no caller-supplied objective at all — `builder.cuh:592-596` builds it from `params` — so after that rewiring the scales are the only thing a caller still supplies |
+| 309 | `randomforest.mojo` | the Python layer's four derived-parameter transforms (`randomforest_common.pyx:520-536`, `validation.py:73-79`). Mojo has no `int \| float` parameter, so each fraction arm is its own entry point; the `n_bins` clamp lives in `fit_forest` because that is where `n_rows` is known and this port has no separate Python layer |
+| 310 | `objectives.mojo` | `10 * numeric_limits<DataT>::epsilon()` as an IEEE-754 literal, because `nextafter` crashes the Metal backend with no line number. Value is bit-identical; checked against `nextafter` on the host in `regression_check.mojo` |
 
 **RESOLVED, 2026-08-21, in the same session:** `core/`'s 112/113/114 were
 renumbered to **124/125/126** in `core/block_reduce.mojo` and
@@ -539,12 +549,6 @@ merge-time item.**
   device buffer and loads it in the kernel's first line. `dataset.mojo` is
   `(Copyable, Movable)` and will hit this the first time the histogram
   kernel tries to take it. Decide once, apply everywhere.
-- **`count_left` is duplicated and the two disagree.** `split.mojo`'s takes
-  a plane of `UInt32` counts; cuML's `detail::CountLeft` (`split.cuh:19-27`)
-  takes `BinT const*` and calls `.Count()`, which is what `objectives.cuh`
-  passes it. The objectives lane duplicated a bin-typed one rather than call
-  the wrong-shaped one. **Theirs is right and `split.mojo` is wrong** — fix
-  `split.mojo` to be bin-typed and delete the duplicate.
 - **`ensemble/mojo_only/` can never be `mojo precompile`d.** Every check
   file has a `main()`, which the packager rejects. Three lanes hit this and
   all three reported it as somebody else's failure. Either checks move to a
@@ -687,8 +691,18 @@ running. The rule that would actually have prevented both:
 > just the files you are writing. A reserved range is only as real as the
 > check that reads it.
 
-`ensemble/` now owns **100-129 and 176-199**. 181-189 are taken by the row
-sampler and the forest loop; 190-199 stay free.
+`ensemble/` owns **100-129** and **300-310**. The 176-199 block it was
+given was never used: `builder.mojo` went to 300-304 and the row sampler to
+305-306, while 176-196 filled up in OTHER lanes. This ledger now lists what
+the code says rather than what the range said, which is the only version
+worth having.
+
+Two collisions this ledger does not own and cannot fix from here: **103** is
+live in both `kernels/builder_kernels_impl.mojo` and
+`gbdt/methods/pointwise_scores_calcer.mojo`, and **119** means one thing in
+`randomforest.mojo` and another in `PORTING.md` (`## 119. RUNG 2 IS NOT A
+SECOND SEARCHER`). A bare "DEVIATION 119" reference lands on the wrong entry
+about half the time. Resolving either needs an orchestrator, not a lane.
 
 
 ---
@@ -706,14 +720,23 @@ bit-identical.
 
 ## Functional gaps, in the order they block a user
 
-1. **`sample_weight` is not accepted anywhere.** It is the single largest
-   remaining feature gap and it blocks three things at once: weighted
-   bootstrap (`randomforest.cuh:125-138`), zero-weight row removal
-   (`:144-154`), and the two WEIGHTED bin types, which are ported but
-   unreachable. All three raise by name. Wiring it means a `double`
-   parameter their code carries, a float64 prefix scan this device cannot
-   run for the CDF, and a decision about the weight's precision on device
-   (DEVIATION 100 already prices Float32).
+1. **`sample_weight` is DONE.** This entry used to say it "is not accepted
+   anywhere" and that all three dependent arms "raise by name". Both
+   sentences were false by the time anyone read them. `fit_forest` takes
+   `sample_weight_host`, all four `RowSampler` arms run, and
+   `sample_weight_check` covers BOTH directions of their
+   `tree_sample_weight` rule (`randomforest.cuh:166-167`): with bootstrap
+   off the weights change the forest, with bootstrap on the weighted bin
+   and the plain bin give the same forest, so nothing is counted twice.
+   The CDF is a host scan rather than their device one (DEVIATION 306).
+
+   **The real remaining gap in this area is OOB.**
+   `RowSampler::store_bootstrap_mask` (`randomforest.cuh:170-183`) and the
+   `bootstrap_masks` buffer threaded through their `fit` are not ported at
+   all, so `oob_score_` (`randomforest_common.pyx:748`) has nothing to read.
+   That is a feature decision, not a defect: it needs a per-tree mask buffer
+   sized `n_trees x n_rows` and a scoring pass, and nothing else in this
+   directory depends on it.
 2. **Inference is the host walk only.** cuML's production path is
    treelite -> nvForest and is not ported and not planned. Any inference
    comparison must say which of the two it ran. OPEN: whether a device

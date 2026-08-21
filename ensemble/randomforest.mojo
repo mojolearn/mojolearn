@@ -211,21 +211,29 @@ below, and `detail::RowSampler` (`:62-226`) as `RowSampler`;
 `computeQuantiles` and the builder both exist now. A forest trains, and
 `ensemble/mojo_only/forest_check.mojo` fits one and predicts it back.
 
-THREE THINGS ARE STILL OUT, each raising by name rather than behaving
-like a neighbouring arm:
+ALL FOUR `RowSampler` ARMS RUN. This block used to say three of them
+were "still out, each raising by name"; that stopped being true and the
+sentence stayed, which is worse than never having written it.
 
-  * BOOTSTRAP. `RowSampler::sample`'s default arm is
-    `raft::random::uniformInt` under `GenPhilox` (`:140-142`), and that
-    generator is being ported bit-exactly against a compiled RAFT oracle.
-    Until it lands, only `bootstrap=False` fits -- their
-    `thrust::sequence` arm (`:155-157`). PRICE: no bagging, so a forest
-    of identical trees unless `max_features < 1.0` supplies the only
-    remaining source of per-tree variation. That is a real statistical
-    difference and it is why the arm raises rather than silently using
-    the identity.
-  * WEIGHTED BOOTSTRAP (`:125-138`) and ZERO-WEIGHT REMOVAL (`:144-154`).
-    Both need `sample_weight`, which this port does not accept, and the
-    first also needs a float64 prefix scan this device cannot run.
+  * BOOTSTRAP (`:140-142`, `raft::random::uniformInt` under `GenPhilox`)
+    is ported and held to a compiled RAFT oracle per cell.
+    **BUT THE ROWS IT DRAWS DEPEND ON THE GPU'S SM COUNT.** RAFT's
+    launch config is `n_blocks = 4 * getMultiProcessorCount()`
+    (`rng_impl.cuh:64-74`) and the generator strides by
+    `gridDim.x * blockDim.x`, so which row each thread draws is a
+    function of the DEVICE. This port pins the stride to 4 x 108 x 256
+    (DEVIATION 184 in `philox.mojo`), which is a 108-SM part -- A100 or
+    A30. On any other NVIDIA card cuML itself draws different rows, for
+    every tree. So "tree 7's rows are a pure function of (seed, 7)" is
+    true of the STREAM COUNT and false of the DEVICE, and the
+    cross-checkable claim is only cross-checkable on one class of card.
+  * WEIGHTED BOOTSTRAP (`:125-138`) and ZERO-WEIGHT REMOVAL (`:144-154`)
+    both run. The CDF is a sequential HOST scan where theirs is
+    `thrust::inclusive_scan` on device -- a different summation order,
+    so `upper_bound` can land on a different row (DEVIATION 306).
+  * `RowSampler::store_bootstrap_mask` (`:170-183`) IS still out, and
+    with it the whole OOB feature. It does not raise, because there is
+    no parameter to raise on: `bootstrap_masks` is simply absent.
   * The METHOD `RandomForest.fit` versus the free function; see its
     docstring.
 
@@ -489,11 +497,13 @@ struct RF_params(ImplicitlyCopyable, Movable):
         caller who builds `RF_params` field by field goes around that
         clamp, so it is refused here.
 
-        The TRAINING fields are a different question with a different
-        answer: `fit` is not ported at all, so `DecisionTreeParams
-        .check_fit_supported()` refuses every one of them together
-        rather than letting any single one look honored. Calling `check`
-        does NOT imply this port can fit.
+        The TRAINING fields used to be a different question, refused
+        wholesale by a `check_fit_supported()` that no longer exists on
+        this struct. They are honored now: `Builder` builds the objective
+        from `params` at `builder.cuh:592-596`'s call site, so
+        `min_samples_leaf`, `split_criterion` and `min_impurity_decrease`
+        reach the device from here and nowhere else. `criteria_check`
+        arm F holds them to it.
         """
         if self.n_streams != 1:
             raise Error(
@@ -513,26 +523,6 @@ struct RF_params(ImplicitlyCopyable, Movable):
             )
         self.tree_params.check()
         self.validity_check()
-
-    def check_fit_supported(self) raises:
-        """Training is NOT PORTED YET; DEVIATION 119a. Names the four
-        pieces their `fit` needs and this repository does not have."""
-        raise Error(
-            "RandomForest.fit is NOT PORTED YET. RandomForest::fit"
-            " (randomforest.cuh:286-370) needs four things that do not"
-            " exist here: DT::computeQuantiles (randomforest.cuh:318),"
-            " detail::RowSampler (randomforest.cuh:63-226), the four"
-            " Builder<ObjectiveT> instantiations"
-            " (decisiontree.cuh:259-332), and a CUDA stream pool"
-            " (randomforest.cuh:336-339). The first three are"
-            " batched_levelalgo/quantiles.mojo, an unwritten row"
-            " sampler and batched_levelalgo/builder.mojo; the fourth"
-            " does not exist on Metal (DEVIATION 117). RF_params"
-            " n_trees, bootstrap, max_samples and seed are therefore"
-            " also unhonored, along with every DecisionTreeParams"
-            " field."
-        )
-
 
 def set_rf_params(
     max_depth: Int32,

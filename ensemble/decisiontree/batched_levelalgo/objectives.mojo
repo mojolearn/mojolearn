@@ -172,7 +172,6 @@ which is the point of listing them:
 
 from std.gpu import block_dim, thread_idx
 from std.math import log
-from std.utils.numerics import nextafter
 from max.gpu.memory import AddressSpace
 
 from ensemble.decisiontree.batched_levelalgo.bins import (
@@ -721,7 +720,7 @@ struct RegressionObjectiveFunction[
     # So the value is written as the IEEE-754 definition instead:
     # `numeric_limits<T>::epsilon()` is 2^-(mantissa bits), exactly, and
     # each literal below is an exact power of two and therefore exactly
-    # representable. `objectives_check` holds them to `nextafter` ON THE
+    # representable. `regression_check.mojo:492` holds them to `nextafter` ON THE
     # HOST, where it works, so this is checked against the definition it
     # replaced rather than trusted.
     comptime eps_ = Scalar[Self.dtype](10) * machine_epsilon[Self.dtype]()

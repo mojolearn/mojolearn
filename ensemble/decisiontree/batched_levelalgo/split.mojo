@@ -564,8 +564,20 @@ struct Split[dtype: DType](TrivialRegisterPassable):
 
                 # `:253-259` -- read the current global split into a
                 # register copy. Their field-by-field read exists because
-                # `split` is `volatile`; ours is a plain load of the same
-                # seven fields, in their order.
+                # `split` is `volatile`; ours is a plain struct load.
+                #
+                # THEIRS LOADS SIX of the seven fields and writes back the
+                # same six: `local_nLeft` is left at the default ctor's 0
+                # and never touched here. Ours copies the whole struct
+                # both ways, so it also stores `local_nLeft`. Inert, and
+                # checked to be rather than assumed --
+                # `resetLocalLeftCountsKernel`
+                # (`kernels/builder_kernels_impl.cuh:48-53`) zeroes that
+                # field immediately before `countLocalLeftKernel` fills
+                # it, and this port has that kernel.
+                #
+                # This comment used to say "the same seven fields, in
+                # their order", which is not what `:254-259` does.
                 var split_reg = split[unsafe_offset=0].copy()
                 var update_result = split_reg.update(
                     self.quesval,

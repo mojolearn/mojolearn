@@ -323,6 +323,15 @@ struct DecisionTreeParams(ImplicitlyCopyable, Movable):
           min_impurity_decrease -> `Gain` (`objectives.cuh:173`, `:374`)
           max_batch_size      -> `NodeQueue::Pop` (`builder.cuh:70-78`)
 
+        The three that go through the objective -- min_samples_leaf,
+        split_criterion, min_impurity_decrease -- reach it only because
+        `Builder` CONSTRUCTS the objective from `params`, at their
+        `builder.cuh:592-596` call site. While it took a pre-built
+        objective from the caller instead, those three rows were false:
+        nothing read them from `params` and nothing checked that the
+        caller's objective agreed. `criteria_check` arm F is what holds
+        them now, and it passes no objective at all.
+
         It is kept as a method rather than deleted so that a future
         unported field has somewhere to be refused BY NAME. That is the
         rule it exists for: an option present and ignored is worse than one
