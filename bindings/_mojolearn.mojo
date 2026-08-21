@@ -63,7 +63,13 @@ from std.python.bindings import PythonModuleBuilder
 from max.gpu.host import DeviceContext
 
 from cluster.estimator import kmeans_fit
-from gbdt.estimator import GbdtFitParams, gbdt_fit, gbdt_predict
+from gbdt.estimator import (
+    GbdtFitParams,
+    gbdt_fit,
+    gbdt_model_dim,
+    gbdt_predict,
+    gbdt_predict_multi,
+)
 from neighbors.estimator import knn_search
 
 
@@ -335,6 +341,51 @@ def gbdt_predict_binding(
     return PythonObject(wrote)
 
 
+def gbdt_model_dim_binding(model: PythonObject) raises -> PythonObject:
+    """The model's approx dimension: 1, or `numClasses - 1` for MultiClass.
+
+    The wrapper calls this once after `fit` to size its output arrays and
+    to recover `n_classes` as `dim + 1`. It parses the model text, which
+    is the price of the handle-free boundary `gbdt/estimator.mojo`
+    argues for.
+    """
+    return PythonObject(gbdt_model_dim(String(py=model)))
+
+
+def gbdt_predict_multi_binding(
+    model: PythonObject,
+    x_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """Apply a multi-dimensional model. Returns the width written.
+
+    `params` is `[n_rows, as_probabilities]`.
+
+    With `as_probabilities` 0 the output is `n_rows * dim` RAW APPROXES,
+    row-major. With 1 it is `n_rows * (dim + 1)` probabilities -- the
+    softmax over ALL numClasses, the pinned class included, which is what
+    their `prediction_type='Probability'` returns. The caller must have
+    sized `out_addr` for the wider case; the return says which it got.
+    """
+    if len(params) != 2:
+        raise Error(
+            "gbdt_predict_multi: params must hold [n_rows,"
+            " as_probabilities], got " + String(len(params))
+        )
+    var text = String(py=model)
+    var xp = _f32_ptr(Int(py=x_addr))
+    var op = _f32_ptr(Int(py=out_addr))
+    var n_rows = Int(py=params[0])
+    var as_prob = Int(py=params[1]) != 0
+
+    var width: Int
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        width = gbdt_predict_multi(ctx, text, xp, n_rows, op, as_prob)
+    return PythonObject(width)
+
+
 @export
 def PyInit__mojolearn() abi("C") -> PythonObject:
     try:
@@ -343,6 +394,8 @@ def PyInit__mojolearn() abi("C") -> PythonObject:
         m.def_function[kmeans_fit_binding]("kmeans_fit")
         m.def_function[gbdt_fit_binding]("gbdt_fit")
         m.def_function[gbdt_predict_binding]("gbdt_predict")
+        m.def_function[gbdt_model_dim_binding]("gbdt_model_dim")
+        m.def_function[gbdt_predict_multi_binding]("gbdt_predict_multi")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn module: ", e))

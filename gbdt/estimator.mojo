@@ -57,7 +57,15 @@ from gbdt.options.catboost_options import (
     SCORE_FUNCTION_COSINE,
     TCatFeatureParams,
 )
-from gbdt.train import model_input_features, predict_floats, train
+from gbdt.methods.doc_parallel_boosting import model_approx_dim
+from gbdt.models.model_text import load_model_text
+from gbdt.train import (
+    model_input_features,
+    multiclass_probabilities,
+    predict_floats,
+    predict_multi_floats,
+    train,
+)
 
 
 @fieldwise_init
@@ -201,6 +209,78 @@ def gbdt_fit(
         subsample=params.subsample,
     )
     return model_text(tm)
+
+
+def gbdt_model_dim(text: String) raises -> Int:
+    """The model's approx dimension, so a caller can size its output.
+
+    `1` for every single-dimensional loss; `numClasses - 1` for MultiClass,
+    because the last class's approx is pinned at zero and is not stored.
+    The Python wrapper reads this to decide the shape of `predict` and to
+    recover `n_classes` as `dim + 1`.
+
+    It costs a parse of the model text. That is the price of the
+    handle-free boundary this file's header argues for, and it is paid once
+    per `fit` rather than once per row.
+    """
+    return model_approx_dim(load_model_text(text).model)
+
+
+def gbdt_predict_multi(
+    ctx: DeviceContext,
+    text: String,
+    x: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    out_preds: MutPointer[Float32, MutUntrackedOrigin],
+    as_probabilities: Bool,
+) raises -> Int:
+    """Apply a MULTI-DIMENSIONAL model. Returns the width written.
+
+    `out_preds` is ROW-MAJOR, `[row * width + k]`.
+
+    `as_probabilities = False` writes the raw approxes, `dim` of them per
+    row -- the same raw-score contract every other predict here has, and
+    their `predict` without a `prediction_type`.
+
+    `as_probabilities = True` writes `dim + 1` per row: the softmax their
+    `prediction_type='Probability'` applies, over ALL `numClasses`
+    including the pinned one whose approx is zero. That last column is not
+    padding -- it is a real class, and a caller that dropped it would
+    renormalise over the wrong set.
+
+    A ONE-DIMENSIONAL MODEL IS ACCEPTED HERE and writes one column, so a
+    caller that always routes through this entry point does not need to
+    branch. `as_probabilities` on a one-dimensional model raises, because
+    a two-class softmax over a single free approx is the SIGMOID and
+    belongs to Logloss, whose own `predict_proba` already does it.
+    """
+    if n_rows <= 0:
+        raise Error("gbdt_predict_multi: n_rows must be positive")
+    var tm = load_model_text(text)
+    var dim = model_approx_dim(tm.model)
+    var n_features = model_input_features(tm)
+
+    var xs = List[Float32]()
+    for i in range(n_rows * n_features):
+        xs.append(x.unsafe_load(i))
+
+    var ap = predict_multi_floats(ctx, tm, xs, n_rows)
+    if not as_probabilities:
+        for i in range(n_rows * dim):
+            out_preds.unsafe_store(i, ap[i])
+        return dim
+
+    if dim < 2:
+        raise Error(
+            "gbdt_predict_multi: as_probabilities needs a"
+            " multi-dimensional model; this one has dim " + String(dim)
+            + ". A two-class problem's link is the sigmoid, which"
+            " Logloss's own predict_proba applies."
+        )
+    var pr = multiclass_probabilities(ap, n_rows, dim + 1)
+    for i in range(n_rows * (dim + 1)):
+        out_preds.unsafe_store(i, pr[i])
+    return dim + 1
 
 
 def gbdt_predict(

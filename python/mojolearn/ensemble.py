@@ -28,9 +28,25 @@ Quantile. Overriding it means overriding CatBoost.
 
 PREDICTIONS ARE RAW SCORES FOR EVERY LOSS, exactly as CatBoost's `predict`
 without a `prediction_type` is. A `Logloss` model's `predict` returns the
-logit; apply the sigmoid yourself. A `Poisson` model's returns the log-rate.
-This is deliberate: the number this library benchmarks is the number it
-returns.
+logit; a `Poisson` model's returns the log-rate. This is deliberate: the
+number this library benchmarks is the number it returns. `predict_proba`
+applies the link where one exists, and `predict_classes` takes its argmax --
+separate methods rather than a `predict` that means different things for
+different losses.
+
+MULTICLASS IS MULTI-OUTPUT AND ITS LAST CLASS IS NOT STORED. A softmax over
+`k` free approxes is over-parameterized -- adding a constant to all of them
+changes nothing -- so CatBoost pins the last class's approx at zero and
+carries `k - 1`. Therefore:
+
+    predict(X)         (n_samples, n_classes - 1)   raw free approxes
+    predict_proba(X)   (n_samples, n_classes)       softmax over ALL of them
+    predict_classes(X) (n_samples,)                 dense class codes
+
+Dropping the last column of `predict_proba` and renormalising the rest gives
+a different and wrong answer: the pinned class is a real class whose approx
+happens to be zero. Labels are dense codes `0..k-1` and the class count is
+derived from them, as their `TClassificationTargetHelper` derives it.
 """
 
 import numpy as np
@@ -43,6 +59,7 @@ from ._arrays import _addr, _addr_ro, as_f32_c
 #: (`pointwise_target_impl.h:259-299`), minus the ones whose leaf estimator
 #: or kernel family is not ported.
 LOSSES = (
+    "MultiClass",
     "RMSE",
     "Logloss",
     "CrossEntropy",
@@ -56,6 +73,13 @@ LOSSES = (
     "Tweedie",
     "Huber",
 )
+
+#: `MultiClass` is the one loss here whose model is MULTI-DIMENSIONAL.
+#: Its labels are DENSE CLASS CODES 0..k-1 and the class count is derived
+#: from them, as their `TClassificationTargetHelper` derives it -- a count
+#: that disagreed with the data would be a wrong model rather than an
+#: error, so it is not a parameter.
+MULTI_OUTPUT_LOSSES = ("MultiClass",)
 
 #: Losses whose parameter CatBoost makes MANDATORY. Passing the loss without
 #: it raises here rather than in Mojo, so the message names the Python
@@ -230,6 +254,11 @@ class GradientBoosting:
         self.model_ = None
         self.loss_curve_ = None
         self.n_features_in_ = None
+        #: 1 for every single-output loss; `n_classes - 1` for MultiClass,
+        #: because the last class's approx is pinned at zero and is not
+        #: stored. Read from the fitted model, never assumed.
+        self.approx_dim_ = None
+        self.n_classes_ = None
 
     # -- the parameter list, in the ONE order both sides name --------------
     #
@@ -323,10 +352,15 @@ class GradientBoosting:
             strs,
         )
         self.n_features_in_ = n_features
+        self.approx_dim_ = _mojolearn.gbdt_model_dim(self.model_)
+        self.n_classes_ = (
+            self.approx_dim_ + 1
+            if self.loss in MULTI_OUTPUT_LOSSES
+            else None
+        )
         return self
 
-    def predict(self, X):
-        """RAW SCORES, not probabilities. See the module docstring."""
+    def _check_fitted(self, X):
         if self.model_ is None:
             raise RuntimeError("mojolearn: predict() before fit()")
         Xa, _ = as_f32_c(X, "X")
@@ -336,7 +370,32 @@ class GradientBoosting:
                 f"mojolearn: model was fitted on {self.n_features_in_} "
                 f"features, got {n_features}"
             )
-        Xcol = np.ascontiguousarray(Xa.T).reshape(-1)
+        return np.ascontiguousarray(Xa.T).reshape(-1), n_rows
+
+    def predict(self, X):
+        """RAW SCORES, not probabilities. See the module docstring.
+
+        For a single-output loss the result is `(n_samples,)`. For
+        `MultiClass` it is `(n_samples, n_classes - 1)` -- the free
+        approxes, with the LAST class's pinned at zero and therefore not
+        returned. `predict_proba` is what turns those into `n_classes`
+        columns; dropping the pinned class and renormalising the rest
+        would give a different answer.
+        """
+        Xcol, n_rows = self._check_fitted(X)
+
+        if self.approx_dim_ > 1:
+            out = np.empty(n_rows * self.approx_dim_, dtype=np.float32)
+            width = _mojolearn.gbdt_predict_multi(
+                self.model_, _addr_ro(Xcol), _addr(out), [n_rows, 0]
+            )
+            if width != self.approx_dim_:
+                raise RuntimeError(
+                    f"mojolearn: predict wrote width {width}, expected "
+                    f"{self.approx_dim_}"
+                )
+            return out.reshape(n_rows, width)
+
         out = np.empty(n_rows, dtype=np.float32)
         wrote = _mojolearn.gbdt_predict(
             self.model_, _addr_ro(Xcol), _addr(out), [n_rows]
@@ -348,18 +407,58 @@ class GradientBoosting:
         return out
 
     def predict_proba(self, X):
-        """Sigmoid of `predict`, for the two cross-entropy losses only.
+        """Class probabilities, `(n_samples, n_classes)`.
 
-        It refuses every other loss rather than returning a number that
-        looks like a probability. CatBoost's `prediction_type='Probability'`
-        is the same sigmoid over the same raw score.
+        Defined for the three losses that have a link: `Logloss` and
+        `CrossEntropy` (the sigmoid) and `MultiClass` (the softmax). It
+        refuses every other loss rather than returning a number that looks
+        like a probability. CatBoost's `prediction_type='Probability'` is
+        the same transform over the same raw scores.
+
+        THE MULTICLASS SOFTMAX IS TAKEN OVER ALL `n_classes`, INCLUDING THE
+        PINNED ONE. The model stores `n_classes - 1` free approxes and the
+        last class's is zero by construction; the device applies the
+        transform, so the max-subtraction matches the one in their
+        `MultiLogitValAndFirstDerImpl` rather than being re-derived here.
+        The returned columns are in class-code order, `0 .. n_classes - 1`.
         """
+        if self.loss in MULTI_OUTPUT_LOSSES:
+            Xcol, n_rows = self._check_fitted(X)
+            out = np.empty(n_rows * self.n_classes_, dtype=np.float32)
+            width = _mojolearn.gbdt_predict_multi(
+                self.model_, _addr_ro(Xcol), _addr(out), [n_rows, 1]
+            )
+            if width != self.n_classes_:
+                raise RuntimeError(
+                    f"mojolearn: predict_proba wrote width {width}, "
+                    f"expected {self.n_classes_}"
+                )
+            return out.reshape(n_rows, width)
+
         if self.loss not in ("Logloss", "CrossEntropy"):
             raise ValueError(
-                f"mojolearn: predict_proba is defined for Logloss and "
-                f"CrossEntropy; this model was fitted with {self.loss!r}. "
-                f"Use predict() and apply the link yourself."
+                f"mojolearn: predict_proba is defined for Logloss, "
+                f"CrossEntropy and MultiClass; this model was fitted with "
+                f"{self.loss!r}. Use predict() and apply the link "
+                f"yourself."
             )
         raw = self.predict(X).astype(np.float64)
         p1 = 1.0 / (1.0 + np.exp(-raw))
         return np.column_stack((1.0 - p1, p1))
+
+    def predict_classes(self, X):
+        """The argmax of `predict_proba`, as dense class codes.
+
+        Named `predict_classes` rather than overloading `predict`, because
+        `predict` returns RAW SCORES for every loss in this library and
+        making one loss return labels instead would be the kind of silent
+        contract change that is worse than an extra method.
+        """
+        if self.loss not in MULTI_OUTPUT_LOSSES + (
+            "Logloss", "CrossEntropy",
+        ):
+            raise ValueError(
+                f"mojolearn: predict_classes needs a classification loss; "
+                f"this model was fitted with {self.loss!r}."
+            )
+        return np.argmax(self.predict_proba(X), axis=1).astype(np.int64)
