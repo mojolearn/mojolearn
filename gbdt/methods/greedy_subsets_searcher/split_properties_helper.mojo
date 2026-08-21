@@ -21,6 +21,22 @@ never accumulates more than N/2 rows per feature however unbalanced the tree
 is. The derivation itself is `histogram_utils.substract_histograms_kernel`,
 one batched launch over every pair at once.
 
+**THE TIE GOES TO THE RIGHT CHILD, and it is a real decision, not a
+formality.** `ids[0]` is the LEFT child (`MakeSplit` gives it the existing,
+lower id: `:861-862`, `:976-977`) and the comparison is a strict `<` on it,
+so an equal-sized pair falls through to the `else` and the RIGHT child is the
+one built. Equal sibling sizes are the common case on a binary feature -- 632
+of 744 planned pairs on the balanced fixture in
+`mojo_only/sibling_tiebreak_check.mojo` -- and the choice is NOT inert: the
+subtraction runs in float32 on cells that have already been rounded out of
+float32's exact-integer range, so swapping it moves histogram bits. PORTING.md
+136.
+
+**THIS HOST COPY IS NOT ON THE SHIPPED PATH.** DEVIATION 94 moved the choice
+onto the device (`kernel/split_resolve.plan_level_kernel`); only `probe_main`
+and the checks reach this function. It is kept in step with the device twin
+so the two cannot drift.
+
 **One case they handle that is easy to miss:** if BOTH siblings of a pair are
 terminal, neither histogram will ever be read, so neither is built
 (`:1326-1328`). Copied. Dropping it would be correct and would waste a build
@@ -158,12 +174,21 @@ def build_necessary_histograms(leaves: List[LeafRecord]) raises -> LevelPlan:
 
         grouped[sibling] = True
 
-        # `:1318`, the rule the whole design rests on.
-        var small = i
-        var big = sibling
-        if leaves[sibling].size < leaves[i].size:
-            small = sibling
-            big = i
+        # `:1318`, the rule the whole design rests on:
+        #
+        #     if (firstLeaf.Size < secondLeaf.Size) { small = ids[0]; ... }
+        #     else                                  { small = ids[1]; ... }
+        #
+        # `ids` is pushed in ASCENDING leaf index (`:1300`), so `ids[0]` is
+        # `i` and `ids[1]` is `sibling`, the strict `<` is on `i`, and ON AN
+        # EXACT TIE THE `else` BRANCH FIRES AND `sibling` IS COMPUTED. This
+        # port had it inverted from `409a16c` until 2026-08-21; PORTING.md
+        # 136 has what that cost.
+        var small = sibling
+        var big = i
+        if leaves[i].size < leaves[sibling].size:
+            small = i
+            big = sibling
 
         # `:1327`. Both terminal means neither histogram is ever read.
         if leaves[small].is_terminal and leaves[big].is_terminal:

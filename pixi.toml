@@ -104,6 +104,12 @@ soak-determinism = "mojo run -I . mojo_only/determinism_soak.mojo"
 # ---------------------------------------------------------------------------
 check-bin-order = "mojo run -I . mojo_only/bin_order_check.mojo"
 check-sample-indices = "mojo run -I . mojo_only/sample_indices_check.mojo"
+# THE SMALLER-SIBLING TIE-BREAK (PORTING.md 136). Four crafted pairs, two of
+# them exact ties, through the shipped device planner against their `:1318`,
+# with an in-file inverted twin that must fail on exactly the ties. Also
+# MEASURES the blast radius: how many histogram cells the choice moves, and a
+# 24-tree fit fingerprint on a fixture where 632 of 744 sibling pairs tie.
+check-sibling-tiebreak = "mojo run -I . mojo_only/sibling_tiebreak_check.mojo"
 check-binarization = "mojo run -I . mojo_only/binarization_check.mojo"
 check-boosting-hist = "mojo run -I . mojo_only/boosting_hist_check.mojo"
 check-bootstrap = "mojo run -I . mojo_only/bootstrap_check.mojo"

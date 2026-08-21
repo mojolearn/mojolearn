@@ -5194,3 +5194,344 @@ with itself and the run HUNG rather than failing, because the validator called
 the same function it was validating. `create_fold_based_subsets` now carries a
 shift-only `fold_count <= 1 << fold_bits` check and O1 asserts ceil-ness
 without calling `int_log2_ceil`.
+
+## 136. THE SMALLER-SIBLING TIE-BREAK WAS INVERTED, and "the subtraction is exact" was never true
+
+At every level one sibling's histogram is COMPUTED and the other is derived as
+`parent - sibling`. Which one gets computed is `BuildNecessaryHistograms`'
+choice (`split_properties_helper.cpp:1318-1324`):
+
+    if (firstLeaf.Size < secondLeaf.Size) { smallLeafId = ids[0]; bigLeafId = ids[1]; }
+    else                                  { smallLeafId = ids[1]; bigLeafId = ids[0]; }
+
+`ids` is pushed in ASCENDING leaf index (`:1300`) and `MakeSplit` gives the
+LEFT child the existing (lower) id and the RIGHT child the appended, higher one
+(`:861-862`, `:976-977`). So `ids[0]` is the LEFT child, the strict `<` is on
+the LEFT, and **on an exact size tie the `else` branch fires and the RIGHT
+child is the one computed.**
+
+This port had it the other way round. Both sites started `small` at the LEFT
+child and moved it only when the right was STRICTLY smaller, so a tie kept the
+LEFT:
+
+    var small = i            # left
+    var big = half + i       # right
+    if right_sz < left_sz:   # ours: strict `<` on the RIGHT
+        small = half + i
+        big = i
+
+**Since when.** The host copy, `split_properties_helper.build_necessary_
+histograms`, has been inverted since it was written -- `409a16c`, 2026-08-19,
+whose message is "The level planner runs and gets every case right". DEVIATION
+94 (`2bbe6af`, 2026-08-21) moved the choice onto the device as
+`kernel/split_resolve.plan_level_kernel` and carried the inversion with it, so
+the SHIPPED path has had it since that commit and the host twin for two days
+longer. Both are fixed here; the host copy is off the shipped path (only
+`probe_main` and `structure_searcher_template`'s schedule call it) and is fixed
+anyway so the two cannot drift.
+
+The pointwise family's own smaller-sibling choice was ALREADY right and is
+untouched: `split_properties_helpers.mojo:200` is
+`left if left_part_size < right_part_size else right`, which is their
+`(leftPartSize < rightPartSize) ? leftPartOffset : rightPartOffset`
+(`kernel/split_properties_helpers.cuh:102`) exactly. That is why the pointwise
+arm does not move in any measurement below.
+
+### 136a. THE DEFENCE THAT SAID IT COULD NOT MATTER, AND WHY IT IS WRONG
+
+Two comments argued the choice was inert, both now deleted rather than
+annotated (`greedy_search_helper.mojo:2846-2851`, still to be applied by the
+lane holding that file; `split_resolve.mojo:152-155`, applied):
+
+> The Int32 fixed-point accumulator makes the subtraction EXACT ... so WHICH
+> sibling is computed cannot change a bit of either histogram.
+
+The accumulator IS exact. The subtraction is not, and it is not for a reason
+the accumulator cannot reach: **the conversion out of fixed point happens
+BEFORE the subtraction.** `write_reduces_from_fixed_kernel` writes each cell as
+
+    Float32(Int(q)) / fixed_scale
+
+and `substract_histograms_kernel` then works in float32 on those values.
+`choose_scale` targets 2^30 (`SCALE_HEADROOM_BITS = 3`, or `2^30 - 1 -
+row_count` with a row count), so `q` sits far above float32's exact-integer
+range of 2^24 and `Float32(Int(q))` ROUNDS. Parent and computed child are
+rounded SEPARATELY, so
+
+    round24(parent_q) - round24(left_q)   need not equal   round24(right_q)
+
+and the derived sibling differs from the sibling that would have been built.
+The division by `fixed_scale` is exact (a power of two) and does not rescue it.
+
+Note which plane escapes: with unit weights, stat 0's cells are `count *
+fixed_scale`, an integer times a large power of two, exactly representable
+while `count < 2^24`. The defect lives on the GRADIENT plane, whose quantized
+cells are arbitrary integers.
+
+### 136b. MEASURED, on this port's own kernels
+
+`mojo_only/sibling_tiebreak_check.mojo`, 2026-08-21, M4. Fixture: 4096 rows, a
+full factorial of 8 binary columns over 256 cells x 16 replicate rows (so every
+binary split halves every leaf EXACTLY) plus 4 columns at 254 folds that are a
+function of the within-cell index alone, hence independent of every leaf those
+binary columns can carve out. 1024 histogram cells per leaf per stat.
+
+**TIES FORCED, counted rather than assumed** -- recomputed from the fit's own
+chosen splits, at every level the planner actually plans for:
+
+    sibling pairs the planner saw   744   (24 trees x depth 6)
+    EXACT size ties                 632   (85%, 10 of them both-empty)
+
+**HISTOGRAM CELLS THE CHOICE MOVES.** One parent and its two children built by
+the shipped histogram path at the scale the boosting loop would choose, then
+the shipped `substract_histograms_kernel` run BOTH ways and each derived
+sibling compared bit-for-bit against the sibling actually built:
+
+    fixed_scale 65536, largest |accumulator cell| 526,938,496  (2^24 = 16,777,216)
+
+    computed LEFT  -> derived RIGHT : 19 of 2048 cells differ,  worst 2 ulp
+    computed RIGHT -> derived LEFT  : 24 of 2048 cells differ,  worst 3 ulp
+    ------------------------------------------------------------------------
+    cells the tie-break choice moves: 43 of 4096 compared      (1.05%)
+
+So the answer to "can it change a histogram bit" is YES, about one cell in a
+hundred, by up to three ulp.
+
+**AND IT CHANGES CHOSEN SPLITS.** The same 24-tree fit, greedy-subsets
+searcher, before and after the flip -- two trees out of 24 pick a different
+split at their last level:
+
+    tree 12  ...(3>0)(10>77)   ->  ...(3>0)(8>135)
+    tree 16  ...(11>33)(6>0)...  ->  ...(10>182)(6>0)...
+
+The final loss is IDENTICAL to all 16 printed digits (0.011631562374532223) on
+both arms and on both searchers, and the pointwise arm's 24 trees are
+bit-identical across the flip, as 136 predicts. The two that moved are
+knife-edge score ties that a one-ulp histogram difference re-decided; tree 16
+in fact moved INTO agreement with the pointwise searcher and tree 12 out of it.
+That is the cost: not accuracy, but WHICH of two near-tied splits is taken, and
+it was being taken differently from CatBoost on 85% of the pairs in a fixture
+built out of binary features.
+
+**`pixi run oracle` is unchanged, exactly.** Six fixtures x two searchers, run
+on a clean checkout of `3406e50` with only this change applied:
+
+    before: 12 lines of "splits matching CatBoost exactly: 48 of 48"
+    after:  12 lines of "splits matching CatBoost exactly: 48 of 48"
+
+and every `our final mse` line is byte-identical too. The oracle fixtures are
+4096 x 16 continuous columns at 15..254 borders, where an exact sibling size tie
+is rare; that is why a real differential against CatBoost could sit green over
+an inverted tie-break for two days. **A green differential is not a proof that
+an untested branch is right** -- the same lesson as 131, on a different branch.
+
+### 136c. THE GATE, AND WHAT MOVES IT
+
+`mojo_only/sibling_tiebreak_check.mojo`. Four crafted sibling pairs, two of
+them exact ties, through the SHIPPED `plan_level_kernel`, against their `:1318`
+rule worked by hand. The sabotage is `plan_level_inverted_kernel` in the same
+file: the pre-136 body verbatim, run on the same input, required to disagree on
+exactly the tied pairs.
+
+    arm                                   pairs disagreeing with CatBoost
+    shipped plan_level_kernel (post-136)   0 of 4       gate PASSES
+    plan_level_inverted_kernel (pre-136)   2 of 4       gate FAILS, on the 2 ties
+    shipped plan_level_kernel (pre-136)    2 of 4       gate FAILS  (run at 3406e50)
+
+The third row is the check run against the tree as it stood before this entry:
+the defect itself is the sabotage, and it turns the gate red.
+
+The file also refuses a fixture that forced NO tie, because a tie-break gate on
+a fixture with no ties is decorative in the way 131 describes.
+
+
+## 135. The border subsample copied a real function on the WRONG CODE PATH: 100k with replacement per feature, where theirs is 200k without replacement shared
+
+Found 2026-08-22 by a symbol-by-symbol read of their host quantizer against
+ours, not by a failing check -- nothing here was red, because nothing here
+compares our borders to theirs.
+
+**What stood in `gbdt/train.mojo`.** Each float column drew its own sample of
+100,000 rows WITH REPLACEMENT, seeded per `(random_seed, feature index)`. The
+comment above it cited `GetSampleSizeForBorderSelectionType`
+(`private/libs/quantization/utils.h:132-136`) and `SampleArray`
+(`utils.cpp:14-24`). **Both citations are real functions and both are on the
+wrong path.** `SampleArray` is reached from `NCB::BuildBorders`, whose callers
+in their tree are a unit test (`external_columns_ut.cpp:47`) and the GPU CTR
+border builder. The 100,000 is that helper's DEFAULT ARGUMENT, and the
+training pipeline overrides it.
+
+**What their quantizer actually does.** `GetSubsetForBuildBorders`
+(`libs/data/quantization.cpp:118-141`) builds ONE `TArraySubsetIndexing` and
+hands the same one to every feature, through `GetArraySubsetForBuildBorders`
+(`private/libs/quantization/utils.cpp:25-51`) at
+`options.MaxSubsetSizeForBuildBordersAlgorithms`, which is **200000**
+(`libs/data/quantization.h:37`). When the pool is not already shuffled that
+subset comes from `SampleIndices` (`libs/helpers/sample.h:20-43`), whose own
+first line of documentation is *"Sample k element indices without
+repetition"*. Three differences at once, then: SIZE, REPLACEMENT and SHARING.
+
+**The cost, measured.** Sabotaging the fix back to a with-replacement draw and
+running `pixi run check-sample-indices`:
+
+    k = 200,000 drawn from n = 464,809 (covtype's row count)
+      with replacement     162,500 distinct   37,500 repeats
+      without replacement  200,000 distinct        0 repeats
+
+162,500 is `n * (1 - (1 - 1/n)^k)` to the digit, which is what makes the
+same arithmetic trustworthy at the configuration that actually shipped: at
+k = 100,000 the old draw reached about **90,030 distinct rows**, so every
+border of every float column was chosen from 90k rows of evidence where
+CatBoost uses 200k. Not a tie-break difference -- a different estimator.
+
+**What is fixed.** `sample_indices_for_borders` in `gbdt/train.mojo` ports
+`SampleIndices` with both branches and their predicate
+`k > 1 && k > (n / log2(k))`; the default is 200,000; the subset is drawn once
+and every column gathers through it.
+
+**What is NOT fixed, and stays a deviation.** Their engine is
+`TRestorableFastRng64` and ours is `TRandom`, so at the same seed the SET
+drawn is not theirs -- only the semantics match. Their `CB_ENSURE_INTERNAL(n
+>= k)` becomes a `>=` branch here. Their rejection arm returns `THashSet`
+iteration order where ours returns insertion order, which is order-equivalent
+because the sample is sorted before borders are built.
+
+**BLAST RADIUS, stated precisely so this is not read as a benchmark result.**
+`bench/interleaved` does NOT reach any of this: it quantizes with CATBOOST'S
+OWN quantizer and hands both arms identical pre-binned uint8
+(`tools/interleaved_prep.py:1-10`). So no standing number moves. What moves is
+every real `fit()` above 100,000 rows -- the user-facing path and the
+end-to-end arm.
+
+**The lesson, which is the reusable part.** The old comment was not vague; it
+was precise, cited file and line, and was checked by whoever wrote it. It was
+still wrong, because the function it named is not the function the pipeline
+calls. A citation proves someone read A line. Only following the call chain
+from the entry point proves they read THE line.
+
+## 140. LOGLOSS'S TEN NEWTON ITERATIONS: neither arm runs ten, and the two stop at different places
+
+**Found 2026-08-21 by `mojo_only/logloss_leaf_oracle_check.mojo`, the first
+comparison of this port's leaf ESTIMATOR against CatBoost's own leaf values.**
+Until it existed, the ten-iteration Newton walker -- CatBoost's DEFAULT for
+Logloss (`private/libs/options/catboost_options.cpp:157-164`, then
+`:315-329`) -- had exactly one gate, `mojo_only/logloss_estimator_check.mojo`,
+which compares the device against a float64 host reimplementation written in
+the same file. That gate has teeth and it is not a comparison with CatBoost:
+if our reading of their walker were wrong, the reimplementation would encode
+the same misreading and agree perfectly.
+
+### What was measured
+
+`bench/oracle_logloss_leaves.txt`, 3000 rows x 8 features, depth 3, 12 trees,
+Logloss / Newton / AnyImprovement, every pin of `tools/catboost_arm.py:55-75`
+(Plain, bootstrap No, rsm 1.0, has_time, no boost-from-average, no model
+shrink, random_strength 0), two arms differing only in
+`leaf_estimation_iterations`:
+
+| gate | leaves outside band | worst \|dleaf\| | worst relative | splits |
+| --- | --- | --- | --- | --- |
+| L2, one iteration | 0 of 96 | 4.6e-08 | 7.1e-07 | 36/36 |
+| L1, ten iterations | 3 of 96 | 3.5e-03 | 3.3e-03 | 36/36 |
+
+Band is `1e-5 + 1e-3 * |theirs|`, derived from float32 accumulation and
+stated before the run. The grid agrees cell for cell (the fixture is below
+the border subsample threshold, so DEVIATION 135 does not touch it), and
+every split of every tree still matches, so this is the ESTIMATOR alone.
+
+### Where the three cells come from
+
+Tree 0, leaf 2: 235 rows, nearly one class, the only leaf of the eight whose
+Newton iterate is still moving after six steps. Seven of eight agree to
+better than 1.2e-06. A float64 transliteration of both their walkers, run on
+their own tree-0 partition at a zero cursor, gives leaf 2 / learning_rate as
+
+    6 accepted steps   -3.47066423   = CATBOOST at leaf_estimation_iterations=10
+    8 accepted steps   -3.48222831   = OURS      at leaf_estimation_iterations=10
+    10 accepted steps  -3.48332208   = what ten steps actually give
+
+**CatBoost accepts six of its ten. We accept eight. Neither runs ten.**
+
+Three independent confirmations. Their leaf values are bit-identical at
+`leaf_estimation_iterations` 6, 7, 8, 9, 10, 11, 12, 20 and 40 -- frozen, not
+slow. At `leaf_estimation_backtracking="No"`, the arm with no acceptance test,
+CatBoost does run all ten and returns -3.48332222, our number and the float64
+number. And the mean Logloss decreases strictly at every one of the ten steps
+in exact arithmetic (step 7 by 1.7e-07), so nothing has converged.
+
+### Why theirs freezes
+
+Their CPU accept test is `valueAfterStep < lossValue`, STRICT
+(`private/libs/algo/approx_calcer/gradient_walker.h:92`), and the value is
+the objective METRIC. Logloss stores approxes exponentiated, and
+`TCrossEntropyMetric::EvalSingleThread`'s expApprox arm computes every row
+through **`FastLogf`** (`catboost/libs/metrics/metric.cpp:270-275`), whose own
+header states accuracy ~1e-05 (`library/cpp/fast_log/fast_log.h:79-86`). On
+ARM64 the SSE3 vectorized arm is compiled out and hands back an empty holder
+with `tailBegin = begin` (`catboost/libs/helpers/short_vector_ops.h:245-257`),
+so EVERY row takes that scalar `FastLogf` path. Step 7's true improvement is
+5.0e-04 in the summed loss, against 3000 per-row terms each carrying ~1e-05 of
+approximation error. Once the improvement falls into that noise the strict
+test fails -- and after one failure the halving converges to a no-op, which
+can never strictly decrease anything, so the walk is frozen permanently.
+
+### Why ours freezes later
+
+Ours is their GPU walker: `FunctionValue <= nextFuncValue`, NON-strict
+(`cuda/methods/leaves_estimation/step_estimator.cpp:8-66`), against the
+target kernel's `functionValue` reduced in float32 on device. Same failure
+mode, different precision and a different tie rule, so it stalls two steps
+later.
+
+### THE PRICE, and why nothing is being changed
+
+This is not a defect in the port. The direction, the halving, the shared
+iteration counter and the acceptance rule are their GPU's, and the
+symbol-by-symbol audit of `descent_helpers.mojo` against
+`descent_helpers.cpp:128-204` stands. It is a CPU-versus-GPU divergence
+INSIDE CatBoost that any faithful GPU port inherits, and this machine cannot
+run their GPU to see which side of it their own GPU lands on
+(`PORTING.md` 109). COPY, DO NOT IMPROVE: making our walker match their CPU
+would mean adopting a `FastLogf`-precision acceptance test, which is neither
+their GPU's behaviour nor better arithmetic.
+
+**Blast radius.** Logloss and CrossEntropy fits, at their default ten
+iterations, on leaves that are still moving at step six -- extreme leaves,
+which are exactly the ones a deep tree makes many of. On this fixture the
+worst per-row prediction gap is 4.4e-03 against 4.5e-07 at one iteration.
+Nothing else in the repository is affected: RMSE takes one iteration and
+DEVIATION 64's skip, and the nine losses of `check-loss-oracle` compare tree
+0 only.
+
+**What is left OPEN.** Whether their GPU stalls where ours does. It is
+answerable on an NVIDIA box in one run -- fit the same fixture at
+`task_type="GPU"`, `leaf_estimation_iterations` 6 through 12, and look for
+the freeze -- and it is not answerable here.
+
+**The gate stays RED.** `check-logloss-leaf-oracle` reports three cells of
+ninety-six and raises. It was not given an allowance for those three,
+because an allowance sized to today's divergence also swallows tomorrow's
+regression. Three, all on extreme leaves, is the known state; anything else
+is new.
+
+
+## 141. `leaf_estimation_backtracking` is not an option here, it is a constant
+
+`doc_parallel_boosting.mojo:601` calls `newton_like_walker_estimate` with a
+literal `BACKTRACKING_ANY_IMPROVEMENT`. Their
+`ELeavesEstimationStepBacktracking` has three values and all three are legal
+on their GPU -- `No`, `AnyImprovement`, `Armijo` -- with `Armijo` supported on
+GPU ONLY (`private/libs/options/catboost_options.cpp:664` refuses it on CPU).
+`gbdt/methods/leaves_estimation/step_estimator.mojo` implements all three
+faithfully, including their literal `C = 1e-5`; nothing can select two of
+them.
+
+The default is `AnyImprovement`, so the constant is the right VALUE and no
+shipped fit is wrong. It is recorded because DEVIATION 140 turned the
+acceptance rule into a load-bearing choice rather than a formality: `No` is
+the setting under which CatBoost's own CPU arm reproduces our leaf values
+exactly, and it is currently unreachable from `train()`. Closing this means
+threading `leaf_estimation_backtracking` from `TCatBoostOptions` through
+`fit_with_test` to that call, and it is under `gbdt/options/` and
+`gbdt/methods/doc_parallel_boosting.mojo`, which the session that found it
+did not hold.

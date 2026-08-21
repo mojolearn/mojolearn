@@ -144,26 +144,52 @@ def plan_level_kernel(
 
     Their `:1318` rule over each sibling pair (left = slot i, right =
     slot half + i, siblings by construction of the split chain): the
-    SMALLER child is computed and the larger derived by subtraction, and
-    the left child wins a tie (their comparison is strict `<` on the
-    sibling). The host used to make this choice from a per-level size
-    read; DEVIATION 94 enqueues levels blind, so the choice moves here,
-    reading the same `p_sz` the partition-update kernel just wrote. The
-    CHOICE cannot change a histogram bit -- the Int32 fixed-point
-    accumulator makes sibling subtraction exact -- but making THEIR
-    choice keeps the computed set the smaller half, which is the whole
-    point of the halving.
+    SMALLER child is computed and the larger derived by subtraction.
+
+        if (firstLeaf.Size < secondLeaf.Size) { smallLeafId = ids[0]; ... }
+        else                                  { smallLeafId = ids[1]; ... }
+
+    `ids` is filled in ASCENDING leaf index (`:1300`) and `MakeSplit`
+    gives the LEFT child the existing (lower) id and the RIGHT child the
+    appended one (`:861-862`, `:976-977`), so `ids[0]` is the LEFT child
+    and the strict `<` is on the LEFT. **ON AN EXACT TIE THE `else`
+    BRANCH FIRES AND THE RIGHT CHILD IS COMPUTED**, which is why the
+    condition below is `left_sz < right_sz` and `small` starts on the
+    right. PORTING.md 136: it was the other way round from `409a16c`
+    until 2026-08-21.
+
+    The host used to make this choice from a per-level size read;
+    DEVIATION 94 enqueues levels blind, so the choice moves here, reading
+    the same `p_sz` the partition-update kernel just wrote.
+
+    AND THE CHOICE DOES CHANGE HISTOGRAM BITS, MEASURED. The claim that
+    used to sit here -- that the Int32 fixed-point accumulator makes
+    sibling subtraction exact, so which sibling is computed cannot move a
+    bit -- is FALSE, and it is false for a reason the accumulator cannot
+    fix: `write_reduces_from_fixed_kernel` converts each cell with
+    `Float32(Int(q)) / fixed_scale` BEFORE the subtraction, and
+    `substract_histograms_kernel` then works in float32. `choose_scale`
+    targets 2^30, so `q` sits far above float32's exact-integer range of
+    2^24 and `Float32(Int(q))` ROUNDS; parent and child are each rounded
+    separately and `parent_f - left_f` need not equal `right_f`.
+    Measured on this port's own kernels at a 4096-row fixture with
+    `fixed_scale` 65536 and cells up to 5.3e8: 19 of 2048 derived cells
+    differ from the built sibling one way, 24 of 2048 the other, worst
+    gap 3 ulp (`mojo_only/sibling_tiebreak_check.mojo`). What survives of
+    the old paragraph is only the second half: making THEIR choice keeps
+    the computed set the smaller half, which is the point of the halving.
     """
     var half = Int(half_in)
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < half:
         var left_sz = part_size.unsafe_load(i)
         var right_sz = part_size.unsafe_load(half + i)
-        var small = i
-        var big = half + i
-        if right_sz < left_sz:
-            small = half + i
-            big = i
+        # their `else` branch is the DEFAULT, so the tie lands on the right
+        var small = half + i
+        var big = i
+        if left_sz < right_sz:
+            small = i
+            big = half + i
         ids_compute.unsafe_store(i, UInt32(small))
         sub_from.unsafe_store(i, UInt32(big))
         sub_what.unsafe_store(i, UInt32(small))
