@@ -927,6 +927,92 @@ def apply_class_weight(
     return out^
 
 
+def preprocess_labels(
+    n_rows: Int, mut labels: List[Int32]
+) raises -> Dict[Int32, Int32]:
+    """`preprocess_labels`, `randomforest.cu:113-131`.
+
+        for (int i = 0; i < n_rows; i++) {
+          ret = labels_map.insert(pair<int,int>(labels[i], n_unique_labels));
+          if (ret.second) { n_unique_labels += 1; }
+          labels[i] = ret.first->second;   // IN-PLACE
+        }
+
+    THE MAPPING IS BY FIRST APPEARANCE, NOT BY SORTED ORDER, and that is
+    easy to get wrong because `std::map` IS sorted -- but the dense index
+    comes from `n_unique_labels`, which increments only when `insert`
+    actually inserted, so it counts the order labels were FIRST SEEN.
+    `[7, 3, 7, 3]` becomes `[0, 1, 0, 1]`, not `[1, 0, 1, 0]`.
+
+    Their Python layer does its own label encoding and never calls this;
+    it is a C-API helper, and it is ported because it is part of that
+    surface, not because anything here needs it.
+
+    `verbosity` is dropped -- this port has no logger (DEVIATION 119f).
+    """
+    if len(labels) < n_rows:
+        raise Error(
+            "labels holds "
+            + String(len(labels))
+            + " values but n_rows is "
+            + String(n_rows)
+        )
+    var labels_map = Dict[Int32, Int32]()
+    var n_unique_labels = Int32(0)
+    for i in range(n_rows):
+        var key = labels[i]
+        if key in labels_map:
+            labels[i] = labels_map[key]
+        else:
+            # `:124-125` -- insert succeeded, so this is a NEW label
+            labels_map[key] = n_unique_labels
+            labels[i] = n_unique_labels
+            n_unique_labels += 1
+    return labels_map^
+
+
+def postprocess_labels(
+    n_rows: Int, mut labels: List[Int32], labels_map: Dict[Int32, Int32]
+) raises:
+    """`postprocess_labels`, `randomforest.cu:140-161`.
+
+        reverse_map.resize(labels_map.size());
+        for (it = labels_map.begin(); it != labels_map.end(); it++)
+          reverse_map[it->second] = it->first;
+        for (int i = 0; i < n_rows; i++)
+          labels[i] = reverse_map[labels[i]];
+
+    The iteration order of their `std::map` does not matter here --
+    `reverse_map` is INDEXED by the dense value, so any order fills the
+    same array. That is why a Mojo `Dict`, which is not ordered, is a
+    faithful stand-in for their `std::map` at this call site and would
+    not be at a call site that walked it in key order.
+
+    Theirs indexes `reverse_map[labels[i]]` with no bounds check, so a
+    label outside the map reads out of bounds; ours refuses.
+    """
+    if len(labels) < n_rows:
+        raise Error(
+            "labels holds "
+            + String(len(labels))
+            + " values but n_rows is "
+            + String(n_rows)
+        )
+    var n_unique = len(labels_map)
+    var reverse_map = List[Int32]()
+    for _ in range(n_unique):
+        reverse_map.append(Int32(0))
+    for entry in labels_map.items():
+        reverse_map[Int(entry.value)] = entry.key
+    for i in range(n_rows):
+        var v = Int(labels[i])
+        if v < 0 or v >= n_unique:
+            raise Error(
+                "label " + String(v) + " is outside the labels_map"
+            )
+        labels[i] = reverse_map[v]
+
+
 def default_rf_params_classifier(n_cols: Int) raises -> RF_params:
     """`RandomForestClassifier.__init__`, `randomforestclassifier.py:209-230`,
     marshalled through `randomforest_common.pyx:477-554`.

@@ -107,6 +107,8 @@ from ensemble.randomforest import (
     RandomForest,
     RandomForestMetaData,
     compute_feature_importances,
+    postprocess_labels,
+    preprocess_labels,
     compute_max_features,
     compute_max_features_float,
     compute_max_features_int,
@@ -666,6 +668,72 @@ def arm_predict_proba() raises -> Int:
         print(
             "  arm predict_proba OK: exact averaged vectors, and argmax"
             " agrees with predict on every row"
+        )
+    return wrong
+
+
+def arm_label_maps() raises -> Int:
+    """`preprocess_labels` / `postprocess_labels`, `randomforest.cu:113-161`.
+
+    The trap is that `std::map` is SORTED but the dense index is not: it
+    comes from `n_unique_labels`, which increments only when the insert
+    actually inserted. So the mapping is by FIRST APPEARANCE. A fixture
+    whose labels happen to appear in ascending order cannot tell the two
+    rules apart, so this one appears in DESCENDING order."""
+    print()
+    print("ARM label maps -- first appearance, not sorted order")
+    var wrong = 0
+
+    # 7 appears first, then 3, then 9. Sorted order would be 3, 7, 9.
+    var labels: List[Int32] = [7, 3, 7, 9, 3, 7]
+    var original = labels.copy()
+    var m = preprocess_labels(len(labels), labels)
+    var want: List[Int32] = [0, 1, 0, 2, 1, 0]
+    print("    [7,3,7,9,3,7] ->", end=" ")
+    for i in range(len(labels)):
+        print(labels[i], end=" ")
+    print("")
+    for i in range(len(labels)):
+        if labels[i] != want[i]:
+            wrong += 1
+    if wrong != 0:
+        print("      FAIL: expected [0,1,0,2,1,0] (first appearance)")
+    if len(m) != 3:
+        print("      FAIL: map should hold 3 distinct labels, holds", len(m))
+        wrong += 1
+    # the distinguishing assertion: sorted order would send 3 -> 0
+    if m[Int32(3)] == Int32(0):
+        print(
+            "      FAIL: 3 mapped to 0, which is SORTED order; their"
+            " n_unique_labels counts first appearance, so 7 -> 0"
+        )
+        wrong += 1
+
+    # round trip
+    postprocess_labels(len(labels), labels, m)
+    var bad = 0
+    for i in range(len(labels)):
+        if labels[i] != original[i]:
+            bad += 1
+    print("    round trip: cells wrong", bad)
+    if bad != 0:
+        wrong += 1
+
+    # a label outside the map: theirs reads out of bounds, ours refuses
+    var stray: List[Int32] = [0, 99]
+    var refused = False
+    try:
+        postprocess_labels(2, stray, m)
+    except:
+        refused = True
+    print("    a label outside the map refused:", refused)
+    if not refused:
+        wrong += 1
+
+    if wrong == 0:
+        print(
+            "  arm label maps OK: dense indices by first appearance, and"
+            " the round trip returns the originals"
         )
     return wrong
 
@@ -1487,6 +1555,7 @@ def main() raises:
     print("MAE refused, get_tree_json refused, training params honored")
 
     failures += arm_predict_proba()
+    failures += arm_label_maps()
 
     print("")
     if failures == 0:
