@@ -422,3 +422,117 @@ not `-inf`, and tests strictly greater while scanning `k` ascending. So an exact
 tie keeps the LOWEST class index, and a leaf whose scores are all `<= 0` returns
 class 0 by default without the comparison ever firing. Ported as written, and
 both cases are in the check.
+
+---
+
+## 149. Fixtures are counter-based, not stream-based
+
+**Theirs.** sklearn's own tests build data with `numpy.random.RandomState`, a
+sequential MT19937 stream: value *k* depends on every value drawn before it.
+
+**Ours.** Every value is `splitmix64` of `(seed, row, col, salt)` — a
+counter-based hash. Cell `(r, c)` depends on nothing but its own coordinates.
+
+**Reason.** A sequential stream cannot be reproduced by a parallel generator
+without materializing the whole stream in traversal order, so a device-side
+fixture and a host-side fixture would have to agree on an ordering the device
+does not have. This is deviation 130's discipline applied to the data instead
+of the draws.
+
+**Price.** These fixtures are NOT byte-comparable with anything a
+`RandomState` seed produces, so no check here can be cross-checked against a
+stored numpy array. Nothing needs that: the analytic fixtures are checked
+against a closed form and the hashed ones against their own stated statistical
+properties.
+
+---
+
+## 150. No fixture contains a missing value
+
+**Theirs.** `find_min_max` counts NaNs into `n_missing`
+(`_partitioner.pyx:152-155`); the constant test is `... and n_missing == 0`
+(`_splitter.pyx:617`); missing values go left or right by a per-candidate coin
+flip (`_splitter.pyx:649`).
+
+**Ours.** No fixture contains a NaN, because deviation 136 refuses missing
+values by name at the API boundary.
+
+**Reason.** A fixture for a refused path is a fixture for code that does not
+exist, and manufacturing one now would freeze a guess at how the coin flip gets
+keyed.
+
+**Price, stated so it cannot be forgotten.** The `n_missing == 0` conjunct of
+the constant test HAS NO FIXTURE COVERAGE, and neither does
+`missing_go_to_left`. If 136 is ever reversed, this file grows a NaN shape and
+this entry is REWRITTEN, not annotated.
+
+---
+
+# Findings from sklearn's source that change how this lane must be written
+
+Not deviations — corrections to what the plan assumed, found by reading
+`~/CascadeProjects/upstream/scikit-learn` at `1.9.0`. Recorded here because
+each one silently changes an answer.
+
+1. **The constant test has three arms, not one.** `_splitter.pyx:614-618`:
+   `if end - start == n_missing or (max <= min + FEATURE_THRESHOLD and
+   n_missing == 0)`. All-missing is ALSO constant, and a column that would
+   otherwise be constant is NOT constant when it contains NaNs.
+2. **That test's addition is FLOAT32, and it widens the band.** Both operands
+   are `float32_t`. At `min == 0.5`, `0.5f + 1e-7f` rounds up to
+   `0.5 + 1.192e-7`, so a column whose spread is `1.19e-7` — comfortably above
+   `1e-7` — is still reported CONSTANT. **A port that does this arithmetic in
+   float64 will disagree with sklearn on real data.** Every near-constant
+   fixture in this lane is anchored at `min == 0.0`, where the addition is
+   exact, so that the fixture tests the rule and not the rounding.
+3. **`rand_uniform` can return `high`.** `_utils.pyx:57-61` is
+   `(high-low) * our_rand_r() / RAND_R_MAX + low` and `our_rand_r` can return
+   exactly `RAND_R_MAX`. sklearn guards it at `_splitter.pyx:651-652`:
+   `if threshold == max_feature_value: threshold = min_feature_value` — the
+   draw is replaced by **min**, not by max, turning a degenerate
+   everything-left into only-the-min-valued-rows-left. **Any splitter port
+   must carry that guard.**
+4. **`Gini` does NOT override `proxy_impurity_improvement`.** Only the base
+   (`:147`), `MSE` (`:944`) and `Poisson` (`:1556`) define it. So the
+   classification quantity sklearn actually maximizes is
+   `-n_R*gini_R - n_L*gini_L`, NOT the `sum_c^2/n_L + sum_c^2/n_R` form ports
+   usually assume. The two differ by the constant `-n_total`: harmless for an
+   argmax within one node, **not** harmless for any check that compares a
+   number, and not harmless for a `min_impurity_decrease` threshold.
+5. **`min_samples_leaf` rejection is a `continue`, not a redraw**
+   (`:659-670`). A rejected candidate feature is discarded for that node; the
+   threshold is not re-sampled.
+6. **`max_features` is not a hard cap.** The loop condition (`:571-576`) is
+   `n_visited_features < max_features OR n_visited_features <=
+   n_found_constants + n_drawn_constants`, so it keeps drawing past
+   `max_features` until at least one non-constant feature has been drawn.
+7. **`find_min_max` initialises on the first non-missing value and then uses
+   `if v < min: elif v > max:`** (`_partitioner.pyx:150-163`) — an `elif`, not
+   two `if`s. Equivalent for non-NaN input; a device reduction must not assume
+   otherwise for NaN-bearing input.
+
+---
+
+# Toolchain traps found in this lane
+
+**`&+` SILENTLY PARSES AS BITWISE AND WITH A UNARY PLUS.** `x &+ k` compiles
+and computes `x & k`. Measured: with `x = 0xF0F0F0F0F0F0F0F0` and `k = 0xFF`,
+`x &+ k` and `x & k` both print 240 while `x + k` prints
+17361641481138401775. This was a REAL DEFECT in a hash written in this lane —
+rows collapsed onto each other wherever the constant had a clear bit — and it
+produces a wrong answer rather than a compile error. `&*` is a hard parse
+error. Plain `+` and `*` on `UInt64` already wrap (`UInt64.MAX + 1 == 0`,
+measured), so plain operators are the only correct spelling.
+
+**`Float32.from_bits` and `SIMD.bitcast` do not exist.** The reverse of
+`to_bits` is `from std.memory import bitcast` then
+`bitcast[DType.float32](u32)`.
+
+**A struct field cannot expose `MutAnyOrigin`** ("struct fields cannot expose
+AnyOrigin in their type"). Use `MutUntrackedOrigin` for non-owning views whose
+lifetime is managed explicitly. `UnsafePointer` is deprecated in favour of
+`Pointer`; the repo's `MutPointer[T, origin]` spelling is the one that compiles
+without a warning.
+
+**A field cannot be moved out of a live struct** ("destroyed out of the middle
+of a value"), so an accessor that hands back an owned member returns `.copy()`.
