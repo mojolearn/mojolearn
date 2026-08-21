@@ -192,36 +192,48 @@ or any other host-only type, so each is callable unchanged from a kernel.
 # ==========================================================================
 
 
-comptime MAX_ROWS_EXACT: Int = 1 << 26
-"""Row count per node at which `CompareProxyExact` is still exact in `Int128`.
+comptime MAX_ROWS_EXACT: Int = 1 << 21
+"""Row count per node at which `GiniProxyExact` is exact.
 
-The widths, tightly. With `n` rows in the node and integer class counts,
-`sq_L = sum_j l_j^2 <= (sum_j l_j)^2 = nL^2 <= n^2`, so `sq_L` and `sq_R` fit
-`Int64` for any `n <= 2^26` (`n^2 <= 2^52`).
+**THIS BOUND WAS 2^26 AND THAT WAS WRONG BY THIRTEEN BITS.** The old
+derivation bounded the `Int128` CROSS-MULTIPLY in `CompareProxyExact` and
+forgot that `num` is STORED in an `Int64` field first. Two different widths,
+and the binding one is the storage.
 
-The comparison is the one that gets wide. `CompareProxyExact` cross-multiplies
-`num_a * den_b` against `num_b * den_a`, and
+Measured, because a bound is not an opinion:
+
+    n = 2^20   num = 288230376151711744    Int64 agrees
+    n = 2^21   num = 2305843009213693952   Int64 agrees
+    n = 2^22   num = 18446744073709551616  Int64 reads 0   *** WRAPPED ***
+    n = 2^25   num = 9444732965739290427392    Int64 reads 0
+    n = 2^26   num = 75557863725914323419136   Int64 reads 0
+
+**It wraps to exactly ZERO**, which is the worst failure available: every
+candidate in the node ties at the same numerator and the winner is decided by
+`Split.update`'s `colid` arm — silently, by feature index, with no symptom.
+
+The widths, tightly. With `n` rows and integer class counts,
+`sq_L = sum_j l_j^2 <= nL^2`, so
 
     num = sq_L*nR + sq_R*nL <= nL^2*nR + nR^2*nL = nL*nR*n <= n^3/4
     den = nL*nR                                            <= n^2/4
 
-so each product is bounded by `n^5 / 16`. **That is `n^5`, not the `n^3` a
-count of the numerator alone suggests** -- the numerator is `n^3`, the
-cross-multiply squares one more factor of `n^2` onto it. `Int128` holds
-`2^127 - 1`, and `n^5/16 <= 2^127` gives `n <= 2^26.2`, so `2^26` is the
-largest power of two that is safely inside it: at `n = 2^26` the product is at
-most `2^126`, one full bit of headroom.
+`num` lives in an `Int64`, which holds `2^63 - 1`, and `n^3/4 <= 2^63` gives
+`n <= 2^21.67`. **`2^21` is the largest safe power of two**: `num <= 2^61`,
+two bits of headroom.
 
-67,108,864 rows IN ONE NODE. The root node is the largest, so this is a bound
-on the training set, and it is above the `Int32` row ids the dataset view uses
-anyway (`dataset.mojo`). Past this point the correct answer is a wider
-comparison, not a float one.
+The cross-multiply is then far inside `Int128`: `num_a * den_b <= 2^61 * 2^40
+= 2^101`. The old 2^26 was the correct answer to that question and the wrong
+answer to this one.
 
-`ProxyImpurityExact` carries a `debug_assert` for a caller who exceeds it.
-That assert is COMPILED OUT by default and only exists under
-`mojo run -D ASSERT=all`; it was run that way once and seen to fire with this
-message, which is the only reason to believe it is reachable at all
-(`mojotrees-verify-reach-not-output`).
+2,097,152 rows IN ONE NODE, and the root is the largest node, so it is a bound
+on the dataset. Above it, `ProxyImpurityExact` raises rather than returning a
+wrapped rational; `objectives_check` measures the wrap at the boundary.
+
+The DEVICE has its own, separate bound for the same field
+(`SCORE_MAX_ROWS_EXACT` in `builder_kernels_impl.mojo`) because it publishes
+the numerator without ever forming the `Int128` product. The two agree by
+construction and both are stated where they are enforced.
 """
 
 

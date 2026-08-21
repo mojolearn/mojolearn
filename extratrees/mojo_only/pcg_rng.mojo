@@ -38,6 +38,9 @@ Checked cell-for-cell against the upstreams' own arithmetic by
 `extratrees/tools/rng_oracle/pcg_reference.txt`.
 """
 
+from std.math import fma
+
+
 
 # cuML kernels/builder_kernels.cuh:100-101.
 comptime FNV1A32_PRIME: UInt32 = 16777619
@@ -234,16 +237,6 @@ def uniform_int_u64(mut gen: PCGenerator, start: UInt64, diff: UInt64) -> UInt64
 
 
 @no_inline
-def _product_f32(res: Float32, span: Float32) -> Float32:
-    """The multiply of `uniform_float`, held in its own frame.
-
-    `@no_inline` is the fix from the repository's standing note on Mojo
-    contracting multiply-then-add into an FMA across statements where clang
-    contracts only within one source expression. See DEVIATION 142.
-    """
-    return res * span
-
-
 def uniform_float(mut gen: PCGenerator, start: Float32, end: Float32) -> Float32:
     """rng_device.cuh:173-183, `custom_next` for `UniformDistParams<float>`.
 
@@ -251,9 +244,28 @@ def uniform_float(mut gen: PCGenerator, start: Float32, end: Float32) -> Float32
     in `[start, end)` for `start <= end`. Their expression rescales the [0,1)
     draw; it does not redraw, so `start == end` is a constant and `start > end`
     is their caller's problem, not theirs.
+
+    **THE RESCALE IS AN EXPLICIT `fma`, AND THAT REPLACED AN UNFUSED FORM THAT
+    COULD NOT BE HELD ON A GPU.** See DEVIATION 142, which was amended rather
+    than kept: this used to route the multiply through an `@no_inline` helper
+    so the product rounded before the add. On the HOST that worked. On the
+    DEVICE it does not — six source-level barriers were measured and every one
+    of them fused anyway (plain, `@no_inline`, an integer bitcast round trip,
+    both together, and a private `stack_allocation` round trip, which fused on
+    device AND made the host fuse). The divergence was real, not theoretical:
+    9 of 105 scored cells differed between the host and device draws, worst 14
+    ulps, and the device's value was ALWAYS exactly `fma(res, span, start)` and
+    never a third value.
+
+    So the choice was never "fused or unfused", it was "fused on device and
+    unfused on host, or fused on both". An explicit `fma` is ONE IEEE
+    operation, fixed by the source on every backend — strictly more determined
+    than either — and it is also what RAFT's own expression becomes under
+    nvcc's default `--fmad=true`, i.e. what the upstream actually computes on
+    the hardware they ship for.
     """
     var res = gen.next_float()
-    return _product_f32(res, end - start) + start
+    return fma(res, end - start, start)
 
 
 # ===========================================================================

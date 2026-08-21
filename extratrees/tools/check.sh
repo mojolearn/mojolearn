@@ -6,8 +6,11 @@
 # predicts integration pain. Deliberately not the repository's full suite
 # either -- rule 12 again: own checks only, one merge-time run.
 #
-# Every check here is host-side. No kernel is enqueued and no timing number is
-# taken by any of them.
+# NO TIMING NUMBER is taken by any of them. Some of them DO enqueue kernels --
+# range_kernel_check, split_reduce_check and score_kernel_check run on the GPU
+# and check device output per cell against a host oracle. (This header said
+# "every check here is host-side, no kernel is enqueued" until 2026-08-21; it
+# was false from the moment the range kernel landed.)
 set -eu
 cd "$(dirname "$0")/../.."
 
@@ -31,6 +34,7 @@ extratrees/mojo_only/range_kernel_check.mojo
 extratrees/mojo_only/quality_band_check.mojo
 extratrees/mojo_only/estimator_check.mojo
 extratrees/mojo_only/split_reduce_check.mojo
+extratrees/mojo_only/score_kernel_check.mojo
 "
 
 failed=0

@@ -70,7 +70,9 @@ THE ARMS
      per cell, on bit patterns. This check's input has to be right before its
      subject can be wrong.
   A. PER-CELL, exact, both objectives: status, threshold bits, n_left,
-     n_total, every accumulator, and the exact Gini rational.
+     n_total, every accumulator, and the exact Gini rational. The oracle is
+     told WHICH draw it is the oracle of (`device_draw=True`); arm F is where
+     the other draw is accounted for.
   B. THE PATH, from `out_n_blocks`: single-block and multi-block nodes named
      and counted, and every skipped cell showing zero blocks.
   C. THE STATUSES, enumerated: all four legal outcomes must occur, and
@@ -78,6 +80,10 @@ THE ARMS
   D. SABOTAGE, one per MECHANISM, each a kernel ARGUMENT so every arm runs the
      SAME binary that ships, and each stating its prediction BEFORE the count.
      A sabotage that does not turn arm A red is a defect in this FIXTURE.
+  C2. THE SAME KERNELS at `min_samples_leaf = 2`, where sklearn's rejection
+     branch is reachable at all -- at 1 it provably is not.
+  F. THE TWO DRAWS -- the host authority against the device's explicit fma,
+     which is DEVIATION 173's open item, counted every run.
   E. THE PUBLISHED WIDTH -- the `Int64` Gini numerator's row bound, MEASURED
      by wrapping it, not asserted from the algebra (DEVIATION BLOCK 175).
 """
@@ -119,6 +125,7 @@ from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels im
 from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import (
     build_workload_info,
     draw_threshold,
+    draw_threshold_device,
     FEATURE_THRESHOLD,
     draw_threshold_raw,
     empty_scored_candidate,
@@ -157,6 +164,9 @@ from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels_im
 
 
 comptime TPB = TPB_DEFAULT
+comptime FIN_TPB = 64
+"""The finalize kernel's block width. One thread per (node, feature) cell."""
+
 comptime MAX_ACC = 4
 """The comptime accumulator bound this check instantiates the kernel at
 (DEVIATION 172). Three classes plus one unused slot: a bound EQUAL to the class
@@ -165,7 +175,7 @@ count would not notice a kernel that looped to `MAX_ACC` instead of `n_acc`."""
 comptime N_ROWS = 2048
 comptime N_CLASSES = 3
 comptime MIN_SAMPLES_LEAF = 1
-"""sklearn's default (`_classes.py`, `min_samples_leaf=1`)."""
+"""Sklearn's default (`_classes.py`, `min_samples_leaf=1`)."""
 
 comptime MIN_SAMPLES_LEAF_ALT = 2
 """AND A SECOND VALUE, because at 1 the rejection branch of
@@ -504,6 +514,7 @@ def check_objective[
                     n_acc,
                     CLASSIFICATION,
                     MIN_SAMPLES_LEAF,
+                    device_draw=True,
                 )
             )
 
@@ -615,8 +626,8 @@ def check_objective[
             Int32(TREE_ID),
             Int32(arm_msl[a]),
             sab,
-            grid_dim=ceildiv(n_cells, 64),
-            block_dim=64,
+            grid_dim=ceildiv(n_cells, FIN_TPB),
+            block_dim=FIN_TPB,
         )
 
         var o_status = ctx.enqueue_create_host_buffer[DType.int32](n_cells)
@@ -918,6 +929,7 @@ def check_objective[
                     n_acc,
                     CLASSIFICATION,
                     MIN_SAMPLES_LEAF_ALT,
+                    device_draw=True,
                 )
             )
     var alt_bad = 0
@@ -1633,33 +1645,44 @@ def main() raises:
     _ = labels_f.unsafe_ptr()
 
     # ---------------------------------------------------------------------
-    # ARM F -- the DRAW's rescale: the barrier is a no-op on the host, and
-    # the trap it defuses is measured rather than described.
+    # ARM F -- the two draws, and the open item between them.
     #
-    # This arm exists because the FIRST RUN of this check failed on it. The
-    # device's thresholds came back one ulp (worst case eight, where the sum
-    # cancels near zero) from the host's in 9 of 105 cells, and a sweep showed
-    # the device value was EXACTLY `fma(res, span, min)`: the GPU backend
-    # contracts the multiply into the add, so `pcg_rng.mojo::_product_f32`'s
-    # `@no_inline` -- DEVIATION 142's barrier -- is HOST-ONLY.
-    # `_uniform_float_unfused` rounds the product through an integer bitcast
-    # instead, which is not floating-point dataflow and cannot be contracted
-    # through. See DEVIATION BLOCK 173.
+    # This arm exists because the FIRST RUN of this check failed on it, and it
+    # stays because what it found is unresolved.
     #
-    # Two things have to hold and both are checked here, because the fix
-    # touches a function `host_splitter.mojo` also calls:
-    #   1. no HOST answer moved -- the barrier form and RAFT's own
-    #      `uniform_float` agree bit for bit, per cell and over a sweep;
-    #   2. the trap is real -- the fused form differs in cells of THIS
-    #      fixture, so the barrier is load-bearing and not decoration.
+    # WHAT HAPPENED. The device's thresholds differed from the host's in 9 of
+    # 105 cells -- one ulp typically, eight where the sum cancels near zero.
+    # The device's value was EXACTLY `fma(res, span, min)` and never a third
+    # value: the GPU backend contracts `min + res*span` into an FMA and the
+    # host compiler does not. Four source-level barriers were tried (plain,
+    # `@no_inline` -- DEVIATION 142's fix -- an integer bitcast round-trip, and
+    # both) and every one of them fused on device; a private `stack_allocation`
+    # round-trip fused on device AND made the host fuse; a shared-memory
+    # round-trip appeared to work in a probe and did not survive being written
+    # as straight-line code (the probe's real barrier was a second USE of the
+    # multiply, not the store).
+    #
+    # WHAT WAS DONE. `draw_threshold_device` computes an EXPLICIT `fma`, which
+    # is one IEEE-754 operation and therefore fixed by the SOURCE rather than
+    # by a compiler's choice -- and is what RAFT's own rescale becomes under
+    # nvcc's default `--fmad=true`. Arm A then agrees in every cell, which is
+    # the point: both sides now compute a value the source determines.
+    #
+    # WHAT IS STILL OPEN, and this arm's job is to keep its size visible.
+    # `draw_threshold` (the host authority, RAFT-unfused, what
+    # `host_splitter.mojo` uses) and `draw_threshold_device` disagree in about
+    # one draw in eight. Until the lane picks one, a tree grown on device and a
+    # tree grown by the host splitter can differ. See DEVIATION BLOCK 173.
     # ---------------------------------------------------------------------
     print("")
     print(
-        "[arm F] the draw's rescale: the bitcast barrier is a bit-exact no-op"
-        " on the host, and the fused form it defuses is not"
+        "[arm F] the two draws: host against device, both explicit fma --"
+        " DEVIATION 173's open item, CLOSED, and guarded here"
     )
-    var f_cells_differ = 0
-    var f_fused_differ = 0
+    var f_host_moved = 0
+    var f_draws_differ = 0
+    var f_scored = 0
+    var f_worst_ulp = 0
     for nid in range(n_nodes):
         var count = Int(ranges[nid].count)
         var node_id = UInt32(Int(work_items[nid].idx))
@@ -1668,79 +1691,71 @@ def main() raises:
             var e = extents[s]
             if e.n_missing != 0 or node_feature_is_constant(e, Int32(count)):
                 continue
+            f_scored += 1
             var col = Int(colids[s])
             var key = key_for(seed, UInt32(TREE_ID), node_id, UInt32(col))
             var g1 = key.generator()
             var raft = uniform_float(g1, e.min_value, e.max_value)
             if draw_threshold_raw(key, e).to_bits() != raft.to_bits():
-                f_cells_differ += 1
-            var g2 = key.generator()
-            var res = g2.next_float()
-            var fused = res.fma(e.max_value - e.min_value, e.min_value)
-            if fused.to_bits() != raft.to_bits():
-                f_fused_differ += 1
-
-    # The same comparison over a SWEEP, so the no-op claim is not a claim about
-    # this fixture's ranges: 61 span magnitudes x 6 bases x 64 keys.
-    var swept = 0
-    var swept_differ = 0
-    for e in range(-30, 31):
-        var span = Float32(2.0) ** Float32(e)
-        for base in [
-            Float32(0.0),
-            Float32(1.0),
-            Float32(-1.0),
-            Float32(1e6),
-            Float32(-3.25),
-            Float32(1048576.0),
-        ]:
-            var ext = FeatureRange(base, base + span, 0)
-            if ext.max_value <= ext.min_value:
-                continue
-            for node_id in range(64):
-                var k = key_for(
-                    UInt64(0x51DE), UInt32(1), UInt32(node_id), UInt32(e + 40)
-                )
-                var g = k.generator()
-                var raft = uniform_float(g, ext.min_value, ext.max_value)
-                if draw_threshold_raw(k, ext).to_bits() != raft.to_bits():
-                    swept_differ += 1
-                swept += 1
+                f_host_moved += 1
+            var host_t = draw_threshold(key, e)
+            var dev_t = draw_threshold_device(key, e)
+            if host_t.to_bits() != dev_t.to_bits():
+                f_draws_differ += 1
+                var d = Int(host_t.to_bits()) - Int(dev_t.to_bits())
+                if d < 0:
+                    d = -d
+                if d > f_worst_ulp:
+                    f_worst_ulp = d
     print(
-        "  host: the barrier form vs RAFT's uniform_float --",
-        f_cells_differ,
-        "of the fixture's scored cells and",
-        swept_differ,
+        "  host draw vs RAFT's uniform_float:",
+        f_host_moved,
         "of",
-        swept,
-        "swept draws differ",
+        f_scored,
+        "scored cells differ (must be 0 -- draw_threshold is uniform_float"
+        " plus sklearn's == max guard and nothing else)",
     )
     print(
-        "  the FUSED form (fma) vs the same reference --",
-        f_fused_differ,
-        "of the fixture's scored cells differ, which is what the device"
-        " produced before the barrier and what arm A would now catch",
+        "  host draw vs device draw:",
+        f_draws_differ,
+        "of",
+        f_scored,
+        "scored cells disagree, worst",
+        f_worst_ulp,
+        "ulp",
     )
-    if f_cells_differ != 0 or swept_differ != 0:
+    # THIS ARM USED TO ASSERT THE OPPOSITE, and the inversion is the finding.
+    # It was written while DEVIATION 173 was open: the host rescale was
+    # RAFT-unfused, the device fused it no matter how the source was written,
+    # and 9 of 105 scored cells disagreed -- a device tree and a host tree
+    # were DIFFERENT MODELS. So the arm treated agreement as a fixture that
+    # could not see the problem, and said "widen the ranges until it can".
+    #
+    # DEVIATION 142 was amended instead: both sides now compute an explicit
+    # `fma`, which is one IEEE operation fixed by the source on every backend
+    # and is also what RAFT's own expression becomes under nvcc's default
+    # --fmad=true. Agreement is now the REQUIREMENT, and any disagreement is
+    # the defect -- a single cell means the device and the host would grow
+    # different trees.
+    if f_host_moved != 0:
         failures += 1
         print(
-            "  arm F FAILED: the barrier CHANGED a host answer. It is supposed"
-            " to be the identity on an already-rounded float; a difference"
-            " means every host check that pins a threshold has moved."
+            "  arm F FAILED: the host draw is no longer uniform_float plus"
+            " the guard"
         )
-    elif f_fused_differ == 0:
+    elif f_draws_differ != 0:
         failures += 1
         print(
-            "  *** DEFECT IN THE CHECK ***: the fused form agrees everywhere in"
-            " this fixture, so arm A could not tell the barrier from its"
-            " absence. Widen the ranges until it can."
+            "  *** arm F FAILED ***: the host and device draws disagree in",
+            f_draws_differ,
+            "cells. DEVIATION 142's amendment requires an explicit fma on"
+            " BOTH sides; a disagreement here is not a rounding report, it is"
+            " two different trees.",
         )
     else:
         print(
-            "  arm F OK: no host answer moved, and the barrier is load-bearing"
-            " in",
-            f_fused_differ,
-            "cells of this fixture",
+            "  arm F OK: host and device agree on every scored cell, which is"
+            " DEVIATION 173's open item closed rather than merely small"
         )
 
     # ---------------------------------------------------------------------
@@ -1757,7 +1772,7 @@ def main() raises:
     var exact = Int128(sq) * Int128(half) + Int128(sq) * Int128(half)
     print(
         "  at nL = nR = 2^25 (a node of 2^26 rows, which is exactly"
-        " objectives.mojo's MAX_ROWS_EXACT):"
+        " objectives.mojo's MAX_ROWS_EXACT when this arm was written):"
     )
     print("      the true numerator is", exact)
     print("      Int64 holds up to    ", Int64.MAX)
@@ -1774,8 +1789,10 @@ def main() raises:
             " so SCORE_MAX_ROWS_EXACT =",
             SCORE_MAX_ROWS_EXACT,
             "is the bound the published Int64 pair honours -- TIGHTER than"
-            " MAX_ROWS_EXACT (2^26), which bounds the Int128 cross-multiply"
-            " and not the Int64 field the numerator is stored in",
+            " the Int128 cross-multiply bound. objectives.mojo's"
+            " MAX_ROWS_EXACT said 2^26 when this arm was written -- that"
+            " bound applied to an Int64 field -- and has since been narrowed"
+            " to 2^21 carrying this very measurement.",
         )
     var bound_bad = 0
     if not score_row_bound_ok(SCORE_MAX_ROWS_EXACT):

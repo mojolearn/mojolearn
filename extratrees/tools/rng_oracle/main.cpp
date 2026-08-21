@@ -21,6 +21,7 @@
 // below is plain C++ once HDI is defined away.
 
 #include <cstdint>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 
@@ -190,7 +191,13 @@ HDI void custom_next(GenType& gen,
 {
   OutType res;
   gen.next(res);
-  *val = (res * (params.end - params.start)) + params.start;
+  // DEVIATION 142, amended: an explicit fma, matching the Mojo side. RAFT
+  // writes `(res * (end - start)) + start`, which nvcc contracts into exactly
+  // this under its default --fmad=true, so the fused form is what the upstream
+  // computes on the hardware they ship for -- and it is the only form a GPU
+  // backend can be made to hold (six source-level barriers were measured and
+  // every one fused anyway).
+  *val = std::fma(res, params.end - params.start, params.start);
 }
 
 // raft/random/detail/rng_device.cuh:185-206

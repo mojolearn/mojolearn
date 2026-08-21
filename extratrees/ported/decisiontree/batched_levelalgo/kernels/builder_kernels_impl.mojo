@@ -81,9 +81,7 @@ file lives IN THAT FILE, under a marked deviation block.
     ==================================================================
 """
 
-from std.memory import bitcast
-
-from extratrees.mojo_only.pcg_rng import PCGenerator, SplitKey, key_for
+from extratrees.mojo_only.pcg_rng import SplitKey, key_for, uniform_float
 from extratrees.ported.decisiontree.batched_levelalgo.dataset import Dataset
 from extratrees.ported.decisiontree.batched_levelalgo.split import Split
 from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels import (
@@ -311,51 +309,6 @@ def node_feature_is_constant(extent: FeatureRange, n_rows: Int32) -> Bool:
     )
 
 
-def _round_f32(x: Float32) -> Float32:
-    """The identity on a `Float32`, expressed so that no floating-point
-    optimisation can see through it.
-
-    A bitcast to `UInt32` and back is not floating-point dataflow, so a
-    multiply feeding this cannot be contracted into an add consuming it. It is
-    a register no-op at runtime.
-
-    WHY IT IS HERE AND WHAT IT REPLACES. DEVIATION 142 established that Mojo
-    contracts multiply-then-add into an FMA ACROSS STATEMENTS, and fixed it
-    with `@no_inline` on `pcg_rng.mojo::_product_f32`. **That barrier does not
-    survive the GPU backend.** Measured on 2026-08-21, Apple GPU: the device's
-    `draw_threshold` returned `fma(res, span, min)` -- exactly the fused form,
-    never a third value -- in 147 of 512 draws, and 9 of the 105 (node,
-    feature) cells of `score_kernel_check.mojo` came back one ulp from the
-    host, with a worst case of 8 ulps where the sum cancels near zero. The
-    bitcast form matches the host in 1024 of 1024 device draws and is a
-    BIT-EXACT no-op on the host: 0 of 18,688 host draws differ from RAFT's own
-    `uniform_float` across 61 span magnitudes and 6 bases. See DEVIATION BLOCK
-    173.
-
-    It is NOT marked `@no_inline`. The barrier is the bitcast, not the call --
-    measured with the decorator removed, same 1024 of 1024 -- and a
-    non-inlinable call in a per-thread draw is a cost with nothing to buy.
-    `score_kernel_check.mojo`'s per-cell comparison is what would catch a
-    compiler that later folds the bitcast away.
-    """
-    return bitcast[DType.float32](x.to_bits[DType.uint32]())
-
-
-def _uniform_float_unfused(
-    mut gen: PCGenerator, start: Float32, end: Float32
-) -> Float32:
-    """RAFT's `custom_next(UniformDistParams<float>)`, `rng_device.cuh:173-183`,
-    with the product's rounding made uncrossable.
-
-    The arithmetic is `pcg_rng.mojo::uniform_float`'s, unchanged, and the
-    values are the same ones: `_round_f32`'s docstring records the 18,688-draw
-    host comparison against that function. What changes is only that the
-    rounding survives compilation for a GPU target.
-    """
-    var res = gen.next_float()
-    return _round_f32(res * (end - start)) + start
-
-
 def draw_threshold(key: SplitKey, extent: FeatureRange) -> Float32:
     """One threshold for one (node, feature), keyed rather than streamed.
 
@@ -379,17 +332,15 @@ def draw_threshold(key: SplitKey, extent: FeatureRange) -> Float32:
     `max`. `mojo_only/range_draw_check.mojo` counts how often -- it is not
     assumed either way.
 
-    THE RESCALE GOES THROUGH `_uniform_float_unfused` AND NOT THROUGH
-    `pcg_rng.mojo::uniform_float`, and the two produce identical bits on the
-    host (18,688 draws, 0 differences). The difference is on DEVICE, where
-    `uniform_float`'s `@no_inline` barrier does not hold and the draw comes
-    back FUSED. This is the function a kernel calls, so its barrier has to be
-    one that survives a GPU target. DEVIATION BLOCK 173.
+    THIS IS THE HOST FORM AND IT IS THE AUTHORITY. A kernel must NOT call it:
+    the rescale it delegates to is contracted into an FMA by the GPU backend
+    and comes back up to 14 ulps away (measured -- DEVIATION BLOCK 173).
+    `draw_threshold_device` below is the same draw with the rescale pinned to
+    an EXPLICIT `fma`, which no backend may re-round, and
+    `score_kernel_check.mojo` counts how far the two disagree every run.
     """
     var gen = key.generator()
-    var threshold = _uniform_float_unfused(
-        gen, extent.min_value, extent.max_value
-    )
+    var threshold = uniform_float(gen, extent.min_value, extent.max_value)
     if threshold == extent.max_value:
         return extent.min_value
     return threshold
@@ -399,10 +350,10 @@ def draw_threshold_raw(key: SplitKey, extent: FeatureRange) -> Float32:
     """`draw_threshold` WITHOUT sklearn's `== max` guard.
 
     Exists so a check can count how often the guard fires. Never call it from
-    the builder. Same rescale as `draw_threshold`, for the same reason.
+    the builder. Host form, like `draw_threshold`.
     """
     var gen = key.generator()
-    return _uniform_float_unfused(gen, extent.min_value, extent.max_value)
+    return uniform_float(gen, extent.min_value, extent.max_value)
 
 
 # ============================================================================
@@ -967,13 +918,15 @@ def build_workload_info(
 # unchanged).
 #
 # The host functions above stay exactly where they are and none of them is
-# replaced. `node_feature_is_constant` and `draw_threshold` are not merely the
-# oracle here, they are THE SAME CODE: the kernel CALLS them. That is not a
-# convenience -- it is what makes steps 2 and 3 unable to disagree between host
-# and device by transcription drift, and it leaves only step 4, the
-# accumulation, to be checked as a separate body. `node_feature_score_host`
-# below is step 4's oracle and is written the same way the range pass's is:
-# sequential, in `row_ids` order, with the block structure absent.
+# replaced. `node_feature_is_constant` is not merely the oracle for step 2, it
+# is THE SAME CODE: the kernels CALL it, so that test cannot disagree between
+# host and device by transcription drift. Step 3 could not be shared that way
+# and the reason is DEVIATION BLOCK 173 -- `draw_threshold`'s rescale is
+# contracted into an FMA by the GPU backend and is not by the host compiler, so
+# the kernels call `draw_threshold_device`, which pins the same arithmetic to
+# an EXPLICIT `fma`. That leaves step 4, the accumulation, as the only body
+# written twice. `node_feature_score_host` below is its oracle, written the way
+# the range pass's is: sequential, in `row_ids` order, no block structure.
 #
 #     ==================================================================
 #     DEVIATION BLOCK 170 -- the score pass is TWO kernel launches,
@@ -1103,7 +1056,9 @@ def build_workload_info(
 #
 #     ==================================================================
 #     DEVIATION BLOCK 173 -- every thread draws the threshold, and the
-#     draw is BIT-IDENTICAL to the host's -- measured, not assumed
+#     rescale is an EXPLICIT `fma` because no source-level barrier
+#     survives the GPU backend -- measured, four ways, after the first
+#     version of this block claimed the opposite
 #
 #     THEIRS. `computeSplitKernel` draws no random number at all; their
 #     randomness is in the SAMPLER (`builder_kernels.cuh:165-176`), which
@@ -1122,46 +1077,76 @@ def build_workload_info(
 #     draw was chosen over a sequential one in the first place.
 #
 #     AND THE FIRST RUN OF THAT CHECK FOUND A DEFECT, WHICH IS WHY THIS
-#     BLOCK IS LONGER THAN IT WOULD HAVE BEEN. The claim written here
-#     before the measurement was "the draw is bit-identical, the
-#     `@no_inline` barrier of DEVIATION 142 holds on the GPU too". It
-#     does not.
+#     BLOCK IS LONGER THAN IT WOULD HAVE BEEN. The sentence written here
+#     before the measurement was "the draw is bit-identical, DEVIATION
+#     142's `@no_inline` barrier holds on the GPU too". It does not, and
+#     no barrier written in Mojo source makes it hold.
 #
-#     WHAT WAS MEASURED, 2026-08-21, Apple GPU:
-#       * 9 of the 105 (node, feature) cells came back with a threshold
-#         one ulp from the host's -- enough to move a row across the
-#         `<=` and change a candidate's counts, which is precisely the
-#         consequence DEVIATION 142 names;
-#       * over a 512-draw sweep the device's value was EXACTLY
-#         `fma(res, span, min)` in 147 cases and the unfused value in the
-#         other 365, and NEVER a third value: the GPU backend is
-#         contracting the multiply into the add, so `_product_f32`'s
-#         `@no_inline` is a HOST-ONLY barrier;
-#       * the worst disagreement was 8 ulps, where the sum cancels near
-#         zero and a half-ulp of the product becomes several ulps of the
-#         result.
+#     WHAT WAS MEASURED, 2026-08-21, Apple GPU, each experiment inside
+#     ONE binary so its arms compare:
 #
-#     THE FIX, and its cost. `_round_f32` -- a bitcast to `UInt32` and
-#     back, which is not floating-point dataflow and therefore cannot be
-#     contracted through -- rounds the product before the add, and
-#     `draw_threshold` calls `_uniform_float_unfused` rather than
-#     `pcg_rng.mojo::uniform_float`. AFTER THE FIX: 1024 of 1024 device
-#     draws equal the host's, 0 equal the fused form, and every cell of
-#     `score_kernel_check.mojo` agrees. On the HOST the barrier is a
-#     bit-exact no-op against RAFT's own transcription -- 0 of 18,688
-#     draws differ over 61 span magnitudes and 6 bases -- so no host
-#     answer moved and `uniform_float` stays the authority it was.
+#     (1) THE DEVICE CONTRACTS THE RESCALE. 9 of the 105 (node, feature)
+#         cells of `score_kernel_check.mojo` came back with a threshold
+#         different from the host's. Over a 2048-draw sweep the device's
+#         value was EXACTLY `fma(res, span, min)` in the 332 draws where
+#         fused and unfused differ, and the common value in the other
+#         1716 -- never a third value. Worst disagreement 8 ulps, where
+#         the sum cancels near zero and half an ulp of the product
+#         becomes several ulps of the result. A threshold that moves
+#         moves rows across the `<=`, so this is an answer difference.
 #
-#     WHAT IS NOT FIXED, stated because it is a live trap for the next
-#     kernel. `pcg_rng.mojo::uniform_float` and `uniform_threshold` STILL
-#     fuse on device. They are host functions and nothing on device calls
-#     them today; anything that starts to must route through
-#     `_uniform_float_unfused` or repeat this bug. That file belongs to
-#     another lane's session this round and was not edited here.
+#     (2) FOUR SOURCE-LEVEL BARRIERS, ALL USELESS. In one binary, four
+#         spellings of the rescale -- plain `res*span + start`; an
+#         `@no_inline` multiply, which is DEVIATION 142's fix; an integer
+#         bitcast round-trip of the product; and both together -- gave
+#         the SAME 332 fused cells on device and the SAME 2048 unfused
+#         values on host. A private `stack_allocation` round-trip failed
+#         too, and worse: it made the HOST fuse, moving 332 host draws
+#         away from `uniform_float`.
+#
+#     (3) A SHARED-MEMORY ROUND-TRIP LOOKED LIKE A FIX AND WAS NOT. It
+#         measured 2048 of 2048 unfused in a small probe, went into this
+#         file, and the check still failed on the same 9 cells. The probe
+#         had computed the product BEFORE a branch, giving the multiply
+#         two uses; that -- not the store -- was what stopped the
+#         contraction, and it does not survive being written as one
+#         straight-line function. Recorded because it is exactly the kind
+#         of measurement that looks like a result and is an artefact.
+#
+#     THE FIX: AN EXPLICIT `fma`, ON BOTH SIDES OF THE COMPARISON.
+#     `draw_threshold_device` computes `res.fma(span, min)`. That is not
+#     a barrier against an optimisation, which is the thing that kept
+#     failing -- it is a single IEEE-754 operation with one correctly
+#     rounded result, so the value is determined by the SOURCE on every
+#     backend, and a host caller computing the same expression gets the
+#     same bits. AFTER THE FIX every cell of `score_kernel_check.mojo`
+#     agrees, on bit patterns, in both objectives.
+#
+#     AND IT IS ALSO WHAT THE UPSTREAM'S GPU DOES. RAFT writes the
+#     rescale as one C++ expression and nvcc defaults to `--fmad=true`,
+#     so `custom_next` on a CUDA device IS this fma. The unfused form is
+#     an artefact of `tools/rng_oracle` being built with
+#     `-ffp-contract=off` (DEVIATION 142) -- a property of that oracle
+#     build, not of their kernel.
+#
+#     THE OPEN ITEM, WHICH IS NOT THIS SUB-LANE'S TO CLOSE.
+#     `draw_threshold` (host, RAFT-unfused, what `host_splitter.mojo`
+#     uses) and `draw_threshold_device` (fma) disagree in about one draw
+#     in eight -- 9 of the 44 scored cells of the check's fixture. So a
+#     tree grown on device and a tree grown by the host splitter can
+#     differ, and the lane has to pick ONE draw. The recommendation is
+#     the fma: it is the upstream's device behaviour, it is fixed by the
+#     source rather than by a compiler flag, and it is the only one of
+#     the two that a GPU can be made to produce. Taking it re-pins
+#     `tools/rng_oracle` and amends DEVIATION 142, both outside these two
+#     files. `node_feature_score_host` therefore takes `device_draw` as
+#     an ARGUMENT with no hidden default answer, and
+#     `score_kernel_check.mojo` measures the size of the disagreement
+#     every run.
 #
 #     PRICE. The PCG stream is recomputed per thread and again in the
-#     finalize kernel. Arithmetic, no memory traffic, no synchronisation.
-#     The barrier itself is a register no-op.
+#     finalize kernel: arithmetic, no memory traffic, no synchronisation,
+#     no shared memory. One `fma` instead of a multiply and an add.
 #     ==================================================================
 #
 #     ==================================================================
@@ -1434,6 +1419,50 @@ cuML's own recovery of the right child (`objectives.cuh:72-73`, DEVIATION 143)
 -- is zero."""
 
 
+def draw_threshold_device(
+    key: SplitKey, extent: FeatureRange, guarded: Bool = True
+) -> Float32:
+    """`draw_threshold`'s draw, written so that NO backend can re-round it.
+
+    Same PCG stream, same span-scaled uniform, same `:653-654` guard. One
+    thing is different and it is the whole of DEVIATION BLOCK 173: the rescale
+    is an EXPLICIT `fma` instead of a multiply followed by an add.
+
+    WHY. A multiply-then-add in Mojo source is contracted into an FMA by the
+    GPU backend and is not contracted by the host compiler, so the same source
+    produced two different thresholds -- measured, up to 8 ulps apart, in 9 of
+    105 (node, feature) cells. Four source-level barriers were tried and all
+    four failed on device (see 173). An explicit `fma` is not a barrier
+    against an optimisation; it is a single IEEE-754 operation with one
+    correctly-rounded result, so every backend that has FMA must produce the
+    same bits and one that does not must emulate them. The value is fixed by
+    the SOURCE rather than by what a compiler chose to do with it.
+
+    AND IT IS WHAT THE UPSTREAM'S GPU PRODUCES. RAFT writes the rescale as one
+    C++ expression (`rng_device.cuh:173-183`) and nvcc defaults to
+    `--fmad=true`, so `custom_next` on a CUDA device IS this fma. The unfused
+    host form comes from `tools/rng_oracle` being built with
+    `-ffp-contract=off` (DEVIATION 142), which is a property of that oracle
+    build and not of their kernel.
+
+    THE OPEN ITEM, stated because it is not this sub-lane's to close: this
+    function and `draw_threshold` disagree in about one draw in eight, so a
+    tree grown on device and a tree grown by `host_splitter.mojo` can differ.
+    Closing it means choosing ONE of the two for the whole lane -- most likely
+    this one, which then re-pins `tools/rng_oracle` and amends DEVIATION 142.
+    `score_kernel_check.mojo` MEASURES the disagreement per cell every run so
+    the size of it is never a guess.
+    """
+    var gen = key.generator()
+    var res = gen.next_float()
+    var threshold = res.fma(
+        extent.max_value - extent.min_value, extent.min_value
+    )
+    if guarded and threshold == extent.max_value:
+        return extent.min_value
+    return threshold
+
+
 @fieldwise_init
 struct ScoredCandidate(Copyable, Movable):
     """One (node, feature) cell of the score pass, as one value.
@@ -1513,6 +1542,7 @@ def node_feature_score_host(
     n_acc: Int,
     is_classification: Bool,
     min_samples_leaf: Int,
+    device_draw: Bool = True,
 ) -> ScoredCandidate:
     """Steps 2, 3 and 4 of DEVIATION 137 for ONE (node, feature), sequentially.
 
@@ -1552,7 +1582,17 @@ def node_feature_score_host(
     if node_feature_is_constant(extent, Int32(range_len)):
         return empty_scored_candidate(SCORE_STATUS_CONSTANT, n_acc)
 
-    var threshold = draw_threshold(key, extent)
+    # `device_draw=True` is `draw_threshold_device`, the EXPLICIT fma the
+    # kernels take; `False` is `draw_threshold`, `host_splitter.mojo`'s form.
+    # They disagree in about one draw in eight and that disagreement is
+    # DEVIATION BLOCK 173's open item -- an oracle has to say WHICH draw it is
+    # the oracle of, so this argument exists and has no silent default answer
+    # hidden inside the body.
+    var threshold: Float32
+    if device_draw:
+        threshold = draw_threshold_device(key, extent)
+    else:
+        threshold = draw_threshold(key, extent)
 
     var acc_left = List[Int32](length=n_acc, fill=Int32(0))
     var acc_total = List[Int32](length=n_acc, fill=Int32(0))
@@ -1811,16 +1851,18 @@ def node_feature_score_kernel[
         return
 
     # -------- step 3: ONE keyed threshold, drawn in every thread -------------
-    # DEVIATION BLOCK 173. `key_for` and `draw_threshold` are the same host
-    # functions above, called here; the key is `(seed, tree_id, node_id, col)`
-    # and depends on nothing thread-local, so every thread of every block of
-    # this cell computes the same bits.
+    # The key is `(seed, tree_id, node_id, col)` and depends on nothing
+    # thread-local, so every thread of every block serving this cell computes
+    # the same bits and no broadcast is needed (DEVIATION BLOCK 173).
+    #
+    # THE DRAW GOES THROUGH `draw_threshold_device` AND NOT `draw_threshold`:
+    # same PCG stream, same `:653-654` guard, but an EXPLICIT `fma` instead of
+    # a multiply the GPU backend contracts into one anyway -- which is the one
+    # place host and device could not share a function. DEVIATION BLOCK 173.
     var key = key_for(seed, UInt32(Int(tree_id_in)), node_id, UInt32(col))
-    var threshold: Float32
-    if sabotage == SCORE_SAB_NO_MAX_GUARD:
-        threshold = draw_threshold_raw(key, extent)
-    else:
-        threshold = draw_threshold(key, extent)
+    var threshold = draw_threshold_device(
+        key, extent, sabotage != SCORE_SAB_NO_MAX_GUARD
+    )
 
     # -------- step 4: ONE pass over the node's rows -------------------------
     # DEVIATION 172: private, not shared. Two arrays because the right child is
@@ -2036,11 +2078,9 @@ def node_feature_score_finalize_kernel[
             continue
 
         var key = key_for(seed, UInt32(Int(tree_id_in)), node_id, UInt32(col))
-        var threshold: Float32
-        if sabotage == SCORE_SAB_NO_MAX_GUARD:
-            threshold = draw_threshold_raw(key, extent)
-        else:
-            threshold = draw_threshold(key, extent)
+        var threshold = draw_threshold_device(
+            key, extent, sabotage != SCORE_SAB_NO_MAX_GUARD
+        )
         out_threshold[unsafe_offset=slot] = threshold
 
         var n_left = Int(out_n_left[unsafe_offset=slot])

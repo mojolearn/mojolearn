@@ -372,18 +372,41 @@ differ, each by exactly one ULP — so the barrier is load-bearing. Fused Mojo v
 a reference built WITHOUT `-ffp-contract=off`: also 0 of 2658, because both
 toolchains lower the fused form to the same arm64 `fmadd`.
 
-**So unfused is a CHOICE, not the only thing that works.** It is chosen because
-the fused form's agreement is an accident of two compilers making the same
-decision on one target, and would have to be re-established on every backend;
-the unfused form is determined by the source. FMA versus mul-then-add differ by
-one rounding of the product, and on a threshold compared with `<=` against
-feature values, one rounding decides which side a row falls on when the
-threshold lands exactly on a value — which, for a threshold drawn between the
-observed min and max, is not rare.
+**AMENDED 2026-08-21, WHEN THE DEVICE ARRIVED: the rescale is now an EXPLICIT
+`fma`, on both sides, and the un-fused form is gone.**
 
-**Price.** One extra rounding against a `float64` sklearn, one un-inlinable
-call in the threshold path, and a build flag in `tools/rng_oracle/build.sh`
-that must not be dropped.
+The entry above chose unfused on the argument that the fused form's agreement
+was an accident of two compilers agreeing on one target while the unfused form
+is determined by the source. That argument was sound on the HOST and did not
+survive contact with a GPU backend.
+
+**What was measured.** The score kernel's draw and the host's disagreed in
+**9 of 105 scored cells**, worst 14 ulps (8 ulps over a 2,048-draw sweep), and
+the device's value was ALWAYS exactly `fma(res, span, start)` and never a third
+value. Six source-level barriers were tried and every one fused anyway on
+device: plain, `@no_inline`, an integer bitcast round trip, both together, and
+a private `stack_allocation` round trip — which fused on device AND made the
+host fuse. One shared-memory round trip looked like a fix in a probe and was an
+artefact of the probe using the product twice.
+
+**So the choice was never fused against unfused.** It was "fused on device and
+unfused on host" against "fused on both". An explicit `fma` is ONE IEEE
+operation, fixed by the source on every backend — strictly more determined than
+either — and it is also what RAFT's own expression becomes under nvcc's default
+`--fmad=true`, which is to say **the fused form is what the upstream actually
+computes on the hardware they ship for.** The unfused form was, in hindsight,
+the one that diverged from them.
+
+**What moved with it.** `tools/rng_oracle/main.cpp` now writes `std::fma` and
+its `-ffp-contract=off` flag is no longer load-bearing;
+`extratrees/tools/rng_oracle/pcg_reference.txt` was regenerated and
+`pcg_rng_check` is green on all 2,658 cells against it. Thresholds shift by up
+to one rounding, so trees drawn before and after this change differ — which is
+the cost, paid once, of host and device agreeing at all.
+
+**Price now.** One rounding against a `float64` sklearn, which deviation 130
+already puts out of reach, and nothing else. The `@no_inline` helper and the
+build flag are both deleted.
 
 ---
 
@@ -1349,3 +1372,124 @@ field comparisons, not one bit moved) rather than by asserting it.
 **Price.** One `Int32` mutex per node the caller must zero, one init launch,
 and a serialized publish per block instead of a wait-free atomic — which no
 float rational could have used anyway.
+
+---
+
+# The device draw and score pass — deviations 170-175
+
+## 170. The score pass is TWO launches, because no block can be elected last
+
+**Theirs.** `computeSplitKernel` elects a last block with `signalDone` plus
+`__threadfence()` (`builder_kernels_impl.cuh:295-317`) and scores inside it.
+
+**Ours.** A kernel boundary IS that fence: an accumulate launch, then a
+finalize launch of one thread per cell.
+
+**Why.** `threadfence` is comptime-asserted NVIDIA-only in Mojo 1.0, so no
+block can be elected. The same wall deviation 161 hit.
+
+**Why it costs no extra row work.** The second launch reads no dataset row —
+three range loads, the constant test, one draw, and an `n_acc` loop — so the
+pass over the node's rows still happens exactly once, which is the property
+that mattered.
+
+**Price.** One launch of `ceil(n_cells / 64)` blocks per level per objective.
+No timing number attached.
+
+---
+
+## 171. NOT a deviation: this merge IS their `atomicAdd`
+
+Deviation 161 replaced their cross-block combine with a mutex because a RANGE
+has no portable float atomic. This merge is an INTEGER ADD, which does have
+one, so `:301` is transcribed directly: one `Atomic.fetch_add` per accumulator
+per block, from thread 0. Order-independence is exact, which is what licenses
+the bit-exact check — the same argument as 160, for a different operation.
+
+Worth stating because the two kernels sitting next to each other with different
+combine strategies looks like an inconsistency and is not: it is the difference
+between an operation that has a portable atomic and one that does not.
+
+---
+
+## 172. No dynamic shared memory: private accumulators plus a block reduction
+
+**Theirs.** `extern __shared__` sized from `max_n_bins * num_outputs`
+(`builder.cuh:497-505`), incremented with shared-memory atomics.
+
+**Ours.** Two `stack_allocation[MAX_ACC, Int32]` PRIVATE arrays per thread and
+one `block.sum` per accumulator. Mojo's `stack_allocation[..., SHARED]` is
+comptime-sized, so their dynamic sizing has no counterpart.
+
+**Why it is not a loss.** Nothing scatters here: deviation 137 deleted the bin
+dimension, so the bound is over CLASSES alone. Their shared atomics existed to
+serialise scatter into bins that no longer exist.
+
+**Price.** `MAX_ACC * 2 * 4` bytes of private memory per thread and `n_acc`
+block reductions per block. A launch with `n_acc > MAX_ACC` publishes nothing
+and the cell stays `UNVISITED` — a refusal, not a truncation.
+
+---
+
+## 173. The draw is an explicit `fma`, and it is why deviation 142 was amended
+
+Every thread draws redundantly, because the key has nothing thread-local in it.
+
+The substance of this entry is in the amendment to deviation 142 above: the
+device fuses the rescale no matter how the source is written, six barriers were
+measured, and the resolution is an explicit `fma` on both sides. **The
+divergence was real before that: 9 of 105 scored cells differed between host and
+device**, which is to say a device tree and a host tree were different models.
+
+`node_feature_score_host` takes the draw as an explicit argument so a check can
+run the oracle against EITHER form and count the divergence, rather than
+assuming the question is settled.
+
+---
+
+## 174. The device sees only INTEGERS, and a refusal is a STATUS
+
+**Labels arrive pre-quantized.** Deviation 135 rules that regression
+accumulates in fixed point, so the host quantizes and the device receives
+`Int32`. The device therefore performs no float-to-int conversion at all and no
+rounding mode enters the accumulation. Class ids are cast on the host for the
+same reason.
+
+**A kernel cannot raise**, so `_refuse_missing`'s error becomes
+`SCORE_STATUS_MISSING_REFUSED`, in the same position in the branch order the
+host raise occupies. The caller converts it back into an error (deviation 136).
+
+**This discharges deviation 163's caller obligation**, and the discharge is a
+proof rather than a promise: the two ways to hold `min > max` are an all-missing
+column, which the refusal catches, and a zero-row node, which the constant
+test's `0 == 0` arm catches. **No threshold is ever drawn from a `(1.0, -1.0)`
+pair.**
+
+---
+
+## 175. The published width is Int64, and it is TIGHTER than the host's Int128 bound
+
+**Classification publishes `GiniProxyExact`'s `Int64` pair** and does not
+compute cuML's float `GainPerSplit` on device: deviation 145 makes that a
+reporting quantity, and computing it would drag deviation 142's FMA question
+into scoring.
+
+`num <= n^3/4` and `Int64` holds `2^63`, so the device bound is
+`SCORE_MAX_ROWS_EXACT = 2^21`.
+
+**AND THAT EXPOSED A BUG IN `objectives.mojo`.** Its `MAX_ROWS_EXACT` was
+`2^26`, which is the correct bound for the `Int128` CROSS-MULTIPLY and the
+wrong one for the `Int64` field the numerator is STORED in first. Measured:
+
+    n = 2^21   num = 2305843009213693952   Int64 agrees
+    n = 2^22   num = 18446744073709551616  Int64 reads 0   *** WRAPPED ***
+
+It wraps to exactly ZERO, so every candidate in the node would tie at the same
+numerator and the winner would fall to `Split.update`'s `colid` arm — decided
+by feature index, silently. `MAX_ROWS_EXACT` is now `2^21` with the measurement
+in its docstring. **A bound that permits garbage is worse than no bound**, and
+this one was written by the same lane three commits earlier.
+
+**MSE publishes no rational**: its numerator needs `Int128` by deviation 135's
+derivation, so the four accumulators ARE the score and `mse_proxy_exact` forms
+it on the host in one multiply each.
