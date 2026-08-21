@@ -2208,15 +2208,306 @@ struct TTreeWorkspace(Movable):
     var block_hist: DeviceBuffer[DType.float32]
     var hist_cells: Int
     var block_cells: Int
+    # ---- the rest of the per-tree setup, hoisted 2026-08-21 ----
+    # Everything below is sized by the DATASET SHAPE and either holds
+    # layout-derived constants (filled once here, kernels only read) or is
+    # scratch every level rewrites before reading. Re-creating it per tree
+    # was measured as a covtype-scale floor term: ~20 buffer creations,
+    # fifteen constant uploads and one drain per tree, none of which
+    # depends on the tree.
+    var n_rows_key: Int
+    var stat_count_key: Int
+    var max_leaves_key: Int
+    var n_features_key: Int
+    var hist_cells_per_leaf_key: Int
+    var dblocks: List[DeviceBlock]
+    var p_off: DeviceBuffer[DType.uint32]
+    var p_sz: DeviceBuffer[DType.uint32]
+    var hp_off: DeviceBuffer[DType.uint32]
+    var hp_sz: DeviceBuffer[DType.uint32]
+    var h_off: HostBuffer[DType.uint32]
+    var h_sz: HostBuffer[DType.uint32]
+    var part_stats: DeviceBuffer[DType.float32]
+    var stat_partials: DeviceBuffer[DType.float32]
+    var flags: DeviceBuffer[DType.uint8]
+    var seq: DeviceBuffer[DType.uint32]
+    var gmap: DeviceBuffer[DType.uint32]
+    var sflags: DeviceBuffer[DType.uint8]
+    var new_index: DeviceBuffer[DType.uint32]
+    var new_stats: DeviceBuffer[DType.float32]
+    var chunk_zeros: DeviceBuffer[DType.uint32]
+    var chunk_offsets: DeviceBuffer[DType.uint32]
+    var leaf_zeros: DeviceBuffer[DType.uint32]
+    var ids_c: DeviceBuffer[DType.uint32]
+    var zero_ids: DeviceBuffer[DType.uint32]
+    var h_zero_ids: HostBuffer[DType.uint32]
+    var dense_ids: DeviceBuffer[DType.uint32]
+    var leaf_values: DeviceBuffer[DType.float32]
+    var h_leaf_values: HostBuffer[DType.float32]
+    var ids_compute: DeviceBuffer[DType.uint32]
+    var h_ids_compute: HostBuffer[DType.uint32]
+    var sub_from: DeviceBuffer[DType.uint32]
+    var sub_what: DeviceBuffer[DType.uint32]
+    var h_sub_from: HostBuffer[DType.uint32]
+    var h_sub_what: HostBuffer[DType.uint32]
+    var skip: DeviceBuffer[DType.uint8]
+    var out_score: DeviceBuffer[DType.float32]
+    var out_bin: DeviceBuffer[DType.uint32]
+    var winners_score: DeviceBuffer[DType.float32]
+    var winners_bf: DeviceBuffer[DType.uint32]
+    var h_wsc: HostBuffer[DType.float32]
+    var h_wbf: HostBuffer[DType.uint32]
+    var sp_feats: DeviceBuffer[DType.uint8]
+    var sp_feats_h: HostBuffer[DType.uint8]
+    var sp_bins: DeviceBuffer[DType.uint32]
+    var sp_bins_h: HostBuffer[DType.uint32]
+    var flat_first: DeviceBuffer[DType.uint32]
+    var flat_folds: DeviceBuffer[DType.uint32]
+    var flat_one_hot: DeviceBuffer[DType.uint8]
+    var bff: DeviceBuffer[DType.uint32]
+    var ffw: DeviceBuffer[DType.float32]
+    var bfr_off: DeviceBuffer[DType.uint32]
+    var bfr_mask: DeviceBuffer[DType.uint32]
+    var bfr_shift: DeviceBuffer[DType.uint32]
+    var bfr_first: DeviceBuffer[DType.uint32]
+    var bfr_folds: DeviceBuffer[DType.uint32]
+    var bfr_oh: DeviceBuffer[DType.uint8]
+    var bfr_bin: DeviceBuffer[DType.uint32]
 
     def __init__(
-        out self, ctx: DeviceContext, hist_cells: Int, block_cells: Int
+        out self,
+        ctx: DeviceContext,
+        layout: CompressedIndexLayout,
+        blocks: List[PolicyBlock],
+        n_rows: Int,
+        stat_count: Int,
+        max_depth: Int,
     ) raises:
-        self.hist = ctx.enqueue_create_buffer[DType.float32](hist_cells)
-        self.acc_i32 = ctx.enqueue_create_buffer[DType.int32](hist_cells)
-        self.block_hist = ctx.enqueue_create_buffer[DType.float32](block_cells)
+        var max_leaves = 1 << max_depth
+        var n_features = len(layout.features)
+        var hist_cells_per_leaf = layout.hist_cells
+        var hist_cells = max_leaves * stat_count * hist_cells_per_leaf
+        var widest_block = 1
+        for b in range(len(blocks)):
+            var tf = 0
+            for k in range(blocks[b].count()):
+                tf += Int(blocks[b].folds[k])
+            if tf > widest_block:
+                widest_block = tf
+        var block_cells = max_leaves * stat_count * widest_block
+        var argmax_blocks = (hist_cells_per_leaf + 255) // 256
+        if argmax_blocks > 64:
+            argmax_blocks = 64
+        if argmax_blocks < 1:
+            argmax_blocks = 1
+        var sm_count = ctx.get_attribute(
+            DeviceAttribute.MULTIPROCESSOR_COUNT
+        )
+        var stat_chunks = (n_rows + STATS_BLOCK - 1) // STATS_BLOCK
+        var machine_chunks = partition_stats_chunks(sm_count, stat_count)
+        if machine_chunks > stat_chunks:
+            stat_chunks = machine_chunks
+        var max_chunks = (n_rows + PARTITION_BLOCK - 1) // PARTITION_BLOCK
+
+        self.n_rows_key = n_rows
+        self.stat_count_key = stat_count
+        self.max_leaves_key = max_leaves
+        self.n_features_key = n_features
+        self.hist_cells_per_leaf_key = hist_cells_per_leaf
         self.hist_cells = hist_cells
         self.block_cells = block_cells
+        self.hist = ctx.enqueue_create_buffer[DType.float32](hist_cells)
+        self.acc_i32 = ctx.enqueue_create_buffer[DType.int32](hist_cells)
+        self.block_hist = ctx.enqueue_create_buffer[DType.float32](
+            block_cells
+        )
+        self.p_off = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+        self.p_sz = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+        self.hp_off = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+        self.hp_sz = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+        self.h_off = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
+        self.h_sz = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
+        self.part_stats = ctx.enqueue_create_buffer[DType.float32](
+            max_leaves * stat_count
+        )
+        self.stat_partials = ctx.enqueue_create_buffer[DType.float32](
+            max_leaves * stat_count * stat_chunks
+        )
+        self.flags = ctx.enqueue_create_buffer[DType.uint8](n_rows)
+        self.seq = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+        self.gmap = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+        self.sflags = ctx.enqueue_create_buffer[DType.uint8](n_rows)
+        self.new_index = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+        self.new_stats = ctx.enqueue_create_buffer[DType.float32](
+            stat_count * n_rows
+        )
+        self.chunk_zeros = ctx.enqueue_create_buffer[DType.uint32](
+            max_leaves * max_chunks
+        )
+        self.chunk_offsets = ctx.enqueue_create_buffer[DType.uint32](
+            max_leaves * max_chunks
+        )
+        self.leaf_zeros = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+        self.ids_c = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+        self.zero_ids = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+        self.h_zero_ids = ctx.enqueue_create_host_buffer[DType.uint32](
+            max_leaves
+        )
+        self.dense_ids = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+        self.leaf_values = ctx.enqueue_create_buffer[DType.float32](
+            max_leaves
+        )
+        self.h_leaf_values = ctx.enqueue_create_host_buffer[DType.float32](
+            max_leaves
+        )
+        self.ids_compute = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+        self.h_ids_compute = ctx.enqueue_create_host_buffer[DType.uint32](
+            max_leaves
+        )
+        self.sub_from = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+        self.sub_what = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+        self.h_sub_from = ctx.enqueue_create_host_buffer[DType.uint32](
+            max_leaves
+        )
+        self.h_sub_what = ctx.enqueue_create_host_buffer[DType.uint32](
+            max_leaves
+        )
+        self.skip = ctx.enqueue_create_buffer[DType.uint8](
+            hist_cells_per_leaf
+        )
+        self.out_score = ctx.enqueue_create_buffer[DType.float32](
+            argmax_blocks
+        )
+        self.out_bin = ctx.enqueue_create_buffer[DType.uint32](argmax_blocks)
+        self.winners_score = ctx.enqueue_create_buffer[DType.float32](
+            max_depth
+        )
+        self.winners_bf = ctx.enqueue_create_buffer[DType.uint32](max_depth)
+        self.h_wsc = ctx.enqueue_create_host_buffer[DType.float32](max_depth)
+        self.h_wbf = ctx.enqueue_create_host_buffer[DType.uint32](max_depth)
+        var built_f = make_split_features_buffers(ctx, max_leaves)
+        self.sp_feats = built_f[0]
+        self.sp_feats_h = built_f[1]
+        self.sp_bins = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+        self.sp_bins_h = ctx.enqueue_create_host_buffer[DType.uint32](
+            max_leaves
+        )
+        self.flat_first = ctx.enqueue_create_buffer[DType.uint32](n_features)
+        self.flat_folds = ctx.enqueue_create_buffer[DType.uint32](n_features)
+        self.flat_one_hot = ctx.enqueue_create_buffer[DType.uint8](
+            n_features
+        )
+        self.bff = ctx.enqueue_create_buffer[DType.uint32](
+            hist_cells_per_leaf
+        )
+        self.ffw = ctx.enqueue_create_buffer[DType.float32](n_features)
+        self.bfr_off = ctx.enqueue_create_buffer[DType.uint32](
+            hist_cells_per_leaf
+        )
+        self.bfr_mask = ctx.enqueue_create_buffer[DType.uint32](
+            hist_cells_per_leaf
+        )
+        self.bfr_shift = ctx.enqueue_create_buffer[DType.uint32](
+            hist_cells_per_leaf
+        )
+        self.bfr_first = ctx.enqueue_create_buffer[DType.uint32](
+            hist_cells_per_leaf
+        )
+        self.bfr_folds = ctx.enqueue_create_buffer[DType.uint32](
+            hist_cells_per_leaf
+        )
+        self.bfr_oh = ctx.enqueue_create_buffer[DType.uint8](
+            hist_cells_per_leaf
+        )
+        self.bfr_bin = ctx.enqueue_create_buffer[DType.uint32](
+            hist_cells_per_leaf
+        )
+        self.dblocks = upload_blocks(ctx, blocks)
+
+        # ---- constant fills: staged locally, settled by the one drain ----
+        var h_dense = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
+        for i in range(max_leaves):
+            h_dense.unsafe_ptr().unsafe_store(i, UInt32(i))
+        ctx.enqueue_copy(dst_buf=self.dense_ids, src_ptr=h_dense.unsafe_ptr())
+        var hsk = ctx.enqueue_create_host_buffer[DType.uint8](
+            hist_cells_per_leaf
+        )
+        for i in range(hist_cells_per_leaf):
+            hsk.unsafe_ptr().unsafe_store(i, UInt8(0))
+        ctx.enqueue_copy(dst_buf=self.skip, src_ptr=hsk.unsafe_ptr())
+        var hff = ctx.enqueue_create_host_buffer[DType.uint32](n_features)
+        var hfd = ctx.enqueue_create_host_buffer[DType.uint32](n_features)
+        var hfoh = ctx.enqueue_create_host_buffer[DType.uint8](n_features)
+        for i in range(n_features):
+            hff.unsafe_ptr().unsafe_store(
+                i, layout.features[i].first_fold_index
+            )
+            hfd.unsafe_ptr().unsafe_store(i, layout.features[i].folds)
+            hfoh.unsafe_ptr().unsafe_store(
+                i,
+                UInt8(1) if layout.features[i].one_hot_feature else UInt8(0),
+            )
+        ctx.enqueue_copy(dst_buf=self.flat_first, src_ptr=hff.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=self.flat_folds, src_ptr=hfd.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=self.flat_one_hot, src_ptr=hfoh.unsafe_ptr())
+        var hbf = ctx.enqueue_create_host_buffer[DType.uint32](
+            hist_cells_per_leaf
+        )
+        var hfw = ctx.enqueue_create_host_buffer[DType.float32](n_features)
+        for f in range(n_features):
+            ref lf = layout.features[f]
+            for b in range(Int(lf.folds)):
+                hbf.unsafe_ptr().unsafe_store(
+                    Int(lf.first_fold_index) + b, UInt32(f)
+                )
+        for f in range(n_features):
+            hfw.unsafe_ptr().unsafe_store(f, Float32(1.0))
+        ctx.enqueue_copy(dst_buf=self.bff, src_ptr=hbf.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=self.ffw, src_ptr=hfw.unsafe_ptr())
+        var hbr1 = ctx.enqueue_create_host_buffer[DType.uint32](
+            hist_cells_per_leaf
+        )
+        var hbr2 = ctx.enqueue_create_host_buffer[DType.uint32](
+            hist_cells_per_leaf
+        )
+        var hbr3 = ctx.enqueue_create_host_buffer[DType.uint32](
+            hist_cells_per_leaf
+        )
+        var hbr4 = ctx.enqueue_create_host_buffer[DType.uint32](
+            hist_cells_per_leaf
+        )
+        var hbr5 = ctx.enqueue_create_host_buffer[DType.uint32](
+            hist_cells_per_leaf
+        )
+        var hbr6 = ctx.enqueue_create_host_buffer[DType.uint8](
+            hist_cells_per_leaf
+        )
+        var hbr7 = ctx.enqueue_create_host_buffer[DType.uint32](
+            hist_cells_per_leaf
+        )
+        for f in range(n_features):
+            ref tf2 = layout.features[f]
+            for b in range(Int(tf2.folds)):
+                var bfx = Int(tf2.first_fold_index) + b
+                hbr1.unsafe_ptr().unsafe_store(
+                    bfx, tf2.offset * UInt32(n_rows)
+                )
+                hbr2.unsafe_ptr().unsafe_store(bfx, tf2.mask)
+                hbr3.unsafe_ptr().unsafe_store(bfx, tf2.shift)
+                hbr4.unsafe_ptr().unsafe_store(bfx, tf2.first_fold_index)
+                hbr5.unsafe_ptr().unsafe_store(bfx, tf2.folds)
+                hbr6.unsafe_ptr().unsafe_store(
+                    bfx, UInt8(1) if tf2.one_hot_feature else UInt8(0)
+                )
+                hbr7.unsafe_ptr().unsafe_store(bfx, UInt32(b))
+        ctx.enqueue_copy(dst_buf=self.bfr_off, src_ptr=hbr1.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=self.bfr_mask, src_ptr=hbr2.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=self.bfr_shift, src_ptr=hbr3.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=self.bfr_first, src_ptr=hbr4.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=self.bfr_folds, src_ptr=hbr5.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=self.bfr_oh, src_ptr=hbr6.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=self.bfr_bin, src_ptr=hbr7.unsafe_ptr())
+        ctx.synchronize()
 
 
 def run_tree_layout[
@@ -2278,7 +2569,6 @@ def run_tree_layout[
 
     var layout = build_layout(fold_counts, one_hot)
     var blocks = blocks_for(layout, n_rows)
-    var dblocks = upload_blocks(ctx, blocks)
     var hist_cells_per_leaf = layout.hist_cells
 
     # their `TArchProps::SMCount()`, read from the device rather than
@@ -2291,12 +2581,89 @@ def run_tree_layout[
     if wide < 1:
         wide = 1
 
-    var p_off = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
-    var p_sz = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
-    var hp_off = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
-    var hp_sz = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
-    var h_off = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
-    var h_sz = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
+    # ---- THE POOL, which since 2026-08-21 carries the WHOLE setup ----
+    # (see TTreeWorkspace's deviation block). A key mismatch means a
+    # different dataset shape reached this searcher; rebuild everything.
+    if (
+        len(ws) == 0
+        or ws[0].n_rows_key != n_rows
+        or ws[0].stat_count_key != stat_count
+        or ws[0].max_leaves_key != max_leaves
+        or ws[0].n_features_key != len(fold_counts)
+        or ws[0].hist_cells_per_leaf_key != hist_cells_per_leaf
+    ):
+        ws.clear()
+        ws.append(TTreeWorkspace(
+            ctx, layout, blocks, n_rows, stat_count, max_depth
+        ))
+    ref hist = ws[0].hist
+    ref block_hist = ws[0].block_hist
+    ref acc_i32 = ws[0].acc_i32
+    ref dblocks = ws[0].dblocks
+    ref p_off = ws[0].p_off
+    ref p_sz = ws[0].p_sz
+    ref hp_off = ws[0].hp_off
+    ref hp_sz = ws[0].hp_sz
+    ref h_off = ws[0].h_off
+    ref h_sz = ws[0].h_sz
+    ref part_stats = ws[0].part_stats
+    ref stat_partials = ws[0].stat_partials
+    ref flags = ws[0].flags
+    ref seq = ws[0].seq
+    ref gmap = ws[0].gmap
+    ref sflags = ws[0].sflags
+    ref new_index = ws[0].new_index
+    ref new_stats = ws[0].new_stats
+    ref chunk_zeros = ws[0].chunk_zeros
+    ref chunk_offsets = ws[0].chunk_offsets
+    ref leaf_zeros = ws[0].leaf_zeros
+    ref ids_c = ws[0].ids_c
+    ref zero_ids = ws[0].zero_ids
+    ref h_zero_ids = ws[0].h_zero_ids
+    ref dense_ids = ws[0].dense_ids
+    ref leaf_values = ws[0].leaf_values
+    ref h_leaf_values = ws[0].h_leaf_values
+    ref ids_compute = ws[0].ids_compute
+    ref h_ids_compute = ws[0].h_ids_compute
+    ref sub_from = ws[0].sub_from
+    ref sub_what = ws[0].sub_what
+    ref h_sub_from = ws[0].h_sub_from
+    ref h_sub_what = ws[0].h_sub_what
+    ref skip = ws[0].skip
+    ref out_score = ws[0].out_score
+    ref out_bin = ws[0].out_bin
+    ref winners_score = ws[0].winners_score
+    ref winners_bf = ws[0].winners_bf
+    ref sp_feats = ws[0].sp_feats
+    ref sp_feats_h = ws[0].sp_feats_h
+    ref sp_bins = ws[0].sp_bins
+    ref sp_bins_h = ws[0].sp_bins_h
+    ref h_wsc = ws[0].h_wsc
+    ref h_wbf = ws[0].h_wbf
+    ref flat_first = ws[0].flat_first
+    ref flat_folds = ws[0].flat_folds
+    ref flat_one_hot = ws[0].flat_one_hot
+    ref bff = ws[0].bff
+    ref ffw = ws[0].ffw
+    ref bfr_off = ws[0].bfr_off
+    ref bfr_mask = ws[0].bfr_mask
+    ref bfr_shift = ws[0].bfr_shift
+    ref bfr_first = ws[0].bfr_first
+    ref bfr_folds = ws[0].bfr_folds
+    ref bfr_oh = ws[0].bfr_oh
+    ref bfr_bin = ws[0].bfr_bin
+
+    # `argmaxBlockCount = Min(CeilDivide(binFeatureCountPerDevice, 256),
+    # 64)` (`greedy_search_helper.cpp:439`), still needed for the score
+    # launches below; the buffers it sizes live in the pool.
+    var argmax_blocks = (hist_cells_per_leaf + 255) // 256
+    if argmax_blocks > 64:
+        argmax_blocks = 64
+    if argmax_blocks < 1:
+        argmax_blocks = 1
+
+    # ---- per-tree state, the only part the pool cannot carry over ----
+    # their `CreateInitialSubsets`' root partition and `FillBuffer` zeroing
     for i in range(max_leaves):
         h_off.unsafe_ptr().unsafe_store(i, UInt32(0))
         h_sz.unsafe_ptr().unsafe_store(i, UInt32(0))
@@ -2305,41 +2672,7 @@ def run_tree_layout[
     ctx.enqueue_copy(dst_buf=p_sz, src_ptr=h_sz.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=hp_off, src_ptr=h_off.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=hp_sz, src_ptr=h_sz.unsafe_ptr())
-
-    var hist_cells = max_leaves * stat_count * hist_cells_per_leaf
-
-    # THE POOL OF ONE, see `TTreeWorkspace`. The block scratch is sized
-    # below in the original code; it is needed here, so its width is
-    # computed first and the old site keeps only the binding.
-    var widest_block = 1
-    for b in range(len(blocks)):
-        var tf = 0
-        for k in range(blocks[b].count()):
-            tf += Int(blocks[b].folds[k])
-        if tf > widest_block:
-            widest_block = tf
-    var block_cells = max_leaves * stat_count * widest_block
-    if (
-        len(ws) == 0
-        or ws[0].hist_cells < hist_cells
-        or ws[0].block_cells < block_cells
-    ):
-        ws.clear()
-        ws.append(TTreeWorkspace(ctx, hist_cells, block_cells))
-    ref hist = ws[0].hist
-    # their `FillBuffer(subsets.Histograms, 0.0f)` in `CreateInitialSubsets`
-    # (`split_properties_helper.cpp:1061`). `zero_histograms_kernel` clears
-    # only `plan.compute_ids`, by design, so every other slot holds whatever
-    # the allocation came with until the bridge writes it, and the bridge
-    # writes only the cells the kernels produced.
     ctx.enqueue_memset(hist, Float32(0.0))
-
-    # Scratch for the per-block layout, sized to the LARGEST block above.
-    ref block_hist = ws[0].block_hist
-    ref acc_i32 = ws[0].acc_i32
-    # `FillBuffer` semantics are UNCHANGED: a pooled plane carries the last
-    # tree's cells, so both planes are zeroed here exactly as an
-    # allocate-per-tree one was.
     ctx.enqueue_memset(acc_i32, Int32(0))
 
     # See the note in `run_tree`: one scale serves both accumulated planes,
@@ -2354,261 +2687,6 @@ def run_tree_layout[
     if gmag > mag:
         mag = gmag
     var fixed_scale = Float32(choose_scale(mag, n_rows))
-
-    var part_stats = ctx.enqueue_create_buffer[DType.float32](
-        max_leaves * stat_count
-    )
-    # SIZED BY THE MACHINE CHUNK COUNT, NOT THE DATA. The kernels index
-    # `(leaf * n_stats + stat) * max_chunks + chunk` with `max_chunks =
-    # partition_stats_chunks(sm_count, n_stats)` -- their machine-sized
-    # grid -- and this buffer was still sized by `ceil(n_rows /
-    # STATS_BLOCK)` from the data-sized era. Whenever the data count was
-    # SMALLER (every fit under ~5k rows on this box), the deep-level
-    # writes ran past the end: leaf 15, stat 1, chunk 9 lands at slot 319
-    # of a 256-float buffer at depth 6 on 4096 rows. The scribble was
-    # SELF-CONSISTENT (phase 2 reads the same out-of-bounds slots), so
-    # the 4096-row oracle fixtures passed over it for days; it surfaced
-    # as NaN leaf values only when the allocator placed something
-    # volatile after the buffer (caught by the train-api check,
-    # 2026-08-21). The larger of the two counts is always safe.
-    var stat_chunks = (n_rows + STATS_BLOCK - 1) // STATS_BLOCK
-    var machine_chunks = partition_stats_chunks(sm_count, stat_count)
-    if machine_chunks > stat_chunks:
-        stat_chunks = machine_chunks
-    var stat_partials = ctx.enqueue_create_buffer[DType.float32](
-        max_leaves * stat_count * stat_chunks
-    )
-
-    var flags = ctx.enqueue_create_buffer[DType.uint8](n_rows)
-    var seq = ctx.enqueue_create_buffer[DType.uint32](n_rows)
-    var gmap = ctx.enqueue_create_buffer[DType.uint32](n_rows)
-    var sflags = ctx.enqueue_create_buffer[DType.uint8](n_rows)
-    var new_index = ctx.enqueue_create_buffer[DType.uint32](n_rows)
-    var new_stats = ctx.enqueue_create_buffer[DType.float32](
-        stat_count * n_rows
-    )
-
-    var max_chunks = (n_rows + PARTITION_BLOCK - 1) // PARTITION_BLOCK
-    var chunk_zeros = ctx.enqueue_create_buffer[DType.uint32](
-        max_leaves * max_chunks
-    )
-    var chunk_offsets = ctx.enqueue_create_buffer[DType.uint32](
-        max_leaves * max_chunks
-    )
-    var leaf_zeros = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
-
-    # `ids_a` and `ids_b` are gone from this function: their content was
-    # ALWAYS the dense sequence `0..n_live-1`, which `dense_ids` already
-    # holds -- their `leavesToSplit` for a symmetric tree is every live
-    # leaf, and their `leftIds` keep the parents' slots. `ids_c` (their
-    # `rightIds`, `leavesCount + i`) is written per level by
-    # `resolve_and_pack_kernel`.
-    var ids_c = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
-
-    # their `zeroLeaves` (`split_properties_helper.cpp:1344`) and the mirror
-    # buffer `ZeroLeavesHistograms` writes it into (`:1391-1392`). It is a
-    # buffer of its own and not a second copy of `h_ids_compute`, because
-    # `enqueue_copy` is asynchronous: overwriting one host staging buffer to
-    # feed two device buffers races the first copy.
-    var zero_ids = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
-    var h_zero_ids = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
-
-    # `0, 1, 2, ...`, the DENSE index list. Their histogram kernels write the
-    # block scratch at `blockIdx.y`, so anything addressing that scratch by
-    # position needs this rather than the leaf-id list.
-    var dense_ids = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
-    var h_dense = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
-    for i in range(max_leaves):
-        h_dense.unsafe_ptr().unsafe_store(i, UInt32(i))
-    ctx.enqueue_copy(dst_buf=dense_ids, src_ptr=h_dense.unsafe_ptr())
-
-    # their weak model's leaf values, one per final leaf
-    var leaf_values = ctx.enqueue_create_buffer[DType.float32](max_leaves)
-    var h_leaf_values = ctx.enqueue_create_host_buffer[DType.float32](
-        max_leaves
-    )
-
-    # their `computeLeaves`, `bigLeaves`, `smallLeaves`
-    # (`split_properties_helper.cpp:1287-1291`)
-    var ids_compute = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
-    var h_ids_compute = ctx.enqueue_create_host_buffer[DType.uint32](
-        max_leaves
-    )
-    var sub_from = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
-    var sub_what = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
-    var h_sub_from = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
-    var h_sub_what = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
-
-    var skip = ctx.enqueue_create_buffer[DType.uint8](hist_cells_per_leaf)
-    var hsk = ctx.enqueue_create_host_buffer[DType.uint8](
-        hist_cells_per_leaf
-    )
-    for i in range(hist_cells_per_leaf):
-        hsk.unsafe_ptr().unsafe_store(i, UInt8(0))
-    ctx.enqueue_copy(dst_buf=skip, src_ptr=hsk.unsafe_ptr())
-
-    # their `argmaxBlockCount = Min(CeilDivide(binFeatureCountPerDevice,
-    # 256), 64)` (`greedy_search_helper.cpp:439`) and `bestProps` sized
-    # `argmaxBlockCount * numScoreBlocks` (`:440`), `numScoreBlocks == 1`
-    # for a symmetric tree. This launch ran at grid (1,1,1) -- ONE
-    # threadgroup walking every candidate -- and measured 11 ms/tree of the
-    # 41.7 ms fixed cost at 800k x 100 depth 6. The block decomposition
-    # cannot change the winner: the tie-break (gain, then bin-feature index,
-    # their `TBestSplitProperties::operator<`, `gpu_structures.h:80-94`) is
-    # a total order over candidates, so this is a SCHEDULING row, not a
-    # numeric one.
-    var argmax_blocks = (hist_cells_per_leaf + 255) // 256
-    if argmax_blocks > 64:
-        argmax_blocks = 64
-    if argmax_blocks < 1:
-        argmax_blocks = 1
-    var out_score = ctx.enqueue_create_buffer[DType.float32](argmax_blocks)
-    var out_bin = ctx.enqueue_create_buffer[DType.uint32](argmax_blocks)
-
-    # The per-level winner records `resolve_and_pack_kernel` writes and the
-    # host reads back in the SAME drain as the leaf sizes -- the fold that
-    # takes a level from two blocking reads to one (DEVIATION BLOCK in
-    # `kernel/split_resolve.mojo`; their level reads `bestProps` and the
-    # sizes separately, `greedy_search_helper.cpp:517` + `:800-813`).
-    var winners_score = ctx.enqueue_create_buffer[DType.float32](max_depth)
-    var winners_bf = ctx.enqueue_create_buffer[DType.uint32](max_depth)
-    var h_wsc = ctx.enqueue_create_host_buffer[DType.float32](max_depth)
-    var h_wbf = ctx.enqueue_create_host_buffer[DType.uint32](max_depth)
-
-    # Their `MakeSplit` packs every ui32 it has to send into ONE buffer and
-    # copies once (`split_properties_helper.cpp:886-905`):
-    #
-    #     const TSlice binsSlice      = TSlice(0, splitBins.size());
-    #     const TSlice leftIdsSlice   = TSlice(binsSlice.Right, ...);
-    #     const TSlice rightIdsSlice  = TSlice(leftIdsSlice.Right, ...);
-    #     auto allUi32Data = TMirrorBuffer<ui32>::Create(...);
-    #     allUi32DataCpu.Write(tmp);
-    #     allUi32Data.Copy(allUi32DataCpu);
-    #
-    # Ours holds the four ui32 fields of the split descriptor the same way.
-    # It used to be four separate buffers and four separate copies followed
-    # by a drain. The one-hot flag stays its own buffer because it is UInt8,
-    # which is also why theirs keeps `splitFeaturesGpu` separate from
-    # `allUi32Data`.
-    var built_f = make_split_features_buffers(ctx, max_leaves)
-    var sp_feats = built_f[0]
-    var sp_feats_h = built_f[1]
-    var sp_bins = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
-    var sp_bins_h = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
-
-    # The scan needs each feature's first bin and fold count over the FLAT
-    # histogram, which is exactly what the layout holds.
-    var flat_first = ctx.enqueue_create_buffer[DType.uint32](
-        len(fold_counts)
-    )
-    var flat_folds = ctx.enqueue_create_buffer[DType.uint32](
-        len(fold_counts)
-    )
-    # ...and their `TBinarizedFeature::OneHotFeature`, which the scan tests
-    # before it prefix-sums anything (`histogram_utils.cu:395`). A one-hot
-    # feature's bins are equality tests, so a running prefix over them is
-    # meaningless. `build_layout` reports False for every feature today; the
-    # flag is carried so the scan is already right when categoricals land.
-    var flat_one_hot = ctx.enqueue_create_buffer[DType.uint8](
-        len(fold_counts)
-    )
-    var hff = ctx.enqueue_create_host_buffer[DType.uint32](len(fold_counts))
-    var hfd = ctx.enqueue_create_host_buffer[DType.uint32](len(fold_counts))
-    var hfoh = ctx.enqueue_create_host_buffer[DType.uint8](len(fold_counts))
-    for i in range(len(fold_counts)):
-        hff.unsafe_ptr().unsafe_store(i, layout.features[i].first_fold_index)
-        hfd.unsafe_ptr().unsafe_store(i, layout.features[i].folds)
-        hfoh.unsafe_ptr().unsafe_store(
-            i, UInt8(1) if layout.features[i].one_hot_feature else UInt8(0)
-        )
-    ctx.enqueue_copy(dst_buf=flat_first, src_ptr=hff.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=flat_folds, src_ptr=hfd.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=flat_one_hot, src_ptr=hfoh.unsafe_ptr())
-
-    # THEIR `BinFeatures` AND `FeatureWeights`, WHICH ARE PER-TREE.
-    # `bff` is the `TCBinFeature.FeatureId` column (`compute_scores.cu:136`),
-    # here the flattened bin-feature to feature map the layout defines; `ffw`
-    # is their `binFeaturesWeights`, all 1.0 because `UpdateFeatureWeights`
-    # fills 1.0 and returns early with no CTRs
-    # (`update_feature_weights.cpp:14-22`) -- their value, not a stub.
-    #
-    # `CreateInitialSubsets` builds both once
-    # (`split_properties_helper.cpp:1063`, `:1075-1076`) and
-    # `structure_searcher_template.h:49` runs it once before the level loop
-    # at `:55-65`. `ComputeOptimalSplits` reads them at
-    # `greedy_search_helper.cpp:455-456` and allocates neither; the one call
-    # that touches them per level, `UpdateFeatureWeightsForBestSplits`
-    # (`:447`), returns immediately when there are no CTRs
-    # (`update_feature_weights.cpp:20-22`).
-    #
-    # Both used to be created INSIDE the depth loop, along with their host
-    # staging, and the `bff` fill re-walked every feature and every one of
-    # its folds at every level to write the same map. Neither value depends
-    # on `depth`, and `layout` is fixed for the whole tree.
-    #
-    # LIFETIME. Nothing writes `bff` or `ffw` after the two copies below, so
-    # no level can read a stale or half-written value. `hbf` and `hfw` are
-    # the host staging for those copies and stay in scope for the whole
-    # function, so the asynchronous copy cannot outlive its source; the
-    # `ctx.synchronize()` below settles both before the first level.
-    var bff = ctx.enqueue_create_buffer[DType.uint32](hist_cells_per_leaf)
-    var hbf = ctx.enqueue_create_host_buffer[DType.uint32](
-        hist_cells_per_leaf
-    )
-    var ffw = ctx.enqueue_create_buffer[DType.float32](len(fold_counts))
-    var hfw = ctx.enqueue_create_host_buffer[DType.float32](len(fold_counts))
-    for f in range(len(fold_counts)):
-        ref lf = layout.features[f]
-        for b in range(Int(lf.folds)):
-            hbf.unsafe_ptr().unsafe_store(
-                Int(lf.first_fold_index) + b, UInt32(f)
-            )
-    for f in range(len(fold_counts)):
-        hfw.unsafe_ptr().unsafe_store(f, Float32(1.0))
-    ctx.enqueue_copy(dst_buf=bff, src_ptr=hbf.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=ffw, src_ptr=hfw.unsafe_ptr())
-
-    # THE PER-BIN-FEATURE TCFeature TABLE for `resolve_and_pack_kernel`:
-    # what the host's `resolve_split` walk + `MakeSplit` pack derived per
-    # level, precomputed once per tree because none of it depends on
-    # `depth`. Seven parallel arrays indexed by FLAT BIN-FEATURE; `offset`
-    # is pre-scaled by `n_rows` exactly as the old host pack scaled it.
-    var bfr_off = ctx.enqueue_create_buffer[DType.uint32](hist_cells_per_leaf)
-    var bfr_mask = ctx.enqueue_create_buffer[DType.uint32](hist_cells_per_leaf)
-    var bfr_shift = ctx.enqueue_create_buffer[DType.uint32](hist_cells_per_leaf)
-    var bfr_first = ctx.enqueue_create_buffer[DType.uint32](hist_cells_per_leaf)
-    var bfr_folds = ctx.enqueue_create_buffer[DType.uint32](hist_cells_per_leaf)
-    var bfr_oh = ctx.enqueue_create_buffer[DType.uint8](hist_cells_per_leaf)
-    var bfr_bin = ctx.enqueue_create_buffer[DType.uint32](hist_cells_per_leaf)
-    var hbr1 = ctx.enqueue_create_host_buffer[DType.uint32](hist_cells_per_leaf)
-    var hbr2 = ctx.enqueue_create_host_buffer[DType.uint32](hist_cells_per_leaf)
-    var hbr3 = ctx.enqueue_create_host_buffer[DType.uint32](hist_cells_per_leaf)
-    var hbr4 = ctx.enqueue_create_host_buffer[DType.uint32](hist_cells_per_leaf)
-    var hbr5 = ctx.enqueue_create_host_buffer[DType.uint32](hist_cells_per_leaf)
-    var hbr6 = ctx.enqueue_create_host_buffer[DType.uint8](hist_cells_per_leaf)
-    var hbr7 = ctx.enqueue_create_host_buffer[DType.uint32](hist_cells_per_leaf)
-    for f in range(len(fold_counts)):
-        ref tf = layout.features[f]
-        for b in range(Int(tf.folds)):
-            var bfx = Int(tf.first_fold_index) + b
-            hbr1.unsafe_ptr().unsafe_store(bfx, tf.offset * UInt32(n_rows))
-            hbr2.unsafe_ptr().unsafe_store(bfx, tf.mask)
-            hbr3.unsafe_ptr().unsafe_store(bfx, tf.shift)
-            hbr4.unsafe_ptr().unsafe_store(bfx, tf.first_fold_index)
-            hbr5.unsafe_ptr().unsafe_store(bfx, tf.folds)
-            hbr6.unsafe_ptr().unsafe_store(
-                bfx, UInt8(1) if tf.one_hot_feature else UInt8(0)
-            )
-            hbr7.unsafe_ptr().unsafe_store(bfx, UInt32(b))
-    ctx.enqueue_copy(dst_buf=bfr_off, src_ptr=hbr1.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=bfr_mask, src_ptr=hbr2.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=bfr_shift, src_ptr=hbr3.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=bfr_first, src_ptr=hbr4.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=bfr_folds, src_ptr=hbr5.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=bfr_oh, src_ptr=hbr6.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=bfr_bin, src_ptr=hbr7.unsafe_ptr())
-
-    ctx.synchronize()
 
     # ================================================================
     # Their `TGreedyTreeLikeStructureSearcher::FitImpl`
