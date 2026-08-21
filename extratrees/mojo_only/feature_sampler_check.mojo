@@ -684,12 +684,23 @@ def main() raises:
     print("        min", bulk_lo, "max", bulk_hi)
 
     # =====================================================================
-    # 8. THE mask[0] PREDECESSOR, AND THE n-1 FILLER: cuML's own bias
+    # 8. NO COLUMN IS STARVED AND NONE IS FAVOURED -- the two cuML bugs, fixed
     # =====================================================================
-    # These are not defects in the port. They are what
-    # `builder_kernels.cuh:231-232` and `:201-203` do, and they are asserted
-    # so that "improving" either one turns this check red.
-    print("[bias] the two structural biases of their excess kernel, measured")
+    # THIS SECTION USED TO ASSERT THE OPPOSITE. It pinned cuML's two
+    # structural biases in place on the reasoning that they are what
+    # `builder_kernels.cuh:231-232` and `:201-203` do and that COPY, DO NOT
+    # IMPROVE therefore required reproducing them. Andrew, 2026-08-21: **do
+    # not port bugs, fix them.** Deviations 164 and 165 are the fixes and this
+    # section is now the regression guard for them, in the direction that
+    # makes the learner right.
+    #
+    # What the old behaviour cost, measured before the fix and kept here so
+    # nobody re-derives it: at k = 1, column 0 was drawn 0 times of 64 at
+    # every one of n = 2, 3, 4 and 8 -- never, not merely rarely -- and column
+    # n-1 was drawn 662 times against 512 expected. On a two-column fixture
+    # whose separating feature is column 0, the whole learner could not see
+    # it: `quality_band_check` scored 0.523 where sklearn scores exactly 1.0.
+    print("[uniformity] no column starved, none favoured (deviations 164/165)")
     print(
         "    column 0 chosen",
         ex_counts[0],
@@ -697,34 +708,38 @@ def main() raises:
         ex_expected,
         "expected (ratio",
         Float64(ex_counts[0]) / ex_expected,
-        ") -- the block minimum is compared against mask[0], the PREVIOUS"
-        " iteration's flag, so a sampled 0 is flagged a duplicate",
+        ")",
     )
     assert_true(
-        Float64(ex_counts[0]) / ex_expected < 0.25,
-        "column 0 must be STARVED on the excess arm. cuML passes mask[0] as"
-        " the predecessor of the block minimum (builder_kernels.cuh:231-232,"
-        " CUB block_adjacent_difference.cuh:393-419), so a sampled column 0"
-        " is dropped. If this ratio has risen to ~1 the port has been"
-        ' "fixed" and has forked from cuML',
+        Float64(ex_counts[0]) / ex_expected > 0.75,
+        "column 0 must NOT be starved. cuML passes mask[0] -- the previous"
+        " iteration's FLAG -- as the predecessor of the block minimum"
+        " (builder_kernels.cuh:231-232), which drops a sampled column 0"
+        " entirely. DEVIATION 164 gives the block minimum an unconditional"
+        " head flag, because a minimum has no predecessor. If this ratio has"
+        " fallen back toward 0 the fix has been reverted",
     )
     print(
         "    column n-1 chosen",
         ex_counts[ex_n - 1],
-        "times -- slots past n_parallel_samples are set to n-1 (:201-203),"
-        " so it is in the block's sample on every iteration",
+        "times against",
+        ex_expected,
+        "expected (ratio",
+        Float64(ex_counts[ex_n - 1]) / ex_expected,
+        ")",
     )
     assert_true(
-        Float64(ex_counts[ex_n - 1]) / ex_expected > 1.0,
-        "column n-1 must be OVER-represented on the excess arm; it is the"
-        " filler value and is therefore always present",
+        Float64(ex_counts[ex_n - 1]) / ex_expected < 1.25,
+        "column n-1 must NOT be over-represented. cuML fills every slot past"
+        " n_parallel_samples with the REAL column id n-1 (:201-203), so a"
+        " slot that never drew votes anyway. DEVIATION 165 fills those slots"
+        " with an out-of-range sentinel that is masked off",
     )
     cells += 2
 
     # The clearest possible demonstration, with no statistics in it at all:
-    # at n=2, k=1 the excess sampler returns column 1 for EVERY node, because
-    # whichever of {0, 1} is drawn, the head flag of the minimum is cleared
-    # or the minimum is 1.
+    # at n=2, k=1 EVERY node draws one of exactly two columns, so both must
+    # appear. Before the fix, column 1 came back 64 times of 64.
     var tiny_nodes = List[Int]()
     for i in range(64):
         tiny_nodes.append(i)
@@ -744,11 +759,11 @@ def main() raises:
         64 - ones,
         "times",
     )
-    assert_equal(
-        ones,
-        64,
-        "at n=2, k=1 their kernel can never return column 0 -- if it now"
-        " does, the mask[0] predecessor has been changed",
+    assert_true(
+        ones > 0 and ones < 64,
+        "at n=2, k=1 BOTH columns must appear across 64 nodes. cuML returns"
+        " column 1 all 64 times; that is the bug deviation 164 fixes, and a"
+        " sweep of exactly 0 or exactly 64 means it is back",
     )
     cells += 1
 

@@ -232,6 +232,16 @@ comptime SAMPLE_ALGO_L: Int = 2
 """`algo_L_sample_kernel`, `builder_kernels.cuh:268`."""
 
 
+def NON_DRAWING_SENTINEL(n: Int) -> Int32:
+    """A value above every valid column id, for a slot that did not draw.
+
+    DEVIATION 165. Any value `>= n` works; `n` itself is the smallest such and
+    keeps the sorted array's tail adjacent to the real ids, which makes the
+    masking loop a single comparison rather than a range test.
+    """
+    return Int32(n)
+
+
 def sampler_arm_name(arm: Int) -> String:
     """So a check and a benchmark can PRINT which kernel ran; rule 8."""
     if arm == SAMPLE_ALL_FEATURES:
@@ -430,27 +440,25 @@ def excess_sample_with_replacement(
        algorithm.
 
     3. SLOTS PAST `n_parallel_samples` ARE NOT IDLE, they are set to `n - 1`
-       (`:201-203`). They are real values that get sorted, deduped and can be
-       WRITTEN OUT: column `n - 1` is present in the block's sample on every
-       iteration, so it is selected whenever the loop stops at exactly `k`
-       uniques. Only the FIRST `n_parallel_samples` slots draw, and the
-       condition is on the CTA-wide slot index, not the thread's.
+       (`:201-203`) -- AND THAT IS THE SAME BUG WEARING DIFFERENT CLOTHES,
+       ALSO FIXED HERE. See DEVIATION BLOCK 165. A slot that did not draw
+       votes anyway, as column `n - 1`, so that column is present in the
+       block's sample on every iteration and is selected whenever the loop
+       stops at exactly `k` uniques. Measured before the fix: column `n - 1`
+       chosen 662 times against 512 expected. Only the FIRST
+       `n_parallel_samples` slots draw, and the condition is on the CTA-wide
+       slot index, not the thread's.
 
-    4. THE PREDECESSOR OF THE FIRST ITEM IS `mask[0]`, NOT AN ITEM.
+    4. THE PREDECESSOR OF THE FIRST ITEM IS `mask[0]`, NOT AN ITEM -- AND
+       THAT IS A BUG IN cuML, FIXED HERE. See DEVIATION BLOCK 164 below.
        `:231-232` calls `SubtractLeft(items, mask, CustomDifference<IdxT>(),
        mask[0])`, and CUB's implementation
        (`cccl/cub/cub/block/block_adjacent_difference.cuh:393-419`) does
        `output[0] = difference_op(input[0], tile_predecessor_item)` on thread
        0. So the block MINIMUM is compared against the previous iteration's
-       flag -- a 0 or a 1 -- and is flagged a DUPLICATE when it happens to
-       equal it. On the first iteration that flag is 0, so a sampled column 0
-       is dropped; if a later iteration leaves `mask[0] == 1`, column 1 is
-       dropped instead. This is theirs, it is measurable (see
-       `feature_sampler_check.mojo`, which shows `n=2, k=1` returning column 1
-       every time), and it is transcribed rather than fixed: `PORTING_RULES.md`
-       0b is COPY, DO NOT IMPROVE. It costs uniformity at the low columns; it
-       cannot produce a duplicate or an out-of-range column, because it only
-       ever CLEARS the head flag of the smallest item.
+       FLAG -- a 0 or a 1 -- and is flagged a duplicate when it equals it.
+       Measured before the fix: at `k = 1`, column 0 was drawn 0 times of 64
+       at every one of n = 2, 3, 4 and 8. Not under-drawn. NEVER drawn.
 
     5. THE OUTPUT IS THE `k` SMALLEST UNIQUES, not a random `k` of them
        (`:243-246`): the gather index is the exclusive prefix sum of the head
@@ -520,7 +528,11 @@ def excess_sample_with_replacement(
                             uniform_int_u64(gens[thread_id], 0, UInt64(n))
                         )
                     elif mask[slot] == 0:
-                        items[slot] = Int32(n - 1)
+                        # DEVIATION 165: theirs writes `n - 1` here, a REAL
+                        # column id, so a slot that did not draw votes anyway.
+                        # Ours writes an out-of-range sentinel that is masked
+                        # off below, so a non-drawing slot casts no vote.
+                        items[slot] = NON_DRAWING_SENTINEL(n)
                     # else: `continue` -- keep the previous iteration's unique.
 
             # `:224`, `BlockRadixSortT(...).Sort(items)`. Ascending over the
@@ -534,10 +546,20 @@ def excess_sample_with_replacement(
             # iteration's flag; see point 4 in the docstring. CUB writes items
             # `ITEMS-1 .. 1` and then item 0, which this mirrors literally
             # even though nothing depends on the order.
-            var tile_predecessor_item = mask[0]
             for slot in range(n_slots - 1, 0, -1):
                 mask[slot] = 0 if items[slot] == items[slot - 1] else 1
-            mask[0] = 0 if items[0] == tile_predecessor_item else 1
+            # DEVIATION 164: the block minimum has NO predecessor, so its head
+            # flag is unconditionally 1. Theirs compares it against `mask[0]`,
+            # the previous iteration's FLAG, and drops it when they are equal.
+            mask[0] = 1
+
+            # DEVIATION 165: a slot that did not draw casts no vote. The
+            # sentinel sorts above every real column id, so these are the tail
+            # of the sorted array; clearing their head flags keeps them out of
+            # `n_uniques` and out of the gather.
+            for slot in range(n_slots):
+                if items[slot] >= Int32(n):
+                    mask[slot] = 0
 
             # `:237`, `BlockScanT(...).ExclusiveSum(mask, col_indices, n_uniques)`.
             var running: Int32 = 0

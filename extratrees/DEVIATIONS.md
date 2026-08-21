@@ -1104,3 +1104,84 @@ without testing `min > max` first. `node_feature_is_constant` already reports
 such a range constant, which is what `_splitter.pyx:611-618` gives an
 all-missing column, so the normal path is safe; a caller that draws a threshold
 from the raw pair is not.
+
+---
+
+# DO NOT PORT BUGS — Andrew, 2026-08-21
+
+The rule this lane was operating under was `PORTING_RULES.md` 0b, COPY DO NOT
+IMPROVE, plus 0c, "theirs is right and ours is wrong until their file says
+otherwise". Read strictly, that required reproducing a defect in cuML's
+sampler that made the learner unable to see a feature. Andrew's ruling:
+**don't port bugs, fix them.**
+
+The refinement, stated so it does not swing too far: **the upstream is the
+authority on DESIGN, not on defects.** A behaviour of theirs is ported when it
+is a choice — even an odd one — and fixed when it is demonstrably a mistake
+that changes an answer. The bar for calling something a mistake is a
+MEASUREMENT, not an opinion: both entries below carry the number that made the
+call, and both have a check asserting the fixed behaviour so the fix cannot
+silently rot.
+
+## 164. FIXED cuML BUG: the block minimum had no head flag, so column 0 was never sampled
+
+**Theirs.** `builder_kernels.cuh:231-232` calls
+`SubtractLeft(items, mask, CustomDifference<IdxT>(), mask[0])`. CUB does
+`output[0] = difference_op(input[0], tile_predecessor_item)` on thread 0
+(`cub/block/block_adjacent_difference.cuh:393-419`), so the block MINIMUM is
+compared against the previous iteration's FLAG — a 0 or a 1 — and is marked a
+duplicate when they are equal.
+
+**Measured before the fix, which is what makes this a bug and not a taste:**
+
+    n=2 k=1  ->  column 0 drawn 0 of 64 nodes
+    n=3 k=1  ->  column 0 drawn 0 of 64
+    n=4 k=1  ->  column 0 drawn 0 of 64
+    n=8 k=1  ->  column 0 drawn 0 of 64
+
+Never, not rarely. And the consequence at the learner level, on a two-column
+fixture whose separating feature is column 0: accuracy **0.523** against
+sklearn's exact **1.0**, mean depth 10.8 against their 3.4, mean leaves 70.5
+against their 7.9 — the tree splitting on noise forever because it could not
+see the signal.
+
+**Ours.** `mask[0] = 1`, unconditionally. A minimum has no predecessor, so its
+head flag is 1 by definition; this is what CUB's no-predecessor overload gives
+and what the head-flag idiom means.
+
+**After the fix, same measurement:** `separable_gap` accuracy **1.0**, mean
+depth **2.99** against sklearn's [2.83, 4.07], mean leaves **6.52** against
+their [6.15, 9.73] — inside their band on all three. `tie_pair` moved from
+depth 5.6 to 2.59, also into band.
+
+**Guarded by** `feature_sampler_check`, which now asserts the ratio for column
+0 is above 0.75 of expectation and that both columns appear at `n=2, k=1`. The
+section previously asserted the opposite; the old numbers are kept in it so
+nobody re-derives them.
+
+---
+
+## 165. FIXED cuML BUG: a slot that never drew voted anyway, as column n-1
+
+**Theirs.** `builder_kernels.cuh:201-203` fills every slot past
+`n_parallel_samples` with `n - 1` — a REAL column id — commented "indices that
+exceed `n_parallel_samples` will not generate". They do not generate, but they
+do get sorted, deduped and gathered, so column `n - 1` is present in the
+block's sample on every iteration and is selected whenever the loop stops at
+exactly `k` uniques.
+
+**Measured before the fix:** column `n - 1` chosen **662** times against
+**512** expected, a 1.29x over-representation of one specific column.
+
+**Ours.** A non-drawing slot is filled with `NON_DRAWING_SENTINEL(n) == n`,
+which is above every valid column id, and its head flag is cleared before the
+prefix sum. It therefore contributes nothing to `n_uniques` and can never be
+gathered: **a slot that did not draw casts no vote.**
+
+**Why the sentinel rather than leaving the slot alone.** The array is sorted
+as a whole and the slots migrate between threads (point 2 of the docstring), so
+"which slots drew" cannot survive the sort as a position. A value above every
+column id survives it, sorts to the tail, and is identified by one comparison.
+
+**Guarded by** `feature_sampler_check`, which asserts column `n - 1` is under
+1.25x expectation.
