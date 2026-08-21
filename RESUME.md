@@ -950,3 +950,17 @@ against BOTH exact references. Verdict on Metal through MAX:
 
 The check is per-backend by construction; running it is the first hour
 of every new kernel-matrix column.
+
+### 2026-08-21, the user-facing hole: train()'s 24-second preparation bill
+
+`mojo_only/quantize_cost_probe.mojo` (worktree at 5eed329): at
+400k x 500, `train()` end to end is 24.5-25.1 s of which the trees are
+0.75 s -- the prep bill is ~24 s, 32x the training. Every benchmark row
+stays true (both arms quantize outside the timed region), but a real
+`.fit(X, y)` pays this inside, against CatBoost's multi-threaded C++
+quantizer -- END TO END WE CURRENTLY LOSE THE SHAPE WE WIN 2-4x ON
+TREES. Components unmeasured; fix list theirs-first in
+`bench/results/PREP_BILL_2026-08-21.md` (their subsample bound for
+border building, then the already-ported device binarize kernel wired
+into train()'s prep, then the honest end-to-end row). This is the
+single largest known performance item in the library.
