@@ -2875,16 +2875,33 @@ the one this repository ported:
 | `TDocParallelObliviousTreeSearcher` | `oblivious_tree_doc_parallel_structure_searcher.{h,cpp}` (295) | Stripe | no | no |
 | `TGreedySubsetsSearcher` | `greedy_subsets_searcher/` | Stripe | no | no |
 
-The first two SHARE their entire stack -- `pointwise_optimization_subsets.h`,
-`pointwise_scores_calcer.h`, `histograms_helper.{h,cpp}`,
-`pointwise_kernels.{h,cpp}`, and the `pointwise_hist2*` kernel family. They are
-one implementation templated on the mapping, with two `TSubsetsHelper`
-specializations whose `CreateSubsets` differ in exactly three lines
+The first two SHARE their SCORING stack -- `pointwise_scores_calcer.h`,
+`histograms_helper.{h,cpp}`, `pointwise_kernels.{h,cpp}`, and the
+`pointwise_hist2*` kernel family.
+
+**CORRECTED 2026-08-21 BY PORTING IT. This paragraph used to say the two were
+"one implementation templated on the mapping, with two `TSubsetsHelper`
+specializations whose `CreateSubsets` differ in exactly three lines", and it
+was wrong in three ways -- see DEVIATION 120 for the source citations.
+`TSubsetsHelper<TMirrorMapping>` has no `CreateSubsets` at all; the two
+`Split`s are different code calling different kernels; and the feature-parallel
+arm needs `docBins`, a per-document bit-packed array with no counterpart on the
+doc-parallel path, which cost 1,067 lines and two kernels to port.** The
+sentence is deleted rather than annotated because `PORTING.md` 119 and
+`NEXT_TWO.md` both priced rung 2 off it.
+
+What IS three lines is the initial subsets state, and it is worth keeping
+because it is still the whole of ordered boosting at this level
 (`pointwise_optimization_subsets.cpp:12-14` vs
 `oblivious_tree_structure_searcher.cpp:36-37`):
 
     Stripe:  FoldCount = 0;               FoldBits = 0;                   bins all zero
     Mirror:  FoldCount = initParts.size(); FoldBits = IntLog2(FoldCount);  bins from WriteFoldBasedInitialBins
+
+And `FoldCount` is not even read: their two `Fit`s pass `subsets.FoldCount`
+(`:93`) and the literal `1` (`:40`) into the same score-calcer argument, and at
+one task those are the same number. `FoldBits`, which IS read everywhere, is 0
+on both.
 
 **That is ordered boosting, in full, at the subsets level: the fold id occupies
 the LOW bits of the bin and the depth bits sit above it**, which is why every
@@ -3932,13 +3949,21 @@ and `CreateSubsets` chooses between them with one ternary (`:30-31`):
     SingleTaskTarget == nullptr ? WriteFoldBasedInitialBins(subsets.Bins)
                                 : WriteSingleTaskInitialBins(subsets.Bins)
 
-Everything after that line -- the depth loop, the histograms, the scorer, the
-`TakeBest` fold, the split -- is the same code on both arms. With `PORTING.md`
-91 A (the two data layouts build a bit-identical compressed index at device
-count 1) and 91 B (the two searchers share their whole stack), what rung 2
-costs is the fold LAYOUT plus wiring, not a second searcher.
+Everything after that line -- the depth loop, the histograms, the scorer and
+the `TakeBest` fold -- is the same code on both arms. **THE SPLIT IS NOT, and
+this section used to claim it was.** It concluded, from 91 A and the version of
+91 B since corrected, that "what rung 2 costs is the fold LAYOUT plus wiring,
+not a second searcher". Rung 2 was then ported and that was false: the
+feature-parallel `Split` reads `docBins`, a per-document bit-packed array with
+no counterpart on the doc-parallel path, and building it is three kernels and
+1,067 lines. See DEVIATION 120. The estimate is deleted rather than annotated
+because two documents were priced off it.
 
-`gbdt/methods/oblivious_tree_fold_tasks.mojo` is that layout.
+What remains true, and is the reason rung 2 could be gated as an IDENTITY: at
+`FoldBits == 0` the two chains produce bit-identical `subsets.Bins` at every
+level, measured over 3 splits and 16,434 per-document leaf ids.
+
+`gbdt/methods/oblivious_tree_fold_tasks.mojo` is the fold layout half of it.
 
 ### The encoding, and why the pairing is load-bearing
 
@@ -4326,3 +4351,265 @@ written as a free function so the lane touched no file in `gbdt/ctrs/`.
 THEIRS -- two `std::includes`, subset first. Reversing it turns gates 4 and 5
 red, and it is the kind of argument order a port gets wrong silently because
 both arguments have the same type.
+
+## 120. RUNG 2 IS A SECOND SEARCHER AFTER ALL: `PORTING.md` 91 B's "three lines" was wrong, and `docBins` is what it costs
+
+Ported 2026-08-21, `gbdt/methods/oblivious_tree_structure_searcher.mojo` +
+`gbdt/methods/oblivious_tree_bin_builder.mojo`, gated by
+`pixi run check-feature-parallel-identity`.
+
+**91 A HELD.** The two data layouts build a bit-identical compressed index at
+device count 1; every step of both `TCudaFeaturesLayoutHelper` walks
+coincides, and the feature-parallel searcher reads the index this repository
+already builds. Nothing found here contradicts it.
+
+**91 B DID NOT, IN THREE WAYS.** It said the two searchers are "one
+implementation templated on the mapping, with two `TSubsetsHelper`
+specializations whose `CreateSubsets` differ in exactly three lines", and
+`PORTING.md` 119 and `NEXT_TWO.md` both priced rung 2 off that sentence. Both
+have been corrected in place.
+
+1. **`TSubsetsHelper<TMirrorMapping>` HAS NO `CreateSubsets`.**
+   `pointwise_optimization_subsets.h:72-105` declares `Split` and two
+   `CurrentPartsView` overloads and nothing else; only the Stripe
+   specialization declares `CreateSubsets` (`:127-128`). The feature-parallel
+   `CreateSubsets` is a METHOD ON THE SEARCHER
+   (`oblivious_tree_structure_searcher.cpp:29`). There is no pair to differ.
+
+2. **THE TWO `Split`s ARE DIFFERENT CODE CALLING DIFFERENT KERNELS.**
+
+       Stripe  UpdateBinFromCompressedIndex(cindex, feature, bin,
+                 docsForBins, depth, Bins)                   ONE kernel
+               (`pointwise_optimization_subsets.cpp:35-40`)
+
+       Mirror  UpdateBins(Bins, nextLevelDocBins, docMap,
+                 CurrentDepth, FoldBits)                     reads docBins
+               (`pointwise_optimization_subsets.h:82`)
+
+   `docBins` does not exist on the doc-parallel path. It is one `ui32` per
+   document in ORIGINAL document order whose bit `d` is the document's side
+   of split `d`, and filling it is `TTreeUpdater::AddSplit` ->
+   `WriteCompressedSplit` -> `UpdateBinFromCompressedBits`: **three kernels
+   and a bit-packed intermediate where the doc-parallel arm runs one
+   kernel.**
+
+3. **THE CALL SITE DIFFERS, NOT ONLY THE BODY.** `treeUpdater.AddSplit(
+   bestSplit)` (`:276`) precedes the subsets `Split` (`:283`), and the bit it
+   writes is `BinarySplits.size()` -- exactly the `loadBit` the next
+   statement reads. Two order-critical statements present on one arm only.
+
+**WHY THEY DO IT THE LONG WAY.** The packed `TMirrorBuffer<ui64>` is what
+`TScopedCacheHolder` CACHES, keyed by `(dataset scope, split)`
+(`oblivious_tree_bin_builder.cpp:84-87`, `:124-132`). One bit per document is
+1/32 of a `ui32` bin array, which is what makes caching every split in a tree
+affordable, and `docBins` after the last level IS the model's leaf assignment
+-- `Fit` ends `CacheBinsForModel(..., std::move(docBins))` (`:300-304`) and
+the feature-parallel leaves estimator reads it. The doc-parallel searcher
+caches nothing and estimates leaves inline from the partition stats it
+already holds (`..._doc_parallel_...cpp:150-157`), so it needs neither.
+
+**THE ANSWER IS UNCHANGED; THE PRICE IS NOT.** At `FoldBits == 0`, one
+device, one task and no CTR columns the two chains produce bit-identical
+`subsets.Bins` at every level. 1,067 new lines of `gbdt/` say so.
+
+### Two further differences 91 B does not mention, both inert at one fold
+
+* **The bootstraps differ.** Feature-parallel calls
+  `Bootstrap.BootstrappedWeights` then `MultiplyVector` on both planes
+  (`:61-72`); doc-parallel calls `BootstrapAndFilter`, which can DROP ROWS
+  (`..._doc_parallel_...cpp:216`). At `bootstrap_type=No` both are no-ops,
+  and neither port carries the bootstrap anyway (DEVIATION 104).
+* **`subsets.FoldCount` is 1 on Mirror and 0 on Stripe.** Mirror computes
+  `initParts.size()`; Stripe hardcodes 0
+  (`pointwise_optimization_subsets.cpp:12`). Their two `Fit`s pass
+  `subsets.FoldCount` (`:93`) and the literal `1` (`:40`) to the same score
+  calcer argument, so the two are the same number and nothing else reads the
+  field. `FoldBits`, which IS read everywhere, is 0 on both. **That plus the
+  initial bin fill is the whole of the real "three lines".**
+
+### DEVIATION 120: four things their `Fit` does that this function does not
+
+`ComputeWeakTarget` (`:57`, `:377-467`), the bootstrap block (`:59-73`) and
+the tree-CTR block (`:136-147`, `:201-255`) are not here, and the fourth is
+`MakeDocIndices` (`:476-498`), which theirs calls INSIDE the depth loop
+(`:124`) and which allocates a fresh buffer per level to copy an array that
+does not change; it is hoisted out of the loop.
+
+The first two are DEVIATION 104 exactly, for its reason: this repository's
+boosting loop already owns the gradient path for the greedy learner, and
+forking it is the one thing that must not differ between two learners being
+compared. The searcher takes the weak target already computed and returns
+the STRUCTURE plus `docBins`. The third is rung 4. The fourth is
+`MaxDepth - 1` allocations, same values.
+
+`MakeDocIndicesForSingleTask` (`:469-474`) copies
+`SingleTaskTarget->GetTarget().GetIndices()`, which at permutation id 0 with
+no shuffle is the identity -- DEVIATION 105's assumption holding on this arm
+too. **The gather is still performed rather than collapsed**, because
+`docBins` is indexed by DOCUMENT and only `subsets.Indices` may be collapsed.
+
+### The gate, and what each half of it catches
+
+`check-feature-parallel-identity` runs four gates at TWO row counts:
+
+    1 IDENTITY     splits/order/type against the doc-parallel searcher
+    2 LEAF IDS     docBins per document vs a HOST recomputation
+    3 COMPRESSION  WriteCompressedSplit's readIndices arm, never taken at
+                   this rung, against its nullptr arm (PORTING_RULES 8)
+    4 CONTROL      a moved-signal fixture that MUST split differently
+
+    4,000  rows   1 compression block  -- blockIdx.x is always 0
+    16,434 rows   3 blocks, last holding 50 keys
+
+Both green: 3 splits identical, 16,434 leaf ids exact, 8 of 16 leaves
+occupied, control differs.
+
+### THE SABOTAGE TABLE, and four of its rows are the point
+
+R = red, `.` = still green, R* = red at 16,434 and GREEN at 4,000.
+
+    #  planted defect                                      1  2  3  4
+    -  --------------------------------------------------  -  -  -  -
+    1  feature_offset left as the COLUMN index             R  R  .  .
+    3  TBinUpdater's OR made a STORE                       .  R  .  .
+    4  CompressBlock bit position `id` not `63 - id`       R  R  .  .
+    5  add_split reads the depth AFTER the push            R  R  .  .
+    6  block stride zeroed in both new kernels             R* R* .  .
+    7  UpdateFoldBins loadBit given CurrentDepth + 1       R  .  .  .
+    8  compressed_split_size sized ceil(n / 64)            CRASHES THE RUN
+    9  readIndices arm reading indices[offset] with no     .  .  R* .
+       block base
+   10  gathered_target flattened before submit_compute     R  .  .  R
+    2  split_subsets_mirror given subsets.indices as       REFUSED BY THE
+       doc_map                                             COMPILER
+
+* **Sabotage 3 does not change the tree.** A STORE leaves bit `CurrentDepth`
+  of `docBins` correct and only clears its neighbours, and `UpdateFoldBins`
+  reads exactly that bit. Every split is identical; 3 documents in 4 land in
+  the wrong leaf. **Gate 2 is the only thing in the repository that sees it**,
+  and it sees it only because it compares PER DOCUMENT rather than a total
+  ([[uniform-test-data-hides-permutation]]).
+* **Sabotage 7 does not move gate 2**, the mirror image: `docBins` is written
+  correctly and only `subsets.Bins` reads the wrong bit. The two gates cover
+  different halves of one chain and neither is redundant.
+* **Sabotage 4 does NOT redden gate 3**, which an earlier draft of the
+  check's docstring asserted it would. Gate 3 compares two arms that share
+  `CompressBlock`, so a defect in the shared half cancels. Sabotage 9 is what
+  makes gate 3 non-vacuous and it reddens gate 3 ALONE.
+* **Sabotages 6 and 9 are invisible at 4,000 rows.** A compression block is
+  8,192 documents, so at rung 1's fixture `blockIdx.x` is always 0 and every
+  `+ KEYS_PER_COMPRESS_BLOCK * block` term is identically zero. At 16,434 the
+  first wrong document is row 8,193 -- the first document of block 1. That is
+  `PORTING.md` 107's rule verbatim, and the second row count is the only
+  reason those two rows are in this table rather than in the paragraph below.
+* **Sabotage 2 is unwritable.** Mojo refuses it:
+  `aliasing values passed mutably to 'doc_map' argument and passed mutably to
+  'subsets' argument`. The wall DEVIATION 97.2 records makes the most obvious
+  way to get `docMap` wrong a compile error.
+
+**AND ONE SABOTAGE MOVED NOTHING AND IS KEPT FOR IT.** The first attempt at
+sabotage 10 memset `gathered_target` immediately AFTER `submit_compute`
+rather than before it, and all four gates stayed green -- the histogram had
+already been built. `PORTING.md` 20 ("a reach sabotage has a WINDOW, at both
+ends"), live, at the cost of one run.
+
+There is NO sabotage switch in either shipped file. `PORTING_RULES.md` 8
+says a switch that outlives its measurement is a defect, and a permanently
+wired defect selector is one. Every row above is an edit, a run, and a
+revert.
+
+### Four things in their source worth knowing before touching this file
+
+* **The packed layout is INTERLEAVED, not contiguous.** `CompressBlock`
+  (`compression_helper.cuh:93`) puts key `BLOCK_SIZE*id + tid` in word `tid`
+  at bit `63 - id`. Consecutive documents are in consecutive WORDS; the 64
+  sharing a word are 128 apart. Reading it as `bits[k/64] >> (k%64)` gives
+  the right multiset in the wrong places -- and every total still balances.
+* **`CompressedSize` is `numBlocks * 128`, not `ceil(n/64)`.** The last block
+  is allocated in full (`compression_helpers_gpu.cpp:249-254`). Sizing it
+  tight crashed the run; that is sabotage 8.
+* **`UpdateFoldBins` reads bit `CurrentDepth` and writes bit
+  `CurrentDepth + FoldBits`** -- two different positions, because `docBins`
+  carries no fold id while `subsets.Bins` packs it in the low bits. They
+  coincide only at `FoldBits == 0`, **which is exactly why rung 2 can be an
+  identity and rung 3 cannot.**
+* **`docBins` after the last level IS the model's leaf assignment**, which is
+  why `Fit` ends in `CacheBinsForModel` and why the doc-parallel searcher
+  never needs one.
+
+## 121. DEVIATION: `TTreeUpdater` has no test set
+
+`TTreeUpdater` takes `LinkedTest` and `TestBins`
+(`gpu_data/oblivious_tree_bin_builder.h:103-104`) and `AddSplit` mirrors
+every split into the second array (`:204-206`), so the held-out pool carries
+the same leaf ids and the leaves estimator can score it. This repository's
+boosting loop owns the test pool elsewhere and hands the searcher one set of
+documents.
+
+A test-bin array with no reader is a field that is never checked. It is not
+arithmetic, it changes no split, and it costs one
+`UpdateBinFromCompressedBits` per level whenever a test pool exists -- which
+is what the wiring will have to pay when the feature-parallel boosting loop
+lands.
+
+## 122. DEVIATION: no `TScopedCacheHolder`, so nothing is cached, and within one tree that is free
+
+`TSplitHelper::GetCompressedBits` caches the packed split bits keyed by
+`(dataset scope, split)` (`gpu_data/oblivious_tree_bin_builder.cpp:84-87`,
+`:124-132`), so a split proposed again by a later tree, or needed again by
+the test set or a tree-CTR tensor tracker, is a lookup rather than a pass
+over the compressed index. Ours recomputes.
+
+**WITHIN ONE TREE THE CACHE CANNOT HIT.** `Fit` breaks on
+`result.HasSplit(bestSplit)` (`:266-268`) BEFORE calling `AddSplit`, so no
+split is ever added twice. The cost is therefore one `WriteCompressedSplit`
+per REPEATED split across trees, and the rung-2 identity is unaffected.
+
+Implementing a cache whose only caller can never hit it would be a path with
+no reachable branch, which this repository has been bitten by four times in
+one day ([[reached-but-inert]]). It becomes worth having when the test set
+(121) or tree CTRs (rung 4) give it a second reader.
+
+## 123. DEVIATION: `CompressBlock`'s four-register accumulator is one register
+
+`TCompressionHelper::CompressBlock` (`compression_helper.cuh:78-103`) keeps
+`TStorageType compressedEntries[4]`, fills them from a `#pragma unroll 4`
+inner loop, and OR-folds them at `:100-103`. This port uses one accumulator.
+
+The value is the OR of the same 64 terms in the same order-independent
+operation; the register split is instruction-level parallelism on a
+dependence chain and nothing else. It is declared because it is a visible
+textual difference in a kernel this rung's identity depends on, not because
+anything was measured -- **no benchmark was authorised for this rung and none
+was run.**
+
+The other half of that function is NOT a deviation and is transcribed:
+`if (tid < srcSize) dst[tid] = ...` guards in KEYS, not words, and matches
+`DecompressBlock`'s `tid < dstSize` (`:118`) exactly. Sabotage 8 above is
+what happens when the sizing rule that guard depends on is loosened.
+
+## 124. DEVIATION: three of their directories land in one file under `gbdt/methods/`
+
+`PORTING_RULES.md` 6 keeps their names and records renames. This rung breaks
+the DIRECTORY correspondence and the reason is lane ownership, not design:
+
+| ours | theirs |
+|---|---|
+| `gbdt/methods/oblivious_tree_bin_builder.mojo` | `catboost/cuda/gpu_data/oblivious_tree_bin_builder.{h,cpp}` |
+| ... same file | `catboost/cuda/gpu_data/splitter.h` |
+| ... same file | `catboost/cuda/gpu_data/kernel/split.cu` |
+| ... same file | `catboost/cuda/cuda_util/kernel/compression_helper.cuh` |
+| `oblivious_tree_structure_searcher.split_subsets_mirror` | `catboost/cuda/methods/pointwise_optimization_subsets.h:74-93` |
+
+The symbols keep their names and every function cites its upstream file and
+line, so the diff surface is intact; what is lost is that a reader looking
+for `WriteCompressedSplit` under `gbdt/gpu_data/` will not find it.
+
+**The correct homes are `gbdt/gpu_data/oblivious_tree_bin_builder.mojo` (with
+the split kernels), `gbdt/gpu_util/kernel/compression.mojo` (for
+`TCompressionHelper`, which is generic in `BitsPerKey` upstream and is
+specialised to 1 here), and `split_subsets_mirror` beside `split_subsets` in
+`pointwise_optimization_subsets.mojo` where CatBoost puts the Mirror
+specialization.** Moving them is a pure rename plus the `PORTED_MAP.tsv` rows
+and is not attempted while three lanes are writing this directory. **This
+paragraph is the debt; a later round that moves them deletes it.**

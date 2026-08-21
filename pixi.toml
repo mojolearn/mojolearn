@@ -437,6 +437,14 @@ probe-pointwise-default = "mojo run -I . mojo_only/pointwise_default_probe.mojo"
 # nothing downstream can tell them apart. Own main(); a GPU, ~5 s.
 check-fold-tasks = "mojo run -I . mojo_only/fold_tasks_check.mojo"
 
+# RUNG 2's GATE, and it is an IDENTITY: the feature-parallel searcher must
+# reproduce the doc-parallel one to the bit at FoldBits == 0, plus a control
+# that must differ. Run at TWO row counts on purpose -- a compression block is
+# 8,192 documents, so two of its ten sabotages are invisible below that.
+# DEVIATION 120.
+check-feature-parallel-identity = "mojo run -I . mojo_only/feature_parallel_identity_check.mojo"
+
+
 # CreateFolds and MinEstimationSize -- how many folds ordered boosting builds
 # and how long each is. Nested prefixes growing geometrically by
 # fold_len_multiplier from min_fold_size. HOST ONLY: the fold boundaries are

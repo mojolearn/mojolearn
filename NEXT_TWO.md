@@ -36,18 +36,29 @@ structure searcher differs.
 
 ## WHAT IS LEFT
 
-### Rung 2 -- `TFeatureParallelObliviousTreeSearcher` at ONE fold (713 lines)
+### Rung 2 -- DONE 2026-08-21. `TFeatureParallelObliviousTreeSearcher` at ONE fold
 
-`methods/oblivious_tree_structure_searcher.{h,cpp}`. At `FoldBits == 0` and
-one device it is the same program as rung 1 -- `PORTING.md` 91 A proves the
-two data layouts build a bit-identical compressed index at device count 1,
-and 91 B shows the two searchers share their whole stack and differ in three
-lines of `CreateSubsets`.
+`gbdt/methods/oblivious_tree_structure_searcher.mojo` +
+`gbdt/methods/oblivious_tree_bin_builder.mojo`,
+`pixi run check-feature-parallel-identity`. `PORTING.md` 120-124. PORTED, NO
+CALLER -- `fit()` cannot select it yet; see `UNWIRED.md`.
 
-**Gate**: an identity. One fold must reproduce rung 1's model to the bit,
-plus a control that must differ, the way `check-pointwise-vs-greedy` does it.
+The gate is the identity this page asked for, at TWO row counts: 3 splits
+identical to the bit, 16,434 per-document leaf ids exact, plus a control that
+must and does differ.
 
-Everything it needs is now ported. This is the cheapest rung by far.
+**THIS PAGE SAID "everything it needs is now ported, this is the cheapest rung
+by far", off `PORTING.md` 91 B. THAT WAS WRONG AND THE SENTENCE IS DELETED.**
+91 A held. 91 B did not: `TSubsetsHelper<TMirrorMapping>` has no
+`CreateSubsets` at all, the two `Split`s are different code calling different
+kernels, and the feature-parallel arm needs `docBins` -- a per-document
+bit-packed array with no counterpart on the doc-parallel path, built by three
+kernels. 1,067 lines of `gbdt/`, not wiring. The IDENTITY claim the gate rests
+on survived; only the price was fiction.
+
+Two rows of its sabotage table are worth carrying forward: a defect in the
+bit-packing was invisible at 4,000 rows and red at 16,434, because a
+compression block is 8,192 documents and `blockIdx.x` is otherwise always 0.
 
 ### Rung 3 -- ordered boosting (1,353 lines)
 
