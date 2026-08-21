@@ -249,19 +249,13 @@ def best_split(
 
 
 def _sort_ascending(mut v: List[Float32]):
-    """Plain insertion-free shell sort. Their `Sort` is `std::sort`; nothing
-    downstream depends on which algorithm gets there."""
-    var n = len(v)
-    var gap = n // 2
-    while gap > 0:
-        for i in range(gap, n):
-            var tmp = v[i]
-            var j = i
-            while j >= gap and v[j - gap] > tmp:
-                v[j] = v[j - gap]
-                j -= gap
-            v[j] = tmp
-        gap //= 2
+    """Their `Sort` is `std::sort`; ours is the stdlib prelude `sort`. Any
+    ascending sort of NaN-free floats yields the same array bit-for-bit (the
+    one ambiguity, +-0.0 placement, washes out: a border midway between the
+    two zeros is +0.0 in either order), so borders are algorithm-invariant.
+    This used to be a hand-written shell sort, which cost ~1 s of the
+    sampled border build's phase B at 500 x 100k random draws."""
+    sort(v)
 
 
 def binarize(value: Float32, borders: List[Float32]) -> Int:
