@@ -541,6 +541,22 @@ def _estimate_and_apply(
             widest = sizes[i]
     ctx.enqueue_copy(dst_buf=d_p_off, src_ptr=h_po.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_p_sz, src_ptr=h_ps.unsafe_ptr())
+    # THE BUFFERS MUST OUTLIVE THE COPY. `h_po` and `h_ps` are LAST USED at
+    # the two `enqueue_copy`s above, so Mojo may free them there -- and the
+    # very next host allocation is `h_leaves` inside
+    # `make_bin_optimized_oracle`, SAME POOL, SAME DTYPE, SAME LENGTH, filled
+    # `[i] = i` immediately. That is DEVIATION 134's pointwise half, and it
+    # is not a hypothesis: forcing exactly that write reproduced the observed
+    # run's structure exactly (8 of 12 splits, first divergence at tree 8)
+    # with the loss agreeing to five significant figures.
+    # [[mojo-buffer-freed-at-last-use]] -- same defect as DEVIATION 125a.
+    #
+    # HELD TO THE EXISTING SYNC rather than drained here. A `ctx.synchronize()`
+    # at this line would also fix it and would cost one full device drain PER
+    # TREE, which is the wrong price for a lifetime bug: the two `_ = h^`
+    # below sit just past the `ctx.synchronize()` this function already runs
+    # before applying the estimate, so the copy is known complete and the
+    # blocks cannot be recycled in between.
 
     var oracle = make_bin_optimized_oracle(
         ctx, n_rows, n_leaves, sizes,
@@ -598,6 +614,10 @@ def _estimate_and_apply(
         est_len
     )
     ctx.synchronize()
+    # The far end of the hold opened above: past this drain the two host
+    # staging buffers may die, because their copies have certainly run.
+    _ = h_po^
+    _ = h_ps^
     if len(estimated) != est_len:
         raise Error(
             "the estimator returned " + String(len(estimated))

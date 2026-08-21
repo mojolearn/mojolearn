@@ -4841,8 +4841,12 @@ rows that is false on the FIRST test, so `multiplier == 1` always and the
 pointwise flush is a plain store. Sweeping `gbdt/` for every other float
 atomic leaves `histogram_utils.mojo:136`, which is Int32 and therefore
 order-independent, and `models/cuda/evaluator.mojo:435`, which is in the device
-evaluator and not on `fit`'s apply path (`compute_bins_and_add_kernel`). So
-there is no known mechanism for the pointwise arm's half of that run.
+evaluator and not on `fit`'s apply path (`compute_bins_and_add_kernel`).
+
+**SUPERSEDED BY 134c: there IS a mechanism for the pointwise arm, it is not
+arithmetic at all, and it has been reproduced on demand.** This paragraph is
+kept because the reasoning that ruled the atomic out for that arm was correct
+and is what sent the hunt somewhere else.
 
 `RESUME.md:509-518` records the determinism story as closed on 2026-08-21 --
 "every rep's loss is BIT-IDENTICAL". This observation contradicts that as
@@ -4918,6 +4922,82 @@ not a plausible tree.
 THE EXPERIMENT THIS IMPLIES, and it is cheap: run the cold soak while the box
 carries a comparable synthetic GPU load. If the anomaly returns under load and
 never returns quiet, the trigger is identified even before the site is.
+
+### 134c. THE POINTWISE HALF IS FOUND, FIXED, AND REPRODUCED ON DEMAND
+
+**A buffer freed at its last use. Not the float atomic.**
+
+`_estimate_and_apply` (`gbdt/methods/doc_parallel_boosting.mojo:542`) stages the
+leaf offsets and sizes in two host buffers and copies them to the device:
+
+    ctx.enqueue_copy(dst_buf=d_p_off, src_ptr=h_po.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=d_p_sz,  src_ptr=h_ps.unsafe_ptr())
+
+Those two `enqueue_copy`s are `h_po`'s and `h_ps`' LAST TEXTUAL USE, so Mojo
+may free them there -- the copies are enqueued, not run
+([[mojo-buffer-freed-at-last-use]]). And the very next host allocation is
+`h_leaves` inside `make_bin_optimized_oracle`
+(`leaves_estimation/pointwise_oracle.mojo:788`): **same pool, same dtype, same
+length**, and filled `h_leaves[i] = i` immediately. If it lands on the freed
+block, `d_p_sz` receives `[0, 1, 2, ...]`.
+
+HOW IT WAS CONFIRMED, and this is the part worth copying. The event is one run
+in a hundred and would not reproduce -- 600 warm reps (134a) and 150 cold
+processes, all clean, one distinct loss. So it was not caught; it was
+RECONSTRUCTED. Forcing exactly that write, on ONE tree, and comparing the
+result against the recorded observation:
+
+                            splits    first divergence    pointwise mse
+    OBSERVED, one run in ~100   8/12    tree 8             4.383606433868408
+    FORCED at call 7            8/12    tree 8             4.383575439453125
+    forced at call 8            9/12    tree 9             4.383563995361328
+    correct                    12/12    none               4.1332526206970215
+
+Same split count, same divergence tree, and a loss agreeing to five
+significant figures -- from a corruption chosen before the comparison was run,
+at a site predicted by an audit rather than found by a search. Corrupting
+EVERY tree instead gives 15.14, worse than the mean baseline, which is why the
+single-tree shape is the one that matters: the observation was coherent and
+wrong, and only a single-tree corruption is coherent and wrong.
+
+THE FIX, and why it is not a `synchronize()`. Holding the two buffers past the
+`ctx.synchronize()` this function already runs before applying the estimate
+costs NOTHING: the copies are certainly complete there, so the blocks cannot be
+recycled in between. A `synchronize()` at the copy would also work and would
+cost one full device drain PER TREE, which is the wrong price for a lifetime
+bug (`mojotrees-speed-mandate`: blow up the control plane, not the kernels).
+
+Verified after the fix: the differential holds at 288 of 288 across six
+fixtures on both searchers, and `check-fit-pointwise` passes.
+
+### 134d. STILL OPEN: the greedy half, and the load condition
+
+Two things this does NOT close.
+
+**The greedy arm's 2 of 12 is unexplained.** The site above is on the pointwise
+path only -- at this configuration `need_estimation` is False for the greedy
+arm, which applies its leaves inside `run_tree_layout` on-device and never
+enters `_estimate_and_apply`. So the observed run had TWO defects firing at
+once, or one defect with two reaches. The audit that found the pointwise site
+ranked `TTreeWorkspace.__init__`
+(`greedy_subsets_searcher/greedy_search_helper.mojo:2466-2557`) as the greedy
+arm's candidate: seven dead staging buffers, thirteen intervening allocations,
+one `synchronize()` only at the very end, and two exact size-and-type matches
+among the followers. It is fit-scoped rather than per-tree, which fits a
+divergence at tree 2 only if a single bin-feature's descriptor moved. UNTESTED
+-- **and the positive-control technique above is how to test it**, not another
+soak.
+
+**Eight further sites carry the same pattern** on the training path, ranked in
+that audit. None is a false positive: the allocator was measured
+returning a freed block after ONE intervening allocation while a copy was
+outstanding. They are hazards of the same class, and this class cannot be gated
+by re-running -- only by not writing it.
+
+**The load condition (134b) is still uncontrolled.** 750 clean runs on a quiet
+box do not speak to a box carrying thirty concurrent GPU processes, which is
+what the sighting had and what makes a deferred-by-one block recycle plausible
+in the first place.
 
 WHAT WOULD CLOSE IT, cheapest first: build once at
 `GLOBAL_NUMERIC_MODE = NUMERIC_IDENTICAL` and soak `d1_f8` a few thousand
