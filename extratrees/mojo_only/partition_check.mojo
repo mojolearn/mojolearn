@@ -295,4 +295,12 @@ def main() raises:
     # Both are covered by the sweep above through the shuffled row_ids, but the
     # count-preserving property is asserted here explicitly so a partition that
     # "works" by rewriting row ids rather than moving them cannot pass.
+    # Keep the backing buffers alive to here: `Dataset`'s pointers are
+    # `MutUntrackedOrigin`, so the compiler tracks no relationship to the
+    # `List`s behind them and would otherwise free one after its last
+    # syntactic use. `range_draw_check` read freed memory this way and
+    # reported min == 0.0 for every column while an earlier section still
+    # passed, because the pages had not been reused yet.
+    _ = probe.unsafe_ptr()
+
     print("partition_check: PASS")

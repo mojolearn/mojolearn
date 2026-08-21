@@ -81,6 +81,7 @@ file lives IN THAT FILE, under a marked deviation block.
     ==================================================================
 """
 
+from extratrees.mojo_only.pcg_rng import SplitKey, key_for, uniform_float
 from extratrees.ported.decisiontree.batched_levelalgo.dataset import Dataset
 from extratrees.ported.decisiontree.batched_levelalgo.split import Split
 from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels import (
@@ -201,3 +202,148 @@ def partition_samples(
             var b = row_ids[unsafe_offset= rcomp[tid]]
             row_ids[unsafe_offset= lcomp[tid]] = b
             row_ids[unsafe_offset= rcomp[tid]] = a
+
+
+comptime FEATURE_THRESHOLD: Float32 = 1e-7
+"""`sklearn/tree/_partitioner.pxd:13`, `cdef const float32_t FEATURE_THRESHOLD
+= 1e-7`. A FLOAT32, and the arithmetic it takes part in below is float32 too.
+That is not incidental -- see `node_feature_is_constant`."""
+
+
+@fieldwise_init
+struct FeatureRange(ImplicitlyCopyable, Movable):
+    """The output of the range pass: one feature's extent over one node."""
+
+    var min_value: Float32
+    var max_value: Float32
+    var n_missing: Int32
+    """NaN count. sklearn tracks it (`_partitioner.pyx:146`) and it changes the
+    constant test; DEVIATION 136 refuses NaN input, so this is expected to be
+    zero and is returned so a caller can ENFORCE that rather than assume it."""
+
+
+def node_feature_min_max(
+    dataset: Dataset, work_item: NodeWorkItem, col: Int32
+) -> FeatureRange:
+    """Min and max of one feature over one node's rows.
+
+    `sklearn/tree/_partitioner.pyx:129-165` (`DensePartitioner.find_min_max`),
+    transcribed, with two differences that are consequences of where it runs
+    and neither of which changes an answer:
+
+    1. Theirs walks `samples[start:end]` and also CACHES each value into
+       `feature_values[p]` as it goes (`:152`), because the best-splitter reuses
+       that buffer. This formulation has no such buffer -- it reads the column
+       twice (DEVIATION 137) -- so the cache write is dropped.
+    2. Theirs reads `self.X[samples[p], current_feature]` from a row-major
+       numpy array; ours reads cuML's column-major `Dataset` (`dataset.h:24`).
+
+    THEIR INITIALIZATION IS THE PART TO COPY EXACTLY (`:145-163`): `min` and
+    `max` are both set from the FIRST NON-MISSING value, and the subsequent
+    tests are `if v < min: elif v > max:` -- an `elif`, not two `if`s. With a
+    single seeded value the two forms agree; a reduction that seeded from
+    +/-INFINITY instead would differ on an all-NaN column, which is exactly the
+    column `n_missing` exists to catch.
+
+    A node with no rows at all returns an empty range with `min > max`, which
+    `node_feature_is_constant` reports constant. Theirs cannot reach that state
+    (`min_samples_split >= 2`), and neither can ours; it is defined here so the
+    function is total.
+    """
+    var begin = Int(work_item.instances.begin)
+    var end = begin + Int(work_item.instances.count)
+    var col_base = Int(col) * Int(dataset.m)
+
+    var min_value = Float32(0.0)
+    var max_value = Float32(0.0)
+    var n_missing = 0
+    var seen_non_missing = False
+
+    for p in range(begin, end):
+        var row = Int(dataset.row_ids[unsafe_offset=p])
+        var v = dataset.data[unsafe_offset = col_base + row]
+        if v != v:  # isnan, without importing one
+            n_missing += 1
+        elif not seen_non_missing:
+            min_value = v
+            max_value = v
+            seen_non_missing = True
+        elif v < min_value:
+            min_value = v
+        elif v > max_value:
+            max_value = v
+
+    if not seen_non_missing:
+        # Their `min = INFINITY, max = -INFINITY` initial state
+        # (`_partitioner.pyx:143-144`) survives untouched when every value is
+        # missing. Reproduced with the same ordering property (min > max)
+        # without needing an infinity on device.
+        return FeatureRange(1.0, -1.0, Int32(n_missing))
+    return FeatureRange(min_value, max_value, Int32(n_missing))
+
+
+def node_feature_is_constant(extent: FeatureRange, n_rows: Int32) -> Bool:
+    """Whether this feature is constant over this node, sklearn's test.
+
+    `_splitter.pyx:611-618`, all THREE arms::
+
+        if (end - start == n_missing or
+            (max_feature_value <= min_feature_value + FEATURE_THRESHOLD
+             and n_missing == 0)):
+
+    So: every value missing is ALSO constant, and a column that would
+    otherwise be constant is NOT constant when it contains any NaN.
+
+    THE ADDITION IS FLOAT32 AND THAT WIDENS THE BAND. Both operands are
+    `float32_t` in their code, so at `min == 0.5` the sum
+    `0.5f + 1e-7f` rounds up to `0.5 + 1.192e-7` and a column whose spread is
+    `1.19e-7` -- comfortably ABOVE the nominal 1e-7 -- is still reported
+    constant. A port that promoted this to float64 would disagree with sklearn
+    on real data. Kept in float32 deliberately.
+    """
+    if n_rows == extent.n_missing:
+        return True
+    return (
+        extent.max_value <= extent.min_value + FEATURE_THRESHOLD
+        and extent.n_missing == 0
+    )
+
+
+def draw_threshold(key: SplitKey, extent: FeatureRange) -> Float32:
+    """One threshold for one (node, feature), keyed rather than streamed.
+
+    `_splitter.pyx:632-637` draws `rand_uniform(min, max, random_state)`, and
+    `:651-652` then applies a guard that is easy to miss and changes an
+    answer::
+
+        if current_split.threshold == max_feature_value:
+            current_split.threshold = min_feature_value
+
+    Their draw can land exactly on `max` because `rand_uniform`
+    (`_utils.pyx:57-61`) divides by `RAND_R_MAX` and `our_rand_r` can return
+    exactly `RAND_R_MAX`. A threshold equal to `max` would send EVERY row left
+    (the test is `<=`), i.e. not split at all; their guard turns that into
+    `min`, which sends only the min-valued rows left.
+
+    OURS CARRIES THE SAME GUARD, and whether it can fire here is a question
+    about float32 rounding rather than about `RAND_R_MAX`: RAFT's `next_float`
+    is `[0, 1 - 2^-24]`, so the mathematical product is strictly below the
+    span, but `min + res * span` is rounded in float32 and CAN round up to
+    `max`. `mojo_only/range_draw_check.mojo` counts how often -- it is not
+    assumed either way.
+    """
+    var gen = key.generator()
+    var threshold = uniform_float(gen, extent.min_value, extent.max_value)
+    if threshold == extent.max_value:
+        return extent.min_value
+    return threshold
+
+
+def draw_threshold_raw(key: SplitKey, extent: FeatureRange) -> Float32:
+    """`draw_threshold` WITHOUT sklearn's `== max` guard.
+
+    Exists so a check can count how often the guard fires. Never call it from
+    the builder.
+    """
+    var gen = key.generator()
+    return uniform_float(gen, extent.min_value, extent.max_value)

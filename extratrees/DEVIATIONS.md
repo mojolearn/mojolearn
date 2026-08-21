@@ -478,13 +478,19 @@ each one silently changes an answer.
    `if end - start == n_missing or (max <= min + FEATURE_THRESHOLD and
    n_missing == 0)`. All-missing is ALSO constant, and a column that would
    otherwise be constant is NOT constant when it contains NaNs.
-2. **That test's addition is FLOAT32, and it widens the band.** Both operands
-   are `float32_t`. At `min == 0.5`, `0.5f + 1e-7f` rounds up to
+2. **That test's addition is FLOAT32, so the band widens and then VANISHES.**
+   Both operands are `float32_t`. At `min == 0.5`, `0.5f + 1e-7f` rounds up to
    `0.5 + 1.192e-7`, so a column whose spread is `1.19e-7` — comfortably above
-   `1e-7` — is still reported CONSTANT. **A port that does this arithmetic in
-   float64 will disagree with sklearn on real data.** Every near-constant
-   fixture in this lane is anchored at `min == 0.0`, where the addition is
-   exact, so that the fixture tests the rule and not the rounding.
+   `1e-7` — is still reported CONSTANT. And further out it does not widen at
+   all: at `min == 3.25` one ulp is `2.384e-7`, half an ulp exceeds
+   `FEATURE_THRESHOLD`, and `3.25f + 1e-7f` rounds straight back to `3.25`, so
+   **the test degenerates to `max <= min` for every feature whose magnitude is
+   above about 2** — a column at that scale is "constant" only if it is exactly
+   constant. Both facts are asserted in `range_draw_check`, and the second was
+   found by a SABOTAGE: tightening the test to `<` made the all-3.25 constant
+   column drawable, which is only possible if `min + FEATURE_THRESHOLD == min`.
+   **A port that computed this in float64 would both miss constants near zero
+   and call constant what sklearn splits further out.**
 3. **`rand_uniform` can return `high`.** `_utils.pyx:57-61` is
    `(high-low) * our_rand_r() / RAND_R_MAX + low` and `our_rand_r` can return
    exactly `RAND_R_MAX`. sklearn guards it at `_splitter.pyx:651-652`:
