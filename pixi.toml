@@ -310,6 +310,17 @@ check-pointwise-hist2-half-byte = "mojo run -I . mojo_only/pointwise_hist2_half_
 # writeback's division is load-bearing. Own main(); a GPU, ~30 s.
 check-pointwise-driver = "mojo run -I . mojo_only/pointwise_driver_check.mojo"
 
+# The BINARY and HALF-BYTE drivers: one accumulator, two writebacks. Binary
+# recovers a one-bit feature by summing the eight nibble values whose bit is
+# clear; half-byte reads its cells directly. E4 is the sharp one -- the two
+# readings of the SAME accumulator must agree, which is two independent
+# paths and the strongest check available without a second implementation.
+# E2 documents a measured redundancy rather than claiming coverage: the fold
+# guard and the abs()>1e-20 guard each suffice alone, so neither is
+# individually observable and only removing BOTH moves a cell. Own main(); a
+# GPU, ~20 s.
+check-pointwise-small-bin-driver = "mojo run -I . mojo_only/pointwise_small_bin_driver_check.mojo"
+
 # The LSD radix sort over (bin, permutation position). Gates STABILITY
 # separately from sortedness and prints both, because sortedness alone
 # cannot see a tie that moved -- and the tie order IS the second half of
