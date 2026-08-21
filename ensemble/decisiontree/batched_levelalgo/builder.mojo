@@ -63,34 +63,29 @@ touches streams except by taking a `cudaStream_t` parameter, which becomes a
 Recorded here only because `Builder`'s constructor takes `cudaStream_t s`
 (`:214`) and a reader diffing the two signatures will notice it missing.
 
-DEVIATION 131. THE FOUR KERNEL LAUNCHES ARE NOT WIRED YET, and this file
-does not pretend otherwise. `train()` below RAISES by name rather than
-returning an empty tree, because a builder that silently returns a
-single-leaf forest is exactly the defect class this repository has been
-bitten by: it compiles, it runs, and its output looks like a very
-conservative model.
+DEVIATION 131 (CLOSED). The four kernel launches ARE wired: `train` ->
+`do_split` -> `_compute_best_splits` -> `_compute_split`, plus
+`set_leaf_predictions`, calling the launchers in
+`kernels/builder_kernels_impl.mojo`. `ensemble/mojo_only/train_check.mojo`
+grows real trees on the device end to end -- quantiles, feature sampling,
+histogram, cdf, gain, split reduction, partition, leaf.
 
-PRICE: `ensemble/` cannot train until the next commit. What IS usable now is
-everything that decides tree shape and allocation, and it is checked --
-`ensemble/mojo_only/builder_check.mojo` drives `NodeQueue` through a full
-synthetic tree build with hand-computed expected node counts, depths and
-instance ranges, and drives the workspace and shared-memory dispatch across
-their whole parameter range.
+WHAT REMAINS OPEN, and it is not the launches: this `Builder` is
+CLASSIFICATION-ONLY. Theirs is `Builder<ObjectiveT>`, generic over the
+objective. Ours cannot be yet, because the launchers are OVERLOADED on the
+concrete objective type (their DEVIATION 129a) -- `objectives.mojo` declares
+no trait and Mojo traits are nominal, so a generic `Builder` has nothing to
+dispatch on. The one-line upstream fix, declaring the two objective structs
+conformant to an objective trait moved somewhere `objectives.mojo` can
+import without a cycle, deletes the two adapters, the six launcher overloads
+AND this restriction together. PRICE until then: regression forests do not
+train, and say so by not existing rather than by training wrongly.
 
-THE LAUNCHER CONTRACT the next commit will call, written here so the two
-halves cannot drift (mirroring `kernels/builder_kernels.cuh:96-160`):
-
-    launch_node_split_kernel(ctx, dataset, work_items, splits, workload_info,
-                             n_blocks_dimx, n_work_items, partition_row_ids)
-    launch_leaf_kernel(ctx, objective, dataset, tree, instance_ranges,
-                       leaves, batch_size, smem_size)
-    launch_build_histograms_kernel(ctx, histograms, max_n_bins, dataset,
-                                   quantiles, work_items, col_start,
-                                   column_samples, objective, workload_info,
-                                   grid_x, grid_y, smem_config)
-    launch_find_best_splits_kernel(ctx, histograms, max_n_bins, dataset,
-                                   quantiles, col_start, column_samples,
-                                   mutex, splits, objective, grid_x, grid_y)
+Classification first was the plan for an independent reason anyway --
+`ClassificationBin` is an integer counter under an integer atomic, so its
+histogram is order-independent by construction, and `train_check` arm E
+holds two fits of a 3-class 4-feature dataset to BIT-IDENTICAL trees and
+leaf values.
 
 DEVIATION 132. `allReduceHistograms` (`:553-568`), `packedHistogramWorkspaceSize`
 (`:269-282`) and the `distributed` flag (`:211`, `:246`) are not ported.
@@ -130,13 +125,43 @@ would silently truncate every tree deeper than 12.
 =================================================================
 """
 
+from std.gpu import WARP_SIZE
 from std.math import ceildiv
+from std.sys.info import size_of
 
+from mojo_only.kernel_matrix import TARGET_COLUMN, column_shared_limit
+
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+
+from ensemble.decisiontree.batched_levelalgo.bins import Bin, BinScales
+from ensemble.decisiontree.batched_levelalgo.dataset import DatasetView
+from ensemble.decisiontree.batched_levelalgo.objectives import (
+    ClassificationObjectiveFunction,
+)
+from ensemble.decisiontree.batched_levelalgo.quantiles import Quantiles
+from ensemble.decisiontree.batched_levelalgo.split import (
+    Split,
+    init_split_kernel,
+)
 from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels import (
     InstanceRange,
     NodeWorkItem,
     SharedMemoryConfig,
     WorkloadInfo,
+    sample_features_kernel,
+)
+from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import (
+    ClassificationObjective,
+    DeviceArgs,
+    FindBestSplitsArgs,
+    HistogramArgs,
+    LeafArgs,
+    NodeSplitArgs,
+    NodeSplitScratch,
+    launch_build_histograms_kernel,
+    launch_find_best_splits_kernel,
+    launch_leaf_kernel,
+    launch_node_split_kernel,
 )
 from ensemble.decisiontree.decisiontree import (
     DecisionTreeParams,
@@ -762,3 +787,692 @@ def compute_shared_memory_config(
         use_global_memory_histogram,
         0 if use_global_memory_histogram else histogram_dynamic_smem_size,
     )
+
+
+# ===========================================================================
+# `Builder`, `builder.cuh:147-698`. The device half, wired.
+# ===========================================================================
+
+
+struct Builder[dt: DType, lt: DType, B: Bin](Movable) where dt.is_floating_point():
+    """`ML::DT::Builder<ObjectiveT>`, `builder.cuh:147-698`.
+
+    THE BUFFERS ARE FIELDS, AND THAT IS LOAD-BEARING RATHER THAN TIDY.
+    Mojo destroys a value at its LAST USE, not at end of scope, so a
+    `DeviceBuffer` handed to a kernel as a raw pointer is dead the moment
+    `.unsafe_ptr()` is taken and the next `enqueue_create_buffer` is handed
+    the same address. That is not theoretical: the kernels lane measured a
+    kernel reading `n_bins` as `-8388609`, the bit pattern of
+    `Split::Min()`, because the `splits` buffer had been allocated on top of
+    a freed `n_bins` buffer -- AND THE ARM HAD PASSED ONCE BEFORE THAT. A
+    struct field keeps its buffer alive for the struct's lifetime, so
+    holding every buffer here removes the hazard for every launch at once
+    instead of requiring a `_ = buf^` after each `synchronize`.
+
+    It is also what their code does, for their own reason: `Builder` owns
+    one `rmm::device_uvector<char> d_buff` and one pinned
+    `ML::pinned_host_vector<char> h_buff` and carves every pointer out of
+    them once in `assignWorkspace` (`:334-372`), because a kernel inside a
+    tree builder must not allocate.
+
+    PARAMETERIZED ON CLASSIFICATION ONLY, and that is an OPEN ITEM rather
+    than a design. Theirs is `Builder<ObjectiveT>`, generic over the
+    objective. Ours cannot be yet: the launchers in
+    `kernels/builder_kernels_impl.mojo` are OVERLOADED on the concrete
+    objective type (their DEVIATION 129a) because `objectives.mojo` declares
+    no trait and Mojo traits are nominal, so a generic `Builder` has nothing
+    to dispatch on. The one-line upstream fix -- declare the two objective
+    structs conformant to an objective trait, moved out of
+    `builder_kernels_impl.mojo` so `objectives.mojo` can import it without a
+    cycle -- deletes the adapters, the six launcher overloads AND this
+    restriction together. Recorded in `ensemble/PLAN.md`.
+
+    Until then this builder trains CLASSIFICATION forests, which is the
+    ship-first path this directory was planned around for an independent
+    reason: `ClassificationBin` is an integer counter with an integer
+    atomic, so its histogram is order-independent by construction.
+    """
+
+    comptime ObjT = ClassificationObjectiveFunction[Self.dt, Self.lt, Self.B]
+
+    var params: DecisionTreeParams
+    var treeid: Int32
+    var seed: UInt64
+    var n_sampled_rows: Int
+    var n_cols: Int
+    var original_n_sampled_cols: Int
+    var num_outputs: Int32
+    var scales: BinScales
+
+    # --- the workspace, `builder.cuh:176-212` ---------------------------
+    var histograms: DeviceBuffer[DType.uint8]
+    var mutex: DeviceBuffer[DType.int32]
+    var splits: DeviceBuffer[DType.uint8]
+    var d_work_items: DeviceBuffer[DType.uint8]
+    var workload_info: DeviceBuffer[DType.uint8]
+    var column_samples: DeviceBuffer[DType.int32]
+    var partition_row_ids: DeviceBuffer[DType.int32]
+    var h_work_items: HostBuffer[DType.uint8]
+    var h_workload_info: HostBuffer[DType.uint8]
+    var h_splits: HostBuffer[DType.uint8]
+
+    # --- DEVIATION 128a's argument blobs, one per launcher --------------
+    var hist_args: DeviceArgs[
+        HistogramArgs[ClassificationObjective[Self.dt, Self.lt, Self.B]]
+    ]
+    var find_args: DeviceArgs[
+        FindBestSplitsArgs[ClassificationObjective[Self.dt, Self.lt, Self.B]]
+    ]
+    var leaf_args: DeviceArgs[
+        LeafArgs[ClassificationObjective[Self.dt, Self.lt, Self.B]]
+    ]
+    var node_split_args: DeviceArgs[NodeSplitArgs[Self.dt, Self.lt]]
+    var node_split_scratch: NodeSplitScratch[Self.dt, TPB_DEFAULT]
+
+    def __init__(
+        out self,
+        ctx: DeviceContext,
+        params: DecisionTreeParams,
+        treeid: Int32,
+        seed: UInt64,
+        n_sampled_rows: Int,
+        n_cols: Int,
+        num_outputs: Int32,
+        scales: BinScales = BinScales(1.0, 1.0),
+    ) raises:
+        """`builder.cuh:213-261`, their constructor.
+
+        `n_sampled_cols = max(1, IdxT(max_features * n_cols))` is `:240`;
+        `max_blocks_dimx = 1 + max_batch_size + n_sampled_rows / TPB` is
+        `:250`; their two `ASSERT`s at `:251-254` become raises.
+        """
+        self.params = params
+        self.treeid = treeid
+        self.seed = seed
+        self.n_sampled_rows = n_sampled_rows
+        self.n_cols = n_cols
+        self.num_outputs = num_outputs
+        self.scales = scales
+        self.original_n_sampled_cols = n_sampled_cols_for(
+            params.max_features, n_cols
+        )
+
+        if num_outputs < Int32(1):
+            raise Error("n_classes should be at least 1")
+        if self.original_n_sampled_cols < 1 or (
+            self.original_n_sampled_cols > n_cols
+        ):
+            raise Error(
+                "n_sampled_cols must be in [1, n_cols]; got "
+                + String(self.original_n_sampled_cols)
+            )
+
+        var max_batch = Int(params.max_batch_size)
+        var max_blocks = max_blocks_dimx_for(
+            params.max_batch_size, n_sampled_rows
+        )
+        var max_len_histograms = (
+            max_batch
+            * Int(params.max_n_bins)
+            * N_BLKS_FOR_COLS
+            * Int(num_outputs)
+        )
+
+        self.histograms = ctx.enqueue_create_buffer[DType.uint8](
+            size_of[Self.B]() * max_len_histograms
+        )
+        self.mutex = ctx.enqueue_create_buffer[DType.int32](max_batch)
+        self.splits = ctx.enqueue_create_buffer[DType.uint8](
+            size_of[Split[Self.dt]]() * max_batch
+        )
+        self.d_work_items = ctx.enqueue_create_buffer[DType.uint8](
+            size_of[NodeWorkItem]() * max_batch
+        )
+        self.workload_info = ctx.enqueue_create_buffer[DType.uint8](
+            size_of[WorkloadInfo]() * max_blocks
+        )
+        self.column_samples = ctx.enqueue_create_buffer[DType.int32](
+            max_batch * self.original_n_sampled_cols
+        )
+        self.partition_row_ids = ctx.enqueue_create_buffer[DType.int32](
+            n_sampled_rows if n_sampled_rows > 0 else 1
+        )
+        self.h_work_items = ctx.enqueue_create_host_buffer[DType.uint8](
+            size_of[NodeWorkItem]() * max_batch
+        )
+        self.h_workload_info = ctx.enqueue_create_host_buffer[DType.uint8](
+            size_of[WorkloadInfo]() * max_blocks
+        )
+        self.h_splits = ctx.enqueue_create_host_buffer[DType.uint8](
+            size_of[Split[Self.dt]]() * max_batch
+        )
+
+        self.hist_args = DeviceArgs[
+            HistogramArgs[ClassificationObjective[Self.dt, Self.lt, Self.B]]
+        ](ctx)
+        self.find_args = DeviceArgs[
+            FindBestSplitsArgs[
+                ClassificationObjective[Self.dt, Self.lt, Self.B]
+            ]
+        ](ctx)
+        self.leaf_args = DeviceArgs[
+            LeafArgs[ClassificationObjective[Self.dt, Self.lt, Self.B]]
+        ](ctx)
+        self.node_split_args = DeviceArgs[NodeSplitArgs[Self.dt, Self.lt]](
+            ctx
+        )
+        self.node_split_scratch = NodeSplitScratch[Self.dt, TPB_DEFAULT](
+            ctx, max_blocks * TPB_DEFAULT, max_batch
+        )
+        ctx.enqueue_memset(self.mutex, Int32(0))
+        ctx.synchronize()
+
+    @always_inline
+    def _splits_ptr(mut self) -> MutPointer[Split[Self.dt], MutUntrackedOrigin]:
+        return (
+            self.splits.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin]()
+            .unsafe_bitcast[Split[Self.dt]]()
+        )
+
+    @always_inline
+    def _work_items_ptr(mut self) -> MutPointer[NodeWorkItem, MutUntrackedOrigin]:
+        return (
+            self.d_work_items.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin]()
+            .unsafe_bitcast[NodeWorkItem]()
+        )
+
+    @always_inline
+    def _workload_ptr(mut self) -> MutPointer[WorkloadInfo, MutUntrackedOrigin]:
+        return (
+            self.workload_info.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin]()
+            .unsafe_bitcast[WorkloadInfo]()
+        )
+
+    @always_inline
+    def _hist_ptr(mut self) -> MutPointer[Self.B, MutUntrackedOrigin]:
+        return (
+            self.histograms.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin]()
+            .unsafe_bitcast[Self.B]()
+        )
+
+    def _objective(mut self) -> Self.ObjT:
+        """`builder.cuh:592-596`, constructed fresh per `computeSplit`."""
+        return Self.ObjT(
+            self.num_outputs,
+            self.params.min_samples_leaf,
+            Int32(self.params.split_criterion),
+            Scalar[Self.dt](Float64(self.params.min_impurity_decrease)),
+            self.scales,
+        )
+
+    def _upload_work_items(
+        mut self, ctx: DeviceContext, items: List[NodeWorkItem]
+    ) raises:
+        """`raft::update_device(d_work_items, ...)`, `:466`, `:492`."""
+        var p = self.h_work_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem]()
+        for i in range(len(items)):
+            p[unsafe_offset=i] = items[i]
+        ctx.enqueue_copy(
+            dst_buf=self.d_work_items,
+            src_ptr=self.h_work_items.unsafe_ptr(),
+        )
+
+    def _upload_workload(
+        mut self, ctx: DeviceContext, wl: List[WorkloadInfo]
+    ) raises:
+        """`raft::update_device(workload_info, ...)`, `:405`."""
+        var p = (
+            self.h_workload_info.unsafe_ptr().unsafe_bitcast[WorkloadInfo]()
+        )
+        for i in range(len(wl)):
+            p[unsafe_offset=i] = wl[i]
+        ctx.enqueue_copy(
+            dst_buf=self.workload_info,
+            src_ptr=self.h_workload_info.unsafe_ptr(),
+        )
+
+    def _download_splits(
+        mut self, ctx: DeviceContext, n: Int
+    ) raises -> List[SplitSummary[Self.dt]]:
+        """`raft::update_host(h_splits, splits, ...)` + `sync_stream`,
+        `:479-480`, `:676-677`. Their host copy is what `NodeQueue::Push`
+        reads, projected onto the six fields it touches."""
+        ctx.enqueue_copy(dst_buf=self.h_splits, src_buf=self.splits)
+        ctx.synchronize()
+        var p = self.h_splits.unsafe_ptr().unsafe_bitcast[Split[Self.dt]]()
+        var out = List[SplitSummary[Self.dt]]()
+        for i in range(n):
+            ref s = p[unsafe_offset=i]
+            out.append(
+                SplitSummary[Self.dt](
+                    s.colid != Int32(-1),
+                    s.colid,
+                    s.quesval,
+                    s.best_metric_val,
+                    s.global_nLeft,
+                    s.local_nLeft,
+                )
+            )
+        return out^
+
+    def _sample_features(
+        mut self,
+        ctx: DeviceContext,
+        n_work_items: Int,
+        sample_offset: Int,
+        n_sampled_cols: Int,
+    ) raises:
+        """`Builder::sampleFeatures`, `:505-520`, calling `sample_features`
+        (`kernels/builder_kernels.cuh:66-94`).
+
+        The seed is split into two Int32 halves BY BIT PATTERN with every
+        intermediate bound to a `var`; chaining the conversions inline folds
+        to one sign-extending cast and silently delivers the wrong word.
+        """
+        var n_column_samples = n_work_items * n_sampled_cols
+        if n_column_samples == 0:
+            return
+        var hi_u = (self.seed >> 32).cast[DType.uint32]()
+        var lo_u = (self.seed & 0xFFFFFFFF).cast[DType.uint32]()
+        var hi_arg = hi_u.cast[DType.int32]()
+        var lo_arg = lo_u.cast[DType.int32]()
+        var blocks = ceildiv(n_column_samples, 256)
+        ctx.enqueue_function[sample_features_kernel](
+            self.column_samples.unsafe_ptr(),
+            self._work_items_ptr(),
+            Int32(n_column_samples),
+            self.treeid,
+            lo_arg,
+            hi_arg,
+            Int32(sample_offset),
+            Int32(self.n_cols),
+            Int32(n_sampled_cols),
+            grid_dim=blocks,
+            block_dim=256,
+        )
+
+    def _compute_split(
+        mut self,
+        ctx: DeviceContext,
+        dataset: DatasetView[Self.dt, Self.lt],
+        quantiles: Quantiles[Self.dt],
+        col: Int,
+        n_blocks_dimx: Int,
+        n_work_items: Int,
+        n_sampled_cols: Int,
+        smem_config: SharedMemoryConfig,
+    ) raises:
+        """`Builder::computeSplit`, `:570-626`.
+
+        Their `n_blocks_dimy = min(n_blks_for_cols, n_sampled_cols - col)`
+        is what makes the histogram buffer hold up to ten columns at once,
+        and `len_histograms` is sized from that same `n_blocks_dimy` rather
+        than from `n_blks_for_cols`, so the memset is exactly the region the
+        launch will touch.
+        """
+        if n_blocks_dimx == 0:
+            return
+        var n_bins = Int(self.params.max_n_bins)
+        var n_classes = Int(self.num_outputs)
+        var n_blocks_dimy = min(N_BLKS_FOR_COLS, n_sampled_cols - col)
+        # `:588-590` -- theirs zeroes exactly `sizeof(BinT) *
+        # len_histograms` bytes, where
+        # `len_histograms = n_bins * n_classes * n_blocks_dimy *
+        # n_work_items`. DEVIATION 134: `enqueue_memset` takes a BUFFER and
+        # not a range, so this zeroes the whole histogram workspace --
+        # sized for `max_batch_size` nodes and `N_BLKS_FOR_COLS` columns.
+        # PRICE: strictly more zeroing than theirs, never less, so every
+        # cell their launch reads is zeroed here too and no value can
+        # differ. The excess is bounded by the workspace, which is
+        # allocated once per tree, and is a candidate for a sub-buffer
+        # view if one is ever measured to matter. Nothing is measured this
+        # round.
+        _ = n_bins * n_classes * n_blocks_dimy * n_work_items
+        ctx.enqueue_memset(self.histograms, UInt8(0))
+        var objective = self._objective()
+
+        launch_build_histograms_kernel(
+            ctx,
+            self._hist_ptr(),
+            n_bins,
+            dataset,
+            quantiles,
+            self._work_items_ptr(),
+            col,
+            self.column_samples.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin](),
+            objective,
+            self._workload_ptr(),
+            n_blocks_dimx,
+            n_blocks_dimy,
+            smem_config,
+            self.hist_args,
+        )
+        # DEVIATION 132: their `if (distributed) allReduceHistograms(...)`
+        # sits exactly here (`:613`) and is unreachable on one device.
+        launch_find_best_splits_kernel(
+            ctx,
+            self._hist_ptr(),
+            n_bins,
+            dataset,
+            quantiles,
+            col,
+            self.column_samples.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin](),
+            self.mutex.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin](),
+            self._splits_ptr(),
+            objective,
+            n_work_items,
+            n_blocks_dimy,
+            self.find_args,
+        )
+
+    def _compute_best_splits(
+        mut self,
+        ctx: DeviceContext,
+        dataset: DatasetView[Self.dt, Self.lt],
+        quantiles: Quantiles[Self.dt],
+        work_items: List[NodeWorkItem],
+        sample_offset: Int,
+        n_sampled_cols: Int,
+        smem_config: SharedMemoryConfig,
+    ) raises -> List[SplitSummary[Self.dt]]:
+        """`Builder::computeBestSplits`, `:485-503`, in their order."""
+        var n = len(work_items)
+        # `:489` -- initSplit
+        ctx.enqueue_function[init_split_kernel[Self.dt]](
+            self._splits_ptr(), Int32(n), grid_dim=ceildiv(n, 128), block_dim=128
+        )
+        # `:490` -- the mutex is re-zeroed EVERY batch, over max_batch_size
+        # entries and not just the live ones.
+        ctx.enqueue_memset(self.mutex, Int32(0))
+        self._upload_work_items(ctx, work_items)
+
+        var wl = List[WorkloadInfo]()
+        var n_blocks_dimx = update_workload_info(work_items, wl)
+        self._upload_workload(ctx, wl)
+
+        self._sample_features(ctx, n, sample_offset, n_sampled_cols)
+
+        # `:497-500` -- ten columns per launch.
+        var c = 0
+        while c < n_sampled_cols:
+            self._compute_split(
+                ctx, dataset, quantiles, c, n_blocks_dimx, n,
+                n_sampled_cols, smem_config,
+            )
+            c += N_BLKS_FOR_COLS
+        return self._download_splits(ctx, n)
+
+    def do_split(
+        mut self,
+        ctx: DeviceContext,
+        dataset: DatasetView[Self.dt, Self.lt],
+        quantiles: Quantiles[Self.dt],
+        work_items: List[NodeWorkItem],
+        smem_config: SharedMemoryConfig,
+    ) raises -> List[SplitSummary[Self.dt]]:
+        """`Builder::doSplit`, `:410-482`. THE MULTI-ROUND LOOP.
+
+        See the module docstring for why the rounds exist. The active set
+        shrinks to the nodes that still have no valid split (`:452-458`),
+        and their `if (round + 1 >= max_sampling_rounds) break;` at `:456`
+        means the LAST round does not bother rebuilding it.
+        """
+        var n = len(work_items)
+        var max_rounds = max_sampling_rounds_for(
+            self.n_cols, self.original_n_sampled_cols
+        )
+
+        var final_splits = List[SplitSummary[Self.dt]]()
+        for _ in range(n):
+            final_splits.append(
+                SplitSummary[Self.dt](
+                    False, Int32(-1), Scalar[Self.dt](0),
+                    Scalar[Self.dt](0), Int64(0), Int64(0),
+                )
+            )
+        var active_items = work_items.copy()
+        var active_to_original = List[Int]()
+        for i in range(n):
+            active_to_original.append(i)
+
+        var round = 0
+        while len(active_items) > 0 and round < max_rounds:
+            var sample_offset = round * self.original_n_sampled_cols
+            var n_sampled_cols = sampled_cols_in_round(
+                self.n_cols, self.original_n_sampled_cols, round
+            )
+            var h = self._compute_best_splits(
+                ctx, dataset, quantiles, active_items, sample_offset,
+                n_sampled_cols, smem_config,
+            )
+            var retry_items = List[NodeWorkItem]()
+            var retry_to_original = List[Int]()
+            for i in range(len(active_items)):
+                var orig = active_to_original[i]
+                final_splits[orig] = h[i]
+                if not h[i].is_valid:
+                    retry_items.append(active_items[i])
+                    retry_to_original.append(orig)
+            if round + 1 >= max_rounds:
+                break
+            active_items = retry_items^
+            active_to_original = retry_to_original^
+            round += 1
+
+        # `:474-478` -- the chosen splits go back to the device once, and
+        # the partition runs ONCE over the whole batch.
+        var sp = self.h_splits.unsafe_ptr().unsafe_bitcast[Split[Self.dt]]()
+        for i in range(n):
+            sp[unsafe_offset=i] = Split[Self.dt](
+                final_splits[i].quesval,
+                final_splits[i].colid,
+                final_splits[i].best_metric_val,
+                final_splits[i].global_n_left,
+                final_splits[i].local_n_left,
+                Int32(-1),
+                Int32(-1),
+            )
+        ctx.enqueue_copy(
+            dst_buf=self.splits, src_ptr=self.h_splits.unsafe_ptr()
+        )
+        self._upload_work_items(ctx, work_items)
+        var wl = List[WorkloadInfo]()
+        var n_partition_blocks = update_workload_info(work_items, wl)
+        self._upload_workload(ctx, wl)
+
+        launch_node_split_kernel(
+            ctx,
+            dataset,
+            self._work_items_ptr(),
+            self._splits_ptr(),
+            self._workload_ptr(),
+            n_partition_blocks,
+            n,
+            self.partition_row_ids.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin](),
+            self.node_split_scratch,
+            self.node_split_args,
+        )
+        return self._download_splits(ctx, n)
+
+    def shared_memory_config(self) raises -> SharedMemoryConfig:
+        """`Builder::computeSharedMemoryConfig`, `:522-551`, with this
+        build's sizes filled in.
+
+        Theirs is called once per `computeBestSplits` (`:493`). Ours is
+        called once per `train` and threaded down, because in this port it
+        is a pure function of `params`, `num_outputs` and the two `size_of`s
+        -- none of which move inside a fit -- and because the one input that
+        WOULD have been a device query is a kernel-matrix row here rather
+        than a `get_attribute` (1.26 ms per call on Metal). Same value,
+        computed once.
+
+        `cdf_scan_smem_size` is `sizeof(cub::BlockScan<BinT, TPB>::
+        TempStorage)` in their expression; ours is what
+        `core/block_scan.block_inclusive_sum` actually allocates,
+        `(TPB + WARPS) * size_of[BinT]`, so the two implementations agree on
+        whether a configuration fits.
+        """
+        var warps = ceildiv(TPB_DEFAULT, WARP_SIZE)
+        var cdf_scan_smem_size = (TPB_DEFAULT + warps) * size_of[Self.B]()
+        return compute_shared_memory_config(
+            self.params.max_n_bins,
+            self.num_outputs,
+            size_of[Self.B](),
+            size_of[Scalar[Self.dt]](),
+            size_of[Split[Self.dt]](),
+            column_shared_limit(TARGET_COLUMN),
+            cdf_scan_smem_size,
+            WARP_SIZE,
+        )
+
+    def set_leaf_predictions(
+        mut self,
+        ctx: DeviceContext,
+        mut tree: TreeMetaDataNode[Self.dt],
+        instance_ranges: List[InstanceRange],
+        dataset: DatasetView[Self.dt, Self.lt],
+    ) raises:
+        """`Builder::SetLeafPredictions`, `:630-687`.
+
+        Their comment at `:636`: "do this in batch to reduce peak memory
+        usage in extreme cases", with `max_batch_size = min(100000,
+        sparsetree.size())` (`:637`). Transcribed, including the batching,
+        because a tree with more nodes than that is exactly the case the
+        batching exists for.
+
+        Note their `leafKernel` runs over EVERY node in the batch and
+        returns immediately for the ones that are not leaves (`:225`), so
+        the launch is sized by node count and not by leaf count. The zero
+        fill at `:659-660` is what leaves the internal nodes' slots at 0.
+        """
+        var n_nodes = len(tree.sparsetree)
+        var n_out = Int(dataset.num_outputs)
+        if n_nodes != len(instance_ranges):
+            raise Error(
+                "Expected instance range for each node; "
+                + String(n_nodes)
+                + " nodes vs "
+                + String(len(instance_ranges))
+                + " ranges"
+            )
+        tree.vector_leaf = List[Scalar[Self.dt]]()
+        tree.vector_leaf.resize(n_nodes * n_out, Scalar[Self.dt](0))
+
+        var batch = min(100000, n_nodes)
+        if batch == 0:
+            return
+        var d_tree = ctx.enqueue_create_buffer[DType.uint8](
+            size_of[SparseTreeNode[Self.dt]]() * batch
+        )
+        var h_tree = ctx.enqueue_create_host_buffer[DType.uint8](
+            size_of[SparseTreeNode[Self.dt]]() * batch
+        )
+        var d_ranges = ctx.enqueue_create_buffer[DType.uint8](
+            size_of[InstanceRange]() * batch
+        )
+        var h_ranges = ctx.enqueue_create_host_buffer[DType.uint8](
+            size_of[InstanceRange]() * batch
+        )
+        var d_leaves = ctx.enqueue_create_buffer[Self.dt](batch * n_out)
+        var h_leaves = ctx.enqueue_create_host_buffer[Self.dt](batch * n_out)
+        var objective = self._objective()
+        # `:652` -- their smem is `sizeof(BinT) * num_outputs`.
+        var smem_size = size_of[Self.B]() * n_out
+
+        var begin = 0
+        while begin < n_nodes:
+            var end = min(begin + batch, n_nodes)
+            var size = end - begin
+            var tp = h_tree.unsafe_ptr().unsafe_bitcast[
+                SparseTreeNode[Self.dt]
+            ]()
+            var rp = h_ranges.unsafe_ptr().unsafe_bitcast[InstanceRange]()
+            for i in range(size):
+                tp[unsafe_offset=i] = tree.sparsetree[begin + i]
+                rp[unsafe_offset=i] = instance_ranges[begin + i]
+            ctx.enqueue_copy(dst_buf=d_tree, src_ptr=h_tree.unsafe_ptr())
+            ctx.enqueue_copy(dst_buf=d_ranges, src_ptr=h_ranges.unsafe_ptr())
+            ctx.enqueue_memset(d_leaves, Scalar[Self.dt](0))
+
+            launch_leaf_kernel(
+                ctx,
+                objective,
+                dataset,
+                d_tree.unsafe_ptr()
+                .unsafe_origin_cast[MutUntrackedOrigin]()
+                .unsafe_bitcast[SparseTreeNode[Self.dt]](),
+                d_ranges.unsafe_ptr()
+                .unsafe_origin_cast[MutUntrackedOrigin]()
+                .unsafe_bitcast[InstanceRange](),
+                d_leaves.unsafe_ptr()
+                .unsafe_origin_cast[MutUntrackedOrigin](),
+                size,
+                smem_size,
+                self.leaf_args,
+            )
+            ctx.enqueue_copy(dst_buf=h_leaves, src_buf=d_leaves)
+            ctx.synchronize()
+            for i in range(size * n_out):
+                tree.vector_leaf[begin * n_out + i] = (
+                    h_leaves.unsafe_ptr().unsafe_load(i)
+                )
+            begin = end
+
+        # The buffers above are LOCALS, and Mojo frees a value at its last
+        # use rather than at end of scope -- so a device buffer handed to a
+        # kernel as a raw pointer can be freed and reallocated under the
+        # running launch. These uses keep them alive past the final
+        # `synchronize`. Measured hazard, not a precaution.
+        _ = d_tree^
+        _ = h_tree^
+        _ = d_ranges^
+        _ = h_ranges^
+        _ = d_leaves^
+        _ = h_leaves^
+
+    def train(
+        mut self,
+        ctx: DeviceContext,
+        dataset: DatasetView[Self.dt, Self.lt],
+        quantiles: Quantiles[Self.dt],
+    ) raises -> TreeMetaDataNode[Self.dt]:
+        """`Builder::train`, `:375-389`. Their loop, verbatim:
+
+            NodeQueue queue(params, maxNodes(), n_sampled_rows, num_outputs);
+            while (queue.HasWork()) {
+              auto work_items = queue.Pop();
+              auto [h_splits, n] = doSplit(work_items);
+              queue.Push(work_items, h_splits);
+            }
+            auto tree = queue.GetTree();
+            SetLeafPredictions(tree, queue.GetInstanceRanges());
+
+        `train_time` is not set; see DEVIATION 133.
+        """
+        var smem_config = self.shared_memory_config()
+        var queue = NodeQueue[Self.dt](
+            self.params,
+            max_nodes(self.params.max_depth),
+            self.n_sampled_rows,
+            self.num_outputs,
+        )
+        while queue.has_work():
+            var work_items = queue.pop()
+            var h_splits = self.do_split(
+                ctx, dataset, quantiles, work_items, smem_config
+            )
+            queue.push(work_items, h_splits)
+        var tree = queue.tree.copy()
+        tree.treeid = self.treeid
+        self.set_leaf_predictions(
+            ctx, tree, queue.node_instances_.copy(), dataset
+        )
+        return tree^
