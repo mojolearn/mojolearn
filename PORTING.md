@@ -3875,3 +3875,29 @@ against our own arithmetic. This is the first that means gated against
 CatBoost. The gap was named in `NEXT_TWO.md` rung 5 and in `PORTING.md` 91 F
 the whole time; it is now closed for the CPU oracle, and `task_type="GPU"`
 remains unrun.
+
+## 109. CatBoost's GPU arm cannot run on this machine, and the oracle is not weaker for it
+
+Probed 2026-08-21:
+
+    catboost.CatBoostRegressor(task_type='GPU', devices='0').fit(X, y)
+    -> catboost/libs/train_lib/trainer_env.cpp:9:
+       Environment for task type [GPU] not found
+
+CatBoost's GPU build is CUDA. `NEXT_TWO.md` had twice named "run the oracle
+with `task_type='GPU'`" as the highest-value open item, and `PORTING.md`
+91 F recorded it as a known gap. **It is not an item.** It needs different
+hardware, which is what `tools/nvidia_bench.sh` and `tools/remote_gpu.sh`
+exist for.
+
+It is also the project's THESIS rather than a limitation of the port: their
+GPU arms cannot run on Apple silicon, and that is the win condition.
+
+**The CPU oracle is the right reference.** CatBoost's CPU learner is the
+canonical implementation; their two arms are meant to agree on which splits
+an oblivious tree takes at a given grid. So `PORTING.md` 108's 144 of 144 is
+a comparison with CatBoost, full stop -- not a substitute for one. What
+remains unverified is whether their GPU arm agrees with their CPU arm, which
+is a question about CatBoost and not about this port.
+
+The sentences claiming otherwise are deleted rather than annotated.

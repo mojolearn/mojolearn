@@ -82,16 +82,35 @@ fit.
 
 ### Rung 5 -- widen the CatBoost differential (independent, do any time)
 
-`tools/catboost_oracle.py` has never done two things:
+**CORRECTED 2026-08-21. This page said twice that running the oracle with
+`task_type="GPU"` was the highest-value item here. It is not an item at
+all: CatBoost's GPU arm CANNOT RUN ON THIS MACHINE.**
 
-* **run with `task_type="GPU"`.** It passes no `task_type`, so today it
-  compares against CatBoost's CPU learner (`PORTING.md` 91 F). Now that a
-  GPU single-target oblivious searcher EXISTS here, this is the comparison
-  that was impossible before and is the highest-value item on this page.
-* **compare a categorical fixture split-for-split.**
+    catboost.CatBoostRegressor(task_type='GPU').fit(...)
+    -> catboost/libs/train_lib/trainer_env.cpp:9:
+       Environment for task type [GPU] not found
 
-Depth and feature-count sweeps are the same shape of change as the border
-budget it already takes from the environment.
+CatBoost's GPU build is CUDA. That is not a gap in this repository's
+discipline -- it is the project's thesis
+([[mojotrees-benchmark-arena]]): their GPU arms cannot run on Apple silicon,
+which is the win condition rather than a caveat. Comparing against their GPU
+output needs an NVIDIA box, which is what `tools/nvidia_bench.sh` and
+`tools/remote_gpu.sh` are for.
+
+**And the CPU oracle is the right reference anyway.** CatBoost's CPU learner
+is the canonical implementation of the algorithm; their two arms are meant to
+agree on which splits an oblivious tree takes. `PORTING.md` 108's 144 of 144
+is a comparison with CatBoost, not a weaker substitute for one.
+
+What is genuinely left here, all doable locally:
+
+* **a CATEGORICAL fixture, split-for-split.** Never done, and the one place
+  the differential has no coverage at all.
+* depth and feature-count sweeps -- the same shape of change as the border
+  budget the oracle already takes from the environment.
+* a fixture whose widest feature lands in each of the four one-byte bit
+  widths, since `PORTING.md` 108 showed a whole kernel can be reached by
+  exactly one of the three existing fixtures.
 
 ## OPEN DECISIONS, both needing a MEASUREMENT and no benchmark authorised
 
