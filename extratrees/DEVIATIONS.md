@@ -2010,3 +2010,90 @@ host/device one, and it costs one allocation per tree instead of one per
 forest. It is the same class of thing deviation 184 closed for the dataset and
 should be closed the same way — in a round where `randomforest.mojo` and
 `builder.mojo` are not both moving.
+
+---
+
+# The feature sampler on device — deviations 195-201
+
+## 195. `cub::BlockRadixSort` has no counterpart, so the sort is a hand-written bitonic network
+
+`max.gpu.primitives.block` offers `sum`, `min`, `max`, `broadcast` and
+`prefix_sum` and nothing else — checked this session. `PORTING_RULES.md` 0b-i's
+terms are met literally: zero warp intrinsics, no assumed wavefront width,
+`barrier()` per stage, no vendor branch anywhere in the kernel.
+
+Deviation 157 already established why the substitution is FREE and it is not
+re-argued: their `Sort` here sorts KEYS ONLY and the keys are the column ids,
+so two equal keys are indistinguishable and every ascending sort produces the
+identical array.
+
+The network covers `next_pow2(n_parallel_samples)` rather than the full slot
+count, because slots at or above `n_parallel_samples` hold a constant run of
+the array's maximum and are already in sorted place.
+
+## 196. MEASURED: their sort's storage does not fit, so `items` lives in global scratch
+
+cuML's own `BLOCK_THREADS * MAX_SAMPLES_PER_THREAD * sizeof(IdxT)` is 36,864
+bytes and this box's threadgroup limit is 32,768: *"Threadgroup memory size
+(36864) exceeds the maximum threadgroup memory allowed (32768)"*. 8,192 `Int32`
+is the ceiling.
+
+`mask` stays private per thread — slots do not migrate, items do — and
+`col_indices` is not stored at all. A comptime capacity ladder was considered
+and REJECTED, because its refusal would fire inside cuML's own supported range.
+
+## 197. The block scan is per-thread totals then one collective
+
+Mojo's `prefix_sum` has no `ITEMS_PER_THREAD`, and nothing returns prefix AND
+aggregate together, so it is two calls — the same finding deviation 176 records
+for the partition. The aggregate must be block-uniform because it drives the
+loop exit.
+
+## 198. The DISPATCH stays on the host, because it is on the host in cuML
+
+`builder.cuh:419-421` computes `n_parallel_samples` on the host and a C++ `if`
+picks between three launches. Rule 2 does not bite: nothing is being decided on
+the host that they decide on the device.
+
+Deviation 159's raise becomes `SAMPLER_OVERRUN`, and `report` is added with no
+cuML counterpart — the device's own statement of which kernel ran and how many
+iterations it took, so a check does not infer the path from host arithmetic.
+
+## 199. MEASURED: Metal has no `double`, so cuML's algorithm L cannot be a kernel here
+
+cuML's algorithm L is a `double` algorithm in four places
+(`builder_kernels.cuh:291`, `:306` twice, `:313`). Metal rejects `double` at
+COMPILE time, not at enqueue: *"function's return type 'double' is not
+supported"*, *"llvm.fma.f64 has Metal-unsupported instructions"*, *"LLVM ERROR:
+Failed to verify LLVM IR for Metal"*.
+
+**A `Float32` substitute was written and REJECTED.** At the `k/n` their dispatch
+actually routes to this arm, `W` is about `1 - 1e-4`, so forming `1 - W` in
+`Float32` is catastrophic cancellation — roughly 13 bits survive. That is a
+DIFFERENT ALGORITHM wearing this one's name, on the one arm nobody would look
+at. Tracking `V = 1 - W` through `expm1f` was rejected for the opposite reason:
+it is numerically BETTER than cuML, and this is a port.
+
+**A second reason it will not be bit-identical even where `double` exists:**
+deviation 158 records that there is no libm through FFI on device, so
+`std.math.log`'s ~5e-8 absolute error applies to the jump computation. The
+kernel below `algo_l_sample_kernel` is a portable DRAFT for a CUDA/ROCm box,
+not a verified kernel, and it says so.
+
+## 201. The algo-L arm runs on the HOST, and that is a placement difference, not a refusal
+
+**The choice.** Refusing the arm would make the device path unusable whenever
+`k/n` is near 1 at large `n`. Running cuML's algorithm on the host is a
+PLACEMENT difference; refusing to fit is a CAPABILITY loss.
+
+**Why the host form is trustworthy for it.** It is not a guess — it is the
+checked oracle the device kernels are verified against, cell for cell, over
+1,063,780 cells.
+
+**The branch is a host-side capability query** (`device_has_float64()`), never
+an `if apple` inside a kernel. On CUDA and ROCm the same call takes the device
+kernel and the copy disappears; the source is one source.
+
+**The price, stated:** on a target without `double`, that arm costs one
+`work_items_size * k` H2D copy per level their design does not have. The
+returned plan reports which arm ran, so it is visible rather than silent.

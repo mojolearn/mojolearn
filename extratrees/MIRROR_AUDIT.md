@@ -34,7 +34,7 @@ level BY CONSTRUCTION. Ours crosses exactly the same thing.
 | `initSplit(splits, ...)` | `:391` | device kernel | device kernel (`split_reduce_init_kernel`) | MIRRORED |
 | `update_device(d_work_items, ...)` | `:394` | H2D copy | H2D copy | MIRRORED |
 | `updateWorkloadInfo` | `:365-385` | **HOST**, then one H2D copy | HOST, then one H2D copy | MIRRORED — theirs builds `h_workload_info` on the host too |
-| feature sampling | `:398-471` | **device kernels** | HOST + upload | **DRIFT — being fixed** |
+| feature sampling | `:398-471` | **device kernels** | device kernels (algo-L arm host-side, deviation 201) | MIRRORED |
 | the split search | `:475-477` | device kernel | device kernels | MIRRORED in placement, DEVIATION 137 in content |
 | the column-block loop `c += n_blks_for_cols` | `:475` | 10 columns per launch | all columns in one launch | EXPLAINED BELOW |
 | `launchNodeSplitKernel` (partition) | `:478-491` | device kernel | device kernel | MIRRORED |
@@ -68,13 +68,10 @@ the feature), and every kernel in this lane keeps it.
 | the dataset | `dataset.h:22-38` | resident for the whole fit | resident for the whole fit | MIRRORED (deviation 184, closed) |
 | `predict` | `:229-242` | HOST loop, `+=` per tree | HOST loop, `+=` per tree | MIRRORED (deviation 147) |
 
-**The `row_sample` drift is real but small**, and it is stated rather than
-hidden: with `bootstrap=False` the value is the identity permutation, and we
-build it on the host and upload it once per tree where they fill it on the
-device. It costs one `n_rows` H2D copy per tree and cannot differ in value.
-It is the next thing to fix after the sampler, and it is NOT the same class of
-drift as computing a decision on the host: nothing is being decided, a constant
-is being materialised.
+**The `row_sample` drift is FIXED** (deviation 200): `row_ids_sequence_kernel`
+fills it on the device, which is what `thrust::sequence` does. What remains is
+a LIFETIME difference — their buffer is owned by `fit`, ours by the trainer —
+not a host/device one.
 
 ## What was WRONG and is now fixed
 
@@ -85,8 +82,21 @@ is being materialised.
    correct and it was the wrong shape. **Fixed**: the gain is computed on the
    device from their expression, the three readbacks are gone, and
    `best_metric_val` is now bit-identical between the two paths.
-2. **The feature sampler runs on the host.** Being fixed now; it is the last
-   rule-2 violation in the lane.
+2. **The feature sampler ran on the host.** FIXED: `sample_features_device`
+   enqueues their kernel, bit-identical to the host oracle over 23,462 asserted
+   slots, with both `MAX_SAMPLES_PER_THREAD` instantiations and the
+   all-features arm named by the DEVICE's own report.
+
+   **One arm of it cannot run on Metal and is named rather than hidden.**
+   cuML's algorithm L is a `double` algorithm in four places
+   (`builder_kernels.cuh:291`, `:306` twice, `:313`) and Metal rejects `double`
+   at COMPILE time. That arm takes the host transcription — the same
+   algorithm, the checked oracle — and the placement is reported in the
+   returned plan. A `Float32` substitute was written and REJECTED: at the `k/n`
+   their dispatch routes there, `W ~ 1 - 1e-4`, so forming `1 - W` in `Float32`
+   leaves about 13 bits. Deviations 199 and 201.
+
+3. **`row_ids` was built on the host.** FIXED, deviation 200.
 
 ## What is deliberately NOT mirrored, with the reason
 

@@ -59,10 +59,18 @@ from extratrees.ported.decisiontree.batched_levelalgo.objectives import (
 )
 from extratrees.ported.decisiontree.batched_levelalgo.split import Split
 from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels import (
+    FeatureSamplerPlan,
     InstanceRange,
     NodeWorkItem,
+    SAMPLE_ALGO_L,
+    SAMPLER_UNVISITED,
     WorkloadInfo,
+    device_has_float64,
+    plan_feature_sampling,
     sample_features,
+    sample_features_device,
+    sampler_report_len,
+    sampler_scratch_len,
     split_not_valid,
 )
 from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import (
@@ -87,7 +95,7 @@ from extratrees.ported.decisiontree.batched_levelalgo.split import (
     split_reduce_init_kernel,
     split_reduce_kernel,
 )
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import ceildiv, fma
 from std.sys.info import size_of
@@ -938,6 +946,97 @@ def train_classification_device(
     )
 
 
+def sample_features_for_device[
+    os: MutOrigin, orp: MutOrigin, ow: MutOrigin, //
+](
+    ctx: DeviceContext,
+    mut d_colids_buf: DeviceBuffer[DType.int32],
+    d_scratch: MutPointer[Int32, os],
+    d_report: MutPointer[Int32, orp],
+    d_work_items: MutPointer[NodeWorkItem, ow],
+    mut h_colids_stage: HostBuffer[DType.int32],
+    work_items: List[NodeWorkItem],
+    tree_id: Int32,
+    seed: UInt64,
+    n: Int,
+    k: Int,
+) raises -> FeatureSamplerPlan:
+    """Sample this batch's features WHERE cuML SAMPLES THEM, with one arm that
+    cannot run there and is named rather than hidden.
+
+    ==================================================================
+    DEVIATION BLOCK 201 -- the excess arm and the all-features arm run
+    on the DEVICE; ALGORITHM L runs on the HOST, because Metal has no
+    `double`.
+
+    THEIRS: `builder.cuh:398-471` computes `n_parallel_samples` on the
+    host and then launches one of three kernels. The `colids` array is
+    produced on the device and the host never sees it.
+
+    OURS, per arm:
+      * `SAMPLE_EXCESS` and `SAMPLE_ALL_FEATURES` -- `sample_features_device`,
+        which enqueues their kernel. Bit-identical to the host oracle over
+        23,462 asserted slots.
+      * `SAMPLE_ALGO_L` -- the HOST transcription, uploaded.
+
+    WHY ALGORITHM L CANNOT RUN THERE, measured rather than assumed:
+    cuML's algorithm L is a `double` algorithm in four places
+    (`builder_kernels.cuh:291`, `:306` twice, `:313`) and Metal rejects
+    `double` AT COMPILE TIME -- "function's return type 'double' is not
+    supported", "llvm.fma.f64 has Metal-unsupported instructions". This
+    is the same wall as no streams and no `threadfence`, and it is in the
+    traps register.
+
+    WHY NOT A FLOAT32 SUBSTITUTE: at the `k/n` their dispatch actually
+    routes to this arm, `W` is about `1 - 1e-4`, so forming `1 - W` in
+    `Float32` is catastrophic cancellation -- roughly 13 bits survive.
+    That would be a DIFFERENT ALGORITHM wearing this one's name, on the
+    one arm nobody would look at. Tracking `V = 1 - W` through `expm1f`
+    was rejected for the opposite reason: it is numerically BETTER than
+    cuML, and this is a port.
+
+    WHY NOT REFUSE THE ARM: refusing would make the device path unusable
+    whenever `k/n` is near 1 at large `n`, and the host transcription is
+    not a guess -- it is the checked oracle the device kernels are
+    verified against, cell for cell, over 1,063,780 cells. Running THEIR
+    algorithm on the host is a placement difference; refusing to fit is a
+    capability loss. The placement is reported in the returned plan, so a
+    caller can see which arm ran and where.
+
+    THE PRICE, stated: on a target without `double` the algo-L arm costs
+    one `work_items_size * k` H2D copy per level that their design does
+    not have. On CUDA and ROCm, where `double` exists, the same call
+    takes the device kernel and the copy disappears -- the code is one
+    source and the branch is a host-side capability query, never an
+    `if apple` inside a kernel.
+    ==================================================================
+    """
+    var plan = plan_feature_sampling(n, k)
+    if plan.arm != SAMPLE_ALGO_L or device_has_float64():
+        return sample_features_device(
+            ctx,
+            d_colids_buf.unsafe_ptr(),
+            d_scratch,
+            d_report,
+            d_work_items,
+            len(work_items),
+            tree_id,
+            seed,
+            n,
+            k,
+        )
+    var host_colids = List[Int32](
+        length=len(work_items) * k, fill=Int32(0)
+    )
+    _ = sample_features(host_colids, work_items, tree_id, seed, n, k)
+    for i in range(len(host_colids)):
+        h_colids_stage.unsafe_ptr().unsafe_store(i, host_colids[i])
+    ctx.enqueue_copy(
+        dst_buf=d_colids_buf, src_ptr=h_colids_stage.unsafe_ptr()
+    )
+    return plan
+
+
 def train_classification_device_resident(
     ctx: DeviceContext,
     mut dataset: DeviceDataset,
@@ -1018,10 +1117,7 @@ def train_classification_device_resident(
         var n_nodes = len(work_items)
 
         # --- 1. feature sampling, on the host, as theirs is -------------
-        var colids = List[Int32](length=n_nodes * Int(k), fill=Int32(0))
-        _ = sample_features(
-            colids, work_items, tree_id, seed, Int(n_cols), Int(k)
-        )
+
 
         # --- 2. the ragged-batch flattening ------------------------------
         var plan = build_workload_info(work_items, TPB)
@@ -1066,6 +1162,12 @@ def train_classification_device_resident(
         var d_nb = ctx.enqueue_create_buffer[DType.int32](n_nodes)
         var d_nc = ctx.enqueue_create_buffer[DType.int32](n_nodes)
         var d_colids = ctx.enqueue_create_buffer[DType.int32](n_cells)
+        var d_samp_scratch = ctx.enqueue_create_buffer[DType.int32](
+            sampler_scratch_len(n_nodes, Int(n_cols), Int(k))
+        )
+        var d_samp_report = ctx.enqueue_create_buffer[DType.int32](
+            sampler_report_len(n_nodes)
+        )
         var d_items = ctx.enqueue_create_buffer[DType.uint8](
             n_nodes * size_of[NodeWorkItem]()
         )
@@ -1086,8 +1188,6 @@ def train_classification_device_resident(
         var h_nc = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
         ctx.synchronize()
 
-        for i in range(n_cells):
-            h_colids.unsafe_ptr().unsafe_store(i, colids[i])
         var items_ptr = h_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem]()
         for i in range(n_nodes):
             items_ptr[unsafe_offset=i] = work_items[i]
@@ -1098,7 +1198,6 @@ def train_classification_device_resident(
             h_nb.unsafe_ptr().unsafe_store(i, Int32(i * Int(k)))
             h_nc.unsafe_ptr().unsafe_store(i, Int32(Int(k)))
 
-        ctx.enqueue_copy(dst_buf=d_colids, src_ptr=h_colids.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=d_items, src_ptr=h_items.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=d_wl, src_ptr=h_wl.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=d_nb, src_ptr=h_nb.unsafe_ptr())
@@ -1106,6 +1205,24 @@ def train_classification_device_resident(
         ctx.synchronize()
 
         # --- 3. the range pass -------------------------------------------
+        # --- feature sampling, WHERE cuML DOES IT (deviation 201) --------
+        # `d_report` is the DEVICE's own statement of which kernel ran, so it
+        # is seeded with a value no kernel can produce.
+        ctx.enqueue_memset(d_samp_report, SAMPLER_UNVISITED)
+        _ = sample_features_for_device(
+            ctx,
+            d_colids,
+            d_samp_scratch.unsafe_ptr(),
+            d_samp_report.unsafe_ptr(),
+            d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            h_colids,
+            work_items,
+            tree_id,
+            seed,
+            Int(n_cols),
+            Int(k),
+        )
+
         ctx.enqueue_memset(d_cell_mutex, Int32(0))
         ctx.enqueue_function[node_feature_range_init_kernel](
             d_min.unsafe_ptr(),
@@ -1490,12 +1607,7 @@ def train_regression_device(
     while queue.has_work():
         var work_items = queue.pop()
         var n_nodes = len(work_items)
-        var colids = List[Int32](
-            length=n_nodes * Int(k), fill=Int32(0)
-        )
-        _ = sample_features(
-            colids, work_items, tree_id, seed, Int(n_cols), Int(k)
-        )
+
         var plan = build_workload_info(work_items, TPB)
         var n_cells = n_nodes * Int(k)
 
@@ -1533,6 +1645,12 @@ def train_regression_device(
         var d_nb = ctx.enqueue_create_buffer[DType.int32](n_nodes)
         var d_nc = ctx.enqueue_create_buffer[DType.int32](n_nodes)
         var d_colids = ctx.enqueue_create_buffer[DType.int32](n_cells)
+        var d_samp_scratch = ctx.enqueue_create_buffer[DType.int32](
+            sampler_scratch_len(n_nodes, Int(n_cols), Int(k))
+        )
+        var d_samp_report = ctx.enqueue_create_buffer[DType.int32](
+            sampler_report_len(n_nodes)
+        )
         var d_items = ctx.enqueue_create_buffer[DType.uint8](
             n_nodes * size_of[NodeWorkItem]()
         )
@@ -1550,8 +1668,6 @@ def train_regression_device(
         var h_nc = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
         ctx.synchronize()
 
-        for i in range(n_cells):
-            h_colids.unsafe_ptr().unsafe_store(i, colids[i])
         var items_ptr = h_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem]()
         for i in range(n_nodes):
             items_ptr[unsafe_offset=i] = work_items[i]
@@ -1561,12 +1677,29 @@ def train_regression_device(
         for i in range(n_nodes):
             h_nb.unsafe_ptr().unsafe_store(i, Int32(i * Int(k)))
             h_nc.unsafe_ptr().unsafe_store(i, Int32(Int(k)))
-        ctx.enqueue_copy(dst_buf=d_colids, src_ptr=h_colids.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=d_items, src_ptr=h_items.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=d_wl, src_ptr=h_wl.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=d_nb, src_ptr=h_nb.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=d_nc, src_ptr=h_nc.unsafe_ptr())
         ctx.synchronize()
+
+        # --- feature sampling, WHERE cuML DOES IT (deviation 201) --------
+        # `d_report` is the DEVICE's own statement of which kernel ran, so it
+        # is seeded with a value no kernel can produce.
+        ctx.enqueue_memset(d_samp_report, SAMPLER_UNVISITED)
+        _ = sample_features_for_device(
+            ctx,
+            d_colids,
+            d_samp_scratch.unsafe_ptr(),
+            d_samp_report.unsafe_ptr(),
+            d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            h_colids,
+            work_items,
+            tree_id,
+            seed,
+            Int(n_cols),
+            Int(k),
+        )
 
         ctx.enqueue_memset(d_cell_mutex, Int32(0))
         ctx.enqueue_function[node_feature_range_init_kernel](
