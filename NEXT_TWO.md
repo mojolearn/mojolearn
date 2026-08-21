@@ -71,14 +71,23 @@ THIS IS CATBOOST'S SHIPPED GPU DEFAULT for every non-multiclass loss
 CatBoost must pin `boosting_type=Plain` on their side**, and we cannot claim
 parity with CatBoost as shipped.
 
-### Rung 4 -- tree CTRs / feature combinations (1,640 lines)
+### Rung 4 -- tree CTRs / feature combinations
 
 Computed DURING tree growth, not as a preprocessing pass: a tree CTR's tensor
 is (the splits already in the current tree) x (a categorical feature). Needs
 rung 2 first -- they live only in the feature-parallel searcher.
 
-**Gate**: the TENSOR first, their hash against a `tools/` oracle, before any
-fit.
+**FRONT HALF DONE 2026-08-21** (`2302da0`), and the gate was the tensor first
+exactly as this page asked: `gbdt/methods/batch_feature_tensor_builder.mojo` +
+`pixi run check-feature-tensor`, against CatBoost's own source compiled by
+clang (`tools/feature_tensor_oracle/`). `PORTING.md` 116-118. PORTED, NO
+CALLER -- see `UNWIRED.md` for the five things that must exist before it has
+one, of which the last is rung 2. Do not take the `max_ctr_complexity > 1`
+guard off until they all do.
+
+WHAT REMAINS: `binarizations_manager`'s tensor -> feature-id map
+(`InverseCtrs`), `tree_ctrs_dataset.{h,cpp}` + `tree_ctrs.{h,cpp}`,
+`ctr_from_tensor_calcer.h`, and `TFeatureTensorTracker`.
 
 ### Rung 5 -- widen the CatBoost differential (independent, do any time)
 
@@ -106,8 +115,17 @@ benchmark and has not been run.
 
 What is genuinely left here, all doable locally:
 
-* **a CATEGORICAL fixture, split-for-split.** Never done, and the one place
-  the differential has no coverage at all.
+* ~~a CATEGORICAL fixture, split-for-split~~ **DONE 2026-08-21** (`233349b`),
+  `bench/oracle_cat.txt`, and it immediately found a shipped bug: the
+  pointwise scorer's one-hot flag array was a hardcoded constant, 0 of 18
+  one-hot splits matching. Now **192 of 192 across all four fixtures on both
+  searchers, 21 of 21 one-hot**. ONE-HOT ONLY, and that is their CPU
+  learner's limit rather than a shape chosen to pass (`PORTING.md` 113):
+  `IsSupportedCtrType(CPU, FeatureFreq)` is FALSE and `max_ctr_complexity`
+  above 1 is refused. **So the CTR half of our categorical path has no oracle
+  coverage at all**, and DEVIATION 109 does not repair it -- this is the one
+  place their CPU arm cannot express the feature rather than merely running
+  it slower.
 * depth and feature-count sweeps -- the same shape of change as the border
   budget the oracle already takes from the environment.
 * a fixture whose widest feature lands in each of the four one-byte bit
