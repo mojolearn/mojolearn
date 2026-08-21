@@ -188,6 +188,8 @@ def main() raises:
     var struct_diff = 0
     var shape_diff = 0
     var pred_diff = 0
+    var leaf_diff = 0
+    var leaf_cells = 0
     var configs = 0
     for depth in [Int32(3), Int32(5), Int32(7)]:
         for seed_i in range(3):
@@ -222,6 +224,17 @@ def main() raises:
                     ):
                         struct_diff += 1
                     cells += 1
+                # AND THE LEAF VALUES, which now come off the device too --
+                # `leaf_kernel` rather than `set_leaf_predictions_*`. They are
+                # ratios of integer class counts, so bit equality is the right
+                # bar here as well.
+                for i in range(len(ht.vector_leaf)):
+                    if (
+                        ht.vector_leaf[i].to_bits()
+                        != dt.vector_leaf[i].to_bits()
+                    ):
+                        leaf_diff += 1
+                    leaf_cells += 1
             # and whether it matters to a prediction
             for r in range(hashed.n_rows):
                 var row = row_of(hashed, r)
@@ -238,7 +251,11 @@ def main() raises:
         total_nodes,
         "nodes differ in (colid, quesval, left_child, instance_count);",
         pred_diff,
-        "row predictions differ",
+        "row predictions differ;",
+        leaf_diff,
+        "of",
+        leaf_cells,
+        "LEAF VALUES differ (device leaf_kernel against the host pass)",
     )
     assert_equal(
         shape_diff,
@@ -259,7 +276,16 @@ def main() raises:
         0,
         "and therefore every row prediction must agree",
     )
-    cells += 3
+    assert_equal(
+        leaf_diff,
+        0,
+        "the DEVICE leaf kernel must produce the same leaf values as the host"
+        " pass, bit for bit -- they are ratios of integer class counts",
+    )
+    assert_true(
+        leaf_cells > 0, "the leaf comparison must actually have run"
+    )
+    cells += 5
 
     # ---------------- 2b. the gate at its DEFAULT: the one difference ------
     # DEVIATION 183, measured rather than asserted away. The device cannot

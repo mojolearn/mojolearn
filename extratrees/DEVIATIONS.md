@@ -1578,3 +1578,122 @@ silently inert on the device path. **That makes this the one place in the lane
 where a parameter is accepted and not honoured**, which is the thing
 `estimator.mojo` exists to prevent; the estimator does not expose the device
 path yet, and it must not until this is closed.
+
+---
+
+# The device partition and leaf pass — deviations 176-181
+
+## 176. `partitionSamples` on device: their collectives, and a BOUND on their unbounded loop
+
+**Theirs.** `builder_kernels_impl.cuh:43-88`, two `cub::BlockScan::ExclusiveSum`
+calls per iteration (each returning prefix AND aggregate), a `smem` carve of
+`2 * TPB` indices, and `do { } while` with no iteration bound.
+
+**Ours.** `block.prefix_sum[exclusive=True]` plus `block.sum` — the aggregate
+must be block-uniform because `llen`/`rlen` drive the loop condition, and
+`sum`'s default `broadcast=True` gives that. Their `smem` becomes ONE
+`stack_allocation[2*TPB]` split into `lcomp`/`rcomp`, one allocation ON PURPOSE
+because two with identical comptime parameters may be aliased.
+
+**The bound is DERIVED, not chosen.** `ceildiv(n_left, TPB) + ceildiv(n_right,
+TPB) + 2`, proved from `minlen = min(llen, rlen)`, and an overrun is REPORTED
+as `PARTITION_OVERRUN` rather than hanging. This discharges deviation 159's
+explicit hand-off: a host oracle could raise, a kernel cannot.
+
+**AND IT FALSIFIED A SENTENCE THIS LANE HAD ALREADY WRITTEN.** Deviation 134
+and `partition_samples`' docstring say their algorithm is deterministic GIVEN
+the block width. It is stronger than that: measured, **0 of 1024 slots differ
+between TPB 32 and TPB 128** — the output order is independent of the width
+entirely. The reason is structural: compaction packs flagged misfits in
+ascending slot order, the first `minlen` are consumed, and a side not fully
+consumed keeps its flags, so globally the k-th left misfit always swaps with
+the k-th right misfit and `TPB` only decides how many pairs happen per
+iteration. Reported, not gated on.
+
+**Measured against the host transcription: 6144 slot comparisons, 0
+differences** — the whole permutation, not an equivalent partition, with
+328-358 of 1024 slots actually moving so the match is not vacuous.
+
+---
+
+## 177. NOT a deviation: one block per node is kept
+
+Their header says so (`:39-41`) and `nodeSplitKernel` launches
+`<<<work_items_size, TPB>>>`. A multi-block partition needs a grid-wide barrier
+per iteration — `__threadfence` plus a done counter — which deviations 161 and
+170 both measured as inexpressible.
+
+The cost is recorded as an ITERATION COUNT, published by the kernel every
+launch, not as a time: 6 / 4 / 2 items ran more than one iteration at TPB
+32 / 64 / 128.
+
+---
+
+## 178. The leaf histogram is a comptime-bounded private array plus one block reduction
+
+**Theirs.** `extern __shared__` sized `BinT[num_outputs]`, incremented with
+shared atomics (`:398-412`).
+
+**Ours.** A `stack_allocation[MAX_OUT]` PRIVATE array per thread and one block
+reduction per output. Same comptime-sizing wall as deviation 172; private
+rather than shared because with one bin per class nothing scatters.
+
+The answer is unchanged because every accumulator is an integer.
+
+---
+
+## 179. RULED: the device regression leaf is FIXED POINT, and the Float64 host form is the reporting one
+
+**The situation.** `builder.mojo::set_leaf_predictions_regression` accumulates
+in `Float64` to match sklearn. There is no `float64` on device, and a `Float32`
+accumulator through a block reduction would not be bit-checkable at all.
+
+**The ruling, and it is deviation 135 applied rather than a new decision.** 135
+already says the device accumulates in fixed point and the host oracle runs at
+`Float64` "matching sklearn, while the device runs over quantized integers".
+The leaf value is an accumulation like any other, so the device leaf is fixed
+point and `leaf_values_host` — the fixed-point host form — is its oracle,
+bit-identical. `set_leaf_predictions_regression` stays as the sklearn-matching
+REPORTING form.
+
+**The gap is measured every run rather than assumed small**: 0 of 7 leaves
+bit-identical between the two forms, largest disagreement 7.629e-06, **exactly
+half the quantization step**. That is the resolution the ruling buys
+order-independence with.
+
+**A fixture defect found on the way, and it is the instructive part.**
+Regression labels of the form `hash/64.0 - 64.0` are all exact multiples of the
+`1/65536` scale, so this measurement first came back "0.0 disagreement, 7 of 7
+bit-identical" — **a fixture that could not round, reporting that nothing
+rounds.** The divisor was changed to 97 and the real number appeared.
+
+---
+
+## 180. One leaf launch over all nodes, and two device-written path reports
+
+**Theirs.** `SetLeafPredictions` batches launches at 100,000 nodes
+(`builder.cuh:559`), which is a HOST MEMORY-BUDGET policy, not an algorithm
+step — their comment says "to reduce peak memory usage in extreme cases".
+
+**Ours.** One launch over all nodes, plus `out_visit`, a device-written report
+of whether each node PUBLISHED or returned early at `IsLeaf`. Measured: 8
+published, 7 internal, 0 unvisited — **both branches named by the device**, not
+inferred from host arithmetic.
+
+**The caller obligations this creates are contracts, not conventions**: the
+leaf array must be ZEROED before the launch (`builder.cuh:582`, and an internal
+node's zero IS its value because the kernel never writes those slots), and
+`out_visit` must be zeroed so `LEAF_VISIT_NONE` means what it says.
+
+---
+
+## 181. `volatile IdxT* row_ids` has no Mojo spelling; `barrier()` carries it
+
+**Theirs.** `partitionSamples` casts `row_ids` to `volatile IdxT*` (`:51`).
+
+**Ours.** `barrier()`, which is STRONGER: `volatile` orders one thread's own
+accesses, while the cross-thread ordering their algorithm actually depends on
+comes from CUB's internal `__syncthreads()`, which `barrier()` is.
+
+The two places it is load-bearing are named in the file so nobody tidies a
+barrier away as redundant.

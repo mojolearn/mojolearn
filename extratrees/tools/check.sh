@@ -36,6 +36,7 @@ extratrees/mojo_only/quality_band_check.mojo
 extratrees/mojo_only/estimator_check.mojo
 extratrees/mojo_only/split_reduce_check.mojo
 extratrees/mojo_only/score_kernel_check.mojo
+extratrees/mojo_only/partition_leaf_kernel_check.mojo
 extratrees/mojo_only/device_tree_check.mojo
 "
 

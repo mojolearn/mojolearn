@@ -2125,3 +2125,1042 @@ def node_feature_score_finalize_kernel[
             out_gini_num[unsafe_offset=slot] = sq_left * nr + sq_right * nl
             out_gini_den[unsafe_offset=slot] = nl * nr
         slot += stride
+
+
+# ============================================================================
+# THE PARTITION AND THE LEAF PASS, ON THE DEVICE.
+#
+#     Verified by:  extratrees/mojo_only/partition_leaf_kernel_check.mojo
+#
+# These are the last two steps of a tree build that had no device
+# implementation. `partition_samples` above and
+# `builder.mojo::set_leaf_predictions_classification` stay exactly where they
+# are and neither is replaced: they are the ORACLES these kernels are checked
+# against, per `PORTING_RULES.md` 0b-ii.
+#
+#     ==================================================================
+#     DEVIATION BLOCK 176 -- `partitionSamples` on the device:
+#     `cub::BlockScan` becomes TWO block collectives, their `smem`
+#     becomes one carved shared array, and their UNBOUNDED `while` gets a
+#     DERIVED bound because a kernel cannot raise
+#
+#     THEIRS (`builder_kernels_impl.cuh:43-88`). Per iteration:
+#
+#         BlockScanT(temp1).ExclusiveSum(lflag, lidx, llen);
+#         BlockScanT(temp2).ExclusiveSum(rflag, ridx, rlen);
+#
+#     -- ONE call per side that returns BOTH the per-thread exclusive
+#     prefix AND the block aggregate, out of two separate
+#     `TempStorage`s. The compaction buffers are carved by hand out of the
+#     dynamic `extern __shared__ char smem[]` their launcher sizes at
+#     `sizeof(IdxT) * TPB * 2` (`:39-41`, `:52-54`):
+#     `lcomp = smem`, `rcomp = smem + sizeof(IdxT) * TPB`. The `while`
+#     has no iteration bound.
+#
+#     OURS. Three differences, none of which can change an answer.
+#
+#     1. TWO COLLECTIVES PER SIDE INSTEAD OF ONE.
+#        `max.gpu.primitives.block.prefix_sum[exclusive=True]` returns the
+#        per-thread prefix and nothing else, and
+#        `max.gpu.primitives.block.sum` returns the aggregate to EVERY
+#        thread (`broadcast=True`, its default). Mojo 1.0 has no single
+#        primitive returning both. The aggregate has to be block-uniform
+#        and not merely thread-0's, because `llen` and `rlen` are what
+#        drive `loffset`/`roffset` and therefore the LOOP CONDITION -- a
+#        thread that disagreed about `llen` would leave the loop at a
+#        different iteration from its neighbours, and every collective
+#        inside the loop is undefined the moment that happens. This is
+#        the vendor library, called rather than hand-written
+#        (`VENDOR_LIBRARIES.md`); `PORTING_RULES.md` 0b-i exempts the
+#        block primitives from the transcription rule for exactly this.
+#
+#     2. THE SHARED CARVE IS ONE ARRAY OF `2 * TPB`, NOT TWO OF `TPB`.
+#        `lcomp` is `[0, TPB)` and `rcomp` is `[TPB, 2*TPB)`, which is
+#        their pointer arithmetic written as an offset. It is ONE
+#        `stack_allocation` on purpose: two allocations with identical
+#        comptime parameters are two expressions the compiler is free to
+#        treat as one, and a silently aliased `lcomp`/`rcomp` would
+#        produce a partition that is wrong only when both sides have
+#        misfits in the same iteration. Their own code carves one blob;
+#        this is that, not an improvement on it.
+#
+#        It is also STATIC where theirs is dynamic. `stack_allocation`'s
+#        slot count is a comptime expression in Mojo 1.0 (DEVIATION 172
+#        hit the same wall from the other side), and `TPB` is already a
+#        comptime parameter of this kernel, so nothing is lost: their
+#        `smem_size` is a pure function of `TPB` too.
+#
+#     3. THE `while` CARRIES A DERIVED BOUND AND A SENTINEL. DEVIATION
+#        159 names this obligation and hands it forward in as many words:
+#        "an `Error` cannot be raised from a kernel, so the device
+#        version needs the bound expressed some other way, or dropped
+#        with the argument that the dispatch guarantees termination
+#        written down." Here is the argument AND the bound.
+#
+#        THE ARGUMENT. `minlen = min(llen, rlen)`, so at least one of
+#        `llen == minlen` and `rlen == minlen` is true every iteration,
+#        so at least one of `loffset` and `roffset` advances by `TPB`
+#        every iteration. `loffset` can advance at most
+#        `ceildiv(n_left, TPB) + 1` times before `loffset >= part` ends
+#        the loop, and `roffset` at most
+#        `ceildiv(range_len - n_left, TPB) + 1`. The sum is the bound.
+#
+#        THE SENTINEL. If the bound is ever reached the kernel STOPS and
+#        publishes `PARTITION_OVERRUN` in its iteration report, so the
+#        failure is a value the host reads rather than a hang. A hang is
+#        the one failure mode a check cannot report, which is DEVIATION
+#        159's argument for the host bound and is not weaker on device.
+#        `partition_leaf_kernel_check.mojo` asserts no cell holds it.
+#
+#     MEASURED, 2026-08-21, Apple GPU, `partition_leaf_kernel_check.mojo`.
+#     Across two guard settings and block widths 32, 64 and 128, all 6144
+#     `row_ids` slot comparisons against the host transcription agree
+#     EXACTLY -- the device reproduces the permutation, not merely an
+#     equivalent partition. `PARTITION_OVERRUN` was published by no item
+#     in any arm, and every published iteration count was at or below
+#     `partition_iteration_bound`.
+#
+#     AND ONE THING THE MEASUREMENT MADE STRONGER THAN THIS BLOCK FIRST
+#     CLAIMED. The check's first draft printed that the output ORDER is
+#     block-width dependent; it measured 0 of 1024 slots differing between
+#     `TPB = 32` and `TPB = 128`, and the sentence was deleted rather than
+#     annotated. Consumption is strictly in slot order on both sides -- the
+#     compaction packs flagged misfits by ascending slot, the first
+#     `minlen` are taken, and a side that was not fully consumed KEEPS its
+#     flags -- so globally the k-th left misfit is always swapped with the
+#     k-th right misfit and `TPB` decides only how many pairs are done per
+#     iteration. Their header promises determinism GIVEN the width; the
+#     permutation is in fact independent of it. That is reported, not
+#     enforced: it is a fact about their algorithm, not a contract.
+#
+#     WHAT IS NOT CHANGED, and is the part a reader should look for and
+#     not find. The comparison directions (`> quesval` is a LEFT misfit,
+#     `<= quesval` is a RIGHT misfit, `:65-66`), the `llen == minlen`
+#     guard that carries leftover flags into the next iteration
+#     (`:65-66`), the exclusive-prefix compaction (`:75-77`), the
+#     flag-clearing and the single-sided advance (`:79-83`), and the
+#     PAIRED swap (`:84-89`) are transcribed unchanged from their file,
+#     in their order, and `partition_samples` above is the host form of
+#     the same lines.
+#     ==================================================================
+#
+#     ==================================================================
+#     DEVIATION BLOCK 177 -- NOT a deviation: the partition stays ONE
+#     BLOCK PER NODE, and the cost of that is recorded as an ITERATION
+#     COUNT rather than argued about
+#
+#     THEIRS. Their own header note at `:39-41` says
+#     "this should be called by only one block from all participating
+#     blocks", and `nodeSplitKernel` (`:89-107`) is launched with one
+#     block per WORK ITEM (`launchNodeSplitKernel`, `:109-134`,
+#     `<<<work_items_size, TPB>>>`), each block partitioning its own
+#     node. A node of a million rows is therefore served by ONE block
+#     looping.
+#
+#     OURS. The same. `grid_dim = n_work_items`, `block_dim = TPB`, one
+#     block per node, and the `while` loop is the same serial walk.
+#
+#     WHY IT IS NOT "IMPROVED" INTO A MULTI-BLOCK SCHEME, and this is a
+#     ruling and not an oversight. The algorithm is a two-cursor
+#     exchange: `loffset` and `roffset` are BLOCK-UNIFORM state that
+#     every iteration reads and writes, and the flags a side keeps when
+#     it did not advance are carried in the SAME threads' registers into
+#     the next iteration. Splitting it across blocks needs a grid-wide
+#     barrier per iteration, which is `__threadfence` plus a done-counter
+#     -- the construction DEVIATIONS 161 and 170 have already measured as
+#     inexpressible in Mojo 1.0 (`threadfence` comptime-asserts
+#     NVIDIA-only). A different partition algorithm could be
+#     multi-block; that is a rewrite, not a port, and this file's job is
+#     the port.
+#
+#     THE COST, RECORDED AS ARITHMETIC AND AS A MEASUREMENT, NOT AS A
+#     TIME. The kernel publishes `out_n_iters[b]`, the number of `while`
+#     iterations its block actually ran -- the device's own report, in
+#     the same spirit as `out_n_merges` (DEVIATION 162) and
+#     `out_n_blocks` (DEVIATION 174), written unconditionally by the
+#     shipping kernel and not behind a flag. The bound above says that
+#     count is at most `ceildiv(n_left, TPB) + ceildiv(n_right, TPB) + 2`,
+#     i.e. it grows LINEARLY in the node's row count at fixed `TPB` while
+#     the rest of this lane's device work grows with `n / (TPB *
+#     n_blocks)`. That is the shape of the cost. No time is attached to
+#     it and none will be until the perf round; if it ever matters, the
+#     number to look at is already being published every launch.
+#
+#     MEASURED, on the check's 11-item batch: at `TPB = 32` six items ran
+#     more than one iteration, at `TPB = 64` four did, and at
+#     `TPB = 128` two did -- i.e. the serial iteration count falls as the
+#     block widens, which is what a one-block-per-node walk does and is
+#     the number that would grow on a real node. The largest item there
+#     is 300 rows, so this is the shape and not the magnitude.
+#     ==================================================================
+#
+#     ==================================================================
+#     DEVIATION BLOCK 178 -- the leaf histogram is a comptime-bounded
+#     PRIVATE array plus one block reduction per output, not their
+#     dynamic shared `BinT[num_outputs]`
+#
+#     THEIRS (`builder_kernels_impl.cuh:391-417`). `extern __shared__
+#     char shared_memory[]`, reinterpreted as `BinT* histogram` and sized
+#     by the host at `sizeof(BinT) * dataset.num_outputs`
+#     (`builder.cuh:581`). Every thread of the block increments the
+#     SHARED histogram directly with
+#     `BinT::IncrementHistogram(histogram, 1, 0, label)` -- note
+#     `n_bins = 1` and `bin = 0`, so it is a plain per-class counter and
+#     not a histogram over thresholds.
+#
+#     OURS. One `stack_allocation[MAX_OUT, Int32]` PER THREAD in the
+#     default (private) address space, and one
+#     `max.gpu.primitives.block.sum` per output to combine them across
+#     the block. `MAX_OUT` is a comptime parameter; a launch whose
+#     `num_outputs` exceeds it publishes NOTHING, so the caller sees the
+#     cell's `LEAF_VISIT_NONE` rather than a corrupted leaf.
+#
+#     WHY. The same wall DEVIATION 172 hit in the score pass:
+#     `stack_allocation`'s slot count is a comptime expression in Mojo
+#     1.0, so a runtime `num_outputs` cannot size a shared blob. And the
+#     same mitigation applies -- their shared array here is
+#     `num_outputs` wide, not `n_bins * num_outputs`, so a comptime bound
+#     of 16 covers the configurations this lane supports rather than
+#     truncating them.
+#
+#     AND WHY PRIVATE RATHER THAN SHARED. With one bin there is nothing
+#     for the threads to share: each thread's contribution is a private
+#     running count that the block reduction combines once. Their shared
+#     histogram exists because `IncrementHistogram` is a shared-memory
+#     atomic that several threads hit at the same class; nothing needs to
+#     be shared when the combine is a collective.
+#
+#     WHY IT CANNOT CHANGE AN ANSWER. Every accumulated quantity is an
+#     INTEGER -- a class count for Gini, a fixed-point label sum for MSE
+#     (DEVIATION 179) -- and integer addition is associative and exact,
+#     so the block-strided private accumulation and a sequential host
+#     loop are OBLIGED to produce identical values. That is DEVIATION
+#     171's argument, reused where it applies again, and it is why the
+#     check asserts on bit patterns with no tolerance.
+#
+#     PRICE. `MAX_OUT * 4` bytes of private memory per thread (64 bytes
+#     at `MAX_OUT = 16`), which is memory and not registers, and
+#     `num_outputs` block reductions per block instead of one shared
+#     increment per row.
+#     ==================================================================
+#
+#     ==================================================================
+#     DEVIATION BLOCK 179 -- the REGRESSION leaf accumulates in FIXED
+#     POINT, so `builder.mojo`'s Float64 transcription is NOT this
+#     kernel's oracle, and the gap between them is MEASURED per leaf
+#
+#     THEIRS. `MSEObjectiveFunction::SetLeafVector`
+#     (`objectives.cuh:259-264`) is `out[i] = shist[i].label_sum /
+#     shist[i].count`, and `label_sum` is an `AggregateBin<DataT>` field
+#     accumulated on device in the label's own float type.
+#
+#     `builder.mojo`'s HOST transcription
+#     (`set_leaf_predictions_regression`) accumulates in
+#     `AggregateBin[DType.float64]`, and its own docstring says why and
+#     hands the question forward: "the accumulator is
+#     `AggregateBin[DType.float64]` here BECAUSE THIS IS THE HOST ORACLE
+#     and DEVIATION 135 -- what the device accumulates in -- is open. The
+#     device form must not silently inherit this choice." This block
+#     closes that.
+#
+#     OURS. The labels arrive ALREADY QUANTIZED as `Int32`
+#     (`labels_q`), exactly as they do in the score pass (DEVIATION 174,
+#     part 1), the block accumulates an exact integer sum, and the leaf
+#     value is formed once at the publish as
+#
+#         Float32(sum_q) / Float32(count) * inv_scale
+#
+#     `inv_scale` being `1 / scale` for the scale DEVIATION 135 chooses
+#     ONCE on the host from the whole dataset. Classification passes
+#     `inv_scale = 1.0` and never touches this arm.
+#
+#     WHY, in three parts.
+#
+#     1. THERE IS NO `float64` ON DEVICE in this toolchain, so the host
+#        transcription's accumulator cannot be reproduced at all. That
+#        is not a preference; the type does not exist on the target.
+#     2. A `Float32` ACCUMULATOR WOULD NOT BE CHECKABLE. Float addition
+#        is not associative, and a block reduction regroups the sum, so
+#        the device answer would depend on the block width and on the
+#        arrival order and no sequential host loop could be obliged to
+#        match it. DEVIATION 135 ruled this out for the score pass on
+#        exactly this argument and the leaf pass is the same shape.
+#     3. IT IS THE SAME ARRAY THE SCORE PASS ALREADY TAKES. A build
+#        whose split accumulation is fixed point and whose leaf
+#        accumulation is float would carry two different notions of a
+#        label through one tree.
+#
+#     WHAT THIS COSTS, AND IT IS NOT ZERO. The device's regression leaf
+#     value is NOT bit-identical to
+#     `set_leaf_predictions_regression`'s, and cannot be. Two things are
+#     done about that rather than one:
+#
+#     * `leaf_values_host` below is the SEQUENTIAL form of exactly what
+#       the kernel computes -- same quantized labels, same integer sum,
+#       same final expression -- and it is what the check compares
+#       against on BIT PATTERNS with no tolerance. The kernel is
+#       therefore fully checked; it is just checked against the oracle
+#       it is the oracle of.
+#     * `partition_leaf_kernel_check.mojo` ALSO computes
+#       `set_leaf_predictions_regression`'s Float64 answer for the same
+#       fixture and MEASURES the largest disagreement, per leaf, every
+#       run. The size of the quantization error is never a guess, and if
+#       a later change to `choose_scale` widens it, the number moves.
+#
+#     MEASURED, 2026-08-21, Apple GPU. All 15 leaf slots are bit-identical
+#     to `leaf_values_host`. Against `set_leaf_predictions_regression`'s
+#     `Float64` answer, over 7 non-empty leaves, 0 agree bit for bit and
+#     the largest disagreement is 7.63e-06 -- half of the `1 / 65536`
+#     scale `choose_scale` picked for that fixture, i.e. exactly the
+#     quantization step and nothing else.
+#
+#     AND THE FIRST VERSION OF THAT MEASUREMENT SAID NOTHING, WHICH IS
+#     RECORDED BECAUSE IT IS THE KIND OF NUMBER THAT LOOKS LIKE A RESULT.
+#     The check's regression labels were `hash / 64.0 - 64.0`, every one
+#     of which is an exact multiple of `1 / 65536`, so the quantization
+#     was LOSSLESS and the measurement came back "0.0 disagreement, 7 of 7
+#     bit-identical" -- a fixture that could not produce a rounding
+#     reporting that there was none. The divisor is now 97.
+#
+#     THE OPEN ITEM, stated because it is not this sub-lane's to close,
+#     and it is the same shape as DEVIATION 173's: the lane has to pick
+#     ONE regression leaf value. The recommendation is this one, because
+#     it is the only one a GPU can produce and it is consistent with
+#     DEVIATION 135; taking it means `set_leaf_predictions_regression`
+#     becomes a REPORTING form rather than the authority, which is an
+#     edit to `builder.mojo` and therefore another session's file.
+#
+#     THE `Int32` BOUND. The block's label sum is an `Int32`, so a leaf
+#     whose quantized labels sum past `2^31` wraps. `fixed_point.mojo`'s
+#     `choose_scale` bounds a single quantized label by `2^SLOT_BITS`
+#     and sizes the accumulator from the ROW COUNT, which is the same
+#     exposure the score pass already carries in `out_acc_total`
+#     (DEVIATION 174) and is bounded by the same argument. It is stated
+#     here rather than left implicit because this kernel does not see
+#     the scale that made it true.
+#     ==================================================================
+#
+#     ==================================================================
+#     DEVIATION BLOCK 180 -- one launch over ALL nodes instead of their
+#     100,000-node batching, and both kernels REPORT the path they took
+#
+#     THEIRS. `SetLeafPredictions` (`builder.cuh:556-599`) loops over the
+#     tree in batches of `min(100000, sparsetree.size())` nodes, copying
+#     that slice of the node array and of the instance ranges to the
+#     device, `cudaMemsetAsync`ing the leaf slice to ZERO, launching
+#     `leafKernel` with `gridDim.x = batch_size`, and copying the slice
+#     back. The comment says why: "do this in batch to reduce peak memory
+#     usage in extreme cases".
+#
+#     OURS. `leaf_kernel` is launched once with `grid_dim = n_nodes` over
+#     the whole tree.
+#
+#     WHY. Their batching is a HOST-SIDE memory-budget policy, not a step
+#     of the algorithm: the kernel is identical, the node index is
+#     `blockIdx.x` plus a batch offset they fold into the pointers, and a
+#     batched caller and an unbatched one produce the same bytes. The
+#     three device arrays it exists to cap are sized by the NODE COUNT,
+#     not by the row count. Batching is one loop in the CALLER and
+#     `builder.mojo` is another session's file this round; the kernel
+#     signature below is already batch-ready -- pass the sliced pointers
+#     and a smaller grid and it batches, with no change here.
+#
+#     AND THE TWO REPORTS, which have no cuML counterpart and are ours.
+#     `out_n_iters` / `out_n_swaps` for the partition and `out_visit`
+#     for the leaf pass are the device's own statement of which path it
+#     took, written unconditionally by the SHIPPING kernel rather than
+#     behind a flag, for the reason DEVIATION 162 gives: a check that
+#     runs a different binary from the one that ships proves nothing
+#     about the one that ships. They answer questions the OUTPUT cannot:
+#
+#     * an internal node's leaf slot is zero, and so is a node the
+#       kernel never reached -- `out_visit` separates
+#       `LEAF_VISIT_INTERNAL` from `LEAF_VISIT_NONE`;
+#     * a node whose rows were already correctly ordered has an
+#       UNCHANGED `row_ids`, and so does a node the partition skipped
+#       and a node the partition never ran on -- `out_n_iters`
+#       separates all three, and `out_n_swaps` says whether anything
+#       actually moved.
+#
+#     THE CALLER OBLIGATIONS THIS CREATES, stated once here and repeated
+#     in each kernel's docstring, because a sentinel nobody wrote is a
+#     sentinel nobody can trust:
+#     `out_visit` must be ZEROED and `out_n_iters` must be seeded with
+#     `PARTITION_UNVISITED` before the launch. `out_leaves` must be
+#     zeroed too, and that one is THEIRS -- `cudaMemsetAsync` at
+#     `builder.cuh:582` -- because an internal node's slot is never
+#     written by anything and the zero IS its value.
+#     ==================================================================
+#
+#     ==================================================================
+#     DEVIATION BLOCK 181 -- their `volatile IdxT* row_ids` has no Mojo
+#     spelling, and `barrier()` is what carries it
+#
+#     THEIRS (`:51`):
+#
+#         volatile auto* row_ids =
+#           reinterpret_cast<volatile IdxT*>(dataset.row_ids);
+#
+#     The whole partition reads and writes `row_ids` through that
+#     `volatile` view. It is doing one job: forbidding nvcc from keeping
+#     a slot in a register across the loop, because a slot one thread
+#     reads at the top of an iteration is a slot ANOTHER thread may have
+#     written at the bottom of the previous one.
+#
+#     OURS. `MutPointer`, with no volatile qualifier -- Mojo 1.0 has
+#     none -- and an explicit `barrier()` at the end of every loop
+#     iteration plus one between the flag reads and the swap writes.
+#
+#     WHY THAT IS STRONGER AND NOT WEAKER. `volatile` orders one
+#     thread's accesses to one location; it does not synchronize
+#     threads, and their code relies on `cub::BlockScan`'s internal
+#     `__syncthreads()` for the actual cross-thread ordering. A
+#     `barrier()` is that synchronization, named, and it makes every
+#     write of the previous iteration visible to every thread of the
+#     block before any read of the next. A register cached across a
+#     `barrier()` would be a compiler defect, not an optimization.
+#
+#     THE ONE PLACE IT IS LOAD-BEARING, so a later reader does not
+#     "tidy" a barrier away. Within an iteration the left window
+#     `[loffset, part)` and the right window `[roffset, end)` are
+#     disjoint (`part <= roffset` always), so the two sides cannot race
+#     each other -- but a thread's own read at `loffset + tid` and
+#     another thread's swap write at `lcomp[k]` are in the SAME window.
+#     Reads-then-barrier-then-writes is what separates them. The
+#     end-of-loop barrier separates this iteration's writes from the
+#     next iteration's reads, and it also protects `lcomp`/`rcomp`:
+#     the next iteration's compaction overwrites the very slots this
+#     iteration's swap is reading.
+#
+#     A NOTE ON THEIR CODE, transcribed rather than fixed (rule 1). Their
+#     iteration ends with the swap and no `__syncthreads()`; the next
+#     iteration's flag reads are separated from it only by the fact that
+#     a side which did NOT advance also does not RE-READ (the
+#     `llen == minlen` guard), and a side which DID advance reads a
+#     window disjoint from the one it just swapped in. That is a correct
+#     argument and it is theirs. The barrier here does not depend on it.
+#     ==================================================================
+# ============================================================================
+
+from max.gpu.memory import AddressSpace
+from max.gpu.primitives.block import prefix_sum as block_prefix_sum
+
+from extratrees.ported.decisiontree.flatnode import (
+    NODE_IS_LEAF,
+    SparseTreeNode,
+)
+from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels import (
+    InstanceRange,
+    split_not_valid,
+)
+
+
+# ---------------------------------------------------------------------------
+# The partition kernel: `nodeSplitKernel` (`:89-107`) around
+# `partitionSamples` (`:43-88`).
+# ---------------------------------------------------------------------------
+
+comptime PARTITION_UNVISITED: Int32 = -3
+"""The seed the CALLER must write into `out_n_iters` before the launch. It is
+not a legal outcome: a cell still holding it means no block served that work
+item -- a grid too small. A check asserts there are none. DEVIATION 180."""
+
+comptime PARTITION_SKIPPED: Int32 = -1
+"""`nodeSplitKernel`'s early return, `:100-104`: `SplitNotValid` was true, so
+NOTHING was partitioned and the node's `row_ids` are untouched. Distinct from
+"partitioned and nothing needed to move", which reports `0` iterations."""
+
+comptime PARTITION_OVERRUN: Int32 = -2
+"""The derived iteration bound of DEVIATION 176 was reached. It cannot happen
+-- the bound is proved, not guessed -- and it exists because a HANG is the one
+failure a check cannot report and a kernel cannot raise."""
+
+
+# Sabotage selectors, one per MECHANISM. A kernel ARGUMENT and not a comptime
+# parameter, for the reason `RANGE_SAB_*` and `SCORE_SAB_*` above state: a
+# sabotage compiled into a different binary proves nothing about the binary
+# that ships, so every arm of `partition_leaf_kernel_check.mojo` runs THIS
+# kernel.
+comptime PART_SAB_NONE: Int32 = 0
+"""No sabotage. The shipping path."""
+
+comptime PART_SAB_LEFT_MISFIT_GE: Int32 = 1
+"""A LEFT-side misfit becomes `col[row] >= quesval` instead of `> quesval`
+(`:65`), so a row sitting exactly ON the threshold is dragged right. Invisible
+unless some row equals the threshold -- which is why the fixture carries a
+nine-level tied column; see `partition_check.mojo`'s scar."""
+
+comptime PART_SAB_RIGHT_MISFIT_LT: Int32 = 2
+"""A RIGHT-side misfit becomes `col[row] < quesval` instead of `<= quesval`
+(`:66`), the other half of the same boundary rule and equally invisible with
+distinct values."""
+
+comptime PART_SAB_NO_SCAN: Int32 = 3
+"""Compact at `thread_idx.x` instead of at the block scan's exclusive prefix
+(`:69-71`, `:75-77`), so flagged threads scatter into holes instead of packing
+down. The shared buffers are pre-seeded with `range_start` so this arm stays
+memory-safe: every index it can produce is still a slot inside the node."""
+
+comptime PART_SAB_UNPAIRED_SWAP: Int32 = 4
+"""Write only the LEFT half of the swap (`:86-88`), so a row is duplicated and
+another is dropped. Property (1) and (2) of `partition_check.mojo` can be
+satisfied by that; property (4), the permutation, cannot."""
+
+comptime PART_SAB_NO_ROW_IDS: Int32 = 5
+"""Drop the `row_ids` indirection in the feature read: `col[row_ids[loff]]`
+becomes `col[loff]` (`:65-66`). The SWAP still moves `row_ids`, so this is a
+misread and not a different algorithm."""
+
+comptime PART_SAB_NO_VALID_GUARD: Int32 = 6
+"""Partition even when `SplitNotValid` says not to (`:100-104`).
+`builder.mojo::train_classification` records that this guard is NOT observable
+in `tree_check` -- a partition only permutes rows inside a range whose node
+stays a leaf. It IS observable here, because this check compares `row_ids`
+slot for slot rather than comparing a trained tree."""
+
+
+def partition_iteration_bound(range_len: Int, n_left: Int, tpb: Int) -> Int:
+    """The proved bound on `partitionSamples`' `while`. DEVIATION 176 part 3.
+
+    `minlen = min(llen, rlen)`, so every iteration at least one of `loffset`
+    and `roffset` advances by `tpb`. `loffset` needs at most
+    `ceildiv(n_left, tpb) + 1` advances to reach `part` and `roffset` at most
+    `ceildiv(range_len - n_left, tpb) + 1` to reach `end`; the loop stops when
+    EITHER arrives, so the sum bounds the iteration count.
+
+    Host and device call this same function, so the bound the kernel enforces
+    and the bound a check asserts against cannot drift apart.
+    """
+    var n_right = range_len - n_left
+    if n_right < 0:
+        n_right = 0
+    var nl = n_left
+    if nl < 0:
+        nl = 0
+    return ceildiv(nl, tpb) + ceildiv(n_right, tpb) + 2
+
+
+def node_split_kernel[
+    TPB: Int
+](
+    row_ids: MutPointer[Int32, MutAnyOrigin],
+    out_n_iters: MutPointer[Int32, MutAnyOrigin],
+    out_n_swaps: MutPointer[Int32, MutAnyOrigin],
+    data: MutPointer[Float32, MutAnyOrigin],
+    work_items: MutPointer[NodeWorkItem, MutAnyOrigin],
+    splits: MutPointer[Split, MutAnyOrigin],
+    m_in: Int32,
+    min_impurity_decrease: Float32,
+    min_samples_leaf_in: Int32,
+    sabotage_in: Int32,
+):
+    """`nodeSplitKernel` (`:89-107`) and the `partitionSamples` it calls.
+
+    `row_ids` IS MUTATED IN PLACE. That is theirs -- it is the one array the
+    whole frontier partitions -- and it is the only output of this kernel that
+    the algorithm reads again.
+
+    GRID. `grid_dim = work_items_size`, `block_dim = TPB`, which is exactly
+    `launchNodeSplitKernel`'s `<<<work_items_size, TPB, smem_size>>>`
+    (`:109-134`). ONE BLOCK PER WORK ITEM, by their design and kept -- see
+    DEVIATION BLOCK 177 for why it is not "improved" and for what it costs.
+    `block_idx.x` indexes BOTH `work_items` and `splits`, which is their
+    `work_items[blockIdx.x]` and `splits[blockIdx.x]` (`:96-97`).
+
+    THE NODES OF ONE BATCH MUST HAVE DISJOINT RANGES. Theirs do -- `Push`
+    (`builder.cuh:117-131`) tiles the children of a level -- and nothing here
+    checks it: two blocks partitioning overlapping ranges would race with no
+    ordering between them at all.
+
+    CALLER OBLIGATIONS (DEVIATION 180):
+
+    * `out_n_iters` -- `work_items_size` `Int32`s, SEEDED WITH
+      `PARTITION_UNVISITED`. The kernel writes `PARTITION_SKIPPED` for the
+      `SplitNotValid` early return, `PARTITION_OVERRUN` for the (unreachable)
+      bound, and otherwise the number of `while` iterations its block ran.
+    * `out_n_swaps` -- `work_items_size` `Int32`s. Written unconditionally, so
+      it needs no seed; it is the total number of misfit PAIRS the block
+      swapped, and it is `0` for a node whose rows were already ordered.
+    * `data` is COLUMN MAJOR, `dataset.h:24`: `data[colid * m + row]`.
+    * `m_in` is `dataset.M`, the ROW COUNT, which is the column stride.
+
+    SHARED MEMORY. `2 * TPB` `Int32`s, declared statically here rather than
+    sized by the launcher; see DEVIATION BLOCK 176 part 2. No caller argument.
+
+    THE ANSWER IS THE HOST TRANSCRIPTION'S, SLOT FOR SLOT. Nothing in the
+    algorithm depends on warp scheduling: the flags are per-thread, the two
+    prefix sums and the two aggregates are block collectives, and `minlen`,
+    `loffset` and `roffset` are block-uniform. Given `TPB`, the sequence of
+    swaps is determined, so `partition_samples` above produces the identical
+    `row_ids` ORDER and the check compares them slot for slot rather than
+    comparing two partitions for equivalence.
+    """
+    var b = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var sabotage = sabotage_in
+
+    # `:96-97` -- their two whole-struct loads (`const auto work_item =
+    # work_items[blockIdx.x]`, `const auto split = splits[blockIdx.x]`), read
+    # one field at a time through the pointer instead: DEVIATION 162, a
+    # whole-struct load in a kernel kills the Metal compiler.
+    var range_start = Int(work_items[unsafe_offset=b].instances.begin)
+    var range_len = Int(work_items[unsafe_offset=b].instances.count)
+    var quesval = splits[unsafe_offset=b].quesval
+    var colid = splits[unsafe_offset=b].colid
+    var best_metric = splits[unsafe_offset=b].best_metric_val
+    var n_left = Int(splits[unsafe_offset=b].n_left)
+
+    # `:98-104`. `split_not_valid` is `builder_kernels.cuh:59-67` and is the
+    # SAME FUNCTION the host builder calls -- the four fields above are
+    # assembled into a LOCAL `Split` here, which is a value and not a memory
+    # load, so the transcription cannot drift between host and device. Same
+    # trick `node_feature_score_kernel` uses for `FeatureRange`.
+    var invalid = split_not_valid(
+        Split(quesval, colid, best_metric, Int32(n_left)),
+        min_impurity_decrease,
+        min_samples_leaf_in,
+        Int32(range_len),
+    )
+    if sabotage == PART_SAB_NO_VALID_GUARD:
+        invalid = False
+    if invalid:
+        if tid == 0:
+            out_n_iters[unsafe_offset=b] = PARTITION_SKIPPED
+            out_n_swaps[unsafe_offset=b] = Int32(0)
+        return
+
+    # `:52-54` -- their one `smem` blob carved into `lcomp` and `rcomp`. One
+    # allocation, two halves, for the aliasing reason in DEVIATION 176.
+    var smem = stack_allocation[
+        2 * TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    # Seed both halves with a slot INSIDE the node. Dead on the shipping path
+    # -- the swap only ever reads indices below `minlen`, which compaction
+    # has filled -- and it is what keeps PART_SAB_NO_SCAN memory-safe instead
+    # of turning a sabotage into an out-of-bounds write.
+    smem[unsafe_offset=tid] = Int32(range_start)
+    smem[unsafe_offset = TPB + tid] = Int32(range_start)
+    barrier()
+
+    # `:55-58` -- their cursors. `col = dataset.data + split.colid * M`.
+    var col_offset = Int(colid) * Int(m_in)
+    var loffset = range_start
+    var part = loffset + n_left
+    var roffset = part
+    var end = range_start + range_len
+
+    # `:59` -- per-thread flags in registers, block-uniform lengths.
+    var lflag = Int32(0)
+    var rflag = Int32(0)
+    var llen = 0
+    var rlen = 0
+    var minlen = 0
+
+    var iters = 0
+    var swaps = 0
+    var bound = partition_iteration_bound(range_len, n_left, TPB)
+
+    # `:61` -- and the condition is BLOCK-UNIFORM, which is what makes every
+    # collective below legal: `loffset`, `part`, `roffset` and `end` are the
+    # same in every thread, so the block leaves the loop together.
+    while loffset < part and roffset < end:
+        if iters >= bound:
+            # DEVIATION 176 part 3. Unreachable; a hang is not.
+            if tid == 0:
+                out_n_iters[unsafe_offset=b] = PARTITION_OVERRUN
+                out_n_swaps[unsafe_offset=b] = Int32(swaps)
+            return
+
+        # `:62-67` -- find the misfits. The `llen == minlen` guard is theirs:
+        # a side whose cursor did NOT advance keeps the flags it already has,
+        # which is what carries leftovers into the next iteration.
+        var loff = loffset + tid
+        var roff = roffset + tid
+        if llen == minlen:
+            if loff < part:
+                var sl = Int(row_ids[unsafe_offset=loff])
+                if sabotage == PART_SAB_NO_ROW_IDS:
+                    sl = loff
+                var v = data[unsafe_offset = col_offset + sl]
+                # `:65`: a LEFT misfit is `> quesval`, so a row EQUAL to the
+                # threshold stays LEFT. `_partitioner.pyx:236` agrees.
+                var misfit: Bool
+                if sabotage == PART_SAB_LEFT_MISFIT_GE:
+                    misfit = v >= quesval
+                else:
+                    misfit = v > quesval
+                lflag = Int32(1) if misfit else Int32(0)
+            else:
+                lflag = Int32(0)
+        if rlen == minlen:
+            if roff < end:
+                var sr = Int(row_ids[unsafe_offset=roff])
+                if sabotage == PART_SAB_NO_ROW_IDS:
+                    sr = roff
+                var v = data[unsafe_offset = col_offset + sr]
+                # `:66`: a RIGHT misfit is `<= quesval`.
+                var misfit: Bool
+                if sabotage == PART_SAB_RIGHT_MISFIT_LT:
+                    misfit = v < quesval
+                else:
+                    misfit = v <= quesval
+                rflag = Int32(1) if misfit else Int32(0)
+            else:
+                rflag = Int32(0)
+
+        # Every read of `row_ids` above is now done; the swap below writes
+        # into the same windows. DEVIATION BLOCK 181.
+        barrier()
+
+        # `:69-72` -- their two `BlockScanT::ExclusiveSum(flag, idx, len)`
+        # calls. Mojo 1.0 has no primitive returning both the prefix and the
+        # aggregate, so each becomes a `prefix_sum[exclusive=True]` plus a
+        # `sum`; the aggregate must be BLOCK-UNIFORM because it drives the
+        # loop condition, which `sum`'s default `broadcast=True` gives.
+        # DEVIATION BLOCK 176 part 1.
+        var lidx = Int(
+            block_prefix_sum[block_size=TPB, exclusive=True](lflag)
+        )
+        barrier()
+        llen = Int(block_sum[block_size=TPB](lflag))
+        barrier()
+        var ridx = Int(
+            block_prefix_sum[block_size=TPB, exclusive=True](rflag)
+        )
+        barrier()
+        rlen = Int(block_sum[block_size=TPB](rflag))
+        barrier()
+
+        if sabotage == PART_SAB_NO_SCAN:
+            lidx = tid
+            ridx = tid
+
+        # `:73` -- pair up only as many misfits as both sides can supply.
+        minlen = llen if llen < rlen else rlen
+
+        # `:75-77` -- compaction.
+        if lflag != Int32(0):
+            smem[unsafe_offset=lidx] = Int32(loff)
+        if rflag != Int32(0):
+            smem[unsafe_offset = TPB + ridx] = Int32(roff)
+        barrier()
+
+        # `:79-83` -- clear the flags about to be consumed, and advance only
+        # the side that was fully consumed.
+        if lidx < minlen:
+            lflag = Int32(0)
+        if ridx < minlen:
+            rflag = Int32(0)
+        if llen == minlen:
+            loffset += TPB
+        if rlen == minlen:
+            roffset += TPB
+
+        # `:84-89` -- swap the paired misfits.
+        if tid < minlen:
+            var lslot = Int(smem[unsafe_offset=tid])
+            var rslot = Int(smem[unsafe_offset = TPB + tid])
+            var a = row_ids[unsafe_offset=lslot]
+            var bv = row_ids[unsafe_offset=rslot]
+            row_ids[unsafe_offset=lslot] = bv
+            if sabotage != PART_SAB_UNPAIRED_SWAP:
+                row_ids[unsafe_offset=rslot] = a
+
+        # This iteration's writes before the next iteration's reads, and this
+        # iteration's `lcomp`/`rcomp` reads before the next iteration's
+        # compaction overwrites them. DEVIATION BLOCK 181.
+        barrier()
+        iters += 1
+        swaps += minlen
+
+    if tid == 0:
+        out_n_iters[unsafe_offset=b] = Int32(iters)
+        out_n_swaps[unsafe_offset=b] = Int32(swaps)
+
+
+# ---------------------------------------------------------------------------
+# The leaf-value kernel: `leafKernel` (`:391-417`) and the half of
+# `SetLeafPredictions` (`builder.cuh:556-599`) that is not host policy.
+# ---------------------------------------------------------------------------
+
+comptime LEAF_VISIT_NONE: Int32 = 0
+"""The zero the CALLER must seed `out_visit` with. Not a legal outcome: a node
+still holding it was never served by a block. DEVIATION 180."""
+
+comptime LEAF_VISIT_INTERNAL: Int32 = 1
+"""A block ran on this node and took `leafKernel`'s early return at `:403`,
+because the node is not a leaf. Its `out_leaves` slot therefore keeps the
+caller's zeros, and this value is how a check tells that apart from a slot
+that is zero because nothing ran."""
+
+comptime LEAF_VISIT_PUBLISHED: Int32 = 2
+"""A block ran on this node, it is a leaf, and `SetLeafVector` wrote its
+value."""
+
+comptime LEAF_MAX_OUT_DEFAULT: Int = 16
+"""Default comptime bound on `num_outputs`. DEVIATION BLOCK 178: Mojo's
+`stack_allocation` is comptime-sized, so the per-thread histogram needs a
+bound. Theirs is `num_outputs` wide too (`builder.cuh:581`), not
+`n_bins * num_outputs`, so 16 covers this lane rather than truncating it."""
+
+
+comptime LEAF_SAB_NONE: Int32 = 0
+"""No sabotage. The shipping path."""
+
+comptime LEAF_SAB_NO_ISLEAF: Int32 = 1
+"""Drop `if (!node.IsLeaf()) return;` (`:403`), so every node's slot is filled.
+A tree whose internal slots are filled still predicts correctly at every leaf,
+which is why this needs its own arm."""
+
+comptime LEAF_SAB_NO_ROW_IDS: Int32 = 2
+"""Read `labels[i]` instead of `labels[row_ids[i]]` (`:409-411`), i.e. treat
+the slot index as a row id. Invisible with an identity `row_ids`, which is why
+the fixture shuffles it."""
+
+comptime LEAF_SAB_STRIDE_ONE: Int32 = 3
+"""Write at `node_id + c` instead of `node_id * num_outputs + c` (`:412`,
+`decisiontree.cuh:218`). The stride is `num_outputs` for ALL nodes, leaves and
+internal alike; a packed layout is right for node 0 and wrong by a growing
+offset after it. Regression has `num_outputs == 1`, where the two spellings
+agree and this arm is correctly invisible."""
+
+comptime LEAF_SAB_NO_NORMALIZE: Int32 = 4
+"""Publish the raw accumulator instead of dividing it: skip the `/ total` of
+`SetLeafVector` for Gini (`objectives.cuh:97-107`) and the `/ count` for MSE
+(`:259-264`). For a single-class leaf the probability is 1 and the count is 1,
+so this arm is only visible where a leaf holds more than one row."""
+
+
+def leaf_values_host(
+    nodes: MutPointer[SparseTreeNode[DType.float32], MutAnyOrigin],
+    instance_ranges: MutPointer[InstanceRange, MutAnyOrigin],
+    row_ids: MutPointer[Int32, MutAnyOrigin],
+    labels_q: MutPointer[Int32, MutAnyOrigin],
+    n_nodes: Int,
+    num_outputs: Int,
+    inv_scale: Float32,
+    is_classification: Bool,
+) -> List[Float32]:
+    """THE ORACLE for `leaf_kernel`: the same pass, sequentially.
+
+    Written the way `node_feature_min_max` and `node_feature_score_host` are
+    -- their branches in their order, no block structure, `row_ids` order --
+    and it is what `partition_leaf_kernel_check.mojo` compares the device
+    against on BIT PATTERNS.
+
+    IT IS NOT A SECOND TRANSCRIPTION OF THE CLASSIFICATION ARM.
+    `builder.mojo::set_leaf_predictions_classification` is that, it is
+    `builder.cuh:556-599` plus `leafKernel`, and the check compares against
+    BOTH -- this function AND that one -- so a drift between the two host
+    forms is itself visible. They are obliged to agree exactly:
+    `GiniObjectiveFunction.SetLeafVector` is `Float32(count) / Float32(total)`
+    and so is the expression below.
+
+    THE REGRESSION ARM IS DIFFERENT AND DELIBERATELY SO. DEVIATION BLOCK 179:
+    `set_leaf_predictions_regression` accumulates in `Float64`, which the
+    device does not have; this accumulates the same `Int32` fixed-point labels
+    the device does, in the same integer arithmetic, and forms the value with
+    the same expression in the same order. So THIS is the regression oracle
+    and that one is a reporting form. The check measures how far apart they
+    land, per leaf, every run.
+
+    A label outside `[0, num_outputs)` is SKIPPED rather than accumulated, on
+    both sides, because on the device it would be an out-of-bounds write into
+    a private array. `node_feature_score_host` carries the same bound for the
+    same reason.
+    """
+    var out = List[Float32](length=n_nodes * num_outputs, fill=Float32(0.0))
+    for node_id in range(n_nodes):
+        # `:403`, the early return: an internal node's slot keeps its zeros.
+        if nodes[unsafe_offset=node_id].left_child_id != NODE_IS_LEAF:
+            continue
+        var begin = Int(instance_ranges[unsafe_offset=node_id].begin)
+        var count = Int(instance_ranges[unsafe_offset=node_id].count)
+        var acc = List[Int32](length=num_outputs, fill=Int32(0))
+        var seen = 0
+        for i in range(begin, begin + count):
+            var row = Int(row_ids[unsafe_offset=i])
+            var lab = Int(labels_q[unsafe_offset=row])
+            if is_classification:
+                if lab >= 0 and lab < num_outputs:
+                    acc[lab] += Int32(1)
+            else:
+                acc[0] += Int32(lab)
+            seen += 1
+        var base = node_id * num_outputs
+        if is_classification:
+            # `objectives.cuh:97-107`, and the shape of the conversion is
+            # theirs: the numerator is cast and the `int` denominator is
+            # promoted by the division.
+            var total = Int32(0)
+            for c in range(num_outputs):
+                total += acc[c]
+            for c in range(num_outputs):
+                out[base + c] = Float32(Int(acc[c])) / Float32(Int(total))
+        else:
+            # `objectives.cuh:259-264` is `label_sum / count`; the `*
+            # inv_scale` is DEVIATION 179's dequantization and is the last
+            # operation, so no `+` sits next to a `*` for a backend to
+            # contract into an FMA (DEVIATION BLOCK 173's defect cannot
+            # recur here).
+            for c in range(num_outputs):
+                out[base + c] = (
+                    Float32(Int(acc[c])) / Float32(seen) * inv_scale
+                )
+    return out^
+
+
+def leaf_kernel[
+    TPB: Int, MAX_OUT: Int, CLASSIFICATION: Bool
+](
+    out_leaves: MutPointer[Float32, MutAnyOrigin],
+    out_visit: MutPointer[Int32, MutAnyOrigin],
+    nodes: MutPointer[SparseTreeNode[DType.float32], MutAnyOrigin],
+    instance_ranges: MutPointer[InstanceRange, MutAnyOrigin],
+    row_ids: MutPointer[Int32, MutAnyOrigin],
+    labels_q: MutPointer[Int32, MutAnyOrigin],
+    num_outputs_in: Int32,
+    inv_scale: Float32,
+    sabotage_in: Int32,
+):
+    """`leafKernel`, `builder_kernels_impl.cuh:391-417`.
+
+    GRID. `grid_dim = n_nodes`, `block_dim = TPB`. ONE BLOCK PER NODE, theirs
+    (`launchLeafKernel`, `:419-432`, `<<<num_blocks, TPB_DEFAULT, smem_size>>>`
+    with `num_blocks = batch_size`). `block_idx.x` is the node id and indexes
+    `nodes`, `instance_ranges` and `out_visit` alike; `out_leaves` is indexed
+    by `node_id * num_outputs`.
+
+    DEVIATION 180: theirs launches this in batches of 100,000 nodes as a
+    host-side memory-budget policy and ours launches it once over the whole
+    tree. The signature is batch-ready -- slice the pointers and shrink the
+    grid -- and nothing in the kernel changes.
+
+    CALLER OBLIGATIONS, and neither is optional:
+
+    * `out_leaves` -- `n_nodes * num_outputs` `Float32`s, ZEROED. That is
+      THEIRS, `cudaMemsetAsync` at `builder.cuh:582`: an internal node's slot
+      is written by nothing and the zero IS its value.
+    * `out_visit` -- `n_nodes` `Int32`s, ZEROED (`LEAF_VISIT_NONE`). The
+      kernel writes `LEAF_VISIT_INTERNAL` or `LEAF_VISIT_PUBLISHED` into
+      every node it reaches, so a node still holding zero is a reach failure
+      the check can NAME rather than a plausible-looking answer.
+    * `labels_q` is an `Int32` array indexed by ROW ID, not by slot: the class
+      id for classification, the fixed-point label for regression (DEVIATION
+      179). The device performs no float-to-integer conversion at all.
+    * `inv_scale` is `1 / scale` for regression and `1.0` for classification,
+      which never reads it.
+
+    `MAX_OUT` bounds `num_outputs`; a launch past it publishes NOTHING and the
+    caller sees `LEAF_VISIT_NONE`. DEVIATION BLOCK 178.
+
+    THE THREE WAYS THIS PASS IS QUIETLY WRONG, which is why the sabotages
+    above are the ones they are: it reads its rows THROUGH `row_ids` over the
+    node's own `InstanceRange` (`:409-412`), it must leave every INTERNAL
+    node's slot zero (`:403`), and the `vector_leaf` stride is `num_outputs`
+    for ALL nodes rather than packed by leaf (`decisiontree.cuh:218`).
+    `mojo_only/leaf_check.mojo` names the same three for the host form.
+    """
+    var node_id = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var k = Int(num_outputs_in)
+    var sabotage = sabotage_in
+
+    # DEVIATION 178: the private array is comptime-sized, so a request past
+    # the bound publishes nothing rather than writing out of bounds.
+    if k > MAX_OUT or k < 1:
+        return
+
+    # `:398-403` -- `auto& node = tree[node_id]; ... if (!node.IsLeaf())
+    # return;`. One FIELD through the pointer, not the struct: `IsLeaf()` is
+    # `left_child_id == -1` and nothing else (`flatnode.h:69`).
+    var is_leaf = (
+        nodes[unsafe_offset=node_id].left_child_id == NODE_IS_LEAF
+    )
+    if sabotage == LEAF_SAB_NO_ISLEAF:
+        is_leaf = True
+    if not is_leaf:
+        if tid == 0:
+            out_visit[unsafe_offset=node_id] = LEAF_VISIT_INTERNAL
+        return
+
+    var begin = Int(instance_ranges[unsafe_offset=node_id].begin)
+    var count = Int(instance_ranges[unsafe_offset=node_id].count)
+
+    # `:404-407` -- their `histogram[i] = BinT()` over shared memory, as a
+    # per-thread private array instead. DEVIATION BLOCK 178.
+    var priv = stack_allocation[MAX_OUT, Scalar[DType.int32]]()
+    for c in range(MAX_OUT):
+        priv[unsafe_offset=c] = Int32(0)
+    var seen = Int32(0)
+
+    # `:409-412` -- their row loop. `dataset.labels[dataset.row_ids[i]]` is
+    # the indirection this pass exists to get right.
+    var i = begin + tid
+    while i < begin + count:
+        var row = Int(row_ids[unsafe_offset=i])
+        if sabotage == LEAF_SAB_NO_ROW_IDS:
+            row = i
+        var lab = Int(labels_q[unsafe_offset=row])
+        comptime if CLASSIFICATION:
+            # `BinT::IncrementHistogram(histogram, 1, 0, label)` -- `n_bins`
+            # is 1 and `bin` is 0, so it is a plain per-class counter.
+            if lab >= 0 and lab < k:
+                priv[unsafe_offset=lab] += Int32(1)
+        else:
+            # DEVIATION 179: the label arrives ALREADY quantized and the
+            # accumulation is an exact integer add.
+            priv[unsafe_offset=0] += Int32(lab)
+        seen += 1
+        i += TPB
+
+    # Their `__syncthreads()` at `:413`. Every thread must reach every
+    # collective, so no arm above returns per-thread: the two returns are
+    # block-uniform (`k > MAX_OUT` and `IsLeaf`).
+    var blk_seen = block_sum[block_size=TPB](seen)
+    barrier()
+
+    var tot = stack_allocation[MAX_OUT, Scalar[DType.int32]]()
+    for c in range(MAX_OUT):
+        tot[unsafe_offset=c] = Int32(0)
+    for c in range(k):
+        var v = block_sum[block_size=TPB](priv[unsafe_offset=c])
+        barrier()
+        tot[unsafe_offset=c] = v
+
+    # `:414-416` -- `if (tid == 0) SetLeafVector(histogram, num_outputs,
+    # leaves + num_outputs * node_id)`.
+    if tid != 0:
+        return
+
+    var base = node_id * k
+    if sabotage == LEAF_SAB_STRIDE_ONE:
+        base = node_id
+
+    comptime if CLASSIFICATION:
+        # `objectives.cuh:97-107`, transcribed including the shape of the
+        # conversion: `int total`, and `DataT(shist[i].x) / total`.
+        var total = Int32(0)
+        for c in range(k):
+            total += tot[unsafe_offset=c]
+        for c in range(k):
+            var num = Float32(Int(tot[unsafe_offset=c]))
+            if sabotage == LEAF_SAB_NO_NORMALIZE:
+                out_leaves[unsafe_offset = base + c] = num
+            else:
+                out_leaves[unsafe_offset = base + c] = num / Float32(
+                    Int(total)
+                )
+    else:
+        # `objectives.cuh:259-264`, `label_sum / count`, over the fixed-point
+        # sum, with DEVIATION 179's dequantization applied last.
+        for c in range(k):
+            var num = Float32(Int(tot[unsafe_offset=c]))
+            if sabotage == LEAF_SAB_NO_NORMALIZE:
+                out_leaves[unsafe_offset = base + c] = num * inv_scale
+            else:
+                out_leaves[unsafe_offset = base + c] = (
+                    num / Float32(Int(blk_seen)) * inv_scale
+                )
+
+    out_visit[unsafe_offset=node_id] = LEAF_VISIT_PUBLISHED

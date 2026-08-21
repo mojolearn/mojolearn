@@ -66,8 +66,14 @@ from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels im
     split_not_valid,
 )
 from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import (
+    LEAF_MAX_OUT_DEFAULT,
+    LEAF_SAB_NONE,
+    PARTITION_UNVISITED,
+    PART_SAB_NONE,
     SCORE_STATUS_SCORED,
     build_workload_info,
+    leaf_kernel,
+    node_split_kernel,
     node_feature_range_init_kernel,
     node_feature_range_kernel,
     node_feature_score_finalize_kernel,
@@ -76,6 +82,7 @@ from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels_im
     partition_samples,
     score_row_bound_ok,
 )
+from extratrees.ported.decisiontree.flatnode import SparseTreeNode
 from extratrees.ported.decisiontree.batched_levelalgo.split import (
     split_reduce_init_kernel,
     split_reduce_kernel,
@@ -783,13 +790,17 @@ def train_classification_device(
         len(x_col_major)
     )
     var h_labels = ctx.enqueue_create_host_buffer[DType.int32](Int(n_rows))
+    var h_rows0 = ctx.enqueue_create_host_buffer[DType.int32](Int(n_rows))
     ctx.synchronize()
     for i in range(len(x_col_major)):
         h_data.unsafe_ptr().unsafe_store(i, x_col_major[i])
     for i in range(Int(n_rows)):
         h_labels.unsafe_ptr().unsafe_store(i, class_ids[i])
+    for i in range(Int(n_rows)):
+        h_rows0.unsafe_ptr().unsafe_store(i, row_ids[i])
     ctx.enqueue_copy(dst_buf=d_data, src_ptr=h_data.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_labels, src_ptr=h_labels.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=d_row_ids, src_ptr=h_rows0.unsafe_ptr())
     ctx.synchronize()
 
     while queue.has_work():
@@ -854,7 +865,6 @@ def train_classification_device(
 
         # One host staging buffer per copy: they are asynchronous, and a
         # shared one would be rewritten under an in-flight copy.
-        var h_rows = ctx.enqueue_create_host_buffer[DType.int32](Int(n_rows))
         var h_colids = ctx.enqueue_create_host_buffer[DType.int32](n_cells)
         var h_items = ctx.enqueue_create_host_buffer[DType.uint8](
             n_nodes * size_of[NodeWorkItem]()
@@ -866,8 +876,6 @@ def train_classification_device(
         var h_nc = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
         ctx.synchronize()
 
-        for i in range(Int(n_rows)):
-            h_rows.unsafe_ptr().unsafe_store(i, row_ids[i])
         for i in range(n_cells):
             h_colids.unsafe_ptr().unsafe_store(i, colids[i])
         var items_ptr = h_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem]()
@@ -880,7 +888,6 @@ def train_classification_device(
             h_nb.unsafe_ptr().unsafe_store(i, Int32(i * Int(k)))
             h_nc.unsafe_ptr().unsafe_store(i, Int32(Int(k)))
 
-        ctx.enqueue_copy(dst_buf=d_row_ids, src_ptr=h_rows.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=d_colids, src_ptr=h_colids.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=d_items, src_ptr=h_items.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=d_wl, src_ptr=h_wl.unsafe_ptr())
@@ -1067,7 +1074,7 @@ def train_classification_device(
         ctx.enqueue_copy(dst_buf=o_v, src_buf=r_v)
         ctx.synchronize()
 
-        # --- 8. partition the winners and push ---------------------------
+        # --- 8. build the batch's splits on the host, as `:492-494` does --
         var splits = List[Split]()
         for i in range(n_nodes):
             var colid = o_c.unsafe_ptr()[unsafe_offset=i]
@@ -1078,57 +1085,121 @@ def train_classification_device(
                 # min_impurity_decrease`, so a scored candidate needs a
                 # positive metric to survive it. The device does not compute
                 # cuML's float gain (DEVIATION 175/182), so the exact
-                # rational's validity IS the gate: a valid key means a real
-                # partition with both children non-empty.
+                # rational's validity IS the gate here: a valid key means a
+                # real partition with both children non-empty. DEVIATION 183
+                # is the price of that and is measured by
+                # `device_tree_check`.
                 metric = Float32(1.0)
-            var sp = Split(o_q.unsafe_ptr()[unsafe_offset=i], colid, metric, n_left)
-            splits.append(sp)
-            var item = work_items[i]
-            if not split_not_valid(
-                sp,
-                params.min_impurity_decrease,
-                params.min_samples_leaf,
-                item.instances.count,
-            ):
-                var host_view = Dataset(
-                    rebind[MutPointer[Float32, MutUntrackedOrigin]](
-                        x_col_major.unsafe_ptr()
-                    ),
-                    rebind[MutPointer[Float32, MutUntrackedOrigin]](
-                        x_col_major.unsafe_ptr()
-                    ),
-                    n_rows,
-                    n_cols,
-                    n_rows,
-                    n_cols,
-                    rebind[MutPointer[Int32, MutUntrackedOrigin]](
-                        row_ids.unsafe_ptr()
-                    ),
-                    n_classes,
+            splits.append(
+                Split(
+                    o_q.unsafe_ptr()[unsafe_offset=i], colid, metric, n_left
                 )
-                partition_samples(host_view, sp, item)
+            )
+
+        # --- 9. the PARTITION, on the device ------------------------------
+        # `nodeSplitKernel` (`builder_kernels_impl.cuh:89-107`) and the
+        # `partitionSamples` it calls. `row_ids` is mutated IN PLACE on the
+        # device, which is what lets it stay resident: it is uploaded once,
+        # above, and never round-trips again.
+        var d_splits = ctx.enqueue_create_buffer[DType.uint8](
+            n_nodes * size_of[Split]()
+        )
+        var d_iters = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+        var d_swaps = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+        var h_splits = ctx.enqueue_create_host_buffer[DType.uint8](
+            n_nodes * size_of[Split]()
+        )
+        ctx.synchronize()
+        var splits_ptr = h_splits.unsafe_ptr().unsafe_bitcast[Split]()
+        for i in range(n_nodes):
+            splits_ptr[unsafe_offset=i] = splits[i]
+        ctx.enqueue_copy(dst_buf=d_splits, src_ptr=h_splits.unsafe_ptr())
+        ctx.enqueue_memset(d_iters, PARTITION_UNVISITED)
+        ctx.enqueue_function[node_split_kernel[TPB]](
+            d_row_ids.unsafe_ptr(),
+            d_iters.unsafe_ptr(),
+            d_swaps.unsafe_ptr(),
+            d_data.unsafe_ptr(),
+            d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            d_splits.unsafe_ptr().unsafe_bitcast[Split](),
+            n_rows,
+            params.min_impurity_decrease,
+            params.min_samples_leaf,
+            PART_SAB_NONE,
+            grid_dim=(n_nodes, 1, 1),
+            block_dim=(TPB, 1, 1),
+        )
+        ctx.synchronize()
+
         queue.push(work_items, splits)
         _ = objective
 
+    # --- 10. the LEAF VALUES, on the device -------------------------------
+    # `SetLeafPredictions` (`builder.cuh:556-599`) and the `leafKernel` it
+    # launches. `row_ids` is still on the device, in the order the partitions
+    # left it, so nothing is uploaded here -- only the tree and its ranges.
     var tree = queue.get_tree()
-    var host_view = Dataset(
-        rebind[MutPointer[Float32, MutUntrackedOrigin]](
-            x_col_major.unsafe_ptr()
-        ),
-        rebind[MutPointer[Float32, MutUntrackedOrigin]](
-            x_col_major.unsafe_ptr()
-        ),
-        n_rows,
-        n_cols,
-        n_rows,
-        n_cols,
-        rebind[MutPointer[Int32, MutUntrackedOrigin]](row_ids.unsafe_ptr()),
-        n_classes,
+    var n_nodes_final = tree.num_nodes()
+    var k_out = Int(tree.num_outputs)
+
+    var d_nodes = ctx.enqueue_create_buffer[DType.uint8](
+        n_nodes_final * size_of[SparseTreeNode[DType.float32]]()
     )
-    _ = host_view
-    set_leaf_predictions_from_class_ids(
-        class_ids, row_ids, tree, queue.node_instances
+    var d_ranges = ctx.enqueue_create_buffer[DType.uint8](
+        n_nodes_final * size_of[InstanceRange]()
     )
+    var d_leaves = ctx.enqueue_create_buffer[DType.float32](
+        n_nodes_final * k_out
+    )
+    var d_visit = ctx.enqueue_create_buffer[DType.int32](n_nodes_final)
+    var h_nodes = ctx.enqueue_create_host_buffer[DType.uint8](
+        n_nodes_final * size_of[SparseTreeNode[DType.float32]]()
+    )
+    var h_ranges = ctx.enqueue_create_host_buffer[DType.uint8](
+        n_nodes_final * size_of[InstanceRange]()
+    )
+    var h_leaves = ctx.enqueue_create_host_buffer[DType.float32](
+        n_nodes_final * k_out
+    )
+    ctx.synchronize()
+    var nodes_ptr = h_nodes.unsafe_ptr().unsafe_bitcast[
+        SparseTreeNode[DType.float32]
+    ]()
+    for i in range(n_nodes_final):
+        nodes_ptr[unsafe_offset=i] = tree.sparsetree[i]
+    var ranges_ptr = h_ranges.unsafe_ptr().unsafe_bitcast[InstanceRange]()
+    for i in range(n_nodes_final):
+        ranges_ptr[unsafe_offset=i] = queue.node_instances[i]
+    ctx.enqueue_copy(dst_buf=d_nodes, src_ptr=h_nodes.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=d_ranges, src_ptr=h_ranges.unsafe_ptr())
+    # `builder.cuh:582` memsets the leaf array before the launch, and an
+    # internal node's ZERO IS ITS VALUE -- the kernel returns early for a
+    # non-leaf and never writes those slots.
+    ctx.enqueue_memset(d_leaves, Float32(0.0))
+    ctx.enqueue_memset(d_visit, Int32(0))
+    ctx.enqueue_function[
+        leaf_kernel[TPB, LEAF_MAX_OUT_DEFAULT, True]
+    ](
+        d_leaves.unsafe_ptr(),
+        d_visit.unsafe_ptr(),
+        d_nodes.unsafe_ptr().unsafe_bitcast[SparseTreeNode[DType.float32]](),
+        d_ranges.unsafe_ptr().unsafe_bitcast[InstanceRange](),
+        d_row_ids.unsafe_ptr(),
+        d_labels.unsafe_ptr(),
+        Int32(k_out),
+        Float32(1.0),  # classification: no fixed-point rescale
+        LEAF_SAB_NONE,
+        grid_dim=(n_nodes_final, 1, 1),
+        block_dim=(TPB, 1, 1),
+    )
+    ctx.enqueue_copy(dst_buf=h_leaves, src_buf=d_leaves)
+    ctx.synchronize()
+
+    tree.vector_leaf = List[Float32](
+        length=n_nodes_final * k_out, fill=Float32(0.0)
+    )
+    for i in range(n_nodes_final * k_out):
+        tree.vector_leaf[i] = h_leaves.unsafe_ptr()[unsafe_offset=i]
     return tree^
 
 
@@ -1136,42 +1207,6 @@ def dataset_len_ok(
     x_col_major: List[Float32], n_rows: Int32, n_cols: Int32
 ) -> Bool:
     return len(x_col_major) == Int(n_rows) * Int(n_cols)
-
-
-def set_leaf_predictions_from_class_ids(
-    class_ids: List[Int32],
-    row_ids: List[Int32],
-    mut tree: TreeMetaDataNode[DType.float32],
-    node_instances: List[InstanceRange],
-) raises:
-    """`set_leaf_predictions_classification` over an `Int32` class-id array.
-
-    The device path holds labels as class ids (DEVIATION 174), not as the
-    `Float32` a `Dataset` carries, so this is the same pass over the same
-    ranges with the one cast moved. It is NOT a second transcription: the
-    branch order, the early return for a non-leaf and the `vector_leaf`
-    stride are the same three lines, and `device_tree_check` compares its
-    output against the `Dataset` form cell for cell.
-    """
-    var n_nodes = tree.num_nodes()
-    if len(node_instances) != n_nodes:
-        raise Error("SetLeafPredictions: node/range length mismatch")
-    var k = Int(tree.num_outputs)
-    tree.vector_leaf = List[Float32](length=n_nodes * k, fill=Float32(0.0))
-    var counts = List[CountBin](length=k, fill=CountBin())
-    for node_id in range(n_nodes):
-        if not tree.sparsetree[node_id].IsLeaf():
-            continue
-        for c in range(k):
-            counts[c] = CountBin()
-        var rng = node_instances[node_id]
-        for i in range(Int(rng.begin), Int(rng.begin) + Int(rng.count)):
-            counts[Int(class_ids[Int(row_ids[i])])].x += 1
-        GiniObjectiveFunction[DType.float32].SetLeafVector(
-            Pointer(to=counts[0]),
-            Int32(k),
-            Pointer(to=tree.vector_leaf[node_id * k]),
-        )
 
 
 def train_loop_shape() -> String:
