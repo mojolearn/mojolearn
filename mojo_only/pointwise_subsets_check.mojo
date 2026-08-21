@@ -113,8 +113,8 @@ this file prints per level; the numbers are cells, not levels.
 |---|---|---|---|
 | 1 | `bins[i] /= split << depth` becomes `bins[i] = split << depth` | `update_bins_from_compressed_index_kernel` | RED: 3294 CONTENT + 3190 ORDER. **L0 stayed green** -- at depth 0 there are no lower bits, so `=` and `/=` agree and a one-level fixture would have missed it entirely |
 | 2 | `++CurrentDepth` moved AFTER `UpdateSubsetsStats` | `split_subsets` | RED at L0: the stats of the new level's upper half come back POISONED, and by L3 the partition array is unreadable |
-| 3 (re-run) | `ReorderBins` made UNSTABLE -- every group reversed, same multiset | `reorder_one_bit_u32_kernel` (`gbdt/gpu_util/kernel/radix_sort.mojo`) | **THE HEADLINE, and UNCHANGED by the layout move.** At L0: `CONTENT wrong 0 ( membership 0 offset 0 size 0 stats 0 count 0 tail 0 ) / ORDER wrong 5958 ( indices 2002 gathered 3956 )`. Every partition offset, every partition size, every per-partition stat and every document's partition membership are BIT-IDENTICAL, and 5958 cells of order are wrong. A check that compared only partitions and totals would have passed this |
-| 4 | `GatherTarget` moves 1 column instead of 2 | `update_subsets_stats` | RED: 11952 ORDER (the whole `Sum` plane of `gathered`) + 31 CONTENT. The `Weight` plane stayed correct throughout, which is why the gather is compared per (plane, position) and not per position |
+| 3 (re-run x2) | `ReorderBins` made UNSTABLE -- every group reversed, same multiset | `reorder_one_bit_u32_kernel` (`gbdt/gpu_util/kernel/radix_sort.mojo`) | **THE HEADLINE, and UNCHANGED by either the layout move or the buffer split.** At L0: `CONTENT wrong 0 ( membership 0 offset 0 size 0 stats 0 count 0 tail 0 ) / ORDER wrong 5958 ( indices 2002 gathered 3956 [w 1966 t 1990] )`. Every partition offset, every partition size, every per-partition stat and every document's partition membership are BIT-IDENTICAL, and 5958 cells of order are wrong. The `[w .. t ..]` split is the proof that the tally still covers BOTH columns after they became separate allocations -- 1966 and 1990, not 3956 and 0 |
+| 4 (re-run) | `GatherTarget` moves 1 column instead of 2 -- on two buffers this is "the second `Gather` call is deleted" | `update_subsets_stats` | RED, and **a different defect than it was on one buffer**: 1992 ORDER + 1-to-8 CONTENT per level, where the merged-buffer form gave 11952 ORDER + 31 CONTENT. Two things the new breakdown shows that the old number could not. (a) `[w 0 t 1992]` -- the damage is entirely in the gradient column and the weight column is untouched, which is what a dropped second call looks like and is NOT what a dropped second plane looked like. (b) 1992, not 2003: the un-gathered buffer comes back all zeros, so the 11 documents whose planted target is exactly 0 MATCH BY ACCIDENT. A boolean "did the gather work" would read those 11 cells as fine; a per-cell count prices them. The stat side moves too, `plane Sum : device 0.0 host 67.0` |
 | 5 (re-run) | `UpdatePartitionDimensions` sized from `max_part_count` instead of `CurrentPartsView` | `update_subsets_stats` | RED: 196 cells, **all of them `tail`**, ORDER 0, everything else 0. Per level 60/56/48/32/0. L4 green because there `current_part_count() == max_part_count`. The count is the same as before the layout move for a reason worth stating: only the PARTITION records are clobbered (2 cells per dead slot), not the stat records, so widening the stat record from 2 to 3 does not widen this number |
 | 6 (re-run) | `UpdatePartitionSizes`'s `i ? bins[i-1] : 0` sentinel changed to `UINT32_MAX` (the value the OFFSETS kernel uses) | `update_partition_sizes_kernel` | RED at **L4 only**: 33 CONTENT (membership 1, size 8, stats 16, count 8). L0-L3 green, because the sentinel is only observable when the first sorted bin is above 0 -- which is exactly why the L4 "ALL RIGHT" arm exists |
 | 7 | every `current_depth + fold_bits` replaced by `current_depth` | `split_subsets`, `current_part_count` | **INERT -- 0 cells moved, and that is a finding, not a failure.** `FoldBits` is 0 on the `TStripeMapping` specialization, so the two spellings are the same number here. Nothing in this file can gate the fold path; only the unported `TMirrorMapping` specialization can, and until it lands the `+ fold_bits` spelling rests on their source (`pointwise_optimization_subsets.cpp:41`, `:46`) and not on a measurement |
@@ -126,10 +126,11 @@ this file prints per level; the numbers are cells, not levels.
 | 13 | `HasPermutationDependentSplit` ANDs its two predicates instead of nesting them | `has_permutation_dependent_split` | RED: a plain float column carrying a stale `IsPermutationDependent` answer tripped it |
 | 14 | `MergeBits` drops the `y` half of its eighth term | `merge_bits` | RED: 32768 of 65536 pairs on the independent oracle AND 32768 on the `get_odd_bits` round trip; `get_even_bits` stayed at 0, which is the round trip proving it ties the three functions together and not to one shared transcription |
 | 15 | `TPartitionStatistics` packed at stride 2 instead of 3 | `pack_partition_stats_kernel` | RED: 2/6/14/24/42 `stats` cells per level, growing with the partition count exactly as a stride error should. `count` stayed 0, because plane 2 was still written at the right place -- so the two halves of the record are independently placed and independently gated |
+| 18 (NEW) | the two `compute_partition_stats` calls write EACH OTHER's output buffer | `update_subsets_stats` | RED: 2/4/8/16/32 `stats` cells, ORDER 0, everything else 0 -- a pure stat-PLACEMENT defect with the reduction itself perfectly correct. Only possible to write once the reduce split into two calls, and it is the failure that split invites: both calls are otherwise identical and differ only in which buffer they read and which they write. `plane Weight : device 67.0 host 64395.0` names it in one line, the gradient total sitting in the weight slot |
 | 16 | `TDataPartition`'s two `ui32` swapped -- `PART_OFFSET = 1`, `PART_SIZE = 0` | the constants | **INERT ON THE FIRST ATTEMPT, AND THAT WAS A HOLE IN THIS FILE.** Every read here imported the library's own `PART_OFFSET`/`PART_SIZE`, so the swap moved writer and reader together and 0 cells changed. Fixed by `check_layout_contract`, which pins the record with `comptime assert` against LITERALS taken from the call sites that hardcode it. Re-run: **the check no longer COMPILES**, and the assertion names the constant and the file that disagrees. A contract is the one thing worth failing at build time rather than on a fixture |
 | 17 | `TPartitionStatistics`'s `Weight` and `Sum` swapped | the constants | RED via `check_layout_contract`: does not compile, naming `TPartitionStatistics::Weight is first`. Added at the same time as 16 and for the same reason |
 
-Four of the seventeen moved NOTHING where it mattered. 1 and 8 are inert at
+Four of the eighteen moved NOTHING where it mattered. 1 and 8 are inert at
 depth 0; 7 is inert everywhere and says something true about `FoldBits`; **16
 was inert because of a defect in THIS FILE, not in the port.** All four are
 recorded rather than dropped. "Reached but inert" is the failure mode this
@@ -1037,14 +1038,22 @@ def _verify_level(
 
     var g_idx = ctx.enqueue_create_host_buffer[DType.uint32](n)
     var g_bins = ctx.enqueue_create_host_buffer[DType.uint32](n)
-    var g_gat = ctx.enqueue_create_host_buffer[DType.float32](
-        n * POINTWISE_STAT_COUNT
-    )
+    # TWO buffers now, and BOTH are read back. A buffer split is exactly the
+    # sort of change that quietly halves a tally: if only `g_gat_w` were read
+    # the gathered count would still be non-zero on most defects, still look
+    # healthy, and would no longer cover the gradient column at all.
+    var g_gat_w = ctx.enqueue_create_host_buffer[DType.float32](n)
+    var g_gat_t = ctx.enqueue_create_host_buffer[DType.float32](n)
     var g_parts = ctx.enqueue_create_host_buffer[DType.uint32](m * 2)
     var g_stats = ctx.enqueue_create_host_buffer[DType.float32](m * 3)
     ctx.enqueue_copy(dst_ptr=g_idx.unsafe_ptr(), src_buf=subsets.indices)
     ctx.enqueue_copy(dst_ptr=g_bins.unsafe_ptr(), src_buf=subsets.bins)
-    ctx.enqueue_copy(dst_ptr=g_gat.unsafe_ptr(), src_buf=subsets.gathered)
+    ctx.enqueue_copy(
+        dst_ptr=g_gat_w.unsafe_ptr(), src_buf=subsets.gathered_weight
+    )
+    ctx.enqueue_copy(
+        dst_ptr=g_gat_t.unsafe_ptr(), src_buf=subsets.gathered_target
+    )
     ctx.enqueue_copy(dst_ptr=g_parts.unsafe_ptr(), src_buf=subsets.partitions)
     ctx.enqueue_copy(
         dst_ptr=g_stats.unsafe_ptr(), src_buf=subsets.partition_stats
@@ -1064,15 +1073,21 @@ def _verify_level(
             bins_wrong += 1
 
     var gat_wrong = 0
+    var gat_w_wrong = 0
+    var gat_t_wrong = 0
     for i in range(n):
         var doc = host.idx[i]
-        # LITERAL planes, per check_layout_contract: 0 is the weight.
-        var w = g_gat.unsafe_ptr().unsafe_load(0 * n + i)
-        var t = g_gat.unsafe_ptr().unsafe_load(1 * n + i)
+        # Both columns, per position. Counted separately so a split that
+        # loses one of them is visible as a HALVING rather than as a smaller
+        # number of the same kind.
+        var w = g_gat_w.unsafe_ptr().unsafe_load(i)
+        var t = g_gat_t.unsafe_ptr().unsafe_load(i)
         if w != Float32(_weight(doc)):
             gat_wrong += 1
+            gat_w_wrong += 1
         if t != Float32(_target(doc)):
             gat_wrong += 1
+            gat_t_wrong += 1
 
     # ---- CONTENT --------------------------------------------------------
     # Which partition each DOCUMENT is in, per document, derived from the
@@ -1146,6 +1161,11 @@ def _verify_level(
         want_t[b] = want_t[b] + Float32(_target(host.idx[i]))
     var stat_wrong = 0
     var first_stat_bad = -1
+    # WHICH plane moved. This used to be unrecorded and the print below
+    # always showed the WEIGHT, so a Sum-only defect -- which is what
+    # dropping one of the two Gathers now produces -- printed two identical
+    # numbers and read as a harness bug.
+    var first_stat_plane = 0
     for p in range(part_count):
         var gw = g_stats.unsafe_ptr().unsafe_load(p * 3 + 0)
         var gt = g_stats.unsafe_ptr().unsafe_load(p * 3 + 1)
@@ -1153,10 +1173,12 @@ def _verify_level(
             stat_wrong += 1
             if first_stat_bad < 0:
                 first_stat_bad = p
+                first_stat_plane = 0
         if gt != want_t[p]:
             stat_wrong += 1
             if first_stat_bad < 0:
                 first_stat_bad = p
+                first_stat_plane = 1
 
     # PLANE 2, `TPartitionStatistics::Count`. Their `PartitionUpdateImpl`
     # sets it to `size` whenever `counts == nullptr`, which is always on this
@@ -1211,7 +1233,9 @@ def _verify_level(
         "| ORDER wrong", order_wrong,
         "( indices", idx_wrong,
         "bins", bins_wrong,
-        "gathered", gat_wrong, ")",
+        "gathered", gat_wrong,
+        "[w", gat_w_wrong,
+        "t", gat_t_wrong, "] )",
     )
     if first_idx_bad >= 0:
         print(
@@ -1220,11 +1244,18 @@ def _verify_level(
             "host", host.idx[first_idx_bad],
         )
     if first_stat_bad >= 0:
+        var plane_name = String("Weight") if first_stat_plane == 0 else (
+            String("Sum")
+        )
+        var got_v = g_stats.unsafe_ptr().unsafe_load(
+            first_stat_bad * 3 + first_stat_plane
+        )
+        var want_v = want_w[first_stat_bad] if first_stat_plane == 0 else (
+            want_t[first_stat_bad]
+        )
         print(
             "       first stat disagreement at partition", first_stat_bad,
-            ": device weight",
-            g_stats.unsafe_ptr().unsafe_load(first_stat_bad * 3 + 0),
-            "host", want_w[first_stat_bad],
+            "plane", plane_name, ": device", got_v, "host", want_v,
         )
 
 
@@ -1256,16 +1287,16 @@ def check_subsets() raises:
     ctx.enqueue_copy(dst_buf=d_cindex, src_ptr=h_cindex.unsafe_ptr())
 
     # ---- TL2Target, two columns, in ORIGINAL document order --------------
-    var h_src = ctx.enqueue_create_host_buffer[DType.float32](
-        n * POINTWISE_STAT_COUNT
-    )
+    # `TL2Target { WeightedTarget; Weights; }` -- two buffers, theirs.
+    var h_w = ctx.enqueue_create_host_buffer[DType.float32](n)
+    var h_t = ctx.enqueue_create_host_buffer[DType.float32](n)
     for d in range(n):
-        h_src.unsafe_ptr().unsafe_store(0 * n + d, Float32(_weight(d)))
-        h_src.unsafe_ptr().unsafe_store(1 * n + d, Float32(_target(d)))
-    var d_src = ctx.enqueue_create_buffer[DType.float32](
-        n * POINTWISE_STAT_COUNT
-    )
-    ctx.enqueue_copy(dst_buf=d_src, src_ptr=h_src.unsafe_ptr())
+        h_w.unsafe_ptr().unsafe_store(d, Float32(_weight(d)))
+        h_t.unsafe_ptr().unsafe_store(d, Float32(_target(d)))
+    var d_w = ctx.enqueue_create_buffer[DType.float32](n)
+    var d_t = ctx.enqueue_create_buffer[DType.float32](n)
+    ctx.enqueue_copy(dst_buf=d_w, src_ptr=h_w.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=d_t, src_ptr=h_t.unsafe_ptr())
     ctx.synchronize()
 
     # `groupedByBinObservations = TStripeBuffer<ui32>::CopyMapping(observations)`
@@ -1280,7 +1311,7 @@ def check_subsets() raises:
     launch_make_sequence(ctx, UInt32(0), d_obs, n)
     ctx.synchronize()
 
-    var source = TL2Target(d_src^, n)
+    var source = TL2Target(d_w^, d_t^, n)
     var subsets = create_subsets(ctx, MAX_DEPTH, source)
     ctx.synchronize()
 

@@ -3549,3 +3549,90 @@ oracle, and their lack of a caller is stated rather than left to be found.
 split to `GetBorders(f).size() - 1`. Their comment explains why a clamp
 exists at all, not why the two differ by one. Transcribed as written; gated
 both ways.
+
+
+## 97.2 (CORRECTED at the wiring step) -- the weak target is TWO buffers, and why that was learned late
+
+An earlier draft merged `WeightedTarget` and `Weights` into one two-column
+buffer, and this file defended the merge. **It is reversed.** Both are two
+separate buffers on both sides now -- `TL2Target.weights`/`.weighted_target`
+and `TOptimizationSubsets.gathered_weight`/`.gathered_target` -- which is what
+`weak_target_helpers.h:11-14` declares.
+
+**IT IS A WALL, NOT A PREFERENCE.** The pointwise histogram family takes the
+two columns as two independent pointers -- `compute_hist2(..., target:
+MutPointer[Float32, o5], weight: MutPointer[Float32, o6], ...)` -- which is
+their signature too. Two views of ONE buffer cannot be handed to a kernel:
+
+* `buf.unsafe_ptr()` with `buf.unsafe_ptr().unsafe_offset(n)` is refused,
+  "aliasing values passed mutably to 'target' argument and passed mutably to
+  'weight' argument";
+* `unsafe_bitcast[Float32]()` does NOT launder the origin;
+* the check fires at `enqueue_function` ITSELF, so no wrapper can hide it at
+  any level.
+
+`PORTING_RULES` 4. **Found at the WIRING step, which is the only place it
+could have been found** -- every layer below had been gated for hours with
+the merged buffer and none of them could see it, because none of them passed
+both columns to one kernel.
+
+### What the reversal costs, stated rather than absorbed
+
+Two things, and the second was not obvious:
+
+* the gather goes 1 launch -> 2, which is exactly their `GatherTarget` body,
+  so this half is fidelity at no real cost;
+* **the partition reduce goes 1 call -> 2.** `compute_partition_stats` reads
+  its planes as `stats[stat * line_size + row]`, contiguous, so two separate
+  allocations cannot be reduced in one call. It runs once per column at
+  `n_stats = 1`: +2 launches, AND a different chunk count, because their grid
+  formula is `CeilDivide(2 * SMCount, statCount)`
+  (`update_part_props.cu:215`) and `statCount` is now 1 instead of 2. The
+  float summation tree has a different SHAPE than before the split. Still
+  deterministic, still pinned through `partition_stats_chunks`, and
+  INVISIBLE to the gate because its plants are exact integers -- recorded
+  because nothing else would record it.
+
+### The launch budget, corrected on both halves
+
+The earlier "theirs is 10, ours is 9" was wrong twice over and is deleted.
+`ReorderBins` is not 4 launches: `launch_radix_sort_bins` at one bit is SIX
+-- four in `_radix_pass` plus two copy-backs, since one pass is an odd count
+and the `Current() != keys` arm fires every level.
+
+    step                            theirs   ours
+    UpdateBinsFromCompressedIndex      1        1
+    ReorderBins (1 bit)               ~3        6
+    UpdatePartitionDimensions          2        2
+    de-interleave adapter              -        1
+    GatherTarget                       2        2
+    UpdatePartitionStats               1        4
+    pack adapter                       -        1
+    ----------------------------------------------
+    total                             ~9       17
+
+### 98a. OPEN, and the number that justified DEVIATION 98 has moved
+
+DEVIATION 98 declined `update_partition_props` -- the reducer their dispatch
+actually names, ported and sitting unused in
+`gbdt/methods/kernel/pointwise_scores.mojo:1800` -- on the grounds that one
+block per partition starves the device at depth 0.
+
+After the interleaved record, the stride-3 stats and now the two-buffer
+split, **that reducer wants exactly what this struct holds**: interleaved
+`parts`, stride-3 `part_stats`, and target/weights as two separate float
+pointers. It is a drop-in. Calling it replaces the de-interleave, both
+reduce calls and the pack -- **six launches and two scratch buffers, for one
+launch of the faithful function** -- taking `Split` from 17 to 12, and
+removing the chunk-count change recorded above.
+
+The trade was six launches to avoid one when the buffers were merged. It is
+now six launches AND two scratch buffers to avoid one, against a reducer
+that is also the faithful one. What is still bought is depth-0 occupancy,
+and **that remains UNMEASURED**: at depth 0 there is exactly one partition,
+so their form puts the whole dataset through a single threadgroup, a shape
+this repo has lost to twice on the greedy path.
+
+Not acted on, because the decision needs a measurement rather than an
+argument and no benchmark is authorised. The swap is one call in
+`update_subsets_stats` and the kernel is already written.

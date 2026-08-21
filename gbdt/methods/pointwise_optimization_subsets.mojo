@@ -70,11 +70,12 @@ has. NOTHING BELOW REIMPLEMENTS THEM.
            writers write to different places.
 
     GatherTarget(WeightedTarget, Weights, source, Indices)
-        -> `gbdt/gpu_util/kernel/transform.launch_gather_planes_with_mask_f32`
-           with `mask = 0xFFFFFFFF`, UNCHANGED. Their `GatherTarget`
-           (`weak_target_helpers.h:17-30`) is two plain `Gather` calls; the
-           masked form with an all-ones mask is the same arithmetic, and the
-           planes form does both columns in one launch.
+        -> `gbdt/gpu_util/kernel/transform.launch_gather_with_mask_f32`
+           TWICE, UNCHANGED. Their `GatherTarget`
+           (`weak_target_helpers.h:17-30`) is two plain `Gather` calls, and
+           this is those two calls; the masked form with an all-ones mask is
+           the same arithmetic. An earlier draft called the PLANES form once
+           over a merged buffer -- DEVIATION 97.2 for why that is gone.
 
     UpdatePartitionStats(PartitionStats, currentParts, WeightedTarget,
                          Weights)
@@ -171,16 +172,51 @@ THE STATE'S LAYOUT: FLOAT32 STATS, AND A `Count` PLANE NOTHING READS.
    What it costs is named in the reuse table above: the offsets kernel is
    ported rather than reused, because the two writers stop coinciding.
 
-2. `WeightedTarget` and `Weights` are TWO COLUMNS OF ONE BUFFER
-   (`TL2Target.stats`, `line_size` apart) rather than two allocations.
-   CatBoost's own greedy searcher stores its stats exactly this way --
-   `TOptimizationTarget::StatsToAggregate` is one multi-column buffer and
-   `GetStatCount()` is its column count (`greedy_subsets_searcher/
-   split_properties_helper.h:41`, `:60-62`) -- so the shape is theirs, from
-   their other file. It is what makes both device reuses possible:
-   `launch_gather_planes_with_mask_f32` moves both columns in one launch and
-   `compute_partition_stats` reduces both planes in one launch. Two separate
-   allocations would need two of each and could not be adjacent.
+2. `WeightedTarget` and `Weights` are TWO SEPARATE BUFFERS on both sides --
+   `TL2Target.weights`/`.weighted_target` and
+   `TOptimizationSubsets.gathered_weight`/`.gathered_target`. **That is
+   theirs** (`weak_target_helpers.h:11-14` declares two
+   `TCudaBuffer<float>`), and it is recorded as a deviation only because an
+   earlier draft of this file MERGED them into one two-column buffer and this
+   entry used to defend the merge.
+
+   Why the merge was tried: CatBoost's own greedy searcher stores its stats
+   that way (`TOptimizationTarget::StatsToAggregate` is one multi-column
+   buffer, `greedy_subsets_searcher/split_properties_helper.h:41`), and it
+   let `launch_gather_planes_with_mask_f32` move both columns in one launch
+   and `compute_partition_stats` reduce both planes in one launch.
+
+   **WHY IT IS GONE, and it is a wall rather than a preference.** The
+   pointwise histogram family takes the two columns as two independent
+   pointers -- `compute_hist2(..., target: MutPointer[Float32, o5], weight:
+   MutPointer[Float32, o6], ...)`
+   (`gbdt/methods/pointwise_kernels.mojo:1284-1302`), which is their
+   signature too. Two views of ONE buffer cannot be handed to a kernel:
+   `buf.unsafe_ptr()` plus `buf.unsafe_ptr().unsafe_offset(doc_count)` is
+   refused with "aliasing values passed mutably to 'target' argument and
+   passed mutably to 'weight' argument", `unsafe_bitcast[Float32]()` does not
+   launder the origin, and the check fires at `enqueue_function` itself, so
+   no wrapper can hide it. Found at the WIRING step, which is the only place
+   it could have been found. `PORTING_RULES.md` rule 4.
+
+   **WHAT THE REVERSAL COSTS, stated rather than absorbed.** Two things, and
+   the second was not obvious:
+
+   - the gather goes from 1 launch to 2 -- which is exactly their
+     `GatherTarget` body, so this half is a gain in fidelity at no real cost;
+   - **the partition reduce goes from 1 call to 2.**
+     `compute_partition_stats` reads its planes as
+     `stats[stat * line_size + row]`, i.e. contiguous, so two separate
+     allocations cannot be reduced in one call. It runs once per column at
+     `n_stats = 1`, which is +2 launches AND changes the chunk count, because
+     their grid formula is `CeilDivide(2 * SMCount, statCount)`
+     (`update_part_props.cu:215`) and `statCount` is now 1 instead of 2. The
+     float summation tree therefore has a different shape than it did before
+     the split. Still deterministic, still pinned through
+     `partition_stats_chunks`, and invisible to the gate because the plants
+     are exact integers -- recorded because nothing else would record it.
+
+   The corrected launch budget is in DEVIATION 98.
 
 3. **SOURCE PLANE 0 IS THE WEIGHT AND PLANE 1 IS THE WEIGHTED TARGET**, which
    is the reverse of `TL2Target`'s field declaration order
@@ -304,15 +340,50 @@ that is a decision rather than an accident:
 
 **PRICED, AND THE PRICE IS NOT MEASURED ON THIS PATH.** The two measurements
 cited are on the greedy path and are cited, not re-taken; nothing calls this
-file yet, so no timing here would mean anything. What IS counted is launches.
-Their `Split` is 10 (update bins 1, reorder 4, dimensions 2, gather 2,
-partition update 1); ours is 9 (update bins 1, reorder 4, dimensions 2,
-de-interleave 1, gather 1, reduce 2, pack 1 -- less the dimensions overlap),
-so the two adapter launches below are not bought at the cost of a launch
-budget. Both adapters run at most `max_part_count` threads: 64 at depth 6.
-If a future measurement says the one-block form wins here, the swap is one
-call in `update_subsets_stats` and `update_partition_props` is already
-written.
+file yet, so no timing here would mean anything. What IS counted is launches,
+and THE COUNT IN AN EARLIER VERSION OF THIS BLOCK WAS WRONG. It said "theirs
+is 10, ours is 9" on a reorder priced at 4 launches. `launch_radix_sort_bins`
+at `bits == 1` is SIX -- four in `_radix_pass` (scan, block sums, carry,
+reorder) plus two copy-backs, because one pass is an odd count and their
+`if (doubleBufferKeys.Current() != keys)` arm fires. The false sentence is
+deleted rather than annotated (`PORTING_RULES.md` rule 1). The real count,
+per `Split`:
+
+    step                          theirs      ours
+    UpdateBinsFromCompressedIndex      1         1
+    ReorderBins (1 bit)               ~3         6   cub::DeviceRadixSort vs
+                                                     our one-bit scan; the
+                                                     deviation radix_sort.mojo
+                                                     already owns and prices
+    UpdatePartitionDimensions          2         2
+    de-interleave adapter              -         1
+    GatherTarget                       2         2
+    UpdatePartitionStats               1         4   two calls x two phases
+    pack adapter                       -         1
+    -------------------------------------------------
+    total                             ~9        17
+
+So this is NOT launch-neutral and the earlier text implying it was is
+withdrawn. Six of the eight extra launches belong to two deviations that
+predate this decision (the one-bit radix sort, and the buffer split in
+DEVIATION 97.2 forcing the reduce to run twice). The two that belong to THIS
+choice are the adapters, and both run at most `max_part_count` threads: 64 at
+depth 6.
+
+**AND THE BALANCE HAS SHIFTED -- THE ORCHESTRATOR SHOULD RE-DECIDE.** After
+the interleaved partition record, the stride-3 stat record and the two-buffer
+split, `update_partition_props` wants EXACTLY what this struct now holds:
+interleaved `parts`, stride-3 `part_stats`, and `target`/`weights` as two
+separate float pointers. It is a drop-in. Calling it would replace the
+de-interleave, both reduce calls and the pack -- six launches and two scratch
+buffers -- with ONE launch of the function their dispatch actually names, and
+would take `Split` from 17 launches to 12. What it costs is the depth-0
+occupancy this block was written to avoid, and nothing else. That trade was
+6-launches-to-avoid-1 when the buffers were merged; it is now
+6-launches-and-two-buffers-to-avoid-1, against a reducer that is also the
+faithful one. This file does not switch on its own -- Decision 3 was explicit
+and `gbdt/methods/kernel/` is another lane's -- but the number that justified
+it has moved and is recorded here so the decision can be re-made on it.
 
 STATUS: UNWIRED. Nothing in this tree calls `create_subsets` or
 `split_subsets` -- the searcher above them
@@ -331,9 +402,7 @@ from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from gbdt.gpu_util.kernel.fill import launch_make_sequence
 from gbdt.gpu_util.kernel.radix_sort import launch_radix_sort_bins
 from gbdt.gpu_util.kernel.reorder_one_bit import REORDER_BLOCK
-from gbdt.gpu_util.kernel.transform import (
-    launch_gather_planes_with_mask_f32,
-)
+from gbdt.gpu_util.kernel.transform import launch_gather_with_mask_f32
 from gbdt.gpu_util.partitions_reduce import (
     compute_partition_stats,
     partition_stats_chunks,
@@ -354,11 +423,17 @@ reduce actually sums. `TPartitionStatistics`'s third member is not one of
 them; see DEVIATION 97.5."""
 
 comptime L2_PLANE_WEIGHT = 0
-"""`TL2Target`'s `Weights` column, plane 0 of `stats` and of `gathered`.
-DEVIATION 97.3 is why the weight is first."""
-
 comptime L2_PLANE_TARGET = 1
-"""`TL2Target`'s `WeightedTarget` column, plane 1."""
+"""`TL2Target`'s two columns, in the ORDER THE PARTITION STAT RECORD USES --
+weight first, gradient second, matching `TPartitionStatistics{Weight, Sum}`
+and `greedy_search_helper.mojo:244`.
+
+They are no longer offsets into a shared buffer: `TL2Target` and
+`gathered_*` are two allocations each (DEVIATION 97.2). What survives is the
+ORDER, which is still load-bearing -- it is the order
+`pack_partition_stats_kernel` writes and the order any future caller must
+hand `compute_hist2` its `target` and `weight`. Kept as named constants so
+`check_layout_contract` has something to pin."""
 
 comptime PART_OFFSET = 0
 comptime PART_SIZE = 1
@@ -394,23 +469,37 @@ indices carry a segment flag in the high bits (`gbdt/ctrs/index_wrapper.mojo`);
 
 struct TL2Target(Movable):
     """`TL2Target<TStripeMapping>` (`methods/weak_target_helpers.h:11-14`),
-    as two columns of one buffer. DEVIATION 97.2 and 97.3.
+    as TWO buffers, which is what it is upstream.
 
         TCudaBuffer<float, TMapping> WeightedTarget;
         TCudaBuffer<float, TMapping> Weights;
 
-    `stats` holds `2 * line_size` floats: `[L2_PLANE_WEIGHT * line_size + i]` is
-    document `i`'s weight and `[L2_PLANE_TARGET * line_size + i]` is its weighted
-    target. Both are in ORIGINAL document order; `subsets.gathered` holds the
-    same two columns in the CURRENT partition order, which is what
-    `GatherTarget` produces and what the partition reduce reads.
+    Both are in ORIGINAL document order. `TOptimizationSubsets.gathered_*`
+    hold the same two columns in the CURRENT partition order, which is what
+    `GatherTarget` produces and what the partition reduce and the histogram
+    kernels read.
+
+    An earlier draft of this file merged the two into one two-column buffer;
+    see DEVIATION 97.2 for why that was done and why it was reversed.
     """
 
-    var stats: DeviceBuffer[DType.float32]
-    var line_size: Int
+    var weights: DeviceBuffer[DType.float32]
+    """`Weights`. `TPartitionStatistics::Weight` is summed from this."""
 
-    def __init__(out self, var stats: DeviceBuffer[DType.float32], line_size: Int):
-        self.stats = stats^
+    var weighted_target: DeviceBuffer[DType.float32]
+    """`WeightedTarget`. `TPartitionStatistics::Sum` is summed from this."""
+
+    var line_size: Int
+    """Documents per column. Their `GetObjectsSlice().Size()`."""
+
+    def __init__(
+        out self,
+        var weights: DeviceBuffer[DType.float32],
+        var weighted_target: DeviceBuffer[DType.float32],
+        line_size: Int,
+    ):
+        self.weights = weights^
+        self.weighted_target = weighted_target^
         self.line_size = line_size
 
 
@@ -445,9 +534,27 @@ struct TOptimizationSubsets(Movable):
     """`PartitionStats`, `[part * PARTITION_STAT_STRIDE + stat]`, three wide.
     DEVIATION 97.4 and 97.5."""
 
-    var gathered: DeviceBuffer[DType.float32]
-    """`WeightedTarget` and `Weights` AFTER `GatherTarget`, two columns
-    `doc_count` apart, in current partition order."""
+    var gathered_weight: DeviceBuffer[DType.float32]
+    var gathered_target: DeviceBuffer[DType.float32]
+    """`Weights` and `WeightedTarget` AFTER `GatherTarget`, in current
+    partition order. TWO BUFFERS, matching `TL2Target` upstream.
+
+    **THEY CANNOT BE ONE BUFFER WITH TWO COLUMNS, AND THAT IS A TOOLCHAIN
+    WALL, NOT A PREFERENCE.** The pointwise histogram family takes them as
+    two independent pointers -- `compute_hist2(..., target: MutPointer[
+    Float32, o5], weight: MutPointer[Float32, o6], ...)`
+    (`gbdt/methods/pointwise_kernels.mojo:1284-1302`), which is their
+    signature too (`newSubsets.WeightedTarget`, `newSubsets.Weights`). Handing
+    it `buf.unsafe_ptr()` and `buf.unsafe_ptr().unsafe_offset(doc_count)` is
+    refused:
+
+        error: aliasing values passed mutably to 'target' argument and passed
+        mutably to 'weight' argument
+
+    `unsafe_bitcast[Float32]()` does not launder the origin, and the check
+    fires at `enqueue_function` itself rather than only at `def` boundaries,
+    so no wrapper hides it. Two views of one buffer cannot reach a kernel at
+    any level. `PORTING_RULES.md` rule 4, biting somewhere new."""
 
     var doc_count: Int
     var max_part_count: Int
@@ -486,7 +593,8 @@ struct TOptimizationSubsets(Movable):
 
     var reduce_offsets: DeviceBuffer[DType.uint32]
     var reduce_sizes: DeviceBuffer[DType.uint32]
-    var reduce_pairs: DeviceBuffer[DType.float32]
+    var reduce_weight: DeviceBuffer[DType.float32]
+    var reduce_target: DeviceBuffer[DType.float32]
     """THE ADAPTER, and it is ours, not theirs.
 
     `compute_partition_stats` was written for the greedy searcher, which
@@ -494,10 +602,18 @@ struct TOptimizationSubsets(Movable):
     `stat_count` stride. This file's records are interleaved and three wide.
     Rather than fork the reducer -- it is on the greedy searcher's live path
     and its signature is that path's contract -- the partition record is
-    de-interleaved into `reduce_offsets`/`reduce_sizes` before the reduce and
-    the stride-2 answer is packed out of `reduce_pairs` after it. Two
-    launches of at most `max_part_count` threads: 64 at depth 6. See
-    DEVIATION 98 for the launch budget this sits inside."""
+    de-interleaved into `reduce_offsets`/`reduce_sizes` before the reduce, and
+    the two stride-1 answers are packed out of `reduce_weight`/`reduce_target`
+    after it. Two adapter launches of at most `max_part_count` threads: 64 at
+    depth 6.
+
+    **AND THE REDUCE ITSELF NOW RUNS TWICE.** `compute_partition_stats` reads
+    its stat planes as `stats[stat * line_size + row]`, i.e. CONTIGUOUS. Once
+    the gathered columns became two separate allocations (see
+    `gathered_weight`), one call at `n_stats = 2` became impossible and it is
+    called twice at `n_stats = 1`, once per column, into two stride-1
+    buffers. That is +2 launches on top of the two adapters. DEVIATION 98
+    carries the corrected budget and what it now implies."""
 
     var part_ids: DeviceBuffer[DType.uint32]
     """`compute_partition_stats` takes a `partIds` list, their argument of the
@@ -511,7 +627,8 @@ struct TOptimizationSubsets(Movable):
         var indices: DeviceBuffer[DType.uint32],
         var partitions: DeviceBuffer[DType.uint32],
         var partition_stats: DeviceBuffer[DType.float32],
-        var gathered: DeviceBuffer[DType.float32],
+        var gathered_weight: DeviceBuffer[DType.float32],
+        var gathered_target: DeviceBuffer[DType.float32],
         var tmp_bins: DeviceBuffer[DType.uint32],
         var tmp_indices: DeviceBuffer[DType.uint32],
         var scan_offsets: DeviceBuffer[DType.int32],
@@ -520,7 +637,8 @@ struct TOptimizationSubsets(Movable):
         var part_ids: DeviceBuffer[DType.uint32],
         var reduce_offsets: DeviceBuffer[DType.uint32],
         var reduce_sizes: DeviceBuffer[DType.uint32],
-        var reduce_pairs: DeviceBuffer[DType.float32],
+        var reduce_weight: DeviceBuffer[DType.float32],
+        var reduce_target: DeviceBuffer[DType.float32],
         doc_count: Int,
         max_part_count: Int,
         sm_count: Int,
@@ -529,7 +647,8 @@ struct TOptimizationSubsets(Movable):
         self.indices = indices^
         self.partitions = partitions^
         self.partition_stats = partition_stats^
-        self.gathered = gathered^
+        self.gathered_weight = gathered_weight^
+        self.gathered_target = gathered_target^
         self.tmp_bins = tmp_bins^
         self.tmp_indices = tmp_indices^
         self.scan_offsets = scan_offsets^
@@ -538,7 +657,8 @@ struct TOptimizationSubsets(Movable):
         self.part_ids = part_ids^
         self.reduce_offsets = reduce_offsets^
         self.reduce_sizes = reduce_sizes^
-        self.reduce_pairs = reduce_pairs^
+        self.reduce_weight = reduce_weight^
+        self.reduce_target = reduce_target^
         self.doc_count = doc_count
         self.max_part_count = max_part_count
         # `subsets.CurrentDepth = 0; subsets.FoldCount = 0;
@@ -778,14 +898,15 @@ def deinterleave_partitions_kernel(
 
 
 def pack_partition_stats_kernel(
-    pairs: MutPointer[Float32, MutAnyOrigin],
+    reduced_weight: MutPointer[Float32, MutAnyOrigin],
+    reduced_target: MutPointer[Float32, MutAnyOrigin],
     partitions: MutPointer[UInt32, MutAnyOrigin],
     part_stats: MutPointer[Float32, MutAnyOrigin],
     part_count_in: Int32,
 ):
     """ADAPTER, plus ONE line that IS theirs.
 
-    The adapter half widens the reducer's stride-2 answer to
+    The adapter half collects the reducer's two stride-1 answers into
     `TPartitionStatistics`'s stride 3.
 
     The line that is theirs is `Count`:
@@ -811,11 +932,11 @@ def pack_partition_stats_kernel(
     while i < part_count:
         part_stats.unsafe_store(
             i * PARTITION_STAT_STRIDE + PART_STAT_WEIGHT,
-            pairs.unsafe_load(i * POINTWISE_STAT_COUNT + L2_PLANE_WEIGHT),
+            reduced_weight.unsafe_load(i),
         )
         part_stats.unsafe_store(
             i * PARTITION_STAT_STRIDE + PART_STAT_SUM,
-            pairs.unsafe_load(i * POINTWISE_STAT_COUNT + L2_PLANE_TARGET),
+            reduced_target.unsafe_load(i),
         )
         # their `else { tmp = size; }`
         part_stats.unsafe_store(
@@ -1064,40 +1185,85 @@ def update_subsets_stats(
     )
 
     # `GatherTarget(WeightedTarget, Weights, source, Indices)`
-    # (`weak_target_helpers.h:17-30`), both columns in one launch.
-    launch_gather_planes_with_mask_f32(
+    # (`weak_target_helpers.h:17-30`), whose body is literally their two
+    # `Gather` calls:
+    #
+    #     Gather(weightedTarget, from.WeightedTarget, indices);
+    #     Gather(weights,        from.Weights,        indices);
+    #
+    # TWO LAUNCHES, which is theirs exactly. An earlier draft did both
+    # columns in one launch off a merged buffer; DEVIATION 97.2 is why that
+    # is gone. `launch_gather_with_mask_f32` with an all-ones mask is plain
+    # `Gather`.
+    launch_gather_with_mask_f32(
         ctx,
-        subsets.gathered,
-        source.stats,
+        subsets.gathered_weight,
+        source.weights,
         subsets.indices,
         subsets.doc_count,
         GATHER_NO_MASK,
-        POINTWISE_STAT_COUNT,
-        source.line_size,
+    )
+    launch_gather_with_mask_f32(
+        ctx,
+        subsets.gathered_target,
+        source.weighted_target,
+        subsets.indices,
+        subsets.doc_count,
+        GATHER_NO_MASK,
     )
 
     # `UpdatePartitionStats(PartitionStats, currentParts, WeightedTarget,
     #  Weights)`. DEVIATION 98 is which of their two reducers this is and
-    #  why. Two planes only -- `Count` is not a reduction on this path.
+    #  why, and what running it twice costs.
+    #
+    #  ONCE PER COLUMN, at `n_stats = 1`. `compute_partition_stats` reads its
+    #  planes as `stats[stat * line_size + row]`, so a second plane has to
+    #  live `line_size` floats after the first; two separate allocations
+    #  cannot satisfy that. Their own kernel reduces both in one launch.
+    #
+    #  NUMERIC NOTE, and it is not cosmetic: the chunk count is
+    #  `CeilDivide(2 * SMCount, statCount)` (`update_part_props.cu:215`), so
+    #  passing 1 where 2 was passed DOUBLES it and changes the shape of the
+    #  float summation tree. It stays deterministic and stays pinned under
+    #  `NUMERIC_IDENTICAL` -- `partition_stats_chunks` is the single place the
+    #  formula lives -- but the last bits of a partition stat are not the
+    #  same as they were before the buffers were split. The gate's integer
+    #  plants are exact under either shape, so no check can see this; it is
+    #  recorded because nothing else would record it.
     compute_partition_stats(
         ctx,
         part_count,
         subsets.doc_count,
-        POINTWISE_STAT_COUNT,
+        1,
         subsets.doc_count,
         subsets.part_ids,
         subsets.reduce_offsets,
         subsets.reduce_sizes,
-        subsets.gathered,
+        subsets.gathered_weight,
         subsets.stat_partials,
-        subsets.reduce_pairs,
+        subsets.reduce_weight,
+        subsets.sm_count,
+    )
+    compute_partition_stats(
+        ctx,
+        part_count,
+        subsets.doc_count,
+        1,
+        subsets.doc_count,
+        subsets.part_ids,
+        subsets.reduce_offsets,
+        subsets.reduce_sizes,
+        subsets.gathered_target,
+        subsets.stat_partials,
+        subsets.reduce_target,
         subsets.sm_count,
     )
 
-    # ADAPTER + their `else { tmp = size; }` Count arm: widen the stride-2
-    # answer to `TPartitionStatistics`'s stride 3.
+    # ADAPTER + their `else { tmp = size; }` Count arm: collect the two
+    # stride-1 answers into `TPartitionStatistics`'s stride 3.
     ctx.enqueue_function[pack_partition_stats_kernel](
-        subsets.reduce_pairs.unsafe_ptr(),
+        subsets.reduce_weight.unsafe_ptr(),
+        subsets.reduce_target.unsafe_ptr(),
         subsets.partitions.unsafe_ptr(),
         subsets.partition_stats.unsafe_ptr(),
         Int32(part_count),
@@ -1158,9 +1324,8 @@ def create_subsets(
     var part_stats = ctx.enqueue_create_buffer[DType.float32](
         max_part_count * PARTITION_STAT_STRIDE
     )
-    var gathered = ctx.enqueue_create_buffer[DType.float32](
-        doc_count * POINTWISE_STAT_COUNT
-    )
+    var gathered_weight = ctx.enqueue_create_buffer[DType.float32](doc_count)
+    var gathered_target = ctx.enqueue_create_buffer[DType.float32](doc_count)
 
     # `ReorderBins`'s double buffer and scan scratch, sized the way
     # `radix_sort.mojo` sizes them.
@@ -1177,9 +1342,15 @@ def create_subsets(
     # (`partitions_reduce.mojo:214`), and sizing it any other way is how the
     # kernel walks off the end of its own row.
     var sm_count = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
-    var chunks = partition_stats_chunks(sm_count, POINTWISE_STAT_COUNT)
+    # `n_stats = 1`, because the reduce now runs once per column. The chunk
+    # count is `CeilDivide(2 * SMCount, statCount)`, so this is DOUBLE what
+    # it was at 2 and the partials buffer has to be sized from the same
+    # formula the launch uses -- `partition_stats_chunks` is exported for
+    # exactly that (`partitions_reduce.mojo:214`), and sizing it any other
+    # way is how the kernel walks off the end of its own row.
+    var chunks = partition_stats_chunks(sm_count, 1)
     var stat_partials = ctx.enqueue_create_buffer[DType.float32](
-        max_part_count * POINTWISE_STAT_COUNT * chunks
+        max_part_count * 1 * chunks
     )
 
     var part_ids = ctx.enqueue_create_buffer[DType.uint32](max_part_count)
@@ -1187,16 +1358,16 @@ def create_subsets(
     # The adapter's scratch. See the `reduce_offsets` field docstring.
     var reduce_offsets = ctx.enqueue_create_buffer[DType.uint32](max_part_count)
     var reduce_sizes = ctx.enqueue_create_buffer[DType.uint32](max_part_count)
-    var reduce_pairs = ctx.enqueue_create_buffer[DType.float32](
-        max_part_count * POINTWISE_STAT_COUNT
-    )
+    var reduce_weight = ctx.enqueue_create_buffer[DType.float32](max_part_count)
+    var reduce_target = ctx.enqueue_create_buffer[DType.float32](max_part_count)
 
     var subsets = TOptimizationSubsets(
         bins^,
         indices^,
         partitions^,
         part_stats^,
-        gathered^,
+        gathered_weight^,
+        gathered_target^,
         tmp_bins^,
         tmp_indices^,
         scan_offsets^,
@@ -1205,7 +1376,8 @@ def create_subsets(
         part_ids^,
         reduce_offsets^,
         reduce_sizes^,
-        reduce_pairs^,
+        reduce_weight^,
+        reduce_target^,
         doc_count,
         max_part_count,
         sm_count,
