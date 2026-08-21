@@ -432,15 +432,24 @@ struct CatBoostOptions(Copyable, Movable):
     too."""
 
     var determinism: Int
-    """NO CATBOOST COUNTERPART. See the three constants above. Default
-    `DETERMINISM_DEVICE`, because a library that returns a different model on
-    a rerun should have to be asked for that.
+    """NO CATBOOST COUNTERPART. See the three constants above.
 
-    What that default COSTS is unrecorded. It forces the fixed-point integer
-    accumulator on every backend, including Apple, where a working float
-    `atomicAdd` has since been probed and where the `FAST` arm is being moved
-    onto it. No interleaved measurement of the two flushes exists yet, so this
-    docstring names the cost rather than pricing it."""
+    DECLARED AND VALIDATED, WIRED TO NOTHING (recorded 2026-08-21). The
+    two flushes are different compiled code, so the operative switch is
+    `GLOBAL_NUMERIC_MODE` (`mojo_only/numerics.mojo`), whose default is
+    `NUMERIC_FAST` -- CatBoost's shipped behavior, vendor's fastest path
+    per kernel-matrix column. A field that validates but changes nothing
+    is recorded here rather than silently kept: wiring it would mean a
+    check that RAISES when the requested level exceeds what the build
+    provides, not a runtime dispatch that cannot exist.
+
+    On Apple the FAST build is nonetheless observed bit-reproducible
+    run to run (every gate this repository runs reproduces train mse
+    exactly), because Metal's integer-only threadgroup atomics force the
+    i32 shared stage and the bridge sums per-block partials in a fixed
+    order. On NVIDIA and AMD, FAST keeps CatBoost's warp-private float
+    design and their nondeterminism with it. `NUMERIC_IDENTICAL` is the
+    opt-in that pins every backend for the cross-device claim."""
 
     def l2_leaf_reg_effective(self) -> Float32:
         """`l2_leaf_reg`, with CatBoost's zero substitution applied.

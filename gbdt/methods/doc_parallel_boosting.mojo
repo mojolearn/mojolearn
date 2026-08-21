@@ -1092,10 +1092,15 @@ def fit_with_test(
         # at most that much too large. `SCALE_HEADROOM_BITS = 3` is a factor
         # of eight against it, five orders of magnitude of slack.
         #
-        # If another lane restores the float atomic on the FAST arm, this
-        # block does NOT become dead. `DETERMINISM_DEVICE` is the default and
-        # it pins the integer flush on every backend, so the contract still
-        # governs the shipped configuration; only the `OFF` arm escapes it.
+        # THE SHIPPED BUILD IS `NUMERIC_FAST` (numerics.mojo:74) -- the
+        # runtime `determinism` option is validated but wired to nothing,
+        # and a comment here used to claim it pinned the integer flush,
+        # which was false (caught 2026-08-21 when Andrew asked why the
+        # nondeterministic mirror was not the default: it already was).
+        # This block still governs the shipped APPLE configuration because
+        # Metal's threadgroup atomics are integer-only, so the hist_2
+        # shared stage quantizes at `fixed_scale` even under FAST
+        # (`HIST2_SMEM_IS_I32`), and `_needs_magnitudes` is that union.
         # ===========================================================
         # DEVIATION 95: the scale is derived on the device inside
         # `run_tree_layout` from the magnitudes buffer, so the per-tree
