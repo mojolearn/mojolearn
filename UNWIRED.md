@@ -791,3 +791,23 @@ rather than notional: it must land BEFORE a second profile exists, because
 after that there are unlabelled models in the field and no way to label them
 retroactively. `VENDOR_COLUMNS.md` carries the same warning where a reader
 adding a vendor will hit it.
+
+
+## Three kernel-matrix rows are declared and nothing reads them
+
+Audited by grep 2026-08-21, on the day the vendor columns were added.
+
+`column_max_block_size` is load-bearing: the identity-floor gate and all
+three block resolvers call it, and it caught a real defect the day it landed.
+These three do not have a reader outside the matrix, its check, and the
+report:
+
+| row | who should eventually read it |
+|---|---|
+| `column_has_dedicated_shared_memory` | whoever sizes replication on a column that answers `False` -- the replication factor is a bet on scratchpad speed and that column loses it |
+| `column_spec_guarantees_onchip_shared` | the same decision, for a target with no vendor to ask |
+| `column_lane_width_is_fixed` | any kernel that ever indexes by HARDWARE lane. Nothing does today, because `sync_granularity_for` is `SYNC_BLOCK` everywhere and left no reason to |
+
+They are declared facts for a bring-up, not inputs to a decision the code
+makes today. Recorded here rather than described as load-bearing, because
+this file exists to stop exactly that inflation.

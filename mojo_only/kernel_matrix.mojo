@@ -10,9 +10,18 @@ There is no CPU column. This tree has no CPU path.
 
 THREE COLUMNS BUILD TODAY; THREE MORE ARE DECLARED AND DO NOT
 --------------------------------------------------------------
-`apple`, `nvidia` and `amd` are what Mojo emits code for. `qualcomm`,
-`intel` and `arm` are declared with their documented minimums and their
-admission verdict, and `column_is_buildable` says which is which.
+`apple`, `nvidia`, `amd` (CDNA) and `amd-rdna` are what Mojo emits code for.
+`qualcomm`, `intel` and the portable `spec-baseline` are declared with their
+documented minimums and their admission verdict, and `column_is_buildable`
+says which is which.
+
+**THE COLUMNS ARE THE DEVICES PEOPLE TRAIN ON, plus the floor beneath them.**
+An `arm` column for Mali was added and struck the same day: nobody trains a
+gradient-boosted model on a phone GPU, and a column implies an intent this
+project does not have. The Mali FACTS that are worth keeping -- it advertises
+32 KB of compute shared memory that is not a scratchpad at all -- are kept in
+`VENDOR_COLUMNS.md`, where a warning belongs, rather than as a build target
+nobody will build.
 
 A declared column is not decoration and it is not a promise of support. It
 answers the one question that has to be answered BEFORE a target exists:
@@ -117,9 +126,22 @@ comptime COLUMN_AMD = 3
 # Qualcomm is first for a reason that is not technical: Qualcomm ACQUIRED
 # Modular in July 2026 and open-sourced Mojo and MAX at ModCon in August, so
 # Adreno is the likeliest fourth target of any GPU on this list.
-comptime COLUMN_QUALCOMM = 4
-comptime COLUMN_INTEL = 5
-comptime COLUMN_ARM = 6
+#: AMD SHIPS TWO WAVEFRONT WIDTHS AND MOJO SUPPORTS BOTH FAMILIES, so one
+#: `amd` column was wrong for half of them. `COLUMN_AMD` is CDNA -- MI300X
+#: and MI355X, the parts Mojo tests continuously -- and is wave64.
+#: `COLUMN_AMD_RDNA` is the consumer training card, RX 9070 / 7900 / 6900,
+#: which runs **wave32**: RDNA's native compute mode, and the only one HIP
+#: reaches (the `mwavefrontsize64` compiler option is experimental and the
+#: HIP runtime does not support it).
+#:
+#: This is not a hypothetical distinction. `lib_block_size_for` sizes the
+#: warpsort block as `8 * lane_width`, so the single `amd` column resolved
+#: 512 threads for a part whose lane group is 32 and whose correct answer is
+#: 256. A scheduling row, so no bit moved -- but wrong on hardware people
+#: actually train on, which is the case this table exists to prevent.
+comptime COLUMN_AMD_RDNA = 4
+comptime COLUMN_QUALCOMM = 5
+comptime COLUMN_INTEL = 6
 
 #: NOT A VENDOR. The PORTABLE FLOOR: what the graphics specifications
 #: GUARANTEE any conformant GPU provides, as opposed to what a particular
@@ -155,13 +177,15 @@ comptime COLUMN_COUNT = 8
 
 #: Kept as aliases so kernel code can name the API or the part it targets
 #: rather than the company. Metal is Apple's, CUDA is NVIDIA's, HIP is AMD's;
-#: Adreno is Qualcomm's GPU, Xe is Intel's, Mali is Arm's.
+#: Adreno is Qualcomm's GPU and Xe is Intel's; CDNA and RDNA are AMD's two
+#: architectures, which differ in the one number this table exists for.
 comptime COLUMN_METAL = COLUMN_APPLE
 comptime COLUMN_CUDA = COLUMN_NVIDIA
 comptime COLUMN_HIP = COLUMN_AMD
+comptime COLUMN_CDNA = COLUMN_AMD
+comptime COLUMN_RDNA = COLUMN_AMD_RDNA
 comptime COLUMN_ADRENO = COLUMN_QUALCOMM
 comptime COLUMN_XE = COLUMN_INTEL
-comptime COLUMN_MALI = COLUMN_ARM
 
 
 def column_name(column: Int) -> String:
@@ -177,8 +201,8 @@ def column_name(column: Int) -> String:
         return String("qualcomm")
     if column == COLUMN_INTEL:
         return String("intel")
-    if column == COLUMN_ARM:
-        return String("arm")
+    if column == COLUMN_AMD_RDNA:
+        return String("amd-rdna")
     if column == COLUMN_SPEC_BASELINE:
         return String("spec-baseline")
     return String("unknown")
@@ -193,15 +217,17 @@ def column_is_buildable(column: Int) -> Bool:
     not after.
 
     Source: Mojo system requirements (read 2026-08-21) lists NVIDIA (Turing
-    through Blackwell, driver 580+), AMD (RDNA2 through CDNA4, ROCm 6.3.3+)
-    and Apple silicon (M1-M5, macOS 15+, Xcode 16+). No Qualcomm, Intel or
-    Arm GPU target is listed.
+    through Blackwell, driver 580+), AMD (RDNA2 through CDNA4, ROCm 6.3.3+ --
+    BOTH families, which is why there are two AMD columns) and Apple silicon
+    (M1-M5, macOS 15+, Xcode 16+). No Qualcomm or Intel GPU target is
+    listed.
     """
     return (
         column == COLUMN_BIT_IDENTICAL
         or column == COLUMN_APPLE
         or column == COLUMN_NVIDIA
         or column == COLUMN_AMD
+        or column == COLUMN_AMD_RDNA
     )
 
 # --- the kernels ---------------------------------------------------------
@@ -269,7 +295,7 @@ struct KernelSpec(Copyable, Movable):
     **This field had no true case until 2026-08-21 and now it has three.**
     The sentence that stood here -- "No vendor forces it today, all three do
     float `atomicAdd`" -- was true of the founding columns and is deleted
-    rather than annotated: on `qualcomm`, `arm` and the portable baseline,
+    rather than annotated: on `qualcomm` and the portable baseline,
     float atomic add is not core (it arrives through
     `cl_ext_float_atomics` / `VK_EXT_shader_atomic_float`, both optional), so
     those columns take the fixed-point flush in BOTH modes. A report must
@@ -359,8 +385,7 @@ def column_meets_identity_floor(column: Int) -> Bool:
 
     Today every declared vendor passes, INCLUDING the three that cannot be
     built for. That is the useful answer and it was not the expected one:
-    Adreno's 32 KB matches Apple's exactly, Mali's advertised 32 KB does too,
-    and Intel's 64 KB is above. The design turns out to have been floored by
+    Adreno's 32 KB matches Apple's exactly and Intel's 64 KB is above. The design turns out to have been floored by
     the most constrained mainstream GPU memory hierarchy already, which is
     why freezing it costs nothing today and is worth doing precisely now,
     while it costs nothing.
@@ -436,14 +461,8 @@ def column_shared_limit(column: Int) -> Int:
                is 128 KB and Intel's own occupancy example splits it as
                64 + 64 for two resident groups (oneAPI GPU optimization
                guide, "Shared Local Memory").
-    - arm      32 KB. Mali's advertised compute shared-memory size, AND SEE
-               `column_has_dedicated_shared_memory`: on Mali this is not a
-               scratchpad at all. Arm's own best-practices guide says "Arm
-               GPUs do not implement dedicated on-chip shared memory for
-               compute shaders. The shared memory that is available to use is
-               system RAM that is backed up by the load-store cache." The
-               BYTES are available; the SPEED the histogram design assumes is
-               not.
+    - amd-rdna 64 KB. Same LDS per workgroup as CDNA; the two AMD columns
+               differ in wavefront width, not in memory.
 
     `BIT_IDENTICAL` returns the FROZEN floor, not a `min()` over these. See
     `IDENTITY_FLOOR_SHARED_BYTES`.
@@ -458,8 +477,8 @@ def column_shared_limit(column: Int) -> Int:
         return 32 * 1024
     if column == COLUMN_INTEL:
         return 64 * 1024
-    if column == COLUMN_ARM:
-        return 32 * 1024
+    if column == COLUMN_AMD_RDNA:
+        return 64 * 1024
     if column == COLUMN_SPEC_BASELINE:
         #: 16 KB. Vulkan's required `maxComputeSharedMemorySize` and WebGPU's
         #: default `maxComputeWorkgroupStorageSize` agree on this number, and
@@ -493,11 +512,11 @@ def column_has_float_atomics(column: Int) -> Bool:
     `IDENTICAL` pins them to the integer path so they agree bit for bit.
 
     **THE DECLARED VENDORS ARE WHERE THIS ROW STOPS BEING TRIVIAL, AND IT IS
-    WHY `flush_forced_by_vendor` EXISTS.** On Adreno and Mali, float atomic
-    add is not core OpenCL: it arrives through `cl_ext_float_atomics`, which
-    requires OpenCL 2.0+ and is optional per device and per memory scope
-    (Khronos OpenCL extension registry). A device without it CANNOT run
-    `FAST` as written and must take the fixed-point flush -- which is the
+    WHY `flush_forced_by_vendor` EXISTS.** On Adreno, float atomic add is not
+    core OpenCL: it arrives through `cl_ext_float_atomics`, which requires
+    OpenCL 2.0+ and is optional per device and per memory scope (Khronos
+    OpenCL extension registry). A device without it CANNOT run `FAST` as
+    written and must take the fixed-point flush -- which is the
     vendor forcing the mode's hand, exactly the case that field was built for
     and that no founding column exercises.
 
@@ -519,6 +538,7 @@ def column_has_float_atomics(column: Int) -> Bool:
         or column == COLUMN_APPLE
         or column == COLUMN_NVIDIA
         or column == COLUMN_AMD
+        or column == COLUMN_AMD_RDNA
         or column == COLUMN_INTEL
     )
 
@@ -561,18 +581,21 @@ def column_has_dedicated_shared_memory(column: Int) -> Bool:
     between a column that is admissible and a column that is admissible and
     also worth shipping.
 
-    Arm's GPU best-practices guide, verbatim: "Arm GPUs do not implement
-    dedicated on-chip shared memory for compute shaders. The shared memory
-    that is available to use is system RAM that is backed up by the
-    load-store cache."
+    True in every column here, and the row exists because that is not a
+    property of GPUs in general. Arm's GPU best-practices guide, verbatim:
+    "Arm GPUs do not implement dedicated on-chip shared memory for compute
+    shaders. The shared memory that is available to use is system RAM that is
+    backed up by the load-store cache." Mali is not a column (nobody trains
+    on a phone), but it is the existence proof that a conformant GPU can
+    advertise the capacity and provide none of the speed.
 
     A replicated-histogram design is a bet that private scratch is much
-    faster than the memory it spares. On Mali that bet is off: the
-    replication still gives the same ANSWER (identity is unaffected) and
-    buys much less than it does elsewhere. Whoever brings that column up
-    should expect to re-measure the replication factor, not to inherit it.
+    faster than the memory it spares. Any future column that answers False
+    here loses that bet: the replication still gives the same ANSWER
+    (identity is unaffected) and buys much less. Re-measure the replication
+    factor there; do not inherit ours.
     """
-    return column != COLUMN_ARM
+    return True
 
 
 def column_spec_guarantees_onchip_shared(column: Int) -> Bool:
@@ -580,33 +603,32 @@ def column_spec_guarantees_onchip_shared(column: Int) -> Bool:
 
     Separate from `column_has_dedicated_shared_memory`, which records what a
     named vendor actually built. Neither Vulkan nor WebGPU says where
-    Workgroup storage lives: Mali is a conformant implementation backing it
-    with cached system RAM, and a conformant future device may do the same.
+    Workgroup storage lives: Arm's Mali is a shipping, conformant
+    implementation that backs it with cached system RAM, and a future device
+    may do the same.
 
     Nothing reads this yet. It is declared because "the spec guarantees the
     capacity and says nothing about the speed" is the kind of distinction
     that gets discovered twice, and the second discovery is expensive.
     """
-    return column != COLUMN_ARM and column != COLUMN_SPEC_BASELINE
+    return column != COLUMN_SPEC_BASELINE
 
 
 def column_max_block_size(column: Int) -> Int:
     """Largest threadgroup the vendor will dispatch, before our budget bites.
 
-    - apple / nvidia / amd / qualcomm / intel: 1024.
+    - every vendor column: 1024.
       (Adreno 5xx and later report a 1024 max OpenCL workgroup size; older
       parts are far smaller -- 128 on Adreno 320, 512 on Adreno 420 -- and
-      are out of scope for a training library.)
-    - arm: 512. Arm's own guidance is a 64-thread baseline and register
-      pressure bites well before the advertised maximum.
+      are out of scope for a training library. Mali's 512, when it was a
+      column, was likewise slack: 32 KB of shared memory already resolves
+      every kernel here to 512 or less, so the cap never bound.)
 
     This bounds nothing today: every block this tree launches is <= 768, and
     the shared-memory budget binds first on every column. It is declared so
     that the FLOOR below can be checked against something rather than
     assumed, since the safe column's hist_2 block is 512.
     """
-    if column == COLUMN_ARM:
-        return 512
     if column == COLUMN_SPEC_BASELINE:
         #: 128, the most restrictive of Vulkan's required
         #: `maxComputeWorkGroupInvocations` (128) and WebGPU's default
@@ -620,7 +642,7 @@ def column_max_block_size(column: Int) -> Int:
 
 def column_lane_width(column: Int) -> Int:
     """Hardware lanes that move in lockstep: warp on NVIDIA, SIMD group on
-    Apple, WAVEFRONT on AMD, wave on Adreno, sub-group on Intel, warp on Mali.
+    Apple, WAVEFRONT on AMD, wave on Adreno, sub-group on Intel.
 
     **This is the cross-vendor hazard in one number.** CatBoost hardcodes 32
     throughout, which is right on Apple and NVIDIA and wrong on AMD, whose
@@ -640,7 +662,9 @@ def column_lane_width(column: Int) -> Int:
     - intel: the sub-group size is 8, 16 or 32 and Intel's compiler CHOOSES
       it from register pressure unless the kernel demands one explicitly
       (oneAPI GPU optimization guide, "Sub-groups and SIMD Vectorization").
-    - arm: 8 on Bifrost (G52, G76), 16 on Valhall. Both BELOW the pinned 32.
+    - amd: 64 on CDNA and 32 on RDNA, which is why they are two columns and
+      not one. Same vendor, same API, different reduction geometry if
+      anything ever read it instead of the pinned value.
 
     The values returned here are the documented MINIMUM for each family,
     which is the only safe reading for anything that sizes a buffer.
@@ -667,8 +691,12 @@ def column_lane_width(column: Int) -> Int:
         return 8
     if column == COLUMN_INTEL:
         return 8
-    if column == COLUMN_ARM:
-        return 8
+    if column == COLUMN_AMD_RDNA:
+        #: 32. RDNA's native compute wavefront, and the only width HIP
+        #: reaches: `mwavefrontsize64` is an experimental compiler option the
+        #: HIP runtime does not support. So an RDNA build indexes by 32 where
+        #: a CDNA build indexes by 64, on the same vendor.
+        return 32
     if column == COLUMN_SPEC_BASELINE:
         #: 1. Neither specification guarantees a subgroup at all -- Vulkan
         #: subgroups are a 1.1 feature with a device-reported size, and core
@@ -947,8 +975,8 @@ def deterministic_flush_for[column: Int, identical: Bool]() -> Bool:
     `identical or not column_has_float_atomics(device)`; this comptime
     accessor -- the one KERNELS actually branch on -- computed only the first
     half. While all three founding columns had float atomics the two agreed
-    and nothing could go wrong. On Adreno or Mali under `FAST` they would
-    have disagreed: the report would say fixed point and the kernel would
+    and nothing could go wrong. On Adreno under `FAST` they would have
+    disagreed: the report would say fixed point and the kernel would
     emit a float `atomicAdd` the device does not have. Found 2026-08-21 by
     Andrew asking whether the float-atomic row should be `no` for those two.
     Two expressions of one rule is how a rule drifts; this one now delegates.
@@ -1048,8 +1076,8 @@ def hist_smem_mode_for[column: Int, identical: Bool]() -> Int:
     elif limit < CATBOOST_PRIVATE_BYTES:
         #: Apple (32 KB) took this arm by measurement. It is now stated as
         #: the BUDGET rule that produced that answer rather than as the
-        #: vendor's name, which is what makes it extend: Adreno's 32 KB and
-        #: Mali's 32 KB land here too, and NVIDIA's 48 KB (exactly their
+        #: vendor's name, which is what makes it extend: Adreno's 32 KB
+        #: land here too, and NVIDIA's 48 KB (exactly their
         #: layout) and AMD's and Intel's 64 KB do not. **The resolved value
         #: for every founding column is unchanged by this rewrite** -- apple
         #: shared-Int32, nvidia and amd warp-private -- which is the only

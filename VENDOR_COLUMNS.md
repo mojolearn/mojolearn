@@ -53,10 +53,10 @@ transcribed, never measured here.
 |---|---|---|---|---|---|---|---|---|
 | apple (Metal) | yes | 32 KB | 32 | 1024 | yes | yes | yes | **admitted** |
 | nvidia (CUDA) | yes | 48 KB | 32 | 1024 | yes | yes | yes | **admitted** |
-| amd (HIP) | yes | 64 KB | 64 | 1024 | yes | yes | yes | **admitted** |
+| amd (CDNA: MI300X/MI355X) | yes | 64 KB | **64** | 1024 | yes | yes | yes | **admitted** |
+| **amd-rdna (RX 9070/7900)** | yes | 64 KB | **32** | 1024 | yes | yes | yes | **admitted** |
 | qualcomm (Adreno) | no | 32 KB | **8–128, compiler-chosen** | 1024 | extension only | yes | yes | **admitted** |
 | intel (Xe/Arc) | no | 64 KB | **8/16/32, compiler-chosen** | 1024 | yes | yes | yes | **admitted** |
-| arm (Mali) | no | 32 KB | 8 (Bifrost) / 16 (Valhall) | 512 | extension only | yes | **no** | **admitted** |
 | **spec-baseline** | no | **16 KB** | **1 (none guaranteed)** | **128** | no | yes | not promised | **REFUSED** |
 
 `spec-baseline` is not a vendor. It is what the portable specifications
@@ -68,7 +68,7 @@ for why it is in the table when it can never be admitted.
 
 **The finding, and it was not the expected one: every declared vendor meets
 the floor.** Adreno's per-workgroup local memory is 32 KB, exactly Metal's;
-Mali advertises the same; Intel is above it. The design was already floored by
+Intel and both AMD families are above it. The design was already floored by
 the most constrained mainstream GPU memory hierarchy, which is why freezing
 the floor costs nothing today — and why now, while it is free, is the moment
 to freeze it.
@@ -94,21 +94,20 @@ Mojo exposes lane primitives and `sync_granularity_for` stops returning
 `SYNC_BLOCK`, that paragraph expires and these columns are unsafe until
 re-argued.**
 
-**Arm Mali is the GPU in most non-Apple phones and tablets** — Arm licenses
-it as IP and Samsung, MediaTek, Google (Tensor) and others ship it, so by
-unit count it is one of the most numerous GPU families in existence, and by
-training relevance one of the least. It is here because it is the family
-whose *architecture* most contradicts this design, which makes it the useful
-stress test even though nobody will train on a phone.
+**AMD is two columns because AMD is two architectures.** CDNA (MI300X,
+MI355X — the parts Mojo tests continuously) runs **wave64**. RDNA (RX 9070,
+7900, 6900 — the cards a person buys to train on) runs **wave32**: RDNA's
+native compute mode, and the only one HIP reaches, since the
+`mwavefrontsize64` compiler option is experimental and unsupported by the HIP
+runtime.
 
-**Mali has no compute scratchpad at all.** Arm's GPU best-practices guide,
-verbatim: "Arm GPUs do not implement dedicated on-chip shared memory for
-compute shaders. The shared memory that is available to use is system RAM
-that is backed up by the load-store cache." The bytes are there, so identity
-is unaffected and the column is admissible; what is not there is the premise
-of a replicated-histogram design, which is that private scratch is much
-faster than the memory it spares. Whoever brings Mali up should expect to
-re-measure the replication factor, not inherit it.
+One `amd` column was therefore wrong for half the AMD parts Mojo supports,
+and not abstractly: `lib_block_size_for` sizes the warpsort block as
+`8 * lane_width`, so it resolved **512 threads for a device whose lane group
+is 32 and whose correct answer is 256**. A scheduling row, so no bit ever
+moved — but wrong on hardware people actually train on, which is exactly the
+class of error this table exists to prevent. Both values are now pinned in
+`check_hardware_matrix`.
 
 **Float atomics are an extension on the mobile columns.** `cl_ext_float_atomics`
 needs OpenCL 2.0+ and is optional per device and per memory scope. A device
@@ -124,21 +123,21 @@ opinion.
 The question the vendor columns were added to answer, with the arithmetic
 rather than a reassurance.
 
-| row | before (apple, nvidia, amd) | after (+ qualcomm, intel, arm) | moved? |
+| row | before (apple, nvidia, amd) | after (+ amd-rdna, qualcomm, intel) | moved? |
 |---|---|---|---|
-| threadgroup bytes | min(32, 48, 64) = **32 KB** | min(32, 48, 64, 32, 64, 32) = **32 KB** | **no** |
-| dispatch cap | min(1024, 1024, 1024) = 1024 | min(…, 1024, 1024, 512) = **512** | yes, and it costs nothing — see below |
-| hardware lane width | min(32, 32, 64) = 32 | min(…, 8, 8, 8) = **8** | yes, and it is not a floor input: the replication group is LOGICAL |
-| core float atomics | all three | **not universal** | yes — in `FAST`, not in `IDENTICAL` |
-| threadgroup i32 atomics | all three | all six, and the baseline too | no |
+| threadgroup bytes | min(32, 48, 64) = **32 KB** | min(32, 48, 64, 64, 32, 64) = **32 KB** | **no** |
+| dispatch cap | 1024 | 1024 | **no** |
+| hardware lane width | min(32, 32, 64) = 32 | min(…, 32, 8, 8) = **8** | yes, and it is not a floor input: the replication group is LOGICAL |
+| core float atomics | all three | **not universal** (Adreno) | yes — in `FAST`, not in `IDENTICAL` |
+| threadgroup i32 atomics | all three | every column, baseline included | no |
 
 **Apple was already the binding constraint and still is.** Adreno's 32 KB per
-workgroup is exactly Metal's; Mali advertises the same; Intel is above both.
+workgroup is exactly Metal's; Intel and both AMD families are above it.
 So the identity column does not change, and *that is the mechanism working*
 rather than a lucky escape: it is frozen, so the only question a new vendor
 raises is whether it joins or is refused.
 
-### The 512-thread dispatch cap on Mali costs nothing
+### A low dispatch cap would cost nothing until it is very low
 
 Resolved per column, straight out of the table rather than estimated:
 
@@ -147,16 +146,16 @@ Resolved per column, straight out of the table rather than estimated:
 | apple | 512 | 512 | 256 | 512 | 1024 |
 | nvidia / amd / intel | 768 | 768 | 384 | 384 | 1024 |
 | qualcomm | 512 | 512 | 256 | 512 | 1024 |
-| arm | 512 | 512 | 256 | 512 | **512** |
 | spec-baseline | 128 | 128 | 128 | 128 | **128** |
 
 On any 32 KB column the **shared-memory budget binds first and produces 512
 anyway**: 32,768 / (16 floats × 4 bytes) = 512 for the binary and half-byte
 kernels, and the shared-Int32 hist_2 arm is capped at 512 by design because
 that is the block that fills 32 KB. Mali's cap sits exactly at the number the
-memory budget already produced, so it removes nothing. The cap that would
-hurt is the baseline's 128 — a quarter of the block, which is a different
-profile, not a tuning loss.
+memory budget had already chosen — so a vendor cap of 512, Mali's when it
+was briefly a column, removes nothing at all. The cap that hurts is the
+baseline's **128**: a quarter of the block, which is a different profile, not
+a tuning loss.
 
 ### The dispatch cap was not being consulted at all
 
@@ -206,14 +205,83 @@ result could be made bit-identical to the GPU column is an open question
 nobody should answer from an armchair. Saying so here stops the next reader
 from filing "add TPU to the matrix" as a small job.
 
-## GPUs that exist and are not modeled
+## Every other GPU that exists, and why none of them gets a column
 
-| family | why not |
+The full enumeration, so that "are there others?" has an answer instead of a
+recurrence. Anything shipping in volume is on this list.
+
+**Desktop and datacenter**
+
+| family | status |
 |---|---|
-| Imagination PowerVR | Real OpenCL/Vulkan compute, but tiny compute-market share and per-part local-memory limits that vary too much to pin honestly. Add a column when a target exists |
-| Broadcom VideoCore (Raspberry Pi) | Vulkan compute only, no realistic training workload at this scale |
-| Vivante, Moore Threads, Biren, Iluvatar | Either CUDA-alike with no public architecture document worth transcribing, or unavailable outside one region. A pinned column would be fiction |
-| Software rasterizers (SwiftShader, llvmpipe) | Not hardware; would be a CPU path, and this tree has no CPU path |
+| NVIDIA, AMD, Intel | columns |
+| Moore Threads (MTT S80/S4000), Biren (BR100), MetaX, Iluvatar CoreX | CUDA-alike, no public architecture document worth transcribing, availability restricted to one region. A pinned column would be fiction |
+| Zhaoxin / Glenfly Arise | negligible compute stack |
+
+**Mobile and embedded IP**
+
+| family | status |
+|---|---|
+| Apple, Qualcomm Adreno | columns |
+| **Imagination PowerVR** | The strongest candidate on this list and probably **refused**. Imagination's own OpenCL guidance describes the shared local memory as living in a **common store of 4,096 words — 16 KB** per multiprocessor, with a 256-work-item group allocating 2,048 words leaving room for two resident groups. That is the baseline column's number, not ours. Worth a real column only if a toolchain target appears; until then `spec-baseline` predicts its verdict |
+| **Arm Mali** | Struck as a column, kept as a warning — see below. No dedicated compute scratchpad; wave 8 (Bifrost) / 16 (Valhall) |
+| Samsung Xclipse | **AMD RDNA IP in a phone.** Its numbers are the `amd-rdna` column's, scaled down. Not a distinct set of minimums |
+| Huawei Maleoon | no public architecture documentation at all |
+| VeriSilicon Vivante, Broadcom VideoCore (Raspberry Pi), Think Silicon NEMA | real OpenCL/Vulkan compute, no realistic training workload at this scale |
+
+**Not hardware**
+
+Software rasterizers (SwiftShader, llvmpipe) would be a CPU path, and this
+tree has no CPU path.
+
+### Why the tail does not need columns
+
+**`spec-baseline` is the answer to all of them.** Every conformant GPU clears
+16 KB and 128 invocations, so every device on this list sits somewhere between
+the baseline and our floor, and its verdict follows without a column:
+
+- clears the identity floor → joins, no bit moves
+- clears only the baseline → refused for `IDENTICAL`, runs `FAST`
+
+PowerVR is the demonstration: one sourced number (16 KB common store) places
+it below the floor without anyone writing a `COLUMN_POWERVR`. Adding vendor
+columns past this point buys precision exactly where we would never build, and
+buys fiction everywhere else. **Add a real column when a toolchain target
+exists, and not before.**
+
+### Why `arm` was added and struck the same day
+
+Mali is the GPU in most non-Apple phones — Arm licenses it and Samsung,
+MediaTek and Google's Tensor ship it — so by unit count it is one of the most
+numerous GPU families alive, and by **training** relevance one of the least.
+
+It was added as a stress test (the family whose architecture most contradicts
+this design) and struck on the rule that **the matrix holds the GPUs people
+train on, plus the floor beneath them.** A column implies an intent, and there
+is no world in which this library targets a phone GPU. `spec-baseline` covers
+the stress-test job better anyway: it is refused, so it exercises the
+admission gate, and it is grounded in a specification rather than in one
+vendor's parts.
+
+The Mali FACTS are kept — in the table above and in
+`column_has_dedicated_shared_memory`'s docstring — because they are a warning
+that outlives the column: **a conformant GPU can advertise the shared-memory
+capacity and provide none of the speed.** Arm's own guide, verbatim: "Arm GPUs
+do not implement dedicated on-chip shared memory for compute shaders. The
+shared memory that is available to use is system RAM that is backed up by the
+load-store cache." Any future column that answers `False` to that row loses
+the bet a replicated histogram is making, and must re-measure the replication
+factor rather than inherit ours.
+
+### Honesty note: three of these rows have no reader
+
+Audited by grep, 2026-08-21. `column_max_block_size` is genuinely load-bearing
+— the floor gate and all three block resolvers call it. But
+`column_has_dedicated_shared_memory`, `column_spec_guarantees_onchip_shared`
+and `column_lane_width_is_fixed` are read by **nothing except the report and
+this document**. They are declared facts for whoever brings a column up, not
+inputs to a decision the code makes today, and calling them load-bearing would
+be a claim this tree's own rules forbid. Tracked in `UNWIRED.md`.
 
 ## Adding a column, in order
 

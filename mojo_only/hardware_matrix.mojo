@@ -39,7 +39,10 @@ VALIDATION HONESTY, which is this repo's stated posture
   column is right on the pinned device and merely reasonable elsewhere.
   When Mojo exposes the device queries, these rows become the fallback and
   the queries become the truth, in that order.
-- QUALCOMM, INTEL and ARM are DECLARED-NOT-BUILDABLE: Mojo emits no code for
+- AMD-RDNA is BUILDABLE and UNVALIDATED, like the CDNA column: Mojo supports
+  both AMD families and they differ in wavefront width (64 CDNA, 32 RDNA),
+  so one `amd` column was wrong for half of them.
+- QUALCOMM and INTEL are DECLARED-NOT-BUILDABLE: Mojo emits no code for
   them today (`kernel_matrix.column_is_buildable`). Their KERNEL rows in
   `kernel_matrix.mojo` are documented vendor minimums with a citation each,
   because those decide an admission question that has to be settled in
@@ -61,7 +64,7 @@ launch does not trust this table past what it knows.
 from mojo_only.kernel_matrix import (
     COLUMN_AMD,
     COLUMN_APPLE,
-    COLUMN_ARM,
+    COLUMN_AMD_RDNA,
     COLUMN_BIT_IDENTICAL,
     COLUMN_INTEL,
     COLUMN_NVIDIA,
@@ -105,8 +108,11 @@ def gpu_cores_for[column: Int]() -> Int:
         return 6  # PLACEHOLDER, see below
     if column == COLUMN_INTEL:
         return 8  # PLACEHOLDER, see below
-    if column == COLUMN_ARM:
-        return 4  # PLACEHOLDER, see below
+    if column == COLUMN_AMD_RDNA:
+        #: 96 compute units, Radeon RX 7900 XTX (RDNA3, Navi 31). The
+        #: consumer training card, pinned the way the A100 and MI250X rows
+        #: are. UNVALIDATED.
+        return 96
     if column == COLUMN_SPEC_BASELINE:
         #: 1. Neither specification guarantees more than one compute unit,
         #: and a grid sized from this asks for the least the standard
@@ -131,8 +137,10 @@ def max_threads_per_core_for[column: Int]() -> Int:
         return 3072
     if column == COLUMN_QUALCOMM or column == COLUMN_INTEL:
         return 1024  # conservative placeholder, see `gpu_cores_for`
-    if column == COLUMN_ARM:
-        return 512  # conservative placeholder, see `gpu_cores_for`
+    if column == COLUMN_AMD_RDNA:
+        #: 2048 per WGP-pair equivalent; RDNA3 tracks up to 16 wave32
+        #: wavefronts per SIMD32 and 2 SIMD32 per CU. UNVALIDATED.
+        return 1024
     if column == COLUMN_SPEC_BASELINE:
         return 128  # the spec's guaranteed invocations per workgroup
     return 2048  # nvidia, amd, and the bit-identical intersection
@@ -167,17 +175,9 @@ def smem_statically_partitioned_for[column: Int]() -> Bool:
     - qualcomm, intel: True. Both partition a per-core local-memory pool
       between resident work-groups; Intel's guide computes occupancy from
       exactly that division. UNVALIDATED.
-    - arm: **False, and for a different reason than Apple's.** Mali has no
-      dedicated compute scratchpad at all -- Arm's best-practices guide says
-      the shared memory "is system RAM that is backed up by the load-store
-      cache" -- so there is no per-core pool for resident groups to divide.
-      It is not a divisor because it is not a partition, which is the same
-      answer Apple gives from the opposite premise. See
-      `kernel_matrix.column_has_dedicated_shared_memory`.
-
     The bit-identical intersection is True (the restrictive reading).
     """
-    return column != COLUMN_APPLE and column != COLUMN_ARM
+    return column != COLUMN_APPLE
 
 
 def smem_per_core_for[column: Int]() -> Int:
@@ -202,8 +202,10 @@ def smem_per_core_for[column: Int]() -> Int:
         #: declared vendors that is a real transcription rather than a
         #: placeholder.
         return 128 * 1024
-    if column == COLUMN_QUALCOMM or column == COLUMN_ARM:
+    if column == COLUMN_QUALCOMM:
         return 32 * 1024  # conservative; see `gpu_cores_for`
+    if column == COLUMN_AMD_RDNA:
+        return 64 * 1024  # LDS per WGP, RDNA3
     if column == COLUMN_SPEC_BASELINE:
         return 16 * 1024  # the spec floor, and nothing above it is promised
     return 32 * 1024  # apple, and the bit-identical intersection

@@ -45,7 +45,7 @@ from mojo_only.hardware_matrix import (
 from mojo_only.kernel_matrix import (
     COLUMN_AMD,
     COLUMN_APPLE,
-    COLUMN_ARM,
+    COLUMN_AMD_RDNA,
     COLUMN_BIT_IDENTICAL,
     COLUMN_COUNT,
     COLUMN_INTEL,
@@ -58,6 +58,7 @@ from mojo_only.kernel_matrix import (
     IDENTITY_FLOOR_LANES,
     IDENTITY_FLOOR_SHARED_BYTES,
     K_HIST_2_ONE_BYTE,
+    K_LIB_SELECT_WARPSORT,
     PINNED_REPLICATION_LANES,
     TARGET_COLUMN,
     column_max_block_size,
@@ -68,6 +69,8 @@ from mojo_only.kernel_matrix import (
     hist2_block_size_for,
     hist_smem_mode_for,
     identity_refusal_reason,
+    lib_block_size_for,
+    lib_lane_width_for,
 )
 from neighbors.ported.distance.detail.pairwise_distance_base import (
     TARGET_GPU_CORES,
@@ -291,6 +294,23 @@ def check_hardware_matrix() raises:
         384,
     )
 
+    # THE SPLIT THAT CAUSED THIS COLUMN. One `amd` column resolved a
+    # 512-thread warpsort block for RDNA parts whose lane group is 32; the
+    # correct answer is 256. Scheduling, so no bit moved, but wrong on
+    # hardware people train on.
+    _pin("amd (CDNA) lane width", lib_lane_width_for[COLUMN_AMD](), 64)
+    _pin("amd-rdna lane width", lib_lane_width_for[COLUMN_AMD_RDNA](), 32)
+    _pin(
+        "amd (CDNA) warpsort block",
+        lib_block_size_for[K_LIB_SELECT_WARPSORT, COLUMN_AMD](),
+        512,
+    )
+    _pin(
+        "amd-rdna warpsort block (8 lane-groups of 32)",
+        lib_block_size_for[K_LIB_SELECT_WARPSORT, COLUMN_AMD_RDNA](),
+        256,
+    )
+
     # The floor is FROZEN. These are not "the current values", they are the
     # guarantee, and an edit to one of them is a profile bump with a
     # migration -- not a patch that happens to fail a test.
@@ -376,8 +396,8 @@ def check_hardware_matrix() raises:
             " thread, not a guard"
         )
 
-    # The vendor-forced flush: `qualcomm`, `arm` and the baseline have no
-    # core float atomic, so they take fixed point in BOTH modes. This is the
+    # The vendor-forced flush: `qualcomm` and the baseline have no core
+    # float atomic, so they take fixed point in BOTH modes. This is the
     # row that was computed in two places and agreed only by luck until
     # 2026-08-21; pinned here so the two expressions cannot drift again.
     if not deterministic_flush_for[COLUMN_QUALCOMM, False]():
@@ -387,10 +407,10 @@ def check_hardware_matrix() raises:
             " there and the kernel would emit an instruction the device may"
             " not have"
         )
-    if not deterministic_flush_for[COLUMN_ARM, False]():
+    if deterministic_flush_for[COLUMN_AMD_RDNA, False]():
         raise Error(
-            "check_hardware_matrix FAIL: an arm FAST build must take the"
-            " fixed-point flush (float atomics optional on Mali)"
+            "check_hardware_matrix FAIL: an amd-rdna FAST build must stay on"
+            " CatBoost's float atomic; RDNA has them"
         )
     if deterministic_flush_for[COLUMN_APPLE, False]():
         raise Error(

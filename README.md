@@ -131,8 +131,11 @@ on the same device can differ in the last bits. We ship Metal, CUDA and HIP
 from one source, so we need "the same fit gives the same model" to be
 available.
 
-The design is a table: **bit-identical**, apple, nvidia, amd, and -- declared
-2026-08-21, with no target to build for yet -- qualcomm, intel and arm.
+The design is a table: **bit-identical**, apple, nvidia, amd (CDNA),
+amd-rdna, and -- declared 2026-08-21, with no target to build for yet --
+qualcomm and intel. The columns are **the GPUs people train on**, which is
+also why AMD is two of them: CDNA runs wave64 and RDNA wave32, and one column
+resolved a 512-thread block for parts whose lane group is 32.
 The bit-identical column is not a mode flag, it is a real column holding the
 value every ADMITTED vendor can meet, and it can be printed and diffed
 against a device column to show exactly what identity costs there.
@@ -149,8 +152,8 @@ never drops to fit one; widening it is a profile bump, which is a different
 guarantee about a different set of models.
 
 Today every declared vendor meets it, including the three nothing can build
-for: Adreno and Mali advertise the same 32 KB per workgroup that Metal does,
-and Intel more. **The lowest common denominator has not moved: Apple was the
+for: Adreno advertises the same 32 KB per workgroup that Metal does, and
+Intel more. **The lowest common denominator has not moved: Apple was the
 binding constraint and still is.** An eighth column, `spec-baseline`, holds
 what the Vulkan and WebGPU specifications GUARANTEE rather than what a vendor
 ships (16 KB, 128 invocations) -- it is refused, permanently and on purpose,
