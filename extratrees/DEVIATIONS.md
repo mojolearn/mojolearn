@@ -191,3 +191,63 @@ refusal is visible; a wrong answer is not.
 
 **Price.** Datasets with missing values are forfeit until this is ported.
 Tracked in `UNPORTED.tsv`.
+
+---
+
+## 137. `computeSplitKernel` has no histogram — THE deviation this lane exists for
+
+**Theirs** (`kernels/builder_kernels_impl.cuh:216-340`), per (node, feature)
+block: load the feature's quantile borders into shared memory (`:265-266`); one
+pass over the node's rows, `lower_bound` each value into a bin and increment a
+shared histogram (`:281-291`); large nodes atomically merge partial histograms
+in global memory and the last block continues (`:295-313`); PDF to CDF in
+place, one scan per class (`:316-322`); `objective.Gain` scores EVERY bin
+border as a candidate (`:328`); `evalBestSplit` reduces (`:340`).
+
+**Ours**, per (node, feature) block: range pass (min/max over the node's rows,
+sklearn `_partitioner.pyx:129-165`); constant test (`max <= min + 1e-7`,
+`_splitter.pyx:616-617`); ONE keyed threshold draw (`_splitter.pyx:633`);
+score pass against that single threshold; `evalBestSplit` **unchanged**.
+
+**Reason.** There is no upstream GPU implementation of this formulation to be
+faithful to. The upstream is Geurts, Ernst & Wehenkel 2006 with sklearn's
+`RandomSplitter` as its reference implementation, and every step above cites
+it by line. Recorded as a `DEVIATION BLOCK` inside the mirrored file rather
+than in a new file, per `PORTING_RULES.md` rule 4.
+
+**Price, stated as arithmetic and not as a measurement** (this lane takes no
+timing numbers): theirs reads the feature column ONCE per node, ours reads it
+TWICE, because the threshold cannot be drawn until the range is known. Drawing
+from the PARENT's range would fuse the two passes; the paper's
+`Pick_a_random_split` draws inside the range of the node's OWN subset and
+sklearn does the same, so it is not taken.
+
+**What it buys.** Per-node state becomes a handful of accumulators per
+candidate feature instead of bins x classes, and steps 1, 3 and 4 of theirs
+disappear entirely rather than being made cheaper: no global quantile array, no
+`lower_bound` per row, no CDF scan, no cross-block histogram merge.
+
+---
+
+## 138. `max_n_bins` is refused, not defaulted
+
+**Theirs.** `DecisionTreeParams::max_n_bins` (`decisiontree.hpp:41`), default
+128, validated into `(0, 1024]` (`decisiontree.cu:36-38`). It sizes the
+quantile set their split search scans.
+
+**Ours.** The field does not exist and the name is refused.
+
+**Reason.** Deviation 137 deletes the histogram, so there is nothing for the
+parameter to size. Refusing rather than ignoring follows `gbdt/`'s `check()`,
+which refuses every unported CatBoost option by name: a caller who passes
+`max_n_bins=1024` expecting a finer search would otherwise get a tree that
+ignored the request in silence.
+
+**Price.** A cuML configuration ported across needs that line deleted. That is
+the intended cost — it is the one line that says these are different
+algorithms.
+
+**Same treatment, same reason, for four criteria.** `ENTROPY`, `POISSON`,
+`GAMMA` and `INVERSE_GAUSSIAN` exist in `algo_helper.h:20-29` with real kernels
+(`kernels/poisson-*.cu` and siblings) and are refused here rather than
+downgraded to MSE. `MAE` is refused by cuML itself (`decisiontree.cu:38`).
