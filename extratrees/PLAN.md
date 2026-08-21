@@ -189,14 +189,54 @@ the objectives, the RNG or the checks — none of which would be wasted.
 
 ## Status
 
-Wave 1 (host-side, no GPU, no timing) — the substrate every later check stands
-on. `split.mojo` / `dataset.mojo` / `builder_kernels.mojo` landed with
-`split_check.mojo` green and four sabotages proven red. In flight, one file per
-sub-lane so nothing converges: the RAFT `PCGenerator` port with a C++ oracle
-built from their own header; `objectives.mojo`; `flatnode.mojo` with the
-predict traversal; and the fixture generators.
+Everything below is host-side. No kernel has been enqueued, no timing number
+has been taken, and none will be until the perf round.
 
-Wave 2, in order: the exact host transcription of `node_split_random` using our
-keyed draws (`mojo_only/host_splitter.mojo`), then `builder.mojo`
-(`NodeQueue` + `Builder`), then the device passes inside the mirrored
-`builder_kernels_impl.mojo`.
+**Landed and checked** (every check has a sabotage per mechanism that was seen
+to turn it red, then restored):
+
+| file | upstream | check | cells |
+|---|---|---|---|
+| `batched_levelalgo/split.mojo` | `split.cuh:32-90` | `split_check` | 54k pairs |
+| `batched_levelalgo/dataset.mojo` | `dataset.h:22-38` | (used by all) | — |
+| `batched_levelalgo/kernels/builder_kernels.mojo` | `builder_kernels.cuh:34-67` | `split_check` | — |
+| `batched_levelalgo/kernels/builder_kernels_impl.mojo` | `builder_kernels_impl.cuh:43-88` + DEVIATION 137 steps 1-3 | `partition_check`, `range_draw_check` | 983k + 18.7k |
+| `batched_levelalgo/builder.mojo` | `builder.cuh:44-135`, `:556-599` | `builder_check`, `leaf_check` | 1081 + 370 |
+| `batched_levelalgo/objectives.mojo` | `objectives.cuh` + `_criterion.pyx` | `objectives_check` | 1577 |
+| `decisiontree/decisiontree.mojo` | `decisiontree.hpp` + `decisiontree.cu:27-45` | `params_check` | 35 |
+| `decisiontree/flatnode.mojo` | `flatnode.h:33-77`, `decisiontree.cuh:394-413` | `flatnode_check` | 5706 |
+| `mojo_only/pcg_rng.mojo` | RAFT `rng_device.cuh:546-683` | `pcg_rng_check` vs a C++ oracle built from their own header | 2658 |
+| `mojo_only/fixtures.mojo` | — | `fixtures_check` | 205 |
+
+**In flight**, one file pair each so nothing converges: the exact host
+transcription of `node_split_random` (`mojo_only/host_splitter.mojo`), and
+cuML's two feature samplers with their dispatch rule
+(`builder_kernels.cuh:152`, `:246`, dispatched at `builder.cuh:400-470`).
+
+**Next, in order.** The device passes inside `builder_kernels_impl.mojo`:
+range, draw, score, `evalBestSplit`, partition, leaf — each checked per cell
+against the host form that already exists for it. Then `Builder::train`'s loop
+(`builder.cuh:344-359`), which is the only thing standing between these pieces
+and a tree. Then the forest wrapper.
+
+## What reading the upstreams changed, and it was not marginal
+
+Four times so far a plan sentence has been deleted because a file said
+otherwise (rule 10), and each is recorded where it happened:
+
+1. The partition was going to be stable and ours. cuML's is a two-pointer
+   misfit swap and is deterministic anyway, so the deviation died and became a
+   port (`DEVIATIONS.md` 134).
+2. `PLAN.md` said sklearn draws from MT19937. It is a 32-bit xorshift
+   (`_random.pxd:20-34`); MT19937 only seeds it.
+3. The classification score was assumed to be `sum_c^2/n_L + sum_c^2/n_R`.
+   `Gini` does not override `proxy_impurity_improvement`, so sklearn actually
+   maximizes `-n_R*gini_R - n_L*gini_L` (`DEVIATIONS.md` 144).
+4. A `break` in `NodeQueue.push` was described as semantically different from
+   a `continue`. A sabotage showed it is not, because `leaf_counter` is
+   monotone inside the loop.
+
+And two facts about sklearn that no amount of reasoning would have produced:
+their constant-feature band is computed in float32, so it WIDENS near zero and
+VANISHES above magnitude ~2; and their `threshold == max` guard is reachable
+here too, 191 times in 13,120 draws, purely from float32 rounding.
