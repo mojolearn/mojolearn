@@ -150,7 +150,13 @@ guarantee about a different set of models.
 
 Today every declared vendor meets it, including the three nothing can build
 for: Adreno and Mali advertise the same 32 KB per workgroup that Metal does,
-and Intel more. `mojo build -I . matrix_main.mojo` prints the whole table
+and Intel more. **The lowest common denominator has not moved: Apple was the
+binding constraint and still is.** An eighth column, `spec-baseline`, holds
+what the Vulkan and WebGPU specifications GUARANTEE rather than what a vendor
+ships (16 KB, 128 invocations) -- it is refused, permanently and on purpose,
+because it is half our floor's memory. It is there to give the admission gate
+a member it must reject, since a guard whose refusal branch has never
+executed is untested rather than working. `mojo build -I . matrix_main.mojo` prints the whole table
 with each vendor's minimums and its admission verdict, and touches no device.
 
 Resolution substitutes per ROW, not per spec: a scheduling row always comes

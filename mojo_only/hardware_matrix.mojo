@@ -66,6 +66,7 @@ from mojo_only.kernel_matrix import (
     COLUMN_INTEL,
     COLUMN_NVIDIA,
     COLUMN_QUALCOMM,
+    COLUMN_SPEC_BASELINE,
     column_name,
     column_shared_limit,
 )
@@ -106,6 +107,11 @@ def gpu_cores_for[column: Int]() -> Int:
         return 8  # PLACEHOLDER, see below
     if column == COLUMN_ARM:
         return 4  # PLACEHOLDER, see below
+    if column == COLUMN_SPEC_BASELINE:
+        #: 1. Neither specification guarantees more than one compute unit,
+        #: and a grid sized from this asks for the least the standard
+        #: promises, which is the only correct reading of a floor.
+        return 1
     return 10  # apple, and the bit-identical intersection
 
 
@@ -127,6 +133,8 @@ def max_threads_per_core_for[column: Int]() -> Int:
         return 1024  # conservative placeholder, see `gpu_cores_for`
     if column == COLUMN_ARM:
         return 512  # conservative placeholder, see `gpu_cores_for`
+    if column == COLUMN_SPEC_BASELINE:
+        return 128  # the spec's guaranteed invocations per workgroup
     return 2048  # nvidia, amd, and the bit-identical intersection
 
 
@@ -196,6 +204,8 @@ def smem_per_core_for[column: Int]() -> Int:
         return 128 * 1024
     if column == COLUMN_QUALCOMM or column == COLUMN_ARM:
         return 32 * 1024  # conservative; see `gpu_cores_for`
+    if column == COLUMN_SPEC_BASELINE:
+        return 16 * 1024  # the spec floor, and nothing above it is promised
     return 32 * 1024  # apple, and the bit-identical intersection
 
 

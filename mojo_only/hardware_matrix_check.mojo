@@ -51,6 +51,7 @@ from mojo_only.kernel_matrix import (
     COLUMN_INTEL,
     COLUMN_NVIDIA,
     COLUMN_QUALCOMM,
+    COLUMN_SPEC_BASELINE,
     HIST_SMEM_SHARED2_I32,
     HIST_SMEM_WARP_PRIVATE_F32,
     IDENTITY_FLOOR_BLOCK,
@@ -63,6 +64,7 @@ from mojo_only.kernel_matrix import (
     column_meets_identity_floor,
     column_name,
     column_shared_limit,
+    deterministic_flush_for,
     hist2_block_size_for,
     hist_smem_mode_for,
     identity_refusal_reason,
@@ -336,10 +338,17 @@ def check_hardware_matrix() raises:
             )
 
     # Today's finding, pinned so that a change to it is deliberate: every
-    # declared vendor MEETS the floor. Adreno and Mali advertise the same
+    # declared VENDOR meets the floor. Adreno and Mali advertise the same
     # 32 KB Apple does, and Intel more, so the design was already floored by
     # the most constrained mainstream GPU memory hierarchy.
+    #
+    # The PORTABLE BASELINE does not, and must not: it is the specifications'
+    # guaranteed minimum (16 KB, 128 invocations), which is half our floor's
+    # memory and a quarter of its block. A day when it passes is a day
+    # somebody lowered the floor.
     for c in range(COLUMN_COUNT):
+        if c == COLUMN_SPEC_BASELINE:
+            continue
         if not column_meets_identity_floor(c):
             raise Error(
                 "check_hardware_matrix FAIL: "
@@ -348,6 +357,52 @@ def check_hardware_matrix() raises:
                 " the floor, it belongs in FAST and this loop needs an"
                 " explicit exception naming it, NOT a lower floor"
             )
+    if column_meets_identity_floor(COLUMN_SPEC_BASELINE):
+        raise Error(
+            "check_hardware_matrix FAIL: the portable baseline (16 KB, 128"
+            " invocations) now MEETS the identity floor, which can only mean"
+            " the floor was lowered. That is a profile bump: it changes"
+            " every model produced under the old profile, and it does not"
+            " happen as a side effect of a table edit"
+        )
+    # REACH, not output: the refusal branch has to have executed. Before the
+    # baseline column existed every member passed, so this guard had never
+    # once run the code that refuses -- an unreached branch is an untested
+    # one, and this tree's rule is that reach is proved per branch.
+    if identity_refusal_reason(COLUMN_SPEC_BASELINE).byte_length() == 0:
+        raise Error(
+            "check_hardware_matrix FAIL: the baseline column is refused and"
+            " gives no reason; a refusal a user cannot act on is a support"
+            " thread, not a guard"
+        )
+
+    # The vendor-forced flush: `qualcomm`, `arm` and the baseline have no
+    # core float atomic, so they take fixed point in BOTH modes. This is the
+    # row that was computed in two places and agreed only by luck until
+    # 2026-08-21; pinned here so the two expressions cannot drift again.
+    if not deterministic_flush_for[COLUMN_QUALCOMM, False]():
+        raise Error(
+            "check_hardware_matrix FAIL: a qualcomm FAST build must take the"
+            " fixed-point flush -- float atomic add is an optional extension"
+            " there and the kernel would emit an instruction the device may"
+            " not have"
+        )
+    if not deterministic_flush_for[COLUMN_ARM, False]():
+        raise Error(
+            "check_hardware_matrix FAIL: an arm FAST build must take the"
+            " fixed-point flush (float atomics optional on Mali)"
+        )
+    if deterministic_flush_for[COLUMN_APPLE, False]():
+        raise Error(
+            "check_hardware_matrix FAIL: an apple FAST build must stay on"
+            " CatBoost's float atomic; that is the shipped default and the"
+            " arm every measured number was taken on"
+        )
+    if deterministic_flush_for[COLUMN_NVIDIA, False]():
+        raise Error(
+            "check_hardware_matrix FAIL: an nvidia FAST build must stay on"
+            " CatBoost's float atomic"
+        )
 
     print(
         "check_hardware_matrix OK: apple column = the old constants"
@@ -361,8 +416,8 @@ def check_hardware_matrix() raises:
         " build column "
         + column_name(TARGET_COLUMN)
         + "; identity floor frozen at profile 1 (32 KB / 32 lanes / block"
-        " 512) and all "
-        + String(COLUMN_COUNT - 1)
-        + " vendor columns meet it, apple/nvidia/amd smem modes unchanged"
+        " 512): all "
+        + String(COLUMN_COUNT - 2)
+        + " vendor columns meet it, the portable baseline is REFUSED, apple/nvidia/amd smem modes unchanged"
         " by the budget rewrite"
     )

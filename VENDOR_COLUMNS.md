@@ -57,6 +57,14 @@ transcribed, never measured here.
 | qualcomm (Adreno) | no | 32 KB | **8–128, compiler-chosen** | 1024 | extension only | yes | yes | **admitted** |
 | intel (Xe/Arc) | no | 64 KB | **8/16/32, compiler-chosen** | 1024 | yes | yes | yes | **admitted** |
 | arm (Mali) | no | 32 KB | 8 (Bifrost) / 16 (Valhall) | 512 | extension only | yes | **no** | **admitted** |
+| **spec-baseline** | no | **16 KB** | **1 (none guaranteed)** | **128** | no | yes | not promised | **REFUSED** |
+
+`spec-baseline` is not a vendor. It is what the portable specifications
+GUARANTEE any conformant GPU provides — the intersection of Vulkan's required
+limits (`maxComputeSharedMemorySize` 16,384; `maxComputeWorkGroupInvocations`
+128) and WebGPU's defaults (`maxComputeWorkgroupStorageSize` 16,384;
+`maxComputeInvocationsPerWorkgroup` 256). See "The floor has not moved" below
+for why it is in the table when it can never be admitted.
 
 **The finding, and it was not the expected one: every declared vendor meets
 the floor.** Adreno's per-workgroup local memory is 32 KB, exactly Metal's;
@@ -86,6 +94,13 @@ Mojo exposes lane primitives and `sync_granularity_for` stops returning
 `SYNC_BLOCK`, that paragraph expires and these columns are unsafe until
 re-argued.**
 
+**Arm Mali is the GPU in most non-Apple phones and tablets** — Arm licenses
+it as IP and Samsung, MediaTek, Google (Tensor) and others ship it, so by
+unit count it is one of the most numerous GPU families in existence, and by
+training relevance one of the least. It is here because it is the family
+whose *architecture* most contradicts this design, which makes it the useful
+stress test even though nobody will train on a phone.
+
 **Mali has no compute scratchpad at all.** Arm's GPU best-practices guide,
 verbatim: "Arm GPUs do not implement dedicated on-chip shared memory for
 compute shaders. The shared memory that is available to use is system RAM
@@ -103,6 +118,71 @@ the vendor forcing the mode's hand. That is exactly what
 ever exercised it. The row is set conservatively (`False` for the mobile
 columns) and should be replaced by a device query at bring-up, not by an
 opinion.
+
+## How far has the lowest common denominator moved? It has not.
+
+The question the vendor columns were added to answer, with the arithmetic
+rather than a reassurance.
+
+| row | before (apple, nvidia, amd) | after (+ qualcomm, intel, arm) | moved? |
+|---|---|---|---|
+| threadgroup bytes | min(32, 48, 64) = **32 KB** | min(32, 48, 64, 32, 64, 32) = **32 KB** | **no** |
+| dispatch cap | min(1024, 1024, 1024) = 1024 | min(…, 1024, 1024, 512) = **512** | yes, and it costs nothing — see below |
+| hardware lane width | min(32, 32, 64) = 32 | min(…, 8, 8, 8) = **8** | yes, and it is not a floor input: the replication group is LOGICAL |
+| core float atomics | all three | **not universal** | yes — in `FAST`, not in `IDENTICAL` |
+| threadgroup i32 atomics | all three | all six, and the baseline too | no |
+
+**Apple was already the binding constraint and still is.** Adreno's 32 KB per
+workgroup is exactly Metal's; Mali advertises the same; Intel is above both.
+So the identity column does not change, and *that is the mechanism working*
+rather than a lucky escape: it is frozen, so the only question a new vendor
+raises is whether it joins or is refused.
+
+### The 512-thread dispatch cap on Mali costs nothing
+
+Resolved per column, straight out of the table rather than estimated:
+
+| column | binary | half-byte | one-byte | hist_2 | vendor cap |
+|---|---|---|---|---|---|
+| apple | 512 | 512 | 256 | 512 | 1024 |
+| nvidia / amd / intel | 768 | 768 | 384 | 384 | 1024 |
+| qualcomm | 512 | 512 | 256 | 512 | 1024 |
+| arm | 512 | 512 | 256 | 512 | **512** |
+| spec-baseline | 128 | 128 | 128 | 128 | **128** |
+
+On any 32 KB column the **shared-memory budget binds first and produces 512
+anyway**: 32,768 / (16 floats × 4 bytes) = 512 for the binary and half-byte
+kernels, and the shared-Int32 hist_2 arm is capped at 512 by design because
+that is the block that fills 32 KB. Mali's cap sits exactly at the number the
+memory budget already produced, so it removes nothing. The cap that would
+hurt is the baseline's 128 — a quarter of the block, which is a different
+profile, not a tuning loss.
+
+### The dispatch cap was not being consulted at all
+
+The baseline column found this on its first run and it is the argument for
+declaring columns you cannot build for. `block_size_for` and
+`hist2_block_size_for` bounded the block by the shared-memory budget and
+**never by the vendor's maximum workgroup size**. On every buildable column
+that was slack — all three caps are 1024, the largest block is 768 — so the
+omission was invisible and would have stayed invisible. Against the baseline
+it resolved a 256-thread block on a target that guarantees only 128
+invocations: a grid the device is not required to be able to launch.
+
+Both resolvers and the runtime one now clamp. `check_hardware_matrix` pins
+apple at 512/512/256/512 and nvidia at 384 across the change, so the fix is
+proved to have moved nothing on any column that runs today.
+
+### What a portable profile would cost, now that it can be priced
+
+If `IDENTICAL` ever has to reach a spec-minimum device, profile 2 would be
+16 KB and a 128-thread block: **a quarter of the block, four times the
+threadgroup slices, a different set of partial sums.** Feasible — 128 threads
+still hosts four 32-lane replication groups, and the one instruction the
+guarantee cannot do without (threadgroup `atomicAdd` on `i32`) is core in
+both Vulkan and WGSL, so the refusal is a *size* and never a missing
+capability. But it is a different guarantee about a different set of models,
+which is exactly why it is a profile bump and not an edit.
 
 ## What is NOT a column, and cannot become one
 

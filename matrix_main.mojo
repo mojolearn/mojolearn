@@ -41,6 +41,7 @@ from mojo_only.kernel_matrix import (
     column_has_float_atomics,
     column_has_threadgroup_int_atomics,
     column_is_buildable,
+    column_spec_guarantees_onchip_shared,
     column_lane_width,
     column_lane_width_is_fixed,
     column_max_block_size,
@@ -166,7 +167,15 @@ def main() raises:
             "\t",
             _yn(column_has_threadgroup_int_atomics(c)),
             "\t",
-            _yn(column_has_dedicated_shared_memory(c)),
+            #: Both halves: what the vendor built (Mali: cached system
+            #: RAM) and what the spec promises (nothing about where
+            #: Workgroup storage lives). Printing `yes` for a column that
+            #: merely has not been contradicted would be the misleading
+            #: half of the truth.
+            _yn(
+                column_has_dedicated_shared_memory(c)
+                and column_spec_guarantees_onchip_shared(c)
+            ),
             "\t",
             _yn(column_meets_identity_floor(c)),
         )

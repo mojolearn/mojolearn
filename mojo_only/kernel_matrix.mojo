@@ -121,10 +121,37 @@ comptime COLUMN_QUALCOMM = 4
 comptime COLUMN_INTEL = 5
 comptime COLUMN_ARM = 6
 
+#: NOT A VENDOR. The PORTABLE FLOOR: what the graphics specifications
+#: GUARANTEE any conformant GPU provides, as opposed to what a particular
+#: vendor's parts happen to provide.
+#:
+#: **It exists to be REFUSED, and that is its job.** Two things follow from
+#: having it, and neither is available from a table of real vendors:
+#:
+#: 1. **It answers "what about some GPU we have not thought of" with a
+#:    number instead of a shrug.** Any future conformant device clears this
+#:    bar; a device that also clears the identity floor joins; one that only
+#:    clears this does not. The open-ended question becomes a comparison.
+#: 2. **It gives the admission gate its first refused member.** Until this
+#:    column existed, `column_meets_identity_floor` returned True for every
+#:    column in the table, so the refusal path had never once executed. An
+#:    unreached branch is not a working guard, it is an untested one, and
+#:    this repository's rule is that reach is proved per branch. This column
+#:    is that proof, permanently, and `hardware_matrix_check` asserts the
+#:    refusal is still happening.
+#:
+#: Values are the intersection of the two portable specifications:
+#:   - Vulkan required limits: `maxComputeSharedMemorySize` 16,384 bytes,
+#:     `maxComputeWorkGroupInvocations` 128.
+#:   - WebGPU defaults: `maxComputeWorkgroupStorageSize` 16,384 bytes,
+#:     `maxComputeInvocationsPerWorkgroup` 256.
+#: The most restrictive of each: 16 KB and 128 threads.
+comptime COLUMN_SPEC_BASELINE = 7
+
 #: The count, so a report or a check loops instead of listing. Raise this and
 #: `column_name` and every row below must answer for the new value; the
 #: check in `mojo_only/hardware_matrix_check.mojo` enforces that they do.
-comptime COLUMN_COUNT = 7
+comptime COLUMN_COUNT = 8
 
 #: Kept as aliases so kernel code can name the API or the part it targets
 #: rather than the company. Metal is Apple's, CUDA is NVIDIA's, HIP is AMD's;
@@ -152,6 +179,8 @@ def column_name(column: Int) -> String:
         return String("intel")
     if column == COLUMN_ARM:
         return String("arm")
+    if column == COLUMN_SPEC_BASELINE:
+        return String("spec-baseline")
     return String("unknown")
 
 
@@ -235,10 +264,16 @@ struct KernelSpec(Copyable, Movable):
 
     var flush_forced_by_vendor: Bool
     """Whether `deterministic_flush` is the mode's choice or the vendor's
-    constraint. **No vendor forces it today** -- all three do float
-    `atomicAdd`. Kept so a column that genuinely cannot has somewhere to say
-    so, and so a report never implies the user asked for a flush the mode
-    did not choose."""
+    constraint.
+
+    **This field had no true case until 2026-08-21 and now it has three.**
+    The sentence that stood here -- "No vendor forces it today, all three do
+    float `atomicAdd`" -- was true of the founding columns and is deleted
+    rather than annotated: on `qualcomm`, `arm` and the portable baseline,
+    float atomic add is not core (it arrives through
+    `cl_ext_float_atomics` / `VK_EXT_shader_atomic_float`, both optional), so
+    those columns take the fixed-point flush in BOTH modes. A report must
+    never imply the user asked for a flush the mode did not choose."""
 
     def shared_bytes(self) -> Int:
         """What this spec asks of threadgroup memory."""
@@ -425,6 +460,14 @@ def column_shared_limit(column: Int) -> Int:
         return 64 * 1024
     if column == COLUMN_ARM:
         return 32 * 1024
+    if column == COLUMN_SPEC_BASELINE:
+        #: 16 KB. Vulkan's required `maxComputeSharedMemorySize` and WebGPU's
+        #: default `maxComputeWorkgroupStorageSize` agree on this number, and
+        #: it is HALF the identity floor. That is the whole finding: the
+        #: guarantee we ship is not a portable-by-specification guarantee, it
+        #: is a guarantee about devices whose real limits exceed the spec's,
+        #: which every mainstream GPU's do.
+        return 16 * 1024
     return IDENTITY_FLOOR_SHARED_BYTES  # BIT_IDENTICAL: frozen, not derived
 
 
@@ -458,9 +501,18 @@ def column_has_float_atomics(column: Int) -> Bool:
     vendor forcing the mode's hand, exactly the case that field was built for
     and that no founding column exercises.
 
-    Conservative until queried: `False` for the unbuildable columns. That is
-    a claim about the WEAKEST device in the family, not about the best one,
-    and bring-up replaces it with a device query rather than an opinion.
+    Conservative until queried: `False` for the mobile columns and for the
+    portable baseline (neither Vulkan core nor WebGPU core has a float atomic
+    add). That is a claim about the WEAKEST device in the family, not about
+    the best one. A PARTICULAR Adreno that advertises the extension can run
+    the float path -- but the flush is comptime, two different bodies of
+    code, so a build has to choose in advance and the safe choice is the one
+    that runs everywhere in the family. Bring-up may add a second build, not
+    a runtime branch.
+
+    Intel is `True` because float atomics are broadly available on Xe; it is
+    the one entry here that should be re-checked against a device rather than
+    a document, and it is marked so in `VENDOR_COLUMNS.md`.
     """
     return (
         column == COLUMN_BIT_IDENTICAL
@@ -480,6 +532,15 @@ def column_has_threadgroup_int_atomics(column: Int) -> Bool:
     that is what makes the histogram independent of arrival order. A device
     without local integer atomics cannot take that path, and there is no
     substitute that keeps the property at a tolerable cost.
+
+    **True in every column INCLUDING the portable baseline, which is the
+    single luckiest fact in this design.** The one capability the identity
+    guarantee cannot do without is the one that is core in every compute API
+    there is: Vulkan core atomics operate on the Workgroup storage class, and
+    WGSL has `atomicAdd` on `var<workgroup> atomic<i32>`. So the reason the
+    baseline column is refused is a SIZE, never a missing instruction -- and
+    a size is something a future profile could accommodate, where a missing
+    instruction would not be.
 
     True everywhere it has been checked, and it is a low bar by construction:
     integer atomics on local memory are CORE OpenCL 1.2 (`atomic_add` on
@@ -514,6 +575,21 @@ def column_has_dedicated_shared_memory(column: Int) -> Bool:
     return column != COLUMN_ARM
 
 
+def column_spec_guarantees_onchip_shared(column: Int) -> Bool:
+    """Whether anything PROMISES the shared memory is on chip.
+
+    Separate from `column_has_dedicated_shared_memory`, which records what a
+    named vendor actually built. Neither Vulkan nor WebGPU says where
+    Workgroup storage lives: Mali is a conformant implementation backing it
+    with cached system RAM, and a conformant future device may do the same.
+
+    Nothing reads this yet. It is declared because "the spec guarantees the
+    capacity and says nothing about the speed" is the kind of distinction
+    that gets discovered twice, and the second discovery is expensive.
+    """
+    return column != COLUMN_ARM and column != COLUMN_SPEC_BASELINE
+
+
 def column_max_block_size(column: Int) -> Int:
     """Largest threadgroup the vendor will dispatch, before our budget bites.
 
@@ -531,6 +607,14 @@ def column_max_block_size(column: Int) -> Int:
     """
     if column == COLUMN_ARM:
         return 512
+    if column == COLUMN_SPEC_BASELINE:
+        #: 128, the most restrictive of Vulkan's required
+        #: `maxComputeWorkGroupInvocations` (128) and WebGPU's default
+        #: `maxComputeInvocationsPerWorkgroup` (256). A QUARTER of the
+        #: identity floor's block, so this column fails two rows and not
+        #: one; `identity_refusal_reason` reports the memory row because it
+        #: is checked first, which is the more fundamental of the two.
+        return 128
     return 1024
 
 
@@ -585,6 +669,13 @@ def column_lane_width(column: Int) -> Int:
         return 8
     if column == COLUMN_ARM:
         return 8
+    if column == COLUMN_SPEC_BASELINE:
+        #: 1. Neither specification guarantees a subgroup at all -- Vulkan
+        #: subgroups are a 1.1 feature with a device-reported size, and core
+        #: WGSL has no subgroup concept. The only width portable code may
+        #: ASSUME is one, which is the strongest possible argument for a
+        #: pinned LOGICAL group and against reading the hardware.
+        return 1
     return 32
 
 
@@ -599,7 +690,11 @@ def column_lane_width_is_fixed(column: Int) -> Bool:
     stop indexing by lane. Nothing in this tree indexes by hardware lane
     today, because `SYNC_BLOCK` left it with no reason to.
     """
-    return column != COLUMN_QUALCOMM and column != COLUMN_INTEL
+    return (
+        column != COLUMN_QUALCOMM
+        and column != COLUMN_INTEL
+        and column != COLUMN_SPEC_BASELINE
+    )
 
 
 def spec_for(kernel: Int, device: Int, mode: NumericMode) raises -> KernelSpec:
@@ -649,6 +744,15 @@ def spec_for(kernel: Int, device: Int, mode: NumericMode) raises -> KernelSpec:
         )
         if limit < block:
             block = limit
+    #: The DEVICE's dispatch cap bounds every kernel, histogram or not, and
+    #: it comes from the device column even under `IDENTICAL`: it is a
+    #: launch-validity wall, not an arithmetic choice. A column that cannot
+    #: reach the identity floor's block is refused by
+    #: `column_meets_identity_floor` before it ever gets here, so clamping
+    #: cannot silently produce a different reduction on an admitted column.
+    var hard_cap = column_max_block_size(device)
+    if hard_cap < block:
+        block = hard_cap
     elif kernel == K_SCORES:
         block = 128  # compute_scores.cu:167
     elif kernel == K_SPLIT_POINTS:
@@ -739,7 +843,18 @@ def block_size_for[kernel: Int, column: Int]() -> Int:
     comptime floats = hist_floats_per_thread_for[kernel]()
     comptime cap = catboost_block_for[kernel]()
     comptime limit = column_shared_limit(column) // (floats * 4)
-    return limit if limit < cap else cap
+    comptime by_smem = limit if limit < cap else cap
+    #: AND THE VENDOR'S DISPATCH CAP, which this row did not consult until
+    #: 2026-08-21. On every column that could be built it was slack -- all
+    #: three founding caps are 1024 and the largest block here is 768, so
+    #: the memory budget always bound first and the omission was invisible.
+    #: The portable-baseline column exposed it on its first run: 16 KB of
+    #: shared memory permits 256 threads, the specifications guarantee only
+    #: 128 invocations per workgroup, and the resolver was handing back a
+    #: block the device is not required to be able to launch at all. A
+    #: declared column earning its place on day one.
+    comptime hard = column_max_block_size(column)
+    return by_smem if by_smem < hard else hard
 
 
 def lane_width_for[column: Int, identical: Bool]() -> Int:
@@ -822,10 +937,21 @@ def deterministic_flush_for[column: Int, identical: Bool]() -> Bool:
     Whether a multi-block histogram flush sums through a FIXED-POINT integer
     accumulator instead of `atomicAdd` on `float`.
 
-    **No column is forced any more.** `FAST` leaves every vendor on
-    CatBoost's float atomic, which is what they ship; `IDENTICAL` pins every
-    vendor to the integer path, where integer addition is associative and the
-    result does not depend on which block lands first.
+    `IDENTICAL` pins every vendor to the integer path, where integer addition
+    is associative and the result does not depend on which block lands first.
+    `FAST` leaves a vendor on CatBoost's float atomic **if it has one**.
+
+    **THIS ROW USED TO RETURN `identical` AND IGNORE THE COLUMN, AND THAT WAS
+    A LATENT BUG THE MOMENT A COLUMN WITHOUT FLOAT ATOMICS WAS DECLARED.**
+    The runtime resolver (`spec_for`) has always computed
+    `identical or not column_has_float_atomics(device)`; this comptime
+    accessor -- the one KERNELS actually branch on -- computed only the first
+    half. While all three founding columns had float atomics the two agreed
+    and nothing could go wrong. On Adreno or Mali under `FAST` they would
+    have disagreed: the report would say fixed point and the kernel would
+    emit a float `atomicAdd` the device does not have. Found 2026-08-21 by
+    Andrew asking whether the float-atomic row should be `no` for those two.
+    Two expressions of one rule is how a rule drifts; this one now delegates.
 
     Comptime rather than runtime because the two flushes are different code,
     not a configured value, which is the distinction `numerics.mojo` draws
@@ -838,7 +964,7 @@ def deterministic_flush_for[column: Int, identical: Bool]() -> Bool:
     (`split_properties_helper.cpp:1155-1157`, `:34-38`) -- rather than with
     the indexed `ZeroHistogramsImpl` it uses on the final flat histogram.
     """
-    return identical
+    return identical or not column_has_float_atomics(column)
 
 
 # ---------------------------------------------------------------------------
@@ -961,9 +1087,12 @@ def hist2_block_size_for[column: Int, smem_mode: Int]() -> Int:
     pinned to `block_size_for`.
     """
 
+    comptime hard = column_max_block_size(column)
     comptime if smem_mode == HIST_SMEM_SHARED2_I32:
         comptime limit = column_shared_limit(column) // 64
-        return 512 if limit >= 512 else limit
+        comptime by_smem = 512 if limit >= 512 else limit
+        #: The vendor dispatch cap, for the reason in `block_size_for`.
+        return by_smem if by_smem < hard else hard
     else:
         return block_size_for[K_HIST_2_ONE_BYTE, column]()
 
