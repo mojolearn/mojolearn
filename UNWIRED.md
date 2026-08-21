@@ -31,15 +31,20 @@ so this tree cannot repeat that quietly. **Audited by grep, not by memory.**
 | `deterministic_flush` (matrix row) | **WIRED**: `hist_binary.mojo` branches on `deterministic_flush_for[TARGET_COLUMN, ...]` at comptime | Forced true on apple because Metal has no float atomic; follows the mode on nvidia and amd. The multi-block path sums Int32 partials through an integer atomic and converts back in `fixed_to_float_kernel`. Exercised, and correct ONLY WHEN THE CALLER BOUNDS THE SCALE: `doc_parallel_boosting.fit` passed `0.0` for both magnitudes, which makes `choose_scale` return its LARGEST value, and every replicated half-byte flush overflowed Int32 from the moment `launch_histograms_for_blocks` started replicating that kernel. Fixed 2026-08-19; `fit` now reads the stats plane back and passes the two sums of magnitudes. `hist_replicas` defaults to 1 because 1 and 32 are INDISTINGUISHABLE interleaved at this shape, not because 32 is slower: the earlier 'slower' reading was cross-run noise. |
 | `mojo_only/fixed_point.mojo` | **WIRED**: `greedy_search_helper.run_tree` and `run_tree_layout` both call `choose_scale`, and `cluster/mojo_only/reduce_by_key.mojo` accumulates through the same scheme | It is also verified in isolation (overflow bound tight at 268,435,453 of 268,435,455; forward and reverse accumulation exact). The tree path used to INLINE the derivation instead of calling it, and the copy drifted: on an all-zero input `choose_scale` returns a scale of 1.0 while the inlined copy returned 268,435,455, the largest scale the type admits. The isolated check passed the whole time, because what was wrong was the wiring and not the unit. |
 | `column_lane_width` | `spec_for` only | Nothing needs a lane width while `sync_granularity` is `SYNC_BLOCK` everywhere. |
-| the device FeatureFreq calcer: `TWeightedBinFreqCalcerGpu` + `compute_simple_ctrs_device` (`gbdt/ctrs/ctr_calcers.mojo`), over `gpu_util/kernel/partitions.mojo` and `gpu_util/kernel/segmented_reduce.mojo` | `mojo_only/freq_ctr_device_check.mojo` only (`pixi run check-freq-ctr-device`, BIT-equal vs the host driver + independent tally, sabotage-verified) | The port half of PORTING.md 52 is closed; what remains is ONE LINE of wiring in a file this lane does not own: `train()`'s permutation-independent call swaps `compute_simple_ctrs(...)` for `compute_simple_ctrs_device(ctx, ...)` (`gbdt/train.mojo:455` at time of writing). Handoff note in the driver's docstring; delete this row in the commit that lands the line. |
+| the device FeatureFreq calcer: `TWeightedBinFreqCalcerGpu` + `compute_simple_ctrs_device` (`gbdt/ctrs/ctr_calcers.mojo`), over `gpu_util/kernel/partitions.mojo` and `gpu_util/kernel/segmented_reduce.mojo` | `mojo_only/freq_ctr_device_check.mojo` only (`pixi run check-freq-ctr-device`, BIT-equal vs the host driver + independent tally, sabotage-verified) | The port half of PORTING.md 52 is closed; what remains is ONE LINE of wiring in a file this lane does not own: `train()`'s permutation-independent call swaps `compute_simple_ctrs(...)` for `compute_simple_ctrs_device(ctx, ...)` (`gbdt/train.mojo:846` as of 2026-08-22; it was :455 when this row was written, which is why a line number in this file is a hint and not an address). Handoff note in the driver's docstring; delete this row in the commit that lands the line. |
 | the category-hash stack: `gbdt/digest/city.mojo` (`city_hash_64`), `gbdt/cat_feature/cat_feature.mojo` (`calc_cat_feature_hash`), `gbdt/models/hash.mojo` (`calc_hash`, `cat_hash_chain_element`) | `mojo_only/cityhash_check.mojo` only (`pixi run check-cityhash`, gated against their own `city.cpp` compiled by `tools/cityhash_oracle/`) | Training needs NO hash -- tree-CTR combination bins are dense-bin reindexing through `TCtrBinBuilder::AddCompressedBins` (`gpu_data/oblivious_tree_bin_builder.cpp:123-186`), and simple CTRs run on dense codes whose labels cannot change any count. The hash becomes load-bearing at exactly two seams, both named in RECON_CTRS.md step 6: tree-CTR tables in a model file (keyed by the `CalcHash` fold over sign-extended category hashes, `ctr_provider.h:94-122`) and raw strings arriving at `train()`/`predict()` without a prep script. Wire it when either lands; until then the check is its only reader. |
 | pinned host partitions (`partsCpu`) | the kernel writes them | `update_partitions_after_split_kernel` takes `host_offset` / `host_size` and writes them, so the device half is ported. **MEASURED 2026-08-19: on this stack the trick does NOT pay and the sentence that used to sit here was wrong.** A kernel handed an `enqueue_create_host_buffer` pointer writes NOTHING, silently, all zeros (64 of 64 wrong) -- another silent no-op in the family of `enqueue_copy(dst_buf=, src_ptr=device)`. The working route is `DeviceBuffer.map_to_host()`, which does see kernel output (0 of 64 wrong), but 54 of them cost 18-29 ms against 8-14 ms for 54 `enqueue_copy` + `synchronize`, so it is 2x SLOWER than the copy it was supposed to replace. CatBoost gets this for free because `PartitionsCpu` is `EPtrType::CudaHost` (`split_properties_helper.h:49`, allocated by `cudaHostAlloc` at `cuda_base.cpp:6`) and `TSplitPointsKernel` dereferences it on the host as a plain pointer (`split_points.cpp:56-62`, `split_points.cu:667`). **The gap is REAL on the pin and is CLOSING upstream.** `HostBuffer` does not conform to `DevicePassable`, which is why the kernel writes nothing, and no allocator on `DeviceContext` other than `enqueue_create_buffer`, `create_buffer_sync` and `enqueue_create_host_buffer` exists to try. But MAX **nightly** adds `DeviceBuffer.unsafe_host_ptr()`, which "on devices with unified memory (Apple silicon) returns a CPU-addressable pointer to the buffer, so the host can read a kernel's output after `DeviceContext.synchronize()` without an `enqueue_copy` round trip", and says it "suits small control records rather than bulk readback" -- a partition array being exactly that. It is NOT in the `26.5` reference and NOT in the shipped release notes, so `mojo 1.0.0` / `max 26.5.0` cannot call it. When the pin moves, `hp_off` / `hp_size` become the read side and the per-level `p_sz` copy goes away. Until then, keep the copies, cut their COUNT. Full search and ordering rules in the DEVIATION BLOCK in `gbdt/gpu_util/gpu_data/partitions.mojo`. |
 
-**Consequence to state plainly, because it is the honest answer to "does the
-matrix drive the fixed-point path": IT DOES NOT, YET.** Under `FAST` the
-design says NVIDIA and AMD keep float atomics and only `IDENTICAL` pins them
-to the integer flush, while Apple is forced regardless. None of that is in
-effect, because the row has no reader.
+**CORRECTED 2026-08-22. The paragraph that stood here said "does the matrix
+drive the fixed-point path: IT DOES NOT, YET ... because the row has no
+reader." That was false, and it was contradicted by the WIRED table three
+rows above it in this same file.** `deterministic_flush_for` has EIGHTEEN
+references across six `gbdt/` files -- `hist_binary`, `hist_half_byte`,
+`hist_one_byte`, `hist_2_one_byte_base`, `point_hist_half_byte_template` and
+`doc_parallel_boosting`. Under `FAST` the design keeps float atomics on
+NVIDIA and AMD and only `IDENTICAL` pins them to the integer flush, while
+Apple is forced regardless -- and that IS in effect, at comptime, in every
+histogram kernel.
 
 ## The rule
 
@@ -72,11 +77,28 @@ detail:
 |---|---|---|---|
 | `gbdt/gpu_util/kernel/segmented_scan.mojo` | `launch_segmented_scan_vector` | `cuda_util/segmented_scan.h:8` -> `segmented_scan.cu:22` | `THistoryBasedCtrCalcer::VisitFloatFeatureMeanCtrs` (`ctr_calcers.h:182`), the ONLY call site of it in all of `catboost/cuda`. That method computes `FloatTargetMeanValue` CTRs, which appear in no default description and have no calcer here (`ctr_calcers.mojo` records `set_float_sample` as unported), so nothing this port can configure reaches it. |
 
-Its shape is exercised only by `pixi run check-segscan`, on both the
-inclusive and the exclusive arm, and the flag-mask argument a real caller
-would pass has still never been supplied by anything but a check. The
-scatter form beside it is now driven by real callers at real sizes, which
-is the difference.
+**CORRECTED 2026-08-22: THE ROW ABOVE IS FALSE AND IS KEPT ONLY TO RECORD
+THAT IT WAS.** `launch_segmented_scan_vector` HAS a production caller and
+always did on this side -- `gbdt/methods/leaves_estimation/
+leaves_estimation_helper.mojo:36` imports it and `:210` calls it, inside
+`compute_weighted_quantile`, the port of their
+`ComputeWeightedQuantile` (`leaves_estimation_helper.h:64-146`). It scans
+the sorted per-bin weights into `weights_prefix_sum`, which
+`compute_weighted_quantile_kernel` then binary-searches for the alpha
+quantile.
+
+It is reachable from a real entry point, and not marginally:
+`compute_weighted_quantile` <- `compute_exact_approx` <-
+`pointwise_oracle` <- `doc_parallel_boosting` under
+`leaf_estimation_method == LEAF_ESTIMATION_EXACT`, which is what CATBOOST'S
+OWN DEFAULTS select for MAE, MAPE and Quantile. So it does not merely have a
+caller; it runs at their defaults for three losses.
+
+What was true is the narrow part: OUR caller is not THEIRS.
+`VisitFloatFeatureMeanCtrs` is still unported, so the `FloatTargetMeanValue`
+path never reaches it, and the flag-mask argument that caller would supply
+has still only ever come from a check. That is a statement about one
+argument, not about the entry point.
 
 Neither primitive has a timing number and neither should be quoted with one.
 The radix sort's pass count is `bits` where CUB's is about `bits/5`, and
@@ -237,14 +259,25 @@ total and nothing about placement. Plant scattered bins and compare against a
 host tally per cell.
 
 
-## The control plane: NOT PORTED AT ALL
+## The control plane: PORTED, ONE FILE UNREACHED
 
-`PORTED_MAP.tsv` has entries from `gpu_data/`, `cuda_util/`, `methods/` and
-`options/`. It has **zero entries from `catboost/cuda/cuda_lib/`**, which is
-their entire control plane: 1694 lines across `cuda_manager`,
-`gpu_single_worker`, `single_device`, `task`, `stream_section_tasks_launcher`
-and the task queues.
+**CORRECTED 2026-08-22. This section was headed "NOT PORTED AT ALL" and
+claimed `PORTED_MAP.tsv` has "zero entries from `catboost/cuda/cuda_lib/`".
+Both were false.** `PORTED_MAP.tsv` has EIGHT `cuda_lib` rows, and
+`gbdt/gpu_lib/` is 2,774 lines: `gpu_manager`, `gpu_single_worker`, `task`,
+`tasks_queue/single_host_task_queue`, `gpu_base`, `gpu_profiler`, `slice`,
+`device_id`, `fwd` and `mapping`. All but `mapping.mojo` are REACHED from a
+real entry point, through `TCudaManager` in `greedy_search_helper.mojo`.
 
+What is genuinely not connected here is narrower and worth keeping:
+
+- `gbdt/gpu_lib/mapping.mojo` (505 lines) -- multi-device mappings. Nothing
+  needs a mapping at one device, which is the only case this port targets.
+- FIVE of the ten `ECommandType` payloads in `gbdt/gpu_lib/task.mojo` are
+  never constructed: `stream_kernel_command`, `allocate_memory_command`,
+  `free_memory_command`, `reset_command`, `free_stream_command`.
+
+The performance sentence below stands and is why this section exists at all.
 We ported the `.cu` files and HAND-WROTE the driver. The driver is the part
 that is slow. Measured Aug 19: ~34 of our 50 ms/tree is fixed and
 row-independent, and it lives here.
@@ -736,15 +769,28 @@ the next step and is not this session's.
 
 ## 2026-08-21: what the loss-breadth round left unreached
 
-**`gbdt/estimator.mojo` -> the CPython extension.** `gbdt_fit` and
-`gbdt_predict` are written, wired into `bindings/_mojolearn.mojo`, and
-proven end to end from a `mojo build` executable. They are NOT reachable
-from Python: `mojo build --emit shared-lib` embeds no compiled Metal code
-(0 AIR blobs against an executable's 81) and the runtime JIT fails on the
-shared-memory GBDT kernels. PORTING.md 70 has the measurement and the five
-hypotheses that died on it. `python/mojolearn/ensemble.py` is written and
-correct; `mojolearn.GradientBoosting` is listed as a named absence with
-that reason until the loader is fixed.
+**`gbdt/estimator.mojo` -> the CPython extension. RESOLVED 2026-08-22, and
+the paragraph that stood here was false in both of its claims.** It said
+`mojo build --emit shared-lib` "embeds no compiled Metal code" and that
+`mojolearn.GradientBoosting` "is listed as a named absence". Neither was
+true: `GradientBoosting` was imported and in `__all__` the whole time, and
+the shipped `.so` carried 85 gbdt AIR blobs and ran KMeans GPU kernels
+fine. What a user actually hit was a stale artifact -- `TypeError: takes 6
+positional arguments but 8 were given` -- because the build could no longer
+be replaced.
+
+The cause was NOT the basename lottery running out of tickets, which is what
+`2cb82ac` recorded. Measured across the history, the gbdt blob count DECLINES
+CONTINUOUSLY as the module grows: 85 (shipped) -> 73 (`2cb82ac~1`) -> 58
+(`9ab10bc`) -> 56 (HEAD). No stem fixes that and neither does deleting one
+kernel family.
+
+GBDT now has its own extension, `bindings/_mojolearn_gbdt.mojo` +
+`build_gbdt.sh`, the same split `_mojolearn_estimators` already used: **141
+gbdt blobs, 41 of them greedy_subsets, against 85 and 37 in the last artifact
+that ever worked.** RMSE, Logloss, MAE and MultiClass all fit and predict
+from Python; `MultiClassOneVsAll` refuses by name. PORTING.md 70 keeps the
+five hypotheses that died on the original measurement.
 
 **Per-row weights through `train()`** -- WIRED 2026-08-21. `train` takes
 `sample_weight` and multiplies it with `class_weights`, which is their own
