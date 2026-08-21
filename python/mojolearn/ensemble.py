@@ -39,14 +39,20 @@ MULTICLASS IS MULTI-OUTPUT AND ITS LAST CLASS IS NOT STORED. A softmax over
 changes nothing -- so CatBoost pins the last class's approx at zero and
 carries `k - 1`. Therefore:
 
-    predict(X)         (n_samples, n_classes - 1)   raw free approxes
-    predict_proba(X)   (n_samples, n_classes)       softmax over ALL of them
-    predict_classes(X) (n_samples,)                 dense class codes
+    MultiClass          predict          (n, n_classes - 1)  free approxes
+                        predict_proba    (n, n_classes)      softmax
+                        predict_classes  (n,)                class codes
 
-Dropping the last column of `predict_proba` and renormalising the rest gives
-a different and wrong answer: the pinned class is a real class whose approx
-happens to be zero. Labels are dense codes `0..k-1` and the class count is
-derived from them, as their `TClassificationTargetHelper` derives it.
+`MultiClassOneVsAll` is implemented and gated in the Mojo layer but is NOT
+reachable from Python: its kernels do not fit in the CPython extension under
+any basename `bindings/build.sh` has measured (PORTING.md 70). Asking for it
+raises with that reason.
+
+Dropping MultiClass's last probability column and renormalising the rest
+gives a different and wrong answer: the pinned class is a real class whose
+approx happens to be zero. Labels are dense codes `0..k-1` for both, and the
+class count is derived from them, as their `TClassificationTargetHelper`
+derives it.
 """
 
 import numpy as np
@@ -80,6 +86,30 @@ LOSSES = (
 #: that disagreed with the data would be a wrong model rather than an
 #: error, so it is not a parameter.
 MULTI_OUTPUT_LOSSES = ("MultiClass",)
+
+#: `MultiClassOneVsAll` IS IMPLEMENTED AND GATED IN THE MOJO LAYER and is
+#: NOT REACHABLE FROM PYTHON. Its two kernels push the CPython extension
+#: past what any measured basename can carry -- see PORTING.md 70, where
+#: the AOT kernel count is a function of the entry file's NAME. Every stem
+#: `bindings/build.sh` tries now drops a subsystem, so the build refuses to
+#: install rather than shipping an artifact that dies at the first launch.
+#:
+#: Named here rather than accepted and then failing inside Metal. Use it
+#: from Mojo (`gbdt/train.mojo`, `loss="MultiClassOneVsAll"`), where
+#: `check-multilogit` and `check-multiclass-train` gate it.
+_UNREACHABLE_LOSSES = {
+    "MultiClassOneVsAll": (
+        "its kernels do not fit in the CPython extension under any "
+        "basename bindings/build.sh has measured; see PORTING.md 70. "
+        "It works and is gated from Mojo."
+    ),
+}
+
+#: `gbdt_predict_multi`'s transform, mirroring their `EPredictionType`
+#: (`libs/model/eval_processing.h:186-226`).
+_PREDICT_RAW = 0
+_PREDICT_SOFTMAX = 1   # their `Probability`,      MultiClass
+_PREDICT_SIGMOID = 2   # their `MultiProbability`, MultiClassOneVsAll
 
 #: Losses whose parameter CatBoost makes MANDATORY. Passing the loss without
 #: it raises here rather than in Mojo, so the message names the Python
@@ -201,6 +231,11 @@ class GradientBoosting:
         cat_features=None,
         one_hot_features=None,
     ):
+        if loss in _UNREACHABLE_LOSSES:
+            raise NotImplementedError(
+                f"mojolearn: {loss} is not reachable from Python -- "
+                f"{_UNREACHABLE_LOSSES[loss]}"
+            )
         if loss not in LOSSES:
             raise ValueError(
                 f"mojolearn: loss must be one of {LOSSES}, got {loss!r}"
@@ -380,9 +415,13 @@ class GradientBoosting:
         )
         self.n_features_in_ = n_features
         self.approx_dim_ = _mojolearn.gbdt_model_dim(self.model_)
+        # MULTICLASS DROPS A CLASS AND ONEVSALL DOES NOT. `dim` is
+        # `n_classes - 1` for the first (the last class's approx is pinned
+        # at zero and not stored) and `n_classes` for the second, whose
+        # classes are independent (`multiclass_targets.h:129-134`).
         self.n_classes_ = (
             self.approx_dim_ + 1
-            if self.loss in MULTI_OUTPUT_LOSSES
+            if self.loss == "MultiClass"
             else None
         )
         return self
@@ -414,7 +453,8 @@ class GradientBoosting:
         if self.approx_dim_ > 1:
             out = np.empty(n_rows * self.approx_dim_, dtype=np.float32)
             width = _mojolearn.gbdt_predict_multi(
-                self.model_, _addr_ro(Xcol), _addr(out), [n_rows, 0]
+                self.model_, _addr_ro(Xcol), _addr(out),
+                [n_rows, _PREDICT_RAW],
             )
             if width != self.approx_dim_:
                 raise RuntimeError(
@@ -442,6 +482,15 @@ class GradientBoosting:
         like a probability. CatBoost's `prediction_type='Probability'` is
         the same transform over the same raw scores.
 
+        THE TWO MULTI-OUTPUT LOSSES GET DIFFERENT TRANSFORMS, and it is
+        not a style choice. `MultiClass` is a softmax -- one shared
+        denominator, columns summing to 1, their `Probability`
+        (`eval_processing.h:214-221`). `MultiClassOneVsAll` is an
+        ELEMENTWISE sigmoid -- their `MultiProbability` (`:222-226`) --
+        and **its columns do NOT sum to 1**, because it fitted
+        `n_classes` independent "is this row class k" problems and
+        renormalising would assert an exclusivity it never learned.
+
         THE MULTICLASS SOFTMAX IS TAKEN OVER ALL `n_classes`, INCLUDING THE
         PINNED ONE. The model stores `n_classes - 1` free approxes and the
         last class's is zero by construction; the device applies the
@@ -451,9 +500,10 @@ class GradientBoosting:
         """
         if self.loss in MULTI_OUTPUT_LOSSES:
             Xcol, n_rows = self._check_fitted(X)
+            mode = _PREDICT_SOFTMAX
             out = np.empty(n_rows * self.n_classes_, dtype=np.float32)
             width = _mojolearn.gbdt_predict_multi(
-                self.model_, _addr_ro(Xcol), _addr(out), [n_rows, 1]
+                self.model_, _addr_ro(Xcol), _addr(out), [n_rows, mode]
             )
             if width != self.n_classes_:
                 raise RuntimeError(

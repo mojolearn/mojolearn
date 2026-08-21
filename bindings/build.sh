@@ -199,6 +199,34 @@ X = np.random.default_rng(0).random((512, 3), dtype=np.float32)
 m = ens.GradientBoosting(loss="RMSE", n_estimators=2, max_depth=3,
                          border_count=16).fit(X, X[:, 0])
 m.predict(X)
+
+# ONE LOSS PER KERNEL FAMILY, because a family the smoke test never fits
+# is a family whose kernels can be missing from the artifact while this
+# gate says PASS. That is not hypothetical: for one build this test fit
+# RMSE only, `MultiClassOneVsAll`'s kernels were absent, every floor and
+# the smoke test passed, and the failure surfaced in a user's fit.
+#
+#   RMSE                pointwise_target_kernel
+#   Logloss             cross_entropy_kernel
+#   MAE                 the EXACT estimator -- segmented sort, scan,
+#                       need-weights, binary search
+#   MultiClass          multilogit_val_and_first_der / second_der_row
+#   MultiClassOneVsAll  one_vs_all_val_and_first_der / second_der
+#
+# Add a row here whenever a kernel family is added. Two trees each; the
+# point is to LAUNCH them, not to fit anything.
+yb = (X[:, 0] > 0.5).astype(np.float32)
+ens.GradientBoosting(loss="Logloss", n_estimators=2, max_depth=3,
+                     border_count=16).fit(X, yb).predict(X)
+ens.GradientBoosting(loss="MAE", n_estimators=2, max_depth=3,
+                     border_count=16).fit(X, X[:, 0]).predict(X)
+yc = (X[:, 0] * 3).astype(np.int32).clip(0, 2).astype(np.float32)
+for mc in ("MultiClass", "MultiClassOneVsAll"):
+    mm = ens.GradientBoosting(loss=mc, n_estimators=2, max_depth=3,
+                              border_count=16).fit(X, yc)
+    mm.predict(X)
+    mm.predict_proba(X)
+
 clu.KMeans(n_clusters=4, random_state=0).fit(X)
 nbr.NearestNeighbors(n_neighbors=3).fit(X).kneighbors(X[:2])
 shutil.rmtree(tmp, ignore_errors=True)

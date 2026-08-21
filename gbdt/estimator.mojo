@@ -62,10 +62,19 @@ from gbdt.models.model_text import load_model_text
 from gbdt.train import (
     model_input_features,
     multiclass_probabilities,
+    one_vs_all_probabilities,
     predict_floats,
     predict_multi_floats,
     train,
 )
+
+#: `gbdt_predict_multi`'s transform, mirroring their `EPredictionType`
+#: (`libs/model/eval_processing.h:186-226`). `RAW` is their `RawFormulaVal`,
+#: `SOFTMAX` their `Probability` for a multi-output model, `SIGMOID` their
+#: `MultiProbability`.
+comptime PREDICT_RAW = 0
+comptime PREDICT_SOFTMAX = 1
+comptime PREDICT_SIGMOID = 2
 
 
 @fieldwise_init
@@ -231,27 +240,40 @@ def gbdt_predict_multi(
     x: MutPointer[Float32, MutUntrackedOrigin],
     n_rows: Int,
     out_preds: MutPointer[Float32, MutUntrackedOrigin],
-    as_probabilities: Bool,
+    mode: Int,
 ) raises -> Int:
     """Apply a MULTI-DIMENSIONAL model. Returns the width written.
 
     `out_preds` is ROW-MAJOR, `[row * width + k]`.
 
-    `as_probabilities = False` writes the raw approxes, `dim` of them per
-    row -- the same raw-score contract every other predict here has, and
-    their `predict` without a `prediction_type`.
+    `mode` picks the transform, mirroring their `EPredictionType`:
 
-    `as_probabilities = True` writes `dim + 1` per row: the softmax their
-    `prediction_type='Probability'` applies, over ALL `numClasses`
-    including the pinned one whose approx is zero. That last column is not
-    padding -- it is a real class, and a caller that dropped it would
-    renormalise over the wrong set.
+      PREDICT_RAW      `dim` columns, the raw approxes -- their
+                       `RawFormulaVal`, the contract every other predict
+                       here has.
+      PREDICT_SOFTMAX  `dim + 1` columns -- their `Probability` for a
+                       multi-output model (`eval_processing.h:214-221`),
+                       over ALL `numClasses` INCLUDING the pinned one
+                       whose approx is zero. **MultiClass only.** That
+                       last column is not padding; it is a real class, and
+                       dropping it would renormalise over the wrong set.
+      PREDICT_SIGMOID  `dim` columns -- their `MultiProbability`
+                       (`:222-226`), an ELEMENTWISE sigmoid. **OneVsAll
+                       only**, whose classes are independent and whose
+                       columns therefore do NOT sum to one.
 
-    A ONE-DIMENSIONAL MODEL IS ACCEPTED HERE and writes one column, so a
-    caller that always routes through this entry point does not need to
-    branch. `as_probabilities` on a one-dimensional model raises, because
-    a two-class softmax over a single free approx is the SIGMOID and
-    belongs to Logloss, whose own `predict_proba` already does it.
+    THE MODEL TEXT DOES NOT RECORD THE LOSS, so this cannot choose between
+    the last two itself -- the caller knows which loss it fitted and says
+    so. That is deliberate rather than an omission: a model file that
+    carried the loss would let a caller's `predict_proba` disagree with
+    the loss they trained under, and the wrapper already has to remember
+    it for other reasons.
+
+    A ONE-DIMENSIONAL MODEL IS ACCEPTED at `PREDICT_RAW` and writes one
+    column, so a caller that always routes through this entry point does
+    not need to branch. The two probability modes raise on one dimension,
+    because a two-class link is the plain sigmoid and belongs to Logloss,
+    whose own `predict_proba` already does it.
     """
     if n_rows <= 0:
         raise Error("gbdt_predict_multi: n_rows must be positive")
@@ -264,22 +286,31 @@ def gbdt_predict_multi(
         xs.append(x.unsafe_load(i))
 
     var ap = predict_multi_floats(ctx, tm, xs, n_rows)
-    if not as_probabilities:
+    if mode == PREDICT_RAW:
         for i in range(n_rows * dim):
             out_preds.unsafe_store(i, ap[i])
         return dim
 
     if dim < 2:
         raise Error(
-            "gbdt_predict_multi: as_probabilities needs a"
+            "gbdt_predict_multi: a probability mode needs a"
             " multi-dimensional model; this one has dim " + String(dim)
             + ". A two-class problem's link is the sigmoid, which"
             " Logloss's own predict_proba applies."
         )
-    var pr = multiclass_probabilities(ap, n_rows, dim + 1)
-    for i in range(n_rows * (dim + 1)):
-        out_preds.unsafe_store(i, pr[i])
-    return dim + 1
+    if mode == PREDICT_SOFTMAX:
+        var pr = multiclass_probabilities(ap, n_rows, dim + 1)
+        for i in range(n_rows * (dim + 1)):
+            out_preds.unsafe_store(i, pr[i])
+        return dim + 1
+    if mode == PREDICT_SIGMOID:
+        var ps = one_vs_all_probabilities(ap, n_rows, dim)
+        for i in range(n_rows * dim):
+            out_preds.unsafe_store(i, ps[i])
+        return dim
+    raise Error(
+        "gbdt_predict_multi: unknown mode " + String(mode)
+    )
 
 
 def gbdt_predict(

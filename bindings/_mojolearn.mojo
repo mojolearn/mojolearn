@@ -360,13 +360,14 @@ def gbdt_predict_multi_binding(
 ) raises -> PythonObject:
     """Apply a multi-dimensional model. Returns the width written.
 
-    `params` is `[n_rows, as_probabilities]`.
+    `params` is `[n_rows, mode]`, where mode is 0 RAW, 1 SOFTMAX, 2
+    SIGMOID -- their `RawFormulaVal`, `Probability` and `MultiProbability`
+    (`libs/model/eval_processing.h:186-226`).
 
-    With `as_probabilities` 0 the output is `n_rows * dim` RAW APPROXES,
-    row-major. With 1 it is `n_rows * (dim + 1)` probabilities -- the
-    softmax over ALL numClasses, the pinned class included, which is what
-    their `prediction_type='Probability'` returns. The caller must have
-    sized `out_addr` for the wider case; the return says which it got.
+    RAW and SIGMOID write `n_rows * dim`; SOFTMAX writes
+    `n_rows * (dim + 1)`, because MultiClass's pinned class is a real
+    class whose approx is zero. The caller must size `out_addr` for the
+    widest case it may ask for; the return says which it got.
     """
     if len(params) != 2:
         raise Error(
@@ -377,12 +378,12 @@ def gbdt_predict_multi_binding(
     var xp = _f32_ptr(Int(py=x_addr))
     var op = _f32_ptr(Int(py=out_addr))
     var n_rows = Int(py=params[0])
-    var as_prob = Int(py=params[1]) != 0
+    var mode = Int(py=params[1])
 
     var width: Int
     with GILReleased(Python()):
         var ctx = DeviceContext()
-        width = gbdt_predict_multi(ctx, text, xp, n_rows, op, as_prob)
+        width = gbdt_predict_multi(ctx, text, xp, n_rows, op, mode)
     return PythonObject(width)
 
 

@@ -930,6 +930,45 @@ def predict_multi_floats(
     return out^
 
 
+def one_vs_all_probabilities(
+    approxes: List[Float32], n_rows: Int, num_classes: Int
+) raises -> List[Float32]:
+    """Their `MultiProbability` transform (`eval_processing.h:222-226`):
+
+        CalcSigmoid(blockView, blockView)   -- ELEMENTWISE, no denominator
+
+    `MultiClassOneVsAll` trains `numClasses` INDEPENDENT logistic
+    regressions, so each plane's probability is its own sigmoid and
+    **the columns do NOT sum to one**. That is not a defect to normalise
+    away: `p_k` is "is this row class k", asked separately k times, and
+    renormalising would assert an exclusivity the loss never fit.
+
+    WHY NOT THEIR `Probability`, which for a multi-dimensional model is
+    the SOFTMAX (`:214-221`): that branch is keyed on `ApproxDimension`
+    rather than on the loss, so it would apply a softmax to independent
+    sigmoid heads. `MultiProbability` is the transform that matches what
+    OneVsAll actually fit, and it is theirs. A caller who wants the
+    softmax can ask for it; `multiclass_probabilities` is right there.
+
+    Input is `n_rows * num_classes`, and so is the output -- unlike
+    MultiClass, nothing is reconstructed, because nothing was dropped.
+    """
+    if len(approxes) != n_rows * num_classes:
+        raise Error(
+            "one_vs_all_probabilities: got " + String(len(approxes))
+            + " approxes for " + String(n_rows) + " rows x "
+            + String(num_classes) + " classes"
+        )
+    var out = List[Float32]()
+    for i in range(n_rows * num_classes):
+        out.append(
+            Float32(
+                1.0 / (1.0 + exp(-Float64(approxes[i])))
+            )
+        )
+    return out^
+
+
 def multiclass_probabilities(
     approxes: List[Float32], n_rows: Int, num_classes: Int
 ) raises -> List[Float32]:

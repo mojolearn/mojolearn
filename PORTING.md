@@ -2017,6 +2017,48 @@ replaced. The replacement was then sabotaged both ways: forcing the poisoned
 stems makes the loop reject them and land on a good one, and the smoke test
 in isolation gives PASS / FAIL / FAIL across the three reproducer artifacts.
 
+### The gate had to be widened again when the kernel set grew
+
+**2026-08-21, second occurrence.** Adding `MultiClassOneVsAll`'s two kernels
+produced an artifact that passed every floor AND the smoke test, and then
+failed in a user's fit with `Failed to create Metal function:
+gbdt_targets_kernel_multilogi...`. The smoke test fit **RMSE only**, so it
+never launched a multiclass kernel, and a family it does not fit is a family
+whose kernels can be absent while the gate says PASS.
+
+That is the SAME failure the blob floor had -- a gate that cannot fail for
+the thing it guards -- and it recurred because the artifact's contents
+depend on a basename nobody can predict, so every added kernel family is a
+new way for the build to silently lose code.
+
+The smoke test now fits ONE LOSS PER KERNEL FAMILY -- RMSE, Logloss, MAE
+(the Exact estimator), MultiClass and MultiClassOneVsAll -- and
+`build.sh` carries a table saying to add a row whenever a family is added.
+Two trees each; the point is to launch them, not to fit anything.
+
+### THE LOTTERY HAS NO WINNER FOR THE CURRENT KERNEL SET
+
+**2026-08-21, and this is the load-bearing consequence.** After
+`MultiClassOneVsAll` added two kernels, `bindings/build.sh` tried all five
+of its measured stems and **every one failed** -- each either dropped a
+subsystem's Metal functions or died at the first launch. It refused to
+install, so the artifact on disk stayed the previous good one.
+
+That is the mitigation working, and it is also the ceiling: the retry loop
+buys nothing once no stem carries the whole set, and each attempt is a full
+package compile of about two minutes. **Adding stems is not a fix, it is
+another spin.**
+
+So `MultiClassOneVsAll` is IMPLEMENTED AND GATED IN MOJO and is NOT
+REACHABLE FROM PYTHON. `python/mojolearn/ensemble.py` refuses it by name
+with this reason rather than accepting it and dying inside Metal.
+
+**What would actually fix it** is upstream: the AOT kernel count must stop
+depending on the entry file's basename. Until then the extension has a hard
+capacity that nobody can predict, and every kernel family added is a new
+chance to lose one silently -- which is why the smoke test now fits one
+loss per family and why it must keep being extended.
+
 ### Still broken the same way, and not ours to fix
 
 `bindings/build_estimators.sh:11` passes
