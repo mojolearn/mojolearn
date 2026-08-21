@@ -21,6 +21,7 @@ from gbdt.gpu_data.kernel.binarize import (
     write_compressed_index_kernel,
 )
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
+    TTreeWorkspace,
     run_one_level,
     run_tree,
     run_tree_layout,
@@ -378,11 +379,13 @@ def check_mixed_tree(max_depth: Int) raises:
     # (`split_properties_helper.cpp:802`), plus one at the end. A third drain
     # per level fails this check, which is the point.
     var _lo = List[Int]()
+    var _ws0 = List[TTreeWorkspace]()
     var sizes = run_tree_layout(
         ctx, n_rows, folds, max_depth, cindex, stats, row_index,
         scratch_cursor,
         Float32(tw), Float32(tg),
         _sp, _lv, _lo,
+        _ws0,
         sync_budget=2 * max_depth + 1,
     )
 

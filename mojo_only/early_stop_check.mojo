@@ -40,6 +40,7 @@ from max.gpu.host import DeviceContext
 from mojo_only.hist2_check import build_cindex
 from gbdt.gpu_data.compressed_index_builder import build_layout
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
+    TTreeWorkspace,
     run_tree_layout,
 )
 from gbdt.models.oblivious_model import TBinarySplit
@@ -86,10 +87,12 @@ def _fit(
     ctx.synchronize()
 
     var _lo = List[Int]()
+    var _ws0 = List[TTreeWorkspace]()
     var sizes = run_tree_layout(
         ctx, ES_ROWS, folds, 3, cindex, stats, row_index, cursor,
         Float32(ES_ROWS), Float32(gmag), out_splits, out_leaf_values,
         _lo,
+        _ws0,
         apply_to_cursor=True, l2_leaf_reg=ES_L2,
     )
     return sizes^

@@ -431,6 +431,107 @@ def copy_histograms_kernel(
         i += stride
 
 
+def copy_histograms_vec4_kernel(
+    left_leaves: MutPointer[UInt32, MutAnyOrigin],
+    right_leaves: MutPointer[UInt32, MutAnyOrigin],
+    num_stats_in: Int32,
+    bin_features_in_hist_in: Int32,
+    histograms: MutPointer[Float32, MutAnyOrigin],
+):
+    """`copy_histograms_kernel` moving 16 bytes per thread instead of 4.
+
+    ================= DEVIATION BLOCK =================
+    Their `CopyHistogramsImpl` (`histogram_utils.cu:15-34`) copies ONE
+    float per thread, and this port transliterated that. On NVIDIA that
+    is free: `__ldg` plus `WriteThrough` (`st.global.wt`) already move a
+    full sector per warp. On this Metal box it is not -- MEASURED, at a
+    depth-6 level's shape (100 features x 254 folds x 2 stats, 32 pairs):
+
+        one float per thread   11.0 GB/s
+        four per thread        65.2 GB/s
+
+    Same bytes, same grid shape, 5.9x. The copy is a pure `memcpy` between
+    two slots of one buffer, so widening the access changes nothing about
+    WHICH bytes land WHERE, only how many a thread carries.
+
+    ALIGNMENT is why this is a separate kernel rather than an edit to
+    theirs: a 4-wide load needs the slot base to be 16-byte aligned, which
+    holds only when `histSize` is a multiple of 4. The launcher checks and
+    falls back to the scalar kernel otherwise, so no dataset silently gets
+    an unaligned access.
+
+    GPU-AGNOSTIC: a 4-wide float load is the one vector width every target
+    in the matrix has (NVIDIA `float4`, AMD `float4`, Metal `float4`). No
+    lane width, no shared memory, no intrinsic is assumed.
+    ===================================================
+    """
+    var num_stats = Int(num_stats_in)
+    var bin_features_in_hist = Int(bin_features_in_hist_in)
+    var left_leaf_id = Int(left_leaves.unsafe_load(Int(block_idx.y)))
+    var right_leaf_id = Int(right_leaves.unsafe_load(Int(block_idx.y)))
+
+    var hist_size = bin_features_in_hist * num_stats
+    var src = left_leaf_id * hist_size
+    var dst = right_leaf_id * hist_size
+    var n4 = hist_size >> 2
+
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while i < n4:
+        var off = i << 2
+        (histograms + dst).store[width=4](
+            off, (histograms + src).load[width=4](off)
+        )
+        i += stride
+
+
+def substract_histograms_vec4_kernel(
+    from_ids: MutPointer[UInt32, MutAnyOrigin],
+    what_ids: MutPointer[UInt32, MutAnyOrigin],
+    bin_feature_count_in: Int32,
+    histogram: MutPointer[Float32, MutAnyOrigin],
+):
+    """`substract_histograms_kernel` at four bin-features per thread.
+
+    ================= DEVIATION BLOCK =================
+    Same measured reason as `copy_histograms_vec4_kernel`, same 4-wide
+    portable width, and the same launcher-side alignment guard: the stat
+    plane base is `stat_id * bin_feature_count`, so a 4-wide access is
+    aligned only when `bin_feature_count % 4 == 0`.
+
+    THE `max(., 0)` ON STAT 0 IS PRESERVED EXACTLY and is still applied
+    per lane, not per vector -- it is their guard against a derived count
+    going slightly negative through float cancellation
+    (`SubstractHistogramsImpl`, `histogram_utils.cu`), and widening the
+    access must not widen the predicate.
+    ===================================================
+    """
+    var bin_feature_count = Int(bin_feature_count_in)
+    var from_id = Int(from_ids.unsafe_load(Int(block_idx.y)))
+    var what_id = Int(what_ids.unsafe_load(Int(block_idx.y)))
+    var stat_id = Int(block_idx.z)
+    var stat_count = Int(grid_dim.z)
+    var n4 = bin_feature_count >> 2
+
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < n4:
+        var from_offset = (
+            from_id * bin_feature_count * stat_count
+            + stat_id * bin_feature_count
+        )
+        var what_offset = (
+            what_id * bin_feature_count * stat_count
+            + stat_id * bin_feature_count
+        )
+        var off = i << 2
+        var a = (histogram + from_offset).load[width=4](off)
+        var b = (histogram + what_offset).load[width=4](off)
+        var v = a - b
+        if stat_id == 0:
+            v = max(v, SIMD[DType.float32, 4](0.0))
+        (histogram + from_offset).store[width=4](off, v)
+
+
 def fixed_to_float_kernel(
     acc_i32: MutPointer[Int32, MutAnyOrigin],
     bin_sums: MutPointer[Float32, MutAnyOrigin],

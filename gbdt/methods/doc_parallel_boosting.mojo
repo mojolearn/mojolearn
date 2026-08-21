@@ -90,6 +90,7 @@ from gbdt.methods.leaves_estimation.step_estimator import (
 )
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
     run_tree_layout,
+    TTreeWorkspace,
 )
 from gbdt.models.oblivious_model import (
     BIN_SPLIT_TAKE_BIN,
@@ -268,6 +269,12 @@ def fit(
     var losses = List[Float64]()
     # their `TVector<TResultModel>* result`, the ensemble being built
 
+    # THE POOL OF ONE, see `TTreeWorkspace`: the tree planes are the FIT's,
+
+    # not the tree's, so growing tree 2 allocates nothing.
+
+    var ws = List[TTreeWorkspace]()
+
     for _ in range(n_estimators):
         # `TTargetAtPointTrait::Create(learnTarget, cursor)` (`:353`).
         # The gradients are taken AT THE CURRENT PREDICTIONS, which is the
@@ -435,7 +442,7 @@ def fit(
             ctx, n_rows, fold_counts, max_depth,
             cindex, stats, row_index, cursor,
             Float32(weight_magnitude), Float32(gradient_magnitude),
-            splits, leaf_values, leaf_offsets,
+            splits, leaf_values, leaf_offsets, ws,
             objective != OBJECTIVE_RMSE,
             use_subtraction, objective == OBJECTIVE_RMSE,
             learning_rate, l2_leaf_reg,

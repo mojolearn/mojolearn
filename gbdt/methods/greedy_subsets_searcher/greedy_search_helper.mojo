@@ -86,6 +86,8 @@ from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     fixed_to_float_kernel,
     scan_histograms_kernel,
     substract_histograms_kernel,
+    substract_histograms_vec4_kernel,
+    copy_histograms_vec4_kernel,
     write_reduces_from_fixed_kernel,
     write_reduces_histograms_kernel,
     zero_buffer_kernel,
@@ -2153,6 +2155,50 @@ def resolve_split(
     )
 
 
+struct TTreeWorkspace(Movable):
+    """The three large planes a tree grows in, owned by the FIT.
+
+    ================= DEVIATION BLOCK =================
+    CatBoost does not allocate per tree and neither should this. Their
+    `TCudaManager` hands every buffer out of a per-device memory pool
+    (`cuda_lib/memory_pool.h`), so `CreateInitialSubsets`
+    (`split_properties_helper.cpp:1040-1080`) reuses the same device
+    memory for tree 2 that tree 1 gave back. This port dropped the pool
+    layer (`gbdt/gpu_lib/NOT_PORTED.md`) and called
+    `enqueue_create_buffer` directly, which meant a fresh allocation of
+    every plane for EVERY tree.
+
+    MEASURED, 50k rows x 100 features x 254 borders, depth 6: the setup
+    before the first level cost **4.69 ms of a 12.3 ms tree**, and
+    allocating these three planes alone (2 x 13 MB plus the block
+    scratch) was **1.9 ms** of it. The memsets that follow are 0.5 ms and
+    are kept -- their `FillBuffer` in `CreateInitialSubsets` is real work,
+    not allocation.
+
+    This is a POOL OF ONE, which is all a single-device, single-stream
+    port needs: `fit` holds the list across trees, and a tree reuses the
+    planes when they are big enough and rebuilds them when they are not.
+    An empty list means "no pool", which is what every existing caller
+    passes and which restores the old allocate-per-call behaviour exactly.
+    ===================================================
+    """
+
+    var hist: DeviceBuffer[DType.float32]
+    var acc_i32: DeviceBuffer[DType.int32]
+    var block_hist: DeviceBuffer[DType.float32]
+    var hist_cells: Int
+    var block_cells: Int
+
+    def __init__(
+        out self, ctx: DeviceContext, hist_cells: Int, block_cells: Int
+    ) raises:
+        self.hist = ctx.enqueue_create_buffer[DType.float32](hist_cells)
+        self.acc_i32 = ctx.enqueue_create_buffer[DType.int32](hist_cells)
+        self.block_hist = ctx.enqueue_create_buffer[DType.float32](block_cells)
+        self.hist_cells = hist_cells
+        self.block_cells = block_cells
+
+
 def run_tree_layout[
     hist2_smem_mode: Int = HIST2_SMEM_MODE
 ](
@@ -2169,6 +2215,7 @@ def run_tree_layout[
     mut out_splits: List[TBinarySplit],
     mut out_leaf_values: List[Float32],
     mut out_leaf_offsets: List[Int],
+    mut ws: List[TTreeWorkspace],
     export_offsets: Bool = False,
     use_subtraction: Bool = True,
     apply_to_cursor: Bool = False,
@@ -2232,16 +2279,10 @@ def run_tree_layout[
     ctx.enqueue_copy(dst_buf=hp_sz, src_ptr=h_sz.unsafe_ptr())
 
     var hist_cells = max_leaves * stat_count * hist_cells_per_leaf
-    var hist = ctx.enqueue_create_buffer[DType.float32](hist_cells)
-    # their `FillBuffer(subsets.Histograms, 0.0f)` in `CreateInitialSubsets`
-    # (`split_properties_helper.cpp:1061`). `zero_histograms_kernel` clears
-    # only `plan.compute_ids`, by design, so every other slot holds whatever
-    # the allocation came with until the bridge writes it, and the bridge
-    # writes only the cells the kernels produced.
-    ctx.enqueue_memset(hist, Float32(0.0))
 
-    # Scratch for the per-block layout. Sized to the LARGEST block, since the
-    # blocks are written one at a time and scattered before the next runs.
+    # THE POOL OF ONE, see `TTreeWorkspace`. The block scratch is sized
+    # below in the original code; it is needed here, so its width is
+    # computed first and the old site keeps only the binding.
     var widest_block = 1
     for b in range(len(blocks)):
         var tf = 0
@@ -2249,10 +2290,28 @@ def run_tree_layout[
             tf += Int(blocks[b].folds[k])
         if tf > widest_block:
             widest_block = tf
-    var block_hist = ctx.enqueue_create_buffer[DType.float32](
-        max_leaves * stat_count * widest_block
-    )
-    var acc_i32 = ctx.enqueue_create_buffer[DType.int32](hist_cells)
+    var block_cells = max_leaves * stat_count * widest_block
+    if (
+        len(ws) == 0
+        or ws[0].hist_cells < hist_cells
+        or ws[0].block_cells < block_cells
+    ):
+        ws.clear()
+        ws.append(TTreeWorkspace(ctx, hist_cells, block_cells))
+    ref hist = ws[0].hist
+    # their `FillBuffer(subsets.Histograms, 0.0f)` in `CreateInitialSubsets`
+    # (`split_properties_helper.cpp:1061`). `zero_histograms_kernel` clears
+    # only `plan.compute_ids`, by design, so every other slot holds whatever
+    # the allocation came with until the bridge writes it, and the bridge
+    # writes only the cells the kernels produced.
+    ctx.enqueue_memset(hist, Float32(0.0))
+
+    # Scratch for the per-block layout, sized to the LARGEST block above.
+    ref block_hist = ws[0].block_hist
+    ref acc_i32 = ws[0].acc_i32
+    # `FillBuffer` semantics are UNCHANGED: a pooled plane carries the last
+    # tree's cells, so both planes are zeroed here exactly as an
+    # allocate-per-tree one was.
     ctx.enqueue_memset(acc_i32, Int32(0))
 
     # See the note in `run_tree`: one scale serves both accumulated planes,
@@ -2719,14 +2778,29 @@ def run_tree_layout[
                 h_sub_what.unsafe_ptr().unsafe_store(i, plan.subtract_what[i])
             ctx.enqueue_copy(dst_buf=sub_from, src_ptr=h_sub_from.unsafe_ptr())
             ctx.enqueue_copy(dst_buf=sub_what, src_ptr=h_sub_what.unsafe_ptr())
-            ctx.enqueue_function[substract_histograms_kernel](
-                sub_from.unsafe_ptr(), sub_what.unsafe_ptr(),
-                Int32(hist_cells_per_leaf), hist.unsafe_ptr(),
-                grid_dim=(
-                    (hist_cells_per_leaf + 255) // 256, n_pairs, stat_count
-                ),
-                block_dim=(256, 1, 1),
-            )
+            # WIDTH DISPATCH, see `substract_histograms_vec4_kernel`'s
+            # deviation block: 4 bin-features per thread where the stat
+            # plane base is 16-byte aligned, their 1-per-thread kernel
+            # otherwise. Same cells, same order, same `max(., 0)`.
+            if hist_cells_per_leaf % 4 == 0:
+                ctx.enqueue_function[substract_histograms_vec4_kernel](
+                    sub_from.unsafe_ptr(), sub_what.unsafe_ptr(),
+                    Int32(hist_cells_per_leaf), hist.unsafe_ptr(),
+                    grid_dim=(
+                        (hist_cells_per_leaf // 4 + 255) // 256,
+                        n_pairs, stat_count
+                    ),
+                    block_dim=(256, 1, 1),
+                )
+            else:
+                ctx.enqueue_function[substract_histograms_kernel](
+                    sub_from.unsafe_ptr(), sub_what.unsafe_ptr(),
+                    Int32(hist_cells_per_leaf), hist.unsafe_ptr(),
+                    grid_dim=(
+                        (hist_cells_per_leaf + 255) // 256, n_pairs, stat_count
+                    ),
+                    block_dim=(256, 1, 1),
+                )
             mgr.stream_kernel()
 
         # their `allUpdatedLeaves` loop (`:1359`)
@@ -2876,15 +2950,29 @@ def run_tree_layout[
         # histogram; this puts the same histogram in the right child's slot.
         # Both children are then `PreviousPath`, which is what lets the next
         # level pair them and derive one by subtraction whichever is smaller.
-        ctx.enqueue_function[copy_histograms_kernel](
-            dense_ids.unsafe_ptr(), ids_c.unsafe_ptr(),
-            Int32(stat_count), Int32(hist_cells_per_leaf),
-            hist.unsafe_ptr(),
-            grid_dim=(
-                (hist_cells_per_leaf * stat_count + 255) // 256, n_live, 1
-            ),
-            block_dim=(256, 1, 1),
-        )
+        # WIDTH DISPATCH, see `copy_histograms_vec4_kernel`'s deviation
+        # block. MEASURED 11.0 -> 65.2 GB/s at a depth-6 level's shape.
+        if (hist_cells_per_leaf * stat_count) % 4 == 0:
+            ctx.enqueue_function[copy_histograms_vec4_kernel](
+                dense_ids.unsafe_ptr(), ids_c.unsafe_ptr(),
+                Int32(stat_count), Int32(hist_cells_per_leaf),
+                hist.unsafe_ptr(),
+                grid_dim=(
+                    (hist_cells_per_leaf * stat_count // 4 + 255) // 256,
+                    n_live, 1
+                ),
+                block_dim=(256, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[copy_histograms_kernel](
+                dense_ids.unsafe_ptr(), ids_c.unsafe_ptr(),
+                Int32(stat_count), Int32(hist_cells_per_leaf),
+                hist.unsafe_ptr(),
+                grid_dim=(
+                    (hist_cells_per_leaf * stat_count + 255) // 256, n_live, 1
+                ),
+                block_dim=(256, 1, 1),
+            )
         mgr.stream_kernel()
 
         # their `UpdatePartitionsAfterSplit` (`split_points.cu:387`), reached

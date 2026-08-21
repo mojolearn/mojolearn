@@ -72,6 +72,7 @@ from gbdt.methods.greedy_subsets_searcher.kernel.split_points import (
     launch_stable_partition,
 )
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
+    TTreeWorkspace,
     run_one_level,
     run_tree,
     run_tree_layout,
@@ -1032,12 +1033,14 @@ def bench_tree_shapes(n_rows: Int, max_depth: Int, repeats: Int) raises:
             var _sp = List[TBinarySplit]()
             var _lv = List[Float32]()
             var _lo = List[Int]()
+            var _ws0 = List[TTreeWorkspace]()
             var sizes = run_tree_layout(
                 ctx, n_rows, fold_sets[s], max_depth,
                 cidx[s], stat[s], ridx[s],
                 scratch_cursor,
                 Float32(tws[s]), Float32(tgs[s]),
                 _sp, _lv, _lo,
+                _ws0,
             )
             var dt = perf_counter_ns() - t0
             _ = len(sizes)
@@ -1103,10 +1106,12 @@ def bench_subtraction(
             var _sp = List[TBinarySplit]()
             var _lv = List[Float32]()
             var _lo = List[Int]()
+            var _ws1 = List[TTreeWorkspace]()
             var sizes = run_tree_layout(
                 ctx, n_rows, folds, max_depth, cidx, stat, ridx,
                 scratch_cursor,
-                Float32(tw), Float32(tg), _sp, _lv, _lo, arm == 0,
+                Float32(tw), Float32(tg), _sp, _lv, _lo, _ws1,
+                arm == 0,
             )
             var dt = perf_counter_ns() - t0
             samples[arm].append(Float64(dt) / 1.0e6)
@@ -1194,11 +1199,13 @@ def bench_realistic(n_rows: Int, n_features: Int, max_depth: Int, repeats: Int) 
         var _sp = List[TBinarySplit]()
         var _lv = List[Float32]()
         var _lo = List[Int]()
+        var _ws2 = List[TTreeWorkspace]()
         var sizes = run_tree_layout(
             ctx, n_rows, folds, max_depth, cindex, stats, row_index,
             scratch_cursor,
             Float32(tw), Float32(tg),
             _sp, _lv, _lo,
+            _ws2,
         )
         var dt = perf_counter_ns() - t0
         _ = len(sizes)

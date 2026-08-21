@@ -1584,3 +1584,92 @@ writer that dropped `TargetClassesCount` produced a file whose `counts`
 list was the same LENGTH (a two-class histogram read as twice as many
 one-count categories), so field-by-field equality passed. Both fields are
 compared now.
+
+## 59. The tree planes belong to the FIT, not the tree: a pool of one
+
+Their `TCudaManager` hands every device buffer out of a per-device memory
+pool (`cuda_lib/memory_pool.h`), so `CreateInitialSubsets`
+(`split_properties_helper.cpp:1040-1080`) gets tree 2's histograms from
+the memory tree 1 released. This port dropped the pool layer
+(`gbdt/gpu_lib/NOT_PORTED.md`) and called `enqueue_create_buffer`
+directly, which made every tree allocate its own planes.
+
+MEASURED, 50k rows x 100 features x 254 borders, depth 6, on the M4:
+`run_tree_layout`'s setup before the first level cost **4.69 ms of a
+12.3 ms tree**, and allocating the three large planes -- `hist` and
+`acc_i32` at 13 MB each plus the block scratch -- was **1.9 ms** of that.
+The whole level loop was 6.08 ms, so the tree spent nearly as long
+getting ready as growing.
+
+`TTreeWorkspace` is a pool of one, which is all a single-device
+single-stream port needs. `fit` holds a `List[TTreeWorkspace]` across the
+boosting loop; a tree reuses the planes when they are large enough and
+rebuilds them when they are not. An EMPTY list means no pool and restores
+allocate-per-call exactly, which is what the `mojo_only/` callers pass.
+
+The `FillBuffer` semantics of `CreateInitialSubsets` are unchanged: both
+pooled planes are still memset at tree start, because a pooled plane
+carries the previous tree's cells where a fresh allocation carried
+whatever the driver had. That memset is 0.5 ms and is real work, not
+overhead.
+
+MEASURED RESULT, interleaved against CatBoost CPU across five row counts:
+fixed per-tree cost 12.56 -> 9.43 ms at 254 borders (25% off), row slope
+unchanged at 18.5 us per 1000 rows, and the row count where we overtake
+their CPU moves from 616k to 436k. Train mse is BIT-IDENTICAL to the
+allocate-per-tree build at every size and both border counts, which is
+the reach proof that no tree is reading a stale plane -- staleness would
+change tree 2 onward. Sabotage: forcing the rebuild branch on every tree
+puts 12.06 ms back on the clock.
+
+## 60. Histogram copy and subtract move 16 bytes per thread, not 4
+
+Their `CopyHistogramsImpl` and `SubstractHistogramsImpl`
+(`greedy_subsets_searcher/kernel/histogram_utils.cu:15-34` and the
+subtract beside it) move ONE float per thread, and this port
+transliterated that. On NVIDIA it costs nothing: `__ldg` plus
+`WriteThrough` already move a full sector per warp.
+
+On this Metal box it is not free. MEASURED in isolation at a depth-6
+level's shape (100 features x 254 folds x 2 stats, 32 pairs):
+
+    one float per thread    11.0 GB/s
+    four floats per thread  65.2 GB/s
+
+Same bytes, same grid shape, 5.9x. `copy_histograms_vec4_kernel` and
+`substract_histograms_vec4_kernel` are the 4-wide arms; the launcher
+dispatches to them only when the plane base is 16-byte aligned
+(`hist_cells_per_leaf * stat_count % 4 == 0` and
+`hist_cells_per_leaf % 4 == 0` respectively) and falls back to their
+1-per-thread kernel otherwise, so no dataset silently takes an unaligned
+access. The `max(., 0)` guard on stat 0 is applied per lane, not per
+vector: widening the access must not widen the predicate.
+
+GPU-AGNOSTIC: 4-wide float is the one vector width every row of the
+kernel matrix has. No lane width, no shared memory, no intrinsic.
+
+End to end this is worth 2.7% at 50k rows, measured by alternating the
+two builds in one window -- small, and worth stating plainly beside the
+isolated 5.9x, because the copy is not the tree's bottleneck.
+
+## 61. NOT a deviation: the serial scan is not costing us
+
+`PORTING.md 8` records that `scan_histograms_kernel` replaced CatBoost's
+`cub::WarpScan<double>` with one thread per feature scanning serially,
+because the port believed Mojo had no warp primitives. That belief is
+stale -- warp primitives are `std.gpu.primitives.warp` -- so the
+substitution was re-examined for SPEED and measured against their shape:
+32 lanes per feature, 8 features per 256-thread block, carry through the
+last lane, with shared memory in place of the shuffle.
+
+    leaves      1      2      4      8     16     32   (per level, ms)
+    ours     .073   .086   .155   .100   .113   .153
+    theirs   .035   .057   .070   .094   .171   .292
+
+Their shape wins at shallow levels and LOSES at deep ones, and over a
+whole depth-6 tree the two are a wash (0.68 ms vs 0.72 ms). The serial
+scan stays. Recorded so the next reader does not spend the afternoon
+this cost.
+
+Their accumulator is `double` and ours is `float32`, which is a real
+fidelity gap and is NOT closable here: this target has no float64.
