@@ -780,3 +780,20 @@ One operational note: rep 2 stalled ~30 minutes inside
 `catboost.datasets`' per-call re-download (sock_connect) before
 recovering, so `catboost_arm` now downloads each dataset once per
 process.
+
+### 2026-08-21: EPSILON -- the widest margin yet, on their own dataset
+
+The pre-registered next lever ran (fixtures from CatBoost's own
+md5-verified tarball, `tools/epsilon_prep.py`; full record
+`bench/results/EPSILON_2026-08-21_interleaved.md`). 400k x 2000 dense,
+20 trees depth 6, interleaved, 3 reps per border:
+
+    254 borders: speedups 2.67 / 3.42 / 3.32x  (mse 8 sig figs)
+    128 borders: speedups 3.41 / 3.67 / 3.30x  (mse 8 sig figs)
+
+Ranges fully disjoint (ours 186-272 ms/tree, theirs 504-903). At
+800k x 100 the 254 arm still loses 1.25-1.36x; at 10x the
+rows-x-features product the same code wins 3.3x at the same border
+count -- feature width amortizes the fixed floor as effectively as row
+count. The scale story is now three measured points: parity near
+800k x 100, 1.8-2.1x at 4M x 100, 3.3-3.4x at 400k x 2000.
