@@ -4861,3 +4861,171 @@ strength.**
 IT IS CLOSED.** A learner that produces a different model one run in a hundred
 does not have a loss to compare, and the two searchers disagreeing with each
 other is the specific thing `check-fit-pointwise` exists to forbid.
+
+## 125. `CreateSubsets`' fold arm pays ONE extra partition reduce, per TREE and not per level
+
+`gbdt/methods/oblivious_tree_fold_tasks.create_fold_based_subsets`.
+
+THEIRS (`oblivious_tree_structure_searcher.cpp:29-43`): the ternary picks
+`WriteFoldBasedInitialBins` or `WriteSingleTaskInitialBins`, the bins are
+written FIRST, and `UpdateSubsetsStats(src, &subsets)` runs ONCE at the end.
+
+OURS: `create_subsets` (`pointwise_optimization_subsets.mojo:1252`) is shared
+with the doc-parallel arm, so it seeds `FillBuffer(Bins, 0u)` and reduces; the
+fold arm then overwrites the bins with `write_fold_based_initial_bins` and
+reduces AGAIN.
+
+PRICED: one `update_subsets_stats` over `1 << FoldBits` partitions per TREE --
+16 partitions over 1,463 documents at the gate's fixture, once, not per level.
+The alternative is a second entry point into `create_subsets` that skips the
+seed, and forking the allocation of a file BOTH searchers share to save one
+reduce per tree is the worse trade.
+
+NOT an arithmetic difference: the final state is identical, and
+`check-ordered-boosting` O3 compares the bin of every position, the offset and
+size of every partition and both partition stats, per cell. Sabotaging the
+second reduce away leaves O3 and O5 red.
+
+### 125a. And the fill's staging buffers must outlive the enqueue
+
+`write_fold_based_initial_bins` allocates one buffer per partition, memsets it
+to the bin, and `enqueue_copy`s it into place. A `DeviceBuffer` handed to
+`enqueue_copy` as `src_buf` is LAST USED at the enqueue
+([[mojo-buffer-freed-at-last-use]]), so dropping it at the end of the loop body
+lets the next iteration's allocation land on the same block and the next
+memset overwrite a copy that has not run.
+
+MEASURED, and it is intermittent: the same fixture read a correct partition
+array on one run and all zeros on the next, with no source change between them.
+The buffers are now held in a `List` until after `synchronize()`. **The
+sabotage that removes the hold was GREEN on the run it was tried**, which is
+the point -- this class of defect cannot be gated by re-running, only by not
+writing it. Sibling of DEVIATION 134's open intermittent, and the reason that
+one deserves a real hunt rather than another hundred green runs.
+
+## 126. `PolicyScoreHelper` hard-codes `foldCount = 1` at three sites, and the searcher REFUSES rather than growing a tree a fold axis short
+
+`TScoreHelper` takes `foldCount` and hands it to BOTH halves
+(`histograms_helper.h:361-365`): the first sizing the histogram
+`(1 << MaxDepth) * FoldCount * binFeatures * 2` (`:147-151`) and passing it to
+`ComputeHistogram2` as `gridDim.z` (`:74`), the second passing it to
+`FindOptimalSplit`, whose `foldCount == 1` test IS the dispatch between the
+plain and the dynamic scorer (`pointwise_scores.cu:537`).
+
+OURS hard-codes 1 at three sites in `pointwise_scores_calcer.mojo`. Since
+`ComputeHistogramsHelper` already TAKES `fold_count` and already multiplies
+both size expressions by it, and both kernels already take it as an argument,
+this is four literals rather than a port.
+
+Until they change, the searcher asks the calcer what fold count it was built
+at and RAISES if it disagrees with the layout, rather than growing a tree whose
+histograms are a fold axis short -- which would be finite, well formed, and
+wrong at every split. The guard dissolves on its own the moment the calcer
+carries folds; it is a cross-check between two ported objects, not a stub.
+Gated both ways by `check-ordered-boosting` O7: it fires with folds and does
+NOT fire without them.
+
+## 127. THE DOC-PARALLEL SEARCHER IS THE WRONG HOME FOR FOLDS, and its fold arm is a deviation scheduled for deletion
+
+Upstream's doc-parallel `CreateSubsets` hard-codes `FoldCount = 0;
+FoldBits = 0;` (`pointwise_optimization_subsets.cpp:12-14`) and nothing can
+give it folds: `TDocParallelObliviousTreeSearcher` is constructed by
+`TDocParallelObliviousTree`, which `TBoosting` (`doc_parallel_boosting.h`)
+drives, and that is the PLAIN learner (`PORTING.md` 91 F). Ordered boosting
+lives ONLY in `TFeatureParallelObliviousTreeSearcher`.
+
+So `fit_oblivious_tree_structure`'s `folds` parameter has NO upstream
+counterpart. It exists because rung 3's wiring was written in the same session
+rung 2 landed, against the only searcher that existed when that lane started.
+`PORTING_RULES` 0b-ii is explicit that there is no third category of file, so
+this is DECLARED and scheduled for deletion, not kept.
+
+What is NOT a deviation is everything under it -- `create_fold_based_subsets`,
+`make_fold_doc_indices`, the fold stripe, the histogram fold axis and the
+dynamic scorer -- because the two searchers share that whole stack and it is
+ported from the feature-parallel side. Moving the arm is three lines in
+`fit_feature_parallel_oblivious_tree_structure`, which now exists
+(DEVIATION 120).
+
+### 127a. The observation gather is NOT optional past depth 0
+
+At one task `docIndices` is the identity and
+`Gather(observationIndices, docIndices, subsets.Indices)` collapses to
+`subsets.Indices` -- which is what DEVIATION 105 records. At N tasks it does
+not, and a position in the concatenated array is not a document id.
+
+MEASURED SYMPTOM, and it is not the one you would predict: skipping the gather
+splits the level into QUARTERS instead of halves. The predicate is identical
+at both levels, so the two split bits must agree and half the partitions must
+be empty; reading the wrong document makes them disagree, and **every partition
+offset still tiles the array perfectly.** The gate found it as 1,463 of 1,463
+positions with the wrong (bin, index) pair while every size looked plausible.
+
+## 128. Ordered boosting supports THREE of the seven score functions, and it does not touch the shipped default
+
+`FindOptimalSplitDynamic` (`pointwise_scores.cu:443-473`) has two arms and a
+`default: throw std::exception()`:
+
+    SolarL2                     -> FindOptimalSplitSolarImpl
+    Cosine, NewtonCosine        -> FindOptimalSplitCosineImpl
+    L2, NewtonL2, SatL2, LOOL2  -> throw
+
+`FindOptimalSplitPlain` (`:468-521`) covers all seven. So four score functions
+that work perfectly at `boosting_type=Plain` cannot be asked for with Ordered,
+and this is upstream's own limit rather than a gap in the port.
+
+IT DOES NOT BLOCK THE SHIPPED CONFIGURATION. The GPU default score function is
+`Cosine` (`oblivious_tree_options.cpp:22`), which is one of the three.
+
+Refused in the searcher rather than at the launch, so the message names the
+option the caller set instead of a kernel they never asked for, and so a tree
+is never half-grown before it fires. Both halves gated: O6 runs all seven at
+fold count 12 AND all four refused ones at fold count 1, because a score
+function that was simply broken would pass the first half.
+
+## 129. The ordered document array is LONGER than the dataset, and `size` stops being the row stride
+
+`CreateFolds` builds fold `k`'s `EstimateSamples` as `[0, R_{k-1})` -- nested
+prefixes, not a partition -- so `GetTotalIndicesSize()`
+(`oblivious_tree_structure_searcher.cpp:321-336`) is `sum_k (L_k + |eval_k|)`,
+not `n`. At n = 600, g = 2.0, min_fold_size = 100 it is **1,463 positions for
+600 rows**, and every document appears in six folds, each carrying that fold's
+own cursor value. That IS ordered boosting; it is not a bookkeeping artefact to
+be normalised away.
+
+The consequence for this port is a parameter that has been one number since the
+compressed index was written and is now two:
+
+    n_rows      the compressed index's ROW STRIDE -- `TCFeature::Offset * n_rows`
+    doc_count   the length of the concatenated array -- `ComputeHistogram2`'s `size`
+
+`PolicyScoreHelper` already takes them at two different places (the constructor
+and `submit_compute`), so no signature changes; the searcher passes different
+values to each. `TL2Target.line_size`, `create_subsets`' `doc_count` and the
+`ReorderBins` length are all the SECOND one.
+
+### 129a. Their scorer is never told the depth
+
+`leavesCount = Parts.Size() >> foldBits` (`pointwise_kernels.h:339-341`). The
+scorer INFERS the leaf count from the size of the partition-stats buffer, which
+works only because `UpdateSubsetsStats` resizes `PartitionStats` every level
+(`pointwise_optimization_subsets.h:58`). This port allocates once at
+`max_part_count` and passes `1 << depth` explicitly -- the same number by a
+different mechanism, and worth knowing before anyone "simplifies" that resize
+into a fixed allocation on their side of the diff.
+
+### 129b. A gate that sized its spans from the port's own answer
+
+The sabotage that swaps LEARN and TEST in `plan_fold_layout` moved NOTHING on
+its first run: O3, O4 and O5 all sized their spans from `lay.parts`, so the
+defect moved both sides of every comparison. O1 now builds an INDEPENDENT
+partition table from `create_folds`' output and everything else reads that;
+the sabotage then turns five gates red.
+
+**Second time in this port a gate has been found checking the port against
+itself** ([[mojotrees-code-not-source-of-truth]]), and both times only a
+sabotage could see it. Its sibling: with a FLOOR `IntLog2` the layout agreed
+with itself and the run HUNG rather than failing, because the validator called
+the same function it was validating. `create_fold_based_subsets` now carries a
+shift-only `fold_count <= 1 << fold_bits` check and O1 asserts ceil-ness
+without calling `int_log2_ceil`.

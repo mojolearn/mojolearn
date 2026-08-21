@@ -454,6 +454,14 @@ probe-pointwise-default = "mojo run -I . mojo_only/pointwise_default_probe.mojo"
 # nothing downstream can tell them apart. Own main(); a GPU, ~5 s.
 check-fold-tasks = "mojo run -I . mojo_only/fold_tasks_check.mojo"
 
+# The fold axis DRIVEN through the shared stack at FoldCount 12: subsets per
+# partition and per position, two splits at FoldBits 4 in order, compute_hist2
+# per cell at 4 leaves x 12 folds (where the partition stride 16 and the
+# histogram stride 12 finally differ), and the 3-of-7 dynamic dispatch. The
+# histogram family had never run with a fold axis before this. DEVIATION 125-129.
+check-ordered-boosting = "mojo run -I . mojo_only/ordered_boosting_check.mojo"
+
+
 # RUNG 2's GATE, and it is an IDENTITY: the feature-parallel searcher must
 # reproduce the doc-parallel one to the bit at FoldBits == 0, plus a control
 # that must differ. Run at TWO row counts on purpose -- a compression block is

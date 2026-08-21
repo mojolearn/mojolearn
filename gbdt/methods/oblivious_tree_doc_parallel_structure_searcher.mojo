@@ -58,6 +58,24 @@ loop already owns all three for the greedy learner
 gradient path -- the one thing that must not differ between two learners
 being compared. What this file returns is exactly the part that differs.
 
+DEVIATION 127: **THIS FILE'S FOLD ARM HAS NO UPSTREAM COUNTERPART, and it
+is here because rung 3 was wired before rung 2 landed.** Upstream's
+doc-parallel `CreateSubsets` hard-codes `FoldCount = 0; FoldBits = 0`
+(`pointwise_optimization_subsets.cpp:12-14`) and nothing can give it folds:
+`TDocParallelObliviousTreeSearcher` is built by `TDocParallelObliviousTree`,
+which `TBoosting` (`doc_parallel_boosting.h`) drives, and that is the PLAIN
+learner (`PORTING.md` 91 F). Ordered boosting lives ONLY in
+`TFeatureParallelObliviousTreeSearcher`, which is
+`gbdt/methods/oblivious_tree_structure_searcher.mojo`.
+
+So the `folds` parameter below is a DEVIATION to be DELETED, not a feature.
+What is NOT a deviation is everything under it -- `create_fold_based_subsets`,
+`make_fold_doc_indices`, the fold stripe, the histogram fold axis and the
+dynamic scorer -- because both searchers share that stack (`PORTING.md` 91 B)
+and it is ported from the feature-parallel side. Moving the arm is three
+lines in the other searcher's `Fit`; until someone does, this one refuses at
+DEVIATION 126 anyway and can never grow a tree.
+
 DEVIATION 105: `observations` must be the identity. Theirs gathers
 `groupedByBinObservations = observations[subsets.Indices]` where
 `observations` is the bootstrapped, filtered doc list; with no bootstrap
@@ -79,6 +97,22 @@ from gbdt.methods.pointwise_optimization_subsets import (
     split_subsets,
 )
 from gbdt.methods.pointwise_scores_calcer import ScoresCalcerOnCompressedDataSet
+from gbdt.gpu_util.kernel.transform import launch_gather_with_mask_u32
+from gbdt.methods.pointwise_optimization_subsets import GATHER_NO_MASK
+from gbdt.methods.dynamic_boosting_folds import TFold
+from gbdt.methods.kernel.pointwise_scores import (
+    SCORE_FUNCTION_COSINE,
+    SCORE_FUNCTION_NEWTON_COSINE,
+    SCORE_FUNCTION_SOLAR_L2,
+)
+from gbdt.methods.oblivious_tree_fold_tasks import (
+    FoldLayout,
+    create_fold_based_subsets,
+    fold_tasks_from_folds,
+    make_fold_doc_indices,
+    plan_fold_layout,
+    plan_single_task_layout,
+)
 from gbdt.models.oblivious_model import (
     BIN_SPLIT_TAKE_BIN,
     BIN_SPLIT_TAKE_GREATER,
@@ -102,6 +136,8 @@ def fit_oblivious_tree_structure(
     seed: UInt64 = 0,
     one_hot: List[Bool] = List[Bool](),
     bootstrapped_observations: Bool = False,
+    folds: List[TFold] = List[TFold](),
+    permutation: List[UInt32] = List[UInt32](),
 ) raises -> List[TBinarySplit]:
     """`TDocParallelObliviousTreeSearcher::FitImpl` (`:12-160`), the
     structure half.
@@ -122,16 +158,124 @@ def fit_oblivious_tree_structure(
             " before passing True."
         )
 
+    # ---------------------------------------------------------------
+    # THE TERNARY (`oblivious_tree_structure_searcher.cpp:30-31`).
+    #
+    #     SingleTaskTarget == nullptr ? WriteFoldBasedInitialBins(...)
+    #                                 : WriteSingleTaskInitialBins(...)
+    #
+    # An empty `folds` is `SetTarget` -- ONE task, `FoldCount = 1`,
+    # `FoldBits = 0`, every document in bin 0. A non-empty one is `AddTask`
+    # per fold -- N tasks, 2N alternating learn/test partitions,
+    # `FoldCount = 2N`, `FoldBits = IntLog2(2N)`, and the fold id in the LOW
+    # bits of every document's bin.
+    # ---------------------------------------------------------------
+    var fold_layout = plan_single_task_layout(n_rows)
+    if len(folds) > 0:
+        fold_layout = plan_fold_layout(fold_tasks_from_folds(folds))
+    var fold_count = fold_layout.fold_count
+    var doc_count = fold_layout.total_indices
+
+    if fold_count > 1:
+        # `FindOptimalSplitDynamic` (`pointwise_scores.cu:443-473`) has TWO
+        # arms and a `default: throw std::exception()`. Four of the seven
+        # score functions -- L2, NewtonL2, SatL2, LOOL2 -- have no
+        # ordered-boosting kernel upstream at all. Refused HERE rather than
+        # at the launch so the refusal names the option the caller set
+        # instead of a kernel it never asked for, and so a tree is never
+        # half-grown before it fires.
+        if not (
+            score_function == SCORE_FUNCTION_SOLAR_L2
+            or score_function == SCORE_FUNCTION_COSINE
+            or score_function == SCORE_FUNCTION_NEWTON_COSINE
+        ):
+            raise Error(
+                "ordered boosting (fold_count "
+                + String(fold_count)
+                + ") supports only SolarL2, Cosine and NewtonCosine:"
+                " `FindOptimalSplitDynamic` (`pointwise_scores.cu:469`)"
+                " throws for every other score function. Got score"
+                " function "
+                + String(score_function)
+            )
+        if len(permutation) != 0 and len(permutation) != n_rows:
+            raise Error(
+                "permutation must be empty (identity) or have one entry"
+                " per row"
+            )
+
     var blocks = blocks_for(layout, n_rows)
     var global_ids = List[Int]()
     for f in range(len(layout.features)):
         global_ids.append(f)
 
-    var target = TL2Target(weights^, weighted_target^, n_rows)
-    var subsets = create_subsets(ctx, max_depth, target)
+    # `n_rows` is the compressed index's ROW STRIDE and `doc_count` is the
+    # length of the CONCATENATED document array. They are the same number
+    # at one task and different at N, because the fold estimate slices are
+    # nested prefixes -- see `fold_tasks_from_folds`.
+    var target = TL2Target(weights^, weighted_target^, doc_count)
+    var subsets = create_subsets(ctx, max_depth, target) if (
+        fold_count == 1
+    ) else create_fold_based_subsets(ctx, max_depth, target, fold_layout)
     var calcer = ScoresCalcerOnCompressedDataSet(
         ctx, blocks, layout, n_rows, max_depth, global_ids
     )
+
+    # DEVIATION 126, and it dissolves the moment the calcer carries folds.
+    # `TScoreHelper` takes `foldCount` and hands it to BOTH halves
+    # (`histograms_helper.h:361-365`): `TComputeHistogramsHelper` sizes the
+    # histogram `(1 << MaxDepth) * FoldCount * binFeatures * 2` and passes
+    # it to `ComputeHistogram2` as `gridDim.z`, and
+    # `TFindBestSplitsHelper` passes it to `FindOptimalSplit`, whose
+    # `foldCount == 1` test IS the dispatch between the plain and the
+    # dynamic scorer. This tree's `PolicyScoreHelper` hard-codes 1 at all
+    # three sites. Rather than grow a tree whose histograms are a fold
+    # axis short, ask the calcer what it is carrying and refuse if it
+    # disagrees with the layout.
+    for i in range(len(calcer.helpers)):
+        if calcer.helpers[i].hist_helper.fold_count != fold_count:
+            raise Error(
+                "DEVIATION 126: the fold layout has FoldCount "
+                + String(fold_count)
+                + " but `PolicyScoreHelper` was built at "
+                + String(calcer.helpers[i].hist_helper.fold_count)
+                + ". `TScoreHelper` takes foldCount"
+                " (`histograms_helper.h:361`) and this port hard-codes 1"
+                " at `pointwise_scores_calcer.mojo`\'s"
+                " `ComputeHistogramsHelper(policy, 1, max_depth)`,"
+                " `compute_hist2(..., plan.part_count, 1, ...)` and"
+                " `find_optimal_split(..., part_count, 1, ...)`."
+            )
+
+    # `Gather(observationIndices, docIndices, subsets.Indices)` (`:120`,
+    # and `MakeDocIndices` at `:485-505` builds `docIndices`). At ONE task
+    # `docIndices` is the identity and the gather collapses to
+    # `subsets.Indices` (DEVIATION 105); at N tasks it does not, and a
+    # searcher that skipped it would read the compressed index at a
+    # POSITION in the concatenated array instead of at a document id.
+    var doc_ids_host = make_fold_doc_indices(folds, permutation) if (
+        fold_count > 1
+    ) else List[UInt32]()
+    var d_doc_ids = ctx.enqueue_create_buffer[DType.uint32](
+        len(doc_ids_host) if fold_count > 1 else 1
+    )
+    var d_observations = ctx.enqueue_create_buffer[DType.uint32](doc_count)
+    if fold_count > 1:
+        if len(doc_ids_host) != doc_count:
+            raise Error(
+                "MakeDocIndices produced "
+                + String(len(doc_ids_host))
+                + " ids for "
+                + String(doc_count)
+                + " concatenated documents"
+            )
+        ctx.enqueue_copy(
+            dst_buf=d_doc_ids, src_ptr=doc_ids_host.unsafe_ptr()
+        )
+        ctx.synchronize()
+        # keep the host list alive across the queue: a raw pointer does not
+        # ([[mojo-buffer-freed-at-last-use]])
+        _ = doc_ids_host[0]
 
     var structure = List[TBinarySplit]()
     var score_before_split = Float32(0.0)
@@ -141,8 +285,18 @@ def fit_oblivious_tree_structure(
         # subsets.Indices)` (`:67`). At identity observations the gather IS
         # `subsets.Indices`; DEVIATION 105.
         var docs = subsets.indices.copy()
+        if fold_count > 1:
+            launch_gather_with_mask_u32(
+                ctx,
+                d_observations,
+                d_doc_ids,
+                docs,
+                doc_count,
+                GATHER_NO_MASK,
+            )
+            docs = d_observations.copy()
         calcer.submit_compute(
-            ctx, subsets, cindex, docs, n_rows, sm_count, fixed_scale
+            ctx, subsets, cindex, docs, doc_count, sm_count, fixed_scale
         )
         var pstats = subsets.partition_stats.copy()
         calcer.compute_optimal_split(
@@ -186,7 +340,14 @@ def fit_oblivious_tree_structure(
         if seen:
             break
 
-        var docs2 = subsets.indices.copy()
+        # their `Split(target, docBins, observationIndices, &subsets)`
+        # (`oblivious_tree_structure_searcher.cpp:275-278`) -- the SAME
+        # gathered array the histograms just read, because
+        # `UpdateBinFromCompressedIndex` indexes the compressed index by
+        # `docsForBins[i]` and not by `i`.
+        var docs2 = d_observations.copy() if fold_count > 1 else (
+            subsets.indices.copy()
+        )
         split_subsets(
             ctx,
             target,
