@@ -56,9 +56,28 @@ all in the configuration this port runs, and saying so is part of the audit:
   numeric-only fit the old sentence is still true and one cursor is still
   theirs.
 
-  This is the largest remaining gap inside this file. It is not ordered
-  boosting -- see PORTING.md 88 for why that is a different learner
-  entirely -- but it is the machinery ordered boosting is built on.
+  **PORTED 2026-08-21**, and the sentence that called it the largest
+  remaining gap is deleted rather than annotated. `fit_with_test` takes
+  `perm_cindexes` and `est_permutation`; it keeps one cursor per
+  permutation, draws the structure permutation the way their `:349-351`
+  draws it, estimates leaf values separately on every permutation
+  (`:371-385`), and exports the estimation permutation's ensemble
+  (`:526-528`). `pixi run check-permutation-count` gates it, and gate 5 is
+  the one that isolates the LOOP from the data: count 3 and count 4 read at
+  est 2 estimate identical leaves on identical rows and differ only in
+  which permutation the structure was searched on.
+
+  Two things of theirs are still absent and neither is read. Their
+  `result` is a `TVector<TResultModel>`, one ENSEMBLE per permutation; this
+  keeps only the estimation permutation's, because the others are written
+  and never read -- their only consumers are snapshot restore and
+  `GetL1LeavesSum()` for a bootstrap arm this port does not take. And their
+  `AppendEnsembles` replay on restore has no counterpart, because there is
+  no snapshotting.
+
+  It is not ordered boosting -- see PORTING.md 88 for why that is a
+  different learner entirely -- but it is the machinery ordered boosting is
+  built on.
 - **`CalcScoreModelLengthMult` (`:358`). NOT A DIVERGENCE HERE, and it is not
   model-size regularization.** Its only consumer is `ComputeScoreStdDev`,
   which returns 0 unconditionally when `modelLengthMult * randomStrength` is
@@ -143,6 +162,11 @@ from gbdt.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
 )
 from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_base import (
     HIST2_SMEM_IS_I32,
+)
+from gbdt.data.permutation import TRandom
+from gbdt.methods.leaves_estimation.doc_parallel_leaves_estimator import (
+    compute_bins_for_model,
+    partition_from_bins,
 )
 from gbdt.overfitting_detector.overfitting_detector import (
     OD_NONE,
@@ -419,6 +443,179 @@ struct FitResult(Movable):
     var stopped_early: Bool
 
 
+
+def _estimate_and_apply(
+    ctx: DeviceContext,
+    n_rows: Int,
+    approx_dim: Int,
+    n_leaves: Int,
+    sizes: List[Int],
+    leaf_offsets: List[Int],
+    mut row_index: DeviceBuffer[DType.uint32],
+    mut targets: DeviceBuffer[DType.float32],
+    mut weights: DeviceBuffer[DType.float32],
+    has_weights: Bool,
+    mut cursor: DeviceBuffer[DType.float32],
+    objective: Int,
+    alpha: Float32,
+    estimator_alpha: Float32,
+    logloss_border: Float32,
+    l2_leaf_reg: Float32,
+    est_sm: Int,
+    leaf_estimation_method: Int,
+    num_classes: Int,
+    iters: Int,
+    learning_rate: Float32,
+    mut leaf_values: List[Float32],
+    mut not_pd_total: Int,
+) raises:
+    """One estimation task: their `TDocParallelLeavesEstimator::Estimate`
+    plus the `AppendModels` that follows it, for ONE (dataset, cursor).
+
+    `row_index`, `leaf_offsets` and `sizes` are the partition -- rows
+    grouped by leaf. Which partition depends on which permutation this task
+    is for: the one the tree was grown on inherits the searcher's, and
+    every other one gets `partition_from_bins`. Nothing else in here
+    differs between permutations, which is why this is one function called
+    `permutation_count` times rather than two paths.
+
+    `leaf_values` is OVERWRITTEN with the estimate, and the caller keeps
+    only the estimation permutation's -- that is the ensemble their `Run()`
+    exports (`doc_parallel_boosting.h:526-528`).
+    """
+    var not_pd_blocks = 0
+    # their `weak->NeedEstimation()` arm (`doc_parallel_boosting.h:
+    # 371-385`): the searcher's leaf values are DISCARDED, the
+    # estimator recomputes them at the cursor, and only then does
+    # the rescaled model touch the cursor. `row_index` left the
+    # searcher bin-sorted, so target/weights/cursor gather straight
+    # into the oracle's order (their factory sorts; we inherit).
+    var g_target = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    var g_weights = ctx.enqueue_create_buffer[DType.float32](
+        n_rows
+    )
+    var g_cursor = ctx.enqueue_create_buffer[DType.float32](
+        approx_dim * n_rows
+    )
+    launch_gather_with_mask_f32(
+        ctx, g_target, targets, row_index, n_rows,
+        UInt32(0xFFFFFFFF),
+    )
+    if has_weights:
+        launch_gather_with_mask_f32(
+            ctx, g_weights, weights, row_index, n_rows,
+            UInt32(0xFFFFFFFF),
+        )
+    # EVERY PLANE. The oracle owns a COPY of the cursor that it
+    # shifts (`AddBinModelValues` inside `MoveTo`), so this cannot
+    # be a gather-on-read view; for MultiClass that copy is
+    # `numClasses - 1` planes wide.
+    launch_gather_planes_with_mask_f32(
+        ctx, g_cursor, cursor, row_index, n_rows,
+        UInt32(0xFFFFFFFF), approx_dim, n_rows,
+    )
+    var d_p_off = ctx.enqueue_create_buffer[DType.uint32](n_leaves)
+    var d_p_sz = ctx.enqueue_create_buffer[DType.uint32](n_leaves)
+    var h_po = ctx.enqueue_create_host_buffer[DType.uint32](
+        n_leaves
+    )
+    var h_ps = ctx.enqueue_create_host_buffer[DType.uint32](
+        n_leaves
+    )
+    ctx.synchronize()
+    # THE DEVICE'S OWN OFFSETS: the final partitions sit in memory
+    # in bit-reversed leaf order, so a prefix sum of the sizes is
+    # the WRONG segmentation (see run_tree_layout's tail).
+    var widest = 1
+    for i in range(n_leaves):
+        h_po.unsafe_ptr().unsafe_store(
+            i, UInt32(leaf_offsets[i])
+        )
+        h_ps.unsafe_ptr().unsafe_store(i, UInt32(sizes[i]))
+        if sizes[i] > widest:
+            widest = sizes[i]
+    ctx.enqueue_copy(dst_buf=d_p_off, src_ptr=h_po.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=d_p_sz, src_ptr=h_ps.unsafe_ptr())
+
+    var oracle = make_bin_optimized_oracle(
+        ctx, n_rows, n_leaves, sizes,
+        g_target^, g_weights^, g_cursor^, d_p_off^, d_p_sz^,
+        has_weights,
+        objective,
+        alpha,
+        estimator_alpha,
+        logloss_border,
+        Float64(l2_leaf_reg),
+        est_sm,
+        leaf_estimation_method,
+        num_classes,
+    )
+    # `TDocParallelLeavesEstimator::Estimate`
+    # (`doc_parallel_leaves_estimator.cpp:9-16`): Exact REPLACES
+    # the walker, it does not configure it.
+    #
+    #     if (LeavesEstimationMethod == Exact) {
+    #         point = derCalcer->EstimateExact();
+    #     } else {
+    #         TNewtonLikeWalker walker(*derCalcer, iterations,
+    #                                  backtrackingType);
+    #         point = walker.Estimate(startPoint);
+    #     }
+    # DEVIATION 74's counter: how many leaves took their silent
+    # gradient fallback because Cholesky found the Hessian not
+    # positive definite. Accumulated across the whole fit and
+    # reported once, because the number that matters is whether
+    # it is ever nonzero.
+    var estimated: List[Float32]
+    if leaf_estimation_method == LEAF_ESTIMATION_EXACT:
+        estimated = oracle.estimate_exact()
+    else:
+        estimated = newton_like_walker_estimate(
+            oracle, iters, BACKTRACKING_ANY_IMPROVEMENT,
+            List[Float32](), not_pd_blocks,
+        )
+    not_pd_total += not_pd_blocks
+    leaf_values.clear()
+    for i in range(len(estimated)):
+        leaf_values.append(estimated[i])
+
+    # `AppendModels` for this arm: the ESTIMATED leaves, rescaled,
+    # onto the real cursor through the same kernel the RMSE arm
+    # uses inside `run_tree_layout`.
+    # `estimated` arrives in the CURSOR's gauge -- the walker
+    # applied `MakeEstimationResult` on its way out
+    # (`descent_helpers.cpp:153`, `:204`) -- so it is
+    # `n_leaves * approx_dim` and is BIN-MAJOR, which is the layout
+    # `add_model_value_kernel`'s z axis reads.
+    var est_len = n_leaves * approx_dim
+    var d_est = ctx.enqueue_create_buffer[DType.float32](est_len)
+    var h_est = ctx.enqueue_create_host_buffer[DType.float32](
+        est_len
+    )
+    ctx.synchronize()
+    if len(estimated) != est_len:
+        raise Error(
+            "the estimator returned " + String(len(estimated))
+            + " leaf values for " + String(n_leaves) + " leaves x "
+            + String(approx_dim) + " dims"
+        )
+    for i in range(est_len):
+        h_est.unsafe_ptr().unsafe_store(i, estimated[i])
+    ctx.enqueue_copy(dst_buf=d_est, src_ptr=h_est.unsafe_ptr())
+    ctx.enqueue_function[add_model_value_kernel](
+        oracle.d_p_off.unsafe_ptr(),
+        oracle.d_p_sz.unsafe_ptr(),
+        row_index.unsafe_ptr(),
+        d_est.unsafe_ptr(),
+        learning_rate,
+        cursor.unsafe_ptr(),
+        Int32(approx_dim), Int32(n_rows),
+        grid_dim=((widest + 255) // 256, n_leaves, approx_dim),
+        block_dim=(256, 1, 1),
+    )
+    ctx.synchronize()
+
+
 def fit_with_test(
     mut model: TAdditiveModel,
     ctx: DeviceContext,
@@ -452,6 +649,15 @@ def fit_with_test(
     # `train`, one of which belongs to another session, so these are
     # additive with defaults rather than a new required argument.
     var test: Optional[TestArm] = None,
+    # THE OTHER PERMUTATIONS' COMPRESSED INDICES, in permutation order and
+    # INCLUDING the estimation one, which must be `cindex` itself. Empty
+    # means one permutation, which is what every caller but `train` passes
+    # and what CatBoost itself uses without a CTR-bearing categorical
+    # feature (`cuda/train_lib/train.cpp:99-108`).
+    var perm_cindexes: List[DeviceBuffer[DType.uint32]] = List[
+        DeviceBuffer[DType.uint32]
+    ](),
+    est_permutation: Int = -1,
     od_type: Int = OD_NONE,
     od_pvalue: Float64 = OD_DEFAULT_STOP_PVALUE,
     od_wait: Int = OD_DEFAULT_WAIT_ITERATIONS,
@@ -542,6 +748,41 @@ def fit_with_test(
     # every plane, not only the first
     ctx.enqueue_memset(cursor, Float32(0.0))
 
+    # ---- the permutations -------------------------------------------
+    #
+    # `cursors->Cursors.resize(PermutationsCount())`
+    # (`doc_parallel_boosting.h:141`), all written to the same starting
+    # value (`:180-186`). `cursor` above IS the estimation permutation's
+    # and keeps its own variable, so a one-permutation fit runs the code
+    # it ran before this block existed, to the bit.
+    var perm_count = len(perm_cindexes)
+    if perm_count == 0:
+        perm_count = 1
+    var est_p = est_permutation
+    if est_p == -1:
+        est_p = perm_count - 1
+    if est_p < 0 or est_p >= perm_count:
+        raise Error(
+            "est_permutation " + String(est_p) + " is outside the "
+            + String(perm_count) + " permutations given"
+        )
+    #: one cursor per permutation, in permutation order.
+    #: `cursors[est_p]` IS `cursor` -- `DeviceBuffer.copy()` copies the
+    #: handle, not the bytes, so the two names are the same memory and a
+    #: write through either is seen by both. That is what keeps the
+    #: one-permutation path identical: it allocates one cursor, memsets it
+    #: once, and every kernel below writes the same buffer it always did.
+    var cursors = List[DeviceBuffer[DType.float32]]()
+    for p in range(perm_count):
+        if p == est_p:
+            cursors.append(cursor.copy())
+        else:
+            var c = ctx.enqueue_create_buffer[DType.float32](
+                approx_dim * n_rows
+            )
+            ctx.enqueue_memset(c, Float32(0.0))
+            cursors.append(c^)
+
     # their der/der2 buffers, in the two-plane layout the histogram kernels
     # already read. See the DEVIATION BLOCK in `pointwise_targets.mojo`.
     var stats = ctx.enqueue_create_buffer[DType.float32](stat_count * n_rows)
@@ -631,6 +872,13 @@ def fit_with_test(
         and leaf_estimation_iterations == 1
     ):
         need_estimation = False
+        # ...AND ONLY AT ONE PERMUTATION. DEVIATION 64 rests on the
+        # searcher's leaf being the same number a Newton step from zero
+        # gives, which it is -- for the rows the searcher partitioned. The
+        # other permutations partition the same tree differently, so their
+        # leaves are different numbers and there is nothing to reuse.
+        if perm_count > 1:
+            need_estimation = True
     var est_sm = -1
     if need_estimation:
         est_sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
@@ -667,7 +915,43 @@ def fit_with_test(
 
     var ws = List[TTreeWorkspace]()
 
-    for _ in range(n_estimators):
+    for iteration in range(n_estimators):
+        # ---- which permutation the STRUCTURE is searched on ----------
+        #
+        # `TRandom rand(iteration + BaseIterationSeed); rand.Advance(10);`
+        # (`doc_parallel_boosting.h:343-345`) and the draw (`:349-351`):
+        #
+        #     learnPermutationCount = estimationPermutation
+        #                             ? permutationCount - 1 : 1
+        #     learnPermutationId = learnPermutationCount > 1
+        #         ? rand.NextUniformL() % (learnPermutationCount - 1) : 0
+        #
+        # **THE MODULUS IS `learnPermutationCount - 1`, NOT
+        # `learnPermutationCount`**, so at their default of four
+        # permutations the structure comes from permutation 0 or 1 and
+        # permutation 2 is never searched on. That reads like an
+        # off-by-one in their code and it is transcribed rather than
+        # corrected: COPY, DO NOT IMPROVE, and a fit that searched on a
+        # permutation theirs never searches on is not this port's call to
+        # make. It is the same expression in their feature-parallel
+        # learner (`dynamic_boosting.h:286-289`), which is evidence it is
+        # deliberate or at least old.
+        var learn_perm_count = perm_count - 1 if est_p != 0 else 1
+        var learn_p = est_p
+        if learn_perm_count > 1:
+            var rnd = TRandom(UInt64(iteration) + random_seed)
+            rnd.advance(10)
+            learn_p = Int(
+                rnd.next_uniform_l() % UInt64(learn_perm_count - 1)
+            )
+        # the learn permutation's (index, cursor) pair, as HANDLES onto the
+        # real buffers -- `copy()` on a `DeviceBuffer` copies the handle,
+        # so the searcher writes the permutation's own cursor.
+        var lc = (
+            cindex.copy() if learn_p == est_p
+            else perm_cindexes[learn_p].copy()
+        )
+        var lcur = cursors[learn_p].copy()
         # `TTargetAtPointTrait::Create(learnTarget, cursor)` (`:353`).
         # The gradients are taken AT THE CURRENT PREDICTIONS, which is the
         # whole of what makes this boosting.
@@ -684,7 +968,7 @@ def fit_with_test(
             # columns 1.. the ders, one per FREE class.
             launch_multilogit_value_and_der_search(
                 ctx, num_classes, n_rows, targets, weights, has_weights,
-                cursor, n_rows, row_index, False,
+                lcur, n_rows, row_index, False,
                 fv_part, True,
                 stats, n_rows,
                 mag_part, mags_in_mse,
@@ -695,14 +979,14 @@ def fit_with_test(
             # `1 + NumClasses` because there is no pinned class to drop.
             launch_one_vs_all_value_and_der[True](
                 ctx, num_classes, n_rows, targets, weights, has_weights,
-                cursor, n_rows, row_index, False,
+                lcur, n_rows, row_index, False,
                 fv_part, True,
                 stats, n_rows,
                 mag_part, mags_in_mse,
             )
         else:
             launch_approximate[False](
-                ctx, objective, targets, weights, Int32(n_rows), cursor,
+                ctx, objective, targets, weights, Int32(n_rows), lcur,
                 Int32(1) if has_weights else Int32(0),
                 alpha, logloss_border,
                 stats, fv_part, Int32(1),
@@ -831,7 +1115,7 @@ def fit_with_test(
         var leaf_offsets = List[Int]()
         var sizes = run_tree_layout(
             ctx, n_rows, fold_counts, max_depth,
-            cindex, stats, row_index, cursor,
+            lc, stats, row_index, lcur,
             Float32(weight_magnitude), Float32(gradient_magnitude),
             splits, leaf_values, leaf_offsets, ws,
             need_estimation,
@@ -848,138 +1132,68 @@ def fit_with_test(
         )
 
         if need_estimation:
-            # their `weak->NeedEstimation()` arm (`doc_parallel_boosting.h:
-            # 371-385`): the searcher's leaf values are DISCARDED, the
-            # estimator recomputes them at the cursor, and only then does
-            # the rescaled model touch the cursor. `row_index` left the
-            # searcher bin-sorted, so target/weights/cursor gather straight
-            # into the oracle's order (their factory sorts; we inherit).
-            var n_leaves = len(sizes)
-            var iters = leaf_estimation_iterations
-            var g_target = ctx.enqueue_create_buffer[DType.float32](n_rows)
-            var g_weights = ctx.enqueue_create_buffer[DType.float32](
-                n_rows
-            )
-            var g_cursor = ctx.enqueue_create_buffer[DType.float32](
-                approx_dim * n_rows
-            )
-            launch_gather_with_mask_f32(
-                ctx, g_target, targets, row_index, n_rows,
-                UInt32(0xFFFFFFFF),
-            )
-            if has_weights:
-                launch_gather_with_mask_f32(
-                    ctx, g_weights, weights, row_index, n_rows,
-                    UInt32(0xFFFFFFFF),
-                )
-            # EVERY PLANE. The oracle owns a COPY of the cursor that it
-            # shifts (`AddBinModelValues` inside `MoveTo`), so this cannot
-            # be a gather-on-read view; for MultiClass that copy is
-            # `numClasses - 1` planes wide.
-            launch_gather_planes_with_mask_f32(
-                ctx, g_cursor, cursor, row_index, n_rows,
-                UInt32(0xFFFFFFFF), approx_dim, n_rows,
-            )
-            var d_p_off = ctx.enqueue_create_buffer[DType.uint32](n_leaves)
-            var d_p_sz = ctx.enqueue_create_buffer[DType.uint32](n_leaves)
-            var h_po = ctx.enqueue_create_host_buffer[DType.uint32](
-                n_leaves
-            )
-            var h_ps = ctx.enqueue_create_host_buffer[DType.uint32](
-                n_leaves
-            )
-            ctx.synchronize()
-            # THE DEVICE'S OWN OFFSETS: the final partitions sit in memory
-            # in bit-reversed leaf order, so a prefix sum of the sizes is
-            # the WRONG segmentation (see run_tree_layout's tail).
-            var widest = 1
-            for i in range(n_leaves):
-                h_po.unsafe_ptr().unsafe_store(
-                    i, UInt32(leaf_offsets[i])
-                )
-                h_ps.unsafe_ptr().unsafe_store(i, UInt32(sizes[i]))
-                if sizes[i] > widest:
-                    widest = sizes[i]
-            ctx.enqueue_copy(dst_buf=d_p_off, src_ptr=h_po.unsafe_ptr())
-            ctx.enqueue_copy(dst_buf=d_p_sz, src_ptr=h_ps.unsafe_ptr())
-
-            var oracle = make_bin_optimized_oracle(
-                ctx, n_rows, n_leaves, sizes,
-                g_target^, g_weights^, g_cursor^, d_p_off^, d_p_sz^,
-                has_weights,
-                objective,
-                alpha,
-                estimator_alpha,
-                logloss_border,
-                Float64(l2_leaf_reg),
-                est_sm,
-                leaf_estimation_method,
-                num_classes,
-            )
-            # `TDocParallelLeavesEstimator::Estimate`
-            # (`doc_parallel_leaves_estimator.cpp:9-16`): Exact REPLACES
-            # the walker, it does not configure it.
+            # ---- their estimation loop (`doc_parallel_boosting.h:
+            # 371-385`): ONE TASK PER PERMUTATION, each on its own dataset
+            # and its own cursor, all estimating the SAME structure.
             #
-            #     if (LeavesEstimationMethod == Exact) {
-            #         point = derCalcer->EstimateExact();
-            #     } else {
-            #         TNewtonLikeWalker walker(*derCalcer, iterations,
-            #                                  backtrackingType);
-            #         point = walker.Estimate(startPoint);
+            #     for (permutation = 0; permutation < permutationCount; ++permutation) {
+            #         estimator.AddEstimationTask(*(learnTarget[permutation]),
+            #                                     dataSet.GetDataSetForPermutation(permutation),
+            #                                     (*learnCursors)[permutation],
+            #                                     &iterationModels[permutation]);
             #     }
-            # DEVIATION 74's counter: how many leaves took their silent
-            # gradient fallback because Cholesky found the Hessian not
-            # positive definite. Accumulated across the whole fit and
-            # reported once, because the number that matters is whether
-            # it is ever nonzero.
-            var estimated: List[Float32]
-            if leaf_estimation_method == LEAF_ESTIMATION_EXACT:
-                estimated = oracle.estimate_exact()
-            else:
-                estimated = newton_like_walker_estimate(
-                    oracle, iters, BACKTRACKING_ANY_IMPROVEMENT,
-                    List[Float32](), not_pd_blocks,
-                )
-            not_pd_total += not_pd_blocks
-            leaf_values.clear()
-            for i in range(len(estimated)):
-                leaf_values.append(estimated[i])
-
-            # `AppendModels` for this arm: the ESTIMATED leaves, rescaled,
-            # onto the real cursor through the same kernel the RMSE arm
-            # uses inside `run_tree_layout`.
-            # `estimated` arrives in the CURSOR's gauge -- the walker
-            # applied `MakeEstimationResult` on its way out
-            # (`descent_helpers.cpp:153`, `:204`) -- so it is
-            # `n_leaves * approx_dim` and is BIN-MAJOR, which is the layout
-            # `add_model_value_kernel`'s z axis reads.
-            var est_len = n_leaves * approx_dim
-            var d_est = ctx.enqueue_create_buffer[DType.float32](est_len)
-            var h_est = ctx.enqueue_create_host_buffer[DType.float32](
-                est_len
-            )
-            ctx.synchronize()
-            if len(estimated) != est_len:
-                raise Error(
-                    "the estimator returned " + String(len(estimated))
-                    + " leaf values for " + String(n_leaves) + " leaves x "
-                    + String(approx_dim) + " dims"
-                )
-            for i in range(est_len):
-                h_est.unsafe_ptr().unsafe_store(i, estimated[i])
-            ctx.enqueue_copy(dst_buf=d_est, src_ptr=h_est.unsafe_ptr())
-            ctx.enqueue_function[add_model_value_kernel](
-                oracle.d_p_off.unsafe_ptr(),
-                oracle.d_p_sz.unsafe_ptr(),
-                row_index.unsafe_ptr(),
-                d_est.unsafe_ptr(),
-                learning_rate,
-                cursor.unsafe_ptr(),
-                Int32(approx_dim), Int32(n_rows),
-                grid_dim=((widest + 255) // 256, n_leaves, approx_dim),
-                block_dim=(256, 1, 1),
-            )
-            ctx.synchronize()
+            #
+            # The permutation the tree was GROWN on inherits the searcher's
+            # partition; the others compute their own, because a row's leaf
+            # depends on that permutation's CTR columns and the searcher
+            # never looked at them.
+            for p in range(perm_count):
+                var pv = List[Float32]()
+                if p == learn_p:
+                    _estimate_and_apply(
+                        ctx, n_rows, approx_dim, len(sizes), sizes,
+                        leaf_offsets,
+                        row_index, targets, weights, has_weights,
+                        cursors[p],
+                        objective, alpha, estimator_alpha, logloss_border,
+                        l2_leaf_reg, est_sm, leaf_estimation_method,
+                        num_classes, leaf_estimation_iterations,
+                        learning_rate,
+                        pv, not_pd_total,
+                    )
+                else:
+                    var d_bins = ctx.enqueue_create_buffer[DType.uint32](
+                        n_rows
+                    )
+                    # DEPTH IS `len(splits)`, NOT `max_depth`: a tree that
+                    # stopped growing early has fewer splits, and
+                    # `len(sizes)` is `1 << len(splits)` either way.
+                    compute_bins_for_model(
+                        ctx, layout_for_test, splits, len(splits),
+                        perm_cindexes[p], n_rows, d_bins,
+                    )
+                    var part = partition_from_bins(
+                        ctx, d_bins, n_rows, len(sizes)
+                    )
+                    _estimate_and_apply(
+                        ctx, n_rows, approx_dim, len(part.sizes),
+                        part.sizes, part.offsets,
+                        part.row_index, targets, weights, has_weights,
+                        cursors[p],
+                        objective, alpha, estimator_alpha, logloss_border,
+                        l2_leaf_reg, est_sm, leaf_estimation_method,
+                        num_classes, leaf_estimation_iterations,
+                        learning_rate,
+                        pv, not_pd_total,
+                    )
+                # the EXPORTED ensemble is the estimation permutation's
+                # (`doc_parallel_boosting.h:526-528`); the others exist to
+                # carry their own cursors forward and their weak models are
+                # never read, so they are not accumulated.
+                if p == est_p:
+                    leaf_values.clear()
+                    for i in range(len(pv)):
+                        leaf_values.append(pv[i])
         _ = len(sizes)
 
         # their `result[i].AddWeakModel(iterationModels[i])` (`:398`).

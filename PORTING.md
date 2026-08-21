@@ -1470,7 +1470,7 @@ orders against CatBoost's own generator compiled by
 
 **Two things around it are.**
 
-### 55a. The column sets are built; the LOOP that uses them is not
+### 55a. `permutation_count` datasets, and the loop that reads them
 
 Their builder loops (`gpu_data/doc_parallel_dataset_builder.cpp:251-262`):
 
@@ -1501,20 +1501,35 @@ check-permutation-count` gates it on an identity: `permutation_count=1` and
 `permutation_count=4` read at permutation 0 must produce the same model bit
 for bit, with permutation 1 as the control that must differ.
 
-**WHAT IS STILL MISSING IS THE LOOP.** Their `Fit`
-(`doc_parallel_boosting.h:345-395`) keeps one cursor and one ensemble PER
-PERMUTATION, searches the structure on a random permutation that is not the
-estimation one, estimates leaf values separately on every permutation, and
-exports the estimation permutation's ensemble. This port runs one cursor and
-one ensemble, so the other sets are built and unused.
+**AND THE LOOP LANDED THE SAME DAY.** `fit_with_test` keeps one cursor per
+permutation, draws the structure permutation exactly as `:349-351` draws it,
+estimates leaf values separately on every permutation (`:371-385`), and
+exports the estimation permutation's ensemble (`:526-528`).
 
-What that costs, stated rather than hidden: their loop searches structures
-against ordered statistics the exported model was not fitted on, which is
-what makes the structure choice independent of the leaf values it will get.
-Ours searches and estimates on the same columns. It is a QUALITY difference
-on the same estimator, not a different estimator -- unlike substituting row
-order, which is 55b. It is also NOT ordered boosting, which is a different
-learner entirely; see 88.
+**Their modulus is `learnPermutationCount - 1`**, so at four permutations
+the structure comes from permutation 0 or 1 and permutation 2 is never
+searched on. That reads like an off-by-one in their code and it is
+transcribed rather than corrected; the same expression appears in their
+feature-parallel learner (`dynamic_boosting.h:286-289`), which is evidence
+it is old if not deliberate.
+
+Two of theirs remain absent and neither is read: their per-permutation
+ENSEMBLES (`TVector<TResultModel>`), whose only consumers are snapshot
+restore and a bootstrap `GetL1LeavesSum()` this port does not take, and the
+`AppendEnsembles` replay, which needs snapshotting. Only the estimation
+permutation's ensemble is accumulated here.
+
+DEVIATION 64's shortcut -- RMSE at Newton-1 taking the searcher's leaves
+instead of the estimator's -- is now conditioned on ONE permutation. It
+rests on the searcher's leaf being the number a Newton step from zero gives
+FOR THE ROWS THE SEARCHER PARTITIONED, and the other permutations partition
+the same tree differently. The equality it claims is re-measured every run
+of `check-permutation-count`: gate 1 compares a one-permutation RMSE fit,
+which takes the shortcut, against a four-permutation fit read at
+permutation 0, which does not, and 4000 of 4000 predictions match bit for
+bit.
+
+It is NOT ordered boosting, which is a different learner entirely; see 88.
 
 ### 55b. Their permutation 0 is the identity and this port must not use it
 

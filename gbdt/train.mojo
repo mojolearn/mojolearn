@@ -1070,6 +1070,12 @@ def train(
         # Quantile and differ for MAPE, whose kernel alpha is 0.
         estimator_alpha=loss_desc.get_alpha(),
         test=Optional(test_arm^),
+        # their `permutationCount` datasets (`doc_parallel_boosting.h:
+        # 137-141`). `cindex` above is `cindexes[est_perm]`, the same
+        # handle, so the loop's estimation permutation and this one are the
+        # same buffer.
+        perm_cindexes=cindexes^,
+        est_permutation=est_perm,
         od_type=od_kind,
         od_pvalue=od_pvalue,
         od_wait=od_wait,

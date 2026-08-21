@@ -179,6 +179,37 @@ def check_permutation_count() raises:
         )
 
     print()
+    print("-- gate 5: the STRUCTURE comes off a different permutation --")
+    # Same estimation permutation, same data for it, same everything the
+    # exported model is FITTED on. The only difference is which
+    # permutation the tree SHAPE was searched on, and their draw
+    # (`doc_parallel_boosting.h:349-351`) makes that depend on
+    # `permutation_count`:
+    #
+    #   count 3, est 2 -> learnPermutationCount 2 -> modulus 1 -> always 0
+    #   count 4, est 2 -> learnPermutationCount 3 -> modulus 2 -> 0 or 1
+    #
+    # so the two fits estimate identical leaves on identical rows and can
+    # only differ through the structure. A loop that searched on the
+    # estimation permutation -- which is what this port did before the
+    # permutation loop existed -- gives the SAME model for both.
+    var three_at_2 = _predict(ctx, x, y, 2, cat, 3, 2)
+    var four_at_2 = _predict(ctx, x, y, 2, cat, 4, 2)
+    var dstruct = _differing_rows(three_at_2, four_at_2)
+    if dstruct == 0:
+        print(
+            "  FAIL the structure permutation changes nothing; the loop is"
+            " searching on the estimation permutation",
+        )
+        failures += 1
+    else:
+        print(
+            "  ok  ", dstruct, "of", PC_ROWS,
+            "rows move when the structure is searched on permutation 0 or"
+            " 1 instead of 0 alone",
+        )
+
+    print()
     print("-- gate 4: permutation_count must be positive --")
     var refused = False
     try:

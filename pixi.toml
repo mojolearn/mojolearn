@@ -180,12 +180,14 @@ check-loss-oracle = "mojo run -I . mojo_only/loss_oracle_check.mojo"
 check-overfitting-detector = "mojo run -I . mojo_only/overfitting_detector_check.mojo"
 
 # `permutation_count`: CatBoost builds four datasets differing only in their
-# permutation-dependent CTR columns, and the model comes from the last one.
-# The gate is an IDENTITY -- one permutation must equal four read at
-# permutation 0, bit for bit -- with a control at permutation 1 that must
-# come out different, so the equality is a real constraint. Plus the
-# numeric-only case, where their `UpdateGpuSpecificDefaults` ASSIGNS 1 and
-# discards an explicit 4. Own main(); a GPU, ~1 min.
+# permutation-dependent CTR columns, keeps a cursor per permutation, searches
+# the tree SHAPE on one of them and estimates the leaves on all of them. Two
+# gates carry it: an IDENTITY (one permutation equals four read at permutation
+# 0, bit for bit, with a control at permutation 1 that must differ), and an
+# ISOLATION (counts 3 and 4 read at est 2 fit identical leaves on identical
+# rows and can only differ through which permutation the structure came off).
+# Plus the numeric-only case, where `UpdateGpuSpecificDefaults` ASSIGNS 1 and
+# discards an explicit 4. Own main(); a GPU, ~2 min.
 check-permutation-count = "mojo run -I . mojo_only/permutation_count_check.mojo"
 
 # Which leaf a row falls in, computed from the compressed index, against the
