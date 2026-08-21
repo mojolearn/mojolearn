@@ -189,56 +189,61 @@ the objectives, the RNG or the checks — none of which would be wasted.
    The reasoning that supersedes it as a gate is above; it remains true that
    nobody has measured gather bandwidth on this box for this access pattern.
 
-## Status
+## Where this stands against the plan above
 
-Everything below is host-side. No kernel has been enqueued, no timing number
-has been taken, and none will be until the perf round.
+The design sketch at the top of this file listed five steps, a set of defaults
+and three oracles. Measured against it:
 
-**Landed and checked** (every check has a sabotage per mechanism that was seen
-to turn it red, then restored):
+| plan item | host | device |
+|---|---|---|
+| 1. range pass (min/max per node, feature) | DONE | in flight |
+| 2. threshold draw, keyed counter-based | DONE | — |
+| 3. score pass (a few accumulators, no histogram) | DONE | — |
+| 4. select, total-order tie-break | DONE | — |
+| 5. stable partition, children join the frontier | DONE (cuML's swap partition, ported) | — |
+| breadth-first frontier | DONE | — |
+| `bootstrap=False` | DONE (`True` refused by name) | — |
+| `max_features` sqrt/1.0 | DONE as a ratio; the `sqrt` name is the caller's to resolve | — |
+| oracle 1: exact host transcription | DONE | — |
+| oracle 2: analytic + adversarial fixtures | DONE | — |
+| oracle 3: sklearn quality band | in flight | — |
 
-| file | upstream | check | cells |
-|---|---|---|---|
-| `batched_levelalgo/split.mojo` | `split.cuh:32-90` | `split_check` | 54k pairs |
-| `batched_levelalgo/dataset.mojo` | `dataset.h:22-38` | (used by all) | — |
-| `batched_levelalgo/kernels/builder_kernels.mojo` | `builder_kernels.cuh:34-67` | `split_check` | — |
-| `batched_levelalgo/kernels/builder_kernels_impl.mojo` | `builder_kernels_impl.cuh:43-88` + DEVIATION 137 steps 1-3 | `partition_check`, `range_draw_check` | 983k + 18.7k |
-| `batched_levelalgo/builder.mojo` | `builder.cuh:44-135`, `:556-599` | `builder_check`, `leaf_check` | 1081 + 370 |
-| `batched_levelalgo/objectives.mojo` | `objectives.cuh` + `_criterion.pyx` | `objectives_check` | 1577 |
-| `decisiontree/decisiontree.mojo` | `decisiontree.hpp` + `decisiontree.cu:27-45` | `params_check` | 35 |
-| `decisiontree/flatnode.mojo` | `flatnode.h:33-77`, `decisiontree.cuh:394-413` | `flatnode_check` | 5706 |
-| `mojo_only/pcg_rng.mojo` | RAFT `rng_device.cuh:546-683` | `pcg_rng_check` vs a C++ oracle built from their own header | 2658 |
-| `mojo_only/fixtures.mojo` | — | `fixtures_check` | 205 |
+**The learner works end to end and so does the forest.** A separable fixture
+comes out exactly right at every seed, a regression step function is fitted
+exactly, an all-constant fixture yields a single leaf, and a 12-tree forest has
+no two trees alike and votes the average of its trees per cell. Fifteen checks,
+run by `tools/check.sh`, every one with a sabotage per mechanism that was seen
+to turn it red.
 
-**In flight**, one file pair each so nothing converges: the exact host
-transcription of `node_split_random` (`mojo_only/host_splitter.mojo`), and
-cuML's two feature samplers with their dispatch rule
-(`builder_kernels.cuh:152`, `:246`, dispatched at `builder.cuh:400-470`).
+**What is NOT done, stated as the gap it is:**
 
-**Next, in order.** The device passes inside `builder_kernels_impl.mojo`:
-range, draw, score, `evalBestSplit`, partition, leaf — each checked per cell
-against the host form that already exists for it. Then `Builder::train`'s loop
-(`builder.cuh:344-359`), which is the only thing standing between these pieces
-and a tree. Then the forest wrapper.
+1. **No kernel has been enqueued.** This is the whole thesis — GPU access on a
+   machine where the incumbents' GPU arms refuse to run — and none of it
+   exists yet. One kernel (the range pass) is in flight. `PORTING_RULES.md` is
+   explicit that a kernel is not ported until it has been enqueued, and
+   compiling is not evidence.
+2. **No number has been measured, deliberately.** Perf is deferred by the repo
+   owner. Nothing in this directory quotes a duration and nothing should until
+   that is lifted.
+3. **The sklearn quality band has not been run**, so "our trees are shallower
+   than sklearn's on constant-heavy data" (deviations 132 and 151) is a
+   prediction, not a measurement.
+4. **The deviation range 130-159 is FULL.** The device work is using 160+.
+5. **No Python binding**, and deviation 154 records a debt against it:
+   `min_weight_fraction_leaf` and `monotonic_cst` have no field to refuse and
+   therefore no error.
 
-## What reading the upstreams changed, and it was not marginal
+## Rules this lane earned, beyond the ones it inherited
 
-Four times so far a plan sentence has been deleted because a file said
-otherwise (rule 10), and each is recorded where it happened:
-
-1. The partition was going to be stable and ours. cuML's is a two-pointer
-   misfit swap and is deterministic anyway, so the deviation died and became a
-   port (`DEVIATIONS.md` 134).
-2. `PLAN.md` said sklearn draws from MT19937. It is a 32-bit xorshift
-   (`_random.pxd:20-34`); MT19937 only seeds it.
-3. The classification score was assumed to be `sum_c^2/n_L + sum_c^2/n_R`.
-   `Gini` does not override `proxy_impurity_improvement`, so sklearn actually
-   maximizes `-n_R*gini_R - n_L*gini_L` (`DEVIATIONS.md` 144).
-4. A `break` in `NodeQueue.push` was described as semantically different from
-   a `continue`. A sabotage showed it is not, because `leaf_counter` is
-   monotone inside the loop.
-
-And two facts about sklearn that no amount of reasoning would have produced:
-their constant-feature band is computed in float32, so it WIDENS near zero and
-VANISHES above magnitude ~2; and their `threshold == max` guard is reachable
-here too, 191 times in 13,120 draws, purely from float32 rounding.
+- **A sabotage that stays green is a finding about the CHECK.** It happened
+  six times here and every time the fixture or the claim was the defect, not
+  the code: the boundary rows that did not exist, the `min_samples_leaf` branch
+  that is unreachable at its default, the exact-vs-float comparator with no
+  adversarial pair, the denominators that were all equal, the feature sampler
+  that never ran because `max_features` defaults to 1.0, and the `max(1, ...)`
+  floor that no `max_features` reached.
+- **A claim in a docstring is a claim, and gets sabotaged like code.** Three
+  were false and are deleted: that `break` differs from `continue` in
+  `NodeQueue.push`, that partitioning before `Push` is load-bearing, and that
+  the validity guard around the partition is observable. All three are
+  measured equivalences now, kept as the upstream has them.
