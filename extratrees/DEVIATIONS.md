@@ -1493,3 +1493,88 @@ this one was written by the same lane three commits earlier.
 **MSE publishes no rational**: its numerator needs `Int128` by deviation 135's
 derivation, so the four accumulators ARE the score and `mse_proxy_exact` forms
 it on the host in one multiply each.
+
+---
+
+# The device path, wired — deviations 182-183
+
+## 182. `score_to_candidate_kernel` exists because 170 split their kernel in two
+
+**Theirs.** `computeSplitKernel`'s elected last block scores the bins and hands
+the result straight to `sp.evalBestSplit(...)` in the same function
+(`builder_kernels_impl.cuh:328-340`). The candidate never exists as memory.
+
+**Ours.** Deviation 170 could not elect a last block, so the score pass ends at
+a kernel boundary and its output is a struct-of-arrays in global memory.
+Something must turn that into the reduction's input layout.
+
+**Why elementwise and not fused into either neighbour.** Fusing it into the
+finalize kernel would make that kernel write two layouts of the same fact;
+fusing it into the reduction would make the reduction read a layout it does not
+own. Both couple two ported files through a shape neither upstream has.
+
+**The one piece of policy in it.** A cell whose status is not `SCORED` becomes
+the DEFAULT `Split` — `colid = -1`, `best_metric_val = MIN_FINITE` — with an
+invalid exact key. That is `initSplit`'s value (`split.cuh:54-59`), so a
+non-scored cell loses to every scored one and ties with other non-scored cells.
+A node all of whose candidates were constant reduces to `colid == -1`, which
+`split_not_valid` rejects and `NodeQueue.push` turns into a leaf — the same
+outcome the host reaches by never producing a candidate.
+
+---
+
+## 183. OPEN — the device does not apply cuML's zero-gain gate, and that is the ONLY difference between the two paths
+
+**Theirs.** `split_not_valid` (`kernels/builder_kernels.cuh:59-67`) rejects a
+split whose `best_metric_val` is `<= min_impurity_decrease`. cuML's Gini gain
+is `>= 0` always, so at the default `0.0` a ZERO-GAIN split — one that does not
+reduce impurity at all — is rejected and the node becomes a leaf.
+
+**Ours.** The device does not compute the float gain (deviation 175: it would
+drag deviation 142's FMA question into scoring, and deviation 145 makes the
+gain a reporting quantity for classification), so it publishes a constant and
+the gate cannot fire.
+
+**MEASURED, both ways, and this is what makes it a bounded gap rather than an
+unknown.** `device_tree_check` runs the same fixture through both paths twice:
+
+    gate DISABLED on the host:  9 configurations, 747 nodes,
+                                0 differing in (colid, quesval, left_child,
+                                instance_count), 0 differing row predictions
+                                -- BIT-IDENTICAL
+    gate at its DEFAULT:        9 configurations, 4 identical in node count,
+                                5 where the device has MORE nodes, 0 where it
+                                has fewer; 689 host nodes against 747 device
+
+So the device split search reproduces the host's **exactly**, and this gate is
+the whole of the remaining difference. The direction is asserted, not assumed:
+the gate can only ever REJECT, so the device can only ever have more nodes, and
+a single configuration where it had fewer would mean something else diverging.
+
+**How to close it, with the algebra worked out so the next round does not have
+to.** The gate is decidable from what the device already has, WITHOUT the
+float. Writing `sq_total` for the node's `sum_j t_j^2`:
+
+    cuML gain = parent_gini + sklearn_proxy / n
+              = (1 - sq_total/n^2) + (num/den - n)/n
+              = num/(den*n) - sq_total/n^2
+
+    gain > 0  <=>  num * n > sq_total * den
+
+All integers, and `out_acc_total` already carries the class counts the device
+would need. Two cautions for whoever does it: the products reach `n^4/4`, which
+is `2^82` at `SCORE_MAX_ROWS_EXACT = 2^21` and therefore needs the hand-widened
+128-bit compare of deviation 167 rather than `Int64` (it fits `Int64` only for
+`n <= 2^15`); and the test belongs in `score_to_candidate_kernel` rather than
+on the winner, which is EQUIVALENT because `sq_total/n^2` is constant within a
+node, so the gain is monotone in `num/den` and the max-gain candidate is the
+max-proxy candidate.
+
+**Price until then.** A device tree is DEEPER than a host tree on data that
+produces zero-gain splits: 747 nodes against 689 on this fixture. It is not
+wrong — every node still splits on a real threshold and every row still lands
+in one leaf — but it is not the same model, and `min_impurity_decrease` is
+silently inert on the device path. **That makes this the one place in the lane
+where a parameter is accepted and not honoured**, which is the thing
+`estimator.mojo` exists to prevent; the estimator does not expose the device
+path yet, and it must not until this is closed.

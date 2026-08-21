@@ -7,7 +7,8 @@
 # either -- rule 12 again: own checks only, one merge-time run.
 #
 # NO TIMING NUMBER is taken by any of them. Some of them DO enqueue kernels --
-# range_kernel_check, split_reduce_check and score_kernel_check run on the GPU
+# range_kernel_check, split_reduce_check, score_kernel_check and
+# device_tree_check run on the GPU
 # and check device output per cell against a host oracle. (This header said
 # "every check here is host-side, no kernel is enqueued" until 2026-08-21; it
 # was false from the moment the range kernel landed.)
@@ -35,6 +36,7 @@ extratrees/mojo_only/quality_band_check.mojo
 extratrees/mojo_only/estimator_check.mojo
 extratrees/mojo_only/split_reduce_check.mojo
 extratrees/mojo_only/score_kernel_check.mojo
+extratrees/mojo_only/device_tree_check.mojo
 "
 
 failed=0

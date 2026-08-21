@@ -61,12 +61,29 @@ from extratrees.ported.decisiontree.batched_levelalgo.split import Split
 from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels import (
     InstanceRange,
     NodeWorkItem,
+    WorkloadInfo,
     sample_features,
     split_not_valid,
 )
 from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import (
+    SCORE_STATUS_SCORED,
+    build_workload_info,
+    node_feature_range_init_kernel,
+    node_feature_range_kernel,
+    node_feature_score_finalize_kernel,
+    node_feature_score_init_kernel,
+    node_feature_score_kernel,
     partition_samples,
+    score_row_bound_ok,
 )
+from extratrees.ported.decisiontree.batched_levelalgo.split import (
+    split_reduce_init_kernel,
+    split_reduce_kernel,
+)
+from max.gpu.host import DeviceContext
+from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from std.math import ceildiv
+from std.sys.info import size_of
 
 
 def max_nodes(max_depth: Int32) -> Int:
@@ -592,6 +609,569 @@ def train_regression(
     var tree = queue.get_tree()
     set_leaf_predictions_regression(dataset, tree, queue.node_instances)
     return tree^
+
+
+# ==========================================================================
+# THE DEVICE PATH
+# ==========================================================================
+# `Builder::doSplit` (`builder.cuh:379-494`) with its kernels enqueued, and
+# `Builder::train`'s loop (`:344-359`) around it. Until this function existed
+# every device kernel in this lane was UNWIRED -- built, checked per cell, and
+# reached by nothing but its own check, which rule 3 says is not done.
+#
+# THEIR HOST/DEVICE SPLIT IS PORTED, NOT RE-DECIDED. cuML's node queue is a
+# HOST structure: `doSplit` ends with `raft::update_host(h_splits, splits,
+# work_items.size())` and a `sync_stream` (`:492-494`), and `Push` then runs on
+# the host. So copying the batch's chosen splits back per level is theirs, not
+# a shortcut here. What is on the device is what is on theirs: the range pass,
+# the draw, the score pass and the split reduction.
+
+
+def score_to_candidate_kernel(
+    cand_quesval: MutPointer[Float32, MutAnyOrigin],
+    cand_colid: MutPointer[Int32, MutAnyOrigin],
+    cand_metric: MutPointer[Float32, MutAnyOrigin],
+    cand_nleft: MutPointer[Int32, MutAnyOrigin],
+    cand_num: MutPointer[Int64, MutAnyOrigin],
+    cand_den: MutPointer[Int64, MutAnyOrigin],
+    cand_valid: MutPointer[Int32, MutAnyOrigin],
+    in_status: MutPointer[Int32, MutAnyOrigin],
+    in_threshold: MutPointer[Float32, MutAnyOrigin],
+    in_n_left: MutPointer[Int32, MutAnyOrigin],
+    in_gini_num: MutPointer[Int64, MutAnyOrigin],
+    in_gini_den: MutPointer[Int64, MutAnyOrigin],
+    colids: MutPointer[Int32, MutAnyOrigin],
+    n_cells_in: Int32,
+):
+    """Scored cells into reduction candidates, elementwise.
+
+    ==================================================================
+    DEVIATION BLOCK 182 -- this kernel exists because 170 split their
+    kernel in two, and it has no cuML counterpart
+
+    THEIRS: `computeSplitKernel`'s elected last block scores the bins and
+    hands the result straight to `sp.evalBestSplit(...)` in the same
+    function (`builder_kernels_impl.cuh:328-340`) -- the candidate never
+    exists as memory.
+
+    OURS: DEVIATION 170 could not elect a last block (`threadfence` is
+    NVIDIA-only), so the score pass ends at a kernel boundary and its
+    output is a struct-of-arrays in global memory. Something must turn
+    that into the reduction's input layout, and this is it.
+
+    WHY IT IS ELEMENTWISE AND NOT FUSED INTO EITHER NEIGHBOUR: fusing it
+    into the finalize kernel would make that kernel write two layouts of
+    the same fact, and fusing it into the reduction would make the
+    reduction read a layout it does not own. Both couple two ported files
+    to each other through a shape neither upstream has.
+
+    THE ONE PIECE OF POLICY IN IT: a cell whose status is not SCORED
+    becomes the DEFAULT `Split` -- `colid = -1`, `best_metric_val =
+    MIN_FINITE` -- with an INVALID exact key. That is `initSplit`'s value
+    (`split.cuh:54-59`), so a non-scored cell loses to every scored one
+    under `Split.update` and ties with other non-scored cells under
+    `compare_exact_key`. A node all of whose candidates were constant
+    therefore reduces to `colid == -1`, which `split_not_valid` rejects
+    and `NodeQueue.push` turns into a leaf -- the same outcome the host
+    path reaches by never producing a candidate at all.
+
+    `best_metric_val` IS ZERO FOR A SCORED CELL, and that is DEVIATION 175
+    surfacing here rather than a shortcut: the device does not compute
+    cuML's float `GainPerSplit`. For classification it does not need to --
+    DEVIATION 145 makes the exact rational the authority and the float a
+    reporting quantity -- but it means the metric arm of `Split.update`'s
+    tie-break is dead on this path and ties fall through to `colid`. The
+    host path has real gains there. `device_tree_check` MEASURES whether
+    that ever changes a tree rather than assuming it does not.
+    ==================================================================
+    """
+    var n_cells = Int(n_cells_in)
+    var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while idx < n_cells:
+        if in_status[unsafe_offset=idx] == SCORE_STATUS_SCORED:
+            cand_quesval[unsafe_offset=idx] = in_threshold[unsafe_offset=idx]
+            cand_colid[unsafe_offset=idx] = colids[unsafe_offset=idx]
+            cand_metric[unsafe_offset=idx] = Float32(0.0)
+            cand_nleft[unsafe_offset=idx] = in_n_left[unsafe_offset=idx]
+            cand_num[unsafe_offset=idx] = in_gini_num[unsafe_offset=idx]
+            cand_den[unsafe_offset=idx] = in_gini_den[unsafe_offset=idx]
+            cand_valid[unsafe_offset=idx] = Int32(1)
+        else:
+            cand_quesval[unsafe_offset=idx] = Float32.MIN_FINITE
+            cand_colid[unsafe_offset=idx] = Int32(-1)
+            cand_metric[unsafe_offset=idx] = Float32.MIN_FINITE
+            cand_nleft[unsafe_offset=idx] = Int32(0)
+            cand_num[unsafe_offset=idx] = Int64(0)
+            cand_den[unsafe_offset=idx] = Int64(0)
+            cand_valid[unsafe_offset=idx] = Int32(0)
+        idx += stride
+
+
+def train_classification_device(
+    ctx: DeviceContext,
+    x_col_major: List[Float32],
+    class_ids: List[Int32],
+    mut row_ids: List[Int32],
+    n_rows: Int32,
+    n_cols: Int32,
+    n_classes: Int32,
+    params: DecisionTreeParams,
+    tree_id: Int32,
+    seed: UInt64,
+) raises -> TreeMetaDataNode[DType.float32]:
+    """One ExtraTree with its split search on the GPU.
+
+    `Builder::train` (`builder.cuh:344-359`) with `doSplit` (`:379-494`)
+    enqueued. Per batch, in their order:
+
+      1. host: sample features into `colids` (`:398-471`);
+      2. host: `updateWorkloadInfo` flattens the ragged batch (`:365-385`);
+      3. device: the range pass -- step 1 of DEVIATION 137;
+      4. device: the draw and score pass -- steps 2-4;
+      5. device: scored cells into reduction candidates (DEVIATION 182);
+      6. device: `evalBestSplit`'s reduction (`split.cuh:107-152`);
+      7. host: copy the batch's splits back, exactly as `:492-494` does;
+      8. host: partition the winners and push the children.
+
+    ROW_IDS IS RE-UPLOADED EVERY BATCH, because the partition is still on the
+    host and it is the host copy that is authoritative between levels. That is
+    a WIRING state, not a design: when the device partition lands, `row_ids`
+    stays resident and this upload becomes the initial one only. It is called
+    out here rather than left to be discovered because it is the difference
+    between a device split search and a device tree build, and this function
+    currently is the former.
+    """
+    if dataset_len_ok(x_col_major, n_rows, n_cols) == False:
+        raise Error("x_col_major must be n_rows * n_cols long, column major")
+    if len(class_ids) != Int(n_rows):
+        raise Error("class_ids must be n_rows long")
+    if len(row_ids) != Int(n_rows):
+        raise Error("row_ids must be n_rows long")
+    validity_check(params)
+
+    comptime TPB = 128
+    comptime MAX_ACC = 32
+    if Int(n_classes) > MAX_ACC:
+        raise Error(
+            "the device score kernel is built for at most "
+            + String(MAX_ACC)
+            + " classes; got "
+            + String(n_classes)
+            + " (DEVIATION 172: shared sizing is comptime here)"
+        )
+    if not score_row_bound_ok(Int(n_rows)):
+        raise Error(
+            "n_rows "
+            + String(n_rows)
+            + " exceeds the row count at which the published Int64 Gini"
+            " numerator is exact; see SCORE_MAX_ROWS_EXACT and DEVIATION 175"
+        )
+
+    var k = n_sampled_cols_for(params, n_cols)
+    var objective = GiniObjectiveFunction[DType.float32](
+        n_classes, params.min_samples_leaf
+    )
+    var queue = NodeQueue[DType.float32](params, n_rows, n_classes, tree_id)
+
+    # The dataset is uploaded ONCE and stays resident, which is theirs: their
+    # `Dataset` holds device pointers for the whole fit (`dataset.h:22-38`).
+    var d_data = ctx.enqueue_create_buffer[DType.float32](len(x_col_major))
+    var d_labels = ctx.enqueue_create_buffer[DType.int32](Int(n_rows))
+    var d_row_ids = ctx.enqueue_create_buffer[DType.int32](Int(n_rows))
+    var h_data = ctx.enqueue_create_host_buffer[DType.float32](
+        len(x_col_major)
+    )
+    var h_labels = ctx.enqueue_create_host_buffer[DType.int32](Int(n_rows))
+    ctx.synchronize()
+    for i in range(len(x_col_major)):
+        h_data.unsafe_ptr().unsafe_store(i, x_col_major[i])
+    for i in range(Int(n_rows)):
+        h_labels.unsafe_ptr().unsafe_store(i, class_ids[i])
+    ctx.enqueue_copy(dst_buf=d_data, src_ptr=h_data.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=d_labels, src_ptr=h_labels.unsafe_ptr())
+    ctx.synchronize()
+
+    while queue.has_work():
+        var work_items = queue.pop()
+        var n_nodes = len(work_items)
+
+        # --- 1. feature sampling, on the host, as theirs is -------------
+        var colids = List[Int32](length=n_nodes * Int(k), fill=Int32(0))
+        _ = sample_features(
+            colids, work_items, tree_id, seed, Int(n_cols), Int(k)
+        )
+
+        # --- 2. the ragged-batch flattening ------------------------------
+        var plan = build_workload_info(work_items, TPB)
+        var n_cells = n_nodes * Int(k)
+
+        # --- per-batch device buffers ------------------------------------
+        var d_min = ctx.enqueue_create_buffer[DType.float32](n_cells)
+        var d_max = ctx.enqueue_create_buffer[DType.float32](n_cells)
+        var d_missing = ctx.enqueue_create_buffer[DType.int32](n_cells)
+        var d_merges = ctx.enqueue_create_buffer[DType.int32](n_cells)
+        var d_cell_mutex = ctx.enqueue_create_buffer[DType.int32](n_cells)
+        var d_nleft = ctx.enqueue_create_buffer[DType.int32](n_cells)
+        var d_ntotal = ctx.enqueue_create_buffer[DType.int32](n_cells)
+        var d_accl = ctx.enqueue_create_buffer[DType.int32](
+            n_cells * Int(n_classes)
+        )
+        var d_acct = ctx.enqueue_create_buffer[DType.int32](
+            n_cells * Int(n_classes)
+        )
+        var d_nblocks = ctx.enqueue_create_buffer[DType.int32](n_cells)
+        var d_status = ctx.enqueue_create_buffer[DType.int32](n_cells)
+        var d_thresh = ctx.enqueue_create_buffer[DType.float32](n_cells)
+        var d_gnum = ctx.enqueue_create_buffer[DType.int64](n_cells)
+        var d_gden = ctx.enqueue_create_buffer[DType.int64](n_cells)
+        var c_q = ctx.enqueue_create_buffer[DType.float32](n_cells)
+        var c_c = ctx.enqueue_create_buffer[DType.int32](n_cells)
+        var c_m = ctx.enqueue_create_buffer[DType.float32](n_cells)
+        var c_l = ctx.enqueue_create_buffer[DType.int32](n_cells)
+        var c_nu = ctx.enqueue_create_buffer[DType.int64](n_cells)
+        var c_de = ctx.enqueue_create_buffer[DType.int64](n_cells)
+        var c_v = ctx.enqueue_create_buffer[DType.int32](n_cells)
+        var r_q = ctx.enqueue_create_buffer[DType.float32](n_nodes)
+        var r_c = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+        var r_m = ctx.enqueue_create_buffer[DType.float32](n_nodes)
+        var r_l = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+        var r_nu = ctx.enqueue_create_buffer[DType.int64](n_nodes)
+        var r_de = ctx.enqueue_create_buffer[DType.int64](n_nodes)
+        var r_v = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+        var r_mg = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+        var r_nw = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+        var r_mx = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+        var d_nb = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+        var d_nc = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+        var d_colids = ctx.enqueue_create_buffer[DType.int32](n_cells)
+        var d_items = ctx.enqueue_create_buffer[DType.uint8](
+            n_nodes * size_of[NodeWorkItem]()
+        )
+        var d_wl = ctx.enqueue_create_buffer[DType.uint8](
+            plan.n_blocks_dimx * size_of[WorkloadInfo]()
+        )
+
+        # One host staging buffer per copy: they are asynchronous, and a
+        # shared one would be rewritten under an in-flight copy.
+        var h_rows = ctx.enqueue_create_host_buffer[DType.int32](Int(n_rows))
+        var h_colids = ctx.enqueue_create_host_buffer[DType.int32](n_cells)
+        var h_items = ctx.enqueue_create_host_buffer[DType.uint8](
+            n_nodes * size_of[NodeWorkItem]()
+        )
+        var h_wl = ctx.enqueue_create_host_buffer[DType.uint8](
+            plan.n_blocks_dimx * size_of[WorkloadInfo]()
+        )
+        var h_nb = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
+        var h_nc = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
+        ctx.synchronize()
+
+        for i in range(Int(n_rows)):
+            h_rows.unsafe_ptr().unsafe_store(i, row_ids[i])
+        for i in range(n_cells):
+            h_colids.unsafe_ptr().unsafe_store(i, colids[i])
+        var items_ptr = h_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem]()
+        for i in range(n_nodes):
+            items_ptr[unsafe_offset=i] = work_items[i]
+        var wl_ptr = h_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo]()
+        for i in range(plan.n_blocks_dimx):
+            wl_ptr[unsafe_offset=i] = plan.info[i]
+        for i in range(n_nodes):
+            h_nb.unsafe_ptr().unsafe_store(i, Int32(i * Int(k)))
+            h_nc.unsafe_ptr().unsafe_store(i, Int32(Int(k)))
+
+        ctx.enqueue_copy(dst_buf=d_row_ids, src_ptr=h_rows.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d_colids, src_ptr=h_colids.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d_items, src_ptr=h_items.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d_wl, src_ptr=h_wl.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d_nb, src_ptr=h_nb.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d_nc, src_ptr=h_nc.unsafe_ptr())
+        ctx.synchronize()
+
+        # --- 3. the range pass -------------------------------------------
+        ctx.enqueue_memset(d_cell_mutex, Int32(0))
+        ctx.enqueue_function[node_feature_range_init_kernel](
+            d_min.unsafe_ptr(),
+            d_max.unsafe_ptr(),
+            d_missing.unsafe_ptr(),
+            d_merges.unsafe_ptr(),
+            Int32(n_cells),
+            grid_dim=ceildiv(n_cells, 64),
+            block_dim=64,
+        )
+        ctx.enqueue_function[node_feature_range_kernel[TPB]](
+            d_min.unsafe_ptr(),
+            d_max.unsafe_ptr(),
+            d_missing.unsafe_ptr(),
+            d_merges.unsafe_ptr(),
+            d_cell_mutex.unsafe_ptr(),
+            d_data.unsafe_ptr(),
+            d_row_ids.unsafe_ptr(),
+            d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
+            d_colids.unsafe_ptr(),
+            n_rows,
+            n_cols,
+            k,
+            Int32(0),
+            grid_dim=(plan.n_blocks_dimx, Int(k), 1),
+            block_dim=(TPB, 1, 1),
+        )
+
+        # --- 4. the draw and score pass ----------------------------------
+        ctx.enqueue_function[node_feature_score_init_kernel](
+            d_status.unsafe_ptr(),
+            d_thresh.unsafe_ptr(),
+            d_nleft.unsafe_ptr(),
+            d_ntotal.unsafe_ptr(),
+            d_gnum.unsafe_ptr(),
+            d_gden.unsafe_ptr(),
+            d_nblocks.unsafe_ptr(),
+            d_accl.unsafe_ptr(),
+            d_acct.unsafe_ptr(),
+            Int32(n_cells),
+            Int32(n_cells * Int(n_classes)),
+            grid_dim=ceildiv(n_cells, 64),
+            block_dim=64,
+        )
+        ctx.enqueue_function[
+            node_feature_score_kernel[TPB, MAX_ACC, True]
+        ](
+            d_nleft.unsafe_ptr(),
+            d_ntotal.unsafe_ptr(),
+            d_accl.unsafe_ptr(),
+            d_acct.unsafe_ptr(),
+            d_nblocks.unsafe_ptr(),
+            d_min.unsafe_ptr(),
+            d_max.unsafe_ptr(),
+            d_missing.unsafe_ptr(),
+            d_data.unsafe_ptr(),
+            d_row_ids.unsafe_ptr(),
+            d_labels.unsafe_ptr(),
+            d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
+            d_colids.unsafe_ptr(),
+            n_rows,
+            k,
+            n_classes,
+            seed,
+            tree_id,
+            Int32(0),
+            grid_dim=(plan.n_blocks_dimx, Int(k), 1),
+            block_dim=(TPB, 1, 1),
+        )
+        ctx.enqueue_function[
+            node_feature_score_finalize_kernel[MAX_ACC, True]
+        ](
+            d_status.unsafe_ptr(),
+            d_thresh.unsafe_ptr(),
+            d_gnum.unsafe_ptr(),
+            d_gden.unsafe_ptr(),
+            d_nleft.unsafe_ptr(),
+            d_ntotal.unsafe_ptr(),
+            d_accl.unsafe_ptr(),
+            d_acct.unsafe_ptr(),
+            d_min.unsafe_ptr(),
+            d_max.unsafe_ptr(),
+            d_missing.unsafe_ptr(),
+            d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            d_colids.unsafe_ptr(),
+            Int32(n_cells),
+            k,
+            n_classes,
+            seed,
+            tree_id,
+            params.min_samples_leaf,
+            Int32(0),
+            grid_dim=ceildiv(n_cells, 64),
+            block_dim=64,
+        )
+
+        # --- 5. scored cells into candidates (DEVIATION 182) -------------
+        ctx.enqueue_function[score_to_candidate_kernel](
+            c_q.unsafe_ptr(),
+            c_c.unsafe_ptr(),
+            c_m.unsafe_ptr(),
+            c_l.unsafe_ptr(),
+            c_nu.unsafe_ptr(),
+            c_de.unsafe_ptr(),
+            c_v.unsafe_ptr(),
+            d_status.unsafe_ptr(),
+            d_thresh.unsafe_ptr(),
+            d_nleft.unsafe_ptr(),
+            d_gnum.unsafe_ptr(),
+            d_gden.unsafe_ptr(),
+            d_colids.unsafe_ptr(),
+            Int32(n_cells),
+            grid_dim=ceildiv(n_cells, 64),
+            block_dim=64,
+        )
+
+        # --- 6. evalBestSplit's reduction ---------------------------------
+        var bpn = ceildiv(Int(k), TPB)
+        if bpn < 1:
+            bpn = 1
+        ctx.enqueue_memset(r_mx, Int32(0))
+        ctx.enqueue_function[split_reduce_init_kernel](
+            r_q.unsafe_ptr(),
+            r_c.unsafe_ptr(),
+            r_m.unsafe_ptr(),
+            r_l.unsafe_ptr(),
+            r_nu.unsafe_ptr(),
+            r_de.unsafe_ptr(),
+            r_v.unsafe_ptr(),
+            r_mg.unsafe_ptr(),
+            r_nw.unsafe_ptr(),
+            Int32(n_nodes),
+            grid_dim=ceildiv(n_nodes, 64),
+            block_dim=64,
+        )
+        ctx.enqueue_function[split_reduce_kernel[TPB]](
+            r_q.unsafe_ptr(),
+            r_c.unsafe_ptr(),
+            r_m.unsafe_ptr(),
+            r_l.unsafe_ptr(),
+            r_nu.unsafe_ptr(),
+            r_de.unsafe_ptr(),
+            r_v.unsafe_ptr(),
+            r_mg.unsafe_ptr(),
+            r_nw.unsafe_ptr(),
+            r_mx.unsafe_ptr(),
+            c_q.unsafe_ptr(),
+            c_c.unsafe_ptr(),
+            c_m.unsafe_ptr(),
+            c_l.unsafe_ptr(),
+            c_nu.unsafe_ptr(),
+            c_de.unsafe_ptr(),
+            c_v.unsafe_ptr(),
+            d_nb.unsafe_ptr(),
+            d_nc.unsafe_ptr(),
+            Int32(bpn),
+            Int32(0),
+            grid_dim=(bpn, n_nodes, 1),
+            block_dim=(TPB, 1, 1),
+        )
+
+        # --- 7. the splits come back to the host, as `:492-494` does ------
+        var o_q = ctx.enqueue_create_host_buffer[DType.float32](n_nodes)
+        var o_c = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
+        var o_l = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
+        var o_nu = ctx.enqueue_create_host_buffer[DType.int64](n_nodes)
+        var o_de = ctx.enqueue_create_host_buffer[DType.int64](n_nodes)
+        var o_v = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
+        ctx.enqueue_copy(dst_buf=o_q, src_buf=r_q)
+        ctx.enqueue_copy(dst_buf=o_c, src_buf=r_c)
+        ctx.enqueue_copy(dst_buf=o_l, src_buf=r_l)
+        ctx.enqueue_copy(dst_buf=o_nu, src_buf=r_nu)
+        ctx.enqueue_copy(dst_buf=o_de, src_buf=r_de)
+        ctx.enqueue_copy(dst_buf=o_v, src_buf=r_v)
+        ctx.synchronize()
+
+        # --- 8. partition the winners and push ---------------------------
+        var splits = List[Split]()
+        for i in range(n_nodes):
+            var colid = o_c.unsafe_ptr()[unsafe_offset=i]
+            var n_left = o_l.unsafe_ptr()[unsafe_offset=i]
+            var metric = Float32(0.0)
+            if o_v.unsafe_ptr()[unsafe_offset=i] != 0 and colid >= 0:
+                # `split_not_valid` rejects `best_metric_val <=
+                # min_impurity_decrease`, so a scored candidate needs a
+                # positive metric to survive it. The device does not compute
+                # cuML's float gain (DEVIATION 175/182), so the exact
+                # rational's validity IS the gate: a valid key means a real
+                # partition with both children non-empty.
+                metric = Float32(1.0)
+            var sp = Split(o_q.unsafe_ptr()[unsafe_offset=i], colid, metric, n_left)
+            splits.append(sp)
+            var item = work_items[i]
+            if not split_not_valid(
+                sp,
+                params.min_impurity_decrease,
+                params.min_samples_leaf,
+                item.instances.count,
+            ):
+                var host_view = Dataset(
+                    rebind[MutPointer[Float32, MutUntrackedOrigin]](
+                        x_col_major.unsafe_ptr()
+                    ),
+                    rebind[MutPointer[Float32, MutUntrackedOrigin]](
+                        x_col_major.unsafe_ptr()
+                    ),
+                    n_rows,
+                    n_cols,
+                    n_rows,
+                    n_cols,
+                    rebind[MutPointer[Int32, MutUntrackedOrigin]](
+                        row_ids.unsafe_ptr()
+                    ),
+                    n_classes,
+                )
+                partition_samples(host_view, sp, item)
+        queue.push(work_items, splits)
+        _ = objective
+
+    var tree = queue.get_tree()
+    var host_view = Dataset(
+        rebind[MutPointer[Float32, MutUntrackedOrigin]](
+            x_col_major.unsafe_ptr()
+        ),
+        rebind[MutPointer[Float32, MutUntrackedOrigin]](
+            x_col_major.unsafe_ptr()
+        ),
+        n_rows,
+        n_cols,
+        n_rows,
+        n_cols,
+        rebind[MutPointer[Int32, MutUntrackedOrigin]](row_ids.unsafe_ptr()),
+        n_classes,
+    )
+    _ = host_view
+    set_leaf_predictions_from_class_ids(
+        class_ids, row_ids, tree, queue.node_instances
+    )
+    return tree^
+
+
+def dataset_len_ok(
+    x_col_major: List[Float32], n_rows: Int32, n_cols: Int32
+) -> Bool:
+    return len(x_col_major) == Int(n_rows) * Int(n_cols)
+
+
+def set_leaf_predictions_from_class_ids(
+    class_ids: List[Int32],
+    row_ids: List[Int32],
+    mut tree: TreeMetaDataNode[DType.float32],
+    node_instances: List[InstanceRange],
+) raises:
+    """`set_leaf_predictions_classification` over an `Int32` class-id array.
+
+    The device path holds labels as class ids (DEVIATION 174), not as the
+    `Float32` a `Dataset` carries, so this is the same pass over the same
+    ranges with the one cast moved. It is NOT a second transcription: the
+    branch order, the early return for a non-leaf and the `vector_leaf`
+    stride are the same three lines, and `device_tree_check` compares its
+    output against the `Dataset` form cell for cell.
+    """
+    var n_nodes = tree.num_nodes()
+    if len(node_instances) != n_nodes:
+        raise Error("SetLeafPredictions: node/range length mismatch")
+    var k = Int(tree.num_outputs)
+    tree.vector_leaf = List[Float32](length=n_nodes * k, fill=Float32(0.0))
+    var counts = List[CountBin](length=k, fill=CountBin())
+    for node_id in range(n_nodes):
+        if not tree.sparsetree[node_id].IsLeaf():
+            continue
+        for c in range(k):
+            counts[c] = CountBin()
+        var rng = node_instances[node_id]
+        for i in range(Int(rng.begin), Int(rng.begin) + Int(rng.count)):
+            counts[Int(class_ids[Int(row_ids[i])])].x += 1
+        GiniObjectiveFunction[DType.float32].SetLeafVector(
+            Pointer(to=counts[0]),
+            Int32(k),
+            Pointer(to=tree.vector_leaf[node_id * k]),
+        )
 
 
 def train_loop_shape() -> String:

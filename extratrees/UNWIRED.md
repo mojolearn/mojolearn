@@ -28,8 +28,8 @@ The root `UNWIRED.md` covers `gbdt/`; this one covers `extratrees/` only.
 
 | piece | why it exists | what would reach it |
 |---|---|---|
-| `node_feature_range_kernel` (device) | step 1 of DEVIATION 137, this lane's first enqueued kernel | a device path in `train_*`. Its output layout is documented; the host `node_feature_min_max` is its per-cell oracle and `range_kernel_check` is green. **Nothing but that check calls it.** |
-| `build_workload_info` | ports `builder.cuh:365-385`; the ragged-batch flattening the device path needs | same. It also sits in `builder_kernels_impl.mojo` rather than `builder.mojo` for lane-ownership reasons; moving it is a merge-time action |
+| ~~`node_feature_range_kernel`~~ | | **WIRED 2026-08-21** by `train_classification_device`, along with the score pass, the finalize pass and the split reduction. `device_tree_check` grows a tree on the GPU and it is bit-identical to the host's. |
+| ~~`build_workload_info`~~ | | **WIRED** by the same. It still sits in `builder_kernels_impl.mojo` rather than `builder.mojo` for lane-ownership reasons; moving it is a merge-time action |
 | `fixed_point.mojo` (`choose_scale`, `quantize`, `mse_proxy_exact`) | DEVIATION 135's ruling | the device regression score pass. The host oracle runs at `Float64` and does not need it, so today only `fixed_point_check` calls it |
 | `ProxyImpurityExact` / `CompareProxyExact` | DEVIATION 144-145 | reached by `node_split_random_gini`, so this row is WIRED — kept here to record that the DEVICE reduction must also honour it, and does not exist yet |
 
