@@ -54,12 +54,13 @@ tolerance on the model.
 
 ## THE RECORDS
 
-    format mojolearn-model 1
+    format mojolearn-model 2
     features <n_features> <n_one_hot_flags>
     trees <n_trees>
     losses <n_losses>
     ctr_columns <n>                        (only when n is non-zero)
-    feature <f> folds <k> one_hot <0|1> type <float|cat|ctr> borders <n> <tok>...
+    feature <f> folds <k> one_hot <0|1> type <float|cat|ctr>
+            nan <as_is|as_false|as_true> borders <n> <tok>...
     ctr_table <column> source <f> type <name> prior_num <tok> prior_denom <tok>
               shift <tok> scale <tok> denom <int> classes <int>
               target_border <int> entries <n>
@@ -138,10 +139,14 @@ rather than annotated.
   (`batch_binarized_ctr_calcer.cpp:57-63`, MinEntropy-15 for FeatureFreq)
   and stores it there. A second copy would be a second thing to corrupt.
 * A model with no categorical features writes NONE of these records and no
-  `split_type` token, so every file this format wrote before they landed
-  is byte-identical to what it writes now, and the `format` version stays
-  1 for float-only models. MEASURED, not asserted: an 8-tree float-only
-  model's 8022 bytes hash the same before and after this change.
+  `split_type` token. That used to come with a byte-identity claim and a
+  `format` version pinned at 1; **the version is 2 as of 2026-08-21 and the
+  claim is retired**, because the `feature` record grew a mandatory `nan`
+  field. It is mandatory rather than trailing-and-conditional on purpose:
+  the alternative is a file whose absent field means `AsIs`, and `AsIs` is
+  the treatment that REFUSES a NaN. A reader that guessed it would turn a
+  model that should reject a NaN row into one that silently scores it in
+  the bottom bin.
 * `split` grows a TRAILING `split_type take_bin` pair, and only on a
   one-hot split. Their `TBinarySplit` carries `EBinSplitType` as a member
   (`cuda/data/feature.h:38`) and their `ToSplit` sets it from
@@ -164,6 +169,11 @@ from gbdt.models.ctr_value_table import (
     ctr_type_from_name,
 )
 from gbdt.ctrs.ctr import ctr_type_name
+from gbdt.data.quantization import (
+    NAN_TREATMENT_AS_FALSE,
+    NAN_TREATMENT_AS_IS,
+    NAN_TREATMENT_AS_TRUE,
+)
 from gbdt.models.oblivious_model import (
     BIN_SPLIT_TAKE_BIN,
     BIN_SPLIT_TAKE_GREATER,
@@ -181,7 +191,37 @@ comptime MODEL_TEXT_NAME = "mojolearn-model"
 
 #: Bumped only when a record an OLDER reader needs changes meaning. Adding
 #: the CTR records above does not bump it; see THE CTR SEAM.
-comptime MODEL_TEXT_VERSION = 1
+comptime MODEL_TEXT_VERSION = 2
+
+
+def nan_treatment_token(treatment: Int) raises -> String:
+    """Their `ENanValueTreatment` spellings, lowercased for this format.
+
+    Written for every column including the ones that cannot have NaNs, so
+    the field is positional and a reader never has to decide what an absent
+    one meant."""
+    if treatment == NAN_TREATMENT_AS_IS:
+        return String("as_is")
+    if treatment == NAN_TREATMENT_AS_FALSE:
+        return String("as_false")
+    if treatment == NAN_TREATMENT_AS_TRUE:
+        return String("as_true")
+    raise Error("unknown nan treatment " + String(treatment))
+
+
+def nan_treatment_from_token(tok: StringSlice) raises -> Int:
+    if tok == String("as_is"):
+        return NAN_TREATMENT_AS_IS
+    if tok == String("as_false"):
+        return NAN_TREATMENT_AS_FALSE
+    if tok == String("as_true"):
+        return NAN_TREATMENT_AS_TRUE
+    raise Error(
+        "unknown nan treatment '" + String(tok)
+        + "'; this reader knows as_is, as_false and as_true and REFUSES"
+        " one it does not, because guessing would turn a model that"
+        " rejects a NaN into one that scores it"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -375,7 +415,9 @@ def model_text(tm: TrainedModel) raises -> String:
         var line = (
             String("feature ") + String(f) + " folds "
             + String(tm.fold_counts[f]) + " one_hot " + String(flag)
-            + " type " + kind + " borders " + String(len(tm.borders[f]))
+            + " type " + kind
+            + " nan " + nan_treatment_token(tm.nan_treatment[f])
+            + " borders " + String(len(tm.borders[f]))
         )
         for b in range(len(tm.borders[f])):
             line += " " + f32_token(tm.borders[f][b])
@@ -546,6 +588,7 @@ def load_model_text(text: String) raises -> TrainedModel:
     var fold_counts = List[Int]()
     var one_hot = List[Bool]()
     var borders = List[List[Float32]]()
+    var nan_treatment = List[Int]()
     var losses = List[Float64]()
     var model = TAdditiveModel()
 
@@ -657,20 +700,22 @@ def load_model_text(text: String) raises -> TrainedModel:
                         + "; a one-hot column is exactly a `cat` column and"
                         " the two spellings must agree"
                     )
-                _expect(t, 8, String("borders"), String("feature"))
+                _expect(t, 8, String("nan"), String("feature"))
+                _expect(t, 10, String("borders"), String("feature"))
                 fold_counts.append(Int(t[3]))
                 if n_flags != 0:
                     one_hot.append(Int(t[5]) != 0)
                 feature_kinds.append(t[7])
-                var n_b = Int(t[9])
-                if len(t) != 10 + n_b:
+                nan_treatment.append(nan_treatment_from_token(t[9]))
+                var n_b = Int(t[11])
+                if len(t) != 12 + n_b:
                     raise Error(
                         "feature " + String(t[1]) + " declares " + String(n_b)
-                        + " borders and carries " + String(len(t) - 10)
+                        + " borders and carries " + String(len(t) - 12)
                     )
                 var bs = List[Float32]()
                 for i in range(n_b):
-                    bs.append(parse_f32(t[10 + i]))
+                    bs.append(parse_f32(t[12 + i]))
                 borders.append(bs^)
                 features_seen += 1
             elif kind == String("ctr_table"):
@@ -1030,7 +1075,7 @@ def load_model_text(text: String) raises -> TrainedModel:
     # loss with a number that never saw a held-out row. Their model file
     # carries no training history either.
     return TrainedModel(
-        model^, fold_counts^, one_hot^, borders^, losses^,
+        model^, fold_counts^, one_hot^, borders^, nan_treatment^, losses^,
         List[Float64](), -1, False, ctr_column_count,
         ctr_tables^,
     )

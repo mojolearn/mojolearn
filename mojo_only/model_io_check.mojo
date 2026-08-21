@@ -76,6 +76,7 @@ from gbdt.models.oblivious_model import (
     TObliviousTreeModel,
     TObliviousTreeStructure,
 )
+from gbdt.data.quantization import NAN_TREATMENT_AS_IS
 from gbdt.train import TrainedModel, predict_floats, train
 
 
@@ -204,6 +205,15 @@ def compare_models(a: TrainedModel, b: TrainedModel, label: String) raises:
     for f in range(len(a.one_hot)):
         if a.one_hot[f] != b.one_hot[f]:
             raise Error(label + ": one_hot[" + String(f) + "] differs")
+    if len(a.nan_treatment) != len(b.nan_treatment):
+        raise Error(label + ": nan_treatment length "
+                    + String(len(a.nan_treatment)) + " vs "
+                    + String(len(b.nan_treatment)))
+    for f in range(len(a.nan_treatment)):
+        if a.nan_treatment[f] != b.nan_treatment[f]:
+            raise Error(label + ": nan_treatment[" + String(f) + "] "
+                        + String(a.nan_treatment[f]) + " vs "
+                        + String(b.nan_treatment[f]))
     if len(a.borders) != len(b.borders):
         raise Error(label + ": borders length " + String(len(a.borders))
                     + " vs " + String(len(b.borders)))
@@ -501,7 +511,11 @@ def build_synthetic(ctr_columns: Int = 0) raises -> TrainedModel:
     # empty curve, -1 for "not recorded", and no early stop. The text
     # carries none of them, so a round trip that produced anything else
     # would be inventing a held-out history.
-    return TrainedModel(m^, fold_counts^, one_hot^, borders^, losses^,
+    var nan_treatment = List[Int]()
+    for _ in range(len(fold_counts)):
+        nan_treatment.append(NAN_TREATMENT_AS_IS)
+    return TrainedModel(m^, fold_counts^, one_hot^, borders^,
+                        nan_treatment^, losses^,
                         List[Float64](), -1, False,
                         ctr_columns, List[TCtrValueTable]())
 
@@ -945,15 +959,17 @@ def sabotage_halve_borders(text: String) raises -> String:
     for i in range(len(lines)):
         if lines[i].startswith("feature 0 "):
             var t = _fields_of(lines[i])
-            var n_b = Int(t[9])
+            # the count sits at 11 and the borders start at 12 since the
+            # record grew its `nan` field (format version 2)
+            var n_b = Int(t[11])
             var keep = n_b // 2
             var rebuilt = String("")
-            for k in range(10):
+            for k in range(12):
                 if k > 0:
                     rebuilt += " "
-                rebuilt += t[k] if k != 9 else String(keep)
+                rebuilt += t[k] if k != 11 else String(keep)
             for k in range(keep):
-                rebuilt += " " + t[10 + k]
+                rebuilt += " " + t[12 + k]
             out.append(rebuilt^)
         else:
             out.append(lines[i])

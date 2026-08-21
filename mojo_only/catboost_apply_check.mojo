@@ -58,6 +58,7 @@ from gbdt.models.oblivious_model import (
     TObliviousTreeModel,
     TObliviousTreeStructure,
 )
+from gbdt.data.quantization import NAN_TREATMENT_AS_IS
 from gbdt.train import TrainedModel, predict_floats
 
 comptime ORACLE = "bench/oracle.txt"
@@ -204,8 +205,12 @@ def check_catboost_apply(ctx: DeviceContext) raises:
         fold_counts.append(len(borders[fdx]))
         one_hot.append(False)
 
+    var nan_treatment = List[Int]()
+    for _ in range(len(fold_counts)):
+        nan_treatment.append(NAN_TREATMENT_AS_IS)
     var tm = TrainedModel(
-        model^, fold_counts^, one_hot^, borders^, List[Float64](),
+        model^, fold_counts^, one_hot^, borders^, nan_treatment^,
+        List[Float64](),
         List[Float64](), -1, False, 0,
         List[TCtrValueTable]()
     )

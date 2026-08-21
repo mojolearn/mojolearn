@@ -70,6 +70,16 @@ from gbdt.targets.kernel.pointwise_targets import (
     OBJECTIVE_MULTICLASS_OVA,
     OBJECTIVE_RMSE,
 )
+from gbdt.data.quantization import (
+    NAN_TREATMENT_AS_IS,
+    calc_quantization,
+    nan_substitution,
+    nan_value_treatment,
+)
+from gbdt.options.data_processing_options import (
+    NAN_MODE_FORBIDDEN,
+    nan_mode_from_name,
+)
 from gbdt.options.loss_description import make_loss_description
 from gbdt.options.catboost_options import (
     COUNTER_CALC_FULL,
@@ -89,6 +99,13 @@ struct TrainedModel(Movable):
     var fold_counts: List[Int]
     var one_hot: List[Bool]
     var borders: List[List[Float32]]
+    #: their `TFloatFeature::NanValueTreatment`, one per column
+    #: (`libs/model/features.h:51-61`). `AsIs` for a column the learn pool
+    #: had no NaN in, and a NaN arriving on such a column at apply time is
+    #: their `CB_ENSURE` rather than a guess. It travels WITH the borders
+    #: because it is part of the grid: the sentinel border is meaningless
+    #: without the substitution that reaches it.
+    var nan_treatment: List[Int]
     var losses: List[Float64]
     #: the HELD-OUT loss per iteration, empty when no eval set was given.
     #: Their `TestCursor`'s error curve, which is what the overfitting
@@ -125,6 +142,7 @@ def _build_cindex_from_floats(
     n_rows: Int,
     borders: List[List[Float32]],
     fold_counts: List[Int],
+    nan_treatment: List[Int] = List[Int](),
 ) raises -> DeviceBuffer[DType.uint32]:
     """Quantize every column and pack it into the compressed index.
 
@@ -138,6 +156,22 @@ def _build_cindex_from_floats(
     (`grid_policy.mojo:83`) is a step function, so the two picked different
     packing policies wherever the pair straddled a step -- 15 folds go to
     HalfByte and 16 to OneByte, 1 fold to Binary and 2 to HalfByte.
+
+    **`nan_treatment` IS WHERE NaN IS HANDLED, AND THE ONLY PLACE.** One
+    entry per column, their `TFloatFeature::ENanValueTreatment`. A NaN is
+    replaced by `-inf` (`AsFalse`) or `+inf` (`AsTrue`) as it is staged for
+    the quantize kernel, which is exactly what their evaluator does
+    (`libs/model/cpu/quantization.h:385-408`), and then the ordinary
+    `value > border` comparison puts it in the sentinel bin. Nothing
+    downstream -- histogram, score, partition, apply -- knows NaN exists.
+    An empty list means every column is `AsIs`, which is the no-NaN case
+    and the contract every caller had before this argument existed.
+
+    A column whose treatment is `AsIs` and which CONTAINS a NaN is an
+    error, their `CB_ENSURE(allowNans, "There are NaNs in test dataset
+    (feature number N) but there were no NaNs in learn dataset")`
+    (`private/libs/quantization/utils.h:74-78`). It is raised here rather
+    than at the caller because this is the function that can see the value.
 
     A 16-category one-hot feature was silently unlearnable as a result. No
     exception, no crash: a returned model that could not see the feature.
@@ -173,8 +207,20 @@ def _build_cindex_from_floats(
         if len(borders[f]) == 0:
             continue
         ref cf = lay.features[f]
+        var treat = NAN_TREATMENT_AS_IS
+        if len(nan_treatment) == n_features:
+            treat = nan_treatment[f]
+        var sub = nan_substitution(treat)
         for r in range(n_rows):
-            hx.unsafe_ptr().unsafe_store(r, x_colmajor[f * n_rows + r])
+            var v = x_colmajor[f * n_rows + r]
+            if v != v:
+                if treat == NAN_TREATMENT_AS_IS:
+                    raise Error(
+                        "There are NaNs in feature number " + String(f)
+                        + " but there were no NaNs in the learn dataset"
+                    )
+                v = sub
+            hx.unsafe_ptr().unsafe_store(r, v)
         ctx.enqueue_copy(dst_buf=xdev, src_ptr=hx.unsafe_ptr())
         hbo.unsafe_ptr().unsafe_store(0, Float32(len(borders[f])))
         for b in range(len(borders[f])):
@@ -213,6 +259,7 @@ def train(
     cat_feature_params: List[TCatFeatureParams] = List[TCatFeatureParams](),
     ctr_estimation_permutation_id: Int = -1,
     permutation_count: Int = -1,
+    nan_mode: String = String("Min"),
     loss: String = "RMSE",
     loss_alpha: Float32 = Float32(-1.0),
     loss_q: Float32 = Float32(-1.0),
@@ -688,6 +735,14 @@ def train(
 
     var borders = List[List[Float32]]()
     var fold_counts = List[Int]()
+    # their `TFloatFeature::NanValueTreatment`, one per COLUMN. One-hot and
+    # CTR columns stay `AsIs`: a one-hot column holds dense codes and a CTR
+    # column holds a computed statistic, and a NaN in either is a caller
+    # error rather than a value to bin.
+    var nan_mode_opt = nan_mode_from_name(nan_mode)
+    var column_nan_treatment = List[Int]()
+    for _ in range(n_columns):
+        column_nan_treatment.append(NAN_TREATMENT_AS_IS)
     for f in range(n_columns):
         var flagged = column_one_hot[f]
         if flagged:
@@ -737,8 +792,13 @@ def train(
             fold_counts.append(len(bs))
             borders.append(bs^)
         else:
+            # `CalcQuantization` (`libs/data/quantization.cpp:300-346`):
+            # the column decides its own NaN mode, and a column that has
+            # NaNs spends ONE of `border_count` on the sentinel.
             var col = columns[f].copy()
-            var bs = best_split(col^, border_count)
+            var q = calc_quantization(col^, border_count, nan_mode_opt)
+            var bs = q[0].copy()
+            column_nan_treatment[f] = nan_value_treatment(q[1])
             fold_counts.append(len(bs))
             borders.append(bs^)
 
@@ -766,7 +826,8 @@ def train(
                     flat.append(columns[c][r])
         cindexes.append(
             _build_cindex_from_floats(
-                ctx, flat, n_rows, borders, fold_counts
+                ctx, flat, n_rows, borders, fold_counts,
+                column_nan_treatment,
             )
         )
     var cindex = cindexes[est_perm].copy()
@@ -1021,7 +1082,8 @@ def train(
             eval_expanded.append(Float32(0.0))
 
     var test_cindex = _build_cindex_from_floats(
-        ctx, eval_expanded, t_rows, borders, fold_counts
+        ctx, eval_expanded, t_rows, borders, fold_counts,
+        column_nan_treatment,
     )
     var test_targets = ctx.enqueue_create_buffer[DType.float32](t_rows)
     var h_ty = ctx.enqueue_create_host_buffer[DType.float32](t_rows)
@@ -1113,6 +1175,7 @@ def train(
         fold_counts^,
         column_one_hot^,
         borders^,
+        column_nan_treatment^,
         losses^,
         t_losses^,
         fit_result.best_iteration,
@@ -1193,7 +1256,8 @@ def predict_floats(
             tm.ctr_tables, n_features, x_colmajor, n_rows
         )
     var cindex = _build_cindex_from_floats(
-        ctx, expanded, n_rows, tm.borders, tm.fold_counts
+        ctx, expanded, n_rows, tm.borders, tm.fold_counts,
+        tm.nan_treatment,
     )
     # A MULTI-DIMENSIONAL MODEL RETURNS `n_rows * approx_dim` VALUES, and
     # they come back PLANE-MAJOR -- `[dim * n_rows + row]` -- because that
@@ -1253,7 +1317,8 @@ def predict_multi_floats(
     else:
         expanded_x = x_colmajor.copy()
     var cindex = _build_cindex_from_floats(
-        ctx, expanded_x, n_rows, tm.borders, tm.fold_counts
+        ctx, expanded_x, n_rows, tm.borders, tm.fold_counts,
+        tm.nan_treatment,
     )
     var cursor = ctx.enqueue_create_buffer[DType.float32](
         approx_dim * n_rows

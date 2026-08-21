@@ -93,6 +93,7 @@ from gbdt.ctrs.ctr_binarization import (
     build_target_borders,
 )
 from gbdt.options.catboost_options import TCatFeatureParams
+from gbdt.data.quantization import NAN_TREATMENT_AS_IS
 from gbdt.train import (
     TrainedModel,
     model_input_features,
@@ -869,8 +870,11 @@ def build_categorical_model(with_tables: Bool = True) raises -> TrainedModel:
                 HB_LEARN_ROWS, 0, 0, hand_built_counts(),
             )
         )
+    var nan_treatment = List[Int]()
+    for _ in range(len(fold_counts)):
+        nan_treatment.append(NAN_TREATMENT_AS_IS)
     return TrainedModel(
-        m^, fold_counts^, one_hot^, borders^, losses^,
+        m^, fold_counts^, one_hot^, borders^, nan_treatment^, losses^,
         List[Float64](), -1, False, 1, tables^
     )
 

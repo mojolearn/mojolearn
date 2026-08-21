@@ -56,9 +56,14 @@ anything larger rather than computing simple CTRs under a name that promises
 combinations. With ordered boosting, this is the other half of what makes
 CatBoost CatBoost.
 
-**Missing values have no handling at all.** There is no `nan_mode`; NaNs are
-dropped when borders are built (`grid_creator/binarization.mojo:167`) and
-nothing routes them at apply time. A pool with NaNs does not fail loudly.
+Missing values were on this list until 2026-08-21 and are not any more:
+`nan_mode` is ported (`gbdt/data/quantization.mojo`), defaults to their
+`Min`, resolves PER FEATURE the way `ComputeNanMode` resolves it, spends one
+of the column's borders on the sentinel as `CalcQuantization` does, travels
+in the model text, and refuses a NaN on a column the learn pool had none in.
+**The knob is not on the Python surface yet** -- the default reaches it
+through `train`, so NaNs are handled from Python, but `nan_mode="Max"` is
+not selectable there until the extension is rebuilt.
 
 Also absent from their GPU learner: `Depthwise` / `Lossguide` / `Region` grow
 policies and non-symmetric trees, snapshotting, multi-GPU, and custom

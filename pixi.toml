@@ -198,6 +198,16 @@ check-permutation-count = "mojo run -I . mojo_only/permutation_count_check.mojo"
 # conserves every leaf SIZE and is why the gate is row-wise. Own main().
 check-leaf-partition = "mojo run -I . mojo_only/leaf_partition_check.mojo"
 
+# `nan_mode`: NaN gets a bin of its own at one end of the grid, and CatBoost
+# does it entirely in quantization -- one border of the column's budget is
+# spent on a sentinel. Six gates: both modes isolate NaN rows on a fixture
+# whose NaN targets nothing else explains, the budget is unchanged (which is
+# what catches an insert-without-decrement), the sentinel is at the named
+# end, a clean column resolves to Forbidden whatever was asked, a saved
+# model routes NaN identically, and a NaN the learn pool never saw is
+# refused. Own main(); a GPU, ~2 min.
+check-nan-mode = "mojo run -I . mojo_only/nan_mode_check.mojo"
+
 # The LSD radix sort over (bin, permutation position). Gates STABILITY
 # separately from sortedness and prints both, because sortedness alone
 # cannot see a tie that moved -- and the tie order IS the second half of
