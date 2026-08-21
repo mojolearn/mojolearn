@@ -1,0 +1,251 @@
+# extratrees sklearn QUALITY-BAND reference, v1
+#
+# THIS IS NOT A CORRECTNESS GATE. Bitwise parity with scikit-learn is
+# impossible by construction (DEVIATIONS.md 130: their draws come off one
+# sequential xorshift stream whose ORDER depends on the data; ours are
+# counter-based and order-independent). Deviations 131 and 132 widen the
+# gap further. A number outside a band below is a FINDING TO REPORT, never
+# a target to tune toward.
+#
+# Regenerate:  see extratrees/tools/README_sklearn_reference.md
+#
+# Every float is written as <decimal>/<hexbits>, the hexbits being the
+# big-endian IEEE-754 float64 bit pattern. READ THE HEX. `String(Float32)`
+# does not round-trip in this toolchain and decimal text is not evidence.
+
+version sklearn 1.9.0
+version numpy 2.5.2
+version python 3.14.7
+fixture_seed 20260821
+sklearn_seeds 21 (random_state = 0 .. 20)
+split_rule train iff (row_index % 4) < 2, holdout otherwise
+
+# Fixture parity against extratrees/mojo_only/fixture_parity_check.mojo,
+# compared on FLOAT BIT PATTERNS, cell for cell. The numbers written here
+# are the actual comparison counts, not a shape calculation.
+parity status EXACT
+parity x_cells 48384
+parity y_cells 2944
+parity label_cells 2944
+parity total_cells 54272
+parity mismatches 0
+parity dump_sha256 3ddb7e1e75b90d2fda54de4d1654c9c9b8b5a53bbb3d2da30b32f7bc75f09327
+
+# scikit-learn's OWN defaults for classification; only random_state is set.
+params classification bootstrap False
+params classification ccp_alpha 0.0
+params classification class_weight None
+params classification criterion 'gini'
+params classification max_depth None
+params classification max_features 'sqrt'
+params classification max_leaf_nodes None
+params classification max_samples None
+params classification min_impurity_decrease 0.0
+params classification min_samples_leaf 1
+params classification min_samples_split 2
+params classification min_weight_fraction_leaf 0.0
+params classification monotonic_cst None
+params classification n_estimators 100
+params classification n_jobs None
+params classification oob_score False
+params classification verbose 0
+params classification warm_start False
+
+# scikit-learn's OWN defaults for regression; only random_state is set.
+params regression bootstrap False
+params regression ccp_alpha 0.0
+params regression criterion 'squared_error'
+params regression max_depth None
+params regression max_features 1.0
+params regression max_leaf_nodes None
+params regression max_samples None
+params regression min_impurity_decrease 0.0
+params regression min_samples_leaf 1
+params regression min_samples_split 2
+params regression min_weight_fraction_leaf 0.0
+params regression monotonic_cst None
+params regression n_estimators 100
+params regression n_jobs None
+params regression oob_score False
+params regression verbose 0
+params regression warm_start False
+
+fixture hashed_cls
+  task classification
+  seed 20260821
+  n_rows 512
+  n_cols 16
+  n_classes 3
+  n_train 256
+  n_holdout 256
+  split train iff (row_index % 4) < 2, holdout otherwise
+  metric accuracy
+  accuracy_min 0.28515625/3fd2400000000000
+  accuracy_median 0.3125/3fd4000000000000
+  accuracy_max 0.3515625/3fd6800000000000
+  mean_depth_min 15.35/402eb33333333333
+  mean_depth_median 15.539999999999999/402f147ae147ae14
+  mean_depth_max 15.82/402fa3d70a3d70a4
+  mean_leaves_min 152.38999999999999/40630c7ae147ae14
+  mean_leaves_median 153.69999999999999/4063366666666666
+  mean_leaves_max 154.68000000000001/406355c28f5c28f6
+  degenerate no
+end_fixture
+
+fixture hashed_reg
+  task regression
+  seed 20260821
+  n_rows 512
+  n_cols 16
+  n_classes 1
+  n_train 256
+  n_holdout 256
+  split train iff (row_index % 4) < 2, holdout otherwise
+  metric mse
+  mse_min 0.3661126122609123/3fd76e639814146e
+  mse_median 0.37299174457271506/3fd7df18c42789fb
+  mse_max 0.38368537514654627/3fd88e4d1a8d4e5b
+  mean_depth_min 16.32/403051eb851eb852
+  mean_depth_median 16.579999999999998/4030947ae147ae14
+  mean_depth_max 16.739999999999998/4030bd70a3d70a3d
+  mean_leaves_min 256/4070000000000000
+  mean_leaves_median 256/4070000000000000
+  mean_leaves_max 256/4070000000000000
+  degenerate no
+end_fixture
+
+fixture shaped_all
+  task classification
+  seed 20260821
+  n_rows 512
+  n_cols 10
+  n_classes 2
+  n_train 256
+  n_holdout 256
+  split train iff (row_index % 4) < 2, holdout otherwise
+  metric accuracy
+  accuracy_min 0.4609375/3fdd800000000000
+  accuracy_median 0.4921875/3fdf800000000000
+  accuracy_max 0.515625/3fe0800000000000
+  mean_depth_min 15.35/402eb33333333333
+  mean_depth_median 15.6/402f333333333333
+  mean_depth_max 15.91/402fd1eb851eb852
+  mean_leaves_min 184.87/40671bd70a3d70a4
+  mean_leaves_median 186.03999999999999/40674147ae147ae1
+  mean_leaves_max 188.21000000000001/406786b851eb851f
+  degenerate no
+end_fixture
+
+fixture shaped_constant_heavy
+  task classification
+  seed 20260821
+  n_rows 512
+  n_cols 48
+  n_classes 2
+  n_train 256
+  n_holdout 256
+  split train iff (row_index % 4) < 2, holdout otherwise
+  metric accuracy
+  accuracy_min 0.4296875/3fdb800000000000
+  accuracy_median 0.4609375/3fdd800000000000
+  accuracy_max 0.48046875/3fdec00000000000
+  mean_depth_min 15.91/402fd1eb851eb852
+  mean_depth_median 16.309999999999999/40304f5c28f5c28f
+  mean_depth_max 16.530000000000001/403087ae147ae148
+  mean_leaves_min 194.37/40684bd70a3d70a4
+  mean_leaves_median 195.88/40687c28f5c28f5c
+  mean_leaves_max 197.06999999999999/4068a23d70a3d70a
+  degenerate yes
+  degenerate_note 45 of 48 columns fail the float32 1e-7 constant test; max_features='sqrt' draws 6, so P(all six constant) = C(45,6)/C(48,6) ~= 0.664. DEVIATIONS 132 and 151 predict OUR trees are SHALLOWER here.
+end_fixture
+
+fixture separable_gap
+  task classification
+  seed 20260821
+  n_rows 256
+  n_cols 2
+  n_classes 2
+  n_train 128
+  n_holdout 128
+  split train iff (row_index % 4) < 2, holdout otherwise
+  metric accuracy
+  accuracy_min 1/3ff0000000000000
+  accuracy_median 1/3ff0000000000000
+  accuracy_max 1/3ff0000000000000
+  mean_depth_min 2.8300000000000001/4006a3d70a3d70a4
+  mean_depth_median 3.4100000000000001/400b47ae147ae148
+  mean_depth_max 4.0700000000000003/401047ae147ae148
+  mean_leaves_min 6.1500000000000004/401899999999999a
+  mean_leaves_median 7.9400000000000004/401fc28f5c28f5c3
+  mean_leaves_max 9.7300000000000004/402375c28f5c28f6
+  degenerate no
+end_fixture
+
+fixture regression_step
+  task regression
+  seed 20260821
+  n_rows 256
+  n_cols 2
+  n_classes 1
+  n_train 128
+  n_holdout 128
+  split train iff (row_index % 4) < 2, holdout otherwise
+  metric mse
+  mse_min 1.9531250000000034e-05/3ef47ae147ae1485
+  mse_median 0.00025390624999999941/3f30a3d70a3d7099
+  mse_max 0.001015625/3f50a3d70a3d70a4
+  mean_depth_min 2.79/400651eb851eb852
+  mean_depth_median 3.1699999999999999/40095c28f5c28f5c
+  mean_depth_max 3.3799999999999999/400b0a3d70a3d70a
+  mean_leaves_min 3.79/400e51eb851eb852
+  mean_leaves_median 4.2000000000000002/4010cccccccccccd
+  mean_leaves_max 4.4000000000000004/401199999999999a
+  degenerate no
+end_fixture
+
+fixture tie_pair
+  task classification
+  seed 20260821
+  n_rows 256
+  n_cols 3
+  n_classes 2
+  n_train 128
+  n_holdout 128
+  split train iff (row_index % 4) < 2, holdout otherwise
+  metric accuracy
+  accuracy_min 1/3ff0000000000000
+  accuracy_median 1/3ff0000000000000
+  accuracy_max 1/3ff0000000000000
+  mean_depth_min 1.9099999999999999/3ffe8f5c28f5c28f
+  mean_depth_median 2.0800000000000001/4000a3d70a3d70a4
+  mean_depth_max 2.5800000000000001/4004a3d70a3d70a4
+  mean_leaves_min 3.6699999999999999/400d5c28f5c28f5c
+  mean_leaves_median 4.1100000000000003/401070a3d70a3d71
+  mean_leaves_max 5.2699999999999996/4015147ae147ae14
+  degenerate no
+end_fixture
+
+fixture all_constant
+  task classification
+  seed 20260821
+  n_rows 128
+  n_cols 4
+  n_classes 2
+  n_train 64
+  n_holdout 64
+  split train iff (row_index % 4) < 2, holdout otherwise
+  metric accuracy
+  accuracy_min 0.5/3fe0000000000000
+  accuracy_median 0.5/3fe0000000000000
+  accuracy_max 0.5/3fe0000000000000
+  mean_depth_min 0/0000000000000000
+  mean_depth_median 0/0000000000000000
+  mean_depth_max 0/0000000000000000
+  mean_leaves_min 1/3ff0000000000000
+  mean_leaves_median 1/3ff0000000000000
+  mean_leaves_max 1/3ff0000000000000
+  degenerate yes
+  degenerate_note every column exactly constant, so NO split exists at any node. sklearn's own trees must be depth 0 with exactly 1 leaf. Labels are r % 2 so the node is impure and 'no split' cannot be right for the wrong reason.
+end_fixture
+
+# end

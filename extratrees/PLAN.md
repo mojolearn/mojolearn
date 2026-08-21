@@ -178,6 +178,60 @@ the objectives, the RNG or the checks — none of which would be wasted.
    the root `PORTING.md`. It remains written in `PORTING.md`'s format, so that
    a future merge is an append rather than an edit, but no merge is planned.
 
+## BLOCKING, and it needs Andrew
+
+**cuML's feature sampler never draws column 0 at `k = 1`, and we ported it
+faithfully, and it makes the learner wrong.**
+
+Measured (`_probe`, and the failure it causes is in `quality_band_check`):
+
+    n=2 k=1  ->  col0 drawn   0 of 64 nodes, col1 64
+    n=3 k=1  ->  col0 drawn   0 of 64
+    n=4 k=1  ->  col0 drawn   0 of 64
+    n=8 k=1  ->  col0 drawn   0 of 64
+
+Not under-drawn. NEVER drawn. Root cause is `builder_kernels.cuh:231-232`,
+which passes `mask[0]` — a FLAG, 0 or 1 — as `SubtractLeft`'s
+`tile_predecessor_item`, so CUB compares the block MINIMUM against the previous
+iteration's flag and marks it a duplicate when they are equal. Column 0 is the
+minimum whenever it is drawn.
+
+**The consequence is not statistical, it is fatal on small `n`.** On the
+`separable_gap` fixture — 2 columns, column 0 perfectly separates the classes,
+column 1 is noise — `max_features='sqrt'` gives `k = 1`, so our learner can
+never see the separating column. It splits on noise forever: accuracy 0.523
+against sklearn's exact 1.0, mean depth 10.8 against their 3.4, mean leaves
+70.5 against their 7.9. `tree_check` did not catch it because it runs at
+`max_features = 1.0`, where every column is a candidate.
+
+**Why this is not mine to decide.** Rule 1 says theirs is right and ours is
+wrong until their file says otherwise, and their file says this. But
+`PORTING_RULES.md` rule 4 is equally explicit that a workaround which would
+change the algorithm is not a workaround, it is a FORK, and it needs Andrew.
+The two options, priced:
+
+1. **Keep it.** The port stays faithful and the defect is documented and
+   asserted (`feature_sampler_check` pins the starvation, so a later
+   "improvement" turns red). Price: our ExtraTrees is materially worse than
+   sklearn's whenever `max_features` resolves to a small `k` and a low-index
+   column matters — which for `sqrt` is every dataset under ~10 columns, and
+   for column 0 specifically, every dataset.
+2. **Fix it as a numbered deviation.** Pass a sentinel that cannot collide
+   with a column id (their `IdxT` is signed, so `-1` works) as the tile
+   predecessor. One line, and it makes the sampler uniform. Price: our sampler
+   no longer reproduces cuML's, so any future per-cell comparison against a
+   cuML run would disagree by construction — though no such comparison is
+   possible on this hardware anyway, since their GPU arm does not run here.
+
+**Recommendation: option 2**, as a numbered deviation with this measurement
+attached, because a faithful port of a defect that makes the learner unable to
+see a feature is a port of a bug rather than of an algorithm. Not taken
+unilaterally.
+
+Until it is ruled, `quality_band_check` FAILS on `separable_gap` and
+`tools/check.sh` is therefore red on exactly that one row. That is deliberate:
+the alternative is a green suite that hides a known-wrong learner.
+
 ## Still open
 
 1. **`n_estimators` / forest-level defaults.** Not touched. This lane is
