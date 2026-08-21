@@ -19,3 +19,4 @@ extratrees/ported/decisiontree/decisiontree.mojo	cpp/include/cuml/tree/decisiont
 extratrees/mojo_only/pcg_rng.mojo	cpp/include/raft/random/detail/rng_device.cuh:546-683,:173-230	RAFT	ported	+ cuML's fnv1a32 chain, builder_kernels.cuh:100-113
 extratrees/mojo_only/fixed_point.mojo	(none)	-	mojo_only	no upstream counterpart; DEVIATION 135's ruling, following root mojo_only/fixed_point.mojo
 extratrees/mojo_only/host_splitter.mojo	sklearn/tree/_splitter.pyx:507-731	scikit-learn	ported	node_split_random, the EXACT oracle; deviations 130-136, 151-154
+extratrees/ported/randomforest/randomforest.mojo	cpp/src/randomforest/randomforest.cuh:50-90,:155-195,:223-256	cuML	partial	the bootstrap=False arm only; the bootstrap row sampler (:66) is refused by name
