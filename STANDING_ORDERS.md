@@ -197,6 +197,25 @@ run.
 > single session would not have. The variable that separated the two
 > outcomes was whether lanes touched the same file.
 
+### 13. Optimize the policy half; the plumbing half belongs to Modular
+
+Andrew's rule, 2026-08-21. GPU work in this repository splits in two.
+The POLICY half — accumulator designs, histogram layouts, block sizes,
+replication factors, the kernel-matrix rows — is algorithm tuning: no
+toolchain will ever choose it for us, it is where CatBoost's own per-arch
+tuning lives, and it is where optimization effort goes. The PLUMBING
+half — launch price, drain price, command encoding, kernel compilation,
+missing device-side sort/scan libraries — is Modular's layer: file the
+upstream ask, take the improvement when the toolchain ships it, and do
+not build a private runtime around it. An Apple-only launch layer is the
+canonical violation (it also breaks rule on one source).
+
+> **The context.** The census that motivated this: 94 launches + 1 drain
+> per covtype tree, matching CatBoost's kernel count with twelve fewer
+> drains than their design — the count is at the algorithm's floor and
+> the per-operation price is the platform's. Control plane ~2.2-2.7 ms
+> of a ~16 ms tree on Metal vs ~0.6 ms for the same design on CUDA.
+
 ## The traps register — platform, not strategy
 
 These cost real days. A fresh start hits them in the first week.
