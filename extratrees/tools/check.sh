@@ -27,6 +27,7 @@ extratrees/mojo_only/feature_sampler_check.mojo
 extratrees/mojo_only/host_splitter_check.mojo
 extratrees/mojo_only/tree_check.mojo
 extratrees/mojo_only/forest_check.mojo
+extratrees/mojo_only/range_kernel_check.mojo
 extratrees/mojo_only/quality_band_check.mojo
 "
 

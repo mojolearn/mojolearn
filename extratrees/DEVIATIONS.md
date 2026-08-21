@@ -981,3 +981,126 @@ does"). Each is ASSERTED in `feature_sampler_check.mojo`, so a later
    and the two consume the RNG at different rates, so they return DIFFERENT
    column sets for the same key — measured, 158 of 160 slots differ at
    `n=1000, k=20`.
+
+---
+
+# The device range pass — deviations 160-163
+
+The lane's reserved range 130-159 is full; the device work continues at 160.
+
+## 160. NOT a deviation: the range pass is bit-checkable and the histogram pass is not
+
+**Theirs.** `computeSplitKernel` (`builder_kernels_impl.cuh:216-340`) makes one
+pass over a node's rows per (node, feature) block and accumulates a HISTOGRAM.
+That accumulator is a SUM — an exact integer count for classification, but for
+regression a running sum of float LABELS, which rounds, so which bits a bin
+ends up holding depends on the order the rows and the partial histograms
+arrive in.
+
+**Ours.** `node_feature_range_kernel` makes the same pass over the same rows
+with the same `WorkloadInfo` flattening and the same strided loop, and
+accumulates MIN, MAX and a NaN COUNT.
+
+**Why this kernel can be checked bit for bit and theirs cannot.** `min` and
+`max` on IEEE-754 floats are associative AND commutative EXACTLY: they select
+one of their inputs and return it unchanged, so nothing rounds at any step and
+no regrouping can change which input survives. A count is an exact integer sum
+with the same property. So the device's block-strided, cross-block-merged
+reduction and the host's sequential loop are OBLIGED to produce identical bits,
+and a tolerance in the check would hide a defect rather than absorb float
+noise. That is why `range_kernel_check` asserts on `.to_bits()` and never on a
+difference.
+
+---
+
+## 161. The cross-block combine is a MUTEX MERGE, not their atomicAdd + signalDone
+
+**Theirs** (`builder_kernels_impl.cuh:295-317`): a large node's blocks each
+`BinT::AtomicAdd` their partial histogram into a global slot keyed by
+`large_nodeid`, `__threadfence()`, then call `MLCommon::signalDone`
+(`src_prims/common/grid_sync.cuh:238-247`), which atomically increments a
+per-(node, feature) counter; the block that drives it to zero is "last" and
+alone continues.
+
+**Ours.** Each block publishes its partial range into the SAME output cell
+under a per-(node, feature) spin mutex, merging with `min`/`max`/`+`. No block
+needs to know it is last.
+
+**Why — a platform wall, not a preference.** Their merge step is an ATOMIC ADD,
+and a histogram bin has one; a RANGE does not. There is no portable device
+`atomicMin`/`atomicMax` on `float32` — the CUDA idiom is a signed-magnitude bit
+twiddle into an integer atomic, which is a different sequence on every vendor
+and is exactly the inline `if apple` this tree forbids. And `__threadfence()` is
+not expressible: Mojo 1.0 comptime-asserts that `threadfence` is
+NVIDIA-only.
+
+**What replaces it is not invented here either.** The spin is the translation
+this repository has already established and enqueued twice: spin on an ACQUIRE
+load until the mutex reads free, claim it with a WEAK RELAXED compare-exchange,
+release with a store. Only thread 0 of a block ever takes the lock, so no two
+threads of one warp contend and the spin cannot livelock a warp.
+
+**Why it cannot change an answer.** The merge is `min`, `max` and integer `+`,
+all exactly associative and commutative (160), so the order the mutex grants
+the lock in is not observable. The multi-block sabotage is what proves the
+merge runs at all.
+
+**Price.** One `Int32` mutex per (node, feature) that the caller must zero, and
+a serialized publish per block instead of a wait-free atomic. No timing number
+is attached and none will be until the perf round.
+
+---
+
+## 162. The output is a STRUCT OF ARRAYS, and `Dataset` is passed as its components
+
+**Theirs.** `computeSplitKernel` takes `const Dataset<...> dataset` BY VALUE
+(`:221`) and reads `work_items[nid]` and `workload_info[blockIdx.x]` as
+whole-struct loads (`:238-241`).
+
+**Ours.** The kernel takes `data`, `row_ids`, `m` and `n` as separate
+arguments, and its output is four parallel arrays rather than an array of
+`FeatureRange`.
+
+**Why.** `PORTING_RULES.md` rule 4: a whole-struct load in a kernel kills the
+Metal compiler, reproduced in a 25-line probe on 2026-08-19, with per-field
+access through the pointer compiling and running. `WorkloadInfo` and
+`NodeWorkItem` ARE still passed as their ported structs and read field by field
+through the pointer — this round established that a TWO-LEVEL field read
+(`work_items[i].instances.begin`) also compiles and runs on Metal, so the ban
+is on the whole-struct load, not on nested access.
+
+**The fourth array is ours and has no cuML counterpart.** `out_n_merges` is the
+device's own report of how many blocks published into a cell, so a check can
+ASSERT that a large node really was served by more than one block instead of
+inferring it from host arithmetic. It is written unconditionally by the
+shipping kernel, not behind a flag, **because a check that runs a different
+binary from the one that ships proves nothing about the one that ships.**
+
+---
+
+## 163. The empty range is carried IN the output as `min > max`, and NaN never reaches the reduction
+
+**sklearn's.** `find_min_max` (`_partitioner.pyx:143-163`) initializes
+`min = INFINITY, max = -INFINITY`, seeds BOTH from the first non-missing value,
+counts NaNs into `n_missing`, and leaves the initial state untouched when every
+value is missing.
+
+**Ours, on device.** A thread that has seen no non-missing value holds
+`(+inf, -inf)` — sklearn's own initial state, and the exact identity of
+min/max. NaNs are tested with `v != v` and diverted to the counter BEFORE the
+comparison, so no NaN is ever an operand of the reduction and `fmin`/`fmax`'s
+NaN rule — the one way min/max could fail to be commutative, and therefore the
+one thing that could break 160 — is unreachable. After the block reduction,
+`blk_min > blk_max` is true exactly when the block contributed nothing, and the
+merge writes the host's `(1.0, -1.0)` form so the OUTPUT CELL is a
+correctly-formed `FeatureRange` after every merge, not only after the last one.
+
+**Why that matters.** It is what makes the mutex merge closed over its own
+output: no block needs to be identified as last in order to convert an internal
+`(+inf, -inf)` accumulator into the published sentinel.
+
+**The one thing a caller must not do.** Read `out_min`/`out_max` as numbers
+without testing `min > max` first. `node_feature_is_constant` already reports
+such a range constant, which is what `_splitter.pyx:611-618` gives an
+all-missing column, so the normal path is safe; a caller that draws a threshold
+from the raw pair is not.

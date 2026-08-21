@@ -20,3 +20,5 @@ extratrees/mojo_only/pcg_rng.mojo	cpp/include/raft/random/detail/rng_device.cuh:
 extratrees/mojo_only/fixed_point.mojo	(none)	-	mojo_only	no upstream counterpart; DEVIATION 135's ruling, following root mojo_only/fixed_point.mojo
 extratrees/mojo_only/host_splitter.mojo	sklearn/tree/_splitter.pyx:507-731	scikit-learn	ported	node_split_random, the EXACT oracle; deviations 130-136, 151-154
 extratrees/ported/randomforest/randomforest.mojo	cpp/src/randomforest/randomforest.cuh:50-90,:155-195,:223-256	cuML	partial	the bootstrap=False arm only; the bootstrap row sampler (:66) is refused by name
+extratrees/ported/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo::node_feature_range_kernel	kernels/builder_kernels_impl.cuh:216-340 (step 1 only)	cuML+paper	device	THE FIRST ENQUEUED KERNEL. Step 1 of DEVIATION 137; deviations 160-163.
+extratrees/ported/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo::build_workload_info	cpp/src/decisiontree/batched-levelalgo/builder.cuh:365-385	cuML	ported	lives in builder_kernels_impl.mojo for lane-ownership reasons; moving it to builder.mojo is a merge-time action
