@@ -28,6 +28,8 @@ while porting rather than read from their source:
    forcing the bin loop innermost and the leaf loop outward.
 """
 
+from std.math import sqrt
+
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.host.device_attribute import DeviceAttribute
 
@@ -76,10 +78,17 @@ from gbdt.options.catboost_options import (
     SCORE_FUNCTION_L2,
     SCORE_FUNCTION_NEWTON_L2,
 )
+from gbdt.data.permutation import TRandom
 from gbdt.methods.greedy_subsets_searcher.kernel.compute_scores import (
     FLOAT32_MAX,
     SCORE_BLOCK_SIZE,
+    TARGET_VARIANCE_BLOCK,
     compute_optimal_splits_kernel,
+    compute_target_variance_kernel,
+    target_variance_blocks,
+)
+from gbdt.targets.kernel.pointwise_targets import (
+    deterministic_sum_lanes_kernel,
 )
 from gbdt.methods.greedy_subsets_searcher.kernel.hist_binary import (
     binary_hist_gather_kernel,
@@ -196,6 +205,74 @@ from gbdt.methods.greedy_subsets_searcher.kernel.split_points import (
     PARTITION_BLOCK,
     launch_stable_partition,
 )
+
+
+def compute_target_std_dev(
+    ctx: DeviceContext,
+    mut stats: DeviceBuffer[DType.float32],
+    size: Int,
+    stat_count: Int,
+    stat_line_size: Int,
+    multiclass_optimization: Bool,
+    sm_count: Int,
+) raises -> Float64:
+    """`ComputeTargetStdDev` (`greedy_search_helper.cpp:369-378`).
+
+        using TKernel = NKernelHost::TComputeTargetVarianceKernel;
+        auto l2Stats = TStripeBuffer<double>::Create(RepeatOnAllDevices(3));
+        LaunchKernels<TKernel>(..., target.StatsToAggregate, l2Stats,
+                               target.MultiLogitOptimization);
+        auto l2StatsCpu = ReadReduce(l2Stats);
+        //        double sum = l2StatsCpu[0];
+        double sum2 = l2StatsCpu[1];
+        double weight = l2StatsCpu[2];
+        return sqrt(sum2 / (weight + 1e-100));
+
+    **THE DENOMINATOR IS THE SUMMED WEIGHT, NOT THE ROW COUNT**, and the
+    doc-parallel arm's `ComputeStdDev` divides the same numerator by the
+    row count instead (`random_score_helper.h:14-15`). CatBoost's two arms
+    therefore produce DIFFERENT noise magnitudes from the same target
+    whenever the weights are not all 1 -- which under Newton, their default
+    leaf estimation, is always. Both are transliterated; see the file
+    docstring of `gbdt/methods/random_score_helper.mojo`.
+
+    Lane 0 is their `sum`, computed by the kernel and commented out by
+    their host. Read here and discarded for the same reason: the kernel
+    writes it either way.
+    """
+    if size <= 0 or stat_count <= 1:
+        return 0.0
+    var n_blocks = target_variance_blocks(size, sm_count)
+    var partials = ctx.enqueue_create_buffer[DType.float32](3 * n_blocks)
+    var l2_stats = ctx.enqueue_create_buffer[DType.float32](3)
+    ctx.enqueue_function[compute_target_variance_kernel](
+        stats.unsafe_ptr(),
+        Int32(size),
+        Int32(stat_count),
+        Int32(stat_line_size),
+        Int32(1) if multiclass_optimization else Int32(0),
+        partials.unsafe_ptr(),
+        grid_dim=(n_blocks, 1, 1),
+        block_dim=(TARGET_VARIANCE_BLOCK, 1, 1),
+    )
+    # their `FillBuffer(aggregatedStats, 0.0, 3, stream)` before the launch
+    # (`compute_scores.cu:293`) has no counterpart: nothing is accumulated
+    # into `l2_stats`, the deterministic fold WRITES all three slots.
+    ctx.enqueue_function[deterministic_sum_lanes_kernel[3]](
+        partials.unsafe_ptr(), Int32(n_blocks), l2_stats.unsafe_ptr(),
+        grid_dim=1, block_dim=256,
+    )
+    var h = ctx.enqueue_create_host_buffer[DType.float32](3)
+    ctx.enqueue_copy(dst_buf=h, src_buf=l2_stats)
+    ctx.synchronize()
+    # reading `h` HERE, after the synchronize, is what keeps the staging
+    # buffer alive across the copy ([[mojo-buffer-freed-at-last-use]]); the
+    # two device buffers are held to the same point below.
+    var sum2 = Float64(h[1])
+    var weight = Float64(h[2])
+    _ = partials^
+    _ = l2_stats^
+    return sqrt(sum2 / (weight + 1e-100))
 
 
 @fieldwise_init
@@ -448,6 +525,10 @@ def run_one_level(
         Int32(1),
         Int32(0),  # multiclassOptimization
         Float32(1.0),
+        # `scoreStdDev` / `seed`: this probe entry point never asks for the
+        # `random_strength` noise. `run_tree_layout` is the training path.
+        Float32(0.0),
+        UInt64(0),
         out_score.unsafe_ptr(),
         out_bin.unsafe_ptr(),
         grid_dim=(1, 1, 1),
@@ -1081,6 +1162,10 @@ def run_tree(
             Int32(n_live),
             Int32(0),  # multiclassOptimization
             Float32(1.0),
+            # `scoreStdDev` / `seed`: this is the uniform-binary probe
+            # path, which never asks for the `random_strength` noise.
+            Float32(0.0),
+            UInt64(0),
             out_score.unsafe_ptr(),
             out_bin.unsafe_ptr(),
             grid_dim=(1, 1, 1),
@@ -2585,6 +2670,13 @@ def run_tree_layout[
     approx_dim: Int = 1,
     multiclass_optimization: Bool = False,
     mags_dev: Optional[DeviceBuffer[DType.float32]] = None,
+    # `Options.RandomStrength` AS THE SEARCHER SEES IT -- already
+    # multiplied by the boosting loop's `CalcScoreModelLengthMult`
+    # (`greedy_subsets_searcher.h:73-76`). Zero is CatBoost's off switch
+    # and this port's default.
+    random_strength: Float32 = Float32(0.0),
+    # their `TGpuAwareRandom` for this tree; see DEVIATION 139 at its use.
+    random_seed: UInt64 = UInt64(0),
 ) raises -> List[Int]:
     """`FitImpl` over a LAYOUT: mixed feature widths, one launch per policy.
 
@@ -2813,6 +2905,58 @@ def run_tree_layout[
     # ================================================================
     var mgr = TCudaManager(ctx.copy(), sync_budget=sync_budget)
 
+    # ============ `CreateInitialSubsets`' ScoreStdDev ==================
+    # `greedy_search_helper.cpp:383-388`, verbatim:
+    #
+    #     if (Options.RandomStrength) {
+    #         ScoreStdDev = Options.RandomStrength * ComputeTargetStdDev(target);
+    #     } else {
+    #         ScoreStdDev = 0;
+    #     }
+    #
+    # ONCE PER TREE, before any level, and `Options.RandomStrength` has
+    # ALREADY been multiplied by the boosting loop's model-length
+    # multiplier (`greedy_subsets_searcher.h:73-76`,
+    # `options.RandomStrength *= randomStrengthMult`). That is why this
+    # parameter is `random_strength` and not `random_strength * mult`: the
+    # caller does the multiply, exactly where their `CreateStructureSearcher`
+    # does it.
+    #
+    # THE TARGET IS THE BOOTSTRAPPED ONE. Their `ComputeTarget` runs
+    # `StochasticDer(bootstrapConfig, ...)` and the std dev is taken from
+    # its output (`greedy_search_helper.cpp:381-385`), so a bootstrap that
+    # scales the planes scales the noise with them. `stats` here is
+    # post-bootstrap for the same reason.
+    #
+    # AND ON THIS ARM THE NOISE CANCELS -- see the block in
+    # `kernel/compute_scores.mojo`. It is computed, launched and paid for
+    # anyway, because that is their code; what it buys is that the day the
+    # two calcers stop being seeded alike, this arm is already correct.
+    var score_std_dev = Float32(0.0)
+    if random_strength != Float32(0.0):
+        score_std_dev = Float32(
+            Float64(random_strength)
+            * compute_target_std_dev(
+                ctx,
+                stats,
+                n_rows,
+                stat_count,
+                n_rows,
+                multiclass_optimization,
+                sm_count,
+            )
+        )
+
+    # their `TGreedySearchHelper::Random`, a `TGpuAwareRandom` shared by the
+    # whole fit and drawn from ONCE PER `ComputeOptimalSplits` call, i.e.
+    # per LEVEL (`greedy_search_helper.cpp:468`, `:489`, `:510`).
+    # DEVIATION 139: theirs is one stream across every tree of the fit;
+    # this one is re-seeded per tree from the caller's `random_seed`,
+    # because `run_tree_layout` owns the level loop and the boosting loop
+    # owns the trees. Per-level draws still differ, a fit is still
+    # reproducible from its seed, and the noise cancels on this arm anyway.
+    var level_rand = TRandom(random_seed)
+
     var n_live = 1
     # grid sizing bound: with no per-level size read (DEVIATION 94) the
     # largest live leaf is unknown until the tree is done, and `n_rows`
@@ -2820,6 +2964,9 @@ def run_tree_layout[
     var max_live_rows = n_rows
 
     for depth in range(max_depth):
+        # `Random.NextUniformL()`, one draw per level, BEFORE the launch
+        # and regardless of which calcer the score function selects.
+        var level_seed = level_rand.next_uniform_l()
         # ============ ComputeOptimalSplits ============
         # their `greedy_search_helper.cpp:398`. Their `leavesToSplit` for a
         # symmetric tree is every live leaf, which is `dense_ids`.
@@ -2997,6 +3144,15 @@ def run_tree_layout[
                 Int32(n_live),
                 Int32(1) if multiclass_optimization else Int32(0),
                 l2_leaf_reg,
+                # `ScoreStdDev, Random.NextUniformL()` -- the last two
+                # arguments of every `ComputeOptimalSplits*` launch
+                # (`greedy_search_helper.cpp:466-468`). The L2 calcer has
+                # NO noise term at all (`score_calcers.cuh:40-69`), so the
+                # constant zero here is their asymmetry and not a gap; the
+                # seed is still handed over so both arms consume the same
+                # stream.
+                Float32(0.0),
+                level_seed,
                 out_score.unsafe_ptr(), out_bin.unsafe_ptr(),
                 grid_dim=(argmax_blocks, 1, 1),
                 block_dim=(SCORE_BLOCK_SIZE, 1, 1),
@@ -3012,6 +3168,12 @@ def run_tree_layout[
                 Int32(n_live),
                 Int32(1) if multiclass_optimization else Int32(0),
                 l2_leaf_reg,
+                # `ScoreStdDev, Random.NextUniformL()`
+                # (`greedy_search_helper.cpp:466-468`). Cosine is the only
+                # calcer of the five that reads them
+                # (`score_calcers.cuh:159-167`).
+                score_std_dev,
+                level_seed,
                 out_score.unsafe_ptr(), out_bin.unsafe_ptr(),
                 grid_dim=(argmax_blocks, 1, 1),
                 block_dim=(SCORE_BLOCK_SIZE, 1, 1),

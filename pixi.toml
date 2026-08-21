@@ -110,6 +110,17 @@ check-sample-indices = "mojo run -I . mojo_only/sample_indices_check.mojo"
 # MEASURES the blast radius: how many histogram cells the choice moves, and a
 # 24-tree fit fingerprint on a fixture where 632 of 744 sibling pairs tie.
 check-sibling-tiebreak = "mojo run -I . mojo_only/sibling_tiebreak_check.mojo"
+# LOGLOSS'S TEN NEWTON ITERATIONS against CatBoost's own leaf values, per tree
+# and per leaf, at ten iterations and at one, plus a cross-arm control that
+# must differ and two leaf-PERMUTATION controls that must fail. The only gate
+# on the leaves-estimation walker that is not a comparison against a
+# reimplementation written in the same file. Needs
+# bench/oracle_logloss_leaves.txt; regenerate with `logloss-leaf-oracle-gen`.
+# EXPECTED RED: 3 cells of 96 diverge on the ten-iteration arm and PORTING.md
+# 140 is the reason -- their CPU walk freezes after six accepted steps where
+# ours takes eight. No allowance is granted, because an allowance sized to
+# today's divergence swallows tomorrow's regression.
+check-logloss-leaf-oracle = "mojo run -I . mojo_only/logloss_leaf_oracle_check.mojo"
 check-binarization = "mojo run -I . mojo_only/binarization_check.mojo"
 check-boosting-hist = "mojo run -I . mojo_only/boosting_hist_check.mojo"
 check-bootstrap = "mojo run -I . mojo_only/bootstrap_check.mojo"
@@ -674,6 +685,10 @@ build-pkg = "mkdir -p build && mojo precompile -I . gbdt -o build/gbdt.mojopkg"
 check-random-strength = "mojo run -I . mojo_only/random_strength_check.mojo"
 
 [feature.bench.tasks]
+# CatBoost's own Logloss leaf values at ten Newton iterations and at one,
+# with the leaf-order mapping proved twice inside the generator and written
+# into the fixture. Writes bench/oracle_logloss_leaves.txt.
+logloss-leaf-oracle-gen = "python tools/catboost_logloss_leaf_oracle.py"
 # Runs CatBoost itself. Writes bench/oracle.txt (read by `oracle`) and
 # bench/oracle.json (the same content, for humans and for diffing).
 # Runs CatBoost CPU for the nine losses ported 2026-08-21. Writes

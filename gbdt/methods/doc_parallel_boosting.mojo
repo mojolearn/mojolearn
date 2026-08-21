@@ -78,16 +78,18 @@ all in the configuration this port runs, and saying so is part of the audit:
   It is not ordered boosting -- see PORTING.md 88 for why that is a
   different learner entirely -- but it is the machinery ordered boosting is
   built on.
-- **`CalcScoreModelLengthMult` (`:358`). NOT A DIVERGENCE HERE, and it is not
-  model-size regularization.** Its only consumer is `ComputeScoreStdDev`,
-  which returns 0 unconditionally when `modelLengthMult * randomStrength` is
-  zero (`random_score_helper.h:25-32`), and it reaches the searcher solely as
+- **`CalcScoreModelLengthMult` (`:358`). PORTED, and it is not model-size
+  regularization.** Its only consumer is `ComputeScoreStdDev`, which returns
+  0 unconditionally when `modelLengthMult * randomStrength` is zero
+  (`random_score_helper.h:25-32`). It reaches the greedy searcher as
   `options.RandomStrength *= randomStrengthMult`
-  (`greedy_subsets_searcher.h:76`). At `random_strength = 0`, which is what
-  `CatBoostOptions.check()` requires because score noise is unported, the
-  whole quantity is an exact no-op. It becomes a divergence the day random
-  strength lands, and not before. (`model_size_reg` is a different option
-  entirely and lives on the feature weights.)
+  (`greedy_subsets_searcher.h:76`) and the doc-parallel one as
+  `ModelLengthMultiplier`
+  (`oblivious_tree_doc_parallel_structure_searcher.h:25,31`); both are wired
+  in the loop below. At `random_strength = 0`, this port's default, the whole
+  quantity is still an exact no-op and the reduce it would need is never
+  launched. (`model_size_reg` is a different option entirely and lives on the
+  feature weights.) This entry used to say the quantity was unported.
 - **Test cursor and early stopping. PORTED 2026-08-21**, and this entry used
   to say otherwise. `fit_with_test` carries their `testCursor`,
   `TrackTestErrors` is `_test_loss` through the same target kernel the learn
@@ -130,6 +132,10 @@ from gbdt.methods.leaves_estimation.step_estimator import (
     BACKTRACKING_ANY_IMPROVEMENT,
 )
 from mojo_only.fixed_point import choose_scale
+from gbdt.methods.random_score_helper import (
+    calc_score_model_length_mult,
+    compute_score_std_dev,
+)
 from gbdt.methods.oblivious_tree_doc_parallel_structure_searcher import (
     fit_oblivious_tree_structure,
     split_stat_planes,
@@ -683,6 +689,17 @@ def fit_with_test(
         DeviceBuffer[DType.uint32]
     ](),
     est_permutation: Int = -1,
+    # `TObliviousTreeLearnerOptions::RandomStrength`
+    # (`oblivious_tree_options.cpp:17`). **THEIR DEFAULT IS 1.0 AND THIS
+    # ONE IS 0.0**; see `CatBoostOptions.random_strength` for why the
+    # default did not move with the port.
+    #
+    # It reaches BOTH searchers and does something on only one of them:
+    # the doc-parallel arm's noise survives into the gain
+    # (`kernel/pointwise_scores.cu:396-402`), the greedy arm's cancels
+    # against its own before-calcer (`compute_scores.cu:84-134`). That is
+    # CatBoost's behaviour, not a gap here.
+    random_strength: Float32 = Float32(0.0),
     # WHICH STRUCTURE SEARCHER GROWS THE TREE. False is
     # `TGreedySubsetsSearcher`, which is what this repository has always
     # run and what CatBoost runs for MULTICLASS symmetric trees. True is
@@ -933,6 +950,17 @@ def fit_with_test(
     # -1 hands the estimator's reduce an invalid block count.
     if need_estimation or use_pointwise_searcher:
         est_sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+    # the `random_strength` reduces are machine-sized like every strided
+    # grid of theirs, and neither of the two conditions above implies the
+    # option is set.
+    var noise_sm = est_sm
+    if random_strength != Float32(0.0) and noise_sm <= 0:
+        noise_sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+    # their `TGpuAwareRandom` for the fit, the one both searchers draw
+    # their per-level `GlobalSeed` from (`oblivious_tree_doc_parallel_
+    # structure_searcher.cpp:15`, `greedy_search_helper.h:15`). One draw
+    # per TREE here; see DEVIATION 139.
+    var noise_rand = TRandom(random_seed)
 
     var losses = List[Float64]()
     var test_losses = List[Float64]()
@@ -1057,6 +1085,45 @@ def fit_with_test(
                 mags.unsafe_ptr(),
                 grid_dim=1, block_dim=256,
             )
+        # ================ THE `random_strength` MAGNITUDE ==============
+        # `auto mult = CalcScoreModelLengthMult(objectCount,
+        #                                       iteration * step);`
+        # (`doc_parallel_boosting.h:358-359`), where `step` is the learning
+        # rate. It is handed to `CreateStructureSearcher(mult, ...)` and
+        # from there either multiplies the greedy searcher's option
+        # (`greedy_subsets_searcher.h:73-76`) or becomes the doc-parallel
+        # searcher's `ModelLengthMultiplier` (`oblivious_tree_doc_parallel_
+        # structure_searcher.h:25,31`).
+        var noise_mult = Float64(0.0)
+        if random_strength != Float32(0.0):
+            noise_mult = calc_score_model_length_mult(
+                Float64(n_rows), Float64(iteration) * Float64(learning_rate)
+            )
+        var tree_seed = noise_rand.next_uniform_l()
+
+        # `ComputeWeakTarget` computes the doc-parallel arm's std dev
+        # BETWEEN the gradient and the bootstrap
+        # (`oblivious_tree_doc_parallel_structure_searcher.cpp:200-218`),
+        # so it is taken from the UNBOOTSTRAPPED planes. The greedy arm's
+        # is taken from the bootstrapped ones instead
+        # (`greedy_search_helper.cpp:381-385`) and is computed inside
+        # `run_tree_layout`. That ordering difference is CatBoost's, and it
+        # is a second reason the two arms' noise magnitudes differ; see
+        # `gbdt/methods/random_score_helper.mojo` for the first two.
+        var pointwise_score_std_dev = Float32(0.0)
+        if use_pointwise_searcher and random_strength != Float32(0.0):
+            pointwise_score_std_dev = Float32(
+                compute_score_std_dev(
+                    ctx,
+                    noise_mult,
+                    Float64(random_strength),
+                    stats,
+                    n_rows,
+                    n_rows,
+                    noise_sm if noise_sm > 0 else 1,
+                )
+            )
+
         if bootstrap_on:
             # their `BootstrapAndFilter`: one draw per row multiplies
             # BOTH planes. Bayesian never zeroes a weight, so their
@@ -1225,6 +1292,8 @@ def fit_with_test(
                 scale,
                 score_function,
                 l2_leaf_reg,
+                score_std_dev=pointwise_score_std_dev,
+                seed=tree_seed,
                 one_hot=one_hot,
             )
             var d_bins = ctx.enqueue_create_buffer[DType.uint32](n_rows)
@@ -1270,6 +1339,15 @@ def fit_with_test(
                 # score needs no extra leaf contribution.
                 multiclass_optimization=objective
                 == OBJECTIVE_MULTICLASS,
+                # `options.RandomStrength *= randomStrengthMult`
+                # (`greedy_subsets_searcher.h:76`). The multiply happens
+                # HERE, in the boosting loop, exactly as their
+                # `CreateStructureSearcher` does it -- the searcher
+                # receives one number and never sees `mult`.
+                random_strength=Float32(
+                    noise_mult * Float64(random_strength)
+                ),
+                random_seed=tree_seed,
             )
 
         if need_estimation:
@@ -1653,7 +1731,9 @@ def fit(
     estimator_alpha: Float32 = Float32(0.5),
     # forwarded; see `fit_with_test` for what it selects and why the
     # default is False
-    use_pointwise_searcher: Bool = False,) raises -> List[Float64]:
+    use_pointwise_searcher: Bool = False,
+    # forwarded; `oblivious_tree_options.cpp:17`
+    random_strength: Float32 = Float32(0.0),) raises -> List[Float64]:
     """`fit_with_test` with no held-out set and no detector.
 
     THIS WRAPPER EXISTS SO NINE CALL SITES DID NOT HAVE TO CHANGE when the
@@ -1689,6 +1769,7 @@ def fit(
         alpha=alpha,
         estimator_alpha=estimator_alpha,
         use_pointwise_searcher=use_pointwise_searcher,
+        random_strength=random_strength,
     )
     var out = r.learn_losses.copy()
     return out^

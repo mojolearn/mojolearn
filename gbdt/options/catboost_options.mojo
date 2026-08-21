@@ -361,10 +361,36 @@ struct CatBoostOptions(Copyable, Movable):
     default differs from theirs; the others are `bootstrap_type` and
     `determinism`.
 
-    Not a preference: no score noise is applied here, so 1.0 would be a
-    default that `check()` refuses, and defaults that fail their own
-    validation are how a library ships an unusable out-of-the-box
-    configuration. 0.0 is the value that describes what actually happens."""
+    HONORED, and what it does depends on WHICH SEARCHER grows the tree.
+    Both arms compute the same three factors -- the model-length multiplier
+    `CalcScoreModelLengthMult(n, iteration * learning_rate)`, a standard
+    deviation of the weak target, and this option -- and hand the product
+    to the cosine calcer as `ScoreStdDev`, which draws
+    `NextNormal(GlobalSeed + FeatureId)` after four seed advances
+    (`score_calcers.cuh:159-167`).
+
+      * `use_pointwise_searcher=True`, their
+        `TDocParallelObliviousTreeSearcher`: THE NOISE CHANGES THE MODEL.
+        The gain is `noisyScore - scoreBeforeSplit` where
+        `scoreBeforeSplit` is an UNNOISED host scalar carried from the
+        previous level (`kernel/pointwise_scores.cu:396-402`), so the draw
+        survives into the argmin.
+      * the default greedy searcher, their `TGreedySubsetsSearcher`: THE
+        NOISE CANCELS. `beforeSplitCalcer` is copied from the calcer after
+        `NextFeature` (`compute_scores.cu:85`), so it carries the same
+        `GlobalSeed + FeatureId` and `GetScore()` adds it the same draw;
+        `gain = score - scoreBefore` (`:134`) removes it exactly in real
+        arithmetic and to within `ulp(noise)` in float32. That is
+        CatBoost's own behaviour on this searcher, not a gap here.
+
+    So a non-zero value is honored on both arms and is only VISIBLE on one.
+    Refused below when the score function is L2 or NewtonL2, where no
+    calcer of theirs has a noise term at all.
+
+    The DEFAULT stays 0.0 rather than moving to CatBoost's 1.0 because the
+    shipped searcher is the greedy one, where 1.0 buys nothing but rounding
+    -- and because every benchmark in this repository is pinned against
+    CatBoost at `random_strength=0` on both sides."""
 
     var rsm: Float32
     """`rsm`, feature sampling rate. Default 1.0. NOT HONORED: every feature
@@ -470,8 +496,10 @@ struct CatBoostOptions(Copyable, Movable):
         """CatBoost's defaults, with THREE deliberate departures.
 
         `random_strength` is 0.0 rather than 1.0 and `bootstrap_type` is `No`
-        rather than `Bayesian`, because neither feature is ported and each
-        would fail `check()` at CatBoost's value. `determinism` has no
+        rather than `Bayesian`. `bootstrap_type` is unported; the score
+        noise IS ported and 1.0 would pass `check()`, but the shipped
+        searcher is the one where CatBoost's own noise cancels, so 0.0 is
+        still the value that describes what a default fit does. `determinism` has no
         CatBoost counterpart at all and defaults to `device`.
 
         Everything else is theirs, at the line that DECIDES the value rather
@@ -555,11 +583,33 @@ struct CatBoostOptions(Copyable, Movable):
                 " TOption::NotSet, letting the loss decide) or >= 0; got "
                 + String(self.leaf_estimation_iterations)
             )
-        if self.random_strength != 0.0:
+        if self.random_strength < 0.0:
             raise Error(
-                "random_strength is not ported; no score noise is applied,"
-                " so set it to 0.0 rather than believing scores were"
-                " randomized"
+                "random_strength must be >= 0; got "
+                + String(self.random_strength)
+            )
+        if self.random_strength != 0.0 and (
+            self.score_function == SCORE_FUNCTION_L2
+            or self.score_function == SCORE_FUNCTION_NEWTON_L2
+        ):
+            # NARROWER THAN THE OLD BLANKET REFUSAL, AND STILL A REFUSAL.
+            # `TCosineScoreCalcer` is the ONLY one of their five calcers
+            # with a noise term (`score_calcers.cuh:159-167`);
+            # `TL2ScoreCalcer` (`:40-69`), `TSolarScoreCalcer`,
+            # `TLOOL2ScoreCalcer` and `TSatL2ScoreCalcer` have none. So
+            # under L2 or NewtonL2 the option is accepted and discarded by
+            # CATBOOST ITSELF. Copying that silence would leave a knob that
+            # reads as live and is not, which this port refuses on
+            # principle even where CatBoost does not.
+            raise Error(
+                "random_strength="
+                + String(self.random_strength)
+                + " does nothing under score_function="
+                + score_function_name(self.score_function)
+                + ": only TCosineScoreCalcer carries the noise term"
+                " (`score_calcers.cuh:159-167`), the L2 calcer has none"
+                " (`:40-69`). Use Cosine or NewtonCosine, or set"
+                " random_strength to 0.0."
             )
         if self.rsm != 1.0:
             raise Error(

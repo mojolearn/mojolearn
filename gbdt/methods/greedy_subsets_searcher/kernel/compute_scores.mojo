@@ -83,9 +83,11 @@ from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.gpu.intrinsics import ldg
 from std.math import sqrt
 from max.gpu.memory import AddressSpace
+from max.gpu.primitives.block import sum as block_sum
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
+from gbdt.gpu_util.kernel.random_gen import advance_seed_k, next_normal_f
 from gbdt.options.catboost_options import (
     SCORE_FUNCTION_COSINE,
     SCORE_FUNCTION_L2,
@@ -168,6 +170,8 @@ def compute_optimal_splits_kernel[
     p_count_in: Int32,
     multiclass_optimization: Int32,
     lambda_l2: Float32,
+    score_std_dev: Float32,
+    global_seed: UInt64,
     out_score: MutPointer[Float32, MutAnyOrigin],
     out_bin: MutPointer[UInt32, MutAnyOrigin],
 ):
@@ -240,13 +244,18 @@ def compute_optimal_splits_kernel[
         var score = Float32(0.0)
         var denum_sqr = Float32(1e-10)
 
-        # `TScoreCalcer beforeSplitCalcer = calcer` (`:85`) is NOT ported.
-        # In THIS kernel -- the oblivious one -- the copy is taken
-        # immediately after `NextFeature` and is never fed a leaf, so
-        # `scoreBefore` is 0 for both calcers (`GetScore()` on an empty
-        # cosine calcer is `-0 / sqrt(1e-10)`), and `gain = score - 0`.
-        # Their leafwise kernels DO feed it (`:341`), which is why the
-        # variable exists at all.
+        # `TScoreCalcer beforeSplitCalcer = calcer` (`:85`). In THIS kernel
+        # -- the oblivious one -- the copy is taken immediately after
+        # `NextFeature` and is never fed a leaf, so its accumulators stay
+        # at their `NextFeature` values and `GetScore()` on it is
+        # `-0 / sqrt(1e-10)` = 0. Their leafwise kernels DO feed it
+        # (`:341`), which is why the variable exists at all.
+        #
+        # It is NOT folded away here, and that sentence used to say it was
+        # "NOT ported": with `ScoreStdDev` live, `beforeSplitCalcer` is no
+        # longer zero -- it carries the same normal draw the after-calcer
+        # does, and the subtraction at the bottom of the loop is what
+        # cancels the noise. See the noise block below.
 
         # THE SERIAL LEAF LOOP. See the module docstring for why it is inside
         # the thread and not across threads.
@@ -340,27 +349,88 @@ def compute_optimal_splits_kernel[
                     score, denum_sqr,
                 )
 
+        # `const ui32 featureId = bf[binFeatureId].FeatureId`
+        # (`compute_scores.cu:136`), hoisted because the noise seed needs it
+        # before the feature-weight multiply does.
+        var feature_id = Int(bf_feature_id.unsafe_load(bin_feature_id))
+
         # `float score = calcer.GetScore()` -- `compute_scores.cu:131`.
         var final_score = score
+        # `const float scoreBefore = beforeSplitCalcer.GetScore()`
+        # (`:132`). `beforeSplitCalcer` is a copy of the calcer taken
+        # immediately after `NextFeature` (`:85`) and THIS kernel never
+        # feeds it a leaf, so its `Score` is 0 and its `DenumSqr` is the
+        # 1e-10 seed -- which passes the `> 1e-15` guard, making its score
+        # `-0 / sqrt(1e-10)`, i.e. zero, in our sign as in theirs. It is a
+        # variable rather than a folded-away constant because the noise
+        # below is added to it too.
+        var score_before = Float32(0.0)
         comptime if cosine:
             # `DenumSqr > 1e-15f ? -Score / sqrt(DenumSqr) : FLT_MAX`
             # -- `score_calcers.cuh:161`. Both branches negated for our
             # sign, so their "unusable" FLT_MAX becomes -FLOAT32_MAX, which
             # loses every comparison here exactly as FLT_MAX loses every
             # comparison there.
-            #
-            # The `ScoreStdDev` noise term that follows it
-            # (`score_calcers.cuh:162-166`) is NOT ported: it is
-            # `random_strength`, which `CatBoostOptions.check()` refuses.
             if denum_sqr > Float32(1e-15):
                 final_score = score / sqrt(denum_sqr)
             else:
                 final_score = -FLOAT32_MAX
 
+            # ============= THE `random_strength` NOISE ==================
+            # `score_calcers.cuh:162-166`, the ONLY calcer of the five that
+            # has it:
+            #
+            #     if (ScoreStdDev) {
+            #         ui64 seed = GlobalSeed + FeatureId;
+            #         AdvanceSeed(&seed, 4);
+            #         score += NextNormal(&seed) * ScoreStdDev;
+            #     }
+            #
+            # Seeded by FEATURE ID, so every bin of one feature draws the
+            # SAME normal on every device and in every block: the term
+            # perturbs the ranking BETWEEN features and never between bins
+            # of one feature. The four advances are part of the stream --
+            # three, or a draw before the advance, is a different tree.
+            #
+            # ===== AND IN THIS KERNEL IT CANCELS. Do not "fix" that. =====
+            # `GetScore()` runs on BOTH calcers, both carry the same
+            # `GlobalSeed` and the same `FeatureId`, so `score` and
+            # `scoreBefore` receive the SAME draw, and `gain = score -
+            # scoreBefore` (`:134`) removes it. Algebraically the greedy
+            # oblivious arm is noiseless no matter what `random_strength`
+            # is; in float32 what survives is the rounding of
+            # `fl(fl(s + n) - n)`, which is a perturbation of order
+            # `ulp(n)` and not a redraw. The same holds in their two
+            # leafwise kernels (`:370-375`, `:459-464`), where the before
+            # calcer IS fed leaves but is still seeded identically.
+            #
+            # It is ported anyway, and the reason is not decoration: the
+            # two calcers stop being seeded identically the moment anything
+            # feeds them different features -- and a port that had dropped
+            # the term would then be silently noiseless where CatBoost is
+            # not. The arm where the noise DOES change the model is the
+            # doc-parallel one (`kernel/pointwise_scores.cu:396-402`),
+            # where `scoreBeforeSplit` is an unnoised HOST scalar carried
+            # from the previous level.
+            # ===========================================================
+            if score_std_dev != Float32(0.0):
+                var seed = advance_seed_k(
+                    global_seed + UInt64(feature_id), 4
+                )
+                var draw = next_normal_f(seed)
+                # ONE subtraction each, not addition: this port's cosine
+                # score is theirs negated (see the module docstring), and
+                # `-(theirs + n)` is `ours - n` exactly, float negation
+                # being exact. Both calcers, because both of theirs run
+                # this branch.
+                var noise = draw[0] * score_std_dev
+                final_score -= noise
+                score_before -= noise
+
         # `gain = score - scoreBefore`, then
         # `gain *= __ldg(binFeaturesWeights + featureId)` where
         # `featureId = bf[binFeatureId].FeatureId`
-        # -- `compute_scores.cu:134-137`. `scoreBefore` is 0 here, see above.
+        # -- `compute_scores.cu:134-137`.
         #
         # Indexed by FEATURE, not by bin-feature: every bin of one feature
         # shares one weight. With numeric features only this is an exact
@@ -368,8 +438,8 @@ def compute_optimal_splits_kernel[
         # returns before touching anything when the CTR count is zero
         # (`update_feature_weights.cpp:14-22`). It is here so that
         # `model_size_reg` is not a divergence the day CTRs land.
-        var gain = final_score * ldg(
-            feature_weights + Int(bf_feature_id.unsafe_load(bin_feature_id))
+        var gain = (final_score - score_before) * ldg(
+            feature_weights + feature_id
         )
 
         if gain > best_gain:
@@ -446,3 +516,106 @@ def compute_optimal_splits_kernel[
         else:
             out_score.unsafe_store(Int(block_idx.x), -FLOAT32_MAX)
             out_bin.unsafe_store(Int(block_idx.x), UInt32(0xFFFFFFFF))
+
+
+#: `ComputeTargetVariance`'s block size (`compute_scores.cu:290`).
+comptime TARGET_VARIANCE_BLOCK = 512
+
+
+def compute_target_variance_kernel(
+    stats: MutPointer[Float32, MutAnyOrigin],
+    size_in: Int32,
+    stat_count_in: Int32,
+    stat_line_size_in: Int32,
+    is_multiclass: Int32,
+    partials: MutPointer[Float32, MutAnyOrigin],
+):
+    """`ComputeTargetVarianceImpl` (`compute_scores.cu:226-283`).
+
+    The greedy arm's standard deviation, over `target.StatsToAggregate`:
+    column 0 is the WEIGHT plane and columns 1.. are the der planes, laid
+    out `stats[statId * statLineSize + row]`.
+
+        while (i < size) {
+            const float w = stats[i];
+            if (w > 1e-15f) {
+                float statSum = 0;
+                for (ui32 statId = 1; statId < statCount; ++statId) {
+                    const float wt = stats[i + statLineSize * statId];
+                    weightedSum += wt;
+                    weightedSum2 += wt * wt / w;   //cause we need sum w*t*t
+                    statSum += wt;
+                }
+                if (isMulticlass) {
+                    weightedSum += -statSum;
+                    weightedSum2 += statSum * statSum / w;
+                }
+                totalWeight += w;
+            }
+            i += gridDim.x * BlockSize;
+        }
+
+    THE MULTICLASS ARM IS THE PINNED CLASS AGAIN. `StatsToAggregate` holds
+    `numClasses - 1` der planes because the multinomial gradient sums to
+    zero across all of them, so the missing plane is exactly `-statSum`;
+    its variance contribution is `statSum^2 / w`. The same identity the
+    score kernel's `multiclass_optimization` arm above uses.
+
+    `weightedSum` (lane 0) is COMPUTED AND NEVER READ -- their host
+    comments the `double sum = l2StatsCpu[0];` line out
+    (`greedy_search_helper.cpp:374`). Ported anyway, because dropping a
+    lane would silently change nothing until someone reads it.
+
+    DEVIATION 138: theirs reduces in `cub::BlockReduce<double>` and ends in
+    `TAtomicAdd<double>` on three slots. Metal has no fp64 and this
+    repository does not accept a float atomic on the fit path
+    (`deterministic_sum_lanes_kernel`'s docstring), so each block STORES
+    three Float32 partials at its own slot and the fold is deterministic.
+    Same three sums, wider error, same bits every run.
+    """
+    var size = Int(size_in)
+    var stat_count = Int(stat_count_in)
+    var stat_line_size = Int(stat_line_size_in)
+
+    var i = TARGET_VARIANCE_BLOCK * Int(block_idx.x) + Int(thread_idx.x)
+
+    var weighted_sum = Float32(0.0)
+    var weighted_sum2 = Float32(0.0)
+    var total_weight = Float32(0.0)
+
+    while i < size:
+        var w = stats.unsafe_load(i)
+        if w > Float32(1e-15):
+            var stat_sum = Float32(0.0)
+            for stat_id in range(1, stat_count):
+                var wt = stats.unsafe_load(i + stat_line_size * stat_id)
+                weighted_sum += wt
+                weighted_sum2 += wt * wt / w
+                stat_sum += wt
+            if is_multiclass != Int32(0):
+                weighted_sum += -stat_sum
+                weighted_sum2 += stat_sum * stat_sum / w
+            total_weight += w
+        i += Int(grid_dim.x) * TARGET_VARIANCE_BLOCK
+
+    var b_sum = block_sum[block_size=TARGET_VARIANCE_BLOCK](weighted_sum)
+    var b_sum2 = block_sum[block_size=TARGET_VARIANCE_BLOCK](weighted_sum2)
+    var b_weight = block_sum[block_size=TARGET_VARIANCE_BLOCK](total_weight)
+
+    if thread_idx.x == 0:
+        var slot = 3 * Int(block_idx.x)
+        partials.unsafe_store(slot, b_sum)
+        partials.unsafe_store(slot + 1, b_sum2)
+        partials.unsafe_store(slot + 2, b_weight)
+
+
+def target_variance_blocks(size: Int, sm_count: Int) -> Int:
+    """`min(4 * TArchProps::SMCount(), CeilDivide(size, blockSize))`
+    (`compute_scores.cu:291`)."""
+    var by_data = (size + TARGET_VARIANCE_BLOCK - 1) // TARGET_VARIANCE_BLOCK
+    var by_machine = 4 * sm_count
+    if by_machine < 1:
+        by_machine = 1
+    if by_data < by_machine:
+        return by_data if by_data > 0 else 1
+    return by_machine

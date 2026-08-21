@@ -5535,3 +5535,257 @@ threading `leaf_estimation_backtracking` from `TCatBoostOptions` through
 `fit_with_test` to that call, and it is under `gbdt/options/` and
 `gbdt/methods/doc_parallel_boosting.mojo`, which the session that found it
 did not hold.
+
+
+## 137. `random_strength`, and CatBoost's TWO standard deviations that are not the same number
+
+`random_strength` was refused by `CatBoostOptions.check()` and the kernel
+path for it was already written and INERT: `pointwise_scores.mojo`'s
+`ScoreCalcer.get_score` carried the noise term and
+`pointwise_scores_calcer.mojo` threaded `score_std_dev` and `seed` down to
+it, but both oblivious searchers defaulted the parameter to zero and no
+caller ever overrode it. The greedy family had dropped the term outright,
+with a comment in `compute_scores.mojo` saying so. This lane wires the
+caller and deletes that comment.
+
+PORTED, at their sites:
+
+  * `gbdt/methods/random_score_helper.mojo` <- `random_score_helper.h`.
+    `ComputeStdDev`, `CalcScoreModelLengthMult`, `ComputeScoreStdDev`.
+  * `compute_target_variance_kernel` in
+    `greedy_subsets_searcher/kernel/compute_scores.mojo` <-
+    `ComputeTargetVarianceImpl` (`compute_scores.cu:226-283`), and the host
+    `compute_target_std_dev` in `greedy_search_helper.mojo` <-
+    `greedy_search_helper.cpp:369-378`.
+  * the noise term itself in the greedy cosine calcer <-
+    `score_calcers.cuh:159-167`, COSINE ONLY. `TL2ScoreCalcer` (`:40-69`),
+    `TSolarScoreCalcer`, `TLOOL2ScoreCalcer` and `TSatL2ScoreCalcer` have
+    no noise term and did not get one.
+  * `CalcScoreModelLengthMult(objectCount, iteration * step)` per iteration
+    in `doc_parallel_boosting.mojo` <- `doc_parallel_boosting.h:358-359`,
+    multiplied into the greedy searcher's option exactly where
+    `greedy_subsets_searcher.h:73-76` multiplies it and passed to the
+    doc-parallel arm as their `ModelLengthMultiplier`.
+
+### THE BRIEF SAID THE TWO ARMS COMPUTE THE SAME PRODUCT. THEY DO NOT.
+
+Asked to verify that claim, and it is half wrong. Same: three factors, the
+model-length multiplier, a standard deviation of the weak target, and the
+option. Different: THE STANDARD DEVIATION, in three ways.
+
+  1. THE DENOMINATOR. `ComputeStdDev` divides `sum wt^2/w` by the OBJECT
+     COUNT (`random_score_helper.h:14-15`). `ComputeTargetStdDev` divides
+     the same numerator by the TOTAL WEIGHT
+     (`greedy_search_helper.cpp:376-377`). Equal only when every weight is
+     1. Under Newton -- CatBoost's default leaf estimation -- the weight
+     plane is the hessian, so they are never equal on a Logloss fit, and
+     for Logloss (hessian <= 0.25) the greedy arm's std dev is at least
+     twice the doc-parallel arm's on the same target.
+  2. THE ZERO GUARD. Their greedy kernel skips rows with `w <= 1e-15`
+     (`compute_scores.cu:239`); `ComputeStdDev` has none and divides
+     through `DivideVector` with `skipZeroes` false, so a zero-weight row
+     with a non-zero gradient poisons the whole reduction.
+  3. WHERE IN THE ITERATION IT IS TAKEN. The doc-parallel arm computes it
+     BETWEEN the gradient and the bootstrap
+     (`oblivious_tree_doc_parallel_structure_searcher.cpp:200-218`), so it
+     is the UNBOOTSTRAPPED target's. The greedy arm computes it inside
+     `CreateInitialSubsets` from `ComputeTarget`'s output, which has
+     already been through `StochasticDer(bootstrapConfig, ...)`
+     (`greedy_search_helper.cpp:381-385`), so it is the BOOTSTRAPPED
+     target's.
+
+All three are transliterated rather than reconciled. The two arms of this
+port therefore disagree about the noise magnitude exactly as far as
+CatBoost's two arms disagree, and no further.
+
+### DEVIATION, PRICED: their two generic device ops are one fused kernel
+
+`ComputeStdDev` is `DivideVector(tmp, Weights)` then
+`DotProduct(tmp, tmp, &Weights)` over a materialized temporary. Neither
+`DivideVector` nor `DotProduct` is ported in this tree, and
+`gbdt/gpu_util/kernel/transform.mojo` carries only the gather/scatter
+family. `std_dev_partials_kernel` fuses the two and never materializes
+`tmp`. Per-row arithmetic is theirs exactly, including the missing zero
+guard. Price: one fewer allocation and one fewer pass than theirs, and a
+kernel that has to be re-read against `random_score_helper.h` rather than
+against two library calls.
+
+Second half of the same deviation: the weak target reaches that kernel as
+ONE two-plane buffer (`stats`, plane 0 the weight and plane 1 the
+gradient), not as `TL2Target`'s two buffers. That is this repository's
+convention, the one `split_stat_planes` bridges with a host round trip; the
+kernel reads both planes through one pointer, so the round trip is not paid
+here.
+
+## 138. `ComputeTargetVariance` in Float32, and the lane their host comments out
+
+Theirs reduces `(weightedSum, weightedSum2, totalWeight)` in
+`cub::BlockReduce<double>` and ends in three `TAtomicAdd<double>`
+(`compute_scores.cu:265-281`). Metal has no fp64 and this repository does
+not accept an order-dependent float atomic on the fit path -- the whole
+reason `deterministic_sum_lanes_kernel` exists. So each block STORES three
+Float32 partials at its own slot and the fold is the deterministic 3-lane
+one. Same three sums, wider accumulation error, same bits every run.
+
+Their `FillBuffer(aggregatedStats, 0.0, 3, stream)` before the launch
+(`:293`) has no counterpart, because nothing accumulates into the
+destination any more: the fold WRITES all three slots.
+
+Lane 0, their `weightedSum`, is computed by the kernel and never read --
+their host has `//        double sum = l2StatsCpu[0];`
+(`greedy_search_helper.cpp:374`). Ported and discarded on the same line,
+because a lane dropped for being unread is a lane that silently changes
+nothing until someone reads it.
+
+## 139. One RNG stream per fit becomes one per tree, and a per-level seed that was not advancing
+
+CatBoost has ONE `TGpuAwareRandom` for the whole fit and draws
+`NextUniformL()` from it once per `ComputeOptimalSplits` call -- i.e. once
+per LEVEL, across every tree
+(`oblivious_tree_doc_parallel_structure_searcher.cpp:86`, `:104`;
+`greedy_search_helper.cpp:468`, `:489`, `:510`). Here the boosting loop and
+the level loop live in different functions and the searchers take value
+parameters, so the stream is chunked: the boosting loop holds
+`TRandom(random_seed)` and draws ONE seed per TREE, and each searcher makes
+its own `TRandom(tree_seed)` and draws one per LEVEL.
+
+Price: the sequence of `GlobalSeed` values differs from CatBoost's, so a
+fit with `random_strength != 0` is not bit-comparable to CatBoost's at the
+same seed. Everything the option is FOR is preserved -- a distinct draw per
+level, reproducibility from one seed, no correlation between features -- and
+at `random_strength = 0`, the default, no seed is consumed at all.
+
+**AND IT FOUND A BUG.**
+`oblivious_tree_doc_parallel_structure_searcher.mojo` was handing `seed`
+ITSELF to every level, not a fresh draw. Every level of a tree would have
+drawn the same per-feature normal, turning the noise from a per-level
+redraw into a fixed per-feature offset for the whole tree. Nothing caught
+it because nothing ever passed a non-zero `score_std_dev` -- the parameter
+existed, was threaded correctly all the way to the kernel, and was dead.
+That is PORTING_RULES 8 in its purest form: the wiring was checked, the
+VALUE was never non-zero, and the one line that depended on the value being
+non-zero was wrong.
+
+## 142. THE NOISE CANCELS ON THE GREEDY ARM, and three of the eight sabotages move nothing
+
+`mojo_only/random_strength_check.mojo`, `pixi run check-random-strength`.
+Six gates, all driven through a real `fit`; nothing hands a kernel its
+inputs (PORTING.md 115).
+
+The thing the gate exists to say: **`random_strength` is a model change on
+one searcher and an exact no-op on the other, and that is CatBoost's
+behaviour, not a gap here.**
+
+    GREEDY (`compute_scores.cu`)     `TScoreCalcer beforeSplitCalcer =
+                                     calcer` is copied AFTER `NextFeature`
+                                     (`:85`), so both calcers carry the
+                                     same `GlobalSeed` and the same
+                                     `FeatureId`, both `GetScore()` calls
+                                     add THE SAME DRAW, and
+                                     `gain = score - scoreBefore` (`:134`)
+                                     removes it. All three of their greedy
+                                     kernels (`:131-134`, `:370-375`,
+                                     `:459-464`).
+    DOC-PARALLEL                     `gain = (noisyScore -
+    (`pointwise_scores.cu:402`)      scoreBeforeSplit)` where
+                                     `scoreBeforeSplit` is an UNNOISED HOST
+                                     scalar carried from the previous
+                                     level. Nothing cancels.
+
+So the reach proof the brief asked for -- "at `random_strength = 1.0` the
+splits must differ" -- is the RIGHT gate on the doc-parallel arm and the
+WRONG one on the greedy arm, where the correct gate is the opposite
+equality. Both are in the file, as R2 and R2G.
+
+### Results, 3000 rows, 10 features, depth 4, 12 iterations, RMSE
+
+    R1   random_strength=0.0 == the parameter unset, BOTH arms:
+         48/48 splits, every leaf value and every loss identical
+    R2   doc-parallel, 0.0 -> 1.0: 45 of 46 splits moved,
+         12 of 12 losses moved
+    R2G  greedy, 0.0 -> 1.0: 48 of 48 splits and all 12 losses IDENTICAL.
+         The float32 residue of `fl(fl(s - n) + n)` flipped nothing at
+         `random_strength = 1`; the cancellation is exact in real
+         arithmetic and held to the bit here. It would NOT hold at a noise
+         magnitude that absorbs the score -- see the R5 note below, where
+         a deliberately leaked term at 1e6 moved every split by absorption
+         alone.
+    R3a  same seed twice: 46/46 splits identical
+    R3b  seed 7 vs seed 99: 43 of 46 splits moved
+    R5   score_function=L2, 0.0 -> 1e6: 48/48 splits identical
+    R4   PLACEMENT. Eight features that are all THE SAME COLUMN, so every
+         candidate's real score is identical across features and the argmin
+         is decided purely by `noise(GlobalSeed + FeatureId)`. The winning
+         FEATURE at all four levels of tree 0 was predicted on the host
+         from the same seed arithmetic and matched: features 0, 4, 7, 1.
+         Three of the four are not the tie-break's answer (which is always
+         feature 0), so this is placement and not a total.
+
+### The sabotage table, run
+
+    mutation                                        moved
+    ----------------------------------------------------------------
+    greedy calcer: advance_seed_k(..,4) -> 3        NOTHING
+    greedy calcer: seed = global_seed, no FeatureId NOTHING
+    greedy: drop the before-calcer's `-= noise`     R2G, 44 of 48 splits
+    run_tree_layout: force score_std_dev = 0        NOTHING
+    pointwise calcer: advance_seed_k(..,4) -> 3     R4, all four levels
+    pointwise calcer: seed without + FeatureId      R4, three of four
+                                                    (depth 0 coincides with
+                                                    the tie-break answer)
+    pointwise: noise leaked into the L2 calcer      R5 -- but ONLY at 1e6
+    boosting loop: force score_std_dev = 0          R2, R3b, R4
+
+TWO GATES WERE DECORATIVE AND ONE STILL IS.
+
+  * R5 was written at `random_strength = 1.0` and the L2 leak moved
+    NOTHING, because the noise magnitude is calibrated off the target's
+    standard deviation while an L2 score is `sum^2 / (w + lambda)` summed
+    over thousands of rows -- the leak was orders of magnitude below the
+    gap between candidates. FIXED by running R5 at 1e6:
+    `TL2ScoreCalcer::GetScore()` returns `Score` unchanged at ANY
+    `ScoreStdDev` (`score_calcers.cuh:57-60`), so the gate is entitled to
+    pick a magnitude no leak survives. It now catches the leak in both
+    forms tested (with and without `FeatureId` capture), 36-40 of 40
+    splits.
+  * THE GREEDY COPY OF THE SEED ARITHMETIC IS UNCHECKABLE THROUGH ANY
+    MODEL, AND STAYS SO. Its `+ FeatureId` and its four advances feed a
+    term that cancels, so no fit on that arm can distinguish them from any
+    other seed. That is not fixable by a better gate; it is a property of
+    their algorithm. What IS checked is that the term REACHES the kernel:
+    deleting the before-calcer's share of the noise moves 44 of 48 splits.
+    The arithmetic itself is checked by R4 on the pointwise copy of the
+    same three lines, and by reading. OPEN, and recorded rather than
+    papered over.
+
+### Documents this falsified, fixed in the same change
+
+  * `OPTIONS.md:100-102` said `random_strength` is "a NO-OP on their GPU
+    symmetric path". True of the greedy searcher and FALSE of the
+    doc-parallel one, which is the searcher CatBoost uses for single-target
+    symmetric trees. Sentence replaced, not annotated.
+  * `compute_scores.mojo` said the noise term "is NOT ported: it is
+    `random_strength`, which `CatBoostOptions.check()` refuses". Deleted.
+  * `compute_scores.mojo` said `beforeSplitCalcer` "is NOT ported". It is
+    now, and it has to be: it is what carries the cancelling draw.
+  * `doc_parallel_boosting.mojo`'s header said `CalcScoreModelLengthMult`
+    is "NOT A DIVERGENCE HERE" because the option was unported. Rewritten.
+  * `CatBoostOptions.random_strength`'s docstring said "no score noise is
+    applied here". Rewritten to say what each arm does, with their line
+    numbers.
+
+### The refusal that was lifted, and the surface it was on
+
+`CatBoostOptions.check()` refused any non-zero `random_strength`. That
+refusal is now narrowed to two cases: a negative value, and a non-zero
+value paired with `score_function` L2 or NewtonL2, where NO calcer of
+theirs has a noise term at all. CatBoost itself accepts that pairing and
+discards the value; this port refuses it, because an option that reads as
+live and is not is worse than one absent.
+
+**AND IT GATES NOTHING TODAY.** `CatBoostOptions` is constructed by exactly
+one thing in this tree, `mojo_only/options_check.mojo`. No fit path
+builds one. `gbdt/train.mojo` is where real callers arrive and it takes
+`random_strength` as a plain parameter with no validation of that pairing.
+Closing that is a `train()`-signature lane, not this one; it is named here
+so the next reader does not mistake `check()` for a guard.

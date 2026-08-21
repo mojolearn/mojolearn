@@ -87,6 +87,7 @@ bootstrap arrives.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
+from gbdt.data.permutation import TRandom
 from gbdt.gpu_data.feature_blocks import PolicyBlock, blocks_for
 from gbdt.gpu_data.compressed_index_builder import CompressedIndexLayout
 from gbdt.methods.helpers import TBestSplitProperties, take_best
@@ -280,6 +281,21 @@ def fit_oblivious_tree_structure(
     var structure = List[TBinarySplit]()
     var score_before_split = Float32(0.0)
 
+    # `auto& random = objective.GetRandom()` (`:15`), drawn from ONCE PER
+    # LEVEL at the two `ComputeOptimalSplit` call sites (`:86`, `:104`).
+    #
+    # THIS WAS A REAL BUG AND IT WAS INVISIBLE. The level loop below used to
+    # hand `seed` itself to every level, so every level of a tree drew the
+    # SAME per-feature normal -- the noise would have been a fixed
+    # per-feature offset for the whole tree instead of a fresh draw per
+    # level. Nothing caught it because no caller ever passed a non-zero
+    # `score_std_dev`, which is exactly PORTING_RULES 8: a branch nothing
+    # reaches is a branch nothing checks.
+    #
+    # DEVIATION 139: theirs is one `TGpuAwareRandom` for the whole fit and
+    # this one is re-seeded per tree from the caller's `seed`.
+    var level_rand = TRandom(seed)
+
     for depth in range(max_depth):
         # their `Gather(groupedByBinObservations, observations,
         # subsets.Indices)` (`:67`). At identity observations the gather IS
@@ -307,7 +323,7 @@ def fit_oblivious_tree_structure(
             score_function,
             l2_leaf_reg,
             score_std_dev,
-            seed,
+            level_rand.next_uniform_l(),
         )
 
         # their fold (`:113-120`), incumbent FIRST so a tie takes the new
