@@ -134,6 +134,7 @@ def main() raises:
             learning_rate=Float32(0.3), l2_leaf_reg=Float32(3.0),
         )
         var train_s = Float64(perf_counter_ns() - t0) / 1e9
+        var train_loss = tm.losses[len(tm.losses) - 1]
         _ = tm^
 
         var model = TAdditiveModel()
@@ -146,5 +147,6 @@ def main() raises:
         print(
             "rep", rep, " train() end-to-end", train_s,
             "s   fit-only", fit_s, "s   prep bill", train_s - fit_s,
-            "s   (fit mse", losses[len(losses) - 1], ")",
+            "s   (train mse", train_loss, " fit mse",
+            losses[len(losses) - 1], ")",
         )

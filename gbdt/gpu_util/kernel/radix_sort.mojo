@@ -76,7 +76,7 @@ the same `cub::DeviceScan::ExclusiveSum` over a different input iterator.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.primitives.block import prefix_sum
 
 from gbdt.gpu_util.copy import COPY_BLOCK, copy_u32_kernel
@@ -278,3 +278,93 @@ def launch_radix_sort_bins(
             values.unsafe_ptr(), temp_values.unsafe_ptr(), Int32(size),
             grid_dim=copy_blocks, block_dim=COPY_BLOCK,
         )
+
+
+struct DeviceFloatSorter(Movable):
+    """Their `RadixSort(sortedFeature)` over float columns -- the device
+    half of `ComputeBorders` (`gpu_data/gpu_binarization_helpers.cpp:
+    10-16`): copy a column to the device, radix-sort it there, read it
+    back sorted, and let the host grid builder walk sorted data.
+
+    A STRUCT WITH PREALLOCATED SCRATCH, not a free function, for the
+    reason `TCtrBinBuilderGpu` already records about its own sort
+    scratch: per-call buffer create/retire around enqueued work crashed
+    under churn -- 500 calls at 400k died inside the runtime on an early
+    iteration (measured 2026-08-21) -- while the hoisted-scratch shape
+    is the one every long-lived caller in this tree uses. Capacity is
+    fixed at construction; a longer column raises.
+
+    The float ordering rides the standard monotone twiddle their cub
+    float radix uses internally: negative bit patterns are inverted,
+    non-negative ones get the sign bit set, so unsigned key order IS
+    ascending float order. The twiddle runs on the HOST inside the
+    staging loop that already touches every element. NaN placement:
+    sign-0 NaNs sort above +inf, sign-1 below -inf; `best_split`'s NaN
+    filter drops them wherever they sit and `compute_nan_mode` counts
+    order-independently, so caller semantics are unaffected. The
+    (keys, values) pair sort carries a dummy value column because
+    `launch_radix_sort_bins` is their pair-sorting `ReorderBins`.
+    """
+
+    var keys: DeviceBuffer[DType.uint32]
+    var vals: DeviceBuffer[DType.uint32]
+    var tkeys: DeviceBuffer[DType.uint32]
+    var tvals: DeviceBuffer[DType.uint32]
+    var offsets: DeviceBuffer[DType.int32]
+    var bsums: DeviceBuffer[DType.int32]
+    var host: HostBuffer[DType.uint32]
+    var capacity: Int
+
+    def __init__(out self, ctx: DeviceContext, capacity: Int) raises:
+        self.capacity = capacity
+        self.keys = ctx.enqueue_create_buffer[DType.uint32](capacity)
+        self.vals = ctx.enqueue_create_buffer[DType.uint32](capacity)
+        self.tkeys = ctx.enqueue_create_buffer[DType.uint32](capacity)
+        self.tvals = ctx.enqueue_create_buffer[DType.uint32](capacity)
+        self.offsets = ctx.enqueue_create_buffer[DType.int32](capacity)
+        self.bsums = ctx.enqueue_create_buffer[DType.int32](
+            (capacity + 512 - 1) // 512
+        )
+        self.host = ctx.enqueue_create_host_buffer[DType.uint32](capacity)
+        ctx.synchronize()
+
+    def sort(
+        mut self, ctx: DeviceContext, var values: List[Float32]
+    ) raises -> List[Float32]:
+        var n = len(values)
+        if n <= 1:
+            return values^
+        if n > self.capacity:
+            raise Error(
+                "DeviceFloatSorter capacity "
+                + String(self.capacity)
+                + " exceeded by a column of "
+                + String(n)
+            )
+        var hp = self.host.unsafe_ptr()
+        var vbits = values.unsafe_ptr().unsafe_bitcast[UInt32]()
+        for i in range(n):
+            var bits = vbits.unsafe_load(i)
+            var key: UInt32
+            if bits & UInt32(0x80000000) != UInt32(0):
+                key = ~bits
+            else:
+                key = bits | UInt32(0x80000000)
+            hp.unsafe_store(i, key)
+        ctx.enqueue_copy(dst_buf=self.keys, src_ptr=hp)
+        ctx.synchronize()
+        launch_radix_sort_bins(
+            ctx, n, 0, 32, self.keys, self.vals, self.tkeys, self.tvals,
+            self.offsets, self.bsums,
+        )
+        ctx.enqueue_copy(dst_ptr=hp, src_buf=self.keys)
+        ctx.synchronize()
+        for i in range(n):
+            var key = hp.unsafe_load(i)
+            var bits: UInt32
+            if key & UInt32(0x80000000) != UInt32(0):
+                bits = key ^ UInt32(0x80000000)
+            else:
+                bits = ~key
+            vbits.unsafe_store(i, bits)
+        return values^

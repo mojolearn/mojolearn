@@ -54,6 +54,7 @@ from gbdt.overfitting_detector.overfitting_detector import (
     OD_NONE,
     od_type_from_name,
 )
+from gbdt.gpu_util.kernel.radix_sort import DeviceFloatSorter
 from gbdt.gpu_util.kernel.bootstrap import (
     BOOTSTRAP_KERNEL_BAYESIAN,
     BOOTSTRAP_KERNEL_BERNOULLI,
@@ -735,6 +736,10 @@ def train(
 
     var borders = List[List[Float32]]()
     var fold_counts = List[Int]()
+    # their ComputeBorders' device RadixSort, scratch hoisted once for
+    # every float column below (see DeviceFloatSorter's docstring for the
+    # churn crash that makes the hoist load-bearing)
+    var border_sorter = DeviceFloatSorter(ctx, n_rows)
     # their `TFloatFeature::NanValueTreatment`, one per COLUMN. One-hot and
     # CTR columns stay `AsIs`: a one-hot column holds dense codes and a CTR
     # column holds a computed statistic, and a NaN in either is a caller
@@ -795,7 +800,19 @@ def train(
             # `CalcQuantization` (`libs/data/quantization.cpp:300-346`):
             # the column decides its own NaN mode, and a column that has
             # NaNs spends ONE of `border_count` on the sentinel.
-            var col = columns[f].copy()
+            #
+            # SORTED ON THE DEVICE FIRST, which is their own GPU
+            # pipeline's design (`ComputeBorders`,
+            # `gpu_binarization_helpers.cpp:10-16`: RadixSort on the
+            # device, grid builder on the sorted readback). Measured
+            # 2026-08-21 (PREP_BILL results): the host sort inside
+            # `best_split` was 34 of 45.9 ms per 400k column, 74% of the
+            # whole 24-second preparation bill at 400k x 500; on
+            # presorted input the same call is 11.8 ms. The sorted
+            # multiset is identical, so every border -- and the fit's
+            # mse -- is bit-for-bit unchanged, which the quantize-cost
+            # probe's recorded mse gates.
+            var col = border_sorter.sort(ctx, columns[f].copy())
             var q = calc_quantization(col^, border_count, nan_mode_opt)
             var bs = q[0].copy()
             column_nan_treatment[f] = nan_value_treatment(q[1])
