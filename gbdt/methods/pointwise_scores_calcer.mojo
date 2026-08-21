@@ -83,10 +83,28 @@ def folds_histogram_for(folds: List[UInt32]) raises -> FoldsHistogram:
     for i in range(len(folds)):
         var f = Int(folds[i])
         if f > 0:
+            # `NCB::IntLog2` is `(ui32)ceil(log2(values))`
+            # (`libs/helpers/math_utils.h:14-16`) -- CEILING, and the first
+            # version of this function used floor. That is not a rounding
+            # nicety, it is the whole dispatch:
+            #
+            #   a 100-fold feature has ceil 7 -> counted under (7,7), which
+            #   launches the 7-bit kernel, whose device bound is (64, 128]
+            #   and accepts it. Under FLOOR it is 6, which launches the
+            #   6-bit kernel, whose bound is (32, 64] and REJECTS it -- and
+            #   the 7-bit kernel never launches at all, because
+            #   `if (featureCountForBits)` sees zero.
+            #
+            # So every one-byte feature whose fold count is not a power of
+            # two goes unhistogrammed, SILENTLY: the tree still grows, on
+            # whatever the other policies offer. Caught by
+            # `mojo_only/pointwise_vs_greedy_check.mojo` on its first run.
+            #
+            # It is also why their one-byte ranges start at FOUR
+            # (`PORTING.md` 102a): ceil(log2(16)) is 4, so a 16-fold
+            # feature belongs to the 5-bit kernel, whose bound is (15, 32].
             var bit = 0
-            var v = f
-            while v > 1:
-                v >>= 1
+            while (1 << bit) < f:
                 bit += 1
             h.counts[bit] += 1
     return h^
@@ -118,6 +136,18 @@ struct PolicyScoreHelper(Movable):
     var d_hist: DeviceBuffer[DType.float32]
     var d_cat_w: DeviceBuffer[DType.float32]
     var d_bin_w: DeviceBuffer[DType.float32]
+    var result_blocks: Int
+    """`const ui64 blockCount = 32;` and
+    `min(CeilDivide(histograms.Size(), 128), blockCount)`
+    (`histograms_helper.h:205-208`). **It is the GRID**, and every block
+    writes its OWN best record at `2 * blockIdx.x`, so `read_optimal_split`
+    has to fold all of them.
+
+    Reading only block 0 is not a partial answer that is usually right --
+    it is an argmin over the first 128 bin features and nothing else, and
+    it looks exactly like a working searcher that prefers low-numbered
+    bins."""
+
     var d_result_ids: DeviceBuffer[DType.uint32]
     var d_result_scores: DeviceBuffer[DType.float32]
     var h_result_ids: HostBuffer[DType.uint32]
@@ -196,10 +226,24 @@ struct PolicyScoreHelper(Movable):
         ctx.enqueue_copy(dst_buf=self.d_cat_w, src_ptr=ones.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=self.d_bin_w, src_ptr=ones.unsafe_ptr())
 
-        self.d_result_ids = ctx.enqueue_create_buffer[DType.uint32](2)
-        self.d_result_scores = ctx.enqueue_create_buffer[DType.float32](2)
-        self.h_result_ids = ctx.enqueue_create_host_buffer[DType.uint32](2)
-        self.h_result_scores = ctx.enqueue_create_host_buffer[DType.float32](2)
+        var blocks_n = (total + 127) // 128
+        if blocks_n > 32:
+            blocks_n = 32
+        if blocks_n < 1:
+            blocks_n = 1
+        self.result_blocks = blocks_n
+        self.d_result_ids = ctx.enqueue_create_buffer[DType.uint32](
+            2 * blocks_n
+        )
+        self.d_result_scores = ctx.enqueue_create_buffer[DType.float32](
+            2 * blocks_n
+        )
+        self.h_result_ids = ctx.enqueue_create_host_buffer[DType.uint32](
+            2 * blocks_n
+        )
+        self.h_result_scores = ctx.enqueue_create_host_buffer[
+            DType.float32
+        ](2 * blocks_n)
         ctx.synchronize()
 
     def submit_compute(
@@ -285,7 +329,7 @@ struct PolicyScoreHelper(Movable):
             score_before_split,
             self.d_result_ids,
             self.d_result_scores,
-            2,
+            self.result_blocks,
             score_function,
             l2,
             Float32(1.0),
@@ -309,12 +353,20 @@ struct PolicyScoreHelper(Movable):
             dst_buf=self.h_result_scores, src_buf=self.d_result_scores
         )
         ctx.synchronize()
-        return TBestSplitProperties(
-            Int32(self.h_result_ids[0]),
-            Int32(self.h_result_ids[1]),
-            self.h_result_scores[0],
-            self.h_result_scores[1],
-        )
+        # `BestSplit(BestScores, Stream)` (`histograms_helper.h:250`): a fold
+        # across the per-block records, not a read of the first one.
+        var best = TBestSplitProperties()
+        for b in range(self.result_blocks):
+            best = take_best(
+                TBestSplitProperties(
+                    Int32(self.h_result_ids[2 * b]),
+                    Int32(self.h_result_ids[2 * b + 1]),
+                    self.h_result_scores[2 * b],
+                    self.h_result_scores[2 * b + 1],
+                ),
+                best,
+            )
+        return best
 
 
 struct ScoresCalcerOnCompressedDataSet(Movable):

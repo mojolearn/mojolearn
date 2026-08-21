@@ -188,7 +188,17 @@ def fit_oblivious_tree_structure(
             target,
             cindex,
             docs2,
-            cf.offset,
+            # `TCFeature::Offset` is an ELEMENT offset into the compressed
+            # index -- `compressed_index[f_offset + doc]`. This tree's
+            # layout stores `offset` as the COLUMN index and strides by
+            # `n_rows`, so the multiply is the conversion. Passing the raw
+            # column reads column 0's bits with this feature's shift and
+            # mask: every document lands on one side, the partition comes
+            # back [0, n] / [n, 0], and the level scores identically to its
+            # parent -- so the searcher re-proposes the same split and
+            # `HasSplit` stops the tree at depth 1. Which is exactly how
+            # this was found.
+            UInt32(Int(cf.offset) * n_rows),
             cf.mask,
             cf.shift,
             is_one_hot,

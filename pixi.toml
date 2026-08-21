@@ -381,6 +381,23 @@ check-pointwise-subsets = "mojo run -I . mojo_only/pointwise_subsets_check.mojo"
 # it compares two independently written formulas rather than running either.
 check-cindex-packing = "mojo run -I . mojo_only/cindex_packing_check.mojo"
 
+# RUNG 1's GATE: two independent searchers, one fixture, the same tree.
+# The greedy-subsets searcher and the new pointwise one grow an oblivious
+# tree from the same compressed index and the same weak target, and every
+# split must agree feature for feature and bin for bin. They share the
+# cindex and NOTHING else -- different histogram layouts (stat-major against
+# stat-minor), different collision schemes, different reduce shapes,
+# OPPOSITE sign conventions (PORTING.md 94a), fixed-point on one side at 8
+# bits and none on the other. Agreement is two ports of one algorithm
+# arriving at one answer, not a tautology.
+#
+# It does NOT prove either matches CatBoost -- both could share a misreading;
+# tools/catboost_oracle.py is what compares against their own output. It DOES
+# prove the ~9,000 lines of the pointwise family compute the same splits as
+# an implementation gated against CatBoost's dumped decisions 48/48.
+# Own main(); a GPU, ~15 s.
+check-pointwise-vs-greedy = "mojo run -I . mojo_only/pointwise_vs_greedy_check.mojo"
+
 # The LSD radix sort over (bin, permutation position). Gates STABILITY
 # separately from sortedness and prints both, because sortedness alone
 # cannot see a tie that moved -- and the tie order IS the second half of
