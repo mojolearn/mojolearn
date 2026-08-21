@@ -370,6 +370,17 @@ check-pointwise-scores = "mojo run -I . mojo_only/pointwise_scores_check.mojo"
 # Own main(); a GPU, ~10 s.
 check-pointwise-subsets = "mojo run -I . mojo_only/pointwise_subsets_check.mojo"
 
+# Does this tree's compressed index feed CatBoost's POINTWISE accumulators?
+# It must, and nothing downstream could tell you otherwise. The pointwise
+# family never reads TCFeature::Mask or ::Shift -- it HARDCODES the packing
+# (one-byte at 24-8k, half-byte at 28-4i, binary as nibble fid/4 bit
+# 3-(fid&3)) -- where the greedy-subsets family reads them per feature and
+# works with any layout. So a packing mismatch produces a perfectly
+# well-formed histogram OF THE WRONG FEATURES: every bin populated, every
+# total right, the tree splitting on the wrong columns. Host only, instant:
+# it compares two independently written formulas rather than running either.
+check-cindex-packing = "mojo run -I . mojo_only/cindex_packing_check.mojo"
+
 # The LSD radix sort over (bin, permutation position). Gates STABILITY
 # separately from sortedness and prints both, because sortedness alone
 # cannot see a tie that moved -- and the tie order IS the second half of
