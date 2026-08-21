@@ -164,28 +164,30 @@ quotes no perf claim.** If the probe lands and reports gathers losing, that is
 a finding about the shape of the eventual kernels, not about the host oracle,
 the objectives, the RNG or the checks — none of which would be wasted.
 
-## OPEN — decisions only Andrew can make
+## RULED by Andrew, 2026-08-21
 
-1. **DEVIATION 135, score accumulation precision for regression.** No `float64`
-   on device. Classification is exact in integer arithmetic and needs no
-   ruling. Regression label sums do: either fixed-point scaling (the precedent
-   already in this repo, `gbdt/mojo_only/fixed_point.mojo::choose_scale`) or
-   `Float32` with a fixed reduction-tree shape. Fixed point makes the device
-   answer exactly equal to the host oracle's; `Float32` makes it equal only to
-   a tolerance, which weakens every downstream check from "per cell exact" to
-   "per cell within eps". Recommendation: fixed point, on the precedent. Not
-   taken unilaterally because it changes what a user's regression model is.
-2. **Where the deviation ledger lives.** This lane writes `DEVIATIONS.md` in
-   its own directory instead of appending 130-159 to the root `PORTING.md`,
-   because the RF lane is appending to `PORTING.md` concurrently and rule 12
-   says file convergence is the thing that predicts integration pain. The text
-   is in `PORTING.md`'s format so the merge is an append. Whoever merges
-   decides whether to do it.
-3. **`n_estimators` / forest-level defaults.** Not touched. This lane is
+1. **DEVIATION 135 — regression accumulation: FIXED POINT.** Closed. Labels are
+   quantized once on the host by a power-of-two scale derived from the whole
+   dataset's magnitude sum; every device accumulation is integer, so the answer
+   is order-independent and identical across vendors. Implemented in
+   `mojo_only/fixed_point.mojo`. The scale had to be derived rather than copied
+   from root's file, because this lane's exact split comparison cross-multiplies
+   into `Int128` and a scale sized only for the accumulator overflows it — see
+   the ledger entry for the arithmetic and the resolution schedule.
+2. **The deviation ledger stays in `extratrees/DEVIATIONS.md`.** Not merged into
+   the root `PORTING.md`. It remains written in `PORTING.md`'s format, so that
+   a future merge is an append rather than an edit, but no merge is planned.
+
+## Still open
+
+1. **`n_estimators` / forest-level defaults.** Not touched. This lane is
    building the LEARNER; sklearn's `ExtraTreesClassifier` defaults
    (`n_estimators=100`, `bootstrap=False`, `max_features='sqrt'` for
-   classification and `1.0` for regression) are recorded as the target, and
-   the forest wrapper is downstream of the tree working.
+   classification and `1.0` for regression) are recorded as the target, and the
+   forest wrapper is downstream of the tree working.
+2. **The gather probe.** `bench/results/GATHER_PROBE_*.md` still does not exist.
+   The reasoning that supersedes it as a gate is above; it remains true that
+   nobody has measured gather bandwidth on this box for this access pattern.
 
 ## Status
 

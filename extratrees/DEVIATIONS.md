@@ -154,24 +154,76 @@ misfits. It is not stable, and it does not need to be.
 against `max.gpu.primitives.block` — a language-level counterpart, explicitly
 allowed by `PORTING_RULES.md` 0b-i and not a vendor-library substitution.
 
-## 135. OPEN — score accumulation precision on device
+## 135. RULED — regression accumulates in FIXED POINT
 
 **Theirs.** sklearn accumulates class counts and label sums in `float64`
-(`_criterion.pyx`, `sum_left`/`sum_right` are `float64_t[::1]`), and the MSE
-proxy is `sum_left^2/n_left + sum_right^2/n_right` (`_criterion.pyx:944-975`).
+(`_criterion.pyx`; `sum_left`/`sum_right` are `float64_t[::1]`), and the MSE
+proxy is `sum_left^2/n_left + sum_right^2/n_right` (`:944-973`).
 
-**Ours.** There is no `float64` on device (root traps register). For
-CLASSIFICATION this is not a problem and is not a deviation: with the default
-`sample_weight=None` the class counts are integers, so the Gini proxy is an
-exact rational in integer arithmetic. For REGRESSION the label sums are floats
-and a parallel reduction has no fixed order.
+**Ours.** There is no `float64` on device.
 
-**Status: OPEN, and it is the one design fork this lane cannot settle from an
-upstream** — `gbdt/` solved the same problem with fixed-point label scaling
-(`mojo_only/fixed_point.mojo`, `choose_scale`), which is a precedent inside
-this repository rather than an invention. Resolving it is a decision recorded
-in `PLAN.md`; nothing downstream is blocked on it because the classification
-path is exact either way.
+- **Classification was never open.** With the default `sample_weight=None` the
+  class counts are integers, so the Gini proxy is an exact rational in integer
+  arithmetic — deviation 144.
+- **Regression is now ruled: FIXED POINT.** Andrew, 2026-08-21. Labels are
+  quantized once, on the host, by a power-of-two scale derived from the whole
+  dataset's sum of magnitudes, and every accumulation on device is integer.
+
+**Reason.** Integer addition is associative and exact, so the accumulation is
+order-independent by construction: however partial sums combine across lanes,
+blocks and vendors, the total is the same bits. A `Float32` accumulator would
+make the answer a function of the reduction's shape, which would weaken every
+downstream check from "exact, per cell" to "within eps" and make the same fit
+on Metal, CUDA and HIP three different models.
+
+**This is a port of a precedent in this repository, not a new idea.** Root's
+`mojo_only/fixed_point.mojo` already solves it for the GBDT learner, where
+CatBoost flushes histograms with a float `atomicAdd` Metal does not have. Three
+of its ideas are taken unchanged with their reasoning: the bound comes from the
+WHOLE dataset once (any node's rows are a subset, so a scale that keeps the
+global magnitude sum inside the slot keeps every partial sum inside it, at
+every node, at every depth); the scale is SNAPPED DOWN to a power of two so it
+is a step function of the magnitude rather than a lever arm for its last bits;
+and quantization truncates toward zero, with no tie-break to get wrong on
+another vendor.
+
+**What this lane had to derive for itself, and it is not a detail.** Root's
+bound is about the ACCUMULATOR. This lane has a second, tighter constraint
+root does not: deviation 144's exact comparison cross-multiplies
+`num = sum_L^2 n_R + sum_R^2 n_L` against `den = n_L n_R`, and it is THAT
+product that must fit `Int128`. With `M = 2^b` the largest scaled sum and `n`
+the node's rows:
+
+    num <= 2 M^2 n      den <= n^2/4      num*den <= M^2 n^3 / 2
+
+so the requirement is `2b + 3 log2(n) <= 128`. **A scale chosen only for the
+accumulator overflows the comparator**: at root's `2^30` slot and this lane's
+`2^26` row cap the product reaches `2^137`, ten bits past `Int128`. So
+`accumulator_bits_for` spends resolution against the row count —
+
+    n <= 2^22 (4.2M)  ->  b = 30, nothing lost
+    n  = 2^24 (16.8M) ->  b = 27
+    n  = 2^26 (67M)   ->  b = 24
+
+— and refuses below a 16-bit floor rather than returning a useless scale.
+`comparator_product_fits` computes the worst case in `Int128` at every row
+count so the algebra above is a CHECKED claim, not a comment.
+
+**Price, measured rather than asserted.** Quantization truncates, so the
+recovered sum is within one unit per row of the float64 sum: on a 4096-row
+hashed fixture the round-trip error was 0.0081 against a budget of 4.0.
+Resolution costs nothing below ~4M rows in a single node and degrades
+gracefully above it. Against that, the float32 control in the same check
+disagrees with itself across summation orders (586.2111 forward, 586.2113
+reverse, 586.20996 pairwise) — which is the cost fixed point removes.
+
+**Implementation:** `mojo_only/fixed_point.mojo`, checked by
+`mojo_only/fixed_point_check.mojo` (8280 cells, seven sabotages).
+
+**Consequence for `AggregateBin`.** `objectives.mojo` deliberately left its
+accumulator type a parameter pending this ruling. The device instantiates it
+over an integer type; the host oracle may keep `Float64`, and where the two are
+compared the comparison is through the quantized values, not the floats.
 
 ---
 
