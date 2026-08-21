@@ -788,6 +788,145 @@ def check_random_seed(random_state: Int) raises -> UInt64:
     return UInt64(random_state)
 
 
+def class_weight_uniform(n_classes: Int) -> List[Float64]:
+    """`common/classification.py:70-72` -- the `class_weight is None` arm,
+    `np.ones(n_classes, dtype=np.float64)`."""
+    var w = List[Float64]()
+    for _ in range(n_classes):
+        w.append(Float64(1.0))
+    return w^
+
+
+def class_weight_balanced(
+    n_classes: Int,
+    y_ind: List[Int32],
+    sample_weight: List[Float32] = List[Float32](),
+) raises -> List[Float64]:
+    """`common/classification.py:73-80` -- the `"balanced"` arm:
+
+        counts  = cp.bincount(y_ind, weights=sample_weight)
+        weights = (counts.sum() / (n_classes * counts)).astype(dtype)
+
+    NOTE THE WEIGHTED BINCOUNT. `balanced_with_sample_weight` defaults
+    True (`:15`), and their own comment says why: some cuml estimators
+    "weren't doing this and we may need to maintain this bug for a bit."
+    Random forest is not one of those -- `randomforestclassifier.py:279`
+    takes the default -- so a class's count here is the SUM OF ITS
+    SAMPLE WEIGHTS, not its row count.
+
+    THE NARROWING IS PART OF THIS ARM AND NOT OF THE OTHERS. `.astype`
+    rounds these weights to float32 before they are ever applied, while
+    the uniform and explicit arms stay float64 until the `take` at `:97`.
+    That asymmetry is theirs; it is transcribed rather than smoothed,
+    because a weight is a multiplier on a histogram accumulation and the
+    two orders do not round the same.
+
+    A class with zero total weight divides by zero and yields `inf`,
+    exactly as theirs does -- no guard on either side.
+    """
+    var counts = List[Float64]()
+    for _ in range(n_classes):
+        counts.append(Float64(0.0))
+    var weighted = len(sample_weight) > 0
+    for i in range(len(y_ind)):
+        var k = Int(y_ind[i])
+        if k < 0 or k >= n_classes:
+            raise Error(
+                "y_ind holds " + String(k) + ", outside [0, n_classes)"
+            )
+        counts[k] += Float64(sample_weight[i]) if weighted else Float64(1.0)
+    var total = Float64(0.0)
+    for k in range(n_classes):
+        total += counts[k]
+    var w = List[Float64]()
+    for k in range(n_classes):
+        var v = total / (Float64(n_classes) * counts[k])
+        # `.astype(dtype)` -- dtype is float32 here
+        w.append(Float64(Float32(v)))
+    return w^
+
+
+def class_weight_explicit(
+    n_classes: Int, weights: List[Float64]
+) raises -> List[Float64]:
+    """`common/classification.py:81-91` -- the dict arm.
+
+    Theirs looks each class up in a mapping and leaves the ones it does
+    not find at 1.0, then raises if SOME classes were missing and the
+    mapping's size does not account for the rest:
+
+        if unweighted and (n_classes - len(unweighted)) != len(class_weight):
+            raise ValueError(f"The classes, ..., are not in class_weight")
+
+    A Mojo `Dict` keyed by an arbitrary label type has no counterpart here
+    -- this port's labels are already the indices `y_ind` holds -- so the
+    mapping becomes a full per-class vector and the partial-coverage error
+    cannot arise. What CAN arise is the wrong length, which is refused.
+
+    Their `'balanced_subsample'` is refused by name for random forest
+    (`randomforestclassifier.py:173-176`); there is no string argument
+    here to refuse, and no subsample arm to reach.
+    """
+    if len(weights) != n_classes:
+        raise Error(
+            "class_weight must hold one weight per class: got "
+            + String(len(weights))
+            + " for "
+            + String(n_classes)
+            + " classes"
+        )
+    return weights.copy()
+
+
+def apply_class_weight(
+    class_weight: List[Float64],
+    y_ind: List[Int32],
+    sample_weight: List[Float32] = List[Float32](),
+) raises -> List[Float32]:
+    """`common/classification.py:93-100`:
+
+        if (weights != 1).any():
+            if sample_weight is None:
+                sample_weight = cp.asarray(weights, dtype).take(y_ind)
+            else:
+                sample_weight = sample_weight.copy()
+                for ind, weight in enumerate(weights):
+                    sample_weight[y_ind == ind] *= weight
+
+    THE `any()` GUARD IS LOAD-BEARING, not an optimization. When every
+    weight is exactly 1 theirs returns `sample_weight` UNCHANGED -- which,
+    when none was passed, is None. Downstream that is the difference
+    between a weighted fit and an unweighted one:
+    `RowSampler::use_weighted_bootstrap` (`randomforest.cuh:214`) tests
+    the pointer, not the values, so materialising a vector of ones would
+    silently move a default fit onto the weighted-bootstrap arm. Ours
+    returns an EMPTY list for the same reason, which is what
+    `has_sample_weight` reads.
+    """
+    var any_non_unit = False
+    for k in range(len(class_weight)):
+        if class_weight[k] != Float64(1.0):
+            any_non_unit = True
+    if not any_non_unit:
+        return sample_weight.copy()
+
+    var out = List[Float32]()
+    var weighted = len(sample_weight) > 0
+    for i in range(len(y_ind)):
+        var k = Int(y_ind[i])
+        if k < 0 or k >= len(class_weight):
+            raise Error(
+                "y_ind holds " + String(k) + ", outside [0, n_classes)"
+            )
+        if weighted:
+            # `:99` -- multiply the caller's weight IN PLACE
+            out.append(sample_weight[i] * Float32(class_weight[k]))
+        else:
+            # `:97` -- take, so the weight is narrowed once, here
+            out.append(Float32(class_weight[k]))
+    return out^
+
+
 def default_rf_params_classifier(n_cols: Int) raises -> RF_params:
     """`RandomForestClassifier.__init__`, `randomforestclassifier.py:209-230`,
     marshalled through `randomforest_common.pyx:477-554`.
@@ -1095,6 +1234,94 @@ struct RandomForest[dtype: DType, label_dtype: DType](
                 predictions[row_id] = row_prediction[0].cast[
                     Self.label_dtype
                 ]()
+
+    def predict_proba(
+        self,
+        input: List[Scalar[Self.dtype]],
+        n_rows: Int,
+        n_cols: Int,
+        mut probabilities: List[Scalar[Self.dtype]],
+        forest: RandomForestMetaData[Self.dtype, Self.label_dtype],
+    ) raises:
+        """`RandomForestClassifier.predict_proba`,
+        `randomforestclassifier.py:357-...`.
+
+        THIS IS `predict` STOPPED ONE LINE EARLY. Their `predict`
+        (`randomforest.cuh:403-427`) zero-inits a row vector, lets every
+        tree ADD its leaf vector into it (`decisiontree.cuh:387`), divides
+        by `n_trees` at `:414-416`, and only THEN takes the argmax at
+        `:417-427`. The divided vector is the class-probability estimate,
+        so `predict_proba` is that vector and `predict` is its argmax --
+        which is why they can never disagree.
+
+        Their Python routes this through nvForest rather than through
+        `RandomForest::predict`, and nvForest is DEVIATION 119b's declined
+        path; this walks the trees on the host instead. Same definition,
+        same value, different executor -- the same substitution the OOB
+        pass makes for its per-tree predictions (DEVIATION 311).
+
+        CLASSIFIER ONLY, as theirs is: `predict_proba` is defined on
+        `RandomForestClassifier` and not on the regressor.
+        """
+        if self.rf_type != CLASSIFICATION:
+            raise Error(
+                "predict_proba is defined on RandomForestClassifier only;"
+                " cuML's regressor has no such method"
+            )
+        self.error_checking(n_rows, n_cols)
+        if len(forest.trees) == 0:
+            raise Error("Cannot predict! No trees in the forest.")
+        var num_outputs = Int(forest.trees[0].num_outputs)
+        if num_outputs < 1:
+            raise Error(
+                "forest.trees[0].num_outputs is " + String(num_outputs)
+            )
+        if len(probabilities) < n_rows * num_outputs:
+            raise Error(
+                "probabilities holds "
+                + String(len(probabilities))
+                + " values but n_rows * num_outputs is "
+                + String(n_rows * num_outputs)
+            )
+        if len(input) < n_rows * n_cols:
+            raise Error(
+                "input holds "
+                + String(len(input))
+                + " values but n_rows * n_cols is "
+                + String(n_rows * n_cols)
+            )
+        var n_trees = Int(self.rf_params.n_trees)
+        if len(forest.trees) < n_trees:
+            raise Error(
+                "rf_params.n_trees is "
+                + String(n_trees)
+                + " but the forest holds "
+                + String(len(forest.trees))
+                + " trees"
+            )
+
+        for row_id in range(n_rows):
+            # `randomforest.cuh:403`
+            var row_prediction = List[Scalar[Self.dtype]]()
+            for _ in range(num_outputs):
+                row_prediction.append(0)
+            # `:404-412`
+            for i in range(n_trees):
+                DecisionTree.predict(
+                    forest.trees[i],
+                    input,
+                    1,
+                    n_cols,
+                    row_prediction,
+                    num_outputs,
+                    rows_offset=row_id * n_cols,
+                    preds_offset=0,
+                )
+            # `:414-416` -- and STOP. No argmax.
+            for k in range(num_outputs):
+                probabilities[row_id * num_outputs + k] = row_prediction[
+                    k
+                ] / Scalar[Self.dtype](n_trees)
 
     @staticmethod
     def score(

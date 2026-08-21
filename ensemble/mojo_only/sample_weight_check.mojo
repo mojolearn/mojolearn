@@ -65,6 +65,10 @@ from ensemble.randomforest import (
     RF_params,
     RandomForestMetaData,
     RowSampler,
+    apply_class_weight,
+    class_weight_balanced,
+    class_weight_explicit,
+    class_weight_uniform,
     fit_forest,
 )
 
@@ -442,7 +446,6 @@ def arm_c_double_counting(ctx: DeviceContext) raises -> Int:
     # twice with the weighted bin and with the PLAIN bin. If the objective
     # were seeing the weights, those two would differ; since it is not, the
     # row sample is the only input and both must produce the same tree.
-    var plain = PlainObj(Int32(3), Int32(1), Int32(GINI), Float32(0.0))
     var boot_wt = _fit[WtObj](ctx, d[0], d[1], n_rows, n_cols, 3, True, w)
     var boot_pl = _fit[PlainObj](
         ctx, d[0], d[1], n_rows, n_cols, 3, True, w
@@ -506,6 +509,132 @@ def arm_d_weighted_bins_train(ctx: DeviceContext) raises -> Int:
     return fails
 
 
+def arm_e_class_weight() raises -> Int:
+    """`common/classification.py:50-100`, reached from
+    `randomforestclassifier.py:279-283`.
+
+    `class_weight` is not a separate mechanism -- it RESOLVES to
+    `sample_weight` and then everything this file already checks applies.
+    So the arms here are about the resolution, and every expected value is
+    arithmetic done by hand.
+    """
+    print()
+    print("ARM E -- class_weight resolves to sample_weight")
+    var wrong = 0
+
+    # 8 rows: 4 of class 0, 3 of class 1, 1 of class 2.
+    var y = List[Int32]()
+    for _ in range(4):
+        y.append(Int32(0))
+    for _ in range(3):
+        y.append(Int32(1))
+    y.append(Int32(2))
+    var n_classes = 3
+
+    # `:70-72` -- None is uniform, and `:93` then returns the caller's
+    # sample_weight UNTOUCHED. Passing none must stay none: materialising
+    # a vector of ones would move a default fit onto the weighted
+    # bootstrap arm, which tests the POINTER (randomforest.cuh:214).
+    var uni = class_weight_uniform(n_classes)
+    var passthrough = apply_class_weight(uni, y)
+    print("    uniform -> sample_weight length", len(passthrough))
+    if len(passthrough) != 0:
+        print("      FAIL: uniform weights must leave sample_weight absent")
+        wrong += 1
+
+    # `:73-80` -- balanced: counts.sum() / (n_classes * counts).
+    # counts = [4, 3, 1], sum 8, n_classes 3
+    #   class 0: 8 / (3*4) = 0.6666667
+    #   class 1: 8 / (3*3) = 0.8888889
+    #   class 2: 8 / (3*1) = 2.6666667
+    var bal = class_weight_balanced(n_classes, y)
+    var want = [
+        Float64(Float32(8.0 / 12.0)),
+        Float64(Float32(8.0 / 9.0)),
+        Float64(Float32(8.0 / 3.0)),
+    ]
+    for k in range(n_classes):
+        print("    balanced class", k, "=", bal[k], "want", want[k])
+        if bal[k] != want[k]:
+            wrong += 1
+    # the rarest class must get the largest weight -- the whole point
+    if not (bal[2] > bal[1] and bal[1] > bal[0]):
+        print("      FAIL: balanced did not order the weights by rarity")
+        wrong += 1
+
+    # applied per row, `:97`
+    var sw = apply_class_weight(bal, y)
+    if len(sw) != len(y):
+        print("      FAIL: applied weights are the wrong length")
+        wrong += 1
+    else:
+        var bad = 0
+        for i in range(len(y)):
+            if sw[i] != Float32(bal[Int(y[i])]):
+                bad += 1
+        print("    applied per row: cells wrong", bad)
+        if bad != 0:
+            wrong += 1
+
+    # `:73-80` again, but with a caller's sample_weight folded into the
+    # bincount -- `balanced_with_sample_weight` defaults True and RF takes
+    # the default, so a class's count is its WEIGHT SUM, not its row count.
+    var caller = List[Float32]()
+    for i in range(len(y)):
+        caller.append(Float32(2.0) if Int(y[i]) == 0 else Float32(1.0))
+    var bal_w = class_weight_balanced(n_classes, y, caller)
+    # counts = [8, 3, 1], sum 12: class 0 -> 12/(3*8) = 0.5
+    var want0 = Float64(Float32(12.0 / 24.0))
+    print("    balanced with sample_weight, class 0 =", bal_w[0], "want", want0)
+    if bal_w[0] != want0:
+        print("      FAIL: the bincount did not use the sample weights")
+        wrong += 1
+    if bal_w[0] == bal[0]:
+        print(
+            "      FAIL: weighting the bincount changed nothing, so this"
+            " fixture cannot tell the two apart"
+        )
+        wrong += 1
+
+    # `:99` -- with a caller's weights, class weights MULTIPLY them
+    var sw2 = apply_class_weight(bal, y, caller)
+    var bad2 = 0
+    for i in range(len(y)):
+        if sw2[i] != caller[i] * Float32(bal[Int(y[i])]):
+            bad2 += 1
+    print("    multiplied into a caller's weights: cells wrong", bad2)
+    if bad2 != 0:
+        wrong += 1
+
+    # `:81-91` -- the explicit arm, and the length it refuses
+    var explicit = class_weight_explicit(n_classes, [1.0, 5.0, 1.0])
+    var sw3 = apply_class_weight(explicit, y)
+    var bad3 = 0
+    for i in range(len(y)):
+        var w = Float32(5.0) if Int(y[i]) == 1 else Float32(1.0)
+        if sw3[i] != w:
+            bad3 += 1
+    print("    explicit {1, 5, 1}: cells wrong", bad3)
+    if bad3 != 0:
+        wrong += 1
+    var refused = False
+    try:
+        var _e = class_weight_explicit(n_classes, [1.0, 5.0])
+    except:
+        refused = True
+    if not refused:
+        print("      FAIL: a wrong-length class_weight must be refused")
+        wrong += 1
+
+    if wrong == 0:
+        print(
+            "  arm E OK: uniform stays absent, balanced is"
+            " sum/(n_classes*count) narrowed to float32 and ordered by"
+            " rarity, the bincount is weighted, and explicit multiplies in"
+        )
+    return wrong
+
+
 def main() raises:
     print("sample_weight_check: the zero-weight drop, validation, and the")
     print("  bootstrap-vs-objective double-counting rule")
@@ -515,6 +644,7 @@ def main() raises:
     fails += arm_b_validation(ctx)
     fails += arm_c_double_counting(ctx)
     fails += arm_d_weighted_bins_train(ctx)
+    fails += arm_e_class_weight()
     if fails == 0:
         print("sample_weight_check: ALL OK")
     else:

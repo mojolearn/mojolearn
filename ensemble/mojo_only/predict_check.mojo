@@ -552,6 +552,124 @@ def importance_tree(
 # ---------------------------------------------------------------------------
 
 
+def arm_predict_proba() raises -> Int:
+    """`RandomForestClassifier.predict_proba`.
+
+    Their `predict` IS the argmax of `predict_proba`: `randomforest.cuh`
+    divides the summed leaf vectors by `n_trees` at `:414-416` and takes
+    the argmax at `:417-427`, out of the same buffer. So the invariant is
+    not "both look reasonable" -- it is that argmax(proba) EQUALS predict,
+    row for row, with their tie-break (strict `>` from index 0, so a tie
+    keeps the LOWER class and an all-non-positive row answers 0).
+
+    A hand-built forest is used rather than a fitted one so the expected
+    probabilities are arithmetic: two trees, known leaves, so each row's
+    vector is a known average of two known vectors."""
+    print()
+    print("ARM predict_proba -- it is predict, stopped one line early")
+    var wrong = 0
+
+    # tree 0: split col 0 at 5.0; left leaf (1,0), right leaf (0,1)
+    # tree 1: split col 0 at 5.0; left leaf (0.5,0.5), right leaf (0,1)
+    var trees = List[TreeMetaDataNode[F32]]()
+    for t in range(2):
+        var st = List[SparseTreeNode[F32]]()
+        st.append(
+            SparseTreeNode[F32].CreateSplitNode(
+                Int32(0), Float32(5.0), Float32(1.0), Int64(1), Int32(4)
+            )
+        )
+        st.append(SparseTreeNode[F32].CreateLeafNode(Int32(2)))
+        st.append(SparseTreeNode[F32].CreateLeafNode(Int32(2)))
+        var vl = List[Float32]()
+        # node 0 is internal: its slots are dead
+        vl.append(0.0)
+        vl.append(0.0)
+        if t == 0:
+            vl.append(1.0)
+            vl.append(0.0)
+        else:
+            vl.append(0.5)
+            vl.append(0.5)
+        vl.append(0.0)
+        vl.append(1.0)
+        trees.append(
+            TreeMetaDataNode[F32](
+                treeid=Int32(t),
+                depth_counter=1,
+                leaf_counter=2,
+                train_time=0.0,
+                vector_leaf=vl^,
+                sparsetree=st^,
+                num_outputs=2,
+            )
+        )
+
+    var params = default_rf_params_classifier(1)
+    params.n_trees = 2
+    var forest = RandomForestMetaData[F32, I32](
+        trees=trees^, rf_params=params, n_features=1
+    )
+    var rf = RandomForest[F32, I32](rf_params=params, rf_type=CLASSIFICATION)
+
+    # row 0 goes LEFT (<= 5.0), row 1 goes RIGHT
+    var rows: List[Float32] = [1.0, 9.0]
+    var proba = List[Float32]()
+    for _ in range(4):
+        proba.append(0.0)
+    rf.predict_proba(rows, 2, 1, proba, forest)
+
+    # left:  ((1,0) + (0.5,0.5)) / 2 = (0.75, 0.25)
+    # right: ((0,1) + (0,1))     / 2 = (0.0,  1.0)
+    var want: List[Float32] = [0.75, 0.25, 0.0, 1.0]
+    for i in range(4):
+        print("    proba cell", i, "=", proba[i], "want", want[i])
+        if proba[i] != want[i]:
+            wrong += 1
+
+    # every row's vector sums to 1 here because the leaves do
+    for r in range(2):
+        var tot = proba[r * 2] + proba[r * 2 + 1]
+        if tot != Float32(1.0):
+            print("      FAIL: row", r, "sums to", tot)
+            wrong += 1
+
+    # THE INVARIANT: argmax(proba) == predict, row for row
+    var preds = List[Scalar[I32]]()
+    for _ in range(2):
+        preds.append(0)
+    rf.predict(rows, 2, 1, preds, forest)
+    for r in range(2):
+        var best = 0
+        var bp = proba[r * 2]
+        for k in range(1, 2):
+            if proba[r * 2 + k] > bp:
+                bp = proba[r * 2 + k]
+                best = k
+        print("    row", r, ": argmax(proba)", best, "predict", preds[r])
+        if Scalar[I32](best) != preds[r]:
+            print("      FAIL: predict and predict_proba disagree")
+            wrong += 1
+
+    # regressor has no predict_proba (theirs defines it on the classifier)
+    var rfr = RandomForest[F32, I32](rf_params=params, rf_type=REGRESSION)
+    var refused = False
+    try:
+        rfr.predict_proba(rows, 2, 1, proba, forest)
+    except:
+        refused = True
+    print("    regressor refuses predict_proba:", refused)
+    if not refused:
+        wrong += 1
+
+    if wrong == 0:
+        print(
+            "  arm predict_proba OK: exact averaged vectors, and argmax"
+            " agrees with predict on every row"
+        )
+    return wrong
+
+
 def main() raises:
     var failures: Int = 0
 
@@ -1367,6 +1485,8 @@ def main() raises:
     print(get_tree_summary_text(tree_a), end="")
     print_metrics(set_all_rf_metrics(CLASSIFICATION, 0.8, -1.0, -1.0, -1.0))
     print("MAE refused, get_tree_json refused, training params honored")
+
+    failures += arm_predict_proba()
 
     print("")
     if failures == 0:
