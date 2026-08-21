@@ -738,7 +738,7 @@ comparator.** Cost unmeasured, deliberately.
 
 ---
 
-## 151. The supplied column list IS the search; sklearn's "keep drawing until one is non-constant" is gone
+## 151. The supplied column list IS the search; sklearn's "keep drawing until one is non-constant" is gone -- **CLOSED by DEVIATION 205**
 
 **Theirs.** `_splitter.pyx:573-577`, the loop guard, holds two separate facts:
 (a) it stops early when every remaining feature is known constant; (b) the
@@ -2226,3 +2226,93 @@ plausible. The first attempt merged the raw bit pattern, which the decode then
 misread as a key: all 84 cells moved where 28 were predicted, and the shape
 check rejected it. **A sabotage that moves everything proves nothing**, and the
 check said so before a human did.
+
+---
+
+## DEVIATION 205 -- sklearn's "keep drawing while every draw was constant". THIS CLOSES 151
+
+**WHAT 151 SAID.** That we stop splitting a node when every one of its
+`max_features` sampled columns is constant while sklearn keeps drawing, and
+that the difference was priced but not fixed.
+
+**WHAT IT COST, MEASURED on covtype 581,012 x 54, 10 trees, depth 12.** Not
+small, and it got worse the narrower the sample:
+
+| `max_features` | our accuracy | sklearn | our nodes | sklearn's nodes |
+|---|---|---|---|---|
+| 5 | 0.645-0.677 | 0.660-0.716 | 3,798-5,818 | 20,558-24,052 |
+| 7 | 0.674-0.691 | 0.683-0.736 | 7,620-10,044 | 22,428-24,434 |
+| 14 | 0.707-0.745 | 0.737-0.749 | 22,884-26,238 | 27,962-29,446 |
+
+We were building **four to six times fewer nodes** than sklearn at a narrow
+sample. covtype is 44 binary one-hot columns out of 54, so a narrow draw is
+constant often, and every time it was, we stopped and they did not.
+
+**THE RULE, `_splitter.pyx:573-577`::**
+
+    while (f_i > n_total_constants and
+            (n_visited_features < max_features or
+             n_visited_features <= n_found_constants + n_drawn_constants)):
+
+`max_features` is a budget on TOTAL DRAWS and a constant feature SPENDS one --
+it is not "keep drawing until you have `max_features` usable columns". But the
+second clause overrides the exhausted budget for exactly as long as every draw
+has been constant. So in the regime this deviation is about, sklearn draws on
+one at a time, without replacement, and stops at the FIRST non-constant
+feature, having evaluated exactly one.
+
+**AND THAT MAKES IT CHEAP TO PORT EXACTLY.** The remaining features are drawn
+in a uniformly random order, so the first non-constant one in that order is
+UNIFORMLY DISTRIBUTED over the node's non-constant columns. `rescue_pick`
+(`mojo_only/rescue.mojo`) draws that choice directly, with RAFT's own
+`uniform_int_u32` on a key whose `feature_id` slot is `0xFFFFFFFF` -- a slot no
+column can occupy, so the choice of column is not correlated with that column's
+own threshold draw. Same distribution, one RNG draw instead of a sequential
+loop no GPU wants to run.
+
+**THE HOST AND THE DEVICE MUST LAND ON THE SAME COLUMN**, and they do it by
+calling the same function. The host trainer scans the node's columns with
+`node_feature_min_max`; the device runs the SAME range pass over every column
+for a SUB-BATCH of exactly the nodes that need it, and the host picks from the
+cells it returns. Both build the non-constant list in ASCENDING COLUMN ORDER,
+which is part of the contract because `rescue_pick` returns an index into it.
+
+**AFTER, same fixture:** accuracy 0.687-0.692 at `max_features=5` (sklearn
+0.660-0.716), 0.686-0.707 at 7 (sklearn 0.683-0.691), 0.740-0.757 at 14
+(sklearn 0.737-0.749), and the node counts now MATCH -- 22,566-24,302 against
+their 20,558-24,052 at 5, where we used to build 3,798.
+
+**IT COSTS SPEED AND THAT IS NOT HIDDEN.** At `max_features=5` a fit went from
+96-140 ms/tree to 354-455, and at 7 from 121-125 to 435-453. We are building
+four to six times more nodes, which is the point; per node we are no slower.
+The comparison against scikit-learn at a narrow sample is now apples to apples
+and we LOSE it against their ten cores (0.28-0.50x at 5, 0.35-0.45x at 7) where
+before we "won" it by building a smaller and worse tree. At `max_features=14`,
+where the node counts always matched, we are 1.02-1.75x faster than their ten
+cores.
+
+**THE SURVEY IS THE COST AND IT IS THE OBVIOUS NEXT LEVER.** A rescued node
+pays a full `n_cols` range pass. The `k` cells it already computed are thrown
+away and recomputed inside it, and the survey could stop at the first
+non-constant column rather than ranging all of them. Neither is done; both are
+measurable.
+
+**WHAT IS NOT PORTED.** sklearn also carries a node's discovered-constant set
+DOWN to its children (`_splitter.pyx:723-734`) so a child never re-tests what
+an ancestor proved constant. That is a cost optimisation on their sequential
+loop: the skipped features are constant at the child too and could never have
+been selected, so it changes the work and not the answer. Our scan tests every
+column afresh.
+
+**REGRESSION DOES NOT HAVE THIS YET.** `train_regression` and
+`train_regression_device` take the same clause and have not been changed. The
+gap is the same gap and it is OPEN, stated here rather than left for somebody
+to find by measuring a regression fixture.
+
+**THE REACH IS PROVED, NOT ASSUMED.** `rescue_check` fits the same fixture with
+the rescue on and off: `shaped_constant_heavy` goes from 1-11 nodes to 459-597
+on every seed, `all_constant` does not move at all (every column constant, so
+sklearn's first clause fails too), and a fixture with no constant column is
+bit-identical. It then fits host against device WITH the rescue firing and
+asserts 0 of 549 nodes differ -- which `device_tree_check` could not have
+caught, because its fixtures never trigger the clause.

@@ -927,6 +927,46 @@ def node_feature_range_init_kernel(
         idx += stride
 
 
+def node_nonconstant_flag_kernel(
+    out_flag: MutPointer[Int32, MutAnyOrigin],
+    out_min: MutPointer[Float32, MutAnyOrigin],
+    out_max: MutPointer[Float32, MutAnyOrigin],
+    out_n_missing: MutPointer[Int32, MutAnyOrigin],
+    work_items: MutPointer[NodeWorkItem, MutAnyOrigin],
+    n_cells: Int32,
+    n_sampled_cols: Int32,
+):
+    """Per node: did ANY of its sampled columns vary?
+
+    DEVIATION 205 needs this and nothing else about the range cells. sklearn's
+    loop keeps drawing while every draw has been constant
+    (`_splitter.pyx:573-577`), so the quantity that decides whether a node is
+    finished is "was a NON-CONSTANT feature evaluated", not "was a split
+    found" -- a non-constant column rejected by `min_samples_leaf` still
+    counts (`:665-666` is a `continue`).
+
+    It reduces to ONE Int32 per node so the host reads back `n_nodes` values
+    instead of the `3 * n_cells` the range cells would cost. `out_flag` must be
+    zeroed first. The test is `node_feature_is_constant`, the SAME function the
+    host trainer calls, because a second spelling of a `1e-7` band is a second
+    answer.
+    """
+    var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while idx < Int(n_cells):
+        var nid = idx // Int(n_sampled_cols)
+        var extent = FeatureRange(
+            out_min[unsafe_offset=idx],
+            out_max[unsafe_offset=idx],
+            out_n_missing[unsafe_offset=idx],
+        )
+        if not node_feature_is_constant(
+            extent, work_items[unsafe_offset=nid].instances.count
+        ):
+            _ = Atomic.fetch_add(out_flag.unsafe_offset(nid), Int32(1))
+        idx += stride
+
+
 def feature_range_at(
     out_min: MutPointer[Float32, MutAnyOrigin],
     out_max: MutPointer[Float32, MutAnyOrigin],
