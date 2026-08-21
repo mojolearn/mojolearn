@@ -23,10 +23,10 @@ other job in their code and is not optional.
 struct Dataset(ImplicitlyCopyable, Movable):
     """`dataset.h:22-38`. Pointers are non-owning views."""
 
-    var data: UnsafePointer[Float32, MutAnyOrigin]
+    var data: MutPointer[Float32, MutUntrackedOrigin]
     """Input dataset, COLUMN MAJOR. Theirs is `const DataT* data`."""
 
-    var labels: UnsafePointer[Float32, MutAnyOrigin]
+    var labels: MutPointer[Float32, MutUntrackedOrigin]
     """Input labels. Theirs is `const LabelT* labels`. Classification stores
     the class id as a float here, exactly as theirs does -- cuML's `LabelT` is
     the data type for regression and the class index for classification, and
@@ -45,7 +45,7 @@ struct Dataset(ImplicitlyCopyable, Movable):
     """Total sampled cols, i.e. `max(1, max_features * N)`
     (`builder.cuh:222`). Theirs is `IdxT n_sampled_cols`."""
 
-    var row_ids: UnsafePointer[Int32, MutAnyOrigin]
+    var row_ids: MutPointer[Int32, MutUntrackedOrigin]
     """Indices of sampled rows. Theirs is `IdxT* row_ids`. The builder
     partitions THIS array in place as nodes split."""
 
@@ -55,8 +55,8 @@ struct Dataset(ImplicitlyCopyable, Movable):
 
     def value(self, row: Int32, col: Int32) -> Float32:
         """One cell, honouring their column-major layout (`dataset.h:24`)."""
-        return self.data[Int(col) * Int(self.m) + Int(row)]
+        return self.data[unsafe_offset= Int(col) * Int(self.m) + Int(row)]
 
     def label(self, row: Int32) -> Float32:
         """One label."""
-        return self.labels[Int(row)]
+        return self.labels[unsafe_offset= Int(row)]
