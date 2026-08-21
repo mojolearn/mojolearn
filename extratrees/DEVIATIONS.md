@@ -107,7 +107,7 @@ adversarial constant-feature fixture exists to expose.
 ## 133. Tie-break is cuML's total order, not sklearn's first-wins
 
 **Theirs (sklearn).** `if current_proxy_improvement > best_proxy_improvement`
-(`_splitter.pyx:690`) — strictly greater, so on a tie the FIRST candidate in
+(`_splitter.pyx:693`) — strictly greater, so on a tie the FIRST candidate in
 sequential draw order survives. That is not a total order; it is a statement
 about loop order.
 
@@ -536,3 +536,103 @@ without a warning.
 
 **A field cannot be moved out of a live struct** ("destroyed out of the middle
 of a value"), so an accessor that hands back an owned member returns `.copy()`.
+
+---
+
+## 143. Histogram-free: the accumulators ARE the arguments
+
+**Theirs (cuML).** Every objective takes
+`(BinT* hist, IdxT i, IdxT n_bins, IdxT len, IdxT nLeft)`
+(`objectives.cuh:52`, `:132`, `:225`, `:299`, `:379`). `hist` is a
+prefix-summed histogram laid out `n_bins*class + b`; the left child is bin `i`
+of that CDF and the right child is recovered as
+`hist[n_bins*c + n_bins-1] - hist[n_bins*c + i]` (`:72-73`). `n_bins` exists
+only to index that layout.
+
+**Ours.** `(BinT* hist_left, BinT* hist_total, IdxT len, IdxT n_left)`. The two
+pointers are the left child's accumulators and the node's totals; the right
+child is still recovered as total minus left, exactly as theirs is. `i` and
+`n_bins` are gone.
+
+**Why.** Deviation 137 deletes the histogram. A random threshold is drawn per
+(node, feature) inside that node's own range; there is no bin index to pass and
+no bin dimension to stride. Keeping their parameters would mean passing `i=0,
+n_bins=1` forever, which is a lie in the signature.
+
+**Price.** The signature no longer diffs against theirs line for line; the body
+still does, which is where the arithmetic lives. `Gain` (`:85-96`) has no
+counterpart at all, because it is the loop over the dimension we deleted.
+
+---
+
+## 144. Classification selects on an EXACT INTEGER proxy
+
+**Theirs — and they are two different quantities, which is the part a
+from-memory port gets wrong.**
+
+- cuML's `GainPerSplit` (`objectives.cuh:52-83`) computes the Gini impurity
+  DECREASE in `DataT`: `sum_j[l_j/nL * l_j/n + r_j/nR * r_j/n] - sum_j(t_j/n)^2`.
+- sklearn's random splitter compares `proxy_impurity_improvement`
+  (`_splitter.pyx:693` over `_criterion.pyx:147-163`), which over
+  `Gini.children_impurity` (`:647-687`) is `sq_L/nL + sq_R/nR - n`: the parent
+  term dropped and the `1/n` scale dropped.
+- The relation is `cuML_gain == parent_gini + sklearn_proxy / n`. Same argmax
+  within a node, different VALUE, different float tie sets, and only sklearn's
+  is an exact rational in integers.
+
+**Ours.** `ProxyImpurityExact` returns sklearn's proxy as an exact rational in
+integer arithmetic — numerator `sq_L*nR + sq_R*nL`, denominator `nL*nR` — and
+`CompareProxyExact` orders two candidates by `Int128` cross-multiplication. The
+float forms of both are kept, as exact transcriptions, for reporting.
+
+**Why.** There is no `float64` on device, and deviation 135 leaves regression
+accumulation open. For classification the question need not be open at all:
+with sklearn's default `sample_weight=None` the class counts are INTEGERS, so
+the proxy is an exact rational and the device can be exactly right rather than
+approximately right. That also removes a whole class of "the GPU picked a
+different split" investigation from the identity work.
+
+**The width, derived rather than guessed.** `sq_L <= nL^2`, so
+`num = sq_L*nR + sq_R*nL <= nL*nR*n <= n^3/4` and `den = nL*nR <= n^2/4`; the
+cross-multiply `num_a * den_b` is bounded by `n^5/16`, NOT `n^3`. `Int128`
+gives `n <= 2^26.2`, so the guard is `MAX_ROWS_EXACT = 2^26 = 67,108,864` rows
+in one node, with one bit of headroom. Accumulators stay `Int64` (`<= 2^52`).
+The `debug_assert` on that bound was PROVED LIVE by running the check under
+`mojo run -D ASSERT=all` at `2^27` and watching it fire — a `debug_assert`
+nobody has seen fail is not a guard.
+
+**Also.** The exact form guards the empty child, which cuML's float form does
+not: with `min_samples_leaf == 0` their `invLeft = One/nLeft`
+(`objectives.cuh:57`) is `+inf` and the gain is NaN. That is transcribed as
+written rather than fixed, and the check asserts the NaN, because it is theirs.
+sklearn cannot reach the case — `min_samples_leaf >= 1` by validation.
+
+**Price.** Weighted samples are out of scope for the exact path.
+`sample_weight` is now listed in `UNPORTED.tsv`.
+
+---
+
+## 145. The exact comparator is the authority, not `Split.best_metric_val`
+
+**Theirs.** cuML reduces candidates through `Split::update`
+(`split.cuh:76-90`), whose first test is
+`other.best_metric_val > this->best_metric_val` on a single `DataT` field. The
+score IS the reduction key.
+
+**Ours.** For classification the reduction key and the score are different
+things. `Split.best_metric_val` stays `Float32` and stays cuML's `GainPerSplit`
+value, for reporting and `feature_importances_`; the candidate ORDER is
+`CompareProxyExact`.
+
+**Why.** Two candidates whose exact proxies differ can round to the same
+`Float32` — 24 mantissa bits against counts reaching 2^26 — and `Split::update`
+then falls through to its `colid` tie-break and picks by feature index. That is
+a silent, data-dependent divergence from sklearn's argmax. Deviation 133
+accepted a different tie-break for GENUINE ties, which is a much smaller claim
+than accepting one for near-ties.
+
+**Price, and it is a contract on code not yet written.** The classification
+reduction must carry the four accumulator fields (`sq_L`, `nL`, `sq_R`, `nR`)
+alongside the `Split`, not just the score. **A score pass that reduces
+classification candidates on the float field alone is using the wrong
+comparator.** Cost unmeasured, deliberately.
