@@ -2973,3 +2973,76 @@ statement is therefore:
   oblivious searchers, because neither is ported.**
 
 Rung 1 above is what closes that, and it is the reason to do it.
+
+
+## 92. The uniform-iteration path is kept on SPECIFICATION, because the failure it prevents will not reproduce
+
+Measured 2026-08-21 while porting the pointwise histogram loop, and it puts a
+question mark over `PORTING.md` 11 without answering it.
+
+### What was expected
+
+Item 11 is why two histogram families here run ONE iteration count for the
+whole block instead of CatBoost's per-thread counts. CatBoost syncs a
+`tiled_partition<8>` inside `AddPoint`
+(`pointwise_hist2_one_byte_5bit.cu:79`, `:108`, `:147`); Mojo exposes only a
+threadgroup `barrier()`; so a thread that runs out of points early walks past
+a barrier its neighbours are still waiting on. Item 11 states this was
+OBSERVED:
+
+    "It is not an edge case: a 64-row partition over a 512-thread block gives
+     warp 0 one iteration and warps 1 to 15 zero. The measured symptom was
+     every feature's histogram reading 0.0."
+
+`compute_point_hist2_loop.mojo` therefore got the same treatment: a per-block
+`max_iters`, with threads past their own count contributing `(bin 0, 0.0,
+0.0)`. Adding 0.0 changes no sum, so it is a scheduling change.
+
+### What actually happened
+
+**The gate written to catch a divergent barrier cannot catch one, because a
+divergent barrier does not fail on this device.**
+
+`mojo_only/pointwise_loop_check.mojo` L6 runs the whole sweep through an
+accumulator that barriers inside `add_point`. Reverting `compute_histogram_2`
+to CatBoost's per-thread count -- which genuinely diverges, 8 iterations on
+the thread at `i == 0` against 7 at `i == 254` -- leaves **all 160 cases
+exact**.
+
+`mojo_only/divergent_barrier_probe.mojo` then tested it directly, at item
+11's own shape: a 512-thread block, a barrier inside a loop whose count is
+`(n - tid + block - 1) / block`, so warp 0 runs one iteration and warps 1-15
+run zero. All 512 slots correct, at n = 64, 100, 511, 512, 513, 1000, 2000.
+No hang, no zeros. `pixi run check-divergent-barrier`.
+
+### What that does and does not mean
+
+It does NOT mean divergent barriers are safe. CUDA's `__syncthreads` and
+Metal's `threadgroup_barrier` both require uniform execution, and "undefined
+happens to work on one M4 today" is not something a port builds on. **The
+uniform path stays**, justified by the specification and priced at one
+predicate per point.
+
+It does NOT mean item 11's observation was invented. But it is no longer
+supported by anything reproducible, and there is a better-fitting suspect.
+**Twice while writing these checks, a RACING per-thread tally produced
+exactly the reported symptom** -- cells reading zero or a fraction of what
+they should, with nothing wrong in the loop -- and the second time it turned
+every gate red against a loop that was correct. `PORTING.md` 12 records a
+third instance of the same symptom from a completely different cause (a
+reused async staging buffer). "Every histogram cell read 0.0" has now been
+produced by three mechanisms in this repository and by a divergent barrier
+zero times.
+
+That is a hypothesis about item 11, not a finding, and it is written down so
+someone can test it rather than inherit it. What is a finding: **item 11's
+stated mechanism is currently unreproducible, and the checks that appear to
+cover it do not.**
+
+### The rule this leaves behind
+
+A gate whose sabotage does not move it is not coverage, and the honest thing
+is to say so in the check itself rather than let the green tick imply
+otherwise. L6 now says it. This is the same discipline
+[[mojotrees-verify-reach-not-output]] describes, applied to a case where the
+answer came out inconvenient.

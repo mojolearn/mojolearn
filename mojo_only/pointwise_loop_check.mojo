@@ -32,6 +32,28 @@ GATES:
   L5  `blocks_per_feature = 4`: the four blocks must PARTITION the points,
       not each take all of them. Summed across blocks, the histogram must
       equal the single-block one exactly.
+  L6  the same sweep through an accumulator that takes a `barrier()`
+      INSIDE `add_point`, which is what every real CatBoost accumulator
+      does (`pointwise_hist2_one_byte_5bit.cu:79`, `:108`, `:147` sync a
+      `tiled_partition<8>` there).
+
+      **READ THIS BEFORE TRUSTING L6.** It does NOT gate the
+      uniform-iteration requirement, and it was written believing it would.
+      Reverting `compute_histogram_2` to CatBoost's per-thread counts --
+      which genuinely diverges, 8 iterations on one thread against 7 on
+      another -- leaves all 160 cases exact. `mojo_only/
+      divergent_barrier_probe.mojo` then showed why: a divergent
+      threadgroup barrier does not misbehave on this device at all, not
+      even at the 512-thread / 64-row shape `PORTING.md` 11 names as its
+      evidence.
+
+      So L1-L6 ALL pass whether the body loop converges the block or not.
+      The uniform path is kept because it is correct by specification, not
+      because anything here can see it -- and that is stated rather than
+      left for a reader to assume otherwise
+      ([[mojotrees-verify-reach-not-output]]: a check that cannot tell a
+      working change from a no-op is not evidence, and saying so is part of
+      the result). `PORTING.md` 92 carries the full account.
 
 SABOTAGES RUN, and what each one moved. One per mechanism, verified by
 breaking the loop and watching the gate go red:
@@ -140,6 +162,116 @@ struct TallyHist[origin: MutOrigin](PointHist2):
 
     def reduce(mut self):
         barrier()
+
+
+struct BarrierTallyHist[origin: MutOrigin](PointHist2):
+    """`TallyHist` with a `barrier()` inside `add_point`.
+
+    Numerically identical to `TallyHist` -- the barrier changes no sum. Its
+    whole job is to make the loop's iteration counts OBSERVABLE: a
+    threadgroup barrier reached by different numbers of threads is
+    undefined, and this is the only accumulator in the check that can tell
+    whether the body loop converged the block or not.
+
+    The barrier goes in `add_point` and NOT in `add_point_2` / `add_point_4`
+    around the whole group, because that is where theirs is: one sync
+    between the two half-writes of every point.
+    """
+
+    var buf: MutPointer[
+        Float32, Self.origin, address_space = AddressSpace.SHARED
+    ]
+
+    def __init__(
+        out self,
+        buf: MutPointer[
+            Float32, Self.origin, address_space = AddressSpace.SHARED
+        ],
+    ):
+        self.buf = buf
+
+    def add_point(mut self, ci: UInt32, t: Float32, w: Float32):
+        var b = Int(ci) % NBINS
+        var slot = Int(thread_idx.x) * NBINS * 2 + b * 2
+        barrier()
+        self.buf.unsafe_store(slot, self.buf.unsafe_load(slot) + t)
+        barrier()
+        self.buf.unsafe_store(slot + 1, self.buf.unsafe_load(slot + 1) + w)
+
+    def add_point_2(
+        mut self,
+        ci: SIMD[DType.uint32, 2],
+        t: SIMD[DType.float32, 2],
+        w: SIMD[DType.float32, 2],
+    ):
+        self.add_point(ci[0], t[0], w[0])
+        self.add_point(ci[1], t[1], w[1])
+
+    def add_point_4(
+        mut self,
+        ci: SIMD[DType.uint32, 4],
+        t: SIMD[DType.float32, 4],
+        w: SIMD[DType.float32, 4],
+    ):
+        self.add_point(ci[0], t[0], w[0])
+        self.add_point(ci[1], t[1], w[1])
+        self.add_point(ci[2], t[2], w[2])
+        self.add_point(ci[3], t[3], w[3])
+
+    def reduce(mut self):
+        barrier()
+
+
+def _barrier_tally_kernel[variant: Int](
+    indices: MutPointer[UInt32, MutAnyOrigin],
+    offset: Int32,
+    ds_size: Int32,
+    target: MutPointer[Float32, MutAnyOrigin],
+    weight: MutPointer[Float32, MutAnyOrigin],
+    cindex: MutPointer[UInt32, MutAnyOrigin],
+    out_buf: MutPointer[Float32, MutAnyOrigin],
+):
+    var smem = stack_allocation[
+        BLOCK * NBINS * 2, Float32, address_space = AddressSpace.SHARED
+    ]()
+    var t = Int(thread_idx.x)
+    for k in range(NBINS * 2):
+        smem.unsafe_store(t * NBINS * 2 + k, 0.0)
+    barrier()
+
+    var hist = BarrierTallyHist(smem)
+
+    comptime if variant == 1:
+        compute_histogram[BLOCK, 1, 1, 1, 1](
+            hist, indices, UInt32(offset), UInt32(ds_size), target, weight,
+            cindex,
+        )
+    elif variant == 4:
+        compute_histogram[BLOCK, 1, 4, 1, 1](
+            hist, indices, UInt32(offset), UInt32(ds_size), target, weight,
+            cindex,
+        )
+    elif variant == 12:
+        compute_histogram_2[BLOCK, 1, 1, 1](
+            hist, indices, UInt32(offset), UInt32(ds_size), target, weight,
+            cindex,
+        )
+    else:
+        compute_histogram_4[BLOCK, 1, 1, 1](
+            hist, indices, UInt32(offset), UInt32(ds_size), target, weight,
+            cindex,
+        )
+
+    barrier()
+    if t < NBINS:
+        var st = Float32(0.0)
+        var sw = Float32(0.0)
+        for lane in range(BLOCK):
+            st += smem.unsafe_load(lane * NBINS * 2 + t * 2)
+            sw += smem.unsafe_load(lane * NBINS * 2 + t * 2 + 1)
+        var at = t * 2
+        out_buf.unsafe_store(at, st)
+        out_buf.unsafe_store(at + 1, sw)
 
 
 def _tally_kernel[variant: Int, blocks_per_feature: Int](
@@ -382,6 +514,92 @@ def main() raises:
         failures += 1
     else:
         print("  ok   L5 -- 4 blocks partition the points exactly")
+
+    # ---------------------------------------------------------------- L6
+    # the same sweep through an accumulator that barriers inside add_point
+    var bvariants: List[Int] = [1, 4, 12, 14]
+    var bnames: List[String] = [
+        String("compute_histogram n=1"),
+        String("compute_histogram n=4"),
+        String("compute_histogram_2"),
+        String("compute_histogram_4"),
+    ]
+    for vi in range(len(bvariants)):
+        var v = bvariants[vi]
+        var bad = 0
+        var cases = 0
+        for oi in range(len(offsets)):
+            for si in range(len(sizes)):
+                var off = offsets[oi]
+                var n = sizes[si]
+                if off + n > N_ROWS:
+                    continue
+                cases += 1
+                var want_t = List[Float32]()
+                var want_w = List[Float32]()
+                for _ in range(NBINS):
+                    want_t.append(0.0)
+                    want_w.append(0.0)
+                for r in range(off, off + n):
+                    var b = Int(cindex_h[Int(indices_h[r])]) % NBINS
+                    want_t[b] += target_h[r]
+                    want_w[b] += weight_h[r]
+
+                ctx.enqueue_memset(d_out, Float32(0.0))
+                if v == 1:
+                    ctx.enqueue_function[_barrier_tally_kernel[1]](
+                        d_idx.unsafe_ptr(), Int32(off), Int32(n),
+                        d_tgt.unsafe_ptr(), d_wt.unsafe_ptr(),
+                        d_ci.unsafe_ptr(), d_out.unsafe_ptr(),
+                        grid_dim=(1, 1, 1), block_dim=(BLOCK, 1, 1),
+                    )
+                elif v == 4:
+                    ctx.enqueue_function[_barrier_tally_kernel[4]](
+                        d_idx.unsafe_ptr(), Int32(off), Int32(n),
+                        d_tgt.unsafe_ptr(), d_wt.unsafe_ptr(),
+                        d_ci.unsafe_ptr(), d_out.unsafe_ptr(),
+                        grid_dim=(1, 1, 1), block_dim=(BLOCK, 1, 1),
+                    )
+                elif v == 12:
+                    ctx.enqueue_function[_barrier_tally_kernel[12]](
+                        d_idx.unsafe_ptr(), Int32(off), Int32(n),
+                        d_tgt.unsafe_ptr(), d_wt.unsafe_ptr(),
+                        d_ci.unsafe_ptr(), d_out.unsafe_ptr(),
+                        grid_dim=(1, 1, 1), block_dim=(BLOCK, 1, 1),
+                    )
+                else:
+                    ctx.enqueue_function[_barrier_tally_kernel[14]](
+                        d_idx.unsafe_ptr(), Int32(off), Int32(n),
+                        d_tgt.unsafe_ptr(), d_wt.unsafe_ptr(),
+                        d_ci.unsafe_ptr(), d_out.unsafe_ptr(),
+                        grid_dim=(1, 1, 1), block_dim=(BLOCK, 1, 1),
+                    )
+                ctx.enqueue_copy(dst_buf=h_out, src_buf=d_out)
+                ctx.synchronize()
+                for b in range(NBINS):
+                    if h_out[b * 2] != want_t[b] or h_out[
+                        b * 2 + 1
+                    ] != want_w[b]:
+                        if bad < 3:
+                            print(
+                                "   L6", bnames[vi], "offset", off, "size",
+                                n, "bin", b, ": got", h_out[b * 2],
+                                "want", want_t[b],
+                            )
+                        bad += 1
+        if bad != 0:
+            print(
+                "FAIL: L6", bnames[vi], "--", bad,
+                "wrong bins with a barrier inside add_point. The body loop"
+                " is not converging the block, so the barrier is divergent"
+                " (PORTING.md 11).",
+            )
+            failures += 1
+        else:
+            print(
+                "  ok   L6", bnames[vi], "--", cases,
+                "cases exact with a barrier inside add_point",
+            )
 
     _ = d_idx^
     _ = d_tgt^

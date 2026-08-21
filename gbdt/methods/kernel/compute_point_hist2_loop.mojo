@@ -66,6 +66,27 @@ from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.gpu.intrinsics import ldg
 from max.gpu.sync import barrier
 
+from mojo_only.kernel_matrix import (
+    TARGET_COLUMN,
+    requires_uniform_iteration_for,
+)
+
+
+#: PORTING.md 11's row, and here it is a PRECONDITION rather than a tuning
+#: knob. CatBoost's accumulators sync a `tiled_partition<8>` INSIDE
+#: `AddPoint` (`pointwise_hist2_one_byte_5bit.cu:79`, `:108`, `:147`), which
+#: is lane-local, so lanes with different iteration counts never wait on
+#: each other. Mojo exposes only a threadgroup `barrier()`, and a
+#: threadgroup barrier some threads reach and others skip is undefined --
+#: item 11 records that this exact mistake made every feature's histogram
+#: read 0.0 in the other family.
+#:
+#: So the body loops below run ONE iteration count for the whole block and
+#: let threads past their own count contribute a zero point. Adding 0.0
+#: changes no sum, which is what makes this a scheduling change and not a
+#: numeric one.
+comptime UNIFORM_ITERATION = requires_uniform_iteration_for[TARGET_COLUMN]()
+
 
 #: NUMERIC ROW. The alignment quantum, pinned at CatBoost's 32.
 #:
@@ -224,59 +245,79 @@ def compute_histogram[
     comptime stripe = stripe_size * blocks_per_feature
 
     if ds_size != 0:
-        var iteration_count = 0
-        if ds_size > i:
-            iteration_count = (ds_size - i + (stripe - 1)) // stripe
-        # `(i | 31)` is theirs (`:80`) and it is DIVERGENCE CONTROL, not a
-        # bounds guard. It rounds `i` up to the largest column in its
-        # 32-group, so every lane in the group agrees on how many unrolled
-        # iterations to run and the unrolled loop never diverges; the
-        # remainder loop below picks up whatever each lane still owes.
+        # ============== DEVIATION BLOCK (PORTING.md 11 and 92) ==========
+        # THEIRS IS PER-THREAD, OURS IS PER-BLOCK, and this is forced:
         #
-        # It cannot change the RESULT and that was measured, not assumed.
-        # Replacing it with a bare `i` leaves all 160 cases of
-        # `mojo_only/pointwise_loop_check.mojo` bit-identical across all
-        # three `n`, and the arithmetic says why: `blocked * n` is
-        # `(iterCount // n) * n <= iterCount` for either spelling, so the
-        # two loops always deliver `iterCount` points in the same per-lane
-        # order. The check records this as a mechanism it deliberately does
-        # NOT gate, because there is nothing there to catch.
-        var blocked_iteration_count = 0
-        if ds_size > (i | (ALIGN_LANES - 1)):
-            blocked_iteration_count = (
-                (ds_size - (i | (ALIGN_LANES - 1)) + (stripe - 1)) // stripe
-            ) // n
+        #     iteration_count        = (dsSize - i + stripe - 1) / stripe
+        #     blocked_iteration_count = (dsSize - (i|31) + stripe - 1)
+        #                               / stripe / N
+        #
+        # Both depend on `i`, so threads run different counts, and their
+        # `AddPoint` syncs an 8-lane tile that does not care. Ours takes a
+        # threadgroup barrier, which every thread must reach the same
+        # number of times.
+        #
+        # `max_iters` is `iteration_count` evaluated at `i == 0`, which is
+        # its maximum over the block, so no thread loses an iteration. A
+        # thread past its OWN count contributes `(bin 0, 0.0, 0.0)`, and
+        # adding 0.0 changes no sum.
+        #
+        # THE COST IS A BOUNDS TEST PER POINT, which their unrolled loop
+        # does not need precisely because their count is per-thread. That
+        # is the trade: their divergence control (`i | 31`) becomes our
+        # convergence requirement.
+        # ================================================================
+        comptime assert UNIFORM_ITERATION, (
+            "compute_point_hist2_loop only has the uniform-iteration path"
+            " written. A column whose sync_granularity_for is not"
+            " SYNC_BLOCK could run CatBoost's per-thread counts directly,"
+            " but that path does not exist here -- write it rather than"
+            " letting this fall through (PORTING.md 11)."
+        )
+        var max_iters = (ds_size + (stripe - 1)) // stripe
+        var own_iters = 0
+        if ds_size > i:
+            own_iters = (ds_size - i + (stripe - 1)) // stripe
+        var blocked_iters = max_iters // n
 
         var cur = base + i
+        var done = 0
 
-        for _ in range(blocked_iteration_count):
-            var local_index = SIMD[DType.uint32, n](0)
-
-            comptime for k in range(n):
-                local_index[k] = ldg(indices.unsafe_offset(cur + stripe * k))
-
+        for _ in range(blocked_iters):
             var local_ci = SIMD[DType.uint32, n](0)
             var local_w = SIMD[DType.float32, n](0)
             var local_wt = SIMD[DType.float32, n](0)
 
             comptime for k in range(n):
-                local_ci[k] = ldg(
-                    cindex.unsafe_offset(Int(local_index[k]))
-                )
-                local_w[k] = ldg(weight.unsafe_offset(cur + stripe * k))
-                local_wt[k] = ldg(target.unsafe_offset(cur + stripe * k))
+                if done + k < own_iters:
+                    var idx = ldg(
+                        indices.unsafe_offset(cur + stripe * k)
+                    )
+                    local_ci[k] = ldg(cindex.unsafe_offset(Int(idx)))
+                    local_w[k] = ldg(
+                        weight.unsafe_offset(cur + stripe * k)
+                    )
+                    local_wt[k] = ldg(
+                        target.unsafe_offset(cur + stripe * k)
+                    )
 
             cur += stripe * n
+            done += n
 
             comptime for k in range(n):
                 hist.add_point(local_ci[k], local_wt[k], local_w[k])
 
-        for _ in range(blocked_iteration_count * n, iteration_count):
-            var index = ldg(indices.unsafe_offset(cur))
-            var ci = ldg(cindex.unsafe_offset(Int(index)))
-            var w = ldg(weight.unsafe_offset(cur))
-            var wt = ldg(target.unsafe_offset(cur))
+        for _ in range(blocked_iters * n, max_iters):
+            var ci = UInt32(0)
+            var w = Float32(0.0)
+            var wt = Float32(0.0)
+            if done < own_iters:
+                var index = ldg(indices.unsafe_offset(cur))
+                ci = ldg(cindex.unsafe_offset(Int(index)))
+                w = ldg(weight.unsafe_offset(cur))
+                wt = ldg(target.unsafe_offset(cur))
             cur += stripe
+            done += 1
             hist.add_point(ci, wt, w)
 
         barrier()
@@ -374,29 +415,40 @@ def compute_histogram_2[
     comptime stripe = stripe_size * blocks_per_feature * 2
 
     if ds_size != 0:
+        # per-block iteration count; see the DEVIATION BLOCK in
+        # `compute_histogram` -- same reason, same zero-point filler
+        comptime assert UNIFORM_ITERATION, (
+            "compute_histogram_2 only has the uniform-iteration path"
+            " written (PORTING.md 11)"
+        )
         var i = 2 * _column_of_thread[hist_block_count](Int(thread_idx.x))
-        var iter_count = 0
+        var max_iters = (ds_size + (stripe - 1)) // stripe
+        var own_iters = 0
         if ds_size > i:
-            iter_count = (ds_size - i + (stripe - 1)) // stripe
+            own_iters = (ds_size - i + (stripe - 1)) // stripe
         var cur = base + i
 
-        for _ in range(iter_count):
-            var li = SIMD[DType.uint32, 2](
-                ldg(indices.unsafe_offset(cur)),
-                ldg(indices.unsafe_offset(cur + 1)),
-            )
-            var bins = SIMD[DType.uint32, 2](
-                ldg(cindex.unsafe_offset(Int(li[0]))),
-                ldg(cindex.unsafe_offset(Int(li[1]))),
-            )
-            var lt = SIMD[DType.float32, 2](
-                ldg(target.unsafe_offset(cur)),
-                ldg(target.unsafe_offset(cur + 1)),
-            )
-            var lw = SIMD[DType.float32, 2](
-                ldg(weight.unsafe_offset(cur)),
-                ldg(weight.unsafe_offset(cur + 1)),
-            )
+        for j in range(max_iters):
+            var bins = SIMD[DType.uint32, 2](0)
+            var lt = SIMD[DType.float32, 2](0)
+            var lw = SIMD[DType.float32, 2](0)
+            if j < own_iters:
+                var li = SIMD[DType.uint32, 2](
+                    ldg(indices.unsafe_offset(cur)),
+                    ldg(indices.unsafe_offset(cur + 1)),
+                )
+                bins = SIMD[DType.uint32, 2](
+                    ldg(cindex.unsafe_offset(Int(li[0]))),
+                    ldg(cindex.unsafe_offset(Int(li[1]))),
+                )
+                lt = SIMD[DType.float32, 2](
+                    ldg(target.unsafe_offset(cur)),
+                    ldg(target.unsafe_offset(cur + 1)),
+                )
+                lw = SIMD[DType.float32, 2](
+                    ldg(weight.unsafe_offset(cur)),
+                    ldg(weight.unsafe_offset(cur + 1)),
+                )
             cur += stripe
             hist.add_point_2(bins, lt, lw)
 
@@ -497,37 +549,48 @@ def compute_histogram_4[
     barrier()  # theirs, `:320`, and only in this variant
 
     if ds_size != 0:
+        # per-block iteration count; see the DEVIATION BLOCK in
+        # `compute_histogram`
+        comptime assert UNIFORM_ITERATION, (
+            "compute_histogram_4 only has the uniform-iteration path"
+            " written (PORTING.md 11)"
+        )
         var i = 4 * _column_of_thread[hist_block_count](Int(thread_idx.x))
-        var iter_count = 0
+        var max_iters = (ds_size + (stripe - 1)) // stripe
+        var own_iters = 0
         if ds_size > i:
-            iter_count = (ds_size - i + (stripe - 1)) // stripe
+            own_iters = (ds_size - i + (stripe - 1)) // stripe
         var cur = base + i
 
-        for _ in range(iter_count):
-            var li = SIMD[DType.uint32, 4](
-                ldg(indices.unsafe_offset(cur)),
-                ldg(indices.unsafe_offset(cur + 1)),
-                ldg(indices.unsafe_offset(cur + 2)),
-                ldg(indices.unsafe_offset(cur + 3)),
-            )
-            var bins = SIMD[DType.uint32, 4](
-                ldg(cindex.unsafe_offset(Int(li[0]))),
-                ldg(cindex.unsafe_offset(Int(li[1]))),
-                ldg(cindex.unsafe_offset(Int(li[2]))),
-                ldg(cindex.unsafe_offset(Int(li[3]))),
-            )
-            var lt = SIMD[DType.float32, 4](
-                ldg(target.unsafe_offset(cur)),
-                ldg(target.unsafe_offset(cur + 1)),
-                ldg(target.unsafe_offset(cur + 2)),
-                ldg(target.unsafe_offset(cur + 3)),
-            )
-            var lw = SIMD[DType.float32, 4](
-                ldg(weight.unsafe_offset(cur)),
-                ldg(weight.unsafe_offset(cur + 1)),
-                ldg(weight.unsafe_offset(cur + 2)),
-                ldg(weight.unsafe_offset(cur + 3)),
-            )
+        for j in range(max_iters):
+            var bins = SIMD[DType.uint32, 4](0)
+            var lt = SIMD[DType.float32, 4](0)
+            var lw = SIMD[DType.float32, 4](0)
+            if j < own_iters:
+                var li = SIMD[DType.uint32, 4](
+                    ldg(indices.unsafe_offset(cur)),
+                    ldg(indices.unsafe_offset(cur + 1)),
+                    ldg(indices.unsafe_offset(cur + 2)),
+                    ldg(indices.unsafe_offset(cur + 3)),
+                )
+                bins = SIMD[DType.uint32, 4](
+                    ldg(cindex.unsafe_offset(Int(li[0]))),
+                    ldg(cindex.unsafe_offset(Int(li[1]))),
+                    ldg(cindex.unsafe_offset(Int(li[2]))),
+                    ldg(cindex.unsafe_offset(Int(li[3]))),
+                )
+                lt = SIMD[DType.float32, 4](
+                    ldg(target.unsafe_offset(cur)),
+                    ldg(target.unsafe_offset(cur + 1)),
+                    ldg(target.unsafe_offset(cur + 2)),
+                    ldg(target.unsafe_offset(cur + 3)),
+                )
+                lw = SIMD[DType.float32, 4](
+                    ldg(weight.unsafe_offset(cur)),
+                    ldg(weight.unsafe_offset(cur + 1)),
+                    ldg(weight.unsafe_offset(cur + 2)),
+                    ldg(weight.unsafe_offset(cur + 3)),
+                )
             cur += stripe
             hist.add_point_4(bins, lt, lw)
 

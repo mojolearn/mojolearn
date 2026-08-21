@@ -242,6 +242,17 @@ check-shared-pointer = "mojo run -I . mojo_only/shared_pointer_probe.mojo"
 # 4-block partition case. Own main(); a GPU, ~1 min.
 check-pointwise-loop = "mojo run -I . mojo_only/pointwise_loop_check.mojo"
 
+# The tripwire under PORTING.md 11 and 92. Two histogram families here run
+# one iteration count per BLOCK rather than CatBoost's per-thread counts,
+# because their AddPoint syncs an 8-lane tile and ours can only take a
+# threadgroup barrier. Item 11 says a divergent barrier was observed failing;
+# this probe runs that exact shape (512-thread block, warp 0 one iteration
+# and warps 1-15 zero) and it does NOT fail, at any of seven sizes. The
+# uniform path is therefore kept on SPECIFICATION, and this check exists to
+# notice if that ever stops being merely a specification matter. Own main();
+# a GPU, a few seconds.
+check-divergent-barrier = "mojo run -I . mojo_only/divergent_barrier_probe.mojo"
+
 # The LSD radix sort over (bin, permutation position). Gates STABILITY
 # separately from sortedness and prints both, because sortedness alone
 # cannot see a tie that moved -- and the tie order IS the second half of
