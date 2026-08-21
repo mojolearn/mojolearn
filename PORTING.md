@@ -2773,3 +2773,164 @@ pieces are in this repository already (`gbdt/gpu_util/kernel/segmented_sort.mojo
 and the LSD radix sort behind the searcher), so this is a wiring job, not a
 new kernel -- held until a measurement shows the host sort costing something
 that matters.
+
+## 91. The device-count answer: at one device the two layouts ARE the same, and the searcher this port mirrors is CatBoost's MULTICLASS symmetric learner
+
+Scoping, 2026-08-21, no code. `NEXT_TWO.md` staged item 1 asked one question --
+how much of `TFeatureParallelDataSet` survives at device count 1 -- and said to
+write the answer here whichever way it came out. It came out four ways, and two
+of them correct things this repository has been saying.
+
+### A. The two layouts produce a BIT-IDENTICAL compressed index at one device
+
+`feature_layout_common.h:176-189` defines the whole difference between them as
+a mapping table, and only one row differs:
+
+    TFeatureParallelLayout          TDocParallelLayout
+      Features  Stripe                Features  Stripe
+      Samples   MIRROR                Samples   STRIPE     <- the only difference
+      CIndex    Stripe                CIndex    Stripe
+      Weights   Mirror                Weights   Mirror
+
+and at `GetDeviceCount() == 1` that row does not differ either.
+`TStripeMapping::SplitBetweenDevices(n)` and `TStripeMapping::RepeatOnAllDevices(n)`
+(`cuda_lib/mapping.h:256-280`) both return the single slice `[{0, n}]`, which
+is what `TMirrorMapping(n)` is.
+
+Walking `TCudaFeaturesLayoutHelper` on both sides
+(`feature_layout_feature_parallel.h:19-105`, `feature_layout_doc_parallel.h:26-104`),
+every step coincides at one device:
+
+| step | feature-parallel | doc-parallel | at 1 device |
+|---|---|---|---|
+| `CreateLayout` | `SplitBetweenDevices(featureCount)` | `RepeatOnAllDevices(featureCount)` | `[{0,F}]` both |
+| `CreateDocLayout` | `TMirrorMapping(docCount)` | `SplitBetweenDevices(docCount)` | `[{0,N}]` both |
+| feature order | `Shuffle(TRandom(0))` then sort WITHIN each device slice | `Shuffle(TRandom(0))` then sort the WHOLE vector | one device slice IS the whole vector -- same `std::sort`, same comparator, same input |
+| `AddDeviceFeatures` | `(devSlice, cindexOffset, FULL docCount)` | `([0,F), cindexOffset, deviceSlice docCount)` | the same three arguments |
+| `CudaFeaturesHost[i]` | `allFeatures[i]` | `allFeatures[dev * F + i]` | `dev == 0`, so `allFeatures[i]` |
+| `FoldsHistogram` | `ComputeFoldsHistogram(devSlice)` | `ComputeFoldsHistogram()` | `feature_layout.cpp:34-36` defines the no-arg form AS `ComputeFoldsHistogram(TSlice(0, FeatureIds.size()))`, which is `devSlice` |
+| `CudaFeaturesDevice` | `CreateFromSizes(trainFeatureSlicesSizes)` | `CreateLayout(features.size() / devCount)` | `[{0, features.size()}]` both |
+| `BinFeatures` | `BuildBinaryFeatures([0, allFeatures.size()))` | `BuildBinaryFeatures([0, F))` | FP pushes each feature once, DP pushes `devCount * F` = `F` -- same slice |
+| `HistogramsMapping` | `CreateMapping<TStripeMapping>(BinFeatureCount)` | `RepeatOnAllDevices(BinFeatures.size())` | same single slice |
+
+**So `feature_layout_feature_parallel.h` costs zero. This port already builds
+the compressed index it would build.** The 583-line dataset estimate in
+`NEXT_TWO.md` was priced against multi-device bookkeeping that does not exist
+on one GPU, and what remains of `TFeatureParallelDataSet` beyond that is
+`InverseIndices`, the CTR targets, the cat-feature dataset and the samples
+grouping -- all of which this repository already has or does not use.
+
+The one thing worth carrying is the TYPE distinction, because it records what
+CatBoost meant: doc-parallel splits ROWS, feature-parallel splits FEATURES, and
+on two devices those are different programs. A port that erases the distinction
+is correct today and unportable to a second device tomorrow.
+
+### B. There are THREE GPU searchers, not two, and `NEXT_TWO.md` had it wrong
+
+The note said "CatBoost has two GPU learners". It has three, and the third is
+the one this repository ported:
+
+| searcher | file | mapping | folds | tree CTRs |
+|---|---|---|---|---|
+| `TFeatureParallelObliviousTreeSearcher` | `oblivious_tree_structure_searcher.{h,cpp}` (713) | Mirror | YES | YES |
+| `TDocParallelObliviousTreeSearcher` | `oblivious_tree_doc_parallel_structure_searcher.{h,cpp}` (295) | Stripe | no | no |
+| `TGreedySubsetsSearcher` | `greedy_subsets_searcher/` | Stripe | no | no |
+
+The first two SHARE their entire stack -- `pointwise_optimization_subsets.h`,
+`pointwise_scores_calcer.h`, `histograms_helper.{h,cpp}`,
+`pointwise_kernels.{h,cpp}`, and the `pointwise_hist2*` kernel family. They are
+one implementation templated on the mapping, with two `TSubsetsHelper`
+specializations whose `CreateSubsets` differ in exactly three lines
+(`pointwise_optimization_subsets.cpp:12-14` vs
+`oblivious_tree_structure_searcher.cpp:36-37`):
+
+    Stripe:  FoldCount = 0;               FoldBits = 0;                   bins all zero
+    Mirror:  FoldCount = initParts.size(); FoldBits = IntLog2(FoldCount);  bins from WriteFoldBasedInitialBins
+
+**That is ordered boosting, in full, at the subsets level: the fold id occupies
+the LOW bits of the bin and the depth bits sit above it**, which is why every
+call downstream reads `CurrentDepth + FoldBits` rather than `CurrentDepth`.
+
+The third searcher -- ours -- has its own histogram family
+(`greedy_subsets_searcher/kernel/`) and shares none of that.
+
+### C. `TDocParallelObliviousTree` is a WEAK-LEARNER SWAP into the loop we have
+
+`train_template_pointwise_greedy_subsets_searcher.h:35-36` and
+`train_template_pointwise.h:49-50` build the same thing around different weak
+learners:
+
+    TBoosting<TTargetTemplate, TGreedySubsetsSearcher<TModel>>      <- ported
+    TBoosting<TTargetTemplate, TDocParallelObliviousTree>           <- not ported
+
+Same `TBoosting` (`doc_parallel_boosting.h`), same `TDocParallelDataSet`, same
+`TObliviousTreeLeavesEstimator`, same `TAddModelDocParallel`. The weak learner
+itself is 85 lines of glue
+(`doc_parallel_pointwise_oblivious_tree.h`). So the boosting loop, the dataset,
+the estimator and the apply are all already here; what is missing is the
+searcher and the histogram family under it.
+
+### D. `pointwise_hist1.cu` is DEAD IN THE UPSTREAM -- 935 lines that cost nothing
+
+`ComputeHist1` is registered as a kernel (`pointwise_kernels.cpp:8`) and
+dispatched (`:95-120`), and **nothing in the CatBoost tree calls it.** A search
+for the symbol across every `.cpp`, `.h` and `.cuh` in the repository returns
+only `pointwise_hist1.cu` itself and its own wrapper. It goes in
+`gbdt/UNPORTED.tsv` as unreachable upstream, not as a gap.
+
+### E. What this does to the price
+
+`NEXT_TWO.md` priced objective 1 at ~4,000 host lines and ~3,700 kernel lines
+as a single indivisible prerequisite. The correct shape is a ladder with a
+gate on every rung, and the first rung is most of the value:
+
+| rung | what | new lines | why it is gateable alone |
+|---|---|---|---|
+| 1 | the pointwise stack + `TDocParallelObliviousTree` | ~1,700 host + ~2,500 kernel | its histograms must agree cell for cell with the greedy-subsets histograms this repo already has, on the same rows and the same compressed index |
+| 2 | `TFeatureParallelObliviousTreeSearcher` at ONE fold | ~400 | must reproduce rung 1 to the bit, since at `FoldBits == 0` and one device it is the same program |
+| 3 | folds + `TDynamicBoosting` = ordered boosting | ~700 | fold boundaries are closed-form in `n`, `min_fold_size`, `fold_len_multiplier` |
+| 4 | tree CTRs | 1,640 | the tensor hash against a `tools/` oracle, before any fit |
+
+Rung 2 is the one the layout finding collapses: with the compressed index
+proven identical at one device, the feature-parallel searcher differs from the
+doc-parallel one by the fold bits and the tree-CTR block, and nothing else.
+
+### F. THE CORRECTION THAT MATTERS MOST: which learner CatBoost runs for symmetric trees
+
+This is a claim this repository has been making loosely and it needs pinning
+down. `GetTrainerFactoryKey(loss)` defaults its second argument to
+`EGrowPolicy::SymmetricTree` (`train_lib/train.h:86`), so the registration
+tables read:
+
+| loss | grow policy | boosting | GPU searcher |
+|---|---|---|---|
+| RMSE, Logloss, MAE, ... | SymmetricTree | Ordered (their default) | `TFeatureParallelPointwiseObliviousTree` |
+| RMSE, Logloss, MAE, ... | SymmetricTree | Plain | `TDocParallelObliviousTree` |
+| RMSE, Logloss, MAE, ... | Lossguide / Depthwise | Plain only | `TGreedySubsetsSearcher<TNonSymmetricTree>` |
+| **MultiClass, MultiClassOneVsAll, MultiRMSE, MultiLogloss, MultiCrossEntropy, RMSEWithUncertainty** | **SymmetricTree** | **Plain only** | **`TGreedySubsetsSearcher<TObliviousTreeModel>`** |
+
+The last row is `multiclass.cpp:5-14`, which includes
+`train_template_pointwise_greedy_subsets_searcher.h` and registers at the
+default grow policy with the default `TModel = TObliviousTreeModel`. And
+`pointwise_non_symmetric.cpp:36` carries the registration that would send
+single-target symmetric trees down the same path, **commented out**:
+
+    //    TGpuTrainerFactory::TRegistrator<TPointwiseTrainer> RegistratorRmseOT(GetTrainerFactoryKey(ELossFunction::RMSE, EGrowPolicy::SymmetricTree));
+
+So the searcher this repository ported is a live, intended, supported CatBoost
+GPU symmetric-tree path -- **it is the one CatBoost uses for MULTICLASS
+symmetric trees** -- and it is NOT the one CatBoost reaches for single-target
+RMSE symmetric trees, in either boosting mode.
+
+**What that does and does not mean.** It does not mean our trees are wrong:
+`tools/catboost_oracle.py` compares split-for-split against CatBoost's own
+dumped decisions and matches 48/48 at three border budgets. But that oracle
+passes no `task_type`, so it runs CatBoost's **CPU** learner. The honest
+statement is therefore:
+
+* our split selection reproduces CatBoost's CPU oblivious learner, 48/48;
+* our searcher mirrors CatBoost's GPU multiclass symmetric learner;
+* **we have never compared against either of CatBoost's GPU single-target
+  oblivious searchers, because neither is ported.**
+
+Rung 1 above is what closes that, and it is the reason to do it.
