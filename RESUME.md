@@ -881,3 +881,20 @@ New files: `bench/interleaved/logloss_interleaved.mojo` +
 NVIDIA lane's uncommitted work cannot collide). Not run on purpose: the
 other nine new losses -- epsilon poses no quantile/Poisson task, and the
 dataset for those gets chosen BEFORE any number exists.
+
+### 2026-08-21, late night: depth 8 -- the margin WIDENS, the cliff loses to their depth bill
+
+gbm-bench's pinned depth, run through
+`bench/interleaved/rmse_depth_interleaved.mojo` (the committed harness
+with DEPTH as argv; separate file only while the standard harness is
+another lane's working file). Full record
+`bench/results/EPSILON_DEPTH8_2026-08-21.md`:
+
+    254: 2.78-3.68x    128: 3.20 / 3.64 / 3.57x    mse 8 sig figs
+
+Depth 6 -> 8 multiplies ours ~2.2x and theirs ~3x: their CPU pays more
+for two extra levels than our density cliff costs us, so the depth-6
+medians (2.40/2.77x) WIDEN at depth 8. The compaction deferral's
+"reopens at depth 8+" condition is hereby weakened comparatively --
+depth 8 is a BETTER shape for us. Depth joins rows and features as an
+axis that amortizes our floor and multiplies their bill.
