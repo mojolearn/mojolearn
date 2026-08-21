@@ -1995,16 +1995,34 @@ def launch_histograms_for_blocks[
 
                 @parameter
                 if hist2_smem_mode == HIST_SMEM_SHARED2_I32:
-                    # the fused two-stat 8-bit arm: one walk over the
-                    # cindex where PASS(8) makes stat_count of them (its
-                    # DEVIATION BLOCK carries the shared-memory arithmetic
-                    # their ladder's fallback exists to avoid)
-                    launch_hist2_8bit(
-                        ctx, blk, depth, n_live, n_rows, stat_count,
-                        max_leaves, sm_count, line, base, cindex,
-                        row_index, stats, p_off, p_sz, ids, block_hist,
-                        acc_i32, fixed_scale,
-                    )
+                    if stat_count == 2:
+                        # the fused two-stat 8-bit arm: one walk over the
+                        # cindex where PASS(8) makes stat_count of them
+                        # (its DEVIATION BLOCK carries the shared-memory
+                        # arithmetic their ladder's fallback exists to
+                        # avoid)
+                        launch_hist2_8bit(
+                            ctx, blk, depth, n_live, n_rows, stat_count,
+                            max_leaves, sm_count, line, base, cindex,
+                            row_index, stats, p_off, p_sz, ids,
+                            block_hist, acc_i32, fixed_scale,
+                        )
+                    else:
+                        # MultiClass carries 1 + (K-1) stat planes and the
+                        # fused arm is two-stat by construction. When it
+                        # landed (8010b2f) every caller WAS two-stat;
+                        # MultiClass arrived later in another lane, and the
+                        # first 254-border multiclass fit hit the fused
+                        # arm's guard instead of a histogram. Multi-stat
+                        # shapes take the PASS route, whose shared-Int32
+                        # arm walks stat pairs on the z axis exactly as
+                        # their ladder does.
+                        launch_one_byte[8, hist2_smem_mode](
+                            ctx, blk, depth, n_live, n_rows, stat_count,
+                            max_leaves, sm_count, line, base, cindex,
+                            row_index, stats, p_off, p_sz, ids,
+                            block_hist, acc_i32, fixed_scale,
+                        )
                 else:
                     launch_one_byte[8, hist2_smem_mode](
                         ctx, blk, depth, n_live, n_rows, stat_count,

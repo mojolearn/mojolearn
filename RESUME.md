@@ -898,3 +898,25 @@ medians (2.40/2.77x) WIDEN at depth 8. The compaction deferral's
 "reopens at depth 8+" condition is hereby weakened comparatively --
 depth 8 is a BETTER shape for us. Depth joins rows and features as an
 axis that amortizes our floor and multiplies their bill.
+
+### 2026-08-21, later still: MultiClass covtype -- near-parity on our worst dataset, and a dispatch defect caught
+
+First benchmark of the MultiClass chassis, at covtype's NATIVE task
+(every incumbent suite binarizes it). Full record
+`bench/results/COVTYPE_MULTICLASS_2026-08-21.md`:
+
+    254: 0.92-0.94x    128: 0.94-0.97x    loss 7 sig figs both borders
+
+Covtype RMSE trails 1.8-2.1x; MultiClass's 7 stat planes multiply
+per-level work ~3.5x on BOTH arms, amortizing our launch floor while
+their CPU scales with the work -- the 2x deficit closes to 3-8%.
+CLASSES are the fourth axis (after rows, features, depth) that amortizes
+our floor and multiplies their bill.
+
+AND THE RUN CAUGHT A REAL DEFECT: the first 254-border multi-stat fit
+ever attempted hit the fused 8-bit arm's two-stat guard instead of a
+histogram -- the fused arm (8010b2f) had replaced the >128 shared-Int32
+route unconditionally, and MultiClass arrived later in another lane.
+Fixed in the same commit: multi-stat shapes route to the PASS family's
+z-axis stat pairs; reach proved by the raise-then-run, correctness by
+the 7-figure loss column against CatBoost's own output.
