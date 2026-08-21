@@ -87,7 +87,7 @@ from extratrees.ported.decisiontree.batched_levelalgo.split import (
     split_reduce_init_kernel,
     split_reduce_kernel,
 )
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import ceildiv
 from std.sys.info import size_of
@@ -800,6 +800,77 @@ def gain_from_exact_totals(
     return Float32(lhs - rhs)
 
 
+@fieldwise_init
+struct DeviceDataset(Movable):
+    """The dataset, resident on the device for a whole FOREST.
+
+    ==================================================================
+    DEVIATION BLOCK 184 -- CLOSED. The dataset is uploaded once per FIT,
+    not once per tree.
+
+    THEIRS: cuML's `Dataset` holds device pointers for the whole fit
+    (`dataset.h:22-38`); every tree reads one resident copy.
+
+    WHAT OURS DID FOR ONE ROUND: `train_classification_device` was
+    written as a whole-tree entry point with no forest above it, so it
+    allocated and filled `d_data` and `d_labels` on entry. An
+    `n_trees`-tree forest therefore uploaded the same IMMUTABLE matrix
+    `n_trees` times -- `n_trees - 1` redundant copies of
+    `4*n_rows*n_cols + 4*n_rows` bytes, plus that many redundant host
+    staging fills and `synchronize()` points.
+
+    IT COULD NEVER HAVE BEEN A WRONG ANSWER, only redundant traffic:
+    the matrix is immutable and every tree uploaded identical bytes.
+    That is why it was allowed to stand for a round rather than being
+    rushed -- and why closing it needed no re-checking of any result.
+
+    THE SPLIT. `upload_dataset` is the old prologue; `_resident` is the
+    old body. `train_classification_device` survives as a two-line
+    wrapper so that `device_tree_check`, which fits ONE tree, is
+    untouched and still exercises the same code. `row_ids` stays
+    per-tree and per-call, because it is the one input that differs
+    between trees -- see deviation 185, which measures that its `mut`
+    is currently vacuous and pins the fact that makes it so.
+    ==================================================================
+    """
+
+    var d_data: DeviceBuffer[DType.float32]
+    var d_labels: DeviceBuffer[DType.int32]
+    var n_rows: Int32
+    var n_cols: Int32
+    var n_classes: Int32
+
+
+def upload_dataset(
+    ctx: DeviceContext,
+    x_col_major: List[Float32],
+    class_ids: List[Int32],
+    n_rows: Int32,
+    n_cols: Int32,
+    n_classes: Int32,
+) raises -> DeviceDataset:
+    """Put the immutable half of the fit on the device, once. DEVIATION 184."""
+    if len(x_col_major) != Int(n_rows) * Int(n_cols):
+        raise Error("x_col_major must be n_rows * n_cols long, column major")
+    if len(class_ids) != Int(n_rows):
+        raise Error("class_ids must be n_rows long")
+    var d_data = ctx.enqueue_create_buffer[DType.float32](len(x_col_major))
+    var d_labels = ctx.enqueue_create_buffer[DType.int32](Int(n_rows))
+    var h_data = ctx.enqueue_create_host_buffer[DType.float32](
+        len(x_col_major)
+    )
+    var h_labels = ctx.enqueue_create_host_buffer[DType.int32](Int(n_rows))
+    ctx.synchronize()
+    for i in range(len(x_col_major)):
+        h_data.unsafe_ptr().unsafe_store(i, x_col_major[i])
+    for i in range(Int(n_rows)):
+        h_labels.unsafe_ptr().unsafe_store(i, class_ids[i])
+    ctx.enqueue_copy(dst_buf=d_data, src_ptr=h_data.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=d_labels, src_ptr=h_labels.unsafe_ptr())
+    ctx.synchronize()
+    return DeviceDataset(d_data^, d_labels^, n_rows, n_cols, n_classes)
+
+
 def train_classification_device(
     ctx: DeviceContext,
     x_col_major: List[Float32],
@@ -808,6 +879,29 @@ def train_classification_device(
     n_rows: Int32,
     n_cols: Int32,
     n_classes: Int32,
+    params: DecisionTreeParams,
+    tree_id: Int32,
+    seed: UInt64,
+) raises -> TreeMetaDataNode[DType.float32]:
+    """One tree, uploading the dataset for itself. DEVIATION 184's wrapper.
+
+    A forest should call `upload_dataset` once and then
+    `train_classification_device_resident` per tree. This name is kept for the
+    single-tree callers, and because keeping it means `device_tree_check` goes
+    on exercising the same body rather than a copy of it.
+    """
+    var dataset = upload_dataset(
+        ctx, x_col_major, class_ids, n_rows, n_cols, n_classes
+    )
+    return train_classification_device_resident(
+        ctx, dataset, row_ids, params, tree_id, seed
+    )
+
+
+def train_classification_device_resident(
+    ctx: DeviceContext,
+    mut dataset: DeviceDataset,
+    mut row_ids: List[Int32],
     params: DecisionTreeParams,
     tree_id: Int32,
     seed: UInt64,
@@ -834,10 +928,9 @@ def train_classification_device(
     between a device split search and a device tree build, and this function
     currently is the former.
     """
-    if dataset_len_ok(x_col_major, n_rows, n_cols) == False:
-        raise Error("x_col_major must be n_rows * n_cols long, column major")
-    if len(class_ids) != Int(n_rows):
-        raise Error("class_ids must be n_rows long")
+    var n_rows = dataset.n_rows
+    var n_cols = dataset.n_cols
+    var n_classes = dataset.n_classes
     if len(row_ids) != Int(n_rows):
         raise Error("row_ids must be n_rows long")
     validity_check(params)
@@ -866,25 +959,14 @@ def train_classification_device(
     )
     var queue = NodeQueue[DType.float32](params, n_rows, n_classes, tree_id)
 
-    # The dataset is uploaded ONCE and stays resident, which is theirs: their
-    # `Dataset` holds device pointers for the whole fit (`dataset.h:22-38`).
-    var d_data = ctx.enqueue_create_buffer[DType.float32](len(x_col_major))
-    var d_labels = ctx.enqueue_create_buffer[DType.int32](Int(n_rows))
+    # `d_data` and `d_labels` are ALREADY resident -- DEVIATION 184. Only
+    # `row_ids` is per-tree, because it is the one input that differs between
+    # trees and the one the partition mutates.
     var d_row_ids = ctx.enqueue_create_buffer[DType.int32](Int(n_rows))
-    var h_data = ctx.enqueue_create_host_buffer[DType.float32](
-        len(x_col_major)
-    )
-    var h_labels = ctx.enqueue_create_host_buffer[DType.int32](Int(n_rows))
     var h_rows0 = ctx.enqueue_create_host_buffer[DType.int32](Int(n_rows))
     ctx.synchronize()
-    for i in range(len(x_col_major)):
-        h_data.unsafe_ptr().unsafe_store(i, x_col_major[i])
-    for i in range(Int(n_rows)):
-        h_labels.unsafe_ptr().unsafe_store(i, class_ids[i])
     for i in range(Int(n_rows)):
         h_rows0.unsafe_ptr().unsafe_store(i, row_ids[i])
-    ctx.enqueue_copy(dst_buf=d_data, src_ptr=h_data.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_labels, src_ptr=h_labels.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_row_ids, src_ptr=h_rows0.unsafe_ptr())
     ctx.synchronize()
 
@@ -997,7 +1079,7 @@ def train_classification_device(
             d_missing.unsafe_ptr(),
             d_merges.unsafe_ptr(),
             d_cell_mutex.unsafe_ptr(),
-            d_data.unsafe_ptr(),
+            dataset.d_data.unsafe_ptr(),
             d_row_ids.unsafe_ptr(),
             d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
             d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
@@ -1037,9 +1119,9 @@ def train_classification_device(
             d_min.unsafe_ptr(),
             d_max.unsafe_ptr(),
             d_missing.unsafe_ptr(),
-            d_data.unsafe_ptr(),
+            dataset.d_data.unsafe_ptr(),
             d_row_ids.unsafe_ptr(),
-            d_labels.unsafe_ptr(),
+            dataset.d_labels.unsafe_ptr(),
             d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
             d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
             d_colids.unsafe_ptr(),
@@ -1224,7 +1306,7 @@ def train_classification_device(
             d_row_ids.unsafe_ptr(),
             d_iters.unsafe_ptr(),
             d_swaps.unsafe_ptr(),
-            d_data.unsafe_ptr(),
+            dataset.d_data.unsafe_ptr(),
             d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
             d_splits.unsafe_ptr().unsafe_bitcast[Split](),
             n_rows,
@@ -1290,7 +1372,7 @@ def train_classification_device(
         d_nodes.unsafe_ptr().unsafe_bitcast[SparseTreeNode[DType.float32]](),
         d_ranges.unsafe_ptr().unsafe_bitcast[InstanceRange](),
         d_row_ids.unsafe_ptr(),
-        d_labels.unsafe_ptr(),
+        dataset.d_labels.unsafe_ptr(),
         Int32(k_out),
         Float32(1.0),  # classification: no fixed-point rescale
         LEAF_SAB_NONE,

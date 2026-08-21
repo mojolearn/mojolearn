@@ -1712,3 +1712,122 @@ comes from CUB's internal `__syncthreads()`, which `barrier()` is.
 
 The two places it is load-bearing are named in the file so nobody tidies a
 barrier away as redundant.
+
+---
+
+# The forest and the estimator on device — deviations 184-188
+
+## 184. CLOSED — the dataset is uploaded once for the FOREST, not once per tree
+
+**Theirs.** cuML's `Dataset` holds device pointers for the whole fit
+(`dataset.h:22-38`); every tree reads one resident copy.
+
+**What ours did for one round.** `train_classification_device` was written as a
+whole-tree entry point with no forest above it, so it allocated and filled
+`d_data` and `d_labels` on entry. An `n_trees`-tree forest uploaded the same
+IMMUTABLE matrix `n_trees` times — `n_trees - 1` redundant copies of
+`4*n_rows*n_cols + 4*n_rows` bytes, plus that many redundant host staging fills
+and `synchronize()` points.
+
+**It could never have been a wrong answer, only redundant traffic**, because
+the matrix is immutable and every tree uploaded identical bytes. That is why it
+was allowed to stand for a round rather than being rushed — and why closing it
+required no result to be re-checked.
+
+**Closed by splitting the function**, exactly as the forest lane specified:
+`upload_dataset` is the old prologue, `train_classification_device_resident` is
+the old body, and `train_classification_device` survives as a two-line wrapper
+so `device_tree_check` — which fits ONE tree — goes on exercising the same body
+rather than a copy of it. `fit_classification_device` hoists the upload above
+its tree loop. Identity re-verified after the move: `device_forest_check` still
+reports 0 differing nodes and 0 differing leaf values.
+
+**Why it was not done in the round that created it.** `builder.mojo` was owned
+by another session, and changing a converged file is the failure mode rule 12
+names. The alternative — a forest-private copy of a 500-line function with a
+different prologue — would have guaranteed drift. Waiting one round cost
+nothing because the defect was traffic, not correctness.
+
+---
+
+## 185. The per-tree `row_ids` is a contract, not a necessity, and that is MEASURED
+
+`train_classification_device` declares `mut row_ids` and reads it once into a
+host staging buffer. `node_split_kernel` then mutates `d_row_ids` ON THE DEVICE
+across every level, and **nothing copies that permutation back**. So the `mut`
+is currently vacuous, and a single shared buffer across all trees produces a
+bit-identical forest.
+
+**`device_forest_check` MEASURES that rather than arguing it**: a whole 12-tree
+forest fitted from one shared buffer differs from the per-tree forest in **0 of
+1034 nodes**.
+
+**It is kept per-tree regardless, for two reasons that are not style.** The two
+arms of the forest must be the same loop and the host arm NEEDS it; and the
+moment the device partition is copied back — which a device-resident frontier
+would do — a shared buffer becomes silent cross-tree corruption, and the tree
+that noticed would be tree 1.
+
+So the check PINS the fact that makes it safe: `row_ids` comes back from the
+device trainer unchanged. **When that assertion goes red, this entry is stale
+and the shared buffer has become dangerous.** A sabotage simulating the
+write-back proves the pin fires.
+
+---
+
+## 186. The class-id cast is hoisted, and it carries a range guard the host path does not have
+
+The device sees only integers (deviation 174), so the forest casts labels to
+`Int32` class ids ONCE rather than per tree — the cast depends on nothing that
+varies across trees, which is the only reason it may be hoisted while the
+dataset upload could not be.
+
+**The range check is new and is NOT on the host path.** A class id outside
+`[0, n_classes)` indexes the score kernel's `MAX_ACC`-wide accumulator, so it is
+an out-of-bounds write rather than a wrong answer. This is a guard on a cast
+this file owns, not a change to a ported file — and it means the two arms can
+refuse different inputs: a label of `7.0` with `n_classes == 3` reaches the host
+trainer and is refused here.
+
+---
+
+## 187. The device is an ENTRY POINT, not a `device=True` field on the config
+
+A boolean field would be wrong twice. `ExtraTreesConfig` is documented as
+sklearn's constructor with sklearn's names and sklearn has no such parameter,
+so the struct would become a mix of sklearn's surface and ours that the next
+reader cannot separate; and a flag cannot carry a `DeviceContext`, which is a
+signature difference no boolean hides.
+
+**Refusals cannot drift between the arms STRUCTURALLY rather than by
+discipline**: both call `classifier_plan`, the only place the criterion check
+and `resolve`/`refuse_unported` are invoked, and both call `depth_cap_bound`.
+Neither arm holds a line of policy.
+
+Two refusals fire on the device arm ONLY — the device trainer's class-count
+bound (deviation 172) and row-count bound (deviation 175) — raised out of the
+first tree before any kernel is enqueued, and neither is restated in
+`estimator.mojo` because restating a bound is how a copy drifts from its
+constant.
+
+**That asymmetry is also the reach proof.** The two arms' forests are
+bit-identical, so no output can tell them apart; `device_forest_check` uses the
+33-class refusal instead, and a sabotage pointing the device arm at
+`fit_classification` left every identity assertion green and reddened only that
+one cell.
+
+---
+
+## 188. Regression has no device arm and it is REFUSED BY NAME
+
+There is no `train_regression_device`. Every device kernel supports regression —
+range, draw, fixed-point score accumulation, partition, leaf — but the finalize
+kernel publishes no exact rational for MSE, so `split_reduce_kernel` cannot
+rank regression candidates at all.
+
+**The refusal is why the function exists.** Offering no symbol leaves a caller
+who found `fit_extra_trees_classifier_device` to guess; quietly forwarding to
+the host regressor hands them a host fit under a device name — the same class
+of defect as a parameter accepted and ignored. It raises unconditionally,
+before `refuse_unported`, because the gap is not a property of the
+configuration.

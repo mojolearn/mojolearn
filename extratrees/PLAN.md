@@ -264,8 +264,11 @@ every one with a sabotage per mechanism that was seen to turn it red.
 1. **No number has been measured, deliberately.** Perf is deferred by the repo
    owner. Nothing in this directory quotes a duration, and the thesis number —
    our GPU against sklearn's CPU on this Mac — has not been taken.
-2. **The forest and the estimator do not use the device path yet.** One tree
-   does; `fit_classification` still calls the host trainer per tree.
+2. **The forest and the estimator DO use the device path** —
+   `fit_classification_device` and `fit_extra_trees_classifier_device`, with
+   the dataset uploaded once for the forest (deviation 184) and every refusal
+   firing on both arms. The device forest is bit-identical to the host forest:
+   0 of 1552 nodes and 0 of 4656 leaf values.
 3. **Regression is host-only on the device path.** Every kernel supports it,
    but the finalize kernel publishes no exact rational for MSE, so the device
    reduction cannot rank regression candidates.

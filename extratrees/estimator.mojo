@@ -47,6 +47,55 @@ THE TWO PARAMETERS THAT NEEDED A DECISION
    of its truncation bucket. `resolve_max_features` returns the COUNT so a
    check can compare against sklearn's rule directly rather than against a
    ratio.
+
+THE DEVICE OPTION, AND WHY IT IS A SECOND ENTRY POINT
+------------------------------------------------------
+This file used to offer no device path at all, and the reason it gave was
+DEVIATION 183: the device could not compute the float gain, so
+`min_impurity_decrease` was ACCEPTED AND INERT there. A parameter honoured on
+one path and ignored on the other is the exact thing this file exists to
+prevent, so the device path could not be offered while that was true.
+
+**183 is closed.** The gain is now formed on the host from the exact integers
+the score pass already produced, `split_not_valid` applies unchanged, and
+`device_tree_check` asserts the device tree equals the host tree at the DEFAULT
+gate as well as with the gate disabled. So `min_impurity_decrease` is honoured
+on both arms, every other parameter was already path-independent -- every one
+of them is resolved by `resolve` BEFORE either trainer is reached -- and the
+option can be offered.
+
+**DEVIATION BLOCK -- DEVIATION 187. THE DEVICE IS AN ENTRY POINT, NOT A FIELD
+ON `ExtraTreesConfig`.** A `device=True` field would be the obvious shape and
+it is wrong twice over. `ExtraTreesConfig` is documented as *sklearn's
+constructor, with its names and its defaults*, and sklearn has no such
+parameter -- putting one there makes the struct a mix of sklearn's surface and
+ours, and the next reader cannot tell which is which by looking. And a flag
+cannot carry a `DeviceContext`: the caller must supply one, so the device arm
+needs an argument the host arm does not have, which is a signature difference
+no boolean can hide. `fit_extra_trees_classifier_device(ctx, ...)` is that
+signature.
+
+**The refusals cannot drift between the arms, structurally rather than by
+discipline.** Both `fit_extra_trees_classifier` and its `_device` twin call
+`classifier_plan`, which is the ONLY place the criterion check and `resolve`
+(and therefore `refuse_unported`) are invoked, and both call `depth_cap_bound`
+for the report. Neither arm has a line of policy of its own. A refusal added to
+`refuse_unported` tomorrow reaches both without either being touched, and there
+is no way to add one to a single arm without first splitting that helper.
+
+**Two refusals fire on the device arm and not on the host arm**, and they are
+the device trainer's own, raised BY NAME out of `train_classification_device`:
+more classes than the score kernel's comptime shared-memory width admits
+(DEVIATION 172), and more rows than the published `Int64` Gini numerator is
+exact for (DEVIATION 175). Neither bound is restated here, because restating a
+bound is how a copy drifts from its constant; they propagate out of the first
+tree, before any kernel is enqueued. `device_forest_check` uses the first of
+them as its REACH proof that this file's device arm really reaches the device
+trainer -- the two arms produce identical forests, so no OUTPUT can tell them
+apart, and only a device-exclusive refusal can.
+
+**Regression has no device arm and it is refused BY NAME**, not silently
+served from the host. DEVIATION 188.
 """
 
 from extratrees.mojo_only.fixed_point import ceil_log2
@@ -59,8 +108,10 @@ from extratrees.ported.decisiontree.decisiontree import (
 from extratrees.ported.randomforest.randomforest import (
     Forest,
     fit_classification,
+    fit_classification_device,
     fit_regression,
 )
+from max.gpu.host import DeviceContext
 
 
 comptime DEPTH_SLACK: Int32 = 16
@@ -337,6 +388,40 @@ struct FitResult(Movable):
     told rather than handed a quietly shallower forest."""
 
 
+def classifier_plan(
+    config: ExtraTreesConfig, n_rows: Int32, n_features: Int32
+) raises -> FitPlan:
+    """Every check and every refusal a classifier fit applies, in ONE place.
+
+    Both `fit_extra_trees_classifier` and `fit_extra_trees_classifier_device`
+    call this and nothing else before their trainer. That is DEVIATION 187's
+    guarantee made structural: there is no line of policy in either arm, so a
+    refusal cannot reach one and miss the other, and adding one to a single arm
+    would require splitting this function first.
+    """
+    if config.criterion != CRITERION_GINI:
+        raise Error(
+            "the classification criterion must be gini; entropy and the"
+            " regression criteria are refused by validity_check"
+        )
+    return resolve(config, Int(n_rows), Int(n_features))
+
+
+def depth_cap_bound(forest: Forest, plan: FitPlan) -> Bool:
+    """Whether any tree reached `params.max_depth` exactly.
+
+    Shared by both arms for the same reason `classifier_plan` is: on an
+    unlimited-depth request this is the number that says whether the
+    substituted cap CHANGED the model, and an arm that computed it differently
+    would report a different model without fitting a different one.
+    """
+    var bound = False
+    for t in range(len(forest.trees)):
+        if forest.trees[t].depth_counter >= plan.params.max_depth:
+            bound = True
+    return bound
+
+
 def fit_extra_trees_classifier(
     x_col_major: List[Float32],
     labels: List[Float32],
@@ -346,12 +431,7 @@ def fit_extra_trees_classifier(
     config: ExtraTreesConfig,
 ) raises -> FitResult:
     """`ExtraTreesClassifier.fit`, with sklearn's names honoured or refused."""
-    if config.criterion != CRITERION_GINI:
-        raise Error(
-            "the classification criterion must be gini; entropy and the"
-            " regression criteria are refused by validity_check"
-        )
-    var plan = resolve(config, Int(n_rows), Int(n_features))
+    var plan = classifier_plan(config, n_rows, n_features)
     var forest = fit_classification(
         x_col_major,
         labels,
@@ -362,10 +442,56 @@ def fit_extra_trees_classifier(
         plan.n_trees,
         config.random_state,
     )
-    var bound = False
-    for t in range(len(forest.trees)):
-        if forest.trees[t].depth_counter >= plan.params.max_depth:
-            bound = True
+    var bound = depth_cap_bound(forest, plan)
+    return FitResult(forest^, plan, bound)
+
+
+def fit_extra_trees_classifier_device(
+    ctx: DeviceContext,
+    x_col_major: List[Float32],
+    labels: List[Float32],
+    n_rows: Int32,
+    n_features: Int32,
+    n_classes: Int32,
+    config: ExtraTreesConfig,
+) raises -> FitResult:
+    """`ExtraTreesClassifier.fit` with the split search on the GPU.
+
+    DEVIATION BLOCK -- DEVIATION 187, stated in full in the module docstring.
+    The signature is `fit_extra_trees_classifier`'s plus a `DeviceContext`, and
+    the body is the same three lines with `fit_classification_device` in place
+    of `fit_classification`. Every sklearn parameter is resolved and refused by
+    `classifier_plan` before either trainer is reached, so the two arms cannot
+    honour different sets.
+
+    **The forest it returns is the SAME forest the host arm returns**, tree for
+    tree and node for node, because deviation 183 closed the last difference
+    between the device and host trees. `device_forest_check` asserts that
+    against this entry point, not only against the raw
+    `fit_classification_device`.
+
+    **What is NOT the same, and it is the device trainer's own refusals rather
+    than this file's:** `train_classification_device` refuses a class count
+    above the score kernel's comptime shared width (DEVIATION 172) and a row
+    count above the exact Int64 Gini bound (DEVIATION 175). Both raise out of
+    the first tree, before any kernel is enqueued, and both propagate from here
+    unchanged. A configuration this arm refuses and the host arm accepts is
+    therefore possible, is named when it happens, and is what
+    `device_forest_check` uses to prove this arm reaches the device at all.
+    """
+    var plan = classifier_plan(config, n_rows, n_features)
+    var forest = fit_classification_device(
+        ctx,
+        x_col_major,
+        labels,
+        n_rows,
+        n_features,
+        n_classes,
+        plan.params,
+        plan.n_trees,
+        config.random_state,
+    )
+    var bound = depth_cap_bound(forest, plan)
     return FitResult(forest^, plan, bound)
 
 
@@ -392,8 +518,46 @@ def fit_extra_trees_regressor(
         plan.n_trees,
         config.random_state,
     )
-    var bound = False
-    for t in range(len(forest.trees)):
-        if forest.trees[t].depth_counter >= plan.params.max_depth:
-            bound = True
+    var bound = depth_cap_bound(forest, plan)
     return FitResult(forest^, plan, bound)
+
+
+def fit_extra_trees_regressor_device(
+    ctx: DeviceContext,
+    x_col_major: List[Float32],
+    y: List[Float32],
+    n_rows: Int32,
+    n_features: Int32,
+    config: ExtraTreesConfig,
+) raises -> FitResult:
+    """DEVIATION BLOCK -- DEVIATION 188. REFUSED BY NAME, NEVER SERVED FROM THE
+    HOST.
+
+    There is no `train_regression_device`. Every device kernel in this lane
+    supports regression -- the range pass, the draw, the score accumulation in
+    deviation 135's fixed point, the partition and the leaf kernel all take the
+    regression arm -- but the FINALIZE kernel publishes no exact rational for
+    MSE, so `split_reduce_kernel` has nothing to rank regression candidates by
+    and the device reduction cannot elect a winner.
+
+    **The refusal is the whole point of this function existing.** The
+    alternative shapes are both worse in the way this file was written to
+    prevent: offering no symbol at all leaves a caller who found
+    `fit_extra_trees_classifier_device` to guess, and quietly forwarding to
+    `fit_extra_trees_regressor` would hand them a HOST fit under a name that
+    says device -- the same class of defect as a parameter accepted and
+    ignored. So the name exists, takes exactly the arguments the device
+    classifier takes, and says what is missing and why.
+
+    It raises unconditionally, before `refuse_unported`, because the gap is not
+    a property of the configuration: no `ExtraTreesConfig` makes a device
+    regression fit possible today.
+    """
+    raise Error(
+        "there is no device regressor: the device split reduction ranks"
+        " candidates by an exact rational that the finalize kernel publishes"
+        " only for Gini, so it cannot rank MSE candidates and"
+        " train_regression_device does not exist. Refused by name rather than"
+        " silently fitting on the HOST under a device name. Use"
+        " fit_extra_trees_regressor for the host fit. DEVIATION 188."
+    )
