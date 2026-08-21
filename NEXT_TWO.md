@@ -47,6 +47,17 @@ suspect is the pointwise BINARY path (or mixed-policy interaction) at
 scales the oracle fixtures never reach. The rung-1 "two arms
 bit-identical" claim holds only on shapes without binary-policy
 features until this is found.
+LOCALIZED (same session, performance lane): each policy ALONE is
+bit-identical -- covtype's 10 one-byte features pass (`covob_*`
+fixtures), its 43 binary features pass (`covbin_*`), the 53 together
+fail. The defect is the POLICY-MIX interaction: the per-policy
+`bin_sums` segment offsets (one policy's writes or the scorer's reads
+landing against the wrong segment base) or the cross-policy
+best-split id mapping are the suspects. Reproduce the split with the
+`covob`/`covbin` fixtures in ~/.cache/mojolearn, built by slicing the
+covtype fixture by fold count. Bonus datum: pure one-byte POINTWISE
+BEAT GREEDY 1.5x at 4k x 10 -- the arm is fast when its histograms
+are honest.
 
 ## BEFORE ANYTHING ELSE: DEVIATION 134 IS OPEN
 
