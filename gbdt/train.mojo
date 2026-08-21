@@ -55,6 +55,7 @@ from gbdt.overfitting_detector.overfitting_detector import (
     od_type_from_name,
 )
 from gbdt.gpu_util.kernel.radix_sort import DeviceFloatSorter
+from max.algorithm import sync_parallelize
 from gbdt.gpu_util.kernel.bootstrap import (
     BOOTSTRAP_KERNEL_BAYESIAN,
     BOOTSTRAP_KERNEL_BERNOULLI,
@@ -739,6 +740,15 @@ def train(
     # their ComputeBorders' device RadixSort, scratch hoisted once for
     # every float column below (see DeviceFloatSorter's docstring for the
     # churn crash that makes the hoist load-bearing)
+    # phase-A/B scratch: how many float columns, and one flat buffer
+    # holding every sorted float column back to back
+    var n_float_prescan = 0
+    for f in range(n_columns):
+        if not column_one_hot[f] and column_ctr_grid[f] < 0:
+            n_float_prescan += 1
+    var float_cols = List[Int]()
+    var sorted_flat = List[Float32](capacity=n_float_prescan * n_rows)
+    sorted_flat.resize(n_float_prescan * n_rows, Float32(0.0))
     var border_sorter = DeviceFloatSorter(ctx, n_rows)
     # their `TFloatFeature::NanValueTreatment`, one per COLUMN. One-hot and
     # CTR columns stay `AsIs`: a one-hot column holds dense codes and a CTR
@@ -812,17 +822,97 @@ def train(
             # multiset is identical, so every border -- and the fit's
             # mse -- is bit-for-bit unchanged, which the quantize-cost
             # probe's recorded mse gates.
-            var col = border_sorter.sort(ctx, columns[f].copy())
-            var q = calc_quantization(col^, border_count, nan_mode_opt)
-            var bs = q[0].copy()
-            column_nan_treatment[f] = nan_value_treatment(q[1])
-            fold_counts.append(len(bs))
-            borders.append(bs^)
+            # PHASE A OF THE SPLIT BORDER BUILD: the device pipeline
+            # sorts this column (the previous float column's prefetch
+            # already enqueued it; the next one is enqueued before the
+            # host copy below, so the device stays busy), and the DP is
+            # DEFERRED to phase B, which runs every float column's grid
+            # builder in parallel on the host -- their per-feature
+            # executor design (`calcBordersAndNanMode` on
+            # `NPar::LocalExecutor`), with the device never touched
+            # inside the parallel region (the sync_parallelize deadlock
+            # rule mojotrees recorded).
+            if not border_sorter.has_pending:
+                border_sorter.begin(ctx, columns[f].copy())
+            var col = border_sorter.finish(ctx)
+            var g = f + 1
+            while g < n_columns:
+                if not column_one_hot[g] and column_ctr_grid[g] < 0:
+                    border_sorter.begin(ctx, columns[g].copy())
+                    break
+                g += 1
+            var slot = len(float_cols)
+            float_cols.append(f)
+            var sfp = sorted_flat.unsafe_ptr()
+            var cp2 = col.unsafe_ptr()
+            for r in range(n_rows):
+                sfp.unsafe_store(slot * n_rows + r, cp2.unsafe_load(r))
+            _ = col^
+            fold_counts.append(0)  # placeholder, phase B fills it
+            borders.append(List[Float32]())  # placeholder
 
     # one-hot features occupy folds+? -- for ordered features CatBoost's
     # fold count IS the border count; a one-hot feature has k categories
     # = k bins reached by k-1 synthetic borders, and its fold count must
     # cover bin k-1 for the equality candidates, hence len+1 above.
+
+    # PHASE B: every float column's calc_quantization in parallel, disjoint
+    # flat output slots, errors carried out through a per-slot flag and
+    # re-raised after the join.
+    var n_float = len(float_cols)
+    if n_float > 0:
+        var out_cap = border_count + 1
+        var out_borders = List[Float32](capacity=n_float * out_cap)
+        out_borders.resize(n_float * out_cap, Float32(0.0))
+        var out_counts = List[Int](capacity=n_float)
+        out_counts.resize(n_float, 0)
+        var out_modes = List[Int](capacity=n_float)
+        out_modes.resize(n_float, -1)
+        var sfp2 = sorted_flat.unsafe_ptr()
+        var obp = out_borders.unsafe_ptr()
+        var ocp = out_counts.unsafe_ptr()
+        var omp = out_modes.unsafe_ptr()
+        var nr2 = n_rows
+        var bc2 = border_count
+        var nm2 = nan_mode_opt
+        var cap2 = out_cap
+
+        def _dp_task(
+            k: Int
+        ) {imm sfp2, imm obp, imm ocp, imm omp, imm nr2, imm bc2, imm nm2, imm cap2}:
+            try:
+                var col2 = List[Float32](capacity=nr2)
+                for r in range(nr2):
+                    col2.append(sfp2.unsafe_load(k * nr2 + r))
+                var q2 = calc_quantization(col2^, bc2, nm2)
+                var nb = len(q2[0])
+                if nb > cap2:
+                    ocp.unsafe_store(k, -2)
+                    return
+                for j in range(nb):
+                    obp.unsafe_store(k * cap2 + j, q2[0][j])
+                ocp.unsafe_store(k, nb)
+                omp.unsafe_store(k, q2[1])
+            except:
+                ocp.unsafe_store(k, -1)
+
+        sync_parallelize(_dp_task, n_float)
+
+        for k in range(n_float):
+            var nb = out_counts[k]
+            if nb < 0:
+                raise Error(
+                    "parallel border build failed on float column "
+                    + String(float_cols[k])
+                )
+            var f2 = float_cols[k]
+            var bs2 = List[Float32](capacity=nb)
+            for j in range(nb):
+                bs2.append(out_borders[k * out_cap + j])
+            column_nan_treatment[f2] = nan_value_treatment(out_modes[k])
+            fold_counts[f2] = nb
+            borders[f2] = bs2^
+
 
     # ONE COMPRESSED INDEX PER PERMUTATION. Theirs shares the
     # permutation-INDEPENDENT columns between them and gives each

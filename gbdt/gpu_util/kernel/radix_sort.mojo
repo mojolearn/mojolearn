@@ -314,6 +314,8 @@ struct DeviceFloatSorter(Movable):
     var bsums: DeviceBuffer[DType.int32]
     var host: HostBuffer[DType.uint32]
     var capacity: Int
+    var pending: List[Float32]
+    var has_pending: Bool
 
     def __init__(out self, ctx: DeviceContext, capacity: Int) raises:
         self.capacity = capacity
@@ -326,14 +328,21 @@ struct DeviceFloatSorter(Movable):
             (capacity + 512 - 1) // 512
         )
         self.host = ctx.enqueue_create_host_buffer[DType.uint32](capacity)
+        self.pending = List[Float32]()
+        self.has_pending = False
         ctx.synchronize()
 
-    def sort(
+    def begin(
         mut self, ctx: DeviceContext, var values: List[Float32]
-    ) raises -> List[Float32]:
+    ) raises:
+        """Stage, upload and ENQUEUE the passes -- no drain. The caller
+        overlaps host work (the border DP on the previous column) with
+        the device's passes and collects the result with `finish`. The
+        values list is stashed and returned by `finish`, sorted in
+        place."""
         var n = len(values)
-        if n <= 1:
-            return values^
+        if self.has_pending:
+            raise Error("DeviceFloatSorter: begin with a sort pending")
         if n > self.capacity:
             raise Error(
                 "DeviceFloatSorter capacity "
@@ -341,30 +350,53 @@ struct DeviceFloatSorter(Movable):
                 + " exceeded by a column of "
                 + String(n)
             )
-        var hp = self.host.unsafe_ptr()
-        var vbits = values.unsafe_ptr().unsafe_bitcast[UInt32]()
-        for i in range(n):
-            var bits = vbits.unsafe_load(i)
-            var key: UInt32
-            if bits & UInt32(0x80000000) != UInt32(0):
-                key = ~bits
-            else:
-                key = bits | UInt32(0x80000000)
-            hp.unsafe_store(i, key)
-        ctx.enqueue_copy(dst_buf=self.keys, src_ptr=hp)
-        ctx.synchronize()
-        launch_radix_sort_bins(
-            ctx, n, 0, 32, self.keys, self.vals, self.tkeys, self.tvals,
-            self.offsets, self.bsums,
-        )
-        ctx.enqueue_copy(dst_ptr=hp, src_buf=self.keys)
-        ctx.synchronize()
-        for i in range(n):
-            var key = hp.unsafe_load(i)
-            var bits: UInt32
-            if key & UInt32(0x80000000) != UInt32(0):
-                bits = key ^ UInt32(0x80000000)
-            else:
-                bits = ~key
-            vbits.unsafe_store(i, bits)
+        if n > 1:
+            var hp = self.host.unsafe_ptr()
+            var vbits = values.unsafe_ptr().unsafe_bitcast[UInt32]()
+            for i in range(n):
+                var bits = vbits.unsafe_load(i)
+                var key: UInt32
+                if bits & UInt32(0x80000000) != UInt32(0):
+                    key = ~bits
+                else:
+                    key = bits | UInt32(0x80000000)
+                hp.unsafe_store(i, key)
+            ctx.enqueue_copy(dst_buf=self.keys, src_ptr=hp)
+            launch_radix_sort_bins(
+                ctx, n, 0, 32, self.keys, self.vals, self.tkeys,
+                self.tvals, self.offsets, self.bsums,
+            )
+            ctx.enqueue_copy(dst_ptr=hp, src_buf=self.keys)
+        self.pending = values^
+        self.has_pending = True
+
+    def finish(
+        mut self, ctx: DeviceContext
+    ) raises -> List[Float32]:
+        """Drain, untwiddle, hand the sorted list back."""
+        if not self.has_pending:
+            raise Error("DeviceFloatSorter: finish with nothing pending")
+        var values = self.pending^
+        self.pending = List[Float32]()
+        self.has_pending = False
+        var n = len(values)
+        if n > 1:
+            ctx.synchronize()
+            var hp = self.host.unsafe_ptr()
+            var vbits = values.unsafe_ptr().unsafe_bitcast[UInt32]()
+            for i in range(n):
+                var key = hp.unsafe_load(i)
+                var bits: UInt32
+                if key & UInt32(0x80000000) != UInt32(0):
+                    bits = key ^ UInt32(0x80000000)
+                else:
+                    bits = ~key
+                vbits.unsafe_store(i, bits)
         return values^
+
+    def sort(
+        mut self, ctx: DeviceContext, var values: List[Float32]
+    ) raises -> List[Float32]:
+        """begin + finish, for one-shot callers."""
+        self.begin(ctx, values^)
+        return self.finish(ctx)
