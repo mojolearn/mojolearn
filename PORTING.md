@@ -3893,11 +3893,24 @@ exist for.
 It is also the project's THESIS rather than a limitation of the port: their
 GPU arms cannot run on Apple silicon, and that is the win condition.
 
-**The CPU oracle is the right reference.** CatBoost's CPU learner is the
-canonical implementation; their two arms are meant to agree on which splits
-an oblivious tree takes at a given grid. So `PORTING.md` 108's 144 of 144 is
-a comparison with CatBoost, full stop -- not a substitute for one. What
-remains unverified is whether their GPU arm agrees with their CPU arm, which
-is a question about CatBoost and not about this port.
+### OUR GPU ARM AGAINST THEIR CPU ARM IS THE COMPARISON, not a fallback
 
-The sentences claiming otherwise are deleted rather than annotated.
+This entry first framed the CPU oracle as "the right reference" and said what
+remained unverified was whether CatBoost's GPU arm agrees with its CPU arm.
+**That is not the point and the framing is deleted.**
+
+The point is `mojolearn-plan`'s thesis: **GPU ACCESS, NOT TIER.** Their GPU
+arm cannot run on this Mac at all, so the comparison that matters -- for
+correctness AND for speed -- is
+
+    OUR arm, on this Mac's GPU     against     THEIR arm, on this Mac's CPU
+
+`PORTING.md` 108's 144 of 144 is exactly that comparison on the correctness
+side, and it is the strongest evidence in this repository: our GPU searcher
+reproducing, split for split, the trees their CPU learner chose on the same
+data and the same grid.
+
+The speed side of the same comparison is a BENCHMARK and is not run here.
+
+Whether CatBoost's own two arms agree with each other is a question about
+CatBoost, is unanswerable on this hardware, and is not this port's business.

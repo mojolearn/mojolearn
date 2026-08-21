@@ -97,10 +97,12 @@ which is the win condition rather than a caveat. Comparing against their GPU
 output needs an NVIDIA box, which is what `tools/nvidia_bench.sh` and
 `tools/remote_gpu.sh` are for.
 
-**And the CPU oracle is the right reference anyway.** CatBoost's CPU learner
-is the canonical implementation of the algorithm; their two arms are meant to
-agree on which splits an oblivious tree takes. `PORTING.md` 108's 144 of 144
-is a comparison with CatBoost, not a weaker substitute for one.
+**OUR GPU ARM AGAINST THEIR CPU ARM IS THE COMPARISON.** That is the plan's
+thesis -- GPU ACCESS, NOT TIER -- and it is what `PORTING.md` 108's 144 of
+144 already is: our GPU searcher reproducing, split for split, the trees
+their CPU learner chose on the same data and the same grid. Not a weaker
+substitute for anything. The SPEED half of that same comparison is a
+benchmark and has not been run.
 
 What is genuinely left here, all doable locally:
 
