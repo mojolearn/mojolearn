@@ -4884,6 +4884,41 @@ That last property is the only account so far of why BOTH arms were wrong and
 wrong DIFFERENTLY. A confirmed instance of exactly that bug was found and
 fixed in `write_fold_based_initial_bins` the same day (DEVIATION 125a).
 
+### 134b. THE CONDITION NOBODY WROTE DOWN: the sighting happened under 20-30 concurrent GPU processes
+
+Three lanes were writing this repository at once when that run happened, and
+one of them reports the box carrying **20 to 33 concurrent `mojo run`
+processes for most of the session**, with a single check taking 8-10 minutes
+where it normally takes under one. Every subsequent attempt to reproduce --
+the ~100 by the lane, and the 600 warm reps in 134a -- was made on a box that
+was comparatively quiet.
+
+**That is a difference between the sighting and every reproduction attempt,
+and it was not controlled for.** It is also a plausible mechanism in its own
+right rather than merely an excuse: under device-memory pressure an allocation
+that would normally get fresh memory can get recycled memory, and a Metal
+command buffer competing with thirty peers is exactly the window in which a
+buffer freed at its last use (DEVIATION 125a's bug, confirmed in this
+repository the same day) gets its block handed to somebody else before the
+enqueued work runs.
+
+It would also explain the property nothing else explains: **both arms wrong,
+and wrong differently.** A pressure-triggered allocation defect strikes
+whichever arm happens to land on the reused block, so two arms in one process
+get two different wrong answers, which is precisely what was seen and precisely
+what an arithmetic account cannot produce.
+
+DO NOT READ THIS AS "THE MEASUREMENT ENVIRONMENT WAS BROKEN, SO THE RESULT IS
+DISCOUNTED." A learner that silently returns a well-formed wrong model under
+memory pressure is a worse defect than one that returns a wrong model always,
+because it will do it on a user's loaded machine and nothing will say so. If
+the mechanism is resource exhaustion, the required behaviour is a LOUD FAILURE,
+not a plausible tree.
+
+THE EXPERIMENT THIS IMPLIES, and it is cheap: run the cold soak while the box
+carries a comparable synthetic GPU load. If the anomaly returns under load and
+never returns quiet, the trigger is identified even before the site is.
+
 WHAT WOULD CLOSE IT, cheapest first: build once at
 `GLOBAL_NUMERIC_MODE = NUMERIC_IDENTICAL` and soak `d1_f8` a few thousand
 times. If the greedy arm goes silent and the pointwise arm still drifts, there
