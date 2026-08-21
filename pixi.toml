@@ -61,6 +61,15 @@ oracle-sweep = "mojo run -I . mojo_only/oracle_sweep_main.mojo"
 # green differential is not a reach proof. PORTING.md 130-131.
 check-onebyte-reach = "mojo run -I . mojo_only/onebyte_reach_check.mojo"
 
+# THE DEVIATION 134 HUNT. Runs the cell that produced the intermittent
+# hundreds of times in ONE process, both searchers, and reports the
+# DISTRIBUTION rather than a pass/fail -- every distinct loss either arm
+# produced, so a one-ULP reduction drift and a several-percent different tree
+# are told apart by reading them. A hundred clean runs of a one-in-a-hundred
+# event is a coin flip, which is why this exists instead of another green run.
+# MOJOLEARN_SOAK_REPS and MOJOLEARN_SOAK_FIXTURE override.
+soak-determinism = "mojo run -I . mojo_only/determinism_soak.mojo"
+
 # The control plane, which is host-side and has its own `main()` rather than
 # a function `probe_main` could call, so it runs as its own task instead of
 # being folded in. Until 2026-08-19 neither of these had ever been compiled.

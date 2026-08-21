@@ -48,6 +48,26 @@ scales the oracle fixtures never reach. The rung-1 "two arms
 bit-identical" claim holds only on shapes without binary-policy
 features until this is found.
 
+## BEFORE ANYTHING ELSE: DEVIATION 134 IS OPEN
+
+One run in roughly a hundred of a 4096 x 8 depth-1 fit produced a WRONG BUT
+COHERENT model on BOTH searchers, **and the two searchers disagreed with each
+other** -- which is the one thing `check-fit-pointwise` exists to forbid. Not
+reproduced in ~100 further runs of that cell. Half a mechanism is known (an
+order-nondeterministic float atomic in the greedy family's multi-block flush,
+live at exactly that row count) and it does not cover the pointwise arm, whose
+flush is a plain store below 10k rows.
+
+**NO SPEED NUMBER AND NO PARITY CLAIM SHOULD BE QUOTED UNTIL THIS CLOSES.** A
+learner that produces a different model one run in a hundred does not have a
+loss to compare.
+
+`pixi run soak-determinism` is the driver. The two experiments, cheapest first:
+soak at the shipping `NUMERIC_FAST`, then rebuild with `GLOBAL_NUMERIC_MODE =
+NUMERIC_IDENTICAL` and soak again -- if the greedy arm goes silent and the
+pointwise arm still drifts, there is a SECOND defect and it is not the
+histogram flush.
+
 ## WHAT IS LEFT
 
 ### Rung 2 -- DONE 2026-08-21. `TFeatureParallelObliviousTreeSearcher` at ONE fold
@@ -74,7 +94,39 @@ Two rows of its sabotage table are worth carrying forward: a defect in the
 bit-packing was invisible at 4,000 rows and red at 16,434, because a
 compression block is 8,192 documents and `blockIdx.x` is otherwise always 0.
 
-### Rung 3 -- ordered boosting (1,353 lines)
+### Rung 3 -- ordered boosting. THE DATA STRUCTURES RUN; the boosting loop is untouched
+
+**STATUS 2026-08-21.** The fold axis is carried and gated end to end through
+the layer both searchers share -- `pixi run check-ordered-boosting`, 8 gates at
+`FoldCount 12 / FoldBits 4 / stripe 16`, 1,463 positions over 600 rows.
+`PORTING.md` 125-129. It is the first time a fold axis has run a kernel in this
+tree.
+
+Three things stood between a fold-based TREE and this page. Two are now gone:
+
+* ~~`PolicyScoreHelper` hard-codes `foldCount = 1` at three sites~~ **CLOSED**
+  (DEVIATION 126). The calcer carries `fold_count`; the differential still
+  stands at 288 of 288.
+* The fold arm is wired into the DOC-PARALLEL searcher, **which upstream
+  cannot have folds at all** (DEVIATION 127). It belongs in
+  `oblivious_tree_structure_searcher.mojo`, which now exists. Three lines, and
+  it is a decision rather than a mechanical edit -- OPEN.
+* `TDynamicBoosting::Fit` is **not ported at all**, and it is the bulk of the
+  1,353 lines: per-permutation datasets, the per-fold approx CURSORS,
+  `ComputeWeakTarget`'s fold arm (a gradient per fold at THAT fold's cursor),
+  per-fold leaf estimation, and model averaging
+  (`dynamic_boosting.h:230-470`). **Without cursors there is no ordered
+  boosting, only an ordered partition.** OPEN, and this is the real remaining
+  work.
+
+So `boosting_type=Plain` STAYS PINNED on every CatBoost comparison, and this
+repository still cannot claim parity with CatBoost AS SHIPPED.
+
+Not a blocker, contrary to fear: the dynamic scorer supports only 3 of the 7
+score functions, and the GPU default is Cosine, which is one of the three
+(DEVIATION 128).
+
+### Rung 3 -- the original entry (1,353 lines)
 
 `methods/dynamic_boosting.h` + `feature_parallel_pointwise_oblivious_tree` +
 the feature-parallel dataset. `CreateFolds` (`dynamic_boosting.h:189-223`) is
