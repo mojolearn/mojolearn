@@ -27,20 +27,30 @@ WHAT THIS DOES AND DOES NOT ESTABLISH -- and the distinction is the point.
   and Metal's `threadgroup_barrier` both require uniform execution -- and
   "undefined happens to work today" is not a property a port can build on.
 
-  IT DOES NOT establish that item 11's original observation was wrong.
-  Twice while writing the pointwise checks, a RACING per-thread tally
-  produced exactly the "everything reads zero or a fraction of what it
-  should" symptom with nothing wrong in the loop. That is a strictly better
-  fit for the reported evidence than a divergent barrier that this probe
-  cannot make fail. It is a hypothesis, not a finding, and it is written
-  here so someone can test it rather than inherit it.
+  IT DOES NOT establish that item 11 was wrong, and item 11 is NOT wrong.
+  A few hours after this probe was written, a divergent barrier reproduced
+  for real in `mojo_only/pointwise_hist2_5bit_check.mojo`: 115 wrong cells
+  for the `uint2` entry point and 73 for `uint4`, every one of them low,
+  from a peel loop that half the block skipped while `AddPoint` took eight
+  barriers inside it. `PORTING.md` 92 carries the account.
 
-SO WHY DOES THE UNIFORM PATH STAY? Because it is correct by specification
-and costs one predicate per point, and because the alternative is relying on
-undefined behaviour whose current benign result this probe would be the
-first to notice changing. That is the whole reason this is a permanent check
-and not a scratch file: it is the tripwire under a decision that is
-currently justified by the spec alone.
+WHY THE TWO RESULTS DO NOT CONFLICT, which is the useful part:
+
+  **A divergent barrier is benign until the barrier is load-bearing.**
+
+  Here, every thread owns its own slot. The barrier orders nothing, so
+  skipping it costs nothing, and 512 of 512 slots come back right.
+
+  In `PointHist5`, eight threads share one inner histogram copy and the
+  barrier is the ONLY thing holding their two half-writes apart. There,
+  divergence drops points.
+
+  This probe is therefore the NEGATIVE control, not the gate. The gate is
+  the accumulator check. Keeping a probe that measures the benign case is
+  worth it precisely because it is what stops "divergent barrier" being
+  used as a catch-all explanation for any histogram that reads wrong --
+  this repository has produced that same symptom from a racing tally twice
+  and from a reused async staging buffer once (`PORTING.md` 12).
 """
 from std.gpu import thread_idx
 from std.memory import stack_allocation

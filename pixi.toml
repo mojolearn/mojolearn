@@ -253,6 +253,18 @@ check-pointwise-loop = "mojo run -I . mojo_only/pointwise_loop_check.mojo"
 # a GPU, a few seconds.
 check-divergent-barrier = "mojo run -I . mojo_only/divergent_barrier_probe.mojo"
 
+# TPointHist<0,0,BlockSize>, the 5-bit pointwise accumulator: four features
+# per UInt32 word, 32 bins each, 32 as the absent marker, reduced to 256
+# floats laid out [2 * (32 * feature + fold) + stat]. EVERY GATE IS PER CELL
+# and none sums, because the two mistakes this file invites -- transposing
+# the stat axis and swapping weight with target -- both leave every total
+# identical. This is also the check that gates CONTENTION rather than
+# coverage: eight of its threads share an inner histogram copy and the
+# barrier is what holds their writes apart, which is why it caught a
+# divergent peel loop that check-pointwise-loop passed at every block size
+# (PORTING.md 92). Own main(); a GPU, ~20 s.
+check-pointwise-hist2-5bit = "mojo run -I . mojo_only/pointwise_hist2_5bit_check.mojo"
+
 # The LSD radix sort over (bin, permutation position). Gates STABILITY
 # separately from sortedness and prints both, because sortedness alone
 # cannot see a tie that moved -- and the tie order IS the second half of

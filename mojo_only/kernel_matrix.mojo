@@ -245,6 +245,21 @@ comptime K_SPLIT_POINTS = 6
 #: different kernel with a different slot layout, so it is its own row.
 comptime K_HIST_2_ONE_BYTE = 7
 
+#: `TPointHist<0,0,BlockSize>` and its 6/7/8-bit siblings -- CatBoost's OTHER
+#: histogram family, the one BOTH of their oblivious searchers share and the
+#: one this repository runs for single-target symmetric trees once rung 1 of
+#: `NEXT_TWO.md` lands (`PORTING.md` 91 B).
+#:
+#: SAME SCRATCH SHAPE as `K_HIST_2_ONE_BYTE` and NOT the same kernel. Both
+#: take `BlockSize * 32` floats at CatBoost's `BlockSize = 384`, and their
+#: `SliceOffset()` is character-identical
+#: (`pointwise_hist2_one_byte_5bit.cu:52-58` against
+#: `hist_2_one_byte_5bit.cu:25-31`). They diverge at the REDUCE: this family
+#: writes `Buffer[2 * (32 * f + fold) + w]`, stat-MINOR, and the other writes
+#: `Histogram[32 * 4 * isSecondStat + 32 * f + fold]`, stat-MAJOR. Its own
+#: row because a shared row would invite sharing the writeback.
+comptime K_POINTWISE_HIST_2 = 8
+
 #: NUMERIC. Lanes one private histogram copy is shared by. CatBoost's 32,
 #: pinned for every vendor because AMD's wavefront is 64 and letting it
 #: follow the hardware changes the reduction tree. See the module docstring.
@@ -845,14 +860,22 @@ comptime TARGET_COLUMN = COLUMN_APPLE
 
 def hist_floats_per_thread_for[kernel: Int]() -> Int:
     """Shared floats per thread. `GetHistSize()` is this times the block."""
-    if kernel == K_HIST_ONE_BYTE or kernel == K_HIST_2_ONE_BYTE:
+    if (
+        kernel == K_HIST_ONE_BYTE
+        or kernel == K_HIST_2_ONE_BYTE
+        or kernel == K_POINTWISE_HIST_2
+    ):
         return 32
     return 16
 
 
 def catboost_block_for[kernel: Int]() -> Int:
     """What CatBoost uses, before our shared-memory budget bites."""
-    if kernel == K_HIST_ONE_BYTE or kernel == K_HIST_2_ONE_BYTE:
+    if (
+        kernel == K_HIST_ONE_BYTE
+        or kernel == K_HIST_2_ONE_BYTE
+        or kernel == K_POINTWISE_HIST_2
+    ):
         return 384
     return 768
 

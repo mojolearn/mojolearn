@@ -37,23 +37,31 @@ GATES:
       does (`pointwise_hist2_one_byte_5bit.cu:79`, `:108`, `:147` sync a
       `tiled_partition<8>` there).
 
-      **READ THIS BEFORE TRUSTING L6.** It does NOT gate the
-      uniform-iteration requirement, and it was written believing it would.
-      Reverting `compute_histogram_2` to CatBoost's per-thread counts --
-      which genuinely diverges, 8 iterations on one thread against 7 on
-      another -- leaves all 160 cases exact. `mojo_only/
-      divergent_barrier_probe.mojo` then showed why: a divergent
-      threadgroup barrier does not misbehave on this device at all, not
-      even at the 512-thread / 64-row shape `PORTING.md` 11 names as its
-      evidence.
+      **READ THIS BEFORE TRUSTING L6, AND BEFORE TRUSTING THIS WHOLE
+      FILE.** L6 does not gate the uniform-iteration requirement, and it
+      was written believing it would. Reverting `compute_histogram_2` to
+      CatBoost's per-thread counts -- which genuinely diverges -- leaves
+      all 160 cases exact.
 
-      So L1-L6 ALL pass whether the body loop converges the block or not.
-      The uniform path is kept because it is correct by specification, not
-      because anything here can see it -- and that is stated rather than
-      left for a reader to assume otherwise
-      ([[mojotrees-verify-reach-not-output]]: a check that cannot tell a
-      working change from a no-op is not evidence, and saying so is part of
-      the result). `PORTING.md` 92 carries the full account.
+      The reason is structural and it limits every gate here:
+      **`TallyHist` gives each thread a PRIVATE slot.** So this file
+      measures COVERAGE -- which point reaches `add_point`, once -- and
+      nothing about the contention the barriers exist to manage. A
+      divergent barrier is benign when the barrier orders nothing, which is
+      exactly the situation a private-slot tally creates.
+
+      It is not a hypothetical limit. The peel loops in `compute_histogram_2`
+      and `_4` were left divergent after the body was converged, and every
+      gate in this file passed at block 128 AND at block 256, in both the
+      broken and the fixed version. `mojo_only/pointwise_hist2_5bit_check.mojo`
+      caught it on its first run -- 115 wrong cells for `uint2`, 73 for
+      `uint4` -- because eight of its threads share an inner histogram copy
+      and the barrier is what holds their writes apart. `PORTING.md` 92.
+
+      **So: coverage is gated here, contention is gated there, and neither
+      file substitutes for the other.** A private-slot tally is the
+      histogram equivalent of uniform test data
+      ([[uniform-test-data-hides-permutation]]).
 
 SABOTAGES RUN, and what each one moved. One per mechanism, verified by
 breaking the loop and watching the gate go red:

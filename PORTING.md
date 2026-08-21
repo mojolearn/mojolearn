@@ -2975,7 +2975,7 @@ statement is therefore:
 Rung 1 above is what closes that, and it is the reason to do it.
 
 
-## 92. The uniform-iteration path is kept on SPECIFICATION, because the failure it prevents will not reproduce
+## 92. A divergent barrier is benign until the barrier is load-bearing, and then it silently drops points
 
 Measured 2026-08-21 while porting the pointwise histogram loop, and it puts a
 question mark over `PORTING.md` 11 without answering it.
@@ -3039,10 +3039,64 @@ someone can test it rather than inherit it. What is a finding: **item 11's
 stated mechanism is currently unreproducible, and the checks that appear to
 cover it do not.**
 
-### The rule this leaves behind
+### AND THEN IT REPRODUCED, three hours later, in the 5-bit accumulator
 
-A gate whose sabotage does not move it is not coverage, and the honest thing
-is to say so in the check itself rather than let the green tick imply
-otherwise. L6 now says it. This is the same discipline
-[[mojotrees-verify-reach-not-output]] describes, applied to a case where the
-answer came out inconvenient.
+Everything above stands as written and its CONCLUSION was wrong. Landing
+`TPointHist<0,0,BlockSize>` produced the failure on the first run:
+
+    scalar n=1   256 cells exact
+    scalar n=4   256 cells exact
+    uint2        115 cells WRONG, every one of them LOW
+    uint4         73 cells WRONG, every one of them LOW
+
+The cause was a divergent barrier, and it was in code this entry had already
+looked at and passed over. When `compute_histogram`'s BODY was converged, the
+peel loops were left as CatBoost writes them:
+
+    for (; colId < 128; colId += blockDim.x / HIST_BLOCK_COUNT)
+
+At `BLOCK_SIZE = 256` that loop is entered by threads 0-127 and skipped
+entirely by 128-255, and `AddPoint` takes eight threadgroup barriers. So half
+the block ran eight barriers the other half never reached, and the two halves
+came out of the peel eight barriers out of phase. Points went missing.
+Converging the peel -- every thread runs `ceil(span / col_step)` iterations
+and contributes a zero point when its column is out of range -- makes all
+four entry points exact and identical.
+
+Coverage was never wrong. Both versions read columns 0-127 exactly once.
+
+### The refined mechanism, which is what should have been written first
+
+A divergent threadgroup barrier is benign when nothing depends on the
+synchronisation, and corrupts when the barrier is LOAD-BEARING for ordering
+shared writes.
+
+    divergent_barrier_probe   each thread owns its slot; the barrier orders
+                              nothing; 512/512 correct at seven sizes
+    PointHist5                eight threads share an inner histogram copy and
+                              the barrier is the ONLY thing holding their two
+                              half-writes apart; points vanish
+
+Both observations are real and neither generalises without the other. Item
+11's mechanism is correct. This entry's earlier conclusion -- that it "will
+not reproduce" -- was drawn from a probe too simple to contain the thing it
+was probing for, which is the same mistake as gating a histogram with uniform
+data.
+
+### The rule this leaves behind, and it is not the one drafted first
+
+**Gate a kernel against a REAL accumulator, not a convenient one.**
+`mojo_only/pointwise_loop_check.mojo` gives every thread a private tally, so
+it measures coverage, and coverage was correct in both the broken and the
+fixed version -- all 160 cases, all six gates, at block 128 AND at block 256.
+It could not have found this. `mojo_only/pointwise_hist2_5bit_check.mojo`
+found it on its first run, because eight of its threads share a slot and the
+barrier is what keeps them apart.
+
+A private-slot tally is the histogram equivalent of uniform test data
+([[uniform-test-data-hides-permutation]]): it verifies the sum and nothing
+about the contention that the code exists to manage.
+
+The secondary rule still holds: a gate whose sabotage does not move it is not
+coverage, and the check should say so rather than let a green tick imply
+otherwise.

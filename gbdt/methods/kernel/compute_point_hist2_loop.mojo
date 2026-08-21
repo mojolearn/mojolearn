@@ -162,6 +162,66 @@ def _column_of_thread[hist_block_count: Int](tid: Int) -> Int:
 
 
 @always_inline
+def _peel[
+    THist: PointHist2, //, hist_block_count: Int
+](
+    mut hist: THist,
+    span: Int,
+    valid: Int,
+    at: Int,
+    indices: MutPointer[UInt32, MutAnyOrigin],
+    target: MutPointer[Float32, MutAnyOrigin],
+    weight: MutPointer[Float32, MutAnyOrigin],
+    cindex: MutPointer[UInt32, MutAnyOrigin],
+    col_step: Int,
+):
+    """Their striding peel loop (`:150-157`, `:176-184`, `:262-269`,
+    `:288-296`), CONVERGED for the whole block.
+
+    ============== DEVIATION BLOCK (PORTING.md 11 and 92) ==============
+    Theirs is `for (; colId < span; colId += blockDim.x / HIST_BLOCK_COUNT)`,
+    and at any block wider than `span` the threads with `colId >= span`
+    never enter it at all. Under an 8-lane tile sync that is harmless: the
+    lanes that skip are whole tiles, and a tile only ever waits on itself.
+    Under a threadgroup barrier it is not, because `AddPoint` takes eight of
+    them.
+
+    THIS WAS NOT A THEORETICAL CONCERN AND THE UNIFORM BODY DID NOT COVER
+    IT. When `compute_histogram`'s body was converged, these peel loops were
+    left as theirs -- they looked like peels, not like body loops. At
+    `BLOCK_SIZE = 256` and `span = 128`, exactly half the block enters, and
+    `mojo_only/pointwise_hist2_5bit_check.mojo` came back with 115 wrong
+    cells for the `uint2` form and 73 for `uint4` while the scalar forms
+    were exact -- points silently missing, totals low.
+
+    The loop's own check could not see it: `TallyHist` gives every thread a
+    PRIVATE slot, so it measures coverage and coverage was never wrong. It
+    took a real accumulator, where eight threads share an inner copy and the
+    barrier is what holds their writes apart, to make it visible. That is
+    the whole argument for gating a kernel against a real accumulator rather
+    than a convenient one.
+
+    So every thread runs `ceil(span / col_step)` iterations and contributes
+    a zero point when its column is outside `span` or outside `valid`.
+    Adding 0.0 changes no sum.
+    ====================================================================
+    """
+    var col = _column_of_thread[hist_block_count](Int(thread_idx.x))
+    var n_peel = (span + col_step - 1) // col_step
+    for _ in range(n_peel):
+        var ci = UInt32(0)
+        var w = Float32(0.0)
+        var wt = Float32(0.0)
+        if col < span and col < valid:
+            var index = ldg(indices.unsafe_offset(at + col))
+            ci = ldg(cindex.unsafe_offset(Int(index)))
+            w = ldg(weight.unsafe_offset(at + col))
+            wt = ldg(target.unsafe_offset(at + col))
+        hist.add_point(ci, wt, w)
+        col += col_step
+
+
+@always_inline
 def compute_histogram[
     THist: PointHist2, //,
     stripe_size: Int,
@@ -363,19 +423,8 @@ def compute_histogram_2[
         last_id = ds_size
 
     if bpf_id == 0:
-        var col = _column_of_thread[hist_block_count](Int(thread_idx.x))
-        while col < 128:
-            var index = UInt32(0)
-            var ci = UInt32(0)
-            var w = Float32(0.0)
-            var wt = Float32(0.0)
-            if col < last_id:
-                index = ldg(indices.unsafe_offset(base + col))
-                ci = ldg(cindex.unsafe_offset(Int(index)))
-                w = ldg(weight.unsafe_offset(base + col))
-                wt = ldg(target.unsafe_offset(base + col))
-            hist.add_point(ci, wt, w)
-            col += col_step
+        _peel[hist_block_count](hist, 128, last_id, base, indices, target,
+                                weight, cindex, col_step)
 
     ds_size = ds_size - last_id if ds_size > last_id else 0
     base += last_id
@@ -384,22 +433,10 @@ def compute_histogram_2[
     var unaligned_tail = ds_size & 63
     if unaligned_tail != 0:
         if bpf_id == 0:
-            var col = _column_of_thread[hist_block_count](Int(thread_idx.x))
             var tail_offset = ds_size - unaligned_tail
-            while col < 64:
-                var index = UInt32(0)
-                var ci = UInt32(0)
-                var w = Float32(0.0)
-                var wt = Float32(0.0)
-                if col < unaligned_tail:
-                    index = ldg(
-                        indices.unsafe_offset(base + tail_offset + col)
-                    )
-                    ci = ldg(cindex.unsafe_offset(Int(index)))
-                    w = ldg(weight.unsafe_offset(base + tail_offset + col))
-                    wt = ldg(target.unsafe_offset(base + tail_offset + col))
-                hist.add_point(ci, wt, w)
-                col += col_step
+            _peel[hist_block_count](hist, 64, unaligned_tail,
+                                    base + tail_offset, indices, target,
+                                    weight, cindex, col_step)
     ds_size -= unaligned_tail
 
     if ds_size <= 0:
@@ -495,19 +532,8 @@ def compute_histogram_4[
         last_id = ds_size
 
     if bpf_id == 0:
-        var col = _column_of_thread[hist_block_count](Int(thread_idx.x))
-        while col < 128:
-            var index = UInt32(0)
-            var ci = UInt32(0)
-            var w = Float32(0.0)
-            var wt = Float32(0.0)
-            if col < last_id:
-                index = ldg(indices.unsafe_offset(base + col))
-                ci = ldg(cindex.unsafe_offset(Int(index)))
-                w = ldg(weight.unsafe_offset(base + col))
-                wt = ldg(target.unsafe_offset(base + col))
-            hist.add_point(ci, wt, w)
-            col += col_step
+        _peel[hist_block_count](hist, 128, last_id, base, indices, target,
+                                weight, cindex, col_step)
 
     ds_size = ds_size - last_id if ds_size > last_id else 0
     base += last_id
@@ -516,22 +542,10 @@ def compute_histogram_4[
     var unaligned_tail = ds_size & 127
     if unaligned_tail != 0:
         if bpf_id == 0:
-            var col = _column_of_thread[hist_block_count](Int(thread_idx.x))
             var tail_offset = ds_size - unaligned_tail
-            while col < 128:
-                var index = UInt32(0)
-                var ci = UInt32(0)
-                var w = Float32(0.0)
-                var wt = Float32(0.0)
-                if col < unaligned_tail:
-                    index = ldg(
-                        indices.unsafe_offset(base + tail_offset + col)
-                    )
-                    ci = ldg(cindex.unsafe_offset(Int(index)))
-                    w = ldg(weight.unsafe_offset(base + tail_offset + col))
-                    wt = ldg(target.unsafe_offset(base + tail_offset + col))
-                hist.add_point(ci, wt, w)
-                col += col_step
+            _peel[hist_block_count](hist, 128, unaligned_tail,
+                                    base + tail_offset, indices, target,
+                                    weight, cindex, col_step)
     ds_size -= unaligned_tail
 
     if ds_size <= 0:
