@@ -249,13 +249,77 @@ def best_split(
 
 
 def _sort_ascending(mut v: List[Float32]):
-    """Their `Sort` is `std::sort`; ours is the stdlib prelude `sort`. Any
-    ascending sort of NaN-free floats yields the same array bit-for-bit (the
-    one ambiguity, +-0.0 placement, washes out: a border midway between the
-    two zeros is +0.0 in either order), so borders are algorithm-invariant.
-    This used to be a hand-written shell sort, which cost ~1 s of the
-    sampled border build's phase B at 500 x 100k random draws."""
-    sort(v)
+    """Their `Sort` is `std::sort`; ours is an LSD radix sort above a small
+    cutoff and the stdlib prelude `sort` below it. Any ascending sort of
+    NaN-free floats yields the same array bit-for-bit (the one ambiguity,
+    +-0.0 placement, washes out: a border midway between the two zeros is
+    +0.0 in either order), so borders are algorithm-invariant -- which is
+    what makes the algorithm swap legal, and the recorded mse gates hold
+    through it as they held through shell -> prelude. Measured on 100k
+    random f32 (hostsort_bench, six interleaved reps): prelude 5.7-6.6 ms,
+    radix 0.73-1.06 ms -- 8x -- and phase B of the border build runs this
+    once per float column at the 100k subsample, so the swap is worth
+    ~0.25 s at 500 features and ~1 s at 2000. The cutoff keeps tiny
+    inputs (border lists, up to border_count entries) on the prelude
+    sort, where counting-sort setup would dominate.
+
+    The key transform is the same monotone float<->u32 twiddle the device
+    sorter uses (`gpu_util/kernel/radix_sort.mojo`): negatives map to
+    `~bits`, non-negatives to `bits | 0x80000000`, so unsigned key order
+    is exactly ascending float order. NaN-free by contract here --
+    `best_split` filters NaNs before sorting, as their `filterNans`
+    does."""
+    var n = len(v)
+    if n < 2048:
+        sort(v)
+        return
+    var keys = List[UInt32](capacity=n)
+    keys.resize(n, UInt32(0))
+    var tmp = List[UInt32](capacity=n)
+    tmp.resize(n, UInt32(0))
+    var vbits = v.unsafe_ptr().unsafe_bitcast[UInt32]()
+    var kp = keys.unsafe_ptr()
+    for i in range(n):
+        var bits = vbits.unsafe_load(i)
+        var k: UInt32
+        if (bits & UInt32(0x80000000)) != UInt32(0):
+            k = ~bits
+        else:
+            k = bits | UInt32(0x80000000)
+        kp.unsafe_store(i, k)
+    var src = rebind[MutPointer[UInt32, MutAnyOrigin]](keys.unsafe_ptr())
+    var dst = rebind[MutPointer[UInt32, MutAnyOrigin]](tmp.unsafe_ptr())
+    for p in range(4):
+        var shift = UInt32(p * 8)
+        var count = List[Int](capacity=256)
+        count.resize(256, 0)
+        var cp = count.unsafe_ptr()
+        for i in range(n):
+            var b = Int((src.unsafe_load(i) >> shift) & UInt32(0xFF))
+            cp.unsafe_store(b, cp.unsafe_load(b) + 1)
+        var run = 0
+        for b in range(256):
+            var c = cp.unsafe_load(b)
+            cp.unsafe_store(b, run)
+            run += c
+        for i in range(n):
+            var k = src.unsafe_load(i)
+            var b = Int((k >> shift) & UInt32(0xFF))
+            var pos = cp.unsafe_load(b)
+            dst.unsafe_store(pos, k)
+            cp.unsafe_store(b, pos + 1)
+        var t = src
+        src = dst
+        dst = t
+    # four passes: `src` points back at `keys`; untwiddle in place into v
+    for i in range(n):
+        var k = src.unsafe_load(i)
+        var bits: UInt32
+        if (k & UInt32(0x80000000)) != UInt32(0):
+            bits = k ^ UInt32(0x80000000)
+        else:
+            bits = ~k
+        vbits.unsafe_store(i, bits)
 
 
 def binarize(value: Float32, borders: List[Float32]) -> Int:
