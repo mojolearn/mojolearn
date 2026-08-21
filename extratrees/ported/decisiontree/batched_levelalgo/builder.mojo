@@ -804,6 +804,42 @@ def score_to_candidate_kernel(
         idx += stride
 
 
+def row_ids_sequence_kernel(
+    row_ids: MutPointer[Int32, MutAnyOrigin],
+    n_rows_in: Int32,
+):
+    """`thrust::sequence(..., selected_rows->begin(), selected_rows->end())`,
+    `randomforest.cuh:69` -- the `bootstrap == false` arm of `get_row_sample`.
+
+    ==================================================================
+    DEVIATION BLOCK 200 -- NOT a deviation any more, and the entry
+    exists to record what it replaced.
+
+    cuML fills the row list ON THE DEVICE: `get_row_sample`
+    (`randomforest.cuh:50-72`) writes into a `rmm::device_uvector` and
+    `fit` hands that straight to the builder (`:169`, `:186`). The host
+    never materialises the permutation.
+
+    THIS LANE BUILT IT AS A HOST `List` AND UPLOADED IT, once per tree.
+    It could not be a wrong answer -- with `bootstrap=False` the value is
+    the identity permutation and nothing is being decided -- but it is
+    one `n_rows` H2D copy per tree their design does not have, and rule 2
+    is about the SHAPE and not only about decisions. A mirror audit of
+    `doSplit` and `fit` found exactly three such drifts: the gain
+    computed host-side (deviation 183, fixed), the feature sampler
+    running host-side (deviation 195), and this one.
+
+    A grid-stride write-only map, which is what `thrust::sequence` is.
+    ==================================================================
+    """
+    var n_rows = Int(n_rows_in)
+    var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while idx < n_rows:
+        row_ids[unsafe_offset=idx] = Int32(idx)
+        idx += stride
+
+
 @fieldwise_init
 struct DeviceDataset(Movable):
     """The dataset, resident on the device for a whole FOREST.
@@ -935,8 +971,6 @@ def train_classification_device_resident(
     var n_rows = dataset.n_rows
     var n_cols = dataset.n_cols
     var n_classes = dataset.n_classes
-    if len(row_ids) != Int(n_rows):
-        raise Error("row_ids must be n_rows long")
     validity_check(params)
 
     comptime TPB = 128
@@ -963,16 +997,21 @@ def train_classification_device_resident(
     )
     var queue = NodeQueue[DType.float32](params, n_rows, n_classes, tree_id)
 
-    # `d_data` and `d_labels` are ALREADY resident -- DEVIATION 184. Only
-    # `row_ids` is per-tree, because it is the one input that differs between
-    # trees and the one the partition mutates.
+    # `d_data` and `d_labels` are resident (deviation 184). `d_row_ids` is
+    # per-tree and is FILLED ON THE DEVICE by a sequence kernel, which is what
+    # `get_row_sample` does (`randomforest.cuh:69`, `thrust::sequence`) --
+    # deviation 200. No row list is uploaded.
     var d_row_ids = ctx.enqueue_create_buffer[DType.int32](Int(n_rows))
-    var h_rows0 = ctx.enqueue_create_host_buffer[DType.int32](Int(n_rows))
-    ctx.synchronize()
-    for i in range(Int(n_rows)):
-        h_rows0.unsafe_ptr().unsafe_store(i, row_ids[i])
-    ctx.enqueue_copy(dst_buf=d_row_ids, src_ptr=h_rows0.unsafe_ptr())
-    ctx.synchronize()
+    ctx.enqueue_function[row_ids_sequence_kernel](
+        d_row_ids.unsafe_ptr(),
+        n_rows,
+        grid_dim=ceildiv(Int(n_rows), 128),
+        block_dim=128,
+    )
+    # `row_ids` is the caller's host list. The device path does not read it --
+    # deviation 185 already measured that its `mut` never meant anything here,
+    # and deviation 200 removed the one place it was read.
+    _ = row_ids
 
     while queue.has_work():
         var work_items = queue.pop()

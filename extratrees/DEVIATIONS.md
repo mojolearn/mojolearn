@@ -1971,3 +1971,42 @@ so that it really is a float-keyed fold.
 **What it bought.** `best_metric_val` is now bit-identical between the two
 paths — 0 of 747, 0 ulp — so `device_tree_check` ASSERTS it instead of
 excluding it.
+
+---
+
+## 200. `row_ids` is filled ON THE DEVICE, as `thrust::sequence` does
+
+**Theirs.** `get_row_sample` (`randomforest.cuh:50-72`) writes into an
+`rmm::device_uvector`; the `bootstrap == false` arm is
+`thrust::sequence(..., selected_rows->begin(), selected_rows->end())` (`:69`),
+and `fit` hands that device vector straight to the builder (`:169`, `:186`).
+**The host never materialises the permutation.**
+
+**What this lane did.** Built the identity permutation as a host `List` and
+uploaded it, once per tree.
+
+**Why it was a drift and not just a cost.** It could never have been a wrong
+answer — with `bootstrap=False` the value is the identity and nothing is being
+decided — but rule 2 is about the SHAPE, not only about decisions, and it is one
+`n_rows` H2D copy per tree that their design does not have.
+
+**Fixed** with `row_ids_sequence_kernel`, a grid-stride write-only map, which is
+what `thrust::sequence` is.
+
+**A LARGER VERSION OF THIS CHANGE WAS TRIED FIRST AND BACKED OUT, and the
+reason is worth keeping.** The most faithful shape puts the device buffer in
+the CALLER, as theirs does — `fit` owns `selected_rows` and passes it in — so
+`train_classification_device_resident` would take a `DeviceBuffer` instead of a
+host `List`. That version produced correct trees (identity held: 0 of 1552
+nodes, 0 of 4656 leaf values) and then **crashed at the end of
+`device_forest_check`**, after every assertion had passed. The narrower change —
+the buffer stays inside the trainer, the FILL becomes a kernel — gets the
+property that mattered (no row list is uploaded, ever) without a signature
+change across two files while a third was being edited by another session.
+
+**What is still not mirrored, stated so it is not lost:** their buffer is owned
+one level up, ours one level down. That is a lifetime difference, not a
+host/device one, and it costs one allocation per tree instead of one per
+forest. It is the same class of thing deviation 184 closed for the dataset and
+should be closed the same way — in a round where `randomforest.mojo` and
+`builder.mojo` are not both moving.
