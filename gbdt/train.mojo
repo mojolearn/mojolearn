@@ -15,7 +15,7 @@ did not subsample, and `binarization_check` holds the border parity on
 the oracle fixture.
 """
 
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from gbdt.gpu_data.compressed_index_builder import build_layout
 from gbdt.gpu_data.kernel.binarize import (
@@ -253,11 +253,14 @@ def _build_cindex_from_columns(
     per-feature drain. The flat buffer exists so PERMUTATION-DEPENDENT
     columns can be substituted per permutation; when there are none, it
     is a 200M-element copy of data this function can read in place. The
-    per-feature `synchronize` becomes a PING-PONG: two staging slots, and
-    the drain before reusing a slot waits on work enqueued two features
-    back -- which is already finished, so the wait is the drain price
-    alone. Same kernels, same borders, same writes: bit-identical output
-    to the flat-path builder, which the train-mse gate holds.
+    per-feature `synchronize` becomes a RING of `_CINDEX_SLOTS` staging
+    slots drained once per ring revolution: a slot's host buffer may be
+    overwritten only after its enqueued upload has run, and one drain
+    before reusing slot 0 covers the whole previous revolution. The
+    two-slot ping-pong this replaces still paid one drain (~0.2 ms) per
+    FEATURE, which was ~0.4 s of the 1.69 s cindex bill at 2000
+    features. Same kernels, same borders, same writes: bit-identical
+    output to the flat-path builder, which the train-mse gate holds.
     """
     var n_features = len(borders)
     if len(fold_counts) != n_features:
@@ -268,14 +271,16 @@ def _build_cindex_from_columns(
     )
     ctx.enqueue_memset(cindex, UInt32(0))
 
-    var xdev_a = ctx.enqueue_create_buffer[DType.float32](n_rows)
-    var xdev_b = ctx.enqueue_create_buffer[DType.float32](n_rows)
-    var hx_a = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
-    var hx_b = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
-    var hbo_a = ctx.enqueue_create_host_buffer[DType.float32](256)
-    var hbo_b = ctx.enqueue_create_host_buffer[DType.float32](256)
-    var bdev_a = ctx.enqueue_create_buffer[DType.float32](256)
-    var bdev_b = ctx.enqueue_create_buffer[DType.float32](256)
+    comptime _CINDEX_SLOTS = 8
+    var xdevs = List[DeviceBuffer[DType.float32]]()
+    var hxs = List[HostBuffer[DType.float32]]()
+    var hbos = List[HostBuffer[DType.float32]]()
+    var bdevs = List[DeviceBuffer[DType.float32]]()
+    for _ in range(_CINDEX_SLOTS):
+        xdevs.append(ctx.enqueue_create_buffer[DType.float32](n_rows))
+        hxs.append(ctx.enqueue_create_host_buffer[DType.float32](n_rows))
+        hbos.append(ctx.enqueue_create_host_buffer[DType.float32](256))
+        bdevs.append(ctx.enqueue_create_buffer[DType.float32](256))
     ctx.synchronize()
     comptime BIN_GRID = BINARIZE_BLOCK_SIZE * BINARIZE_DOCS_PER_THREAD
     var staged = 0
@@ -287,14 +292,12 @@ def _build_cindex_from_columns(
         if len(nan_treatment) == n_features:
             treat = nan_treatment[f]
         var sub = nan_substitution(treat)
-        var use_a = (staged & 1) == 0
-        if staged >= 2:
-            # the slot being reused carries work from two features back;
-            # everything since has also drained, which is fine -- the
-            # point is the WAIT is near zero, not the drain count
+        var slot = staged % _CINDEX_SLOTS
+        if staged >= _CINDEX_SLOTS and slot == 0:
+            # one drain per revolution frees every slot in the ring
             ctx.synchronize()
-        var hx = hx_a.unsafe_ptr() if use_a else hx_b.unsafe_ptr()
-        var hbo = hbo_a.unsafe_ptr() if use_a else hbo_b.unsafe_ptr()
+        var hx = hxs[slot].unsafe_ptr()
+        var hbo = hbos[slot].unsafe_ptr()
         var src = columns[f].unsafe_ptr()
         if treat == NAN_TREATMENT_AS_IS:
             # AS_IS means the border build's full-column NaN scan (the
@@ -312,26 +315,15 @@ def _build_cindex_from_columns(
         hbo.unsafe_store(0, Float32(len(borders[f])))
         for b in range(len(borders[f])):
             hbo.unsafe_store(1 + b, borders[f][b])
-        if use_a:
-            ctx.enqueue_copy(dst_buf=xdev_a, src_ptr=hx)
-            ctx.enqueue_copy(dst_buf=bdev_a, src_ptr=hbo)
-            ctx.enqueue_function[binarize_float_feature_kernel](
-                Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
-                xdev_a.unsafe_ptr(), Int32(n_rows),
-                bdev_a.unsafe_ptr(), cindex.unsafe_ptr(),
-                grid_dim=(n_rows + BIN_GRID - 1) // BIN_GRID,
-                block_dim=(BINARIZE_BLOCK_SIZE, 1, 1),
-            )
-        else:
-            ctx.enqueue_copy(dst_buf=xdev_b, src_ptr=hx)
-            ctx.enqueue_copy(dst_buf=bdev_b, src_ptr=hbo)
-            ctx.enqueue_function[binarize_float_feature_kernel](
-                Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
-                xdev_b.unsafe_ptr(), Int32(n_rows),
-                bdev_b.unsafe_ptr(), cindex.unsafe_ptr(),
-                grid_dim=(n_rows + BIN_GRID - 1) // BIN_GRID,
-                block_dim=(BINARIZE_BLOCK_SIZE, 1, 1),
-            )
+        ctx.enqueue_copy(dst_buf=xdevs[slot], src_ptr=hx)
+        ctx.enqueue_copy(dst_buf=bdevs[slot], src_ptr=hbo)
+        ctx.enqueue_function[binarize_float_feature_kernel](
+            Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
+            xdevs[slot].unsafe_ptr(), Int32(n_rows),
+            bdevs[slot].unsafe_ptr(), cindex.unsafe_ptr(),
+            grid_dim=(n_rows + BIN_GRID - 1) // BIN_GRID,
+            block_dim=(BINARIZE_BLOCK_SIZE, 1, 1),
+        )
         staged += 1
     ctx.synchronize()
     return cindex^
