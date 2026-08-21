@@ -159,6 +159,7 @@ from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import
     LeafArgs,
     NodeSplitArgs,
     NodeSplitScratch,
+    TUNABLE_SPLIT_HISTOGRAM_DYNAMIC_SMEM_LIMIT_BYTES,
     launch_build_histograms_kernel,
     launch_find_best_splits_kernel,
     launch_leaf_kernel,
@@ -176,8 +177,22 @@ from ensemble.flatnode import SparseTreeNode
 # `builder.cuh:161` -- "default threads per block for most kernels in here"
 comptime TPB_DEFAULT = 128
 
-# `builder.cuh:163`, with their comment transcribed in the deviation block.
-comptime TUNABLE_SPLIT_HISTOGRAM_DYNAMIC_SMEM_LIMIT_BYTES = 16 * 1024
+# `builder.cuh:163` is DECLARED ONCE, in
+# `kernels/builder_kernels_impl.mojo`, and imported above.
+#
+# It used to be declared here TOO, as a second independent `16 * 1024`.
+# The two agreed, and nothing made them agree: this file's copy decides
+# WHICH ARM RUNS (`shared_memory_config` below) while the kernels file's
+# copy sizes the BLOB THE SHARED ARM WRITES INTO
+# (`default_smem_bin_slots`). Move either one and the dispatch admits the
+# shared arm at a size its blob cannot hold, which is a shared-memory
+# overflow and not a wrong answer -- exactly the property DEVIATION 103a's
+# sizing argument rests on. Theirs cannot drift because theirs is one
+# `static constexpr` member and the kernels take the size as a launch
+# argument; ours needs it in both places, so it must be one symbol.
+#
+# The declaration lives in the kernels file rather than here because
+# `builder.mojo` imports THAT file, so the other direction is a cycle.
 
 # `builder.cuh:203` -- "number of blocks used to parallelize column-wise
 # computations". A plain member initialised to 10 and never reassigned.

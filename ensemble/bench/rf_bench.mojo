@@ -102,10 +102,22 @@ def run_arm[
             var v = Float32(Int(h % UInt64(10000))) / Float32(10000.0)
             hx.unsafe_ptr().unsafe_store(c * n_rows + r, v)
             m_sum += h % UInt64(10000)
-            if c < 3:
-                acc += h % UInt64(10000)
-        # a label that genuinely depends on the first three features
-        var cls = Int((acc // UInt64(2500)) % UInt64(N_CLASSES))
+            # THE LABEL IS AXIS-ALIGNED ON PURPOSE. It counts how many of
+            # the first three features are above their midpoint, so a tree
+            # of depth 3 can represent it EXACTLY and both arms can
+            # actually learn it.
+            #
+            # The first version of this fixture was
+            # `((x0+x1+x2) // 0.25) % 4`, twelve diagonal bands. Held-out
+            # accuracy measured 0.25 for BOTH arms -- the 4-class baseline
+            # -- so neither implementation learned anything and the
+            # accuracy gate beside the timings was vacuous. Timing a fit
+            # on a fixture with no signal still measures work, but it
+            # measures work on trees that mean nothing, and the two arms
+            # were building trees of very different sizes while doing it.
+            if c < 3 and (h % UInt64(10000)) >= UInt64(5000):
+                acc += 1
+        var cls = Int(acc)
         labels.append(Int32(cls))
         y_sum += cls
         hy.unsafe_ptr().unsafe_store(r, Int32(cls))
@@ -139,10 +151,29 @@ def run_arm[
         if rep == REPEATS - 1:
             # ACCURACY, beside the timing and not in a separate window.
             # A speed number without it is not a result.
+            #
+            # HELD OUT, on rows [n_rows, 2*n_rows) from the same
+            # generator. TRAIN accuracy was measured first and it was
+            # MISLEADING: every row sits in its own leaves, so each tree
+            # nudges that row's own label by ~1/leaf_size, and 20 trees of
+            # those nudges inflate the number. Measured directly -- a fit
+            # on RANDOMLY SHUFFLED labels still scored 0.68 train while
+            # scoring 0.25 held out. Train accuracy was comparing
+            # memorization capacity, and the arm with bigger trees wins
+            # that by construction.
             var rows = List[Float32]()
-            for r in range(n_rows):
+            var test_y = List[Int32]()
+            for r0 in range(n_rows):
+                var r = n_rows + r0
+                var hits = UInt64(0)
                 for c in range(n_cols):
-                    rows.append(hx.unsafe_ptr().unsafe_load(c * n_rows + r))
+                    var h = _mix(UInt64(r) * UInt64(1000003) + UInt64(c))
+                    rows.append(
+                        Float32(Int(h % UInt64(10000))) / Float32(10000.0)
+                    )
+                    if c < 3 and (h % UInt64(10000)) >= UInt64(5000):
+                        hits += 1
+                test_y.append(Int32(Int(hits)))
             var preds = List[Scalar[LT]]()
             for _ in range(n_rows):
                 preds.append(0)
@@ -152,7 +183,7 @@ def run_arm[
             rf.predict(rows, n_rows, n_cols, preds, forest)
             var correct = 0
             for r in range(n_rows):
-                if preds[r] == labels[r]:
+                if preds[r] == test_y[r]:
                     correct += 1
             print(
                 "ACC",

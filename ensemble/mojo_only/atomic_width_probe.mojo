@@ -71,7 +71,12 @@ from max.gpu.host import DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from mojo_only.kernel_matrix import TARGET_COLUMN, column_name
+from max.gpu.host.device_attribute import DeviceAttribute
+from mojo_only.kernel_matrix import (
+    TARGET_COLUMN,
+    column_name,
+    column_shared_limit,
+)
 from ensemble.mojo_only.atomic_matrix import (
     column_has_64bit_int_atomics,
     column_has_float32_atomics,
@@ -159,6 +164,76 @@ def _global_u64_kernel(out_buf: MutPointer[UInt64, MutAnyOrigin]):
         _ = out_buf
 
 
+def probe_launch_bounds(ctx: DeviceContext) raises -> Int:
+    """Do the block sizes this lane launches actually fit the device, and
+    is the shared-memory limit knowable at all?
+
+    TWO SEPARATE QUESTIONS, and they get opposite answers here.
+
+    THREADS PER BLOCK IS QUERYABLE, so it is queried. This lane launches
+    at three widths -- 1024 for `computeQuantilesBatchedKernel`
+    (`quantiles.cuh:271`, `min(1024, max_n_bins)`), 512 for the segmented
+    sort's blocks, and TPB_DEFAULT 128 everywhere else -- and none of them
+    was ever checked against the device. cuML gets this for free because
+    1024 is CUDA's architectural maximum; on Metal it is a per-device
+    limit and a per-KERNEL one, and a kernel that exceeds it fails at
+    dispatch rather than at compile.
+
+    SHARED MEMORY PER BLOCK IS NOT QUERYABLE. `MAX_SHARED_MEMORY_PER_
+    MULTIPROCESSOR` raises "not supported for Apple GPU" on this device,
+    measured here. That is WHY `shared_memory_config` reads a kernel
+    matrix row instead of `handle.get_device_properties().sharedMemPerBlock`
+    the way `builder.cuh:539` does -- not a shortcut past a device query,
+    but the absence of one. This arm records the absence, so the next
+    reader does not have to rediscover it before deciding the matrix row
+    is a cop-out.
+    """
+    print()
+    print("LAUNCH BOUNDS --")
+    var wrong = 0
+
+    var max_threads = Int(
+        ctx.get_attribute(DeviceAttribute.MAX_THREADS_PER_BLOCK)
+    )
+    print("    MAX_THREADS_PER_BLOCK =", max_threads)
+    var widths = [1024, 512, 128, 256]
+    var names = [
+        String("computeQuantilesBatchedKernel cap"),
+        String("segmented sort SORT_BLOCK"),
+        String("TPB_DEFAULT"),
+        String("sample_features / mask kernels"),
+    ]
+    for i in range(len(widths)):
+        var ok = widths[i] <= max_threads
+        print("      ", names[i], widths[i], "fits" if ok else "*** EXCEEDS ***")
+        if not ok:
+            wrong += 1
+
+    var shared_queryable = True
+    try:
+        _ = ctx.get_attribute(
+            DeviceAttribute.MAX_SHARED_MEMORY_PER_MULTIPROCESSOR
+        )
+    except:
+        shared_queryable = False
+    print(
+        "    shared memory per block queryable:",
+        shared_queryable,
+        "-- kernel matrix row says",
+        column_shared_limit(TARGET_COLUMN),
+        "bytes",
+    )
+    if shared_queryable:
+        print(
+            "      NOTE: it is queryable now. `shared_memory_config`'s"
+            " docstring says it is not, and that claim must be re-read."
+        )
+
+    if wrong == 0:
+        print("  launch bounds OK: every width this lane launches fits")
+    return wrong
+
+
 def main() raises:
     var ctx = DeviceContext()
 
@@ -170,6 +245,8 @@ def main() raises:
         want_hash += _hashed(tid)
         want_hash16 += Float32(Int(_hashed(tid) & 0xFFFF))
 
+    var lb_wrong = probe_launch_bounds(ctx)
+    print()
     print("atomic width probe -- column:", column_name(TARGET_COLUMN))
     print(" ", THREADS, "threads all hitting one cell, maximum contention")
     print("  analytic count =", want_count, " analytic hashed sum =", want_hash)

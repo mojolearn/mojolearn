@@ -41,15 +41,17 @@ def mix(x):
     return h ^ (h >> np.uint64(31))
 
 
-def make(n_rows, n_cols):
-    r = np.arange(n_rows, dtype=np.uint64)[:, None]
+def make(n_rows, n_cols, offset=0):
+    r = np.arange(offset, offset + n_rows, dtype=np.uint64)[:, None]
     c = np.arange(n_cols, dtype=np.uint64)[None, :]
     with np.errstate(over="ignore"):
         h = mix(r * np.uint64(1000003) + c)
     m = h % np.uint64(10000)
     x = (m.astype(np.float32) / np.float32(10000.0)).astype(np.float32)
-    acc = m[:, :3].sum(axis=1, dtype=np.uint64)
-    y = ((acc // np.uint64(2500)) % np.uint64(N_CLASSES)).astype(np.int32)
+    # Axis-aligned on purpose; see the note in rf_bench.mojo. The first
+    # fixture was twelve diagonal bands and BOTH arms scored the 0.25
+    # baseline on held-out data, which made the accuracy gate vacuous.
+    y = (m[:, :3] >= np.uint64(5000)).sum(axis=1).astype(np.int32)
     return np.ascontiguousarray(x), y, m
 
 
@@ -62,12 +64,13 @@ def digest(m, y):
     return f"{int(m.astype(np.uint64).sum(dtype=np.uint64))}/{int(y.astype(np.int64).sum())}"
 
 
-def run_arm(name, n_rows, n_cols, want_checksum):
+def run_arm(name, n_rows, n_cols, want_checksum, accuracy_only=False):
     x, y, m = make(n_rows, n_cols)
     if want_checksum:
         print("SUM", name, digest(m, y))
         return
-    for rep in range(REPEATS):
+    reps = 1 if accuracy_only else REPEATS
+    for rep in range(reps):
         clf = RandomForestClassifier(
             n_estimators=N_TREES,
             criterion="gini",
@@ -83,17 +86,23 @@ def run_arm(name, n_rows, n_cols, want_checksum):
         clf.fit(x, y)
         t1 = time.perf_counter()
         print("ARM", name, (t1 - t0) * 1000.0)
-        if rep == REPEATS - 1:
-            acc = float((clf.predict(x) == y).mean())
-            print("ACC", name, acc)
+        if rep == reps - 1:
+            # HELD OUT -- see the note in rf_bench.mojo. Train accuracy on
+            # a bagged ensemble measures memorization, and the arm with
+            # bigger trees wins that by construction.
+            xte, yte, _ = make(n_rows, n_cols, offset=n_rows)
+            print("ACC", name, float((clf.predict(xte) == yte).mean()))
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--checksum", action="store_true")
+    ap.add_argument("--accuracy", action="store_true",
+                    help="one fit per arm, print ACC only -- for reading the "
+                         "accuracy that must sit beside any timing")
     args = ap.parse_args()
-    run_arm("rf@100000", 100000, 50, args.checksum)
-    run_arm("rf@500000", 500000, 50, args.checksum)
+    run_arm("rf@100000", 100000, 50, args.checksum, args.accuracy)
+    run_arm("rf@500000", 500000, 50, args.checksum, args.accuracy)
 
 
 if __name__ == "__main__":
