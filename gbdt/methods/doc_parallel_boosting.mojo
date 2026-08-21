@@ -128,10 +128,12 @@ from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_base import (
     HIST2_SMEM_IS_I32,
 )
 from gbdt.overfitting_detector.overfitting_detector import (
-    OD_DEFAULT_STOP_PVALUE,
-    OD_DEFAULT_WAIT_ITERATIONS,
     OD_NONE,
     make_overfitting_detector,
+)
+from gbdt.options.overfitting_detector_options import (
+    OD_DEFAULT_STOP_PVALUE,
+    OD_DEFAULT_WAIT_ITERATIONS,
 )
 from gbdt.options.catboost_options import (
     LEAF_ESTIMATION_EXACT,

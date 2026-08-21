@@ -41,6 +41,15 @@ THE OTHER GATES:
    fires and nobody would learn anything.
 4. **`train` REFUSES `od_type` without an eval set**, rather than building
    an inert detector and silently never stopping.
+5. **`use_best_model` CUTS WHERE IT SAYS IT DOES.** The returned ensemble
+   is applied to the eval rows on the HOST, through `predict_floats`, and
+   has to reproduce `test_losses[best_iteration]` -- the number the DEVICE
+   test cursor recorded at that iteration. Tree counts are not the gate;
+   the loss is. `use_best_model=0` keeps every tree and reproduces the
+   LAST recorded loss instead, and the two numbers must differ, or neither
+   statement means anything. `best_model_min_trees` floors the cut, and
+   the fixture is checked to actually exercise the floor rather than
+   sitting above it.
 
 SABOTAGES:
 
@@ -48,6 +57,9 @@ SABOTAGES:
     O2  the detector fed a monotone FALLING
         curve while expecting a stop            that it does not fire on
                                                 a model that is improving
+    O3  the cut moved one tree either way        that gate 5 resolves the
+                                                cut and not just the
+                                                neighbourhood
 """
 
 from max.gpu.host import DeviceContext
@@ -58,7 +70,43 @@ from gbdt.overfitting_detector.overfitting_detector import (
     OD_NONE,
     make_overfitting_detector,
 )
-from gbdt.train import train
+from gbdt.train import TrainedModel, predict_floats, train
+
+
+def _close(got: Float64, want: Float64, tol: Float64) -> Bool:
+    var d = got - want
+    if d < 0.0:
+        d = -d
+    var sc = want
+    if sc < 0.0:
+        sc = -sc
+    if sc < 1e-6:
+        sc = 1e-6
+    return d / sc <= tol
+
+
+def _eval_mse(
+    ctx: DeviceContext,
+    tm: TrainedModel,
+    x: List[Float32],
+    y: List[Float32],
+    n: Int,
+) raises -> Float64:
+    """The RMSE target's loss as `_test_loss` reports it, recomputed on
+    the HOST from `predict_floats`.
+
+    Their accumulation is `-w * (val - relev)^2`
+    (`pointwise_targets.cu:311`) and the boosting divides the negated sum
+    by the row count, so the number the detector sees is the MEAN SQUARED
+    error and not its root. This is deliberately a second, independent
+    path to it: a shared helper would agree with the device by
+    construction."""
+    var p = predict_floats(ctx, tm, x, n)
+    var acc = Float64(0.0)
+    for r in range(n):
+        var d = Float64(p[r]) - Float64(y[r])
+        acc += d * d
+    return acc / Float64(n)
 
 
 def synthetic_stop(
@@ -256,17 +304,33 @@ def check_overfitting_detector(ctx: DeviceContext) raises:
     if not b.stopped_early:
         print("  FAIL Iter did not stop on an overfitting curve")
         failures += 1
-    elif len(b.model.weak_models) != b.best_iteration + wait + 1:
+    elif len(b.test_losses) != b.best_iteration + wait + 1:
         print(
-            "  FAIL stopped with", len(b.model.weak_models),
-            "trees; best", b.best_iteration, "+ wait", wait, "+ 1",
+            "  FAIL ran", len(b.test_losses),
+            "iterations; best", b.best_iteration, "+ wait", wait, "+ 1",
         )
         failures += 1
     else:
         print(
-            "  ok   Iter wait", wait, "stopped at",
-            len(b.model.weak_models), "trees, best_iteration",
+            "  ok   Iter wait", wait, "ran",
+            len(b.test_losses), "iterations, best_iteration",
             b.best_iteration,
+        )
+    # AND THE RETURNED ENSEMBLE IS SHORTER THAN THAT, because
+    # `use_best_model` is UNSET and there is an eval set with a
+    # non-constant target, which is their default of TRUE
+    # (`options_helper.cpp:106-108`). A check that read the tree count as
+    # the iteration count would now be reading the shrink.
+    if len(b.model.weak_models) != b.best_iteration + 1:
+        print(
+            "  FAIL default use_best_model left", len(b.model.weak_models),
+            "trees; best", b.best_iteration, "+ 1 expected",
+        )
+        failures += 1
+    else:
+        print(
+            "  ok   default use_best_model shrank", len(b.test_losses),
+            "trees to", len(b.model.weak_models),
         )
 
     print()
@@ -286,10 +350,153 @@ def check_overfitting_detector(ctx: DeviceContext) raises:
         print("  ok   refused")
 
     print()
+    print("-- gate 5: use_best_model cuts at the iteration it claims --")
+    # THE CUT IS CHECKED AGAINST THE HELD-OUT LOSS, not against a tree
+    # count. Applying the RETURNED model to the eval rows must reproduce
+    # `test_losses[best_iteration]`, the number the detector saw at that
+    # iteration -- and it comes from a different apply (host-side
+    # `predict_floats` over raw floats) than the one that recorded it
+    # (the device test cursor). An off-by-one cut lands on a neighbouring
+    # point of a curve that is RISING there, so it moves the number.
+    var off = train(
+        ctx, xl, yl, n, f, border_count=32, n_estimators=50,
+        max_depth=6, loss="RMSE", learning_rate=Float32(0.3),
+        eval_x_colmajor=xe, eval_y=ye, od_type="Iter", od_wait=wait,
+        use_best_model=0,
+    )
+    if len(off.model.weak_models) != len(off.test_losses):
+        print(
+            "  FAIL use_best_model=0 still shrank:",
+            len(off.model.weak_models), "trees for",
+            len(off.test_losses), "iterations",
+        )
+        failures += 1
+    else:
+        print(
+            "  ok   use_best_model=0 keeps all", len(off.test_losses),
+            "trees",
+        )
+
+    var mse_best = _eval_mse(ctx, b, xe, ye, 800)
+    var mse_off = _eval_mse(ctx, off, xe, ye, 800)
+    var want_best = b.test_losses[b.best_iteration]
+    var want_off = off.test_losses[len(off.test_losses) - 1]
+    if not _close(mse_best, want_best, 1e-4):
+        print(
+            "  FAIL the shrunk model scores", mse_best,
+            "on the eval rows; iteration", b.best_iteration, "recorded",
+            want_best,
+        )
+        failures += 1
+    else:
+        print(
+            "  ok   shrunk model reproduces test_losses[", b.best_iteration,
+            "] =", want_best,
+        )
+    if not _close(mse_off, want_off, 1e-4):
+        print(
+            "  FAIL the unshrunk model scores", mse_off,
+            "; the last iteration recorded", want_off,
+        )
+        failures += 1
+    else:
+        print("  ok   unshrunk model reproduces the LAST test loss", want_off)
+    # and the two are different, or neither statement above is worth
+    # anything: a flat curve would satisfy both with the same model
+    if not (mse_off > mse_best * 1.001):
+        print(
+            "  FAIL the shrink changed nothing measurable:", mse_best,
+            "vs", mse_off,
+        )
+        failures += 1
+    else:
+        print(
+            "  ok   the trees after the minimum really do cost held-out"
+            " loss:", mse_best, "->", mse_off,
+        )
+
+    # `best_model_min_trees` FLOORS the cut (`boosting_progress_tracker.cpp:
+    # 162`, `:114-125`). With the minimum at 8 and a floor of 20, their
+    # second tracker never sees an iteration before 19, so the cut lands
+    # on the best of what is left -- which on a rising curve is 19.
+    var floored = train(
+        ctx, xl, yl, n, f, border_count=32, n_estimators=50,
+        max_depth=6, loss="RMSE", learning_rate=Float32(0.3),
+        eval_x_colmajor=xe, eval_y=ye,
+        best_model_min_trees=20,
+    )
+    var want_floor = 20
+    var eligible_best = 19
+    for i in range(19, len(floored.test_losses)):
+        if floored.test_losses[i] < floored.test_losses[eligible_best]:
+            eligible_best = i
+    want_floor = eligible_best + 1
+    if len(floored.model.weak_models) != want_floor:
+        print(
+            "  FAIL best_model_min_trees=20 left",
+            len(floored.model.weak_models), "trees, expected", want_floor,
+        )
+        failures += 1
+    elif floored.best_iteration + 1 >= want_floor:
+        print(
+            "  FAIL the fixture does not exercise the floor: best",
+            floored.best_iteration, "is already at or past it",
+        )
+        failures += 1
+    else:
+        print(
+            "  ok   floor 20 kept", len(floored.model.weak_models),
+            "trees though best_iteration is", floored.best_iteration,
+        )
+
+    var refused_ubm = False
+    try:
+        var _d = train(
+            ctx, xl, yl, n, f, border_count=32, n_estimators=5,
+            max_depth=4, loss="RMSE", use_best_model=1,
+        )
+    except e:
+        refused_ubm = True
+    if not refused_ubm:
+        print("  FAIL use_best_model=1 without an eval set was accepted")
+        failures += 1
+    else:
+        print("  ok   use_best_model=1 without an eval set is refused")
+
+
+    print()
     print("-- sabotages --")
     # O1: the waits must produce DISTINCT stop indices, or gate 1 would
     # pass with any monotone function of `wait` and could not tell
     # `min + wait` from `min + wait + 1`.
+    # O3: the gate above compares the shrunk model's score against
+    # `test_losses[best_iteration]`. If the neighbouring iterations scored
+    # the SAME, that comparison could not tell a correct cut from a cut
+    # one tree either side of it, and gate 5 would pass with an off-by-one
+    # shrink. So both neighbours must be OUTSIDE the tolerance the gate
+    # uses.
+    var cut_lo = b.best_iteration - 1
+    var cut_hi = b.best_iteration + 1
+    var lo_ok = _close(
+        mse_best, b.test_losses[cut_lo], 1e-4
+    )
+    var hi_ok = _close(
+        mse_best, b.test_losses[cut_hi], 1e-4
+    )
+    if lo_ok or hi_ok:
+        print(
+            "  FAIL O3: a cut at", cut_lo, "or", cut_hi,
+            "would score inside the tolerance of a cut at",
+            b.best_iteration,
+        )
+        failures += 1
+    else:
+        print(
+            "  ok   O3 neighbouring cuts score",
+            b.test_losses[cut_lo], "and", b.test_losses[cut_hi],
+            "-- an off-by-one shrink is visible",
+        )
+
     var o1a = synthetic_stop(v, 2, OD_ITER, 0.0)
     var o1b = synthetic_stop(v, 3, OD_ITER, 0.0)
     if o1b - o1a != 1:

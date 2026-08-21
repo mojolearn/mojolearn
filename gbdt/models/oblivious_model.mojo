@@ -163,3 +163,19 @@ struct TAdditiveModel(Copyable, Movable):
 
     def size(self) -> Int:
         return len(self.weak_models)
+
+    def shrink(mut self, new_size: Int) raises:
+        """Their `Shrink` (`additive_model.h:62-65`), and their
+        `CB_ENSURE(newSize <= WeakModels.size())` with it.
+
+        This is what `use_best_model` does to a trained ensemble: drop
+        every tree after the best held-out iteration. It is a TRUNCATION
+        and nothing is rescaled, because each weak model already carries
+        the shrinkage in its leaves."""
+        if new_size > len(self.weak_models):
+            raise Error(
+                "TAdditiveModel.shrink: new_size " + String(new_size)
+                + " exceeds " + String(len(self.weak_models))
+            )
+        while len(self.weak_models) > new_size:
+            _ = self.weak_models.pop()

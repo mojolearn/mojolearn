@@ -144,6 +144,27 @@ SCORE_FUNCTION_COSINE = 1
 
 _UNSET = -1.0
 
+#: their `EOverfittingDetectorType` spellings. `None` here means the
+#: option was not given, and that is NOT the same as `od_type="None"`:
+#: unset lets `TOverfittingDetectorOptions::Load`
+#: (`overfitting_detector_options.cpp:24-32`) pick the type from whichever
+#: of `od_pvalue` / `od_wait` was given, while "None" turns the detector
+#: off outright. Wilcoxon is theirs and is not ported.
+OD_TYPES = ("None", "IncToDec", "Iter")
+
+
+def _tri(v):
+    """A CatBoost `TOption` tri-state: `None` is `NotSet()`.
+
+    Used for `use_best_model`, whose default is DATA-DEPENDENT on their
+    side (`options_helper.cpp:106-108` turns it on when there is a test
+    set with a non-constant target), so `False` and "unset" have to stay
+    distinguishable across the boundary.
+    """
+    if v is None:
+        return -1
+    return 1 if v else 0
+
 
 class GradientBoosting:
     """Gradient-boosted oblivious trees, mirroring CatBoost's GPU learner.
@@ -195,6 +216,32 @@ class GradientBoosting:
         (`binarizations_manager.cpp:106-115`): one-hot when the cardinality
         is small enough, target statistics (CTRs) otherwise.
 
+    od_type : {'None', 'IncToDec', 'Iter'}, optional
+        The overfitting detector. LEAVING IT UNSET IS NOT THE SAME AS
+        'None': their `Load` (`overfitting_detector_options.cpp:24-32`)
+        picks the type from whichever of `od_pvalue` / `od_wait` was
+        given -- a wait alone means 'Iter', a p-value alone means
+        'IncToDec', neither means 'None'. Requires `eval_set`; stopping on
+        the learn loss would stop on a curve that falls by construction,
+        so it raises instead.
+    od_pvalue : float, optional
+        `stop_pvalue`, IncToDec's threshold. Their default is 0, which
+        makes the detector INACTIVE (`IsActive()` is `Threshold > 0`).
+    od_wait : int, optional
+        `wait_iterations`, default 20. Iterations without a new best
+        before stopping.
+    use_best_model : bool, optional
+        Truncate the returned ensemble to the best held-out iteration,
+        their `ShrinkToBestIteration`. UNSET IS NOT FALSE: with an
+        `eval_set` whose target is not constant it defaults to True, which
+        is their own data-dependent default (`options_helper.cpp:106-108`).
+        True without an `eval_set` raises -- they warn and carry on, and a
+        warning on a returned model is invisible from here.
+    best_model_min_trees : int, default 1
+        The shrink may not cut below this many trees
+        (`output_file_options.cpp:77`,
+        `boosting_progress_tracker.cpp:162`).
+
     Attributes
     ----------
     model_ : str
@@ -207,6 +254,18 @@ class GradientBoosting:
     loss_curve_ : ndarray
         The training loss after each iteration. It is CatBoost's
         `functionValue` negated and divided by the row count, so it FALLS.
+    test_loss_curve_ : ndarray or None
+        The HELD-OUT loss after each iteration, `None` without an
+        `eval_set`. This is the curve the detector reads and the one worth
+        plotting: `loss_curve_` falls almost by construction.
+    best_iteration_ : int
+        The index of the lowest `test_loss_curve_` entry, or of the lowest
+        learn loss with no eval set. It is the ERROR tracker's best
+        (`error_tracker.h:73-75`), so with `best_model_min_trees` above it
+        the fitted model holds MORE trees than `best_iteration_ + 1` and
+        both numbers are right.
+    stopped_early_ : bool
+        Whether the detector fired before `n_estimators` was reached.
     """
 
     def __init__(
@@ -230,6 +289,11 @@ class GradientBoosting:
         subsample=None,
         cat_features=None,
         one_hot_features=None,
+        od_type=None,
+        od_pvalue=None,
+        od_wait=None,
+        use_best_model=None,
+        best_model_min_trees=1,
     ):
         if loss in _UNREACHABLE_LOSSES:
             raise NotImplementedError(
@@ -285,9 +349,17 @@ class GradientBoosting:
         self.subsample = subsample
         self.cat_features = cat_features
         self.one_hot_features = one_hot_features
+        self.od_type = od_type
+        self.od_pvalue = od_pvalue
+        self.od_wait = od_wait
+        self.use_best_model = use_best_model
+        self.best_model_min_trees = int(best_model_min_trees)
 
         self.model_ = None
         self.loss_curve_ = None
+        self.test_loss_curve_ = None
+        self.best_iteration_ = None
+        self.stopped_early_ = None
         self.n_features_in_ = None
         #: 1 for every single-output loss; `n_classes - 1` for MultiClass,
         #: because the last class's approx is pinned at zero and is not
@@ -300,7 +372,8 @@ class GradientBoosting:
     # `bindings/_mojolearn.mojo:gbdt_fit_binding` writes this same order in
     # the same words. A silent reordering here is a wrong answer, not a
     # failure, which is why it is spelled out in both places.
-    def _params(self, n_rows, n_features, n_flags, n_weights=0):
+    def _params(self, n_rows, n_features, n_flags, n_weights=0,
+                n_eval_rows=0):
         def f(v):
             return _UNSET if v is None else float(v)
 
@@ -330,6 +403,12 @@ class GradientBoosting:
             method_code,                                # 17
             float(self.bagging_temperature),            # 18
             f(self.subsample),                          # 19
+            int(n_eval_rows),                           # 20
+            f(self.od_pvalue),                          # 21
+            -1 if self.od_wait is None
+            else int(self.od_wait),                     # 22
+            _tri(self.use_best_model),                  # 23
+            int(self.best_model_min_trees),             # 24
         ]
 
     def _flags(self, n_features):
@@ -355,7 +434,53 @@ class GradientBoosting:
             flags[i] |= 2
         return flags
 
-    def fit(self, X, y, sample_weight=None):
+    def _eval_arrays(self, eval_set, n_features):
+        """`(X_eval, y_eval)` -> column-major float32 plus a row count.
+
+        Returns `(None, None, 0)` when there is no eval set, which is the
+        "unread" contract the binding documents for the two addresses.
+        """
+        if eval_set is None:
+            return None, None, 0
+        if isinstance(eval_set, list):
+            if len(eval_set) != 1:
+                raise ValueError(
+                    "mojolearn: eval_set takes ONE (X, y) pair; the "
+                    "boosting carries a single test cursor. CatBoost "
+                    f"accepts a list, this takes {len(eval_set)} as an "
+                    "error rather than scoring the first and dropping "
+                    "the rest"
+                )
+            eval_set = eval_set[0]
+        try:
+            Xe, ye = eval_set
+        except (TypeError, ValueError):
+            raise ValueError(
+                "mojolearn: eval_set must be (X_eval, y_eval)"
+            ) from None
+
+        Xea, _ = as_f32_c(Xe, "eval_set X")
+        n_eval_rows, n_eval_features = Xea.shape
+        if n_eval_features != n_features:
+            raise ValueError(
+                f"mojolearn: eval_set X has {n_eval_features} features "
+                f"for a fit on {n_features}"
+            )
+        if n_eval_rows == 0:
+            raise ValueError("mojolearn: eval_set X has no rows")
+        yea = np.ascontiguousarray(
+            np.asarray(ye).ravel(), dtype=np.float32
+        )
+        if yea.shape[0] != n_eval_rows:
+            raise ValueError(
+                f"mojolearn: eval_set y has {yea.shape[0]} values for "
+                f"{n_eval_rows} rows"
+            )
+        # the same transpose `fit` prices for the learn matrix
+        Ecol = np.ascontiguousarray(Xea.T).reshape(-1)
+        return Ecol, yea, n_eval_rows
+
+    def fit(self, X, y, sample_weight=None, eval_set=None):
         """Fit the ensemble. `X` is (n_samples, n_features), `y` is 1-D.
 
         `sample_weight` is a per-row weight, `None` meaning all ones. It
@@ -365,6 +490,21 @@ class GradientBoosting:
         `rawWeights[i] * rawGroupWeights[i] * classWeights[...]`). Their
         group-weight factor is absent because this port carries no
         `group_id`.
+
+        `eval_set` is `(X_eval, y_eval)`, or a one-element list holding
+        that pair. **CatBoost takes a LIST of eval sets and this takes
+        one**, because the boosting carries a single test cursor; more
+        than one raises rather than silently scoring the first.
+
+        Passing it changes the DEFAULT of `use_best_model` to True, which
+        is CatBoost's own data-dependent default
+        (`options_helper.cpp:106-108`) and means `model_` holds the trees
+        up to the best held-out iteration rather than all of them. Pass
+        `use_best_model=False` to keep every tree.
+
+        After the call: `test_loss_curve_` is the held-out loss per
+        iteration, `best_iteration_` its argmin, and `stopped_early_` says
+        whether the detector fired before `n_estimators`.
         """
         Xa, _ = as_f32_c(X, "X")
         n_rows, n_features = Xa.shape
@@ -402,16 +542,40 @@ class GradientBoosting:
                 )
             n_weights = n_rows
 
-        params = self._params(n_rows, n_features, n_flags, n_weights)
-        strs = [self.loss, self.bootstrap_type or ""]
+        Ecol, ea, n_eval_rows = self._eval_arrays(eval_set, n_features)
 
-        self.model_ = _mojolearn.gbdt_fit(
+        params = self._params(
+            n_rows, n_features, n_flags, n_weights, n_eval_rows
+        )
+        if self.od_type is not None and self.od_type not in OD_TYPES:
+            raise ValueError(
+                f"mojolearn: od_type must be one of {OD_TYPES}, got "
+                f"{self.od_type!r}"
+            )
+        strs = [self.loss, self.bootstrap_type or "", self.od_type or ""]
+
+        # THE EVAL ADDRESSES ARE UNREAD WHEN params[20] IS 0, and the
+        # learn buffer stands in so nothing has to allocate a throwaway --
+        # the same stand-in the weights use.
+        eval_x_holder = Ecol if Ecol is not None else Xcol
+        eval_y_holder = ea if ea is not None else ya
+
+        out = _mojolearn.gbdt_fit(
             _addr_ro(Xcol),
             _addr_ro(ya),
             _addr_ro(wa),
             _addr_ro(flags_holder),
+            _addr_ro(eval_x_holder),
+            _addr_ro(eval_y_holder),
             params,
             strs,
+        )
+        self.model_ = out[0]
+        self.best_iteration_ = int(out[1])
+        self.stopped_early_ = bool(out[2])
+        self.loss_curve_ = np.asarray(out[3], dtype=np.float64)
+        self.test_loss_curve_ = (
+            np.asarray(out[4], dtype=np.float64) if n_eval_rows else None
         )
         self.n_features_in_ = n_features
         self.approx_dim_ = _mojolearn.gbdt_model_dim(self.model_)

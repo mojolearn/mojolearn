@@ -53,14 +53,6 @@ comptime OD_NONE = 0
 comptime OD_INC_TO_DEC = 1
 comptime OD_ITER = 2
 
-#: `TOverfittingDetectorOptions` (`overfitting_detector_options.cpp:7-12`):
-#: `stop_pvalue` 0, `type` IncToDec, `wait_iterations` 20. NOTE that the
-#: default p-value is ZERO, so their DEFAULT detector is INACTIVE --
-#: `IsActive()` is `Threshold > 0`. CatBoost does not early-stop unless
-#: asked, and neither does this.
-comptime OD_DEFAULT_STOP_PVALUE = Float64(0.0)
-comptime OD_DEFAULT_WAIT_ITERATIONS = 20
-
 #: `TOverfittingDetectorIncToDec`'s four constants (`:160-163`).
 comptime OD_LAMBDA_FORGET = Float64(0.99)
 comptime OD_ITERATION_FORGET = 2000
@@ -85,6 +77,23 @@ def od_type_from_name(name: String) raises -> Int:
     raise Error(
         "unknown od_type '" + name + "': None, IncToDec, Iter"
     )
+
+
+def od_type_name(od_type: Int) raises -> String:
+    """The inverse, their `ToString(EOverfittingDetectorType)`.
+
+    It exists because the option layer resolves a type and `train` takes a
+    spelling, and a resolved type that could not be spelled would have to
+    be passed as a bare integer through a signature whose whole point is
+    to be readable in a stack trace.
+    """
+    if od_type == OD_NONE:
+        return String("None")
+    if od_type == OD_INC_TO_DEC:
+        return String("IncToDec")
+    if od_type == OD_ITER:
+        return String("Iter")
+    raise Error("unknown od_type code " + String(od_type))
 
 
 @fieldwise_init

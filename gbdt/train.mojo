@@ -97,6 +97,9 @@ struct TrainedModel(Movable):
     var test_losses: List[Float64]
     #: the index of the lowest TEST loss, or of the lowest learn loss with
     #: no eval set. Their `TLearnProgress` best-iteration bookkeeping.
+    #: **-1 means NOT RECORDED**, which is what a model loaded from text
+    #: carries: the text holds no held-out curve and
+    #: `load_model_text` does not invent one.
     var best_iteration: Int
     #: True when the detector fired before `n_estimators` was reached
     var stopped_early: Bool
@@ -224,6 +227,8 @@ def train(
     od_type: String = String("None"),
     od_pvalue: Float64 = 0.0,
     od_wait: Int = 20,
+    use_best_model: Int = -1,
+    best_model_min_trees: Int = 1,
 ) raises -> TrainedModel:
     """Borders -> device quantization -> fit, one call.
 
@@ -338,6 +343,39 @@ def train(
     is the older hand-driven surface where the caller has already made the
     one-hot decision, and `cat_features` is the one that makes it the way
     their dispatch does.
+
+    ## The held-out set, the detector, and `use_best_model`
+
+    `eval_x_colmajor` / `eval_y` are their test pool. It is quantized here,
+    against the borders THIS fit built, and scored every iteration by
+    `TestArm`; `od_type` / `od_pvalue` / `od_wait` drive the detector
+    (`gbdt/overfitting_detector/overfitting_detector.mojo`).
+
+    **`use_best_model` TRUNCATES THE RETURNED ENSEMBLE** to the trees up to
+    and including the best held-out iteration, their `ShrinkToBestIteration`
+    (`boosting_progress_tracker.h:113-125`) called from
+    `train_template.h:127-137`. It is a TRI-STATE, because theirs is
+    `TOption::NotSet()` and their default is data-dependent
+    (`options_helper.cpp:100-113`):
+
+        -1  unset -> TRUE when there is an eval set whose target is not
+            constant, FALSE otherwise
+         0  off
+         1  on -> and with no eval set this raises, where they warn and
+            switch it off
+
+    `best_model_min_trees` is their `best_model_min_trees`, default 1
+    (`output_file_options.cpp:77`): the shrink may not cut BELOW this many
+    trees, because their second tracker only ever sees iterations at or
+    past it (`boosting_progress_tracker.cpp:162`). At the default it is
+    inert, which is why it is easy to get wrong and why it is ported now
+    rather than later.
+
+    `best_iteration` in the result is the ERROR tracker's, not the
+    min-trees tracker's -- the same distinction their shrink log draws at
+    `boosting_progress_tracker.h:119-122`. So a caller who sets
+    `best_model_min_trees` above the best iteration gets a model with MORE
+    trees than `best_iteration + 1`, and both numbers are correct.
     """
     if len(x_colmajor) != n_rows * n_features:
         raise Error("x_colmajor size mismatch")
@@ -786,6 +824,43 @@ def train(
             " would stop on a curve that falls by construction."
         )
 
+    # `UpdateUseBestModel` (`options_helper.cpp:100-113`). Their
+    # `hasTestConstTarget` is the reason for the second half: a test set
+    # whose target never varies cannot rank iterations, so they leave the
+    # default off rather than shrink on a flat curve. `hasTestPairs` is
+    # theirs and not ours -- this port carries no pairwise loss.
+    var eval_const_target = True
+    for r in range(1, eval_rows):
+        if eval_y[r] != eval_y[0]:
+            eval_const_target = False
+            break
+    var want_best_model = use_best_model
+    if want_best_model == -1:
+        want_best_model = (
+            1 if (eval_rows > 0 and not eval_const_target) else 0
+        )
+    elif want_best_model == 1 and eval_rows == 0:
+        # THEY WARN AND CONTINUE (`options_helper.cpp:109-112`); this
+        # raises. DEVIATION 87. A warning on a returned model is invisible
+        # from Python -- the caller asked for the best-iteration model and
+        # would get the last-iteration one with no way to tell. Their
+        # binary prints to a console a human is watching; this is a
+        # library call.
+        raise Error(
+            "use_best_model=1 needs an eval set: pass eval_x_colmajor"
+            " and eval_y, or leave it unset."
+        )
+    elif want_best_model != 0 and want_best_model != 1:
+        raise Error(
+            "use_best_model must be -1 (unset), 0 or 1, got "
+            + String(use_best_model)
+        )
+    if best_model_min_trees < 1:
+        raise Error(
+            "best_model_min_trees must be at least 1, got "
+            + String(best_model_min_trees)
+        )
+
     var t_rows = eval_rows if eval_rows > 0 else 1
     var eval_expanded: List[Float32]
     if eval_rows > 0 and ctr_column_count != 0:
@@ -855,6 +930,32 @@ def train(
     )
     var losses = fit_result.learn_losses.copy()
     var t_losses = fit_result.test_losses.copy()
+
+    # ---- `ShrinkToBestIteration` (`boosting_progress_tracker.h:113-125`)
+    #
+    # Called here rather than inside `fit_with_test` because theirs is
+    # called here: `train_template.h:127-137` shrinks the model the
+    # boosting returned, after the loop, and only when there IS a test
+    # set. The second tracker is separate from the detector's
+    # (`boosting_progress_tracker.cpp:160-164`): it is fed only iterations
+    # at or past `best_model_min_trees`, so its best iteration can differ
+    # from `fit_result.best_iteration`, and it is THAT one the shrink
+    # reads.
+    if want_best_model == 1 and len(t_losses) > 0:
+        var min_trees_best = -1
+        var min_trees_err = Float64(0.0)
+        for i in range(len(t_losses)):
+            if i + 1 < best_model_min_trees:
+                continue
+            # their strict `<` (`error_tracker.h:58-64`), so the FIRST of
+            # a tie wins and a plateau does not walk the cut rightwards
+            if min_trees_best < 0 or t_losses[i] < min_trees_err:
+                min_trees_err = t_losses[i]
+                min_trees_best = i
+        var best_iter = min_trees_best + 1
+        if 0 < best_iter and best_iter < len(model.weak_models):
+            model.shrink(best_iter)
+
     return TrainedModel(
         model^,
         fold_counts^,

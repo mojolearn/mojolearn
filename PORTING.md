@@ -2053,7 +2053,33 @@ So `MultiClassOneVsAll` is IMPLEMENTED AND GATED IN MOJO and is NOT
 REACHABLE FROM PYTHON. `python/mojolearn/ensemble.py` refuses it by name
 with this reason rather than accepting it and dying inside Metal.
 
-**What would actually fix it** is upstream: the AOT kernel count must stop
+**2026-08-21, later: the ceiling is not a lottery that a new spin can win.**
+The held-out surface (`eval_set`, the overfitting detector's three options,
+`use_best_model`, `best_model_min_trees`) added no kernels at all -- five
+scalars, two buffer addresses and a richer return -- and all five stems
+still reported `gbdt: 0 AIR blobs`. A basename lottery would be expected to
+move under a source change of that size. It did not. **So the reachable
+reading is CAPACITY, with the basename as the thing that decides which
+subsystem gets dropped rather than whether one does**, and hypothesis 2's
+"dead" verdict below applies only to a GBDT-ONLY entry point, which is what
+it measured.
+
+The consequence for the Python surface: `GradientBoosting.fit(...,
+eval_set=...)` is written, its marshalling is checked, and the Mojo side is
+gated by `check-overfitting-detector` -- but no artifact carries it yet, and
+the `.so` on disk is the older one, whose `gbdt_fit` takes six arguments
+where the wrapper now passes eight. **The installed extension and the
+checked-in wrapper are one build apart and cannot be used together.**
+
+**The fix that follows from capacity** is to stop putting three estimators'
+kernels in one module: a GBDT-only entry point measured 84 blobs and fit
+from Python, so splitting the extension is the move that has evidence behind
+it. It is a packaging change, it touches `python/mojolearn/__init__.py` and
+the wheel script, and `bindings/build_estimators.sh` is another session's
+lane -- so it is written down here rather than started in the middle of a
+port.
+
+**What would ALSO fix it** is upstream: the AOT kernel count must stop
 depending on the entry file's basename. Until then the extension has a hard
 capacity that nobody can predict, and every kernel family added is a new
 chance to lose one silently -- which is why the smoke test now fits one

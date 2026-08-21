@@ -1022,8 +1022,16 @@ def load_model_text(text: String) raises -> TrainedModel:
                     + ", whose type is '" + feature_kinds[fid] + "'"
                 )
 
+    # THE HELD-OUT FIELDS ARE NOT IN THE TEXT AND ARE NOT INVENTED HERE.
+    # `test_losses` is empty, `stopped_early` is False and
+    # `best_iteration` is -1 meaning NOT RECORDED -- a loaded model has no
+    # eval set behind it, and deriving a "best iteration" from the learn
+    # curve the text does carry would answer a question about held-out
+    # loss with a number that never saw a held-out row. Their model file
+    # carries no training history either.
     return TrainedModel(
-        model^, fold_counts^, one_hot^, borders^, losses^, ctr_column_count,
+        model^, fold_counts^, one_hot^, borders^, losses^,
+        List[Float64](), -1, False, ctr_column_count,
         ctr_tables^,
     )
 

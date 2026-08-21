@@ -870,7 +870,8 @@ def build_categorical_model(with_tables: Bool = True) raises -> TrainedModel:
             )
         )
     return TrainedModel(
-        m^, fold_counts^, one_hot^, borders^, losses^, 1, tables^
+        m^, fold_counts^, one_hot^, borders^, losses^,
+        List[Float64](), -1, False, 1, tables^
     )
 
 

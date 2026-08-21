@@ -65,6 +65,7 @@ from max.gpu.host import DeviceContext
 from cluster.estimator import kmeans_fit
 from gbdt.estimator import (
     GbdtFitParams,
+    GbdtFitResult,
     gbdt_fit,
     gbdt_model_dim,
     gbdt_predict,
@@ -216,10 +217,17 @@ def gbdt_fit_binding(
     y_addr: PythonObject,
     weights_addr: PythonObject,
     cat_flags_addr: PythonObject,
+    eval_x_addr: PythonObject,
+    eval_y_addr: PythonObject,
     params: PythonObject,
     strs: PythonObject,
 ) raises -> PythonObject:
-    """Fit a gradient-boosted ensemble. Returns the model as TEXT.
+    """Fit a gradient-boosted ensemble.
+
+    Returns `[model_text, best_iteration, stopped_early, learn_losses,
+    test_losses]`. It used to return the text alone; the four that follow
+    it are what a caller needs to tell a model that STOPPED from one that
+    ran out of iterations, and to plot the curve that made it stop.
 
     `params` is, in this exact order -- and the wrapper names the same
     order in the same words, because a silent reordering here is a wrong
@@ -245,9 +253,20 @@ def gbdt_fit_binding(
         17  leaf_estimation_method      (-1 = unset, the loss decides)
         18  bagging_temperature (float)
         19  subsample        (float, -1 = unset)
+        20  n_eval_rows      (0 means no held-out set; the eval addresses
+                              are unread)
+        21  od_pvalue        (float, -1 = unset)
+        22  od_wait          (-1 = unset)
+        23  use_best_model   (-1 = unset, 0 off, 1 on)
+        24  best_model_min_trees
 
-    `strs` is `[loss, bootstrap_type]`, their `ELossFunction` and
-    `EBootstrapType` spellings. An empty `bootstrap_type` means none.
+    `strs` is `[loss, bootstrap_type, od_type]`, their `ELossFunction`,
+    `EBootstrapType` and `EOverfittingDetectorType` spellings. An empty
+    `bootstrap_type` means none, and an empty `od_type` means UNSET --
+    which is not the same as `None`: their `Load`
+    (`overfitting_detector_options.cpp:24-32`) picks the type from
+    whichever of the other two was given, so an unset type with a wait is
+    `Iter`.
 
     EVERY `-1` ABOVE IS THEIR `TOption::NotSet()`, not a magic number: the
     loss picks the leaf estimator and its iteration count through
@@ -255,15 +274,15 @@ def gbdt_fit_binding(
     `catboost_options.cpp:273-360`. A caller that passes explicit values
     is overriding CatBoost's own defaults and should know it.
     """
-    if len(params) != 20:
+    if len(params) != 25:
         raise Error(
-            "gbdt_fit: params must hold 20 values, got "
+            "gbdt_fit: params must hold 25 values, got "
             + String(len(params))
         )
-    if len(strs) != 2:
+    if len(strs) != 3:
         raise Error(
-            "gbdt_fit: strs must hold [loss, bootstrap_type], got "
-            + String(len(strs))
+            "gbdt_fit: strs must hold [loss, bootstrap_type, od_type],"
+            " got " + String(len(strs))
         )
     var xp = _f32_ptr(Int(py=x_addr))
     var yp = _f32_ptr(Int(py=y_addr))
@@ -272,6 +291,10 @@ def gbdt_fit_binding(
     # and `_f32_ptr` still refuses a null.
     var wp = _f32_ptr(Int(py=weights_addr))
     var cp = _u32_ptr(Int(py=cat_flags_addr))
+    # unread when params[20] is 0, the same contract the weights have;
+    # the wrapper passes the X address rather than allocating a throwaway
+    var ep = _f32_ptr(Int(py=eval_x_addr))
+    var eyp = _f32_ptr(Int(py=eval_y_addr))
 
     var n_rows = Int(py=params[0])
     var n_features = Int(py=params[1])
@@ -297,16 +320,36 @@ def gbdt_fit_binding(
         String(py=strs[1]),
         Float32(Float64(py=params[18])),
         Float32(Float64(py=params[19])),
+        String(py=strs[2]),
+        Float64(py=params[21]),
+        Int(py=params[22]),
+        Int(py=params[23]),
+        Int(py=params[24]),
     )
+    var n_eval_rows = Int(py=params[20])
 
-    var text: String
+    var result: GbdtFitResult
     with GILReleased(Python()):
         var ctx = DeviceContext()
-        text = gbdt_fit(
+        result = gbdt_fit(
             ctx, xp, n_rows, n_features, yp, wp, n_weights,
-            cp, n_flags, fp,
+            cp, n_flags, ep, eyp, n_eval_rows, fp,
         )
-    return PythonObject(text)
+
+    var learn = Python.list()
+    for i in range(len(result.learn_losses)):
+        learn.append(PythonObject(result.learn_losses[i]))
+    var test = Python.list()
+    for i in range(len(result.test_losses)):
+        test.append(PythonObject(result.test_losses[i]))
+
+    var out = Python.list()
+    out.append(PythonObject(result.text))
+    out.append(PythonObject(result.best_iteration))
+    out.append(PythonObject(result.stopped_early))
+    out.append(learn)
+    out.append(test)
+    return out
 
 
 def gbdt_predict_binding(

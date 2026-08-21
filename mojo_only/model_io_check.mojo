@@ -497,7 +497,12 @@ def build_synthetic(ctr_columns: Int = 0) raises -> TrainedModel:
     losses.append(bitcast[DType.float64](UInt64(1)))
     losses.append(Float64(-0.0))
 
+    # the three held-out fields as `load_model_text` reconstructs them:
+    # empty curve, -1 for "not recorded", and no early stop. The text
+    # carries none of them, so a round trip that produced anything else
+    # would be inventing a held-out history.
     return TrainedModel(m^, fold_counts^, one_hot^, borders^, losses^,
+                        List[Float64](), -1, False,
                         ctr_columns, List[TCtrValueTable]())
 
 

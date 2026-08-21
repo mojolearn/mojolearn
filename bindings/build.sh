@@ -211,7 +211,8 @@ m.predict(X)
 #   MAE                 the EXACT estimator -- segmented sort, scan,
 #                       need-weights, binary search
 #   MultiClass          multilogit_val_and_first_der / second_der_row
-#   MultiClassOneVsAll  one_vs_all_val_and_first_der / second_der
+#   MultiClassOneVsAll  one_vs_all_val_and_first_der / second_der -- NOT
+#                       IN THE ARTIFACT; the row below asserts the refusal
 #
 # Add a row here whenever a kernel family is added. Two trees each; the
 # point is to LAUNCH them, not to fit anything.
@@ -221,11 +222,38 @@ ens.GradientBoosting(loss="Logloss", n_estimators=2, max_depth=3,
 ens.GradientBoosting(loss="MAE", n_estimators=2, max_depth=3,
                      border_count=16).fit(X, X[:, 0]).predict(X)
 yc = (X[:, 0] * 3).astype(np.int32).clip(0, 2).astype(np.float32)
-for mc in ("MultiClass", "MultiClassOneVsAll"):
-    mm = ens.GradientBoosting(loss=mc, n_estimators=2, max_depth=3,
-                              border_count=16).fit(X, yc)
-    mm.predict(X)
-    mm.predict_proba(X)
+mm = ens.GradientBoosting(loss="MultiClass", n_estimators=2, max_depth=3,
+                          border_count=16).fit(X, yc)
+mm.predict(X)
+mm.predict_proba(X)
+
+# MultiClassOneVsAll IS THE ROW THAT CANNOT BE FITTED. Its two kernels
+# did not fit in the artifact under any measured stem (PORTING.md 70), so
+# `ensemble.py` refuses it by name. The smoke test asserts THE REFUSAL,
+# because the alternative -- fitting it -- is a gate that can never pass,
+# and a gate that can never pass stops being read.
+try:
+    ens.GradientBoosting(loss="MultiClassOneVsAll")
+except NotImplementedError:
+    pass
+else:
+    raise SystemExit("smoke: MultiClassOneVsAll was accepted from Python")
+
+# THE HELD-OUT PATH, which crosses two addresses and five parameters that
+# nothing else in this file exercises. Their default `use_best_model` is
+# ON with an eval set, so the fitted model must be SHORTER than the
+# iteration count unless the last iteration happened to be the best.
+Xe = np.random.default_rng(7).random((128, 3), dtype=np.float32)
+me = ens.GradientBoosting(loss="RMSE", n_estimators=6, max_depth=3,
+                          border_count=16, od_wait=2)
+me.fit(X, X[:, 0], eval_set=(Xe, Xe[:, 0]))
+if me.test_loss_curve_ is None or len(me.test_loss_curve_) == 0:
+    raise SystemExit("smoke: eval_set produced no held-out curve")
+if len(me.loss_curve_) != len(me.test_loss_curve_):
+    raise SystemExit("smoke: the two loss curves have different lengths")
+if not 0 <= me.best_iteration_ < len(me.test_loss_curve_):
+    raise SystemExit("smoke: best_iteration_ is outside the curve")
+me.predict(X)
 
 clu.KMeans(n_clusters=4, random_state=0).fit(X)
 nbr.NearestNeighbors(n_neighbors=3).fit(X).kneighbors(X[:2])

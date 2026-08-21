@@ -58,6 +58,10 @@ from gbdt.options.catboost_options import (
     TCatFeatureParams,
 )
 from gbdt.methods.doc_parallel_boosting import model_approx_dim
+from gbdt.options.overfitting_detector_options import (
+    load_overfitting_detector_options,
+)
+from gbdt.overfitting_detector.overfitting_detector import od_type_name
 from gbdt.models.model_text import load_model_text
 from gbdt.train import (
     model_input_features,
@@ -104,6 +108,20 @@ struct GbdtFitParams(Copyable, ImplicitlyCopyable, Movable):
     var bootstrap_type: String
     var bagging_temperature: Float32
     var subsample: Float32
+    #: their `TOverfittingDetectorOptions`, UNRESOLVED. An empty
+    #: `od_type` and a negative `od_pvalue` / `od_wait` are their
+    #: `options.Has(...)` returning false, and
+    #: `load_overfitting_detector_options` is what turns the three into a
+    #: detector type -- `od_wait` alone means Iter, `od_pvalue` alone
+    #: means IncToDec, neither means None.
+    var od_type: String
+    var od_pvalue: Float64
+    var od_wait: Int
+    #: their `use_best_model`, TRI-STATE: -1 unset (on when there is an
+    #: eval set with a non-constant target), 0 off, 1 on.
+    var use_best_model: Int
+    #: their `best_model_min_trees`, default 1 (`output_file_options.cpp:77`)
+    var best_model_min_trees: Int
 
 
 def default_gbdt_fit_params() -> GbdtFitParams:
@@ -121,7 +139,31 @@ def default_gbdt_fit_params() -> GbdtFitParams:
         Float32(-1.0),
         -1, -1,
         String(""), Float32(1.0), Float32(-1.0),
+        String(""), Float64(-1.0), -1,
+        -1, 1,
     )
+
+
+@fieldwise_init
+struct GbdtFitResult(Movable):
+    """What a fit produces besides the model.
+
+    THE LOSS CURVES ARE NOT DECORATION. `test_losses` is the series the
+    overfitting detector stopped on, and without it a caller cannot tell a
+    model that stopped early from one that ran out of iterations, nor see
+    the shape that made it stop. Their `TMetricsAndTimeLeftHistory` carries
+    the same two curves out of `TrainModel` for the same reason.
+
+    `best_iteration` is the ERROR tracker's best (`error_tracker.h:73-75`),
+    not the min-trees tracker's, so with `best_model_min_trees` above it
+    the returned ensemble holds MORE trees than `best_iteration + 1`.
+    """
+
+    var text: String
+    var best_iteration: Int
+    var stopped_early: Bool
+    var learn_losses: List[Float64]
+    var test_losses: List[Float64]
 
 
 def gbdt_fit(
@@ -134,9 +176,12 @@ def gbdt_fit(
     n_weights: Int,
     cat_flags: MutPointer[UInt32, MutUntrackedOrigin],
     n_flags: Int,
+    eval_x: MutPointer[Float32, MutUntrackedOrigin],
+    eval_y: MutPointer[Float32, MutUntrackedOrigin],
+    n_eval_rows: Int,
     params: GbdtFitParams,
-) raises -> String:
-    """Fit and return the model as `model_text`.
+) raises -> GbdtFitResult:
+    """Fit and return the model as `model_text`, plus both loss curves.
 
     `x` is COLUMN-MAJOR, `[feature * n_rows + row]`, which is the layout
     `train` documents and the layout the quantizer walks.
@@ -153,6 +198,13 @@ def gbdt_fit(
 
     `n_weights` of 0 means unit weights and `weights` is never read, the
     same contract `kmeans_fit` has for its weight pointer.
+
+    `eval_x` is COLUMN-MAJOR over `n_eval_rows` rows and the SAME
+    `n_features` columns, and `eval_y` its target. `n_eval_rows == 0`
+    means no held-out set and neither pointer is read -- the same contract
+    the weights have. The held-out rows are quantized inside `train`,
+    against the borders that fit built, which is the only place they can
+    be.
     """
     if n_rows <= 0:
         raise Error("gbdt_fit: n_rows must be positive")
@@ -167,6 +219,11 @@ def gbdt_fit(
         raise Error(
             "gbdt_fit: n_flags must be 0 or n_features, got "
             + String(n_flags)
+        )
+    if n_eval_rows < 0:
+        raise Error(
+            "gbdt_fit: n_eval_rows must not be negative, got "
+            + String(n_eval_rows)
         )
 
     var xs = List[Float32]()
@@ -192,6 +249,21 @@ def gbdt_fit(
         for i in range(n_rows):
             ws.append(weights.unsafe_load(i))
 
+    var eval_xs = List[Float32]()
+    var eval_ys = List[Float32]()
+    if n_eval_rows != 0:
+        for i in range(n_eval_rows * n_features):
+            eval_xs.append(eval_x.unsafe_load(i))
+        for i in range(n_eval_rows):
+            eval_ys.append(eval_y.unsafe_load(i))
+
+    # `TOverfittingDetectorOptions::Load` (`:24-40`), which is where the
+    # detector TYPE comes from when the caller named only a wait or only a
+    # p-value.
+    var od = load_overfitting_detector_options(
+        params.od_type, params.od_pvalue, params.od_wait
+    )
+
     var tm = train(
         ctx, xs, ys, n_rows, n_features,
         border_count=params.border_count,
@@ -215,8 +287,23 @@ def gbdt_fit(
         bootstrap_type=params.bootstrap_type,
         bagging_temperature=params.bagging_temperature,
         subsample=params.subsample,
+        eval_x_colmajor=eval_xs,
+        eval_y=eval_ys,
+        od_type=od_type_name(od.od_type),
+        od_pvalue=od.auto_stop_p_value,
+        od_wait=od.iterations_wait,
+        use_best_model=params.use_best_model,
+        best_model_min_trees=params.best_model_min_trees,
     )
-    return model_text(tm)
+    var learn_losses = tm.losses.copy()
+    var test_losses = tm.test_losses.copy()
+    return GbdtFitResult(
+        model_text(tm),
+        tm.best_iteration,
+        tm.stopped_early,
+        learn_losses^,
+        test_losses^,
+    )
 
 
 def gbdt_model_dim(text: String) raises -> Int:

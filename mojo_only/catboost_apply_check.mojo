@@ -205,7 +205,8 @@ def check_catboost_apply(ctx: DeviceContext) raises:
         one_hot.append(False)
 
     var tm = TrainedModel(
-        model^, fold_counts^, one_hot^, borders^, List[Float64](), 0,
+        model^, fold_counts^, one_hot^, borders^, List[Float64](),
+        List[Float64](), -1, False, 0,
         List[TCtrValueTable]()
     )
     var ours = predict_floats(ctx, tm, x_colmajor, rows)
