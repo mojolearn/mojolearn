@@ -1195,7 +1195,9 @@ struct Builder[O: ObjectiveLike](Movable):
             c += N_BLKS_FOR_COLS
         return self._download_splits(ctx, n)
 
-    def do_split(
+    def do_split[
+        sabotage: Int = 0
+    ](
         mut self,
         ctx: DeviceContext,
         dataset: DatasetView[Self.O.DataT, Self.O.LabelT],
@@ -1211,6 +1213,8 @@ struct Builder[O: ObjectiveLike](Movable):
         means the LAST round does not bother rebuilding it.
         """
         var n = len(work_items)
+        # `:437` -- `const IdxT original_n_sampled_cols = dataset.n_sampled_cols;`
+        var ds = dataset.copy()
         var max_rounds = max_sampling_rounds_for(
             self.n_cols, self.original_n_sampled_cols
         )
@@ -1234,8 +1238,22 @@ struct Builder[O: ObjectiveLike](Movable):
             var n_sampled_cols = sampled_cols_in_round(
                 self.n_cols, self.original_n_sampled_cols, round
             )
+            # `:439-440` -- they NARROW the dataset field for this round:
+            #     dataset.n_sampled_cols =
+            #         min(original_n_sampled_cols, n_cols - sample_offset);
+            # The last round is short whenever n_sampled_cols does not
+            # divide n_cols, and the kernels' stride must follow it.
+            ds.n_sampled_cols = Int32(n_sampled_cols)
+            # CHECK HOOK. 8 restores the pre-fix value -- the DatasetView
+            # field left at whatever the caller passed, i.e. `n_cols` -- so
+            # a check can watch the writer/reader strides come apart
+            # instead of taking the fix on trust. THIS is the load-bearing
+            # write: a hook on the `train` assignment alone is inert,
+            # because this line overwrites it every round.
+            comptime if sabotage == 8:
+                ds.n_sampled_cols = Int32(self.n_cols)
             var h = self._compute_best_splits(
-                ctx, dataset, quantiles, active_items, sample_offset,
+                ctx, ds, quantiles, active_items, sample_offset,
                 n_sampled_cols, smem_config,
             )
             var retry_items = List[NodeWorkItem]()
@@ -1251,6 +1269,9 @@ struct Builder[O: ObjectiveLike](Movable):
             active_items = retry_items^
             active_to_original = retry_to_original^
             round += 1
+
+        # `:458` -- `dataset.n_sampled_cols = original_n_sampled_cols;`
+        ds.n_sampled_cols = Int32(self.original_n_sampled_cols)
 
         # `:474-478` -- the chosen splits go back to the device once, and
         # the partition runs ONCE over the whole batch.
@@ -1275,7 +1296,7 @@ struct Builder[O: ObjectiveLike](Movable):
 
         launch_node_split_kernel(
             ctx,
-            dataset,
+            ds,
             self._work_items_ptr(),
             self._splits_ptr(),
             self._workload_ptr(),
@@ -1424,7 +1445,9 @@ struct Builder[O: ObjectiveLike](Movable):
         _ = d_leaves^
         _ = h_leaves^
 
-    def train(
+    def train[
+        sabotage: Int = 0
+    ](
         mut self,
         ctx: DeviceContext,
         dataset: DatasetView[Self.O.DataT, Self.O.LabelT],
@@ -1443,6 +1466,21 @@ struct Builder[O: ObjectiveLike](Movable):
 
         `train_time` is not set; see DEVIATION 303.
         """
+        # `:240` -- THEIR CTOR SETS THIS FIELD:
+        #     dataset.n_sampled_cols = max(1, IdxT(params.max_features * n_cols))
+        # and both split kernels then index `column_samples` with it
+        # (`kernels/builder_kernels_impl.cuh:310`, `:373`) at exactly the
+        # stride `sample_features` wrote at, because `:509` passes the same
+        # field as `k`. ONE VARIABLE, so writer and reader cannot disagree.
+        # Ours took the sampled count onto the Builder instead and left the
+        # DatasetView field at whatever the caller passed -- `n_cols` -- so
+        # the writer strode by max_features*n_cols and the reader by n_cols.
+        # Node 0 coincided; every later node in a batch read another node's
+        # columns, and deep enough into a batch, off the end of the
+        # allocation. Default classifier path (`max_features='sqrt'`).
+        var ds = dataset.copy()
+        ds.n_sampled_cols = Int32(self.original_n_sampled_cols)
+
         var smem_config = self.shared_memory_config()
         var queue = NodeQueue[Self.O.DataT](
             self.params,
@@ -1452,13 +1490,13 @@ struct Builder[O: ObjectiveLike](Movable):
         )
         while queue.has_work():
             var work_items = queue.pop()
-            var h_splits = self.do_split(
-                ctx, dataset, quantiles, work_items, smem_config
+            var h_splits = self.do_split[sabotage](
+                ctx, ds, quantiles, work_items, smem_config
             )
             queue.push(work_items, h_splits)
         var tree = queue.tree.copy()
         tree.treeid = self.treeid
         self.set_leaf_predictions(
-            ctx, tree, queue.node_instances_.copy(), dataset
+            ctx, tree, queue.node_instances_.copy(), ds
         )
         return tree^

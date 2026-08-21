@@ -1032,7 +1032,15 @@ struct RandomForest[dtype: DType, label_dtype: DType](
         var abs_sum: Float64 = 0.0
         var sq_sum: Float64 = 0.0
         for i in range(n_rows):
-            var diff = Float64(predictions[i]) - Float64(ref_labels[i])
+            # raft `scores.cuh:116` -- `double diff = predictions[i] -
+            # ref_predictions[i];`. BOTH OPERANDS ARE `T`, which is `float`
+            # for `RandomForestRegressorF`, so THE SUBTRACTION IS FLOAT32
+            # and only its result is widened. Widening first is a silent
+            # improvement on them: the two sums might be excused by the
+            # atomic ordering already priced in DEVIATION 119e, but the
+            # median is a SELECTION, so a different low bit here returns a
+            # different element, not a differently-rounded one.
+            var diff = Float64(predictions[i] - ref_labels[i])
             var abs_diff = diff
             if abs_diff < 0.0:
                 abs_diff = -abs_diff
@@ -1471,8 +1479,17 @@ def n_sampled_rows_for(
     """
     if not bootstrap:
         return n_rows
-    var x = Float64(max_samples) * Float64(n_rows)
-    var f = Float64(Int(x))
+    # `:302` -- `std::round(this->rf_params.max_samples * n_rows)`.
+    # THE PRODUCT IS FLOAT32. `max_samples` is `float` (`randomforest.hpp:71`)
+    # and `n_rows` is `int`, so C++'s usual arithmetic conversions promote
+    # `n_rows` TO FLOAT and the multiply rounds there -- including the
+    # int->float conversion of `n_rows` itself. Computing this in Float64
+    # is not a harmless widening: above 2^24 float32 cannot hold every
+    # integer, so at n_rows = 20_000_001 with max_samples = 1.0 theirs
+    # gives 20_000_000 and a Float64 product gives 20_000_001. That is a
+    # different bootstrap size, hence a different forest, on every tree.
+    var x = Float32(max_samples) * Float32(n_rows)
+    var f = Float32(Int(x))
     if x - f >= 0.5:
         return Int(f) + 1
     return Int(f)

@@ -860,5 +860,28 @@ def compute_quantiles(
     # `:275`
     ctx.synchronize()
 
+    # NO CUML COUNTERPART, AND NOT OPTIONAL. Mojo destroys a value at its
+    # LAST USE, not at the end of scope, and a buffer handed to a kernel as
+    # a raw pointer is NOT used by that launch -- so every scratch buffer
+    # above is dead at the `.unsafe_ptr()` that enqueued it, and the next
+    # `enqueue_create_buffer` is free to land on it while the kernel that
+    # reads it is still queued. Measured once already in this port: a
+    # kernel read `n_bins` as -8388609, the bit pattern of `Split::Min()`,
+    # through a freed quantiles pointer -- AFTER a green run. These
+    # keep-alives must stay AFTER the `synchronize()` above; moving them
+    # before it, or deleting them as dead code, restores the hazard.
+    _ = h_offsets^
+    _ = d_offsets^
+    _ = h_u64^
+    _ = d_u64^
+    _ = sampled_columns^
+    _ = sorted_samples^
+    _ = sort_a^
+    _ = sort_b^
+    _ = sort_off^
+    _ = sort_bsum^
+    _ = h_bin_idx^
+    _ = d_bin_idx^
+
     # `:278`
     return QuantileResult(quantiles_array^, n_bins_array^)
