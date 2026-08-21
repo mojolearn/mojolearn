@@ -523,7 +523,9 @@ def write_reduces_histograms_kernel(
         dst_histogram.unsafe_store(dst, val)
 
 
-def write_reduces_from_fixed_kernel(
+def write_reduces_from_fixed_kernel[
+    read_scratch: Bool
+](
     hist_block_offset_in: Int32,
     bin_features_in_block_in: Int32,
     histogram_ids: MutPointer[UInt32, MutAnyOrigin],
@@ -589,12 +591,20 @@ def write_reduces_from_fixed_kernel(
             + bin_feature_id
         )
         var q = acc_i32.unsafe_load(src)
-        var val: Float32
+        var val = Float32(0.0)
         if q != Int32(0):
             val = Float32(Int(q)) / fixed_scale
             acc_i32.unsafe_store(src, Int32(0))
         else:
-            val = block_histogram.unsafe_load(src)
+            # `read_scratch` is False for a ONE-BYTE block, whose i32
+            # writebacks now put single-block cells in the accumulator
+            # too, so the scratch holds nothing and a zero accumulator
+            # cell means a zero histogram cell. It stays True for the
+            # binary and half-byte families, whose single-block stores
+            # are exact floats in the scratch.
+            @parameter
+            if read_scratch:
+                val = block_histogram.unsafe_load(src)
 
         var dst = (
             dst_id * bin_feature_count * stat_count

@@ -1815,7 +1815,30 @@ def launch_histograms_for_blocks[
         # `block_cells` of it; that is their whole-buffer semantic exactly,
         # and the cells past `block_cells` are ones no kernel writes and the
         # bridge never reads.
-        ctx.enqueue_memset(block_hist, Float32(0.0))
+        comptime _flush_is_fixed_point = deterministic_flush_for[
+            TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
+        ]()
+        var run_fixed_bridge = _flush_is_fixed_point
+
+        @parameter
+        if (
+            hist2_smem_mode == HIST_SMEM_SHARED2_I32
+            and not _flush_is_fixed_point
+        ):
+            if blk.policy == POLICY_ONE_BYTE:
+                run_fixed_bridge = True
+
+        # A ONE-BYTE block on the i32 arms never touches the scratch any
+        # more: its writebacks put single-block cells in the accumulator
+        # too, and the fused writeback below reads the accumulator alone.
+        # So the whole-buffer zero is SKIPPED for exactly those blocks --
+        # their ZeroBuffer exists to give the float atomics a zeroed
+        # destination, and there are none here.
+        var scratch_dead = (
+            run_fixed_bridge and blk.policy == POLICY_ONE_BYTE
+        )
+        if not scratch_dead:
+            ctx.enqueue_memset(block_hist, Float32(0.0))
 
         if blk.policy == POLICY_BINARY:
             if depth == 0:
@@ -2010,28 +2033,6 @@ def launch_histograms_for_blocks[
         # branch is comptime, same truth the kernels' flush branches read,
         # so the IDENTICAL build keeps the conversion and the FAST build
         # never launches it.
-        comptime _flush_is_fixed_point = deterministic_flush_for[
-            TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
-        ]()
-
-        # BOTH one-byte families under `HIST_SMEM_SHARED2_I32` drain their
-        # replicated flush through the Int32 accumulator EVEN UNDER FAST
-        # (see the DEVIATION BLOCKs in `hist2_add_to_global_memory` and
-        # `hist_one_byte.mojo`'s writeback), so the conversion must run for
-        # every `POLICY_ONE_BYTE` block -- hist_2 at `maxBins <= 128` and
-        # the PASS family at 129-255 alike -- and for nothing else, keeping
-        # the FAST float path's measured ~7 ms/tree of accumulator reading
-        # off the binary/half-byte blocks.
-        var run_fixed_bridge = _flush_is_fixed_point
-
-        @parameter
-        if (
-            hist2_smem_mode == HIST_SMEM_SHARED2_I32
-            and not _flush_is_fixed_point
-        ):
-            if blk.policy == POLICY_ONE_BYTE:
-                run_fixed_bridge = True
-
         # The bridge is FUSED into the writeback below when it would have
         # run: `write_reduces_from_fixed_kernel` reads the accumulator
         # directly, converts with the identical expression, and zeroes it
@@ -2066,8 +2067,23 @@ def launch_histograms_for_blocks[
         # this becomes a real gap, not a no-op, and it is where the port
         # would need `TReducer` from `gpu_lib`.
         # ==================================================================
-        if run_fixed_bridge:
-            ctx.enqueue_function[write_reduces_from_fixed_kernel](
+        if scratch_dead:
+            ctx.enqueue_function[write_reduces_from_fixed_kernel[False]](
+                Int32(block_first_bin),
+                Int32(blk.total_folds),
+                ids.unsafe_ptr(),
+                acc_i32.unsafe_ptr(),
+                block_hist.unsafe_ptr(),
+                fixed_scale,
+                Int32(hist_cells_per_leaf),
+                hist.unsafe_ptr(),
+                grid_dim=(
+                    (blk.total_folds + 127) // 128, n_live, stat_count
+                ),
+                block_dim=(128, 1, 1),
+            )
+        elif run_fixed_bridge:
+            ctx.enqueue_function[write_reduces_from_fixed_kernel[True]](
                 Int32(block_first_bin),
                 Int32(blk.total_folds),
                 ids.unsafe_ptr(),

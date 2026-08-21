@@ -485,9 +485,18 @@ def hist2_add_to_global_memory[
                                 acc_i32.unsafe_offset(dst_base + fold), q
                             )
                         else:
-                            dst.unsafe_store(
-                                fold, Float32(Int(q)) / fixed_scale
-                            )
+                            # SINGLE BLOCK GOES THROUGH THE ACCUMULATOR
+                            # TOO (plain store: one grid block owns the
+                            # cell). `q` is already fixed point, so the
+                            # fused writeback dequantizes the IDENTICAL
+                            # bits the store here used to; what it buys
+                            # is a DEAD float scratch on this arm -- no
+                            # store, no fallback read, no per-launch
+                            # scratch memset. Binary and half-byte do
+                            # NOT take this shape: their cells are exact
+                            # floats and routing them through Int32
+                            # would add a round trip that moves bits.
+                            acc_i32.unsafe_store(dst_base + fold, q)
                 else:
                     var val = rebind[Scalar[DType.float32]](cell)
                     if abs(val) > Float32(1e-20):

@@ -160,9 +160,10 @@ def h8_reduce_and_flush(
                             acc_i32.unsafe_offset(dst_base + fold), q
                         )
                     else:
-                        bin_sums.unsafe_store(
-                            dst_base + fold, Float32(Int(q)) / fixed_scale
-                        )
+                        # through the accumulator, like the base family:
+                        # q is already fixed point, bits cannot move,
+                        # and the float scratch goes dead on this arm.
+                        acc_i32.unsafe_store(dst_base + fold, q)
 
 
 def hist2_8bit_kernel(

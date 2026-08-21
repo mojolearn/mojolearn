@@ -769,9 +769,10 @@ def one_byte_hist_kernel[bits: Int, smem_mode: Int](
                             acc_i32.unsafe_offset(dst_base + fold), q
                         )
                     else:
-                        dst.unsafe_store(
-                            fold, Float32(Int(q)) / fixed_scale
-                        )
+                        # through the accumulator, like hist_2's base
+                        # family: q is already fixed point, bits cannot
+                        # move, and the float scratch goes dead here.
+                        acc_i32.unsafe_store(dst_base + fold, q)
             else:
                 var val = rebind[Scalar[DType.float32]](cell)
                 if abs(val) > Float32(1e-20):
@@ -1221,9 +1222,10 @@ def one_byte_hist_gather_kernel[bits: Int, smem_mode: Int](
                             acc_i32.unsafe_offset(dst_base + fold), q
                         )
                     else:
-                        dst.unsafe_store(
-                            fold, Float32(Int(q)) / fixed_scale
-                        )
+                        # through the accumulator, like hist_2's base
+                        # family: q is already fixed point, bits cannot
+                        # move, and the float scratch goes dead here.
+                        acc_i32.unsafe_store(dst_base + fold, q)
             else:
                 var val = rebind[Scalar[DType.float32]](cell)
                 if abs(val) > Float32(1e-20):

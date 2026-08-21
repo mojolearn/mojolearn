@@ -149,11 +149,24 @@ def probe_mixed_histogram(binary: Int = 8, half: Int = 4, one: Int = 4, pre_brid
     # POST-BRIDGE reads the flat histogram the scorer sees. Comparing the two
     # separates a bad accumulation from a bad scatter.
     var out = ctx.enqueue_create_host_buffer[DType.float32](hist_cells)
+    # PRE-BRIDGE truth lives in TWO places since the writebacks routed
+    # every i32 one-byte cell through the accumulator (single-block
+    # included) and the scratch went dead on that arm: the accumulator
+    # where nonzero, the float scratch otherwise -- the same two-source
+    # contract write_reduces_from_fixed_kernel documents. This probe
+    # runs at fixed_scale = 1.0, so a raw accumulator cell IS the count.
+    var out_acc = ctx.enqueue_create_host_buffer[DType.int32](hist_cells)
     if pre_bridge:
         ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=block_hist)
+        ctx.enqueue_copy(dst_ptr=out_acc.unsafe_ptr(), src_buf=acc)
     else:
         ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=hist)
     ctx.synchronize()
+    if pre_bridge:
+        for i in range(hist_cells):
+            var q = out_acc.unsafe_ptr().unsafe_load(i)
+            if q != Int32(0):
+                out.unsafe_ptr().unsafe_store(i, Float32(Int(q)))
 
     # Leaf 0, stat 0 (the weight plane): cell for (feature f, bin b) sits at
     # first_fold_index[f] + b in the flat array.
