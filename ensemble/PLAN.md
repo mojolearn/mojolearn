@@ -596,20 +596,27 @@ Metal/CUDA/HIP, and against cuML itself, still needs the NVIDIA column.
    RAFT's own compiled output per cell at 10 cuML call sites. `fit_forest`
    trains cuML's DEFAULT configuration. Twelve checks green.
 
-   **AND IT SURFACED A FINDING ABOUT cuML ITSELF THAT THE PAPER SHOULD
-   CARRY.** `raft::random::uniformInt` launches `4 * SM_count` blocks of
-   256 threads and gives thread `tid` Philox subsequence `base + tid`,
-   striding by `gridDim.x * blockDim.x` (`rng_impl.cuh:70-71`,
-   `rng_device.cuh:675-694`). **The stride, and therefore which subsequence
-   produces which row id, is a function of the GPU MODEL.** An A100 (108 SM)
-   and an H100 (132 SM) draw different bootstrap samples from the same seed,
-   so cuML's RF trains different forests on the same data, same seed, same
-   version, on different NVIDIA parts. That is a stronger statement than
-   "GPU results are nondeterministic": it is architecture-dependent output
-   from a deterministic algorithm, in the row sampler rather than in a float
-   reduction. DEVIATION 184 freezes 4x108x256 and prices the loss of
-   bit-identity with cuML off a 108-SM device — which no choice avoids,
-   because theirs is not a fixed target.
+   **AND IT SURFACED A VERIFIED FINDING ABOUT cuML ITSELF.** Read
+   first-hand in RAFT v26.08.00 (`ebf9268`), not taken on report:
+   `call_rng_kernel` launches `4 * getMultiProcessorCount()` blocks of 256
+   threads (`rng_impl.cuh:70-71`); `rngKernel` gives thread `tid`
+   subsequence `tid` and strides by `gridDim.x * blockDim.x`
+   (`rng_device.cuh:680-694`); the SM count is
+   `cudaDeviceGetAttribute(cudaDevAttrMultiProcessorCount)`
+   (`cudart_utils.hpp:301-308`).
+
+   **WITH THE BOUND, which the first write-up of this omitted.** When
+   `len <= stride` the loop body runs once per thread and element `idx`
+   comes from subsequence `idx`, draw 0 -- independent of `stride`, hence
+   identical on every GPU. The dependence appears only for `len > stride`.
+   So: cuML's bootstrap sample is identical across NVIDIA parts when
+   `n_sampled_rows <= 4 * SM_count * 256`, and differs above it.
+   `4*SM*256` is 59,392 on an L4, 81,920 on a V100, 110,592 on an A100,
+   131,072 on a 4090, 135,168 on an H100. A 50k-row fit is reproducible
+   everywhere; covtype (581,012) and epsilon (400k) are not.
+
+   DEVIATION 184 freezes 4x108x256 and prices the loss: below the threshold
+   we match cuML on ANY part, above it we match a 108-SM part.
 
    Second finding, same read: cuML **truncates the user's 64-bit seed to 32
    bits** (`randomforest.cuh:121` calls `fnv1a32` directly rather than
