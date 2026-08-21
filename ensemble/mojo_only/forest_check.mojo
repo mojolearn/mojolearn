@@ -47,6 +47,9 @@ Together they pin the seed chain from both sides: it must reach the sampler
 from max.gpu.host import DeviceContext
 
 from ensemble.decisiontree.batched_levelalgo.bins import ClassificationBin
+from ensemble.decisiontree.batched_levelalgo.objectives import (
+    ClassificationObjectiveFunction,
+)
 from ensemble.decisiontree.decisiontree import DecisionTreeParams, GINI
 from ensemble.mojo_only.philox import RNG_STRIDE
 from ensemble.randomforest import (
@@ -150,9 +153,15 @@ def _fit(
     var dsw = ctx.enqueue_create_buffer[DT](1)
     ctx.synchronize()
 
-    var forest = fit_forest[LT, ClassificationBin](
-        ctx, dx, dy, dsw, d.n_rows, d.n_cols, d.n_classes, p
+    var objective = ClassificationObjectiveFunction[DT, LT, ClassificationBin](
+        Int32(d.n_classes),
+        p.tree_params.min_samples_leaf,
+        Int32(p.tree_params.split_criterion),
+        Scalar[DT](Float64(p.tree_params.min_impurity_decrease)),
     )
+    var forest = fit_forest[
+        ClassificationObjectiveFunction[DT, LT, ClassificationBin]
+    ](ctx, dx, dy, dsw, d.n_rows, d.n_cols, d.n_classes, p, objective)
     # Mojo frees a value at its LAST USE; every buffer here reached a kernel
     # as a raw pointer.
     _ = dx^

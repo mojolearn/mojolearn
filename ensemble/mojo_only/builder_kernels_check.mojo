@@ -85,7 +85,6 @@ from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels import (
     WorkloadInfo,
 )
 from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import (
-    ClassificationObjective,
     DeviceArgs,
     FindBestSplitsArgs,
     HistogramArgs,
@@ -102,7 +101,10 @@ from ensemble.flatnode import SparseTreeNode
 comptime DT = DType.float32
 comptime LT = DType.int32
 comptime BinT = ClassificationBin
-comptime ObjT = ClassificationObjective[DT, LT, BinT]
+# DEVIATION 129a IS CLOSED: the objective goes into the kernels directly
+# now, with no forwarding adapter, because `objectives.mojo` declares
+# `ObjectiveLike` and both objectives conform to it.
+comptime ObjT = ClassificationObjectiveFunction[DT, LT, BinT]
 
 comptime TPB = 128
 comptime N_CLASSES = 3
@@ -525,7 +527,7 @@ def run_histogram[
     var obj = ClassificationObjectiveFunction[DT, LT, BinT](
         Int32(N_CLASSES), Int32(1), CRITERION_GINI
     )
-    launch_build_histograms_kernel[TPB=TPB, sabotage=sabotage](
+    launch_build_histograms_kernel[ObjT, TPB=TPB, sabotage=sabotage](
         ctx,
         hists.unsafe_ptr()
         .unsafe_origin_cast[MutUntrackedOrigin]()
@@ -573,7 +575,7 @@ def arm_histogram[
     var obj = ClassificationObjectiveFunction[DT, LT, BinT](
         Int32(N_CLASSES), Int32(1), CRITERION_GINI
     )
-    launch_build_histograms_kernel[TPB=TPB, sabotage=sabotage](
+    launch_build_histograms_kernel[ObjT, TPB=TPB, sabotage=sabotage](
         ctx,
         hists.unsafe_ptr()
         .unsafe_origin_cast[MutUntrackedOrigin]()
@@ -775,7 +777,7 @@ def arm_c_cdf_and_splits[
         Int32(C_CLASSES), Int32(1), CRITERION_GINI
     )
     var blob = DeviceArgs[FindBestSplitsArgs[ObjT]](ctx)
-    launch_find_best_splits_kernel[TPB=C_TPB, sabotage=sabotage](
+    launch_find_best_splits_kernel[ObjT, TPB=C_TPB, sabotage=sabotage](
         ctx,
         hists.unsafe_ptr()
         .unsafe_origin_cast[MutUntrackedOrigin]()
@@ -1151,7 +1153,7 @@ def arm_e_leaf[
         Int32(N_CLASSES), Int32(1), CRITERION_GINI
     )
     var blob = DeviceArgs[LeafArgs[ObjT]](ctx)
-    launch_leaf_kernel[TPB=TPB, sabotage=sabotage](
+    launch_leaf_kernel[ObjT, TPB=TPB, sabotage=sabotage](
         ctx, obj, fx.dataset(),
         tree.unsafe_ptr()
         .unsafe_origin_cast[MutUntrackedOrigin]()

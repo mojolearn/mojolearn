@@ -293,6 +293,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from ensemble.decisiontree.batched_levelalgo.bins import Bin
 from ensemble.decisiontree.batched_levelalgo.builder import Builder
+from ensemble.decisiontree.batched_levelalgo.objectives import ObjectiveLike
 from ensemble.decisiontree.batched_levelalgo.dataset import DatasetView
 from ensemble.decisiontree.batched_levelalgo.quantiles import (
     compute_quantiles,
@@ -1326,26 +1327,35 @@ def n_sampled_rows_for(
 
 
 def fit_forest[
-    lt: DType, B: Bin
+    O: ObjectiveLike
 ](
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32],
-    mut y: DeviceBuffer[lt],
+    mut y: DeviceBuffer[O.LabelT],
     mut sample_weight: DeviceBuffer[DType.float32],
     n_rows: Int,
     n_cols: Int,
     n_unique_labels: Int,
     mut rf_params: RF_params,
+    objective: O,
     row_major: Bool = False,
-) raises -> RandomForestMetaData[DType.float32, lt]:
+) raises -> RandomForestMetaData[O.DataT, O.LabelT] where (
+    O.DataT == DType.float32
+):
     """`RandomForest::fit`, `randomforest.cuh:286-370`. THE FOREST LOOP.
 
-    FLOAT32 ONLY, and that is inherited rather than chosen here. cuML
-    instantiates this for `float` and `double` (their `-double.cu` TUs);
+    GENERIC OVER THE OBJECTIVE, as `Builder<ObjectiveT>` is, so a
+    REGRESSION forest and a classification forest are the same code with a
+    different `O`. That was not true until `objectives.mojo` declared
+    `ObjectiveLike`.
+
+    FLOAT32 FEATURES ONLY, and that is inherited rather than chosen here.
+    cuML instantiates for `float` and `double` (their `-double.cu` TUs);
     this port has no float64 on device at all, so `computeQuantiles` is
     float32-only upstream of this function and the `double` instantiations
-    are declined where the bins are (DEVIATION 114). Recorded so a reader
-    does not read the missing `dt` parameter as an oversight.
+    are declined where the bins are (DEVIATION 114). The LABEL type is
+    `O.LabelT` and is free -- Int32 for classification, Float32 for
+    regression.
 
     Their body, in their order, with the two things that are easy to get
     wrong called out:
@@ -1414,9 +1424,15 @@ def fit_forest[
         rf_params.seed,
         row_major,
     )
-    var quantiles = Quantiles[DType.float32](
-        qr.quantiles_array.unsafe_ptr()
-        .unsafe_origin_cast[MutUntrackedOrigin](),
+    # `rebind` because `O.DataT` and `DType.float32` are EQUAL by this
+    # function's `where` clause but not syntactically the same expression,
+    # so the pointer types do not unify on their own. This is rebind's
+    # documented job and it reinterprets nothing at runtime.
+    var quantiles = Quantiles[O.DataT](
+        rebind[MutPointer[Scalar[O.DataT], MutUntrackedOrigin]](
+            qr.quantiles_array.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin]()
+        ),
         qr.n_bins_array.unsafe_ptr()
         .unsafe_origin_cast[MutUntrackedOrigin](),
     )
@@ -1425,8 +1441,8 @@ def fit_forest[
         ctx, rf_params.bootstrap, rf_params.seed, n_rows, n_sampled
     )
 
-    var forest = RandomForestMetaData[DType.float32, lt](
-        List[TreeMetaDataNode[DType.float32]](),
+    var forest = RandomForestMetaData[O.DataT, O.LabelT](
+        List[TreeMetaDataNode[O.DataT]](),
         rf_params,
         Int32(n_cols),
     )
@@ -1434,8 +1450,10 @@ def fit_forest[
     # `:337-367` -- their tree loop, serial here (DEVIATION 117).
     for i in range(Int(rf_params.n_trees)):
         sampler.sample(ctx, Int32(i))
-        var dataset = DatasetView[DType.float32, lt](
-            x.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+        var dataset = DatasetView[O.DataT, O.LabelT](
+            rebind[MutPointer[Scalar[O.DataT], MutUntrackedOrigin]](
+                x.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+            ),
             y.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
             sample_weight.unsafe_ptr()
             .unsafe_origin_cast[MutUntrackedOrigin](),
@@ -1450,7 +1468,7 @@ def fit_forest[
             Int32(n_unique_labels),
             False,
         )
-        var builder = Builder[DType.float32, lt, B](
+        var builder = Builder[O](
             ctx,
             rf_params.tree_params,
             Int32(i),
@@ -1458,6 +1476,7 @@ def fit_forest[
             n_sampled,
             n_cols,
             Int32(n_unique_labels),
+            objective.copy(),
         )
         var tree = builder.train(ctx, dataset, quantiles)
         tree.treeid = Int32(i)

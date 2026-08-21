@@ -70,6 +70,9 @@ from std.sys.info import size_of
 from max.gpu.host import DeviceContext
 
 from ensemble.decisiontree.batched_levelalgo.bins import ClassificationBin
+from ensemble.decisiontree.batched_levelalgo.objectives import (
+    ClassificationObjectiveFunction,
+)
 from ensemble.decisiontree.batched_levelalgo.builder import Builder
 from ensemble.decisiontree.batched_levelalgo.dataset import DatasetView
 from ensemble.decisiontree.batched_levelalgo.quantiles import (
@@ -195,8 +198,17 @@ def _fit(
         False,
     )
 
-    var builder = Builder[DT, LT, ClassificationBin](
-        ctx, params, Int32(0), UInt64(42), n_rows, n_cols, Int32(n_classes)
+    var objective = ClassificationObjectiveFunction[DT, LT, ClassificationBin](
+        Int32(n_classes),
+        params.min_samples_leaf,
+        Int32(params.split_criterion),
+        Scalar[DT](Float64(params.min_impurity_decrease)),
+    )
+    var builder = Builder[
+        ClassificationObjectiveFunction[DT, LT, ClassificationBin]
+    ](
+        ctx, params, Int32(0), UInt64(42), n_rows, n_cols,
+        Int32(n_classes), objective^,
     )
     var tree = builder.train(ctx, dataset, quantiles)
 

@@ -199,10 +199,119 @@ comptime CRITERION_INVERSE_GAUSSIAN = Int32(6)
 comptime CRITERION_END = Int32(7)
 
 
+@always_inline
+def machine_epsilon[dtype: DType]() -> Scalar[dtype]:
+    """`std::numeric_limits<T>::epsilon()`: 2^-(mantissa bits), IEEE-754.
+
+    Device-legal, unlike `nextafter` -- see the note on
+    `RegressionObjectiveFunction.eps_`. Every literal is an exact power of
+    two, so each is exactly representable in its own type and the value is
+    identical to what `nextafter(1, 2) - 1` returns on the host.
+    """
+    comptime if dtype == DType.float32:
+        return Scalar[dtype](1.1920928955078125e-07)  # 2^-23
+    elif dtype == DType.float64:
+        return Scalar[dtype](2.220446049250313e-16)  # 2^-52
+    elif dtype == DType.float16:
+        return Scalar[dtype](0.0009765625)  # 2^-10
+    else:
+        comptime assert False, (
+            "machine_epsilon: no mantissa width recorded for this dtype;"
+            " add it rather than guessing"
+        )
+        return Scalar[dtype](0)
+
+
+# ---------------------------------------------------------------- ObjectiveLike --
+# MOVED HERE from `kernels/builder_kernels_impl.mojo` (DEVIATION 129a, now
+# CLOSED). It had to live in that file while it was written, because
+# `objectives.mojo` declares no trait and Mojo traits are NOMINAL -- so the
+# kernels could not name what they required of an objective, and the
+# launchers were OVERLOADED on the two concrete objective types instead,
+# with a forwarding adapter apiece.
+#
+# The cost of that was not the adapters. It was that `Builder` could not be
+# generic over the objective the way `Builder<ObjectiveT>` is, so REGRESSION
+# FORESTS COULD NOT TRAIN AT ALL. Declaring the trait here, where both
+# objectives can conform to it and the kernels can import it without a
+# cycle, deletes the two adapters, the six launcher overloads and that
+# restriction together.
+
+trait ObjectiveLike(Copyable & Deinitable):
+    """What `buildHistogramsKernel`, `findBestSplitsKernel` and
+    `leafKernel` require of `typename ObjectiveT`.
+
+    NOT A PORT OF A CUML CONSTRUCT. Their three kernels take an
+    unconstrained `typename ObjectiveT` and use it structurally:
+    `::BinT` (`:296`, `:363`, `:219`), `NumClasses()` (`:307`, `:369`),
+    `IncrementHistogram(...)` (`:341`, `:234`), `Gain(...)` (`:385`) and
+    the static `SetLeafVector(...)` (`:238-239`). This trait is that list
+    written down; see DEVIATION 129a for why it lives here.
+    """
+
+    comptime DataT: DType
+    comptime LabelT: DType
+    comptime BinT: Bin
+
+    def NumClasses(self) -> Int32:
+        """`objectives.cuh:150` / `:361`."""
+        ...
+
+    def Scales(self) -> BinScales:
+        """NOT theirs. DEVIATION 101b's fixed-point scales, which
+        `SetLeafVector` needs and their two-argument static did not."""
+        ...
+
+    def IncrementHistogram[
+        ho: MutOrigin, aspace: AddressSpace, //
+    ](
+        self,
+        histogram: MutPointer[Self.BinT, ho, address_space=aspace],
+        n_bins: Int32,
+        bin: Int32,
+        label: Scalar[Self.LabelT],
+        dataset: DatasetView[Self.DataT, Self.LabelT],
+        row: Int32,
+    ):
+        """`objectives.cuh:152-161` / `:370-379`."""
+        ...
+
+    def Gain[
+        ho: MutOrigin,
+        aspace: AddressSpace,
+        qo: MutOrigin,
+        qs: AddressSpace, //,
+    ](
+        self,
+        shist: MutPointer[Self.BinT, ho, address_space=aspace],
+        squantiles: MutPointer[Scalar[Self.DataT], qo, address_space=qs],
+        col: Int32,
+        len: Int64,
+        n_bins: Int32,
+    ) -> Split[Self.DataT]:
+        """`objectives.cuh:163-177` / `:381-397`."""
+        ...
+
+    @staticmethod
+    def SetLeafVector[
+        ho: MutOrigin,
+        aspace: AddressSpace,
+        oo: MutOrigin,
+        os: AddressSpace, //,
+    ](
+        shist: MutPointer[Self.BinT, ho, address_space=aspace],
+        nclasses: Int32,
+        out_ptr: MutPointer[Scalar[Self.DataT], oo, address_space=os],
+        scales: BinScales,
+    ):
+        """`objectives.cuh:179-195` / `:399-408`."""
+        ...
+
+
 # ------------------------------------- ClassificationObjectiveFunction --
 struct ClassificationObjectiveFunction[
-    dtype: DType, label_dtype: DType, BinT: Bin
-](Copyable, Movable) where dtype.is_floating_point():
+    dtype: DType, label_dtype: DType, B: Bin
+](ObjectiveLike) where dtype.is_floating_point():
     """`ML::DT::ClassificationObjectiveFunction`, `objectives.cuh:20-196`.
 
     Their `DataT_`/`LabelT_`/`IdxT_`/`weighted_` become `dtype`,
@@ -210,6 +319,20 @@ struct ClassificationObjectiveFunction[
     instantiation, `decisiontree.cuh:255`) and `BinT` -- see DEVIATION
     112b for why the last one is a type here and a Bool there.
     """
+
+    # `objectives.cuh:23-26` -- their `using DataT = DataT_;` etc.
+    #
+    # THESE ARE ASSOCIATED MEMBERS, NOT PARAMETERS, AND THE DIFFERENCE IS
+    # THE WHOLE REASON THE THIRD PARAMETER IS SPELLED `B`. `ObjectiveLike`
+    # requires a member named `BinT`; a struct PARAMETER named `BinT` does
+    # not satisfy that, and Mojo says so ("required member 'BinT' is not
+    # specified") while printing a candidate signature that looks
+    # identical. Renaming the parameter to `B` and aliasing `BinT` to it
+    # leaves every `Self.BinT` in this file resolving to the member the
+    # trait asked for, with no other edit.
+    comptime DataT = Self.dtype
+    comptime LabelT = Self.label_dtype
+    comptime BinT = Self.B
 
     # `objectives.cuh:27` -- `static constexpr bool weighted`, now read
     # off the bin instead of selecting it.
@@ -423,6 +546,13 @@ struct ClassificationObjectiveFunction[
         return self.nclasses
 
     @always_inline
+    def Scales(self) -> BinScales:
+        """NOT theirs. DEVIATION 101b's fixed-point scales, which
+        `SetLeafVector` needs and their two-argument static did not.
+        Required by `ObjectiveLike` so the kernels can reach them."""
+        return self.scales
+
+    @always_inline
     def IncrementHistogram[
         ho: MutOrigin, aspace: AddressSpace, //
     ](
@@ -522,9 +652,15 @@ struct ClassificationObjectiveFunction[
 
 # ----------------------------------------- RegressionObjectiveFunction --
 struct RegressionObjectiveFunction[
-    dtype: DType, label_dtype: DType, BinT: RegressionBinLike
-](Copyable, Movable) where dtype.is_floating_point():
+    dtype: DType, label_dtype: DType, B: RegressionBinLike
+](ObjectiveLike) where dtype.is_floating_point():
     """`ML::DT::RegressionObjectiveFunction`, `objectives.cuh:198-387`."""
+
+    # `objectives.cuh:200-204`; see the note on the classification twin
+    # for why the parameter is `B` and `BinT` is an alias to it.
+    comptime DataT = Self.dtype
+    comptime LabelT = Self.label_dtype
+    comptime BinT = Self.B
 
     # `objectives.cuh:205`
     comptime weighted = Self.BinT.weighted
@@ -538,19 +674,30 @@ struct RegressionObjectiveFunction[
     # NOT in their class. DEVIATION 101b's fixed-point scales.
     var scales: BinScales
 
-    @staticmethod
-    @always_inline
-    def eps_() -> Scalar[Self.dtype]:
-        """`objectives.cuh:211` -- `10 * numeric_limits<DataT>::epsilon()`.
-
-        A static method rather than a `comptime` because Mojo has no
-        `numeric_limits::epsilon`; this is the definition of machine
-        epsilon, `nextafter(1, 2) - 1`, in DataT.
-        """
-        var one = Scalar[Self.dtype](1)
-        return Scalar[Self.dtype](10) * (
-            nextafter(one, Scalar[Self.dtype](2)) - one
-        )
+    # `objectives.cuh:211` -- `10 * numeric_limits<DataT>::epsilon()`.
+    #
+    # THIS WAS `10 * (nextafter(1, 2) - 1)` AND IT CRASHED THE METAL
+    # BACKEND. Not "was slow", not "was imprecise": the first regression
+    # kernel ever instantiated failed with "Metal Compiler failed to
+    # compile metallib", no line number and no symbol. `nextafter` is a
+    # libm-shaped call and does not survive into device code. Isolated to a
+    # ten-line kernel that does nothing but call it, so this is measured
+    # rather than inferred.
+    #
+    # HOW IT WAS FOUND, because the shape recurs: `MSEGain` compiled and
+    # ran while `PoissonGain`, `GammaGain` and `InverseGaussianGain` all
+    # crashed. The only thing those three share and MSE does not is this
+    # constant -- and the third of them does not call `log` at all, which
+    # is what ruled `log` out. Making it a `comptime` did NOT help; the
+    # call still reached the device.
+    #
+    # So the value is written as the IEEE-754 definition instead:
+    # `numeric_limits<T>::epsilon()` is 2^-(mantissa bits), exactly, and
+    # each literal below is an exact power of two and therefore exactly
+    # representable. `objectives_check` holds them to `nextafter` ON THE
+    # HOST, where it works, so this is checked against the definition it
+    # replaced rather than trusted.
+    comptime eps_ = Scalar[Self.dtype](10) * machine_epsilon[Self.dtype]()
 
     @always_inline
     def __init__(
@@ -660,9 +807,9 @@ struct RegressionObjectiveFunction[
 
         # `:251-253` -- label sum cannot be non-positive
         if (
-            label_sum <= Self.eps_()
-            or left_label_sum <= Self.eps_()
-            or right_label_sum <= Self.eps_()
+            label_sum <= Self.eps_
+            or left_label_sum <= Self.eps_
+            or right_label_sum <= Self.eps_
         ):
             return -Scalar[Self.dtype].MAX_FINITE
 
@@ -718,9 +865,9 @@ struct RegressionObjectiveFunction[
 
         # `:279-281` -- label sum cannot be non-positive
         if (
-            label_sum <= Self.eps_()
-            or left_label_sum <= Self.eps_()
-            or right_label_sum <= Self.eps_()
+            label_sum <= Self.eps_
+            or left_label_sum <= Self.eps_
+            or right_label_sum <= Self.eps_
         ):
             return -Scalar[Self.dtype].MAX_FINITE
 
@@ -778,9 +925,9 @@ struct RegressionObjectiveFunction[
 
         # `:306-308` -- label sum cannot be non-positive
         if (
-            label_sum <= Self.eps_()
-            or left_label_sum <= Self.eps_()
-            or right_label_sum <= Self.eps_()
+            label_sum <= Self.eps_
+            or left_label_sum <= Self.eps_
+            or right_label_sum <= Self.eps_
         ):
             return -Scalar[Self.dtype].MAX_FINITE
 
@@ -836,6 +983,13 @@ struct RegressionObjectiveFunction[
     def NumClasses(self) -> Int32:
         """`objectives.cuh:351` -- `return 1`."""
         return 1
+
+    @always_inline
+    def Scales(self) -> BinScales:
+        """NOT theirs. DEVIATION 101b's fixed-point scales, which
+        `SetLeafVector` needs and their two-argument static did not.
+        Required by `ObjectiveLike` so the kernels can reach them."""
+        return self.scales
 
     @always_inline
     def IncrementHistogram[

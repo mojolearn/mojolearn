@@ -136,7 +136,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from ensemble.decisiontree.batched_levelalgo.bins import Bin, BinScales
 from ensemble.decisiontree.batched_levelalgo.dataset import DatasetView
 from ensemble.decisiontree.batched_levelalgo.objectives import (
-    ClassificationObjectiveFunction,
+    ObjectiveLike,
 )
 from ensemble.decisiontree.batched_levelalgo.quantiles import Quantiles
 from ensemble.decisiontree.batched_levelalgo.split import (
@@ -151,7 +151,6 @@ from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels import (
     sample_features_kernel,
 )
 from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import (
-    ClassificationObjective,
     DeviceArgs,
     FindBestSplitsArgs,
     HistogramArgs,
@@ -794,7 +793,7 @@ def compute_shared_memory_config(
 # ===========================================================================
 
 
-struct Builder[dt: DType, lt: DType, B: Bin](Movable) where dt.is_floating_point():
+struct Builder[O: ObjectiveLike](Movable):
     """`ML::DT::Builder<ObjectiveT>`, `builder.cuh:147-698`.
 
     THE BUFFERS ARE FIELDS, AND THAT IS LOAD-BEARING RATHER THAN TIDY.
@@ -833,8 +832,6 @@ struct Builder[dt: DType, lt: DType, B: Bin](Movable) where dt.is_floating_point
     atomic, so its histogram is order-independent by construction.
     """
 
-    comptime ObjT = ClassificationObjectiveFunction[Self.dt, Self.lt, Self.B]
-
     var params: DecisionTreeParams
     var treeid: Int32
     var seed: UInt64
@@ -842,7 +839,15 @@ struct Builder[dt: DType, lt: DType, B: Bin](Movable) where dt.is_floating_point
     var n_cols: Int
     var original_n_sampled_cols: Int
     var num_outputs: Int32
-    var scales: BinScales
+    # THEIRS constructs the objective FRESH inside `computeSplit`
+    # (`builder.cuh:592-596`) from `params`, every level, every column
+    # block. It is the same value every time -- `params`, `num_outputs`
+    # and the scales do not move inside a fit -- so ours is constructed
+    # once by the caller and stored. Same value, one construction; a
+    # spelling difference, and the only reason to note it is that a reader
+    # diffing `computeSplit` will find their four-argument constructor
+    # missing from ours.
+    var objective: Self.O
 
     # --- the workspace, `builder.cuh:176-212` ---------------------------
     var histograms: DeviceBuffer[DType.uint8]
@@ -857,17 +862,11 @@ struct Builder[dt: DType, lt: DType, B: Bin](Movable) where dt.is_floating_point
     var h_splits: HostBuffer[DType.uint8]
 
     # --- DEVIATION 128a's argument blobs, one per launcher --------------
-    var hist_args: DeviceArgs[
-        HistogramArgs[ClassificationObjective[Self.dt, Self.lt, Self.B]]
-    ]
-    var find_args: DeviceArgs[
-        FindBestSplitsArgs[ClassificationObjective[Self.dt, Self.lt, Self.B]]
-    ]
-    var leaf_args: DeviceArgs[
-        LeafArgs[ClassificationObjective[Self.dt, Self.lt, Self.B]]
-    ]
-    var node_split_args: DeviceArgs[NodeSplitArgs[Self.dt, Self.lt]]
-    var node_split_scratch: NodeSplitScratch[Self.dt, TPB_DEFAULT]
+    var hist_args: DeviceArgs[HistogramArgs[Self.O]]
+    var find_args: DeviceArgs[FindBestSplitsArgs[Self.O]]
+    var leaf_args: DeviceArgs[LeafArgs[Self.O]]
+    var node_split_args: DeviceArgs[NodeSplitArgs[Self.O.DataT, Self.O.LabelT]]
+    var node_split_scratch: NodeSplitScratch[Self.O.DataT, TPB_DEFAULT]
 
     def __init__(
         out self,
@@ -878,7 +877,7 @@ struct Builder[dt: DType, lt: DType, B: Bin](Movable) where dt.is_floating_point
         n_sampled_rows: Int,
         n_cols: Int,
         num_outputs: Int32,
-        scales: BinScales = BinScales(1.0, 1.0),
+        var objective: Self.O,
     ) raises:
         """`builder.cuh:213-261`, their constructor.
 
@@ -892,7 +891,7 @@ struct Builder[dt: DType, lt: DType, B: Bin](Movable) where dt.is_floating_point
         self.n_sampled_rows = n_sampled_rows
         self.n_cols = n_cols
         self.num_outputs = num_outputs
-        self.scales = scales
+        self.objective = objective^
         self.original_n_sampled_cols = n_sampled_cols_for(
             params.max_features, n_cols
         )
@@ -919,11 +918,11 @@ struct Builder[dt: DType, lt: DType, B: Bin](Movable) where dt.is_floating_point
         )
 
         self.histograms = ctx.enqueue_create_buffer[DType.uint8](
-            size_of[Self.B]() * max_len_histograms
+            size_of[Self.O.BinT]() * max_len_histograms
         )
         self.mutex = ctx.enqueue_create_buffer[DType.int32](max_batch)
         self.splits = ctx.enqueue_create_buffer[DType.uint8](
-            size_of[Split[Self.dt]]() * max_batch
+            size_of[Split[Self.O.DataT]]() * max_batch
         )
         self.d_work_items = ctx.enqueue_create_buffer[DType.uint8](
             size_of[NodeWorkItem]() * max_batch
@@ -944,35 +943,27 @@ struct Builder[dt: DType, lt: DType, B: Bin](Movable) where dt.is_floating_point
             size_of[WorkloadInfo]() * max_blocks
         )
         self.h_splits = ctx.enqueue_create_host_buffer[DType.uint8](
-            size_of[Split[Self.dt]]() * max_batch
+            size_of[Split[Self.O.DataT]]() * max_batch
         )
 
-        self.hist_args = DeviceArgs[
-            HistogramArgs[ClassificationObjective[Self.dt, Self.lt, Self.B]]
-        ](ctx)
-        self.find_args = DeviceArgs[
-            FindBestSplitsArgs[
-                ClassificationObjective[Self.dt, Self.lt, Self.B]
-            ]
-        ](ctx)
-        self.leaf_args = DeviceArgs[
-            LeafArgs[ClassificationObjective[Self.dt, Self.lt, Self.B]]
-        ](ctx)
-        self.node_split_args = DeviceArgs[NodeSplitArgs[Self.dt, Self.lt]](
+        self.hist_args = DeviceArgs[HistogramArgs[Self.O]](ctx)
+        self.find_args = DeviceArgs[FindBestSplitsArgs[Self.O]](ctx)
+        self.leaf_args = DeviceArgs[LeafArgs[Self.O]](ctx)
+        self.node_split_args = DeviceArgs[NodeSplitArgs[Self.O.DataT, Self.O.LabelT]](
             ctx
         )
-        self.node_split_scratch = NodeSplitScratch[Self.dt, TPB_DEFAULT](
+        self.node_split_scratch = NodeSplitScratch[Self.O.DataT, TPB_DEFAULT](
             ctx, max_blocks * TPB_DEFAULT, max_batch
         )
         ctx.enqueue_memset(self.mutex, Int32(0))
         ctx.synchronize()
 
     @always_inline
-    def _splits_ptr(mut self) -> MutPointer[Split[Self.dt], MutUntrackedOrigin]:
+    def _splits_ptr(mut self) -> MutPointer[Split[Self.O.DataT], MutUntrackedOrigin]:
         return (
             self.splits.unsafe_ptr()
             .unsafe_origin_cast[MutUntrackedOrigin]()
-            .unsafe_bitcast[Split[Self.dt]]()
+            .unsafe_bitcast[Split[Self.O.DataT]]()
         )
 
     @always_inline
@@ -992,22 +983,17 @@ struct Builder[dt: DType, lt: DType, B: Bin](Movable) where dt.is_floating_point
         )
 
     @always_inline
-    def _hist_ptr(mut self) -> MutPointer[Self.B, MutUntrackedOrigin]:
+    def _hist_ptr(mut self) -> MutPointer[Self.O.BinT, MutUntrackedOrigin]:
         return (
             self.histograms.unsafe_ptr()
             .unsafe_origin_cast[MutUntrackedOrigin]()
-            .unsafe_bitcast[Self.B]()
+            .unsafe_bitcast[Self.O.BinT]()
         )
 
-    def _objective(mut self) -> Self.ObjT:
-        """`builder.cuh:592-596`, constructed fresh per `computeSplit`."""
-        return Self.ObjT(
-            self.num_outputs,
-            self.params.min_samples_leaf,
-            Int32(self.params.split_criterion),
-            Scalar[Self.dt](Float64(self.params.min_impurity_decrease)),
-            self.scales,
-        )
+    def _objective(self) -> Self.O:
+        """`builder.cuh:592-596`. See the field's comment for why this
+        returns the stored one rather than constructing a new one."""
+        return self.objective.copy()
 
     def _upload_work_items(
         mut self, ctx: DeviceContext, items: List[NodeWorkItem]
@@ -1037,18 +1023,18 @@ struct Builder[dt: DType, lt: DType, B: Bin](Movable) where dt.is_floating_point
 
     def _download_splits(
         mut self, ctx: DeviceContext, n: Int
-    ) raises -> List[SplitSummary[Self.dt]]:
+    ) raises -> List[SplitSummary[Self.O.DataT]]:
         """`raft::update_host(h_splits, splits, ...)` + `sync_stream`,
         `:479-480`, `:676-677`. Their host copy is what `NodeQueue::Push`
         reads, projected onto the six fields it touches."""
         ctx.enqueue_copy(dst_buf=self.h_splits, src_buf=self.splits)
         ctx.synchronize()
-        var p = self.h_splits.unsafe_ptr().unsafe_bitcast[Split[Self.dt]]()
-        var out = List[SplitSummary[Self.dt]]()
+        var p = self.h_splits.unsafe_ptr().unsafe_bitcast[Split[Self.O.DataT]]()
+        var out = List[SplitSummary[Self.O.DataT]]()
         for i in range(n):
             ref s = p[unsafe_offset=i]
             out.append(
-                SplitSummary[Self.dt](
+                SplitSummary[Self.O.DataT](
                     s.colid != Int32(-1),
                     s.colid,
                     s.quesval,
@@ -1098,8 +1084,8 @@ struct Builder[dt: DType, lt: DType, B: Bin](Movable) where dt.is_floating_point
     def _compute_split(
         mut self,
         ctx: DeviceContext,
-        dataset: DatasetView[Self.dt, Self.lt],
-        quantiles: Quantiles[Self.dt],
+        dataset: DatasetView[Self.O.DataT, Self.O.LabelT],
+        quantiles: Quantiles[Self.O.DataT],
         col: Int,
         n_blocks_dimx: Int,
         n_work_items: Int,
@@ -1135,7 +1121,7 @@ struct Builder[dt: DType, lt: DType, B: Bin](Movable) where dt.is_floating_point
         ctx.enqueue_memset(self.histograms, UInt8(0))
         var objective = self._objective()
 
-        launch_build_histograms_kernel(
+        launch_build_histograms_kernel[Self.O](
             ctx,
             self._hist_ptr(),
             n_bins,
@@ -1154,7 +1140,7 @@ struct Builder[dt: DType, lt: DType, B: Bin](Movable) where dt.is_floating_point
         )
         # DEVIATION 178: their `if (distributed) allReduceHistograms(...)`
         # sits exactly here (`:613`) and is unreachable on one device.
-        launch_find_best_splits_kernel(
+        launch_find_best_splits_kernel[Self.O](
             ctx,
             self._hist_ptr(),
             n_bins,
@@ -1175,17 +1161,17 @@ struct Builder[dt: DType, lt: DType, B: Bin](Movable) where dt.is_floating_point
     def _compute_best_splits(
         mut self,
         ctx: DeviceContext,
-        dataset: DatasetView[Self.dt, Self.lt],
-        quantiles: Quantiles[Self.dt],
+        dataset: DatasetView[Self.O.DataT, Self.O.LabelT],
+        quantiles: Quantiles[Self.O.DataT],
         work_items: List[NodeWorkItem],
         sample_offset: Int,
         n_sampled_cols: Int,
         smem_config: SharedMemoryConfig,
-    ) raises -> List[SplitSummary[Self.dt]]:
+    ) raises -> List[SplitSummary[Self.O.DataT]]:
         """`Builder::computeBestSplits`, `:485-503`, in their order."""
         var n = len(work_items)
         # `:489` -- initSplit
-        ctx.enqueue_function[init_split_kernel[Self.dt]](
+        ctx.enqueue_function[init_split_kernel[Self.O.DataT]](
             self._splits_ptr(), Int32(n), grid_dim=ceildiv(n, 128), block_dim=128
         )
         # `:490` -- the mutex is re-zeroed EVERY batch, over max_batch_size
@@ -1212,11 +1198,11 @@ struct Builder[dt: DType, lt: DType, B: Bin](Movable) where dt.is_floating_point
     def do_split(
         mut self,
         ctx: DeviceContext,
-        dataset: DatasetView[Self.dt, Self.lt],
-        quantiles: Quantiles[Self.dt],
+        dataset: DatasetView[Self.O.DataT, Self.O.LabelT],
+        quantiles: Quantiles[Self.O.DataT],
         work_items: List[NodeWorkItem],
         smem_config: SharedMemoryConfig,
-    ) raises -> List[SplitSummary[Self.dt]]:
+    ) raises -> List[SplitSummary[Self.O.DataT]]:
         """`Builder::doSplit`, `:410-482`. THE MULTI-ROUND LOOP.
 
         See the module docstring for why the rounds exist. The active set
@@ -1229,12 +1215,12 @@ struct Builder[dt: DType, lt: DType, B: Bin](Movable) where dt.is_floating_point
             self.n_cols, self.original_n_sampled_cols
         )
 
-        var final_splits = List[SplitSummary[Self.dt]]()
+        var final_splits = List[SplitSummary[Self.O.DataT]]()
         for _ in range(n):
             final_splits.append(
-                SplitSummary[Self.dt](
-                    False, Int32(-1), Scalar[Self.dt](0),
-                    Scalar[Self.dt](0), Int64(0), Int64(0),
+                SplitSummary[Self.O.DataT](
+                    False, Int32(-1), Scalar[Self.O.DataT](0),
+                    Scalar[Self.O.DataT](0), Int64(0), Int64(0),
                 )
             )
         var active_items = work_items.copy()
@@ -1268,9 +1254,9 @@ struct Builder[dt: DType, lt: DType, B: Bin](Movable) where dt.is_floating_point
 
         # `:474-478` -- the chosen splits go back to the device once, and
         # the partition runs ONCE over the whole batch.
-        var sp = self.h_splits.unsafe_ptr().unsafe_bitcast[Split[Self.dt]]()
+        var sp = self.h_splits.unsafe_ptr().unsafe_bitcast[Split[Self.O.DataT]]()
         for i in range(n):
-            sp[unsafe_offset=i] = Split[Self.dt](
+            sp[unsafe_offset=i] = Split[Self.O.DataT](
                 final_splits[i].quesval,
                 final_splits[i].colid,
                 final_splits[i].best_metric_val,
@@ -1321,13 +1307,13 @@ struct Builder[dt: DType, lt: DType, B: Bin](Movable) where dt.is_floating_point
         whether a configuration fits.
         """
         var warps = ceildiv(TPB_DEFAULT, WARP_SIZE)
-        var cdf_scan_smem_size = (TPB_DEFAULT + warps) * size_of[Self.B]()
+        var cdf_scan_smem_size = (TPB_DEFAULT + warps) * size_of[Self.O.BinT]()
         return compute_shared_memory_config(
             self.params.max_n_bins,
             self.num_outputs,
-            size_of[Self.B](),
-            size_of[Scalar[Self.dt]](),
-            size_of[Split[Self.dt]](),
+            size_of[Self.O.BinT](),
+            size_of[Scalar[Self.O.DataT]](),
+            size_of[Split[Self.O.DataT]](),
             column_shared_limit(TARGET_COLUMN),
             cdf_scan_smem_size,
             WARP_SIZE,
@@ -1336,9 +1322,9 @@ struct Builder[dt: DType, lt: DType, B: Bin](Movable) where dt.is_floating_point
     def set_leaf_predictions(
         mut self,
         ctx: DeviceContext,
-        mut tree: TreeMetaDataNode[Self.dt],
+        mut tree: TreeMetaDataNode[Self.O.DataT],
         instance_ranges: List[InstanceRange],
-        dataset: DatasetView[Self.dt, Self.lt],
+        dataset: DatasetView[Self.O.DataT, Self.O.LabelT],
     ) raises:
         """`Builder::SetLeafPredictions`, `:630-687`.
 
@@ -1363,17 +1349,17 @@ struct Builder[dt: DType, lt: DType, B: Bin](Movable) where dt.is_floating_point
                 + String(len(instance_ranges))
                 + " ranges"
             )
-        tree.vector_leaf = List[Scalar[Self.dt]]()
-        tree.vector_leaf.resize(n_nodes * n_out, Scalar[Self.dt](0))
+        tree.vector_leaf = List[Scalar[Self.O.DataT]]()
+        tree.vector_leaf.resize(n_nodes * n_out, Scalar[Self.O.DataT](0))
 
         var batch = min(100000, n_nodes)
         if batch == 0:
             return
         var d_tree = ctx.enqueue_create_buffer[DType.uint8](
-            size_of[SparseTreeNode[Self.dt]]() * batch
+            size_of[SparseTreeNode[Self.O.DataT]]() * batch
         )
         var h_tree = ctx.enqueue_create_host_buffer[DType.uint8](
-            size_of[SparseTreeNode[Self.dt]]() * batch
+            size_of[SparseTreeNode[Self.O.DataT]]() * batch
         )
         var d_ranges = ctx.enqueue_create_buffer[DType.uint8](
             size_of[InstanceRange]() * batch
@@ -1381,18 +1367,18 @@ struct Builder[dt: DType, lt: DType, B: Bin](Movable) where dt.is_floating_point
         var h_ranges = ctx.enqueue_create_host_buffer[DType.uint8](
             size_of[InstanceRange]() * batch
         )
-        var d_leaves = ctx.enqueue_create_buffer[Self.dt](batch * n_out)
-        var h_leaves = ctx.enqueue_create_host_buffer[Self.dt](batch * n_out)
+        var d_leaves = ctx.enqueue_create_buffer[Self.O.DataT](batch * n_out)
+        var h_leaves = ctx.enqueue_create_host_buffer[Self.O.DataT](batch * n_out)
         var objective = self._objective()
         # `:652` -- their smem is `sizeof(BinT) * num_outputs`.
-        var smem_size = size_of[Self.B]() * n_out
+        var smem_size = size_of[Self.O.BinT]() * n_out
 
         var begin = 0
         while begin < n_nodes:
             var end = min(begin + batch, n_nodes)
             var size = end - begin
             var tp = h_tree.unsafe_ptr().unsafe_bitcast[
-                SparseTreeNode[Self.dt]
+                SparseTreeNode[Self.O.DataT]
             ]()
             var rp = h_ranges.unsafe_ptr().unsafe_bitcast[InstanceRange]()
             for i in range(size):
@@ -1400,15 +1386,15 @@ struct Builder[dt: DType, lt: DType, B: Bin](Movable) where dt.is_floating_point
                 rp[unsafe_offset=i] = instance_ranges[begin + i]
             ctx.enqueue_copy(dst_buf=d_tree, src_ptr=h_tree.unsafe_ptr())
             ctx.enqueue_copy(dst_buf=d_ranges, src_ptr=h_ranges.unsafe_ptr())
-            ctx.enqueue_memset(d_leaves, Scalar[Self.dt](0))
+            ctx.enqueue_memset(d_leaves, Scalar[Self.O.DataT](0))
 
-            launch_leaf_kernel(
+            launch_leaf_kernel[Self.O](
                 ctx,
                 objective,
                 dataset,
                 d_tree.unsafe_ptr()
                 .unsafe_origin_cast[MutUntrackedOrigin]()
-                .unsafe_bitcast[SparseTreeNode[Self.dt]](),
+                .unsafe_bitcast[SparseTreeNode[Self.O.DataT]](),
                 d_ranges.unsafe_ptr()
                 .unsafe_origin_cast[MutUntrackedOrigin]()
                 .unsafe_bitcast[InstanceRange](),
@@ -1441,9 +1427,9 @@ struct Builder[dt: DType, lt: DType, B: Bin](Movable) where dt.is_floating_point
     def train(
         mut self,
         ctx: DeviceContext,
-        dataset: DatasetView[Self.dt, Self.lt],
-        quantiles: Quantiles[Self.dt],
-    ) raises -> TreeMetaDataNode[Self.dt]:
+        dataset: DatasetView[Self.O.DataT, Self.O.LabelT],
+        quantiles: Quantiles[Self.O.DataT],
+    ) raises -> TreeMetaDataNode[Self.O.DataT]:
         """`Builder::train`, `:375-389`. Their loop, verbatim:
 
             NodeQueue queue(params, maxNodes(), n_sampled_rows, num_outputs);
@@ -1458,7 +1444,7 @@ struct Builder[dt: DType, lt: DType, B: Bin](Movable) where dt.is_floating_point
         `train_time` is not set; see DEVIATION 179.
         """
         var smem_config = self.shared_memory_config()
-        var queue = NodeQueue[Self.dt](
+        var queue = NodeQueue[Self.O.DataT](
             self.params,
             max_nodes(self.params.max_depth),
             self.n_sampled_rows,

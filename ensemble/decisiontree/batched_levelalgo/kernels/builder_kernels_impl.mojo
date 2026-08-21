@@ -384,6 +384,7 @@ from ensemble.decisiontree.batched_levelalgo.bins import (
 )
 from ensemble.decisiontree.batched_levelalgo.dataset import DatasetView
 from ensemble.decisiontree.batched_levelalgo.objectives import (
+    ObjectiveLike,
     ClassificationObjectiveFunction,
     RegressionObjectiveFunction,
 )
@@ -452,225 +453,6 @@ def lower_bound_aspace[
 
 # ===========================================================================
 # DEVIATION 129a -- the objective trait their `typename ObjectiveT` implies.
-# ===========================================================================
-
-
-trait ObjectiveLike(Copyable & Deinitable):
-    """What `buildHistogramsKernel`, `findBestSplitsKernel` and
-    `leafKernel` require of `typename ObjectiveT`.
-
-    NOT A PORT OF A CUML CONSTRUCT. Their three kernels take an
-    unconstrained `typename ObjectiveT` and use it structurally:
-    `::BinT` (`:296`, `:363`, `:219`), `NumClasses()` (`:307`, `:369`),
-    `IncrementHistogram(...)` (`:341`, `:234`), `Gain(...)` (`:385`) and
-    the static `SetLeafVector(...)` (`:238-239`). This trait is that list
-    written down; see DEVIATION 129a for why it lives here.
-    """
-
-    comptime DataT: DType
-    comptime LabelT: DType
-    comptime BinT: Bin
-
-    def NumClasses(self) -> Int32:
-        """`objectives.cuh:150` / `:361`."""
-        ...
-
-    def Scales(self) -> BinScales:
-        """NOT theirs. DEVIATION 101b's fixed-point scales, which
-        `SetLeafVector` needs and their two-argument static did not."""
-        ...
-
-    def IncrementHistogram[
-        ho: MutOrigin, aspace: AddressSpace, //
-    ](
-        self,
-        histogram: MutPointer[Self.BinT, ho, address_space=aspace],
-        n_bins: Int32,
-        bin: Int32,
-        label: Scalar[Self.LabelT],
-        dataset: DatasetView[Self.DataT, Self.LabelT],
-        row: Int32,
-    ):
-        """`objectives.cuh:152-161` / `:370-379`."""
-        ...
-
-    def Gain[
-        ho: MutOrigin,
-        aspace: AddressSpace,
-        qo: MutOrigin,
-        qs: AddressSpace, //,
-    ](
-        self,
-        shist: MutPointer[Self.BinT, ho, address_space=aspace],
-        squantiles: MutPointer[Scalar[Self.DataT], qo, address_space=qs],
-        col: Int32,
-        len: Int64,
-        n_bins: Int32,
-    ) -> Split[Self.DataT]:
-        """`objectives.cuh:163-177` / `:381-397`."""
-        ...
-
-    @staticmethod
-    def SetLeafVector[
-        ho: MutOrigin,
-        aspace: AddressSpace,
-        oo: MutOrigin,
-        os: AddressSpace, //,
-    ](
-        shist: MutPointer[Self.BinT, ho, address_space=aspace],
-        nclasses: Int32,
-        out_ptr: MutPointer[Scalar[Self.DataT], oo, address_space=os],
-        scales: BinScales,
-    ):
-        """`objectives.cuh:179-195` / `:399-408`."""
-        ...
-
-
-@fieldwise_init
-struct ClassificationObjective[dt: DType, lt: DType, B: Bin](
-    ObjectiveLike
-) where dt.is_floating_point():
-    """DEVIATION 129a's adapter over
-    `ClassificationObjectiveFunction[dt, lt, B]`. Every method forwards;
-    there is no logic here."""
-
-    comptime DataT = Self.dt
-    comptime LabelT = Self.lt
-    comptime BinT = Self.B
-
-    var inner: ClassificationObjectiveFunction[Self.dt, Self.lt, Self.B]
-
-    @always_inline
-    def NumClasses(self) -> Int32:
-        return self.inner.NumClasses()
-
-    @always_inline
-    def Scales(self) -> BinScales:
-        return self.inner.scales
-
-    @always_inline
-    def IncrementHistogram[
-        ho: MutOrigin, aspace: AddressSpace, //
-    ](
-        self,
-        histogram: MutPointer[Self.BinT, ho, address_space=aspace],
-        n_bins: Int32,
-        bin: Int32,
-        label: Scalar[Self.LabelT],
-        dataset: DatasetView[Self.DataT, Self.LabelT],
-        row: Int32,
-    ):
-        self.inner.IncrementHistogram(
-            histogram, n_bins, bin, label, dataset, row
-        )
-
-    @always_inline
-    def Gain[
-        ho: MutOrigin,
-        aspace: AddressSpace,
-        qo: MutOrigin,
-        qs: AddressSpace, //,
-    ](
-        self,
-        shist: MutPointer[Self.BinT, ho, address_space=aspace],
-        squantiles: MutPointer[Scalar[Self.DataT], qo, address_space=qs],
-        col: Int32,
-        len: Int64,
-        n_bins: Int32,
-    ) -> Split[Self.DataT]:
-        return self.inner.Gain(shist, squantiles, col, len, n_bins)
-
-    @staticmethod
-    @always_inline
-    def SetLeafVector[
-        ho: MutOrigin,
-        aspace: AddressSpace,
-        oo: MutOrigin,
-        os: AddressSpace, //,
-    ](
-        shist: MutPointer[Self.BinT, ho, address_space=aspace],
-        nclasses: Int32,
-        out_ptr: MutPointer[Scalar[Self.DataT], oo, address_space=os],
-        scales: BinScales,
-    ):
-        ClassificationObjectiveFunction[
-            Self.dt, Self.lt, Self.B
-        ].SetLeafVector(shist, nclasses, out_ptr, scales)
-
-
-@fieldwise_init
-struct RegressionObjective[dt: DType, lt: DType, B: Bin](
-    ObjectiveLike
-) where dt.is_floating_point() and conforms_to(B, RegressionBinLike):
-    """DEVIATION 129a's adapter over
-    `RegressionObjectiveFunction[dt, lt, B]`."""
-
-    comptime DataT = Self.dt
-    comptime LabelT = Self.lt
-    comptime BinT = Self.B
-
-    var inner: RegressionObjectiveFunction[Self.dt, Self.lt, Self.B]
-
-    @always_inline
-    def NumClasses(self) -> Int32:
-        return self.inner.NumClasses()
-
-    @always_inline
-    def Scales(self) -> BinScales:
-        return self.inner.scales
-
-    @always_inline
-    def IncrementHistogram[
-        ho: MutOrigin, aspace: AddressSpace, //
-    ](
-        self,
-        histogram: MutPointer[Self.BinT, ho, address_space=aspace],
-        n_bins: Int32,
-        bin: Int32,
-        label: Scalar[Self.LabelT],
-        dataset: DatasetView[Self.DataT, Self.LabelT],
-        row: Int32,
-    ):
-        self.inner.IncrementHistogram(
-            histogram, n_bins, bin, label, dataset, row
-        )
-
-    @always_inline
-    def Gain[
-        ho: MutOrigin,
-        aspace: AddressSpace,
-        qo: MutOrigin,
-        qs: AddressSpace, //,
-    ](
-        self,
-        shist: MutPointer[Self.BinT, ho, address_space=aspace],
-        squantiles: MutPointer[Scalar[Self.DataT], qo, address_space=qs],
-        col: Int32,
-        len: Int64,
-        n_bins: Int32,
-    ) -> Split[Self.DataT]:
-        return self.inner.Gain(shist, squantiles, col, len, n_bins)
-
-    @staticmethod
-    @always_inline
-    def SetLeafVector[
-        ho: MutOrigin,
-        aspace: AddressSpace,
-        oo: MutOrigin,
-        os: AddressSpace, //,
-    ](
-        shist: MutPointer[Self.BinT, ho, address_space=aspace],
-        nclasses: Int32,
-        out_ptr: MutPointer[Scalar[Self.DataT], oo, address_space=os],
-        scales: BinScales,
-    ):
-        RegressionObjectiveFunction[Self.dt, Self.lt, Self.B].SetLeafVector(
-            shist, nclasses, out_ptr, scales
-        )
-
-
-# ===========================================================================
-# DEVIATION 129b -- `BinT` seen as a `BlockScanElement`.
 # ===========================================================================
 
 
@@ -1320,8 +1102,20 @@ def leaf_kernel[
         )
 
 
-def _launch_leaf_kernel[
-    O: ObjectiveLike, TPB: Int, LEAF_SMEM_BIN_SLOTS: Int, sabotage: Int
+# DEVIATION 129a IS CLOSED. Until `objectives.mojo` declared
+# `ObjectiveLike`, this file carried two forwarding adapters
+# (`ClassificationObjective`, `RegressionObjective`) and each launcher had
+# TWO overloads, one per concrete objective, because Mojo traits are
+# nominal and there was nothing to dispatch on. The trait now lives beside
+# the objectives, both conform to it, and the adapters and overloads are
+# deleted -- which also un-blocks a generic `Builder` and therefore
+# regression forests.
+
+def launch_leaf_kernel[
+    O: ObjectiveLike,
+    TPB: Int = TPB_DEFAULT,
+    LEAF_SMEM_BIN_SLOTS: Int = default_smem_bin_slots[O.BinT](),
+    sabotage: Int = 0,
 ](
     ctx: DeviceContext,
     objective: O,
@@ -1356,86 +1150,6 @@ def _launch_leaf_kernel[
         grid_dim=batch_size,
         block_dim=TPB,
     )
-
-
-def launch_leaf_kernel[
-    dt: DType,
-    lt: DType,
-    B: Bin, //,
-    TPB: Int = TPB_DEFAULT,
-    LEAF_SMEM_BIN_SLOTS: Int = default_smem_bin_slots[B](),
-    sabotage: Int = 0,
-](
-    ctx: DeviceContext,
-    objective: ClassificationObjectiveFunction[dt, lt, B],
-    dataset: DatasetView[dt, lt],
-    tree: MutPointer[SparseTreeNode[dt], MutUntrackedOrigin],
-    instance_ranges: MutPointer[InstanceRange, MutUntrackedOrigin],
-    leaves: MutPointer[Scalar[dt], MutUntrackedOrigin],
-    batch_size: Int,
-    smem_size: Int,
-    mut args_blob: DeviceArgs[LeafArgs[ClassificationObjective[dt, lt, B]]],
-) raises where dt.is_floating_point():
-    """`launchLeafKernel`, `:243-255`, classification overload
-    (DEVIATION 129a)."""
-    _launch_leaf_kernel[
-        ClassificationObjective[dt, lt, B],
-        TPB,
-        LEAF_SMEM_BIN_SLOTS,
-        sabotage,
-    ](
-        ctx,
-        ClassificationObjective[dt, lt, B](objective.copy()),
-        dataset,
-        tree,
-        instance_ranges,
-        leaves,
-        batch_size,
-        smem_size,
-        args_blob,
-    )
-
-
-def launch_leaf_kernel[
-    dt: DType,
-    lt: DType,
-    B: Bin, //,
-    TPB: Int = TPB_DEFAULT,
-    LEAF_SMEM_BIN_SLOTS: Int = default_smem_bin_slots[B](),
-    sabotage: Int = 0,
-](
-    ctx: DeviceContext,
-    objective: RegressionObjectiveFunction[dt, lt, B],
-    dataset: DatasetView[dt, lt],
-    tree: MutPointer[SparseTreeNode[dt], MutUntrackedOrigin],
-    instance_ranges: MutPointer[InstanceRange, MutUntrackedOrigin],
-    leaves: MutPointer[Scalar[dt], MutUntrackedOrigin],
-    batch_size: Int,
-    smem_size: Int,
-    mut args_blob: DeviceArgs[LeafArgs[RegressionObjective[dt, lt, B]]],
-) raises where dt.is_floating_point() and conforms_to(
-    B, RegressionBinLike
-):
-    """`launchLeafKernel`, `:243-255`, regression overload
-    (DEVIATION 129a)."""
-    _launch_leaf_kernel[
-        RegressionObjective[dt, lt, B], TPB, LEAF_SMEM_BIN_SLOTS, sabotage
-    ](
-        ctx,
-        RegressionObjective[dt, lt, B](objective.copy()),
-        dataset,
-        tree,
-        instance_ranges,
-        leaves,
-        batch_size,
-        smem_size,
-        args_blob,
-    )
-
-
-# ===========================================================================
-# THE HISTOGRAM -- `:285-352`, `:396-421`.
-# ===========================================================================
 
 
 @fieldwise_init
@@ -1650,8 +1364,11 @@ def build_histograms_kernel[
             k += Int(block_dim.x)
 
 
-def _launch_build_histograms_kernel[
-    O: ObjectiveLike, TPB: Int, SMEM_BIN_SLOTS: Int, sabotage: Int
+def launch_build_histograms_kernel[
+    O: ObjectiveLike,
+    TPB: Int = TPB_DEFAULT,
+    SMEM_BIN_SLOTS: Int = default_smem_bin_slots[O.BinT](),
+    sabotage: Int = 0,
 ](
     ctx: DeviceContext,
     histograms: MutPointer[O.BinT, MutUntrackedOrigin],
@@ -1713,107 +1430,6 @@ def _launch_build_histograms_kernel[
             grid_dim=(histogram_grid_x, histogram_grid_y),
             block_dim=TPB,
         )
-
-
-def launch_build_histograms_kernel[
-    dt: DType,
-    lt: DType,
-    B: Bin, //,
-    TPB: Int = TPB_DEFAULT,
-    SMEM_BIN_SLOTS: Int = default_smem_bin_slots[B](),
-    sabotage: Int = 0,
-](
-    ctx: DeviceContext,
-    histograms: MutPointer[B, MutUntrackedOrigin],
-    max_n_bins: Int,
-    dataset: DatasetView[dt, lt],
-    quantiles: Quantiles[dt],
-    work_items: MutPointer[NodeWorkItem, MutUntrackedOrigin],
-    col_start: Int,
-    column_samples: MutPointer[Int32, MutUntrackedOrigin],
-    objective: ClassificationObjectiveFunction[dt, lt, B],
-    workload_info: MutPointer[WorkloadInfo, MutUntrackedOrigin],
-    histogram_grid_x: Int,
-    histogram_grid_y: Int,
-    smem_config: SharedMemoryConfig,
-    mut args_blob: DeviceArgs[
-        HistogramArgs[ClassificationObjective[dt, lt, B]]
-    ],
-) raises where dt.is_floating_point():
-    """`launchBuildHistogramsKernel`, `:396-421`, classification overload
-    (DEVIATION 129a)."""
-    _launch_build_histograms_kernel[
-        ClassificationObjective[dt, lt, B], TPB, SMEM_BIN_SLOTS, sabotage
-    ](
-        ctx,
-        histograms,
-        max_n_bins,
-        dataset,
-        quantiles,
-        work_items,
-        col_start,
-        column_samples,
-        ClassificationObjective[dt, lt, B](objective.copy()),
-        workload_info,
-        histogram_grid_x,
-        histogram_grid_y,
-        smem_config,
-        args_blob,
-    )
-
-
-def launch_build_histograms_kernel[
-    dt: DType,
-    lt: DType,
-    B: Bin, //,
-    TPB: Int = TPB_DEFAULT,
-    SMEM_BIN_SLOTS: Int = default_smem_bin_slots[B](),
-    sabotage: Int = 0,
-](
-    ctx: DeviceContext,
-    histograms: MutPointer[B, MutUntrackedOrigin],
-    max_n_bins: Int,
-    dataset: DatasetView[dt, lt],
-    quantiles: Quantiles[dt],
-    work_items: MutPointer[NodeWorkItem, MutUntrackedOrigin],
-    col_start: Int,
-    column_samples: MutPointer[Int32, MutUntrackedOrigin],
-    objective: RegressionObjectiveFunction[dt, lt, B],
-    workload_info: MutPointer[WorkloadInfo, MutUntrackedOrigin],
-    histogram_grid_x: Int,
-    histogram_grid_y: Int,
-    smem_config: SharedMemoryConfig,
-    mut args_blob: DeviceArgs[
-        HistogramArgs[RegressionObjective[dt, lt, B]]
-    ],
-) raises where dt.is_floating_point() and conforms_to(
-    B, RegressionBinLike
-):
-    """`launchBuildHistogramsKernel`, `:396-421`, regression overload
-    (DEVIATION 129a)."""
-    _launch_build_histograms_kernel[
-        RegressionObjective[dt, lt, B], TPB, SMEM_BIN_SLOTS, sabotage
-    ](
-        ctx,
-        histograms,
-        max_n_bins,
-        dataset,
-        quantiles,
-        work_items,
-        col_start,
-        column_samples,
-        RegressionObjective[dt, lt, B](objective.copy()),
-        workload_info,
-        histogram_grid_x,
-        histogram_grid_y,
-        smem_config,
-        args_blob,
-    )
-
-
-# ===========================================================================
-# THE SPLIT SCORING -- `:353-393`, `:423-445`.
-# ===========================================================================
 
 
 @fieldwise_init
@@ -1951,8 +1567,8 @@ def find_best_splits_kernel[
     )
 
 
-def _launch_find_best_splits_kernel[
-    O: ObjectiveLike, TPB: Int, sabotage: Int
+def launch_find_best_splits_kernel[
+    O: ObjectiveLike, TPB: Int = TPB_DEFAULT, sabotage: Int = 0
 ](
     ctx: DeviceContext,
     histograms: MutPointer[O.BinT, MutUntrackedOrigin],
@@ -1990,91 +1606,3 @@ def _launch_find_best_splits_kernel[
     )
 
 
-def launch_find_best_splits_kernel[
-    dt: DType,
-    lt: DType,
-    B: Bin, //,
-    TPB: Int = TPB_DEFAULT,
-    sabotage: Int = 0,
-](
-    ctx: DeviceContext,
-    histograms: MutPointer[B, MutUntrackedOrigin],
-    max_n_bins: Int,
-    dataset: DatasetView[dt, lt],
-    quantiles: Quantiles[dt],
-    col_start: Int,
-    column_samples: MutPointer[Int32, MutUntrackedOrigin],
-    mutex: MutPointer[Int32, MutUntrackedOrigin],
-    splits: MutPointer[Split[dt], MutUntrackedOrigin],
-    objective: ClassificationObjectiveFunction[dt, lt, B],
-    split_grid_x: Int,
-    split_grid_y: Int,
-    mut args_blob: DeviceArgs[
-        FindBestSplitsArgs[ClassificationObjective[dt, lt, B]]
-    ],
-) raises where dt.is_floating_point():
-    """`launchFindBestSplitsKernel`, `:423-445`, classification overload
-    (DEVIATION 129a)."""
-    _launch_find_best_splits_kernel[
-        ClassificationObjective[dt, lt, B], TPB, sabotage
-    ](
-        ctx,
-        histograms,
-        max_n_bins,
-        dataset,
-        quantiles,
-        col_start,
-        column_samples,
-        mutex,
-        splits,
-        ClassificationObjective[dt, lt, B](objective.copy()),
-        split_grid_x,
-        split_grid_y,
-        args_blob,
-    )
-
-
-def launch_find_best_splits_kernel[
-    dt: DType,
-    lt: DType,
-    B: Bin, //,
-    TPB: Int = TPB_DEFAULT,
-    sabotage: Int = 0,
-](
-    ctx: DeviceContext,
-    histograms: MutPointer[B, MutUntrackedOrigin],
-    max_n_bins: Int,
-    dataset: DatasetView[dt, lt],
-    quantiles: Quantiles[dt],
-    col_start: Int,
-    column_samples: MutPointer[Int32, MutUntrackedOrigin],
-    mutex: MutPointer[Int32, MutUntrackedOrigin],
-    splits: MutPointer[Split[dt], MutUntrackedOrigin],
-    objective: RegressionObjectiveFunction[dt, lt, B],
-    split_grid_x: Int,
-    split_grid_y: Int,
-    mut args_blob: DeviceArgs[
-        FindBestSplitsArgs[RegressionObjective[dt, lt, B]]
-    ],
-) raises where dt.is_floating_point() and conforms_to(
-    B, RegressionBinLike
-):
-    """`launchFindBestSplitsKernel`, `:423-445`, regression overload
-    (DEVIATION 129a)."""
-    _launch_find_best_splits_kernel[
-        RegressionObjective[dt, lt, B], TPB, sabotage
-    ](
-        ctx,
-        histograms,
-        max_n_bins,
-        dataset,
-        quantiles,
-        col_start,
-        column_samples,
-        mutex,
-        splits,
-        RegressionObjective[dt, lt, B](objective.copy()),
-        split_grid_x,
-        split_grid_y,
-        args_blob,
-    )
