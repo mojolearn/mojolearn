@@ -2097,3 +2097,132 @@ kernel and the copy disappears; the source is one source.
 **The price, stated:** on a target without `double`, that arm costs one
 `work_items_size * k` H2D copy per level their design does not have. The
 returned plan reports which arm ran, so it is visible rather than silent.
+
+---
+
+## DEVIATION 202 -- the workspace is allocated once per tree, not once per level
+
+**THEIRS.** cuML computes `workspaceSize()` once (`builder.cuh:272-296`) and
+hands out pointers into one allocation with `assignWorkspace()`
+(`builder.cuh:302-341`). Nothing inside their level loop allocates. Every size
+is a CAPACITY -- `max_batch * n_sampled_cols` for `colids`, `max_batch` for
+`splits` and `d_work_items`, `max_blocks_dimx` for `workload_info` -- and
+`max_blocks_dimx` is `1 + params.max_batch_size + dataset.n_sampled_rows /
+TPB_DEFAULT` (`builder.cuh:230`).
+
+**WHAT OURS DID.** Allocated all 51 per-level buffers INSIDE
+`while queue.has_work()`, sized to the current level. A depth-12 tree runs 13
+levels, so a ten-tree forest performed about 5,500 buffer creations where cuML
+performs ten.
+
+**IT WAS NEVER A WRONG ANSWER**, which is why no check saw it: every buffer is
+explicitly initialised before use, by `node_feature_range_init_kernel`,
+`node_feature_score_init_kernel`, `split_reduce_init_kernel` or an
+`enqueue_memset`, so a reused buffer and a fresh one are indistinguishable to
+every kernel that reads one.
+
+**REUSING THE HOST STAGING BUFFERS NEEDED AN ARGUMENT, NOT A HOPE.** The copies
+out of them are asynchronous, so a staging buffer rewritten under an in-flight
+copy would corrupt it. Every level ends with a `synchronize()` before the
+splits are read back, so by the time the loop returns to the top, every copy
+the previous level issued has completed.
+
+**AND IT BOUGHT NOTHING, MEASURED.** Bit-identical -- the three scale digests
+(`0xf4d3f26ad592d04d` at `max_features=14`, `0xfef885360b06f02c` at `log2`,
+`0x37f7156a89f8e725` at `k27`, covtype 581,012 rows, 10 trees, depth 12) are
+unchanged -- and the time did not move: 3206 ms before and 3206 ms after at
+`k14`. **Allocation was not the cost.** It is kept because it is cuML's shape
+and because the previous shape was an unrecorded departure from it, NOT because
+it is faster, and this paragraph exists so nobody re-derives a speedup from it.
+
+---
+
+## DEVIATION 203 -- the frontier partition is multi-block
+
+**THEIRS.** `launchNodeSplitKernel` is `<<<work_items_size, TPB>>>`
+(`builder_kernels_impl.cuh:109-134`): one block per node, walking two cursors
+down the node's range and swapping misfits in pairs (`:43-88`).
+
+**WHY IT CHANGED, MEASURED.** That grid has `n_nodes` blocks and the root level
+has ONE node, so on covtype at 581,012 rows the root's partition is a single
+threadgroup walking 581,012 rows. The signature is visible from outside the
+kernel: at 145,253 rows a whole fit is FASTER at `max_features=54`
+(10.7 ms/level, 11,080 nodes) than at `max_features=5` (14.4 ms/level, 1,244
+nodes), despite ten times the split-search work. The only quantity moving the
+right way is the NODE COUNT, and this was the only per-node-serial pass. A100s
+hide it under 108 SMs; ten Apple GPU cores do not.
+
+**WHAT REPLACED IT.** A counting partition in three passes over the same
+`WorkloadInfo` flattening the split search already uses, so the grid is
+`(n_blocks_dimx, 1, 1)` -- blocks over ROWS: count left-going rows per block,
+exclusive-scan those counts within each node (still one block per node, but
+over `ceil(count/TPB)` values instead of `count` rows -- 4,540 instead of
+581,012 at the root), then scatter and write back. `cub::BlockScan::ExclusiveSum`
+becomes MAX's `prefix_sum` plus a broadcast `sum` for the aggregate, per rule
+0b-i: port the CALL.
+
+**THE ANSWER IS UNCHANGED AND IT IS CHECKED, NOT ASSUMED.** The order WITHIN
+each side differs from their pairwise-swap order. Nothing downstream reads it:
+the split search takes min, max and INTEGER class counts over a node's rows,
+the leaf pass sums the same integers, and child ranges come from `split.n_left`.
+`device_tree_check` still reports 0 of 747 nodes and 0 of 2,241 leaf values
+differing against the HOST trainer, which still uses the swap partition, and
+the three scale digests are unchanged.
+
+**MEASURED, on covtype 581,012 x 54, 10 trees, depth 12:** 3554 -> 2952 ms at
+`log2`, 3206 -> 2523 at `k14`, 4180 -> 3500 at `k27`. 1.19-1.20x. Real, and
+much smaller than the model predicted, which is what sent the next measurement
+into the range pass.
+
+**`node_split_kernel` STAYS**, checked, as the oracle
+`partition_multiblock_check` compares against. Deleting the thing you verify
+against leaves nothing to verify against tomorrow.
+
+---
+
+## DEVIATION 204 -- the cross-block range merge is lock-free. THIS CLOSES 161
+
+**WHAT 161 SAID, AND WHAT WAS WRONG WITH IT.** That Mojo has no portable float
+`atomicMin`/`atomicMax`, which is true, and that the cross-block min/max merge
+therefore had to take a lock, which does not follow. The standard
+order-preserving map turns the float compare into an INTEGER one, and integer
+`atomicMin`/`Max` exist on every backend this lane targets.
+
+**THE MAP.** Non-negative float: set the sign bit. Negative float: invert every
+bit. Monotone on all of IEEE-754 except NaN, and exactly invertible -- NaN
+never reaches it because the row loop counts NaNs separately and never lets one
+become an operand (DEVIATION 163).
+
+**WHAT THE LOCK COST, MEASURED.** Instrumented per phase at 581,012 rows,
+`max_features=5`: the range pass was 199-260 ms of a 250-330 ms tree -- 80% --
+while the SCORE pass, reading the same rows and doing strictly more arithmetic,
+took 27-36 ms. Six to seven times slower for less work is not the work; it is
+the lock. At the root, 4,540 blocks took the same spin lock on
+`n_sampled_cols` cells.
+
+**MEASURED AFTER, same fixture:** 2952 -> 1215 ms at `log2` (2.4x), 2523 ->
+1959 at `k14`, 3500 -> 3000 at `k27`. Against the ORIGINAL shipping code the
+whole round is 3554 -> 1215 ms at `log2`, **2.9x**. Digests unchanged
+throughout.
+
+**THE SENTINEL GATE IN THE MERGE GOES; THE SENTINEL DOES NOT.** 163 gated the
+merge on `not (blk_min > blk_max)` so a block that saw no value could not push
+`+inf`/`-inf` into the cell. Under an atomic min/max that gate is a NO-OP:
+`range_key(+inf)` is the largest key and cannot win a minimum,
+`range_key(-inf)` is the smallest and cannot win a maximum. They are the
+identities. The gate is deleted rather than left as a line that can never fire.
+The EMPTY-CELL rule survives one level up, in
+`node_feature_range_decode_kernel`, and so does `RANGE_SAB_NO_SENTINEL`, which
+now selects that kernel's arm and predicts exactly what it predicted before.
+
+**TWO NEW SABOTAGES, AND THE FIRST TRY AT ONE WAS REFUSED BY THE CHECK.**
+`RANGE_SAB_SIGN_UNFLIPPED` drops the key's negative branch -- the same
+expression on non-negative data, the wrong order on negative data -- and moves
+exactly the 28 of 84 cells that carry a negative value.
+`RANGE_SAB_EMPTY_NOT_IDENTITY` makes an empty block publish `range_key(0.0)`
+instead of its identities, and moves exactly the 18 cells with an empty
+contribution, which is what makes deleting the gate safe rather than merely
+plausible. The first attempt merged the raw bit pattern, which the decode then
+misread as a key: all 84 cells moved where 28 were predicted, and the shape
+check rejected it. **A sabotage that moves everything proves nothing**, and the
+check said so before a human did.

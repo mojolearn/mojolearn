@@ -546,6 +546,7 @@ def draw_threshold_raw(key: SplitKey, extent: FeatureRange) -> Float32:
 # ============================================================================
 
 from std.atomic import Atomic, Ordering
+from std.memory import bitcast
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import ceildiv, inf
 from max.gpu.primitives.block import max as block_max
@@ -581,18 +582,149 @@ comptime RANGE_SAB_NAN_AS_VALUE = 4
 """Skip the `v != v` test, so NaN is neither counted nor diverted."""
 
 comptime RANGE_SAB_NO_SENTINEL = 5
-"""Publish `(+inf, -inf)` for an empty contribution instead of the host's
-`(1.0, -1.0)` sentinel."""
+"""Publish `(+inf, -inf)` for an empty cell instead of the host's
+`(1.0, -1.0)` sentinel. Selected in `node_feature_range_decode_kernel`, which
+is where the sentinel lives once the merge is lock-free (DEVIATION 204)."""
+
+comptime RANGE_SAB_EMPTY_NOT_IDENTITY = 7
+"""An empty block publishes `range_key(0.0)` rather than its `+inf`/`-inf`
+identities. DEVIATION 204 deleted 163's sentinel gate from the merge on the
+grounds that those two keys are the identities of min and max; this is the arm
+that makes that grounds observable instead of merely stated."""
+
+comptime RANGE_SAB_SIGN_UNFLIPPED = 6
+"""Skip `range_key`'s NEGATIVE branch: set the sign bit unconditionally
+instead of inverting a negative's bits.
+
+For a non-negative float the two spellings are the SAME expression, so this
+arm is invisible on non-negative data and moves exactly the cells that carry
+a negative value -- which is the whole content of DEVIATION 204's map, and
+the reason the fixture has to carry negatives. The first attempt at this arm
+merged the raw bit pattern instead, which the DECODE then misread as a key,
+so all 84 cells moved and the arm predicted nothing; the check refused it,
+which is what a shape check is for."""
+
+
+def range_key(v: Float32) -> UInt32:
+    """A float as an unsigned key whose INTEGER order is the float's order.
+
+    ==================================================================
+    DEVIATION BLOCK -- DEVIATION 204. THE CROSS-BLOCK RANGE MERGE IS
+    LOCK-FREE. THIS CLOSES DEVIATION 161.
+
+    161 said Mojo has no portable float `atomicMin`/`atomicMax`, which
+    is true, and concluded that the merge had to take a lock. The
+    conclusion was wrong: the standard order-preserving map turns the
+    float compare into an INTEGER one, and integer `atomicMin`/`Max`
+    exist on every backend this lane targets.
+
+    THE MAP. For a non-negative float, set the sign bit; for a negative
+    one, invert every bit. That is monotone on the whole of IEEE-754
+    excluding NaN, and it is exactly invertible, so nothing is
+    approximated -- `range_unkey(range_key(x))` is `x` BIT FOR BIT, and
+    `range_key_check` asserts that over a scattered fixture rather than
+    on a handful of round numbers. NaN never reaches it: the row loop
+    counts NaNs separately and never lets one become an operand
+    (DEVIATION 163).
+
+    WHAT THE LOCK COST, MEASURED. At 581,012 rows the root level runs
+    4,540 blocks against `n_sampled_cols` cells, and every one of them
+    took the same spin lock. Instrumented per phase, the range pass was
+    199-260 ms of a 250-330 ms tree at `max_features=5` -- 80% of the
+    time -- while the SCORE pass, which reads the same rows and does
+    strictly more arithmetic, took 27-36 ms. Six to seven times slower
+    for less work is not the work; it is the lock.
+
+    THE SENTINEL GATE IN THE MERGE GOES WITH IT; THE SENTINEL DOES NOT.
+    163 gated the merge on `not (blk_min > blk_max)` so that a block
+    which saw no value could not push `+inf`/`-inf` into the cell. Under
+    an atomic min/max that gate is a NO-OP by construction:
+    `range_key(+inf)` is the LARGEST key, so it cannot win a minimum,
+    and `range_key(-inf)` is the smallest, so it cannot win a maximum.
+    They are the identities. So the gate is deleted rather than left as
+    a line that can never fire.
+
+    The EMPTY-CELL rule itself survives one level up, and so does its
+    sabotage: a cell no block ever touched still holds both seeds, which
+    decode to `(+inf, -inf)`, and
+    `node_feature_range_decode_kernel` turns that into the host
+    function's own `(1.0, -1.0)`. `RANGE_SAB_NO_SENTINEL` now selects
+    that kernel's arm instead of the merge's, and predicts exactly what
+    it predicted before -- only the cells with no non-missing value
+    move.
+
+    THE MAP ITSELF NEEDED ITS OWN SABOTAGE, because nothing above would
+    have caught a wrong one: `RANGE_SAB_SIGN_UNFLIPPED` drops the
+    negative branch, which is the same expression on non-negative data
+    and the wrong order on negative data, so it moves exactly the cells
+    that carry a negative value and no others.
+
+    AND DELETING THE GATE NEEDED ONE TOO. The gate is safe only
+    BECAUSE `range_key` sends `+inf` to the largest key and `-inf` to
+    the smallest; that is an argument, and an argument in a comment is
+    not a check. `RANGE_SAB_EMPTY_NOT_IDENTITY` makes an empty block
+    publish `range_key(0.0)` instead, and moves exactly the cells that
+    HAVE an empty contribution -- the all-NaN column everywhere plus
+    every column of the 0-row node, which is the same set the empty-cell
+    sentinel moves and is computed the same way.
+    ==================================================================
+    """
+    var b = rebind[UInt32](v.to_bits())
+    if (b & UInt32(0x80000000)) != 0:
+        return ~b
+    return b | UInt32(0x80000000)
+
+
+def range_unkey(k: UInt32) -> Float32:
+    """The exact inverse of `range_key`."""
+    if (k & UInt32(0x80000000)) != 0:
+        return bitcast[DType.float32](k ^ UInt32(0x80000000))
+    return bitcast[DType.float32](~k)
+
+
+comptime RANGE_KEY_MIN_SEED: UInt32 = 0xFF800000
+"""`range_key(+inf)`: the largest key, so an untouched cell loses every min."""
+comptime RANGE_KEY_MAX_SEED: UInt32 = 0x007FFFFF
+"""`range_key(-inf)`: the smallest key, so an untouched cell loses every max."""
+
+
+def node_feature_range_decode_kernel(
+    out_min: MutPointer[Float32, MutAnyOrigin],
+    out_max: MutPointer[Float32, MutAnyOrigin],
+    minkey: MutPointer[UInt32, MutAnyOrigin],
+    maxkey: MutPointer[UInt32, MutAnyOrigin],
+    len: Int32,
+    sabotage_in: Int32,
+):
+    """Keys back into the `(min, max)` floats every later pass reads.
+
+    A cell no block touched still holds both seeds; it decodes to
+    `(+inf, -inf)`, and this writes the host function's all-missing return
+    `(1.0, -1.0)` instead, so the invariant DEVIATION 163 states -- an output
+    cell is a correctly-formed `FeatureRange` after zero merges as well as
+    after many -- holds unchanged.
+    """
+    var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while idx < Int(len):
+        var lo = range_unkey(minkey[unsafe_offset=idx])
+        var hi = range_unkey(maxkey[unsafe_offset=idx])
+        if lo > hi and sabotage_in != RANGE_SAB_NO_SENTINEL:
+            out_min[unsafe_offset=idx] = Float32(1.0)
+            out_max[unsafe_offset=idx] = Float32(-1.0)
+        else:
+            out_min[unsafe_offset=idx] = lo
+            out_max[unsafe_offset=idx] = hi
+        idx += stride
 
 
 def node_feature_range_kernel[
     TPB: Int
 ](
-    out_min: MutPointer[Float32, MutAnyOrigin],
-    out_max: MutPointer[Float32, MutAnyOrigin],
+    out_minkey: MutPointer[UInt32, MutAnyOrigin],
+    out_maxkey: MutPointer[UInt32, MutAnyOrigin],
     out_n_missing: MutPointer[Int32, MutAnyOrigin],
     out_n_merges: MutPointer[Int32, MutAnyOrigin],
-    mutexes: MutPointer[Int32, MutAnyOrigin],
     data: MutPointer[Float32, MutAnyOrigin],
     row_ids: MutPointer[Int32, MutAnyOrigin],
     work_items: MutPointer[NodeWorkItem, MutAnyOrigin],
@@ -739,60 +871,34 @@ def node_feature_range_kernel[
 
     var slot = nid * n_sampled_cols + fslot
 
-    # Their `while (atomicCAS(mutex, 0, 1));` as an acquire-load spin plus a
-    # weak relaxed claim -- the translation `ensemble/.../split.mojo:548-561`
-    # established and enqueued, because `threadfence` is NVIDIA-only in Mojo
-    # 1.0 and Metal rejects a strong compare-exchange by name.
-    while True:
-        if (
-            Atomic.load[ordering = Ordering.ACQUIRE](mutexes.unsafe_offset(slot))
-            != Int32(0)
-        ):
-            continue
-        var expected = Int32(0)
-        if Atomic.compare_exchange[
-            success_ordering = Ordering.RELAXED,
-            failure_ordering = Ordering.RELAXED,
-            weak=True,
-        ](mutexes.unsafe_offset(slot), expected, Int32(1)):
-            break
-
-    var cur_min = out_min[unsafe_offset=slot]
-    var cur_max = out_max[unsafe_offset=slot]
-
-    # `blk_min > blk_max` iff this block contributed no non-missing value,
-    # because the seeds are `+inf` and `-inf`. Same test on the cell, which
-    # holds the host's `(1.0, -1.0)` while empty. DEVIATION 163.
-    var have_block = not (blk_min > blk_max)
-    if sabotage == RANGE_SAB_NO_SENTINEL:
-        have_block = True
-    if have_block:
-        if cur_min > cur_max:
-            cur_min = blk_min
-            cur_max = blk_max
-        else:
-            if blk_min < cur_min:
-                cur_min = blk_min
-            if blk_max > cur_max:
-                cur_max = blk_max
-
-    out_min[unsafe_offset=slot] = cur_min
-    out_max[unsafe_offset=slot] = cur_max
-    out_n_missing[unsafe_offset=slot] = (
-        out_n_missing[unsafe_offset=slot] + blk_missing
-    )
-    out_n_merges[unsafe_offset=slot] = out_n_merges[unsafe_offset=slot] + 1
-
-    # Their `__threadfence(); atomicExch(mutex, 0);` folded into one RELEASE
-    # store, which orders the four writes above before the handback.
-    Atomic.store[ordering = Ordering.RELEASE](
-        mutexes.unsafe_offset(slot), Int32(0)
-    )
+    # DEVIATION 204. Four independent atomics, no lock and no critical
+    # section. `range_key` makes the float min/max an INTEGER min/max, and
+    # the seeds are the identities, so a block that saw nothing cannot move
+    # either extreme and needs no gate -- see the block on `range_key`.
+    var kmin = range_key(blk_min)
+    var kmax = range_key(blk_max)
+    var empty_block = blk_min > blk_max
+    if sabotage == RANGE_SAB_SIGN_UNFLIPPED and not empty_block:
+        # FINITE VALUES ONLY. Applied to the `+/-inf` an empty block carries,
+        # this would ALSO break the identity property, and the arm would move
+        # the union of two mechanisms' cells instead of one's -- which is what
+        # the first version did, and what the shape check rejected.
+        kmin = rebind[UInt32](blk_min.to_bits()) | UInt32(0x80000000)
+        kmax = rebind[UInt32](blk_max.to_bits()) | UInt32(0x80000000)
+    if sabotage == RANGE_SAB_EMPTY_NOT_IDENTITY and empty_block:
+        kmin = range_key(Float32(0.0))
+        kmax = range_key(Float32(0.0))
+    Atomic.min(out_minkey.unsafe_offset(slot), kmin)
+    Atomic.max(out_maxkey.unsafe_offset(slot), kmax)
+    _ = Atomic.fetch_add(out_n_missing.unsafe_offset(slot), blk_missing)
+    _ = Atomic.fetch_add(out_n_merges.unsafe_offset(slot), Int32(1))
 
 
 def node_feature_range_init_kernel(
     out_min: MutPointer[Float32, MutAnyOrigin],
     out_max: MutPointer[Float32, MutAnyOrigin],
+    out_minkey: MutPointer[UInt32, MutAnyOrigin],
+    out_maxkey: MutPointer[UInt32, MutAnyOrigin],
     out_n_missing: MutPointer[Int32, MutAnyOrigin],
     out_n_merges: MutPointer[Int32, MutAnyOrigin],
     len: Int32,
@@ -814,6 +920,8 @@ def node_feature_range_init_kernel(
     while idx < Int(len):
         out_min[unsafe_offset=idx] = Float32(1.0)
         out_max[unsafe_offset=idx] = Float32(-1.0)
+        out_minkey[unsafe_offset=idx] = RANGE_KEY_MIN_SEED
+        out_maxkey[unsafe_offset=idx] = RANGE_KEY_MAX_SEED
         out_n_missing[unsafe_offset=idx] = Int32(0)
         out_n_merges[unsafe_offset=idx] = Int32(0)
         idx += stride

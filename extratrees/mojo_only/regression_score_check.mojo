@@ -142,6 +142,7 @@ from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels_im
     mse_gain_from_exact_totals,
     node_feature_is_constant,
     node_feature_min_max,
+    node_feature_range_decode_kernel,
     node_feature_range_init_kernel,
     node_feature_range_kernel,
     node_feature_score_finalize_kernel,
@@ -607,7 +608,8 @@ def main() raises:
     var d_max = ctx.enqueue_create_buffer[DType.float32](n_cells)
     var d_missing = ctx.enqueue_create_buffer[DType.int32](n_cells)
     var d_merges = ctx.enqueue_create_buffer[DType.int32](n_cells)
-    var d_mutex = ctx.enqueue_create_buffer[DType.int32](n_cells)
+    var d_minkey = ctx.enqueue_create_buffer[DType.uint32](n_cells)
+    var d_maxkey = ctx.enqueue_create_buffer[DType.uint32](n_cells)
     var d_data = ctx.enqueue_create_buffer[DType.float32](N_COLS * N_ROWS)
     var d_row_ids = ctx.enqueue_create_buffer[DType.int32](N_ROWS)
     var d_colids = ctx.enqueue_create_buffer[DType.int32](len(colids))
@@ -662,10 +664,11 @@ def main() raises:
     # ------------------------------------------------------------------
     # ARM P -- the range pass, this check's INPUT.
     # ------------------------------------------------------------------
-    ctx.enqueue_memset(d_mutex, Int32(0))
     ctx.enqueue_function[node_feature_range_init_kernel](
         d_min.unsafe_ptr(),
         d_max.unsafe_ptr(),
+        d_minkey.unsafe_ptr(),
+        d_maxkey.unsafe_ptr(),
         d_missing.unsafe_ptr(),
         d_merges.unsafe_ptr(),
         Int32(n_cells),
@@ -673,11 +676,10 @@ def main() raises:
         block_dim=64,
     )
     ctx.enqueue_function[node_feature_range_kernel[TPB]](
-        d_min.unsafe_ptr(),
-        d_max.unsafe_ptr(),
+        d_minkey.unsafe_ptr(),
+        d_maxkey.unsafe_ptr(),
         d_missing.unsafe_ptr(),
         d_merges.unsafe_ptr(),
-        d_mutex.unsafe_ptr(),
         d_data.unsafe_ptr(),
         d_row_ids.unsafe_ptr(),
         d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
@@ -689,6 +691,19 @@ def main() raises:
         Int32(RANGE_SAB_NONE),
         grid_dim=(plan.n_blocks_dimx, N_COLS, 1),
         block_dim=(TPB, 1, 1),
+    )
+    # DEVIATION 204: the merge produced order-preserving KEYS; this turns
+    # them back into the `(min, max)` floats every later pass reads, and
+    # applies the empty-cell sentinel.
+    ctx.enqueue_function[node_feature_range_decode_kernel](
+        d_min.unsafe_ptr(),
+        d_max.unsafe_ptr(),
+        d_minkey.unsafe_ptr(),
+        d_maxkey.unsafe_ptr(),
+        Int32(n_cells),
+        Int32(RANGE_SAB_NONE),
+        grid_dim=ceildiv(n_cells, 64),
+        block_dim=64,
     )
     var r_min = ctx.enqueue_create_host_buffer[DType.float32](n_cells)
     var r_max = ctx.enqueue_create_host_buffer[DType.float32](n_cells)

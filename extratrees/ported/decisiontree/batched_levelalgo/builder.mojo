@@ -74,10 +74,12 @@ from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels im
     split_not_valid,
 )
 from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import (
+    node_feature_range_decode_kernel,
     LEAF_MAX_OUT_DEFAULT,
     LEAF_SAB_NONE,
     PARTITION_UNVISITED,
     PART_SAB_NONE,
+    RANGE_SAB_NONE,
     SCORE_STATUS_SCORED,
     build_workload_info,
     leaf_kernel,
@@ -91,6 +93,13 @@ from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels_im
     score_row_bound_ok,
 )
 from extratrees.ported.decisiontree.flatnode import SparseTreeNode
+from extratrees.ported.decisiontree.batched_levelalgo.kernels.partition_multiblock import (
+    PART_MB_SAB_NONE,
+    partition_count_kernel,
+    partition_scan_kernel,
+    partition_scatter_kernel,
+    partition_writeback_kernel,
+)
 from extratrees.ported.decisiontree.batched_levelalgo.split import (
     split_reduce_init_kernel,
     split_reduce_kernel,
@@ -1037,6 +1046,199 @@ def sample_features_for_device[
     return plan
 
 
+@fieldwise_init
+struct LevelWorkspace(Movable):
+    """Every per-level buffer, allocated ONCE, as `assignWorkspace` does.
+
+    ==================================================================
+    DEVIATION BLOCK -- DEVIATION 202. THE WORKSPACE IS ALLOCATED ONCE
+    PER TREE, NOT ONCE PER LEVEL.
+
+    THEIRS: cuML sizes the whole workspace up front from
+    `params.max_batch_size` (`workspaceSize`, `builder.cuh:272-296`) and
+    hands out pointers into one allocation (`assignWorkspace`,
+    `builder.cuh:302-341`). Nothing in their level loop allocates. The
+    sizes are capacities, not the current level's occupancy:
+    `max_batch * n_sampled_cols` for `colids`, `max_batch` for `splits`
+    and `d_work_items`, and `max_blocks_dimx` -- which is
+    `1 + params.max_batch_size + dataset.n_sampled_rows / TPB_DEFAULT`
+    (`builder.cuh:230`) -- for `workload_info`.
+
+    WHAT OURS DID FOR SEVEN ROUNDS: allocated all 51 of them INSIDE the
+    `while queue.has_work()` loop, sized to the current level. A
+    depth-12 tree runs 13 levels, so a ten-tree forest performed about
+    5,500 buffer creations where cuML performs ten.
+
+    IT WAS NEVER A WRONG ANSWER, and that is why it survived: every
+    buffer is explicitly initialised before use -- by
+    `node_feature_range_init_kernel`, `node_feature_score_init_kernel`,
+    `split_reduce_init_kernel`, or an `enqueue_memset` -- so a reused
+    buffer and a fresh one are indistinguishable to every kernel that
+    reads one. The identity checks could not see it and did not.
+
+    WHAT IT COST, MEASURED. Time per level was flat in the amount of
+    WORK: at 581,012 rows a level-iteration cost 24 ms at
+    `max_features=5` and 32.5 ms at `max_features=54`, and total time
+    tracked LEVEL COUNT almost exactly (5, 9 and 13 levels -> 662,
+    1067, 1421 ms at four trees). A cost that does not move when the
+    work moves is not the work.
+
+    REUSE ACROSS LEVELS IS SAFE FOR THE HOST STAGING BUFFERS TOO, and
+    that needed an argument rather than a hope: the copies out of them
+    are asynchronous, so a staging buffer rewritten under an in-flight
+    copy would corrupt it. Every level ends with a `synchronize()`
+    before the splits are read back, so by the time the loop returns to
+    the top, every copy issued by the previous level has completed.
+    ==================================================================
+    """
+
+    var d_min: DeviceBuffer[DType.float32]
+    var d_max: DeviceBuffer[DType.float32]
+    var d_thresh: DeviceBuffer[DType.float32]
+    var c_q: DeviceBuffer[DType.float32]
+    var c_m: DeviceBuffer[DType.float32]
+    var d_missing: DeviceBuffer[DType.int32]
+    var d_merges: DeviceBuffer[DType.int32]
+    var d_minkey: DeviceBuffer[DType.uint32]
+    var d_maxkey: DeviceBuffer[DType.uint32]
+    var d_nleft: DeviceBuffer[DType.int32]
+    var d_ntotal: DeviceBuffer[DType.int32]
+    var d_nblocks: DeviceBuffer[DType.int32]
+    var d_status: DeviceBuffer[DType.int32]
+    var c_c: DeviceBuffer[DType.int32]
+    var c_l: DeviceBuffer[DType.int32]
+    var c_v: DeviceBuffer[DType.int32]
+    var d_colids: DeviceBuffer[DType.int32]
+    var d_gnum: DeviceBuffer[DType.int64]
+    var d_gden: DeviceBuffer[DType.int64]
+    var c_nu: DeviceBuffer[DType.int64]
+    var c_de: DeviceBuffer[DType.int64]
+    var d_accl: DeviceBuffer[DType.int32]
+    var d_acct: DeviceBuffer[DType.int32]
+    var r_q: DeviceBuffer[DType.float32]
+    var r_m: DeviceBuffer[DType.float32]
+    var r_c: DeviceBuffer[DType.int32]
+    var r_l: DeviceBuffer[DType.int32]
+    var r_v: DeviceBuffer[DType.int32]
+    var r_mg: DeviceBuffer[DType.int32]
+    var r_nw: DeviceBuffer[DType.int32]
+    var r_mx: DeviceBuffer[DType.int32]
+    var d_nb: DeviceBuffer[DType.int32]
+    var d_nc: DeviceBuffer[DType.int32]
+    var d_iters: DeviceBuffer[DType.int32]
+    var d_swaps: DeviceBuffer[DType.int32]
+    var r_nu: DeviceBuffer[DType.int64]
+    var r_de: DeviceBuffer[DType.int64]
+    var d_samp_scratch: DeviceBuffer[DType.int32]
+    var d_samp_report: DeviceBuffer[DType.int32]
+    var d_items: DeviceBuffer[DType.uint8]
+    var d_wl: DeviceBuffer[DType.uint8]
+    var d_blk_left: DeviceBuffer[DType.int32]
+    var d_blk_off: DeviceBuffer[DType.int32]
+    var d_blk_base: DeviceBuffer[DType.int32]
+    var h_blk_base: HostBuffer[DType.int32]
+    var d_row_alt: DeviceBuffer[DType.int32]
+    var d_splits: DeviceBuffer[DType.uint8]
+    var h_colids: HostBuffer[DType.int32]
+    var h_items: HostBuffer[DType.uint8]
+    var h_wl: HostBuffer[DType.uint8]
+    var o_q: HostBuffer[DType.float32]
+    var o_m: HostBuffer[DType.float32]
+    var o_c: HostBuffer[DType.int32]
+    var o_l: HostBuffer[DType.int32]
+    var o_v: HostBuffer[DType.int32]
+    var h_nb: HostBuffer[DType.int32]
+    var h_nc: HostBuffer[DType.int32]
+    var o_nu: HostBuffer[DType.int64]
+    var o_de: HostBuffer[DType.int64]
+    var h_splits: HostBuffer[DType.uint8]
+
+
+def make_level_workspace(
+    ctx: DeviceContext,
+    max_batch: Int,
+    n_rows: Int32,
+    n_cols: Int32,
+    n_classes: Int32,
+    k: Int,
+    tpb: Int,
+) raises -> LevelWorkspace:
+    """`workspaceSize` + `assignWorkspace`, in one call.
+
+    `blocks` is `builder.cuh:230` transcribed:
+    `1 + params.max_batch_size + dataset.n_sampled_rows / TPB_DEFAULT`.
+    That is the bound because `n_blocks_dimx` is
+    `sum_i ceil(count_i / tpb)` over the batch, `sum_i count_i <= n_rows`,
+    and each of at most `max_batch` nodes contributes at most one extra
+    block from the ceiling.
+    """
+    var nodes = max_batch
+    var cells = nodes * k
+    var blocks = 1 + max_batch + Int(n_rows) // tpb
+    return LevelWorkspace(
+        d_min=ctx.enqueue_create_buffer[DType.float32](cells),
+        d_max=ctx.enqueue_create_buffer[DType.float32](cells),
+        d_thresh=ctx.enqueue_create_buffer[DType.float32](cells),
+        c_q=ctx.enqueue_create_buffer[DType.float32](cells),
+        c_m=ctx.enqueue_create_buffer[DType.float32](cells),
+        d_missing=ctx.enqueue_create_buffer[DType.int32](cells),
+        d_merges=ctx.enqueue_create_buffer[DType.int32](cells),
+        d_minkey=ctx.enqueue_create_buffer[DType.uint32](cells),
+        d_maxkey=ctx.enqueue_create_buffer[DType.uint32](cells),
+        d_nleft=ctx.enqueue_create_buffer[DType.int32](cells),
+        d_ntotal=ctx.enqueue_create_buffer[DType.int32](cells),
+        d_nblocks=ctx.enqueue_create_buffer[DType.int32](cells),
+        d_status=ctx.enqueue_create_buffer[DType.int32](cells),
+        c_c=ctx.enqueue_create_buffer[DType.int32](cells),
+        c_l=ctx.enqueue_create_buffer[DType.int32](cells),
+        c_v=ctx.enqueue_create_buffer[DType.int32](cells),
+        d_colids=ctx.enqueue_create_buffer[DType.int32](cells),
+        d_gnum=ctx.enqueue_create_buffer[DType.int64](cells),
+        d_gden=ctx.enqueue_create_buffer[DType.int64](cells),
+        c_nu=ctx.enqueue_create_buffer[DType.int64](cells),
+        c_de=ctx.enqueue_create_buffer[DType.int64](cells),
+        d_accl=ctx.enqueue_create_buffer[DType.int32](cells * Int(n_classes)),
+        d_acct=ctx.enqueue_create_buffer[DType.int32](cells * Int(n_classes)),
+        r_q=ctx.enqueue_create_buffer[DType.float32](nodes),
+        r_m=ctx.enqueue_create_buffer[DType.float32](nodes),
+        r_c=ctx.enqueue_create_buffer[DType.int32](nodes),
+        r_l=ctx.enqueue_create_buffer[DType.int32](nodes),
+        r_v=ctx.enqueue_create_buffer[DType.int32](nodes),
+        r_mg=ctx.enqueue_create_buffer[DType.int32](nodes),
+        r_nw=ctx.enqueue_create_buffer[DType.int32](nodes),
+        r_mx=ctx.enqueue_create_buffer[DType.int32](nodes),
+        d_nb=ctx.enqueue_create_buffer[DType.int32](nodes),
+        d_nc=ctx.enqueue_create_buffer[DType.int32](nodes),
+        d_iters=ctx.enqueue_create_buffer[DType.int32](nodes),
+        d_swaps=ctx.enqueue_create_buffer[DType.int32](nodes),
+        r_nu=ctx.enqueue_create_buffer[DType.int64](nodes),
+        r_de=ctx.enqueue_create_buffer[DType.int64](nodes),
+        d_samp_scratch=ctx.enqueue_create_buffer[DType.int32](sampler_scratch_len(nodes, Int(n_cols), k)),
+        d_samp_report=ctx.enqueue_create_buffer[DType.int32](sampler_report_len(nodes)),
+        d_items=ctx.enqueue_create_buffer[DType.uint8](nodes * size_of[NodeWorkItem]()),
+        d_wl=ctx.enqueue_create_buffer[DType.uint8](blocks * size_of[WorkloadInfo]()),
+        d_blk_left=ctx.enqueue_create_buffer[DType.int32](blocks),
+        d_blk_off=ctx.enqueue_create_buffer[DType.int32](blocks),
+        d_blk_base=ctx.enqueue_create_buffer[DType.int32](nodes),
+        h_blk_base=ctx.enqueue_create_host_buffer[DType.int32](nodes),
+        d_row_alt=ctx.enqueue_create_buffer[DType.int32](Int(n_rows)),
+        d_splits=ctx.enqueue_create_buffer[DType.uint8](nodes * size_of[Split]()),
+        h_colids=ctx.enqueue_create_host_buffer[DType.int32](cells),
+        h_items=ctx.enqueue_create_host_buffer[DType.uint8](nodes * size_of[NodeWorkItem]()),
+        h_wl=ctx.enqueue_create_host_buffer[DType.uint8](blocks * size_of[WorkloadInfo]()),
+        o_q=ctx.enqueue_create_host_buffer[DType.float32](nodes),
+        o_m=ctx.enqueue_create_host_buffer[DType.float32](nodes),
+        o_c=ctx.enqueue_create_host_buffer[DType.int32](nodes),
+        o_l=ctx.enqueue_create_host_buffer[DType.int32](nodes),
+        o_v=ctx.enqueue_create_host_buffer[DType.int32](nodes),
+        h_nb=ctx.enqueue_create_host_buffer[DType.int32](nodes),
+        h_nc=ctx.enqueue_create_host_buffer[DType.int32](nodes),
+        o_nu=ctx.enqueue_create_host_buffer[DType.int64](nodes),
+        o_de=ctx.enqueue_create_host_buffer[DType.int64](nodes),
+        h_splits=ctx.enqueue_create_host_buffer[DType.uint8](nodes * size_of[Split]()),
+    )
+
+
 def train_classification_device_resident(
     ctx: DeviceContext,
     mut dataset: DeviceDataset,
@@ -1112,6 +1314,20 @@ def train_classification_device_resident(
     # and deviation 200 removed the one place it was read.
     _ = row_ids
 
+    # THE WORKSPACE, ONCE, as `assignWorkspace` does (`builder.cuh:302-341`).
+    # Deviation 202. Every buffer below is sized to the CAPACITY the batch
+    # can reach, not to this level's occupancy, which is what lets one
+    # allocation serve every level.
+    var ws = make_level_workspace(
+        ctx,
+        Int(params.max_batch_size),
+        n_rows,
+        n_cols,
+        n_classes,
+        Int(k),
+        TPB,
+    )
+
     while queue.has_work():
         var work_items = queue.pop()
         var n_nodes = len(work_items)
@@ -1124,68 +1340,53 @@ def train_classification_device_resident(
         var n_cells = n_nodes * Int(k)
 
         # --- per-batch device buffers ------------------------------------
-        var d_min = ctx.enqueue_create_buffer[DType.float32](n_cells)
-        var d_max = ctx.enqueue_create_buffer[DType.float32](n_cells)
-        var d_missing = ctx.enqueue_create_buffer[DType.int32](n_cells)
-        var d_merges = ctx.enqueue_create_buffer[DType.int32](n_cells)
-        var d_cell_mutex = ctx.enqueue_create_buffer[DType.int32](n_cells)
-        var d_nleft = ctx.enqueue_create_buffer[DType.int32](n_cells)
-        var d_ntotal = ctx.enqueue_create_buffer[DType.int32](n_cells)
-        var d_accl = ctx.enqueue_create_buffer[DType.int32](
-            n_cells * Int(n_classes)
-        )
-        var d_acct = ctx.enqueue_create_buffer[DType.int32](
-            n_cells * Int(n_classes)
-        )
-        var d_nblocks = ctx.enqueue_create_buffer[DType.int32](n_cells)
-        var d_status = ctx.enqueue_create_buffer[DType.int32](n_cells)
-        var d_thresh = ctx.enqueue_create_buffer[DType.float32](n_cells)
-        var d_gnum = ctx.enqueue_create_buffer[DType.int64](n_cells)
-        var d_gden = ctx.enqueue_create_buffer[DType.int64](n_cells)
-        var c_q = ctx.enqueue_create_buffer[DType.float32](n_cells)
-        var c_c = ctx.enqueue_create_buffer[DType.int32](n_cells)
-        var c_m = ctx.enqueue_create_buffer[DType.float32](n_cells)
-        var c_l = ctx.enqueue_create_buffer[DType.int32](n_cells)
-        var c_nu = ctx.enqueue_create_buffer[DType.int64](n_cells)
-        var c_de = ctx.enqueue_create_buffer[DType.int64](n_cells)
-        var c_v = ctx.enqueue_create_buffer[DType.int32](n_cells)
-        var r_q = ctx.enqueue_create_buffer[DType.float32](n_nodes)
-        var r_c = ctx.enqueue_create_buffer[DType.int32](n_nodes)
-        var r_m = ctx.enqueue_create_buffer[DType.float32](n_nodes)
-        var r_l = ctx.enqueue_create_buffer[DType.int32](n_nodes)
-        var r_nu = ctx.enqueue_create_buffer[DType.int64](n_nodes)
-        var r_de = ctx.enqueue_create_buffer[DType.int64](n_nodes)
-        var r_v = ctx.enqueue_create_buffer[DType.int32](n_nodes)
-        var r_mg = ctx.enqueue_create_buffer[DType.int32](n_nodes)
-        var r_nw = ctx.enqueue_create_buffer[DType.int32](n_nodes)
-        var r_mx = ctx.enqueue_create_buffer[DType.int32](n_nodes)
-        var d_nb = ctx.enqueue_create_buffer[DType.int32](n_nodes)
-        var d_nc = ctx.enqueue_create_buffer[DType.int32](n_nodes)
-        var d_colids = ctx.enqueue_create_buffer[DType.int32](n_cells)
-        var d_samp_scratch = ctx.enqueue_create_buffer[DType.int32](
-            sampler_scratch_len(n_nodes, Int(n_cols), Int(k))
-        )
-        var d_samp_report = ctx.enqueue_create_buffer[DType.int32](
-            sampler_report_len(n_nodes)
-        )
-        var d_items = ctx.enqueue_create_buffer[DType.uint8](
-            n_nodes * size_of[NodeWorkItem]()
-        )
-        var d_wl = ctx.enqueue_create_buffer[DType.uint8](
-            plan.n_blocks_dimx * size_of[WorkloadInfo]()
-        )
+        ref d_min = ws.d_min
+        ref d_max = ws.d_max
+        ref d_missing = ws.d_missing
+        ref d_merges = ws.d_merges
+        ref d_minkey = ws.d_minkey
+        ref d_maxkey = ws.d_maxkey
+        ref d_nleft = ws.d_nleft
+        ref d_ntotal = ws.d_ntotal
+        ref d_accl = ws.d_accl
+        ref d_acct = ws.d_acct
+        ref d_nblocks = ws.d_nblocks
+        ref d_status = ws.d_status
+        ref d_thresh = ws.d_thresh
+        ref d_gnum = ws.d_gnum
+        ref d_gden = ws.d_gden
+        ref c_q = ws.c_q
+        ref c_c = ws.c_c
+        ref c_m = ws.c_m
+        ref c_l = ws.c_l
+        ref c_nu = ws.c_nu
+        ref c_de = ws.c_de
+        ref c_v = ws.c_v
+        ref r_q = ws.r_q
+        ref r_c = ws.r_c
+        ref r_m = ws.r_m
+        ref r_l = ws.r_l
+        ref r_nu = ws.r_nu
+        ref r_de = ws.r_de
+        ref r_v = ws.r_v
+        ref r_mg = ws.r_mg
+        ref r_nw = ws.r_nw
+        ref r_mx = ws.r_mx
+        ref d_nb = ws.d_nb
+        ref d_nc = ws.d_nc
+        ref d_colids = ws.d_colids
+        ref d_samp_scratch = ws.d_samp_scratch
+        ref d_samp_report = ws.d_samp_report
+        ref d_items = ws.d_items
+        ref d_wl = ws.d_wl
 
         # One host staging buffer per copy: they are asynchronous, and a
         # shared one would be rewritten under an in-flight copy.
-        var h_colids = ctx.enqueue_create_host_buffer[DType.int32](n_cells)
-        var h_items = ctx.enqueue_create_host_buffer[DType.uint8](
-            n_nodes * size_of[NodeWorkItem]()
-        )
-        var h_wl = ctx.enqueue_create_host_buffer[DType.uint8](
-            plan.n_blocks_dimx * size_of[WorkloadInfo]()
-        )
-        var h_nb = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
-        var h_nc = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
+        ref h_colids = ws.h_colids
+        ref h_items = ws.h_items
+        ref h_wl = ws.h_wl
+        ref h_nb = ws.h_nb
+        ref h_nc = ws.h_nc
         ctx.synchronize()
 
         var items_ptr = h_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem]()
@@ -1194,14 +1395,27 @@ def train_classification_device_resident(
         var wl_ptr = h_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo]()
         for i in range(plan.n_blocks_dimx):
             wl_ptr[unsafe_offset=i] = plan.info[i]
+        var base_acc = 0
         for i in range(n_nodes):
             h_nb.unsafe_ptr().unsafe_store(i, Int32(i * Int(k)))
             h_nc.unsafe_ptr().unsafe_store(i, Int32(Int(k)))
+            # Where node `i`'s blocks start in the flattened workload array.
+            # `build_workload_info` lays them out contiguously in node order,
+            # so this repeats the running sum it performs -- deviation 203's
+            # scan pass needs that base and the device cannot derive it.
+            ws.h_blk_base.unsafe_ptr().unsafe_store(i, Int32(base_acc))
+            var nb_i = ceildiv(Int(work_items[i].instances.count), TPB)
+            if nb_i < 1:
+                nb_i = 1
+            base_acc += nb_i
 
         ctx.enqueue_copy(dst_buf=d_items, src_ptr=h_items.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=d_wl, src_ptr=h_wl.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=d_nb, src_ptr=h_nb.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=d_nc, src_ptr=h_nc.unsafe_ptr())
+        ctx.enqueue_copy(
+            dst_buf=ws.d_blk_base, src_ptr=ws.h_blk_base.unsafe_ptr()
+        )
         ctx.synchronize()
 
         # --- 3. the range pass -------------------------------------------
@@ -1223,10 +1437,11 @@ def train_classification_device_resident(
             Int(k),
         )
 
-        ctx.enqueue_memset(d_cell_mutex, Int32(0))
         ctx.enqueue_function[node_feature_range_init_kernel](
             d_min.unsafe_ptr(),
             d_max.unsafe_ptr(),
+            d_minkey.unsafe_ptr(),
+            d_maxkey.unsafe_ptr(),
             d_missing.unsafe_ptr(),
             d_merges.unsafe_ptr(),
             Int32(n_cells),
@@ -1234,11 +1449,10 @@ def train_classification_device_resident(
             block_dim=64,
         )
         ctx.enqueue_function[node_feature_range_kernel[TPB]](
-            d_min.unsafe_ptr(),
-            d_max.unsafe_ptr(),
+            d_minkey.unsafe_ptr(),
+            d_maxkey.unsafe_ptr(),
             d_missing.unsafe_ptr(),
             d_merges.unsafe_ptr(),
-            d_cell_mutex.unsafe_ptr(),
             dataset.d_data.unsafe_ptr(),
             d_row_ids.unsafe_ptr(),
             d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
@@ -1250,6 +1464,19 @@ def train_classification_device_resident(
             Int32(0),
             grid_dim=(plan.n_blocks_dimx, Int(k), 1),
             block_dim=(TPB, 1, 1),
+        )
+        # DEVIATION 204: the merge produced order-preserving KEYS; this
+        # turns them back into the `(min, max)` floats every later pass
+        # reads, and applies the empty-cell sentinel.
+        ctx.enqueue_function[node_feature_range_decode_kernel](
+            d_min.unsafe_ptr(),
+            d_max.unsafe_ptr(),
+            d_minkey.unsafe_ptr(),
+            d_maxkey.unsafe_ptr(),
+            Int32(n_cells),
+            Int32(RANGE_SAB_NONE),
+            grid_dim=ceildiv(n_cells, 64),
+            block_dim=64,
         )
 
         # --- 4. the draw and score pass ----------------------------------
@@ -1397,13 +1624,13 @@ def train_classification_device_resident(
         # at `builder.cuh:492-494`. The gain travels WITH the candidate now
         # (DEVIATION 183, second form), so no per-level readback of the node
         # totals is needed and none happens.
-        var o_q = ctx.enqueue_create_host_buffer[DType.float32](n_nodes)
-        var o_c = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
-        var o_l = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
-        var o_nu = ctx.enqueue_create_host_buffer[DType.int64](n_nodes)
-        var o_de = ctx.enqueue_create_host_buffer[DType.int64](n_nodes)
-        var o_v = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
-        var o_m = ctx.enqueue_create_host_buffer[DType.float32](n_nodes)
+        ref o_q = ws.o_q
+        ref o_c = ws.o_c
+        ref o_l = ws.o_l
+        ref o_nu = ws.o_nu
+        ref o_de = ws.o_de
+        ref o_v = ws.o_v
+        ref o_m = ws.o_m
         ctx.enqueue_copy(dst_buf=o_q, src_buf=r_q)
         ctx.enqueue_copy(dst_buf=o_c, src_buf=r_c)
         ctx.enqueue_copy(dst_buf=o_l, src_buf=r_l)
@@ -1435,35 +1662,77 @@ def train_classification_device_resident(
         # `partitionSamples` it calls. `row_ids` is mutated IN PLACE on the
         # device, which is what lets it stay resident: it is uploaded once,
         # above, and never round-trips again.
-        var d_splits = ctx.enqueue_create_buffer[DType.uint8](
-            n_nodes * size_of[Split]()
-        )
-        var d_iters = ctx.enqueue_create_buffer[DType.int32](n_nodes)
-        var d_swaps = ctx.enqueue_create_buffer[DType.int32](n_nodes)
-        var h_splits = ctx.enqueue_create_host_buffer[DType.uint8](
-            n_nodes * size_of[Split]()
-        )
+        ref d_splits = ws.d_splits
+        ref d_iters = ws.d_iters
+        ref d_swaps = ws.d_swaps
+        ref h_splits = ws.h_splits
         ctx.synchronize()
         var splits_ptr = h_splits.unsafe_ptr().unsafe_bitcast[Split]()
         for i in range(n_nodes):
             splits_ptr[unsafe_offset=i] = splits[i]
         ctx.enqueue_copy(dst_buf=d_splits, src_ptr=h_splits.unsafe_ptr())
-        ctx.enqueue_memset(d_iters, PARTITION_UNVISITED)
-        ctx.enqueue_function[node_split_kernel[TPB]](
+        # DEVIATION 203: three passes over the frontier's ROWS instead of
+        # one block per node, on the same `WorkloadInfo` grid the split
+        # search uses. `d_iters`/`d_swaps` are the one-block kernel's
+        # report and this path does not produce them; that kernel stays in
+        # the tree as the oracle `partition_multiblock_check` compares
+        # against.
+        ctx.enqueue_function[partition_count_kernel[TPB]](
+            ws.d_blk_left.unsafe_ptr(),
             d_row_ids.unsafe_ptr(),
-            d_iters.unsafe_ptr(),
-            d_swaps.unsafe_ptr(),
             dataset.d_data.unsafe_ptr(),
             d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
             d_splits.unsafe_ptr().unsafe_bitcast[Split](),
             n_rows,
             params.min_impurity_decrease,
             params.min_samples_leaf,
-            PART_SAB_NONE,
+            PART_MB_SAB_NONE,
+            grid_dim=(plan.n_blocks_dimx, 1, 1),
+            block_dim=(TPB, 1, 1),
+        )
+        ctx.enqueue_function[partition_scan_kernel[TPB]](
+            ws.d_blk_off.unsafe_ptr(),
+            ws.d_blk_left.unsafe_ptr(),
+            ws.d_blk_base.unsafe_ptr(),
+            d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            d_splits.unsafe_ptr().unsafe_bitcast[Split](),
+            params.min_impurity_decrease,
+            params.min_samples_leaf,
+            PART_MB_SAB_NONE,
             grid_dim=(n_nodes, 1, 1),
             block_dim=(TPB, 1, 1),
         )
+        ctx.enqueue_function[partition_scatter_kernel[TPB]](
+            ws.d_row_alt.unsafe_ptr(),
+            d_row_ids.unsafe_ptr(),
+            ws.d_blk_off.unsafe_ptr(),
+            dataset.d_data.unsafe_ptr(),
+            d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
+            d_splits.unsafe_ptr().unsafe_bitcast[Split](),
+            n_rows,
+            params.min_impurity_decrease,
+            params.min_samples_leaf,
+            PART_MB_SAB_NONE,
+            grid_dim=(plan.n_blocks_dimx, 1, 1),
+            block_dim=(TPB, 1, 1),
+        )
+        ctx.enqueue_function[partition_writeback_kernel[TPB]](
+            d_row_ids.unsafe_ptr(),
+            ws.d_row_alt.unsafe_ptr(),
+            d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
+            d_splits.unsafe_ptr().unsafe_bitcast[Split](),
+            params.min_impurity_decrease,
+            params.min_samples_leaf,
+            PART_MB_SAB_NONE,
+            grid_dim=(plan.n_blocks_dimx, 1, 1),
+            block_dim=(TPB, 1, 1),
+        )
         ctx.synchronize()
+        _ = d_iters
+        _ = d_swaps
 
         queue.push(work_items, splits)
         _ = objective
@@ -1615,7 +1884,8 @@ def train_regression_device(
         var d_max = ctx.enqueue_create_buffer[DType.float32](n_cells)
         var d_missing = ctx.enqueue_create_buffer[DType.int32](n_cells)
         var d_merges = ctx.enqueue_create_buffer[DType.int32](n_cells)
-        var d_cell_mutex = ctx.enqueue_create_buffer[DType.int32](n_cells)
+        var d_minkey = ctx.enqueue_create_buffer[DType.uint32](n_cells)
+        var d_maxkey = ctx.enqueue_create_buffer[DType.uint32](n_cells)
         var d_nleft = ctx.enqueue_create_buffer[DType.int32](n_cells)
         var d_ntotal = ctx.enqueue_create_buffer[DType.int32](n_cells)
         var d_accl = ctx.enqueue_create_buffer[DType.int32](n_cells)
@@ -1701,10 +1971,11 @@ def train_regression_device(
             Int(k),
         )
 
-        ctx.enqueue_memset(d_cell_mutex, Int32(0))
         ctx.enqueue_function[node_feature_range_init_kernel](
             d_min.unsafe_ptr(),
             d_max.unsafe_ptr(),
+            d_minkey.unsafe_ptr(),
+            d_maxkey.unsafe_ptr(),
             d_missing.unsafe_ptr(),
             d_merges.unsafe_ptr(),
             Int32(n_cells),
@@ -1712,11 +1983,10 @@ def train_regression_device(
             block_dim=64,
         )
         ctx.enqueue_function[node_feature_range_kernel[TPB]](
-            d_min.unsafe_ptr(),
-            d_max.unsafe_ptr(),
+            d_minkey.unsafe_ptr(),
+            d_maxkey.unsafe_ptr(),
             d_missing.unsafe_ptr(),
             d_merges.unsafe_ptr(),
-            d_cell_mutex.unsafe_ptr(),
             dataset.d_data.unsafe_ptr(),
             d_row_ids.unsafe_ptr(),
             d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
@@ -1728,6 +1998,19 @@ def train_regression_device(
             Int32(0),
             grid_dim=(plan.n_blocks_dimx, Int(k), 1),
             block_dim=(TPB, 1, 1),
+        )
+        # DEVIATION 204: the merge produced order-preserving KEYS; this
+        # turns them back into the `(min, max)` floats every later pass
+        # reads, and applies the empty-cell sentinel.
+        ctx.enqueue_function[node_feature_range_decode_kernel](
+            d_min.unsafe_ptr(),
+            d_max.unsafe_ptr(),
+            d_minkey.unsafe_ptr(),
+            d_maxkey.unsafe_ptr(),
+            Int32(n_cells),
+            Int32(RANGE_SAB_NONE),
+            grid_dim=ceildiv(n_cells, 64),
+            block_dim=64,
         )
         ctx.enqueue_function[node_feature_score_init_kernel](
             d_status.unsafe_ptr(),

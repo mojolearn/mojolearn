@@ -103,6 +103,7 @@ from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels_im
     build_workload_info,
     FeatureRange,
     node_feature_min_max,
+    node_feature_range_decode_kernel,
     node_feature_range_init_kernel,
     node_feature_range_kernel,
     RANGE_SAB_BLOCK0_ONLY,
@@ -110,6 +111,8 @@ from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels_im
     RANGE_SAB_NO_ROW_IDS,
     RANGE_SAB_NO_SENTINEL,
     RANGE_SAB_NONE,
+    RANGE_SAB_EMPTY_NOT_IDENTITY,
+    RANGE_SAB_SIGN_UNFLIPPED,
     RANGE_SAB_ROW_MAJOR,
     TPB_DEFAULT,
 )
@@ -286,7 +289,8 @@ def main() raises:
     var d_max = ctx.enqueue_create_buffer[DType.float32](n_cells)
     var d_missing = ctx.enqueue_create_buffer[DType.int32](n_cells)
     var d_merges = ctx.enqueue_create_buffer[DType.int32](n_cells)
-    var d_mutex = ctx.enqueue_create_buffer[DType.int32](n_cells)
+    var d_minkey = ctx.enqueue_create_buffer[DType.uint32](n_cells)
+    var d_maxkey = ctx.enqueue_create_buffer[DType.uint32](n_cells)
     var d_data = ctx.enqueue_create_buffer[DType.float32](n_cols * N_ROWS)
     var d_row_ids = ctx.enqueue_create_buffer[DType.int32](N_ROWS)
     var d_colids = ctx.enqueue_create_buffer[DType.int32](len(colids))
@@ -337,15 +341,18 @@ def main() raises:
         RANGE_SAB_BLOCK0_ONLY,
         RANGE_SAB_NAN_AS_VALUE,
         RANGE_SAB_NO_SENTINEL,
+        RANGE_SAB_SIGN_UNFLIPPED,
+        RANGE_SAB_EMPTY_NOT_IDENTITY,
     ]
     var runs = List[RangeRun]()
 
     for a in range(len(arms)):
         var sab = arms[a]
-        ctx.enqueue_memset(d_mutex, Int32(0))
         ctx.enqueue_function[node_feature_range_init_kernel](
             d_min.unsafe_ptr(),
             d_max.unsafe_ptr(),
+            d_minkey.unsafe_ptr(),
+            d_maxkey.unsafe_ptr(),
             d_missing.unsafe_ptr(),
             d_merges.unsafe_ptr(),
             Int32(n_cells),
@@ -353,11 +360,10 @@ def main() raises:
             block_dim=64,
         )
         ctx.enqueue_function[node_feature_range_kernel[TPB]](
-            d_min.unsafe_ptr(),
-            d_max.unsafe_ptr(),
+            d_minkey.unsafe_ptr(),
+            d_maxkey.unsafe_ptr(),
             d_missing.unsafe_ptr(),
             d_merges.unsafe_ptr(),
-            d_mutex.unsafe_ptr(),
             d_data.unsafe_ptr(),
             d_row_ids.unsafe_ptr(),
             d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
@@ -369,6 +375,20 @@ def main() raises:
             Int32(sab),
             grid_dim=(plan.n_blocks_dimx, n_sampled_cols, 1),
             block_dim=(TPB, 1, 1),
+        )
+        # DEVIATION 204: the merge writes order-preserving KEYS; this turns
+        # them back into the `(min, max)` cells every assertion below reads.
+        # The sabotage argument goes to BOTH, because the empty-cell sentinel
+        # now lives in the decode and the key map lives in the merge.
+        ctx.enqueue_function[node_feature_range_decode_kernel](
+            d_min.unsafe_ptr(),
+            d_max.unsafe_ptr(),
+            d_minkey.unsafe_ptr(),
+            d_maxkey.unsafe_ptr(),
+            Int32(n_cells),
+            Int32(sab),
+            grid_dim=ceildiv(n_cells, 64),
+            block_dim=64,
         )
         var o_min = ctx.enqueue_create_host_buffer[DType.float32](n_cells)
         var o_max = ctx.enqueue_create_host_buffer[DType.float32](n_cells)
@@ -508,10 +528,21 @@ def main() raises:
         runs[4], want_min, want_max, want_missing, n_cells,
     )
     failures += _sabotage(
-        "the empty sentinel (publish (+inf, -inf) instead of (1.0, -1.0))",
+        "the empty-cell sentinel in the DECODE (publish (+inf, -inf)"
+        " instead of (1.0, -1.0)) -- deviation 204 moved it there",
         "moves ONLY the cells with no non-missing value: the all-NaN column"
         " in every node, plus EVERY column of the 0-row node",
         runs[5], want_min, want_max, want_missing, n_cells,
+    )
+
+    failures += _sabotage(
+        "the order-preserving key's NEGATIVE branch (invert-the-bits ->"
+        " set-the-sign-bit), DEVIATION 204",
+        "moves exactly the cells whose column carries a NEGATIVE value on"
+        " this node's rows, where raw-bit order is REVERSED, and leaves every"
+        " all-non-negative cell alone -- the exact set is computed by"
+        " _negative_cells and checked below",
+        runs[6], want_min, want_max, want_missing, n_cells,
     )
 
     # A sabotage that moves everything is not evidence either, so the three
@@ -538,12 +569,47 @@ def main() raises:
         runs[5], base, n_nodes, n_sampled_cols,
         _empty_cells(ranges, colids, n_nodes, n_sampled_cols),
     )
+    var neg = _negative_cells(
+        flat, row_ids, ranges, colids, N_ROWS, n_nodes, n_sampled_cols
+    )
+    var n_neg = 0
+    for i in range(len(neg)):
+        if neg[i]:
+            n_neg += 1
+    if n_neg == 0:
+        print("  order-preserving key FAILED: this fixture has no negative"
+              " value anywhere, so RANGE_SAB_SIGN_UNFLIPPED cannot move a single"
+              " cell and the arm proves nothing")
+        failures += 1
+    else:
+        print("     (", n_neg, "of", n_cells,
+              "cells carry a negative value; on the other",
+              n_cells - n_neg,
+              "the two spellings are the same expression, so this arm"
+              " cannot move them and must not)")
+    failures += _moved_exactly(
+        "order-preserving key",
+        runs[6], base, n_nodes, n_sampled_cols, neg,
+    )
+    failures += _sabotage(
+        "the +/-inf IDENTITY an empty block relies on (publish"
+        " range_key(0.0) instead), DEVIATION 204",
+        "moves exactly the cells with an empty contribution -- the all-NaN"
+        " column in every node and every column of the 0-row node -- which"
+        " is what makes deleting 163's sentinel gate from the merge safe",
+        runs[7], want_min, want_max, want_missing, n_cells,
+    )
+    failures += _moved_exactly(
+        "empty-block identity",
+        runs[7], base, n_nodes, n_sampled_cols,
+        _empty_cells(ranges, colids, n_nodes, n_sampled_cols),
+    )
 
     print("")
     if failures == 0:
         print("range_kernel_check: PASS --", n_cells,
               "cells bit-identical, both block paths named by the device,"
-              " five mechanisms sabotaged and each moved what it predicted")
+              " seven mechanisms sabotaged and each moved what it predicted")
     else:
         print("range_kernel_check: FAIL --", failures, "arm(s) red")
         raise Error("range_kernel_check failed")
@@ -749,6 +815,41 @@ def _nan_moved_cells(want_missing: List[Int32]) -> List[Bool]:
     var out = List[Bool]()
     for s in range(len(want_missing)):
         out.append(want_missing[s] != Int32(0))
+    return out^
+
+
+def _negative_cells(
+    flat: List[Float32],
+    row_ids: List[Int32],
+    ranges: List[InstanceRange],
+    colids: List[Int32],
+    n_rows: Int,
+    n_nodes: Int,
+    n_sampled_cols: Int,
+) -> List[Bool]:
+    """Cells whose column carries a NEGATIVE non-missing value on this node's
+    rows.
+
+    `range_key` and the raw bit pattern AGREE on non-negative floats and
+    disagree on negative ones, so this is exactly the set
+    `RANGE_SAB_SIGN_UNFLIPPED` can move. Computing it rather than asserting "most
+    of them" is what makes the arm evidence: if this fixture ever lost its
+    negative values the predicted set would go empty, and an empty predicted
+    set with a green sabotage is a CHECK DEFECT rather than a passing check.
+    """
+    var out = List[Bool]()
+    for nid in range(n_nodes):
+        var begin = Int(ranges[nid].begin)
+        var count = Int(ranges[nid].count)
+        for fslot in range(n_sampled_cols):
+            var col = Int(colids[nid * n_sampled_cols + fslot])
+            var has_neg = False
+            for i in range(begin, begin + count):
+                var r = Int(row_ids[i])
+                var v = flat[col * n_rows + r]
+                if v == v and v < 0.0:
+                    has_neg = True
+            out.append(has_neg)
     return out^
 
 
