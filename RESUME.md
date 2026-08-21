@@ -828,3 +828,29 @@ findings, each measured:
    measured answer at every door. It reopens only on other memory
    systems (re-run the depth differencing there first) or at much
    greater depths.
+
+### 2026-08-21, evening: the quiet-window epsilon rerun, and deviation 52 closed
+
+**EPSILON CONFIRMED QUIET**: with no concurrent session, theirs
+339-378 ms/tree, ours 129-156 -- speedups 2.28-2.78x (medians 2.40x @254,
+2.77x @128), mse identical to the loaded window. The loaded window's
+3.3-3.4x was partly their arm's memory-pressure sensitivity; the standing
+claim is now 2.3-3.7x across both windows, ranges disjoint in all 12
+reps, quiet medians quotable (EPSILON_2026-08-21_interleaved.md).
+
+**DEVIATION 52's PORT HALF IS CLOSED**: `TWeightedBinFreqCalcerGpu` runs
+their `VisitEqualUpToPriorFreqCtrs` launch for launch on the device, over
+two pieces ported on the way -- `UpdatePartitionOffsets`
+(`gpu_util/kernel/partitions.mojo`, both dispatcher arms including the
+`partCount == size` FillBuffer path) and the Sum arm of their cub
+`SegmentedReduceVector` (`gpu_util/kernel/segmented_reduce.mojo`,
+hand-written; vendor check recorded: MAX ships no segmented reduce).
+`pixi run check-freq-ctr-device` gates it BIT-EQUAL against the host
+driver and an independent tally (trivial weights make every float sum
+exact, so equality is the contract, not a hope), across the
+packing-policy cardinality boundaries, both priors, and a sabotage that
+must land exactly on the affected categories -- green first run, 950
+moved cells all in the right rows. WHAT REMAINS IS ONE LINE in
+`gbdt/train.mojo` (the other lane's file): swap the independent-half
+call to `compute_simple_ctrs_device(ctx, ...)`; handoff note in the
+driver's docstring, UNWIRED.md carries the row until it lands.

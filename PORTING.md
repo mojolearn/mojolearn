@@ -1259,15 +1259,32 @@ WHAT LANDED ON THE DEVICE, 2026-08-21:
   `transform.cu:214-276`) and `gpu_util/kernel/scan.mojo`
   (`ScanVector<ui32>`, `scan.cu:10-19`).
 
-WHAT IS STILL HOST SIDE, and it is one class:
-`TWeightedBinFreqCalcer::VisitEqualUpToPriorFreqCtrs`
-(`ctrs/ctr_calcers.h:307-341`), which scans the segment ids, reduces per
-segment and divides. It needs two device pieces the Borders path does not:
-`UpdatePartitionOffsets` (`cuda_util/kernel/partitions.cu:81-107`) and
-`SegmentedReduceVector` (a `cub::DeviceSegmentedReduce`). Neither is ported.
-`TCtrBinBuilder` (no suffix) stays beside it as the host reference the
-device builder is gated against, and `TCtrBinBuilderGpu.read_indices` is the
-seam that feeds the host freq calcer a device-produced ordering.
+WHAT WAS STILL HOST SIDE LANDED ON THE DEVICE 2026-08-21, closing this
+deviation's port. `TWeightedBinFreqCalcerGpu`
+(`gbdt/ctrs/ctr_calcers.mojo`) is `VisitEqualUpToPriorFreqCtrs`
+(`ctrs/ctr_calcers.h:307-341`) launch for launch, and the two device
+pieces it needed are ported beside it: `UpdatePartitionOffsets`
+(`gpu_util/kernel/partitions.mojo`, from
+`cuda_util/kernel/partitions.cu:81-107` + `:155-176`, both dispatcher
+arms) and the Sum arm of `SegmentedReduceVector`
+(`gpu_util/kernel/segmented_reduce.mojo` -- their `cub::
+DeviceSegmentedReduce` hand-written portably; the vendor check is
+recorded in that file's header: MAX ships no segmented reduce). Gated
+BIT-EQUAL against the host driver plus an independent tally by
+`pixi run check-freq-ctr-device`, across the packing-policy cardinality
+boundaries, both priors, the `partCount == size` dispatcher arm, a 100k
+multi-block run, and a sabotage that must land exactly on the affected
+categories.
+
+`TCtrBinBuilder` and `TWeightedBinFreqCalcer` (no suffix) stay as the
+gated host references (`PORTING_RULES.md` 0b-ii). WHAT REMAINS OF THIS
+ENTRY IS WIRING, not porting: `train()`'s permutation-independent call
+still runs the host driver, and the one-line swap to
+`compute_simple_ctrs_device(ctx, ...)` belongs to the lane that owns
+`gbdt/train.mojo` -- the handoff note is in that driver's docstring, and
+UNWIRED.md carries the entry until the line lands. The
+`counter_calc_method == Full` arm keeps its host implementation: opt-in,
+reached by no benchmark, and the same number on a fit with no test pool.
 
 `THistoryBasedCtrCalcer` (no suffix) is likewise kept, as the reference
 `mojo_only/ctr_device_check.mojo` compares the device calcer against cell by

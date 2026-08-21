@@ -113,6 +113,16 @@ check-radixsort = "mojo run -I . mojo_only/radix_sort_check.mojo"
 # regenerate it with `ctr-target-oracle-gen`.
 check-ctr = "mojo run -I . mojo_only/ctr_check.mojo"
 
+# The DEVICE FeatureFreq calcer -- TWeightedBinFreqCalcerGpu and its
+# compute_simple_ctrs_device driver -- against the host driver PER CELL
+# (bit-equal: trivial weights make every float sum exact) and an
+# independent count/(n+1) tally, across the packing-policy cardinality
+# boundaries, both priors, the partCount==size dispatcher arm, a 100k
+# multi-block run, and a sabotage that must land exactly on the affected
+# categories. Closes PORTING.md deviation 52. Own main(); a GPU and
+# seconds.
+check-freq-ctr-device = "mojo run -I . mojo_only/freq_ctr_device_check.mojo"
+
 # The CATEGORY HASH STACK -- their CityHash64 1.0 variant (which public
 # CityHash vectors do NOT match), CalcCatFeatureHash's low-32 truncation,
 # and the model-side CalcHash combination fold with its (ui64)(int) sign

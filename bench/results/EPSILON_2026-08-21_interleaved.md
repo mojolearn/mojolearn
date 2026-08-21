@@ -1,4 +1,4 @@
-# EPSILON, first run: 3.3-3.4x faster than CatBoost CPU, mse to 8 figures
+# EPSILON: 2.3-3.7x faster than CatBoost CPU across two windows, mse to 8 figures
 
 2026-08-21, M4 base (10 GPU cores, 16GB), interleaved arms in ONE process,
 `bench/interleaved/catboost_interleaved.mojo /Users/andrewhendel/.cache/mojolearn epsilon 400000`,
@@ -58,11 +58,31 @@ run started.
   100, 1.8-2.1x at 4M x 100, 3.3-3.4x at 400k x 2000. Feature width
   amortizes the floor as effectively as row count.
 
-## Not measured here, deliberately
+## Follow-ups, both run the same day
 
-One run, one box, first numbers: no quiet-window rerun yet, no phase
-attribution at this shape. If a next round wants more speed at this
-shape, measure the per-phase split FIRST (zero/bridge/score/convert all
-scale with the 33M-cell-per-level histogram footprint at 128 borders)
-and read their source for how the same footprint is walked before
-touching anything.
+The quiet-window rerun is the section below. The phase attribution ran
+too: `SHAPE_SWEEP_2026-08-21_epsilon.md` (83% accumulate, subtraction
+proven 1.96x, the density cliff measured and its fixes refuted by
+`mojo_only/density_probe.mojo`).
+
+## The quiet-window rerun, same day -- and what the first window flattered
+
+Reran identically with no concurrent session on the box. Both arms
+faster, ranges much tighter:
+
+    254 borders: theirs 356.9-378.3 ms/tree, ours 150.6-156.4
+                 -> speedups 2.51 / 2.28 / 2.40x
+    128 borders: theirs 339.2-363.9, ours 129.1-130.9
+                 -> speedups 2.77 / 2.61 / 2.78x
+    mse identical to the first window at both borders, our arm
+    bit-identical across all windows.
+
+THE HONEST READING: the first window's 3.3-3.4x medians were taken while
+another session's load sat on the box, and their CPU arm suffered MORE
+from that pressure than our GPU arm did (theirs 504-903 loaded vs
+339-378 quiet; ours 186-272 vs 129-156). The loaded ratios are real
+measurements of a loaded machine, not discarded -- but the QUIET numbers
+are the quotable ones. The claim this file now makes: **2.3-3.7x faster
+across both windows, ours-vs-theirs ranges disjoint in all 12 reps,
+quiet-window medians 2.40x at 254 and 2.77x at 128 borders, mse matched
+to 8 significant figures throughout.**
