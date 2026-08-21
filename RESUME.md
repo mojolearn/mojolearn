@@ -752,3 +752,31 @@ tree_ctrs.cpp` 534 lines, `tree_ctrs_dataset.h` 210,
 per-split tensor extension, per-device dataset packs, lazy compressed
 indices, score-calcer reuse, and the visitor's cross-device best-split
 race. Every device primitive it stands on is already ported.
+
+### 2026-08-21: ADULT categorical quality row -- run and reported
+
+The row owed since the prep-bug diagnosis, run whatever it showed. The bug
+was real float NaN among adult's object-column strings (workclass 1836,
+occupation 1843, native-country 583 of 32561 rows): `.astype(str)` alone
+does not homogenize them, and `catboost.Pool` REFUSES a NaN cat cell
+outright, so the `fillna("nan")` fix landed on BOTH arms --
+`tools/ctr_prep.py` at the np.unique site and
+`catboost_arm.fit_and_test_mse_cat` before the Pool.
+
+26048/6513 holdout, 100 trees depth 6, frequency-information-only both
+arms (the amazon design; 8 freq-ctr + 6 numeric columns, cards 2-42):
+
+    ours 0.0892802 test mse  vs  CatBoost(Counter) 0.0908374 -- all
+    three reps bit-identical per arm, ours 1.7% BELOW theirs
+
+Attribution, same as amazon's row: same information CLASS, not same bits
+(their CPU has no FeatureFreq; Counter normalizes the same counts
+differently). One arm asymmetry worth naming: adult carries a
+cardinality-2 feature, which our fixture freq-encodes while their arm
+one-hots it at `one_hot_max_size=2` -- a quality-band row, not a parity
+row. The GPU box was shared with a concurrent session during the run;
+quality rows are immune to the drift that would disqualify a timing row.
+One operational note: rep 2 stalled ~30 minutes inside
+`catboost.datasets`' per-call re-download (sock_connect) before
+recovering, so `catboost_arm` now downloads each dataset once per
+process.

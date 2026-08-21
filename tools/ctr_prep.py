@@ -25,11 +25,13 @@ everything it needs.
     pixi run -e bench python tools/ctr_prep.py <dir> amazon
     pixi run -e bench python tools/ctr_prep.py <dir> adult
 
-KNOWN ISSUE for the harness stream: adult's object columns carry real float
-NaN among strings, so `.astype(str)` alone does not homogenize them --
-`cat_df[c].fillna("nan").astype(str)` at the np.unique site is the fix.
-Amazon works and its quality row is RUN AND REPORTED (RESUME): ours 0.05078
-vs CatBoost-Counter 0.05064 test mse, frequency-information-matched arms.
+Both quality rows are RUN AND REPORTED (RESUME), frequency-information-
+matched arms: amazon ours 0.05078 vs CatBoost-Counter 0.05064 test mse;
+adult (2026-08-21, after the NaN fix below) ours at or slightly below
+theirs every rep. The adult prep bug was real float NaN among strings in
+object columns -- `.astype(str)` alone does not homogenize them, so both
+this script and `catboost_arm.fit_and_test_mse_cat` fillna("nan") first;
+catboost.Pool refuses a NaN cat cell outright.
 
 THE FORMULAS ARE THEIRS, PINNED FROM SOURCE (CatBoost 54a8143a):
 * FeatureFreq value = (bin_count + prior) / (n_rows + prior_observations)
@@ -133,7 +135,13 @@ def main():
     codes = np.zeros((len(cat_cols), n), dtype=np.int64)
     card = []
     for i, c in enumerate(cat_cols):
-        uniq, inv = np.unique(cat_df[c].astype(str).to_numpy(), return_inverse=True)
+        # adult's object columns carry real float NaN among strings, and
+        # `.astype(str)` maps each NaN to a distinct "nan" object only after
+        # fillna homogenizes them; without it np.unique treats them as
+        # separate categories.
+        uniq, inv = np.unique(
+            cat_df[c].fillna("nan").astype(str).to_numpy(), return_inverse=True
+        )
         codes[i] = inv
         card.append(len(uniq))
 

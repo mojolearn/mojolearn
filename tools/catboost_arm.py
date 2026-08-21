@@ -212,19 +212,39 @@ def fit_and_test_mse_cat(scratch, prefix, trees, depth, train_rows, seed):
     INFORMATION CLASS, not the same bits: quality bands compare, values
     do not."""
     import catboost.datasets
+    # catboost.datasets fetches over the network on EVERY call (no local
+    # cache dir on this box), and a 3-rep run once stalled half an hour
+    # inside rep 2's sock_connect before recovering. Download once per
+    # process.
+    raw_key = ("raw_df", str(prefix))
+    if raw_key not in _CACHE:
+        if str(prefix) == "amazon":
+            _CACHE[raw_key] = catboost.datasets.amazon()[0]
+        elif str(prefix) == "adult":
+            _CACHE[raw_key] = catboost.datasets.adult()[0]
+        else:
+            raise ValueError(prefix)
+    train_df = _CACHE[raw_key]
     if str(prefix) == "amazon":
-        train_df, _ = catboost.datasets.amazon()
         y = train_df["ACTION"].to_numpy().astype(np.float32)
         xdf = train_df.drop(columns=["ACTION"])
         cat_idx = list(range(xdf.shape[1]))
     elif str(prefix) == "adult":
-        train_df, _ = catboost.datasets.adult()
         y = (train_df["income"] == ">50K").to_numpy().astype(np.float32)
         xdf = train_df.drop(columns=["income"])
         cat_idx = [i for i, c in enumerate(xdf.columns)
                    if xdf[c].dtype == object]
     else:
         raise ValueError(prefix)
+    if str(prefix) == "adult":
+        # adult's object columns carry real float NaN among strings, and
+        # catboost.Pool refuses them outright ("NaN values should be
+        # converted to string"). The fixture side (tools/ctr_prep.py) maps
+        # them to the string "nan", so both arms see the same category.
+        xdf = xdf.copy()
+        for i in cat_idx:
+            c = xdf.columns[i]
+            xdf[c] = xdf[c].fillna("nan").astype(str)
     x = xdf.astype(str) if str(prefix) == "amazon" else xdf
     tr = int(train_rows)
     m = catboost.CatBoostRegressor(
