@@ -469,15 +469,25 @@ def arm_d_unported_arms(ctx: DeviceContext) raises -> Int:
         fails += 1
         print("  arm D FAILED: weighted bootstrap did not raise")
 
+    # The zero-weight arm (`randomforest.cuh:144-154`) IS PORTED now, so it
+    # must NOT raise -- but it must also refuse to run before
+    # `prepare_weights` has established which rows survive, because a
+    # sampler that silently emitted `n_sampled_rows` identity indices there
+    # would train on the zero-weight rows it was asked to drop. Its
+    # behaviour proper is checked in `sample_weight_check`.
     var s3 = RowSampler(ctx, False, UInt64(7), 100, 100, True)
-    var raised3 = False
-    try:
-        s3.sample(ctx, Int32(0))
-    except e:
-        raised3 = True
-    if not raised3:
+    var w3 = List[Float32]()
+    for i in range(100):
+        w3.append(Float32(0.0) if i % 5 == 0 else Float32(1.0))
+    s3.prepare_weights(ctx, w3)
+    s3.sample(ctx, Int32(0))
+    if s3.n_selected != 80:
         fails += 1
-        print("  arm D FAILED: zero-weight removal did not raise")
+        print(
+            "  arm D: zero-weight removal selected", s3.n_selected,
+            "rows, want 80",
+        )
+    _ = s3^
 
     # and the arm that IS ported must produce the identity, per cell
     var s4 = RowSampler(ctx, False, UInt64(7), 100, 100, False)
@@ -500,9 +510,10 @@ def arm_d_unported_arms(ctx: DeviceContext) raises -> Int:
 
     if fails == 0:
         print(
-            "  arm D OK: the bootstrap arm matches RAFT per cell, the two"
-            " weight-dependent arms raise by name, and the no-bootstrap"
-            " arm is the identity in all 100 cells"
+            "  arm D OK: the bootstrap arm matches RAFT per cell, weighted"
+            " bootstrap raises by name, zero-weight removal selects 80 of"
+            " 100, and the no-bootstrap arm is the identity in all 100"
+            " cells"
         )
     return fails
 

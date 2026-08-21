@@ -25,7 +25,7 @@ is complete:
   * `sampled_cols_for` and the multi-round feature-resampling schedule.
 
 The four kernel LAUNCHES (`doSplit`, `computeBestSplits`, `computeSplit`,
-`SetLeafPredictions`) are NOT wired here yet; see DEVIATION 176's note at the
+`SetLeafPredictions`) are NOT wired here yet; see DEVIATION 300's note at the
 end of the deviation block. They are the next commit, and the launcher
 contract they will call is written down there so the two halves cannot drift.
 
@@ -54,7 +54,7 @@ first `max_features` columns happened to be uninformative.
 
 ================= DEVIATION BLOCK (whole file) =================
 
-DEVIATION 176. `n_streams` and the whole stream/OpenMP fan-out are absent.
+DEVIATION 300. `n_streams` and the whole stream/OpenMP fan-out are absent.
 That belongs to the estimator above this file and is priced in full under
 DEVIATION 117 in `randomforest.mojo`; nothing in `builder.cuh` itself
 touches streams except by taking a `cudaStream_t` parameter, which becomes a
@@ -63,7 +63,7 @@ touches streams except by taking a `cudaStream_t` parameter, which becomes a
 Recorded here only because `Builder`'s constructor takes `cudaStream_t s`
 (`:214`) and a reader diffing the two signatures will notice it missing.
 
-DEVIATION 177 (CLOSED). The four kernel launches ARE wired: `train` ->
+DEVIATION 301 (CLOSED). The four kernel launches ARE wired: `train` ->
 `do_split` -> `_compute_best_splits` -> `_compute_split`, plus
 `set_leaf_predictions`, calling the launchers in
 `kernels/builder_kernels_impl.mojo`. `ensemble/mojo_only/train_check.mojo`
@@ -87,7 +87,7 @@ histogram is order-independent by construction, and `train_check` arm E
 holds two fits of a 3-class 4-feature dataset to BIT-IDENTICAL trees and
 leaf values.
 
-DEVIATION 178. `allReduceHistograms` (`:553-568`), `packedHistogramWorkspaceSize`
+DEVIATION 302. `allReduceHistograms` (`:553-568`), `packedHistogramWorkspaceSize`
 (`:269-282`) and the `distributed` flag (`:211`, `:246`) are not ported.
 They gate on a RAFT communicator with more than one rank
 (`raft::resource::comms_initialized(handle) && get_size() > 1`), which a
@@ -97,7 +97,7 @@ which is zero on their single-rank path too (`:271`: `if (!distributed)
 { return 0; }`). So the workspace this file computes is byte-for-byte the
 size THEIRS computes on one device. That equality is checked.
 
-DEVIATION 179. `MLCommon::TimerCPU` and `tree->train_time` (`:377`, `:387`)
+DEVIATION 303. `MLCommon::TimerCPU` and `tree->train_time` (`:377`, `:387`)
 are not ported and the field is left at its initial value. Timing is out of
 scope this round by instruction, and a field that would report a duration is
 better empty than filled with a number nobody measured. PRICE: their tree
@@ -660,7 +660,7 @@ def workspace_layout(
 
     `packedHistogramWorkspaceSize` is omitted; it returns 0 on a
     single-device build (`:271`), so the total is theirs exactly. See
-    DEVIATION 178.
+    DEVIATION 302.
     """
     var max_batch = Int(max_batch_size)
     var max_len_histograms = (
@@ -1108,7 +1108,7 @@ struct Builder[O: ObjectiveLike](Movable):
         # `:588-590` -- theirs zeroes exactly `sizeof(BinT) *
         # len_histograms` bytes, where
         # `len_histograms = n_bins * n_classes * n_blocks_dimy *
-        # n_work_items`. DEVIATION 180: `enqueue_memset` takes a BUFFER and
+        # n_work_items`. DEVIATION 304: `enqueue_memset` takes a BUFFER and
         # not a range, so this zeroes the whole histogram workspace --
         # sized for `max_batch_size` nodes and `N_BLKS_FOR_COLS` columns.
         # PRICE: strictly more zeroing than theirs, never less, so every
@@ -1138,7 +1138,7 @@ struct Builder[O: ObjectiveLike](Movable):
             smem_config,
             self.hist_args,
         )
-        # DEVIATION 178: their `if (distributed) allReduceHistograms(...)`
+        # DEVIATION 302: their `if (distributed) allReduceHistograms(...)`
         # sits exactly here (`:613`) and is unreachable on one device.
         launch_find_best_splits_kernel[Self.O](
             ctx,
@@ -1441,7 +1441,7 @@ struct Builder[O: ObjectiveLike](Movable):
             auto tree = queue.GetTree();
             SetLeafPredictions(tree, queue.GetInstanceRanges());
 
-        `train_time` is not set; see DEVIATION 179.
+        `train_time` is not set; see DEVIATION 303.
         """
         var smem_config = self.shared_memory_config()
         var queue = NodeQueue[Self.O.DataT](

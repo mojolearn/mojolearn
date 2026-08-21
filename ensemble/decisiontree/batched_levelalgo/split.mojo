@@ -147,6 +147,7 @@ counts, and local counts are filled just before partitioning."
 """
 
 from std.atomic import Atomic, Ordering
+from std.bit import log2_floor
 from max.gpu.memory import AddressSpace
 
 # `split.cuh:8` includes `bins.cuh`, because `detail::CountLeft` is
@@ -477,9 +478,16 @@ struct Split[dtype: DType](TrivialRegisterPassable):
         type does the same split internally.
         """
         var lane = lane_id()
-        var i = WARP_SIZE // 2
-        while i >= 1:
-            var src = UInt32((lane + i) % WARP_SIZE)
+        # `#pragma unroll` on their `:209`. `WARP_SIZE` is a compile-time
+        # constant here, so `comptime for` unrolls this exactly as their
+        # pragma does -- same trip count, same offsets, fully unrolled, no
+        # loop counter in registers. A runtime `while` would have been a
+        # silent divergence from their optimization path, which is small
+        # here and is the kind of thing that is never noticed later.
+        comptime STEPS = log2_floor(WARP_SIZE)
+        comptime for k in range(STEPS):
+            comptime OFF = WARP_SIZE >> (k + 1)
+            var src = UInt32((lane + OFF) % WARP_SIZE)
             var qu = shuffle_idx(self.quesval, src)
             var co = shuffle_idx(self.colid, src)
             var be = shuffle_idx(self.best_metric_val, src)
@@ -493,7 +501,6 @@ struct Split[dtype: DType](TrivialRegisterPassable):
                 Int(UInt32(Int(gnl_lo)))
             )
             _ = self.update(qu, co, be, gnl, bs, bn)
-            i //= 2
 
     @always_inline
     def eval_best_split[

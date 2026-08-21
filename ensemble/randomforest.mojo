@@ -837,6 +837,7 @@ struct RandomForest[dtype: DType, label_dtype: DType](
         n_cols: Int,
         n_unique_labels: Int,
         objective: O,
+        sample_weight_host: List[Float32] = List[Float32](),
         row_major: Bool = False,
     ) raises -> RandomForestMetaData[O.DataT, O.LabelT] where (
         O.DataT == DType.float32
@@ -866,6 +867,7 @@ struct RandomForest[dtype: DType, label_dtype: DType](
             n_unique_labels,
             self.rf_params,
             objective,
+            sample_weight_host,
             row_major,
         )
 
@@ -1223,6 +1225,10 @@ struct RowSampler(Movable):
     var n_rows: Int
     var n_sampled_rows: Int
     var has_sample_weight: Bool
+    # `:151` -- their `selected_rows.resize(n_selected)`. The zero-weight
+    # arm produces FEWER rows than `n_sampled_rows`, and the builder must
+    # be told how many, or it reads past the live entries.
+    var n_selected: Int
     # `:224` -- one `device_uvector<int>` per stream. One stream here.
     var selected_rows: DeviceBuffer[DType.int32]
     var h_rows: HostBuffer[DType.int32]
@@ -1242,10 +1248,68 @@ struct RowSampler(Movable):
         self.n_rows = n_rows
         self.n_sampled_rows = n_sampled_rows
         self.has_sample_weight = has_sample_weight
+        self.n_selected = n_sampled_rows
         var n = n_sampled_rows if n_sampled_rows > 0 else 1
         self.selected_rows = ctx.enqueue_create_buffer[DType.int32](n)
         self.h_rows = ctx.enqueue_create_host_buffer[DType.int32](n)
         ctx.synchronize()
+
+    def prepare_weights(
+        mut self, ctx: DeviceContext, weights: List[Float32]
+    ) raises:
+        """`validate_sample_weight` (`:198-211`) + the `copy_if` of
+        `:144-154`, both done once.
+
+        THEIR TWO REFUSALS ARE KEPT AND ARE NOT ADVISORY.
+        `InvalidSampleWeight` rejects anything non-finite or negative
+        (`:202-208`), and `compute_sample_weight_sum` asserts the total is
+        strictly positive (`:93-95`). A silently-accepted bad weight would
+        train a forest on a row set nobody asked for, which is the same
+        failure class as a wrong bootstrap.
+
+        DEVIATION 305: theirs runs the `copy_if` on the DEVICE, inside
+        `sample()`, once per tree. Ours runs it on the HOST, once per
+        forest. The set is a function of `sample_weight` alone -- no tree
+        id, no RNG -- so every tree gets the identical set either way; the
+        difference is `n_trees - 1` redundant device passes, which is work
+        rather than meaning. PRICE: one host pass over `n_rows` weights
+        per forest, and the weights must be available on the host, which
+        they are because the caller supplies them.
+        """
+        if len(weights) < self.n_rows:
+            raise Error(
+                "sample_weight holds "
+                + String(len(weights))
+                + " values but n_rows is "
+                + String(self.n_rows)
+            )
+        var total = Float64(0.0)
+        var kept = 0
+        var p = self.h_rows.unsafe_ptr()
+        for i in range(self.n_rows):
+            var w = weights[i]
+            # `:202-208` -- non-finite or negative is refused BY VALUE.
+            if not (w == w):
+                raise Error(
+                    "sample_weight values must be finite and non-negative;"
+                    " index " + String(i) + " is NaN"
+                )
+            if w < Float32(0.0):
+                raise Error(
+                    "sample_weight values must be finite and non-negative;"
+                    " index " + String(i) + " is " + String(w)
+                )
+            total += Float64(w)
+            if w != Float32(0.0):
+                if kept < self.n_sampled_rows:
+                    p.unsafe_store(kept, Int32(i))
+                kept += 1
+        if total <= 0.0:
+            raise Error(
+                "sample_weight values must contain at least one positive"
+                " value (randomforest.cuh:93-95)"
+            )
+        self.n_selected = min(kept, self.n_sampled_rows)
 
     def rng_seed_for(self, tree_id: Int32) -> UInt32:
         """`:120-123`, the per-tree seed, exposed so a check can hold it to
@@ -1261,10 +1325,12 @@ struct RowSampler(Movable):
         if self.bootstrap and self.has_sample_weight:
             raise Error(
                 "weighted bootstrap is NOT PORTED YET"
-                " (randomforest.cuh:125-138: raft::random::uniform<double>"
-                " into a thrust::upper_bound over a weight CDF). It needs"
-                " sample_weight, which this port does not accept, and a"
-                " float64 prefix scan, which this device cannot run."
+                " (randomforest.cuh:125-138). sample_weight IS accepted"
+                " now and the CDF scan and upper_bound are both host work;"
+                " what is missing is raft::random::uniform<double>, whose"
+                " bit-exact port was declined under DEVIATION 187c. Until"
+                " it lands, use bootstrap=False with weights (their"
+                " :144-154 arm), or bootstrap=True without them."
             )
         if self.bootstrap:
             # `:140-142` -- THE DEFAULT ARM.
@@ -1279,6 +1345,7 @@ struct RowSampler(Movable):
             # `call_rng_kernel` performs writes into an object nobody reads
             # again. Hence no state is threaded here -- verified in RAFT
             # rather than assumed.
+            self.n_selected = self.n_sampled_rows
             launch_uniform_int(
                 ctx,
                 self.selected_rows,
@@ -1290,14 +1357,25 @@ struct RowSampler(Movable):
             ctx.synchronize()
             return
         if self.has_sample_weight:
-            raise Error(
-                "zero-weight row removal is NOT PORTED YET"
-                " (randomforest.cuh:144-154: thrust::copy_if over"
-                " NonzeroSampleWeight). It needs sample_weight, which this"
-                " port does not accept."
+            # `:144-154` -- `thrust::copy_if` over `NonzeroSampleWeight`,
+            # dropping the zero-weight rows and keeping the rest IN ORDER.
+            # Computed once in `prepare_weights` rather than per tree: it
+            # reads only `sample_weight`, so it is the same set for every
+            # tree, and theirs recomputing it per tree is work, not
+            # meaning. DEVIATION 305.
+            if self.n_selected <= 0:
+                raise Error(
+                    "sample_weight values must contain at least one"
+                    " positive value (randomforest.cuh:94)"
+                )
+            ctx.enqueue_copy(
+                dst_buf=self.selected_rows, src_ptr=self.h_rows.unsafe_ptr()
             )
+            ctx.synchronize()
+            return
         # `:155-157` -- `thrust::sequence`, the identity. This is the arm
         # `bootstrap=False` takes, and it is the only one that runs today.
+        self.n_selected = self.n_sampled_rows
         var p = self.h_rows.unsafe_ptr()
         for i in range(self.n_sampled_rows):
             p.unsafe_store(i, Int32(i))
@@ -1354,6 +1432,7 @@ def fit_forest[
     n_unique_labels: Int,
     mut rf_params: RF_params,
     objective: O,
+    sample_weight_host: List[Float32] = List[Float32](),
     row_major: Bool = False,
 ) raises -> RandomForestMetaData[O.DataT, O.LabelT] where (
     O.DataT == DType.float32
@@ -1453,9 +1532,26 @@ def fit_forest[
         .unsafe_origin_cast[MutUntrackedOrigin](),
     )
 
+    var has_sw = len(sample_weight_host) > 0
     var sampler = RowSampler(
-        ctx, rf_params.bootstrap, rf_params.seed, n_rows, n_sampled
+        ctx, rf_params.bootstrap, rf_params.seed, n_rows, n_sampled, has_sw
     )
+    if has_sw:
+        sampler.prepare_weights(ctx, sample_weight_host)
+
+    # `RowSampler::tree_sample_weight`, `randomforest.cuh:166-167`:
+    #
+    #     return bootstrap_ ? nullptr : sample_weight_;
+    #
+    # with their comment: "Use sample weights in impurity / objective
+    # calculation only when bootstrapping is not enabled." THIS IS EASY TO
+    # MISS AND CHANGES THE MODEL. When bootstrapping, the weights are
+    # already expressed by DRAWING rows in proportion to them, so feeding
+    # them to the objective as well would apply them twice. When not
+    # bootstrapping, the objective is the only place they can act. A port
+    # that always passed the weights down would double-count on the
+    # default path and look merely "differently regularised".
+    var objective_sees_weights = has_sw and not rf_params.bootstrap
 
     var forest = RandomForestMetaData[O.DataT, O.LabelT](
         List[TreeMetaDataNode[O.DataT]](),
@@ -1478,18 +1574,20 @@ def fit_forest[
             # `builder.cuh:238-239` -- row_major picks the strides.
             Int64(n_cols) if row_major else Int64(1),
             Int64(1) if row_major else Int64(n_rows),
-            Int32(n_sampled),
+            # `:151` -- the zero-weight arm selects FEWER rows than
+            # `n_sampled_rows`, and the builder must see the real count.
+            Int32(sampler.n_selected),
             Int32(n_cols),
             sampler.rows_ptr(),
             Int32(n_unique_labels),
-            False,
+            objective_sees_weights,
         )
         var builder = Builder[O](
             ctx,
             rf_params.tree_params,
             Int32(i),
             rf_params.seed,
-            n_sampled,
+            sampler.n_selected,
             n_cols,
             Int32(n_unique_labels),
             objective.copy(),
