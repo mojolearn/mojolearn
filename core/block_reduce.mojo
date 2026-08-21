@@ -55,7 +55,7 @@ algorithm does not select it.
 # =========================================================================
 # DEVIATION BLOCK
 #
-# DEVIATION 112. THE WARP WIDTH IS QUERIED, NOT CUB'S HARDCODED 32.
+# DEVIATION 124. THE WARP WIDTH IS QUERIED, NOT CUB'S HARDCODED 32.
 #
 # THEIRS: `BlockReduceWarpReductions` sizes itself from `warp_threads`
 # (`block_reduce_warp_reductions.cuh:60-64`), which is
@@ -90,7 +90,7 @@ algorithm does not select it.
 # would size `warp_aggregates` for twice as many warps as exist and fold
 # uninitialised threadgroup memory into the total.
 #
-# DEVIATION 113. THE FLUSH ATOMIC IS 32-BIT, NOT 64-BIT.
+# DEVIATION 125. THE FLUSH ATOMIC IS 32-BIT, NOT 64-BIT.
 #
 # THEIRS: `atomicAdd` on an `unsigned long long*` aliasing
 # `Split::local_nLeft`, which is `std::int64_t` (`split.cuh:51`).
@@ -156,7 +156,7 @@ def block_reduce_sum[
     "the thread block size in threads" (`block_reduce.cuh:283`).
     """
     # `warps = ceil_div(threads_per_block, warp_threads)`,
-    # `block_reduce_warp_reductions.cuh:60`. See DEVIATION 112 for why the
+    # `block_reduce_warp_reductions.cuh:60`. See DEVIATION 124 for why the
     # divisor is queried.
     comptime WARPS = ceildiv(TPB, WARP_SIZE)
 
@@ -231,7 +231,7 @@ def block_flush_count_i32(
     Their `block_count > 0` guard is theirs and is kept: it is what keeps
     a block whose whole tile is invalid from touching the line at all.
 
-    See DEVIATION 113 for why the target is `Int32` and why that is exact.
+    See DEVIATION 125 for why the target is `Int32` and why that is exact.
     """
     if Int(thread_idx.x) == 0 and block_count > Int64(0):
         _ = Atomic.fetch_add(

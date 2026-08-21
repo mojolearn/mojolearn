@@ -70,7 +70,7 @@ fields cannot be carried at their width -- that is DEVIATION 101 in
 # =========================================================================
 # DEVIATION BLOCK
 #
-# DEVIATION 114. THE WARP SCAN TAKES CUB'S OWN `HAS_IDENTITY == false`
+# DEVIATION 126. THE WARP SCAN TAKES CUB'S OWN `HAS_IDENTITY == false`
 # ARM, UNPADDED, AND SYNCS AT BLOCK SCOPE.
 #
 # THEIRS: `WarpScanSmem` allocates `LOGICAL_WARP_THREADS +
@@ -103,7 +103,7 @@ fields cannot be carried at their width -- that is DEVIATION 101 in
 #     one, and it is not measured here: timing is out of scope for this
 #     lane.
 #
-# DEVIATION 112 (declared in `core/block_reduce.mojo`, and it applies
+# DEVIATION 124 (declared in `core/block_reduce.mojo`, and it applies
 # unchanged to this file). CUB's `WARP_THREADS` is a hardcoded 32; ours is
 # `WARP_SIZE`. For this scan the consequence is sharper than for the
 # reduce, because the fold in `ComputeWarpPrefix` is over WARPS partials
@@ -207,7 +207,7 @@ def block_inclusive_sum[
     # Their `_TempStorage` (`block_scan_warp_scans.cuh:69-79`) is
     # `warp_aggregates[WARPS]` + `warp_scan[WARPS]` + `block_prefix`. The
     # `block_prefix` member serves only the prefix-callback form, which
-    # cuML does not call, so it is not allocated. See DEVIATION 114 for
+    # cuML does not call, so it is not allocated. See DEVIATION 126 for
     # the missing pad on `warp_scan`.
     comptime SCAN_BYTES = (TPB + WARPS) * size_of[T]()
     comptime assert (

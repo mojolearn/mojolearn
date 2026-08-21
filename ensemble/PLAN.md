@@ -478,13 +478,24 @@ Numbers as actually used, which is what PORTING.md takes:
 | 121 | `kernels/builder_kernels.mojo` | `sample_features` — OPENED, then CLOSED |
 | 122 | `kernels/builder_kernels.mojo` | multi-GPU pack/unpack declined |
 | **123** | `quantiles.mojo` | **NEW, assigned here: the subnormal flush. See below.** |
+| 124 | `core/block_reduce.mojo`, `core/block_scan.mojo` | queried warp width (was 112) |
+| 125 | `core/block_reduce.mojo` | 32-bit flush atomic (was 113) |
+| 126 | `core/block_scan.mojo` | CUB's unpadded `HAS_IDENTITY == false` arm (was 114) |
+| 130 | `builder.mojo` | `n_streams` absent from the builder; priced at 117 |
+| 131 | `builder.mojo` | the four kernel launches not wired yet; `train()` raises by name |
+| 132 | `builder.mojo` | the distributed all-reduce path not ported; workspace total unchanged on one device |
+| 133 | `builder.mojo` | `TimerCPU`/`train_time` not ported |
 
-**RESOLUTION, for whoever merges:** `core/`'s 112/113/114 renumber to
-**124/125/126**, because `objectives.mojo`'s were written first and because
-`core/` is one file tree away from the rest of this ledger. 127-129 stay
-free. The lesson is not "assign numbers up front" — they WERE assigned up
-front. It is that the orchestrator must not spend numbers from a range it
-has already handed out.
+**RESOLVED, 2026-08-21, in the same session:** `core/`'s 112/113/114 were
+renumbered to **124/125/126** in `core/block_reduce.mojo` and
+`core/block_scan.mojo`, because `objectives.mojo`'s were written first and
+because `core/` is one file tree away from the rest of this ledger. The row
+above is kept as history; the files now read 124/125/126 and nothing holds
+112/113/114 twice.
+
+The lesson is not "assign numbers up front" — they WERE assigned up front. It
+is that the orchestrator must not spend numbers from a range it has already
+handed out.
 
 ## DEVIATION 123 — this GPU flushes float32 subnormals in arithmetic
 
