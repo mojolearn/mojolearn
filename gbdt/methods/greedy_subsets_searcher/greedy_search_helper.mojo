@@ -151,6 +151,7 @@ from mojo_only.kernel_matrix import (
     HIST_SMEM_SHARED2_I32,
     TARGET_COLUMN,
     deterministic_flush_for,
+    partition_chunks_sm_for,
 )
 from mojo_only.numerics import NUMERIC_IDENTICAL
 from gbdt.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
@@ -1863,9 +1864,40 @@ def replication_for(
     source is exactly what PORTING_RULES rule 0 forbids, and it survived
     because every measurement of it was taken on an empty histogram.
     ======================================================
+
+    **AND UNDER `IDENTICAL` THE `sm_count` IS PINNED** (IDENTITY_PATHS
+    row 7 class, DEVIATION 354; DEVIATIONS 252 and 353 are the
+    std-dev-grid siblings). The replication factor looks like pure
+    occupancy, and for the hist_2/one-byte families it is: they quantize
+    PER ROW (`hist2_quantize`) and sum in Int32, so any partition of rows
+    into blocks gives the same bits. The binary and half-byte families do
+    NOT: their shared histograms accumulate in FLOAT and the
+    deterministic flush quantizes the per-block PARTIAL
+    (`Int32(val * fixed_scale)`, `hist_binary.mojo` /
+    `hist_half_byte.mojo`), so `active_block_count` -- which is
+    `min(f(p_size), maxBlocksPerPart)` with `maxBlocksPerPart` derived
+    from THIS replication -- decides which rows form each rounded
+    partial. A core count in that formula is a summation order
+    (`numerics.mojo`'s opening warning), so `IDENTICAL` feeds it
+    `kernel_matrix.partition_chunks_sm_for`'s pin (32 everywhere) and
+    `FAST` keeps the device's count, CatBoost's behavior bit for bit.
+    One pin for all three policies, because a pin only some policies
+    read cannot be audited.
+
+    THE RESIDUE THIS PIN DOES NOT CLOSE: `min_docs_per_block` inside
+    those kernels multiplies in `BLOCK_SIZE`, and
+    `kernel_matrix.block_size_for` is not identical-gated -- NVIDIA's
+    48 KB budget yields 768 where the identity floor's 32 KB yields 512,
+    so the float-family fold shape still differs cross-vendor under
+    IDENTICAL until that accessor reads the frozen floor. Reported to
+    the matrix's owner; this function cannot fix it from here.
     """
     var blocks_per_sm = 2
-    var max_active_blocks = blocks_per_sm * sm_count
+    # DEVIATION 354: pinned under IDENTICAL, device count under FAST.
+    var sm = partition_chunks_sm_for[HIST_BUILD_MODE == NUMERIC_IDENTICAL](
+        sm_count
+    )
+    var max_active_blocks = blocks_per_sm * sm
     # THE GATHER ARM DOUBLES THE TARGET. Their direct-load launches divide
     # `maxActiveBlocks` (`hist_one_byte.cu:291`) but every gather launch
     # divides `2 * maxActiveBlocks` (`hist_one_byte.cu:356`,

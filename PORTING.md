@@ -5932,6 +5932,49 @@ Priced and deferred: closing it means porting the stats update into the split
 chain, which is a change to a file the symmetric lane owns, and it is worth
 doing only once this lane has a number that says how much of a level it is.
 
+## 353. `target_variance_blocks` is pinned under IDENTICAL (row-7 class; twin of 252)
+
+Their `min(4 * TArchProps::SMCount(), CeilDivide(size, blockSize))`
+(`compute_scores.cu:291`) sizes the greedy arm's target-variance reduce from
+the machine's core count. The kernel strides by `gridDim.x * blockSize`, so
+the block count decides which rows form each FLOAT partial; the partials feed
+the score-noise std dev, and through it every noised score of the fit. Inert
+at this port's default `random_strength = 0`; CatBoost's default is 1.0.
+
+Pinned INSIDE `target_variance_blocks` (`kernel/compute_scores.mojo`) -- the
+one place the formula lives, so the launch and the `partials` sizing in
+`compute_target_std_dev` cannot disagree -- through the SAME
+`kernel_matrix.partition_chunks_sm_for` row 7 uses: device count under FAST
+(CatBoost's behavior bit for bit), 32 under IDENTICAL. DEVIATION 252 is the
+doc-parallel twin (`random_score_helper.std_dev_blocks`), mirrored exactly.
+The same commit routes `compute_target_variance_kernel`'s within-block fold
+through `pinned_block_sum` (DEVIATION 251's family -- this kernel was a
+producer site row 8's checklist had not listed).
+
+## 354. Histogram replication is pinned under IDENTICAL (row-7 class)
+
+`replication_for` (`greedy_search_helper.mojo`) is their
+`CeilDivide(blocksPerSm * SMCount(), x*y*z)` (`hist_binary.cu:95` and twins),
+and it LOOKS like pure occupancy. For the hist_2/one-byte families it is:
+they quantize per row (`hist2_quantize`) and sum in Int32, so any partition
+of rows into blocks gives the same bits. The binary and half-byte families
+accumulate their shared histograms in FLOAT and the deterministic flush
+quantizes the per-block PARTIAL (`Int32(val * fixed_scale)`), so
+`active_block_count` -- derived from this replication -- decides which rows
+form each rounded partial. A core count in that formula is a summation order.
+
+Under IDENTICAL the formula is fed `partition_chunks_sm_for`'s pin (32
+everywhere); under FAST the device's count, unchanged. One pin for all three
+policies, because a pin only some policies read cannot be audited.
+
+**KNOWN RESIDUE, not closed by this entry:** `kernel_matrix.block_size_for`
+is not identical-gated, so the float families' BLOCK SIZE (hence
+`min_docs_per_block`, replica count and `HIST_SIZE`) still follows the
+vendor's shared-memory budget under IDENTICAL -- NVIDIA's 48 KB yields 768
+where the identity floor's 32 KB yields 512. The comptime accessor needs the
+same identical-gating `spec_for` (the runtime report) already has. That edit
+is the kernel matrix owner's; reported 2026-08-22.
+
 
 # =====================================================================
 # DEVIATION NUMBERS 250-299 ARE THE SYMMETRIC LANE'S (250 reserved)
