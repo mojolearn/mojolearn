@@ -88,6 +88,7 @@ from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
 from gbdt.gpu_util.kernel.random_gen import advance_seed_k, next_normal_f
+from mojo_only.numerics import identical_mul_add
 from gbdt.options.catboost_options import (
     SCORE_FUNCTION_COSINE,
     SCORE_FUNCTION_L2,
@@ -107,7 +108,7 @@ comptime FLOAT32_MAX = Float32(3.4028234663852886e38)
 
 @always_inline
 def _add_leaf[
-    score_function: Int, normalize: Bool
+    score_function: Int, normalize: Bool, pin_mul_add: Bool = False
 ](
     sum: Float32,
     weight: Float32,
@@ -140,8 +141,38 @@ def _add_leaf[
         var mu = Float32(0.0)
         if weight > Float32(0.0):
             mu = sum / (weight + lam)
-        score += sum * mu
-        denum_sqr += weight * mu * mu
+
+        # ============ IDENTITY_PATHS ROW 9, MEASURED HERE ============
+        # `Score += sum * mu` and `DenumSqr += weight * mu * mu` are the
+        # ONLY contractible seams on the whole score path -- the L2 calcer
+        # accumulates a quotient, which has no multiply to fuse into the
+        # add. Row 9 says contraction is a codegen decision no runtime row
+        # can reach.
+        #
+        # ON THIS KERNEL THAT IS NOT HYPOTHETICAL. `check-leafwise-scores`
+        # compares the device against BOTH host walks over 18 shapes:
+        # **15 matched the naive chain and 3 matched `fma`**, in one kernel,
+        # in one build, differing only in leaf count and stat count. So MAX
+        # on Metal contracts these two lines on some instantiations and not
+        # others -- which makes this seam non-identical across backends by
+        # exactly the mechanism row 9 names.
+        #
+        # `pin_mul_add` routes it through `numerics.identical_mul_add`,
+        # which is `fma` under IDENTICAL and the naive chain under FAST.
+        # DEFAULT FALSE, and the false arm is character-for-character the
+        # source that was here before, so the symmetric arm above is
+        # unchanged in both modes and no other lane's numbers move.
+        #
+        # THE SYMMETRIC ARM HAS THE SAME SEAM AND IS STILL UNPINNED. That
+        # is an OPEN row-9 item for whoever owns it, not an oversight of
+        # this one; the measurement above is the evidence it needs.
+        # =============================================================
+        comptime if pin_mul_add:
+            score = identical_mul_add(sum, mu, score)
+            denum_sqr = identical_mul_add(weight * mu, mu, denum_sqr)
+        else:
+            score += sum * mu
+            denum_sqr += weight * mu * mu
     else:
         # `TL2ScoreCalcer::AddLeaf` at `MetaExponent == 1`:
         # `leafScore = (weight > 1e-20f ? (-sum*sum)/(weight+Lambda) : 0)`
@@ -619,3 +650,407 @@ def target_variance_blocks(size: Int, sm_count: Int) -> Int:
     if by_data < by_machine:
         return by_data if by_data > 0 else 1
     return by_machine
+
+
+# =====================================================================
+# THE LEAFWISE SCORERS -- `EGrowPolicy::Lossguide` and `EGrowPolicy::Region`
+#
+# Added 2026-08-22 by the LOSSGUIDE lane. Everything above this line is the
+# SYMMETRIC arm and is not touched by it; `LOSSGUIDE.md` carries the lane
+# boundary and the deviation block 300-349.
+#
+# `compute_scores.cu` holds THREE `__global__`s. The symmetric one above
+# (`:56`) scores a candidate ONCE for the whole level, summing over every
+# leaf. The other two score a candidate PER LEAF, because a non-symmetric
+# tree gives each leaf its own split:
+#
+#   `ComputeOptimalSplitsRegion` (`:303-385`)  Depthwise and Region.
+#       leaf ids come from a buffer:  partIds += blockIdx.y; partIds[0]
+#   `ComputeOptimalSplit`        (`:393-475`)  Lossguide.
+#       leaf ids are two SCALARS:  blockIdx.y == 0 ? partId : maybeSecondPartId
+#
+# ============================ DEVIATION 302 ============================
+# THE TWO BODIES ARE THE SAME BODY. Diffed line for line: `:406-472` against
+# `:316-382` is character-identical apart from the three lines that produce
+# `thisPartId`. Theirs are two separate `__global__` templates because CUDA
+# gives them no cheaper way to vary one load; ours is ONE `@always_inline`
+# scan (`_leafwise_scan_part`) plus one `@always_inline` block argmax
+# (`_leafwise_argmax_write`), and each policy's kernel is the four lines that
+# pick a part id and call them.
+#
+# This is a deviation of SHAPE and it is priced at zero: the emitted code per
+# kernel is the same instruction sequence their template instantiation emits,
+# and the two arms cannot drift apart because there is one arm. It is
+# recorded rather than assumed because the "identical bodies" claim is a
+# claim about THEIR file, and a future CatBoost that edits one and not the
+# other would break it silently. Re-diff `:303-475` when the pin moves.
+#
+# The Lossguide kernel is written here. **The Depthwise/Region kernel is the
+# depthwise lane's and belongs at the foot of this block** -- it is four
+# lines and both helpers are already exported for it.
+# =======================================================================
+#
+# ================== WHAT THE SYMMETRIC ARM DOES NOT DO ==================
+# Three things live in the leafwise bodies and in NEITHER the symmetric
+# kernel above nor its port, so none of this is reachable by editing the
+# arm above and none of it is redundant:
+#
+#   1. `beforeSplitCalcer` IS FED (`:341`, `:431`). The symmetric copy is
+#      taken after `NextFeature` and never sees a leaf, so its score is a
+#      constant zero and the port says so. Here it accumulates the PARENT
+#      as one leaf -- `AddLeaf(partStat, partWeight)` -- so `gain = after -
+#      before` is a real difference of two real scores, which is what makes
+#      a per-leaf gain comparable ACROSS leaves. That comparability is the
+#      whole of Lossguide: `FindBestLeafToSplit` argmins over it.
+#
+#   2. `toZeroPartSplit` (`:337-340`, `:427-430`). If either side's weight
+#      falls under 1e-20 the candidate is not scored at all: both scores
+#      become the sentinel and **the gain is forced to exactly 0**, not to
+#      the sentinel. In their sign 0 beats every positive gain, so a
+#      degenerate split still wins a leaf on which NOTHING improves. That
+#      is not a bug to round off -- it is how a leaf with no usable split
+#      still reports a defined `BestSplit`, which is what keeps
+#      `FindBestLeafToSplit` from picking it while other leaves have real
+#      gains, and what lets `IsTerminalLeaf` be the thing that stops the
+#      tree instead. Ported exactly, sign-flipped once.
+#
+#   3. `bestScore = gain` (`:468`), where the symmetric kernel sets
+#      `bestScore = score` (`:143`). **CHECKED, because Lossguide's leaf
+#      argmin reads `BestSplit.Score` and not `BestSplit.Gain`**
+#      (`greedy_search_helper.cpp:300`), while the cross-block reduce reads
+#      `operator<` which is keyed on `Gain` (`gpu_structures.h:80-93`). If
+#      the two fields differed on this path, this port's collapse of Score
+#      and Gain into one number would silently change WHICH LEAF gets
+#      split. They do not differ: on both leafwise kernels `bestScore` and
+#      `bestGain` are assigned the same `gain`. The collapse is correct
+#      here and would NOT have been correct on the symmetric arm.
+# =======================================================================
+
+
+#: `const int blockSize = 256` for BOTH leafwise launchers
+#: (`compute_scores.cu:484`, `:557`), where the symmetric launcher uses 128
+#: (`:167`, `SCORE_BLOCK_SIZE` above). Their number, not a tuning of ours.
+#:
+#: SCHEDULING, not numeric, and the argument is not "it is a block size":
+#: every thread scores its own candidates with no cross-thread accumulation,
+#: and the block argmax below is a total order (gain, then smaller bin id),
+#: so no reduction shape can move the answer. `numerics.mojo`'s test is
+#: whether a row changes the SEQUENCE of arithmetic, and this one cannot.
+comptime LEAFWISE_SCORE_BLOCK_SIZE = 256
+
+
+@always_inline
+def _leafwise_scan_part[
+    score_function: Int, normalize: Bool, block_size: Int
+](
+    this_part_id: Int,
+    bf_skip: MutPointer[UInt8, MutAnyOrigin],
+    bin_feature_count: Int,
+    bf_feature_id: MutPointer[UInt32, MutAnyOrigin],
+    feature_weights: MutPointer[Float32, MutAnyOrigin],
+    histograms: MutPointer[Float32, MutAnyOrigin],
+    part_stats: MutPointer[Float32, MutAnyOrigin],
+    stat_count: Int,
+    multiclass_optimization: Int32,
+    lambda_l2: Float32,
+    score_std_dev: Float32,
+    global_seed: UInt64,
+    mut best_gain: Float32,
+    mut best_bin: UInt32,
+):
+    """One leaf's candidate scan -- `compute_scores.cu:406-472`, both copies.
+
+    Their grid-stride loop over bin features, the two calcers, the skip
+    test, the multiclass arm and the noise draw. Leaves `best_gain` and
+    `best_bin` holding this thread's winner, in THIS port's sign (larger is
+    better; see the module docstring's sign block).
+    """
+    comptime cosine = (
+        score_function == SCORE_FUNCTION_COSINE
+        or score_function == SCORE_FUNCTION_NEWTON_COSINE
+    )
+    comptime assert (
+        cosine
+        or score_function == SCORE_FUNCTION_L2
+        or score_function == SCORE_FUNCTION_NEWTON_L2
+    ), (
+        "score_function has no calcer here; only Cosine, NewtonCosine, L2"
+        " and NewtonL2 are ported"
+    )
+
+    var tid = Int(thread_idx.x)
+    var leaf_base = this_part_id * stat_count * bin_feature_count
+
+    var offset = Int(block_idx.x) * block_size
+    while offset < bin_feature_count:
+        var bin_feature_id = offset + tid
+        if bin_feature_id >= bin_feature_count:
+            break
+        if bf_skip.unsafe_load(bin_feature_id) != 0:
+            offset += block_size * Int(grid_dim.x)
+            continue
+
+        # `calcer.NextFeature(bf[binFeatureId]); TScoreCalcer
+        # beforeSplitCalcer = calcer;` (`:424-425`). BOTH start from the
+        # `NextFeature` seed, which is what makes their noise draws
+        # identical and therefore cancelling.
+        var score = Float32(0.0)
+        var denum_sqr = Float32(1e-10)
+        var score_b = Float32(0.0)
+        var denum_sqr_b = Float32(1e-10)
+
+        # `const double partWeight = __ldg(partStats + thisPartId *
+        # statCount)` (`:427`), stat plane 0.
+        var part_weight = ldg(part_stats + this_part_id * stat_count)
+        var weight_left = max(
+            ldg(histograms + (leaf_base + bin_feature_id)), Float32(0.0)
+        )
+        var weight_right = max(part_weight - weight_left, Float32(0.0))
+
+        # `bool toZeroPartSplit = false; if (weightLeft < 1e-20f ||
+        # weightRight < 1e-20f) { toZeroPartSplit = true; }` (`:430-434`).
+        var to_zero_part_split = (
+            weight_left < Float32(1e-20) or weight_right < Float32(1e-20)
+        )
+
+        var total_sum_left = Float32(0.0)
+        var total_sum_part = Float32(0.0)
+
+        for stat_id in range(1, stat_count):
+            var stat_slot = (
+                leaf_base + stat_id * bin_feature_count + bin_feature_id
+            )
+            var sum_left = ldg(histograms + stat_slot)
+            var part_stat = ldg(
+                part_stats + (this_part_id * stat_count + stat_id)
+            )
+            total_sum_part += part_stat
+            var sum_right = part_stat - sum_left
+
+            # `calcer.AddLeaf(sumLeft, weightLeft); calcer.AddLeaf(sumRight,
+            # weightRight); beforeSplitCalcer.AddLeaf(partStat, partWeight);`
+            # (`:443-446`). The THIRD call is the one the symmetric arm has
+            # no counterpart for.
+            _add_leaf[score_function, normalize, True](
+                sum_left, weight_left, lambda_l2, score, denum_sqr
+            )
+            _add_leaf[score_function, normalize, True](
+                sum_right, weight_right, lambda_l2, score, denum_sqr
+            )
+            _add_leaf[score_function, normalize, True](
+                part_stat, part_weight, lambda_l2, score_b, denum_sqr_b
+            )
+            total_sum_left += sum_left
+
+        # `if (multiclassOptimization) { ... beforeSplitCalcer.AddLeaf(
+        # -totalSumPart, partWeight); }` (`:448-454`). Same pinned-class
+        # identity as the symmetric arm, plus the before-calcer's own term.
+        if multiclass_optimization != Int32(0):
+            var total_sum_right = total_sum_part - total_sum_left
+            _add_leaf[score_function, normalize, True](
+                -total_sum_left, weight_left, lambda_l2, score, denum_sqr
+            )
+            _add_leaf[score_function, normalize, True](
+                -total_sum_right, weight_right, lambda_l2, score, denum_sqr
+            )
+            _add_leaf[score_function, normalize, True](
+                -total_sum_part, part_weight, lambda_l2,
+                score_b, denum_sqr_b,
+            )
+
+        var feature_id = Int(bf_feature_id.unsafe_load(bin_feature_id))
+
+        # `const float scoreAfter = !skip ? calcer.GetScore() : FLT_MAX;`
+        # `const float scoreBefore = !skip ? beforeSplitCalcer.GetScore()
+        #  : FLT_MAX;` (`:458-459`), both sentinels negated for our sign.
+        var final_score = score
+        var score_before = score_b
+        comptime if cosine:
+            if denum_sqr > Float32(1e-15):
+                final_score = score / sqrt(denum_sqr)
+            else:
+                final_score = -FLOAT32_MAX
+            if denum_sqr_b > Float32(1e-15):
+                score_before = score_b / sqrt(denum_sqr_b)
+            else:
+                score_before = -FLOAT32_MAX
+
+            # `score_calcers.cuh:162-166`, run by BOTH calcers because
+            # `GetScore()` is called on both. Same seed, same feature id,
+            # same draw -- so it cancels in the difference exactly as it
+            # does on the symmetric arm, and is ported for the same reason
+            # (see the noise block above).
+            if score_std_dev != Float32(0.0):
+                var seed = advance_seed_k(
+                    global_seed + UInt64(feature_id), 4
+                )
+                var draw = next_normal_f(seed)
+                var noise = draw[0] * score_std_dev
+                final_score -= noise
+                score_before -= noise
+
+        if to_zero_part_split:
+            final_score = -FLOAT32_MAX
+            score_before = -FLOAT32_MAX
+
+        # `float gain = !skip ? (scoreAfter - scoreBefore) : 0;` (`:463`)
+        # then `gain *= __ldg(binFeaturesWeights + featureId)` (`:466`).
+        #
+        # THE ZERO IS NOT THE SENTINEL. Writing `-FLOAT32_MAX - -FLOAT32_MAX`
+        # here would give NaN, and writing `-FLOAT32_MAX` would make a
+        # degenerate candidate lose to everything -- both change which split
+        # a hopeless leaf reports. Theirs is a literal 0 and so is this.
+        var gain = Float32(0.0)
+        if not to_zero_part_split:
+            gain = final_score - score_before
+        gain = gain * ldg(feature_weights + feature_id)
+
+        if gain > best_gain:
+            best_gain = gain
+            best_bin = UInt32(bin_feature_id)
+
+        offset += block_size * Int(grid_dim.x)
+
+
+@always_inline
+def _leafwise_argmax_write[
+    block_size: Int
+](
+    best_gain: Float32,
+    best_bin: UInt32,
+    bin_feature_count: Int,
+    out_slot: Int,
+    out_score: MutPointer[Float32, MutAnyOrigin],
+    out_bin: MutPointer[UInt32, MutAnyOrigin],
+):
+    """Their `ARGMAX()` macro (`compute_scores.cu:20-51`) for the leafwise
+    kernels, with the same tie rule and the same poison record.
+
+    `out_slot` is their `result += blockIdx.x + blockIdx.y * gridDim.x`
+    (`:319`, `:406`): one record per (argmax block, score block) pair, which
+    is the layout their host reduce walks (`greedy_search_helper.cpp:520-528`).
+
+    **The symmetric kernel above inlines this same reduction rather than
+    calling this helper.** That is duplication and it is recorded here
+    rather than fixed, because folding the symmetric arm onto this helper
+    means editing another lane's live arm in a shared file. The two are
+    gated against each other in `mojo_only/leafwise_scores_check.mojo`; if
+    that gate ever disagrees, one of the two copies has drifted and this
+    comment is where to start.
+    """
+    var tid = Int(thread_idx.x)
+    var s_score = stack_allocation[
+        block_size,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var s_bin = stack_allocation[
+        block_size,
+        Scalar[DType.uint32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    s_score[tid] = best_gain
+    s_bin[tid] = best_bin
+    barrier()
+
+    var stride = block_size // 2
+    while stride > 0:
+        if tid < stride:
+            # Their tie rule, sign-flipped once: on an exact tie the SMALLER
+            # bin-feature index wins (`:30`).
+            var take = s_score[tid + stride] > s_score[tid]
+            if s_score[tid + stride] == s_score[tid]:
+                if s_bin[tid + stride] < s_bin[tid]:
+                    take = True
+            if take:
+                s_score[tid] = s_score[tid + stride]
+                s_bin[tid] = s_bin[tid + stride]
+        barrier()
+        stride //= 2
+
+    if tid == 0:
+        var index = s_bin[0]
+        if index != UInt32(0xFFFFFFFF) and Int(index) < bin_feature_count:
+            out_score.unsafe_store(out_slot, s_score[0])
+            out_bin.unsafe_store(out_slot, index)
+        else:
+            # The poison record (`:44-49`). THE CALLER MUST RAISE ON IT --
+            # and on the Lossguide path the caller has one more duty the
+            # symmetric path does not: a poisoned leaf must be left with an
+            # UNDEFINED `BestSplit`, so `FindBestLeafToSplit` skips it
+            # (`greedy_search_helper.cpp:299`) instead of splitting a leaf
+            # whose score is a sentinel.
+            out_score.unsafe_store(out_slot, -FLOAT32_MAX)
+            out_bin.unsafe_store(out_slot, UInt32(0xFFFFFFFF))
+
+
+def compute_optimal_split_kernel[
+    score_function: Int = SCORE_FUNCTION_COSINE,
+    normalize: Bool = False,
+](
+    bf_skip: MutPointer[UInt8, MutAnyOrigin],
+    bin_feature_count_in: Int32,
+    bf_feature_id: MutPointer[UInt32, MutAnyOrigin],
+    feature_weights: MutPointer[Float32, MutAnyOrigin],
+    histograms: MutPointer[Float32, MutAnyOrigin],
+    part_stats: MutPointer[Float32, MutAnyOrigin],
+    stat_count_in: Int32,
+    part_id_in: Int32,
+    maybe_second_part_id_in: Int32,
+    multiclass_optimization: Int32,
+    lambda_l2: Float32,
+    score_std_dev: Float32,
+    global_seed: UInt64,
+    out_score: MutPointer[Float32, MutAnyOrigin],
+    out_bin: MutPointer[UInt32, MutAnyOrigin],
+):
+    """`ComputeOptimalSplit` (`compute_scores.cu:393-475`) -- LOSSGUIDE.
+
+    **Two leaves at most, and they arrive as scalars.** A Lossguide iteration
+    splits exactly one leaf, which creates exactly two leaves without a
+    `BestSplit`, and `SelectLeavesToVisit` returns exactly the leaves that
+    lack one (`greedy_search_helper.cpp:697-710`). Their host asserts it:
+    `CB_ENSURE(leavesToVisit.size() <= 2)` (`:511`). The root iteration
+    returns one leaf, and their launcher then sets `numBlocks.y = partId ==
+    maybeSecondPartId ? 1 : 2` (`:570`) -- so the CALLER passes the same id
+    twice and launches one block row. Passing two equal ids with a two-row
+    grid would score the same leaf twice and hand the host a duplicate.
+
+    Grid is `(argmax_block_count, 1 or 2, 1)`, block is
+    `LEAFWISE_SCORE_BLOCK_SIZE`.
+    """
+    var this_part_id = Int(part_id_in)
+    if Int(block_idx.y) != 0:
+        this_part_id = Int(maybe_second_part_id_in)
+
+    var bin_feature_count = Int(bin_feature_count_in)
+    var best_gain = -FLOAT32_MAX
+    var best_bin = UInt32(0xFFFFFFFF)
+
+    _leafwise_scan_part[
+        score_function, normalize, LEAFWISE_SCORE_BLOCK_SIZE
+    ](
+        this_part_id,
+        bf_skip,
+        bin_feature_count,
+        bf_feature_id,
+        feature_weights,
+        histograms,
+        part_stats,
+        Int(stat_count_in),
+        multiclass_optimization,
+        lambda_l2,
+        score_std_dev,
+        global_seed,
+        best_gain,
+        best_bin,
+    )
+
+    _leafwise_argmax_write[LEAFWISE_SCORE_BLOCK_SIZE](
+        best_gain,
+        best_bin,
+        bin_feature_count,
+        Int(block_idx.x) + Int(block_idx.y) * Int(grid_dim.x),
+        out_score,
+        out_bin,
+    )

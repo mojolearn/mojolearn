@@ -713,6 +713,23 @@ build-pkg = "mkdir -p build && mojo precompile -I . gbdt -o build/gbdt.mojopkg"
 # checked by predicting the WINNING FEATURE at every level from the host.
 check-random-strength = "mojo run -I . mojo_only/random_strength_check.mojo"
 
+# ---- LOSSGUIDE LANE (leafwise growth). See LOSSGUIDE.md. ----
+#
+# The Lossguide score kernel, `ComputeOptimalSplit` (`compute_scores.cu:393`),
+# against a host walk written from THEIR CUDA plus five teeth: G1 bit-exact
+# at 18 shapes and three grid widths; G2 the two block rows must score
+# DIFFERENT leaves and swapping the two scalar part ids must exchange the
+# records (that one line is the whole difference from the Depthwise kernel);
+# G3 `toZeroPartSplit` gives a gain of bitwise +0.0, not the sentinel; G4 the
+# poison record survives an all-skipped run; G5 an exact tie goes to the
+# smaller bin-feature id at five grid widths.
+#
+# G1 ALSO MEASURES IDENTITY_PATHS ROW 9 on this kernel: it compares the
+# device against the naive multiply-add chain AND against explicit `fma`,
+# and prints the tally. On an M4 at 2026-08-22 that tally is 15 naive / 3
+# fused IN ONE BUILD, which is the row-9 hazard caught in the act.
+check-leafwise-scores = "mojo run -I . mojo_only/leafwise_scores_check.mojo"
+
 [feature.bench.tasks]
 # CatBoost's own Logloss leaf values at ten Newton iterations and at one,
 # with the leaf-order mapping proved twice inside the generator and written
