@@ -1,0 +1,36 @@
+{
+  "year": {
+    "lgbm-et-cpu": {
+      "accuracy": {
+        "MeanAbsError": 6.9436422520727294,
+        "MeanSquaredError": 92.84895077056204,
+        "MedianAbsError": 5.243317532928586
+      },
+      "train_time": 6.16585054108873
+    },
+    "lgbm-rf-cpu": {
+      "accuracy": {
+        "MeanAbsError": 6.803677376643089,
+        "MeanSquaredError": 92.01909955389598,
+        "MedianAbsError": 4.839405715286489
+      },
+      "train_time": 7.686991291935556
+    },
+    "mojolearn-et-gpu": {
+      "accuracy": {
+        "MeanAbsError": 7.21523227784007,
+        "MeanSquaredError": 98.0398732238183,
+        "MedianAbsError": 5.67950439453125
+      },
+      "train_time": 15.600909083033912
+    },
+    "mojolearn-rf-gpu": {
+      "accuracy": {
+        "MeanAbsError": 6.812558174133301,
+        "MeanSquaredError": 91.71202850341797,
+        "MedianAbsError": 4.91473388671875
+      },
+      "train_time": 23.092146040988155
+    }
+  }
+}

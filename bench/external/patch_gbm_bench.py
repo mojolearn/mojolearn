@@ -122,6 +122,10 @@ def patch_algorithms(root):
         "            return LgbmExtraTreesCPUAlgorithm()\n"
         "        if name == 'lgbm-rf-cpu':\n"
         "            return LgbmRandomForestCPUAlgorithm()\n"
+        "        if name == 'lgbm-et-gpu':\n"
+        "            return LgbmExtraTreesGPUAlgorithm()\n"
+        "        if name == 'lgbm-rf-gpu':\n"
+        "            return LgbmRandomForestGPUAlgorithm()\n"
         "        raise ValueError(\"Unknown algorithm: \" + name)",
         "the algorithm factory",
     )
@@ -137,6 +141,8 @@ def patch_algorithms(root):
         "    SkExtraTreesCPUAlgorithm,\n" \
         "    LgbmExtraTreesCPUAlgorithm,\n" \
         "    LgbmRandomForestCPUAlgorithm,\n" \
+        "    LgbmExtraTreesGPUAlgorithm,\n" \
+        "    LgbmRandomForestGPUAlgorithm,\n" \
         ")\n"
 
     _write(path, text)
