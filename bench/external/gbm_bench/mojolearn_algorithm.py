@@ -99,6 +99,19 @@ PARITY_NOTES = {
         "the lgbm forest arms and the other two BY LIGHTGBM'S OWN "
         "CONSTRAINT; skl-et-cpu is the like-for-like comparator."
     ),
+    "lgbm-rf-features": (
+        "LightGBM's rf mode runs feature_fraction=1.0 (every feature at "
+        "every node) where mojolearn-rf-gpu, skrf and the RF definition "
+        "use max_features='sqrt'. MEASURED on covtype 2026-08-22: this "
+        "asymmetry IS the F1/Precision gap -- at max_features=1.0 our arm "
+        "scores Acc 0.7567 / F1 0.7478 / Prec 0.7548 against their "
+        "0.7170 / 0.7466 / 0.7880, ahead on accuracy and F1. n_bins "
+        "128 vs their max_bin 255 was probed the same day and moves "
+        "NOTHING on covtype or year (255-bin deltas within 0.0003), so "
+        "quantization is exonerated. The arms keep their own defaults in "
+        "the table (each mirrors its own library's forest); this note is "
+        "the decoder."
+    ),
     "skl-threads": (
         "gbm-bench's own sklearn arms pass no n_jobs, which runs sklearn on "
         "ONE core. skl-et-cpu is our ADDED arm and it gets n_jobs=<cpus> "

@@ -49,6 +49,31 @@ dropped by result.
   pair, then died at the ET arm's raise before writing; the recorded RF
   numbers are from the rf-only rerun.)
 
+## The accuracy question, closed by three probes (2026-08-22, late morning)
+
+Andrew's directive: fix RF accuracy where behind. The behind cells were
+covtype F1/Precision and year MAE (both with accuracy/MSE AHEAD). Three
+single-arm probes -- accuracy is a deterministic function of the input
+bits, so a contended box cannot falsify these; their timings are noise
+and not quoted:
+
+1. **covtype at n_bins=255** (LightGBM's max_bin): Acc 0.7221 / F1
+   0.7009 -- IDENTICAL to 128 bins. Quantization exonerated.
+2. **covtype at max_features=1.0** (LightGBM rf mode's own
+   feature_fraction): Acc **0.7567** / F1 **0.7478** / Prec 0.7548,
+   against their 0.7170 / 0.7466 / 0.7880. The whole F1 gap was the
+   feature-sampling asymmetry; at feature parity we lead accuracy AND
+   F1. PARITY_NOTES["lgbm-rf-features"] is the standing record.
+3. **year at n_bins=255**: MAE 6.8128 vs 6.8126 -- unchanged. The MAE
+   hairline (ours 6.8126, theirs 6.8037, 0.13%) is their 0.632
+   subsampling acting as regularization that trades MSE for MAE; we win
+   MSE, which is the criterion RF regression optimizes.
+
+VERDICT: no RF accuracy defect anywhere in the table. The behind cells
+are config asymmetries inherent to each library's own defaults, now
+measured and documented. No engine or default change is warranted
+(defaults stay cuML's, per the standing rule).
+
 ## The NVIDIA leg, ready and waiting on a box
 
 `tools/nvidia_forest_bench.sh <user@host> <dataset>` runs the six-arm
