@@ -2564,3 +2564,65 @@ the sentence points at the check that sabotages that staging. Deviation 185's
 warning -- that a device-resident frontier would need per-tree row isolation
 -- is superseded by exactly that isolation arriving as the slot offsets, and
 `fit_classification_device` says so where the old block stood.
+
+---
+
+## DEVIATION 212 -- the materialized score pass: MEASURED AND DECLINED, and it is 208's lesson at forest scale
+
+**WHAT WAS TRIED.** cuML reads the data matrix ONCE per level because their
+quantization turned it into bins up front; the histogram-free formulation
+(137) reads the raw floats TWICE -- the range pass gathers
+`data[col * m + row_ids[i]]` to bound each (node, feature) cell, and the
+score pass gathers the same cells again. Since the range pass pays the
+gather anyway, it was extended to STASH each value it read in slot order
+(`d_mat[fslot * batch_rows + row_base[nid] + (i - range_start)]`, coalesced
+on both sides -- writer and reader walk the identical strided loop), and the
+score pass read the copy sequentially instead of gathering. A second arm
+also stashed the LABELS in slot order -- 208's hoist re-measured, because
+removing the big gather voids the condition under which 208 declined it. The
+whole thing was built, threaded through both objectives, held bit-identical
+by every device check, and its reach was proved by a poison sabotage
+(perturb only the COPY, leave the reduction's values true -- ranges and
+thresholds stay right, so only a score pass actually READING the copy can
+move; it moved 2,388 / 2,610 nodes clf/reg in `device_batched_check`).
+
+**IT DID NOT PAY, ANYWHERE, AND IT IS REVERTED.** Three regimes, three modes
+alternated inside ONE process per rep, forest digests asserted identical on
+every rep and every mode (mode 0 = gather, mode 1 = values materialized,
+mode 2 = values + labels), covtype, depth 12, ratios are mode0/modeN so
+above 1 would mean the copy won:
+
+    clf 581,012 x sqrt, 10 trees:   mode1 0.90 / 0.95 / 1.01   mode2 0.86 / 0.97 / 1.11
+    reg 581,012 x all,  10 trees:   mode1 0.74 / 0.89 / 0.92   mode2 0.89 / 0.93 / 0.94
+    clf 100,000 x sqrt, 100 trees:  mode1 0.72 / 0.95 / 0.99   mode2 0.62 / 0.96 / 0.98
+
+A wash at best, a loss at worst, and never a sustained win. The
+classification arms ran the SAME group sizes in both modes (10 and 100 trees
+both fit one materialization-capped group), so the number isolates the copy
+itself, not the group shrink that the `all` arm additionally pays.
+
+**WHY, and what this pins for the next reader.** This is DEVIATION 208's
+finding at full scale: a standalone probe measured scattered gathers at
+6.7-9.0x sequential cost, and the ledger priced "column materialization
+~20%" from it -- but in the REAL kernel the score pass's gather is not the
+serialized cost the probe modelled. The memory system overlaps it with the
+label read, the accumulator work and the other blocks in flight, and a
+16 MB-per-tree-level sequential copy (write in the range pass + read in the
+score pass) costs as much as the gather it replaces. **The standing
+diagnosis "the score pass is within ~1.5x of the gather roofline" therefore
+needs its reading corrected: the pass is near a roofline, but removing the
+gather does not move it, so the binding resource is the whole memory
+system's throughput over the level's row traffic, not the gather's latency
+per se.** Two consequences, stated so they are not re-derived: (a) the
+~20% materialization estimate in the old parallelization ledger is
+FALSIFIED, priced at 0.6-1.0x measured; (b) any future lever that only
+REARRANGES the same row traffic (prefetch, layout, hoists) should be
+presumed a wash until an alternating in-process A/B says otherwise -- the
+levers that have actually paid in this lane (211, 202, 184) all REMOVED
+work or launches outright rather than rearranging reads.
+
+**THE CODE IS REVERTED** to DEVIATION 211's state -- kernels, workspace,
+checks and the `mat_ab.mojo` harness -- because a dead-by-default mode kept
+"for later" is the unwired-path defect rule 3 names. This entry is the
+result; the harness is three hundred lines anyone can rewrite from the
+paragraph above in an hour, and the numbers are what they would get.

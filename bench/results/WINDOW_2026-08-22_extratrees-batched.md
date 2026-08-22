@@ -76,3 +76,22 @@ No cuML column (no NVIDIA hardware here), no inference, no depth sweep, and
 nothing at other `max_features` counts — the sampled-column count still
 decides the 100k classification story and that sweep is the obvious next
 window. All ratios are fit-time only, as the harness defines.
+
+## Addendum, same day: DEVIATION 212 (materialized score pass) — MEASURED AND DECLINED
+
+The follow-on lever — the range pass stashing its gathered values (and
+labels) in slot order so the score pass reads sequentially, recovering
+cuML's read-once-per-level property without their bins — was built,
+bit-identity gated, and measured in this same window, three modes alternated
+inside one process, digests asserted identical every rep:
+
+| config | values materialized | values + labels |
+|---|---|---|
+| clf 581,012 rows, sqrt, 10 trees | 0.90–1.01x | 0.86–1.11x |
+| reg 581,012 rows, all, 10 trees | 0.74–0.92x | 0.89–0.94x |
+| clf 100,000 rows, sqrt, 100 trees | 0.72–0.99x | 0.62–0.98x |
+
+A wash at best, a loss at worst; reverted, full record and the corrected
+reading of the "gather roofline" diagnosis in `extratrees/DEVIATIONS.md`
+entry 212. The ledger's old "column materialization ~20%" estimate is
+falsified by this table.
