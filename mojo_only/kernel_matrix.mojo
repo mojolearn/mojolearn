@@ -581,6 +581,33 @@ def column_has_float_atomics(column: Int) -> Bool:
     )
 
 
+def column_compares_flush_subnormals(column: Int) -> Bool:
+    """CAPABILITY. Whether the vendor's float COMPARE flushes subnormals.
+
+    Not a knob this project chooses -- a vendor property nobody chose --
+    which is why it is a CAPABILITY row rather than a NUMERIC one. Moved
+    here from `ensemble/.../quantiles.mojo`'s DEVIATION 403 block at that
+    lane's request (the lane charter forbids it editing this file).
+
+    MEASURED on Apple, 2026-08-22 (quantiles_check): a float32 subnormal
+    survives host -> device -> host bit-exact, but `0x006CE3EE ==
+    0x00000001` compares TRUE, subnormals compare equal to both zeros, and
+    `subnormal + (-0.0)` returns `+0.0` -- arithmetic and comparison flush
+    while storage does not. CUDA honors subnormals in both. Consequence:
+    cuML's `unique` compare (`quantiles.cuh:104`) collapses subnormal
+    classes on Apple that CUDA keeps, so `n_bins_array` differs per vendor
+    under FAST (measured spread 5v6, 4v6, 5v7 on the boundary column).
+    Copying cuML exactly on a device that cannot compare exactly is NOT
+    AVAILABLE; `IDENTICAL` aligns every vendor to ONE behavior through
+    `numerics.ftz` (DEVIATION 403, IDENTITY_PATHS row 10).
+
+    Conservative until queried: only Apple is measured True. The declared
+    columns are transcriptions -- re-check on first device contact, with
+    `check-ieee-arith` per row 10's rule.
+    """
+    return column == COLUMN_APPLE
+
+
 def column_has_threadgroup_int_atomics(column: Int) -> Bool:
     """Whether a block can `atomicAdd` an `Int32` in THREADGROUP memory.
 
