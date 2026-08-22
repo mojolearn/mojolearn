@@ -174,6 +174,77 @@ def patch_metrics(root):
     print("patched metrics.py (log_loss eps compat, semantics preserved)")
 
 
+RUNME_HELPER = '''
+
+''' + MARKER + '''
+def _mojolearn_result_hashes(data, pred):
+    """Bit-exact fingerprints for the results JSON.
+
+    Two runs whose "predictions" hashes match produced BYTE-IDENTICAL
+    prediction vectors -- a stronger statement than any rounded accuracy
+    column, and the one the cross-device identity claim is made of: the
+    same fit on a second vendor's GPU must reproduce this hash, not an
+    approximation of the metric. "test_target" pins the eval rows the
+    predictions were scored against, so a hash match can never be two
+    different subsets agreeing by luck. The hash covers dtype, shape and
+    raw bytes; it costs one pass over arrays that already exist and runs
+    AFTER both timed phases, so it cannot perturb a timing.
+    """
+    import hashlib
+
+    import numpy as np
+
+    def one(arr):
+        a = np.ascontiguousarray(np.asarray(arr))
+        digest = hashlib.sha256()
+        digest.update(str(a.dtype).encode())
+        digest.update(str(a.shape).encode())
+        digest.update(a.tobytes())
+        return digest.hexdigest()
+
+    try:
+        return {"predictions": one(pred), "test_target": one(data.y_test)}
+    except Exception as exc:  # a new arm returning an exotic type
+        return {"error": "unhashable: %s" % exc}
+
+
+'''
+
+
+def patch_runme(root):
+    """Add the hash section to every arm's results entry.
+
+    Timing-neutral by construction: the hash runs after `fit` and `test`
+    have both returned and their times are already captured.
+    """
+    path = os.path.join(root, "runme.py")
+    text = _read(path)
+    if MARKER in text:
+        print("runme.py already patched (result hashes)")
+        return
+    text = _replace_once(
+        text,
+        "# benchmarks a single dataset\ndef benchmark(",
+        RUNME_HELPER.lstrip("\n") + "\n# benchmarks a single dataset\ndef benchmark(",
+        "the benchmark() definition",
+    )
+    text = _replace_once(
+        text,
+        "            results[alg] = {\n"
+        "                \"train_time\": train_time,\n"
+        "                \"accuracy\": get_metrics(data, pred),\n"
+        "            }",
+        "            results[alg] = {\n"
+        "                \"train_time\": train_time,\n"
+        "                \"accuracy\": get_metrics(data, pred),\n"
+        "                \"hashes\": _mojolearn_result_hashes(data, pred),\n"
+        "            }",
+        "the per-arm results dict",
+    )
+    _write(path, text)
+    print("patched runme.py (bit-exact result hashes)")
+
+
 def install_adapter(root):
     src = os.path.join(HERE, "gbm_bench", "mojolearn_algorithm.py")
     dst = os.path.join(root, "mojolearn_algorithm.py")
@@ -190,6 +261,7 @@ def main():
     install_adapter(root)
     patch_algorithms(root)
     patch_metrics(root)
+    patch_runme(root)
     print("\nready. mojolearn-gbdt-gpu, mojolearn-et-gpu, skl-et-cpu, "
           "lgbm-et-cpu and lgbm-rf-cpu are now valid -algorithm values.")
 

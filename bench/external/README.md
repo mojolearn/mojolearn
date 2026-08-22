@@ -52,11 +52,28 @@ trees.
     pixi run -e gbmbench bash bench/external/run_gbm_bench.sh year 500 gbdt
     pixi run -e gbmbench bash bench/external/run_gbm_bench.sh covtype 100 forest
 
-Shorthands: `gbdt` = `mojolearn-gbdt-gpu,cat-cpu`; `forest` =
-`mojolearn-et-gpu,skl-et-cpu,lgbm-et-cpu,lgbm-rf-cpu`. All arms of one
-invocation run interleaved in ONE process (the box drifts across thermal
-windows); repeat the invocation for spread. Results and the box record land
-in `bench/results/gbm_bench_*`.
+Shorthands: `gbdt` = `mojolearn-gbdt-gpu,cat-cpu` (the symmetric pair is
+CatBoost ONLY — Andrew's standing order); `forest` =
+`mojolearn-rf-gpu,skl-rf-cpu,mojolearn-et-gpu,skl-et-cpu` (LightGBM is
+excluded from every Mac pair; its arms stay registered for the NVIDIA leg).
+All arms of one invocation run interleaved in ONE process (the box drifts
+across thermal windows); repeat the invocation for spread. Results and the
+box record land in `bench/results/gbm_bench_*`.
+
+## Result hashes
+
+Every arm's results entry carries a `hashes` section (patched into
+`runme.py` by `patch_gbm_bench.py`, 2026-08-22): `predictions` is sha256
+over the prediction vector's dtype + shape + exact bytes, and
+`test_target` pins the eval rows it was scored against. Two entries whose
+prediction hashes match produced BYTE-IDENTICAL predictions — the
+statement the bit-identity claim is made of, embedded in the same JSON as
+the timing. The hash runs after both timed phases, so it cannot perturb a
+number. Uses: (1) run-to-run determinism is visible in the results
+themselves (verified at patch time: two independent processes, year pair,
+both arms' hashes identical); (2) the cross-vendor E1 check is `diff` on
+this field between a Metal JSON and a CUDA/HIP JSON; (3) a changed hash
+under an allegedly FAST-inert code change is a regression caught for free.
 
 Datasets download into `bench/external/.gbm-datasets` unless
 `GBM_BENCH_DATA` points elsewhere; mojotrees' already-downloaded copies at
@@ -64,12 +81,14 @@ Datasets download into `bench/external/.gbm-datasets` unless
 cache in `~/scikit_learn_data`) can be reused that way. `airline` and
 `bosch` are tens of GB — check free space first.
 
-## Known upstream sharp edge
+## Known upstream sharp edge (FIXED)
 
-gbm-bench's binary-classification metrics call
+gbm-bench's binary-classification metrics called
 `sklearn.metrics.log_loss(..., eps=1e-5)`; sklearn removed `eps` in 1.5, so
-BINARY datasets (higgs, fraud, airline, epsilon, bosch) crash in their
-metric code under this environment's sklearn 1.9. year (regression) and
-covtype (multiclass) are unaffected. Fixing it means editing their metric
-line, which the restraint above reserves for a recorded, minimal,
-compatibility-only patch if a binary dataset is ever needed.
+BINARY datasets crashed in their metric code under sklearn 1.9. The
+reserved compatibility-only patch is now applied (`patch_metrics` in
+`patch_gbm_bench.py`): the clip is spelled with `np.clip`, same arithmetic,
+semantics preserved. Binary datasets (higgs et al.) run. Separately, the
+harness Log_Loss column is ASYMMETRIC for CatBoost (it scores their raw
+margins) — never quote it in either direction; AUC/Accuracy are the
+comparable columns.
