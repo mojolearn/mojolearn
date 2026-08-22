@@ -5931,3 +5931,51 @@ termination, because the final split moved the partitions after the last
 Priced and deferred: closing it means porting the stats update into the split
 chain, which is a change to a file the symmetric lane owns, and it is worth
 doing only once this lane has a number that says how much of a level it is.
+
+
+# =====================================================================
+# DEVIATION NUMBERS 250-299 ARE THE SYMMETRIC LANE'S (250 reserved)
+# =====================================================================
+#
+# Assigned by the orchestrator 2026-08-22. 250 is held for the parked
+# partitions-reduce patch and is NOT claimed by either entry below.
+
+## 251. `pinned_block_sum`: the within-block float fold does not follow the wavefront under IDENTICAL
+
+IDENTITY_PATHS row 8's remainder. Every fv/magnitude producer
+(`pointwise_target_kernel`, `cross_entropy_kernel`, both multilogit value
+kernels, `std_dev_partials_kernel`) reduced its per-block partial with MAX's
+`block.sum`, whose internal cross-lane fold runs at the HARDWARE'S warp
+width -- 32 on Apple and NVIDIA, 64 on AMD's CDNA wavefront -- so the
+partial's bits differed on the AMD column even with the partial counts pure
+f(n_rows) and the cross-block combine already the fixed-order
+`deterministic_sum_lanes_kernel`.
+
+`pinned_block_sum[block_size]` (`gbdt/targets/kernel/pointwise_targets.mojo`)
+is the REPLACE move: under `NUMERIC_IDENTICAL` a shared-memory halving tree
+at exactly `block_size` lanes, no warp primitives -- the fold shape
+`deterministic_sum_lanes_kernel` and `bootstrap.mojo`'s magnitude tail
+already use -- one shape on every vendor. Under `NUMERIC_FAST` it IS the
+`block.sum` call, bit for bit, so the shipped default cannot move.
+CatBoost's own reduce at these sites is `FastInBlockReduce` -- a shared-
+memory tree of their own -- ending in a float `atomicAdd` this port already
+replaced (DEVIATION 71 and the pointwise determinism fix), so the IDENTICAL
+arm is, if anything, closer to their in-block shape than the library call
+was.
+
+## 252. `std_dev_blocks` is pinned under IDENTICAL, the way row 7 pinned `partition_stats_chunks`
+
+`min(4 * SMCount(), CeilDivide(size, blockSize))` (`compute_scores.cu:291`)
+sizes the score-noise std-dev reduce (`random_score_helper.mojo`), and a
+partial COUNT is a summation order: the machine's core count decided the
+last bits of `random_strength`'s noise magnitude. Inert at this port's
+default `random_strength = 0`; CatBoost's default is 1.0, so the pin lands
+BEFORE anyone wires that default.
+
+Pinned INSIDE `std_dev_blocks` -- the one place the formula lives, read by
+the launch, the `partials` sizing and the fold count alike -- through the
+SAME `kernel_matrix.partition_chunks_sm_for` row 7 uses (32 every vendor,
+deliberately no real device's own number, mode-gated exactly as row 7 is:
+device count under FAST). The greedy arm's twin, `target_variance_blocks`
+(`compute_scores.mojo:663`), has the identical hazard and is the greedy
+lane's file; reported, not touched.

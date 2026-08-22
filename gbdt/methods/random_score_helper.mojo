@@ -63,10 +63,12 @@ lane fold where theirs is a double block reduce ending in a float atomic.
 from std.gpu import block_idx, grid_dim, thread_idx
 from std.math import exp, log, sqrt
 from max.gpu.host import DeviceBuffer, DeviceContext
-from max.gpu.primitives.block import sum as block_sum
 
+from mojo_only.kernel_matrix import partition_chunks_sm_for
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from gbdt.targets.kernel.pointwise_targets import (
     deterministic_sum_lanes_kernel,
+    pinned_block_sum,
 )
 
 
@@ -108,7 +110,9 @@ def std_dev_partials_kernel(
         var tmp = stats.unsafe_load(stat_line_size + i) / w
         acc += w * tmp * tmp
         i += Int(grid_dim.x) * STD_DEV_BLOCK
-    var total = block_sum[block_size=STD_DEV_BLOCK](acc)
+    # IDENTITY_PATHS row 8 (DEVIATION 251): the pinned-shape fold, so the
+    # within-block sum does not follow AMD's 64-wide wavefront.
+    var total = pinned_block_sum[block_size=STD_DEV_BLOCK](acc)
     if thread_idx.x == 0:
         partials.unsafe_store(Int(block_idx.x), total)
 
@@ -116,9 +120,30 @@ def std_dev_partials_kernel(
 def std_dev_blocks(size: Int, sm_count: Int) -> Int:
     """`min(4 * SMCount(), CeilDivide(size, blockSize))`
     (`compute_scores.cu:291`), the same machine-sized strided grid the
-    sibling reduce uses."""
+    sibling reduce uses.
+
+    **AND IT IS A NUMERIC ROW, PINNED HERE FOR THE SAME REASON
+    `partition_stats_chunks` IS** (IDENTITY_PATHS row 7, DEVIATION 252):
+    the block count partitions a FLOAT sum -- each block's partial is
+    reduced in float and `deterministic_sum_lanes_kernel` adds the
+    partials -- so the machine's core count decides the last bits of the
+    score-noise std dev, and through it every noised score of the fit.
+    Inert at this port's default `random_strength = 0`, but CatBoost's
+    default is 1.0, so the row must hold BEFORE anyone wires that default.
+
+    Under `IDENTICAL` the `sm_count` fed to the formula therefore comes
+    from `kernel_matrix.partition_chunks_sm_for`, the SAME pin row 7 uses
+    (32 on every vendor, deliberately no real device's own number); under
+    `FAST` it is the device's count, CatBoost's behavior unchanged. The
+    pin is applied INSIDE this function -- the only place the formula
+    lives -- so the launch, the `partials` buffer sizing and the fold
+    count in `compute_std_dev` cannot disagree, which is row 7's exact
+    argument. `size`'s arm (`by_data`) is pure f(size) and needs no pin.
+    """
+    comptime _identical = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    var sm = partition_chunks_sm_for[_identical](sm_count)
     var by_data = (size + STD_DEV_BLOCK - 1) // STD_DEV_BLOCK
-    var by_machine = 4 * sm_count
+    var by_machine = 4 * sm
     if by_machine < 1:
         by_machine = 1
     if by_data < by_machine:
