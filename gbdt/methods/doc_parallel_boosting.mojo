@@ -658,6 +658,9 @@ def _estimate_and_apply(
         block_dim=(256, 1, 1),
     )
     ctx.synchronize()
+    # past the drain, not before it: `h_est`'s last use was its enqueue,
+    # which freed it under a queued copy (the step-33 race class)
+    _ = h_est^
 
 
 def fit_with_test(
@@ -1808,6 +1811,16 @@ def predict(
         lvl += depth
         leaf += (1 << depth) * approx_dim
     ctx.synchronize()
+    # past the drain: the six pack buffers' last uses were their
+    # enqueues, which freed them under queued copies -- and THIS is the
+    # AUC path, so the step-33 race class here corrupts the metric even
+    # when the fit was clean
+    _ = h_off^
+    _ = h_shift^
+    _ = h_mask^
+    _ = h_bin^
+    _ = h_eq^
+    _ = h_vals^
 
 def fit(
     mut model: TAdditiveModel,

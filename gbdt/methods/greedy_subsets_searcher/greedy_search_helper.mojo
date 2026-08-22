@@ -2664,6 +2664,25 @@ struct TTreeWorkspace(Movable):
         ctx.enqueue_copy(dst_buf=self.bfr_oh, src_ptr=hbr6.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=self.bfr_bin, src_ptr=hbr7.unsafe_ptr())
         ctx.synchronize()
+        # past the drain, every staging buffer this ctor enqueued from:
+        # their last uses were the enqueues above, which freed them under
+        # queued copies (the step-33 race class -- freed host pages can
+        # be reused before the queue drains, and the ctor allocates
+        # between enqueue and drain)
+        _ = h_dense^
+        _ = hsk^
+        _ = hff^
+        _ = hfd^
+        _ = hfoh^
+        _ = hbf^
+        _ = hfw^
+        _ = hbr1^
+        _ = hbr2^
+        _ = hbr3^
+        _ = hbr4^
+        _ = hbr5^
+        _ = hbr6^
+        _ = hbr7^
 
 
 def run_tree_layout[

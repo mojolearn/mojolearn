@@ -1348,6 +1348,9 @@ def train(
     ctx.enqueue_copy(dst_buf=targets, src_ptr=ht.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
     ctx.synchronize()
+    # past the drain (step-33 race class)
+    _ = ht^
+    _ = hw^
 
     var loss_desc = make_loss_description(
         loss,
@@ -1573,6 +1576,7 @@ def train(
         )
     ctx.enqueue_copy(dst_buf=test_targets, src_ptr=h_ty.unsafe_ptr())
     ctx.synchronize()
+    _ = h_ty^  # past the drain (step-33 race class)
 
     var approx_dim = 1
     if objective == OBJECTIVE_MULTICLASS:

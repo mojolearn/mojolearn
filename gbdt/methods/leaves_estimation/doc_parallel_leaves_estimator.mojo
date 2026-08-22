@@ -138,6 +138,13 @@ def compute_bins_for_model(
         block_dim=(COMPUTE_BINS_BLOCK_SIZE, 1, 1),
     )
     ctx.synchronize()
+    # past the drain (the step-33 race class: freed-at-enqueue under a
+    # queued copy)
+    _ = h_off^
+    _ = h_shift^
+    _ = h_mask^
+    _ = h_bin^
+    _ = h_eq^
 
 
 def partition_from_bins(
@@ -201,5 +208,6 @@ def partition_from_bins(
     var row_index = ctx.enqueue_create_buffer[DType.uint32](n_rows)
     ctx.enqueue_copy(dst_buf=row_index, src_ptr=h_rows.unsafe_ptr())
     ctx.synchronize()
+    _ = h_rows^  # past the drain (step-33 race class)
 
     return LeafPartition(row_index^, offsets^, sizes^)

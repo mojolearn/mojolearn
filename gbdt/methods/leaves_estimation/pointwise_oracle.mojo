@@ -916,6 +916,17 @@ def make_bin_optimized_oracle(
             make_exact_quantile_scratch(ctx, n_rows, bin_count, max_leaf)
         )
 
+    # THE HOST STAGING BUFFER MUST OUTLIVE ITS ENQUEUED COPY. `h_leaves`'
+    # last use was its `enqueue_copy`, so Mojo freed it there while the
+    # copy sat in the queue -- a use-after-free whose window OPENS UNDER
+    # CPU CONTENTION (the freed pages get reused before the queue
+    # drains), which is precisely the signature of the divergent
+    # full-higgs fit of 2026-08-22 (PREP_BILL step 33). The drain makes
+    # the copy a RUN; only then may the buffer die. Same rule as the
+    # 730cc20 hardening: an enqueue is not a run.
+    ctx.synchronize()
+    _ = h_leaves^
+
     return BinOptimizedOracle(
         ctx,
         n_rows,
