@@ -66,6 +66,10 @@ from gbdt.methods.histograms_helper import (
     ComputeHistogramsHelper,
 )
 from gbdt.methods.kernel.pointwise_scores import find_optimal_split
+from gbdt.methods.kernel.pointwise_split_resolve import (
+    launch_pw_fold_winner,
+    launch_pw_seed_sentinel,
+)
 from gbdt.methods.pointwise_kernels import FoldsHistogram, compute_hist2
 from gbdt.methods.pointwise_optimization_subsets import TOptimizationSubsets
 from gbdt.data.permutation import TRandom
@@ -155,6 +159,11 @@ struct PolicyScoreHelper(Movable):
     var d_result_scores: DeviceBuffer[DType.float32]
     var h_result_ids: HostBuffer[DType.uint32]
     var h_result_scores: HostBuffer[DType.float32]
+    var d_score_scratch: DeviceBuffer[DType.float32]
+    """One float. The score kernels read `scoreBeforeSplit` from the device
+    (DEVIATION 207); a caller that still holds it as a host scalar stages
+    it here with `enqueue_fill` -- owned by the helper because a per-call
+    temporary dies at `.unsafe_ptr()` (the last-use trap)."""
     # `TScoreHelper`'s third constructor argument
     # (`histograms_helper.h:361-365`), handed to BOTH halves: it sizes the
     # histogram and becomes `gridDim.z`, and `foldCount == 1` IS the dispatch
@@ -288,6 +297,7 @@ struct PolicyScoreHelper(Movable):
         self.h_result_scores = ctx.enqueue_create_host_buffer[
             DType.float32
         ](2 * blocks_n)
+        self.d_score_scratch = ctx.enqueue_create_buffer[DType.float32](1)
         ctx.synchronize()
 
     def submit_compute(
@@ -356,7 +366,55 @@ struct PolicyScoreHelper(Movable):
         seed: UInt64,
     ) raises:
         """`TScoreHelper::ComputeOptimalSplit`
-        (`histograms_helper.h:390-404`)."""
+        (`histograms_helper.h:390-404`). The host-scalar form: stages the
+        scalar into `d_score_scratch` (an enqueued fill, no sync) and
+        launches -- kept for the OTHER searcher and the check library,
+        which still carry the score on the host. The launch is spelled out
+        rather than delegated to `compute_optimal_split_dev` because
+        passing `self.d_score_scratch` mutably alongside `mut self` is the
+        DEVIATION 97.2 aliasing refusal."""
+        if self.feature_count == 0:
+            return
+        self.d_score_scratch.enqueue_fill(score_before_split)
+        find_optimal_split(
+            ctx,
+            self.d_bf,
+            self.bin_feature_count,
+            self.d_cat_w,
+            self.d_bin_w,
+            self.bin_feature_count,
+            self.d_hist,
+            part_stats,
+            part_count,
+            self.fold_count,
+            self.d_score_scratch,
+            self.d_result_ids,
+            self.d_result_scores,
+            self.result_blocks,
+            score_function,
+            l2,
+            Float32(1.0),
+            Float32(0.0),
+            False,
+            score_std_dev,
+            seed,
+            False,
+        )
+
+    def compute_optimal_split_dev(
+        mut self,
+        ctx: DeviceContext,
+        mut part_stats: DeviceBuffer[DType.float32],
+        part_count: Int,
+        mut score_before: DeviceBuffer[DType.float32],
+        score_function: Int,
+        l2: Float32,
+        score_std_dev: Float32,
+        seed: UInt64,
+    ) raises:
+        """The device-score form (DEVIATION 207): `scoreBeforeSplit` is a
+        one-float device buffer the blind level loop's pack kernel wrote,
+        never read by the host. Same launches, same arithmetic."""
         if self.feature_count == 0:
             return
         find_optimal_split(
@@ -370,7 +428,7 @@ struct PolicyScoreHelper(Movable):
             part_stats,
             part_count,
             self.fold_count,
-            score_before_split,
+            score_before,
             self.d_result_ids,
             self.d_result_scores,
             self.result_blocks,
@@ -512,6 +570,70 @@ struct ScoresCalcerOnCompressedDataSet(Movable):
                 score_std_dev,
                 rnd.next_uniform_l(),
             )
+
+    def compute_optimal_split_dev(
+        mut self,
+        ctx: DeviceContext,
+        mut part_stats: DeviceBuffer[DType.float32],
+        part_count: Int,
+        mut score_before: DeviceBuffer[DType.float32],
+        score_function: Int,
+        l2: Float32,
+        score_std_dev: Float32,
+        seed: UInt64,
+    ) raises:
+        """The device-score fan-out (DEVIATION 207). Identical to
+        `compute_optimal_split` -- including the per-helper seed advance --
+        except `scoreBeforeSplit` stays on the device."""
+        var rnd = TRandom(seed)
+        for i in range(len(self.helpers)):
+            self.helpers[i].compute_optimal_split_dev(
+                ctx,
+                part_stats,
+                part_count,
+                score_before,
+                score_function,
+                l2,
+                score_std_dev,
+                rnd.next_uniform_l(),
+            )
+
+    def resolve_optimal_split(
+        mut self,
+        ctx: DeviceContext,
+        mut best_ids: DeviceBuffer[DType.uint32],
+        mut best_scores: DeviceBuffer[DType.float32],
+    ) raises:
+        """The device twin of `read_optimal_split` (DEVIATION 207): the same
+        two nested folds, run by one-thread kernels instead of the host, so
+        no drain. Fold order and tie rules are BIT-EQUAL to the host pair by
+        construction: within a helper the per-block fold keeps the INCUMBENT
+        on a full tie (challenger-first `take_best`, `read_optimal_split`'s
+        loop), and across helpers the EARLIER policy wins a tie
+        (`TakeBest(helper->Read(), best)`, `:94-105`). `is_first` seeds the
+        incumbent slot with the undefined sentinel, so a dataset whose every
+        helper is empty resolves to `FeatureId = (ui32)-1` exactly as the
+        host fold returns the default record. `mojo_only/
+        pointwise_resolve_check.mojo` plants the tie cases and compares this
+        against the host fold record for record."""
+        var first = True
+        for i in range(len(self.helpers)):
+            if self.helpers[i].feature_count == 0:
+                continue
+            launch_pw_fold_winner(
+                ctx,
+                self.helpers[i].d_result_ids,
+                self.helpers[i].d_result_scores,
+                self.helpers[i].result_blocks,
+                first,
+                best_ids,
+                best_scores,
+            )
+            first = False
+        if first:
+            # no helper has features: the host fold would return the
+            # sentinel default; write it so the pack kernel sees the same
+            launch_pw_seed_sentinel(ctx, best_ids, best_scores)
 
     def read_optimal_split(
         mut self, ctx: DeviceContext

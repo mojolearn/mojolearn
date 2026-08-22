@@ -425,6 +425,15 @@ def run_one_level(
     )
 
     # 2. BUILD. grid z is the stat, so both planes come from one launch.
+    # DEVIATION 95 turned the kernel's `fixed_scale` into a DEVICE pointer
+    # and this probe-only entry kept passing the scalar -- found when
+    # `pixi run probe` refused to build, the same every-known-check-
+    # updated-end-to-end-command-not-run class as DEVIATION 95's own miss.
+    # The VALUE stays this site's own 1.0; only where it lives changes.
+    var scale_dev = ctx.enqueue_create_buffer[DType.float32](1)
+    var h_scale = ctx.enqueue_create_host_buffer[DType.float32](1)
+    h_scale.unsafe_ptr().unsafe_store(0, Float32(1.0))
+    ctx.enqueue_copy(dst_buf=scale_dev, src_ptr=h_scale.unsafe_ptr())
     ctx.enqueue_function[binary_hist_kernel](
         folds.unsafe_ptr(),
         fold_off.unsafe_ptr(),
@@ -441,7 +450,7 @@ def run_one_level(
         leaf0.unsafe_ptr(),
         hist.unsafe_ptr(),
         acc_scratch.unsafe_ptr(),
-        Float32(1.0),
+        scale_dev.unsafe_ptr(),
         Int32(n_leaves),
         Int32(stat_count),
         grid_dim=(1, 1, stat_count),
@@ -541,6 +550,10 @@ def run_one_level(
     ctx.enqueue_copy(dst_ptr=hos.unsafe_ptr(), src_buf=out_score)
     ctx.enqueue_copy(dst_ptr=hob.unsafe_ptr(), src_buf=out_bin)
     ctx.synchronize()
+    # the scale buffer must outlive the hist launch's execution
+    # ([[mojo-buffer-freed-at-last-use]])
+    _ = scale_dev.unsafe_ptr()
+    _ = h_scale.unsafe_ptr()
     var best = Int(hob.unsafe_ptr().unsafe_load(0))
 
     # 5. SPLIT FLAGS ------------------------------------------------------

@@ -634,7 +634,7 @@ def find_optimal_split_solar_kernel[
     parts: MutPointer[Float32, MutAnyOrigin],
     p_count_in: Int32,
     fold_count_in: Int32,
-    score_before_split: Float32,
+    score_before: MutPointer[Float32, MutAnyOrigin],
     result_ids: MutPointer[UInt32, MutAnyOrigin],
     result_scores: MutPointer[Float32, MutAnyOrigin],
 ):
@@ -660,6 +660,9 @@ def find_optimal_split_solar_kernel[
     var bin_feature_count = Int(bin_feature_count_in)
     var p_count = Int(p_count_in)
     var fold_count = Int(fold_count_in)
+    # DEVIATION 207: theirs is a host scalar; the blind level loop keeps
+    # it on the device. Same word, uniform load.
+    var score_before_split = score_before.unsafe_load(0)
 
     var best_score = FLOAT32_MAX
     var best_gain = FLOAT32_MAX
@@ -805,7 +808,7 @@ def find_optimal_split_single_fold_kernel[
     cat_features_weights: MutPointer[Float32, MutAnyOrigin],
     bin_features_weights: MutPointer[Float32, MutAnyOrigin],
     bin_features_weights_count_in: Int32,
-    score_before_split: Float32,
+    score_before: MutPointer[Float32, MutAnyOrigin],
     bin_sums: MutPointer[Float32, MutAnyOrigin],
     parts: MutPointer[Float32, MutAnyOrigin],
     p_count_in: Int32,
@@ -846,9 +849,15 @@ def find_optimal_split_single_fold_kernel[
 
     `weightRight = max(part.Weight - weightLeft, 0.0f)` but
     `sumRight = part.Sum - sumLeft` with no clamp (`:260-263`) -- finding 4.
+
+    `score_before` is a DEVICE pointer where theirs is a host scalar
+    (DEVIATION 207): the blind level loop keeps last level's winning score
+    on the device, so the kernel loads it instead of receiving it. Every
+    thread loads the same word; the value and the arithmetic are unchanged.
     """
     var bin_feature_count = Int(bin_feature_count_in)
     var p_count = Int(p_count_in)
+    var score_before_split = score_before.unsafe_load(0)
 
     var best_score = FLOAT32_MAX
     var best_gain = FLOAT32_MAX
@@ -946,7 +955,7 @@ def find_optimal_split_cosine_kernel[
     parts: MutPointer[Float32, MutAnyOrigin],
     p_count_in: Int32,
     fold_count_in: Int32,
-    score_before_split: Float32,
+    score_before: MutPointer[Float32, MutAnyOrigin],
     l2: Float32,
     normalize_in: Int32,
     score_std_dev: Float32,
@@ -978,6 +987,9 @@ def find_optimal_split_cosine_kernel[
     var p_count = Int(p_count_in)
     var fold_count = Int(fold_count_in)
     var normalize = normalize_in != Int32(0)
+    # DEVIATION 207: theirs is a host scalar; the blind level loop keeps
+    # it on the device. Same word, uniform load.
+    var score_before_split = score_before.unsafe_load(0)
 
     var best_score = FLOAT32_MAX
     var best_gain = FLOAT32_MAX
@@ -1436,7 +1448,7 @@ def find_optimal_split_dynamic(
     mut parts: DeviceBuffer[DType.float32],
     p_count: Int,
     fold_count: Int,
-    score_before_split: Float32,
+    mut score_before: DeviceBuffer[DType.float32],
     mut result_ids: DeviceBuffer[DType.uint32],
     mut result_scores: DeviceBuffer[DType.float32],
     result_size: Int,
@@ -1476,7 +1488,7 @@ def find_optimal_split_dynamic(
             parts.unsafe_ptr(),
             Int32(p_count),
             Int32(fold_count),
-            score_before_split,
+            score_before.unsafe_ptr(),
             result_ids.unsafe_ptr(),
             result_scores.unsafe_ptr(),
             grid_dim=(result_size, 1, 1),
@@ -1500,7 +1512,7 @@ def find_optimal_split_dynamic(
             parts.unsafe_ptr(),
             Int32(p_count),
             Int32(fold_count),
-            score_before_split,
+            score_before.unsafe_ptr(),
             l2,
             Int32(1) if normalize else Int32(0),
             score_std_dev,
@@ -1531,7 +1543,7 @@ def find_optimal_split_plain[
     mut splits: DeviceBuffer[DType.float32],
     mut parts: DeviceBuffer[DType.float32],
     p_count: Int,
-    score_before_split: Float32,
+    mut score_before: DeviceBuffer[DType.float32],
     mut result_ids: DeviceBuffer[DType.uint32],
     mut result_scores: DeviceBuffer[DType.float32],
     result_size: Int,
@@ -1575,21 +1587,21 @@ def find_optimal_split_plain[
         _launch_single_fold[hist_loader, SCORE_FUNCTION_SOLAR_L2](
             ctx, binary_features, binary_feature_count, cat_features_weights,
             bin_features_weights, binary_feature_weights_count, splits, parts,
-            p_count, score_before_split, l2, meta_exponent, normalize,
+            p_count, score_before, l2, meta_exponent, normalize,
             score_std_dev, calcer_seed, result_ids, result_scores, result_size,
         )
     elif score_function == SCORE_FUNCTION_SAT_L2:
         _launch_single_fold[hist_loader, SCORE_FUNCTION_SAT_L2](
             ctx, binary_features, binary_feature_count, cat_features_weights,
             bin_features_weights, binary_feature_weights_count, splits, parts,
-            p_count, score_before_split, l2, meta_exponent, normalize,
+            p_count, score_before, l2, meta_exponent, normalize,
             score_std_dev, calcer_seed, result_ids, result_scores, result_size,
         )
     elif score_function == SCORE_FUNCTION_LOO_L2:
         _launch_single_fold[hist_loader, SCORE_FUNCTION_LOO_L2](
             ctx, binary_features, binary_feature_count, cat_features_weights,
             bin_features_weights, binary_feature_weights_count, splits, parts,
-            p_count, score_before_split, l2, meta_exponent, normalize,
+            p_count, score_before, l2, meta_exponent, normalize,
             score_std_dev, calcer_seed, result_ids, result_scores, result_size,
         )
     elif (
@@ -1599,7 +1611,7 @@ def find_optimal_split_plain[
         _launch_single_fold[hist_loader, SCORE_FUNCTION_L2](
             ctx, binary_features, binary_feature_count, cat_features_weights,
             bin_features_weights, binary_feature_weights_count, splits, parts,
-            p_count, score_before_split, l2, meta_exponent, normalize,
+            p_count, score_before, l2, meta_exponent, normalize,
             score_std_dev, calcer_seed, result_ids, result_scores, result_size,
         )
     elif (
@@ -1609,7 +1621,7 @@ def find_optimal_split_plain[
         _launch_single_fold[hist_loader, SCORE_FUNCTION_COSINE](
             ctx, binary_features, binary_feature_count, cat_features_weights,
             bin_features_weights, binary_feature_weights_count, splits, parts,
-            p_count, score_before_split, l2, meta_exponent, normalize,
+            p_count, score_before, l2, meta_exponent, normalize,
             score_std_dev, calcer_seed, result_ids, result_scores, result_size,
         )
     else:
@@ -1631,7 +1643,7 @@ def _launch_single_fold[
     mut splits: DeviceBuffer[DType.float32],
     mut parts: DeviceBuffer[DType.float32],
     p_count: Int,
-    score_before_split: Float32,
+    mut score_before: DeviceBuffer[DType.float32],
     l2: Float32,
     meta_exponent: Float32,
     normalize: Bool,
@@ -1656,7 +1668,7 @@ def _launch_single_fold[
         cat_features_weights.unsafe_ptr(),
         bin_features_weights.unsafe_ptr(),
         Int32(binary_feature_weights_count),
-        score_before_split,
+        score_before.unsafe_ptr(),
         splits.unsafe_ptr(),
         parts.unsafe_ptr(),
         Int32(p_count),
@@ -1683,7 +1695,7 @@ def find_optimal_split(
     mut parts: DeviceBuffer[DType.float32],
     p_count: Int,
     fold_count: Int,
-    score_before_split: Float32,
+    mut score_before: DeviceBuffer[DType.float32],
     mut result_ids: DeviceBuffer[DType.uint32],
     mut result_scores: DeviceBuffer[DType.float32],
     result_size: Int,
@@ -1697,6 +1709,13 @@ def find_optimal_split(
     gathered_by_leaves: Bool,
 ) raises:
     """`FindOptimalSplit` (`:530-551`), THE DISPATCH.
+
+    `score_before` is a ONE-FLOAT DEVICE BUFFER where theirs is a host
+    scalar -- DEVIATION 207 (the blind level loop keeps last level's
+    winning score on the device). A caller that still holds a host scalar
+    stages it with `enqueue_fill` on a buffer it OWNS; a per-call
+    temporary dies at `.unsafe_ptr()` (the last-use trap) and is not an
+    option.
 
         if (foldCount == 1) {
             gatheredByLeaves ? Plain<TGatheredByLeavesHistLoader>
@@ -1714,7 +1733,7 @@ def find_optimal_split(
                 ctx, binary_features, binary_feature_count,
                 cat_features_weights, bin_features_weights,
                 binary_feature_weights_count, splits, parts, p_count,
-                score_before_split, result_ids, result_scores, result_size,
+                score_before, result_ids, result_scores, result_size,
                 score_function, l2, meta_l2_exponent, meta_l2_frequency,
                 normalize, score_std_dev, seed,
             )
@@ -1723,7 +1742,7 @@ def find_optimal_split(
                 ctx, binary_features, binary_feature_count,
                 cat_features_weights, bin_features_weights,
                 binary_feature_weights_count, splits, parts, p_count,
-                score_before_split, result_ids, result_scores, result_size,
+                score_before, result_ids, result_scores, result_size,
                 score_function, l2, meta_l2_exponent, meta_l2_frequency,
                 normalize, score_std_dev, seed,
             )
@@ -1731,7 +1750,7 @@ def find_optimal_split(
         find_optimal_split_dynamic(
             ctx, binary_features, binary_feature_count, cat_features_weights,
             bin_features_weights, binary_feature_weights_count, splits, parts,
-            p_count, fold_count, score_before_split, result_ids, result_scores,
+            p_count, fold_count, score_before, result_ids, result_scores,
             result_size, score_function, l2, normalize, score_std_dev, seed,
         )
 

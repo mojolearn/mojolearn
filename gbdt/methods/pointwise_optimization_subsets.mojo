@@ -1096,6 +1096,44 @@ def update_bins_from_compressed_index_kernel(
         i += stride
 
 
+def update_bins_from_desc_kernel(
+    compressed_index: MutPointer[UInt32, MutAnyOrigin],
+    indices: MutPointer[UInt32, MutAnyOrigin],
+    size_in: Int32,
+    split_desc: MutPointer[UInt32, MutAnyOrigin],
+    depth: UInt32,
+    bins: MutPointer[UInt32, MutAnyOrigin],
+):
+    """`update_bins_from_compressed_index_kernel` with the five feature
+    scalars read from the DEVICE descriptor the pack kernel wrote
+    (`kernel/pointwise_split_resolve.mojo`) instead of arriving as kernel
+    arguments -- DEVIATION 207, the blind level loop. Descriptor layout:
+    `(offset_elems, mask, shift, one_hot, bin)`. The body below is the
+    transcription above, unchanged; only where the scalars COME FROM
+    differs, and `mojo_only/pointwise_pool_check.mojo`'s P1 plus the fit
+    gates hold the two routes bit-equal."""
+    var size = Int(size_in)
+    var f_offset = Int(split_desc.unsafe_load(0))
+    var feature_shift = split_desc.unsafe_load(2)
+    var value = split_desc.unsafe_load(4) << feature_shift
+    var mask = split_desc.unsafe_load(1) << feature_shift
+    var one_hot = split_desc.unsafe_load(3) != UInt32(0)
+
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(block_dim.x) * Int(grid_dim.x)
+    while i < size:
+        var idx = Int(indices.unsafe_load(i))
+        var feature_val = compressed_index.unsafe_load(f_offset + idx) & mask
+        var goes_right: Bool
+        if one_hot:
+            goes_right = feature_val == value
+        else:
+            goes_right = feature_val > value
+        if goes_right:
+            bins.unsafe_store(i, bins.unsafe_load(i) | (UInt32(1) << depth))
+        i += stride
+
+
 def launch_update_bin_from_compressed_index(
     ctx: DeviceContext,
     mut compressed_index: DeviceBuffer[DType.uint32],
@@ -1526,4 +1564,63 @@ def split_subsets(
     subsets.current_depth += 1
 
     # `UpdateSubsetsStats(sourceTarget, subsets);`
+    update_subsets_stats(ctx, source, subsets)
+
+
+def split_subsets_from_desc(
+    ctx: DeviceContext,
+    mut source: TL2Target,
+    mut compressed_index: DeviceBuffer[DType.uint32],
+    mut docs_for_bins: DeviceBuffer[DType.uint32],
+    mut split_desc: DeviceBuffer[DType.uint32],
+    mut subsets: TOptimizationSubsets,
+) raises:
+    """`split_subsets` consuming the winner from the DEVICE descriptor the
+    pack kernel wrote, instead of five host scalars -- DEVIATION 207, the
+    blind level loop's split. Same three calls in the same order
+    (`TSubsetsHelper<TStripeMapping>::Split`,
+    `pointwise_optimization_subsets.cpp:26-52`); only the bins update reads
+    its feature through `update_bins_from_desc_kernel`. The depth-32 guard
+    stays HOST-side: `current_depth` is host state either way."""
+    var depth = subsets.current_depth + subsets.fold_bits
+    if Int(depth) >= 32:
+        raise Error(
+            String("Split at depth ") + String(depth)
+            + " would write bit " + String(depth)
+            + " of a ui32 bin; CatBoost's ReorderBins asserts"
+            " (offset + bits) <= 32 (cuda_util/sort.cpp:557)"
+        )
+
+    var num_blocks = (subsets.doc_count + SPLIT_BLOCK_SIZE - 1) // (
+        SPLIT_BLOCK_SIZE
+    )
+    if num_blocks > SPLIT_MAX_BLOCKS:
+        num_blocks = SPLIT_MAX_BLOCKS
+    if num_blocks > 0:
+        ctx.enqueue_function[update_bins_from_desc_kernel](
+            compressed_index.unsafe_ptr(),
+            docs_for_bins.unsafe_ptr(),
+            Int32(subsets.doc_count),
+            split_desc.unsafe_ptr(),
+            depth,
+            subsets.bins.unsafe_ptr(),
+            grid_dim=(num_blocks, 1, 1),
+            block_dim=(SPLIT_BLOCK_SIZE, 1, 1),
+        )
+
+    launch_radix_sort_bins(
+        ctx,
+        subsets.doc_count,
+        Int(depth),
+        Int(depth) + 1,
+        subsets.bins,
+        subsets.indices,
+        subsets.tmp_bins,
+        subsets.tmp_indices,
+        subsets.scan_offsets,
+        subsets.block_sums,
+    )
+
+    subsets.current_depth += 1
+
     update_subsets_stats(ctx, source, subsets)

@@ -352,6 +352,17 @@ check-pointwise-loop = "mojo run -I . mojo_only/pointwise_loop_check.mojo"
 # helper's plan sequence after reset(). Own main(); a GPU, seconds.
 check-pointwise-pool = "mojo run -I . mojo_only/pointwise_pool_check.mojo"
 
+# The blind level loop's device winner fold (DEVIATION 207): the fold
+# kernels against the REAL host take_best in the host code's exact
+# nesting, hashed records plus every tie case planted by hand (earlier
+# helper, earlier block, unsigned sentinel, bin), and the pack kernel's
+# three outputs -- winner record, score_before (poison-seeded so a dead
+# write fails), split descriptor -- read back whole. The fit gates hold
+# the path end to end but their fixtures never tie and their feature
+# weights are ones, which is exactly where a wrong tie rule or a dead
+# write hides. Own main(); a GPU, seconds.
+check-pointwise-resolve = "mojo run -I . mojo_only/pointwise_resolve_check.mojo"
+
 # The tripwire under PORTING.md 11 and 92. Two histogram families here run
 # one iteration count per BLOCK rather than CatBoost's per-thread counts,
 # because their AddPoint syncs an 8-lane tile and ours can only take a

@@ -602,6 +602,9 @@ def main() raises:
     ctx.enqueue_copy(dst_buf=d_bw, src_ptr=ones.unsafe_ptr())
     var d_rid = ctx.enqueue_create_buffer[DType.uint32](2)
     var d_rsc = ctx.enqueue_create_buffer[DType.float32](2)
+    # DEVIATION 207: the scorers read scoreBeforeSplit from the device
+    var d_sb = ctx.enqueue_create_buffer[DType.float32](1)
+    d_sb.enqueue_fill(Float32(0.0))
     ctx.synchronize()
 
     var supported: List[Int] = [
@@ -620,7 +623,7 @@ def main() raises:
         try:
             find_optimal_split(
                 ctx, d_bf, hist_line, d_cw, d_bw, hist_line, d_hist,
-                subsets.partition_stats, 1, fold_count, Float32(0.0),
+                subsets.partition_stats, 1, fold_count, d_sb,
                 d_rid, d_rsc, 1, supported[s], Float32(1.0), Float32(1.0),
                 Float32(0.0), False, Float32(0.0), 0, False,
             )
@@ -636,7 +639,7 @@ def main() raises:
         try:
             find_optimal_split(
                 ctx, d_bf, hist_line, d_cw, d_bw, hist_line, d_hist,
-                subsets.partition_stats, 1, fold_count, Float32(0.0),
+                subsets.partition_stats, 1, fold_count, d_sb,
                 d_rid, d_rsc, 1, refused[s], Float32(1.0), Float32(1.0),
                 Float32(0.0), False, Float32(0.0), 0, False,
             )
@@ -657,7 +660,7 @@ def main() raises:
         try:
             find_optimal_split(
                 ctx, d_bf, hist_line, d_cw, d_bw, hist_line, d_hist,
-                subsets.partition_stats, 1, 1, Float32(0.0),
+                subsets.partition_stats, 1, 1, d_sb,
                 d_rid, d_rsc, 1, refused[s], Float32(1.0), Float32(1.0),
                 Float32(0.0), False, Float32(0.0), 0, False,
             )
@@ -669,6 +672,9 @@ def main() raises:
                 " about the DYNAMIC arm:", e,
             )
             bad += 1
+    # keep the score buffer alive past the last enqueue's synchronize
+    # ([[mojo-buffer-freed-at-last-use]])
+    _ = d_sb.unsafe_ptr()
     if bad != 0:
         failures += 1
     else:

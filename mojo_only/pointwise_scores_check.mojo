@@ -688,6 +688,9 @@ def _sweep(
     var d_rsc = ctx.enqueue_create_buffer[DType.float32](2)
     var h_rid = ctx.enqueue_create_host_buffer[DType.uint32](2)
     var h_rsc = ctx.enqueue_create_host_buffer[DType.float32](2)
+    # DEVIATION 207: the scorers read scoreBeforeSplit from the device
+    var d_sb = ctx.enqueue_create_buffer[DType.float32](1)
+    d_sb.enqueue_fill(score_before)
 
     ctx.enqueue_copy(dst_buf=d_cat, src_ptr=fx.cat_w.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_binw, src_ptr=fx.bin_w.unsafe_ptr())
@@ -716,7 +719,7 @@ def _sweep(
 
         find_optimal_split(
             ctx, d_bf, b_count, d_cat, d_binw, fx.n_features, d_hist,
-            d_parts, fx.p_count, fx.fold_count, score_before, d_rid, d_rsc,
+            d_parts, fx.p_count, fx.fold_count, d_sb, d_rid, d_rsc,
             1, sf, l2, meta_l2_exponent, meta_frequency, normalize, std_dev,
             seed, gathered,
         )
@@ -757,6 +760,7 @@ def _sweep(
     _ = d_parts^
     _ = d_rid^
     _ = d_rsc^
+    _ = d_sb^
     _ = h_rid^
     _ = h_rsc^
     return Tally(bad, worst)
@@ -1090,6 +1094,9 @@ def main() raises:
     var d_rs2 = ctx.enqueue_create_buffer[DType.float32](4)
     var h_ri2 = ctx.enqueue_create_host_buffer[DType.uint32](4)
     var h_rs2 = ctx.enqueue_create_host_buffer[DType.float32](4)
+    # DEVIATION 207: the scorers read scoreBeforeSplit from the device
+    var d_sb2 = ctx.enqueue_create_buffer[DType.float32](1)
+    d_sb2.enqueue_fill(score_before)
     ctx.enqueue_copy(dst_buf=d_bf2, src_ptr=fb.bf.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_cat2, src_ptr=fb.cat_w.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_bw2, src_ptr=fb.bin_w.unsafe_ptr())
@@ -1097,12 +1104,14 @@ def main() raises:
     ctx.enqueue_copy(dst_buf=d_p2, src_ptr=fb.parts.unsafe_ptr())
     find_optimal_split(
         ctx, d_bf2, fb.b_count, d_cat2, d_bw2, fb.n_features, d_h2, d_p2,
-        fb.p_count, 1, score_before, d_ri2, d_rs2, 2, SCORE_FUNCTION_COSINE,
+        fb.p_count, 1, d_sb2, d_ri2, d_rs2, 2, SCORE_FUNCTION_COSINE,
         l2, Float32(1.0), Float32(0.0), False, Float32(0.0), seed, False,
     )
     ctx.enqueue_copy(dst_buf=h_ri2, src_buf=d_ri2)
     ctx.enqueue_copy(dst_buf=h_rs2, src_buf=d_rs2)
     ctx.synchronize()
+    # ([[mojo-buffer-freed-at-last-use]])
+    _ = d_sb2.unsafe_ptr()
 
     var a_bad = 0
     for blk in range(2):

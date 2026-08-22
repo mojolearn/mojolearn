@@ -91,6 +91,13 @@ def probe() raises:
         Int32(4),
         Int32(0),  # multiclassOptimization
         Float32(1.0),
+        # `ScoreStdDev, Random.NextUniformL()` -- DEVIATION 137-139 grew
+        # the kernel by these two and this probe site was missed until
+        # `pixi run probe` refused to build (the same class as DEVIATION
+        # 95's miss: every KNOWN check updated, the end-to-end command
+        # not run)
+        Float32(0.0),
+        UInt64(0),
         f32c.unsafe_ptr(),
         u32c.unsafe_ptr(),
         grid_dim=(1, 1, 1),

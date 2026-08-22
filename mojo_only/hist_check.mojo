@@ -836,6 +836,11 @@ def check_scores() raises:
         Int32(n_leaves),
         Int32(0),  # multiclassOptimization
         lambda_l2,
+        # `ScoreStdDev, Random.NextUniformL()` (DEVIATION 137-139); the L2
+        # calcer never reads them and this fixture's expectation is
+        # noise-free either way
+        Float32(0.0),
+        UInt64(0),
         out_score.unsafe_ptr(),
         out_bin.unsafe_ptr(),
         grid_dim=(1, 1, 1),

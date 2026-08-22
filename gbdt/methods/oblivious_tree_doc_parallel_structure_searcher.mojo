@@ -85,18 +85,21 @@ wrong array, and the argument is there so the signature does not change when
 bootstrap arrives.
 """
 
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from gbdt.data.permutation import TRandom
 from gbdt.gpu_data.feature_blocks import PolicyBlock, blocks_for
 from gbdt.gpu_data.compressed_index_builder import CompressedIndexLayout
-from gbdt.methods.helpers import TBestSplitProperties, take_best
 from gbdt.methods.pointwise_optimization_subsets import (
     TL2Target,
     TOptimizationSubsets,
     create_subsets,
     reset_subsets,
-    split_subsets,
+    split_subsets_from_desc,
+)
+from gbdt.methods.kernel.pointwise_split_resolve import (
+    PW_SENTINEL_ID,
+    launch_pw_pack_winner,
 )
 from gbdt.methods.pointwise_scores_calcer import ScoresCalcerOnCompressedDataSet
 from gbdt.gpu_util.kernel.transform import (
@@ -167,16 +170,39 @@ struct PointwiseTreeWorkspace(Movable):
     var n_features_key: Int
     var fold_count_key: Int
 
+    # ---- DEVIATION 207: the blind level loop's device state ----------
+    # The winner fold slot (2 words + 2 floats), the per-level winner
+    # records, the loop-carried scoreBeforeSplit, the packed split
+    # descriptor, and the per-feature table the pack kernel reads --
+    # everything the host loop used to touch between the read and the
+    # split, now resident. `d_feat_table` is 4 words per feature
+    # `(offset_elems, mask, shift, one_hot)`, the same values the host
+    # lookup took from `layout.features[fid]` / `one_hot[fid]`, valid for
+    # the pool's whole life because the pool is owned per fit and keyed on
+    # (n_rows, n_features). The host pair rides the ONE drain per tree.
+    var d_best_ids: DeviceBuffer[DType.uint32]
+    var d_best_scores: DeviceBuffer[DType.float32]
+    var d_winners_ids: DeviceBuffer[DType.uint32]
+    var d_winners_scores: DeviceBuffer[DType.float32]
+    var d_score_before: DeviceBuffer[DType.float32]
+    var d_split_desc: DeviceBuffer[DType.uint32]
+    var d_feat_table: DeviceBuffer[DType.uint32]
+    var h_winners_ids: HostBuffer[DType.uint32]
+    var h_winners_scores: HostBuffer[DType.float32]
+
     def __init__(
         out self,
+        ctx: DeviceContext,
         var subsets: TOptimizationSubsets,
         var calcer: ScoresCalcerOnCompressedDataSet,
+        layout: CompressedIndexLayout,
+        one_hot: List[Bool],
         doc_count: Int,
         n_rows: Int,
         max_depth: Int,
         n_features: Int,
         fold_count: Int,
-    ):
+    ) raises:
         self.subsets = subsets^
         self.calcer = calcer^
         self.doc_count_key = doc_count
@@ -184,6 +210,46 @@ struct PointwiseTreeWorkspace(Movable):
         self.max_depth_key = max_depth
         self.n_features_key = n_features
         self.fold_count_key = fold_count
+
+        self.d_best_ids = ctx.enqueue_create_buffer[DType.uint32](2)
+        self.d_best_scores = ctx.enqueue_create_buffer[DType.float32](2)
+        self.d_winners_ids = ctx.enqueue_create_buffer[DType.uint32](
+            2 * max_depth
+        )
+        self.d_winners_scores = ctx.enqueue_create_buffer[DType.float32](
+            2 * max_depth
+        )
+        self.d_score_before = ctx.enqueue_create_buffer[DType.float32](1)
+        self.d_split_desc = ctx.enqueue_create_buffer[DType.uint32](5)
+        self.d_feat_table = ctx.enqueue_create_buffer[DType.uint32](
+            4 * n_features
+        )
+        self.h_winners_ids = ctx.enqueue_create_host_buffer[DType.uint32](
+            2 * max_depth
+        )
+        self.h_winners_scores = ctx.enqueue_create_host_buffer[
+            DType.float32
+        ](2 * max_depth)
+
+        # the same three values the host loop read from
+        # `layout.features[fid]`, plus the same `one_hot[fid]` guard
+        # (`len(one_hot) == len(layout.features)` or all-False)
+        var table = List[UInt32]()
+        var have_oh = len(one_hot) == n_features
+        for f in range(n_features):
+            table.append(UInt32(Int(layout.features[f].offset) * n_rows))
+            table.append(UInt32(layout.features[f].mask))
+            table.append(UInt32(layout.features[f].shift))
+            table.append(
+                UInt32(1) if (have_oh and one_hot[f]) else UInt32(0)
+            )
+        ctx.enqueue_copy(
+            dst_buf=self.d_feat_table, src_ptr=table.unsafe_ptr()
+        )
+        ctx.synchronize()
+        # keep the host list alive across the queue
+        # ([[mojo-buffer-freed-at-last-use]])
+        _ = table[0]
 
 
 def fit_oblivious_tree_structure(
@@ -309,8 +375,8 @@ def fit_oblivious_tree_structure(
         )
         pool.append(
             PointwiseTreeWorkspace(
-                subsets_new^, calcer_new^, doc_count, n_rows, max_depth,
-                len(layout.features), fold_count,
+                ctx, subsets_new^, calcer_new^, layout, one_hot, doc_count,
+                n_rows, max_depth, len(layout.features), fold_count,
             )
         )
     ref subsets = pool[0].subsets
@@ -373,7 +439,38 @@ def fit_oblivious_tree_structure(
         _ = doc_ids_host[0]
 
     var structure = List[TBinarySplit]()
-    var score_before_split = Float32(0.0)
+
+    # ================= DEVIATION 207 =================
+    # ONE DRAIN PER TREE, NOT PER LEVEL -- the pointwise sibling of the
+    # greedy family's DEVIATION 94, for the same price ledger: their
+    # per-level `ReadOptimalSplit` is a ~5 us pinned read, this box's
+    # drain is ~191 us plus a queue-empty bubble, and after DEVIATION 143
+    # those `max_depth` waits were the arm's largest remaining host term
+    # (PREP_BILL step 26: ~2-4 ms/tree). So the level loop below is
+    # enqueued BLIND -- no host read anywhere in it. What made the
+    # per-level read load-bearing, and what replaces each use:
+    #
+    # * the winner fold (`TakeBest` over blocks, then helpers) moves into
+    #   `pw_fold_winner_kernel`, sequential, same nesting and tie rules;
+    # * `score_before_split = best.score` becomes `d_score_before`,
+    #   written by the pack kernel and loaded by the next level's score
+    #   kernels (their host scalar, now a loop-carried device float);
+    # * the `layout.features[fid]` / `one_hot[fid]` lookup becomes
+    #   `d_feat_table`, and `split_subsets` consumes the packed
+    #   descriptor (`split_subsets_from_desc`);
+    # * the undefined-winner raise and the `HasSplit` stop move to the
+    #   post-tree walk, which applies them IN LEVEL ORDER, so the first
+    #   stop at level k discards levels k.. exactly as their loop would
+    #   never have grown them. NOTHING AFTER THE LOOP READS `subsets`
+    #   (the function returns the structure and the pool's next-tree
+    #   reset rebuilds subset state from scratch), so unlike DEVIATION 94
+    #   there is NO rollback: the blind extra levels' splits are simply
+    #   discarded. A level that would have raised packs a well-formed
+    #   (feature 0, bin 0) descriptor for the levels still in flight --
+    #   see `pw_pack_winner_kernel` -- and the walk raises before reading
+    #   anything a garbage level produced.
+    # =================================================
+    pool[0].d_score_before.enqueue_fill(Float32(0.0))
 
     # `auto& random = objective.GetRandom()` (`:15`), drawn from ONCE PER
     # LEVEL at the two `ComputeOptimalSplit` call sites (`:86`, `:104`).
@@ -409,46 +506,35 @@ def fit_oblivious_tree_structure(
             ctx, subsets, cindex, docs, doc_count, sm_count, fixed_scale
         )
         var pstats = subsets.partition_stats.copy()
-        calcer.compute_optimal_split(
+        calcer.compute_optimal_split_dev(
             ctx,
             pstats,
             1 << depth,
-            score_before_split,
+            pool[0].d_score_before,
             score_function,
             l2_leaf_reg,
             score_std_dev,
             level_rand.next_uniform_l(),
         )
 
-        # their fold (`:113-120`), incumbent FIRST so a tie takes the new
-        var best = TBestSplitProperties()
-        best = take_best(best, calcer.read_optimal_split(ctx))
-
-        if best.feature_id < 0:
-            raise Error(
-                "best split is undefined at depth "
-                + String(depth)
-                + ": every candidate scored non-finite. Theirs raises the"
-                " same way (`:122`)."
-            )
-        score_before_split = best.score
-
-        var fid = Int(best.feature_id)
-        ref cf = layout.features[fid]
-        var is_one_hot = False
-        if len(one_hot) == len(layout.features):
-            is_one_hot = one_hot[fid]
-
-        # `structure.HasSplit(bestSplit)` (`:134`), BEFORE applying it
-        var seen = False
-        for i in range(len(structure)):
-            if (
-                structure[i].feature_id == Int32(fid)
-                and structure[i].bin_idx == best.bin_id
-            ):
-                seen = True
-        if seen:
-            break
+        # their fold (`:113-120`) and the record's consumption, on the
+        # device (DEVIATION 207); the raise and the `HasSplit` stop are in
+        # the post-tree walk below
+        calcer.resolve_optimal_split(
+            ctx, pool[0].d_best_ids, pool[0].d_best_scores
+        )
+        launch_pw_pack_winner(
+            ctx,
+            pool[0].d_best_ids,
+            pool[0].d_best_scores,
+            depth,
+            pool[0].d_winners_ids,
+            pool[0].d_winners_scores,
+            pool[0].d_score_before,
+            pool[0].d_feat_table,
+            len(layout.features),
+            pool[0].d_split_desc,
+        )
 
         # their `Split(target, docBins, observationIndices, &subsets)`
         # (`oblivious_tree_structure_searcher.cpp:275-278`) -- the SAME
@@ -458,40 +544,78 @@ def fit_oblivious_tree_structure(
         var docs2 = d_observations.copy() if fold_count > 1 else (
             subsets.indices.copy()
         )
-        split_subsets(
+        # `TCFeature::Offset` is an ELEMENT offset into the compressed
+        # index and this tree's layout stores it as a COLUMN index strided
+        # by `n_rows`; the conversion lives in `d_feat_table`'s build now
+        # (`PointwiseTreeWorkspace.__init__`), where its history -- the raw
+        # column reading column 0's bits and stopping every tree at depth
+        # 1 -- is the reason the table stores `offset * n_rows`.
+        split_subsets_from_desc(
             ctx,
             target,
             cindex,
             docs2,
-            # `TCFeature::Offset` is an ELEMENT offset into the compressed
-            # index -- `compressed_index[f_offset + doc]`. This tree's
-            # layout stores `offset` as the COLUMN index and strides by
-            # `n_rows`, so the multiply is the conversion. Passing the raw
-            # column reads column 0's bits with this feature's shift and
-            # mask: every document lands on one side, the partition comes
-            # back [0, n] / [n, 0], and the level scores identically to its
-            # parent -- so the searcher re-proposes the same split and
-            # `HasSplit` stops the tree at depth 1. Which is exactly how
-            # this was found.
-            UInt32(Int(cf.offset) * n_rows),
-            cf.mask,
-            cf.shift,
-            is_one_hot,
-            UInt32(best.bin_id),
+            pool[0].d_split_desc,
             subsets,
         )
+
+    # ---- THE ONE DRAIN OF THE TREE (DEVIATION 207) -------------------
+    # Their per-level `ReadOptimalSplit`, folded into one: the winner
+    # records hold every level and ride home behind everything the loop
+    # enqueued.
+    ctx.enqueue_copy(
+        dst_buf=pool[0].h_winners_ids, src_buf=pool[0].d_winners_ids
+    )
+    ctx.enqueue_copy(
+        dst_buf=pool[0].h_winners_scores, src_buf=pool[0].d_winners_scores
+    )
+    ctx.synchronize()
+
+    # ============ THE GATES, POST-TREE ================================
+    # The host loop applied these BEFORE each split; the walk applies them
+    # in LEVEL ORDER, so the first stop at level k discards levels k..
+    # exactly as the loop would never have grown them, and the returned
+    # structure is unchanged record for record.
+    for depth2 in range(max_depth):
+        var fid_u = pool[0].h_winners_ids[2 * depth2]
+        var bin_u = pool[0].h_winners_ids[2 * depth2 + 1]
+
+        if fid_u == PW_SENTINEL_ID:
+            raise Error(
+                "best split is undefined at depth "
+                + String(depth2)
+                + ": every candidate scored non-finite. Theirs raises the"
+                " same way (`:122`)."
+            )
+
+        var fid = Int(fid_u)
+        var is_one_hot = False
+        if len(one_hot) == len(layout.features):
+            is_one_hot = one_hot[fid]
+
+        # `structure.HasSplit(bestSplit)` (`:134`), BEFORE applying it
+        var seen = False
+        for i in range(len(structure)):
+            if (
+                structure[i].feature_id == Int32(fid)
+                and structure[i].bin_idx == Int32(bin_u)
+            ):
+                seen = True
+        if seen:
+            break
+
         # `split_type`, and the constants are NOT in the order the names
         # suggest: `BIN_SPLIT_TAKE_BIN` is 0 and `BIN_SPLIT_TAKE_GREATER`
-        # is 1 (`oblivious_model.mojo:36-37`). Writing `1 if one_hot else 0`
-        # makes every ORDINARY feature an equality test, which still grows a
-        # well-formed tree of the right depth with the right splits and
-        # partitions the rows completely differently -- 8 non-empty leaves
-        # instead of 12. That is how this was found: identical structure,
-        # different leaf values.
+        # is 1 (`oblivious_model.mojo:36-37`). Writing `1 if one_hot else
+        # 0` makes every ORDINARY feature an equality test, which still
+        # grows a well-formed tree of the right depth with the right
+        # splits and partitions the rows completely differently -- 8
+        # non-empty leaves instead of 12. That is how this was found:
+        # identical structure, different leaf values.
         structure.append(
             TBinarySplit(
                 Int32(fid),
-                best.bin_id,
+                Int32(bin_u),
                 Int32(BIN_SPLIT_TAKE_BIN) if is_one_hot else Int32(
                     BIN_SPLIT_TAKE_GREATER
                 ),
