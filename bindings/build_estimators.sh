@@ -44,8 +44,13 @@ MACOS_FLOOR="11.0"
 # set, because inheriting it from an outer shell reproduces the bug silently.
 unset MACOSX_DEPLOYMENT_TARGET
 
-MACOS_SDK=$(xcrun --sdk macosx --show-sdk-version)
+if [ "$(uname)" = "Darwin" ]; then
+    MACOS_SDK=$(xcrun --sdk macosx --show-sdk-version)
+else
+    MACOS_SDK=""  # linux arm (E1, 2026-08-22): no Mach-O, no Metal SDK
+fi
 LINK_FLAGS="-Xlinker -platform_version -Xlinker macos -Xlinker $MACOS_FLOOR -Xlinker $MACOS_SDK"
+[ "$(uname)" = "Darwin" ] || LINK_FLAGS=""
 
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/mojolearn-est.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT INT TERM
@@ -59,8 +64,16 @@ out="$tmpdir/_mojolearn_estimators.so"
 #
 # `--target-accelerator metal:1` is kept from the original invocation.
 # shellcheck disable=SC2086
+TARGET_FLAGS="--target-cpu apple-m1 --target-accelerator metal:1"
+[ "$(uname)" = "Darwin" ] || TARGET_FLAGS=""  # linux arm: host cpu + its GPU
+# Explicit kernel-matrix column: MOJOLEARN_TARGET_COLUMN=apple|nvidia|amd|amd_rdna
+COLUMN_DEFINE=""
+if [ -n "${MOJOLEARN_TARGET_COLUMN:-}" ]; then
+    COLUMN_DEFINE="-D MOJOLEARN_COLUMN_$(printf %s "$MOJOLEARN_TARGET_COLUMN" | tr '[:lower:]' '[:upper:]')"
+fi
+# shellcheck disable=SC2086
 pixi run mojo build --emit shared-lib \
-    --target-cpu apple-m1 --target-accelerator metal:1 \
+    $TARGET_FLAGS $COLUMN_DEFINE \
     $LINK_FLAGS \
     -I . -I bindings \
     bindings/_mojolearn_estimators.mojo \

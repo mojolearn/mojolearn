@@ -103,8 +103,13 @@ MACOS_FLOOR="11.0"
 # because inheriting it from an outer shell silently reproduces the bug.
 unset MACOSX_DEPLOYMENT_TARGET
 
-MACOS_SDK=$(xcrun --sdk macosx --show-sdk-version)
+if [ "$(uname)" = "Darwin" ]; then
+    MACOS_SDK=$(xcrun --sdk macosx --show-sdk-version)
+else
+    MACOS_SDK=""  # linux arm (E1, 2026-08-22): no Mach-O, no Metal SDK
+fi
 LINK_FLAGS="-Xlinker -platform_version -Xlinker macos -Xlinker $MACOS_FLOOR -Xlinker $MACOS_SDK"
+[ "$(uname)" = "Darwin" ] || LINK_FLAGS=""
 
 # THE CPU TARGET IS PINNED TO A PORTABLE BASELINE, NOT LEFT AT THE HOST.
 #
@@ -141,6 +146,13 @@ LINK_FLAGS="-Xlinker -platform_version -Xlinker macos -Xlinker $MACOS_FLOOR -Xli
 # -- but that is the smaller half: PASSING THE FLAG AT ALL, right value or
 # wrong, suppresses ahead-of-time Metal compilation.
 TARGET_FLAGS="--target-cpu apple-m1"
+[ "$(uname)" = "Darwin" ] || TARGET_FLAGS=""
+# Explicit kernel-matrix column: MOJOLEARN_TARGET_COLUMN=apple|nvidia|amd|amd_rdna
+# becomes a -D define that overrides TARGET_COLUMN autodetection.
+COLUMN_DEFINE=""
+if [ -n "${MOJOLEARN_TARGET_COLUMN:-}" ]; then
+    COLUMN_DEFINE="-D MOJOLEARN_COLUMN_$(printf %s "$MOJOLEARN_TARGET_COLUMN" | tr '[:lower:]' '[:upper:]')"
+fi
 
 # --emit shared-lib, not an executable: CPython dlopens this and calls
 # PyInit__mojolearn. The name of the file must match that symbol's suffix or
@@ -153,7 +165,7 @@ out="$tmpdir/_mojolearn.so"
 
 # shellcheck disable=SC2086  # both flag strings are deliberately word-split
 pixi run mojo build --emit shared-lib \
-    $TARGET_FLAGS \
+    $TARGET_FLAGS $COLUMN_DEFINE \
     $LINK_FLAGS \
     -I . -I bindings \
     bindings/_mojolearn.mojo \
@@ -183,6 +195,7 @@ air_blobs() {
 }
 
 kernels_plausible() {
+    [ "$(uname)" = "Darwin" ] || return 0  # linux gate is run_smoke
     _air=$(air_blobs "$1")
     # subsystem:floor -- floors are a filter, never the proof. A good build
     # measured 22 cluster, 4 neighbors and 2 core; a suppressed one has 0 of
@@ -205,6 +218,7 @@ kernels_plausible() {
 # wheel whose tag and binary disagree -- exactly the failure the flag exists
 # to prevent.
 minos_matches() {
+    [ "$(uname)" = "Darwin" ] || return 0  # linux gate is run_smoke
     _got=$(otool -l "$1" \
         | awk '/LC_BUILD_VERSION/{f=1} f && /minos/{print $2; exit}')
     if [ "$_got" != "$MACOS_FLOOR" ]; then

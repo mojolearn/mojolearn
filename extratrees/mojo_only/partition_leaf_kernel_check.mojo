@@ -149,11 +149,16 @@ comptime LEAF_MAX_OUT = LEAF_MAX_OUT_DEFAULT
 # block primitives require block > warp, so the {32, 64, 128} triplet that
 # exercises small blocks on Apple/NVIDIA cannot COMPILE on a 64-wide CDNA
 # wavefront. The invariant under test -- three distinct widths, identical
-# partitions -- is width-agnostic; on wide-warp targets the triplet becomes
-# {128, 256, 512}. `WARP_SIZE` resolves per compile target.
+# partitions -- is width-agnostic, but ARM C's REACH premise is not: the
+# widest block must still leave at least one work item needing a second
+# loop iteration, and at 512 this fixture has none (measured on the
+# MI325X: 2 multi-iteration items at 128, 1 at 256, 0 at 512 -- ARM C
+# correctly refused the 512 triplet). Wide-warp targets therefore test
+# {128, 192, 256}: all > warp 64, all warp-multiples, and the largest is
+# the width this fixture measurably still multi-iterates at.
 comptime PART_TPB_A = 32 if WARP_SIZE <= 32 else 128
-comptime PART_TPB_B = 64 if WARP_SIZE <= 32 else 256
-comptime PART_TPB_C = 128 if WARP_SIZE <= 32 else 512
+comptime PART_TPB_B = 64 if WARP_SIZE <= 32 else 192
+comptime PART_TPB_C = 128 if WARP_SIZE <= 32 else 256
 
 
 def mix32(x: UInt32) -> UInt32:

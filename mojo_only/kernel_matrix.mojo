@@ -73,6 +73,7 @@ same kernel for the same device. Pinning was the right answer for AMD and is
 the only possible answer for those two. See `column_lane_width`.
 """
 
+from std.sys.compile import is_defined
 from std.sys.info import (
     has_amd_gpu_accelerator,
     has_nvidia_gpu_accelerator,
@@ -911,17 +912,28 @@ def spec_for(kernel: Int, device: Int, mode: NumericMode) raises -> KernelSpec:
 #: device query. Cross-compiling for another vendor means rebuilding on (or
 #: for) that vendor's box, which is the honest shape of the constraint.
 #:
-#: RESOLVED FROM THE BUILD MACHINE'S ACCELERATOR (2026-08-22, E1 finding):
-#: this was a hardcoded `COLUMN_APPLE`, so the first AMD build compiled
-#: every kernel against Apple's scheduling constants -- it RAN (Apple's
-#: numbers fit inside AMD's limits, and IDENTICAL pins the numeric rows to
-#: the floor anyway), but the matrix was describing a build nobody was
-#: running, the exact failure this file's own header names. AMD resolves to
-#: the CDNA column (the datacenter parts E1 runs on); an RDNA build must
-#: override by hand -- `has_amd_gpu_accelerator` cannot tell a wavefront-64
-#: part from a wavefront-32 one.
-comptime TARGET_COLUMN = COLUMN_AMD if has_amd_gpu_accelerator() else (
-    COLUMN_NVIDIA if has_nvidia_gpu_accelerator() else COLUMN_APPLE
+#: RESOLVED IN TWO LAYERS (2026-08-22, E1 findings):
+#:
+#: 1. AN EXPLICIT BUILD DEFINE WINS: `mojo build -D MOJOLEARN_COLUMN_<NAME>`
+#:    (the build scripts spell it `MOJOLEARN_TARGET_COLUMN=<name>` in the
+#:    environment and pass the define through). This is how a cross-compile
+#:    or an RDNA part names its column -- `has_amd_gpu_accelerator` cannot
+#:    tell a wavefront-64 CDNA part from a wavefront-32 RDNA one.
+#: 2. OTHERWISE, THE BUILD MACHINE'S OWN ACCELERATOR. This was a hardcoded
+#:    `COLUMN_APPLE`, so the first AMD build compiled every kernel against
+#:    Apple's scheduling constants -- it RAN (Apple's numbers fit inside
+#:    AMD's limits, and IDENTICAL pins the numeric rows to the floor
+#:    anyway), but the matrix was describing a build nobody was running,
+#:    the exact failure this file's own header names. Bare AMD resolves to
+#:    the CDNA column (the datacenter parts E1 runs on).
+comptime TARGET_COLUMN = (
+    COLUMN_APPLE if is_defined["MOJOLEARN_COLUMN_APPLE"]() else
+    COLUMN_NVIDIA if is_defined["MOJOLEARN_COLUMN_NVIDIA"]() else
+    COLUMN_AMD if is_defined["MOJOLEARN_COLUMN_AMD"]() else
+    COLUMN_AMD_RDNA if is_defined["MOJOLEARN_COLUMN_AMD_RDNA"]() else
+    COLUMN_AMD if has_amd_gpu_accelerator() else
+    COLUMN_NVIDIA if has_nvidia_gpu_accelerator() else
+    COLUMN_APPLE
 )
 
 

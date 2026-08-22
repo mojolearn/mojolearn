@@ -28,6 +28,12 @@ LINK_FLAGS="-Xlinker -platform_version -Xlinker macos -Xlinker $MACOS_FLOOR -Xli
 [ "$(uname)" = "Darwin" ] || LINK_FLAGS=""
 TARGET_FLAGS="--target-cpu apple-m1"
 [ "$(uname)" = "Darwin" ] || TARGET_FLAGS=""
+# Explicit kernel-matrix column: MOJOLEARN_TARGET_COLUMN=apple|nvidia|amd|amd_rdna
+# becomes a -D define that overrides TARGET_COLUMN autodetection.
+COLUMN_DEFINE=""
+if [ -n "${MOJOLEARN_TARGET_COLUMN:-}" ]; then
+    COLUMN_DEFINE="-D MOJOLEARN_COLUMN_$(printf %s "$MOJOLEARN_TARGET_COLUMN" | tr '[:lower:]' '[:upper:]')"
+fi
 
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/mojolearn-rf-build.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT INT TERM
@@ -35,7 +41,7 @@ out="$tmpdir/_mojolearn_rf.so"
 
 # shellcheck disable=SC2086  # both flag strings are deliberately word-split
 pixi run mojo build --emit shared-lib \
-    $TARGET_FLAGS \
+    $TARGET_FLAGS $COLUMN_DEFINE \
     $LINK_FLAGS \
     -I . -I bindings \
     bindings/_mojolearn_rf.mojo \
