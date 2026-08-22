@@ -512,10 +512,38 @@ duplicate this time. Their `StageTimes` drains on both edges of every stage
 (so a stage-timed run is NOT a timing, same clause as trace rule 4), prints
 integer-math milliseconds, and its `begin`/`end` pairs already bracket the
 shared driver's stages, which ARE the Lossguide stages -- one driver, four
-policy branches. What this lane still owes on it: verify a `report()` call
-exists at fit end and that the table is emitted on a LOSSGUIDE fit (reach is
-per branch), once the depthwise lane's driver edit lands and the file goes
-quiet.
+policy branches.
+
+**REACH VERIFIED ON THIS POLICY'S BRANCH, 2026-08-22** (their wiring
+committed at `045afa3`, including the `report()` this lane's first look
+predated -- that observation was a mid-edit snapshot):
+`MOJOLEARN_STAGE_TIMES=1 pixi run check-lossguide` prints the full 14-stage
+table on every Lossguide fit, headed `lossguide fit: rows=... leaves=...
+iterations=...`. Fixture-scale shape (4096 rows, 9 leaves -- TRIAGE, drains
+per stage, never a benchmark): hist.* ~46%, split.chain ~16%, score.* ~13%.
+The dataset-scale table that prices the single-leaf fast path is the
+orchestrator's queued run; the port itself is GATED on that table by ruling.
+
+### FOUND 2026-08-22: the driver's reorder never takes the inplace fast arm
+
+`launch_reorder_in_leaves` dispatches on `max_leaf_rows` exactly as theirs
+does on `maxLeafSize` -- the largest SPLITTING leaf's partition size,
+computed on the host over the leaves being split (`split_points.cpp:60-63`),
+`<= 1024` taking `GatherInplaceLeqSize`, ONE launch, no scratch. The
+SYMMETRIC helper passes the real number (`max_live_rows`,
+`greedy_search_helper.mojo:1278`, `:3342`). **The merged non-symmetric driver
+passes `n_rows`** (`greedy_search_helper_depthwise.mojo:1562`), so past 1024
+TOTAL rows the fast arm is unreachable however small the split leaf is, and
+every split pays the slow arm's `2*ceil(statCount/8) + 2` launches plus
+scratch round-trip. Lossguide is the policy this taxes hardest: it splits
+O(leaves) times and its late splits are exactly the small leaves the fast arm
+exists for, so at `stat_count = 2` the tree pays ~4x the reorder launches
+CatBoost pays, into the launch-tax budget the covtype record already names.
+The fix is one hoisted host max -- `max over to_split of leaves[id].size`,
+fresh because sizes are rebuilt from `p_sz` each iteration, exactly their
+`partitionsCpuPtr[cpuLeafIdsPtr[leaf]].Size` -- passed instead of `n_rows`.
+NOT a deviation: it RESTORES their dispatch. The depthwise lane's file, so
+relayed through the orchestrator rather than edited here.
 
 ## One item that is bigger than this lane, for Andrew
 
@@ -554,7 +582,7 @@ rather than doing it.
 | the non-symmetric model + apply | the depthwise lane's, consumed |
 | the stage-hash instrument | **LANDED**, `check-identity-trace`, writer and reader gated together; both lanes on it |
 | the queue + selected-leaf checkpoints | **LANDED** in `select_leaves_to_split_traced`, gated by `check-lossguide-policy` P7; the one-line driver swap is OWED (depthwise lane's file, requested via orchestrator) |
-| stage wall timers | the depthwise lane's `depthwise_stage_times.mojo`, CONSUMED not duplicated; lossguide-reach verification owed when the driver goes quiet |
+| stage wall timers | the depthwise lane's `depthwise_stage_times.mojo`, CONSUMED not duplicated; lossguide-branch reach VERIFIED against their committed `045afa3` |
 | DEVIATION 318, the multiply-add pin | landed, verified in the emitted AIR |
 | single-leaf split kernels | not started -- a PERFORMANCE arm, correctly ordered after the tree |
 | CatBoost's own Lossguide values as an oracle | **OWED**, and it cannot be run on this box: their GPU learner does not start on Apple silicon. The NVIDIA column's job. |
