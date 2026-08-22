@@ -409,6 +409,17 @@ def run_one_level(
         hz.unsafe_ptr().unsafe_store(i, UInt32(i))
     ctx.enqueue_copy(dst_buf=zero_ids, src_ptr=hz.unsafe_ptr())
     ctx.synchronize()
+    _ = hz^  # past the drain (step-33 race class)
+    _ = hoh^  # past the drain (step-33 race class)
+    _ = hfd^  # past the drain (step-33 race class)
+    _ = hfc^  # past the drain (step-33 race class)
+    _ = hfb^  # past the drain (step-33 race class)
+    _ = hfa^  # past the drain (step-33 race class)
+    _ = h_sz2^  # past the drain (step-33 race class)
+    _ = h_sz^  # past the drain (step-33 race class)
+    _ = h_off2^  # past the drain (step-33 race class)
+    _ = h_off^  # past the drain (step-33 race class)
+    _ = h_leaf0^  # past the drain (step-33 race class)
 
     # 1. ZERO -------------------------------------------------------------
     # `numBlocks.x = CeilDivide(binFeatureCount, blockSize)` with blockSize
@@ -506,6 +517,8 @@ def run_one_level(
     var out_score = ctx.enqueue_create_buffer[DType.float32](1)
     var out_bin = ctx.enqueue_create_buffer[DType.uint32](1)
     ctx.synchronize()
+    _ = scan_ids_h^  # past the drain (step-33 race class)
+    _ = hsk^  # past the drain (step-33 race class)
     # THE SCALE PAIR MUST OUTLIVE THE LAUNCH THAT READS IT, and until this
     # line neither did. `h_scale` was LAST USED at its `enqueue_copy` and
     # `scale_dev` at the `.unsafe_ptr()` handed to `binary_hist_kernel`, so
@@ -555,6 +568,8 @@ def run_one_level(
         block_dim=(SCORE_BLOCK_SIZE, 1, 1),
     )
     ctx.synchronize()
+    _ = hfw^  # past the drain (step-33 race class)
+    _ = hbf^  # past the drain (step-33 race class)
 
     var hos = ctx.enqueue_create_host_buffer[DType.float32](1)
     var hob = ctx.enqueue_create_host_buffer[DType.uint32](1)
@@ -598,6 +613,7 @@ def run_one_level(
     var flags = ctx.enqueue_create_buffer[DType.uint8](n_rows)
     var seq = ctx.enqueue_create_buffer[DType.uint32](n_rows)
     ctx.synchronize()
+    _ = e^  # past the drain (step-33 race class)
 
     ctx.enqueue_function[split_and_make_sequence_kernel](
         cindex.unsafe_ptr(),
@@ -691,6 +707,8 @@ def run_one_level(
     # cannot observe an unwritten `left` / `right`. The single drain below is
     # what makes the copy's result readable on the host. The two
     # `ctx.synchronize()` calls that used to sit before and after the kernel
+    _ = hr^  # past the drain (step-33 race class)
+    _ = hl^  # past the drain (step-33 race class)
     # ordered nothing that the queue did not already order; they were three
     # drains per level where CatBoost has one.
     var osz = ctx.enqueue_create_host_buffer[DType.uint32](n_leaves)
@@ -722,6 +740,7 @@ def upload_scale(
     h.unsafe_ptr().unsafe_store(0, value)
     ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())
     ctx.synchronize()
+    _ = h^  # past the drain (step-33 race class)
     return d^
 
 
@@ -1002,6 +1021,13 @@ def run_tree(
     # staging for those copies; they stay in scope for the whole function so
     # that the asynchronous `enqueue_copy` cannot outlive its source.
     # The `ctx.synchronize()` further down settles both before the loop.
+    _ = q5^  # past the drain (step-33 race class)
+    _ = q4^  # past the drain (step-33 race class)
+    _ = q3^  # past the drain (step-33 race class)
+    _ = q2^  # past the drain (step-33 race class)
+    _ = q^  # past the drain (step-33 race class)
+    _ = hsk^  # past the drain (step-33 race class)
+    _ = h_off^  # past the drain (step-33 race class)
     var bff = ctx.enqueue_create_buffer[DType.uint32](n_features)
     var hbf = ctx.enqueue_create_host_buffer[DType.uint32](n_features)
     var ffw = ctx.enqueue_create_buffer[DType.float32](n_features)
@@ -1039,6 +1065,8 @@ def run_tree(
     var sp5 = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
     var hs5 = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
     ctx.synchronize()
+    _ = hfw^  # past the drain (step-33 race class)
+    _ = hbf^  # past the drain (step-33 race class)
 
     # Leaf values land here; the caller reads them through `tree_leaf_value`.
     var h_leaf_values = ctx.enqueue_create_host_buffer[DType.float32](
@@ -1219,6 +1247,7 @@ def run_tree(
         ctx.enqueue_copy(dst_buf=sp_feats, src_ptr=sp_feats_h.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=sp5, src_ptr=hs5.unsafe_ptr())
         ctx.synchronize()
+        _ = hs5^  # past the drain (step-33 race class)
 
         ctx.enqueue_function[split_and_make_sequence_kernel](
             cindex.unsafe_ptr(),
@@ -1314,6 +1343,8 @@ def run_tree(
         # already order, and CatBoost has one.
         ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
         ctx.synchronize()
+        _ = h_ids_c^  # past the drain (step-33 race class)
+        _ = h_ids_b^  # past the drain (step-33 race class)
         max_live_rows = 1
         for i in range(n_live):
             var s = Int(h_sz.unsafe_ptr().unsafe_load(i))
@@ -1328,6 +1359,7 @@ def run_tree(
         h_ids_a.unsafe_ptr().unsafe_store(i, UInt32(i))
     ctx.enqueue_copy(dst_buf=ids_a, src_ptr=h_ids_a.unsafe_ptr())
     ctx.synchronize()
+    _ = h_ids_a^  # past the drain (step-33 race class)
     compute_partition_stats(
         ctx, n_live, max_live_rows, stat_count, n_rows,
         ids_a, p_off, p_sz, stats, stat_partials, part_stats,
@@ -1348,6 +1380,7 @@ def run_tree(
     ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
     ctx.enqueue_copy(dst_ptr=h_leaf_values.unsafe_ptr(), src_buf=leaf_values)
     ctx.synchronize()
+    _ = h_leaf_values^  # past the drain (step-33 race class)
     var out = List[Int]()
     for i in range(n_live):
         out.append(Int(h_sz.unsafe_ptr().unsafe_load(i)))
@@ -1383,6 +1416,7 @@ def upload_blocks(
     the tree. Re-uploading per level would be a copy per level for nothing.
     """
     var out = List[DeviceBlock]()
+    var staging_holds = List[HostBuffer[DType.uint32]]()
     for b in range(len(blocks)):
         ref blk = blocks[b]
         var n = blk.count()
@@ -1408,6 +1442,14 @@ def upload_blocks(
         ctx.enqueue_copy(dst_buf=d_fo, src_ptr=h2.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=d_go, src_ptr=h3.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=d_gs, src_ptr=h4.unsafe_ptr())
+        # per-iteration staging must outlive its queued copies: park each
+        # buffer in the holder until the one drain below (step-33 race
+        # class -- a plain scope exit here frees while copies from THIS
+        # iteration are still queued)
+        staging_holds.append(h1^)
+        staging_holds.append(h2^)
+        staging_holds.append(h3^)
+        staging_holds.append(h4^)
         out.append(
             DeviceBlock(
                 blk.policy, n, blk.first_column, total, widest,
@@ -1415,6 +1457,7 @@ def upload_blocks(
             )
         )
     ctx.synchronize()
+    _ = staging_holds^
     return out^
 
 

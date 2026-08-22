@@ -239,6 +239,10 @@ def _build_cindex_from_floats(
             block_dim=(BINARIZE_BLOCK_SIZE, 1, 1),
         )
         ctx.synchronize()
+        _ = bdev^  # past the drain (step-33 race class, device side)
+        _ = xdev^  # past the drain (step-33 race class, device side)
+        _ = hx^  # past the drain (step-33 race class)
+        _ = hbo^  # past the drain (step-33 race class)
     return cindex^
 
 
@@ -1767,6 +1771,7 @@ def predict_floats(
     var hc = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
     ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=cursor)
     ctx.synchronize()
+    _ = cursor^  # past the drain (step-33 race class, device side)
     var out = List[Float32]()
     for r in range(n_rows):
         out.append(hc.unsafe_ptr().unsafe_load(r))
@@ -1819,6 +1824,7 @@ def predict_multi_floats(
     )
     ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=cursor)
     ctx.synchronize()
+    _ = cursor^  # past the drain (step-33 race class, device side)
     var out = List[Float32]()
     for r in range(n_rows):
         for d in range(approx_dim):

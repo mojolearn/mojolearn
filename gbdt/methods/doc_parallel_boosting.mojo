@@ -658,6 +658,7 @@ def _estimate_and_apply(
         block_dim=(256, 1, 1),
     )
     ctx.synchronize()
+    _ = d_est^  # past the drain (step-33 race class, device side)
     # past the drain, not before it: `h_est`'s last use was its enqueue,
     # which freed it under a queued copy (the step-33 race class)
     _ = h_est^
@@ -1379,6 +1380,8 @@ def fit_with_test(
                 var hm = ctx.enqueue_create_host_buffer[DType.float32](2)
                 ctx.enqueue_copy(dst_buf=hm, src_buf=mags)
                 ctx.synchronize()
+                _ = boot_mag_part^  # past the drain (step-33 race class, device side)
+                _ = mags^  # past the drain (step-33 race class, device side)
                 var m0 = Float64(hm[0])
                 if m0 < 0.0:
                     m0 = -m0
@@ -1611,6 +1614,8 @@ def fit_with_test(
     )
     ctx.enqueue_copy(dst_ptr=h_fv.unsafe_ptr(), src_buf=fv)
     ctx.synchronize()
+    _ = fv_part^  # past the drain (step-33 race class, device side)
+    _ = fv^  # past the drain (step-33 race class, device side)
     losses.append(
         -Float64(h_fv.unsafe_ptr().unsafe_load(0)) / Float64(n_rows)
     )
@@ -1811,6 +1816,12 @@ def predict(
         lvl += depth
         leaf += (1 << depth) * approx_dim
     ctx.synchronize()
+    _ = d_vals^  # past the drain (step-33 race class, device side)
+    _ = d_eq^  # past the drain (step-33 race class, device side)
+    _ = d_bin^  # past the drain (step-33 race class, device side)
+    _ = d_mask^  # past the drain (step-33 race class, device side)
+    _ = d_shift^  # past the drain (step-33 race class, device side)
+    _ = d_off^  # past the drain (step-33 race class, device side)
     # past the drain: the six pack buffers' last uses were their
     # enqueues, which freed them under queued copies -- and THIS is the
     # AUC path, so the step-33 race class here corrupts the metric even

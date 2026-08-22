@@ -138,6 +138,11 @@ def compute_bins_for_model(
         block_dim=(COMPUTE_BINS_BLOCK_SIZE, 1, 1),
     )
     ctx.synchronize()
+    _ = d_eq^  # past the drain (step-33 race class, device side)
+    _ = d_bin^  # past the drain (step-33 race class, device side)
+    _ = d_mask^  # past the drain (step-33 race class, device side)
+    _ = d_shift^  # past the drain (step-33 race class, device side)
+    _ = d_off^  # past the drain (step-33 race class, device side)
     # past the drain (the step-33 race class: freed-at-enqueue under a
     # queued copy)
     _ = h_off^
