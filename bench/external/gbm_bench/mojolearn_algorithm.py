@@ -238,6 +238,34 @@ class MojolearnRandomForestGPUAlgorithm(Algorithm):
         del self.model
 
 
+class SkRandomForestCPUAllCoresAlgorithm(Algorithm):
+    """sklearn's RandomForest with n_jobs=<cpus>: the fair multicore RF
+    baseline. An ADDED arm -- gbm-bench's own `skrf` passes no n_jobs and
+    therefore runs sklearn on ONE core, and beating a single-core sklearn
+    is not a result (PARITY_NOTES["skl-threads"])."""
+
+    def _estimator(self, data, params):
+        if data.learning_task == LearningTask.REGRESSION:
+            return sken.RandomForestRegressor(**params)
+        return sken.RandomForestClassifier(**params)
+
+    def fit(self, data, args):
+        params = _forest_params(args)
+        params["n_jobs"] = args.cpus if args.cpus else -1
+        model = self._estimator(data, params)
+        with Timer() as t:
+            self.model = model.fit(data.X_train, data.y_train)
+        return t.interval
+
+    def test(self, data):
+        if data.learning_task == LearningTask.CLASSIFICATION:
+            return self.model.predict_proba(data.X_test)[:, 1]
+        return self.model.predict(data.X_test)
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        del self.model
+
+
 class SkExtraTreesCPUAlgorithm(Algorithm):
     """sklearn's ExtraTrees, the algorithm's definition and therefore the
     like-for-like comparator for mojolearn-et-gpu. An ADDED arm; gbm-bench

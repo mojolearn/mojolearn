@@ -116,6 +116,8 @@ def patch_algorithms(root):
         "            return MojolearnRandomForestGPUAlgorithm()\n"
         "        if name == 'skl-et-cpu':\n"
         "            return SkExtraTreesCPUAlgorithm()\n"
+        "        if name == 'skl-rf-cpu':\n"
+        "            return SkRandomForestCPUAllCoresAlgorithm()\n"
         "        if name == 'lgbm-et-cpu':\n"
         "            return LgbmExtraTreesCPUAlgorithm()\n"
         "        if name == 'lgbm-rf-cpu':\n"
@@ -131,6 +133,7 @@ def patch_algorithms(root):
         "    MojolearnGbdtGPUAlgorithm,\n" \
         "    MojolearnExtraTreesGPUAlgorithm,\n" \
         "    MojolearnRandomForestGPUAlgorithm,\n" \
+        "    SkRandomForestCPUAllCoresAlgorithm,\n" \
         "    SkExtraTreesCPUAlgorithm,\n" \
         "    LgbmExtraTreesCPUAlgorithm,\n" \
         "    LgbmRandomForestCPUAlgorithm,\n" \

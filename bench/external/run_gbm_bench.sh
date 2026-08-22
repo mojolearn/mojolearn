@@ -30,8 +30,11 @@ DATASET="${1:?dataset required (year, covtype, higgs, fraud, epsilon, airline, b
 NTREES="${2:?ntrees required}"
 case "${3:-}" in
   gbdt)   ALGOS="mojolearn-gbdt-gpu,cat-cpu" ;;
+  # THE HEADLINE SUITE IS US-THEM PAIRS AND NOTHING ELSE: symmetric trees
+  # vs CatBoost, RF vs multicore sklearn RF, ET vs multicore sklearn ET.
+  pairs)  ALGOS="mojolearn-rf-gpu,skl-rf-cpu,mojolearn-et-gpu,skl-et-cpu" ;;
   forest) ALGOS="mojolearn-rf-gpu,skrf,lgbm-rf-cpu,mojolearn-et-gpu,skl-et-cpu,lgbm-et-cpu" ;;
-  rf)     ALGOS="mojolearn-rf-gpu,skrf,lgbm-rf-cpu" ;;
+  rf)     ALGOS="mojolearn-rf-gpu,skl-rf-cpu" ;;
   "")     ALGOS="mojolearn-gbdt-gpu,cat-cpu" ;;
   *)      ALGOS="$3" ;;
 esac
