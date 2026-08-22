@@ -64,7 +64,7 @@ symmetric or lossguide lanes were editing.
 | `gbdt/methods/greedy_subsets_searcher/structure_searcher_options.mojo` | `TTreeStructureSearcherOptions` | new |
 | `.../kernel/compute_scores.mojo` | `ComputeOptimalSplitsRegion` (`:303`) | appended at the foot |
 | `gbdt/models/kernel/add_bin_values.mojo` | `ComputeNonSymmetricDecisionTreeBinsImpl` (`add_model_value.cu:353`) | appended at the foot |
-| `.../greedy_search_helper_depthwise.mojo` | the Depthwise arms + `FitImpl` + `MakeSplit`'s multi-leaf arm | new |
+| `.../greedy_search_helper_depthwise.mojo` | the Depthwise arms + `FitImpl` + `MakeSplit`'s multi-leaf arm | **merged**: now `fit_non_symmetric_tree` with four policy branches, `fit_depthwise_tree` a thin wrapper |
 | `mojo_only/depthwise_check.mojo` | — | the gate, 7 claims |
 | `gbdt/methods/greedy_subsets_searcher/points_subsets.mojo` | `TLeaf.Path` | `depth: Int` became the real `TLeafPath`, closing that field's own TODO |
 
@@ -233,37 +233,60 @@ whether the arithmetic was ever going to agree.
 
 | | check-depthwise | trace records | reproducible | identical across {device, 108, 1} SMs |
 |---|---|---|---|---|
-| FAST | 7/7 | 99 | yes | yes — a platform accident, Metal has no float threadgroup atomics |
-| IDENTICAL | 7/7, claim 6 **gated** | 94 | yes | **yes** |
+| FAST | 7/7 | 99 | yes | yes at depths 2, 4, 6 — a platform accident, Metal has no float threadgroup atomics |
+| IDENTICAL | 7/7, claim 6 **gated** | 94 | yes | **yes at depths 2, 4, 6** — 3 / 15 / 62 nodes, bit for bit |
+
+Claim 3 runs depths 2/3/4/6 and claim 6 runs 2/4/6. **They ran only depth 4
+until 2026-08-22**, and that gap is why the lossguide lane's wrong bound
+survived six probes: a gate that runs one shape tests a shape, not a policy.
+Depth is the cheapest axis with real coverage in it — it changes the level
+count, the leaf frontier's raggedness, and through `max_leaves = 1 << depth`
+every workspace bound. Claim 6 in particular needs more than one depth
+because replication is `f(sm_count) / (groups × leaves × stats)` and
+collapses to 1 once the leaf count is large, so machine-dependence is at its
+*most* aggressive at shallow depth.
 
 ## Deviation numbers
 
-**350-399 are this lane's**, agreed with the lossguide lane (which took
-300-349) so that the 2026-08-20 collision — two lanes claiming 42
-concurrently — cannot repeat. Spent so far: 350 (`TTreeNode`'s `ui16` fields
-raise where theirs narrow silently), 351 (the bin-feature lookup table),
-352 (partition stats recomputed per level rather than updated inside the
-split).
+**350-399 are this lane's**, agreed with the lossguide lane before either
+wrote a numbered entry and since registered with the orchestrator lane.
+Spent: 350 (`TTreeNode`'s ui16 fields raise where theirs narrow silently),
+351 (the bin-feature lookup table), 352 (partition stats recomputed per
+level rather than updated inside the split). Claim new numbers through the
+orchestrator — the 300-349 block turned out to collide with committed
+ensemble usage, which is exactly the collision the block scheme exists to
+prevent.
 
 ## What is NOT done, and is not pretended to be
 
-* **Not wired into training.** `doc_parallel_boosting` grows symmetric trees
-  only, and `catboost_options.check()` still refuses `grow_policy=Depthwise`
-  by name. That refusal is honest until the boosting driver takes a policy;
-  relaxing it before then would make an option that is accepted and dropped,
-  which is what `PORTING_RULES.md` rule 3 forbids. `UNWIRED.md` carries the
-  order of what has to land first.
-* **No CatBoost differential.** There is no `oracle` row for depthwise. The
-  gate compares against host tallies and against itself, which is why claim 7
-  is a sabotage and not a digest.
-* **No number.** Nothing has been benchmarked. The first performance question
-  is the control-plane replay above; the second is whether a depthwise level
-  still launches `O(1)` kernels in the leaf count, which is CatBoost's own
-  design property (`compute_by_blocks_helper.h:87-92`) and is worth
-  confirming rather than assuming now that the leaf frontier is ragged.
-* **Region and Lossguide** are absent rather than stubbed. Lossguide is the
-  other lane's; Region is nobody's.
-* `Rescale` / `ShiftLeafValues` / `UpdateLeaves` / `UpdateWeights` on
-  `TNonSymmetricTree`, `BuildTreeLikeModel<TObliviousTreeModel>`, `GetHash`,
-  `SortPath` / `SortUniquePath`, `BootstrapOptions`, `FixedBinarySplits`:
-  recorded in `UNWIRED.md`, not written.
+* **The cross-GPU claim is not yet demonstrated, only proxied.** Core-count
+  invariance on one machine is the strongest on-box evidence available,
+  because the core count is the only machine-dependent input the algorithm
+  has — but "bitwise identical across GPUs" needs a second GPU. That is one
+  billed RunPod / `tools/remote_gpu.sh` run and it awaits Andrew's word. The
+  instrument for it is in place: the trace emits per-stage addresses and
+  `tools/identity_trace_diff.py` classifies whatever comes back.
+* **`IDENTITY_PATHS.md` row 8 is still OPEN** (fixed-point scale magnitude).
+  Not on this lane's path — the scale is host-derived here — but it is on
+  the boosting path, so it goes live the moment depthwise is wired to
+  training.
+* **An unenumerated identity pathway, found 2026-08-22 and handed to the
+  perf/orchestrator lane:** with `random_strength != 0`,
+  `target_variance_blocks` is `min(4 * sm_count, ...)`, so the NUMBER of
+  float partials feeding the score standard deviation varies by machine even
+  though the fold order is pinned by `deterministic_sum_lanes_kernel`. The
+  noise mostly cancels in `gain = after - before`; what survives is a
+  rounding residue of order `ulp(n)`, which is enough to move a split. Inert
+  at our default of 0 — **CatBoost's own default is 1.0**
+  (`oblivious_tree_options.cpp:17`), so it bites when boosting is wired. The
+  fix has exact precedent in row 7's `partition_chunks_sm_for`.
+* **Not wired into training.** `train()` still refuses `grow_policy=Depthwise`
+  BY NAME, and that refusal is honest until `AppendModels` has a
+  `TNonSymmetricTree` arm. `UNWIRED.md` carries the order.
+* **No CatBoost differential** for depthwise, and **no benchmark**. The vec4
+  arms landed on a documented 5.9x that this lane has still never measured.
+* **Region and Lossguide** are absent / the other lane's.
+* `Rescale` / `ShiftLeafValues` / `UpdateLeaves` / `UpdateWeights`,
+  `BuildTreeLikeModel<TObliviousTreeModel>`, `GetHash`, `SortPath` /
+  `SortUniquePath`, `BootstrapOptions`, `FixedBinarySplits`: recorded in
+  `UNWIRED.md`, not written.
