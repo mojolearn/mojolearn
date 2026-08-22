@@ -77,14 +77,21 @@ three other trees' device work.
 
 ## Ours vs scikit-learn, same night, NOT yet quotable
 
-The interleaved harness row (both arms, one process alternation, their
-defaults: `max_features=None`/1.0, 20 trees, depth 12) printed
-**3.15x at 100k and 4.15x at 500k, ours faster, n=15/15 each** -- but
-its window was VOIDed by two transient background spikes (Spotlight,
-the Docker VM) and is not quoted; a retry loop is hunting a clean
-window. For scale: the pre-round binary measured INDISTINGUISHABLE from
-sklearn at 100k in the first (voided) window of the night -- the round
-turned parity into a multiple.
+FIVE interleaved windows ran between 22:39 and 23:16 and every one was
+VOIDed by the gate -- all on macOS nightly-maintenance daemons
+(Spotlight, the Docker VM, duetexpertd, mediaanalysisd), never on a
+peer lane. Across the five, ours-faster ratios of **2.40-3.15x at 100k
+and 4.13-4.64x at 500k**, each individually outside its window's floor;
+NONE is quoted, per the gate. What the five DO establish without a
+clean window: our GPU arm's absolute times are stable to ~1%
+(874.1-884.9 ms at 100k in all five) while sklearn's CPU arm swung
+2102-2785 ms under the same daemons -- background CPU load is what
+keeps voiding the windows, and it lands almost entirely on the CPU
+arm. The clean run belongs to a daytime window, after the nightly
+maintenance is done. For scale: the pre-round binary measured
+INDISTINGUISHABLE from sklearn at 100k in the first (voided) window of
+the night -- the round turned parity into a multiple whatever the
+final digit turns out to be.
 
 On eps500 (real data, 400k x 500): held-out accuracy **ours 0.6728 vs
 sklearn 0.673275** -- identical to three decimals, so the 0.67 is what
