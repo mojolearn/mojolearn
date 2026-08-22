@@ -5824,3 +5824,78 @@ editing `pointwise_scores.mojo` / `pointwise_scores_calcer.mojo` /
 `pointwise_split_resolve.mojo` in this shared checkout mid-compile; it is
 that lane's in-flight state, not this change (mojotrees-shared-checkout
 rule: the working tree is a moving target).
+
+
+# =====================================================================
+# DEVIATION NUMBERS 350-399 ARE THE DEPTHWISE LANE'S
+# =====================================================================
+#
+# Assigned 2026-08-22 and agreed with the LOSSGUIDE lane (which took
+# 300-349) BEFORE either lane wrote a numbered entry. The gbdt lane sits
+# at 144, the forest lanes at 200-215 and 300-314 (`extratrees/
+# DEVIATIONS.md`, `ensemble/PLAN.md`) -- so 300-349 collides with the
+# ensemble block on paper and the lossguide lane knows it; 350-399 is
+# clear of everything in the tree today.
+#
+# The rule this exists to enforce is PORTING_RULES.md 3, earned on
+# 2026-08-20 when two lanes both claimed DEVIATION 42 concurrently and
+# the entries had to be renumbered after the fact.
+
+## 350. `TTreeNode`'s `ui16` fields narrow silently in theirs and raise here
+
+`TTreeNode` is four `ui16` (`gpu_data/gpu_structures.h:167-171`), and their
+flat model builder assigns a `ui32` `FeatureId` straight into it
+(`model_builder.cpp:257`). A dataset with more than 65,535 features, or a
+subtree wider than 65,535 leaves, wraps and produces a model that applies
+cleanly and answers wrong.
+
+`model_builder._to_ui16` raises instead. The type is UNCHANGED -- widening it
+would make a model file theirs cannot read -- so this cannot change any model
+their code would have built correctly. It is the cheapest class of deviation
+there is: it converts an unrepresentable state into an error and has no
+effect on any representable one.
+
+## 351. `TBinFeatureTable`: their per-candidate walk becomes an O(1) lookup
+
+`ToSplit(FeaturesManager, props)` (`methods/helpers.cpp:164-170`) resolves one
+candidate at a time out of the features manager, and `resolve_split` in this
+port is the same thing: an O(features) walk per call.
+
+The symmetric arm resolves ONE candidate per level. The depthwise arm resolves
+`argmaxBlockCount * leavesToVisit.size()` -- up to 64 x 64 -- because the host
+reduce runs per leaf over per-block records (`greedy_search_helper.cpp:520-531`).
+At 2000 features that is a walk of 8 million steps per level to answer a
+question whose answer is a table.
+
+So the table is built once per fit, indexed by bin-feature. **It is filled BY
+`resolve_split`**, so it cannot disagree with the function it replaces --
+and `mojo_only/depthwise_check.mojo` claim 1 asserts that cell for cell
+anyway, because "cannot disagree by construction" is a sentence this
+repository has been wrong about before (`build_layout`'s two walks agreed only
+because every fixture happened to be binary-first).
+
+Bit-inert. HOST_AND_DEVICE.md rule one holds: the table is sized by the total
+BIN count, which scales with features times borders and never with rows.
+
+## 352. Partition stats are recomputed per level, not updated inside the split
+
+Their `TSplitPointsKernel` updates `subsets->PartitionStats` as one of its five
+steps ("Update part stats", `split_properties_helper.cpp:918`), so their
+`ComputeOptimalSplits` finds the stats already correct for the new leaves and
+`AllReduceThroughMaster` is only the multi-device fold.
+
+This port has never ported that half. `run_tree_layout` calls
+`compute_partition_stats` at the top of every level instead, and the depthwise
+driver does the same rather than growing a second mechanism that would have to
+be kept in step with the first.
+
+**The cost is one extra reduction per level; the values are identical.** It is
+the same reduction over the same rows with the same PINNED chunk count
+(`IDENTITY_PATHS.md` row 7), so this cannot move a bit -- it can only cost
+time. The depthwise arm pays it once more than the symmetric arm does, at
+termination, because the final split moved the partitions after the last
+`ComputeOptimalSplits` and the leaf values are read from those stats.
+
+Priced and deferred: closing it means porting the stats update into the split
+chain, which is a change to a file the symmetric lane owns, and it is worth
+doing only once this lane has a number that says how much of a level it is.

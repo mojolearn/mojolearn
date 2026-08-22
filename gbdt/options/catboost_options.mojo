@@ -266,8 +266,19 @@ struct CatBoostOptions(Copyable, Movable):
 
     var grow_policy: Int
     """`grow_policy`. Default SymmetricTree. HONORED for SymmetricTree only;
-    Depthwise and Lossguide are not ported and `check()` refuses them rather
-    than silently growing a symmetric tree under another name."""
+    Depthwise and Lossguide are refused here rather than silently growing a
+    symmetric tree under another name.
+
+    **THE REFUSAL IS NOW ABOUT THE BOOSTING DRIVER, NOT ABOUT THE SEARCHER.**
+    As of 2026-08-22 a Depthwise searcher EXISTS -- `greedy_subsets_searcher/
+    greedy_search_helper_depthwise.mojo`, gated by `pixi run check-depthwise`
+    -- and a Lossguide one is being written beside it. What does not exist is
+    a `doc_parallel_boosting.fit` that can carry a policy, an `AppendModels`
+    arm for `TNonSymmetricTree` (their `add_non_symmetric_tree_doc_parallel`,
+    unported), or a model writer that knows a second tree shape. Until those
+    three land, accepting the option here would accept it and drop it, which
+    is what `PORTING_RULES.md` rule 3 forbids. `UNWIRED.md` carries the
+    order."""
 
     var max_leaves: Int
     """`max_leaves`. **Default `1 << depth`, which is 64 at the default depth
@@ -288,14 +299,25 @@ struct CatBoostOptions(Copyable, Movable):
 
     **CatBoost IGNORES this option under SymmetricTree.** `IsTerminalLeaf`
     guards the size test with `Options.Policy != EGrowPolicy::SymmetricTree`
-    (`greedy_search_helper.cpp:691-694`), so the only policy this port grows
-    is the one where their leaf-size test never runs. Our score kernel has no
-    minimum-count test either, which for SymmetricTree is agreement and not a
-    gap.
+    (`greedy_search_helper.cpp:685`), so on the only policy this option
+    struct can currently select, their leaf-size test never runs. Our score
+    kernel has no minimum-count test either, which for SymmetricTree is
+    agreement and not a gap.
 
-    `check()` still refuses anything but 1. That is STRICTER than CatBoost,
-    which accepts any value here and discards it, and it is kept so the option
-    cannot become silently live the day Lossguide lands."""
+    **IT IS NO LONGER TRUE THAT NOTHING IN THIS TREE READS IT.** The
+    depthwise searcher went live on 2026-08-22 and its `is_terminal_leaf`
+    runs their size test, boundary included -- theirs is `leaf.Size <=
+    MinLeafSize`, so a minimum of 1 marks a ONE-ROW LEAF TERMINAL rather
+    than permitting it. `mojo_only/depthwise_check.mojo` claim 5 probes that
+    `<=` at a leaf size that actually occurs. That searcher takes its
+    options through `greedy_subsets_searcher/structure_searcher_options.
+    mojo`, not through this struct, which is why the refusal below is still
+    correct for anything reached from `train()`.
+
+    `check()` still refuses anything but 1 here. That is STRICTER than
+    CatBoost, which accepts any value and discards it, and it is kept so the
+    option cannot become silently live the day the boosting driver takes a
+    grow policy."""
 
     var l2_leaf_reg: Float32
     """`l2_leaf_reg`. Default 3.0 (`oblivious_tree_options.cpp:15`, and

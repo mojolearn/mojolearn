@@ -172,3 +172,150 @@ def compute_bins_kernel(
                 leaf += 1 << level
         out_bins.unsafe_store(i, UInt32(leaf))
         i += stride
+
+
+# =========================================================================
+# THE NON-SYMMETRIC APPLY -- `ComputeNonSymmetricDecisionTreeBinsImpl`
+# (`add_model_value.cu:353-395`)
+# =========================================================================
+#
+# Added by the DEPTHWISE lane, 2026-08-22, at the FOOT of this file behind
+# its own header. It is the same upstream file as the two kernels above and
+# the same job -- give every row its leaf -- for a tree whose leaves do not
+# share a split list.
+#
+# WHY IT IS SO MUCH SIMPLER THAN THE STRUCTURE THAT PRODUCED IT. The tree
+# arrives as the flat pre-order `TTreeNode` array (`TFlatTreeBuilder` in
+# `greedy_subsets_searcher/model_builder.mojo`), where `left_subtree` and
+# `right_subtree` are LEAF COUNTS. Walking it needs no stack and no depth
+# bound at all:
+#
+#     bin = 0
+#     loop:
+#       going RIGHT:  bin += node.left_subtree     (skip the left leaves)
+#                     stop if right_subtree == 1   (the right child IS a leaf)
+#                     else advance by left_subtree (right child's node)
+#       going LEFT:   stop if left_subtree == 1    (the left child IS a leaf)
+#                     else advance by 1            (left child's node)
+#
+# and the accumulated `bin` is the number of leaves to the left of this row's
+# leaf, which is exactly the numbering `TNonSymmetricTreeStructure.visit_bins`
+# hands out. THE TWO AGREEING IS NOT ASSUMED: `mojo_only/depthwise_check.mojo`
+# walks both and compares per row.
+#
+# THE FEATURE ARRAY IS PARALLEL TO THE NODE ARRAY, one `TCFeature` per
+# INTERNAL NODE, and both advance together -- `nodes += node.LeftSubtree;
+# features += node.LeftSubtree` (`:381-382`). That is theirs and it is why
+# the caller builds a per-node feature table rather than indexing a
+# per-feature one; the deviation block below says what ours does instead.
+
+
+def compute_non_symmetric_decision_tree_bins_kernel(
+    node_offset: MutPointer[UInt32, MutAnyOrigin],
+    node_mask: MutPointer[UInt32, MutAnyOrigin],
+    node_shift: MutPointer[UInt32, MutAnyOrigin],
+    node_one_hot: MutPointer[UInt8, MutAnyOrigin],
+    node_bin: MutPointer[UInt32, MutAnyOrigin],
+    node_left_subtree: MutPointer[UInt32, MutAnyOrigin],
+    node_right_subtree: MutPointer[UInt32, MutAnyOrigin],
+    node_count_in: Int32,
+    compressed_index: MutPointer[UInt32, MutAnyOrigin],
+    n_rows_in: Int32,
+    out_bins: MutPointer[UInt32, MutAnyOrigin],
+):
+    """`ComputeNonSymmetricDecisionTreeBinsImpl`, copied.
+
+    ================= DEVIATION BLOCK =================
+    THEIRS TAKES TWO STRUCT ARRAYS, `const TCFeature* features` and
+    `const TTreeNode* nodes`, and walks them by POINTER ARITHMETIC. Ours
+    takes seven parallel planes and walks an INDEX.
+
+    Two reasons, both already established in this port and neither of them a
+    preference:
+
+    * `split_points.mojo`'s deviation block: binding a whole `CFeature` to a
+      local kills the Metal backend ("Metal Compiler failed to compile
+      metallib"), reproduced in a 25-line probe on 2026-08-19. Field-by-field
+      access through a pointer compiles and runs. A `TTreeNode` is the same
+      shape of struct and gets the same treatment rather than waiting to
+      find out.
+    * `enqueue_function` refuses several pointers derived from ONE
+      allocation as aliasing mutable arguments, which is what a
+      `bitcast`-to-struct view of a byte buffer would be.
+
+    Semantically identical: same fields, same order, same loads. The
+    `node_left_subtree` / `node_right_subtree` planes are `UInt32` where
+    their `TTreeNode` fields are `ui16`, because a kernel parameter is
+    Int32-shaped in Mojo; the HOST still refuses anything past 65,535 at
+    `model_builder._to_ui16`, so no model can exist here that theirs could
+    not hold.
+    ===================================================
+
+    `readIndices` and `writeIndices` are their two optional permutations and
+    are NOT parameters here: every caller in this lane passes null for both
+    (`bin = tid`, `writeIdx = tid`), exactly as their apply does on a
+    doc-parallel dataset. A caller that needs them is a caller that does not
+    exist yet, and an unused pointer parameter is an unreached branch.
+
+    `nodes == nullptr` is their CONSTANT TREE -- a root that found no
+    improving split. Their `bool stop = nodes == nullptr` makes the loop
+    body run zero times and every row land in bin 0. `node_count == 0` is
+    the same test here, and it is REACHABLE: a depthwise fit on a residual
+    that is already flat produces exactly that tree.
+    """
+    var node_count = Int(node_count_in)
+    var n_rows = Int(n_rows_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+
+    while i < n_rows:
+        var bin = 0
+        var node = 0
+        # `bool stop = nodes == nullptr;`
+        var stop = node_count == 0
+
+        while not stop:
+            # `const ui32 featureVal = (__ldg(cindex + feature.Offset +
+            #  loadIdx) >> feature.Shift) & feature.Mask;` (`:373`).
+            #
+            # NOTE THE ORDER: shift THEN mask, where the growth-side
+            # `split_and_make_sequence_kernel` masks a PRE-SHIFTED value
+            # (`value = bin << shift`, `mask = mask << shift`). The two are
+            # the same predicate written two ways and both are theirs --
+            # `split_points.cu:518` and this line. They are kept as written
+            # on each side, because collapsing one into the other is the
+            # kind of "obviously equivalent" edit that stops being
+            # equivalent the day a shift is signed.
+            var off = Int(node_offset.unsafe_load(node))
+            var shift = node_shift.unsafe_load(node)
+            var mask = node_mask.unsafe_load(node)
+            var feature_val = (
+                compressed_index.unsafe_load(off + i) >> shift
+            ) & mask
+
+            var this_bin = node_bin.unsafe_load(node)
+            var split: Bool
+            if node_one_hot.unsafe_load(node) != UInt8(0):
+                split = feature_val == this_bin
+            else:
+                split = feature_val > this_bin
+
+            var left_subtree = Int(node_left_subtree.unsafe_load(node))
+            var right_subtree = Int(node_right_subtree.unsafe_load(node))
+
+            if split:
+                # `bin += node.LeftSubtree; stop = node.RightSubtree == 1;`
+                # `if (!stop) { nodes += node.LeftSubtree; ... }` (`:377-383`)
+                bin += left_subtree
+                stop = right_subtree == 1
+                if not stop:
+                    node += left_subtree
+            else:
+                # `stop = node.LeftSubtree == 1; if (!stop) { nodes += 1; }`
+                # (`:385-389`)
+                stop = left_subtree == 1
+                if not stop:
+                    node += 1
+
+        out_bins.unsafe_store(i, UInt32(bin))
+        i += stride

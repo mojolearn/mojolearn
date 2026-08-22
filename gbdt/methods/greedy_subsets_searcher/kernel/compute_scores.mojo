@@ -1074,3 +1074,88 @@ def compute_optimal_split_kernel[
         out_score,
         out_bin,
     )
+
+
+def compute_optimal_splits_region_kernel[
+    score_function: Int = SCORE_FUNCTION_COSINE,
+    normalize: Bool = False,
+](
+    bf_skip: MutPointer[UInt8, MutAnyOrigin],
+    bin_feature_count_in: Int32,
+    bf_feature_id: MutPointer[UInt32, MutAnyOrigin],
+    feature_weights: MutPointer[Float32, MutAnyOrigin],
+    histograms: MutPointer[Float32, MutAnyOrigin],
+    part_stats: MutPointer[Float32, MutAnyOrigin],
+    stat_count_in: Int32,
+    part_ids: MutPointer[UInt32, MutAnyOrigin],
+    multiclass_optimization: Int32,
+    lambda_l2: Float32,
+    score_std_dev: Float32,
+    global_seed: UInt64,
+    out_score: MutPointer[Float32, MutAnyOrigin],
+    out_bin: MutPointer[UInt32, MutAnyOrigin],
+):
+    """`ComputeOptimalSplitsRegion` (`compute_scores.cu:303-385`) -- DEPTHWISE.
+
+    Added by the DEPTHWISE lane at the foot of the lossguide lane's block,
+    where DEVIATION 302 says it belongs. **Four lines and two calls**, because
+    that deviation is exactly the finding that the two leafwise bodies are one
+    body: `:316-382` is character-identical to `:406-472` apart from how
+    `thisPartId` is produced.
+
+    This one takes it from a BUFFER, one leaf per block row:
+
+        result  += blockIdx.x + blockIdx.y * gridDim.x;
+        partIds += blockIdx.y;
+        const int thisPartId = partIds[0];
+
+    where Lossguide's takes two scalars. That is the whole difference, and it
+    is the reason `numScoreBlocks` can be `leavesToVisit.size()` here
+    (`greedy_search_helper.cpp:428-432`) and is capped at 2 there
+    (`:511`).
+
+    **This is the FIRST version of this kernel in this file and not the
+    second.** An earlier standalone copy of the body was written here before
+    the lossguide lane landed its factoring; it has been deleted rather than
+    left beside this one, and it carried a real defect that the factoring
+    fixes: it used `SCORE_BLOCK_SIZE` (128), which is the SYMMETRIC launcher's
+    block (`:167`). Both leafwise launchers use 256 (`:484`, `:557`). Their
+    number, and it was ours to get wrong.
+
+    Grid is `(argmax_block_count, leavesToVisit.size(), 1)`, block is
+    `LEAFWISE_SCORE_BLOCK_SIZE`.
+    """
+    # `partIds += blockIdx.y; const int thisPartId = partIds[0];` (`:320-321`)
+    var this_part_id = Int(part_ids.unsafe_load(Int(block_idx.y)))
+
+    var bin_feature_count = Int(bin_feature_count_in)
+    var best_gain = -FLOAT32_MAX
+    var best_bin = UInt32(0xFFFFFFFF)
+
+    _leafwise_scan_part[
+        score_function, normalize, LEAFWISE_SCORE_BLOCK_SIZE
+    ](
+        this_part_id,
+        bf_skip,
+        bin_feature_count,
+        bf_feature_id,
+        feature_weights,
+        histograms,
+        part_stats,
+        Int(stat_count_in),
+        multiclass_optimization,
+        lambda_l2,
+        score_std_dev,
+        global_seed,
+        best_gain,
+        best_bin,
+    )
+
+    _leafwise_argmax_write[LEAFWISE_SCORE_BLOCK_SIZE](
+        best_gain,
+        best_bin,
+        bin_feature_count,
+        Int(block_idx.x) + Int(block_idx.y) * Int(grid_dim.x),
+        out_score,
+        out_bin,
+    )

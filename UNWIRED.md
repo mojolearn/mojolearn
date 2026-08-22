@@ -932,3 +932,49 @@ Until 1-5 exist the builder is correct and inert, which is the state this file
 exists to record. Its hash is a CACHE KEY, so getting it wrong later is a
 silent wrong-dataset bug rather than a crash -- hence the 800-tensor collision
 sweep in the check.
+
+
+## The DEPTHWISE lane, 2026-08-22
+
+`gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo` and
+the four files under it (`models/non_symmetric_tree.mojo`,
+`greedy_subsets_searcher/model_builder.mojo`,
+`greedy_subsets_searcher/structure_searcher_options.mojo`, plus the
+`ComputeOptimalSplitsRegion` arm of `kernel/compute_scores.mojo` and the
+`ComputeNonSymmetricDecisionTreeBinsImpl` arm of
+`models/kernel/add_bin_values.mojo`).
+
+**Reached by `pixi run check-depthwise` and by NOTHING ELSE.** Audited by
+grep 2026-08-22: no other importer exists. `doc_parallel_boosting.fit` grows
+symmetric trees only, and `catboost_options.check()` still refuses
+`grow_policy=Depthwise` **by name**.
+
+That refusal is the honest state and it should come off LAST. Their
+`GetTrainerFactoryKey(loss, EGrowPolicy::Depthwise)` registers a whole
+trainer per loss (`cuda/train_lib/pointwise_non_symmetric.cpp:19-29`), and on
+this side the boosting driver would need: a policy on the searcher call, a
+`TNonSymmetricTree` arm on `AppendModels` (their
+`add_non_symmetric_tree_doc_parallel.{h,cpp}`, unported), and the
+`TAdditiveModel` / model-text writer taught a second tree shape. Relaxing the
+option before those exist would make an option that is accepted and dropped,
+which is what `PORTING_RULES.md` rule 3 forbids.
+
+### Written and NOT written, so the difference is on the record
+
+| written, reached only by the gate | NOT written, recorded instead |
+|---|---|
+| `TNonSymmetricTreeStructure.visit_bins` (their `VisitBins`) | `GetHash` -- a `THashMap` key this port replaces with the parent LEAF ID |
+| `TFlatTreeBuilder`, BOTH duplicate policies | `BuildTreeLikeModel<TObliviousTreeModel>` -- the symmetric lane returns a split list directly and never folds paths back |
+| `compute_non_symmetric_decision_tree_bins_kernel` | `BuildTreeLikeModel<TRegionModel>` -- `EGrowPolicy::Region`, no lane |
+| `TTreeStructureSearcherOptions.check()` | `TNonSymmetricTree::Rescale` / `ShiftLeafValues` / `UpdateLeaves` / `UpdateWeights` -- the boosting loop's, and this lane does not own it |
+| the `sm_count_override` test knob (claim 6) | `SortPath` / `SortUniquePath` -- the Region model builder's |
+| | `TTreeStructureSearcherOptions.BootstrapOptions` -- the boosting driver bootstraps one level up in this port, so the field would be a second unread copy |
+| | `TTreeStructureSearcherOptions.FixedBinarySplits` -- fed only by `fixed_binary_splits`, an option refused by name |
+| | the CPU `GreedyTensorSearchDepthwise` (`private/libs/algo/greedy_tensor_search.cpp:1467`) -- read and cited in `DEPTHWISE.md`, deliberately not ported; the thesis is GPU access and porting their CPU learner would produce a second CPU learner |
+
+### The one thing that IS wired into a shared file
+
+`points_subsets.TLeaf` carried `depth: Int` with the note *"when the model
+builder lands, this becomes the path"*. The model builder landed, so it is now
+`path: TLeafPath` with a `get_depth()`. The symmetric lane never constructed a
+`TLeaf` outside that file (audited by grep), so nothing else moved.

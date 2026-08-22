@@ -745,6 +745,34 @@ check-leafwise-scores = "mojo run -I . mojo_only/leafwise_scores_check.mojo"
 # OWN CB_ENSURE would fire, pinned at three rather than papered over.
 check-lossguide-policy = "mojo run -I . mojo_only/lossguide_policy_check.mojo"
 
+# The DEPTHWISE lane's gate: `EGrowPolicy::Depthwise`, seven claims.
+#
+#   1 the bin-feature lookup table (DEVIATION 351) agrees with the
+#     `resolve_split` walk it replaces, cell for cell;
+#   2 `TFlatTreeBuilder` on a hand-written ASYMMETRIC tree -- left subtree
+#     deeper than right, so `index + 1` and `index + left_subtree` are
+#     different node indices and a builder that confuses them still gets the
+#     leaf COUNT right; plus `VisitBins` round-tripping the paths and BOTH
+#     duplicate policies;
+#   3 a real depthwise tree: rows conserved, more than one non-empty leaf,
+#     and **two nodes carrying different (feature, bin)**. That last is the
+#     per-branch REACH PROOF for the leafwise score kernel -- an oblivious
+#     level gives every leaf the same split by construction, so a run that
+#     reached the wrong kernel fails here and nowhere else;
+#   4 the non-symmetric apply kernel routes every row to the bin growth
+#     partitioned it into, compared PER BIN (a swap conserves the total);
+#   5 `min_data_in_leaf` is live -- it is dead under SymmetricTree
+#     (`greedy_search_helper.cpp:685`) -- and its boundary is `<=`, probed
+#     at a leaf size that actually occurs;
+#   6 **THE CROSS-GPU CLAIM.** The same tree grown three times in one
+#     process at core counts {this device, 108, 1} must be BIT-IDENTICAL --
+#     nodes, split types and leaf-value bit patterns. The core count is the
+#     only machine-dependent input this algorithm has, and it is the input
+#     that was silently building different models on a 10-core M4 and a
+#     108-SM A100 until IDENTITY_PATHS row 7 was pinned;
+#   7 sabotage: one row's gradient changed must move the model.
+check-depthwise = "mojo run -I . mojo_only/depthwise_check.mojo"
+
 [feature.bench.tasks]
 # CatBoost's own Logloss leaf values at ten Newton iterations and at one,
 # with the leaf-order mapping proved twice inside the generator and written

@@ -15,6 +15,8 @@ they say which buffer is already reduced and which is not.
 
 from max.gpu.host import DeviceBuffer, HostBuffer
 
+from gbdt.data.leaf_path import TLeafPath
+
 
 struct TBestSplitProperties(Copyable, ImplicitlyCopyable, Movable):
     """`gpu_structures.h:64`. Their defaults, exactly.
@@ -82,7 +84,7 @@ struct EHistogramsType(Copyable, ImplicitlyCopyable, Movable):
         return self.value != other.value
 
 
-struct TLeaf(Copyable, ImplicitlyCopyable, Movable):
+struct TLeaf(Copyable, Movable):
     """`split_properties_helper.h`, their `TLeaf`, same five fields."""
 
     var size: Int
@@ -103,17 +105,33 @@ struct TLeaf(Copyable, ImplicitlyCopyable, Movable):
     var histograms_type: EHistogramsType
     var best_split: TBestSplitProperties
     var is_terminal: Bool
-    var depth: Int
-    """Their `Path.GetDepth()`. We carry the depth rather than the whole
-    `TLeafPath`, because nothing downstream of tree growth reads the path
-    yet. When the model builder lands, this becomes the path."""
+    var path: TLeafPath
+    """Their `Path`, the whole `TLeafPath`.
+
+    THIS WAS AN `Int depth` UNTIL 2026-08-22, with the note "when the model
+    builder lands, this becomes the path". The model builder landed
+    (`greedy_subsets_searcher/model_builder.mojo`, the depthwise lane), so
+    the note is now the change: `get_depth()` below is their
+    `Path.GetDepth()` and nothing carries a second copy of the depth.
+
+    An OBLIVIOUS tree does not need the path -- every leaf of a symmetric
+    level shares one split list, which is why the substitution went
+    unnoticed for three days. A DEPTHWISE tree does: two leaves at the same
+    depth were split on different features, and the model builder rebuilds
+    the node tree from these paths and from nothing else."""
 
     def __init__(out self):
         self.size = 0
         self.histograms_type = EHistogramsType.Zeroes
         self.best_split = TBestSplitProperties()
         self.is_terminal = False
-        self.depth = 0
+        self.path = TLeafPath()
+
+    def get_depth(self) -> Int:
+        """Their `Path.GetDepth()`, which `IsTerminalLeaf` compares against
+        `MaxDepth` (`greedy_search_helper.cpp:686`) and `FindMaxDepth` maxes
+        over (`:311-317`)."""
+        return self.path.get_depth()
 
     def update_best_split(mut self, best: TBestSplitProperties):
         """Their `UpdateBestSplit`."""
