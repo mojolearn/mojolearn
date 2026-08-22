@@ -815,9 +815,11 @@ findings, each measured:
    against the 90 GB/s streaming ceiling).
 2. **Sibling subtraction is alive and worth exactly 1.96x** at this shape
    (OFF: 240-252 ms/tree vs ON: 124-128), with BIT-IDENTICAL mse both
-   arms -- on the Int32 accumulate the subtraction is exact, so the
-   equality is the correctness proof. Their policy mirrored:
-   build-smaller-and-subtract, `split_properties_helper.cpp:1283-1355`.
+   arms -- a measured equality at this shape, NOT a theorem: the old
+   "Int32 makes the subtraction exact" argument is false (PORTING.md
+   136a; cells round through float32 before the subtraction). Their
+   policy mirrored: build-smaller-and-subtract,
+   `split_properties_helper.cpp:1283-1355`.
 3. **The density cliff**: depth differencing (30.7 / 67.9 / 123.4 ms/tree
    at depths 2/4/6) gives per-level cost 11.5 -> 18.6 -> 27.8 ms while
    built rows per level stay ~constant -- cache-line utilization collapses

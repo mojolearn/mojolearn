@@ -38,6 +38,14 @@ cp "$here/LICENSE" "$here/NOTICE" "$here/README.md" "$here/python/"
 # "takes 6 positional arguments but 8 were given".
 ./bindings/build.sh
 ./bindings/build_gbdt.sh
+# ADDED 2026-08-22, and the comment above was already the diagnosis: this
+# script said "EVERY EXTENSION IN THE WHEEL IS BUILT HERE" while building two
+# of three. `_mojolearn_estimators.so` therefore shipped whatever sat in the
+# working tree -- which was a ZERO-KERNEL artifact, so DBSCAN, PCA, tSVD and
+# OLS raised "Failed to create Metal function" from the installed wheel. The
+# same failure mode this file documents for `_mojolearn.so`, one extension
+# over, and the reason `build_estimators.sh` now carries its own gate.
+./bindings/build_estimators.sh
 
 # The FULL transitive closure, walked rather than sampled. See
 # packaging/macos/stage_dylibs.py: reading only the extension's direct
@@ -46,12 +54,13 @@ cp "$here/LICENSE" "$here/NOTICE" "$here/README.md" "$here/python/"
 # @rpath/libMSupportGlobals.dylib, referenced from .dylibs/libAsyncRT...".
 # It also verifies statically that nothing is left unresolved, which is the
 # only form of this check that means anything on the build machine.
-# BOTH EXTENSIONS IN ONE CALL, because there is one `.dylibs` and the script
-# wipes it before staging. Two calls would leave the first extension's closure
+# ALL THREE EXTENSIONS IN ONE CALL, because there is one `.dylibs` and the
+# script wipes it before staging. Separate calls would leave earlier closures
 # deleted -- invisibly, because on THIS machine the original rpath still
 # resolves into the pixi environment.
 pixi run -e pkg python "$here/packaging/macos/stage_dylibs.py" \
-    "$PKG/_mojolearn.so" "$PKG/_mojolearn_gbdt.so" "$ENV_LIB"
+    "$PKG/_mojolearn.so" "$PKG/_mojolearn_gbdt.so" \
+    "$PKG/_mojolearn_estimators.so" "$ENV_LIB"
 
 
 
@@ -63,7 +72,8 @@ pixi run -e pkg python "$here/packaging/macos/stage_dylibs.py" \
 # CHECKED FOR EVERY EXTENSION, not just the first: one wheel carries one tag,
 # and the tag is only honest if it is the floor of EVERYTHING inside.
 TAG_MINOS=$(grep -E '^DEFAULT_MACOS_TARGET' "$here/python/setup.py" | sed 's/[^0-9.]//g')
-for so in "$PKG/_mojolearn.so" "$PKG/_mojolearn_gbdt.so"; do
+for so in "$PKG/_mojolearn.so" "$PKG/_mojolearn_gbdt.so" \
+          "$PKG/_mojolearn_estimators.so"; do
     BIN_MINOS=$(otool -l "$so" | awk '/LC_BUILD_VERSION/{f=1} f&&/minos/{print $2; exit}')
     if [ "$BIN_MINOS" != "$TAG_MINOS" ]; then
         echo "ERROR: $(basename "$so") minos $BIN_MINOS but setup.py tags $TAG_MINOS" >&2
@@ -79,14 +89,16 @@ done
 # wheel: a binary carrying bf16, i8mm or SME instructions SIGILLs on the Macs
 # the macosx_11_0 tag invites in.
 pixi run -e pkg python "$here/packaging/isa_baseline.py" \
-    "$PKG/_mojolearn.so" "$PKG/_mojolearn_gbdt.so"
+    "$PKG/_mojolearn.so" "$PKG/_mojolearn_gbdt.so" \
+    "$PKG/_mojolearn_estimators.so"
 
 # NO GPU KERNELS, NO WHEEL. A build on a machine without a usable Apple GPU
 # emits the host half and silently no Metal shader code, exits 0, and produces
 # a wheel that imports and then dies on the first fit. That shipped once, as
 # TestPyPI 0.1.0a2. See packaging/macos/check_gpu_embedded.py.
 pixi run -e pkg python "$here/packaging/macos/check_gpu_embedded.py" \
-    "$PKG/_mojolearn.so" "$PKG/_mojolearn_gbdt.so"
+    "$PKG/_mojolearn.so" "$PKG/_mojolearn_gbdt.so" \
+    "$PKG/_mojolearn_estimators.so"
 
 cd "$here/python"
 rm -rf dist build ./*.egg-info

@@ -35,9 +35,11 @@ Same full-shape fixture, `use_subtraction` flipped:
     mse 0.5779691796875 BOTH ARMS, bit-identical
 
 The reach check the digest could never do: the switch demonstrably moves
-the biggest term, and on the Int32 accumulate the subtraction arithmetic
-is exact, so the mse equality is the correctness proof, not a
-coincidence. (CatBoost's policy, for the record:
+the biggest term, and the mse equality held at this shape. (It is a
+MEASURED equality, not implied: the "Int32 makes the subtraction exact"
+argument recorded here originally is false -- PORTING.md 136a, cells
+round through float32 before the subtraction.) (CatBoost's policy, for
+the record:
 `BuildNecessaryHistograms` computes the SMALLER sibling and subtracts,
 `split_properties_helper.cpp:1283-1355`.)
 

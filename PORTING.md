@@ -5157,7 +5157,7 @@ arm does not move in any measurement below.
 ### 136a. THE DEFENCE THAT SAID IT COULD NOT MATTER, AND WHY IT IS WRONG
 
 Two comments argued the choice was inert, both now deleted rather than
-annotated (`greedy_search_helper.mojo:2846-2851`, still to be applied by the
+annotated (`greedy_search_helper.mojo:2846-2851`, applied 2026-08-21 by the
 lane holding that file; `split_resolve.mojo:152-155`, applied):
 
 > The Int32 fixed-point accumulator makes the subtraction EXACT ... so WHICH

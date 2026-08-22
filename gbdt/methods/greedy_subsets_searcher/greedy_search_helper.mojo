@@ -2990,12 +2990,14 @@ def run_tree_layout[
         # per-level sizes load-bearing, and what replaces each use:
         #
         # * their smaller-child choice (`:1318`) picked which sibling to
-        #   COMPUTE, the other derived by subtraction. The Int32
-        #   fixed-point accumulator makes the subtraction EXACT (see
-        #   `mojo_only/fixed_point.mojo`), so WHICH sibling is computed
-        #   cannot change a bit of either histogram; the plan is now
-        #   static -- always the LEFT child, right = parent - left --
-        #   and the train-mse gates hold bit-for-bit through the swap.
+        #   COMPUTE, the other derived by subtraction. That choice moved
+        #   ON-DEVICE (`plan_level_kernel`, reading the `p_sz` the
+        #   partition update just wrote) rather than becoming static:
+        #   DEVIATION 136 measured that WHICH sibling is computed DOES
+        #   change histogram bits (the fixed-point cells round through
+        #   `Float32(Int(q))/fixed_scale` BEFORE the float32 subtraction),
+        #   and their tie lands on the RIGHT child -- see
+        #   `plan_level_kernel`'s docstring for the full correction.
         # * their `NonZeroLeaves`/`ZeroLeaves` split skipped empty
         #   leaves' builds and zeroed their slots. The compute slots are
         #   now zeroed UNCONDITIONALLY before the build (the builder

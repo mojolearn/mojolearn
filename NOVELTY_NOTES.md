@@ -29,14 +29,18 @@ paper.
    from the "GPU float folklore" list. We have not seen this stated
    anywhere for tree learners.
 
-3. **Exact sibling subtraction as an instrument, not just an
-   optimization.** With the Int32 fixed-point histogram, sibling
-   subtraction is EXACT integer arithmetic, so subtraction-on vs
-   subtraction-off must agree bit-for-bit -- turning a correctness
-   property into a one-run REACH PROOF for the biggest optimization in
-   the learner (measured: 1.96x, mse bit-identical,
-   SHAPE_SWEEP_2026-08-21). Using bit-equality contracts as
-   sabotage-grade instrumentation appears methodologically fresh.
+3. **Bit-equality contracts as an instrument, not just a gate.** The
+   subtraction-on vs subtraction-off mse equality was used as a one-run
+   REACH PROOF for the biggest optimization in the learner (measured:
+   1.96x, mse bit-identical, SHAPE_SWEEP_2026-08-21). The original
+   derivation -- Int32 fixed point makes the subtraction EXACT, so the
+   arms MUST agree -- is FALSE (DEVIATION 136 / PORTING.md 136a: cells
+   convert through `Float32(Int(q))/fixed_scale` BEFORE the float32
+   subtraction, and derived cells measurably differ by up to 3 ulp), so
+   the equality is an empirical outcome at the measured shapes, not a
+   theorem. Using bit-equality contracts as sabotage-grade
+   instrumentation still appears methodologically fresh, but the claim
+   must be stated as a per-shape measurement.
 
 4. **The four-axes floor-amortization law, measured.** On unified-memory
    consumer silicon, GPU-vs-CPU GBDT outcome is decided by one constant
