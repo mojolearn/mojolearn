@@ -185,18 +185,45 @@ git worktree add --detach "$WT" HEAD
 sed -i '' 's/^comptime GLOBAL_NUMERIC_MODE = NUMERIC_FAST$/comptime GLOBAL_NUMERIC_MODE = NUMERIC_IDENTICAL/' \
   "$WT/mojo_only/numerics.mojo"
 pixi run mojo run -I "$WT" "$WT/mojo_only/depthwise_check.mojo"
-pixi run mojo run -I "$WT" "$WT/mojo_only/depthwise_digest_probe.mojo"
+pixi run mojo run -I "$WT" "$WT/mojo_only/depthwise_trace_probe.mojo"
 git worktree remove "$WT"
 ```
 
-`check-depthwise-digest` is the LADDER: one digest line per stage, in the
-lossguide lane's `core/identity_trace.mojo` format, so
-`tools/identity_trace_diff.py` reads it — that reader aligns two traces on tag
-SEQUENCES and classifies each differing cell (DENORMAL-vs-ZERO / SIGN /
-NAN-payload / ULP<=n / LARGE), which is the diagnosis where a hash is only the
-location. It also compares two core counts **in one process**, with a
-run-it-twice control first, because run-to-run noise and machine dependence are
-indistinguishable without one.
+`check-depthwise-trace` is the STAGE LADDER, and **it is the lossguide lane's
+`core/identity_trace.mojo`, not a second instrument.** This lane briefly had
+its own (`mojo_only/stage_digest.mojo`, commit `e5cef46`) because both lanes
+built the same thing inside the same hour without knowing. It is deleted.
+Theirs is a strict superset — generic over `DType` where mine was four
+hand-written methods, `create_sub_buffer` for a short read where mine needed
+two lengths, plus raw dumps, enforced tag uniqueness, a format version, and a
+reader: `tools/identity_trace_diff.py` aligns two traces on tag SEQUENCES and
+classifies each differing cell (DENORMAL-vs-ZERO / SIGN / NAN-payload /
+ULP<=n / LARGE). **That classification is the diagnosis; a hash is only the
+location.** An all-denormal divergence is row 10 and a mode difference; a
+scattered 1-ULP divergence is a summation order; those send you to different
+files.
+
+What this lane added to that file, at the foot: `read_trace_lines` and
+`first_divergence`, so a MOJO check that produces two traces in one process
+can raise on the difference. `mojo_only/identity_trace_check.mojo` had
+already written that loop inline and can now drop its copy.
+
+The probe answers two questions locally and leaves both traces on disk for
+the cross-machine path:
+
+- **control** — the same configuration twice. Run-to-run noise and machine
+  dependence are indistinguishable without it.
+- **localization** — this device's core count against 108.
+
+Two things the ladder taught about itself, both the hard way. It **needs the
+control** (it was added after the fact). And it **must never hash a
+machine-sized scratch**: `sflags` and `gmap` are sized `n_rows` while a level
+writes only the splitting leaves' rows, so hashing the plane digests HISTORY
+and not the stage — it named a false first-divergence at `d3.flags` while
+claim 6 correctly said the models were bit-identical. Dropped; `row_index`,
+`stats` and the two partition planes are the complete live-region
+description. The lossguide lane had reached the same rule independently and
+it is in their file's docstring.
 
 Order on a new backend: `check-ieee-arith`, then `check-depthwise`, then the
 ladder. Running the ladder first tells you a stage disagrees without telling you
@@ -204,7 +231,7 @@ whether the arithmetic was ever going to agree.
 
 **Measured, M4, 2026-08-22:**
 
-| | check-depthwise | ladder stages | reproducible | identical across {device, 108, 1} SMs |
+| | check-depthwise | trace records | reproducible | identical across {device, 108, 1} SMs |
 |---|---|---|---|---|
 | FAST | 7/7 | 99 | yes | yes — a platform accident, Metal has no float threadgroup atomics |
 | IDENTICAL | 7/7, claim 6 **gated** | 94 | yes | **yes** |

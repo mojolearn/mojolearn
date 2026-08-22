@@ -63,130 +63,145 @@ from gbdt.methods.greedy_subsets_searcher.greedy_search_helper_depthwise import 
     fit_depthwise_tree,
 )
 from mojo_only.depthwise_check import Fixture, default_options
+from core.identity_trace import IdentityTrace, first_divergence
 from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from mojo_only.stage_digest import TStageDigest, first_difference
 
 
 def run_ladder(
-    mut fx: Fixture, scope: String, sm_count_override: Int, quiet: Bool
-) raises -> TStageDigest:
-    """One fit with the ladder on. Returns the digest so it can be compared.
+    mut fx: Fixture, path: String, sm_count_override: Int
+) raises -> Int:
+    """One fit with `core/identity_trace.mojo` writing to `path`.
 
-    The fixture is RESET first. Growth permutes `stats` and `row_index` in
-    place -- their boosting loop re-supplies both per tree -- and a probe
+    Returns the record count so the caller can assert the ladder was
+    actually walked.
+
+    THE FIXTURE IS RESET FIRST. Growth permutes `stats` and `row_index` in
+    place -- their boosting loop re-supplies both per tree -- so a probe
     that compares two fits without resetting is comparing the second fit
     against a permuted input. That mistake cost this lane an hour on
     2026-08-22 and produced three wrong hypotheses before it was found; see
     `Fixture.pristine_stats`.
+
+    `to_path` and not `IdentityTrace()`: this probe must not depend on
+    whether the operator happens to have `MOJOLEARN_IDENTITY_TRACE`
+    exported, and `to_path` truncates, so re-running does not read back the
+    previous run concatenated with this one.
     """
     fx.reset()
     var ws = List[TTreeWorkspace]()
     var dws = List[TDepthwiseWorkspace]()
-    var dg = List[TStageDigest]()
-    dg.append(TStageDigest(fx.ctx.copy(), True, scope, quiet=quiet))
+    var tr = IdentityTrace.to_path(path)
+    tr.header(
+        String("depthwise, 4096 rows, 8 binary + 4 half-byte + 4 one-byte,")
+        + " hashed bins, depth 4, sm_count_override="
+        + String(sm_count_override)
+    )
     var model = fit_depthwise_tree(
         fx.ctx, fx.n_rows, fx.folds, default_options(4),
         fx.cindex, fx.stats, fx.row_index,
         fx.total_weight, fx.total_gradient,
-        ws, dws, dg,
+        ws, dws, tr,
         sm_count_override=sm_count_override,
     )
     _ = model^
     _ = ws^
     _ = dws^
-    return dg.pop()
+    return tr.seq
 
 
 def main() raises:
     var mode = String(
         "IDENTICAL"
     ) if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else String("FAST")
-    print("# depthwise stage ladder, numeric mode", mode)
-    print(
-        "# 4096 rows, 8 binary + 4 half-byte + 4 one-byte, hashed bins,"
-        " depth 4"
-    )
-    print(
-        "# tag format: #<scope>/<stage> <fnv1a64 of the raw bits>"
-        " n=<elements hashed>"
-    )
+
+    # Plain `/tmp` paths, the same convention `identity_trace_check` uses,
+    # so this runs on a bare machine with no directory to create first.
+    # `to_path` truncates, so a re-run does not read back its own last run.
+    var p_here = String("/tmp/mojolearn_dw_here.trace")
+    var p_again = String("/tmp/mojolearn_dw_again.trace")
+    var p_a100 = String("/tmp/mojolearn_dw_a100.trace")
+
+    print("depthwise identity trace, numeric mode", mode)
 
     var ctx = DeviceContext()
     var fx = Fixture(ctx.copy())
 
-    # The ladder for THIS machine, printed. Redirect and diff against
-    # another column's.
-    var here = run_ladder(fx, String("dw"), -1, False)
+    var n_here = run_ladder(fx, p_here, -1)
 
     # THE LADDER MUST HAVE BEEN WALKED. A run that emits nothing and a run
     # whose stages all agree produce the same empty diff, and only this
-    # number tells them apart. It is the `reached-but-inert` rule applied to
-    # a diagnostic: a localizer that localizes nothing is worse than none,
-    # because it reads as a clean bill of health.
-    if here.count < 10:
+    # number tells them apart. `reached-but-inert` applied to a diagnostic:
+    # a localizer that localizes nothing reads as a clean bill of health.
+    if n_here < 10:
         raise Error(
-            String("the ladder emitted only ")
-            + String(here.count)
-            + " tags; a depth-4 fit walks dozens. The digest is disabled or"
-            " the stages are not calling it, and an empty ladder reads as"
+            String("the trace emitted only ")
+            + String(n_here)
+            + " records; a depth-4 fit walks dozens. The trace is disabled"
+            " or the stages are not calling it, and an empty trace reads as"
             " agreement."
         )
 
     # ================= THE CONTROL, AND IT RUNS FIRST =================
-    # THE SAME CONFIGURATION TWICE. A ladder can only be used to compare two
+    # THE SAME CONFIGURATION TWICE. A trace can only compare two
     # configurations if it agrees with ITSELF, and on a nondeterministic
     # backend it does not: under FAST, a family whose flush is a float
     # `atomicAdd` gives a different histogram every run on the same machine.
-    #
-    # Without this control, run-to-run noise is indistinguishable from
-    # machine dependence, and the probe would confidently name a stage that
-    # simply is not reproducible. This lane has already been burned once by
-    # a differential in which the thing under test was not the only thing
-    # that differed (see `Fixture.pristine_stats`); this is that lesson
-    # applied to the diagnostic itself.
-    # ==================================================================
-    var again = run_ladder(fx, String("dw"), -1, True)
-    var self_diff = first_difference(here, again)
+    # Without this, run-to-run noise is indistinguishable from machine
+    # dependence and the probe would confidently name a stage that simply is
+    # not reproducible.
+    _ = run_ladder(fx, p_again, -1)
+    var self_diff = first_divergence(p_here, p_again)
 
     print("")
-    print("# ---- control: same configuration, twice ----")
+    print("-- control: same configuration, twice --")
     if self_diff.byte_length() == 0:
         print(
-            "# REPRODUCIBLE:", here.count,
-            "stages agree with themselves [" + mode + "]"
+            "   REPRODUCIBLE:", n_here,
+            "records agree with themselves [" + mode + "]",
         )
     else:
-        print("# NOT REPRODUCIBLE run to run. First unstable stage:")
-        print("#   " + self_diff)
+        print("   NOT REPRODUCIBLE run to run. First unstable stage:")
+        print("   " + self_diff)
         print(
-            "# every comparison below is unusable until this is clean."
+            "   every comparison below is unusable until this is clean."
             " Under FAST that is expected on a backend with float"
             " threadgroup atomics; build IDENTICAL and re-run."
         )
 
-    # The same tree as a 108-SM machine would schedule it, quietly, then the
-    # first tag on which the two disagree.
-    var a100 = run_ladder(fx, String("dw"), 108, True)
+    # The same tree as a 108-SM machine would schedule it. The core count is
+    # the only machine-dependent input this algorithm has, so this is the
+    # cross-GPU question asked locally.
+    _ = run_ladder(fx, p_a100, 108)
 
     print("")
-    print("# ---- in-process localization: this device vs 108 SMs ----")
+    print("-- localization: this device vs 108 SMs --")
     if self_diff.byte_length() != 0:
         print(
-            "# SKIPPED: the control above says this build is not"
-            " reproducible run to run, so a difference here would not mean"
-            " machine dependence."
-        )
-        return
-    var diff = first_difference(here, a100)
-    if diff.byte_length() == 0:
-        print(
-            "# no divergence:", here.count,
-            "stages agree bit for bit at both core counts [" + mode + "]"
+            "   SKIPPED: the control says this build is not reproducible"
+            " run to run, so a difference here would not mean machine"
+            " dependence."
         )
     else:
-        print("# FIRST DIVERGING STAGE:")
-        print("#   " + diff)
-        print(
-            "# everything after that tag is a consequence. Read the tag"
-            " against the table in this file's docstring."
-        )
+        var diff = first_divergence(p_here, p_a100)
+        if diff.byte_length() == 0:
+            print(
+                "   no divergence:", n_here,
+                "records agree bit for bit at both core counts ["
+                + mode + "]",
+            )
+        else:
+            print("   FIRST DIVERGING STAGE:")
+            print("   " + diff)
+            print(
+                "   everything after that tag is a consequence. Read it"
+                " against the table in this file's docstring."
+            )
+
+    print("")
+    print("-- artifacts for tools/identity_trace_diff.py --")
+    print("   " + p_here)
+    print("   " + p_a100)
+    print(
+        "   tools/identity_trace_diff.py " + p_here + " " + p_a100
+        + "   # aligns on tag sequences and classifies each differing cell"
+    )

@@ -104,6 +104,7 @@ from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
 )
 from gbdt.methods.greedy_subsets_searcher.kernel.compute_scores import (
     LEAFWISE_SCORE_BLOCK_SIZE,
+    compute_optimal_split_kernel,
     compute_optimal_splits_region_kernel,
 )
 from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
@@ -122,6 +123,9 @@ from gbdt.methods.greedy_subsets_searcher.kernel.split_points import (
 )
 from gbdt.methods.greedy_subsets_searcher.model_builder import (
     build_non_symmetric_tree,
+)
+from gbdt.methods.greedy_subsets_searcher.greedy_search_helper_lossguide import (
+    select_leaves_to_split as lossguide_select_leaves_to_split,
 )
 from gbdt.methods.greedy_subsets_searcher.points_subsets import (
     EHistogramsType,
@@ -145,7 +149,7 @@ from gbdt.methods.helpers import (
     best_split_properties_less,
 )
 from gbdt.models.non_symmetric_tree import TNonSymmetricTree
-from mojo_only.stage_digest import TStageDigest
+from core.identity_trace import IdentityTrace
 from gbdt.models.oblivious_model import (
     BIN_SPLIT_TAKE_BIN,
     BIN_SPLIT_TAKE_GREATER,
@@ -153,6 +157,7 @@ from gbdt.models.oblivious_model import (
 )
 from gbdt.options.catboost_options import (
     GROW_DEPTHWISE,
+    GROW_LOSSGUIDE,
     GROW_SYMMETRIC,
     SCORE_FUNCTION_COSINE,
     SCORE_FUNCTION_L2,
@@ -473,11 +478,35 @@ def split_leaf(
     return child^
 
 
-def _as_u32(values: List[Int]) -> List[UInt32]:
-    """A host id list in the shape the digest hashes. Debug only."""
-    var out = List[UInt32]()
+def _as_i32(values: List[Int]) -> List[Int32]:
+    """A host id list in the shape `IdentityTrace.record_list_i32` takes.
+
+    Leaf ids and plan ids are `UInt32` on the device and `Int` on the host,
+    and the trace has `record_list_i32` but no `record_list_u32`. Narrowing
+    to `Int32` rather than adding a method to another lane's struct: the ids
+    are small non-negative counts, the trace hashes BITS either way, and the
+    dtype the record carries then honestly says what was hashed. Debug path
+    only.
+    """
+    var out = List[Int32]()
     for i in range(len(values)):
-        out.append(UInt32(values[i]))
+        out.append(Int32(values[i]))
+    return out^
+
+
+def _u32_as_i32(values: List[UInt32]) -> List[Int32]:
+    """Same, for the plan's `UInt32` id lists."""
+    var out = List[Int32]()
+    for i in range(len(values)):
+        out.append(Int32(Int(values[i])))
+    return out^
+
+
+def _one_i32(value: Int) -> List[Int32]:
+    """A scalar as a one-element record -- their `record_list_i32` is the
+    integer counterpart of `record_scalar_f32`."""
+    var out = List[Int32]()
+    out.append(Int32(value))
     return out^
 
 
@@ -517,7 +546,7 @@ def _leaf_records(
     return out^
 
 
-def fit_depthwise_tree[
+def fit_non_symmetric_tree[
     hist2_smem_mode: Int = 0
 ](
     ctx: DeviceContext,
@@ -531,25 +560,29 @@ def fit_depthwise_tree[
     gradient_magnitude: Float32,
     mut ws: List[TTreeWorkspace],
     mut dws: List[TDepthwiseWorkspace],
-    # ---- THE STAGE DIGEST LADDER, off unless the caller supplies one ----
-    # `mojo_only/stage_digest.mojo`. When two GPU columns disagree, claim 6
-    # of `depthwise_check` says THAT and not WHERE; this ladder names the
-    # stage. One line per stage; `diff` two machines' logs, or compare two
-    # in-process runs with `stage_digest.first_difference`, and the first
-    # differing tag is the answer.
+    # ---- THE IDENTITY TRACE, off unless the caller enables one ----
+    # `core/identity_trace.mojo`, the LOSSGUIDE lane's facility, used here
+    # rather than re-implemented. When two GPU columns disagree, claim 6 of
+    # `depthwise_check` says THAT and not WHERE; the trace names the stage,
+    # and `tools/identity_trace_diff.py` then classifies each differing cell
+    # (DENORMAL-vs-ZERO / SIGN / NAN-payload / ULP<=n / LARGE), which is the
+    # diagnosis where a hash is only the location.
     #
-    # A RUNTIME OBJECT AND NOT A `comptime` FLAG, deliberately.
-    # `IDENTITY_PATHS.md`'s first finding was a toggle that could not be
-    # selected because five files each declared their own comptime, so every
-    # statement anyone had made about that mode was about a configuration
-    # nobody had built. A debugging switch that needs a rebuild is a
-    # debugging switch nobody uses.
+    # THIS LANE BRIEFLY HAD ITS OWN COPY (`mojo_only/stage_digest.mojo`,
+    # commit e5cef46) because both lanes built the same instrument inside
+    # the same hour without knowing. It is deleted. Two implementations of
+    # one instrument is the drift surface every rule in this tree is about,
+    # and theirs is a strict superset: generic over `DType` where mine was
+    # four hand-written methods, `create_sub_buffer` for a short read where
+    # mine needed two lengths, plus raw dumps, tag-uniqueness enforcement, a
+    # format version and a gated reader.
     #
-    # EMPTY LIST = OFF, which costs one Bool test per stage. The list shape
-    # is the same pool idiom `ws` and `dws` use, and it is here rather than
-    # a defaulted parameter because the CALLER has to read `.log` back
-    # afterwards -- that is what makes the ladder a localizer.
-    mut digest: List[TStageDigest],
+    # `IdentityTrace()` reads the environment once and is DISABLED unless
+    # `MOJOLEARN_IDENTITY_TRACE` is set; `IdentityTrace.disabled()` is the
+    # explicit off switch for callers that must not depend on the operator's
+    # shell. Off, this costs one Bool test per stage. On, it DRAINS at every
+    # record, so a traced run is not a measurement.
+    mut trace: IdentityTrace,
     one_hot: List[Bool] = List[Bool](),
     approx_dim: Int = 1,
     multiclass_optimization: Bool = False,
@@ -606,11 +639,13 @@ def fit_depthwise_tree[
     row 7).
     ===============================================
     """
-    if options.policy != GROW_DEPTHWISE:
+    if options.policy != GROW_DEPTHWISE and options.policy != GROW_LOSSGUIDE:
         raise Error(
-            "fit_depthwise_tree is EGrowPolicy::Depthwise only; call"
-            " run_tree_layout for SymmetricTree"
+            "fit_non_symmetric_tree is EGrowPolicy::Depthwise or Lossguide;"
+            " call run_tree_layout for SymmetricTree, and Region is"
+            " unported"
         )
+    var lossguide = options.policy == GROW_LOSSGUIDE
     options.check()
 
     var stat_count = 1 + approx_dim
@@ -794,12 +829,8 @@ def fit_depthwise_tree[
     var parent_of = List[Int]()
     parent_of.append(0)
 
-    if len(digest) == 0:
-        digest.append(TStageDigest(ctx.copy(), False, String("dw")))
-    ref dg = digest[0]
-    var emit_digests = dg.enabled
+    var emit_digests = trace.enabled
     var hist_live_stride = stat_count * hist_cells_per_leaf
-    var hist_capacity = max_leaves * hist_live_stride
 
     var mgr = TCudaManager(ctx.copy(), sync_budget=-1)
 
@@ -874,11 +905,19 @@ def fit_depthwise_tree[
         var non_zero = non_zero_leaves(records, plan.compute_ids)
 
         var d_tag = String("d") + String(iteration - 1) + "."
-        dg.note(d_tag + "leaves", len(leaves))
-        dg.emit_host_u32(d_tag + "plan.compute", plan.compute_ids)
-        dg.emit_host_u32(d_tag + "plan.subfrom", plan.subtract_from)
-        dg.emit_host_u32(d_tag + "plan.subwhat", plan.subtract_what)
-        dg.emit_host_u32(d_tag + "plan.nonzero", non_zero)
+        trace.record_list_i32(d_tag + "leaves", _one_i32(len(leaves)))
+        trace.record_list_i32(
+            d_tag + "plan.compute", _u32_as_i32(plan.compute_ids)
+        )
+        trace.record_list_i32(
+            d_tag + "plan.subfrom", _u32_as_i32(plan.subtract_from)
+        )
+        trace.record_list_i32(
+            d_tag + "plan.subwhat", _u32_as_i32(plan.subtract_what)
+        )
+        trace.record_list_i32(
+            d_tag + "plan.nonzero", _u32_as_i32(non_zero)
+        )
 
         if len(plan.compute_ids) > 0:
             # their `ZeroLeavesHistograms(zeroLeaves, subsets)`
@@ -938,8 +977,8 @@ def fit_depthwise_tree[
                 block_dim=(256, 1, 1),
             )
             mgr.stream_kernel()
-            dg.emit_f32(
-                d_tag + "hist.scanned", hist, hist_capacity,
+            trace.record_device(
+                ctx, d_tag + "hist.scanned", hist,
                 len(leaves) * hist_live_stride,
             )
 
@@ -964,8 +1003,8 @@ def fit_depthwise_tree[
                 block_dim=(256, 1, 1),
             )
             mgr.stream_kernel()
-            dg.emit_f32(
-                d_tag + "hist.subtracted", hist, hist_capacity,
+            trace.record_device(
+                ctx, d_tag + "hist.subtracted", hist,
                 len(leaves) * hist_live_stride,
             )
 
@@ -1010,8 +1049,8 @@ def fit_depthwise_tree[
                 sm_count=sm_count,
             )
             mgr.stream_kernel()
-            dg.emit_f32(
-                d_tag + "partstats", part_stats, max_leaves * stat_count,
+            trace.record_device(
+                ctx, d_tag + "partstats", part_stats,
                 len(leaves) * stat_count,
             )
 
@@ -1025,7 +1064,92 @@ def fit_depthwise_tree[
                 h_visit.unsafe_ptr().unsafe_store(i, UInt32(visit[i]))
             ctx.enqueue_copy(dst_buf=d_visit, src_ptr=h_visit.unsafe_ptr())
 
-            if (
+            # ==================== POLICY BRANCH 2 OF 4 ====================
+            # `greedy_search_helper.cpp:465-533`. The three policies take
+            # three different kernels off ONE `numScoreBlocks`:
+            #
+            #   SymmetricTree   TComputeOptimalSplitsKernel        (:470)
+            #   Depthwise       TComputeOptimalSplitsLeafwiseKernel(:490)
+            #   Lossguide       TComputeOptimalSplitLeafwiseKernel (:513)
+            #
+            # and the last of those is guarded by
+            # `CB_ENSURE(leavesToVisit.size() <= 2)` (`:511`), which is not
+            # an assumption but a CONSEQUENCE of the Lossguide selection:
+            # one split makes exactly two leaves without a `BestSplit`, and
+            # `SelectLeavesToVisit` returns exactly the leaves that lack
+            # one. Ported as a raise, because the state that breaks it --
+            # a leaf left undefined by a poison record -- is reachable and
+            # is recorded in `mojo_only/lossguide_policy_check.mojo` P6.
+            #
+            # THE RECORD LAYOUT IS THE SAME on both arms: block (x, y)
+            # writes `x + y * gridDim.x`, so the host reduce below is
+            # policy-independent and is NOT branched.
+            if lossguide and len(visit) > 2:
+                raise Error(
+                    String("Lossguide scored ")
+                    + String(len(visit))
+                    + " leaves; their CB_ENSURE allows at most 2"
+                    + " (greedy_search_helper.cpp:511). A leaf left"
+                    + " undefined by a poison record is the state that"
+                    + " does this."
+                )
+            if lossguide:
+                # their two scalars, and `numBlocks.y = partId ==
+                # maybeSecondPartId ? 1 : 2` (`:570`) -- so a single-leaf
+                # iteration passes the SAME id twice and launches one row.
+                # Passing two equal ids with a two-row grid would score one
+                # leaf twice and hand the reduce a duplicate.
+                var first = Int32(visit[0])
+                var second = Int32(visit[1]) if len(visit) == 2 else first
+                var rows = 2 if len(visit) == 2 else 1
+                if (
+                    options.score_function == SCORE_FUNCTION_L2
+                    or options.score_function == SCORE_FUNCTION_NEWTON_L2
+                ):
+                    ctx.enqueue_function[
+                        compute_optimal_split_kernel[SCORE_FUNCTION_L2]
+                    ](
+                        skip.unsafe_ptr(),
+                        Int32(hist_cells_per_leaf),
+                        bff.unsafe_ptr(),
+                        ffw.unsafe_ptr(),
+                        hist.unsafe_ptr(),
+                        part_stats.unsafe_ptr(),
+                        Int32(stat_count),
+                        first,
+                        second,
+                        Int32(1) if multiclass_optimization else Int32(0),
+                        options.l2_reg,
+                        Float32(0.0),
+                        level_seed,
+                        region_score.unsafe_ptr(),
+                        region_bin.unsafe_ptr(),
+                        grid_dim=(argmax_blocks, rows, 1),
+                        block_dim=(LEAFWISE_SCORE_BLOCK_SIZE, 1, 1),
+                    )
+                else:
+                    ctx.enqueue_function[
+                        compute_optimal_split_kernel[SCORE_FUNCTION_COSINE]
+                    ](
+                        skip.unsafe_ptr(),
+                        Int32(hist_cells_per_leaf),
+                        bff.unsafe_ptr(),
+                        ffw.unsafe_ptr(),
+                        hist.unsafe_ptr(),
+                        part_stats.unsafe_ptr(),
+                        Int32(stat_count),
+                        first,
+                        second,
+                        Int32(1) if multiclass_optimization else Int32(0),
+                        options.l2_reg,
+                        score_std_dev,
+                        level_seed,
+                        region_score.unsafe_ptr(),
+                        region_bin.unsafe_ptr(),
+                        grid_dim=(argmax_blocks, rows, 1),
+                        block_dim=(LEAFWISE_SCORE_BLOCK_SIZE, 1, 1),
+                    )
+            elif (
                 options.score_function == SCORE_FUNCTION_L2
                 or options.score_function == SCORE_FUNCTION_NEWTON_L2
             ):
@@ -1086,17 +1210,15 @@ def fit_depthwise_tree[
                 dst_ptr=h_region_bin.unsafe_ptr(), src_buf=region_bin
             )
             mgr.wait_complete()
-            dg.emit_f32(
-                d_tag + "scores.gain", region_score,
-                argmax_blocks * max_leaves, argmax_blocks * len(visit),
+            trace.record_device(
+                ctx, d_tag + "scores.gain", region_score,
+                argmax_blocks * len(visit),
             )
-            dg.emit_u32(
-                d_tag + "scores.bin", region_bin,
-                argmax_blocks * max_leaves, argmax_blocks * len(visit),
+            trace.record_device(
+                ctx, d_tag + "scores.bin", region_bin,
+                argmax_blocks * len(visit),
             )
-            dg.emit_host_u32(
-                d_tag + "visit", _as_u32(visit)
-            )
+            trace.record_list_i32(d_tag + "visit", _as_i32(visit))
 
             # their cross-block reduce, `:520-531`, ONE WINNER PER SCORE
             # BLOCK where the symmetric arm reduces to one for the level:
@@ -1203,15 +1325,26 @@ def fit_depthwise_tree[
                     wf.append(bs.feature_id)
                     wb.append(bs.bin_id)
                     wg.append(bs.gain)
-                dg.emit_host_i32(d_tag + "best.feature", wf)
-                dg.emit_host_i32(d_tag + "best.bin", wb)
-                dg.emit_host_f32(d_tag + "best.gain", wg)
+                trace.record_list_i32(d_tag + "best.feature", wf)
+                trace.record_list_i32(d_tag + "best.bin", wb)
+                trace.record_list_f32(d_tag + "best.gain", wg)
 
         # ===================== SplitLeaves ==========================
         # `greedy_search_helper.cpp:575`. `HaveFixedSplits` is absent: the
         # option that feeds it is refused by name (see
         # `structure_searcher_options.mojo`).
-        var to_split = select_leaves_to_split(leaves)
+        # ==================== POLICY BRANCH 3 OF 4 ====================
+        # `SelectLeavesToSplit` (`greedy_search_helper.cpp:317-361`).
+        # Depthwise and SymmetricTree share one arm -- every leaf whose best
+        # split IMPROVES (`Score < 0`, `:355-359`). Lossguide takes the
+        # single best leaf and HAS NO SIGN TEST AT ALL (`:319-324`), so it
+        # keeps splitting after every remaining split makes the objective
+        # worse and is bounded only by MaxLeaves and IsTerminalLeaf.
+        var to_split: List[Int]
+        if lossguide:
+            to_split = lossguide_select_leaves_to_split(leaves)
+        else:
+            to_split = select_leaves_to_split(leaves)
 
         if len(to_split) > 0:
             # --- MakeSplit's multi-leaf arm, `split_properties_helper
@@ -1387,12 +1520,16 @@ def fit_depthwise_tree[
             for i in range(len(leaves)):
                 leaves[i].size = Int(h_sz.unsafe_ptr().unsafe_load(i))
 
-            dg.note(d_tag + "split.count", n_split)
-            dg.emit_u32(
-                d_tag + "split.bins", sp_bins, max_leaves, n_split
+            trace.record_list_i32(
+                d_tag + "split.count", _one_i32(n_split)
             )
-            dg.emit_u32(d_tag + "split.left", d_left, max_leaves, n_split)
-            dg.emit_u32(d_tag + "split.right", d_right, max_leaves, n_split)
+            trace.record_device(
+                ctx, d_tag + "split.bins", sp_bins, n_split
+            )
+            trace.record_device(ctx, d_tag + "split.left", d_left, n_split)
+            trace.record_device(
+                ctx, d_tag + "split.right", d_right, n_split
+            )
             # ============ WHY `sflags` AND `gmap` ARE NOT ON THE LADDER ==========
             # They were, for one run, and they produced a FALSE POSITIVE that
             # is worth recording because the tool is a diagnostic and a
@@ -1414,16 +1551,15 @@ def fit_depthwise_tree[
             # complete, live-region-only description of what the split chain
             # did, so nothing is lost by dropping the two scratch planes --
             # and the ladder stops lying.
-            dg.emit_u32(d_tag + "rowindex", row_index, n_rows, n_rows)
-            dg.emit_f32(
-                d_tag + "stats", stats, stat_count * n_rows,
-                stat_count * n_rows,
+            trace.record_device(ctx, d_tag + "rowindex", row_index, n_rows)
+            trace.record_device(
+                ctx, d_tag + "stats", stats, stat_count * n_rows
             )
-            dg.emit_u32(
-                d_tag + "parts.off", p_off, max_leaves, len(leaves)
+            trace.record_device(
+                ctx, d_tag + "parts.off", p_off, len(leaves)
             )
-            dg.emit_u32(
-                d_tag + "parts.size", p_sz, max_leaves, len(leaves)
+            trace.record_device(
+                ctx, d_tag + "parts.size", p_sz, len(leaves)
             )
 
             # `MarkTerminal(leftIds, ...)` then `MarkTerminal(rightIds, ...)`
@@ -1462,8 +1598,8 @@ def fit_depthwise_tree[
             )
             mgr.wait_complete()
 
-            dg.emit_f32(
-                "final.partstats", part_stats, max_leaves * stat_count,
+            trace.record_device(
+                ctx, "final.partstats", part_stats,
                 len(leaves) * stat_count,
             )
 
@@ -1512,8 +1648,8 @@ def fit_depthwise_tree[
         var flat_w = List[Float32]()
         for i in range(len(result_weights)):
             flat_w.append(Float32(result_weights[i]))
-        dg.emit_host_f32("final.leafvalues", flat_v)
-        dg.emit_host_f32("final.leafweights", flat_w)
+        trace.record_list_f32("final.leafvalues", flat_v)
+        trace.record_list_f32("final.leafweights", flat_w)
 
     # `return BuildTreeLikeModel<TModel>(leaves, leavesWeights, leavesValues)`
     var model = build_non_symmetric_tree(
@@ -1527,10 +1663,80 @@ def fit_depthwise_tree[
             nodes.append(Int32(Int(n.bin)))
             nodes.append(Int32(Int(n.left_subtree)))
             nodes.append(Int32(Int(n.right_subtree)))
-        dg.emit_host_i32("model.nodes", nodes)
-        dg.emit_host_i32(
+        trace.record_list_i32("model.nodes", nodes)
+        trace.record_list_i32(
             "model.splittypes", model.model_structure.split_types
         )
-        dg.emit_host_f32("model.values", model.leaf_values)
-        dg.note("model.leaves", model.bin_count())
+        trace.record_list_f32("model.values", model.leaf_values)
+        trace.record_list_i32(
+            "model.leaves", _one_i32(model.bin_count())
+        )
     return model^
+
+
+def fit_depthwise_tree[
+    hist2_smem_mode: Int = 0
+](
+    ctx: DeviceContext,
+    n_rows: Int,
+    fold_counts: List[Int],
+    options: TTreeStructureSearcherOptions,
+    mut cindex: DeviceBuffer[DType.uint32],
+    mut stats: DeviceBuffer[DType.float32],
+    mut row_index: DeviceBuffer[DType.uint32],
+    weight_magnitude: Float32,
+    gradient_magnitude: Float32,
+    mut ws: List[TTreeWorkspace],
+    mut dws: List[TDepthwiseWorkspace],
+    mut trace: IdentityTrace,
+    one_hot: List[Bool] = List[Bool](),
+    approx_dim: Int = 1,
+    multiclass_optimization: Bool = False,
+    random_seed: UInt64 = UInt64(0),
+    sm_count_override: Int = -1,
+) raises -> TNonSymmetricTree:
+    """The Depthwise name, kept so nothing that already calls it moves.
+
+    `fit_non_symmetric_tree` is the same function; this wrapper exists
+    because `mojo_only/depthwise_check.mojo` and the digest probe were
+    written against this name and a rename that moves a gate is a rename
+    that costs a review.
+
+    **The rename was not cosmetic and the merge was not either.** Two
+    drivers, one per policy, is OUR structure. CatBoost has ONE
+    `TGreedySearchHelper` with `if (Options.Policy == ...)` at four sites
+    (`greedy_search_helper.cpp:319`, `:465`, `:355`, `:668`), and
+    `PORTING_RULES.md` 0b says their design wins over ours. So the two
+    lanes' drivers became one function with four branches, which is both
+    less code and more faithful -- and it removed the surface on which the
+    Depthwise arm and the Lossguide arm could drift apart in everything
+    they share, which is nearly all of it.
+
+    It also refuses a policy this function does not implement, rather than
+    growing a tree under the wrong one: `options.policy` is checked at the
+    top of `fit_non_symmetric_tree`.
+    """
+    if options.policy != GROW_DEPTHWISE:
+        raise Error(
+            "fit_depthwise_tree is the Depthwise entry point; pass"
+            " grow_policy=Depthwise or call fit_non_symmetric_tree"
+        )
+    return fit_non_symmetric_tree[hist2_smem_mode](
+        ctx,
+        n_rows,
+        fold_counts,
+        options,
+        cindex,
+        stats,
+        row_index,
+        weight_magnitude,
+        gradient_magnitude,
+        ws,
+        dws,
+        trace,
+        one_hot,
+        approx_dim,
+        multiclass_optimization,
+        random_seed,
+        sm_count_override,
+    )

@@ -47,7 +47,7 @@ is the run that says so.
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
-from gbdt.data.leaf_path import TLeafPath
+from gbdt.data.leaf_path import TLeafPath, paths_equal
 from gbdt.gpu_data.compressed_index_builder import build_layout
 from gbdt.gpu_data.kernel.binarize import (
     WRITE_BLOCK_SIZE,
@@ -74,7 +74,7 @@ from gbdt.methods.greedy_subsets_searcher.structure_searcher_options import (
     TTreeStructureSearcherOptions,
 )
 from gbdt.methods.helpers import SPLIT_VALUE_ONE, SPLIT_VALUE_ZERO
-from mojo_only.stage_digest import TStageDigest
+from core.identity_trace import IdentityTrace
 from gbdt.models.kernel.add_bin_values import (
     compute_non_symmetric_decision_tree_bins_kernel,
 )
@@ -312,12 +312,15 @@ def fit(
     fx.reset()
     var ws = List[TTreeWorkspace]()
     var dws = List[TDepthwiseWorkspace]()
-    var dg = List[TStageDigest]()
+    # `disabled()` and not `IdentityTrace()`: a GATE whose behavior depends
+    # on whether the operator happens to have MOJOLEARN_IDENTITY_TRACE
+    # exported is a gate that passes or fails for reasons outside itself.
+    var tr = IdentityTrace.disabled()
     var model = fit_depthwise_tree(
         fx.ctx, fx.n_rows, fx.folds, options,
         fx.cindex, fx.stats, fx.row_index,
         fx.total_weight, fx.total_gradient,
-        ws, dws, dg,
+        ws, dws, tr,
         sm_count_override=sm_count_override,
     )
     # KEEP-ALIVES, and the invariant they pin. `ws` / `dws` hold every
@@ -329,7 +332,7 @@ def fit(
     # crash. Pinned locally so the check cannot be the thing that breaks.
     _ = ws^
     _ = dws^
-    _ = dg^
+    _ = tr^
     return model^
 
 
@@ -507,7 +510,7 @@ def claim_2_model_builder() raises:
     for i in range(4):
         if visited[i].bin != i:
             raise Error("visit_bins numbered a leaf out of order")
-        if not _paths_same(visited[i].path, paths[i]):
+        if not paths_equal(visited[i].path, paths[i]):
             raise Error(
                 String("visit_bins path ") + String(i)
                 + " differs from the path it was built from"
@@ -579,21 +582,6 @@ def claim_2_model_builder() raises:
         raise Error("Combine touched a leaf it was not given")
 
     print("  claim 2 OK: 3 nodes, asymmetric subtree sizes, both policies")
-
-
-def _paths_same(a: TLeafPath, b: TLeafPath) raises -> Bool:
-    if a.get_depth() != b.get_depth():
-        return False
-    for i in range(a.get_depth()):
-        if a.splits[i].feature_id != b.splits[i].feature_id:
-            return False
-        if a.splits[i].bin_idx != b.splits[i].bin_idx:
-            return False
-        if a.splits[i].split_type != b.splits[i].split_type:
-            return False
-        if a.directions[i] != b.directions[i]:
-            return False
-    return True
 
 
 def apply_bins(
