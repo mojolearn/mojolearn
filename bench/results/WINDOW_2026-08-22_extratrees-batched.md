@@ -134,3 +134,41 @@ ranges already global per 211). Clocked leaf phase 735 -> 130 ms at 100
 trees, bit-identity held by every device gate. Named next levers from the
 table: stage+sampler and reduce at small n (per-batch fixed phases), the
 two row passes everywhere (formulation floor per 212/213).
+
+## Addendum 4: HIGGS, second dataset on the board
+
+UCI HIGGS via the gbm-bench cache (`~/datasets/gbm-bench/higgs/`), converted
+to the harness format as `higgs2m`: a 2,097,152-row prefix, because **the
+full 11M rows are REFUSED by the classification device arm** -- DEVIATION
+175's exact Int64 Gini pair is published only up to `SCORE_MAX_ROWS_EXACT =
+2^21` rows, and 2,097,152 is exactly that bound. This is the first dataset
+where the exactness cap binds a real request; widening the published key
+(the check's own note says the Int64-pair bound is TIGHTER than the Int128
+cross-multiply bound, so headroom exists) is now a named product item, not a
+theoretical one. Regression has no such cap (DEVIATION 189).
+
+2,097,152 x 28, 2 classes, depth 12, sqrt (5 of 28), interleaved one
+process, 3 reps:
+
+| config | vs sklearn 1 core | vs sklearn 10 cores | acc ours / theirs |
+|---|---|---|---|
+| 10 trees | 7.06-7.59x | **2.18-2.21x** | 0.635-0.639 / 0.642-0.657 |
+| 100 trees (sklearn default) | 7.05-7.79x | **2.48-2.73x** | 0.646-0.652 / 0.659-0.662 |
+
+Node counts comparable (ours 362-373k vs theirs 346-365k at 100 trees).
+**OPEN QUESTION, stated rather than smoothed: our train accuracy runs
+~1.0-1.5 points below sklearn's on higgs, consistently, with no overlap
+across reps -- a gap covtype does not show (there ours was equal or
+higher).** No bit-identity is claimed against sklearn (different RNG
+designs), but a consistent one-directional gap on one dataset is a lead,
+not noise: candidate suspects are the threshold-draw boundary handling,
+the zero-gain gate's `<=`, and DEVIATION 151's stop-on-constant, none of
+which covtype's feature distributions would exercise the same way. The
+lane's quality-band check should gain a higgs fixture before this number
+is quoted anywhere.
+
+DEVIATION 211's A/B on higgs (serial vs merged, digests identical):
+0.88-1.06x at 10 trees -- neutral, as the mechanism predicts: at 2M rows
+the grid is never starved even one tree at a time, so the merge's win
+(4-5x at 100k, 1.7-1.9x at 581k) tapers to nothing here. The absolute
+numbers above rode the same drifting box as the rest of this window.
