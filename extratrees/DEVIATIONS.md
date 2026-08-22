@@ -3049,3 +3049,184 @@ is therefore explicit, hit or miss, one line each.
   itself was not re-run for this scoring; a direct re-run remains the
   orchestrator's option and this line is not upgraded to HIT until it
   happens.
+
+---
+
+## AMENDMENT to commit d85c6ce's staleness note (2026-08-22)
+
+That commit's message claimed "extratrees builder source feeds TWO shipped
+binaries, {_mojolearn_rf.so, _mojolearn_trees.so}". The ruling of record is
+that the claim was WRONG: the two compile graphs are DISJOINT --
+`_mojolearn_trees.so` is extratrees/ + core/ + its binding, and
+`_mojolearn_rf.so` does not consume extratrees source. An extratrees source
+edit stales `_mojolearn_trees.so` only. The commit message cannot be
+rewritten (shared checkout, no history rewrites); this note is the
+correction, placed where the next reader of the ledger will find it.
+
+---
+
+## DEVIATION 452 -- under NUMERIC_IDENTICAL the range pass's block fold runs in KEY space
+
+**The pathway** (cross-vendor identity audit, 2026-08-22, IDENTITY_PATHS
+row 8's residue class surfacing in this lane). `node_feature_range_kernel`
+reduced each block's per-thread float min/max partials with the library
+block collectives (`max.gpu.primitives.block.min/max`), whose internal
+cross-lane fold follows the HARDWARE warp width -- 32 on Apple and NVIDIA,
+64 on AMD wavefronts. Float `min`/`max` select an input and return it
+unchanged, so the fold shape is invisible in VALUE and in BITS on every
+input except one: `-0.0` and `+0.0` compare EQUAL, so which zero survives
+`min(-0.0, +0.0)` is decided by operand ORDER, i.e. by the fold's grouping.
+A (node, column) whose rows carry both zeros could publish a range whose
+sign bit differs on the AMD column, and that bit reaches the MODEL: the
+`threshold == max -> min` guard returns the published min, sign bit and
+all, into `Split.quesval`.
+
+**Theirs.** cuML has no counterpart pass (DEVIATION 137 replaced the
+histogram with the range pass), and CatBoost/cuML make no cross-vendor
+bit-identity claim at all; there is nothing to transcribe.
+
+**Ours.** Under `NUMERIC_IDENTICAL` (comptime `BUILD_MODE`, the
+`mojo_only/numerics.GLOBAL_NUMERIC_MODE` gate), the block fold runs over
+`range_key(partial)` -- the SAME order-preserving UInt32 map the
+cross-block `Atomic.min/max` merge has used since DEVIATION 204 -- so the
+fold is an INTEGER min/max under a TOTAL order: any width, any grouping,
+same bits, and the two zeros are ordered (`-0.0` below `+0.0`) instead of
+tied. The per-thread row loop is untouched (its order is the strided
+assignment, a pure function of `(count, TPB, num_blocks)`, all
+data-derived). The empty-block test becomes `kmin > kmax`, which is
+exactly `blk_min > blk_max` through the monotone map.
+
+**FAST -- the default -- is bit-for-bit the old code**: the comptime
+branch keeps the float fold, `kmin/kmax` are computed from its result
+exactly as before, and the `RANGE_SAB_SIGN_UNFLIPPED` arm is unchanged
+(the decode-then-rebit round trip is exact because `range_unkey` inverts
+`range_key` bit for bit).
+
+**Gate.** `range_kernel_check` green on this source (FAST arm; the
+IDENTICAL arm compiles the same kernel with the other branch and is
+exercised when the orchestrator builds the IDENTICAL column). Apple
+default bits cannot move: the shipping branch is textually the old code.
+
+---
+
+## DEVIATION 453 -- IDENTITY_PATHS row 10 applied to the ET device path's float seams
+
+**The pathway.** Row 10's measured model: Metal's arithmetic is IEEE
+correct-rounding on normals with FLUSH-TO-SIGNED-ZERO on denormal
+operands, intermediates and results; CUDA's default honors denormals. Any
+float seam the ET device path writes for another kernel, the reduction or
+the host to read can therefore differ across vendors when a denormal is
+reachable. The audit found three reachable seams and one non-seam:
+
+  1. `draw_threshold_device` -- the range floats are SELECTED raw data
+     bits (the range pass never does arithmetic on them), so a
+     denormal-scale column puts denormals into `max - min` and into the
+     fma; the `== max` guard then also compares flushed against unflushed.
+     FIXED: `min`, `max`, the span and the fma result all pass through
+     `numerics.ftz`, and the guard compares the flushed pair. The host
+     oracle shares the function, so `node_feature_score_host` follows.
+  2. `gain_per_split` (builder.mojo, the device gain of DEVIATION 183
+     second form) -- every operand and intermediate term is bounded below
+     by `1/n^2` (normal at any legal n), but the accumulated gain can
+     CANCEL into the denormal band, where Metal publishes a signed zero
+     and a denormal-honoring backend publishes the denormal; DEVIATION
+     217's clamp then reads different signs (`-0.0 < 0.0` is false,
+     `-1e-39 < 0.0` is true) and the published `best_metric_val` differs.
+     FIXED: the final gain passes through `ftz` before the clamp. An
+     intermediate denormal is below half an ulp of every later normal
+     term and cannot survive into the result, so the final flush is the
+     whole model here.
+  3. `leaf_kernel`'s regression publish and its oracle `leaf_values_host`
+     -- `sum/count` is safe (integer-valued operands, quotient magnitude
+     `>= 2^-31`), but the `* inv_scale` dequantization can land denormal
+     for a tiny-magnitude label vector. FIXED: the product passes through
+     `ftz` on both sides.
+  4. NON-seam, recorded so nobody re-audits it: the classification leaf
+     (`count/total`, quotient in {0} U [2^-31, 1]), the reciprocals in
+     `gain_per_split` (`>= 2^-31`), `node_feature_is_constant` (a
+     denormal min is below half an ulp of `FEATURE_THRESHOLD` on both
+     sides of the add, and the compare decides identically), and
+     `mse_gain_from_exact_totals` (host Float64 from exact integers --
+     IEEE-correct division and multiplication, identical on every host).
+
+**FAST is untouched**: `ftz` is a comptime no-op under the default mode,
+so every shipping value is computed by the same operations as before.
+Under IDENTICAL on Metal the flushes are bitwise inert (flushing what the
+hardware already flushed); on a denormal-honoring backend they align its
+bits to Metal's. Each converted site cites row 10 as its authority.
+
+**Gate.** score_kernel_check / partition_leaf_kernel_check /
+device_tree_check green on this source (FAST). The IDENTICAL column's
+flush behavior is certified by the cross-vendor run (E1), which these
+seams exist to make bisectable.
+
+---
+
+## DEVIATION 454 -- identity-trace checkpoints at the audit's hazard stages
+
+The cross-vendor audit (this session) named the stages a bit can move at:
+the sampler's column draw (and its host-libm dispatch), the range fold
+(DEVIATION 452), the threshold draw (DEVIATION 453 site 1), the score
+accumulation and the reduction. The trace recorded only the REDUCED
+winners and the selected splits, so a divergence at any earlier stage
+surfaced two stages late and read as "the reduction moved".
+
+Both forest trainers now record, per merged batch, in PIPELINE order and
+before the reduce records: `gN.cM.colids` (the sampler's output),
+`gN.cM.range.min` / `gN.cM.range.max` (the decoded range cells),
+`gN.cM.draw.thresh` (the per-cell drawn thresholds), each over the
+batch's LOGICAL first `n_nodes * k` slots of the capacity-sized
+workspace buffer (trace rule 3). Tags name algorithm positions only
+(trace rule 2); the differ bisects by the FIRST differing tag: colids =
+sampler / dispatch, range = the fold, thresh = the draw, reduce = score
+or reduction. Shipping state (`MOJOLEARN_IDENTITY_TRACE` unset) is
+unchanged: every record returns on one boolean test.
+
+---
+
+## DEVIATION 455 -- the rescue path's re-stage broke 450's invariant: a MEASURED device-fit race, and its one-drain fix
+
+**Found by the cross-vendor identity audit's Phase B run, 2026-08-22.**
+`rescue_check` was RED at clean HEAD, and worse than red: two runs of
+IDENTICAL source gave DIFFERENT device trees on the rescue-heavy fixture
+(shaped_constant_heavy device node counts 587/459/495/581 vs
+605/461/465/597 across two runs; the host counts were stable at
+651/595/543/607). A device fit that varies run to run on ONE machine is an
+identity failure before any second vendor enters.
+
+**The mechanism, from DEVIATION 450's own invariant.** 450 removed five of
+six per-cycle drains on the argument that "every `h_*` staging buffer is
+REWRITTEN only after a required drain has retired the last copy that read
+it -- every `search_batch` path ends in one". TRUE for every `stage_batch`
+call INSIDE `search_batch`. FALSE for the one OUTSIDE it: when a cycle
+takes the rescue (`len(retry) > 0`), the batch's work items are re-staged
+before the partition -- `stage_batch` enqueues `h_items`/`h_wl`/`h_nb`/
+`h_nc`/`h_blk_base`/`h_tree` copies AFTER the cycle's reduce drain, and
+the next thing that touches those staging buffers is the NEXT cycle's
+`stage_batch`, whose HOST writes race the still-possibly-in-flight DMA
+reads. A corrupted `d_items`/`d_wl` then partitions the wrong ranges,
+which is a silent wrong tree, not a crash -- exactly the failure the
+`stage_batch` docstring warned about from the other side.
+
+Why the gates missed it: the race needs a cycle that TAKES the rescue AND
+a following cycle, and it is a race -- `device_batched_check`'s fixtures
+either did not hit that shape or got lucky; `rescue_check` is the one
+check built to hammer it, and it is the one that went red. (It was also
+absent from d85c6ce's "no check regresses" scoring list.)
+
+**The fix.** One `ctx.synchronize()` immediately after the retry-path
+`stage_batch`, in both forest trainers. The rescue-free cycle -- the
+common path, and the whole of 450's measured win -- keeps its single-drain
+shape; only a cycle that actually rescued pays one extra drain.
+
+**MEASURED after the fix.** `rescue_check` PASSES, twice, with
+run-to-run-identical device counts -- and the device trees now agree with
+the host rescue EXACTLY (651/595/543/607, 0 nodes differ on every seed),
+so the entire previous red was this race. device_tree_check,
+device_batched_check, device_forest_check, device_regression_check all
+PASS on the fixed source.
+
+**Standing instruction this leaves behind:** any future `stage_batch` (or
+other staging write + enqueue) added OUTSIDE `search_batch` must either be
+followed by a drain or must prove the next rewrite of its staging sits
+behind one. 450's invariant is per-call-site, not ambient.
