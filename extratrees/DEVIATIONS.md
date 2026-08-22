@@ -2376,7 +2376,13 @@ winning number in this file is at 581,012.
 
 ---
 
-## DEVIATION 207 -- the label gather hoist, MEASURED AND DECLINED
+## DEVIATION 208 -- the label gather hoist, MEASURED AND DECLINED
+
+(Renumbered from 207 on 2026-08-21 by the perf lane: two lanes claimed
+207 within the hour, and the gbdt blind level loop landed first
+(59496dc, ~21:15) before this entry's commit (3b0f333). Commit message
+3b0f333 says 207 and cannot change; this ledger is the authority. 208
+was verified unclaimed repo-wide at rename time.)
 
 **WHAT WAS TRIED.** `node_feature_score_kernel` is launched with
 `gridDim.y = n_sampled_cols`, and its row loop does TWO scattered reads per
