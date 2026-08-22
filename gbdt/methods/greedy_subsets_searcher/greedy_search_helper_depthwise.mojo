@@ -109,8 +109,10 @@ from gbdt.methods.greedy_subsets_searcher.kernel.compute_scores import (
 )
 from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     copy_histograms_kernel,
+    copy_histograms_vec4_kernel,
     scan_histograms_kernel,
     substract_histograms_kernel,
+    substract_histograms_vec4_kernel,
     zero_histograms_kernel,
 )
 from gbdt.methods.greedy_subsets_searcher.kernel.split_points import (
@@ -1025,18 +1027,41 @@ def fit_non_symmetric_tree[
                 h_right.unsafe_ptr().unsafe_store(i, plan.subtract_what[i])
             ctx.enqueue_copy(dst_buf=d_left, src_ptr=h_left.unsafe_ptr())
             ctx.enqueue_copy(dst_buf=d_right, src_ptr=h_right.unsafe_ptr())
-            ctx.enqueue_function[substract_histograms_kernel](
-                d_left.unsafe_ptr(),
-                d_right.unsafe_ptr(),
-                Int32(hist_cells_per_leaf),
-                hist.unsafe_ptr(),
-                grid_dim=(
-                    (hist_cells_per_leaf + 255) // 256,
-                    len(plan.subtract_from),
-                    stat_count,
-                ),
-                block_dim=(256, 1, 1),
-            )
+            # WIDTH DISPATCH, the symmetric lane's, which this driver was
+            # missing until 2026-08-22. The vec4 arms are not a symmetric
+            # optimization -- they are a property of the BUFFER, whose
+            # layout is identical under every grow policy -- and both
+            # non-symmetric policies were silently taking the scalar path.
+            # The copy arm's own deviation block records 11.0 -> 65.2 GB/s
+            # at a depth-6 level's shape. Found by the lossguide lane
+            # reading the two drivers side by side, which is the whole
+            # argument for there being one driver.
+            if hist_cells_per_leaf % 4 == 0:
+                ctx.enqueue_function[substract_histograms_vec4_kernel](
+                    d_left.unsafe_ptr(),
+                    d_right.unsafe_ptr(),
+                    Int32(hist_cells_per_leaf),
+                    hist.unsafe_ptr(),
+                    grid_dim=(
+                        (hist_cells_per_leaf // 4 + 255) // 256,
+                        len(plan.subtract_from),
+                        stat_count,
+                    ),
+                    block_dim=(256, 1, 1),
+                )
+            else:
+                ctx.enqueue_function[substract_histograms_kernel](
+                    d_left.unsafe_ptr(),
+                    d_right.unsafe_ptr(),
+                    Int32(hist_cells_per_leaf),
+                    hist.unsafe_ptr(),
+                    grid_dim=(
+                        (hist_cells_per_leaf + 255) // 256,
+                        len(plan.subtract_from),
+                        stat_count,
+                    ),
+                    block_dim=(256, 1, 1),
+                )
             mgr.stream_kernel()
             trace.record_device(
                 ctx, d_tag + "hist.subtracted", hist,
@@ -1515,19 +1540,35 @@ def fit_non_symmetric_tree[
             # is the single-leaf kernel and belongs to the lossguide lane. The left child kept the parent's
             # slot; this puts the same histogram in the right child's, so
             # both are `PreviousPath` and next level can pair them.
-            ctx.enqueue_function[copy_histograms_kernel](
-                d_left.unsafe_ptr(),
-                d_right.unsafe_ptr(),
-                Int32(stat_count),
-                Int32(hist_cells_per_leaf),
-                hist.unsafe_ptr(),
-                grid_dim=(
-                    (hist_cells_per_leaf * stat_count + 255) // 256,
-                    n_split,
-                    1,
-                ),
-                block_dim=(256, 1, 1),
-            )
+            # WIDTH DISPATCH, same story as the subtraction above.
+            if (hist_cells_per_leaf * stat_count) % 4 == 0:
+                ctx.enqueue_function[copy_histograms_vec4_kernel](
+                    d_left.unsafe_ptr(),
+                    d_right.unsafe_ptr(),
+                    Int32(stat_count),
+                    Int32(hist_cells_per_leaf),
+                    hist.unsafe_ptr(),
+                    grid_dim=(
+                        (hist_cells_per_leaf * stat_count // 4 + 255) // 256,
+                        n_split,
+                        1,
+                    ),
+                    block_dim=(256, 1, 1),
+                )
+            else:
+                ctx.enqueue_function[copy_histograms_kernel](
+                    d_left.unsafe_ptr(),
+                    d_right.unsafe_ptr(),
+                    Int32(stat_count),
+                    Int32(hist_cells_per_leaf),
+                    hist.unsafe_ptr(),
+                    grid_dim=(
+                        (hist_cells_per_leaf * stat_count + 255) // 256,
+                        n_split,
+                        1,
+                    ),
+                    block_dim=(256, 1, 1),
+                )
             mgr.stream_kernel()
 
             ctx.enqueue_function[update_partitions_after_split_kernel](

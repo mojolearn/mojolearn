@@ -718,10 +718,12 @@ def apply_bins(
     return counts^
 
 
-def claim_3_growth_and_divergence(mut fx: Fixture) raises -> TNonSymmetricTree:
+def claim_3_growth_and_divergence(
+    mut fx: Fixture
+) raises -> TNonSymmetricTree:
     """A real depthwise tree, and THE reach proof for the leafwise kernel.
 
-    Three things, in increasing strength:
+    Three things, in increasing strength, AT FOUR DEPTHS:
 
     1. rows are conserved -- the leaf weights sum to `n_rows`;
     2. more than one leaf is non-empty -- a tree that puts every row on one
@@ -735,52 +737,91 @@ def claim_3_growth_and_divergence(mut fx: Fixture) raises -> TNonSymmetricTree:
     `compute_optimal_splits_kernel` instead of the region arm, every node at
     a given depth would agree and (3) would fail. Reach is per-branch and
     this is the branch.
+
+    ================= WHY MORE THAN ONE DEPTH =================
+    Every claim in this file called `default_options(4)` and nothing else
+    until 2026-08-22, so depths 2, 3 and 6 had NEVER BEEN RUN. The lossguide
+    lane found that the hard way: a bound of theirs was wrong at depth 6 and
+    hid behind this gate's single shape, and they spent six probes on it.
+
+    A gate that only ever runs one shape is a gate that tests a shape, not a
+    policy. The depth changes the level count, the leaf frontier's raggedness
+    and -- through `max_leaves = 1 << depth` -- every workspace bound, so it
+    is the cheapest axis with real coverage in it.
+    ===========================================================
     """
-    var model = fit(fx, default_options(4))
-    ref st = model.model_structure
+    var depths = List[Int]()
+    depths.append(2)
+    depths.append(3)
+    depths.append(4)
+    depths.append(6)
 
-    var total = Float64(0.0)
-    for i in range(len(model.leaf_weights)):
-        total += model.leaf_weights[i]
-    if Int(total) != fx.n_rows:
-        raise Error(
-            String("rows lost or duplicated: leaf weights sum to ")
-            + String(total) + " of " + String(fx.n_rows)
+    var keep = fit(fx, default_options(4))
+
+    for di in range(len(depths)):
+        var d = depths[di]
+        var model = fit(fx, default_options(d))
+        ref st = model.model_structure
+
+        var total = Float64(0.0)
+        for i in range(len(model.leaf_weights)):
+            total += model.leaf_weights[i]
+        if Int(total) != fx.n_rows:
+            raise Error(
+                String("depth ") + String(d)
+                + ": rows lost or duplicated, leaf weights sum to "
+                + String(total) + " of " + String(fx.n_rows)
+            )
+
+        var nonempty = 0
+        for i in range(len(model.leaf_weights)):
+            if model.leaf_weights[i] > 0.0:
+                nonempty += 1
+        if nonempty < 2:
+            raise Error(
+                String("depth ") + String(d) + ": the tree never split, "
+                + String(nonempty) + " non-empty leaf"
+            )
+
+        # `max_leaves = 1 << depth` is a HARD bound for every policy but
+        # Lossguide (`catboost_options.cpp:993-1001`), and every workspace
+        # in this fit is sized by it. A tree that exceeded it would have
+        # been writing past the histogram plane.
+        if model.bin_count() > (1 << d):
+            raise Error(
+                String("depth ") + String(d) + ": "
+                + String(model.bin_count())
+                + " leaves exceeds max_leaves " + String(1 << d)
+            )
+
+        var distinct = 0
+        for i in range(len(st.nodes)):
+            var seen_before = False
+            for j in range(i):
+                if (
+                    st.nodes[j].feature_id == st.nodes[i].feature_id
+                    and st.nodes[j].bin == st.nodes[i].bin
+                ):
+                    seen_before = True
+            if not seen_before:
+                distinct += 1
+        # Depth 1 could legitimately have one node; from depth 2 up, a
+        # depthwise tree on this fixture must diverge.
+        if distinct < 2:
+            raise Error(
+                String("depth ") + String(d)
+                + ": every node carries the same (feature, bin), so the"
+                " level is oblivious and the leafwise score kernel is NOT"
+                " the one being reached"
+            )
+
+        print(
+            "  claim 3 OK depth", d, "->", len(st.nodes), "nodes,",
+            model.bin_count(), "leaves,", nonempty, "non-empty,", distinct,
+            "distinct splits,", Int(total), "rows conserved",
         )
 
-    var nonempty = 0
-    for i in range(len(model.leaf_weights)):
-        if model.leaf_weights[i] > 0.0:
-            nonempty += 1
-    if nonempty < 2:
-        raise Error(
-            "the tree never split: " + String(nonempty) + " non-empty leaf"
-        )
-
-    var distinct = 0
-    for i in range(len(st.nodes)):
-        var seen_before = False
-        for j in range(i):
-            if (
-                st.nodes[j].feature_id == st.nodes[i].feature_id
-                and st.nodes[j].bin == st.nodes[i].bin
-            ):
-                seen_before = True
-        if not seen_before:
-            distinct += 1
-    if distinct < 2:
-        raise Error(
-            "every node in this tree carries the same (feature, bin): the"
-            " level is oblivious, so the leafwise score kernel is NOT the"
-            " one being reached"
-        )
-
-    print(
-        "  claim 3 OK:", len(st.nodes), "nodes,", model.bin_count(),
-        "leaves,", nonempty, "non-empty,", distinct, "distinct splits,",
-        Int(total), "rows conserved",
-    )
-    return model^
+    return keep^
 
 
 def claim_4_apply_matches_growth(
@@ -946,59 +987,80 @@ def claim_6_core_count_invariance(mut fx: Fixture) raises:
     the claim is invariance WITHIN a mode.
     =================================================================
     """
-    var a = fit(fx, default_options(4), sm_count_override=-1)
-    var b = fit(fx, default_options(4), sm_count_override=108)
-    var c = fit(fx, default_options(4), sm_count_override=1)
+    # AT THREE DEPTHS. The core count reaches grid widths and the histogram
+    # replication factor, and replication is `f(sm_count) / (groups * leaves
+    # * stats)` -- so it COLLAPSES to 1 once the leaf count is large and is
+    # at its most aggressive at SHALLOW depths. A one-depth run of this
+    # claim tests the machine-dependence question at exactly one point on
+    # the axis that decides how much machine-dependence there is.
+    var depths = List[Int]()
+    depths.append(2)
+    depths.append(4)
+    depths.append(6)
 
-    var sa = fingerprint(a, with_values=False)
-    var sb = fingerprint(b, with_values=False)
-    var sc = fingerprint(c, with_values=False)
-    var fa = fingerprint(a)
-    var fb = fingerprint(b)
-    var fc = fingerprint(c)
+    var mode = String(
+        "IDENTICAL"
+    ) if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else String("FAST")
 
-    var struct_same = (sa == sb) and (sa == sc)
-    var bits_same = (fa == fb) and (fa == fc)
+    for di in range(len(depths)):
+        var d = depths[di]
+        var a = fit(fx, default_options(d), sm_count_override=-1)
+        var b = fit(fx, default_options(d), sm_count_override=108)
+        var c = fit(fx, default_options(d), sm_count_override=1)
 
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        if not struct_same:
-            raise Error(
-                "IDENTICAL: core counts {device, 108, 1} built DIFFERENT"
-                " TREE STRUCTURES. A machine-dependent number is feeding a"
-                " summation order upstream of the split choice; see"
-                " IDENTITY_PATHS.md row 7 and the histogram flush rows."
+        var sa = fingerprint(a, with_values=False)
+        var sb = fingerprint(b, with_values=False)
+        var sc = fingerprint(c, with_values=False)
+        var fa = fingerprint(a)
+        var fb = fingerprint(b)
+        var fc = fingerprint(c)
+
+        var struct_same = (sa == sb) and (sa == sc)
+        var bits_same = (fa == fb) and (fa == fc)
+
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+            if not struct_same:
+                raise Error(
+                    String("IDENTICAL, depth ") + String(d)
+                    + ": core counts {device, 108, 1} built DIFFERENT TREE"
+                    " STRUCTURES. A machine-dependent number is feeding a"
+                    " summation order upstream of the split choice; see"
+                    " IDENTITY_PATHS.md row 7 and the histogram flush rows."
+                )
+            if not bits_same:
+                raise Error(
+                    String("IDENTICAL, depth ") + String(d)
+                    + ": core counts agreed on the tree but NOT on the leaf"
+                    " values. The split path is pinned and the"
+                    " partition-stats path is not; IDENTITY_PATHS.md row 7"
+                    " is the first place to look."
+                )
+            print(
+                "  claim 6 OK [IDENTICAL] depth", d, "-> core counts"
+                " {device, 108, 1} give one model, bit for bit,",
+                len(a.model_structure.nodes), "nodes and",
+                len(a.leaf_values), "leaf values",
             )
-        if not bits_same:
-            raise Error(
-                "IDENTICAL: core counts {device, 108, 1} agreed on the tree"
-                " but NOT on the leaf values. The split path is pinned and"
-                " the partition-stats path is not; IDENTITY_PATHS.md row 7"
-                " is the first place to look."
+        else:
+            print(
+                "  claim 6 [FAST] depth", d, "-> structure identical:",
+                struct_same, "/ leaf values bit-identical:", bits_same,
             )
-        print(
-            "  claim 6 OK [IDENTICAL]: core counts {device, 108, 1} ->",
-            "one model, bit for bit,", len(a.model_structure.nodes),
-            "nodes and", len(a.leaf_values), "leaf values",
-        )
-    else:
-        print(
-            "  claim 6 [FAST]: structure identical across core counts:",
-            struct_same, "/ leaf values bit-identical:", bits_same,
-        )
+            if not (struct_same and bits_same):
+                print(
+                    "    NOTE: FAST DIVERGED on this backend. On Apple that"
+                    " would be the surprising outcome (no float threadgroup"
+                    " atomics => FAST is forced onto the i32 stage); on a"
+                    " backend that has them it is expected. Either way the"
+                    " IDENTICAL build is where the claim is gated."
+                )
+
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         print(
             "    FAST does not PIN the flush; on Apple it is forced onto"
-            " the same i32 stage anyway (no float threadgroup atomics), so"
-            " agreement here is a platform accident and not a guarantee."
-            " The bit claim is gated in the IDENTICAL build."
+            " the same i32 stage anyway, so agreement is a platform"
+            " accident. The bit claim is gated in the IDENTICAL build."
         )
-        if not (struct_same and bits_same):
-            print(
-                "    NOTE: FAST DIVERGED on this backend. On Apple that"
-                " would be the surprising outcome (no float threadgroup"
-                " atomics => FAST is forced onto the i32 stage); on a"
-                " backend that has them it is the expected one. Either"
-                " way the IDENTICAL build is where the claim is gated."
-            )
 
 
 def claim_7_sabotage(mut fx: Fixture) raises:
