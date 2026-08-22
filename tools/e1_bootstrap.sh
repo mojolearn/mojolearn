@@ -66,7 +66,11 @@ echo "--- extratrees suite"
 bash extratrees/tools/check.sh || echo "PHASE2-FINDING: extratrees suite (see log)"
 
 step "phase 3: build IDENTICAL .so + traced fits"
-bash bindings/build_trees.sh && bash bindings/build_rf.sh && bash bindings/build_gbdt.sh \
+# run inside the gbmbench env so the build scripts' run_smoke python has
+# numpy on every platform (the linux ROCm images do not guarantee it).
+pixi run -e gbmbench bash bindings/build_trees.sh \
+  && pixi run -e gbmbench bash bindings/build_rf.sh \
+  && pixi run -e gbmbench bash bindings/build_gbdt.sh \
   || echo "PHASE3-FINDING: a binding build failed (see log)"
 PYTHONPATH="$REPO/python" pixi run -e gbmbench python3 tools/e1_traced_fit.py "$OUT" \
   || PYTHONPATH="$REPO/python" python3 tools/e1_traced_fit.py "$OUT" \

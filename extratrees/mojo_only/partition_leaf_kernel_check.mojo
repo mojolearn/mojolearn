@@ -71,6 +71,7 @@ validity guard) and four for the leaf pass (the `IsLeaf` early return, the
 not turn an arm red is a defect in THIS FIXTURE and is reported as one.
 """
 
+from std.gpu import WARP_SIZE
 from std.math import ceildiv
 from std.sys import has_accelerator
 from std.sys.info import (
@@ -143,6 +144,16 @@ comptime LEAF_NODES = 15
 comptime LEAF_CLASSES = 4
 comptime LEAF_TPB = TPB_DEFAULT
 comptime LEAF_MAX_OUT = LEAF_MAX_OUT_DEFAULT
+
+# ARM A's three block widths, WARP-AWARE (2026-08-22, first AMD run): MAX's
+# block primitives require block > warp, so the {32, 64, 128} triplet that
+# exercises small blocks on Apple/NVIDIA cannot COMPILE on a 64-wide CDNA
+# wavefront. The invariant under test -- three distinct widths, identical
+# partitions -- is width-agnostic; on wide-warp targets the triplet becomes
+# {128, 256, 512}. `WARP_SIZE` resolves per compile target.
+comptime PART_TPB_A = 32 if WARP_SIZE <= 32 else 128
+comptime PART_TPB_B = 64 if WARP_SIZE <= 32 else 256
+comptime PART_TPB_C = 128 if WARP_SIZE <= 32 else 512
 
 
 def mix32(x: UInt32) -> UInt32:
@@ -634,20 +645,20 @@ def _partition_section() raises -> Int:
             var run: PartitionRun
             var tpb: Int
             if w == 0:
-                tpb = 32
-                run = _launch_partition[32](
+                tpb = PART_TPB_A
+                run = _launch_partition[PART_TPB_A](
                     ctx, flat, row_ids, items, splits,
                     guard_mid[g], guard_msl[g], PART_SAB_NONE,
                 )
             elif w == 1:
-                tpb = 64
-                run = _launch_partition[64](
+                tpb = PART_TPB_B
+                run = _launch_partition[PART_TPB_B](
                     ctx, flat, row_ids, items, splits,
                     guard_mid[g], guard_msl[g], PART_SAB_NONE,
                 )
             else:
-                tpb = 128
-                run = _launch_partition[128](
+                tpb = PART_TPB_C
+                run = _launch_partition[PART_TPB_C](
                     ctx, flat, row_ids, items, splits,
                     guard_mid[g], guard_msl[g], PART_SAB_NONE,
                 )
@@ -1217,7 +1228,7 @@ def _leaf_section() raises -> Int:
 
     # Block-width independence: the accumulation is an exact integer sum, so
     # a different block width is obliged to produce identical bits.
-    var got32 = _launch_leaf[True, 32](
+    var got32 = _launch_leaf[True, PART_TPB_A](
         ctx, nodes, ranges, row_ids, labels_q, LEAF_CLASSES, Float32(1.0),
         LEAF_SAB_NONE,
     )
@@ -1226,7 +1237,7 @@ def _leaf_section() raises -> Int:
         if not _same_bits(got32[0][i], base_leaves[i]):
             width_bad += 1
     if width_bad == 0:
-        print("  ARM I OK: tpb 32 and tpb", LEAF_TPB,
+        print("  ARM I OK: tpb", PART_TPB_A, "and tpb", LEAF_TPB,
               "produce bit-identical leaves -- the block width is a"
               " scheduling parameter, not an algorithmic one")
     else:

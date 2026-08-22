@@ -73,6 +73,11 @@ same kernel for the same device. Pinning was the right answer for AMD and is
 the only possible answer for those two. See `column_lane_width`.
 """
 
+from std.sys.info import (
+    has_amd_gpu_accelerator,
+    has_nvidia_gpu_accelerator,
+)
+
 from mojo_only.numerics import (
     NumericMode,
     NUMERIC_FAST,
@@ -903,9 +908,21 @@ def spec_for(kernel: Int, device: Int, mode: NumericMode) raises -> KernelSpec:
 
 #: The column kernels compile against. One value for the whole build, because
 #: a threadgroup size is fixed at compile time and cannot follow a runtime
-#: device query. Cross-compiling for another vendor means rebuilding with
-#: this changed, which is the honest shape of the constraint.
-comptime TARGET_COLUMN = COLUMN_APPLE
+#: device query. Cross-compiling for another vendor means rebuilding on (or
+#: for) that vendor's box, which is the honest shape of the constraint.
+#:
+#: RESOLVED FROM THE BUILD MACHINE'S ACCELERATOR (2026-08-22, E1 finding):
+#: this was a hardcoded `COLUMN_APPLE`, so the first AMD build compiled
+#: every kernel against Apple's scheduling constants -- it RAN (Apple's
+#: numbers fit inside AMD's limits, and IDENTICAL pins the numeric rows to
+#: the floor anyway), but the matrix was describing a build nobody was
+#: running, the exact failure this file's own header names. AMD resolves to
+#: the CDNA column (the datacenter parts E1 runs on); an RDNA build must
+#: override by hand -- `has_amd_gpu_accelerator` cannot tell a wavefront-64
+#: part from a wavefront-32 one.
+comptime TARGET_COLUMN = COLUMN_AMD if has_amd_gpu_accelerator() else (
+    COLUMN_NVIDIA if has_nvidia_gpu_accelerator() else COLUMN_APPLE
+)
 
 
 def hist_floats_per_thread_for[kernel: Int]() -> Int:

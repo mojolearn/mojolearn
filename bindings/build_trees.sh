@@ -31,9 +31,15 @@ mkdir -p python/mojolearn
 MACOS_FLOOR="11.0"
 unset MACOSX_DEPLOYMENT_TARGET
 
-MACOS_SDK=$(xcrun --sdk macosx --show-sdk-version)
+if [ "$(uname)" = "Darwin" ]; then
+    MACOS_SDK=$(xcrun --sdk macosx --show-sdk-version)
+else
+    MACOS_SDK=""  # linux arm (E1, 2026-08-22): no Mach-O, no Metal SDK
+fi
 LINK_FLAGS="-Xlinker -platform_version -Xlinker macos -Xlinker $MACOS_FLOOR -Xlinker $MACOS_SDK"
+[ "$(uname)" = "Darwin" ] || LINK_FLAGS=""
 TARGET_FLAGS="--target-cpu apple-m1"
+[ "$(uname)" = "Darwin" ] || TARGET_FLAGS=""
 
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/mojolearn-trees-build.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT INT TERM
@@ -62,6 +68,7 @@ air_blobs() {
 # suppressed build, and run_smoke below is the gate that can say WHICH
 # kernels are missing.
 kernels_plausible() {
+    [ "$(uname)" = "Darwin" ] || return 0  # linux gate is run_smoke
     _n=$(air_blobs "$1" | grep -c '^extratrees' || true)
     if [ "$_n" -lt 10 ]; then
         printf '  extratrees: %s AIR blobs, want at least 10\n' "$_n" >&2
@@ -71,6 +78,7 @@ kernels_plausible() {
 }
 
 minos_matches() {
+    [ "$(uname)" = "Darwin" ] || return 0  # linux gate is run_smoke
     _got=$(otool -l "$1" \
         | awk '/LC_BUILD_VERSION/{f=1} f && /minos/{print $2; exit}')
     if [ "$_got" != "$MACOS_FLOOR" ]; then

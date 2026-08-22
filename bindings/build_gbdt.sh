@@ -113,8 +113,13 @@ MACOS_FLOOR="11.0"
 # because inheriting it from an outer shell silently reproduces the bug.
 unset MACOSX_DEPLOYMENT_TARGET
 
-MACOS_SDK=$(xcrun --sdk macosx --show-sdk-version)
+if [ "$(uname)" = "Darwin" ]; then
+    MACOS_SDK=$(xcrun --sdk macosx --show-sdk-version)
+else
+    MACOS_SDK=""  # linux arm (E1, 2026-08-22): no Mach-O, no Metal SDK
+fi
 LINK_FLAGS="-Xlinker -platform_version -Xlinker macos -Xlinker $MACOS_FLOOR -Xlinker $MACOS_SDK"
+[ "$(uname)" = "Darwin" ] || LINK_FLAGS=""
 
 # THE CPU TARGET IS PINNED TO A PORTABLE BASELINE, NOT LEFT AT THE HOST.
 #
@@ -139,6 +144,7 @@ LINK_FLAGS="-Xlinker -platform_version -Xlinker macos -Xlinker $MACOS_FLOOR -Xli
 # blobs. (`bindings/build_estimators.sh` still passes it. That is not an
 # endorsement; it is a file this script must not edit.)
 TARGET_FLAGS="--target-cpu apple-m1"
+[ "$(uname)" = "Darwin" ] || TARGET_FLAGS=""
 
 # --emit shared-lib, not an executable: CPython dlopens this and calls
 # PyInit__mojolearn_gbdt. The file's name must match that symbol's suffix or
@@ -188,6 +194,7 @@ air_blobs() {
 # imports neither, and a floor on a subsystem that is not supposed to be here
 # would fail every correct build.
 kernels_plausible() {
+    [ "$(uname)" = "Darwin" ] || return 0  # linux gate is run_smoke
     _air=$(air_blobs "$1")
     for _pair in gbdt:120; do
         _sub=${_pair%%:*}
@@ -206,6 +213,7 @@ kernels_plausible() {
 # setting it now, and a silently dropped `-Xlinker` would publish a wheel whose
 # tag and binary disagree -- exactly the failure the flag exists to prevent.
 minos_matches() {
+    [ "$(uname)" = "Darwin" ] || return 0  # linux gate is run_smoke
     _got=$(otool -l "$1" \
         | awk '/LC_BUILD_VERSION/{f=1} f && /minos/{print $2; exit}')
     if [ "$_got" != "$MACOS_FLOOR" ]; then
