@@ -50,7 +50,12 @@ THE CALL CYCLE, theirs (`pointwise_oracle.cpp`):
   `kernel_add_model_value.mojo`; PREP_BILL 2026-08-22 step 32).
 * `function_value` arrives as per-block partials folded in one fixed host
   order, the file-standard substitution for their block-reduce-plus-
-  `atomicAdd` scalar.
+  `atomicAdd` scalar. The fold is FLOAT32, their accumulator's width, and
+  the total passes through their `static_cast<float>` truncation
+  (`pointwise_oracle.cpp:106`) before it becomes the walker's double --
+  it was Float64 until 2026-08-22, which gave our AnyImprovement test
+  sub-float32 resolution their walker does not have (PORTING.md 140's
+  two extra accepted rounds were exactly that).
 * `AddRigdeRegulaizationIfNecessary` (`:109-111`) is a no-op unless
   `AddRidgeToTargetFunction`, which no configuration this repository runs
   sets; omitted, like the Langevin hooks (`oracle_interface.mojo` records
@@ -366,9 +371,23 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                     )
                     + self.lambda_reg
                 )
-            value = 0.0
+            # `(*value) = static_cast<float>(ReadReduce(valueGpu)[0]);`
+            # (`pointwise_oracle.cpp:106`). THE VALUE IS A FLOAT32 NUMBER
+            # in their walker: the target kernel block-reduces and
+            # atomicAdds per-block FLOAT partials into one float scalar,
+            # and the cast keeps it float on the way into the double. The
+            # fold below is the file-standard deterministic substitution
+            # for their atomic's order; its WIDTH is now theirs too. It
+            # was Float64, which let AnyImprovement see improvements
+            # BELOW float32 resolution and accept steps their walker
+            # cannot see -- PORTING.md 140 measured ours accepting 8
+            # rounds where 6-7 sit at the float32 noise floor. Found
+            # 2026-08-22 in the Newton-walk audit; the walk-divergence
+            # entry carries the measurement.
+            var fv32 = Float32(0.0)
             for b in range(blocks):
-                value += Float64(self.h_fv.unsafe_ptr().unsafe_load(b))
+                fv32 += self.h_fv.unsafe_ptr().unsafe_load(b)
+            value = Float64(fv32)
             return
 
         # ---- the rowSize > 1 arm: the multiclass family --------------
@@ -453,9 +472,12 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         # recomputes it row by row, exactly as theirs does
         self.cached_der2.clear()
 
-        value = 0.0
+        # the same `static_cast<float>` (`pointwise_oracle.cpp:106`) as the
+        # single-dim arm: fold the block partials in FLOAT32, their width.
+        var mfv32 = Float32(0.0)
         for b in range(ml_blocks):
-            value += Float64(self.h_fv.unsafe_ptr().unsafe_load(b))
+            mfv32 += self.h_fv.unsafe_ptr().unsafe_load(b)
+        value = Float64(mfv32)
 
     def write_second_derivatives(mut self, mut second_der: List[Float64]) raises:
         """`WriteSecondDerivatives` (`pointwise_oracle.cpp:114-195`).

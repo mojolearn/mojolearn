@@ -72,11 +72,18 @@ def _diagonal_direction(
     gradient: List[Float64], hessian: List[Float64]
 ) -> List[Float32]:
     """`UpdateMoveDirectionDiagonal` (`descent_helpers.cpp:83-90`)."""
+    # THEIR EPSILON IS THE FLOAT LITERAL `1e-20f` (`descent_helpers.cpp
+    # :87`), promoted to double at the addition -- 9.99999968...e-21, one
+    # float-ULP under the decimal. `Float64(1e-20)` here was the exact
+    # decimal, a different double; invisible against any healthy Hessian
+    # and a bit-divergence wherever the Hessian is O(1e-20). Matched
+    # 2026-08-22 in the Newton-walk audit.
+    comptime EPS_1E20F = Float64(Float32(1e-20))
     var direction = List[Float32]()
     for i in range(len(gradient)):
         if hessian[i] > 0:
             direction.append(
-                Float32(gradient[i] / (hessian[i] + Float64(1e-20)))
+                Float32(gradient[i] / (hessian[i] + EPS_1E20F))
             )
         else:
             direction.append(Float32(0.0))

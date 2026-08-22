@@ -159,6 +159,18 @@ WHAT IT FOUND, 2026-08-21, AND WHY THIS CHECK IS RED
                           worst |dleaf| 3.5e-03, worst relative 3.3e-03
                           all 36 splits STILL match, worst |dpred| 4.4e-03
 
+AMENDED 2026-08-22: the KNOWN state is now FIVE of 96 (trees 0, 6, 7 x2,
+10), same worst cell and value (tree 0 leaf 2, |dleaf| 3.5947e-03), worst
+|dpred| 4.5e-03, splits still 36/36. The move is the function-value fold
+taking THEIR width: their walker's acceptance value is a FLOAT32 scalar
+(`FastInBlockReduce<float>` + `atomicAdd(float*)`,
+`pointwise_targets.cu:275-279`, then `static_cast<float>` at
+`pointwise_oracle.cpp:106`), and our Float64 host fold was giving
+AnyImprovement sub-float32 resolution their GPU does not have. Folding in
+Float32 is the faithful port; where the walk stalls against CatBoost's
+FastLogf-noise CPU walk shifts on two more extreme leaves, and per
+PORTING.md 140 matching their CPU is not the goal.
+
 That is the tight-L2 / loose-L1 signature, and the cause is located.
 
 THE WALKS STOP AT DIFFERENT ITERATIONS. On tree 0 seven of eight leaves
@@ -870,13 +882,14 @@ def main() raises:
             + " verdicts. Read the per-tree lines above: a tight L2 beside"
             " a loose L1 localises the divergence to the walker's"
             " ITERATIONS, and the numbers are the finding -- do not widen"
-            " the band. THREE cells of ninety-six outside on the"
-            " ten-iteration arm, all on extreme leaves, is the KNOWN state:"
-            " PORTING.md 140, CatBoost's CPU walk freezes after six"
-            " accepted steps where ours takes eight, because their"
-            " acceptance test is measured through FastLogf and ours"
-            " through a float32 device reduce. Anything more than that, or"
-            " a divergence on a leaf that is not extreme, is new"
+            " the band. FIVE cells of ninety-six outside on the"
+            " ten-iteration arm, all on extreme leaves, worst 3.5947e-03"
+            " at tree 0 leaf 2, is the KNOWN state (2026-08-22):"
+            " PORTING.md 140, CatBoost's CPU walk freezes at its"
+            " FastLogf noise floor where ours freezes at the float32"
+            " noise floor of THEIR GPU's own function-value accumulator,"
+            " whose width the fold now matches. Anything more than that,"
+            " or a divergence on a leaf that is not extreme, is new"
         )
     print()
     print(

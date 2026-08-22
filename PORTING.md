@@ -5431,6 +5431,38 @@ because an allowance sized to today's divergence also swallows tomorrow's
 regression. Three, all on extreme leaves, is the known state; anything else
 is new.
 
+### ADDENDUM 2026-08-22: the fold's WIDTH was the unported half, and it is now theirs
+
+The entry above says ours stalls later than their CPU because our
+acceptance value is "the target kernel's `functionValue` reduced in
+float32 on device" -- and that was only half true. The DEVICE half was
+float32; the HOST fold of the per-block partials was Float64, so our
+walker's acceptance test could resolve improvements BELOW one float32 ULP
+of the total. Their walker cannot: `functionValue` is one FLOAT32 scalar
+filled by `FastInBlockReduce<float>` + `atomicAdd(float*)`
+(`pointwise_targets.cu:275-279`) and read through
+`static_cast<float>(ReadReduce(valueGpu)[0])`
+(`pointwise_oracle.cpp:106`). The extra resolution was OUR deviation and
+is the mechanism behind "ours accepts eight where theirs accepts six".
+
+FIXED in `pointwise_oracle.mojo` (both oracle arms): the partials fold in
+Float32, one fixed host order -- the order substitution for their atomic
+stays, the WIDTH no longer deviates. The diagonal walker's epsilon was
+also matched to their float literal: `Hessian + 1e-20f`
+(`descent_helpers.cpp:87`) promotes 9.99999968e-21, not the exact decimal
+1e-20 this port added (`descent_helpers.mojo`).
+
+MEASURED: `check-logloss-leaf-oracle` moves from 3 of 96 outside band to
+FIVE of 96 (trees 0, 6, 7 x2, 10), same worst cell and value (tree 0 leaf
+2, 3.5947e-03), splits still 36/36, L2 arm still 0 of 96 (worst 4.6e-08).
+The gate compares against CatBoost's CPU, whose FastLogf noise floor is
+not our target; where a float32-valued walk stalls is legitimately
+different from where a FastLogf-valued walk stalls, and the entry above
+already ruled that matching their CPU is not the goal. `oracle` 48/48 and
+`check-loss-oracle` (nine objectives) unmoved. What this changes at higgs
+scale -- the walk now stops where their GPU's value resolution stops --
+is the orchestrator's timing/accuracy run to take.
+
 
 ## 141. `leaf_estimation_backtracking` is not an option here, it is a constant
 
