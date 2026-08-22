@@ -817,7 +817,23 @@ wheel = "*"
 python-build = "*"
 twine = "*"
 
+# NVIDIA's gbm-bench harness (bench/external/), which needs pandas and
+# LightGBM on top of what `bench` has. A SEPARATE feature, not additions to
+# `bench`, for the same reason `skgpu` is: adding dependencies to `bench`
+# would re-solve the environment every recorded timing was taken under.
+# python is pinned to 3.14 because the prebuilt extension modules under
+# python/mojolearn/ were built against it (verified importing under 3.14.7).
+[feature.gbmbench.dependencies]
+python = "3.14.*"
+numpy = "*"
+pandas = "*"
+scikit-learn = "*"
+catboost = ">=1.2"
+lightgbm = "*"
+tqdm = ">=4.70.0,<5"
+
 [environments]
 bench = ["bench"]
 skgpu = ["skgpu"]
 pkg = ["pkg"]
+gbmbench = ["gbmbench"]
