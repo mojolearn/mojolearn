@@ -305,38 +305,82 @@ def _ratios(text):
 
 
 def canary_verdict(text):
-    """Read `CANARY <tag> <ms> nodes <n>` from stdout AND from the log file."""
-    try:
-        with open(CANARY_LOG) as fh:
-            text = text + "\n" + fh.read()
-    except OSError:
-        pass
-    ticks, nodes = [], set()
+    """Read `CANARY <tag> <ms> nodes <n>` lines and compute the box's
+    resolution floor from them.
+
+    STDOUT WINS OVER THE LOG. The log exists because `run_bench.py`
+    swallows child stdout; when the driver DOES pass canary lines through
+    (an A/B driver that re-emits everything), reading both double-counts
+    every tick. The log is the fallback, not a second source.
+
+    TICKS GROUP BY BINARY. `CANARY A:pre 51.3` and `CANARY B:pre 80.5`
+    are DIFFERENT canaries: an A/B across two builds changes the canary's
+    own code, so its duration moves for code reasons and pooling the two
+    would read that as machine noise -- which is exactly what happened
+    the first time a pre-vs-post window ran (the post build's K=4 arena
+    allocation slowed ITS canary ~1.7x, and the pooled spread voided a
+    window whose per-binary spreads were ~1.25x). Within one binary the
+    canary is constant work, so the spread WITHIN each group measures the
+    box; the floor is the WORST group's spread, and the cross-group
+    ratio is a CODE finding to record, not noise. An untagged tag (plain
+    `pre`/`mid`/`post`) is its own group, so single-binary windows are
+    unchanged."""
+    stdout_has = any(
+        line.split()[:1] == ["CANARY"] for line in text.splitlines()
+    )
+    if not stdout_has:
+        try:
+            with open(CANARY_LOG) as fh:
+                text = text + "\n" + fh.read()
+        except OSError:
+            pass
+    groups, nodes_by_group = {}, {}
     for line in text.splitlines():
         f = line.split()
         if len(f) >= 3 and f[0] == "CANARY":
             try:
-                ticks.append((f[1], float(f[2])))
+                ms = float(f[2])
             except ValueError:
                 continue
+            tag = f[1]
+            group = tag.split(":", 1)[0] if ":" in tag else ""
+            groups.setdefault(group, []).append((tag, ms))
             if len(f) >= 5 and f[3] == "nodes":
-                nodes.add(f[4])
-    if not ticks:
+                nodes_by_group.setdefault(group, set()).add(f[4])
+    if not groups:
         return None, None, "no CANARY lines -- the workload is not instrumented"
-    if len(nodes) > 1:
-        # The canary fits fixed bits, so its tree must be identical every
-        # time. Two node counts means it is not doing constant work, and a
-        # canary that varies measures nothing.
-        return False, None, ("canary node count VARIED across ticks: %s"
-                             % sorted(nodes))
-    ms = [t[1] for t in ticks]
-    spread = max(ms) / min(ms) if min(ms) > 0 else float("inf")
-    detail = "  ".join("%s=%.1fms" % t for t in ticks)
-    if spread > CANARY_VOID:
-        return False, spread, ("canary spread %.2fx exceeds the gross-contamination "
-                               "bound %.2fx  [%s]" % (spread, CANARY_VOID, detail))
-    return True, spread, "canary spread %.3fx over %d ticks  [%s]" % (
-        spread, len(ticks), detail)
+    for g, ns in nodes_by_group.items():
+        if len(ns) > 1:
+            # The canary fits fixed bits, so its tree must be identical
+            # every time WITHIN one binary. Two node counts in one group
+            # means it is not doing constant work.
+            return False, None, (
+                "canary node count VARIED across ticks in group '%s': %s"
+                % (g, sorted(ns)))
+    worst_spread, worst_group, details = 0.0, "", []
+    for g in sorted(groups):
+        ms = [t[1] for t in groups[g]]
+        spread = max(ms) / min(ms) if min(ms) > 0 else float("inf")
+        details.append("%s: %.2fx [%s]" % (
+            g or "(untagged)", spread,
+            "  ".join("%s=%.1fms" % t for t in groups[g])))
+        if spread > worst_spread:
+            worst_spread, worst_group = spread, g or "(untagged)"
+    detail = "; ".join(details)
+    if len(groups) > 1:
+        med = {g: sorted(t[1] for t in groups[g])[len(groups[g]) // 2]
+               for g in groups}
+        gs = sorted(med)
+        detail += ("; CROSS-GROUP canary ratio %.2fx (%s vs %s) is the "
+                   "CODE under test, not the box -- record it"
+                   % (max(med.values()) / min(med.values()), gs[0], gs[-1]))
+    if worst_spread > CANARY_VOID:
+        return False, worst_spread, (
+            "canary spread %.2fx in group %s exceeds the gross-contamination "
+            "bound %.2fx  [%s]" % (worst_spread, worst_group, CANARY_VOID,
+                                   detail))
+    return True, worst_spread, "canary floor %.3fx (worst group)  [%s]" % (
+        worst_spread, detail)
 
 
 def main():

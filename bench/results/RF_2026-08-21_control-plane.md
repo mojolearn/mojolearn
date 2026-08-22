@@ -85,12 +85,11 @@ exact integer digest printed by both arms
 (`416391741338190515/199823`). It is an env var because
 `bench/run_bench.py` is a shared harness that passes no arguments.
 
-## Still owed
+## Still owed -- DELIVERED later the same night
 
-- The pre-vs-post ABAB (`rf_bench_pre` built from a detached worktree at
-  `f28b134`) and the eps500 ours-vs-sklearn row, both through
-  `quiet_window.py`. Every attempt this evening was refused or would have
-  been voided; the peers were entitled to the box (checks do not take the
-  timing lock -- the standing coordination gap, still Andrew's call).
-- NVIDIA parity: nothing in `ensemble/` has ever been compared against
-  cuML itself. Unchanged, and still the largest gap in the lane.
+The pre-vs-post ABAB ran CLEAN after the forest loop was also pipelined
+(DEVIATION 117 ported, commit `617ee6b`): **2.24x at 100k, 1.42x at
+500k**, canary floor 1.18x, ranges disjoint. The full record, the
+sklearn row's status, and the eps500 accuracy oracle are in
+`RF_2026-08-21_pipelined-forest.md`, which supersedes this section.
+NVIDIA parity remains the lane's largest gap.
