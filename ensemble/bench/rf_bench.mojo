@@ -32,11 +32,15 @@ from std.sys import argv
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from ensemble.decisiontree.batched_levelalgo.bins import ClassificationBin
+from ensemble.decisiontree.batched_levelalgo.bins import (
+    ClassificationBin,
+    RegressionBin,
+)
 from ensemble.decisiontree.batched_levelalgo.objectives import (
     ClassificationObjectiveFunction,
+    RegressionObjectiveFunction,
 )
-from ensemble.decisiontree.decisiontree import DecisionTreeParams, GINI
+from ensemble.decisiontree.decisiontree import DecisionTreeParams, GINI, MSE
 from ensemble.randomforest import (
     CLASSIFICATION,
     RF_params,
@@ -46,7 +50,9 @@ from ensemble.randomforest import (
 
 comptime DT = DType.float32
 comptime LT = DType.int32
+comptime RLT = DType.float32
 comptime ClsObj = ClassificationObjectiveFunction[DT, LT, ClassificationBin]
+comptime RegObj = RegressionObjectiveFunction[DT, RLT, RegressionBin]
 
 comptime REPEATS = 5
 comptime N_CLASSES = 4
@@ -371,6 +377,62 @@ def run_arm[
     _ = hy^
 
 
+def run_reg_arm(
+    ctx: DeviceContext, name: String, n_rows: Int, n_cols: Int
+) raises:
+    """The REGRESSION arm, RF_BENCH_REG-gated. It exists because the
+    lane's losing gbm-bench row (year: 515k x 90, MSE) is a regression
+    shape and every timed arm above is classification -- and regression's
+    `RegressionBin` pays TWO atomics per histogram increment where
+    `ClassificationBin` pays one, so a classification A/B cannot certify
+    a regression claim. Same splitmix64 bits as `run_arm`; the target is
+    `v0 + v1 + v2` of the uniform features, a smooth function the depth
+    is sufficient for. Timing only: bit-identity for regression is the
+    fingerprint gate's REG-BOOT config, and this arm's SUM digest proves
+    both sides of an A/B fit the same bits."""
+    var hx = ctx.enqueue_create_host_buffer[DT](n_rows * n_cols)
+    var hy = ctx.enqueue_create_host_buffer[RLT](n_rows)
+    var m_sum = UInt64(0)
+    for r in range(n_rows):
+        var acc = Float32(0.0)
+        for c in range(n_cols):
+            var h = _mix(UInt64(r) * UInt64(1000003) + UInt64(c))
+            var v = Float32(Int(h % UInt64(10000))) / Float32(10000.0)
+            hx.unsafe_ptr().unsafe_store(c * n_rows + r, v)
+            m_sum += h % UInt64(10000)
+            if c < 3:
+                acc += v
+        hy.unsafe_ptr().unsafe_store(r, acc)
+    print("SUM", name, String(m_sum))
+
+    var dx = ctx.enqueue_create_buffer[DT](n_rows * n_cols)
+    log_launch("xfer_bench_x")
+    ctx.enqueue_copy(dst_buf=dx, src_ptr=hx.unsafe_ptr())
+    var dy = ctx.enqueue_create_buffer[RLT](n_rows)
+    log_launch("xfer_bench_y")
+    ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
+    var dsw = ctx.enqueue_create_buffer[DT](1)
+    ctx.synchronize()
+
+    for _ in range(REPEATS):
+        var p = _params(n_cols)
+        p.tree_params.split_criterion = MSE
+        var t0 = perf_counter_ns()
+        var forest = fit_forest[RegObj](
+            ctx, dx, dy, dsw, n_rows, n_cols, 1, p
+        )
+        ctx.synchronize()
+        var t1 = perf_counter_ns()
+        print("ARM", name, Float64(t1 - t0) / 1.0e6)
+        _ = forest^
+
+    _ = dx^
+    _ = dy^
+    _ = dsw^
+    _ = hx^
+    _ = hy^
+
+
 def _read_all(path: String) raises -> List[UInt8]:
     var f = open(path, "r")
     var b = f.read_bytes()
@@ -580,6 +642,18 @@ def main() raises:
     # spread must not include. The tick still prints and still logs (the
     # evidence stays in the record, and its node count still self-checks);
     # `quiet_window.py` excludes `warmup` tags from the spread only.
+    if String(getenv("RF_BENCH_REG")) != "":
+        # The regression window, opted into by env var for the same
+        # reason the epsilon row is: run_bench.py passes no arguments.
+        # 90 columns is the year row's width.
+        canary.tick(ctx, "warmup")
+        canary.tick(ctx, "pre")
+        run_reg_arm(ctx, "rfreg@100000", 100000, 90)
+        canary.tick(ctx, "mid")
+        run_reg_arm(ctx, "rfreg@500000", 500000, 90)
+        canary.tick(ctx, "post")
+        _ = canary^
+        return
     canary.tick(ctx, "warmup")
     canary.tick(ctx, "pre")
     run_arm(ctx, "rf@100000", 100000, 50)

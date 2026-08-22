@@ -433,6 +433,12 @@ struct Fixture(Movable):
             ](),
             Int32(N_CLASSES),
             False,
+            # DEVIATION 314: no bin matrix here -- the raw searching
+            # path is exactly what this check exercises.
+            self.data.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin]()
+            .unsafe_bitcast[UInt8](),
+            False,
         )
 
     def quantiles(mut self) -> Quantiles[DT]:
@@ -754,6 +760,11 @@ def arm_c_cdf_and_splits[
         Int32(4), Int32(C_SLOTS),
         dummy_i.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
         Int32(C_CLASSES), False,
+        # DEVIATION 314: raw path.
+        dummy.unsafe_ptr()
+        .unsafe_origin_cast[MutUntrackedOrigin]()
+        .unsafe_bitcast[UInt8](),
+        False,
     )
     var quantiles = Quantiles[DT](
         q_arr.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
@@ -957,6 +968,11 @@ def arm_d_partition[
         Int32(n), Int32(N_SAMPLED_COLS),
         rid.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
         Int32(N_CLASSES), False,
+        # DEVIATION 314: raw path.
+        fx.data.unsafe_ptr()
+        .unsafe_origin_cast[MutUntrackedOrigin]()
+        .unsafe_bitcast[UInt8](),
+        False,
     )
 
     var l_sp = List[Split[DT]]()

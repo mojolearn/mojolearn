@@ -1224,12 +1224,49 @@ def _histogram_inner_loop[
         i += stride
 
 
+@always_inline
+def _histogram_inner_loop_binned[
+    O: ObjectiveLike, ho: MutOrigin, ha: AddressSpace, //, sabotage: Int = 0
+](
+    objective: O,
+    dataset: DatasetView[O.DataT, O.LabelT],
+    histogram: MutPointer[O.BinT, ho, address_space=ha],
+    col: Int32,
+    n_bins: Int32,
+    range_start: Int,
+    end: Int,
+    tid: Int,
+    stride: Int,
+):
+    """DEVIATION 314's inner loop: their `:336-342` with the
+    `lower_bound` (`:341`) replaced by the PRECOMPUTED index the search
+    would return -- `DatasetView.bin_of`, a 1-byte read at the same
+    offset `value()` gathers 4 bytes from. Identical bin, identical
+    histogram, identical everything after.
+
+    `sabotage=3` (constant bin 0) is honored here exactly as in the
+    searching loop, so the check that proves the searching loop's reach
+    proves this one's too."""
+    var i = range_start + tid
+    while i < end:
+        var row = dataset.row_ids[unsafe_offset=i]
+        var start = dataset.bin_of(row, col)
+        comptime if sabotage == 3:
+            start = Int32(0)
+        var label = dataset.labels[unsafe_offset = Int(row)]
+        objective.IncrementHistogram(
+            histogram, n_bins, start, label, dataset, row
+        )
+        i += stride
+
+
 def build_histograms_kernel[
     O: ObjectiveLike,
     TPB: Int,
     SMEM_BIN_SLOTS: Int,
     USE_GLOBAL_MEMORY_HISTOGRAM: Bool,
     sabotage: Int = 0,
+    USE_BINNED: Bool = False,
 ](
     argsp: MutPointer[HistogramArgs[O], MutAnyOrigin],
     histograms: MutPointer[O.BinT, MutAnyOrigin],
@@ -1308,20 +1345,33 @@ def build_histograms_kernel[
     comptime if USE_GLOBAL_MEMORY_HISTOGRAM:
         # `:294`, `:317-318` -- `histogram = global_histogram` and
         # `quantiles_for_split = quantiles.quantiles_array + max_n_bins * col`.
-        _histogram_inner_loop[sabotage=sabotage](
-            objective,
-            dataset,
-            global_histogram,
-            quantiles.quantiles_array.unsafe_offset(
-                Int(max_n_bins) * Int(col)
-            ),
-            col,
-            n_bins,
-            range_start,
-            end,
-            tid,
-            stride,
-        )
+        comptime if USE_BINNED:
+            _histogram_inner_loop_binned[sabotage=sabotage](
+                objective,
+                dataset,
+                global_histogram,
+                col,
+                n_bins,
+                range_start,
+                end,
+                tid,
+                stride,
+            )
+        else:
+            _histogram_inner_loop[sabotage=sabotage](
+                objective,
+                dataset,
+                global_histogram,
+                quantiles.quantiles_array.unsafe_offset(
+                    Int(max_n_bins) * Int(col)
+                ),
+                col,
+                n_bins,
+                range_start,
+                end,
+                tid,
+                stride,
+            )
     else:
         # `:322-333` -- carve the shared blob, zero the histogram, copy
         # the quantiles in, then `__syncthreads()`. DEVIATION 103a.
@@ -1336,27 +1386,45 @@ def build_histograms_kernel[
         while i < histogram_len:
             histogram[unsafe_offset=i] = O.BinT()
             i += Int(block_dim.x)
-        var b = Int(thread_idx.x)
-        while b < Int(n_bins):
-            shared_quantiles[unsafe_offset=b] = quantiles.quantiles_array[
-                unsafe_offset = Int(max_n_bins) * Int(col) + b
-            ]
-            b += Int(block_dim.x)
+        comptime if not USE_BINNED:
+            # The quantile copy exists only for the bin SEARCH
+            # (`:330-332`); the binned loop reads no quantiles.
+            var b = Int(thread_idx.x)
+            while b < Int(n_bins):
+                shared_quantiles[unsafe_offset=b] = (
+                    quantiles.quantiles_array[
+                        unsafe_offset = Int(max_n_bins) * Int(col) + b
+                    ]
+                )
+                b += Int(block_dim.x)
         barrier()
 
         # `:336-342`
-        _histogram_inner_loop[sabotage=sabotage](
-            objective,
-            dataset,
-            histogram,
-            shared_quantiles,
-            col,
-            n_bins,
-            range_start,
-            end,
-            tid,
-            stride,
-        )
+        comptime if USE_BINNED:
+            _histogram_inner_loop_binned[sabotage=sabotage](
+                objective,
+                dataset,
+                histogram,
+                col,
+                n_bins,
+                range_start,
+                end,
+                tid,
+                stride,
+            )
+        else:
+            _histogram_inner_loop[sabotage=sabotage](
+                objective,
+                dataset,
+                histogram,
+                shared_quantiles,
+                col,
+                n_bins,
+                range_start,
+                end,
+                tid,
+                stride,
+            )
 
         # `:344-351`
         barrier()
@@ -1407,6 +1475,24 @@ def launch_build_histograms_kernel[
         )
     )
     if smem_config.use_global_memory_histogram:
+        if dataset.has_bins:
+            # DEVIATION 314: same launch, the binned loop body.
+            comptime kgb = build_histograms_kernel[
+                O, TPB, 1, True, sabotage, True
+            ]
+            log_launch("histogram_global_binned")
+            ctx.enqueue_function[kgb](
+                argsp.unsafe_origin_cast[MutAnyOrigin](),
+                histograms.unsafe_origin_cast[MutAnyOrigin](),
+                Int32(max_n_bins),
+                work_items.unsafe_origin_cast[MutAnyOrigin](),
+                Int32(col_start),
+                column_samples.unsafe_origin_cast[MutAnyOrigin](),
+                workload_info.unsafe_origin_cast[MutAnyOrigin](),
+                grid_dim=(histogram_grid_x, histogram_grid_y),
+                block_dim=TPB,
+            )
+            return
         comptime kg = build_histograms_kernel[
             O, TPB, 1, True, sabotage
         ]
@@ -1423,6 +1509,25 @@ def launch_build_histograms_kernel[
             block_dim=TPB,
         )
     else:
+        if dataset.has_bins:
+            # DEVIATION 314, shared arm. Uses the default 103a blob; the
+            # tier question below is orthogonal and pending its own A/B.
+            comptime ksb = build_histograms_kernel[
+                O, TPB, SMEM_BIN_SLOTS, False, sabotage, True
+            ]
+            log_launch("histogram_binned")
+            ctx.enqueue_function[ksb](
+                argsp.unsafe_origin_cast[MutAnyOrigin](),
+                histograms.unsafe_origin_cast[MutAnyOrigin](),
+                Int32(max_n_bins),
+                work_items.unsafe_origin_cast[MutAnyOrigin](),
+                Int32(col_start),
+                column_samples.unsafe_origin_cast[MutAnyOrigin](),
+                workload_info.unsafe_origin_cast[MutAnyOrigin](),
+                grid_dim=(histogram_grid_x, histogram_grid_y),
+                block_dim=TPB,
+            )
+            return
         # DEVIATION 103a, TIER MACHINERY (2026-08-22, VERDICT PENDING).
         # Their launcher passes EXACTLY `histogram_dynamic_smem_size` as
         # dynamic shared memory (`builder.cuh:412`, computed at
@@ -1438,38 +1543,46 @@ def launch_build_histograms_kernel[
         # bit-identical output (fingerprint gate held through the tiered
         # build); only the RESERVATION changes. The tier taken is visible
         # in the launch log by name.
-        # THE TIER LIST SHIPS EMPTY-IN-EFFECT ([1]: no need ever fits, so
-        # every launch falls through to the incumbent 16 KiB blob). The
-        # candidate list is [2048, 4096, 8192]. Rule 11 needs a measured
-        # win to flip a default, and the only A/B run so far
-        # (2026-08-22 morning) was VOIDed at canary spread 10.5x -- a
-        # peer GBM benchmark held the GPU through the window. The
-        # informal single-build reads that suggested the SMALLER blob is
-        # SLOWER on M4 (an occupancy result CUDA intuition would not
-        # predict) are equally uncertifiable under that contention.
+        # THE TIER MACHINERY SHIPS DISABLED, and the disable is a
+        # comptime flag rather than a sentinel: the first shipped form
+        # ("tier list [1], nothing fits") was BROKEN BY DESIGN --
+        # builder_kernels_check passes `SharedMemoryConfig(use_global, 0)`
+        # as a don't-care, 0 <= 1 selected the tier, and
+        # `TIER_BYTES // size_of[BinT]` allocated a ZERO-SLOT shared
+        # blob: the shared arm accumulated into nothing and every
+        # non-zero cell read back 0 (caught by that check, 2026-08-22).
+        # Rule 11 needs a measured win to enable the tiers, and the only
+        # A/B so far was VOIDed at canary spread 10.5x (a peer GBM
+        # benchmark held the GPU); the informal reads suggesting the
+        # SMALLER blob is SLOWER on M4 are equally uncertifiable.
         # `build/rf_bench_smem4k` / `_smem16k` are the A/B pair; rerun
-        # the gated ABAB on a quiet box before touching this list.
-        var need_bytes = smem_config.histogram_dynamic_smem_size
+        # the gated ABAB on a quiet box before flipping this flag.
+        comptime HISTOGRAM_SMEM_TIERS_ENABLED = False
         var launched = False
-        comptime for TIER_BYTES in [1]:
-            comptime TIER_SLOTS = TIER_BYTES // size_of[O.BinT]()
-            if not launched and need_bytes <= TIER_BYTES:
-                comptime kt = build_histograms_kernel[
-                    O, TPB, TIER_SLOTS, False, sabotage
-                ]
-                log_launch("histogram_shared_" + String(TIER_BYTES))
-                ctx.enqueue_function[kt](
-                    argsp.unsafe_origin_cast[MutAnyOrigin](),
-                    histograms.unsafe_origin_cast[MutAnyOrigin](),
-                    Int32(max_n_bins),
-                    work_items.unsafe_origin_cast[MutAnyOrigin](),
-                    Int32(col_start),
-                    column_samples.unsafe_origin_cast[MutAnyOrigin](),
-                    workload_info.unsafe_origin_cast[MutAnyOrigin](),
-                    grid_dim=(histogram_grid_x, histogram_grid_y),
-                    block_dim=TPB,
-                )
-                launched = True
+        comptime if HISTOGRAM_SMEM_TIERS_ENABLED:
+            var need_bytes = smem_config.histogram_dynamic_smem_size
+            comptime for TIER_BYTES in [2048, 4096, 8192]:
+                comptime TIER_SLOTS = TIER_BYTES // size_of[O.BinT]()
+                comptime assert TIER_SLOTS > 0, "tier below one BinT slot"
+                # `need_bytes > 0` guards the check-suite's don't-care
+                # config; a zero size means "not computed", never "fits".
+                if not launched and need_bytes > 0 and need_bytes <= TIER_BYTES:
+                    comptime kt = build_histograms_kernel[
+                        O, TPB, TIER_SLOTS, False, sabotage
+                    ]
+                    log_launch("histogram_shared_" + String(TIER_BYTES))
+                    ctx.enqueue_function[kt](
+                        argsp.unsafe_origin_cast[MutAnyOrigin](),
+                        histograms.unsafe_origin_cast[MutAnyOrigin](),
+                        Int32(max_n_bins),
+                        work_items.unsafe_origin_cast[MutAnyOrigin](),
+                        Int32(col_start),
+                        column_samples.unsafe_origin_cast[MutAnyOrigin](),
+                        workload_info.unsafe_origin_cast[MutAnyOrigin](),
+                        grid_dim=(histogram_grid_x, histogram_grid_y),
+                        block_dim=TPB,
+                    )
+                    launched = True
         if not launched:
             # Above 8 KiB the full 103a blob remains; anything past
             # 16 KiB never reaches this arm because
@@ -1666,3 +1779,79 @@ def launch_find_best_splits_kernel[
     )
 
 
+
+# ===========================================================================
+# DEVIATION 314 -- the dataset is binned ONCE per forest.
+# ===========================================================================
+
+
+def bin_dataset_kernel[dtype: DType](
+    data: MutPointer[Scalar[dtype], MutAnyOrigin],
+    bins: MutPointer[UInt8, MutAnyOrigin],
+    quantiles_array: MutPointer[Scalar[dtype], MutAnyOrigin],
+    n_bins_array: MutPointer[Int32, MutAnyOrigin],
+    max_n_bins: Int32,
+    n_rows: Int32,
+    n_cols: Int32,
+    row_stride: Int64,
+    col_stride: Int64,
+):
+    """DEVIATION 314. One thread per (row, col): store
+    `lower_bound(quantiles[col], value)` as a uint8, at the SAME offset
+    formula `value()` uses, so `DatasetView.bin_of` reads what the
+    histogram kernel's search (`builder_kernels_impl.cuh:341`) would
+    have computed. Grid y is the column, x strides the rows -- the
+    quantile row for a column is read once per thread, the data column
+    is walked coalesced for the column-major default.
+
+    This kernel has no cuML counterpart: their histogram kernel
+    re-searches at every level (`:336-343`). The index it stores is the
+    IDENTICAL pure function of (row, col), which is the whole
+    bit-identity argument.
+    """
+    var col = Int32(Int(block_idx.y))
+    var n_bins = n_bins_array[unsafe_offset = Int(col)]
+    var q = quantiles_array.unsafe_offset(Int(max_n_bins) * Int(col))
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while i < Int(n_rows):
+        var off = Int(
+            Int64(i) * row_stride + Int64(Int(col)) * col_stride
+        )
+        var b = lower_bound_aspace(q, n_bins, data[unsafe_offset=off])
+        bins[unsafe_offset=off] = UInt8(Int(b))
+        i += stride
+
+
+def launch_bin_dataset[dtype: DType](
+    ctx: DeviceContext,
+    data: MutPointer[Scalar[dtype], MutUntrackedOrigin],
+    mut bins_buf: DeviceBuffer[DType.uint8],
+    quantiles_array: MutPointer[Scalar[dtype], MutUntrackedOrigin],
+    n_bins_array: MutPointer[Int32, MutUntrackedOrigin],
+    max_n_bins: Int,
+    n_rows: Int,
+    n_cols: Int,
+    row_stride: Int,
+    col_stride: Int,
+) raises:
+    """DEVIATION 314's one launch, once per forest, right after
+    `compute_quantiles`. The caller guards `max_n_bins <= 256`."""
+    if n_rows <= 0 or n_cols <= 0:
+        return
+    var blocks_x = ceildiv(n_rows, 256)
+    log_launch("bin_dataset")
+    ctx.enqueue_function[bin_dataset_kernel[dtype]](
+        data.unsafe_origin_cast[MutAnyOrigin](),
+        bins_buf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        quantiles_array.unsafe_origin_cast[MutAnyOrigin](),
+        n_bins_array.unsafe_origin_cast[MutAnyOrigin](),
+        Int32(max_n_bins),
+        Int32(n_rows),
+        Int32(n_cols),
+        Int64(row_stride),
+        Int64(col_stride),
+        grid_dim=(blocks_x, n_cols),
+        block_dim=256,
+    )
+    _ = bins_buf.unsafe_ptr()

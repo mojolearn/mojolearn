@@ -143,6 +143,11 @@ def _fit[sabotage: Int](ctx: DeviceContext) raises -> FitOut:
         dr.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
         Int32(N_CLASSES),
         False,
+        # DEVIATION 314: raw path.
+        dx.unsafe_ptr()
+        .unsafe_origin_cast[MutUntrackedOrigin]()
+        .unsafe_bitcast[UInt8](),
+        False,
     )
 
     var builder = Builder[

@@ -313,6 +313,9 @@ from ensemble.decisiontree.batched_levelalgo.builder import (
     Builder,
     TreeState,
 )
+from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import (
+    launch_bin_dataset,
+)
 from ensemble.flatnode import SparseTreeNode
 from ensemble.decisiontree.batched_levelalgo.bins import BinScales
 from ensemble.decisiontree.batched_levelalgo.objectives import ObjectiveLike
@@ -2441,6 +2444,36 @@ def fit_forest[
         .unsafe_origin_cast[MutUntrackedOrigin](),
     )
 
+    # DEVIATION 314 -- the dataset is BINNED once, right here, where
+    # their quantiles are computed once (`:317-325`). The histogram
+    # kernel re-derives `lower_bound(quantiles[col], value)` per element
+    # per LEVEL per TREE (`builder_kernels_impl.cuh:341`); that index is
+    # a pure function of (row, col) once the quantiles exist, so storing
+    # it as one uint8 per element makes every later lookup a 1-byte read
+    # of the SAME index -- bit-identical by construction, and the launch
+    # -log attribution measured that kernel at 85.3% of device time at
+    # 500k x 50. uint8 caps the index at 255, so `max_n_bins > 256`
+    # keeps the searching path; the buffer is a 1-byte dummy then.
+    var use_bins = Int(rf_params.tree_params.max_n_bins) <= 256
+    var d_bins = ctx.enqueue_create_buffer[DType.uint8](
+        n_rows * n_cols if use_bins else 1
+    )
+    if use_bins:
+        launch_bin_dataset(
+            ctx,
+            rebind[MutPointer[Scalar[O.DataT], MutUntrackedOrigin]](
+                x.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+            ),
+            d_bins,
+            quantiles.quantiles_array,
+            quantiles.n_bins_array,
+            Int(rf_params.tree_params.max_n_bins),
+            n_rows,
+            n_cols,
+            n_cols if row_major else 1,
+            1 if row_major else n_rows,
+        )
+
     var has_sw = len(sample_weight_host) > 0
     # DEVIATION 117, PORTED: cuML's shipped forest loop is
     # `#pragma omp parallel for num_threads(n_streams)` over trees with a
@@ -2568,6 +2601,11 @@ def fit_forest[
                 sampler.rows_ptr(k),
                 Int32(n_unique_labels),
                 objective_sees_weights,
+                # DEVIATION 314 -- shared read-only across all K slots.
+                d_bins.unsafe_ptr().unsafe_origin_cast[
+                    MutUntrackedOrigin
+                ](),
+                use_bins,
             )
             var ts = builders[k].begin_tree(ctx, dataset, quantiles)
             if ts.done:
@@ -2619,6 +2657,11 @@ def fit_forest[
                     sampler.rows_ptr(k),
                     Int32(n_unique_labels),
                     objective_sees_weights,
+                    # DEVIATION 314.
+                    d_bins.unsafe_ptr().unsafe_origin_cast[
+                        MutUntrackedOrigin
+                    ](),
+                    use_bins,
                 )
                 states[k] = builders[k].begin_tree(ctx, dataset, quantiles)
                 slot_tree[k] = next_tree
@@ -2644,4 +2687,5 @@ def fit_forest[
     # synchronize. Measured hazard, not a precaution.
     _ = qr^
     _ = sampler^
+    _ = d_bins^
     return forest^

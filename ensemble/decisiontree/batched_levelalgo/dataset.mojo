@@ -99,6 +99,24 @@ struct DatasetView[dtype: DType, label_dtype: DType](Copyable, Movable):
     # `MutPointer` is non-null by design. The null-ness their code tests
     # is carried as this flag and tested in the same two places.
     var has_sample_weight: Bool
+    # DEVIATION 314 -- NOT in their struct: the pre-binned dataset. Their
+    # histogram kernel re-derives `lower_bound(quantiles[col], value)`
+    # for every element at EVERY level of EVERY tree
+    # (`builder_kernels_impl.cuh:341`), but that index is a pure function
+    # of (row, col) once the per-forest quantiles exist
+    # (`randomforest.cuh:317-325` computes them ONCE). `bins` holds that
+    # index, computed once per forest by `launch_bin_dataset`
+    # (quantiles.mojo), laid out with the SAME strides as `data`, one
+    # uint8 per element -- so the histogram kernel's 4-byte random gather
+    # plus 7-step binary search becomes a 1-byte read of the SAME index,
+    # and every downstream bit is unchanged. Launch-log attribution
+    # measured that kernel at 85.3% of device time at 500k x 50
+    # (bench/results/RF_2026-08-22_attribution.md). `has_bins` is False
+    # when `max_n_bins > 256` (uint8 cannot hold the index) and in
+    # checks that exercise the raw path; the kernel then searches as
+    # theirs does.
+    var bins: MutPointer[UInt8, MutUntrackedOrigin]
+    var has_bins: Bool
 
     @always_inline
     def value(self, row: Int32, col: Int32) -> Scalar[Self.dtype]:
@@ -109,3 +127,19 @@ struct DatasetView[dtype: DType, label_dtype: DType](Copyable, Movable):
                 + Int64(Int(col)) * self.col_stride
             )
         ]
+
+    @always_inline
+    def bin_of(self, row: Int32, col: Int32) -> Int32:
+        """DEVIATION 314: the precomputed `lower_bound` index for
+        (row, col). Valid only when `has_bins`; same offset formula as
+        `value` above."""
+        return Int32(
+            Int(
+                self.bins[
+                    unsafe_offset = Int(
+                        Int64(Int(row)) * self.row_stride
+                        + Int64(Int(col)) * self.col_stride
+                    )
+                ]
+            )
+        )

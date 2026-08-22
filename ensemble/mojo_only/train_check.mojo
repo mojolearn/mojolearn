@@ -196,6 +196,12 @@ def _fit(
         dr.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
         Int32(n_classes),
         False,
+        # DEVIATION 314: raw path -- this check IS the searching loop's
+        # oracle.
+        dx.unsafe_ptr()
+        .unsafe_origin_cast[MutUntrackedOrigin]()
+        .unsafe_bitcast[UInt8](),
+        False,
     )
 
     var builder = Builder[
