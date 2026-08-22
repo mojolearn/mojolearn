@@ -445,11 +445,14 @@ struct CatBoostOptions(Copyable, Movable):
     defaulted one, so nothing can run on an unstated tree budget."""
 
     var boost_from_average: Bool
-    """`boost_from_average`. Default false (`boosting_options.cpp:17`).
-    HONORED at false, which is what the port does: `fit` seeds the cursor with
-    zeros, matching their `StartingPoint`-less branch
-    (`doc_parallel_boosting.h:180-186`). True would seed it with
-    `CalcOptimumConstApprox` and is refused."""
+    """`boost_from_average`. Default false (`boosting_options.cpp:17`);
+    their data-dependent auto-true (`AdjustBoostFromAverageDefaultValue`)
+    is resolved by `train`, not here, mirroring their layering. PORTED
+    2026-08-22 for RMSE, Logloss and CrossEntropy: `fit_with_test` seeds
+    every cursor with `CalcOptimumConstApprox`
+    (`gbdt/metrics/optimal_const_for_loss.mojo`) and the model records the
+    bias (`doc_parallel_boosting.h:174-182`, `:434`). `check()` here
+    validates the flag against the ported loss set."""
 
     # --- bootstrap_options.h, and this one changes the tree -----------------
 
@@ -668,9 +671,12 @@ struct CatBoostOptions(Copyable, Movable):
                 " the score kernel here applies no minimum-count test either,"
                 " so it is refused rather than accepted and discarded"
             )
-        # The three boosting options. `learning_rate` and `iterations` are
-        # honored, `boost_from_average` is honored only at CatBoost's own
-        # default of false (`boosting_options.cpp:17`).
+        # The three boosting options, all honored. `boost_from_average`
+        # (PORTED 2026-08-22) is validated against the losses whose
+        # CalcOptimumConstApprox arm exists
+        # (`gbdt/metrics/optimal_const_for_loss.mojo`); their own ENSURE
+        # (`catboost_options.cpp:705-709`) allows the quantile family too,
+        # whose constant needs the unported CalcSampleQuantile.
         if self.learning_rate <= 0.0:
             raise Error(
                 "learning_rate must be positive; got "
@@ -681,13 +687,11 @@ struct CatBoostOptions(Copyable, Movable):
                 "Iterations count should be positive; got "
                 + String(self.iterations)
             )
-        if self.boost_from_average:
-            raise Error(
-                "boost_from_average is not ported; the cursor is seeded with"
-                " zeros, and seeding it with CalcOptimumConstApprox"
-                " (doc_parallel_boosting.h:145-156) is a different model, not"
-                " a different starting guess"
-            )
+        # `boost_from_average`'s loss validation is THEIR loss-aware
+        # ENSURE (`catboost_options.cpp:703-711`) and this struct does not
+        # carry the loss, so it lives where the loss is known: `train`'s
+        # resolver raises by name for losses whose CalcOptimumConstApprox
+        # arm is not ported. Nothing to check here.
         # Bootstrap. Theirs defaults to Bayesian at temperature 1.0 and
         # reweights every row once per tree BEFORE the derivatives are taken
         # (`weak_objective_impl.h:31-36`), so accepting the name and skipping

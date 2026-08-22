@@ -467,6 +467,7 @@ class GradientBoosting:
         nan_mode="Min",
         random_strength=0.0,
         use_pointwise_searcher=False,
+        boost_from_average=None,
         border_build_max_samples=200000,
         class_weights=None,
         permutation_count=None,
@@ -619,6 +620,12 @@ class GradientBoosting:
         self.nan_mode = nan_mode
         self.random_strength = float(random_strength)
         self.use_pointwise_searcher = bool(use_pointwise_searcher)
+        # their tri-state (`AdjustBoostFromAverageDefaultValue`): None is
+        # unset and resolves inside `train` -- auto-True for RMSE (their
+        # rule; NOT for Logloss, which is not on their list), False
+        # otherwise; True is explicit and refused by name for losses
+        # whose CalcOptimumConstApprox arm is not ported.
+        self.boost_from_average = boost_from_average
         self.border_build_max_samples = int(border_build_max_samples)
         self.class_weights = (
             None if class_weights is None
@@ -693,7 +700,8 @@ class GradientBoosting:
             else int(self.permutation_count),           # 28
             -1 if self.ctr_estimation_permutation_id is None
             else int(self.ctr_estimation_permutation_id),  # 29
-            len(cw),                                    # 30  n_class_weights
+            _tri(self.boost_from_average),              # 30
+            len(cw),                                    # 31  n_class_weights
             # ---- and then `n_class_weights` MORE, the weights themselves.
             # They ride in this list rather than at a seventh buffer address
             # because `gbdt_fit` already takes eight arguments and
@@ -895,6 +903,17 @@ class GradientBoosting:
             strs,
         )
         self.model_ = out[0]
+        # the model's bias (CatBoost's `get_scale_and_bias()[1]`), parsed
+        # from the text's BITS half so it round-trips exactly. 0.0 on
+        # every fit without boost_from_average, exactly as theirs is.
+        self.bias_ = 0.0
+        for _line in str(out[0]).split("\n"):
+            if _line.startswith("bias "):
+                _bits = int(_line.split()[1].split("/")[1], 16)
+                self.bias_ = float(
+                    np.uint64(_bits).view(np.float64)
+                )
+                break
         self.best_iteration_ = int(out[1])
         self.stopped_early_ = bool(out[2])
         self.loss_curve_ = np.asarray(out[3], dtype=np.float64)

@@ -68,10 +68,17 @@ DEVIATIONS, all stated:
   `bin_feature_val` (u32) + `bin_feature_xor` (u32) arrays; the uchar4 is
   a `UInt32` unpacked by byte shifts.
 * their results pipeline converts to FLOAT64 with model scale/bias
-  (`ProcessResultsImpl`); Metal has no float64, our models have
-  scale 1 / bias 0, so the Float32 accumulator IS the prediction and
-  `ProcessResults` is not carried. The in-kernel accumulator is `float`
-  on their side too (`TCudaEvaluatorLeafType = float`, evaluator.cuh:26).
+  (`ProcessResultsImpl`); Metal has no float64, so `ProcessResults` is
+  not carried as a post-pass. Scale is always 1 here; BIAS IS NOT since
+  boost_from_average landed (2026-08-22), and it enters as the
+  accumulator's SEED -- `launch_eval` clears `results` to
+  `Float32(model.bias)` instead of zero. That is bias-then-add in
+  float32 where theirs is add-then-bias in float64: at most one float32
+  rounding of association apart, inside the reorder tolerance the
+  tree-block atomicAdd already imposes, and `model_io_check` gates the
+  evaluator against the tree-wise apply on a BIASED model since the same
+  date. The in-kernel accumulator is `float` on their side too
+  (`TCudaEvaluatorLeafType = float`, evaluator.cuh:26).
 * the one atomic is their `TAtomicAdd<float>` on global memory; Metal has
   global float atomicAdd (measured), so it ports directly. Same
   non-determinism class as their own GPU evaluator.
@@ -475,6 +482,9 @@ struct GpuEvaluatorModel(Movable):
     """Their `NeedXorMask` dispatch (`cpu/evaluator_impl.cpp:257`,
     `:428-437`): true iff some split in this model is one-hot. A float-only
     model runs the kernel it ran before the one-hot arm existed."""
+    var bias: Float32
+    """`model.bias` narrowed once; the accumulator's seed (see the
+    ProcessResults deviation in the module docstring)."""
 
 
 def pack_model_for_evaluator(
@@ -602,7 +612,7 @@ def pack_model_for_evaluator(
     ctx.synchronize()
     return GpuEvaluatorModel(
         tree_sizes^, tree_starts^, first_leaf^, bf_idx^, bf_val^, bf_xor^,
-        leaves^, n_trees, need_xor_mask,
+        leaves^, n_trees, need_xor_mask, Float32(model.bias),
     )
 
 
@@ -661,8 +671,9 @@ def launch_eval(
     mut results: DeviceBuffer[DType.float32],
 ) raises:
     """`EvalQuantizedData` (`evaluator.cu:344-368`): clear results, one
-    kernel over (tree blocks, doc blocks)."""
-    ctx.enqueue_memset(results, Float32(0.0))
+    kernel over (tree blocks, doc blocks). The clear value is the model's
+    bias -- the ProcessResults deviation in the module docstring."""
+    ctx.enqueue_memset(results, m.bias)
     # the adaptive sub-block width of the kernel's DEVIATION BLOCK: fill
     # all eight tree sub-blocks at any model size
     var ext_width = (m.tree_count + 63) // 64

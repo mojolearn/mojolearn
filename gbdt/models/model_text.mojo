@@ -367,6 +367,12 @@ def model_text(tm: TrainedModel) raises -> String:
     )
     out += String("trees ") + String(tm.model.size()) + "\n"
     out += String("losses ") + String(len(tm.losses)) + "\n"
+    # the model's bias (their `SetBias`, set under `boost_from_average`).
+    # Written ONLY when non-zero, the `ctr_columns` rule: a zero-bias
+    # model's file stays byte-identical to what this format wrote before
+    # the field existed.
+    if tm.model.bias != 0.0:
+        out += String("bias ") + f64_token(tm.model.bias) + "\n"
     # CTR COLUMN COUNT. Written ONLY when non-zero, so a float-only model's
     # file is byte-identical to what this format wrote before the field
     # existed and the version stays 1 -- the rule THE CTR SEAM sets out.
@@ -666,6 +672,19 @@ def load_model_text(text: String) raises -> TrainedModel:
                     raise Error("`losses` must follow `trees`")
                 n_losses = Int(t[1])
                 header_seen = 4
+            elif kind == String("bias"):
+                # their `SetBias` value (`doc_parallel_boosting.h:434`),
+                # written only when non-zero -- the same
+                # absent-means-default rule as `ctr_columns`, so every
+                # file written before boost_from_average landed reads
+                # unchanged. A model that carries one and lost it in a
+                # round trip would predict the residual, which is why
+                # `model_io_check` round-trips a biased model per cell.
+                if header_seen != 4:
+                    raise Error("`bias` must follow `losses`")
+                if len(t) != 2:
+                    raise Error("`bias` takes one float token")
+                model.bias = parse_f64(String(t[1]))
             elif kind == String("ctr_columns"):
                 if header_seen != 4:
                     raise Error("`ctr_columns` must follow `losses`")

@@ -116,6 +116,9 @@ citations rather than leaving it to be assumed.
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.host.device_attribute import DeviceAttribute
 from gbdt.methods.kernel_add_model_value import add_model_value_kernel
+from gbdt.metrics.optimal_const_for_loss import (
+    calc_one_dimensional_optimum_const_approx,
+)
 
 from gbdt.gpu_lib.gpu_manager import TCudaManager
 from gbdt.gpu_util.kernel.transform import (
@@ -677,6 +680,13 @@ def fit_with_test(
     leaf_estimation_method: Int = LEAF_ESTIMATION_NEWTON,
     alpha: Float32 = Float32(0.0),
     estimator_alpha: Float32 = Float32(0.5),
+    # `boost_from_average`, PORTED 2026-08-22 and RESOLVED BY THE CALLER:
+    # their layering resolves the data-dependent default in
+    # `options_helper.cpp::AdjustBoostFromAverageDefaultValue` before the
+    # trainer runs, and this port keeps that shape -- `train`/the python
+    # surface resolve, this function only obeys. False is every existing
+    # caller and every oracle fixture (the generators pin it off).
+    boost_from_average: Bool = False,
     # THE HELD-OUT ARM IS OPTIONAL AND EVERY EXISTING CALLER IS
     # UNCHANGED. `fit` has nine call sites across checks, benches and
     # `train`, one of which belongs to another session, so these are
@@ -798,19 +808,51 @@ def fit_with_test(
         approx_dim = num_classes
     var stat_count = 1 + approx_dim
 
-    # their `cursor`: the running prediction for every row. Zeros is THEIR
-    # default branch, not a simplification of it: with no baseline column and
-    # `boost_from_average` false (`boosting_options.cpp:17`),
-    # `cursors->StartingPoint` is unset and `CreateCursors` writes
-    # `TVector<float> start(sampleCount, 0.0)`
-    # (`doc_parallel_boosting.h:180-186`). `boost_from_average` true would
-    # seed it with `CalcOptimumConstApprox` and is refused by
-    # `CatBoostOptions.check()`.
+    # their `cursor`: the running prediction for every row. With
+    # `boost_from_average` false, `cursors->StartingPoint` is unset and
+    # `CreateCursors` writes `TVector<float> start(sampleCount, 0.0)`
+    # (`doc_parallel_boosting.h:180-186`); with it TRUE (PORTED
+    # 2026-08-22), `StartingPoint = NCB::CalcOptimumConstApprox(loss,
+    # target, weights)` (`:174-182`) and every cursor plane is written
+    # with `const float value = (*cursors->StartingPoint)[dim]` -- the
+    # double narrowed to float32 exactly once, here as there. The same
+    # value goes on the model as its bias
+    # (`modelToExport.SetBias(cursors->StartingPoint)`, `:434`).
+    var starting_approx = Float64(0.0)
+    if boost_from_average:
+        if approx_dim != 1:
+            raise Error(
+                "boost_from_average is one-dimensional here; their ENSURE"
+                " list has no MultiClass either"
+            )
+        var h_t = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
+        ctx.enqueue_copy(dst_ptr=h_t.unsafe_ptr(), src_buf=targets)
+        var h_w = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
+        if has_weights:
+            ctx.enqueue_copy(dst_ptr=h_w.unsafe_ptr(), src_buf=weights)
+        ctx.synchronize()
+        var t_host = List[Float32](capacity=n_rows)
+        var w_host = List[Float32](capacity=n_rows)
+        for i in range(n_rows):
+            t_host.append(h_t.unsafe_ptr().unsafe_load(i))
+        if has_weights:
+            for i in range(n_rows):
+                w_host.append(h_w.unsafe_ptr().unsafe_load(i))
+        starting_approx = calc_one_dimensional_optimum_const_approx(
+            objective, t_host, w_host, has_weights
+        )
+        # their `modelToExport.SetBias` (`:434`), set here so an early
+        # stop or a raise mid-fit cannot produce a seeded-cursor model
+        # that forgot to say so.
+        model.bias = starting_approx
+        _ = h_t^
+        _ = h_w^
+    var start_value = Float32(starting_approx)
     var cursor = ctx.enqueue_create_buffer[DType.float32](
         approx_dim * n_rows
     )
     # every plane, not only the first
-    ctx.enqueue_memset(cursor, Float32(0.0))
+    ctx.enqueue_memset(cursor, start_value)
 
     # ---- the permutations -------------------------------------------
     #
@@ -844,7 +886,9 @@ def fit_with_test(
             var c = ctx.enqueue_create_buffer[DType.float32](
                 approx_dim * n_rows
             )
-            ctx.enqueue_memset(c, Float32(0.0))
+            # `cursors->Cursors[i]`, ALL written to the same starting
+            # value (`doc_parallel_boosting.h:180-186`)
+            ctx.enqueue_memset(c, start_value)
             cursors.append(c^)
 
     # their der/der2 buffers, in the two-plane layout the histogram kernels
@@ -973,6 +1017,12 @@ def fit_with_test(
     # MINIMIZED, so `maxIsOptimal` is False; a detector built without a
     # test set is inert whatever was asked (`:122-124`).
     var has_test = test.__bool__() and test.value().n_rows > 0
+    if boost_from_average and has_test:
+        # their `CreateCursors` seeds the TEST cursor with the same
+        # `StartingPoint` (the CB_ENSURE at `:174-182` names
+        # TestDataProvider precisely because the seed reaches it)
+        ref t_arm = test.value()
+        ctx.enqueue_memset(t_arm.cursor, start_value)
     var detector = make_overfitting_detector(
         od_type, False, od_pvalue, od_wait, has_test
     )
@@ -1625,7 +1675,12 @@ def predict(
     var layout = build_layout(fold_counts, one_hot)
     var approx_dim = model_approx_dim(model)
 
-    ctx.enqueue_memset(cursor, Float32(0.0))
+    # the model's bias IS the cursor's starting value
+    # (`modelToExport.SetBias(cursors->StartingPoint)`,
+    # `doc_parallel_boosting.h:434`): a fit under `boost_from_average`
+    # grew every tree against a cursor seeded there, so an apply that
+    # started at zero would return the residual, not the target.
+    ctx.enqueue_memset(cursor, Float32(model.bias))
 
     # pack every tree's per-level records and leaf values, flat.
     # `total_leaves` counts VALUES, so it carries the approx dimension.
@@ -1778,7 +1833,10 @@ def fit(
     # default is False
     use_pointwise_searcher: Bool = False,
     # forwarded; `oblivious_tree_options.cpp:17`
-    random_strength: Float32 = Float32(0.0),) raises -> List[Float64]:
+    random_strength: Float32 = Float32(0.0),
+    # forwarded; resolved by the caller (see `fit_with_test`'s docstring
+    # on this parameter)
+    boost_from_average: Bool = False,) raises -> List[Float64]:
     """`fit_with_test` with no held-out set and no detector.
 
     THIS WRAPPER EXISTS SO NINE CALL SITES DID NOT HAVE TO CHANGE when the
@@ -1815,6 +1873,7 @@ def fit(
         estimator_alpha=estimator_alpha,
         use_pointwise_searcher=use_pointwise_searcher,
         random_strength=random_strength,
+        boost_from_average=boost_from_average,
     )
     var out = r.learn_losses.copy()
     return out^

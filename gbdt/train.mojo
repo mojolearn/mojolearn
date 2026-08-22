@@ -69,6 +69,7 @@ from gbdt.gpu_util.kernel.bootstrap import (
 #: and MVS does not reach their GPU oblivious searcher.
 comptime DEFAULT_SUBSAMPLE = Float32(0.66)
 from gbdt.targets.kernel.pointwise_targets import (
+    OBJECTIVE_CROSSENTROPY,
     OBJECTIVE_LOGLOSS,
     OBJECTIVE_MULTICLASS,
     OBJECTIVE_MULTICLASS_OVA,
@@ -464,6 +465,18 @@ def train(
     # leaf it already grew. That is why it cannot take DEVIATION 64's
     # estimation shortcut.
     use_pointwise_searcher: Bool = False,
+    # `boost_from_average`, tri-state exactly because THEIRS is: -1 is
+    # "not set", resolved by the port of
+    # `options_helper.cpp::AdjustBoostFromAverageDefaultValue` below --
+    # auto-TRUE for the losses on their list whose CalcOptimumConstApprox
+    # arm is ported (RMSE; their list also holds MAE/Quantile/MAPE, whose
+    # constant needs the unported CalcSampleQuantile, so those resolve to
+    # FALSE with the gap named in `gbdt/metrics/optimal_const_for_loss`).
+    # NOTE their list does NOT hold Logloss: an unset option on a Logloss
+    # fit is FALSE on their side too, which the higgs 2026-08-22 read
+    # got wrong before this port. 0 and 1 are explicit; 1 raises by name
+    # for losses without a ported constant.
+    boost_from_average: Int = -1,
 ) raises -> TrainedModel:
     """Borders -> device quantization -> fit, one call.
 
@@ -1346,6 +1359,42 @@ def train(
     )
     var objective = loss_desc.loss_function
 
+    # ---- `AdjustBoostFromAverageDefaultValue` (`options_helper.cpp`),
+    # ported 2026-08-22. Their rule, verbatim: if the option is SET,
+    # keep it; else set TRUE on a single host with no baseline and no
+    # continuation for RMSE, MAE, Quantile, MAPE (and three multi losses
+    # this port does not have). Logloss is NOT on the list. This port has
+    # no baseline column and no continuation, so those guards are
+    # trivially met; MAE/Quantile/MAPE resolve FALSE here because their
+    # constant needs the unported CalcSampleQuantile -- a named gap, not
+    # their rule.
+    var bfa: Bool
+    if boost_from_average == 1:
+        if not (
+            objective == OBJECTIVE_RMSE
+            or objective == OBJECTIVE_LOGLOSS
+            or objective == OBJECTIVE_CROSSENTROPY
+        ):
+            # their CB_ENSURE names the allowed list; ours additionally
+            # names the unported-constant gap for the quantile family
+            raise Error(
+                "boost_from_average: ported for RMSE, Logloss and"
+                " CrossEntropy only. Their list also allows Quantile,"
+                " MultiQuantile, MAE, MAPE, MultiRMSE (catboost_options"
+                ".cpp:705-709); those need the unported CalcSampleQuantile"
+                " and are refused by name."
+            )
+        bfa = True
+    elif boost_from_average == 0:
+        bfa = False
+    elif boost_from_average == -1:
+        bfa = objective == OBJECTIVE_RMSE
+    else:
+        raise Error(
+            "boost_from_average must be -1 (their data-dependent"
+            " default), 0 or 1; got " + String(boost_from_average)
+        )
+
     # THE CLASS COUNT COMES FROM THE LABEL COLUMN, as their
     # `TClassificationTargetHelper` derives it, and it is derived rather
     # than taken as a parameter because a count that disagrees with the
@@ -1574,6 +1623,7 @@ def train(
         od_wait=od_wait,
         random_strength=random_strength,
         use_pointwise_searcher=use_pointwise_searcher,
+        boost_from_average=bfa,
     )
     var losses = fit_result.learn_losses.copy()
     var t_losses = fit_result.test_losses.copy()

@@ -761,6 +761,15 @@ ctr-target-oracle-gen = "python tools/ctr_target_oracle.py > bench/ctr_target_or
 # exactly, which is what makes its Cosine disagreement evidence.
 score-probe = "python tools/score_probe.py"
 
+# boost_from_average against CatBoost ITSELF: their get_scale_and_bias()
+# bias vs the bias our python surface reports, bit for bit, on hashed
+# fixtures -- every ported arm (RMSE/Logloss, weighted and not), BOTH
+# sides of their data-dependent default (unset RMSE auto-true, unset
+# Logloss stays zero -- Logloss is NOT on their adjust list, the misread
+# behind the 2026-08-22 higgs report), and a weighted-vs-unweighted
+# sabotage. Needs the rebuilt _mojolearn_gbdt.so; a GPU; seconds.
+check-bfa-oracle = "python tools/bfa_oracle_check.py"
+
 [feature.bench.dependencies]
 python = ">=3.11"
 numpy = "*"

@@ -152,6 +152,10 @@ struct GbdtFitParams(Copyable, Movable):
     #: their estimation permutation (`doc_parallel_boosting.h:101-103`),
     #: -1 UNSET meaning `permutation_count - 1`. Only the CTR path reads it.
     var ctr_estimation_permutation_id: Int
+    #: their `boost_from_average`, tri-state exactly as `train` takes it:
+    #: -1 is their unset option, resolved by the port of
+    #: `AdjustBoostFromAverageDefaultValue` inside `train`; 0/1 explicit.
+    var boost_from_average: Int
     #: their `class_weights` (`data_processing_options.cpp:52`), EMPTY for
     #: none. Multiplied into the row weight, not substituted for it
     #: (`target/data_providers.cpp:168`). One entry per class slot; `train`
@@ -187,6 +191,9 @@ def default_gbdt_fit_params() -> GbdtFitParams:
         # 1.0 (`oblivious_tree_options.cpp:17`) and `train` ships 0.0.
         String("Min"), Float32(0.0), False,
         200_000, -1, -1,
+        # boost_from_average -1: their unset option, resolved inside
+        # `train` by the AdjustBoostFromAverageDefaultValue port
+        -1,
         List[Float32](),
     )
 
@@ -347,6 +354,7 @@ def gbdt_fit(
         border_build_max_samples=params.border_build_max_samples,
         permutation_count=params.permutation_count,
         ctr_estimation_permutation_id=params.ctr_estimation_permutation_id,
+        boost_from_average=params.boost_from_average,
         class_weights=params.class_weights.copy(),
     )
     var learn_losses = tm.losses.copy()

@@ -143,19 +143,24 @@ struct TAdditiveModel(Copyable, Movable):
     folded into the stored leaf values by their `Rescale(step)`
     (`doc_parallel_boosting.h:389-391`), so nothing here reapplies it.
 
-    Their `SetBias` is not carried (`doc_parallel_boosting.h:527`). It exists
-    to record `cursors->StartingPoint`, which is set only under
-    `boost_from_average` or `RMSEWithUncertainty` (`:146-148`); both are
-    refused by `CatBoostOptions.check()`, so the bias would be zero on every
-    model this port can build. It has to appear the day either lands, because
-    a model whose cursor started somewhere other than zero and does not say so
-    predicts the residual rather than the target.
+    Their `SetBias` IS carried (`doc_parallel_boosting.h:434`,
+    `modelToExport.SetBias(cursors->StartingPoint)`): `bias` records the
+    `CalcOptimumConstApprox` value the cursors were seeded with under
+    `boost_from_average`, ported 2026-08-22. It is Float64 because their
+    `StartingPoint` is `TVector<double>`; one value, not a vector, because
+    every loss `boost_from_average` is ported for is one-dimensional. A
+    model whose cursor started somewhere other than zero and did not say so
+    would predict the residual rather than the target, which is why the
+    field exists on the model and not only in the fit.
     """
 
     var weak_models: List[TObliviousTreeModel]
+    #: their `SetBias` value; 0.0 on every fit without `boost_from_average`
+    var bias: Float64
 
     def __init__(out self):
         self.weak_models = List[TObliviousTreeModel]()
+        self.bias = 0.0
 
     def add_weak_model(mut self, var model: TObliviousTreeModel):
         """Their `AddWeakModel`."""

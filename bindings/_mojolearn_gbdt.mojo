@@ -160,25 +160,27 @@ def gbdt_fit_binding(
     `catboost_options.cpp:273-360`. A caller that passes explicit values
     is overriding CatBoost's own defaults and should know it.
     """
-    # 31 FIXED SLOTS PLUS ONE PER CLASS WEIGHT. The count is checked
-    # against slot 30 rather than assumed, because a wrapper that appended
-    # the wrong number of weights would otherwise read whatever followed
-    # them -- and for a weight that is a wrong answer, not a failure.
-    if len(params) < 31:
+    # 32 FIXED SLOTS PLUS ONE PER CLASS WEIGHT (slot 30 grew
+    # boost_from_average 2026-08-22; the count moved to 31). The count is
+    # checked against its slot rather than assumed, because a wrapper that
+    # appended the wrong number of weights would otherwise read whatever
+    # followed them -- and for a weight that is a wrong answer, not a
+    # failure.
+    if len(params) < 32:
         raise Error(
-            "gbdt_fit: params must hold at least 31 values, got "
+            "gbdt_fit: params must hold at least 32 values, got "
             + String(len(params))
         )
-    var n_class_weights = Int(py=params[30])
+    var n_class_weights = Int(py=params[31])
     if n_class_weights < 0:
         raise Error(
             "gbdt_fit: n_class_weights must not be negative, got "
             + String(n_class_weights)
         )
-    if len(params) != 31 + n_class_weights:
+    if len(params) != 32 + n_class_weights:
         raise Error(
-            "gbdt_fit: params must hold 31 + n_class_weights ("
-            + String(31 + n_class_weights)
+            "gbdt_fit: params must hold 32 + n_class_weights ("
+            + String(32 + n_class_weights)
             + ") values, got "
             + String(len(params))
         )
@@ -209,7 +211,7 @@ def gbdt_fit_binding(
     # race, not a slow path.
     var class_weights = List[Float32]()
     for i in range(n_class_weights):
-        class_weights.append(Float32(Float64(py=params[31 + i])))
+        class_weights.append(Float32(Float64(py=params[32 + i])))
 
     var fp = GbdtFitParams(
         Int(py=params[4]),
@@ -241,6 +243,7 @@ def gbdt_fit_binding(
         Int(py=params[27]),
         Int(py=params[28]),
         Int(py=params[29]),
+        Int(py=params[30]),
         class_weights^,
     )
     var n_eval_rows = Int(py=params[20])
