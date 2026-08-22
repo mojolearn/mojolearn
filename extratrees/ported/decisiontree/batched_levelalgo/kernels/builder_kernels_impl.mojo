@@ -554,6 +554,14 @@ from max.gpu.primitives.block import min as block_min
 from max.gpu.primitives.block import sum as block_sum
 from max.gpu.sync import barrier
 
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
+
+comptime BUILD_MODE = GLOBAL_NUMERIC_MODE
+"""The repo-wide numeric mode (`mojo_only/numerics.mojo`). DEVIATION 452
+branches the range pass's block fold on it; every `ftz` call below reads it
+inside the helper. FAST -- the default -- compiles both to the code this file
+always had, bit for bit."""
+
 from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels import (
     WorkloadInfo,
 )
@@ -852,10 +860,47 @@ def node_feature_range_kernel[
     # Their `__syncthreads()` at `:293` before the merge. The block
     # collectives replace their shared histogram; every thread must reach all
     # three, so no arm above may return early.
-    var blk_min = block_min[block_size=TPB](local_min)
-    barrier()
-    var blk_max = block_max[block_size=TPB](local_max)
-    barrier()
+    #
+    # ==================================================================
+    # DEVIATION BLOCK 452 -- under NUMERIC_IDENTICAL the block fold runs
+    # in KEY space, because the library's FLOAT min/max fold is the one
+    # order-dependent bit source left in this pass
+    #
+    # The library block collectives fold at the HARDWARE warp width -- 32
+    # on Apple and NVIDIA, 64 on AMD wavefronts (IDENTITY_PATHS row 8's
+    # residue class). For float `min`/`max` that grouping is invisible in
+    # VALUE, and invisible in BITS too on all inputs except one: `-0.0`
+    # and `+0.0` compare EQUAL, so which zero survives `min(-0.0, +0.0)`
+    # is decided by operand ORDER, i.e. by the fold shape. A (node,
+    # column) holding both zeros can therefore publish a min (or max)
+    # whose SIGN BIT differs on the AMD column, and the sign bit of the
+    # published range reaches `quesval` through the `== max -> min`
+    # guard -- a bit in the MODEL.
+    #
+    # `range_key` already maps the floats onto a TOTAL integer order for
+    # the cross-block atomics (DEVIATION 204); under IDENTICAL the
+    # block-level fold uses the same keys, so any fold width and any
+    # grouping returns the same bits, and the two zeros are ordered
+    # (-0.0 below +0.0) instead of tied. The per-thread loop above is
+    # untouched: its row order is fixed by the strided assignment, which
+    # is a pure function of (count, TPB, num_blocks), all data-derived.
+    #
+    # FAST -- the default -- keeps the float fold, bit for bit.
+    # ==================================================================
+    var kmin: UInt32
+    var kmax: UInt32
+    comptime if BUILD_MODE == NUMERIC_IDENTICAL:
+        kmin = block_min[block_size=TPB](range_key(local_min))
+        barrier()
+        kmax = block_max[block_size=TPB](range_key(local_max))
+        barrier()
+    else:
+        var blk_min = block_min[block_size=TPB](local_min)
+        barrier()
+        var blk_max = block_max[block_size=TPB](local_max)
+        barrier()
+        kmin = range_key(blk_min)
+        kmax = range_key(blk_max)
     var blk_missing = block_sum[block_size=TPB](local_missing)
     barrier()
 
@@ -875,16 +920,19 @@ def node_feature_range_kernel[
     # section. `range_key` makes the float min/max an INTEGER min/max, and
     # the seeds are the identities, so a block that saw nothing cannot move
     # either extreme and needs no gate -- see the block on `range_key`.
-    var kmin = range_key(blk_min)
-    var kmax = range_key(blk_max)
-    var empty_block = blk_min > blk_max
+    # `kmin > kmax` in key space is EXACTLY `blk_min > blk_max` in float
+    # space -- the key order is the float order, and the empty block's
+    # `(+inf, -inf)` pair maps to the two extreme keys.
+    var empty_block = kmin > kmax
     if sabotage == RANGE_SAB_SIGN_UNFLIPPED and not empty_block:
         # FINITE VALUES ONLY. Applied to the `+/-inf` an empty block carries,
         # this would ALSO break the identity property, and the arm would move
         # the union of two mechanisms' cells instead of one's -- which is what
-        # the first version did, and what the shape check rejected.
-        kmin = rebind[UInt32](blk_min.to_bits()) | UInt32(0x80000000)
-        kmax = rebind[UInt32](blk_max.to_bits()) | UInt32(0x80000000)
+        # the first version did, and what the shape check rejected. The
+        # decode-then-rebit round trip is exact (`range_unkey` inverts
+        # `range_key` bit for bit), so this arm is unchanged under 452.
+        kmin = rebind[UInt32](range_unkey(kmin).to_bits()) | UInt32(0x80000000)
+        kmax = rebind[UInt32](range_unkey(kmax).to_bits()) | UInt32(0x80000000)
     if sabotage == RANGE_SAB_EMPTY_NOT_IDENTITY and empty_block:
         kmin = range_key(Float32(0.0))
         kmax = range_key(Float32(0.0))
@@ -2048,13 +2096,24 @@ def draw_threshold_device(
     `score_kernel_check.mojo` MEASURES the disagreement per cell every run so
     the size of it is never a guess.
     """
+    # DEVIATION 453 (IDENTITY_PATHS row 10 applied): every float in this
+    # draw goes through `numerics.ftz`. Metal flushes denormal OPERANDS,
+    # intermediates and results of arithmetic; CUDA's default honors them,
+    # so a denormal-scale range (a raw-data property -- the range pass
+    # publishes SELECTED bits, never arithmetic results) would give the two
+    # vendors different threshold bits and a different `== max` guard
+    # decision. Under IDENTICAL the flushes align every backend to the
+    # measured Metal model; under FAST `ftz` is a comptime no-op and this
+    # is bit for bit the code that shipped. `res` is in [0, 1 - 2^-24] and
+    # never denormal, so it is not flushed.
     var gen = key.generator()
     var res = gen.next_float()
-    var threshold = res.fma(
-        extent.max_value - extent.min_value, extent.min_value
-    )
-    if guarded and threshold == extent.max_value:
-        return extent.min_value
+    var lo = ftz(extent.min_value)
+    var hi = ftz(extent.max_value)
+    var span = ftz(hi - lo)
+    var threshold = ftz(res.fma(span, lo))
+    if guarded and threshold == hi:
+        return lo
     return threshold
 
 
@@ -3698,9 +3757,10 @@ def leaf_values_host(
             # inv_scale` is DEVIATION 179's dequantization and is the last
             # operation, so no `+` sits next to a `*` for a backend to
             # contract into an FMA (DEVIATION BLOCK 173's defect cannot
-            # recur here).
+            # recur here). `ftz` mirrors the kernel's publish (DEVIATION
+            # 453) so the oracle computes the same flushed value.
             for c in range(num_outputs):
-                out[base + c] = (
+                out[base + c] = ftz(
                     Float32(Int(acc[c])) / Float32(seen) * inv_scale
                 )
     return out^
@@ -3849,13 +3909,17 @@ def leaf_kernel[
                 )
     else:
         # `objectives.cuh:259-264`, `label_sum / count`, over the fixed-point
-        # sum, with DEVIATION 179's dequantization applied last.
+        # sum, with DEVIATION 179's dequantization applied last. The publish
+        # goes through `ftz` (DEVIATION 453, row 10): `sum/count` is never
+        # denormal (both are integer-valued, quotient magnitude >= 2^-31),
+        # but the `* inv_scale` product can be for a tiny-magnitude label
+        # vector, and the flushed form is what Metal computes anyway.
         for c in range(k):
             var num = Float32(Int(tot[unsafe_offset=c]))
             if sabotage == LEAF_SAB_NO_NORMALIZE:
                 out_leaves[unsafe_offset = base + c] = num * inv_scale
             else:
-                out_leaves[unsafe_offset = base + c] = (
+                out_leaves[unsafe_offset = base + c] = ftz(
                     num / Float32(Int(blk_seen)) * inv_scale
                 )
 

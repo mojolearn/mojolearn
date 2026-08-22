@@ -120,6 +120,8 @@ from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import ceildiv, fma
 from std.sys.info import size_of
 
+from mojo_only.numerics import ftz
+
 
 def max_nodes(max_depth: Int32) -> Int:
     """`builder.cuh:253-262`, transcribed including their cliff.
@@ -838,6 +840,17 @@ def gain_per_split(
         gain = fma(rval * inv_right * rval, inv_len, gain)
         var val = Float32(Int(lval_i + rval_i)) * inv_len
         gain = fma(-val, val, gain)
+    # DEVIATION 453 (IDENTITY_PATHS row 10): the accumulated gain is the
+    # one value in this function that cancellation can land in the
+    # denormal band (every operand and every intermediate term is bounded
+    # below by 1/n^2, normal at any legal n). Metal's arithmetic flushes
+    # it to a signed zero; CUDA's default keeps it and the clamp below
+    # then reads a different sign. Flushing the FINAL value under
+    # IDENTICAL aligns the vendors to the Metal model; a denormal
+    # difference at an INTERMEDIATE step is below half an ulp of every
+    # later normal term and cannot survive into the result. Under FAST
+    # `ftz` is a comptime no-op.
+    gain = ftz(gain)
     # DEVIATION 217: the TRUE gain is provably non-negative (the within-
     # group sum of squares never exceeds the total: Gini and variance
     # decompositions alike), so a negative value HERE is pure float32
@@ -2332,6 +2345,29 @@ def train_forest_classification_device_timed(
                 tag_pre = (
                     String("g") + String(gi) + ".c" + String(cyc) + "."
                 )
+                # DEVIATION 454: the identity audit's hazard stages, in
+                # PIPELINE order, so the cross-vendor differ bisects by
+                # mechanism -- colids differ = the sampler (or its host
+                # libm dispatch); ranges differ with colids equal = the
+                # range fold; thresholds differ with ranges equal = the
+                # draw; reduce differs with thresholds equal = score or
+                # reduction. Each buffer is the batch's LOGICAL first
+                # `n_cells` slots of a capacity-sized workspace buffer
+                # (rule 3), recorded BEFORE deviation 205's rescue can
+                # reuse the staging.
+                var n_cells_t = n_nodes * Int(k)
+                trace.record_device(
+                    ctx, tag_pre + "colids", ws.d_colids, n_cells_t
+                )
+                trace.record_device(
+                    ctx, tag_pre + "range.min", ws.d_min, n_cells_t
+                )
+                trace.record_device(
+                    ctx, tag_pre + "range.max", ws.d_max, n_cells_t
+                )
+                trace.record_device(
+                    ctx, tag_pre + "draw.thresh", ws.d_thresh, n_cells_t
+                )
                 # The level's REDUCED per-node winners, straight off the
                 # `o_*` readback and BEFORE deviation 205's rescue can
                 # reuse the staging. Rule 3: this is the logical reduced
@@ -2439,6 +2475,17 @@ def train_forest_classification_device_timed(
                 # partition below reads `d_items` and `d_wl`, so put this
                 # batch's back.
                 stage_batch(ctx, ws, work_items, item_trees, plan, Int(k))
+                # DEVIATION 455: this re-stage's copies are the ONE set that
+                # DEVIATION 450's invariant did not cover -- they are
+                # enqueued AFTER the cycle's reduce drain, and the next
+                # cycle's `stage_batch` rewrites the same `h_*` staging
+                # with nothing in between to retire them. MEASURED as
+                # run-to-run nondeterminism of the device fit on the
+                # rescue-heavy fixture (rescue_check, shaped_constant_heavy:
+                # device node counts 587/605 across two runs of identical
+                # source). One drain, on the rescue path only; the
+                # rescue-free cycle keeps 450's single-drain shape.
+                ctx.synchronize()
 
             # --- the PARTITION, on the device (deviation 203) -------------
             # Range-addressed: every item's rows live in its own tree's
@@ -3279,6 +3326,21 @@ def train_forest_regression_device_timed(
                 tag_pre = (
                     String("g") + String(gi) + ".c" + String(cyc) + "."
                 )
+                # DEVIATION 454: the hazard stages in pipeline order --
+                # see the classification twin for the bisection argument.
+                var n_cells_t = n_nodes * Int(k)
+                trace.record_device(
+                    ctx, tag_pre + "colids", ws.d_colids, n_cells_t
+                )
+                trace.record_device(
+                    ctx, tag_pre + "range.min", ws.d_min, n_cells_t
+                )
+                trace.record_device(
+                    ctx, tag_pre + "range.max", ws.d_max, n_cells_t
+                )
+                trace.record_device(
+                    ctx, tag_pre + "draw.thresh", ws.d_thresh, n_cells_t
+                )
                 # The level's REDUCED per-node winners (rule 3: the logical
                 # reduced buffer). Regression's readback carries no exact
                 # num/den pair -- the gain travels with the candidate
@@ -3374,6 +3436,10 @@ def train_forest_regression_device_timed(
             var plan = build_workload_info(work_items, TPB)
             if len(retry) > 0:
                 stage_batch(ctx, ws, work_items, item_trees, plan, Int(k))
+                # DEVIATION 455 -- see the classification twin: the
+                # re-stage's copies must be drained before the next cycle
+                # rewrites the staging.
+                ctx.synchronize()
 
             # --- the PARTITION (deviation 203, the regression half) -------
             # DEVIATION 450: no pre-partition synchronize -- see the twin.
