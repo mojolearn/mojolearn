@@ -2373,3 +2373,84 @@ the widest margin against scikit-learn recorded in this lane.
 weakness: classification at 100,000 rows was also about 0.25x. The GPU is
 starved below a few hundred thousand rows for both objectives, and every
 winning number in this file is at 581,012.
+
+---
+
+## DEVIATION 207 -- the label gather hoist, MEASURED AND DECLINED
+
+**WHAT WAS TRIED.** `node_feature_score_kernel` is launched with
+`gridDim.y = n_sampled_cols`, and its row loop does TWO scattered reads per
+visit: `data[col * m + row]`, per (row, column) and irreducible, and
+`labels_q[row]`, per ROW and repeated for EVERY column -- seven times per row
+at `max_features='sqrt'`, fifty-four at `max_features=None`. A
+`materialize_labels_kernel` gathered the level's labels once into slot order so
+the score pass could read them sequentially. It was written, wired into both
+trainers, both direct-call checks were updated, and it was **bit-identical**
+(digest `0x50addb0c6f00b47c`, 23,726 nodes, unchanged).
+
+**IT DID NOT PAY, AND IT IS REVERTED.** Alternating A/B in one window, covtype
+581,012 x 54, 10 trees, depth 12, `max_features='sqrt'`, three rounds of
+off-then-on:
+
+    off 1958 ms / on 2006 ms      off 2075 / on 2060      off 2435 / on 1851
+
+Fully overlapping. No effect.
+
+**THE FIRST MEASUREMENT SAID 1.75x AND IT WAS WRONG, WHICH IS THE LESSON.**
+A stash/pop before-and-after -- not interleaved -- read 2037-2421 ms before and
+1153-1237 ms after and was recorded here as a 1.75x win. It was window drift:
+the "before" ran on a box still loaded from a concurrent build and the "after"
+did not. The interleaved benchmark then showed `ours-gpu` at 115-118 ms/tree
+against 113-118 before the change -- identical -- which is what forced the
+alternating A/B. **The harness exists for exactly this and it was not used for
+a build-level change, because a build-level change cannot alternate inside one
+process.** Alternate the BUILDS instead; three rounds is enough.
+
+**AND THE MICRO-BENCHMARK OVERSTATED THE COST IT WAS PREDICTING FROM.** A
+standalone probe measured a second scattered gather from a 2.3 MB array at
+44-47% on top of one from a 16 MB array, which is what made this look worth
+doing. In the real kernel that cost is not additive: the two loads are
+independent and the memory system overlaps the small one behind the large one.
+**A two-line probe cannot see the latency the surrounding kernel already
+hides.**
+
+**WHAT THE PROBES ARE STILL GOOD FOR**, since they were paid for:
+
+* per-phase instrumentation inside a level (581,012 rows, sqrt, 83 batches):
+  score 57.7% (3.41 ms/batch), range 13.3%, and the seven remaining phases
+  0.08-0.32 ms/batch each. After DEVIATION 204 the range pass is no longer the
+  problem; the SCORE pass is, and it is nearly all `data` gather.
+* the gather probe, 4M reads, real shuffled permutation, steady state:
+  sequential 46-62 GB/s, permuted gather ~1.74 G gathers/s and ~7 GB/s
+  effective -- **scattered is 6.7-9.0x slower**. The score pass runs at ~1.19 G
+  cell-visits/s, so it is already **within ~1.5x of this machine's pure-gather
+  roofline**. It is memory-latency bound, not inefficient.
+
+**WHICH MAKES THE CEILING A FORMULATION QUESTION, NOT A KERNEL ONE.** An exact
+ExtraTrees rereads real `Float32` feature values at every level; a histogram
+method reads one-byte bins. DEVIATION 137 deleted the histogram deliberately --
+that is what makes this ExtraTrees rather than a binned learner -- and the
+traffic that follows is the price of that decision, not a defect to tune away.
+
+## What is left, and what it is worth
+
+Named here so the next round starts from measurements rather than from
+intuition:
+
+* **Tree-level batching is NOT the 2x it looks like.** cuML parallelises trees
+  across CUDA streams (`randomforest.cuh:164`); `ctx.create_stream()` on this
+  device answers **"createStream is not supported on this device"**, so their
+  literal mechanism is unavailable. The batched-frontier equivalent IS
+  available -- nodes from different trees are just more nodes in the same
+  `WorkloadInfo` flattening -- but the per-batch fixed cost it would amortise
+  is only ~1.7 ms of an 8.7 ms batch, and **the grid was never starved**:
+  `n_blocks_dimx` is driven by ROW count, so the root level already launches
+  ~4,540 x k blocks. Estimated worth ~11%, not 2x.
+* **Materialising the sampled columns** the way the labels now are: the gather
+  still has to happen once, so it converts two scattered passes (range and
+  score) into one scattered gather plus sequential reads. Worth measuring;
+  estimated ~20%.
+* **The per-level non-constant flag readback** (DEVIATION 205) runs on every
+  level including those with nothing to rescue, and at `max_features=None` a
+  rescue can never fire at all. Folding it into a readback that already happens
+  is free.
