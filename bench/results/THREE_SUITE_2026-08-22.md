@@ -81,6 +81,18 @@ reproducible, not sampled luck.
   session disclaims both, and the extratrees lane session that owned
   ET runs appears to have ended. Treated as an orphaned run; the
   numbers in it are consistent with the sweep's own.
+- MEMORY-PRESSURE FLAG (disclosed after the sweep by the aa-floor
+  session, corroborated by swap still at 13.3/14.3 GB when checked):
+  during roughly this window the box ran near swap exhaustion
+  (22.7/23.5 GB used) and the kernel OOM-killed four of that session's
+  measurement processes. Both arms of each interleaved pair shared the
+  pressure, so ratios stand, but the absolute times — especially the
+  RAM-heavy sklearn higgs arms — carry unquantified swap cost. Rerun
+  under a certified-quiet window before publishing absolute seconds.
+- Roster post-mortem: after roll-call, NO living session claims the
+  foreign files or the unstaged extratrees work in the checkout; both
+  attribute by elimination to the extratrees lane session that ended
+  earlier today (it owned ET and had DEVIATION 218 in flight).
 - Ambient load disclosure (coastguard session, same box): latexmk,
   ruff, a ~8 s pytest suite, and a matplotlib job reading ~20M AIS
   rows ran at points during the hour. Ambient CPU load lands on both
