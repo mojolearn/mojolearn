@@ -767,6 +767,29 @@ bounds what bit-identity can even mean.
 Below that: sklearn as a quality band, then timing -- the Step 0 gather
 probe first, since it prices everything downstream.
 
+# Session log: 2026-08-21 late evening, the control-plane round
+
+The lane changed hands (one dedicated session now owns `ensemble/`). Three
+commits, all pushed: `af91bae` (DEVIATION 313 workspace pool + DEVIATION
+304 revised to their memset bytes + the two per-tree sampler syncs
+deleted), `a7d9bac` (Philox, segmented sort and the shuffle iterator --
+THREE shipping-path files, the earlier count of two missed the shuffle
+iterator -- lifted from `mojo_only/` to `core/`), `d113ba8` (the eps500
+bench row behind `RF_BENCH_EPS_DIR`, and
+`bench/results/RF_2026-08-21_control-plane.md`, which is this round's
+record and the place to read what may be claimed without a window).
+
+The gate for all of it is `mojo_only/fingerprint_probe.mojo`: five
+recorded FNV-1a64 forest hashes, bit-exact across every step, sabotaged
+once per mechanism. The per-BATCH syncs were checked against their source
+and KEPT -- two `update_host` + `sync_stream` per doSplit is cuML's own
+design (`builder.cuh:479-481`, `:501-502`), and by HOST_AND_DEVICE.md
+rule two a wait they also have stays until the port produces its number.
+
+Still owed from that file: the pre-vs-post ABAB and the eps500 row, both
+through `quiet_window.py` -- every window this evening was refused or
+would have voided, peers held the box throughout.
+
 CORRECTED 2026-08-21 EVENING. The sentence that stood here said no timing
 measurement of any kind existed. That stopped being true the same day, and
 the way it stopped being true is the reason the replacement is longer.
