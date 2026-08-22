@@ -17,6 +17,7 @@ the oracle fixture.
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
+from core.identity_trace import IdentityTrace
 from gbdt.gpu_data.compressed_index_builder import build_layout
 from gbdt.gpu_data.kernel.binarize import (
     BINARIZE_BLOCK_SIZE,
@@ -1255,6 +1256,21 @@ def train(
             fold_counts[f2] = nb
             borders[f2] = bs2^
 
+    # the fit's identity trace begins HERE so the border records and the
+    # tree records share one seq space (a second IdentityTrace() later
+    # would restart seq inside the same file). Disabled unless
+    # MOJOLEARN_IDENTITY_TRACE is set.
+    var trace = IdentityTrace()
+    if trace.enabled:
+        trace.header("mojolearn train(): borders + symmetric fit")
+        var border_counts = List[Int32]()
+        var border_values = List[Float32]()
+        for f in range(len(borders)):
+            border_counts.append(Int32(len(borders[f])))
+            for b in range(len(borders[f])):
+                border_values.append(borders[f][b])
+        trace.record_list_i32("borders.counts", border_counts)
+        trace.record_list_f32("borders.values", border_values)
 
     # ONE COMPRESSED INDEX PER PERMUTATION. Theirs shares the
     # permutation-INDEPENDENT columns between them and gives each
@@ -1613,7 +1629,10 @@ def train(
     var fit_result = fit_with_test(
         model, ctx, n_rows, fold_counts, max_depth, cindex, targets,
         weights, use_class_weights or use_sample_weight,
-        n_estimators, learning_rate,
+        # `trace` rides POSITIONALLY (delta from the granted spec's
+        # `trace=trace`: the later arguments here are positional, and a
+        # positional argument may not follow a keyword one)
+        n_estimators, trace, learning_rate,
         l2_leaf_reg, True,
         bootstrap_bayesian=bootstrap_bayesian,
         bagging_temperature=bagging_temperature,

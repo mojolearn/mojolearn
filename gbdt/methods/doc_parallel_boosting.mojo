@@ -125,11 +125,16 @@ from gbdt.gpu_util.kernel.transform import (
     launch_gather_planes_with_mask_f32,
     launch_gather_with_mask_f32,
 )
+from core.identity_trace import IdentityTrace
+from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import (
+    StageTimes,
+)
 from gbdt.methods.leaves_estimation.descent_helpers import (
     newton_like_walker_estimate,
 )
 from gbdt.methods.leaves_estimation.pointwise_oracle import (
     make_bin_optimized_oracle,
+    merge_stage_times,
 )
 from gbdt.methods.leaves_estimation.step_estimator import (
     BACKTRACKING_ANY_IMPROVEMENT,
@@ -142,10 +147,12 @@ from gbdt.methods.random_score_helper import (
 from gbdt.methods.oblivious_tree_doc_parallel_structure_searcher import (
     PointwiseTreeWorkspace,
     fit_oblivious_tree_structure,
+    fit_oblivious_tree_structure_traced,
     split_stat_planes,
 )
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
     run_tree_layout,
+    run_tree_layout_traced,
     TTreeWorkspace,
 )
 from gbdt.models.oblivious_model import (
@@ -460,6 +467,15 @@ struct FitResult(Movable):
 
 
 
+def _tree_tag(iteration: Int) -> String:
+    """`treeNNN` prefix for identity-trace tags, zero-padded to sort in
+    fit order."""
+    var s = String(iteration)
+    while s.byte_length() < 3:
+        s = String("0") + s
+    return String("tree") + s
+
+
 def _estimate_and_apply(
     ctx: DeviceContext,
     n_rows: Int,
@@ -484,6 +500,9 @@ def _estimate_and_apply(
     learning_rate: Float32,
     mut leaf_values: List[Float32],
     mut not_pd_total: Int,
+    mut trace: IdentityTrace,
+    mut stage_times: StageTimes,
+    leaf_tag: String,
 ) raises:
     """One estimation task: their `TDocParallelLeavesEstimator::Estimate`
     plus the `AppendModels` that follows it, for ONE (dataset, cursor).
@@ -601,10 +620,12 @@ def _estimate_and_apply(
     var estimated: List[Float32]
     if leaf_estimation_method == LEAF_ESTIMATION_EXACT:
         estimated = oracle.estimate_exact()
+        trace.record_list_f32(leaf_tag, estimated)
     else:
         estimated = newton_like_walker_estimate(
             oracle, iters, BACKTRACKING_ANY_IMPROVEMENT,
             List[Float32](), not_pd_blocks,
+            stage_times, trace, leaf_tag,
         )
     not_pd_total += not_pd_blocks
     leaf_values.clear()
@@ -675,6 +696,7 @@ def fit_with_test(
     mut weights: DeviceBuffer[DType.float32],
     has_weights: Bool,
     n_estimators: Int,
+    mut trace: IdentityTrace,
     learning_rate: Float32 = Float32(0.03),
     l2_leaf_reg: Float32 = Float32(3.0),
     use_subtraction: Bool = True,
@@ -1085,6 +1107,11 @@ def fit_with_test(
             " `multiclass_targets.cpp:27`)"
         )
 
+    # one stage clock per fit -- env read ONCE (MOJOLEARN_STAGE_TIMES=1);
+    # the identity trace arrives from the caller so border records and
+    # tree records share one seq space.
+    var stage_times = StageTimes()
+
     for iteration in range(n_estimators):
         # ---- which permutation the STRUCTURE is searched on ----------
         #
@@ -1393,13 +1420,14 @@ def fit_with_test(
                 )
 
             var planes = split_stat_planes(ctx, stats, n_rows)
-            splits = fit_oblivious_tree_structure(
+            splits = fit_oblivious_tree_structure_traced(
                 ctx, layout_for_test, n_rows, max_depth, lc,
                 planes[0], planes[1],
                 est_sm if est_sm > 0 else 1,
                 scale,
                 score_function,
                 pw_pool,
+                trace, stage_times, _tree_tag(iteration),
                 l2_leaf_reg,
                 score_std_dev=pointwise_score_std_dev,
                 seed=tree_seed,
@@ -1428,13 +1456,16 @@ def fit_with_test(
                     leaf_estimation_method, num_classes,
                     leaf_estimation_iterations, learning_rate,
                     leaf_values, not_pd_total,
+                    trace, stage_times,
+                    _tree_tag(iteration) + ".leaves.estimated",
                 )
         else:
-            sizes = run_tree_layout(
+            sizes = run_tree_layout_traced(
                 ctx, n_rows, fold_counts, max_depth,
                 lc, stats, row_index, lcur,
                 Float32(0.0), Float32(0.0),
                 splits, leaf_values, leaf_offsets, ws,
+                trace, stage_times, _tree_tag(iteration),
                 need_estimation,
                 use_subtraction, not need_estimation,
                 learning_rate, l2_leaf_reg,
@@ -1488,6 +1519,9 @@ def fit_with_test(
                         num_classes, leaf_estimation_iterations,
                         learning_rate,
                         pv, not_pd_total,
+                        trace, stage_times,
+                        _tree_tag(iteration) + ".perm" + String(p)
+                        + ".leaves.estimated",
                     )
                 else:
                     var d_bins = ctx.enqueue_create_buffer[DType.uint32](
@@ -1513,6 +1547,9 @@ def fit_with_test(
                         num_classes, leaf_estimation_iterations,
                         learning_rate,
                         pv, not_pd_total,
+                        trace, stage_times,
+                        _tree_tag(iteration) + ".perm" + String(p)
+                        + ".leaves.estimated",
                     )
                 # the EXPORTED ensemble is the estimation permutation's
                 # (`doc_parallel_boosting.h:526-528`); the others exist to
@@ -1632,6 +1669,8 @@ def fit_with_test(
             "leaf-blocks over this fit; those leaves took their gradient"
             " fallback, as CatBoost's own dposv does",
         )
+
+    stage_times.report("symmetric fit (doc-parallel boosting)")
 
     return FitResult(
         losses^, test_losses^, detector.best_iteration, stopped_early
@@ -1875,9 +1914,11 @@ def fit(
     test arm landed -- checks, benches, and another session's interleaved
     harness. Its signature and return are exactly what they were.
     """
+    var trace = IdentityTrace()
     var r = fit_with_test(
         model=model,
         ctx=ctx,
+        trace=trace,
         n_rows=n_rows,
         fold_counts=fold_counts,
         max_depth=max_depth,
