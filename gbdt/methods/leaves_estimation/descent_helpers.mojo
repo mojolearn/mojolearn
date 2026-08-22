@@ -59,8 +59,16 @@ The Langevin hooks at `:141-147` and `:190-196` are omitted, not stubbed;
 `oracle_interface.mojo` records why and what putting them back requires.
 """
 
+from core.identity_trace import IdentityTrace
+from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import (
+    StageTimes,
+)
 from gbdt.methods.leaves_estimation.oracle_interface import (
     LeavesEstimationOracle,
+)
+from gbdt.methods.leaves_estimation.pointwise_oracle import (
+    BinOptimizedOracle,
+    merge_stage_times,
 )
 from gbdt.methods.leaves_estimation.step_estimator import (
     create_step_estimator,
@@ -273,3 +281,41 @@ def newton_like_walker_estimate[
     # one component too wide.
     out_not_pd = not_pd_total
     return oracle.make_estimation_result(cur_point)
+
+
+def newton_like_walker_estimate(
+    mut oracle: BinOptimizedOracle,
+    iterations: Int,
+    backtracking_type: Int,
+    start_point: List[Float32],
+    mut out_not_pd: Int,
+    mut times: StageTimes,
+    mut trace: IdentityTrace,
+    leaf_tag: String,
+) raises -> List[Float32]:
+    """The instrumented entry: the same walk, plus the two instruments.
+
+    NOT A PORT -- the walk is the overload above, called unchanged. What
+    this adds, per the LEBILL pattern (PREP_BILL 2026-08-22 step 32):
+
+    * the fit-level `StageTimes`' enabled flag is COPIED into the
+      oracle's own force-disabled clock on the way in (one env read per
+      fit, `depthwise_stage_times.mojo`'s contract), and the oracle's
+      per-eval rows (est.move / est.approx / est.pstats / est.readback)
+      are folded back into the fit table on the way out;
+    * the estimated point -- the walker's return, post-Regularize, in
+      the cursor's gauge -- is recorded under `leaf_tag` (e.g.
+      `tree007.leaves.estimated`), which is the per-tree
+      after-leaf-estimation checkpoint of the identity trace.
+
+    Concrete on `BinOptimizedOracle` rather than generic: the oracle's
+    clock is a field, not a trait member, and this is its only
+    implementor.
+    """
+    oracle.times.enabled = times.enabled
+    var result = newton_like_walker_estimate(
+        oracle, iterations, backtracking_type, start_point, out_not_pd
+    )
+    merge_stage_times(times, oracle.times)
+    trace.record_list_f32(leaf_tag, result)
+    return result^

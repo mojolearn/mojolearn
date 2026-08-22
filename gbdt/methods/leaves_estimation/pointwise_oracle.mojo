@@ -66,6 +66,10 @@ THE CALL CYCLE, theirs (`pointwise_oracle.cpp`):
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.host.device_attribute import DeviceAttribute
 
+from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import (
+    StageTimes,
+)
+
 from gbdt.gpu_util.kernel.fill import launch_make_sequence
 from gbdt.gpu_util.partitions_reduce import (
     compute_partition_stats,
@@ -110,6 +114,31 @@ from gbdt.targets.kernel.pointwise_targets import (
     MSE_BLOCK_SIZE,
     launch_approximate,
 )
+
+
+def merge_stage_times(mut dst: StageTimes, src: StageTimes):
+    """Fold one instrument's rows into another's, tag by tag.
+
+    The LEBILL pattern made permanent (PREP_BILL 2026-08-22 step 32): the
+    oracle self-times its per-eval phases into its OWN `StageTimes` --
+    it is constructed and destroyed per tree, so its rows would die with
+    it -- and the walker folds them into the FIT-level table the caller
+    reports once. Lives here because the oracle owns the field; the
+    struct itself is the depthwise lane's
+    (`depthwise_stage_times.mojo`) and is not this file's to grow a
+    method on."""
+    if not src.enabled:
+        return
+    for i in range(len(src.tags)):
+        var found = False
+        for j in range(len(dst.tags)):
+            if dst.tags[j] == src.tags[i]:
+                dst.ns[j] += src.ns[i]
+                found = True
+                break
+        if not found:
+            dst.tags.append(src.tags[i].copy())
+            dst.ns.append(src.ns[i])
 
 
 @fieldwise_init
@@ -201,6 +230,14 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
     #: nineteen buffers of `n_rows` they never read.
     var exact: Optional[ExactQuantileScratch]
     var max_leaf_size: Int
+    #: the per-eval phase clock (LEBILL rows: est.move / est.approx /
+    #: est.pstats / est.readback). Constructed FORCE-DISABLED -- the env
+    #: is read once per fit, not per tree -- and adopted from the
+    #: fit-level instrument by the walker's timed overload
+    #: (`descent_helpers.newton_like_walker_estimate`), which also folds
+    #: the rows back out via `merge_stage_times`. When disabled every
+    #: call is one Bool test.
+    var times: StageTimes
 
     def point_dim(self) -> Int:
         return self.bin_count * self.single_bin_dim
@@ -255,6 +292,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                 + " for " + String(self.bin_count) + " bins x "
                 + String(self.single_bin_dim) + " dims"
             )
+        self.times.begin(self.ctx)
         # `TVector<float> newPoint = MakeEstimationResult(point);` (`:43`)
         var new_point = self.make_estimation_result(point)
 
@@ -292,6 +330,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         self.current_point.clear()
         for i in range(shift_len):
             self.current_point.append(new_point[i])
+        self.times.end(self.ctx, "est.move")
 
     def write_value_and_first_derivatives(
         mut self, mut value: Float64, mut gradient: List[Float64]
@@ -327,6 +366,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         ) // MSE_BLOCK_SIZE
 
         if self.single_bin_dim == 1:
+            self.times.begin(self.ctx)
             launch_approximate[True](
                 self.ctx, self.objective,
                 self.d_target, self.d_weights, Int32(self.n_rows),
@@ -337,12 +377,16 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                 self.d_mag_dummy, Int32(0),
                 blocks,
             )
+            self.times.end(self.ctx, "est.approx")
+            self.times.begin(self.ctx)
             compute_partition_stats(
                 self.ctx, self.bin_count, 0, 2, self.n_rows,
                 self.d_leaves, self.d_p_off, self.d_p_sz,
                 self.d_eval_stats, self.d_partials, self.d_part_stats,
                 sm_count=self.sm_count,
             )
+            self.times.end(self.ctx, "est.pstats")
+            self.times.begin(self.ctx)
             self.ctx.enqueue_copy(
                 dst_ptr=self.h_part_stats.unsafe_ptr(),
                 src_buf=self.d_part_stats,
@@ -351,6 +395,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                 dst_ptr=self.h_fv.unsafe_ptr(), src_buf=self.d_fv
             )
             self.ctx.synchronize()
+            self.times.end(self.ctx, "est.readback")
 
             gradient.clear()
             self.cached_der2.clear()
@@ -399,6 +444,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                 + " has SingleBinDim > 1 without a der calcer"
             )
         var ml_blocks = multilogit_blocks(self.n_rows)
+        self.times.begin(self.ctx)
         if is_ova:
             launch_one_vs_all_value_and_der[False](
                 self.ctx, self.num_classes, self.n_rows,
@@ -419,14 +465,18 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                 self.d_multi_der, self.n_rows,
                 self.d_mag_dummy, False,
             )
+        self.times.end(self.ctx, "est.approx")
         # `ComputePartitionStats(der, Offsets, &reducedDer)` (`:83`), with
         # `cursorDim` columns instead of one
+        self.times.begin(self.ctx)
         compute_partition_stats(
             self.ctx, self.bin_count, 0, self.cursor_dim, self.n_rows,
             self.d_leaves, self.d_p_off, self.d_p_sz,
             self.d_multi_der, self.d_multi_partials, self.d_multi_stats,
             sm_count=self.sm_count,
         )
+        self.times.end(self.ctx, "est.pstats")
+        self.times.begin(self.ctx)
         self.ctx.enqueue_copy(
             dst_ptr=self.h_multi_stats.unsafe_ptr(),
             src_buf=self.d_multi_stats,
@@ -435,6 +485,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             dst_ptr=self.h_fv.unsafe_ptr(), src_buf=self.d_fv
         )
         self.ctx.synchronize()
+        self.times.end(self.ctx, "est.readback")
 
         # `DerAtPoint = ReadReduce(reducedDer)` (`:84`)
         self.der_at_point.clear()
@@ -949,6 +1000,14 @@ def make_bin_optimized_oracle(
     ctx.synchronize()
     _ = h_leaves^
 
+    # FORCE-DISABLED regardless of the environment: the fit reads the env
+    # ONCE (its own `StageTimes()`), and the walker's timed overload
+    # copies that enabled flag in here per tree. An env read per oracle
+    # would be 500 per fit and, worse, would let an UN-merged caller pay
+    # per-eval drains for rows nobody reports.
+    var est_times = StageTimes()
+    est_times.enabled = False
+
     return BinOptimizedOracle(
         ctx,
         n_rows,
@@ -993,4 +1052,5 @@ def make_bin_optimized_oracle(
         List[Float64](),
         exact^,
         max_leaf,
+        est_times^,
     )

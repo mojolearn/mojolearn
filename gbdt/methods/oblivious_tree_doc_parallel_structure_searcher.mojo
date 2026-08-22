@@ -87,7 +87,12 @@ bootstrap arrives.
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
+from core.identity_trace import IdentityTrace
 from gbdt.data.permutation import TRandom
+from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import (
+    StageTimes,
+)
+from gbdt.methods.histograms_helper import policy_name
 from gbdt.gpu_data.feature_blocks import PolicyBlock, blocks_for
 from gbdt.gpu_data.compressed_index_builder import CompressedIndexLayout
 from gbdt.methods.pointwise_optimization_subsets import (
@@ -252,7 +257,14 @@ struct PointwiseTreeWorkspace(Movable):
         _ = table[0]
 
 
-def fit_oblivious_tree_structure(
+def _dd2(n: Int) -> String:
+    """Two zero-padded digits, for depth components of trace tags."""
+    if n < 10:
+        return String("0") + String(n)
+    return String(n)
+
+
+def fit_oblivious_tree_structure_traced(
     ctx: DeviceContext,
     layout: CompressedIndexLayout,
     n_rows: Int,
@@ -264,6 +276,9 @@ def fit_oblivious_tree_structure(
     fixed_scale: Float32,
     score_function: Int,
     mut pool: List[PointwiseTreeWorkspace],
+    mut trace: IdentityTrace,
+    mut times: StageTimes,
+    tree_tag: String,
     l2_leaf_reg: Float32 = Float32(3.0),
     score_std_dev: Float32 = Float32(0.0),
     seed: UInt64 = 0,
@@ -492,6 +507,7 @@ def fit_oblivious_tree_structure(
         # subsets.Indices)` (`:67`). At identity observations the gather IS
         # `subsets.Indices`; DEVIATION 105.
         var docs = subsets.indices.copy()
+        times.begin(ctx)
         if fold_count > 1:
             launch_gather_with_mask_u32(
                 ctx,
@@ -505,7 +521,31 @@ def fit_oblivious_tree_structure(
         calcer.submit_compute(
             ctx, subsets, cindex, docs, doc_count, sm_count, fixed_scale
         )
+        times.end(ctx, "pw.hist")
+
+        # ---- identity checkpoint: this depth's REDUCED histograms ----
+        # One record per policy present, over the LIVE VIEW only
+        # (`histogram_view_size`, the parts-outer prefix the scorer
+        # reads); the allocation's tail holds deeper levels' stale cells
+        # (identity_trace rule 3). OUTSIDE the timed regions, and each
+        # record drains -- a traced run is not a timing (rule 4).
+        if trace.enabled:
+            for hi in range(len(calcer.helpers)):
+                if calcer.helpers[hi].feature_count == 0:
+                    continue
+                var view = calcer.helpers[hi].hist_helper.histogram_view_size(
+                    depth, calcer.helpers[hi].bin_feature_count
+                )
+                trace.record_device(
+                    ctx,
+                    tree_tag + ".depth" + _dd2(depth) + ".hist."
+                    + policy_name(calcer.helpers[hi].policy),
+                    calcer.helpers[hi].d_hist,
+                    count=view,
+                )
+
         var pstats = subsets.partition_stats.copy()
+        times.begin(ctx)
         calcer.compute_optimal_split_dev(
             ctx,
             pstats,
@@ -516,10 +556,12 @@ def fit_oblivious_tree_structure(
             score_std_dev,
             level_rand.next_uniform_l(),
         )
+        times.end(ctx, "pw.score")
 
         # their fold (`:113-120`) and the record's consumption, on the
         # device (DEVIATION 207); the raise and the `HasSplit` stop are in
         # the post-tree walk below
+        times.begin(ctx)
         calcer.resolve_optimal_split(
             ctx, pool[0].d_best_ids, pool[0].d_best_scores
         )
@@ -535,6 +577,7 @@ def fit_oblivious_tree_structure(
             len(layout.features),
             pool[0].d_split_desc,
         )
+        times.end(ctx, "pw.winner")
 
         # their `Split(target, docBins, observationIndices, &subsets)`
         # (`oblivious_tree_structure_searcher.cpp:275-278`) -- the SAME
@@ -550,6 +593,7 @@ def fit_oblivious_tree_structure(
         # (`PointwiseTreeWorkspace.__init__`), where its history -- the raw
         # column reading column 0's bits and stopping every tree at depth
         # 1 -- is the reason the table stores `offset * n_rows`.
+        times.begin(ctx)
         split_subsets_from_desc(
             ctx,
             target,
@@ -558,11 +602,13 @@ def fit_oblivious_tree_structure(
             pool[0].d_split_desc,
             subsets,
         )
+        times.end(ctx, "pw.split")
 
     # ---- THE ONE DRAIN OF THE TREE (DEVIATION 207) -------------------
     # Their per-level `ReadOptimalSplit`, folded into one: the winner
     # records hold every level and ride home behind everything the loop
     # enqueued.
+    times.begin(ctx)
     ctx.enqueue_copy(
         dst_buf=pool[0].h_winners_ids, src_buf=pool[0].d_winners_ids
     )
@@ -570,6 +616,22 @@ def fit_oblivious_tree_structure(
         dst_buf=pool[0].h_winners_scores, src_buf=pool[0].d_winners_scores
     )
     ctx.synchronize()
+    times.end(ctx, "pw.drain")
+
+    # ---- identity checkpoint: the tree's winner records --------------
+    # Every level's (feature, bin) and score pair, exactly as the one
+    # drain brought them home; hashed from the HOST copies, so this adds
+    # no device traffic of its own.
+    trace.record_host(
+        tree_tag + ".winners.ids",
+        pool[0].h_winners_ids.unsafe_ptr(),
+        2 * max_depth,
+    )
+    trace.record_host(
+        tree_tag + ".winners.scores",
+        pool[0].h_winners_scores.unsafe_ptr(),
+        2 * max_depth,
+    )
 
     # ============ THE GATES, POST-TREE ================================
     # The host loop applied these BEFORE each split; the walk applies them
@@ -623,6 +685,55 @@ def fit_oblivious_tree_structure(
         )
 
     return structure^
+
+
+def fit_oblivious_tree_structure(
+    ctx: DeviceContext,
+    layout: CompressedIndexLayout,
+    n_rows: Int,
+    max_depth: Int,
+    mut cindex: DeviceBuffer[DType.uint32],
+    var weights: DeviceBuffer[DType.float32],
+    var weighted_target: DeviceBuffer[DType.float32],
+    sm_count: Int,
+    fixed_scale: Float32,
+    score_function: Int,
+    mut pool: List[PointwiseTreeWorkspace],
+    l2_leaf_reg: Float32 = Float32(3.0),
+    score_std_dev: Float32 = Float32(0.0),
+    seed: UInt64 = 0,
+    one_hot: List[Bool] = List[Bool](),
+    bootstrapped_observations: Bool = False,
+    folds: List[TFold] = List[TFold](),
+    permutation: List[UInt32] = List[UInt32](),
+) raises -> List[TBinarySplit]:
+    """The un-instrumented entry: the exact pre-instrumentation signature,
+    forwarding to `fit_oblivious_tree_structure_traced` with BOTH
+    instruments off.
+
+    The `StageTimes` is FORCE-DISABLED rather than env-constructed on
+    purpose: an env-enabled timer here would pay a drain per stage per
+    level for a table nobody reports (the fit-level table lives with the
+    boosting loop, which calls the traced entry directly). Same for the
+    trace: a per-tree `IdentityTrace()` would restart `seq` at 0 in a
+    shared trace file and break the format's monotonic-seq contract.
+    """
+    var no_trace = IdentityTrace.disabled()
+    var no_times = StageTimes()
+    no_times.enabled = False
+    return fit_oblivious_tree_structure_traced(
+        ctx, layout, n_rows, max_depth, cindex,
+        weights^, weighted_target^,
+        sm_count, fixed_scale, score_function, pool,
+        no_trace, no_times, String("tree"),
+        l2_leaf_reg,
+        score_std_dev=score_std_dev,
+        seed=seed,
+        one_hot=one_hot,
+        bootstrapped_observations=bootstrapped_observations,
+        folds=folds,
+        permutation=permutation,
+    )
 
 
 def split_stat_planes(

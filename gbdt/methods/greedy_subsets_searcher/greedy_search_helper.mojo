@@ -54,6 +54,10 @@ from gbdt.methods.greedy_subsets_searcher.split_properties_helper import (
     zero_leaves,
 )
 from std.sys.info import size_of
+from core.identity_trace import IdentityTrace
+from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import (
+    StageTimes,
+)
 from gbdt.gpu_data.gpu_structures import CFeature
 from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     choose_scale_kernel,
@@ -2728,7 +2732,14 @@ struct TTreeWorkspace(Movable):
         _ = hbr7^
 
 
-def run_tree_layout[
+def _sym_dd2(n: Int) -> String:
+    """Two zero-padded digits, for depth components of trace tags."""
+    if n < 10:
+        return String("0") + String(n)
+    return String(n)
+
+
+def run_tree_layout_traced[
     hist2_smem_mode: Int = HIST2_SMEM_MODE
 ](
     ctx: DeviceContext,
@@ -2745,6 +2756,9 @@ def run_tree_layout[
     mut out_leaf_values: List[Float32],
     mut out_leaf_offsets: List[Int],
     mut ws: List[TTreeWorkspace],
+    mut trace: IdentityTrace,
+    mut times: StageTimes,
+    tree_tag: String,
     export_offsets: Bool = False,
     use_subtraction: Bool = True,
     apply_to_cursor: Bool = False,
@@ -3123,6 +3137,7 @@ def run_tree_layout[
         # every compute slot rather than the empty ones the host no longer
         # knows about; a computed slot is overwritten either way, and an
         # empty one's zeros ARE its histogram)
+        times.begin(ctx)
         ctx.enqueue_function[zero_histograms_kernel](
             level_ids,
             Int32(hist_cells_per_leaf),
@@ -3194,13 +3209,46 @@ def run_tree_layout[
                 )
             mgr.stream_kernel()
 
+        times.end(ctx, "sym.hist")
+
+        # ---- identity checkpoint: this depth's REDUCED histograms ----
+        # `hist` is `[leaf][stat][binFeature]` leaf-major, and at this
+        # point slots 0..n_live-1 hold the level's SCANNED histograms
+        # (computed or sibling-derived); the tail holds deeper slots'
+        # stale cells, so only the live prefix is hashed (identity_trace
+        # rule 3). Records drain -- a traced run is not a timing (rule 4)
+        # -- and sit OUTSIDE the timed regions.
+        if trace.enabled:
+            trace.record_device(
+                ctx,
+                tree_tag + ".depth" + _sym_dd2(depth) + ".hist",
+                hist,
+                count=n_live * stat_count * hist_cells_per_leaf,
+            )
+
         # their `AllReduceThroughMaster(subsets->CurrentPartStats(), ...)`
+        times.begin(ctx)
         compute_partition_stats(
             ctx, n_live, max_live_rows, stat_count, n_rows,
             dense_ids, p_off, p_sz, stats, stat_partials, part_stats,
             sm_count=sm_count,
         )
         mgr.stream_kernel()
+        times.end(ctx, "sym.pstats")
+
+        # ---- identity checkpoint: the level's per-leaf totals ---------
+        # `part_stats` is the REDUCED `[leaf][stat]` result the score
+        # kernel reads -- the logical buffer, never the machine-sized
+        # `stat_partials` scratch (identity_trace rule 3 names exactly
+        # that buffer as the wrong one).
+        if trace.enabled:
+            trace.record_device(
+                ctx,
+                tree_tag + ".depth" + _sym_dd2(depth) + ".pstats",
+                part_stats,
+                count=n_live * stat_count,
+            )
+        times.begin(ctx)
 
         # `bff` and `ffw` are their `subsets->BinFeatures` and
         # `subsets->FeatureWeights`, built once above this loop because that
@@ -3263,6 +3311,7 @@ def run_tree_layout[
                 block_dim=(SCORE_BLOCK_SIZE, 1, 1),
             )
         mgr.stream_kernel()
+        times.end(ctx, "sym.score")
 
         # THE WINNER IS RESOLVED ON THE DEVICE and the split descriptors
         # are packed there too, so the split chain below is enqueued
@@ -3275,6 +3324,7 @@ def run_tree_layout[
         # to the smaller bin-feature), same descriptors; the gates their
         # host applies BEFORE splitting are applied by ours AFTER the
         # drain, with a one-level rollback on the rare stop.
+        times.begin(ctx)
         ctx.enqueue_function[resolve_and_pack_kernel](
             out_score.unsafe_ptr(), out_bin.unsafe_ptr(),
             Int32(argmax_blocks),
@@ -3290,8 +3340,9 @@ def run_tree_layout[
             block_dim=(RESOLVE_BLOCK_SIZE, 1, 1),
         )
         mgr.stream_kernel()
+        times.end(ctx, "sym.winner")
 
-
+        times.begin(ctx)
         # `numBlocks.x = (leavesCount > 4 ? 2 : 4) * TArchProps::SMCount()`
         # (`split_points.cu:563`): MACHINE-sized, like every strided grid in
         # their file; `wide` was data-sized and is not what their grid x
@@ -3406,6 +3457,7 @@ def run_tree_layout[
             block_dim=(512, 1, 1),
         )
         mgr.stream_kernel()
+        times.end(ctx, "sym.split")
 
         n_live = n_live * 2
 
@@ -3414,10 +3466,23 @@ def run_tree_layout[
     # folded into one: the winner records hold every level, the partition
     # sizes hold the final leaves, and both ride home behind everything
     # the loop enqueued.
+    times.begin(ctx)
     ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
     ctx.enqueue_copy(dst_ptr=h_wsc.unsafe_ptr(), src_buf=winners_score)
     ctx.enqueue_copy(dst_ptr=h_wbf.unsafe_ptr(), src_buf=winners_bf)
     mgr.wait_complete()
+    times.end(ctx, "sym.drain")
+
+    # ---- identity checkpoint: the tree's winner records --------------
+    # Every level's score and packed bin-feature id, exactly as the one
+    # drain brought them home; hashed from the HOST copies, so this adds
+    # no device traffic of its own.
+    trace.record_host(
+        tree_tag + ".winners.scores", h_wsc.unsafe_ptr(), max_depth
+    )
+    trace.record_host(
+        tree_tag + ".winners.bf", h_wbf.unsafe_ptr(), max_depth
+    )
 
     # ============ THE GATES, POST-TREE ================================
     # Their host applies these BEFORE each split
@@ -3507,6 +3572,7 @@ def run_tree_layout[
         # BEFORE each split, and the last split has no level after it.
         # `ids_a` still holds the LAST level's ids, and `n_live` has doubled
         # since. Refill it for the final leaf count.
+        times.begin(ctx)
         compute_partition_stats(
             ctx, n_live, max_live_rows, stat_count, n_rows,
             dense_ids, p_off, p_sz, stats, stat_partials, part_stats,
@@ -3538,6 +3604,7 @@ def run_tree_layout[
             block_dim=(256, 1, 1),
         )
         mgr.stream_kernel()
+        times.end(ctx, "sym.leaves")
 
     ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
     mgr.wait_complete()
@@ -3546,6 +3613,14 @@ def run_tree_layout[
         # rather than only its effect on the cursor.
         for i in range(n_live):
             out_leaf_values.append(h_leaf_values.unsafe_ptr().unsafe_load(i))
+        # ---- identity checkpoint: this tree's leaf values ------------
+        # The Simple-method leaves (the searcher's own Newton step),
+        # recorded AFTER the drain that made the host copy readable. The
+        # estimation path's leaves are recorded by the walker's traced
+        # overload instead (`descent_helpers.mojo`).
+        trace.record_host(
+            tree_tag + ".leaves", h_leaf_values.unsafe_ptr(), n_live
+        )
     var out = List[Int]()
     for i in range(n_live):
         out.append(Int(h_sz.unsafe_ptr().unsafe_load(i)))
@@ -3571,3 +3646,69 @@ def run_tree_layout[
         for i in range(n_live):
             out_leaf_offsets.append(Int(h_sz.unsafe_ptr().unsafe_load(i)))
     return out^
+
+
+def run_tree_layout[
+    hist2_smem_mode: Int = HIST2_SMEM_MODE
+](
+    ctx: DeviceContext,
+    n_rows: Int,
+    fold_counts: List[Int],
+    max_depth: Int,
+    mut cindex: DeviceBuffer[DType.uint32],
+    mut stats: DeviceBuffer[DType.float32],
+    mut row_index: DeviceBuffer[DType.uint32],
+    mut cursor: DeviceBuffer[DType.float32],
+    weight_magnitude: Float32,
+    gradient_magnitude: Float32,
+    mut out_splits: List[TBinarySplit],
+    mut out_leaf_values: List[Float32],
+    mut out_leaf_offsets: List[Int],
+    mut ws: List[TTreeWorkspace],
+    export_offsets: Bool = False,
+    use_subtraction: Bool = True,
+    apply_to_cursor: Bool = False,
+    learning_rate: Float32 = Float32(0.3),
+    l2_leaf_reg: Float32 = Float32(3.0),
+    sync_budget: Int = -1,
+    one_hot: List[Bool] = List[Bool](),
+    score_function: Int = SCORE_FUNCTION_COSINE,
+    approx_dim: Int = 1,
+    multiclass_optimization: Bool = False,
+    mags_dev: Optional[DeviceBuffer[DType.float32]] = None,
+    random_strength: Float32 = Float32(0.0),
+    random_seed: UInt64 = UInt64(0),
+) raises -> List[Int]:
+    """The un-instrumented entry: the exact pre-instrumentation signature,
+    forwarding to `run_tree_layout_traced` with BOTH instruments off.
+
+    The `StageTimes` is FORCE-DISABLED rather than env-constructed on
+    purpose: an env-enabled timer here would pay a drain per stage per
+    level for a table nobody reports (the fit-level table lives with the
+    boosting loop, which calls the traced entry directly). Same for the
+    trace: a per-tree `IdentityTrace()` would restart `seq` at 0 in a
+    shared trace file and break the format's monotonic-seq contract.
+    """
+    var no_trace = IdentityTrace.disabled()
+    var no_times = StageTimes()
+    no_times.enabled = False
+    return run_tree_layout_traced[hist2_smem_mode](
+        ctx, n_rows, fold_counts, max_depth,
+        cindex, stats, row_index, cursor,
+        weight_magnitude, gradient_magnitude,
+        out_splits, out_leaf_values, out_leaf_offsets, ws,
+        no_trace, no_times, String("tree"),
+        export_offsets=export_offsets,
+        use_subtraction=use_subtraction,
+        apply_to_cursor=apply_to_cursor,
+        learning_rate=learning_rate,
+        l2_leaf_reg=l2_leaf_reg,
+        sync_budget=sync_budget,
+        one_hot=one_hot,
+        score_function=score_function,
+        approx_dim=approx_dim,
+        multiclass_optimization=multiclass_optimization,
+        mags_dev=mags_dev,
+        random_strength=random_strength,
+        random_seed=random_seed,
+    )
