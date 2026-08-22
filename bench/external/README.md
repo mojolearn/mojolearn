@@ -24,6 +24,12 @@ a caveat.
 |---|---|---|
 | `mojolearn-gbdt-gpu` | the CatBoost oblivious-tree port | gbm-bench's `CatAlgorithm` param for param |
 | `cat-cpu` | gbm-bench's own CatBoost arm | (theirs, untouched) |
+
+**The symmetric-trees pair is CatBoost ONLY (Andrew's standing order,
+2026-08-22).** LightGBM has no symmetric-tree mode -- leaf-wise is its only
+growth algorithm -- so a lgbm arm beside the symmetric pair compares
+different algorithms and is excluded from it. LightGBM remains the
+comparator for the FOREST pairs below.
 | `mojolearn-et-gpu` | the cuML-design ExtraTrees port | `SkRandomForestAlgorithm`'s parameter shape |
 | `mojolearn-rf-gpu` | the cuML RandomForest port (`ensemble/`, quantile splits, with-replacement bootstrap) | `SkRandomForestAlgorithm`'s parameter shape |
 | `skrf` | gbm-bench's own sklearn RandomForest arm | (theirs, untouched) |

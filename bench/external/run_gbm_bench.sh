@@ -29,6 +29,10 @@ DATA="${GBM_BENCH_DATA:-$HOME/datasets/gbm-bench}"
 DATASET="${1:?dataset required (year, covtype, higgs, fraud, epsilon, airline, bosch)}"
 NTREES="${2:?ntrees required}"
 case "${3:-}" in
+  # THE SYMMETRIC-TREES PAIR IS CATBOOST ONLY -- Andrew's standing order
+  # (2026-08-22): LightGBM has no symmetric-tree mode (leaf-wise is its
+  # only growth algorithm), so a lgbm arm in this pair compares different
+  # algorithms and is NOT run here. LightGBM stays in the FOREST pairs.
   gbdt)   ALGOS="mojolearn-gbdt-gpu,cat-cpu" ;;
   # THE HEADLINE SUITE IS US-THEM PAIRS AND NOTHING ELSE, and "them" is
   # LIGHTGBM: it ships GPU arms for NVIDIA (CUDA) and AMD/Windows (OpenCL)
