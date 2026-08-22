@@ -25,14 +25,17 @@ a caveat.
 | `mojolearn-gbdt-gpu` | the CatBoost oblivious-tree port | gbm-bench's `CatAlgorithm` param for param |
 | `cat-cpu` | gbm-bench's own CatBoost arm | (theirs, untouched) |
 | `mojolearn-et-gpu` | the cuML-design ExtraTrees port | `SkRandomForestAlgorithm`'s parameter shape |
+| `mojolearn-rf-gpu` | the cuML RandomForest port (`ensemble/`, quantile splits, with-replacement bootstrap) | `SkRandomForestAlgorithm`'s parameter shape |
+| `skrf` | gbm-bench's own sklearn RandomForest arm | (theirs, untouched) |
 | `skl-et-cpu` | sklearn ExtraTrees (ADDED; like-for-like ET comparator) | |
 | `lgbm-et-cpu` | LightGBM `boosting_type='rf'` + `extra_trees=true` (ADDED) | |
 | `lgbm-rf-cpu` | LightGBM `boosting_type='rf'` (ADDED) | |
 
-There is NO mojolearn RandomForest arm: the python surface refuses
-`bootstrap=True` by name (cuML's with-replacement row sampler has no caller
-yet). `lgbm-rf-cpu` exists so the comparator is ready the day that surface
-lands. Every difference between a mojolearn arm and the arm it mirrors is in
+`mojolearn-rf-gpu` landed 2026-08-22: `python/mojolearn/randomforest.py`
+over the NEW `_mojolearn_rf` extension (`bindings/_mojolearn_rf.mojo`,
+built by `bindings/build_rf.sh`), the first Python caller of `ensemble/`'s
+with-replacement `RowSampler`. Every difference between a mojolearn arm and
+the arm it mirrors is in
 `PARITY_NOTES` in `gbm_bench/mojolearn_algorithm.py` — including the RMSE
 `boost_from_average` emulation (target centering inside the fit timer),
 without which the accuracy column measures CatBoost's seed rather than the

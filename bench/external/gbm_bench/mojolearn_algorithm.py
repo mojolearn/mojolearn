@@ -17,6 +17,9 @@ Arms registered here:
                        side-by-side comparators are `skl-et-cpu` (the
                        algorithm's definition) and `lgbm-et-cpu` (LightGBM's
                        nearest forest)
+  mojolearn-rf-gpu     the cuML RandomForest port on Metal (quantile
+                       splits, with-replacement bootstrap); comparators are
+                       gbm-bench's own `skrf` and `lgbm-rf-cpu`
   skl-et-cpu           sklearn ExtraTrees, an ADDED arm (gbm-bench ships
                        `skrf-cpu` but no ExtraTrees)
   lgbm-et-cpu          LightGBM boosting_type='rf' + extra_trees=true, the
@@ -35,6 +38,10 @@ import numpy as np
 
 import mojolearn
 from mojolearn.extratrees import ExtraTreesClassifier, ExtraTreesRegressor
+from mojolearn.randomforest import (
+    RandomForestClassifier as MojoRFClassifier,
+    RandomForestRegressor as MojoRFRegressor,
+)
 import sklearn.ensemble as sken
 import lightgbm as lgb
 
@@ -76,11 +83,14 @@ PARITY_NOTES = {
         "(log-odds prior) cannot be emulated by relabeling and remains a "
         "recorded gap on binary datasets."
     ),
-    "no-rf": (
-        "There is no mojolearn RandomForest arm: the python surface refuses "
-        "bootstrap=True by name because cuML's with-replacement row sampler "
-        "(randomforest.cuh:64-67) has no caller yet. lgbm-rf-cpu is "
-        "registered so the comparator exists the day that surface lands."
+    "rf-quantile-splits": (
+        "mojolearn-rf-gpu is the cuML RandomForest port: splits are "
+        "searched over at most 128 per-feature QUANTILES (cuML's design), "
+        "while sklearn's skrf searches exact thresholds. Faster and a "
+        "different algorithm; accuracy sits beside the timing so the "
+        "reader can weigh both. Bootstrap defaults match sklearn's RF "
+        "(with-replacement, n rows per tree); LightGBM's rf mode cannot "
+        "match that (see lgbm-rf-bagging)."
     ),
     "lgbm-rf-bagging": (
         "LightGBM's rf boosting REQUIRES bagging_freq>0 and "
@@ -175,6 +185,37 @@ class MojolearnExtraTreesGPUAlgorithm(Algorithm):
         if data.learning_task == LearningTask.REGRESSION:
             return ExtraTreesRegressor(device="gpu", **params)
         return ExtraTreesClassifier(device="gpu", **params)
+
+    def fit(self, data, args):
+        params = _forest_params(args)
+        model = self._estimator(data, params)
+        X = np.ascontiguousarray(data.X_train, dtype=np.float32)
+        y = data.y_train
+        if data.learning_task != LearningTask.REGRESSION:
+            y = y.astype(np.int64)
+        with Timer() as t:
+            self.model = model.fit(X, y)
+        return t.interval
+
+    def test(self, data):
+        X = np.ascontiguousarray(data.X_test, dtype=np.float32)
+        if data.learning_task == LearningTask.CLASSIFICATION:
+            return self.model.predict_proba(X)[:, 1]
+        return self.model.predict(X)
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        del self.model
+
+
+class MojolearnRandomForestGPUAlgorithm(Algorithm):
+    """The cuML RandomForest port, configured as gbm-bench's own `skrf`
+    arm configures its forest (`_forest_params`), with cuML's quantile
+    splits -- PARITY_NOTES["rf-quantile-splits"]."""
+
+    def _estimator(self, data, params):
+        if data.learning_task == LearningTask.REGRESSION:
+            return MojoRFRegressor(device="gpu", **params)
+        return MojoRFClassifier(device="gpu", **params)
 
     def fit(self, data, args):
         params = _forest_params(args)

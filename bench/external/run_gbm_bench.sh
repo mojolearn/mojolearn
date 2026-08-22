@@ -19,13 +19,19 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 WORK="${GBM_BENCH_HOME:-$REPO_ROOT/bench/external/.gbm-bench}"
-DATA="${GBM_BENCH_DATA:-$REPO_ROOT/bench/external/.gbm-datasets}"
+# The dataset store lives OUTSIDE every git repository and its files carry
+# `chflags uchg` (immutable), both per the standing protect-local-data rule:
+# these are multi-GB downloads and no test run, clean step, or rm -rf may
+# take them. To add a dataset the DIRECTORY stays writable; to replace a
+# protected file, `chflags nouchg <file>` first, deliberately.
+DATA="${GBM_BENCH_DATA:-$HOME/datasets/gbm-bench}"
 
 DATASET="${1:?dataset required (year, covtype, higgs, fraud, epsilon, airline, bosch)}"
 NTREES="${2:?ntrees required}"
 case "${3:-}" in
   gbdt)   ALGOS="mojolearn-gbdt-gpu,cat-cpu" ;;
-  forest) ALGOS="mojolearn-et-gpu,skl-et-cpu,lgbm-et-cpu,lgbm-rf-cpu" ;;
+  forest) ALGOS="mojolearn-rf-gpu,skrf,lgbm-rf-cpu,mojolearn-et-gpu,skl-et-cpu,lgbm-et-cpu" ;;
+  rf)     ALGOS="mojolearn-rf-gpu,skrf,lgbm-rf-cpu" ;;
   "")     ALGOS="mojolearn-gbdt-gpu,cat-cpu" ;;
   *)      ALGOS="$3" ;;
 esac
@@ -91,5 +97,8 @@ cd "$WORK"
   -verbose
 
 echo
+echo "==> protecting any newly downloaded dataset files (chflags uchg)"
+find "$DATA" -type f -exec chflags uchg {} + 2>/dev/null || true
+
 echo "==> wrote $OUT"
 echo "    and the box record beside it at ${OUT%.json}.env.txt"

@@ -112,6 +112,8 @@ def patch_algorithms(root):
         "            return MojolearnGbdtGPUAlgorithm()\n"
         "        if name == 'mojolearn-et-gpu':\n"
         "            return MojolearnExtraTreesGPUAlgorithm()\n"
+        "        if name == 'mojolearn-rf-gpu':\n"
+        "            return MojolearnRandomForestGPUAlgorithm()\n"
         "        if name == 'skl-et-cpu':\n"
         "            return SkExtraTreesCPUAlgorithm()\n"
         "        if name == 'lgbm-et-cpu':\n"
@@ -128,6 +130,7 @@ def patch_algorithms(root):
         "from mojolearn_algorithm import (  # noqa: E402\n" \
         "    MojolearnGbdtGPUAlgorithm,\n" \
         "    MojolearnExtraTreesGPUAlgorithm,\n" \
+        "    MojolearnRandomForestGPUAlgorithm,\n" \
         "    SkExtraTreesCPUAlgorithm,\n" \
         "    LgbmExtraTreesCPUAlgorithm,\n" \
         "    LgbmRandomForestCPUAlgorithm,\n" \
