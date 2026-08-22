@@ -2736,3 +2736,60 @@ Whole-fit confirmation rides the next clean window per the drift rule; the
 mechanism removes 99 allocations-sets, launches and synchronizes per
 100-tree group outright, which is the lever class with a 3-for-3 record here
 (184, 202, 211) against 0-for-2 for traffic rearrangement (212, 213).
+
+---
+
+## DEVIATION 215 -- cuML's feature sampler is BIASED, and higgs paid for it: the k survivors are now a uniform keyed-hash subset
+
+**Theirs, and it is a bug.** `excess_sample_with_replacement_kernel` draws
+`n_parallel_samples` columns with replacement, dedupes, and -- when more
+than `k` uniques came out -- keeps the `k` SMALLEST unique column ids
+(`builder_kernels.cuh:243-246`: the gather index is the prefix sum of the
+head flags over the SORTED array, and everything past `k` is not written).
+That is a selection bias, not a tie-break. At `(n=28, k=5)` the dispatch
+draws only 6 samples (`ceil(log(1-5/28)/log(1-1/28))`), and simulating
+their rule over 200,000 nodes puts column 27 in the sample at **0.38x
+column 0's rate** -- the last column of a 28-feature dataset is sampled at
+barely a third the frequency of the first.
+
+**How it was FOUND, because the trail is the lesson.** The higgs board
+(addendum 4) showed our train accuracy 1.0-1.5 points UNDER sklearn's,
+consistently, while covtype showed ours equal or better -- and the year
+discriminator showed a residual at `max_features=all`, where the sampler
+never runs, so the sampler could only explain the `sqrt` gap. The sign
+pattern is what convicted it: higgs's seven most informative features (the
+derived masses) are its HIGHEST-indexed columns, 21-27 -- starved by the
+bias -- while covtype's informative continuous columns are its LOWEST, 0-9
+-- boosted by it. One mechanism, both observations, opposite signs.
+
+**Ours.** When the loop lands on exactly `k` uniques there is nothing to
+select and cuML's gather runs verbatim. When it overshoots, the `k` kept
+are the smallest by `excess_selection_hash(tree, node, col)` -- a keyed
+fnv1a32 chain, salted so the stream is disjoint from the subsequence and
+threshold keys. By symmetry of the i.i.d. draws, a hash-ranked `k`-subset
+of the uniques is EXACTLY uniform over columns; it is deterministic from
+`(tree, node, col)` alone, identical on host and device (one shared
+function), independent of thread scheduling, and it changes neither the
+sort network nor the dedupe. Same fix-their-bug footing as DEVIATIONS 164
+and 165, which repaired two other defects in this same kernel.
+
+**GATED, and the gate can see what no prior check could.** The sets were
+always valid, host and device always matched slot for slot, and the
+distribution was never asserted -- which is exactly how the bias shipped
+through 23,462 asserted cells. `sampler_kernel_check` section 8 now
+aggregates 4,000 nodes at `(28, 5)`: the fixed rule's per-column counts
+land 670-768 around the uniform 714 (a +/-15% band, over four sigma), and
+cuML's original rule -- kept alive as `SAMP_SAB_SMALLEST_K`, the required-
+RED sabotage arm -- lands 273-836, the starved column at the simulated
+0.38x. Every existing sampler assertion still passes: the fix is invisible
+to set-validity and slot-parity checks, visible only to the distribution
+gate, which is the whole finding.
+
+**PRICE.** The overshoot path pays one extra pass over the block's scratch
+per unique (rank by hash; the scratch was already global per deviation
+195). The exact-`k` path -- the common case, since `n_parallel_samples`
+targets `E[uniques] = k` -- is bit-for-bit cuML's. Forests built at
+`max_features < n` CHANGE with this fix, everywhere, by design: the
+candidate sets are now actually uniform. Accuracy movements are recorded
+in `bench/results/` -- including covtype, where the bias had been HELPING
+and honesty requires re-measuring, not just the dataset that benefits.

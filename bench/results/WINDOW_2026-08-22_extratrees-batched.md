@@ -172,3 +172,38 @@ DEVIATION 211's A/B on higgs (serial vs merged, digests identical):
 the grid is never starved even one tree at a time, so the merge's win
 (4-5x at 100k, 1.7-1.9x at 581k) tapers to nothing here. The absolute
 numbers above rode the same drifting box as the rest of this window.
+
+## Addendum 5: DEVIATION 215 -- cuML's sampler bias, found via higgs, fixed, confirmed
+
+The higgs accuracy gap (addendum 4) traced to a cuML bug our port had
+faithfully transcribed: when the excess sampler overshoots `k` uniques it
+keeps the `k` SMALLEST column ids -- at `(n=28, k=5)` column 27 is sampled
+at 0.38x column 0's rate. Higgs's most informative features are its
+highest-indexed columns (starved); covtype's are its lowest (boosted) --
+one mechanism, both signs. Fixed: the survivors are now the `k` smallest by
+a keyed hash of `(tree, node, col)` -- exactly uniform by symmetry,
+deterministic, host and device sharing one rule. Gated by a NEW
+distribution assertion in `sampler_kernel_check` (4,000 nodes: fixed rule
+670-768 around uniform 714; cuML's rule, kept as the required-RED sabotage
+arm `SAMP_SAB_SMALLEST_K`: 273-836). No prior check could see it -- sets
+valid, slots host-device identical -- which is the finding.
+
+Confirmed, same harness, same seeds, interleaved (train acc, 3 reps):
+
+| dataset | ours BEFORE | ours AFTER | sklearn |
+|---|---|---|---|
+| higgs2m, 10 trees | 0.635-0.639 (below every rep) | **0.640-0.652** (overlapping; one rep above) | 0.642-0.657 |
+| covtype, 10 trees | 0.679-0.707 | 0.682-0.696 | 0.683-0.736 |
+
+Higgs recovered ~+1.2 points to sklearn parity; covtype's average is
+unchanged (0.690 -> 0.690) -- the bias's help there was marginal at
+`(54, 7)`. Speedups in this window's clock state: higgs 2.8-3.1x their ten
+cores, covtype 1.6-1.8x.
+
+Also this round, the YEAR decomposition (`skl-et-cpu` run through the
+peer's own gbm-bench harness, same split): sklearn ET scores MSE 96.25 at
+the depth-8 parity config, so 3.4 of the 5.2-point ET gap vs LightGBM is
+the MODEL FAMILY (depth-capped Geurts ET vs their leaf-wise binned
+variant), not our code. Our remaining residual vs sklearn ET is 1.79 MSE
+at `max_features=all` -- where the sampler never runs -- so it is a
+SECOND, separate defect, still open.

@@ -199,6 +199,34 @@ def excess_subsequence(
     return subsequence.cast[DType.uint64]()
 
 
+comptime EXCESS_SELECTION_SALT = UInt32(0x5E1EC7ED)
+
+
+def excess_selection_hash(
+    tree_id: UInt32, node_id: UInt32, col: UInt32
+) -> UInt32:
+    """DEVIATION 215's selection key: which `k` of the uniques survive when
+    the excess sampler drew MORE than `k`.
+
+    cuML keeps the `k` SMALLEST unique column ids (`:243-246`) -- a real
+    selection bias, not a tie-break: at higgs's `(n=28, k=5)` the dispatch
+    draws only 6 samples, and simulating their rule puts column 27 in the
+    sample at 0.38x column 0's rate. That is cuML's own bug, and this lane's
+    standing rule is to fix their bugs, not port them (164 and 165 fixed two
+    others in this same kernel). The fix: rank the uniques by THIS keyed hash
+    instead of by column id, and keep the `k` smallest BY HASH -- by
+    symmetry an exactly uniform `k`-subset of the uniques, deterministic
+    from `(tree, node, col)` alone, identical on host and device, and free
+    of any cross-thread draw order. The salt keeps this stream disjoint
+    from `excess_subsequence`'s and `key_for`'s.
+    """
+    var h = fnv1a32(FNV1A32_BASIS, EXCESS_SELECTION_SALT)
+    h = fnv1a32(h, tree_id)
+    h = fnv1a32(h, node_id)
+    h = fnv1a32(h, col)
+    return h
+
+
 def algo_l_subsequence(tree_id: UInt32, node_id: UInt32) -> UInt64:
     """The reservoir sampler's PCG subsequence. `builder_kernels.cuh:280`::
 
@@ -575,11 +603,40 @@ def excess_sample_with_replacement(
             if n_uniques >= k:  # `:241`, `while (n_uniques < k)`
                 break
 
-        # `:244-247`
+        # `:244-247` -- with DEVIATION 215 replacing WHICH `k` survive.
+        # cuML's gather keeps the `k` smallest unique COLUMN IDS, a selection
+        # bias (see `excess_selection_hash`). When the loop landed on exactly
+        # `k` uniques there is nothing to select and their gather is kept
+        # verbatim; when it overshot, the `k` kept are the smallest by the
+        # keyed hash -- a uniform `k`-subset -- and the slot order is hash
+        # order, which no consumer reads meaning into (candidates are
+        # order-independent by the total-order reduction).
         var col_offset = k * block_id
-        for slot in range(n_slots):
-            if mask[slot] != 0 and Int(col_indices[slot]) < k:
-                colids[col_offset + Int(col_indices[slot])] = items[slot]
+        if n_uniques <= k:
+            for slot in range(n_slots):
+                if mask[slot] != 0 and Int(col_indices[slot]) < k:
+                    colids[col_offset + Int(col_indices[slot])] = items[slot]
+        else:
+            var tree_u = UInt32(Int(tree_ids[block_id]))
+            for slot in range(n_slots):
+                if mask[slot] == 0:
+                    continue
+                var col = items[slot]
+                var h = excess_selection_hash(
+                    tree_u, node_id, UInt32(Int(col))
+                )
+                var rank = 0
+                for s in range(n_slots):
+                    if mask[s] == 0:
+                        continue
+                    var c2 = items[s]
+                    var h2 = excess_selection_hash(
+                        tree_u, node_id, UInt32(Int(c2))
+                    )
+                    if h2 < h or (h2 == h and c2 < col):
+                        rank += 1
+                if rank < k:
+                    colids[col_offset + rank] = col
 
 
 # --- arm 2: reservoir sampling, algorithm L --------------------------------
@@ -1001,6 +1058,14 @@ comptime SAMP_SAB_ALL_REVERSED: Int32 = 8
 156 materializes an IDENTITY, in order; a reversal has the same column SET and
 is invisible to any check that only looks at the set."""
 
+comptime SAMP_SAB_SMALLEST_K: Int32 = 9
+"""cuML's ORIGINAL selection (`:243-246`): when the loop drew more than `k`
+uniques, keep the `k` smallest COLUMN IDS instead of DEVIATION 215's uniform
+keyed-hash subset. This is the bug arm: it under-samples high-indexed columns
+(0.38x at higgs's `(28, 5)`), and the uniformity gate in
+`sampler_kernel_check` must go red under it -- that is what proves the gate
+watches the selection distribution and not just the set's validity."""
+
 
 # --- host-side sizing, so the caller never guesses a length ----------------
 
@@ -1307,17 +1372,54 @@ def excess_sample_kernel[
 
     # `:244-247`. `col_indices[i]` is the exclusive prefix sum of `mask`, so
     # it is this thread's block-scan prefix plus its own running count.
+    # DEVIATION 215 replaces WHICH `k` survive an overshoot: cuML keeps the
+    # `k` smallest unique column ids -- a selection bias (see
+    # `excess_selection_hash`) -- and the fixed rule keeps the `k` smallest
+    # by keyed hash. `n_uniques == k` has nothing to select, so their gather
+    # runs verbatim there and under the SMALLEST_K sabotage arm. The rank
+    # scan reads `items` from the block's GLOBAL scratch (deviation 195 put
+    # it there) and recomputes each slot's headness by the same adjacent
+    # rule the dedupe used; the sort's final barrier ordered the scratch.
     if not overrun:
         var col_offset = k * b
-        var running = Int32(thread_prefix)
-        for l in range(M):
-            var slot = M * tid + l
-            var ci = running
-            running += mask[unsafe_offset=l]
-            if mask[unsafe_offset=l] != Int32(0) and Int(ci) < k:
-                colids[unsafe_offset = col_offset + Int(ci)] = items[
-                    unsafe_offset=slot
-                ]
+        if n_uniques <= k or sab == SAMP_SAB_SMALLEST_K:
+            var running = Int32(thread_prefix)
+            for l in range(M):
+                var slot = M * tid + l
+                var ci = running
+                running += mask[unsafe_offset=l]
+                if mask[unsafe_offset=l] != Int32(0) and Int(ci) < k:
+                    colids[unsafe_offset = col_offset + Int(ci)] = items[
+                        unsafe_offset=slot
+                    ]
+        else:
+            for l in range(M):
+                var slot = M * tid + l
+                if mask[unsafe_offset=l] == Int32(0):
+                    continue
+                var col = items[unsafe_offset=slot]
+                var h = excess_selection_hash(
+                    tree_u, node_id, col.cast[DType.uint32]()
+                )
+                var rank = 0
+                for s in range(N_SLOTS):
+                    var c2 = items[unsafe_offset=s]
+                    if c2 >= Int32(n):
+                        continue
+                    var is_head: Bool
+                    if s == 0:
+                        is_head = True
+                    else:
+                        is_head = c2 != items[unsafe_offset = s - 1]
+                    if not is_head:
+                        continue
+                    var h2 = excess_selection_hash(
+                        tree_u, node_id, c2.cast[DType.uint32]()
+                    )
+                    if h2 < h or (h2 == h and c2 < col):
+                        rank += 1
+                if rank < k:
+                    colids[unsafe_offset = col_offset + rank] = col
 
     if tid == 0:
         report[unsafe_offset = 3 * b + 0] = Int32(SAMPLE_EXCESS)

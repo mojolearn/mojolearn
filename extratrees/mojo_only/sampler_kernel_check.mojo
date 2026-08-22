@@ -87,6 +87,7 @@ from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels im
     SAMP_SAB_LOOP_ANY_UNIQUE,
     SAMP_SAB_NONE,
     SAMP_SAB_NO_DEDUPE,
+    SAMP_SAB_SMALLEST_K,
     SAMP_SAB_SORT_DESCENDING,
     device_has_float64,
     excess_scratch_stride,
@@ -414,6 +415,26 @@ def run_case(
         " slots bit-identical",
     )
     return cells
+
+
+def _column_spread(
+    run: DeviceRun, w: Int, n: Int, k: Int
+) raises -> Tuple[Int, Int]:
+    """(min, max) per-column selection count over a batch -- DEVIATION 215's
+    uniformity gate reads the distribution through this."""
+    var counts = List[Int](length=n, fill=0)
+    for i in range(w * k):
+        var c = Int(run.colids[i])
+        assert_true(c >= 0 and c < n, "column out of range")
+        counts[c] += 1
+    var lo = counts[0]
+    var hi = counts[0]
+    for c in range(n):
+        if counts[c] < lo:
+            lo = counts[c]
+        if counts[c] > hi:
+            hi = counts[c]
+    return (lo, hi)
 
 
 def main() raises:
@@ -892,5 +913,65 @@ def main() raises:
     )
 
     print("")
+    # ------------------------------------------------------------------
+    # 8. DEVIATION 215: the selection is UNIFORM over columns, and the
+    #    gate can SEE non-uniformity. cuML's own gather keeps the k
+    #    smallest unique column ids when the draw overshoots -- at
+    #    (n=28, k=5) that puts the last column in the sample at 0.38x the
+    #    first column's rate, which quietly starved higgs's most
+    #    informative (highest-indexed) features. No existing arm could
+    #    see it: the sets were valid, the slots matched the host, and the
+    #    distribution was never asserted. This section asserts it -- and
+    #    runs the ORIGINAL rule as a sabotage arm, required RED, so the
+    #    gate is proven to watch the distribution and not the validity.
+    # ------------------------------------------------------------------
+    print("")
+    print("[uniformity] DEVIATION 215 at (n=28, k=5), 4000 nodes")
+    var u_n = 28
+    var u_k = 5
+    var u_nodes = List[Int]()
+    for i in range(4000):
+        u_nodes.append(i)
+
+    var fair = run_device(
+        ctx, u_nodes, Int32(3), UInt64(0x215), u_n, u_k, SAMP_SAB_NONE
+    )
+    var fs = _column_spread(fair, len(u_nodes), u_n, u_k)
+    # Expected count per column: 4000 * 5 / 28 = 714; sd ~24; the band is
+    # +/-15% (over 4 sigma), far inside what the bug violates (-62%).
+    var expect = len(u_nodes) * u_k // u_n
+    assert_true(
+        fs[0] > (expect * 85) // 100 and fs[1] < (expect * 115) // 100,
+        "the fixed selection is not uniform: spread "
+        + String(fs[0])
+        + ".."
+        + String(fs[1])
+        + " around "
+        + String(expect),
+    )
+    var bug = run_device(
+        ctx, u_nodes, Int32(3), UInt64(0x215), u_n, u_k, SAMP_SAB_SMALLEST_K
+    )
+    var bs = _column_spread(bug, len(u_nodes), u_n, u_k)
+    assert_true(
+        bs[0] < (expect * 60) // 100,
+        "SAMP_SAB_SMALLEST_K did not starve any column -- the gate cannot"
+        " see the selection distribution",
+    )
+    cells += 2 * u_n
+    print(
+        "    fixed rule: per-column counts",
+        fs[0],
+        "..",
+        fs[1],
+        "around",
+        expect,
+        "; cuML's smallest-k arm:",
+        bs[0],
+        "..",
+        bs[1],
+        "-- RED as required",
+    )
+
     print("sampler_kernel: ", cells, " cells")
     print("sampler_kernel_check: PASS")
