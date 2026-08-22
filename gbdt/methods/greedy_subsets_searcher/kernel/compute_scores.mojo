@@ -951,12 +951,23 @@ def _leafwise_argmax_write[
     is the layout their host reduce walks (`greedy_search_helper.cpp:520-528`).
 
     **The symmetric kernel above inlines this same reduction rather than
-    calling this helper.** That is duplication and it is recorded here
-    rather than fixed, because folding the symmetric arm onto this helper
-    means editing another lane's live arm in a shared file. The two are
-    gated against each other in `mojo_only/leafwise_scores_check.mojo`; if
-    that gate ever disagrees, one of the two copies has drifted and this
-    comment is where to start.
+    calling this helper.** That is duplication, recorded rather than fixed,
+    because folding the symmetric arm onto this helper means editing another
+    lane's live arm in a shared file.
+
+    THE SENTENCE THAT WAS HERE IS DELETED AS FALSE. It said "the two are
+    gated against each other in `mojo_only/leafwise_scores_check.mojo`".
+    They are not: that file never launches `compute_optimal_splits_kernel`
+    at all, so its G4 poison-record and G5 tie-rule gates exercise THIS copy
+    only. A duplication audit found it, and the reason it survived is
+    exactly the reason it was worth writing down -- a comment asserting a
+    gate exists is as load-bearing as the gate, and nothing checks comments.
+
+    **So the symmetric arm's tie rule and poison record are REACHED BUT
+    UNGATED.** The two bodies were read line by line at the time of that
+    audit and are behaviorally identical -- same `>` with the smaller-bin
+    tie-break, same `(ui32)-1` poison record. That is a reading, not a
+    measurement, and it is the honest status.
     """
     var tid = Int(thread_idx.x)
     var s_score = stack_allocation[

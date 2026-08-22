@@ -74,7 +74,7 @@ differential gates are measuring nothing.
 """
 
 from max.gpu.host import DeviceContext
-from std.memory import bitcast
+from mojo_only.leafwise_scores_check import bits
 
 from gbdt.methods.greedy_subsets_searcher.kernel.compute_scores import (
     LEAFWISE_SCORE_BLOCK_SIZE,
@@ -256,7 +256,7 @@ def check_sign_convention(ctx: DeviceContext) raises -> Int:
         return failures + 1
 
     for i in range(2):
-        if bits_f32(leaves[i].best_split.gain) != bits_f32(-our_gain[i]):
+        if bits(leaves[i].best_split.gain) != bits(-our_gain[i]):
             print(
                 "  FAIL leaf", i, "stored", leaves[i].best_split.gain,
                 "but the kernel's gain was", our_gain[i],
@@ -279,10 +279,6 @@ def check_sign_convention(ctx: DeviceContext) raises -> Int:
                 " and the argmin picks the better leaf (", got, ")",
             )
     return failures
-
-
-def bits_f32(x: Float32) -> UInt32:
-    return bitcast[DType.uint32](x)
 
 
 def check_lossguide_policy(ctx: DeviceContext) raises:

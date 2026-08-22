@@ -73,6 +73,8 @@ from max.gpu.host import DeviceContext
 from std.math import fma, sqrt
 from std.memory import bitcast
 
+from mojo_only.multiclass_score_check import hashed, splitmix
+
 from gbdt.methods.greedy_subsets_searcher.kernel.compute_scores import (
     FLOAT32_MAX,
     LEAFWISE_SCORE_BLOCK_SIZE,
@@ -92,20 +94,19 @@ comptime N_BF = 37
 comptime LAMBDA = Float32(1.5)
 
 
-def splitmix(x: UInt64) -> UInt64:
-    var z = x + UInt64(0x9E3779B97F4A7C15)
-    z = (z ^ (z >> 30)) * UInt64(0xBF58476D1CE4E5B9)
-    z = (z ^ (z >> 27)) * UInt64(0x94D049BB133111EB)
-    return z ^ (z >> 31)
+# `splitmix` and `hashed` are IMPORTED, not copied. `multiclass_score_check`
+# wrote them first for the same purpose -- a planted value that is a function
+# of its own coordinates, per `[[uniform-test-data-hides-permutation]]` -- and
+# a duplication audit found thirteen copies of splitmix64 across this tree
+# with ONE of them carrying a different multiplier under the same name. Two
+# copies of a generator is two generators.
 
 
-def hashed(seed: UInt64, i: Int) -> Float32:
-    """A planted value, not a random one. See
-    `[[uniform-test-data-hides-permutation]]`: a fixture whose cells are all
-    alike cannot see a permutation, so every cell here is a function of its
-    own coordinates."""
-    var h = splitmix(seed ^ UInt64(i * 2654435761))
-    return Float32(Int(h % UInt64(2000))) / Float32(1000.0) - Float32(1.0)
+def bits(x: Float32) -> UInt32:
+    """A float by its bit pattern. Shared with
+    `mojo_only/lossguide_policy_check.mojo`, which used to spell the same
+    line `bits_f32`."""
+    return bitcast[DType.uint32](x)
 
 
 @fieldwise_init
@@ -400,10 +401,6 @@ def run_device[
                 best_b = bn
         out.append((best_g, best_b))
     return out^
-
-
-def bits(x: Float32) -> UInt32:
-    return bitcast[DType.uint32](x)
 
 
 # ----------------------------------------------------------------- gates
