@@ -40,10 +40,11 @@ because it converts a checkable property into a belief.
 | 9 | **FMA contraction** | codegen decision | **CONSTRUCTION LANDED 2026-08-21**: `numerics.identical_mul_add` -- explicit `fma` under IDENTICAL (one rounding, identical on Metal/PTX/AMDGPU), the naive chain under FAST. Apple's FAST baseline measured UNFUSED (`check-ieee-arith`: fused 0 / unfused 1,046,394 of 2^20), so IDENTICAL differs from FAST on Apple BY DESIGN and is the same bits everywhere. | **helper landed; APPLICATION CHECKLIST OPEN** -- route every enumerated multiply-add seam through it: score gain arithmetic, cursor update, estimator derivations, leaf rescale. Each site converted must cite this row. |
 | 10 | division and `sqrt` in scoring | IEEE-correct on normals everywhere measured; the REAL hazard is DENORMAL POLICY | **CONSTRUCTION LANDED 2026-08-21**: `numerics.ftz` -- flush-to-signed-zero under IDENTICAL, comptime no-op under FAST. MEASURED, not designed: the identical model reproduced ALL 53,041 observed Metal divergences bit for bit (`check-ieee-arith`'s ftz-model arm), so on FTZ backends the helper is bitwise inert and on denormal-honoring backends it aligns them to Metal. | **Apple column CLOSED (IEEE+FTZ, no fast-math); helper landed; APPLICATION CHECKLIST OPEN** -- flush every cross-kernel float seam and store pinned expressions' intermediates through `ftz`; run `check-ieee-arith` first on every new backend column. |
 | 11 | k-NN tie handling (`select_radix`) | `atomicAdd` placement, no index tie-break | REFUSE — out of scope for GBDT | documented in `UNWIRED.md` |
+| 12 | **transcendentals in DEVICE loss kernels** — `std.math.exp`/`log` in `gbdt/targets/kernel/pointwise_targets.mojo` (Poisson/Quantile/Logloss derivatives, ~15 call sites) | vendor implementation choice: the stdlib may lower these to per-target intrinsics (PTX fast paths on NVIDIA, OCML on AMD, Metal's own on Apple), so `exp(x)`'s last bit can differ per vendor even with every reduction pinned | **AUDIT then REPLACE if divergent** — determine what each backend actually compiles (probe like `check-ieee-arith`: same 2^20 inputs, compare bits per backend); if it is not one polynomial from one source, port a single polynomial evaluated through `identical_mul_add` (row 9) under IDENTICAL | **OPEN — row was MISSING until 2026-08-22.** The host-side libm rule (`optimal_const_for_loss.mojo`, `binarization.mojo`) covers the HOST column only; nothing covered the device column. Found while answering the "is LCD sufficient" question — the enumeration's own incompleteness class (see opening paragraph). |
 
-Six closed, three open, one out of scope, one refused. **That ratio is the
-honest state of the guarantee**, and it is the first time it has been written
-down in one place.
+Six closed, four open (row 12 discovered 2026-08-22), one out of scope, one
+refused. **That ratio is the honest state of the guarantee**, and it is the
+first time it has been written down in one place.
 
 ## The three findings that produced this file
 
@@ -90,7 +91,7 @@ the fix is the accumulator the histogram already uses.
 
 ## What has to be true before the claim is made
 
-1. Items 8, 9 and 10 closed.
+1. Items 8, 9, 10 and 12 closed.
 2. `check_identity_paths` — a test that FAILS if a new float reduction appears
    without a matrix row. This ledger is a document today, which means it rots.
 3. The cross-vendor run (E1), which is now the LAST step rather than the first.
