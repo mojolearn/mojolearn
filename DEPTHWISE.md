@@ -268,6 +268,36 @@ because replication is `f(sm_count) / (groups × leaves × stats)` and
 collapses to 1 once the leaf count is large, so machine-dependence is at its
 *most* aggressive at shallow depth.
 
+## Audit findings, 2026-08-22 (the lane's identity, continued)
+
+Symbol-by-symbol read of their `SplitLeaves` epilogue (`:575-661`) and
+`MakeSplit`'s multi-leaf arm (`:833-954`) against the merged driver. Two
+fixes, both landed in `bf43e7b`, both restorations of THEIR behavior:
+
+1. **Multiclass leaf-value rounding** (their `:653`): ours rounded
+   `total_sum` to f32 before a float add where theirs is `float += double`
+   — one rounding, not two. Reach demonstrated by a scratch sabotage probe
+   at `approx_dim=2`; no committed gate covers that shape (noted, not
+   grown — no-new-features order).
+2. **Reorder arm dispatch** (their `split_points.cpp:60-63`): we passed
+   `n_rows` where theirs branches on the largest SPLITTING leaf, so past
+   1024 rows the one-launch GatherInplace fast arm was unreachable for both
+   non-symmetric policies (lossguide lane's find, verified here). The max is
+   taken from PARENT snapshots inside the split-prep loop — at the call
+   site the slot already holds the left child whose `size` is 0 by their
+   own `SplitLeaf` (`:790`), and a call-site max would take the fast arm
+   always, past the inplace kernel's shared-memory bound.
+
+Checked and CLEAN in the same read: the `w > 1e-20` guard, the totalSum
+accumulation order, `MarkTerminal` after size rebuild, `ShouldTerminate`,
+partition-stats dtype (their `TStripeBuffer<double>` vs our f32 is the
+recorded DEVIATION BLOCK 2 in `gpu_util/partitions_reduce.mojo`, not new).
+Observed, not ours: their `MakeSplit` dispatches to a SINGLE-leaf arm when
+exactly one leaf splits (`:839-840`, `FastUpdateLeavesSizes` reading two
+partitions instead of all) — the merged driver always takes the multi-leaf
+arm. Values identical, host reads differ; the single-leaf machinery is the
+lossguide lane's boundary and is recorded there.
+
 ## Deviation numbers
 
 **350-399 are this lane's**, agreed with the lossguide lane before either
