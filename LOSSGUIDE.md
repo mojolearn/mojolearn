@@ -317,12 +317,28 @@ was.
    On Apple the pin therefore buys nothing here and buys everything on a
    backend whose codegen chooses the other way.
 
-3. **Honest limit.** The discriminating fixture only exercises
-   `DenumSqr += weight * mu * mu`. The `Score += sum * mu` seam has not yet
-   been observed discriminating. The gate now buckets four ways -- fused /
-   naive / TIE / neither -- extends past `stat_count == 3`, and asserts
+3. **Honest limit.** The discriminating fixtures only exercise
+   `DenumSqr += weight * mu * mu`. A model that fuses ONLY `Score += sum * mu`
+   is bitwise equal to the naive chain on every fixture here, so the device
+   matching a both-fused model establishes the `DenumSqr` seam and leaves the
+   `Score` seam undetermined. The gate now buckets four ways -- fused / naive
+   / TIE / neither -- runs past `stat_count == 3`, and asserts
    `cos_fused != 0` so a fixture set that discriminates nothing cannot pass
    quietly.
+
+4. **THE CORRECTED TALLY, run on the device in both modes, M4, 2026-08-22:**
+
+   | mode | shapes | fused | naive | tie (blind) | neither |
+   |---|---|---|---|---|---|
+   | `NUMERIC_FAST` | 36 | **6** | **0** | 30 | 0 |
+   | `NUMERIC_IDENTICAL` | 36 | **6** | **0** | 30 | 0 |
+
+   Identical, and that is the expected result rather than a null one: Apple
+   already fuses this seam, so **the pin is bitwise inert on Apple and its
+   whole value is aligning a backend that chooses otherwise.** Zero naive
+   and zero neither in both modes; six shapes discriminate, so the gate is
+   not blind. L2 is bit-identical to the host walk at every shape in both
+   modes, which is the control -- its accumulation has no multiply to fuse.
 
 **THE LESSON, which is the reusable part.** A tally is not a measurement
 until the buckets are disjoint and the blind cases are named. I read a number
@@ -353,6 +369,25 @@ Being verified independently against their source before it is relied on.
 * What Apple's AIR-to-binary stage does with `llvm.fma.f32`. The AIR diff
   proves the pin survives to AIR, not to metal machine code. Low risk,
   unmeasured, and labelled as such.
+
+## One item that is bigger than this lane, for Andrew
+
+**`IDENTITY_PATHS.md` row 9 records "Apple's FAST baseline measured UNFUSED
+(fused 0 / unfused 1,046,394 of 2^20)" as a general property of the Apple
+column.** This lane has a seam where that generalization is FALSE: Metal's
+FAST codegen fuses the cosine calcer's `DenumSqr` accumulation, measured on
+the device, six discriminating shapes, both modes.
+
+Both measurements are correct. They are different expressions in different
+kernels, and that is exactly the point: **contraction is a per-seam property
+and a probe cannot license a claim about a kernel it did not compile.** Row 9
+is the artifact the paper rests on and it currently reads as though the probe
+settled the column.
+
+The depthwise lane independently reached the same conclusion and neither of
+us has edited that file, because it predates both lanes and is shared. **The
+caveat belongs in row 9 itself, not only in two lane records.** Raising it
+rather than doing it.
 * Whether `FindBestLeafToSplit`'s HOST argmin adds an identity pathway that
   `IDENTITY_PATHS.md` does not enumerate. It compares scores read back from
   the device, and the argmin's tie-break is `<` strict on leaf id, so the
