@@ -52,10 +52,12 @@ reproducible, not sampled luck.
 |---|---|---|---|---|---|---|
 | covtype | 581k | 5.3 s | 13.1 s | **2.46×** | 0.6469 | 0.6418 |
 | year | 463k | 34.0 s | 130.3 s | **3.83×** | MSE 96.57 | MSE 96.25 |
-| higgs | 8.8M | REFUSED | — | — | — | — |
+| higgs | 8.8M | 36.9 s | 170.7 s | **4.6×** | AUC 0.7092 | AUC 0.6986 |
 
-- higgs ET is a named refusal pending extratrees DEVIATION 218 (the
-  row-cap lift, approved, queued behind this sweep's ALL-CLEAR).
+- higgs ET filled 12:43 same day, after DEVIATION 218 (row-cap lift)
+  landed: 4.6× with accuracy ABOVE sklearn's, on the 218+450 binary
+  (gbm_bench_higgs_2026-08-22_124301.json; separate window from the
+  sweep, uncertified timing, interleaved-pair ratio defense).
 - Accuracy parity both rows (covtype +0.005 us; year MSE +0.32 them —
   ET seed family).
 
