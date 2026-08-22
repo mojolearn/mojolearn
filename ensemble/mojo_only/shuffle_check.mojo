@@ -39,7 +39,7 @@ say "wrong" without saying where:
      the port is held at the call site and not only at the primitive.
 """
 
-from ensemble.mojo_only.shuffle_iterator import (
+from core.shuffle_iterator import (
     FeistelBijection,
     key_stream_next,
     lcg_next,

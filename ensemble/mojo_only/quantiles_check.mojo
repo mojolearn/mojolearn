@@ -116,7 +116,7 @@ from ensemble.decisiontree.batched_levelalgo.quantiles import (
     custom_next_uniform_int_u64,
     quantile_bin_index,
 )
-from ensemble.mojo_only.segmented_sort import segmented_sort_keys_f32
+from core.segmented_sort import segmented_sort_keys_f32
 
 
 # ===========================================================================

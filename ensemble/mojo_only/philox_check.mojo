@@ -59,12 +59,12 @@ SIX LAYERS, SEPARATELY COUNTED, so a failure names its layer:
      oracle rows.
 """
 
-from ensemble.mojo_only.philox import (
+from core.philox import (
     PhiloxState,
     custom_next_uniform_double,
     philox_next_u64,
 )
-from ensemble.mojo_only.philox import (
+from core.philox import (
     PhiloxState,
     RNG_BLOCK_THREADS,
     RNG_STRIDE,

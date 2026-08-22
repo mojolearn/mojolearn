@@ -64,9 +64,10 @@ what makes one model out of three backends. The per-vendor facts behind
 that constant are `ensemble/mojo_only/atomic_matrix.mojo`
 (`column_has_64bit_int_atomics`, `bin_counter_bits`,
 `bin_counter_is_exact_at_32_bits`), written by the same round. This file
-does not IMPORT that table -- `ensemble/mojo_only/` is another lane's
-directory and is being edited concurrently, so a compile-time dependency
-on it would couple two lanes for no gain today. WIRING `UInt32` HERE TO
+does not IMPORT that table -- `ensemble/mojo_only/` is this lane's CHECKS
+directory, and since 2026-08-21 the shipping path imports nothing from it
+(the three primitives it once held -- Philox, the segmented sort, the
+shuffle iterator -- live in `core/` now). WIRING `UInt32` HERE TO
 `bin_counter_bits(TARGET_COLUMN)` THERE IS AN OPEN MERGE-TIME ITEM; until
 it is done the two files agree by inspection, which is weaker than
 agreeing by construction.

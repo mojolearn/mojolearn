@@ -255,7 +255,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.sync import barrier
 from std.gpu import block_dim, block_idx, thread_idx
 
-from ensemble.mojo_only.segmented_sort import segmented_sort_keys_f32
+from core.segmented_sort import segmented_sort_keys_f32
 
 
 # ===========================================================================

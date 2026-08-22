@@ -124,7 +124,7 @@ from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from ensemble.decisiontree.batched_levelalgo.random_utils import (
     fnv1a32_hash_seed_tree_node,
 )
-from ensemble.mojo_only.shuffle_iterator import shuffled_feature
+from core.shuffle_iterator import shuffled_feature
 
 
 @fieldwise_init

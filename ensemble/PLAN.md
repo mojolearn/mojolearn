@@ -805,14 +805,14 @@ quoted.
   `main()`; all EIGHTEEN run by path (the count said fourteen until
   `oob_check`, `sampled_cols_check` and the rest landed), and no
   `pixi.toml` task exists for any of them.
-- **`ensemble/mojo_only/` IS ON THE SHIPPING PATH, and its name says it is
-  not.** `quantiles.mojo:258` imports `segmented_sort_keys_f32` from it and
-  `randomforest.mojo:320` imports Philox from it, so both compile into any
-  binary that fits a forest -- the Metal shader list for one fit names
-  `ensemble_mojo_only_segmented_*` and `ensemble_mojo_only_philox_*` among
-  its 21 pipelines. `bins.mojo:67` states in passing that this directory is
-  another lane's and is not imported, which is now false. Neither symbol
-  mirrors a cuML FILE (theirs are CUB's `DeviceSegmentedRadixSort` and
-  RAFT's `PCGenerator`), so where they live is our choice and nothing about
-  the file-for-file mirror decides it -- but a checks directory is the
-  wrong answer. Andrew's call, since it moves files.
+- **RESOLVED 2026-08-21: `ensemble/mojo_only/` is no longer on the
+  shipping path.** The three primitives it held that shipping code
+  imported -- Philox (`randomforest.mojo`), the segmented radix sort
+  (`quantiles.mojo`), and the shuffle iterator (`builder_kernels.mojo`,
+  which the first write-up of this item missed) -- moved to `core/`,
+  which the lane split reserves for exactly this ("lifted
+  scan/partition/RNG primitives"). None mirrors a cuML FILE (theirs are
+  RAFT's `PCGenerator`, CUB's `DeviceSegmentedRadixSort`, CCCL's
+  `shuffle_iterator`), so `core/` is the shared home; `gbdt/`'s own
+  segmented-sort copy still stands and collapsing the two remains the
+  merge-time item below.

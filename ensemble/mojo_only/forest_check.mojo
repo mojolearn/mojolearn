@@ -51,7 +51,7 @@ from ensemble.decisiontree.batched_levelalgo.objectives import (
     ClassificationObjectiveFunction,
 )
 from ensemble.decisiontree.decisiontree import DecisionTreeParams, GINI
-from ensemble.mojo_only.philox import RNG_STRIDE
+from core.philox import RNG_STRIDE
 from ensemble.randomforest import (
     CLASSIFICATION,
     RF_params,

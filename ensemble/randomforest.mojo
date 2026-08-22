@@ -317,7 +317,7 @@ from ensemble.decisiontree.batched_levelalgo.quantiles import (
 from ensemble.decisiontree.batched_levelalgo.random_utils import (
     fnv1a32_hash_seed_tree,
 )
-from ensemble.mojo_only.philox import (
+from core.philox import (
     RNG_STRIDE,
     launch_uniform_int,
     uniform_double_host,
