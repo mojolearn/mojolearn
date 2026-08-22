@@ -784,6 +784,32 @@ check-identity-trace = "sh tools/check_identity_trace.sh"
 #   7 sabotage: one row's gradient changed must move the model.
 check-depthwise = "mojo run -I . mojo_only/depthwise_check.mojo"
 
+# The depthwise STAGE LADDER: one digest line per stage of a fit, so a
+# bitwise disagreement between two GPUs has an ADDRESS instead of only
+# "the models differ".
+#
+#   pixi run check-depthwise-digest > /tmp/dw-metal.txt   # here
+#   pixi run check-depthwise-digest > /tmp/dw-cuda.txt    # tools/remote_gpu.sh
+#   tools/identity_trace_diff.py /tmp/dw-metal.txt /tmp/dw-cuda.txt
+#
+# The line format is the LOSSGUIDE lane's `core/identity_trace.mojo` format,
+# so their reader takes these logs: it aligns on tag SEQUENCES (a plain diff
+# degrades badly when the two runs have different stage sets, which is the
+# interesting case) and classifies each differing cell -- DENORMAL-vs-ZERO /
+# SIGN / NAN-payload / ULP<=n / LARGE. That classification is the diagnosis;
+# the hash is only the location.
+#
+# It also does the comparison IN ONE PROCESS, which no file-based reader can:
+# the same tree at this device's core count and at 108 (an A100's), with a
+# run-it-twice CONTROL first, because run-to-run noise and machine dependence
+# are indistinguishable without one.
+#
+# NOT A BENCHMARK and never to be one -- it drains and copies at every stage.
+# Not a gate either; `check-depthwise` claim 6 is. This is what you run when
+# a gate has already gone red. On a new backend the order is
+# `check-ieee-arith`, then `check-depthwise`, then this.
+check-depthwise-digest = "mojo run -I . mojo_only/depthwise_digest_probe.mojo"
+
 [feature.bench.tasks]
 # CatBoost's own Logloss leaf values at ten Newton iterations and at one,
 # with the leaf-order mapping proved twice inside the generator and written

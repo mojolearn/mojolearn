@@ -36,7 +36,7 @@ THE FIVE THINGS DEPTHWISE DOES DIFFERENTLY, and they are all there is
    `Options.Policy != EGrowPolicy::SymmetricTree` (`:685`), so this is the
    first lane in this port where `min_data_in_leaf` decides anything.
 3. `UpdateFeatureWeightsForBestSplits` is NOT called -- it sits inside the
-   SymmetricTree branch only (`:466`), so `model_size_reg` does nothing here.
+   SymmetricTree branch only (`:447`), so `model_size_reg` does nothing here.
 4. The leaves are a LIST that grows unevenly. A level splits only the leaves
    that are non-terminal AND improving, so `leavesToSplit` is a subset and
    the new right children take ids `leavesCount + i` (`:861`).
@@ -98,6 +98,7 @@ from gbdt.gpu_util.partitions_reduce import compute_partition_stats
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
     CFEATURE_BYTES,
     TTreeWorkspace,
+    compute_target_std_dev,
     launch_histograms_for_blocks,
     resolve_split,
 )
@@ -144,6 +145,7 @@ from gbdt.methods.helpers import (
     best_split_properties_less,
 )
 from gbdt.models.non_symmetric_tree import TNonSymmetricTree
+from mojo_only.stage_digest import TStageDigest
 from gbdt.models.oblivious_model import (
     BIN_SPLIT_TAKE_BIN,
     BIN_SPLIT_TAKE_GREATER,
@@ -151,6 +153,7 @@ from gbdt.models.oblivious_model import (
 )
 from gbdt.options.catboost_options import (
     GROW_DEPTHWISE,
+    GROW_SYMMETRIC,
     SCORE_FUNCTION_COSINE,
     SCORE_FUNCTION_L2,
     SCORE_FUNCTION_NEWTON_L2,
@@ -183,11 +186,15 @@ struct TBinFeatureTable(Copyable, Movable):
     var feature: List[Int32]
     var bin: List[Int32]
     var one_hot: List[Bool]
+    var folds: List[Int32]
+    """The owning feature's bin count, carried so `to_split` can apply their
+    clamp (`helpers.cpp:165-170`) without a second walk of the layout."""
 
     def __init__(out self, layout: CompressedIndexLayout) raises:
         self.feature = List[Int32]()
         self.bin = List[Int32]()
         self.one_hot = List[Bool]()
+        self.folds = List[Int32]()
         for bf in range(layout.hist_cells):
             var choice = resolve_split(layout, bf)
             self.feature.append(Int32(choice.feature))
@@ -195,6 +202,7 @@ struct TBinFeatureTable(Copyable, Movable):
             self.one_hot.append(
                 layout.features[choice.feature].one_hot_feature
             )
+            self.folds.append(Int32(Int(layout.features[choice.feature].folds)))
 
     def to_split(self, bin_feature: Int) raises -> TBinarySplit:
         """Their `ToSplit` (`methods/helpers.cpp:164-170`).
@@ -204,9 +212,30 @@ struct TBinFeatureTable(Copyable, Movable):
         off the layout instead of off the features manager -- the same
         substitution `run_tree_layout` makes at its own `ToSplit` site.
         """
+        # ============ THEIR CLAMP, `helpers.cpp:157-171` ============
+        #     split.BinIdx = Min<ui32>(GetBinCount(id), props.BinId);      // cat
+        #     split.BinIdx = Min<ui32>(GetBorders(id).size() - 1, props.BinId);
+        # under their own comment "Float arithmetic could generate empty bin
+        # splits for ctrs". It was missing here while this docstring cited
+        # the very lines that contain it.
+        #
+        # INERT ON THIS PATH BY CONSTRUCTION -- `resolve_split` derives the
+        # bin as `bin_feature - first_fold_index`, which is strictly below
+        # `folds` by definition, so the clamp can never bind. Ported anyway,
+        # because "inert by construction" is a claim about a DIFFERENT
+        # function, and the day a bin arrives from anywhere but
+        # `resolve_split` the clamp is the thing that was supposed to be
+        # here. `helpers.mojo:244-262` is the canonical port and carries the
+        # argument for the two arms' asymmetry.
+        var max_bin = Int32(self.folds[bin_feature]) - 1
+        if self.one_hot[bin_feature]:
+            max_bin = Int32(self.folds[bin_feature])
+        var bin = self.bin[bin_feature]
+        if bin > max_bin:
+            bin = max_bin
         return TBinarySplit(
             self.feature[bin_feature],
-            self.bin[bin_feature],
+            bin,
             Int32(
                 BIN_SPLIT_TAKE_BIN
             ) if self.one_hot[bin_feature] else Int32(BIN_SPLIT_TAKE_GREATER),
@@ -294,7 +323,7 @@ struct TDepthwiseWorkspace(Movable):
 def is_terminal_leaf(
     leaf: TLeaf, options: TTreeStructureSearcherOptions
 ) raises -> Bool:
-    """`TGreedySearchHelper::IsTerminalLeaf` (`greedy_search_helper.cpp:683`).
+    """`TGreedySearchHelper::IsTerminalLeaf` (`greedy_search_helper.cpp:691`).
 
         const bool checkLeafSize = Options.Policy != EGrowPolicy::SymmetricTree;
         const bool flag = (checkLeafSize && leaf.Size <= Options.MinLeafSize)
@@ -311,7 +340,7 @@ def is_terminal_leaf(
     a POLICY fact and the next reader should not have to know the policy to
     read the line.
     """
-    var check_leaf_size = options.policy != 0  # EGrowPolicy::SymmetricTree
+    var check_leaf_size = options.policy != GROW_SYMMETRIC
     if check_leaf_size and Float64(leaf.size) <= options.min_leaf_size:
         return True
     return leaf.get_depth() >= options.max_depth
@@ -320,7 +349,7 @@ def is_terminal_leaf(
 def should_terminate(
     leaves: List[TLeaf], options: TTreeStructureSearcherOptions
 ) raises -> Bool:
-    """`ShouldTerminate` (`greedy_search_helper.cpp:672-682`).
+    """`ShouldTerminate` (`greedy_search_helper.cpp:678-689`).
 
         if (leafCount >= Options.MaxLeaves) return true;
         ... return AreAllTerminal(subsets, allLeaves);
@@ -337,7 +366,7 @@ def should_terminate(
 
 
 def select_leaves_to_visit(leaves: List[TLeaf]) raises -> List[Int]:
-    """`SelectLeavesToVisit` (`greedy_search_helper.cpp:697-710`).
+    """`SelectLeavesToVisit` (`greedy_search_helper.cpp:698-711`).
 
         if (!leaf.IsTerminal) {
             if (leaf.BestSplit.Defined()) continue;
@@ -444,6 +473,14 @@ def split_leaf(
     return child^
 
 
+def _as_u32(values: List[Int]) -> List[UInt32]:
+    """A host id list in the shape the digest hashes. Debug only."""
+    var out = List[UInt32]()
+    for i in range(len(values)):
+        out.append(UInt32(values[i]))
+    return out^
+
+
 def _leaf_records(
     leaves: List[TLeaf], parent_of: List[Int]
 ) raises -> List[LeafRecord]:
@@ -494,6 +531,25 @@ def fit_depthwise_tree[
     gradient_magnitude: Float32,
     mut ws: List[TTreeWorkspace],
     mut dws: List[TDepthwiseWorkspace],
+    # ---- THE STAGE DIGEST LADDER, off unless the caller supplies one ----
+    # `mojo_only/stage_digest.mojo`. When two GPU columns disagree, claim 6
+    # of `depthwise_check` says THAT and not WHERE; this ladder names the
+    # stage. One line per stage; `diff` two machines' logs, or compare two
+    # in-process runs with `stage_digest.first_difference`, and the first
+    # differing tag is the answer.
+    #
+    # A RUNTIME OBJECT AND NOT A `comptime` FLAG, deliberately.
+    # `IDENTITY_PATHS.md`'s first finding was a toggle that could not be
+    # selected because five files each declared their own comptime, so every
+    # statement anyone had made about that mode was about a configuration
+    # nobody had built. A debugging switch that needs a rebuild is a
+    # debugging switch nobody uses.
+    #
+    # EMPTY LIST = OFF, which costs one Bool test per stage. The list shape
+    # is the same pool idiom `ws` and `dws` use, and it is here rather than
+    # a defaulted parameter because the CALLER has to read `.log` back
+    # afterwards -- that is what makes the ladder a localizer.
+    mut digest: List[TStageDigest],
     one_hot: List[Bool] = List[Bool](),
     approx_dim: Int = 1,
     multiclass_optimization: Bool = False,
@@ -657,6 +713,41 @@ def fit_depthwise_tree[
 
     var table = TBinFeatureTable(layout)
 
+    # ============ THEIR `subsets.FeatureWeights`, WHICH WAS BEING DROPPED ===
+    # `CreateInitialSubsets` writes `Options.FeatureWeights` into
+    # `subsets.FeatureWeights` (`split_properties_helper.cpp:1075-1076`) and
+    # the kernel multiplies every candidate's gain by
+    # `binFeaturesWeights[featureId]` (`compute_scores.cu:467`).
+    #
+    # This driver used to hand the kernel `ws[0].ffw`, which the workspace
+    # fills with 1.0 for every feature and nothing ever overwrites. A caller
+    # who set `feature_weights` got them ACCEPTED AND DROPPED -- the exact
+    # failure `PORTING_RULES.md` rule 3 exists to prevent, sitting under an
+    # options docstring that read as though they were honored. Found by an
+    # audit against their source, not by a gate.
+    #
+    # Empty stays empty: their `UpdateFeatureWeightsForBestSplits` leaves
+    # 1.0 everywhere when there are no CTRs (`update_feature_weights.cpp
+    # :14-22`), which is what the workspace already holds.
+    if len(options.feature_weights) != 0:
+        if len(options.feature_weights) != len(fold_counts):
+            raise Error(
+                String("feature_weights must be one per feature: got ")
+                + String(len(options.feature_weights))
+                + " for "
+                + String(len(fold_counts))
+                + " features"
+            )
+        var hfw = ctx.enqueue_create_host_buffer[DType.float32](
+            len(fold_counts)
+        )
+        for i in range(len(fold_counts)):
+            hfw.unsafe_ptr().unsafe_store(i, options.feature_weights[i])
+        ctx.enqueue_copy(dst_buf=ws[0].ffw, src_ptr=hfw.unsafe_ptr())
+        ctx.synchronize()
+        # past the drain; `mojo-buffer-freed-at-last-use`
+        _ = hfw^
+
     # ================= CreateInitialSubsets =========================
     # `split_properties_helper.cpp:1043-1080`: zero the partitions, write
     # the root partition over every row, zero the stats and the histograms,
@@ -703,12 +794,53 @@ def fit_depthwise_tree[
     var parent_of = List[Int]()
     parent_of.append(0)
 
+    if len(digest) == 0:
+        digest.append(TStageDigest(ctx.copy(), False, String("dw")))
+    ref dg = digest[0]
+    var emit_digests = dg.enabled
+    var hist_live_stride = stat_count * hist_cells_per_leaf
+    var hist_capacity = max_leaves * hist_live_stride
+
     var mgr = TCudaManager(ctx.copy(), sync_budget=-1)
 
     # their `TGpuAwareRandom`, drawn from ONCE PER `ComputeOptimalSplits`
     # call (`greedy_search_helper.cpp:487`), i.e. per LEVEL. Same per-tree
     # re-seed as `run_tree_layout` (DEVIATION 139).
     var level_rand = TRandom(random_seed)
+
+    # ============ `CreateInitialSubsets`' ScoreStdDev, ONCE PER TREE ========
+    # `greedy_search_helper.cpp:384-388`, verbatim:
+    #
+    #     if (Options.RandomStrength) {
+    #         ScoreStdDev = Options.RandomStrength * ComputeTargetStdDev(target);
+    #     } else {
+    #         ScoreStdDev = 0;
+    #     }
+    #
+    # and it is `ScoreStdDev` -- the PRODUCT -- that becomes the kernel's
+    # `scoreStdDev` argument (`:488`), not `RandomStrength`.
+    #
+    # THIS WAS WRONG UNTIL 2026-08-22: `options.random_strength` went
+    # straight into the kernel slot and `ComputeTargetStdDev` was never
+    # called, so the noise magnitude was short by a factor of the target's
+    # standard deviation. It was inert only because every caller passes 0,
+    # and it was found by an audit against their source and not by any gate
+    # -- which is the whole argument for reading their file against ours
+    # rather than trusting green checks.
+    #
+    # THE TARGET IS THE BOOTSTRAPPED ONE, as in the symmetric lane: their
+    # `ComputeTarget` runs `StochasticDer(bootstrapConfig, ...)` and the
+    # std dev is taken from its output, so a bootstrap that scales the
+    # planes scales the noise with them.
+    var score_std_dev = Float32(0.0)
+    if options.random_strength != Float32(0.0):
+        score_std_dev = Float32(
+            Float64(options.random_strength)
+            * compute_target_std_dev(
+                ctx, stats, n_rows, stat_count, n_rows,
+                multiclass_optimization, sm_count,
+            )
+        )
 
     var result_paths = List[TLeafPath]()
     var result_weights = List[Float64]()
@@ -733,14 +865,20 @@ def fit_depthwise_tree[
             )
 
         # ================= ComputeOptimalSplits =====================
-        # `greedy_search_helper.cpp:396`. One draw per level, before the
-        # launch, regardless of which calcer the score function selects.
-        var level_seed = level_rand.next_uniform_l()
+        # `greedy_search_helper.cpp:396`. The RNG draw is NOT here; see the
+        # order block below.
 
         # --- SplitPropsHelper.BuildNecessaryHistograms(subsets) ---
         var records = _leaf_records(leaves, parent_of)
         var plan = build_necessary_histograms(records)
         var non_zero = non_zero_leaves(records, plan.compute_ids)
+
+        var d_tag = String("d") + String(iteration - 1) + "."
+        dg.note(d_tag + "leaves", len(leaves))
+        dg.emit_host_u32(d_tag + "plan.compute", plan.compute_ids)
+        dg.emit_host_u32(d_tag + "plan.subfrom", plan.subtract_from)
+        dg.emit_host_u32(d_tag + "plan.subwhat", plan.subtract_what)
+        dg.emit_host_u32(d_tag + "plan.nonzero", non_zero)
 
         if len(plan.compute_ids) > 0:
             # their `ZeroLeavesHistograms(zeroLeaves, subsets)`
@@ -800,6 +938,10 @@ def fit_depthwise_tree[
                 block_dim=(256, 1, 1),
             )
             mgr.stream_kernel()
+            dg.emit_f32(
+                d_tag + "hist.scanned", hist, hist_capacity,
+                len(leaves) * hist_live_stride,
+            )
 
         if len(plan.subtract_from) > 0:
             # their `SubstractHistograms(bigLeaves, smallLeaves, subsets)`
@@ -822,6 +964,10 @@ def fit_depthwise_tree[
                 block_dim=(256, 1, 1),
             )
             mgr.stream_kernel()
+            dg.emit_f32(
+                d_tag + "hist.subtracted", hist, hist_capacity,
+                len(leaves) * hist_live_stride,
+            )
 
         # their `allUpdatedLeaves` loop (`:1359-1367`): computed leaves plus
         # derived big leaves become `CurrentPath`, AND THEIR BestSplit IS
@@ -833,20 +979,46 @@ def fit_depthwise_tree[
             leaves[id].histograms_type = EHistogramsType.CurrentPath
             leaves[id].best_split = TBestSplitProperties()
 
-        # their `AllReduceThroughMaster(subsets->CurrentPartStats(), ...)`
-        # (`:445`) over leaves `[0, leafCount)`. See DEVIATION 352.
-        for i in range(len(leaves)):
-            h_ids.unsafe_ptr().unsafe_store(i, UInt32(i))
-        ctx.enqueue_copy(dst_buf=d_ids, src_ptr=h_ids.unsafe_ptr())
-        compute_partition_stats(
-            ctx, len(leaves), n_rows, stat_count, n_rows,
-            d_ids, p_off, p_sz, stats, stat_partials, part_stats,
-            sm_count=sm_count,
-        )
-        mgr.stream_kernel()
-
+        # THEIR ORDER, AND IT IS NOT COSMETIC (`greedy_search_helper.cpp`):
+        #
+        #     SplitPropsHelper.BuildNecessaryHistograms(subsets);   :399
+        #     SelectLeavesToVisit(*subsets, &leavesToVisit);        :401
+        #     if (leavesToVisit.empty()) { return; }                :402-405
+        #     ...
+        #     AllReduceThroughMaster(subsets->CurrentPartStats(),.) :443
+        #     Random.NextUniformL()                            :469/:489/:510
+        #
+        # Both the stats reduce AND the random draw are AFTER the early
+        # return, so a level with nothing to visit does neither. This driver
+        # had the reduce before the visit list and drew the seed
+        # unconditionally at the top of the iteration -- so on a level that
+        # visits nothing, ours burned a draw theirs does not and ran a
+        # reduce theirs skips. The reduce is inert (same numbers, one extra
+        # launch); the DRAW IS NOT, because it advances a stream that every
+        # later level reads. Corrected 2026-08-22 from an audit against
+        # their file.
         var visit = select_leaves_to_visit(leaves)
         if len(visit) > 0:
+            # their `AllReduceThroughMaster(subsets->CurrentPartStats(),
+            # ...)` (`:443`) over leaves `[0, leafCount)`. See DEVIATION 352.
+            for i in range(len(leaves)):
+                h_ids.unsafe_ptr().unsafe_store(i, UInt32(i))
+            ctx.enqueue_copy(dst_buf=d_ids, src_ptr=h_ids.unsafe_ptr())
+            compute_partition_stats(
+                ctx, len(leaves), n_rows, stat_count, n_rows,
+                d_ids, p_off, p_sz, stats, stat_partials, part_stats,
+                sm_count=sm_count,
+            )
+            mgr.stream_kernel()
+            dg.emit_f32(
+                d_tag + "partstats", part_stats, max_leaves * stat_count,
+                len(leaves) * stat_count,
+            )
+
+            # `Random.NextUniformL()`, ONE DRAW PER LAUNCH and not per
+            # iteration (`:469`, `:489`, `:510`).
+            var level_seed = level_rand.next_uniform_l()
+
             # `numScoreBlocks = leavesToVisit.size()` (`:428-432`), and the
             # kernel is `TComputeOptimalSplitsLeafwiseKernel` (`:470-488`).
             for i in range(len(visit)):
@@ -896,7 +1068,7 @@ def fit_depthwise_tree[
                     d_visit.unsafe_ptr(),
                     Int32(1) if multiclass_optimization else Int32(0),
                     options.l2_reg,
-                    options.random_strength,
+                    score_std_dev,
                     level_seed,
                     region_score.unsafe_ptr(),
                     region_bin.unsafe_ptr(),
@@ -914,6 +1086,17 @@ def fit_depthwise_tree[
                 dst_ptr=h_region_bin.unsafe_ptr(), src_buf=region_bin
             )
             mgr.wait_complete()
+            dg.emit_f32(
+                d_tag + "scores.gain", region_score,
+                argmax_blocks * max_leaves, argmax_blocks * len(visit),
+            )
+            dg.emit_u32(
+                d_tag + "scores.bin", region_bin,
+                argmax_blocks * max_leaves, argmax_blocks * len(visit),
+            )
+            dg.emit_host_u32(
+                d_tag + "visit", _as_u32(visit)
+            )
 
             # their cross-block reduce, `:520-531`, ONE WINNER PER SCORE
             # BLOCK where the symmetric arm reduces to one for the level:
@@ -930,19 +1113,49 @@ def fit_depthwise_tree[
             # doc-parallel searcher. A SEQUENTIAL fold under a total order,
             # so the block count cannot move the answer.
             #
-            # THE RECORD LAYOUT IS TRANSPOSED FROM THEIRS. Their kernel
-            # writes `result += blockIdx.x + blockIdx.y * gridDim.x`, i.e.
-            # block-major within a score block; ours writes the same slot,
-            # so `leaf i`'s records are `[i*argmax_blocks, (i+1)*argmax_blocks)`.
+            # THE RECORD LAYOUT IS THEIRS, UNCHANGED. This comment used to
+            # open "THE RECORD LAYOUT IS TRANSPOSED FROM THEIRS" and then
+            # contradict itself in its own next clause. It is not
+            # transposed: their kernel writes
+            # `result += blockIdx.x + blockIdx.y * gridDim.x` with
+            # `gridDim.x == argmaxBlockCount` (`compute_scores.cu:319`) and
+            # their host reads `propsCpu.data() + scoreBlockId *
+            # argmaxBlockCount` then `[i]` (`greedy_search_helper.cpp:524`).
+            # Both sides are `leaf * argmax_blocks + block`, and so is this.
             for i in range(len(visit)):
                 var best = TBestSplitProperties()
                 for b in range(argmax_blocks):
                     var slot = i * argmax_blocks + b
                     var bf = h_region_bin.unsafe_ptr().unsafe_load(slot)
                     if bf == UInt32(0xFFFFFFFF):
-                        # their poison record IS a default-constructed
-                        # `TBestSplitProperties`, so skipping it and
-                        # comparing against it are the same thing.
+                        # =============== CORRECTED 2026-08-22 ===============
+                        # This used to say "their poison record IS a
+                        # default-constructed `TBestSplitProperties`, so
+                        # skipping it and comparing against it are the same
+                        # thing". BOTH HALVES WERE WRONG.
+                        #
+                        #   their ARGMAX poison  (compute_scores.cu:46-49)
+                        #       FeatureId=-1  BinId=-1  Score=FLT_MAX  Gain=FLT_MAX
+                        #   their default ctor   (gpu_structures.h:65-68)
+                        #       FeatureId=-1  BinId= 0  Score=+inf     Gain=+inf
+                        #
+                        # Two of four fields differ, and `FLT_MAX < inf` is
+                        # TRUE, so in THEIR host reduce an all-poison block
+                        # actually REPLACES the accumulator rather than
+                        # losing to it.
+                        #
+                        # THE OUTCOME IS THE SAME AND THAT IS WHY IT IS SAFE
+                        # to skip: `Defined()` is `FeatureId != (ui32)-1`,
+                        # and the poison carries the sentinel feature id, so
+                        # a leaf whose every block was poisoned ends
+                        # undefined either way. `BinId` is the only field
+                        # that differs afterwards and nothing reads it on an
+                        # undefined split.
+                        #
+                        # Recorded rather than "fixed" because reproducing
+                        # their replacement would mean constructing a record
+                        # with `Gain = FLT_MAX` purely to lose to nothing.
+                        # ====================================================
                         continue
                     if Int(bf) >= hist_cells_per_leaf:
                         raise Error(
@@ -976,6 +1189,23 @@ def fit_depthwise_tree[
                 # every candidate was unusable simply keeps an UNDEFINED
                 # best split and is never selected to split.
                 leaves[visit[i]].update_best_split(best)
+
+            # THE WINNERS, which is the last host state before the split
+            # chain. A divergence that first appears here and not in
+            # `scores.gain` is in the HOST REDUCE -- the sequential fold
+            # under `best_split_properties_less` -- and not on the device.
+            if emit_digests:
+                var wf = List[Int32]()
+                var wb = List[Int32]()
+                var wg = List[Float32]()
+                for i in range(len(visit)):
+                    ref bs = leaves[visit[i]].best_split
+                    wf.append(bs.feature_id)
+                    wb.append(bs.bin_id)
+                    wg.append(bs.gain)
+                dg.emit_host_i32(d_tag + "best.feature", wf)
+                dg.emit_host_i32(d_tag + "best.bin", wb)
+                dg.emit_host_f32(d_tag + "best.gain", wg)
 
         # ===================== SplitLeaves ==========================
         # `greedy_search_helper.cpp:575`. `HaveFixedSplits` is absent: the
@@ -1111,8 +1341,10 @@ def fit_depthwise_tree[
             for _ in range(reorder_launches):
                 mgr.stream_kernel()
 
-            # their `CopyHistogram(LeafIdToSplit, RightLeafIdAfterSplit)`
-            # (`split_points.cpp:326`). The left child kept the parent's
+            # their `CopyHistograms(leftLeaves, rightLeaves, ...)`
+            # (`split_points.cpp:139-140`) -- the MULTI-leaf call, which is
+            # the arm this lane mirrors. `CopyHistogram` singular at `:327`
+            # is the single-leaf kernel and belongs to the lossguide lane. The left child kept the parent's
             # slot; this puts the same histogram in the right child's, so
             # both are `PreviousPath` and next level can pair them.
             ctx.enqueue_function[copy_histograms_kernel](
@@ -1155,8 +1387,47 @@ def fit_depthwise_tree[
             for i in range(len(leaves)):
                 leaves[i].size = Int(h_sz.unsafe_ptr().unsafe_load(i))
 
+            dg.note(d_tag + "split.count", n_split)
+            dg.emit_u32(
+                d_tag + "split.bins", sp_bins, max_leaves, n_split
+            )
+            dg.emit_u32(d_tag + "split.left", d_left, max_leaves, n_split)
+            dg.emit_u32(d_tag + "split.right", d_right, max_leaves, n_split)
+            # ============ WHY `sflags` AND `gmap` ARE NOT ON THE LADDER ==========
+            # They were, for one run, and they produced a FALSE POSITIVE that
+            # is worth recording because the tool is a diagnostic and a
+            # diagnostic that cries wolf is worse than none.
+            #
+            # Both are SCRATCH sized to `n_rows`, and a level writes only the
+            # rows inside the leaves it is splitting. Every other row holds
+            # whatever an earlier level left there. Hashing the whole plane
+            # therefore digests HISTORY, not this stage -- and the history
+            # differs harmlessly between two core counts because the chunked
+            # partition covers the stale regions differently.
+            #
+            # MEASURED 2026-08-22: the ladder named `d3.flags` as the first
+            # divergence between this device's core count and 108, while
+            # `depthwise_check` claim 6 said the two MODELS were bit-identical.
+            # Both were right. The tag was pointing at a scratch tail.
+            #
+            # `row_index`, `stats` and the two partition planes are the
+            # complete, live-region-only description of what the split chain
+            # did, so nothing is lost by dropping the two scratch planes --
+            # and the ladder stops lying.
+            dg.emit_u32(d_tag + "rowindex", row_index, n_rows, n_rows)
+            dg.emit_f32(
+                d_tag + "stats", stats, stat_count * n_rows,
+                stat_count * n_rows,
+            )
+            dg.emit_u32(
+                d_tag + "parts.off", p_off, max_leaves, len(leaves)
+            )
+            dg.emit_u32(
+                d_tag + "parts.size", p_sz, max_leaves, len(leaves)
+            )
+
             # `MarkTerminal(leftIds, ...)` then `MarkTerminal(rightIds, ...)`
-            # (`greedy_search_helper.cpp:617-618`), AFTER the sizes are
+            # (`greedy_search_helper.cpp:618-619`), AFTER the sizes are
             # rebuilt -- `IsTerminalLeaf` reads `leaf.Size`.
             for i in range(n_split):
                 var left_id = to_split[i]
@@ -1191,6 +1462,11 @@ def fit_depthwise_tree[
             )
             mgr.wait_complete()
 
+            dg.emit_f32(
+                "final.partstats", part_stats, max_leaves * stat_count,
+                len(leaves) * stat_count,
+            )
+
             var num_leaves = len(leaves)
             for leaf_id in range(num_leaves):
                 var w = Float64(
@@ -1224,7 +1500,37 @@ def fit_depthwise_tree[
                 result_paths.append(leaves[leaf_id].path.copy())
             break
 
+    # THE MODEL ITSELF, last rung of the ladder. If every stage above
+    # agrees and this does not, the divergence is in the HOST model
+    # builder -- the path fold, the pre-order flatten, the bin numbering --
+    # and not in anything the device did.
+    if emit_digests:
+        var flat_v = List[Float32]()
+        for i in range(len(result_values)):
+            for j in range(len(result_values[i])):
+                flat_v.append(result_values[i][j])
+        var flat_w = List[Float32]()
+        for i in range(len(result_weights)):
+            flat_w.append(Float32(result_weights[i]))
+        dg.emit_host_f32("final.leafvalues", flat_v)
+        dg.emit_host_f32("final.leafweights", flat_w)
+
     # `return BuildTreeLikeModel<TModel>(leaves, leavesWeights, leavesValues)`
-    return build_non_symmetric_tree(
+    var model = build_non_symmetric_tree(
         result_paths, result_weights, result_values
     )
+    if emit_digests:
+        var nodes = List[Int32]()
+        for i in range(len(model.model_structure.nodes)):
+            ref n = model.model_structure.nodes[i]
+            nodes.append(Int32(Int(n.feature_id)))
+            nodes.append(Int32(Int(n.bin)))
+            nodes.append(Int32(Int(n.left_subtree)))
+            nodes.append(Int32(Int(n.right_subtree)))
+        dg.emit_host_i32("model.nodes", nodes)
+        dg.emit_host_i32(
+            "model.splittypes", model.model_structure.split_types
+        )
+        dg.emit_host_f32("model.values", model.leaf_values)
+        dg.note("model.leaves", model.bin_count())
+    return model^

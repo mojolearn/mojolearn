@@ -74,6 +74,7 @@ from gbdt.methods.greedy_subsets_searcher.structure_searcher_options import (
     TTreeStructureSearcherOptions,
 )
 from gbdt.methods.helpers import SPLIT_VALUE_ONE, SPLIT_VALUE_ZERO
+from mojo_only.stage_digest import TStageDigest
 from gbdt.models.kernel.add_bin_values import (
     compute_non_symmetric_decision_tree_bins_kernel,
 )
@@ -311,13 +312,25 @@ def fit(
     fx.reset()
     var ws = List[TTreeWorkspace]()
     var dws = List[TDepthwiseWorkspace]()
-    return fit_depthwise_tree(
+    var dg = List[TStageDigest]()
+    var model = fit_depthwise_tree(
         fx.ctx, fx.n_rows, fx.folds, options,
         fx.cindex, fx.stats, fx.row_index,
         fx.total_weight, fx.total_gradient,
-        ws, dws,
+        ws, dws, dg,
         sm_count_override=sm_count_override,
     )
+    # KEEP-ALIVES, and the invariant they pin. `ws` / `dws` hold every
+    # device buffer the fit enqueued work against, and they are LOCALS
+    # here: they are safe only because `fit_depthwise_tree` drains before
+    # it returns and enqueues nothing after. That invariant is load-bearing
+    # and was undocumented -- any enqueue added after the final
+    # `wait_complete` there turns this into a use-after-free that does not
+    # crash. Pinned locally so the check cannot be the thing that breaks.
+    _ = ws^
+    _ = dws^
+    _ = dg^
+    return model^
 
 
 def fingerprint(model: TNonSymmetricTree) raises -> String:

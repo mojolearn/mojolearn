@@ -16,9 +16,9 @@ where that can be said once:
 * `MinLeafSize` is DEAD under SymmetricTree and LIVE under every other
   policy -- `IsTerminalLeaf` guards the size test with
   `Options.Policy != EGrowPolicy::SymmetricTree`
-  (`greedy_search_helper.cpp:685`). This lane is the first to make it live.
+  (`greedy_search_helper.cpp:691`). This lane is the first to make it live.
 * `ModelSizeReg` is read ONLY inside the SymmetricTree branch of
-  `ComputeOptimalSplits` (`:466`, `UpdateFeatureWeightsForBestSplits`), so
+  `ComputeOptimalSplits` (`:447`, `UpdateFeatureWeightsForBestSplits`), so
   Depthwise and Lossguide never run it. It is carried anyway, because the
   field exists in their struct for all four policies and a missing field is
   a silent divergence the day a fourth policy reads it.
@@ -47,6 +47,9 @@ from gbdt.options.catboost_options import (
     GROW_LOSSGUIDE,
     GROW_SYMMETRIC,
     SCORE_FUNCTION_COSINE,
+    SCORE_FUNCTION_L2,
+    SCORE_FUNCTION_NEWTON_COSINE,
+    SCORE_FUNCTION_NEWTON_L2,
     grow_policy_name,
 )
 
@@ -90,7 +93,7 @@ struct TTreeStructureSearcherOptions(Copyable, Movable):
     """`MinLeafSize`, default 1.
 
     THEIRS IS A DOUBLE AND THE COMPARISON IS `leaf.Size <= MinLeafSize`
-    (`greedy_search_helper.cpp:686`), NOT `<`. So the default of 1 marks a
+    (`greedy_search_helper.cpp:693`), NOT `<`. So the default of 1 marks a
     one-row leaf terminal, and `min_data_in_leaf=1` means "a leaf of one row
     does not split" rather than "a leaf of one row is allowed". Getting that
     boundary wrong builds a tree one row deeper than CatBoost's on every
@@ -174,6 +177,31 @@ struct TTreeStructureSearcherOptions(Copyable, Movable):
                     + ", got "
                     + String(self.max_leaves)
                 )
+        # ============ THE SCORE FUNCTION, REFUSED BY NAME ============
+        # Their launcher has a case per calcer and `default: { throw
+        # std::exception(); }` (`compute_scores.cu:509-546`). This port has
+        # calcers for two of the five: Cosine/NewtonCosine and L2/NewtonL2.
+        #
+        # THE DRIVER'S DISPATCH IS AN `if L2 else COSINE`, so SolarL2, SatL2
+        # and LOOL2 -- all live constants in `catboost_options` -- fell into
+        # the `else` and SILENTLY GOT THE COSINE CALCER. `catboost_options
+        # .check()` refuses them, but no searcher calls that, so nothing
+        # stood between a caller and a wrong score. Their `default: throw`
+        # is what belongs here, and this is it. Found by an audit against
+        # their source, 2026-08-22.
+        if (
+            self.score_function != SCORE_FUNCTION_COSINE
+            and self.score_function != SCORE_FUNCTION_NEWTON_COSINE
+            and self.score_function != SCORE_FUNCTION_L2
+            and self.score_function != SCORE_FUNCTION_NEWTON_L2
+        ):
+            raise Error(
+                String("score_function=")
+                + String(self.score_function)
+                + " has no calcer in this port; only Cosine, NewtonCosine,"
+                " L2 and NewtonL2 are ported (SolarL2, SatL2 and LOOL2 are"
+                " theirs at compute_scores.cu:509-546 and are not written)"
+            )
         if self.min_leaf_size < Float64(0.0):
             raise Error(
                 String("min_data_in_leaf must be non-negative, got ")
