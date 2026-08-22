@@ -107,3 +107,34 @@ node-count self-check).
 - The full 17-check suite on the final source (fingerprint gate is
   green; the rest deferred so as not to contend the peer's GPU
   benchmark mid-run).
+
+## The certification hunt, end of day 2026-08-22: seventeen attempts, zero clean windows, and why
+
+DEVIATION 314's speed ratio remains UNCERTIFIED after a full day of
+trying. The record: 4 voids and 13 pre-open refusals across three hunts,
+the last one run under a four-lane coordination protocol (bench lock
+held across the hunt, every peer Claude lane holding by agreement) that
+WORKED -- the lanes were silent -- and still refused 16/16, because the
+immovable load was Andrew's own aa_floor.core backblaze job (homebrew
+python, respawning, up to 350% CPU) plus macOS knowledge/spotlight
+daemons. The box hosts four active lanes and the owner's own compute;
+the gate's pre-open bar is unattainable in daytime.
+
+What every contaminated look agreed on, quoted as consistency evidence
+and NOT as measurement: post-vs-pre ratios 1.45-2.48x at 100k and
+1.45-1.67x at 500k across five windows that completed, always in 314's
+favor, never once against. Bit-identity is separately PROVEN (the gate
+record in the 801a8a8 commit message). The certified number is
+scheduled for an overnight one-shot slot (04:43, after nightly
+maintenance), running the same locked hunt.
+
+The day's collateral wins, from the cross-lane traffic the coordination
+opened: the perf lane's freed-at-enqueue UAF class audited across this
+lane (shipping path clean by design -- field-owned or keep-alive-after-
+sync throughout; 15 latent sites fixed in six CHECK files, f27e7f6);
+the depthwise lane's duplication sweep fixed this lane's one falsified
+docstring (fingerprint_probe._mix is Murmur3 fmix64, not splitmix64 --
+the sentence was the bug) and queued the core/pcg_rng.mojo
+consolidation with a both-lanes comparison gate; and this lane verified
+v26.08.00 contains no excess_sample_with_replacement, confirming the
+extratrees lane's DEVIATION 215 bias fix tracks upstream's own removal.
