@@ -109,6 +109,38 @@ anything -- by running THEIR binary on a constructed fixture in this tie
 class on the NVIDIA column and reading their per-cell output -- not by
 reasoning, which is what produced the paragraph you are reading.
 
+DEVIATION 404 (2026-08-22). THE REDUCTION WIDTH IS PINNED TO 32 UNDER
+`NUMERIC_IDENTICAL`. This is the ACT half of the price DEVIATION 104
+recorded: at width 64 (AMD CDNA) the grouping differs from theirs and,
+by DEVIATION 105's non-associativity, can select a different split in
+the equal-gain-equal-column tie class. Under IDENTICAL the block
+reduction therefore runs `eval_best_split_pinned` -- the SAME
+rotate-and-reduce, at the SAME width 32, with `shuffle` spelled through
+shared memory and barriers instead of warp primitives, so the grouping
+is a pure function of `(thread_idx, TPB)` on every vendor. It is the
+`PINNED_LIB_REDUCE_LANES = 32` move of IDENTITY_PATHS rows 4/6 applied
+to this reduction, and the same remedy row 8 names for `block.sum`.
+
+WHY THE APPLE COLUMN'S BITS CANNOT MOVE, argued and then measured: at
+`WARP_SIZE == 32` the pinned emulation performs the identical `update`
+calls on the identical operand pairs in the identical step order as the
+shuffle loop -- phase 1 is the same five rotate steps per 32-lane group,
+phase 2 the same second reduction over per-group results -- so on Apple
+and NVIDIA the two arms are the same function, and IDENTICAL differs
+from FAST only on 64-wide hardware. `split_check.mojo`'s pinned-parity
+arm holds the two arms to bit-equal outputs per cell on this M4.
+
+WHAT REMAINS OPEN AFTER THIS PIN: the CROSS-BLOCK merge needs no pin,
+and that is an audit RESULT rather than a hope. The kernel launches one
+block per (node, sampled column) and feature sampling is a permutation
+(`shuffle_iterator`), so candidates merging through the global mutex
+ALWAYS carry distinct `colid`s; `update` on distinct colids never
+reaches the range-merge step and is a plain maximum on a total order --
+associative, commutative, arrival-order-free. DEVIATION 105's
+within-a-column tie class is confined to lanes of one block, where the
+order is now pinned. The mutex spin itself (DEVIATION 106) stays in
+both modes.
+
 DEVIATION 106. Their `atomicCAS` / `__threadfence()` / `atomicExch` mutex
 (`:251`, `:270-271`) is not expressible on Metal in that spelling: Mojo 1.0
 comptime-asserts that `threadfence` "is only implemented on NVIDIA GPUs",
@@ -158,6 +190,13 @@ from std.gpu import WARP_SIZE, block_dim, thread_idx
 from std.gpu.primitives.id import lane_id
 from std.gpu.primitives.warp import shuffle_idx
 from max.gpu.sync import barrier
+
+
+#: DEVIATION 404 -- the reduction width `eval_best_split_pinned` uses on
+#: every vendor: `raft::WarpSize`'s hardcoded 32, which is also the width
+#: of every measured column but AMD CDNA. The same pin as
+#: `PINNED_LIB_REDUCE_LANES` in IDENTITY_PATHS rows 4/6.
+comptime PINNED_SPLIT_REDUCE_LANES = 32
 
 
 @always_inline
@@ -544,57 +583,171 @@ struct Split[dtype: DType](TrivialRegisterPassable):
             self.warp_reduce()
             # `:249` -- only the first thread publishes for this node.
             if thread_idx.x == 0 and self.IsValid():
-                self.select_split_range_midpoint(quantiles, n_bins)
+                self._publish_to_global(split, mutex, quantiles, n_bins)
 
-                # `:251-252` -- their `while (atomicCAS(mutex, 0, 1));`
-                # as an acquire-load spin plus a weak relaxed claim.
-                while True:
-                    if (
-                        Atomic.load[ordering = Ordering.ACQUIRE](mutex)
-                        != Int32(0)
-                    ):
-                        continue
-                    var expected = Int32(0)
-                    if Atomic.compare_exchange[
-                        success_ordering = Ordering.RELAXED,
-                        failure_ordering = Ordering.RELAXED,
-                        weak=True,
-                    ](mutex, expected, Int32(1)):
-                        break
+    @always_inline
+    def _publish_to_global[
+        go: MutOrigin, mo: MutOrigin, qo: MutOrigin, //
+    ](
+        mut self,
+        split: MutPointer[Self, go],
+        mutex: MutPointer[Int32, mo],
+        quantiles: MutPointer[Scalar[Self.dtype], qo],
+        n_bins: Int32,
+    ):
+        """`split.cuh:250-271`, the thread-0 tail of `evalBestSplit`:
+        midpoint selection, the DEVIATION 106 mutex claim, the guarded
+        merge into the node's global slot, and the release. Factored out
+        (2026-08-22, with DEVIATION 404) so the pinned and warp-shuffle
+        reductions publish through ONE spelling; the body is the former
+        inline text, unchanged."""
+        self.select_split_range_midpoint(quantiles, n_bins)
 
-                # `:253-259` -- read the current global split into a
-                # register copy. Their field-by-field read exists because
-                # `split` is `volatile`; ours is a plain struct load.
-                #
-                # THEIRS LOADS SIX of the seven fields and writes back the
-                # same six: `local_nLeft` is left at the default ctor's 0
-                # and never touched here. Ours copies the whole struct
-                # both ways, so it also stores `local_nLeft`. Inert, and
-                # checked to be rather than assumed --
-                # `resetLocalLeftCountsKernel`
-                # (`kernels/builder_kernels_impl.cuh:48-53`) zeroes that
-                # field immediately before `countLocalLeftKernel` fills
-                # it, and this port has that kernel.
-                #
-                # This comment used to say "the same seven fields, in
-                # their order", which is not what `:254-259` does.
-                var split_reg = split[unsafe_offset=0].copy()
-                var update_result = split_reg.update(
-                    self.quesval,
-                    self.colid,
-                    self.best_metric_val,
-                    self.global_nLeft,
-                    self.split_start,
-                    self.split_end,
+        # `:251-252` -- their `while (atomicCAS(mutex, 0, 1));`
+        # as an acquire-load spin plus a weak relaxed claim.
+        while True:
+            if (
+                Atomic.load[ordering = Ordering.ACQUIRE](mutex)
+                != Int32(0)
+            ):
+                continue
+            var expected = Int32(0)
+            if Atomic.compare_exchange[
+                success_ordering = Ordering.RELAXED,
+                failure_ordering = Ordering.RELAXED,
+                weak=True,
+            ](mutex, expected, Int32(1)):
+                break
+
+        # `:253-259` -- read the current global split into a
+        # register copy. Their field-by-field read exists because
+        # `split` is `volatile`; ours is a plain struct load.
+        #
+        # THEIRS LOADS SIX of the seven fields and writes back the
+        # same six: `local_nLeft` is left at the default ctor's 0
+        # and never touched here. Ours copies the whole struct
+        # both ways, so it also stores `local_nLeft`. Inert, and
+        # checked to be rather than assumed --
+        # `resetLocalLeftCountsKernel`
+        # (`kernels/builder_kernels_impl.cuh:48-53`) zeroes that
+        # field immediately before `countLocalLeftKernel` fills
+        # it, and this port has that kernel.
+        #
+        # This comment used to say "the same seven fields, in
+        # their order", which is not what `:254-259` does.
+        var split_reg = split[unsafe_offset=0].copy()
+        var update_result = split_reg.update(
+            self.quesval,
+            self.colid,
+            self.best_metric_val,
+            self.global_nLeft,
+            self.split_start,
+            self.split_end,
+        )
+        # `:262-269`
+        if update_result:
+            split[unsafe_offset=0] = split_reg.copy()
+
+        # `:270-271` -- their `__threadfence(); atomicExch(mutex,
+        # 0);` folded into one RELEASE store, which orders the
+        # publish above before the handback.
+        Atomic.store[ordering = Ordering.RELEASE](mutex, Int32(0))
+
+    @always_inline
+    def eval_best_split_pinned[
+        so: MutOrigin,
+        sas: AddressSpace,
+        go: MutOrigin,
+        mo: MutOrigin,
+        qo: MutOrigin, //
+    ](
+        mut self,
+        scratch: MutPointer[Self, so, address_space=sas],
+        split: MutPointer[Self, go],
+        mutex: MutPointer[Int32, mo],
+        quantiles: MutPointer[Scalar[Self.dtype], qo],
+        n_bins: Int32,
+    ):
+        """DEVIATION 404 -- `evalBestSplit` with the reduction width
+        PINNED to `PINNED_SPLIT_REDUCE_LANES` (32) on every vendor.
+
+        Same contract as `eval_best_split` (`split.cuh:229-230`: all
+        threads of the block enter together), but `scratch` must hold
+        `block_dim.x` slots -- the shuffle is spelled through shared
+        memory, one slot per thread, instead of warp lanes. The
+        `update` calls, their operand pairing and their step order are
+        EXACTLY the width-32 shuffle loop's: phase 1 is their
+        `warpReduce` per 32-thread group (each step snapshots the
+        neighbor's pre-step value, barriers, updates, publishes,
+        barriers -- which is what a warp shuffle does in lockstep), and
+        phase 2 is their warp-0 second reduction over the group
+        results, groups past `n_groups` seeding a default `Split`
+        exactly as their lanes past `nWarps` do. On 32-wide hardware
+        this arm and `eval_best_split` are the same function; on
+        64-wide hardware only this arm keeps their grouping.
+
+        Every thread must hit every `barrier()`, so the group-0 work of
+        phase 2 is guarded per statement while the barriers stay in
+        uniform control flow.
+        """
+        comptime L = PINNED_SPLIT_REDUCE_LANES
+        comptime STEPS = log2_floor(L)
+        var tid = Int(thread_idx.x)
+        var vlane = tid % L
+        var vgroup = tid // L
+        var n_groups = Int(block_dim.x) // L
+
+        # ---- phase 1: their `warpReduce` at width L, per group -------
+        scratch[unsafe_offset=tid] = self.copy()
+        barrier()
+        comptime for k in range(STEPS):
+            comptime OFF = L >> (k + 1)
+            var src = vgroup * L + ((vlane + OFF) % L)
+            var other = scratch[unsafe_offset=src].copy()
+            barrier()
+            _ = self.update(
+                other.quesval,
+                other.colid,
+                other.best_metric_val,
+                other.global_nLeft,
+                other.split_start,
+                other.split_end,
+            )
+            scratch[unsafe_offset=tid] = self.copy()
+            barrier()
+
+        # ---- phase 2: their `if (warp == 0)` second reduction --------
+        # Group g's reduction is in every one of its slots; slot g*L is
+        # read BEFORE the store below overwrites slots 0..L-1.
+        var mine = Self()
+        if vgroup == 0 and vlane < n_groups:
+            mine = scratch[unsafe_offset = vlane * L].copy()
+        barrier()
+        if vgroup == 0:
+            self = mine.copy()
+            scratch[unsafe_offset=vlane] = self.copy()
+        barrier()
+        comptime for k in range(STEPS):
+            comptime OFF = L >> (k + 1)
+            var other = Self()
+            if vgroup == 0:
+                other = scratch[unsafe_offset = (vlane + OFF) % L].copy()
+            barrier()
+            if vgroup == 0:
+                _ = self.update(
+                    other.quesval,
+                    other.colid,
+                    other.best_metric_val,
+                    other.global_nLeft,
+                    other.split_start,
+                    other.split_end,
                 )
-                # `:262-269`
-                if update_result:
-                    split[unsafe_offset=0] = split_reg.copy()
+                scratch[unsafe_offset=vlane] = self.copy()
+            barrier()
 
-                # `:270-271` -- their `__threadfence(); atomicExch(mutex,
-                # 0);` folded into one RELEASE store, which orders the
-                # publish above before the handback.
-                Atomic.store[ordering = Ordering.RELEASE](mutex, Int32(0))
+        # `:249` -- only the first thread publishes for this node.
+        if tid == 0 and self.IsValid():
+            self._publish_to_global(split, mutex, quantiles, n_bins)
 
 
 def init_split_kernel[

@@ -702,7 +702,7 @@ def c_pdf(nid: Int, slot: Int, cls: Int, b: Int) -> UInt32:
 
 
 def arm_c_cdf_and_splits[
-    sabotage: Int = 0
+    sabotage: Int = 0, pinned: Bool = False, TPB: Int = C_TPB
 ](ctx: DeviceContext, quiet: Bool = False) raises -> ArmResult:
     """`wrong` counts cdf cells; `bucket_a` counts the ones in the FIRST
     scan chunk (bin < 32), which a broken chunk carry must leave alone;
@@ -788,7 +788,9 @@ def arm_c_cdf_and_splits[
         Int32(C_CLASSES), Int32(1), CRITERION_GINI
     )
     var blob = DeviceArgs[FindBestSplitsArgs[ObjT]](ctx)
-    launch_find_best_splits_kernel[ObjT, TPB=C_TPB, sabotage=sabotage](
+    launch_find_best_splits_kernel[
+        ObjT, TPB=TPB, sabotage=sabotage, pinned_reduce=pinned
+    ](
         ctx,
         hists.unsafe_ptr()
         .unsafe_origin_cast[MutUntrackedOrigin]()
@@ -846,7 +848,7 @@ def arm_c_cdf_and_splits[
                                 got0 = h[idx]
                                 want0 = run
                             wrong += 1
-                            if b < C_TPB:
+                            if b < TPB:
                                 wrong_first_chunk += 1
     if wrong != 0:
         if not quiet:
@@ -1471,6 +1473,48 @@ def main() raises:
     var c = arm_c_cdf_and_splits(ctx)
     failures += 1 if c.wrong != 0 else 0
     failures += 1 if c.bucket_b != 0 else 0
+    # DEVIATION 404 -- the PINNED split reduction (width 32 through shared
+    # memory, the NUMERIC_IDENTICAL arm) against the same analytic
+    # expectations. At WARP_SIZE == 32 the pinned arm is the same function
+    # as the shuffle arm by construction, so on this hardware every field
+    # of every published split must match arm C exactly.
+    print(
+        "arm C-pinned: findBestSplitsKernel, eval_best_split_pinned"
+        " (DEVIATION 404), same analytic winners"
+    )
+    var cp = arm_c_cdf_and_splits[0, True](ctx, quiet=True)
+    if cp.wrong != 0 or cp.bucket_b != 0:
+        print(
+            "  arm C-pinned FAILED:", cp.wrong, "cdf cells,",
+            cp.bucket_b, "nodes wrong under the pinned reduction",
+        )
+        failures += 1 if cp.wrong != 0 else 0
+        failures += 1 if cp.bucket_b != 0 else 0
+    else:
+        print(
+            "  arm C-pinned OK: all", C_NODES,
+            "nodes published the same analytically-forced winner"
+            " through the pinned width-32 reduction",
+        )
+    # TPB 128 = FOUR 32-lane groups, so phase 2 of the pinned fold (the
+    # cross-group reduction) carries real candidates -- at TPB 32 it is a
+    # single group and phase 2 is the identity, which a sabotage run
+    # proved by NOT moving (2026-08-22). Reach for BOTH phases is only
+    # claimed at this width.
+    var cp4 = arm_c_cdf_and_splits[0, True, 128](ctx, quiet=True)
+    if cp4.wrong != 0 or cp4.bucket_b != 0:
+        print(
+            "  arm C-pinned/128 FAILED:", cp4.wrong, "cdf cells,",
+            cp4.bucket_b, "nodes wrong under the 4-group pinned reduction",
+        )
+        failures += 1 if cp4.wrong != 0 else 0
+        failures += 1 if cp4.bucket_b != 0 else 0
+    else:
+        print(
+            "  arm C-pinned/128 OK: all", C_NODES,
+            "nodes published the same winner with TPB 128 -- four"
+            " 32-lane groups, so the pinned phase-2 fold carried them",
+        )
     var d = arm_d_partition(ctx, fx)
     failures += 1 if d.wrong != 0 else 0
     failures += 1 if d.bucket_b != 0 else 0

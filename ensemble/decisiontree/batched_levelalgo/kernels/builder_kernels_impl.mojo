@@ -388,7 +388,11 @@ from ensemble.decisiontree.batched_levelalgo.objectives import (
     RegressionObjectiveFunction,
 )
 from ensemble.decisiontree.batched_levelalgo.quantiles import Quantiles
-from ensemble.decisiontree.batched_levelalgo.split import Split
+from ensemble.decisiontree.batched_levelalgo.split import (
+    PINNED_SPLIT_REDUCE_LANES,
+    Split,
+)
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels import (
     InstanceRange,
     NodeWorkItem,
@@ -401,6 +405,15 @@ from ensemble.flatnode import SparseTreeNode
 # `builder_kernels_impl.cuh:34` -- `static constexpr int TPB_DEFAULT = 128;`
 # (and `builder.cuh:161`, the same constant declared twice in their tree).
 comptime TPB_DEFAULT = 128
+
+# DEVIATION 404 -- the one line the gbdt kernel files also carry
+# (`comptime BUILD_MODE = GLOBAL_NUMERIC_MODE`): the numeric mode is read
+# from `mojo_only/numerics` ONCE here, and the split reduction's width pin
+# defaults from it. Checks may instantiate either arm explicitly through
+# `find_best_splits_kernel`'s `pinned_reduce` parameter without flipping
+# the global.
+comptime BUILD_MODE = GLOBAL_NUMERIC_MODE
+comptime SPLIT_REDUCE_PINNED_DEFAULT = BUILD_MODE == NUMERIC_IDENTICAL
 
 # `builder.cuh:163`. Their comment: "Tunable performance heuristic for the
 # shared-memory histogram path. Large per-block histograms, usually from
@@ -1616,7 +1629,10 @@ struct FindBestSplitsArgs[O: ObjectiveLike](Copyable, Movable):
 
 
 def find_best_splits_kernel[
-    O: ObjectiveLike, TPB: Int, sabotage: Int = 0
+    O: ObjectiveLike,
+    TPB: Int,
+    sabotage: Int = 0,
+    pinned_reduce: Bool = SPLIT_REDUCE_PINNED_DEFAULT,
 ](
     argsp: MutPointer[FindBestSplitsArgs[O], MutAnyOrigin],
     histograms: MutPointer[O.BinT, MutAnyOrigin],
@@ -1653,9 +1669,17 @@ def find_best_splits_kernel[
     # `Split` is `TrivialRegisterPassable` here, so the allocation is
     # typed and the cast has nothing to do. `raft::WarpSize` is their
     # hardcoded 32; `WARP_SIZE` is queried (DEVIATION 104 in split.mojo).
-    comptime N_SPLIT_WARPS = ceildiv(TPB, WARP_SIZE)
+    # DEVIATION 404: the pinned arm spells the shuffle through shared
+    # memory, so its scratch is one slot per THREAD rather than per warp;
+    # its lane count must divide the block.
+    comptime assert (not pinned_reduce) or (
+        TPB % PINNED_SPLIT_REDUCE_LANES == 0
+    ), "pinned split reduce needs TPB % 32 == 0 (DEVIATION 404)"
+    comptime N_SPLIT_SCRATCH = TPB if pinned_reduce else ceildiv(
+        TPB, WARP_SIZE
+    )
     var split_scratch = stack_allocation[
-        N_SPLIT_WARPS,
+        N_SPLIT_SCRATCH,
         Split[O.DataT],
         address_space = AddressSpace.SHARED,
     ]()
@@ -1729,18 +1753,34 @@ def find_best_splits_kernel[
     barrier()
 
     # `:395` -- `sp.evalBestSplit(split_scratch, splits + nid, mutex + nid,
-    # quantiles_for_split, n_bins);`
-    sp.eval_best_split(
-        split_scratch,
-        splits.unsafe_offset(Int(nid)),
-        mutex.unsafe_offset(Int(nid)),
-        quantiles_for_split,
-        n_bins,
-    )
+    # quantiles_for_split, n_bins);` DEVIATION 404 picks the arm: the
+    # pinned reduction under NUMERIC_IDENTICAL (width 32 on every vendor,
+    # no warp primitives), the transcribed warp-shuffle reduction under
+    # FAST. At `WARP_SIZE == 32` the two arms are the same function --
+    # `split_check.mojo`'s pinned-parity arm holds that per cell.
+    comptime if pinned_reduce:
+        sp.eval_best_split_pinned(
+            split_scratch,
+            splits.unsafe_offset(Int(nid)),
+            mutex.unsafe_offset(Int(nid)),
+            quantiles_for_split,
+            n_bins,
+        )
+    else:
+        sp.eval_best_split(
+            split_scratch,
+            splits.unsafe_offset(Int(nid)),
+            mutex.unsafe_offset(Int(nid)),
+            quantiles_for_split,
+            n_bins,
+        )
 
 
 def launch_find_best_splits_kernel[
-    O: ObjectiveLike, TPB: Int = TPB_DEFAULT, sabotage: Int = 0
+    O: ObjectiveLike,
+    TPB: Int = TPB_DEFAULT,
+    sabotage: Int = 0,
+    pinned_reduce: Bool = SPLIT_REDUCE_PINNED_DEFAULT,
 ](
     ctx: DeviceContext,
     histograms: MutPointer[O.BinT, MutUntrackedOrigin],
@@ -1764,7 +1804,7 @@ def launch_find_best_splits_kernel[
             dataset.copy(), quantiles.copy(), objective.copy()
         )
     )
-    comptime k = find_best_splits_kernel[O, TPB, sabotage]
+    comptime k = find_best_splits_kernel[O, TPB, sabotage, pinned_reduce]
     log_launch("find_best_splits")
     ctx.enqueue_function[k](
         argsp.unsafe_origin_cast[MutAnyOrigin](),
