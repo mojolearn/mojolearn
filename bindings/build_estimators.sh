@@ -86,6 +86,17 @@ air_blobs() {
         | sort -u
 }
 
+# The gates below import the WHOLE python package, so during a
+# from-scratch multi-binding build (a fresh linux box, E1) they fail on
+# the siblings' not-yet-built .so files; and the AIR/otool checks are
+# Mach-O-only. The caller that sets this owns end-to-end verification
+# (the E1 bootstrap runs the traced-fit driver after all five builds).
+if [ -n "${MOJOLEARN_SKIP_BUILD_GATE:-}" ] || [ "$(uname)" != "Darwin" ]; then
+    mv "$out" python/mojolearn/_mojolearn_estimators.so
+    echo "built python/mojolearn/_mojolearn_estimators.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)"
+    exit 0
+fi
+
 # A FLOOR, NOT A PROOF. The failure this guards against is an artifact with
 # zero kernels; the failure run_smoke guards against is an artifact that
 # imports and dies at the first launch.

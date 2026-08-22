@@ -69,12 +69,19 @@ step "phase 3: build IDENTICAL .so + traced fits"
 # ALL FIVE bindings: the python package's __init__ imports cluster ->
 # _mojolearn.so and friends, so an rsync'd foreign-platform .so anywhere
 # in the package breaks every import ("invalid ELF header", run 2's
-# finding). Run inside the gbmbench env so run_smoke's python has numpy.
+# finding). Remove the foreign binaries LOUDLY first, and skip each
+# build's own smoke gate -- during a from-scratch five-binding build
+# every gate imports siblings that do not exist yet (run 3's finding).
+# The traced driver below is the real gate: it launches kernels through
+# every lib. Run inside the gbmbench env so python has numpy.
+rm -f python/mojolearn/_mojolearn*.so
+export MOJOLEARN_SKIP_BUILD_GATE=1
 for b in build.sh build_estimators.sh build_gbdt.sh build_rf.sh build_trees.sh; do
   echo "--- bindings/$b"
   pixi run -e gbmbench bash "bindings/$b" \
     || echo "PHASE3-FINDING: bindings/$b failed (see log)"
 done
+unset MOJOLEARN_SKIP_BUILD_GATE
 PYTHONPATH="$REPO/python" pixi run -e gbmbench python3 tools/e1_traced_fit.py "$OUT" \
   || PYTHONPATH="$REPO/python" python3 tools/e1_traced_fit.py "$OUT" \
   || echo "PHASE3-FINDING: traced driver failed (see log)"

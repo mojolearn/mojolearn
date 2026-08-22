@@ -147,6 +147,17 @@ shutil.rmtree(tmp, ignore_errors=True)
 PY
 }
 
+# The per-build gate imports the WHOLE python package, so during a
+# from-scratch multi-binding build (a fresh linux box, E1) the first
+# gates fail on the siblings' not-yet-built .so files. The caller that
+# sets this owns end-to-end verification (the E1 bootstrap runs the
+# traced-fit driver, which launches kernels through every lib).
+if [ -n "${MOJOLEARN_SKIP_BUILD_GATE:-}" ]; then
+    mv "$out" python/mojolearn/_mojolearn_rf.so
+    echo "built python/mojolearn/_mojolearn_rf.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)"
+    exit 0
+fi
+
 if ! kernels_plausible "$out" || ! minos_matches "$out" || ! run_smoke "$out"; then
     printf '%s\n' \
       "" \
