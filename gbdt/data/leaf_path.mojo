@@ -41,28 +41,38 @@ but a vector of them (`model_builder.cpp:11`).
 from gbdt.models.oblivious_model import TBinarySplit
 
 
-def split_less(a: TBinarySplit, b: TBinarySplit) -> Bool:
-    """Their `TBinarySplit::operator<` (`feature.h:50-52`), the lexicographic
-    tie over all THREE members in their order: feature, bin, split type.
+# =====================================================================
+# `TBinarySplit`'s ORDER AND EQUALITY LIVE IN ONE PLACE, AND IT IS NOT HERE
+#
+# This file carried its own `split_less` / `split_equal` from `e1bfab9`
+# until 2026-08-22. `gbdt/methods/batch_feature_tensor_builder.mojo:389`
+# already had the same two functions, ported from the same
+# `feature.h:50-64` -- AND THE TWO DISAGREED.
+#
+# Theirs compares through `_as_u32` because CatBoost's `TBinarySplit`
+# fields are `ui32` and this port's are `Int32`; that is DEVIATION 116, and
+# it is the same argument `helpers.best_split_properties_less` makes about
+# the `(ui32)-1` sentinel -- read signed, an undefined split is the
+# SMALLEST value there is; read unsigned, the largest. The copy deleted
+# here compared `Int32` directly and so sorted the opposite way for any
+# field at or above 2^31. Inert on a leaf path, which never holds an
+# undefined split, and wrong anyway: a second port that silently reverts a
+# numbered deviation is exactly what the deviation ledger exists to stop.
+#
+# A repo-wide duplication sweep found it, not a gate. Nothing compares two
+# comparators.
+#
+# WHERE THEY BELONG: beside `TBinarySplit` in `models/oblivious_model.mojo`,
+# which is what `feature.h` does -- the struct and its operators in one
+# file. They are imported from `methods/` instead of moved because that
+# file has eight call sites and belongs to another lane; the move is a
+# merge-time job and this comment is the note for it.
+# =====================================================================
 
-    `is_sorted` below reads it, and so does any caller that wants their
-    `SortPath`. The third member matters: a one-hot and a border split on the
-    same feature and bin are DIFFERENT splits to them, and their `operator==`
-    ties the split type too (`:60-62`)."""
-    if a.feature_id != b.feature_id:
-        return a.feature_id < b.feature_id
-    if a.bin_idx != b.bin_idx:
-        return a.bin_idx < b.bin_idx
-    return a.split_type < b.split_type
-
-
-def split_equal(a: TBinarySplit, b: TBinarySplit) -> Bool:
-    """Their `TBinarySplit::operator==` (`feature.h:60-62`). All three."""
-    return (
-        a.feature_id == b.feature_id
-        and a.bin_idx == b.bin_idx
-        and a.split_type == b.split_type
-    )
+from gbdt.methods.batch_feature_tensor_builder import (
+    binary_split_equal as split_equal,
+    binary_split_less as split_less,
+)
 
 
 struct TLeafPath(Copyable, Movable):

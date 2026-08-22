@@ -336,10 +336,24 @@ def fit(
     return model^
 
 
-def fingerprint(model: TNonSymmetricTree) raises -> String:
-    """Every bit of the model that a reader could act on, as text.
+def fingerprint(
+    model: TNonSymmetricTree, with_values: Bool = True
+) raises -> String:
+    """Every bit of the model a reader could act on, as text.
 
-    Leaf values go out as their EXACT BIT PATTERN, not as decimals:
+    `with_values=False` gives the tree SHAPE alone -- nodes and split types,
+    no leaf values. That distinction is worth having because the two answer
+    different questions: shape differing means the SEARCH diverged, values
+    differing with the same shape means only the leaf-value reduce did, and
+    those live in different code.
+
+    THIS WAS TWO FUNCTIONS until 2026-08-22, `fingerprint` and
+    `structure_fingerprint`, the second being the first's node loop copied
+    verbatim minus the value tail. A repo-wide duplication sweep found it.
+    One loop with a flag cannot drift; two loops over the same four fields
+    is a fix applied to one of them.
+
+    Leaf values go out as their EXACT BIT PATTERN, never as decimals:
     `String(Float32)` does not round-trip in this Mojo
     (`mojo-string-float-roundtrip`), so a decimal fingerprint would call two
     different models equal.
@@ -356,6 +370,8 @@ def fingerprint(model: TNonSymmetricTree) raises -> String:
             + String(Int(model.model_structure.split_types[i]))
             + ")"
         )
+    if not with_values:
+        return s^
     s += " values="
     for i in range(len(model.leaf_values)):
         s += String(Int(model.leaf_values[i].to_bits())) + ","
@@ -888,23 +904,6 @@ def claim_5_min_data_in_leaf(mut fx: Fixture) raises:
     )
 
 
-def structure_fingerprint(model: TNonSymmetricTree) raises -> String:
-    """The tree SHAPE alone: nodes and split types, no leaf values."""
-    var s = String("")
-    for i in range(len(model.model_structure.nodes)):
-        ref n = model.model_structure.nodes[i]
-        s += (
-            String("(")
-            + String(Int(n.feature_id)) + ","
-            + String(Int(n.bin)) + ","
-            + String(Int(n.left_subtree)) + ","
-            + String(Int(n.right_subtree)) + ","
-            + String(Int(model.model_structure.split_types[i]))
-            + ")"
-        )
-    return s^
-
-
 def claim_6_core_count_invariance(mut fx: Fixture) raises:
     """THE CROSS-GPU CLAIM. Three core counts, one process.
 
@@ -951,9 +950,9 @@ def claim_6_core_count_invariance(mut fx: Fixture) raises:
     var b = fit(fx, default_options(4), sm_count_override=108)
     var c = fit(fx, default_options(4), sm_count_override=1)
 
-    var sa = structure_fingerprint(a)
-    var sb = structure_fingerprint(b)
-    var sc = structure_fingerprint(c)
+    var sa = fingerprint(a, with_values=False)
+    var sb = fingerprint(b, with_values=False)
+    var sc = fingerprint(c, with_values=False)
     var fa = fingerprint(a)
     var fb = fingerprint(b)
     var fc = fingerprint(c)
