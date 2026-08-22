@@ -94,6 +94,45 @@ def run_arm(name, n_rows, n_cols, want_checksum, accuracy_only=False):
             print("ACC", name, float((clf.predict(xte) == yte).mean()))
 
 
+def run_eps_arm(eps_dir, accuracy_only=False):
+    """The eps500 arm. Same env-var opt-in as the Mojo side (the shared
+    harness passes no arguments), same bytes, same exact integer digest --
+    the sum of the file's raw uint32 patterns in FILE order, which UInt64
+    wraparound makes identical in numpy and Mojo."""
+    name = "rf@eps500-360k"
+    n, f, train = 400000, 500, 360000
+    xc = np.fromfile(eps_dir + "/eps500_Xcol.f32", dtype=np.float32)
+    yf = np.fromfile(eps_dir + "/eps500_y.f32", dtype=np.float32)
+    assert xc.size == n * f and yf.size == n
+    y01 = (yf > 0).astype(np.int32)
+    x_sum = int(xc.view(np.uint32).astype(np.uint64).sum(dtype=np.uint64))
+    print("SUM", name, f"{x_sum}/{int(y01.sum())}")
+    # Column-major on disk (verified against epsilon_train.tsv row 0):
+    # reshape (f, n) then transpose gives rows x features.
+    x = np.ascontiguousarray(xc.reshape(f, n).T)
+    xtr, ytr = x[:train], y01[:train]
+    xte, yte = x[train:], y01[train:]
+    reps = 1 if accuracy_only else 3
+    for rep in range(reps):
+        clf = RandomForestClassifier(
+            n_estimators=N_TREES,
+            criterion="gini",
+            max_depth=MAX_DEPTH,
+            min_samples_split=2,
+            min_samples_leaf=1,
+            max_features=None,   # all features, matching max_features=1.0
+            bootstrap=True,
+            random_state=20260821,
+            n_jobs=-1,
+        )
+        t0 = time.perf_counter()
+        clf.fit(xtr, ytr)
+        t1 = time.perf_counter()
+        print("ARM", name, (t1 - t0) * 1000.0, flush=True)
+        if rep == reps - 1:
+            print("ACC", name, float((clf.predict(xte) == yte).mean()))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--checksum", action="store_true")
@@ -101,6 +140,11 @@ def main():
                     help="one fit per arm, print ACC only -- for reading the "
                          "accuracy that must sit beside any timing")
     args = ap.parse_args()
+    import os
+    eps_dir = os.environ.get("RF_BENCH_EPS_DIR", "")
+    if eps_dir:
+        run_eps_arm(eps_dir, args.accuracy)
+        return
     run_arm("rf@100000", 100000, 50, args.checksum, args.accuracy)
     run_arm("rf@500000", 500000, 50, args.checksum, args.accuracy)
 
