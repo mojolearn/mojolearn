@@ -837,6 +837,19 @@ def gain_per_split(
         gain = fma(rval * inv_right * rval, inv_len, gain)
         var val = Float32(Int(lval_i + rval_i)) * inv_len
         gain = fma(-val, val, gain)
+    # DEVIATION 217: the TRUE gain is provably non-negative (the within-
+    # group sum of squares never exceeds the total: Gini and variance
+    # decompositions alike), so a negative value HERE is pure float32
+    # cancellation -- measured on year at node scale, where sums near 3e8
+    # put the three ~1e5-magnitude terms' rounding at the size of the true
+    # gain and a VALID winner evaluated at -0.027, which `split_not_valid`
+    # then leafed (half a tree gone at one seed). cuML ships this defect;
+    # sklearn evaluates in float64 and does not. The clamp is exact, not
+    # cosmetic: it restores the sign the mathematics guarantees. All three
+    # gain forms (this device one, the host Gini, the host MSE) clamp
+    # identically or the arms would grow different trees.
+    if gain < Float32(0.0):
+        gain = Float32(0.0)
     return gain
 
 

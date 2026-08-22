@@ -532,6 +532,35 @@ def node_split_random_gini[
             )
         hist_total[k].x += 1
 
+    # DEVIATION 216's companion, sklearn `_tree.pyx:240`: a PURE node --
+    # `impurity <= EPSILON`, which for integer Gini counts is EXACTLY "one
+    # class holds every row" -- is a LEAF before any candidate is drawn.
+    # Under cuML's old `<=` gate pure nodes leafed through zero-gain
+    # rejection, so this test is what keeps 216's accepted zero-gain splits
+    # from cascading a pure region down to the depth cap. The returned
+    # record is the nothing-was-valid shape (`Split()`, colid -1), which
+    # `split_not_valid` rejects on the MIN_FINITE sentinel as always.
+    for k in range(nclasses):
+        if Int(hist_total[k].x) == count and count > 0:
+            return HostSplitResult[dtype](
+                split=Split(),
+                found=False,
+                is_classification=True,
+                node_rows=Int32(count),
+                candidates=List[CandidateRecord[dtype]](),
+                best_index=-1,
+                hist_total=hist_total^,
+                agg_total=AggregateBin[dtype](),
+                sq_sum_total=Scalar[dtype](0),
+                best_exact=GiniProxyExact(0, 0, Int64(count), False),
+                n_constant=Int32(0),
+                n_visited=Int32(0),
+                impurity_parent=Scalar[dtype](0),
+                impurity_left=Scalar[dtype](0),
+                impurity_right=Scalar[dtype](0),
+                improvement=Scalar[dtype](0),
+            )
+
     # `:560` `_init_split(&best_split, end)`. Theirs seeds `pos = end` and
     # `improvement = -INFINITY`; cuML's default `Split` seeds `colid = -1`
     # and `best_metric_val = -max<DataT>()` (`split.cuh:54-59`), which is the

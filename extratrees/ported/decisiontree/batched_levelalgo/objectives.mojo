@@ -532,6 +532,12 @@ struct GiniObjectiveFunction[dtype: DType](Copyable, Movable):
             var val = Scalar[Self.dtype](Int(val_i)) * invLen
             gain = fma(-val, val, gain)
 
+        # DEVIATION 217: the true Gini decrease is non-negative; a negative
+        # value is float cancellation, and it fed `split_not_valid`. See
+        # `builder.mojo::gain_per_split` for the measurement; the three gain
+        # forms clamp identically or the arms would grow different trees.
+        if gain < Scalar[Self.dtype](0.0):
+            gain = Scalar[Self.dtype](0.0)
         return gain
 
     # ----------------------------------------------------------------------
@@ -909,6 +915,13 @@ struct MSEObjectiveFunction[dtype: DType](Copyable, Movable):
             gain = parent_obj - (left_obj + right_obj)
             gain *= Scalar[Self.dtype](0.5) * invLen
 
+            # DEVIATION 217: the true variance reduction is non-negative; a
+            # negative value is float cancellation (measured on year: a
+            # valid 148k-row winner at -0.027 leafed half a tree). See
+            # `builder.mojo::gain_per_split`; all three gain forms clamp
+            # identically.
+            if gain < Scalar[Self.dtype](0.0):
+                gain = Scalar[Self.dtype](0.0)
             return gain
 
     # ----------------------------------------------------------------------

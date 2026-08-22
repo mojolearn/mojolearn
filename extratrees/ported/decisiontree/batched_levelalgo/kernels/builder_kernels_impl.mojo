@@ -1686,11 +1686,20 @@ that function is that no node's partial sum can leave the slot -- so a cell in
 this state means the labels did not come through the fixed-point contract. The
 rows WERE read and the accumulators ARE published; only the key is withheld.
 
-There were four statuses here until 2026-08-21 and now there are five. A caller
-enumerating them (`_status_name`, `score_to_candidate_kernel`'s `!= SCORED`
-test) needs no change to be CORRECT -- anything not `SCORED` is already the
-default `Split` -- but a caller PRINTING them will show `?` until it learns
-this one."""
+There were four statuses here until 2026-08-21, five that day, and six since
+`SCORE_STATUS_PURE_NODE` (2026-08-22). A caller enumerating them
+(`_status_name`, `score_to_candidate_kernel`'s `!= SCORED` test) needs no
+change to be CORRECT -- anything not `SCORED` is already the default `Split`
+-- but a caller PRINTING them will show `?` until it learns the new ones."""
+
+comptime SCORE_STATUS_PURE_NODE: Int32 = 6
+"""DEVIATION 216's companion (sklearn `_tree.pyx:240`): the node is PURE --
+one class holds every row, Gini exactly 0 -- so it is a leaf before any
+candidate can win. Classification only: regression purity (zero variance) is
+not detectable from the sums the device accumulates, and its cost is bounded
+by `min_samples_split` rather than guarded (the 216 entry prices this).
+Published per cell because purity is tested where the counts live; every
+cell of a pure node carries it."""
 
 
 comptime SCORE_MAX_ACC_DEFAULT: Int = 16
@@ -2182,6 +2191,13 @@ def node_feature_score_host(
         or n_right == 0
     ):
         status = SCORE_STATUS_REJECTED_MIN_SAMPLES_LEAF
+    # DEVIATION 216's companion, mirrored from the finalize kernel: a PURE
+    # classification node is a leaf (sklearn `_tree.pyx:240`), tested after
+    # the min_samples rejection exactly as the kernel tests it.
+    if status == SCORE_STATUS_SCORED and is_classification and n_total > 0:
+        for kc in range(n_acc):
+            if Int(acc_total[kc]) == n_total:
+                status = SCORE_STATUS_PURE_NODE
 
     var num = Int64(0)
     var den = Int64(0)
@@ -2698,6 +2714,24 @@ def node_feature_score_finalize_kernel[
             )
             slot += stride
             continue
+
+        # DEVIATION 216's companion: a PURE node (one class holds every row)
+        # is a LEAF before any candidate can win -- sklearn `_tree.pyx:240`.
+        # Tested here because this is where the node's class totals live;
+        # under the old `<=` gate purity fell out of zero-gain rejection and
+        # needed no test.
+        comptime if CLASSIFICATION:
+            var pure = False
+            for kc in range(n_acc):
+                if (
+                    Int(out_acc_total[unsafe_offset = slot * n_acc + kc])
+                    == n_total
+                ):
+                    pure = True
+            if pure and n_total > 0:
+                out_status[unsafe_offset=slot] = SCORE_STATUS_PURE_NODE
+                slot += stride
+                continue
 
         out_status[unsafe_offset=slot] = SCORE_STATUS_SCORED
         comptime if CLASSIFICATION:

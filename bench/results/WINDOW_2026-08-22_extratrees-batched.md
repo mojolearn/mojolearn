@@ -223,3 +223,33 @@ discriminators for it, in order: year TRAIN-vs-TEST MSE ours-vs-sklearn
 (overfit-shape difference vs split-quality difference), then a read of
 `regression_key`'s shift resolution at year's magnitudes. Not chased
 further in this window.
+
+## Addendum 7: the year residual CLOSED -- DEVIATIONS 216+217, one fix in two halves
+
+216 (sklearn's gain-gate boundary, `<=` to `<`, plus the pure-node leaf
+companion) measured as a NO-OP alone -- its pre-committed predictions
+failed, which forced the probe that found the truth: our year trees were
+collapsing seed-dependently (seed 2: 217 nodes vs sklearn's 497, half a
+tree leafed at depth 1), and `bench/node2_probe.mojo` caught a VALID
+148k-row winner carrying gain -0.0269. The true gain is provably
+non-negative; cuML's float `GainPerSplit` -- transcribed faithfully --
+cancels catastrophically at year's label magnitudes, and the gate leafed
+the arithmetic's sign error. cuML ships this defect; sklearn (float64)
+does not. 217 clamps all three gain forms at zero -- exact, not cosmetic
+-- and is load-bearing only with 216's boundary (a clamped 0.0 still
+leafs under cuML's `<=`).
+
+| measurement | before | after |
+|---|---|---|
+| year nodes/tree, seeds 0-5 (sklearn 475-505) | 217-481 | **475-507** |
+| year TEST MSE, gbm-bench pair | 98.04 | **96.57** (sklearn ET: 96.25-96.61) |
+| covtype train acc, interleaved 3 reps | 0.679-0.707 | 0.688-0.715 |
+| higgs2m train acc | parity (post-215) | parity held |
+
+The remaining year gap to LightGBM (92.85) is the depth-8-parity
+model-family difference sklearn's own ET shares. ET accuracy-where-behind
+is now CLOSED on every dataset measured: higgs (215), year (216+217),
+covtype never behind. All 29 checks pass; three cuML defects found and
+fixed today (215 sampler bias, 217 negative gains, plus 216's boundary),
+each with the original behavior kept as a required-RED sabotage arm or
+measured record.

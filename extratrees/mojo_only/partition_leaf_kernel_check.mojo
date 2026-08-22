@@ -252,13 +252,15 @@ def _work_specs() -> List[WorkSpec]:
             905, 119, 1, LEVEL_BASE - 1.0, 1.0, "119 rows, below every level"
         )
     )
-    # A zero-gain split. `split_not_valid`'s FIRST clause is `<=`
-    # (`builder_kernels.cuh:59-67`), so this one is rejected at the default
-    # `min_impurity_decrease = 0.0` no matter how its rows sit.
+    # A gain-refused split. DEVIATION 216 moved the boundary to sklearn's --
+    # gain EQUAL to `min_impurity_decrease` now PASSES (builder_check and
+    # split_check pin that side) -- so the refusal this spec keeps covered is
+    # the one the fit path actually produces: the invalid-candidate
+    # MIN_FINITE sentinel, still strictly below any threshold.
     out.append(
         WorkSpec(
-            1024 - 96, 96, 0, Float32(0.0), 0.0,
-            "96 rows, ZERO GAIN -> SplitNotValid",
+            1024 - 96, 96, 0, Float32(0.0), Float32.MIN_FINITE,
+            "96 rows, MIN_FINITE gain -> SplitNotValid",
         )
     )
     return out^

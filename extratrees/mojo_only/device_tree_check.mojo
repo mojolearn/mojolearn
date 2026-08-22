@@ -382,18 +382,35 @@ def main() raises:
         "and the totals must match: 689 against 689 when this was closed,"
         " where it was 689 against 747 before",
     )
-    # The gate must also be DOING something on this fixture, or the arm is
-    # asserting an equality that no zero-gain split ever tested. Arm 2a runs
-    # the same configurations with the gate disabled; if the gate never fires,
-    # the two arms grow the same trees and 2b proves nothing.
+    # The gate must also be DOING something, or the arms assert equalities no
+    # gate-rejected split ever tested. Under DEVIATION 216 the boundary is
+    # sklearn's, so at the DEFAULT 0.0 the gate rejects nothing here
+    # (zero-gain winners split; PURE nodes leaf through their own status) --
+    # gate-disabled and gate-default now grow the SAME trees by design. The
+    # firing configuration is a POSITIVE threshold: one config at 0.005
+    # against the same config unfettered, host and device agreeing at both.
+    var pg = DecisionTreeParams()
+    pg.max_depth = 5
+    pg.max_features = 0.5
+    pg.min_impurity_decrease = 0.005
+    var gate_seed = UInt64(104729 + 11)
+    var g_host = fit_host(hashed, pg, gate_seed, 2)
+    var g_dev = fit_device(ctx, hashed, pg, gate_seed, 2)
+    assert_equal(
+        g_host.num_nodes(),
+        g_dev.num_nodes(),
+        "host and device must agree at the firing gate too",
+    )
+    pg.min_impurity_decrease = -1.0
+    var g_free = fit_host(hashed, pg, gate_seed, 2)
     assert_true(
-        total_nodes > host_total,
-        "arm 2a (gate disabled) grew "
-        + String(total_nodes)
-        + " nodes and arm 2b (gate on) grew "
-        + String(host_total)
-        + "; if those are equal the gate never fired and this arm is"
-        " measuring nothing",
+        g_free.num_nodes() > g_host.num_nodes(),
+        "gate disabled grew "
+        + String(g_free.num_nodes())
+        + " nodes and gate at 0.005 grew "
+        + String(g_host.num_nodes())
+        + "; if those are equal the gate never fired on this fixture and"
+        " nothing above tested a rejection",
     )
     cells += 3
 

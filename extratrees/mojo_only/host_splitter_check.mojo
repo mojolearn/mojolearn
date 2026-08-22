@@ -316,7 +316,22 @@ def check_hashed_classification() raises -> Int:
             dataset, item, colids, obj, seed, Int32(11)
         )
 
-        assert_equal(Int(res.n_visited), n_cols, "n_visited == len(colids)")
+        # DEVIATION 216's companion: a PURE node (one class holds every row
+        # -- a one-row node trivially so) leafs BEFORE any candidate is
+        # visited, sklearn `_tree.pyx:240`, so it reports n_visited == 0.
+        var node_pure = False
+        for kcls in range(len(res.hist_total)):
+            if Int(res.hist_total[kcls].x) == count and count > 0:
+                node_pure = True
+        if node_pure:
+            assert_equal(
+                Int(res.n_visited), 0, "a pure node visits no candidates"
+            )
+            assert_true(
+                not res.found, "and cannot have found a split"
+            )
+        else:
+            assert_equal(Int(res.n_visited), n_cols, "n_visited == len(colids)")
         assert_equal(Int(res.node_rows), count, "node_rows == count")
         cells += 2
 
@@ -331,6 +346,10 @@ def check_hashed_classification() raises -> Int:
                 "node class total mismatch",
             )
             cells += 1
+        if node_pure:
+            # A pure node's early leaf (216's companion) carries no
+            # candidate records; everything below reads them.
+            continue
 
         var best_ref = -1
         var best_num = Int64(0)

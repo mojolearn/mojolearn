@@ -213,16 +213,22 @@ def main() raises:
     # ================= 1. the device forest IS the host forest ============
     # Tree for tree, node for node, and every leaf value, bit for bit.
     #
-    # ARM 1a runs with the zero-gain gate DISABLED on both arms
-    # (`min_impurity_decrease = -1.0`, which cuML's non-negative Gini gain can
+    # ARM 1a runs with the gain gate DISABLED on both arms
+    # (`min_impurity_decrease = -1.0`, which a non-negative Gini gain can
     # never trip) so that a difference can only come from the split search.
-    # ARM 1b runs at the DEFAULT gate, which is deviation 183's claim: the
-    # device forms the gain on the host from exact integers, so
-    # `split_not_valid` applies unchanged. Keeping both localises a break --
-    # 1b red with 1a green is the gate, both red is the search.
+    # ARM 1b runs the gate where it FIRES. Under DEVIATION 216 the boundary
+    # is sklearn's -- gain equal to the threshold passes -- so at the old
+    # default 0.0 the gate rejects nothing on this fixture (zero-gain
+    # winners now split, and PURE nodes leaf through their own status, not
+    # the gate). A POSITIVE threshold is what exercises the clause the fit
+    # path still owns: low-gain winners on hashed labels get rejected, the
+    # arms differ, and the reach assertion below stays a real assertion.
+    # Device and host apply the same gate, so identity holds per arm either
+    # way; keeping both localises a break -- 1b red with 1a green is the
+    # gate, both red is the search.
     print("[identity] the device forest against the host forest, node by node")
-    var arm_names = ["1a gate DISABLED", "1b gate at its DEFAULT"]
-    var gates = [Float32(-1.0), Float32(0.0)]
+    var arm_names = ["1a gate DISABLED", "1b gate at 0.005 (must fire)"]
+    var gates = [Float32(-1.0), Float32(0.005)]
     var arm_nodes = [0, 0]
     for arm in range(2):
         var configs = 0
@@ -359,12 +365,14 @@ def main() raises:
         )
         cells += 6
     # The gate must be DOING something, or arm 1b asserts an equality no
-    # zero-gain split ever tested.
+    # gate-rejected split ever tested. (Pre-216 this compared the DEFAULT
+    # gate, which rejected zero-gain winners; 216 moved the boundary to
+    # sklearn's, so the firing configuration is a positive threshold.)
     assert_true(
         arm_nodes[0] > arm_nodes[1],
         "arm 1a (gate disabled) grew "
         + String(arm_nodes[0])
-        + " nodes and arm 1b (gate on) grew "
+        + " nodes and arm 1b (gate at 0.005) grew "
         + String(arm_nodes[1])
         + "; if those are equal the gate never fired on this fixture and 1b"
         " is measuring nothing",

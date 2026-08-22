@@ -69,10 +69,11 @@ blocks, which is the shape `PART_MB_SAB_SINGLE_BLOCK` and
 128 is a multiple of TPB; every other node has a ragged last block.
 
 THREE of the nine are refused by `split_not_valid`, by three different
-clauses: a ZERO-GAIN node (their first clause is `<=`, so gain 0 at the
-default `min_impurity_decrease = 0` is rejected), a node with NO ROWS, and a
-ONE-ROW node (which cannot leave `min_samples_leaf = 1` on both sides). All
-three must come out untouched.
+clauses: a BELOW-THRESHOLD node (the `MIN_FINITE` invalid-candidate
+sentinel -- since DEVIATION 216 zero gain PASSES, sklearn's boundary, so
+the sentinel is the gain refusal the fit path actually produces), a node
+with NO ROWS, and a ONE-ROW node (which cannot leave `min_samples_leaf = 1`
+on both sides). All three must come out untouched.
 
 The values are HASHED and scattered, never `i % k` and never monotone: a
 monotone column makes every partition a contiguous prefix, which is the one
@@ -258,7 +259,16 @@ def _node_specs() -> List[NodeSpec]:
     out.append(NodeSpec(200, 128, 1, 42, 1.0, "128 rows, EXACTLY one block, TIED column"))
     out.append(NodeSpec(600, 129, 0, 64, 1.0, "129 rows, TWO blocks, one row over"))
     out.append(NodeSpec(1200, 700, 0, 349, 1.0, "700 rows, SIX blocks, ragged last"))
-    out.append(NodeSpec(2400, 96, 0, 47, 0.0, "96 rows, ZERO GAIN -> refused"))
+    # DEVIATION 216: zero gain now PASSES the gate (sklearn's boundary;
+    # builder_check and split_check pin that side), so the gain refusal this
+    # node keeps covered is the fit path's real one -- the MIN_FINITE
+    # invalid-candidate sentinel.
+    out.append(
+        NodeSpec(
+            2400, 96, 0, 47, Float32.MIN_FINITE,
+            "96 rows, MIN_FINITE gain -> refused",
+        )
+    )
     out.append(NodeSpec(2700, 300, 1, 99, 1.0, "300 rows, THREE blocks, TIED column"))
     out.append(NodeSpec(3600, 0, 0, 0, 1.0, "0 rows -> refused (n_left < msl)"))
     out.append(NodeSpec(3700, 1, 0, 0, 1.0, "1 row -> refused (one side < msl)"))

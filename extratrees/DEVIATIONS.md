@@ -2785,6 +2785,15 @@ RED sabotage arm -- lands 273-836, the starved column at the simulated
 to set-validity and slot-parity checks, visible only to the distribution
 gate, which is the whole finding.
 
+**UPSTREAM CONFIRMATION (reported by the RF lane, 2026-08-22, from its own
+v26.08.00 pin 265b9da6; not re-verified at this lane's pin).** cuML's current
+release has NO `excess_sample_with_replacement` anywhere in `decisiontree/`
+-- the only feature sampler is a `shuffle_iterator`/minstd path, uniform by
+construction. Upstream evidently moved off this sampler after the pin this
+lane transcribed; a future rebase turns this fix into a straight port of
+their shuffle path, and their removing commit may carry their own reasoning,
+worth citing if found.
+
 **PRICE.** The overshoot path pays one extra pass over the block's scratch
 per unique (rank by hash; the scratch was already global per deviation
 195). The exact-`k` path -- the common case, since `n_parallel_samples`
@@ -2793,3 +2802,121 @@ targets `E[uniques] = k` -- is bit-for-bit cuML's. Forests built at
 candidate sets are now actually uniform. Accuracy movements are recorded
 in `bench/results/` -- including covtype, where the bias had been HELPING
 and honesty requires re-measuring, not just the dataset that benefits.
+
+---
+
+## DEVIATION 216 -- the zero-gain gate: cuML's `<=` becomes sklearn's boundary, because year's TEST set was paying for it
+
+**The trail, in order, because each step eliminated a suspect.** After 215,
+our-vs-sklearn accuracy was clean on higgs at `sqrt` AND at `all`, and on
+covtype both objectives -- but the year pair still read test MSE 98.04 vs
+sklearn ET's 96.25 at the depth-8 parity config. The train-side
+discriminator (interleaved, same seeds, `max_features=all`, depth 8) showed
+ours OVERLAPPING sklearn on TRAIN MSE (96.6-97.8 vs 97.1-98.0, ours better
+on 2 of 3 reps) while building ~13% FEWER nodes (4,082-4,242 vs
+4,656-4,892). Equal train fit from fewer nodes, worse test fit: the missing
+nodes were splits that do not move TRAIN MSE at all -- ZERO-GAIN splits --
+whose absence still changes how test rows are partitioned.
+
+**The mechanism.** `split_not_valid`'s first clause was cuML's
+`best_metric_val <= min_impurity_decrease`: at the default 0, a zero-gain
+winner becomes a leaf. sklearn accepts equality, so it SPLITS zero-gain
+nodes and keeps refining. On continuous targets exact zeros are rare and
+the two gates agree; on INTEGER targets (year is years; covtype's elevation
+column is integers too) exact zero gain is common, and cuML's gate silently
+prunes. The split rule this lane implements is sklearn's -- the reference
+named in the lane header -- so this is the same footing as 215: their
+boundary was a defect against the reference, not a design to preserve.
+
+**The change.** One comparison in ONE shared function (`split_not_valid`,
+used by `NodeQueue.push`, the host trainers, and the partition kernels via
+`_skip_node`): `<=` to `<`. Invalid candidates still carry `MIN_FINITE` and
+still fail. Host and device change together, so every identity gate holds
+by construction. Nonzero `min_impurity_decrease` scaling parity between the
+two libraries is a separate, unchanged question.
+
+**THE COMPANION THE AUDIT FOUND, before any measurement ran.** sklearn
+leafs a PURE node before splitting (`_tree.pyx:240`, `impurity <= EPSILON`)
+-- under cuML's `<=` gate purity fell out of zero-gain rejection for free,
+so accepting zero gain WITHOUT that pre-leaf would cascade pure regions
+down to the depth cap (identical child predictions, real node/time bloat).
+For CLASSIFICATION the test is exact from counts already in hand -- Gini is
+0 iff one class holds every row -- and it now lives in all three scoring
+paths (the finalize kernel as `SCORE_STATUS_PURE_NODE`, the shared host
+oracle, and `host_splitter`'s Gini splitter), so host and device leaf the
+same nodes. For REGRESSION zero variance is not detectable from the sums
+the device accumulates; the exposure is bounded by `min_samples_split` and
+the depth cap, and the year node-count prediction below is the measurement
+that says whether it bites.
+
+**MEASURED, AND THE PRE-COMMITTED PREDICTIONS FAILED -- which is what led
+to the real defect.** Predictions (a) and (b), committed above before the
+run: both FAILED. Node counts did not move (4,088-4,258, same as before)
+and test MSE did not move (98.05). The revert clause's own premise --
+that the gate was firing and shrinking trees -- was falsified along with
+them: zero-gain WINNERS essentially never occur (a regression winner is
+zero-gain only when all ninety candidates are). The gate change alone is a
+measured NO-OP.
+
+**Why it is KEPT anyway, and what made it load-bearing after all.** The
+failed predictions forced the depth probe that found the true mechanism --
+DEVIATION 217: valid winners whose true gain is positive but whose FLOAT
+evaluation is NEGATIVE by cancellation, which the gate then leafed. 217's
+clamp maps those to 0.0 -- and a 0.0 gain passes only under THIS entry's
+sklearn boundary; under cuML's `<=` it would still leaf. So the pair is
+the fix and neither half works alone: with both, year's seed-2 tree went
+217 -> 477 nodes (sklearn 497), every seed landed inside sklearn's range,
+and test MSE closed 98.04 -> 96.57 against sklearn ET's own 96.25-96.61.
+The purity companion above is what keeps the pair from bloating pure
+regions. Classification did not regress (covtype average up ~1 point,
+higgs at parity, measured interleaved).
+
+
+---
+
+## DEVIATION 217 -- cuML's float gain evaluates NEGATIVE on provably non-negative splits, and the gate was leafing them: the exact-sign clamp
+
+**The find, exactly as it happened, because the trail is the method.** After
+216 measured as a no-op, the depth probe showed our year trees collapsing
+SEED-DEPENDENTLY (seed 2: 217 nodes vs sklearn's 497) with an entire
+half-tree leafed at depth 1 -- 148,196 rows, ninety non-constant columns,
+label sums comfortably inside the fixed-point slot. `bench/node2_probe.mojo`
+reran `search_batch_regression` on that exact node with the fitted keys and
+printed the winner: `colid 77, metric -0.026946679` -- a VALID candidate
+carrying a NEGATIVE gain.
+
+**The defect.** The true impurity decrease is provably non-negative for
+both objectives -- the within-group sum of squares never exceeds the total;
+that is the Gini and variance decompositions -- so a negative value can only
+be arithmetic. `GainPerSplit` (`objectives.cuh:52-83`, `:225-244`,
+transcribed statement for statement, fma placement and all, per DEVIATION
+142/183) forms three terms near 1e5-1e12 magnitude from label sums near
+3e8 in FLOAT32 and cancels them; at year's scale the rounding of the terms
+is the SIZE of the true gain, so tiny-but-real gains come out negative,
+`split_not_valid` leafs the node, and which nodes die depends on the drawn
+thresholds -- hence the seed dependence. **cuML ships this defect** (their
+own gate consumes the same float), on the same footing as 215's sampler
+bias and 164/165: transcribed faithfully, then fixed rather than ported.
+sklearn evaluates its criterion in float64 and does not exhibit it.
+
+**The fix.** One clamp -- `gain < 0 -> 0` -- at all THREE gain forms (the
+device `gain_per_split`, the host Gini `GainPerSplit`, the host MSE
+`GainPerSplit`), identically, or the arms would grow different trees. The
+clamp restores the sign the mathematics guarantees; ranking is untouched
+(the reduction orders by the exact integer keys, DEVIATIONS 144/189). It is
+load-bearing ONLY with 216's boundary: a clamped 0.0 passes sklearn's `<`
+and would still leaf under cuML's `<=` -- the two entries are one fix.
+
+**MEASURED.** Year, depth 8, `max_features=all`: per-seed node counts moved
+from 217-481 (collapsing) to 475-507, statistically indistinguishable from
+sklearn's 475-505; gbm-bench TEST MSE 98.04 -> 96.57 (sklearn ET 96.25 and
+96.61 in this window's two runs; the remaining distance to LightGBM's 92.85
+is the depth-8-parity model-family gap sklearn shares, per this window's
+earlier decomposition). Classification: covtype interleaved average up
+about a point, higgs at the post-215 parity, both at 2.3-3.8x sklearn's
+ten cores in this window's clock state. All 29 checks pass; the probe that
+caught it stays in `bench/node2_probe.mojo` as the exact repro.
+
+**What this closes.** The year accuracy row's our-vs-sklearn residual --
+the last open ET-behind accuracy item. The scoreboard's remaining year gap
+is model-family, shared with sklearn's own ET at this config.

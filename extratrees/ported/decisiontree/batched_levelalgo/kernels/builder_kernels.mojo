@@ -92,21 +92,26 @@ def split_not_valid(
     min_samples_leaf: Int32,
     num_rows: Int32,
 ) -> Bool:
-    """`builder_kernels.cuh:59-67`, transcribed.
+    """`builder_kernels.cuh:59-67` -- with DEVIATION 216 on the first clause.
 
-    Theirs: `split.best_metric_val <= min_impurity_decrease ||
-    split.nLeft < min_samples_leaf ||
-    (IdxT(num_rows) - split.nLeft) < min_samples_leaf`.
-
-    Note the FIRST clause is `<=`, so a split whose gain exactly equals
-    `min_impurity_decrease` is rejected, and with their default of 0 a
-    zero-gain split is rejected too. sklearn's test is the other way round --
-    `min_impurity_decrease` is checked as `>=` against a differently scaled
-    quantity in `_tree.pyx` -- which is why this lane reports the gain in BOTH
-    forms rather than assuming they are the same number.
+    Theirs: `split.best_metric_val <= min_impurity_decrease || ...` -- the
+    `<=` rejects a split whose gain exactly equals the threshold, so at the
+    default 0 cuML turns every ZERO-GAIN node into a leaf. sklearn accepts
+    equality (`>=` in its own orientation), so at the default it SPLITS
+    zero-gain nodes, and the split rule this lane implements is sklearn's
+    (the reference for the formulation, per the lane header). The difference
+    is not cosmetic on integer-valued targets, where exact zero gain is
+    common: on year (integer years, `max_features=all`, depth 8) cuML's gate
+    left our trees ~13% smaller than sklearn's at EQUAL train MSE and
+    measurably worse TEST MSE -- the gate was discarding refining splits.
+    DEVIATION 216 changes the clause to strict `<`, sklearn's boundary; an
+    invalid candidate's `MIN_FINITE` sentinel is still rejected by it. For
+    NONZERO `min_impurity_decrease` the two libraries also SCALE the gain
+    differently; that parity question is unchanged by this edit and still
+    documented at the estimator boundary.
     """
     return (
-        split.best_metric_val <= min_impurity_decrease
+        split.best_metric_val < min_impurity_decrease
         or split.n_left < min_samples_leaf
         or (num_rows - split.n_left) < min_samples_leaf
     )

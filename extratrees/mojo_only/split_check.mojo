@@ -155,8 +155,12 @@ def main() raises:
     # `builder_kernels.cuh:59-67`. Each assertion isolates ONE clause.
     var good = Split(1.0, 3, 0.5, 40)
     assert_true(not split_not_valid(good, 0.0, 1, 100), "a good split must pass")
-    assert_true(split_not_valid(Split(1.0, 3, 0.0, 40), 0.0, 1, 100), "gain == min_impurity_decrease is REJECTED (their <=)")
+    # DEVIATION 216: gain EQUAL to min_impurity_decrease PASSES -- sklearn's
+    # boundary, replacing cuML's `<=` (this line pinned "REJECTED (their <=)"
+    # until year's test MSE paid for the pruned zero-gain splits).
+    assert_true(not split_not_valid(Split(1.0, 3, 0.0, 40), 0.0, 1, 100), "gain == min_impurity_decrease PASSES (sklearn boundary, 216)")
     assert_true(split_not_valid(Split(1.0, 3, -1.0, 40), 0.0, 1, 100), "negative gain rejected")
+    assert_true(split_not_valid(Split(1.0, 3, Float32.MIN_FINITE, 40), 0.0, 1, 100), "the invalid-candidate sentinel rejected")
     assert_true(split_not_valid(good, 0.0, 41, 100), "left child below min_samples_leaf rejected")
     assert_true(split_not_valid(good, 0.0, 61, 100), "right child below min_samples_leaf rejected")
     print("split_not_valid: 5 clauses, one cell each")

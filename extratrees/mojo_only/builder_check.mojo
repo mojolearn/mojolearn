@@ -308,31 +308,64 @@ def main() raises:
     )
     cells += 3
 
-    # --- an invalid split leaves the node a leaf and costs no budget ------
+    # --- the gain gate's BOUNDARY, both sides of it (DEVIATION 216) -------
+    # A split whose gain exactly EQUALS min_impurity_decrease SPLITS: that is
+    # sklearn's boundary, and at the default 0 it is what keeps zero-gain
+    # refining splits alive on integer targets (this case pinned cuML's `<=`
+    # -- "a rejected split must create no nodes" for gain == threshold --
+    # until year's test MSE paid for it; see the 216 entry).
     var pi = DecisionTreeParams()
     pi.max_depth = 4
     var qi = NodeQueue[DType.float32](pi, 100, 1)
     var batch0 = qi.pop()
     var before_leaves = qi.tree.leaf_counter
     var before_nodes = qi.tree.num_nodes()
-    var dud = List[Split]()
-    dud.append(Split(1.0, 0, 0.0, 50))  # gain == min_impurity_decrease
-    qi.push(batch0, dud)
+    var zero_gain = List[Split]()
+    zero_gain.append(Split(1.0, 0, 0.0, 50))  # gain == min_impurity_decrease
+    qi.push(batch0, zero_gain)
     assert_equal(
         qi.tree.num_nodes(),
-        before_nodes,
-        "a rejected split must create no nodes",
+        before_nodes + 2,
+        "gain == min_impurity_decrease SPLITS (sklearn's boundary, 216)",
     )
     assert_equal(
         qi.tree.leaf_counter,
-        before_leaves,
+        before_leaves + 1,
+        "the accepted boundary split consumes exactly one leaf of budget",
+    )
+    # And a split strictly BELOW the threshold is still rejected -- the
+    # sentinel an invalid candidate carries is MIN_FINITE, which is the
+    # rejection the fit path actually exercises.
+    var qr2 = NodeQueue[DType.float32](pi, 100, 1)
+    var batch1 = qr2.pop()
+    var rb_leaves = qr2.tree.leaf_counter
+    var rb_nodes = qr2.tree.num_nodes()
+    var dud = List[Split]()
+    dud.append(Split(1.0, 0, Float32.MIN_FINITE, 50))
+    qr2.push(batch1, dud)
+    assert_equal(
+        qr2.tree.num_nodes(),
+        rb_nodes,
+        "a below-threshold split must create no nodes",
+    )
+    assert_equal(
+        qr2.tree.leaf_counter,
+        rb_leaves,
         "a rejected split must not consume leaf budget",
     )
+    # `qi` took the ACCEPTED boundary split above (216), so its root is a
+    # split node with two child work items; `qr2` took the rejected one and
+    # must be untouched.
     assert_true(
-        qi.tree.sparsetree[0].IsLeaf(), "the node must still be a leaf"
+        not qi.tree.sparsetree[0].IsLeaf(),
+        "the boundary-accepted root must be a SPLIT node (216)",
     )
-    assert_true(not qi.has_work(), "and no new work may be queued")
-    cells += 4
+    assert_true(
+        qr2.tree.sparsetree[0].IsLeaf(),
+        "the rejected split's node must still be a leaf",
+    )
+    assert_true(not qr2.has_work(), "and no new work may be queued for it")
+    cells += 5
 
     # --- the max_leaves cutoff admits exactly the budget, and no more ------
     # Two work items in one batch, both with valid splits, with room for
