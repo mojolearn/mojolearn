@@ -101,7 +101,11 @@ def _params(n_cols: Int, n_bins: Int = MAX_N_BINS) -> RF_params:
         bootstrap=True,
         max_samples=Float32(1.0),
         seed=UInt64(20260821),
-        n_streams=Int32(1),
+        # Their Python default (randomforestclassifier.py:94), honored by
+        # the pipelined forest loop since DEVIATION 117 was ported. The
+        # output is bit-identical at any value; rule 5 says run THEIR
+        # defaults.
+        n_streams=Int32(4),
         tree_params=DecisionTreeParams(
             max_depth=Int32(MAX_DEPTH),
             max_leaves=Int32(-1),

@@ -1106,30 +1106,33 @@ def main() raises:
                 reg_preds[r],
             )
 
-    # ---------------- n_streams refusal --------------------------------
+    # ---------------- n_streams is HONORED now -------------------------
     #
-    # DEVIATION 117: the one field a caller can set today and have
-    # silently ignored. The refusal must fire.
+    # DEVIATION 117, PORTED: the forest loop pipelines n_streams trees
+    # over the one queue, mirroring their omp/stream pool
+    # (`randomforest.cuh:336-367`). This block used to assert that
+    # `check()` REFUSES n_streams=4 and that `set_rf_params` clamps it to
+    # 1 -- both were the SERIAL port's contract and the port of the
+    # parallel design falsified them. What must hold now: `check()`
+    # accepts 4, `set_rf_params` passes 4 through (only the `:585` clamp
+    # to n_trees survives; the omp clamp modeled host worker threads the
+    # pipeline does not need). The K=1-vs-K=4 BIT-IDENTITY of the forests
+    # themselves is gated in `fingerprint_probe.mojo`, where a cross-slot
+    # sabotage proves the gate watches it.
     var streamy = params.copy()
     streamy.n_streams = 4
-    var refused = False
     try:
         streamy.check()
+        print("n_streams=4 accepted; the pipelined loop honors it")
     except e:
-        refused = True
-    if not refused:
         failures += 1
         print(
-            "  FAIL: RF_params.check() accepted n_streams=4, which this"
-            " port does not honor (DEVIATION 117)"
+            "  FAIL: RF_params.check() refused n_streams=4, which the"
+            " pipelined forest loop honors (DEVIATION 117):",
+            e,
         )
-    else:
-        print("n_streams=4 refused by name")
 
-    # `set_rf_params` must CLAMP rather than refuse, because that is what
-    # their own non-OpenMP build does (randomforest.cu:584 with
-    # randomforest.cuh:41-42).
-    var clamped = set_rf_params(
+    var passed = set_rf_params(
         max_depth=INT32_MAX,
         max_leaves=-1,
         max_features=1.0,
@@ -1145,16 +1148,41 @@ def main() raises:
         cfg_n_streams=4,
         max_batch_size=4096,
     )
-    if clamped.n_streams != 1:
+    if passed.n_streams != 4:
         failures += 1
         print(
             "  FAIL: set_rf_params(cfg_n_streams=4) gave n_streams =",
-            clamped.n_streams,
-            "-- their min(cfg, omp_get_max_threads()) is 1 without"
-            " OpenMP",
+            passed.n_streams,
+            "-- only the n_trees clamp (randomforest.cu:585) survives",
         )
     else:
-        print("set_rf_params clamped cfg_n_streams=4 to 1, as theirs does")
+        print("set_rf_params passes cfg_n_streams=4 through")
+    # `randomforest.cu:585` -- the clamp to n_trees is theirs and stays.
+    var clamped_trees = set_rf_params(
+        max_depth=INT32_MAX,
+        max_leaves=-1,
+        max_features=1.0,
+        max_n_bins=128,
+        min_samples_leaf=1,
+        min_samples_split=2,
+        min_impurity_decrease=0.0,
+        bootstrap=True,
+        n_trees=3,
+        max_samples=1.0,
+        seed=0,
+        split_criterion=GINI,
+        cfg_n_streams=8,
+        max_batch_size=4096,
+    )
+    if clamped_trees.n_streams != 3:
+        failures += 1
+        print(
+            "  FAIL: set_rf_params(n_trees=3, cfg_n_streams=8) gave",
+            clamped_trees.n_streams,
+            "-- their :585 clamps streams to the tree count",
+        )
+    else:
+        print("set_rf_params clamps n_streams to n_trees, as theirs does")
 
     # ---------------- fit is PORTED now --------------------------------
     # This block used to assert that `RandomForest.fit()` RAISES. It no
@@ -1203,7 +1231,9 @@ def main() raises:
         "clf.max_batch_size", Int(clf.tree_params.max_batch_size), 4096, failures
     )
     want_i("clf.split_criterion", clf.tree_params.split_criterion, GINI, failures)
-    want_i("clf.n_streams (clamped from 4)", Int(clf.n_streams), 1, failures)
+    # Their Python default n_streams=4 (`randomforestclassifier.py:94`)
+    # flows through since DEVIATION 117 was ported.
+    want_i("clf.n_streams (their default)", Int(clf.n_streams), 4, failures)
     want_i("reg.split_criterion", reg.tree_params.split_criterion, MSE, failures)
     if clf.tree_params.min_impurity_decrease != 0.0:
         failures += 1

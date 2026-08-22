@@ -80,13 +80,14 @@ def _rf_params(
     max_depth: Int,
     max_n_bins: Int,
     criterion: Int,
+    n_streams: Int = 1,
 ) -> RF_params:
     return RF_params(
         n_trees=Int32(n_trees),
         bootstrap=bootstrap,
         max_samples=Float32(1.0),
         seed=UInt64(1234),
-        n_streams=Int32(1),
+        n_streams=Int32(n_streams),
         tree_params=DecisionTreeParams(
             max_depth=Int32(max_depth),
             max_leaves=Int32(-1),
@@ -216,3 +217,19 @@ def main() raises:
 
     var p5 = _rf_params(6, True, Float32(0.3), 14, 32, GINI)
     print("CLF-DEEP   ", hex(_fit_clf(ctx, 8000, 20, 4, p5, False, 44)))
+
+    # THE K=4 GATE for DEVIATION 117's pipelined forest loop: every hash
+    # below must EQUAL its n_streams=1 line above, because their RNG is a
+    # pure hash of (seed, treeid[, nodeid]) and each in-flight tree owns
+    # its workspace and row-buffer slot. A K4 line that differs from its
+    # K1 twin is a cross-slot leak, found here and nowhere cheaper.
+    var q1 = _rf_params(8, True, Float32(0.5), 8, 32, GINI, n_streams=4)
+    print("CLF-BOOT-K4", hex(_fit_clf(ctx, 4000, 20, 4, q1, False, 11)))
+    var q2 = _rf_params(8, True, Float32(0.5), 8, 32, GINI, n_streams=4)
+    print("CLF-OOB-K4 ", hex(_fit_clf(ctx, 4000, 20, 4, q2, True, 11)))
+    var q3 = _rf_params(4, False, Float32(0.5), 8, 32, GINI, n_streams=4)
+    print("CLF-NOB-K4 ", hex(_fit_clf(ctx, 4000, 20, 4, q3, False, 22)))
+    var q4 = _rf_params(6, True, Float32(0.5), 8, 32, MSE, n_streams=4)
+    print("REG-BOOT-K4", hex(_fit_reg(ctx, 4000, 20, q4, 33)))
+    var q5 = _rf_params(6, True, Float32(0.3), 14, 32, GINI, n_streams=4)
+    print("CLF-DEEP-K4", hex(_fit_clf(ctx, 8000, 20, 4, q5, False, 44)))

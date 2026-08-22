@@ -49,10 +49,11 @@ and nothing at all for the forest half.
 | `max_samples` | none (required) | 1.0 | 1.0 | `randomforest_common.pyx:316` |
 | `split_criterion` | **CRITERION_END** | **`'gini'` (clf) / `'mse'` (reg)** | **GINI clf, MSE reg** | `decisiontree.hpp:89`; `randomforestclassifier.py:213`, `randomforestregressor.py:157` |
 | `max_batch_size` | 4096 | 4096 | 4096 | `decisiontree.hpp:90`; `randomforest_common.pyx:324` |
-| `n_streams` | none (required) | 4 | **1** | `randomforest_common.pyx:326`; DEVIATION 117 |
+| `n_streams` | none (required) | 4 | 4 | `randomforest_common.pyx:326`; DEVIATION 117, PORTED as K-way pipelining |
 | `random_state` / `seed` | none (required) | **None -> 0** | 0 | `randomforest_common.pyx:325, 517-519` |
 
-**FOUR DISAGREEMENTS, flagged:**
+**THREE DISAGREEMENTS, flagged (a fourth -- n_streams clamped to 1 --
+resolved when DEVIATION 117 was ported):**
 
 1. `max_depth`. The header says -1 and `validity_check` would REFUSE it
    (`ASSERT(params.max_depth >= 0)`, `decisiontree.cu:19`) -- the C++
@@ -78,8 +79,6 @@ and nothing at all for the forest half.
    FAMILY on the same integer-label test. Ours has the family fixed by
    `O` already, so only the value is left to resolve, and the constructor
    is the first point that sees both `params` and `O.LabelT`.
-4. `n_streams`. 4 in Python, 1 here. DEVIATION 117.
-
 `random_state=None` mapping to seed 0 (`randomforest_common.pyx:517-519`)
 is worth reading twice: unseeded does not mean randomly seeded. Seed 0
 is a fixed seed, so an unseeded cuML forest is already deterministic in
@@ -153,38 +152,42 @@ later reader would otherwise assume in the wrong direction.
 
 ================= DEVIATION BLOCK (whole file) =================
 
-DEVIATION 117. `n_streams` is not ported and cannot be. THEIRS runs the
-per-tree loop under `#pragma omp parallel for num_threads(n_streams)`
-with each OpenMP thread owning one CUDA stream from the handle's stream
-pool (`randomforest.cuh:336-341`), giving cross-tree parallelism. OURS
-has no streams on Metal, so the loop is serial and `n_streams` is
-clamped to 1: `set_rf_params` below keeps their clamp
-(`randomforest.cu:584`) and `RF_params.check()` refuses any other value
-by name rather than accepting it and ignoring it.
+DEVIATION 117, PORTED (2026-08-21 late; it stood as "not ported and
+cannot be" until then). THEIRS runs the per-tree loop under `#pragma omp
+parallel for num_threads(n_streams)` with each OpenMP thread owning one
+CUDA stream from the handle's stream pool (`randomforest.cuh:336-341`) --
+cross-tree parallelism, and their Python default is n_streams=4
+(`randomforestclassifier.py:94`), so the SHIPPED cuML overlaps four
+trees. Metal has one queue and this port one host thread, so the same
+overlap is expressed as K-WAY PIPELINING in `fit_forest`: K =
+`n_streams` trees in flight, each suspended at `doSplit`'s two sync
+points (`builder.cuh:479-481`, `:501-502`), one synchronize per cycle
+serving all of them, each consume step immediately enqueueing that
+tree's next phase. The state machine lives in `builder.mojo`
+(`BatchState`/`TreeState`, `begin_*`/`advance_*`); `train` and
+`do_split` are its serial K=1 drive, operation for operation.
 
-THE PRICE, and it is close to zero on OUTPUT for a reason that is in
-their source rather than in an argument:
+WHAT MAKES THE OVERLAP FREE ON OUTPUT, from their source rather than an
+argument: **their RNG is a pure function rather than a stream.** Both
+draws are keyed by hash, not by draw order: the per-tree row sample is
+`rs = fnv1a32(fnv1a32(basis, seed), tree_id)` (`randomforest.cuh:120-122`,
+under their own comment "Hash these together so per-tree row samples are
+uncorrelated"), and the per-node feature sample is
+`fnv1a32_hash(seed, treeid, nodeid)` (`kernels/builder_kernels.cuh:88`).
+Tree 7's rows and node 12's columns are the same values whether 1 stream
+or 8 built them. Each in-flight tree owns its whole `Builder` workspace
+(DEVIATION 313, pool-of-K) and its `selected_rows_` slot (their
+per-stream vector, ported); the only shared device objects are
+read-only. GATED: `fingerprint_probe.mojo` holds K=1 and K=4 to
+bit-identical forests on five configs, and the sabotage that aliases
+every slot to row buffer 0 moves every K4 line while the K1 lines stand
+-- so the gate watches the concurrency, not just the totals.
 
-  * Their OWN non-OpenMP build already produces exactly this. They ship
-    `#else / #define omp_get_thread_num() 0 / #define
-    omp_get_max_threads() 1` (`randomforest.cuh:38-43`), and
-    `set_rf_params` computes `min(cfg_n_streams,
-    omp_get_max_threads())` (`randomforest.cu:584`). Compile cuML
-    without OpenMP and `n_streams` is 1 no matter what the user passed.
-    The clamp below is theirs, not ours.
-  * **Nothing about the OUTPUT depends on stream count, because their
-    RNG is a pure function rather than a stream.** Both draws are keyed
-    by hash, not by draw order: the per-tree row sample is
-    `rs = fnv1a32(fnv1a32(basis, seed), tree_id)`
-    (`randomforest.cuh:120-122`, under their own comment "Hash these
-    together so per-tree row samples are uncorrelated",
-    `randomforest.cuh:119`), and the per-node feature sample is
-    `fnv1a32_hash(seed, treeid, nodeid)`
-    (`kernels/builder_kernels.cuh:88`). Tree 7's rows and node 12's
-    columns are the same values whether 1 stream or 8 built them.
-  * So what `n_streams` buys is WALL-CLOCK ONLY, and this round takes no
-    timing measurement of any kind, so no number is claimed here in
-    either direction.
+Their non-OpenMP `#else` build (`randomforest.cuh:38-43`,
+`randomforest.cu:584`) pins n_streams to 1; the serial port mirrored
+that build and the old text here defended it. Porting the parallel
+design supersedes it: only their `:585` clamp (streams <= trees)
+survives in `set_rf_params`.
 
 **A CORRECTION THAT IS PART OF THIS RESULT.** `ensemble/PLAN.md` and
 `decisiontree/batched_levelalgo/random_utils.mojo` both justify this
@@ -306,7 +309,11 @@ from std.math import ceildiv as _ceildiv
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from ensemble.decisiontree.batched_levelalgo.bins import Bin
-from ensemble.decisiontree.batched_levelalgo.builder import Builder
+from ensemble.decisiontree.batched_levelalgo.builder import (
+    Builder,
+    TreeState,
+)
+from ensemble.flatnode import SparseTreeNode
 from ensemble.decisiontree.batched_levelalgo.bins import BinScales
 from ensemble.decisiontree.batched_levelalgo.objectives import ObjectiveLike
 from ensemble.decisiontree.batched_levelalgo.dataset import DatasetView
@@ -507,22 +514,15 @@ struct RF_params(ImplicitlyCopyable, Movable):
         reach the device from here and nowhere else. `criteria_check`
         arm F holds them to it.
         """
-        if self.n_streams != 1:
-            raise Error(
-                "n_streams="
-                + String(self.n_streams)
-                + " is not honored; this port builds trees serially"
-                " because Metal has no streams, so anything but 1 would"
-                " be silently ignored. cuML's own non-OpenMP build does"
-                " exactly the same thing -- randomforest.cuh:41-42"
-                " defines omp_get_max_threads() to 1 and"
-                " randomforest.cu:584 takes min(cfg_n_streams,"
-                " omp_get_max_threads()). Nothing about the OUTPUT"
-                " changes: their per-tree and per-node RNG is a pure"
-                " hash of (seed, treeid, nodeid), not a stream"
-                " (randomforest.cuh:120-122,"
-                " kernels/builder_kernels.cuh:88). See DEVIATION 117."
-            )
+        # `n_streams` IS honored since DEVIATION 117 was ported: the
+        # forest loop pipelines that many trees over the one Metal queue,
+        # mirroring their omp/stream pool (`randomforest.cuh:336-367`).
+        # The refusal that stood here guarded the serial port and is gone
+        # with it; no output bit depends on the value, because their
+        # per-tree and per-node RNG is a pure hash of (seed, treeid[,
+        # nodeid]) (`randomforest.cuh:120-122`,
+        # `kernels/builder_kernels.cuh:88`) -- the fingerprint probe holds
+        # K=1 and K=4 to identical forests.
         self.tree_params.check()
         self.validity_check()
 
@@ -554,11 +554,11 @@ def set_rf_params(
       * build `tree_params` through `DT::set_tree_params`, which
         validates the tree half
       * copy n_trees / bootstrap / max_samples / seed
-      * `n_streams = min(cfg_n_streams, omp_get_max_threads())` -- and
-        `omp_get_max_threads()` is 1 in a build without OpenMP, which
-        this one is (`randomforest.cuh:41-42`). DEVIATION 117.
+      * `n_streams = min(cfg_n_streams, omp_get_max_threads())` -- the
+        omp term models their host worker threads and drops out under
+        the pipelined loop (DEVIATION 117, PORTED)
       * clamp `n_streams` down to `n_trees` if there are fewer trees
-        than streams (`randomforest.cu:585`)
+        than streams (`randomforest.cu:585`) -- KEPT
       * `validity_check`
     """
     var tree_params = DecisionTreeParams(
@@ -584,14 +584,15 @@ def set_rf_params(
         cfg_split_criterion=split_criterion,
         cfg_max_batch_size=max_batch_size,
     )
-    # `randomforest.cu:584` -- min(cfg_n_streams, omp_get_max_threads()),
-    # and `randomforest.cuh:42` makes omp_get_max_threads() 1 without
-    # OpenMP. Their clamp, their `#else` branch, our only arm.
-    comptime OMP_GET_MAX_THREADS: Int32 = 1
+    # `randomforest.cu:584` -- min(cfg_n_streams, omp_get_max_threads()).
+    # That clamp models the HOST WORKER THREADS their omp fan-out needs,
+    # one per stream. The pipelined loop (DEVIATION 117) drives every
+    # slot from one host thread, so there is no thread count to clamp to
+    # and the omp term drops out; what survives is `randomforest.cu:585`,
+    # the clamp to the tree count. (The old text here modeled their
+    # non-OpenMP `#else` build, which pins n_streams to 1 -- that was the
+    # serial port's story and it is gone with it.)
     var n_streams = cfg_n_streams
-    if OMP_GET_MAX_THREADS < n_streams:
-        n_streams = OMP_GET_MAX_THREADS
-    # `randomforest.cu:585`
     if n_trees < n_streams:
         n_streams = n_trees
     var rf_params = RF_params(
@@ -1910,7 +1911,7 @@ struct RowSampler(Movable):
     samples are uncorrelated." Tree 7's rows are a pure function of
     `(seed, 7)`, so they do not depend on how many streams built the forest,
     on the order the trees were built, or on anything else. That is what
-    makes DEVIATION 117 free.
+    makes DEVIATION 117's pipelined overlap free on output.
 
     Note `fnv1a32_hash_seed_tree` folds the uint64 seed in ONE round on its
     low 32 bits and DISCARDS the high half -- because this call site uses
@@ -1932,8 +1933,13 @@ struct RowSampler(Movable):
     # `double sample_weight_sum_`. Float64 on the HOST; see DEVIATION 306.
     var weight_cdf: List[Float64]
     var weight_sum: Float64
-    # `:224` -- one `device_uvector<int>` per stream. One stream here.
-    var selected_rows: DeviceBuffer[DType.int32]
+    # `:224` -- `std::vector<rmm::device_uvector<int>> selected_rows_`,
+    # ONE PER STREAM. The pipelined forest loop (DEVIATION 117) is their
+    # stream pool expressed on one queue, so the slot dimension is ported
+    # with it: each in-flight tree reads its own row buffer. `h_rows` is
+    # DEVIATION 305's host staging and stays single -- the arms that use
+    # it synchronize, so it is never live for two slots at once.
+    var selected_rows_: List[DeviceBuffer[DType.int32]]
     var h_rows: HostBuffer[DType.int32]
     # `:70`, `:81` -- `bool* bootstrap_masks_`, an `n_trees x n_rows`
     # DEVICE buffer the CALLER owns; theirs asserts it is a device
@@ -1952,6 +1958,7 @@ struct RowSampler(Movable):
         n_sampled_rows: Int,
         has_sample_weight: Bool = False,
         n_trees_for_masks: Int = 0,
+        n_slots: Int = 1,
     ) raises:
         """`:63-105`, their constructor.
 
@@ -1972,7 +1979,11 @@ struct RowSampler(Movable):
         self.weight_cdf = List[Float64]()
         self.weight_sum = Float64(0.0)
         var n = n_sampled_rows if n_sampled_rows > 0 else 1
-        self.selected_rows = ctx.enqueue_create_buffer[DType.int32](n)
+        self.selected_rows_ = List[DeviceBuffer[DType.int32]]()
+        for _ in range(n_slots if n_slots > 0 else 1):
+            self.selected_rows_.append(
+                ctx.enqueue_create_buffer[DType.int32](n)
+            )
         self.h_rows = ctx.enqueue_create_host_buffer[DType.int32](n)
         self.has_masks = n_trees_for_masks > 0
         var m = n_trees_for_masks * n_rows if self.has_masks else 1
@@ -2054,7 +2065,9 @@ struct RowSampler(Movable):
         the same value the sampler uses."""
         return fnv1a32_hash_seed_tree(self.seed, tree_id)
 
-    def sample(mut self, ctx: DeviceContext, tree_id: Int32) raises:
+    def sample(
+        mut self, ctx: DeviceContext, tree_id: Int32, slot: Int = 0
+    ) raises:
         """`RowSampler::sample`, `:110-165`.
 
         Their body is the four-way dispatch followed by ONE call to
@@ -2065,12 +2078,12 @@ struct RowSampler(Movable):
         early `return` in each arm, so a call per arm would be four
         chances to forget one.
         """
-        self._sample_rows(ctx, tree_id)
+        self._sample_rows(ctx, tree_id, slot)
         # `:163`
-        self.store_bootstrap_mask(ctx, tree_id)
+        self.store_bootstrap_mask(ctx, tree_id, slot)
 
     def store_bootstrap_mask(
-        mut self, ctx: DeviceContext, tree_id: Int32
+        mut self, ctx: DeviceContext, tree_id: Int32, slot: Int = 0
     ) raises:
         """`RowSampler::store_bootstrap_mask`, `:170-183`.
 
@@ -2106,7 +2119,7 @@ struct RowSampler(Movable):
             ctx.enqueue_function[bootstrap_mask_scatter_kernel](
                 self.bootstrap_masks.unsafe_ptr(),
                 offset,
-                self.selected_rows.unsafe_ptr(),
+                self.selected_rows_[slot].unsafe_ptr(),
                 Int32(self.n_selected),
                 Int32(self.n_rows),
                 grid_dim=_ceildiv(self.n_selected, 256),
@@ -2121,7 +2134,9 @@ struct RowSampler(Movable):
         # is in scope to delete. Nothing host-side reads the mask before
         # `fit_forest`'s post-loop synchronize.
 
-    def _sample_rows(mut self, ctx: DeviceContext, tree_id: Int32) raises:
+    def _sample_rows(
+        mut self, ctx: DeviceContext, tree_id: Int32, slot: Int = 0
+    ) raises:
         """`:112-161`, the four-way dispatch in their order. All four arms
         run; see the struct docstring."""
         if self.bootstrap and self.has_sample_weight:
@@ -2165,7 +2180,8 @@ struct RowSampler(Movable):
                 p.unsafe_store(i, Int32(lo))
             self.n_selected = self.n_sampled_rows
             ctx.enqueue_copy(
-                dst_buf=self.selected_rows, src_ptr=self.h_rows.unsafe_ptr()
+                dst_buf=self.selected_rows_[slot],
+                src_ptr=self.h_rows.unsafe_ptr(),
             )
             ctx.synchronize()
             return
@@ -2185,7 +2201,7 @@ struct RowSampler(Movable):
             self.n_selected = self.n_sampled_rows
             launch_uniform_int(
                 ctx,
-                self.selected_rows,
+                self.selected_rows_[slot],
                 self.n_sampled_rows,
                 Int32(0),
                 Int32(self.n_rows),
@@ -2213,7 +2229,8 @@ struct RowSampler(Movable):
                     " positive value (randomforest.cuh:94)"
                 )
             ctx.enqueue_copy(
-                dst_buf=self.selected_rows, src_ptr=self.h_rows.unsafe_ptr()
+                dst_buf=self.selected_rows_[slot],
+                src_ptr=self.h_rows.unsafe_ptr(),
             )
             ctx.synchronize()
             return
@@ -2224,14 +2241,17 @@ struct RowSampler(Movable):
         for i in range(self.n_sampled_rows):
             p.unsafe_store(i, Int32(i))
         ctx.enqueue_copy(
-            dst_buf=self.selected_rows, src_ptr=self.h_rows.unsafe_ptr()
+            dst_buf=self.selected_rows_[slot],
+            src_ptr=self.h_rows.unsafe_ptr(),
         )
         ctx.synchronize()
 
     @always_inline
-    def rows_ptr(mut self) -> MutPointer[Int32, MutUntrackedOrigin]:
+    def rows_ptr(
+        mut self, slot: Int = 0
+    ) -> MutPointer[Int32, MutUntrackedOrigin]:
         return (
-            self.selected_rows.unsafe_ptr()
+            self.selected_rows_[slot].unsafe_ptr()
             .unsafe_origin_cast[MutUntrackedOrigin]()
         )
 
@@ -2324,9 +2344,10 @@ def fit_forest[
        why `rf_params` is `mut`.
 
     The `#pragma omp parallel for num_threads(n_streams)` at `:337` is
-    DEVIATION 117: one stream here, so the loop is serial, and no output bit
-    depends on it because every tree's rows and every node's columns are
-    pure hashes of `(seed, tree_id)` and `(seed, tree_id, node_id)`.
+    DEVIATION 117, PORTED: K = n_streams trees pipelined over the one
+    queue (see the driver below), and no output bit depends on it because
+    every tree's rows and every node's columns are pure hashes of
+    `(seed, tree_id)` and `(seed, tree_id, node_id)`.
 
     Their `DT::DecisionTree::fit` call (`:353-366`) passes the FOREST seed
     and the tree INDEX separately; the per-tree hashing happens below, in
@@ -2412,6 +2433,20 @@ def fit_forest[
     )
 
     var has_sw = len(sample_weight_host) > 0
+    # DEVIATION 117, PORTED: cuML's shipped forest loop is
+    # `#pragma omp parallel for num_threads(n_streams)` over trees with a
+    # stream pool (`randomforest.cuh:336-367`), and their Python default
+    # is n_streams=4 (`randomforestclassifier.py:94`). One Metal queue and
+    # one host thread express the same overlap as K-WAY PIPELINING below:
+    # K trees in flight, each suspended at its doSplit sync points, ONE
+    # synchronize per cycle serving all of them. K=1 reproduces the serial
+    # loop operation for operation.
+    var k_streams = Int(rf_params.n_streams)
+    if k_streams > Int(rf_params.n_trees):
+        k_streams = Int(rf_params.n_trees)
+    if k_streams < 1:
+        k_streams = 1
+
     var sampler = RowSampler(
         ctx,
         rf_params.bootstrap,
@@ -2420,6 +2455,7 @@ def fit_forest[
         n_sampled,
         has_sw,
         Int(rf_params.n_trees) if oob_score else 0,
+        n_slots=k_streams,
     )
     if has_sw:
         sampler.prepare_weights(ctx, sample_weight_host)
@@ -2458,50 +2494,134 @@ def fit_forest[
         sampler.n_selected if has_sw and not rf_params.bootstrap
         else n_sampled
     )
-    var builder = Builder[O](
-        ctx,
-        rf_params.tree_params,
-        Int32(0),
-        rf_params.seed,
-        builder_rows,
-        n_cols,
-        Int32(n_unique_labels),
-        scales,
-    )
-
-    # `:337-367` -- their tree loop, serial here (DEVIATION 117).
-    for i in range(Int(rf_params.n_trees)):
-        sampler.sample(ctx, Int32(i))
-        builder.reset_for_tree(Int32(i), sampler.n_selected)
-        var dataset = DatasetView[O.DataT, O.LabelT](
-            rebind[MutPointer[Scalar[O.DataT], MutUntrackedOrigin]](
-                x.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
-            ),
-            y.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
-            sample_weight.unsafe_ptr()
-            .unsafe_origin_cast[MutUntrackedOrigin](),
-            Int64(n_rows),
-            Int64(n_cols),
-            # `builder.cuh:238-239` -- row_major picks the strides.
-            Int64(n_cols) if row_major else Int64(1),
-            Int64(1) if row_major else Int64(n_rows),
-            # `:151` -- the zero-weight arm selects FEWER rows than
-            # `n_sampled_rows`, and the builder must see the real count.
-            Int32(sampler.n_selected),
-            Int32(n_cols),
-            sampler.rows_ptr(),
-            Int32(n_unique_labels),
-            objective_sees_weights,
+    # Pool-of-K: one Builder per pipeline slot, their stream pool's
+    # per-stream workspaces.
+    var builders = List[Builder[O]]()
+    for _ in range(k_streams):
+        builders.append(
+            Builder[O](
+                ctx,
+                rf_params.tree_params,
+                Int32(0),
+                rf_params.seed,
+                builder_rows,
+                n_cols,
+                Int32(n_unique_labels),
+                scales,
+            )
         )
-        var tree = builder.train(ctx, dataset, quantiles)
-        tree.treeid = Int32(i)
-        forest.trees.append(tree^)
+
+    # `:337-367` -- their tree loop, K-WAY PIPELINED (DEVIATION 117; see
+    # the block above `k_streams`). Trees finish out of order, so the
+    # forest is preallocated and each tree lands at ITS index.
+    var n_trees = Int(rf_params.n_trees)
+    for _ in range(n_trees):
+        forest.trees.append(
+            TreeMetaDataNode[O.DataT](
+                Int32(-1),
+                Int32(0),
+                Int32(0),
+                Float64(0),
+                List[Scalar[O.DataT]](),
+                List[SparseTreeNode[O.DataT]](),
+                Int32(0),
+            )
+        )
+
+    var states = List[TreeState[O]]()
+    var slot_tree = List[Int]()
+    var next_tree = 0
+    # PRIME: one tree per slot. A tree whose root is not expandable
+    # (max_depth 0, min_samples_split too big) finishes inside
+    # `begin_tree` and its slot immediately takes the next tree.
+    for k in range(k_streams):
+        if next_tree >= n_trees:
+            break
+        while next_tree < n_trees:
+            sampler.sample(ctx, Int32(next_tree), k)
+            builders[k].reset_for_tree(Int32(next_tree), sampler.n_selected)
+            var dataset = DatasetView[O.DataT, O.LabelT](
+                rebind[MutPointer[Scalar[O.DataT], MutUntrackedOrigin]](
+                    x.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+                ),
+                y.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+                sample_weight.unsafe_ptr()
+                .unsafe_origin_cast[MutUntrackedOrigin](),
+                Int64(n_rows),
+                Int64(n_cols),
+                # `builder.cuh:238-239` -- row_major picks the strides.
+                Int64(n_cols) if row_major else Int64(1),
+                Int64(1) if row_major else Int64(n_rows),
+                # `:151` -- the zero-weight arm selects FEWER rows than
+                # `n_sampled_rows`; the builder must see the real count.
+                Int32(sampler.n_selected),
+                Int32(n_cols),
+                sampler.rows_ptr(k),
+                Int32(n_unique_labels),
+                objective_sees_weights,
+            )
+            var ts = builders[k].begin_tree(ctx, dataset, quantiles)
+            if ts.done:
+                forest.trees[next_tree] = ts.tree.copy()
+                next_tree += 1
+                continue
+            states.append(ts^)
+            slot_tree.append(next_tree)
+            next_tree += 1
+            break
+
+    # THE CYCLE: one synchronize covers every in-flight tree's enqueued
+    # phase; each consume step immediately enqueues that tree's next
+    # phase (or its successor tree's first), so the queue is never empty
+    # while work remains. This is their stream pool's overlap, minus the
+    # host threads it never needed.
+    var active = len(states)
+    while active > 0:
+        ctx.synchronize()
+        for k in range(len(states)):
+            if slot_tree[k] < 0:
+                continue
+            if not builders[k].advance_tree(ctx, quantiles, states[k]):
+                continue
+            while True:
+                forest.trees[slot_tree[k]] = states[k].tree.copy()
+                if next_tree >= n_trees:
+                    slot_tree[k] = -1
+                    active -= 1
+                    break
+                sampler.sample(ctx, Int32(next_tree), k)
+                builders[k].reset_for_tree(
+                    Int32(next_tree), sampler.n_selected
+                )
+                var dataset = DatasetView[O.DataT, O.LabelT](
+                    rebind[MutPointer[Scalar[O.DataT], MutUntrackedOrigin]](
+                        x.unsafe_ptr()
+                        .unsafe_origin_cast[MutUntrackedOrigin]()
+                    ),
+                    y.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+                    sample_weight.unsafe_ptr()
+                    .unsafe_origin_cast[MutUntrackedOrigin](),
+                    Int64(n_rows),
+                    Int64(n_cols),
+                    Int64(n_cols) if row_major else Int64(1),
+                    Int64(1) if row_major else Int64(n_rows),
+                    Int32(sampler.n_selected),
+                    Int32(n_cols),
+                    sampler.rows_ptr(k),
+                    Int32(n_unique_labels),
+                    objective_sees_weights,
+                )
+                states[k] = builders[k].begin_tree(ctx, dataset, quantiles)
+                slot_tree[k] = next_tree
+                next_tree += 1
+                if not states[k].done:
+                    break
 
     ctx.synchronize()
-    # Mojo frees a value at its LAST USE; the builder's buffers must
-    # outlive every launch that read them, so it is released only after
-    # the drain above.
-    _ = builder^
+    # Mojo frees a value at its LAST USE; the builders' buffers must
+    # outlive every launch that read them, so they are released only
+    # after the drain above.
+    _ = builders^
 
     # `randomforest_common.pyx:669-670` -- after the tree loop, and only
     # if it was asked for.

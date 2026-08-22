@@ -22,8 +22,9 @@ row samples are uncorrelated"): the RNG is not a stream that threads
 draw from in order, it is a PURE FUNCTION of (seed, treeid, nodeid).
 There is no draw order to reproduce, so nothing here depends on launch
 order, block count, warp width or stream count. This is the reason
-`n_streams` can be dropped on Metal (DEVIATION 117, `randomforest.mojo`)
-without touching a single output bit.
+`n_streams` could first be dropped on Metal, and now that DEVIATION 117
+is PORTED it is the reason K trees can be pipelined over one queue
+(`randomforest.mojo`) without touching a single output bit.
 
 A CORRECTION, because the sentence that stood here was FALSE and a
 falsified sentence gets deleted rather than annotated. It read: "their own

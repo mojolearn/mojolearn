@@ -108,28 +108,28 @@ exists, zero warp intrinsics, smem from queried budget):
 
 **Known non-ports, recorded up front:**
 
-- `n_streams` OpenMP fan-out over CUDA streams: no streams on Metal
-  (PORTING_RULES.md:195). Faithful port gets zero cross-tree parallelism and
-  it changes no OUTPUT bit, for two reasons verified in their source
-  2026-08-21: their own non-OpenMP build defines `omp_get_max_threads()` to
-  1 (`randomforest.cuh:38-43`) and `set_rf_params` takes
-  `min(cfg_n_streams, omp_get_max_threads())` (`randomforest.cu:584`), so a
-  cuML built without OpenMP is single-stream regardless of what the user
-  passed; and both RNG draws are pure hashes of `(seed, tree_id)`
+- ~~`n_streams` OpenMP fan-out over CUDA streams~~ **PORTED 2026-08-21
+  late, as K-WAY PIPELINING over the one Metal queue.** The serial port
+  had mirrored their crippled non-OpenMP `#else` build; what cuML SHIPS
+  overlaps n_streams=4 trees (`randomforestclassifier.py:94`,
+  `randomforest.cuh:336-341`, per-stream Builder workspaces and
+  `selected_rows_[stream_id]`). The port keeps one host thread and one
+  queue: K trees in flight, each suspended at `doSplit`'s sync points,
+  one synchronize per cycle for all of them
+  (`builder.mojo` `BatchState`/`TreeState`; `train`/`do_split` are the
+  serial K=1 drive). Free on OUTPUT for the reason the serial deviation
+  was: both RNG draws are pure hashes of `(seed, tree_id)`
   (`randomforest.cuh:120-122`) and `(seed, treeid, nodeid)`
-  (`builder_kernels.cuh:88`) rather than a stream drawn in order, so tree
-  7's rows and node 12's columns are the same values whether 1 stream or 8
-  produced them. DEVIATION 117, worth a paper sentence.
+  (`builder_kernels.cuh:88`). GATED: `fingerprint_probe.mojo` holds K=1
+  and K=4 bit-identical on five configs, and the alias-all-slots-to-
+  buffer-0 sabotage moves every K4 line while K1 stands. Only their
+  `randomforest.cu:585` clamp (streams <= trees) survives in
+  `set_rf_params`; the omp-thread clamp modeled host workers the
+  pipeline does not need.
 
-  **The earlier justification here was FALSE and is deleted rather than
-  annotated:** it claimed "cuML's own docs say `n_streams=1` for
-  reproducibility (`randomforestclassifier.pyx:182`)". That file does not
-  exist at this pin (both estimators are plain `.py`), its `n_streams`
-  docstring is `randomforestclassifier.py:94-95` and says only "Number of
-  parallel streams used for forest building", and a grep for
-  `reproduc|deterministic` across their ensemble, randomforest and
-  decisiontree trees returns nothing of the kind for RF. The claim had also
-  propagated into `random_utils.mojo`, where it has been struck too.
+  (An earlier justification of the serial deviation -- "cuML's own docs
+  say `n_streams=1` for reproducibility" -- was false at the pin and was
+  already struck; recorded here so it is not resurrected.)
 - Multi-GPU quantile path (raft comms): out of scope, single-device library.
 - Inference: cuML's own path is treelite -> nvForest (in-repo FIL is
   REMOVED on main). We will not port treelite. The C-API `predict()`
@@ -472,7 +472,7 @@ Numbers as actually used, which is what PORTING.md takes:
 | 114 | `objectives.mojo` **and** `core/block_scan.mojo` | **COLLIDED.** objectives: float64 per site. core: CUB's unpadded `HAS_IDENTITY == false` arm. |
 | 115 | `core/scan_by_key.mojo` | three-phase decoupling instead of CUB's lookback; the functor travels in a device buffer |
 | 116 | `flatnode.mojo` | private fields, the phantom `LabelT`, their asymmetric widths |
-| 117 | `randomforest.mojo` | `n_streams` |
+| 117 | `randomforest.mojo` | `n_streams` -- PORTED 2026-08-21 late as K-way queue pipelining (their omp/stream pool, default 4); K=1-vs-K=4 bit-identity gated in `fingerprint_probe.mojo` with a cross-slot sabotage |
 | 118 | `decisiontree.mojo` | phantom `L`; tree dumps not ported; `train_time` inert |
 | 119 | `randomforest.mojo` | `fit` not ported; treelite not ported; the device-pointer boundary; float64 per site; summation order in `score` |
 | 120 | `kernels/builder_kernels.mojo` | `alignPointer` declined, padding still transcribed |

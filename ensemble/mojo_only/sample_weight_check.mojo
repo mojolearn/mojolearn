@@ -254,7 +254,7 @@ def arm_a_zero_weight_drop(ctx: DeviceContext) raises -> Int:
             "  arm A: n_selected", s.n_selected, "want", n_keep,
         )
     var hb = ctx.enqueue_create_host_buffer[DType.int32](n_rows)
-    ctx.enqueue_copy(dst_buf=hb, src_buf=s.selected_rows)
+    ctx.enqueue_copy(dst_buf=hb, src_buf=s.selected_rows_[0])
     ctx.synchronize()
     var wrong = 0
     for j in range(min(s.n_selected, n_keep)):

@@ -119,7 +119,7 @@ def arm_a_mask_per_cell(ctx: DeviceContext) raises -> Int:
     for t in range(n_trees):
         ref_s.sample(ctx, Int32(t))
         var hr = ctx.enqueue_create_host_buffer[DType.int32](n_rows)
-        ctx.enqueue_copy(dst_buf=hr, src_buf=ref_s.selected_rows)
+        ctx.enqueue_copy(dst_buf=hr, src_buf=ref_s.selected_rows_[0])
         ctx.synchronize()
         var want = List[Bool]()
         for _ in range(n_rows):

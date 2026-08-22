@@ -421,7 +421,7 @@ def arm_d_unported_arms(ctx: DeviceContext) raises -> Int:
         var smp = RowSampler(ctx, True, seed, nr, ns, False)
         smp.sample(ctx, Int32(tree_id))
         var hb = ctx.enqueue_create_host_buffer[DType.int32](ns)
-        ctx.enqueue_copy(dst_buf=hb, src_buf=smp.selected_rows)
+        ctx.enqueue_copy(dst_buf=hb, src_buf=smp.selected_rows_[0])
         ctx.synchronize()
         oracle_rows += 1
         for i in range(min(n_vals, ns)):
@@ -466,7 +466,7 @@ def arm_d_unported_arms(ctx: DeviceContext) raises -> Int:
     s2.prepare_weights(ctx, w2)
     s2.sample(ctx, Int32(0))
     var h2 = ctx.enqueue_create_host_buffer[DType.int32](100)
-    ctx.enqueue_copy(dst_buf=h2, src_buf=s2.selected_rows)
+    ctx.enqueue_copy(dst_buf=h2, src_buf=s2.selected_rows_[0])
     ctx.synchronize()
     var oob = 0
     for i in range(100):
@@ -507,7 +507,7 @@ def arm_d_unported_arms(ctx: DeviceContext) raises -> Int:
     var s4 = RowSampler(ctx, False, UInt64(7), 100, 100, False)
     s4.sample(ctx, Int32(3))
     var h = ctx.enqueue_create_host_buffer[DType.int32](100)
-    ctx.enqueue_copy(dst_buf=h, src_buf=s4.selected_rows)
+    ctx.enqueue_copy(dst_buf=h, src_buf=s4.selected_rows_[0])
     ctx.synchronize()
     var wrong = 0
     for i in range(100):

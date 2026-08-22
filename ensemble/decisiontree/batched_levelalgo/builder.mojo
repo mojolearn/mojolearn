@@ -56,11 +56,12 @@ first `max_features` columns happened to be uninformative.
 
 ================= DEVIATION BLOCK (whole file) =================
 
-DEVIATION 300. `n_streams` and the whole stream/OpenMP fan-out are absent.
-That belongs to the estimator above this file and is priced in full under
-DEVIATION 117 in `randomforest.mojo`; nothing in `builder.cuh` itself
-touches streams except by taking a `cudaStream_t` parameter, which becomes a
-`DeviceContext` here. No output bit depends on it.
+DEVIATION 300. The stream/OpenMP fan-out itself lives in the estimator
+above this file, where DEVIATION 117 now PORTS it as K-way pipelining;
+this file's contribution is the `BatchState`/`TreeState` machine whose
+serial drive is `train`/`do_split`. Nothing in `builder.cuh` itself
+touches streams except by taking a `cudaStream_t` parameter, which becomes
+a `DeviceContext` here. No output bit depends on it.
 
 Recorded here only because `Builder`'s constructor takes `cudaStream_t s`
 (`:214`) and a reader diffing the two signatures will notice it missing.
@@ -809,6 +810,54 @@ def compute_shared_memory_config(
 
 
 # ===========================================================================
+# DEVIATION 117's state carriers. cuML's shipped default runs the forest
+# loop `#pragma omp parallel for num_threads(n_streams)` with n_streams=4
+# (`randomforest.cuh:336-337`, `randomforestclassifier.py:94`): four host
+# threads, four CUDA streams, four trees in flight. Metal has one queue and
+# this port has one host thread, so the same overlap is expressed as K-WAY
+# PIPELINING: each tree's `doSplit` is cut at its two sync points
+# (`builder.cuh:479-481`, `:501-502`), K trees enqueue their next phase,
+# and ONE synchronize serves all of them. No output bit can move: every
+# per-tree and per-node draw is a pure hash of (seed, treeid[, nodeid])
+# (`randomforest.cuh:120-122`, `builder_kernels.cuh:88`), each in-flight
+# tree owns its whole workspace, and the only shared device objects are
+# read-only (the data, the labels, the quantiles).
+# ===========================================================================
+
+
+@fieldwise_init
+struct BatchState[O: ObjectiveLike](Movable):
+    """One batch of `doSplit` (`builder.cuh:410-482`), suspended at a sync
+    point. `phase` 0 means a best-splits download is pending; 1 means the
+    node-split download is. `do_split` drives this serially and is
+    bit-identical to the pre-pipeline transcription."""
+
+    var work_items: List[NodeWorkItem]
+    var active_items: List[NodeWorkItem]
+    var active_to_original: List[Int]
+    var final_splits: List[SplitSummary[Self.O.DataT]]
+    var round: Int
+    var max_rounds: Int
+    var phase: Int
+    var result: List[SplitSummary[Self.O.DataT]]
+
+
+@fieldwise_init
+struct TreeState[O: ObjectiveLike](Movable):
+    """One tree's `Builder::train` (`:375-389`), suspended between
+    batches. `ds` carries the `n_sampled_cols` correction train() makes
+    (their ctor's `:240` -- see `train`'s docstring); `tree` is valid
+    only once `done` is set."""
+
+    var queue: NodeQueue[Self.O.DataT]
+    var ds: DatasetView[Self.O.DataT, Self.O.LabelT]
+    var smem_config: SharedMemoryConfig
+    var batch: BatchState[Self.O]
+    var tree: TreeMetaDataNode[Self.O.DataT]
+    var done: Bool
+
+
+# ===========================================================================
 # `Builder`, `builder.cuh:147-698`. The device half, wired.
 # ===========================================================================
 
@@ -1247,23 +1296,26 @@ struct Builder[O: ObjectiveLike](Movable):
         )
         _ = dst^
 
-    def _download_splits(
-        mut self, ctx: DeviceContext, n: Int
-    ) raises -> List[SplitSummary[Self.O.DataT]]:
-        """`raft::update_host(h_splits, splits, ...)` + `sync_stream`,
-        `:479-480`, `:676-677`. Their host copy is what `NodeQueue::Push`
-        reads, projected onto the six fields it touches."""
+    def _enqueue_splits_download(mut self, ctx: DeviceContext, n: Int) raises:
+        """The COPY half of `raft::update_host(h_splits, splits, ...)`
+        (`:479`, `:501`). The sync is the CALLER's, because in the
+        pipelined forest loop (DEVIATION 117) one synchronize serves every
+        in-flight tree's downloads at once."""
         var nbytes = n * size_of[Split[Self.O.DataT]]()
         if nbytes > 0:
             # `:479` -- their count is `work_items.size()`.
             var hdst = self.h_splits.create_sub_buffer[DType.uint8](0, nbytes)
             var dsrc = self.splits.create_sub_buffer[DType.uint8](0, nbytes)
             ctx.enqueue_copy(dst_buf=hdst, src_buf=dsrc)
-            ctx.synchronize()
             _ = hdst^
             _ = dsrc^
-        else:
-            ctx.synchronize()
+
+    def _read_splits(
+        mut self, n: Int
+    ) raises -> List[SplitSummary[Self.O.DataT]]:
+        """The host read that follows the sync -- what `NodeQueue::Push`
+        reads, projected onto the six fields it touches. Only valid after
+        a `synchronize` that covers `_enqueue_splits_download`."""
         var p = self.h_splits.unsafe_ptr().unsafe_bitcast[Split[Self.O.DataT]]()
         var out = List[SplitSummary[Self.O.DataT]]()
         for i in range(n):
@@ -1279,6 +1331,17 @@ struct Builder[O: ObjectiveLike](Movable):
                 )
             )
         return out^
+
+    def _download_splits(
+        mut self, ctx: DeviceContext, n: Int
+    ) raises -> List[SplitSummary[Self.O.DataT]]:
+        """`raft::update_host(h_splits, splits, ...)` + `sync_stream`,
+        `:479-480`, `:676-677` -- the serial composition of the two
+        halves above, kept so `train()`'s single-tree path reads exactly
+        as their code does."""
+        self._enqueue_splits_download(ctx, n)
+        ctx.synchronize()
+        return self._read_splits(n)
 
     def _sample_features(
         mut self,
@@ -1397,7 +1460,7 @@ struct Builder[O: ObjectiveLike](Movable):
             self.find_args,
         )
 
-    def _compute_best_splits(
+    def enqueue_best_splits(
         mut self,
         ctx: DeviceContext,
         dataset: DatasetView[Self.O.DataT, Self.O.LabelT],
@@ -1406,8 +1469,12 @@ struct Builder[O: ObjectiveLike](Movable):
         sample_offset: Int,
         n_sampled_cols: Int,
         smem_config: SharedMemoryConfig,
-    ) raises -> List[SplitSummary[Self.O.DataT]]:
-        """`Builder::computeBestSplits`, `:485-503`, in their order."""
+    ) raises:
+        """`Builder::computeBestSplits`, `:485-503`, in their order --
+        MINUS the trailing sync, which belongs to the caller so the
+        pipelined forest loop (DEVIATION 117) can share one synchronize
+        across every in-flight tree. `_compute_best_splits` below is the
+        serial composition."""
         var n = len(work_items)
         # `:489` -- initSplit
         ctx.enqueue_function[init_split_kernel[Self.O.DataT]](
@@ -1432,7 +1499,144 @@ struct Builder[O: ObjectiveLike](Movable):
                 n_sampled_cols, smem_config,
             )
             c += N_BLKS_FOR_COLS
-        return self._download_splits(ctx, n)
+        self._enqueue_splits_download(ctx, n)
+
+    def _compute_best_splits(
+        mut self,
+        ctx: DeviceContext,
+        dataset: DatasetView[Self.O.DataT, Self.O.LabelT],
+        quantiles: Quantiles[Self.O.DataT],
+        work_items: List[NodeWorkItem],
+        sample_offset: Int,
+        n_sampled_cols: Int,
+        smem_config: SharedMemoryConfig,
+    ) raises -> List[SplitSummary[Self.O.DataT]]:
+        """The serial composition: enqueue, drain, read -- exactly their
+        `computeBestSplits` including `:479-480`'s `update_host` +
+        `sync_stream`."""
+        self.enqueue_best_splits(
+            ctx, dataset, quantiles, work_items, sample_offset,
+            n_sampled_cols, smem_config,
+        )
+        ctx.synchronize()
+        return self._read_splits(len(work_items))
+
+    def _enqueue_round[
+        sabotage: Int = 0
+    ](
+        mut self,
+        ctx: DeviceContext,
+        dataset: DatasetView[Self.O.DataT, Self.O.LabelT],
+        quantiles: Quantiles[Self.O.DataT],
+        smem_config: SharedMemoryConfig,
+        mut st: BatchState[Self.O],
+    ) raises:
+        """One sampling round's enqueue, `:437-450`."""
+        var sample_offset = st.round * self.original_n_sampled_cols
+        var n_sampled_cols = sampled_cols_in_round(
+            self.n_cols, self.original_n_sampled_cols, st.round
+        )
+        # `:439-440` -- they NARROW the dataset field for this round:
+        #     dataset.n_sampled_cols =
+        #         min(original_n_sampled_cols, n_cols - sample_offset);
+        # The last round is short whenever n_sampled_cols does not
+        # divide n_cols, and the kernels' stride must follow it.
+        var ds = dataset.copy()
+        ds.n_sampled_cols = Int32(n_sampled_cols)
+        # CHECK HOOK. 8 restores the pre-fix value -- the DatasetView
+        # field left at whatever the caller passed, i.e. `n_cols` -- so
+        # a check can watch the writer/reader strides come apart
+        # instead of taking the fix on trust. THIS is the load-bearing
+        # write: a hook on the `train` assignment alone is inert,
+        # because this line overwrites it every round.
+        comptime if sabotage == 8:
+            ds.n_sampled_cols = Int32(self.n_cols)
+        self.enqueue_best_splits(
+            ctx, ds, quantiles, st.active_items, sample_offset,
+            n_sampled_cols, smem_config,
+        )
+
+    def begin_batch[
+        sabotage: Int = 0
+    ](
+        mut self,
+        ctx: DeviceContext,
+        dataset: DatasetView[Self.O.DataT, Self.O.LabelT],
+        quantiles: Quantiles[Self.O.DataT],
+        work_items: List[NodeWorkItem],
+        smem_config: SharedMemoryConfig,
+    ) raises -> BatchState[Self.O]:
+        """`doSplit`'s head (`:410-437`) plus round zero's enqueue. The
+        returned state is pending a synchronize."""
+        var n = len(work_items)
+        var max_rounds = max_sampling_rounds_for(
+            self.n_cols, self.original_n_sampled_cols
+        )
+        var final_splits = List[SplitSummary[Self.O.DataT]]()
+        for _ in range(n):
+            final_splits.append(
+                SplitSummary[Self.O.DataT](
+                    False, Int32(-1), Scalar[Self.O.DataT](0),
+                    Scalar[Self.O.DataT](0), Int64(0), Int64(0),
+                )
+            )
+        var active_items = work_items.copy()
+        var active_to_original = List[Int]()
+        for i in range(n):
+            active_to_original.append(i)
+        var st = BatchState[Self.O](
+            work_items.copy(),
+            active_items^,
+            active_to_original^,
+            final_splits^,
+            0,
+            max_rounds,
+            0,
+            List[SplitSummary[Self.O.DataT]](),
+        )
+        self._enqueue_round[sabotage](ctx, dataset, quantiles, smem_config, st)
+        return st^
+
+    def advance_batch[
+        sabotage: Int = 0
+    ](
+        mut self,
+        ctx: DeviceContext,
+        dataset: DatasetView[Self.O.DataT, Self.O.LabelT],
+        quantiles: Quantiles[Self.O.DataT],
+        smem_config: SharedMemoryConfig,
+        mut st: BatchState[Self.O],
+    ) raises -> Bool:
+        """`doSplit`'s consume side: the retry logic of `:452-458` after a
+        best-splits sync, or the final read of `:501` after the node-split
+        sync. Call ONLY after a synchronize covering this builder's
+        enqueues. Returns True when the batch is finished, with the pushed
+        splits in `st.result`."""
+        if st.phase == 1:
+            st.result = self._read_splits(len(st.work_items))
+            return True
+        var h = self._read_splits(len(st.active_items))
+        var retry_items = List[NodeWorkItem]()
+        var retry_to_original = List[Int]()
+        for i in range(len(st.active_items)):
+            var orig = st.active_to_original[i]
+            st.final_splits[orig] = h[i]
+            if not h[i].is_valid:
+                retry_items.append(st.active_items[i])
+                retry_to_original.append(orig)
+        # Their `:456`: `if (round + 1 >= max_sampling_rounds) break;` --
+        # the LAST round does not bother rebuilding the active set.
+        if len(retry_items) > 0 and st.round + 1 < st.max_rounds:
+            st.active_items = retry_items^
+            st.active_to_original = retry_to_original^
+            st.round += 1
+            self._enqueue_round[sabotage](
+                ctx, dataset, quantiles, smem_config, st
+            )
+            return False
+        self.enqueue_node_split(ctx, dataset, st.work_items, st.final_splits)
+        st.phase = 1
+        return False
 
     def do_split[
         sabotage: Int = 0
@@ -1446,70 +1650,36 @@ struct Builder[O: ObjectiveLike](Movable):
     ) raises -> List[SplitSummary[Self.O.DataT]]:
         """`Builder::doSplit`, `:410-482`. THE MULTI-ROUND LOOP.
 
-        See the module docstring for why the rounds exist. The active set
-        shrinks to the nodes that still have no valid split (`:452-458`),
-        and their `if (round + 1 >= max_sampling_rounds) break;` at `:456`
-        means the LAST round does not bother rebuilding it.
+        See the module docstring for why the rounds exist. Since the
+        pipelined forest loop (DEVIATION 117) this is the SERIAL DRIVE of
+        `begin_batch`/`advance_batch` -- same operations, same order, same
+        sync count (one per round plus one for the partition), verified
+        bit-identical by the fingerprint probe when the split was made.
         """
-        var n = len(work_items)
-        # `:437` -- `const IdxT original_n_sampled_cols = dataset.n_sampled_cols;`
-        var ds = dataset.copy()
-        var max_rounds = max_sampling_rounds_for(
-            self.n_cols, self.original_n_sampled_cols
+        var st = self.begin_batch[sabotage](
+            ctx, dataset, quantiles, work_items, smem_config
         )
+        while True:
+            ctx.synchronize()
+            if self.advance_batch[sabotage](
+                ctx, dataset, quantiles, smem_config, st
+            ):
+                var out = st.result.copy()
+                return out^
 
-        var final_splits = List[SplitSummary[Self.O.DataT]]()
-        for _ in range(n):
-            final_splits.append(
-                SplitSummary[Self.O.DataT](
-                    False, Int32(-1), Scalar[Self.O.DataT](0),
-                    Scalar[Self.O.DataT](0), Int64(0), Int64(0),
-                )
-            )
-        var active_items = work_items.copy()
-        var active_to_original = List[Int]()
-        for i in range(n):
-            active_to_original.append(i)
-
-        var round = 0
-        while len(active_items) > 0 and round < max_rounds:
-            var sample_offset = round * self.original_n_sampled_cols
-            var n_sampled_cols = sampled_cols_in_round(
-                self.n_cols, self.original_n_sampled_cols, round
-            )
-            # `:439-440` -- they NARROW the dataset field for this round:
-            #     dataset.n_sampled_cols =
-            #         min(original_n_sampled_cols, n_cols - sample_offset);
-            # The last round is short whenever n_sampled_cols does not
-            # divide n_cols, and the kernels' stride must follow it.
-            ds.n_sampled_cols = Int32(n_sampled_cols)
-            # CHECK HOOK. 8 restores the pre-fix value -- the DatasetView
-            # field left at whatever the caller passed, i.e. `n_cols` -- so
-            # a check can watch the writer/reader strides come apart
-            # instead of taking the fix on trust. THIS is the load-bearing
-            # write: a hook on the `train` assignment alone is inert,
-            # because this line overwrites it every round.
-            comptime if sabotage == 8:
-                ds.n_sampled_cols = Int32(self.n_cols)
-            var h = self._compute_best_splits(
-                ctx, ds, quantiles, active_items, sample_offset,
-                n_sampled_cols, smem_config,
-            )
-            var retry_items = List[NodeWorkItem]()
-            var retry_to_original = List[Int]()
-            for i in range(len(active_items)):
-                var orig = active_to_original[i]
-                final_splits[orig] = h[i]
-                if not h[i].is_valid:
-                    retry_items.append(active_items[i])
-                    retry_to_original.append(orig)
-            if round + 1 >= max_rounds:
-                break
-            active_items = retry_items^
-            active_to_original = retry_to_original^
-            round += 1
-
+    def enqueue_node_split(
+        mut self,
+        ctx: DeviceContext,
+        dataset: DatasetView[Self.O.DataT, Self.O.LabelT],
+        work_items: List[NodeWorkItem],
+        final_splits: List[SplitSummary[Self.O.DataT]],
+    ) raises:
+        """The partition half of `doSplit`, `:458-501`, MINUS the trailing
+        sync -- the caller's, per the pipelined forest loop (DEVIATION
+        117)."""
+        var n = len(work_items)
         # `:458` -- `dataset.n_sampled_cols = original_n_sampled_cols;`
+        var ds = dataset.copy()
         ds.n_sampled_cols = Int32(self.original_n_sampled_cols)
 
         # `:474-478` -- the chosen splits go back to the device once, and
@@ -1554,7 +1724,7 @@ struct Builder[O: ObjectiveLike](Movable):
             self.node_split_scratch,
             self.node_split_args,
         )
-        return self._download_splits(ctx, n)
+        self._enqueue_splits_download(ctx, n)
 
     def shared_memory_config(self) raises -> SharedMemoryConfig:
         """`Builder::computeSharedMemoryConfig`, `:522-551`, with this
@@ -1754,9 +1924,36 @@ struct Builder[O: ObjectiveLike](Movable):
         # Node 0 coincided; every later node in a batch read another node's
         # columns, and deep enough into a batch, off the end of the
         # allocation. Default classifier path (`max_features='sqrt'`).
+        # (The fix lives in `begin_tree` now; this docstring keeps the
+        # incident where a reader of `train` will find it.)
+        #
+        # Since the pipelined forest loop (DEVIATION 117) this is the
+        # SERIAL DRIVE of `begin_tree`/`advance_tree` -- same operations,
+        # same order, same sync count, verified bit-identical by the
+        # fingerprint probe when the split was made.
+        var ts = self.begin_tree[sabotage](ctx, dataset, quantiles)
+        while not ts.done:
+            ctx.synchronize()
+            _ = self.advance_tree[sabotage](ctx, quantiles, ts)
+        var tree = ts.tree.copy()
+        return tree^
+
+    def begin_tree[
+        sabotage: Int = 0
+    ](
+        mut self,
+        ctx: DeviceContext,
+        dataset: DatasetView[Self.O.DataT, Self.O.LabelT],
+        quantiles: Quantiles[Self.O.DataT],
+    ) raises -> TreeState[Self.O]:
+        """`Builder::train`'s head: the `n_sampled_cols` correction (their
+        ctor's `:240` -- see `train`'s docstring for the incident it
+        fixed), the queue, and the first batch's enqueue. If the root is
+        not expandable (max_depth 0, min_samples_split larger than the
+        node) the tree finishes HERE, leaf pass included -- check `done`
+        before waiting on a sync for it."""
         var ds = dataset.copy()
         ds.n_sampled_cols = Int32(self.original_n_sampled_cols)
-
         var smem_config = self.shared_memory_config()
         var queue = NodeQueue[Self.O.DataT](
             self.params,
@@ -1764,15 +1961,76 @@ struct Builder[O: ObjectiveLike](Movable):
             self.n_sampled_rows,
             self.num_outputs,
         )
-        while queue.has_work():
-            var work_items = queue.pop()
-            var h_splits = self.do_split[sabotage](
-                ctx, ds, quantiles, work_items, smem_config
+        var ts = TreeState[Self.O](
+            queue^,
+            ds^,
+            smem_config,
+            BatchState[Self.O](
+                List[NodeWorkItem](),
+                List[NodeWorkItem](),
+                List[Int](),
+                List[SplitSummary[Self.O.DataT]](),
+                0,
+                0,
+                0,
+                List[SplitSummary[Self.O.DataT]](),
+            ),
+            TreeMetaDataNode[Self.O.DataT](
+                Int32(-1),
+                Int32(0),
+                Int32(0),
+                Float64(0),
+                List[Scalar[Self.O.DataT]](),
+                List[SparseTreeNode[Self.O.DataT]](),
+                Int32(0),
+            ),
+            False,
+        )
+        if ts.queue.has_work():
+            var work_items = ts.queue.pop()
+            ts.batch = self.begin_batch[sabotage](
+                ctx, ts.ds, quantiles, work_items, ts.smem_config
             )
-            queue.push(work_items, h_splits)
-        var tree = queue.tree.copy()
+        else:
+            self._finish_tree(ctx, ts)
+        return ts^
+
+    def advance_tree[
+        sabotage: Int = 0
+    ](
+        mut self,
+        ctx: DeviceContext,
+        quantiles: Quantiles[Self.O.DataT],
+        mut ts: TreeState[Self.O],
+    ) raises -> Bool:
+        """One consume step of `Builder::train`'s loop (`:375-389`). Call
+        ONLY after a synchronize covering this builder's enqueues. Returns
+        True when the TREE is done -- the leaf pass runs inside that final
+        step and carries its own syncs, exactly as the serial train did."""
+        if ts.done:
+            return True
+        if not self.advance_batch[sabotage](
+            ctx, ts.ds, quantiles, ts.smem_config, ts.batch
+        ):
+            return False
+        ts.queue.push(ts.batch.work_items, ts.batch.result)
+        if ts.queue.has_work():
+            var work_items = ts.queue.pop()
+            ts.batch = self.begin_batch[sabotage](
+                ctx, ts.ds, quantiles, work_items, ts.smem_config
+            )
+            return False
+        self._finish_tree(ctx, ts)
+        return True
+
+    def _finish_tree(
+        mut self, ctx: DeviceContext, mut ts: TreeState[Self.O]
+    ) raises:
+        """`train`'s tail: `GetTree` + `SetLeafPredictions` (`:386-388`)."""
+        var tree = ts.queue.tree.copy()
         tree.treeid = self.treeid
         self.set_leaf_predictions(
-            ctx, tree, queue.node_instances_.copy(), ds
+            ctx, tree, ts.queue.node_instances_.copy(), ts.ds
         )
-        return tree^
+        ts.tree = tree^
+        ts.done = True
