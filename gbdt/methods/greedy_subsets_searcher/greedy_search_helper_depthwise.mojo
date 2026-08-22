@@ -130,7 +130,7 @@ from gbdt.methods.greedy_subsets_searcher.model_builder import (
     build_non_symmetric_tree,
 )
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper_lossguide import (
-    select_leaves_to_split as lossguide_select_leaves_to_split,
+    select_leaves_to_split_traced as lossguide_select_leaves_to_split_traced,
 )
 from gbdt.methods.greedy_subsets_searcher.points_subsets import (
     EHistogramsType,
@@ -1431,7 +1431,14 @@ def fit_non_symmetric_tree[
         # worse and is bounded only by MaxLeaves and IsTerminalLeaf.
         var to_split: List[Int]
         if lossguide:
-            to_split = lossguide_select_leaves_to_split(leaves)
+            # the TRACED wrapper (lossguide lane's, 8426d52): records the
+            # per-leaf BestSplit queue and the selected leaf on the identity
+            # ladder, then delegates the decision untouched. Host records
+            # only -- no drain -- so it stays outside the stage timers'
+            # concern, and the trace/timer mutual exclusion covers the rest.
+            to_split = lossguide_select_leaves_to_split_traced(
+                leaves, trace, d_tag
+            )
         else:
             to_split = select_leaves_to_split(leaves)
 
