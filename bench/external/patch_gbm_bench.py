@@ -140,6 +140,31 @@ def patch_algorithms(root):
     print("patched algorithms.py (mojolearn arms)")
 
 
+def patch_metrics(root):
+    """ONE compatibility edit to their metric code, semantics preserved.
+
+    `classification_metrics` calls `sklm.log_loss(real, y_prob, eps=1e-5)`;
+    sklearn removed `eps` in 1.5, so every BINARY dataset crashes in their
+    metric under a current sklearn. `eps` clipped the probabilities to
+    [eps, 1-eps] before the log; `np.clip` is that exact arithmetic, spelled
+    without the removed keyword. Same numbers on any sklearn that still
+    accepts `eps`, and the reserved-in-README compatibility-only exception
+    to the no-edits rule."""
+    path = os.path.join(root, "metrics.py")
+    text = _read(path)
+    if MARKER in text:
+        print("metrics.py already patched (log_loss eps compat)")
+        return
+    text = _replace_once(
+        text,
+        "sklm.log_loss(real, y_prob, eps=1e-5),",
+        "sklm.log_loss(real, np.clip(y_prob, 1e-5, 1 - 1e-5)),  " + MARKER,
+        "the binary log_loss eps call",
+    )
+    _write(path, text)
+    print("patched metrics.py (log_loss eps compat, semantics preserved)")
+
+
 def install_adapter(root):
     src = os.path.join(HERE, "gbm_bench", "mojolearn_algorithm.py")
     dst = os.path.join(root, "mojolearn_algorithm.py")
@@ -155,6 +180,7 @@ def main():
         raise SystemExit("not a gbm-bench checkout: " + root)
     install_adapter(root)
     patch_algorithms(root)
+    patch_metrics(root)
     print("\nready. mojolearn-gbdt-gpu, mojolearn-et-gpu, skl-et-cpu, "
           "lgbm-et-cpu and lgbm-rf-cpu are now valid -algorithm values.")
 
