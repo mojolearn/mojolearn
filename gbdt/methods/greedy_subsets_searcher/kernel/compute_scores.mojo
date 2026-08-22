@@ -83,12 +83,18 @@ from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.gpu.intrinsics import ldg
 from std.math import sqrt
 from max.gpu.memory import AddressSpace
-from max.gpu.primitives.block import sum as block_sum
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
 from gbdt.gpu_util.kernel.random_gen import advance_seed_k, next_normal_f
-from mojo_only.numerics import identical_mul_add
+from gbdt.targets.kernel.pointwise_targets import pinned_block_sum
+from mojo_only.kernel_matrix import partition_chunks_sm_for
+from mojo_only.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
+    ftz,
+    identical_mul_add,
+)
 from gbdt.options.catboost_options import (
     SCORE_FUNCTION_COSINE,
     SCORE_FUNCTION_L2,
@@ -188,8 +194,18 @@ def _add_leaf[
         # this one; the AIR diff above is the evidence it needs.
         # =============================================================
         comptime if pin_mul_add:
-            score = identical_mul_add(sum, mu, score)
-            denum_sqr = identical_mul_add(weight * mu, mu, denum_sqr)
+            # IDENTITY_PATHS ROW 10 rides along on the pinned arm: `mu` is
+            # a division in scoring (the row's own title), and the row's
+            # checklist requires a pinned expression's INTERMEDIATES to be
+            # stored through `ftz` -- an unflushed denormal intermediate
+            # re-diverges the very seam row 9 just pinned. Every `ftz` is
+            # a comptime no-op under FAST, so the FAST arm of this branch
+            # is bitwise what it was.
+            mu = ftz(mu)
+            score = ftz(identical_mul_add(sum, mu, score))
+            denum_sqr = ftz(
+                identical_mul_add(ftz(weight * mu), mu, denum_sqr)
+            )
         else:
             score += sum * mu
             denum_sqr += weight * mu * mu
@@ -474,9 +490,24 @@ def compute_optimal_splits_kernel[
                 # `-(theirs + n)` is `ours - n` exactly, float negation
                 # being exact. Both calcers, because both of theirs run
                 # this branch.
-                var noise = draw[0] * score_std_dev
-                final_score -= noise
-                score_before -= noise
+                #
+                # IDENTITY_PATHS ROW 9: `score - draw * stdDev` is a
+                # multiply feeding a subtract, and Mojo has been seen
+                # contracting ACROSS a named intermediate, so a backend is
+                # free to fuse one of the two subtractions and not the
+                # other. Routed through `identical_mul_add(-draw, stdDev,
+                # score)`: under FAST that is the same mul-then-add chain
+                # (negation is exact, `x + (-n)` is `x - n` bit for bit),
+                # under IDENTICAL it is one `fma` on every backend. Found
+                # by the lossguide lane's audit, routed here by the
+                # orchestrator 2026-08-22.
+                var neg_draw = -draw[0]
+                final_score = identical_mul_add(
+                    neg_draw, score_std_dev, final_score
+                )
+                score_before = identical_mul_add(
+                    neg_draw, score_std_dev, score_before
+                )
 
         # `gain = score - scoreBefore`, then
         # `gain *= __ldg(binFeaturesWeights + featureId)` where
@@ -489,8 +520,15 @@ def compute_optimal_splits_kernel[
         # returns before touching anything when the CTR count is zero
         # (`update_feature_weights.cpp:14-22`). It is here so that
         # `model_size_reg` is not a divergence the day CTRs land.
-        var gain = (final_score - score_before) * ldg(
-            feature_weights + feature_id
+        #
+        # IDENTITY_PATHS ROW 10: `ftz` BEFORE the argmax compare, not only
+        # at the store. Two candidates whose gains differ by a denormal
+        # compare UNEQUAL on a denormal-honoring backend and EQUAL on
+        # Metal's FTZ hardware, and the tie rule then picks different
+        # bins; flushing at the store alone would leave the ranking
+        # divergent. Comptime no-op under FAST.
+        var gain = ftz(
+            (final_score - score_before) * ldg(feature_weights + feature_id)
         )
 
         if gain > best_gain:
@@ -561,11 +599,16 @@ def compute_optimal_splits_kernel[
         # bin-feature 0.
         # ==================================================================
         var index = s_bin[0]
+        # IDENTITY_PATHS ROW 10: the block-winner record is a
+        # kernel-to-host seam (the host reduce reads it), flushed through
+        # `ftz`. The gains were already flushed before the compare, so
+        # this is the seam's own guarantee rather than a change of value;
+        # the sentinel is a normal number and passes through untouched.
         if index != UInt32(0xFFFFFFFF) and Int(index) < bin_feature_count:
-            out_score.unsafe_store(Int(block_idx.x), s_score[0])
+            out_score.unsafe_store(Int(block_idx.x), ftz(s_score[0]))
             out_bin.unsafe_store(Int(block_idx.x), index)
         else:
-            out_score.unsafe_store(Int(block_idx.x), -FLOAT32_MAX)
+            out_score.unsafe_store(Int(block_idx.x), ftz(-FLOAT32_MAX))
             out_bin.unsafe_store(Int(block_idx.x), UInt32(0xFFFFFFFF))
 
 
@@ -634,37 +677,83 @@ def compute_target_variance_kernel(
     var weighted_sum2 = Float32(0.0)
     var total_weight = Float32(0.0)
 
+    # IDENTITY_PATHS ROW 10 on the accumulation chain: `wt * wt` squares a
+    # gradient, so a |wt| under ~1e-19 lands the product in the denormal
+    # range -- Metal's hardware flushes it, CUDA's default keeps it, and
+    # the two partials part ways. Every op's result is stored through
+    # `ftz` (the measured flush-operands/flush-result model, and flushed
+    # results make later operand flushes redundant). Comptime no-ops
+    # under FAST, so the FAST chain is character-for-character the ops it
+    # was.
     while i < size:
         var w = stats.unsafe_load(i)
         if w > Float32(1e-15):
             var stat_sum = Float32(0.0)
             for stat_id in range(1, stat_count):
                 var wt = stats.unsafe_load(i + stat_line_size * stat_id)
-                weighted_sum += wt
-                weighted_sum2 += wt * wt / w
-                stat_sum += wt
+                weighted_sum = ftz(weighted_sum + wt)
+                weighted_sum2 = ftz(
+                    weighted_sum2 + ftz(ftz(wt * wt) / w)
+                )
+                stat_sum = ftz(stat_sum + wt)
             if is_multiclass != Int32(0):
-                weighted_sum += -stat_sum
-                weighted_sum2 += stat_sum * stat_sum / w
-            total_weight += w
+                weighted_sum = ftz(weighted_sum + -stat_sum)
+                weighted_sum2 = ftz(
+                    weighted_sum2 + ftz(ftz(stat_sum * stat_sum) / w)
+                )
+            total_weight = ftz(total_weight + w)
         i += Int(grid_dim.x) * TARGET_VARIANCE_BLOCK
 
-    var b_sum = block_sum[block_size=TARGET_VARIANCE_BLOCK](weighted_sum)
-    var b_sum2 = block_sum[block_size=TARGET_VARIANCE_BLOCK](weighted_sum2)
-    var b_weight = block_sum[block_size=TARGET_VARIANCE_BLOCK](total_weight)
+    # IDENTITY_PATHS row 8 (DEVIATION 251's family): the pinned-shape
+    # fold, so the within-block sum does not follow AMD's 64-wide
+    # wavefront. FAST arm IS `block.sum`, verbatim.
+    var b_sum = pinned_block_sum[block_size=TARGET_VARIANCE_BLOCK](
+        weighted_sum
+    )
+    var b_sum2 = pinned_block_sum[block_size=TARGET_VARIANCE_BLOCK](
+        weighted_sum2
+    )
+    var b_weight = pinned_block_sum[block_size=TARGET_VARIANCE_BLOCK](
+        total_weight
+    )
 
     if thread_idx.x == 0:
+        # row 10: the partials buffer is a kernel-to-kernel seam
+        # (`deterministic_sum_lanes_kernel` reads it), flushed.
         var slot = 3 * Int(block_idx.x)
-        partials.unsafe_store(slot, b_sum)
-        partials.unsafe_store(slot + 1, b_sum2)
-        partials.unsafe_store(slot + 2, b_weight)
+        partials.unsafe_store(slot, ftz(b_sum))
+        partials.unsafe_store(slot + 1, ftz(b_sum2))
+        partials.unsafe_store(slot + 2, ftz(b_weight))
 
 
 def target_variance_blocks(size: Int, sm_count: Int) -> Int:
     """`min(4 * TArchProps::SMCount(), CeilDivide(size, blockSize))`
-    (`compute_scores.cu:291`)."""
+    (`compute_scores.cu:291`).
+
+    **AND IT IS A NUMERIC ROW, PINNED HERE FOR THE SAME REASON
+    `partition_stats_chunks` IS** (IDENTITY_PATHS row 7, DEVIATION 353;
+    DEVIATION 252 is the doc-parallel twin, `random_score_helper.
+    std_dev_blocks`, and this mirrors it): the kernel above strides by
+    `grid_dim.x * blockSize`, so the block count decides WHICH rows land
+    in WHICH float partial, and the machine's core count then decides the
+    last bits of the greedy arm's score-noise std dev -- every noised
+    score of the fit flows through it. Inert at this port's default
+    `random_strength = 0`; CatBoost's default is 1.0, so the row must
+    hold before that default is wired.
+
+    Under `IDENTICAL` the `sm_count` fed to the formula comes from
+    `kernel_matrix.partition_chunks_sm_for`, the SAME pin row 7 uses (32
+    on every vendor, deliberately no real device's own number); under
+    `FAST` it is the device's count, CatBoost's behavior unchanged. The
+    pin is applied INSIDE this function -- the only place the formula
+    lives -- so the launch and the `partials` buffer sizing in
+    `compute_target_std_dev` cannot disagree, which is row 7's exact
+    argument. `by_data` is pure f(size) and needs no pin.
+    """
+    comptime _identical = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    var sm = partition_chunks_sm_for[_identical](sm_count)
     var by_data = (size + TARGET_VARIANCE_BLOCK - 1) // TARGET_VARIANCE_BLOCK
-    var by_machine = 4 * sm_count
+    var by_machine = 4 * sm
     if by_machine < 1:
         by_machine = 1
     if by_data < by_machine:
@@ -825,7 +914,14 @@ def _leafwise_scan_part[
         var weight_left = max(
             ldg(histograms + (leaf_base + bin_feature_id)), Float32(0.0)
         )
-        var weight_right = max(part_weight - weight_left, Float32(0.0))
+        # IDENTITY_PATHS ROW 10: the subtraction can cancel into the
+        # denormal range, and a denormal weight fed to `sum / (weight +
+        # lambda)` diverges between Metal's FTZ hardware and a
+        # denormal-honoring backend (lambda may be 0, so the denominator
+        # is not guaranteed away from it). Flushed HERE, where the value
+        # is derived, so every consumer sees one policy. Comptime no-op
+        # under FAST.
+        var weight_right = ftz(max(part_weight - weight_left, Float32(0.0)))
 
         # `bool toZeroPartSplit = false; if (weightLeft < 1e-20f ||
         # weightRight < 1e-20f) { toZeroPartSplit = true; }` (`:430-434`).
@@ -845,7 +941,10 @@ def _leafwise_scan_part[
                 part_stats + (this_part_id * stat_count + stat_id)
             )
             total_sum_part += part_stat
-            var sum_right = part_stat - sum_left
+            # row 10 again: `partStat - sumLeft` is THE cancellation step
+            # of the kernel (module docstring), so it is the likeliest
+            # producer of a denormal on this path. Flushed at derivation.
+            var sum_right = ftz(part_stat - sum_left)
 
             # `calcer.AddLeaf(sumLeft, weightLeft); calcer.AddLeaf(sumRight,
             # weightRight); beforeSplitCalcer.AddLeaf(partStat, partWeight);`
@@ -886,12 +985,17 @@ def _leafwise_scan_part[
         var final_score = score
         var score_before = score_b
         comptime if cosine:
+            # IDENTITY_PATHS ROW 10 IS TITLED "division and sqrt in
+            # scoring", and these two quotients are that row: the quotient
+            # of a cancelled numerator can land denormal, where Metal's
+            # FTZ hardware and a denormal-honoring backend part ways.
+            # Flushed at the derivation; comptime no-op under FAST.
             if denum_sqr > Float32(1e-15):
-                final_score = score / sqrt(denum_sqr)
+                final_score = ftz(score / sqrt(denum_sqr))
             else:
                 final_score = -FLOAT32_MAX
             if denum_sqr_b > Float32(1e-15):
-                score_before = score_b / sqrt(denum_sqr_b)
+                score_before = ftz(score_b / sqrt(denum_sqr_b))
             else:
                 score_before = -FLOAT32_MAX
 
@@ -905,9 +1009,17 @@ def _leafwise_scan_part[
                     global_seed + UInt64(feature_id), 4
                 )
                 var draw = next_normal_f(seed)
-                var noise = draw[0] * score_std_dev
-                final_score -= noise
-                score_before -= noise
+                # IDENTITY_PATHS ROW 9, same seam as the symmetric arm's
+                # noise block above: a multiply feeding a subtract is a
+                # contraction seam, pinned to one `fma` under IDENTICAL;
+                # the FAST arm is the same mul-then-add chain bit for bit.
+                var neg_draw = -draw[0]
+                final_score = identical_mul_add(
+                    neg_draw, score_std_dev, final_score
+                )
+                score_before = identical_mul_add(
+                    neg_draw, score_std_dev, score_before
+                )
 
         if to_zero_part_split:
             final_score = -FLOAT32_MAX
@@ -923,7 +1035,11 @@ def _leafwise_scan_part[
         var gain = Float32(0.0)
         if not to_zero_part_split:
             gain = final_score - score_before
-        gain = gain * ldg(feature_weights + feature_id)
+        # IDENTITY_PATHS ROW 10: flushed BEFORE the argmax compare, same
+        # argument as the symmetric arm's gain -- flushing only at the
+        # store would leave the in-block RANKING divergent on a
+        # denormal-honoring backend. Comptime no-op under FAST.
+        gain = ftz(gain * ldg(feature_weights + feature_id))
 
         if gain > best_gain:
             best_gain = gain
@@ -1001,8 +1117,10 @@ def _leafwise_argmax_write[
 
     if tid == 0:
         var index = s_bin[0]
+        # IDENTITY_PATHS ROW 10: kernel-to-host seam, flushed -- same
+        # note as the symmetric argmax's store above.
         if index != UInt32(0xFFFFFFFF) and Int(index) < bin_feature_count:
-            out_score.unsafe_store(out_slot, s_score[0])
+            out_score.unsafe_store(out_slot, ftz(s_score[0]))
             out_bin.unsafe_store(out_slot, index)
         else:
             # The poison record (`:44-49`). THE CALLER MUST RAISE ON IT --
@@ -1011,7 +1129,7 @@ def _leafwise_argmax_write[
             # UNDEFINED `BestSplit`, so `FindBestLeafToSplit` skips it
             # (`greedy_search_helper.cpp:299`) instead of splitting a leaf
             # whose score is a sentinel.
-            out_score.unsafe_store(out_slot, -FLOAT32_MAX)
+            out_score.unsafe_store(out_slot, ftz(-FLOAT32_MAX))
             out_bin.unsafe_store(out_slot, UInt32(0xFFFFFFFF))
 
 
