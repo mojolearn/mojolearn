@@ -1,0 +1,36 @@
+{
+  "year": {
+    "mojolearn-et-gpu": {
+      "accuracy": {
+        "MeanAbsError": 7.134564375669578,
+        "MeanSquaredError": 96.57011148079309,
+        "MedianAbsError": 5.52252197265625
+      },
+      "train_time": 18.843623833032325
+    },
+    "mojolearn-rf-gpu": {
+      "accuracy": {
+        "MeanAbsError": 6.812558174133301,
+        "MeanSquaredError": 91.71202850341797,
+        "MedianAbsError": 4.91473388671875
+      },
+      "train_time": 14.140552332974039
+    },
+    "skl-et-cpu": {
+      "accuracy": {
+        "MeanAbsError": 7.136187084201992,
+        "MeanSquaredError": 96.48777010842561,
+        "MedianAbsError": 5.532820684233229
+      },
+      "train_time": 54.644410375040025
+    },
+    "skl-rf-cpu": {
+      "accuracy": {
+        "MeanAbsError": 6.794163663840879,
+        "MeanSquaredError": 91.76018085139131,
+        "MedianAbsError": 4.847830741662619
+      },
+      "train_time": 385.0937830830226
+    }
+  }
+}
