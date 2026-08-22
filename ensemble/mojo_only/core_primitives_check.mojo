@@ -156,6 +156,12 @@ def run_block_reduce(ctx: DeviceContext) raises:
     )
     ctx.enqueue_copy(dst_ptr=h_out.unsafe_ptr(), src_buf=d_out)
     ctx.synchronize()
+    # Freed-at-enqueue UAF guard (perf-lane find, 2026-08-22): `h_vals`'s
+    # last use was the enqueue, and `d_vals` died at its `.unsafe_ptr()`
+    # inside the kernel argument list -- the DEVICE form of the same
+    # trap. Keep-alives AFTER the sync.
+    _ = h_vals^
+    _ = d_vals^
 
     var wrong = 0
     for b in range(RED_BLOCKS):
@@ -236,6 +242,12 @@ def run_block_reduce(ctx: DeviceContext) raises:
     )
     ctx.enqueue_copy(dst_ptr=h_nleft.unsafe_ptr(), src_buf=d_nleft)
     ctx.synchronize()
+    # Freed-at-enqueue UAF guard: keep-alives AFTER the sync (`d_node`
+    # is the device form -- dead at its `.unsafe_ptr()` in the kernel
+    # argument list).
+    _ = h_node^
+    _ = h_left^
+    _ = d_node^
     var nwrong = 0
     for nd in range(N_NODES):
         if h_nleft[nd] != want_n[nd]:
@@ -719,6 +731,17 @@ def run_scan_by_key(ctx: DeviceContext) raises:
     )
 
     scan_run[0, 0](ctx, bufs, h_part, h_fill)
+    # Freed-at-enqueue UAF guard (perf-lane find, 2026-08-22): the seven
+    # staging buffers' last uses were the enqueues at the top; scan_run
+    # synchronized, so the keep-alives land here, after the copies are
+    # actually done.
+    _ = h_keys^
+    _ = h_start^
+    _ = h_pos^
+    _ = h_cnt^
+    _ = h_left^
+    _ = h_gl^
+    _ = h_rows^
     var wrong = cells_wrong(h_part, want)
     if wrong != 0:
         var shown = 0

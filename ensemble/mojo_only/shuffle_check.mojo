@@ -348,6 +348,12 @@ def main() raises:
     var h_cols = ctx.enqueue_create_host_buffer[DType.int32](n_samples)
     ctx.enqueue_copy(dst_buf=h_cols, src_buf=d_cols)
     ctx.synchronize()
+    # Freed-at-enqueue UAF guard: `h_items`'s last use above was the
+    # enqueue itself, and `d_items` died at its `.unsafe_ptr()` in the
+    # kernel argument list (the device form). Keep-alives AFTER the sync
+    # (perf-lane find, 2026-08-22).
+    _ = h_items^
+    _ = d_items^
 
     var dev_wrong = 0
     var dup_wrong = 0

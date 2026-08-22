@@ -562,6 +562,9 @@ def check_segmented_sort(ctx: DeviceContext) raises -> Int:
     var wide = (SEG + 511) // 512
     var bsum = ctx.enqueue_create_buffer[DType.int32](NSEG * wide)
     ctx.synchronize()
+    # Freed-at-enqueue UAF guard (perf-lane find, 2026-08-22): `h_in`'s
+    # last use above was the enqueue itself; keep-alive AFTER the sync.
+    _ = h_in^
 
     segmented_sort_keys_f32(
         ctx, NSEG, SEG, d_in, d_out, wa, wb, off, bsum
@@ -718,6 +721,8 @@ def check_pipeline(
     var d = ctx.enqueue_create_buffer[DType.float32](len(data))
     ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())
     ctx.synchronize()
+    # Freed-at-enqueue UAF guard: keep-alive AFTER the sync.
+    _ = h^
 
     var result = compute_quantiles(
         ctx, d, max_n_bins, n_rows, N_COLS, 4, seed, False

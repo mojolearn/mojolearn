@@ -792,6 +792,11 @@ def main() raises:
     ctx.enqueue_copy(dst_buf=h_nl, src_buf=d_nl)
     ctx.enqueue_copy(dst_buf=h_qu, src_buf=d_qu)
     ctx.synchronize()
+    # Device form of the freed-at-enqueue UAF (perf-lane find,
+    # 2026-08-22): `dh`/`dq` died at their `.unsafe_ptr()` in the kernel
+    # argument list. Keep-alives AFTER the sync.
+    _ = dh^
+    _ = dq^
 
     # Analytic, per thread. nLeft = 4, 10, 14, 18 and nRight = 14, 8, 4, 0,
     # so thread 3 is skipped entirely by `:170-171` and must come back

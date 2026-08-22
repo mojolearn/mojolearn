@@ -57,7 +57,13 @@ comptime FNV_PRIME: UInt64 = 0x100000001B3
 
 @always_inline
 def _mix(x: UInt64) -> UInt64:
-    """splitmix64 finalizer; the fixture generator."""
+    """Murmur3 fmix64; the fixture generator. An earlier docstring called
+    this "splitmix64 finalizer", which is FALSE (splitmix64's finalizer
+    uses 0xBF58476D1CE4E5B9/0x94D049BB133111EB and 30/27/31 shifts --
+    that one lives in rf_bench.mojo). The constants below are Murmur3's.
+    DO NOT "fix" the function to match the old doc: every recorded
+    fingerprint hash depends on these exact bits. Caught by the
+    depthwise lane's duplication sweep, 2026-08-22."""
     var h = x
     h ^= h >> 33
     h *= 0xFF51AFD7ED558CCD

@@ -392,6 +392,13 @@ def _run_device(
         sp_ptr[unsafe_offset=n] = Split[DT]()
     ctx.enqueue_copy(dst_buf=splits, src_ptr=hs.unsafe_ptr())
     ctx.synchronize()
+    # Mojo frees a value at its LAST USE, and `hq`'s last use above was
+    # the enqueue itself -- the buffer was dead while its copy was still
+    # queued (freed-at-enqueue UAF, found by the perf lane on the gbdt
+    # path 2026-08-22; contention-sensitive, so a green check proves
+    # nothing). Keep-alives AFTER the synchronize.
+    _ = hq^
+    _ = hs^
 
     ctx.enqueue_function[_reduce_kernel](
         splits.unsafe_ptr().unsafe_bitcast[Split[DT]](),
@@ -407,6 +414,10 @@ def _run_device(
     )
     ctx.enqueue_copy(dst_buf=out, src_buf=splits)
     ctx.synchronize()
+    # Device form of the freed-at-enqueue UAF: `mutexes` died at its
+    # `.unsafe_ptr()` in the kernel argument list. Keep-alive AFTER the
+    # sync.
+    _ = mutexes^
 
     var res = List[Split[DT]]()
     var op = out.unsafe_ptr().unsafe_bitcast[Split[DT]]()
