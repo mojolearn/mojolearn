@@ -42,6 +42,7 @@ from mojo_only.hardware_matrix import (
     smem_statically_partitioned_for,
     threadgroup_limit_for,
 )
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from mojo_only.kernel_matrix import (
     COLUMN_AMD,
     COLUMN_APPLE,
@@ -288,10 +289,19 @@ def check_hardware_matrix() raises:
         hist2_block_size_for[COLUMN_APPLE, HIST_SMEM_SHARED2_I32](),
         512,
     )
+    # MODE-AWARE since 2026-08-22 (found by the E1 Mac bootstrap): under an
+    # IDENTICAL build `block_size_for`'s identity gate caps the one-byte
+    # family's budget at the 32 KB floor, so NVIDIA's warp-private hist2
+    # block is 256 there BY DESIGN (one geometry on every vendor), and 384
+    # -- CatBoost's own -- under FAST. Asserting 384 unconditionally made
+    # this check fail on exactly the build the gate exists for.
+    comptime _nvidia_hist2_want = 256 if (
+        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    ) else 384
     _pin(
-        "nvidia hist2 block (CatBoost's 384)",
+        "nvidia hist2 block (CatBoost's 384 FAST / floor 256 IDENTICAL)",
         hist2_block_size_for[COLUMN_NVIDIA, HIST_SMEM_WARP_PRIVATE_F32](),
-        384,
+        _nvidia_hist2_want,
     )
 
     # THE SPLIT THAT CAUSED THIS COLUMN. One `amd` column resolved a
