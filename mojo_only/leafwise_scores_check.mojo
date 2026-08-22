@@ -20,12 +20,24 @@ against the CUDA, not against each other.
 
 THE FIVE, in the order they run:
 
-  G1  BIT-EXACT against the host walk, for L2 and Cosine, at one leaf and at
-      two, and at THREE grid widths. Bit-exact rather than tolerant because
-      every thread owns its candidates outright: there is no cross-thread
-      accumulation anywhere in this kernel, so a differing last bit means a
-      differing OPERATION, never a differing order. This is also the gate
-      that would catch a grid-stride bug, which is why the widths vary.
+  G1  BIT-EXACT against the host walk, for L2 and Cosine, over four stat
+      counts, three leaf counts and three grid widths. Bit-exact rather than
+      tolerant because every thread owns its candidates outright: there is
+      no cross-thread accumulation anywhere in this kernel, so a differing
+      last bit means a differing OPERATION, never a differing order. This is
+      also the gate that would catch a grid-stride bug, which is why the
+      widths vary.
+
+      G1 DOUBLES AS IDENTITY_PATHS ROW 9'S MEASUREMENT on this kernel: the
+      Cosine arm is compared against BOTH host walks, the naive
+      `score += sum * mu` chain and explicit `fma`, and the shapes are
+      bucketed four ways -- fused / naive / TIE / neither. The tie bucket
+      is the one that matters and the one the first version of this file
+      got wrong: `fma(a, b, 0) == a * b + 0` exactly, so a shape whose stat
+      loop runs once cannot tell the two apart, and counting those as
+      "naive" produced a 15/3 split that had nothing to do with the device.
+      `cos_fused` is asserted non-zero so a fixture set that discriminates
+      nothing cannot pass.
 
   G2  THE TWO BLOCK ROWS SCORE DIFFERENT LEAVES, and swapping the two scalar
       part ids must swap the two output records. `blockIdx.y == 0 ? partId :
@@ -407,11 +419,28 @@ def check_leafwise_scores(ctx: DeviceContext) raises:
     # `fma(sum, mu, score)` -- and the counts are printed. Whichever the
     # device matches is what its codegen actually did on this kernel, and
     # a shape that matches NEITHER is a third thing and a real defect.
+    # FOUR BUCKETS, NOT TWO. The first version of this tally had three --
+    # naive / fused / neither -- and tested them in that order, so every
+    # fixture on which the two host walks AGREE was counted as "naive". It
+    # reported 15 naive / 3 fused and I read that as "MAX contracts on some
+    # instantiations and not others". **That reading was wrong and the
+    # sentence it produced has been deleted from the kernel file and from
+    # LOSSGUIDE.md.** Running `host_best` against itself on the CPU, with
+    # no device involved at all, reproduces the same 15/3 split: it is a
+    # property of the FIXTURES.
+    #
+    # A tie is not evidence. `fma(a, b, 0) == a * b + 0` exactly, so every
+    # `stat_count == 2` shape -- one iteration of the stat loop, both
+    # accumulators still at their seeds -- is structurally blind to
+    # contraction. The stat counts below go past 3 for that reason, and
+    # `cos_fused` is asserted NON-ZERO so a blind fixture set cannot pass
+    # this gate quietly.
     var cos_naive = 0
     var cos_fused = 0
+    var cos_tie = 0
     var cos_neither = 0
     var cos_total = 0
-    for stat_count in [2, 3]:
+    for stat_count in [2, 3, 4, 5]:
         for n_leaves in [1, 2, 5]:
             var fx = make_fixture(n_leaves, stat_count, UInt64(0xA5A5))
             for argmax_blocks in [1, 3, 8]:
@@ -441,10 +470,21 @@ def check_leafwise_scores(ctx: DeviceContext) raises:
                     ctx, fx, n_leaves - 1, n_leaves - 1, argmax_blocks
                 )
                 cos_total += 1
-                if bits(got_c[0][0]) == bits(naive[0]):
-                    cos_naive += 1
+                if bits(naive[0]) == bits(fused[0]):
+                    cos_tie += 1
+                    if bits(got_c[0][0]) != bits(naive[0]):
+                        cos_neither += 1
+                        print(
+                            "  FAIL Cosine stats", stat_count, "leaves",
+                            n_leaves, "blocks", argmax_blocks,
+                            "differs from BOTH host walks where they agree:",
+                            got_c[0][0], "vs", naive[0],
+                        )
+                        failures += 1
                 elif bits(got_c[0][0]) == bits(fused[0]):
                     cos_fused += 1
+                elif bits(got_c[0][0]) == bits(naive[0]):
+                    cos_naive += 1
                 else:
                     cos_neither += 1
                     print(
@@ -465,23 +505,26 @@ def check_leafwise_scores(ctx: DeviceContext) raises:
                     )
                     failures += 1
     print(
-        "  cosine shapes:", cos_total, "-> naive", cos_naive, "/ fused",
-        cos_fused, "/ neither", cos_neither,
+        "  cosine shapes:", cos_total, "-> fused", cos_fused, "/ naive",
+        cos_naive, "/ tie (blind)", cos_tie, "/ neither", cos_neither,
     )
-    # UNDER FAST the codegen may pick either, and MAY PICK DIFFERENTLY PER
-    # SHAPE -- that is exactly what "contraction is a codegen decision"
-    # means, and it is why row 9 exists. The gate is that it picked one of
-    # the two, and that the argmax did not move. Under IDENTICAL there is
-    # only one legal answer and the assertion below tightens.
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        if cos_naive != 0:
-            print(
-                "  FAIL under IDENTICAL every cosine shape must be FUSED;",
-                cos_naive, "were the naive chain",
-            )
-            failures += 1
-        else:
-            print("  ok   IDENTICAL: all", cos_fused, "cosine shapes fused")
+    if cos_fused == 0:
+        print(
+            "  FAIL not one shape DISCRIMINATES contraction; this gate is"
+            " blind and its verdict means nothing"
+        )
+        failures += 1
+    if cos_naive != 0:
+        # TRUE IN BOTH MODES. Under IDENTICAL the pin makes it fma. Under
+        # FAST, Metal's own codegen was MEASURED fused on this seam (see
+        # below), so a naive result would mean the emitted code changed.
+        print(
+            "  FAIL", cos_naive,
+            "shapes took the unfused chain; under IDENTICAL that defeats"
+            " the pin, and under FAST it contradicts the measured Metal"
+            " baseline",
+        )
+        failures += 1
     if failures == 0:
         print("  ok   L2 bit-identical at 18 shapes; cosine argmax stable")
 

@@ -730,6 +730,21 @@ check-random-strength = "mojo run -I . mojo_only/random_strength_check.mojo"
 # fused IN ONE BUILD, which is the row-9 hazard caught in the act.
 check-leafwise-scores = "mojo run -I . mojo_only/leafwise_scores_check.mojo"
 
+# The Lossguide LEAF-SELECTION policy, proved DIFFERENTIALLY against the
+# depthwise lane's own `select_leaves_to_split` on identical leaf lists.
+# HOST ONLY -- no DeviceContext, milliseconds, safe inside another lane's
+# timing window. P1 Lossguide takes one leaf where Depthwise takes four;
+# P2 on a list where every split makes the objective WORSE, Depthwise takes
+# none and Lossguide still takes the least-bad leaf (their Lossguide arm has
+# no sign test at all, `greedy_search_helper.cpp:319-324`); P3 an exact tie
+# goes to the first leaf id, re-planted to prove it follows the ID; P4 the
+# poison record is invisible to the argmin; P5 max_leaves and the `<=`
+# min_data_in_leaf boundary, which goes LIVE for non-symmetric policies;
+# P6 the `leavesToVisit.size() <= 2` contract the score kernel's two-scalar
+# signature rests on, replayed -- plus the poisoned-leaf state where THEIR
+# OWN CB_ENSURE would fire, pinned at three rather than papered over.
+check-lossguide-policy = "mojo run -I . mojo_only/lossguide_policy_check.mojo"
+
 [feature.bench.tasks]
 # CatBoost's own Logloss leaf values at ten Newton iterations and at one,
 # with the leaf-order mapping proved twice inside the generator and written

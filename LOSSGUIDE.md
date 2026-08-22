@@ -211,7 +211,7 @@ Taken so far (the depthwise lane has confirmed 350-399 and spent 350):
 | 300 | reserved -- the lane's own header row | -- |
 | 301 | `greedy_search_helper_lossguide.mojo` is a second file for one of theirs, forced by a dirty checkout | open |
 | 302 | one shared body serves `ComputeOptimalSplit` and `ComputeOptimalSplitsRegion`; the part-id read is the only difference | **PARTIALLY DEFEATED, see below** |
-| 303 | the Cosine calcer's two multiply-adds routed through `numerics.identical_mul_add` on the leafwise path, behind a defaulted comptime parameter so the symmetric arm's source is unchanged character for character | landed, **and it does not yet work**, see the findings |
+| 303 | the Cosine calcer's two multiply-adds routed through `numerics.identical_mul_add` on the leafwise path, behind a defaulted comptime parameter so the symmetric arm's source is unchanged character for character | landed and verified in the AIR |
 
 **DEVIATION 302 did not fully land, and that is on the clock rather than on
 either lane.** I wrote the shared `_leafwise_scan_part` + `_leafwise_argmax_write`
@@ -275,46 +275,61 @@ been right on the symmetric arm.
 Checked rather than assumed, because assuming it is how a lane ships a tree
 that splits the wrong leaf and still passes every histogram gate.
 
-### 2. FMA CONTRACTION IS LIVE ON THIS KERNEL, MEASURED, AND THE EXISTING PIN DOES NOT REMOVE IT
+### 2. RETRACTED AND REPLACED: the contraction pin WORKS, and my gate was the thing that was broken
 
-`check-leafwise-scores` compares the device against TWO host walks -- the
-naive `score += sum * mu` chain and explicit `fma(sum, mu, score)` -- over 18
-shapes.
+**What this section said first, and what commit `97df3d8` says in its
+message, is FALSE and is deleted:** "15 shapes match the unfused chain and
+three match `fma`, in one kernel, in one build ... MAX on Metal contracts
+these two lines on some instantiations and not others", together with the
+conclusion that `numerics.identical_mul_add` "moved not one bit".
 
-    cosine shapes: 18 -> naive 15 / fused 3 / neither 0
+The 15/3 split was a defect in `check-leafwise-scores`. Its tally had three
+buckets tested as `if naive: elif fused: else neither`, so **every fixture on
+which the two host walks AGREE was counted as "naive"**. Running the gate's
+own `host_best` against ITSELF on the CPU, with no device involved at all,
+reproduces the same 15/3 split: it is a property of the FIXTURES. And the
+reason so many fixtures agree is exact: `fma(a, b, 0) == a * b + 0`, so every
+`stat_count == 2` shape -- one iteration of the stat loop, both accumulators
+still at their seeds -- is structurally blind to contraction, and nine of the
+eighteen shapes were that.
 
-**Fifteen shapes match the unfused chain and three match `fma`, in one
-kernel, in one build, differing only in leaf count and stat count.** The L2
-calcer is unaffected at all 18, and it should be: its accumulation is a
-quotient added to a running sum, with no multiply to fuse. The Cosine calcer
-has two contractible seams (`score_calcers.cuh:155-156`) and it is the one
-that moves.
+Corollary the gate could not have survived: its `if cos_naive != 0: FAIL`
+assertion under IDENTICAL could never have passed, however correct the pin
+was.
 
-This is IDENTITY_PATHS row 9 caught in the act on a real kernel rather than
-on a probe, and the split being SHAPE-DEPENDENT within one build is worse
-than a uniform choice would be: it means no single host model describes the
-kernel.
+**WHAT IS ACTUALLY TRUE.**
 
-**AND THE PIN DID NOT FIX IT.** DEVIATION 303 routes both seams through
-`numerics.identical_mul_add`, which is `fma` under `NUMERIC_IDENTICAL`. Run in
-a clean worktree with `GLOBAL_NUMERIC_MODE = NUMERIC_IDENTICAL` (mode printed
-by the check as a guard against a stale build), the tally is **unchanged:
-still 15 naive / 3 fused**. Flipping the mode moved not one bit.
+1. **The pin reaches Metal.** Verified in emitted code rather than inferred.
+   `mojo build --emit asm` writes a per-kernel AIR sidecar; diffing a FAST
+   build against an IDENTICAL one turns `fmul contract` + `fadd contract`
+   into `call contract float @llvm.fma.f32`, **10 sites to 22 -- exactly the
+   +12 that six pinned `_add_leaf` calls times two lines predicts.** The L2
+   kernel's module is byte-identical between the two builds, which is the
+   control. IDENTITY_PATHS row 9's construction is sound.
 
-So one of these is true and the lane does not yet know which:
+2. **On the one seam that discriminates, Metal's own FAST codegen already
+   fuses.** The three non-blind shapes match the `fma` walk under FAST too.
+   **That contradicts the generalization in IDENTITY_PATHS row 9**, which
+   records `check-ieee-arith` measuring Apple UNFUSED, fused 0 of 2^20. Both
+   measurements can be right -- different expressions in different kernels --
+   and the transferable lesson is the one this lane is putting on the record:
+   **contraction must be measured PER SEAM and never inherited from a probe.**
+   On Apple the pin therefore buys nothing here and buys everything on a
+   backend whose codegen chooses the other way.
 
-* `identical_mul_add` does not lower to a hardware `fma` inside a GPU kernel
-  on this backend, in which case IDENTITY_PATHS row 9's "CONSTRUCTION LANDED"
-  is overstated for every site that will ever use it, not just this one;
-* the comptime branch is not being taken in the kernel's compilation unit;
-* the backend re-associates after inlining, defeating the pin downstream;
-* or my "fused" host model is not what a fused device would compute.
+3. **Honest limit.** The discriminating fixture only exercises
+   `DenumSqr += weight * mu * mu`. The `Score += sum * mu` seam has not yet
+   been observed discriminating. The gate now buckets four ways -- fused /
+   naive / TIE / neither -- extends past `stat_count == 3`, and asserts
+   `cos_fused != 0` so a fixture set that discriminates nothing cannot pass
+   quietly.
 
-Under investigation. **Until it resolves, this lane's identity claim is
-bounded: the Lossguide scorer is NOT known to be bit-identical across
-backends on the Cosine score function.** L2 is unaffected. That bound goes in
-front of any number this lane reports, and no artifact of this lane may say
-otherwise.
+**THE LESSON, which is the reusable part.** A tally is not a measurement
+until the buckets are disjoint and the blind cases are named. I read a number
+off my own gate and wrote a conclusion about a vendor's compiler from it,
+and the number was about my fixtures. `[[gate-against-a-real-accumulator]]`
+is the same class: a gate that cannot distinguish two hypotheses will still
+report one of them.
 
 ### 3. The six single-leaf kernels are a PERFORMANCE arm, not a correctness prerequisite
 
@@ -332,8 +347,12 @@ Being verified independently against their source before it is relied on.
 
 ## What is not yet known
 
-* The contraction question above. Everything else waits behind it, because a
-  bit-identity gate written on top of an unpinned seam measures nothing.
+* Whether the `Score += sum * mu` seam discriminates at all on any backend.
+  The `DenumSqr` seam does; this one has not been caught doing so, and an
+  unexercised pin is a pin nobody has tested.
+* What Apple's AIR-to-binary stage does with `llvm.fma.f32`. The AIR diff
+  proves the pin survives to AIR, not to metal machine code. Low risk,
+  unmeasured, and labelled as such.
 * Whether `FindBestLeafToSplit`'s HOST argmin adds an identity pathway that
   `IDENTITY_PATHS.md` does not enumerate. It compares scores read back from
   the device, and the argmin's tie-break is `<` strict on leaf id, so the
@@ -348,7 +367,7 @@ Being verified independently against their source before it is relied on.
 | piece | state |
 |---|---|
 | `ComputeOptimalSplit` (the Lossguide scorer) | **PORTED AND GATED**, `check-leafwise-scores`, five teeth, PASS under FAST |
-| DEVIATION 303, the multiply-add pin | landed, **measured ineffective**, under investigation |
+| DEVIATION 303, the multiply-add pin | landed and **verified in the emitted AIR** (10 -> 22 `llvm.fma.f32`); the "ineffective" reading was a gate defect, retracted |
 | single-leaf split kernels | not started; re-classified as a performance arm |
 | `select_leaves_to_split` / `should_terminate` / `is_terminal_leaf` | not started |
 | the Lossguide fit loop | not started |

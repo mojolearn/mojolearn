@@ -1,0 +1,170 @@
+"""Which ONE leaf Lossguide splits next, and when it stops.
+
+PORT OF the `EGrowPolicy::Lossguide` arms of
+`catboost/cuda/methods/greedy_subsets_searcher/greedy_search_helper.cpp` at
+CatBoost `54a8143a`. Transliterated. Do not improve.
+
+============================ DEVIATION 301 ============================
+**Theirs is ONE file and ours is three.** `TGreedySearchHelper` holds every
+policy's arm in `greedy_search_helper.cpp`; here the symmetric arm is in
+`greedy_search_helper.mojo`, the Depthwise arm is in
+`greedy_search_helper_depthwise.mojo` and this is the Lossguide arm.
+
+The reason is a checkout state, not a design: `greedy_search_helper.mojo` was
+mid-edit by a third session when both non-symmetric lanes opened, and a lane
+that edits another lane's live file trades a merge conflict for a silent
+overwrite. **This split folds back into `greedy_search_helper.mojo` when that
+file is quiet**, and `PORTED_MAP.tsv` points all three rows at the same
+upstream file so the fold is a rename and not an archaeology exercise.
+=======================================================================
+
+============================ DEVIATION 304 ============================
+**This file imports three predicates from the DEPTHWISE lane's file**, which
+inverts nothing in CatBoost -- in their source `IsTerminalLeaf`,
+`ShouldTerminate` and `SelectLeavesToVisit` are policy-general members of the
+one helper, read by every policy (`:668-710`). Ours have to live somewhere
+and the depthwise lane wrote them first.
+
+The alternative was a second copy, and a second copy of a predicate whose
+whole job is to agree with the first is how two lanes come to disagree about
+when a tree stops. `min_data_in_leaf`'s `<=` boundary is exactly the kind of
+detail that survives in one copy and not the other.
+
+**The correct home is `greedy_search_helper.mojo` and the move is scheduled**
+for when both lanes' files are committed and that file is quiet. Until then
+the import direction is wrong and is written down rather than hidden.
+=======================================================================
+
+WHAT LOSSGUIDE ACTUALLY IS. Four decisions, and only two of them are in this
+file because the other two are shared:
+
+  1. `SelectLeavesToSplit`  -> the single best leaf, HERE      (`:319-324`)
+  2. `ComputeOptimalSplits` -> `ComputeOptimalSplit`, the kernel
+     (`kernel/compute_scores.mojo`'s `compute_optimal_split_kernel`)
+  3. `MakeSplit`            -> their single-leaf fast path, or the multi-leaf
+     kernels with a one-element list (see `LOSSGUIDE.md` finding 3)
+  4. `ShouldTerminate`      -> shared, and `MaxLeaves` is where Lossguide
+     differs from every other policy in what the number MEANS
+"""
+
+from gbdt.methods.greedy_subsets_searcher.greedy_search_helper_depthwise import (
+    is_terminal_leaf,
+    select_leaves_to_visit,
+    should_terminate,
+)
+from gbdt.methods.greedy_subsets_searcher.points_subsets import TLeaf
+
+
+def find_best_leaf_to_split(leaves: List[TLeaf]) raises -> Int:
+    """`FindBestLeafToSplit` (`greedy_search_helper.cpp:296-309`).
+
+        double bestScore = std::numeric_limits<double>::infinity();
+        TMaybe<ui32> bestLeaf;
+        for (size_t i = 0; i < subsets.Leaves.size(); ++i) {
+            if (subsets.Leaves[i].BestSplit.Defined()) {
+                if (subsets.Leaves[i].BestSplit.Score < bestScore) {
+                    bestScore = subsets.Leaves[i].BestSplit.Score;
+                    bestLeaf = i;
+                }
+            }
+        }
+
+    Returns their `TMaybe<ui32>` as `-1` for "nothing" -- every caller here
+    tests it, and the one caller that matters is `select_leaves_to_split`
+    below, which returns an empty list rather than splitting anything.
+
+    THREE THINGS THAT ARE DECISIONS AND NOT FORMALITIES:
+
+    **The comparison is STRICT `<`, so on a tie the FIRST leaf wins**, and
+    leaf ids are creation order (`MakeSplit` keeps the parent's id for the
+    left child and appends the right at `leavesCount + i`,
+    `split_properties_helper.cpp:872-873`). So a tie between two leaves is
+    broken by which was created first, which on a Lossguide tree means the
+    one nearer the root of the split ORDER, not of the tree. Reversing the
+    comparison to `<=` grows a different tree from the same data, and ties
+    are not exotic: two leaves that saw the same rows on a constant feature
+    tie exactly.
+
+    **There is NO SIGN TEST.** Depthwise and SymmetricTree take only leaves
+    whose `BestSplit.Score < 0`, i.e. only splits that improve
+    (`:355-359`). Lossguide takes the best leaf whatever its sign. **A
+    Lossguide tree therefore keeps splitting after every remaining split
+    makes the objective worse**, until `MaxLeaves` or `IsTerminalLeaf`
+    stops it. That is their design and it is what `max_leaves` is FOR. A
+    port that "helpfully" added `score < 0` here would grow smaller trees
+    than CatBoost on every dataset and would look like a tuning difference
+    rather than a defect.
+
+    **`Score`, not `Gain`.** Their argmin reads `BestSplit.Score` while the
+    cross-block host reduce keys on `operator<`, which is `Gain`
+    (`gpu_structures.h:80-93`). On this path the two fields hold the SAME
+    number -- `ComputeOptimalSplit` assigns `bestScore = gain; bestGain =
+    gain` (`compute_scores.cu:468-472`) where the OBLIVIOUS kernel assigns
+    `bestScore = score; bestGain = gain` (`:142-144`) -- so this port,
+    which carries one number, is correct here and would NOT be if these
+    records ever came from the oblivious kernel. Checked against their
+    source, not assumed.
+
+    THE SIGN. This port's scores are theirs negated throughout (see
+    `kernel/compute_scores.mojo`'s sign block), so their argmin over
+    `Score` is an ARGMAX over `gain` here, and their `infinity` seed is
+    `-inf` here.
+    """
+    var best_leaf = -1
+    var best_gain = Float32.MIN
+    for i in range(len(leaves)):
+        if leaves[i].best_split.defined:
+            # their `< bestScore`, our sign: strictly greater wins, so the
+            # FIRST leaf keeps a tie exactly as theirs does.
+            if leaves[i].best_split.gain > best_gain:
+                best_gain = leaves[i].best_split.gain
+                best_leaf = i
+    return best_leaf
+
+
+def select_leaves_to_split(leaves: List[TLeaf]) raises -> List[Int]:
+    """`SelectLeavesToSplit`'s Lossguide arm (`greedy_search_helper.cpp:319-324`).
+
+        TMaybe<ui32> leafToSplit = FindBestLeafToSplit(subsets);
+        for (ui32 leaf = 0; leaf < subsets.Leaves.size(); ++leaf) {
+            if (leafToSplit.Defined() && leaf == *leafToSplit) {
+                leavesToSplit->push_back(leaf);
+            }
+        }
+
+    Their loop is a one-element filter written the long way; it produces
+    either `[bestLeaf]` or `[]`. Kept as the same two outcomes rather than
+    as their loop, because the loop cannot produce a third.
+
+    **AT MOST ONE LEAF PER ITERATION, and that is what bounds the scorer.**
+    One split makes two new leaves, both without a `BestSplit`, so the next
+    `SelectLeavesToVisit` returns exactly those two -- which is why their
+    `CB_ENSURE(leavesToVisit.size() <= 2)` (`:511`) holds and why
+    `compute_optimal_split_kernel` takes two scalar leaf ids instead of a
+    buffer. The bound is a consequence of THIS function, not an independent
+    assumption, and breaking this one breaks that kernel's contract.
+    """
+    var out = List[Int]()
+    var best = find_best_leaf_to_split(leaves)
+    if best >= 0:
+        out.append(best)
+    return out^
+
+
+def find_max_depth(leaves: List[TLeaf]) raises -> Int:
+    """`FindMaxDepth` (`greedy_search_helper.cpp:311-317`).
+
+    Read twice per iteration by their `ComputeOptimalSplits` and
+    `SplitLeaves`, both times only to index `FixedBinarySplits` and to
+    number a log line -- neither of which this lane ports. It is here
+    because their loop is here and because the Lossguide log line's
+    `iteration` is `subsets.Leaves.size()` and NOT this
+    (`:596-600`), which is a distinction a reader will otherwise have to
+    re-derive from their source.
+    """
+    var depth = 0
+    for i in range(len(leaves)):
+        var d = leaves[i].get_depth()
+        if d > depth:
+            depth = d
+    return depth

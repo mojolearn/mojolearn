@@ -149,13 +149,33 @@ def _add_leaf[
         # add. Row 9 says contraction is a codegen decision no runtime row
         # can reach.
         #
-        # ON THIS KERNEL THAT IS NOT HYPOTHETICAL. `check-leafwise-scores`
-        # compares the device against BOTH host walks over 18 shapes:
-        # **15 matched the naive chain and 3 matched `fma`**, in one kernel,
-        # in one build, differing only in leaf count and stat count. So MAX
-        # on Metal contracts these two lines on some instantiations and not
-        # others -- which makes this seam non-identical across backends by
-        # exactly the mechanism row 9 names.
+        # ON THIS KERNEL THE SEAM IS REAL AND THE PIN REACHES IT. Verified
+        # in the emitted code, not inferred: `mojo build --emit asm` writes
+        # a per-kernel AIR sidecar, and diffing a FAST build against an
+        # IDENTICAL one turns `fmul contract` + `fadd contract` into
+        # `call contract float @llvm.fma.f32`, 10 sites -> 22, exactly the
+        # +12 that six pinned `_add_leaf` calls x two lines predicts. The
+        # L2 kernel's module is byte-identical between the two builds,
+        # which is the control.
+        #
+        # AND ON THIS SEAM METAL'S OWN FAST CODEGEN ALREADY FUSES.
+        # `check-leafwise-scores` buckets every Cosine shape four ways and
+        # the discriminating ones match the `fma` walk under FAST as well.
+        # **That contradicts the generalization in IDENTITY_PATHS row 9**,
+        # which records `check-ieee-arith` measuring Apple UNFUSED (fused 0
+        # of 2^20). Both measurements can be right -- they are different
+        # expressions in different kernels -- and the lesson is that
+        # contraction must be measured PER SEAM, never inherited from a
+        # probe. So the pin buys nothing on Apple here and everything on a
+        # backend whose codegen chooses the other way.
+        #
+        # A SENTENCE THAT WAS HERE IS DELETED AS FALSE: "15 matched the
+        # naive chain and 3 matched fma ... so MAX contracts on some
+        # instantiations and not others". The 15 were TIES, counted as
+        # naive by a three-way tally tested in the wrong order;
+        # `host_best` reproduces the same 15/3 split against ITSELF on the
+        # CPU with no device involved. See commit 97df3d8's message, which
+        # carries the same error.
         #
         # `pin_mul_add` routes it through `numerics.identical_mul_add`,
         # which is `fma` under IDENTICAL and the naive chain under FAST.
@@ -165,7 +185,7 @@ def _add_leaf[
         #
         # THE SYMMETRIC ARM HAS THE SAME SEAM AND IS STILL UNPINNED. That
         # is an OPEN row-9 item for whoever owns it, not an oversight of
-        # this one; the measurement above is the evidence it needs.
+        # this one; the AIR diff above is the evidence it needs.
         # =============================================================
         comptime if pin_mul_add:
             score = identical_mul_add(sum, mu, score)
