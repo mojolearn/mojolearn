@@ -98,7 +98,9 @@ from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels_im
     partition_samples,
 )
 from std.time import perf_counter_ns
+from std.os import getenv
 
+from core.identity_trace import IdentityTrace
 from extratrees.mojo_only.host_splitter import HostSplitResult
 from extratrees.mojo_only.rescue import rescue_key, rescue_pick
 from extratrees.ported.decisiontree.flatnode import SparseTreeNode
@@ -1518,6 +1520,46 @@ struct PhaseClock(Movable):
         return "?"
 
 
+comptime STAGE_TIMES_ENV = "MOJOLEARN_STAGE_TIMES"
+"""Set `MOJOLEARN_STAGE_TIMES=1` and the shipping forest entry points run
+their fit under an ENABLED `PhaseClock` and print stage -> seconds at fit
+end. Read ONCE PER FIT, in the wrapper; unset (the shipping state), the
+wrappers construct the same inert clock they always did and the fit is
+byte-for-byte the untimed program."""
+
+
+def stage_times_enabled() -> Bool:
+    """The one place `STAGE_TIMES_ENV` is read: once, at fit entry."""
+    return String(getenv(STAGE_TIMES_ENV)) == "1"
+
+
+def print_stage_times(clock: PhaseClock, what: StringSlice) raises:
+    """Stage -> seconds for one fit, printed at fit end. Inert clock: silent.
+
+    The caution is `PhaseClock`'s, restated where the number lands: every
+    phase boundary of an enabled clock is a `synchronize`, so these are the
+    durations of phases FORBIDDEN TO OVERLAP -- a different program from the
+    shipping fit. Read them as attribution, never as a benchmark; the gap to
+    an unclocked run of the same config is the measurement's own distortion.
+    """
+    if not clock.enabled:
+        return
+    var total = Int64(0)
+    for p in range(N_PHASES):
+        total += clock.ns[p]
+    print("MOJOLEARN_STAGE_TIMES [" + String(what) + "]")
+    print("  (serialized-by-measurement; compare total to an untimed run)")
+    for p in range(N_PHASES):
+        print(
+            "  ",
+            clock.phase_name(p),
+            "->",
+            Float64(clock.ns[p]) / 1e9,
+            "s",
+        )
+    print("  total ->", Float64(total) / 1e9, "s")
+
+
 comptime FOREST_ROW_SLOT_CAP = 1 << 26
 """Ceiling on `in-flight trees * n_rows` row SLOTS one group of the batched
 forest trainer (DEVIATION 211) may hold: 2^26 slots = 256 MB in `d_row_ids`
@@ -2010,11 +2052,15 @@ def train_forest_classification_device(
 ) raises -> List[TreeMetaDataNode[DType.float32]]:
     """The shipping entry point: an INERT clock, so no synchronize is ever
     added -- see `PhaseClock`. `_timed` below is the same function with the
-    micro-step clock threaded; `bench/fit_once.mojo` is its only caller."""
-    var clock = PhaseClock(False)
-    return train_forest_classification_device_timed(
+    micro-step clock threaded; `bench/fit_once.mojo` calls it directly.
+    `MOJOLEARN_STAGE_TIMES=1` (read once, here) enables the clock and prints
+    stage -> seconds at fit end -- see `STAGE_TIMES_ENV`."""
+    var clock = PhaseClock(stage_times_enabled())
+    var out = train_forest_classification_device_timed(
         ctx, dataset, params, tree_ids, seed, sabotage, row_slot_cap, clock
     )
+    print_stage_times(clock, "extratrees classification forest fit")
+    return out^
 
 
 def train_forest_classification_device_timed(
@@ -2109,6 +2155,33 @@ def train_forest_classification_device_timed(
     # `score_row_bound_ok` remains the exactness boundary's statement, and
     # everything at or under it is bit-for-bit unchanged.
 
+    # --- identity trace (`core/identity_trace.mojo`) -- NOT A PORT --------
+    # Stage checkpoints so a cross-backend bit difference has an ADDRESS.
+    # `MOJOLEARN_IDENTITY_TRACE` is read ONCE, here, at fit entry; unset
+    # (the shipping state) every `record_*` returns on one boolean test.
+    # That file's four rules govern every checkpoint below -- in
+    # particular rule 4: a traced run drains the queue per record and is
+    # NEVER a timing.
+    var trace = IdentityTrace()
+    if trace.enabled:
+        trace.header(
+            String("extratrees.classification.forest n_rows=")
+            + String(n_rows)
+            + " n_cols="
+            + String(n_cols)
+            + " n_classes="
+            + String(n_classes)
+            + " n_trees="
+            + String(len(tree_ids))
+            + " seed="
+            + String(seed)
+        )
+        # The post-upload boundary. ET fits the RAW resident matrix -- this
+        # port has no quantile/binning stage, so deviation 184's resident
+        # dataset is the corresponding stage output.
+        trace.record_device(ctx, "dataset.data", dataset.d_data)
+        trace.record_device(ctx, "dataset.labels", dataset.d_labels)
+
     var k = n_sampled_cols_for(params, n_cols)
     var out = List[TreeMetaDataNode[DType.float32]]()
     # `row_slot_cap` defaults to FOREST_ROW_SLOT_CAP; the batched check
@@ -2118,6 +2191,7 @@ def train_forest_classification_device_timed(
         group_cap = 1
     clock.mark(ctx)
 
+    var gi = 0
     var first = 0
     while first < len(tree_ids):
         var g = len(tree_ids) - first
@@ -2162,6 +2236,11 @@ def train_forest_classification_device_timed(
             )
 
         clock.tick(ctx, PHASE_SETUP)
+        # The trace's LEVEL-CYCLE counter: one merged frontier batch per
+        # iteration. `gN.cM.` prefixes keep every tag unique within the
+        # trace (the differ's alignment invariant) while naming a position
+        # in the ALGORITHM -- group N, cycle M -- never a machine property.
+        var cyc = 0
         while True:
             # --- ONE merged batch across every queue with work ----------
             var work_items = List[NodeWorkItem]()
@@ -2214,6 +2293,26 @@ def train_forest_classification_device_timed(
             )
             var splits = found[0].copy()
             var any_nonconst = found[1].copy()
+
+            var tag_pre = String("")
+            if trace.enabled:
+                tag_pre = (
+                    String("g") + String(gi) + ".c" + String(cyc) + "."
+                )
+                # The level's REDUCED per-node winners, straight off the
+                # `o_*` readback and BEFORE deviation 205's rescue can
+                # reuse the staging. Rule 3: this is the logical reduced
+                # buffer (one winner per node), never the per-cell
+                # candidate scratch behind it.
+                trace.record_host(
+                    tag_pre + "reduce.colid", ws.o_c.unsafe_ptr(), n_nodes
+                )
+                trace.record_host(
+                    tag_pre + "reduce.num", ws.o_nu.unsafe_ptr(), n_nodes
+                )
+                trace.record_host(
+                    tag_pre + "reduce.den", ws.o_de.unsafe_ptr(), n_nodes
+                )
 
             # --- DEVIATION 205: the nodes whose whole sample was constant.
             # Identical to the one-tree flow; the rescue key and the survey
@@ -2283,6 +2382,23 @@ def train_forest_classification_device_timed(
                     var rescued = res2[0].copy()
                     for t in range(len(chosen_slot)):
                         splits[chosen_slot[t]] = rescued[t]
+
+            if trace.enabled:
+                # The SELECTED splits -- post-rescue, exactly what the
+                # partition and the queues consume.
+                var t_q = List[Float32]()
+                var t_c = List[Int32]()
+                var t_l = List[Int32]()
+                var t_m = List[Float32]()
+                for i in range(n_nodes):
+                    t_q.append(splits[i].quesval)
+                    t_c.append(splits[i].colid)
+                    t_l.append(splits[i].n_left)
+                    t_m.append(splits[i].best_metric_val)
+                trace.record_list_f32(tag_pre + "split.thresh", t_q)
+                trace.record_list_i32(tag_pre + "split.colid", t_c)
+                trace.record_list_i32(tag_pre + "split.nleft", t_l)
+                trace.record_list_f32(tag_pre + "split.gain", t_m)
 
             var plan = build_workload_info(work_items, TPB)
             if len(retry) > 0:
@@ -2357,6 +2473,15 @@ def train_forest_classification_device_timed(
             )
             ctx.synchronize()
             clock.tick(ctx, PHASE_PARTITION)
+
+            if trace.enabled:
+                # The partition's output: the group's whole row-id buffer,
+                # a permutation per tree slot. Logical content -- the same
+                # bytes on any backend that partitioned identically.
+                trace.record_device(
+                    ctx, tag_pre + "partition.rowids", d_row_ids
+                )
+            cyc += 1
 
             # --- the push, PER QUEUE, in the order each was popped --------
             for t in range(len(seg_queue)):
@@ -2456,11 +2581,18 @@ def train_forest_classification_device_timed(
                     unsafe_offset = leaf_base[s] * k_out + i
                 ]
             out.append(trees_g[s].copy())
+        if trace.enabled:
+            # The leaf pass's output for the whole group: the values the
+            # model returns, still concatenated across the group's trees.
+            trace.record_device(
+                ctx, String("g") + String(gi) + ".leaves", d_leaves
+            )
         clock.tick(ctx, PHASE_LEAF)
         # Mojo frees a buffer at its LAST USE; these must outlive every
         # launch that read them, and every launch has synchronized above.
         _ = d_row_ids^
         _ = ws^
+        gi += 1
         first += g
 
     return out^
@@ -2917,12 +3049,15 @@ def train_forest_regression_device(
     row_slot_cap: Int = FOREST_ROW_SLOT_CAP,
 ) raises -> List[TreeMetaDataNode[DType.float32]]:
     """The shipping entry point: an INERT clock -- see `PhaseClock` and the
-    classification twin above."""
-    var clock = PhaseClock(False)
-    return train_forest_regression_device_timed(
+    classification twin above. `MOJOLEARN_STAGE_TIMES=1` (read once, here)
+    enables the clock and prints stage -> seconds at fit end."""
+    var clock = PhaseClock(stage_times_enabled())
+    var out = train_forest_regression_device_timed(
         ctx, dataset, scale, params, tree_ids, seed, sabotage, row_slot_cap,
         clock,
     )
+    print_stage_times(clock, "extratrees regression forest fit")
+    return out^
 
 
 def train_forest_regression_device_timed(
@@ -2961,6 +3096,32 @@ def train_forest_regression_device_timed(
 
     comptime TPB = DEVICE_TPB
 
+    # --- identity trace -- NOT A PORT; see the classification twin --------
+    var trace = IdentityTrace()
+    if trace.enabled:
+        trace.header(
+            String("extratrees.regression.forest n_rows=")
+            + String(n_rows)
+            + " n_cols="
+            + String(n_cols)
+            + " n_trees="
+            + String(len(tree_ids))
+            + " seed="
+            + String(seed)
+        )
+        # The post-quantize boundary: regression labels arrive ALREADY
+        # fixed-point quantized (deviation 135), so the resident quantized
+        # labels plus the forest's scale ARE this fit's binning output.
+        trace.record_device(ctx, "dataset.data", dataset.d_data)
+        trace.record_device(
+            ctx, "dataset.labels.quantized", dataset.d_labels
+        )
+        # The scale, by its BITS (rule 1: never decimal text).
+        var sc = List[Float64]()
+        sc.append(scale)
+        trace.record_host("dataset.scale", sc.unsafe_ptr(), 1)
+        _ = sc^
+
     var k = n_sampled_cols_for(params, n_cols)
     var out = List[TreeMetaDataNode[DType.float32]]()
     # `row_slot_cap` defaults to FOREST_ROW_SLOT_CAP; the batched check
@@ -2970,6 +3131,7 @@ def train_forest_regression_device_timed(
         group_cap = 1
     clock.mark(ctx)
 
+    var gi = 0
     var first = 0
     while first < len(tree_ids):
         var g = len(tree_ids) - first
@@ -3008,6 +3170,8 @@ def train_forest_regression_device_timed(
             )
 
         clock.tick(ctx, PHASE_SETUP)
+        # The trace's level-cycle counter -- see the classification twin.
+        var cyc = 0
         while True:
             var work_items = List[NodeWorkItem]()
             var item_trees = List[Int32]()
@@ -3058,6 +3222,23 @@ def train_forest_regression_device_timed(
             )
             var splits = rfound[0].copy()
             var any_nonconst = rfound[1].copy()
+
+            var tag_pre = String("")
+            if trace.enabled:
+                tag_pre = (
+                    String("g") + String(gi) + ".c" + String(cyc) + "."
+                )
+                # The level's REDUCED per-node winners (rule 3: the logical
+                # reduced buffer). Regression's readback carries no exact
+                # num/den pair -- the gain travels with the candidate
+                # (deviation 183) -- so the winner's column and gain are
+                # the reduced record.
+                trace.record_host(
+                    tag_pre + "reduce.colid", ws.o_c.unsafe_ptr(), n_nodes
+                )
+                trace.record_host(
+                    tag_pre + "reduce.gain", ws.o_m.unsafe_ptr(), n_nodes
+                )
 
             # --- DEVIATION 205, the regression half ----------------------
             var retry = List[Int]()
@@ -3122,6 +3303,22 @@ def train_forest_regression_device_timed(
                     var rescued = res2[0].copy()
                     for t in range(len(chosen_slot)):
                         splits[chosen_slot[t]] = rescued[t]
+
+            if trace.enabled:
+                # The SELECTED splits -- post-rescue; see the twin.
+                var t_q = List[Float32]()
+                var t_c = List[Int32]()
+                var t_l = List[Int32]()
+                var t_m = List[Float32]()
+                for i in range(n_nodes):
+                    t_q.append(splits[i].quesval)
+                    t_c.append(splits[i].colid)
+                    t_l.append(splits[i].n_left)
+                    t_m.append(splits[i].best_metric_val)
+                trace.record_list_f32(tag_pre + "split.thresh", t_q)
+                trace.record_list_i32(tag_pre + "split.colid", t_c)
+                trace.record_list_i32(tag_pre + "split.nleft", t_l)
+                trace.record_list_f32(tag_pre + "split.gain", t_m)
 
             var plan = build_workload_info(work_items, TPB)
             if len(retry) > 0:
@@ -3190,6 +3387,13 @@ def train_forest_regression_device_timed(
             )
             ctx.synchronize()
             clock.tick(ctx, PHASE_PARTITION)
+
+            if trace.enabled:
+                # The partition's output permutation -- see the twin.
+                trace.record_device(
+                    ctx, tag_pre + "partition.rowids", d_row_ids
+                )
+            cyc += 1
 
             for t in range(len(seg_queue)):
                 var items_s = List[NodeWorkItem]()
@@ -3290,9 +3494,15 @@ def train_forest_regression_device_timed(
                     unsafe_offset = leaf_base[s] * k_out + i
                 ]
             out.append(trees_g[s].copy())
+        if trace.enabled:
+            # The leaf pass's output for the whole group -- see the twin.
+            trace.record_device(
+                ctx, String("g") + String(gi) + ".leaves", d_leaves
+            )
         clock.tick(ctx, PHASE_LEAF)
         _ = d_row_ids^
         _ = ws^
+        gi += 1
         first += g
 
     return out^

@@ -101,3 +101,27 @@ Three oracles, in the house pattern:
 3. **Quality band** — sklearn `ExtraTreesClassifier`/`Regressor` at a fixed
    seed, holdout accuracy/MSE only. Never bitwise, never a gate, never on a
    real dataset (rule 4).
+
+## Instrumentation (env-gated, off by default)
+
+Both flags are read ONCE per forest fit, in
+`ported/decisiontree/batched_levelalgo/builder.mojo`; unset, the fit is
+byte-for-byte the uninstrumented program.
+
+* `MOJOLEARN_IDENTITY_TRACE=<path>` — `core/identity_trace.mojo` stage
+  checkpoints, so a cross-backend bit difference has an ADDRESS. The ET fit
+  records: `dataset.data` / `dataset.labels` (regression adds
+  `dataset.labels.quantized` and `dataset.scale`, the fixed-point boundary —
+  ET has no quantile/binning stage, so the resident dataset is that
+  boundary), then per group `gN` and level cycle `cM`: `gN.cM.reduce.*` (the
+  reduced per-node winners off the readback — `colid`/`num`/`den` for
+  classification, `colid`/`gain` for regression), `gN.cM.split.*`
+  (post-rescue selected splits: `thresh`/`colid`/`nleft`/`gain`),
+  `gN.cM.partition.rowids` (the partition's output permutation), and
+  `gN.leaves` (the leaf pass's output). That file's four rules govern every
+  record; rule 4 means a traced run is NEVER a timing.
+* `MOJOLEARN_STAGE_TIMES=1` — the shipping forest entry points run under an
+  ENABLED `PhaseClock` and print stage -> seconds at fit end. `PhaseClock`'s
+  caution applies: every boundary is a `synchronize`, so the phases are
+  forbidden to overlap — attribution, never a benchmark; compare the total
+  to an untimed run to see the measurement's own distortion.
