@@ -1822,19 +1822,39 @@ one cell.
 
 ---
 
-## 188. Regression has no device arm and it is REFUSED BY NAME
+## 188. The estimator's device regressor: refused BY NAME, then CLOSED
 
-There is no `train_regression_device`. Every device kernel supports regression —
-range, draw, fixed-point score accumulation, partition, leaf — but the finalize
-kernel publishes no exact rational for MSE, so `split_reduce_kernel` cannot
-rank regression candidates at all.
+**The refusal, as it stood.** When this entry was written there was no
+`train_regression_device`: every device kernel supported regression — range,
+draw, fixed-point score accumulation, partition, leaf — but the finalize
+kernel published no exact rational for MSE, so `split_reduce_kernel` could not
+rank regression candidates. `fit_extra_trees_regressor_device` existed only to
+refuse: offering no symbol leaves a caller who found
+`fit_extra_trees_classifier_device` to guess, and quietly forwarding to the
+host regressor hands them a host fit under a device name — the same class of
+defect as a parameter accepted and ignored.
 
-**The refusal is why the function exists.** Offering no symbol leaves a caller
-who found `fit_extra_trees_classifier_device` to guess; quietly forwarding to
-the host regressor hands them a host fit under a device name — the same class
-of defect as a parameter accepted and ignored. It raises unconditionally,
-before `refuse_unported`, because the gap is not a property of the
-configuration.
+**CLOSED 2026-08-21.** Deviation 189 gave the reduction an exact `Int64` MSE
+key, deviation 206 brought the regression device path level with
+classification and added `fit_regression_device`, and at that point the
+refusal was a switch that had outlived its reason — the defect class the
+Borders default flip already named. `fit_extra_trees_regressor_device` now
+follows 187's shape exactly: both regressor arms call `regressor_plan` (the
+new `classifier_plan` twin) and nothing else before their trainer, and the
+device arm additionally derives deviation 135's quantization
+(`quantize_labels`: whole-vector magnitude sum through `choose_scale`, the
+same derivation `device_regression_check` uses) so callers need not know
+fixed point exists.
+
+**Measured, in `device_regression_check` section 4:** 3 trees through the
+sklearn surface, 0 nodes differing in structure between the arms, 62 leaf
+values moved by quantization and none past one quantization step. REACH is
+proved by that movement rather than by a device-exclusive refusal (regression
+has none): a device arm silently serving the host fit returns bit-equal
+leaves, and the sabotage that did exactly that reddened only the reach
+assertion, while a doubled trainer scale reddened only the one-step bound.
+The shared-plan refusals (`bootstrap=True`, a classification criterion) are
+asserted through the device arm as well.
 
 ---
 

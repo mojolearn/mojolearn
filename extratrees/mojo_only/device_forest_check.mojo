@@ -872,26 +872,25 @@ def main() raises:
     )
     cells += 1
 
-    # Regression on the device is refused BY NAME (deviation 188), and the
-    # HOST regressor still works -- so the refusal is about the device path,
-    # not about regression.
+    # Regression on the device is ACCEPTED since deviation 188 CLOSED. This
+    # check asserted the refusal while it stood; the full host-vs-device
+    # regression estimator comparison (structure, leaf bound, reach) lives in
+    # device_regression_check section 4, so here only the acceptance and the
+    # host arm are pinned.
     var rcfg = ExtraTreesConfig().for_regression()
     rcfg.n_estimators = 3
     rcfg.max_depth = 4
     var ry = List[Float32]()
     for r in range(hashed.n_rows):
         ry.append(hashed.y[r])
-    var reg_refused = False
-    try:
-        _ = fit_extra_trees_regressor_device(
-            ctx, xc, ry, Int32(hashed.n_rows), Int32(hashed.n_cols), rcfg
-        )
-    except:
-        reg_refused = True
-    assert_true(
-        reg_refused,
-        "there is no device regressor and it must be refused BY NAME rather"
-        " than silently fitting on the host (deviation 188)",
+    var rdev = fit_extra_trees_regressor_device(
+        ctx, xc, ry, Int32(hashed.n_rows), Int32(hashed.n_cols), rcfg
+    )
+    assert_equal(
+        len(rdev.forest.trees),
+        3,
+        "the device regressor must fit through the estimator (deviation 188"
+        " closed)",
     )
     var rfit = fit_extra_trees_regressor(
         xc, ry, Int32(hashed.n_rows), Int32(hashed.n_cols), rcfg
@@ -899,8 +898,7 @@ def main() raises:
     assert_equal(
         len(rfit.forest.trees),
         3,
-        "and the HOST regressor must still fit, so the refusal is about the"
-        " device path and not about regression",
+        "and the HOST regressor still fits alongside it",
     )
     assert_equal(rcfg.criterion, CRITERION_MSE)
     cells += 3

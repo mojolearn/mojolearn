@@ -94,11 +94,22 @@ them as its REACH proof that this file's device arm really reaches the device
 trainer -- the two arms produce identical forests, so no OUTPUT can tell them
 apart, and only a device-exclusive refusal can.
 
-**Regression has no device arm and it is refused BY NAME**, not silently
-served from the host. DEVIATION 188.
+**Regression has the same pair of arms.** DEVIATION 188 refused the device
+regressor BY NAME while `train_regression_device` did not exist; deviation 189
+gave the device reduction an exact MSE key and deviation 206 brought the
+regression device path level with classification, so the refusal's reason is
+gone and 188 is CLOSED. `fit_extra_trees_regressor_device(ctx, ...)` follows
+187's shape exactly: both regressor arms call `regressor_plan` and nothing
+else before their trainer, so a refusal cannot reach one arm and miss the
+other. The one thing the device arm does that the host arm does not is
+QUANTIZE the labels (deviation 135): the device trainer consumes fixed-point
+integers, so this file derives the scale from the whole label vector's
+magnitude sum -- the same derivation `device_regression_check` uses -- and the
+leaf values it returns differ from the host arm's by at most one quantization
+step, which is 135's ruling and not a defect.
 """
 
-from extratrees.mojo_only.fixed_point import ceil_log2
+from extratrees.mojo_only.fixed_point import ceil_log2, choose_scale, quantize
 from extratrees.ported.decisiontree.decisiontree import (
     CRITERION_GINI,
     CRITERION_MSE,
@@ -110,6 +121,7 @@ from extratrees.ported.randomforest.randomforest import (
     fit_classification,
     fit_classification_device,
     fit_regression,
+    fit_regression_device,
 )
 from max.gpu.host import DeviceContext
 
@@ -495,6 +507,45 @@ def fit_extra_trees_classifier_device(
     return FitResult(forest^, plan, bound)
 
 
+def regressor_plan(
+    config: ExtraTreesConfig, n_rows: Int32, n_features: Int32
+) raises -> FitPlan:
+    """`classifier_plan`'s regression twin, for DEVIATION 187's reason.
+
+    Both `fit_extra_trees_regressor` and `fit_extra_trees_regressor_device`
+    call this and nothing else before their trainer, so neither arm has a line
+    of policy of its own and a refusal cannot reach one and miss the other.
+    """
+    if config.criterion != CRITERION_MSE:
+        raise Error(
+            "the regression criterion must be squared_error; the others are"
+            " refused by validity_check"
+        )
+    return resolve(config, Int(n_rows), Int(n_features))
+
+
+def quantize_labels(
+    y: List[Float32], n_rows: Int32
+) raises -> Tuple[List[Int32], Float64]:
+    """The label vector in deviation 135's fixed point, and its scale.
+
+    `choose_scale` takes the sum of magnitudes over the WHOLE label vector,
+    because any node's rows are a subset of it -- 135's bound, which makes
+    accumulator overflow impossible rather than unlikely. The same derivation
+    `device_regression_check` uses, kept here so a caller of the device arm
+    does not have to know deviation 135 exists.
+    """
+    var mag = Float64(0.0)
+    for r in range(Int(n_rows)):
+        var v = Float64(y[r])
+        mag += v if v >= 0.0 else -v
+    var scale = choose_scale(mag, Int(n_rows))
+    var q = List[Int32]()
+    for r in range(Int(n_rows)):
+        q.append(Int32(quantize(Float64(y[r]), scale)))
+    return (q^, scale)
+
+
 def fit_extra_trees_regressor(
     x_col_major: List[Float32],
     y: List[Float32],
@@ -503,12 +554,7 @@ def fit_extra_trees_regressor(
     config: ExtraTreesConfig,
 ) raises -> FitResult:
     """`ExtraTreesRegressor.fit`, same contract."""
-    if config.criterion != CRITERION_MSE:
-        raise Error(
-            "the regression criterion must be squared_error; the others are"
-            " refused by validity_check"
-        )
-    var plan = resolve(config, Int(n_rows), Int(n_features))
+    var plan = regressor_plan(config, n_rows, n_features)
     var forest = fit_regression(
         x_col_major,
         y,
@@ -530,34 +576,46 @@ def fit_extra_trees_regressor_device(
     n_features: Int32,
     config: ExtraTreesConfig,
 ) raises -> FitResult:
-    """DEVIATION BLOCK -- DEVIATION 188. REFUSED BY NAME, NEVER SERVED FROM THE
-    HOST.
+    """`ExtraTreesRegressor.fit` with the split search on the GPU.
 
-    There is no `train_regression_device`. Every device kernel in this lane
-    supports regression -- the range pass, the draw, the score accumulation in
-    deviation 135's fixed point, the partition and the leaf kernel all take the
-    regression arm -- but the FINALIZE kernel publishes no exact rational for
-    MSE, so `split_reduce_kernel` has nothing to rank regression candidates by
-    and the device reduction cannot elect a winner.
+    DEVIATION BLOCK -- DEVIATION 188, CLOSED. This function refused BY NAME
+    while `train_regression_device` did not exist: the device reduction had
+    nothing exact to rank MSE candidates by. Deviation 189 published cuML's
+    own MSE gain as an exact `Int64` key and deviation 206 brought the
+    regression device path level with classification, so the refusal's reason
+    is gone and keeping it would be the stale-switch defect the Borders
+    default already taught this repository once.
 
-    **The refusal is the whole point of this function existing.** The
-    alternative shapes are both worse in the way this file was written to
-    prevent: offering no symbol at all leaves a caller who found
-    `fit_extra_trees_classifier_device` to guess, and quietly forwarding to
-    `fit_extra_trees_regressor` would hand them a HOST fit under a name that
-    says device -- the same class of defect as a parameter accepted and
-    ignored. So the name exists, takes exactly the arguments the device
-    classifier takes, and says what is missing and why.
+    The shape is DEVIATION 187's, unchanged: the signature is
+    `fit_extra_trees_regressor`'s plus a `DeviceContext`, both arms call
+    `regressor_plan` and nothing else before their trainer, and the dataset is
+    uploaded once for the forest (`fit_regression_device`, deviation 184's
+    split applied to regression by 206).
 
-    It raises unconditionally, before `refuse_unported`, because the gap is not
-    a property of the configuration: no `ExtraTreesConfig` makes a device
-    regression fit possible today.
+    **What is NOT identical to the host arm, and it is deviation 135's ruling
+    rather than a defect:** the device trainer consumes labels QUANTIZED to
+    fixed point, so `quantize_labels` derives the scale here, the tree
+    STRUCTURE is bit-identical to the host arm's (the split decision is made
+    on integer sums on both sides, deviations 135 and 189), and the LEAF
+    VALUES differ by at most one quantization step -- they are means of
+    quantized labels where the host's are `Float64` means.
+    `device_regression_check` asserts all three against THIS entry point, and
+    uses the leaf-value difference as the REACH proof that this arm fits on
+    the device at all: an arm that silently served the host fit would return
+    bit-equal leaves, and the check requires at least one to differ.
     """
-    raise Error(
-        "there is no device regressor: the device split reduction ranks"
-        " candidates by an exact rational that the finalize kernel publishes"
-        " only for Gini, so it cannot rank MSE candidates and"
-        " train_regression_device does not exist. Refused by name rather than"
-        " silently fitting on the HOST under a device name. Use"
-        " fit_extra_trees_regressor for the host fit. DEVIATION 188."
+    var plan = regressor_plan(config, n_rows, n_features)
+    var ql = quantize_labels(y, n_rows)
+    var forest = fit_regression_device(
+        ctx,
+        x_col_major,
+        ql[0],
+        ql[1],
+        n_rows,
+        n_features,
+        plan.params,
+        plan.n_trees,
+        config.random_state,
     )
+    var bound = depth_cap_bound(forest, plan)
+    return FitResult(forest^, plan, bound)

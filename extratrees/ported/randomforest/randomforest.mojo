@@ -59,10 +59,15 @@ not consequences:
 * **the labels are cast to `Int32` class ids once for the forest**, not once
   per tree, because the cast does not depend on the tree id. DEVIATION 186.
 
-There is no `fit_regression_device`, and that is not an omission of this file:
-`train_regression_device` does not exist, because the finalize kernel publishes
-no exact rational for MSE and the device reduction therefore cannot rank
-regression candidates. DEVIATION 188 refuses it BY NAME at the estimator.
+`fit_regression_device` is the regression twin of the same loop, added when
+deviation 206 brought the regression device path level: same upload-once
+dataset (DEVIATION 184's shape), same per-tree `row_ids`, same `bootstrap`
+refusal by name, with the workspace also hoisted to the fit because deviation
+202 gave regression a per-tree workspace to hoist. It takes labels ALREADY
+QUANTIZED (deviation 135) plus the scale that produced them; the estimator's
+`fit_extra_trees_regressor_device` derives that quantization so callers do not
+have to. DEVIATION 188, which refused a device regressor by name while
+`train_regression_device` did not exist, is CLOSED.
 """
 
 from extratrees.ported.decisiontree.decisiontree import (

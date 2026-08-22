@@ -24,7 +24,12 @@ What is asserted here:
 3. the leaf values agree to within the quantization step, and the actual
    difference is REPORTED rather than assumed;
 4. every row lands in exactly one leaf, `max_depth` is respected, the same seed
-   reproduces the tree and a different seed does not.
+   reproduces the tree and a different seed does not;
+5. the ESTIMATOR's device arm (`fit_extra_trees_regressor_device`, deviation
+   188 closed) produces the host estimator arm's structure with leaves within
+   one quantization step, at least one leaf MOVED (the reach proof: a device
+   arm that silently served the host fit would return bit-equal leaves), and
+   the shared `regressor_plan` refusals fire through the device arm.
 """
 
 from std.testing import assert_equal, assert_true
@@ -50,6 +55,11 @@ from extratrees.ported.decisiontree.batched_levelalgo.builder import (
     train_regression_device,
 )
 from extratrees.ported.decisiontree.batched_levelalgo.dataset import Dataset
+from extratrees.estimator import (
+    ExtraTreesConfig,
+    fit_extra_trees_regressor,
+    fit_extra_trees_regressor_device,
+)
 
 
 def column_major(fixture: FixtureDataset) -> List[Float32]:
@@ -313,6 +323,125 @@ def main() raises:
         "nodes, depth",
         dt2.depth_counter,
         "-- every row in one leaf, deterministic, seed-sensitive",
+    )
+
+    # ---- 4. the ESTIMATOR's device arm (deviation 188, closed) -----------
+    # `fit_extra_trees_regressor_device` against `fit_extra_trees_regressor`,
+    # through the sklearn surface rather than the raw trainers. The two arms
+    # share `regressor_plan`, so what is asserted here is the part that CAN
+    # drift: the device arm's own quantization and its trainer.
+    #
+    # REACH is proved by the leaf values, not by the structure: the device's
+    # leaves are means of QUANTIZED labels (deviation 135) and the host's are
+    # Float64 means, so at least one leaf MUST differ. An arm that silently
+    # served the host fit under the device name would return bit-equal
+    # leaves. Sabotaged once to prove the proof: with the body forwarding to
+    # `fit_regression` instead, this section went red on exactly that
+    # assertion, and with the quantization scale halved it went red on the
+    # one-step bound. Both reverted.
+    print("[estimator] fit_extra_trees_regressor_device vs the host arm")
+    var config = ExtraTreesConfig().for_regression()
+    config.n_estimators = 3
+    config.max_depth = 5
+    config.random_state = 0xE57
+    var x_est = column_major(hashed)
+    var y_est = List[Float32]()
+    for r in range(hashed.n_rows):
+        y_est.append(hashed.y[r])
+    var host_fit = fit_extra_trees_regressor(
+        x_est, y_est, Int32(hashed.n_rows), Int32(hashed.n_cols), config
+    )
+    var dev_fit = fit_extra_trees_regressor_device(
+        ctx, x_est, y_est, Int32(hashed.n_rows), Int32(hashed.n_cols), config
+    )
+    assert_equal(
+        Int(dev_fit.forest.n_trees),
+        Int(host_fit.forest.n_trees),
+        "same n_estimators both arms",
+    )
+    var est_struct_diff = 0
+    var est_leaf_out = 0
+    var est_leaf_moved = 0
+    for t in range(len(host_fit.forest.trees)):
+        assert_equal(
+            host_fit.forest.trees[t].num_nodes(),
+            dev_fit.forest.trees[t].num_nodes(),
+            "tree " + String(t) + ": same node count both arms",
+        )
+        for i in range(host_fit.forest.trees[t].num_nodes()):
+            var a = host_fit.forest.trees[t].sparsetree[i]
+            var b = dev_fit.forest.trees[t].sparsetree[i]
+            if (
+                a.ColumnId() != b.ColumnId()
+                or a.QueryValue().to_bits() != b.QueryValue().to_bits()
+                or a.LeftChildId() != b.LeftChildId()
+                or a.InstanceCount() != b.InstanceCount()
+            ):
+                est_struct_diff += 1
+            cells += 1
+            if not a.IsLeaf():
+                continue
+            var d = Float64(
+                host_fit.forest.trees[t].vector_leaf[i]
+            ) - Float64(dev_fit.forest.trees[t].vector_leaf[i])
+            if d < 0.0:
+                d = -d
+            if d > q_step:
+                est_leaf_out += 1
+            if d > 0.0:
+                est_leaf_moved += 1
+    assert_equal(
+        est_struct_diff,
+        0,
+        "the estimator arms must agree on structure, as the raw trainers do",
+    )
+    assert_equal(
+        est_leaf_out,
+        0,
+        "and every leaf value within one quantization step of the host mean",
+    )
+    assert_true(
+        est_leaf_moved > 0,
+        "REACH: no leaf value differs at all, so the device arm did not"
+        " quantize -- it served the HOST fit under the device name, which is"
+        " the defect deviation 188's refusal existed to prevent",
+    )
+    cells += 3
+
+    # The plan is shared, so one refusal through the DEVICE arm proves the
+    # plan is consulted there at all (rule 8's both-sides is in
+    # estimator_check for the host arm).
+    var refused = False
+    var bad = ExtraTreesConfig().for_regression()
+    bad.bootstrap = True
+    try:
+        _ = fit_extra_trees_regressor_device(
+            ctx, x_est, y_est, Int32(hashed.n_rows), Int32(hashed.n_cols), bad
+        )
+    except:
+        refused = True
+    assert_true(refused, "bootstrap=True refused by name on the device arm")
+    var wrong_crit = ExtraTreesConfig()  # Gini, the classifier default
+    refused = False
+    try:
+        _ = fit_extra_trees_regressor_device(
+            ctx,
+            x_est,
+            y_est,
+            Int32(hashed.n_rows),
+            Int32(hashed.n_cols),
+            wrong_crit,
+        )
+    except:
+        refused = True
+    assert_true(refused, "a classification criterion refused on the device arm")
+    cells += 2
+    print(
+        "    ",
+        len(host_fit.forest.trees),
+        "trees structure-identical;",
+        est_leaf_moved,
+        "leaf values moved by quantization, none past one step",
     )
 
     print("device_regression: ", cells, "cells")

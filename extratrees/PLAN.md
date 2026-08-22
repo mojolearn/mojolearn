@@ -269,13 +269,16 @@ every one with a sabotage per mechanism that was seen to turn it red.
    the dataset uploaded once for the forest (deviation 184) and every refusal
    firing on both arms. The device forest is bit-identical to the host forest:
    0 of 1552 nodes and 0 of 4656 leaf values.
-3. **Regression RUNS on the device** -- `train_regression_device`, the same
-   `Builder::train` loop with the two kernels instantiated for
-   `CLASSIFICATION = False` and cuML's `MSEObjectiveFunction` in place of
-   their Gini one, which is what their `template <typename ObjectiveT> struct
-   Builder` is for. Structure is identical to the host tree (0 of 691 nodes)
-   and leaf values differ by at most half a quantization step -- deviation
-   135's ruling, measured, not a shortfall.
+3. **Regression RUNS on the device, estimator included** --
+   `train_regression_device`, the same `Builder::train` loop with the two
+   kernels instantiated for `CLASSIFICATION = False` and cuML's
+   `MSEObjectiveFunction` in place of their Gini one, which is what their
+   `template <typename ObjectiveT> struct Builder` is for. Structure is
+   identical to the host tree (0 of 691 nodes) and leaf values differ by at
+   most half a quantization step -- deviation 135's ruling, measured, not a
+   shortfall. `fit_extra_trees_regressor_device` exposes it through the
+   sklearn surface since deviation 188 CLOSED (both regressor arms share
+   `regressor_plan`, so refusals cannot drift between them).
 4. **Deviation 151** — we stop when every sampled column is constant and
    sklearn keeps drawing. Priced, measured on `shaped_constant_heavy`, not
    fixed.
