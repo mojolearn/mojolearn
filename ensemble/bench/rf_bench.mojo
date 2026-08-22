@@ -547,11 +547,23 @@ def main() raises:
         # The epsilon window is ONE arm, bracketed the same way. See the
         # comptime block at the top for what RF_BENCH_EPS_DIR does and
         # why it is an env var.
+        canary.tick(ctx, "warmup")  # discarded; see the timed path below
         canary.tick(ctx, "pre")
         run_eps_arm(ctx)
         canary.tick(ctx, "post")
         _ = canary^
         return
+    # THE WARMUP TICK IS DISCARDED BY THE GATE. The window's first GPU
+    # work pays the idle->active clock ramp: across three voided windows
+    # on 2026-08-22 the first tick read 100.8/80.7/84.9 ms against a
+    # steady ~52-60, while rounds 2 and 3 -- EQUALLY fresh processes --
+    # ticked steady, so the cost is the GPU waking for the window, not
+    # per-process and not the box. That is a cost internal to this
+    # benchmark's own arrival, exactly what the Canary docstring says its
+    # spread must not include. The tick still prints and still logs (the
+    # evidence stays in the record, and its node count still self-checks);
+    # `quiet_window.py` excludes `warmup` tags from the spread only.
+    canary.tick(ctx, "warmup")
     canary.tick(ctx, "pre")
     run_arm(ctx, "rf@100000", 100000, 50)
     canary.tick(ctx, "mid")

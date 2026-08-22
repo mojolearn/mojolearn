@@ -359,7 +359,20 @@ def canary_verdict(text):
                 % (g, sorted(ns)))
     worst_spread, worst_group, details = 0.0, "", []
     for g in sorted(groups):
-        ms = [t[1] for t in groups[g]]
+        # WARMUP TICKS ARE EVIDENCE, NOT SPREAD. The window's first GPU
+        # work pays the idle->active clock ramp -- measured at
+        # 100.8/80.7/84.9 ms against a steady ~52-60 across three voided
+        # windows on 2026-08-22, while rounds 2 and 3 (equally fresh
+        # processes) ticked steady, so it is the GPU waking for the
+        # window, not the box moving. The workload now runs a tick tagged
+        # `warmup` first to absorb it; that tick still prints, still
+        # logs, and still feeds the node-count self-check above, but a
+        # cost caused by the benchmark's own arrival cannot be part of a
+        # floor that exists to measure COMPETITION.
+        ms = [t[1] for t in groups[g]
+              if t[0].rsplit(":", 1)[-1] != "warmup"]
+        if not ms:
+            continue
         spread = max(ms) / min(ms) if min(ms) > 0 else float("inf")
         details.append("%s: %.2fx [%s]" % (
             g or "(untagged)", spread,
