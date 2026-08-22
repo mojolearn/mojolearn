@@ -127,8 +127,10 @@ system.** Not before.
 
 ## Not papers, and naming them stops them being mistaken for papers
 
-- `NOVELTY_NOTES` C8 (the basename lottery) and C9 (the Mojo numeric traps):
-  upstream issues. C8 is also a release blocker.
+- `NOVELTY_NOTES` C8 (Metal AOT suppression by MACOSX_DEPLOYMENT_TARGET +
+  cache not keying on it; the "basename lottery" is retracted, 5cd37db) and
+  C9 (the Mojo numeric traps): upstream issues. C8 is no longer a release
+  blocker -- the workaround is shipped and the wheel builds.
 - Items 6 and 7 (benchmark protocol, oracle-compiled gates): methods sections
   in Papers 1 and 2. Kalibera & Jones and Mytkowicz et al. own the first;
   differential testing owns the second.

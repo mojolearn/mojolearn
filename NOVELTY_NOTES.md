@@ -114,15 +114,18 @@ paper.
 
 ## C. Toolchain findings (report upstream, never paper claims)
 
-8. **The basename lottery, now with a mechanism profile.** Mojo 1.0
-   AOT GPU-kernel emission for a CPython shared-lib tracks the SOURCE
-   FILE'S BASENAME in stable name-keyed buckets: `copyml*` names emit
-   73 of ~100 GBDT kernels (invariant under 12 content paddings), 30+
-   other names emit 0, and a GBDT-only split emits 17 -- so emission is
-   not a budget, not content-hashed, not monotone in module size.
-   Current source exceeds every known bucket: the Python extension is
-   unbuildable at HEAD by any local means. Reproducer data ready for a
-   Modular issue (third in the series after #6932/#6933).
+8. **Metal AOT suppression + cache poisoning (replaces the retracted
+   "basename lottery", 5cd37db).** `MACOSX_DEPLOYMENT_TARGET` set to
+   ANY value makes `mojo build` write an empty 134-byte metallib per
+   kernel (0 AIR blobs vs 141 unset, one variable, fresh cache both
+   sides), and `$MODULAR_HOME/cache/.mojo_cache` is content-addressed
+   WITHOUT keying on the deployment target, so one poisoned build
+   serves empty metallibs to every later build whatever its flags.
+   The name-keyed buckets of the earlier claim were cache attrition,
+   not emission behavior. Workaround shipped: pass the floor via
+   `-Xlinker -platform_version`, unset the env var, verify the Mach-O
+   header. Two upstream issues (suppression + cache keying), data in
+   5cd37db (third in the series after #6932/#6933).
 
 9. The Mojo numeric-trap family (recorded across sessions, all
    measured): `String(float)` 1-ulp round-trip failures, `log` 5e-8
