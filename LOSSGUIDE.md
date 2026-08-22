@@ -470,9 +470,47 @@ rather than doing it.
 
 | piece | state |
 |---|---|
-| `ComputeOptimalSplit` (the Lossguide scorer) | **PORTED AND GATED**, `check-leafwise-scores`, five teeth, PASS under FAST |
-| DEVIATION 303, the multiply-add pin | landed and **verified in the emitted AIR** (10 -> 22 `llvm.fma.f32`); the "ineffective" reading was a gate defect, retracted |
-| single-leaf split kernels | not started; re-classified as a performance arm |
-| `select_leaves_to_split` / `should_terminate` / `is_terminal_leaf` | not started |
-| the Lossguide fit loop | not started |
-| `min_data_in_leaf` / `max_leaves` going live | not started; `catboost_options.mojo:289` docstring must be corrected in the same edit |
+| `ComputeOptimalSplit`, the Lossguide scorer | **PORTED AND GATED**, `check-leafwise-scores`, five teeth |
+| leaf selection (`FindBestLeafToSplit`, no sign test, argmin) | **PORTED AND GATED**, `check-lossguide-policy`, six claims incl. a device sign-convention gate |
+| the fit loop | **PORTED AND GATED**, `check-lossguide`, six claims -- ONE DRIVER with four policy branches, not a second driver |
+| the non-symmetric model + apply | the depthwise lane's, consumed |
+| the stage-hash instrument | **LANDED**, `check-identity-trace`, writer and reader gated together; both lanes on it |
+| DEVIATION 303, the multiply-add pin | landed, verified in the emitted AIR |
+| single-leaf split kernels | not started -- a PERFORMANCE arm, correctly ordered after the tree |
+| CatBoost's own Lossguide values as an oracle | **OWED**, and it cannot be run on this box: their GPU learner does not start on Apple silicon. The NVIDIA column's job. |
+
+**What "done" does NOT yet mean.** Every claim gated here is about the POLICY
+being the policy their source describes -- exact `max_leaves`, no sign test,
+the `<=` size boundary, a structure that differs from Depthwise on identical
+input. **None of it compares a value against CatBoost's own output**, because
+CatBoost's GPU arm cannot run here at all. That comparison is the NVIDIA
+column's and it is the honest gap in front of any accuracy claim.
+
+## Duplication, after Andrew asked "are we recreating anything?"
+
+A repo-wide audit ran. What it found about THIS lane, and what was done:
+
+* **The stage-hash instrument was built TWICE, by two lanes, inside one
+  hour.** Resolved the right way and quickly: the depthwise lane deleted
+  theirs and moved onto `core/identity_trace.mojo`, priced on the merits.
+  That is the pattern.
+* **A docstring of mine claimed a gate that does not exist** -- that the
+  symmetric kernel's inlined block argmax and the factored
+  `_leafwise_argmax_write` were gated against each other. They are not; the
+  check never launches the symmetric kernel. Claim deleted, gap labelled.
+  **A comment asserting a gate exists is as load-bearing as the gate, and
+  nothing checks comments.**
+* Two drivers became one (see above). `splitmix`/`hashed` imported rather
+  than copied. `bits`/`bits_f32` collapsed. DEVIATION 304 closed.
+
+**Refuted as duplication:** `TDepthwiseWorkspace` holds only what
+`TTreeWorkspace` cannot serve; `greedy_search_helper_lossguide.mojo` is 190
+lines, three functions, one import.
+
+**Open, and NOT this lane's to fix:** `estimation_bench.mojo`'s splitmix
+carries a different multiplier under the same name (one of thirteen copies);
+`core/segmented_sort.mojo` is a declared fork of the gbdt one and has
+diverged; and **the vec4 histogram fast paths are symmetric-only, so both
+non-symmetric policies silently miss a measured 5.9x** -- the largest single
+item on the list.
+
