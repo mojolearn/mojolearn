@@ -3465,11 +3465,15 @@ def run_tree_layout[
             dst_ptr=h_leaf_values.unsafe_ptr(), src_buf=leaf_values
         )
 
+        # MACHINE-SIZED x (the kernel strides; DEVIATION 210b's repair
+        # applied to this once-per-tree launch): `wide` was data-sized
+        # and paid every leaf the same block count.
         ctx.enqueue_function[add_model_value_kernel](
             p_off.unsafe_ptr(), p_sz.unsafe_ptr(), row_index.unsafe_ptr(),
             leaf_values.unsafe_ptr(), learning_rate, cursor.unsafe_ptr(),
             Int32(1), Int32(0),
-            grid_dim=(wide, n_live, 1), block_dim=(256, 1, 1),
+            grid_dim=(split_points_grid_x(n_live, sm_count), n_live, 1),
+            block_dim=(256, 1, 1),
         )
         mgr.stream_kernel()
 

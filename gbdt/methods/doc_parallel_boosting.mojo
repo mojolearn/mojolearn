@@ -638,6 +638,14 @@ def _estimate_and_apply(
     for i in range(est_len):
         h_est.unsafe_ptr().unsafe_store(i, estimated[i])
     ctx.enqueue_copy(dst_buf=d_est, src_ptr=h_est.unsafe_ptr())
+    # MACHINE-SIZED x (the kernel strides): the widest-leaf grid priced
+    # every leaf at the largest leaf's block count -- on a skewed depth-8
+    # tree, tens of millions of empty threads per launch. Same repair as
+    # DEVIATION 210b in `kernel_add_model_value.mojo`; the launch runs
+    # once per tree, so the fix here is the grid, not the kernel.
+    var amv_gx = 2 * oracle.sm_count
+    if amv_gx < 1:
+        amv_gx = 1
     ctx.enqueue_function[add_model_value_kernel](
         oracle.d_p_off.unsafe_ptr(),
         oracle.d_p_sz.unsafe_ptr(),
@@ -646,7 +654,7 @@ def _estimate_and_apply(
         learning_rate,
         cursor.unsafe_ptr(),
         Int32(approx_dim), Int32(n_rows),
-        grid_dim=((widest + 255) // 256, n_leaves, approx_dim),
+        grid_dim=(amv_gx, n_leaves, approx_dim),
         block_dim=(256, 1, 1),
     )
     ctx.synchronize()

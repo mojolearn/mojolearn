@@ -86,3 +86,103 @@ def add_model_value_kernel(
         var row = plane + Int(row_index.unsafe_load(offset + i))
         cursor.unsafe_store(row, cursor.unsafe_load(row) + value)
         i += stride
+
+
+comptime ABMV_BLOCK = 256
+"""`const ui32 blockSize = 256` (`add_model_value.cu:60`)."""
+
+comptime ABMV_ELEMENTS = 4
+"""`const ui32 elementsPerThreads = 4` (`add_model_value.cu:61`)."""
+
+
+def add_bin_model_value_kernel(
+    bin_values: MutPointer[Float32, MutAnyOrigin],
+    bins: MutPointer[UInt32, MutAnyOrigin],
+    size_in: Int32,
+    cursor_dim_in: Int32,
+    cursor_align_in: Int32,
+    cursor: MutPointer[Float32, MutAnyOrigin],
+):
+    """`AddBinModelValueImpl` (`add_model_value.cu:14-53`), the kernel the
+    leaves estimator's `MoveTo` actually launches on their side
+    (`pointwise_oracle.cpp:50-52`) -- FLAT over rows, `bins[i]` names row
+    i's leaf, no per-leaf grid axis at all.
+
+    ================= DEVIATION 210b (scheduling repair) ==============
+    This port's `MoveTo` used to launch `add_model_value_kernel` -- the
+    PARTITION-indexed AppendModels-style kernel -- on a grid of
+    `ceil(max_leaf/256)` blocks x `bin_count` leaves: every leaf priced
+    at the WIDEST leaf's block count, which on a skewed depth-8 higgs
+    tree is ~100M+ empty threads per call. Measured 2026-08-22 on higgs
+    2M rows: 13.62 ms/call against 1.0 ms for the ENTIRE Logloss
+    evaluation kernel, at ~11 calls per tree = 47% of the whole fit.
+    Their design has no such kernel in `MoveTo` at all; this is their
+    kernel, restored. Grid: `CeilDivide(size, blockSize *
+    elementsPerThreads)` (`:62`), one dimension.
+
+    Their `readIndices` / `writeIndices` arms are NULL on this call path
+    (the estimation cursor is bin-ordered and indices mean identity, the
+    `readIndices ? ... : idx` branch), so the identity arms are compiled
+    in and the pointers are not taken; the day a caller needs the gather
+    arms it adds them as comptime flags rather than loading an identity
+    array their null skips.
+    ===================================================================
+
+    The register-staging shape is theirs: each thread stages
+    `ELEMENTS_PER_THREAD` (bins, then values, then adds) with the
+    `i + j * BLOCK_SIZE` layout of their `#pragma unroll` loops.
+    """
+    var size = Int(size_in)
+    var cursor_dim = Int(cursor_dim_in)
+    var cursor_align = Int(cursor_align_in)
+    var i = Int(block_idx.x) * ABMV_BLOCK * ABMV_ELEMENTS + Int(
+        thread_idx.x
+    )
+
+    var bins_local = InlineArray[UInt32, ABMV_ELEMENTS](fill=UInt32(0))
+
+    comptime for j in range(ABMV_ELEMENTS):
+        var idx = i + j * ABMV_BLOCK
+        if idx < size:
+            bins_local[j] = bins.unsafe_load(idx)
+
+    for dim in range(cursor_dim):
+        var vals_local = InlineArray[Float32, ABMV_ELEMENTS](
+            fill=Float32(0.0)
+        )
+
+        comptime for j in range(ABMV_ELEMENTS):
+            var idx = i + j * ABMV_BLOCK
+            if idx < size:
+                vals_local[j] = bin_values.unsafe_load(
+                    Int(bins_local[j]) * cursor_dim + dim
+                )
+
+        comptime for j in range(ABMV_ELEMENTS):
+            var idx = i + j * ABMV_BLOCK
+            if idx < size:
+                var at = idx + dim * cursor_align
+                cursor.unsafe_store(
+                    at, cursor.unsafe_load(at) + vals_local[j]
+                )
+
+
+def fill_bins_from_partition_kernel(
+    part_offset: MutPointer[UInt32, MutAnyOrigin],
+    part_size: MutPointer[UInt32, MutAnyOrigin],
+    bins: MutPointer[UInt32, MutAnyOrigin],
+):
+    """The per-row `bins` array `TBinOptimizedOracle` carries (their ctor
+    receives it ready-made from the searcher; this port's searchers hand
+    over a partition instead, so the bins are read off it ONCE per tree).
+    Grid y is the leaf, x strides its rows -- the shape is tolerable here
+    because it runs once per tree, not once per Newton evaluation, and
+    the launcher machine-sizes x."""
+    var leaf = Int(block_idx.y)
+    var offset = Int(part_offset.unsafe_load(leaf))
+    var size = Int(part_size.unsafe_load(leaf))
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while i < size:
+        bins.unsafe_store(offset + i, UInt32(leaf))
+        i += stride

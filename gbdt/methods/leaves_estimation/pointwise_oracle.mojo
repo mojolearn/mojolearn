@@ -41,9 +41,13 @@ THE CALL CYCLE, theirs (`pointwise_oracle.cpp`):
   unweighted arm takes the INTEGER count the partition already knows,
   which is the number their double reduce produces. The weighted arm
   reduces the real weights like theirs.
-* `AddBinModelValues` is `add_model_value_kernel` over an IDENTITY row
-  index at learning_rate 1 -- same kernel the boosting loop applies models
-  with, pointed at the bin-sorted cursor copy.
+* `AddBinModelValues` is `add_bin_model_value_kernel` -- THEIR MoveTo
+  kernel (`add_model_value.cu:14-53`), flat over rows against the per-row
+  `bins` array built once per tree from the partition. It used to be
+  `add_model_value_kernel` over an identity row index, whose
+  widest-leaf-sized grid cost 13.6 ms/call on a skewed higgs tree
+  against 1.0 ms for the whole Logloss evaluation (DEVIATION 210b in
+  `kernel_add_model_value.mojo`; PREP_BILL 2026-08-22 step 32).
 * `function_value` arrives as per-block partials folded in one fixed host
   order, the file-standard substitution for their block-reduce-plus-
   `atomicAdd` scalar.
@@ -62,7 +66,13 @@ from gbdt.gpu_util.partitions_reduce import (
     compute_partition_stats,
     partition_stats_chunks,
 )
-from gbdt.methods.kernel_add_model_value import add_model_value_kernel
+from gbdt.methods.kernel_add_model_value import (
+    add_bin_model_value_kernel,
+    add_model_value_kernel,
+    fill_bins_from_partition_kernel,
+    ABMV_BLOCK,
+    ABMV_ELEMENTS,
+)
 from gbdt.methods.leaves_estimation.oracle_interface import (
     LeavesEstimationOracle,
 )
@@ -160,6 +170,9 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
     var d_weights: DeviceBuffer[DType.float32]
     var d_cursor: DeviceBuffer[DType.float32]
     var d_identity: DeviceBuffer[DType.uint32]
+    #: their oracle's per-row `Bins` (`pointwise_oracle.h:70`), read off
+    #: the partition once per tree; `MoveTo`'s kernel indexes it flat
+    var d_bins: DeviceBuffer[DType.uint32]
     var d_leaves: DeviceBuffer[DType.uint32]
     var d_p_off: DeviceBuffer[DType.uint32]
     var d_p_sz: DeviceBuffer[DType.uint32]
@@ -250,17 +263,23 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         self.ctx.enqueue_copy(
             dst_buf=self.d_shift, src_ptr=self.h_shift.unsafe_ptr()
         )
-        self.ctx.enqueue_function[add_model_value_kernel](
-            self.d_p_off.unsafe_ptr(),
-            self.d_p_sz.unsafe_ptr(),
-            self.d_identity.unsafe_ptr(),
+        # their `AddBinModelValue(shift, bins, ...)` (`pointwise_oracle
+        # .cpp:50-52`): the FLAT kernel over rows, `CeilDivide(size,
+        # blockSize * elementsPerThreads)` blocks (`add_model_value.cu
+        # :60-62`). DEVIATION 210b in `kernel_add_model_value.mojo` has
+        # the 13.6-ms-per-call grid this replaces.
+        var abmv_blocks = (
+            self.n_rows + ABMV_BLOCK * ABMV_ELEMENTS - 1
+        ) // (ABMV_BLOCK * ABMV_ELEMENTS)
+        self.ctx.enqueue_function[add_bin_model_value_kernel](
             self.d_shift.unsafe_ptr(),
-            Float32(1.0),
-            self.d_cursor.unsafe_ptr(),
+            self.d_bins.unsafe_ptr(),
+            Int32(self.n_rows),
             Int32(self.cursor_dim),
             Int32(self.n_rows),
-            grid_dim=(self.wide, self.bin_count, self.cursor_dim),
-            block_dim=(256, 1, 1),
+            self.d_cursor.unsafe_ptr(),
+            grid_dim=(abmv_blocks, 1, 1),
+            block_dim=(ABMV_BLOCK, 1, 1),
         )
         # `DerAtPoint.Clear(); Der2AtPoint.Clear();` (`:54-55`)
         self.cached_der2.clear()
@@ -781,6 +800,8 @@ def make_bin_optimized_oracle(
     var d_identity = ctx.enqueue_create_buffer[DType.uint32](n_rows)
     launch_make_sequence(ctx, UInt32(0), d_identity, n_rows)
 
+    var d_bins = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+
     var d_leaves = ctx.enqueue_create_buffer[DType.uint32](bin_count)
     var h_leaves = ctx.enqueue_create_host_buffer[DType.uint32](bin_count)
     for i in range(bin_count):
@@ -802,6 +823,19 @@ def make_bin_optimized_oracle(
     var sm = sm_count
     if sm < 0:
         sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+
+    # their oracle's per-row `Bins`, read off the partition ONCE per tree
+    # (their ctor receives it ready-made from the searcher). Machine-sized
+    # x, strided; `MoveTo` reads this every evaluation.
+    var bins_gx = 2 * sm
+    if bins_gx < 1:
+        bins_gx = 1
+    ctx.enqueue_function[fill_bins_from_partition_kernel](
+        d_p_off.unsafe_ptr(), d_p_sz.unsafe_ptr(), d_bins.unsafe_ptr(),
+        grid_dim=(bins_gx, bin_count, 1),
+        block_dim=(256, 1, 1),
+    )
+
     var chunks2 = partition_stats_chunks(sm, 2)
     var chunks1 = partition_stats_chunks(sm, 1)
     var partials_len = bin_count * 2 * chunks2
@@ -907,6 +941,7 @@ def make_bin_optimized_oracle(
         d_weights^,
         d_cursor^,
         d_identity^,
+        d_bins^,
         d_leaves^,
         d_p_off^,
         d_p_sz^,
