@@ -105,18 +105,43 @@ def find_best_leaf_to_split(leaves: List[TLeaf]) raises -> Int:
     records ever came from the oblivious kernel. Checked against their
     source, not assumed.
 
-    THE SIGN. This port's scores are theirs negated throughout (see
-    `kernel/compute_scores.mojo`'s sign block), so their argmin over
-    `Score` is an ARGMAX over `gain` here, and their `infinity` seed is
-    `-inf` here.
+    ============ THE SIGN, AND IT IS NOT THIS PORT'S ============
+    **A `TLeaf.best_split` HOLDS THEIR SIGN, NOT OURS.** The kernel's gain is
+    theirs negated (see `kernel/compute_scores.mojo`'s sign block), but the
+    HOST REDUCE negates it back before storing:
+
+        var cand = TBestSplitProperties(f, b, -our_gain, -our_gain)
+        if best_split_properties_less(cand, best): best = cand
+
+    -- and `best_split_properties_less` is a transcription of their
+    `operator<`, which is `Gain <` with LOWER BETTER, over a default record
+    whose gain is `Float32.MAX` so that an undefined candidate loses every
+    comparison. Both of those only make sense on their sign.
+
+    So the record that reaches this function is CatBoost's own number and
+    their code ports VERBATIM: an ARGMIN with strict `<`, seeded at `+inf`.
+
+    **THIS FUNCTION WAS WRITTEN AS AN ARGMAX AND WAS WRONG.** I reasoned "our
+    kernel's sign is flipped, so flip the comparison" and never traced the
+    value to where it is STORED. The flip happens twice -- once in the kernel
+    and once in the reduce -- so it cancels, and a Lossguide tree built on the
+    argmax splits the WORST leaf available at every iteration. The lesson is
+    the one [[read-their-source-against-ours]] keeps paying for: a sign is a
+    property of a VALUE AT A PLACE, and the place is the store, not the
+    nearest comment about the kernel.
+
+    Pinned empirically, not by argument: `check-lossguide-policy`'s S1 runs
+    the real kernel on a fixture whose best split improves, applies the real
+    reduce, and asserts the stored gain is NEGATIVE.
+    ==============================================================
     """
     var best_leaf = -1
-    var best_gain = Float32.MIN
+    var best_gain = Float32.MAX
     for i in range(len(leaves)):
         if leaves[i].best_split.defined:
-            # their `< bestScore`, our sign: strictly greater wins, so the
+            # their `< bestScore`, VERBATIM: strictly less wins, so the
             # FIRST leaf keeps a tie exactly as theirs does.
-            if leaves[i].best_split.gain > best_gain:
+            if leaves[i].best_split.gain < best_gain:
                 best_gain = leaves[i].best_split.gain
                 best_leaf = i
     return best_leaf

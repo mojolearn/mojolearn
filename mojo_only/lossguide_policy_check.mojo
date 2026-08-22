@@ -73,6 +73,17 @@ assertions ever pass trivially, the contrast has gone dead and the
 differential gates are measuring nothing.
 """
 
+from max.gpu.host import DeviceContext
+from std.memory import bitcast
+
+from gbdt.methods.greedy_subsets_searcher.kernel.compute_scores import (
+    LEAFWISE_SCORE_BLOCK_SIZE,
+    compute_optimal_split_kernel,
+)
+from gbdt.methods.helpers import best_split_properties_less
+from gbdt.models.oblivious_model import BIN_SPLIT_TAKE_GREATER
+from gbdt.options.catboost_options import SCORE_FUNCTION_COSINE
+
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper_depthwise import (
     is_terminal_leaf,
     select_leaves_to_split as depthwise_select_leaves_to_split,
@@ -95,8 +106,17 @@ from gbdt.options.catboost_options import GROW_LOSSGUIDE, GROW_SYMMETRIC
 
 
 def leaf(gain: Float32, defined: Bool, size: Int = 100) raises -> TLeaf:
-    """One leaf carrying a planted best split. `gain` is in THIS PORT'S
-    sign, where larger is better and their `Score < 0` is our `gain > 0`."""
+    """One leaf carrying a planted best split.
+
+    **`gain` IS IN CATBOOST'S SIGN, LOWER IS BETTER**, because that is what a
+    `TLeaf.best_split` actually holds. The kernel's gain is theirs negated,
+    and the host reduce negates it BACK before storing
+    (`cand = TBestSplitProperties(f, b, -our_gain, -our_gain)`), so the two
+    flips cancel and the stored record is CatBoost's own number. S1 below
+    pins that empirically against the real kernel rather than by argument --
+    this file asserted the opposite convention for its first hour, and every
+    gate still passed, because a self-consistent fixture cannot see a
+    convention error."""
     var l = TLeaf()
     l.size = size
     if defined:
@@ -119,17 +139,167 @@ def lossguide_options() raises -> TTreeStructureSearcherOptions:
     return o^
 
 
-def check_lossguide_policy() raises:
+def check_sign_convention(ctx: DeviceContext) raises -> Int:
+    """S1. THE ONLY DEVICE GATE IN THIS FILE, and the one that would have
+    caught the defect the rest of it could not.
+
+    `find_best_leaf_to_split` was written as an ARGMAX because the score
+    kernel's sign is this port's, flipped from CatBoost's. It is flipped
+    TWICE: once in the kernel and once again in the host reduce, which
+    stores `-our_gain` so that `best_split_properties_less` -- a
+    transcription of their `operator<`, lower-is-better, over a default
+    record whose gain is `+MAX` -- means what it says. The two flips cancel
+    and the stored record is CatBoost's own number.
+
+    **Every host gate in this file passed under the wrong convention**,
+    because a fixture written in one sign and asserted in the same sign is
+    self-consistent whichever sign that is. Only a gate that spans the
+    BOUNDARY can see it. So this one runs the real kernel, applies the real
+    reduce, and asserts the identity rather than any fixture's property:
+
+        stored_gain == -our_gain,  bit for bit
+        find_best_leaf_to_split picks the leaf whose OUR-SIGN gain is LARGEST
+
+    An identity, not a fixture property, so it holds whatever the planted
+    data does and cannot be satisfied by re-planting.
+    """
     var failures = 0
+    comptime N_BF = 16
+    comptime STAT_COUNT = 2
+    comptime N_LEAVES = 3
+
+    var n_cells = N_LEAVES * STAT_COUNT * N_BF
+    var h_hist = ctx.enqueue_create_host_buffer[DType.float32](n_cells)
+    var h_ps = ctx.enqueue_create_host_buffer[DType.float32](
+        N_LEAVES * STAT_COUNT
+    )
+    var h_skip = ctx.enqueue_create_host_buffer[DType.uint8](N_BF)
+    var h_fid = ctx.enqueue_create_host_buffer[DType.uint32](N_BF)
+    var h_fw = ctx.enqueue_create_host_buffer[DType.float32](N_BF)
+    for b in range(N_BF):
+        h_skip.unsafe_ptr().unsafe_store(b, UInt8(0))
+        h_fid.unsafe_ptr().unsafe_store(b, UInt32(b))
+        h_fw.unsafe_ptr().unsafe_store(b, Float32(1.0))
+    for l in range(N_LEAVES):
+        var w = Float32(20.0) + Float32(l) * Float32(11.0)
+        h_ps.unsafe_ptr().unsafe_store(l * STAT_COUNT, w)
+        h_ps.unsafe_ptr().unsafe_store(
+            l * STAT_COUNT + 1, Float32(4.0) - Float32(l) * Float32(1.3)
+        )
+        for b in range(N_BF):
+            var f = Float32(b + 1) / Float32(N_BF + 2)
+            h_hist.unsafe_ptr().unsafe_store(l * STAT_COUNT * N_BF + b, w * f)
+            h_hist.unsafe_ptr().unsafe_store(
+                l * STAT_COUNT * N_BF + N_BF + b,
+                (Float32(4.0) - Float32(l) * Float32(1.3)) * f * f,
+            )
+
+    var argmax_blocks = 2
+    var d_hist = ctx.enqueue_create_buffer[DType.float32](n_cells)
+    var d_ps = ctx.enqueue_create_buffer[DType.float32](
+        N_LEAVES * STAT_COUNT
+    )
+    var d_skip = ctx.enqueue_create_buffer[DType.uint8](N_BF)
+    var d_fid = ctx.enqueue_create_buffer[DType.uint32](N_BF)
+    var d_fw = ctx.enqueue_create_buffer[DType.float32](N_BF)
+    var d_score = ctx.enqueue_create_buffer[DType.float32](argmax_blocks * 2)
+    var d_bin = ctx.enqueue_create_buffer[DType.uint32](argmax_blocks * 2)
+    ctx.enqueue_copy(dst_buf=d_hist, src_ptr=h_hist.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=d_ps, src_ptr=h_ps.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=d_skip, src_ptr=h_skip.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=d_fid, src_ptr=h_fid.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=d_fw, src_ptr=h_fw.unsafe_ptr())
+    ctx.synchronize()
+
+    ctx.enqueue_function[compute_optimal_split_kernel[SCORE_FUNCTION_COSINE]](
+        d_skip.unsafe_ptr(), Int32(N_BF), d_fid.unsafe_ptr(),
+        d_fw.unsafe_ptr(), d_hist.unsafe_ptr(), d_ps.unsafe_ptr(),
+        Int32(STAT_COUNT), Int32(0), Int32(2), Int32(0),
+        Float32(1.5), Float32(0.0), UInt64(0),
+        d_score.unsafe_ptr(), d_bin.unsafe_ptr(),
+        grid_dim=(argmax_blocks, 2, 1),
+        block_dim=(LEAFWISE_SCORE_BLOCK_SIZE, 1, 1),
+    )
+    var h_s = ctx.enqueue_create_host_buffer[DType.float32](argmax_blocks * 2)
+    var h_b = ctx.enqueue_create_host_buffer[DType.uint32](argmax_blocks * 2)
+    ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr(), src_buf=d_score)
+    ctx.enqueue_copy(dst_ptr=h_b.unsafe_ptr(), src_buf=d_bin)
+    ctx.synchronize()
+
+    # THE REAL REDUCE, transcribed from the depthwise driver's own loop so
+    # this gate cannot pass against a private variant of it.
+    var leaves = List[TLeaf]()
+    var our_gain = List[Float32]()
+    for row in range(2):
+        var best = TBestSplitProperties()
+        var best_ours = -Float32.MAX
+        for i in range(argmax_blocks):
+            var slot = row * argmax_blocks + i
+            var bf = h_b.unsafe_ptr().unsafe_load(slot)
+            if bf == UInt32(0xFFFFFFFF):
+                continue
+            var g = h_s.unsafe_ptr().unsafe_load(slot)
+            var cand = TBestSplitProperties(
+                Int32(Int(bf)), Int32(0), -g, -g
+            )
+            if best_split_properties_less(cand, best):
+                best = cand
+                best_ours = g
+        var lf = TLeaf()
+        lf.size = 100
+        lf.update_best_split(best)
+        leaves.append(lf^)
+        our_gain.append(best_ours)
+
+    if len(leaves) != 2 or not leaves[0].best_split.defined:
+        print("  FAIL the kernel produced no usable record; S1 is BLIND")
+        return failures + 1
+
+    for i in range(2):
+        if bits_f32(leaves[i].best_split.gain) != bits_f32(-our_gain[i]):
+            print(
+                "  FAIL leaf", i, "stored", leaves[i].best_split.gain,
+                "but the kernel's gain was", our_gain[i],
+                "-- the stored record is NOT the kernel's gain negated",
+            )
+            failures += 1
+    if failures == 0:
+        var want = 0 if our_gain[0] > our_gain[1] else 1
+        var got = find_best_leaf_to_split(leaves)
+        if got != want:
+            print(
+                "  FAIL find_best_leaf_to_split picked", got, "but the leaf"
+                " with the LARGER our-sign gain is", want,
+                "( gains", our_gain[0], our_gain[1], ")",
+            )
+            failures += 1
+        else:
+            print(
+                "  ok   stored gain is the kernel's negated, bit for bit,"
+                " and the argmin picks the better leaf (", got, ")",
+            )
+    return failures
+
+
+def bits_f32(x: Float32) -> UInt32:
+    return bitcast[DType.uint32](x)
+
+
+def check_lossguide_policy(ctx: DeviceContext) raises:
+    var failures = 0
+
+    print("-- S1: the SIGN CONVENTION, across the kernel/host boundary --")
+    failures += check_sign_convention(ctx)
+    print()
 
     print("-- P1: at most one leaf, where Depthwise takes many --")
     var many = List[TLeaf]()
-    # four leaves that all improve (our sign: gain > 0), one that does not
-    many.append(leaf(Float32(0.5), True))
-    many.append(leaf(Float32(2.5), True))
-    many.append(leaf(Float32(1.5), True))
-    many.append(leaf(Float32(-0.25), True))
-    many.append(leaf(Float32(0.75), True))
+    # four leaves that IMPROVE (their sign: gain < 0), one that does not
+    many.append(leaf(Float32(-0.5), True))
+    many.append(leaf(Float32(-2.5), True))
+    many.append(leaf(Float32(-1.5), True))
+    many.append(leaf(Float32(0.25), True))
+    many.append(leaf(Float32(-0.75), True))
 
     var lg = select_leaves_to_split(many)
     var dw = depthwise_select_leaves_to_split(many)
@@ -137,7 +307,7 @@ def check_lossguide_policy() raises:
         print("  FAIL Lossguide selected", len(lg), "leaves, want exactly 1")
         failures += 1
     elif lg[0] != 1:
-        print("  FAIL Lossguide picked leaf", lg[0], "want 1 (gain 2.5)")
+        print("  FAIL Lossguide picked leaf", lg[0], "want 1 (gain -2.5)")
         failures += 1
     elif len(dw) < 2:
         # THE CONTRAST MUST BE LIVE. If Depthwise also returned one leaf
@@ -156,9 +326,9 @@ def check_lossguide_policy() raises:
     print()
     print("-- P2: NO SIGN TEST, where Depthwise refuses outright --")
     var all_worse = List[TLeaf]()
-    all_worse.append(leaf(Float32(-3.0), True))
-    all_worse.append(leaf(Float32(-0.5), True))
-    all_worse.append(leaf(Float32(-1.75), True))
+    all_worse.append(leaf(Float32(3.0), True))
+    all_worse.append(leaf(Float32(0.5), True))
+    all_worse.append(leaf(Float32(1.75), True))
 
     var lg2 = select_leaves_to_split(all_worse)
     var dw2 = depthwise_select_leaves_to_split(all_worse)
@@ -175,7 +345,7 @@ def check_lossguide_policy() raises:
         )
         failures += 1
     elif lg2[0] != 1:
-        print("  FAIL Lossguide picked leaf", lg2[0], "want 1 (gain -0.5)")
+        print("  FAIL Lossguide picked leaf", lg2[0], "want 1 (gain +0.5)")
         failures += 1
     else:
         print(
@@ -186,10 +356,10 @@ def check_lossguide_policy() raises:
     print()
     print("-- P3: an exact tie goes to the FIRST leaf --")
     var tie_a = List[TLeaf]()
-    tie_a.append(leaf(Float32(1.0), True))
-    tie_a.append(leaf(Float32(4.0), True))
-    tie_a.append(leaf(Float32(4.0), True))
-    tie_a.append(leaf(Float32(2.0), True))
+    tie_a.append(leaf(Float32(-1.0), True))
+    tie_a.append(leaf(Float32(-4.0), True))
+    tie_a.append(leaf(Float32(-4.0), True))
+    tie_a.append(leaf(Float32(-2.0), True))
     if find_best_leaf_to_split(tie_a) != 1:
         print(
             "  FAIL tie at ids 1,2 went to",
@@ -201,9 +371,9 @@ def check_lossguide_policy() raises:
         # one nearest the end of the scan, the first case could pass by
         # luck; the winner must track the ID.
         var tie_b = List[TLeaf]()
-        tie_b.append(leaf(Float32(4.0), True))
-        tie_b.append(leaf(Float32(1.0), True))
-        tie_b.append(leaf(Float32(4.0), True))
+        tie_b.append(leaf(Float32(-4.0), True))
+        tie_b.append(leaf(Float32(-1.0), True))
+        tie_b.append(leaf(Float32(-4.0), True))
         if find_best_leaf_to_split(tie_b) != 0:
             print(
                 "  FAIL tie at ids 0,2 went to",
@@ -217,7 +387,7 @@ def check_lossguide_policy() raises:
     print("-- P4: undefined leaves are invisible to the argmin --")
     var mixed = List[TLeaf]()
     mixed.append(undefined_leaf())
-    mixed.append(leaf(Float32(-9.0), True))
+    mixed.append(leaf(Float32(9.0), True))
     mixed.append(undefined_leaf())
     if find_best_leaf_to_split(mixed) != 1:
         print(
@@ -237,8 +407,8 @@ def check_lossguide_policy() raises:
             failures += 1
         else:
             print(
-                "  ok   a single defined leaf at gain -9 still wins;"
-                " all-undefined selects nothing"
+                "  ok   a single defined leaf at gain +9 (a WORSE split)"
+                " still wins; all-undefined selects nothing"
             )
 
     print()
@@ -247,10 +417,10 @@ def check_lossguide_policy() raises:
     # MaxLeaves: their test is `leafCount >= Options.MaxLeaves`.
     var seven = List[TLeaf]()
     for _ in range(7):
-        seven.append(leaf(Float32(1.0), True))
+        seven.append(leaf(Float32(-1.0), True))
     var eight = List[TLeaf]()
     for _ in range(8):
-        eight.append(leaf(Float32(1.0), True))
+        eight.append(leaf(Float32(-1.0), True))
     if should_terminate(seven, o):
         print("  FAIL terminated at 7 leaves with max_leaves 8")
         failures += 1
@@ -262,8 +432,8 @@ def check_lossguide_policy() raises:
 
     # IsTerminalLeaf's size test is `<=`, and it is LIVE for Lossguide
     # where it is dead for SymmetricTree.
-    var one_row = leaf(Float32(1.0), True, 1)
-    var two_rows = leaf(Float32(1.0), True, 2)
+    var one_row = leaf(Float32(-1.0), True, 1)
+    var two_rows = leaf(Float32(-1.0), True, 2)
     if not is_terminal_leaf(one_row, o):
         print(
             "  FAIL min_data_in_leaf=1 must make a ONE-ROW leaf terminal"
@@ -304,7 +474,7 @@ def check_lossguide_policy() raises:
         var tree = List[TLeaf]()
         for i in range(n_leaves):
             tree.append(
-                leaf(Float32(i) * Float32(0.5) + Float32(0.1), True)
+                leaf(-(Float32(i) * Float32(0.5) + Float32(0.1)), True)
             )
         var picked = select_leaves_to_split(tree)
         if len(picked) != 1:
@@ -362,9 +532,9 @@ def check_lossguide_policy() raises:
     # that the count IS three, so if a future change makes it two the
     # assertion fails and someone re-reads this block.
     var poisoned = List[TLeaf]()
-    poisoned.append(leaf(Float32(1.0), True))
+    poisoned.append(leaf(Float32(-1.0), True))
     poisoned.append(undefined_leaf())
-    poisoned.append(leaf(Float32(2.0), True))
+    poisoned.append(leaf(Float32(-2.0), True))
     var pick2 = select_leaves_to_split(poisoned)
     var pid = pick2[0]
     var pr = TLeaf()
@@ -390,7 +560,7 @@ def check_lossguide_policy() raises:
     print()
     print("-- find_max_depth --")
     var depths = List[TLeaf]()
-    depths.append(leaf(Float32(1.0), True))
+    depths.append(leaf(Float32(-1.0), True))
     if find_max_depth(depths) != 0:
         print("  FAIL a root-only tree has max depth", find_max_depth(depths))
         failures += 1
@@ -406,4 +576,5 @@ def check_lossguide_policy() raises:
 
 
 def main() raises:
-    check_lossguide_policy()
+    var ctx = DeviceContext()
+    check_lossguide_policy(ctx)
