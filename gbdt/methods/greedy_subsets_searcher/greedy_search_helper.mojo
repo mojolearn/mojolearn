@@ -506,6 +506,17 @@ def run_one_level(
     var out_score = ctx.enqueue_create_buffer[DType.float32](1)
     var out_bin = ctx.enqueue_create_buffer[DType.uint32](1)
     ctx.synchronize()
+    # THE SCALE PAIR MUST OUTLIVE THE LAUNCH THAT READS IT, and until this
+    # line neither did. `h_scale` was LAST USED at its `enqueue_copy` and
+    # `scale_dev` at the `.unsafe_ptr()` handed to `binary_hist_kernel`, so
+    # Mojo could free both there -- an ENQUEUE is not a RUN, and the very
+    # next allocations (`scan_ids`, `part_stats`, `hps`) come straight off
+    # the same pools. That is DEVIATION 134 exactly: the failure is a
+    # garbage scale read intermittently, not a crash, so `check-level`
+    # passing is not evidence against it. The drain above is the first
+    # point at which the copy and the kernel have certainly run.
+    _ = h_scale^
+    _ = scale_dev^
 
     # their `TCBinFeature.FeatureId` and `binFeaturesWeights`
     # (`compute_scores.cu:136`). The weights are all 1.0 because

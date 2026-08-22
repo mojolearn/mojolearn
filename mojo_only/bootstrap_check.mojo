@@ -40,6 +40,7 @@ from gbdt.gpu_util.kernel.bootstrap import (
     BOOTSTRAP_KERNEL_BAYESIAN,
     BOOTSTRAP_KERNEL_BERNOULLI,
     BOOTSTRAP_KERNEL_POISSON,
+    bootstrap_grid_blocks,
     launch_bootstrap,
 )
 from gbdt.methods.doc_parallel_boosting import TAdditiveModel, fit
@@ -144,6 +145,7 @@ def check_bootstrap() raises:
     launch_bootstrap(
         ctx, BOOTSTRAP_KERNEL_BAYESIAN, s1, stats, BS_ROWS,
         Float32(1.0), mags, True,
+        2,
     )
     var v = _read(ctx, stats, 2 * BS_ROWS)
     var total = Float64(0.0)
@@ -181,6 +183,7 @@ def check_bootstrap() raises:
     launch_bootstrap(
         ctx, BOOTSTRAP_KERNEL_BAYESIAN, s1, stats2, BS_ROWS,
         Float32(1.0), mags, True,
+        2,
     )
     var v2 = _read(ctx, stats2, BS_ROWS)
     var moved = 0
@@ -196,6 +199,7 @@ def check_bootstrap() raises:
     launch_bootstrap(
         ctx, BOOTSTRAP_KERNEL_BAYESIAN, s1b, stats3, BS_ROWS,
         Float32(1.0), mags, True,
+        2,
     )
     var v3 = _read(ctx, stats3, BS_ROWS)
     for i in range(BS_ROWS):
@@ -300,6 +304,7 @@ def check_bernoulli_and_poisson(ctx: DeviceContext) raises:
         launch_bootstrap(
             ctx, BOOTSTRAP_KERNEL_BERNOULLI, seeds, st, BS_ROWS, rate,
             mags, True,
+            2,
         )
         var v = _read(ctx, st, 2 * BS_ROWS)
         for i in range(BS_ROWS):
@@ -319,6 +324,7 @@ def check_bernoulli_and_poisson(ctx: DeviceContext) raises:
     launch_bootstrap(
         ctx, BOOTSTRAP_KERNEL_BERNOULLI, seeds, st5, BS_ROWS,
         Float32(0.5), mags, True,
+        2,
     )
     var v5 = _read(ctx, st5, 2 * BS_ROWS)
     var kept = 0
@@ -349,6 +355,7 @@ def check_bernoulli_and_poisson(ctx: DeviceContext) raises:
     launch_bootstrap(
         ctx, BOOTSTRAP_KERNEL_POISSON, seeds, stp, BS_ROWS,
         Float32(1.0), mags, True,
+        2,
     )
     var vp = _read(ctx, stp, 2 * BS_ROWS)
     var total = Float64(0.0)
@@ -392,8 +399,118 @@ def check_bernoulli_and_poisson(ctx: DeviceContext) raises:
           zeros, "zeros and", big, "draws >= 3 -- both planes identical")
 
 
+def check_bootstrap_multiclass(ctx: DeviceContext) raises:
+    """EVERY DERIVATIVE PLANE TAKES THE DRAW, not just the first.
+
+    The bug this gates: `bootstrap_kernel` hard-coded two planes,
+    `stats[i]` and `stats[n + i]`, and `launch_bootstrap` had no plane
+    count at all. Correct for a single-target loss, where `stat_count` is
+    2. SILENTLY WRONG for MultiClass, where it is `1 + approx_dim`: planes
+    2..N kept their un-bootstrapped values, so a row was sampled OUT of one
+    class and fully present in the others. Their draw is a per-row WEIGHT
+    that scales every column (`gpu_data/bootstrap.h:96-98`).
+
+    WHY IT SURVIVED: every existing arm of this file runs at two planes,
+    which is exactly the configuration where the bug and the fix agree.
+
+    PLANTED, NOT UNIFORM. Each cell holds a value keyed to (plane, row), so
+    a check that passes cannot be passing on a total: if the kernel scaled
+    the wrong plane, or scaled one plane twice, the per-cell comparison
+    moves even though the grand sum would not.
+    """
+    var rows = 512
+    var planes = 5  # MultiClass at 5 classes: 1 weight + 4 derivative
+    var h = ctx.enqueue_create_host_buffer[DType.float32](planes * rows)
+    for k in range(planes):
+        for i in range(rows):
+            # distinct per cell, and never zero, so a dropped scale shows up
+            h.unsafe_ptr().unsafe_store(
+                k * rows + i, Float32(1 + k * 7919 + i * 13)
+            )
+    var stats = ctx.enqueue_create_buffer[DType.float32](planes * rows)
+    ctx.enqueue_copy(dst_buf=stats, src_ptr=h.unsafe_ptr())
+    ctx.synchronize()
+
+    var seeds = create_bootstrap_seeds(ctx, UInt64(11))
+    var mags = ctx.enqueue_create_buffer[DType.float32](
+        2 * bootstrap_grid_blocks(rows)
+    )
+    # BERNOULLI at rate 1.0: every draw is `u < 1.0`, true for every u in
+    # [0,1), so `bw == 1.0` for every row. The stats must come back
+    # UNCHANGED -- an ANALYTIC identity forced by their own kernel's
+    # arithmetic, not a tally of ours, and it holds on every plane at once.
+    launch_bootstrap(
+        ctx, BOOTSTRAP_KERNEL_BERNOULLI, seeds, stats, rows,
+        Float32(1.0), mags, False,
+        planes,
+    )
+    var got = _read(ctx, stats, planes * rows)
+    var bad_identity = 0
+    for k in range(planes):
+        for i in range(rows):
+            if got[k * rows + i] != Float32(1 + k * 7919 + i * 13):
+                bad_identity += 1
+    print(
+        "  multiclass, Bernoulli rate 1.0: "
+        + String(bad_identity)
+        + " of "
+        + String(planes * rows)
+        + " cells changed (0 required, every plane)"
+    )
+
+    # BERNOULLI at rate 0.0: `u < 0.0` is false for every draw, so every
+    # row is zeroed -- ON EVERY PLANE. Under the two-plane bug, planes 2,3
+    # and 4 came back untouched, which is exactly what this counts.
+    ctx.enqueue_copy(dst_buf=stats, src_ptr=h.unsafe_ptr())
+    ctx.synchronize()
+    var seeds2 = create_bootstrap_seeds(ctx, UInt64(11))
+    launch_bootstrap(
+        ctx, BOOTSTRAP_KERNEL_BERNOULLI, seeds2, stats, rows,
+        Float32(0.0), mags, False,
+        planes,
+    )
+    var got0 = _read(ctx, stats, planes * rows)
+    var survived = List[Int]()
+    for k in range(planes):
+        var n_alive = 0
+        for i in range(rows):
+            if got0[k * rows + i] != Float32(0.0):
+                n_alive += 1
+        survived.append(n_alive)
+    var msg = String("  multiclass, Bernoulli rate 0.0: per-plane survivors")
+    for k in range(planes):
+        msg += " " + String(survived[k])
+    print(msg + "  (all zero required)")
+
+    var fails = 0
+    if bad_identity != 0:
+        print("  FAIL: rate 1.0 changed " + String(bad_identity) + " cells")
+        fails += 1
+    for k in range(planes):
+        if survived[k] != 0:
+            print(
+                "  FAIL: plane "
+                + String(k)
+                + " kept "
+                + String(survived[k])
+                + " un-bootstrapped values -- the draw did not reach it"
+            )
+            fails += 1
+    _ = h^
+    if fails != 0:
+        raise Error(
+            String(fails)
+            + " multiclass bootstrap gate(s) failed: the per-row draw is"
+            " not reaching every stat plane"
+        )
+    print("  multiclass bootstrap: every plane takes the draw")
+
+
 def main() raises:
     # STANDALONE DRIVER, the same call `probe_main.mojo` makes.
     # `check_bootstrap` builds the `DeviceContext` and hands it to
     # `check_bernoulli_and_poisson` itself, so this must NOT build one.
     check_bootstrap()
+    print("MULTICLASS PLANES (the bug the two-plane kernel hid):")
+    var ctx = DeviceContext()
+    check_bootstrap_multiclass(ctx)

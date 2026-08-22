@@ -119,6 +119,7 @@ def bootstrap_kernel[bootstrap_type: Int](
     param: Float32,
     mags: MutPointer[Float32, MutAnyOrigin],
     compute_mags_in: Int32,
+    stat_count_in: Int32,
 ):
     """Their three draw kernels, with the two `MultiplyVector`s folded in.
 
@@ -178,12 +179,40 @@ def bootstrap_kernel[bootstrap_type: Int](
             s = draw[1]
             bw = draw[0]
 
+        # EVERY DERIVATIVE PLANE, NOT JUST THE FIRST. This loop used to be
+        # two hard-coded loads, `stats[i]` and `stats[n + i]`, and
+        # `launch_bootstrap` had no plane count at all. That is correct for
+        # a single-target loss, where `stat_count == 2`, and SILENTLY WRONG
+        # for MultiClass / MultiClassOneVsAll, where it is
+        # `1 + approx_dim`: planes 2..N kept their un-bootstrapped values,
+        # so a row was sampled OUT of one class and fully present in the
+        # others. `train()` accepts `objective="MultiClass"` together with
+        # `bootstrap_type` and refused neither.
+        #
+        # Their draw is a per-row WEIGHT, and it scales every column:
+        # `MultiplyVector(der, tmp); MultiplyVector(weights, tmp)`
+        # (`gpu_data/bootstrap.h:96-98`), and on the greedy arm it is folded
+        # into the weight BEFORE `Approximate` writes any der column
+        # (`pointwise_target_impl.h:181-183`).
         var w = stats.unsafe_load(i) * bw
-        var g = stats.unsafe_load(n + i) * bw
         stats.unsafe_store(i, w)
-        stats.unsafe_store(n + i, g)
         mag_w += abs(w)
-        mag_g += abs(g)
+
+        # THE GRADIENT MAGNITUDE FOLLOWS DEVIATION 79's CONVENTION:
+        # `sum over rows of max over classes |der_k|`, one bound valid for
+        # every plane at once, because `choose_scale` takes ONE scale for
+        # the whole histogram. The old two-plane code also bounded the
+        # fixed-point scale from 2 of N planes, which under-bounded it for
+        # multiclass. At `stat_count == 2` this reduces to `abs(g)` exactly,
+        # so nothing about a single-target fit changes.
+        var gmax = Float32(0.0)
+        for k in range(1, Int(stat_count_in)):
+            var g = stats.unsafe_load(k * n + i) * bw
+            stats.unsafe_store(k * n + i, g)
+            var a = abs(g)
+            if a > gmax:
+                gmax = a
+        mag_g += gmax
         i += stride
     seeds.unsafe_store(gid, s)
 
@@ -265,6 +294,7 @@ def launch_bootstrap(
     param: Float32,
     mut mags: DeviceBuffer[DType.float32],
     compute_mags: Bool,
+    stat_count: Int,
 ) raises:
     """`TBootstrap::Bootstrap`'s switch (`gpu_data/bootstrap.h:41-92`)
     over their three launches (`bootstrap.cu:64-84`), each grid
@@ -282,6 +312,7 @@ def launch_bootstrap(
         ](
             seeds.unsafe_ptr(), stats.unsafe_ptr(), Int32(n_rows), param,
             mags.unsafe_ptr(), Int32(1) if compute_mags else Int32(0),
+            Int32(stat_count),
             grid_dim=(blocks, 1, 1),
             block_dim=(BOOTSTRAP_BLOCK_SIZE, 1, 1),
         )
@@ -291,6 +322,7 @@ def launch_bootstrap(
         ](
             seeds.unsafe_ptr(), stats.unsafe_ptr(), Int32(n_rows), param,
             mags.unsafe_ptr(), Int32(1) if compute_mags else Int32(0),
+            Int32(stat_count),
             grid_dim=(blocks, 1, 1),
             block_dim=(BOOTSTRAP_BLOCK_SIZE, 1, 1),
         )
@@ -300,6 +332,7 @@ def launch_bootstrap(
         ](
             seeds.unsafe_ptr(), stats.unsafe_ptr(), Int32(n_rows), param,
             mags.unsafe_ptr(), Int32(1) if compute_mags else Int32(0),
+            Int32(stat_count),
             grid_dim=(blocks, 1, 1),
             block_dim=(BOOTSTRAP_BLOCK_SIZE, 1, 1),
         )

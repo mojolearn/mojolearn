@@ -1180,7 +1180,7 @@ def fit_with_test(
                 compute_mags = True
             launch_bootstrap(
                 ctx, boot_kind, boot_seeds, stats, n_rows, boot_param,
-                boot_mag_part, compute_mags,
+                boot_mag_part, compute_mags, stat_count,
             )
             if compute_mags:
                 ctx.enqueue_function[deterministic_sum_lanes_kernel[2]](
