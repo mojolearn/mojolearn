@@ -873,3 +873,35 @@ touching lane files; left alone.
 
 Commits this session: 78fede3, 719e27c, d6b1fe1 (+ this PLAN edit),
 each `git show --stat`-verified to explicit paths.
+
+# Session log: 2026-08-22 midday, DEVIATION 314 lands; the accuracy question closes
+
+**DEVIATION 314 (801a8a8): the dataset is binned ONCE per forest.** One
+uint8 per (row, col) holding the lower_bound index their histogram
+kernel re-derives per element per level per tree; the 85.3% kernel's
+4-byte gather + 7-step search becomes a 1-byte read of the same index.
+Gates: ten fingerprint hashes unchanged; launch-log reach 1348/1348
+binned; zero-the-matrix sabotage moves every hash; gbm-bench year rerun
+identical to four decimals. Falls back to searching above 256 bins.
+SPEED CERTIFICATION STILL OWED: CLF ABAB + the new RF_BENCH_REG
+500k x 90 MSE arm (year's shape; RegressionBin pays 2 atomics per
+increment, so a CLF A/B cannot certify a regression claim). Pre/post
+binaries: build/rf_bench_pre314 (worktree at pre-314 HEAD + the same
+bench arms) vs build/rf_bench.
+
+**The check suite caught a real one**: the 103a tier machinery's
+"disabled" sentinel ([1]) selected a ZERO-SLOT shared blob under
+builder_kernels_check's don't-care SharedMemoryConfig(_, 0) -- every
+shared-arm cell zero. Now a comptime flag + need_bytes>0 guard; suite
+17/17; fingerprints green.
+
+**RF accuracy vs LightGBM: closed by three probes, no defect**
+(5e0c788): covtype F1 gap = their feature_fraction=1.0 vs sqrt (at
+parity we lead accuracy AND F1: 0.7567/0.7478); bins 128 vs 255 moves
+nothing on covtype or year; year MAE hairline = their 0.632 subsample
+trading MSE (we win MSE). PARITY_NOTES["lgbm-rf-features"].
+
+Pairs table + NVIDIA runner: bench/results/RF_ET_2026-08-22_lightgbm-
+pairs.md (387dd81, 5e0c788); NVIDIA leg blocked on a rented box.
+Shared-checkout: commit with PATHSPECS (git commit -- paths); two sweep
+incidents today, both repaired (805653e note, 6570665 note).
