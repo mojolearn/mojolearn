@@ -207,3 +207,19 @@ the MODEL FAMILY (depth-capped Geurts ET vs their leaf-wise binned
 variant), not our code. Our remaining residual vs sklearn ET is 1.79 MSE
 at `max_features=all` -- where the sampler never runs -- so it is a
 SECOND, separate defect, still open.
+
+## Addendum 6: the residual, cornered
+
+Higgs at `max_features=all` (sampler out of the picture), interleaved, 10
+trees, depth 12: ours 0.703-0.711 train acc vs sklearn's 0.708 -- ABOVE
+theirs on two of three reps, at 2.6-4.4x their ten cores. So after
+DEVIATION 215 there is NO our-vs-sklearn accuracy gap on higgs at either
+`sqrt` or `all`. Combined with covtype regression (ours better than
+sklearn on train MSE, addendum 1's window) and covtype classification
+(parity), the year residual is now cornered to: TEST-set MSE, on year
+specifically, regression at `all`, depth 8 -- 1.79 MSE vs sklearn ET, with
+3.4 more being model family vs LightGBM's leaf-wise variant. Next
+discriminators for it, in order: year TRAIN-vs-TEST MSE ours-vs-sklearn
+(overfit-shape difference vs split-quality difference), then a read of
+`regression_key`'s shift resolution at year's magnitudes. Not chased
+further in this window.
