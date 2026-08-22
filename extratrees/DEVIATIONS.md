@@ -2960,3 +2960,58 @@ refused cell; (b) its accuracy metrics land within the band of lgbm-et's
 on the same split (no bit-identity claim across libraries); (c) no check
 regresses; (d) the higgs2m board (all under 2^21) is bit-for-bit
 untouched. Numbers land beside this entry when the bench lock clears.
+
+---
+
+## DEVIATION 450 -- one drain per batch: five of the level cycle's six synchronizes removed
+
+**What stood.** One level cycle of the merged forest trainer drained the
+queue SIX times: the workspace-staging sync at `stage_batch`'s tail, the
+`search_batch` entry sync, the rescue's colids-copy sync, the range pass's
+readback sync, the reduce readback sync, and a pre- plus post-partition
+pair in the forest loop. cuML's `doSplit` enqueues everything and drains
+ONCE, at `raft::update_host(h_splits...)` + `handle.sync_stream`
+(`builder.cuh:492-494`) -- our extra five were ported caution, not ported
+design, and on Metal a drain is a fixed per-cycle stall that the
+scoreboard's small-n rows (100k at 0.7-0.9x sklearn) pay in full.
+
+**The lift.** The cycle now drains exactly where the host READS device
+results: the reduce readback (always) and the survey's readback (rescue
+paths only). The arguments, per removed site:
+
+  * a single in-order queue orders every enqueued op after everything
+    enqueued before it, so device-side hazards (kernels reading `d_items`,
+    `d_colids`, `d_splits` behind their copies) never needed a drain;
+  * every `h_*` staging buffer is REWRITTEN only after a required drain
+    has retired the last copy that read it -- every `search_batch` path
+    ends in one (the reduce sync, or the survey's) before returning;
+  * `h_nonconst` was the one host READ before the reduce sync, and it was
+    read EARLY: its consumer (the rescue's retry scan) runs after
+    `search_batch` returns, so the read moved past the reduce drain and
+    the range pass keeps only its enqueued copy;
+  * first-ever host writes are covered by a NEW one-time drain at the tail
+    of `make_level_workspace` (host buffers are created by ENQUEUED ops;
+    the leaf pass already modeled create-sync-write).
+
+`PhaseClock`'s contract is unchanged: an enabled clock's `tick` drains at
+every boundary as before, so the TIMED program is the same serialized
+program it always was; only the untimed program lost its stalls.
+
+**GATED, bit-for-bit.** device_batched_check, device_forest_check,
+device_regression_check, device_tree_check all PASS. Stronger: full
+identity traces of device_batched_check (every fit, every stage) before
+and after the change are HASH-IDENTICAL on every real fit -- 4198 of 4358
+record lines, every non-sabotage fit -- and the two diverging fits are
+exactly the two `FOREST_SAB_SHARED_ROW_BASE` subjects, which overwrite one
+row-slot from every tree BY DESIGN and which two runs of IDENTICAL
+post-change code also disagree on (moved-node counts 2812/3074 vs
+2780/3094). The sabotage arm was nondeterministic before this change; the
+gate it feeds asserts only that the sabotage MOVES the forest, which held
+in every run.
+
+**What this buys, to be measured by the orchestrator.** Five fewer full
+queue drains per level cycle, every cycle of every group. The stage-timer
+flag (`MOJOLEARN_STAGE_TIMES=1`) attributes exactly the phases these
+stalls sat in. PREDICTION, committed before the measurement: the 100k-row
+clf/reg rows move toward parity and no large-n row regresses; the win
+scales with cycle count over device seconds, so small-n gains most.

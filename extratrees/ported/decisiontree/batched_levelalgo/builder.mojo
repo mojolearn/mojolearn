@@ -1346,7 +1346,7 @@ def make_level_workspace(
     var k_cap = k if k > Int(n_cols) else Int(n_cols)
     var cells = nodes * k_cap
     var blocks = 1 + max_batch + Int(n_rows) // tpb
-    return LevelWorkspace(
+    var ws = LevelWorkspace(
         d_min=ctx.enqueue_create_buffer[DType.float32](cells),
         d_max=ctx.enqueue_create_buffer[DType.float32](cells),
         d_thresh=ctx.enqueue_create_buffer[DType.float32](cells),
@@ -1415,6 +1415,13 @@ def make_level_workspace(
         o_de=ctx.enqueue_create_host_buffer[DType.int64](nodes),
         h_splits=ctx.enqueue_create_host_buffer[DType.uint8](nodes * size_of[Split]()),
     )
+    # DEVIATION 450: the workspace's ONE materialization drain. Every host
+    # buffer above is created by an ENQUEUED op, and the level loop writes
+    # them through raw pointers; this sync -- once per GROUP, in setup --
+    # is what lets the per-cycle synchronizes that used to guard those
+    # writes come out. The per-site arguments live in DEVIATIONS.md 450.
+    ctx.synchronize()
+    return ws^
 
 
 comptime DEVICE_TPB = 128
@@ -1636,7 +1643,13 @@ def stage_batch(
     ctx.enqueue_copy(
         dst_buf=ws.d_blk_base, src_ptr=ws.h_blk_base.unsafe_ptr()
     )
-    ctx.synchronize()
+    # DEVIATION 450: no trailing synchronize. The copies above are queue-
+    # ordered ahead of every kernel that reads their destinations, and the
+    # `h_*` staging they read from is not rewritten until after the next
+    # REQUIRED drain (the reduce readback, or the survey's) -- so the only
+    # thing a sync here bought was one more per-cycle stall. cuML's
+    # `doSplit` enqueues its `update_device` calls the same way and drains
+    # ONCE, at `handle.sync_stream` (`builder.cuh:492-494`).
 
 def search_batch(
     ctx: DeviceContext,
@@ -1729,8 +1742,13 @@ def search_batch(
     # shared one would be rewritten under an in-flight copy. The items and
     # workload staging moved into `stage_batch`; only `h_colids` is still
     # written here (the rescue's host-chosen columns).
+    #
+    # DEVIATION 450: no entry synchronize. Every path that enqueued a copy
+    # READING an `h_*` staging buffer drained before returning to the
+    # caller (the reduce readback's sync, or the survey's), so no such
+    # copy can be in flight when this call rewrites the staging; the
+    # workspace constructor's own drain covers the first write ever.
     ref h_colids = ws.h_colids
-    ctx.synchronize()
 
     stage_batch(ctx, ws, work_items, item_trees, plan, Int(k))
 
@@ -1749,8 +1767,10 @@ def search_batch(
             )
         for i in range(n_cells):
             h_colids.unsafe_ptr().unsafe_store(i, host_colids[i])
+        # DEVIATION 450: no synchronize after this copy -- queue-ordered
+        # ahead of the kernels reading `d_colids`, and `h_colids` is next
+        # rewritten only after a required drain.
         ctx.enqueue_copy(dst_buf=d_colids, src_ptr=h_colids.unsafe_ptr())
-        ctx.synchronize()
     if use_sampler:
         # --- feature sampling, WHERE cuML DOES IT (deviation 201) --------
         # `d_report` is the DEVICE's own statement of which kernel ran, so it
@@ -1829,19 +1849,25 @@ def search_batch(
         block_dim=64,
     )
     ctx.enqueue_copy(dst_buf=ws.h_nonconst, src_buf=ws.d_nonconst)
+    # DEVIATION 450: the range pass drains only when the caller wants the
+    # survey NOW. On the full path `h_nonconst` is not READ until after
+    # the reduce readback's sync below, so its copy rides the queue and
+    # this pass loses its per-cycle stall -- cuML's `doSplit` shape, which
+    # drains ONCE per batch. `clock.tick` still syncs when the clock is
+    # ENABLED: the timed program was always the serialized one.
     if range_only:
         ctx.enqueue_copy(dst_buf=ws.o_rmin, src_buf=d_min)
         ctx.enqueue_copy(dst_buf=ws.o_rmax, src_buf=d_max)
         ctx.enqueue_copy(dst_buf=ws.o_rmiss, src_buf=d_missing)
-    ctx.synchronize()
+        ctx.synchronize()
     clock.tick(ctx, PHASE_RANGE)
-    var any_nonconst = List[Int32](length=n_nodes, fill=Int32(0))
-    for i in range(n_nodes):
-        any_nonconst[i] = ws.h_nonconst.unsafe_ptr()[unsafe_offset=i]
 
     if range_only:
         # THE SURVEY. The rescue needs the cells themselves so the host can
         # pick a column; nothing else does, so nothing else pays for them.
+        var any_nonconst = List[Int32](length=n_nodes, fill=Int32(0))
+        for i in range(n_nodes):
+            any_nonconst[i] = ws.h_nonconst.unsafe_ptr()[unsafe_offset=i]
         var rmin = List[Float32](length=n_cells, fill=Float32(0.0))
         var rmax = List[Float32](length=n_cells, fill=Float32(0.0))
         var rmiss = List[Int32](length=n_cells, fill=Int32(0))
@@ -2013,6 +2039,13 @@ def search_batch(
     ctx.enqueue_copy(dst_buf=o_m, src_buf=r_m)
     ctx.synchronize()
     clock.tick(ctx, PHASE_REDUCE)
+
+    # DEVIATION 450: the deferred `h_nonconst` read. Its copy was enqueued
+    # in the range pass; the sync above is the batch's ONE drain, so the
+    # values are complete here and nowhere earlier did the host need them.
+    var any_nonconst = List[Int32](length=n_nodes, fill=Int32(0))
+    for i in range(n_nodes):
+        any_nonconst[i] = ws.h_nonconst.unsafe_ptr()[unsafe_offset=i]
 
     # --- 8. build the batch's splits on the host, as `:492-494` does --
     var splits = List[Split]()
@@ -2411,7 +2444,12 @@ def train_forest_classification_device_timed(
             # Range-addressed: every item's rows live in its own tree's
             # slot of `d_row_ids`, so nodes of different trees partition
             # side by side without seeing each other.
-            ctx.synchronize()
+            #
+            # DEVIATION 450: no synchronize before writing `h_splits`. The
+            # last copy READING it was enqueued a full cycle ago and this
+            # cycle's reduce readback drained the queue since; the copy
+            # below is queue-ordered ahead of the partition kernels that
+            # read `d_splits`.
             var splits_ptr = ws.h_splits.unsafe_ptr().unsafe_bitcast[Split]()
             for i in range(n_nodes):
                 splits_ptr[unsafe_offset=i] = splits[i]
@@ -2471,7 +2509,11 @@ def train_forest_classification_device_timed(
                 grid_dim=(plan.n_blocks_dimx, 1, 1),
                 block_dim=(TPB, 1, 1),
             )
-            ctx.synchronize()
+            # DEVIATION 450: no post-partition synchronize. Nothing on the
+            # host reads the partition's output; the next cycle's kernels
+            # are queue-ordered behind it, and the leaf pass drains before
+            # its own host writes. `clock.tick` still serializes when the
+            # clock is ENABLED, so the timed attribution is unchanged.
             clock.tick(ctx, PHASE_PARTITION)
 
             if trace.enabled:
@@ -2710,8 +2752,8 @@ def search_batch_regression(
     ref d_samp_report = ws.d_samp_report
     ref d_items = ws.d_items
     ref d_wl = ws.d_wl
+    # DEVIATION 450: no entry synchronize -- see the classification twin.
     ref h_colids = ws.h_colids
-    ctx.synchronize()
     stage_batch(ctx, ws, work_items, item_trees, plan, Int(k))
 
     if not use_sampler:
@@ -2726,8 +2768,10 @@ def search_batch_regression(
             )
         for i in range(n_cells):
             h_colids.unsafe_ptr().unsafe_store(i, host_colids[i])
+        # DEVIATION 450: no synchronize after this copy either -- it is
+        # queue-ordered ahead of the kernels that read `d_colids`, and
+        # `h_colids` is next rewritten only after a required drain.
         ctx.enqueue_copy(dst_buf=d_colids, src_ptr=h_colids.unsafe_ptr())
-        ctx.synchronize()
     else:
         # --- feature sampling, WHERE cuML DOES IT (deviation 201) --------
         # `d_report` is the DEVICE's own statement of which kernel ran, so it
@@ -2805,17 +2849,19 @@ def search_batch_regression(
         block_dim=64,
     )
     ctx.enqueue_copy(dst_buf=ws.h_nonconst, src_buf=ws.d_nonconst)
+    # DEVIATION 450: drain only for the survey -- see the classification
+    # twin's range pass.
     if range_only:
         ctx.enqueue_copy(dst_buf=ws.o_rmin, src_buf=d_min)
         ctx.enqueue_copy(dst_buf=ws.o_rmax, src_buf=d_max)
         ctx.enqueue_copy(dst_buf=ws.o_rmiss, src_buf=d_missing)
-    ctx.synchronize()
+        ctx.synchronize()
     clock.tick(ctx, PHASE_RANGE)
-    var any_nonconst = List[Int32](length=n_nodes, fill=Int32(0))
-    for i in range(n_nodes):
-        any_nonconst[i] = ws.h_nonconst.unsafe_ptr()[unsafe_offset=i]
 
     if range_only:
+        var any_nonconst = List[Int32](length=n_nodes, fill=Int32(0))
+        for i in range(n_nodes):
+            any_nonconst[i] = ws.h_nonconst.unsafe_ptr()[unsafe_offset=i]
         var rmin = List[Float32](length=n_cells, fill=Float32(0.0))
         var rmax = List[Float32](length=n_cells, fill=Float32(0.0))
         var rmiss = List[Int32](length=n_cells, fill=Int32(0))
@@ -2976,6 +3022,11 @@ def search_batch_regression(
     ctx.enqueue_copy(dst_buf=o_m, src_buf=r_m)
     ctx.synchronize()
     clock.tick(ctx, PHASE_REDUCE)
+
+    # DEVIATION 450: the deferred `h_nonconst` read -- see the twin.
+    var any_nonconst = List[Int32](length=n_nodes, fill=Int32(0))
+    for i in range(n_nodes):
+        any_nonconst[i] = ws.h_nonconst.unsafe_ptr()[unsafe_offset=i]
 
     var splits = List[Split]()
     for i in range(n_nodes):
@@ -3325,7 +3376,7 @@ def train_forest_regression_device_timed(
                 stage_batch(ctx, ws, work_items, item_trees, plan, Int(k))
 
             # --- the PARTITION (deviation 203, the regression half) -------
-            ctx.synchronize()
+            # DEVIATION 450: no pre-partition synchronize -- see the twin.
             var splits_ptr = ws.h_splits.unsafe_ptr().unsafe_bitcast[Split]()
             for i in range(n_nodes):
                 splits_ptr[unsafe_offset=i] = splits[i]
@@ -3385,7 +3436,7 @@ def train_forest_regression_device_timed(
                 grid_dim=(plan.n_blocks_dimx, 1, 1),
                 block_dim=(TPB, 1, 1),
             )
-            ctx.synchronize()
+            # DEVIATION 450: no post-partition synchronize -- see the twin.
             clock.tick(ctx, PHASE_PARTITION)
 
             if trace.enabled:
