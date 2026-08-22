@@ -127,8 +127,9 @@ calls on the identical operand pairs in the identical step order as the
 shuffle loop -- phase 1 is the same five rotate steps per 32-lane group,
 phase 2 the same second reduction over per-group results -- so on Apple
 and NVIDIA the two arms are the same function, and IDENTICAL differs
-from FAST only on 64-wide hardware. `split_check.mojo`'s pinned-parity
-arm holds the two arms to bit-equal outputs per cell on this M4.
+from FAST only on 64-wide hardware. `builder_kernels_check.mojo`'s
+arm C-pinned (TPB 32 and TPB 128) holds the pinned arm to the same
+per-cell winners as the shuffle arm on this M4.
 
 WHAT REMAINS OPEN AFTER THIS PIN: the CROSS-BLOCK merge needs no pin,
 and that is an audit RESULT rather than a hope. The kernel launches one

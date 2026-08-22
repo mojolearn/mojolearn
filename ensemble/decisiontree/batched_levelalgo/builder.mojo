@@ -1555,6 +1555,24 @@ struct Builder[O: ObjectiveLike](Movable):
         self._upload_workload(ctx, wl)
 
         self._sample_features(ctx, n, sample_offset, n_sampled_cols)
+        # DEVIATION 401 (added with the 2026-08-22 identity audit) -- the
+        # round's sampled COLUMNS, the per-node feature-sample RNG's
+        # (`fnv1a32_hash(seed, treeid, nodeid)` -> minstd_rand ->
+        # shuffle_iterator) only output. Without this tag an RNG
+        # divergence would first surface in the histograms, one stage
+        # late; with it the cross-vendor bisection separates "sampled
+        # different columns" from "histogrammed the same columns
+        # differently". The hashed prefix is the LIVE region
+        # (n work items x this round's sampled columns), a pure algorithm
+        # shape; the buffer's tail is capacity (rule 3). Draining here is
+        # rule 4's price -- a traced run is never a timing.
+        if instr.trace.enabled:
+            instr.trace.record_device(
+                ctx,
+                tag_prefix + ".colsamples",
+                self.column_samples,
+                n * n_sampled_cols,
+            )
 
         # `:497-500` -- ten columns per launch.
         var c = 0

@@ -1757,7 +1757,7 @@ def find_best_splits_kernel[
     # pinned reduction under NUMERIC_IDENTICAL (width 32 on every vendor,
     # no warp primitives), the transcribed warp-shuffle reduction under
     # FAST. At `WARP_SIZE == 32` the two arms are the same function --
-    # `split_check.mojo`'s pinned-parity arm holds that per cell.
+    # `builder_kernels_check.mojo`'s arm C-pinned holds that per cell.
     comptime if pinned_reduce:
         sp.eval_best_split_pinned(
             split_scratch,
