@@ -41,9 +41,12 @@ case "${3:-}" in
   # lgbm-rf-cpu (boosting_type='rf'); ET pair = mojolearn-et-gpu vs
   # lgbm-et-cpu (rf + extra_trees=true). The sklearn arms stay registered
   # as appendix baselines only.
-  pairs)  ALGOS="mojolearn-rf-gpu,lgbm-rf-cpu,mojolearn-et-gpu,lgbm-et-cpu" ;;
-  forest) ALGOS="mojolearn-rf-gpu,skrf,lgbm-rf-cpu,mojolearn-et-gpu,skl-et-cpu,lgbm-et-cpu" ;;
-  rf)     ALGOS="mojolearn-rf-gpu,lgbm-rf-cpu" ;;
+  # LIGHTGBM IS EXCLUDED EVERYWHERE (Andrew, 2026-08-22 evening,
+  # superseding the earlier forest pairing): the forest comparator is
+  # multicore sklearn -- RF and ET's home library.
+  pairs)  ALGOS="mojolearn-rf-gpu,skl-rf-cpu,mojolearn-et-gpu,skl-et-cpu" ;;
+  forest) ALGOS="mojolearn-rf-gpu,skl-rf-cpu,mojolearn-et-gpu,skl-et-cpu" ;;
+  rf)     ALGOS="mojolearn-rf-gpu,skl-rf-cpu" ;;
   "")     ALGOS="mojolearn-gbdt-gpu,cat-cpu" ;;
   *)      ALGOS="$3" ;;
 esac
