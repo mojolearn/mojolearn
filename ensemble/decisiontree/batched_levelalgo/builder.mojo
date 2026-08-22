@@ -137,6 +137,7 @@ from mojo_only.kernel_matrix import TARGET_COLUMN, column_shared_limit
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from core.launch_log import log_launch
+from ensemble.instruments import FitInstruments
 from ensemble.decisiontree.batched_levelalgo.bins import Bin, BinScales
 from ensemble.decisiontree.batched_levelalgo.dataset import DatasetView
 from ensemble.decisiontree.batched_levelalgo.objectives import (
@@ -902,6 +903,11 @@ struct Builder[O: ObjectiveLike](Movable):
 
     var params: DecisionTreeParams
     var treeid: Int32
+    # DEVIATION 401 -- the 0-based index of the batch within the current
+    # tree, for identity-trace tags ("treeT.batchB.roundR..."). A POSITION
+    # IN THE ALGORITHM (the queue pops in deterministic order), never a
+    # machine property. -1 between trees; `begin_batch` pre-increments.
+    var trace_batch: Int
     var seed: UInt64
     var n_sampled_rows: Int
     var n_cols: Int
@@ -989,6 +995,7 @@ struct Builder[O: ObjectiveLike](Movable):
         """
         self.params = params
         self.treeid = treeid
+        self.trace_batch = -1
         self.seed = seed
         self.n_sampled_rows = n_sampled_rows
         self.n_cols = n_cols
@@ -1177,6 +1184,8 @@ struct Builder[O: ObjectiveLike](Movable):
                 + String(n_sampled_rows)
             )
         self.treeid = treeid
+        # DEVIATION 401 -- per-tree batch numbering restarts with the tree.
+        self.trace_batch = -1
 
     @always_inline
     def _splits_ptr(mut self) -> MutPointer[Split[Self.O.DataT], MutUntrackedOrigin]:
@@ -1394,6 +1403,8 @@ struct Builder[O: ObjectiveLike](Movable):
         n_work_items: Int,
         n_sampled_cols: Int,
         smem_config: SharedMemoryConfig,
+        mut instr: FitInstruments,
+        tag_prefix: String,
     ) raises:
         """`Builder::computeSplit`, `:570-626`.
 
@@ -1445,6 +1456,23 @@ struct Builder[O: ObjectiveLike](Movable):
             smem_config,
             self.hist_args,
         )
+        # DEVIATION 401 -- the column block's REDUCED histograms, hashed
+        # between the histogram kernel and the split kernel so the record
+        # is the pdf the atomics produced (order-independent by
+        # construction: integer atomics for classification, fixed-point
+        # Int32 for regression -- DEVIATION 101). The hashed prefix is
+        # EXACTLY the region their memset sizes (`:588-591`), so no
+        # uninitialized tail is folded in (identity_trace rule 3); its
+        # shape is (nodes x colblock x bins x outputs), all algorithm
+        # quantities, never an SM count. Draining here is rule 4's price:
+        # a traced run is a trace subject, never a timing.
+        if instr.trace.enabled:
+            instr.trace.record_device(
+                ctx,
+                tag_prefix + ".cols" + String(col) + ".hist",
+                self.histograms,
+                size_of[Self.O.BinT]() * len_histograms,
+            )
         # DEVIATION 302: their `if (distributed) allReduceHistograms(...)`
         # sits exactly here (`:613`) and is unreachable on one device.
         launch_find_best_splits_kernel[Self.O](
@@ -1474,6 +1502,8 @@ struct Builder[O: ObjectiveLike](Movable):
         sample_offset: Int,
         n_sampled_cols: Int,
         smem_config: SharedMemoryConfig,
+        mut instr: FitInstruments,
+        tag_prefix: String,
     ) raises:
         """`Builder::computeBestSplits`, `:485-503`, in their order --
         MINUS the trailing sync, which belongs to the caller so the
@@ -1502,7 +1532,7 @@ struct Builder[O: ObjectiveLike](Movable):
         while c < n_sampled_cols:
             self._compute_split(
                 ctx, dataset, quantiles, c, n_blocks_dimx, n,
-                n_sampled_cols, smem_config,
+                n_sampled_cols, smem_config, instr, tag_prefix,
             )
             c += N_BLKS_FOR_COLS
         self._enqueue_splits_download(ctx, n)
@@ -1519,10 +1549,13 @@ struct Builder[O: ObjectiveLike](Movable):
     ) raises -> List[SplitSummary[Self.O.DataT]]:
         """The serial composition: enqueue, drain, read -- exactly their
         `computeBestSplits` including `:479-480`'s `update_host` +
-        `sync_stream`."""
+        `sync_stream`. Instruments are DISABLED here (DEVIATION 401): the
+        callers of this serial arm are checks, and a check must not change
+        behavior under an exported trace variable."""
+        var instr = FitInstruments.disabled()
         self.enqueue_best_splits(
             ctx, dataset, quantiles, work_items, sample_offset,
-            n_sampled_cols, smem_config,
+            n_sampled_cols, smem_config, instr, String("untraced"),
         )
         ctx.synchronize()
         return self._read_splits(len(work_items))
@@ -1536,8 +1569,22 @@ struct Builder[O: ObjectiveLike](Movable):
         quantiles: Quantiles[Self.O.DataT],
         smem_config: SharedMemoryConfig,
         mut st: BatchState[Self.O],
+        mut instr: FitInstruments,
     ) raises:
         """One sampling round's enqueue, `:437-450`."""
+        # DEVIATION 401 -- the tag names a position in the algorithm:
+        # which tree, which queue pop, which sampling round. Built only
+        # under an enabled trace, so the shipping path pays no String.
+        var tag_prefix = String("")
+        if instr.trace.enabled:
+            tag_prefix = (
+                "tree"
+                + String(self.treeid)
+                + ".batch"
+                + String(self.trace_batch)
+                + ".round"
+                + String(st.round)
+            )
         var sample_offset = st.round * self.original_n_sampled_cols
         var n_sampled_cols = sampled_cols_in_round(
             self.n_cols, self.original_n_sampled_cols, st.round
@@ -1559,8 +1606,46 @@ struct Builder[O: ObjectiveLike](Movable):
             ds.n_sampled_cols = Int32(self.n_cols)
         self.enqueue_best_splits(
             ctx, ds, quantiles, st.active_items, sample_offset,
-            n_sampled_cols, smem_config,
+            n_sampled_cols, smem_config, instr, tag_prefix,
         )
+
+    def _record_splits(
+        self,
+        mut instr: FitInstruments,
+        tag: String,
+        splits: List[SplitSummary[Self.O.DataT]],
+    ) raises:
+        """DEVIATION 401 -- a batch of `SplitSummary` as an identity-trace
+        record, FIELD BY FIELD rather than raw struct bytes: a host
+        struct's padding bytes are unspecified, and hashing them would
+        report divergence where there is none (the same failure rule 3
+        exists to prevent, from the host side). Every field travels as bit
+        patterns in u32 lanes; 64-bit values are split low-then-high with
+        an explicit mask, because Int widening sign-extends
+        (`[[mojo-int-widening-sign-extends]]`)."""
+        if not instr.trace.enabled:
+            return
+        var flat = List[UInt32]()
+        for i in range(len(splits)):
+            ref s = splits[i]
+            flat.append(UInt32(1) if s.is_valid else UInt32(0))
+            flat.append(UInt32(Int(s.colid) & 0xFFFFFFFF))
+            var qb = UInt64(s.quesval.to_bits())
+            flat.append(UInt32(qb & 0xFFFFFFFF))
+            flat.append(UInt32(qb >> 32))
+            var mb = UInt64(s.best_metric_val.to_bits())
+            flat.append(UInt32(mb & 0xFFFFFFFF))
+            flat.append(UInt32(mb >> 32))
+            var g = s.global_n_left.cast[DType.uint64]()
+            flat.append(UInt32(g & 0xFFFFFFFF))
+            flat.append(UInt32(g >> 32))
+            var l = s.local_n_left.cast[DType.uint64]()
+            flat.append(UInt32(l & 0xFFFFFFFF))
+            flat.append(UInt32(l >> 32))
+        instr.trace.record_host(tag, flat.unsafe_ptr(), len(flat))
+        # `[[mojo-buffer-freed-at-last-use]]`: `.unsafe_ptr()` above would
+        # otherwise be `flat`'s last use, freeing it under the hash.
+        _ = flat^
 
     def begin_batch[
         sabotage: Int = 0
@@ -1571,9 +1656,14 @@ struct Builder[O: ObjectiveLike](Movable):
         quantiles: Quantiles[Self.O.DataT],
         work_items: List[NodeWorkItem],
         smem_config: SharedMemoryConfig,
+        mut instr: FitInstruments,
     ) raises -> BatchState[Self.O]:
         """`doSplit`'s head (`:410-437`) plus round zero's enqueue. The
         returned state is pending a synchronize."""
+        # DEVIATION 401 -- the batch takes its 0-based index within the
+        # tree. Incremented unconditionally so the numbering is the same
+        # whether or not this run is traced.
+        self.trace_batch += 1
         var n = len(work_items)
         var max_rounds = max_sampling_rounds_for(
             self.n_cols, self.original_n_sampled_cols
@@ -1600,7 +1690,9 @@ struct Builder[O: ObjectiveLike](Movable):
             0,
             List[SplitSummary[Self.O.DataT]](),
         )
-        self._enqueue_round[sabotage](ctx, dataset, quantiles, smem_config, st)
+        self._enqueue_round[sabotage](
+            ctx, dataset, quantiles, smem_config, st, instr
+        )
         return st^
 
     def advance_batch[
@@ -1612,6 +1704,7 @@ struct Builder[O: ObjectiveLike](Movable):
         quantiles: Quantiles[Self.O.DataT],
         smem_config: SharedMemoryConfig,
         mut st: BatchState[Self.O],
+        mut instr: FitInstruments,
     ) raises -> Bool:
         """`doSplit`'s consume side: the retry logic of `:452-458` after a
         best-splits sync, or the final read of `:501` after the node-split
@@ -1620,8 +1713,36 @@ struct Builder[O: ObjectiveLike](Movable):
         splits in `st.result`."""
         if st.phase == 1:
             st.result = self._read_splits(len(st.work_items))
+            # DEVIATION 401 -- the batch's splits as the PARTITION read
+            # them back: chosen column, threshold bits, child counts.
+            # This is "after split selection" for the whole batch.
+            if instr.trace.enabled:
+                self._record_splits(
+                    instr,
+                    "tree"
+                    + String(self.treeid)
+                    + ".batch"
+                    + String(self.trace_batch)
+                    + ".splits",
+                    st.result,
+                )
             return True
         var h = self._read_splits(len(st.active_items))
+        # DEVIATION 401 -- the round's CANDIDATE splits, before the retry
+        # dispatch, so a divergence is pinned to a sampling round rather
+        # than to the batch's final answer.
+        if instr.trace.enabled:
+            self._record_splits(
+                instr,
+                "tree"
+                + String(self.treeid)
+                + ".batch"
+                + String(self.trace_batch)
+                + ".round"
+                + String(st.round)
+                + ".cand",
+                h,
+            )
         var retry_items = List[NodeWorkItem]()
         var retry_to_original = List[Int]()
         for i in range(len(st.active_items)):
@@ -1637,7 +1758,7 @@ struct Builder[O: ObjectiveLike](Movable):
             st.active_to_original = retry_to_original^
             st.round += 1
             self._enqueue_round[sabotage](
-                ctx, dataset, quantiles, smem_config, st
+                ctx, dataset, quantiles, smem_config, st, instr
             )
             return False
         self.enqueue_node_split(ctx, dataset, st.work_items, st.final_splits)
@@ -1661,14 +1782,17 @@ struct Builder[O: ObjectiveLike](Movable):
         `begin_batch`/`advance_batch` -- same operations, same order, same
         sync count (one per round plus one for the partition), verified
         bit-identical by the fingerprint probe when the split was made.
+        Instruments are DISABLED (DEVIATION 401): this arm serves checks,
+        which must not change behavior under an exported trace variable.
         """
+        var instr = FitInstruments.disabled()
         var st = self.begin_batch[sabotage](
-            ctx, dataset, quantiles, work_items, smem_config
+            ctx, dataset, quantiles, work_items, smem_config, instr
         )
         while True:
             ctx.synchronize()
             if self.advance_batch[sabotage](
-                ctx, dataset, quantiles, smem_config, st
+                ctx, dataset, quantiles, smem_config, st, instr
             ):
                 var out = st.result.copy()
                 return out^
@@ -1940,11 +2064,15 @@ struct Builder[O: ObjectiveLike](Movable):
         # Since the pipelined forest loop (DEVIATION 117) this is the
         # SERIAL DRIVE of `begin_tree`/`advance_tree` -- same operations,
         # same order, same sync count, verified bit-identical by the
-        # fingerprint probe when the split was made.
-        var ts = self.begin_tree[sabotage](ctx, dataset, quantiles)
+        # fingerprint probe when the split was made. Instruments are
+        # DISABLED (DEVIATION 401): this arm serves checks, which must not
+        # change behavior under an exported trace variable. Traced fits go
+        # through `fit_forest`.
+        var instr = FitInstruments.disabled()
+        var ts = self.begin_tree[sabotage](ctx, dataset, quantiles, instr)
         while not ts.done:
             ctx.synchronize()
-            _ = self.advance_tree[sabotage](ctx, quantiles, ts)
+            _ = self.advance_tree[sabotage](ctx, quantiles, ts, instr)
         var tree = ts.tree.copy()
         return tree^
 
@@ -1955,6 +2083,7 @@ struct Builder[O: ObjectiveLike](Movable):
         ctx: DeviceContext,
         dataset: DatasetView[Self.O.DataT, Self.O.LabelT],
         quantiles: Quantiles[Self.O.DataT],
+        mut instr: FitInstruments,
     ) raises -> TreeState[Self.O]:
         """`Builder::train`'s head: the `n_sampled_cols` correction (their
         ctor's `:240` -- see `train`'s docstring for the incident it
@@ -1999,10 +2128,10 @@ struct Builder[O: ObjectiveLike](Movable):
         if ts.queue.has_work():
             var work_items = ts.queue.pop()
             ts.batch = self.begin_batch[sabotage](
-                ctx, ts.ds, quantiles, work_items, ts.smem_config
+                ctx, ts.ds, quantiles, work_items, ts.smem_config, instr
             )
         else:
-            self._finish_tree(ctx, ts)
+            self._finish_tree(ctx, ts, instr)
         return ts^
 
     def advance_tree[
@@ -2012,6 +2141,7 @@ struct Builder[O: ObjectiveLike](Movable):
         ctx: DeviceContext,
         quantiles: Quantiles[Self.O.DataT],
         mut ts: TreeState[Self.O],
+        mut instr: FitInstruments,
     ) raises -> Bool:
         """One consume step of `Builder::train`'s loop (`:375-389`). Call
         ONLY after a synchronize covering this builder's enqueues. Returns
@@ -2020,27 +2150,35 @@ struct Builder[O: ObjectiveLike](Movable):
         if ts.done:
             return True
         if not self.advance_batch[sabotage](
-            ctx, ts.ds, quantiles, ts.smem_config, ts.batch
+            ctx, ts.ds, quantiles, ts.smem_config, ts.batch, instr
         ):
             return False
         ts.queue.push(ts.batch.work_items, ts.batch.result)
         if ts.queue.has_work():
             var work_items = ts.queue.pop()
             ts.batch = self.begin_batch[sabotage](
-                ctx, ts.ds, quantiles, work_items, ts.smem_config
+                ctx, ts.ds, quantiles, work_items, ts.smem_config, instr
             )
             return False
-        self._finish_tree(ctx, ts)
+        self._finish_tree(ctx, ts, instr)
         return True
 
     def _finish_tree(
-        mut self, ctx: DeviceContext, mut ts: TreeState[Self.O]
+        mut self,
+        ctx: DeviceContext,
+        mut ts: TreeState[Self.O],
+        mut instr: FitInstruments,
     ) raises:
-        """`train`'s tail: `GetTree` + `SetLeafPredictions` (`:386-388`)."""
+        """`train`'s tail: `GetTree` + `SetLeafPredictions` (`:386-388`).
+        DEVIATION 402 times the leaf pass here, where it runs, because
+        `set_leaf_predictions` carries its own per-batch syncs and its
+        wall time is real device work."""
         var tree = ts.queue.tree.copy()
         tree.treeid = self.treeid
+        var t0 = instr.times.start()
         self.set_leaf_predictions(
             ctx, tree, ts.queue.node_instances_.copy(), ts.ds
         )
+        instr.times.stop(ctx, "leaf_values", t0)
         ts.tree = tree^
         ts.done = True

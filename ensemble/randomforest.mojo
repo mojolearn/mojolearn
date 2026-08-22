@@ -328,6 +328,7 @@ from ensemble.decisiontree.batched_levelalgo.random_utils import (
     fnv1a32_hash_seed_tree,
 )
 from core.launch_log import log_launch
+from ensemble.instruments import FitInstruments
 from core.philox import (
     RNG_STRIDE,
     launch_uniform_int,
@@ -2305,6 +2306,50 @@ def n_sampled_rows_for(
     return Int(f)
 
 
+def _record_tree[
+    dt: DType
+](mut instr: FitInstruments, tree: TreeMetaDataNode[dt], idx: Int) raises:
+    """DEVIATION 401 -- a finished tree's two identity checkpoints.
+
+    `treeN.nodes` is the tree STRUCTURE (colid, threshold bits, metric
+    bits, left child, instance count -- the same fields the fingerprint
+    probe folds, plus the metric), and `treeN.leaves` is `vector_leaf`.
+    Both are host lists by the time a tree lands in the forest, hashed
+    FIELD BY FIELD as u32 bit patterns -- never raw struct bytes (padding)
+    and never decimal text (identity_trace rule 1). `idx` is the tree's
+    FOREST index, a position in the algorithm, identical under any
+    pipeline width K (DEVIATION 117's output-freedom is what makes that
+    true)."""
+    if not instr.trace.enabled:
+        return
+    var flat = List[UInt32]()
+    for i in range(len(tree.sparsetree)):
+        ref node = tree.sparsetree[i]
+        flat.append(UInt32(Int(node.ColumnId()) & 0xFFFFFFFF))
+        var qb = UInt64(node.QueryValue().to_bits())
+        flat.append(UInt32(qb & 0xFFFFFFFF))
+        flat.append(UInt32(qb >> 32))
+        var mb = UInt64(node.BestMetric().to_bits())
+        flat.append(UInt32(mb & 0xFFFFFFFF))
+        flat.append(UInt32(mb >> 32))
+        flat.append(UInt32(Int(node.LeftChildId()) & 0xFFFFFFFF))
+        flat.append(UInt32(Int(node.InstanceCount()) & 0xFFFFFFFF))
+    instr.trace.record_host(
+        "tree" + String(idx) + ".nodes", flat.unsafe_ptr(), len(flat)
+    )
+    # `[[mojo-buffer-freed-at-last-use]]` -- keep the list past the hash.
+    _ = flat^
+    var leaves = List[UInt32]()
+    for i in range(len(tree.vector_leaf)):
+        var lb = UInt64(tree.vector_leaf[i].to_bits())
+        leaves.append(UInt32(lb & 0xFFFFFFFF))
+        leaves.append(UInt32(lb >> 32))
+    instr.trace.record_host(
+        "tree" + String(idx) + ".leaves", leaves.unsafe_ptr(), len(leaves)
+    )
+    _ = leaves^
+
+
 def fit_forest[
     O: ObjectiveLike, oob_sabotage: Int = 0
 ](
@@ -2374,6 +2419,33 @@ def fit_forest[
     rf_params.validity_check()
     rf_params.check()
 
+    # DEVIATION 401 (identity-trace checkpoints) and 402 (stage timers):
+    # ONE instrument set per fit, read from the environment here and
+    # threaded down by `mut` reference -- one sequence counter, so K
+    # pipelined builders cannot interleave two traces into one file. Both
+    # are off by default; see `ensemble/instruments.mojo`.
+    var instr = FitInstruments()
+    var t_fit = instr.times.start()
+    if instr.trace.enabled:
+        instr.trace.header(
+            "fit_forest n_rows="
+            + String(n_rows)
+            + " n_cols="
+            + String(n_cols)
+            + " n_trees="
+            + String(rf_params.n_trees)
+            + " n_streams="
+            + String(rf_params.n_streams)
+            + " seed="
+            + String(rf_params.seed)
+            + " max_depth="
+            + String(rf_params.tree_params.max_depth)
+            + " max_n_bins="
+            + String(rf_params.tree_params.max_n_bins)
+            + " bootstrap="
+            + String(rf_params.bootstrap)
+        )
+
     # `randomforest_common.pyx:497-499` -- "Out of bag estimation only
     # available if bootstrap=True". Without a bootstrap every tree sees
     # every row, so no row is ever out of bag and the score would be
@@ -2421,6 +2493,7 @@ def fit_forest[
         )
 
     # `:317-325` -- ONCE, for the whole forest, with their literal 4.
+    var t_stage = instr.times.start()
     var qr = compute_quantiles(
         ctx,
         x,
@@ -2431,6 +2504,20 @@ def fit_forest[
         rf_params.seed,
         row_major,
     )
+    instr.times.stop(ctx, "quantiles", t_stage)
+    # DEVIATION 401 -- the forest's ONE quantile table. `nbins` is the
+    # per-feature bin count, which is where the subnormal-flush divergence
+    # (DEVIATION 123) lands FIRST on a cross-backend diff; `values` is the
+    # full col-major table, whose tail past `nbins[col]` is the unique
+    # pass's leftover -- a pure function of the input data, deterministic
+    # per backend, so hashing the whole logical allocation is sound.
+    if instr.trace.enabled:
+        instr.trace.record_device(
+            ctx, "forest.quantiles.nbins", qr.n_bins_array
+        )
+        instr.trace.record_device(
+            ctx, "forest.quantiles.values", qr.quantiles_array
+        )
     # `rebind` because `O.DataT` and `DType.float32` are EQUAL by this
     # function's `where` clause but not syntactically the same expression,
     # so the pointer types do not unify on their own. This is rebind's
@@ -2459,6 +2546,7 @@ def fit_forest[
         n_rows * n_cols if use_bins else 1
     )
     if use_bins:
+        t_stage = instr.times.start()
         launch_bin_dataset(
             ctx,
             rebind[MutPointer[Scalar[O.DataT], MutUntrackedOrigin]](
@@ -2473,6 +2561,13 @@ def fit_forest[
             n_cols if row_major else 1,
             1 if row_major else n_rows,
         )
+        instr.times.stop(ctx, "bin_dataset", t_stage)
+        # DEVIATION 401 -- the pre-binned index matrix (DEVIATION 314),
+        # one uint8 per (row, col), fully written by the kernel above.
+        # Every level of every tree reads THIS; a divergence here explains
+        # every histogram downstream of it.
+        if instr.trace.enabled:
+            instr.trace.record_device(ctx, "forest.binned", d_bins)
 
     var has_sw = len(sample_weight_host) > 0
     # DEVIATION 117, PORTED: cuML's shipped forest loop is
@@ -2580,7 +2675,18 @@ def fit_forest[
         if next_tree >= n_trees:
             break
         while next_tree < n_trees:
+            t_stage = instr.times.start()
             sampler.sample(ctx, Int32(next_tree), k)
+            instr.times.stop(ctx, "row_sampling", t_stage)
+            # DEVIATION 401 -- the tree's sampled rows, the first per-tree
+            # divergence point (a pure hash of (seed, tree_id), so K-free).
+            if instr.trace.enabled:
+                instr.trace.record_device(
+                    ctx,
+                    "tree" + String(next_tree) + ".rows",
+                    sampler.selected_rows_[k],
+                    sampler.n_selected,
+                )
             builders[k].reset_for_tree(Int32(next_tree), sampler.n_selected)
             var dataset = DatasetView[O.DataT, O.LabelT](
                 rebind[MutPointer[Scalar[O.DataT], MutUntrackedOrigin]](
@@ -2607,9 +2713,10 @@ def fit_forest[
                 ](),
                 use_bins,
             )
-            var ts = builders[k].begin_tree(ctx, dataset, quantiles)
+            var ts = builders[k].begin_tree(ctx, dataset, quantiles, instr)
             if ts.done:
                 forest.trees[next_tree] = ts.tree.copy()
+                _record_tree(instr, forest.trees[next_tree], next_tree)
                 next_tree += 1
                 continue
             states.append(ts^)
@@ -2624,19 +2731,39 @@ def fit_forest[
     # host threads it never needed.
     var active = len(states)
     while active > 0:
+        # DEVIATION 402 -- "device_wait" is the one drain that serves
+        # every in-flight tree's enqueued phase; `stop_host` because the
+        # queue is empty at the stamp by construction.
+        t_stage = instr.times.start()
         ctx.synchronize()
+        instr.times.stop_host("device_wait", t_stage)
         for k in range(len(states)):
             if slot_tree[k] < 0:
                 continue
-            if not builders[k].advance_tree(ctx, quantiles, states[k]):
+            if not builders[k].advance_tree(
+                ctx, quantiles, states[k], instr
+            ):
                 continue
             while True:
                 forest.trees[slot_tree[k]] = states[k].tree.copy()
+                _record_tree(
+                    instr, forest.trees[slot_tree[k]], slot_tree[k]
+                )
                 if next_tree >= n_trees:
                     slot_tree[k] = -1
                     active -= 1
                     break
+                t_stage = instr.times.start()
                 sampler.sample(ctx, Int32(next_tree), k)
+                instr.times.stop(ctx, "row_sampling", t_stage)
+                # DEVIATION 401 -- same checkpoint as the prime loop's.
+                if instr.trace.enabled:
+                    instr.trace.record_device(
+                        ctx,
+                        "tree" + String(next_tree) + ".rows",
+                        sampler.selected_rows_[k],
+                        sampler.n_selected,
+                    )
                 builders[k].reset_for_tree(
                     Int32(next_tree), sampler.n_selected
                 )
@@ -2663,7 +2790,9 @@ def fit_forest[
                     ](),
                     use_bins,
                 )
-                states[k] = builders[k].begin_tree(ctx, dataset, quantiles)
+                states[k] = builders[k].begin_tree(
+                    ctx, dataset, quantiles, instr
+                )
                 slot_tree[k] = next_tree
                 next_tree += 1
                 if not states[k].done:
@@ -2678,9 +2807,11 @@ def fit_forest[
     # `randomforest_common.pyx:669-670` -- after the tree loop, and only
     # if it was asked for.
     if oob_score:
+        t_stage = instr.times.start()
         compute_oob_score[O, oob_sabotage](
             ctx, forest, sampler, x, y, n_rows, n_cols, row_major
         )
+        instr.times.stop(ctx, "oob", t_stage)
 
     # Mojo frees a value at its LAST USE, and every buffer above reached a
     # kernel as a raw pointer. These uses keep them alive past the final
@@ -2688,4 +2819,9 @@ def fit_forest[
     _ = qr^
     _ = sampler^
     _ = d_bins^
+    # DEVIATION 402 -- the stage table, printed only under
+    # MOJOLEARN_STAGE_TIMES=1. `stop_host` because everything above has
+    # drained.
+    instr.times.stop_host("fit_total", t_fit)
+    instr.times.report()
     return forest^

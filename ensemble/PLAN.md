@@ -498,6 +498,9 @@ Numbers as actually used, which is what PORTING.md takes:
 | 312 | `randomforest.mojo` | `class_weight`'s mapping becomes a full per-class vector, because this port's labels ARE the indices `y_ind` holds and there is no arbitrary-label dict to key on. Their partial-coverage error (`common/classification.py:87-91`) therefore cannot arise; a wrong LENGTH is refused instead |
 | 311 | `randomforest.mojo` | OOB. The mask buffer is allocated by `fit_forest`, not by a caller, and `oob_score_` / `oob_decision_function_` / `oob_prediction_` land on `RandomForestMetaData` rather than on an estimator object -- they are Python ATTRIBUTES there, not C++ members. The per-tree predictions come from the host tree walk rather than `nvforest.predict_per_tree` (which is DEVIATION 119b's declined path), and the whole scoring pass is on the host where theirs is cupy on device |
 | 310 | `objectives.mojo` | `10 * numeric_limits<DataT>::epsilon()` as an IEEE-754 literal, because `nextafter` crashes the Metal backend with no line number. Value is bit-identical; checked against `nextafter` on the host in `regression_check.mojo` |
+| 400 | — | RESERVED by name for a pcg_rng port; unspent as of 2026-08-22. This lane's block is 400-449 |
+| 401 | `instruments.mojo`, `randomforest.mojo`, `builder.mojo` | identity-trace checkpoints threaded through `fit_forest` and `Builder`'s phase methods (`mut instr: FitInstruments`); cuML has no counterpart. Tags: `forest.quantiles.{nbins,values}`, `forest.binned`, `treeT.rows`, `treeT.batchB.roundR.colsC.hist`, `treeT.batchB.roundR.cand`, `treeT.batchB.splits`, `treeT.nodes`, `treeT.leaves`. Serial drives (`train`, `do_split`, `_compute_best_splits`) run DISABLED instruments so no check changed. Host structs recorded FIELD BY FIELD (padding), 64-bit values split lo/hi with explicit masks. GATED: all ten fingerprint hashes unchanged, trace byte-identical across two runs, and K=1 vs K=4 agree PER TAG on all 279 records of the CLF-BOOT fixture — a finer gate than the forest hash |
+| 402 | `instruments.mojo`, `randomforest.mojo`, `builder.mojo` | `MOJOLEARN_STAGE_TIMES=1` per-stage wall timers (stages: quantiles, bin_dataset, row_sampling, device_wait, leaf_values, oob, fit_total, derived other), the replacement for their `TimerCPU`/`train_time` declined under 303. `stop()` drains to close each stage, so A STAGED RUN IS NEVER A CERTIFIABLE TIMING; env read once per fit, `start`/`stop` return on one boolean when unset. Fingerprints unchanged with the flag ON |
 | 313 | `builder.mojo`, `randomforest.mojo` | ONE Builder per FOREST, reset per tree (`reset_for_tree`), and the leaf pass's six staging buffers pooled with it. Their Builder is constructed per tree, but from RMM's POOLED resources -- pointer carving, not driver allocation -- so per-tree Metal buffer creates were a cost their design never pays. Also deleted in the same round, under HOST_AND_DEVICE.md rule two: the two per-tree `RowSampler` synchronizes (their `sample()` has NONE -- every arm is stream-ordered, `randomforest.cuh:110-165` -- while the host-staging arms keep theirs as DEVIATION 305's price). Gated by `mojo_only/fingerprint_probe.mojo`: five configs bit-exact across every step, and the treeid-freeze sabotage moves every multi-tree line |
 
 **RESOLVED, 2026-08-21, in the same session:** `core/`'s 112/113/114 were
@@ -905,3 +908,45 @@ Pairs table + NVIDIA runner: bench/results/RF_ET_2026-08-22_lightgbm-
 pairs.md (387dd81, 5e0c788); NVIDIA leg blocked on a rented box.
 Shared-checkout: commit with PATHSPECS (git commit -- paths); two sweep
 incidents today, both repaired (805653e note, 6570665 note).
+
+# Session log: 2026-08-22 afternoon, the instrumentation round
+
+Scope narrowed by Andrew mid-session: SPEED of existing paths and
+BITWISE-IDENTITY pieces only; no new features. Deliverable: DEVIATIONS
+401/402 (see ledger) -- identity-trace checkpoints at every fit stage
+plus MOJOLEARN_STAGE_TIMES wall timers, in `ensemble/instruments.mojo`
+and threaded through `fit_forest` / `Builder`.
+
+Gates run, all green: ten fingerprint hashes unchanged against the
+pre-change binary (build/fingerprint_probe, 09:59) with instruments off
+AND with timers on; traced run byte-identical across two executions;
+K=1 vs K=4 agree per tag on all 279 records (sorted-by-tag compare) --
+the pipeline is now provably output-free at EVERY stage, not just at
+the forest hash. Sensitivity: same seed reproduces `tree0.rows` across
+configs (the rows ARE a pure hash of (seed, tree)), different
+objective/data moves the hist records. `bindings/build_rf.sh` rerun,
+smoke gate green, fresh `_mojolearn_rf.so` committed with the source.
+
+**Trace-tooling finding for the cross-device round (orchestrator):**
+`tools/identity_trace_diff.py` REFUSES a file holding more than one
+fit's trace (`seq out of order` -- the env path appends deliberately,
+core/identity_trace.mojo's interleaved-harness rule). Cross-device RF
+diffs must trace ONE fit per file, or split segments on the
+`# fit_forest` header lines first. Also expected: comparing traces of
+DIFFERENT K widths mismatches on sequence alignment (K interleaves
+enqueue order); compare per tag, or hold K equal across the two arms --
+same-K cross-backend is the differ's real use case and aligns fully.
+
+First stage table on the fingerprint fixture (diagnostic only, NOT a
+certified timing; drains per stage): device_wait dominates at ~39% with
+`other` (host enqueue/consume) ~54% at 4000x20x8 trees -- consistent
+with mojolearn-fixed-vs-marginal's small-n constant; at bench shapes
+expect device_wait to absorb the 85.3% histogram share. A staged run of
+RF_BENCH shapes is a cheap first read BEFORE any Instruments session;
+propose to the orchestrator, never run under the bench lock.
+
+DEVIATION 314 speed certification: still owed, prep confirmed --
+build/rf_bench_pre314 and build/rf_bench both present; the CLF ABAB and
+the RF_BENCH_REG 500k x 90 MSE arm remain queued on a clean window
+(gated by quiet_window + canary). sklearn row (ten voids) and the eps
+row likewise wait on the box; all three are orchestrator runs.
