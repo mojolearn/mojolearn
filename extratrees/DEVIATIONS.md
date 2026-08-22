@@ -2626,3 +2626,65 @@ checks and the `mat_ab.mojo` harness -- because a dead-by-default mode kept
 "for later" is the unwired-path defect rule 3 names. This entry is the
 result; the harness is three hundred lines anyone can rewrite from the
 paragraph above in an hour, and the numbers are what they would get.
+
+---
+
+## DEVIATION 213 -- the merged batch bound: MEASURED, NO EFFECT, and the Instruments profile that closes the schedule question
+
+**WHAT WAS TRIED.** cuML pops frontier batches at `max_batch_size = 4096`, a
+bound tuned for ONE tree; DEVIATION 211's merged frontier holds tens of
+thousands of nodes at sklearn's default 100 trees, so the bound splits deep
+levels into dozens of batches, each with its own staging, launches, readback
+and synchronize. Batch width is contracted not to change the tree, so
+`bench/batchwidth_ab.mojo` swept 4096 / 16384 / 32768 alternated in one
+process (digests identical across every arm and rep -- the width contract,
+live at full covtype scale): covtype 581,012 x sqrt, 100 trees, depth 12 --
+**0.96x / 1.07x / 1.01x for 16384 and 0.96-1.04x for 32768. No effect;**
+4096 stays, being cuML's value and the smallest workspace.
+
+**WHY, measured rather than argued -- the Apple Instruments profile**
+(`bench/fit_once.mojo` traced under Metal System Trace, read by
+`bench/profile_et_metal.py`; the parsing technique is the RF lane's, reused
+in this lane's own file). One merged 100-tree covtype fit, 3,645 compute
+dispatches:
+
+    GPU busy fraction           93.8%  (busy 10,715 ms of 11,422 ms span)
+    the 10 longest dispatches   50.8% of busy time (max single: 799 ms)
+    the 50 longest              83.2%
+    the 200 longest             96.7%
+    GPU performance state       "Minimum M4" for 11,015 of 11,422 ms
+    thermal state               "Fair" throughout
+
+Three findings, each of which retires a hypothesis:
+
+1. **The schedule is DONE.** 93.8% busy means the host is not the cost and
+   no scheduling lever (wider batches, fewer syncs, pipelining) has
+   meaningful room -- which is exactly what this entry's wash and 212's
+   wash showed from the outside. DEVIATION 211 is what bought this; the
+   pre-211 sibling measurement on this repo was launch-bound.
+2. **The cost is a handful of GIANT dispatches: the shallow levels' range
+   and score passes, where every row of every tree is active.** Ten
+   dispatches are half the fit. That is the formulation's own row traffic
+   (two passes over `rows x k` per level, deviation 137's deliberate
+   trade), not overhead -- and 212 measured that rearranging those reads
+   does not help. Within this formulation, at this size, the kernels are
+   the floor. The formulation-level alternative (bin-space ET on the
+   histogram builder, LightGBM's `USE_RAND`) is the RF lane's Step 2, a
+   different product by design.
+3. **THE GPU RAN AT ITS MINIMUM CLOCK FOR 96% OF THE TRACE, thermal state
+   "Fair".** This is the MECHANISM behind the repo's standing rule that
+   this box drifts 1.7x in twenty minutes: a heat-soaked chassis pins the
+   GPU governor at minimum, and every absolute number in these windows --
+   including the sklearn ratios, whose CPU arms throttle on their own
+   schedule -- is a number AT WHATEVER CLOCK THE WINDOW GOT. Alternation
+   inside one process protects the ratios; nothing protects the absolutes.
+   A cold-chassis window would be faster everywhere and possibly by a lot;
+   taking one is a bench-hygiene action, not a code change.
+
+**WHAT THIS CLOSES AND WHAT IT LEAVES.** Closed: scheduling (211 finished
+it), read rearrangement (212), batch width (this entry). Left, priced by
+the profile: nothing inside the current formulation at the shipped size --
+the next real large-data moves are a different formulation (bin-space ET,
+the other lane's product) or better silicon conditions. The small-n regime
+is a different story and its lever (the sampled-column sweep, `gridDim.y`)
+is unchanged by any of this.

@@ -95,3 +95,17 @@ A wash at best, a loss at worst; reverted, full record and the corrected
 reading of the "gather roofline" diagnosis in `extratrees/DEVIATIONS.md`
 entry 212. The ledger's old "column materialization ~20%" estimate is
 falsified by this table.
+
+## Addendum 2: batch width (DEVIATION 213) and the Instruments profile
+
+Sweeping the merged frontier's `max_batch_size` (4096 / 16384 / 32768,
+alternated in one process, digests identical) at covtype 581k, 100 trees:
+0.96-1.07x -- no effect. The Metal System Trace over one merged 100-tree fit
+explains why and closes the schedule question: **GPU busy fraction 93.8%**,
+the 10 longest dispatches hold 50.8% of busy time (the shallow levels' range
+and score passes, where every row is active), and the **GPU performance
+state sat at "Minimum M4" for 11.0 of 11.4 seconds** (thermal "Fair") -- the
+heat-soaked-governor mechanism behind this box's standing 1.7x drift rule.
+After 211 the host is not the cost, the kernels are the floor at this size,
+and every absolute in this window was taken at whatever clock the window
+got. Tools: `extratrees/bench/fit_once.mojo` + `profile_et_metal.py`.
