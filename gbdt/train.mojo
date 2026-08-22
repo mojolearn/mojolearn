@@ -1223,6 +1223,22 @@ def train(
                 ocp.unsafe_store(k, -1)
 
         sync_parallelize(_dp_task, n_float)
+        # ==================== THE STEP-33 RACE, FOUND =====================
+        # The plane the tasks read must outlive the JOIN, not its last
+        # textual use: `sfp2 = predrawn.unsafe_ptr()` above was
+        # `predrawn`'s last use, so Mojo freed the whole drawn-sample
+        # plane BEFORE the pool ran -- and each task's own `col2`
+        # allocation (border_sample_n floats) could land inside the freed
+        # pages and OVERWRITE them under a sibling task's read. Thread
+        # scheduling decides who reads garbage: nondeterministic on a
+        # QUIET box, dependent on allocator size classes (which is why
+        # 8.8M-row fits diverged where 2M-row fits never did), and the
+        # fork lands in the BORDERS, which is why divergent models differ
+        # from tree 0 with coherent-but-wrong AUCs. Full record:
+        # PREP_BILL_2026-08-22 steps 33-34.
+        _ = sorted_flat^
+        _ = predrawn^
+        # ==================================================================
 
         for k in range(n_float):
             var nb = out_counts[k]
