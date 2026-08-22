@@ -141,6 +141,7 @@ from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels_im
     node_feature_score_init_kernel,
     node_feature_score_kernel,
     RANGE_SAB_NONE,
+    classification_key_shift,
     score_row_bound_ok,
     ScoredCandidate,
     scored_candidate_at,
@@ -1834,8 +1835,51 @@ def main() raises:
         print("  arm E FAILED: score_row_bound_ok disagrees with its own bound")
     else:
         print(
-            "  score_row_bound_ok: 2^21 exact, 2^22 refused, 2^26 refused --"
-            " computed in Int128, not asserted"
+            "  score_row_bound_ok: 2^21 exact, above it INEXACT -- and since"
+            " DEVIATION 218 inexact means SHIFTED, not refused"
+        )
+
+    # --- DEVIATION 218: the shift that replaced the refusal ---------------
+    # (a) The shift is ZERO through the whole formerly-legal regime and
+    # positive above it, sized so the published pair holds in Int64.
+    var shift_bad = 0
+    if classification_key_shift(SCORE_MAX_ROWS_EXACT) != 0:
+        shift_bad += 1
+    if classification_key_shift((1 << 22)) != 2:
+        shift_bad += 1
+    if classification_key_shift((1 << 24)) != 8:
+        shift_bad += 1
+    # (b) Recheck the wrap case above WITH the shift: at n = 2^26 the same
+    # worst-case numerator, shifted, must fit Int64 -- in Int128, computed.
+    var s26 = classification_key_shift(1 << 26)
+    var shifted = (Int128(sq) >> Int128(s26)) * Int128(half) * Int128(2)
+    if shifted > Int128(Int64.MAX):
+        shift_bad += 1
+    # (c) ORDER SURVIVES the shift at adversarial closeness: two candidates
+    # whose numerators differ by more than one granule must rank the same
+    # shifted as exact; inside one granule they may tie (priced surrender).
+    var g = Int64(1) << Int64(s26)
+    var a_sq = Int64(1) << Int64(46)
+    var b_sq = a_sq + 2 * g
+    var a_shift = (a_sq >> Int64(s26)) * half * 2
+    var b_shift = (b_sq >> Int64(s26)) * half * 2
+    if not (b_shift > a_shift):
+        shift_bad += 1
+    var c_sq = a_sq + (g >> Int64(1))
+    var c_shift = (c_sq >> Int64(s26)) * half * 2
+    if c_shift != a_shift:
+        # half a granule apart MUST tie into the total order -- if it does
+        # not, the granularity claim in the 218 entry is wrong.
+        shift_bad += 1
+    if shift_bad != 0:
+        failures += 1
+        print("  arm E FAILED: classification_key_shift broke a 218 claim,")
+        print("  shift_bad =", shift_bad)
+    else:
+        print(
+            "  classification_key_shift: 0 at 2^21, 2 at 2^22, 8 at 2^24;"
+            " the 2^26 worst case fits Int64 shifted; order preserved past"
+            " one granule and tied within half of one -- all in Int128"
         )
 
     print("")

@@ -2920,3 +2920,43 @@ caught it stays in `bench/node2_probe.mojo` as the exact repro.
 **What this closes.** The year accuracy row's our-vs-sklearn residual --
 the last open ET-behind accuracy item. The scoreboard's remaining year gap
 is model-family, shared with sklearn's own ET at this config.
+---
+
+## DEVIATION 218 -- the 2^21 classification row cap LIFTED: deviation 191's shift, applied to the Gini pair
+
+**What stood.** DEVIATION 175 published sklearn's proxy as an exact Int64
+rational and priced the exactness at a cap: the worst numerator is `n^3/4`,
+so past 2,097,152 rows the pair can wrap and the classification device path
+REFUSED -- a theoretical bound until full higgs (8.8M train rows) became the
+first real request it denied, as a named refusal in the RF lane's pairs
+table.
+
+**The lift.** `classification_key_shift(row_count) = max(0,
+3*ceil_log2(n) - 64)` -- a NODE-UNIFORM right shift on the squared sums
+before the pair is formed, exactly deviation 191's scheme for the
+regression key. Three publish sites shift identically (the finalize
+kernel, the host oracle, the host trainer's `ProxyImpurityExact`) or the
+arms would rank differently. The `-64` is `-62` of budget plus `-2` for
+the `/4` in the worst case; the first draft wrote `-62` and would have
+shifted AT 2^21, breaking the next sentence -- arm E's new assertions are
+what caught it, before any run.
+
+**What is preserved and what is surrendered.** `s == 0` at and below 2^21
+rows: the entire formerly-legal regime is BIT-FOR-BIT unchanged and every
+existing identity gate still pins it. Above, candidates within one granule
+(`2^s` on squared sums of relative size `2^-40` at any `n`) tie into the
+total order -- the same surrender 191 made for regression, four orders
+finer at its worst. `score_row_bound_ok` survives as the statement of
+where exactness ends; the refusal it fed is gone.
+
+**GATED before any fit ran**: arm E of `score_kernel_check` asserts the
+shift is 0/2/8 at 2^21/2^22/2^24, that the 2^26 worst case fits Int64
+shifted (in Int128), that order survives past one granule, and that half
+a granule TIES -- the granularity claim held to its own number.
+
+**PREDICTIONS, committed before the measurement**: (a) full-higgs ET
+(8.8M-row train split) FITS through the pairs harness and fills the
+refused cell; (b) its accuracy metrics land within the band of lgbm-et's
+on the same split (no bit-identity claim across libraries); (c) no check
+regresses; (d) the higgs2m board (all under 2^21) is bit-for-bit
+untouched. Numbers land beside this entry when the bench lock clears.

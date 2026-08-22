@@ -96,7 +96,6 @@ from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels_im
     node_feature_score_init_kernel,
     node_feature_score_kernel,
     partition_samples,
-    score_row_bound_ok,
 )
 from std.time import perf_counter_ns
 
@@ -2103,13 +2102,12 @@ def train_forest_classification_device_timed(
             + String(n_classes)
             + " (DEVIATION 172: shared sizing is comptime here)"
         )
-    if not score_row_bound_ok(Int(n_rows)):
-        raise Error(
-            "n_rows "
-            + String(n_rows)
-            + " exceeds the row count at which the published Int64 Gini"
-            " numerator is exact; see SCORE_MAX_ROWS_EXACT and DEVIATION 175"
-        )
+    # DEVIATION 218: the 2^21-row refusal that stood here (DEVIATION 175,
+    # first bound by a real request on full higgs) is LIFTED. Above
+    # `SCORE_MAX_ROWS_EXACT` the published Gini pair is node-uniformly
+    # SHIFTED (`classification_key_shift`) instead of refused --
+    # `score_row_bound_ok` remains the exactness boundary's statement, and
+    # everything at or under it is bit-for-bit unchanged.
 
     var k = n_sampled_cols_for(params, n_cols)
     var out = List[TreeMetaDataNode[DType.float32]]()

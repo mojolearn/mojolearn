@@ -99,6 +99,10 @@ or any other host-only type, so each is callable unchanged from a kernel.
 
 from std.math import fma
 
+from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import (
+    classification_key_shift,
+)
+
 
 
 # ==========================================================================
@@ -707,14 +711,11 @@ struct GiniObjectiveFunction[dtype: DType](Copyable, Movable):
         Every symbol on the last line is an integer when `sample_weight` is
         None. No rounding happens anywhere in this function.
         """
-        debug_assert(
-            Int(len) <= MAX_ROWS_EXACT,
-            (
-                "GiniObjectiveFunction.ProxyImpurityExact: node has more rows"
-                " than the Int128 cross-multiply in CompareProxyExact is"
-                " exact to; see MAX_ROWS_EXACT"
-            ),
-        )
+        # DEVIATION 218: nodes past MAX_ROWS_EXACT no longer refuse -- the
+        # node-uniform shift below keeps the published pair inside Int64 and
+        # the comparator's Int128 cross-multiply, at 2^-40 relative
+        # granularity. Below 2^21 rows the shift is zero and this function
+        # is bit-for-bit its pre-218 self.
 
         var nRight = len - nLeft
 
@@ -740,8 +741,15 @@ struct GiniObjectiveFunction[dtype: DType](Copyable, Movable):
 
         var nl = Int64(Int(nLeft))
         var nr = Int64(Int(nRight))
+        # DEVIATION 218: mirrored from the finalize kernel and the host
+        # oracle -- the three publish sites shift identically or the arms
+        # would rank differently.
+        var cs = Int64(classification_key_shift(Int(len)))
         return GiniProxyExact(
-            sq_left * nr + sq_right * nl, nl * nr, Int64(Int(len)), True
+            (sq_left >> cs) * nr + (sq_right >> cs) * nl,
+            nl * nr,
+            Int64(Int(len)),
+            True,
         )
 
     @staticmethod

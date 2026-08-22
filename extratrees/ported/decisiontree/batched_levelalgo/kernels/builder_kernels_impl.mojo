@@ -1755,6 +1755,39 @@ One bit under `Int64`'s `2^63`, held back the way `accumulator_bits_for` holds
 two back, so that a later term added to `num` does not silently cross."""
 
 
+def classification_key_shift(row_count: Int) -> Int:
+    """`s`, the NODE-UNIFORM right shift on the classification squared sums.
+
+    DEVIATION 218 -- deviation 191's scheme applied to the Gini rational,
+    lifting DEVIATION 175's 2^21-row refusal. The published pair becomes
+    `num = (sq_L >> s)*nR + (sq_R >> s)*nL`, `den = nL*nR`:
+
+      * worst case at `nL = nR = n/2`: `num <= (n^3/4) >> s`, so
+        `s = max(0, 3*ceil_log2(n) - 64)` keeps `num` under `2^62` --
+        the `-64` is `-62` for the budget and `-2` for the `/4`, and
+        getting it wrong by that 2 would shift AT `2^21` and break the
+        bit-for-bit claim below (caught by arm E's shift assertions).
+      * `den <= n^2/4` holds in Int64 past any Int32 row count.
+      * the comparator's Int128 cross-multiply holds to `num*den <= 2^122`.
+
+    `s == 0` for every node at or under 2^21 rows, so the entire formerly-
+    legal regime is BIT-FOR-BIT unchanged and every existing identity gate
+    still pins it. Above 2^21 the surrendered granularity is `2^s` on sums
+    of squares of magnitude ~`2^(2*log2 n)` -- relative `<= 2^-40` at any
+    `n` -- and candidates inside one granule tie into the total order, the
+    same surrender deviation 191 already made for regression at its cap.
+    The loop is `ceil_log2`'s, for its reason: a bound must not depend on a
+    transcendental.
+    """
+    var bits = 0
+    var acc = 1
+    while acc < row_count:
+        acc *= 2
+        bits += 1
+    var s = 3 * bits - 64
+    return s if s > 0 else 0
+
+
 def regression_key_shift(row_count: Int) -> Int:
     """`j`, the NODE-UNIFORM right shift on `|A|`. DEVIATION BLOCK 191.
 
@@ -2213,7 +2246,9 @@ def node_feature_score_host(
             sq_right += rv * rv
         var nl = Int64(n_left)
         var nr = Int64(n_right)
-        num = sq_left * nr + sq_right * nl
+        # DEVIATION 218: mirrored from the finalize kernel.
+        var cs = Int64(classification_key_shift(range_len))
+        num = (sq_left >> cs) * nr + (sq_right >> cs) * nl
         den = nl * nr
     elif status == SCORE_STATUS_SCORED:
         # DEVIATION BLOCKS 189-193: cuML's MSE gain as an exact rational, from
@@ -2753,7 +2788,12 @@ def node_feature_score_finalize_kernel[
                 sq_right += rv * rv
             var nl = Int64(n_left)
             var nr = Int64(n_right)
-            out_gini_num[unsafe_offset=slot] = sq_left * nr + sq_right * nl
+            # DEVIATION 218: the node-uniform shift that lifts the 2^21 row
+            # cap; s == 0 there and below, so the old regime is unchanged.
+            var cs = Int64(classification_key_shift(range_len))
+            out_gini_num[unsafe_offset=slot] = (
+                (sq_left >> cs) * nr + (sq_right >> cs) * nl
+            )
             out_gini_den[unsafe_offset=slot] = nl * nr
         else:
             # DEVIATION BLOCKS 189-193: cuML's own MSE gain
