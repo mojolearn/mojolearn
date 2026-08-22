@@ -25,6 +25,8 @@ from std.math import floor
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
+from mojo_only.numerics import ftz
+
 
 @always_inline
 def hist2_dither(pos: Int) -> Float32:
@@ -77,10 +79,18 @@ def hist2_quantize(val: Float32, fixed_scale: Float32, u: Float32) -> Int32:
     the first run. `x - floor(x)` is exact in Float32 (the operands are
     within a factor of two), the compare never manufactures a crossing, and
     an integral `x` has fraction 0, which no `u < 1` can lift to 1."""
-    var scaled = val * fixed_scale
+    # IDENTITY_PATHS ROW 10: a DENORMAL `val` diverges here between
+    # Metal's FTZ hardware (operand flushed, `scaled` = 0) and a
+    # denormal-honoring backend (`scaled` can be a real fraction --
+    # `choose_scale` can legally return 2^100-class scales when the plane
+    # magnitude is tiny -- and the dither compare then increments `q` on
+    # one vendor and not the other). Operand and result flushed through
+    # `ftz`, aligning every backend to Metal's measured model; comptime
+    # no-ops under FAST, where Apple's hardware did both flushes already.
+    var scaled = ftz(ftz(val) * fixed_scale)
     var base = floor(scaled)
     var q = Int32(base)
-    if scaled - base + u >= Float32(1.0):
+    if ftz(scaled - base) + u >= Float32(1.0):
         q += Int32(1)
     return q
 
@@ -177,7 +187,15 @@ def substract_histograms_kernel(
             what_id * bin_feature_count * stat_count
             + stat_id * bin_feature_count
         )
-        var new_val = histogram.unsafe_load(bin_feature_id + from_offset) - histogram.unsafe_load(bin_feature_id + what_offset)
+        # IDENTITY_PATHS ROW 10: parent minus child is a cancellation, so
+        # the derived sibling can land denormal; flushed at the store
+        # (kernel-to-kernel seam -- the score kernel reads this cell), so
+        # the histogram buffer never holds a denormal on any backend.
+        # Comptime no-op under FAST.
+        var new_val = ftz(
+            histogram.unsafe_load(bin_feature_id + from_offset)
+            - histogram.unsafe_load(bin_feature_id + what_offset)
+        )
         if stat_id == 0:
             new_val = max(new_val, Scalar[DType.float32](0.0))
         histogram.unsafe_store(bin_feature_id + from_offset, new_val)
@@ -247,7 +265,11 @@ def scan_histograms_kernel(
 
     var running = Scalar[DType.float32](0.0)
     for i in range(folds):
-        running += histogram.unsafe_load(base + i)
+        # IDENTITY_PATHS ROW 10: the running prefix is both an
+        # intermediate and a stored seam (the score kernel reads every
+        # cell), flushed so a denormal crossing cannot split the vendors.
+        # Comptime no-op under FAST.
+        running = ftz(running + histogram.unsafe_load(base + i))
         histogram.unsafe_store(base + i, running)
 
 
@@ -527,6 +549,11 @@ def substract_histograms_vec4_kernel(
         var a = (histogram + from_offset).load[width=4](off)
         var b = (histogram + what_offset).load[width=4](off)
         var v = a - b
+        # IDENTITY_PATHS ROW 10, per lane exactly as the `max` predicate
+        # is per lane: same flushed-store seam as the scalar kernel.
+        # Comptime no-op under FAST.
+        comptime for e in range(4):
+            v[e] = ftz(v[e])
         if stat_id == 0:
             v = max(v, SIMD[DType.float32, 4](0.0))
         (histogram + from_offset).store[width=4](off, v)
@@ -557,7 +584,11 @@ def fixed_to_float_kernel(
     while i < n:
         var q = acc_i32.unsafe_load(i)
         if q != Int32(0):
-            bin_sums.unsafe_store(i, Float32(Int(q)) / fixed_scale)
+            # IDENTITY_PATHS ROW 10: the dequantized quotient can land
+            # denormal when `fixed_scale` is huge; flushed at the store so
+            # the histogram never holds a denormal. Comptime no-op under
+            # FAST.
+            bin_sums.unsafe_store(i, ftz(Float32(Int(q)) / fixed_scale))
             acc_i32.unsafe_store(i, Int32(0))
         i += stride
 
@@ -696,7 +727,10 @@ def write_reduces_from_fixed_kernel[
         var q = acc_i32.unsafe_load(src)
         var val = Float32(0.0)
         if q != Int32(0):
-            val = Float32(Int(q)) / fixed_scale
+            # IDENTITY_PATHS ROW 10: same flushed dequantization as
+            # `fixed_to_float_kernel` -- the flat histogram is the seam
+            # every scorer reads. Comptime no-op under FAST.
+            val = ftz(Float32(Int(q)) / fixed_scale)
             acc_i32.unsafe_store(src, Int32(0))
         else:
             # `read_scratch` is False for a ONE-BYTE block, whose i32

@@ -38,7 +38,12 @@ from mojo_only.kernel_matrix import (
     deterministic_flush_for,
     requires_uniform_iteration_for,
 )
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
+from mojo_only.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_FAST,
+    NUMERIC_IDENTICAL,
+    ftz,
+)
 from gbdt.methods.greedy_subsets_searcher.kernel.point_hist_half_byte_template import (
     BLOCK_SIZE,
     HIST_SIZE,
@@ -374,7 +379,10 @@ def binary_hist_kernel(
                     var slot = slice_base + add_point_slot(
                         local_bins[batch * LOAD_SIZE + e], tid, i
                     )
-                    smem[slot] = smem[slot] + t
+                    # IDENTITY_PATHS ROW 10: float-family intermediate,
+                    # flushed -- see `add_half_byte_point`'s note.
+                    # Comptime no-op under FAST.
+                    smem[slot] = ftz(smem[slot] + t)
                 # `addToHistTile.sync()`, an 8-lane `tiled_partition<8>` in
                 # theirs. `syncwarp` is 32 lanes, so it orders a SUPERSET and
                 # is still correct; it is the narrowest sync Mojo exposes.
@@ -392,7 +400,9 @@ def binary_hist_kernel(
         var acc = Float32(0.0)
         var i2 = slot_i
         while i2 < HIST_SIZE:
-            acc += smem[i2]
+            # row 10: reduce-stage intermediate, flushed (no-op under
+            # FAST).
+            acc = ftz(acc + smem[i2])
             i2 += REDUCE_WIDTH
         barrier()
         smem[slot_i] = acc
@@ -403,7 +413,9 @@ def binary_hist_kernel(
     if tid < 128:
         @parameter
         for group in range(4):
-            acc2 += smem[reduce_stage2_slot(tid, group)]
+            # row 10: reduce-stage intermediate, flushed (no-op under
+            # FAST).
+            acc2 = ftz(acc2 + smem[reduce_stage2_slot(tid, group)])
     barrier()
     if tid < 128:
         smem[tid] = acc2
@@ -844,7 +856,10 @@ def binary_hist_gather_kernel(
                     var slot = slice_base + add_point_slot(
                         local_bins[batch * LOAD_SIZE + e], tid, i
                     )
-                    smem[slot] = smem[slot] + t
+                    # IDENTITY_PATHS ROW 10: float-family intermediate,
+                    # flushed -- see `add_half_byte_point`'s note.
+                    # Comptime no-op under FAST.
+                    smem[slot] = ftz(smem[slot] + t)
                 # `addToHistTile.sync()`, an 8-lane `tiled_partition<8>` in
                 # theirs. `syncwarp` is 32 lanes, so it orders a SUPERSET and
                 # is still correct; it is the narrowest sync Mojo exposes.
@@ -862,7 +877,9 @@ def binary_hist_gather_kernel(
         var acc = Float32(0.0)
         var i2 = slot_i
         while i2 < HIST_SIZE:
-            acc += smem[i2]
+            # row 10: reduce-stage intermediate, flushed (no-op under
+            # FAST).
+            acc = ftz(acc + smem[i2])
             i2 += REDUCE_WIDTH
         barrier()
         smem[slot_i] = acc
@@ -873,7 +890,9 @@ def binary_hist_gather_kernel(
     if tid < 128:
         @parameter
         for group in range(4):
-            acc2 += smem[reduce_stage2_slot(tid, group)]
+            # row 10: reduce-stage intermediate, flushed (no-op under
+            # FAST).
+            acc2 = ftz(acc2 + smem[reduce_stage2_slot(tid, group)])
     barrier()
     if tid < 128:
         smem[tid] = acc2

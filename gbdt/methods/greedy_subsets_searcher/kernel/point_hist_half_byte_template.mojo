@@ -47,7 +47,12 @@ from mojo_only.kernel_matrix import (
     block_size_for,
     hist_floats_per_thread_for,
 )
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
+from mojo_only.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_FAST,
+    NUMERIC_IDENTICAL,
+    ftz,
+)
 
 
 #: READ FROM THE MATRIX, not restated here. `mojo_only/kernel_matrix.mojo`
@@ -234,7 +239,12 @@ def add_half_byte_point(
     @parameter
     for i in range(8):
         var slot = slice_base + add_point_slot(ci, tid, i)
-        smem[slot] = smem[slot] + stat
+        # IDENTITY_PATHS ROW 10: this family accumulates in FLOAT in both
+        # modes (unlike hist_2's Int32), and a running cell can pass
+        # through the denormal range under cancellation -- flushed on
+        # Metal's hardware, kept on CUDA's default -- so each stored
+        # intermediate goes through `ftz`. Comptime no-op under FAST.
+        smem[slot] = ftz(smem[slot] + stat)
         syncwarp()
 
 
