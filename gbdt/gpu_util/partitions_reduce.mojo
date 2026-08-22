@@ -87,6 +87,8 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.host.device_attribute import DeviceAttribute
 from max.gpu.primitives.block import sum as block_sum
 
+from gbdt.targets.kernel.pointwise_targets import pinned_block_sum
+
 from mojo_only.kernel_matrix import partition_chunks_sm_for
 from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
@@ -153,7 +155,11 @@ def partition_stats_partial_kernel(
     while i < size:
         v += stats.unsafe_load(stat * line_size + offset + i)
         i += stride
-    var total = block_sum[block_size=STATS_BLOCK](v)
+    # IDENTITY_PATHS row 8, the last producer pair (E1 2026-08-22: the
+    # gbdt_rmse card diverged Apple<->AMD at the FIRST pstats stage --
+    # this fold, at hardware warp width). `pinned_block_sum`'s FAST arm
+    # IS the library call; IDENTICAL folds one shape on every vendor.
+    var total = pinned_block_sum[STATS_BLOCK](v)
     if tid == 0:
         partials.unsafe_store(
             (leaf_slot * n_stats + stat) * max_chunks + chunk, total
@@ -206,7 +212,8 @@ def partition_stats_finish_kernel(
             (leaf_slot * n_stats + stat) * max_chunks + c
         )
         c += STATS_BLOCK
-    var total = block_sum[block_size=STATS_BLOCK](acc)
+    # IDENTITY_PATHS row 8 (see the sibling fold above).
+    var total = pinned_block_sum[STATS_BLOCK](acc)
     if tid == 0:
         out_stats.unsafe_store(leaf_id * n_stats + stat, total)
 

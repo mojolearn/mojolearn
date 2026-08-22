@@ -80,6 +80,8 @@ leaf-value buffer and the overrun would be into live data.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.primitives.block import sum as block_sum
+
+from gbdt.targets.kernel.pointwise_targets import pinned_block_sum
 from std.gpu import block_dim, block_idx, thread_idx
 
 #: `const ui32 blockSize = 1024` (`exact_estimation.cu:107`). Metal's
@@ -225,7 +227,9 @@ def compute_need_weights_kernel(
         total_sum += weights.unsafe_load(base + idx)
         idx += NEED_WEIGHTS_BLOCK
 
-    var blocks_sum = block_sum[block_size=NEED_WEIGHTS_BLOCK](total_sum)
+    # IDENTITY_PATHS row 8's last site (E1 2026-08-22: gbdt_logloss's
+    # first divergent stage is leaves.estimated, this path).
+    var blocks_sum = pinned_block_sum[NEED_WEIGHTS_BLOCK](total_sum)
     if tid == 0 and size > 0:
         need_weights.unsafe_store(seg, blocks_sum * alpha)
 
