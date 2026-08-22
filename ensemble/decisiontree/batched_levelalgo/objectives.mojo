@@ -129,10 +129,16 @@ ONE source expression, which is exactly the case nvcc contracts by
 default (`-fmad=true`) and clang contracts at `-ffp-contract=on`. Mojo
 contracting it too is agreement, not divergence. The PORTING.md 54 defect
 was the other case -- contraction ACROSS an inlined call boundary, which
-clang does not do -- and there is no such boundary in this file: every
-gain computes its own terms inline. No `@no_inline` is needed here and
-none is applied. If a future edit factors a term out into a helper, that
-helper needs `@no_inline` and this paragraph is why.
+clang does not do. Since DEVIATION 405 the transcendental-free gains
+route their seams through `_ftz_seam` / `_mul_add_seam` (both
+`@always_inline`): under FAST each body is the same one-expression
+arithmetic the inline text was, exposing the same single contraction
+site (`a*b + c` inside `_mul_add_seam`) and no NEW cross-boundary
+mul-into-add shape -- every product the caller feeds in arrives as a
+finished argument value, and no caller-side add consumes a helper-side
+product. Under IDENTICAL the contraction question is moot: the `fma` is
+explicit. `objectives_check`'s per-cell expected values are the gate
+that this stayed bit-identical on the FAST arm.
 
 DEVIATION 114. EVERY `double` IN THIS FILE, RESOLVED PER SITE.
 Their locals are `double` in four places and the resolutions differ,
@@ -167,12 +173,34 @@ which is the point of listing them:
     Price: a caller who wants float64 features gets float32. cuML's own
     Python layer converts to float32 by default
     (`randomforestclassifier.pyx`), so this is the arm their users take.
+
+DEVIATION 405 (2026-08-22). IDENTITY_PATHS rows 9 and 10 applied to the
+gain arithmetic, plus row-12's REFUSE. Three parts:
+  * `GiniGain`, `MSEGain`, `InverseGaussianGain`, both `SetLeafVector`s
+    and `WeightAt` route every division, product seam and accumulation
+    through `_ftz_seam` / `_mul_add_seam` (defined below the imports).
+    Under NUMERIC_FAST both are comptime no-ops and the decomposition
+    preserves the transcription's association order, so the default
+    build's bits are unchanged; under NUMERIC_IDENTICAL each
+    multiply-add is one explicit `fma` rounding and every stored
+    intermediate is flushed to signed zero -- ONE arithmetic on Metal,
+    PTX and AMDGPU.
+  * `EntropyGain`, `PoissonGain`, `GammaGain` are NOT converted: their
+    device `std.math.log` (DEVIATION 113) is a per-vendor lowering that
+    no mul-add pin can rescue (IDENTITY_PATHS row 12, open). Converting
+    the rest of their arithmetic would be decoration on a pathway that
+    still diverges.
+  * The REFUSE lives in `builder.mojo`'s constructor: under
+    NUMERIC_IDENTICAL a criterion from the second bullet raises by name
+    rather than silently returning a non-identical model.
 =================================================================
 """
 
 from std.gpu import block_dim, thread_idx
 from std.math import log
 from max.gpu.memory import AddressSpace
+
+from mojo_only.numerics import ftz, identical_mul_add
 
 from ensemble.decisiontree.batched_levelalgo.bins import (
     Bin,
@@ -181,6 +209,49 @@ from ensemble.decisiontree.batched_levelalgo.bins import (
 )
 from ensemble.decisiontree.batched_levelalgo.dataset import DatasetView
 from ensemble.decisiontree.batched_levelalgo.split import Split, count_left
+
+
+# ----------------------------------------------- DEVIATION 405's two seams --
+# IDENTITY_PATHS rows 9 and 10 applied to the gain arithmetic of the
+# criteria that carry NO transcendental: Gini, MSE, InverseGaussian, and
+# the two `SetLeafVector`s. Under NUMERIC_FAST both helpers are comptime
+# no-ops (the naive chain, no flush), so the default build's bits are the
+# transcription's -- the expressions below were DECOMPOSED in source order
+# (same products, same association; additions commute bitwise) so that the
+# FAST arm is the same arithmetic it was. Under NUMERIC_IDENTICAL every
+# multiply-add seam is one `fma` rounding and every stored intermediate is
+# flushed, which is what makes the gain a single arithmetic on Metal, PTX
+# and AMDGPU. The criteria that DO call `log` (Entropy, Poisson, Gamma)
+# are NOT converted: their `std.math.log` is a per-vendor lowering
+# (IDENTITY_PATHS row 12, DEVIATION 113) that no mul-add pin can rescue,
+# so under IDENTICAL the Builder REFUSES them by name instead
+# (`builder.mojo`, same deviation).
+
+
+@always_inline
+def _ftz_seam[dt: DType, //](x: Scalar[dt]) -> Scalar[dt]:
+    """`numerics.ftz` for a generic-dtype seam. RF instantiates
+    `dtype = float32` everywhere; any other float width passes through
+    untouched (there is no float64 on the device and no ftz model
+    measured for it)."""
+    comptime if dt == DType.float32:
+        return ftz(x.cast[DType.float32]()).cast[dt]()
+    return x
+
+
+@always_inline
+def _mul_add_seam[
+    dt: DType, //
+](a: Scalar[dt], b: Scalar[dt], c: Scalar[dt]) -> Scalar[dt]:
+    """`numerics.identical_mul_add` for a generic-dtype seam; the naive
+    chain in the same operand order for any non-float32 width."""
+    comptime if dt == DType.float32:
+        return identical_mul_add(
+            a.cast[DType.float32](),
+            b.cast[DType.float32](),
+            c.cast[DType.float32](),
+        ).cast[dt]()
+    return a * b + c
 
 
 # ----------------------------------------------------------------- CRITERION --
@@ -407,12 +478,18 @@ struct ClassificationObjectiveFunction[
         n_bins: Int32,
     ) -> Scalar[Self.BinT.weight_dtype]:
         """`objectives.cuh:35-42`. Their accumulator is `double`; see
-        DEVIATION 114 for why it is Int64 on the unweighted path."""
+        DEVIATION 114 for why it is Int64 on the unweighted path.
+        DEVIATION 405: the weighted path's Float32 partials store through
+        `_ftz_seam` (fixed order already -- one thread, class order); a
+        comptime no-op under FAST and on Int64."""
         var weight = Scalar[Self.BinT.weight_dtype](0)
         for j in range(Int(self.nclasses)):
-            weight += hist[
-                unsafe_offset = Int(n_bins) * j + Int(i)
-            ].Weight(self.scales)
+            weight = _ftz_seam(
+                weight
+                + hist[
+                    unsafe_offset = Int(n_bins) * j + Int(i)
+                ].Weight(self.scales)
+            )
         return weight
 
     @always_inline
@@ -440,10 +517,13 @@ struct ClassificationObjectiveFunction[
         if total_weight <= 0 or left_weight <= 0 or right_weight <= 0:
             return -Scalar[Self.dtype].MAX_FINITE
 
-        # `:55-58`
-        var invLen = One / total_weight.cast[Self.dtype]()
-        var invLeft = One / left_weight.cast[Self.dtype]()
-        var invRight = One / right_weight.cast[Self.dtype]()
+        # `:55-58`. DEVIATION 405: divisions and products store through
+        # `_ftz_seam` and each accumulation is one `_mul_add_seam` --
+        # comptime no-ops under FAST, the pinned arithmetic under
+        # IDENTICAL. The decomposition preserves their association order.
+        var invLen = _ftz_seam(One / total_weight.cast[Self.dtype]())
+        var invLeft = _ftz_seam(One / left_weight.cast[Self.dtype]())
+        var invRight = _ftz_seam(One / right_weight.cast[Self.dtype]())
         var gain = Scalar[Self.dtype](0.0)
 
         # `:60-75`
@@ -452,20 +532,27 @@ struct ClassificationObjectiveFunction[
             var lval_i = hist[
                 unsafe_offset = Int(n_bins) * j + Int(i)
             ].Weight(self.scales)
-            var lval = lval_i.cast[Self.dtype]()
-            gain += lval * invLeft * lval * invLen
+            var lval = _ftz_seam(lval_i.cast[Self.dtype]())
+            # `gain += lval * invLeft * lval * invLen`
+            var l1 = _ftz_seam(lval * invLeft)
+            var l2 = _ftz_seam(l1 * lval)
+            gain = _mul_add_seam(l2, invLen, gain)
 
             val_i += lval_i
             var total_sum = hist[
                 unsafe_offset = Int(n_bins) * j + Int(n_bins) - 1
             ].Weight(self.scales)
             var rval_i = total_sum - lval_i
-            var rval = rval_i.cast[Self.dtype]()
-            gain += rval * invRight * rval * invLen
+            var rval = _ftz_seam(rval_i.cast[Self.dtype]())
+            # `gain += rval * invRight * rval * invLen`
+            var r1 = _ftz_seam(rval * invRight)
+            var r2 = _ftz_seam(r1 * rval)
+            gain = _mul_add_seam(r2, invLen, gain)
 
             val_i += rval_i
-            var val = val_i.cast[Self.dtype]() * invLen
-            gain -= val * val
+            var val = _ftz_seam(val_i.cast[Self.dtype]() * invLen)
+            # `gain -= val * val` -- the negation is a sign flip, exact.
+            gain = _mul_add_seam(-val, val, gain)
 
         return gain
 
@@ -659,10 +746,14 @@ struct ClassificationObjectiveFunction[
         `scales` is DEVIATION 101b's; theirs is a two-argument static and
         the division's width is DEVIATION 114's last bullet.
         """
-        # `:181-185` -- Output probability
+        # `:181-185` -- Output probability. DEVIATION 405: the accumulation
+        # order is already fixed (one thread, class order); `_ftz_seam`
+        # pins the denormal policy of each partial and of the published
+        # ratio under IDENTICAL, and is a comptime no-op under FAST and on
+        # the unweighted path's exact Int64.
         var total = Scalar[Self.BinT.weight_dtype](0)
         for i in range(Int(nclasses)):
-            total += shist[unsafe_offset=i].Weight(scales)
+            total = _ftz_seam(total + shist[unsafe_offset=i].Weight(scales))
         # `:186-191`
         if total <= 0:
             for i in range(Int(nclasses)):
@@ -670,7 +761,7 @@ struct ClassificationObjectiveFunction[
             return
         # `:192-194`
         for i in range(Int(nclasses)):
-            out_ptr[unsafe_offset=i] = (
+            out_ptr[unsafe_offset=i] = _ftz_seam(
                 shist[unsafe_offset=i].Weight(scales).cast[Self.dtype]()
                 / total.cast[Self.dtype]()
             )
@@ -771,26 +862,38 @@ struct RegressionObjectiveFunction[
         if parent_weight <= 0 or left_weight <= 0 or right_weight <= 0:
             return -Scalar[Self.dtype].MAX_FINITE
 
-        # `:223-231`
-        var invLen = Scalar[Self.dtype](1.0) / parent_weight.cast[
-            Self.dtype
-        ]()
-        var label_sum = hist[unsafe_offset = Int(n_bins) - 1].LabelSum(
-            self.scales
-        ).cast[Self.dtype]()
-        var left_label_sum = hist[unsafe_offset = Int(i)].LabelSum(
-            self.scales
-        ).cast[Self.dtype]()
-        var parent_obj = -label_sum * label_sum * invLen
-        var left_obj = -(left_label_sum * left_label_sum) / left_weight.cast[
-            Self.dtype
-        ]()
-        var right_label_sum = label_sum - left_label_sum
-        var right_obj = -(
-            right_label_sum * right_label_sum
-        ) / right_weight.cast[Self.dtype]()
-        var gain = parent_obj - (left_obj + right_obj)
-        gain *= Scalar[Self.dtype](0.5) * invLen
+        # `:223-231`. DEVIATION 405: each division and product stores
+        # through `_ftz_seam` -- comptime no-ops under FAST, and the
+        # decomposition preserves their association order.
+        var invLen = _ftz_seam(
+            Scalar[Self.dtype](1.0) / parent_weight.cast[Self.dtype]()
+        )
+        var label_sum = _ftz_seam(
+            hist[unsafe_offset = Int(n_bins) - 1].LabelSum(
+                self.scales
+            ).cast[Self.dtype]()
+        )
+        var left_label_sum = _ftz_seam(
+            hist[unsafe_offset = Int(i)].LabelSum(
+                self.scales
+            ).cast[Self.dtype]()
+        )
+        # `parent_obj = -label_sum * label_sum * invLen`
+        var p1 = _ftz_seam(-label_sum * label_sum)
+        var parent_obj = _ftz_seam(p1 * invLen)
+        # `left_obj = -(l*l) / left_weight`
+        var lsq = _ftz_seam(left_label_sum * left_label_sum)
+        var left_obj = _ftz_seam((-lsq) / left_weight.cast[Self.dtype]())
+        var right_label_sum = _ftz_seam(label_sum - left_label_sum)
+        var rsq = _ftz_seam(right_label_sum * right_label_sum)
+        var right_obj = _ftz_seam(
+            (-rsq) / right_weight.cast[Self.dtype]()
+        )
+        var lr = _ftz_seam(left_obj + right_obj)
+        var gain = _ftz_seam(parent_obj - lr)
+        # `gain *= 0.5 * invLen`
+        var half_inv = _ftz_seam(Scalar[Self.dtype](0.5) * invLen)
+        gain = _ftz_seam(gain * half_inv)
 
         return gain
 
@@ -957,13 +1060,19 @@ struct RegressionObjectiveFunction[
         if parent_weight <= 0 or left_weight <= 0 or right_weight <= 0:
             return -Scalar[Self.dtype].MAX_FINITE
 
-        # `:302-304`
-        var label_sum = hist[unsafe_offset = Int(n_bins) - 1].LabelSum(
-            self.scales
-        ).cast[Self.dtype]()
-        var left_label_sum = hist[unsafe_offset = Int(i)].LabelSum(
-            self.scales
-        ).cast[Self.dtype]()
+        # `:302-304`. DEVIATION 405: stored through `_ftz_seam` (comptime
+        # no-op under FAST) so the `eps_` guards below compare the same
+        # bits on every vendor under IDENTICAL.
+        var label_sum = _ftz_seam(
+            hist[unsafe_offset = Int(n_bins) - 1].LabelSum(
+                self.scales
+            ).cast[Self.dtype]()
+        )
+        var left_label_sum = _ftz_seam(
+            hist[unsafe_offset = Int(i)].LabelSum(
+                self.scales
+            ).cast[Self.dtype]()
+        )
         # THE SUBTRACTION IS AT STORAGE WIDTH, narrowed once -- theirs is
         # `DataT(hist[n_bins - 1].LabelSum() - hist[i].LabelSum())`, and
         # their `LabelSum()` returns the `double` that IS their storage.
@@ -973,11 +1082,13 @@ struct RegressionObjectiveFunction[
         # is exact, and rounds once. NOTE `MSEGain` does NOT do this: their
         # `:228` subtracts the already-narrowed `DataT` values, and that
         # inconsistency in their source is theirs to keep.
-        var right_label_sum = hist[
-            unsafe_offset = Int(n_bins) - 1
-        ].LabelSumMinus(hist[unsafe_offset = Int(i)], self.scales).cast[
-            Self.dtype
-        ]()
+        var right_label_sum = _ftz_seam(
+            hist[
+                unsafe_offset = Int(n_bins) - 1
+            ].LabelSumMinus(hist[unsafe_offset = Int(i)], self.scales).cast[
+                Self.dtype
+            ]()
+        )
 
         # `:306-308` -- label sum cannot be non-positive
         if (
@@ -987,18 +1098,24 @@ struct RegressionObjectiveFunction[
         ):
             return -Scalar[Self.dtype].MAX_FINITE
 
-        # `:310-314`
-        var parent_obj = -parent_weight.cast[Self.dtype]() * parent_weight.cast[
-            Self.dtype
-        ]() / label_sum
-        var left_obj = -left_weight.cast[Self.dtype]() * left_weight.cast[
-            Self.dtype
-        ]() / left_label_sum
-        var right_obj = -right_weight.cast[Self.dtype]() * right_weight.cast[
-            Self.dtype
-        ]() / right_label_sum
-        var gain = parent_obj - (left_obj + right_obj)
-        gain = gain / (Scalar[Self.dtype](2) * parent_weight.cast[Self.dtype]())
+        # `:310-314`. DEVIATION 405: same decomposition discipline as
+        # `MSEGain` -- their association order, seams stored through
+        # `_ftz_seam`.
+        var pw = parent_weight.cast[Self.dtype]()
+        var lw = left_weight.cast[Self.dtype]()
+        var rw = right_weight.cast[Self.dtype]()
+        # `parent_obj = -pw * pw / label_sum`
+        var psq = _ftz_seam(-pw * pw)
+        var parent_obj = _ftz_seam(psq / label_sum)
+        var lsq = _ftz_seam(-lw * lw)
+        var left_obj = _ftz_seam(lsq / left_label_sum)
+        var rsq = _ftz_seam(-rw * rw)
+        var right_obj = _ftz_seam(rsq / right_label_sum)
+        var lr = _ftz_seam(left_obj + right_obj)
+        var gain = _ftz_seam(parent_obj - lr)
+        # `gain = gain / (2 * pw)`
+        var denom = _ftz_seam(Scalar[Self.dtype](2) * pw)
+        gain = _ftz_seam(gain / denom)
 
         return gain
 
@@ -1120,12 +1237,15 @@ struct RegressionObjectiveFunction[
         scales: BinScales,
     ):
         """`objectives.cuh:380-386`, the mean-label leaf."""
-        # `:382-385`
+        # `:382-385`. DEVIATION 405: the published mean stores through
+        # `_ftz_seam` (comptime no-op under FAST).
         for i in range(Int(nclasses)):
             var weight = shist[unsafe_offset=i].Weight(scales)
             if weight > 0:
-                out_ptr[unsafe_offset=i] = shist[unsafe_offset=i].LabelSum(
-                    scales
-                ).cast[Self.dtype]() / weight.cast[Self.dtype]()
+                out_ptr[unsafe_offset=i] = _ftz_seam(
+                    shist[unsafe_offset=i].LabelSum(
+                        scales
+                    ).cast[Self.dtype]() / weight.cast[Self.dtype]()
+                )
             else:
                 out_ptr[unsafe_offset=i] = Scalar[Self.dtype](0)
