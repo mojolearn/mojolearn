@@ -193,6 +193,7 @@ from gbdt.options.catboost_options import (
     LEAF_ESTIMATION_GRADIENT,
     LEAF_ESTIMATION_NEWTON,
     LEAF_ESTIMATION_SIMPLE,
+    is_second_order_score_function,
 )
 from gbdt.targets.kernel.multilogit import (
     launch_multilogit_value_and_der_search,
@@ -999,6 +1000,29 @@ def fit_with_test(
     # the pointwise arm's pool of one (DEVIATION 143), same span: the FIT's
     var pw_pool = List[PointwiseTreeWorkspace]()
 
+    # `secondDerAsWeights = IsSecondOrderScoreFunction(scoreFunction)`.
+    # BOTH their searchers key the stat planes' content on it -- the greedy
+    # arm through `ComputeTarget` -> `StochasticDer`
+    # (`greedy_search_helper.cpp:286-296`), the doc-parallel arm through
+    # `NewtonAtZero` vs `GradientAtZero`
+    # (`oblivious_tree_doc_parallel_structure_searcher.cpp:195-207`) -- and
+    # both arms here read the ONE stats buffer the launch below fills, so
+    # this is the one place the flag applies.
+    var second_order = is_second_order_score_function(score_function)
+    if second_order and (
+        objective == OBJECTIVE_MULTICLASS
+        or objective == OBJECTIVE_MULTICLASS_OVA
+    ):
+        # their `CB_ENSURE(!secondDerAsWeights, ...)`
+        # (`multiclass_targets.cpp:27`), raised at fit entry rather than
+        # inside the first tree's der launch -- same first observable
+        # effect, no half-grown tree.
+        raise Error(
+            "MultiClass loss doesn't support second derivatives in tree"
+            " structure search currently (their CB_ENSURE,"
+            " `multiclass_targets.cpp:27`)"
+        )
+
     for iteration in range(n_estimators):
         # ---- which permutation the STRUCTURE is searched on ----------
         #
@@ -1067,6 +1091,19 @@ def fit_with_test(
                 fv_part, True,
                 stats, n_rows,
                 mag_part, mags_in_mse,
+            )
+        elif second_order:
+            # `secondDerAsWeights=true`: plane 0 becomes `weight * der2`
+            # (`pointwise_target_impl.h:193-201`); plane 1 stays
+            # `weight * der`. Runtime flag to comptime arm, the same shape
+            # as the objective dispatch one call down.
+            launch_approximate[False, True](
+                ctx, objective, targets, weights, Int32(n_rows), lcur,
+                Int32(1) if has_weights else Int32(0),
+                alpha, logloss_border,
+                stats, fv_part, Int32(1),
+                mag_part, Int32(1) if mags_in_mse else Int32(0),
+                mse_blocks,
             )
         else:
             launch_approximate[False](
@@ -1165,8 +1202,10 @@ def fit_with_test(
         # and plane 1 is `der`, laid out `stats[s * n_rows + i]` by
         # `pointwise_target_kernel`, which is their `StatsToAggregate` column order
         # (`pointwise_target_impl.h:188-192`). Plane 0 is the sample weight
-        # rather than `der2` under Cosine, their default score function, and
-        # the two coincide for RMSE; see `pointwise_targets.mojo`.
+        # under Cosine/L2 and `weight * der2` under NewtonCosine/NewtonL2
+        # (`second_order` above); the two coincide for RMSE, whose Der2 is
+        # 1.0. Either way the kernel's magnitudes bound the plane AS
+        # STORED; see `pointwise_targets.mojo`.
         #
         # ===================== WHY THIS EXISTS =====================
         # This call passed `0.0, 0.0` for both. Zero is not "unknown", it is

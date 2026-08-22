@@ -5706,3 +5706,121 @@ builds one. `gbdt/train.mojo` is where real callers arrive and it takes
 `random_strength` as a plain parameter with no validation of that pairing.
 Closing that is a `train()`-signature lane, not this one; it is named here
 so the next reader does not mistake `check()` for a guard.
+
+## 144. `secondDerAsWeights` LANDS: the Newton score functions stop being their twins in name only
+
+(143 is claimed in-source by the pointwise searcher's cross-tree pool --
+`oblivious_tree_doc_parallel_structure_searcher.mojo:134` -- whose entry
+belongs to that lane; this one takes the next number after it.)
+
+`mojo_only/second_der_weights_check.mojo`, `pixi run
+check-second-der-weights`.
+
+CatBoost decides what the histogram's WEIGHT plane holds FROM THE SCORE
+FUNCTION: `secondDerAsWeights = IsSecondOrderScoreFunction(scoreFunction)`
+(`greedy_search_helper.cpp:286-296`; `enum_helpers.cpp:830-846` says
+exactly NewtonL2 and NewtonCosine). Under a second-order score function
+their `StochasticDer` hands `&weightsView` -- COLUMN 0 of
+`StatsToAggregate` -- to `Approximate` as the der2 output
+(`pointwise_target_impl.h:193-201`), and the kernel fills it
+`der2[i] = weight * target.Der2(relev, val)` (`pointwise_targets.cu:
+268-269`; the cross-entropy kernel's `der2[idx] = weight[j] * scale[j]`,
+`:373-375`) -- THE SAMPLE WEIGHT FOLDED IN. First-order keeps
+`weightsView.Copy(weightsForIndices)` (`:203-213`). The doc-parallel
+searcher keys the same choice as `NewtonAtZero` vs `GradientAtZero`
+(`oblivious_tree_doc_parallel_structure_searcher.cpp:195-207`). Until now
+this port always wrote the raw weight, so `NewtonCosine` fit a
+bit-identical Cosine model and `NewtonL2` an L2 one; both were refused by
+name at the Python surface for exactly that reason, and the refusal is
+now lifted (`SCORE_FUNCTIONS` in `python/mojolearn/ensemble.py`).
+SolarL2, LOOL2 and SatL2 STAY REFUSED: no calcer, and an option accepted
+and ignored is worse than one absent.
+
+THEIR CPU ARM CANNOT DISAGREE BECAUSE IT REFUSES: `MakePointwiseScoreCalcer`
+is "Only Cosine and L2 score functions are supported for CPU"
+(`algo/score_calcers.h:106-115`, and again `leafwise_scoring.cpp:530-550`).
+`secondDerAsWeights` is GPU-only upstream, so the GPU arm is the only
+semantics there is, and it is what this mirrors. (Their GPU LOSSGUIDE
+default is NewtonL2, `catboost_options.cpp:980-991` -- so upstream this
+flag is on by default on that policy; the symmetric-tree default stays
+Cosine, which is why the shipped oracle never moved.)
+
+### The port, and the three differences that are ours
+
+- `second_der_as_weights` is a COMPTIME parameter on
+  `pointwise_target_kernel` / `cross_entropy_kernel` and their two
+  launchers, defaulted False, where theirs is a runtime bool deciding
+  which buffer pointer the der2 write lands in. Same substitution
+  DEVIATION 63 already records for the objective switch: the host branch
+  (`fit_with_test`, the fits' ONE der launch, which BOTH searchers'
+  planes come from) picks the instantiation. `estimation=True` plus the
+  flag is refused by a `comptime assert`: their `ApproximateAt` has no
+  such flag.
+- Their `CB_ENSURE(!secondDerAsWeights, "MultiClass loss doesn't support
+  second derivatives...")` (`multiclass_targets.cpp:27`) is raised at FIT
+  ENTRY here rather than inside the first tree's der launch -- same first
+  observable effect, no half-grown tree.
+- The fixed-point magnitudes (ours, no CatBoost counterpart) bound plane
+  0 AS STORED: `|weight * der2|` under the flag, `|weight|` otherwise.
+  Anything else would hand `choose_scale` a bound for a plane that is not
+  the one being accumulated.
+
+The Python-side `random_strength` refusal widens from `'L2'` to
+`('L2', 'NewtonL2')`, which `CatBoostOptions.validate` already said: the
+noise term lives only in the Cosine calcer and NewtonL2 runs the L2 one.
+
+### Gates and results (M4, 2026-08-21)
+
+    S1  PER-CELL, hashed distinct weight/target/prediction per row (a
+        total is satisfied by a permutation), 3000 rows, against a
+        Float64 host recomputation. Logloss covers cross_entropy_kernel,
+        POISSON covers pointwise_target_kernel -- both with non-constant
+        der2, because for RMSE the flag is invisible by construction.
+        First-order plane 0 must be the raw weight BIT-EXACTLY.
+        Result: 0 bad cells in all 8 plane/arm combinations.
+    S2  THE MODEL MOVES, Logloss, 4000 rows x 7 features, depth 4, 8
+        trees: greedy NewtonCosine vs Cosine 2 of 32 splits and 48 of 128
+        leaf values differ; NewtonL2 vs L2 29 of 37 splits, 48 leaves.
+    S3  NEGATIVE CONTROL, RMSE: NewtonCosine vs Cosine 0 of 32 splits, 0
+        of 128 leaf values -- bit-identical, forced by
+        `TRmseTarget::Der2 == 1.0f`, NOT a tally of ours.
+    S4  BOTH SEARCHERS: S2 and S3 identical numbers on the pointwise arm
+        (2/32+48, 29/37+48, 0+0).
+
+### Sabotage table, each run and reverted
+
+    A   cross_entropy_kernel second-order arm stores `weight`
+        -> S1 Logloss 2nd-order 3000/3000 bad; S2 all four pairs
+        identical (5 gates). S3 unmoved, as it must be.
+    A2  pointwise_target_kernel second-order arm stores `weight`
+        -> ONLY S1 Poisson 2nd-order (3000/3000). Without the Poisson
+        arm this branch is gated by NOTHING: S2 is Logloss (other
+        kernel) and S3's RMSE coincides by construction. That is the
+        reached-but-inert shape, and S1b is the one check with teeth on
+        it.
+    B   host passes second_order=False unconditionally
+        -> S2 fails on BOTH searchers (4 gates); S1 does not move (it
+        launches the kernel directly). S1 and S2 gate different layers.
+    C   search-mode stores swap planes 0 and 1
+        -> S1 Logloss both arms, both planes, 3000/3000 (placement, not
+        a total).
+    D   `is_second_order_score_function` returns True for Cosine too
+        -> S2's NewtonCosine-vs-Cosine pairs collapse on both searchers
+        (2 gates); the L2 pairs still differ; S3 STILL PASSES -- the
+        RMSE identity holds even for a misclassified Cosine, which is
+        the analytic point of the control.
+    E   second-order arm stores raw `der2` WITHOUT the weight
+        -> S1 Poisson 3000/3000 AND S3 fails on both searchers (7 of 32
+        splits, 128 leaf values moved): the "did they fold the weight
+        in" trap, and the sabotage that proves S3 has teeth.
+
+Every gate is moved by at least one sabotage; none is decorative.
+
+`pixi run oracle` 288 of 288 before and after (GPU symmetric default is
+Cosine, first-order, so the shipped configuration must not and did not
+move). One transient 14/40 pointwise-searcher failure during the
+before-run reproduced as 288/288 and coincided with another lane actively
+editing `pointwise_scores.mojo` / `pointwise_scores_calcer.mojo` /
+`pointwise_split_resolve.mojo` in this shared checkout mid-compile; it is
+that lane's in-flight state, not this change (mojotrees-shared-checkout
+rule: the working tree is a moving target).

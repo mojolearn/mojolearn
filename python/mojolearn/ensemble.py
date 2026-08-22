@@ -183,23 +183,34 @@ SCORE_FUNCTION_LOO_L2 = 4
 SCORE_FUNCTION_SAT_L2 = 5
 SCORE_FUNCTION_L2 = 6
 
-#: The two score functions this port ACTUALLY COMPUTES. Both have a real
-#: calcer in the split kernel: Cosine is `TCosineScoreCalcer`
-#: (`score_calcers.cuh:152-167`) and L2 is `TL2ScoreCalcer` (`:40-69`).
-SCORE_FUNCTIONS = ("Cosine", "L2")
+#: The four score functions this port ACTUALLY COMPUTES. Cosine and L2
+#: have a real calcer in the split kernel -- `TCosineScoreCalcer`
+#: (`score_calcers.cuh:152-167`) and `TL2ScoreCalcer` (`:40-69`) -- and
+#: the Newton spellings pair onto those SAME calcers, differing only in
+#: which derivative the der launch puts in the histogram's weight plane:
+#: `secondDerAsWeights = IsSecondOrderScoreFunction(scoreFunction)`
+#: (`greedy_search_helper.cpp:286-296`) makes plane 0 `weight * der2`
+#: instead of the raw weight (`pointwise_target_impl.h:193-201`), which is
+#: CatBoost's own structure (`compute_scores.cu:201-219`). That flag IS
+#: ported and gated per cell and per model by
+#: `mojo_only/second_der_weights_check.mojo`; for RMSE alone the Newton
+#: spellings coincide with their pair bit for bit, because
+#: `TRmseTarget::Der2` returns 1.0.
+SCORE_FUNCTIONS = ("Cosine", "L2", "NewtonCosine", "NewtonL2")
 
 _SCORE_FUNCTION_NAMES = {
     "Cosine": SCORE_FUNCTION_COSINE,
     "L2": SCORE_FUNCTION_L2,
+    "NewtonCosine": SCORE_FUNCTION_NEWTON_COSINE,
+    "NewtonL2": SCORE_FUNCTION_NEWTON_L2,
 }
 
-#: THE OTHER FIVE ARE REFUSED BY NAME, AND THIS IS THE WHOLE REASON THE
+#: THE OTHER THREE ARE REFUSED BY NAME, AND THIS IS THE WHOLE REASON THE
 #: OPTION COULD NOT SIMPLY BE FORWARDED.
 #:
 #: `score_function` was hard-coded to Cosine here for exactly as long as it
 #: took someone to look at what the other values do on the way down. They do
-#: not fail. They produce a DIFFERENT MODEL THAN THE ONE ASKED FOR, silently,
-#: and in two distinct ways:
+#: not fail. They produce a DIFFERENT MODEL THAN THE ONE ASKED FOR, silently:
 #:
 #: SolarL2, LOOL2, SatL2 -- the greedy subsets searcher, which is the arm
 #: `train` runs, dispatches on `score_function` with an `if L2 or NewtonL2
@@ -212,20 +223,10 @@ _SCORE_FUNCTION_NAMES = {
 #: (`pointwise_scores.mojo:1569-1616`), which is why "it is implemented"
 #: and "it is honored" are different sentences here.
 #:
-#: NewtonCosine, NewtonL2 -- these pair onto the Cosine and L2 calcers
-#: deliberately, which is CatBoost's own structure: the Newton spellings
-#: differ only in WHICH DERIVATIVE the caller put in the stat planes
-#: (`compute_scores.cu:201-219`). That choice is
-#: `secondDerAsWeights = IsSecondOrderScoreFunction(scoreFunction)`
-#: (`greedy_search_helper.cpp:286-296`) and IT IS NOT PORTED: the target
-#: kernel always writes the weight in plane 0 and never `der2`
-#: (`pointwise_targets.mojo:476-485`). So asking for NewtonCosine gets a
-#: Cosine model and asking for NewtonL2 gets an L2 one.
-#:
-#: For RMSE alone the Newton distinction is invisible, because
-#: `TRmseTarget::Der2` returns 1.0 -- which is precisely the configuration
-#: a check would be written in, and precisely why this is refused on the
-#: source rather than waved through on a green test.
+#: NewtonCosine and NewtonL2 used to sit in this dict for a different
+#: reason -- `secondDerAsWeights` was unported, so each silently fit its
+#: non-Newton twin -- and left it when that flag landed, gated by
+#: `mojo_only/second_der_weights_check.mojo`.
 _UNPORTED_SCORE_FUNCTIONS = {
     "SolarL2": (
         "the greedy searcher this port runs has no SolarL2 arm and falls "
@@ -242,16 +243,6 @@ _UNPORTED_SCORE_FUNCTIONS = {
         "the greedy searcher this port runs has no SatL2 arm and falls "
         "through to Cosine (greedy_search_helper.mojo:3134-3162), so the "
         "fit would silently be a Cosine fit"
-    ),
-    "NewtonCosine": (
-        "secondDerAsWeights is not ported -- the target kernel never "
-        "writes der2 into the stat planes (pointwise_targets.mojo:476-485) "
-        "-- so this would fit an ordinary Cosine model under a Newton name"
-    ),
-    "NewtonL2": (
-        "secondDerAsWeights is not ported -- the target kernel never "
-        "writes der2 into the stat planes (pointwise_targets.mojo:476-485) "
-        "-- so this would fit an ordinary L2 model under a Newton name"
     ),
 }
 
@@ -360,16 +351,21 @@ class GradientBoosting:
         (`output_file_options.cpp:77`,
         `boosting_progress_tracker.cpp:162`).
 
-    score_function : {'Cosine', 'L2'}, default 'Cosine'
+    score_function : {'Cosine', 'L2', 'NewtonCosine', 'NewtonL2'}, \
+            default 'Cosine'
         The split score. Cosine is CatBoost's shipped GPU default
         (`oblivious_tree_options.cpp:20`) and `TCosineScoreCalcer` is the
         only one of their five calcers that carries the `random_strength`
         noise term (`score_calcers.cuh:152-167`); `TL2ScoreCalcer` (`:40-69`)
-        has none. CatBoost's other five spellings -- SolarL2, LOOL2, SatL2,
-        NewtonCosine, NewtonL2 -- ARE REFUSED BY NAME rather than accepted,
-        because on this port each of them silently fits a different model
-        than the one asked for. See `_UNPORTED_SCORE_FUNCTIONS` for which,
-        and why.
+        has none. The Newton spellings run the SAME calcers with
+        `weight * der2` in the histogram's weight plane instead of the raw
+        weight -- their `secondDerAsWeights`
+        (`greedy_search_helper.cpp:286-296`) -- so for RMSE, whose Der2 is
+        1.0, each is bit-identical to its twin. CatBoost's other three
+        spellings -- SolarL2, LOOL2, SatL2 -- ARE REFUSED BY NAME rather
+        than accepted, because on this port each silently fits a different
+        model than the one asked for. See `_UNPORTED_SCORE_FUNCTIONS` for
+        which, and why.
     nan_mode : {'Min', 'Max', 'Forbidden'}, default 'Min'
         Where a NaN sorts against the borders
         (`data_processing_options.cpp:26`). 'Min' puts it below every
@@ -384,8 +380,9 @@ class GradientBoosting:
         float rounding. It is a live knob on `use_pointwise_searcher=True`,
         where the noise is drawn before the bootstrap
         (`oblivious_tree_doc_parallel_structure_searcher.cpp:200-218`).
-        Refused above 0.0 with `score_function='L2'`, because the L2 calcer
-        has no noise term and CatBoost itself would discard it.
+        Refused above 0.0 with `score_function='L2'` or `'NewtonL2'`,
+        because the L2 calcer both run has no noise term and CatBoost
+        itself would discard it.
     use_pointwise_searcher : bool, default False
         Grow with `TDocParallelObliviousTreeSearcher`, CatBoost's
         single-target symmetric learner, instead of the greedy subsets
@@ -535,18 +532,20 @@ class GradientBoosting:
                 f"mojolearn: random_strength must be >= 0, got "
                 f"{random_strength}"
             )
-        if random_strength != 0.0 and score_function == "L2":
+        if random_strength != 0.0 and score_function in ("L2", "NewtonL2"):
             # CatBoost accepts this pair and discards the value: only
             # `TCosineScoreCalcer` has a noise term
             # (`score_calcers.cuh:159-167`), `TL2ScoreCalcer` (`:40-69`)
-            # has none. Copying that silence would leave a knob that reads
-            # as live and is not, so this port refuses where CatBoost does
-            # not. The same refusal is in `CatBoostOptions.validate`.
+            # has none, and NewtonL2 runs that same L2 calcer. Copying
+            # that silence would leave a knob that reads as live and is
+            # not, so this port refuses where CatBoost does not. The same
+            # refusal is in `CatBoostOptions.validate`.
             raise ValueError(
                 f"mojolearn: random_strength={random_strength} does nothing "
-                "under score_function='L2' -- only TCosineScoreCalcer "
-                "carries the noise term (score_calcers.cuh:159-167). Use "
-                "score_function='Cosine' or random_strength=0.0."
+                f"under score_function={score_function!r} -- only "
+                "TCosineScoreCalcer carries the noise term "
+                "(score_calcers.cuh:159-167). Use score_function='Cosine' "
+                "or 'NewtonCosine', or random_strength=0.0."
             )
         if border_build_max_samples < 0:
             raise ValueError(

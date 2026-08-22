@@ -424,6 +424,7 @@ comptime HUBER_DER2 = -1.0
 def pointwise_target_kernel[
     objective: Int,
     estimation: Bool = False,
+    second_der_as_weights: Bool = False,
 ](
     relevs: MutPointer[Float32, MutAnyOrigin],
     weights: MutPointer[Float32, MutAnyOrigin],
@@ -471,17 +472,20 @@ def pointwise_target_kernel[
     IN TWO MODES, because their one kernel serves two callers whose
     outputs differ (the same two modes `cross_entropy_kernel` records):
 
-      - `estimation=False`, the SEARCH: plane 0 the WEIGHT, plane 1
-        `weight * Der`. That is their own `StatsToAggregate` column order
-        under a NON-second-order score function
-        (`pointwise_target_impl.h:188-213`): `ComputeTarget` passes
+      - `estimation=False`, the SEARCH: plane 1 is `weight * Der`, and
+        plane 0 is keyed on `second_der_as_weights`, which is their
         `secondDerAsWeights = IsSecondOrderScoreFunction(scoreFunction)`
-        (`greedy_search_helper.cpp:286-296`), and Cosine, the shipped
-        default, is NOT second order (`enum_helpers.cpp:829-841`), so
-        plane 0 is `weightsView.Copy(weightsForIndices)`.
-        `der2` is not written; the search never reads it under Cosine/L2.
-        A NewtonCosine/NewtonL2 caller would need the `secondDerAsWeights`
-        flag, and for RMSE alone the distinction is invisible because
+        (`greedy_search_helper.cpp:286-296`, `enum_helpers.cpp:829-846`):
+        False (Cosine/L2, and Cosine is the shipped default) writes the
+        WEIGHT -- their `weightsView.Copy(weightsForIndices)`
+        (`pointwise_target_impl.h:203-213`); True (NewtonCosine/NewtonL2)
+        writes `weight * Der2` -- their `StochasticDer` hands
+        `&weightsView` to `Approximate` as the der2 output
+        (`pointwise_target_impl.h:193-201`) and the kernel fills it as
+        `der2[i] = weight * target.Der2(relev, val)`
+        (`pointwise_targets.cu:268-269`), the sample weight FOLDED IN.
+        No third plane is written in either mode; the search reads only
+        two. For RMSE alone the two modes coincide bit for bit, because
         `TRmseTarget::Der2` returns `1.0f`.
       - `estimation=True`, the LEAVES ORACLE's `ApproximateAt`
         (`pointwise_oracle.cpp:73-78`, the rowSize==1 fast path): plane 0
@@ -562,9 +566,26 @@ def pointwise_target_kernel[
         if has_weights != Int32(0):
             weight = weights.unsafe_load(i)
 
+    # their `ApproximateAt` path has no `secondDerAsWeights` flag; the
+    # combination is a caller error, not a mode.
+    comptime assert not (estimation and second_der_as_weights), (
+        "second_der_as_weights is a SEARCH-mode flag: their StochasticDer"
+        " takes it (`pointwise_target_impl.h:173-216`), their ApproximateAt"
+        " does not"
+    )
+
     # `der[i] = weight * target.Der(relev, val)` (`:265-266`)
     # `der2[i] = weight * target.Der2(relev, val)` (`:268-269`)
     var der = weight * target_der[objective](relev, val, alpha)
+
+    # what SEARCH plane 0 holds, per `second_der_as_weights` -- see the
+    # deviation block. The der2 arm is their `der2[i] = weight *
+    # target.Der2(relev, val)` landing in `weightsView`.
+    var plane0 = weight
+
+    @parameter
+    if second_der_as_weights:
+        plane0 = weight * target_der2[objective](relev, val, alpha)
 
     if in_range:
 
@@ -576,9 +597,9 @@ def pointwise_target_kernel[
                 weight * target_der2[objective](relev, val, alpha),
             )
         else:
-            stats.unsafe_store(i, weight)
+            stats.unsafe_store(i, plane0)
             stats.unsafe_store(size + i, der)
-            # der2 is not stored in search mode; see the deviation block.
+            # no third plane in search mode; see the deviation block.
 
     # `if (functionValue) { tmpScores[tid] = -w * target.Score(...); ...
     # FastInBlockReduce; if (tid == 0) atomicAdd(functionValue, val); }`
@@ -615,7 +636,10 @@ def pointwise_target_kernel[
         var w_abs = Float32(0.0)
         var g_abs = Float32(0.0)
         if in_range:
-            w_abs = abs(weight)
+            # NO CATBOOST COUNTERPART (the fixed-point scale is ours):
+            # the magnitudes bound the planes AS STORED, so plane 0's is
+            # |weight * Der2| under `second_der_as_weights`.
+            w_abs = abs(plane0)
             g_abs = abs(der)
         var w_total = block_sum[block_size=MSE_BLOCK_SIZE](w_abs)
         var g_total = block_sum[block_size=MSE_BLOCK_SIZE](g_abs)
@@ -692,6 +716,7 @@ def deterministic_sum_lanes_kernel[
 def cross_entropy_kernel[
     has_border: Bool,
     estimation: Bool = False,
+    second_der_as_weights: Bool = False,
 ](
     target_classes: MutPointer[Float32, MutAnyOrigin],
     weights: MutPointer[Float32, MutAnyOrigin],
@@ -731,13 +756,14 @@ def cross_entropy_kernel[
 
     * STATS PLANES instead of their separate output buffers, in TWO MODES,
       because their one kernel serves two callers whose outputs differ:
-      - `estimation=False`, the SEARCH: plane 0 the weight, plane 1
-        `weight * der` -- their `StatsToAggregate` column order under a
-        NON-second-order score function (`pointwise_target_impl.h:188-213`;
-        Cosine and L2 are not second order, `enum_helpers.cpp:829-841`).
-        `der2` is not written: the search never reads it under Cosine/L2.
-        A NewtonCosine/NewtonL2 caller would need the `secondDerAsWeights`
-        flag, exactly as the mse block already says.
+      - `estimation=False`, the SEARCH: plane 1 is `weight * der`, and
+        plane 0 is keyed on `second_der_as_weights` exactly as the mse
+        block lays out: False (Cosine/L2) writes the weight
+        (`pointwise_target_impl.h:203-213`); True (NewtonCosine/NewtonL2)
+        writes `weight * p * (1 - p)` -- their `der2[idx] = weight[j] *
+        scale[j]` (`pointwise_targets.cu:373-375`) landing in
+        `weightsView` (`pointwise_target_impl.h:193-201`). No third plane
+        is written in either mode.
       - `estimation=True`, the LEAVES ORACLE's `ApproximateAt`
         (`pointwise_oracle.cpp:73-78`, the rowSize==1 "fast path" their
         pointwise losses take): plane 0 their `der` buffer
@@ -799,8 +825,25 @@ def cross_entropy_kernel[
     else:
         c = target_class
 
+    # their `ApproximateAt` path has no `secondDerAsWeights` flag; the
+    # combination is a caller error, not a mode.
+    comptime assert not (estimation and second_der_as_weights), (
+        "second_der_as_weights is a SEARCH-mode flag: their StochasticDer"
+        " takes it (`pointwise_target_impl.h:173-216`), their ApproximateAt"
+        " does not"
+    )
+
     var direction = c - p  # their `direction[j] = c - p` (`:358`)
     var scale = p * (Float32(1.0) - p)  # their `scale[j]` (`:359`)
+
+    # what SEARCH plane 0 holds, per `second_der_as_weights` -- see the
+    # deviation block. The der2 arm is their `der2[idx] = weight[j] *
+    # scale[j]` (`:373-375`) landing in `weightsView`.
+    var plane0 = weight
+
+    @parameter
+    if second_der_as_weights:
+        plane0 = weight * scale
 
     if in_range:
 
@@ -809,9 +852,9 @@ def cross_entropy_kernel[
             stats.unsafe_store(i, weight * direction)
             stats.unsafe_store(size + i, weight * scale)
         else:
-            stats.unsafe_store(i, weight)
+            stats.unsafe_store(i, plane0)
             stats.unsafe_store(size + i, weight * direction)
-            # der2 is not stored in search mode; see the deviation block.
+            # no third plane in search mode; see the deviation block.
     _ = scale
 
     if compute_fv != Int32(0):
@@ -832,7 +875,10 @@ def cross_entropy_kernel[
         var w_abs = Float32(0.0)
         var g_abs = Float32(0.0)
         if in_range:
-            w_abs = abs(weight)
+            # NO CATBOOST COUNTERPART (the fixed-point scale is ours):
+            # the magnitudes bound the planes AS STORED, so plane 0's is
+            # |weight * p * (1 - p)| under `second_der_as_weights`.
+            w_abs = abs(plane0)
             g_abs = abs(weight * direction)
         var w_total = block_sum[block_size=MSE_BLOCK_SIZE](w_abs)
         var g_total = block_sum[block_size=MSE_BLOCK_SIZE](g_abs)
@@ -862,7 +908,8 @@ def cross_entropy_kernel[
 
 
 def launch_pointwise_target_kernel[
-    estimation: Bool
+    estimation: Bool,
+    second_der_as_weights: Bool = False,
 ](
     ctx: DeviceContext,
     objective: Int,
@@ -890,7 +937,7 @@ def launch_pointwise_target_kernel[
     @parameter
     def _go[obj: Int]() raises:
         ctx.enqueue_function[
-            pointwise_target_kernel[obj, estimation]
+            pointwise_target_kernel[obj, estimation, second_der_as_weights]
         ](
             relevs, weights, size, predictions, has_weights, alpha,
             stats, function_value, compute_fv,
@@ -940,7 +987,8 @@ def launch_pointwise_target_kernel[
 
 
 def launch_approximate[
-    estimation: Bool
+    estimation: Bool,
+    second_der_as_weights: Bool = False,
 ](
     ctx: DeviceContext,
     objective: Int,
@@ -966,7 +1014,9 @@ def launch_approximate[
     land on the same kernel. Everything else goes to the generic one.
     """
     if objective == OBJECTIVE_LOGLOSS:
-        ctx.enqueue_function[cross_entropy_kernel[True, estimation]](
+        ctx.enqueue_function[
+            cross_entropy_kernel[True, estimation, second_der_as_weights]
+        ](
             relevs, weights, size, predictions, has_weights, border,
             stats, function_value, compute_fv,
             plane_magnitudes, compute_magnitudes,
@@ -974,7 +1024,9 @@ def launch_approximate[
             block_dim=(MSE_BLOCK_SIZE, 1, 1),
         )
     elif objective == OBJECTIVE_CROSSENTROPY:
-        ctx.enqueue_function[cross_entropy_kernel[False, estimation]](
+        ctx.enqueue_function[
+            cross_entropy_kernel[False, estimation, second_der_as_weights]
+        ](
             relevs, weights, size, predictions, has_weights, border,
             stats, function_value, compute_fv,
             plane_magnitudes, compute_magnitudes,
@@ -982,7 +1034,7 @@ def launch_approximate[
             block_dim=(MSE_BLOCK_SIZE, 1, 1),
         )
     else:
-        launch_pointwise_target_kernel[estimation](
+        launch_pointwise_target_kernel[estimation, second_der_as_weights](
             ctx, objective, relevs, weights, size, predictions,
             has_weights, alpha, stats, function_value, compute_fv,
             plane_magnitudes, compute_magnitudes, blocks,

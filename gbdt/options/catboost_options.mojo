@@ -126,6 +126,31 @@ def score_function_name(s: Int) -> String:
     return String("L2")
 
 
+def is_second_order_score_function(s: Int) raises -> Bool:
+    """`IsSecondOrderScoreFunction` (`enum_helpers.cpp:830-846`).
+
+    NewtonL2 and NewtonCosine are second order; Cosine, SolarL2, LOOL2
+    and L2 are not. **SatL2 is not in their switch at all** and falls into
+    the `default:` `ythrow "Unknown score function"`, so it raises here
+    too rather than getting an answer their code never gives.
+    """
+    if s == SCORE_FUNCTION_NEWTON_L2 or s == SCORE_FUNCTION_NEWTON_COSINE:
+        return True
+    if (
+        s == SCORE_FUNCTION_COSINE
+        or s == SCORE_FUNCTION_SOLAR_L2
+        or s == SCORE_FUNCTION_LOO_L2
+        or s == SCORE_FUNCTION_L2
+    ):
+        return False
+    raise Error(
+        "Unknown score function " + score_function_name(s)
+        + ": `IsSecondOrderScoreFunction` (`enum_helpers.cpp:841-843`)"
+        " throws for it -- SatL2 included, which is missing from their"
+        " switch"
+    )
+
+
 # --- determinism -----------------------------------------------------------
 #
 # NO CATBOOST COUNTERPART. They ship one GPU backend and accept whatever
