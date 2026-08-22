@@ -60,7 +60,6 @@ from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
 )
 from gbdt.methods.greedy_subsets_searcher.kernel.split_resolve import (
     RESOLVE_BLOCK_SIZE,
-    plan_level_kernel,
     resolve_and_pack_kernel,
 )
 from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_8bit import (
@@ -161,6 +160,7 @@ from gbdt.methods.greedy_subsets_searcher.kernel.split_points import (
     gather_index_in_leaves_kernel,
     split_and_make_sequence_kernel,
     update_partitions_after_split_kernel,
+    update_partitions_and_plan_kernel,
 )
 from gbdt.methods.leaves_estimation.leaves_estimation import (
     LEAF_BLOCK,
@@ -3042,16 +3042,12 @@ def run_tree_layout[
         var n_compute = n_live
         if planned:
             n_compute = half
-            # their smaller-child choice (`:1318`), from `p_sz` on the
-            # device -- see `plan_level_kernel`'s docstring
-            ctx.enqueue_function[plan_level_kernel](
-                p_sz.unsafe_ptr(), Int32(half),
-                ids_compute.unsafe_ptr(),
-                sub_from.unsafe_ptr(), sub_what.unsafe_ptr(),
-                grid_dim=((half + 63) // 64, 1, 1),
-                block_dim=(64, 1, 1),
-            )
-            mgr.stream_kernel()
+            # their smaller-child choice (`:1318`) was `plan_level_kernel`
+            # here, reading the `p_sz` the previous level's partition
+            # update just wrote; DEVIATION 210 folds that store into the
+            # update's border branch (`update_partitions_and_plan_kernel`),
+            # so `ids_compute`/`sub_from`/`sub_what` already hold this
+            # level's plan and the launch is gone.
         var level_ids = ids_compute.unsafe_ptr()
         if not planned:
             # the static plan: the dense prefix (`zero_ids` holds a copy
@@ -3334,11 +3330,16 @@ def run_tree_layout[
         # deviation forced by the toolchain, not a choice; the search that
         # established it is the DEVIATION BLOCK in
         # `gbdt/gpu_util/gpu_data/partitions.mojo`.
-        # their `:397`, the same machine-sized expression.
-        ctx.enqueue_function[update_partitions_after_split_kernel](
+        # their `:397`, the same machine-sized expression. The fused
+        # variant (DEVIATION 210) also writes next level's compute plan
+        # from the border thread's registers, retiring the per-level
+        # `plan_level_kernel` launch above.
+        ctx.enqueue_function[update_partitions_and_plan_kernel](
             dense_ids.unsafe_ptr(), ids_c.unsafe_ptr(), Int32(n_live),
             sflags.unsafe_ptr(), p_off.unsafe_ptr(), p_sz.unsafe_ptr(),
             hp_off.unsafe_ptr(), hp_sz.unsafe_ptr(),
+            ids_compute.unsafe_ptr(),
+            sub_from.unsafe_ptr(), sub_what.unsafe_ptr(),
             grid_dim=(split_points_grid_x(n_live, sm_count), n_live, 1),
             block_dim=(512, 1, 1),
         )

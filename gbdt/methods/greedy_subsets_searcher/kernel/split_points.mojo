@@ -245,6 +245,99 @@ def update_partitions_after_split_kernel(
         i += stride
 
 
+def update_partitions_and_plan_kernel(
+    left_leaves: MutPointer[UInt32, MutAnyOrigin],
+    right_leaves: MutPointer[UInt32, MutAnyOrigin],
+    leaf_count: Int32,
+    sorted_flags: MutPointer[UInt8, MutAnyOrigin],
+    part_offset: MutPointer[UInt32, MutAnyOrigin],
+    part_size: MutPointer[UInt32, MutAnyOrigin],
+    host_offset: MutPointer[UInt32, MutAnyOrigin],
+    host_size: MutPointer[UInt32, MutAnyOrigin],
+    ids_compute: MutPointer[UInt32, MutAnyOrigin],
+    sub_from: MutPointer[UInt32, MutAnyOrigin],
+    sub_what: MutPointer[UInt32, MutAnyOrigin],
+):
+    """`update_partitions_after_split_kernel` with `plan_level_kernel`'s
+    choice folded into the border store. USED ONLY BY THE BLIND TREE LOOP.
+
+    ================= DEVIATION 210 (scheduling only) =================
+    Their next level opens with `BuildNecessaryHistograms`' smaller-child
+    choice (`split_properties_helper.cpp:1318`), which DEVIATION 94 moved
+    on-device as `plan_level_kernel`: one launch per level reading the
+    `p_sz` this kernel just wrote. That launch is pure LAUNCH TAX on this
+    box (~42 us host floor, PREP_BILL 2026-08-21 step 29), because the
+    border-finding thread below already holds BOTH sizes it would read:
+    the left child's size is `i` and the right child's is `part_sz - i`,
+    and next level's pair `(slot j, slot half + j)` IS this launch's
+    `(left_leaf, right_leaf)` at `leaf_slot == j` -- `MakeSplit` gives the
+    left child the parent's dense slot and `resolve_and_pack_kernel`
+    writes `ids_c[j] = n_live + j`, with `half` next level equal to
+    `n_live` now. So the plan store moves into the border branch: same
+    comparison, same operands, same tie rule (an exact tie computes the
+    RIGHT child -- PORTING.md 136), one fewer launch per planned level.
+    NO arithmetic moves: the choice is an integer compare on the same two
+    numbers `plan_level_kernel` loads, and every partition store is
+    byte-identical to the unfused kernel's.
+
+    `plan_level_kernel` stays: `mojo_only/sibling_tiebreak_check.mojo`
+    exercises its tie rule, and `check-plan-fusion` gates THIS kernel's
+    plan words against it on the same planted partitions.
+
+    The final level's plan words are written and never read (the loop
+    ends); the buffers are `max_leaves` wide and the last level writes
+    `max_leaves / 2` slots, so the dead store is in bounds. When
+    `use_subtraction` is off the caller never reads `ids_compute` either
+    and the store is equally dead, exactly as the unfused planner's
+    output was untrusted on unplanned levels.
+    ===================================================================
+    """
+    var leaf_slot = Int(block_idx.y)
+    var left_leaf = Int(left_leaves.unsafe_load(leaf_slot))
+    var right_leaf = Int(right_leaves.unsafe_load(leaf_slot))
+
+    var offset = Int(part_offset.unsafe_load(left_leaf))
+    var part_sz = Int(part_size.unsafe_load(left_leaf))
+
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(block_dim.x) * Int(grid_dim.x)
+
+    while i <= part_sz:
+        var flag0 = 1
+        if i < part_sz:
+            flag0 = Int(ldg(sorted_flags + (offset + i)))
+        var flag1 = 0
+        if i != 0:
+            flag1 = Int(ldg(sorted_flags + (offset + i - 1)))
+
+        if flag0 != flag1:
+            part_size.unsafe_store(left_leaf, UInt32(i))
+            host_offset.unsafe_store(left_leaf, UInt32(offset))
+            host_size.unsafe_store(left_leaf, UInt32(i))
+
+            part_offset.unsafe_store(right_leaf, UInt32(offset + i))
+            part_size.unsafe_store(right_leaf, UInt32(part_sz - i))
+            host_offset.unsafe_store(right_leaf, UInt32(offset + i))
+            host_size.unsafe_store(right_leaf, UInt32(part_sz - i))
+
+            # the plan, folded (DEVIATION 210): `plan_level_kernel`'s
+            # body on the sizes this thread just stored. `left_sz <
+            # right_sz` is its strict `<` on the LEFT; the tie computes
+            # the right child, so `small` starts there.
+            var left_sz = UInt32(i)
+            var right_sz = UInt32(part_sz - i)
+            var small = UInt32(right_leaf)
+            var big = UInt32(left_leaf)
+            if left_sz < right_sz:
+                small = UInt32(left_leaf)
+                big = UInt32(right_leaf)
+            ids_compute.unsafe_store(leaf_slot, small)
+            sub_from.unsafe_store(leaf_slot, big)
+            sub_what.unsafe_store(leaf_slot, small)
+            break
+        i += stride
+
+
 #: `const ui32 blockSize = 256` for the in-leaf copy and the in-leaf gather
 #: (`split_points.cu:217`, `:239`).
 comptime LEAF_COPY_BLOCK = 256

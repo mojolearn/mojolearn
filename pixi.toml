@@ -363,6 +363,16 @@ check-pointwise-pool = "mojo run -I . mojo_only/pointwise_pool_check.mojo"
 # write hides. Own main(); a GPU, seconds.
 check-pointwise-resolve = "mojo run -I . mojo_only/pointwise_resolve_check.mojo"
 
+# DEVIATION 210: the greedy blind loop retires the per-level
+# `plan_level_kernel` launch by folding the smaller-sibling choice into
+# `update_partitions_after_split_kernel`'s border store, whose thread holds
+# both sizes in registers. This gate runs the incumbent two-launch pair and
+# the fused kernel on the same planted borders (ties, empty children, an
+# empty parent, strided leaves), compares every output word against an
+# independent host fold, and proves the comparison has teeth with the
+# pre-136 tie inversion as sabotage. Own main(); a GPU, seconds.
+check-plan-fusion = "mojo run -I . mojo_only/plan_fusion_check.mojo"
+
 # The tripwire under PORTING.md 11 and 92. Two histogram families here run
 # one iteration count per BLOCK rather than CatBoost's per-thread counts,
 # because their AddPoint syncs an 8-lane tile and ours can only take a
