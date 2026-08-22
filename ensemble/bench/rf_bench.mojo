@@ -28,7 +28,7 @@ the SAME BITS.
 
 from std.sys import argv
 from std.time import perf_counter_ns
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext
 
 from ensemble.decisiontree.batched_levelalgo.bins import ClassificationBin
 from ensemble.decisiontree.batched_levelalgo.objectives import (
@@ -52,6 +52,23 @@ comptime N_TREES = 20
 comptime MAX_DEPTH = 12
 comptime MAX_N_BINS = 128
 
+# The CANARY. A fixed, deliberately small fit, run between the real arms
+# to measure the BOX rather than the code. See `Canary` below.
+comptime CANARY_ROWS = 20000
+comptime CANARY_COLS = 8
+comptime CANARY_TREES = 4
+comptime CANARY_DEPTH = 6
+
+# The canary also APPENDS to this file, relative to the repo root, because
+# stdout is not a reliable channel out of here. `bench/run_bench.py` is a
+# SHARED harness owned by another lane, this lane may not edit it, and it
+# captures each child's stdout and re-emits only the `ARM` lines it parsed
+# -- everything else is echoed solely when a child FAILS. A canary that
+# only ever reaches stdout is therefore invisible in exactly the runs it
+# was built to certify. `quiet_window.py` truncates this file before a
+# window and reads it after.
+comptime CANARY_LOG = "build/rf_canary.log"
+
 
 @always_inline
 def _mix(x: UInt64) -> UInt64:
@@ -63,7 +80,7 @@ def _mix(x: UInt64) -> UInt64:
     return h ^ (h >> 31)
 
 
-def _params(n_cols: Int) -> RF_params:
+def _params(n_cols: Int, n_bins: Int = MAX_N_BINS) -> RF_params:
     return RF_params(
         n_trees=Int32(N_TREES),
         bootstrap=True,
@@ -74,7 +91,7 @@ def _params(n_cols: Int) -> RF_params:
             max_depth=Int32(MAX_DEPTH),
             max_leaves=Int32(-1),
             max_features=Float32(1.0),
-            max_n_bins=Int32(MAX_N_BINS),
+            max_n_bins=Int32(n_bins),
             min_samples_leaf=Int32(1),
             min_samples_split=Int32(2),
             split_criterion=GINI,
@@ -84,11 +101,136 @@ def _params(n_cols: Int) -> RF_params:
     )
 
 
+struct Canary(Movable):
+    """THE BOX, MEASURED BESIDE THE CODE.
+
+    WHY THIS EXISTS. On 2026-08-21 this lane published a 2.50x speedup, a
+    0.89x, and a 6.99x before them, and every one had to be retracted: a
+    peer lane was running covtype at 99% CPU through all three windows. The
+    timing lock said STALE-PID, which its own help text spells out is NOT
+    evidence the box is free, and a human read the evidence and overrode it.
+
+    A better lock would not have caught that, because the lock records a
+    CLAIM written once at acquisition. What catches it is measuring the
+    machine DURING the window with something whose true duration is known
+    to be constant.
+
+    So: a fixed fit -- same code path, same device, same bits every time --
+    run between the real arms. Its duration cannot change for any reason
+    internal to this benchmark. If it moves, the BOX moved, and every
+    number taken in that window is void. `ensemble/bench/quiet_window.py`
+    is what enforces that; this struct only produces the evidence.
+
+    IT IS A GPU CANARY ON PURPOSE. A CPU canary certifies a CPU window. It
+    would have sat happily at its usual duration while a peer's sklearn arm
+    saturated the cores and left the GPU alone -- and equally, it would
+    have missed a peer's GPU arm entirely. The arms being gated here are
+    GPU fits, so the canary is a GPU fit.
+
+    THE BUFFERS ARE FIELDS, NOT LOCALS. A DeviceBuffer handed to a kernel
+    as a raw pointer is dead at its last use, and in this compiler that is
+    the `.unsafe_ptr()` call, not the end of the enclosing scope. Holding
+    them here keeps them alive across every `tick`.
+    """
+
+    var dx: DeviceBuffer[DT]
+    var dy: DeviceBuffer[LT]
+    var dsw: DeviceBuffer[DT]
+
+    def __init__(out self, ctx: DeviceContext) raises:
+        var hx = ctx.enqueue_create_host_buffer[DT](CANARY_ROWS * CANARY_COLS)
+        var hy = ctx.enqueue_create_host_buffer[LT](CANARY_ROWS)
+        for r in range(CANARY_ROWS):
+            var acc = UInt64(0)
+            for c in range(CANARY_COLS):
+                # A DIFFERENT stream from the benchmark fixture (the
+                # `0xC0FFEE` offset), so the canary cannot accidentally
+                # share cached quantiles or warmed pages with the arm it is
+                # certifying.
+                var h = _mix(
+                    UInt64(r) * UInt64(1000003) + UInt64(c) + UInt64(0xC0FFEE)
+                )
+                var v = Float32(Int(h % UInt64(10000))) / Float32(10000.0)
+                hx.unsafe_ptr().unsafe_store(c * CANARY_ROWS + r, v)
+                if c < 3 and (h % UInt64(10000)) >= UInt64(5000):
+                    acc += 1
+            hy.unsafe_ptr().unsafe_store(r, Int32(Int(acc)))
+
+        self.dx = ctx.enqueue_create_buffer[DT](CANARY_ROWS * CANARY_COLS)
+        ctx.enqueue_copy(dst_buf=self.dx, src_ptr=hx.unsafe_ptr())
+        self.dy = ctx.enqueue_create_buffer[LT](CANARY_ROWS)
+        ctx.enqueue_copy(dst_buf=self.dy, src_ptr=hy.unsafe_ptr())
+        self.dsw = ctx.enqueue_create_buffer[DT](1)
+        ctx.synchronize()
+        _ = hx^
+        _ = hy^
+
+    def tick(mut self, ctx: DeviceContext, tag: String) raises:
+        """One fixed fit, timed and printed as `CANARY <tag> <ms>`."""
+        var p = RF_params(
+            n_trees=Int32(CANARY_TREES),
+            bootstrap=True,
+            max_samples=Float32(1.0),
+            seed=UInt64(0xCA9A47),
+            n_streams=Int32(1),
+            tree_params=DecisionTreeParams(
+                max_depth=Int32(CANARY_DEPTH),
+                max_leaves=Int32(-1),
+                max_features=Float32(1.0),
+                max_n_bins=Int32(MAX_N_BINS),
+                min_samples_leaf=Int32(1),
+                min_samples_split=Int32(2),
+                split_criterion=GINI,
+                min_impurity_decrease=Float32(0.0),
+                max_batch_size=Int32(4096),
+            ),
+        )
+        var t0 = perf_counter_ns()
+        var forest = fit_forest[ClsObj](
+            ctx,
+            self.dx,
+            self.dy,
+            self.dsw,
+            CANARY_ROWS,
+            CANARY_COLS,
+            N_CLASSES,
+            p,
+        )
+        ctx.synchronize()
+        var t1 = perf_counter_ns()
+        # The node count is printed because it is the canary's own
+        # self-check: it is a deterministic function of the fixed bits
+        # above, so if it EVER differs between ticks the canary is not
+        # doing constant work and its timings mean nothing.
+        var line = String("CANARY ") + tag + " " + String(
+            Float64(t1 - t0) / 1.0e6
+        ) + " nodes " + String(len(forest.trees[0].sparsetree))
+        print(line)
+        with open(CANARY_LOG, "a") as fh:
+            fh.write(line + "\n")
+        _ = forest^
+
+
 def run_arm[
     checksum_only: Bool = False
 ](
-    ctx: DeviceContext, name: String, n_rows: Int, n_cols: Int
+    ctx: DeviceContext,
+    name: String,
+    n_rows: Int,
+    n_cols: Int,
+    n_bins: Int = MAX_N_BINS,
+    timed: Bool = True,
+    score: Bool = True,
 ) raises:
+    """One arm. `timed=False` fits once and prints ACCURACY ONLY.
+
+    THAT FLAG IS A HONESTY DEVICE, not a convenience. Accuracy here is a
+    deterministic function of the input bits, so it is worth exactly the
+    same on a loaded box as on an idle one -- which means the `--acc-sweep`
+    mode below is legitimate to run while a peer lane holds the timing
+    lock, and a timing run is not. Separating them stops a sweep from
+    quietly emitting ARM lines that look like a measurement.
+    """
     # ---- data, column-major, generated once ---------------------------
     var hx = ctx.enqueue_create_host_buffer[DT](n_rows * n_cols)
     var hy = ctx.enqueue_create_host_buffer[LT](n_rows)
@@ -138,17 +280,19 @@ def run_arm[
     var dsw = ctx.enqueue_create_buffer[DT](1)
     ctx.synchronize()
 
-    for rep in range(REPEATS):
-        var p = _params(n_cols)
+    var reps = REPEATS if timed else 1
+    for rep in range(reps):
+        var p = _params(n_cols, n_bins)
         var t0 = perf_counter_ns()
         var forest = fit_forest[ClsObj](
             ctx, dx, dy, dsw, n_rows, n_cols, N_CLASSES, p
         )
         ctx.synchronize()
         var t1 = perf_counter_ns()
-        print("ARM", name, Float64(t1 - t0) / 1.0e6)
+        if timed:
+            print("ARM", name, Float64(t1 - t0) / 1.0e6)
 
-        if rep == REPEATS - 1:
+        if score and rep == reps - 1:
             # ACCURACY, beside the timing and not in a separate window.
             # A speed number without it is not a result.
             #
@@ -191,6 +335,8 @@ def run_arm[
                 Float64(correct) / Float64(n_rows),
                 "nodes",
                 len(forest.trees[0].sparsetree),
+                "bins",
+                n_bins,
             )
         _ = forest^
 
@@ -203,21 +349,71 @@ def run_arm[
 
 def main() raises:
     var ctx = DeviceContext()
-    # `--checksum` generates the data, prints the digest and does NOT fit.
-    # It exists so the two arms can be proven to be fitting the same bits
-    # without opening a measurement window to do it.
     var only_sum = False
+    var acc_sweep = False
+    var profile = False
     var args = argv()
     for i in range(len(args)):
+        # `--checksum` generates the data, prints the digest and does NOT
+        # fit. It exists so the two arms can be proven to be fitting the
+        # same bits without opening a measurement window to do it.
         if args[i] == "--checksum":
             only_sum = True
+        # `--acc-sweep` fits at several bin counts and prints ACCURACY
+        # ONLY. No ARM lines, no canary, no timing lock needed.
+        if args[i] == "--acc-sweep":
+            acc_sweep = True
+        # `--profile` is ONE fit and nothing else: no repeats, no canary,
+        # no held-out scoring. The scoring pass is a host-side tree walk
+        # over 100000 x 50 values and it dwarfs the fit in wall time, so
+        # leaving it in would bury the GPU work this mode exists to look
+        # at. Not a measurement -- a trace subject.
+        if args[i] == "--profile":
+            profile = True
+
     if only_sum:
         run_arm[True](ctx, "rf@100000", 100000, 50)
         run_arm[True](ctx, "rf@500000", 500000, 50)
         return
 
-    # Interleaved WITHIN this process across sizes, and `run_bench.py`
-    # alternates this process with scikit-learn's. Both matter: this box
-    # has been measured drifting 1.7x inside twenty minutes.
+    if profile:
+        run_arm(ctx, "rf@100000", 100000, 50, MAX_N_BINS, False, False)
+        return
+
+    if acc_sweep:
+        # THE PREDICTION THIS TESTS. Following cuML, every feature is cut
+        # at `max_n_bins` quantile candidates drawn from a sample of
+        # `min(n_rows, max_n_bins * 4)` rows (`quantiles.cuh`, and the
+        # oversampling_factor=4 note in our `quantiles.mojo`). The fixture
+        # label switches at exactly x=0.5 on three features, and the
+        # closest candidate to 0.5 is on average about `1/(4*n_bins)` away
+        # in quantile space, so the error floor from binning alone should
+        # be near `3/(4*n_bins)` and should HALVE every time the bin count
+        # DOUBLES.
+        #
+        # If it does, the gap to scikit-learn's exact split search is the
+        # ported design and not a defect. If it does not -- if accuracy is
+        # flat in the bin count, or moves the wrong way -- then something
+        # here is broken and the binning story was a comfortable guess.
+        for nb in [32, 64, 128, 256, 512]:
+            run_arm(ctx, "rf@100000", 100000, 50, nb, False)
+        return
+
+    # THE TIMED PATH. Interleaved WITHIN this process across sizes, and
+    # `run_bench.py` alternates this process with scikit-learn's. Both
+    # matter: this box has been measured drifting 1.7x inside twenty
+    # minutes.
+    #
+    # A CANARY BRACKETS EVERY ARM. It is a fixed fit whose duration cannot
+    # change for any reason internal to this benchmark, so any movement in
+    # it is the machine. `quiet_window.py` voids the run if the spread
+    # across these ticks exceeds its threshold. Reading the ARM numbers
+    # without checking the CANARY numbers is what produced three retracted
+    # results on 2026-08-21.
+    var canary = Canary(ctx)
+    canary.tick(ctx, "pre")
     run_arm(ctx, "rf@100000", 100000, 50)
+    canary.tick(ctx, "mid")
     run_arm(ctx, "rf@500000", 500000, 50)
+    canary.tick(ctx, "post")
+    _ = canary^

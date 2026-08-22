@@ -764,9 +764,31 @@ no RF file. It also settles the DEVIATION 105 tie-class question, which
 bounds what bit-identity can even mean.
 
 Below that: sklearn as a quality band, then timing -- the Step 0 gather
-probe first, since it prices everything downstream. **No timing measurement
-of any kind exists**, by instruction, so nothing here may be quoted as a
-performance result in either direction.
+probe first, since it prices everything downstream.
+
+CORRECTED 2026-08-21 EVENING. The sentence that stood here said no timing
+measurement of any kind existed. That stopped being true the same day, and
+the way it stopped being true is the reason the replacement is longer.
+Timings WERE taken, three of them were published, and all three were
+retracted: a peer lane held the box at 99-371% CPU throughout, the timing
+lock reported STALE-PID, and its own warning that STALE-PID IS NOT EVIDENCE
+THE BOX IS FREE was read and overridden. So what exists now is:
+
+  * `ensemble/bench/quiet_window.py`, which TAKES the timing lock for the
+    life of the window, samples the box throughout it, and returns exit 2
+    with the word VOID rather than a ratio when either check fails.
+  * a GPU CANARY inside `rf_bench.mojo` -- a fixed fit, bracketing every
+    arm -- so a window is invalidated by the machine slowing down for ANY
+    reason, including the ones no process scan can name. It reaches the
+    gate through `build/rf_canary.log`, because `bench/run_bench.py` is a
+    shared harness this lane may not edit and it swallows child stdout on
+    success.
+  * `ensemble/bench/profile_metal.py`, per-dispatch device time from
+    Instruments.
+
+None of that makes the sklearn comparison into parity with cuML. It only
+means a number taken here now has to survive a gate before it can be
+quoted.
 
 ## Merge-time cleanups, none blocking
 
@@ -779,5 +801,17 @@ performance result in either direction.
   `mojo_only/kernel_matrix.mojo` as a CAPABILITY row.
 - `ensemble/mojo_only/segmented_sort.mojo` duplicates the `gbdt/` one.
 - `ensemble/mojo_only/` cannot be `mojo precompile`d while its checks carry
-  `main()`; all fourteen run by path, and no `pixi.toml` task exists for
-  any of them.
+  `main()`; all EIGHTEEN run by path (the count said fourteen until
+  `oob_check`, `sampled_cols_check` and the rest landed), and no
+  `pixi.toml` task exists for any of them.
+- **`ensemble/mojo_only/` IS ON THE SHIPPING PATH, and its name says it is
+  not.** `quantiles.mojo:258` imports `segmented_sort_keys_f32` from it and
+  `randomforest.mojo:320` imports Philox from it, so both compile into any
+  binary that fits a forest -- the Metal shader list for one fit names
+  `ensemble_mojo_only_segmented_*` and `ensemble_mojo_only_philox_*` among
+  its 21 pipelines. `bins.mojo:67` states in passing that this directory is
+  another lane's and is not imported, which is now false. Neither symbol
+  mirrors a cuML FILE (theirs are CUB's `DeviceSegmentedRadixSort` and
+  RAFT's `PCGenerator`), so where they live is our choice and nothing about
+  the file-for-file mirror decides it -- but a checks directory is the
+  wrong answer. Andrew's call, since it moves files.
