@@ -2112,7 +2112,14 @@ struct RowSampler(Movable):
                 grid_dim=_ceildiv(self.n_selected, 256),
                 block_dim=256,
             )
-        ctx.synchronize()
+        # NO synchronize. Their `thrust::fill` + `thrust::scatter` run on
+        # the stream and `sample()` returns without a sync (`:163-165`);
+        # everything that reads the mask or `selected_rows` is enqueued on
+        # this same queue afterwards, so ordering is the queue's. A sync
+        # here was this port's own wait, with no counterpart in their
+        # source -- HOST_AND_DEVICE.md's rule two says exactly this wait
+        # is in scope to delete. Nothing host-side reads the mask before
+        # `fit_forest`'s post-loop synchronize.
 
     def _sample_rows(mut self, ctx: DeviceContext, tree_id: Int32) raises:
         """`:112-161`, the four-way dispatch in their order. All four arms
@@ -2184,7 +2191,14 @@ struct RowSampler(Movable):
                 Int32(self.n_rows),
                 UInt64(Int(self.rng_seed_for(tree_id))),
             )
-            ctx.synchronize()
+            # NO synchronize -- theirs is `uniformInt` on the stream and
+            # `sample()` returns with no sync; the builder's kernels are
+            # enqueued after this on the same queue and read
+            # `selected_rows` in order. The host never reads it. The
+            # host-staging arms below DO keep their sync, because each
+            # re-writes `h_rows` on the host next tree and the write must
+            # not race the in-flight copy -- that wait is the price of
+            # DEVIATION 305's host staging, not of their design.
             return
         if self.has_sample_weight:
             # `:144-154` -- `thrust::copy_if` over `NonzeroSampleWeight`,
@@ -2430,9 +2444,35 @@ def fit_forest[
         Int32(n_cols),
     )
 
+    # DEVIATION 313: ONE Builder for the whole forest, reset per tree.
+    # Their per-tree Builder construction allocates from RMM's POOLED
+    # resources, so it is pointer carving; a Metal buffer create per tree
+    # is a driver cost their design never pays. See
+    # `Builder.reset_for_tree` for the full argument. `builder_rows` is
+    # what `sampler.n_selected` will hold in the loop -- constant across
+    # one forest in every arm: three arms set it to `n_sampled`, and the
+    # no-bootstrap weighted arm's value is fixed by `prepare_weights`
+    # above. `reset_for_tree` re-checks it per tree and raises rather
+    # than mis-sizing.
+    var builder_rows = (
+        sampler.n_selected if has_sw and not rf_params.bootstrap
+        else n_sampled
+    )
+    var builder = Builder[O](
+        ctx,
+        rf_params.tree_params,
+        Int32(0),
+        rf_params.seed,
+        builder_rows,
+        n_cols,
+        Int32(n_unique_labels),
+        scales,
+    )
+
     # `:337-367` -- their tree loop, serial here (DEVIATION 117).
     for i in range(Int(rf_params.n_trees)):
         sampler.sample(ctx, Int32(i))
+        builder.reset_for_tree(Int32(i), sampler.n_selected)
         var dataset = DatasetView[O.DataT, O.LabelT](
             rebind[MutPointer[Scalar[O.DataT], MutUntrackedOrigin]](
                 x.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
@@ -2453,22 +2493,15 @@ def fit_forest[
             Int32(n_unique_labels),
             objective_sees_weights,
         )
-        var builder = Builder[O](
-            ctx,
-            rf_params.tree_params,
-            Int32(i),
-            rf_params.seed,
-            sampler.n_selected,
-            n_cols,
-            Int32(n_unique_labels),
-            scales,
-        )
         var tree = builder.train(ctx, dataset, quantiles)
         tree.treeid = Int32(i)
         forest.trees.append(tree^)
-        _ = builder^
 
     ctx.synchronize()
+    # Mojo frees a value at its LAST USE; the builder's buffers must
+    # outlive every launch that read them, so it is released only after
+    # the drain above.
+    _ = builder^
 
     # `randomforest_common.pyx:669-670` -- after the tree loop, and only
     # if it was asked for.

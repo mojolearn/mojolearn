@@ -905,6 +905,21 @@ struct Builder[O: ObjectiveLike](Movable):
     var node_split_args: DeviceArgs[NodeSplitArgs[Self.O.DataT, Self.O.LabelT]]
     var node_split_scratch: NodeSplitScratch[Self.O.DataT, TPB_DEFAULT]
 
+    # --- the leaf pass's staging, DEVIATION 313's second half ------------
+    # Theirs allocates `d_tree` / `d_instance_ranges` / `d_leaves` inside
+    # `SetLeafPredictions` per tree (`:638-650`) -- out of RMM's pool, so
+    # a pointer bump. Six Metal buffer creates per tree is the un-pooled
+    # price; these live with the workspace instead and grow only when a
+    # tree's node count exceeds every earlier tree's. `leaf_capacity` is
+    # in NODES, batched the way theirs batches (`min(100000, n_nodes)`).
+    var leaf_capacity: Int
+    var leaf_d_tree: DeviceBuffer[DType.uint8]
+    var leaf_h_tree: HostBuffer[DType.uint8]
+    var leaf_d_ranges: DeviceBuffer[DType.uint8]
+    var leaf_h_ranges: HostBuffer[DType.uint8]
+    var leaf_d_leaves: DeviceBuffer[Self.O.DataT]
+    var leaf_h_leaves: HostBuffer[Self.O.DataT]
+
     def __init__(
         out self,
         ctx: DeviceContext,
@@ -1045,8 +1060,73 @@ struct Builder[O: ObjectiveLike](Movable):
         self.node_split_scratch = NodeSplitScratch[Self.O.DataT, TPB_DEFAULT](
             ctx, max_blocks * TPB_DEFAULT, max_batch
         )
+
+        # Leaf-pass staging, sized by their batching rule up front: a
+        # depth < 13 tree can never exceed the dense bound, so for the
+        # common case this never regrows; past their `min(100000, ...)`
+        # cap the batching loop reuses the same buffers anyway.
+        self.leaf_capacity = min(100000, max_nodes(params.max_depth))
+        var n_out = Int(num_outputs)
+        self.leaf_d_tree = ctx.enqueue_create_buffer[DType.uint8](
+            size_of[SparseTreeNode[Self.O.DataT]]() * self.leaf_capacity
+        )
+        self.leaf_h_tree = ctx.enqueue_create_host_buffer[DType.uint8](
+            size_of[SparseTreeNode[Self.O.DataT]]() * self.leaf_capacity
+        )
+        self.leaf_d_ranges = ctx.enqueue_create_buffer[DType.uint8](
+            size_of[InstanceRange]() * self.leaf_capacity
+        )
+        self.leaf_h_ranges = ctx.enqueue_create_host_buffer[DType.uint8](
+            size_of[InstanceRange]() * self.leaf_capacity
+        )
+        self.leaf_d_leaves = ctx.enqueue_create_buffer[Self.O.DataT](
+            self.leaf_capacity * n_out
+        )
+        self.leaf_h_leaves = ctx.enqueue_create_host_buffer[Self.O.DataT](
+            self.leaf_capacity * n_out
+        )
+
         ctx.enqueue_memset(self.mutex, Int32(0))
         ctx.synchronize()
+
+    def reset_for_tree(mut self, treeid: Int32, n_sampled_rows: Int) raises:
+        """DEVIATION 313: ONE Builder serves the whole forest; this is the
+        per-tree half of its constructor.
+
+        Their Builder IS constructed per tree (`decisiontree.cuh:258-260`),
+        but every byte it allocates comes from RMM's POOLED resources --
+        `rmm::device_uvector` / `pinned_host_vector` draw from the
+        handle's memory resource, so their per-tree construction is
+        pointer carving, not a driver allocation. On Metal a fresh
+        `enqueue_create_buffer` per tree pays the driver every time, a
+        cost their design never has. Pooling the workspace across trees is
+        their allocator's semantics, ported; the same ruling as gbdt's
+        TTreeWorkspace, pool-of-one.
+
+        `treeid` is the only constructor input that varies across a
+        forest's trees -- it feeds the feature-sampler seed chain
+        `fnv1a32(seed, treeid, nodeid)`. Every workspace region is
+        (re)written before it is read each batch: `mutex` is re-zeroed
+        every `computeBestSplits` (`:490`), `histograms` before every
+        column block (`:588-591`), `splits` by `initSplitKernel`, the work
+        items and workload by their uploads, `partition_row_ids` by
+        `nodeSplitKernel` before anything reads it. The fingerprint gate
+        (`mojo_only/fingerprint_probe.mojo`) held bit-exact across this
+        change on all five configs, and the sabotage that freezes this
+        method's `treeid` write moves every multi-tree line of it.
+
+        The guard below cannot fire today -- every `RowSampler` arm holds
+        `n_selected` constant across one forest -- and exists so a future
+        arm that varies it rebuilds instead of reading a mis-sized
+        workspace."""
+        if n_sampled_rows != self.n_sampled_rows:
+            raise Error(
+                "Builder workspace sized for "
+                + String(self.n_sampled_rows)
+                + " sampled rows; tree asked for "
+                + String(n_sampled_rows)
+            )
+        self.treeid = treeid
 
     @always_inline
     def _splits_ptr(mut self) -> MutPointer[Split[Self.O.DataT], MutUntrackedOrigin]:
@@ -1260,20 +1340,24 @@ struct Builder[O: ObjectiveLike](Movable):
         var n_bins = Int(self.params.max_n_bins)
         var n_classes = Int(self.num_outputs)
         var n_blocks_dimy = min(N_BLKS_FOR_COLS, n_sampled_cols - col)
-        # `:588-590` -- theirs zeroes exactly `sizeof(BinT) *
+        # `:588-591` -- theirs zeroes exactly `sizeof(BinT) *
         # len_histograms` bytes, where
         # `len_histograms = n_bins * n_classes * n_blocks_dimy *
-        # n_work_items`. DEVIATION 304: `enqueue_memset` takes a BUFFER and
-        # not a range, so this zeroes the whole histogram workspace --
-        # sized for `max_batch_size` nodes and `N_BLKS_FOR_COLS` columns.
-        # PRICE: strictly more zeroing than theirs, never less, so every
-        # cell their launch reads is zeroed here too and no value can
-        # differ. The excess is bounded by the workspace, which is
-        # allocated once per tree, and is a candidate for a sub-buffer
-        # view if one is ever measured to matter. Nothing is measured this
-        # round.
-        _ = n_bins * n_classes * n_blocks_dimy * n_work_items
-        ctx.enqueue_memset(self.histograms, UInt8(0))
+        # n_work_items`. DEVIATION 304, REVISED: `enqueue_memset` takes a
+        # BUFFER and not a range, so their byte count is expressed as a
+        # prefix sub-buffer view. The launch reads and writes only that
+        # prefix -- their memset size is the proof, since they never zero
+        # past it -- so the bytes zeroed here are THEIR bytes, per launch.
+        # (This used to zero the WHOLE workspace, sized for
+        # `max_batch_size` nodes, every column block of every batch: at
+        # the default `max_batch_size` 4096 that is a constant ~100x the
+        # bytes their launch touches whenever the live batch is small.)
+        var len_histograms = n_bins * n_classes * n_blocks_dimy * n_work_items
+        var hist_prefix = self.histograms.create_sub_buffer[DType.uint8](
+            0, size_of[Self.O.BinT]() * len_histograms
+        )
+        ctx.enqueue_memset(hist_prefix, UInt8(0))
+        _ = hist_prefix^
         var objective = self._objective()
 
         launch_build_histograms_kernel[Self.O](
@@ -1539,20 +1623,31 @@ struct Builder[O: ObjectiveLike](Movable):
         var batch = min(100000, n_nodes)
         if batch == 0:
             return
-        var d_tree = ctx.enqueue_create_buffer[DType.uint8](
-            size_of[SparseTreeNode[Self.O.DataT]]() * batch
-        )
-        var h_tree = ctx.enqueue_create_host_buffer[DType.uint8](
-            size_of[SparseTreeNode[Self.O.DataT]]() * batch
-        )
-        var d_ranges = ctx.enqueue_create_buffer[DType.uint8](
-            size_of[InstanceRange]() * batch
-        )
-        var h_ranges = ctx.enqueue_create_host_buffer[DType.uint8](
-            size_of[InstanceRange]() * batch
-        )
-        var d_leaves = ctx.enqueue_create_buffer[Self.O.DataT](batch * n_out)
-        var h_leaves = ctx.enqueue_create_host_buffer[Self.O.DataT](batch * n_out)
+        # DEVIATION 313: the staging is pooled on the builder and grows
+        # only when a tree outgrows every earlier one. At entry the
+        # previous tree's leaf pass has drained (its own final
+        # `synchronize` below), so reassigning the buffers cannot free
+        # memory under an in-flight launch.
+        if batch > self.leaf_capacity:
+            self.leaf_capacity = batch
+            self.leaf_d_tree = ctx.enqueue_create_buffer[DType.uint8](
+                size_of[SparseTreeNode[Self.O.DataT]]() * batch
+            )
+            self.leaf_h_tree = ctx.enqueue_create_host_buffer[DType.uint8](
+                size_of[SparseTreeNode[Self.O.DataT]]() * batch
+            )
+            self.leaf_d_ranges = ctx.enqueue_create_buffer[DType.uint8](
+                size_of[InstanceRange]() * batch
+            )
+            self.leaf_h_ranges = ctx.enqueue_create_host_buffer[
+                DType.uint8
+            ](size_of[InstanceRange]() * batch)
+            self.leaf_d_leaves = ctx.enqueue_create_buffer[Self.O.DataT](
+                batch * n_out
+            )
+            self.leaf_h_leaves = ctx.enqueue_create_host_buffer[
+                Self.O.DataT
+            ](batch * n_out)
         var objective = self._leaf_objective()
         # `:652` -- their smem is `sizeof(BinT) * num_outputs`.
         var smem_size = size_of[Self.O.BinT]() * n_out
@@ -1561,52 +1656,70 @@ struct Builder[O: ObjectiveLike](Movable):
         while begin < n_nodes:
             var end = min(begin + batch, n_nodes)
             var size = end - begin
-            var tp = h_tree.unsafe_ptr().unsafe_bitcast[
+            var tp = self.leaf_h_tree.unsafe_ptr().unsafe_bitcast[
                 SparseTreeNode[Self.O.DataT]
             ]()
-            var rp = h_ranges.unsafe_ptr().unsafe_bitcast[InstanceRange]()
+            var rp = (
+                self.leaf_h_ranges.unsafe_ptr().unsafe_bitcast[InstanceRange]()
+            )
             for i in range(size):
                 tp[unsafe_offset=i] = tree.sparsetree[begin + i]
                 rp[unsafe_offset=i] = instance_ranges[begin + i]
-            ctx.enqueue_copy(dst_buf=d_tree, src_ptr=h_tree.unsafe_ptr())
-            ctx.enqueue_copy(dst_buf=d_ranges, src_ptr=h_ranges.unsafe_ptr())
-            ctx.enqueue_memset(d_leaves, Scalar[Self.O.DataT](0))
+            # Prefix views keep the copied and zeroed byte counts at
+            # THEIRS -- `update_device(..., batch size)` at `:655-658` and
+            # `sizeof(DataT) * d_leaves.size()` at `:652-653` -- now that
+            # the pooled buffers can be larger than the live batch.
+            var dt = self.leaf_d_tree.create_sub_buffer[DType.uint8](
+                0, size_of[SparseTreeNode[Self.O.DataT]]() * size
+            )
+            ctx.enqueue_copy(
+                dst_buf=dt, src_ptr=self.leaf_h_tree.unsafe_ptr()
+            )
+            var dr = self.leaf_d_ranges.create_sub_buffer[DType.uint8](
+                0, size_of[InstanceRange]() * size
+            )
+            ctx.enqueue_copy(
+                dst_buf=dr, src_ptr=self.leaf_h_ranges.unsafe_ptr()
+            )
+            var dl = self.leaf_d_leaves.create_sub_buffer[Self.O.DataT](
+                0, size * n_out
+            )
+            ctx.enqueue_memset(dl, Scalar[Self.O.DataT](0))
 
             launch_leaf_kernel[Self.O](
                 ctx,
                 objective,
                 dataset,
-                d_tree.unsafe_ptr()
+                self.leaf_d_tree.unsafe_ptr()
                 .unsafe_origin_cast[MutUntrackedOrigin]()
                 .unsafe_bitcast[SparseTreeNode[Self.O.DataT]](),
-                d_ranges.unsafe_ptr()
+                self.leaf_d_ranges.unsafe_ptr()
                 .unsafe_origin_cast[MutUntrackedOrigin]()
                 .unsafe_bitcast[InstanceRange](),
-                d_leaves.unsafe_ptr()
+                self.leaf_d_leaves.unsafe_ptr()
                 .unsafe_origin_cast[MutUntrackedOrigin](),
                 size,
                 smem_size,
                 self.leaf_args,
             )
-            ctx.enqueue_copy(dst_buf=h_leaves, src_buf=d_leaves)
+            var hl = self.leaf_h_leaves.create_sub_buffer[Self.O.DataT](
+                0, size * n_out
+            )
+            var dls = self.leaf_d_leaves.create_sub_buffer[Self.O.DataT](
+                0, size * n_out
+            )
+            ctx.enqueue_copy(dst_buf=hl, src_buf=dls)
             ctx.synchronize()
+            _ = dt^
+            _ = dr^
+            _ = dl^
+            _ = hl^
+            _ = dls^
             for i in range(size * n_out):
                 tree.vector_leaf[begin * n_out + i] = (
-                    h_leaves.unsafe_ptr().unsafe_load(i)
+                    self.leaf_h_leaves.unsafe_ptr().unsafe_load(i)
                 )
             begin = end
-
-        # The buffers above are LOCALS, and Mojo frees a value at its last
-        # use rather than at end of scope -- so a device buffer handed to a
-        # kernel as a raw pointer can be freed and reallocated under the
-        # running launch. These uses keep them alive past the final
-        # `synchronize`. Measured hazard, not a precaution.
-        _ = d_tree^
-        _ = h_tree^
-        _ = d_ranges^
-        _ = h_ranges^
-        _ = d_leaves^
-        _ = h_leaves^
 
     def train[
         sabotage: Int = 0
