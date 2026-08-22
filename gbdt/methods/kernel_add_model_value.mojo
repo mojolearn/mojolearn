@@ -37,6 +37,8 @@ point it at. Recorded so that gap is visible.
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 
+from mojo_only.numerics import identical_mul_add
+
 
 def add_model_value_kernel(
     part_offset: MutPointer[UInt32, MutAnyOrigin],
@@ -76,15 +78,27 @@ def add_model_value_kernel(
     var plane = dim * Int(cursor_stride_in)
     var offset = Int(part_offset.unsafe_load(leaf))
     var size = Int(part_size.unsafe_load(leaf))
-    var value = (
-        leaf_values.unsafe_load(leaf * dim_count + dim) * learning_rate
-    )
+    var raw = leaf_values.unsafe_load(leaf * dim_count + dim)
 
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)
     while i < size:
         var row = plane + Int(row_index.unsafe_load(offset + i))
-        cursor.unsafe_store(row, cursor.unsafe_load(row) + value)
+        # IDENTITY_PATHS row 9, the CURSOR UPDATE seam (E1 2026-08-22:
+        # with tree 0 fully bit-identical Apple<->AMD under RMSE, the
+        # first divergence moved to tree 1's FIRST histogram -- the only
+        # arithmetic in between is this `cursor + leaf*rate`, which HIP's
+        # default contraction may fuse per row while Metal's baseline is
+        # measured unfused). `identical_mul_add` is an explicit fma under
+        # IDENTICAL (one rounding, every vendor) and the naive chain
+        # under FAST -- same operands, same ops, Apple FAST bits
+        # unchanged.
+        cursor.unsafe_store(
+            row,
+            identical_mul_add(
+                raw, learning_rate, cursor.unsafe_load(row)
+            ),
+        )
         i += stride
 
 
