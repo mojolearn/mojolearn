@@ -229,6 +229,28 @@ Order on a new backend: `check-ieee-arith`, then `check-depthwise`, then the
 ladder. Running the ladder first tells you a stage disagrees without telling you
 whether the arithmetic was ever going to agree.
 
+### Stage wall timers (2026-08-22)
+
+`MOJOLEARN_STAGE_TIMES=1` prints a stage -> milliseconds table at the end of
+every fit — fixed machine-independent tags (`host.plan`, `hist.zero`,
+`hist.build`, `hist.scan`, `hist.subtract`, `partstats`, `score.kernel`,
+`score.read`, `score.hostreduce`, `split.host`, `split.chain`, `split.sizes`,
+`leaf.values`, `model.build`), accumulated across levels, plus an
+accounted-vs-fit-wall line that exposes any un-wrapped segment. The facility
+is `depthwise_stage_times.mojo` beside the driver; the environment is read
+ONCE per fit and the shipping state is one Bool test per stage.
+
+**A stage-timed run is TRIAGE, never a benchmark** — enabled, every stage
+boundary drains the queue, the same control-plane change that makes a traced
+run a trace subject (identity_trace rule 4). And do not combine it with
+`MOJOLEARN_IDENTITY_TRACE`: the trace's own drains would be billed to
+whichever stage contains them. One instrument at a time.
+
+First table on the gate's 4096-row fixture (depth 6, FAST, drains included so
+indicative only): `hist.build` carries ~a third of the fit wall, `split.chain`
+second; nothing else is over 10%. That ranking — not the numbers — is what an
+optimization round starts from.
+
 **Measured, M4, 2026-08-22:**
 
 | | check-depthwise | trace records | reproducible | identical across {device, 108, 1} SMs |

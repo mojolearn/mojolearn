@@ -123,6 +123,9 @@ from gbdt.methods.greedy_subsets_searcher.kernel.split_points import (
     split_points_grid_x,
     update_partitions_after_split_kernel,
 )
+from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import (
+    StageTimes,
+)
 from gbdt.methods.greedy_subsets_searcher.model_builder import (
     build_non_symmetric_tree,
 )
@@ -834,6 +837,14 @@ def fit_non_symmetric_tree[
     var emit_digests = trace.enabled
     var hist_live_stride = stat_count * hist_cells_per_leaf
 
+    # ---- STAGE WALL TIMERS, off unless MOJOLEARN_STAGE_TIMES=1 ----
+    # `depthwise_stage_times.mojo`. Environment read ONCE, here, per fit.
+    # Enabled, every begin/end DRAINS, so a stage-timed run is triage and
+    # never a benchmark -- the same standing as a traced run (identity_trace
+    # rule 4). Do not enable together with the identity trace: the trace's
+    # own drains would be billed to whatever stage contains them.
+    var stage_times = StageTimes()
+
     var mgr = TCudaManager(ctx.copy(), sync_budget=-1)
 
     # their `TGpuAwareRandom`, drawn from ONCE PER `ComputeOptimalSplits`
@@ -937,9 +948,11 @@ def fit_non_symmetric_tree[
         # order block below.
 
         # --- SplitPropsHelper.BuildNecessaryHistograms(subsets) ---
+        stage_times.begin(ctx)
         var records = _leaf_records(leaves, parent_of)
         var plan = build_necessary_histograms(records)
         var non_zero = non_zero_leaves(records, plan.compute_ids)
+        stage_times.end(ctx, "host.plan")
 
         var d_tag = String("d") + String(iteration - 1) + "."
         trace.record_list_i32(d_tag + "leaves", _one_i32(len(leaves)))
@@ -963,6 +976,7 @@ def fit_non_symmetric_tree[
             # either way and an empty leaf's zeros ARE its histogram, so
             # this subsumes their split; it is the symmetric lane's choice
             # and is kept identical so the two cannot drift.
+            stage_times.begin(ctx)
             for i in range(len(plan.compute_ids)):
                 h_ids.unsafe_ptr().unsafe_store(i, plan.compute_ids[i])
             ctx.enqueue_copy(dst_buf=d_ids, src_ptr=h_ids.unsafe_ptr())
@@ -978,12 +992,14 @@ def fit_non_symmetric_tree[
                 block_dim=(256, 1, 1),
             )
             mgr.stream_kernel()
+            stage_times.end(ctx, "hist.zero")
 
         if len(non_zero) > 0:
             # their `ComputeSplitProperties(loadPolicy, nonZeroComputeLeaves,
             # subsets)` (`:1347`). `ids` must be the NON-EMPTY set and the
             # call must not happen at all when it is empty -- their
             # `if (leavesToCompute.size() == 0) { return; }` (`:1089`).
+            stage_times.begin(ctx)
             for i in range(len(non_zero)):
                 h_ids.unsafe_ptr().unsafe_store(i, non_zero[i])
             ctx.enqueue_copy(dst_buf=d_ids, src_ptr=h_ids.unsafe_ptr())
@@ -994,10 +1010,12 @@ def fit_non_symmetric_tree[
                 hist, acc_i32, block_hist, hist_cells_per_leaf,
             )
             mgr.stream_kernel()
+            stage_times.end(ctx, "hist.build")
 
             # their `TScanHistogramsKernel`, over the BUILT set. A prefix
             # sum is linear, so the derived sibling needs no scan and an
             # all-zero slot scans to itself.
+            stage_times.begin(ctx)
             ctx.enqueue_function[scan_histograms_kernel](
                 d_ids.unsafe_ptr(),
                 flat_first.unsafe_ptr(),
@@ -1014,6 +1032,7 @@ def fit_non_symmetric_tree[
                 block_dim=(256, 1, 1),
             )
             mgr.stream_kernel()
+            stage_times.end(ctx, "hist.scan")
             trace.record_device(
                 ctx, d_tag + "hist.scanned", hist,
                 len(leaves) * hist_live_stride,
@@ -1022,6 +1041,7 @@ def fit_non_symmetric_tree[
         if len(plan.subtract_from) > 0:
             # their `SubstractHistograms(bigLeaves, smallLeaves, subsets)`
             # (`:1354`): `from - what`, in place, one launch for all pairs.
+            stage_times.begin(ctx)
             for i in range(len(plan.subtract_from)):
                 h_left.unsafe_ptr().unsafe_store(i, plan.subtract_from[i])
                 h_right.unsafe_ptr().unsafe_store(i, plan.subtract_what[i])
@@ -1063,6 +1083,7 @@ def fit_non_symmetric_tree[
                     block_dim=(256, 1, 1),
                 )
             mgr.stream_kernel()
+            stage_times.end(ctx, "hist.subtract")
             trace.record_device(
                 ctx, d_tag + "hist.subtracted", hist,
                 len(leaves) * hist_live_stride,
@@ -1100,6 +1121,7 @@ def fit_non_symmetric_tree[
         if len(visit) > 0:
             # their `AllReduceThroughMaster(subsets->CurrentPartStats(),
             # ...)` (`:443`) over leaves `[0, leafCount)`. See DEVIATION 352.
+            stage_times.begin(ctx)
             for i in range(len(leaves)):
                 h_ids.unsafe_ptr().unsafe_store(i, UInt32(i))
             ctx.enqueue_copy(dst_buf=d_ids, src_ptr=h_ids.unsafe_ptr())
@@ -1109,6 +1131,7 @@ def fit_non_symmetric_tree[
                 sm_count=sm_count,
             )
             mgr.stream_kernel()
+            stage_times.end(ctx, "partstats")
             trace.record_device(
                 ctx, d_tag + "partstats", part_stats,
                 len(leaves) * stat_count,
@@ -1120,6 +1143,7 @@ def fit_non_symmetric_tree[
 
             # `numScoreBlocks = leavesToVisit.size()` (`:428-432`), and the
             # kernel is `TComputeOptimalSplitsLeafwiseKernel` (`:470-488`).
+            stage_times.begin(ctx)
             for i in range(len(visit)):
                 h_visit.unsafe_ptr().unsafe_store(i, UInt32(visit[i]))
             ctx.enqueue_copy(dst_buf=d_visit, src_ptr=h_visit.unsafe_ptr())
@@ -1260,9 +1284,11 @@ def fit_non_symmetric_tree[
                     block_dim=(LEAFWISE_SCORE_BLOCK_SIZE, 1, 1),
                 )
             mgr.stream_kernel()
+            stage_times.end(ctx, "score.kernel")
 
             # ===== HOST WAIT ONE OF TWO: their `bestProps.Read(propsCpu)`
             # (`greedy_search_helper.cpp:517`). =====
+            stage_times.begin(ctx)
             ctx.enqueue_copy(
                 dst_ptr=h_region_score.unsafe_ptr(), src_buf=region_score
             )
@@ -1270,6 +1296,7 @@ def fit_non_symmetric_tree[
                 dst_ptr=h_region_bin.unsafe_ptr(), src_buf=region_bin
             )
             mgr.wait_complete()
+            stage_times.end(ctx, "score.read")
             trace.record_device(
                 ctx, d_tag + "scores.gain", region_score,
                 argmax_blocks * len(visit),
@@ -1304,6 +1331,7 @@ def fit_non_symmetric_tree[
             # their host reads `propsCpu.data() + scoreBlockId *
             # argmaxBlockCount` then `[i]` (`greedy_search_helper.cpp:524`).
             # Both sides are `leaf * argmax_blocks + block`, and so is this.
+            stage_times.begin(ctx)
             for i in range(len(visit)):
                 var best = TBestSplitProperties()
                 for b in range(argmax_blocks):
@@ -1371,6 +1399,7 @@ def fit_non_symmetric_tree[
                 # every candidate was unusable simply keeps an UNDEFINED
                 # best split and is never selected to split.
                 leaves[visit[i]].update_best_split(best)
+            stage_times.end(ctx, "score.hostreduce")
 
             # THE WINNERS, which is the last host state before the split
             # chain. A divergence that first appears here and not in
@@ -1410,6 +1439,7 @@ def fit_non_symmetric_tree[
             # --- MakeSplit's multi-leaf arm, `split_properties_helper
             # .cpp:845-950`. `leftId = leavesToSplit[i]` keeps the parent's
             # partition slot and `rightId = leavesCount + i` is fresh.
+            stage_times.begin(ctx)
             var leaves_count = len(leaves)
             var sp_bytes = sp_feats_h.unsafe_ptr()
             for i in range(len(to_split)):
@@ -1495,6 +1525,8 @@ def fit_non_symmetric_tree[
             ctx.enqueue_copy(dst_buf=sp_bins, src_ptr=sp_bins_h.unsafe_ptr())
             ctx.enqueue_copy(dst_buf=d_left, src_ptr=h_left.unsafe_ptr())
             ctx.enqueue_copy(dst_buf=d_right, src_ptr=h_right.unsafe_ptr())
+            stage_times.end(ctx, "split.host")
+            stage_times.begin(ctx)
 
             # their `TSplitPointsKernel`, whose five steps are five calls
             # here (`split_points.cpp:64-136`): flag and sequence, stable
@@ -1586,15 +1618,18 @@ def fit_non_symmetric_tree[
                 block_dim=(512, 1, 1),
             )
             mgr.stream_kernel()
+            stage_times.end(ctx, "split.chain")
 
             # ===== HOST WAIT TWO OF TWO: `RebuildLeavesSizes`
             # (`split_properties_helper.cpp:800-812`). Theirs reads the
             # PINNED mirror with no copy; ours copies, for the reason in
             # `gpu_util/gpu_data/partitions.mojo`'s deviation block. =====
+            stage_times.begin(ctx)
             ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
             mgr.wait_complete()
             for i in range(len(leaves)):
                 leaves[i].size = Int(h_sz.unsafe_ptr().unsafe_load(i))
+            stage_times.end(ctx, "split.sizes")
 
             trace.record_list_i32(
                 d_tag + "split.count", _one_i32(n_split)
@@ -1660,6 +1695,7 @@ def fit_non_symmetric_tree[
             # `numStats` is their `PartitionStats.SingleObjectSize()`.
             # The partitions moved in the split above, so the stats are
             # recomputed here (DEVIATION 352) before being read.
+            stage_times.begin(ctx)
             for i in range(len(leaves)):
                 h_ids.unsafe_ptr().unsafe_store(i, UInt32(i))
             ctx.enqueue_copy(dst_buf=d_ids, src_ptr=h_ids.unsafe_ptr())
@@ -1673,6 +1709,7 @@ def fit_non_symmetric_tree[
                 dst_ptr=h_part_stats.unsafe_ptr(), src_buf=part_stats
             )
             mgr.wait_complete()
+            stage_times.end(ctx, "leaf.values")
 
             trace.record_device(
                 ctx, "final.partstats", part_stats,
@@ -1728,8 +1765,19 @@ def fit_non_symmetric_tree[
         trace.record_list_f32("final.leafweights", flat_w)
 
     # `return BuildTreeLikeModel<TModel>(leaves, leavesWeights, leavesValues)`
+    stage_times.begin(ctx)
     var model = build_non_symmetric_tree(
         result_paths, result_weights, result_values
+    )
+    stage_times.end(ctx, "model.build")
+    stage_times.report(
+        String("lossguide" if lossguide else "depthwise")
+        + " fit: rows="
+        + String(n_rows)
+        + " leaves="
+        + String(len(leaves))
+        + " iterations="
+        + String(iteration)
     )
     if emit_digests:
         var nodes = List[Int32]()
