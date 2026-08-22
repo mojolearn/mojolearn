@@ -9,7 +9,7 @@
 #
 # [algorithms] shorthands:
 #   gbdt    mojolearn-gbdt-gpu,cat-cpu           (the symmetric-trees pairing)
-#   forest  mojolearn-et-gpu,skl-et-cpu,lgbm-et-cpu,lgbm-rf-cpu
+#   forest  mojolearn-rf-gpu,skl-rf-cpu,mojolearn-et-gpu,skl-et-cpu
 #   (anything else is passed through as a comma-separated list)
 #
 # All arms of a shorthand run interleaved inside ONE process, which is what
@@ -34,16 +34,9 @@ case "${3:-}" in
   # only growth algorithm), so a lgbm arm in this pair compares different
   # algorithms and is NOT run here. LightGBM stays in the FOREST pairs.
   gbdt)   ALGOS="mojolearn-gbdt-gpu,cat-cpu" ;;
-  # THE HEADLINE SUITE IS US-THEM PAIRS AND NOTHING ELSE, and "them" is
-  # LIGHTGBM: it ships GPU arms for NVIDIA (CUDA) and AMD/Windows (OpenCL)
-  # and none for Apple silicon, so on this box its strongest legal arm is
-  # CPU -- that asymmetry is the thesis. RF pair = mojolearn-rf-gpu vs
-  # lgbm-rf-cpu (boosting_type='rf'); ET pair = mojolearn-et-gpu vs
-  # lgbm-et-cpu (rf + extra_trees=true). The sklearn arms stay registered
-  # as appendix baselines only.
-  # LIGHTGBM IS EXCLUDED EVERYWHERE (Andrew, 2026-08-22 evening,
-  # superseding the earlier forest pairing): the forest comparator is
-  # multicore sklearn -- RF and ET's home library.
+  # LIGHTGBM IS EXCLUDED EVERYWHERE (Andrew, 2026-08-22 evening): the
+  # forest comparator is multicore sklearn -- RF and ET's home library.
+  # The lgbm arms stay registered in the adapter for the NVIDIA leg only.
   pairs)  ALGOS="mojolearn-rf-gpu,skl-rf-cpu,mojolearn-et-gpu,skl-et-cpu" ;;
   forest) ALGOS="mojolearn-rf-gpu,skl-rf-cpu,mojolearn-et-gpu,skl-et-cpu" ;;
   rf)     ALGOS="mojolearn-rf-gpu,skl-rf-cpu" ;;
