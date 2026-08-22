@@ -85,7 +85,11 @@ bitwise der parity against a CatBoost fit.
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import exp, isfinite, log
 from max.gpu.host import DeviceBuffer, DeviceContext
-from max.gpu.primitives.block import sum as block_sum
+
+# IDENTITY_PATHS row 8 (DEVIATION 251): under `NUMERIC_IDENTICAL` the
+# within-block fold must not follow the hardware warp width (64 on AMD),
+# so every fv/magnitude reduce below goes through the pinned-shape fold.
+from gbdt.targets.kernel.pointwise_targets import pinned_block_sum
 
 #: `const ui32 blockSize = 256` (`multilogit.cu:180`, `:204`)
 comptime MULTILOGIT_BLOCK_SIZE = 256
@@ -310,7 +314,9 @@ def multilogit_val_and_first_der_kernel[
 
     # DEVIATION 71: per-block partials, not their block reduce + atomicAdd
     if compute_fv != Int32(0):
-        var total = block_sum[block_size=MULTILOGIT_BLOCK_SIZE](tmp_score)
+        var total = pinned_block_sum[block_size=MULTILOGIT_BLOCK_SIZE](
+            tmp_score
+        )
         if thread_idx.x == 0:
             function_value.unsafe_store(Int(block_idx.x), total)
 
@@ -318,10 +324,10 @@ def multilogit_val_and_first_der_kernel[
     # as the pointwise kernel's.
     comptime if search:
         if compute_magnitudes != Int32(0):
-            var w_total = block_sum[block_size=MULTILOGIT_BLOCK_SIZE](
+            var w_total = pinned_block_sum[block_size=MULTILOGIT_BLOCK_SIZE](
                 mag_weight
             )
-            var g_total = block_sum[block_size=MULTILOGIT_BLOCK_SIZE](
+            var g_total = pinned_block_sum[block_size=MULTILOGIT_BLOCK_SIZE](
                 mag_der
             )
             if thread_idx.x == 0:
@@ -754,16 +760,18 @@ def one_vs_all_val_and_first_der_kernel[
         mag_der += max_abs[j]
 
     if compute_fv != Int32(0):
-        var total = block_sum[block_size=MULTILOGIT_BLOCK_SIZE](tmp_score)
+        var total = pinned_block_sum[block_size=MULTILOGIT_BLOCK_SIZE](
+            tmp_score
+        )
         if thread_idx.x == 0:
             function_value.unsafe_store(Int(block_idx.x), total)
 
     comptime if search:
         if compute_magnitudes != Int32(0):
-            var w_total = block_sum[block_size=MULTILOGIT_BLOCK_SIZE](
+            var w_total = pinned_block_sum[block_size=MULTILOGIT_BLOCK_SIZE](
                 mag_weight
             )
-            var g_total = block_sum[block_size=MULTILOGIT_BLOCK_SIZE](
+            var g_total = pinned_block_sum[block_size=MULTILOGIT_BLOCK_SIZE](
                 mag_der
             )
             if thread_idx.x == 0:

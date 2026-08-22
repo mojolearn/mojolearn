@@ -52,10 +52,63 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.primitives.block import sum as block_sum
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+
+#: The mode this build compiles against; see `mojo_only/numerics.mojo`. Same
+#: declaration as the histogram kernels', and `pinned_block_sum` below is the
+#: one reader in this file.
+comptime BUILD_MODE = GLOBAL_NUMERIC_MODE
 
 #: the boosting loop launches this kernel at 256 threads; the reduce below
 #: needs the block size at comptime.
 comptime MSE_BLOCK_SIZE = 256
+
+
+@always_inline
+def pinned_block_sum[block_size: Int](value: Float32) -> Float32:
+    """The within-block float sum, with a MACHINE-INDEPENDENT fold shape
+    under `NUMERIC_IDENTICAL`.
+
+    IDENTITY_PATHS row 8's remainder (DEVIATION 251). The per-block
+    partials that `deterministic_sum_lanes_kernel` folds are themselves
+    produced by MAX's `block.sum`, whose internal cross-lane fold runs at
+    the HARDWARE'S warp width -- 32 on Apple and NVIDIA, 64 on AMD's CDNA
+    wavefront -- so the partial's last bits differ on the AMD column even
+    with the partial COUNTS pinned and the cross-block combine fixed.
+
+    Under `IDENTICAL` this is therefore a shared-memory halving tree at
+    exactly `block_size` lanes, NO warp primitives -- the same fold shape
+    `deterministic_sum_lanes_kernel` and `bootstrap.mojo`'s magnitude tail
+    already use -- so the fold has ONE shape on every vendor. Under `FAST`
+    it is the library call unchanged, bit for bit.
+
+    CONTRACT, same as the `block.sum` call sites already hold: EVERY
+    thread of the block must call this (out-of-range threads contribute
+    zero), and only thread 0's return is meaningful. `block_size` must be
+    a power of two, so the halving fold is exact. The trailing `barrier()`
+    protects the shared slab across back-to-back calls (the magnitude
+    sites call this twice in a row).
+    """
+    comptime if BUILD_MODE == NUMERIC_IDENTICAL:
+        var tid = Int(thread_idx.x)
+        var red = stack_allocation[
+            block_size,
+            Scalar[DType.float32],
+            address_space = AddressSpace.SHARED,
+        ]()
+        red[tid] = value
+        barrier()
+        var step = block_size // 2
+        while step > 0:
+            if tid < step:
+                red[tid] = red[tid] + red[tid + step]
+            barrier()
+            step //= 2
+        var total = red[0]
+        barrier()
+        return total
+    else:
+        return block_sum[block_size=block_size](value)
 
 #: the pointwise objectives this port trains. Their `ELossFunction`
 #: spellings: RMSE dispatches `TRmseTarget`; Logloss and CrossEntropy both
@@ -626,7 +679,7 @@ def pointwise_target_kernel[
         var score = Float32(0.0)
         if in_range:
             score = -weight * target_score[objective](relev, val, alpha)
-        var total = block_sum[block_size=MSE_BLOCK_SIZE](score)
+        var total = pinned_block_sum[block_size=MSE_BLOCK_SIZE](score)
         if thread_idx.x == 0:
             function_value.unsafe_store(Int(block_idx.x), total)
 
@@ -641,8 +694,8 @@ def pointwise_target_kernel[
             # |weight * Der2| under `second_der_as_weights`.
             w_abs = abs(plane0)
             g_abs = abs(der)
-        var w_total = block_sum[block_size=MSE_BLOCK_SIZE](w_abs)
-        var g_total = block_sum[block_size=MSE_BLOCK_SIZE](g_abs)
+        var w_total = pinned_block_sum[block_size=MSE_BLOCK_SIZE](w_abs)
+        var g_total = pinned_block_sum[block_size=MSE_BLOCK_SIZE](g_abs)
         if thread_idx.x == 0:
             plane_magnitudes.unsafe_store(
                 2 * Int(block_idx.x), w_total
@@ -867,7 +920,7 @@ def cross_entropy_kernel[
             if isfinite(exp_val):
                 log_exp_val_plus_one = log(Float32(1.0) + exp_val)
             score = weight * (c * val - log_exp_val_plus_one)
-        var total = block_sum[block_size=MSE_BLOCK_SIZE](score)
+        var total = pinned_block_sum[block_size=MSE_BLOCK_SIZE](score)
         if thread_idx.x == 0:
             function_value.unsafe_store(Int(block_idx.x), total)
 
@@ -880,8 +933,8 @@ def cross_entropy_kernel[
             # |weight * p * (1 - p)| under `second_der_as_weights`.
             w_abs = abs(plane0)
             g_abs = abs(weight * direction)
-        var w_total = block_sum[block_size=MSE_BLOCK_SIZE](w_abs)
-        var g_total = block_sum[block_size=MSE_BLOCK_SIZE](g_abs)
+        var w_total = pinned_block_sum[block_size=MSE_BLOCK_SIZE](w_abs)
+        var g_total = pinned_block_sum[block_size=MSE_BLOCK_SIZE](g_abs)
         if thread_idx.x == 0:
             plane_magnitudes.unsafe_store(2 * Int(block_idx.x), w_total)
             plane_magnitudes.unsafe_store(
