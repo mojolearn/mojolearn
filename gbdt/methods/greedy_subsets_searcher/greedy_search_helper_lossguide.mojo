@@ -35,6 +35,38 @@ Their true home is still `greedy_search_helper.mojo`, with everything else
 `TGreedySearchHelper` owns -- see DEVIATION 316.
 =======================================================================
 
+================= CROSS-VENDOR IDENTITY AUDIT, 2026-08-22 =================
+Audited under `IDENTITY_PATHS.md`'s three-move discipline (PIN / REPLACE /
+REFUSE) for anything that could move a bit across GPU vendors. **The verdict
+is that this file needs NO move**, and the reasons are worth one paragraph
+each because each names a hazard class that is ABSENT rather than fixed:
+
+* **No order-dependent operation.** Both scans below iterate a `List` in
+  index order -- Mojo `List` iteration is defined order, and no `Dict` or
+  hash container appears anywhere on the selection path (a `Dict` here
+  would be an iteration-order hazard; there is none to pin).
+* **Ties are already deterministic.** The argmin's strict `<` gives an
+  exact float tie to the LOWEST leaf index, which is creation order --
+  CatBoost's own shape (`greedy_search_helper.cpp:302`), gated by the
+  policy check's P3 in both tie positions.
+* **NaN is deterministic too, and INVISIBLE.** `gain < best_gain` is
+  IEEE-false when `gain` is NaN, on every vendor, so a NaN-gain leaf loses
+  every comparison exactly like an undefined one -- their `Score <
+  bestScore` verbatim. A rewrite through `max()`/sort could change that
+  (max's NaN rule is not `<`'s), so the policy check's P8 pins it.
+* **No float arithmetic at all.** Zero multiply-add seams (row 9 audit:
+  nothing to route through `identical_mul_add`) and zero cross-kernel
+  stores (row 10 audit: nothing to flush through `ftz`). The only float
+  OPERANDS here are `best_split.gain` values, PRODUCED upstream -- the
+  score kernel (`kernel/compute_scores.mojo`) and the driver's host reduce
+  -- so their cross-vendor identity is those files' rows (9/10/12 and the
+  target-variance rows), not this one's.
+
+Given bit-identical inputs, this file's outputs are bit-identical across
+vendors in BOTH numeric modes; it carries no `BUILD_MODE` branch because it
+has nothing to branch on.
+============================================================================
+
 WHAT LOSSGUIDE ACTUALLY IS. Four decisions, and only two of them are in this
 file because the other two are shared:
 

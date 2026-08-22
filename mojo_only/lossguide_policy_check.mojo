@@ -48,6 +48,17 @@ quietly acquires the other's rule.
       Includes the all-undefined case, which must select NOTHING rather
       than leaf 0.
 
+  P8  A NaN GAIN IS INVISIBLE, BY IEEE RULES, DETERMINISTICALLY. Their
+      argmin is `Score < bestScore` and `<` is false when the left side is
+      NaN, on every vendor, so a NaN-gain leaf loses every comparison
+      exactly like an undefined one, and an all-NaN list selects NOTHING.
+      Not a property of the fixture but of the comparison operator, and the
+      reason it is gated: a rewrite through `max()` or a sort would change
+      it silently (max's NaN propagation is not `<`'s), and the divergence
+      would surface as a cross-vendor structural difference only on the
+      rare fit where an upstream kernel produced a NaN score. Numbered out
+      of order because it landed with the 2026-08-22 identity audit.
+
   P5  TERMINATION. `ShouldTerminate`'s `MaxLeaves` bound is the one that
       makes `max_leaves` mean something under Lossguide and nothing under
       every other policy, and `IsTerminalLeaf`'s size test is `<=`, so
@@ -87,6 +98,8 @@ differential gates are measuring nothing.
 """
 
 from max.gpu.host import DeviceContext
+from std.memory import bitcast
+
 from mojo_only.leafwise_scores_check import bits
 
 from gbdt.methods.greedy_subsets_searcher.kernel.compute_scores import (
@@ -420,6 +433,37 @@ def check_lossguide_policy(ctx: DeviceContext) raises:
             print(
                 "  ok   a single defined leaf at gain +9 (a WORSE split)"
                 " still wins; all-undefined selects nothing"
+            )
+
+    print()
+    print("-- P8: a NaN gain is invisible, by IEEE comparison rules --")
+    # THE QUIET NaN, planted by bit pattern so the fixture cannot depend on
+    # how any library spells NaN construction.
+    var qnan = bitcast[DType.float32](UInt32(0x7FC00000))
+    var with_nan = List[TLeaf]()
+    with_nan.append(leaf(qnan, True))
+    with_nan.append(leaf(Float32(5.0), True))  # WORSE than nothing; still wins
+    with_nan.append(leaf(qnan, True))
+    if find_best_leaf_to_split(with_nan) != 1:
+        print(
+            "  FAIL a NaN gain was not invisible; picked",
+            find_best_leaf_to_split(with_nan), "want 1",
+        )
+        failures += 1
+    else:
+        var all_nan = List[TLeaf]()
+        all_nan.append(leaf(qnan, True))
+        all_nan.append(leaf(qnan, True))
+        if find_best_leaf_to_split(all_nan) != -1:
+            print("  FAIL an all-NaN list reported a best leaf")
+            failures += 1
+        elif len(select_leaves_to_split(all_nan)) != 0:
+            print("  FAIL an all-NaN list selected something to split")
+            failures += 1
+        else:
+            print(
+                "  ok   NaN loses to a gain of +5.0 (their `<`, verbatim),"
+                " and an all-NaN list selects nothing"
             )
 
     print()
