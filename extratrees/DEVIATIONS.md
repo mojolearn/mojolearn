@@ -2122,6 +2122,10 @@ returned plan reports which arm ran, so it is visible rather than silent.
 
 ## DEVIATION 202 -- the workspace is allocated once per tree, not once per level
 
+(Since DEVIATION 211: once per GROUP of in-flight trees, one step further in
+the same direction; the entry below records the per-level -> per-tree move as
+it was made.)
+
 **THEIRS.** cuML computes `workspaceSize()` once (`builder.cuh:272-296`) and
 hands out pointers into one allocation with `assignWorkspace()`
 (`builder.cuh:302-341`). Nothing inside their level loop allocates. Every size
@@ -2480,3 +2484,83 @@ intuition:
   level including those with nothing to rescue, and at `max_features=None` a
   rescue can never fire at all. Folding it into a readback that already happens
   is free.
+
+---
+
+## DEVIATION 211 -- the batch spans TREES: cuML's stream pool, expressed as a wider grid
+
+(209 is the ensemble lane's handle-launches negative and 210 is the gbdt
+scheduling fold; both were verified claimed repo-wide before this number was
+taken.)
+
+**Theirs.** cuML's cross-tree parallelism is `#pragma omp parallel for
+num_threads(n_streams)` over the tree loop, one CUDA stream per OpenMP thread
+(`randomforest.cuh:336-341`), Python default `n_streams=4`
+(`randomforestclassifier.py:94`). The shipped cuML overlaps four trees.
+
+**Why it cannot be transcribed.** Metal has no streams -- `ctx.create_stream()`
+is unsupported on this backend (the traps register). The RF lane met the same
+wall and ported the OVERLAP as K-way pipelining over one queue (its DEVIATION
+117). This lane's formulation admits something strictly stronger, so that is
+what was built.
+
+**Ours.** The frontier batch itself spans trees.
+`train_forest_classification_device` / `train_forest_regression_device` pop
+work items from EVERY tree's `NodeQueue` into one merged batch per cycle; the
+tree id, which crossed the kernel boundary as a per-launch scalar, now rides
+PER ITEM (`item_trees`, staged into `LevelWorkspace.d_tree`; read by the score,
+finalize and sampler kernels as `tree_ids[nid]`). Each in-flight tree owns slot
+`s` -- rows `[s * n_rows, (s + 1) * n_rows)` -- of ONE `d_row_ids` buffer
+(`row_ids_tiled_sequence_kernel`; `NodeQueue` gained `row_base` so every range
+a tree ever holds is carved from its slot). The per-tree trainers survive as
+one-tree calls of the forest trainers, so there is exactly ONE copy of the
+loop; `fit_classification_device` / `fit_regression_device` call the forest
+trainers directly. `FOREST_ROW_SLOT_CAP` (2^26 row slots) bounds the in-flight
+group; trees beyond it run as further sequential groups.
+
+**Why the trees cannot move, mechanism by mechanism.** Every draw was ALREADY a
+pure function of `(seed, tree_id, node_id, feature_id)` (deviation 130) -- the
+same property that makes cuML's own stream overlap "free on output" -- and
+`bootstrap=False` means every tree reads the same resident dataset (deviation
+184). The score accumulators are per-(node, feature) integer atomics (171); the
+reduction is per node; the partition is range-addressed and the slots are
+disjoint; each queue's push order is its own FIFO order, and batch width was
+already a scheduling parameter contracted not to change the tree
+(`NodeQueue.pop`).
+
+**What it buys.** Launches, split readbacks and `synchronize()` points per
+level divide by the number of in-flight trees, and the grid per launch
+multiplies by it -- which is aimed at the small-n regime, where the ledger's
+standing diagnosis is a STARVED grid, not slow kernels. PRICE: `2 * 4 *
+min(n_trees, cap) * n_rows` bytes of row-id buffers, and the workspace's
+row-scaled pieces grow the same way (the workspace itself is now one per GROUP,
+deviation 202 taken further; the regression trainer's last per-level
+allocations -- its split staging -- moved into the workspace on the way).
+
+**Numbers are in `bench/results/`,** not here: this entry records the
+mechanism and the gate; the lane's no-timing rule was lifted by the repo owner
+for this round and the measurement discipline is the benchmark file's.
+
+**GATED** by `device_batched_check.mojo`: the merged forest against one-tree
+device builds, node for node and leaf BIT for leaf bit, on the public fit
+entry points; a `max_batch_size=3` config that splits trees across cycles
+mid-level; a `max_leaves` config (the budget's break order must survive
+merging); a `row_slot_cap` of two trees that forces the multi-group path; and
+BOTH isolation mechanisms sabotaged on BOTH objectives, asserted RED in the
+check itself rather than applied by hand: `FOREST_SAB_SCALAR_TREE` (every item
+staged with the batch-first tree id -- what keeping the scalar would silently
+do) moved 2,148 / 2,862 nodes (clf/reg), and `FOREST_SAB_SHARED_ROW_BASE`
+(every tree rooted at slot 0 -- what losing the offsets would do) moved 2,882 /
+2,912. `device_forest_check` and `device_tree_check` still hold the device
+forest to the HOST forest, so the merge is also transitively pinned to the
+host trees.
+
+**Doc corrections carried with this change (rule 17).**
+`fit_classification_device`'s docstring described a per-tree loop with "a
+FRESH `row_ids` per tree" and still carried 184's completed "what the next
+round should do" plan; both replaced. `device_forest_check`'s module
+docstring said the tree id crosses as "a scalar argument"; now per-node, and
+the sentence points at the check that sabotages that staging. Deviation 185's
+warning -- that a device-resident frontier would need per-tree row isolation
+-- is superseded by exactly that isolation arriving as the slot offsets, and
+`fit_classification_device` says so where the old block stood.

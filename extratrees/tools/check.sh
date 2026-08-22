@@ -44,6 +44,7 @@ extratrees/mojo_only/sampler_kernel_check.mojo
 extratrees/mojo_only/device_regression_check.mojo
 extratrees/mojo_only/partition_multiblock_check.mojo
 extratrees/mojo_only/rescue_check.mojo
+extratrees/mojo_only/device_batched_check.mojo
 "
 
 failed=0

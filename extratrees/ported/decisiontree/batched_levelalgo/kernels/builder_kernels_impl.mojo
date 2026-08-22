@@ -2325,14 +2325,21 @@ def node_feature_score_kernel[
     work_items: MutPointer[NodeWorkItem, MutAnyOrigin],
     workload_info: MutPointer[WorkloadInfo, MutAnyOrigin],
     colids: MutPointer[Int32, MutAnyOrigin],
+    tree_ids: MutPointer[Int32, MutAnyOrigin],
     m_in: Int32,
     n_sampled_cols_in: Int32,
     n_acc_in: Int32,
     seed: UInt64,
-    tree_id_in: Int32,
     sabotage_in: Int32,
 ):
     """Steps 2, 3 and 4 of DEVIATION 137: skip, draw, and accumulate.
+
+    DEVIATION 211: the tree id is PER NODE (`tree_ids[nid]`), not per launch,
+    because one batch's nodes may belong to different trees -- the forest
+    trainer merges every in-flight tree's frontier into one launch. The key
+    a cell draws with is unchanged: `(seed, tree_ids[nid], node_id, col)`,
+    the same pure function of tree position it always was, so batch
+    composition cannot move a threshold.
 
     The control plane is `computeSplitKernel`'s, `builder_kernels_impl.cuh`
     `:236-291`, transcribed and shared line for line with
@@ -2428,7 +2435,12 @@ def node_feature_score_kernel[
     # same PCG stream, same `:653-654` guard, but an EXPLICIT `fma` instead of
     # a multiply the GPU backend contracts into one anyway -- which is the one
     # place host and device could not share a function. DEVIATION BLOCK 173.
-    var key = key_for(seed, UInt32(Int(tree_id_in)), node_id, UInt32(col))
+    var key = key_for(
+        seed,
+        tree_ids[unsafe_offset=nid].cast[DType.uint32](),
+        node_id,
+        UInt32(col),
+    )
     var threshold = draw_threshold_device(
         key, extent, sabotage != SCORE_SAB_NO_MAX_GUARD
     )
@@ -2581,15 +2593,19 @@ def node_feature_score_finalize_kernel[
     in_n_missing: MutPointer[Int32, MutAnyOrigin],
     work_items: MutPointer[NodeWorkItem, MutAnyOrigin],
     colids: MutPointer[Int32, MutAnyOrigin],
+    tree_ids: MutPointer[Int32, MutAnyOrigin],
     n_cells_in: Int32,
     n_sampled_cols_in: Int32,
     n_acc_in: Int32,
     seed: UInt64,
-    tree_id_in: Int32,
     min_samples_leaf_in: Int32,
     sabotage_in: Int32,
 ):
     """Publish each cell's status, threshold and score. One thread per cell.
+
+    DEVIATION 211: `tree_ids[nid]` replaces the per-launch tree id, exactly
+    as in the accumulate kernel above; the REDRAW below must key with the
+    same tree the first draw used, and both now read it per node.
 
     This is the half of `computeSplitKernel` that their LAST BLOCK does
     (`:316-328`) after `signalDone` elects it, moved into a second launch
@@ -2653,7 +2669,12 @@ def node_feature_score_finalize_kernel[
             slot += stride
             continue
 
-        var key = key_for(seed, UInt32(Int(tree_id_in)), node_id, UInt32(col))
+        var key = key_for(
+            seed,
+            tree_ids[unsafe_offset=nid].cast[DType.uint32](),
+            node_id,
+            UInt32(col),
+        )
         var threshold = draw_threshold_device(
             key, extent, sabotage != SCORE_SAB_NO_MAX_GUARD
         )

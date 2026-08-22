@@ -185,6 +185,15 @@ def run_device(
     )
     ctx.synchronize()
 
+    # DEVIATION 211: the kernels take the tree id PER NODE now; this check's
+    # batch is one tree, so every slot is `tree_id`.
+    var d_tree_ids = ctx.enqueue_create_buffer[DType.int32](w)
+    var h_tree_ids = ctx.enqueue_create_host_buffer[DType.int32](w)
+    ctx.synchronize()
+    for i in range(w):
+        h_tree_ids.unsafe_ptr().unsafe_store(i, tree_id)
+    ctx.enqueue_copy(dst_buf=d_tree_ids, src_ptr=h_tree_ids.unsafe_ptr())
+
     var ip = h_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem]()
     for i in range(w):
         ip[unsafe_offset=i] = items[i]
@@ -201,8 +210,8 @@ def run_device(
         d_scratch.unsafe_ptr(),
         d_report.unsafe_ptr(),
         d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+        d_tree_ids.unsafe_ptr(),
         w,
-        tree_id,
         seed,
         n,
         k,
@@ -227,6 +236,10 @@ def run_device(
     var tail = List[Int32]()
     for i in range(3):
         tail.append(o_rep.unsafe_ptr().unsafe_load(n_rep + i))
+    # Mojo frees a buffer at its LAST USE; the launch above read this one and
+    # the synchronize came first.
+    _ = d_tree_ids^
+    _ = h_tree_ids^
     return DeviceRun(colids^, report^, tail^, plan)
 
 

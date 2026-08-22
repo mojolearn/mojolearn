@@ -532,6 +532,14 @@ def check_objective[
     var d_blocks = ctx.enqueue_create_buffer[DType.int32](n_cells)
     var d_acc_left = ctx.enqueue_create_buffer[DType.int32](n_acc_cells)
     var d_acc_total = ctx.enqueue_create_buffer[DType.int32](n_acc_cells)
+    # DEVIATION 211: the kernels take the tree id PER NODE now; this check's
+    # batch is one tree, so every slot is TREE_ID.
+    var d_tree_ids = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+    var h_tree_ids = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
+    ctx.synchronize()
+    for i in range(n_nodes):
+        h_tree_ids.unsafe_ptr().unsafe_store(i, Int32(TREE_ID))
+    ctx.enqueue_copy(dst_buf=d_tree_ids, src_ptr=h_tree_ids.unsafe_ptr())
     ctx.synchronize()
 
     var arms = List[Int32]()
@@ -594,11 +602,11 @@ def check_objective[
             p_items,
             p_wl,
             p_colids,
+            d_tree_ids.unsafe_ptr(),
             Int32(N_ROWS),
             Int32(N_COLS),
             Int32(n_acc),
             seed,
-            Int32(TREE_ID),
             sab,
             grid_dim=(n_blocks_dimx, N_COLS, 1),
             block_dim=(TPB, 1, 1),
@@ -620,11 +628,11 @@ def check_objective[
             p_missing,
             p_items,
             p_colids,
+            d_tree_ids.unsafe_ptr(),
             Int32(n_cells),
             Int32(N_COLS),
             Int32(n_acc),
             seed,
-            Int32(TREE_ID),
             Int32(arm_msl[a]),
             sab,
             grid_dim=ceildiv(n_cells, FIN_TPB),
@@ -690,6 +698,11 @@ def check_objective[
         for s in range(n_cells):
             blocks.append(o_blocks.unsafe_ptr().unsafe_load(s))
         runs.append(ScoreRun(cells^, blocks^))
+
+    # Mojo frees a buffer at its LAST USE; the launches above read this one
+    # and the loop's synchronize must come first.
+    _ = d_tree_ids^
+    _ = h_tree_ids^
 
     var base = runs[0].copy()
 

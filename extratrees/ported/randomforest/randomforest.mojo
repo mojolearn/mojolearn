@@ -79,13 +79,10 @@ from extratrees.ported.decisiontree.flatnode import (
     predict_one_accumulate,
 )
 from extratrees.ported.decisiontree.batched_levelalgo.builder import (
-    make_level_workspace,
-    train_regression_device_resident,
-    n_sampled_cols_for,
-    DEVICE_TPB,
     train_classification,
     train_classification_device,
-    train_classification_device_resident,
+    train_forest_classification_device,
+    train_forest_regression_device,
     train_regression,
     upload_dataset,
 )
@@ -282,68 +279,23 @@ def fit_classification_device(
 ) raises -> Forest:
     """`randomforest.cuh:155-195` again, with the split search on the GPU.
 
-    Line for line `fit_classification` above, with `train_classification`
-    replaced by `train_classification_device`. Everything the host loop does,
-    this does: `error_checking` and `validity_check` first, `bootstrap=True`
-    REFUSED BY NAME through `row_sample_for`, a FRESH `row_ids` per tree, and
-    `i` passed as the tree id — which is what makes the trees differ
-    (deviation 130 hashes it into the split key). The argument list is the host
-    one plus a `DeviceContext`, and the labels stay `Float32` on purpose so a
-    caller can hand the SAME data to either arm and compare.
+    Everything the host loop does, this does: `error_checking` and
+    `validity_check` first, `bootstrap=True` REFUSED BY NAME through
+    `row_sample_for`, and `i` passed as the tree id — which is what makes the
+    trees differ (deviation 130 hashes it into the split key). The argument
+    list is the host one plus a `DeviceContext`, and the labels stay
+    `Float32` on purpose so a caller can hand the SAME data to either arm and
+    compare.
 
-    DEVIATION BLOCK — DEVIATION 184. THE DATASET IS UPLOADED ONCE PER TREE.
-
-    **Theirs.** cuML's `Dataset` holds device pointers for the whole fit
-    (`dataset.h:22-38`); `fit` uploads `X` and `y` once (`randomforest.cuh:158`
-    region) and every tree in the loop reads the same resident copy.
-
-    **Ours.** `train_classification_device` allocates `d_data` and `d_labels`
-    and fills them from host staging buffers on entry
-    (`builder.mojo:871-889`), because it was written as a whole-tree entry
-    point with no forest above it. So an `n_trees`-tree forest performs
-    `n_trees` uploads of the same immutable `n_rows * n_cols` matrix and
-    `n_trees` uploads of the same label vector.
-
-    **Why it is left that way IN THIS ROUND, stated as a decision.** Hoisting
-    the upload means `train_classification_device` must accept device buffers
-    instead of `List`s, which changes its signature — and `builder.mojo` is
-    owned by another session this round. Changing a file two sessions are
-    editing is the failure mode rule 12 names (file convergence, not
-    delegation, is what predicts integration pain). The alternative — writing
-    a second, forest-private copy of that 500-line function with a different
-    prologue — would put the device tree build in two places and guarantee
-    they drift.
-
-    **THE PRICE, WRITTEN DOWN AND NOT MEASURED IN TIME** (no duration is taken
-    anywhere in this lane): `n_trees - 1` redundant host-to-device copies of
-    `4 * n_rows * n_cols` bytes plus `4 * n_rows` bytes, and the same number of
-    redundant host-side staging fills and `synchronize()` points. It is
-    redundant TRAFFIC and redundant SYNCHRONISATION; it is not a wrong answer,
-    and it cannot become one, because the matrix is immutable and every tree
-    uploads the identical bytes. That is exactly why it was safe to defer: the
-    cost is a number nobody is allowed to take yet, and the correctness is
-    unaffected.
-
-    **WHAT THE NEXT ROUND SHOULD DO, precisely.** In `builder.mojo`, split
-    `train_classification_device` at line 889 (the end of its upload prologue)
-    into two functions:
-
-      1. a `DeviceDataset` struct holding `d_data`, `d_labels` and `n_rows`,
-         `n_cols`, `n_classes`, built by a `upload_dataset(ctx, x_col_major,
-         class_ids, n_rows, n_cols)` that is the current lines 871-889;
-      2. `train_classification_device_resident(ctx, dataset, mut row_ids, ...)`
-         — the current body from line 891 on, taking `d_data`/`d_labels` from
-         the struct and allocating only `d_row_ids` per tree, since `row_ids`
-         is the one input that is per-tree.
-
-    Keep the present `train_classification_device` as a two-line wrapper
-    (upload, then call the resident form) so `device_tree_check` and every
-    other existing caller is untouched. Then this function hoists
-    `upload_dataset` above the tree loop and passes the same struct to every
-    tree. The identity claim is unchanged by that move and
-    `device_forest_check` is the check that proves it: it compares the device
-    forest against the host forest node for node, so a hoisted upload that
-    corrupted anything turns it red.
+    What is NOT the host loop any more: there is no per-tree loop. DEVIATION
+    184 (CLOSED) uploads the dataset once for the forest, and DEVIATION 211
+    hands the whole tree-id list to `train_forest_classification_device`,
+    which merges every tree's frontier into shared level batches — cuML's
+    stream-pool overlap (`randomforest.cuh:336-341`) expressed as a wider
+    grid, because Metal has no streams. `device_forest_check` still holds
+    this forest to the HOST forest node for node, and `device_batched_check`
+    holds it to one-tree device builds, so neither move can have changed a
+    tree.
     """
     error_checking(n_rows, n_cols, n_trees)
     validity_check(params)
@@ -370,48 +322,32 @@ def fit_classification_device(
         ctx, x_col_major, class_ids, n_rows, n_cols, n_classes
     )
 
-    var forest = Forest(n_classes)
+    # The bootstrap refusal (`row_sample_for` raises BY NAME) fires once for
+    # the forest; the identity permutation it returns is never read by the
+    # device path -- deviation 200 fills row lists with a sequence KERNEL.
+    var row_ids = row_sample_for(n_rows, bootstrap)
+    _ = row_ids.unsafe_ptr()
+
+    # DEVIATION 211: the whole forest through ONE merged-frontier trainer --
+    # every tree's level runs in the same launches -- instead of a per-tree
+    # loop of `train_classification_device_resident` calls. `:180-191`'s
+    # "i is passed as the tree id" survives as the `tree_ids` list, and the
+    # trees are the SAME TREES: `device_batched_check` holds the merged
+    # forest to the one-tree builds node for node.
+    #
+    # Deviation 185's old block here (the vacuous per-tree `mut row_ids`,
+    # measured, and the warning that a device-resident frontier would make a
+    # shared HOST buffer dangerous) is superseded by exactly that frontier
+    # arriving: each in-flight tree owns a SLOT of one device buffer, which
+    # is the isolation that block said would be needed, and the check that
+    # pinned the old fact now gates the slots (FOREST_SAB_SHARED_ROW_BASE).
+    var tree_ids = List[Int32]()
     for tree_id in range(Int(n_trees)):
-        # `:169` -- each tree gets its OWN row list. On the HOST path that is
-        # load-bearing because `train_*` partitions the list in place; on this
-        # path the partition happens on the DEVICE, in `d_row_ids`, and the
-        # host list is never written back.
-        #
-        # DEVIATION BLOCK -- DEVIATION 185. THE PER-TREE `row_ids` IS A
-        # CONTRACT HERE, NOT A NECESSITY, AND THAT IS MEASURED.
-        #
-        # `train_classification_device` declares `mut row_ids` and reads it
-        # once, into a host staging buffer, before uploading
-        # (`builder.mojo:884-885`). `node_split_kernel` then mutates
-        # `d_row_ids` on the device across every level, and nothing ever copies
-        # that permutation back. So the `mut` is currently vacuous and a single
-        # shared buffer across all trees would produce a BIT-IDENTICAL forest.
-        # `device_forest_check` MEASURES that -- it fits the whole forest from
-        # one shared buffer and finds 0 differing nodes -- rather than leaving
-        # it as an argument.
-        #
-        # It is kept per-tree regardless, for two reasons that are not style:
-        # (a) the two arms of this file must be the same loop, and the host arm
-        # NEEDS it; (b) the moment the device partition is copied back -- which
-        # is what a device-resident frontier would do -- a shared buffer
-        # becomes silent cross-tree corruption, and the tree that noticed would
-        # be tree 1. The check therefore PINS the current fact: it asserts that
-        # `row_ids` comes back from the device trainer unchanged. When that
-        # assertion goes red, this comment is stale and the shared buffer has
-        # become dangerous.
-        var row_ids = row_sample_for(n_rows, bootstrap)
-        # `:180-191` -- `i` is passed as the tree id.
-        forest.trees.append(
-            train_classification_device_resident(
-                ctx,
-                device_dataset,
-                row_ids,
-                params,
-                Int32(tree_id),
-                seed,
-            )
-        )
-        _ = row_ids.unsafe_ptr()
+        tree_ids.append(Int32(tree_id))
+    var forest = Forest(n_classes)
+    forest.trees = train_forest_classification_device(
+        ctx, device_dataset, params, tree_ids, seed
+    )
     forest.n_trees = n_trees
     return forest^
 
@@ -471,15 +407,13 @@ def fit_regression_device(
 ) raises -> Forest:
     """A regression forest with its split search on the GPU.
 
-    `fit_classification_device`'s twin, and it exists for DEVIATION 184's
-    reason: the dataset is immutable across trees, so it is uploaded ONCE, and
-    the level workspace is allocated once for the same reason DEVIATION 202
-    allocates it once per tree rather than once per level. Going through
-    `train_regression_device` per tree instead uploads the same
-    `4*n_rows*n_cols + 4*n_rows` bytes `n_trees` times and rebuilds the
-    workspace `n_trees` times -- MEASURED at roughly 100 ms per tree of pure
-    floor at 100,000 rows, which is most of what a shallow regression tree
-    costs.
+    `fit_classification_device`'s twin. The dataset is immutable across
+    trees, so it is uploaded ONCE (DEVIATION 184 -- going through
+    `train_regression_device` per tree instead re-uploads it `n_trees` times
+    and rebuilds the workspace each time, MEASURED at roughly 100 ms per tree
+    of pure floor at 100,000 rows), and the whole forest runs through
+    `train_forest_regression_device`'s merged frontier (DEVIATION 211), which
+    owns the workspace -- one per group now, deviation 202 taken further.
 
     `labels_q` is already quantized (DEVIATION 135); `scale` puts the leaf
     values back in the label's units.
@@ -489,24 +423,19 @@ def fit_regression_device(
     var dataset = upload_dataset(
         ctx, x_col_major, labels_q, n_rows, n_cols, 1
     )
-    var ws = make_level_workspace(
-        ctx,
-        Int(params.max_batch_size),
-        n_rows,
-        n_cols,
-        1,
-        Int(n_sampled_cols_for(params, n_cols)),
-        DEVICE_TPB,
-    )
-    var forest = Forest(1)
+    # The bootstrap refusal fires once for the forest; deviation 200 fills
+    # the device row lists with a sequence kernel and never reads this.
+    var row_ids = row_sample_for(n_rows, bootstrap)
+    _ = row_ids.unsafe_ptr()
+    # DEVIATION 211: one merged-frontier trainer for the whole forest; the
+    # per-group workspace lives inside it now (deviation 202, further).
+    var tree_ids = List[Int32]()
     for tree_id in range(Int(n_trees)):
-        var row_ids = row_sample_for(n_rows, bootstrap)
-        forest.trees.append(
-            train_regression_device_resident(
-                ctx, dataset, ws, scale, row_ids, n_rows, n_cols, params,
-                Int32(tree_id), seed,
-            )
-        )
+        tree_ids.append(Int32(tree_id))
+    var forest = Forest(1)
+    forest.trees = train_forest_regression_device(
+        ctx, dataset, scale, params, tree_ids, seed
+    )
     forest.n_trees = n_trees
     return forest^
 

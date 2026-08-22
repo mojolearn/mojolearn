@@ -11,8 +11,10 @@ tree_id, node_id, feature_id)`, deviation 130) exactly so that identical data
 yields different thresholds. Pass a constant instead and you get `n_trees`
 copies of one tree — which predicts fine, votes unanimously, and is not a
 forest. The device path has its own way to lose the tree id, because the id
-crosses a kernel boundary as a scalar argument rather than staying in a host
-loop variable. So the trees are compared to each other, pairwise, ALL pairs.
+crosses a kernel boundary — since DEVIATION 211 as a per-node array staged
+with each batch, which is exactly the staging a merged batch could get wrong
+(`device_batched_check` sabotages that mechanism directly). So the trees are
+compared to each other, pairwise, ALL pairs.
 
 **THE VOTE CAN BE THE LAST TREE INSTEAD OF THE AVERAGE.** `forest_vote` is
 shared by both arms, and deviation 147's accumulating `predict_one` is what

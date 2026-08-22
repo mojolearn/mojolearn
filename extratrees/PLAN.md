@@ -236,7 +236,7 @@ and three oracles. Every one of them now exists on BOTH the host and the GPU.
 | 4. select, total-order tie-break | DONE | DONE |
 | 5. partition, children join the frontier | DONE | DONE |
 | leaf values | DONE | DONE |
-| breadth-first frontier | DONE | host, as cuML's is |
+| breadth-first frontier | DONE | host, as cuML's is — and MERGED ACROSS TREES (deviation 211) |
 | `bootstrap=False` | DONE | DONE |
 | `max_features` sqrt/1.0 | DONE | DONE |
 | oracle 1: exact host transcription | DONE | it IS the device's oracle |
@@ -256,14 +256,21 @@ amendment put the same explicit `fma` on both sides of the draw, and deviation
 was argued at the time as a determinism decision; this is the thing they were
 determinism decisions FOR.
 
-**Twenty-two checks, run by `tools/check.sh`, five of them enqueuing kernels**,
-every one with a sabotage per mechanism that was seen to turn it red.
+**Twenty-nine checks, run by `tools/check.sh`, twelve of them enqueuing
+kernels**, every one with a sabotage per mechanism that was seen to turn it
+red. (This sentence said twenty-two while twenty-eight ran; both counts
+recomputed from `check.sh` and `grep -l DeviceContext` on 2026-08-22,
+rule 17.)
 
 ## What is NOT done, stated as the gap it is
 
-1. **No number has been measured, deliberately.** Perf is deferred by the repo
-   owner. Nothing in this directory quotes a duration, and the thesis number —
-   our GPU against sklearn's CPU on this Mac — has not been taken.
+1. **The perf deferral is LIFTED (Andrew, 2026-08-22: "please continue
+   improving performance for extra trees... I think we should parallelize to
+   use gpu").** The first act under it is DEVIATION 211 — the frontier batch
+   spans trees, cuML's stream-pool overlap expressed as a wider grid, since
+   Metal has no streams. Gated bit-identical by `device_batched_check`
+   (twenty-nine checks now); measured in `bench/results/` per the alternating
+   in-window discipline, not here. The lane's checks still quote no duration.
 2. **The forest and the estimator DO use the device path** —
    `fit_classification_device` and `fit_extra_trees_classifier_device`, with
    the dataset uploaded once for the forest (deviation 184) and every refusal

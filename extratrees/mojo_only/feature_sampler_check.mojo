@@ -355,10 +355,12 @@ def main() raises:
     var b_colids = List[Int32](length=len(nodes8) * 20, fill=Int32(-1))
     _ = sample_features(a_colids, m_items, 7, 0xC0FFEE, 1000, 20)
     var differed = 0
+    # DEVIATION 211: the inner arms take one tree id per work item now.
+    var m_trees = List[Int32](length=len(m_items), fill=Int32(7))
     excess_sample_with_replacement(
         b_colids,
         m_items,
-        7,
+        m_trees,
         0xC0FFEE,
         1000,
         20,

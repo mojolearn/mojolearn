@@ -402,7 +402,7 @@ comptime EXCESS_MAX_ITERATIONS: Int = 1024
 def excess_sample_with_replacement(
     mut colids: List[Int32],
     work_items: List[NodeWorkItem],
-    tree_id: Int32,
+    tree_ids: List[Int32],
     seed: UInt64,
     n: Int,
     k: Int,
@@ -484,7 +484,11 @@ def excess_sample_with_replacement(
                 PCGenerator(
                     seed,
                     excess_subsequence(
-                        UInt32(thread_id), UInt32(tree_id), node_id
+                        UInt32(thread_id),
+                        # DEVIATION 211: per-ITEM tree id, so one batch may
+                        # span trees. Same key, same draws.
+                        UInt32(Int(tree_ids[block_id])),
+                        node_id,
                     ),
                     UInt64(0),
                 )
@@ -584,7 +588,7 @@ def excess_sample_with_replacement(
 def algo_l_sample(
     mut colids: List[Int32],
     work_items: List[NodeWorkItem],
-    tree_id: Int32,
+    tree_ids: List[Int32],
     seed: UInt64,
     n: Int,
     k: Int,
@@ -634,8 +638,11 @@ def algo_l_sample(
     for tid in range(len(work_items)):
         # `:277-278`. One thread per work item; the host loop is the grid.
         var node_id = UInt32(work_items[tid].idx)  # `:279`
+        # DEVIATION 211: per-ITEM tree id, so one batch may span trees.
         var gen = PCGenerator(
-            seed, algo_l_subsequence(UInt32(tree_id), node_id), UInt64(0)
+            seed,
+            algo_l_subsequence(UInt32(Int(tree_ids[tid])), node_id),
+            UInt64(0),
         )  # `:280-281`
 
         # `:287-291`
@@ -677,6 +684,21 @@ def sample_features(
     n: Int,
     k: Int,
 ) raises -> FeatureSamplerPlan:
+    """One-tree form of `sample_features_pertree` below: every work item
+    belongs to `tree_id`. The host trainer and the sampler checks call this;
+    the batched forest trainer (DEVIATION 211) calls the per-item form."""
+    var tree_ids = List[Int32](length=len(work_items), fill=tree_id)
+    return sample_features_pertree(colids, work_items, tree_ids, seed, n, k)
+
+
+def sample_features_pertree(
+    mut colids: List[Int32],
+    work_items: List[NodeWorkItem],
+    tree_ids: List[Int32],
+    seed: UInt64,
+    n: Int,
+    k: Int,
+) raises -> FeatureSamplerPlan:
     """Fill `colids` with `k` distinct columns per work item, and SAY WHICH
     KERNEL DID IT.
 
@@ -685,8 +707,19 @@ def sample_features(
     8 -- "a harness that cannot name the kernel it ran can publish a number
     about a different one".
 
-    `colids` must already be `len(work_items) * k` long.
+    `colids` must already be `len(work_items) * k` long; `tree_ids` holds one
+    tree id PER WORK ITEM (DEVIATION 211: a batch may span trees, and each
+    item's draws are keyed by ITS tree). The arm is chosen by `(n, k)` alone,
+    so a merged batch takes the same arm every single-tree batch would.
     """
+    if len(tree_ids) != len(work_items):
+        raise Error(
+            "sample_features_pertree: "
+            + String(len(work_items))
+            + " work items but "
+            + String(len(tree_ids))
+            + " tree ids"
+        )
     var plan = plan_feature_sampling(n, k)
     if plan.arm == SAMPLE_ALL_FEATURES:
         # DEVIATION 156.
@@ -697,7 +730,7 @@ def sample_features(
         excess_sample_with_replacement(
             colids,
             work_items,
-            tree_id,
+            tree_ids,
             seed,
             n,
             k,
@@ -706,7 +739,7 @@ def sample_features(
             plan.block_threads,
         )
     else:
-        algo_l_sample(colids, work_items, tree_id, seed, n, k)
+        algo_l_sample(colids, work_items, tree_ids, seed, n, k)
     return plan
 
 
@@ -1047,8 +1080,8 @@ def excess_sample_kernel[
     scratch: MutPointer[Int32, MutAnyOrigin],
     report: MutPointer[Int32, MutAnyOrigin],
     work_items: MutPointer[NodeWorkItem, MutAnyOrigin],
+    tree_ids: MutPointer[Int32, MutAnyOrigin],
     work_items_size_in: Int32,
-    tree_id_in: Int32,
     seed: UInt64,
     n_in: Int32,
     k_in: Int32,
@@ -1124,16 +1157,16 @@ def excess_sample_kernel[
     # `:167-172`. The shipping path calls the SAME `excess_subsequence` the
     # host oracle calls, so the key chain cannot drift between the two; only
     # the sabotage is spelled out here.
+    # DEVIATION 211: the tree id is per NODE (`tree_ids[b]`), not per launch.
+    var tree_u = tree_ids[unsafe_offset=b].cast[DType.uint32]()
     var subsequence: UInt64
     if sab == SAMP_SAB_KEY_NO_THREAD:
         var h = FNV1A32_BASIS
-        h = fnv1a32(h, tree_id_in.cast[DType.uint32]())
+        h = fnv1a32(h, tree_u)
         h = fnv1a32(h, node_id)
         subsequence = h.cast[DType.uint64]()
     else:
-        subsequence = excess_subsequence(
-            UInt32(tid), tree_id_in.cast[DType.uint32](), node_id
-        )
+        subsequence = excess_subsequence(UInt32(tid), tree_u, node_id)
     var gen = PCGenerator(seed, subsequence, UInt64(0))
 
     # `:184-186` -- their `for (i) mask[i] = 0`, so every slot draws on
@@ -1370,8 +1403,8 @@ def algo_l_sample_kernel[
     colids: MutPointer[Int32, MutAnyOrigin],
     report: MutPointer[Int32, MutAnyOrigin],
     work_items: MutPointer[NodeWorkItem, MutAnyOrigin],
+    tree_ids: MutPointer[Int32, MutAnyOrigin],
     work_items_size_in: Int32,
-    tree_id_in: Int32,
     seed: UInt64,
     n_in: Int32,
     k_in: Int32,
@@ -1416,9 +1449,12 @@ def algo_l_sample_kernel[
     var k = Int(k_in)
 
     var node_id = work_items[unsafe_offset=tid].idx.cast[DType.uint32]()  # `:279`
+    # DEVIATION 211: per-node tree id.
     var gen = PCGenerator(
         seed,
-        algo_l_subsequence(tree_id_in.cast[DType.uint32](), node_id),
+        algo_l_subsequence(
+            tree_ids[unsafe_offset=tid].cast[DType.uint32](), node_id
+        ),
         UInt64(0),
     )  # `:280-281`
 
@@ -1456,15 +1492,15 @@ def algo_l_sample_kernel[
 
 
 def sample_features_device[
-    oc: MutOrigin, os: MutOrigin, orp: MutOrigin, ow: MutOrigin, //
+    oc: MutOrigin, os: MutOrigin, orp: MutOrigin, ow: MutOrigin, ot: MutOrigin, //
 ](
     ctx: DeviceContext,
     d_colids: MutPointer[Int32, oc],
     d_scratch: MutPointer[Int32, os],
     d_report: MutPointer[Int32, orp],
     d_work_items: MutPointer[NodeWorkItem, ow],
+    d_tree_ids: MutPointer[Int32, ot],
     work_items_size: Int,
-    tree_id: Int32,
     seed: UInt64,
     n: Int,
     k: Int,
@@ -1513,8 +1549,8 @@ def sample_features_device[
                 d_scratch,
                 d_report,
                 d_work_items,
+                d_tree_ids,
                 Int32(work_items_size),
-                tree_id,
                 seed,
                 Int32(n),
                 Int32(k),
@@ -1534,8 +1570,8 @@ def sample_features_device[
                 d_scratch,
                 d_report,
                 d_work_items,
+                d_tree_ids,
                 Int32(work_items_size),
-                tree_id,
                 seed,
                 Int32(n),
                 Int32(k),
@@ -1568,8 +1604,8 @@ def sample_features_device[
             d_colids,
             d_report,
             d_work_items,
+            d_tree_ids,
             Int32(work_items_size),
-            tree_id,
             seed,
             Int32(n),
             Int32(k),
