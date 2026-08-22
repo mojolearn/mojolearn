@@ -366,6 +366,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from core.block_reduce import block_flush_count_i32, block_reduce_sum
+from core.launch_log import log_launch
 from core.block_scan import BlockScanElement, pdf_to_cdf
 from core.scan_by_key import (
     ScanByKeyElement,
@@ -509,6 +510,7 @@ struct DeviceArgs[F: Copyable & Deinitable](Movable):
         self.host.unsafe_ptr().unsafe_bitcast[Self.F]()[
             unsafe_offset=0
         ] = args.copy()
+        log_launch("xfer_args_upload")
         ctx.enqueue_copy(dst_buf=self.dev, src_ptr=self.host.unsafe_ptr())
         return (
             self.dev.unsafe_ptr()
@@ -924,6 +926,7 @@ def launch_node_split_kernel[
     comptime RESET_TPB = 128
     var reset_grid = ceildiv(n_work_items, RESET_TPB)
     comptime k_reset = reset_local_left_counts_kernel[dtype]
+    log_launch("nodesplit_reset")
     ctx.enqueue_function[k_reset](
         splits.unsafe_origin_cast[MutAnyOrigin](),
         scratch.local_nleft.unsafe_ptr(),
@@ -937,6 +940,7 @@ def launch_node_split_kernel[
     comptime k_count = count_local_left_kernel[
         dtype, label_dtype, TPB, count_sab
     ]
+    log_launch("nodesplit_count_left")
     ctx.enqueue_function[k_count](
         argsp.unsafe_origin_cast[MutAnyOrigin](),
         work_items.unsafe_origin_cast[MutAnyOrigin](),
@@ -950,6 +954,7 @@ def launch_node_split_kernel[
     # DEVIATION 127: their 64-bit atomic landed straight in the field;
     # ours widens the shadow into it here, before `:113` reads it.
     comptime k_pub = publish_local_left_counts_kernel[dtype]
+    log_launch("nodesplit_publish")
     ctx.enqueue_function[k_pub](
         splits.unsafe_origin_cast[MutAnyOrigin](),
         scratch.local_nleft.unsafe_ptr(),
@@ -970,6 +975,7 @@ def launch_node_split_kernel[
     scratch.ops_host.unsafe_ptr().unsafe_bitcast[OpsT]()[
         unsafe_offset=0
     ] = ops
+    log_launch("xfer_nodesplit_ops")
     ctx.enqueue_copy(
         dst_buf=scratch.ops_dev, src_ptr=scratch.ops_host.unsafe_ptr()
     )
@@ -995,6 +1001,7 @@ def launch_node_split_kernel[
     comptime k_copy = node_split_copy_back_kernel[
         dtype, label_dtype, TPB, copy_sab
     ]
+    log_launch("nodesplit_copy_back")
     ctx.enqueue_function[k_copy](
         argsp.unsafe_origin_cast[MutAnyOrigin](),
         work_items.unsafe_origin_cast[MutAnyOrigin](),
@@ -1140,6 +1147,7 @@ def launch_leaf_kernel[
         )
     var argsp = args_blob.upload(ctx, LeafArgs[O](objective.copy(), dataset.copy()))
     comptime k = leaf_kernel[O, TPB, LEAF_SMEM_BIN_SLOTS, sabotage]
+    log_launch("leaf")
     ctx.enqueue_function[k](
         argsp.unsafe_origin_cast[MutAnyOrigin](),
         tree.unsafe_origin_cast[MutAnyOrigin](),
@@ -1402,6 +1410,7 @@ def launch_build_histograms_kernel[
         comptime kg = build_histograms_kernel[
             O, TPB, 1, True, sabotage
         ]
+        log_launch("histogram_global")
         ctx.enqueue_function[kg](
             argsp.unsafe_origin_cast[MutAnyOrigin](),
             histograms.unsafe_origin_cast[MutAnyOrigin](),
@@ -1414,20 +1423,72 @@ def launch_build_histograms_kernel[
             block_dim=TPB,
         )
     else:
-        comptime ks = build_histograms_kernel[
-            O, TPB, SMEM_BIN_SLOTS, False, sabotage
-        ]
-        ctx.enqueue_function[ks](
-            argsp.unsafe_origin_cast[MutAnyOrigin](),
-            histograms.unsafe_origin_cast[MutAnyOrigin](),
-            Int32(max_n_bins),
-            work_items.unsafe_origin_cast[MutAnyOrigin](),
-            Int32(col_start),
-            column_samples.unsafe_origin_cast[MutAnyOrigin](),
-            workload_info.unsafe_origin_cast[MutAnyOrigin](),
-            grid_dim=(histogram_grid_x, histogram_grid_y),
-            block_dim=TPB,
-        )
+        # DEVIATION 103a, TIER MACHINERY (2026-08-22, VERDICT PENDING).
+        # Their launcher passes EXACTLY `histogram_dynamic_smem_size` as
+        # dynamic shared memory (`builder.cuh:412`, computed at
+        # `:526-533`, "stays small enough for good occupancy"); 103a
+        # reserves the full 16 KiB tunable limit instead because
+        # `stack_allocation` is comptime-static. The launch-log
+        # attribution measured this kernel at 85.3% of all device time at
+        # the 500k benchmark shape while needing ~2.6 KiB of the 16 KiB
+        # reserved, so the dispatch below can launch a tier-sized blob --
+        # the smallest byte tier holding `histogram_dynamic_smem_size`
+        # (which already includes the copied quantiles and their `:531`
+        # alignment padding). Same kernel body, same bytes TOUCHED,
+        # bit-identical output (fingerprint gate held through the tiered
+        # build); only the RESERVATION changes. The tier taken is visible
+        # in the launch log by name.
+        # THE TIER LIST SHIPS EMPTY-IN-EFFECT ([1]: no need ever fits, so
+        # every launch falls through to the incumbent 16 KiB blob). The
+        # candidate list is [2048, 4096, 8192]. Rule 11 needs a measured
+        # win to flip a default, and the only A/B run so far
+        # (2026-08-22 morning) was VOIDed at canary spread 10.5x -- a
+        # peer GBM benchmark held the GPU through the window. The
+        # informal single-build reads that suggested the SMALLER blob is
+        # SLOWER on M4 (an occupancy result CUDA intuition would not
+        # predict) are equally uncertifiable under that contention.
+        # `build/rf_bench_smem4k` / `_smem16k` are the A/B pair; rerun
+        # the gated ABAB on a quiet box before touching this list.
+        var need_bytes = smem_config.histogram_dynamic_smem_size
+        var launched = False
+        comptime for TIER_BYTES in [1]:
+            comptime TIER_SLOTS = TIER_BYTES // size_of[O.BinT]()
+            if not launched and need_bytes <= TIER_BYTES:
+                comptime kt = build_histograms_kernel[
+                    O, TPB, TIER_SLOTS, False, sabotage
+                ]
+                log_launch("histogram_shared_" + String(TIER_BYTES))
+                ctx.enqueue_function[kt](
+                    argsp.unsafe_origin_cast[MutAnyOrigin](),
+                    histograms.unsafe_origin_cast[MutAnyOrigin](),
+                    Int32(max_n_bins),
+                    work_items.unsafe_origin_cast[MutAnyOrigin](),
+                    Int32(col_start),
+                    column_samples.unsafe_origin_cast[MutAnyOrigin](),
+                    workload_info.unsafe_origin_cast[MutAnyOrigin](),
+                    grid_dim=(histogram_grid_x, histogram_grid_y),
+                    block_dim=TPB,
+                )
+                launched = True
+        if not launched:
+            # Above 8 KiB the full 103a blob remains; anything past
+            # 16 KiB never reaches this arm because
+            # `compute_shared_memory_config` already chose global.
+            comptime ks = build_histograms_kernel[
+                O, TPB, SMEM_BIN_SLOTS, False, sabotage
+            ]
+            log_launch("histogram_shared")
+            ctx.enqueue_function[ks](
+                argsp.unsafe_origin_cast[MutAnyOrigin](),
+                histograms.unsafe_origin_cast[MutAnyOrigin](),
+                Int32(max_n_bins),
+                work_items.unsafe_origin_cast[MutAnyOrigin](),
+                Int32(col_start),
+                column_samples.unsafe_origin_cast[MutAnyOrigin](),
+                workload_info.unsafe_origin_cast[MutAnyOrigin](),
+                grid_dim=(histogram_grid_x, histogram_grid_y),
+                block_dim=TPB,
+            )
 
 
 @fieldwise_init
@@ -1591,6 +1652,7 @@ def launch_find_best_splits_kernel[
         )
     )
     comptime k = find_best_splits_kernel[O, TPB, sabotage]
+    log_launch("find_best_splits")
     ctx.enqueue_function[k](
         argsp.unsafe_origin_cast[MutAnyOrigin](),
         histograms.unsafe_origin_cast[MutAnyOrigin](),

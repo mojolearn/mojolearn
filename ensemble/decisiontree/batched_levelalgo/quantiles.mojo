@@ -255,6 +255,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.sync import barrier
 from std.gpu import block_dim, block_idx, thread_idx
 
+from core.launch_log import log_launch
 from core.segmented_sort import segmented_sort_keys_f32
 
 
@@ -758,6 +759,7 @@ def compute_quantiles(
         raise Error("global row count must be positive")
 
     var d_offsets = ctx.enqueue_create_buffer[DType.uint64](n_offsets)
+    log_launch("xfer_quantiles_offsets")
     ctx.enqueue_copy(dst_buf=d_offsets, src_ptr=h_offsets.unsafe_ptr())
 
     # `:193-194` -- `narrow_cast<int>(min(global_rows,
@@ -793,10 +795,12 @@ def compute_quantiles(
     h_u64.unsafe_ptr().unsafe_store(0, global_rows)
     h_u64.unsafe_ptr().unsafe_store(1, seed)
     var d_u64 = ctx.enqueue_create_buffer[DType.uint64](2)
+    log_launch("xfer_quantiles_seed")
     ctx.enqueue_copy(dst_buf=d_u64, src_ptr=h_u64.unsafe_ptr())
 
     # `:214-225` -- `dim3 sample_grid(n_cols, ceil(sample_count /
     # n_threads))`, block `n_threads = 256`.
+    log_launch("quantiles_sample_columns")
     ctx.enqueue_function[sample_owned_columns_kernel](
         sampled_columns.unsafe_ptr(),
         data.unsafe_ptr(),
@@ -840,12 +844,14 @@ def compute_quantiles(
             bin, Int32(quantile_bin_index(bin, sample_count, max_n_bins))
         )
     var d_bin_idx = ctx.enqueue_create_buffer[DType.int32](max_n_bins)
+    log_launch("xfer_quantiles_bin_idx")
     ctx.enqueue_copy(dst_buf=d_bin_idx, src_ptr=h_bin_idx.unsafe_ptr())
 
     # `:271-272` -- grid `n_cols`, block `min(1024, max_n_bins)`.
     var quantile_block = max_n_bins
     if quantile_block > QUANTILE_BLOCK_CAP:
         quantile_block = QUANTILE_BLOCK_CAP
+    log_launch("quantiles_batched")
     ctx.enqueue_function[compute_quantiles_batched_kernel](
         quantiles_array.unsafe_ptr(),
         n_bins_array.unsafe_ptr(),

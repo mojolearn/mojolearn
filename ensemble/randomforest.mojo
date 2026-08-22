@@ -324,6 +324,7 @@ from ensemble.decisiontree.batched_levelalgo.quantiles import (
 from ensemble.decisiontree.batched_levelalgo.random_utils import (
     fnv1a32_hash_seed_tree,
 )
+from core.launch_log import log_launch
 from core.philox import (
     RNG_STRIDE,
     launch_uniform_int,
@@ -1609,14 +1610,17 @@ def compute_oob_score[
 
     # The masks, back on the host. `:717` indexes them per tree.
     var hm = ctx.enqueue_create_host_buffer[DType.uint8](n_trees * n_rows)
+    log_launch("xfer_oob_masks")
     ctx.enqueue_copy(dst_buf=hm, src_buf=sampler.bootstrap_masks)
 
     # X, row-major, because `predict_one` walks a row (`:366` does the
     # same pointer arithmetic). Training may have been column-major.
     var hx = ctx.enqueue_create_host_buffer[DType.float32](n_rows * n_cols)
+    log_launch("xfer_oob_x")
     ctx.enqueue_copy(dst_buf=hx, src_buf=x)
 
     var hy = ctx.enqueue_create_host_buffer[O.LabelT](n_rows)
+    log_launch("xfer_oob_y")
     ctx.enqueue_copy(dst_buf=hy, src_buf=y)
     ctx.synchronize()
 
@@ -2108,6 +2112,7 @@ struct RowSampler(Movable):
             return
         # `:178` -- `checked_mul<std::size_t>(tree_id, n_rows_)`
         var offset = Int64(Int(tree_id)) * Int64(self.n_rows)
+        log_launch("bootstrap_mask_fill")
         ctx.enqueue_function[bootstrap_mask_fill_kernel](
             self.bootstrap_masks.unsafe_ptr(),
             offset,
@@ -2116,6 +2121,7 @@ struct RowSampler(Movable):
             block_dim=256,
         )
         if self.n_selected > 0:
+            log_launch("bootstrap_mask_scatter")
             ctx.enqueue_function[bootstrap_mask_scatter_kernel](
                 self.bootstrap_masks.unsafe_ptr(),
                 offset,
@@ -2179,6 +2185,7 @@ struct RowSampler(Movable):
                         hi = mid
                 p.unsafe_store(i, Int32(lo))
             self.n_selected = self.n_sampled_rows
+            log_launch("xfer_sampled_rows")
             ctx.enqueue_copy(
                 dst_buf=self.selected_rows_[slot],
                 src_ptr=self.h_rows.unsafe_ptr(),
@@ -2228,6 +2235,7 @@ struct RowSampler(Movable):
                     "sample_weight values must contain at least one"
                     " positive value (randomforest.cuh:94)"
                 )
+            log_launch("xfer_sampled_rows")
             ctx.enqueue_copy(
                 dst_buf=self.selected_rows_[slot],
                 src_ptr=self.h_rows.unsafe_ptr(),
@@ -2240,6 +2248,7 @@ struct RowSampler(Movable):
         var p = self.h_rows.unsafe_ptr()
         for i in range(self.n_sampled_rows):
             p.unsafe_store(i, Int32(i))
+        log_launch("xfer_sampled_rows")
         ctx.enqueue_copy(
             dst_buf=self.selected_rows_[slot],
             src_ptr=self.h_rows.unsafe_ptr(),

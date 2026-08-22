@@ -201,6 +201,7 @@ WHAT IS TRANSCRIBED FROM WHERE, since two upstreams are involved:
 =================================================================
 """
 
+from core.launch_log import log_launch
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import ceildiv
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -783,6 +784,7 @@ def launch_uniform_int_ex(
 
     var diff = end.cast[DType.uint32]() - start.cast[DType.uint32]()
 
+    log_launch("philox_uniform_int")
     ctx.enqueue_function[uniform_int_kernel](
         out_buf.unsafe_ptr(),
         Int32(n),

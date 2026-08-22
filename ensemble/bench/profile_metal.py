@@ -58,11 +58,21 @@ TRACE = "/tmp/rf_profile.trace"
 BINARY = os.path.join(REPO, "build", "rf_bench")
 
 
-def record(trace, binary, args):
+def record(trace, binary, args, launch_log=None):
     if os.path.exists(trace):
         subprocess.run(["rm", "-rf", trace], check=True)
     cmd = ["xctrace", "record", "--template", "Metal System Trace",
-           "--output", trace, "--target-stdout", "-", "--launch", "--", binary] + args
+           "--output", trace, "--target-stdout", "-"]
+    if launch_log:
+        # The workload names its own dispatches: every enqueue site in the
+        # forest path calls `core.launch_log.log_launch` first, and with
+        # RF_LAUNCH_LOG set the names land in this file in enqueue order.
+        # `attr` below joins them to the trace. Truncate first -- a stale
+        # log misaligns the join, which then refuses.
+        if os.path.exists(launch_log):
+            os.remove(launch_log)
+        cmd += ["--env", "RF_LAUNCH_LOG=" + launch_log]
+    cmd += ["--launch", "--", binary] + args
     print("==> " + " ".join(cmd))
     r = subprocess.run(cmd)
     if r.returncode != 0:
@@ -224,24 +234,96 @@ def report(trace, who="rf_bench"):
     return 0
 
 
+def attr(trace, logpath, who="rf_bench"):
+    """PER-SITE GPU TIME, from the launch log joined to the trace.
+
+    Apple's stock template records the Shader Timeline instrument
+    Disabled and `xctrace` cannot enable it (`--instrument 'GPU'` records
+    nothing into `gpu-shader-profiler-interval` either -- measured
+    2026-08-22), so the trace knows every dispatch's DURATION but not its
+    NAME. The workload's launch log knows every NAME but no duration.
+    Metal's compute channel here is a single in-order queue, so device
+    order IS enqueue order and line `i` of the log names merged op `i` of
+    the trace.
+
+    TWO MEASURED FACTS THE JOIN DEPENDS ON (dispatch_census_probe, prime
+    counts 7/11/13/5/17 decomposing uniquely):
+      * `enqueue_memset` emits NO Compute interval on this stack (a host
+        write on unified memory), so memsets are NOT logged;
+      * every `enqueue_copy` direction (H2D, D2D, D2H) IS a Compute
+        dispatch, so every copy site IS logged.
+    And MAX sometimes expands one enqueue into several dispatches inside
+    ONE command buffer (28 of 9405 rows at the 500k shape), so
+    consecutive rows sharing a cmdbuffer-id merge into one logical op,
+    durations summed. After the merge the counts must match EXACTLY or
+    the join is REFUSED: one slip mislabels every row after it.
+    """
+    names = [l.strip() for l in open(logpath) if l.strip()]
+    _c, gi = pm_table(trace, "metal-gpu-intervals")
+    comp = [r for r in gi
+            if who in (r.get("event-label") or "")
+            and r.get("channel-name") == "Compute"]
+    comp.sort(key=lambda r: int(r["start"]))
+    merged = []
+    prev_cb = object()
+    for r in comp:
+        cb = r.get("cmdbuffer-id")
+        if cb == prev_cb and merged:
+            merged[-1] += int(r["duration"])
+        else:
+            merged.append(int(r["duration"]))
+        prev_cb = cb
+    print("logged %d   trace Compute rows %d   merged ops %d"
+          % (len(names), len(comp), len(merged)))
+    if len(merged) != len(names):
+        print("COUNT MISMATCH after cmdbuf merge -- join refused. Was the",
+              file=sys.stderr)
+        print("trace recorded with the SAME binary and RF_LAUNCH_LOG set?",
+              file=sys.stderr)
+        return 1
+    per_ms, per_n = {}, {}
+    for name, dur in zip(names, merged):
+        per_ms[name] = per_ms.get(name, 0.0) + dur / 1e6
+        per_n[name] = per_n.get(name, 0) + 1
+    total = sum(per_ms.values())
+    print("total attributed GPU time %.1f ms" % total)
+    print("%-28s %10s %8s %8s %10s" % ("site", "ms", "share", "n", "us/op"))
+    for name in sorted(per_ms, key=lambda k: -per_ms[k]):
+        print("%-28s %10.1f %7.1f%% %8d %10.1f"
+              % (name, per_ms[name], 100 * per_ms[name] / total,
+                 per_n[name], 1e3 * per_ms[name] / per_n[name]))
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("actions", nargs="+", choices=["record", "report"])
+    ap.add_argument("actions", nargs="+", choices=["record", "report", "attr"])
     ap.add_argument("--trace", default=TRACE)
     ap.add_argument("--binary", default=BINARY)
-    ap.add_argument("--arg", action="append", default=["--profile"],
+    ap.add_argument("--launch-log", default=None,
+                    help="path for the workload's launch log; required by "
+                         "'attr', and passed to the workload during 'record'")
+    # NOT default=["--profile"]: argparse APPENDS to a non-empty default,
+    # so `--arg --profile-large` would have produced BOTH flags and the
+    # binary honors --profile first -- the trace would silently be the
+    # 100k one whatever was asked for.
+    ap.add_argument("--arg", action="append", default=None,
                     help="argument for the traced binary (default: --profile)")
     a = ap.parse_args()
+    if a.arg is None:
+        a.arg = ["--profile"]
     for action in a.actions:
         if action == "record":
-            rc = record(a.trace, a.binary, a.arg)
-            if rc:
-                return rc
+            rc = record(a.trace, a.binary, a.arg, launch_log=a.launch_log)
+        elif action == "attr":
+            if not a.launch_log:
+                ap.error("'attr' needs --launch-log")
+            rc = attr(a.trace, a.launch_log)
         else:
             rc = report(a.trace)
-            if rc:
-                return rc
+        if rc:
+            return rc
     return 0
 
 

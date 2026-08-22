@@ -81,6 +81,7 @@ DEVIATION 111 covers this whole file; its text is in `quantiles.mojo`
 beside the call it replaces.
 """
 
+from core.launch_log import log_launch
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.primitives.block import prefix_sum
 from std.gpu import block_dim, block_idx, thread_idx
@@ -305,6 +306,7 @@ def segmented_sort_keys_f32(
     var blocks_wide = (seg_size + SORT_BLOCK - 1) // SORT_BLOCK
     var flat_blocks = (total + SORT_BLOCK - 1) // SORT_BLOCK
 
+    log_launch("seg_sort_twiddle_in")
     ctx.enqueue_function[twiddle_in_kernel](
         src.unsafe_ptr(),
         Int32(total),
@@ -347,6 +349,7 @@ def segmented_sort_keys_f32(
         parity = 1 - parity
         bit += 1
 
+    log_launch("seg_sort_twiddle_out")
     ctx.enqueue_function[twiddle_out_kernel](
         work_a.unsafe_ptr(),
         Int32(total),
@@ -368,6 +371,7 @@ def _seg_radix_pass(
     mut block_sums: DeviceBuffer[DType.int32],
 ) raises:
     """One bit, every segment at once."""
+    log_launch("seg_sort_scan_key_bit")
     ctx.enqueue_function[seg_scan_key_bit_kernel](
         src_keys.unsafe_ptr(),
         Int32(bit),
@@ -378,6 +382,7 @@ def _seg_radix_pass(
         grid_dim=(blocks_wide, n_segments, 1),
         block_dim=(SORT_BLOCK, 1, 1),
     )
+    log_launch("seg_sort_scan_block_sums")
     ctx.enqueue_function[seg_scan_block_sums_kernel](
         block_sums.unsafe_ptr(),
         Int32(seg_size),
@@ -385,6 +390,7 @@ def _seg_radix_pass(
         grid_dim=(n_segments, 1, 1),
         block_dim=(1, 1, 1),
     )
+    log_launch("seg_sort_add_block_carry")
     ctx.enqueue_function[seg_add_block_carry_kernel](
         offsets.unsafe_ptr(),
         block_sums.unsafe_ptr(),
@@ -393,6 +399,7 @@ def _seg_radix_pass(
         grid_dim=(blocks_wide, n_segments, 1),
         block_dim=(SORT_BLOCK, 1, 1),
     )
+    log_launch("seg_sort_reorder_one_bit")
     ctx.enqueue_function[seg_reorder_one_bit_kernel](
         src_keys.unsafe_ptr(),
         offsets.unsafe_ptr(),

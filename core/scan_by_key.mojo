@@ -168,6 +168,7 @@ load, so it is cheap on their side too.
 # =========================================================================
 """
 
+from core.launch_log import log_launch
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import ceildiv
 from std.memory import stack_allocation
@@ -269,6 +270,7 @@ def upload_device_functor[
     silent no-op on this target.
     """
     host_blob.unsafe_ptr().unsafe_bitcast[F]()[unsafe_offset=0] = ops
+    log_launch("xfer_scan_ops")
     ctx.enqueue_copy(dst_buf=device_blob, src_ptr=host_blob.unsafe_ptr())
     return (
         device_blob.unsafe_ptr()
@@ -574,6 +576,7 @@ def launch_inclusive_scan_by_key[
     var agg_p = block_agg.unsafe_ptr().unsafe_bitcast[F.Elem]()
 
     comptime k1 = scan_by_key_block_kernel[F, TPB, sabotage]
+    log_launch("scan_by_key_block")
     ctx.enqueue_function[k1](
         ops_ptr,
         Int32(n_slots),
@@ -586,6 +589,7 @@ def launch_inclusive_scan_by_key[
     )
 
     comptime k2 = scan_by_key_carry_kernel[F.Elem, TPB, sabotage]
+    log_launch("scan_by_key_carry")
     ctx.enqueue_function[k2](
         agg_p,
         block_head.unsafe_ptr(),
@@ -595,6 +599,7 @@ def launch_inclusive_scan_by_key[
     )
 
     comptime k3 = scan_by_key_emit_kernel[F, TPB, sabotage]
+    log_launch("scan_by_key_emit")
     ctx.enqueue_function[k3](
         ops_ptr,
         Int32(n_slots),

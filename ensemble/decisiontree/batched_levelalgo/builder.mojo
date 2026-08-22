@@ -136,6 +136,7 @@ from mojo_only.kernel_matrix import TARGET_COLUMN, column_shared_limit
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
+from core.launch_log import log_launch
 from ensemble.decisiontree.batched_levelalgo.bins import Bin, BinScales
 from ensemble.decisiontree.batched_levelalgo.dataset import DatasetView
 from ensemble.decisiontree.batched_levelalgo.objectives import (
@@ -1269,6 +1270,7 @@ struct Builder[O: ObjectiveLike](Movable):
         if nbytes == 0:
             return
         var dst = self.d_work_items.create_sub_buffer[DType.uint8](0, nbytes)
+        log_launch("xfer_work_items")
         ctx.enqueue_copy(
             dst_buf=dst, src_ptr=self.h_work_items.unsafe_ptr()
         )
@@ -1291,6 +1293,7 @@ struct Builder[O: ObjectiveLike](Movable):
         var dst = self.workload_info.create_sub_buffer[DType.uint8](
             0, nbytes
         )
+        log_launch("xfer_workload_info")
         ctx.enqueue_copy(
             dst_buf=dst, src_ptr=self.h_workload_info.unsafe_ptr()
         )
@@ -1306,6 +1309,7 @@ struct Builder[O: ObjectiveLike](Movable):
             # `:479` -- their count is `work_items.size()`.
             var hdst = self.h_splits.create_sub_buffer[DType.uint8](0, nbytes)
             var dsrc = self.splits.create_sub_buffer[DType.uint8](0, nbytes)
+            log_launch("xfer_splits_download")
             ctx.enqueue_copy(dst_buf=hdst, src_buf=dsrc)
             _ = hdst^
             _ = dsrc^
@@ -1365,6 +1369,7 @@ struct Builder[O: ObjectiveLike](Movable):
         var hi_arg = hi_u.cast[DType.int32]()
         var lo_arg = lo_u.cast[DType.int32]()
         var blocks = ceildiv(n_column_samples, 256)
+        log_launch("sample_features")
         ctx.enqueue_function[sample_features_kernel](
             self.column_samples.unsafe_ptr(),
             self._work_items_ptr(),
@@ -1477,6 +1482,7 @@ struct Builder[O: ObjectiveLike](Movable):
         serial composition."""
         var n = len(work_items)
         # `:489` -- initSplit
+        log_launch("init_split")
         ctx.enqueue_function[init_split_kernel[Self.O.DataT]](
             self._splits_ptr(), Int32(n), grid_dim=ceildiv(n, 128), block_dim=128
         )
@@ -1702,6 +1708,7 @@ struct Builder[O: ObjectiveLike](Movable):
             var sdst = self.splits.create_sub_buffer[DType.uint8](
                 0, sp_bytes
             )
+            log_launch("xfer_splits_upload")
             ctx.enqueue_copy(
                 dst_buf=sdst, src_ptr=self.h_splits.unsafe_ptr()
             )
@@ -1842,12 +1849,14 @@ struct Builder[O: ObjectiveLike](Movable):
             var dt = self.leaf_d_tree.create_sub_buffer[DType.uint8](
                 0, size_of[SparseTreeNode[Self.O.DataT]]() * size
             )
+            log_launch("xfer_leaf_tree")
             ctx.enqueue_copy(
                 dst_buf=dt, src_ptr=self.leaf_h_tree.unsafe_ptr()
             )
             var dr = self.leaf_d_ranges.create_sub_buffer[DType.uint8](
                 0, size_of[InstanceRange]() * size
             )
+            log_launch("xfer_leaf_ranges")
             ctx.enqueue_copy(
                 dst_buf=dr, src_ptr=self.leaf_h_ranges.unsafe_ptr()
             )
@@ -1878,6 +1887,7 @@ struct Builder[O: ObjectiveLike](Movable):
             var dls = self.leaf_d_leaves.create_sub_buffer[Self.O.DataT](
                 0, size * n_out
             )
+            log_launch("xfer_leaf_download")
             ctx.enqueue_copy(dst_buf=hl, src_buf=dls)
             ctx.synchronize()
             _ = dt^
