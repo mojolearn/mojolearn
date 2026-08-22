@@ -36,7 +36,7 @@ because it converts a checkable property into a belief.
 | 5 | reduce stage width | a summation order | PIN — 512 | **closed** |
 | 6 | library cross-lane folds (`PINNED_LIB_REDUCE_LANES`) | a summation order | PIN — 32 | **closed** |
 | 7 | **partition stats → LEAF VALUES** | **chunk count = f(core count)** | **PIN — `partition_chunks_sm_for`** | **closed 2026-08-21** |
-| 8 | **fixed-point scale magnitude** | **device float reduce + float atomic** | REPLACE — needed, not written | **OPEN** |
+| 8 | **fixed-point scale magnitude** (and `functionValue`, same reduce) | ~~device float reduce + float atomic~~ **the atomic half CLOSED 2026-08-21** (the "DETERMINISM FIX" block, `pointwise_targets.mojo:607`): every block STORES its partial, `deterministic_sum_lanes_kernel` folds them in one fixed 256-thread shape, and the partial COUNTS are pure `f(n_rows)` — `mse_blocks`, `multilogit_blocks`, `bootstrap_grid_blocks` all verified machine-independent 2026-08-22, no row-7-class hazard. What REMAINS: the per-block partial itself is MAX's `block.sum`, whose internal cross-lane fold follows the hardware warp width — 32 on Apple and NVIDIA, **64 on AMD** — so the partial's bits differ on the AMD column only | REPLACE the remainder — a pinned-shape block fold (the `deterministic_sum_lanes_kernel` shared-memory shape, no warp primitives) under `NUMERIC_IDENTICAL`, at the producer sites: mse kernel (`fv` + mags), `cross_entropy_kernel`, multilogit, bootstrap | **DEVICE column CLOSED; CROSS_DEVICE open on AMD only** (Apple↔NVIDIA already fold at the same width). The power-of-two snap already contains a last-bit magnitude wobble to a 2x band except at exact-ratio boundaries — the blast radius argument below still stands. |
 | 9 | **FMA contraction** | codegen decision | **CONSTRUCTION LANDED 2026-08-21**: `numerics.identical_mul_add` -- explicit `fma` under IDENTICAL (one rounding, identical on Metal/PTX/AMDGPU), the naive chain under FAST. Apple's FAST baseline measured UNFUSED (`check-ieee-arith`: fused 0 / unfused 1,046,394 of 2^20), so IDENTICAL differs from FAST on Apple BY DESIGN and is the same bits everywhere. | **helper landed; APPLICATION CHECKLIST OPEN** -- route every enumerated multiply-add seam through it: score gain arithmetic, cursor update, estimator derivations, leaf rescale. Each site converted must cite this row. |
 | 10 | division and `sqrt` in scoring | IEEE-correct on normals everywhere measured; the REAL hazard is DENORMAL POLICY | **CONSTRUCTION LANDED 2026-08-21**: `numerics.ftz` -- flush-to-signed-zero under IDENTICAL, comptime no-op under FAST. MEASURED, not designed: the identical model reproduced ALL 53,041 observed Metal divergences bit for bit (`check-ieee-arith`'s ftz-model arm), so on FTZ backends the helper is bitwise inert and on denormal-honoring backends it aligns them to Metal. | **Apple column CLOSED (IEEE+FTZ, no fast-math); helper landed; APPLICATION CHECKLIST OPEN** -- flush every cross-kernel float seam and store pinned expressions' intermediates through `ftz`; run `check-ieee-arith` first on every new backend column. |
 | 11 | k-NN tie handling (`select_radix`) | `atomicAdd` placement, no index tie-break | REFUSE — out of scope for GBDT | documented in `UNWIRED.md` |
@@ -84,10 +84,18 @@ and indexed it with another.
 
 ### 3. The scale is derived from a float atomic
 
-Item 8, still open. `choose_scale` snapping to a power of two contains it to
+Item 8. `choose_scale` snapping to a power of two contains it to
 roughly 1e-6 per boosting round; when it fires the whole histogram shifts by a
 factor of two. Small probability, large blast radius, and no reason to keep it:
 the fix is the accumulator the histogram already uses.
+
+**Update 2026-08-22:** the atomic was replaced the same day this file was
+written (per-block partial stores + `deterministic_sum_lanes_kernel`) and the
+ledger row lagged the code. The audit that caught the stale row also verified
+the partial counts are machine-independent. The residue is narrower than the
+row ever said: MAX's `block.sum` folds at hardware warp width inside each
+block, which diverges only on AMD's 64-wide wavefront. See the row for the
+named fix.
 
 ## What has to be true before the claim is made
 
