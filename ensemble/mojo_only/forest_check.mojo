@@ -418,7 +418,17 @@ def arm_d_unported_arms(ctx: DeviceContext) raises -> Int:
         # exactly, which is what a stride difference looks like.
         if stride != RNG_STRIDE:
             continue
-        var smp = RowSampler(ctx, True, seed, nr, ns, False)
+        # DEVIATION 400: the oracle's draws come from RAFT's TRUNCATING
+        # seed chain, which our fixed chain matches exactly when the
+        # seed's high word is zero. For a high-word oracle seed the same
+        # RAFT parity is held by sampling with the LOW WORD (bit-equal
+        # chain by the fix's own condition), and the fix's REACH is held
+        # separately below: the full 64-bit seed must draw a DIFFERENT
+        # sample than the truncated one, which is the whole point of
+        # folding the high half.
+        var hi = (seed >> 32) & 0xFFFFFFFF
+        var parity_seed = seed if hi == 0 else (seed & 0xFFFFFFFF)
+        var smp = RowSampler(ctx, True, parity_seed, nr, ns, False)
         smp.sample(ctx, Int32(tree_id))
         var hb = ctx.enqueue_create_host_buffer[DType.int32](ns)
         ctx.enqueue_copy(dst_buf=hb, src_buf=smp.selected_rows_[0])
@@ -434,6 +444,26 @@ def arm_d_unported_arms(ctx: DeviceContext) raises -> Int:
                         tree_id, "i", i, "got",
                         hb.unsafe_ptr().unsafe_load(i), "want", want,
                     )
+        if hi != 0:
+            var smp2 = RowSampler(ctx, True, seed, nr, ns, False)
+            smp2.sample(ctx, Int32(tree_id))
+            var hb2 = ctx.enqueue_create_host_buffer[DType.int32](ns)
+            ctx.enqueue_copy(dst_buf=hb2, src_buf=smp2.selected_rows_[0])
+            ctx.synchronize()
+            var moved = 0
+            for i in range(ns):
+                if hb2.unsafe_ptr().unsafe_load(i) != hb.unsafe_ptr(
+                ).unsafe_load(i):
+                    moved += 1
+            if moved == 0:
+                oracle_wrong += 1
+                print(
+                    "  arm D DEVIATION 400 DID NOT REACH: seed",
+                    seed, "tree", tree_id,
+                    "drew the same rows as its truncated low word",
+                )
+            _ = smp2^
+            _ = hb2^
         _ = smp^
         _ = hb^
     if oracle_rows < 5:

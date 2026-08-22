@@ -75,6 +75,8 @@ from core.philox import (
     uniform_int_host,
 )
 from ensemble.decisiontree.batched_levelalgo.random_utils import (
+    FNV1A32_BASIS,
+    fnv1a32,
     fnv1a32_hash_seed_tree,
 )
 from max.gpu.host import DeviceContext
@@ -373,20 +375,64 @@ def main() raises:
             var n = Int(atol(t[4]))
             var stride = Int(atol(t[5]))
             var want_rs = _u32(t[6])
+            # DEVIATION 400: the oracle records RAFT's TRUNCATING seed
+            # chain, `rs = fnv1a32(fnv1a32(basis, lo(seed)), tree)`; our
+            # `fnv1a32_hash_seed_tree` folds the high half when nonzero.
+            # Three assertions replace the old single parity line:
+            #   (a) the ORACLE row still equals the transcribed truncating
+            #       chain -- holds the fixture and the transcription;
+            #   (b) our chain equals the truncating chain for lo-only
+            #       seeds (exact RAFT parity, the unchanged rows) and the
+            #       truncating chain PLUS the one high round otherwise;
+            #   (c) for high-half seeds ours must DIFFER from RAFT's --
+            #       the fix's reach, held per row rather than assumed.
+            # The draw layers below stay keyed by the ORACLE's rs, so the
+            # Philox layers are still measured against RAFT on every row.
+            var lo = UInt32(seed & 0xFFFFFFFF)
+            var hi = UInt32((seed >> 32) & 0xFFFFFFFF)
+            var trunc_rs = fnv1a32(
+                fnv1a32(FNV1A32_BASIS, lo), UInt32(Int(tree_id))
+            )
             var got_rs = fnv1a32_hash_seed_tree(seed, tree_id)
-            if got_rs != want_rs:
+            if trunc_rs != want_rs:
+                e2e_wrong += 1
+                if first_fail == "":
+                    first_fail = (
+                        "e2e ORACLE vs truncating chain seed=" + String(seed)
+                        + " tree=" + String(tree_id) + " chain "
+                        + String(trunc_rs) + " oracle " + String(want_rs)
+                    )
+            var expect_rs: UInt32
+            if hi == 0:
+                expect_rs = want_rs
+            else:
+                expect_rs = fnv1a32(
+                    fnv1a32(fnv1a32(FNV1A32_BASIS, lo), hi),
+                    UInt32(Int(tree_id)),
+                )
+            if got_rs != expect_rs:
                 e2e_wrong += 1
                 if first_fail == "":
                     first_fail = (
                         "e2e seed chain seed=" + String(seed) + " tree="
                         + String(tree_id) + " got " + String(got_rs)
-                        + " want " + String(want_rs)
+                        + " want " + String(expect_rs)
+                        + (" (DEVIATION 400 arm)" if hi != 0 else "")
+                    )
+            if hi != 0 and got_rs == want_rs:
+                e2e_wrong += 1
+                if first_fail == "":
+                    first_fail = (
+                        "e2e DEVIATION 400 DID NOT REACH: high-half seed "
+                        + String(seed) + " tree=" + String(tree_id)
+                        + " still hashes to RAFT's truncated "
+                        + String(want_rs)
                     )
             var want = List[Int32]()
             for j in range(n):
                 want.append(_i32(t[7 + j]))
             var got = uniform_int_host(
-                UInt64(got_rs), UInt64(0), stride, n, Int32(0), n_rows
+                UInt64(want_rs), UInt64(0), stride, n, Int32(0), n_rows
             )
             for j in range(n):
                 e2e_cells += 1
@@ -399,7 +445,9 @@ def main() raises:
                             + String(got[j]) + " want " + String(want[j])
                         )
             if stride % RNG_BLOCK_THREADS == 0:
-                dev_seed.append(UInt64(got_rs))
+                # ORACLE's rs, not ours: the device arm measures the
+                # Philox layers against RAFT (DEVIATION 400 above).
+                dev_seed.append(UInt64(want_rs))
                 dev_base.append(UInt64(0))
                 dev_stride.append(stride)
                 dev_start.append(Int32(0))
