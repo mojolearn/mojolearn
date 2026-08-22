@@ -72,7 +72,7 @@ statement: Region reads `partIds += blockIdx.y; thisPartId = partIds[0]`,
 Lossguide takes `partId` / `maybeSecondPartId` as scalars and picks with
 `blockIdx.y == 0 ? partId : maybeSecondPartId`. That is the entire delta, and
 it is why the depthwise lane and this one can share one Mojo kernel body with
-the part id resolved by a comptime arm. Recorded as **DEVIATION 302**.
+the part id resolved by a comptime arm. Recorded as **DEVIATION 317**.
 
 Why `<= 2`: a Lossguide iteration splits exactly one leaf, which creates
 exactly two leaves without a `BestSplit`, and `SelectLeavesToVisit`
@@ -193,7 +193,7 @@ Mid-edit by other sessions at lane open:
 Lossguide methods and it is DIRTY. So they land in
 `greedy_search_helper_lossguide.mojo` in the same directory, with a merge note
 at its head and a `PORTED_MAP.tsv` row pointing at the same upstream file.
-**That split is temporary and is itself DEVIATION 301.** The depthwise lane is
+**That split is temporary and is itself DEVIATION 316.** The depthwise lane is
 doing the same with `greedy_search_helper_depthwise.mojo`.
 
 ## Deviation numbers
@@ -201,28 +201,71 @@ doing the same with `greedy_search_helper_depthwise.mojo`.
 Rule 3 says assign them before parallel work begins. The gbdt lane is at 144,
 the forest lanes are at 215.
 
-* **300-349 is this lane, Lossguide.** Opened here.
-* **350-399 is reserved for the depthwise lane.** Do not spend them.
+* **315-349 is this lane, Lossguide.**
+* **350-399 is the depthwise lane's.** Do not spend them.
+* **300-314 is the ENSEMBLE lane's and always was.** See the renumbering
+  below.
 
-Taken so far (the depthwise lane has confirmed 350-399 and spent 350):
+### RENUMBERED 2026-08-22: this lane opened on a block that was already taken
+
+The block agreed with the depthwise lane this morning was 300-349. **It
+collided.** The ensemble lane had committed 305, 306, 309, 311, 313 and 314 in
+`ensemble/randomforest.mojo` at `7ce6db4`, 2026-08-21 15:06 -- **a day before
+the agreement**. Verified against git before accepting the ruling, not taken
+on assertion: the commit, the date and six live citations are all there, and
+`core/philox.mojo:872` carries their 306 as well.
+
+First-landed-keeps. The ensemble lane holds 300-314 and this lane moved to
+315-349, on the perf lane's ruling.
+
+**THE MAP, because five commits already in history cite the OLD numbers and
+cannot be rewritten -- peers have built on them:**
+
+| old | new | what |
+|---|---|---|
+| 300 | **315** | the lane's own header row (reserved, never cited in code) |
+| 301 | **316** | the three-file split of one CatBoost file |
+| 302 | **317** | one shared body for both leafwise score kernels |
+| 303 | **318** | the multiply-add pin on the Cosine calcer |
+| 304 | **319** | the cross-lane predicate import (CLOSED) |
+
+Commits `97df3d8`, `790728a`, `77ca6ab`, `8321474`, `41717a7` and `bc2739a`
+say 301-304 in their messages and mean 316-319. The CODE is renumbered;
+history is not, and this table is the only thing that connects them.
+
+**WHY IT HAPPENED, since rule 3 exists to prevent exactly this.** Two lanes
+agreed a block between themselves without checking what was already committed
+in a THIRD lane's directory. An agreement between two parties is not a
+namespace. Deviation blocks now route through the perf lane, which is the
+right answer and was not in place this morning.
+
+Taken so far (the depthwise lane holds 350-399 and has spent 350-352):
 
 | # | what | status |
 |---|---|---|
-| 300 | reserved -- the lane's own header row | -- |
-| 301 | `greedy_search_helper_lossguide.mojo` is a second file for one of theirs, forced by a dirty checkout | open |
-| 302 | one shared body serves `ComputeOptimalSplit` and `ComputeOptimalSplitsRegion`; the part-id read is the only difference | **PARTIALLY DEFEATED, see below** |
-| 303 | the Cosine calcer's two multiply-adds routed through `numerics.identical_mul_add` on the leafwise path, behind a defaulted comptime parameter so the symmetric arm's source is unchanged character for character | landed and verified in the AIR |
+| 315 | reserved -- the lane's own header row | -- |
+| 316 | `greedy_search_helper_lossguide.mojo` is a second file for one of theirs, forced by a dirty checkout | open |
+| 317 | one shared body serves `ComputeOptimalSplit` and `ComputeOptimalSplitsRegion`; the part-id read is the only difference | **LANDED**, and it caught a block-size defect in its first hour |
+| 318 | the Cosine calcer's two multiply-adds routed through `numerics.identical_mul_add` on the leafwise path, behind a defaulted comptime parameter so the symmetric arm's source is unchanged character for character | landed and verified in the AIR |
 
-**DEVIATION 302 did not fully land, and that is on the clock rather than on
-either lane.** I wrote the shared `_leafwise_scan_part` + `_leafwise_argmax_write`
-helpers so the Depthwise kernel would be four lines on top of them. The
-depthwise lane landed `compute_optimal_splits_region_kernel` in the same file
-at the same time with the body written out again. So `compute_scores.mojo`
-now carries the body TWICE, which is exactly the drift surface 302 existed to
-remove. Neither copy is wrong; both were gated. **The fix is one lane deleting
-its copy and calling the other's helpers, and it is not urgent enough to do
-while both files are hot.** Recorded here so it is a scheduled merge rather
-than a discovery in three weeks.
+**DEVIATION 317 LANDED, after a false start worth keeping.** I wrote the
+shared `_leafwise_scan_part` + `_leafwise_argmax_write` helpers so the
+Depthwise kernel would be four lines on top of them. The depthwise lane
+landed `compute_optimal_splits_region_kernel` in the same file at the same
+hour with the body written out again, so `compute_scores.mojo` briefly
+carried it TWICE -- exactly the drift surface 317 exists to remove.
+
+**They deleted their copy and folded onto the helpers, and it immediately
+paid for itself:** their standalone body used `SCORE_BLOCK_SIZE` (128), the
+SYMMETRIC launcher's block, where both leafwise launchers use 256
+(`compute_scores.cu:484`, `:557`). Nothing but a fidelity read catches that
+-- the block argmax is a total order and the scan is grid-strided, so every
+correctness gate passes at either size. One body, one defect found, in its
+first hour.
+
+The sentence that used to sit here -- "the fix is not urgent enough to do
+while both files are hot" -- is deleted. It was wrong: the other lane did it
+the same hour and found a bug doing it.
 
 ## The gates, in the order they get built
 
@@ -475,7 +518,7 @@ rather than doing it.
 | the fit loop | **PORTED AND GATED**, `check-lossguide`, six claims -- ONE DRIVER with four policy branches, not a second driver |
 | the non-symmetric model + apply | the depthwise lane's, consumed |
 | the stage-hash instrument | **LANDED**, `check-identity-trace`, writer and reader gated together; both lanes on it |
-| DEVIATION 303, the multiply-add pin | landed, verified in the emitted AIR |
+| DEVIATION 318, the multiply-add pin | landed, verified in the emitted AIR |
 | single-leaf split kernels | not started -- a PERFORMANCE arm, correctly ordered after the tree |
 | CatBoost's own Lossguide values as an oracle | **OWED**, and it cannot be run on this box: their GPU learner does not start on Apple silicon. The NVIDIA column's job. |
 
@@ -501,7 +544,7 @@ A repo-wide audit ran. What it found about THIS lane, and what was done:
   **A comment asserting a gate exists is as load-bearing as the gate, and
   nothing checks comments.**
 * Two drivers became one (see above). `splitmix`/`hashed` imported rather
-  than copied. `bits`/`bits_f32` collapsed. DEVIATION 304 closed.
+  than copied. `bits`/`bits_f32` collapsed. DEVIATION 319 closed.
 
 **Refuted as duplication:** `TDepthwiseWorkspace` holds only what
 `TTreeWorkspace` cannot serve; `greedy_search_helper_lossguide.mojo` is 190

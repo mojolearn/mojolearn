@@ -4,7 +4,7 @@ PORT OF the `EGrowPolicy::Lossguide` arms of
 `catboost/cuda/methods/greedy_subsets_searcher/greedy_search_helper.cpp` at
 CatBoost `54a8143a`. Transliterated. Do not improve.
 
-============================ DEVIATION 301 ============================
+============================ DEVIATION 316 ============================
 **Theirs is ONE file and ours is three.** `TGreedySearchHelper` holds every
 policy's arm in `greedy_search_helper.cpp`; here the symmetric arm is in
 `greedy_search_helper.mojo`, the Depthwise arm is in
@@ -18,7 +18,7 @@ file is quiet**, and `PORTED_MAP.tsv` points all three rows at the same
 upstream file so the fold is a rename and not an archaeology exercise.
 =======================================================================
 
-===================== DEVIATION 304, CLOSED =====================
+===================== DEVIATION 319, CLOSED =====================
 **This file used to import `IsTerminalLeaf`, `ShouldTerminate` and
 `SelectLeavesToVisit` from the DEPTHWISE lane's file**, to avoid a second
 copy of predicates whose whole job is to agree. It no longer does, and the
@@ -32,7 +32,7 @@ where the driver can reach them. Checks may import from both; a check is a
 leaf of the dependency graph and cannot create a cycle.
 
 Their true home is still `greedy_search_helper.mojo`, with everything else
-`TGreedySearchHelper` owns -- see DEVIATION 301.
+`TGreedySearchHelper` owns -- see DEVIATION 316.
 =======================================================================
 
 WHAT LOSSGUIDE ACTUALLY IS. Four decisions, and only two of them are in this

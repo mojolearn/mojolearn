@@ -689,7 +689,7 @@ def target_variance_blocks(size: Int, sm_count: Int) -> Int:
 #   `ComputeOptimalSplit`        (`:393-475`)  Lossguide.
 #       leaf ids are two SCALARS:  blockIdx.y == 0 ? partId : maybeSecondPartId
 #
-# ============================ DEVIATION 302 ============================
+# ============================ DEVIATION 317 ============================
 # THE TWO BODIES ARE THE SAME BODY. Diffed line for line: `:406-472` against
 # `:316-382` is character-identical apart from the three lines that produce
 # `thisPartId`. Theirs are two separate `__global__` templates because CUDA
@@ -1109,7 +1109,7 @@ def compute_optimal_splits_region_kernel[
     """`ComputeOptimalSplitsRegion` (`compute_scores.cu:303-385`) -- DEPTHWISE.
 
     Added by the DEPTHWISE lane at the foot of the lossguide lane's block,
-    where DEVIATION 302 says it belongs. **Four lines and two calls**, because
+    where DEVIATION 317 says it belongs. **Four lines and two calls**, because
     that deviation is exactly the finding that the two leafwise bodies are one
     body: `:316-382` is character-identical to `:406-472` apart from how
     `thisPartId` is produced.
