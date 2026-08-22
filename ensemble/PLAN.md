@@ -458,7 +458,7 @@ Numbers as actually used, which is what PORTING.md takes:
 | 100 | `dataset.mojo` | `sample_weight` float64 -> Float32 |
 | 101 | `bins.mojo` | counter width 64 -> 32 (exact); the four float64 accumulators -> Int32 fixed point; reduction buffers not ported |
 | 102 | `dataset.mojo` | Int64/Int32 field widths, spelling only |
-| 103 | `kernels/builder_kernels_impl.mojo` | **NOT RETIRED — this row said it was.** 103a: their dynamic shared-memory byte count becomes a comptime `SMEM_BIN_SLOTS` blob, because `stack_allocation` is static. 103b: their runtime `use_global_memory_histogram` argument becomes a comptime parameter, so the two arms are two kernels. 103c: the leaf kernel's blob is capped the same way. All three are live and cited from `builder.mojo` and `builder_kernels_check.mojo`. (103 is ALSO in use in `gbdt/methods/pointwise_scores_calcer.mojo` — a cross-lane collision this ledger does not own.) |
+| 103 | `kernels/builder_kernels_impl.mojo` | **NOT RETIRED — this row said it was.** 103a: their dynamic shared-memory byte count becomes a comptime `SMEM_BIN_SLOTS` blob, because `stack_allocation` is static. 103b: their runtime `use_global_memory_histogram` argument becomes a comptime parameter, so the two arms are two kernels. 103c: the leaf kernel's blob is capped the same way. All three are live and cited from `builder.mojo` and `builder_kernels_check.mojo`. (103 is ALSO in use in `gbdt/methods/pointwise_scores_calcer.mojo` — a cross-lane collision this ledger does not own.) 2026-08-22: 103a gained TIER MACHINERY (2/4/8 KiB blobs tracking their exact `histogram_dynamic_smem_size`, `builder.cuh:526-533`) after launch-log attribution measured the shared-histogram kernel at 85.3% of device time at 500k while using ~2.6 KiB of the 16 KiB blob; the tier list SHIPS DISABLED — the gated 16k-vs-4k ABAB voided at canary 10.5x (peer GBM benchmark on the GPU), and informal reads suggesting the SMALLER blob is slower on M4 are uncertifiable. Fingerprint gate held bit-identical through the tiered build. See `bench/results/RF_2026-08-22_attribution.md`. |
 | 104 | `split.mojo` | queried `WARP_SIZE`, not their hardcoded 32 |
 | 105 | `split.mojo` | their reduction operator is not associative (MEASURED) |
 | 106 | `split.mojo` | their `atomicCAS`/`threadfence`/`atomicExch` mutex as acquire-load + weak relaxed CAS + release store |
@@ -839,3 +839,37 @@ quoted.
   `shuffle_iterator`), so `core/` is the shared home; `gbdt/`'s own
   segmented-sort copy still stands and collapsing the two remains the
   merge-time item below.
+
+# Session log: 2026-08-22 morning, the attribution round
+
+The directive: optimize for LARGE datasets, decisions grounded in cuML.
+The deliverable: the lane can now name every dispatch. `core/launch_log`
++ `RF_LAUNCH_LOG` + `profile_metal.py attr` join host enqueue order to
+the trace's Compute intervals (exact or refused; 9377 = 9377 after
+same-cmdbuffer merge). Ground truth from `dispatch_census_probe`:
+memsets emit no Compute interval, every copy direction does. THE
+FINDING at 500k x 50: `histogram_shared` is 85.3% of device time,
+`find_best_splits` 8.0%, nothing else over 2%; GPU busy 78.6% at that
+shape. Large-data optimization = that one kernel.
+
+First lead chased: DEVIATION 103a's 16 KiB static blob vs their exact
+~2.6 KiB dynamic size (occupancy). Tier machinery landed, fingerprint
+gate held bit-identical, but the tier SHIPS DISABLED: the gated ABAB
+voided at canary 10.5x under a peer GBM GPU benchmark, and the informal
+single-build reads (which suggested smaller = SLOWER on M4, a result
+worth having if real) violated the alternate-inside-one-window rule.
+`build/rf_bench_smem16k` / `_smem4k` are the pair; rerun gated when the
+box clears.
+
+Also this morning: sklearn-row voids eight through ten (ten total, none
+quoted; our arm stable ~875-890 ms across all of them); the warmup
+canary tick (the window's first GPU work pays the clock ramp -- now a
+discarded `warmup` tag, excluded from the spread by the gate); a
+quiet-box watcher that launches windows only after 2 sustained quiet
+minutes. Parallel session (not this lane) started
+`bindings/_mojolearn_rf.mojo` + `python/mojolearn/randomforest.py` --
+the RF Python wire-in -- binding against ensemble/'s API without
+touching lane files; left alone.
+
+Commits this session: 78fede3, 719e27c, d6b1fe1 (+ this PLAN edit),
+each `git show --stat`-verified to explicit paths.
