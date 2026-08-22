@@ -539,11 +539,18 @@ scratch round-trip. Lossguide is the policy this taxes hardest: it splits
 O(leaves) times and its late splits are exactly the small leaves the fast arm
 exists for, so at `stat_count = 2` the tree pays ~4x the reorder launches
 CatBoost pays, into the launch-tax budget the covtype record already names.
-The fix is one hoisted host max -- `max over to_split of leaves[id].size`,
-fresh because sizes are rebuilt from `p_sz` each iteration, exactly their
-`partitionsCpuPtr[cpuLeafIdsPtr[leaf]].Size` -- passed instead of `n_rows`.
-NOT a deviation: it RESTORES their dispatch. The depthwise lane's file, so
-relayed through the orchestrator rather than edited here.
+**THE FIX AS FIRST SPECIFIED HERE WAS WRONG, and the depthwise lane caught
+it landing it (their commit `bf43e7b`; their board has the record).** The
+literal form -- "host max over `to_split` of `leaves[id].size` before the
+call" -- reads ZERO at that point: the split-prep loop has already
+overwritten the split slot with the LEFT CHILD, whose size their own
+`SplitLeaf` resets to 0 (`split_properties_helper.cpp:790`). That form would
+take the fast arm ALWAYS and overrun `GatherInplace`'s shared-memory bound.
+The landed fix takes the max from the PARENT snapshots inside the split-prep
+loop -- the value their `partitionsCpuPtr[cpuLeafIdsPtr[leaf]].Size` read
+actually sees -- passed instead of `n_rows`. NOT a deviation: it RESTORES
+their dispatch. The finding was real; the call-site spec was the part only
+the owner's read could check, which is what single-writer files are for.
 
 ## One item that is bigger than this lane, for Andrew
 
