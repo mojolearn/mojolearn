@@ -3015,3 +3015,37 @@ flag (`MOJOLEARN_STAGE_TIMES=1`) attributes exactly the phases these
 stalls sat in. PREDICTION, committed before the measurement: the 100k-row
 clf/reg rows move toward parity and no large-n row regresses; the win
 scales with cycle count over device seconds, so small-n gains most.
+
+### DEVIATION 218 -- the four predictions, SCORED (2026-08-22, against `bench/results/gbm_bench_higgs_2026-08-22_124301.json`)
+
+The predictions were committed in this entry before any run; the scoring
+is therefore explicit, hit or miss, one line each.
+
+* **(a) full-higgs ET fits through the pairs harness and fills the
+  refused cell -- HIT.** 8.8M-row train split, `mojolearn-et-gpu`
+  train_time 36.94 s, on the rebuilt `_mojolearn_trees.so` (the first
+  binary carrying the lift; the previous run's refusal came from a STALE
+  binary whose source-level fix this ledger had already recorded -- the
+  shipped artifact is a call site too). The comparator arm ran skl-et-cpu
+  at 170.73 s: 4.6x, with our AUC 0.70922 / LogLoss 0.66334 against their
+  0.69861 / 0.66648 -- accuracy ABOVE the comparator at the formerly
+  refused scale.
+* **(b) accuracy within the band of lgbm-et's on the same split -- NOT
+  SCOREABLE AS WRITTEN.** The JSON carries no lgbm-et arm, and the only
+  lgbm-et higgs row on record (`RF_ET_2026-08-22_lightgbm-pairs.md`)
+  logged time only, under a contamination flag. Against the comparator
+  that WAS run, skl-et-cpu, every accuracy metric landed above. The
+  prediction stays open until an lgbm-et higgs arm runs clean; it is not
+  claimed as a hit.
+* **(c) no check regresses -- HIT.** score_kernel_check (210 cells, arm
+  E's 218 assertions included), objectives_check, device_batched_check,
+  device_forest_check, device_regression_check, device_tree_check,
+  estimator_check: all PASS on this source.
+* **(d) the higgs2m board (all under 2^21) is bit-for-bit untouched --
+  HELD BY GATE, not re-measured.** `classification_key_shift` is 0 at and
+  below 2^21 (arm E asserts it), so the formerly-legal regime publishes
+  the identical pair; corroborated by identity traces of the fixture
+  suite hashing identical pre/post on every non-raced fit. The board
+  itself was not re-run for this scoring; a direct re-run remains the
+  orchestrator's option and this line is not upgraded to HIT until it
+  happens.
