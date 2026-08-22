@@ -1,0 +1,314 @@
+diff --git a/IDENTITY_PATHS.md b/IDENTITY_PATHS.md
+index f2fc0dd..56cad91 100644
+--- a/IDENTITY_PATHS.md
++++ b/IDENTITY_PATHS.md
+@@ -66,6 +66,12 @@ the other mode.
+ It decides how many chunks a leaf's rows are split into before `block.sum`
+ reduces each one **in float**. So the machine's core count decides the last
+ bits of every per-leaf stat, and per-leaf stats **are the leaf values**.
++(Since 2026-08-22 it is the UPPER BOUND: the kernel takes
++`min(grid, ceil(size / (512 * 16)))` blocks per leaf — their
++`effectiveBlockCount`, `update_part_props.cu:136-137` — so a leaf under
++`8192 * grid` rows has a summation shape that no longer depends on the
++core count at all, in FAST mode included. The pinned formula still sizes
++the grid and the buffers, and row 7 stays closed.)
+ 
+ Apple's 10 cores and an A100's 108 SMs give different chunk counts and
+ therefore different models — not rarely, not probabilistically, but on every
+diff --git a/gbdt/gpu_util/partitions_reduce.mojo b/gbdt/gpu_util/partitions_reduce.mojo
+index 042ceec..4499833 100644
+--- a/gbdt/gpu_util/partitions_reduce.mojo
++++ b/gbdt/gpu_util/partitions_reduce.mojo
+@@ -68,11 +68,28 @@ plumbing, which is why it needs its own kernel rather than a comment.
+ TWO PHASES, for the reason the partition has two
+ -------------------------------------------------
+ Phase 1 is grid-parallel over (block, leaf) and writes one partial sum per
+-block, each block STRIPING over the rows it owns the way `ComputeSum` does.
+-Phase 2 reduces one partial per launched block, per leaf, the way
+-`SaveResultsImpl` does. A one-block-per-leaf version would be correct and
+-would serialize the whole dataset through one threadgroup at depth 0, which
+-is the mistake this repository has now made twice and measured twice.
++block, each block STRIPING over the rows it owns the way `ComputeSum` does
++-- restricted, since 2026-08-22, to each leaf's EFFECTIVE block count
++(`minDocsPerBlock = BlockSize * 16`, `update_part_props.cu:136-137`), which
++this port had silently dropped: every block of every (leaf, stat) was paying
++a 512-wide `block_sum` barrier tree even when its stripe held nothing, and
++on the higgs estimation shape that was ~90% of the launched blocks. Phase 2
++folds the per-block partials the way `SaveResultsImpl` does -- one THREAD
++per (part, stat), serial over the chunk axis, at their `saveBlockSize` of
++256 -- which replaced a one-512-block-per-(leaf, stat) `block_sum` of a
++dozen numbers that was also ours, also unrecorded. A one-block-per-leaf
++phase 1 would still be correct and would serialize the whole dataset
++through one threadgroup at depth 0, which is the mistake this repository
++has now made twice and measured twice; `effectiveBlockCount` is their
++answer to BOTH ends of that tradeoff.
++
++BITS MOVE with this port, and the ledger entry (PORTING.md, the
++2026-08-22 partitions-reduce entry) carries the price: the per-thread
++stripe stride became the effective grid rather than the launched grid, and
++phase 2's fold became serial-in-chunk rather than a 512-lane tree, so
++every float partition stat can round differently in its last bits. The
++oracle gates are the arbiter, exactly as they were for the machine-sized
++grid change above.
+ 
+ Neither phase re-derives the block count from a partition's length. The
+ launcher owns that number and hands it to both, which is theirs
+@@ -145,15 +162,40 @@ def partition_stats_partial_kernel(
+     var chunk = Int(block_idx.x)
+     var tid = Int(thread_idx.x)
+ 
+-    # `blockCount` is `gridDim.x`, exactly as theirs is: the stride has to be
+-    # the grid that is actually running, not the buffer's row width.
+-    var stride = Int(grid_dim.x) * STATS_BLOCK
+-    var v = Float32(0.0)
+-    var i = chunk * STATS_BLOCK + tid
+-    while i < size:
+-        v += stats.unsafe_load(stat * line_size + offset + i)
+-        i += stride
+-    var total = block_sum[block_size=STATS_BLOCK](v)
++    # `minDocsPerBlock = BlockSize * 16; effectiveBlockCount = min(gridDim.x,
++    # CeilDivide(partSize, minDocsPerBlock))` (`update_part_props.cu:136-137`,
++    # `UpdatePartitionsPropsImpl`'s constants -- the ForSplit variant uses
++    # `BlockSize` alone and is NOT this launcher's kernel). A leaf shorter
++    # than 8192 rows per grid slot concentrates into FEWER blocks; a block
++    # past its leaf's effective count SKIPS the whole body -- no loads, no
++    # block reduction -- and thread 0 writes the 0.0 its slab contributes
++    # (`:139-152`: `double result = 0; if (blockIdx.x < effectiveBlockCount)
++    # {...}; if (threadIdx.x == 0) tempVars[...] = result`). This port ran
++    # EVERY block through `block_sum` -- 512-wide barrier trees over empty
++    # stripes -- which is the silently-dropped half of their design this
++    # file's history never recorded; the higgs estimation shape (256 leaves
++    # x ~8k rows x 10 chunks) paid ~90% of its phase-1 blocks for nothing.
++    #
++    # `chunk` is uniform across the block (it IS `block_idx.x`), so the
++    # branch below is block-uniform and the barrier inside `block_sum` is
++    # never divergent -- the same argument their `__syncthreads()` inside
++    # the `if` relies on.
++    var min_docs = STATS_BLOCK * 16
++    var eff = (size + min_docs - 1) // min_docs
++    if eff > Int(grid_dim.x):
++        eff = Int(grid_dim.x)
++
++    var total = Float32(0.0)
++    if chunk < eff:
++        # the stride is the EFFECTIVE grid, theirs (`stripeSize` is built
++        # from `blockCount = effectiveBlockCount`, `:53-57` via `:143-144`)
++        var stride = eff * STATS_BLOCK
++        var v = Float32(0.0)
++        var i = chunk * STATS_BLOCK + tid
++        while i < size:
++            v += stats.unsafe_load(stat * line_size + offset + i)
++            i += stride
++        total = block_sum[block_size=STATS_BLOCK](v)
+     if tid == 0:
+         partials.unsafe_store(
+             (leaf_slot * n_stats + stat) * max_chunks + chunk, total
+@@ -165,50 +207,59 @@ def partition_stats_finish_kernel(
+     partials: MutPointer[Float32, MutAnyOrigin],
+     out_stats: MutPointer[Float32, MutAnyOrigin],
+     max_chunks_in: Int32,
++    part_count_in: Int32,
++    n_stats_in: Int32,
+ ):
+     """PHASE 2: sum a leaf's per-block partials into `partStats`.
+ 
+-    `SaveResultsImpl` (`cuda_util/kernel/update_part_props.cu`), whose loop is
+-
+-        for (int x = 0; x < tempVarsBlockCount; ++x) {
+-            total += tempVars[i];  tempVars += statCount * partCount;
+-        }
+-
+-    `tempVarsBlockCount` is `numBlocks.x` handed down from the host, so they
+-    read one partial PER LAUNCHED BLOCK and never re-derive the count from
+-    the partition. `max_chunks` is that argument.
+-
+-    This used to recompute `ceil(part_size / STATS_BLOCK)` from the size
+-    instead. Two things were wrong with that. It read `max_chunks` entries'
+-    worth of stride while indexing up to the leaf's own chunk count, so a
+-    leaf longer than `max_leaf_rows` walked out of its own row of `partials`
+-    and into the next leaf's. And it duplicated a number the launcher already
+-    knows, which is how the two could disagree at all. `part_size` is
+-    therefore no longer an argument, exactly as it is not one of theirs.
+-
+-    Blocks past a leaf's length wrote `0.0` in phase 1, so summing all of
+-    them is the same arithmetic as summing the occupied ones.
++    `SaveResultsImpl` (`cuda_util/kernel/update_part_props.cu:96-115`),
++    ported at ITS shape now, not merely its arithmetic: ONE THREAD per
++    (part, stat) --
++
++        const ui32 i = blockIdx.x * blockDim.x + threadIdx.x;
++        const ui32 statId = i % statCount;
++        const ui32 y = i / statCount;
++        ...
++        for (int x = 0; x < tempVarsBlockCount; ++x) { total += ...; }
++        statSums[leafId * statCount + statId] = total;
++
++    -- a SERIAL loop over the chunk axis in ascending x order, launched at
++    `saveBlockSize = 256` over `ceil(partCount * statCount / 256)` blocks
++    (`:224-228`). What stood here was one 512-thread block per (leaf,
++    stat) running a full `block_sum` tree to add `max_chunks` numbers --
++    tens of values under a 512-wide barrier reduction, hundreds of such
++    blocks per call. That shape was OURS, unrecorded; the serial loop is
++    theirs, and with the chunk axis innermost in this port's `partials`
++    layout each thread's reads are contiguous besides.
++
++    `tempVarsBlockCount` is `numBlocks.x` handed down from the host, so
++    they read one partial PER LAUNCHED BLOCK and never re-derive the count
++    from the partition; `max_chunks` is that argument, and phase 1's
++    inactive blocks wrote real `0.0`s, so summing all of them is the same
++    arithmetic as summing the occupied ones. `part_count`/`n_stats` arrive
++    as arguments because this kernel's grid no longer encodes them.
+ 
+     Writes `[leaf][stat]`, the layout `compute_optimal_splits_kernel` reads
+-    as `part_stats[leaf * stat_count + stat]`.
++    as `part_stats[leaf * stat_count + stat]`, through the LEAF ID -- their
++    `statSums[leafId * statCount + statId]`.
+     """
+     var max_chunks = Int(max_chunks_in)
+-    var leaf_slot = Int(block_idx.y)
++    var part_count = Int(part_count_in)
++    var n_stats = Int(n_stats_in)
++    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if i >= part_count * n_stats:
++        return
++    # their mapping (`:103-104`): stat innermost
++    var stat = i % n_stats
++    var leaf_slot = i // n_stats
+     var leaf_id = Int(leaves.unsafe_load(leaf_slot))
+-    var stat = Int(block_idx.z)
+-    var n_stats = Int(grid_dim.z)
+-    var tid = Int(thread_idx.x)
+ 
+-    var acc = Float32(0.0)
+-    var c = tid
+-    while c < max_chunks:
+-        acc += partials.unsafe_load(
++    var total = Float32(0.0)
++    for c in range(max_chunks):
++        total += partials.unsafe_load(
+             (leaf_slot * n_stats + stat) * max_chunks + c
+         )
+-        c += STATS_BLOCK
+-    var total = block_sum[block_size=STATS_BLOCK](acc)
+-    if tid == 0:
+-        out_stats.unsafe_store(leaf_id * n_stats + stat, total)
++    out_stats.unsafe_store(leaf_id * n_stats + stat, total)
+ 
+ 
+ def partition_stats_chunks(sm_count: Int, n_stats: Int) -> Int:
+@@ -303,11 +354,19 @@ def compute_partition_stats(
+         grid_dim=(max_chunks, n_leaf_slots, n_stats),
+         block_dim=(STATS_BLOCK, 1, 1),
+     )
++    # `const ui32 saveBlockSize = 256; numSaveBlocks = CeilDivide(
++    # numBlocks.y * numBlocks.z, saveBlockSize)` (`update_part_props.cu
++    # :224-226`): one THREAD per (part, stat).
++    var save_blocks = (n_leaf_slots * n_stats + 255) // 256
++    if save_blocks < 1:
++        save_blocks = 1
+     ctx.enqueue_function[partition_stats_finish_kernel](
+         leaves.unsafe_ptr(),
+         partials.unsafe_ptr(),
+         out_stats.unsafe_ptr(),
+         Int32(max_chunks),
+-        grid_dim=(1, n_leaf_slots, n_stats),
+-        block_dim=(STATS_BLOCK, 1, 1),
++        Int32(n_leaf_slots),
++        Int32(n_stats),
++        grid_dim=(save_blocks, 1, 1),
++        block_dim=(256, 1, 1),
+     )
+diff --git a/mojo_only/partitions_reduce_check.mojo b/mojo_only/partitions_reduce_check.mojo
+index 80dd38d..4500226 100644
+--- a/mojo_only/partitions_reduce_check.mojo
++++ b/mojo_only/partitions_reduce_check.mojo
+@@ -36,8 +36,8 @@ WHAT IT COMPARES, AND WHY EACH RULE IS HERE
+ 3. **Both levels are checked, PER ELEMENT.** `out_stats` is one value per
+    (leaf, stat) and comparing only that would be comparing a total. So the
+    per-block `partials` plane is read back too and every (slot, stat, block)
+-   entry is compared against the host's stripe sum. At the largest arm that
+-   is 157 distinct expected values per (leaf, stat) instead of one, and a
++   entry is compared against the host's stripe sum -- including the exact
++   0.0 every block past a leaf's EFFECTIVE count must write -- and a
+    phase 2 that dropped every block past the first would leave phase 1
+    perfect and `out_stats` wrong, which is precisely the shape of the
+    `argsort` failure.
+@@ -302,26 +302,31 @@ def _arm(
+     ctx.synchronize()
+ 
+     # ---- PHASE 1, per (slot, stat, block) -------------------------------
+-    # Block `b` owns rows `b * STATS_BLOCK + t + j * gridDim.x * STATS_BLOCK`,
+-    # which is every row whose chunk index is congruent to `b` modulo the
+-    # grid width. That is `ComputeSum`'s stripe, restated here rather than
+-    # imported, because a check that derives its expectation from the thing
+-    # under test agrees with the bug.
++    # THE EFFECTIVE STRIPE (`update_part_props.cu:136-137`): a leaf uses
++    # `eff = min(gridDim.x, ceil(size / (BlockSize * 16)))` blocks, block
++    # `b < eff` owns every row whose chunk index is congruent to `b`
++    # modulo `eff`, and block `b >= eff` contributes an exact 0.0 without
++    # running the reduction at all. Restated here rather than imported,
++    # because a check that derives its expectation from the thing under
++    # test agrees with the bug.
+     var wrong_partial = 0
+     var first_bad_partial = String("")
+     for k in range(n_slots):
++        var eff_k = (sizes[k] + STATS_BLOCK * 16 - 1) // (STATS_BLOCK * 16)
++        if eff_k > max_chunks:
++            eff_k = max_chunks
+         for s in range(N_STATS):
+             for b in range(max_chunks):
+                 var want = Float64(0.0)
+                 var c = b
+-                while c * STATS_BLOCK < sizes[k]:
++                while b < eff_k and c * STATS_BLOCK < sizes[k]:
+                     var lo = c * STATS_BLOCK
+                     var hi = lo + STATS_BLOCK
+                     if hi > sizes[k]:
+                         hi = sizes[k]
+                     for i in range(lo, hi):
+                         want += host_stat[s * n_rows + offs[k] + i]
+-                    c += max_chunks
++                    c += eff_k
+                 var idx = (k * N_STATS + s) * max_chunks + b
+                 var have = Float64(
+                     got_partial.unsafe_ptr().unsafe_load(idx)
+@@ -467,7 +472,9 @@ def _sizes() -> List[Int]:
+     not. 512 and 4096 are clean multiples of the block and are here as the
+     controls that CANNOT see a missing cross-block combine; 513, 1000 and
+     40000 are the ones that can. 1 is the degenerate partition, and 40000 is
+-    157 blocks deep so phase 2 has real work rather than a single term.
++    the one arm whose effective block count exceeds one
++    (`ceil(40000 / 8192) = 5`), so phase 1's stripe and phase 2's serial
++    fold both have real work rather than a single term.
+     """
+     var s = List[Int]()
+     s.append(1)
+@@ -548,15 +555,19 @@ def check_partitions_reduce_narrow_grid() raises:
+     width. Ours has to do the same or `max_leaf_rows` is an undeclared
+     correctness precondition.
+ 
+-    Two widths. 256 collapses the grid to ONE block in x, so the whole
+-    40,000-row leaf goes through a single threadgroup striding 256 rows at a
+-    time. 1000 gives four blocks, so each one takes ten strides and phase 2
+-    has four partials to combine. Both must be exact.
+-
+-    Against the kernels before this arm existed -- one chunk per block, and a
+-    phase 2 that re-derived its chunk count from `part_size` -- the first
+-    width returns the first 256 rows of a 40,000-row leaf and the second
+-    walks 157 entries through a 4-entry row of `partials`. Neither raises.
++    Since the machine-sized grid landed, `grid_rows` no longer narrows the
++    launch (the expectation block at the top of `_arm` records why the
++    argument is still passed); what this arm still guarantees is the
++    STRIPE: the 40,000-row leaf's effective block count
++    (`ceil(40000 / (512 * 16)) = 5`) is below any machine grid, so each
++    active block must take every chunk congruent to its index modulo the
++    EFFECTIVE count, blocks past it must write exact zeros, and both
++    widths must agree with the host tally exactly.
++
++    Against the kernels before this arm existed -- one chunk per block, and
++    a phase 2 that re-derived its chunk count from `part_size` -- a narrow
++    grid returned the first rows of the leaf and walked out of its own row
++    of `partials`. Neither raised.
+     """
+     var ctx = DeviceContext()
+     var narrow = List[Int]()
