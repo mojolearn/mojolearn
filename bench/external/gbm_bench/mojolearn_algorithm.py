@@ -24,7 +24,9 @@ Arms registered here:
                        `skrf-cpu` but no ExtraTrees)
   lgbm-et-cpu          LightGBM boosting_type='rf' + extra_trees=true, the
                        closest thing LightGBM offers to an ExtraTrees forest
-  lgbm-rf-cpu          LightGBM boosting_type='rf', a plain random forest
+  lgbm-rf-cpu          LightGBM boosting_type='rf', a plain random forest;
+                       registered now so the comparator exists, but there is
+                       NO mojolearn-rf arm yet -- see PARITY_NOTES["no-rf"]
 
 `device='gpu'` is explicit on every mojolearn arm, never 'auto', so a run
 that cannot reach the accelerator fails loudly instead of quietly reporting
@@ -71,14 +73,15 @@ PARITY_NOTES = {
         "fitting something else. The ExtraTrees arm handles multiclass."
     ),
     "boost_from_average": (
-        "PORTED IN THE ENGINE 2026-08-22 (gbdt/metrics/"
-        "optimal_const_for_loss.mojo; check-bfa-oracle proves the bias "
-        "bit-equal to CatBoost's own get_scale_and_bias on every arm). "
-        "The arm passes NOTHING: both libraries resolve the same "
-        "data-dependent default (auto-true for RMSE, false for Logloss -- "
-        "Logloss is NOT on their AdjustBoostFromAverageDefaultValue list, "
-        "which an earlier version of this note got wrong). The y-centering "
-        "shim this arm used to carry is deleted."
+        "CatBoost's RMSE default boosts from the target mean; mojolearn "
+        "refuses boost_from_average by name (the cursor seeds at zero, "
+        "OPTIONS.md). For RMSE the two are the same arithmetic, so the arm "
+        "centers y before fit and adds the mean back at predict, INSIDE the "
+        "fit timer. Without this the arm spots CatBoost mean(y)*0.9^ntrees "
+        "of head start and the accuracy column measures the seed, not the "
+        "trees (measured: MAE 243 at 20 trees on year). The Logloss analog "
+        "(log-odds prior) cannot be emulated by relabeling and remains a "
+        "recorded gap on binary datasets."
     ),
     "rf-quantile-splits": (
         "mojolearn-rf-gpu is the cuML RandomForest port: splits are "
@@ -150,12 +153,15 @@ class MojolearnGbdtGPUAlgorithm(Algorithm):
     def fit(self, data, args):
         params = self.configure(data, args)
         model = mojolearn.GradientBoosting(**params)
+        self._y_offset = 0.0
         X = np.ascontiguousarray(data.X_train, dtype=np.float32)
-        y = np.ascontiguousarray(data.y_train, dtype=np.float32)
         with Timer() as t:
-            # boost_from_average is the ENGINE's now, resolved by the same
-            # data-dependent rule CatBoost applies to its own arm --
-            # PARITY_NOTES["boost_from_average"].
+            y = np.ascontiguousarray(data.y_train, dtype=np.float32)
+            if data.learning_task == LearningTask.REGRESSION:
+                # PARITY_NOTES["boost_from_average"]; inside the timer
+                # because it is part of this arm's training work.
+                self._y_offset = float(np.mean(y, dtype=np.float64))
+                y = (y - np.float32(self._y_offset)).astype(np.float32)
             self.model = model.fit(X, y)
         return t.interval
 
@@ -165,7 +171,7 @@ class MojolearnGbdtGPUAlgorithm(Algorithm):
             # gbm-bench's binary metrics expect a positive-class
             # probability, matching lgb.Booster.predict for "binary".
             return self.model.predict_proba(X)[:, 1]
-        return self.model.predict(X)
+        return self.model.predict(X) + self._y_offset
 
     def __exit__(self, exc_type, exc_value, traceback):
         del self.model
