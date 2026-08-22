@@ -93,6 +93,19 @@ INDISTINGUISHABLE from sklearn at 100k in the first (voided) window of
 the night -- the round turned parity into a multiple whatever the
 final digit turns out to be.
 
+Morning of Aug 22, two more attempts, VOIDs six and seven. 07:19:
+corespotlightd + an Apple Virtualization VM + a VS Code renderer
+spiked past 130%, and the canary's FIRST tick (100.8 ms vs a steady
+~55) blew the spread to 2.19x -- the window opened under interactive
+Chrome/WindowServer load. 07:29: the PEER LANES woke up --
+`oracle_main.mojo` at 367% peak across 27/150 samples, plus
+`plan_fusion_check` and `sibling_tiebreak_*`, plus mediaanalysisd at
+201%. Ratios printed 2.53x/3.86x and 2.65x/4.81x, our arm 881/877 ms
+(the same ~1% band as all five nightly voids); none quoted. Next
+attempt goes through a quiet-box watcher that refuses to open a
+window until peers and daemons have been silent for two sustained
+minutes, instead of burning attempts blind.
+
 On eps500 (real data, 400k x 500): held-out accuracy **ours 0.6728 vs
 sklearn 0.673275** -- identical to three decimals, so the 0.67 is what
 forests do on epsilon, not a port defect. sklearn's single fit took
@@ -103,7 +116,8 @@ arrangement window.
 
 ## Still owed
 
-- A clean ours-vs-sklearn window (retry loop running).
+- A clean ours-vs-sklearn window (seven voids on record; watcher-gated
+  retries in progress Aug 22 morning).
 - The eps500 interleaved row, by arrangement (sklearn's arm alone is
   ~13 min/fit).
 - NVIDIA parity: unchanged, nothing here has ever been compared against
