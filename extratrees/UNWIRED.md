@@ -30,8 +30,8 @@ The root `UNWIRED.md` covers `gbdt/`; this one covers `extratrees/` only.
 |---|---|---|
 | ~~`node_feature_range_kernel`~~ | | **WIRED 2026-08-21** by `train_classification_device`, along with the score pass, the finalize pass and the split reduction. `device_tree_check` grows a tree on the GPU and it is bit-identical to the host's. |
 | ~~`build_workload_info`~~ | | **WIRED** by the same. It still sits in `builder_kernels_impl.mojo` rather than `builder.mojo` for lane-ownership reasons; moving it is a merge-time action |
-| `fixed_point.mojo` (`choose_scale`, `quantize`, `mse_proxy_exact`) | DEVIATION 135's ruling | the device regression score pass. The host oracle runs at `Float64` and does not need it, so today only `fixed_point_check` calls it |
-| `ProxyImpurityExact` / `CompareProxyExact` | DEVIATION 144-145 | reached by `node_split_random_gini`, so this row is WIRED — kept here to record that the DEVICE reduction must also honour it, and does not exist yet |
+| ~~`fixed_point.mojo`~~ | DEVIATION 135's ruling | **WIRED** by the device regression score pass (deviation 206) and by the estimator's `quantize_labels` (deviation 188's closure); `fixed_point_check` and `device_regression_check` guard it |
+| ~~`ProxyImpurityExact` / `CompareProxyExact`~~ | DEVIATION 144-145 | **WIRED** on the host by `node_split_random_gini`; the device reduction this row was held open for exists (deviations 189-190) and `split_reduce_check` guards it |
 
 ## Deliberately not built
 

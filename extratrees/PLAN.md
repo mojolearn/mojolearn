@@ -282,7 +282,16 @@ every one with a sabotage per mechanism that was seen to turn it red.
 4. **Deviation 151** — we stop when every sampled column is constant and
    sklearn keeps drawing. Priced, measured on `shaped_constant_heavy`, not
    fixed.
-5. **No Python binding.**
+5. **The Python binding exists**: `bindings/_mojolearn_trees.mojo` (its own
+   extension, so it is not a merge point with the estimators or gbdt
+   bindings), `python/mojolearn/extratrees.py` (`ExtraTreesClassifier` /
+   `ExtraTreesRegressor`, sklearn's surface honoured or refused by name,
+   `device="gpu"|"cpu"`), built and GATED by `bindings/build_trees.sh` --
+   the gate launches both device fits and asserts the gpu/cpu classifier
+   arms bit-identical through Python. NOT yet registered in the package
+   `__init__.py` or the wheel script: both are another lane's working
+   files, so top-level `mojolearn.ExtraTreesClassifier` and wheel inclusion
+   are handoff items, named here rather than quietly absent.
 
 ## Rules this lane earned, beyond the ones it inherited
 
