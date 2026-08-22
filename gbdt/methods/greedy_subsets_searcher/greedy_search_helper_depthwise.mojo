@@ -1449,6 +1449,30 @@ def fit_non_symmetric_tree[
             stage_times.begin(ctx)
             var leaves_count = len(leaves)
             var sp_bytes = sp_feats_h.unsafe_ptr()
+            # ============ THEIR REORDER DISPATCH NUMBER, RESTORED 2026-08-22 ==
+            # `TSplitPointsKernel::Run` picks its arm on the LARGEST LEAF
+            # BEING SPLIT -- `maxLeafSize = Max(partitionsCpuPtr[
+            # cpuLeafIdsPtr[leaf]].Size, ...)` over exactly `leavesToSplit`
+            # (`split_points.cpp:60-63`), fast one-launch GatherInplace when
+            # `maxLeafSize <= 1024` (`:65`, `:113`). This driver passed
+            # `n_rows`, so past 1024 total rows the fast arm was UNREACHABLE
+            # for both non-symmetric policies -- found by the lossguide lane
+            # (their 2eb2cfb), verified here against their source. The
+            # symmetric driver passes its own `max_live_rows` and was never
+            # wrong.
+            #
+            # THE MAX IS TAKEN FROM THE PARENT SNAPSHOTS INSIDE THE LOOP, not
+            # from `leaves[to_split[i]].size` at the call site: by then the
+            # split slot holds the LEFT CHILD, whose `size` is 0 by their own
+            # `SplitLeaf` (`newLeaf.Size = 0`, `:790`) -- a call-site max
+            # would be 0, always fast arm, and the inplace kernel run past
+            # its shared-memory bound. Their read works because it reads the
+            # PARTITION mirror, which still holds the parents' sizes; the
+            # parent snapshot is this host loop's copy of the same number,
+            # current since HOST WAIT TWO of the previous iteration (root:
+            # set at CreateInitialSubsets).
+            # ===================================================================
+            var max_split_rows = 0
             for i in range(len(to_split)):
                 var left_id = to_split[i]
                 var right_id = leaves_count + i
@@ -1518,6 +1542,8 @@ def fit_non_symmetric_tree[
                 # Both children are derived from the parent, so the parent
                 # must be read before the left slot is overwritten.
                 var parent = leaves[left_id].copy()
+                if parent.size > max_split_rows:
+                    max_split_rows = parent.size
                 var left = split_leaf(parent, split, SPLIT_VALUE_ZERO)
                 var right = split_leaf(parent, split, SPLIT_VALUE_ONE)
                 leaves[left_id] = left^
@@ -1566,7 +1592,7 @@ def fit_non_symmetric_tree[
             mgr.stream_kernel()
 
             var reorder_launches = launch_reorder_in_leaves(
-                ctx, n_split, wide, n_rows, stat_count, n_rows,
+                ctx, n_split, wide, max_split_rows, stat_count, n_rows,
                 d_left, p_off, p_sz, stats, new_stats, row_index,
                 new_index, gmap, sm_count=sm_count,
             )
@@ -1749,9 +1775,25 @@ def fit_non_symmetric_tree[
                     total_sum += Float64(v)
                 if multiclass_optimization:
                     # `for (approxId ...) resultValues[leafId][approxId]
-                    #  += totalSum;` (`:644-646`)
+                    #  += totalSum;` (`:651-655` -- the cite used to say
+                    # :644-646, which is the totalSum accumulation).
+                    #
+                    # ============ CORRECTED 2026-08-22, audit finding ============
+                    # Theirs is `float += double`: C++ promotes the float,
+                    # adds IN DOUBLE, and rounds ONCE on the store-back.
+                    # This line was `values[approx_id] += Float32(total_sum)`
+                    # -- totalSum rounded to f32 FIRST, then a float add: two
+                    # roundings where theirs has one, up to 1 ULP apart on
+                    # the stored leaf value. Found by reading their :653
+                    # against ours; no gate covers the branch (the depthwise
+                    # gate's fixtures are all approx_dim=1), which is why the
+                    # audit is the lane's identity. Reach demonstrated by a
+                    # scratch probe at approx_dim=2 before this landed.
+                    # =============================================================
                     for approx_id in range(stat_count - 1):
-                        values[approx_id] += Float32(total_sum)
+                        values[approx_id] = Float32(
+                            Float64(values[approx_id]) + total_sum
+                        )
                 result_values.append(values^)
                 result_paths.append(leaves[leaf_id].path.copy())
             break
