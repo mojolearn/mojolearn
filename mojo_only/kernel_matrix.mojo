@@ -73,7 +73,12 @@ same kernel for the same device. Pinning was the right answer for AMD and is
 the only possible answer for those two. See `column_lane_width`.
 """
 
-from mojo_only.numerics import NumericMode, NUMERIC_FAST, NUMERIC_IDENTICAL
+from mojo_only.numerics import (
+    NumericMode,
+    NUMERIC_FAST,
+    NUMERIC_IDENTICAL,
+    GLOBAL_NUMERIC_MODE,
+)
 
 
 # --- the columns ---------------------------------------------------------
@@ -908,10 +913,36 @@ def block_size_for[kernel: Int, column: Int]() -> Int:
     block is the largest that fits under it, capped at CatBoost's own choice
     because more threads than they use buys nothing and costs a wider
     barrier.
+
+    IDENTITY GATE (2026-08-22, closes the audit finding that IDENTITY_PATHS
+    row 3 was closed only at `spec_for`, the runtime REPORT, while this
+    comptime accessor -- the one the kernels actually compile against --
+    read the device column unconditionally): under a `NUMERIC_IDENTICAL`
+    build the budget is `IDENTITY_FLOOR_SHARED_BYTES` and the block is
+    additionally capped at `IDENTITY_FLOOR_BLOCK`, mirroring `spec_for`'s
+    resolution exactly. The mode is read HERE rather than taken as a
+    parameter so every caller -- the hist kernels and the hist2/pointwise
+    wrappers that derive from this -- gates at once with no call-site
+    wiring, the same one-line-toggle argument that created
+    `GLOBAL_NUMERIC_MODE`. On Apple the floor and the column coincide
+    (32 KB, block 512), so both modes give the same numbers there; the
+    gate moves the NVIDIA column's 768 to 512 (and the one-byte family's
+    384 to 256) under IDENTICAL, one geometry on every vendor. The device
+    dispatch cap below still applies: a column that cannot reach the floor
+    is refused by `column_meets_identity_floor` before any launch.
     """
     comptime floats = hist_floats_per_thread_for[kernel]()
-    comptime cap = catboost_block_for[kernel]()
-    comptime limit = column_shared_limit(column) // (floats * 4)
+    comptime identical = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    comptime cb_cap = catboost_block_for[kernel]()
+    comptime cap = (
+        IDENTITY_FLOOR_BLOCK if identical
+        and IDENTITY_FLOOR_BLOCK < cb_cap else cb_cap
+    )
+    comptime budget = (
+        IDENTITY_FLOOR_SHARED_BYTES if identical
+        else column_shared_limit(column)
+    )
+    comptime limit = budget // (floats * 4)
     comptime by_smem = limit if limit < cap else cap
     #: AND THE VENDOR'S DISPATCH CAP, which this row did not consult until
     #: 2026-08-21. On every column that could be built it was slack -- all
@@ -1206,6 +1237,13 @@ def partition_chunks_sm_for[identical: Bool](device_sm: Int) -> Int:
     is a grid that under-fills a large GPU and over-fills a small one, on the
     opt-in arm only -- a chunk count, not a kernel, so measuring it is a
     parameter sweep and it has not been run.
+
+    READERS (2026-08-22): no longer just the partition-stats chunk formula.
+    `std_dev_blocks` (random_score_helper.mojo, DEVIATION 252), the greedy
+    arm's `target_variance_blocks` (compute_scores.mojo, DEVIATION 353) and
+    the histogram replication factor (DEVIATION 354) all pin their
+    machine-derived counts through this one function, so the row-7 class
+    has ONE pin to audit.
     """
     comptime if identical:
         return PINNED_PARTITION_CHUNKS_SM
