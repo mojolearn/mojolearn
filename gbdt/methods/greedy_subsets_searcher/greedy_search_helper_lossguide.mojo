@@ -47,6 +47,7 @@ file because the other two are shared:
      differs from every other policy in what the number MEANS
 """
 
+from core.identity_trace import IdentityTrace
 from gbdt.methods.greedy_subsets_searcher.points_subsets import TLeaf
 
 
@@ -168,6 +169,63 @@ def select_leaves_to_split(leaves: List[TLeaf]) raises -> List[Int]:
     var best = find_best_leaf_to_split(leaves)
     if best >= 0:
         out.append(best)
+    return out^
+
+
+def select_leaves_to_split_traced(
+    leaves: List[TLeaf],
+    mut trace: IdentityTrace,
+    tag_prefix: StringSlice,
+) raises -> List[Int]:
+    """`select_leaves_to_split` with the LEAF QUEUE and the WINNER on the
+    identity-trace ladder. Same decision, verbatim -- it delegates.
+
+    NOT A PORT, like everything on the ladder: CatBoost ships one GPU backend
+    and needs no cross-backend address for a diverging bit. The two stages
+    this adds are the ones `LOSSGUIDE.md`'s stage table owed and the driver's
+    existing records cannot supply:
+
+    * `<prefix>queue.*` -- the per-leaf `BestSplit` records over ALL leaves,
+      which IS Lossguide's priority queue. The driver's `best.*` records
+      cover only the <= 2 leaves VISITED this iteration; the argmin below
+      reads every leaf, so a stale or clobbered record on an unvisited leaf
+      is visible here and nowhere else.
+    * `<prefix>selected_leaf` -- which leaf the policy chose. An INTEGER, so
+      a cross-backend difference here is structural, and per the ladder's
+      ordering rule it is read before any float stage is worth reading.
+
+    THE QUEUE IS RECORDED VERBATIM, STORED FIELDS ONLY. An undefined slot
+    holds the default record -- `feature_id = -1` (their own `Defined()`
+    sentinel), `bin_id = 0`, `gain = Float32.MAX` (`gpu_structures.h:64`) --
+    which both backends construct identically, so no synthesis is needed and
+    none is done: what is hashed is the host queue state the argmin actually
+    reads. Rule 3 (hash the LOGICAL buffer) is satisfied for free -- the
+    queue is host state, not machine-sized scratch.
+
+    `tag_prefix` is the caller's `dN.` iteration prefix; the trace enforces
+    tag uniqueness, so passing a constant prefix from a loop raises on the
+    second iteration rather than mis-aligning two traces.
+    """
+    if trace.enabled:
+        var qf = List[Int32]()
+        var qb = List[Int32]()
+        var qg = List[Float32]()
+        for i in range(len(leaves)):
+            ref bs = leaves[i].best_split
+            qf.append(bs.feature_id)
+            qb.append(bs.bin_id)
+            qg.append(bs.gain)
+        trace.record_list_i32(String(tag_prefix) + "queue.feature", qf)
+        trace.record_list_i32(String(tag_prefix) + "queue.bin", qb)
+        trace.record_list_f32(String(tag_prefix) + "queue.gain", qg)
+    var out = select_leaves_to_split(leaves)
+    if trace.enabled:
+        var sel = List[Int32]()
+        if len(out) > 0:
+            sel.append(Int32(out[0]))
+        else:
+            sel.append(Int32(-1))
+        trace.record_list_i32(String(tag_prefix) + "selected_leaf", sel)
     return out^
 
 

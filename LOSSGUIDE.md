@@ -457,9 +457,27 @@ class.
 
 ### The stage list for the Lossguide fit
 
-Wired so far: `fixture.hist`, `fixture.part_stats`, `score.best_gain`,
-`score.best_bin` (in the check's pipeline, which is the real leafwise
-kernel). The rest land with the fit loop, in this order, one tag per section:
+**STATE 2026-08-22, second pass.** The sentence that used to sit here --
+"wired so far: `fixture.*` and `score.*`; the rest land with the fit loop" --
+is STALE and is replaced: the merged driver now carries the ladder end to end
+(`d<iter>.leaves`, `plan.*`, `hist.scanned`, `scores.gain/bin`, `visit`,
+`best.*`, `split.*`, `rowindex`, `stats`, `parts.*`, `final.*`, `model.*`),
+and `check-lossguide` L6 gates its REACH on this policy's path (94 records on
+the fixture fit, traced tree identical to untraced). The table below is the
+intent; the driver spells the per-iteration prefix `d<iter>.` -- the
+`treeNN.` layer lands when the boosting loop carries the trace across trees.
+
+**Two stages the driver's ladder could NOT supply are now this lane's
+`select_leaves_to_split_traced`** (`greedy_search_helper_lossguide.mojo`):
+`queue.feature/bin/gain` -- the per-leaf `BestSplit` records over ALL leaves,
+verbatim stored fields, which IS the priority queue the argmin reads (the
+driver's `best.*` covers only the <= 2 VISITED leaves) -- and
+`selected_leaf`, the policy's integer choice. Gated by `check-lossguide-policy`
+P7, whose tooth is a gain edit on an unselected, unvisited leaf: `queue.gain`
+must move while `selected_leaf` and `queue.feature` stand still. **Driver
+wiring OWED**: the one-line swap at the `lossguide_select_leaves_to_split`
+call site to the traced variant with `trace` and `d_tag` -- the depthwise
+lane's file, edit requested through the orchestrator.
 
 | tag | what it pins |
 |---|---|
@@ -481,6 +499,23 @@ The ordering is deliberate: **integers before floats at every level.** If
 amount of ULP analysis on the histograms will explain it. If they agree and
 only the float stages move, it is a numeric pathway and IDENTITY_PATHS is the
 file to open.
+
+### Stage wall timers: BUILT ONCE, BY THE OTHER LANE, AND CONSUMED HERE
+
+The orchestrator's ask (env-gated `MOJOLEARN_STAGE_TIMES=1`, stage -> seconds
+at fit end, env read once) was ALREADY BEING BUILT by the depthwise lane when
+this lane went to write it: `depthwise_stage_times.mojo` appeared untracked
+in the target directory, found by the `ls`-in-the-same-breath rule the 09:57
+overwrite paid for. **No second instrument was written** -- the
+instrument-built-twice pattern from the dedup audit, caught BEFORE the
+duplicate this time. Their `StageTimes` drains on both edges of every stage
+(so a stage-timed run is NOT a timing, same clause as trace rule 4), prints
+integer-math milliseconds, and its `begin`/`end` pairs already bracket the
+shared driver's stages, which ARE the Lossguide stages -- one driver, four
+policy branches. What this lane still owes on it: verify a `report()` call
+exists at fit end and that the table is emitted on a LOSSGUIDE fit (reach is
+per branch), once the depthwise lane's driver edit lands and the file goes
+quiet.
 
 ## One item that is bigger than this lane, for Andrew
 
@@ -518,6 +553,8 @@ rather than doing it.
 | the fit loop | **PORTED AND GATED**, `check-lossguide`, six claims -- ONE DRIVER with four policy branches, not a second driver |
 | the non-symmetric model + apply | the depthwise lane's, consumed |
 | the stage-hash instrument | **LANDED**, `check-identity-trace`, writer and reader gated together; both lanes on it |
+| the queue + selected-leaf checkpoints | **LANDED** in `select_leaves_to_split_traced`, gated by `check-lossguide-policy` P7; the one-line driver swap is OWED (depthwise lane's file, requested via orchestrator) |
+| stage wall timers | the depthwise lane's `depthwise_stage_times.mojo`, CONSUMED not duplicated; lossguide-reach verification owed when the driver goes quiet |
 | DEVIATION 318, the multiply-add pin | landed, verified in the emitted AIR |
 | single-leaf split kernels | not started -- a PERFORMANCE arm, correctly ordered after the tree |
 | CatBoost's own Lossguide values as an oracle | **OWED**, and it cannot be run on this box: their GPU learner does not start on Apple silicon. The NVIDIA column's job. |

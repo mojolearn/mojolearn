@@ -2,9 +2,12 @@
 
     pixi run check-lossguide-policy
 
-NO CATBOOST COUNTERPART: a gate, so `mojo_only/`. HOST ONLY -- it creates no
-`DeviceContext`, launches nothing, and runs in milliseconds, so it is safe to
-run inside another lane's timing window.
+NO CATBOOST COUNTERPART: a gate, so `mojo_only/`. The sentence that used to
+sit here, "HOST ONLY -- it creates no `DeviceContext`, launches nothing",
+became FALSE the day S1 landed: S1 launches the real score kernel, precisely
+because a host-only fixture could not see the sign-convention defect it pins.
+Every claim but S1 is host algebra in milliseconds; the file as a whole is a
+device check and is NOT safe inside another lane's timing window.
 
 WHAT IS UNDER TEST. `find_best_leaf_to_split` and `select_leaves_to_split`
 from `greedy_search_helper_lossguide.mojo`, this repository's port of
@@ -66,6 +69,16 @@ quietly acquires the other's rule.
       papered over, and the Lossguide caller must raise where theirs raises
       instead of clamping three leaves into a two-scalar kernel.
 
+  P7  THE QUEUE CHECKPOINT SEES UNVISITED LEAVES. The identity-trace ladder's
+      `queue.*` / `selected_leaf` stages (`select_leaves_to_split_traced`)
+      must: emit exactly four records in order; change nothing about the
+      decision; emit NOTHING when disabled; and -- the tooth -- a gain edit
+      on a leaf that is NOT selected and NOT visited must move the
+      `queue.gain` hash while `selected_leaf` and `queue.feature` stand
+      still. The driver's `best.*` records cover only the visited pair, so
+      an instrument claiming to hash the whole priority queue has to be
+      shown a difference only the whole queue can carry.
+
 THE SABOTAGES. P2 and P3 are applied to the EXPECTATION as well: the file
 asserts that the Depthwise arm DOES reject the all-worse list and that it
 returns more than one leaf on the many-improving list. If those two
@@ -90,10 +103,12 @@ from gbdt.methods.greedy_subsets_searcher.greedy_search_helper_depthwise import 
     select_leaves_to_visit,
     should_terminate,
 )
+from core.identity_trace import IdentityTrace, read_trace_lines
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper_lossguide import (
     find_best_leaf_to_split,
     find_max_depth,
     select_leaves_to_split,
+    select_leaves_to_split_traced,
 )
 from gbdt.methods.greedy_subsets_searcher.points_subsets import (
     TBestSplitProperties,
@@ -554,6 +569,81 @@ def check_lossguide_policy(ctx: DeviceContext) raises:
         )
 
     print()
+    print("-- P7: the queue checkpoint is wired, inert, and sees UNVISITED leaves --")
+    # The ladder stage the driver cannot supply: `best.*` covers only the
+    # visited pair, `queue.*` is the whole priority queue. Four sub-claims,
+    # and the tooth is the last one -- an edit only the whole queue can see.
+    var q = List[TLeaf]()
+    q.append(leaf(Float32(-1.0), True))
+    q.append(leaf(Float32(-3.0), True))  # the winner: lowest, THEIR sign
+    q.append(undefined_leaf())
+    q.append(leaf(Float32(2.0), True))  # defined, worse, never selected
+
+    var plain = select_leaves_to_split(q)
+    var tr_off = IdentityTrace.disabled()
+    var picked_off = select_leaves_to_split_traced(q, tr_off, "p7.")
+    if len(picked_off) != 1 or len(plain) != 1 or picked_off[0] != plain[0]:
+        print("  FAIL the traced variant changed the DECISION under disabled()")
+        failures += 1
+    elif tr_off.seq != 0:
+        print("  FAIL a disabled trace emitted", tr_off.seq, "records")
+        failures += 1
+    else:
+        var pa = String("/tmp/mojolearn_lossguide_p7_a.trace")
+        var tra = IdentityTrace.to_path(pa)
+        var picked_a = select_leaves_to_split_traced(q, tra, "p7.")
+        var lines_a = read_trace_lines(pa)
+        # A gain edit on leaf 3: DEFINED, never selected, and -- because it
+        # is not one of the two children a split just made -- never VISITED.
+        var q2 = q.copy()
+        q2[3] = leaf(Float32(2.5), True)
+        var pb = String("/tmp/mojolearn_lossguide_p7_b.trace")
+        var trb = IdentityTrace.to_path(pb)
+        var picked_b = select_leaves_to_split_traced(q2, trb, "p7.")
+        var lines_b = read_trace_lines(pb)
+        if picked_a[0] != plain[0] or picked_b[0] != plain[0]:
+            print("  FAIL tracing (or the leaf-3 edit) moved the decision itself")
+            failures += 1
+        elif len(lines_a) != 4 or len(lines_b) != 4:
+            print(
+                "  FAIL want exactly 4 records, got", len(lines_a), "and",
+                len(lines_b),
+            )
+            failures += 1
+        elif (
+            _tag(lines_a[0]) != "p7.queue.feature"
+            or _tag(lines_a[1]) != "p7.queue.bin"
+            or _tag(lines_a[2]) != "p7.queue.gain"
+            or _tag(lines_a[3]) != "p7.selected_leaf"
+        ):
+            print(
+                "  FAIL tag order is", _tag(lines_a[0]), _tag(lines_a[1]),
+                _tag(lines_a[2]), _tag(lines_a[3]),
+            )
+            failures += 1
+        elif lines_a[2] == lines_b[2]:
+            # THE TOOTH. Identical hashes across a real queue difference is
+            # the worst failure this instrument can have (its silence would
+            # read as cross-backend agreement), so it is asserted, not hoped.
+            print(
+                "  FAIL queue.gain hash did not move across a gain edit on"
+                " an unselected leaf -- the checkpoint is not hashing the"
+                " whole queue"
+            )
+            failures += 1
+        elif lines_a[0] != lines_b[0] or lines_a[3] != lines_b[3]:
+            print(
+                "  FAIL queue.feature or selected_leaf moved when only a"
+                " gain changed -- the records are not independent"
+            )
+            failures += 1
+        else:
+            print(
+                "  ok   4 records, decision untouched, disabled emits none,"
+                " and the queue.gain hash MOVES on an unvisited leaf's edit"
+            )
+
+    print()
     print("-- find_max_depth --")
     var depths = List[TLeaf]()
     depths.append(leaf(Float32(-1.0), True))
@@ -569,6 +659,14 @@ def check_lossguide_policy(ctx: DeviceContext) raises:
         )
     print()
     print("lossguide policy check: PASS")
+
+
+def _tag(line: String) raises -> String:
+    """Field 2 of a trace record, `<seq>\\t<tag>\\t<dtype>\\t<count>\\t<hash>`."""
+    var parts = line.split("\t")
+    if len(parts) < 2:
+        return String("")
+    return String(parts[1])
 
 
 def main() raises:
