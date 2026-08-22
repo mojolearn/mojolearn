@@ -745,6 +745,19 @@ check-leafwise-scores = "mojo run -I . mojo_only/leafwise_scores_check.mojo"
 # OWN CB_ENSURE would fire, pinned at three rather than papered over.
 check-lossguide-policy = "mojo run -I . mojo_only/lossguide_policy_check.mojo"
 
+# `EGrowPolicy::Lossguide` END TO END on the depthwise lane's own fixture --
+# imported, not re-written, because a contrast is only worth something if
+# both arms saw the same rows. L1 it grows and the node/leaf counts agree;
+# L2/L3 it lands on EXACTLY `max_leaves` (2, 3, 5, 9 on demand) because
+# Lossguide adds exactly one leaf per iteration, which is the sharpest
+# observable difference from Depthwise and an exact integer rather than a
+# tendency; L4 the two policies produce DIFFERENT structures on identical
+# input, so the branch is proved reached; L5 `min_data_in_leaf` still stops
+# the tree before the leaf cap does; L6 the identity trace is reached AND
+# inert -- a traced fit emits records and grows a tree identical to the
+# untraced one.
+check-lossguide = "mojo run -I . mojo_only/lossguide_check.mojo"
+
 # THE STAGE-HASH INSTRUMENT, writer and reader gated together.
 # `core/identity_trace.mojo` makes a fit emit named checkpoints, each an
 # FNV-1a64 over a buffer's raw bit patterns, and

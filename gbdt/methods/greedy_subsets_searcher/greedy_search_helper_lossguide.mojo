@@ -18,21 +18,21 @@ file is quiet**, and `PORTED_MAP.tsv` points all three rows at the same
 upstream file so the fold is a rename and not an archaeology exercise.
 =======================================================================
 
-============================ DEVIATION 304 ============================
-**This file imports three predicates from the DEPTHWISE lane's file**, which
-inverts nothing in CatBoost -- in their source `IsTerminalLeaf`,
-`ShouldTerminate` and `SelectLeavesToVisit` are policy-general members of the
-one helper, read by every policy (`:668-710`). Ours have to live somewhere
-and the depthwise lane wrote them first.
+===================== DEVIATION 304, CLOSED =====================
+**This file used to import `IsTerminalLeaf`, `ShouldTerminate` and
+`SelectLeavesToVisit` from the DEPTHWISE lane's file**, to avoid a second
+copy of predicates whose whole job is to agree. It no longer does, and the
+reason is not tidiness: the driver merge made the depthwise file import THIS
+one, and the pair became a CYCLE.
 
-The alternative was a second copy, and a second copy of a predicate whose
-whole job is to agree with the first is how two lanes come to disagree about
-when a tree stops. `min_data_in_leaf`'s `<=` boundary is exactly the kind of
-detail that survives in one copy and not the other.
+The cycle compiled. It was resolved anyway, by direction: the shared driver
+depends on each policy's arm, and no policy arm depends on the driver. This
+file therefore imports nothing from it, and the three shared predicates stay
+where the driver can reach them. Checks may import from both; a check is a
+leaf of the dependency graph and cannot create a cycle.
 
-**The correct home is `greedy_search_helper.mojo` and the move is scheduled**
-for when both lanes' files are committed and that file is quiet. Until then
-the import direction is wrong and is written down rather than hidden.
+Their true home is still `greedy_search_helper.mojo`, with everything else
+`TGreedySearchHelper` owns -- see DEVIATION 301.
 =======================================================================
 
 WHAT LOSSGUIDE ACTUALLY IS. Four decisions, and only two of them are in this
@@ -47,11 +47,6 @@ file because the other two are shared:
      differs from every other policy in what the number MEANS
 """
 
-from gbdt.methods.greedy_subsets_searcher.greedy_search_helper_depthwise import (
-    is_terminal_leaf,
-    select_leaves_to_visit,
-    should_terminate,
-)
 from gbdt.methods.greedy_subsets_searcher.points_subsets import TLeaf
 
 

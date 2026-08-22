@@ -55,7 +55,13 @@ lives with each call site and with `LOSSGUIDE.md`'s stage list.
 from max.gpu.host import DeviceContext
 from std.memory import bitcast
 
-from core.identity_trace import FNV_OFFSET, IdentityTrace, fnv1a64_bytes
+from core.identity_trace import (
+    FNV_OFFSET,
+    IdentityTrace,
+    first_divergence,
+    fnv1a64_bytes,
+    read_trace_lines,
+)
 from gbdt.methods.greedy_subsets_searcher.kernel.compute_scores import (
     LEAFWISE_SCORE_BLOCK_SIZE,
     compute_optimal_split_kernel,
@@ -66,23 +72,6 @@ from gbdt.options.catboost_options import SCORE_FUNCTION_COSINE
 comptime N_BF = 24
 comptime STAT_COUNT = 3
 comptime N_LEAVES = 4
-
-
-def read_lines(path: String) raises -> List[String]:
-    var out = List[String]()
-    with open(path, "r") as fh:
-        var body = fh.read()
-        var cur = String("")
-        for i in range(body.byte_length()):
-            var c = String(body[byte=i])
-            if c == "\n":
-                out.append(cur)
-                cur = String("")
-            else:
-                cur += c
-        if cur != "":
-            out.append(cur)
-    return out^
 
 
 def hist_cell(l: Int, st: Int, b: Int) -> Int:
@@ -231,8 +220,8 @@ def check_identity_trace(ctx: DeviceContext) raises:
     var b = String("/tmp/mojolearn_it_b.trace")
     run_pipeline(ctx, a, "", 3, -1, UInt32(0))
     run_pipeline(ctx, b, "", 3, -1, UInt32(0))
-    var la = read_lines(a)
-    var lb = read_lines(b)
+    var la = read_trace_lines(a)
+    var lb = read_trace_lines(b)
     if len(la) != len(lb):
         print("  FAIL line counts differ:", len(la), "vs", len(lb))
         failures += 1
@@ -254,7 +243,7 @@ def check_identity_trace(ctx: DeviceContext) raises:
     run_pipeline(
         ctx, poisoned, "", 3, cell, bitcast[DType.uint32](Float32(99.0))
     )
-    var lp = read_lines(poisoned)
+    var lp = read_trace_lines(poisoned)
     if len(lp) != len(la):
         print("  FAIL the poisoned run has a different record count")
         failures += 1
@@ -266,11 +255,12 @@ def check_identity_trace(ctx: DeviceContext) raises:
                 n_diff += 1
                 if first_diff < 0:
                     first_diff = i
-        # Records are: header comment, fixture.hist, fixture.part_stats,
-        # score.best_gain, score.best_bin. The header is line 0 and is
-        # identical; the perturbation is IN the histogram, so the first
-        # differing record must be `fixture.hist` and `part_stats` -- which
-        # is downstream of nothing -- must still match.
+        # Records are fixture.hist, fixture.part_stats, score.best_gain,
+        # score.best_bin -- `read_trace_lines` drops the `#` provenance
+        # lines, which is what makes them provenance and not records. The
+        # perturbation is IN the histogram, so the first differing record
+        # must be `fixture.hist`, and `part_stats` -- downstream of nothing
+        # -- must still match.
         if first_diff < 0:
             print(
                 "  FAIL the instrument is BLIND: a poisoned histogram cell"
@@ -306,7 +296,7 @@ def check_identity_trace(ctx: DeviceContext) raises:
     for w in widths:
         var p = String("/tmp/mojolearn_it_w") + String(w) + ".trace"
         run_pipeline(ctx, p, "", w, -1, UInt32(0))
-        var lines = read_lines(p)
+        var lines = read_trace_lines(p)
         for i in range(len(lines)):
             if lines[i].find("fixture.hist") >= 0:
                 hist_hashes.append(lines[i])
@@ -333,8 +323,8 @@ def check_identity_trace(ctx: DeviceContext) raises:
     var c = hist_cell(2, 2, 5)
     run_pipeline(ctx, zero_run, "", 3, c, UInt32(0x00000000))
     run_pipeline(ctx, denorm_run, "", 3, c, UInt32(0x00000001))
-    var lz = read_lines(zero_run)
-    var ld = read_lines(denorm_run)
+    var lz = read_trace_lines(zero_run)
+    var ld = read_trace_lines(denorm_run)
     var denorm_seen = False
     for i in range(len(lz)):
         if lz[i].find("fixture.hist") >= 0 and lz[i] != ld[i]:
@@ -350,8 +340,8 @@ def check_identity_trace(ctx: DeviceContext) raises:
         var nan_b = String("/tmp/mojolearn_it_nan_b.trace")
         run_pipeline(ctx, nan_a, "", 3, c, UInt32(0x7FC00001))
         run_pipeline(ctx, nan_b, "", 3, c, UInt32(0x7FC00002))
-        var na = read_lines(nan_a)
-        var nb = read_lines(nan_b)
+        var na = read_trace_lines(nan_a)
+        var nb = read_trace_lines(nan_b)
         var nan_seen = False
         for i in range(len(na)):
             if na[i].find("fixture.hist") >= 0 and na[i] != nb[i]:
@@ -370,7 +360,7 @@ def check_identity_trace(ctx: DeviceContext) raises:
     print("-- T5: the .bin dump re-hashes to its recorded hash --")
     var dumped = String("/tmp/mojolearn_it_dump.trace")
     run_pipeline(ctx, dumped, "fixture.hist", 3, -1, UInt32(0))
-    var dl = read_lines(dumped)
+    var dl = read_trace_lines(dumped)
     var checked = 0
     for i in range(len(dl)):
         if dl[i].find("fixture.hist") < 0:

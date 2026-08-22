@@ -877,18 +877,53 @@ def fit_non_symmetric_tree[
     var result_weights = List[Float64]()
     var result_values = List[List[Float32]]()
 
-    # Their `while (true)`. The bound is OURS: Depthwise splits every live
-    # leaf at most once per iteration and `IsTerminalLeaf` stops at
-    # `MaxDepth`, so `max_depth + 2` iterations is unreachable unless the
-    # bookkeeping has broken. Their loop has no bound and would spin; this
-    # raises with the state that made it spin.
+    # Their `while (true)`. The bound is OURS, and it is POLICY-SHAPED,
+    # which is the whole point of this block.
+    #
+    # Depthwise splits every live leaf at most once per ITERATION and
+    # `IsTerminalLeaf` stops at `MaxDepth`, so one iteration is one LEVEL
+    # and `max_depth + 2` is unreachable unless the bookkeeping has broken.
+    #
+    # **LOSSGUIDE SPLITS EXACTLY ONE LEAF PER ITERATION**
+    # (`greedy_search_helper.cpp:319-324`), so its iteration count is a LEAF
+    # count, not a depth: `max_leaves - 1` splits grow `max_leaves` leaves,
+    # at any depth. A depth-shaped bound is not conservative for it -- it is
+    # WRONG, and it fires on correct trees.
+    #
+    # ================= HOW THIS WAS FOUND, because the shape of the
+    # investigation is the lesson =================
+    # The merge that gave this loop its Lossguide branch left the bound
+    # alone, so every Lossguide fit needing more than `max_depth + 2` splits
+    # raised. The message says "depthwise level loop", which is generic to
+    # this driver, and I read it as an accusation of the DEPTHWISE ARM and
+    # spent six probes eliminating options construction, fit helpers,
+    # fixture reuse, claim ordering, extra live fixtures and borrowed
+    # DeviceContexts -- all of which came back clean, because the depthwise
+    # arm was never involved.
+    #
+    # The numbers had said so from the first run and I did not read them:
+    # `max_depth 3 -> "5 iterations; leaves=6"`, `6 -> "8 iterations;
+    # leaves=9"`, `4 -> "6 iterations; leaves=7"`. Every one is exactly
+    # `max_depth + 2` iterations and exactly `iterations + 1` leaves --
+    # one leaf per iteration, which IS Lossguide working correctly. A
+    # diagnostic that reports its own state was telling me the answer
+    # while I searched elsewhere. READ THE NUMBERS IN THE ERROR BEFORE
+    # FORMING A HYPOTHESIS ABOUT WHICH COMPONENT IS WRONG.
+    #
+    # The message is now policy-named so the next reader is not sent to the
+    # wrong arm.
+    # ===============================================
+    var max_iterations = max_depth + 2
+    if lossguide:
+        max_iterations = max_leaves + 1
     var iteration = 0
     while True:
         iteration += 1
-        if iteration > max_depth + 2:
+        if iteration > max_iterations:
             raise Error(
-                String("depthwise level loop did not terminate in ")
-                + String(max_depth + 2)
+                String("lossguide" if lossguide else "depthwise")
+                + " growth loop did not terminate in "
+                + String(max_iterations)
                 + " iterations; leaves="
                 + String(len(leaves))
                 + " (a leaf is neither terminal nor improving and its"
