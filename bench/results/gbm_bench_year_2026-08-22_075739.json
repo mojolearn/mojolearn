@@ -1,0 +1,20 @@
+{
+  "year": {
+    "cat-cpu": {
+      "accuracy": {
+        "MeanAbsError": 6.262552913187826,
+        "MeanSquaredError": 79.97499900452556,
+        "MedianAbsError": 4.324505471666612
+      },
+      "train_time": 20.92043391696643
+    },
+    "mojolearn-gbdt-gpu": {
+      "accuracy": {
+        "MeanAbsError": 6.261633396148682,
+        "MeanSquaredError": 80.18132781982422,
+        "MedianAbsError": 4.321044921875
+      },
+      "train_time": 15.795057083014399
+    }
+  }
+}
