@@ -745,6 +745,17 @@ check-leafwise-scores = "mojo run -I . mojo_only/leafwise_scores_check.mojo"
 # OWN CB_ENSURE would fire, pinned at three rather than papered over.
 check-lossguide-policy = "mojo run -I . mojo_only/lossguide_policy_check.mojo"
 
+# THE STAGE-HASH INSTRUMENT, writer and reader gated together.
+# `core/identity_trace.mojo` makes a fit emit named checkpoints, each an
+# FNV-1a64 over a buffer's raw bit patterns, and
+# `tools/identity_trace_diff.py` aligns two traces and names the FIRST stage
+# that differs -- which is how a cross-backend identity failure gets an
+# address instead of only "the models differ". The end-to-end step plants
+# +0.0 against the smallest denormal, the shape of a real Metal-vs-CUDA
+# divergence, and REQUIRES the differ to classify it as DENORMAL-vs-ZERO
+# rather than as ULP noise. Needs python3 for the reader half.
+check-identity-trace = "sh tools/check_identity_trace.sh"
+
 # The DEPTHWISE lane's gate: `EGrowPolicy::Depthwise`, seven claims.
 #
 #   1 the bin-feature lookup table (DEVIATION 351) agrees with the

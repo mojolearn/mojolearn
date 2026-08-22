@@ -370,6 +370,75 @@ Being verified independently against their source before it is relied on.
   proves the pin survives to AIR, not to metal machine code. Low risk,
   unmeasured, and labelled as such.
 
+## The stage-hash instrument, and where the tags go
+
+Added 2026-08-22 on Andrew's ask: **hash tags per section, so a cross-GPU
+difference has an address.** A bit-identity claim that can only be checked on
+the final model is a claim nobody can debug -- two model files that differ
+tell you nothing about where the first bit moved.
+
+* `core/identity_trace.mojo` -- the writer. `MOJOLEARN_IDENTITY_TRACE=<path>`
+  makes a fit emit `<seq> <tag> <dtype> <count> <fnv1a64>` per checkpoint,
+  over RAW BIT PATTERNS in index order.
+  `MOJOLEARN_IDENTITY_TRACE_DUMP=<substring>` also writes the raw elements so
+  the comparison can go to cells.
+* `tools/identity_trace_diff.py` -- the reader. Aligns two traces on their
+  TAG SEQUENCES first (a differing stage set is a bigger finding than any
+  hash), then names the FIRST diverging stage, verifies both dumps re-hash to
+  their records, and classifies each differing cell:
+  `DENORMAL-vs-ZERO` / `SIGN` / `NAN-vs-NUMBER` / `DIFFERENT-NAN-PAYLOAD` /
+  `ULP<=n` / `LARGE`.
+* `pixi run check-identity-trace` -- gates BOTH HALVES TOGETHER. A writer and
+  a reader tested only apart are two programs, not one instrument.
+
+**Why the classification is the point, not a garnish.** An all-`DENORMAL-vs-ZERO`
+divergence is IDENTITY_PATHS row 10 -- Metal flushes subnormals, CUDA does
+not -- and it is a MODE difference, not an accuracy problem. A scattered
+1-ULP divergence is a summation order. Those two findings send a reader to
+completely different files, and an instrument that reported only "the
+histogram differs" would not separate them. The end-to-end gate plants
+`+0.0` against the smallest denormal and REQUIRES the differ to name that
+class.
+
+### The four rules a checkpoint has to obey
+
+1. Bit patterns, never decimal text (`[[mojo-string-float-roundtrip]]`).
+2. **Tags must be machine-independent AND unique within a trace.** Alignment
+   is by tag sequence, so a tag carrying an SM count produces two disjoint
+   tag sets, and a repeated tag lets the aligner pair tree 3's record against
+   tree 7's. Uniqueness is enforced in the writer, not left as a convention.
+3. Hash the LOGICAL buffer, never a machine-sized scratch. `stat_partials` is
+   sized from the core count (row 7); two backends legitimately hold
+   different partials that reduce to the same answer. Checkpoint the reduce.
+4. **A traced run is not a measurement.** Every record drains and copies.
+
+### The stage list for the Lossguide fit
+
+Wired so far: `fixture.hist`, `fixture.part_stats`, `score.best_gain`,
+`score.best_bin` (in the check's pipeline, which is the real leafwise
+kernel). The rest land with the fit loop, in this order, one tag per section:
+
+| tag | what it pins |
+|---|---|
+| `treeNN.target.stats` | `StochasticDer`'s gradient and weight planes, before any tree work |
+| `treeNN.root.part_stats` | the root reduce -- if this moves, nothing downstream is interpretable |
+| `treeNN.iterII.leafKK.hist.built` | the histogram actually accumulated |
+| `treeNN.iterII.leafKK.hist.subtracted` | the sibling derivation, which is where a float subtraction re-rounds |
+| `treeNN.iterII.leafKK.hist.scanned` | the prefix scan the scorer reads |
+| `treeNN.iterII.best_gain` / `.best_bin` | the REDUCED winner, never the per-block scratch (rule 3) |
+| `treeNN.iterII.selected_leaf` | which leaf Lossguide chose -- an integer, so a difference here is structural and not numeric |
+| `treeNN.iterII.partitions` | offsets and sizes after the split |
+| `treeNN.iterII.row_index` | the permutation, which no float can explain |
+| `treeNN.structure.nodes` | the flat non-symmetric tree |
+| `treeNN.leaf_values` | the values, after estimation |
+| `model.cursor` | the applied prediction, per tree |
+
+The ordering is deliberate: **integers before floats at every level.** If
+`selected_leaf` or `row_index` differs, the divergence is structural and no
+amount of ULP analysis on the histograms will explain it. If they agree and
+only the float stages move, it is a numeric pathway and IDENTITY_PATHS is the
+file to open.
+
 ## One item that is bigger than this lane, for Andrew
 
 **`IDENTITY_PATHS.md` row 9 records "Apple's FAST baseline measured UNFUSED
