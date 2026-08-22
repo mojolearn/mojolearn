@@ -194,11 +194,12 @@ THE DUPLICATION IS A LANE ARTIFACT, not a design choice: `gbdt/` is
 owned by another session this round and the lane charter forbids
 importing across it. It should be collapsed to one file at merge.
 
-=========== HARDWARE ROW -- NEEDS A DEVIATION NUMBER ===========
- What follows is
-a fifth, real, OUTPUT-CHANGING divergence from cuML and it is recorded
-without a number rather than squeezed into one of the four or quietly
-dropped. 
+=========== DEVIATION 123 / 403 -- THE SUBNORMAL HARDWARE ROW ===========
+What follows is a fifth, real, OUTPUT-CHANGING divergence from cuML.
+It was first recorded here without a number; the builder's trace site
+already cites it as DEVIATION 123, and DEVIATION 403 (2026-08-22) is
+the half of it this lane can act on -- see THE IDENTICAL-MODE ALIGNMENT
+at the end of this block.
 
 SUBNORMAL FLOAT32 FEATURE VALUES COLLAPSE INTO ZERO IN `n_bins_array`.
 
@@ -247,6 +248,28 @@ it stands: that table's rows are knobs this project chooses. This is a
 vendor property nobody chose, and it belongs in the table as a
 CAPABILITY row. The lane charter forbids editing that file, so the row
 is stated here and the orchestrator should move it.
+
+THE IDENTICAL-MODE ALIGNMENT (DEVIATION 403, 2026-08-22). The paragraph
+above establishes that cuML's exact behavior is not reproducible on
+Metal; what IS available is ONE behavior on every vendor, which is what
+`NUMERIC_IDENTICAL` promises. IDENTITY_PATHS row 10's construction
+(`mojo_only/numerics.ftz`) does exactly this: the `unique` comparison in
+`compute_quantiles_batched_kernel` compares `ftz(cur) != ftz(prev)`.
+Under FAST, `ftz` is a comptime no-op and this file's behavior is
+unchanged bit for bit -- Apple keeps its hardware flush, CUDA keeps
+cuML's IEEE compare, and the divergence above stands as documented.
+Under IDENTICAL, every vendor flushes the two operands to signed zero
+before comparing: on Apple that is bitwise inert (flushing what the
+hardware compare would have flushed -- the measured model above
+reproduced all observed divergences bit for bit), and on a
+denormal-honoring backend it aligns the count to Apple's. The STORED
+representative is unaffected either way: the sort is integer-keyed and
+bit-exact, so the first element of each run is the same value on every
+vendor, and only the run BOUNDARIES move. Result: `n_bins_array` is the
+same bytes on Metal, CUDA and HIP under IDENTICAL, at the price of
+differing from cuML's CUDA count on subnormal-bearing columns -- the
+same price Apple's hardware already charged, now stated once for all
+vendors instead of varying by vendor.
 ==================================================================
 """
 
@@ -257,6 +280,7 @@ from std.gpu import block_dim, block_idx, thread_idx
 
 from core.launch_log import log_launch
 from core.segmented_sort import segmented_sort_keys_f32
+from mojo_only.numerics import ftz
 
 
 # ===========================================================================
@@ -614,12 +638,18 @@ def compute_quantiles_batched_kernel(
     # are theirs and are preserved: `-0.0` and `+0.0` compare EQUAL and
     # collapse even though the sort ordered them apart, and NaN compares
     # unequal to itself and never collapses.
+    #
+    # DEVIATION 403 -- the operands pass through `numerics.ftz` so that
+    # under NUMERIC_IDENTICAL every vendor applies the SAME denormal
+    # policy to this comparison (flush, Apple's hardware behavior). Under
+    # NUMERIC_FAST `ftz` is a comptime no-op and this line is the
+    # transcription. See the deviation block's subnormal hardware row.
     if Int(thread_idx.x) == 0:
         var w = 1
         for r in range(1, Int(max_n_bins)):
             var prev = quantiles.unsafe_load(col_q + w - 1)
             var cur = quantiles.unsafe_load(col_q + r)
-            if cur != prev:
+            if ftz(cur) != ftz(prev):
                 quantiles.unsafe_store(col_q + w, cur)
                 w += 1
         n_bins.unsafe_store(col, Int32(w))
