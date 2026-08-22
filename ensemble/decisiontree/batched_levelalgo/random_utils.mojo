@@ -55,7 +55,33 @@ each argument changes the answer, so this port keeps the widths
 explicit at each call site rather than promoting everything to 64 bits.
 
 ================= DEVIATION BLOCK (whole file) =================
-NONE. Every value here is an exact transcription. `fnv1a32_prime`,
+DEVIATION 400. THE PER-TREE SEED FOLD DISCARDS THE SEED'S HIGH 32 BITS,
+AND THAT IS A BUG WE FIX RATHER THAN PORT. Their `randomforest.cuh:121`
+is `rs = fnv1a32(rs, seed_)` -- `fnv1a32` takes `uint32_t`, `seed_` is
+`uint64_t`, so C++ silently truncates and every pair of seeds that agree
+in their low word grows THE SAME FOREST: `fit(seed=1)` and
+`fit(seed=2^32 + 1)` are indistinguishable in cuML. Their own per-NODE
+fold two lines away (`builder_kernels.cuh:88` via `fnv1a32_combine`)
+hashes BOTH halves, so the truncation is an oversight, not a design.
+
+THE FIX, in `fnv1a32_hash_seed_tree` below: the high half is folded in
+one extra round, BUT ONLY WHEN IT IS NONZERO. The condition is what
+makes the fix free where cuML is not broken: for every seed below 2^32
+-- cuML's Python surface passes exactly these (`random_state` is hashed
+to 32 bits upstream, and `None` becomes 0), every committed oracle
+fixture, and this repository's default 0 -- the extra round does not
+execute and the output is bit-for-bit the transcription's output. Seeds
+with high bits set (reachable through our own UInt64 `seed` parameter)
+now produce distinct forests, which is the property a seed exists for.
+HOST-ONLY and vendor-free: this hash runs on the host and feeds Philox;
+no device column can diverge on it. The RNG remains a PURE FUNCTION of
+`(seed, treeid)` / `(seed, treeid, nodeid)` -- this deviation was
+reserved for `pcg_rng` in case the draw path itself needed replacing;
+the audit found the draw path already pure (Philox with the stride
+PINNED, DEVIATION 184/185 in `core/philox.mojo`), so the seed fold was
+the only defect left in DEVIATION 400's charter and is what spends it.
+
+Everything else is an exact transcription. `fnv1a32_prime`,
 `fnv1a32_basis`, the four byte-extract-and-multiply rounds and the
 `sizeof(T) > 4` predicate all match their file. UInt32 multiplication
 wraps in Mojo exactly as `uint32_t` wraps in C++, which is the one
@@ -112,11 +138,20 @@ def fnv1a32_hash_seed_tree(seed: UInt64, treeid: Int32) -> UInt32:
     tree_id);` on a `rs` initialized to `fnv1a32_basis` -- note that
     this call site uses `fnv1a32` DIRECTLY, not `fnv1a32_combine`, so
     the uint64 `seed_` is folded in ONE round on its low 32 bits and its
-    high half is discarded. That asymmetry with `fnv1a32_hash` below is
-    theirs; it is transcribed, not corrected.
+    high half is DISCARDED. That is their bug, not their design -- their
+    per-node fold below hashes both halves -- and DEVIATION 400 fixes it:
+    the high half gets its round exactly when it is nonzero, so every
+    seed below 2^32 (every cuML-reachable seed, every oracle fixture,
+    the default 0) keeps the transcription's bits and high-half seeds
+    stop colliding. The fold order low-then-high is `fnv1a32_combine`'s
+    own (`random_utils.cuh:33-41`).
     """
     var rs = FNV1A32_BASIS
     rs = fnv1a32(rs, UInt32(seed & 0xFFFFFFFF))
+    # DEVIATION 400 -- the conditional high-half round.
+    var hi = UInt32((seed >> 32) & 0xFFFFFFFF)
+    if hi != 0:
+        rs = fnv1a32(rs, hi)
     rs = fnv1a32(rs, UInt32(Int(treeid)))
     return rs
 
