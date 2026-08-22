@@ -171,6 +171,44 @@ retraction is the useful part: a three-way `if/elif/else` tally silently files
 fixture is structurally blind to contraction anyway, since `fma(a,b,0) ==
 a*b + 0` exactly.
 
+## Running the two arms, and the stage ladder
+
+`check-depthwise` gates whichever numeric mode the build carries.
+`GLOBAL_NUMERIC_MODE` is a `comptime` in `mojo_only/numerics.mojo` and the
+shipped default is `NUMERIC_FAST`, so the `IDENTICAL` arm needs a build with
+that one line flipped. **Do not flip it in the shared checkout** — three
+sessions compile against it. Use a detached worktree:
+
+```sh
+WT=/tmp/wt-identical
+git worktree add --detach "$WT" HEAD
+sed -i '' 's/^comptime GLOBAL_NUMERIC_MODE = NUMERIC_FAST$/comptime GLOBAL_NUMERIC_MODE = NUMERIC_IDENTICAL/' \
+  "$WT/mojo_only/numerics.mojo"
+pixi run mojo run -I "$WT" "$WT/mojo_only/depthwise_check.mojo"
+pixi run mojo run -I "$WT" "$WT/mojo_only/depthwise_digest_probe.mojo"
+git worktree remove "$WT"
+```
+
+`check-depthwise-digest` is the LADDER: one digest line per stage, in the
+lossguide lane's `core/identity_trace.mojo` format, so
+`tools/identity_trace_diff.py` reads it — that reader aligns two traces on tag
+SEQUENCES and classifies each differing cell (DENORMAL-vs-ZERO / SIGN /
+NAN-payload / ULP<=n / LARGE), which is the diagnosis where a hash is only the
+location. It also compares two core counts **in one process**, with a
+run-it-twice control first, because run-to-run noise and machine dependence are
+indistinguishable without one.
+
+Order on a new backend: `check-ieee-arith`, then `check-depthwise`, then the
+ladder. Running the ladder first tells you a stage disagrees without telling you
+whether the arithmetic was ever going to agree.
+
+**Measured, M4, 2026-08-22:**
+
+| | check-depthwise | ladder stages | reproducible | identical across {device, 108, 1} SMs |
+|---|---|---|---|---|
+| FAST | 7/7 | 99 | yes | yes — a platform accident, Metal has no float threadgroup atomics |
+| IDENTICAL | 7/7, claim 6 **gated** | 94 | yes | **yes** |
+
 ## Deviation numbers
 
 **350-399 are this lane's**, agreed with the lossguide lane (which took
