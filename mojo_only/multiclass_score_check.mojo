@@ -158,6 +158,9 @@ def run_score[
         d_ids.unsafe_ptr(), Int32(n_leaves),
         Int32(1) if multiclass else Int32(0),
         LAMBDA,
+        # ScoreStdDev, seed (DEVIATION 137-139); zero noise keeps every
+        # expectation in this file exact
+        Float32(0.0), UInt64(0),
         d_score.unsafe_ptr(), d_bin.unsafe_ptr(),
         grid_dim=(1, 1, 1), block_dim=(SCORE_BLOCK_SIZE, 1, 1),
     )
