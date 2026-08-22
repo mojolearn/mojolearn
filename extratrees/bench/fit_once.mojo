@@ -1,14 +1,21 @@
-"""ONE merged device fit, for tracing under Apple Instruments.
+"""ONE merged device fit, for tracing under Apple Instruments -- or, with
+`phases`, the lane's MICRO-STEP clock.
 
     pixi run mojo build -I . extratrees/bench/fit_once.mojo -o build/et_fit_once
     build/et_fit_once <data_dir> <name> <n_rows> <n_features> <n_classes> \
-        <trees> <depth> [regression] [mf_spec]
+        <trees> <depth> [regression] [mf_spec] [phases]
 
-Runs exactly one `train_forest_*_device` call -- the shipping merged path --
-and prints the wall time and node count. No alternation and no digest: this
-file is the TARGET of `profile_et_metal.py`, whose numbers come from the
-GPU's own timeline, not from this clock. The wall time printed here is only
-the denominator sanity check for the trace's span.
+Without `phases`: exactly one `train_forest_*_device` call -- the shipping
+merged path -- printing wall time and node count; the TARGET of
+`profile_et_metal.py`, whose numbers come from the GPU's own timeline.
+
+With `phases`: TWO fits back to back -- first the shipping (unclocked) one,
+then the same fit through `train_forest_*_device_timed` with an enabled
+`PhaseClock`, which synchronizes at every phase boundary. The clocked fit is
+a SERIALIZED version of the program (the PhaseClock docstring says why), so
+the report prints both totals and their ratio: the gap is the measurement's
+own distortion, stated next to the numbers it distorts. The per-phase table
+is what DEVIATIONS 212/213 did not have and guessed without.
 """
 
 from max.gpu.host import DeviceContext
@@ -30,9 +37,15 @@ from extratrees.ported.decisiontree.decisiontree import (
 )
 from extratrees.ported.decisiontree.batched_levelalgo.builder import (
     train_forest_classification_device,
+    train_forest_classification_device_timed,
     train_forest_regression_device,
+    train_forest_regression_device_timed,
     upload_dataset,
     DeviceDataset,
+    FOREST_ROW_SLOT_CAP,
+    FOREST_SAB_NONE,
+    N_PHASES,
+    PhaseClock,
 )
 from extratrees.ported.randomforest.randomforest import class_ids_for
 
@@ -52,11 +65,14 @@ def main() raises:
     var trees = Int(String(args[6]))
     var depth = Int(String(args[7]))
     var regression = False
+    var phases = False
     var mf_spec = String("sqrt")
     for i in range(8, len(args)):
         var a = String(args[i])
         if a == String("regression"):
             regression = True
+        elif a == String("phases"):
+            phases = True
         elif not all_digits(a):
             mf_spec = a
 
@@ -109,6 +125,20 @@ def main() raises:
     for t in range(trees):
         tree_ids.append(Int32(t))
 
+    if phases:
+        # WARMUP, unmeasured: the process's FIRST fit pays every kernel's
+        # pipeline creation (measured at several hundred ms), and without
+        # this fit the "distortion" ratio below compares a cold program to a
+        # warm one.
+        if regression:
+            _ = train_forest_regression_device(
+                ctx, dev, scale, params, tree_ids, seed
+            )
+        else:
+            _ = train_forest_classification_device(
+                ctx, dev, params, tree_ids, seed
+            )
+
     var t0 = perf_counter_ns()
     var nodes = 0
     if regression:
@@ -124,12 +154,53 @@ def main() raises:
         for t in range(len(f)):
             nodes += f[t].num_nodes()
     var t1 = perf_counter_ns()
-    print(
-        "[fit_once]",
-        trees,
-        "trees,",
-        nodes,
-        "nodes,",
-        Float64(t1 - t0) / 1e6,
-        "ms",
-    )
+    var plain_ms = Float64(t1 - t0) / 1e6
+    print("[fit_once]", trees, "trees,", nodes, "nodes,", plain_ms, "ms")
+
+    if phases:
+        var clock = PhaseClock(True)
+        var t2 = perf_counter_ns()
+        var nodes2 = 0
+        if regression:
+            var f = train_forest_regression_device_timed(
+                ctx, dev, scale, params, tree_ids, seed, FOREST_SAB_NONE,
+                FOREST_ROW_SLOT_CAP, clock,
+            )
+            for t in range(len(f)):
+                nodes2 += f[t].num_nodes()
+        else:
+            var f = train_forest_classification_device_timed(
+                ctx, dev, params, tree_ids, seed, FOREST_SAB_NONE,
+                FOREST_ROW_SLOT_CAP, clock,
+            )
+            for t in range(len(f)):
+                nodes2 += f[t].num_nodes()
+        var t3 = perf_counter_ns()
+        if nodes2 != nodes:
+            raise Error("the clocked fit built a different forest")
+        var timed_ms = Float64(t3 - t2) / 1e6
+        var sum_ns = Int64(0)
+        for p in range(N_PHASES):
+            sum_ns += clock.ns[p]
+        print(
+            "[phases] clocked total",
+            timed_ms,
+            "ms vs unclocked",
+            plain_ms,
+            "ms -- serialization distortion",
+            timed_ms / plain_ms,
+            "x; phase sum",
+            Float64(sum_ns) / 1e6,
+            "ms",
+        )
+        for p in range(N_PHASES):
+            var ms = Float64(clock.ns[p]) / 1e6
+            print(
+                "  ",
+                clock.phase_name(p),
+                ": ",
+                ms,
+                "ms (",
+                100.0 * Float64(clock.ns[p]) / Float64(sum_ns),
+                "% )",
+            )

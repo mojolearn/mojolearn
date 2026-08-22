@@ -109,3 +109,28 @@ heat-soaked-governor mechanism behind this box's standing 1.7x drift rule.
 After 211 the host is not the cost, the kernels are the floor at this size,
 and every absolute in this window was taken at whatever clock the window
 got. Tools: `extratrees/bench/fit_once.mojo` + `profile_et_metal.py`.
+
+## Addendum 3: the phase clock lands (DEVIATION 214), and the leaf tail is batched
+
+The lane now has micro-step timing: `PhaseClock` in the forest trainers
+(inert by default; `build/et_fit_once ... phases` prints nine phases with
+the serialization distortion stated beside them). First attribution, shares
+(the box was mid-drift; absolutes swung 2.7-10.2 s on one config within the
+hour, so shares are the signal):
+
+| phase | 581k x 10 trees | 100k x 100 trees |
+|---|---|---|
+| score pass | 41% | 30% |
+| range pass | 28% | 25% |
+| stage + feature sampler | 11% | 18% |
+| candidate+reduce+readback | 10% | 9% |
+| partition | 8% | 9% |
+| leaf tail | 1% | 8.3% |
+
+First fix it priced: the leaf tail allocated seven buffers and synchronized
+once PER TREE; now one allocation set, one launch, one readback, one
+synchronize per GROUP (the kernel was batch-ready per deviation 180, the
+ranges already global per 211). Clocked leaf phase 735 -> 130 ms at 100
+trees, bit-identity held by every device gate. Named next levers from the
+table: stage+sampler and reduce at small n (per-batch fixed phases), the
+two row passes everywhere (formulation floor per 212/213).

@@ -2688,3 +2688,51 @@ the next real large-data moves are a different formulation (bin-space ET,
 the other lane's product) or better silicon conditions. The small-n regime
 is a different story and its lever (the sampled-column sweep, `gridDim.y`)
 is unchanged by any of this.
+
+---
+
+## DEVIATION 214 -- the phase clock, and the first thing it paid for: the leaf tail batched
+
+**THE INSTRUMENT.** DEVIATIONS 212 and 213 were both chosen from whole-fit
+inference and both measured out as washes; the lane had NO micro-step
+timing, and Instruments cannot name kernels from the stock template. So
+`PhaseClock` (builder.mojo): threaded through `search_batch`, both twins,
+and the `train_forest_*_device_timed` variants; DISABLED it is inert -- the
+shipping entry points construct a disabled clock and add no synchronize --
+and ENABLED it syncs at every phase boundary and accumulates nine phases
+(setup, stage+sampler, range, score, candidate+reduce+readback, host splits,
+partition, host queue, leaf). An enabled clock measures a SERIALIZED
+program, so `bench/fit_once.mojo phases` prints the clocked total NEXT TO an
+unclocked warm run of the same config: the gap is the measurement's own
+distortion, stated beside the numbers it distorts (the RF lane's profiler
+carries the same caution; a warmup fit precedes both, because the process's
+first fit pays several hundred ms of pipeline creation).
+
+**FIRST TABLES** (covtype, depth 12, sqrt; shares are the signal -- the box
+was mid-drift and absolutes swung 2.7-10.2 s on one config within the hour,
+see the entry-213 clock finding):
+
+    581k x 10 trees:  score 41%  range 28%  stage+sampler 11%  reduce 10%  partition 8%  leaf 1%
+    100k x 100 trees: score 30%  range 25%  stage+sampler 18%  reduce 9%   partition 9%  leaf 8%
+
+The two row passes dominate everywhere (the entry-213 reading, now
+attributed); at small n the per-batch fixed phases (stage+sampler, reduce)
+grow to a quarter of the fit -- the next levers, now NAMED instead of
+guessed.
+
+**THE FIRST FIX IT PRICED: the leaf tail.** The per-tree leaf loop allocated
+SEVEN buffers and synchronized once per tree -- deviation 202's
+per-level-allocation disease, still alive in the tail -- and the clock
+priced it at 8.3% of a 100-tree fit. The kernel was batch-ready all along
+(deviation 180's own words: slice the pointers, shrink the grid), and every
+range is already global in the shared row buffer (211), so the group's trees
+are now CONCATENATED: one allocation set, one `leaf_kernel` launch over
+every node of every tree, one readback, one synchronize per GROUP where
+there were a hundred of each. Clocked leaf phase 735 ms -> 130 ms (8.3% ->
+3.5%, residual is the host-side node staging). Bit-identity gated by the
+same checks as always -- `device_batched_check`, `device_forest_check`,
+`device_regression_check` all hold node for node and leaf BIT for bit.
+Whole-fit confirmation rides the next clean window per the drift rule; the
+mechanism removes 99 allocations-sets, launches and synchronizes per
+100-tree group outright, which is the lever class with a 3-for-3 record here
+(184, 202, 211) against 0-for-2 for traffic rearrangement (212, 213).

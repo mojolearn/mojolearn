@@ -98,6 +98,8 @@ from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels_im
     partition_samples,
     score_row_bound_ok,
 )
+from std.time import perf_counter_ns
+
 from extratrees.mojo_only.host_splitter import HostSplitResult
 from extratrees.mojo_only.rescue import rescue_key, rescue_pick
 from extratrees.ported.decisiontree.flatnode import SparseTreeNode
@@ -1423,6 +1425,87 @@ comptime FOREST_SAB_SHARED_ROW_BASE = Int32(2)
 0, so their partitions overwrite each other. The forest must move -- this is
 the gate watching that the slot offsets are what isolate the trees."""
 
+comptime PHASE_SETUP = 0
+comptime PHASE_STAGE = 1
+comptime PHASE_RANGE = 2
+comptime PHASE_SCORE = 3
+comptime PHASE_REDUCE = 4
+comptime PHASE_HOST_SPLITS = 5
+comptime PHASE_PARTITION = 6
+comptime PHASE_HOST_QUEUE = 7
+comptime PHASE_LEAF = 8
+comptime N_PHASES = 9
+
+
+struct PhaseClock(Movable):
+    """Per-phase wall time for one forest fit -- the lane's MICRO-STEP clock.
+
+    DISABLED (the default and the only state any shipping caller uses) it is
+    inert: `tick` does nothing, no synchronize is inserted, and the fit is
+    byte-for-byte the untimed program. ENABLED, every phase boundary becomes
+    `ctx.synchronize()` + a host clock read, which SERIALIZES the pipeline
+    it measures -- the number is the duration of phases no longer allowed to
+    overlap, which is a DIFFERENT PROGRAM (the RF lane's profiler states the
+    same caution). That is why the clocked entry points are separate
+    `*_timed` functions, why nothing on the fit path constructs an enabled
+    clock, and why any report from this struct must print the clocked total
+    NEXT TO an unclocked run of the same config: the gap between them is the
+    measurement's own distortion, stated instead of hidden.
+
+    Why it exists anyway: Apple Instruments gives dispatch durations but the
+    stock template cannot name kernels (unnamed encoders), and DEVIATIONS
+    212/213 were both chosen from whole-fit inference and both measured out
+    as washes. Attribution has to come from somewhere; this is the exact
+    per-phase form, priced honestly.
+    """
+
+    var enabled: Bool
+    var ns: List[Int64]
+    var last: Int64
+
+    def __init__(out self, enabled: Bool = False):
+        self.enabled = enabled
+        self.ns = List[Int64](length=N_PHASES, fill=Int64(0))
+        self.last = Int64(0)
+
+    def mark(mut self, ctx: DeviceContext) raises:
+        """Set the clock without charging any phase -- the fit's start."""
+        if not self.enabled:
+            return
+        ctx.synchronize()
+        self.last = Int64(perf_counter_ns())
+
+    def tick(mut self, ctx: DeviceContext, phase: Int) raises:
+        """Charge everything since the previous boundary to `phase`."""
+        if not self.enabled:
+            return
+        ctx.synchronize()
+        var now = Int64(perf_counter_ns())
+        self.ns[phase] += now - self.last
+        self.last = now
+
+    def phase_name(self, phase: Int) -> String:
+        if phase == PHASE_SETUP:
+            return "setup (buffers, row fill, workspace)"
+        if phase == PHASE_STAGE:
+            return "stage + feature sampler"
+        if phase == PHASE_RANGE:
+            return "range pass (init+range+decode+nonconst)"
+        if phase == PHASE_SCORE:
+            return "score pass (init+score+finalize)"
+        if phase == PHASE_REDUCE:
+            return "candidate+reduce+splits readback"
+        if phase == PHASE_HOST_SPLITS:
+            return "host: split records"
+        if phase == PHASE_PARTITION:
+            return "partition (4 kernels)"
+        if phase == PHASE_HOST_QUEUE:
+            return "host: batch assembly + queue push"
+        if phase == PHASE_LEAF:
+            return "leaf pass"
+        return "?"
+
+
 comptime FOREST_ROW_SLOT_CAP = 1 << 26
 """Ceiling on `in-flight trees * n_rows` row SLOTS one group of the batched
 forest trainer (DEVIATION 211) may hold: 2^26 slots = 256 MB in `d_row_ids`
@@ -1517,6 +1600,7 @@ def search_batch(
     use_sampler: Bool,
     host_colids: List[Int32],
     range_only: Bool,
+    mut clock: PhaseClock,
 ) raises -> Tuple[
     List[Split], List[Int32], List[Float32], List[Float32], List[Int32]
 ]:
@@ -1633,6 +1717,7 @@ def search_batch(
             Int(k),
         )
 
+    clock.tick(ctx, PHASE_STAGE)
     ctx.enqueue_function[node_feature_range_init_kernel](
         d_min.unsafe_ptr(),
         d_max.unsafe_ptr(),
@@ -1695,6 +1780,7 @@ def search_batch(
         ctx.enqueue_copy(dst_buf=ws.o_rmax, src_buf=d_max)
         ctx.enqueue_copy(dst_buf=ws.o_rmiss, src_buf=d_missing)
     ctx.synchronize()
+    clock.tick(ctx, PHASE_RANGE)
     var any_nonconst = List[Int32](length=n_nodes, fill=Int32(0))
     for i in range(n_nodes):
         any_nonconst[i] = ws.h_nonconst.unsafe_ptr()[unsafe_offset=i]
@@ -1781,6 +1867,7 @@ def search_batch(
     )
 
     # --- 5. scored cells into candidates (DEVIATION 182) -------------
+    clock.tick(ctx, PHASE_SCORE)
     ctx.enqueue_function[score_to_candidate_kernel](
         c_q.unsafe_ptr(),
         c_c.unsafe_ptr(),
@@ -1871,6 +1958,7 @@ def search_batch(
     ctx.enqueue_copy(dst_buf=o_v, src_buf=r_v)
     ctx.enqueue_copy(dst_buf=o_m, src_buf=r_m)
     ctx.synchronize()
+    clock.tick(ctx, PHASE_REDUCE)
 
     # --- 8. build the batch's splits on the host, as `:492-494` does --
     var splits = List[Split]()
@@ -1889,6 +1977,7 @@ def search_batch(
             )
         )
 
+    clock.tick(ctx, PHASE_HOST_SPLITS)
     return (
         splits^,
         any_nonconst^,
@@ -1906,6 +1995,25 @@ def train_forest_classification_device(
     seed: UInt64,
     sabotage: Int32 = FOREST_SAB_NONE,
     row_slot_cap: Int = FOREST_ROW_SLOT_CAP,
+) raises -> List[TreeMetaDataNode[DType.float32]]:
+    """The shipping entry point: an INERT clock, so no synchronize is ever
+    added -- see `PhaseClock`. `_timed` below is the same function with the
+    micro-step clock threaded; `bench/fit_once.mojo` is its only caller."""
+    var clock = PhaseClock(False)
+    return train_forest_classification_device_timed(
+        ctx, dataset, params, tree_ids, seed, sabotage, row_slot_cap, clock
+    )
+
+
+def train_forest_classification_device_timed(
+    ctx: DeviceContext,
+    mut dataset: DeviceDataset,
+    params: DecisionTreeParams,
+    tree_ids: List[Int32],
+    seed: UInt64,
+    sabotage: Int32,
+    row_slot_cap: Int,
+    mut clock: PhaseClock,
 ) raises -> List[TreeMetaDataNode[DType.float32]]:
     """Every requested ExtraTree, with ONE merged frontier driving the GPU.
 
@@ -1997,6 +2105,7 @@ def train_forest_classification_device(
     var group_cap = row_slot_cap // Int(n_rows)
     if group_cap < 1:
         group_cap = 1
+    clock.mark(ctx)
 
     var first = 0
     while first < len(tree_ids):
@@ -2041,6 +2150,7 @@ def train_forest_classification_device(
                 )
             )
 
+        clock.tick(ctx, PHASE_SETUP)
         while True:
             # --- ONE merged batch across every queue with work ----------
             var work_items = List[NodeWorkItem]()
@@ -2065,12 +2175,14 @@ def train_forest_classification_device(
                     work_items.append(got[i])
                     item_trees.append(tree_ids[first + s])
             if len(work_items) == 0:
+                clock.tick(ctx, PHASE_HOST_QUEUE)
                 break
             if sabotage == FOREST_SAB_SCALAR_TREE:
                 for i in range(len(item_trees)):
                     item_trees[i] = item_trees[0]
             var n_nodes = len(work_items)
 
+            clock.tick(ctx, PHASE_HOST_QUEUE)
             var found = search_batch(
                 ctx,
                 ws,
@@ -2087,6 +2199,7 @@ def train_forest_classification_device(
                 True,
                 List[Int32](),
                 False,
+                clock,
             )
             var splits = found[0].copy()
             var any_nonconst = found[1].copy()
@@ -2115,7 +2228,7 @@ def train_forest_classification_device(
                 var survey = search_batch(
                     ctx, ws, dataset, d_row_ids, sub, Int(n_cols), params,
                     n_classes, n_rows, n_cols, sub_trees, seed, False,
-                    ident, True,
+                    ident, True, clock,
                 )
 
                 var s_min = survey[2].copy()
@@ -2154,7 +2267,7 @@ def train_forest_classification_device(
                     var res2 = search_batch(
                         ctx, ws, dataset, d_row_ids, chosen_items, 1, params,
                         n_classes, n_rows, n_cols, chosen_trees, seed, False,
-                        chosen_cols, False,
+                        chosen_cols, False, clock,
                     )
                     var rescued = res2[0].copy()
                     for t in range(len(chosen_slot)):
@@ -2232,6 +2345,7 @@ def train_forest_classification_device(
                 block_dim=(TPB, 1, 1),
             )
             ctx.synchronize()
+            clock.tick(ctx, PHASE_PARTITION)
 
             # --- the push, PER QUEUE, in the order each was popped --------
             for t in range(len(seg_queue)):
@@ -2242,80 +2356,96 @@ def train_forest_classification_device(
                     splits_s.append(splits[seg_start[t] + j])
                 queues[seg_queue[t]].push(items_s, splits_s)
 
-        # --- the LEAF VALUES, per tree, from the shared row buffer --------
-        # `SetLeafPredictions` (`builder.cuh:556-599`). Each tree's ranges
-        # already point into its own slot of `d_row_ids`, in the order its
-        # partitions left it.
+        # --- the LEAF VALUES, ONE launch for the whole group --------------
+        # `SetLeafPredictions` (`builder.cuh:556-599`). DEVIATION 214: the
+        # per-tree loop allocated seven buffers and synchronized once PER
+        # TREE -- the per-level-allocation disease deviation 202 cured in the
+        # level loop, still alive in the tail, and the phase clock priced it
+        # at 8% of a 100-tree fit. The kernel was batch-ready all along
+        # (deviation 180: slice pointers, shrink the grid -- here the grid
+        # GROWS instead): every tree's ranges already point into its own
+        # slot of the shared `d_row_ids`, and the kernel reads nothing
+        # tree-relative but `left_child_id == -1`. So the group's trees are
+        # concatenated and the tail is one allocation set, one launch, one
+        # readback, one synchronize.
+        var trees_g = List[TreeMetaDataNode[DType.float32]]()
+        var leaf_base = List[Int]()
+        var total_nodes = 0
         for s in range(g):
-            var tree = queues[s].get_tree()
-            var n_nodes_final = tree.num_nodes()
-            var k_out = Int(tree.num_outputs)
-
-            var d_nodes = ctx.enqueue_create_buffer[DType.uint8](
-                n_nodes_final * size_of[SparseTreeNode[DType.float32]]()
-            )
-            var d_ranges = ctx.enqueue_create_buffer[DType.uint8](
-                n_nodes_final * size_of[InstanceRange]()
-            )
-            var d_leaves = ctx.enqueue_create_buffer[DType.float32](
-                n_nodes_final * k_out
-            )
-            var d_visit = ctx.enqueue_create_buffer[DType.int32](
-                n_nodes_final
-            )
-            var h_nodes = ctx.enqueue_create_host_buffer[DType.uint8](
-                n_nodes_final * size_of[SparseTreeNode[DType.float32]]()
-            )
-            var h_ranges = ctx.enqueue_create_host_buffer[DType.uint8](
-                n_nodes_final * size_of[InstanceRange]()
-            )
-            var h_leaves = ctx.enqueue_create_host_buffer[DType.float32](
-                n_nodes_final * k_out
-            )
-            ctx.synchronize()
-            var nodes_ptr = h_nodes.unsafe_ptr().unsafe_bitcast[
+            leaf_base.append(total_nodes)
+            total_nodes += len(queues[s].node_instances)
+            trees_g.append(queues[s].get_tree())
+        var k_out = Int(n_classes)
+        var d_nodes = ctx.enqueue_create_buffer[DType.uint8](
+            total_nodes * size_of[SparseTreeNode[DType.float32]]()
+        )
+        var d_ranges = ctx.enqueue_create_buffer[DType.uint8](
+            total_nodes * size_of[InstanceRange]()
+        )
+        var d_leaves = ctx.enqueue_create_buffer[DType.float32](
+            total_nodes * k_out
+        )
+        var d_visit = ctx.enqueue_create_buffer[DType.int32](total_nodes)
+        var h_nodes = ctx.enqueue_create_host_buffer[DType.uint8](
+            total_nodes * size_of[SparseTreeNode[DType.float32]]()
+        )
+        var h_ranges = ctx.enqueue_create_host_buffer[DType.uint8](
+            total_nodes * size_of[InstanceRange]()
+        )
+        var h_leaves = ctx.enqueue_create_host_buffer[DType.float32](
+            total_nodes * k_out
+        )
+        ctx.synchronize()
+        var nodes_ptr = h_nodes.unsafe_ptr().unsafe_bitcast[
+            SparseTreeNode[DType.float32]
+        ]()
+        var ranges_ptr = h_ranges.unsafe_ptr().unsafe_bitcast[
+            InstanceRange
+        ]()
+        for s in range(g):
+            for i in range(trees_g[s].num_nodes()):
+                nodes_ptr[unsafe_offset = leaf_base[s] + i] = trees_g[
+                    s
+                ].sparsetree[i]
+                ranges_ptr[unsafe_offset = leaf_base[s] + i] = queues[
+                    s
+                ].node_instances[i]
+        ctx.enqueue_copy(dst_buf=d_nodes, src_ptr=h_nodes.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d_ranges, src_ptr=h_ranges.unsafe_ptr())
+        # `builder.cuh:582` memsets the leaf array before the launch, and an
+        # internal node's ZERO IS ITS VALUE.
+        ctx.enqueue_memset(d_leaves, Float32(0.0))
+        ctx.enqueue_memset(d_visit, Int32(0))
+        ctx.enqueue_function[
+            leaf_kernel[TPB, LEAF_MAX_OUT_DEFAULT, True]
+        ](
+            d_leaves.unsafe_ptr(),
+            d_visit.unsafe_ptr(),
+            d_nodes.unsafe_ptr().unsafe_bitcast[
                 SparseTreeNode[DType.float32]
-            ]()
-            for i in range(n_nodes_final):
-                nodes_ptr[unsafe_offset=i] = tree.sparsetree[i]
-            var ranges_ptr = h_ranges.unsafe_ptr().unsafe_bitcast[
-                InstanceRange
-            ]()
-            for i in range(n_nodes_final):
-                ranges_ptr[unsafe_offset=i] = queues[s].node_instances[i]
-            ctx.enqueue_copy(dst_buf=d_nodes, src_ptr=h_nodes.unsafe_ptr())
-            ctx.enqueue_copy(dst_buf=d_ranges, src_ptr=h_ranges.unsafe_ptr())
-            # `builder.cuh:582` memsets the leaf array before the launch, and
-            # an internal node's ZERO IS ITS VALUE.
-            ctx.enqueue_memset(d_leaves, Float32(0.0))
-            ctx.enqueue_memset(d_visit, Int32(0))
-            ctx.enqueue_function[
-                leaf_kernel[TPB, LEAF_MAX_OUT_DEFAULT, True]
-            ](
-                d_leaves.unsafe_ptr(),
-                d_visit.unsafe_ptr(),
-                d_nodes.unsafe_ptr().unsafe_bitcast[
-                    SparseTreeNode[DType.float32]
-                ](),
-                d_ranges.unsafe_ptr().unsafe_bitcast[InstanceRange](),
-                d_row_ids.unsafe_ptr(),
-                dataset.d_labels.unsafe_ptr(),
-                Int32(k_out),
-                Float32(1.0),  # classification: no fixed-point rescale
-                LEAF_SAB_NONE,
-                grid_dim=(n_nodes_final, 1, 1),
-                block_dim=(TPB, 1, 1),
+            ](),
+            d_ranges.unsafe_ptr().unsafe_bitcast[InstanceRange](),
+            d_row_ids.unsafe_ptr(),
+            dataset.d_labels.unsafe_ptr(),
+            Int32(k_out),
+            Float32(1.0),  # classification: no fixed-point rescale
+            LEAF_SAB_NONE,
+            grid_dim=(total_nodes, 1, 1),
+            block_dim=(TPB, 1, 1),
+        )
+        ctx.enqueue_copy(dst_buf=h_leaves, src_buf=d_leaves)
+        ctx.synchronize()
+        for s in range(g):
+            var n_s = trees_g[s].num_nodes()
+            trees_g[s].vector_leaf = List[Float32](
+                length=n_s * k_out, fill=Float32(0.0)
             )
-            ctx.enqueue_copy(dst_buf=h_leaves, src_buf=d_leaves)
-            ctx.synchronize()
-
-            tree.vector_leaf = List[Float32](
-                length=n_nodes_final * k_out, fill=Float32(0.0)
-            )
-            for i in range(n_nodes_final * k_out):
-                tree.vector_leaf[i] = h_leaves.unsafe_ptr()[unsafe_offset=i]
-            out.append(tree^)
-
+            for i in range(n_s * k_out):
+                trees_g[s].vector_leaf[i] = h_leaves.unsafe_ptr()[
+                    unsafe_offset = leaf_base[s] * k_out + i
+                ]
+            out.append(trees_g[s].copy())
+        clock.tick(ctx, PHASE_LEAF)
         # Mojo frees a buffer at its LAST USE; these must outlive every
         # launch that read them, and every launch has synchronized above.
         _ = d_row_ids^
@@ -2374,6 +2504,7 @@ def search_batch_regression(
     use_sampler: Bool,
     host_colids: List[Int32],
     range_only: Bool,
+    mut clock: PhaseClock,
 ) raises -> Tuple[
     List[Split], List[Int32], List[Float32], List[Float32], List[Int32]
 ]:
@@ -2474,6 +2605,7 @@ def search_batch_regression(
             Int(k),
         )
 
+    clock.tick(ctx, PHASE_STAGE)
     ctx.enqueue_function[node_feature_range_init_kernel](
         d_min.unsafe_ptr(),
         d_max.unsafe_ptr(),
@@ -2535,6 +2667,7 @@ def search_batch_regression(
         ctx.enqueue_copy(dst_buf=ws.o_rmax, src_buf=d_max)
         ctx.enqueue_copy(dst_buf=ws.o_rmiss, src_buf=d_missing)
     ctx.synchronize()
+    clock.tick(ctx, PHASE_RANGE)
     var any_nonconst = List[Int32](length=n_nodes, fill=Int32(0))
     for i in range(n_nodes):
         any_nonconst[i] = ws.h_nonconst.unsafe_ptr()[unsafe_offset=i]
@@ -2620,6 +2753,7 @@ def search_batch_regression(
     # `n_classes = 1`: the accumulator loop runs once and the metric is
     # the gain in SCALED units, which is monotone in the label's own units
     # and therefore orders identically.
+    clock.tick(ctx, PHASE_SCORE)
     ctx.enqueue_function[score_to_candidate_kernel](
         c_q.unsafe_ptr(),
         c_c.unsafe_ptr(),
@@ -2698,6 +2832,7 @@ def search_batch_regression(
     ctx.enqueue_copy(dst_buf=o_v, src_buf=r_v)
     ctx.enqueue_copy(dst_buf=o_m, src_buf=r_m)
     ctx.synchronize()
+    clock.tick(ctx, PHASE_REDUCE)
 
     var splits = List[Split]()
     for i in range(n_nodes):
@@ -2714,6 +2849,7 @@ def search_batch_regression(
             )
         )
 
+    clock.tick(ctx, PHASE_HOST_SPLITS)
     return (
         splits^,
         any_nonconst^,
@@ -2769,6 +2905,26 @@ def train_forest_regression_device(
     sabotage: Int32 = FOREST_SAB_NONE,
     row_slot_cap: Int = FOREST_ROW_SLOT_CAP,
 ) raises -> List[TreeMetaDataNode[DType.float32]]:
+    """The shipping entry point: an INERT clock -- see `PhaseClock` and the
+    classification twin above."""
+    var clock = PhaseClock(False)
+    return train_forest_regression_device_timed(
+        ctx, dataset, scale, params, tree_ids, seed, sabotage, row_slot_cap,
+        clock,
+    )
+
+
+def train_forest_regression_device_timed(
+    ctx: DeviceContext,
+    mut dataset: DeviceDataset,
+    scale: Float64,
+    params: DecisionTreeParams,
+    tree_ids: List[Int32],
+    seed: UInt64,
+    sabotage: Int32,
+    row_slot_cap: Int,
+    mut clock: PhaseClock,
+) raises -> List[TreeMetaDataNode[DType.float32]]:
     """`train_forest_classification_device`'s regression twin: the SAME
     merged-frontier forest loop (DEVIATION 211 -- read that block; it is not
     repeated here) with `search_batch_regression` in place of `search_batch`,
@@ -2801,6 +2957,7 @@ def train_forest_regression_device(
     var group_cap = row_slot_cap // Int(n_rows)
     if group_cap < 1:
         group_cap = 1
+    clock.mark(ctx)
 
     var first = 0
     while first < len(tree_ids):
@@ -2839,6 +2996,7 @@ def train_forest_regression_device(
                 )
             )
 
+        clock.tick(ctx, PHASE_SETUP)
         while True:
             var work_items = List[NodeWorkItem]()
             var item_trees = List[Int32]()
@@ -2862,12 +3020,14 @@ def train_forest_regression_device(
                     work_items.append(got[i])
                     item_trees.append(tree_ids[first + s])
             if len(work_items) == 0:
+                clock.tick(ctx, PHASE_HOST_QUEUE)
                 break
             if sabotage == FOREST_SAB_SCALAR_TREE:
                 for i in range(len(item_trees)):
                     item_trees[i] = item_trees[0]
             var n_nodes = len(work_items)
 
+            clock.tick(ctx, PHASE_HOST_QUEUE)
             var rfound = search_batch_regression(
                 ctx,
                 ws,
@@ -2883,6 +3043,7 @@ def train_forest_regression_device(
                 True,
                 List[Int32](),
                 False,
+                clock,
             )
             var splits = rfound[0].copy()
             var any_nonconst = rfound[1].copy()
@@ -2907,7 +3068,7 @@ def train_forest_regression_device(
                         ident[j * Int(n_cols) + c] = Int32(c)
                 var survey = search_batch_regression(
                     ctx, ws, dataset, d_row_ids, sub, Int(n_cols), params,
-                    n_rows, n_cols, sub_trees, seed, False, ident, True,
+                    n_rows, n_cols, sub_trees, seed, False, ident, True, clock,
                 )
                 var s_min = survey[2].copy()
                 var s_max = survey[3].copy()
@@ -2945,7 +3106,7 @@ def train_forest_regression_device(
                     var res2 = search_batch_regression(
                         ctx, ws, dataset, d_row_ids, chosen_items, 1, params,
                         n_rows, n_cols, chosen_trees, seed, False,
-                        chosen_cols, False,
+                        chosen_cols, False, clock,
                     )
                     var rescued = res2[0].copy()
                     for t in range(len(chosen_slot)):
@@ -3017,6 +3178,7 @@ def train_forest_regression_device(
                 block_dim=(TPB, 1, 1),
             )
             ctx.synchronize()
+            clock.tick(ctx, PHASE_PARTITION)
 
             for t in range(len(seg_queue)):
                 var items_s = List[NodeWorkItem]()
@@ -3026,74 +3188,98 @@ def train_forest_regression_device(
                     splits_s.append(splits[seg_start[t] + j])
                 queues[seg_queue[t]].push(items_s, splits_s)
 
-        # --- the LEAF VALUES, per tree ------------------------------------
+        # --- the LEAF VALUES, ONE launch for the whole group --------------
+        # `SetLeafPredictions` (`builder.cuh:556-599`). DEVIATION 214: the
+        # per-tree loop allocated seven buffers and synchronized once PER
+        # TREE -- the per-level-allocation disease deviation 202 cured in the
+        # level loop, still alive in the tail, and the phase clock priced it
+        # at 8% of a 100-tree fit. The kernel was batch-ready all along
+        # (deviation 180: slice pointers, shrink the grid -- here the grid
+        # GROWS instead): every tree's ranges already point into its own
+        # slot of the shared `d_row_ids`, and the kernel reads nothing
+        # tree-relative but `left_child_id == -1`. So the group's trees are
+        # concatenated and the tail is one allocation set, one launch, one
+        # readback, one synchronize.
+        var trees_g = List[TreeMetaDataNode[DType.float32]]()
+        var leaf_base = List[Int]()
+        var total_nodes = 0
         for s in range(g):
-            var tree = queues[s].get_tree()
-            var n_nodes_final = tree.num_nodes()
-            var d_nodes = ctx.enqueue_create_buffer[DType.uint8](
-                n_nodes_final * size_of[SparseTreeNode[DType.float32]]()
-            )
-            var d_ranges = ctx.enqueue_create_buffer[DType.uint8](
-                n_nodes_final * size_of[InstanceRange]()
-            )
-            var d_leaves = ctx.enqueue_create_buffer[DType.float32](
-                n_nodes_final
-            )
-            var d_visit = ctx.enqueue_create_buffer[DType.int32](
-                n_nodes_final
-            )
-            var h_nodes = ctx.enqueue_create_host_buffer[DType.uint8](
-                n_nodes_final * size_of[SparseTreeNode[DType.float32]]()
-            )
-            var h_ranges = ctx.enqueue_create_host_buffer[DType.uint8](
-                n_nodes_final * size_of[InstanceRange]()
-            )
-            var h_leaves = ctx.enqueue_create_host_buffer[DType.float32](
-                n_nodes_final
-            )
-            ctx.synchronize()
-            var nodes_ptr = h_nodes.unsafe_ptr().unsafe_bitcast[
+            leaf_base.append(total_nodes)
+            total_nodes += len(queues[s].node_instances)
+            trees_g.append(queues[s].get_tree())
+        var k_out = 1
+        var d_nodes = ctx.enqueue_create_buffer[DType.uint8](
+            total_nodes * size_of[SparseTreeNode[DType.float32]]()
+        )
+        var d_ranges = ctx.enqueue_create_buffer[DType.uint8](
+            total_nodes * size_of[InstanceRange]()
+        )
+        var d_leaves = ctx.enqueue_create_buffer[DType.float32](
+            total_nodes * k_out
+        )
+        var d_visit = ctx.enqueue_create_buffer[DType.int32](total_nodes)
+        var h_nodes = ctx.enqueue_create_host_buffer[DType.uint8](
+            total_nodes * size_of[SparseTreeNode[DType.float32]]()
+        )
+        var h_ranges = ctx.enqueue_create_host_buffer[DType.uint8](
+            total_nodes * size_of[InstanceRange]()
+        )
+        var h_leaves = ctx.enqueue_create_host_buffer[DType.float32](
+            total_nodes * k_out
+        )
+        ctx.synchronize()
+        var nodes_ptr = h_nodes.unsafe_ptr().unsafe_bitcast[
+            SparseTreeNode[DType.float32]
+        ]()
+        var ranges_ptr = h_ranges.unsafe_ptr().unsafe_bitcast[
+            InstanceRange
+        ]()
+        for s in range(g):
+            for i in range(trees_g[s].num_nodes()):
+                nodes_ptr[unsafe_offset = leaf_base[s] + i] = trees_g[
+                    s
+                ].sparsetree[i]
+                ranges_ptr[unsafe_offset = leaf_base[s] + i] = queues[
+                    s
+                ].node_instances[i]
+        ctx.enqueue_copy(dst_buf=d_nodes, src_ptr=h_nodes.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d_ranges, src_ptr=h_ranges.unsafe_ptr())
+        # `builder.cuh:582` memsets the leaf array before the launch, and an
+        # internal node's ZERO IS ITS VALUE.
+        ctx.enqueue_memset(d_leaves, Float32(0.0))
+        ctx.enqueue_memset(d_visit, Int32(0))
+        ctx.enqueue_function[
+            leaf_kernel[TPB, LEAF_MAX_OUT_DEFAULT, False]
+        ](
+            d_leaves.unsafe_ptr(),
+            d_visit.unsafe_ptr(),
+            d_nodes.unsafe_ptr().unsafe_bitcast[
                 SparseTreeNode[DType.float32]
-            ]()
-            for i in range(n_nodes_final):
-                nodes_ptr[unsafe_offset=i] = tree.sparsetree[i]
-            var ranges_ptr = h_ranges.unsafe_ptr().unsafe_bitcast[
-                InstanceRange
-            ]()
-            for i in range(n_nodes_final):
-                ranges_ptr[unsafe_offset=i] = queues[s].node_instances[i]
-            ctx.enqueue_copy(dst_buf=d_nodes, src_ptr=h_nodes.unsafe_ptr())
-            ctx.enqueue_copy(dst_buf=d_ranges, src_ptr=h_ranges.unsafe_ptr())
-            ctx.enqueue_memset(d_leaves, Float32(0.0))
-            ctx.enqueue_memset(d_visit, Int32(0))
-            # `inv_scale` puts the fixed-point mean back into the label's own
-            # units -- DEVIATION 179.
-            ctx.enqueue_function[
-                leaf_kernel[TPB, LEAF_MAX_OUT_DEFAULT, False]
-            ](
-                d_leaves.unsafe_ptr(),
-                d_visit.unsafe_ptr(),
-                d_nodes.unsafe_ptr().unsafe_bitcast[
-                    SparseTreeNode[DType.float32]
-                ](),
-                d_ranges.unsafe_ptr().unsafe_bitcast[InstanceRange](),
-                d_row_ids.unsafe_ptr(),
-                dataset.d_labels.unsafe_ptr(),
-                Int32(1),
-                Float32(1.0 / scale),
-                LEAF_SAB_NONE,
-                grid_dim=(n_nodes_final, 1, 1),
-                block_dim=(TPB, 1, 1),
+            ](),
+            d_ranges.unsafe_ptr().unsafe_bitcast[InstanceRange](),
+            d_row_ids.unsafe_ptr(),
+            dataset.d_labels.unsafe_ptr(),
+            Int32(k_out),
+            # `inv_scale` puts the fixed-point mean back into the
+            # label's own units -- DEVIATION 179.
+            Float32(1.0 / scale),
+            LEAF_SAB_NONE,
+            grid_dim=(total_nodes, 1, 1),
+            block_dim=(TPB, 1, 1),
+        )
+        ctx.enqueue_copy(dst_buf=h_leaves, src_buf=d_leaves)
+        ctx.synchronize()
+        for s in range(g):
+            var n_s = trees_g[s].num_nodes()
+            trees_g[s].vector_leaf = List[Float32](
+                length=n_s * k_out, fill=Float32(0.0)
             )
-            ctx.enqueue_copy(dst_buf=h_leaves, src_buf=d_leaves)
-            ctx.synchronize()
-            tree.vector_leaf = List[Float32](
-                length=n_nodes_final, fill=Float32(0.0)
-            )
-            for i in range(n_nodes_final):
-                tree.vector_leaf[i] = h_leaves.unsafe_ptr()[unsafe_offset=i]
-            out.append(tree^)
-
+            for i in range(n_s * k_out):
+                trees_g[s].vector_leaf[i] = h_leaves.unsafe_ptr()[
+                    unsafe_offset = leaf_base[s] * k_out + i
+                ]
+            out.append(trees_g[s].copy())
+        clock.tick(ctx, PHASE_LEAF)
         _ = d_row_ids^
         _ = ws^
         first += g
