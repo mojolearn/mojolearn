@@ -950,3 +950,41 @@ build/rf_bench_pre314 and build/rf_bench both present; the CLF ABAB and
 the RF_BENCH_REG 500k x 90 MSE arm remain queued on a clean window
 (gated by quiet_window + canary). sklearn row (ten voids) and the eps
 row likewise wait on the box; all three are orchestrator runs.
+
+## Speed proposals from the symbol-by-symbol read (2026-08-22 afternoon)
+
+Read: our `build_histograms_kernel` against their `buildHistogramsKernel`
+(`builder_kernels_impl.cuh:285-352`) and our `shared_memory_config`
+against their `computeSharedMemoryConfig` (`builder.cuh:522-552`), both
+at the pin. The kernel is a faithful transcription; the remaining
+daylight is all in the SMEM SIZING, plus one priced idea their design
+does not have. In value order:
+
+1. **Certify what is already built** (orchestrator, queued): the 314
+   CLF ABAB (pre-instrumentation pair, run as-is), RF_BENCH_REG, then
+   the 103a 16k-vs-4k tier pair. Nothing below outranks these.
+2. **Binned-arm tier without the quantile region** (extends 103a; no
+   number until landed). Their dynamic size is `max_n_bins*num_outputs*
+   sizeof(BinT) + max_n_bins*sizeof(DataT)` (`builder.cuh:526-533`) --
+   histogram PLUS copied quantiles. DEVIATION 314's binned arm compiles
+   the quantile copy out (`USE_BINNED` guard) but still reserves the
+   full static blob, so its tier could shrink by `max_n_bins * 4` bytes
+   at identical semantics. Occupancy-only; BLOCKED on the same
+   certification machinery as 103a (the informal smaller-is-slower read
+   makes this family uncertifiable without a clean window).
+3. **Label gather elimination** (would be a NEW deviation; priced, not
+   started). The inner loop's two random streams per element are
+   `bin_of(row, col)` (1B, was 4B before 314) and `labels[row]` (4B,
+   re-gathered per column block per level per tree). Keeping labels in
+   SAMPLED order (`labels_s[i] = labels[row_ids[i]]`, permuted by the
+   partition kernel alongside `row_ids` each level) makes the label
+   read sequential in `i` everywhere. PRICE: +4B/row workspace, a
+   second permuted array in the scan-scatter, and it deviates from
+   cuML's own memory shape (they pay the gather) -- so it needs its own
+   window and a fingerprint gate, and the density-diagnosis history
+   (footprint-by-address DEAD) says treat the win as unproven until
+   measured.
+
+Not proposed: touching `find_best_splits` (8.0% at 500k) or the host
+control plane (78.6% GPU-busy at bench shape says the box is not
+host-bound there) before the histogram items above are certified.
