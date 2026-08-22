@@ -30,11 +30,16 @@ DATASET="${1:?dataset required (year, covtype, higgs, fraud, epsilon, airline, b
 NTREES="${2:?ntrees required}"
 case "${3:-}" in
   gbdt)   ALGOS="mojolearn-gbdt-gpu,cat-cpu" ;;
-  # THE HEADLINE SUITE IS US-THEM PAIRS AND NOTHING ELSE: symmetric trees
-  # vs CatBoost, RF vs multicore sklearn RF, ET vs multicore sklearn ET.
-  pairs)  ALGOS="mojolearn-rf-gpu,skl-rf-cpu,mojolearn-et-gpu,skl-et-cpu" ;;
+  # THE HEADLINE SUITE IS US-THEM PAIRS AND NOTHING ELSE, and "them" is
+  # LIGHTGBM: it ships GPU arms for NVIDIA (CUDA) and AMD/Windows (OpenCL)
+  # and none for Apple silicon, so on this box its strongest legal arm is
+  # CPU -- that asymmetry is the thesis. RF pair = mojolearn-rf-gpu vs
+  # lgbm-rf-cpu (boosting_type='rf'); ET pair = mojolearn-et-gpu vs
+  # lgbm-et-cpu (rf + extra_trees=true). The sklearn arms stay registered
+  # as appendix baselines only.
+  pairs)  ALGOS="mojolearn-rf-gpu,lgbm-rf-cpu,mojolearn-et-gpu,lgbm-et-cpu" ;;
   forest) ALGOS="mojolearn-rf-gpu,skrf,lgbm-rf-cpu,mojolearn-et-gpu,skl-et-cpu,lgbm-et-cpu" ;;
-  rf)     ALGOS="mojolearn-rf-gpu,skl-rf-cpu" ;;
+  rf)     ALGOS="mojolearn-rf-gpu,lgbm-rf-cpu" ;;
   "")     ALGOS="mojolearn-gbdt-gpu,cat-cpu" ;;
   *)      ALGOS="$3" ;;
 esac
