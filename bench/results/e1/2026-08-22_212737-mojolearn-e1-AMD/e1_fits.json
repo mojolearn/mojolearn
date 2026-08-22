@@ -1,0 +1,29 @@
+{
+  "commit": "8936e522a12fbca5661512e8ad2e3f849452f62d",
+  "fits": {
+    "et_clf": {
+      "card": "et_clf.card",
+      "predictions": "557ccc4ac068dc3c12314763fe9eea1f6b1259d5e2199802bc4c30ae54165dd2"
+    },
+    "gbdt_logloss": {
+      "card": "gbdt_logloss.card",
+      "predictions": "3d0e6d0652ff86a0ac21cbfa9cd29e98ab2fc77eb0127c235406769024521d65"
+    },
+    "gbdt_rmse": {
+      "card": "gbdt_rmse.card",
+      "predictions": "4f7fde92e1782a7334d8a275345bef0f4af9b37fee560e3bd4a1ec3c6df6caf1"
+    },
+    "rf_reg": {
+      "card": "rf_reg.card",
+      "predictions": "c49a306ea4dbeca2c73f9f374e15b92377a0ea9d9df12ce1573ef81b5b1f3900"
+    }
+  },
+  "inputs": {
+    "X": "5cbddce1deb73cde4aeb6a4be43a3cdb3efd2150cdbfd6e1887eb5ec73b1be8a",
+    "y_clf": "ce719d74527865507dcbc2513a684a608c6e85e46fb200bb9f467a349ede997f",
+    "y_reg": "0f8e8420b2a6d4b38e4a9499b1e9ce5f634ae7c829e58814da618ca6ea2e205e"
+  },
+  "machine": "mojolearn-e1",
+  "mode_flip": true,
+  "platform": "Linux-6.8.0-59-generic-x86_64-with-glibc2.39"
+}

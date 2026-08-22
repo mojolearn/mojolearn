@@ -53,8 +53,18 @@ def main():
     n, d = 20000, 24
     X = rng.rand(n, d).astype(np.float32)
     w = rng.rand(d).astype(np.float32)
-    y_reg = (X @ w + 0.1 * rng.rand(n).astype(np.float32)).astype(np.float32)
-    y_clf = (y_reg > np.median(y_reg)).astype(np.float32)
+    # TARGETS VIA EXACT INTEGER ARITHMETIC (first E1 run's finding: the
+    # original `X @ w` went through the platform BLAS -- Accelerate vs
+    # OpenBLAS -- and y_reg's hash differed between the machines, voiding
+    # the rf/rmse comparisons; the driver itself violated the one-variable
+    # rule). Integer matmul is numpy's own exact loop on every platform,
+    # int64 -> float64 -> *2^-20 -> float32 are all exactly-rounded steps,
+    # so these targets are bit-identical everywhere by construction.
+    q = (X * 1024.0).astype(np.int64)
+    wq = (w * 1024.0).astype(np.int64)
+    y_reg = ((q @ wq).astype(np.float64) * 2.0 ** -20).astype(np.float32)
+    s = q.sum(axis=1)
+    y_clf = (s > np.median(s)).astype(np.float32)
 
     repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     record = {
