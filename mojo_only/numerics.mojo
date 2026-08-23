@@ -619,6 +619,106 @@ def identical_exp64(x: Float64) -> Float64:
     return exp(x)
 
 
+def portable_log64(x_in: Float64) -> Float64:
+    """HOST-ONLY (no float64 on device): `log` for Float64 as one
+    arithmetic, the sibling of `portable_exp64` for the same reason (each
+    host libm rounds double log differently in the last bit). Asked for
+    by the metrics lane (DEVIATION 651, RAFT's double-precision seams) and
+    the KDE lane (DEVIATION 601's normalization constant), 2026-08-23.
+
+    Cephes `log` for double, both arms: `frexp` to m in [0.5, 1), then for
+    |e| <= 2 the (P5, Q5) rational in x = m - 1 (or 2m - 1 below sqrt(1/2)),
+    else the (R2, S3) rational in x = (m - 1)/(m + 1) (z = x^2); the
+    exponent re-enters as e * ln2 in two pieces (0.693359375 and
+    -2.121944400546905827679e-4) so the large-|e| arm keeps its bits. One
+    `fma` per Horner step, every other op one rounding. ~1 ulp of double.
+    Domain: NaN -> NaN; +inf -> +inf; 0 -> -inf; negative -> NaN; a
+    denormal input is scaled by 2^54 first."""
+    from std.math import fma
+    from std.memory import bitcast
+
+    var x = x_in
+    if x != x:
+        return x
+    if x == Float64(0.0):
+        return bitcast[DType.float64](UInt64(0xFFF0000000000000))  # -inf
+    if x < Float64(0.0):
+        return bitcast[DType.float64](UInt64(0x7FF8000000000000))  # nan
+    var bits = bitcast[DType.uint64](x)
+    if bits == UInt64(0x7FF0000000000000):
+        return x  # +inf
+    var e = 0
+    if (bits >> 52) == UInt64(0):
+        # denormal: scale up by 2^54, remember it
+        x = x * 18014398509481984.0
+        bits = bitcast[DType.uint64](x)
+        e = -54
+    # frexp: m in [0.5, 1), x = m * 2^e
+    e += Int((bits >> 52) & UInt64(0x7FF)) - 1022
+    var m = bitcast[DType.float64]((bits & UInt64(0x000FFFFFFFFFFFFF)) | UInt64(0x3FE0000000000000))
+    comptime SQRTH = 0.70710678118654752440
+    var z: Float64
+    var y: Float64
+    var xm: Float64
+    if e > 2 or e < -2:
+        if m < SQRTH:
+            e -= 1
+            z = m - 0.5
+            y = fma(0.5, z, 0.5)
+        else:
+            z = m - 0.5
+            z = z - 0.5
+            y = fma(0.5, m, 0.5)
+        xm = z / y
+        z = xm * xm
+        # R(z) / S(z)
+        var r = fma(-7.89580278884799154124e-1, z, 1.63866645699558079767e1)
+        r = fma(r, z, -6.41409952958715622951e1)
+        var sq = z + -3.56722798256324312549e1
+        sq = fma(sq, z, 3.12093766372244180303e2)
+        sq = fma(sq, z, -7.69691943550460008604e2)
+        z = xm * (z * r / sq)
+        var ye = Float64(e)
+        z = fma(ye, -2.121944400546905827679e-4, z)
+        z = z + xm
+        z = fma(ye, 0.693359375, z)
+        return z
+    if m < SQRTH:
+        e -= 1
+        xm = fma(2.0, m, -1.0)
+    else:
+        xm = m - 1.0
+    z = xm * xm
+    var pp = fma(1.01875663804580931796e-4, xm, 4.97494994976747001425e-1)
+    pp = fma(pp, xm, 4.70579119878881725854e0)
+    pp = fma(pp, xm, 1.44989225341610930846e1)
+    pp = fma(pp, xm, 1.79368678507819816313e1)
+    pp = fma(pp, xm, 7.70838733755885391666e0)
+    var qq = xm + 1.12873587189167450590e1
+    qq = fma(qq, xm, 4.52279145837532221105e1)
+    qq = fma(qq, xm, 8.29875266912776603211e1)
+    qq = fma(qq, xm, 7.11544750618563894466e1)
+    qq = fma(qq, xm, 2.31251620126765340583e1)
+    y = xm * (z * pp / qq)
+    var ye2 = Float64(e)
+    y = fma(ye2, -2.121944400546905827679e-4, y)
+    y = fma(z, -0.5, y)
+    z = xm + y
+    z = fma(ye2, 0.693359375, z)
+    return z
+
+
+def identical_log64(x: Float64) -> Float64:
+    """The host double-log seam call: IDENTICAL routes through
+    `portable_log64`, FAST is the host stdlib verbatim (the `identical_exp64`
+    contract)."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        return portable_log64(x)
+    from std.math import log
+
+    return log(x)
+
+
 def identical_sqrt(x: Float32) -> Float32:
     """Row 10's sqrt seam call: IDENTICAL routes through `portable_sqrtf`
     (one arithmetic, correctly rounded, the same bits on the approximate-

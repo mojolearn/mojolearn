@@ -639,6 +639,8 @@ check-portable-translog = "mojo run -I . mojo_only/portable_translog_check.mojo"
 # 2pi; pow <= 64 ulp. The printed device hash is the certificate line,
 # the same number on every column. Run beside check-portable-translog.
 check-portable-sqrtcos = "mojo run -I . mojo_only/portable_sqrtcos_check.mojo"
+# host-only: portable_log64 (Cephes double log) against the host libm, 2 ulp, + its own hash
+check-portable-log64 = "mojo run -I . mojo_only/portable_log64_check.mojo"
 
 # E2U: the unsupervised sub-feature matrix through the Python surface
 # (tools/e2u_README.md); append the out dir:
