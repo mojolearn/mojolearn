@@ -125,7 +125,7 @@ git -C "$REPO" branch -f "e2-run" "$COMMIT" >/dev/null 2>&1
 log "bundle $COMMIT (branch e2-run)"
 git -C "$REPO" bundle create "$BUNDLE" e2-run >/dev/null 2>&1 || { log "bundle failed"; exit 6; }
 scp -q -o StrictHostKeyChecking=accept-new "$BUNDLE" "root@$IP:/root/e2.bundle" || { log "scp failed"; exit 6; }
-$SSH "rm -rf /root/mojolearn && git clone -q -b e2-run /root/e2.bundle /root/mojolearn && cd /root/mojolearn && git rev-parse HEAD && git status --short | head -3 && grep -c '^comptime GLOBAL_NUMERIC_MODE = NUMERIC_FAST' mojo_only/numerics.mojo" \
+$SSH "rm -rf /root/mojolearn && git clone -q -b e2-run /root/e2.bundle /root/mojolearn && cd /root/mojolearn && git rev-parse HEAD && git status --short | head -3 && grep -c 'is_defined\\[\"MOJOLEARN_NUMERIC_IDENTICAL\"\\]' mojo_only/numerics.mojo" \
   || { log "remote clone/checkout failed"; exit 6; }
 
 log "bootstrap (phases 0-4) -- this is the long step"
