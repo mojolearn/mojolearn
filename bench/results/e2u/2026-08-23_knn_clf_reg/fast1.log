@@ -1,0 +1,51 @@
+E2U matrix (fast): 20 cells -> /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/e2u/2026-08-23_knn_clf_reg/fast1
+[ 1/20] knn_k1                       cee0bffdae3ca2dd used_query_tile=256 stages=6                0.3s
+[ 2/20] knn_k10                      2b882a14efa09819 used_query_tile=256 stages=6                0.2s
+[ 3/20] knn_k100                     e98f9670e01efcfa used_query_tile=256 stages=6                0.3s
+[ 4/20] knn_k10_self                 8d79664f57cd18cb used_query_tile=256 stages=6                0.2s
+[ 5/20] knn_k10_ties                 f183bf0d8adedfed used_query_tile=256 stages=6                0.2s
+[ 6/20] knn_k64_ties                 0d3735f1a5acf0ca used_query_tile=256 stages=6                0.2s
+[ 7/20] knn_k100_ties                25e3db22db1b6bdb used_query_tile=256 stages=6                0.2s
+[ 8/20] knn_k300                     5a0f69baa33a7244 used_query_tile=256 stages=6                0.7s
+[ 9/20] knn_k10_tile64               2b882a14efa09819 used_query_tile=64 stages=6                 0.3s
+[10/20] knn_k10_200k                 d7023914fd39701d used_query_tile=256 stages=6                0.6s
+[11/20] knn_metric_cosine            REFUSED ValueError: mojolearn NearestNeighbors:              0.2s
+[12/20] knn_metric_minkowski_p1      REFUSED ValueError: mojolearn NearestNeighbors:              0.2s
+[13/20] knn_algorithm_kd_tree        REFUSED ValueError: mojolearn NearestNeighbors:              0.2s
+[14/20] knn_metric_l2                2b882a14efa09819 used_query_tile=256 stages=6                0.3s
+[15/20] knn_clf_k5                   b2e15c69f35b1bb0 used_query_tile=256 stages=9                0.3s
+[16/20] knn_clf_k15_3class           1da84f3fc0b8c21f used_query_tile=256 stages=9                0.4s
+[17/20] knn_clf_ties                 6cec249c74a476b5 used_query_tile=256 stages=9                0.3s
+[18/20] knn_reg_k5                   86e3ca57cbadc763 used_query_tile=256 stages=7                0.3s
+[19/20] knn_reg_k50                  65d7e53c243ce07a used_query_tile=256 stages=7                0.3s
+[20/20] knn_clf_weights_distance_refused REFUSED ValueError: mojolearn KNeighborsClassifi             0.2s
+
+REACH
+  KMeans.n_clusters                            MISSING            
+  KMeans.init                                  MISSING            
+  KMeans.n_init                                MISSING            
+  KMeans.tol                                   MISSING            
+  KMeans.max_iter                              MISSING            
+  KMeans.random_state                          MISSING            
+  KMeans.sample_weight                         MISSING            
+  KMeans.init_centroids                        MISSING            
+  NearestNeighbors.n_neighbors                 REACHES            moved distances,indices
+  NearestNeighbors.query_tile                  INVARIANT          used_query_tile: 256 -> 64
+  NearestNeighbors.metric='l2'                 INVARIANT          distances,indices equal
+  KNeighborsClassifier.n_neighbors             REACHES            moved predictions,proba
+  KNeighborsRegressor.n_neighbors              REACHES            moved predictions
+  DBSCAN.eps                                   MISSING            
+  DBSCAN.min_samples                           MISSING            
+  DBSCAN.algorithm                             MISSING            
+  DBSCAN.algorithm (min50)                     MISSING            
+  DBSCAN.algorithm (uniform24)                 MISSING            
+  DBSCAN.max_mbytes_per_batch (rbc)            MISSING            
+  DBSCAN.max_mbytes_per_batch (brute)          MISSING            
+  DBSCAN.max_iterations (chain, cap 200 binds) MISSING            
+  DBSCAN.max_iterations (chain, None = fixed point) MISSING            
+  DBSCAN.max_iterations (blobs, converges in 1) MISSING            
+  DBSCAN.algorithm (chain)                     MISSING            
+  PCA.n_components                             MISSING            
+  TruncatedSVD.n_components                    MISSING            
+  LinearRegression.fit_intercept               MISSING            
+wrote /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/e2u/2026-08-23_knn_clf_reg/fast1/e2u_cells.json

@@ -12,9 +12,13 @@ That contract is the wrapper's to honor and it is stated in
 
 WHAT IS EXPOSED, AND WHAT IS NOT
 ---------------------------------
-`knn_search` and `kmeans_fit`. Those are the algorithms with a caller-facing
-surface in THIS extension: they take host pointers, own their device work, and
-have checks covering the policy they add.
+`knn_search`, `knn_classify`, `knn_regress` and `kmeans_fit`. Those are the
+algorithms with a caller-facing surface in THIS extension: they take host
+pointers, own their device work, and have checks covering the policy they
+add. `knn_classify` / `knn_regress` (2026-08-23) are the k-NN classifier and
+regressor over `knn_search`: one call does the search AND the vote (or the
+mean), for the identity-trace reason `neighbors/estimator.mojo`'s
+`knn_search` docstring gives.
 
 **GBDT MOVED OUT.** It lives in `bindings/_mojolearn_gbdt.mojo`, built by
 `bindings/build_gbdt.sh` into a second extension, for the reason
@@ -46,8 +50,8 @@ SCALARS ARRIVE AS ONE LIST, WHICH IS NOT A STYLE CHOICE
 --------------------------------------------------------
 `PythonModuleBuilder.def_function` infers its signature from the function's
 arity and stops being able to above roughly nine arguments; mojotrees' widest
-binding takes nine and that is not a coincidence. `knn_search` needs ten and
-`kmeans_fit` fourteen. So each entry point takes its BUFFER ADDRESSES
+binding takes nine and that is not a coincidence. `knn_search` needs ten,
+`knn_classify` fourteen plus one per output and `kmeans_fit` fourteen. So each entry point takes its BUFFER ADDRESSES
 positionally, where a mistake is a crash rather than a wrong answer, and its
 scalars in one list whose order is written out beside the unpacking below and
 mirrored in the wrapper. Both sides name the order in the same words on
@@ -70,7 +74,11 @@ from std.python.bindings import PythonModuleBuilder
 from max.gpu.host import DeviceContext
 
 from cluster.estimator import kmeans_fit
-from neighbors.estimator import knn_search
+from neighbors.estimator import (
+    knn_classifier_predict,
+    knn_regressor_predict,
+    knn_search,
+)
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -89,6 +97,12 @@ def _u32_ptr(addr: Int) raises -> MutPointer[UInt32, MutUntrackedOrigin]:
     if addr == 0:
         raise Error("mojolearn: null buffer address")
     return MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=addr)
+
+
+def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
+    if addr == 0:
+        raise Error("mojolearn: null int32 buffer address")
+    return MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=addr)
 
 
 def knn_search_binding(
@@ -134,6 +148,124 @@ def knn_search_binding(
     with GILReleased(Python()):
         var ctx = DeviceContext()
         used = knn_search(ctx, ip, ni, qp, nq, nf, kk, dp, xp, sq, qt)
+    return PythonObject(used)
+
+
+def knn_classify_binding(
+    index_addr: PythonObject,
+    queries_addr: PythonObject,
+    y_addr: PythonObject,
+    out_labels_addr: PythonObject,
+    out_proba_addr: PythonObject,
+    out_uniq_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """The k-NN classifier: search, then vote or tally. Returns the query tile
+    that ran (the same number `knn_search` returns, for the same reason).
+
+    `params` is, in this exact order (mirrored in
+    `python/mojolearn/neighbors.py::KNeighborsClassifier`):
+
+        0  n_index
+        1  n_queries
+        2  n_features
+        3  k
+        4  query_tile
+        5  n_outputs
+        6  want_proba      (0: write out_labels; 1: write out_proba)
+        7.. n_classes per output, `n_outputs` of them
+
+    `y_addr` is `n_outputs` CONTIGUOUS int32 columns of `n_index`
+    (`neighbors/estimator.mojo` policy 6). `out_labels_addr` is
+    `n_queries x n_outputs` int32 row-major; `out_proba_addr` is the
+    per-output `n_queries x n_classes[i]` float32 blocks concatenated;
+    `out_uniq_addr` is `sum(n_classes)` int32 and is always written (policy
+    7: the wrapper asserts it against `classes_`). Whichever of the two
+    outputs is not selected by `want_proba` is unread, and the wrapper
+    passes a one-element array for it rather than a null.
+    """
+    if len(params) < 7:
+        raise Error(
+            "knn_classify: params must hold at least 7 values, got "
+            + String(len(params))
+        )
+    var ni = Int(py=params[0])
+    var nq = Int(py=params[1])
+    var nf = Int(py=params[2])
+    var kk = Int(py=params[3])
+    var qt = Int(py=params[4])
+    var no = Int(py=params[5])
+    var want_proba = Int(py=params[6]) != 0
+    if len(params) != 7 + no:
+        raise Error(
+            "knn_classify: params must hold 7 + n_outputs ("
+            + String(7 + no)
+            + ") values, got "
+            + String(len(params))
+        )
+    var n_classes = List[Int]()
+    for i in range(no):
+        n_classes.append(Int(py=params[7 + i]))
+    var ip = _f32_ptr(Int(py=index_addr))
+    var qp = _f32_ptr(Int(py=queries_addr))
+    var yp = _i32_ptr(Int(py=y_addr))
+    var lp = _i32_ptr(Int(py=out_labels_addr))
+    var pp = _f32_ptr(Int(py=out_proba_addr))
+    var up = _i32_ptr(Int(py=out_uniq_addr))
+
+    var used: Int
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        used = knn_classifier_predict(
+            ctx, ip, ni, qp, nq, nf, kk, yp, no, n_classes, lp, pp, up,
+            want_proba, qt,
+        )
+    return PythonObject(used)
+
+
+def knn_regress_binding(
+    index_addr: PythonObject,
+    queries_addr: PythonObject,
+    y_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """The k-NN regressor: search, then the mean of the neighbours' targets.
+    Returns the query tile that ran.
+
+    `params` is, in this exact order (mirrored in
+    `python/mojolearn/neighbors.py::KNeighborsRegressor`):
+
+        0  n_index
+        1  n_queries
+        2  n_features
+        3  k
+        4  query_tile
+        5  n_outputs
+
+    `y_addr` is `n_outputs` CONTIGUOUS float32 columns of `n_index`;
+    `out_addr` is `n_queries x n_outputs` float32 row-major.
+    """
+    if len(params) != 6:
+        raise Error(
+            "knn_regress: params must hold 6 values, got "
+            + String(len(params))
+        )
+    var ip = _f32_ptr(Int(py=index_addr))
+    var qp = _f32_ptr(Int(py=queries_addr))
+    var yp = _f32_ptr(Int(py=y_addr))
+    var op = _f32_ptr(Int(py=out_addr))
+    var ni = Int(py=params[0])
+    var nq = Int(py=params[1])
+    var nf = Int(py=params[2])
+    var kk = Int(py=params[3])
+    var qt = Int(py=params[4])
+    var no = Int(py=params[5])
+
+    var used: Int
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        used = knn_regressor_predict(ctx, ip, ni, qp, nq, nf, kk, yp, no, op, qt)
     return PythonObject(used)
 
 
@@ -218,6 +350,8 @@ def PyInit__mojolearn() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn")
         m.def_function[knn_search_binding]("knn_search")
+        m.def_function[knn_classify_binding]("knn_classify")
+        m.def_function[knn_regress_binding]("knn_regress")
         m.def_function[kmeans_fit_binding]("kmeans_fit")
         return m.finalize()
     except e:

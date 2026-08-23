@@ -168,6 +168,66 @@ window, `check_unsupervised_identity.sh`'s FAST arm takes the same lock, and
 `check_column_invariance.sh` READS THE MODE BACK from each run rather than
 assuming it from the flip.
 
+## The k-NN classifier and regressor, 2026-08-23 (DEVIATIONS 541-544)
+
+`mojolearn.KNeighborsClassifier` / `KNeighborsRegressor` landed as cuML's
+`ML::knn_classify` / `knn_class_proba` / `knn_regress` over `knn_search`
+(`neighbors/ported/knn/knn.mojo`, `neighbors/ported/selection/knn.mojo`,
+`neighbors/ported/label/classlabels.mojo`; `neighbors/README.md` has the
+file map). What this lane's identity ledger owes for them is short,
+because cuML's kernels are already the serial shape IDENTICAL wants:
+
+- **The vote and the mean are serial per-row folds in slot order in cuML**
+  (`class_probs_kernel`: `out[row, class] += 1/k` over the `k` slots;
+  `regress_avg_kernel`: `pred += y[nb]` then `/ k`). No atomic, no block
+  fold, no shuffle. So there is nothing for IDENTICAL to REPLACE and
+  nothing for FAST to choose; ONE loop runs in both modes and the mode
+  changes only the row-10 `ftz` seams (the loaded target, each partial
+  sum, `1/k`, the quotient), which are bit-inert on Apple and align a
+  denormal-honoring column to it. DEVIATION 542. The E2U passes below
+  measure exactly that: every `knn_clf_*` / `knn_reg_*` output hash is the
+  same under FAST and IDENTICAL on this Mac, and that agreement is NOT
+  evidence the pins are reached (row 9's lesson, again).
+- **Ties in the vote go to the LOWEST class** (`class_vote_kernel`'s strict
+  `>` from `cur_max = -1.0`), a tie in COUNT being an exact tie in FLOAT
+  because a class with `j` votes holds the same serial sum of `j` copies
+  of `1/k` on every row. The gate `check_knn_classify_ties_go_to_lowest_class`
+  plants 2-2 votes (23 of 64 rows at k=4) and refuses itself if none occur.
+- **The slot ORDER is `knn_search`'s host sort, `(distance, index)`** -- so
+  under IDENTICAL, where row 11 makes the SET the lowest-index tie set,
+  the fold's operand sequence is a pure function of the data. Under FAST
+  it is not, and the E2U `knn_clf_ties` cell shows it: two FAST passes
+  diverge at `knn.out_dist` (the search, not the vote) and the untraced
+  `predict_proba` of that cell came back with two different hashes
+  (`4aefaed3…` / `3d7571e3…`); under IDENTICAL both passes agree on every
+  byte (`3b3f7e7d…`). Row 11 reaching the classifier, as it must.
+- **DEVIATION 541**: `getUniquelabels` (CUB `SortKeys` + `Unique`) is a
+  host sort + unique of int32 -- the same function, no float, identical
+  by construction. **DEVIATION 543**: the tally buffer is bounds-checked
+  against the recomputed class count (cuML writes into a buffer the pyx
+  sized by `cp.unique` from a count the C++ recomputes, and nothing
+  compares them). **DEVIATION 544**: the estimator composes search and
+  vote in ONE Mojo call under ONE identity trace (the pyx makes two calls)
+  because a second `IdentityTrace()` would restart `seq` at 0 in the same
+  card, and the ported `ML::` functions return the unique sets so the
+  composition can check them against `classes_`.
+
+Stages: `knn.*` (the search's six) then `knn_clf.uniq_labels`,
+`knn_clf.votes`, `knn_clf.labels` (predict) or `knn_clf.proba`
+(predict_proba); `knn_reg.pred`. Multi-output adds an `.o<i>` infix.
+
+Passes: `bench/results/e2u/2026-08-23_knn_clf_reg/` (fast1/2, identical1/2,
+the 20 `knn_*` cells): IDENTICAL control 15 IDENTICAL + 5 REFUSED, every
+card byte for byte; FAST control identical on every cell but `knn_clf_ties`
+(above); FAST vs IDENTICAL `knn_reg_k50` OUTPUT-ONLY@`knn.out_idx` (the arm
+differs -- fused under FAST at k=50, tiled under IDENTICAL -- and the sorted
+output and the mean agree).
+
+Owed, for the row-text in IDENTITY_PATHS (row 32, "k-NN classifier and
+regressor votes and means"): a denormal-target fixture run on a
+denormal-honoring column (AMD) to see the `ftz` seam do work; on Apple it
+cannot.
+
 ## The column-invariance gate, and the number that gives it teeth
 
     pixi run check-column-invariance

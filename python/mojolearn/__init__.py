@@ -6,12 +6,13 @@ those can reach. See NOTICE for the attribution each carries.
 
 WHAT IS IN THIS ALPHA, AND WHAT IS NOT
 ---------------------------------------
-Eleven estimators: `NearestNeighbors`, `KMeans`, `DBSCAN`, `PCA`,
-`TruncatedSVD`, `LinearRegression`, `GradientBoosting`,
-`RandomForestClassifier`, `RandomForestRegressor`, `ExtraTreesClassifier`
-and `ExtraTreesRegressor`. All are backed by kernels verified against
-hand-computed expectations and, for k-means, the forests and the ensemble,
-against cuVS, cuML, scikit-learn and CatBoost's own output. Each
+Thirteen estimators: `NearestNeighbors`, `KNeighborsClassifier`,
+`KNeighborsRegressor`, `KMeans`, `DBSCAN`, `PCA`, `TruncatedSVD`,
+`LinearRegression`, `GradientBoosting`, `RandomForestClassifier`,
+`RandomForestRegressor`, `ExtraTreesClassifier` and `ExtraTreesRegressor`.
+All are backed by kernels verified against hand-computed expectations and,
+for k-means, k-NN classification and regression, the forests and the
+ensemble, against cuVS, cuML, scikit-learn and CatBoost's own output. Each
 class docstring carries a WHAT IS HONORED / REFUSED table: a parameter the
 kernel does not carry is refused BY NAME with the reason, never accepted
 and ignored, and `tools/e2u_matrix_fit.py` measures that every honored
@@ -72,7 +73,11 @@ from .density import DBSCAN
 from .ensemble import GradientBoosting
 from .extratrees import ExtraTreesClassifier, ExtraTreesRegressor
 from .linear_model import LinearRegression
-from .neighbors import NearestNeighbors
+from .neighbors import (
+    KNeighborsClassifier,
+    KNeighborsRegressor,
+    NearestNeighbors,
+)
 from .randomforest import RandomForestClassifier, RandomForestRegressor
 
 __all__ = [
@@ -81,6 +86,8 @@ __all__ = [
     "ExtraTreesRegressor",
     "GradientBoosting",
     "KMeans",
+    "KNeighborsClassifier",
+    "KNeighborsRegressor",
     "LinearRegression",
     "NearestNeighbors",
     "PCA",
@@ -92,18 +99,11 @@ __all__ = [
 ]
 
 # Named absences. Importing one of these raises with a reason rather than an
-# AttributeError, because "why is KNeighborsClassifier missing" is a
-# question the answer to is interesting and short. Each value names the
-# thing that EXISTS and where it stops.
+# AttributeError, because "why is RadiusNeighbors missing" is a question
+# the answer to is interesting and short. Each value names the thing that
+# EXISTS and where it stops. (`KNeighborsClassifier` / `KNeighborsRegressor`
+# were here until 2026-08-23; they are exported above now.)
 _NOT_YET = {
-    "KNeighborsClassifier": (
-        "neighbors/estimator.mojo (knn_search): a vote over what it "
-        "returns, not written"
-    ),
-    "KNeighborsRegressor": (
-        "neighbors/estimator.mojo (knn_search): a mean over what it "
-        "returns, not written"
-    ),
     "RadiusNeighbors": (
         "neighbors/ported/neighbors/ball_cover/ (radius search exists for "
         "DBSCAN's eps neighbourhood); no caller-facing surface"

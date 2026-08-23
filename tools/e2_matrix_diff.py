@@ -47,6 +47,7 @@ OUTPUT_KEYS = (
     "components", "explained_variance", "explained_variance_ratio",
     "singular_values", "mean", "noise_variance", "transformed",
     "coef", "intercept",
+    "classes",  # KNeighborsClassifier.classes_ (e2u, 2026-08-23)
 )
 
 

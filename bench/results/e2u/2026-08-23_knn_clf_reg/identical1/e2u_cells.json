@@ -1,0 +1,395 @@
+{
+  "cells": {
+    "knn_algorithm_kd_tree": {
+      "kind": "knn",
+      "refused": "ValueError: mojolearn NearestNeighbors: algorithm='kd_tree' is refused; this class is exact brute force ('brute', which 'auto' also means here) and ships no tree or graph index",
+      "seconds": 0.0,
+      "spec": {
+        "algorithm": "kd_tree",
+        "n_neighbors": 10
+      }
+    },
+    "knn_clf_k15_3class": {
+      "card": "knn_clf_k15_3class.card",
+      "classes": "a296c7e7cc1e6e0056364c5572a77c816f4bcee8214189856920f0868be345f8",
+      "kind": "knn_clf",
+      "n_classes": 3,
+      "predictions": "1da84f3fc0b8c21f788c5a761f75fad829194b62f2254ab6cb7af0cca4c6c60e",
+      "proba": "304b5be9921a6251943b0c059dd8fd13032ccfcd850351c2619505990c8958b6",
+      "seconds": 0.18,
+      "spec": {
+        "n_neighbors": 15
+      },
+      "stages": 9,
+      "used_query_tile": 256
+    },
+    "knn_clf_k5": {
+      "card": "knn_clf_k5.card",
+      "classes": "a296c7e7cc1e6e0056364c5572a77c816f4bcee8214189856920f0868be345f8",
+      "kind": "knn_clf",
+      "n_classes": 3,
+      "predictions": "b2e15c69f35b1bb0cc9351a4ea2e71ff7815f1d39daefc72f8df5f0cca4e7bed",
+      "proba": "7e9bc1b7b891562b46c5098b13c75a99463584028a690ff398ea5822a2a69788",
+      "seconds": 0.24,
+      "spec": {
+        "n_neighbors": 5
+      },
+      "stages": 9,
+      "used_query_tile": 256
+    },
+    "knn_clf_ties": {
+      "card": "knn_clf_ties.card",
+      "classes": "6ba049c298f5563f3aa65636efc50fdc25f67f385d3086c4060b9a4b83281d66",
+      "kind": "knn_clf",
+      "n_classes": 2,
+      "predictions": "6cec249c74a476b5b6a1ab3739f29c739d319d27a08825eab12f062deab4b756",
+      "proba": "3b3f7e7d86556acda78e5aaad6e268837138f987d1c65f5376c78d12db7845be",
+      "seconds": 0.11,
+      "spec": {
+        "n_neighbors": 4
+      },
+      "stages": 9,
+      "used_query_tile": 256
+    },
+    "knn_clf_weights_distance_refused": {
+      "kind": "knn_clf",
+      "refused": "ValueError: mojolearn KNeighborsClassifier: weights='distance' is refused; only 'uniform' is ported. cuML refuses it too (kneighbors_classifier.pyx:191, 'Only uniform weighting strategy is supported currently') and the ported vote (neighbors/ported/selection/knn.mojo) carries no weight: a distance-weighted vote is a port, not a flag",
+      "seconds": 0.0,
+      "spec": {
+        "n_neighbors": 5,
+        "weights": "distance"
+      }
+    },
+    "knn_k1": {
+      "card": "knn_k1.card",
+      "distances": "cee0bffdae3ca2dd97cca02b0cc872b2c46e45091da766f4ef305f9e9d30b31e",
+      "indices": "44628167ce3917a9b55e0db67582819cda89fdfd2cf6579539ba3d829a7fe7ff",
+      "kind": "knn",
+      "seconds": 0.11,
+      "spec": {
+        "n_neighbors": 1
+      },
+      "stages": 6,
+      "used_query_tile": 256
+    },
+    "knn_k10": {
+      "card": "knn_k10.card",
+      "distances": "2b882a14efa0981905bfbf181f6f4dfcbd1fa7edb28325d961015574284b5ea7",
+      "indices": "9c0566c60022ad10df0b29f7169c7d4adec61830c9ce61a3773b4eeabddade2d",
+      "kind": "knn",
+      "seconds": 0.12,
+      "spec": {
+        "n_neighbors": 10
+      },
+      "stages": 6,
+      "used_query_tile": 256
+    },
+    "knn_k100": {
+      "card": "knn_k100.card",
+      "distances": "e98f9670e01efcfa9a05363e86557ce9f1a83a9ce9016b1a53b0c557b1a47b17",
+      "indices": "1c0f428b9b47f980f05a5c074cc988eb0c82566e7c7ed34a6662212fa328e93e",
+      "kind": "knn",
+      "seconds": 0.14,
+      "spec": {
+        "n_neighbors": 100
+      },
+      "stages": 6,
+      "used_query_tile": 256
+    },
+    "knn_k100_ties": {
+      "card": "knn_k100_ties.card",
+      "distances": "25e3db22db1b6bdbf9225a2de6ba573d8ca13e2c00ca0012a06f16204e7f6ae6",
+      "indices": "faf985455d617198f9bd7a8fa83195f366df5e59a9933dd215fbafe2f9449e35",
+      "kind": "knn",
+      "seconds": 0.1,
+      "spec": {
+        "n_neighbors": 100
+      },
+      "stages": 6,
+      "used_query_tile": 256
+    },
+    "knn_k10_200k": {
+      "card": "knn_k10_200k.card",
+      "distances": "d7023914fd39701dad3ac79b4703a12d47b881db24ccc0db107f9098662c58f2",
+      "indices": "47bf0bc340d2788ccb544987cce710ad943f3251527501311fbf67a79452f467",
+      "kind": "knn",
+      "seconds": 0.62,
+      "spec": {
+        "n_neighbors": 10
+      },
+      "stages": 6,
+      "used_query_tile": 256
+    },
+    "knn_k10_self": {
+      "card": "knn_k10_self.card",
+      "distances": "fcba2b16c4c142b38c473250cac734361bbaf5a94978bf1823d24f4e8b63e64a",
+      "indices": "d361f34919189c8992ef8d5d721968ec21377a4333f17b924451ece7b4b5f9da",
+      "kind": "knn",
+      "seconds": 0.11,
+      "spec": {
+        "n_neighbors": 10
+      },
+      "stages": 6,
+      "used_query_tile": 256
+    },
+    "knn_k10_ties": {
+      "card": "knn_k10_ties.card",
+      "distances": "f183bf0d8adedfedc0f375b2c5171426de0a21a00491e7ef62bb4a6b0811c5ea",
+      "indices": "b2d698f0b3b15966d125cec25de76855fd3f64e6bf4609b0cc193d2c95ebaea7",
+      "kind": "knn",
+      "seconds": 0.06,
+      "spec": {
+        "n_neighbors": 10
+      },
+      "stages": 6,
+      "used_query_tile": 256
+    },
+    "knn_k10_tile64": {
+      "card": "knn_k10_tile64.card",
+      "distances": "2b882a14efa0981905bfbf181f6f4dfcbd1fa7edb28325d961015574284b5ea7",
+      "indices": "9c0566c60022ad10df0b29f7169c7d4adec61830c9ce61a3773b4eeabddade2d",
+      "kind": "knn",
+      "seconds": 0.08,
+      "spec": {
+        "n_neighbors": 10,
+        "query_tile": 64
+      },
+      "stages": 6,
+      "used_query_tile": 64
+    },
+    "knn_k300": {
+      "kind": "knn",
+      "refused": "Exception: select_radix (IDENTICAL): k > 256 is refused. The rank pass gives one thread to each output slot; a larger k needs a loop, which is not written until something asks for it.",
+      "seconds": 0.06,
+      "spec": {
+        "n_neighbors": 300
+      }
+    },
+    "knn_k64_ties": {
+      "card": "knn_k64_ties.card",
+      "distances": "0d3735f1a5acf0ca57d3abae68689eade4ec25d83b6d15b2df73d41b81be7121",
+      "indices": "19785489f0b39bd1214c0d4649294afcba15cc35f0d6e00f55f42e7dba7b3a8b",
+      "kind": "knn",
+      "seconds": 0.1,
+      "spec": {
+        "n_neighbors": 64
+      },
+      "stages": 6,
+      "used_query_tile": 256
+    },
+    "knn_metric_cosine": {
+      "kind": "knn",
+      "refused": "ValueError: mojolearn NearestNeighbors: metric='cosine' is refused; only Euclidean ('euclidean', 'l2', 'minkowski' with p=2) is ported. The brute-force kernels carry the expanded-L2 arm only (neighbors/ported/neighbors/detail/knn_brute_force.mojo): another metric is a port, not a flag",
+      "seconds": 0.0,
+      "spec": {
+        "metric": "cosine",
+        "n_neighbors": 10
+      }
+    },
+    "knn_metric_l2": {
+      "card": "knn_metric_l2.card",
+      "distances": "2b882a14efa0981905bfbf181f6f4dfcbd1fa7edb28325d961015574284b5ea7",
+      "indices": "9c0566c60022ad10df0b29f7169c7d4adec61830c9ce61a3773b4eeabddade2d",
+      "kind": "knn",
+      "seconds": 0.14,
+      "spec": {
+        "metric": "l2",
+        "n_neighbors": 10
+      },
+      "stages": 6,
+      "used_query_tile": 256
+    },
+    "knn_metric_minkowski_p1": {
+      "kind": "knn",
+      "refused": "ValueError: mojolearn NearestNeighbors: metric='minkowski' with p=1 is refused; only p=2 (Euclidean) is ported",
+      "seconds": 0.0,
+      "spec": {
+        "metric": "minkowski",
+        "n_neighbors": 10,
+        "p": 1
+      }
+    },
+    "knn_reg_k5": {
+      "card": "knn_reg_k5.card",
+      "kind": "knn_reg",
+      "predictions": "86e3ca57cbadc7639dee31043a3ebcf2b1d05452388abfdb0d78a2da9e3cd68a",
+      "seconds": 0.17,
+      "spec": {
+        "n_neighbors": 5
+      },
+      "stages": 7,
+      "used_query_tile": 256
+    },
+    "knn_reg_k50": {
+      "card": "knn_reg_k50.card",
+      "kind": "knn_reg",
+      "predictions": "65d7e53c243ce07a3fb0b2e92e4d2ccf7f4c11045cacb030bf76cef18f15eb7e",
+      "seconds": 0.13,
+      "spec": {
+        "n_neighbors": 50
+      },
+      "stages": 7,
+      "used_query_tile": 256
+    }
+  },
+  "commit": "ade0dc40c4866b35d6d6b7bb91a7d0155d21ccc5",
+  "driver": "e2u",
+  "inputs": {
+    "C0": "09d72baac77347c606b0ec4a90977b55c246e10fadc174888d3fee05bfee4a4e",
+    "X": "5a095c2b4b84d5e01de5fb6be5486723093c6abd431b82b612bc28ee89484e95",
+    "X_blobs": "6b619f79e2b0dd5b258193598de84fe3521645f71d7fe6372b94ee4ff9eb8dcf",
+    "X_chain": "8a11433bb672dc09d76fd980ddd604a7b11bb35cb4817fa4aa74fb15685edb03",
+    "X_ols_wide": "d9126dc7bc873d6f03466d1b935abc0642699ca62e41f698a4fd6180d9e30187",
+    "X_ties": "a83aadd777521005a6e17a32ee30d83b6341be4f10ed06ecf3519e831620feee",
+    "X_wide": "c3a39be30811e8bf7a9532e280e29c53b4db0630b1246ad1ddd4cab2a750ebe0",
+    "Xb": "f677a70a0cd8a870f263a8f66d63a5e6c56ff98b11bf8a650122485178b1ce80",
+    "Xq": "f7af5e4967e5455e8bd0d4bb775dad8d6326401043168539fa2e117d959b007a",
+    "Xq_ties": "7e66684f8f9585f876aa45622a0749476bc3dd91a7543320ac56e1ac0d36d663",
+    "sw": "dc70834feb7e9806b2e8e9c17df83290fd7a09bf37d7d119a06e3409503b84f3",
+    "y_clf2": "66f61758631c071484d67c1341b6f848c84d853d7db20403a738f799f1938237",
+    "y_clf3": "d011af44e44d9bc82487bbd70705aa0642d0131b905eee521706e8123c67dd3e",
+    "y_ols_wide": "1df84470fdac59abad6ce08f405289230a5ae4bd5387097ef2436e8d72a50824",
+    "y_reg": "c9360efad18ce7e0414753c377d663e3a6035ea6d098457b9264a5768f1fe573",
+    "yb_reg": "a424cbbb79a28102880781cc2db1c80cacf22596ed4af77e657a74452771b8e3"
+  },
+  "machine": "MacBook-Air-1-terrabyte.local",
+  "numeric_mode": "identical",
+  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "reach": [
+    {
+      "note": "",
+      "parameter": "KMeans.n_clusters",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "KMeans.init",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "KMeans.n_init",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "KMeans.tol",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "KMeans.max_iter",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "KMeans.random_state",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "KMeans.sample_weight",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "KMeans.init_centroids",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "moved distances,indices",
+      "parameter": "NearestNeighbors.n_neighbors",
+      "verdict": "REACHES"
+    },
+    {
+      "note": "used_query_tile: 256 -> 64",
+      "parameter": "NearestNeighbors.query_tile",
+      "verdict": "INVARIANT"
+    },
+    {
+      "note": "distances,indices equal",
+      "parameter": "NearestNeighbors.metric='l2'",
+      "verdict": "INVARIANT"
+    },
+    {
+      "note": "moved predictions,proba",
+      "parameter": "KNeighborsClassifier.n_neighbors",
+      "verdict": "REACHES"
+    },
+    {
+      "note": "moved predictions",
+      "parameter": "KNeighborsRegressor.n_neighbors",
+      "verdict": "REACHES"
+    },
+    {
+      "note": "",
+      "parameter": "DBSCAN.eps",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "DBSCAN.min_samples",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "DBSCAN.algorithm",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "DBSCAN.algorithm (min50)",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "DBSCAN.algorithm (uniform24)",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "DBSCAN.max_mbytes_per_batch (rbc)",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "DBSCAN.max_mbytes_per_batch (brute)",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "DBSCAN.max_iterations (chain, cap 200 binds)",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "DBSCAN.max_iterations (chain, None = fixed point)",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "DBSCAN.max_iterations (blobs, converges in 1)",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "DBSCAN.algorithm (chain)",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "PCA.n_components",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "TruncatedSVD.n_components",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "LinearRegression.fit_intercept",
+      "verdict": "MISSING"
+    }
+  ]
+}

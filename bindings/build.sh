@@ -218,7 +218,8 @@ kernels_plausible() {
     [ "$(uname)" = "Darwin" ] || return 0  # linux gate is run_smoke
     _air=$(air_blobs "$1")
     # subsystem:floor -- floors are a filter, never the proof. A good build
-    # measured 22 cluster, 4 neighbors and 2 core; a suppressed one has 0 of
+    # measured 22 cluster, 8 neighbors (4 before the k-NN classifier and
+    # regressor landed 2026-08-23) and 2 core; a suppressed one has 0 of
     # everything.
     for _pair in cluster:15 neighbors:3 core:1; do
         _sub=${_pair%%:*}
@@ -273,6 +274,11 @@ import mojolearn.neighbors as nbr
 X = np.random.default_rng(0).random((512, 3), dtype=np.float32)
 clu.KMeans(n_clusters=4, random_state=0).fit(X)
 nbr.NearestNeighbors(n_neighbors=3).fit(X).kneighbors(X[:2])
+# the classifier and regressor launch three more kernels (class_probs,
+# class_vote, regress_avg) plus the label map; one predict each
+y = (np.arange(512) * 7919 % 3).astype(np.int64) - 1
+nbr.KNeighborsClassifier(n_neighbors=3).fit(X, y).predict(X[:2])
+nbr.KNeighborsRegressor(n_neighbors=3).fit(X, X[:, 0]).predict(X[:2])
 shutil.rmtree(tmp, ignore_errors=True)
 PY
 }

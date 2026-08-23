@@ -1,0 +1,14 @@
+{
+  "card": "knn_clf_ties.card",
+  "classes": "6ba049c298f5563f3aa65636efc50fdc25f67f385d3086c4060b9a4b83281d66",
+  "kind": "knn_clf",
+  "n_classes": 2,
+  "predictions": "6cec249c74a476b5b6a1ab3739f29c739d319d27a08825eab12f062deab4b756",
+  "proba": "3d7571e3d48886457f1b73442e19d2a29e5f1324e819b0088b6d006618713c64",
+  "seconds": 0.12,
+  "spec": {
+    "n_neighbors": 4
+  },
+  "stages": 9,
+  "used_query_tile": 256
+}

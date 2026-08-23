@@ -8,14 +8,14 @@ and AMD through a Mojo driver, and named what it did NOT cover: k-means++'s
 float scan, the fused/tiled arms at other k, the ball-cover DBSCAN arm, the
 memory-budget batching, and PCA / truncated SVD / OLS entirely. This driver
 sweeps the PYTHON surface -- `mojolearn.KMeans`, `.NearestNeighbors`,
-`.DBSCAN`, `.PCA`, `.TruncatedSVD`, `.LinearRegression` -- one subprocess
-per cell, a `MOJOLEARN_IDENTITY_TRACE` card per cell (every one of the six
+`.KNeighborsClassifier`, `.KNeighborsRegressor` (2026-08-23), `.DBSCAN`,
+`.PCA`, `.TruncatedSVD`, `.LinearRegression` -- one subprocess per cell, a `MOJOLEARN_IDENTITY_TRACE` card per cell (every one of the six
 paths traces: k-means and DBSCAN inside the ported fit, k-NN in
 `neighbors/estimator.mojo`, OLS through `ols_fit_traced` since DEVIATION 517,
 PCA / tSVD at the host surface since DEVIATION 518), and a sha256 over every
 caller-visible output: labels, centroids, inertia, indices, distances,
 components, explained variance, singular values, coefficients, intercept,
-predictions, transforms.
+predictions, transforms, class probabilities, class sets.
 
 THREE VERDICTS PER CELL, ALL OF THEM RESULTS (the E2 set): identical /
 divergent-at-stage / refused. A REFUSED cell is a parameter the surface
@@ -152,11 +152,21 @@ def make_inputs():
     # hashed starting centroids for init='array': 8 rows of X
     c0_rows = (np.arange(8, dtype=np.int64) * 7919 + 13) % N_ROWS
     C0 = np.ascontiguousarray(X[c0_rows])
+    # THE k-NN CLASSIFIER LABELS (added 2026-08-23, drawn from no rng, so
+    # every hash above is untouched): hashed integer classes over the
+    # 20,000 index rows, 3-class as {-1, 0, 1} (a NEGATIVE label, so the
+    # class set is not range(n) and the ported monotonic map does work)
+    # and 2-class as {0, 1}. The 2-class set at an EVEN k on the tie
+    # fixture is where 2-2 VOTE ties happen and the lowest-class rule is
+    # exercised.
+    y_clf3 = (((idx * 2654435761) % 3)).astype(np.int64) - 1
+    y_clf2 = (((idx * 40503) >> 3) % 2).astype(np.int64)
     return dict(X=X, Xq=Xq, y_reg=y_reg, sw=sw, X_ties=X_ties,
                 Xq_ties=Xq_ties, X_blobs=X_blobs, X_chain=X_chain,
                 X_wide=X_wide,
                 X_ols_wide=X_ols_wide, y_ols_wide=y_ols_wide,
-                Xb=Xb, yb_reg=yb_reg, C0=C0)
+                Xb=Xb, yb_reg=yb_reg, C0=C0,
+                y_clf3=y_clf3, y_clf2=y_clf2)
 
 
 # ---------------------------------------------------------------- the cells
@@ -214,6 +224,24 @@ cell("knn_metric_minkowski_p1", "knn", n_neighbors=10, metric="minkowski",
 cell("knn_algorithm_kd_tree", "knn", n_neighbors=10,
      algorithm="kd_tree")  # REFUSED
 cell("knn_metric_l2", "knn", n_neighbors=10, metric="l2")  # == knn_k10
+
+# --- KNeighborsClassifier / KNeighborsRegressor (2026-08-23): index X,
+# queries Xq; labels y_clf3 ({-1,0,1}) / y_clf2 ({0,1}); targets y_reg.
+# The vote and the mean are serial per-row folds in both modes (DEVIATION
+# 542), so under IDENTICAL the whole card (search stages + knn_clf.* /
+# knn_reg.*) must be byte-identical run to run, and under FAST the vote
+# stages are identical whenever the SEARCH's index set is (row 11).
+cell("knn_clf_k5", "knn_clf", n_neighbors=5, _y="y_clf3")
+cell("knn_clf_k15_3class", "knn_clf", n_neighbors=15, _y="y_clf3")
+# 2 classes, k=4, on the 1/16-grid tie fixture: 2-2 vote ties AND
+# equidistant neighbours in one cell; the lowest-class rule decides the
+# former, the IDENTICAL selector's lowest-index rule the latter
+cell("knn_clf_ties", "knn_clf", n_neighbors=4, _y="y_clf2", _X="X_ties",
+     _Xq="Xq_ties")
+cell("knn_reg_k5", "knn_reg", n_neighbors=5)
+cell("knn_reg_k50", "knn_reg", n_neighbors=50)
+cell("knn_clf_weights_distance_refused", "knn_clf", n_neighbors=5,
+     weights="distance", _y="y_clf3")  # REFUSED
 
 # --- DBSCAN: X_blobs (6400 x 4; 8 blobs + 400 noise) ------------------------
 DB_BASE = dict(eps=0.3, min_samples=5)
@@ -303,6 +331,10 @@ REACH = [
      "used_query_tile"),
     ("NearestNeighbors.metric='l2'", "knn_k10", "knn_metric_l2", "same",
      None),
+    ("KNeighborsClassifier.n_neighbors", "knn_clf_k5", "knn_clf_k15_3class",
+     "differ", None),
+    ("KNeighborsRegressor.n_neighbors", "knn_reg_k5", "knn_reg_k50",
+     "differ", None),
     ("DBSCAN.eps", "dbscan_rbc", "dbscan_eps1.0", "differ", None),
     ("DBSCAN.min_samples", "dbscan_rbc", "dbscan_min50", "differ", None),
     ("DBSCAN.algorithm", "dbscan_rbc", "dbscan_brute", "same", None),
@@ -331,7 +363,7 @@ REACH = [
 _HASH_KEYS = ("labels", "centroids", "inertia", "distances", "indices",
               "components", "explained_variance", "explained_variance_ratio",
               "singular_values", "mean", "noise_variance", "transformed",
-              "coef", "intercept", "predictions")
+              "coef", "intercept", "predictions", "proba", "classes")
 
 
 # ---------------------------------------------------------------- one cell
@@ -394,6 +426,27 @@ def run_cell(name, out_dir):
             dist, ind = m.kneighbors(Xq)
             entry["distances"] = sha256_of(dist)
             entry["indices"] = sha256_of(ind)
+            entry["used_query_tile"] = int(m.used_query_tile_)
+        elif kind == "knn_clf":
+            m = mojolearn.KNeighborsClassifier(**spec).fit(X, y)
+            # predict is the TRACED call (search stages + knn_clf.uniq_labels
+            # / votes / labels). predict_proba is a SECOND search and vote
+            # -- cuML's predict / predict_proba are two kneighbors calls
+            # too -- and a second Mojo call would append a second `seq 0`
+            # into the same card, which the differ refuses (the DEVIATION
+            # 518 defect); so the trace is unset for it and only its
+            # output hash is recorded. `_predict` raises by name if the
+            # ported class set disagrees with np.unique (estimator policy
+            # 7).
+            entry["predictions"] = sha256_of(m.predict(Xq))
+            os.environ.pop("MOJOLEARN_IDENTITY_TRACE", None)
+            entry["proba"] = sha256_of(m.predict_proba(Xq))
+            entry["classes"] = sha256_of(m.classes_)
+            entry["n_classes"] = int(m.classes_.shape[0])
+            entry["used_query_tile"] = int(m.used_query_tile_)
+        elif kind == "knn_reg":
+            m = mojolearn.KNeighborsRegressor(**spec).fit(X, y)
+            entry["predictions"] = sha256_of(m.predict(Xq))
             entry["used_query_tile"] = int(m.used_query_tile_)
         elif kind == "dbscan":
             m = mojolearn.DBSCAN(**spec).fit(X, **fit_kw)

@@ -1,7 +1,8 @@
-# neighbors: exact brute-force k-NN, from cuVS and RAFT
+# neighbors: exact brute-force k-NN from cuVS and RAFT, and the k-NN classifier and regressor over it from cuML
 
-Third section, second and third upstream. Same rule as `gbdt/` and
-`cluster/`: **COPY, DO NOT IMPROVE.**
+Third section, second and third upstream (and, since 2026-08-23, cuML as a
+fourth, for the classifier and regressor -- see the last section). Same
+rule as `gbdt/` and `cluster/`: **COPY, DO NOT IMPROVE.**
 
 ## The claim being tested
 
@@ -89,3 +90,37 @@ which at N=4096 is below float32 precision at any scale. cuVS defaults to
 visibly move, small enough that it does not destroy the property being
 asserted. Both k-NN sabotages failed once for being outside it, and the
 kernel was right both times.
+
+## The k-NN classifier and regressor, 2026-08-23
+
+`mojolearn.KNeighborsClassifier` / `KNeighborsRegressor` are cuML's
+`ML::knn_classify` / `knn_class_proba` / `knn_regress` over the search
+above, ported file for file where cuML keeps them:
+
+    cuml cpp/src/knn/knn.cu:328-389          ->  ported/knn/knn.mojo
+    cuml cpp/src_prims/selection/knn.cuh     ->  ported/selection/knn.mojo
+    raft label/detail/classlabels.cuh        ->  ported/label/classlabels.mojo
+
+The vote is `class_probs_kernel` (each of the `k` neighbour slots adds `1/k`
+to its class, serially, per query) then `class_vote_kernel` (first maximum,
+so a tie goes to the LOWEST class in the sorted unique-label set, which is
+what scikit-learn's `mode` does); the mean is `regress_avg_kernel`. Both
+folds are serial per row in cuML already, so FAST and IDENTICAL run ONE
+arithmetic and the mode changes only the `ftz` seams (DEVIATION 542;
+IDENTITY_PATHS row 32). The host policy that composes search and vote
+under one identity trace is `neighbors/estimator.mojo` policies 5-7;
+DEVIATIONS 541-544 are in the DEVIATION BLOCKs of the two ported files and
+the estimator (540 was taken by the Gram/TF32 lane the same day and is
+not used here).
+
+Gates: `mojo_only/knn_classify_check.mojo`, `mojo_only/knn_regress_check.mojo`
+(host transcription bit for bit, planted vote ties, reach by one flipped
+label / one moved target, `k = 0` refused, multi-output layout, run twice),
+run by `pixi run check-knn`; `tools/knn_sklearn_oracle.py` against
+scikit-learn in both modes; E2U cells `knn_clf_k5`, `knn_clf_k15_3class`,
+`knn_clf_ties`, `knn_reg_k5`, `knn_reg_k50`, `knn_clf_weights_distance_refused`
+(`tools/e2u_matrix_fit.py`, first passes under
+`bench/results/e2u/2026-08-23_knn_clf_reg/`).
+
+What is not ported is in `UNPORTED.tsv` (the MNMG `precomp_lbls` arm,
+`weights='distance'`, which cuML refuses too).

@@ -1,0 +1,8 @@
+# knn n_index=20000 n_queries=2000 d=24 k=10 method=2 sqrt=True
+# format: mojolearn-identity-trace v1
+0	knn.index_norm	f32	20000	74a472e4925ec44e
+1	knn.query_norm	f32	2000	65ee8671f5e796dd
+2	knn.out_dist	f32	20000	5e172be65f2c55ba
+3	knn.out_idx	u32	20000	f20a549f58adacfd
+4	knn.sorted_dist	f32	20000	5e172be65f2c55ba
+5	knn.sorted_idx	u32	20000	f20a549f58adacfd

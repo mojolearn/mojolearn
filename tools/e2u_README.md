@@ -4,8 +4,9 @@
 one subprocess per cell, one identity card per cell, a sha256 over every
 caller-visible output, REFUSED cells recorded as results, and a REACH table
 that says which parameter moved the answer. It covers `mojolearn.KMeans`,
-`NearestNeighbors`, `DBSCAN`, `PCA`, `TruncatedSVD` and `LinearRegression`
-through the Python surface, which is the path a user takes.
+`NearestNeighbors`, `KNeighborsClassifier`, `KNeighborsRegressor`,
+`DBSCAN`, `PCA`, `TruncatedSVD` and `LinearRegression` through the Python
+surface, which is the path a user takes.
 
 ## Run it
 
@@ -26,9 +27,12 @@ cell and a REACH table, and writes `e2u_cells.json` (the record:
 verdicts) plus `<cell>.card` and `<cell>.cell.json` per cell. The record is
 rewritten after every cell, so a killed run still leaves one.
 
-The whole matrix is 67 cells (2026-08-23); on an M4 a pass takes a few
-minutes in either mode (the first run's four passes are
-`bench/results/e2u/2026-08-23_081643/`, with the four verdict tables).
+The whole matrix is 73 cells (2026-08-23; 67 before the six k-NN
+classifier / regressor cells landed); on an M4 a pass takes a few minutes
+in either mode (the first run's four passes are
+`bench/results/e2u/2026-08-23_081643/`, with the four verdict tables; the
+six `knn_clf_*` / `knn_reg_*` cells' first passes are under
+`bench/results/e2u/2026-08-23_knn_clf_reg/`).
 
 ## Judge it
 
@@ -73,6 +77,8 @@ and whether the outputs are expected to differ or to be invariant:
 |---|---|---|
 | kmeans | labels, centroids, inertia | n_iter, inertia_value, sum_scale, weight_scale |
 | knn | distances, indices | used_query_tile |
+| knn_clf | predictions, proba, classes | n_classes, used_query_tile |
+| knn_reg | predictions | used_query_tile |
 | dbscan | labels | n_clusters, n_noise, n_iter (propagation passes), batches (from the card header) |
 | pca | components, explained_variance, explained_variance_ratio, singular_values, mean, noise_variance, transformed | |
 | tsvd | components, singular_values, transformed | |

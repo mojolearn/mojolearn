@@ -60,9 +60,12 @@ WHAT IS NOT HERE YET, NAMED SO IT IS NOT MISTAKEN FOR DONE
 - Metrics other than expanded L2. The ported kernel carries only that arm
   (`knn_brute_force.mojo`'s dispatch note), so cosine and L1 are a port, not
   a flag.
-- `KNeighborsClassifier` / `KNeighborsRegressor`. A vote and a mean over what
-  `knn_search` already returns (`mojolearn.__init__`'s `_NOT_YET` names
-  them).
+- `KNeighborsClassifier` / `KNeighborsRegressor` EXIST since 2026-08-23:
+  `knn_classifier_predict` / `knn_regressor_predict` below, over the cuML
+  port in `neighbors/ported/knn/knn.mojo` and
+  `neighbors/ported/selection/knn.mojo`, bound as `_mojolearn.knn_classify`
+  / `.knn_regress` and exported as `mojolearn.KNeighborsClassifier` /
+  `.KNeighborsRegressor`. This bullet used to name them as absent.
 - The CPython extension EXISTS: `bindings/_mojolearn.mojo::knn_search_binding`
   and `python/mojolearn/neighbors.py` (`mojolearn.NearestNeighbors`). This
   bullet used to say nothing here was importable from Python; that stopped
@@ -95,8 +98,13 @@ ORDER of the set, which is a different property from WHICH set.
 """
 
 from core.identity_trace import IdentityTrace
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext
 
+from neighbors.ported.knn.knn import (
+    knn_class_proba,
+    knn_classify,
+    knn_regress,
+)
 from neighbors.ported.neighbors.detail.knn_brute_force import (
     KNN_METHOD_AUTO,
     brute_force_knn_impl,
@@ -163,6 +171,50 @@ def plan_query_tile(n_index: Int, n_queries: Int, requested_tile: Int) -> Int:
 
 def knn_search(
     ctx: DeviceContext,
+    index_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_index: Int,
+    queries_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_queries: Int,
+    n_features: Int,
+    k: Int,
+    out_dist_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_idx_ptr: MutPointer[UInt32, MutUntrackedOrigin],
+    return_sqrt: Bool = True,
+    requested_query_tile: Int = DEFAULT_QUERY_TILE,
+    knn_method: Int = KNN_METHOD_AUTO,
+) raises -> Int:
+    """Exact k nearest neighbours, index and queries row-major on the host.
+
+    The whole of the docstring is on `knn_search_traced`, which this calls
+    with a trace read from the environment. Split 2026-08-23 for the same
+    reason as `ols_fit_traced` (DEVIATION 517): the k-NN classifier and
+    regressor run a search AND a vote, and a trace's `seq` must increase by
+    one across the whole card (`core/identity_trace.mojo`), so the vote has
+    to record into the SAME trace the search did. A second `IdentityTrace()`
+    would append a second `seq 0` into the same file, which the differ
+    refuses -- the exact defect DEVIATION 518 fixed for k-means++.
+    """
+    var trace = IdentityTrace()
+    return knn_search_traced(
+        ctx,
+        trace,
+        index_ptr,
+        n_index,
+        queries_ptr,
+        n_queries,
+        n_features,
+        k,
+        out_dist_ptr,
+        out_idx_ptr,
+        return_sqrt,
+        requested_query_tile,
+        knn_method,
+    )
+
+
+def knn_search_traced(
+    ctx: DeviceContext,
+    mut trace: IdentityTrace,
     index_ptr: MutPointer[Float32, MutUntrackedOrigin],
     n_index: Int,
     queries_ptr: MutPointer[Float32, MutUntrackedOrigin],
@@ -268,7 +320,6 @@ def knn_search(
     # value: it is a memory number, and
     # `check_knn_tiled_is_query_tile_invariant` gates that the answer does
     # not depend on it.
-    var trace = IdentityTrace()
     if trace.enabled:
         trace.header(
             String("knn n_index=") + String(n_index) + " n_queries="
@@ -395,3 +446,278 @@ def knn_search(
         out_idx_ptr.unsafe_store(i, hi.unsafe_ptr().unsafe_load(i))
 
     return query_tile
+
+
+# =====================================================================
+# THE k-NN CLASSIFIER AND REGRESSOR, 2026-08-23
+#
+# Host-side composition of TWO things that already exist: `knn_search_traced`
+# above, and the cuML port in `neighbors/ported/knn/knn.mojo` (`ML::knn_classify`,
+# `ML::knn_class_proba`, `ML::knn_regress`). cuML's Python does exactly this
+# composition -- `kneighbors(X, return_distance=False)` then `knn_classify(...)`
+# on the indices (`kneighbors_classifier.pyx:245-285`) -- and the only reason
+# it is done in Mojo here rather than in `python/mojolearn/neighbors.py` is
+# the IDENTITY TRACE: one card, one `seq` sequence, so the vote's stages sit
+# after the search's stages in the same file. See `knn_search`'s docstring.
+# THAT IS DEVIATION 544: their Python makes two calls (kneighbors, then
+# knn_classify on the indices it got back); ours makes one, and the ported
+# `ML::` functions return the unique-label sets (theirs return void) so the
+# composition can check them against the wrapper's (policy 7 below).
+#
+# POLICY, since this file is where policy is named:
+#
+# 5. THE VOTE AND THE MEAN ARE ONE ARITHMETIC IN BOTH MODES. cuML's kernels
+#    are serial per query row in neighbour-slot order (no atomic, no block
+#    fold), so FAST has nothing faster to choose and IDENTICAL has nothing to
+#    replace; the mode changes only the row-10 flushes (`ftz`) at the seams,
+#    which are inert on Apple. DEVIATION 542 in `selection/knn.mojo`.
+#
+# 6. WHAT `y` IS, AT THE BOUNDARY. `n_outputs` columns, each `n_index` long
+#    and CONTIGUOUS -- cuML's `order='F'` `y` (`:197`), which is what makes
+#    `y[:, i].ptr` a column pointer there. The wrapper transposes a 2-D `y`
+#    into that layout once at `fit`.
+#
+# 7. THE CLASS SET IS COMPUTED TWICE, ON PURPOSE, AND CHECKED. The wrapper
+#    takes `np.unique` per output for `classes_` (the pyx takes `cp.unique`)
+#    and sizes `predict_proba`'s columns by it; the Mojo side recomputes the
+#    set with the ported `getUniquelabels` (`knn.cu:344`). `knn_classify`
+#    returns its counts and THIS function raises if they disagree with the
+#    wrapper's, rather than writing past the end of a buffer sized by the
+#    other answer.
+# =====================================================================
+
+
+def knn_classifier_predict(
+    ctx: DeviceContext,
+    index_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_index: Int,
+    queries_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_queries: Int,
+    n_features: Int,
+    k: Int,
+    y_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    n_outputs: Int,
+    n_classes: List[Int],
+    out_labels_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    out_proba_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_uniq_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    want_proba: Bool,
+    requested_query_tile: Int = DEFAULT_QUERY_TILE,
+) raises -> Int:
+    """Search, then vote (`want_proba=False`: `predict`) or tally
+    (`want_proba=True`: `predict_proba`). Returns the query tile that ran.
+
+    `y_ptr`: `n_outputs` contiguous int32 columns of `n_index` (policy 6).
+    `n_classes[i]`: the wrapper's class count for output `i` (policy 7).
+    `out_labels_ptr`: `n_queries x n_outputs` int32 row-major, written when
+    `want_proba` is False (the ORIGINAL label values).
+    `out_proba_ptr`: the per-output `n_queries x n_classes[i]` float32
+    blocks, concatenated in output order, written when `want_proba` is True.
+    `out_uniq_ptr`: the sorted unique labels per output, concatenated
+    (`sum(n_classes)` int32), ALWAYS written -- the wrapper asserts it equals
+    `classes_`, which is the check policy 7 describes made visible.
+
+    One call does one of the two, never both: each records `knn_clf.votes`
+    and a tag is unique within a trace. That matches cuML, where `predict`
+    and `predict_proba` are two `kneighbors` calls.
+    """
+    if n_outputs < 1:
+        raise Error(
+            "knn_classifier_predict: n_outputs must be positive, got "
+            + String(n_outputs)
+        )
+    if len(n_classes) != n_outputs:
+        raise Error(
+            "knn_classifier_predict: n_classes has "
+            + String(len(n_classes))
+            + " entries for "
+            + String(n_outputs)
+            + " outputs"
+        )
+
+    var trace = IdentityTrace()
+    var h_dist = ctx.enqueue_create_host_buffer[DType.float32](n_queries * k)
+    var h_idx = ctx.enqueue_create_host_buffer[DType.uint32](n_queries * k)
+    ctx.synchronize()
+    # `knn_search_traced` refuses k <= 0, k > n_index and the empty shapes
+    # by name; nothing here re-derives those refusals.
+    var used_tile = knn_search_traced(
+        ctx,
+        trace,
+        index_ptr,
+        n_index,
+        queries_ptr,
+        n_queries,
+        n_features,
+        k,
+        h_dist.unsafe_ptr(),
+        h_idx.unsafe_ptr(),
+        False,
+        requested_query_tile,
+        KNN_METHOD_AUTO,
+    )
+
+    # The sorted indices go back to the device, where cuML's kernels read
+    # them (`knn_indices` in `class_probs_kernel`).
+    var d_idx = ctx.enqueue_create_buffer[DType.uint32](n_queries * k)
+    var y = List[DeviceBuffer[DType.int32]]()
+    for i in range(n_outputs):
+        y.append(ctx.enqueue_create_buffer[DType.int32](n_index))
+    ctx.synchronize()
+    ctx.enqueue_copy(dst_buf=d_idx, src_ptr=h_idx.unsafe_ptr())
+    for i in range(n_outputs):
+        ctx.enqueue_copy(
+            dst_buf=y[i], src_ptr=y_ptr.unsafe_offset(i * n_index)
+        )
+    ctx.synchronize()
+
+    var uniq: List[List[Int32]]
+    if want_proba:
+        var probas = List[DeviceBuffer[DType.float32]]()
+        for i in range(n_outputs):
+            probas.append(
+                ctx.enqueue_create_buffer[DType.float32](
+                    n_queries * n_classes[i]
+                )
+            )
+        ctx.synchronize()
+        uniq = knn_class_proba(
+            ctx, trace, probas, d_idx, y, n_index, n_queries, k
+        )
+        _check_class_counts(uniq, n_classes)
+        var off = 0
+        for i in range(n_outputs):
+            var cnt = n_queries * n_classes[i]
+            var h = ctx.enqueue_create_host_buffer[DType.float32](cnt)
+            ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=probas[i])
+            ctx.synchronize()
+            for j in range(cnt):
+                out_proba_ptr.unsafe_store(
+                    off + j, h.unsafe_ptr().unsafe_load(j)
+                )
+            off += cnt
+            _ = h^
+        _ = probas^
+    else:
+        var labels = ctx.enqueue_create_buffer[DType.int32](
+            n_queries * n_outputs
+        )
+        ctx.synchronize()
+        uniq = knn_classify(
+            ctx, trace, labels, d_idx, y, n_index, n_queries, k
+        )
+        _check_class_counts(uniq, n_classes)
+        var h = ctx.enqueue_create_host_buffer[DType.int32](
+            n_queries * n_outputs
+        )
+        ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=labels)
+        ctx.synchronize()
+        for j in range(n_queries * n_outputs):
+            out_labels_ptr.unsafe_store(j, h.unsafe_ptr().unsafe_load(j))
+        _ = h^
+        _ = labels^
+
+    # The unique sets the port computed, handed out so the wrapper can
+    # compare them to `classes_` -- the only way a caller can SEE policy
+    # 7's agreement rather than trust it.
+    var off = 0
+    for i in range(n_outputs):
+        for j in range(len(uniq[i])):
+            out_uniq_ptr.unsafe_store(off + j, uniq[i][j])
+        off += len(uniq[i])
+
+    _ = h_dist^
+    _ = h_idx^
+    _ = d_idx^
+    _ = y^
+    return used_tile
+
+
+def _check_class_counts(got: List[List[Int32]], want: List[Int]) raises:
+    """Policy 7: the port's `getUniquelabels` count against the wrapper's."""
+    for i in range(len(want)):
+        if len(got[i]) != want[i]:
+            raise Error(
+                "knn_classifier_predict: the ported getUniquelabels found "
+                + String(len(got[i]))
+                + " classes for output "
+                + String(i)
+                + " and the caller sized its buffers for "
+                + String(want[i])
+                + "; one of the two class sets is wrong and nothing is "
+                + "written"
+            )
+
+
+def knn_regressor_predict(
+    ctx: DeviceContext,
+    index_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_index: Int,
+    queries_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_queries: Int,
+    n_features: Int,
+    k: Int,
+    y_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_outputs: Int,
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    requested_query_tile: Int = DEFAULT_QUERY_TILE,
+) raises -> Int:
+    """Search, then the mean of the `k` neighbours' targets per output.
+    Returns the query tile that ran.
+
+    `y_ptr`: `n_outputs` contiguous float32 columns of `n_index` (policy 6).
+    `out_ptr`: `n_queries x n_outputs` float32 row-major.
+    """
+    if n_outputs < 1:
+        raise Error(
+            "knn_regressor_predict: n_outputs must be positive, got "
+            + String(n_outputs)
+        )
+    var trace = IdentityTrace()
+    var h_dist = ctx.enqueue_create_host_buffer[DType.float32](n_queries * k)
+    var h_idx = ctx.enqueue_create_host_buffer[DType.uint32](n_queries * k)
+    ctx.synchronize()
+    var used_tile = knn_search_traced(
+        ctx,
+        trace,
+        index_ptr,
+        n_index,
+        queries_ptr,
+        n_queries,
+        n_features,
+        k,
+        h_dist.unsafe_ptr(),
+        h_idx.unsafe_ptr(),
+        False,
+        requested_query_tile,
+        KNN_METHOD_AUTO,
+    )
+
+    var d_idx = ctx.enqueue_create_buffer[DType.uint32](n_queries * k)
+    var y = List[DeviceBuffer[DType.float32]]()
+    for i in range(n_outputs):
+        y.append(ctx.enqueue_create_buffer[DType.float32](n_index))
+    var out = ctx.enqueue_create_buffer[DType.float32](n_queries * n_outputs)
+    ctx.synchronize()
+    ctx.enqueue_copy(dst_buf=d_idx, src_ptr=h_idx.unsafe_ptr())
+    for i in range(n_outputs):
+        ctx.enqueue_copy(
+            dst_buf=y[i], src_ptr=y_ptr.unsafe_offset(i * n_index)
+        )
+    ctx.synchronize()
+
+    knn_regress(ctx, trace, out, d_idx, y, n_index, n_queries, k)
+
+    var h = ctx.enqueue_create_host_buffer[DType.float32](n_queries * n_outputs)
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=out)
+    ctx.synchronize()
+    for j in range(n_queries * n_outputs):
+        out_ptr.unsafe_store(j, h.unsafe_ptr().unsafe_load(j))
+
+    _ = h^
+    _ = out^
+    _ = h_dist^
+    _ = h_idx^
+    _ = d_idx^
+    _ = y^
+    return used_tile
