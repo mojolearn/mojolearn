@@ -5,7 +5,8 @@ body transcribed branch for branch (`:154-271`). The math is documented in
 their header and is not repeated here; what follows is what changed.
 
     typedef cub::BlockReduce<Pair, WSIZE>    -> pinned_block_argmin/argmax
-    typedef cub::BlockReduce<math_t, WSIZE>  -> pinned_block_max_all
+    typedef cub::BlockReduce<math_t, WSIZE>  -> pinned_block_argmax (value only
+                                                used; DEVIATION 635)
     __shared__ f_u, u, l, tmp_u, tmp_l, diff, diff_end  -> threadgroup slots
     __shared__ Kd[WSIZE]                     -> threadgroup slab
 
@@ -22,13 +23,47 @@ THE THREE PINS (svm/README.md, identity content section 3):
 # the host oracle, which selects the same way in serial.
 # =========================================================================
 
+# =========================================================================
+# DEVIATION 635 (IDENTITY_PATHS row 39): `f_max` is the SAME key-tied
+# argmax (value of the smallest training index among the maximal f), not
+# a pure `max` fold. Theirs is `cub::BlockReduce<math_t>::Reduce(f_tmp,
+# cuda::maximum{})`, whose survivor among EQUAL values is the fold
+# topology's; the only equal values a float max can tell apart are `+0.0`
+# and `-0.0`, and `f` can hold both at once (a sample exactly on the
+# margin gives +0.0; a negative subnormal flushed at the f seam gives
+# -0.0, row 10). Before this deviation ours was a strict-`>` halving tree
+# with no key, whose survivor on that tie is a function of tree POSITION
+# (the oracle's serial scan keeps the FIRST index, the tree does not), so
+# `diff = f_max - f_u` could be `-0.0` on the device and `+0.0` on the
+# oracle with f_u = +0.0: one recorded bit (`svm.iterNNN.diff`), decided by
+# position. Now every reduction of the block solve ties on the training
+# index and the oracle scans with the same rule. Bits move only for a
+# working set holding both zeros as its maximal lower-set f; measured by
+# `svc_check.mojo::check_block_solve_signed_zero_tie` (order A: the fixed
+# spelling gives diff = -0.0/0x80000000 on device and oracle alike; the
+# old spelling gives +0.0 on the device, SAB_FMAX_NOKEY).
+# =========================================================================
+
 The contraction `f += q * (Kui - Kli)` is `identical_mul_add(q, ftz(Kui -
 Kli), f)` under IDENTICAL (their CUDA build contracts it to an fma; Metal
 through MAX contracts too; the pin is for the backend that does not); the
 quotient `(f_u - f)^2 / eta` is `ftz(ftz(d * d) / eta)`; `eta` is
-`max(ftz(ftz(Kd_t + Kd_u) - ftz(2 * Kui)), ETA_EPS)`. Both helpers compile
-away under FAST, so the FAST kernel is the plain expression and ONE body
-serves both modes (the association is the same either way).
+`ftz(ftz(Kd_t + Kd_u) - ftz(2 * Kui))` floored at `ETA_EPS` by the
+compare `if eta < ETA_EPS: eta = ETA_EPS` (theirs is `max(eta, ETA_EPS)`;
+row 39: a compare, not a hardware `max`, so a `-0.0` eta gives `ETA_EPS`
+on every vendor; a NaN eta needs a NaN kernel cell, which only float
+overflow of a legal input can make, and the NaN it leaves in `alpha`/`f`
+raises before any record, DEVIATION 637). Both helpers compile away under FAST, so
+the FAST kernel is the plain expression and ONE body serves both modes
+(the association is the same either way).
+
+THE MIN-SELECTS of the alpha update (`tmp_l if tmp_l < q_l else q_l`,
+`tmp_u if tmp_u < tmp_l else tmp_l`) are compare-and-select, not hardware
+`min`, and never see a `-0.0` anyway: `alpha` starts at +0.0 and every
+update `a +- q*y` with `0 <= q <= min(tmp_u, tmp_l)` stays in `[+0.0, C]`
+(a result of exactly zero is +0.0 under round-to-nearest; a positive
+subnormal flushes to +0.0), so `a`, `C - a`, and `q_l = (f - f_u)/eta`
+with `f_u < f` are all `>= +0.0` with the sign bit clear (row 39).
 
 WSIZE is a comptime parameter because the threadgroup slabs are; theirs is
 `SMO_WS_SIZE = 1024` at the one call site. `n_ws <= WSIZE` threads carry
@@ -40,6 +75,7 @@ gate runs two values of it on the same problem.
 from std.gpu import thread_idx
 from std.memory import stack_allocation
 from std.math import inf
+from std.sys.compile import is_defined
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
@@ -47,8 +83,19 @@ from mojo_only.numerics import ftz, identical_mul_add
 from svm.mojo_only.pinned_argreduce import (
     pinned_block_argmax,
     pinned_block_argmin,
-    pinned_block_max_all,
+    sabotage_block_max_hw,
+    sabotage_block_max_nokey,
 )
+
+
+#: SABOTAGES of the `f_max` fold (row 39; svc_check "signed-zero tie"):
+#: NOKEY = the pre-DEVIATION-635 strict-`>` tree (position decides a +0/-0
+#: tie); HWMAX = halving tree through the hardware `max(mine, other)`;
+#: HWMAX_SWAP = `max(other, mine)`. The README records which of these is
+#: Apple-inert and why that is exactly the hazard.
+comptime SAB_FMAX_NOKEY = is_defined["MOJOLEARN_SVM_SABOTAGE_FMAX_NOKEY"]()
+comptime SAB_FMAX_HWMAX = is_defined["MOJOLEARN_SVM_SABOTAGE_FMAX_HWMAX"]()
+comptime SAB_FMAX_HWMAX_SWAP = is_defined["MOJOLEARN_SVM_SABOTAGE_FMAX_HWMAX_SWAP"]()
 from svm.ported.svm.smo_sets import in_lower, in_upper
 
 
@@ -144,7 +191,18 @@ def smo_block_solve_kernel[
         var Kui = Float32(0.0)
         if active:
             Kui = kernel.unsafe_load(u * n_ws + tid)
-        var f_max = pinned_block_max_all[WSIZE](f_tmp)
+        # DEVIATION 635: the key-tied argmax; `f_max` is the winner's own
+        # bits (+0.0 or -0.0 as that sample holds it), decided by the key.
+        var f_max: Float32
+        comptime if SAB_FMAX_NOKEY:
+            f_max = sabotage_block_max_nokey[WSIZE](f_tmp)
+        elif SAB_FMAX_HWMAX:
+            f_max = sabotage_block_max_hw[WSIZE, False](f_tmp)
+        elif SAB_FMAX_HWMAX_SWAP:
+            f_max = sabotage_block_max_hw[WSIZE, True](f_tmp)
+        else:
+            var resm = pinned_block_argmax[WSIZE](f_tmp, key)
+            f_max = resm[0]
 
         # f_max - f_u is used to check stopping condition.
         var diff = ftz(f_max - f_u)
@@ -158,6 +216,7 @@ def smo_block_solve_kernel[
 
         if active and f_u < f and in_lower(a, y, C):
             var eta_ui = ftz(ftz(Kd[tid] + Kd[u]) - ftz(Float32(2.0) * Kui))
+            # row 39: a compare, not `max`; -0.0 < ETA_EPS is TRUE everywhere
             if eta_ui < ETA_EPS:
                 eta_ui = ETA_EPS
             var d = ftz(f_u - f)

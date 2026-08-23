@@ -31,6 +31,28 @@ advice is a message, the counter behind it is kept).
 # oracle gate.
 # =========================================================================
 
+# =========================================================================
+# DEVIATION 637 (IDENTITY_PATHS row 39, FACT 2): a NaN in `alpha` or `f`
+# RAISES at the end of the outer iteration that produced it, BEFORE that
+# iteration's card records, with their "SMO error: NaN found during
+# fitting" sentence. Theirs throws only on a NaN `diff`, and `diff` is the
+# FIRST inner iteration's value (`return_buff[0]` is written at `n_iter ==
+# 0` only), so a NaN born at a later inner iteration (float overflow with
+# finite inputs: `inf - inf` in `f += q * (Kui - Kli)`, or a NaN kernel
+# cell from an overflowed norm) propagates through `delta_alpha` and
+# `UpdateF` into every `f` while the host sees a finite `diff`; theirs
+# then either throws one outer iteration later or, when the NaN lands on
+# a masked lane of the next reduce, finishes with NaN alphas. Ours scans
+# `alpha` and `f` once per outer iteration (`flag_nan_f32_kernel`, one
+# Int32 flag read back beside their `host_return_buff` read) and raises.
+# Why it matters here and not there: a computed NaN's payload is the
+# vendor's (Apple 0x7fc00000, NVIDIA 0x7fffffff, AMD 0xffc00000), so a
+# NaN in a hashed stage is a cross-vendor divergence that is not a defect
+# of the solver. Bits move for no finite-valued fit. `svm.b` gets the same
+# check (`inf + -inf` in the bound-only arm). Gated by
+# `svc_check.mojo::check_nan_never_recorded` (an overflowing fixture).
+# =========================================================================
+
 THE STOPPING RULE is host Float64 exactly as theirs is host double on a
 float `diff`: `diff > diff_prev * 1.5` and `abs(diff - diff_prev) < 0.001
 * tol` promote through the double literals, `diff < tol` is float. The
@@ -50,9 +72,11 @@ from svm.mojo_only.device_select import (
     SEL_TPB,
     SelectScratch,
     fill_f32_kernel,
+    flag_nan_f32_kernel,
     flag_nonzero_f32_kernel,
     read_f32,
     read_i32,
+    set_i32_kernel,
     upload_i32,
 )
 from svm.ported.svm.kernelcache import BatchDescriptor, KernelCache
@@ -306,6 +330,8 @@ struct SmoSolver(Movable):
     var nz_flags: DeviceBuffer[DType.uint8]
     var fold_order: DeviceBuffer[DType.int32]
     var select: SelectScratch
+    var nan_flag: DeviceBuffer[DType.int32]
+    var host_nan_flag: HostBuffer[DType.int32]
 
     # Variables to track convergence of training
     var diff_prev: Float32
@@ -366,6 +392,8 @@ struct SmoSolver(Movable):
         self.nz_flags = ctx.enqueue_create_buffer[DType.uint8](ws)
         self.fold_order = ctx.enqueue_create_buffer[DType.int32](ws)
         self.select = SelectScratch(ctx, ws)
+        self.nan_flag = ctx.enqueue_create_buffer[DType.int32](1)
+        self.host_nan_flag = ctx.enqueue_create_host_buffer[DType.int32](1)
         self.diff_prev = Float32(0.0)
         self.n_small_diff = 0
         self.n_increased_diff = 0
@@ -547,11 +575,34 @@ struct SmoSolver(Movable):
                     self.update_f(
                         ctx, bd.offset, bd.batch_size, nnz_da, cache.kernel_tile
                     )
+            # DEVIATION 637: the NaN scan of alpha and f, read back with diff.
+            ctx.enqueue_function[set_i32_kernel](
+                self.nan_flag.unsafe_ptr(), Int32(0), grid_dim=1, block_dim=1,
+            )
+            ctx.enqueue_function[flag_nan_f32_kernel](
+                self.nan_flag.unsafe_ptr(), self.alpha.unsafe_ptr(), Int32(self.n_train),
+                grid_dim=_grid(self.n_train), block_dim=SEL_TPB,
+            )
+            ctx.enqueue_function[flag_nan_f32_kernel](
+                self.nan_flag.unsafe_ptr(), self.f.unsafe_ptr(), Int32(self.n_train),
+                grid_dim=_grid(self.n_train), block_dim=SEL_TPB,
+            )
+            ctx.enqueue_copy(
+                dst_ptr=self.host_nan_flag.unsafe_ptr(), src_buf=self.nan_flag
+            )
             ctx.synchronize()
 
             var diff = self.host_return_buff.unsafe_ptr().unsafe_load(0)
             var inner = Int(self.host_return_buff.unsafe_ptr().unsafe_load(1))
             keep_going = self.check_stopping_condition(diff)
+            if self.host_nan_flag.unsafe_ptr().unsafe_load(0) != Int32(0):
+                raise Error(
+                    "SMO error: NaN found during fitting. This might be caused by"
+                    " floating point overflow. In such case using fp64 could"
+                    " help. Alternatively, try gamma='scale' kernel parameter."
+                    " (DEVIATION 637: NaN in alpha or f after outer iteration "
+                    + String(self.n_outer_iter) + ", before its record)"
+                )
             self.n_iter += inner
             self.n_outer_iter += 1
             if (max_iter != -1 and self.n_iter >= max_iter) or (
@@ -581,6 +632,12 @@ struct SmoSolver(Movable):
         var res = Results(ctx, n_rows, n_cols)
         res.get(ctx, x, y, self.C_vec, self.alpha, self.f, model)
         model.n_iter = self.n_iter
+        if isnan(model.b):
+            # DEVIATION 637: `-(b_up + b_low)/2` with b_up = +inf, b_low = -inf
+            raise Error(
+                "SMO error: NaN found during fitting (DEVIATION 637: the"
+                " intercept b is NaN, floating point overflow in f)"
+            )
         card.record_scalar_f32("svm.b", model.b)
         card.record_list_f32("svm.dual_coefs", model.dual_coefs)
         card.record_list_i32("svm.support_idx", model.support_idx)

@@ -44,6 +44,7 @@ from svm.ported.svm.svm_parameter import (
     KernelParams,
     SvmModel,
     SvmParameter,
+    check_finite_list,
     check_rung1_scope,
 )
 
@@ -137,6 +138,9 @@ def svc_fit(
     if len(x_host) != n_rows * n_cols or len(labels_host) != n_rows:
         raise Error("svc_fit: x / labels sizes do not match n_rows x n_cols")
     check_rung1_scope(param, kp, has_sample_weight)
+    # DEVIATION 636 (row 39, FACT 2): no NaN/inf may enter; see svm_parameter.mojo
+    check_finite_list(x_host, "X")
+    check_finite_list(labels_host, "labels")
 
     var model = SvmModel()
     model.unique_labels = unique_labels_sorted(labels_host)
@@ -201,6 +205,7 @@ def svc_predict(
         raise Error("svc_predict: x size does not match n_rows x n_cols")
     if n_rows <= 0:
         return List[Float32]()
+    check_finite_list(x_host, "predict X")  # DEVIATION 636
     var n_support = model.n_support
     var n_batch = n_rows
     var buffer_bytes = buffer_size_mib * 1024.0 * 1024.0
@@ -270,6 +275,15 @@ def svc_predict(
         i += nb
     ctx.synchronize()
     preds = read_f32(ctx, d_preds, n_rows)
+    # DEVIATION 637 (row 39, FACT 2): a NaN decision value (float overflow
+    # of `sum K * dual` with finite inputs) carries a vendor payload and
+    # must not be recorded; raise before the record, as the solver does.
+    for i in range(n_rows):
+        if preds[i] != preds[i]:
+            raise Error(
+                "svm predict: NaN decision value at row " + String(i)
+                + " (floating point overflow; DEVIATION 637)"
+            )
     card.record_device[DType.float32](ctx, ptag + "out", d_preds, n_rows)
     _ = x^
     _ = sv^

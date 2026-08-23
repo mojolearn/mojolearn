@@ -389,8 +389,9 @@ def _block_solve[
 ) -> Tuple[Scalar[dt], Int]:
     """`SmoBlockSolve`, serialized: the per-thread registers are arrays
     indexed by `tid`, the three reductions are serial scans with the
-    DEVIATION 633 tie-break (smaller training index). Returns
-    `(return_buff[0], n_iter)`."""
+    DEVIATION 633 / 635 tie-break (smaller training index; the scans
+    compare with `<`/`>`/`==`, never a hardware `min`/`max`, row 39).
+    Returns `(return_buff[0], n_iter)`."""
     var pos_inf = _inf[dt]()
     var neg_inf = -_inf[dt]()
     var y = List[Scalar[dt]]()
@@ -425,12 +426,16 @@ def _block_solve[
                 u_key = key[t]
         if u < 0:
             u = 0
-        # f_max over lower
+        # f_max over lower: DEVIATION 635, the same key-tied argmax as `u`
+        # (the value of the smallest training index among the maximal f;
+        # only a +0.0/-0.0 pair can tie with different bits, row 39)
         var f_max = neg_inf
+        var fmax_key = 2147483647
         for t in range(n_ws):
             var v = f[t] if in_lower_g[dt](a[t], y[t], C) else neg_inf
-            if v > f_max:
+            if v > f_max or (v == f_max and key[t] < fmax_key):
                 f_max = v
+                fmax_key = key[t]
         var diff = _flush[dt](f_max - f_u)
         if n_iter == 0:
             diff0 = diff
@@ -637,6 +642,9 @@ def smo_oracle_fit[
         if n_free > 0:
             res.b = _flush[dt](-s / Scalar[dt](n_free))
         else:
+            # strict `<`/`>` ascending: the FIRST index wins a +0.0/-0.0
+            # tie, as `serial_min/max_f32_kernel` do over the compaction
+            # (row 39); no hardware min/max
             var b_up = _inf[dt]()
             var b_low = -_inf[dt]()
             var nu = 0

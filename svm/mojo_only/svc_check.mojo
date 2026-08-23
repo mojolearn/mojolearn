@@ -25,12 +25,23 @@ is inexact; a uniform fixture hides a permutation):
                                                 FIFO; the oracle's Float64 twin
     F7 wide_k    n=96   k=200 linear  C=1       the v1 GEMM leaf path (k > 128)
 
+    Z  signed zero  n_ws=8 planted at the BLOCK-SOLVE ENTRY (row 39): every
+                    f in the working set is a zero, +0.0 and -0.0 mixed,
+                    keys a permutation, upper/lower sets split by y; two
+                    orders (A, B); block 32 and 1024
+    N  nan          refusals of non-finite X / labels / C / tol / gamma, and
+                    a finite input whose linear kernel OVERFLOWS (DEVIATION 637)
+
 SABOTAGES (each a `-D` define; the README table records the failing line):
 
     MOJOLEARN_SVM_SABOTAGE_WS_TIE       workingset.mojo   must FAIL on F3
     MOJOLEARN_SVM_SABOTAGE_FOLD_ROTATE  smosolver.mojo    must FAIL (F1..F7)
     MOJOLEARN_SVM_SABOTAGE_STD_EXP      kernel_matrices   must FAIL on rbf (IDENTICAL)
     MOJOLEARN_SVM_SABOTAGE_NO_FTZ       smosolver.mojo    REPORT (bit-inert on FTZ hw)
+    MOJOLEARN_SVM_SABOTAGE_ARG_TIE_HIGH pinned_argreduce  must FAIL on F3 and Z
+    MOJOLEARN_SVM_SABOTAGE_FMAX_NOKEY   smoblocksolve     must FAIL on Z order A
+    MOJOLEARN_SVM_SABOTAGE_FMAX_HWMAX   smoblocksolve     Apple-INERT on Z (row 39); predicted FAIL on NVIDIA/AMD
+    MOJOLEARN_SVM_SABOTAGE_FMAX_HWMAX_SWAP smoblocksolve  must FAIL on Z order A on Apple
 """
 
 from std.math import inf
@@ -39,15 +50,17 @@ from max.gpu.host import DeviceContext
 
 from core.identity_trace import IdentityTrace, first_divergence
 from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from svm.mojo_only.device_select import read_f32, upload_f32, upload_i32
 from svm.mojo_only.smo_oracle import (
     OracleResult,
     global_kkt_gap,
     smo_oracle_decision,
     smo_oracle_fit,
+    _block_solve,
     _kernel_cell,
     _row_norm,
 )
-from svm.ported.svm.smosolver import SmoTrace
+from svm.ported.svm.smosolver import SmoTrace, launch_block_solve
 from svm.ported.svm.svc_impl import (
     svc_fit,
     svc_predict,
@@ -710,4 +723,328 @@ def check_card_is_emitted(ctx: DeviceContext, path_a: String, path_b: String) ra
     var d = first_divergence(path_a, path_b)
     print("  card: two traced fits (different launches) first divergence: " + (d if d != "" else "none"))
     if d != "":
-        raise Error("the two cards diverge at " + d)
+        # FACT 3 (row 39 audit): the two launches differ in the full-tile
+        # BATCH and the predict batch, and under FAST the kernel rows come
+        # from the vendor matmul, which may fold per shape; the agreement
+        # is only pinned under IDENTICAL.
+        if _is_identical():
+            raise Error("the two cards diverge at " + d)
+        print("    RECORDED [FAST]: the two cards diverge at " + d + " (vendor matmul per batch shape; asserted under IDENTICAL only)")
+
+
+# ===========================================================================
+# ROW 39: SIGNED ZERO AT THE BLOCK-SOLVE REDUCTIONS, AND THE NaN AUDIT
+# ===========================================================================
+
+
+struct ZeroFixture(Movable):
+    """A working set of 8 whose every f is a zero of planted sign, at the
+    block-solve ENTRY (the real kernel, the real oracle function). Why not
+    through `svc_fit`: `f = -0.0` arises only from a negative subnormal
+    flushed at the f seam (row 10), which no O(1)-scale input with 13-bit
+    significands can produce, and `f = +0.0` needs a sample exactly on the
+    margin; planting at the entry is the only way to put BOTH in one set.
+    Keys (`ws_idx`) are a permutation so that tree position, working-set
+    position and training index all differ."""
+
+    var name: String
+    var ws_idx: List[Int32]
+    var y: List[Float32]
+    var alpha: List[Float32]
+    var f: List[Float32]
+    var tile: List[Float32]
+    var expect_diff_bits: UInt32
+
+    def __init__(
+        out self, name: String, var ws_idx: List[Int32], var y: List[Float32],
+        var alpha: List[Float32], var f: List[Float32], var tile: List[Float32],
+        expect_diff_bits: UInt32,
+    ):
+        self.name = name
+        self.ws_idx = ws_idx^
+        self.y = y^
+        self.alpha = alpha^
+        self.f = f^
+        self.tile = tile^
+        self.expect_diff_bits = expect_diff_bits
+
+
+def _zero_fixture(order_b: Bool) -> ZeroFixture:
+    """Order A: by POSITION t = 0..7 the keys are [6,1,7,0,3,5,2,4]; the
+    UPPER set (y = +1, alpha = 0) is positions {0, 2, 5} = keys {6, 7, 5},
+    the LOWER set (y = -1, alpha = 0) is positions {1, 3, 4, 6, 7} = keys
+    {1, 0, 3, 2, 4}. f by KEY: [-0, +0, -0, +0, -0, +0, -0, -0]. The
+    smallest upper key (5) holds +0.0, so f_u = +0.0; the smallest lower
+    key (0) holds -0.0, so f_max = -0.0 under DEVIATION 635; diff = -0.0 -
+    (+0.0) = -0.0 = 0x80000000, and the solve stops at n_iter = 0 (diff <
+    eps). The pre-635 strict-`>` tree over the lower lanes (upper lanes
+    masked to -inf: [-inf, +0, -inf, -0, +0, -inf, -0, -0] by position)
+    never updates on a tie and its survivor is +0.0 (hand trace in the
+    README), so SAB_FMAX_NOKEY gives +0.0 - (+0.0) = +0.0 and FAILS; the
+    hardware-max tree `max(mine, other)` on Apple (second operand) lands on
+    -0.0 and is INERT here, while NVIDIA/AMD would give +0.0 (FAIL); the
+    swapped `max(other, mine)` on Apple gives +0.0 (FAIL). Order B flips
+    every sign: f_u = -0.0, f_max = +0.0, diff = +0.0 = 0x00000000, and
+    NOKEY is inert (which is why both orders run)."""
+    var keys: List[Int32] = [6, 1, 7, 0, 3, 5, 2, 4]
+    var upper_pos: List[Int] = [0, 2, 5]
+    var y = List[Float32]()
+    var alpha = List[Float32]()
+    var f = List[Float32]()
+    for _ in range(8):
+        y.append(Float32(-1.0))
+        alpha.append(Float32(0.0))
+        f.append(Float32(0.0))
+    for t in upper_pos:
+        y[Int(keys[t])] = Float32(1.0)
+    # f by key, order A
+    var neg = List[Bool]()
+    var signs_a: List[Bool] = [True, False, True, False, True, False, True, True]
+    for k in range(8):
+        var is_neg = signs_a[k]
+        if order_b:
+            is_neg = not is_neg
+        neg.append(is_neg)
+        f[k] = bitcast[DType.float32](UInt32(0x80000000)) if is_neg else Float32(0.0)
+    # a hashed symmetric PSD-ish tile (unused at n_iter = 0, must be real memory)
+    var tile = List[Float32]()
+    for i in range(8):
+        for j in range(8):
+            var v = _unit(i * 8 + j, 5) if i <= j else _unit(j * 8 + i, 5)
+            if i == j:
+                v = Float32(2.0) + v
+            tile.append(v)
+    var expect = UInt32(0x00000000) if order_b else UInt32(0x80000000)
+    return ZeroFixture(
+        "Z.order_" + ("B" if order_b else "A"), keys^, y^, alpha^, f^, tile^, expect
+    )
+
+
+def _run_zero_fixture_device(
+    ctx: DeviceContext, zf: ZeroFixture, threads: Int
+) raises -> Tuple[Float32, Int, List[Float32], List[Float32]]:
+    """One `SmoBlockSolve` launch on the planted set: returns (diff,
+    n_iter, alpha after, delta_alpha)."""
+    var y = upload_f32(ctx, zf.y)
+    var alpha = upload_f32(ctx, zf.alpha)
+    var f = upload_f32(ctx, zf.f)
+    var tile = upload_f32(ctx, zf.tile)
+    var ws_idx = upload_i32(ctx, zf.ws_idx)
+    var C_list = List[Float32]()
+    var da0 = List[Float32]()
+    for _ in range(8):
+        C_list.append(Float32(1.0))
+        da0.append(Float32(0.0))
+    var C_vec = upload_f32(ctx, C_list)
+    var delta_alpha = upload_f32(ctx, da0)
+    var rb0: List[Float32] = [Float32(0.0), Float32(0.0)]
+    var return_buff = upload_f32(ctx, rb0)
+    launch_block_solve(
+        ctx, threads, y, 8, alpha, 8, delta_alpha, f, tile, ws_idx, C_vec,
+        Float32(1.0e-3), return_buff, 10000,
+    )
+    ctx.synchronize()
+    var rb = read_f32(ctx, return_buff, 2)
+    var a_out = read_f32(ctx, alpha, 8)
+    var da_out = read_f32(ctx, delta_alpha, 8)
+    _ = y^
+    _ = f^
+    _ = tile^
+    _ = ws_idx^
+    _ = C_vec^
+    _ = alpha^
+    _ = delta_alpha^
+    _ = return_buff^
+    return (rb[0], Int(rb[1]), a_out^, da_out^)
+
+
+def check_block_solve_signed_zero_tie(ctx: DeviceContext) raises:
+    """ROW 39, THE -0.0 FIXTURE: both zeros in one working set, both
+    orders, block 32 and 1024; device == oracle BITWISE on `diff` (the one
+    recorded bit a zero's sign can reach), n_iter, alpha and delta_alpha,
+    and `diff` equals the value the smallest-key rule predicts.
+
+    Asserted in BOTH modes: no arithmetic runs (n_iter = 0; the one
+    operation is `(+-0) - (+-0)`, exact and sign-defined by IEEE 754 on
+    every vendor), the folds are integer keys plus IEEE compares, and no
+    library call or hardware `max`/`min` is on the path. That is the
+    property DEVIATIONS 633/635 claim, and it is not vendor-shaped."""
+    var bad = String("")
+    for order in range(2):
+        var zf = _zero_fixture(order == 1)
+        # the oracle
+        var o_alpha = zf.alpha.copy()
+        var o_da = List[Float32]()
+        for _ in range(8):
+            o_da.append(Float32(0.0))
+        var o = _block_solve[DType.float32](
+            zf.ws_idx, 8, zf.y, o_alpha, zf.f, zf.tile, Float32(1.0), Float32(1.0e-3),
+            10000, o_da,
+        )
+        var o_diff = o[0]
+        var o_iter = o[1]
+        for which in range(2):
+            var threads = 32 if which == 0 else 1024
+            var d = _run_zero_fixture_device(ctx, zf, threads)
+            var d_diff = d[0]
+            var d_iter = d[1]
+            var same = _bits(d_diff) == _bits(o_diff) and d_iter == o_iter
+            for i in range(8):
+                if _bits(d[2][i]) != _bits(o_alpha[i]) or _bits(d[3][i]) != _bits(o_da[i]):
+                    same = False
+            var expected_ok = _bits(d_diff) == zf.expect_diff_bits
+            print(
+                "  " + zf.name + " [" + _mode_name() + "] block=" + String(threads)
+                + " device diff=" + _show(d_diff) + " n_iter=" + String(d_iter)
+                + " | oracle diff=" + _show(o_diff) + " n_iter=" + String(o_iter)
+                + " | expected diff bits " + hex(zf.expect_diff_bits)
+                + (" OK" if (same and expected_ok) else " MISMATCH")
+            )
+            if not same and bad == "":
+                bad = zf.name + " block=" + String(threads) + ": device diff " + _show(d_diff) + " vs oracle " + _show(o_diff)
+            if not expected_ok and bad == "":
+                bad = zf.name + " block=" + String(threads) + ": diff " + _show(d_diff) + " is not the smallest-key answer " + hex(zf.expect_diff_bits)
+    if bad != "":
+        raise Error("signed-zero tie: " + bad)
+
+
+def _expect_raise_naming(what: String, name: String, e_msg: String, raised: Bool) raises:
+    if not raised:
+        raise Error(what + ": no raise (expected one naming " + name + ")")
+    if e_msg.find(name) < 0:
+        raise Error(what + ": the raise does not name " + name + ": " + e_msg)
+
+
+def check_nan_never_recorded(ctx: DeviceContext) raises:
+    """FACT 2 (row 39): no NaN can reach a recorded stage. (1) DEVIATION
+    636: non-finite X, labels, C, tol, gamma and predict-X are refused BY
+    NAME before any stage; (2) DEVIATION 637: a FINITE input whose linear
+    kernel overflows (x ~ 1.5e19, k = 2: every K is +inf, eta = inf - inf)
+    raises the NaN sentence before the iteration's record. (1) is host
+    refusal, asserted in both modes; (2) is asserted under IDENTICAL and
+    RECORDED under FAST (a fast-math build may fold `x != x` to false)."""
+    var fx = fixture_blobs()
+    var card = IdentityTrace.disabled()
+    var trace = SmoTrace()
+    var n_ok = 0
+
+    # (1a) X
+    var x_nan = fx.x.copy()
+    x_nan[17] = bitcast[DType.float32](UInt32(0x7FC00000))
+    var raised = False
+    var msg = String("")
+    try:
+        _ = svc_fit(ctx, x_nan, fx.labels, fx.n, fx.k, fx.param, fx.kp, card, trace, False)
+    except e:
+        raised = True
+        msg = String(e)
+    _expect_raise_naming("X NaN", "X contains a non-finite value at flat index 17", msg, raised)
+    n_ok += 1
+    # (1b) X inf
+    var x_inf = fx.x.copy()
+    x_inf[3] = inf[DType.float32]()
+    raised = False
+    msg = ""
+    try:
+        _ = svc_fit(ctx, x_inf, fx.labels, fx.n, fx.k, fx.param, fx.kp, card, trace, False)
+    except e:
+        raised = True
+        msg = String(e)
+    _expect_raise_naming("X inf", "X contains a non-finite value at flat index 3", msg, raised)
+    n_ok += 1
+    # (1c) labels
+    var lab = fx.labels.copy()
+    lab[5] = bitcast[DType.float32](UInt32(0xFFC00000))
+    raised = False
+    msg = ""
+    try:
+        _ = svc_fit(ctx, fx.x, lab, fx.n, fx.k, fx.param, fx.kp, card, trace, False)
+    except e:
+        raised = True
+        msg = String(e)
+    _expect_raise_naming("labels NaN", "labels contains a non-finite value at flat index 5", msg, raised)
+    n_ok += 1
+    # (1d) C = inf
+    var p_c = SvmParameter.default()
+    p_c.C = inf[DType.float64]()
+    raised = False
+    msg = ""
+    try:
+        _ = svc_fit(ctx, fx.x, fx.labels, fx.n, fx.k, p_c, fx.kp, card, trace, False)
+    except e:
+        raised = True
+        msg = String(e)
+    _expect_raise_naming("C inf", "C must be finite", msg, raised)
+    n_ok += 1
+    # (1e) tol = NaN (passes `tol > 0` and would never stop)
+    var p_t = SvmParameter.default()
+    p_t.tol = Float64(bitcast[DType.float32](UInt32(0x7FC00000)))
+    raised = False
+    msg = ""
+    try:
+        _ = svc_fit(ctx, fx.x, fx.labels, fx.n, fx.k, p_t, fx.kp, card, trace, False)
+    except e:
+        raised = True
+        msg = String(e)
+    _expect_raise_naming("tol NaN", "tol must be finite", msg, raised)
+    n_ok += 1
+    # (1f) gamma = inf (NaN on the kernel diagonal) and gamma < 0
+    raised = False
+    msg = ""
+    try:
+        _ = svc_fit(ctx, fx.x, fx.labels, fx.n, fx.k, fx.param, KernelParams.rbf(inf[DType.float64]()), card, trace, False)
+    except e:
+        raised = True
+        msg = String(e)
+    _expect_raise_naming("gamma inf", "gamma must be finite and >= 0", msg, raised)
+    n_ok += 1
+    raised = False
+    msg = ""
+    try:
+        _ = svc_fit(ctx, fx.x, fx.labels, fx.n, fx.k, fx.param, KernelParams.rbf(-0.5), card, trace, False)
+    except e:
+        raised = True
+        msg = String(e)
+    _expect_raise_naming("gamma negative", "gamma must be finite and >= 0", msg, raised)
+    n_ok += 1
+    # (1g) predict X
+    var model = svc_fit(ctx, fx.x, fx.labels, fx.n, fx.k, fx.param, fx.kp, card, trace, False)
+    var q = fx.x.copy()
+    q[0] = bitcast[DType.float32](UInt32(0x7FC00000))
+    raised = False
+    msg = ""
+    try:
+        _ = svc_predict(ctx, model, q, fx.n, fx.k, fx.kp, 200.0, False, card)
+    except e:
+        raised = True
+        msg = String(e)
+    _expect_raise_naming("predict X NaN", "predict X contains a non-finite value", msg, raised)
+    n_ok += 1
+    print("  NaN refusals by name (DEVIATION 636): " + String(n_ok) + " (X NaN, X inf, labels, C, tol, gamma inf, gamma < 0, predict X)")
+
+    # (2) the overflow trap: finite input, every kernel cell +inf
+    var n = 8
+    var k = 2
+    var xo = List[Float32]()
+    var labo = List[Float32]()
+    for i in range(n):
+        for c in range(k):
+            xo.append(Float32(1.5e19) * (Float32(1.0) + Float32(0.25) * abs(_unit(i * k + c, 61))))
+        labo.append(Float32(1.0) if (i & 1) == 1 else Float32(0.0))
+    var po = SvmParameter.default()
+    raised = False
+    msg = ""
+    try:
+        _ = svc_fit(ctx, xo, labo, n, k, po, KernelParams.linear(), card, trace, False)
+    except e:
+        raised = True
+        msg = String(e)
+    var trap_ok = raised and msg.find("NaN found during fitting") >= 0
+    print(
+        "  overflow fixture (linear, |x| ~ 1.5e19, K = +inf everywhere) [" + _mode_name() + "]: "
+        + ("RAISED: " + msg if raised else "NO RAISE (fit completed)")
+    )
+    if not trap_ok:
+        if _is_identical():
+            raise Error("DEVIATION 637: the overflowing fit did not raise the NaN sentence: " + (msg if raised else "no raise"))
+        print("    RECORDED [FAST]: the NaN trap did not fire (fast-math may fold x != x); asserted under IDENTICAL only")

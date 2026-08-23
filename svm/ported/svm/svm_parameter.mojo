@@ -20,7 +20,28 @@ happens to it:
                            unported rather than written blind)
     degree, coef0          only read by the two refused kernels
     sample_weight          the Solve/InitPenalty argument; raised by name
+
+# =========================================================================
+# DEVIATION 636 (IDENTITY_PATHS row 39, FACT 2): NON-FINITE inputs are
+# REFUSED BY NAME. Theirs validates none of `C`, `tol`, `gamma`, `X`,
+# `labels` (the C++ entry points take what they are given; a NaN surfaces,
+# if at all, as the "NaN found during fitting" throw of
+# `CheckStoppingCondition`). Ours raises, naming the parameter, on: `C`
+# not finite, `tol` not finite (`tol = NaN` passes their `tol > 0` and
+# never stops), RBF `gamma` not finite or negative (`gamma = inf` makes
+# `-inf * 0 = NaN` on the diagonal of the kernel matrix; a negative gamma
+# is an exp that overflows to inf and then to NaN in f; sklearn's own
+# constraint is `gamma >= 0`), and any non-finite cell of `X` or `labels`
+# (`svc_impl.mojo`, fit and predict). Why: a computed NaN carries a
+# VENDOR-SPECIFIC payload (Apple 0x7fc00000, NVIDIA 0x7fffffff, AMD
+# 0xffc00000), so a NaN can never sit in a card-hashed stage, and every
+# one of these inputs puts one there (`svm.iter000.f` at the latest).
+# Refusing is the guard; the stages stay raw bits. Gated by
+# `svc_check.mojo::check_refusals` (each named) and `check_nan_never_recorded`.
+# =========================================================================
 """
+
+from std.math import isfinite
 
 
 comptime C_SVC = 0
@@ -137,7 +158,30 @@ def check_rung1_scope(
         raise Error("svm: unknown kernel " + String(kp.kernel))
     if has_sample_weight:
         raise Error("svm: sample_weight is not ported in rung 1 (InitPenalty's weighted arm)")
+    # DEVIATION 636: NaN fails `<= 0.0` and would pass; ask for finite first.
+    if not isfinite(param.C):
+        raise Error("svm: C must be finite, got " + String(param.C) + " (DEVIATION 636)")
     if param.C <= 0.0:
         raise Error("svm: C must be positive, got " + String(param.C))
+    if not isfinite(param.tol):
+        raise Error("svm: tol must be finite, got " + String(param.tol) + " (DEVIATION 636)")
     if param.tol <= 0.0:
         raise Error("svm: tol must be positive, got " + String(param.tol))
+    if kp.kernel == KERNEL_RBF:
+        if not isfinite(kp.gamma) or kp.gamma < 0.0:
+            raise Error(
+                "svm: gamma must be finite and >= 0 for the RBF kernel, got "
+                + String(kp.gamma) + " (DEVIATION 636)"
+            )
+
+
+def check_finite_list(values: List[Float32], what: String) raises:
+    """DEVIATION 636: every cell of `what` (`X`, `labels`, the predict `X`)
+    must be finite; raises naming the first offending index."""
+    for i in range(len(values)):
+        if not isfinite(values[i]):
+            raise Error(
+                "svm: " + what + " contains a non-finite value at flat index "
+                + String(i) + " (DEVIATION 636: a NaN or inf input cannot be"
+                " fitted; a computed NaN has a vendor-specific payload)"
+            )

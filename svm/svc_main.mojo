@@ -22,9 +22,11 @@ from svm.mojo_only.svc_check import (
     _mode_name,
     _run_device,
     all_fixtures,
+    check_block_solve_signed_zero_tie,
     check_card_is_emitted,
     check_device_is_launch_invariant,
     check_device_matches_oracle,
+    check_nan_never_recorded,
     check_oracle_f32_matches_f64_reference,
     check_oracle_kkt_and_accuracy,
     check_oracle_objective_decreases,
@@ -107,6 +109,18 @@ def run_device_gates(mut ran: Int, mut failed: Int) raises:
     except err:
         e = String(err)
     _gate("card_is_emitted", ran, failed, e)
+    e = ""
+    try:
+        check_block_solve_signed_zero_tie(ctx)
+    except err:
+        e = String(err)
+    _gate("block_solve_signed_zero_tie (row 39, DEVIATIONS 633/635, Z x 2 orders x 2 blocks)", ran, failed, e)
+    e = ""
+    try:
+        check_nan_never_recorded(ctx)
+    except err:
+        e = String(err)
+    _gate("nan_never_recorded (row 39 FACT 2, DEVIATIONS 636/637)", ran, failed, e)
 
 
 def emit_card() raises:

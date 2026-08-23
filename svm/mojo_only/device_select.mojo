@@ -153,6 +153,28 @@ def flag_nonzero_f32_kernel(
         flags.unsafe_store(i, UInt8(1) if x != Float32(0.0) else UInt8(0))
 
 
+def flag_nan_f32_kernel(
+    flag: MutPointer[Int32, MutAnyOrigin],
+    v: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """DEVIATION 637 (`smosolver.mojo`): `flag[0] = 1` if any `v[i]` is
+    NaN (`x != x`; inf is not flagged, its bits are the same on every
+    vendor). Plain stores of the same value from many threads; reset by
+    `set_i32_kernel` before each scan. No arithmetic, no mode."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in):
+        var x = v.unsafe_load(i)
+        if x != x:
+            flag.unsafe_store(0, Int32(1))
+
+
+def set_i32_kernel(v: MutPointer[Int32, MutAnyOrigin], value: Int32):
+    """One-thread store of one Int32 (the NaN flag's reset)."""
+    if Int(thread_idx.x) == 0 and Int(block_idx.x) == 0:
+        v.unsafe_store(0, value)
+
+
 def flag_free_kernel(
     flags: MutPointer[UInt8, MutAnyOrigin],
     alpha: MutPointer[Float32, MutAnyOrigin],
@@ -262,8 +284,13 @@ def serial_min_f32_kernel(
     v: MutPointer[Float32, MutAnyOrigin],
     n_in: Int32,
 ):
-    """`cub::DeviceReduce::Min` (`results.cuh::SelectReduce`): exact, so a
-    one-thread scan is the same answer as any fold."""
+    """`cub::DeviceReduce::Min` (`results.cuh::SelectReduce`): exact away
+    from a +0.0/-0.0 pair, so a one-thread scan is the same answer as any
+    fold; ON that pair (row 39) the strict `<` keeps the FIRST element in
+    index order (the compaction preserves training-index order), which is
+    the oracle's serial rule in `smo_oracle.mojo::_results`, and not a
+    hardware `min`. A NaN at index 0 would persist and a later one would
+    be dropped; none reaches here (DEVIATION 637 raises first)."""
     if Int(thread_idx.x) == 0 and Int(block_idx.x) == 0:
         var m = v.unsafe_load(0)
         for i in range(1, Int(n_in)):
@@ -278,6 +305,8 @@ def serial_max_f32_kernel(
     v: MutPointer[Float32, MutAnyOrigin],
     n_in: Int32,
 ):
+    """`cub::DeviceReduce::Max`; the twin of `serial_min_f32_kernel`, same
+    row-39 note: strict `>`, first index wins a +0.0/-0.0 tie."""
     if Int(thread_idx.x) == 0 and Int(block_idx.x) == 0:
         var m = v.unsafe_load(0)
         for i in range(1, Int(n_in)):
