@@ -98,6 +98,24 @@ and the vendor rule resumes. `gram_splitk_applies` consults
 target columns, sending the shape back to `linalg.matmul` through
 `gemm_tn_via_transpose`.
 
+**AND ON NVIDIA THAT VENDOR ARM IS TF32, NOT FP32 (DEVIATION 540,
+2026-08-23).** The H100 leg of E2 failed `check_gram_vendor_arm` under FAST
+at 33x33x257 by 2.4e-5 of the magnitude -- 2.4x the fp32 budget -- while
+this kernel passed the same Float64 oracle at ten shapes in the same
+process. MAX 26.5.0's `linalg.matmul` defaults `use_tf32=True`, its cuBLAS
+fallback hard-codes `CUBLAS_TF32_TENSOR_OP_MATH`, and `use_tf32=False` is a
+compile-time assert on every NVIDIA part before Blackwell
+(`mojo_only/kernel_matrix.mojo::column_vendor_fp32_matmul_is_tf32`, with
+the source lines). So: **under FAST on the NVIDIA column every Gram
+product PCA, truncated SVD and OLS compute is a TF32 tensor-core product
+(10-bit mantissa operands, fp32 accumulation), at EVERY shape, because
+this kernel is not that column's arm.** The AMD column's vendor product is
+fp32 (MFMA f32 16x16x4; rocBLAS at compute type fp32) and the Apple M1-M4
+arm is fp32 (an M5 is fp19 by default in MAX 26.5.0, see the row). The
+checks hold the vendor arm to the TF32 bound on a lossy column and to the
+fp32 budget elsewhere, and print which. Under IDENTICAL none of this is
+reachable: this kernel is the arm on every column or `gemm_tn` refuses.
+
 ACCURACY. The split sum (chunk partials of ~k/chunks terms, then a fold
 over the chunks -- 240 of them on the Apple column) is a two-level
 pairwise-style summation: its error grows like

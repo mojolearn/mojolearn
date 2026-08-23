@@ -73,6 +73,18 @@ the most constrained mainstream GPU memory hierarchy, which is why freezing
 the floor costs nothing today — and why now, while it is free, is the moment
 to freeze it.
 
+**One capability the table does not have a column for, because it belongs
+to the TOOLCHAIN's library and not to the silicon: whether MAX's fp32
+`linalg.matmul` is an fp32 product or a TF32 tensor-core one.** NVIDIA: TF32
+by default with no compilable opt-out before Blackwell; Apple M1-M4 and AMD
+CDNA: fp32; Apple M5: fp19 by default (an environment variable selects the
+precise path). It is the kernel-matrix row
+`column_vendor_fp32_matmul_is_tf32` / `vendor_fp32_matmul_is_lossy`
+(DEVIATIONS 529 and 540, with the MAX source lines), it decides the
+tolerance two checks hold a FAST vendor product to, and it has no bearing
+on `IDENTICAL`, which never calls the vendor matmul. `VENDOR_LIBRARIES.md`,
+"FAST products on NVIDIA are TF32".
+
 ### The three cells that matter more than the rest
 
 **Adreno's wave width is not a device constant.** Qualcomm's own OpenCL

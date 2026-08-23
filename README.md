@@ -84,7 +84,15 @@ from Python, Intel and Qualcomm GPU columns, and a CPU fallback of any kind.
 `FAST` is the default. Histograms flush through float atomics, library
 reductions follow the hardware warp width, and the last bits of a model can
 move between two runs on the same device. That is CatBoost's shipped
-behavior and it is the fastest the hardware goes.
+behavior and it is the fastest the hardware goes. One vendor fact rides
+with it: on NVIDIA, MAX's fp32 matrix product is a TF32 tensor-core product
+by default, so the `FAST` products that go through it there (the Gram step of
+`PCA`, `TruncatedSVD` and `LinearRegression`, PCA's transforms, k-NN
+brute-force distances, k-means++ seeding costs; not the k-means assignment)
+carry TF32 accuracy, roughly four significant digits on each operand
+([VENDOR_LIBRARIES.md](VENDOR_LIBRARIES.md), "FAST products on NVIDIA are
+TF32"). On Apple M1-M4 and AMD CDNA the same products are fp32. `IDENTICAL`
+never calls the vendor product, on any vendor.
 
 `IDENTICAL` pins every pathway that can move a bit. The enumeration of those
 pathways is [IDENTITY_PATHS.md](IDENTITY_PATHS.md), 32 rows, each with what

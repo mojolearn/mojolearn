@@ -183,6 +183,83 @@ and which tests CORRECT above.
 
 ---
 
+## FAST products on NVIDIA are TF32, 2026-08-23 (DEVIATIONS 529, 540)
+
+The correctness table above is an Apple M4 measurement, and its two
+`linalg.matmul` rows say **GPU, CORRECT** against a Float64 oracle at an fp32
+budget. On the H100 leg of E2 the same products failed that budget under FAST:
+`mojo_only/gram_splitk_check.mojo::check_gram_vendor_arm` at 33x33x257 by
+2.4e-5 of the magnitude, and the k-means unfused assignment arm
+(`cluster/mojo_only/kmeans_check.mojo::check_assignment_arm_dispatch`) by 4e-5
+-- both ~100x outside fp32 and well inside TF32. Both are `core/gemm.mojo::
+gemm_nt` = `linalg.matmul`. Read from the pinned toolchain's source (tag
+`max/v26.5.0`):
+
+- `linalg/matmul/__init__.mojo:59,90`: `use_tf32: Bool = True` -- "allow TF32
+  tensor-core truncation for fp32 inputs" -- is the DEFAULT.
+- `linalg/matmul/gpu/__init__.mojo:493-498`: `use_tf32=False` is a
+  COMPILE-TIME ASSERT except on SM100 (Blackwell): "use_tf32=False is only
+  implemented for the SM100 matmul dispatch". On an H100 there is no flag.
+- `linalg/matmul/vendor/matmul.mojo:73,116`: the cuBLAS fallback hard-codes
+  `vendor_matmul[use_tf32=True]`, which is `COMPUTE_32F_FAST_TF32` plus
+  `CUBLAS_TF32_TENSOR_OP_MATH` (`vendor/blas.mojo:751-758`, with the source's
+  own comment "the result is not bit-wise identical to the result of FP32").
+- AMD CDNA's fp32 MFMA is the full-precision `16x16x4` f32 instruction
+  (`layout/tensor_core.mojo:1446`) and its rocBLAS fallback runs at compute
+  type fp32 (`vendor/blas.mojo:929`): **fp32**. Apple M1-M4
+  (`gemm_kernel_apple_8x8`): **fp32**. Apple M5: the fp19 simdgroup MMA path
+  is ON BY DEFAULT (`MODULAR_APPLE_M5_ALLOW_LOSSY_F32_MATMUL` defaults to "1",
+  `utils_gpu.mojo:564-569`), so an M5 is TF32-class unless that variable is
+  "0" -- transcribed, untested on an M5.
+
+So the rows above are **GPU, CORRECT AT FP32 ON APPLE M1-M4 AND AMD CDNA,
+TF32-ACCURACY ON NVIDIA** under FAST. The property is a KERNEL MATRIX row
+(`mojo_only/kernel_matrix.mojo::column_vendor_fp32_matmul_is_tf32` /
+`vendor_fp32_matmul_is_lossy`, the latter folding in the M5 generation at
+runtime), read by both checks, which hold a vendor product to
+`VENDOR_TF32_PRODUCT_REL_BOUND` (1e-3 of the magnitude: 2^-10, a product of
+two operands each rounded to 10 mantissa bits) on a lossy column and to the
+fp32 budget everywhere else, and print which. Each check also carries a
+self-sabotage that rounds the operands to TF32 on the host and proves, on
+the Mac, that the fp32 budget rejects the result and the TF32 bound admits
+it -- the two tolerances separate the classes without a tensor core.
+
+WHAT THIS MEANS FOR THE ESTIMATORS, FAST MODE, NVIDIA COLUMN ONLY: every
+product through `gemm_nt` / `gemm_tn`'s vendor arm is TF32-accuracy --
+PCA / truncated SVD / OLS's Gram product (at EVERY shape on NVIDIA, because
+the split-K kernel is the Apple column's arm), PCA transform and inverse
+transform, OLS step 5, k-NN brute-force distances, k-means++ candidate costs.
+The k-means Lloyd ASSIGNMENT is not: the shipped arm is the fused SIMT kernel
+(fp32), which is why the fused arm was RIGHT on the H100 and the diff against
+the vendor arm was what failed. `gemv_gpu` (OLS step 6, predict) is a CUDA-core
+kernel and is not on this list. **Under IDENTICAL none of it is reachable**:
+`gemm_nt` is `pinned_gemm_nt_kernel`, `gemm_tn` is the split-K kernel or a
+refusal (DEVIATIONS 521, 526), and the E2 IDENTICAL cards matched Apple stage
+for stage on the H100 the same day.
+
+ONE MORE THING THE COLUMN SIMS FOUND: the flat fp32 budget (1e-5 of the
+magnitude, calibrated at k=10007) is ALSO too tight for a closed fp32
+product at k=100003 -- the `-D MOJOLEARN_COLUMN_AMD` build forces
+`check_gram_dispatch`'s 32x32x100003 wrapper call onto Apple's own fp32
+`gemm_kernel_apple_8x8` and it lands 1.3e-5, no tensor core involved, a
+serial fold at k=1e5 being wider than one at 1e4. A closed product (order
+unknown) now earns `4 x 2^-24 x sqrt(k)` on top of the flat budget on every
+column (`VENDOR_SERIAL_FOLD_REL_PER_SQRT_K`); our split-K kernel keeps the
+flat budget. A real MI300X under FAST would have failed at exactly that
+line.
+
+NOT CHANGED: no vendor call was replaced and no tolerance was loosened on an
+exact column beyond that k-scaled fp32 allowance. Forcing fp32 through MAX is not available on the H100 (the
+assert above); a hand-written fp32 N-T product for FAST would be the
+closed-library exception arguing against the vendor rule on accuracy rather
+than throughput, and that is a decision for the lane that owns `core/gemm.mojo`,
+priced (a 3xTF32 emulation costs ~3x the tensor-core time; the fp32 SIMT path
+costs more). `check_pinned_gemm_is_batch_invariant`'s H100 REPORT the same day
+(n=64 differs from n=4 in 234 of 256 cells) is the same kernel seen from the
+launch-invariance side.
+
+---
+
 ## THE CORRECTION THIS FILE OPENS WITH
 
 **Mojo HAS warp primitives.** This repository has claimed since its first
