@@ -413,17 +413,46 @@ ledger.
    the house rule for that file, it is a BIT-MOVING MIGRATION of committed,
    certified behaviour, and it needs both lanes to agree before a line is
    edited. It is the LAST step of Phase 2, never an incidental one.
+   **SETTLED 2026-08-23: adoption there needs the identity lane's sign-off
+   before an edit.**
 
 2. **`core/gram_splitk.mojo` folds partials SERIALLY and row 27 is closed on
    that spelling.** The v1 contract's fold is a FIXED BALANCED TREE. Those
-   are different arithmetic. Either the Gram kernel is a separate profile
-   with its own certificate, or it migrates and its bits move. Naming it now
-   is cheap; discovering it after v1 is published is not.
+   are different arithmetic.
+
+   **SETTLED 2026-08-23, and it is a decision this lane BUILDS AGAINST rather
+   than works around: the Gram kernel STAYS on its serial-fold spelling as
+   its OWN PROFILE with its own certificate.** The reasoning is the identity
+   lane's and this file records it because it constrains v1: row 27 is closed
+   on that spelling, and the E1U AMD cards and the E2 rounds ride on it, so
+   **certified cross-vendor bits do not move for a house style**. If v1's
+   balanced tree ever wants to become the Gram kernel's arithmetic, that is a
+   new deviation, a new certificate and regenerated vendor cards, decided
+   then and by both lanes.
+
+   THE CONSEQUENCE FOR v1, stated so Phase 2 does not quietly assume the
+   opposite: **v1 is NOT obliged to reproduce the Gram kernel's bits, and must
+   not be designed as though it were.** Two profiles coexisting is the
+   expected end state, not a defect to be resolved later. A future reader
+   comparing `gemm_tn`'s output against a v1 GEMM at the same shape and
+   finding different bits has found two profiles, not a bug.
 
 3. **`GLOBAL_NUMERIC_MODE` is moving from a source line to a build define.**
    This lane depends on the SYMBOL and not on the mechanism, so the migration
    should be invisible here. If any `gemm/` file ever tests how the mode was
    selected rather than what it is, that is this lane's bug.
+
+   **LANDED 2026-08-23 (`c03db65`) AND VERIFIED FROM THIS SIDE.**
+   `tools/with_identical_mode.sh` is now a define injector that touches no
+   file at all -- `-D MOJOLEARN_NUMERIC_IDENTICAL=1` -- so the whole
+   flip/revert hazard class, including the one that ate another lane's edit
+   at 06:44, is gone rather than mitigated. Smoke-tested for THIS lane's
+   invocation form (`with_identical_mode.sh pixi run mojo run -I . <file>`,
+   which takes the injector's form-1 path): reports `[IDENTICAL]`, and the
+   plain form under the build lock reports `[FAST]`. The `_mode_name()`
+   witness in every check is kept anyway and is now the only thing standing
+   between a mis-plumbed define and a correctly-labelled measurement of the
+   wrong arm.
 
 ## Working rules
 
