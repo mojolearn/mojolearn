@@ -1,5 +1,8 @@
 # mojolearn
 
+[![PyPI](https://img.shields.io/pypi/v/mojolearn.svg)](https://pypi.org/project/mojolearn/)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22068632.svg)](https://doi.org/10.5281/zenodo.22068632)
+
 **GPU machine learning in Mojo, on hardware the originals cannot reach.**
 
 mojolearn ports the GPU implementations that established today's tree and
@@ -205,7 +208,10 @@ used under license.
 
 If mojolearn is useful in work you publish, please cite it.
 [CITATION.cff](CITATION.cff) is what GitHub's **Cite this repository** button
-reads; each GitHub release is archived on Zenodo with its own DOI.
+reads. Each GitHub release is archived on Zenodo with its own DOI; the
+concept DOI [10.5281/zenodo.22068632](https://doi.org/10.5281/zenodo.22068632)
+always resolves to the latest release, and 0.1.0 is
+[10.5281/zenodo.22068633](https://doi.org/10.5281/zenodo.22068633).
 
 ## Where things are
 
