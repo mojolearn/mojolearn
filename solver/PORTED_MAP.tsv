@@ -11,5 +11,6 @@ ported/stats/mean.mojo	raft cpp/include/raft/stats/detail/mean.cuh, mean_center.
 ported/linalg/axpy.mojo	raft cpp/include/raft/linalg/detail/axpy.cuh	partial	axpy<T, DevicePointerMode=true>: cuBLAS (CLOSED), MAX has no axpy; mirror = one thread per row reading alpha from device memory as their pointer mode does. incx = incy = 1 only
 mojo_only/profile_dot.mojo	none	mojo-only	DEVIATION 610: every n_rows reduction under IDENTICAL is the mojolearn.identical.gemm.fp32.v1 OP_NT cell at 1 x 1 x n_rows, CALLED through gemm/mojo_only/gemm_identical.mojo::identical_gemm_with_plan; host side through gemm_oracle_cell. No fold is spelled here
 mojo_only/cd_oracle.mojo	none	mojo-only	the host oracle (device arithmetic, serial), the whole-row serial variant, the Float64 reference, the hashed fixtures, the NO_FTZ_RESID sabotage switch
-mojo_only/cd_check.mojo	none	mojo-only	DEVIATION 610's gates; four sabotages recorded in its header and in README.md
+mojo_only/record_canon.mojo	none	mojo-only	DEVIATION 612: every float stage of the card is hashed through a NaN-canonicalized COPY (0x7FC00000, IDENTITY_PATHS row 39 FACT 2); the NO_NAN_CANON sabotage switch
+mojo_only/cd_check.mojo	none	mojo-only	DEVIATION 610's gates, the row 39 signed-zero and NaN-payload gates; seven sabotages recorded in its header and in README.md
 cd_main.mojo	none	mojo-only	the driver and the identity card (cd.* stages)

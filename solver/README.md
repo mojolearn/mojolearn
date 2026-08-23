@@ -5,8 +5,9 @@ Seventh section. **COPY, DO NOT IMPROVE.** `cdFit` and `cdPredict`
 their control plane calls, file for file, under `solver/ported/`; the one
 thing cuML never needed -- a row-length reduction with ONE fold shape on
 three vendors -- under `solver/mojo_only/`. DEVIATION 610 is the identity
-construction; 611 is reserved and NOT spent (see `shuffle` below); 612-619
-are unused.
+construction; 611 is reserved and NOT spent (see `shuffle` below); 612 is
+the card's NaN canonicalization and 613 the NaN/inf parameter refusals
+(the ROW 39 AUDIT section); 614-619 are unused.
 
 ## Status: CONSTRUCTION plus one Apple device's gates; no second vendor has run this.
 
@@ -23,10 +24,17 @@ benchmark arena are the identity lane's.
     # the gates, both arms (every line carries the mode the binary COMPILED in)
     tools/with_build_lock.sh     pixi run mojo run -I . solver/mojo_only/cd_check.mojo
     tools/with_identical_mode.sh pixi run mojo run -I . solver/mojo_only/cd_check.mojo
+    # the same through the registered pixi tasks (no *-identity task exists by design)
+    pixi run check-cd
+    tools/with_identical_mode.sh pixi run check-cd
 
     # the driver: one Lasso fit on the planted fixture, the oracle's verdict, predict
     tools/with_build_lock.sh     pixi run mojo run -I . solver/cd_main.mojo
     tools/with_identical_mode.sh pixi run mojo run -I . solver/cd_main.mojo
+    pixi run cd-main
+
+    # a sabotage build (the define goes right after `mojo run`)
+    tools/with_identical_mode.sh pixi run mojo run -D MOJOLEARN_CD_SABOTAGE_ZERO_FOLD_MAX=1 -I . solver/mojo_only/cd_check.mojo
 
     # the identity card
     MOJOLEARN_IDENTITY_TRACE=/tmp/cd.apple.card \
@@ -34,9 +42,9 @@ benchmark arena are the identity lane's.
     python3 tools/identity_trace_diff.py /tmp/cd.apple.card /tmp/cd.other.card
 
 `cd_main.mojo` reads `MOJOLEARN_CD_ROWS/COLS/ALPHA/L1_RATIO/FIT_INTERCEPT/
-EPOCHS/TOL` (defaults 2048 / 16 / 0.01 / 1.0 / 1 / 1000 / 1e-3). No pixi
-task is registered (pixi.toml is not this lane's); the lines above are the
-whole interface.
+EPOCHS/TOL` (defaults 2048 / 16 / 0.01 / 1.0 / 1 / 1000 / 1e-3). The pixi
+tasks `check-cd` and `cd-main` are registered by the identity lane; the
+lines above are the whole interface.
 
 ## What is ported
 
@@ -53,6 +61,7 @@ whole interface.
 | `solver/ported/linalg/axpy.mojo` | `raft linalg/detail/axpy.cuh` | `axpy<T, DevicePointerMode=true>` -- cuBLAS axpy with a DEVICE alpha; MAX has no axpy, so the mirror is one thread per row reading alpha from device memory |
 | `solver/mojo_only/profile_dot.mojo` | none | DEVIATION 610: every `n_rows` reduction under IDENTICAL is the `mojolearn.identical.gemm.fp32.v1` `OP_NT` cell at `1 x 1 x n_rows`, CALLED from the gemm lane (`identical_gemm_with_plan`) -- no second fold is spelled; the sum for the means is the dot against ones |
 | `solver/mojo_only/cd_oracle.mojo` | none | the host oracle (device arithmetic, serial), the whole-row serial variant, the Float64 reference, the hashed fixtures |
+| `solver/mojo_only/record_canon.mojo` | none | DEVIATION 612: every float stage of the card is hashed through a copy whose NaNs are rewritten to the one payload `0x7FC00000` (IDENTITY_PATHS row 39 FACT 2) |
 | `solver/mojo_only/cd_check.mojo` | none | the gates, below |
 | `solver/cd_main.mojo` | none | the driver and the card |
 
@@ -170,8 +179,9 @@ run-to-run control.
 ## The gates (`solver/mojo_only/cd_check.mojo`), and what each one saw on the M4
 
     check_cd_refuses_by_name              shuffle=true, sample_weight, loss=HINGE, n_cols=0,
-                                          n_rows=1, alpha<0, l1_ratio=1.5, predict loss=HINGE:
-                                          each raises naming the parameter
+                                          n_rows=1, alpha<0, l1_ratio=1.5, predict loss=HINGE,
+                                          alpha=NaN, alpha=inf, l1_ratio=NaN, tol=NaN (DEVIATION
+                                          613): each raises naming the parameter
     check_cd_recovers_the_planted_support Lasso alpha 0.01 on hashed X in [-0.5,0.5), 4 of 16
                                           planted nonzeros: support recovered EXACTLY; worst
                                           |device - float64| 2.8e-07 (tol 2e-3); n_iter device 3
@@ -206,6 +216,20 @@ run-to-run control.
                                           + flushed add; FAST: 494 differ, worst 5.5e-6 relative
     check_cd_card_is_emitted              20 records, the tag list above, control identical
     check_cd_soft_threshold_operand_order a REPORT, meaningful in the SOFT_SWAP build (below)
+    check_cd_signed_zero_coefficients     ROW 39: alpha 1e36 / l1_ratio 0 / tol 0 on 256x8 flushes
+                                          every quotient to a zero SIGNED by its dot: 4 -0.0 and
+                                          4 +0.0 coefficients, coef[0] -0.0 in the `pos` fixture
+                                          and +0.0 in the negated one (both orders); device card ==
+                                          oracle card on every stage (incl. `.conv`), cells bit for
+                                          bit, coefMax/diffMax +0.0 (0x00000000). IDENTICAL asserts;
+                                          FAST RECORDED (the FAST oracle keeps the subnormal
+                                          quotient 0x801d0718 the Apple device flushes)
+    check_cd_nan_payload_is_canonical     DEVIATION 612: a +inf label puts a COMPUTED NaN in 256/256
+                                          residual cells (device 0x7fc00000, arm64 host 0x7fc00000),
+                                          a 0x7FC0BEEF label a PROPAGATED one in 1/256 (device
+                                          0x7fc00000, host 0x7fc0beef); canonicalized cards agree on
+                                          every stage, cells agree after canonicalization. IDENTICAL
+                                          asserts; FAST RECORDED
 
 On batch composition: a per-coordinate solver has no batch axis of its own
 -- each dot is one `1 x 1` cell and each column norm one launch -- so the
@@ -220,12 +244,132 @@ and what this section varies is the plan, the grid and the padding.
 | `MOJOLEARN_GEMM_SABOTAGE_LEAF_ROTATE=1` | the leaf at tree position `t` is ROTATED BY THE BLOCK INDEX (the brief's "rotate the reduction start by block index") | `FAILED ... 24981 disagreements` -- large (P = 157, the SPLITK leaf kernel spans two blocks): coef 1/4, resid 20000/20000, first divergence `cd.mu_input`; planted and denormal (P <= 16, one block, rotation by 0) UNCHANGED, as the mechanism predicts |
 | `MOJOLEARN_CD_SABOTAGE_NO_FTZ_RESID=1` | the ORACLE's residual flush dropped (store and re-read). On Apple the device's flush is hardware, so the host side is where the seam's reach can be shown on this column | `FAILED ... 1025 disagreements` -- denormal fixture ONLY: resid 1024/1024, `first resid cell 0 device 0x00000000 oracle 0x80019511`, first card divergence `7 cd.sweep000.resid`; planted and large unchanged (no denormal is reachable there). Found while building it: dropping only the STORE-side flush is invisible at `n_cols > 1`, because the next coordinate's axpy flushes the denormal residual on load; the seam is the pair and the sabotage drops both |
 | `MOJOLEARN_CD_SABOTAGE_SOFT_SWAP=1` | `-(l1_alpha - coef)` for `coef - l1_alpha`, `l1_alpha + coef` for `coef + l1_alpha` in `cdUpdateCoefKernel` | `REPORT: 0 coef cells and 0 residual cells moved` -- IEEE subtraction is exactly anticommutative and addition commutative in round-to-nearest; the operand order is not a bit |
+| `MOJOLEARN_CD_SABOTAGE_ZERO_FOLD_MAX=1` | the `coefMax` fold as the hardware `max(conv, cand)` with `cand` = the SIGNED `r` when `r` is a zero (row 39) | `check_cd_signed_zero_coefficients FAILED under IDENTICAL (zero-fold sabotage ZERO_FOLD_MAX): 1 of 2 fixtures` -- `signed_zero_neg` (whose LAST coordinate is -0.0): `first card divergence: 8 cd.sweep000.conv`; `signed_zero_pos` (last coordinate +0.0) inert. Apple returns the SECOND operand of `max(+0,-0)`; NVIDIA/AMD's IEEE-2019 maximum returns +0.0, so this sabotage is PREDICTED INERT there -- one source, two cards |
+| `MOJOLEARN_CD_SABOTAGE_ZERO_FOLD_MAX_SWAPPED=1` | the same with the operands swapped, `max(cand, conv)` | `check_cd_signed_zero_coefficients OK [IDENTICAL] ... (zero-fold sabotage ZERO_FOLD_MAX_SWAPPED)` -- APPLE-INERT (the +0.0 seed is the second operand) and predicted inert on NVIDIA/AMD too (IEEE maximum): a spelling that is right everywhere by accident of operand order, which is exactly why a hardware max is not the spelling -- the two sabotages differ on Apple alone |
+| `MOJOLEARN_CD_SABOTAGE_NO_NAN_CANON=1` | both cards hash raw NaN bits (DEVIATION 612 off) | `check_cd_nan_payload_is_canonical FAILED under IDENTICAL (canon sabotage NO_NAN_CANON): 1 of 2 fixtures` -- `nan_propagated`: `first cell 9 device 0x7fc00000 oracle 0x7fc0beef; first card divergence: 7 cd.sweep000.resid`; `nan_computed` INERT on this machine (the M4's GPU and its arm64 host both default to 0x7fc00000) and predicted to FAIL on the NVIDIA box (device 0x7fffffff against an x86 host's 0xffc00000) |
 
 A fused-versus-unfused sabotage of the axpy is NOT listed because it cannot
 be seen on this column: Metal through MAX contracts `a*b+c` by default, so
 `identical_mul_add` is bit-inert here (gemm contract 4.1). The pin's value
 is the first non-contracting backend; the reach proof there is the device
 oracle arm the gemm lane describes.
+
+## ROW 39 AUDIT (2026-08-23): signed zero, NaN payloads, FAST-mode gates
+
+IDENTITY_PATHS row 39, measured the same day on Apple M4 / NVIDIA H100 /
+AMD MI325X: `max(+0.0, -0.0)` is -0.0 on Apple (the second operand) and
++0.0 on NVIDIA/AMD (IEEE-2019 maximum); a computed NaN's payload is the
+vendor's (0x7fc00000 / 0x7fffffff / 0xffc00000); the phase-6 gate scripts
+run the FAST pass too. Every float `max`/`min`/`abs`/clamp/compare-fold
+site in `solver/` was read against those three facts.
+
+### Sites reviewed
+
+| site | what it is | can +-0.0 / NaN reach it | verdict |
+|---|---|---|---|
+| `solver/ported/solver/cd.mojo` `cd_update_coef_kernel`, the soft threshold `c > l1_alpha ? c - l1_alpha : (c < -l1_alpha ? c + l1_alpha : 0)` | a branch, no max/min | `c` can be -0.0 (a flushed negative dot): both compares are false, `r = +0.0` literal; a nonzero arm's result is strictly signed (`c > a` implies `c - a > 0`); a NaN `c` takes the `0` arm (both compares false) | no hardware max/min; UNCHANGED. The SOFT_SWAP sabotage (below) already shows the operand order is not a bit |
+| the same kernel, `r = r / sq` then `ftz(r)` | a quotient that CAN flush to a SIGNED zero | yes: `dot / squared` below the normal floor is -0.0 for a negative dot (Apple's hardware flush and `ftz` agree, row 10); stored to `coef` and negated into `conv[0]` | IEEE division, negation and the signed flush are vendor-invariant; the -0.0 is a RECORDED bit (`cd.sweepNNN.coef`, `.conv`) and `check_cd_signed_zero_coefficients` plants it and compares the card bit for bit. PROVEN in a comment at the site |
+| the same kernel, `diffMax`/`coefMax` folds: `if conv[2] < diff: conv[2] = diff`, `if conv[1] < absv: conv[1] = absv` | two max folds spelled as strict compares | candidates are `abs()` values (`abs(-0.0)` is +0.0, the sign bit is cleared), seed is the +0.0 `enqueue_memset` wrote, strict `<` keeps the EARLIER value on a tie by position, `x < NaN` is false so a NaN never enters | PROVEN in a comment at the site; no hardware max; UNCHANGED. The -0.0 fixture reaches both folds with both zeros in both orders; the ZERO_FOLD_MAX sabotage shows what a hardware-max spelling would do |
+| `solver/mojo_only/cd_oracle.mojo` `cd_oracle_fit`, the same folds on the host | the oracle's spelling | identical reasoning | comment added; asserted in both modes that the sign bit of `coefMax`/`diffMax` is never set |
+| `solver/ported/linalg/coalesced_reduction.mojo:84` `if abs(sum) >= abs(cur)` | RAFT's KBN branch selecting the compensation FORMULA | both operands `abs()`; on a magnitude tie the two formulas compute the same `c`; NaN takes the second arm as RAFT's does | PROVEN in the docstring; FAST-only (comptime assert); UNCHANGED |
+| `solver/ported/stats/mean.mojo`, `glm/preprocess.mojo`, `linalg/norm.mojo`, `linalg/axpy.mojo`, `functions/linear_reg.mojo` | sums, a multiply by `1/N`, `x - mu`, `fma`, `x + s`; `norm` is a SUM OF SQUARES with NO sqrt | no clamp, no max/min, no sqrt, no division by a data value anywhere (`ratio = 1/N` with `n_rows >= 2`); a zero column gives `colnorm = 0`, `squared = l2_alpha`, and `cd.cuh:62`'s `1e-5` guard zeroes the coefficient; a zero-variance column under `fit_intercept` centers to the zero column | nothing to change |
+| `solver/mojo_only/profile_dot.mojo:64,88` `if p > w`, `if p < 0` | Int | not floats | nothing |
+| `solver/mojo_only/cd_check.mojo` `if e > worst` (tolerance scans) | host Float64 `abs()` maxima | report values only | nothing |
+
+No `max(`/`min(` on a float, no `.clamp()`, no `reduce_max/min`, no
+`pinned_block_max/min`, no `Atomic.max/min`, no `copysign` exists in
+`solver/`. No clamp was rewritten because there is none.
+
+### FACT 2, the recorded stages (DEVIATION 612, `solver/mojo_only/record_canon.mojo`)
+
+cuML's `cdFit` has no finiteness guard. With FINITE inputs of moderate
+scale no stage can hold a NaN (a zero column, a zero-variance column,
+`alpha = 0`, `l1_ratio` at either end, `tol = 0`, `max_iter = 0` were each
+traced: zeros and infs at worst, never `0/0`). Two things CAN put one on
+the card: a non-finite label or design cell, and an overflow of
+`x * residual` past FLT_MAX (`inf - inf` in a dot; `(-inf) * x + inf` in
+the second axpy). The soft threshold maps a NaN dot to a `0` coefficient
+(both compares false) but the residual keeps the NaN, and the payload is
+the vendor's. Decision per stage:
+
+| stage | NaN reachable | handled |
+|---|---|---|
+| `cd.input.x`, `cd.input.y` | a user NaN (its own payload, the same bits on every vendor) | canonicalized at the record (so a user payload and a propagated one hash alike) |
+| `cd.l1_alpha`, `cd.l2_alpha` | only from a NaN/inf parameter | **DEVIATION 613**: `alpha` non-finite, `l1_ratio` NaN, `tol` NaN are REFUSED BY NAME (`cd.mojo`, the block banner there); after that they are finite-times-finite, finite or +inf, never NaN; recorded raw |
+| `cd.mu_input`, `cd.mu_labels`, `cd.colnorm`, `cd.squared` | from a non-finite input or an overflowing sum of squares (`inf`, not NaN, unless the input holds a NaN) | canonicalized |
+| `cd.sweepNNN.coef/resid/conv`, `cd.final.coef` | yes (the two mechanisms above) | canonicalized |
+| `cd.intercept` | `mu_labels - mu_input . coef` with an inf coefficient | canonicalized (`canon_nan_f32` on the host scalar) |
+| `cd.n_iter` | integer | no |
+
+`record_device_canon` copies the buffer, rewrites every NaN to
+`0x7FC00000` (a bit WRITE, the payload numerics.mojo's `identical_log`/
+`identical_sqrt` already use) and hashes the copy; the live buffers are
+untouched (a NaN payload steers no downstream bit: every consumer is a
+payload-blind comparison or an op that yields a NaN again). The oracle
+card does the same through `canon_nan_list`. Gate:
+`check_cd_nan_payload_is_canonical` (two fixtures, outputs in the gates
+list above); sabotage `NO_NAN_CANON` (table above): FAILS on this machine
+on the PROPAGATED fixture (the M4's GPU canonicalizes a propagated payload
+to 0x7fc00000, the arm64 host keeps 0x7fc0beef), INERT here on the
+COMPUTED fixture (GPU and arm64 host both default to 0x7fc00000), and
+predicted to fail on the NVIDIA box on both (device 0x7fffffff, x86 host
+0xffc00000).
+
+### The -0.0 fixture and its sabotages
+
+`fixture_signed_zero` (256 x 8, alpha 1e36, l1_ratio 0, tol 0, 2 epochs):
+`squared` is ~2.56e38 and every `dot / squared` flushes to a zero signed
+by its dot -- 4 coefficients -0.0 and 4 +0.0, `coef[0]` -0.0 in the `pos`
+fixture and +0.0 in the negated one, so the folds see both zeros in both
+orders. Under IDENTICAL: device card == oracle card on every stage, every
+cell bit for bit, `coefMax`/`diffMax` 0x00000000 in every sweep. Under
+FAST: RECORDED (the host oracle keeps the subnormal quotient 0x801d0718
+that the Apple device flushes; a denormal-keeping column would keep it on
+the device too).
+
+- `ZERO_FOLD_MAX` (hardware `max(conv, cand)`, the signed zero as a
+  candidate): FAILS on Apple on the fixture whose LAST coordinate is -0.0
+  (`first card divergence: 8 cd.sweep000.conv`), inert on the other; Apple
+  returns the second operand. PREDICTED INERT on NVIDIA and AMD (IEEE
+  maximum returns +0.0 whatever the order) -- the same source would give
+  two different cards, which is the defect the `abs()`-and-strict-`<`
+  spelling does not have.
+- `ZERO_FOLD_MAX_SWAPPED` (`max(cand, conv)`): APPLE-INERT (the +0.0 seed
+  is the second operand) and predicted inert on NVIDIA/AMD. Right
+  everywhere by accident of operand order; the two sabotages differ on
+  Apple alone, which is the whole point.
+
+For a MAX fold of `abs()` values the correct answer is +0.0 and IEEE
+maximum agrees with it, so no sabotage of THIS site can fail on NVIDIA/
+AMD; a `min` fold or a `max` over signed values would have the mirror
+image. Nothing in `solver/` spells either.
+
+### FAST demotions (FACT 3)
+
+`_record_or_raise` in `cd_check.mojo`: asserts under IDENTICAL, prints
+`RECORDED [FAST] ...` and continues under FAST. Demoted: the 2e-3
+tolerance against the Float64 reference (coef and intercept,
+`check_cd_recovers_the_planted_support`; alpha=0 coef in
+`check_cd_elasticnet_arms_reach`), the 1e-4 relative predict tolerance
+(`check_cd_predict_matches_host`), the run-to-run control at one launch
+(`check_cd_is_launch_invariant`) and the run-to-run card equality and
+`n_iter` (`check_cd_card_is_emitted`) -- all of them claims about a
+vendor gemv's rounding or repeatability. Kept as assertions in both modes:
+every refusal by name, the record count and tag list, the planted-support
+decision (a ~50x margin: `l1_alpha` 20.48 against a null column's dot of
+~0.4), `n_iter` being a converged count, the norm ordering and bit-movement
+reach checks, `fit_intercept=False` returning the 0.0 literal, and every
+host-only computation.
+
+### Outputs
+
+    tools/with_build_lock.sh     pixi run mojo run -I . solver/mojo_only/cd_check.mojo
+    == solver/mojo_only/cd_check.mojo [FAST] ALL PASSED ==
+    tools/with_identical_mode.sh pixi run mojo run -I . solver/mojo_only/cd_check.mojo
+    == solver/mojo_only/cd_check.mojo [IDENTICAL] ALL PASSED ==
+    tools/with_identical_mode.sh pixi run mojo run -I . solver/cd_main.mojo
+    [IDENTICAL] oracle: n_iter=3 intercept 0x3ad72d10; coefficients differing from the device: 0 of 16
+    (card: 20 records)
 
 ## UNPORTED (the short form; `solver/UNPORTED.tsv` is the parameter-by-parameter list)
 
@@ -261,11 +405,9 @@ oracle arm the gemm lane describes.
    (it is cuML's `glm/preprocess.cuh`, which `glm/UNPORTED.tsv` lists as
    NOT PORTED). Move it and delete that UNPORTED entry in the same commit;
    `glm/estimator.mojo`'s host-side centering could then call it.
-3. **pixi lines** (pixi.toml is not this lane's):
-
-        check-cd = "tools/with_build_lock.sh pixi run mojo run -I . solver/mojo_only/cd_check.mojo"
-        check-cd-identity = "tools/with_identical_mode.sh pixi run mojo run -I . solver/mojo_only/cd_check.mojo"
-        cd-main = "tools/with_build_lock.sh pixi run mojo run -I . solver/cd_main.mojo"
+3. (done by the identity lane: `check-cd` and `cd-main` are registered; FAST
+   via `pixi run check-cd`, IDENTICAL via `tools/with_identical_mode.sh pixi
+   run check-cd`.)
 
 4. **The cross-vendor leg**: `solver/cd_main.mojo` under
    `MOJOLEARN_IDENTITY_TRACE` on the H100 and the MI300X/MI325X at the
@@ -274,8 +416,9 @@ oracle arm the gemm lane describes.
    both. The expected first divergence, if any, is `cd.input.x` (a host
    fixture is assembled in Float64 and rounded once per cell, so it should
    not move) and then `cd.colnorm`.
-5. **`SUPPORT_MATRIX.md` / `IDENTITY_PATHS.md`**: the row below.
+5. **`SUPPORT_MATRIX.md` / `IDENTITY_PATHS.md`**: the row below (row 41 in
+   the ledger).
 
-## ROW TEXT FOR THE IDENTITY LANE
+## ROW TEXT FOR THE IDENTITY LANE (row 41)
 
-| 40 | **coordinate descent (Lasso / ElasticNet): the row-length reductions and the epoch count** -- `solver/ported/solver/cd.mojo` (cuML `solver/cd.cuh`): `colNorm` and the means on RAFT `coalescedReduction`, whose kernel is CHOSEN BY SM COUNT (`-inl.cuh:497`) and compensates per thread then folds with CUB; `dot(X[:,ci], residual)` on cuBLAS `gemv`; `coef > l1_alpha` and `diffMax / coefMax < tol` branch on those bits, so `n_iter` is per card | yes: three fold shapes, one of them closed, one of them a device property | DEVIATION 610: all four reductions are the `gemm.fp32.v1` `OP_NT` cell at `1 x 1 x n_rows` (`solver/mojo_only/profile_dot.mojo`, CALLED from the gemm lane; the means are the dot against ones); axpys `identical_mul_add` + `ftz` at the residual (store and load); `cdUpdateCoefKernel` flushes quotient, diff, |r|; card `cd.colnorm/squared/sweepNNN.coef/resid/conv/final.coef/intercept/n_iter` | **CONSTRUCTION plus one Apple device's gates, 2026-08-23**: device == host oracle bit for bit on every stage and cell of three fixtures incl. a denormal-residual one; launch-invariant across 4 plans / 2 block sizes / 2 grids / 3 paddings; FAST vs IDENTICAL differ in 2 of 16 coefficients on the planted fixture; three sabotages fail where predicted (FOLD_SERIAL everywhere, LEAF_ROTATE only at P = 157, NO_FTZ_RESID only on the denormal fixture); `shuffle=true` refused by name (611 reserved); no second vendor has run this |
+| 41 | **coordinate descent (Lasso / ElasticNet): the row-length reductions and the epoch count** -- `solver/ported/solver/cd.mojo` (cuML `solver/cd.cuh`): `colNorm` and the means on RAFT `coalescedReduction`, whose kernel is CHOSEN BY SM COUNT (`-inl.cuh:497`) and compensates per thread then folds with CUB; `dot(X[:,ci], residual)` on cuBLAS `gemv`; `coef > l1_alpha` and `diffMax / coefMax < tol` branch on those bits, so `n_iter` is per card | yes: three fold shapes, one of them closed, one of them a device property | DEVIATION 610: all four reductions are the `gemm.fp32.v1` `OP_NT` cell at `1 x 1 x n_rows` (`solver/mojo_only/profile_dot.mojo`, CALLED from the gemm lane; the means are the dot against ones); axpys `identical_mul_add` + `ftz` at the residual (store and load); `cdUpdateCoefKernel` flushes quotient, diff, |r|; card `cd.colnorm/squared/sweepNNN.coef/resid/conv/final.coef/intercept/n_iter` | **CONSTRUCTION plus one Apple device's gates, 2026-08-23**: device == host oracle bit for bit on every stage and cell of three fixtures incl. a denormal-residual one; launch-invariant across 4 plans / 2 block sizes / 2 grids / 3 paddings; FAST vs IDENTICAL differ in 2 of 16 coefficients on the planted fixture; three sabotages fail where predicted (FOLD_SERIAL everywhere, LEAF_ROTATE only at P = 157, NO_FTZ_RESID only on the denormal fixture); `shuffle=true` refused by name (611 reserved); ROW 39 AUDIT 2026-08-23: no float max/min/clamp in the section, the coefMax/diffMax folds are abs()-and-strict-`<` (proven at the site, -0.0 planted in both orders and card-compared), the card's NaN stages are canonicalized to 0x7FC00000 (DEVIATION 612, planted computed and propagated NaN), non-finite alpha / NaN l1_ratio / NaN tol refused by name (DEVIATION 613), vendor-shaped FAST claims RECORDED; no second vendor has run this |

@@ -4,8 +4,10 @@ DEVIATION 610. The checks, in order:
 
     check_cd_refuses_by_name            shuffle=true, sample_weight, a loss
                                         other than SQRD_LOSS, n_cols 0,
-                                        n_rows 1, alpha < 0, l1_ratio 1.5:
-                                        each RAISES naming the parameter
+                                        n_rows 1, alpha < 0, l1_ratio 1.5,
+                                        and (DEVIATION 613) alpha NaN/inf,
+                                        l1_ratio NaN, tol NaN: each RAISES
+                                        naming the parameter
     check_cd_recovers_the_planted_support
                                         Lasso at alpha 0.01 on the hashed
                                         planted fixture: the nonzero set IS
@@ -47,6 +49,7 @@ DEVIATION 610. The checks, in order:
     check_cd_predict_matches_host       cdPredict against the host: IDENTICAL
                                         bit for bit (gemm OP_TN cell + flushed
                                         add), FAST within 1e-4 relative
+                                        (RECORDED there)
     check_cd_card_is_emitted            the card's stage list, and a second
                                         run's card is byte-identical (control)
     check_cd_soft_threshold_operand_order
@@ -55,6 +58,24 @@ DEVIATION 610. The checks, in order:
                                         Meaningful only in the
                                         `MOJOLEARN_CD_SABOTAGE_SOFT_SWAP=1`
                                         build; expected: no bit moves
+    check_cd_signed_zero_coefficients   IDENTITY_PATHS row 39: alpha 1e36 /
+                                        l1_ratio 0 flushes every coefficient
+                                        to a zero SIGNED by its dot; the
+                                        negated fixture flips them; cards and
+                                        cells bit for bit, coefMax/diffMax
+                                        +0.0. IDENTICAL asserts, FAST reports
+    check_cd_nan_payload_is_canonical   DEVIATION 612: a +inf label (computed
+                                        NaN) and a payload NaN label
+                                        (propagated) reach the residual; the
+                                        canonicalized device and oracle cards
+                                        agree. IDENTICAL asserts, FAST reports
+
+FAST-mode rule (row 39 FACT 3): anything vendor-shaped under FAST -- a
+tolerance against a vendor gemv, run-to-run repeatability of one, the flush
+of a subnormal quotient -- prints `RECORDED [FAST] ...` through
+`_record_or_raise` and continues; under IDENTICAL the same line raises.
+Kept as assertions in both modes: refusals by name, shapes and record
+counts, the planted-support decision (a ~50x margin), host-only folds.
 
 Run both arms (every printed line carries the mode the binary COMPILED in):
 
@@ -84,6 +105,23 @@ in `solver/README.md`):
     -D MOJOLEARN_CD_SABOTAGE_SOFT_SWAP=1        operand order in the soft
                                                  threshold: a REPORT, no bit
                                                  expected to move
+    -D MOJOLEARN_CD_SABOTAGE_ZERO_FOLD_MAX=1    coefMax fold as a hardware
+                                                 `max(conv, r)` with the SIGNED
+                                                 zero as candidate: FAILS on
+                                                 Apple (second operand) at a
+                                                 `.conv` stage of the fixture
+                                                 whose last coordinate is -0.0;
+                                                 inert on NVIDIA/AMD (IEEE
+                                                 maximum returns +0.0)
+    -D MOJOLEARN_CD_SABOTAGE_ZERO_FOLD_MAX_SWAPPED=1
+                                                 the same with `max(r, conv)`:
+                                                 inert on all three (the +0.0
+                                                 seed is Apple's second operand
+                                                 and IEEE's maximum)
+    -D MOJOLEARN_CD_SABOTAGE_NO_NAN_CANON=1     record raw NaN bits on both
+                                                 cards: fails where the host's
+                                                 default NaN differs from the
+                                                 device's
 """
 
 from std.memory import bitcast
@@ -109,11 +147,20 @@ from solver.mojo_only.cd_oracle import (
     cd_oracle_fit,
     cd_reference_f64,
     fixture_denormal_residual,
+    fixture_nonfinite_labels,
     fixture_planted_sparse,
+    fixture_signed_zero,
     oracle_sabotage_name,
+)
+from solver.mojo_only.record_canon import (
+    canon_nan_f32,
+    canon_nan_list,
+    canon_nan_sabotage_name,
 )
 from solver.ported.solver.cd import (
     SAB_SOFT_SWAP,
+    SAB_ZERO_FOLD_MAX,
+    SAB_ZERO_FOLD_MAX_SWAPPED,
     CdLaunch,
     cd_fit,
     cd_fit_traced,
@@ -182,6 +229,46 @@ def _count_diff(a: List[Float32], b: List[Float32]) -> Tuple[Int, String]:
                     + " oracle " + _hex32(b[i])
                 )
     return (bad, first)
+
+
+def _bits(v: Float32) -> UInt32:
+    return bitcast[DType.uint32](v)
+
+
+def _count_bits(v: List[Float32], bits: UInt32) -> Int:
+    var c = 0
+    for e in v:
+        if _bits(e) == bits:
+            c += 1
+    return c
+
+
+def _count_nan(v: List[Float32]) -> Int:
+    var c = 0
+    for e in v:
+        if e != e:
+            c += 1
+    return c
+
+
+def _first_nan_hex(v: List[Float32]) -> String:
+    for e in v:
+        if e != e:
+            return _hex32(e)
+    return String("none")
+
+
+def _record_or_raise(cond: Bool, msg: String) raises:
+    """Row 39 FACT 3: a vendor-shaped claim ASSERTS under IDENTICAL and is
+    RECORDED under FAST (the phase-6 gate scripts run both passes on
+    NVIDIA/AMD, where the FAST arm is the vendor's gemv and its own
+    rounding)."""
+    if cond:
+        return
+    comptime if IDENTICAL:
+        raise Error(msg)
+    else:
+        print("  RECORDED [FAST] " + msg)
 
 
 @fieldwise_init
@@ -288,23 +375,26 @@ def _device_fit(
 def _oracle_card(o: CdOracleResult, n: Int, d: Int, fit_intercept: Bool, path: String) raises:
     """The oracle's stages under the device's tags, so `first_divergence`
     can name the first stage that disagrees."""
+    # DEVIATION 612: the same NaN canonicalization the device card gets
+    # (`record_canon.mojo`), so a NaN stage compares payload-blind; the
+    # host's native payload is what the NO_NAN_CANON sabotage exposes.
     var t = IdentityTrace.to_path(path)
-    t.record_list_f32("cd.input.x", o.x_input)
-    t.record_list_f32("cd.input.y", o.y_input)
+    t.record_list_f32("cd.input.x", canon_nan_list(o.x_input))
+    t.record_list_f32("cd.input.y", canon_nan_list(o.y_input))
     if fit_intercept:
-        t.record_list_f32("cd.mu_input", o.mu_input)
-        t.record_scalar_f32("cd.mu_labels", o.mu_labels)
+        t.record_list_f32("cd.mu_input", canon_nan_list(o.mu_input))
+        t.record_scalar_f32("cd.mu_labels", canon_nan_f32(o.mu_labels))
     t.record_scalar_f32("cd.l1_alpha", o.l1_alpha)
     t.record_scalar_f32("cd.l2_alpha", o.l2_alpha)
-    t.record_list_f32("cd.colnorm", o.colnorm)
-    t.record_list_f32("cd.squared", o.squared)
+    t.record_list_f32("cd.colnorm", canon_nan_list(o.colnorm))
+    t.record_list_f32("cd.squared", canon_nan_list(o.squared))
     for s in range(o.n_iter):
         var tag = String("cd.sweep") + _pad3(s)
-        t.record_list_f32(tag + ".coef", o.coef_sweeps[s])
-        t.record_list_f32(tag + ".resid", o.resid_sweeps[s])
-        t.record_list_f32(tag + ".conv", o.conv_sweeps[s])
-    t.record_list_f32("cd.final.coef", o.coef)
-    t.record_scalar_f32("cd.intercept", o.intercept)
+        t.record_list_f32(tag + ".coef", canon_nan_list(o.coef_sweeps[s]))
+        t.record_list_f32(tag + ".resid", canon_nan_list(o.resid_sweeps[s]))
+        t.record_list_f32(tag + ".conv", canon_nan_list(o.conv_sweeps[s]))
+    t.record_list_f32("cd.final.coef", canon_nan_list(o.coef))
+    t.record_scalar_f32("cd.intercept", canon_nan_f32(o.intercept))
     var iters = List[Int32]()
     iters.append(Int32(o.n_iter))
     t.record_list_i32("cd.n_iter", iters)
@@ -352,6 +442,18 @@ def _expect_refusal(
             var preds = ctx.enqueue_create_buffer[DType.float32](n)
             cd_predict(ctx, x, n, d, coef, Float32(0.0), preds, LOSS_HINGE)
             _ = preds^
+        elif code == 8:
+            # DEVIATION 613: alpha = NaN (`alpha < 0` is false for it)
+            _ = cd_fit(ctx, x, n, d, y, coef, False, 10, LOSS_SQRD_LOSS, bitcast[DType.float32](UInt32(0x7FC00000)), Float32(1.0), False, Float32(1e-3))
+        elif code == 9:
+            # DEVIATION 613: alpha = +inf (l2_alpha would be 0 * inf)
+            _ = cd_fit(ctx, x, n, d, y, coef, False, 10, LOSS_SQRD_LOSS, bitcast[DType.float32](UInt32(0x7F800000)), Float32(1.0), False, Float32(1e-3))
+        elif code == 10:
+            # DEVIATION 613: l1_ratio = NaN (both range tests false)
+            _ = cd_fit(ctx, x, n, d, y, coef, False, 10, LOSS_SQRD_LOSS, Float32(0.1), bitcast[DType.float32](UInt32(0x7FC00000)), False, Float32(1e-3))
+        elif code == 11:
+            # DEVIATION 613: tol = NaN (never stops)
+            _ = cd_fit(ctx, x, n, d, y, coef, False, 10, LOSS_SQRD_LOSS, Float32(0.1), Float32(1.0), False, bitcast[DType.float32](UInt32(0x7FC00000)))
     except e:
         raised = True
         msg = String(e)
@@ -385,10 +487,14 @@ def check_cd_refuses_by_name() raises:
     _expect_refusal(ctx, x, y, coef, n, d, "alpha<0", "alpha", 5)
     _expect_refusal(ctx, x, y, coef, n, d, "l1_ratio=1.5", "l1_ratio", 6)
     _expect_refusal(ctx, x, y, coef, n, d, "predict loss=HINGE", "loss", 7)
+    _expect_refusal(ctx, x, y, coef, n, d, "alpha=NaN", "alpha", 8)
+    _expect_refusal(ctx, x, y, coef, n, d, "alpha=inf", "alpha", 9)
+    _expect_refusal(ctx, x, y, coef, n, d, "l1_ratio=NaN", "l1_ratio", 10)
+    _expect_refusal(ctx, x, y, coef, n, d, "tol=NaN", "tol", 11)
     _ = x^
     _ = y^
     _ = coef^
-    print("check_cd_refuses_by_name OK [" + _mode_name() + "]: 8 parameters refused by name")
+    print("check_cd_refuses_by_name OK [" + _mode_name() + "]: 12 parameter values refused by name (DEVIATION 613: the four NaN/inf ones)")
 
 
 def check_cd_recovers_the_planted_support() raises:
@@ -415,11 +521,19 @@ def check_cd_recovers_the_planted_support() raises:
         var e = abs(Float64(dev.coef[k]) - r64[0][k])
         if e > worst:
             worst = e
-    if worst > 2.0e-3:
-        raise Error("device coefficients " + String(worst) + " from the Float64 reference (tolerance 2e-3)")
+    # The support decision has a margin of ~50x (l1_alpha = 20.48 against a
+    # null column's dot of ~0.4), so it holds under any vendor gemv and
+    # stays an assertion in both modes. The 2e-3 tolerance against Float64
+    # is a claim about a vendor product's rounding under FAST (row 39 FACT
+    # 3) and is RECORDED there.
+    _record_or_raise(
+        worst <= 2.0e-3,
+        "device coefficients " + String(worst) + " from the Float64 reference (tolerance 2e-3)",
+    )
     var ie = abs(Float64(dev.intercept) - r64[1])
-    if ie > 2.0e-3:
-        raise Error("intercept " + String(ie) + " from the Float64 reference")
+    _record_or_raise(
+        ie <= 2.0e-3, "intercept " + String(ie) + " from the Float64 reference"
+    )
     var last_diff = orc.conv_sweeps[orc.n_iter - 1][2]
     var last_max = orc.conv_sweeps[orc.n_iter - 1][1]
     print(
@@ -600,8 +714,12 @@ def check_cd_is_launch_invariant() raises:
         + " of " + String(len(a)) + " (coef + residual + intercept + n_iter)"
         + (("; first A/B " + ab[1]) if ab[0] > 0 else "")
     )
-    if aa[0] != 0:
-        raise Error("run-to-run control moved " + String(aa[0]) + " cells at the same launch: " + aa[1])
+    # Run-to-run at one launch: under FAST the dot is the vendor's gemv,
+    # whose repeatability is the vendor's claim, not ours (row 39 FACT 3).
+    _record_or_raise(
+        aa[0] == 0,
+        "run-to-run control moved " + String(aa[0]) + " cells at the same launch: " + aa[1],
+    )
     comptime if IDENTICAL:
         if ab[0] + ac[0] + ad[0] != 0:
             raise Error(
@@ -660,8 +778,10 @@ def check_cd_elasticnet_arms_reach() raises:
         var e = abs(Float64(ols.coef[k]) - r64[0][k])
         if e > worst:
             worst = e
-    if worst > 2.0e-3:
-        raise Error("alpha=0 device coefficients " + String(worst) + " from the Float64 reference")
+    _record_or_raise(
+        worst <= 2.0e-3,
+        "alpha=0 device coefficients " + String(worst) + " from the Float64 reference",
+    )
     print("check_cd_elasticnet_arms_reach OK [" + _mode_name() + "]: the l2 arm, the alpha=0 arm and the no-intercept arm each move the bits as the objective says")
 
 
@@ -702,8 +822,11 @@ def check_cd_predict_matches_host() raises:
     comptime if IDENTICAL:
         if bad != 0:
             raise Error("check_cd_predict_matches_host FAILED under IDENTICAL: " + first)
-    if worst > 1.0e-4:
-        raise Error("predict " + String(worst) + " relative from the host")
+    # 1e-4 relative against the host cell: under FAST the product is the
+    # vendor's gemv (a TF32 product would miss it); RECORDED there.
+    _record_or_raise(
+        worst <= 1.0e-4, "predict " + String(worst) + " relative from the host"
+    )
     _ = x^
     _ = coef^
     _ = preds^
@@ -744,10 +867,11 @@ def check_cd_card_is_emitted() raises:
         if lines[i].find(String("\t") + want[i] + "\t") < 0:
             raise Error("card record " + String(i) + " is not " + want[i] + ": " + lines[i])
     var div = first_divergence(p1, p2)
-    if div != "":
-        raise Error("two runs of one fixture differ on the card: " + div)
-    if a.n_iter != b.n_iter:
-        raise Error("n_iter moved run to run")
+    # The record COUNT and the tag list are structural (asserted above in
+    # both modes); run-to-run equality of the card's bits is the vendor
+    # gemv's repeatability under FAST (row 39 FACT 3): RECORDED there.
+    _record_or_raise(div == "", "two runs of one fixture differ on the card: " + div)
+    _record_or_raise(a.n_iter == b.n_iter, "n_iter moved run to run")
     print("check_cd_card_is_emitted OK [" + _mode_name() + "]: " + String(expected) + " records (" + String(a.n_iter) + " epochs), run-to-run control identical")
 
 
@@ -775,8 +899,167 @@ def check_cd_soft_threshold_operand_order() raises:
         )
 
 
+def _zero_fold_sabotage_name() -> String:
+    comptime if SAB_ZERO_FOLD_MAX:
+        return String("ZERO_FOLD_MAX")
+    comptime if SAB_ZERO_FOLD_MAX_SWAPPED:
+        return String("ZERO_FOLD_MAX_SWAPPED")
+    return String("none")
+
+
+def check_cd_signed_zero_coefficients() raises:
+    """IDENTITY_PATHS row 39 (signed zero). `fixture_signed_zero` at alpha
+    1e36 / l1_ratio 0 / tol 0 flushes EVERY coefficient's quotient to a
+    zero signed by its dot, and the negated fixture flips every sign, so
+    `cdUpdateCoefKernel`'s `coefMax`/`diffMax` folds see -0.0 and +0.0
+    coefficients in both orders and the card's `.coef` stages carry the
+    -0.0 bits. IDENTICAL asserts: device card == oracle card on every
+    stage (the `.conv` record is the fold's answer), every final cell bit
+    for bit, both zeros present, and the first coordinate -0.0 in exactly
+    one of the two fixtures; the oracle's `coefMax`/`diffMax` are +0.0 bits
+    in every sweep (host-only, asserted in both modes). FAST: RECORDED (the
+    FAST arm keeps subnormals where the hardware does, and the vendor gemv
+    is its own)."""
+    var n = 256
+    var d = 8
+    var ctx = DeviceContext()
+    var p = FitParams(False, 2, Float32(1.0e36), Float32(0.0), Float32(0.0))
+    var neg_first = 0
+    var pos_first = 0
+    var bad = 0
+    for which in range(2):
+        var negate = which == 1
+        var fx = fixture_signed_zero(n, d, negate)
+        var name = String("signed_zero_") + ("neg" if negate else "pos")
+        var dev_path = _scratch() + "/mojolearn_cd_" + name + ".device.card"
+        var orc_path = _scratch() + "/mojolearn_cd_" + name + ".oracle.card"
+        var dev = _device_fit(ctx, fx[0], fx[1], n, d, p, CdLaunch.default(), 0, Float32(0.0), dev_path)
+        var orc = cd_oracle_fit(fx[0], fx[1], n, d, False, 2, p.alpha, p.l1_ratio, p.tol, True)
+        _oracle_card(orc, n, d, False, orc_path)
+        var div = first_divergence(dev_path, orc_path)
+        var c = _count_diff(dev.coef, orc.coef)
+        var r = _count_diff(dev.residual, orc.residual)
+        var neg_zeros = _count_bits(dev.coef, UInt32(0x80000000))
+        var pos_zeros = _count_bits(dev.coef, UInt32(0x00000000))
+        var first_bits = _bits(dev.coef[0])
+        if first_bits == UInt32(0x80000000):
+            neg_first += 1
+        elif first_bits == UInt32(0):
+            pos_first += 1
+        var conv_signed = 0
+        var conv_nonzero = 0
+        for sw in range(orc.n_iter):
+            var b1 = _bits(orc.conv_sweeps[sw][1])
+            var b2 = _bits(orc.conv_sweeps[sw][2])
+            if (b1 >> 31) != UInt32(0) or (b2 >> 31) != UInt32(0):
+                conv_signed += 1
+            if b1 != UInt32(0) or b2 != UInt32(0):
+                conv_nonzero += 1
+        print(
+            "  [" + _mode_name() + "] " + name + ": device coef[0] " + _hex32(dev.coef[0])
+            + " oracle " + _hex32(orc.coef[0]) + "; -0.0 coefficients " + String(neg_zeros)
+            + " +0.0 " + String(pos_zeros) + " of " + String(d) + "; n_iter " + String(dev.n_iter)
+            + "/" + String(orc.n_iter) + "; differing cells coef " + String(c[0]) + " resid "
+            + String(r[0]) + (("; first " + c[1]) if c[0] > 0 else "")
+            + "; oracle coefMax/diffMax bits " + _hex32(orc.conv_sweeps[orc.n_iter - 1][1])
+            + "/" + _hex32(orc.conv_sweeps[orc.n_iter - 1][2])
+            + (("; first card divergence: " + div) if div != "" else "; cards agree on every stage")
+        )
+        # Host-only, by construction in BOTH modes: the oracle's folds are
+        # over abs() with a +0.0 seed and a strict `<`, so the SIGN BIT of
+        # coefMax/diffMax is never set. That they are exactly +0.0 needs the
+        # flush (every quotient a zero), which the FAST oracle does not do
+        # (it honors subnormals, as a denormal-keeping column would).
+        if conv_signed != 0:
+            raise Error(name + ": the ORACLE's coefMax/diffMax carry a sign bit in " + String(conv_signed) + " sweeps")
+        _record_or_raise(
+            conv_nonzero == 0,
+            name + ": coefMax/diffMax are not +0.0 in " + String(conv_nonzero) + " sweeps (the quotients did not all flush)",
+        )
+        if div != "" or c[0] != 0 or r[0] != 0 or dev.n_iter != orc.n_iter:
+            bad += 1
+        # REACH: both zeros must actually be planted (under FAST a
+        # denormal-honoring column keeps the quotient subnormal instead).
+        _record_or_raise(
+            neg_zeros > 0 and pos_zeros > 0,
+            name + ": the fixture did not plant both zeros (-0.0 " + String(neg_zeros) + ", +0.0 " + String(pos_zeros) + ")",
+        )
+    _record_or_raise(
+        neg_first == 1 and pos_first == 1,
+        "the first coordinate was -0.0 in " + String(neg_first) + " and +0.0 in " + String(pos_first) + " of the two fixtures (both orders required)",
+    )
+    comptime if IDENTICAL:
+        if bad != 0:
+            raise Error(
+                "check_cd_signed_zero_coefficients FAILED under IDENTICAL (zero-fold sabotage "
+                + _zero_fold_sabotage_name() + "): " + String(bad) + " of 2 fixtures disagree with the oracle (see the lines above)"
+            )
+        print("check_cd_signed_zero_coefficients OK [IDENTICAL]: -0.0 and +0.0 coefficients in both orders, cards and cells bit for bit, coefMax/diffMax +0.0 (zero-fold sabotage " + _zero_fold_sabotage_name() + ")")
+    else:
+        print("check_cd_signed_zero_coefficients REPORTED [FAST]: " + String(bad) + " of 2 fixtures disagree with the oracle (the FAST arm's flush and gemv are the vendor's)")
+
+
+def check_cd_nan_payload_is_canonical() raises:
+    """IDENTITY_PATHS row 39 FACT 2, DEVIATION 612. Two fixtures with one
+    non-finite label: a +inf (the first coordinate's update writes
+    `inf - inf`, a COMPUTED NaN with the vendor's payload, into the
+    residual; the next epoch makes every residual one) and a payload NaN
+    `0x7FC0BEEF` (PROPAGATED). The device card and the oracle card -- both
+    canonicalized -- must agree on every stage under IDENTICAL, the final
+    cells must agree after canonicalization, and the NaN must actually
+    REACH the recorded residual (count > 0 on both sides, equal). The raw
+    payload each side produced is printed; under
+    `MOJOLEARN_CD_SABOTAGE_NO_NAN_CANON=1` the cards carry those raw bits
+    and the check fails exactly where the host's and the device's default
+    NaN differ. FAST: RECORDED."""
+    var n = 256
+    var d = 4
+    var ctx = DeviceContext()
+    var p = FitParams(False, 3, Float32(0.01), Float32(1.0), Float32(1e-3))
+    var bad = 0
+    for kind in range(2):
+        var fx = fixture_nonfinite_labels(n, d, kind)
+        var name = String("nan_") + ("computed" if kind == 0 else "propagated")
+        var dev_path = _scratch() + "/mojolearn_cd_" + name + ".device.card"
+        var orc_path = _scratch() + "/mojolearn_cd_" + name + ".oracle.card"
+        var dev = _device_fit(ctx, fx[0], fx[1], n, d, p, CdLaunch.default(), 0, Float32(0.0), dev_path)
+        var orc = cd_oracle_fit(fx[0], fx[1], n, d, False, 3, p.alpha, p.l1_ratio, p.tol, True)
+        _oracle_card(orc, n, d, False, orc_path)
+        var div = first_divergence(dev_path, orc_path)
+        var c = _count_diff(canon_nan_list(dev.coef), canon_nan_list(orc.coef))
+        var r = _count_diff(canon_nan_list(dev.residual), canon_nan_list(orc.residual))
+        var dev_nan = _count_nan(dev.residual)
+        var orc_nan = _count_nan(orc.residual)
+        print(
+            "  [" + _mode_name() + "] " + name + ": NaN residual cells device " + String(dev_nan)
+            + " oracle " + String(orc_nan) + " of " + String(n) + "; raw payload device "
+            + _first_nan_hex(dev.residual) + " host " + _first_nan_hex(orc.residual)
+            + "; coef[0] device " + _hex32(dev.coef[0]) + " oracle " + _hex32(orc.coef[0])
+            + "; n_iter " + String(dev.n_iter) + "/" + String(orc.n_iter)
+            + "; differing cells (NaN-canonical) coef " + String(c[0]) + " resid " + String(r[0])
+            + (("; first " + r[1]) if r[0] > 0 else "")
+            + (("; first card divergence: " + div) if div != "" else "; cards agree on every stage")
+        )
+        if div != "" or c[0] != 0 or r[0] != 0 or dev.n_iter != orc.n_iter or dev_nan != orc_nan:
+            bad += 1
+        # REACH: the NaN must sit in the recorded residual on both sides.
+        _record_or_raise(
+            dev_nan > 0 and orc_nan > 0,
+            name + ": no NaN reached the residual (device " + String(dev_nan) + ", oracle " + String(orc_nan) + ")",
+        )
+    comptime if IDENTICAL:
+        if bad != 0:
+            raise Error(
+                "check_cd_nan_payload_is_canonical FAILED under IDENTICAL (canon sabotage "
+                + canon_nan_sabotage_name() + "): " + String(bad) + " of 2 fixtures disagree (see the lines above)"
+            )
+        print("check_cd_nan_payload_is_canonical OK [IDENTICAL]: computed and propagated NaN stages hash to one payload on the device card and the oracle card (canon sabotage " + canon_nan_sabotage_name() + ")")
+    else:
+        print("check_cd_nan_payload_is_canonical REPORTED [FAST]: " + String(bad) + " of 2 fixtures disagree with the oracle")
+
+
 def main() raises:
-    print("== solver/mojo_only/cd_check.mojo [" + _mode_name() + "] gemm-sabotage=" + gemm_sabotage_name() + " oracle-sabotage=" + oracle_sabotage_name() + " ==")
+    print("== solver/mojo_only/cd_check.mojo [" + _mode_name() + "] gemm-sabotage=" + gemm_sabotage_name() + " oracle-sabotage=" + oracle_sabotage_name() + " zero-fold-sabotage=" + _zero_fold_sabotage_name() + " canon-sabotage=" + canon_nan_sabotage_name() + " ==")
     check_cd_refuses_by_name()
     check_cd_recovers_the_planted_support()
     check_cd_serial_fold_is_a_different_answer()
@@ -786,4 +1069,6 @@ def main() raises:
     check_cd_predict_matches_host()
     check_cd_card_is_emitted()
     check_cd_soft_threshold_operand_order()
+    check_cd_signed_zero_coefficients()
+    check_cd_nan_payload_is_canonical()
     print("== solver/mojo_only/cd_check.mojo [" + _mode_name() + "] ALL PASSED ==")

@@ -65,8 +65,17 @@ test data hides permutation"):
                                         leaves, so the SPLITK leaf kernel
                                         spans two blocks and the gemm lane's
                                         LEAF_ROTATE sabotage can bite.
+    fixture_signed_zero(n, d, negate)   X, y hashed; with alpha 1e36 and
+                                        l1_ratio 0 every quotient flushes to
+                                        a zero SIGNED by its dot; `negate`
+                                        flips every sign (row 39, both orders)
+    fixture_nonfinite_labels(n, d, k)   y with one +inf (k = 0: a COMPUTED
+                                        NaN in the residual) or one payload
+                                        NaN 0x7FC0BEEF (k = 1: a PROPAGATED
+                                        NaN); DEVIATION 612's gate
 """
 
+from std.memory import bitcast
 from std.sys.compile import is_defined
 
 from gemm.mojo_only.gemm_oracle import contract_leaf_size
@@ -165,6 +174,62 @@ def fixture_denormal_residual(
     y.reserve(n)
     for i in range(n):
         y.append(Float32(Float64(x[i]) * 1.0e-37))
+    return (x^, y^)
+
+
+def fixture_signed_zero(
+    n: Int, d: Int, negate: Bool
+) -> Tuple[List[Float32], List[Float32]]:
+    """IDENTITY_PATHS row 39's fixture: `X` hashed in [-0.5, 0.5), `y`
+    hashed in [-0.5, 0.5) and NEGATED when `negate`. Meant to be fit with
+    `fit_intercept = False, alpha = 1e36, l1_ratio = 0, tol = 0`: `squared`
+    is `colnorm + 1e36 * n` (~2.56e38 at n = 256) and every coordinate's
+    quotient `dot / squared` lies below the normal floor, so `r` flushes to
+    a zero CARRYING THE SIGN OF THE DOT -- a -0.0 coefficient wherever
+    `dot(X[:, j], y) < 0`, a +0.0 wherever it is positive, and the negated
+    fixture flips every one (negation is exact, `fma(x, -y, -acc)` is
+    `-fma(x, y, acc)`). Both zeros reach `cdUpdateCoefKernel`'s `coefMax` /
+    `diffMax` folds, in both orders across the two fixtures, and the
+    coefficient array on the card carries them."""
+    var x = List[Float32]()
+    x.reserve(n * d)
+    for k in range(d):
+        for i in range(n):
+            x.append(Float32(_u01(i, k, 3939) - 0.5))
+    var y = List[Float32]()
+    y.reserve(n)
+    for i in range(n):
+        var v = _u01(i, 0, 3940) - 0.5
+        if negate:
+            v = -v
+        y.append(Float32(v))
+    return (x^, y^)
+
+
+def fixture_nonfinite_labels(
+    n: Int, d: Int, kind: Int
+) -> Tuple[List[Float32], List[Float32]]:
+    """IDENTITY_PATHS row 39 FACT 2's fixture (DEVIATION 612): `X` hashed;
+    `y` hashed with ONE non-finite label. `kind = 0`: `y[5] = +inf`, so the
+    first coordinate's dot is `+-inf`, its coefficient `+-inf`, and the
+    second axpy writes `(-inf) * x + inf` -- a COMPUTED NaN with the
+    vendor's payload -- into `residual[5]`; the next epoch's first axpy
+    makes every residual `inf - inf`. `kind = 1`: `y[9]` is the quiet NaN
+    `0x7FC0BEEF`, a payload-carrying NaN that PROPAGATES (`fma(-0, x, NaN)`)
+    into the residual and the dot. Fit with `fit_intercept = False`."""
+    var x = List[Float32]()
+    x.reserve(n * d)
+    for k in range(d):
+        for i in range(n):
+            x.append(Float32(_u01(i, k, 6121) - 0.5))
+    var y = List[Float32]()
+    y.reserve(n)
+    for i in range(n):
+        y.append(Float32(_u01(i, 0, 6122) - 0.5))
+    if kind == 0:
+        y[5] = bitcast[DType.float32](UInt32(0x7F800000))  # +inf
+    else:
+        y[9] = bitcast[DType.float32](UInt32(0x7FC0BEEF))  # quiet NaN, payload
     return (x^, y^)
 
 
@@ -319,6 +384,11 @@ def cd_oracle_fit(
             else:
                 r = Float32(0.0)
             r = ftz(r)
+            # IDENTITY_PATHS row 39: the same spelling as the device's
+            # `cd_update_coef_kernel` -- `abs()` candidates (never -0.0),
+            # +0.0 seeds, STRICT `<` (the earlier value survives a tie by
+            # position; a NaN never enters). `r` itself may be -0.0 and is
+            # kept as such, like the device's.
             var diff = ftz(abs(ftz(conv_coef) - r))
             if diff_max < diff:
                 diff_max = diff

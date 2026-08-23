@@ -70,7 +70,16 @@ WHAT IS REFUSED BY NAME (every one raises with the parameter's name):
 (`solver/ported/solver/shuffle.mojo`: `std::shuffle` is not specified by the
 standard, so the permutation is not a pure function of the seed), `n_cols
 <= 0`, `n_rows <= 1` (theirs, `cd.cuh:128-129`), `alpha < 0` and `l1_ratio`
-outside `[0, 1]` (cuML's Python layer, `elastic_net.py:199-206`).
+outside `[0, 1]` (cuML's Python layer, `elastic_net.py:199-206`), and --
+DEVIATION 613, ours -- a non-finite `alpha`, a NaN `l1_ratio`, a NaN `tol`
+(their guards let every NaN through).
+
+THE CARD AND NaN (DEVIATION 612, `solver/mojo_only/record_canon.mojo`):
+every float stage is hashed through a copy whose NaNs are rewritten to the
+one payload `0x7FC00000`, because a computed NaN's payload is the vendor's
+(IDENTITY_PATHS row 39) and a non-finite label or an overflowing dot can
+put one in `residual`, `coef` and `ConvState` (the soft threshold maps a
+NaN dot to a `0` coefficient; cuML does the same and never says which NaN).
 
 IDENTITY (DEVIATION 610). cuML's `cdFit` runs its four row-length
 reductions on three fold shapes (the colNorm and the means on a RAFT
@@ -103,6 +112,10 @@ from solver.mojo_only.profile_dot import (
     profile_dot_into,
     profile_dot_workspace_floats,
 )
+from solver.mojo_only.record_canon import (
+    record_device_canon,
+    record_scalar_f32_canon,
+)
 from solver.ported.functions.linear_reg import linear_reg_h
 from solver.ported.glm.preprocess import post_process_data, pre_process_data
 from solver.ported.linalg.axpy import AXPY_TPB, axpy_device_alpha
@@ -117,6 +130,23 @@ from solver.ported.solvers.params import LOSS_SQRD_LOSS, loss_funct_name
 #: addition exactly commutative in round-to-nearest, so this MUST move no
 #: bit; `check_cd_soft_threshold_operand_order` builds with it and REPORTS.
 comptime SAB_SOFT_SWAP = is_defined["MOJOLEARN_CD_SABOTAGE_SOFT_SWAP"]()
+
+#: SABOTAGES for IDENTITY_PATHS row 39 (each a no-op unless named): the
+#: `coefMax` fold is respelled as a HARDWARE `max` whose candidate is the
+#: SIGNED `r` when `r` is a zero (so a -0.0 becomes a candidate, which the
+#: `abs()` spelling never lets happen) and `|r|` otherwise -- bit-inert on
+#: every fixture without a zero coefficient. `max(conv, cand)` (ZERO_FOLD
+#: _MAX) returns the SECOND operand on Apple, so a trailing -0.0 coordinate
+#: leaves -0.0 in `ConvState.coefMax`; NVIDIA/AMD's IEEE-2019 maximum
+#: returns +0.0 and cannot see it. The swapped `max(cand, conv)` (ZERO_FOLD
+#: _MAX_SWAPPED) returns the +0.0 seed on Apple and +0.0 on the others: a
+#: spelling that is inert everywhere by accident of operand order. The
+#: `check_cd_signed_zero_coefficients` gate runs both; the README has the
+#: lines.
+comptime SAB_ZERO_FOLD_MAX = is_defined["MOJOLEARN_CD_SABOTAGE_ZERO_FOLD_MAX"]()
+comptime SAB_ZERO_FOLD_MAX_SWAPPED = is_defined[
+    "MOJOLEARN_CD_SABOTAGE_ZERO_FOLD_MAX_SWAPPED"
+]()
 
 #: `cd.cuh:62`'s guard, `math_t(1e-5)`.
 comptime CD_SQUARED_GUARD = Float32(1.0e-5)
@@ -183,12 +213,33 @@ def cd_update_coef_kernel(
     # Row 10: the quotient is a seam (the next axpy's alpha, the card, the
     # host's |coef| test), so it gets its own flushed local.
     r = ftz(r)
+    # IDENTITY_PATHS row 39 (signed zero, NaN). `r` CAN be -0.0 here: a
+    # negative quotient below the normal floor flushes to a SIGNED zero
+    # (Apple's hardware and `ftz` agree, row 10), and it is stored to
+    # `coef` and negated into `conv[0]` as the IEEE bits it is -- negation
+    # and the flush are vendor-invariant, `check_cd_signed_zero_
+    # coefficients` plants both zeros and compares the card bit for bit.
+    # The two folds below NEVER see a -0.0 or a NaN as a candidate that
+    # could win: `abs()` clears the sign bit, so both candidates are +0.0
+    # or positive; the seed is the +0.0 `enqueue_memset` wrote; the compare
+    # is a STRICT `<`, so on a +0.0/+0.0 tie the SEED (the earlier value)
+    # survives by position, not by a vendor's `max`, and a NaN candidate
+    # (`x < NaN` is false) never enters. No hardware max/min is spelled.
     var diff = ftz(abs(ftz(conv.unsafe_load(0)) - r))
     if conv.unsafe_load(2) < diff:
         conv.unsafe_store(2, diff)
     var absv = abs(r)
-    if conv.unsafe_load(1) < absv:
-        conv.unsafe_store(1, absv)
+    comptime if SAB_ZERO_FOLD_MAX or SAB_ZERO_FOLD_MAX_SWAPPED:
+        var cand = absv
+        if r == Float32(0.0):
+            cand = r  # the SIGNED zero becomes a candidate
+        comptime if SAB_ZERO_FOLD_MAX:
+            conv.unsafe_store(1, max(conv.unsafe_load(1), cand))
+        else:
+            conv.unsafe_store(1, max(cand, conv.unsafe_load(1)))
+    else:
+        if conv.unsafe_load(1) < absv:
+            conv.unsafe_store(1, absv)
     conv.unsafe_store(0, -r)
     coef.unsafe_store(ci, r)
 
@@ -295,6 +346,34 @@ def cd_fit_traced(
         raise Error(
             "Expected 0.0 <= l1_ratio <= 1.0, got " + String(l1_ratio)
         )
+    # ======================================================================
+    # DEVIATION 613 -- non-finite `alpha`, NaN `l1_ratio`, NaN `tol`
+    # ======================================================================
+    # WHAT THEIRS DOES: cuML's Python guards (`elastic_net.py:199-206`,
+    # mirrored just above) are `alpha < 0` and `l1_ratio < 0 or > 1`, both
+    # FALSE for a NaN, and nothing bounds `alpha` above; a NaN `alpha` or
+    # `l1_ratio` makes `l1_alpha`/`l2_alpha` NaN (`cd.cuh:168-169`), every
+    # `coef > l1_alpha` false and every coefficient 0, and an `alpha` of
+    # +inf at `l1_ratio = 1` makes `l2_alpha = 0 * inf = NaN`. A NaN `tol`
+    # never stops (`cd.cuh:236`, both tests false). The fit runs and
+    # returns zeros or runs out the epochs.
+    # WHAT OURS DOES: refuses each BY NAME. The guard's intent is "a
+    # nonnegative number", and a NaN is not one; with these three refused,
+    # `cd.l1_alpha`/`cd.l2_alpha` are products of finite operands (finite or
+    # +inf, never NaN) and no PARAMETER can put a NaN on the card -- only
+    # data can, and DEVIATION 612 (`solver/mojo_only/record_canon.mojo`)
+    # canonicalizes that at the record.
+    # MEASURED: `check_cd_refuses_by_name` (alpha=NaN, alpha=inf,
+    # l1_ratio=NaN, tol=NaN each raise naming the parameter).
+    # ======================================================================
+    if alpha != alpha or alpha - alpha != Float32(0.0):
+        raise Error(
+            "Parameter alpha: must be a finite number, got " + String(alpha)
+        )
+    if l1_ratio != l1_ratio:
+        raise Error("Parameter l1_ratio: must not be NaN")
+    if tol != tol:
+        raise Error("Parameter tol: must not be NaN")
 
     trace.header(
         String("cdFit n_rows=") + String(n_rows) + " n_cols=" + String(n_cols)
@@ -302,8 +381,17 @@ def cd_fit_traced(
         + String(epochs) + " alpha=" + String(alpha) + " l1_ratio="
         + String(l1_ratio) + " tol=" + String(tol) + " shuffle=false"
     )
-    trace.record_device[DType.float32](ctx, prefix + ".input.x", x, n_rows * n_cols)
-    trace.record_device[DType.float32](ctx, prefix + ".input.y", labels, n_rows)
+    # DEVIATION 612: every float stage is hashed through a NaN-canonicalized
+    # COPY (`solver/mojo_only/record_canon.mojo`); the scratch is sized for
+    # the largest stage (`x`) and is one float when the trace is off.
+    var canon_n = n_rows * n_cols
+    if canon_n < 3:
+        canon_n = 3
+    if not trace.enabled:
+        canon_n = 1
+    var canon_ws = ctx.enqueue_create_buffer[DType.float32](canon_n)
+    record_device_canon(ctx, trace, prefix + ".input.x", x, n_rows * n_cols, canon_ws)
+    record_device_canon(ctx, trace, prefix + ".input.y", labels, n_rows, canon_ws)
 
     var residual = ctx.enqueue_create_buffer[DType.float32](n_rows)
     var squared = ctx.enqueue_create_buffer[DType.float32](n_cols)
@@ -327,8 +415,8 @@ def cd_fit_traced(
             ctx, x, n_rows, n_cols, labels, mu_input, mu_labels,
             fit_intercept, ones, ws_rows, launch.dot_plan,
         )
-        trace.record_device[DType.float32](ctx, prefix + ".mu_input", mu_input, n_cols)
-        trace.record_device[DType.float32](ctx, prefix + ".mu_labels", mu_labels, 1)
+        record_device_canon(ctx, trace, prefix + ".mu_input", mu_input, n_cols, canon_ws)
+        record_device_canon(ctx, trace, prefix + ".mu_labels", mu_labels, 1, canon_ws)
 
     var ri = init_shuffle(n_cols)
 
@@ -340,17 +428,19 @@ def cd_fit_traced(
     var l2_alpha = l2_a * Float32(n_rows)
     var l1_a = l1_ratio * alpha
     var l1_alpha = l1_a * Float32(n_rows)
+    # Row 39 / DEVIATION 613: finite * [0,1] * n_rows -- finite or +inf,
+    # never NaN, so these two host scalars are recorded raw.
     trace.record_scalar_f32(prefix + ".l1_alpha", l1_alpha)
     trace.record_scalar_f32(prefix + ".l2_alpha", l2_alpha)
 
     # Precompute: colNorm, + l2_alpha, residual = labels.
     col_norm_l2_squared(ctx, squared, x, n_cols, n_rows, ws_rows, launch.dot_plan)
-    trace.record_device[DType.float32](ctx, prefix + ".colnorm", squared, n_cols)
+    record_device_canon(ctx, trace, prefix + ".colnorm", squared, n_cols, canon_ws)
     ctx.enqueue_function[add_scalar_cols_kernel](
         squared.unsafe_ptr(), Int32(n_cols), l2_alpha,
         grid_dim=((n_cols + 255) // 256, 1, 1), block_dim=(256, 1, 1),
     )
-    trace.record_device[DType.float32](ctx, prefix + ".squared", squared, n_cols)
+    record_device_canon(ctx, trace, prefix + ".squared", squared, n_cols, canon_ws)
     ctx.enqueue_copy(dst_buf=residual, src_buf=labels)
 
     var conv = ctx.enqueue_create_buffer[DType.float32](3)
@@ -403,9 +493,9 @@ def cd_fit_traced(
         var diff_max = h_conv.unsafe_ptr().unsafe_load(2)
         n_iter += 1
         var tag = prefix + ".sweep" + _pad3(n_iter - 1)
-        trace.record_device[DType.float32](ctx, tag + ".coef", coef, n_cols)
-        trace.record_device[DType.float32](ctx, tag + ".resid", residual, n_rows)
-        trace.record_device[DType.float32](ctx, tag + ".conv", conv, 3)
+        record_device_canon(ctx, trace, tag + ".coef", coef, n_cols, canon_ws)
+        record_device_canon(ctx, trace, tag + ".resid", residual, n_rows, canon_ws)
+        record_device_canon(ctx, trace, tag + ".conv", conv, 3, canon_ws)
         if coef_max < tol or (diff_max / coef_max) < tol:
             break
 
@@ -418,8 +508,8 @@ def cd_fit_traced(
         )
         _ = d_intercept^
     ctx.synchronize()
-    trace.record_device[DType.float32](ctx, prefix + ".final.coef", coef, n_cols)
-    trace.record_scalar_f32(prefix + ".intercept", intercept)
+    record_device_canon(ctx, trace, prefix + ".final.coef", coef, n_cols, canon_ws)
+    record_scalar_f32_canon(trace, prefix + ".intercept", intercept)
     var iters = List[Int32]()
     iters.append(Int32(n_iter))
     trace.record_list_i32(prefix + ".n_iter", iters)
@@ -438,6 +528,7 @@ def cd_fit_traced(
     _ = ones^
     _ = conv^
     _ = h_conv^
+    _ = canon_ws^
     return (n_iter, intercept)
 
 
