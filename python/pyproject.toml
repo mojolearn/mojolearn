@@ -14,8 +14,8 @@ build-backend = "setuptools.build_meta"
 name = "mojolearn"
 # Must agree with python/mojolearn/_version.py. Not made dynamic, so that a
 # version bump is a visible edit in both places rather than one.
-version = "0.1.0a3"
-description = "GPU machine learning in Mojo, running on Apple Silicon"
+version = "0.1.0"
+description = "GPU machine learning in Mojo. Gradient boosting, random forests, extra trees, k-means, k-NN, DBSCAN, PCA and OLS on Apple silicon, bit-identical across GPU vendors on request"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
@@ -28,9 +28,15 @@ keywords = [
     "metal",
     "apple silicon",
     "mojo",
+    "gradient boosting",
+    "random forest",
+    "extra trees",
     "clustering",
     "k-means",
     "nearest neighbors",
+    "dbscan",
+    "pca",
+    "bitwise reproducibility",
 ]
 
 # THE FLOOR IS 3.12 AND IT IS MEASURED, NOT GUESSED.
@@ -43,7 +49,7 @@ keywords = [
 # because they were not run, and a floor is a promise.
 
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
     "Intended Audience :: Developers",
     # macOS on Apple silicon is the only platform with a wheel. The library
@@ -105,9 +111,11 @@ include-package-data = false
 # It does not ship what is missing -- it ships whatever .so happens to be
 # sitting in the working tree, however old. `_mojolearn.so` shipped that way
 # once, predating eval_x/eval_y, and every user's fit raised "takes 6
-# positional arguments but 8 were given". As of 2026-08-21 the extensions are
-# `_mojolearn.so` (k-means, k-NN) and `_mojolearn_gbdt.so` (the ensemble);
-# `_mojolearn_estimators.so` is built by bindings/build_estimators.sh, which
-# build_release_wheel.sh does NOT call -- so it is shipped from the tree and
-# is an OPEN packaging item, not a claim this file makes.
-mojolearn = ["*.so", ".dylibs/*.dylib"]
+# positional arguments but 8 were given". As of 2026-08-23 the extensions are
+# `_mojolearn.so` (k-means, k-NN), `_mojolearn_gbdt.so` (gradient boosting),
+# `_mojolearn_estimators.so` (DBSCAN, PCA, tSVD, OLS), `_mojolearn_rf.so`
+# (random forest) and `_mojolearn_trees.so` (extra trees), each built TWICE:
+# the FAST set here and the IDENTICAL set under identical/, which
+# _backend.py loads when MOJOLEARN_NUMERIC_MODE=identical. All ten are built
+# by build_release_wheel.sh, which refuses a stale file by mtime.
+mojolearn = ["*.so", "identical/*.so", ".dylibs/*.dylib"]

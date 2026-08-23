@@ -169,14 +169,20 @@ def main():
     # is still a broken wheel.
     exts = [pathlib.Path(a) for a in sys.argv[1:-1]]
     env_lib = pathlib.Path(sys.argv[-1])
-    dylibs = exts[0].parent / ".dylibs"
+    # The package directory is the FIRST extension's directory. Every other
+    # extension sits there or exactly one directory below it (the
+    # `identical/` numeric-mode set, 2026-08-23); anything else is refused,
+    # because one `.dylibs` is staged and the rpath written into each
+    # extension is computed from its depth.
+    root = exts[0].parent
+    dylibs = root / ".dylibs"
     for ext in exts:
         if not ext.exists():
             raise SystemExit(f"stage_dylibs: no such extension: {ext}")
-        if ext.parent != exts[0].parent:
+        if ext.parent != root and ext.parent.parent != root:
             raise SystemExit(
-                "stage_dylibs: every extension must sit in one package "
-                f"directory; {ext} is not beside {exts[0]}"
+                "stage_dylibs: every extension must sit in the package "
+                f"directory or one level below it; {ext} is not under {root}"
             )
 
     if dylibs.exists():
@@ -196,7 +202,8 @@ def main():
 
     dropped = []
     for ext in exts:
-        add_rpath(ext, "@loader_path/.dylibs")
+        up = "" if ext.parent == root else "../"
+        add_rpath(ext, f"@loader_path/{up}.dylibs")
         dropped += strip_build_rpaths(ext)
     for name in needed:
         dropped += strip_build_rpaths(dylibs / name)
@@ -211,7 +218,7 @@ def main():
 
     print(f"  staged {len(needed)}: {', '.join(needed)}")
     for ext in exts:
-        print(f"  for {ext.name}:")
+        print(f"  for {ext.relative_to(root)}:")
         verify_closed(ext, dylibs)
 
 

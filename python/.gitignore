@@ -3,6 +3,10 @@ NOTICE
 README.md
 mojolearn/_mojolearn.so
 mojolearn/_mojolearn_gbdt.so
+mojolearn/_mojolearn_estimators.so
+mojolearn/_mojolearn_rf.so
+mojolearn/_mojolearn_trees.so
+mojolearn/identical/
 mojolearn/.dylibs/
 dist/
 build/

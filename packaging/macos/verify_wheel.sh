@@ -47,11 +47,20 @@ for py in python3.10 python3.11 python3.12 python3.13 python3.14; do
     # cd to /tmp so the repository's ./python/mojolearn cannot shadow the
     # installed package. Without this the test can pass on source that is not
     # in the wheel at all.
-    if out=$(cd "$tmp" && "$tmp/venv/bin/python" "$here/packaging/macos/smoke.py" $SMOKE_ARGS 2>&1); then
-        echo "PASS $py  $out"
-    else
-        echo "FAIL $py"; echo "$out" | tail -5; fails=$((fails+1))
-    fi
+    # BOTH NUMERIC MODES, from the same installed wheel. The identical set
+    # is selected by the env var at import (python/mojolearn/_backend.py);
+    # smoke.py asserts that the mode it reads back from the binary is the
+    # one that was asked for, so a wheel that silently shipped only the fast
+    # set fails here rather than on a user's machine.
+    okmode=1
+    for mode in fast identical; do
+        if out=$(cd "$tmp" && MOJOLEARN_NUMERIC_MODE=$mode "$tmp/venv/bin/python" "$here/packaging/macos/smoke.py" $SMOKE_ARGS 2>&1); then
+            echo "PASS $py [$mode]  $out"
+        else
+            echo "FAIL $py [$mode]"; echo "$out" | tail -5; okmode=0
+        fi
+    done
+    [ "$okmode" -eq 1 ] || fails=$((fails+1))
     rm -rf "$tmp"
 done
 
