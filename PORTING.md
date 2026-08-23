@@ -6022,3 +6022,64 @@ deliberately no real device's own number, mode-gated exactly as row 7 is:
 device count under FAST). The greedy arm's twin, `target_variance_blocks`
 (`compute_scores.mojo:663`), has the identical hazard and is the greedy
 lane's file; reported, not touched.
+
+## 257. `EnsureNewtonIsAvailable` was never ported; the Huber / Quantile+Newton / MAE+Newton hash coincidence is sha256 of zeros
+
+Found 2026-08-23 explaining an E2-matrix oddity: `Huber delta=1.0`,
+`Quantile leaf_estimation_method=Newton` and `MAE ... Newton` all hashed
+`66adb9a97127bab9...` on the 20000x24 E2 fixture. That hash is the sha256
+of 20,000 float32 ZEROS, not of three equal models. The chain, every link
+theirs: the fixture's target sits in [3.74, 10.55] and the cursor starts
+at 0 (Huber is not on `AdjustBoostFromAverage`'s list,
+`train_lib/options_helper.cpp:362-368`), so on tree 0 every |residual|
+exceeds delta and Huber's `Der2` is 0 on every row
+(`pointwise_targets.cu:86-93`) exactly as Quantile's and MAE's always are;
+Huber's default is Newton at one iteration (`catboost_options.cpp:
+187-192`); the leaf Hessian is `0 + l2` (`pointwise_oracle.cpp:86-89`) so
+the leaf is `sum(+-delta) / l2` (`descent_helpers.cpp:87`) -- 2812/3 and
+17188/3 on tree 0 here; the Cosine score of a constant-sign gradient ties
+every split at sqrt(n) (winners.scores = 141.42136 at all six depths), so
+each tree is the same depth-1 split (`HasSplit` break,
+`oblivious_tree_doc_parallel_structure_searcher.cpp:134-136`); the next
+tree sees every residual saturated the OTHER way and its leaf is the exact
+negation (`tree 0: +281.2/+1718.8`, `tree 1: -281.2/-1718.8`); after an
+even tree count the sum is exactly 0. CatBoost CPU 1.2.10 on the same
+fixture diverges the same way (Huber delta=1: predictions in [-786, 669],
+MAE 79.8; delta=3: [-1910, 2276]; delta=30, where the quadratic arm is
+live: MAE 0.24). THEIR SEMANTICS, KEPT: the Huber arm of
+`pointwise_targets.mojo` is theirs symbol for symbol, `loss_delta` reaches
+the kernel (delta 0.1 / 30 hash differently; 1 and 3 coincide because
+both saturate every row), and `check-loss-oracle` holds Huber against
+their CPU on a fixture whose residuals straddle delta (1474 of 3000 rows
+inside, 1526 outside). A comment now sits on the Huber `Der2` arm saying
+why the zero arm must not be "fixed".
+
+WHAT WAS OURS: `EnsureNewtonIsAvailable` (`catboost_options.cpp:
+588-601`, called from `Validate` on the RESOLVED method, `:740-742`)
+refuses Newton for Quantile, MultiQuantile, MAE, LogLinQuantile, MAPE, the
+two Stochastic* ranking losses and Lq with q < 2 -- catboost 1.2.10 says
+"Newton leaves estimation method is not supported for Quantile loss
+function" at fit time. This port accepted the override and ran a
+zero-Hessian Newton step CatBoost cannot be configured to run. Ported as
+`ensure_newton_is_available` in `gbdt/options/catboost_options.mojo`,
+called at the end of `set_leaves_estimation_default` (the function that
+resolves the method, the same value their `Validate` sees), GPU arm: the
+CPU-only pairwise clause is false here and the Stochastic* losses are not
+ported. `check-options` gains `check_newton_availability`: the five
+refusals plus Lq q=1.5, AND the acceptances (Lq q=2.5, Huber, RMSE, and
+Quantile's default resolving to Exact), sabotaged once (guard removed ->
+"Newton on Quantile should have been refused"). The E2 matrix's
+`gbdt_quantile_newton` cell now records a REFUSE by their message (the
+tool classifies "not supported" as a refusal, a result), which is what
+CatBoost itself does with that configuration.
+
+Bit-inert for everything that still trains: Huber / Quantile / MAE /
+Lq / RMSE hashes identical before and after on the E2 fixture, rebuilt
+from a clean HEAD checkout to separate the rebuild from the change
+(NOTE: the `_mojolearn_gbdt.so` that produced the brief's Huber numbers
+was STALE against HEAD -- Huber Gradient `2cda0e6e` / Exact `91c9d0ca`
+are not reproducible from HEAD's sources; HEAD-clean gives
+`6b6c42839b1ab54c` / `0d5c5af4c718f02c`, and RMSE's `da34f396f968e546`
+matches E1_RESULTS.md, so the rebuilt .so is the recorded one).
+`check-loss-oracle` all nine pass, `check-pointwise-target` PASS,
+`check-options` green.

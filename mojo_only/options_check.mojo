@@ -9,8 +9,10 @@ keeps finding unwired.
 from gbdt.options.catboost_options import (
     LEAF_ESTIMATION_EXACT,
     LEAF_ESTIMATION_GRADIENT,
+    LEAF_ESTIMATION_NEWTON,
     LEAF_ESTIMATION_SIMPLE,
     CatBoostOptions,
+    set_leaves_estimation_default,
     DETERMINISM_CROSS_DEVICE,
     DETERMINISM_DEVICE,
     DETERMINISM_OFF,
@@ -21,6 +23,77 @@ from gbdt.options.catboost_options import (
     determinism_name,
     grow_policy_name,
 )
+from gbdt.options.loss_description import make_loss_description
+
+
+def _newton_override(
+    name: String,
+    q: Float32 = Float32(-1.0),
+    delta: Float32 = Float32(-1.0),
+) raises -> Bool:
+    """True when `loss_estimation_method=Newton` is REFUSED for `name`."""
+    var loss = make_loss_description(name, q=q, delta=delta)
+    try:
+        _ = set_leaves_estimation_default(
+            loss, method_override=LEAF_ESTIMATION_NEWTON
+        )
+    except e:
+        var msg = String(e)
+        if not (
+            "Newton leaves estimation method is not supported" in msg
+        ):
+            raise Error(
+                "Newton on " + name + " refused with the WRONG message: "
+                + msg
+            )
+        return True
+    return False
+
+
+def check_newton_availability() raises:
+    """DEVIATION 257: `EnsureNewtonIsAvailable` (`catboost_options.cpp:
+    588-601`, via `Validate` `:740-742`) on the RESOLVED method.
+
+    Before 2026-08-23 every arm below was accepted, and the E2 matrix's
+    `Quantile+Newton` / `MAE+Newton` cells ran a zero-Hessian Newton
+    step that CatBoost itself refuses to configure. Both directions are
+    asserted: the five refusals AND the acceptances, so the guard can
+    neither vanish nor over-reach.
+    """
+    var refused = List[String]()
+    refused.append(String("Quantile"))
+    refused.append(String("MAE"))
+    refused.append(String("LogLinQuantile"))
+    refused.append(String("MAPE"))
+    for i in range(len(refused)):
+        if not _newton_override(refused[i]):
+            raise Error(
+                "leaf_estimation_method=Newton on " + refused[i]
+                + " should have been refused (catboost_options.cpp:588)"
+            )
+        print("    refused: leaf_estimation_method=Newton on", refused[i])
+    if not _newton_override(String("Lq"), q=Float32(1.5)):
+        raise Error("Newton on Lq q=1.5 should have been refused (:599)")
+    print("    refused: leaf_estimation_method=Newton on Lq q=1.5")
+
+    # the other direction: Newton IS their default or legal here
+    if _newton_override(String("Lq"), q=Float32(2.5)):
+        raise Error("Newton on Lq q=2.5 is legal (:599) and was refused")
+    if _newton_override(String("Huber"), delta=Float32(1.0)):
+        raise Error("Newton on Huber is THEIR default (:187-192), refused")
+    if _newton_override(String("RMSE")):
+        raise Error("Newton on RMSE is their default (:59-64), refused")
+    # the default path for the refused losses must still resolve (Exact /
+    # Gradient), i.e. the guard is on the OVERRIDE, not the loss
+    var q_default = set_leaves_estimation_default(
+        make_loss_description(String("Quantile"))
+    )
+    if q_default.method == LEAF_ESTIMATION_NEWTON:
+        raise Error("Quantile's default resolved to Newton")
+    print(
+        "    accepted: Newton on Lq q=2.5, Huber, RMSE; Quantile default"
+        " resolves without Newton"
+    )
 
 
 def expect_refusal(mut o: CatBoostOptions, what: String) raises:
@@ -127,6 +200,8 @@ def check_options() raises:
         k.check()
     print("    all three determinism levels accepted")
     print("  every unported option refuses by name")
+    check_newton_availability()
+    print("  Newton availability matches their Validate (DEVIATION 257)")
 
 
 def main() raises:

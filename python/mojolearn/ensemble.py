@@ -309,7 +309,10 @@ class GradientBoosting:
     loss_border : float, optional
         `Logloss`'s target threshold, default 0.5.
     leaf_estimation_method : {'Newton','Gradient','Exact','Simple'}, optional
-        None (default) means the LOSS decides, per CatBoost.
+        None (default) means the LOSS decides, per CatBoost. 'Newton' is
+        refused for Quantile, MAE, LogLinQuantile, MAPE and Lq with q < 2,
+        with CatBoost's own message (`catboost_options.cpp:588-601`;
+        their second derivative is zero there).
     leaf_estimation_iterations : int, optional
         None (default) means the loss decides.
     bootstrap_type : {'Bayesian','Bernoulli','Poisson','No'}, optional

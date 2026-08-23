@@ -528,6 +528,20 @@ def target_der2[objective: Int](
         # `HUBER_DER2 = -1.0` (`:62`), i.e. 1.0; the double negation is
         # kept so a reader diffing against their file finds the same
         # expression.
+        #
+        # THE ZERO ARM IS LOAD-BEARING AND THEIRS. Huber's default is
+        # Newton at one iteration (`catboost_options.cpp:187-192`) and
+        # the cursor starts at 0 (Huber is not on the boost-from-average
+        # list, `train_lib/options_helper.cpp:362-368`), so a target
+        # whose every |value| exceeds delta puts EVERY row in this arm on
+        # tree 0: the leaf Hessian is `0 + l2` (`pointwise_oracle.cpp:
+        # 86-89`) and the leaf is `sum(+-delta) / l2` -- the
+        # order-of-n overshoot that CatBoost CPU 1.2.10 reproduces on
+        # the E2 fixture (predictions in [-786, 669] for a target in
+        # [3.7, 10.6]). Measured 2026-08-23; see DEVIATION 257
+        # (`gbdt/options/catboost_options.mojo`) for the whole chain and
+        # for the one piece of it that WAS ours. Not a port defect; do
+        # not "fix" this arm.
         var diff = t - p
         if abs(diff) < alpha:
             return -Float32(HUBER_DER2)

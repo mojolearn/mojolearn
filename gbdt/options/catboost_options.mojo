@@ -1380,4 +1380,67 @@ def set_leaves_estimation_default(
             " Simple leaf-estimation mode"
         )
 
+    # `Validate()` (`:740-742`) runs on the RESOLVED method, after
+    # `SetNotSpecifiedOptionsToDefaults` (`Load`, `:380-382`), and this is
+    # the function that resolves it -- so the guard sits here, on the same
+    # value theirs sees. DEVIATION 257 (the entry is on
+    # `ensure_newton_is_available`).
+    if method == LEAF_ESTIMATION_NEWTON:
+        ensure_newton_is_available(loss)
+
     return TResolvedLeavesEstimation(method, iterations, l2)
+
+
+# ============================ DEVIATION 257 ============================
+# NOT a deviation from their arithmetic -- a CB_ENSURE of theirs that was
+# never ported, found 2026-08-23 while explaining why the E2 matrix's
+# `Huber`, `Quantile+Newton` and `MAE+Newton` cells hashed bit-identical
+# (66adb9a97127bab9...). That hash is sha256 of 20,000 float32 ZEROS: with
+# every |residual| above delta (the fixture's y sits in [3.74, 10.55] and
+# the cursor starts at 0 -- Huber is NOT on `AdjustBoostFromAverage`'s
+# list, `train_lib/options_helper.cpp:362-368`), Huber's der2 is 0 on
+# every row exactly as Quantile's and MAE's always are, the Newton leaf is
+# `sum(der) / (0 + l2)` (`pointwise_oracle.cpp:86-89`,
+# `descent_helpers.cpp:87`), the Cosine score ties every split at
+# sqrt(n) for a constant-sign gradient so each tree is the SAME depth-1
+# split (`HasSplit` break, `..._structure_searcher.cpp:134-136`), and the
+# next tree's leaf is the exact negation: a period-2 oscillation that
+# lands on 0 after an even tree count. CatBoost CPU 1.2.10 on the same
+# fixture diverges the same way (Huber delta=1: predictions in
+# [-786, 669], MAE 79.8 on a target of std 0.89). Their semantics, kept:
+# the Huber arm of `pointwise_targets.mojo` is theirs symbol for symbol
+# and `check-loss-oracle` holds it against their CPU on a fixture whose
+# residuals straddle delta.
+#
+# WHAT WAS OURS: the two Newton overrides that made the coincidence
+# visible are configurations CatBoost REFUSES. `EnsureNewtonIsAvailable`
+# (`catboost_options.cpp:588-601`, called from `Validate`, `:740-742`)
+# rejects Newton for Quantile, MultiQuantile, MAE, LogLinQuantile, MAPE,
+# StochasticFilter, StochasticRank, and for Lq with q < 2; catboost
+# 1.2.10 says so at runtime ("Newton leaves estimation method is not
+# supported for Quantile loss function"). This port let them through to a
+# zero-Hessian Newton step. Ported below, GPU arm: the CPU-only pairwise
+# clause is `false` here and the two Stochastic* losses are not ported,
+# so the list is the five this port trains plus the Lq clause.
+# =======================================================================
+
+
+def ensure_newton_is_available(loss: TLossDescription) raises:
+    """`EnsureNewtonIsAvailable(ETaskType::GPU, loss)`
+    (`catboost_options.cpp:588-601`), their message verbatim."""
+    var f = loss.loss_function
+    if (
+        f == OBJECTIVE_QUANTILE
+        or f == OBJECTIVE_MAE
+        or f == OBJECTIVE_LOGLINQUANTILE
+        or f == OBJECTIVE_MAPE
+    ):
+        raise Error(
+            "Newton leaves estimation method is not supported for "
+            + loss.name() + " loss function"
+        )
+    if f == OBJECTIVE_LQ and loss.get_lq_param() < Float32(2.0):
+        raise Error(
+            "Newton leaves estimation method is not supported for Lq loss"
+            " function with q < 2"
+        )
