@@ -186,7 +186,7 @@ What this round added beyond the verdict:
 | E1U cards | 3 | **3/3** | **3/3** |
 | train-here-infer-there, BOTH directions | 111 | **111/111** and **111/111** | **111/111** and **111/111** |
 
-157,018 matched tree stage pairs, 17,492 unsupervised, zero disagreeing.
+148,212 matched tree stage pairs, 17,504 unsupervised, zero disagreeing.
 First time on a box: the unsupervised identity gate's IDENTICAL pass ran
 and was green on the MI325X ("unsupervised identity: both modes green").
 The linalg gate's IDENTICAL pass was still aborted by one stale FAST
