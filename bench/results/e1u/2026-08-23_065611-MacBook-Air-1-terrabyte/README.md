@@ -48,3 +48,35 @@ so the answer is decided by the selector's tie rule rather than by the
 distances. Under FAST that same fixture returned three different values in
 three consecutive runs on this machine
 (`bench/results/column_invariance/2026-08-23_063334/RESULT.md`).
+
+## Provenance, verified rather than asserted
+
+This leg was produced in the main checkout, which at the time carried other
+lanes' UNCOMMITTED edits to `mojo_only/numerics.mojo`,
+`mojo_only/kernel_matrix.mojo` and `core/gemm.mojo` -- all three on the
+unsupervised path. `commit.txt` would then have been a claim about a tree
+that did not exist, which is exactly the thing E1's first precondition
+("same commit on both sides") is about.
+
+So it was checked instead of argued. A detached worktree at `2432e07`
+(`git worktree add --detach`), its own pixi environment, its own
+`numerics.mojo`, and the same driver:
+
+    kmeans  cards BYTE-IDENTICAL
+    knn     cards BYTE-IDENTICAL
+    dbscan  cards BYTE-IDENTICAL
+
+So the other lanes' in-flight work does not reach these bits, and this
+directory is what the commit produces. The result is a measurement with a
+date on it, not a property: **re-run the worktree comparison before
+trusting any future leg taken from a dirty checkout.**
+
+### The worktree is the better instrument, and supersedes the lock here
+
+DEVIATION 514 put the shared build lock around the mode flip because
+`numerics.mojo` is one file and the sessions are many. A detached worktree
+is strictly stronger for an identity leg: it has its OWN `numerics.mojo`, so
+a parallel session's flip cannot reach it at all, and its HEAD is a commit
+rather than a working tree. The lock is still needed for gates that must run
+in the main checkout (`check-unsupervised-identity`, which is about the
+shipped tree); anything that produces a CARD should come off a worktree.
