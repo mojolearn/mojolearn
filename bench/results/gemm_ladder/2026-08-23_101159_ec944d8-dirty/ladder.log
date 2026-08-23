@@ -1,0 +1,111 @@
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/gemm_ladder_main.mojo:219:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:101:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn/bench/gemm_ladder_main.mojo:297:25: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+        tmp.unsafe_ptr().bitcast[UInt8](),
+        ~~~~~~~~~~~~~~~~^~~~~~~~
+                         unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/gemm_ladder_main.mojo:219:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:246:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/gemm_ladder_main.mojo:219:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:360:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/gemm_ladder_main.mojo:219:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:374:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/gemm_ladder_main.mojo:219:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:384:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+== bench/gemm_ladder_main.mojo [IDENTICAL] ==
+profile mojolearn.identical.gemm.fp32.v1
+plan 7 SPLITK_STAGED(leaf kernel -> D separate global fold-level launches -> emit)
+sabotage none
+column apple
+check_orientation_map OK: table (NT,TN,NN) = (0,1,2) -> oracle (1,2,0), verified against gemm_operand_strides at m=5 n=7 k=11
+
+   pca.transform.8192x4x4 op=NT(tbl 0 -> oracle 1) m=8192 n=4 k=4 L=4 P=1 levels=1 nodes/cell=1 ws=32768 floats
+      pca.transform.8192x4x4.fold.L00 w=1 nodes=32768 carry=no 0dad395eede1b2ac
+      pca.transform.8192x4x4.out cells=32768 0dad395eede1b2ac
+      proof-1 OK  top level L00 == .out, bit for bit, hash 0dad395eede1b2ac
+      proof-2 OK  device == gemm_oracle, all 32768 cells
+
+   llama8b.qkv.t1 op=NT(tbl 0 -> oracle 1) m=1 n=1024 (capped from 4096) k=4096 L=128 P=32 levels=6 nodes/cell=63 ws=64512 floats
+      llama8b.qkv.t1.fold.L00 w=32 nodes=32768 carry=no d3a2b5ab7236a09f
+      llama8b.qkv.t1.fold.L01 w=16 nodes=16384 carry=no 2fdf212d9ae2334c
+      llama8b.qkv.t1.fold.L02 w=8 nodes=8192 carry=no 4cfde85a612900e3
+      llama8b.qkv.t1.fold.L03 w=4 nodes=4096 carry=no b5d1c3926a6e25d9
+      llama8b.qkv.t1.fold.L04 w=2 nodes=2048 carry=no 3a37c31445632725
+      llama8b.qkv.t1.fold.L05 w=1 nodes=1024 carry=no 64b3d7031941dc80
+      llama8b.qkv.t1.out cells=1024 64b3d7031941dc80
+      proof-1 OK  top level L05 == .out, bit for bit, hash 64b3d7031941dc80
+      proof-2 OK  device == gemm_oracle, all 1024 cells
+
+   llama8b.mlp_down.t1 op=NT(tbl 0 -> oracle 1) m=1 n=256 (capped from 4096) k=14336 L=128 P=112 levels=8 nodes/cell=224 ws=57344 floats
+      llama8b.mlp_down.t1.fold.L00 w=112 nodes=28672 carry=no c6f5d476e845606b
+      llama8b.mlp_down.t1.fold.L01 w=56 nodes=14336 carry=no 2f0571d77996027f
+      llama8b.mlp_down.t1.fold.L02 w=28 nodes=7168 carry=no 26f06ec933cc111b
+      llama8b.mlp_down.t1.fold.L03 w=14 nodes=3584 carry=no e7aa8a4fb0c208ad
+      llama8b.mlp_down.t1.fold.L04 w=7 nodes=1792 carry=no 57367ff891d7a73e
+      llama8b.mlp_down.t1.fold.L05 w=4 nodes=1024 carry=yes 4494831cc7f22ae8
+      llama8b.mlp_down.t1.fold.L06 w=2 nodes=512 carry=no b614e996122fa0b4
+      llama8b.mlp_down.t1.fold.L07 w=1 nodes=256 carry=no 4305ea1060b06494
+      llama8b.mlp_down.t1.out cells=256 4305ea1060b06494
+      proof-1 OK  top level L07 == .out, bit for bit, hash 4305ea1060b06494
+      proof-2 OK  device == gemm_oracle, all 256 cells
+
+   ols.step1.16x16x64K op=TN(tbl 1 -> oracle 2) m=8 (capped from 16) n=8 (capped from 16) k=65536 L=128 P=512 levels=10 nodes/cell=1023 ws=65472 floats
+      ols.step1.16x16x64K.fold.L00 w=512 nodes=32768 carry=no 3e2dda7c5ece0978
+      ols.step1.16x16x64K.fold.L01 w=256 nodes=16384 carry=no 3f96e14237438bb4
+      ols.step1.16x16x64K.fold.L02 w=128 nodes=8192 carry=no f7503d4a1a86c444
+      ols.step1.16x16x64K.fold.L03 w=64 nodes=4096 carry=no b504d8472da7df35
+      ols.step1.16x16x64K.fold.L04 w=32 nodes=2048 carry=no 57768325565e112f
+      ols.step1.16x16x64K.fold.L05 w=16 nodes=1024 carry=no 3524beed77b2b408
+      ols.step1.16x16x64K.fold.L06 w=8 nodes=512 carry=no 19e729b82059592a
+      ols.step1.16x16x64K.fold.L07 w=4 nodes=256 carry=no 6749b4c1f19c7f85
+      ols.step1.16x16x64K.fold.L08 w=2 nodes=128 carry=no ee3629dac046e5f7
+      ols.step1.16x16x64K.fold.L09 w=1 nodes=64 carry=no cc037315c8a027bc
+      ols.step1.16x16x64K.out cells=64 cc037315c8a027bc
+      proof-1 OK  top level L09 == .out, bit for bit, hash cc037315c8a027bc
+      proof-2 OK  device == gemm_oracle, all 64 cells
+
+   gram.32x32x1M op=TN(tbl 1 -> oracle 2) m=2 (capped from 32) n=2 (capped from 32) k=1000000 L=977 P=1024 levels=11 nodes/cell=2047 ws=8188 floats
+      gram.32x32x1M.fold.L00 w=1024 nodes=4096 carry=no 3f72d795cedfb9e2
+      gram.32x32x1M.fold.L01 w=512 nodes=2048 carry=no f15942bdabe8e4fd
+      gram.32x32x1M.fold.L02 w=256 nodes=1024 carry=no 01b9aa3978827ec5
+      gram.32x32x1M.fold.L03 w=128 nodes=512 carry=no 53d6142f9a56463f
+      gram.32x32x1M.fold.L04 w=64 nodes=256 carry=no 3a2b6cbd1fab889c
+      gram.32x32x1M.fold.L05 w=32 nodes=128 carry=no b3e7bcc2b711150d
+      gram.32x32x1M.fold.L06 w=16 nodes=64 carry=no 2f6ef2e1f439c088
+      gram.32x32x1M.fold.L07 w=8 nodes=32 carry=no 50ef249970ef414e
+      gram.32x32x1M.fold.L08 w=4 nodes=16 carry=no b97283ef7b9f3b94
+      gram.32x32x1M.fold.L09 w=2 nodes=8 carry=no f40b1b2e25b6f61f
+      gram.32x32x1M.fold.L10 w=1 nodes=4 carry=no 5faa19f251e84f32
+      gram.32x32x1M.out cells=4 5faa19f251e84f32
+      proof-1 OK  top level L10 == .out, bit for bit, hash 5faa19f251e84f32
+      proof-2 OK  device == gemm_oracle, all 4 cells
+
+card: bench/results/gemm_ladder/2026-08-23_101159_ec944d8-dirty/ladder.card
+records: 57
+Localize a divergence:
+  tools/gemm_ladder.sh emit  -> a card
+  tools/gemm_ladder.sh diff A.card B.card
+The first differing record names a LEVEL. Levels below it that agree are the evidence that the defect is in the fold and not in the leaves; a level 0 that moves is the evidence that it is not.
+
+gemm fold ladder: GREEN -- 57 records over 5 shapes; every top level is the emitted output and every output is gemm_oracle.

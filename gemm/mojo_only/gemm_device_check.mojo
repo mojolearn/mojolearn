@@ -45,7 +45,7 @@ WHAT IS ASSERTED IN WHICH MODE
 bits beside its decimal.
 """
 
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.memory import bitcast
 
 from bench.gemm_shapes import (
@@ -1181,6 +1181,180 @@ def _batch_arm(
     )
 
 
+def _batch_loop_arm(
+    ctx: DeviceContext, k: Int, m_ov: Int, n_ov: Int, mut fails: Int
+) raises:
+    """THE SHARED-WORKSPACE COMPOSITION. Several INDEPENDENT GEMMs of
+    different shapes, enqueued back to back with NO synchronize between them
+    through ONE workspace buffer (`identical_gemm_into`, the asynchronous
+    form a batched caller would use), against the same cells computed in a
+    launch of their own.
+
+    What this sees that `_batch_arm` cannot: a plan that reads a partial it
+    did not write -- a workspace slot left over from the PREVIOUS product in
+    the queue -- or any state that leaks from one launch into the next. Each
+    GEMM in the loop takes whatever plan `choose_gemm_plan` gives its shape
+    (SPLITK for `64 x 4` and `64 x 64`, a tile for `130 x 64`), so the
+    workspace is sized for the largest and is DIRTY for every launch after
+    the first. The reference is `_batch_run`'s solo `64 x 4`, which had a
+    clean workspace of its own.
+    """
+    var shapes_m = [64, 64, 130, 64]
+    var shapes_n = [4, 64, 64, 4]
+    var count = len(shapes_m)
+    var solo = _batch_run(ctx, m_ov, n_ov, k)
+
+    # One workspace for the whole loop, sized for the largest plan in it.
+    var nws = 1
+    var ma = 0
+    var mb = 0
+    var mc = 0
+    for q in range(count):
+        var w = identical_gemm_workspace_max_floats(shapes_m[q], shapes_n[q], k)
+        if w > nws:
+            nws = w
+        if shapes_m[q] * k > ma:
+            ma = shapes_m[q] * k
+        if shapes_n[q] * k > mb:
+            mb = shapes_n[q] * k
+        if shapes_m[q] * shapes_n[q] > mc:
+            mc = shapes_m[q] * shapes_n[q]
+    var dw = ctx.enqueue_create_buffer[DType.float32](nws)
+    # Operands are built ONCE at the largest extent and every GEMM reads a
+    # prefix of them: `_batch_a` is a function of `(i, p)` and `_batch_b` of
+    # `(j, p)`, so row `i` of the 130-row `A` IS row `i` of the 64-row `A`,
+    # and the loop's inputs are the reference's inputs by construction.
+    var hA = ctx.enqueue_create_host_buffer[DType.float32](ma)
+    var hB = ctx.enqueue_create_host_buffer[DType.float32](mb)
+    ctx.synchronize()
+    var big_m = ma // k
+    var big_n = mb // k
+    for i in range(big_m):
+        for pp in range(k):
+            hA.unsafe_ptr().unsafe_store(i * k + pp, _batch_a(i, pp, k))
+    for j in range(big_n):
+        for pp in range(k):
+            hB.unsafe_ptr().unsafe_store(j * k + pp, _batch_b(j, pp, k))
+    var das = List[DeviceBuffer[DType.float32]]()
+    var dbs = List[DeviceBuffer[DType.float32]]()
+    var dcs = List[DeviceBuffer[DType.float32]]()
+    var hcs = List[HostBuffer[DType.float32]]()
+    for q in range(count):
+        var mq = shapes_m[q]
+        var nq = shapes_n[q]
+        # `_batch_run` lays `A` out as `m x k` row-major with row stride k,
+        # so a prefix of rows of the big `A` is exactly the small `A`. `B` is
+        # `n x k` the same way.
+        var da = ctx.enqueue_create_buffer[DType.float32](mq * k)
+        var db = ctx.enqueue_create_buffer[DType.float32](nq * k)
+        var dc = ctx.enqueue_create_buffer[DType.float32](mq * nq)
+        var hc = ctx.enqueue_create_host_buffer[DType.float32](mq * nq)
+        ctx.synchronize()
+        for i in range(mq * nq):
+            hc.unsafe_ptr().unsafe_store(i, POISON)
+        ctx.enqueue_copy(dst_buf=da, src_ptr=hA.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=db, src_ptr=hB.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=dc, src_ptr=hc.unsafe_ptr())
+        das.append(da^)
+        dbs.append(db^)
+        dcs.append(dc^)
+        hcs.append(hc^)
+    ctx.synchronize()
+    # THE LOOP: no synchronize between launches, one workspace throughout.
+    for q in range(count):
+        identical_gemm_into(
+            ctx, dcs[q], das[q], dbs[q], dw, shapes_m[q], shapes_n[q], k, OP_NT
+        )
+    ctx.synchronize()
+    for q in range(count):
+        ctx.enqueue_copy(dst_ptr=hcs[q].unsafe_ptr(), src_buf=dcs[q])
+    ctx.synchronize()
+
+    var total_bad = 0
+    for q in range(count):
+        var mq = shapes_m[q]
+        var nq = shapes_n[q]
+        var bad = 0
+        var first_i = -1
+        var first_j = -1
+        var va2 = Float32(0.0)
+        var vb2 = Float32(0.0)
+        for i in range(m_ov):
+            for j in range(n_ov):
+                var vb = hcs[q].unsafe_ptr().unsafe_load(i * nq + j)
+                if _bits(vb) == _bits(POISON):
+                    raise Error(
+                        "POISON SURVIVED in the shared-workspace loop, GEMM "
+                        + String(q)
+                        + " ("
+                        + String(mq)
+                        + "x"
+                        + String(nq)
+                        + "), cell ("
+                        + String(i)
+                        + ", "
+                        + String(j)
+                        + ")"
+                    )
+                var va = solo[i * n_ov + j]
+                if _bits(va) != _bits(vb):
+                    bad += 1
+                    if first_i < 0:
+                        first_i = i
+                        first_j = j
+                        va2 = va
+                        vb2 = vb
+        var tag = (
+            String("loop[")
+            + String(q)
+            + "] "
+            + String(mq)
+            + "x"
+            + String(nq)
+            + " -> "
+            + gemm_plan_name(_dispatch_plan(mq, nq, k))
+            + ", shared ws of "
+            + String(nws)
+            + " floats"
+        )
+        if bad == 0:
+            print(
+                "      OK   "
+                + tag
+                + ": "
+                + String(m_ov * n_ov)
+                + " overlapping cells identical to the solo launch"
+            )
+        else:
+            total_bad += 1
+            print(
+                "      FAIL "
+                + tag
+                + ": "
+                + String(bad)
+                + " of "
+                + String(m_ov * n_ov)
+                + " overlapping cells CHANGED BITS against the solo launch."
+                " First at cell ("
+                + String(first_i)
+                + ", "
+                + String(first_j)
+                + "): solo "
+                + _show(va2)
+                + "   in-loop "
+                + _show(vb2)
+            )
+    if total_bad != 0:
+        fails += 1
+    _ = dw
+    _ = hA
+    _ = hB
+    _ = das
+    _ = dbs
+    _ = dcs
+    _ = hcs
+
+
 def check_device_is_batch_invariant() raises:
     """**GATE 3.** A cell's bits do not depend on how many OTHER cells were
     in the launch.
@@ -1221,6 +1395,31 @@ def check_device_is_batch_invariant() raises:
     ODD with a one-element last leaf), because a carry is where a
     launch-dependent fold would most easily hide.
 
+    BATCH COMPOSITION, added 2026-08-23, two arms:
+
+    5. **`n: 4 vs 4096`** -- the same `(i, j, k)` cell inside a launch of
+       256 cells and inside a launch of 262,144 cells. At `n = 4096` every
+       cell of the overlap sits in a DIFFERENT BLOCK than it does at `n = 4`
+       (a 16x16 tile grid 256 tiles wide against one SPLITK grid), so a
+       kernel whose leaf order or fold depends on the block it was scheduled
+       in cannot pass both. This is the charter's "batch composition" in its
+       literal form: the same cell computed inside a small launch and a
+       large one.
+    6. **The shared-workspace loop** (`_batch_loop_arm`): four independent
+       GEMMs of three shapes, enqueued back to back through ONE workspace
+       with no synchronize between them, each compared to the solo launch.
+
+    SABOTAGE, shown to fail: `-D MOJOLEARN_GEMM_SABOTAGE_LEAF_ROTATE=1`
+    rotates the leaf start by the block index in every plan (the leaf
+    arithmetic and the tree untouched; only WHICH leaf stands at which tree
+    position moves with the block). Measured 2026-08-23 on Apple, IDENTICAL:
+    arms 1-5 all FAIL (`n: 4 vs 4096`: 144 of 256 cells), and in arm 6 the
+    two GEMMs whose shape differs from the solo launch FAIL (144 of 256 each)
+    while the two of the SAME shape agree -- as they must, since a rotation
+    that is a pure function of the block index reproduces itself at the same
+    geometry, which is why the arm has more than one shape in it. The oracle
+    gate fails 32 of 62 shapes and the launch-invariance gate fails too.
+
     ASSERTED IN BOTH MODES, for the reason GATE 2 gives.
     """
     print(
@@ -1256,6 +1455,12 @@ def check_device_is_batch_invariant() raises:
             _batch_arm(
                 ctx, k, 64, 64, 130, 64, 64, 64, String("m: 64 vs 130"), fails
             )
+            # (5): the same cell inside a small launch and a LARGE one.
+            _batch_arm(
+                ctx, k, 64, 4, 64, 4096, 64, 4, String("n: 4 vs 4096"), fails
+            )
+            # (6): several independent GEMMs through one dirty workspace.
+            _batch_loop_arm(ctx, k, 64, 4, fails)
     if fails != 0:
         raise Error(
             "check_device_is_batch_invariant ["

@@ -155,6 +155,17 @@ comptime SAB_FOLD_SERIAL = is_defined["MOJOLEARN_GEMM_SABOTAGE_FOLD_SERIAL"]()
 #: pairing is over logical leaf indices, never over physical block, warp or
 #: thread indices" -- and 7.2 clause 2.
 comptime SAB_NODE_ORDER = is_defined["MOJOLEARN_GEMM_SABOTAGE_NODE_ORDER"]()
+#: THE LEAF START IS ROTATED BY THE BLOCK INDEX: position `t` of the fold
+#: visits logical leaf `(t + block_idx.x) mod P` instead of leaf `t`, in every
+#: plan. The leaf ARITHMETIC and the tree are both untouched -- only WHICH
+#: leaf stands at which tree position depends on the physical block, so the
+#: same `(i, j, k)` cell folds in a different order whenever the launch puts
+#: it in a different block. That is exactly what a change of batch
+#: composition does, and it is the defect `check_device_is_batch_invariant`'s
+#: `n: 4 vs 4096` and shared-workspace arms exist to see. Contract 7.2.2 and
+#: the charter's "never of batch composition". Added 2026-08-23 for the
+#: batch-composition arms; a NO-OP in every build that does not name it.
+comptime SAB_LEAF_ROTATE = is_defined["MOJOLEARN_GEMM_SABOTAGE_LEAF_ROTATE"]()
 
 comptime ANY_SABOTAGE = (
     SAB_LEAF_READS_LAUNCH
@@ -162,6 +173,7 @@ comptime ANY_SABOTAGE = (
     or SAB_PAD_PLUS_ZERO
     or SAB_FOLD_SERIAL
     or SAB_NODE_ORDER
+    or SAB_LEAF_ROTATE
 )
 
 
@@ -177,6 +189,8 @@ def gemm_sabotage_name() -> String:
         return String("FOLD_SERIAL")
     comptime if SAB_NODE_ORDER:
         return String("NODE_ORDER")
+    comptime if SAB_LEAF_ROTATE:
+        return String("LEAF_ROTATE")
     return String("none")
 
 
@@ -431,6 +445,17 @@ def _leaf_bounds(t: Int, leaf: Int, k: Int) -> Tuple[Int, Int]:
     return (pb, pe)
 
 
+def _leaf_at(t: Int, p_count: Int) -> Int:
+    """The logical leaf that stands at fold position `t`. **The identity**,
+    and it exists only so that `SAB_LEAF_ROTATE` has one place to break it
+    in every plan: under the sabotage it is `(t + block_idx.x) mod P`, and
+    the block a cell was scheduled in decides its summation order."""
+    comptime if SAB_LEAF_ROTATE:
+        if p_count > 0:
+            return (t + Int(block_idx.x)) % p_count
+    return t
+
+
 # ===========================================================================
 # PLAN FLAT: one thread per output cell, its whole k range, no staging
 # ===========================================================================
@@ -491,7 +516,7 @@ def identical_gemm_flat_kernel(
     var a_row = i * a_si
     var b_col = j * b_sj
     for t in range(p_count):
-        var bounds = _leaf_bounds(t, leaf, k)
+        var bounds = _leaf_bounds(_leaf_at(t, p_count), leaf, k)
         var acc = Float32(0.0)
         for p in range(bounds[0], bounds[1]):
             # Contract 7.1: ascending `p`, one `identical_mul_add` per step,
@@ -632,7 +657,7 @@ def identical_gemm_tiled_kernel[
     var serial = Float32(0.0)
 
     for t in range(p_count):
-        var bounds = _leaf_bounds(t, leaf, k)
+        var bounds = _leaf_bounds(_leaf_at(t, p_count), leaf, k)
         var pe = bounds[1]
         var acc = Float32(0.0)
         var p = bounds[0]
@@ -766,7 +791,7 @@ def identical_gemm_leaf_kernel(
     var i = cell // n
     var j = cell - i * n
 
-    var bounds = _leaf_bounds(t, leaf, k)
+    var bounds = _leaf_bounds(_leaf_at(t, p_count), leaf, k)
     var acc = Float32(0.0)
     var a_row = i * a_si
     var b_col = j * b_sj

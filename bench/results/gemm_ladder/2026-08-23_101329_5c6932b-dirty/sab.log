@@ -1,0 +1,116 @@
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/gemm_ladder_main.mojo:219:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:101:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+/Users/andrewhendel/CascadeProjects/mojolearn/bench/gemm_ladder_main.mojo:297:25: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+        tmp.unsafe_ptr().bitcast[UInt8](),
+        ~~~~~~~~~~~~~~~~^~~~~~~~
+                         unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/gemm_ladder_main.mojo:219:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:246:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/gemm_ladder_main.mojo:219:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:360:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/gemm_ladder_main.mojo:219:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:374:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/gemm_ladder_main.mojo:219:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:384:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+== bench/gemm_ladder_main.mojo [IDENTICAL] ==
+profile mojolearn.identical.gemm.fp32.v1
+plan 7 SPLITK_STAGED(leaf kernel -> D separate global fold-level launches -> emit)
+sabotage FOLD_STRIDE
+column apple
+check_orientation_map OK: table (NT,TN,NN) = (0,1,2) -> oracle (1,2,0), verified against gemm_operand_strides at m=5 n=7 k=11
+
+   pca.transform.8192x4x4 op=NT(tbl 0 -> oracle 1) m=8192 n=4 k=4 L=4 P=1 levels=1 nodes/cell=1 ws=32768 floats
+      pca.transform.8192x4x4.fold.L00 w=1 nodes=32768 carry=no 0dad395eede1b2ac
+      pca.transform.8192x4x4.out cells=32768 0dad395eede1b2ac
+      proof-1 OK  top level L00 == .out, bit for bit, hash 0dad395eede1b2ac
+      proof-2 OK  device == gemm_oracle, all 32768 cells
+
+   llama8b.qkv.t1 op=NT(tbl 0 -> oracle 1) m=1 n=1024 (capped from 4096) k=4096 L=128 P=32 levels=6 nodes/cell=63 ws=64512 floats
+      llama8b.qkv.t1.fold.L00 w=32 nodes=32768 carry=no d3a2b5ab7236a09f
+      llama8b.qkv.t1.fold.L01 w=16 nodes=16384 carry=no 6a782dfaab7c7fbd
+      llama8b.qkv.t1.fold.L02 w=8 nodes=8192 carry=no 7e227e31ab6553ac
+      llama8b.qkv.t1.fold.L03 w=4 nodes=4096 carry=no bcdb91ea308be09b
+      llama8b.qkv.t1.fold.L04 w=2 nodes=2048 carry=no 397efdf0dd40a4ff
+      llama8b.qkv.t1.fold.L05 w=1 nodes=1024 carry=no 3a57ff6ce18d162e
+      llama8b.qkv.t1.out cells=1024 3a57ff6ce18d162e
+      proof-1 OK  top level L05 == .out, bit for bit, hash 3a57ff6ce18d162e
+      ORACLE MISMATCH: llama8b.qkv.t1 -- 667 of 1024 cells differ from the normative answer. First at ( 0 , 0 ): device -39.680157/0xc21eb87b oracle -39.68016/0xc21eb87c
+        Sabotage FOLD_STRIDE is active -- the mismatch is the sabotage, as intended.
+
+   llama8b.mlp_down.t1 op=NT(tbl 0 -> oracle 1) m=1 n=256 (capped from 4096) k=14336 L=128 P=112 levels=8 nodes/cell=224 ws=57344 floats
+      llama8b.mlp_down.t1.fold.L00 w=112 nodes=28672 carry=no c6f5d476e845606b
+      llama8b.mlp_down.t1.fold.L01 w=56 nodes=14336 carry=no 0121561b5f7ea8e9
+      llama8b.mlp_down.t1.fold.L02 w=28 nodes=7168 carry=no a8764bfb5d162640
+      llama8b.mlp_down.t1.fold.L03 w=14 nodes=3584 carry=no 645770f9bdcb2e24
+      llama8b.mlp_down.t1.fold.L04 w=7 nodes=1792 carry=no ba4ba24b02b6a9cb
+      llama8b.mlp_down.t1.fold.L05 w=4 nodes=1024 carry=yes a58ebc341192e8ee
+      llama8b.mlp_down.t1.fold.L06 w=2 nodes=512 carry=no 379c03abc4f64623
+      llama8b.mlp_down.t1.fold.L07 w=1 nodes=256 carry=no af8e8930f7bfca8d
+      llama8b.mlp_down.t1.out cells=256 af8e8930f7bfca8d
+      proof-1 OK  top level L07 == .out, bit for bit, hash af8e8930f7bfca8d
+      ORACLE MISMATCH: llama8b.mlp_down.t1 -- 188 of 256 cells differ from the normative answer. First at ( 0 , 0 ): device -16.075294/0xc1809a34 oracle -16.075298/0xc1809a36
+        Sabotage FOLD_STRIDE is active -- the mismatch is the sabotage, as intended.
+
+   ols.step1.16x16x64K op=TN(tbl 1 -> oracle 2) m=8 (capped from 16) n=8 (capped from 16) k=65536 L=128 P=512 levels=10 nodes/cell=1023 ws=65472 floats
+      ols.step1.16x16x64K.fold.L00 w=512 nodes=32768 carry=no 3e2dda7c5ece0978
+      ols.step1.16x16x64K.fold.L01 w=256 nodes=16384 carry=no 4ecb311094271468
+      ols.step1.16x16x64K.fold.L02 w=128 nodes=8192 carry=no 28fa397499064d86
+      ols.step1.16x16x64K.fold.L03 w=64 nodes=4096 carry=no 7572bda3d0e11ca7
+      ols.step1.16x16x64K.fold.L04 w=32 nodes=2048 carry=no 1a8e215ecd07d1db
+      ols.step1.16x16x64K.fold.L05 w=16 nodes=1024 carry=no 037ccbf05d5ab153
+      ols.step1.16x16x64K.fold.L06 w=8 nodes=512 carry=no ffdd4c6f65deefc9
+      ols.step1.16x16x64K.fold.L07 w=4 nodes=256 carry=no d014883eb3f9f7a6
+      ols.step1.16x16x64K.fold.L08 w=2 nodes=128 carry=no 20b86509ad056de2
+      ols.step1.16x16x64K.fold.L09 w=1 nodes=64 carry=no 5a9f731617a051d9
+      ols.step1.16x16x64K.out cells=64 5a9f731617a051d9
+      proof-1 OK  top level L09 == .out, bit for bit, hash 5a9f731617a051d9
+      ORACLE MISMATCH: ols.step1.16x16x64K -- 50 of 64 cells differ from the normative answer. First at ( 0 , 1 ): device -82.68396/0xc2a55e30 oracle -82.683975/0xc2a55e32
+        Sabotage FOLD_STRIDE is active -- the mismatch is the sabotage, as intended.
+
+   gram.32x32x1M op=TN(tbl 1 -> oracle 2) m=2 (capped from 32) n=2 (capped from 32) k=1000000 L=977 P=1024 levels=11 nodes/cell=2047 ws=8188 floats
+      gram.32x32x1M.fold.L00 w=1024 nodes=4096 carry=no 3f72d795cedfb9e2
+      gram.32x32x1M.fold.L01 w=512 nodes=2048 carry=no 96e48f5ba0109945
+      gram.32x32x1M.fold.L02 w=256 nodes=1024 carry=no d08fefb4c1ad825e
+      gram.32x32x1M.fold.L03 w=128 nodes=512 carry=no 0df144fcca394da3
+      gram.32x32x1M.fold.L04 w=64 nodes=256 carry=no e8c15b87ac70efa8
+      gram.32x32x1M.fold.L05 w=32 nodes=128 carry=no b9e03e3e25603bce
+      gram.32x32x1M.fold.L06 w=16 nodes=64 carry=no 2764bf3f619cfd80
+      gram.32x32x1M.fold.L07 w=8 nodes=32 carry=no 5029515eeea0e0ba
+      gram.32x32x1M.fold.L08 w=4 nodes=16 carry=no db513436ca5e2bb6
+      gram.32x32x1M.fold.L09 w=2 nodes=8 carry=no beac84f10565b73c
+      gram.32x32x1M.fold.L10 w=1 nodes=4 carry=no 1271fb597d86fb48
+      gram.32x32x1M.out cells=4 1271fb597d86fb48
+      proof-1 OK  top level L10 == .out, bit for bit, hash 1271fb597d86fb48
+      ORACLE MISMATCH: gram.32x32x1M -- 2 of 4 cells differ from the normative answer. First at ( 1 , 0 ): device 342.46695/0x43ab3bc5 oracle 342.46692/0x43ab3bc4
+        Sabotage FOLD_STRIDE is active -- the mismatch is the sabotage, as intended.
+
+card: bench/results/gemm_ladder/2026-08-23_101329_5c6932b-dirty/sab.card
+records: 57
+Localize a divergence:
+  tools/gemm_ladder.sh emit  -> a card
+  tools/gemm_ladder.sh diff A.card B.card
+The first differing record names a LEVEL. Levels below it that agree are the evidence that the defect is in the fold and not in the leaves; a level 0 that moves is the evidence that it is not.
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: gemm fold ladder: 4 failure(s) above. Every verdict was printed before this raise, because under a sabotage build the useful evidence is WHICH checks a defect reaches and which it walks past.
+/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1

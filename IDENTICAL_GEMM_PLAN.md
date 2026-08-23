@@ -353,6 +353,15 @@ At the end, recommend one of, on evidence and not optimism:
 **C.** Stop, because Mojo/MAX code generation prevents the arithmetic
 contract from being enforced on one or more vendors.
 
+**2026-08-23, on one device.** The evidence supports **A-pending-vendors**:
+on the Apple M4 the kernel reproduces the oracle bit for bit at 62 shapes
+under eight execution plans, the launch, batch and batch-composition gates
+hold, six sabotages each fail, and Mojo's Metal code generation has not
+prevented the contract from being enforced anywhere it was tested. That is
+one vendor. The decision waits for E1G (`gemm/E1G_RUNBOOK.md`), which has
+not run; until it does, nothing here distinguishes A from C on NVIDIA or
+AMD, and no recommendation is made.
+
 ## Deliverables
 
 Implementation; numerical-contract documentation; IDENTITY_PATHS row and
@@ -495,3 +504,49 @@ ledger.
 - Every check prints the mode it COMPILED in, read from the comptime
   constant. Three mislabelled measurements were caught by that today and it
   survives the `-D` migration unchanged.
+
+---
+
+# THIS LANE'S DEVIATION BLOCK, AND THE GREP THAT MISSES HALF OF IT
+
+DEVIATIONS 530-539 are this lane's. Allocation as of 2026-08-23:
+
+| number | what | state |
+|---|---|---|
+| 530 | the register-stack realization of the contract's fold tree | SPENT, Phase 2b (`gemm/mojo_only/gemm_identical.mojo`) |
+| 531 | Phase 2b's second | SPENT |
+| 532 | Phase 2b's third | SPENT |
+| 533 | the fold-ladder card: per-level stage hashing so a cross-vendor divergence localizes to a fold level and a leaf | SPENT (`bench/gemm_ladder_main.mojo`, `tools/gemm_ladder.sh`); GREEN on Apple, 57 records over 5 shapes |
+| 534 | the identity card's device arm | SPENT (`bench/gemm_card_main.mojo`); oracle and device cards byte-identical at 60 stages on Apple |
+| 535 | the price harness's device arms | SPENT (`bench/gemm_price_main.mojo`); wiring only, no number published |
+| 536 | the guarded RunPod remote leg and its runbook | SPENT (`tools/gemm_remote_leg.sh`, `gemm/E1G_RUNBOOK.md`); **UNRUN**, `sh -n` only |
+| 537-539 | unallocated | -- |
+
+**The block is nearly exhausted.** Three numbers remain and the three-vendor
+leg has not run. When 539 is spent this lane agrees a second block with the
+identity lane rather than drifting into 540+, which is theirs
+(`DEVIATIONS 541-544` and `546-549` are already spent there).
+
+## THE TRAP, RECORDED BECAUSE IT NEARLY LANDED A COLLISION
+
+Four numbers were handed to four parallel agents on the strength of
+
+    grep -rho "DEVIATION 5[0-9][0-9]" .
+
+which returned nothing between 529 and 540 and therefore looked like an empty
+block. **It is not empty. The repository writes the plural form for ranges** --
+`DEVIATIONS 530-532` in `gemm/mojo_only/gemm_identical.mojo:89`,
+`gemm/README.md:56` and `gemm/README.md:453` -- and the singular pattern
+matches none of them. Three of the four assignments collided with committed
+work and were corrected before any header was written.
+
+The pattern that actually answers the question:
+
+    grep -rhoE "DEVIATIONS? 5[0-9][0-9](-5?[0-9]+)?" . | sort -u
+
+and note that even this one reports a RANGE as its first number only, so
+`DEVIATIONS 530-532` must be read as claiming three. **A deviation number is
+an identifier in a shared namespace across four concurrent sessions; a
+half-matching grep over it is the same class of error as a fixture that
+cannot separate the alternatives it claims to test.** It returns a clean
+answer to a question it did not ask.

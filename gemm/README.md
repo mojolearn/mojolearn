@@ -8,22 +8,74 @@ Andrew's Phase 2 contract call, which also replaced the fold ACROSS leaves
 with a fixed balanced tree. Changing the leaf rule or the fold topology from
 here creates a v2; it does not amend v1.
 
-**Status: PHASE 0, PHASE 1 AND PHASE 2a.** The contract is written and
-versioned, the two oracles are split and named, and the fixtures — now
-covering all seven of clause 5's distinctions — run green in both modes.
-There is NO device kernel (Phase 2b), NO invariance gate (Phase 3) and NO
-benchmark (Phase 4) — deliberately, because clause 5 says the distinguishing
-gates come BEFORE optimizing, and a kernel written against an unreviewed
-oracle is what the charter forbids.
+**Status: PHASES 0, 1, 2a, 2b, 3 AND 4 ARE LANDED, ON ONE DEVICE.** The
+contract is written and versioned, the two oracles are split and named, the
+fixtures — covering all seven of clause 5's distinctions — run green in both
+modes, the device kernel matches the oracle bit-for-bit at 62 shapes across
+its eight execution plans with six sabotages all shown to fail, the
+invariance gates (launch, batch, and batch COMPOSITION) run, and the price
+harness is wired.
 
+**The one thing this status does not say is the one that matters most: NONE
+OF IT HAS RUN ON A SECOND VENDOR.** Every claim above is CONSTRUCTION plus
+one Apple device's gates. `tools/gemm_column_invariance.sh` compiles three
+vendor COLUMNS onto ONE backend, which catches a source that reads its
+vendor's constants and cannot catch contraction, denormal policy or `sqrt`
+rounding — those are the BACKEND's and not the column's. The standing proof
+that this distinction is not pedantic is NVIDIA's `sqrt`, which is not
+correctly rounded on 180,714 of 2^20 patterns, 176,577 of them on normals: a
+defect only its own silicon shows. Until `gemm/E1G_RUNBOOK.md`'s leg runs,
+the completion sentence in the charter has NOT been earned.
+
+This ordering was deliberate and is worth keeping in view when reading the
+file table below: clause 5 says the distinguishing gates come BEFORE
+optimizing, and a kernel written against an unreviewed oracle is what the
+charter forbids. So 1 and 2a were finished and green before a line of 2b was
+written.
+
+    # Phases 0-1, host only, no GPU:
     pixi run mojo run -I . gemm/mojo_only/gemm_oracle_check.mojo
 
     # both modes, the way the other identity gates do it:
     tools/with_build_lock.sh     pixi run mojo run -I . gemm/mojo_only/gemm_oracle_check.mojo
     tools/with_identical_mode.sh pixi run mojo run -I . gemm/mojo_only/gemm_oracle_check.mojo
 
-No pixi task is registered; the orchestrator registers it. Host only — no GPU
-is required to run any of this.
+    # Phase 2b, THE DEVICE GATES — needs a GPU and takes the build lock:
+    tools/with_identical_mode.sh pixi run mojo run -I . gemm/mojo_only/gemm_device_check.mojo
+
+    # Phase 3, the identity card and the three-column sweep:
+    tools/gemm_card.sh oracle                             # the reference card
+    MOJOLEARN_GEMM_CARD_HOST_CAP=1 tools/gemm_card.sh device   # the kernel's, same m/n cap
+    /usr/bin/python3 tools/identity_trace_diff.py <oracle.card> <device.card>
+    tools/gemm_card.sh compare                            # tree vs chain: must DIVERGE at P > 1
+    tools/gemm_column_invariance.sh
+
+    # The fold-ladder card (DEVIATION 533), one hash per tree LEVEL:
+    tools/gemm_ladder.sh emit
+    tools/gemm_ladder.sh sabotage FOLD_STRIDE
+
+    # Phase 4, the price harness. WIRING, not a published number:
+    tools/gemm_price.sh
+
+    # The three-vendor leg. UNRUN; read gemm/E1G_RUNBOOK.md first:
+    tools/gemm_remote_leg.sh
+
+No pixi task is registered; the orchestrator registers it.
+
+Last verified on this tree, 2026-08-23 (Apple M4, IDENTICAL): the oracle and
+device cards are byte-identical at 60 stages, 0 shapes skipped, and
+`tools/identity_trace_diff.py` reports `IDENTICAL` on them
+(`bench/results/gemm_card/2026-08-23_101058_verify/`); the fold ladder is
+GREEN, 57 records over 5 shapes, and its card diffs clean against the
+previous day's card at every level
+(`bench/results/gemm_ladder/2026-08-23_101159_ec944d8-dirty/`); the price
+harness's device arms build and run in both modes with `_plans_agree`
+holding at every swept `P` (no number kept); `gemm_device_check.mojo` is
+all green, 6 gates, in IDENTICAL and in FAST, with the `LEAF_ROTATE`
+sabotage build failing 3 of 6; `sh -n` passes on `tools/gemm_ladder.sh` and
+`tools/gemm_remote_leg.sh`. The ladder's `.bin` sidecars are not committed
+(none are, anywhere in `bench/results/`); `MOJOLEARN_GEMM_LADDER_DUMP=fold`
+regenerates them.
 
 ## WHY THIS DIRECTORY IS NOT CALLED `linalg`
 
@@ -54,9 +106,26 @@ exactly, because the collision is at the TOP level only.
 | `mojo_only/gemm_oracle.mojo` | the contract in code, and BOTH references. `gemm_oracle` (leaves + the fixed balanced tree) is NORMATIVE; `gemm_oracle_serial` (the whole-K ascending chain) is DIAGNOSTIC. Host, scalar, single-threaded, built from `identical_mul_add` and `ftz` so that it IS the contract rather than an opinion about it. The partition count is a PARAMETER, which is what makes the fixtures provable, and the fold tree's structure is a pure function of `P` that Phase 2b addresses from the device. |
 | `mojo_only/gemm_oracle_check.mojo` | the adversarial fixtures and their separation proofs. Every one refuses to pass unless the two alternatives produce different bits. |
 | `mojo_only/gemm_identical.mojo` | **PHASE 2b: the device kernel.** Eight execution plans over ONE numerical plan -- a flat thread-per-cell arm, five tiled arms that give one block an output tile and all of its `k` leaves (contract 13.5's second workspace escape: no global scratch at any shape), and two split-K arms that materialize named partials into a predetermined workspace. `contract_partition` is the only producer of `(L, P)` in the file and it takes `k`. Host entry point `identical_gemm(ctx, c, a, b, m, n, k, op)`. DEVIATIONS 530-532. |
-| `mojo_only/gemm_device_check.mojo` | the device gates: per-cell bits against `gemm_oracle` over 62 shapes, launch invariance over all eight plans, batch invariance across a dispatch boundary, and the host proof that the kernel's register fold IS `fold_balanced_tree` at every `P` in 1..2049. Five build-define sabotages, each shown to fail. |
+| `mojo_only/gemm_device_check.mojo` | the device gates: per-cell bits against `gemm_oracle` over 62 shapes, launch invariance over all eight plans, batch invariance across a dispatch boundary AND across batch composition (the same cell inside a 256-cell launch and a 262,144-cell launch; four independent GEMMs through one dirty shared workspace), and the host proof that the kernel's register fold IS `fold_balanced_tree` at every `P` in 1..2049. Six build-define sabotages, each shown to fail. |
 | `ported/linalg/contractions.mojo` | `raft/linalg/contractions.cuh`'s `KernelPolicy`, `ColKernelPolicy` and the three float policy families, parameterized. COPY, DO NOT IMPROVE. |
 | `PORTED_MAP.tsv`, `UNPORTED.tsv` | upstream -> ours, and what was not ported and why. |
+| `E1G_RUNBOOK.md` | the operator's document for the three-vendor leg (`tools/gemm_remote_leg.sh`): preconditions, the dry run, the guard, the result layout, and what a divergence means. **Says at its top that the leg HAS NOT RUN.** DEVIATION 536. |
+
+The lane's drivers live beside the other benches and tools, because the
+charter gives this lane `bench/gemm_*` and `tools/gemm_*` and nothing else
+outside `gemm/`:
+
+| file | what | deviation |
+|---|---|---|
+| `bench/gemm_shapes.mojo` | the ONE shape table, every row with provenance, tagged by NAME. Every card, ladder and price run reads it; none may add a row to go green. | -- |
+| `bench/gemm_card_main.mojo` | the `gemm.fp32.v1` identity card: per-shape input hashes and one output hash, three arms (`oracle`, `serial`, `device`), shapes capped in `m`/`n` and never in `k`. The device arm records the product straight off the device buffer. | DEVIATION 534 (the device arm) |
+| `tools/gemm_card.sh` | drives the card under the right mode, READS THE MODE BACK, and turns two cards into a verdict; `compare` asserts the tree and the chain DISAGREE wherever `P > 1`. | -- |
+| `tools/gemm_column_invariance.sh` | compiles the APPLE, NVIDIA and AMD vendor COLUMNS onto one backend and diffs the cards. Catches a source that reads its vendor's constants; cannot catch contraction, denormals or `sqrt` rounding, which are the backend's. | -- |
+| `bench/gemm_ladder_main.mojo` | **the fold-ladder card**: one hash per LEVEL of the reduction tree per shape, on the staged split-K plan (the only plan that materializes every node), plus two proofs per shape (top level == emitted output; device == `gemm_oracle` per cell). Turns "`.out` differs" into "level 1 moved, level 0 agrees". **GREEN on Apple**, 57 records over 5 shapes, `bench/results/gemm_ladder/`. | DEVIATION 533 |
+| `tools/gemm_ladder.sh` | `emit`, `diff` (localizes a divergence to a level), `sabotage NAME` (clean vs broken, localized; exit 3 when the ladder cannot see the defect). Reads the mode AND the sabotage witness back from the run. | DEVIATION 533 |
+| `bench/gemm_price_main.mojo` | the Phase 4 price harness over contract 13.6: fold in isolation, staged vs fused, end to end over the shape table, the leaf-loop seams, workspace, limiter inputs. Host arms and device arms; `_plans_agree` is ASSERTED under IDENTICAL. WIRING, not a published number. | DEVIATION 535 (the device arms) |
+| `tools/gemm_price.sh` | runs the harness in both modes for N rounds, reads the mode back, discards a mislabelled leg, reports medians with the A5 contamination banner. | -- |
+| `tools/gemm_remote_leg.sh` | **the guarded RunPod leg**: `tools/runpod_guard.sh arm` FIRST, one-hour hard cap, clean-tree refusal, same-commit cross-check, the remote card diffed against the Apple reference. **UNRUN. `sh -n` only.** | DEVIATION 536 |
 
 ## Upstream
 
@@ -502,6 +571,7 @@ contract-conforming one.
 | `PAD_PLUS_ZERO` (`+0.0` instead of the carry) | **FAIL 3/62** | ok | ok | ok |
 | `FOLD_SERIAL` (the superseded ascending fold) | **FAIL 46/62** | ok | ok | ok |
 | `NODE_ORDER` (partial addressed by `block_idx`) | FAIL 26/62 | FAIL 8 | FAIL 8 | ok |
+| `LEAF_ROTATE` (leaf start rotated by `block_idx`, every plan; added 2026-08-23 for the composition arms) | FAIL 32/62 | FAIL | **FAIL 12** (all five width arms at both `k`; in the shared-workspace loop the two GEMMs whose shape differs from the solo launch, 144/256 and 213/256 cells) | ok |
 
 `PAD_PLUS_ZERO` failing on only three shapes is the whole reason those three
 exist. `x + (+0.0) == x` on every finite float, every infinity and every NaN --
@@ -520,3 +590,80 @@ Under IDENTICAL all 62 agree. That is a SEPARATING measurement for the flush
 pin on Metal: the host does not flush and the hardware does, and `ftz` is what
 brings them to one array of bits. It is not the tie that
 `check-ieee-arith`'s first `fma` verdict was built on.
+
+---
+
+# BATCH COMPOSITION, 2026-08-23: the gate's two new arms and their sabotage
+
+The charter's launch-invariance bullet names "two batch compositions
+(compute the same cell inside a small launch and a large one)". GATE 3
+already varied `n` across 4, 64 and 256 and crossed a dispatch boundary; it
+did not reach a LARGE launch and it never composed several products. Two
+arms were added to `check_device_is_batch_invariant` rather than a new
+check, so one gate owns the property:
+
+| arm | what | clean, IDENTICAL | clean, FAST |
+|---|---|---|---|
+| `n: 4 vs 4096` | cell `(i, j)`, `i < 64, j < 4`, computed inside a `64 x 4` launch (256 cells, SPLITK) and inside a `64 x 4096` launch (262,144 cells, TILE 16x16); every cell of the overlap sits in a different block in the two launches | OK, 256/256 at `k = 4096` and `k = 4097` | OK |
+| shared-workspace loop | four independent GEMMs (`64x4`, `64x64`, `130x64`, `64x4`) enqueued back to back with NO synchronize between them through ONE workspace sized for the largest, so it is DIRTY for every launch after the first; each compared per cell to a solo `64 x 4` launch that had a clean workspace | OK, 4 of 4 at both `k` | OK |
+
+**The sabotage, `-D MOJOLEARN_GEMM_SABOTAGE_LEAF_ROTATE=1`** (a sixth
+switch in `gemm_identical.mojo`, compiled out in every build that does not
+name it): fold position `t` visits logical leaf `(t + block_idx.x) mod P` in
+every plan. The leaf arithmetic and the tree are untouched; only WHICH leaf
+stands at which tree position depends on the block a cell was scheduled in,
+which is exactly what a change of batch composition moves. Built and run,
+IDENTICAL:
+
+    FAIL n: 4 vs 4096: 144 of 256 overlapping cells CHANGED BITS with the launch width.
+         First at cell (1, 2): 64x4 gave 531.37036/0x4404d7b4   64x4096 gave 531.37054/0x4404d7b7
+    OK   loop[0] 64x4   -> SPLITK ... 256 overlapping cells identical to the solo launch
+    FAIL loop[1] 64x64  -> SPLITK ... 144 of 256 overlapping cells CHANGED BITS against the solo launch
+    FAIL loop[2] 130x64 -> TILE 16x16 ... 144 of 256 overlapping cells CHANGED BITS against the solo launch
+    OK   loop[3] 64x4   -> SPLITK ... 256 overlapping cells identical to the solo launch
+    check_device_is_batch_invariant [IDENTICAL]: 12 arms found a cell whose BITS depend on how many other cells shared the launch
+    gemm_device_check [IDENTICAL]: 3 of 6 gates FAILED (sabotage: LEAF_ROTATE)
+
+`loop[0]` and `loop[3]` PASS under the sabotage and that is the honest
+reading, not a gap: they are the solo launch's own shape, a rotation that is
+a pure function of the block index reproduces itself at the same geometry,
+and it is why the loop carries more than one shape. The oracle gate fails
+32 of 62 shapes under it (every `P > 1` shape whose cells reach a second
+block) and the launch-invariance gate fails as well.
+
+**Restored** by building without the define: all six gates green in
+IDENTICAL and in FAST, and the device card emitted after the kernel edit is
+byte-identical to the oracle card
+(`bench/results/gemm_card/2026-08-23_101058_verify/device_after_leaf_rotate_edit.card`
+against `oracle.card`), so the default build's bits did not move. **No
+deviation number was spent**: the kernel's shipped arithmetic is unchanged
+and the switch is dead code unless named.
+
+## The fold ladder's own sabotage, run the same day
+
+`tools/gemm_ladder.sh sabotage FOLD_STRIDE`
+(`bench/results/gemm_ladder/2026-08-23_101329_5c6932b-dirty/`): the clean
+card and the sabotaged card agree at `dims`, at the inputs and at `fold.L00`
+on every shape, and diverge from `fold.L01` upward on the four shapes with
+`P > 1`:
+
+    llama8b.qkv.t1       levels L00:= L01:X L02:X L03:X L04:X L05:X   out DIFFER
+    verdict  LEVEL 01 MOVED AND LEVELS 00..00 ARE IDENTICAL.
+    pca.transform.8192x4x4   levels L00:=   out same   (P = 1: no fold addition, contract 7.3)
+    5 shape(s) compared; DIVERGENCE LOCALIZED ABOVE
+
+That is the instrument doing the one thing the input/output card cannot:
+naming the LEVEL, so a cross-vendor divergence reads "the leaves agree and
+the fold moved" rather than "`.out` differs".
+
+---
+
+# ROW TEXT FOR THE IDENTITY LANE
+
+One row, in the ledger's table format, for `IDENTITY_PATHS.md`. This lane
+does not edit the ledger; the identity lane assigns the number.
+
+| n | path | what is vendor-dependent in their spelling | what we did | status |
+|---|---|---|---|---|
+| (next) | `gemm.fp32.v1`: `C = op(A) . op(B)`, FP32, NN/NT/TN, contiguous row-major, profile `mojolearn.identical.gemm.fp32.v1` (`gemm/IDENTICAL_FP32_CONTRACT.md`); entry `gemm/mojo_only/gemm_identical.mojo::identical_gemm` | RAFT's standalone GEMM is cuBLASLt (`raft/linalg/detail/gemm.hpp`), a closed library: its k-split, its summation order, its FMA contraction and its denormal handling are all the vendor's and change with the GPU, the block count and the batch. Our own FAST arm is MAX `linalg.matmul`, the same class of dependence. | CONSTRUCTION plus Apple's gates (DEVIATIONS 530-536). One numerical plan -- leaves of `L = contract_leaf_size(k)`, `P = contract_leaf_count(k)` from `k` alone, ascending `identical_mul_add` with `ftz` at seven seams inside a leaf, a fixed balanced adjacent-pair tree with bit-for-bit carries across leaves, no seed, `P == 1` folds nothing -- under EIGHT execution plans (FLAT; TILE 16x16/32, 8x32/32, 32x8/16-reversed, 16x16/8-transposed, 4x4/32-transposed; SPLITK; SPLITK_STAGED). Host oracle `gemm_oracle` (normative) and `gemm_oracle_serial` (diagnostic), eleven separating fixtures covering all seven clause-5 distinctions. Device gates: per-cell bits against the oracle at 62 shapes (`k` from 0 to 4,000,000, `P` from 0 to 1024, ragged and odd `P`, `-0.0` leaf partials); launch invariance over all eight plans; batch invariance across a dispatch boundary and across composition (`n` 4 vs 4096; four GEMMs through one dirty shared workspace). SIX sabotages each shown to fail (`LEAF_READS_LAUNCH`, `FOLD_STRIDE`, `PAD_PLUS_ZERO`, `FOLD_SERIAL`, `NODE_ORDER`, `LEAF_ROTATE`). The fold-ladder card (DEVIATION 533) hashes every tree level per shape and localizes `FOLD_STRIDE` to level 01 with level 00 identical. The identity card's oracle and device arms are byte-identical at 60 stages on Apple. Price harness wired, no number published. | **CLOSED ON APPLE ONLY.** The three-vendor run is OWED: `gemm/E1G_RUNBOOK.md` and `tools/gemm_remote_leg.sh` (DEVIATION 536) exist and have not run. "Bit-identical across GPUs" is not a measured sentence for this path until it does. |
+

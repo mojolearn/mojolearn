@@ -1,0 +1,2 @@
+== gemm.fp32.v1 card: arm oracle, IDENTICAL ==
+  arm oracle: [IDENTICAL] 60 stages, 0 shapes skipped -> bench/results/gemm_column_invariance/2026-08-23_085911/oracle_AMD_r2.card
