@@ -158,43 +158,61 @@ jobs:
             exit 1
           }
 
-      - name: Install python 3.10 through 3.14
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: |
-            3.10
-            3.11
-            3.12
-            3.13
-            3.14
+      # NOT setup-python, for the same reason as pixi above: on a self-hosted
+      # Mac the action writes its toolcache to /Users/runner, the hosted
+      # runner's home, and fails with "mkdir: /Users/runner: Permission
+      # denied" (first dispatch, run 32638952057, 2026-08-23). The runner
+      # machine carries the five interpreters (Homebrew python@3.10 through
+      # python@3.14); this step verifies each is on PATH and fails loudly if
+      # one is missing, because verify_wheel.sh would otherwise SKIP it and
+      # the "No interpreter may be skipped" step below would fail later with
+      # a less useful message.
+      - name: Use the machine's python 3.10 through 3.14
+        run: |
+          export PATH="/opt/homebrew/bin:$PATH"
+          echo "/opt/homebrew/bin" >> "$GITHUB_PATH"
+          missing=0
+          for v in 3.10 3.11 3.12 3.13 3.14; do
+            if command -v "python$v" >/dev/null 2>&1; then
+              echo "python$v: $(command -v "python$v") ($("python$v" --version 2>&1))"
+            else
+              echo "::error::python$v is not on this runner (brew install python@$v)"
+              missing=1
+            fi
+          done
+          exit $missing
 
       # Builds at --target-cpu apple-m1 --target-accelerator metal:1, stages
       # the MAX runtime dylibs, re-signs, checks the binary's minos against
       # the wheel tag, and runs the ISA disassembly. Each of those refuses to
       # continue rather than warning.
-      - name: Build the wheel
-        run: ./packaging/macos/build_release_wheel.sh
-
-      # NO --no-gpu. This runner has a real Apple GPU, so every interpreter
-      # installs the wheel into a clean venv and runs actual fits: planted
-      # clusters that must be recovered, and a point that must be its own
-      # nearest neighbor. This is the check TestPyPI 0.1.0a2 would have failed.
-      - name: Install and RUN on every claimed interpreter
-        run: ./packaging/macos/verify_wheel.sh
-
-      - name: No interpreter may be skipped
+      # build_release_wheel.sh builds all ten binaries (five extensions, two
+      # numeric modes), gates them, packs the wheel and then RUNS
+      # verify_wheel.sh itself: every interpreter installs the wheel into a
+      # clean venv and runs actual fits on every estimator family in both
+      # modes. NO --no-gpu; this runner has a real Apple GPU. The output is
+      # kept so the next step can refuse a SKIP, which is what a missing
+      # interpreter looks like and what "No interpreter may be skipped"
+      # exists to catch.
+      - name: Build the wheel, then install and RUN it on every claimed interpreter
         run: |
-          out=$(./packaging/macos/verify_wheel.sh)
-          echo "$out"
-          echo "$out" | grep -q '^SKIP' && {
+          set -o pipefail
+          ./packaging/macos/build_release_wheel.sh 2>&1 | tee build.log
+
+      - name: No interpreter may be skipped, in either numeric mode
+        run: |
+          grep -q '^SKIP' build.log && {
             echo "::error::an interpreter the package claims was not tested"
             exit 1
           }
           for v in 3.10 3.11 3.12 3.13 3.14; do
-            echo "$out" | grep -q "PASS python$v" || {
-              echo "::error::python$v is claimed but did not pass"; exit 1; }
+            for mode in fast identical; do
+              grep -q "^PASS python$v \[$mode\]" build.log || {
+                echo "::error::python$v [$mode] is claimed but did not pass"; exit 1; }
+            done
           done
-          exit 0
+          grep -q '^all interpreters passed' build.log
+          rm -f build.log
 
       - name: Metadata check
         run: pixi run -e pkg twine check python/dist/*.whl

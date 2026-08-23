@@ -362,6 +362,15 @@ cell("et_clf_maxleaf", et("clf", max_leaf_nodes=64, _y="y_clf", **ET_BASE))
 cell("et_reg_mid", et("reg", min_impurity_decrease=0.001, _y="y_reg",
                       **ET_BASE))
 cell("et_clf_entropy", et("clf", criterion="entropy", _y="y_clf", **ET_BASE))
+# DEVIATION 459/460 (2026-08-23): the two REFUSED= cells above became running
+# cells; these three join them -- sklearn's alias of entropy (must hash equal
+# to et_clf_entropy), the regressor's bootstrap, and bootstrap with sklearn's
+# max_samples resolved to a count (0.5 -> 10000 rows per tree).
+cell("et_clf_logloss_alias", et("clf", criterion="log_loss", _y="y_clf",
+                                **ET_BASE))
+cell("et_reg_bootstrap", et("reg", bootstrap=True, _y="y_reg", **ET_BASE))
+cell("et_clf_bootstrap_maxsamples", et("clf", bootstrap=True, max_samples=0.5,
+                                       _y="y_clf", **ET_BASE))
 
 # --- Random Forest ---------------------------------------------------------
 RF_BASE = dict(n_estimators=10, max_depth=8, random_state=7)
