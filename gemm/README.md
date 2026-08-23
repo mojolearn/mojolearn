@@ -53,6 +53,8 @@ exactly, because the collision is at the TOP level only.
 | `IDENTICAL_FP32_CONTRACT.md` | **the deliverable.** Thirteen sections: the v1 version rules, dtypes and the FP32 accumulation requirement, layout, the three orientations, the multiply-add policy, the flush policy and its seven seams, the logical k partition, the evaluation order and the fold tree's node addressing, ragged k and the degenerate `P`, NaN / infinity / signed zero, the exclusions, what is NOT promised, a clause-to-code index, and the clause-6 performance ANALYSIS. |
 | `mojo_only/gemm_oracle.mojo` | the contract in code, and BOTH references. `gemm_oracle` (leaves + the fixed balanced tree) is NORMATIVE; `gemm_oracle_serial` (the whole-K ascending chain) is DIAGNOSTIC. Host, scalar, single-threaded, built from `identical_mul_add` and `ftz` so that it IS the contract rather than an opinion about it. The partition count is a PARAMETER, which is what makes the fixtures provable, and the fold tree's structure is a pure function of `P` that Phase 2b addresses from the device. |
 | `mojo_only/gemm_oracle_check.mojo` | the adversarial fixtures and their separation proofs. Every one refuses to pass unless the two alternatives produce different bits. |
+| `mojo_only/gemm_identical.mojo` | **PHASE 2b: the device kernel.** Eight execution plans over ONE numerical plan -- a flat thread-per-cell arm, five tiled arms that give one block an output tile and all of its `k` leaves (contract 13.5's second workspace escape: no global scratch at any shape), and two split-K arms that materialize named partials into a predetermined workspace. `contract_partition` is the only producer of `(L, P)` in the file and it takes `k`. Host entry point `identical_gemm(ctx, c, a, b, m, n, k, op)`. DEVIATIONS 530-532. |
+| `mojo_only/gemm_device_check.mojo` | the device gates: per-cell bits against `gemm_oracle` over 62 shapes, launch invariance over all eight plans, batch invariance across a dispatch boundary, and the host proof that the kernel's register fold IS `fold_balanced_tree` at every `P` in 1..2049. Five build-define sabotages, each shown to fail. |
 | `ported/linalg/contractions.mojo` | `raft/linalg/contractions.cuh`'s `KernelPolicy`, `ColKernelPolicy` and the three float policy families, parameterized. COPY, DO NOT IMPROVE. |
 | `PORTED_MAP.tsv`, `UNPORTED.tsv` | upstream -> ours, and what was not ported and why. |
 
@@ -289,26 +291,63 @@ All four were caught by the checks' own refusals, not by inspection.
 
 # Reported, not fixed — defects in files this lane does not own
 
-## 1. RETRACTED: `core/gemm.mojo`'s two pinned kernels are RIGHT at `P == 1`
+## 1. `core/gemm.mojo`'s two pinned kernels LAUNDER a `-0.0` at `P == 1`
 
-**Phase 1 reported a defect here and the report was wrong. It is deleted, not
-amended.** The claim was that `pinned_gemm_nt_kernel:154` and
-`pinned_gemv_n_kernel:183` storing `ftz(acc)` with no fold diverged from the
-then-current contract section 9.2(b), which required an unconditional one-term
-`+0.0`-seeded fold, and the proposed fix was
-`ftz(Float32(0.0) + ftz(acc))` in each.
+**AMENDED 2026-08-23 BY PHASE 2b, AND THE SENTENCE THAT WAS WRONG IS DELETED
+RATHER THAN LEFT BESIDE ITS CORRECTION.** This entry used to read *"RETRACTED:
+`core/gemm.mojo`'s two pinned kernels are RIGHT at `P == 1`"*, and it stated
+as fact that `pinned_gemm_nt_kernel` and `pinned_gemv_n_kernel` store
+`ftz(acc)` with no fold. **They do not.** As of this checkout they store
 
-**Under `mojolearn.identical.gemm.fp32.v1` the proposed change would BE the
-defect.** Clause 3 of Andrew's Phase 2 call: *"P=1 performs no fold addition
-and returns the one leaf through the declared output seam."* Those kernels run
-at `P == 1`. `ftz(acc)` is exactly the contract. Fixture F6a-P1 now separates
-the two spellings in the opposite direction, and the v1 answer is the one
-those kernels already compute.
+    z.unsafe_store(cell, ftz(Float32(0.0) + ftz(acc)))    core/gemm.mojo:164
+    z.unsafe_store(i,    ftz(Float32(0.0) + ftz(acc)))    core/gemm.mojo:196
 
-**No edit is requested in `core/gemm.mojo` for this reason.** What remains
-true is a different and larger statement, and it is contract section 7.6
-rather than a defect report: both kernels compute `gemm_oracle_serial` — the
-DIAGNOSTIC reference — whenever `k > K_LEAF_MIN`, because they do not
+which is the `+0.0`-seeded one-term fold the Phase 1 report PROPOSED, under
+the superseded section 9.2(b). Somebody applied it. So the retraction was
+written against a file that no longer said what it described, and a reader
+following this section would have concluded that no edit was needed when one
+is.
+
+**MEASURED, not read.** `OP_NT`, `m = n = 4`, `k = 128` (so `P == 1`), with
+`A`'s rows built by `gemm_device_check.mojo::_minus_zero_leaves` so the single
+leaf partial is exactly `-0.0`, and `B` all ones:
+
+    gemm_oracle          cell (0,0) = 0x80000000   (-0.0)
+    core/gemm.mojo::gemm_nt          = 0x00000000   (+0.0)
+    gemm/mojo_only/gemm_identical    = 0x80000000   (-0.0)
+
+**Why that is a divergence from v1.** Contract section 7.3: *"`P == 1`
+performs NO fold addition. The single leaf partial reaches the output through
+the declared output seam (5g) and through nothing else."* Section 9.2(f)
+states the same conclusion in the opposite direction: *"Under v1 that report
+is wrong and the proposed change would be the defect."* `x + (+0.0)` is the
+identity on every float32 except `-0.0`, where it is `+0.0` — so the
+`Float32(0.0) +` is bitwise inert everywhere except on exactly the value
+section 9.2 is about, and there it destroys the sign the v1 fold is defined to
+preserve.
+
+**THE EXACT CHANGE REQUESTED, and this lane does NOT make it** —
+`core/gemm.mojo` is the identity / E2 lane's file (`IDENTICAL_GEMM_PLAN.md`,
+LANE BOUNDARY item 1) and rows 27 and 28 are certified on its current bits:
+
+    core/gemm.mojo:164   ftz(Float32(0.0) + ftz(acc))  ->  ftz(acc)
+    core/gemm.mojo:196   ftz(Float32(0.0) + ftz(acc))  ->  ftz(acc)
+
+and the comment blocks above each store (`:152-163` and `:193-195`) cite
+section 9.2(b) as *"seeding at `+0.0` and always folding is what keeps the
+SIGN OF A ZERO from being a function of the partition count"*. **That sentence
+is now false and should be deleted, not amended**: v1's tree has no seed, the
+sign of a zero is a pure function of the input bits, `k` and the profile
+(section 9.2(c)), and `P == 1` is the case where the rule and the
+"optimization" coincide.
+
+It is a BIT-MOVING change on a certified path — it moves exactly one value,
+`-0.0` to `+0.0`, and only where a leaf accumulator flushes negative subnormal
+— so it needs the identity lane's sign-off before a line is edited.
+
+What is unchanged and is a larger statement than this one, contract section
+7.6 rather than a defect report: both kernels compute `gemm_oracle_serial` —
+the DIAGNOSTIC reference — whenever `k > K_LEAF_MIN`, because they do not
 partition `k` at all. Reconciling that is a bit-moving migration of certified
 behaviour, it needs the identity lane's agreement, and it is the last step of
 Phase 2, not an incidental one.
@@ -405,3 +444,79 @@ and the bits are the oracle's. Contract section 13.4 argues that at
 `MAX_LEAVES = 1024` the whole fold fits in one threadgroup on every target, so
 the multi-launch cost clause 6 warns about need not arise at any legal `k`.
 That is an argument, not a measurement; section 13.6 lists what to measure.
+
+---
+
+# PHASE 2b LANDED, 2026-08-23: the device kernel and its gates
+
+`gemm/mojo_only/gemm_identical.mojo` and `gemm/mojo_only/gemm_device_check.mojo`.
+DEVIATIONS 530 (the register-stack realization of the fold tree), 531 (the
+fused one-block-owns-all-k arm as the default and the workspace escape it is),
+532 (the split-K arms and the level-wise fold over the normative `(d, q)`
+addressing).
+
+## The workspace escape, contract 13.5
+
+**Chosen: the SECOND escape, "let one block own an output tile and ALL of its
+`k` leaves".** The default arm is a `TM x TN` tiled kernel in which one thread
+owns one output cell, walks every one of its `k` products, and folds its own
+`P - 1` nodes in registers. `identical_gemm_workspace_floats` returns **0** for
+it at every `m`, `n` and `k` -- the 2 GB at `4096 x 4096 x 4096` and the 64 GB
+at `k = 4,000,000` that 13.5 tabulates do not arise, because no partial is ever
+materialized anywhere.
+
+The split-K arms are kept for 13.5's opposite shape -- small `m n`, enormous
+`k`, which is the shipped Gram aspect -- where the fused arm has only `m * n`
+threads of parallelism. `choose_gemm_plan` selects between them on `m`, `n` and
+`k`, which contract 6.1 explicitly permits ("the EXECUTION plan may look at
+`m`, `n`, the device, the occupancy and anything else it likes"). It returns a
+plan id and nothing else; every plan then calls `contract_partition(k)`.
+
+## Why launch geometry cannot reach the arithmetic
+
+Three structural facts, not three promises:
+
+1. **One producer of `(L, P)`.** `contract_partition(k)` takes `k`. Every
+   kernel receives `L` and `P` as arguments and has no other route to a leaf
+   boundary; `block_dim`, `grid_dim`, `block_idx`, `thread_idx`, `m` and `n`
+   appear in no expression that reaches `_leaf_bounds` or a tree level.
+2. **No float crosses a thread boundary** in the FLAT and TILE plans.
+   Threadgroup memory carries OPERANDS -- a bit-exact copy of `A` and `B` --
+   never partial sums. There is no cross-thread combination for a block size to
+   reorder.
+3. **The fold's merge rule is a pure function of the leaf index.** The register
+   stack merges when a level is occupied, which is exactly when the contract's
+   tree pairs; an unpaired leaf never merges, which is the CARRY realized as no
+   instruction at all.
+
+## The gate / sabotage matrix, IDENTICAL, 2026-08-23
+
+Two of the five defects are INVISIBLE to both invariance gates, and that is the
+point of the table: a launch-invariant kernel is not the same thing as a
+contract-conforming one.
+
+| sabotage | oracle | launch-inv | batch-inv | host fold |
+|---|---|---|---|---|
+| `LEAF_READS_LAUNCH` (`L` scaled by the block size) | FAIL 50/62 | FAIL 13 | FAIL 6 | ok |
+| `FOLD_STRIDE` (`pinned_block_sum`'s pairing) | FAIL 49/62 | FAIL 8 | FAIL 6 | **FAIL** |
+| `PAD_PLUS_ZERO` (`+0.0` instead of the carry) | **FAIL 3/62** | ok | ok | ok |
+| `FOLD_SERIAL` (the superseded ascending fold) | **FAIL 46/62** | ok | ok | ok |
+| `NODE_ORDER` (partial addressed by `block_idx`) | FAIL 26/62 | FAIL 8 | FAIL 8 | ok |
+
+`PAD_PLUS_ZERO` failing on only three shapes is the whole reason those three
+exist. `x + (+0.0) == x` on every finite float, every infinity and every NaN --
+it differs on exactly ONE value, `-0.0` -- so the first version of the oracle
+gate ran 42 shapes against this sabotage and **exited 0**. The fixtures that
+catch it build every leaf partial to be exactly `-0.0` through `ftz` of a
+negative subnormal, which is the only route contract 9.2(a) leaves open, and
+`_minus_zero_case` REFUSES ITSELF if the oracle does not come back
+`0x80000000`.
+
+## The `ftz` pin, reached on a device
+
+Under FAST, six of the 62 shapes -- the four `-0.0` fixtures and two whose
+every product is subnormal -- differ between the host oracle and the device.
+Under IDENTICAL all 62 agree. That is a SEPARATING measurement for the flush
+pin on Metal: the host does not flush and the hardware does, and `ftz` is what
+brings them to one array of bits. It is not the tie that
+`check-ieee-arith`'s first `fma` verdict was built on.
