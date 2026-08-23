@@ -1,282 +1,222 @@
 # mojolearn
 
-**GPU machine-learning algorithms in Mojo, running on hardware the originals
-cannot reach.**
+**GPU machine learning in Mojo, on hardware the originals cannot reach.**
 
-Every line here is written in this repository. What it mirrors is the DESIGN
-of the implementations that already got these algorithms right, and the rule
-for doing that is in `PORTING_RULES.md`: follow their algorithm, keep their
-control plane and their data plane, keep what they do on the GPU on the GPU
-and what they do on the host on the host, and adapt to Mojo only where the
-toolchain forces it. The mirroring is deliberate. A port that drifts cannot be
-checked against the original, and this one is checked against it constantly.
+mojolearn ports the GPU implementations that established today's tree and
+classical algorithms, CatBoost, cuVS, cuML and RAFT, into one Mojo source
+that runs on Apple silicon through Metal and, from the same source, on NVIDIA
+through CUDA and AMD through HIP. Every estimator has two numeric modes.
+`FAST` is the upstream's shipped behavior. `IDENTICAL` produces bit-identical
+models on every supported GPU vendor, with a per-stage certificate that
+proves it rather than a hash that hopes so.
 
-The point is the target. Every design below was written for CUDA, and none of
-those implementations runs on Apple silicon at all. This one does, from a
-single source that also targets CUDA and ROCm.
+The scikit-learn shapes are kept. The defaults follow the upstream each
+algorithm mirrors, and every place that differs from scikit-learn is named
+on the class.
 
-Designs mirrored, table corrected 2026-08-20. It said "two upstreams so far"
-and listed two. There are five, and the omission was not cosmetic: cuML had no
-attribution section in `NOTICE` at all, which is an Apache-2.0 section 4
-obligation, and the MIT-licensed FAISS code RAFT vendors had no notice
-anywhere. Both are fixed; see `NOTICE`.
+## Install in five minutes
 
-| directory | upstream | what |
+Requirements are a Mac with Apple silicon, macOS 11 or later, Python 3.10
+through 3.14, and numpy. There is no CPU path; every estimator runs on the
+GPU.
+
+```sh
+python3 -m venv .venv && source .venv/bin/activate
+pip install mojolearn
+```
+
+```python
+import numpy as np
+import mojolearn
+
+rng = np.random.default_rng(0)
+X = rng.random((100_000, 20), dtype=np.float32)
+y = (X[:, 0] + X[:, 1] > 1.0).astype(np.float32)
+
+gb = mojolearn.GradientBoosting(loss="Logloss", n_estimators=200, max_depth=6)
+gb.fit(X, y)
+print(gb.predict_proba(X[:5]))
+
+rf = mojolearn.RandomForestClassifier(n_estimators=100, max_depth=12, random_state=7)
+print(rf.fit(X, y).predict(X[:5]))
+
+km = mojolearn.KMeans(n_clusters=8).fit(X)
+print(km.cluster_centers_.shape, mojolearn.numeric_mode())
+```
+
+To train the bit-identical way, set one environment variable before the
+import. Nothing is rebuilt; the wheel carries both binary sets.
+
+```sh
+MOJOLEARN_NUMERIC_MODE=identical python train.py
+```
+
+`mojolearn.numeric_mode()` reports the mode that actually loaded, read back
+from the binary, so a run cannot be mislabeled by accident.
+
+## What is in 0.1
+
+| estimator | mirrors | what it does | FAST | IDENTICAL |
+|---|---|---|---|---|
+| `GradientBoosting` | CatBoost GPU | oblivious (symmetric) trees, 12 losses plus MultiClass, depthwise and lossguide growth, CTRs, eval sets, overfitting detector, save and load | yes | yes |
+| `RandomForestClassifier`, `RandomForestRegressor` | cuML | quantile-split forest, with-replacement bootstrap, gini, entropy, poisson, gamma, inverse gaussian | yes | yes |
+| `ExtraTreesClassifier`, `ExtraTreesRegressor` | cuML | extremely randomized trees, gini, entropy, mse | yes | yes |
+| `KMeans` | cuVS | k-means with k-means++ init; `n_init` defaults to cuVS's 1, not scikit-learn's 10 | yes | yes |
+| `NearestNeighbors` | cuVS, RAFT, FAISS | brute-force k-NN, fused L2, ball cover, top-k selection | yes | yes |
+| `DBSCAN` | cuML, RAFT | epsilon neighborhoods, label propagation, border and noise points | yes | yes |
+| `PCA`, `TruncatedSVD` | cuML, RAFT | eigen and SVD decompositions, transform and inverse transform | yes | yes |
+| `LinearRegression` | RAFT | ordinary least squares (`lstsqEig`) | yes | yes |
+
+Estimators save to and load from `.npz` files, and a model fitted on a Mac
+loads and predicts identically on an NVIDIA or AMD box (95 of 95 models,
+probabilities included, in the E2 certificate below).
+
+Not on the surface in 0.1, named rather than omitted: `MultiClassOneVsAll`
+from Python, Intel and Qualcomm GPU columns, and a CPU fallback of any kind.
+
+## The two numeric modes
+
+`FAST` is the default. Histograms flush through float atomics, library
+reductions follow the hardware warp width, and the last bits of a model can
+move between two runs on the same device. That is CatBoost's shipped
+behavior and it is the fastest the hardware goes.
+
+`IDENTICAL` pins every pathway that can move a bit. The enumeration of those
+pathways is [IDENTITY_PATHS.md](IDENTITY_PATHS.md), 32 rows, each with what
+`IDENTICAL` does about it and the status of that closure. The mode makes
+exactly three kinds of move, pin a machine-derived parameter to a frozen
+floor, replace an order-dependent operation with a fixed-point or fixed-shape
+one, or refuse by name. There is no fourth move and no "usually fine".
+
+### Identity coverage, measured on three vendors
+
+One source tree, one commit, byte-identical inputs proven by hash, and the
+device plus toolchain as the only variable. Every fit writes an identity
+trace card, one hash per training stage, and cards are diffed stage by stage.
+
+| certificate | what was compared | Apple M4 (Metal) vs NVIDIA H100 (CUDA) | Apple M4 vs AMD MI325X (HIP) |
+|---|---|---|---|
+| E2, the sub-feature matrix ([E2_RESULTS.md](E2_RESULTS.md)) | 99 configurations across all 13 GBDT losses, 4 bootstraps, 4 score functions, both searchers, CTRs, NaN modes, 5 bin widths, 3 depths, 13 Extra Trees and 18 Random Forest configurations, plus depthwise, lossguide, one-vs-all and feature-parallel | 93 identical on the full card, 2 identical on the host arm, 4 refused with the same message, **0 divergent** | 93, 2, 4, **0 divergent** |
+| E1, one configuration per family ([E1_RESULTS.md](E1_RESULTS.md)) | Extra Trees classification, Random Forest regression, symmetric GBDT RMSE and Logloss, 99 to 302 stages per fit | ET and RF identical on every stage; GBDT RMSE predictions identical | ET, RF and GBDT RMSE identical on every stage |
+| Train here, infer there | 95 models fitted on the Mac, loaded and predicted on the box | 95 of 95 prediction hashes equal | 95 of 95 |
+
+The Logloss row in E1 diverged on a device exp and log seam that the ledger
+had named before any hardware ran, and round 2 of E2 closed that class for
+the whole matrix. The unsupervised estimators have their own ledger rows and
+Apple to AMD cards ([UNSUPERVISED_IDENTITY.md](UNSUPERVISED_IDENTITY.md)).
+
+Reproduce a certificate with the runbook in [E1_RUNBOOK.md](E1_RUNBOOK.md).
+On the Mac, one fit and its card is
+
+```sh
+pixi run python tools/e1_traced_fit.py --fit et_clf --out cards/mac
+```
+
+and the comparison against a card from another box is
+`python tools/identity_trace_diff.py cards/mac/et_clf.card cards/box/et_clf.card`.
+
+## Hardware
+
+| GPU | wheel | source build | certificates |
+|---|---|---|---|
+| Apple silicon (Metal) | yes, macOS arm64, `pip install mojolearn` | yes | E1, E2 |
+| NVIDIA (CUDA) | no wheel yet | yes, `tools/e2_remote_leg.sh` | E1, E2 on H100 |
+| AMD CDNA (HIP) | no wheel yet | yes, same script | E1, E2 on MI325X and MI300X |
+
+Support is one source; validation is what the certificates say and nothing
+more. Performance has been measured on exactly one machine, an M4 laptop
+with 10 cores and 16 GB, and the numbers below carry that.
+
+## Benchmarks
+
+Method first. We run NVIDIA's gbm-bench harness unmodified except for
+registering our arms and letting its imports survive a machine with no CUDA.
+Their timing code, their datasets, their metrics, their parameters for their
+arms. On Apple silicon none of the established libraries has a working GPU
+path, so the comparison is our Metal path against their CPU path, on the
+same machine, all arms of one invocation interleaved in one process because
+the box drifts across thermal windows. Every arm records a sha256 of its
+prediction vector beside its timing, so determinism is visible in the results
+themselves. The reproduction command is
+
+```sh
+pixi run -e gbmbench bash bench/external/run_gbm_bench.sh year 500 gbdt
+pixi run -e gbmbench bash bench/external/run_gbm_bench.sh covtype 100 forest
+```
+
+and the results and the machine record land in `bench/results/gbm_bench_*`.
+These are the last interleaved runs of 2026-08-22 on the M4 described above.
+
+| dataset, arm pair | ours (Metal) | theirs (CPU, same M4) | speed | accuracy |
+|---|---|---|---|---|
+| year, symmetric GBDT 500 rounds, vs CatBoost CPU | 11.9 s | 13.6 s | 1.14x | MAE 6.261 vs 6.263 |
+| higgs, symmetric GBDT, vs CatBoost CPU | 131.5 s | 177.8 s | 1.35x | AUC 0.822 vs 0.830, an open parity gap |
+| covtype, Extra Trees 100 trees, vs scikit-learn on 10 cores | 3.7 s | 5.4 s | 1.46x | 0.647 vs 0.645 |
+| covtype, Random Forest, vs scikit-learn on 10 cores | 4.0 s | 5.3 s | 1.33x | 0.722 vs 0.720 |
+| higgs, Extra Trees, vs scikit-learn on 10 cores | 39.0 s | 132.4 s | 3.4x | AUC 0.709 vs 0.700 |
+| higgs, Random Forest, vs scikit-learn on 10 cores | 47.1 s | 310.3 s | 6.6x | AUC 0.775 vs 0.775 |
+
+Six interleaved year runs over the day ranged from 1.14x to 1.68x as the
+laptop warmed; the table shows the last one, not the best one. The CatBoost
+pair compares symmetric trees only, because LightGBM has no symmetric mode.
+The higgs GBDT accuracy gap is stated because it is there.
+
+## Limitations and refusals
+
+- GPU only. No CPU fallback exists and none is planned for this release.
+- The wheel is macOS arm64. CUDA and HIP are source builds.
+- Validated on one M4 for performance; correctness and identity validated on
+  the M4, an H100, an MI325X and an MI300X through the certificates above.
+- `IDENTICAL` refuses rather than guessing. A GPU column that misses the
+  frozen identity floor, a k-NN arm that needs a warp primitive a column does
+  not have, or `k > 256` on the identical k-NN selector raise with a named
+  reason instead of returning a model that might not match.
+- `KMeans.n_init` is 1. `GradientBoosting` defaults are CatBoost's.
+- No Intel or Qualcomm GPU column has hardware to build for yet.
+- Numerics are float32 on the device; no float64 device path.
+
+## Provenance and licensing
+
+Every line of Mojo here was written in this repository and Andrew Hendel
+holds its copyright. What it mirrors is the design of the upstreams, file for
+file where the toolchain allows, under the rule copy, do not improve, so that
+a port can be checked against its original. That makes the ported
+directories derivative works under Apache-2.0 section 4, and
+[NOTICE](NOTICE) carries each upstream's attribution. `PORTED_MAP.tsv` maps
+every ported file to its origin and status. This is not a clean-room
+reimplementation and must not be described as one.
+
+| directory | upstream | license |
 |---|---|---|
-| `gbdt/`, `mojo_only/` | CatBoost | the GPU oblivious (symmetric) tree learner, control plane included |
-| `cluster/` | cuVS | k-means |
-| `neighbors/` | cuVS, RAFT, FAISS (MIT) | brute-force k-NN, the fused L2 kernel, ball cover, top-k selection |
-| `dbscan/` | cuML, RAFT | DBSCAN, epsilon-neighborhood, label merging |
-| `decomposition/` | cuML, RAFT | PCA and truncated SVD |
-| `glm/` | RAFT | ordinary least squares (`lstsqEig`, cuML's `olsFit` algo=1) |
+| `gbdt/` | CatBoost, YANDEX LLC | Apache-2.0 |
+| `ensemble/`, `extratrees/`, `dbscan/`, `decomposition/` | cuML, NVIDIA | Apache-2.0 |
+| `cluster/`, `neighbors/` | cuVS, RAFT, NVIDIA | Apache-2.0 |
+| `neighbors/` (warp select) | FAISS, Meta | MIT |
+| `glm/` | RAFT, NVIDIA | Apache-2.0 |
 
-Every derivation is recorded per file in the `PORTED_MAP.tsv` beside each
-section, with a status of transliterated, partial, replaced, or substitute,
-and an `UNPORTED.tsv` naming what was deliberately left out.
+License Apache-2.0, in [LICENSE](LICENSE). [AUTHORS.md](AUTHORS.md) records
+who wrote what. Not affiliated with, endorsed by, or sponsored by YANDEX LLC,
+NVIDIA, Meta, or Modular, Inc. MAX and Mojo are trademarks of Modular, Inc.
+used under license.
 
-Renamed from `catboost-symmetric-trees` on 2026-08-19, because it stopped
-being one port.
+## Citing
 
-## The CatBoost port
-
-**GPU path only. No CPU path. Nothing from mojotrees.**
-
-## Why this exists
-
-mojotrees is 2.5x behind LightGBM and 10x behind CatBoost per symmetric tree,
-and a full day of measurement established that the gap is not the inner loop:
-our histogram kernel is about 2x FASTER per update than CatBoost's.
-
-That paragraph used to end with a claim about launch count, that this port
-issues "73 command buffers and 1 host sync per tree". **It is false and it is
-deleted rather than annotated**, per the standing rule that a document a
-result falsifies is part of the result.
-
-This section then said, for a day, that the deficit was the CONTROL PLANE.
-**That is falsified too, by measurement, and is deleted under the same
-rule.** On 2026-08-19 the counters read 77 launches and 12 drains per
-depth-6 tree at 800k x 100 (12 is exactly CatBoost's own two-per-level
-discipline), and pricing them on this Metal device (one launch+drain
-191 us, one undrained launch 23 us) puts ALL dispatch at 3.8 ms of the
-measured 41.7 ms fixed cost per tree. **Nine percent.** The other ~38 ms is
-KERNEL TIME on work whose size does not depend on the rows: the depth-6
-histogram footprint is 64 leaves x 100 features x 255 bins x 2 stats =
-3.26M cells, zeroed, flushed, scanned, subtracted and scored every level.
-The deficit is row-independent KERNEL WORK, and the per-row work is also
-2.1x CatBoost CPU's (103 vs 48.6 us per 1000 rows), so no dataset size
-closes the gap by itself. A per-kernel itemization taken the same day put
-the histogram ACCUMULATE at ~68 ms of the 124 at 800k, found the score
-kernel launched at grid (1,1,1) where CatBoost launches
-`min(ceil(binFeatureCount/256), 64)` blocks (`greedy_search_helper.cpp:439`),
-and fixing that one dispatch took the curve to {100k: 42.4, 200k: 48.2,
-400k: 63.7, 800k: 107.1} ms/tree, splits still 48/48 against the oracle. A
-90 GB/s streaming probe on the same buffers cleared the substrate: MAX's
-Metal path delivers bandwidth, and what remains is kernel geometry. `HOST_AND_DEVICE.md` still carries the rule for
-what may be done about the control plane; the control plane is just no
-longer where the time is.
-
-What that day also established is that mojotrees' own code and its own
-instruments cannot be trusted to say why. Four features were found built,
-tested, documented and unreachable. A static attribution predicted a 41
-percent win and measured minus 53. A traffic model predicted 20x and measured
-2.9x. The phase profiler answered `no span is device time`.
-
-So the experiment is to stop reasoning about our implementation and
-**transliterate theirs**, in a tree where our architecture cannot leak in.
-
-## The one rule
-
-**COPY. DO NOT IMPROVE.**
-
-Port what CatBoost does, in the order and shape it does it, including the
-parts that look wrong. Every deviation is a confound: if this ends up slow we
-must be able to say it is their design that is slow here and not our
-interpretation of it. Where Mojo cannot express something (see PORTING.md),
-write the closest thing and MARK IT, rather than substituting a better idea.
-
-Specifically forbidden in this tree:
-- reading mojotrees for guidance on what a stage should do
-- "while I am here" restructuring
-- our per-leaf histogram model, our row-list model, our three-plane cell
-- optimizing before the whole thing runs
-
-## Scope
-
-CatBoost commit `54a8143a`, `catboost/cuda/`. Symmetric (oblivious) growth,
-GPU, pointwise objectives.
-
-**The tree mirrors CatBoost's tree, file for file, with their constant `catboost/cuda/` prefix dropped**, so a reviewer can put
-`gbdt/methods/.../hist_binary.mojo` beside their `hist_binary.cu` and diff
-them, and so "did we port this file?" is answered by `ls` rather than by
-reading. Anything with no CatBoost counterpart lives under `mojo_only/` and
-has to justify its existence there.
-
-| stage | CatBoost source | port |
-|---|---|---|
-| feature grouping and bit packing | `gpu_data/grid_policy.h` | `gbdt/gpu_data/grid_policy.mojo` |
-| leaf as a contiguous range | `cuda_util/gpu_data/partitions.h` | `gbdt/cuda_util/gpu_data/partitions.mojo` |
-| histogram, binary (32 features/ui32) | `methods/greedy_subsets_searcher/kernel/hist_binary.cu` | `gbdt/methods/greedy_subsets_searcher/kernel/hist_binary.mojo` |
-| histogram, half-byte (8/ui32) | `.../hist_half_byte.cu`, `point_hist_half_byte_template.cuh` | `.../kernel/hist_half_byte.mojo` |
-| histogram, one-byte (4/ui32) | `.../hist_one_byte.cu`, `compute_hist_loop_two_stats.cuh` | `.../kernel/hist_one_byte.mojo` |
-| bin prefix scan, sibling subtraction | `.../histogram_utils.cu` | `.../kernel/histogram_utils.mojo` |
-| score and argmax | `.../compute_scores.cu` | `.../kernel/compute_scores.mojo` |
-| in-leaf reorder after a split | `.../split_points.cu` | `.../kernel/split_points.mojo` |
-| the level loop | `methods/greedy_subsets_searcher/structure_searcher_template.h`, `split_properties_helper.cpp` | `.../greedy_subsets_searcher/structure_searcher_template.mojo` |
-
-## The one thing here that is NOT a port: `mojo_only/numerics.mojo`
-
-CatBoost ships one GPU backend and accepts a non-deterministic answer: its
-histogram flushes through `atomicAdd` on `float`, so two runs of the same fit
-on the same device can differ in the last bits. We ship Metal, CUDA and HIP
-from one source, so we need "the same fit gives the same model" to be
-available.
-
-The design is a table: **bit-identical**, apple, nvidia, amd (CDNA),
-amd-rdna, and -- declared 2026-08-21, with no target to build for yet --
-qualcomm and intel. The columns are **the GPUs people train on**, which is
-also why AMD is two of them: CDNA runs wave64 and RDNA wave32, and one column
-resolved a 512-thread block for parts whose lane group is 32.
-The bit-identical column is not a mode flag, it is a real column holding the
-value every ADMITTED vendor can meet, and it can be printed and diffed
-against a device column to show exactly what identity costs there.
-
-**It is a FROZEN, VERSIONED FLOOR and no longer the intersection of whoever
-is in the table.** As an intersection it was a tripwire: adding one vendor
-with a smaller shared-memory budget would have shrunk the safe column, which
-changes the block size, the replication factor, and therefore which partial
-sums combine -- so every model ever produced under `IDENTICAL` would have
-stopped matching the ones produced afterwards, with no error and no version
-to notice it by. A new vendor now either meets the floor and joins with no
-bit moving, or is refused for `IDENTICAL` by name and runs `FAST`. The floor
-never drops to fit one; widening it is a profile bump, which is a different
-guarantee about a different set of models.
-
-Today every declared vendor meets it, including the three nothing can build
-for: Adreno advertises the same 32 KB per workgroup that Metal does, and
-Intel more. **The lowest common denominator has not moved: Apple was the
-binding constraint and still is.** An eighth column, `spec-baseline`, holds
-what the Vulkan and WebGPU specifications GUARANTEE rather than what a vendor
-ships (16 KB, 128 invocations) -- it is refused, permanently and on purpose,
-because it is half our floor's memory. It is there to give the admission gate
-a member it must reject, since a guard whose refusal branch has never
-executed is untested rather than working. `mojo build -I . matrix_main.mojo` prints the whole table
-with each vendor's minimums and its admission verdict, and touches no device.
-
-Resolution substitutes per ROW, not per spec: a scheduling row always comes
-from the device's column, and a numeric row comes from the device's column
-under the default `FAST` mode or from bit-identical under `IDENTICAL`.
-
-**`FAST` is the default.** Full per-vendor speed, and because histograms
-flush through float atomics the last bits move between two runs of the same
-fit on the same device, not only across vendors. That is CatBoost's shipped
-behavior. `IDENTICAL` is the opt-in for reproducibility.
-
-Each row is classified by ONE question. **Does it change the sequence or the precision of the arithmetic?**
-Rows that do are NUMERIC and `IDENTICAL` pins them to a safe column; rows
-that do not are SCHEDULING and every backend picks freely in both modes. So
-geometry runs at full per-backend speed always, and identity costs only the
-named subset.
-
-**The classification is not "numerics versus scheduling", and that
-distinction is the whole point.** A block count is a summation order. A
-replication factor is a summation order. Both look like scheduling and both
-are numeric. Getting this axis wrong is not hypothetical: mojotrees shipped a
-wrong bit-identity claim on exactly that mistake, because
-`AccumulationPlan.row_blocks` reads as a schedule and moves bits.
-
-Two things escape the table and are handled in source rather than
-configured: floating-point atomics are order-nondeterministic run to run, so
-`IDENTICAL` REPLACES the accumulator rather than configuring it; and FMA
-contraction is a codegen decision a runtime row cannot reach.
-
-## A second section, a second upstream: `cluster/`
-
-`cluster/` is a port of **cuVS** k-means at commit `94c2819` (branch-25.08, cloned 2026-08-19). The commit `2140532c` that this
-file and every `cluster/` header used to name is NOT A VALID OBJECT in the
-cuVS repository; it was never verifiable and is corrected rather than kept. Built the same
-way and under the same rule. It is the first algorithm here with no histogram
-in it, and per `PLAN.md` that is why it was built first: it is the smallest
-thing that can answer whether the shared substrate is actually shared or is
-quietly tree-shaped.
-
-**The first answer is in and it is a good one.** The fixed-point accumulator
-in `mojo_only/fixed_point.mojo`, written for the histogram flush, serves the
-k-means centroid update unchanged.
-Its overflow argument transferred with one noun changed: "any leaf's rows are
-a subset of all rows" became "any cluster's rows are a subset of all rows",
-and nothing else moved. That also gives the file its first reader; it had
-none.
-
-k-means moved out of RAFT and into cuVS, so the mirror is two-layer:
-algorithms from cuVS into `cluster/gbdt/`, and the RAFT and cuBLAS
-primitives they call into `cluster/mojo_only/`. See `cluster/README.md`.
-
-`cluster/` is LAUNCHED and passing: 4 of 4 centroids recovered as a
-permutation, 0 of 512 rows misassigned, inertia within 0.3% of the
-analytically known value, and reach proved by two sabotages that predict
-different movements. The k-means++ init path is still unreached. See
-`cluster/README.md`.
-
-## What is deliberately NOT here
-
-No CPU fallback. No binning: this consumes an already-quantized matrix. No
-categorical features, no CTRs, no ordered boosting, no ranking. No tests
-until the thing runs end to end.
-
-## Testing the columns we do not have
-
-`tools/remote_gpu.sh <user@host> [nvidia|amd]` syncs this tree to a rented
-GPU, rewrites `TARGET_COLUMN`, builds, and runs the correctness checks.
-
-`TARGET_COLUMN` is a **comptime** constant, so a column is a BUILD and not a
-flag. That is the honest shape of the constraint rather than a limitation of
-the script: a threadgroup allocation size is fixed at compile time and cannot
-follow a runtime device query.
-
-It runs correctness only, never timing. A rented box is shared, throttled and
-unknown, and this repository's rule is that only interleaved arms inside one
-process compare. Correctness checks are verdicts and do not care about the
-machine's mood.
-
-**One of this port's deviations is currently justified by reasoning that has
-never executed on another vendor**, which is what the script exists to fix:
-`replication_lanes` is pinned at 32 so AMD's 64-wide wavefront cannot change
-the reduction geometry.
-
-This paragraph used to name a second one, that "the float-atomic flush
-branch is unreachable on Apple". **That is false and it is deleted rather
-than annotated**: the histogram kernels build at `BUILD_MODE = NUMERIC_FAST`
-and `deterministic_flush_for` returns `identical`, so the FAST build runs
-CatBoost's verbatim `atomicAdd` on `float` on Apple too (float atomics work
-on Metal; the old "absent" reading was a wrong import path). The
-fixed-point branch is what `IDENTICAL` builds take, on every vendor.
-
-## License and attribution
-
-Created and maintained by **Andrew Hendel**
-([@ajhendel](https://github.com/ajhendel)). [AUTHORS.md](AUTHORS.md) records
-who holds what, and is worth reading here specifically because most of the
-*algorithm* is CatBoost's and most of the *translation* is not.
-
-If this is useful in work you publish, we would appreciate a citation.
+If mojolearn is useful in work you publish, please cite it.
 [CITATION.cff](CITATION.cff) is what GitHub's **Cite this repository** button
-reads.
+reads; each GitHub release is archived on Zenodo with its own DOI.
 
-Apache-2.0, in [LICENSE](LICENSE). [NOTICE](NOTICE) records what this derives
-from and must travel with any redistribution.
+## Where things are
 
-**Everything under `gbdt/` is a derivative work of CatBoost**, Copyright
-2017-2026 YANDEX LLC, Apache-2.0, translated from CUDA C++ into Mojo at commit
-`54a8143a`. `PORTED_MAP.tsv` maps each file to its origin.
-
-**This is not a clean-room reimplementation and must not be described as one.**
-Clean-room means reproducing behavior from a specification without reading the
-source. This project does the opposite deliberately: `README.md`'s own rule is
-COPY, DO NOT IMPROVE, and the tree mirrors CatBoost's paths file for file so a
-reviewer can diff `hist_binary.mojo` against `hist_binary.cu`. That is a port,
-which Apache-2.0 permits, and it carries attribution obligations that a
-clean-room reimplementation would not.
-
-Not affiliated with, endorsed by, or sponsored by YANDEX LLC or Modular, Inc.
-
-MAX (R) and Mojo (R) are trademarks of Modular, Inc. used under license.
+- [IDENTITY_PATHS.md](IDENTITY_PATHS.md), the bit-identity ledger.
+- [E1_RESULTS.md](E1_RESULTS.md), [E2_RESULTS.md](E2_RESULTS.md),
+  [E1_RUNBOOK.md](E1_RUNBOOK.md), the cross-vendor certificates and how to
+  reproduce them.
+- [PORTING_RULES.md](PORTING_RULES.md), [PORTING.md](PORTING.md), how the
+  port is done and every numbered deviation from the upstream.
+- [VENDOR_LIBS.md](VENDOR_LIBS.md), where a vendor library is called instead
+  of hand-written.
+- [docs/DESIGN_NOTES.md](docs/DESIGN_NOTES.md), the working notes that were
+  this README during the port.
+- [docs/PYPI_RELEASE.md](docs/PYPI_RELEASE.md), how a release is built,
+  verified and published.
+- [ROADMAP.md](ROADMAP.md), what comes next.

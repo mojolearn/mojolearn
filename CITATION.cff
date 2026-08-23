@@ -9,6 +9,8 @@ authors:
     orcid: "https://orcid.org/0009-0000-9877-3623"
     affiliation: "Latent Archon"
 license: Apache-2.0
+version: "0.1.0"
+date-released: "2026-08-23"
 repository-code: "https://github.com/mojolearn/mojolearn"
 abstract: >-
   Ports of GPU machine-learning algorithms into Mojo from the CUDA
