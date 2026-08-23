@@ -253,7 +253,15 @@ what `k > 64` costs.
 
 ## What is owed
 
-1. **A second vendor, still.** `check-column-invariance` pays the
+1. ~~**A second vendor.**~~ **DONE 2026-08-23 for the Apple<->AMD pair.**
+   An MI300X (ROCm 6.4.1) and the M4 produce bit-identical outputs AND
+   bit-identical cards for all three algorithms -- 86 matched stage pairs,
+   zero divergences, 0 findings on either leg, commit parity proven by a
+   source-tree hash rather than by a `commit.txt` the rented box could not
+   write. **NVIDIA is still owed**, and `E1_RESULTS.md`'s own honesty note
+   is why that matters: for the tree ensembles Apple<->AMD agreed through
+   every stage while an H100 diverged. See `E1U_RESULTS.md`. What remains
+   of the original item: `check-column-invariance` pays the
    source-level half; the arithmetic half is E1's and is untouched by it.
    Rows 19-26 have not been to a real MI300X. `bench/unsupervised_trace_
    main.mojo` and E1_RUNBOOK's Phase 3u are the payload, ready to run; what

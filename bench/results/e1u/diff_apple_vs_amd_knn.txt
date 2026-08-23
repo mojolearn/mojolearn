@@ -1,0 +1,26 @@
+==============================================================================
+IDENTITY TRACE DIFF
+==============================================================================
+  A = /Users/andrewhendel/CascadeProjects/mojolearn-e1u-clean/bench/results/e1u/2026-08-23_073546-MacBook-Air-1-terrabyte/knn.card
+  B = /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects/5a83e928-6cee-4d65-80a9-4f44fe9cbf93/scratchpad/amdleg/2026-08-23_113251-ac94b5a09591/knn.card
+
+STEP 1 -- PARSE
+  A: 6 record(s), 2 comment line(s), 1 blank line(s)
+  B: 6 record(s), 2 comment line(s), 1 blank line(s)
+
+STEP 1b -- DUMP INTEGRITY (re-hash every .bin found)
+
+STEP 2 -- ALIGNMENT (tag sequence, computed BEFORE any hash compare)
+  matched stage pairs: 6
+  unmatched in A: 0    unmatched in B: 0
+  TAG SEQUENCES ARE IDENTICAL.
+
+STEP 3 -- HASH WALK over 6 matched pair(s)
+  All 6 matched pair(s) agree on dtype, count and hash.
+
+==============================================================================
+RESULT: IDENTICAL. Same stage sequence, same counts, same hashes.
+  Caveat: a matching hash means the buffers agreed at each
+  checkpoint, NOT that the computation was identical, and nothing
+  is known about whatever the trace did not checkpoint.
+==============================================================================
