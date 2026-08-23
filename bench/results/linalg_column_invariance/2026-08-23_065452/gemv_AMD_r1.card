@@ -1,0 +1,4 @@
+# format: mojolearn-identity-trace v1
+0	gemv.input.x	f32	16384	8dc2302f08543a00
+1	gemv.input.y	f32	128	9d4078a9360f2ee8
+2	gemv.product	f32	128	09e7f123cf87887a

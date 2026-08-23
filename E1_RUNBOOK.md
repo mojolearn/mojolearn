@@ -55,6 +55,9 @@ vendor. Record the output verbatim.
     extratrees/tools/check.sh         # 29 checks, integer core
     # ensemble (RF): builder/split/objectives/quantiles/forest/philox checks
     pixi run check-random-strength    # R1/R3a on the pinned noise path
+    pixi run check-linalg-identity    # rows 27-32: the matrix products,
+                                      # PCA, tSVD and OLS, in BOTH modes
+    pixi run check-linalg-column-invariance   # one card across three columns
 
 Every gate that is green on the M4 must be green on the MI300X. A red
 gate here is a within-machine defect on AMD (a launch bug, a transcribed
@@ -64,6 +67,18 @@ machine that fails its own gates teaches nothing.
 ## Phase 3 — the card diff (the actual E1)
 
 **Mojo-only cards (E2).** Four training paths have no Python surface and so fall outside `tools/e2_matrix_fit.py`: depthwise growth, lossguide growth, `MultiClassOneVsAll`, and the feature-parallel searcher. `tools/e2_mojo_cards.sh <out_dir>` emits one card each (`gbdt_depthwise.card`, `gbdt_lossguide.card`, `gbdt_multiclass_ova.card`, `gbdt_feature_parallel.card`; one fit per file, hashed fixtures that are pure functions of constants, machine-independent tags) via `mojo_only/e2_growth_cards.mojo` (pixi task `e2-growth-cards`), runs the set a second time into `<out_dir>/control/` as the run-to-run control, and writes `<out_dir>/e2_mojo_cards.json` (name, record count, description, `control_match`, numeric mode). A card whose control does not match under FAST is read only under IDENTICAL. The feature-parallel card is OUTPUT-LEVEL (splits + docBins; that searcher has no in-searcher trace plumbing). Diff them exactly like the Python cards below.
+
+**Linear-algebra cards (rows 27-32).** `core/gemm.mojo` has no Python
+binding either, so the matrix products and OLS produce their own cards:
+`tools/check_linalg_column_invariance.sh` emits `gram`, `nt` and `gemv` from
+`bench/linalg_trace_main.mojo`, and `pixi run ols-card` emits the eleven-stage
+OLS card plus a run-to-run control beside it. Diff them with the same differ.
+Read the `nt` arm's three tags together: `nt.narrow`, `nt.wide` and
+`nt.wider` are the SAME logical rows at three launch widths, so a divergence
+among them on ONE machine is a batch-invariance failure and a divergence of
+all three between machines is an ordinary vendor difference. The OLS card's
+two INTEGER stages (`step3.info`, which carries the Jacobi sweep count, and
+`step4.rank`) come before any float stage on the ladder for the usual reason.
 
 Same fixture, same seed, both machines:
 

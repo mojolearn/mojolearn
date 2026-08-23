@@ -72,6 +72,36 @@ gives one queue here, so ours runs them in sequence. That is a real
 throughput deviation and not a correctness one, and it is exactly the kind of
 control-plane concurrency `HOST_AND_DEVICE.md` says the incumbents get for
 free from CUDA and we do not.
+
+WHAT DEVIATION 527 ADDED HERE, AND WHY IT MOVES NO BITS
+-------------------------------------------------------
+This file is `glm/ported/`: COPY, DO NOT IMPROVE, and under `NUMERIC_FAST`
+the shipped bits must not move at all. Two things were added and neither is
+arithmetic:
+
+1. **A STAGE CARD.** `lstsq_eig_traced` is the same six steps carrying an
+   `IdentityTrace` (`core/identity_trace.mojo`), which hashes RAW BYTES of a
+   named buffer after each one. A single final hash says a model moved; a
+   card says WHICH STEP moved it first, which is the difference between a
+   claim and a diagnosis. `lstsq_eig` is the untraced entry every existing
+   caller already had, and it constructs a DISABLED trace, whose every
+   `record_*` returns on one boolean test. No launch, no copy, no float.
+2. **`elem_tpb`, THE ELEMENTWISE LAUNCH WIDTH.** Steps 4 and the
+   eigenvalue extraction launch one thread per OUTPUT CELL
+   (`divide_columns_by_nonzero_kernel`, `diagonal_to_vector_kernel`: `idx =
+   block_idx.x * block_dim.x + thread_idx.x`, one store per `idx`, no fold,
+   no atomic, no cross-thread combination). The block width therefore moves
+   WHICH thread computes a cell and never what any cell is computed from --
+   `numerics.mojo`'s own definition of a SCHEDULING row. It exists so that
+   `check_ols_is_launch_invariant` can vary a launch geometry that must not
+   matter and require the coefficient BYTES not to move. The default is the
+   256 that was hardcoded here before, so the shipped launch is unchanged.
+
+   It is deliberately NOT threaded into the Gram product, the `xty` fold or
+   the Jacobi block: those three block widths ARE fold widths (rows 20/21),
+   they are pinned at the matrix and in `pinned_block_sum`, and handing a
+   caller a knob onto them would be handing a caller a knob onto a summation
+   order.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -84,12 +114,33 @@ from core.column_stats import (
     divide_columns_by_nonzero_kernel,
     xty_kernel,
 )
+from core.identity_trace import IdentityTrace
 from decomposition.mojo_only.jacobi_eigh_device import (
     JACOBI_SWEEPS,
     JACOBI_TOL,
     JACOBI_TPB,
     jacobi_eigh_kernel,
 )
+
+
+#: The elementwise launch width steps 3b and 4 used to hardcode. SCHEDULING,
+#: and provably so: each thread owns one output cell, so this number cannot
+#: reach the value of any cell. See the module docstring.
+comptime OLS_ELEM_TPB = 256
+
+#: `DivideByNonZero`'s threshold, hoisted out of the call so the ONE place it
+#: is written is the one place a check can read.
+#:
+#: **IT IS ABSOLUTE, AND THAT IS A RECORDED DEVIATION, NOT A DESIGN.** `lam`
+#: is an eigenvalue of `A^T A`, which scales with the SQUARE of the data and
+#: with `n_rows`; a fixed 1e-10 therefore means something different for the
+#: same design in different units, which is the identical defect DEVIATION
+#: BLOCK 1 of `jacobi_eigh_device.mojo` fixed for the convergence test on the
+#: matrix one step upstream. `check_ols_rank_guard_is_absolute` MEASURES what
+#: it costs rather than arguing about it. Not changed here, because changing
+#: it moves shipped `NUMERIC_FAST` bits on any rank-deficient design and this
+#: file is COPY-DO-NOT-IMPROVE; the finding is reported instead.
+comptime OLS_NONZERO_THRESH = Float32(1.0e-10)
 
 
 def lstsq_eig(
@@ -107,14 +158,58 @@ def lstsq_eig(
     mut a_alias2: DeviceBuffer[DType.float32],
     n_rows: Int,
     n_cols: Int,
+    elem_tpb: Int = OLS_ELEM_TPB,
 ) raises:
-    """`w = inv(A^T A) A^T b`, their step order.
+    """`w = inv(A^T A) A^T b`, their step order. The untraced entry.
+
+    Every caller this file ever had lands here. It constructs a DISABLED
+    `IdentityTrace` and calls `lstsq_eig_traced`, so there is exactly one
+    implementation of the six steps and the traced runs certify the shipped
+    path rather than a copy of it. A disabled trace's `record_*` returns on
+    one boolean test: no launch, no copy, no arithmetic, no bits moved.
+    """
+    var off = IdentityTrace.disabled()
+    lstsq_eig_traced(
+        ctx, a, b, w, cov_a, q, qs, s_vec, ab, inv, a_alias, a_alias2,
+        n_rows, n_cols, elem_tpb, off,
+    )
+
+
+def lstsq_eig_traced(
+    ctx: DeviceContext,
+    mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],
+    mut w: DeviceBuffer[DType.float32],
+    mut cov_a: DeviceBuffer[DType.float32],
+    mut q: DeviceBuffer[DType.float32],
+    mut qs: DeviceBuffer[DType.float32],
+    mut s_vec: DeviceBuffer[DType.float32],
+    mut ab: DeviceBuffer[DType.float32],
+    mut inv: DeviceBuffer[DType.float32],
+    mut a_alias: DeviceBuffer[DType.float32],
+    mut a_alias2: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    n_cols: Int,
+    elem_tpb: Int,
+    mut trace: IdentityTrace,
+) raises:
+    """`w = inv(A^T A) A^T b`, their step order, with a stage card.
 
     Steps 5 and 6 are on MAX's tuned kernels, which is what their cuBLAS
     calls are; step 1 goes through `gemm_tn`, which dispatches the shipped
     small-output Gram shapes to the split-K kernel (see the module
     docstring). There is no second implementation selected by any flag; the
     old `use_vendor_gemv` flag and its contraction are gone.
+
+    THE CARD, DEVIATION 527. One record after each of the six steps, plus
+    the eigensolver's `info` and the RANK. Tags name a position in the
+    algorithm and carry no machine number, per `core/identity_trace.mojo`
+    rule 2, so two vendors' cards align. The rank record is the one that is
+    not a rounding: `divide_columns_by_nonzero_kernel` DROPS a direction
+    whose eigenvalue is at or below `OLS_NONZERO_THRESH`, so a last-bit
+    move in step 3 can change how many directions the pseudo-inverse keeps
+    -- a DISCRETE output of a float comparison, and an integer stage the
+    differ reads before it reads any float one.
     """
     # covA <- A^T A. `raft::linalg::gemm(CUBLAS_OP_T, CUBLAS_OP_N, alpha=1)`
     # — a Gram matrix, not a covariance, so no scale. This is the ONLY
@@ -135,6 +230,16 @@ def lstsq_eig(
         block_dim=(STATS_TPB, 1, 1),
     )
     ctx.synchronize()
+
+    # THE CARD'S FIRST TWO DEVICE STAGES. `cov_a` is recorded HERE and not
+    # later because the Jacobi below CONSUMES it in place -- after the sweep
+    # the buffer holds the eigenvalues on its diagonal and rotated rubble
+    # off it, so a record taken after the launch would hash a different
+    # object under a step-1 name.
+    trace.record_device[DType.float32](
+        ctx, "ols.step1.covA", cov_a, n_cols * n_cols
+    )
+    trace.record_device[DType.float32](ctx, "ols.step2.Ab", ab, n_cols)
 
     # Q S Q* <- covA. Jacobi consumes covA and leaves S on its diagonal.
     #
@@ -164,8 +269,8 @@ def lstsq_eig(
         s_vec.unsafe_ptr(),
         cov_a.unsafe_ptr(),
         Int32(n_cols),
-        grid_dim=((n_cols + 255) // 256, 1, 1),
-        block_dim=(256, 1, 1),
+        grid_dim=((n_cols + elem_tpb - 1) // elem_tpb, 1, 1),
+        block_dim=(elem_tpb, 1, 1),
     )
     var h_info = ctx.enqueue_create_host_buffer[DType.float32](3)
     ctx.enqueue_copy(dst_ptr=h_info.unsafe_ptr(), src_buf=info_buf)
@@ -183,18 +288,38 @@ def lstsq_eig(
             + ". A rank-deficient or badly scaled design produces this."
         )
 
+    # THE EIGENDECOMPOSITION'S THREE STAGES. `info` is recorded as a stage
+    # of its own because slot 2 is the SWEEP COUNT, and a sweep count is a
+    # discrete quantity that a last-bit disagreement in the convergence fold
+    # can move (`jacobi_eigh_device.mojo` DEVIATION BLOCK 3). Two vendors
+    # whose cards first differ HERE differed about how much work to do, not
+    # about how to round it, and the differ should say so.
+    trace.record_device[DType.float32](ctx, "ols.step3.eigvals", s_vec, n_cols)
+    trace.record_device[DType.float32](
+        ctx, "ols.step3.eigvecs", q, n_cols * n_cols
+    )
+    trace.record_device[DType.float32](ctx, "ols.step3.info", info_buf, 3)
+    _record_rank(ctx, trace, s_vec, n_cols)
+
     # QS <- Q invS, with DivideByNonZero.
     ctx.enqueue_function[divide_columns_by_nonzero_kernel](
         qs.unsafe_ptr(),
         q.unsafe_ptr(),
         s_vec.unsafe_ptr(),
         Int32(n_cols),
-        Float32(1.0e-10),
-        grid_dim=((n_cols * n_cols + 255) // 256, 1, 1),
-        block_dim=(256, 1, 1),
+        OLS_NONZERO_THRESH,
+        grid_dim=((n_cols * n_cols + elem_tpb - 1) // elem_tpb, 1, 1),
+        block_dim=(elem_tpb, 1, 1),
+    )
+    trace.record_device[DType.float32](
+        ctx, "ols.step4.QS", qs, n_cols * n_cols
     )
     # inv <- QS Q^T == Q invS Q^T == inv(A^T A)
     gemm_nt(ctx, inv, qs, q, n_cols, n_cols, n_cols)
+    ctx.synchronize()
+    trace.record_device[DType.float32](
+        ctx, "ols.step5.inv", inv, n_cols * n_cols
+    )
 
     # w <- inv Ab.
     #
@@ -252,3 +377,46 @@ def lstsq_eig(
     # hand-written GEMM to check a tuned GEMV a host property already covers.
     gemv_n(ctx, w, inv, ab, n_cols, n_cols)
     ctx.synchronize()
+    trace.record_device[DType.float32](ctx, "ols.step6.coef", w, n_cols)
+
+
+def _record_rank(
+    ctx: DeviceContext,
+    mut trace: IdentityTrace,
+    mut s_vec: DeviceBuffer[DType.float32],
+    n_cols: Int,
+) raises:
+    """The card's one INTEGER stage: how many directions survive step 4.
+
+    `divide_columns_by_nonzero_kernel`'s predicate is
+    `lam > thresh or lam < -thresh` and this recomputes exactly that on the
+    host, character for character, so the record is the rank the kernel is
+    about to use and not an approximation of it. A NaN eigenvalue fails both
+    comparisons and is counted as DROPPED, which is what the kernel does
+    too.
+
+    Why it is worth a stage of its own: every other record here is a float
+    buffer, where a cross-vendor difference is a rounding until proved
+    otherwise. This one is a COUNT. If two vendors' cards first differ at
+    `ols.step4.rank`, they disagree about the MODEL'S RANK -- a different
+    pseudo-inverse, not a different last bit -- and `E1_RUNBOOK`'s ladder
+    says stop and read the integer stage before reading any float one.
+
+    Costs a device-to-host copy, and only when the trace is enabled.
+    """
+    if not trace.enabled:
+        return
+    var hs = ctx.enqueue_create_host_buffer[DType.float32](n_cols)
+    ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=s_vec)
+    ctx.synchronize()
+    var kept = 0
+    for i in range(n_cols):
+        var lam = hs.unsafe_ptr().unsafe_load(i)
+        if lam > OLS_NONZERO_THRESH or lam < -OLS_NONZERO_THRESH:
+            kept += 1
+    var one = List[Int32]()
+    one.append(Int32(kept))
+    trace.record_list_i32("ols.step4.rank", one)
+    # `[[mojo-buffer-freed-at-last-use]]`: a host buffer is dead at
+    # `.unsafe_ptr()` unless something uses it later.
+    _ = hs^

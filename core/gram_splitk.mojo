@@ -55,13 +55,28 @@ two `transpose_kernel` passes (~22 ms at the bench shape) disappear as well.
 
 DETERMINISM, WHICH THE PAPER CLAIMS RIDE ON
 -------------------------------------------
-- The chunk count is a fixed function of the hardware constants (no runtime
-  query, no atomics-based scheduling), so the same (m, k) always produces
-  the same partition.
 - Within a chunk each cell is one serial fp32 chain in row order.
 - The fold is `gram_splitk_reduce_kernel`: one thread per output cell,
   chunk 0 to chunk N-1, ascending, serial. NO device-wide float atomics
   anywhere. Run-to-run bit-identical.
+- The chunk count is a fixed function of the hardware constants (no runtime
+  query, no atomics-based scheduling), so the same (m, k) always produces
+  the same partition ON ONE COLUMN. **That is run-to-run determinism and it
+  is NOT cross-vendor identity**, which is the distinction this section used
+  to blur: the constants are the TARGET COLUMN's core count and occupancy,
+  so two columns compile two different partitions of the k axis, and a
+  partition of a float sum is a summation order (IDENTITY_PATHS row 7's
+  class). Under `NUMERIC_IDENTICAL` the count is pinned
+  (`PINNED_GRAM_SPLITK_CHUNKS`, DEVIATION 520) and the partition is the
+  same on every column; under `NUMERIC_FAST` it still fills the machine.
+- The per-cell products and the fold are pinned to ONE rounding and ONE
+  denormal policy under IDENTICAL (`identical_mul_add`, `ftz`; DEVIATION
+  522). Unpinned, `acc + a*b` is one rounding or two AT THE CODEGEN'S WHIM
+  and the whim is per backend.
+- This kernel is the arm on EVERY column under IDENTICAL, not just Apple's
+  (DEVIATION 521). Two columns running two different kernels cannot be bit
+  identical however well each is pinned, and the vendor matmul is a closed
+  library whose tile shape and k-split are its own business.
 
 BITWISE SYMMETRY, WHICH `check_covariance_is_symmetric` ENFORCES
 ----------------------------------------------------------------
@@ -118,9 +133,17 @@ from std.memory import stack_allocation
 
 from mojo_only.hardware_matrix import gram_splitk_is_target_arm
 from mojo_only.kernel_matrix import (
+    COLUMN_BIT_IDENTICAL,
     K_LIB_GRAM_SPLITK,
     TARGET_COLUMN,
     lib_block_size_for,
+)
+from mojo_only.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
+    ftz,
+    ftz_simd,
+    identical_mul_add,
 )
 from neighbors.ported.distance.detail.pairwise_distance_base import (
     TARGET_GPU_CORES,
@@ -160,6 +183,43 @@ comptime GRAM_STAGE_W = 4
 #: choice: same machine constants, same partition, every run.
 comptime GRAM_OVERSUBSCRIBE = 2
 
+#: THE PINNED CHUNK COUNT (IDENTITY_PATHS row 27, DEVIATION 520). Under
+#: `NUMERIC_IDENTICAL` the k partition is THIS number on every column
+#: instead of the machine-derived one below.
+#:
+#: The formula under it is `cores x resident-blocks x 2`, which is 240 on
+#: the Apple column and a different number on every other one -- so the
+#: file's own "fixed means deterministic" claim was true WITHIN a build and
+#: false ACROSS vendors, which is precisely IDENTITY_PATHS row 7's class:
+#: *a block count is a summation order*, and this one splits the k axis of
+#: every Gram product PCA, truncated SVD and OLS compute.
+#:
+#: 128 rather than any real column's number, deliberately and for the same
+#: reason `PINNED_PARTITION_CHUNKS_SM` is 32: no column runs the pinned arm
+#: at its own count, so nobody can mistake the pin for a measurement. It is
+#: also a power of two, which the reduce does not require and the two-level
+#: error bound likes. The cost is a partition that under-fills a large GPU
+#: and over-fills a small one, on the opt-in arm only.
+#:
+#: SAFE FOR THE WORKSPACE BY DIRECTION, not by luck: the partials buffer is
+#: `n_chunks * m * m` floats and `gram_splitk_scratch_covers` tests
+#: `k >= n_chunks * m`, so pinning DOWN from 240 shrinks the workspace and
+#: widens the reuse window. A pin ABOVE any column's count would have to
+#: re-argue both.
+comptime PINNED_GRAM_SPLITK_CHUNKS = 128
+
+#: THE COLUMN THE ARM DECISION IS READ FROM (DEVIATION 521). ONE definition,
+#: two readers -- `gram_splitk_applies` compiles against it and
+#: `core/gemm_identity_check.mojo` asserts it -- so the check cannot come to
+#: a different conclusion than the kernel it is checking. Under IDENTICAL it
+#: is `COLUMN_BIT_IDENTICAL`, whose `gram_splitk_is_target_arm` row already
+#: answers True and had simply never been asked; under FAST it is the
+#: device's own column, unchanged.
+comptime GRAM_SPLITK_RESOLVED_COLUMN = (
+    COLUMN_BIT_IDENTICAL if GLOBAL_NUMERIC_MODE
+    == NUMERIC_IDENTICAL else TARGET_COLUMN
+)
+
 #: Register accumulators per thread in the widest instantiation.
 #: `GRAM_TPB * this` caps m*m at 16,384 = 128 x 128, matching GRAM_MAX_COLS.
 comptime GRAM_MAX_CELLS_PER_THREAD = 64
@@ -173,16 +233,38 @@ comptime VENDOR_MATMUL_TILE = 64
 
 
 def gram_splitk_chunk_count() raises -> Int:
-    """The FIXED number of k-chunks, from the machine constants.
+    """The FIXED number of k-chunks. NUMERIC: this IS the summation split.
 
-    `blocks-that-fit x GRAM_OVERSUBSCRIBE`, computed from the SAME
-    target-keyed readers `pairwise_distance_base.mojo` exposes (on the Apple
-    column: 10 cores x 3072-thread slots / 256 threads = 120 resident
-    blocks, x2 = 240, and `hardware_matrix_check` pins that 240). Fixed
-    means deterministic: the summation split never depends on anything
-    measured at runtime, and the same build always produces the same
-    partition.
+    Under `NUMERIC_FAST`, `blocks-that-fit x GRAM_OVERSUBSCRIBE`, computed
+    from the SAME target-keyed readers `pairwise_distance_base.mojo`
+    exposes (on the Apple column: 10 cores x 3072-thread slots / 256
+    threads = 120 resident blocks, x2 = 240, and `hardware_matrix_check`
+    pins that 240).
+
+    Under `NUMERIC_IDENTICAL`, `PINNED_GRAM_SPLITK_CHUNKS` -- see that
+    constant for the argument and the cost.
+
+    **THE SENTENCE THAT USED TO STAND HERE WAS TRUE OF ONE BUILD AND FALSE
+    OF THE CLAIM IT WAS READ AS SUPPORTING.** It said "Fixed means
+    deterministic: the summation split never depends on anything measured
+    at runtime, and the same build always produces the same partition." Every
+    clause of that is correct and none of it is cross-vendor identity: the
+    count is fixed at COMPILE time from the TARGET COLUMN's core count and
+    occupancy, so two columns compile two different partitions of the k
+    axis, and a partition of a float sum is a summation order. The module
+    header's DETERMINISM section makes the same move ("the chunk count is a
+    fixed function of the hardware constants ... so the same (m, k) always
+    produces the same partition") and is corrected there too. Run-to-run
+    determinism on one device was never the property in question.
+
+    THE PIN IS AT THIS FUNCTION, not at its callers, because the launch
+    geometry AND the `partials` workspace sizing AND
+    `gram_splitk_scratch_covers` all read it: pinning one caller would size
+    a buffer from one count and index it with another. Same reasoning, same
+    shape, as IDENTITY_PATHS finding 3 and `partition_chunks_sm_for`.
     """
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        return PINNED_GRAM_SPLITK_CHUNKS
     return (
         TARGET_GPU_CORES
         * max_active_blocks_per_core(GRAM_TPB, GRAM_STAGE_FLOATS * 4)
@@ -274,10 +356,45 @@ def gram_splitk_applies(m: Int, n: Int, k: Int) raises -> Bool:
 
     The two capacity bounds are the kernel's own: one staged row per tile
     line (`m <= GRAM_MAX_COLS`) and `m*n` register cells across the block.
+
+    **UNDER `NUMERIC_IDENTICAL` THE COLUMN IS RESOLVED TO
+    `COLUMN_BIT_IDENTICAL` AND THE STARVATION TEST IS NOT CONSULTED**
+    (IDENTITY_PATHS row 27, DEVIATION 521). Two reasons, and the second is
+    the one that is easy to miss:
+
+    1. `gram_splitk_is_target_arm[TARGET_COLUMN]()` reads the DEVICE's
+       column unconditionally, so an IDENTICAL build on NVIDIA or AMD
+       answered False here and ran `linalg.matmul` -- a closed vendor
+       library whose tile shape and k-split are per-vendor, and a k-split
+       IS a summation order. Every pin inside this kernel is worthless if
+       the other vendor never enters the kernel. That row already answers
+       True for `COLUMN_BIT_IDENTICAL` ("the split-K kernel is the arm with
+       the determinism guarantee"); the accessor simply never asked it.
+       This is IDENTITY_PATHS row 3's defect exactly -- a gate that lived
+       at the report while the compiled accessor read the device column --
+       and it is fixed the same way, at the accessor, so every caller
+       inherits it.
+    2. The starvation predicate `vendor_tiles < block_slots` is computed
+       from `TARGET_GPU_CORES` and `max_active_blocks_per_core`. Under
+       IDENTICAL it would decide the ARM from the machine's size, so a
+       10-core box and a 108-SM box would take different kernels at the
+       same shape. It is a PERFORMANCE dispatch and it has no business
+       deciding identity, so under IDENTICAL the arm is this kernel
+       wherever the kernel's own capacity allows.
+
+    Where capacity does NOT allow (`m > GRAM_MAX_COLS`, or `m*n` over the
+    register budget), this returns False and `gemm_tn` REFUSES rather than
+    quietly handing the shape to the vendor matmul. REFUSE is the third and
+    only other legitimate move; a silent fall-through to a closed library
+    would be a toggle that returns a non-identical model, which
+    IDENTITY_PATHS' opening rule calls worse than no toggle.
     """
-    comptime if not gram_splitk_is_target_arm[TARGET_COLUMN]():
-        # Non-Apple target: MAX's own split-K machinery exists there, so
-        # the vendor matmul is preferred at every shape.
+    comptime identical = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    comptime if not gram_splitk_is_target_arm[
+        GRAM_SPLITK_RESOLVED_COLUMN
+    ]():
+        # Non-Apple target under FAST: MAX's own split-K machinery exists
+        # there, so the vendor matmul is preferred at every shape.
         return False
     if m != n:
         # Two DIFFERENT operand views cannot be a Gram; only the Gram shape
@@ -287,6 +404,12 @@ def gram_splitk_applies(m: Int, n: Int, k: Int) raises -> Bool:
         return False
     if m * n > GRAM_TPB * GRAM_MAX_CELLS_PER_THREAD:
         return False
+    comptime if identical:
+        # Capacity holds and the column is pinned: this kernel IS the arm.
+        # The starvation test below is a performance dispatch keyed to the
+        # machine's size and must not decide which kernel an identity build
+        # runs. See the docstring's reason 2.
+        return True
     var vendor_tiles = (
         (m + VENDOR_MATMUL_TILE - 1) // VENDOR_MATMUL_TILE
     ) * ((n + VENDOR_MATMUL_TILE - 1) // VENDOR_MATMUL_TILE)
@@ -426,12 +549,27 @@ def _gram_splitk_partial_body[CELLS: Int, CENTERED: Bool](
                 var e = vi * GRAM_STAGE_W
                 var v = x.unsafe_load[width=GRAM_STAGE_W](t * m + e)
                 comptime if CENTERED:
+                    # DEVIATION 522 / IDENTITY_PATHS row 10: the centered
+                    # value is a SEAM -- it is written into the staging tile
+                    # for every other thread of the block to read -- so both
+                    # operands and the difference are flushed under
+                    # IDENTICAL. Metal flushes these in hardware and CUDA's
+                    # default does not, so without this a denormal column
+                    # mean or a near-cancelling row makes the two columns
+                    # stage different tiles from the same input. `ftz_simd`
+                    # is bitwise inert on an FTZ backend and compiles away
+                    # entirely under FAST.
+                    v = ftz_simd[GRAM_STAGE_W](v)
                     # Element e sits in column `e % m` (t * m is a multiple
                     # of m), and columns `e % m .. e % m + GRAM_STAGE_W - 1`
                     # never wrap: e % m and m are both multiples of
                     # GRAM_STAGE_W. The per-lane fp32 subtract is the same
                     # IEEE op the scalar arm performs, lane by lane.
-                    v = v - mu.unsafe_load[width=GRAM_STAGE_W](e % m)
+                    v = ftz_simd[GRAM_STAGE_W](
+                        v - ftz_simd[GRAM_STAGE_W](
+                            mu.unsafe_load[width=GRAM_STAGE_W](e % m)
+                        )
+                    )
                 tile.unsafe_store(e, v)
                 vi += GRAM_TPB
         else:
@@ -446,8 +584,14 @@ def _gram_splitk_partial_body[CELLS: Int, CENTERED: Bool](
                     # and IEEE `a + (-b)` IS `a - b`), landed in the shared
                     # tile instead of back in DRAM. Bit-identity is proven
                     # per cell by `check_gram_centered_fused`, not argued.
-                    tile[i] = (
-                        x.unsafe_load(t * m + i) - mu.unsafe_load(i % m)
+                    # DEVIATION 522 / row 10, the scalar twin of the vector
+                    # arm above: operands and difference flushed, so the
+                    # two staging arms stay the bit-identical pair the
+                    # module header claims they are on EVERY column and not
+                    # only on one that flushes in hardware.
+                    tile[i] = ftz(
+                        ftz(x.unsafe_load(t * m + i))
+                        - ftz(mu.unsafe_load(i % m))
                     )
                 else:
                     tile[i] = x.unsafe_load(t * m + i)
@@ -469,22 +613,43 @@ def _gram_splitk_partial_body[CELLS: Int, CENTERED: Bool](
                     comptime for a in range(T):
                         var xi = tile[base + bi0 + a]
                         comptime for b in range(T):
-                            acc[a * T + b] = acc[a * T + b] + xi * cv[b]
+                            # DEVIATION 522 / IDENTITY_PATHS row 9. `acc +
+                            # xi*cv` is ONE rounding or TWO at the codegen's
+                            # whim and the whim is per backend, so the pin
+                            # is at the source: `fma` under IDENTICAL, the
+                            # naive chain under FAST. Bit-inert on a
+                            # backend that already contracts (Metal does --
+                            # row 9's 2026-08-23 correction), which is
+                            # exactly why "Apple's bits did not move" is
+                            # not evidence the pin is unreached.
+                            acc[a * T + b] = identical_mul_add(
+                                xi, cv[b], acc[a * T + b]
+                            )
         elif uniform_jj:
             for r in range(rows):
                 var base = r * m
                 var xj = tile[base + jm]
                 comptime for c in range(CELLS):
                     if tid + c * GRAM_TPB < mn:
-                        acc[c] = acc[c] + tile[base + Int(ii[c])] * xj
+                        # DEVIATION 522 / row 9, same seam, uniform-jj arm.
+                        acc[c] = identical_mul_add(
+                            tile[base + Int(ii[c])], xj, acc[c]
+                        )
         else:
             for r in range(rows):
                 var base = r * m
                 comptime for c in range(CELLS):
                     if tid + c * GRAM_TPB < mn:
-                        acc[c] = (
-                            acc[c]
-                            + tile[base + Int(ii[c])] * tile[base + Int(jj[c])]
+                        # DEVIATION 522 / row 9, same seam, strided arm.
+                        # The i-operand stays FIRST in every arm: the
+                        # module's BITWISE SYMMETRY argument rests on cells
+                        # (i,j) and (j,i) forming the same two loads in
+                        # commuted order, and `fma(a,b,c)` is exactly as
+                        # commutative in a and b as `a*b` was.
+                        acc[c] = identical_mul_add(
+                            tile[base + Int(ii[c])],
+                            tile[base + Int(jj[c])],
+                            acc[c],
                         )
         barrier()
         t += rows
@@ -492,17 +657,23 @@ def _gram_splitk_partial_body[CELLS: Int, CENTERED: Bool](
     # The writeback mirrors the ownership arm, and BOTH arms address a cell
     # as `chunk * mn + i*m + j`: the reduce reads the identical slot per
     # cell whichever arm produced it, in the same ascending-chunk order.
+    # DEVIATION 522 / IDENTITY_PATHS row 10: `partials` is the seam between
+    # this kernel and the reduce, so every stored value is flushed under
+    # IDENTICAL. A denormal partial is not exotic here -- it is one chunk's
+    # slice of a centered column, which is where cancellation lives.
     if tiled:
         if own_tile:
             comptime for a in range(T):
                 comptime for b in range(T):
                     var cell = (bi0 + a) * m + (bj0 + b)
-                    partials.unsafe_store(chunk * mn + cell, acc[a * T + b])
+                    partials.unsafe_store(
+                        chunk * mn + cell, ftz(acc[a * T + b])
+                    )
     else:
         comptime for c in range(CELLS):
             var cell = tid + c * GRAM_TPB
             if cell < mn:
-                partials.unsafe_store(chunk * mn + cell, acc[c])
+                partials.unsafe_store(chunk * mn + cell, ftz(acc[c]))
 
 
 def gram_splitk_partial_kernel[CELLS: Int](
@@ -548,6 +719,20 @@ def gram_splitk_reduce_kernel(
     Ascending fixed order, no atomics: the determinism of the whole path
     rests on this loop's order, so do not "improve" it into a tree that
     depends on launch geometry, and never into `Atomic.fetch_add`.
+
+    **This loop is the reason the whole path is batch-invariant.** The fold
+    is over `n_chunks`, which is a pure function of the pinned constant
+    under IDENTICAL, and the per-cell order is the SAME sequence whatever
+    grid the launch chose, because a cell's owner reads every chunk itself
+    rather than combining whatever partials happened to arrive. Nothing
+    here consults the block index, the block size, the lane width or the
+    device.
+
+    DEVIATION 522 / IDENTITY_PATHS row 10: each loaded partial and each
+    running sum is flushed under IDENTICAL. Unlike the accumulation loop
+    inside the partial kernel, this fold is only `n_chunks` steps long, so
+    flushing every intermediate is affordable and there is no reason to
+    accept a named residue where the exact model is cheap.
     """
     var mn = Int(mn_in)
     var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -555,8 +740,8 @@ def gram_splitk_reduce_kernel(
         return
     var acc = Float32(0.0)
     for c in range(Int(n_chunks_in)):
-        acc += partials.unsafe_load(c * mn + cell)
-    z.unsafe_store(cell, acc)
+        acc = ftz(acc + ftz(partials.unsafe_load(c * mn + cell)))
+    z.unsafe_store(cell, ftz(acc))
 
 
 def _enqueue_partial[CELLS: Int](

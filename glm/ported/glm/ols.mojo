@@ -68,7 +68,11 @@ exact inverse afterwards). See `glm/UNPORTED.tsv`.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from glm.ported.linalg.detail.lstsq import lstsq_eig
+from core.identity_trace import IdentityTrace
+from glm.ported.linalg.detail.lstsq import (
+    OLS_ELEM_TPB,
+    lstsq_eig_traced,
+)
 
 
 # `ols.cuh:116-126`, the switch. Their ids, so an error message names the same solver
@@ -97,6 +101,7 @@ def ols_fit(
     algo: Int = OLS_ALGO_EIG,
     fit_intercept: Bool = False,
     normalize: Bool = False,
+    elem_tpb: Int = OLS_ELEM_TPB,
 ) raises:
     """`olsFit`, their guards and their dispatch, in their order.
 
@@ -105,6 +110,46 @@ def ols_fit(
     raises would make the entry point useless; defaulting to the arm cuML's
     PYTHON layer defaults to is the closest honest choice. That is a
     DEVIATION and it is recorded in `glm/UNPORTED.tsv`.
+
+    The untraced entry. `ols_fit_traced` below is the same dispatch carrying
+    a stage card; this one constructs a DISABLED trace so there is one
+    implementation of the guards and not two (DEVIATION 527).
+    """
+    var off = IdentityTrace.disabled()
+    ols_fit_traced(
+        ctx, a, b, w, cov_a, q, qs, s_vec, ab, inv, a_alias, a_alias2,
+        n_rows, n_cols, off, algo, fit_intercept, normalize, elem_tpb,
+    )
+
+
+def ols_fit_traced(
+    ctx: DeviceContext,
+    mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],
+    mut w: DeviceBuffer[DType.float32],
+    mut cov_a: DeviceBuffer[DType.float32],
+    mut q: DeviceBuffer[DType.float32],
+    mut qs: DeviceBuffer[DType.float32],
+    mut s_vec: DeviceBuffer[DType.float32],
+    mut ab: DeviceBuffer[DType.float32],
+    mut inv: DeviceBuffer[DType.float32],
+    mut a_alias: DeviceBuffer[DType.float32],
+    mut a_alias2: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    n_cols: Int,
+    mut trace: IdentityTrace,
+    algo: Int = OLS_ALGO_EIG,
+    fit_intercept: Bool = False,
+    normalize: Bool = False,
+    elem_tpb: Int = OLS_ELEM_TPB,
+) raises:
+    """`olsFit` with the DEVIATION 527 stage card. See `ols_fit`.
+
+    THE GUARDS AND THE DISPATCH ARE INSIDE THE TRACED ENTRY DELIBERATELY.
+    A card produced by a driver that called `lstsq_eig` directly would
+    certify a path no user takes and would miss the very thing
+    `ols.cuh:112-113` exists for -- and `glm/estimator.mojo` shipped
+    exactly that bypass until DEVIATION 527 found it.
     """
     # `ols.cuh:74-75`, copied including the bounds.
     if n_cols <= 0:
@@ -131,9 +176,9 @@ def ols_fit(
         selected_algo = OLS_ALGO_SVD_JACOBI
 
     if selected_algo == OLS_ALGO_EIG:
-        lstsq_eig(
+        lstsq_eig_traced(
             ctx, a, b, w, cov_a, q, qs, s_vec, ab, inv, a_alias, a_alias2,
-            n_rows, n_cols,
+            n_rows, n_cols, elem_tpb, trace,
         )
     elif selected_algo == OLS_ALGO_SVD_JACOBI:
         # Reached either because the caller asked for it, or -- far more

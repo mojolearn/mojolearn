@@ -129,6 +129,96 @@ against the installed sklearn, not assumed.
 That flip is `sign_flip_kernel` below, a transliteration of `signFlipKernel`
 (`raft/matrix/detail/math.cuh:367`), and it runs ON THE DEVICE. It replaced a
 host loop over the copied-back eigenvectors.
+
+THE RULE, STATED AS A TOTAL ORDER (DEVIATION 525, IDENTITY_PATHS row 30)
+------------------------------------------------------------------------
+"Largest-magnitude entry positive" is INCOMPLETE and shipping it as though
+it were complete is the defect this section was audited for. Two entries can
+share the largest magnitude with opposite signs, and then "the" largest
+entry does not exist; resolved by whichever lane got there first, the sign
+of a whole component becomes a function of a schedule. So the convention
+this file implements is the completed one, in three clauses, and all three
+are load-bearing:
+
+  1. Let `M` be the largest ABSOLUTE value in the component. NaNs do not
+     compete for it (they lose every comparison), and the search starts from
+     `+0.0`, so `M >= 0` always.
+  2. Let `i` be the LOWEST INDEX whose absolute value equals `M`. This is
+     the tie-break, and it is not an invention: it is `cub::ArgMax`'s rule,
+     it is cuML's own thrust loop (`tsvd.cuh:160`, `if (val > max)` keeps
+     the first strict improvement), and it is `np.argmax`'s and therefore
+     scikit-learn's. Four implementations of the same tie rule.
+  3. Negate the component iff `entry[i] < 0.0`. Note `<`, not "the sign bit
+     is set": `-0.0 < 0.0` is FALSE, so a component whose largest-magnitude
+     entry is a zero of either sign is never flipped.
+
+The rule is a pure function of the component's own values. Nothing in it
+reads an index range, a lane id, a block count or a mode.
+
+ZERO, NEGATIVE ZERO AND NaN, RULED ON RATHER THAN AVOIDED
+----------------------------------------------------------
+IDENTITY_PATHS row 13 is the precedent and the reason this paragraph exists:
+`-0.0` and `+0.0` compare EQUAL, so which one survives a float min/max is
+decided by fold ORDER, and in the ET range kernel the surviving sign reached
+the model. Both zeros do reach clause 1's maximum here. **Neither can decide
+anything**, and the reason is structural:
+
+  - clause 1 folds `abs(...)`, and its result is consumed only by clause 2's
+    `==`, which cannot tell `+0.0` from `-0.0`. Whichever the fold keeps,
+    clause 2 selects the same index.
+  - clause 3's test is `< 0.0`, which both zeros fail.
+
+That is a BIT-level statement, not a formality, because the flip is a
+negation and `-(+0.0)` is `-0.0`. An all-zero component therefore comes back
+bit for bit as it went in; had clause 3 tested the sign bit instead, an
+all-zero component would come back as a row of `0x80000000` and which one
+you got would be decided by a fold order. The other side is pinned too: a
+component that IS flipped has its `+0.0` entries come back as `-0.0`, which
+is the rule's answer rather than a race's.
+
+An all-NaN component has no defined maximum -- clause 1's `>` admits no NaN,
+so `M` is the `+0.0` starting value that no real entry attains -- and it is
+left untouched rather than flipped on a sentinel.
+
+WHY THERE IS NO `NUMERIC_IDENTICAL` ARM HERE, AND WHY THAT IS THE ANSWER
+-------------------------------------------------------------------------
+Two block collectives compute this rule (`block_max` over the magnitudes,
+`block_min` over the indices attaining it), and IDENTITY_PATHS row 20 is
+about exactly that call shape: `max.gpu.primitives.block.sum` folds across
+lanes at the HARDWARE width -- 32 on Apple and NVIDIA, 64 on AMD's wavefront
+-- so a fold's shape is a per-vendor number and row 20 had to REPLACE the
+sums it found.
+
+**A fold shape cannot move a min or a max.** A sum is non-associative in
+floating point; a max is a SELECTION over a total order, exactly associative
+and commutative, so a 32-wide tree and a 64-wide tree return the same bits.
+The only two escapes from that total order are the `-0.0`/`+0.0` pair and
+NaN, and the paragraph above shows both are neutralised inside the rule
+rather than left to the fold. So the pathway is already pinned by
+construction and an `IDENTICAL` arm would be a second spelling of the same
+answer.
+
+The gate is also refused for a second, independent reason: mode-gating this
+would MOVE SHIPPED BITS. The flip has been unconditional since `b495627`, so
+`NUMERIC_FAST` -- the default, the arm every benchmark and every wheel is
+built from -- already carries it. Turning it off under FAST to "match the
+mirror" would make the shipped fit's component signs depend on the
+eigensolver's rounding again, which is a regression with no measurement
+behind it and is the opposite of what a numerics mode is for. The deviation
+from cuML is recorded in `UNPORTED.tsv` and in `PORTED_MAP.tsv`; it is not
+re-litigated by a build flag.
+
+WHAT IS STILL NOT PINNED, AND IT IS NOT THIS RULE
+--------------------------------------------------
+The rule is a pure function of the eigenvector's values, so it is exactly as
+cross-vendor as those values are. Two entries whose magnitudes differ by one
+ULP are not a tie and this rule will not treat them as one: if a vendor's
+eigensolver puts them the other way round, clause 2 selects the other index
+and the component's sign can invert. That is an amplification of an
+upstream difference, not a defect here -- sklearn's `svd_flip` has it too,
+and no sign convention that depends on the values can avoid it. It is named
+because a cross-vendor comparison that finds a flipped component should look
+at the eigensolver first.
 """
 
 from std.gpu import block_idx, thread_idx
@@ -319,10 +409,19 @@ def sign_flip_kernel(
     """PORT OF `signFlipKernel`, `raft/matrix/detail/math.cuh:367`.
 
     One block per component. Finds the entry of largest ABSOLUTE value in the
-    component and negates the whole component if that entry is negative. That
-    is the convention scikit-learn's `svd_flip(..., u_based_decision=False)`
-    uses. It is NOT cuML's: see the module docstring, which records that
-    `pcaFit` does not flip at all and `pcaFitTransform` flips on U.
+    component, breaks a tie for that magnitude by taking the LOWEST INDEX,
+    and negates the whole component if that entry is `< 0.0`. Those three
+    clauses are the whole convention and the module docstring states them as
+    one (DEVIATION 525); it is scikit-learn's
+    `svd_flip(..., u_based_decision=False)` and it is NOT cuML's, which
+    records that `pcaFit` does not flip at all and `pcaFitTransform` flips
+    on U.
+
+    The rule reads nothing but the component's values -- no lane id, no
+    block count, no mode -- which is what makes it identical across vendors.
+    `decomposition/mojo_only/pca_check.mojo` holds it to that: the device
+    answer must equal a fold-free host scan BITWISE, and the tie, the zero
+    cases and the NaN case are each planted rather than hoped for.
 
     This REPLACED a host loop in `eig_and_truncate` that did the same thing on
     the copied-back eigenvectors. Same convention, same tie-break, on the
@@ -348,12 +447,20 @@ def sign_flip_kernel(
     matrix whose eigendecomposition already cost O(n^3).
 
     TIE-BREAK, WHICH IS PART OF THE CONVENTION. `cub::ArgMax` keeps the LOWER
-    index on a tie, and cuML's own thrust loop keeps the first strict
-    improvement (`cuml/cpp/src/tsvd/tsvd.cuh:160`, `if (val > max)`). Taking
-    the MINIMUM index among the entries attaining the maximum reproduces
-    both. Without it, a component holding both `+x` and `-x` at the largest
-    magnitude would have no defined sign, which is exactly the
-    irreproducibility the sign flip exists to remove.
+    index on a tie, cuML's own thrust loop keeps the first strict
+    improvement (`cuml/cpp/src/tsvd/tsvd.cuh:160`, `if (val > max)`), and
+    `np.argmax` -- so scikit-learn's `svd_flip` -- returns the first
+    occurrence. Taking the MINIMUM index among the entries attaining the
+    maximum reproduces all three. Without it, a component holding both `+x`
+    and `-x` at the largest magnitude would have no defined sign, which is
+    exactly the irreproducibility the sign flip exists to remove.
+
+    It is TOTAL, not merely two-valued: indices are distinct integers, so a
+    three-way or n-way tie has one lowest index just as a two-way one does.
+    The check plants a three-way tie for that reason, and plants ties both
+    ACROSS lanes (indices 3 and 4 at `SIGNFLIP_TPB = 32`) and WITHIN one
+    lane's strided slice (3 and 35), because those are two different things
+    that could decide it and only one of them is a fold.
     """
     var n = Int(n_in)
     var col = Int(block_idx.x)
@@ -385,8 +492,17 @@ def sign_flip_kernel(
     var biggest = sh[0]
 
     # PASS 2: the LOWEST index attaining it. `n` is the sentinel for a thread
-    # whose slice holds none. The equality is exact: a max is a selection, so
-    # `biggest` is bit for bit one of the values compared against it.
+    # whose slice holds none. `biggest` is bit for bit one of the compared
+    # values WHENEVER ANY REAL ENTRY ATTAINS IT -- a max is a selection --
+    # but that is not unconditional and the sentence that used to claim it
+    # was is deleted: on an all-NaN component nothing attains the `+0.0`
+    # starting value, so `first` stays at the sentinel `n` and PASS 3 leaves
+    # `sh[2]` at +1. Untouched is the right answer there; the wrong one would
+    # be to flip on a sentinel.
+    #
+    # `+0.0` and `-0.0` both reach this `==` and it cannot tell them apart,
+    # which is the point rather than a gap: whichever zero PASS 1's fold kept
+    # (IDENTITY_PATHS row 13's hazard), this pass selects the same index.
     var cand = Float32(n)
     f = tid
     while f < n:
@@ -395,6 +511,10 @@ def sign_flip_kernel(
             if fv < cand:
                 cand = fv
         f += SIGNFLIP_TPB
+    # Indices travel through the reduction as `Float32`, which is exact only
+    # below 2^24. Named rather than guarded because the bound is not
+    # reachable: `n` here is `n_cols`, and the matrix this kernel is handed
+    # is `n_cols x n_cols`, so `n_cols = 2^24` is 2^48 floats.
     var reduced_first = block_min[block_size=SIGNFLIP_TPB](cand)
     if tid == 0:
         sh[1] = reduced_first
@@ -402,8 +522,20 @@ def sign_flip_kernel(
     barrier()
     var first = sh[1]
 
-    # PASS 3: the thread owning that index reads its SIGN. Exactly one thread
-    # matches, because `biggest` is attained by at least one real entry.
+    # PASS 3: the thread owning that index reads its SIGN. AT MOST one thread
+    # matches -- exactly one when any real entry attained the maximum, and
+    # none on an all-NaN component, where `first` is the sentinel `n` and no
+    # `f < n` can equal it. (The claim that used to stand here, "exactly one
+    # thread matches, because `biggest` is attained by at least one real
+    # entry", is false in that case and is deleted rather than qualified.)
+    #
+    # The test is `< Float32(0.0)` and NOT a sign-bit test, deliberately:
+    # `-0.0 < 0.0` is FALSE, so a component whose largest-magnitude entry is
+    # a zero is never flipped and an all-zero component comes back bit for
+    # bit as it arrived. A sign-bit test would negate it instead, turning a
+    # row of `0x00000000` into a row of `0x80000000` on the strength of a
+    # zero's sign. `check_sign_flip_rule_and_ties` asserts both zero columns
+    # on the bits, and that sabotage is the one it catches.
     f = tid
     while f < n:
         if Float32(f) == first:
@@ -486,6 +618,23 @@ def eig_and_truncate(
     # because the sign of a column does not depend on the ordering and doing
     # it here means the host side never touches signs at all. Theirs flips
     # `n_components` columns for the same reason: the flip is per column.
+    #
+    # PINNED ONCE, HERE, FOR BOTH CALLERS (DEVIATION 525). `eig_and_truncate`
+    # is `calEig` + `truncCompExpVars` and `tsvd_fit` reaches it too, so
+    # truncated SVD carries the same convention with the same tie-break by
+    # construction rather than by a second copy of the rule. cuML's two
+    # entries do NOT agree with each other on this -- `pcaFit` never flips
+    # and `tsvdFitTransform` flips on U (`tsvd.cuh:270`) -- and one shared
+    # rule is the deliberate divergence, not an accident of sharing a
+    # function.
+    #
+    # ORDER MATTERS AND IT IS THIS ONE. The flip runs on the eigenvectors as
+    # the solver left them, BEFORE the descending-eigenvalue permutation
+    # below (`raft::matrix::colReverse`, `tsvd.cuh:122`, which for a Jacobi
+    # is a sort rather than a reverse). It commutes with that permutation --
+    # the rule is per column and reads only that column -- so putting it
+    # first is a choice about where the host stops caring, not a numeric
+    # one.
     ctx.enqueue_function[sign_flip_kernel](
         vec_buf.unsafe_ptr(),
         Int32(n_cols),

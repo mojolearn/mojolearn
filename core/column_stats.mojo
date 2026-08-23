@@ -42,6 +42,39 @@ for something else.
 `cov` uses the `n_rows - 1` denominator, the sample covariance, because
 `pca_fit` later multiplies the explained variances by exactly `n_rows - 1` to
 recover singular values.
+
+THE TWO FLOAT FOLDS ARE PINNED (DEVIATION 523)
+-----------------------------------------------
+`column_mean_kernel` and `xty_kernel` used to fold with
+`max.gpu.primitives.block.sum`, whose internal cross-lane stage follows the
+HARDWARE warp width -- 32 on Apple and NVIDIA, **64 on AMD's CDNA
+wavefront**. Float addition is not associative, so the AMD column combined
+different partials and produced a different mean and a different `A^T b`,
+and PCA subtracts that mean from every row while OLS solves the normal
+equations against that right-hand side. IDENTITY_PATHS row 20's defect, in
+row 20's own directory, named in that file and left for this lane.
+
+DEVIATION 510 had already added `K_LIB_COLUMN_STATS` to
+`lib_block_bounds_a_float_fold`, which pins the block WIDTH to one value on
+every column. That is necessary and NOT sufficient: pinning the width does
+not change what the library does inside that width. The fix is REPLACE, not
+PIN -- `core/pinned_reduce.pinned_block_sum`, the library call verbatim
+under FAST and a halving tree with no lane primitive in it under IDENTICAL.
+
+Also closed here: `xty_kernel`'s `acc += x * y` through
+`identical_mul_add` (row 9), and row 10's `ftz` at every float seam these
+kernels write -- the mean's quotient, `A^T b`, the centering store, the
+pseudo-inverse's column division, and the covariance scale.
+
+THE CENTERING STORE WAS HALF-CLOSED WHEN THIS ARRIVED, which is worth
+recording because it is not the shape the audit expected. DEVIATION 522
+(`core/gram_splitk.mojo`, the same day) flushed the FUSED arm's centered
+read to `ftz(ftz(x) - ftz(mu))` and left this kernel -- the OTHER arm of
+a pair `check_gram_centered_fused` asserts is bit-equal per cell --
+unflushed. On Metal both spellings are inert and the check passes either
+way; on CUDA and HIP under IDENTICAL the two arms would have staged
+different tiles from the same input. `shift_columns_kernel` now mirrors
+that spelling exactly.
 """
 
 from mojo_only.kernel_matrix import (
@@ -53,9 +86,11 @@ from mojo_only.kernel_matrix import (
 
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.memory import AddressSpace
-from max.gpu.primitives.block import sum as block_sum
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
+
+from core.pinned_reduce import pinned_block_sum
+from mojo_only.numerics import ftz, identical_mul_add
 
 
 # READ FROM THE MATRIX, not restated here. `mojo_only/kernel_matrix.mojo`
@@ -82,14 +117,35 @@ def column_mean_kernel(
         acc += x.unsafe_load(r * n_cols + col)
         r += STATS_TPB
 
-    # `cub::BlockReduce`'s counterpart. MAX ships the block
-    # collectives at `max.gpu.primitives.block`, so the hand-written
-    # shared-memory tree reduction this replaced is gone. Same
-    # arithmetic, one call, and the reduction shape is Modular's to
-    # tune rather than ours to guess. See VENDOR_LIBRARIES.md.
-    var s0 = block_sum[block_size=STATS_TPB](acc)
+    # `cub::BlockReduce`'s counterpart, and NOT `block.sum` any more.
+    # DEVIATION 523, IDENTITY_PATHS row 20's defect in this directory:
+    # `max.gpu.primitives.block.sum` is correct and tuned, and its
+    # internal cross-lane stage folds at the HARDWARE warp width -- 32
+    # on Apple and NVIDIA, 64 on AMD's CDNA wavefront. Float addition is
+    # not associative, so the same STATS_TPB values reduce through two
+    # different association trees on two vendors, and this mean is
+    # subtracted from every row before the covariance. `pinned_block_sum`
+    # IS the library call under FAST (bit for bit, so the shipped build
+    # is unmoved) and a halving tree with no lane primitive in it under
+    # IDENTICAL. See `core/pinned_reduce.mojo` and VENDOR_LIBRARIES.md.
+    #
+    # The contract is met at both call sites (`pca.mojo:200`,
+    # `gram_splitk_check.mojo:248`): `block_dim == STATS_TPB`, there is
+    # no early return above this line, so every thread of the block
+    # reaches the fold, and a thread whose stride found no row arrives
+    # with `acc == 0.0`.
+    var s0 = ftz(pinned_block_sum[STATS_TPB](acc))
     if tid == 0:
-        mu.unsafe_store(col, s0 / Float32(n_rows))
+        # IDENTITY_PATHS row 10, and the reason this is two statements:
+        # the quotient is a float SEAM another kernel reads, and a
+        # division is a seam-PRODUCING operation (a centered column of
+        # near-constant data drives it toward the denormal range). An
+        # intermediate inside one expression cannot be reached by `ftz`
+        # on a non-FTZ backend, so the fold result and the quotient each
+        # get their own local. Bitwise inert on Metal, which already
+        # flushes; it aligns CUDA and HIP to Metal.
+        var m = ftz(s0 / Float32(n_rows))
+        mu.unsafe_store(col, m)
 
 
 def shift_columns_kernel(
@@ -103,15 +159,47 @@ def shift_columns_kernel(
 
     Both directions in one kernel because they are the same operation and
     because pairing them makes the restore hard to forget.
+
+    AUDITED FOR DEVIATION 523. Two classes were looked for:
+
+    - CONTRACTION (row 9): none reachable, and `identical_mul_add` is
+      deliberately NOT called. `sign_in` is exactly +-1.0 at every call
+      site, so `sign_in * mu` is an exact sign flip and
+      `fma(sign, mu, x)` and `x + (sign * mu)` round to the same bits on
+      every backend. The pin is left off rather than added-and-inert so
+      that nobody later reads it as evidence that a general `sign_in` is
+      safe. It is not: a caller passing anything else makes this a row-9
+      site and the pin has to arrive with that caller.
+    - SEAM (row 10): PRESENT, AND NOW CLOSED -- the flushes below.
+      `x + sign*mu` is the centering cancellation, which is the single
+      most likely denormal producer in this file, and the store is a seam
+      the Gram product reads.
+
+    **THE SPELLING IS NOT FREE: IT MIRRORS `core/gram_splitk.mojo`
+    STATEMENT FOR STATEMENT.** That file's fused arm reads
+    `x[t, j] - mu[j]` into its staging tile INSTEAD of reading this
+    kernel's output, and `check_gram_centered_fused` asserts the two arms
+    agree PER CELL, bitwise. DEVIATION 522 flushed that arm as
+    `ftz(ftz(x) - ftz(mu))` (both operands and the difference). Flushing
+    only one of the two halves splits the pair on CUDA and HIP while
+    passing on Metal, where the flush is inert -- so the half left
+    unflushed WAS the open defect, not the half being added. `x + (-1)*mu`
+    is bitwise `x - mu` (exact sign flip, and IEEE `a + (-b)` IS `a - b`),
+    and `ftz(-m) == -ftz(m)` because `ftz` flushes to a SIGNED zero, so
+    the two spellings are the same three flushes in the same places.
     """
     var n_cols = Int(n_cols_in)
     var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if idx >= Int(n_rows_in) * n_cols:
         return
     var col = idx % n_cols
-    x.unsafe_store(
-        idx, x.unsafe_load(idx) + sign_in * mu.unsafe_load(col)
-    )
+    # One local per flush, because an intermediate INSIDE an expression
+    # cannot be reached by `ftz` on a non-FTZ backend (row 10's checklist,
+    # and `numerics.ftz`'s own docstring says so).
+    var xv = ftz(x.unsafe_load(idx))
+    var mv = ftz(mu.unsafe_load(col))
+    var shifted = ftz(xv + sign_in * mv)
+    x.unsafe_store(idx, shifted)
 
 
 def xty_kernel(
@@ -136,16 +224,30 @@ def xty_kernel(
     var acc = Float32(0.0)
     var r = tid
     while r < n_rows:
-        acc += x.unsafe_load(r * n_cols + col) * y.unsafe_load(r)
+        # IDENTITY_PATHS row 9, the contraction pin, and the same class
+        # row 19 closed for the L2 accumulators: `acc += x * y` is ONE
+        # rounding or TWO at the codegen's whim, and the whim differs per
+        # backend. Pinning the fold's shape and leaving this unpinned
+        # would still hand two vendors two different `A^T b`.
+        # DEVIATION 523.
+        acc = identical_mul_add(
+            x.unsafe_load(r * n_cols + col), y.unsafe_load(r), acc
+        )
         r += STATS_TPB
 
-    # `cub::BlockReduce`'s counterpart. MAX ships the block
-    # collectives at `max.gpu.primitives.block`, so the hand-written
-    # shared-memory tree reduction this replaced is gone. Same
-    # arithmetic, one call, and the reduction shape is Modular's to
-    # tune rather than ours to guess. See VENDOR_LIBRARIES.md.
-    var s0 = block_sum[block_size=STATS_TPB](acc)
+    # `cub::BlockReduce`'s counterpart, and NOT `block.sum` any more --
+    # DEVIATION 523, the same fold defect as `column_mean_kernel` above,
+    # on the right-hand side the normal equations are solved against.
+    # `pinned_block_sum` is the library call verbatim under FAST and a
+    # lane-width-independent halving tree under IDENTICAL. The contract
+    # is met at the one call site (`lstsq.mojo:128`, `block_dim ==
+    # STATS_TPB`): no early return, every thread reaches the fold, and a
+    # thread with no row arrives with `acc == 0.0`.
+    var s0 = ftz(pinned_block_sum[STATS_TPB](acc))
     if tid == 0:
+        # IDENTITY_PATHS row 10: `out_v` is a float seam `lstsq_eig`'s
+        # final `gemv` reads. `s0` is already flushed above, so the store
+        # carries the flushed local rather than re-deriving it.
         out_v.unsafe_store(col, s0)
 
 
@@ -175,7 +277,15 @@ def divide_columns_by_nonzero_kernel(
     var col = idx % n
     var lam = s_vec.unsafe_load(col)
     if lam > thresh_in or lam < -thresh_in:
-        qs.unsafe_store(idx, q.unsafe_load(idx) / lam)
+        # IDENTITY_PATHS row 10, DEVIATION 523. A quotient is the
+        # seam-producing operation row 10 names, `qs` is read by
+        # `gemm_nt`, and `q / lam` with a barely-above-threshold `lam`
+        # is exactly where a denormal appears. The compare above needs
+        # no flush: `thresh_in` is 1e-10 at the one call site, twenty-
+        # eight orders of magnitude above the largest denormal, so a
+        # denormal `lam` takes the zero arm on every backend and can
+        # never reach this division.
+        qs.unsafe_store(idx, ftz(q.unsafe_load(idx) / lam))
     else:
         qs.unsafe_store(idx, Float32(0.0))
 
@@ -190,6 +300,16 @@ def diagonal_to_vector_kernel(
     cuSOLVER hands back a separate eigenvalue array; Jacobi leaves them on
     the diagonal of the matrix it consumed. One kernel bridges the two
     conventions so the rest of the port reads like theirs.
+
+    AUDITED FOR DEVIATION 523, NO CHANGE. There is no arithmetic here at
+    all -- one strided load, one store -- so there is no fold and no
+    seam-producing operation: a copy cannot make a denormal that did not
+    arrive. A denormal that DID arrive is the Jacobi sweep's to flush
+    (`decomposition/mojo_only/jacobi_eigh_device.mojo`, DEVIATION 511,
+    another lane's file), and flushing it here instead would be inert
+    for this file's only consumer anyway:
+    `divide_columns_by_nonzero_kernel` zeroes anything below 1e-10, which
+    is every denormal.
     """
     var n = Int(n_in)
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -212,7 +332,12 @@ def scale_in_place_kernel(
     """
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < Int(n_in):
-        a.unsafe_store(i, a.unsafe_load(i) * scale_in)
+        # IDENTITY_PATHS row 10, DEVIATION 523. The covariance matrix is
+        # the seam PCA's eigensolver reads and `pca_fit` later multiplies
+        # back by `n_rows - 1`; the multiply by `1 / (n_rows - 1)` shrinks
+        # every entry, so a small off-diagonal covariance at a large
+        # `n_rows` is precisely how a denormal is produced here.
+        a.unsafe_store(i, ftz(a.unsafe_load(i) * scale_in))
 
 
 
@@ -235,6 +360,15 @@ def transpose_kernel(
     Tiled and padded so both the read and the write are coalesced: a naive
     transpose is coalesced on exactly one side and strided on the other,
     which costs more than the whole operation is worth.
+
+    AUDITED FOR DEVIATION 523, NO CHANGE, SAID OUT LOUD RATHER THAN
+    SKIPPED. This kernel MOVES DATA: load, threadgroup store, barrier,
+    threadgroup load, store. Not one arithmetic operation is performed on
+    a float value anywhere in it, so it has no fold whose order could
+    differ and no operation that could produce a denormal a backend might
+    flush differently. Every bit that leaves it is a bit that entered it,
+    at a new address. `K_LIB_TRANSPOSE` is classified the same way in
+    `lib_block_bounds_a_float_fold` ("moves data").
     """
     var n_rows = Int(n_rows_in)
     var n_cols = Int(n_cols_in)

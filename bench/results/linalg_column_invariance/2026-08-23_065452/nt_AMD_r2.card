@@ -1,0 +1,6 @@
+# format: mojolearn-identity-trace v1
+0	nt.input.x	f32	32768	c46521d1f8e4dc10
+1	nt.input.y	f32	2048	05b7f760fd4a853f
+2	nt.narrow	f32	256	04859492d36daecd
+3	nt.wide	f32	256	04859492d36daecd
+4	nt.wider	f32	256	04859492d36daecd

@@ -808,6 +808,55 @@ check-unsupervised-identity = "sh tools/check_unsupervised_identity.sh"
 # three different sorted index sets.
 check-column-invariance = "sh tools/check_column_invariance.sh"
 
+# THE LINEAR-ALGEBRA IDENTITY GATE (IDENTITY_PATHS rows 27-31; DEVIATIONS
+# 520-526). The matrix products, PCA, truncated SVD and OLS, in BOTH modes.
+# Same shape as the unsupervised gate above and for the same reason: one
+# process is one mode, so a run of a single arm proves half the property and
+# reads like the whole of it. Every check prints the mode it COMPILED in.
+check-linalg-identity = "sh tools/check_linalg_identity.sh"
+
+# WHAT THAT GATE COSTS, in seconds rather than in argument. Alternates the
+# modes round by round (the M4's governor drifts up to 1.7x over twenty
+# minutes, so a block of A then a block of B measures the drift).
+price-linalg-identity = "sh tools/price_linalg_identity.sh"
+
+# The two identity checks this lane added, registered individually so a
+# reader can run one without the whole gate. A check with no line here is
+# reachable only by someone who already knows it is there.
+check-gemm-identity = "mojo run -I . core/gemm_identity_check.mojo"
+check-column-stats-identity = "mojo run -I . core/column_stats_identity_check.mojo"
+
+# THE COLUMN MAY NOT REACH THE PRODUCT (IDENTITY_PATHS rows 27-28). Compiles
+# bench/linalg_trace_main.mojo against the APPLE, NVIDIA and AMD comptime
+# columns on THIS machine under IDENTICAL and requires one card. The half of
+# the cross-vendor debt that needs no hardware; the sibling of
+# check-column-invariance, which does the same for rows 19-26.
+check-linalg-column-invariance = "sh tools/check_linalg_column_invariance.sh"
+
+# THE OLS IDENTITY CARD (IDENTITY_PATHS row 32, DEVIATION 527). Eleven stages
+# from the input bytes to the coefficients, so a cross-vendor diff names the
+# FIRST step that moved instead of reporting that the answer moved. Writes a
+# run-to-run control beside it.
+ols-card = "sh tools/ols_card.sh"
+
+# THE COLUMN-INVARIANCE GATE (2026-08-23). The half of the cross-vendor debt
+# that does NOT need cross-vendor hardware: `TARGET_COLUMN` is a comptime
+# choice, so `-D MOJOLEARN_COLUMN_AMD` compiles this source against AMD's
+# block sizes, lane width, shared budget and core count on whatever device is
+# attached. This runs k-means, k-NN and DBSCAN under IDENTICAL at three
+# columns, twice each, and requires one card and one output hash across all
+# eighteen runs.
+#
+# WHAT IT PROVES: the vendor's CONSTANTS do not reach the answer -- most of
+# rows 8, 21, 22 and 23. WHAT IT CANNOT: contraction, denormal policy and
+# device transcendentals are the BACKEND's (rows 9, 10, 12), and every run
+# here is on one backend. E1 is still owed and this does not shorten it.
+#
+# It has teeth, measured rather than assumed: the same eighteen runs under
+# FAST do NOT agree -- three consecutive FAST k-NN runs on ONE column gave
+# three different sorted index sets.
+check-column-invariance = "sh tools/check_column_invariance.sh"
+
 # The three identity check files ALONE, in whatever mode the tree is
 # currently built for. For the loop while working on one of them; the gate
 # above is what a session should finish on.

@@ -62,8 +62,134 @@ from layout import TileTensor
 from layout.tile_layout import row_major
 from linalg.matmul import matmul
 from max.gpu.host import DeviceBuffer, DeviceContext
+from std.gpu import block_dim, block_idx, thread_idx
 
-from core.gram_splitk import gemm_tn_splitk_into, gram_splitk_applies
+from core.gram_splitk import (
+    GRAM_MAX_CELLS_PER_THREAD,
+    GRAM_MAX_COLS,
+    GRAM_TPB,
+    gemm_tn_splitk_into,
+    gram_splitk_applies,
+)
+from mojo_only.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
+    ftz,
+    identical_mul_add,
+)
+
+
+# ===========================================================================
+# THE PINNED PRODUCTS (IDENTITY_PATHS row 28, DEVIATION 526)
+# ===========================================================================
+#
+# `linalg.matmul` and `linalg.gemv.gemv_gpu` are CLOSED vendor libraries, and
+# that is the correct default: where cuVS and cuML call cuBLAS for a
+# standalone product they call a library with no source, so there is nothing
+# to port. **A closed library cannot carry an identity claim.** Its tile
+# shape, its k-split and, on some backends, its mantissa width are chosen per
+# vendor and per shape, and a k-split IS a summation order. IDENTITY_PATHS
+# row 24 reached this verdict for the k-NN distance step and paid for it
+# (`neighbors/mojo_only/pinned_distance_tile.mojo`, measured 2.85x); these
+# two are the same verdict for the two products OLS and PCA run through.
+#
+# THE CONSTRUCTION, and it is deliberately the simplest correct one:
+# ONE THREAD PER OUTPUT CELL, contraction axis ASCENDING, every step through
+# `identical_mul_add` (one rounding) with `ftz` at the seams. Therefore
+#
+#     the sequence of arithmetic operations that produces cell (i, j) is a
+#     pure function of k, and of NOTHING ELSE.
+#
+# Not of the grid, not of the block size, not of how many other cells were
+# computed in the same launch, not of the lane width, not of the vendor. A
+# staged or split-k version would be faster and would be a SECOND thing to
+# pin, which is the trade row 24 already made once and made the same way.
+#
+# THIS IS THE PROPERTY THE SERVING WORLD CALLS BATCH INVARIANCE. There, the
+# observation is that changing the batch size changes the reduction order
+# inside attention and normalization kernels, so the same prompt returns
+# different logits depending on what else was in the batch. It is the same
+# defect as IDENTITY_PATHS rows 3 and 7 -- a block count is a summation order
+# -- reached from a different direction by a different community. A product
+# whose per-cell order does not depend on launch geometry is the shared fix,
+# and it is worth knowing that the two problems are one problem.
+#
+# THE COST IS A MEASUREMENT, NOT AN ARGUMENT: `tools/price_linalg_identity.sh`
+# runs the arms interleaved and reports the ratio. Under `NUMERIC_FAST`
+# neither kernel is reachable and the vendor call is what runs, bit for bit.
+
+
+def pinned_gemm_nt_kernel(
+    z: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    y: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    n_in: Int32,
+    k_in: Int32,
+):
+    """`z[m x n] = x[m x k] . y[n x k]^T`, one thread per output cell.
+
+    The whole numeric content is the loop below: `p` ascending from 0 to
+    k-1, one `fma` per step, no partials, no cross-thread combination, no
+    atomics. Two threads never contribute to one cell, so nothing about the
+    launch can reach the answer.
+    """
+    var m = Int(m_in)
+    var n = Int(n_in)
+    var k = Int(k_in)
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= m * n:
+        return
+    var i = cell // n
+    var j = cell % n
+    var acc = Float32(0.0)
+    for p in range(k):
+        acc = ftz(
+            identical_mul_add(
+                ftz(x.unsafe_load(i * k + p)),
+                ftz(y.unsafe_load(j * k + p)),
+                acc,
+            )
+        )
+    z.unsafe_store(cell, ftz(acc))
+
+
+def pinned_gemv_n_kernel(
+    z: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    y: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    k_in: Int32,
+):
+    """`z[m] = x[m x k] . y[k]`, one thread per output element.
+
+    The `n == 1` case of the kernel above, kept separate only because the
+    caller's `y` is a k-vector rather than an `n x k` matrix; the index
+    arithmetic collapses to the same thing and the loop is character for
+    character the same, so the two cannot round differently.
+    """
+    var m = Int(m_in)
+    var k = Int(k_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= m:
+        return
+    var acc = Float32(0.0)
+    for p in range(k):
+        acc = ftz(
+            identical_mul_add(
+                ftz(x.unsafe_load(i * k + p)), ftz(y.unsafe_load(p)), acc
+            )
+        )
+    z.unsafe_store(i, ftz(acc))
+
+
+#: Threads per block for the two pinned products. SCHEDULING and provably so:
+#: each thread owns a whole output cell, so this number moves WHICH thread
+#: computes a cell and never the order any cell is accumulated in. That is
+#: the distinction `numerics.mojo` opens by drawing, and it is the reason
+#: this row does not belong in `lib_block_bounds_a_float_fold` beside the
+#: rows whose block size IS a fold width.
+comptime PINNED_GEMM_TPB = 256
 
 
 # `KernelPolicy<float, 4, 32, 4, 4, 16, 16>`, RAFT's Policy4x4<float>.
@@ -125,6 +251,23 @@ def gemm_nt(
     if n == 1:
         gemv_n(ctx, z, x, y, m, k)
         return
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        # DEVIATION 526. `matmul` is a closed vendor library; see the
+        # PINNED PRODUCTS block above. The `n == 1` route is taken FIRST and
+        # deliberately, so the degenerate shape keeps landing on ONE
+        # implementation in both modes rather than acquiring a second
+        # spelling that only the identical arm sees.
+        ctx.enqueue_function[pinned_gemm_nt_kernel](
+            z.unsafe_ptr(),
+            x.unsafe_ptr(),
+            y.unsafe_ptr(),
+            Int32(m),
+            Int32(n),
+            Int32(k),
+            grid_dim=((m * n + PINNED_GEMM_TPB - 1) // PINNED_GEMM_TPB, 1, 1),
+            block_dim=(PINNED_GEMM_TPB, 1, 1),
+        )
+        return
     var tz = TileTensor(z, row_major(m, n))
     var tx = TileTensor(x, row_major(m, k))
     var ty = TileTensor(y, row_major(n, k))
@@ -168,7 +311,44 @@ def gemm_tn(
     Both arms are exercised by name: `mojo_only/gram_splitk_check.mojo`
     runs each directly against a Float64 host oracle, and the vendor table
     covers each through this wrapper (`check_matmul_colmajor`'s tail rows).
+
+    **UNDER `NUMERIC_IDENTICAL` THERE IS ONE ARM AND A REFUSAL, NOT TWO
+    ARMS** (IDENTITY_PATHS row 27, DEVIATION 521). `gram_splitk_applies`
+    resolves the column to `COLUMN_BIT_IDENTICAL` and stops consulting the
+    starvation test, so it answers True on every column wherever the
+    kernel's capacity allows. Where capacity does NOT allow, the shape
+    would otherwise fall through to `gemm_tn_via_transpose` and
+    `linalg.matmul`, a CLOSED vendor library whose tile shape and k-split
+    are per-vendor and whose k-split IS a summation order -- an identity
+    build would then return a model that is not identical and say nothing.
+    So it raises by name instead. REFUSE is the third and only other
+    legitimate move (IDENTITY_PATHS' opening rule); the closure that
+    upgrades this refusal to a run is a wider split-K kernel, and it is
+    named in the error rather than left for a reader to infer.
     """
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        if not gram_splitk_applies(m, n, k):
+            raise Error(
+                "gemm_tn: NUMERIC_IDENTICAL refuses the Gram shape "
+                + String(m)
+                + " x "
+                + String(n)
+                + " x "
+                + String(k)
+                + ". The split-K kernel (core/gram_splitk.mojo) is the only"
+                + " arm with a pinned summation order, and this shape is"
+                + " outside its capacity (needs m == n <= "
+                + String(GRAM_MAX_COLS)
+                + " and m*n <= "
+                + String(GRAM_TPB * GRAM_MAX_CELLS_PER_THREAD)
+                + " register cells). The other arm is linalg.matmul, whose"
+                + " k-split is a per-vendor summation order, so running it"
+                + " would return a NON-identical model under a mode that"
+                + " promises one. IDENTITY_PATHS row 27. To close this"
+                + " refusal, widen the split-K kernel's staging tile; to"
+                + " work around it today, reduce the feature count or run"
+                + " NUMERIC_FAST and drop the cross-vendor claim."
+            )
     if gram_splitk_applies(m, n, k):
         # `xt` is pure scratch on both arms and is sized `k * m`, so the
         # split-K arm reuses it as the partials workspace whenever it
@@ -301,6 +481,24 @@ def gemv_n(
     arm predicts at n=1, since it swaps a and b and passes `(n, m, k)`.
     Reverted; that failure is the evidence.
     """
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        # DEVIATION 526. `gemv_gpu` is a closed vendor library and its
+        # reduction over k is its own business: on a wide-k gemv the usual
+        # shape is one BLOCK per output row with a cross-lane fold, whose
+        # width is the hardware's (32 on Apple and NVIDIA, 64 on AMD) --
+        # IDENTITY_PATHS row 20's defect, inside a library we cannot reach.
+        # The pinned kernel gives the row to ONE thread instead, so k is
+        # walked ascending with no fold at all.
+        ctx.enqueue_function[pinned_gemv_n_kernel](
+            z.unsafe_ptr(),
+            x.unsafe_ptr(),
+            y.unsafe_ptr(),
+            Int32(m),
+            Int32(k),
+            grid_dim=((m + PINNED_GEMM_TPB - 1) // PINNED_GEMM_TPB, 1, 1),
+            block_dim=(PINNED_GEMM_TPB, 1, 1),
+        )
+        return
     var tz = TileTensor(z, row_major(m, Int(1)))
     var tx = TileTensor(x, row_major(m, k))
     var ty = TileTensor(y, row_major(k, Int(1)))

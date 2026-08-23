@@ -1,0 +1,87 @@
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_trace_main.mojo:56:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:374:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_trace_main.mojo:56:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:246:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_trace_main.mojo:56:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:360:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_trace_main.mojo:56:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:384:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_trace_main.mojo:54:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:399:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/column_stats.mojo:389:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        tile[ty * (TRANSPOSE_TILE + 1) + tx] = src.unsafe_load(r * n_cols + c)
+        ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_trace_main.mojo:54:
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/core/gemm.mojo:399:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/column_stats.mojo:396:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            r2 * n_rows + c2, tile[tx * (TRANSPOSE_TILE + 1) + ty]
+                              ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_trace_main.mojo:56:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/identity_trace.mojo:101:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_trace_main.mojo:55:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:592:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    tile[i] = ftz(
+                    ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_trace_main.mojo:55:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:597:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    tile[i] = x.unsafe_load(t * m + i)
+                    ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_trace_main.mojo:55:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:612:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        cv[b] = tile[base + bj0 + b]
+                                ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_trace_main.mojo:55:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:614:38: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        var xi = tile[base + bi0 + a]
+                                 ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_trace_main.mojo:55:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:631:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var xj = tile[base + jm]
+                         ~~~~^~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_trace_main.mojo:55:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:636:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(ii[c])], xj, acc[c]
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_trace_main.mojo:55:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:650:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(ii[c])],
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/andrewhendel/CascadeProjects/mojolearn/bench/linalg_trace_main.mojo:55:
+/Users/andrewhendel/CascadeProjects/mojolearn/core/gram_splitk.mojo:651:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(jj[c])],
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+mode IDENTICAL
+column nvidia
+gram_chunks 128
+gram_splitk_arm True
+arm gemv done

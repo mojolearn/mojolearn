@@ -30,6 +30,7 @@ from core.gram_splitk import (
     GRAM_OVERSUBSCRIBE,
     GRAM_STAGE_FLOATS,
     GRAM_TPB,
+    PINNED_GRAM_SPLITK_CHUNKS,
     gram_splitk_applies,
     gram_splitk_chunk_count,
 )
@@ -203,13 +204,30 @@ def check_hardware_matrix() raises:
         max_active_blocks_per_core(256, 18432),
         max_active_blocks_for[TARGET_COLUMN](256, 18432),
     )
-    _pin(
-        "gram_splitk_chunk_count reader vs table",
-        gram_splitk_chunk_count(),
-        gpu_cores_for[TARGET_COLUMN]()
-        * max_active_blocks_for[TARGET_COLUMN](GRAM_TPB, GRAM_STAGE_FLOATS * 4)
-        * GRAM_OVERSUBSCRIBE,
-    )
+    # THE CHUNK COUNT IS A NUMERIC ROW UNDER IDENTICAL, NOT A TABLE READER
+    # (DEVIATION 520, IDENTITY_PATHS row 27). Under FAST it is still the
+    # machine's own number and this file still pins it against the table.
+    # Under IDENTICAL it is `PINNED_GRAM_SPLITK_CHUNKS` on every column,
+    # because the count IS the k-axis summation split and a summation split
+    # read from the hardware is a different model per vendor. Asserting the
+    # table value in both modes would demand the identity build read the
+    # machine, which is the defect.
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        _pin(
+            "gram_splitk_chunk_count pinned (IDENTICAL)",
+            gram_splitk_chunk_count(),
+            PINNED_GRAM_SPLITK_CHUNKS,
+        )
+    else:
+        _pin(
+            "gram_splitk_chunk_count reader vs table",
+            gram_splitk_chunk_count(),
+            gpu_cores_for[TARGET_COLUMN]()
+            * max_active_blocks_for[TARGET_COLUMN](
+                GRAM_TPB, GRAM_STAGE_FLOATS * 4
+            )
+            * GRAM_OVERSUBSCRIBE,
+        )
     # The dispatch row: split-K is the apple arm and ONLY the apple arm.
     if not gram_splitk_is_target_arm[COLUMN_APPLE]():
         raise Error(
@@ -230,7 +248,11 @@ def check_hardware_matrix() raises:
     # Apple-build pins: the exact numbers the 2026-08-19 measured tables
     # and the shipped defaults stand on.
     comptime if TARGET_COLUMN == COLUMN_APPLE:
-        _pin("apple-build gram chunk grid", gram_splitk_chunk_count(), 240)
+        # 240 is the APPLE MACHINE's number and belongs to the FAST arm.
+        # Under IDENTICAL the same call returns the pinned constant on every
+        # column including this one -- see DEVIATION 520 above.
+        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+            _pin("apple-build gram chunk grid", gram_splitk_chunk_count(), 240)
         var g = fused_l2_knn_grid(2000, 200000)
         if g[0] != 1 or g[1] != 120:
             raise Error(

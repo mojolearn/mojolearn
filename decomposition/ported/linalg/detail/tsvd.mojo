@@ -38,6 +38,23 @@ read-mostly. See the dispatch-audit lane report.
 eigenvalue into a zero singular value is a PCA-only step, and this port
 performs it on neither.
 
+THE SIGN CONVENTION IS PINNED ONCE, AND NOT IN THIS FILE
+---------------------------------------------------------
+Truncated SVD has the same exposure PCA has -- an eigenvector is defined up
+to sign, so an unpinned fit's component signs are whatever the eigensolver's
+rounding produced -- and it is closed in the same place, because both
+callers reach `eig_and_truncate`. `sign_flip_kernel` runs there
+(DEVIATION 525): largest-ABSOLUTE-value entry made positive, ties broken by
+the LOWEST index, a zero maximum never flipped. Nothing is added here, and
+nothing should be: two copies of a tie-break are two tie-breaks.
+
+Their two entries do NOT share one convention, which is worth stating beside
+the shared function. `pcaFit` never flips; `tsvdFitTransform` DOES, at
+`tsvd.cuh:270`, and its flip is U-based -- the argmax runs down the columns
+of the TRANSFORMED data, not of the components -- so a `TruncatedSVD` user
+of cuML gets a sign convention that a `PCA` user does not, and it is not
+this one. Ours is V-based on both paths. Recorded in `UNPORTED.tsv`.
+
 Set that beside `pca_fit` and the whole difference is visible: PCA subtracts
 the column means first and divides by `n_rows - 1`, truncated SVD does
 neither. Same product, same eigensolver, same truncation. **That is why this

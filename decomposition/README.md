@@ -126,11 +126,30 @@ that centered in the wrong place.
     check_pca_truncation OK at 128 features: noise_var 0.98947 = mean of the
       118 discarded eigenvalues, and 0 when nothing is discarded
 
-    decomposition/pca_wide_sklearn.py, against scikit-learn 1.9.0:
-      n_cols= 64  explained_variance 1.597e-06  ratio 3.606e-07
-                  worst |1-|dot|| over separated components 3.596e-06  OK
-      n_cols=128  explained_variance 1.674e-06  ratio 5.480e-07
-                  worst |1-|dot|| over separated components 5.993e-06  OK
+    decomposition/pca_wide_sklearn.py, against scikit-learn 1.9.0
+    (RE-RUN 2026-08-23; the four numbers that used to sit here were from an
+    earlier round and had drifted, so they are replaced rather than kept):
+      n_cols= 64  explained_variance 1.340e-06  ratio 8.756e-08
+                  singular_values 3.165e-06
+                  worst |1-|dot|| over separated components 3.420e-06  OK
+      n_cols=128  explained_variance 1.429e-06  ratio 4.644e-07
+                  singular_values 3.410e-06
+                  worst |1-|dot|| over separated components 5.714e-06  OK
+
+    and the sign half, which the oracle does not ask because it compares
+    |dot|: all 16 separated components agree with sklearn in SIGNED dot, and
+    all 192 of sklearn's own components satisfy our stated rule.
+
+    check_sign_flip_rule_and_ties OK: ties broken by LOWEST INDEX and
+      separated four ways (across lanes, within one lane, sign-swapped,
+      three-way); all-zero and all--0.0 components bit-identical after; an
+      all-NaN component left alone; a flipped component's zeros pinned to
+      -0.0; the rule is idempotent, bitwise
+    check_sign_flip_matches_host_rule OK: device == a fold-free host scan,
+      BITWISE, on 7186 cells at n = 4/31/32/33/64, 56 tied columns, at
+      least 89 components actually flipped
+    check_sign_flip_reaches_the_fit OK: all 48 components of a real pca_fit
+      at 48 features satisfy the convention
 
 and at four features:
 
@@ -165,6 +184,82 @@ Two defects of the same class as the size cap, both fixed:
   the identical ASSERT at `:79-81` is `eigDC_legacy`'s, which nothing calls), and
   that is the behaviour we follow. The kernel writes a three-slot info buffer
   and `eig_and_truncate` raises on it.
+
+## The SIGN of a component is pinned, and the pin has a tie-break
+
+An eigenvector is defined up to sign, so an implementation that does not PICK
+one returns a model whose every component sign is the eigensolver's rounding.
+cuML's `pcaFit` is that implementation: it calls no flip at all, and
+`PCA.fit()` is the entry a Python user reaches (`pca.pyx:547`). We diverge
+deliberately, and `sign_flip_kernel` runs in `eig_and_truncate`, which means
+PCA and truncated SVD carry ONE rule rather than two copies of one.
+
+The rule (DEVIATION 525) is three clauses, and the second is the one that is
+usually left out:
+
+1. take the entry of largest ABSOLUTE value in the component;
+2. **on a tie for that magnitude, the LOWEST INDEX wins**;
+3. negate the component iff that entry is `< 0.0`.
+
+Clause 2 is not an invention. `cub::ArgMax` keeps the lower index, cuML's own
+thrust loop keeps the first strict improvement (`tsvd.cuh:160`), and
+`np.argmax` -- and therefore scikit-learn's `svd_flip` -- returns the first
+occurrence. Without it a component holding both `+x` and `-x` at the largest
+magnitude has no defined sign and a schedule decides it, which is exactly the
+class `IDENTITY_PATHS.md` exists to close.
+
+Clause 3 is `< 0.0` and not a sign-bit test, deliberately: `-0.0 < 0.0` is
+FALSE, so a component whose largest-magnitude entry is a zero of either sign
+is never flipped and an all-zero component comes back BIT FOR BIT as it
+arrived. That is `IDENTITY_PATHS` row 13's hazard -- `-0.0` and `+0.0` compare
+equal, so a fold picks between them -- and it cannot decide anything here,
+because the magnitude fold's result is consumed only by an `==` that cannot
+tell the two zeros apart. An all-NaN component has no maximum at all (a NaN
+loses every compare) and is left alone rather than flipped on a sentinel.
+
+**There is no `NUMERIC_IDENTICAL` arm and that is the answer, not an
+omission.** Two block collectives compute the rule, and `IDENTITY_PATHS` row
+20 records why that shape is dangerous: `block.sum` folds at the hardware
+lane width, 32 on Apple and NVIDIA and 64 on AMD. But a fold shape cannot
+move a MIN or a MAX -- a sum is non-associative in floating point, a max is a
+selection over a total order -- and the two escapes from that order
+(`-0.0`/`+0.0`, NaN) are neutralised inside the rule. The flip has also been
+unconditional since `b495627`, so gating it to IDENTICAL would move SHIPPED
+`NUMERIC_FAST` bits and put the default build's component signs back in the
+eigensolver's hands.
+
+Three checks, and they fail differently:
+
+- `check_sign_flip_rule_and_ties` -- planted matrices where the tie EXISTS by
+  construction (across lanes at indices 3 and 4, within one lane at 3 and 35,
+  sign-swapped, three-way), plus the all-zero, all-`-0.0`, all-NaN and
+  single-nonzero-at-63 columns, asserted on the BITS. It refuses to pass
+  unless the tie multiplicity is what the fixture claims.
+- `check_sign_flip_matches_host_rule` -- the device must equal a fold-free
+  host scan BITWISE over 7,186 cells at n = 4/31/32/33/64, with 56 tied
+  columns and at least 89 components actually flipped.
+- `check_sign_flip_reaches_the_fit` -- the rule holds on a real `pca_fit` at
+  48 features. **48 and not 4 for a reason**: each component's sign is
+  decided independently, so a 4-component fixture agrees with a no-flip build
+  one run in sixteen. Measured: with the flip removed, the 4-column
+  `check_pca_fit` still passes and 24 of these 48 components fail.
+
+Reach is by SABOTAGE, four of them, each caught by a different assertion:
+inverting the tie-break to highest-index gives `0xc0000000` where
+`0x40000000` is required; removing the flip launch fails 24 of 48 components
+on the fit path; making clause 3 sensitive to the sign bit turns the
+all-`-0.0` column into `0x00000000`; and replacing the index selection with
+"whichever lane wrote last" fails the same tie the same way -- identically on
+all three runs, which is worth noticing, because a race that is stable on ONE
+device is precisely what stays invisible until a second vendor runs.
+
+sklearn is the corroboration and not the design source. Its `_fit_full` calls
+`svd_flip(U, Vt, u_based_decision=False)`, which is clauses 1-3 with
+`np.argmax`'s first-occurrence tie rule. Measured on the wide fixture: all 16
+separated components agree with sklearn in SIGNED dot, not merely in |dot|,
+and all 192 of sklearn's own components satisfy our stated rule. One real
+difference, in our favour: `np.sign(0.0)` is 0, so sklearn MULTIPLIES a
+component whose maximum is zero by zero; ours leaves it untouched.
 
 ## The checks are INVARIANTS, which is stronger than a fixture
 
