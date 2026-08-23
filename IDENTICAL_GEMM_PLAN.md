@@ -465,6 +465,33 @@ ledger.
   `tools/with_build_lock.sh`, and no timing produced here is trustworthy
   while the other lane is running a leg. Timing is theirs anyway; this lane
   reports device numbers as indicative and says so.
+
+- **RENTING, amended 2026-08-23 by Andrew.** The boundary's first draft gave
+  every rented box to the identity lane. Amended: **this lane may rent, on
+  its OWN provider, with a ONE-HOUR HARD LIMIT.** The two lanes must not
+  share a provider account, because the identity lane's DigitalOcean quota is
+  ONE GPU droplet at a time and a second lane taking it would silently queue
+  their leg behind this one's. So:
+
+    identity / E2 lane   DigitalOcean droplets, their `e2_remote_leg.sh`
+    this lane            RunPod, `tools/runpod_guard.sh arm` FIRST
+
+  Rules, and none of them is optional:
+  1. **The guard is armed BEFORE any work**, not after. If `arm` refuses,
+     the box is not used -- it is terminated. A box that cannot be armed is
+     an orphan that has not happened yet.
+  2. **One hour is a HARD cap, not a default to extend past casually.**
+     Extending is re-arming and each extension is a decision.
+  3. **Neither lane publishes timing while the other has a box up.** Timing
+     is what actually contends across providers via nothing at all -- it
+     contends via this Mac, which drives both. Correctness does not.
+  4. The two providers FAIL DIFFERENTLY and neither guard transfers. **DO
+     bills until the droplet is DESTROYED** -- power-off does not stop it,
+     which is how a 90-second job once billed 10h48m. **RunPod's container
+     exit stops GPU billing but disk keeps accruing**, so the on-pod
+     watchdog is layer one and `reap` is layer two.
+  5. Terminate at the end of the work, not at the end of the lease. The
+     lease is the backstop for when this session disappears, not the plan.
 - Every check prints the mode it COMPILED in, read from the comptime
   constant. Three mislabelled measurements were caught by that today and it
   survives the `-D` migration unchanged.
