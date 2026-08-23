@@ -66,7 +66,7 @@ run_all() {
             continue
         fi
         echo "  -- $f"
-        out=$(pixi run mojo run -I . "$f" 2>&1) || fail=1
+        out=$(pixi run mojo run ${MOJOLEARN_MOJO_DEFINES:-} -I . "$f" 2>&1) || fail=1
         echo "$out" | grep -E "^check_|^== |^Unhandled|error:" || true
         if [ "$fail" -ne 0 ]; then
             echo "FAILED: $f"

@@ -466,6 +466,14 @@ def run_cell(name, out_dir):
     return entry
 
 
+def _numeric_mode():
+    """What the package LOADED ('fast' | 'identical'), read back from the
+    gbdt binary's compile-time answer -- the mode is a build define now
+    (MOJOLEARN_NUMERIC_MODE=identical selects python/mojolearn/identical/)."""
+    import mojolearn
+    return mojolearn.numeric_mode()
+
+
 def main():
     argv = sys.argv[1:]
     if argv and argv[0] == "--cell":
@@ -485,9 +493,7 @@ def main():
     record = {
         "commit": subprocess.check_output(
             ["git", "rev-parse", "HEAD"], cwd=repo).decode().strip(),
-        "mode_flip": subprocess.check_output(
-            ["git", "diff", "--", "mojo_only/numerics.mojo"],
-            cwd=repo).decode().count("NUMERIC_IDENTICAL") > 0,
+        "numeric_mode": _numeric_mode(),
         "platform": platform.platform(),
         "machine": platform.node(),
         "inputs": {k: sha256_of(v) for k, v in data.items()},

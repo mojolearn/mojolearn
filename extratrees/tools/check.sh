@@ -53,7 +53,7 @@ for c in $checks; do
     printf 'SKIP  %s (not present)\n' "$c"
     continue
   fi
-  if pixi run mojo run -I . "$c" >/tmp/et_check.$$ 2>&1; then
+  if pixi run mojo run ${MOJOLEARN_MOJO_DEFINES:-} -I . "$c" >/tmp/et_check.$$ 2>&1; then
     printf 'ok    %s\n' "$c"
   else
     printf 'FAIL  %s\n' "$c"

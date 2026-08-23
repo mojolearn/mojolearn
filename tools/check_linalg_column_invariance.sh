@@ -91,7 +91,7 @@ for arm in $ARMS; do
         log="$OUT/${arm}_${tag}.log"
         : > "$card"
         if MOJOLEARN_IDENTITY_TRACE="$card" MOJOLEARN_LINALG_ARM="$arm" \
-            pixi run mojo run -D "MOJOLEARN_COLUMN_${col}=1" -I . \
+            pixi run mojo run ${MOJOLEARN_MOJO_DEFINES:-} -D "MOJOLEARN_COLUMN_${col}=1" -I . \
             bench/linalg_trace_main.mojo > "$log" 2>&1; then
 
             # THE CONTAMINATION GUARD. The mode is READ BACK from the run

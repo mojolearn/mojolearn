@@ -45,13 +45,16 @@ CONTROL="${E2_MOJO_CARDS_CONTROL:-1}"
 
 CARDS="gbdt_depthwise gbdt_lossguide gbdt_multiclass_ova gbdt_feature_parallel"
 
-NUMERICS="$REPO/mojo_only/numerics.mojo"
-if grep -q '^comptime GLOBAL_NUMERIC_MODE = NUMERIC_IDENTICAL$' "$NUMERICS"; then
+# THE MODE IS A BUILD DEFINE (2026-08-23): MOJOLEARN_NUMERIC_MODE=identical in
+# the environment (tools/with_identical_mode.sh exports it) runs the probe
+# with -D MOJOLEARN_NUMERIC_IDENTICAL=1 through the injector; otherwise FAST.
+# The probe prints the mode it was COMPILED with; that line is the truth.
+if [ "${MOJOLEARN_NUMERIC_MODE:-fast}" = "identical" ]; then
     MODE=IDENTICAL
-elif grep -q '^comptime GLOBAL_NUMERIC_MODE = NUMERIC_FAST$' "$NUMERICS"; then
-    MODE=FAST
+    MOJOLEARN_RUN_PREFIX="$REPO/tools/with_identical_mode.sh"
 else
-    MODE=unknown
+    MODE=FAST
+    MOJOLEARN_RUN_PREFIX=""
 fi
 
 echo "e2_mojo_cards: numeric mode $MODE, out_dir $OUT"
@@ -59,7 +62,7 @@ cd "$REPO"
 
 # THE EMISSION. One process, every card; the probe raises if any card's
 # record count is under its floor, and `set -e` carries that out.
-pixi run e2-growth-cards "$OUT"
+${MOJOLEARN_RUN_PREFIX:-} pixi run e2-growth-cards "$OUT"
 
 for name in $CARDS; do
     [ -s "$OUT/$name.card" ] || { echo "e2_mojo_cards: $name.card missing or empty" >&2; exit 1; }
@@ -69,7 +72,7 @@ done
 # FAST is reported, not hidden -- that is the finding.
 if [ "$CONTROL" != "0" ]; then
     mkdir -p "$OUT/control"
-    pixi run e2-growth-cards "$OUT/control"
+    ${MOJOLEARN_RUN_PREFIX:-} pixi run e2-growth-cards "$OUT/control"
     echo "-- run-to-run control --"
     for name in $CARDS; do
         if cmp -s "$OUT/$name.card" "$OUT/control/$name.card"; then

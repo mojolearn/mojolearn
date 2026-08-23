@@ -9,16 +9,12 @@
 #   rsync -a --exclude .pixi --exclude bench/external/.gbm-bench \
 #       ~/CascadeProjects/mojolearn/ <box>:~/mojolearn/
 #
-# THE MODE FLIP: this script flips GLOBAL_NUMERIC_MODE to IDENTICAL for
-# the session and reverts it at the end (trap). It is never committed.
-# On AMD the flip is mandatory -- the FAST build is a compile error at
-# the 64-wide wavefront asserts, by design.
-#
-# Mac reference side, after this script: the tracked .so files were
-# rebuilt IDENTICAL for the driver; restore the shipped FAST binaries:
-#   git checkout -- python/mojolearn/_mojolearn_trees.so \
-#       python/mojolearn/_mojolearn_rf.so python/mojolearn/_mojolearn_estimators.so
-#   bash bindings/build_gbdt.sh   # gbdt .so is untracked; rebuild FAST
+# THE MODE: IDENTICAL, by BUILD DEFINE (-D MOJOLEARN_NUMERIC_IDENTICAL=1 via
+# tools/with_identical_mode.sh; bindings into python/mojolearn/identical/;
+# drivers select it with MOJOLEARN_NUMERIC_MODE=identical). No file in the
+# tree is edited, nothing is reverted, the shipped FAST binaries are never
+# touched. On AMD a FAST build is a compile error at the 64-wide wavefront
+# asserts, by design, so IDENTICAL is the only mode that runs there.
 set -uo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -43,31 +39,35 @@ if ! command -v pixi >/dev/null; then
 fi
 pixi install
 
-step "mode flip -> IDENTICAL (session-local, reverted on exit)"
-NUMERICS=mojo_only/numerics.mojo
-grep -q "^comptime GLOBAL_NUMERIC_MODE = NUMERIC_FAST$" "$NUMERICS" || {
-  echo "numerics.mojo not in the expected FAST state; refusing"; exit 2; }
-sed -i.e1bak 's/^comptime GLOBAL_NUMERIC_MODE = NUMERIC_FAST$/comptime GLOBAL_NUMERIC_MODE = NUMERIC_IDENTICAL/' "$NUMERICS"
-revert() { mv -f "$NUMERICS.e1bak" "$NUMERICS" 2>/dev/null || true; }
-trap revert EXIT
+step "mode: IDENTICAL by build define (no source flip since 2026-08-23)"
+# Every gate below runs through tools/with_identical_mode.sh, which injects
+# -D MOJOLEARN_NUMERIC_IDENTICAL=1 into the mojo command (or exports
+# MOJOLEARN_MOJO_DEFINES for scripts that call mojo themselves); the
+# bindings build into python/mojolearn/identical/ and the Python drivers
+# select that set with MOJOLEARN_NUMERIC_MODE=identical. Nothing in the
+# tree is edited, so there is nothing to revert and no shipped binary to
+# restore afterwards. On AMD a FAST build is still a compile error at the
+# 64-wide wavefront asserts, by design.
+IDENT="$REPO/tools/with_identical_mode.sh"
+export MOJOLEARN_NUMERIC_MODE=identical
 
 step "phase 0: smoke (hardware matrix, column detection)"
-pixi run check-hardware-matrix || echo "PHASE0-FINDING: hardware matrix (see log)"
+"$IDENT" pixi run check-hardware-matrix || echo "PHASE0-FINDING: hardware matrix (see log)"
 
 step "phase 1: vendor characterization (row 10 precondition)"
-pixi run check-ieee-arith || echo "PHASE1-FINDING: ieee-arith (see log)"
+"$IDENT" pixi run check-ieee-arith || echo "PHASE1-FINDING: ieee-arith (see log)"
 # row 12's certificate line: the printed device hash must be the SAME
 # NUMBER on every vendor column (Apple measured 8705486125800438413)
-pixi run check-portable-translog || echo "PHASE1-FINDING: portable-translog (see log)"
-pixi run check-portable-sqrtcos || echo "PHASE1-FINDING: portable-sqrtcos (see log)"
+"$IDENT" pixi run check-portable-translog || echo "PHASE1-FINDING: portable-translog (see log)"
+"$IDENT" pixi run check-portable-sqrtcos || echo "PHASE1-FINDING: portable-sqrtcos (see log)"
 
 step "phase 2: gates under IDENTICAL"
 for gate in check-depthwise check-lossguide-policy check-random-strength; do
   echo "--- $gate"
-  pixi run "$gate" || echo "PHASE2-FINDING: $gate FAILED"
+  "$IDENT" pixi run "$gate" || echo "PHASE2-FINDING: $gate FAILED"
 done
 echo "--- extratrees suite"
-bash extratrees/tools/check.sh || echo "PHASE2-FINDING: extratrees suite (see log)"
+"$IDENT" bash extratrees/tools/check.sh || echo "PHASE2-FINDING: extratrees suite (see log)"
 
 step "phase 3: build IDENTICAL .so + traced fits"
 # ALL FIVE bindings: the python package's __init__ imports cluster ->
@@ -78,14 +78,25 @@ step "phase 3: build IDENTICAL .so + traced fits"
 # every gate imports siblings that do not exist yet (run 3's finding).
 # The traced driver below is the real gate: it launches kernels through
 # every lib. Run inside the gbmbench env so python has numpy.
-rm -f python/mojolearn/_mojolearn*.so
-export MOJOLEARN_SKIP_BUILD_GATE=1
+# the identical set lands in python/mojolearn/identical/ (MOJOLEARN_NUMERIC_MODE
+# is exported above and the build scripts read it); a foreign-platform .so
+# left there from an rsync would break every import, so clear it first
+rm -f python/mojolearn/identical/_mojolearn*.so
 for b in build.sh build_estimators.sh build_gbdt.sh build_rf.sh build_trees.sh; do
-  echo "--- bindings/$b"
+  echo "--- bindings/$b (identical)"
   pixi run -e gbmbench bash "bindings/$b" \
     || echo "PHASE3-FINDING: bindings/$b failed (see log)"
 done
-unset MOJOLEARN_SKIP_BUILD_GATE
+# the FAST set must exist too: the package imports every binding and the
+# selector only swaps the five it loads; on a fresh box build FAST as well
+# (it cannot build on AMD -- the wavefront asserts -- so a missing FAST set
+# is tolerated: the selector never touches it under identical)
+if [ ! -f python/mojolearn/_mojolearn.so ]; then
+  for b in build.sh build_estimators.sh build_gbdt.sh build_rf.sh build_trees.sh; do
+    MOJOLEARN_NUMERIC_MODE=fast MOJOLEARN_SKIP_BUILD_GATE=1 pixi run -e gbmbench bash "bindings/$b" >/dev/null 2>&1 \
+      || echo "note: FAST bindings/$b did not build here (expected on AMD)"
+  done
+fi
 PYTHONPATH="$REPO/python" pixi run -e gbmbench python3 tools/e1_traced_fit.py "$OUT" \
   || PYTHONPATH="$REPO/python" python3 tools/e1_traced_fit.py "$OUT" \
   || echo "PHASE3-FINDING: traced driver failed (see log)"

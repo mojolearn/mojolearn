@@ -25,3 +25,6 @@ __pycache__/
 
 # Agent worktrees: transient, and each is its own git repo
 .claude/worktrees/
+
+# the NUMERIC_IDENTICAL binary set (MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_*.sh); built per machine, never committed
+python/mojolearn/identical/

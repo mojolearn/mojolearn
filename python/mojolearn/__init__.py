@@ -49,6 +49,15 @@ the worst place in the tree for that sentence to have been.
 """
 
 from ._version import __version__
+
+# THE NUMERIC MODE IS CHOSEN HERE, BEFORE ANY BINDING IS IMPORTED.
+# MOJOLEARN_NUMERIC_MODE=identical loads python/mojolearn/identical/*.so
+# under the canonical names (see _backend.py); default is fast.
+from . import _backend as _backend
+
+_backend.select()
+numeric_mode = _backend.numeric_mode
+
 from .cluster import KMeans
 from .ensemble import GradientBoosting
 from .neighbors import NearestNeighbors
@@ -58,6 +67,7 @@ __all__ = [
     "KMeans",
     "NearestNeighbors",
     "__version__",
+    "numeric_mode",
 ]
 
 # Named absences. Importing one of these raises with a reason rather than an

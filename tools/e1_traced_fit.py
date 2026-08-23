@@ -50,6 +50,14 @@ def sha256_of(arr):
     return h.hexdigest()
 
 
+def _numeric_mode():
+    """What the package LOADED ('fast' | 'identical'), read back from the
+    gbdt binary's compile-time answer -- the mode is a build define now
+    (MOJOLEARN_NUMERIC_MODE=identical selects python/mojolearn/identical/)."""
+    import mojolearn
+    return mojolearn.numeric_mode()
+
+
 def main():
     out_dir = os.path.abspath(sys.argv[1])
     os.makedirs(out_dir, exist_ok=True)
@@ -75,9 +83,7 @@ def main():
     record = {
         "commit": subprocess.check_output(
             ["git", "rev-parse", "HEAD"], cwd=repo).decode().strip(),
-        "mode_flip": subprocess.check_output(
-            ["git", "diff", "--", "mojo_only/numerics.mojo"],
-            cwd=repo).decode().count("NUMERIC_IDENTICAL") > 0,
+        "numeric_mode": _numeric_mode(),
         "platform": platform.platform(),
         "machine": platform.node(),
         "inputs": {"X": sha256_of(X), "y_reg": sha256_of(y_reg),

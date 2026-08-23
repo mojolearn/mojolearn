@@ -43,6 +43,9 @@ determinism cost" has an answer in seconds rather than in opinions. Run the
 two modes interleaved and report the ratio.
 """
 
+from std.sys.compile import is_defined
+
+
 
 #: **THE DEFAULT.** Every row is read from the device's own column. Full
 #: per-vendor speed, and histograms flush through floating-point atomics.
@@ -66,12 +69,30 @@ two modes interleaved and report the ratio.
 #: Found by Andrew asking whether the toggle actually works. It did not.
 #:
 #: Every site that used to hardcode `NUMERIC_FAST` now reads this, so the
-#: default is unchanged bit for bit and flipping this one line rebuilds the
-#: whole tree in the other mode. Comptime, because the two modes are
-#: different code (a float atomic and a fixed-point accumulator are not one
-#: configured value), which is the same reason `TARGET_COLUMN` is a build
-#: rather than a flag.
-comptime GLOBAL_NUMERIC_MODE = NUMERIC_FAST
+#: default is unchanged bit for bit and the other mode rebuilds the whole
+#: tree. Comptime, because the two modes are different code (a float atomic
+#: and a fixed-point accumulator are not one configured value), which is the
+#: same reason `TARGET_COLUMN` is a build rather than a flag.
+#:
+#: **A BUILD DEFINE SINCE 2026-08-23, NOT AN EDITED LINE.** It used to read
+#: `= NUMERIC_FAST` and every identity gate flipped it with sed and reverted
+#: on exit; two sessions sharing one checkout then lost an edit made inside a
+#: flip window (restored from a backup copy), and a flip left behind
+#: mislabels every number the next session measures. Now, exactly like the
+#: column (`kernel_matrix.mojo`'s `-D MOJOLEARN_COLUMN_*`):
+#:
+#:     mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . <check>.mojo
+#:     MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_gbdt.sh
+#:
+#: `tools/with_identical_mode.sh <cmd>` injects the define into a `mojo
+#: run`/`mojo build` command line (no file is touched); the build scripts
+#: land an identical binary set under `python/mojolearn/identical/`, and
+#: `python/mojolearn/_backend.py` loads that set when the env var
+#: `MOJOLEARN_NUMERIC_MODE=identical` is set at import. Default is FAST, in
+#: every spelling. The source line below never changes again.
+comptime GLOBAL_NUMERIC_MODE = (
+    NUMERIC_IDENTICAL if is_defined["MOJOLEARN_NUMERIC_IDENTICAL"]() else NUMERIC_FAST
+)
 
 
 comptime NUMERIC_FAST = 0

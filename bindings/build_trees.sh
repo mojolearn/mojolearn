@@ -43,6 +43,26 @@ TARGET_FLAGS="--target-cpu apple-m1"
 # Explicit kernel-matrix column: MOJOLEARN_TARGET_COLUMN=apple|nvidia|amd|amd_rdna
 # becomes a -D define that overrides TARGET_COLUMN autodetection.
 COLUMN_DEFINE=""
+# THE NUMERIC MODE IS A BUILD DEFINE, NOT A SOURCE FLIP (2026-08-23).
+# MOJOLEARN_NUMERIC_MODE=identical compiles with -D MOJOLEARN_NUMERIC_IDENTICAL=1
+# (mojo_only/numerics.mojo reads it through is_defined, the same shape as
+# the column define) and lands the binary under python/mojolearn/identical/,
+# where python/mojolearn/_backend.py picks it up when the env var
+# MOJOLEARN_NUMERIC_MODE=identical is set at import. Default is fast and the
+# default location. The build-time smoke gates import the FAST package, so
+# they are skipped for an identical build; tools/e2_matrix_fit.py is that
+# build's gate.
+MODE_DEFINE=""
+OUTDIR="python/mojolearn"
+if [ "${MOJOLEARN_NUMERIC_MODE:-fast}" = "identical" ]; then
+    MODE_DEFINE="-D MOJOLEARN_NUMERIC_IDENTICAL=1"
+    OUTDIR="python/mojolearn/identical"
+    mkdir -p "$OUTDIR"
+    export MOJOLEARN_SKIP_BUILD_GATE=1
+elif [ "${MOJOLEARN_NUMERIC_MODE:-fast}" != "fast" ]; then
+    echo "MOJOLEARN_NUMERIC_MODE must be fast or identical, got '$MOJOLEARN_NUMERIC_MODE'" >&2
+    exit 2
+fi
 if [ -n "${MOJOLEARN_TARGET_COLUMN:-}" ]; then
     COLUMN_DEFINE="-D MOJOLEARN_COLUMN_$(printf %s "$MOJOLEARN_TARGET_COLUMN" | tr '[:lower:]' '[:upper:]')"
 fi
@@ -53,7 +73,7 @@ out="$tmpdir/_mojolearn_trees.so"
 
 # shellcheck disable=SC2086  # both flag strings are deliberately word-split
 pixi run mojo build --emit shared-lib \
-    $TARGET_FLAGS $COLUMN_DEFINE \
+    $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE \
     $LINK_FLAGS \
     -I . -I bindings \
     bindings/_mojolearn_trees.mojo \
@@ -170,8 +190,8 @@ PY
 # sets this owns end-to-end verification (the E1 bootstrap runs the
 # traced-fit driver, which launches kernels through every lib).
 if [ -n "${MOJOLEARN_SKIP_BUILD_GATE:-}" ]; then
-    mv "$out" python/mojolearn/_mojolearn_trees.so
-    echo "built python/mojolearn/_mojolearn_trees.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)"
+    mv "$out" "$OUTDIR/_mojolearn_trees.so"
+    echo "built $OUTDIR/_mojolearn_trees.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)"
     exit 0
 fi
 
@@ -188,5 +208,5 @@ if ! kernels_plausible "$out" || ! minos_matches "$out" || ! run_smoke "$out"; t
 fi
 
 count=$(air_blobs "$out" | wc -l | tr -d ' ')
-mv "$out" python/mojolearn/_mojolearn_trees.so
-echo "built python/mojolearn/_mojolearn_trees.so ($count AIR blobs, minos $MACOS_FLOOR)"
+mv "$out" "$OUTDIR/_mojolearn_trees.so"
+echo "built $OUTDIR/_mojolearn_trees.so ($count AIR blobs, minos $MACOS_FLOOR)"

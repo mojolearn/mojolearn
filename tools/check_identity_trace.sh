@@ -21,7 +21,7 @@
 set -e
 
 echo "== writer =="
-mojo run -I . mojo_only/identity_trace_check.mojo
+mojo run ${MOJOLEARN_MOJO_DEFINES:-} -I . mojo_only/identity_trace_check.mojo
 
 echo
 echo "== reader, own selftest =="
