@@ -70,7 +70,18 @@ def dbscan_fit(
     max_iterations: Int = 200,
     eps_nn_method: Int = EPS_NN_RBC,
 ) raises -> Int:
-    """Cluster host-resident row-major data. Returns the batch count.
+    """Cluster host-resident row-major data. Returns the PROPAGATION PASSES.
+
+    THE RETURN VALUE WAS DOCUMENTED WRONG until 2026-08-23 ("Returns the
+    batch count"). It is `dbscan_fit_impl`'s return, which that function's
+    own docstring names correctly: the total number of `weak_cc` passes
+    summed over the batches. The batch count is not returned by anything;
+    it reaches the outside world only through the identity-trace header
+    (`batches=`) and the `phase_timing` lines. The wrong sentence was
+    load-bearing -- `check_dbscan_batch_count_invariance` named the value
+    `batches` and printed it as one, so its diagnostics reported pass
+    counts as batch counts and it never checked that its budgets moved the
+    batch count at all.
 
     `x_ptr` is `n_samples x n_features`, row-major, float32.
     `out_labels_ptr` is `n_samples` Int32 and is written with scikit-learn's

@@ -21,17 +21,24 @@ THE ARMS, and why the tiled k-NN one is separated from the default:
                       arithmetic, no extra kernel -- so this arm is the
                       "pins only" price.
     knn.auto          the shipped default. Under IDENTICAL the arm is
-                      pinned to cuVS's own dispatch and `grid_x` to 1
-                      (DEVIATION 502), so this measures a SCHEDULING
-                      change, not a kernel swap.
-    knn.tiled         the arm k > 64 must take. Under IDENTICAL its
+                      pinned to TILED on every column (DEVIATION 509), so
+                      at `k <= 64` this arm is a KERNEL SWAP and not a
+                      scheduling change: it is `knn.tiled`'s price paid by
+                      the default. The pin is not a preference -- the
+                      FUSED arm DEVIATION 502 used to pin to refuses at
+                      its entry on a 64-lane column, so pinning to it made
+                      the identical build of k-NN unrunnable on AMD.
+    knn.tiled         the same arm, requested explicitly, which is also
+                      what `k > 64` must take. Under IDENTICAL its
                       distances come from `pinned_distance_tile_kernel`
                       instead of the vendor matmul (DEVIATION 505), which
                       is the one place in this lane where identity buys a
                       genuinely slower kernel rather than a different
-                      rounding. Priced separately BECAUSE it is the
-                      expensive one; folding it into an average would hide
-                      both numbers.
+                      rounding. Kept as its own arm BECAUSE the two are no
+                      longer the same measurement under FAST -- there AUTO
+                      still reads the geometry -- so the pair prices the
+                      pin (auto FAST vs auto IDENTICAL) and the kernel
+                      (tiled FAST vs tiled IDENTICAL) separately.
     dbscan.fit        brute-force eps neighbourhood plus propagation.
 """
 

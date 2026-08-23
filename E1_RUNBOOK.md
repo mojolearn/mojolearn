@@ -80,6 +80,51 @@ first. Only then read the float stages. On the first float divergence,
 re-run with `MOJOLEARN_IDENTITY_TRACE_DUMP=<tag>` on both sides for the
 per-cell ULP/denormal classification.
 
+## Phase 3u — the unsupervised cards (rows 19-26)
+
+`tools/e1_traced_fit.py` drives the GBDT/ET/RF families through the Python
+bindings, and `cluster/`, `neighbors/` and `dbscan/` have no bindings, so
+until 2026-08-23 the unsupervised half of the ledger had no way to produce
+a card at all. `bench/unsupervised_trace_main.mojo` is that way: one arm
+per process (the differ refuses a card whose sequence numbers restart), a
+fixture that is an integer-exact function of a constant seed, and an input
+hash printed before the fit so both machines can be proven to have fitted
+the same bytes before anything else is compared.
+
+    for arm in kmeans knn dbscan; do
+      : > $OUT/$arm.card
+      MOJOLEARN_IDENTITY_TRACE=$OUT/$arm.card MOJOLEARN_UNSUP_ARM=$arm \
+        pixi run mojo run -I . bench/unsupervised_trace_main.mojo \
+        | tee $OUT/$arm.hashes
+    done
+
+Then diff each `<arm>.card` against the other machine's. Compare
+`input.*` FIRST; a card diff against different inputs measures nothing.
+
+Read the k-NN card knowing what its stages are. `knn.out_dist` /
+`knn.out_idx` are PRE-SORT and record an arm's internal order, which the
+two arms genuinely disagree about (the tiled selector does not sort);
+`knn.sorted_dist` / `knn.sorted_idx` are what `kneighbors` returns and are
+what a cross-vendor claim is a claim about. Two runs whose sorted
+DISTANCES agree and whose sorted INDICES do not have chosen different
+members of an equidistant class and have diverged in the selector and
+nowhere else.
+
+DBSCAN records three stages and no per-batch ones deliberately: at the
+default budget the batch count comes from the device's FREE MEMORY, so
+`batch03.core` exists on one machine and not the other. The batch count is
+in the card HEADER (a comment, skipped by the differ) and the invariance
+those records would have tested is gated directly by
+`check_dbscan_batch_count_invariance`.
+
+**Run `pixi run check-column-invariance` BEFORE renting anything.** It
+compiles the same three arms against the APPLE, NVIDIA and AMD columns on
+the local device and requires one card across all of them. Every defect it
+catches is a defect the rented box would have found more slowly and more
+expensively, and it caught two on the day it was written (a k-NN arm pinned
+to a kernel that refuses on a 64-lane column, and a DBSCAN invariance check
+that had never verified its own lever moved).
+
 ## The train-here-infer-there leg (models cross machines, not just hashes)
 
 Phase 3's driver also saves each fitted model beside its card as

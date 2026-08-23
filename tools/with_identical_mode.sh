@@ -16,18 +16,59 @@
 # made deliberately: the flip must never be committed (E1_RUNBOOK
 # preconditions), and a stray IDENTICAL build silently changes every number
 # the next session measures.
+#
+# ------------------------------------------------------------------------
+# THE LOCK, ADDED 2026-08-23 (DEVIATION 514), AND WHY IT IS NOT OPTIONAL
+# ------------------------------------------------------------------------
+# This script MUTATES A SHARED FILE for the duration of a command that can
+# run for minutes. `tools/with_build_lock.sh` exists because this repository
+# is worked by parallel sessions in ONE checkout, and until today this
+# script did not take that lock. The failure it allows is not a merge
+# conflict -- it is a SILENTLY MISLABELLED MEASUREMENT:
+#
+#   session A: flip -> IDENTICAL ......... run (2 min) ......... revert
+#   session B:              `pixi run mojo run ... kmeans_main.mojo`
+#                           compiles HERE, gets an IDENTICAL binary,
+#                           and prints "FAST" because `_mode_name()`
+#                           reads the same constant it was compiled
+#                           against. Every number in that run is the
+#                           other arm's, correctly labelled as this one.
+#
+# It was not hypothetical. This run hit the other half of the same race:
+# the refusal below fired on a tree that `grep` showed as FAST one second
+# later, because a concurrent session was inside its own flip window.
+#
+# So the whole flip-run-revert window is held under `/tmp/cbsym-build.lock`,
+# the same lock `with_build_lock.sh` takes. A session that wants a FAST
+# build while this one holds the lock will block rather than compile the
+# wrong arm. `MOJOLEARN_IDENT_LOCK_HELD` makes re-entry a no-op so a gate
+# that nests these (`check_unsupervised_identity.sh` re-enters itself) does
+# not deadlock against itself.
 set -e
 
-NUMERICS="$(dirname "$0")/../mojo_only/numerics.mojo"
+HERE="$(dirname "$0")"
+NUMERICS="$HERE/../mojo_only/numerics.mojo"
 FAST_LINE='comptime GLOBAL_NUMERIC_MODE = NUMERIC_FAST'
 IDENT_LINE='comptime GLOBAL_NUMERIC_MODE = NUMERIC_IDENTICAL'
 
+# Re-exec under the shared build lock, once. Everything below this point
+# runs with the checkout's mode line owned by this process.
+if [ "${MOJOLEARN_IDENT_LOCK_HELD:-}" != "1" ]; then
+    MOJOLEARN_IDENT_LOCK_HELD=1
+    export MOJOLEARN_IDENT_LOCK_HELD
+    exec "$HERE/with_build_lock.sh" "$0" "$@"
+fi
+
 if ! grep -q "^$FAST_LINE\$" "$NUMERICS"; then
     if grep -q "^$IDENT_LINE\$" "$NUMERICS"; then
-        echo "with_identical_mode: the tree is ALREADY in IDENTICAL mode."
-        echo "  Refusing to flip: this script reverts to FAST on exit and"
-        echo "  would leave your deliberate edit reverted. Run the command"
-        echo "  directly, or put numerics.mojo back to NUMERIC_FAST first."
+        # Reaching this WITH the lock held means a human (or a crashed run)
+        # left the edit in the tree, not that another session is mid-flip.
+        echo "with_identical_mode: the tree is ALREADY in IDENTICAL mode,"
+        echo "  and this process holds the build lock -- so it is not a"
+        echo "  concurrent session's flip window, it is an edit that was"
+        echo "  left behind. Refusing: this script reverts to FAST on exit"
+        echo "  and would discard it. Put numerics.mojo back to"
+        echo "  NUMERIC_FAST, or run the command directly."
         exit 2
     fi
     echo "with_identical_mode: cannot find the mode line in $NUMERICS" >&2

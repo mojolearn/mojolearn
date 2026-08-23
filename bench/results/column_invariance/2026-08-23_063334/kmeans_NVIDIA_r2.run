@@ -1,0 +1,8 @@
+arm kmeans
+mode IDENTICAL
+column 2 lane_width 32
+input.x 14006717752511810141
+input.centroids 2727533609010192784
+output.centroids 1636775608130736985
+output.labels 9543594618727214305
+done kmeans

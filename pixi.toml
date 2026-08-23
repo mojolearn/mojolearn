@@ -790,6 +790,24 @@ check-identity-trace = "sh tools/check_identity_trace.sh"
 # committed (E1_RUNBOOK preconditions).
 check-unsupervised-identity = "sh tools/check_unsupervised_identity.sh"
 
+# THE COLUMN-INVARIANCE GATE (2026-08-23). The half of the cross-vendor debt
+# that does NOT need cross-vendor hardware: `TARGET_COLUMN` is a comptime
+# choice, so `-D MOJOLEARN_COLUMN_AMD` compiles this source against AMD's
+# block sizes, lane width, shared budget and core count on whatever device is
+# attached. This runs k-means, k-NN and DBSCAN under IDENTICAL at three
+# columns, twice each, and requires one card and one output hash across all
+# eighteen runs.
+#
+# WHAT IT PROVES: the vendor's CONSTANTS do not reach the answer -- most of
+# rows 8, 21, 22 and 23. WHAT IT CANNOT: contraction, denormal policy and
+# device transcendentals are the BACKEND's (rows 9, 10, 12), and every run
+# here is on one backend. E1 is still owed and this does not shorten it.
+#
+# It has teeth, measured rather than assumed: the same eighteen runs under
+# FAST do NOT agree -- three consecutive FAST k-NN runs on ONE column gave
+# three different sorted index sets.
+check-column-invariance = "sh tools/check_column_invariance.sh"
+
 # The three identity check files ALONE, in whatever mode the tree is
 # currently built for. For the loop while working on one of them; the gate
 # above is what a session should finish on.

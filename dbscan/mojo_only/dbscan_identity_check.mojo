@@ -120,7 +120,10 @@ def _fit(
 ) raises -> Int:
     var labels = ctx.enqueue_create_host_buffer[DType.int32](DB_N)
     ctx.synchronize()
-    var batches = dbscan_fit(
+    # NAMED FOR WHAT IT IS: `dbscan_fit` returns the total propagation
+    # passes, not the batch count. Its docstring claimed the latter until
+    # 2026-08-23 and this file believed it.
+    var passes = dbscan_fit(
         ctx,
         x.unsafe_ptr(),
         DB_N,
@@ -135,7 +138,58 @@ def _fit(
     for i in range(DB_N):
         out.append(labels.unsafe_ptr().unsafe_load(i))
     _ = labels^
-    return batches
+    return passes
+
+
+def _batch_count_of_last_fit(path: String) raises -> Int:
+    """The batch count, read back from the identity-trace HEADER.
+
+    NOT COMPUTED HERE, ON PURPOSE. The batch count is
+    `ceildiv(n_rows, batch)` inside `dbscan_fit_impl` and `batch` comes off
+    the memory budget through `runner.cuh`'s sizing; a copy of that
+    arithmetic in this file would be a second opinion that can agree with
+    the runner while both are wrong, which is the failure mode
+    `mojotrees-code-not-source-of-truth` is about. The runner already
+    PUBLISHES the number -- `trace.header(... " batches=" ...)` -- so this
+    reads what the fit itself reported.
+
+    WHY THE CHECK NEEDS IT AT ALL. Until 2026-08-23 this check called
+    `dbscan_fit`'s return value `batches` and printed it as one. That
+    return is the PROPAGATION PASS COUNT (`dbscan_fit_impl`: "Returns the
+    total propagation passes"; `dbscan_fit`'s own docstring said "batch
+    count" and was wrong). So the check's headline number was a different
+    quantity, and -- the part that matters -- nothing anywhere verified
+    that its four budgets produced four different BATCH counts. A run in
+    which every budget produced one batch would have printed the same
+    reassuring line while testing nothing, which is `[[reached-but-inert]]`
+    exactly.
+    """
+    var fh = open(path, "r")
+    var text = fh.read()
+    fh.close()
+    var key = String("batches=")
+    var at = text.find(key)
+    if at < 0:
+        raise Error(
+            "_batch_count_of_last_fit: no `batches=` in the trace header at "
+            + path
+            + ". The runner writes it; if the header moved, this check is"
+            " reading a stale contract."
+        )
+    var i = at + key.byte_length()
+    var digits = String("")
+    while i < text.byte_length():
+        var b = text.as_bytes()[i]
+        if b < UInt8(48) or b > UInt8(57):
+            break
+        digits += String(Int(b) - 48)
+        i += 1
+    if digits.byte_length() == 0:
+        raise Error(
+            "_batch_count_of_last_fit: `batches=` at " + path
+            + " is followed by no digits."
+        )
+    return Int(digits)
 
 
 def check_dbscan_batch_count_invariance() raises:
@@ -162,13 +216,26 @@ def check_dbscan_batch_count_invariance() raises:
     budgets.append(2)
     budgets.append(16)
 
+    from std.os import setenv
+
     var base = List[Int32]()
     var base_batches = 0
     var seen_batches = List[Int]()
+    var seen_passes = List[Int]()
+    var card = String("/tmp/mojolearn_dbscan_batchcount.card")
     for b in range(len(budgets)):
         var got = List[Int32]()
-        var batches = _fit(ctx, x, budgets[b], EPS_NN_BRUTE_FORCE, 200, got)
+        # The trace is turned on ONLY to make the runner publish its batch
+        # count; the records themselves are not read here. Truncated each
+        # time because `IdentityTrace`'s env constructor appends.
+        with open(card, "w") as fh:
+            fh.write("")
+        _ = setenv("MOJOLEARN_IDENTITY_TRACE", card, True)
+        var passes = _fit(ctx, x, budgets[b], EPS_NN_BRUTE_FORCE, 200, got)
+        _ = setenv("MOJOLEARN_IDENTITY_TRACE", "", True)
+        var batches = _batch_count_of_last_fit(card)
         seen_batches.append(batches)
+        seen_passes.append(passes)
         if b == 0:
             base = got.copy()
             base_batches = batches
@@ -192,6 +259,33 @@ def check_dbscan_batch_count_invariance() raises:
                     + " batches). A memory number is reaching the answer."
                 )
 
+    # THE LEVER GUARD, and the reason this check was not previously a
+    # check. Four budgets that all produce ONE batch decompose the problem
+    # exactly one way, so every label agreeing proves nothing about
+    # batching. The budgets are a lever only if they moved the number, and
+    # on a large-memory device (an MI300X has 192 GB, so a budget of 0 --
+    # "ask the device" -- is the whole matrix in one batch) they very
+    # plausibly do not. Assert the lever, then the invariance.
+    var distinct = 0
+    for b in range(len(seen_batches)):
+        var first = True
+        for c in range(b):
+            if seen_batches[c] == seen_batches[b]:
+                first = False
+        if first:
+            distinct += 1
+    if distinct < 2:
+        raise Error(
+            "check_dbscan_batch_count_invariance: all "
+            + String(len(budgets))
+            + " budgets produced the same batch count ("
+            + String(base_batches)
+            + "), so nothing was varied and the invariance is vacuous."
+            " Lower the byte budgets or raise DB_N until the count moves"
+            " on THIS device; a pass here would otherwise mean only that"
+            " the fit is deterministic."
+        )
+
     # THE FIXTURE GUARD. Border points are non-core points that got a label
     # anyway; noise is a non-core point that got none. If the bridge
     # produced neither, this fixture is two blobs and the check is vacuous.
@@ -213,16 +307,21 @@ def check_dbscan_batch_count_invariance() raises:
         )
 
     var spread = String("")
+    var pass_spread = String("")
     for b in range(len(seen_batches)):
         spread += String(seen_batches[b])
+        pass_spread += String(seen_passes[b])
         if b + 1 < len(seen_batches):
             spread += "/"
+            pass_spread += "/"
     print(
         "check_dbscan_batch_count_invariance OK (" + _mode_name() + "):",
         DB_N,
         "labels bit-identical at",
         spread,
-        "batches, with",
+        "BATCHES (read from the runner's own trace header;",
+        pass_spread,
+        "propagation passes), with",
         bridge_labelled,
         "border points and",
         bridge_noise,

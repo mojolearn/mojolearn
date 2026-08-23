@@ -36,6 +36,7 @@ the caller passed is not identical in any useful sense.
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
+from mojo_only.kernel_matrix import TARGET_COLUMN, lib_lane_width_for
 from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from neighbors.estimator import knn_search
 from neighbors.ported.neighbors.detail.knn_brute_force import (
@@ -315,7 +316,28 @@ def check_knn_fused_tie_set_is_geometry_invariant() raises:
     vendor difference: it is `updateSortedWarpQ`'s mutex merge resolving a
     tie in whatever order the blocks arrived. So FAST reports the count and
     IDENTICAL requires zero.
+
+    SKIPPED, LOUDLY, ON A COLUMN WITHOUT THE ARM (added 2026-08-23). The
+    fused arm refuses wherever the lane width is not 32 (row 23), so on
+    `MOJOLEARN_COLUMN_AMD` this check was not failing, it was asking a
+    32-lane question of a 64-lane machine and reading the refusal as a
+    crash. It prints what it skipped and why; a silent `return` here would
+    make an AMD run look like it had verified something it never ran.
     """
+    comptime if lib_lane_width_for[TARGET_COLUMN]() != 32:
+        print(
+            "check_knn_fused_tie_set_is_geometry_invariant SKIPPED (",
+            _mode_name(),
+            "): this column's lane width is",
+            lib_lane_width_for[TARGET_COLUMN](),
+            "and the FAISS warp queue is a 32-lane bitonic network, so the",
+            "fused arm REFUSES here (IDENTITY_PATHS row 23). Nothing about",
+            "the fused tie set is verified on this column; the arm the",
+            "default takes here is the tiled one (DEVIATIONS 509, 512) and",
+            "its tie set is checked by check_knn_tie_set_is_lowest_index.",
+        )
+        return
+
     var ctx = DeviceContext()
     var index_host = _build_index(ctx)
 
@@ -382,14 +404,22 @@ def check_knn_fused_tie_set_is_geometry_invariant() raises:
 
 
 def check_knn_auto_arm_is_pinned() raises:
-    """DEVIATION 502. Under IDENTICAL, AUTO may not choose by shape.
+    """DEVIATION 509. Under IDENTICAL, AUTO is the TILED arm on every column.
 
     The two arms break a tie differently, so an AUTO that consults the
     launch computation makes the ANSWER depend on the query count. This
     drives the caller-facing surface at two query counts that fall on
     opposite sides of DEVIATION 36's grid test and requires AUTO to agree
-    with FUSED in both -- which is cuVS's own dispatch
-    (`knn_brute_force.cuh:443`) restored.
+    with TILED in both.
+
+    THE ARM CHANGED AND THE CHECK CHANGED WITH IT. DEVIATION 502 pinned
+    AUTO to FUSED, which is cuVS's own dispatch and is well-defined here;
+    it is not well-defined on AMD, where `fused_l2_knn` refuses at its
+    entry because the FAISS queue is a 32-lane network (row 23). Pinning
+    the identical column to an arm that RAISES on one of its three
+    vendors is the defect DEVIATION 509 corrects, and TILED is the arm
+    whose tie set is NAMED -- lowest index, by the composite key -- rather
+    than merely reproducible.
 
     Under FAST the same two shapes are EXPECTED to disagree, because that
     is what DEVIATION 36 measured and chose. The check reports it rather
@@ -413,7 +443,7 @@ def check_knn_auto_arm_is_pinned() raises:
             ctx, index_host, counts[c], k, KNN_METHOD_AUTO, 256, da, ia
         )
         _ = _search(
-            ctx, index_host, counts[c], k, KNN_METHOD_FUSED, 256, df, if_
+            ctx, index_host, counts[c], k, KNN_METHOD_TILED, 256, df, if_
         )
         for s in range(k):
             if ia[s] != if_[s] or da[s] != df[s]:
@@ -428,19 +458,19 @@ def check_knn_auto_arm_is_pinned() raises:
                         + String(s)
                         + " where FUSED returned "
                         + String(Int(if_[s]))
-                        + ". DEVIATION 502 pins AUTO to cuVS's dispatch in"
+                        + ". DEVIATION 509 pins AUTO to the TILED arm in"
                         " this mode; a shape-chosen arm is a shape-chosen"
                         " tie set."
                     )
     comptime if IDENTICAL_BUILD:
         print(
-            "check_knn_auto_arm_is_pinned OK (IDENTICAL): AUTO == FUSED at",
+            "check_knn_auto_arm_is_pinned OK (IDENTICAL): AUTO == TILED at",
             "53 and 2,000 queries, so the arm no longer depends on the",
             "query count",
         )
     else:
         print(
-            "check_knn_auto_arm_is_pinned OK (FAST): AUTO and FUSED",
+            "check_knn_auto_arm_is_pinned OK (FAST): AUTO and TILED",
             "disagreed on",
             disagreements,
             "of",

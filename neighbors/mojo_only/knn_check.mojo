@@ -1105,39 +1105,29 @@ def check_dispatch_takes_fused() raises:
     for i in range(FCHK_QUERIES * kf):
         if got_u.unsafe_ptr().unsafe_load(i) == UInt32(0xDEADBEEF):
             untouched3 += 1
-    # THE DEFAULT IS MODE-DEPENDENT, and that is DEVIATION 502 rather than a
-    # weakening of DEVIATION 36. Under FAST, AUTO consults the launch
-    # computation and sends this x-split shape to TILED. Under IDENTICAL the
-    # arm cannot be chosen by SHAPE at all -- the two arms break a tie in
-    # the k-th distance differently, so a shape-dependent arm makes the
-    # ANSWER depend on the caller's query count -- and AUTO resolves to
-    # cuVS's own dispatch, which is FUSED for k <= 64 on row-major L2.
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        if untouched3 != 0:
-            raise Error(
-                "DEFAULT DISPATCH at k=8 under IDENTICAL left "
-                + String(untouched3)
-                + " of out_idx untouched, so the TILED arm ran. DEVIATION"
-                " 502 pins AUTO to cuVS's own dispatch in this mode and"
-                " k = 8 is inside their `k <= 64` fused branch."
-            )
-    else:
-        if untouched3 != FCHK_QUERIES * kf:
-            raise Error(
-                "DEFAULT DISPATCH at k=8 on the (53 x 4,093) fixture wrote"
-                " out_idx, so the FUSED arm ran. fused_l2_knn_grid picks"
-                " grid (16, 4) here, the x-split regime, and DEVIATION 36's"
-                " AUTO default must send that to TILED; either the default"
-                " moved or AUTO is not consulting the launch computation."
-            )
+    # BOTH MODES SEND THIS SHAPE TO TILED, for two DIFFERENT reasons, and
+    # the check asserts the same thing twice on purpose. Under FAST, AUTO
+    # consults the launch computation and this x-split shape is DEVIATION
+    # 36's tiled regime. Under IDENTICAL the arm may not be chosen by SHAPE
+    # at all -- the two arms break a tie in the k-th distance differently,
+    # so a shape-dependent arm makes the ANSWER depend on the caller's query
+    # count -- and DEVIATION 509 pins AUTO to TILED on every column,
+    # superseding DEVIATION 502's pin to cuVS's own FUSED dispatch (that arm
+    # REFUSES on a 64-lane column, so it cannot be the identical column's).
+    if untouched3 != FCHK_QUERIES * kf:
+        raise Error(
+            "DEFAULT DISPATCH at k=8 on the (53 x 4,093) fixture wrote"
+            " out_idx, so the FUSED arm ran. Under FAST that is DEVIATION"
+            " 36's x-split regime (fused_l2_knn_grid picks grid (16, 4)"
+            " here) and under IDENTICAL it is DEVIATION 509's pin; either"
+            " the default moved or AUTO is not reading the mode."
+        )
     var bad3 = 0
     for i in range(FCHK_QUERIES):
         for s3 in range(kf):
             # Whichever arm ran wrote its own output buffer: the tiled arm
             # fills `out_idx32` and the fused arm `out_idx`.
             var got3 = Int(got_i.unsafe_ptr().unsafe_load(i * kf + s3))
-            comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-                got3 = Int(got_u.unsafe_ptr().unsafe_load(i * kf + s3))
             var found3 = False
             for t in range(FCHK_MAX_K):
                 if truth[i * FCHK_MAX_K + t] == got3:
@@ -1151,13 +1141,17 @@ def check_dispatch_takes_fused() raises:
             " running but wrong"
         )
 
-    # --- k = 8, ARGUMENT OMITTED, grid_x == 1 shape: AUTO must pick FUSED --
+    # --- k = 8, ARGUMENT OMITTED, grid_x == 1 shape ------------------------
     #
     # 1,920 queries = 120 y-chunks at Mblk 16, exactly minGridSize on the M4,
     # so `fused_l2_knn_grid` returns grid_x == 1 (pinned in
-    # check_launch_config_values) and the AUTO default must take the fused
-    # arm. Only WHICH buffer was written is asserted here; the fused arm's
-    # answers are oracle-checked elsewhere on their own fixtures.
+    # check_launch_config_values). Under FAST the AUTO default must take the
+    # FUSED arm here; under IDENTICAL it must take TILED at this shape TOO,
+    # which is the whole content of DEVIATION 509's pin -- the arm is a
+    # function of the MODE and of nothing else, so the two shapes in this
+    # check must land on the same arm as each other in that mode. Only WHICH
+    # buffer was written is asserted here; the arms' answers are
+    # oracle-checked elsewhere on their own fixtures.
     var big_q = 1920
     var bqueries = ctx.enqueue_create_buffer[DType.float32](
         big_q * FCHK_FEATURES
@@ -1202,15 +1196,28 @@ def check_dispatch_takes_fused() raises:
     for i in range(big_q * kf):
         if hbi.unsafe_ptr().unsafe_load(i) == Int32(-77):
             tiled_untouched += 1
-    if fused_wrote != big_q * kf or tiled_untouched != big_q * kf:
-        raise Error(
-            "DEFAULT DISPATCH at k=8 with 1,920 queries: expected the FUSED"
-            " arm (grid_x == 1 regime), but out_idx has "
-            + String(big_q * kf - fused_wrote)
-            + " sentinel slots left and out_idx32 has "
-            + String(big_q * kf - tiled_untouched)
-            + " written slots; AUTO is not reading the geometry"
-        )
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        if fused_wrote != 0 or tiled_untouched != 0:
+            raise Error(
+                "DEFAULT DISPATCH at k=8 with 1,920 queries under IDENTICAL:"
+                " expected the TILED arm at EVERY shape (DEVIATION 509), but"
+                " out_idx has "
+                + String(fused_wrote)
+                + " written slots and out_idx32 has "
+                + String(tiled_untouched)
+                + " sentinel slots left; AUTO is choosing by geometry in a"
+                " mode where the arm may not depend on the query count."
+            )
+    else:
+        if fused_wrote != big_q * kf or tiled_untouched != big_q * kf:
+            raise Error(
+                "DEFAULT DISPATCH at k=8 with 1,920 queries: expected the"
+                " FUSED arm (grid_x == 1 regime), but out_idx has "
+                + String(big_q * kf - fused_wrote)
+                + " sentinel slots left and out_idx32 has "
+                + String(big_q * kf - tiled_untouched)
+                + " written slots; AUTO is not reading the geometry"
+            )
 
     print(
         "check_dispatch_takes_fused OK: with KNN_METHOD_FUSED, k=8 wrote"
@@ -1218,9 +1225,10 @@ def check_dispatch_takes_fused() raises:
         " opposite, so the `k <= 64` branch at knn_brute_force.cuh:443 is"
         " wired both ways; with the argument omitted, the AUTO default took",
         (
-            "FUSED on BOTH shapes, which is cuVS's own dispatch and is"
-            " DEVIATION 502's pin (the arm may not depend on the query"
-            " count when the two arms break ties differently)"
+            "TILED on BOTH shapes, which is DEVIATION 509's pin (the arm"
+            " may not depend on the query count when the two arms break"
+            " ties differently, and the FUSED arm 502 used to pin to"
+            " refuses outright on a 64-lane column)"
             if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
             else "TILED on the (53 x 4,093) x-split shape and FUSED on the"
             " 1,920-query grid_x == 1 shape, which is DEVIATION 36"

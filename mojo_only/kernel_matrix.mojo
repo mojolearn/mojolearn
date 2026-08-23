@@ -1708,15 +1708,38 @@ def lib_block_bounds_a_float_fold[kernel: Int]() -> Bool:
                             `ceildiv(n, PLUS_PLUS_TPB)`. The scan feeds
                             `binary_search_kernel`, so its rounding decides
                             WHICH SAMPLE k-means++ draws.
+    - `K_LIB_COLUMN_STATS`  `core/column_stats.mojo`, ADDED 2026-08-23
+                            (DEVIATION 510). Both `column_mean_kernel` and
+                            `xty_kernel` fold Float32 at this width, and
+                            both feed PCA and OLS: the mean is subtracted
+                            from every row before the covariance, and
+                            `A^T b` is the right-hand side the normal
+                            equations are solved against. Missed by
+                            DEVIATION 508, which enumerated the three rows
+                            the unsupervised sections reach and stopped at
+                            the section boundary -- the row was one
+                            directory over in `core/`, reached by
+                            `decomposition/`, and a row's LANE is not a
+                            reason for it to be classified differently.
 
     Every other library row here is either integer (`K_LIB_EPS_NEIGHBORHOOD`
-    and `K_LIB_ADJ_SCAN` fold `Int32`, which is associative), carries no
-    fold at all (`K_LIB_WEAK_CC`), or has its numeric geometry pinned
-    separately (`PINNED_ACC_*`, `PINNED_KBLK`, `PINNED_VECLEN` for the two
-    contraction rows; `K_LIB_GRAM_SPLITK` says so in its own row).
+    and `K_LIB_ADJ_SCAN` fold `Int32`, which is associative; so do
+    `K_LIB_SELECT_RADIX`'s histogram scan and `K_LIB_BALL_COVER_EPS`'s
+    counter), carries no fold at all (`K_LIB_WEAK_CC`), folds with an
+    ORDER-INDEPENDENT operator (`K_LIB_TRANSPOSE` moves data; the ball-cover
+    scan's `block.max` is a max, which is associative AND commutative on
+    floats away from NaN), or has its numeric geometry pinned separately
+    (`PINNED_ACC_*`, `PINNED_KBLK`, `PINNED_VECLEN` for the two contraction
+    rows; `K_LIB_GRAM_SPLITK` says so in its own row).
+
+    `K_LIB_JACOBI_EIGH` is the one row this list cannot dismiss and does
+    not pin HERE: `decomposition/mojo_only/jacobi_eigh_device.mojo` folds
+    two Float32 sums at that width, and its 32 is the LANE WIDTH rather
+    than a scheduling choice, so the fix there is the fold, not the row.
+    See DEVIATION 511 and the note in that file.
 
     BIT-INERT TODAY, AND THAT IS THE POINT. `lib_block_size` returns 128
-    for all three in every column, so gating them moves nothing on any
+    for all four in every column, so gating them moves nothing on any
     machine that exists. What the gate buys is the NEXT measurement: this
     table's own docstring invites a vendor number to land here "WITHOUT
     touching a kernel", and landing one on any of these three rows would
@@ -1728,6 +1751,7 @@ def lib_block_bounds_a_float_fold[kernel: Int]() -> Bool:
         kernel == K_LIB_ROW_NORM
         or kernel == K_LIB_REDUCE_BY_KEY
         or kernel == K_LIB_PLUS_PLUS
+        or kernel == K_LIB_COLUMN_STATS
     )
 
 

@@ -1,0 +1,7 @@
+arm dbscan
+mode IDENTICAL
+column 3 lane_width 64
+input.x 8706409177216062216
+batches 7 (device-dependent, NOT part of the claim)
+output.labels 14389807861238588709
+done dbscan

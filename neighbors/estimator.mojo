@@ -307,6 +307,16 @@ def knn_search(
     # `enqueue_create_host_buffer` is not interchangeable with an arbitrary
     # host pointer on this stack, and the failure is SILENT. Copying through
     # a buffer the runtime made keeps this on the route the checks exercise.
+    # THESE TWO ARE PRE-SORT, AND A CARD DIFF MUST READ THEM AS SUCH. The
+    # host sort below normalizes an order the two arms genuinely disagree
+    # about (the table further down measures TILED at 157 of 320 "wrong"
+    # ordered and 0 wrong as a SET), so two machines can differ here for a
+    # reason the caller never sees. Measured 2026-08-23 with
+    # `tools/check_column_invariance.sh`: under FAST, the APPLE and AMD
+    # COLUMNS of one source on one device diverge at `knn.out_dist` while
+    # every sorted distance agrees -- the arms were different, the answer
+    # was the same multiset. Diagnose from the `.sorted` pair below; these
+    # two localize WHICH ARM produced the difference.
     if trace.enabled:
         trace.record_device(ctx, "knn.out_dist", out_dist, n_queries * k)
         trace.record_device(ctx, "knn.out_idx", out_idx, n_queries * k)
@@ -362,6 +372,20 @@ def knn_search(
                 b -= 1
             hd.unsafe_ptr().unsafe_store(base + b + 1, dv)
             hi.unsafe_ptr().unsafe_store(base + b + 1, iv)
+
+    # THE CALLER-VISIBLE STAGES, added 2026-08-23. Everything above the sort
+    # is an arm's internal order; THIS is what `kneighbors` returns, and it
+    # is what a cross-vendor claim about k-NN is a claim about. Recorded as
+    # two tags rather than one because the failure they separate is the
+    # whole of IDENTITY_PATHS row 11: two runs whose DISTANCES agree and
+    # whose INDICES do not have chosen different members of an equidistant
+    # class and have diverged in the selector and nowhere else. That exact
+    # signature was observed between two COLUMNS under FAST on 2026-08-23
+    # (`bench/results/column_invariance/`), so the pair is not hypothetical
+    # bookkeeping.
+    if trace.enabled:
+        trace.record_host("knn.sorted_dist", hd.unsafe_ptr(), n_queries * k)
+        trace.record_host("knn.sorted_idx", hi.unsafe_ptr(), n_queries * k)
 
     for i in range(n_queries * k):
         out_dist_ptr.unsafe_store(i, hd.unsafe_ptr().unsafe_load(i))

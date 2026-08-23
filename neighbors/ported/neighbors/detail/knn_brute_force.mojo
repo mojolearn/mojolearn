@@ -69,6 +69,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.expand_distances import expand_distances_kernel
 from core.gemm import gemm_nt
 from core.row_norms import NORM_TPB, row_norm_kernel
+from mojo_only.kernel_matrix import TARGET_COLUMN, lib_lane_width_for
 from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from neighbors.mojo_only.pinned_distance_tile import (
     PINNED_TILE_TPB,
@@ -438,27 +439,89 @@ def brute_force_knn_impl(
     var want_fused = knn_method == KNN_METHOD_FUSED
     if knn_method == KNN_METHOD_AUTO:
         comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-            # THE ARM PIN, IDENTITY_PATHS row 23 (DEVIATION 502). AUTO
-            # normally chooses by SHAPE -- fused when the launch computation
-            # says `grid_x == 1`, tiled when it would engage the x-split --
-            # and the two arms resolve a tie in the k-th distance
-            # differently: the tiled arm's composite key takes the LOWEST
-            # INDEX (DEVIATION 500) while the fused arm's FAISS queue
-            # compares the distance only. A shape-dependent arm therefore
-            # makes the ANSWER depend on how many queries the caller
-            # happened to pass, which is not a property an identical column
-            # can have.
+            # THE ARM PIN, IDENTITY_PATHS row 23. AUTO normally chooses by
+            # SHAPE -- fused when the launch computation says `grid_x == 1`,
+            # tiled when it would engage the x-split -- and the two arms
+            # resolve a tie in the k-th distance differently: the tiled arm's
+            # composite key takes the LOWEST INDEX (DEVIATION 500) while the
+            # fused arm's FAISS queue compares the distance only. A
+            # shape-dependent arm therefore makes the ANSWER depend on how
+            # many queries the caller happened to pass, which is not a
+            # property an identical column can have.
             #
-            # Under IDENTICAL the choice is cuVS's OWN dispatch instead
-            # (`knn_brute_force.cuh:443`): fused whenever their four
-            # conditions hold. The x-split that made AUTO exist is
-            # neutralized separately -- `fused_l2_knn` pins `grid_x = 1`
-            # in this mode -- so the reason DEVIATION 36 avoided the fused
-            # arm at those shapes is gone with it.
-            want_fused = True
+            # DEVIATION 509 SUPERSEDES 502'S CHOICE OF ARM, and the reason is
+            # a column, not a preference. 502 pinned AUTO to the FUSED arm
+            # (cuVS's own dispatch, `knn_brute_force.cuh:443`) and that is
+            # well-defined on a 32-lane column -- but `fused_l2_knn` REFUSES
+            # at its entry wherever `lib_lane_width_for[TARGET_COLUMN]() !=
+            # 32`, because the FAISS queue is a 32-lane bitonic network and
+            # a 64-wide wavefront addresses the wrong half of it (row 23's
+            # own refusal). So under 502 the IDENTICAL build of k-NN did not
+            # merely lose its tie guarantee on AMD, it RAISED: the pinned
+            # arm was one that cannot exist on one of the three columns this
+            # tree claims. A dispatch that is unrunnable on a column is not
+            # that column's dispatch.
+            #
+            # AUTO therefore pins to the TILED arm on EVERY column under
+            # IDENTICAL. That arm is the one whose answer is NAMED rather
+            # than merely reproducible:
+            #
+            #   - `select_radix_identical` ranks over the composite
+            #     `(twiddle_in(distance) << 32) | index` key, so equidistant
+            #     neighbours come back LOWEST INDEX FIRST by construction and
+            #     the tie class does not exist (DEVIATIONS 500, 501);
+            #   - `pinned_distance_tile` accumulates each cell in ONE thread
+            #     over the whole feature axis, ascending, with no vendor
+            #     matmul and no k-split (DEVIATION 505);
+            #   - neither kernel contains a warp primitive or reads a lane
+            #     width, and the selector's only block collective is a
+            #     prefix sum over Int32 histogram counts, which is exact at
+            #     any tree shape.
+            #
+            # The price is measured, not argued: `price-unsupervised-identity`
+            # puts `knn.tiled` at 2.85x `knn.auto`'s FAST arm on the M4, so
+            # this is what the identical column costs for `k <= 64`. It buys
+            # the only thing the column is for -- the same bits on Metal, PTX
+            # and AMDGPU -- and it buys it on all three rather than on two.
+            #
+            # `KNN_METHOD_FUSED` is untouched: it restores their dispatch
+            # exactly, keeps 502's `grid_x = 1` pin so its tie set stays a
+            # pure function of `(m, n, k)`, and keeps refusing on a column
+            # whose lane width is not 32.
+            want_fused = False
         else:
             var g = fused_l2_knn_grid(n_queries, n_index)
             want_fused = g[0] == 1
+
+    # DEVIATION 512: THE ARM MUST EXIST ON THIS COLUMN BEFORE AUTO PICKS IT.
+    #
+    # Found by compiling this file against `MOJOLEARN_COLUMN_AMD` on the Mac
+    # (2026-08-23), which is a build the four-column matrix supports and
+    # nothing had ever run: `check_knn_fused_tie_set_is_geometry_invariant`
+    # died with `fusedL2kNN: the FAISS warp queue is a 32-lane bitonic
+    # network and this target column's lane width is 64`.
+    #
+    # That refusal is CORRECT (row 23) and it was being reached through the
+    # DEFAULT. `fused_l2_knn` is refused wherever the lane width is not 32,
+    # but AUTO's geometry test does not know that, so on a 64-wide wavefront
+    # every `k <= 64` row-major query whose launch computation returns
+    # `grid_x == 1` -- the COMMON shape, and the one DEVIATION 36 measured
+    # the fused arm to be fastest at -- raised instead of running. A caller
+    # who never named an arm got an exception for a shape class, on a
+    # vendor, in the SHIPPED mode. Under IDENTICAL, DEVIATION 509 had
+    # already moved AUTO off the fused arm; this is the same hole in FAST,
+    # and it is a correctness bug rather than an identity one.
+    #
+    # The refusal stays exactly where it is for an EXPLICIT
+    # `KNN_METHOD_FUSED`: asking for an arm this column cannot express
+    # should say so rather than silently substituting another one with a
+    # different tie rule. AUTO, which by definition did not ask, takes the
+    # tiled arm.
+    comptime fused_arm_exists = lib_lane_width_for[TARGET_COLUMN]() == 32
+    comptime if not fused_arm_exists:
+        if knn_method == KNN_METHOD_AUTO:
+            want_fused = False
+
     var fused_ok = (
         k <= FKNN_MAX_NN
         and row_major_query == row_major_index

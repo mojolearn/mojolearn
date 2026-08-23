@@ -42,11 +42,24 @@ cluster/kmeans_main.mojo
 neighbors/knn_main.mojo
 dbscan/dbscan_main.mojo"
 
+# THE COLUMN IS A BUILD, NOT A FLAG (`mojo_only/kernel_matrix.mojo`), so a
+# vendor other than this machine's is selected with a `-D` and compiles the
+# same source against that vendor's block sizes, lane width and shared-memory
+# budget. `MOJOLEARN_UNSUP_COLUMN=AMD` runs this whole gate that way. It does
+# NOT execute AMD kernels -- the device is still whatever is attached -- so
+# what it proves is about the SOURCE: that the column's constants do not
+# reach an answer. Real AMD bits need E1 and a real MI300X.
+COLDEF=""
+if [ -n "${MOJOLEARN_UNSUP_COLUMN:-}" ]; then
+    COLDEF="-D MOJOLEARN_COLUMN_${MOJOLEARN_UNSUP_COLUMN}=1"
+    echo "== building against COLUMN_${MOJOLEARN_UNSUP_COLUMN} (device unchanged) =="
+fi
+
 run_all() {
     fail=0
     for f in $FILES; do
         echo "  -- $f"
-        out=$(pixi run mojo run -I . "$f" 2>&1) || fail=1
+        out=$(pixi run mojo run $COLDEF -I . "$f" 2>&1) || fail=1
         echo "$out" | grep -E "^check_|^ball_cover|^Unhandled|error:" || true
         if [ "$fail" -ne 0 ]; then
             echo "FAILED: $f"
@@ -62,8 +75,15 @@ if [ "$MOJOLEARN_UNSUP_INNER" = "1" ]; then
     exit $?
 fi
 
+# THE FAST ARM TAKES THE BUILD LOCK TOO (DEVIATION 514). The lock is not
+# about this script's own two arms -- they are sequential -- it is about the
+# OTHER session in this checkout. `with_identical_mode.sh` mutates
+# `mojo_only/numerics.mojo` for the length of its window, so an unlocked
+# FAST compile that lands inside someone else's window gets an IDENTICAL
+# binary and prints "FAST", because `_mode_name()` reads the constant it was
+# compiled against. Both arms hold the lock, so the two cannot interleave.
 echo "== NUMERIC_FAST (the shipped build) =="
-run_all
+MOJOLEARN_UNSUP_INNER=1 tools/with_build_lock.sh "$0" || exit 1
 
 echo
 echo "== NUMERIC_IDENTICAL (session-local flip, reverted on exit) =="
