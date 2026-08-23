@@ -140,6 +140,13 @@ from extratrees.mojo_only.pcg_rng import (
     fnv1a32,
     uniform_int_u64,
 )
+from mojo_only.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
+    identical_exp,
+    identical_log,
+    portable_logf,
+)
 
 
 # --- libm, not `std.math` --------------------------------------------------
@@ -339,10 +346,60 @@ def n_parallel_samples_for(n: Int, k: Int) -> Int:
     undefined behaviour. Their `doSplit` cannot reach it -- feature sampling
     is guarded by `n_sampled_cols != N` at `builder.cuh:399` -- and neither
     can `plan_feature_sampling`, which takes that guard first.
+
+    DEVIATION 457 -- this dispatch value is MODE-GATED. The libm arm below
+    is host-vendor arithmetic, so cross-vendor is cross-HOST here -- macOS
+    libm and glibc can disagree in `log`'s last bits, and near an integer
+    the `ceil` turns that last bit into a different draw count, and at the
+    128/9216 boundaries into a DIFFERENT KERNEL (IDENTITY_PATHS row 18's ET
+    half). Under IDENTICAL the count comes from `n_parallel_samples_portable`
+    instead, one arithmetic on every host. Under FAST the libm arm runs
+    verbatim -- bit for bit the code that has always been here.
     """
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        return n_parallel_samples_portable(n, k)
+    return n_parallel_samples_libm(n, k)
+
+
+def n_parallel_samples_libm(n: Int, k: Int) -> Int:
+    """DEVIATION 158's arm of `n_parallel_samples_for` -- both logs through
+    HOST libm in double, cuML's types exactly. This is the body that lived
+    inline in `n_parallel_samples_for` until DEVIATION 457 named it, so a
+    check can hold it against the portable arm on one host; the FAST gate
+    above compiles to exactly this call and nothing else."""
     var ratio = _log64(1.0 - Float64(k) / Float64(n))
     var per_draw = _log64(1.0 - 1.0 / Float64(n))
     return Int(_ceil64(ratio / per_draw))
+
+
+def n_parallel_samples_portable(n: Int, k: Int) -> Int:
+    """DEVIATION 457's arm -- the same `ceil(log(1 - k/n) / log(1 - 1/n))`
+    with both logs through row 12's `portable_logf`, so every HOST computes
+    the same count from the same `(n, k)`.
+
+    Every seam that is NOT a log is already one arithmetic everywhere and
+    needs no replacement -- `Float32(k)` and `Float32(n)` are exact below
+    2^24 columns, the divide and the subtract are single correctly rounded
+    IEEE operations on every host, the quotient of the two logs is one more
+    correctly rounded divide, and `ceil` of a float is exact (its result is
+    integral, there is nothing to round). The two logs were the only
+    host-vendor seams, and they are the two calls replaced.
+
+    THE PRICE, MEASURED (this is row 18's knife edge made visible, not a
+    bug) -- float32 cannot form `1 - 1/n` to double precision, so this arm's
+    count sits a few counts below the libm arm's at large `n` (at n=20000
+    the sweep in `feature_sampler_check` sees 17278 of 19999 k differ, all
+    within [-36, -1]) and at exactly one swept k per large n the difference
+    crosses a dispatch boundary -- (n=20000, k=7385) is fast=9217/algo-L,
+    portable=9216/excess. Either sampler is a correct draw of k distinct
+    columns at ANY count, so this moves WHICH KERNEL, never correctness;
+    IDENTICAL bits differ from FAST bits BY DESIGN, and the property
+    purchased is that IDENTICAL's count is one value on every host."""
+    from std.math import ceil
+
+    var ratio = portable_logf(Float32(1.0) - Float32(k) / Float32(n))
+    var per_draw = portable_logf(Float32(1.0) - Float32(1.0) / Float32(n))
+    return Int(ceil(ratio / per_draw))
 
 
 def plan_feature_sampling(n: Int, k: Int) raises -> FeatureSamplerPlan:
@@ -908,6 +965,13 @@ def sample_features_pertree(
 #   jump line is the one to check, and the check to run against it is
 #   `feature_sampler_check.mojo`'s determinism and distinctness cases at the
 #   `(n, k)` pairs it already names.
+#
+#   ADDENDUM 2026-08-23 -- libm itself is a HOST-vendor arithmetic, which is
+#   the half of the story this entry could not fix. DEVIATION 457 gates
+#   `n_parallel_samples_for` on the numeric mode (IDENTICAL computes the
+#   count through row 12's `portable_logf`), and DEVIATION 456 does the same
+#   for the device kernel's float seams. Under FAST every call this entry
+#   describes runs verbatim.
 #
 # ---------------------------------------------------------------------------
 #
@@ -1480,26 +1544,41 @@ def sample_all_features_kernel(
 
 # `std.math`, not libm through FFI: a kernel cannot make an FFI call, so
 # DEVIATION 158's whole argument has to be re-made on the device and cannot
-# be won. These three exist so the substitution is NAMED at each of the four
-# call sites below rather than hidden inside them, and so that a reader
-# comparing the kernel against `algo_l_sample` above sees the float/double
-# split of cuML's expressions preserved: `logf`/`expf` on the `float`
-# arguments, `log` on the `double` one. DEVIATION 199.
+# be won by libm. These three exist so the substitution is NAMED at each of
+# the four call sites below rather than hidden inside them, and so that a
+# reader comparing the kernel against `algo_l_sample` above sees the
+# float/double split of cuML's expressions preserved: `logf`/`expf` on the
+# `float` arguments, `log` on the `double` one. DEVIATION 199.
+#
+# DEVIATION 456 -- the two FLOAT seams now route through row 12's mode
+# gate. Under FAST each is the `std.math` call it always was, verbatim, so
+# FAST bits cannot move; under IDENTICAL each is `portable_logf` /
+# `portable_expf`, one arithmetic on every backend, which closes the
+# "SECOND reason" DEVIATION 199 records for the float32 half of this
+# kernel. The DOUBLE seam `_dev_log64` is NOT routed -- the portable pair
+# is float32, and carrying `W` or `log(1 - W)` in float32 is the
+# cancellation fork 199 rejects by name -- so on a double-capable target
+# the algo-L device arm is still not bit-pinned across vendors or against
+# the host oracle until a portable DOUBLE log exists. See 199's addendum.
 
 
 def _dev_logf32(x: Float32) -> Float32:
-    """`raft::log(float)`. `_logf32`'s device twin."""
-    return log(x)
+    """`raft::log(float)`. `_logf32`'s device twin. DEVIATION 456 -- FAST
+    is `std.math.log` verbatim, IDENTICAL is `portable_logf`."""
+    return identical_log(x)
 
 
 def _dev_expf32(x: Float32) -> Float32:
-    """`raft::exp(float)`. `_expf32`'s device twin."""
-    return exp(x)
+    """`raft::exp(float)`. `_expf32`'s device twin. DEVIATION 456 -- FAST
+    is `std.math.exp` verbatim, IDENTICAL is `portable_expf`."""
+    return identical_exp(x)
 
 
 def _dev_log64(x: Float64) -> Float64:
     """`raft::log(double)`. `_log64`'s device twin, and the one the Metal
-    backend refuses."""
+    backend refuses. NOT routed through row 12's gate -- the portable pair
+    is float32 only, and DEVIATION 199 rejects a float32 stand-in for this
+    seam by name -- so under BOTH modes it is the stdlib's device `log`."""
     return log(x)
 
 
@@ -1960,8 +2039,24 @@ def sample_features_device[
 #   ~5e-8 absolute error against libm is a SECOND reason that arm will not be
 #   bit-identical to the host oracle even where `double` exists.
 #
+#   ADDENDUM 2026-08-23, DEVIATION 456 -- row 12's portable pair landed and
+#   HALF of this entry is now closed. The kernel's two FLOAT seams
+#   (`_dev_logf32`, `_dev_expf32`) route through `identical_log` /
+#   `identical_exp`, so under IDENTICAL the float32 transcendentals are one
+#   arithmetic on every backend and the "SECOND reason" above no longer
+#   applies to them; under FAST they compile to the verbatim `std.math`
+#   calls this entry has always described. WHAT REMAINS, and the portable
+#   pair cannot cure it -- the DOUBLE core. The type refusal on Metal
+#   stands untouched (`W`, `log(1 - W)` and the truncated jump are still
+#   `double`, still refused by name on a target without it), and on a
+#   double-capable target `_dev_log64` is still the vendor's `std.math.log`
+#   under both modes, because the portable pair is FLOAT32 and a float32
+#   stand-in for `1 - W` is the cancellation fork this entry rejects. Full
+#   closure of the double seam needs a portable DOUBLE log, a row 12
+#   artifact that does not exist yet.
+#
 #   Reachability. The algo-L arm needs `n_parallel_samples > 72 * 128`, i.e.
-#   `k/n` close to 1 at a large `n` -- (2000, 1990) and (20000, 7385) are the
-#   pairs the checks use. It is not the ExtraTrees default (`max_features =
+#   `k/n` close to 1 at a large `n` -- (2000, 1990) and (20000, 7385 under
+#   FAST, 7386 under IDENTICAL; DEVIATION 457) are the pairs the checks use. It is not the ExtraTrees default (`max_features =
 #   sqrt`, which lands far inside the excess arm), but it is reachable from
 #   `max_features` near 1.0 and it is NOT dead.

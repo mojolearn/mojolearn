@@ -98,6 +98,15 @@ from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels im
     sampler_report_len,
     sampler_scratch_len,
 )
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+
+# DEVIATION 457 -- the smallest algo-L k at n=20000 is MODE-DEPENDENT (7385
+# under FAST host libm on this host, 7386 under IDENTICAL's portable arm).
+# Same two lines as `feature_sampler_check.mojo`, which owns the sweep that
+# pins them.
+comptime ALGO_L_FRONTIER_K = (
+    7386 if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else 7385
+)
 
 
 @fieldwise_init
@@ -539,7 +548,7 @@ def main() raises:
         " on",
         _vendor(),
     )
-    for pair in [(20000, 7385), (2000, 1990)]:
+    for pair in [(20000, ALGO_L_FRONTIER_K), (2000, 1990)]:
         var n = pair[0]
         var k = pair[1]
         var plan = plan_feature_sampling(n, k)

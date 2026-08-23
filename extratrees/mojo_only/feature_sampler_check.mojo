@@ -45,8 +45,27 @@ from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels im
     excess_sample_with_replacement,
     excess_subsequence,
     n_parallel_samples_for,
+    n_parallel_samples_libm,
+    n_parallel_samples_portable,
     plan_feature_sampling,
     sample_features,
+)
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+
+# DEVIATION 457 -- the excess/algo-L boundary at n=20000 is MODE-DEPENDENT.
+# The FAST arm is host libm in double and puts the smallest algo-L k at 7385
+# on this host (k=7384 lands exactly on 9216); the IDENTICAL arm is row 12's
+# float32 `portable_logf` and sits a couple of counts lower, so ITS smallest
+# algo-L k is 7386 (k=7385 lands exactly on 9216). Every case below that
+# needs "a k on the algo-L side" or "the k exactly on the boundary" reads
+# these, so the file pins the boundary of the arm it is actually built with.
+# `sampler_kernel_check.mojo` carries the frontier constant by the same
+# number.
+comptime ALGO_L_FRONTIER_K = (
+    7386 if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else 7385
+)
+comptime EXCESS_EDGE_K = (
+    7385 if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else 7384
 )
 
 
@@ -212,7 +231,10 @@ def main() raises:
     # it. An off-by-one in the comparison (`>=` for `>`) moves exactly one of
     # these two cases and nothing else in the file would notice.
     var boundary_n = 20000
-    for pair in [(7384, SAMPLE_EXCESS), (7385, SAMPLE_ALGO_L)]:
+    for pair in [
+        (EXCESS_EDGE_K, SAMPLE_EXCESS),
+        (ALGO_L_FRONTIER_K, SAMPLE_ALGO_L),
+    ]:
         var k = pair[0]
         var nps = n_parallel_samples_for(boundary_n, k)
         var plan = plan_feature_sampling(boundary_n, k)
@@ -235,12 +257,93 @@ def main() raises:
         )
         cells += 1
     assert_equal(
-        n_parallel_samples_for(boundary_n, 7384),
+        n_parallel_samples_for(boundary_n, EXCESS_EDGE_K),
         SAMPLER_BLOCK_THREADS * SAMPLER_MAX_SAMPLES_PER_THREAD,
-        "k=7384 at n=20000 must land EXACTLY on 9216 -- that is what makes"
-        " the pair above a boundary rather than a gap",
+        "the mode's EXCESS_EDGE_K at n=20000 must land EXACTLY on 9216 --"
+        " that is what makes the pair above a boundary rather than a gap"
+        " (DEVIATION 457: 7384 under FAST on this host, 7385 under"
+        " IDENTICAL)",
     )
     cells += 1
+
+    # DEVIATION 457's sweep -- the FAST arm (host libm, double) against the
+    # portable arm (row 12 float32), held side by side on THIS host. The
+    # counts differ often and by a little (float32 cannot form 1 - 1/n to
+    # double precision), which moves no correctness anywhere -- any count is
+    # a valid draw budget -- so what this pins is the only thing that can
+    # move behavior, WHICH KERNEL the dispatch picks. On this host the sweep
+    # has exactly one arm flip, and it is IDENTITY_PATHS row 18's knife edge
+    # made visible -- (n=20000, k=7385), libm 9217 (algo-L) against portable
+    # 9216 (excess). A glibc host may put the libm side of these numbers
+    # elsewhere; that host-dependence is the entire reason the portable arm
+    # exists.
+    print("[dispatch] DEVIATION 457: libm arm vs portable arm, swept")
+    var sweep_ns = [64, 500, 1000, 2000, 20000]
+    var sweep_total = 0
+    var sweep_mismatch = 0
+    var flip_n = List[Int]()
+    var flip_k = List[Int]()
+    comptime BIG = SAMPLER_BLOCK_THREADS * SAMPLER_MAX_SAMPLES_PER_THREAD
+    for ni in range(len(sweep_ns)):
+        var n = sweep_ns[ni]
+        for k in range(1, n):
+            var a = n_parallel_samples_libm(n, k)
+            var b = n_parallel_samples_portable(n, k)
+            sweep_total += 1
+            if a != b:
+                sweep_mismatch += 1
+            var flip = (
+                (a <= SAMPLER_BLOCK_THREADS) != (b <= SAMPLER_BLOCK_THREADS)
+            ) or ((a <= BIG) != (b <= BIG))
+            if flip:
+                flip_n.append(n)
+                flip_k.append(k)
+    print(
+        "    swept",
+        sweep_total,
+        "(n, k); counts differ on",
+        sweep_mismatch,
+        "; dispatch-boundary flips:",
+        len(flip_n),
+    )
+    for i in range(len(flip_n)):
+        print(
+            "    ARM FLIP at n=",
+            flip_n[i],
+            " k=",
+            flip_k[i],
+            " libm=",
+            n_parallel_samples_libm(flip_n[i], flip_k[i]),
+            " portable=",
+            n_parallel_samples_portable(flip_n[i], flip_k[i]),
+        )
+    assert_equal(
+        len(flip_n),
+        1,
+        "this host's sweep has exactly one (n, k) where the two arms pick"
+        " different kernels; a second one appearing means the host libm or"
+        " the portable polynomial moved",
+    )
+    assert_true(
+        flip_n[0] == 20000 and flip_k[0] == 7385,
+        "the one arm flip is the row-18 knife edge (n=20000, k=7385)",
+    )
+    # Reach for the gate itself -- `n_parallel_samples_for` must equal the
+    # arm this build was compiled with, asserted where the arms DISAGREE so
+    # a gate stuck on the wrong arm cannot pass by coincidence.
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        assert_equal(
+            n_parallel_samples_for(20000, 7385),
+            n_parallel_samples_portable(20000, 7385),
+            "IDENTICAL build must route the portable arm",
+        )
+    else:
+        assert_equal(
+            n_parallel_samples_for(20000, 7385),
+            n_parallel_samples_libm(20000, 7385),
+            "FAST build must route the libm arm",
+        )
+    cells += 3
 
     for pair in [(127, 1), (128, SAMPLER_MAX_SAMPLES_PER_THREAD)]:
         var k = pair[0]
@@ -393,7 +496,14 @@ def main() raises:
     for i in range(16):
         nodes16.append(i * 5)
     cells += run_case(
-        20000, 7385, nodes16, 4, 0xC0FFEE, SAMPLE_ALGO_L, 0, String("frontier")
+        20000,
+        ALGO_L_FRONTIER_K,
+        nodes16,
+        4,
+        0xC0FFEE,
+        SAMPLE_ALGO_L,
+        0,
+        String("frontier"),
     )
     cells += run_case(
         2000, 1990, nodes16, 6, 0xC0FFEE, SAMPLE_ALGO_L, 0, String("k near n")
@@ -407,7 +517,7 @@ def main() raises:
     # columns, and a different node id must produce different ones. A port
     # that keyed on the loop counter would pass every property above.
     print("[keying] node id, not batch position")
-    for arm_case in [(1000, 20), (20000, 7385)]:
+    for arm_case in [(1000, 20), (20000, ALGO_L_FRONTIER_K)]:
         var n = arm_case[0]
         var k = arm_case[1]
         var repeated = List[Int]()
@@ -496,7 +606,7 @@ def main() raises:
 
     var l_sigs = List[List[Int32]]()
     var n_l = 20000
-    var k_l = 7385
+    var k_l = ALGO_L_FRONTIER_K
     var l_nodes = List[Int]()
     for i in range(32):
         l_nodes.append(i)
@@ -571,7 +681,7 @@ def main() raises:
     print("[uniformity] a smoke test, stated as one")
 
     var uni_n = 20000
-    var uni_k = 7385
+    var uni_k = ALGO_L_FRONTIER_K
     var uni_counts = List[Int](length=uni_n, fill=0)
     var uni_nodes = List[Int]()
     for i in range(64):

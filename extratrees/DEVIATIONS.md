@@ -3230,3 +3230,84 @@ PASS on the fixed source.
 other staging write + enqueue) added OUTSIDE `search_batch` must either be
 followed by a drain or must prove the next rewrite of its staging sits
 behind one. 450's invariant is per-call-site, not ambient.
+
+---
+
+## DEVIATION 456 -- the algo-L device kernel's FLOAT seams route through row 12's portable pair
+
+**The pathway** (IDENTITY_PATHS row 12, ET consumer, 2026-08-23).
+`algo_l_sample_kernel`'s float32 transcendentals (`_dev_logf32`,
+`_dev_expf32` in `builder_kernels.mojo`) compiled to `std.math.log` /
+`std.math.exp`, which lower to whatever each device target ships -- PTX
+fast paths, OCML, Metal's own -- so `exp(x)`'s last bit was a vendor
+choice, the SECOND reason DEVIATION 199 recorded for that arm never being
+bit-identical to the host oracle even where `double` exists.
+
+**Ours.** Both helpers now return `identical_log(x)` / `identical_exp(x)`
+(`mojo_only/numerics.mojo`, commit `ed0fe5d`). Under FAST each wrapper IS
+the stdlib call verbatim, so FAST bits cannot move; under IDENTICAL each
+is `portable_logf` / `portable_expf`, one Cephes polynomial through fma,
+one arithmetic on every backend. The wrappers were chosen over calling
+`portable_*` directly because the kernel's enqueue is gated on
+`device_has_float64()`, not on the numeric mode -- both modes can reach it
+on a double-capable target, so the seam needs both arms.
+
+**What this does NOT close, stated so nobody reads more into it.**
+DEVIATION 199's core refusal is the DOUBLE type -- `W`, `log(1 - W)` and
+the truncated jump -- and the portable pair is float32. `_dev_log64` stays
+the stdlib `log` under both modes, because a float32 stand-in for `1 - W`
+is the catastrophic-cancellation fork 199 rejects by name. Consequences
+that stand unchanged -- the Metal refusal, the kernel's never-enqueued
+status on Apple, and (on CUDA or ROCm) a device arm that is still not
+bit-pinned across vendors or against the libm host oracle until a portable
+DOUBLE log exists. 199 carries a dated addendum saying exactly this.
+
+**Gate.** FAST -- the full ET lane suite (`extratrees/tools/check.sh`)
+green with unchanged printed numbers; `sampler_kernel_check` still asserts
+the algo-L refusal by name on this box. IDENTICAL is exercised by the
+orchestrator's consolidated pass.
+
+---
+
+## DEVIATION 457 -- `n_parallel_samples_for` is mode-gated; cross-vendor is cross-HOST here
+
+**The pathway** (IDENTITY_PATHS rows 12 and 18, ET half). The sampler
+dispatch count `ceil(log(1 - k/n) / log(1 - 1/n))` ran through HOST libm
+(DEVIATION 158's FFI arm) on every build. libm is host-vendor arithmetic
+-- macOS and glibc differ in `log`'s last bits -- and this value is turned
+into an INTEGER whose 128/9216 comparisons pick WHICH KERNEL runs, so two
+hosts could train different forests from identical inputs. The device is
+not involved at all; this seam's cross-vendor axis is cross-HOST.
+
+**Ours.** The function splits into two named arms plus a comptime gate --
+`n_parallel_samples_libm` (the exact former body, libm in double, what
+FAST compiles to and nothing else) and `n_parallel_samples_portable`
+(both logs through `portable_logf`, float32, what IDENTICAL compiles to).
+In the portable arm every non-log seam is already one arithmetic
+everywhere and is left as a single operation each -- `Float32(k)` and
+`Float32(n)` are exact below 2^24, the subtract and both divides are
+single correctly rounded IEEE operations on every host, and `ceil` of a
+float is exact because its result is integral.
+
+**MEASURED, the knife edge made visible.** Swept on this host (M4, macOS
+libm) over n in {64, 500, 1000, 2000, 20000}, all k: the two arms differ
+on most counts at large n (17278 of 19999 k at n=20000, every difference
+in [-36, -1]; float32 cannot form 1 - 1/n to double precision) and cross
+a dispatch boundary at EXACTLY ONE swept pair -- (n=20000, k=7385), libm
+9217 = algo-L against portable 9216 = excess. That pair is row 18's knife
+edge, now printed and asserted by `feature_sampler_check`'s DEVIATION 457
+sweep case rather than latent. A different count is a different (still
+correct) draw budget, so the only behavior that moves is kernel choice,
+and it moves only under IDENTICAL, whose bits differ from FAST BY DESIGN.
+
+**Check plumbing this forced.** The n=20000 boundary pins in
+`feature_sampler_check.mojo` and `sampler_kernel_check.mojo` were
+FAST-libm facts (smallest algo-L k = 7385, exact-9216 k = 7384). Both
+files now compute the pinned k from the build mode (`ALGO_L_FRONTIER_K` =
+7385 FAST / 7386 IDENTICAL, `EXCESS_EDGE_K` = 7384 FAST / 7385 IDENTICAL),
+so under FAST they compile to the exact values and printed numbers they
+have always had, and the orchestrator's IDENTICAL pass pins the portable
+arm's boundary instead of going red on the libm arm's.
+
+**Gate.** FAST -- ET lane suite green, `feature_sampler_check` prints the
+sweep tallies and the single ARM FLIP line above.
