@@ -39,7 +39,16 @@ DROPLET_ID=""
 DEADMAN_PID=""
 
 destroy() {
-  [ -z "$DROPLET_ID" ] && return 0
+  if [ -z "$DROPLET_ID" ]; then
+    # no id known: sweep by name so an unreadable create response cannot
+    # leave a droplet behind (the leg-10 orphan)
+    for id in $(api "$API/droplets?tag_name=e2&per_page=50" | python3 -c "import json,sys
+d=json.load(sys.stdin); print(' '.join(str(x['id']) for x in d.get('droplets',[]) if x['name']=='$NAME'))" 2>/dev/null); do
+      code=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE -H "Authorization: Bearer $TOK" "$API/droplets/$id")
+      log "DELETE by-name droplet $id -> HTTP $code"
+    done
+    return 0
+  fi
   for i in 1 2 3 4 5 6; do
     code=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE \
       -H "Authorization: Bearer $TOK" "$API/droplets/$DROPLET_ID")
@@ -70,23 +79,49 @@ teardown() {
 trap teardown EXIT
 
 mkdir -p "$(dirname "$STATE")"
-log "creating $NAME ($SIZE, $REGION)"
-DROPLET_ID=$(api -X POST -H "Content-Type: application/json" \
-  -d "{\"name\":\"$NAME\",\"region\":\"$REGION\",\"size\":\"$SIZE\",\"image\":$IMAGE,\"ssh_keys\":[\"$SSH_KEY_FP\"],\"tags\":[\"e2\"]}" \
-  "$API/droplets" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['droplet']['id'] if 'droplet' in d else '')")
-if [ -z "$DROPLET_ID" ]; then
-  log "create FAILED"; exit 3
-fi
-echo "droplet $DROPLET_ID created $(date -u +%FT%TZ)" > "$STATE"
-log "droplet id $DROPLET_ID"
 
-# THE DEAD-MAN: a detached process that destroys the droplet after the cap.
-# It survives this script and the session that launched it.
-nohup bash -c "sleep $DEADMAN_SECONDS; curl -s -o /dev/null -w 'deadman DELETE -> %{http_code}\n' -X DELETE -H 'Authorization: Bearer $TOK' '$API/droplets/$DROPLET_ID' >> '$STATE'" \
+# THE DEAD-MAN, ARMED BEFORE THE CREATE CALL AND KEYED BY NAME, NOT ID.
+# Leg 10 (2026-08-23 12:11): the create call made the droplet but returned
+# a non-JSON body, this script parsed no id, printed "create FAILED", and
+# exited through a teardown that had nothing to destroy and a dead-man that
+# had never been armed -- an ORPHAN MI325X, found by hand 19 minutes later
+# through the account listing. The id-keyed timer protected every path
+# except the one where the id is unknown. This one lists every droplet
+# tagged e2 whose name is $NAME and deletes each, so it needs nothing this
+# script learns later. It survives this script and the session that
+# launched it, and is cancelled only by a clean teardown.
+nohup bash -c "sleep $DEADMAN_SECONDS; for id in \$(curl -s -H 'Authorization: Bearer $TOK' '$API/droplets?tag_name=e2&per_page=50' | python3 -c \"import json,sys; d=json.load(sys.stdin); print(' '.join(str(x['id']) for x in d.get('droplets',[]) if x['name']=='$NAME'))\"); do curl -s -o /dev/null -w \"deadman DELETE \$id -> %{http_code}\\n\" -X DELETE -H 'Authorization: Bearer $TOK' \"$API/droplets/\$id\" >> '$STATE'; done" \
   >/dev/null 2>&1 < /dev/null &
 DEADMAN_PID=$!
 disown "$DEADMAN_PID" 2>/dev/null || true
-log "dead-man timer pid $DEADMAN_PID ($DEADMAN_SECONDS s)"
+log "dead-man timer pid $DEADMAN_PID ($DEADMAN_SECONDS s, keyed by tag e2 + name $NAME)"
+
+log "creating $NAME ($SIZE, $REGION)"
+CREATE_BODY="$(api -X POST -H "Content-Type: application/json" \
+  -d "{\"name\":\"$NAME\",\"region\":\"$REGION\",\"size\":\"$SIZE\",\"image\":$IMAGE,\"ssh_keys\":[\"$SSH_KEY_FP\"],\"tags\":[\"e2\"]}" \
+  "$API/droplets")"
+DROPLET_ID=$(printf '%s' "$CREATE_BODY" | python3 -c "import json,sys
+try:
+    d=json.load(sys.stdin); print(d['droplet']['id'] if 'droplet' in d else '')
+except Exception:
+    print('')")
+if [ -z "$DROPLET_ID" ]; then
+  # The create may have SUCCEEDED with an unreadable body (leg 10). Look
+  # the droplet up by name before concluding anything, and ADOPT it so the
+  # id-keyed teardown below owns it.
+  log "create returned no id; body: $(printf '%s' "$CREATE_BODY" | head -c 200)"
+  sleep 5
+  DROPLET_ID=$(api "$API/droplets?tag_name=e2&per_page=50" | python3 -c "import json,sys
+d=json.load(sys.stdin); ids=[x['id'] for x in d.get('droplets',[]) if x['name']=='$NAME']
+print(ids[0] if ids else '')")
+  if [ -n "$DROPLET_ID" ]; then
+    log "ADOPTED droplet $DROPLET_ID found by name after an unreadable create response"
+  else
+    log "create FAILED (no droplet by that name either)"; exit 3
+  fi
+fi
+echo "droplet $DROPLET_ID created $(date -u +%FT%TZ)" > "$STATE"
+log "droplet id $DROPLET_ID"
 
 IP=""
 for i in $(seq 1 90); do

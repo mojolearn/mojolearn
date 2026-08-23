@@ -724,6 +724,23 @@ def check_ols_is_launch_invariant() raises:
                 ac_first = k
 
     if not ac_same:
+        # LOCALIZE before raising (2026-08-23): the H100 leg raised here in
+        # BOTH modes (coefficient 0: 0xbbc76fa8 vs 0xbbc6fa1b, 0.2% apart)
+        # and the message named the class but not the stage. Two traced
+        # fits of the card fixture at THIS shape, in this process, and the
+        # first record they disagree on -- the same certificate machinery
+        # the cross-vendor legs use, pointed at one process.
+        var stage = String("<no traced repro: the card fixture's two fits agreed>")
+        var pa = String("/tmp/mojolearn_ols_launch_inv_a.card")
+        var pb = String("/tmp/mojolearn_ols_launch_inv_b.card")
+        with DeviceContext() as ctx2:
+            var ta = IdentityTrace.to_path(pa, "", True)
+            _ = emit_ols_card(ctx2, ta, N, D, OLS_ELEM_TPB, 527)
+            var tb = IdentityTrace.to_path(pb, "", True)
+            _ = emit_ols_card(ctx2, tb, N, D, OLS_ELEM_TPB, 527)
+        var d2 = first_divergence(pa, pb)
+        if d2 != "":
+            stage = d2
         raise Error(
             "check_ols_is_launch_invariant: TWO IDENTICAL FITS in one"
             " process disagreed at coefficient "
@@ -737,7 +754,9 @@ def check_ols_is_launch_invariant() raises:
             " uninitialized read or a race, and it is a defect in BOTH"
             " modes. This ran in mode ["
             + _mode_name()
-            + "]."
+            + "]. FIRST DIVERGING STAGE of two traced fits at the same"
+            " shape: "
+            + stage
         )
 
     comptime if IDENTICAL:

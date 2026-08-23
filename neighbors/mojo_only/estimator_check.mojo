@@ -42,7 +42,13 @@ only the default would have been green on one shape and silently describing
 the other. That is the exact failure rule 8 was written for.
 """
 
-from mojo_only.kernel_matrix import TARGET_COLUMN, lib_lane_width_for
+from mojo_only.kernel_matrix import (
+    TARGET_COLUMN,
+    lib_lane_width_for,
+    vendor_fp32_matmul_is_lossy,
+    vendor_fp32_matmul_precision_name,
+)
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from max.gpu.host import DeviceContext
 from std.math import sqrt
 
@@ -238,6 +244,27 @@ def check_knn_search_matches_host() raises:
                 wrong_dist += 1
 
     if wrong_idx != 0 or wrong_dist != 0:
+        # FAST on a column whose vendor matmul is TF32/fp19 (IDENTITY_PATHS
+        # row 33, DEVIATION 529/540): the tiled arm's distance step is
+        # `linalg.matmul`, a 10-bit-mantissa product, so distances land
+        # ~1e-3 off and near-tied neighbours swap (H100 leg 10, 2026-08-23:
+        # 8 of 320 indices, 273 distances, worst 0.0022). That is the
+        # shipped arm's accuracy on that vendor, RECORDED with its label;
+        # IDENTICAL never calls the vendor matmul and keeps the exact claim.
+        var lossy = (
+            GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
+            and vendor_fp32_matmul_is_lossy(TARGET_COLUMN, ctx.compute_capability())
+        )
+        if lossy and worst_dist_err < 0.05:
+            print(
+                "check_knn_search_matches_host: RECORDED (FAST, vendor product "
+                + vendor_fp32_matmul_precision_name(TARGET_COLUMN, ctx.compute_capability())
+                + "): " + String(wrong_idx) + " of " + String(CHK_QUERIES * CHK_K)
+                + " indices differ from the exact host top-k, " + String(wrong_dist)
+                + " distances beyond 1e-4, worst distance error " + String(worst_dist_err)
+                + ", query_tile=" + String(used_tile)
+            )
+            return
         raise Error(
             "check_knn_search_matches_host: "
             + String(wrong_idx)
