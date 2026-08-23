@@ -41,10 +41,15 @@ from ensemble.decisiontree.batched_levelalgo.objectives import (
     RegressionObjectiveFunction,
 )
 from ensemble.decisiontree.decisiontree import (
+    ENTROPY,
+    GAMMA,
     GINI,
+    INVERSE_GAUSSIAN,
     MSE,
+    POISSON,
     DecisionTreeParams,
     TreeMetaDataNode,
+    criterion_name,
 )
 from ensemble.flatnode import SparseTreeNode
 from ensemble.randomforest import (
@@ -98,7 +103,68 @@ names the same order in the same words:
     13  seed
     14  n_streams             (cuML's python default is 4; DEVIATION 117)
     15  max_batch_size        (cuML default 4096)
+
+The split criterion is NOT a slot: it crosses as its own integer argument
+(`criterion`, the `CRITERION` enumerator value from `decisiontree.mojo`)
+so the two fit entry points can gate it by LABEL TYPE before the engine
+sees it -- see DEVIATION 407 at `_check_criterion` below.
 """
+
+# DEVIATION 407 (2026-08-23, RF lane). THE CRITERION SELECTOR CROSSES THE
+# PYTHON BOUNDARY.
+# THEIRS: `randomforest_common.pyx:104-151` maps the strings
+# 'gini'/'entropy'/'mse'/'poisson'/'gamma'/'inverse_gaussian' (and the
+# digits '0'..'7') onto `CRITERION`, refuses MAE by NotImplementedError, and
+# passes the enumerator down as `split_criterion`; nothing in their python
+# layer checks that the enumerator suits the LABEL TYPE. The C++ `default:`
+# arm of `GainPerSplit` (`objectives.cuh:132-136`, `:331-338`) returns
+# `-max()` for every candidate, so a regression enumerator handed to the
+# classifier (or vice versa) fits a forest of STUMPS without a word.
+# OURS: the wrapper maps sklearn-shaped names onto the same enumerators
+# (`python/mojolearn/randomforest.py::_CLS_CRITERIA` / `_REG_CRITERIA`)
+# and each fit binding REFUSES BY NAME an enumerator its objective has no
+# arm for -- a silent stump is the "reached but inert" failure class
+# `ensemble/mojo_only/criteria_check.mojo` arm A/B exists to catch, and
+# the Python surface must not reopen it. Until this deviation the binding
+# hardcoded GINI / MSE and the wrapper refused every other name; that text
+# is gone.
+
+
+def _cls_criteria() -> List[Int]:
+    """The enumerators `ClassificationObjectiveFunction.GainPerSplit` has
+    an arm for (`objectives.cuh:132-136`)."""
+    return [GINI, ENTROPY]
+
+
+def _reg_criteria() -> List[Int]:
+    """The enumerators `RegressionObjectiveFunction.GainPerSplit` has an
+    arm for (`objectives.cuh:331-338`); MAE is enumerated but armless,
+    theirs and ours."""
+    return [MSE, POISSON, GAMMA, INVERSE_GAUSSIAN]
+
+
+def _check_criterion(
+    who: String, criterion: Int, allowed: List[Int]
+) raises:
+    """DEVIATION 407: refuse an enumerator the objective has no arm for."""
+    for i in range(len(allowed)):
+        if allowed[i] == criterion:
+            return
+    var names = String("")
+    for i in range(len(allowed)):
+        if i > 0:
+            names += "/"
+        names += criterion_name(allowed[i])
+    raise Error(
+        who
+        + ": split criterion "
+        + criterion_name(criterion)
+        + " ("
+        + String(criterion)
+        + ") has no arm in this objective's GainPerSplit"
+        + " (objectives.mojo, DEVIATION 407); accepted: "
+        + names
+    )
 
 
 def _rf_params_from(params: PythonObject, criterion: Int) raises -> RF_params:
@@ -210,10 +276,13 @@ def rf_classifier_fit_binding(
     x_addr: PythonObject,
     y_addr: PythonObject,
     params: PythonObject,
+    criterion: PythonObject,
 ) raises -> PythonObject:
     """Fit the cuML-port RandomForest classifier. `x` is COLUMN-major
     float32 (n_rows * n_cols, the layout `fit_forest`'s default expects);
-    `y` is int32 class CODES in [0, n_classes). See `N_RF_FIT_PARAMS`."""
+    `y` is int32 class CODES in [0, n_classes). See `N_RF_FIT_PARAMS`.
+    `criterion` is GINI (0) or ENTROPY (1); anything else is refused by
+    name (DEVIATION 407)."""
     if len(params) != N_RF_FIT_PARAMS:
         raise Error(
             "rf_classifier_fit: params must hold "
@@ -228,7 +297,9 @@ def rf_classifier_fit_binding(
         raise Error("rf_classifier_fit: n_classes must be >= 2")
     var xp = _f32_ptr(Int(py=x_addr))
     var yp = _i32_ptr(Int(py=y_addr))
-    var rf_params = _rf_params_from(params, GINI)
+    var crit = Int(py=criterion)
+    _check_criterion("rf_classifier_fit", crit, _cls_criteria())
+    var rf_params = _rf_params_from(params, crit)
 
     var forest: RandomForestMetaData[DT, CLT]
     with GILReleased(Python()):
@@ -265,9 +336,13 @@ def rf_regressor_fit_binding(
     x_addr: PythonObject,
     y_addr: PythonObject,
     params: PythonObject,
+    criterion: PythonObject,
 ) raises -> PythonObject:
-    """Fit the cuML-port RandomForest regressor (MSE criterion). Same
-    contract; slot 2 MUST be 0 and `y` is float32."""
+    """Fit the cuML-port RandomForest regressor. Same contract; slot 2
+    MUST be 0 and `y` is float32. `criterion` is MSE (2), POISSON (4),
+    GAMMA (5) or INVERSE_GAUSSIAN (6); anything else is refused by name
+    (DEVIATION 407). The log criteria are DEVIATION 406's: they RUN in
+    both numeric modes, comparable to cuML in neither."""
     if len(params) != N_RF_FIT_PARAMS:
         raise Error(
             "rf_regressor_fit: params must hold "
@@ -281,7 +356,9 @@ def rf_regressor_fit_binding(
     var n_cols = Int(py=params[1])
     var xp = _f32_ptr(Int(py=x_addr))
     var yp = _f32_ptr(Int(py=y_addr))
-    var rf_params = _rf_params_from(params, MSE)
+    var crit = Int(py=criterion)
+    _check_criterion("rf_regressor_fit", crit, _reg_criteria())
+    var rf_params = _rf_params_from(params, crit)
 
     var forest: RandomForestMetaData[DT, RLT]
     with GILReleased(Python()):

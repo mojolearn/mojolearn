@@ -43,11 +43,56 @@ _CUML_DEFAULT_N_BINS = 128
 _CUML_DEFAULT_N_STREAMS = 4
 _CUML_DEFAULT_MAX_BATCH = 4096
 
+# DEVIATION 407 (2026-08-23, RF lane): the split criterion crosses the
+# boundary as cuML's `CRITERION` enumerator (`algo_helper.h:10-18`, the
+# same integers `ensemble/decisiontree/decisiontree.mojo` declares: GINI 0,
+# ENTROPY 1, MSE 2, POISSON 4, GAMMA 5, INVERSE_GAUSSIAN 6). The names are
+# sklearn's where sklearn has one and cuML's otherwise, mapped the way
+# `randomforest_common.pyx:104-120` maps cuML's own strings; `log_loss` is
+# sklearn's second spelling of entropy and `mse` is cuML's spelling of
+# squared_error. The binding refuses by name any enumerator its objective
+# has no arm for (`bindings/_mojolearn_rf.mojo::_check_criterion`), so a
+# wrong code cannot fit a silent forest of stumps.
+_CLS_CRITERIA = {"gini": 0, "entropy": 1, "log_loss": 1}
+_REG_CRITERIA = {
+    "squared_error": 2, "mse": 2,
+    "poisson": 4, "gamma": 5, "inverse_gaussian": 6,
+}
+# sklearn names the engine enumerates but has no arm for. MAE is value 3
+# of their enum and refused by `DecisionTreeParams.check()`
+# (`ensemble/decisiontree/decisiontree.mojo:286-291`, after
+# `decisiontree.cu:28` and `randomforest_common.pyx:147-151`);
+# friedman_mse has no cuML counterpart at all.
+_NOT_PORTED_CRITERIA = {
+    "absolute_error": "cuML enumerates MAE (algo_helper.h:14) and refuses"
+                      " it (decisiontree.cu:28); the port keeps that refuse"
+                      " at ensemble/decisiontree/decisiontree.mojo:286.",
+    "mae": "cuML enumerates MAE (algo_helper.h:14) and refuses it"
+           " (decisiontree.cu:28); the port keeps that refuse at"
+           " ensemble/decisiontree/decisiontree.mojo:286.",
+    "friedman_mse": "no cuML counterpart; RegressionObjectiveFunction"
+                    ".GainPerSplit (ensemble/decisiontree/batched_levelalgo"
+                    "/objectives.mojo:1252-1261) has no arm for it.",
+}
+
 
 def _refuse(name, why):
     raise NotImplementedError(
         f"{name} is not ported: {why} Refused by name rather than accepted"
         " and ignored."
+    )
+
+
+def _criterion_code(criterion, table, who):
+    """A criterion NAME into the engine's `CRITERION` enumerator, or a
+    refusal by name (DEVIATION 407)."""
+    if criterion in table:
+        return table[criterion]
+    if criterion in _NOT_PORTED_CRITERIA:
+        _refuse(f"criterion={criterion!r}", _NOT_PORTED_CRITERIA[criterion])
+    raise ValueError(
+        f"criterion={criterion!r} is not a {who} criterion here; accepted"
+        f" are {sorted(table)}"
     )
 
 
@@ -104,6 +149,7 @@ class _RandomForestBase:
         n_jobs,
         verbose,
         device,
+        criterion_code,
     ):
         if device != "gpu":
             raise ValueError(
@@ -138,6 +184,7 @@ class _RandomForestBase:
             )
         self.device = device
         self._cfg = dict(
+            criterion=int(criterion_code),
             n_estimators=int(n_estimators),
             max_depth=(
                 _CUML_DEFAULT_MAX_DEPTH if max_depth is None
@@ -196,7 +243,9 @@ class _RandomForestBase:
         # docstring.
         Xf = np.asfortranarray(Xa, dtype=np.float32)
         params = self._fit_params(n_rows, n_features, n_classes)
-        out = fit_fn(_addr_ro(Xf), _addr_ro(y_arr), params)
+        out = fit_fn(
+            _addr_ro(Xf), _addr_ro(y_arr), params, self._cfg["criterion"]
+        )
         del Xf  # the borrow ends with the call
         offsets, colid, quesval, left_child, leaves, meta = out
         self._offsets = np.asarray(offsets, dtype=np.int32)
@@ -286,10 +335,13 @@ class _RandomForestBase:
 class RandomForestClassifier(_RandomForestBase):
     """cuML's `RandomForestClassifier`, honoured or refused by name.
 
-    Gini splits over per-feature quantiles (`n_bins`, default 128);
-    `max_depth` defaults to cuML's 16, not sklearn's None. `predict` is the
-    argmax of `predict_proba`, exactly as `RandomForest::predict` argmaxes
-    (`randomforest.cuh:417-427`).
+    `criterion` is 'gini' (cuML's GINI, the default) or 'entropy' /
+    'log_loss' (ENTROPY), split over per-feature quantiles (`n_bins`,
+    default 128); `max_depth` defaults to cuML's 16, not sklearn's None.
+    `predict` is the argmax of `predict_proba`, exactly as
+    `RandomForest::predict` argmaxes (`randomforest.cuh:417-427`).
+    Entropy's `log` is DEVIATION 113/406's: it runs in both numeric modes
+    and is bit-comparable to cuML's in neither.
     """
 
     def __init__(
@@ -319,13 +371,7 @@ class RandomForestClassifier(_RandomForestBase):
         max_batch_size=_CUML_DEFAULT_MAX_BATCH,
         device="gpu",
     ):
-        if criterion != "gini":
-            _refuse(
-                f"criterion={criterion!r}",
-                "only 'gini' crosses this boundary; the engine also"
-                " transcribes entropy but the binding does not carry the"
-                " selector yet.",
-            )
+        code = _criterion_code(criterion, _CLS_CRITERIA, "classifier")
         if min_weight_fraction_leaf:
             _refuse("min_weight_fraction_leaf",
                     "sample weights do not cross this boundary yet.")
@@ -334,8 +380,9 @@ class RandomForestClassifier(_RandomForestBase):
             min_samples_leaf, min_samples_split, min_impurity_decrease,
             bootstrap, max_samples, random_state, n_streams, max_batch_size,
             oob_score, warm_start, ccp_alpha, class_weight, monotonic_cst,
-            n_jobs, verbose, device,
+            n_jobs, verbose, device, code,
         )
+        self.criterion = criterion
 
     def fit(self, X, y):
         ya = np.asarray(y).ravel()
@@ -373,9 +420,22 @@ class RandomForestClassifier(_RandomForestBase):
 
 
 class RandomForestRegressor(_RandomForestBase):
-    """cuML's `RandomForestRegressor` (MSE criterion), honoured or refused
-    by name. Same quantile-split and `max_depth=16` defaults as the
-    classifier; `max_features` defaults to 1.0, cuML's regressor default.
+    """cuML's `RandomForestRegressor`, honoured or refused by name.
+
+    `criterion` is 'squared_error' (cuML's MSE, the default; 'mse' is
+    accepted as cuML's spelling), 'poisson', 'gamma' or 'inverse_gaussian'
+    -- the four arms of their `GainPerSplit` (`objectives.cuh:331-338`).
+    'absolute_error' / 'mae' and 'friedman_mse' are refused by name
+    (DEVIATION 407). Same quantile-split and `max_depth=16` defaults as
+    the classifier; `max_features` defaults to 1.0, cuML's regressor
+    default.
+
+    TARGET DOMAIN. The three deviance criteria return `-max()` for any
+    candidate whose label sum is not positive (`objectives.cuh:251-253`,
+    `:279-281`, `:306-308`), so cuML, fed a non-positive target, silently
+    fits stumps. `fit` refuses instead: 'poisson' needs y >= 0 with a
+    positive sum (sklearn's rule, which is the engine's per-node guard
+    applied at the root); 'gamma' and 'inverse_gaussian' need y > 0.
     """
 
     def __init__(
@@ -404,13 +464,7 @@ class RandomForestRegressor(_RandomForestBase):
         max_batch_size=_CUML_DEFAULT_MAX_BATCH,
         device="gpu",
     ):
-        if criterion != "squared_error":
-            _refuse(
-                f"criterion={criterion!r}",
-                "only 'squared_error' (cuML's MSE) crosses this boundary;"
-                " the engine transcribes more but the binding does not"
-                " carry the selector yet.",
-            )
+        code = _criterion_code(criterion, _REG_CRITERIA, "regressor")
         if min_weight_fraction_leaf:
             _refuse("min_weight_fraction_leaf",
                     "sample weights do not cross this boundary yet.")
@@ -419,11 +473,30 @@ class RandomForestRegressor(_RandomForestBase):
             min_samples_leaf, min_samples_split, min_impurity_decrease,
             bootstrap, max_samples, random_state, n_streams, max_batch_size,
             oob_score, warm_start, ccp_alpha, None, monotonic_cst,
-            n_jobs, verbose, device,
+            n_jobs, verbose, device, code,
         )
+        self.criterion = criterion
 
     def fit(self, X, y):
         y32 = np.ascontiguousarray(np.asarray(y).ravel(), dtype=np.float32)
+        code = self._cfg["criterion"]
+        if code == _REG_CRITERIA["poisson"]:
+            if np.any(y32 < 0) or not np.sum(y32, dtype=np.float64) > 0:
+                raise ValueError(
+                    "criterion='poisson' requires y >= 0 with a positive"
+                    " sum: PoissonGain returns -max() for a non-positive"
+                    " label sum (objectives.cuh:251-253), which would fit"
+                    " a stump silently"
+                )
+        elif code in (_REG_CRITERIA["gamma"],
+                      _REG_CRITERIA["inverse_gaussian"]):
+            if np.any(y32 <= 0):
+                raise ValueError(
+                    f"criterion={self.criterion!r} requires y > 0: its"
+                    " gain returns -max() for a non-positive label sum"
+                    " (objectives.cuh:279-281, :306-308), which would fit"
+                    " a stump silently"
+                )
         return self._fit_arrays(X, y32, 0, _mojolearn_rf.rf_regressor_fit)
 
     def predict(self, X):

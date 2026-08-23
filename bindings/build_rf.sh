@@ -137,12 +137,47 @@ for bad in (dict(oob_score=True), dict(warm_start=True),
             raise SystemExit(f"smoke: refusal for {bad} does not name it")
     else:
         raise SystemExit(f"smoke: {bad} was accepted")
+# DEVIATION 407: THE CRITERION SELECTOR MUST REACH THE ENGINE. On a
+# fixture with real structure gini and entropy choose different splits
+# (criteria_check arm A); if the two forests are bit-equal the selector is
+# a dead argument and the classifier is fitting gini under both names.
+# Same kw, same seed, bootstrap off so only the criterion moves.
+kwr = dict(n_estimators=3, max_depth=6, max_features=1.0, n_bins=16,
+           bootstrap=False, random_state=2024)
+yc3 = ((X[:, 0] * 7 + X[:, 1] * 13) % 3).astype(np.int64)
+g = rfm.RandomForestClassifier(criterion="gini", **kwr).fit(X, yc3)
+e = rfm.RandomForestClassifier(criterion="entropy", **kwr).fit(X, yc3)
+if np.array_equal(g._quesval, e._quesval) and np.array_equal(
+        g._colid, e._colid):
+    raise SystemExit("smoke: gini and entropy fitted the IDENTICAL forest"
+                     " -- the criterion is not reaching the engine")
+l = rfm.RandomForestClassifier(criterion="log_loss", **kwr).fit(X, yc3)
+if not (np.array_equal(l._quesval, e._quesval)
+        and np.array_equal(l._colid, e._colid)):
+    raise SystemExit("smoke: log_loss and entropy must be one criterion")
+yp = X[:, 1].astype(np.float32) + 1.0
+seen = {}
+for crit in ("squared_error", "poisson", "gamma", "inverse_gaussian"):
+    r = rfm.RandomForestRegressor(criterion=crit, **kwr).fit(X, yp)
+    seen[crit] = (r._colid.tobytes(), r._quesval.tobytes())
+if len(set(seen.values())) < 2:
+    raise SystemExit("smoke: every regression criterion fitted the same"
+                     " forest -- the criterion is not reaching the engine")
+for bad in ("friedman_mse", "absolute_error"):
+    try:
+        rfm.RandomForestRegressor(criterion=bad)
+    except NotImplementedError as ex:
+        if bad not in str(ex):
+            raise SystemExit(f"smoke: refusal for criterion={bad} does not"
+                             " name it")
+    else:
+        raise SystemExit(f"smoke: criterion={bad!r} was accepted")
 try:
-    rfm.RandomForestClassifier(criterion="entropy")
-except NotImplementedError:
+    rfm.RandomForestRegressor(criterion="gamma", **kwr).fit(X, -yp)
+except ValueError:
     pass
 else:
-    raise SystemExit("smoke: criterion='entropy' was accepted")
+    raise SystemExit("smoke: gamma accepted a non-positive target")
 shutil.rmtree(tmp, ignore_errors=True)
 PY
 }
