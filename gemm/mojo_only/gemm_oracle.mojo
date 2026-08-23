@@ -28,16 +28,26 @@ cites its section. Performance is irrelevant here -- it is `O(m n k)` scalar
 Mojo on the host, single threaded, and it is meant to stay that way. Its jobs
 are exactly three:
 
-1. **Be the definition.** The answer the Phase 2 kernel must produce is
-   `gemm_oracle(...)` at `leaf = contract_leaf_size(k)`. Not "close to"; the
-   same bits.
-2. **Be the serial reference.** At `leaf >= k` there is one leaf and the
-   whole product is one ascending fp32 chain, which is the simplest thing
-   anybody can check by hand.
+1. **Be the definition.** The NORMATIVE answer of profile
+   `mojolearn.identical.gemm.fp32.v1` is `gemm_oracle(...)`: logical leaves
+   at `contract_leaf_size(k)`, combined by `fold_balanced_tree`'s FIXED
+   BALANCED TREE. Not "close to"; the same bits.
+2. **Be the diagnostic reference.** `gemm_oracle_serial(...)` is the whole-K
+   ascending chain, the simplest thing anybody can check by hand and what
+   `core/gemm.mojo`'s two shipped pinned kernels compute. **It is NOT the v1
+   answer when `P > 1`**, and the two coincide only at
+   `k <= CONTRACT_K_LEAF_MIN`. Clause 4 of the Phase 2 contract call names
+   both and names which is which.
 3. **Be the instrument that proves a fixture separates.** The partition
    count is a PARAMETER here, so "does this input distinguish P = 8 from
    P = 16" is a question this file answers rather than one the kernel is
    trusted about. `gemm_oracle_check.mojo` uses it that way throughout.
+4. **Be the tree's address space.** The balanced fold's structure is a pure
+   function of `P`, computed on the HOST by `fold_level_width`,
+   `fold_level_base`, `fold_node_addr` and `fold_node_is_carry`, so Phase 2b
+   can address a node from a device kernel without inventing a second
+   opinion about the topology. See the block comment above
+   `fold_level_width`.
 
 BUILT FROM THE DECLARED HELPERS, ON PURPOSE
 --------------------------------------------
@@ -82,10 +92,23 @@ from mojo_only.numerics import ftz, identical_mul_add
 #: contract revision, not a tuning knob.
 comptime CONTRACT_K_LEAF_MIN = 128
 
-#: The cap on the number of leaves. At k = 4,000,000 an unbounded
-#: `ceil(k / 128)` would be 31,250 partials to fold serially, which is a
-#: worse-conditioned sum than the leaves it was meant to fix. With the cap
-#: the two levels are ~3,907 and 1,024 steps instead of 4,000,000.
+#: The cap on the number of leaves.
+#:
+#: ITS JUSTIFICATION CHANGED WITH THE v1 FOLD AND THE OLD ONE IS DELETED.
+#: While the fold was serial, the cap was a CONDITIONING argument: an
+#: unbounded `ceil(k/128)` at k = 4,000,000 is 31,250 partials, and a 31,250-
+#: term serial fp32 chain is worse conditioned than the leaves the partition
+#: was introduced to fix. **Under the balanced tree that argument is void** --
+#: 31,250 partials fold in 15 levels, which is better conditioned than 1,024
+#: leaves of 3,907, not worse. The cap survives on two DIFFERENT grounds:
+#: it bounds the per-cell fold SCRATCH (`fold_node_total(P)` nodes) and the
+#: number of ARITHMETIC tree levels a staged implementation may have to launch
+#: (10 at P = 1024 against 15 at 31,250), and it keeps the leaf long enough
+#: that the
+#: leaf loop, not the fold, is where the work is.
+#:
+#: It is a PROFILE constant either way: changing it changes the answer's bits
+#: and is a contract revision, not a tuning knob.
 comptime CONTRACT_MAX_LEAVES = 1024
 
 
@@ -250,31 +273,180 @@ def oracle_leaf_partial(
     return ftz(acc)
 
 
-def fold_partials(partials: List[Float32]) -> Float32:
-    """The partial fold: SERIAL, ASCENDING by leaf index, seeded `+0.0`.
-    Contract section 7.
 
-    `acc = ftz(acc + ftz(partial[j]))` for `j = 0 .. P-1`. This is
-    `core/gram_splitk.mojo::gram_splitk_reduce_kernel` exactly, which is
-    deliberate: the contract picks the topology that already ships rather
-    than a second one.
+# ===========================================================================
+# THE FIXED BALANCED FOLD TREE (contract section 7.2) AND ITS ADDRESSING
+# ===========================================================================
+# The structure below is a PURE FUNCTION OF `P`. It reads no launch geometry,
+# no block size, no warp width, no vendor and no occupancy, and that is the
+# whole point of naming it: **a physical block may calculate any node in any
+# order once its dependencies are complete, and the bits do not move.**
+#
+# THE LOGICAL ADDRESS SPACE, which Phase 2b's kernel has to address from a
+# device.
+#
+#     level 0     the P real leaf partials, in ASCENDING LOGICAL LEAF ORDER
+#     level d     N_d = ceil(P / 2^d) nodes, for d = 1 .. D
+#     D           the smallest d with N_d == 1; D = 0 when P == 1
+#
+#     node(d, q) for d >= 1 and 2q + 1 <  N_{d-1}   ARITHMETIC:
+#         ftz( ftz(node(d-1, 2q)) + ftz(node(d-1, 2q+1)) )
+#
+#     node(d, q) for d >= 1 and 2q + 1 == N_{d-1}   CARRY:
+#         node(d-1, 2q), copied BIT FOR BIT. No arithmetic, no padding.
+#
+#     output = ftz( node(D, 0) )
+#
+# A carry can only occur at the LAST node of a level whose predecessor had an
+# ODD width, so there is at most one carry per level. `+0.0` padding is NOT
+# an allowed spelling of it: `x + (+0.0)` is not the identity at `x = -0.0`,
+# and fixture F7 is that difference measured. (`-0.0` padding IS bitwise
+# equal to the carry at every node -- also measured, in F7's third arm -- and
+# is still forbidden, because it is one character away from the spelling that
+# is not, and it buys nothing.)
+#
+# THE FLAT ADDRESS. Levels are laid out low to high, level-major:
+#
+#     fold_level_base(P, d) = sum of N_0 .. N_{d-1}
+#     fold_node_addr(P, d, q) = fold_level_base(P, d) + q
+#     fold_node_total(P) = fold_level_base(P, D + 1)
+#
+# and for a whole `m x n` output the cell block is
+#
+#     (i * n + j) * fold_node_total(P) + fold_node_addr(P, d, q).
+#
+# **The (d, q) pair is the normative address; the flat integer is one legal
+# layout of it.** A Phase 2b kernel that reduces IN PLACE over the level-0
+# scratch, or that keeps only two levels live, is free to do so: what it may
+# not change is which node is added to which, or the ascending logical order
+# the pairing is taken in.
 
-    **THE FOLD IS UNCONDITIONAL. `P == 1` IS A ONE-TERM FOLD, NOT A BYPASS**,
-    and that sentence is contract section 9's second half rather than a
-    pedantic aside. The one-term fold has exactly one arithmetic effect: it
-    turns a `-0.0` partial into `+0.0`. Skip it at `P == 1` and the SIGN OF A
-    ZERO becomes a function of the partition count -- `-0.0` at `P = 1` and
-    `+0.0` at `P = 2` for the same inputs -- which is IDENTITY_PATHS row 13's
-    defect (`-0.0` and `+0.0` compare equal, so which one survives is decided
-    by order and the sign reaches the model) reappearing in a GEMM. Running
-    the fold at every `P` costs one add and removes the class.
 
-    `P == 0` (k == 0) returns `+0.0`.
+def fold_level_width(p: Int, d: Int) -> Int:
+    """`N_d = ceil(P / 2^d)`, the number of nodes at level `d`.
+
+    Repeated ceiling-halving IS a single ceiling division -- `ceil(ceil(x/2)
+    /2) == ceil(x/4)` -- so the closed form and the level-by-level
+    construction agree, and `check_fold_tree_addressing` asserts that against
+    an iterative walk rather than trusting the identity.
+
+    `d` past the top of the tree keeps returning 1, which is what makes the
+    carry test below total.
     """
-    var acc = Float32(0.0)
-    for j in range(len(partials)):
-        acc = ftz(acc + ftz(partials[j]))
-    return acc
+    if p <= 0:
+        return 0
+    if d <= 0:
+        return p
+    if d >= 40:
+        return 1
+    var denom = 1 << d
+    return (p + denom - 1) // denom
+
+
+def fold_level_count(p: Int) -> Int:
+    """The number of levels INCLUDING level 0, i.e. `D + 1`.
+
+    `P == 0` has no tree at all (0). `P == 1` is one level and performs NO
+    fold addition: the single leaf reaches the output through the declared
+    output seam and nothing else. That is contract section 7.2 and it is not
+    a bypass of anything -- a one-node tree HAS no internal node to skip.
+    """
+    if p <= 0:
+        return 0
+    var levels = 1
+    var w = p
+    while w > 1:
+        w = (w + 1) // 2
+        levels += 1
+    return levels
+
+
+def fold_level_base(p: Int, d: Int) -> Int:
+    """The flat address of node `(d, 0)`: the widths of every level below."""
+    var base = 0
+    for dd in range(d):
+        base += fold_level_width(p, dd)
+    return base
+
+
+def fold_node_total(p: Int) -> Int:
+    """Every node in the tree, level 0 included. The scratch a fully staged
+    Phase 2b implementation would size per output cell."""
+    return fold_level_base(p, fold_level_count(p))
+
+
+def fold_node_addr(p: Int, d: Int, q: Int) -> Int:
+    """The flat logical address of node `(d, q)`. One legal layout of the
+    normative `(d, q)` pair; see the block comment above."""
+    return fold_level_base(p, d) + q
+
+
+def fold_node_is_carry(p: Int, d: Int, q: Int) -> Bool:
+    """True when node `(d, q)` is the unpaired ODD tail of level `d-1` and is
+    therefore a BIT-FOR-BIT COPY with no arithmetic in it.
+
+    Level 0 is never a carry: its nodes are leaf partials.
+    """
+    if d < 1:
+        return False
+    return 2 * q + 1 >= fold_level_width(p, d - 1)
+
+
+def fold_balanced_tree(partials: List[Float32]) -> Float32:
+    """**THE CONTRACT'S FOLD**: the fixed balanced tree of contract section
+    7.2, over the `P` real leaf partials in ASCENDING LOGICAL LEAF ORDER.
+
+        current = partials
+        while len(current) > 1:
+            next[q] = ftz( ftz(current[2q]) + ftz(current[2q+1]) )
+            if len(current) is odd: carry current[-1] unchanged
+            current = next
+        output = ftz(current[0])
+
+    Four things this is NOT, each of which is a real alternative somebody
+    will reach for and each of which fixture F5, F7, F8 or F9 separates:
+
+    - it is NOT the serial ascending fold `acc = ftz(acc + ftz(p[t]))` that
+      `core/gram_splitk.mojo::gram_splitk_reduce_kernel` ships and that this
+      contract required before the v1 call. That fold has an `O(P)`
+      dependency chain per output cell; this one has `O(log P)`. Fixture F5.
+    - it is NOT the STRIDE pairing `red[t] += red[t + step]` that
+      `core/pinned_reduce.mojo::pinned_block_sum` ships. That is also a
+      balanced tree of the same depth, and it pairs DIFFERENT leaves, so it
+      is a different answer. Fixture F8.
+    - it does NOT pad an odd level to the next power of two. Fixture F7.
+    - it does NOT let a block size, a warp width, an occupancy or a launch
+      count define a level. Nothing here reads any of them; fixture F9 runs
+      three unrelated evaluation schedules over the same tree and requires
+      identical bits from all of them.
+
+    `P == 0` (k == 0) returns `+0.0`. `P == 1` performs NO addition and
+    returns `ftz(partials[0])` -- contract sections 7.2 and 8.
+
+    The `ftz` on each child read is bitwise redundant (every node value is
+    already flushed: a leaf partial by `oracle_leaf_partial`'s own output
+    seam, an arithmetic node by this function, a carry node by inheritance)
+    and it is written anyway, because contract section 5's seam table names
+    it and a reader should not have to derive that two of the seven seams are
+    no-ops.
+    """
+    var p = len(partials)
+    if p == 0:
+        return Float32(0.0)
+    var current = partials.copy()
+    while len(current) > 1:
+        var width = len(current)
+        var pairs = width // 2
+        var nxt = List[Float32]()
+        for q in range(pairs):
+            nxt.append(ftz(ftz(current[2 * q]) + ftz(current[2 * q + 1])))
+        if width % 2 != 0:
+            # THE CARRY. Bit for bit, no arithmetic, no padding. Contract
+            # section 7.2.
+            nxt.append(current[width - 1])
+        current = nxt^
+    # The output seam, contract section 5g.
+    return ftz(current[0])
 
 
 def gemm_oracle_cell(
@@ -288,9 +460,12 @@ def gemm_oracle_cell(
     k: Int,
     leaf: Int,
 ) -> Float32:
-    """`C[i, j]` at an EXPLICIT leaf size.
+    """`C[i, j]` at an EXPLICIT leaf size, folded by the contract's balanced
+    tree.
 
-    `leaf >= k` is the serial reference (one leaf). `leaf =
+    `leaf >= k` is one leaf, which at `P == 1` makes this the whole-K
+    ascending chain -- the same value as `gemm_oracle_serial_cell`, and
+    `check_serial_oracle_is_the_one_leaf_case` asserts it. `leaf =
     contract_leaf_size(k)` is the contract's answer. Any other value is an
     adversary, and that is what the parameter is for.
     """
@@ -314,7 +489,7 @@ def gemm_oracle_cell(
                 leaf_end(t, el, k),
             )
         )
-    return ftz(fold_partials(partials))
+    return fold_balanced_tree(partials)
 
 
 def gemm_oracle_at_leaf(
@@ -337,27 +512,69 @@ def gemm_oracle_at_leaf(
 def gemm_oracle(
     a: List[Float32], b: List[Float32], op: Int, m: Int, n: Int, k: Int
 ) -> List[Float32]:
-    """**THE CONTRACT'S ANSWER.** The `m x n` product at
-    `contract_leaf_size(k)`, row-major.
+    """**THE NORMATIVE ANSWER of `mojolearn.identical.gemm.fp32.v1`.**
+
+    Logical leaves at `contract_leaf_size(k)`, combined by the fixed balanced
+    tree of `fold_balanced_tree`. Row-major `m x n`.
 
     This is the value Phase 2's kernel must reproduce bit for bit, on Apple,
     NVIDIA and AMD, at every legal launch geometry and every batch
-    composition.
+    composition. **It is `gemm_oracle`, not `gemm_oracle_serial`, that the
+    scalable kernel must agree with** whenever `P > 1`; the two coincide only
+    at `k <= CONTRACT_K_LEAF_MIN`.
     """
     return gemm_oracle_at_leaf(a, b, op, m, n, k, contract_leaf_size(k))
+
+
+def gemm_oracle_serial_cell(
+    a: List[Float32],
+    b: List[Float32],
+    op: Int,
+    i: Int,
+    j: Int,
+    m: Int,
+    n: Int,
+    k: Int,
+) -> Float32:
+    """One cell of the WHOLE-K ASCENDING CHAIN. **Diagnostic, NOT normative.**
+
+    Written out as its own loop rather than as `gemm_oracle_cell` at
+    `leaf = k`, so that the diagnostic reference is a second, independent
+    spelling. `check_serial_oracle_is_the_one_leaf_case` requires the two to
+    agree bit for bit; if they ever stop agreeing, the one-leaf case of the
+    tree has grown an arithmetic step it should not have.
+    """
+    var acc = Float32(0.0)
+    for p in range(k):
+        acc = ftz(
+            identical_mul_add(
+                ftz(_a_at(a, op, i, p, m, k)),
+                ftz(_b_at(b, op, p, j, n, k)),
+                acc,
+            )
+        )
+    return ftz(acc)
 
 
 def gemm_oracle_serial(
     a: List[Float32], b: List[Float32], op: Int, m: Int, n: Int, k: Int
 ) -> List[Float32]:
-    """The SERIAL reference: one leaf, one ascending fp32 chain per cell.
+    """The WHOLE-K ASCENDING CHAIN, one `p` loop per cell, no partition and
+    no fold. **A DIAGNOSTIC REFERENCE. It is NOT the v1 answer when P > 1.**
 
-    Equal to `gemm_oracle` when and only when `k <= CONTRACT_K_LEAF_MIN`.
-    Above that the two are DIFFERENT ANSWERS and the contract's is the
-    partitioned one -- see contract section 7's note on why a serial fp32
-    chain is not the target at large k.
+    Contract clause 4 of the Phase 2 call names both references and this is
+    the one that is only a reference: it is the simplest thing a person can
+    check by hand, it is what `core/gemm.mojo`'s two shipped pinned kernels
+    compute today, and it is what a reader means by "the obvious answer".
+
+    Equal to `gemm_oracle` when and only when `k <= CONTRACT_K_LEAF_MIN`
+    (there `P == 1` and the tree has no arithmetic node). Above that the two
+    are DIFFERENT ANSWERS, the contract's is the partitioned one, and
+    fixture F1 is that difference measured. Do not describe this function as
+    "the right answer" at large `k`.
     """
-    var el = k
-    if el < 1:
-        el = 1
-    return gemm_oracle_at_leaf(a, b, op, m, n, k, el)
+    var c = List[Float32]()
+    for i in range(m):
+        for j in range(n):
+            c.append(gemm_oracle_serial_cell(a, b, op, i, j, m, n, k))
+    return c^

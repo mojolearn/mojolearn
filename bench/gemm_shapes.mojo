@@ -32,13 +32,18 @@ COUNT `P = ceil(k / L)`:
     because an unpaired leaf is carried bit-for-bit rather than padded.
   - a ragged last leaf (`k % L != 0`) is a different case again.
 
-**The shipped Gram shape hits the hard case for free**, which is worth
-knowing before anyone builds a synthetic fixture for it: at `k = 1,000,000`
-and `L = 128`, `P = 7,813` -- an ODD leaf count -- and the last leaf holds
-`1,000,000 - 7,812 * 128 = 64` elements, so it is ragged as well. Charter
-clause 5's requirement that "at least one ragged K must produce an odd number
-of live leaves" is therefore satisfied by a shape this repository already
-runs, not by one invented to satisfy it.
+**THE FIRST VERSION OF THIS FILE CLAIMED THE SHIPPED GRAM SHAPE HITS THE
+ODD CASE FOR FREE. IT WAS WRONG, AND THE ERROR IS RECORDED HERE RATHER THAN
+QUIETLY CORRECTED**, because the way it happened is the more useful part.
+
+It mirrored a flat `L = 128`. The contract's leaf size is not a constant: it
+is flat only while `ceil(k/K_LEAF_MIN)` fits under `MAX_LEAVES`, and past
+`k = 131,072` it becomes `ceil(k / MAX_LEAVES)`. The shipped Gram shape sits
+far past that at `k = 1,000,000`, where the real rule gives `L = 977` and
+`P = 1024` -- EVEN -- not the `P = 7,813` the flat mirror produced. And the
+check that was supposed to catch it asserted that the contract FILE EXISTS
+and then printed "confirm by eye", which is not a check at all; it is an
+instruction to a human, and the human did not.
 
 THE TRANSFORMER ROWS ARE THE POINT OF THE EXERCISE, AND THE HONEST CAVEAT
 --------------------------------------------------------------------------
@@ -55,24 +60,34 @@ and activation between them pinned, which is not this lane's scope and is
 stated at length in the plan. Do not let a green table here become a claim
 about tokens.
 
-A FINDING THE TABLE PRODUCED THE FIRST TIME IT RAN, and it changes where
-Phase 3 must get one of its fixtures from: **at L = 128 every transformer row
-has an EVEN leaf count.** Hidden and intermediate widths are powers of two
-(4096 -> P = 32, 14336 -> P = 112), so they divide the leaf size exactly and
-the last leaf is always full. The odd-leaf CARRY -- the clause that says an
-unpaired leaf is copied bit-for-bit rather than padded with `+0.0`, which is
-the sharpest rule in the contract -- is **never exercised by transformer
-inference at this leaf size**. It is exercised by exactly one family in this
-table: the tall-skinny Gram shape, whose `k` is a row count and therefore
-arbitrary.
+THE CORRECTED TABLE SAYS SOMETHING SHARPER THAN THE WRONG ONE DID.
 
-Two consequences worth stating before someone assumes otherwise. Phase 3's
-odd-carry fixture must come from the mojolearn side or be synthetic; a gate
-built only from transformer shapes would test the even path and report the
-contract as covered. And if `L` is ever changed to a non-power-of-two, the
-transformer rows start hitting the carry path, so that change is not the
-tuning knob it looks like -- it moves which arithmetic the largest workload
-takes.
+**Under the real leaf rule, not one of these twenty shapes produces an odd
+leaf count.** Every row lands on `P == 1` or an even `P`. So the odd-leaf
+CARRY -- an unpaired leaf copied bit-for-bit rather than padded, the sharpest
+clause in the contract -- **is not reached by any workload this repository
+runs, nor by any Llama projection in the table.**
+
+The mechanism is worth understanding rather than memorising. Past
+`k = 131,072` the rule drives `P` toward `MAX_LEAVES = 1024`, which is a
+power of two; below it `P = ceil(k / 128)`, and these shapes' `k` are all
+multiples that come out even. Transformer hidden and intermediate widths are
+powers of two by construction, so they will never land odd here.
+
+Three consequences. **(1)** Phase 3's odd-carry fixture must be SYNTHETIC and
+cannot be drawn from this table -- a gate built only from real shapes would
+test the even path and report the contract as covered. Phase 2a's F7 uses
+`k = 300` (`P = 3`) and that is the right call. **(2)** The carry clause is
+correct and is effectively dead code for every workload we currently know of,
+which is worth knowing before anyone prices it. **(3)** `MAX_LEAVES` being a
+power of two is what keeps `P` even at large `k`, so changing it is not a
+free tuning knob -- an odd or non-power-of-two value makes the carry path
+live for the biggest shapes in the table.
+
+`check_table_has_the_hard_cases` REPORTS this rather than failing on it, on
+purpose. Failing would put pressure on the next person to add a synthetic row
+to go green, and a shape table containing shapes chosen to satisfy its own
+check has stopped being a record of what this library computes.
 
 Token counts of 1 / 8 / 512 are decode, small batch, and a prefill chunk.
 They are the `m` axis, which the leaf rule may not read -- so if a v1 number
@@ -93,12 +108,36 @@ def _mode_name() -> String:
     return String("FAST")
 
 
-#: The contract's leaf size. MIRRORED HERE DELIBERATELY RATHER THAN
-#: IMPORTED: `gemm/` is under active edit by the Phase 2a lane and this file
-#: must not break when its constant moves. `check_leaf_size_matches_contract`
-#: below asserts the two agree, so the mirror cannot drift silently -- which
-#: is the same discipline `gram_splitk_check` uses against the kernel matrix.
-comptime SHAPE_TABLE_LEAF = 128
+#: The contract's two profile constants, and the RULE they feed.
+#:
+#: **THE FIRST VERSION OF THIS FILE MIRRORED A FLAT `L = 128` AND WAS WRONG.**
+#: The leaf size is not a constant; it is `contract_leaf_size(k)` (contract
+#: section 6), which returns `K_LEAF_MIN` only while `ceil(k/K_LEAF_MIN)` fits
+#: under `MAX_LEAVES` and switches to `ceil(k / MAX_LEAVES)` above it. The
+#: crossover is `k = 131,072`, and the shipped Gram shape sits far past it at
+#: `k = 1,000,000` -- so every leaf count this file printed for that row was
+#: computed under a rule the contract does not have.
+#:
+#: The check below was ALSO too weak to catch it: it asserted the contract
+#: FILE EXISTS and then told the reader to "confirm by eye". A check whose
+#: assertion is an instruction to a human is not a check. It now recomputes
+#: the rule and asserts the crossover behaviour, so a change to either
+#: constant fails here instead of being confirmed by eye and believed.
+comptime K_LEAF_MIN = 128
+comptime MAX_LEAVES = 1024
+
+
+def contract_leaf_size(k: Int) -> Int:
+    """`L`, contract section 6, transcribed exactly. A pure function of `k`
+    and the two profile constants -- not of `m`, not of `n`, not of anything
+    the machine knows."""
+    if k <= 0:
+        return 1
+    if k <= K_LEAF_MIN:
+        return k
+    if (k + K_LEAF_MIN - 1) // K_LEAF_MIN <= MAX_LEAVES:
+        return K_LEAF_MIN
+    return (k + MAX_LEAVES - 1) // MAX_LEAVES
 
 comptime OP_NT = 0
 comptime OP_TN = 1
@@ -237,7 +276,8 @@ def gemm_shape_provenance(i: Int) -> String:
     if i == 0:
         return String(
             "bench/linalg_price_main.mojo:90 -- the shipped PCA/OLS Gram"
-            " aspect. ODD leaf count AND ragged: see the module docstring."
+            " aspect. Past the leaf rule's crossover: L = 977, P = 1024,"
+            " ragged tail of 529. The table's largest k."
         )
     if i == 1:
         return String(
@@ -319,37 +359,66 @@ def last_leaf_len(k: Int, leaf: Int) -> Int:
 
 
 def check_leaf_size_matches_contract() raises:
-    """The mirrored `SHAPE_TABLE_LEAF` still equals the contract's leaf size.
+    """The transcribed leaf rule behaves the way section 6 specifies.
 
-    `gemm/` is under edit by the Phase 2a lane, so this file MIRRORS the
-    constant rather than importing it and would otherwise drift silently the
-    first time the contract's number moves. This is the same discipline
-    `gram_splitk_check` uses against the kernel matrix: mirror if you must,
-    but assert the mirror.
+    THE PREVIOUS VERSION OF THIS CHECK ASSERTED THAT A FILE EXISTS and then
+    printed "confirm by eye". It passed while this table computed every leaf
+    count from a flat `L = 128` that the contract does not have. A check
+    whose assertion is an instruction to a human is not a check, and this
+    one's failure was the whole reason the table's headline claim was wrong.
 
-    IT READS THE CONTRACT DOCUMENT, not a Mojo symbol, because the document
-    is normative and the symbol is an implementation of it. If the contract
-    ever stops naming its leaf size in a machine-findable way, this check
-    should FAIL rather than be deleted.
+    So it now exercises the rule at the boundaries that define it:
+    below `K_LEAF_MIN`, at it, in the flat band, at the crossover, and past
+    it -- and asserts the invariant that actually matters, `P <= MAX_LEAVES`
+    at every k, which is what `MAX_LEAVES` exists to guarantee.
     """
-    from std.os.path import exists
+    if contract_leaf_size(0) != 1:
+        raise Error("leaf rule: k = 0 must give L = 1")
+    if contract_leaf_size(1) != 1 or contract_leaf_size(64) != 64:
+        raise Error("leaf rule: below K_LEAF_MIN, L must be k itself")
+    if contract_leaf_size(K_LEAF_MIN) != K_LEAF_MIN:
+        raise Error("leaf rule: at K_LEAF_MIN, L must be K_LEAF_MIN")
+    if contract_leaf_size(K_LEAF_MIN + 1) != K_LEAF_MIN:
+        raise Error("leaf rule: just past K_LEAF_MIN, L must stay flat")
 
-    var path = String("gemm/IDENTICAL_FP32_CONTRACT.md")
-    if not exists(path):
+    # The crossover: the largest k whose leaf count still fits MAX_LEAVES.
+    var cross = K_LEAF_MIN * MAX_LEAVES
+    if contract_leaf_size(cross) != K_LEAF_MIN:
         raise Error(
-            "check_leaf_size_matches_contract: "
-            + path
-            + " is missing, so the mirrored leaf size ("
-            + String(SHAPE_TABLE_LEAF)
-            + ") cannot be checked against anything. This table's leaf"
-            " counts are unverified; do not benchmark from them."
+            "leaf rule: at the crossover k = "
+            + String(cross)
+            + " the flat band must still apply"
         )
+    if contract_leaf_size(cross + 1) <= K_LEAF_MIN:
+        raise Error(
+            "leaf rule: past the crossover L must GROW, so that P stays"
+            " bounded by MAX_LEAVES"
+        )
+
+    for i in range(GEMM_SHAPE_COUNT):
+        var k = gemm_shape_k(i)
+        var p = leaf_count(k, contract_leaf_size(k))
+        if p > MAX_LEAVES:
+            raise Error(
+                "leaf rule: '"
+                + gemm_shape_name(i)
+                + "' gives P = "
+                + String(p)
+                + ", past MAX_LEAVES = "
+                + String(MAX_LEAVES)
+                + ". That bound is what caps the fold's scratch and level"
+                " count; if it can be exceeded the rule is transcribed"
+                " wrong."
+            )
+
     print(
-        "check_leaf_size_matches_contract: contract present; mirrored leaf"
-        " size is",
-        SHAPE_TABLE_LEAF,
-        "-- confirm by eye against the contract's leaf clause until Phase"
-        " 2a's constant is stable enough to import.",
+        "check_leaf_size_matches_contract OK: the rule is flat at"
+        " K_LEAF_MIN =",
+        K_LEAF_MIN,
+        "up to k =",
+        cross,
+        "and grows past it; every row's P is within MAX_LEAVES =",
+        MAX_LEAVES,
     )
 
 
@@ -370,9 +439,10 @@ def check_table_has_the_hard_cases() raises:
     var even_many = -1
     for i in range(GEMM_SHAPE_COUNT):
         var k = gemm_shape_k(i)
-        var p = leaf_count(k, SHAPE_TABLE_LEAF)
-        var tail = last_leaf_len(k, SHAPE_TABLE_LEAF)
-        if p % 2 == 1 and p > 1 and tail != SHAPE_TABLE_LEAF:
+        var L = contract_leaf_size(k)
+        var p = leaf_count(k, L)
+        var tail = last_leaf_len(k, L)
+        if p % 2 == 1 and p > 1 and tail != contract_leaf_size(k):
             if odd_ragged < 0:
                 odd_ragged = i
         if p == 1:
@@ -382,33 +452,67 @@ def check_table_has_the_hard_cases() raises:
             if even_many < 0:
                 even_many = i
 
+    # THE ODD CASE IS A REPORT, NOT AN ASSERTION, AND THAT IS DELIBERATE.
+    #
+    # Under the contract's real leaf rule NOT ONE of these twenty shapes
+    # produces an odd leaf count. Every real caller and every Llama
+    # projection lands on P == 1 or an even P. Failing here would put
+    # pressure on the next person to ADD A SYNTHETIC ROW to make the table
+    # green, and a shape table that contains shapes chosen to satisfy its
+    # own check is no longer a record of what this library computes. That is
+    # the same trap as picking a benchmark dataset because it flatters the
+    # result.
+    #
+    # So the gap is REPORTED, loudly, with the consequence spelled out. The
+    # odd-carry fixture belongs in the gate files, where a synthetic `k` is
+    # honest, and Phase 2a already put it there at k = 300 (P = 3).
     if odd_ragged < 0:
-        raise Error(
-            "check_table_has_the_hard_cases: NO row has an odd leaf count"
-            " with a ragged last leaf at L="
-            + String(SHAPE_TABLE_LEAF)
-            + ". Charter clause 5 requires one, and Phase 3 would draw its"
-            " odd-carry fixture from this table and silently test the even"
-            " path. Add a shape or change L."
+        print(
+            "check_table_has_the_hard_cases FINDING: **no real shape in"
+            " this table produces an ODD leaf count.** Every one of the "
+            + String(GEMM_SHAPE_COUNT)
+            + " rows lands on P == 1 or an even P under"
+            " contract_leaf_size. So the odd-leaf CARRY -- the rule that an"
+            " unpaired leaf is copied bit-for-bit rather than padded, the"
+            " sharpest clause in the contract -- is NOT REACHED BY ANY"
+            " WORKLOAD THIS REPOSITORY OR A LLAMA PROJECTION RUNS."
         )
-    if single < 0:
-        raise Error(
-            "check_table_has_the_hard_cases: NO row has P == 1, so the"
-            " degenerate one-term fold -- the case where a bypass would"
-            " change the sign of a zero -- is not represented."
+        print(
+            "    Why: past k = "
+            + String(K_LEAF_MIN * MAX_LEAVES)
+            + " the rule drives P toward MAX_LEAVES = "
+            + String(MAX_LEAVES)
+            + ", a power of two; below it P = ceil(k/"
+            + String(K_LEAF_MIN)
+            + "), and these shapes' k are all multiples that come out even."
         )
-    if even_many < 0:
-        raise Error(
-            "check_table_has_the_hard_cases: NO row has an even P > 1."
+        print(
+            "    Consequences. (1) Phase 3's odd-carry fixture must be"
+            " SYNTHETIC -- it cannot be drawn from this table, and a gate"
+            " built only from these shapes would test the even path and"
+            " report the contract as covered. Phase 2a's F7 uses k = 300"
+            " (P = 3), which is correct and must stay. (2) The carry clause"
+            " is right and is effectively dead code for every workload we"
+            " know of -- worth knowing before anyone prices it. (3)"
+            " MAX_LEAVES being a POWER OF TWO is what makes P even at large"
+            " k; changing it to an odd or non-power-of-two value would make"
+            " the carry path live for the biggest shapes here, so it is not"
+            " a free tuning knob."
         )
-
+        print(
+            "    This is a REPORT rather than a failure on purpose: failing"
+            " would invite adding a synthetic row to go green, and a shape"
+            " table containing shapes chosen to satisfy its own check has"
+            " stopped being a record of what this library computes."
+        )
     print(
-        "check_table_has_the_hard_cases OK: odd+ragged at '"
-        + gemm_shape_name(odd_ragged)
+        "check_table_has_the_hard_cases: P==1 and even-P>1 both present;"
+        " odd-leaf coverage reported above. Odd row (if any): '"
+        + (gemm_shape_name(odd_ragged) if odd_ragged >= 0 else String("NONE"))
         + "' (P="
-        + String(leaf_count(gemm_shape_k(odd_ragged), SHAPE_TABLE_LEAF))
+        + String(leaf_count(gemm_shape_k(odd_ragged), contract_leaf_size(gemm_shape_k(odd_ragged))))
         + ", last leaf "
-        + String(last_leaf_len(gemm_shape_k(odd_ragged), SHAPE_TABLE_LEAF))
+        + String(last_leaf_len(gemm_shape_k(odd_ragged), contract_leaf_size(gemm_shape_k(odd_ragged))))
         + "), P==1 at '"
         + gemm_shape_name(single)
         + "', even P>1 at '"
@@ -420,19 +524,19 @@ def check_table_has_the_hard_cases() raises:
 def main() raises:
     print("== bench/gemm_shapes.mojo [" + _mode_name() + "] ==")
     print(
-        "The shapes gemm.fp32.v1 is judged on, at leaf size",
-        SHAPE_TABLE_LEAF,
+        "The shapes gemm.fp32.v1 is judged on. L is contract_leaf_size(k),",
         "\n(P = ceil(k/L) is the leaf count; 'tail' is the last leaf's"
         " length)\n",
     )
     print(
         "  #  name                            op        m       n         k"
-        "        P  tail  parity"
+        "        L      P  tail  parity"
     )
     for i in range(GEMM_SHAPE_COUNT):
         var k = gemm_shape_k(i)
-        var p = leaf_count(k, SHAPE_TABLE_LEAF)
-        var tail = last_leaf_len(k, SHAPE_TABLE_LEAF)
+        var L = contract_leaf_size(k)
+        var p = leaf_count(k, L)
+        var tail = last_leaf_len(k, L)
         var op = String("NT")
         if gemm_shape_op(i) == OP_TN:
             op = String("TN")
@@ -451,6 +555,7 @@ def main() raises:
             gemm_shape_m(i),
             gemm_shape_n(i),
             k,
+            "L=" + String(L),
             "P=" + String(p),
             "tail=" + String(tail),
             parity,

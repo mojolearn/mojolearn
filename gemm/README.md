@@ -3,11 +3,18 @@
 Opened 2026-08-23. The lane's brief is the `LANE CHARTER` section of
 `IDENTICAL_GEMM_PLAN.md`. DEVIATIONS 530-539 are this lane's.
 
-**Status: PHASE 0 AND PHASE 1 ONLY.** The contract is written and the oracle
-and its adversarial fixtures run green in both modes. There is NO scalable
-kernel (Phase 2), NO invariance gate (Phase 3) and NO benchmark (Phase 4) —
-deliberately, because the charter says those must be built on a contract that
-has been reviewed and building ahead of the contract is what it forbids.
+**The profile is `mojolearn.identical.gemm.fp32.v1`.** Named 2026-08-23 by
+Andrew's Phase 2 contract call, which also replaced the fold ACROSS leaves
+with a fixed balanced tree. Changing the leaf rule or the fold topology from
+here creates a v2; it does not amend v1.
+
+**Status: PHASE 0, PHASE 1 AND PHASE 2a.** The contract is written and
+versioned, the two oracles are split and named, and the fixtures — now
+covering all seven of clause 5's distinctions — run green in both modes.
+There is NO device kernel (Phase 2b), NO invariance gate (Phase 3) and NO
+benchmark (Phase 4) — deliberately, because clause 5 says the distinguishing
+gates come BEFORE optimizing, and a kernel written against an unreviewed
+oracle is what the charter forbids.
 
     pixi run mojo run -I . gemm/mojo_only/gemm_oracle_check.mojo
 
@@ -43,8 +50,8 @@ exactly, because the collision is at the TOP level only.
 
 | file | what |
 |---|---|
-| `IDENTICAL_FP32_CONTRACT.md` | **the deliverable.** Twelve sections: dtypes, layout, the three orientations, the multiply-add policy, the flush policy and its seven seams, the logical k partition, the evaluation order, ragged k, NaN / infinity / signed zero, the exclusions, what is NOT promised, and a clause-to-code index. |
-| `mojo_only/gemm_oracle.mojo` | the contract in code. Host, scalar, single-threaded, built from `identical_mul_add` and `ftz` so that it IS the contract rather than an opinion about it. The partition count is a PARAMETER, which is what makes the fixtures provable. |
+| `IDENTICAL_FP32_CONTRACT.md` | **the deliverable.** Thirteen sections: the v1 version rules, dtypes and the FP32 accumulation requirement, layout, the three orientations, the multiply-add policy, the flush policy and its seven seams, the logical k partition, the evaluation order and the fold tree's node addressing, ragged k and the degenerate `P`, NaN / infinity / signed zero, the exclusions, what is NOT promised, a clause-to-code index, and the clause-6 performance ANALYSIS. |
+| `mojo_only/gemm_oracle.mojo` | the contract in code, and BOTH references. `gemm_oracle` (leaves + the fixed balanced tree) is NORMATIVE; `gemm_oracle_serial` (the whole-K ascending chain) is DIAGNOSTIC. Host, scalar, single-threaded, built from `identical_mul_add` and `ftz` so that it IS the contract rather than an opinion about it. The partition count is a PARAMETER, which is what makes the fixtures provable, and the fold tree's structure is a pure function of `P` that Phase 2b addresses from the device. |
 | `mojo_only/gemm_oracle_check.mojo` | the adversarial fixtures and their separation proofs. Every one refuses to pass unless the two alternatives produce different bits. |
 | `ported/linalg/contractions.mojo` | `raft/linalg/contractions.cuh`'s `KernelPolicy`, `ColKernelPolicy` and the three float policy families, parameterized. COPY, DO NOT IMPROVE. |
 | `PORTED_MAP.tsv`, `UNPORTED.tsv` | upstream -> ours, and what was not ported and why. |
@@ -162,45 +169,91 @@ and each one deletes a materialized transpose from a shipped path.
 
 ---
 
-# The six adversarial distinctions, and the bits that prove they separate
+# The seven clause-5 distinctions, and the bits that prove they separate
 
-Every fixture below is BUILT TO SEPARATE and the check REFUSES to pass unless
-the two alternatives produce different bits. `mojo_only/ieee_arith_check.mojo`
-scoring a contracting backend as UNFUSED on 2^20 hashed patterns — of which
-ZERO separate the two spellings — is why this is the standard here.
+Clause 5 of Andrew's Phase 2 contract call names seven distinctions the
+fixtures must be able to make, *before optimizing*. Each has one. Every
+fixture is BUILT TO SEPARATE and the check REFUSES to pass unless the two
+alternatives produce different bits — `mojo_only/ieee_arith_check.mojo`
+scoring a contracting backend as UNFUSED on 2^20 hashed patterns, of which
+ZERO separate the two spellings, is why that is the standard here.
+
 Bit patterns below are from the IDENTICAL run; the FAST run prints the same
 ones, because the adversaries are written with explicit spellings rather than
 with the mode-gated helpers.
 
-| # | distinction | fixture | alternative A | alternative B |
+| clause-5 distinction | # | fixture | alternative A | alternative B |
 |---|---|---|---|---|
-| F1 | serial vs split-k | `A = [2^24, 1 x 1023]`, `B = 1`, `k = 1024`. `2^24` has ulp 2, so `2^24 + 1` is the halfway case round-half-to-even discards: the serial chain swallows all 1023 additions. Partitioned, each later leaf sums its own ones to an exact 128 and the fold adds them where they ARE representable | serial `P = 1` → `16777216.0 / 0x4b800000` | contract `P = 8` → `16778112.0 / 0x4b8001c0` |
-| F2 | one partition count from another | same | `L = 128, P = 8` → `0x4b8001c0` | `L = 64, P = 16` → `16778176.0 / 0x4b8001e0` (and a third point, `L = 256, P = 4` → `0x4b800180`) |
-| F3 | fused vs unfused multiply-add | `mojo_only/ieee_arith_check.mojo` ARM 6's construction inside a `k = 2` GEMM: `a0, b0` half-width mantissas, `A = [1, a0]`, `B = [−fl(a0b0), b0]`. Unfused is `q − q = +0.0` EXACTLY; fused is the rounding error. 1,621 of 4,096 patterns separate | fused → `5.9604645e-08 / 0x33800000` | unfused → `0.0 / 0x00000000` |
-| F4a | FTZ vs gradual underflow, RESULT seam | `A = [1.5·2⁻¹²⁶, 2⁻¹²⁶]`, `B = [1, −1]`. **Both operands NORMAL**, their difference `2⁻¹²⁷` SUBNORMAL, and it is the answer | FTZ → `0.0 / 0x00000000` | gradual → `5.877472e-39 / 0x00400000` |
-| F4b | FTZ vs gradual underflow, OPERAND seam | `A = [2⁻¹²⁷]` (subnormal) `x B = [2²⁰]`. The unflushed product is an ordinary NORMAL number, so the divergence is not confined to the subnormal range | FTZ → `0.0 / 0x00000000` | gradual → `6.162976e-33 / 0x0a000000` |
-| F5 | balanced fold vs ascending serial fold | partition held at the contract's `L = 128`; a single `2^24` in leaf 0 and a single `1.0` in each of the other seven, zeros elsewhere (`fma(0,1,acc) == acc` exactly). Serial swallows all seven ones; the halving tree pairs them into 2s and 4s first | serial → `16777216.0 / 0x4b800000` | halving → `16777222.0 / 0x4b800003` |
-| F6a | signed zero — the FOLD SEED | every one of the 8 partials is exactly `−0.0`, produced by `ftz` of a negative subnormal placed at the END of each leaf (at the start, the trailing zero products erase the sign — `fma(0,1,−0.0)` is `+0.0`) | `+0.0` seed (contract) → `0.0 / 0x00000000` | first-partial seed → `−0.0 / 0x80000000` |
-| F6a-P1 | signed zero — the UNCONDITIONAL FOLD | the same at `k = 128`, where `P == 1` and "seeded with the first partial" IS "skip the fold, one leaf needs no folding" | fold runs (contract) → `0.0 / 0x00000000` | fold bypassed → `−0.0 / 0x80000000` |
-| F6b | cancellation | `[2^24, 1, …, −2^24, −1, …]`, exact sum ZERO, at the contract's `L = 128` | serial `P = 1` → `−1.0 / 0xbf800000` | contract `P = 8` → `0.0 / 0x00000000` |
+| whole-K serial vs leaf-partitioned balanced | F1 | `A = [2^24, 1 x 1023]`, `B = 1`, `k = 1024`. `2^24` has ulp 2, so `2^24 + 1` is the halfway case round-half-to-even discards: the whole-K chain swallows all 1023 additions. Partitioned, each later leaf sums its own ones to an exact 128 and the tree adds them where they ARE representable | serial `P = 1` → `16777216.0 / 0x4b800000` | contract `P = 8` → `16778112.0 / 0x4b8001c0` |
+| (same, through the two named references) | clause 4 | the same fixture through `gemm_oracle` and `gemm_oracle_serial` themselves, in `check_serial_oracle_is_the_one_leaf_case` | `gemm_oracle` (NORMATIVE) → `0x4b8001c0` | `gemm_oracle_serial` (diagnostic) → `0x4b800000` |
+| balanced vs ascending serial leaf fold | F5 | partition held at the contract's `L = 128`; a single `2^24` in leaf 0 and a single `1.0` in each of the other seven, zeros elsewhere (`fma(0,1,acc) == acc` exactly). The serial fold swallows all seven ones; the tree pairs them into 2s and 4s first | serial ascending, SUPERSEDED → `16777216.0 / 0x4b800000` | **balanced tree, contract** → `16777222.0 / 0x4b800003` |
+| **odd-leaf carry vs zero padding** | **F7** | `k = 300` → `L = 128`, `P = 3` **(odd, and the last leaf is RAGGED at 44 elements)**. Every partial is exactly `-0.0`, produced by `ftz` of a negative subnormal placed at the END of each leaf. The odd tail is carried, or it is paired with a `+0.0` pad | carry, contract → `-0.0 / 0x80000000` | `+0.0` padding → `0.0 / 0x00000000` |
+| ↳ and the coincidence that makes it necessary | F7b | the same tree with a NORMAL value in the odd tail. `x + (+0.0) == x` on every finite value, every infinity and every NaN | carry → `16777220.0 / 0x4b800002` | `+0.0` padding → `16777220.0 / 0x4b800002` — **they COINCIDE**, asserted |
+| ↳ and the second coincidence | F7c | the `-0.0` fixture with a `-0.0` pad. `x + (-0.0) == x` on EVERY float32, `-0.0` included | carry → `0x80000000` | `-0.0` padding → `0x80000000` — **bitwise equal, asserted**; forbidden as a spelling, not as a value |
+| **one balanced topology vs an alternate pairing** | **F8** | `k = 512` → `L = 128, P = 4`, partials `[2^24, 1.0, +0.0, -2^24]`. Adjacent pairs `(0,1),(2,3)`; the stride form pairs `(0,2),(1,3)`, which is `pinned_block_sum`'s shape. They differ only by swapping `c1` and `c2`, so the fixture had to be built with `c1 != c2` | adjacent, contract → `0.0 / 0x00000000` | stride, `pinned_block_sum` → `1.0 / 0x3f800000` |
+| fused vs unfused leaf accumulation | F3 | `mojo_only/ieee_arith_check.mojo` ARM 6's construction inside a `k = 2` GEMM: `a0, b0` half-width mantissas, `A = [1, a0]`, `B = [−fl(a0b0), b0]`. Unfused is `q − q = +0.0` EXACTLY; fused is the rounding error. 1,621 of 4,096 patterns separate | fused → `5.9604645e-08 / 0x33800000` | unfused → `0.0 / 0x00000000` |
+| FTZ vs gradual underflow, RESULT seam | F4a | `A = [1.5·2⁻¹²⁶, 2⁻¹²⁶]`, `B = [1, −1]`. **Both operands NORMAL**, their difference `2⁻¹²⁷` SUBNORMAL, and it is the answer | FTZ → `0.0 / 0x00000000` | gradual → `5.877472e-39 / 0x00400000` |
+| FTZ vs gradual underflow, OPERAND seam | F4b | `A = [2⁻¹²⁷]` (subnormal) `x B = [2²⁰]`. The unflushed product is an ordinary NORMAL number, so the divergence is not confined to the subnormal range | FTZ → `0.0 / 0x00000000` | gradual → `6.162976e-33 / 0x0a000000` |
+| **different physical geometries, one logical tree** | **F9** | four unrelated evaluation ORDERS over the same node addresses — level-major, reverse-order multi-pass, coprime-stride multi-pass, and depth-first with an explicit stack — compared at EVERY node address, not only at the root. Run at `P = 4` (F8's fixture), `P = 3` (one carry, F7's `-0.0` partials) and `P = 5` (**two** carries; `P = 7` looks like the second odd case and carries only once) | all four schedules, adjacent tree → `0.0 / 0x00000000` | stride pairing → `1.0 / 0x3f800000` — the SENSITIVITY half, without which four schedules agreeing would prove nothing |
 
-**Every distinction the charter named has a separating fixture. None had to be
-recorded as unbuildable.**
+**All seven clause-5 distinctions have a separating fixture. None had to be
+recorded as unbuildable.** F9's is the host analogue of a launch geometry —
+Phase 2a has no device — and the device version with real grids is Phase 3's.
 
-Three more checks sit beside them and are not fixtures in the same sense:
-`check_ieee_zero_assumptions` (the three IEEE facts section 9.2 rests on,
-asserted through a `List` so a constant folder cannot answer for the
-hardware), `check_leaf_partition_is_a_pure_function_of_k` (the partition table
-at nine `k`, plus the no-empty-leaf invariant), `check_ported_policy_matches_
-upstream` (RAFT's policy arithmetic, cross-checked against `core/gemm.mojo`'s
-independent flattening of the same table), `check_oracle_matches_the_contract_
-spelling` (the reach proof for `identical_mul_add` and `ftz`) and
+Beside them, still green and still separating:
+
+| # | distinction | alternative A | alternative B |
+|---|---|---|---|
+| F2 | one partition count from another (three points, none of them the serial one) | `L = 128, P = 8` → `0x4b8001c0` | `L = 64, P = 16` → `0x4b8001e0`; `L = 256, P = 4` → `0x4b800180` |
+| F6a | **the signed-zero bit the v1 fold MOVED.** All 8 partials exactly `-0.0`; the seedless tree preserves the sign, the superseded `+0.0`-seeded serial fold laundered it | balanced tree, no seed (v1) → `-0.0 / 0x80000000` | `+0.0`-seeded serial (SUPERSEDED) → `0.0 / 0x00000000` |
+| F6a-P1 | the same at `k = 128`, where `P == 1` and clause 3 says the leaf reaches the output unchanged | no fold addition (v1) → `-0.0 / 0x80000000` | one-term `+0.0` fold (SUPERSEDED) → `0.0 / 0x00000000` |
+| F6b | cancellation. `[2^24, 1, …, −2^24, −1, …]`, exact sum ZERO, at the contract's `L = 128` | whole-K serial → `−1.0 / 0xbf800000` | contract `P = 8` → `0.0 / 0x00000000` |
+
+And the checks that are not fixtures in the same sense:
+`check_ieee_zero_assumptions` (the IEEE facts section 9.2 rests on, asserted
+through a `List` so a constant folder cannot answer for the hardware),
+`check_leaf_partition_is_a_pure_function_of_k` (the partition table at ten
+`k`, plus the no-empty-leaf invariant), **`check_fold_tree_addressing`** (the
+tree's shape at eight `P`: widths against a level-by-level halving, exactly
+`P - 1` arithmetic nodes, at most one carry per level, dense addresses),
+`check_ported_policy_matches_upstream` (RAFT's policy arithmetic against
+`core/gemm.mojo`'s independent flattening), `check_oracle_matches_the_
+contract_spelling` (the reach proof for `identical_mul_add` and `ftz`, **in
+two arms** — see below), **`check_serial_oracle_is_the_one_leaf_case`** (the
+two named references agree at `P == 1` and separate above it), and
 `check_orientations_agree` (NN == NT == TN bit for bit, with a wrong-layout
 sabotage proving the check can see a difference at all).
 
-## Two fixtures that were WRONG on the first try, recorded because that is the point
+## The tree's node addressing, which Phase 2b depends on
 
-Both were caught by the checks' own refusals, not by inspection.
+    level 0     the P leaf partials, ascending by LOGICAL leaf index
+    level d     N_d = ceil(P / 2^d) nodes,  d = 1 .. D
+    D           smallest d with N_d == 1;  D = 0 when P == 1
+
+    node(d,q), 2q+1 <  N_{d-1}   ARITHMETIC: ftz(ftz(node(d-1,2q)) + ftz(node(d-1,2q+1)))
+    node(d,q), 2q+1 == N_{d-1}   CARRY:      node(d-1,2q), bit for bit
+    output = ftz(node(D,0))
+
+`(d, q)` is the normative address. The flat form
+`fold_node_addr(P,d,q) = fold_level_base(P,d) + q`, with cell `(i,j)`'s block
+at `(i*n+j) * fold_node_total(P)`, is one legal realization. All six
+functions are host-computable pure functions of `P` in
+`mojo_only/gemm_oracle.mojo`. Measured shapes:
+
+| P | levels | depth D | adds | carries | nodes |
+|---|---|---|---|---|---|
+| 1 | 1 | 0 | 0 | 0 | 1 |
+| 2 | 2 | 1 | 1 | 0 | 3 |
+| 3 | 3 | 2 | 2 | 1 | 6 |
+| 4 | 3 | 2 | 3 | 0 | 7 |
+| 5 | 4 | 3 | 4 | **2** | 11 |
+| 7 | 4 | 3 | 6 | 1 | 14 |
+| 8 | 4 | 3 | 7 | 0 | 15 |
+| 1024 | 11 | 10 | 1023 | 0 | 2047 |
+
+## Four fixtures that were WRONG on the first try, recorded because that is the point
+
+All four were caught by the checks' own refusals, not by inspection.
 
 1. **F3's "unfused" spelling was fused.** The first version wrote `var prod =
    a * b; return prod + c` — the spelling `ieee_arith_check.mojo`'s ARM 6
@@ -217,32 +270,48 @@ Both were caught by the checks' own refusals, not by inspection.
    spellings returned `1.0` and the FAST arm cheerfully reported "agree". It
    now uses F4a's fixture and calls `_separates` on the two arms FIRST, so a
    fixture that stops separating fails loudly instead of passing quietly.
+3. **The same reach proof was REACHED BUT INERT for the whole of Phase 2a's
+   subject.** It ran at `k = 2`, which is `P == 1`, so it exercised the leaf's
+   `fma` and `ftz` seams and NOT ONE NODE OF THE FOLD. A gated oracle that
+   folded serially would have passed it. Found by asking what a sabotage would
+   have to break, not by a failing run — and then confirmed by breaking it: a
+   serial `fold_balanced_tree` slips past the `k = 2` arm and is caught by the
+   `k = 1024` arm added beside it (`gated oracle = 0x4b800000` against
+   `contract = 0x4b800003`). The new arm calls `_separates` on the balanced
+   and serial spellings before asserting the agreement.
+4. **F9's second odd case was the wrong integer.** The schedule-invariance
+   fixture claimed `P = 7` carries twice, at levels 1 and 2. It carries ONCE:
+   widths go 7 → 4 → 2 → 1 and only the first predecessor is odd. The smallest
+   `P` that carries twice is **5** (5 → 3 → 2 → 1). The check refused itself
+   on the count, which is the fixture doing its job on its own author.
 
 ---
 
 # Reported, not fixed — defects in files this lane does not own
 
-## 1. `core/gemm.mojo`: the two pinned kernels do not run the fold
+## 1. RETRACTED: `core/gemm.mojo`'s two pinned kernels are RIGHT at `P == 1`
 
-`pinned_gemm_nt_kernel:154` stores `ftz(acc)` and `pinned_gemv_n_kernel:183`
-stores `ftz(acc)`. Contract section 9.2(b) requires the one-term fold, whose
-only arithmetic effect is to turn a `−0.0` accumulator into `+0.0`.
+**Phase 1 reported a defect here and the report was wrong. It is deleted, not
+amended.** The claim was that `pinned_gemm_nt_kernel:154` and
+`pinned_gemv_n_kernel:183` storing `ftz(acc)` with no fold diverged from the
+then-current contract section 9.2(b), which required an unconditional one-term
+`+0.0`-seeded fold, and the proposed fix was
+`ftz(Float32(0.0) + ftz(acc))` in each.
 
-Today both kernels always run at `P == 1`, so nothing disagrees with them and
-no shipped bit moves. **Phase 2's partitioned arm WILL disagree**, on exactly
-the negative-subnormal cell, and then the same product has two signs depending
-on which arm ran. Fixture F6a-P1 is that case.
+**Under `mojolearn.identical.gemm.fp32.v1` the proposed change would BE the
+defect.** Clause 3 of Andrew's Phase 2 call: *"P=1 performs no fold addition
+and returns the one leaf through the declared output seam."* Those kernels run
+at `P == 1`. `ftz(acc)` is exactly the contract. Fixture F6a-P1 now separates
+the two spellings in the opposite direction, and the v1 answer is the one
+those kernels already compute.
 
-The exact change, one expression each:
-
-    core/gemm.mojo:154   z.unsafe_store(cell, ftz(acc))
-                      -> z.unsafe_store(cell, ftz(Float32(0.0) + ftz(acc)))
-
-    core/gemm.mojo:183   z.unsafe_store(i, ftz(acc))
-                      -> z.unsafe_store(i, ftz(Float32(0.0) + ftz(acc)))
-
-`core/gram_splitk.mojo::gram_splitk_reduce_kernel` already complies — its fold
-is `+0.0`-seeded and runs unconditionally.
+**No edit is requested in `core/gemm.mojo` for this reason.** What remains
+true is a different and larger statement, and it is contract section 7.6
+rather than a defect report: both kernels compute `gemm_oracle_serial` — the
+DIAGNOSTIC reference — whenever `k > K_LEAF_MIN`, because they do not
+partition `k` at all. Reconciling that is a bit-moving migration of certified
+behaviour, it needs the identity lane's agreement, and it is the last step of
+Phase 2, not an incidental one.
 
 ## 2. `core/gram_splitk.mojo` pins the COUNT where the contract pins the SIZE
 
@@ -251,7 +320,7 @@ LENGTH is `ceil(k / 128)` and grows without bound: at `k = 4,000,000` each
 chunk is a 31,250-term serial fp32 chain. The contract fixes the LEAF SIZE
 instead and derives the count, so the same `k` gives 1,024 leaves of 3,907.
 
-Two consequences Phase 2 has to reconcile, neither of which is a bug today:
+Three consequences Phase 2 has to reconcile, none of which is a bug today:
 
 - **Conditioning.** 31,250 sequential roundings per partial against 3,907.
 - **Empty chunks.** Pinning the count first means `k < 128` produces empty
@@ -259,6 +328,14 @@ Two consequences Phase 2 has to reconcile, neither of which is a bug today:
   or past k writes an all-zero partial"*). The contract's derivation order
   makes an empty leaf impossible, so that handling has nothing to handle —
   which is a simplification, not a fix.
+- **NEW with the v1 fold: its reduce kernel folds SERIALLY, and the v1
+  contract folds with a fixed balanced tree.** Those are different arithmetic
+  — fixture F5 is the difference measured — and IDENTITY_PATHS row 27 is
+  closed on the serial spelling. So `gram_splitk` is either a SEPARATE PROFILE
+  with its own name and certificate, or it migrates to
+  `mojolearn.identical.gemm.fp32.v1` and its committed bits move. Contract
+  section 7.6 names it; `IDENTICAL_GEMM_PLAN.md`'s LANE BOUNDARY item 2 is the
+  instruction to name it now rather than discover it after v1 is published.
 
 Not changed here: `gram_splitk` is another lane's file and its constant is
 load-bearing for the workspace sizing and for `gram_splitk_scratch_covers`,
@@ -288,3 +365,43 @@ profile constants are pure numbers, and the oracle is host-only. Phase 2 will
 need one only if the scalable kernel's EXECUTION plan wants a per-vendor tile
 size — and by contract section 6.1 that row must not be readable from anything
 the numerical plan touches.
+
+---
+
+# What Phase 2b inherits, and what it must not do
+
+Phase 2a is host-only by design. The device kernel is a separate brief because
+clause 5 says the distinguishing gates come BEFORE optimizing.
+
+**Inherited, ready to use:**
+
+- the versioned contract, `mojolearn.identical.gemm.fp32.v1`;
+- `gemm_oracle` (normative) and `gemm_oracle_serial` (diagnostic), named per
+  clause 4;
+- the fold tree's node addressing as six host-computable pure functions of
+  `P`, with its shape asserted at eight `P`;
+- eleven separating fixtures covering all seven clause-5 distinctions, each
+  with its two bit patterns, each refusing to pass if it stops separating;
+- four sabotages already run against them (a serial gated fold, a `+0.0` pad
+  for the carry, a stride pairing for the adjacent one, and one broken
+  schedule) — all four caught, by the fixture the amendment was written for.
+
+**Forbidden, and each has a fixture that would catch it:**
+
+- sub-partitioning a leaf into per-register or per-lane accumulators and
+  adding them at the end (a hidden tree inside one leaf — contract 7.1);
+- letting a thread, warp or block index stand in for a logical leaf index
+  (the stride pairing — F8);
+- padding an odd level to a power of two (F7);
+- padding a ragged leaf instead of masking it (contract 8);
+- **any dispatch that selects a different fold at a performance boundary.**
+  Clause 6: *"The numerical tree cannot change at a performance dispatch
+  boundary."* No `if P < 32 use the serial fold`.
+
+**Permitted, and expected:** any tiling, any block and thread count, any
+staging, any vectorization, output tiling to bound the workspace, and fusing
+several LOGICAL tree levels into one physical block — provided the pairings
+and the bits are the oracle's. Contract section 13.4 argues that at
+`MAX_LEAVES = 1024` the whole fold fits in one threadgroup on every target, so
+the multi-launch cost clause 6 warns about need not arise at any legal `k`.
+That is an argument, not a measurement; section 13.6 lists what to measure.
