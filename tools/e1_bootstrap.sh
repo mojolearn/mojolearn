@@ -89,7 +89,22 @@ PYTHONPATH="$REPO/python" pixi run -e gbmbench python3 tools/e1_traced_fit.py "$
   || PYTHONPATH="$REPO/python" python3 tools/e1_traced_fit.py "$OUT" \
   || echo "PHASE3-FINDING: traced driver failed (see log)"
 
+step "phase 4: E2 sub-feature matrix (every loss/bootstrap/score/estimator/searcher/bins/cat/NaN/criterion)"
+# one subprocess per cell, so a device fault in one configuration leaves
+# the other cards intact; e2_cells.json is rewritten after every cell.
+# `tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR` is the verdict table.
+PYTHONPATH="$REPO/python" pixi run -e gbmbench python3 tools/e2_matrix_fit.py "$OUT" \
+  || PYTHONPATH="$REPO/python" python3 tools/e2_matrix_fit.py "$OUT" \
+  || echo "PHASE4-FINDING: E2 matrix driver failed (see log)"
+# the Python-unreachable training paths (depthwise/lossguide growth,
+# MultiClassOneVsAll, ...) get their cards from Mojo probes, one fit per
+# file, when that script is present
+if [ -x tools/e2_mojo_cards.sh ]; then
+  bash tools/e2_mojo_cards.sh "$OUT" || echo "PHASE4-FINDING: e2_mojo_cards failed (see log)"
+fi
+
 step "done"
 echo "artifacts in $OUT"
 echo "next: fetch this directory beside the other machine's and run"
-echo "  python3 tools/identity_trace_diff.py <mac>/<fit>.card <gpu>/<fit>.card"
+echo "  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write"
+echo "  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card"
