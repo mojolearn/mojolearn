@@ -1,0 +1,6 @@
+== leg lane=kde mode=FAST round=1 12:57:13 ==
+== bench/lanes_price_main.mojo [FAST] lane=kde rounds=1 smoke=True ==
+LPRICE kde FAST warmup 128x32x8 0.004798 61bb0e73dc92f3b3
+LPRICE kde FAST 1 128x32x8 0.001017 61bb0e73dc92f3b3
+HASH-STABLE kde FAST 2 rounds all 61bb0e73dc92f3b3
+== done [FAST] lane=kde ==

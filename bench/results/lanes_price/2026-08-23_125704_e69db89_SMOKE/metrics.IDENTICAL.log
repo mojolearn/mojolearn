@@ -1,0 +1,6 @@
+== leg lane=metrics mode=IDENTICAL round=1 12:57:14 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=metrics rounds=1 smoke=True ==
+LPRICE metrics IDENTICAL warmup lab257.flt257.sil67x4.tru61x6 0.01381 3bc0cdcca4a035cd
+LPRICE metrics IDENTICAL 1 lab257.flt257.sil67x4.tru61x6 0.007334 3bc0cdcca4a035cd
+HASH-STABLE metrics IDENTICAL 2 rounds all 3bc0cdcca4a035cd
+== done [IDENTICAL] lane=metrics ==

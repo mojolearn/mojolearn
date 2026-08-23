@@ -1,0 +1,6 @@
+== leg lane=svm mode=FAST round=1 12:57:13 ==
+== bench/lanes_price_main.mojo [FAST] lane=svm rounds=1 smoke=True ==
+LPRICE svm FAST warmup F2.xor.240x2 0.034012 2def386e7266a86a
+LPRICE svm FAST 1 F2.xor.240x2 0.01932 2def386e7266a86a
+HASH-STABLE svm FAST 2 rounds all 2def386e7266a86a
+== done [FAST] lane=svm ==

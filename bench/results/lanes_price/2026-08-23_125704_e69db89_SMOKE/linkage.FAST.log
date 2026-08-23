@@ -1,0 +1,6 @@
+== leg lane=linkage mode=FAST round=1 12:57:13 ==
+== bench/lanes_price_main.mojo [FAST] lane=linkage rounds=1 smoke=True ==
+LPRICE linkage FAST warmup dups_lattice.48x2 0.01319 af1408d790e1a446
+LPRICE linkage FAST 1 dups_lattice.48x2 0.008688 af1408d790e1a446
+HASH-STABLE linkage FAST 2 rounds all af1408d790e1a446
+== done [FAST] lane=linkage ==

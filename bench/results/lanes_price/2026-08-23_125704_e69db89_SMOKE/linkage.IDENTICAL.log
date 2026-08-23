@@ -1,0 +1,6 @@
+== leg lane=linkage mode=IDENTICAL round=1 12:57:13 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=linkage rounds=1 smoke=True ==
+LPRICE linkage IDENTICAL warmup dups_lattice.48x2 0.012834 af1408d790e1a446
+LPRICE linkage IDENTICAL 1 dups_lattice.48x2 0.008813 af1408d790e1a446
+HASH-STABLE linkage IDENTICAL 2 rounds all af1408d790e1a446
+== done [IDENTICAL] lane=linkage ==

@@ -1,0 +1,6 @@
+== leg lane=gemm mode=FAST round=1 12:57:14 ==
+== bench/lanes_price_main.mojo [FAST] lane=gemm rounds=1 smoke=True ==
+LPRICE gemm FAST warmup pca.transform.8192x4x4.8192x4x4 0.001258 5e18d6d88ce1cafd
+LPRICE gemm FAST 1 pca.transform.8192x4x4.8192x4x4 0.000554 5e18d6d88ce1cafd
+HASH-STABLE gemm FAST 2 rounds all 5e18d6d88ce1cafd
+== done [FAST] lane=gemm ==

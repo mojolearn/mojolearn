@@ -1,0 +1,6 @@
+== leg lane=metrics mode=FAST round=1 12:57:14 ==
+== bench/lanes_price_main.mojo [FAST] lane=metrics rounds=1 smoke=True ==
+LPRICE metrics FAST warmup lab257.flt257.sil67x4.tru61x6 0.013435 826b40eee60c57ee
+LPRICE metrics FAST 1 lab257.flt257.sil67x4.tru61x6 0.009306 826b40eee60c57ee
+HASH-STABLE metrics FAST 2 rounds all 826b40eee60c57ee
+== done [FAST] lane=metrics ==

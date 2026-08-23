@@ -1,0 +1,6 @@
+== leg lane=cd mode=FAST round=1 12:57:12 ==
+== bench/lanes_price_main.mojo [FAST] lane=cd rounds=1 smoke=True ==
+LPRICE cd FAST warmup 256x4 0.009332 3be34440e79b3131
+LPRICE cd FAST 1 256x4 0.003174 3be34440e79b3131
+HASH-STABLE cd FAST 2 rounds all 3be34440e79b3131
+== done [FAST] lane=cd ==

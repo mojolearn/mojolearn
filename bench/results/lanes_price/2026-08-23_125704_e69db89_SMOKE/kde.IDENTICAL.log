@@ -1,0 +1,6 @@
+== leg lane=kde mode=IDENTICAL round=1 12:57:13 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=kde rounds=1 smoke=True ==
+LPRICE kde IDENTICAL warmup 128x32x8 0.004239 61bb0e73dc92f3b3
+LPRICE kde IDENTICAL 1 128x32x8 0.001024 61bb0e73dc92f3b3
+HASH-STABLE kde IDENTICAL 2 rounds all 61bb0e73dc92f3b3
+== done [IDENTICAL] lane=kde ==

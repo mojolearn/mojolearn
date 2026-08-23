@@ -1,0 +1,6 @@
+== leg lane=gemm mode=IDENTICAL round=1 12:57:14 ==
+== bench/lanes_price_main.mojo [IDENTICAL] lane=gemm rounds=1 smoke=True ==
+LPRICE gemm IDENTICAL warmup pca.transform.8192x4x4.8192x4x4 0.001596 5e18d6d88ce1cafd
+LPRICE gemm IDENTICAL 1 pca.transform.8192x4x4.8192x4x4 0.000856 5e18d6d88ce1cafd
+HASH-STABLE gemm IDENTICAL 2 rounds all 5e18d6d88ce1cafd
+== done [IDENTICAL] lane=gemm ==
