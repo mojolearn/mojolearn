@@ -43,6 +43,8 @@ of a tied neighbor non-reproducible.
 from std.math import sqrt
 from max.gpu.host import DeviceBuffer, DeviceContext
 
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+
 from core.row_norms import NORM_TPB, row_norm_kernel
 from neighbors.ported.distance.detail.pairwise_distance_base import (
     launch_config_generator,
@@ -1103,18 +1105,39 @@ def check_dispatch_takes_fused() raises:
     for i in range(FCHK_QUERIES * kf):
         if got_u.unsafe_ptr().unsafe_load(i) == UInt32(0xDEADBEEF):
             untouched3 += 1
-    if untouched3 != FCHK_QUERIES * kf:
-        raise Error(
-            "DEFAULT DISPATCH at k=8 on the (53 x 4,093) fixture wrote"
-            " out_idx, so the FUSED arm ran. fused_l2_knn_grid picks"
-            " grid (16, 4) here, the x-split regime, and DEVIATION 36's AUTO"
-            " default must send that to TILED; either the default moved or"
-            " AUTO is not consulting the launch computation."
-        )
+    # THE DEFAULT IS MODE-DEPENDENT, and that is DEVIATION 502 rather than a
+    # weakening of DEVIATION 36. Under FAST, AUTO consults the launch
+    # computation and sends this x-split shape to TILED. Under IDENTICAL the
+    # arm cannot be chosen by SHAPE at all -- the two arms break a tie in
+    # the k-th distance differently, so a shape-dependent arm makes the
+    # ANSWER depend on the caller's query count -- and AUTO resolves to
+    # cuVS's own dispatch, which is FUSED for k <= 64 on row-major L2.
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        if untouched3 != 0:
+            raise Error(
+                "DEFAULT DISPATCH at k=8 under IDENTICAL left "
+                + String(untouched3)
+                + " of out_idx untouched, so the TILED arm ran. DEVIATION"
+                " 502 pins AUTO to cuVS's own dispatch in this mode and"
+                " k = 8 is inside their `k <= 64` fused branch."
+            )
+    else:
+        if untouched3 != FCHK_QUERIES * kf:
+            raise Error(
+                "DEFAULT DISPATCH at k=8 on the (53 x 4,093) fixture wrote"
+                " out_idx, so the FUSED arm ran. fused_l2_knn_grid picks"
+                " grid (16, 4) here, the x-split regime, and DEVIATION 36's"
+                " AUTO default must send that to TILED; either the default"
+                " moved or AUTO is not consulting the launch computation."
+            )
     var bad3 = 0
     for i in range(FCHK_QUERIES):
         for s3 in range(kf):
+            # Whichever arm ran wrote its own output buffer: the tiled arm
+            # fills `out_idx32` and the fused arm `out_idx`.
             var got3 = Int(got_i.unsafe_ptr().unsafe_load(i * kf + s3))
+            comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+                got3 = Int(got_u.unsafe_ptr().unsafe_load(i * kf + s3))
             var found3 = False
             for t in range(FCHK_MAX_K):
                 if truth[i * FCHK_MAX_K + t] == got3:
@@ -1193,9 +1216,16 @@ def check_dispatch_takes_fused() raises:
         "check_dispatch_takes_fused OK: with KNN_METHOD_FUSED, k=8 wrote"
         " out_idx and left out_idx32 at its sentinel and k=65 did the"
         " opposite, so the `k <= 64` branch at knn_brute_force.cuh:443 is"
-        " wired both ways; with the argument omitted, the AUTO default took"
-        " TILED on the (53 x 4,093) x-split shape and FUSED on the"
-        " 1,920-query grid_x == 1 shape, which is DEVIATION 36 (revised)"
+        " wired both ways; with the argument omitted, the AUTO default took",
+        (
+            "FUSED on BOTH shapes, which is cuVS's own dispatch and is"
+            " DEVIATION 502's pin (the arm may not depend on the query"
+            " count when the two arms break ties differently)"
+            if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+            else "TILED on the (53 x 4,093) x-split shape and FUSED on the"
+            " 1,920-query grid_x == 1 shape, which is DEVIATION 36"
+            " (revised)"
+        ),
     )
 
 

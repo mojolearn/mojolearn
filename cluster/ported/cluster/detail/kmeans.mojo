@@ -92,6 +92,7 @@ from core.row_norms import NORM_TPB, row_norm_kernel
 from cluster.ported.cluster.detail.kmeans_common import (
     check_convergence,
 )
+from core.identity_trace import IdentityTrace
 from mojo_only.fixed_point import choose_scale
 from cluster.ported.cluster.detail.min_cluster_distance_compute import (
     compute_centroid_norms,
@@ -886,6 +887,20 @@ def init_scalable_kmeans_plus_plus(
         ctx.synchronize()
 
 
+def _pad2(v: Int) -> String:
+    """Two digits, zero padded, for a trace tag.
+
+    Tags are compared by ALIGNING SEQUENCES (`core/identity_trace.mojo`
+    rule 2), so `iter9` and `iter10` sorting out of order in a reader is a
+    real hazard and one this costs nothing to remove. Values above 99 are
+    written in full; the tag stays unique, which is the invariant that
+    matters.
+    """
+    if v < 10:
+        return String("0") + String(v)
+    return String(v)
+
+
 def kmeans_fit_main(
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32],
@@ -911,6 +926,27 @@ def kmeans_fit_main(
     which is theirs (`:916-924`), and on return it holds the best restart.
     """
     params.validate()
+
+    # THE STAGE HASHES (`core/identity_trace.mojo`). Off unless
+    # `MOJOLEARN_IDENTITY_TRACE` is set, one `getenv` for the whole fit, and
+    # every `record_*` below sits behind `trace.enabled` so a shipping run
+    # does not even build the tag strings.
+    #
+    # WHY A FIT IS THE UNIT. The tags carry `restartNN.iterMM.` prefixes,
+    # which are ALGORITHM positions and identical on every machine (rule 2
+    # in that file). Two fits in one process would collide on those tags and
+    # the writer RAISES on a duplicate, which is the instrument stating its
+    # contract rather than producing a file the differ would misalign: a
+    # traced run is one fit, exactly as E1_RUNBOOK already requires.
+    var trace = IdentityTrace()
+    if trace.enabled:
+        trace.header(
+            String("kmeans n=") + String(n_samples) + " d="
+            + String(n_features) + " k=" + String(params.n_clusters)
+            + " metric=" + String(params.metric) + " seed="
+            + String(params.seed) + " n_init=" + String(params.n_init)
+            + " max_iter=" + String(params.max_iter)
+        )
 
     var n_clusters = params.n_clusters
     var cd = n_clusters * n_features
@@ -954,6 +990,8 @@ def kmeans_fit_main(
             block_dim=(NORM_TPB, 1, 1),
         )
         ctx.synchronize()
+        if trace.enabled:
+            trace.record_device(ctx, "fit.x_norm", x_norm, n_samples)
 
     var rng = HostRng(params.seed)
     var best_inertia = Float64(1.0e308)
@@ -968,6 +1006,7 @@ def kmeans_fit_main(
         n_init = 1
 
     for _seed_iter in range(n_init):
+        var restart_tag = String("restart") + _pad2(_seed_iter) + "."
         if params.init == INIT_ARRAY:
             ctx.enqueue_function[copy_f32_kernel](
                 cur_centroids.unsafe_ptr(),
@@ -1014,6 +1053,11 @@ def kmeans_fit_main(
                 n_samples,
                 n_features,
                 rng,
+            )
+
+        if trace.enabled:
+            trace.record_device(
+                ctx, restart_tag + "init.centroids", cur_centroids, cd
             )
 
         # `for (n_iter[0] = 1; n_iter[0] <= params.max_iter; ++n_iter[0])`,
@@ -1063,6 +1107,16 @@ def kmeans_fit_main(
                 params.batch_centroids,
             )
 
+            if trace.enabled:
+                var it_tag = restart_tag + "iter" + _pad2(it) + "."
+                trace.record_device(
+                    ctx, it_tag + "centroid_norm", centroid_norm, n_clusters
+                )
+                trace.record_device(ctx, it_tag + "labels", labels, n_samples)
+                trace.record_device(
+                    ctx, it_tag + "min_dist", min_dist, n_samples
+                )
+
             # `update_centroids`' two reductions, `detail/kmeans.cuh:300-318`.
             # The dispatch (privatized block-local partials when they fit
             # and the input is large, direct scatter-add otherwise), the
@@ -1102,6 +1156,20 @@ def kmeans_fit_main(
                 grid_dim=((cd + 255) // 256, 1, 1),
                 block_dim=(256, 1, 1),
             )
+
+            if trace.enabled:
+                var acc_tag = restart_tag + "iter" + _pad2(it) + "."
+                # The fixed-point accumulators, not the float centroids they
+                # become: an Int32 sum is the thing IDENTICAL guarantees is
+                # order independent, so a divergence HERE and a divergence
+                # one kernel later mean different things.
+                trace.record_device(ctx, acc_tag + "sums_i32", sums_i32, cd)
+                trace.record_device(
+                    ctx, acc_tag + "weight_i32", weight_i32, n_clusters
+                )
+                trace.record_device(
+                    ctx, acc_tag + "new_centroids", new_centroids, cd
+                )
 
             # The shift, `:453-459`. `mapThenSumReduce` with `sqdiff_op`: the
             # squared difference is applied INSIDE the reduction, between the
@@ -1163,6 +1231,15 @@ def kmeans_fit_main(
             var shift = Float64(h_shift.unsafe_ptr().unsafe_load(0))
 
             # `:492`, on the host, in this iteration.
+            if trace.enabled:
+                # The SHIFT is what the loop stops on, so a fit that takes a
+                # different number of iterations on two machines diverged
+                # HERE first, whatever the centroids look like afterwards.
+                trace.record_scalar_f32(
+                    restart_tag + "iter" + _pad2(it) + ".shift",
+                    h_shift.unsafe_ptr().unsafe_load(0),
+                )
+
             var done = check_convergence(
                 cur_cost, prior_cost, shift, params.tol, it, params.inertia_check
             )
@@ -1211,6 +1288,14 @@ def kmeans_fit_main(
         ctx.enqueue_copy(dst_ptr=h_cost.unsafe_ptr(), src_buf=d_cost)
         ctx.synchronize()
         var iter_cost = Float64(h_cost.unsafe_ptr().unsafe_load(0))
+        if trace.enabled:
+            trace.record_device(
+                ctx, restart_tag + "final.labels", labels, n_samples
+            )
+            trace.record_device(
+                ctx, restart_tag + "final.centroids", cur_centroids, cd
+            )
+            trace.record_device(ctx, restart_tag + "final.inertia", d_cost, 1)
 
         # `:938-943`, and `n_iter` is NOT clamped there.
         if iter_cost < best_inertia:
@@ -1224,5 +1309,9 @@ def kmeans_fit_main(
                 block_dim=(256, 1, 1),
             )
             ctx.synchronize()
+
+    if trace.enabled:
+        trace.record_device(ctx, "fit.centroids", centroids, cd)
+        trace.record_device(ctx, "fit.labels", labels, n_samples)
 
     return FitResult(best_inertia, best_iter)

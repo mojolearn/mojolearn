@@ -69,6 +69,8 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
+from mojo_only.numerics import ftz, identical_mul_add
+
 
 # `P::Nthreads` for their SIMT fused kernel is 256
 # (`fused_distance_nn/simt_kernel.cuh:70`, `__launch_bounds__(P::Nthreads, 2)`,
@@ -185,10 +187,17 @@ def reduce_min_kernel(
                 denom = Float32(1.0)
             dist = Float32(1.0) - (z.unsafe_load(row * n + col) / denom)
         else:
-            dist = (
-                x_norm_row
-                + y_norm.unsafe_load(col)
-                - Float32(2.0) * z.unsafe_load(row * n + col)
+            # The same pinned multiply-add the FUSED twin's epilog uses
+            # (IDENTITY_PATHS row 9), so the two arms differ only where
+            # their inputs do -- this one's `z` is a VENDOR MATMUL, which
+            # is why the unfused arm is refused under IDENTICAL and kept
+            # for differential testing. See the module docstring.
+            dist = ftz(
+                identical_mul_add(
+                    Float32(-2.0),
+                    ftz(z.unsafe_load(row * n + col)),
+                    ftz(ftz(x_norm_row) + ftz(y_norm.unsafe_load(col))),
+                )
             )
             # GEMM round-off can produce slightly negative expanded
             # distances; clamp to zero. Theirs,

@@ -29,7 +29,8 @@ from mojo_only.kernel_matrix import (
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.memory import AddressSpace
-from max.gpu.primitives.block import sum as block_sum
+from core.pinned_reduce import pinned_block_sum
+from mojo_only.numerics import ftz, identical_mul_add
 from max.gpu.primitives.block import prefix_sum
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
@@ -70,15 +71,20 @@ def candidate_cost_kernel(
 
     var i = tid
     while i < n_samples:
-        var d = (
-            x_norm.unsafe_load(i)
-            + cn
-            - Float32(2.0) * z.unsafe_load(i * n_trials + trial)
+        # ONE pinned multiply-add (IDENTITY_PATHS row 9) with the seams
+        # flushed (row 10). Under FAST it is bit-for-bit the subtraction it
+        # replaces.
+        var d = ftz(
+            identical_mul_add(
+                Float32(-2.0),
+                ftz(z.unsafe_load(i * n_trials + trial)),
+                ftz(ftz(x_norm.unsafe_load(i)) + ftz(cn)),
+            )
         )
         if d <= Float32(0.0):
             d = Float32(0.0)
         var cur = current_min.unsafe_load(i)
-        acc += d if d < cur else cur
+        acc = ftz(acc + (d if d < cur else cur))
         i += PLUS_PLUS_TPB
 
     # `cub::BlockReduce`'s counterpart from
@@ -86,7 +92,7 @@ def candidate_cost_kernel(
     # reduction this replaced is gone: same arithmetic, one call, and
     # the reduction shape is Modular's to tune rather than ours to
     # guess. See VENDOR_LIBRARIES.md.
-    var s0 = block_sum[block_size=PLUS_PLUS_TPB](acc)
+    var s0 = pinned_block_sum[PLUS_PLUS_TPB](acc)
     if tid == 0:
         out_cost.unsafe_store(trial, s0)
 
@@ -115,10 +121,12 @@ def adopt_candidate_min_kernel(
 
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < n_samples:
-        var d = (
-            x_norm.unsafe_load(i)
-            + cn
-            - Float32(2.0) * z.unsafe_load(i * n_trials + trial)
+        var d = ftz(
+            identical_mul_add(
+                Float32(-2.0),
+                ftz(z.unsafe_load(i * n_trials + trial)),
+                ftz(ftz(x_norm.unsafe_load(i)) + ftz(cn)),
+            )
         )
         if d <= Float32(0.0):
             d = Float32(0.0)
@@ -171,7 +179,7 @@ def chunk_sums_kernel(
         acc += a.unsafe_load(i)
         i += PLUS_PLUS_TPB
 
-    var s0 = block_sum[block_size=PLUS_PLUS_TPB](acc)
+    var s0 = pinned_block_sum[PLUS_PLUS_TPB](acc)
     if tid == 0:
         out_partial.unsafe_store(Int(block_idx.x), s0)
 

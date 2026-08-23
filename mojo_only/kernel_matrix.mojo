@@ -1685,9 +1685,70 @@ def lib_smem_pages(kernel: Int, column: Int, page_bytes: Int) -> Int:
 # reintroduced the problem in a more expensive form, because now the table AND
 # the kernel both have an opinion and they can disagree.
 
+def lib_block_bounds_a_float_fold[kernel: Int]() -> Bool:
+    """NUMERIC CLASSIFIER, and the correction of a label this file got wrong.
+
+    `lib_block_size` and `lib_block_size_for` both open by calling
+    themselves SCHEDULING. For most of these kernels that is right. For
+    THREE of them it is exactly the mistake `numerics.mojo` opens by
+    warning about -- *a block count is a summation order* -- because the
+    block size is the WIDTH of a `block.sum` over floats:
+
+    - `K_LIB_ROW_NORM`      `core/row_norms.mojo`, the sum of squares that
+                            becomes every expanded-L2 distance.
+    - `K_LIB_REDUCE_BY_KEY` `cluster/mojo_only/reduce_by_key.mojo`'s
+                            `sum_partials_kernel` / `finish_sum_kernel`,
+                            which carry inertia AND the centroid SHIFT the
+                            Lloyd loop converges on -- so a different width
+                            can end the fit an iteration earlier and change
+                            the MODEL, not just a reported cost.
+    - `K_LIB_PLUS_PLUS`     `cluster/mojo_only/plus_plus.mojo`: the
+                            candidate-cost `block.sum` and the three-stage
+                            float SCAN whose chunk count is
+                            `ceildiv(n, PLUS_PLUS_TPB)`. The scan feeds
+                            `binary_search_kernel`, so its rounding decides
+                            WHICH SAMPLE k-means++ draws.
+
+    Every other library row here is either integer (`K_LIB_EPS_NEIGHBORHOOD`
+    and `K_LIB_ADJ_SCAN` fold `Int32`, which is associative), carries no
+    fold at all (`K_LIB_WEAK_CC`), or has its numeric geometry pinned
+    separately (`PINNED_ACC_*`, `PINNED_KBLK`, `PINNED_VECLEN` for the two
+    contraction rows; `K_LIB_GRAM_SPLITK` says so in its own row).
+
+    BIT-INERT TODAY, AND THAT IS THE POINT. `lib_block_size` returns 128
+    for all three in every column, so gating them moves nothing on any
+    machine that exists. What the gate buys is the NEXT measurement: this
+    table's own docstring invites a vendor number to land here "WITHOUT
+    touching a kernel", and landing one on any of these three rows would
+    have silently made an AMD fit disagree with a CUDA fit in the last
+    bits of every distance. The gate makes that landing safe instead of
+    silent.
+    """
+    return (
+        kernel == K_LIB_ROW_NORM
+        or kernel == K_LIB_REDUCE_BY_KEY
+        or kernel == K_LIB_PLUS_PLUS
+    )
+
+
 def lib_block_size_for[kernel: Int, column: Int]() -> Int:
-    """SCHEDULING. Threads per block for one library kernel, per column."""
-    comptime lanes = column_lane_width(column)
+    """SCHEDULING for most rows, NUMERIC for three of them.
+
+    IDENTITY GATE (2026-08-23, DEVIATION 508), the same shape row 3's
+    re-close put on `block_size_for` and for the same reason: under a
+    `NUMERIC_IDENTICAL` build the column is replaced by
+    `COLUMN_BIT_IDENTICAL` for every kernel
+    `lib_block_bounds_a_float_fold` names, so the fold has ONE width on
+    every vendor. Read `GLOBAL_NUMERIC_MODE` HERE rather than at the call
+    sites: these are comptime accessors compiled into the kernels, and a
+    gate at the report level is the defect row 3 was re-opened for.
+    """
+    comptime identical = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    comptime numeric_row = lib_block_bounds_a_float_fold[kernel]()
+    comptime resolved = (
+        COLUMN_BIT_IDENTICAL if identical and numeric_row else column
+    )
+    comptime lanes = column_lane_width(resolved)
     if kernel == K_LIB_SELECT_RADIX:
         #: Forced by the algorithm, not by the vendor: one thread per
         #: histogram bucket, `select_radix.mojo:117`.

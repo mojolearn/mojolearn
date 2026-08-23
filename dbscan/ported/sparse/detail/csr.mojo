@@ -33,8 +33,22 @@ but the fixed point does not: a minimum over a set is the same whatever order
 it is taken in. This is one of the rare places in these ports where an
 atomic costs nothing in reproducibility, the same situation as the k-means
 assignment argmin and unlike CatBoost's float histogram flush.
+
+**THAT ARGUMENT HAS A PRECONDITION AND IT IS THE ITERATION CAP**
+(IDENTITY_PATHS row 25, DEVIATION 507). "The fixed point does not vary" is
+a statement about the FIXED POINT, and the loop below only reaches it if it
+is allowed to run until `changed` stays zero. `max_iterations` (cuML's
+default 200, `dbscan.mojo:141`) truncates it, and a truncated propagation is
+a SNAPSHOT of a race: whichever labels happened to have propagated by pass
+200 on this machine. Upstream returns that snapshot silently.
+
+Under `NUMERIC_IDENTICAL` this function RAISES instead. A cap that binds is
+the one case where DBSCAN's labels are not a function of its input, so the
+mode that promises they are may not hand one back. Under `FAST` the
+upstream behaviour is unchanged, cap and all.
 """
 
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
@@ -167,6 +181,7 @@ def weak_cc_batched(
     ctx.synchronize()
 
     var passes = 0
+    var converged = False
     for _it in range(max_iterations):
         h_changed.unsafe_ptr().unsafe_store(0, Int32(0))
         ctx.enqueue_copy(dst_buf=d_changed, src_ptr=h_changed.unsafe_ptr())
@@ -187,5 +202,19 @@ def weak_cc_batched(
         ctx.synchronize()
         passes += 1
         if h_changed.unsafe_ptr().unsafe_load(0) == Int32(0):
+            converged = True
             break
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        # DEVIATION 507. See DETERMINISM in the module docstring: the
+        # order-independence of `atomicMin` is a property of the FIXED
+        # POINT, and a run that stopped at the cap never reached one.
+        if not converged:
+            raise Error(
+                "weak_cc_batched: label propagation did not converge in "
+                + String(max_iterations)
+                + " passes. Under NUMERIC_IDENTICAL a truncated propagation"
+                " is refused rather than returned: its labels are a"
+                " snapshot of the atomic order on THIS machine, not a"
+                " function of the graph. Raise max_iterations."
+            )
     return passes

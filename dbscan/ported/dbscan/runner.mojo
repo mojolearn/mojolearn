@@ -67,6 +67,7 @@ from dbscan.ported.dbscan.adjgraph.algo import (
     adj_graph_run,
     scan_blocks_needed,
 )
+from core.identity_trace import IdentityTrace
 from dbscan.ported.dbscan.corepoints.compute import core_points_compute
 from dbscan.ported.dbscan.mergelabels.runner import merge_labels_run
 from dbscan.ported.dbscan.vertexdeg.algo import vertex_deg_run
@@ -709,6 +710,43 @@ def dbscan_fit(
                     + String(Float64(perf_counter_ns() - t_ml) / 1.0e6)
                 )
 
+    # --- THE STAGE HASHES (`core/identity_trace.mojo`) --------------------
+    # THREE RECORDS, AND THE CHOICE OF THREE IS THE WHOLE POINT.
+    #
+    # A tag must name a position in the ALGORITHM and never a property of
+    # the machine (rule 2 in that file), and DBSCAN's per-batch stages fail
+    # that test outright: `max_mbytes_per_batch = 0` -- the DEFAULT, and
+    # cuML's -- derives the batch count from the DEVICE'S FREE MEMORY
+    # (`dbscan.mojo:151`), so `batch03.core` exists on one machine and not
+    # on another and the differ would align two disjoint tag sets.
+    #
+    # These three exist on every machine at every batch count:
+    #
+    #   dbscan.core            the core mask over all N, complete once the
+    #                          neighbourhood loop has finished. A
+    #                          divergence HERE is the float distance and
+    #                          the eps compare -- the only float
+    #                          arithmetic in DBSCAN.
+    #   dbscan.labels.merged   the propagation's fixed point, before the
+    #                          ids are renumbered. A divergence here with
+    #                          `dbscan.core` agreeing is the propagation,
+    #                          which by construction should not have one.
+    #   dbscan.labels.final    what the caller gets.
+    #
+    # The batch-count invariance the omitted per-batch records would have
+    # tested is gated directly instead, by
+    # `check_dbscan_batch_count_invariance`.
+    var trace = IdentityTrace()
+    if trace.enabled:
+        trace.header(
+            String("dbscan n=") + String(n_rows) + " d="
+            + String(n_features) + " eps=" + String(eps)
+            + " min_pts=" + String(min_pts) + " batches="
+            + String(n_batches)
+        )
+        trace.record_device(ctx, "dbscan.core", core, n_rows)
+        trace.record_device(ctx, "dbscan.labels.merged", labels, n_rows)
+
     # --- final relabel (`runner.cuh:410-416`) -----------------------------
     # `if (algo_ccl == 2) final_relabel(labels, N, stream);` and cuML's own
     # `dbscanFitImpl` hardcodes `algo_ccl = 2` (`dbscan.cuh:122`), so this is
@@ -729,5 +767,7 @@ def dbscan_fit(
             "PHASE final_relabel batch 1/1 "
             + String(Float64(perf_counter_ns() - t_fr) / 1.0e6)
         )
+    if trace.enabled:
+        trace.record_device(ctx, "dbscan.labels.final", labels, n_rows)
 
     return passes

@@ -69,6 +69,14 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.expand_distances import expand_distances_kernel
 from core.gemm import gemm_nt
 from core.row_norms import NORM_TPB, row_norm_kernel
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from neighbors.mojo_only.pinned_distance_tile import (
+    PINNED_TILE_TPB,
+    pinned_distance_tile_kernel,
+)
+from neighbors.mojo_only.select_radix_identical import (
+    radix_topk_identical_kernel,
+)
 from layout import TileTensor
 from layout.tile_layout import row_major
 from nn.topk import top_k
@@ -149,24 +157,48 @@ def tiled_brute_force_knn(
         # A `create_sub_buffer` window rather than a pointer offset, because
         # MAX's matmul takes a TileTensor over a DeviceBuffer and there is no
         # offset form of that. Same bytes, no copy.
-        var q_tile = queries.create_sub_buffer[DType.float32](
-            q * n_features, rows * n_features
-        )
-        gemm_nt(ctx, dist_tile, q_tile, index, rows, n_index, n_features)
-
-        # The epilogue k-means fuses into its reduction has to be its own
-        # pass here, because the top-k needs every distance to survive.
         var cells = rows * n_index
-        ctx.enqueue_function[expand_distances_kernel](
-            dist_tile.unsafe_ptr(),
-            query_norm.unsafe_ptr().unsafe_offset(q),
-            index_norm.unsafe_ptr(),
-            Int32(rows),
-            Int32(n_index),
-            Int32(1 if is_sqrt else 0),
-            grid_dim=((cells + 255) // 256, 1, 1),
-            block_dim=(256, 1, 1),
-        )
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+            # IDENTITY_PATHS row 24. The vendor matmul's k-split is a
+            # summation order nothing here can pin, so under IDENTICAL the
+            # product and the epilogue are ONE kernel with the feature axis
+            # walked ascending in a single thread. See
+            # `neighbors/mojo_only/pinned_distance_tile.mojo` for the price
+            # and for why no faster shape was chosen.
+            ctx.enqueue_function[pinned_distance_tile_kernel](
+                dist_tile.unsafe_ptr(),
+                queries.unsafe_ptr().unsafe_offset(q * n_features),
+                index.unsafe_ptr(),
+                query_norm.unsafe_ptr().unsafe_offset(q),
+                index_norm.unsafe_ptr(),
+                Int32(rows),
+                Int32(n_index),
+                Int32(n_features),
+                Int32(1 if is_sqrt else 0),
+                grid_dim=(
+                    (cells + PINNED_TILE_TPB - 1) // PINNED_TILE_TPB, 1, 1
+                ),
+                block_dim=(PINNED_TILE_TPB, 1, 1),
+            )
+        else:
+            var q_tile = queries.create_sub_buffer[DType.float32](
+                q * n_features, rows * n_features
+            )
+            gemm_nt(ctx, dist_tile, q_tile, index, rows, n_index, n_features)
+
+            # The epilogue k-means fuses into its reduction has to be its
+            # own pass here, because the top-k needs every distance to
+            # survive.
+            ctx.enqueue_function[expand_distances_kernel](
+                dist_tile.unsafe_ptr(),
+                query_norm.unsafe_ptr().unsafe_offset(q),
+                index_norm.unsafe_ptr(),
+                Int32(rows),
+                Int32(n_index),
+                Int32(1 if is_sqrt else 0),
+                grid_dim=((cells + 255) // 256, 1, 1),
+                block_dim=(256, 1, 1),
+            )
 
         # THE SELECTION. Two implementations, and which one runs is a
         # parameter rather than a preference.
@@ -193,19 +225,47 @@ def tiled_brute_force_knn(
                 ctx,
             )
         else:
-            ctx.enqueue_function[radix_topk_one_block_kernel](
-                dist_tile.unsafe_ptr(),
-                out_dist.unsafe_ptr().unsafe_offset(q * k),
-                out_idx.unsafe_ptr().unsafe_offset(q * k),
-                buf_val.unsafe_ptr(),
-                buf_idx.unsafe_ptr(),
-                Int32(n_index),
-                Int32(k),
-                Int32(buf_len),
-                Int32(1),
-                grid_dim=(rows, 1, 1),
-                block_dim=(SELECT_BLOCK, 1, 1),
-            )
+            comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+                # IDENTITY_PATHS row 11's closure, DEVIATIONS 500/501: the
+                # composite (distance, index) key and the ranked placement.
+                # The ported selector keeps RAFT's tie handling, which is
+                # atomic-ordered by construction; this one has no tie class
+                # and no arrival order in its output.
+                if k > SELECT_BLOCK:
+                    raise Error(
+                        "select_radix (IDENTICAL): k > "
+                        + String(SELECT_BLOCK)
+                        + " is refused. The rank pass gives one thread to"
+                        " each output slot; a larger k needs a loop, which"
+                        " is not written until something asks for it."
+                    )
+                ctx.enqueue_function[radix_topk_identical_kernel](
+                    dist_tile.unsafe_ptr(),
+                    out_dist.unsafe_ptr().unsafe_offset(q * k),
+                    out_idx.unsafe_ptr().unsafe_offset(q * k),
+                    buf_val.unsafe_ptr(),
+                    buf_idx.unsafe_ptr(),
+                    Int32(n_index),
+                    Int32(k),
+                    Int32(buf_len),
+                    Int32(1),
+                    grid_dim=(rows, 1, 1),
+                    block_dim=(SELECT_BLOCK, 1, 1),
+                )
+            else:
+                ctx.enqueue_function[radix_topk_one_block_kernel](
+                    dist_tile.unsafe_ptr(),
+                    out_dist.unsafe_ptr().unsafe_offset(q * k),
+                    out_idx.unsafe_ptr().unsafe_offset(q * k),
+                    buf_val.unsafe_ptr(),
+                    buf_idx.unsafe_ptr(),
+                    Int32(n_index),
+                    Int32(k),
+                    Int32(buf_len),
+                    Int32(1),
+                    grid_dim=(rows, 1, 1),
+                    block_dim=(SELECT_BLOCK, 1, 1),
+                )
         q += rows
     ctx.synchronize()
 
@@ -377,8 +437,28 @@ def brute_force_knn_impl(
     # is in; see DEVIATION 36 above the constants for the measurements.
     var want_fused = knn_method == KNN_METHOD_FUSED
     if knn_method == KNN_METHOD_AUTO:
-        var g = fused_l2_knn_grid(n_queries, n_index)
-        want_fused = g[0] == 1
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+            # THE ARM PIN, IDENTITY_PATHS row 23 (DEVIATION 502). AUTO
+            # normally chooses by SHAPE -- fused when the launch computation
+            # says `grid_x == 1`, tiled when it would engage the x-split --
+            # and the two arms resolve a tie in the k-th distance
+            # differently: the tiled arm's composite key takes the LOWEST
+            # INDEX (DEVIATION 500) while the fused arm's FAISS queue
+            # compares the distance only. A shape-dependent arm therefore
+            # makes the ANSWER depend on how many queries the caller
+            # happened to pass, which is not a property an identical column
+            # can have.
+            #
+            # Under IDENTICAL the choice is cuVS's OWN dispatch instead
+            # (`knn_brute_force.cuh:443`): fused whenever their four
+            # conditions hold. The x-split that made AUTO exist is
+            # neutralized separately -- `fused_l2_knn` pins `grid_x = 1`
+            # in this mode -- so the reason DEVIATION 36 avoided the fused
+            # arm at those shapes is gone with it.
+            want_fused = True
+        else:
+            var g = fused_l2_knn_grid(n_queries, n_index)
+            want_fused = g[0] == 1
     var fused_ok = (
         k <= FKNN_MAX_NN
         and row_major_query == row_major_index

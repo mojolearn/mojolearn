@@ -86,6 +86,7 @@ garbage without it -- the old unfused kernel ASSIGNED, so this is a new
 precondition, not an inherited one.
 """
 
+from mojo_only.numerics import ftz_simd, identical_mul_add_simd
 from std.atomic import Atomic
 from std.gpu import block_idx, thread_idx
 from std.gpu.primitives.warp import shuffle_xor
@@ -227,35 +228,57 @@ def eps_unexp_l2_sq_neigh_kernel(
                 regy[j] = sy[
                     (acccolid + j * GEMM_ACC_TH_COLS) * GEMM_SMEM_STRIDE + kk
                 ]
+            regy = ftz_simd[GEMM_ACC_COLS_PER_TH](regy)
             # `auto diff = regx - regy; acc += diff * diff;` -- UNEXPANDED.
-            var d0 = (
+            # `auto diff = regx - regy; acc += diff * diff;` -- UNEXPANDED,
+            # and under IDENTICAL every step of it is pinned. This is the
+            # ONLY float arithmetic in DBSCAN: everything downstream is an
+            # Int32 degree, a bool adjacency and a min over labels, so ONE
+            # bit here is the difference between a point being a neighbour
+            # and not, and from there between two clusters and one.
+            #
+            # `acc += diff * diff` is a multiply-add and therefore
+            # IDENTITY_PATHS row 9's shape (one rounding under IDENTICAL,
+            # the codegen's choice under FAST). `diff` is a SUBTRACTION OF
+            # NEARBY VALUES, which is where a denormal actually appears in
+            # this port -- two points a hair apart in one feature -- so
+            # row 10's flush is not decorative here either.
+            var d0 = ftz_simd[GEMM_ACC_COLS_PER_TH](
                 sx[
                     (accrowid + 0 * GEMM_ACC_TH_ROWS) * GEMM_SMEM_STRIDE + kk
                 ]
                 - regy
             )
-            acc0 += d0 * d0
-            var d1 = (
+            acc0 = ftz_simd[GEMM_ACC_COLS_PER_TH](
+                identical_mul_add_simd[GEMM_ACC_COLS_PER_TH](d0, d0, acc0)
+            )
+            var d1 = ftz_simd[GEMM_ACC_COLS_PER_TH](
                 sx[
                     (accrowid + 1 * GEMM_ACC_TH_ROWS) * GEMM_SMEM_STRIDE + kk
                 ]
                 - regy
             )
-            acc1 += d1 * d1
-            var d2 = (
+            acc1 = ftz_simd[GEMM_ACC_COLS_PER_TH](
+                identical_mul_add_simd[GEMM_ACC_COLS_PER_TH](d1, d1, acc1)
+            )
+            var d2 = ftz_simd[GEMM_ACC_COLS_PER_TH](
                 sx[
                     (accrowid + 2 * GEMM_ACC_TH_ROWS) * GEMM_SMEM_STRIDE + kk
                 ]
                 - regy
             )
-            acc2 += d2 * d2
-            var d3 = (
+            acc2 = ftz_simd[GEMM_ACC_COLS_PER_TH](
+                identical_mul_add_simd[GEMM_ACC_COLS_PER_TH](d2, d2, acc2)
+            )
+            var d3 = ftz_simd[GEMM_ACC_COLS_PER_TH](
                 sx[
                     (accrowid + 3 * GEMM_ACC_TH_ROWS) * GEMM_SMEM_STRIDE + kk
                 ]
                 - regy
             )
-            acc3 += d3 * d3
+            acc3 = ftz_simd[GEMM_ACC_COLS_PER_TH](
+                identical_mul_add_simd[GEMM_ACC_COLS_PER_TH](d3, d3, acc3)
+            )
         barrier()
         kt += GEMM_KBLK
 

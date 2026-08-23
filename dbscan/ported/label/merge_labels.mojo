@@ -38,6 +38,7 @@ comment says why: "min(ra, rb) would be sufficient but this speeds up
 convergence". Copied, including the extra indirection.
 """
 
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
@@ -139,7 +140,14 @@ def merge_labels(
     )
     ctx.synchronize()
 
-    # Step 1: compute connected components in the label equivalence graph
+    # Step 1: compute connected components in the label equivalence graph.
+    #
+    # The same cap and the same refusal as `weak_cc_batched` (DEVIATION
+    # 507): `propagate_label_kernel` reaches a UNIQUE fixed point whatever
+    # order its `atomicMin`s land in, and a run cut off at `max_iterations`
+    # has not reached it. Under IDENTICAL that is refused; under FAST it is
+    # upstream's silent truncation.
+    var merged = False
     for _it in range(max_iterations):
         h_m.unsafe_ptr().unsafe_store(0, Int32(0))
         ctx.enqueue_copy(dst_buf=d_m, src_ptr=h_m.unsafe_ptr())
@@ -157,7 +165,17 @@ def merge_labels(
         ctx.enqueue_copy(dst_ptr=h_m.unsafe_ptr(), src_buf=d_m)
         ctx.synchronize()
         if h_m.unsafe_ptr().unsafe_load(0) == Int32(0):
+            merged = True
             break
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        if not merged:
+            raise Error(
+                "merge_labels: the label equivalence graph did not settle"
+                " in "
+                + String(max_iterations)
+                + " passes. Under NUMERIC_IDENTICAL a truncated merge is"
+                " refused rather than returned; raise max_iterations."
+            )
 
     # Step 2: re-assign minimum equivalent label
     ctx.enqueue_function[reassign_label_kernel](

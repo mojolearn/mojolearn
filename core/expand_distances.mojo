@@ -15,6 +15,8 @@ negative, and `sqrt` of that is NaN.
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import sqrt
 
+from mojo_only.numerics import ftz, identical_mul_add
+
 
 def expand_distances_kernel(
     z: MutPointer[Float32, MutAnyOrigin],
@@ -32,13 +34,21 @@ def expand_distances_kernel(
 
     var row = idx // n_cols
     var col = idx % n_cols
-    var d = (
-        x_norm.unsafe_load(row)
-        + y_norm.unsafe_load(col)
-        - Float32(2.0) * z.unsafe_load(idx)
+    # ONE pinned multiply-add, IDENTITY_PATHS row 9, and the seams flushed
+    # for row 10. Under FAST `(-2) * z + (xn + yn)` is bit-for-bit the
+    # subtraction it replaces. This kernel is on the TILED k-NN arm, whose
+    # `z` comes from a vendor matmul -- the arithmetic here is pinned so
+    # that the ONLY unpinned thing left on that arm is the product itself,
+    # which is what its refusal under IDENTICAL names.
+    var d = ftz(
+        identical_mul_add(
+            Float32(-2.0),
+            ftz(z.unsafe_load(idx)),
+            ftz(ftz(x_norm.unsafe_load(row)) + ftz(y_norm.unsafe_load(col))),
+        )
     )
     if d <= Float32(0.0):
         d = Float32(0.0)
     if is_sqrt_in != 0:
-        d = sqrt(d)
+        d = ftz(sqrt(d))
     z.unsafe_store(idx, d)

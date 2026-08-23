@@ -160,6 +160,26 @@ ceiling that forces this is Apple's alone and the double buffer would fit on
 NVIDIA's 48 KB and AMD's 64 KB. That is a `lib_smem_pages_for` row, not a
 constant, and it is left OPEN; see the lane file.
 
+**DEVIATION BLOCK 5 - IDENTITY, and it is TWO moves plus a refusal**
+(IDENTITY_PATHS rows 19 and 23, DEVIATIONS 502 and 503). Reached only under
+`NUMERIC_IDENTICAL`; the FAST build below is unchanged bit for bit.
+
+1. The accumulate is `identical_mul_add_simd` and the epilog's
+   `xn + yn - 2*dot` is one pinned multiply-add, so the contraction is not
+   the codegen's to choose.
+2. `grid_x` is PINNED TO 1. At `grid_x > 1` the blocks sharing a row merge
+   through the mutex array, and `Comparators.cuh:17` compares the DISTANCE
+   ONLY, so which of several equidistant neighbours survives is decided by
+   which block won the mutex -- run to run on one device, and by the core
+   count across two. At `grid_x == 1` there is no merge: one block owns
+   every column of its rows and feeds them ascending. `grid_y` needs no pin,
+   because `row - tile_m` is the same offset inside `Mblk` at every grid, so
+   the same lane sees the same columns in the same order.
+3. A target column whose lane width is not 32 is REFUSED at the entry. The
+   FAISS network is 32 lanes wide by construction and on a 64-wide
+   wavefront it addresses the wrong half of the group -- that is not
+   non-identical, it is wrong.
+
 **DEVIATION BLOCK 4 - `sqrt`.** Not a deviation, a copy, recorded because it
 looks like one. `fusedL2Knn` hard-codes `constexpr bool sqrt = false`
 (`fused_l2_knn.cuh:977-979`) with the comment that FAISS bfKNN only
@@ -198,6 +218,15 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
+from mojo_only.kernel_matrix import TARGET_COLUMN, lib_lane_width_for
+from mojo_only.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
+    ftz,
+    ftz_simd,
+    identical_mul_add,
+    identical_mul_add_simd,
+)
 from neighbors.ported.distance.detail.pairwise_distance_base import (
     launch_config_generator,
 )
@@ -249,7 +278,15 @@ def l2_exp_epilog(xnv: Float32, ynv: Float32, dot: Float32) -> Float32:
     BOTH clauses; see the module docstring for why the second one matters and
     where it is missing in this tree.
     """
-    var val = xnv + ynv - Float32(2.0) * dot
+    # ONE pinned multiply-add under IDENTICAL (IDENTITY_PATHS row 9) with
+    # the seams flushed (row 10). Under FAST `(-2) * dot + (xn + yn)` is
+    # bit-for-bit the subtraction it replaces: IEEE addition is commutative
+    # and a sign flip is exact.
+    var val = ftz(
+        identical_mul_add(
+            Float32(-2.0), ftz(dot), ftz(ftz(xnv) + ftz(ynv))
+        )
+    )
     if val <= Float32(0.0):
         return Float32(0.0)
     if val * val < FKNN_CLAMP_PRECISION and xnv == ynv:
@@ -423,9 +460,38 @@ def fused_l2_knn_kernel[
                         regy[j] = sy[
                             (tc + j * FKNN_ACC_TH_COLS) * FKNN_SMEM_STRIDE + kk
                         ]
-                    acc0 += sx[(tr + 0) * FKNN_SMEM_STRIDE + kk] * regy
-                    acc1 += (
-                        sx[(tr + FKNN_ACC_TH_ROWS) * FKNN_SMEM_STRIDE + kk] * regy
+                    # `acc += x * y`, with the CONTRACTION PINNED under
+                    # IDENTICAL: one `fma`, one rounding, the same on
+                    # Metal, PTX and AMDGPU (IDENTITY_PATHS row 9). Under
+                    # FAST this is the chain the codegen had before, and on
+                    # this backend the codegen contracts it anyway --
+                    # measured, `check-ieee-arith`'s built-to-separate arm.
+                    var rgy = ftz_simd[FKNN_ACC_COLS_PER_TH](regy)
+                    acc0 = ftz_simd[FKNN_ACC_COLS_PER_TH](
+                        identical_mul_add_simd[FKNN_ACC_COLS_PER_TH](
+                            ftz_simd[FKNN_ACC_COLS_PER_TH](
+                                SIMD[DType.float32, FKNN_ACC_COLS_PER_TH](
+                                    sx[(tr + 0) * FKNN_SMEM_STRIDE + kk]
+                                )
+                            ),
+                            rgy,
+                            acc0,
+                        )
+                    )
+                    acc1 = ftz_simd[FKNN_ACC_COLS_PER_TH](
+                        identical_mul_add_simd[FKNN_ACC_COLS_PER_TH](
+                            ftz_simd[FKNN_ACC_COLS_PER_TH](
+                                SIMD[DType.float32, FKNN_ACC_COLS_PER_TH](
+                                    sx[
+                                        (tr + FKNN_ACC_TH_ROWS)
+                                        * FKNN_SMEM_STRIDE
+                                        + kk
+                                    ]
+                                )
+                            ),
+                            rgy,
+                            acc1,
+                        )
                     )
                 barrier()
                 kt += FKNN_KBLK
@@ -801,7 +867,42 @@ def fused_l2_knn(
     # `shDumpKV` (DEVIATION BLOCKS 1 and 3), where theirs adds
     # `Mblk * numOfNN * sizeof(Pair)` for the shmem queue dump it has and we
     # do not.
+    # THE 32-LANE REFUSAL (IDENTITY_PATHS row 23). `faiss_select`'s warp
+    # queue is a bitonic network over `WARP_LANES = 32` lanes, and the
+    # kernel's own `lid = threadIdx.x % 32` and `kNumWarpQRegisters =
+    # NumWarpQ / 32` say the same thing three more times. On a 64-wide
+    # wavefront those lane indices address the wrong half of the group, so
+    # this arm is not merely non-identical there, it is WRONG. Refuse at
+    # the entry rather than compile a silently different answer; the
+    # closure is the width-parameterized network, which is not ported.
+    if lib_lane_width_for[TARGET_COLUMN]() != 32:
+        raise Error(
+            "fusedL2kNN: the FAISS warp queue is a 32-lane bitonic network"
+            " and this target column's lane width is "
+            + String(lib_lane_width_for[TARGET_COLUMN]())
+            + ". Refusing rather than returning a lane-mismatched answer."
+        )
+
     var cfg = fused_l2_knn_grid(n_queries, n_index)
+    var grid_x = cfg[0]
+    var grid_y = cfg[1]
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        # THE GRID PIN (IDENTITY_PATHS row 23, DEVIATION 502). At
+        # `grid_dim.x > 1` the blocks sharing a row merge their queues
+        # through the mutex array, and the FAISS comparator compares the
+        # DISTANCE ONLY (`Comparators.cuh:17`), so which of several
+        # equidistant neighbours survives a merge is decided by the order
+        # the blocks won the mutex -- run to run on one device, and by the
+        # core count across two. At `grid_dim.x == 1` no merge happens at
+        # all: one block owns every column of its rows, feeds them to the
+        # queue in ascending column-tile order, and that order is a pure
+        # function of (m, n, k) and the policy.
+        #
+        # `grid_dim.y` needs no pin. A row's owner block changes with it,
+        # but `row - tile_m` is always the same offset inside `Mblk`, so
+        # the SAME lane sees the SAME columns in the same order whatever
+        # `grid_y` is -- which `check_knn_geometry_invariance` gates.
+        grid_x = 1
     fused_l2_knn_launch(
         ctx,
         queries,
@@ -815,8 +916,8 @@ def fused_l2_knn(
         n_features,
         k,
         is_sqrt,
-        cfg[0],
-        cfg[1],
+        grid_x,
+        grid_y,
         0,
     )
 

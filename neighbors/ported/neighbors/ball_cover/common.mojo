@@ -42,6 +42,9 @@ reason `nn.argsort` is not an option.
 """
 
 
+from mojo_only.numerics import ftz, identical_mul_add
+
+
 # `std::numeric_limits<value_idx>::max()` is what `registers.cuh:498,536`
 # uses as the "further than anything" sentinel for a FLOAT distance. That is
 # int64 max reinterpreted through a float conversion, about 9.2e18, which is
@@ -65,8 +68,17 @@ def eps_dist_sq(
     the inner distance compute", and every membership test downstream squares
     `eps` instead.
     """
+    # PINNED under IDENTICAL (IDENTITY_PATHS rows 9 and 10, DEVIATION 506).
+    # This is the ball-cover arm's ONLY float accumulation and DBSCAN's rbc
+    # path runs through it, so one bit here decides an eps-membership the
+    # same way the brute-force kernel's accumulator does. `diff` is a
+    # subtraction of nearby coordinates, which is where a denormal appears;
+    # `sum_sq += diff * diff` is a multiply-add and therefore the codegen's
+    # to contract unless it is pinned.
     var sum_sq = Float32(0.0)
     for i in range(n_dims):
-        var diff = a.unsafe_load(a_off + i) - b.unsafe_load(b_off + i)
-        sum_sq += diff * diff
+        var diff = ftz(
+            ftz(a.unsafe_load(a_off + i)) - ftz(b.unsafe_load(b_off + i))
+        )
+        sum_sq = ftz(identical_mul_add(diff, diff, sum_sq))
     return sum_sq

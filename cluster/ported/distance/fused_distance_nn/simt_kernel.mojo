@@ -137,6 +137,21 @@ unportable. Keeping them apart is the whole content of this section.
    each writing its own `P::AccRowsPerTh` rows. That is `acccolid == 0`
    below.
 
+**DEVIATION 503 - THE IDENTITY PINS**, reached only under
+`NUMERIC_IDENTICAL` (IDENTITY_PATHS row 19). The register-tile accumulate
+runs through `identical_mul_add_simd` and the epilog's `xn + yn - 2*acc`
+through `identical_mul_add`, so `acc += x * y` is ONE rounding on every
+backend rather than one or two at the codegen's whim; every seam a later
+kernel reads is flushed through `ftz_simd` / `ftz`, which is bitwise inert
+on an FTZ backend and aligns a denormal-honoring one to Metal. Under FAST
+both are the naive chain, bit for bit, and the shipped answer does not move.
+
+What is NOT pinned here, because it does not need to be: the k order
+(ascending inside ascending chunks at every `veclen`), the row ownership
+(`row mod Mblk` at every `grid_y`), and the argmin (a `(value, key)` total
+order in both arms). Those are properties of the port, and
+`check_assignment_geometry_invariance` gates them.
+
 One more deliberate difference: when `sqrt` is requested, their epilog takes
 it per accumulator CELL before the min reduce (`l2_exp.cuh:137-145`); this
 kernel takes it once per ROW at the final write. `sqrt` is monotone and
@@ -151,6 +166,13 @@ from std.math import sqrt
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
+
+from mojo_only.numerics import (
+    ftz,
+    ftz_simd,
+    identical_mul_add,
+    identical_mul_add_simd,
+)
 
 
 comptime FUSED_MAX = Float32(3.4028234663852886e38)
@@ -383,13 +405,56 @@ def fused_distance_nn_kernel[
                         (acccolid + 3 * tc) * smem_stride + kc * veclen
                     )
                     comptime for v in range(veclen):
-                        var yv = SIMD[DType.float32, cpt](
-                            ry0[v], ry1[v], ry2[v], ry3[v]
+                        var yv = ftz_simd[cpt](
+                            SIMD[DType.float32, cpt](
+                                ry0[v], ry1[v], ry2[v], ry3[v]
+                            )
                         )
-                        acc0 += SIMD[DType.float32, cpt](rx0[v]) * yv
-                        acc1 += SIMD[DType.float32, cpt](rx1[v]) * yv
-                        acc2 += SIMD[DType.float32, cpt](rx2[v]) * yv
-                        acc3 += SIMD[DType.float32, cpt](rx3[v]) * yv
+                        # `acc += x * y` (`l2_exp.cuh:103-109`) with the
+                        # CONTRACTION PINNED under IDENTICAL: one `fma`,
+                        # one rounding, the same on Metal, PTX and AMDGPU
+                        # (IDENTITY_PATHS row 9). Under FAST this is the
+                        # naive chain the codegen had before, bit for bit.
+                        # The partials are flushed through `ftz_simd` for
+                        # row 10's intermediate rule -- a squared feature
+                        # difference is where a denormal appears, and Metal
+                        # flushes one where CUDA keeps it.
+                        acc0 = ftz_simd[cpt](
+                            identical_mul_add_simd[cpt](
+                                ftz_simd[cpt](
+                                    SIMD[DType.float32, cpt](rx0[v])
+                                ),
+                                yv,
+                                acc0,
+                            )
+                        )
+                        acc1 = ftz_simd[cpt](
+                            identical_mul_add_simd[cpt](
+                                ftz_simd[cpt](
+                                    SIMD[DType.float32, cpt](rx1[v])
+                                ),
+                                yv,
+                                acc1,
+                            )
+                        )
+                        acc2 = ftz_simd[cpt](
+                            identical_mul_add_simd[cpt](
+                                ftz_simd[cpt](
+                                    SIMD[DType.float32, cpt](rx2[v])
+                                ),
+                                yv,
+                                acc2,
+                            )
+                        )
+                        acc3 = ftz_simd[cpt](
+                            identical_mul_add_simd[cpt](
+                                ftz_simd[cpt](
+                                    SIMD[DType.float32, cpt](rx3[v])
+                                ),
+                                yv,
+                                acc3,
+                            )
+                        )
                 # Second barrier per k-tile: the single-buffer deviation
                 # (PORTING.md 42). Their double buffer writes the NEXT page
                 # while this one is read and needs one sync; one page cannot.
@@ -447,7 +512,19 @@ def fused_distance_nn_kernel[
                     # `tmpkey = acccolid + j * P::AccThCols + gridStrideX`
                     var col = tile_n + acccolid + j * tc
                     if col < n:
-                        var d = rxn[i] + ryn[j] - Float32(2.0) * acc_row[j]
+                        # `xn + yn - 2 * acc`, `l2_exp.cuh:117-136`. Written
+                        # as ONE pinned multiply-add so the contraction is
+                        # not the codegen's to choose (row 9): under FAST
+                        # `(-2) * acc + (xn + yn)` is bit-for-bit the
+                        # subtraction it replaces, IEEE addition being
+                        # commutative and a sign flip exact.
+                        var d = ftz(
+                            identical_mul_add(
+                                Float32(-2.0),
+                                ftz(acc_row[j]),
+                                ftz(ftz(rxn[i]) + ftz(ryn[j])),
+                            )
+                        )
                         # `val * (val > 0) * !((val*val < eps) * (xn == yn))`
                         # -- the positivity clamp and the self-neighbor
                         # round-off guard, `l2_exp.cuh:127-135`.

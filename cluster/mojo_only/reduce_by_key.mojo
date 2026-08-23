@@ -65,7 +65,8 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.memory import AddressSpace
-from max.gpu.primitives.block import sum as block_sum
+from core.pinned_reduce import pinned_block_sum
+from mojo_only.numerics import ftz
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
@@ -563,12 +564,17 @@ def finalize_centroids_kernel(
     var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if idx < n_clusters * n_features:
         var cluster = idx // n_features
-        var w = Float32(weight_i32.unsafe_load(cluster)) / weight_scale_in
+        # Two quotients and a divide, every one of them a seam another
+        # kernel reads: flushed under IDENTICAL (IDENTITY_PATHS row 10).
+        # The DIVIDENDS are exact integers, so nothing here can differ
+        # between vendors except through the denormal policy -- which is
+        # precisely what a centroid of a near-empty cluster can produce.
+        var w = ftz(Float32(weight_i32.unsafe_load(cluster)) / weight_scale_in)
         if w == Float32(0.0):
             new_centroids.unsafe_store(idx, old_centroids.unsafe_load(idx))
         else:
-            var s = Float32(sums_i32.unsafe_load(idx)) / sum_scale_in
-            new_centroids.unsafe_store(idx, s / w)
+            var s = ftz(Float32(sums_i32.unsafe_load(idx)) / sum_scale_in)
+            new_centroids.unsafe_store(idx, ftz(s / w))
 
 
 comptime SUM_MODE_PLAIN = 0
@@ -620,11 +626,11 @@ def sum_partials_kernel(
     while i < n:
         var v = a.unsafe_load(i)
         if mode == SUM_MODE_PRODUCT:
-            v = v * b.unsafe_load(i)
+            v = ftz(ftz(v) * ftz(b.unsafe_load(i)))
         elif mode == SUM_MODE_SQDIFF:
-            var d = v - b.unsafe_load(i)
-            v = d * d
-        acc += v
+            var d = ftz(ftz(v) - ftz(b.unsafe_load(i)))
+            v = ftz(d * d)
+        acc = ftz(acc + v)
         i += stride
 
     # `cub::BlockReduce`'s counterpart from
@@ -632,7 +638,7 @@ def sum_partials_kernel(
     # reduction this replaced is gone: same arithmetic, one call, and
     # the reduction shape is Modular's to tune rather than ours to
     # guess. See VENDOR_LIBRARIES.md.
-    var s0 = block_sum[block_size=REDUCE_BY_KEY_TPB](acc)
+    var s0 = pinned_block_sum[REDUCE_BY_KEY_TPB](acc)
     if tid == 0:
         out_partial.unsafe_store(Int(block_idx.x), s0)
 
@@ -690,7 +696,7 @@ def finish_sum_kernel(
     var acc = Float32(0.0)
     var i = tid
     while i < n_blocks:
-        acc += partials.unsafe_load(i)
+        acc = ftz(acc + partials.unsafe_load(i))
         i += REDUCE_BY_KEY_TPB
 
     # `cub::BlockReduce`'s counterpart from
@@ -698,6 +704,6 @@ def finish_sum_kernel(
     # reduction this replaced is gone: same arithmetic, one call, and
     # the reduction shape is Modular's to tune rather than ours to
     # guess. See VENDOR_LIBRARIES.md.
-    var s0 = block_sum[block_size=REDUCE_BY_KEY_TPB](acc)
+    var s0 = pinned_block_sum[REDUCE_BY_KEY_TPB](acc)
     if tid == 0:
         out_scalar.unsafe_store(0, s0)

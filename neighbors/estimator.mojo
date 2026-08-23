@@ -69,13 +69,29 @@ THE REPRODUCIBILITY LIMITATION, WHICH IS REAL AND IS NOT HIDDEN
 ---------------------------------------------------------------
 
 `UNWIRED.md:371`: RAFT places k-NN output with `atomicAdd` and has no index
-tie-break, so **which of several equidistant neighbours is returned is not
-reproducible**. Distances are stable; the identity of a tied neighbour is
-not. Any caller building a bit-identity claim on top of this must know that,
-and an `IDENTICAL` column cannot cover k-NN indices until the upstream is
-fixed -- which would be an improvement on it, not a port of it.
+tie-break, so under the DEFAULT build **which of several equidistant
+neighbours is returned is not reproducible**. Distances are stable; the
+identity of a tied neighbour is not. Any caller building a bit-identity
+claim on the FAST build must know that. It is not hypothetical: with 40
+identical queries, the fused arm has been observed returning a different
+neighbour for row 16 than for row 0, in one process on one device
+(`check_knn_fused_tie_set_is_geometry_invariant`).
+
+**UNDER `NUMERIC_IDENTICAL` THIS IS CLOSED, 2026-08-23** (IDENTITY_PATHS
+row 11, DEVIATIONS 500/501/502). The tiled arm's selector runs over a
+64-bit `(distance, index)` composite key, so the tie class does not exist
+and the lowest indices win by arithmetic; its output slots come from a rank
+rather than an atomic arrival. The fused arm's `grid_x` is pinned to 1, so
+no mutex merge decides anything, and the ARM ITSELF is pinned to cuVS's own
+dispatch -- because the two arms break a tie differently and an AUTO that
+chooses by SHAPE would make the answer depend on how many queries the
+caller passed.
+
+The host sort below is unchanged and still does its own job: it fixes the
+ORDER of the set, which is a different property from WHICH set.
 """
 
+from core.identity_trace import IdentityTrace
 from max.gpu.host import DeviceContext
 
 from neighbors.ported.neighbors.detail.knn_brute_force import (
@@ -234,6 +250,32 @@ def knn_search(
     compute_norms(ctx, queries, query_norm, n_queries, n_features, False)
     ctx.synchronize()
 
+    # THE STAGE HASHES (`core/identity_trace.mojo`), off unless
+    # `MOJOLEARN_IDENTITY_TRACE` is set. FOUR records, and the split
+    # between them is the diagnosis: the two norms are the input to every
+    # distance, `search.out_dist` is the selection's values, and
+    # `search.out_idx` is the one that carries the TIE CLASS. Two runs whose
+    # distances agree and whose indices do not have diverged in the
+    # selector and nowhere else -- which is precisely row 11's failure mode
+    # and is invisible in any comparison of distances alone.
+    #
+    # The tags name algorithm positions and carry no tile, batch or grid,
+    # so they align across machines (rule 2). The QUERY TILE is deliberately
+    # absent from them for that reason, even though it is in the return
+    # value: it is a memory number, and
+    # `check_knn_tiled_is_query_tile_invariant` gates that the answer does
+    # not depend on it.
+    var trace = IdentityTrace()
+    if trace.enabled:
+        trace.header(
+            String("knn n_index=") + String(n_index) + " n_queries="
+            + String(n_queries) + " d=" + String(n_features) + " k="
+            + String(k) + " method=" + String(knn_method) + " sqrt="
+            + String(return_sqrt)
+        )
+        trace.record_device(ctx, "knn.index_norm", index_norm, n_index)
+        trace.record_device(ctx, "knn.query_norm", query_norm, n_queries)
+
     brute_force_knn_impl(
         ctx,
         queries,
@@ -265,6 +307,10 @@ def knn_search(
     # `enqueue_create_host_buffer` is not interchangeable with an arbitrary
     # host pointer on this stack, and the failure is SILENT. Copying through
     # a buffer the runtime made keeps this on the route the checks exercise.
+    if trace.enabled:
+        trace.record_device(ctx, "knn.out_dist", out_dist, n_queries * k)
+        trace.record_device(ctx, "knn.out_idx", out_idx, n_queries * k)
+
     var hd = ctx.enqueue_create_host_buffer[DType.float32](n_queries * k)
     var hi = ctx.enqueue_create_host_buffer[DType.uint32](n_queries * k)
     ctx.enqueue_copy(dst_ptr=hd.unsafe_ptr(), src_buf=out_dist)

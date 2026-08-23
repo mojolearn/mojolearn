@@ -777,6 +777,39 @@ check-lossguide = "mojo run -I . mojo_only/lossguide_check.mojo"
 # rather than as ULP noise. Needs python3 for the reader half.
 check-identity-trace = "sh tools/check_identity_trace.sh"
 
+# THE UNSUPERVISED IDENTITY GATE, both modes, six files. `IDENTITY_PATHS.md`
+# rows 19-26 and `UNSUPERVISED_IDENTITY.md`. One process is one mode
+# (`GLOBAL_NUMERIC_MODE` is comptime), so every check asserts something
+# DIFFERENT in each: under FAST that the shipped arm still behaves as
+# measured and that the upstream's non-reproducibility is REPORTED, under
+# IDENTICAL that the pins are reached, that the answer does not move with
+# the launch geometry, and that a truncated propagation raises. Running one
+# mode proves half of that and reads like the whole of it.
+#
+# The mode flip is session-local with a revert trap and must never be
+# committed (E1_RUNBOOK preconditions).
+check-unsupervised-identity = "sh tools/check_unsupervised_identity.sh"
+
+# The three identity check files ALONE, in whatever mode the tree is
+# currently built for. For the loop while working on one of them; the gate
+# above is what a session should finish on.
+check-kmeans-identity = "mojo run -I . cluster/mojo_only/kmeans_identity_check.mojo"
+check-knn-identity = "mojo run -I . neighbors/mojo_only/knn_identity_check.mojo"
+check-dbscan-identity = "mojo run -I . dbscan/mojo_only/dbscan_identity_check.mojo"
+
+# THE THREE ALGORITHM SUITES, which had no task of their own until now --
+# the same defect the block above this file's `check-bin-order` describes:
+# a check nobody can run by name is a check nobody runs.
+check-kmeans = "mojo run -I . cluster/kmeans_main.mojo"
+check-knn = "mojo run -I . neighbors/knn_main.mojo"
+check-dbscan = "mojo run -I . dbscan/dbscan_main.mojo"
+check-ball-cover = "mojo run -I . neighbors/ball_cover_main.mojo"
+
+# WHAT IDENTICAL COSTS, alternated process by process because the two modes
+# are two binaries and this box drifts up to 1.7x across twenty minutes.
+# `MOJOLEARN_PRICE_ROUNDS` (default 3) sets the rounds.
+price-unsupervised-identity = "sh tools/price_unsupervised_identity.sh"
+
 # The DEPTHWISE lane's gate: `EGrowPolicy::Depthwise`, seven claims.
 #
 #   1 the bin-feature lookup table (DEVIATION 351) agrees with the

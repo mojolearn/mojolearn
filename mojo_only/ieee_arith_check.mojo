@@ -188,6 +188,13 @@ def main() raises:
     var denorm_neither = 0
     var ftz_model_hits = 0
     var ftz_model_misses = 0
+    # See THE SEPARATING SUBSET below: the patterns on which a fused and an
+    # unfused `a*b+c` actually differ, and the only ones the contraction
+    # verdict may be read off.
+    var separating = 0
+    var sep_fused = 0
+    var sep_unfused = 0
+    var sep_neither = 0
 
     for i in range(N):
         var av = ha.unsafe_ptr().unsafe_load(i)
@@ -254,6 +261,25 @@ def main() raises:
         var got_fma = q_fma.unsafe_load(i)
         var fb = _bits(ref_fused)
         var ub = _bits(ref_unfused)
+        # THE SEPARATING SUBSET, added 2026-08-23, and it changes this
+        # check's verdict rather than decorating it. The two references
+        # AGREE on the overwhelming majority of hashed patterns -- random
+        # exponents put `a * b` and `c` so far apart that one rounding and
+        # two round to the same bits -- and every such pattern was being
+        # counted as evidence of UNFUSED by the `if got == ub` arm that
+        # runs first. A backend that contracts EVERYTHING would therefore
+        # still be reported "UNFUSED" as long as the ties dominated, which
+        # is exactly what happened: the recorded 'fused 0 / unfused
+        # 1,046,394' was 1,046,394 ties and no measurement at all.
+        # Only patterns where the references DIFFER carry information.
+        if fb != ub:
+            separating += 1
+            if got_fma == fb:
+                sep_fused += 1
+            elif got_fma == ub:
+                sep_unfused += 1
+            else:
+                sep_neither += 1
         if got_fma == ub:
             unfused += 1
         elif got_fma == fb:
@@ -280,6 +306,107 @@ def main() raises:
     print(
         "  a*b+c: unfused", unfused, " fused", fused, " neither", neither,
         " (ties where both references agree count as unfused)",
+    )
+    print(
+        "  a*b+c SEPARATING patterns (the two references differ):",
+        separating,
+        " of which device fused", sep_fused,
+        " unfused", sep_unfused,
+        " neither", sep_neither,
+    )
+    # ---- ARM 6: THE PURPOSE-BUILT CONTRACTION PATTERNS -------------------
+    # Arm 5's operands are hashed bit patterns, and the count above says
+    # what that costs: ZERO of 2^20 of them separate a fused `a*b+c` from an
+    # unfused one, because random exponents put the product and the addend
+    # so far apart that both spellings round the same way. A verdict read
+    # off those patterns is a verdict about nothing, and the one this file
+    # used to print ("UNFUSED on this backend") propagated into
+    # IDENTITY_PATHS row 9 and from there into the claim that IDENTICAL's
+    # `fma` differs from FAST on Apple.
+    #
+    # These patterns separate BY CONSTRUCTION. Take `a` and `b` with
+    # half-width mantissas so their exact product needs more bits than
+    # float32 keeps, and set `c = -fl(a*b)`, the ROUNDED product negated.
+    # Then:
+    #
+    #     unfused:  fl(a*b) + (-fl(a*b))  ==  +0.0, exactly, always
+    #     fused:    a*b - fl(a*b)         ==  the rounding error, nonzero
+    #
+    # so one bit of the answer IS the contraction. Nothing about the
+    # magnitudes is delicate and no tie can hide it.
+    var sepN = 4096
+    var sa = ctx.enqueue_create_buffer[DType.float32](sepN)
+    var sb = ctx.enqueue_create_buffer[DType.float32](sepN)
+    var sc = ctx.enqueue_create_buffer[DType.float32](sepN)
+    var sbp = ctx.enqueue_create_buffer[DType.float32](sepN)
+    var s_div = ctx.enqueue_create_buffer[DType.float32](sepN)
+    var s_sqrt = ctx.enqueue_create_buffer[DType.float32](sepN)
+    var s_l2 = ctx.enqueue_create_buffer[DType.float32](sepN)
+    var s_cos = ctx.enqueue_create_buffer[DType.float32](sepN)
+    var s_out = ctx.enqueue_create_buffer[DType.float32](sepN)
+    var hsa = ctx.enqueue_create_host_buffer[DType.float32](sepN)
+    var hsb = ctx.enqueue_create_host_buffer[DType.float32](sepN)
+    var hsc = ctx.enqueue_create_host_buffer[DType.float32](sepN)
+    var hsbp = ctx.enqueue_create_host_buffer[DType.float32](sepN)
+    var hs_out = ctx.enqueue_create_host_buffer[DType.float32](sepN)
+    ctx.synchronize()
+
+    for i in range(sepN):
+        var h1 = _splitmix(UInt64(i) + UInt64(0xC0FFEE))
+        var h2 = _splitmix(UInt64(i) + UInt64(0xBEEF01))
+        var av2 = Float32(1.0) + Float32(Int(h1 & UInt64(0xFFF))) / Float32(
+            4096.0
+        )
+        var bv2 = Float32(1.0) + Float32(Int(h2 & UInt64(0xFFF))) / Float32(
+            4096.0
+        )
+        # ONE multiply, standing alone: nothing for a compiler to contract
+        # it into, on any host.
+        var prod = av2 * bv2
+        hsa.unsafe_ptr().unsafe_store(i, av2)
+        hsb.unsafe_ptr().unsafe_store(i, bv2)
+        hsc.unsafe_ptr().unsafe_store(i, -prod)
+        hsbp.unsafe_ptr().unsafe_store(i, Float32(1.0))
+    ctx.enqueue_copy(dst_buf=sa, src_ptr=hsa.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=sb, src_ptr=hsb.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=sc, src_ptr=hsc.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=sbp, src_ptr=hsbp.unsafe_ptr())
+    ctx.synchronize()
+    ctx.enqueue_function[arith_kernel](
+        sa.unsafe_ptr(), sb.unsafe_ptr(), sc.unsafe_ptr(), sbp.unsafe_ptr(),
+        s_div.unsafe_ptr(), s_sqrt.unsafe_ptr(), s_l2.unsafe_ptr(),
+        s_cos.unsafe_ptr(), s_out.unsafe_ptr(), Int32(sepN),
+        grid_dim=((sepN + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+    )
+    ctx.synchronize()
+    ctx.enqueue_copy(dst_ptr=hs_out.unsafe_ptr(), src_buf=s_out)
+    ctx.synchronize()
+
+    var built_sep = 0
+    var built_fused = 0
+    var built_unfused = 0
+    var built_neither = 0
+    for i in range(sepN):
+        var av2 = hsa.unsafe_ptr().unsafe_load(i)
+        var bv2 = hsb.unsafe_ptr().unsafe_load(i)
+        var cv2 = hsc.unsafe_ptr().unsafe_load(i)
+        var ref_f = fma(av2, bv2, cv2)
+        if _bits(ref_f) == _bits(Float32(0.0)):
+            # the product was exact; this pattern carries no information
+            continue
+        built_sep += 1
+        var got = _bits(hs_out.unsafe_ptr().unsafe_load(i))
+        if got == _bits(ref_f):
+            built_fused += 1
+        elif got == _bits(Float32(0.0)):
+            built_unfused += 1
+        else:
+            built_neither += 1
+    print(
+        "  a*b+c BUILT-TO-SEPARATE patterns:", built_sep,
+        " device fused", built_fused,
+        " unfused", built_unfused,
+        " neither", built_neither,
     )
     print(
         "  ftz model: reproduces", ftz_model_hits, "of",
@@ -321,7 +448,17 @@ def main() raises:
         )
     print(
         "  contraction: a*b+c is",
-        "UNFUSED" if fused == 0 else "FUSED" if unfused == 0 else "MIXED",
+        (
+            "UNMEASURED (nothing separated the two spellings)"
+            if (separating + built_sep) == 0
+            else "FUSED" if (sep_unfused + built_unfused) == 0
+            else "UNFUSED" if (sep_fused + built_fused) == 0
+            else "MIXED"
+        ),
+        "-- read off the",
+        separating + built_sep,
+        "patterns that SEPARATE the two spellings, never the",
+        "tie-dominated totals above",
         "on this backend",
     )
 

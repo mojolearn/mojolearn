@@ -62,10 +62,20 @@ than there are slots left. Two runs on one device can return different
 neighbors of equal distance.
 
 That is a real property of the upstream and it is NOT fixed here, because
-fixing it is an improvement on RAFT and this tree's rule is that improvements
-wait for the measurement. What it costs is worth stating: an `IDENTICAL`
+fixing it is an improvement on RAFT and improvements do not belong in
+`ported/`. What it costs was worth stating and used to end: "an `IDENTICAL`
 column cannot cover k-NN indices without an index tie-break that RAFT does
-not have, and adding one is cheap. Recorded, not done.
+not have, and adding one is cheap. Recorded, not done."
+
+**DONE 2026-08-23, BESIDE THIS FILE RATHER THAN IN IT.**
+`neighbors/mojo_only/select_radix_identical.mojo` runs the same passes over
+a 64-bit `(twiddle_in(distance) << 32) | index` composite key -- a total
+order in which the tie class does not exist -- and rewrites every output
+slot from a rank instead of an atomic arrival (DEVIATIONS 500 and 501,
+IDENTITY_PATHS row 11). `tiled_brute_force_knn` dispatches to it under
+`NUMERIC_IDENTICAL` and to THIS kernel, unchanged, under `NUMERIC_FAST`.
+The two files are meant to be read together: this one is what RAFT does,
+that one is what an identical column needs.
 
 DEVIATIONS
 ----------
