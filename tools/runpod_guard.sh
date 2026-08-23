@@ -139,10 +139,20 @@ cmd_arm() {
 #!/bin/sh
 # Installed by tools/runpod_guard.sh. Terminates THIS POD at the deadline.
 sleep SECONDS_PLACEHOLDER
-curl -fsS -X DELETE \"https://rest.runpod.io/v1/pods/POD_PLACEHOLDER\" \
-     -H \"Authorization: Bearer \$RUNPOD_API_KEY\" >/tmp/mojolearn-lease.out 2>&1
+# v2 first (v1 is deprecated), v1 as a FALLBACK. Two endpoints because this
+# is the only thing standing between an orphan and the bill, and an API
+# deprecation that silently 404s would disarm every lease at once. Both were
+# confirmed answering 200 with this account on 2026-08-23.
+for u in \"https://api.runpod.io/v2/pods/POD_PLACEHOLDER\" \
+         \"https://rest.runpod.io/v1/pods/POD_PLACEHOLDER\"; do
+    code=\$(curl -s -o /tmp/mojolearn-lease.body -w '%{http_code}' \
+            -X DELETE \"\$u\" -H \"Authorization: Bearer \$RUNPOD_API_KEY\")
+    echo \"\$(date -u +%FT%TZ) DELETE \$u -> \$code\" >> /tmp/mojolearn-lease.out
+    case \"\$code\" in 2*) exit 0 ;; esac
+done
+echo \"\$(date -u +%FT%TZ) ALL DELETE ENDPOINTS FAILED\" >> /tmp/mojolearn-lease.out
 WATCHDOG
-        sed -i \"s/SECONDS_PLACEHOLDER/$secs/; s/POD_PLACEHOLDER/$pod/\" \
+        sed -i \"s/SECONDS_PLACEHOLDER/$secs/g; s/POD_PLACEHOLDER/$pod/g\" \
             /tmp/mojolearn-lease.sh
         chmod 700 /tmp/mojolearn-lease.sh
         RUNPOD_API_KEY='$RUNPOD_API_KEY' nohup /tmp/mojolearn-lease.sh \
@@ -242,7 +252,7 @@ cmd_reap() {
         now=$(date -u +%s)
         if [ -n "$force" ] || [ "$now" -ge "$deadline_epoch" ]; then
             echo "terminating $pod ..."
-            curl -fsS -X DELETE "https://rest.runpod.io/v1/pods/$pod" \
+            curl -fsS -X DELETE "https://api.runpod.io/v2/pods/$pod" \
                 -H "Authorization: Bearer $RUNPOD_API_KEY" >/dev/null \
                 && { echo "  terminated"; rm -f "$f"; } \
                 || echo "  FAILED -- terminate $pod by hand in the console"
