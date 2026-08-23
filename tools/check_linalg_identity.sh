@@ -88,13 +88,30 @@ fi
 # inside ANOTHER session's flip window and print "FAST" over IDENTICAL
 # numbers -- the race DEVIATION 514 was opened for, from the other side.
 echo "== NUMERIC_FAST (the shipped build) =="
+# BOTH PASSES ALWAYS RUN (2026-08-23). Until then a FAST-pass failure ended
+# the script before the IDENTICAL pass, and on every H100/MI325X leg through
+# leg 9 some Apple-shaped FAST assertion did exactly that -- so the
+# IDENTICAL pass, which is the pass the cross-vendor claim rests on, never
+# ran on a box. The two passes answer different questions (FAST: the shipped
+# arm on this vendor; IDENTICAL: the pinned arm is reached and right); each
+# is recorded on its own and the exit status is the OR of the two.
+set +e
 MOJOLEARN_LINALG_INNER=1 MOJOLEARN_MOJO_DEFINES= MOJOLEARN_NUMERIC_MODE=fast tools/with_build_lock.sh "$0"
+fast_rc=$?
+[ $fast_rc = 0 ] || echo "linear-algebra identity: FAST pass FAILED (rc=$fast_rc) -- recorded; the IDENTICAL pass runs regardless"
 
 echo
-echo "== NUMERIC_IDENTICAL (session-local flip, reverted on exit) =="
+echo "== NUMERIC_IDENTICAL (build define, session-local) =="
 MOJOLEARN_LINALG_INNER=1 tools/with_identical_mode.sh "$0"
+ident_rc=$?
+[ $ident_rc = 0 ] || echo "linear-algebra identity: IDENTICAL pass FAILED (rc=$ident_rc)"
 
 echo
-echo "linear-algebra identity: both modes green."
+if [ $fast_rc = 0 ] && [ $ident_rc = 0 ]; then
+  echo "linear-algebra identity: both modes green."
+else
+  echo "linear-algebra identity: FAST rc=$fast_rc, IDENTICAL rc=$ident_rc -- NOT both green (read each pass's lines above)"
+fi
 echo "Reminder: this is ONE DEVICE. Cross-vendor identity is E1's to"
 echo "measure; see IDENTITY_PATHS.md and E1_RUNBOOK.md."
+[ $fast_rc = 0 ] && [ $ident_rc = 0 ]

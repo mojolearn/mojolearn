@@ -204,12 +204,20 @@ def check_column_stats_row_is_pinned() raises:
             " pinned as a float fold. It moves data and folds nothing;"
             " pinning it costs speed for no identity."
         )
-    if lib_block_bounds_a_float_fold[K_LIB_JACOBI_EIGH]():
+    # K_LIB_JACOBI_EIGH IS listed since 2026-08-23 (the fold was fixed
+    # first -- DEVIATION 511/524, `pinned_block_sum` -- and then the row
+    # went NUMERIC so that AMD's FAST Jacobi could read its 64-wide
+    # wavefront while IDENTICAL keeps the floor's 32 on every vendor).
+    # Until then this check asserted the OPPOSITE and was the sentence the
+    # kernel_matrix docstring deleted; `check_jacobi_fold_width_is_pinned`
+    # owns the per-mode expectation now. Asserted here so that un-listing
+    # it again is loud.
+    if not lib_block_bounds_a_float_fold[K_LIB_JACOBI_EIGH]():
         raise Error(
-            "check_column_stats_row_is_pinned: K_LIB_JACOBI_EIGH is now"
-            " pinned here. Its 32 is a LANE WIDTH, not a scheduling"
-            " choice, so the fix there is the fold -- DEVIATION 511, not"
-            " this table."
+            "check_column_stats_row_is_pinned: K_LIB_JACOBI_EIGH is no"
+            " longer classified as a float fold. Its width is the fold's"
+            " AND the stride of the per-thread partials; unclassifying it"
+            " lets a FAST vendor number (AMD = 64) reach an IDENTICAL build."
         )
     if lib_block_bounds_a_float_fold[K_LIB_GEMM_CONTRACTION]():
         raise Error(

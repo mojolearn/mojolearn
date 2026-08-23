@@ -83,13 +83,30 @@ fi
 # binary and prints "FAST", because `_mode_name()` reads the constant it was
 # compiled against. Both arms hold the lock, so the two cannot interleave.
 echo "== NUMERIC_FAST (the shipped build) =="
-MOJOLEARN_UNSUP_INNER=1 MOJOLEARN_MOJO_DEFINES= MOJOLEARN_NUMERIC_MODE=fast tools/with_build_lock.sh "$0" || exit 1
+# BOTH PASSES ALWAYS RUN (2026-08-23). Until then a FAST-pass failure ended
+# the script before the IDENTICAL pass, and on every H100/MI325X leg through
+# leg 9 some Apple-shaped FAST assertion did exactly that -- so the
+# IDENTICAL pass, which is the pass the cross-vendor claim rests on, never
+# ran on a box. The two passes answer different questions (FAST: the shipped
+# arm on this vendor; IDENTICAL: the pinned arm is reached and right); each
+# is recorded on its own and the exit status is the OR of the two.
+set +e
+MOJOLEARN_UNSUP_INNER=1 MOJOLEARN_MOJO_DEFINES= MOJOLEARN_NUMERIC_MODE=fast tools/with_build_lock.sh "$0"
+fast_rc=$?
+[ $fast_rc = 0 ] || echo "unsupervised identity: FAST pass FAILED (rc=$fast_rc) -- recorded; the IDENTICAL pass runs regardless"
 
 echo
-echo "== NUMERIC_IDENTICAL (session-local flip, reverted on exit) =="
+echo "== NUMERIC_IDENTICAL (build define, session-local) =="
 MOJOLEARN_UNSUP_INNER=1 tools/with_identical_mode.sh "$0"
+ident_rc=$?
+[ $ident_rc = 0 ] || echo "unsupervised identity: IDENTICAL pass FAILED (rc=$ident_rc)"
 
 echo
-echo "unsupervised identity: both modes green."
+if [ $fast_rc = 0 ] && [ $ident_rc = 0 ]; then
+  echo "unsupervised identity: both modes green."
+else
+  echo "unsupervised identity: FAST rc=$fast_rc, IDENTICAL rc=$ident_rc -- NOT both green (read each pass's lines above)"
+fi
 echo "Reminder: this is ONE DEVICE. Cross-vendor identity is E1's to"
 echo "measure; see IDENTITY_PATHS.md and E1_RUNBOOK.md."
+[ $fast_rc = 0 ] && [ $ident_rc = 0 ]

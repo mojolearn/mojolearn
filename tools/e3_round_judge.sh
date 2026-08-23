@@ -77,8 +77,8 @@ for arm in kmeans knn dbscan; do
     a="$REF/e1u/$arm.card"; b="$d/e1u/$arm.card"
     if [ ! -f "$a" ] || [ ! -f "$b" ]; then echo "  $arm APPLE vs $(label_of "$d"): card MISSING"; RC=1; continue; fi
     out="$(python3 tools/identity_trace_diff.py "$a" "$b" 2>&1)"; r=$?
-    n="$(grep -c . "$a")"
-    if [ $r = 0 ]; then echo "  $arm APPLE vs $(label_of "$d"): IDENTICAL ($(echo "$out" | grep -oE '[0-9]+ stages' | head -1))"
+    n="$(grep -vc '^#\|^$' "$a")"
+    if [ $r = 0 ]; then echo "  $arm APPLE vs $(label_of "$d"): IDENTICAL ($n stages)"
     else echo "  $arm APPLE vs $(label_of "$d"): DIVERGENT"; echo "$out" | head -6 | sed 's/^/      /'; RC=1; fi
   done
 done
