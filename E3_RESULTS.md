@@ -177,10 +177,47 @@ What this round added beyond the verdict:
   and clean fit, Bayesian `bagging_temperature` 0 and 3, `Simple` leaves on
   Logloss and Quantile): 116 tree cells.
 
+## Round 9, commit `b943103` (2026-08-23): 116 tree cells, both directions, still closed
+
+| family | cells | Apple vs H100 | Apple vs MI325X |
+|---|---|---|---|
+| decision trees (+6 cells: `nan_mode='Forbidden'` refusal and clean fit, Bayesian `bagging_temperature` 0 and 3, `Simple` leaves on Logloss and Quantile) | 116 | **116 identical** (109 / 2 / 5 same refusal) | **116 identical** (109 / 2 / 5) |
+| unsupervised + linear | 80 | **80 identical** | **80 identical** |
+| E1U cards | 3 | **3/3** | **3/3** |
+| train-here-infer-there, BOTH directions | 111 | **111/111** and **111/111** | **111/111** and **111/111** |
+
+157,018 matched tree stage pairs, 17,492 unsupervised, zero disagreeing.
+First time on a box: the unsupervised identity gate's IDENTICAL pass ran
+and was green on the MI325X ("unsupervised identity: both modes green").
+The linalg gate's IDENTICAL pass was still aborted by one stale FAST
+assertion (`check_column_stats_row_is_pinned` insisting the Jacobi row is
+NOT numeric — the opposite of `b943103`); fixed in `5bb66ec`, and the
+gate scripts now run BOTH passes unconditionally so a FAST finding can
+never again hide the IDENTICAL pass. One last M4-only expectation
+(`knn_check`'s 32 KB threadgroup wall; the H100's is 48 KB) fixed in
+`a4ff922` by compiling the NVIDIA column on Metal, which is a cheap way to
+flush Apple-shaped assertions before a leg.
+
+**AMD FAST, measured:** `bindings/build_estimators.sh` now BUILDS on the
+MI325X under FAST (the Jacobi row at 64 worked), so FAST PCA/tSVD/OLS exist
+there for the first time. `bindings/build_gbdt.sh` under FAST does NOT,
+and never has: the FAST histogram accumulators
+(`gbdt/.../hist_one_byte.mojo:202`, `hist_2_one_byte_base.mojo:240`,
+`point_hist_half_byte_template.mojo:163`) carry CatBoost's 32-lane slice
+layout and refuse a 64-wide wavefront at compile time, by design
+("write the wide-wavefront layout before letting LANE_WIDTH be 64").
+IDENTICAL builds and certifies on AMD because its column resolves to the
+32-lane identity floor. **FAST gradient boosting on AMD is therefore a
+port (a 64-lane histogram layout for three accumulators), not a gate
+fix**, and the bootstrap now keeps each FAST build's log with the first
+error line instead of a bare "did not build".
+
 ## Owed
 
-1. The phase-6 IDENTICAL gate pass on both boxes (one leg after the gate
-   fixes above), and AMD's FAST estimators build with the Jacobi row at 64.
-2. The gemm Phase 2b adoption decision (k-NN IDENTICAL price; the gemm
-   lane's price harness is wired, no number published yet).
-3. A Mac→box cross-inference re-run (the `ad90dfe` round's 106/106 stands).
+1. The linalg gate's IDENTICAL pass on both boxes (one leg; the scripts
+   now run it regardless of the FAST pass).
+2. FAST gradient boosting on AMD: the 64-lane histogram layout (a port;
+   IDENTICAL is unaffected and certified).
+3. The gemm Phase 2b adoption decision (k-NN IDENTICAL price; the gemm
+   lane's price harness is wired, no number published; no measuring
+   today by Andrew's word).

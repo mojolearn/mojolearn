@@ -1,0 +1,9 @@
+{
+  "kind": "dbscan",
+  "refused": "NotImplementedError: mojolearn DBSCAN: sample_weight is not ported (dbscan/estimator.mojo, WHAT IS NOT HERE YET)",
+  "seconds": 0.0,
+  "spec": {
+    "eps": 0.3,
+    "min_samples": 5
+  }
+}

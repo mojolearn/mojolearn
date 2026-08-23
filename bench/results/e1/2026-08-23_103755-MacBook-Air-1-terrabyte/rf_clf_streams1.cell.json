@@ -1,0 +1,13 @@
+{
+  "card": "rf_clf_streams1.card",
+  "kind": "rf_clf",
+  "model": "00fa141590eacac3e958bb08f2c75ef9ddad54567cec49bbd0712defd6ff9326",
+  "predictions": "3c29f7f1414adf20d70566924cf39774818752e0baa8a589ddc505cb0b28bb08",
+  "seconds": 0.32,
+  "spec": {
+    "max_depth": 8,
+    "n_estimators": 10,
+    "n_streams": 1,
+    "random_state": 7
+  }
+}

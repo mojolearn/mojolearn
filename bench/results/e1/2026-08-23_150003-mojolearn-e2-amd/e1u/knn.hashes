@@ -1,0 +1,9 @@
+arm knn
+mode IDENTICAL
+column 3 lane_width 64
+input.index 7900684798707350708
+input.queries 17351274754253287356
+query_tile 256
+output.distances 9794987834769335813
+output.indices 16793617586120664034
+done knn

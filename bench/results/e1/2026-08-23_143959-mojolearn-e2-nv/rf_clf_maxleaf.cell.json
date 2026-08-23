@@ -1,0 +1,13 @@
+{
+  "card": "rf_clf_maxleaf.card",
+  "kind": "rf_clf",
+  "model": "9897291fb016312127c3e733e3b0eee1b07427ab0a1254f1a734e982a29baf43",
+  "predictions": "aebdb9c5198b57dfe28391edbefb27b1968c5f02d753d2c2ab130751b8b58ea4",
+  "seconds": 0.63,
+  "spec": {
+    "max_depth": 8,
+    "max_leaf_nodes": 64,
+    "n_estimators": 10,
+    "random_state": 7
+  }
+}

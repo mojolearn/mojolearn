@@ -1,0 +1,13 @@
+{
+  "card": "rf_clf_entropy.card",
+  "kind": "rf_clf",
+  "model": "01ad2d6fccee9885f1112ade25588ee70a9f7a481153002b166dc3f6b025ba3c",
+  "predictions": "cbcc008cdf18cf8810c2253c163e24b20f8f1d0561d1e58c1c78c846b1b67d9f",
+  "seconds": 0.39,
+  "spec": {
+    "criterion": "entropy",
+    "max_depth": 8,
+    "n_estimators": 10,
+    "random_state": 7
+  }
+}

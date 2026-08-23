@@ -1,0 +1,18 @@
+{
+  "best_iteration": 0,
+  "card": "gbdt_quantile.card",
+  "kind": "gbdt",
+  "loss_curve": "abe00a6c092ac740f96e2fa6e5fa8e056d9d4d35a303202528e7dd41cc339b08",
+  "model": "85d0acc60e4b7c2f7f91c24055c26daee3c1f0b204662daf0f4b3e6ee0b148b6",
+  "predictions": "5de10fd9c688a6f2b5148d152552d0194e67c52263505afa1ef83fb130c74d1a",
+  "seconds": 0.6,
+  "spec": {
+    "border_count": 128,
+    "learning_rate": 0.3,
+    "loss": "Quantile",
+    "max_depth": 6,
+    "n_estimators": 20,
+    "random_state": 7
+  },
+  "stopped_early": 0
+}

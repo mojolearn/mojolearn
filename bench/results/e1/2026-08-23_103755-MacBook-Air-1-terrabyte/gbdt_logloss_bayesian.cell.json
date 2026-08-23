@@ -1,0 +1,19 @@
+{
+  "best_iteration": 0,
+  "card": "gbdt_logloss_bayesian.card",
+  "kind": "gbdt",
+  "loss_curve": "d866bd9e3de21acdff5e5263b5f20341c6dc077492d0dd21b1181715a58ec799",
+  "model": "4620bb0ef6bc89d71fe4959bc0e70b73b1336693e75d2ce812d0d03d1933dcff",
+  "predictions": "80b7b4aa26bcf7a80f0b389d5bbae580f00e50863f9a912fb1a8a8295e62151a",
+  "seconds": 1.01,
+  "spec": {
+    "bootstrap_type": "Bayesian",
+    "border_count": 128,
+    "learning_rate": 0.3,
+    "loss": "Logloss",
+    "max_depth": 6,
+    "n_estimators": 20,
+    "random_state": 7
+  },
+  "stopped_early": 0
+}

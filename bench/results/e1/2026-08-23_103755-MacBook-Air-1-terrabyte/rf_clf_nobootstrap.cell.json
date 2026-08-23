@@ -1,0 +1,13 @@
+{
+  "card": "rf_clf_nobootstrap.card",
+  "kind": "rf_clf",
+  "model": "b4501b8f7e8ae20afa92294d0d4a157af414b2ff9e2ada826c829ae1af4bcab2",
+  "predictions": "8085a1614aabd113c1ef4f63d91cca1ac43d13430a412427285bd7bd3fe67c5b",
+  "seconds": 0.3,
+  "spec": {
+    "bootstrap": false,
+    "max_depth": 8,
+    "n_estimators": 10,
+    "random_state": 7
+  }
+}

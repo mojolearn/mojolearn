@@ -93,8 +93,16 @@ done
 # is tolerated: the selector never touches it under identical)
 if [ ! -f python/mojolearn/_mojolearn.so ]; then
   for b in build.sh build_estimators.sh build_gbdt.sh build_rf.sh build_trees.sh; do
-    MOJOLEARN_NUMERIC_MODE=fast MOJOLEARN_SKIP_BUILD_GATE=1 pixi run -e gbmbench bash "bindings/$b" >/dev/null 2>&1 \
-      || echo "note: FAST bindings/$b did not build here (expected on AMD)"
+    # keep the output: "did not build" without the first error line cost a
+    # leg (2026-08-23). Known on AMD: build_gbdt.sh -- the FAST histogram
+    # accumulators are CatBoost's 32-lane slice layout and refuse a 64-wide
+    # wavefront at compile time (hist_one_byte.mojo:202, hist_2_one_byte_base
+    # .mojo:240, point_hist_half_byte_template.mojo:163); build_estimators.sh
+    # built once K_LIB_JACOBI_EIGH went numeric (b943103).
+    if ! MOJOLEARN_NUMERIC_MODE=fast MOJOLEARN_SKIP_BUILD_GATE=1 pixi run -e gbmbench bash "bindings/$b" > "$OUT/fast_build_${b%.sh}.log" 2>&1; then
+      echo "note: FAST bindings/$b did not build here; first error:"
+      grep -m2 -E 'error:|constraint failed' "$OUT/fast_build_${b%.sh}.log" | cut -c1-200 | sed 's/^/      /'
+    fi
   done
 fi
 PYTHONPATH="$REPO/python" pixi run -e gbmbench python3 tools/e1_traced_fit.py "$OUT" \
