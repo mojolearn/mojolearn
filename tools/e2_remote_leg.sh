@@ -129,6 +129,11 @@ $SSH 'export PATH=/root/.pixi/bin:$PATH; cd /root/mojolearn && bash tools/e1_boo
 # run's models (MAC_REF_DIR, optional) are loaded on the box with the
 # IDENTICAL .so the bootstrap just built and predicted there. The box ->
 # Mac direction runs on the Mac after the fetch.
+# MAC_REF_GLOB resolves LATE (the Mac reference run may still be writing
+# when this leg starts; its stamped directory name is unknown up front)
+if [ -n "${MAC_REF_GLOB:-}" ]; then
+  MAC_REF_DIR="$(ls -td $MAC_REF_GLOB 2>/dev/null | head -1)"
+fi
 if [ -n "${MAC_REF_DIR:-}" ] && [ -d "$MAC_REF_DIR" ]; then
   log "cross-infer: Mac models on the box"
   rsync -az --include '*.model.npz' --include '*.json' --exclude '*' "$MAC_REF_DIR/" "root@$IP:/root/mac_ref/" \
