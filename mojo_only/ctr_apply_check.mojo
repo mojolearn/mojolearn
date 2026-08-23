@@ -130,6 +130,76 @@ def _spread(v: List[Float32]) -> Float32:
     return hi - lo
 
 
+def _device_vs_tally(
+    label: String, refv: List[Float32], dev: List[Float32], n: Int
+) raises -> Int:
+    """The device evaluator against a host tally, honestly. Returns the
+    number of rows that differ in BITS and prints one line: "== bitwise"
+    when that is 0, otherwise RECORDED with the magnitude; RAISES only when
+    a row is more than 64 ulp of the tally away, which is where a wrong CTR
+    column (an O(1) move) lands and a summation order never does.
+
+    Measured 2026-08-23 on the M4 before this helper existed: the
+    FeatureFreq model below differed on 2297 of 4096 learn rows, worst
+    1.9e-6 on values ~0.6 (about 30 ulp), 1974 within 2 ulp; on new rows
+    578 of 1024. That is the evaluator's own accumulation -- their
+    tree-parallel reduce with the bias as the seed (`evaluator.mojo`) --
+    against the tally's sequential float32 walk from the same bias. Two
+    summation orders were never going to be bit-equal on every model, and
+    the old `== bitwise` claim here was red at HEAD for that reason alone
+    (the same models' HOST apply IS bit-equal to the tally, and the
+    Python surface predicts through the host apply)."""
+    # The ulp budget is taken at the tally's LARGEST magnitude, not per
+    # row: a row whose trees cancel to near zero carries the rounding of
+    # the partial sums that cancelled (k = 31 in the one-hot sweep: 33 rows
+    # "beyond 64 ulp" of a near-zero result at an absolute 4.8e-7), and a
+    # wrong column still moves a row by O(1), four orders above this.
+    var scale = Float32(0.0)
+    for r in range(n):
+        if abs(refv[r]) > scale:
+            scale = abs(refv[r])
+    var bound = Float32(64.0) * scale * Float32(1.1920929e-07)
+    var wrong = 0
+    var worst = Float32(0.0)
+    var first = -1
+    var within2 = 0
+    var over = 0
+    for r in range(n):
+        if not _same_f32(refv[r], dev[r]):
+            wrong += 1
+            var d = abs(refv[r] - dev[r])
+            var ulp = abs(refv[r]) * Float32(1.1920929e-07)
+            if d > worst:
+                worst = d
+            if first < 0:
+                first = r
+            if d <= Float32(2.0) * ulp:
+                within2 += 1
+            if d > bound + Float32(1e-30):
+                over += 1
+    if wrong == 0:
+        print("      " + label + ": device evaluator == the tally on all",
+              n, "rows, bitwise")
+        return 0
+    var msg = (
+        label + ": device evaluator differs from the tally in BITS on "
+        + String(wrong) + " of " + String(n) + " rows; worst |diff| "
+        + String(worst) + ", " + String(within2)
+        + " within 2 ulp; first row " + String(first) + ": tally "
+        + f32_token(refv[first]) + " device " + f32_token(dev[first])
+    )
+    if over != 0:
+        raise Error(
+            msg + "; " + String(over)
+            + " rows beyond 64 ulp of the tally's largest magnitude ("
+            + String(bound) + ") -- a CTR column, not a summation order"
+        )
+    print("      " + msg + " -- RECORDED, every row within "
+          + String(bound) + " = 64 ulp of the tally's largest magnitude"
+          " (summation order, not a column)")
+    return wrong
+
+
 def _count_mismatch(
     a: List[Float32], b: List[Float32], n: Int
 ) raises -> Int:
@@ -966,19 +1036,9 @@ def check_hand_built(ctx: DeviceContext) raises:
 
     _assert_evaluator_is_a_comparator(ctx, back, x, n)
     var dev = evaluator_predict(ctx, back, x, n)
-    var wrong_dev = _count_mismatch(ref_p, dev, n)
-    if wrong_dev != 0:
-        for r in range(n):
-            if not _same_f32(ref_p[r], dev[r]):
-                raise Error(
-                    "the DEVICE evaluator disagrees with the independent"
-                    " tally on " + String(wrong_dev) + " of " + String(n)
-                    + " rows; first at row " + String(r) + ": tally "
-                    + f32_token(ref_p[r]) + " evaluator "
-                    + f32_token(dev[r])
-                )
-    print("      device evaluator == the same tally on all", n,
-          "rows, bitwise (its XorMask one-hot arm and its CTR columns)")
+    _ = _device_vs_tally(
+        String("learn rows (XorMask one-hot arm + CTR columns)"), ref_p, dev, n
+    )
 
     var packed = pack_model_for_evaluator(ctx, back.model)
     if not packed.need_xor_mask:
@@ -1157,13 +1217,7 @@ def check_trained(ctx: DeviceContext) raises:
 
     _assert_evaluator_is_a_comparator(ctx, back, x, n)
     var dev = evaluator_predict(ctx, back, x, n)
-    var wrong_dev = _count_mismatch(ref_p, dev, n)
-    if wrong_dev != 0:
-        raise Error(
-            "the DEVICE evaluator disagrees with the tally on "
-            + String(wrong_dev) + " of " + String(n) + " rows"
-        )
-    print("      device evaluator == the same tally on all", n, "rows")
+    _ = _device_vs_tally(String("learn rows (FeatureFreq)"), ref_p, dev, n)
 
     # NEW ROWS, including categories the learn pool never saw
     var n2 = 1024
@@ -1195,12 +1249,7 @@ def check_trained(ctx: DeviceContext) raises:
             + String(wrong_new) + " of " + String(n2) + " rows"
         )
     var dev_new = evaluator_predict(ctx, back, xn, n2)
-    var wrong_dev_new = _count_mismatch(ref_new, dev_new, n2)
-    if wrong_dev_new != 0:
-        raise Error(
-            "on NEW rows the device evaluator disagrees with the tally on "
-            + String(wrong_dev_new) + " of " + String(n2) + " rows"
-        )
+    _ = _device_vs_tally(String("NEW rows (FeatureFreq)"), ref_new, dev_new, n2)
     print("      NEW rows (", unseen, "of", n2, "carrying a category the"
           " learn pool never saw): host and device both == the tally,"
           " bitwise; spread", _spread(host_new))
@@ -1291,7 +1340,10 @@ def borders_reference_score(
                 if v > tm.borders[c][k2]:
                     b += 1
             bins[c] = b
-        var acc = Float32(0.0)
+        # the same SetBias seed `reference_score` takes (the Borders
+        # tally was left at 0 when that was fixed, and disagreed with the
+        # host apply by exactly the bias on every row; 2026-08-23)
+        var acc = Float32(tm.model.bias)
         for t2 in range(tm.model.size()):
             ref w = tm.model.weak_models[t2]
             var leaf = 0
@@ -1601,13 +1653,7 @@ def check_trained_borders(ctx: DeviceContext) raises:
 
     _assert_evaluator_is_a_comparator(ctx, back, x, n)
     var dev = evaluator_predict(ctx, back, x, n)
-    var wrong_dev = _count_mismatch(ref_p, dev, n)
-    if wrong_dev != 0:
-        raise Error(
-            "the DEVICE evaluator disagrees with the Borders tally on "
-            + String(wrong_dev) + " of " + String(n) + " rows"
-        )
-    print("      device evaluator == the same tally on all", n, "rows")
+    _ = _device_vs_tally(String("learn rows (Borders)"), ref_p, dev, n)
 
     # THE ORDERED-VERSUS-FINAL GAP, measured rather than assumed. A
     # FeatureFreq model's apply reproduces its fit bit for bit; a Borders
@@ -1657,11 +1703,7 @@ def check_trained_borders(ctx: DeviceContext) raises:
             " on " + String(wrong_new) + " of " + String(n2) + " rows"
         )
     var dev_new = evaluator_predict(ctx, back, xn, n2)
-    if _count_mismatch(ref_new, dev_new, n2) != 0:
-        raise Error(
-            "on NEW rows the device evaluator disagrees with the Borders"
-            " tally"
-        )
+    _ = _device_vs_tally(String("NEW rows (Borders)"), ref_new, dev_new, n2)
 
     # and the unseen value itself, per table, read off the model
     for k in range(len(tm.ctr_tables)):
@@ -1753,7 +1795,9 @@ def check_borders_sweep(ctx: DeviceContext) raises:
         var host = predict_floats(ctx, back, x, n)
         _assert_evaluator_is_a_comparator(ctx, back, x, n)
         var dev = evaluator_predict(ctx, back, x, n)
-        var wrong_dev = _count_mismatch(host, dev, n)
+        var wrong_dev = _device_vs_tally(
+            String("k = ") + String(k) + " (device vs host apply)", host, dev, n
+        )
         var wrong = 0
         var classes = 0
         if is_one_hot_arm:
@@ -1776,12 +1820,12 @@ def check_borders_sweep(ctx: DeviceContext) raises:
             wrong = _count_mismatch(
                 borders_reference_score(back, plan, x, n), host, n
             )
-        if wrong != 0 or wrong_dev != 0:
+        if wrong != 0:
             raise Error(
                 "k = " + String(k) + ": host wrong on " + String(wrong)
-                + " against the tally, device wrong on "
-                + String(wrong_dev) + " against the host, of " + String(n)
-                + " rows"
+                + " against the tally (device vs host: "
+                + String(wrong_dev) + " rows differ in bits, recorded above), of "
+                + String(n) + " rows"
             )
         print(
             "      k =", k,
@@ -1865,15 +1909,18 @@ def check_one_hot_sweep(ctx: DeviceContext) raises:
         var wrong = _count_mismatch(ref_p, host, n)
         _assert_evaluator_is_a_comparator(ctx, back, x, n)
         var dev = evaluator_predict(ctx, back, x, n)
-        var wrong_dev = _count_mismatch(ref_p, dev, n)
-        if wrong != 0 or wrong_dev != 0:
+        var wrong_dev = _device_vs_tally(
+            String("k = ") + String(k), ref_p, dev, n
+        )
+        if wrong != 0:
             raise Error(
                 "k = " + String(k) + ": host wrong on " + String(wrong)
                 + ", device wrong on " + String(wrong_dev) + " of "
                 + String(n) + " rows against the tally"
             )
         print("      k =", k, " folds", tm.fold_counts[1], " one-hot splits",
-              take_bin, " host and device both == tally on all", n, "rows")
+              take_bin, " host == tally on all", n, "rows; device",
+              "bitwise too" if wrong_dev == 0 else "within 64 ulp (recorded)")
 
 
 def check_ctr_sweep(ctx: DeviceContext) raises:
@@ -1967,8 +2014,10 @@ def check_ctr_sweep(ctx: DeviceContext) raises:
         var wrong = _count_mismatch(ref_p, host, n)
         _assert_evaluator_is_a_comparator(ctx, back, x, n)
         var dev = evaluator_predict(ctx, back, x, n)
-        var wrong_dev = _count_mismatch(ref_p, dev, n)
-        if wrong != 0 or wrong_dev != 0:
+        var wrong_dev = _device_vs_tally(
+            String("k = ") + String(k), ref_p, dev, n
+        )
+        if wrong != 0:
             raise Error(
                 "k = " + String(k) + ": host wrong on " + String(wrong)
                 + ", device wrong on " + String(wrong_dev) + " of "
@@ -1979,7 +2028,8 @@ def check_ctr_sweep(ctx: DeviceContext) raises:
             " arm", String("ONE-HOT" if is_one_hot_arm else "CTR"),
             " categories seen", nonzero,
             " column-2 folds", tm.fold_counts[2],
-            " host and device both == tally on all", n, "rows",
+            " host == tally on all", n, "rows; device",
+            "bitwise too" if wrong_dev == 0 else "within 64 ulp (recorded)",
         )
 
 
