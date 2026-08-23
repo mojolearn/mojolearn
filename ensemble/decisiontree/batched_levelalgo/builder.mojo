@@ -171,16 +171,11 @@ from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import
 from ensemble.decisiontree.decisiontree import (
     CRITERION_END,
     DecisionTreeParams,
-    ENTROPY,
-    GAMMA,
     GINI,
     MSE,
-    POISSON,
     TreeMetaDataNode,
-    criterion_name,
 )
 from ensemble.flatnode import SparseTreeNode
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 # `builder.cuh:161` -- "default threads per block for most kernels in here"
 comptime TPB_DEFAULT = 128
@@ -1030,29 +1025,20 @@ struct Builder[O: ObjectiveLike](Movable):
             else:
                 self.params.split_criterion = MSE
 
-        # DEVIATION 405, the REFUSE arm (IDENTITY_PATHS' third move): the
-        # criteria whose gain calls `std.math.log` ON THE DEVICE --
-        # Entropy, Poisson, Gamma -- sit on IDENTITY_PATHS row 12: the
-        # stdlib may lower `log` to a different implementation per vendor,
-        # and no mul-add pin can rescue a transcendental's last bit. Under
-        # NUMERIC_IDENTICAL a fit that cannot be identical must raise
-        # rather than silently return a non-identical model ("there is no
-        # fourth move"). Gini, MSE and InverseGaussian carry no
-        # transcendental and pass; the gate is comptime-erased under FAST.
-        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-            if (
-                self.params.split_criterion == ENTROPY
-                or self.params.split_criterion == POISSON
-                or self.params.split_criterion == GAMMA
-            ):
-                raise Error(
-                    "NUMERIC_IDENTICAL refuses split_criterion "
-                    + criterion_name(self.params.split_criterion)
-                    + ": its gain calls std.math.log on the device, a"
-                    " per-vendor lowering (IDENTITY_PATHS row 12,"
-                    " DEVIATIONS 113/405). Use gini, mse or"
-                    " inverse_gaussian, or build NUMERIC_FAST."
-                )
+        # DEVIATION 405's REFUSE arm stood here from 2026-08-22 to
+        # 2026-08-23, RETIRED BY DEVIATION 406. Under NUMERIC_IDENTICAL
+        # the criteria whose gain calls `log` on the device -- Entropy,
+        # Poisson, Gamma -- raised by name, because the stdlib lowered
+        # `log` differently per vendor (IDENTITY_PATHS row 12, then open)
+        # and a fit that cannot be identical must raise rather than
+        # silently return a non-identical model ("there is no fourth
+        # move"). That reasoning was right on its date and is kept here as
+        # history. Row 12 then closed at commit ed0fe5d (`portable_logf`,
+        # one arithmetic on every backend), the three gains now route
+        # every `log` through `identical_log` (`objectives.mojo`,
+        # DEVIATION 406), and under IDENTICAL they compute instead of
+        # raising. Nothing is gated here any more -- the routing lives at
+        # the call sites, so there is no criterion left to refuse.
 
         self.original_n_sampled_cols = n_sampled_cols_for(
             params.max_features, n_cols

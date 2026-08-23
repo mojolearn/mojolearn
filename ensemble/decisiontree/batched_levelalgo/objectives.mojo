@@ -109,6 +109,13 @@ because no libm is reachable there." These three gains are `HDI`/`DI`
 functions called from inside the split kernel. There is no libm on a GPU
 and there is no float64 on this one, so the recorded fix cannot be
 applied and no new one is invented here.
+UPDATED BY DEVIATION 406 (2026-08-23). The call sites now route through
+`_log_seam` / `numerics.identical_log`. Under NUMERIC_FAST that wrapper
+IS `std.math.log`, so everything priced here stands unchanged for the
+default build. Under NUMERIC_IDENTICAL the call is `portable_logf`
+(IDENTITY_PATHS row 12, commit ed0fe5d) -- one arithmetic on every
+backend. Comparability with cuML stays lost in both modes; what row 12
+buys is cross-vendor sameness of OUR bits.
 PRICE, and it is a real one:
   * GINI and MSE contain no transcendental and are unaffected. They are
     the two defaults (`decisiontree.cuh:253-254` picks GINI for integer
@@ -185,14 +192,43 @@ gain arithmetic, plus row-12's REFUSE. Three parts:
     multiply-add is one explicit `fma` rounding and every stored
     intermediate is flushed to signed zero -- ONE arithmetic on Metal,
     PTX and AMDGPU.
-  * `EntropyGain`, `PoissonGain`, `GammaGain` are NOT converted: their
-    device `std.math.log` (DEVIATION 113) is a per-vendor lowering that
-    no mul-add pin can rescue (IDENTITY_PATHS row 12, open). Converting
-    the rest of their arithmetic would be decoration on a pathway that
-    still diverges.
-  * The REFUSE lives in `builder.mojo`'s constructor: under
-    NUMERIC_IDENTICAL a criterion from the second bullet raises by name
+  * `EntropyGain`, `PoissonGain`, `GammaGain` were NOT converted: their
+    device `std.math.log` (DEVIATION 113) was a per-vendor lowering that
+    no mul-add pin could rescue (IDENTITY_PATHS row 12, open on
+    2026-08-22). Converting the rest of their arithmetic would have been
+    decoration on a pathway that still diverged.
+  * The REFUSE lived in `builder.mojo`'s constructor: under
+    NUMERIC_IDENTICAL a criterion from the second bullet raised by name
     rather than silently returning a non-identical model.
+The second and third bullets were the 2026-08-22 answer, kept here as
+history; DEVIATION 406 below is the 2026-08-23 answer, made possible by
+row 12's closure.
+
+DEVIATION 406 (2026-08-23). ROW 12 CLOSED, SO THE 405 REFUSE IS UPGRADED
+TO A REAL RUN.
+THEIRS: `raft::log` in `EntropyGain`, `PoissonGain` and `GammaGain`, as
+recorded in DEVIATION 113.
+OURS: `_log_seam` (defined below the imports with 405's two seams),
+which is `numerics.identical_log`. Under NUMERIC_FAST the wrapper IS
+`std.math.log` verbatim, so the default build's bits are DEVIATION
+113's, unchanged and re-gated (`objectives_check`, `criteria_check`,
+`cuml_oracle_check` outputs identical before and after this edit).
+Under NUMERIC_IDENTICAL it is `portable_logf` (commit ed0fe5d,
+IDENTITY_PATHS row 12) -- one Cephes polynomial from one source through
+fma and basic ops only, measured max 1 ulp against a float64 stdlib
+reference, device bits equal to host bits on every lane. With the
+transcendental pinned, the arithmetic AROUND it is pinned too, by the
+same rows 9/10 discipline DEVIATION 405 applied to the
+transcendental-free gains -- the three criteria's divisions, products,
+`eps_`-guard stores and accumulations route through `_ftz_seam` /
+`_mul_add_seam`, decomposed in their association order so the FAST arm
+is the same arithmetic it was. The `builder.mojo` REFUSE for exactly
+these three criteria is retired (same deviation, historical note kept
+there); under IDENTICAL they now compute instead of raising.
+PRICE, unchanged from DEVIATION 113: bit-comparability with cuML's
+Entropy/Poisson/Gamma stays lost in BOTH modes, because `portable_logf`
+is not their `raft::log` either. What IDENTICAL buys is that OUR bits
+are the same on Metal, PTX and AMDGPU, run to run and vendor to vendor.
 =================================================================
 """
 
@@ -200,7 +236,7 @@ from std.gpu import block_dim, thread_idx
 from std.math import log
 from max.gpu.memory import AddressSpace
 
-from mojo_only.numerics import ftz, identical_mul_add
+from mojo_only.numerics import ftz, identical_log, identical_mul_add
 
 from ensemble.decisiontree.batched_levelalgo.bins import (
     Bin,
@@ -222,10 +258,14 @@ from ensemble.decisiontree.batched_levelalgo.split import Split, count_left
 # multiply-add seam is one `fma` rounding and every stored intermediate is
 # flushed, which is what makes the gain a single arithmetic on Metal, PTX
 # and AMDGPU. The criteria that DO call `log` (Entropy, Poisson, Gamma)
-# are NOT converted: their `std.math.log` is a per-vendor lowering
-# (IDENTITY_PATHS row 12, DEVIATION 113) that no mul-add pin can rescue,
-# so under IDENTICAL the Builder REFUSES them by name instead
-# (`builder.mojo`, same deviation).
+# were NOT converted by 405 -- their `std.math.log` was a per-vendor
+# lowering (IDENTITY_PATHS row 12, DEVIATION 113, both then open) that no
+# mul-add pin could rescue, so under IDENTICAL the Builder REFUSED them
+# by name. DEVIATION 406 (2026-08-23) retired that refuse once row 12
+# closed -- the three now route every `log` through `_log_seam`, which is
+# the stdlib call verbatim under FAST and commit ed0fe5d's portable
+# arithmetic under IDENTICAL, and they pin the arithmetic around it
+# through the same two seams the transcendental-free gains use.
 
 
 @always_inline
@@ -252,6 +292,23 @@ def _mul_add_seam[
             c.cast[DType.float32](),
         ).cast[dt]()
     return a * b + c
+
+
+@always_inline
+def _log_seam[
+    dt: DType, //
+](x: Scalar[dt]) -> Scalar[dt] where dt.is_floating_point():
+    """`numerics.identical_log` for a generic-dtype seam (DEVIATION 406).
+    Under FAST the wrapper IS `std.math.log`, so the default build's bits
+    are DEVIATION 113's, unchanged; under IDENTICAL it is
+    `portable_logf` -- IDENTITY_PATHS row 12's one arithmetic on every
+    backend. Any non-float32 width keeps the stdlib call (there is no
+    float64 on the device and no portable polynomial measured for it).
+    The `where` clause is DEVIATION 112e's evidence requirement, which
+    both objective structs already carry."""
+    comptime if dt == DType.float32:
+        return identical_log(x.cast[DType.float32]()).cast[dt]()
+    return log(x)
 
 
 # ----------------------------------------------------------------- CRITERION --
@@ -568,7 +625,8 @@ struct ClassificationObjectiveFunction[
         nLeft: Int64,
         nRight: Int64,
     ) -> Scalar[Self.dtype]:
-        """`objectives.cuh:80-118`. See DEVIATION 113 for `raft::log`."""
+        """`objectives.cuh:80-118`. See DEVIATION 113 for `raft::log` and
+        DEVIATION 406 for the `_log_seam` routing."""
         # `:83-85`
         var total_weight = self.WeightAt(hist, n_bins - 1, n_bins)
         var left_weight = self.WeightAt(hist, i, n_bins)
@@ -578,31 +636,38 @@ struct ClassificationObjectiveFunction[
         if total_weight <= 0 or left_weight <= 0 or right_weight <= 0:
             return -Scalar[Self.dtype].MAX_FINITE
 
-        # `:90-93`
+        # `:90-93`. DEVIATION 406: the divisions store through `_ftz_seam`
+        # -- comptime no-ops under FAST, the pinned arithmetic under
+        # IDENTICAL.
         var gain = Scalar[Self.dtype](0.0)
-        var invLeft = Scalar[Self.dtype](1.0) / left_weight.cast[
-            Self.dtype
-        ]()
-        var invRight = Scalar[Self.dtype](1.0) / right_weight.cast[
-            Self.dtype
-        ]()
-        var invLen = Scalar[Self.dtype](1.0) / total_weight.cast[
-            Self.dtype
-        ]()
-        # `:94-115`
+        var invLeft = _ftz_seam(
+            Scalar[Self.dtype](1.0) / left_weight.cast[Self.dtype]()
+        )
+        var invRight = _ftz_seam(
+            Scalar[Self.dtype](1.0) / right_weight.cast[Self.dtype]()
+        )
+        var invLen = _ftz_seam(
+            Scalar[Self.dtype](1.0) / total_weight.cast[Self.dtype]()
+        )
+        # `:94-115`. DEVIATION 406: every `raft::log` routes through
+        # `_log_seam` and the arithmetic around it is decomposed in their
+        # association order -- products through `_ftz_seam`, each
+        # accumulation one `_mul_add_seam`. `raft::log(DataT(2))` stays
+        # recomputed per term, where they compute it.
         for c in range(Int(self.nclasses)):
             var val_i = Scalar[Self.BinT.weight_dtype](0)
             var lval_i = hist[
                 unsafe_offset = Int(n_bins) * c + Int(i)
             ].Weight(self.scales)
             if lval_i != 0:
-                var lval = lval_i.cast[Self.dtype]()
-                gain += (
-                    log(lval * invLeft)
-                    / log(Scalar[Self.dtype](2))
-                    * lval
-                    * invLen
+                var lval = _ftz_seam(lval_i.cast[Self.dtype]())
+                # `gain += log(lval * invLeft) / log(2) * lval * invLen`
+                var larg = _ftz_seam(lval * invLeft)
+                var l1 = _ftz_seam(
+                    _log_seam(larg) / _log_seam(Scalar[Self.dtype](2))
                 )
+                var l2 = _ftz_seam(l1 * lval)
+                gain = _mul_add_seam(l2, invLen, gain)
 
             val_i += lval_i
             var total_sum = hist[
@@ -610,18 +675,22 @@ struct ClassificationObjectiveFunction[
             ].Weight(self.scales)
             var rval_i = total_sum - lval_i
             if rval_i != 0:
-                var rval = rval_i.cast[Self.dtype]()
-                gain += (
-                    log(rval * invRight)
-                    / log(Scalar[Self.dtype](2))
-                    * rval
-                    * invLen
+                var rval = _ftz_seam(rval_i.cast[Self.dtype]())
+                # `gain += log(rval * invRight) / log(2) * rval * invLen`
+                var rarg = _ftz_seam(rval * invRight)
+                var r1 = _ftz_seam(
+                    _log_seam(rarg) / _log_seam(Scalar[Self.dtype](2))
                 )
+                var r2 = _ftz_seam(r1 * rval)
+                gain = _mul_add_seam(r2, invLen, gain)
 
             val_i += rval_i
             if val_i != 0:
-                var val = val_i.cast[Self.dtype]() * invLen
-                gain -= val * log(val) / log(Scalar[Self.dtype](2))
+                var val = _ftz_seam(val_i.cast[Self.dtype]() * invLen)
+                # `gain -= val * log(val) / log(2)`
+                var v1 = _ftz_seam(val * _log_seam(val))
+                var v2 = _ftz_seam(v1 / _log_seam(Scalar[Self.dtype](2)))
+                gain = _ftz_seam(gain - v2)
 
         return gain
 
@@ -909,7 +978,8 @@ struct RegressionObjectiveFunction[
         nLeft: Int64,
         nRight: Int64,
     ) -> Scalar[Self.dtype]:
-        """`objectives.cuh:236-262`. See DEVIATION 113 for `raft::log`."""
+        """`objectives.cuh:236-262`. See DEVIATION 113 for `raft::log` and
+        DEVIATION 406 for the `_log_seam` routing."""
         # `:239-241`
         var parent_weight = hist[
             unsafe_offset = Int(n_bins) - 1
@@ -921,14 +991,22 @@ struct RegressionObjectiveFunction[
         if parent_weight <= 0 or left_weight <= 0 or right_weight <= 0:
             return -Scalar[Self.dtype].MAX_FINITE
 
-        # `:246-249`
-        var invLen = Scalar[Self.dtype](1) / parent_weight.cast[Self.dtype]()
-        var label_sum = hist[unsafe_offset = Int(n_bins) - 1].LabelSum(
-            self.scales
-        ).cast[Self.dtype]()
-        var left_label_sum = hist[unsafe_offset = Int(i)].LabelSum(
-            self.scales
-        ).cast[Self.dtype]()
+        # `:246-249`. DEVIATION 406: stored through `_ftz_seam` (comptime
+        # no-op under FAST) so the `eps_` guards below compare the same
+        # bits on every vendor under IDENTICAL.
+        var invLen = _ftz_seam(
+            Scalar[Self.dtype](1) / parent_weight.cast[Self.dtype]()
+        )
+        var label_sum = _ftz_seam(
+            hist[unsafe_offset = Int(n_bins) - 1].LabelSum(
+                self.scales
+            ).cast[Self.dtype]()
+        )
+        var left_label_sum = _ftz_seam(
+            hist[unsafe_offset = Int(i)].LabelSum(
+                self.scales
+            ).cast[Self.dtype]()
+        )
         # THE SUBTRACTION IS AT STORAGE WIDTH, narrowed once -- theirs is
         # `DataT(hist[n_bins - 1].LabelSum() - hist[i].LabelSum())`, and
         # their `LabelSum()` returns the `double` that IS their storage.
@@ -938,11 +1016,13 @@ struct RegressionObjectiveFunction[
         # is exact, and rounds once. NOTE `MSEGain` does NOT do this: their
         # `:228` subtracts the already-narrowed `DataT` values, and that
         # inconsistency in their source is theirs to keep.
-        var right_label_sum = hist[
-            unsafe_offset = Int(n_bins) - 1
-        ].LabelSumMinus(hist[unsafe_offset = Int(i)], self.scales).cast[
-            Self.dtype
-        ]()
+        var right_label_sum = _ftz_seam(
+            hist[
+                unsafe_offset = Int(n_bins) - 1
+            ].LabelSumMinus(hist[unsafe_offset = Int(i)], self.scales).cast[
+                Self.dtype
+            ]()
+        )
 
         # `:251-253` -- label sum cannot be non-positive
         if (
@@ -952,16 +1032,23 @@ struct RegressionObjectiveFunction[
         ):
             return -Scalar[Self.dtype].MAX_FINITE
 
-        # `:255-259`
-        var parent_obj = -label_sum * log(label_sum * invLen)
-        var left_obj = -left_label_sum * log(
+        # `:255-259`. DEVIATION 406: every `raft::log` routes through
+        # `_log_seam` and the arithmetic around it is decomposed in their
+        # association order, each argument and product stored through
+        # `_ftz_seam`.
+        var parg = _ftz_seam(label_sum * invLen)
+        var parent_obj = _ftz_seam(-label_sum * _log_seam(parg))
+        var larg = _ftz_seam(
             left_label_sum / left_weight.cast[Self.dtype]()
         )
-        var right_obj = -right_label_sum * log(
+        var left_obj = _ftz_seam(-left_label_sum * _log_seam(larg))
+        var rarg = _ftz_seam(
             right_label_sum / right_weight.cast[Self.dtype]()
         )
-        var gain = parent_obj - (left_obj + right_obj)
-        gain = gain * invLen
+        var right_obj = _ftz_seam(-right_label_sum * _log_seam(rarg))
+        var lr = _ftz_seam(left_obj + right_obj)
+        var gain = _ftz_seam(parent_obj - lr)
+        gain = _ftz_seam(gain * invLen)
 
         return gain
 
@@ -977,7 +1064,8 @@ struct RegressionObjectiveFunction[
         nLeft: Int64,
         nRight: Int64,
     ) -> Scalar[Self.dtype]:
-        """`objectives.cuh:264-290`. See DEVIATION 113 for `raft::log`."""
+        """`objectives.cuh:264-290`. See DEVIATION 113 for `raft::log` and
+        DEVIATION 406 for the `_log_seam` routing."""
         # `:267-269`
         var parent_weight = hist[
             unsafe_offset = Int(n_bins) - 1
@@ -989,14 +1077,22 @@ struct RegressionObjectiveFunction[
         if parent_weight <= 0 or left_weight <= 0 or right_weight <= 0:
             return -Scalar[Self.dtype].MAX_FINITE
 
-        # `:274-277`
-        var invLen = Scalar[Self.dtype](1) / parent_weight.cast[Self.dtype]()
-        var label_sum = hist[unsafe_offset = Int(n_bins) - 1].LabelSum(
-            self.scales
-        ).cast[Self.dtype]()
-        var left_label_sum = hist[unsafe_offset = Int(i)].LabelSum(
-            self.scales
-        ).cast[Self.dtype]()
+        # `:274-277`. DEVIATION 406: stored through `_ftz_seam` (comptime
+        # no-op under FAST) so the `eps_` guards below compare the same
+        # bits on every vendor under IDENTICAL.
+        var invLen = _ftz_seam(
+            Scalar[Self.dtype](1) / parent_weight.cast[Self.dtype]()
+        )
+        var label_sum = _ftz_seam(
+            hist[unsafe_offset = Int(n_bins) - 1].LabelSum(
+                self.scales
+            ).cast[Self.dtype]()
+        )
+        var left_label_sum = _ftz_seam(
+            hist[unsafe_offset = Int(i)].LabelSum(
+                self.scales
+            ).cast[Self.dtype]()
+        )
         # THE SUBTRACTION IS AT STORAGE WIDTH, narrowed once -- theirs is
         # `DataT(hist[n_bins - 1].LabelSum() - hist[i].LabelSum())`, and
         # their `LabelSum()` returns the `double` that IS their storage.
@@ -1006,11 +1102,13 @@ struct RegressionObjectiveFunction[
         # is exact, and rounds once. NOTE `MSEGain` does NOT do this: their
         # `:228` subtracts the already-narrowed `DataT` values, and that
         # inconsistency in their source is theirs to keep.
-        var right_label_sum = hist[
-            unsafe_offset = Int(n_bins) - 1
-        ].LabelSumMinus(hist[unsafe_offset = Int(i)], self.scales).cast[
-            Self.dtype
-        ]()
+        var right_label_sum = _ftz_seam(
+            hist[
+                unsafe_offset = Int(n_bins) - 1
+            ].LabelSumMinus(hist[unsafe_offset = Int(i)], self.scales).cast[
+                Self.dtype
+            ]()
+        )
 
         # `:279-281` -- label sum cannot be non-positive
         if (
@@ -1020,18 +1118,29 @@ struct RegressionObjectiveFunction[
         ):
             return -Scalar[Self.dtype].MAX_FINITE
 
-        # `:283-287`
-        var parent_obj = parent_weight.cast[Self.dtype]() * log(
-            label_sum * invLen
+        # `:283-287`. DEVIATION 406: every `raft::log` routes through
+        # `_log_seam` and the arithmetic around it is decomposed in their
+        # association order, each argument and product stored through
+        # `_ftz_seam`.
+        var parg = _ftz_seam(label_sum * invLen)
+        var parent_obj = _ftz_seam(
+            parent_weight.cast[Self.dtype]() * _log_seam(parg)
         )
-        var left_obj = left_weight.cast[Self.dtype]() * log(
+        var larg = _ftz_seam(
             left_label_sum / left_weight.cast[Self.dtype]()
         )
-        var right_obj = right_weight.cast[Self.dtype]() * log(
+        var left_obj = _ftz_seam(
+            left_weight.cast[Self.dtype]() * _log_seam(larg)
+        )
+        var rarg = _ftz_seam(
             right_label_sum / right_weight.cast[Self.dtype]()
         )
-        var gain = parent_obj - (left_obj + right_obj)
-        gain = gain * invLen
+        var right_obj = _ftz_seam(
+            right_weight.cast[Self.dtype]() * _log_seam(rarg)
+        )
+        var lr = _ftz_seam(left_obj + right_obj)
+        var gain = _ftz_seam(parent_obj - lr)
+        gain = _ftz_seam(gain * invLen)
 
         return gain
 
