@@ -118,9 +118,19 @@ def make_inputs():
     Xe = rng.rand(5000, N_COLS).astype(np.float32)
     qe = (Xe * 1024.0).astype(np.int64)
     ye_reg = ((qe @ wq).astype(np.float64) * 2.0 ** -20).astype(np.float32)
+    # ROW-COUNT REGIMES: several kernels dispatch on n_rows (ET's sampler
+    # boundaries at 128/9216 draws, the GBDT small-bin drivers, block and
+    # chunk counts that are f(n_rows) by design). 200k rows, same recipe,
+    # drawn AFTER the arrays above so every existing hash is untouched.
+    Xb = rng.rand(200000, N_COLS).astype(np.float32)
+    qb = (Xb * 1024.0).astype(np.int64)
+    yb_reg = ((qb @ wq).astype(np.float64) * 2.0 ** -20).astype(np.float32)
+    sb = qb.sum(axis=1)
+    yb_clf = (sb > np.median(sb)).astype(np.float32)
     return dict(X=X, y_reg=y_reg, y_clf=y_clf, y_prob=y_prob, y_mc=y_mc,
                 sw=sw, X_nan=X_nan, X_cat=X_cat, y_regcat=y_regcat,
-                y_clfcat=y_clfcat, Xe=Xe, ye_reg=ye_reg)
+                y_clfcat=y_clfcat, Xe=Xe, ye_reg=ye_reg,
+                Xb=Xb, yb_reg=yb_reg, yb_clf=yb_clf)
 
 
 # ---------------------------------------------------------------- the cells
@@ -175,7 +185,15 @@ cell("gbdt_expectile", gb(loss="Expectile", loss_alpha=0.3, _y="y_reg",
                           **GB_BASE))
 cell("gbdt_tweedie", gb(loss="Tweedie", loss_variance_power=1.5, _y="y_reg",
                         **GB_BASE))
-cell("gbdt_huber", gb(loss="Huber", loss_delta=1.0, _y="y_reg", **GB_BASE))
+# delta 6 on a target in [3.7, 10.6]: the first trees see residuals on
+# BOTH sides of delta, so the quadratic and linear arms are both live.
+# delta 1 saturated every row (Der2 = 0 everywhere, Cosine ties every
+# split, the cursor oscillates) and the 20-tree prediction was EXACTLY
+# ZERO -- CatBoost CPU does the same (DEVIATION 257's audit), so it is
+# their semantics, but an all-zero output certifies nothing
+cell("gbdt_huber", gb(loss="Huber", loss_delta=6.0, _y="y_reg", **GB_BASE))
+cell("gbdt_huber_d1_saturated", gb(loss="Huber", loss_delta=1.0, _y="y_reg",
+                                   **GB_BASE))
 cell("gbdt_multiclass", gb(loss="MultiClass", _y="y_mc", _proba=True,
                            **GB_BASE))
 
@@ -213,6 +231,9 @@ cell("gbdt_logloss_newton3", gb(loss="Logloss",
                                 _y="y_clf", **GB_BASE))
 # Exact IS the loss default for Quantile/MAE (CatBoost's choice), so the
 # overrides that exercise a different estimator are Newton and Gradient
+# DEVIATION 257: CatBoost REFUSES Newton for Quantile/MAE/MAPE/LogLinQuantile
+# (EnsureNewtonIsAvailable); this cell's passing result is REFUSED= on every
+# column
 cell("gbdt_quantile_newton", gb(loss="Quantile", leaf_estimation_method="Newton",
                                 _y="y_reg", **GB_BASE))
 cell("gbdt_mae_gradient", gb(loss="MAE", leaf_estimation_method="Gradient",
@@ -308,6 +329,20 @@ cell("gbdt_rmse_od_inctodec", gb(loss="RMSE", od_type="IncToDec",
 # exercises the border-search subsample
 cell("gbdt_rmse_borders_sub5k", gb(loss="RMSE", border_build_max_samples=5000,
                                    _y="y_reg", **GB_BASE))
+
+# --- row-count regime: 200k rows (added for E2 round 2, 2026-08-23) -------
+cell("gbdt_rmse_200k", gb(loss="RMSE", _X="Xb", _y="yb_reg", **GB_BASE))
+cell("gbdt_logloss_200k", gb(loss="Logloss", _X="Xb", _y="yb_clf", **GB_BASE))
+cell("gbdt_rmse_pointwise_200k", gb(loss="RMSE", use_pointwise_searcher=True,
+                                    _X="Xb", _y="yb_reg", **GB_BASE))
+cell("et_clf_200k", et("clf", n_estimators=10, max_depth=8, random_state=7,
+                       _X="Xb", _y="yb_clf"))
+cell("et_reg_200k", et("reg", n_estimators=10, max_depth=8, random_state=7,
+                       _X="Xb", _y="yb_reg"))
+cell("rf_reg_200k", rf("reg", n_estimators=10, max_depth=8, random_state=7,
+                       _X="Xb", _y="yb_reg"))
+cell("rf_clf_200k", rf("clf", n_estimators=10, max_depth=8, random_state=7,
+                       _X="Xb", _y="yb_clf"))
 
 # --- Extra Trees ----------------------------------------------------------
 ET_BASE = dict(n_estimators=10, max_depth=8, random_state=7)
