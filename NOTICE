@@ -83,8 +83,8 @@ unmet obligation rather than a formatting gap: cuML is Apache-2.0, sections
 derivative works of cuML that this file did not name.
 
 These are DERIVATIVE WORKS of cuML, translated from CUDA C++ into Mojo.
-`dbscan/PORTED_MAP.tsv` and `decomposition/PORTED_MAP.tsv` map each file to
-the cuML source it derives from and record whether the port is
+`dbscan/PORTED_MAP.tsv`, `decomposition/PORTED_MAP.tsv` and
+`neighbors/PORTED_MAP.tsv` map each file to the cuML source it derives from and record whether the port is
 transliterated, partial, or replaced; `UNPORTED.tsv` beside each records what
 was deliberately left out.
 
@@ -98,6 +98,9 @@ was deliberately left out.
     dbscan/ported/dbscan/mergelabels/runner.mojo
     decomposition/ported/linalg/detail/pca.mojo
     decomposition/ported/linalg/detail/tsvd.mojo
+    neighbors/ported/knn/knn.mojo            (added 2026-08-23, the k-NN
+        classifier and regressor; neighbors/PORTED_MAP.tsv)
+    neighbors/ported/selection/knn.mojo
 
     cuML
     Copyright (c) 2018-2026, NVIDIA CORPORATION & AFFILIATES
@@ -131,6 +134,8 @@ These are DERIVATIVE WORKS of RAFT, translated from CUDA C++ into Mojo. The
     dbscan/ported/dbscan/adjgraph/algo.mojo
     dbscan/ported/label/merge_labels.mojo
     dbscan/ported/label/classlabels.mojo
+    neighbors/ported/label/classlabels.mojo   (added 2026-08-23; the same
+        header, the general route for arbitrary int32 class labels)
     dbscan/ported/sparse/detail/csr.mojo
     decomposition/ported/linalg/detail/pca.mojo   (sign_flip_kernel only,
         from raft matrix/detail/math.cuh:367 signFlipKernel)
