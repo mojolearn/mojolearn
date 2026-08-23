@@ -56,6 +56,9 @@ pixi run check-hardware-matrix || echo "PHASE0-FINDING: hardware matrix (see log
 
 step "phase 1: vendor characterization (row 10 precondition)"
 pixi run check-ieee-arith || echo "PHASE1-FINDING: ieee-arith (see log)"
+# row 12's certificate line: the printed device hash must be the SAME
+# NUMBER on every vendor column (Apple measured 8705486125800438413)
+pixi run check-portable-translog || echo "PHASE1-FINDING: portable-translog (see log)"
 
 step "phase 2: gates under IDENTICAL"
 for gate in check-depthwise check-lossguide-policy check-random-strength; do
