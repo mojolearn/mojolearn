@@ -1876,10 +1876,13 @@ def lib_block_bounds_a_float_fold[kernel: Int]() -> Bool:
     (`PINNED_ACC_*`, `PINNED_KBLK`, `PINNED_VECLEN` for the two contraction
     rows; `K_LIB_GRAM_SPLITK` says so in its own row).
 
-    `K_LIB_JACOBI_EIGH` is the one row this list cannot dismiss and does
-    not pin HERE: `decomposition/mojo_only/jacobi_eigh_device.mojo` folds
-    two Float32 sums at that width, and its 32 is the LANE WIDTH rather
-    than a scheduling choice. See DEVIATION 511 and the note in that file.
+    `K_LIB_JACOBI_EIGH` IS LISTED (2026-08-23): `decomposition/mojo_only/
+    jacobi_eigh_device.mojo` folds two Float32 sums at that width and
+    strides its per-thread partials by it, so under IDENTICAL the row
+    resolves to the identity floor (32) on every vendor, and under FAST it
+    may carry a vendor number -- AMD's is its 64-wide wavefront, because
+    the FAST library fold cannot compile narrower there. See DEVIATION
+    511 and the note in that file.
 
     **THE SENTENCE THAT USED TO END THAT PARAGRAPH -- "so the fix there is
     the fold, not the row" -- IS INCOMPLETE AND IS DELETED** (DEVIATION
@@ -1889,12 +1892,11 @@ def lib_block_bounds_a_float_fold[kernel: Int]() -> Bool:
     BLOCK-SIZE dependence: this number is simultaneously the fold's width
     AND the stride the per-thread partials are strided by, so two columns
     carrying two values here would compute two different multisets of
-    partials and then fold each of them correctly. The row is flat 32 in
-    every column TODAY, so nothing moves on any machine that exists, and
-    the invariant is gated from the consumer's side by
-    `check_jacobi_fold_width_is_pinned` rather than left to whoever lands
-    the next vendor number. If a measured per-column value ever wants to
-    land here, it must come with the row added to this list.
+    partials and then fold each of them correctly. That is why the row is
+    NOW IN THIS LIST: under IDENTICAL it is the floor's 32 on every vendor
+    (gated from the consumer's side by `check_jacobi_fold_width_is_pinned`),
+    and the one vendor number that landed (AMD FAST = 64, the wavefront)
+    came with the listing, as this paragraph used to demand.
 
     BIT-INERT TODAY, AND THAT IS THE POINT. `lib_block_size` returns 128
     for all four in every column, so gating them moves nothing on any
@@ -1910,6 +1912,7 @@ def lib_block_bounds_a_float_fold[kernel: Int]() -> Bool:
         or kernel == K_LIB_REDUCE_BY_KEY
         or kernel == K_LIB_PLUS_PLUS
         or kernel == K_LIB_COLUMN_STATS
+        or kernel == K_LIB_JACOBI_EIGH
     )
 
 
@@ -1941,7 +1944,18 @@ def lib_block_size_for[kernel: Int, column: Int]() -> Int:
     if kernel == K_LIB_TRANSPOSE:
         return 256
     if kernel == K_LIB_JACOBI_EIGH:
-        return 32
+        #: NUMERIC (listed above, 2026-08-23): under IDENTICAL `resolved`
+        #: is the identity floor on every vendor and this is 32 everywhere,
+        #: which is what the E1U/E2U cards certified. Under FAST it is the
+        #: column's own number, and on AMD that is the WAVEFRONT: the
+        #: FAST fold is the library `block_sum`, whose lane primitive
+        #: asserts at compile time on a 32-thread block of a 64-wide
+        #: wavefront -- which is why `bindings/build_estimators.sh` did not
+        #: build on the MI325X at all under FAST (every leg through
+        #: 2026-08-23 printed "expected on AMD"). FAST claims no
+        #: cross-vendor bit, so AMD's FAST Jacobi may stride its partials
+        #: by 64; IDENTICAL's may not, and does not.
+        return 32 if lanes <= 32 else lanes
     if kernel == K_LIB_GEMM_CONTRACTION or kernel == K_LIB_FUSED_DISTANCE_NN:
         #: Policy4x4: AccThRows * AccThCols threads cover one tile.
         return 256

@@ -1,0 +1,20 @@
+{
+  "best_iteration": 0,
+  "card": "gbdt_rmse_lossguide_leaves8.card",
+  "kind": "gbdt",
+  "loss_curve": "644ab2ca18fdcf57f15555e671fec6665f74487ce60f79a901ab6e6b9501afdf",
+  "model": "c3921381dd5cb307bb1a0adde0e8cd327a2b2587c689d9bac5d13d5ee709e6e2",
+  "predictions": "ec1563cdbddcde3647f20e2b7777682c1aa8000bcf19d2c4356528d08f5f858f",
+  "seconds": 0.61,
+  "spec": {
+    "border_count": 128,
+    "grow_policy": "Lossguide",
+    "learning_rate": 0.3,
+    "loss": "RMSE",
+    "max_depth": 6,
+    "max_leaves": 8,
+    "n_estimators": 20,
+    "random_state": 7
+  },
+  "stopped_early": 0
+}

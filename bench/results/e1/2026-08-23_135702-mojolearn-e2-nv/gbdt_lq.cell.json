@@ -1,0 +1,19 @@
+{
+  "best_iteration": 0,
+  "card": "gbdt_lq.card",
+  "kind": "gbdt",
+  "loss_curve": "52dc51de010f41831ff0e2113fc9ce6ef614f99a5a39bde660c2e4874ab608ad",
+  "model": "1f463584f5804d111703831575b6fe80efafaff9ef27a306b76cf87db8fd9a9f",
+  "predictions": "86f6b3897034b372484642631d07ca4a32fb51b500fb5a8af0927eb33dcc7ee6",
+  "seconds": 0.73,
+  "spec": {
+    "border_count": 128,
+    "learning_rate": 0.3,
+    "loss": "Lq",
+    "loss_q": 1.5,
+    "max_depth": 6,
+    "n_estimators": 20,
+    "random_state": 7
+  },
+  "stopped_early": 0
+}

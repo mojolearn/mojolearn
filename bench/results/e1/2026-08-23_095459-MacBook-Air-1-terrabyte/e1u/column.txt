@@ -1,0 +1,3 @@
+arm kmeans
+mode IDENTICAL
+column 1 lane_width 32

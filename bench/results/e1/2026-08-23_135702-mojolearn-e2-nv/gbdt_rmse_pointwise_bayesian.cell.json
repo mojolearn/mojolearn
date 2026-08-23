@@ -1,0 +1,20 @@
+{
+  "best_iteration": 0,
+  "card": "gbdt_rmse_pointwise_bayesian.card",
+  "kind": "gbdt",
+  "loss_curve": "0ceb2a05bac66d87ad973d55accd40e871d79215d9791a8ca037f54906deb198",
+  "model": "3a3c76b0c149adc3c8f31188652096ba4e22027aa02bba86d294c9bd5337a6ac",
+  "predictions": "7cd93390dc1956df1406f148568e4073ea865bb93edc95987012244376f5d15c",
+  "seconds": 0.71,
+  "spec": {
+    "bootstrap_type": "Bayesian",
+    "border_count": 128,
+    "learning_rate": 0.3,
+    "loss": "RMSE",
+    "max_depth": 6,
+    "n_estimators": 20,
+    "random_state": 7,
+    "use_pointwise_searcher": true
+  },
+  "stopped_early": 0
+}

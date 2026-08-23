@@ -23,7 +23,8 @@ three vendors: `check-portable-translog` 8705486125800438413,
 **Decision trees are closed across three vendors, every sub-feature the
 surface exposes.** The unsupervised stack is closed on AMD and closed on
 NVIDIA except for one mechanism, named below and fixed in the commit
-after this one (DEVIATION 550), to be re-certified on the next legs.
+after this one (DEVIATION 550) — and re-certified the same day: see
+**Round 8** below, where every family is identical on all three vendors.
 
 ## The one divergence, and its mechanism
 
@@ -121,13 +122,65 @@ its adoption into `core/gemm.mojo` is one value wide at P == 1 (rows
   `dbscan_*`, `logreg_l1_refused`, ...) on every vendor, with the same
   message — a refusal is a certified answer too.
 
+## Round 8, commit `fe00e8a` (2026-08-23, same day): CLOSED on three vendors
+
+The re-certification legs after DEVIATION 550 and the five gate fixes:
+
+| family | cells | Apple vs H100 | Apple vs MI325X |
+|---|---|---|---|
+| decision trees | 110 | **110 identical** (104 / 2 / 4) | **110 identical** (104 / 2 / 4) |
+| unsupervised + linear | 80 | **80 identical** (60 / 20 same refusal) | **80 identical** (60 / 20) |
+| E1U cards (k-means, k-NN, DBSCAN) | 3 | **3/3** | **3/3** |
+| box-trained models predicted on the Mac | 106 | **106/106** | **106/106** |
+
+145,192 matched tree stage pairs and 17,492 unsupervised, zero disagreeing.
+The ten NVIDIA k-NN cells that diverged at `knn.out_dist` in the `ad90dfe`
+round are identical after DEVIATION 550. **Every training path the Python
+surface exposes, and every Mojo-only path the matrix reaches, produces the
+same bits on Apple M4, NVIDIA H100 and AMD MI325X under
+`NUMERIC_IDENTICAL`.** (Mac→box cross-inference was not re-run this round;
+the box→Mac direction was, and the `ad90dfe` round's 106/106 in that
+direction stands.) Zero droplets left after the round, verified by API.
+
+What this round added beyond the verdict:
+
+- **The signed-zero table, three vendors** (ARM 7, IDENTITY_PATHS row 39):
+  no vendor applies an `nsz`-class rewrite; Apple flushes negative
+  subnormals to a SIGNED -0.0, NVIDIA and AMD keep them; NaN payloads are
+  three different bit patterns for one IEEE answer (Apple 0x7fc00000,
+  NVIDIA 0x7fffffff, AMD 0xffc00000), so a computed NaN can never sit in a
+  certified stage; and the IEEE-unspecified point is real and splits the
+  vendors: `max(+0.0, -0.0)` is **-0.0 on Apple** (the second operand) and
+  **+0.0 on NVIDIA and AMD** (IEEE-2019 maximum). Every clamp in the
+  kernels is spelled value-first (`max(v, 0.0)`), which returns +0.0 for
+  v = -0.0 on all three; the rule for new code is in row 39.
+- The phase-6 gate scripts' IDENTICAL pass STILL did not run on either box:
+  the FAST pass found four more Apple-shaped assertions (OLS 1% under a
+  TF32 vendor product, the M4's `fused_l2_knn_grid` transcriptions, the
+  surface's FUSED arm on a 64-lane column, and — on AMD — the Jacobi
+  check not compiling at all). Fixed after this round (`47a52c3` and the
+  commit carrying this paragraph); the boxes' IDENTICAL gate pass is the
+  one thing still owed from the gates, and it is a gate property, not a
+  kernel one — the cards above ARE the IDENTICAL evidence.
+- **AMD has had no FAST PCA/tSVD/OLS at all**: `bindings/build_estimators.sh`
+  did not build on the MI325X under FAST on any leg ("expected on AMD" in
+  the bootstrap) because the Jacobi solver's FAST fold is the library
+  `block_sum` at 32 threads, half a CDNA wavefront, which asserts at
+  compile time. The kernel-matrix row `K_LIB_JACOBI_EIGH` is now NUMERIC
+  (IDENTICAL resolves to the floor's 32 on every vendor — the certified
+  cards — and FAST on AMD reads its 64-wide wavefront). To be confirmed on
+  the next MI325X leg.
+- `check-ctr-apply` is green again (its device-evaluator claim was two
+  summation orders, now RECORDED within 64 ulp, and the Borders tally was
+  missing the model bias).
+- Six tree cells added for the next round (`nan_mode='Forbidden'` refusal
+  and clean fit, Bayesian `bagging_temperature` 0 and 3, `Simple` leaves on
+  Logloss and Quantile): 116 tree cells.
+
 ## Owed
 
-1. Re-certify the ten k-NN cells and the E1U k-NN card on an H100 after
-   DEVIATION 550 (one leg).
-2. Run phase 6's IDENTICAL pass on both boxes now that the FAST-pass
-   check defects are fixed (same leg).
-3. `check-ieee-arith` ARM 7 (the signed-zero table, added after this
-   round) on both boxes: which zero `max(+0,-0)` returns per vendor, and
-   the sign a negative subnormal flushes to (IDENTITY_PATHS row 39).
-4. The gemm Phase 2b adoption decision (k-NN IDENTICAL price).
+1. The phase-6 IDENTICAL gate pass on both boxes (one leg after the gate
+   fixes above), and AMD's FAST estimators build with the Jacobi row at 64.
+2. The gemm Phase 2b adoption decision (k-NN IDENTICAL price; the gemm
+   lane's price harness is wired, no number published yet).
+3. A Mac→box cross-inference re-run (the `ad90dfe` round's 106/106 stands).

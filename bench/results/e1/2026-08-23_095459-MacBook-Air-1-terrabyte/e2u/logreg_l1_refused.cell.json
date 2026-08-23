@@ -1,0 +1,8 @@
+{
+  "kind": "logreg",
+  "refused": "NotImplementedError: mojolearn LogisticRegression: penalty='l1' selects OWL-QN (min_owlqn, qn_solvers.cuh:246), which is NOT PORTED; penalty='l2' or None (L-BFGS) are the ported arms. See glm/UNPORTED.tsv",
+  "seconds": 0.0,
+  "spec": {
+    "penalty": "l1"
+  }
+}

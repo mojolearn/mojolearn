@@ -1,0 +1,12 @@
+{
+  "card": "et_reg_200k.card",
+  "kind": "et_reg",
+  "model": "d9715dd7a479a4c69999fc5b23004ecc56b8d0835a9c27bee74737fbc751b618",
+  "predictions": "a3ab9be153bcb3fc13ec2fc2e11717d339ae0096a4102ed821b2cbb5c6c05afc",
+  "seconds": 0.91,
+  "spec": {
+    "max_depth": 8,
+    "n_estimators": 10,
+    "random_state": 7
+  }
+}

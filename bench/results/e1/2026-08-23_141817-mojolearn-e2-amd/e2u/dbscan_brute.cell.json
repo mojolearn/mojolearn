@@ -1,0 +1,16 @@
+{
+  "batches": 1,
+  "card": "dbscan_brute.card",
+  "kind": "dbscan",
+  "labels": "ece90482443a2d2888696f40bb30099075ba71b1864e937196653b630b7f5bb2",
+  "n_clusters": 8,
+  "n_iter": 2,
+  "n_noise": 399,
+  "seconds": 0.33,
+  "spec": {
+    "algorithm": "brute",
+    "eps": 0.3,
+    "min_samples": 5
+  },
+  "stages": 3
+}

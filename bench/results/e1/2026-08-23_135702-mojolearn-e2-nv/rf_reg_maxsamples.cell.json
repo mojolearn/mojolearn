@@ -1,0 +1,13 @@
+{
+  "card": "rf_reg_maxsamples.card",
+  "kind": "rf_reg",
+  "model": "fbd977272e089cca176c441eb8a0e9b63909ee079edcb087db9351fb8eacdff6",
+  "predictions": "3df01bb6fdc0709615a38e6cfcb9020ae7f7f7a08cc38aac2882b22ec6e048b3",
+  "seconds": 0.75,
+  "spec": {
+    "max_depth": 8,
+    "max_samples": 0.5,
+    "n_estimators": 10,
+    "random_state": 7
+  }
+}

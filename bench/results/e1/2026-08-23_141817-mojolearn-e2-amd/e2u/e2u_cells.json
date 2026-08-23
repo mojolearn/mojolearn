@@ -1,0 +1,1245 @@
+{
+  "cells": {
+    "dbscan_algorithm_bad": {
+      "kind": "dbscan",
+      "refused": "ValueError: mojolearn DBSCAN: algorithm='kd_tree' is refused; it must be one of ['brute', 'rbc'] ('rbc' is the ball-cover eps search, DEVIATION 35's default; 'brute' is cuML's default arm)",
+      "seconds": 0.0,
+      "spec": {
+        "algorithm": "kd_tree",
+        "eps": 0.3,
+        "min_samples": 5
+      }
+    },
+    "dbscan_brute": {
+      "batches": 1,
+      "card": "dbscan_brute.card",
+      "kind": "dbscan",
+      "labels": "ece90482443a2d2888696f40bb30099075ba71b1864e937196653b630b7f5bb2",
+      "n_clusters": 8,
+      "n_iter": 2,
+      "n_noise": 399,
+      "seconds": 0.33,
+      "spec": {
+        "algorithm": "brute",
+        "eps": 0.3,
+        "min_samples": 5
+      },
+      "stages": 3
+    },
+    "dbscan_brute_budget1mb": {
+      "batches": 67,
+      "card": "dbscan_brute_budget1mb.card",
+      "kind": "dbscan",
+      "labels": "ece90482443a2d2888696f40bb30099075ba71b1864e937196653b630b7f5bb2",
+      "n_clusters": 8,
+      "n_iter": 200,
+      "n_noise": 399,
+      "seconds": 0.5,
+      "spec": {
+        "algorithm": "brute",
+        "eps": 0.3,
+        "max_mbytes_per_batch": 1,
+        "min_samples": 5
+      },
+      "stages": 3
+    },
+    "dbscan_chain_default": {
+      "batches": 1,
+      "card": "dbscan_chain_default.card",
+      "kind": "dbscan",
+      "labels": "9cbead1bd198bc908fb5e5babc0fa654e44f0e4ef17b861738e4c475a055c1c2",
+      "n_clusters": 1,
+      "n_iter": 663,
+      "n_noise": 0,
+      "seconds": 0.34,
+      "spec": {
+        "eps": 0.1875,
+        "min_samples": 2
+      },
+      "stages": 3
+    },
+    "dbscan_chain_iter200": {
+      "kind": "dbscan",
+      "refused": "Exception: weak_cc_batched: label propagation did not converge in 200 passes. Under NUMERIC_IDENTICAL a truncated propagation is refused rather than returned: its labels are a snapshot of the atomic order on THIS machine, not a function of the graph. Raise max_iterations.",
+      "seconds": 0.32,
+      "spec": {
+        "eps": 0.1875,
+        "max_iterations": 200,
+        "min_samples": 2
+      }
+    },
+    "dbscan_chain_iter5000": {
+      "batches": 1,
+      "card": "dbscan_chain_iter5000.card",
+      "kind": "dbscan",
+      "labels": "9cbead1bd198bc908fb5e5babc0fa654e44f0e4ef17b861738e4c475a055c1c2",
+      "n_clusters": 1,
+      "n_iter": 659,
+      "n_noise": 0,
+      "seconds": 0.34,
+      "spec": {
+        "eps": 0.1875,
+        "max_iterations": 5000,
+        "min_samples": 2
+      },
+      "stages": 3
+    },
+    "dbscan_chain_iter5000_brute": {
+      "batches": 1,
+      "card": "dbscan_chain_iter5000_brute.card",
+      "kind": "dbscan",
+      "labels": "9cbead1bd198bc908fb5e5babc0fa654e44f0e4ef17b861738e4c475a055c1c2",
+      "n_clusters": 1,
+      "n_iter": 620,
+      "n_noise": 0,
+      "seconds": 0.33,
+      "spec": {
+        "algorithm": "brute",
+        "eps": 0.1875,
+        "max_iterations": 5000,
+        "min_samples": 2
+      },
+      "stages": 3
+    },
+    "dbscan_eps0.15": {
+      "batches": 1,
+      "card": "dbscan_eps0.15.card",
+      "kind": "dbscan",
+      "labels": "300ce3546935ede58f83be2e594deb4a1e58e8381c19211ae5b380fe03dcdb05",
+      "n_clusters": 8,
+      "n_iter": 3,
+      "n_noise": 409,
+      "seconds": 0.32,
+      "spec": {
+        "eps": 0.15,
+        "min_samples": 5
+      },
+      "stages": 3
+    },
+    "dbscan_eps1.0": {
+      "batches": 1,
+      "card": "dbscan_eps1.0.card",
+      "kind": "dbscan",
+      "labels": "3f49644f0adc53536f46c79bf34172c6acd6f827db2b8369e236f28b7c1c127c",
+      "n_clusters": 8,
+      "n_iter": 2,
+      "n_noise": 396,
+      "seconds": 0.33,
+      "spec": {
+        "eps": 1.0,
+        "min_samples": 5
+      },
+      "stages": 3
+    },
+    "dbscan_maxiter1": {
+      "kind": "dbscan",
+      "refused": "Exception: weak_cc_batched: label propagation did not converge in 1 passes. Under NUMERIC_IDENTICAL a truncated propagation is refused rather than returned: its labels are a snapshot of the atomic order on THIS machine, not a function of the graph. Raise max_iterations.",
+      "seconds": 0.32,
+      "spec": {
+        "eps": 0.3,
+        "max_iterations": 1,
+        "min_samples": 5
+      }
+    },
+    "dbscan_metric_manhattan": {
+      "kind": "dbscan",
+      "refused": "ValueError: mojolearn DBSCAN: metric='manhattan' is refused; only 'euclidean' is ported (the eps kernels in dbscan/ported/neighbors/epsilon_neighborhood.mojo carry L2 only, and cuML's runner.cuh:152-156 downgrades every other metric to L2Sqrt as well)",
+      "seconds": 0.0,
+      "spec": {
+        "eps": 0.3,
+        "metric": "manhattan",
+        "min_samples": 5
+      }
+    },
+    "dbscan_min2": {
+      "batches": 1,
+      "card": "dbscan_min2.card",
+      "kind": "dbscan",
+      "labels": "e8d0d8c5b84b84090fe5427dad6b390c9ea5cceac19cdbbe66ce51b212ce113e",
+      "n_clusters": 9,
+      "n_iter": 2,
+      "n_noise": 397,
+      "seconds": 0.33,
+      "spec": {
+        "eps": 0.3,
+        "min_samples": 2
+      },
+      "stages": 3
+    },
+    "dbscan_min200": {
+      "batches": 1,
+      "card": "dbscan_min200.card",
+      "kind": "dbscan",
+      "labels": "6a7a678b1a078e0eed33a8902dcd4da3540696902b19810ada105898421ed05e",
+      "n_clusters": 4,
+      "n_iter": 2,
+      "n_noise": 570,
+      "seconds": 0.32,
+      "spec": {
+        "eps": 0.3,
+        "min_samples": 200
+      },
+      "stages": 3
+    },
+    "dbscan_min50": {
+      "batches": 1,
+      "card": "dbscan_min50.card",
+      "kind": "dbscan",
+      "labels": "c33b3568065e760dc713e8227ffecbb9a338d894c44a440f6694c770d7008bad",
+      "n_clusters": 5,
+      "n_iter": 2,
+      "n_noise": 469,
+      "seconds": 0.33,
+      "spec": {
+        "eps": 0.3,
+        "min_samples": 50
+      },
+      "stages": 3
+    },
+    "dbscan_min50_brute": {
+      "batches": 1,
+      "card": "dbscan_min50_brute.card",
+      "kind": "dbscan",
+      "labels": "c33b3568065e760dc713e8227ffecbb9a338d894c44a440f6694c770d7008bad",
+      "n_clusters": 5,
+      "n_iter": 2,
+      "n_noise": 469,
+      "seconds": 0.32,
+      "spec": {
+        "algorithm": "brute",
+        "eps": 0.3,
+        "min_samples": 50
+      },
+      "stages": 3
+    },
+    "dbscan_rbc": {
+      "batches": 1,
+      "card": "dbscan_rbc.card",
+      "kind": "dbscan",
+      "labels": "ece90482443a2d2888696f40bb30099075ba71b1864e937196653b630b7f5bb2",
+      "n_clusters": 8,
+      "n_iter": 2,
+      "n_noise": 399,
+      "seconds": 0.33,
+      "spec": {
+        "eps": 0.3,
+        "min_samples": 5
+      },
+      "stages": 3
+    },
+    "dbscan_rbc_budget1mb": {
+      "batches": 67,
+      "card": "dbscan_rbc_budget1mb.card",
+      "kind": "dbscan",
+      "labels": "ece90482443a2d2888696f40bb30099075ba71b1864e937196653b630b7f5bb2",
+      "n_clusters": 8,
+      "n_iter": 202,
+      "n_noise": 399,
+      "seconds": 0.54,
+      "spec": {
+        "eps": 0.3,
+        "max_mbytes_per_batch": 1,
+        "min_samples": 5
+      },
+      "stages": 3
+    },
+    "dbscan_sw": {
+      "kind": "dbscan",
+      "refused": "NotImplementedError: mojolearn DBSCAN: sample_weight is not ported (dbscan/estimator.mojo, WHAT IS NOT HERE YET)",
+      "seconds": 0.0,
+      "spec": {
+        "eps": 0.3,
+        "min_samples": 5
+      }
+    },
+    "dbscan_uniform24": {
+      "batches": 1,
+      "card": "dbscan_uniform24.card",
+      "kind": "dbscan",
+      "labels": "6d2bb5ae05235e959848c322d2b27be658abd64b4ed4d39d37e5bc320388ea2e",
+      "n_clusters": 1,
+      "n_iter": 3,
+      "n_noise": 86,
+      "seconds": 0.37,
+      "spec": {
+        "eps": 1.25,
+        "min_samples": 5
+      },
+      "stages": 3
+    },
+    "dbscan_uniform24_brute": {
+      "batches": 1,
+      "card": "dbscan_uniform24_brute.card",
+      "kind": "dbscan",
+      "labels": "6d2bb5ae05235e959848c322d2b27be658abd64b4ed4d39d37e5bc320388ea2e",
+      "n_clusters": 1,
+      "n_iter": 3,
+      "n_noise": 86,
+      "seconds": 0.35,
+      "spec": {
+        "algorithm": "brute",
+        "eps": 1.25,
+        "min_samples": 5
+      },
+      "stages": 3
+    },
+    "kmeans_init_bad": {
+      "kind": "kmeans",
+      "refused": "ValueError: mojolearn: init must be one of ['array', 'k-means++', 'random'], got 'pca-ish'",
+      "seconds": 0.0,
+      "spec": {
+        "init": "pca-ish",
+        "n_clusters": 8,
+        "random_state": 7
+      }
+    },
+    "kmeans_k3": {
+      "card": "kmeans_k3.card",
+      "centroids": "3b5bda4188feebd407c8a86c20d83df957b1a834ebe799c5150d7ceddd06f0ee",
+      "inertia": "4d7d2bab481ddceba10fba9a25e13559874bfdfcb428e439e6a4d6903c01a08e",
+      "inertia_value": 37991.53125,
+      "kind": "kmeans",
+      "labels": "3bec35ededf9ccc73350f4c8e43018388b4643a7b58812ae0ef45a6b69344140",
+      "n_iter": 60,
+      "seconds": 0.36,
+      "spec": {
+        "n_clusters": 3,
+        "random_state": 7
+      },
+      "stages": 490,
+      "sum_scale": 65536.0,
+      "weight_scale": 32768.0
+    },
+    "kmeans_k32": {
+      "card": "kmeans_k32.card",
+      "centroids": "5acf6821d4e46144fa666ff7cefa42fcf52111fe5f3267c97c926689013ec96f",
+      "inertia": "f2cfe186e2ec6b037e43dc090d38599db33535985c3fb178a5dc7200cbb01062",
+      "inertia_value": 32023.044921875,
+      "kind": "kmeans",
+      "labels": "8d40568a3458892070e0f4963f6f7eec5ae3226383324595a879106a69dd9bf6",
+      "n_iter": 117,
+      "seconds": 0.39,
+      "spec": {
+        "n_clusters": 32,
+        "random_state": 7
+      },
+      "stages": 889,
+      "sum_scale": 65536.0,
+      "weight_scale": 32768.0
+    },
+    "kmeans_k32_random": {
+      "card": "kmeans_k32_random.card",
+      "centroids": "79db06992da79a1ee6d3a35ffec359c80f4660aabe2f6e6289e72b02fee6e140",
+      "inertia": "50f7894cbaaccc8eaf1168aaea8b234122faa6898363766973c3d204d450a508",
+      "inertia_value": 32028.68359375,
+      "kind": "kmeans",
+      "labels": "0fb6401ed83a2300462e45c2f36b76fa72befb94f2c7f0d48e7dde00f9685489",
+      "n_iter": 118,
+      "seconds": 0.38,
+      "spec": {
+        "init": "random",
+        "n_clusters": 32,
+        "random_state": 7
+      },
+      "stages": 833,
+      "sum_scale": 65536.0,
+      "weight_scale": 32768.0
+    },
+    "kmeans_k8": {
+      "card": "kmeans_k8.card",
+      "centroids": "a75be13ae713757839f2ce42b1df3df8f6d596d54d66291b7f6dd3b99154f27b",
+      "inertia": "8235f0d3282022ac2dd0e410845cd7ad3fe95dedf168364a8090626fe3980158",
+      "inertia_value": 35844.8203125,
+      "kind": "kmeans",
+      "labels": "0f1feb6120205a47ba412a9a55b8e4af58b2cce2c7875b36697e81bac29da8c0",
+      "n_iter": 81,
+      "seconds": 0.37,
+      "spec": {
+        "n_clusters": 8,
+        "random_state": 7
+      },
+      "stages": 602,
+      "sum_scale": 65536.0,
+      "weight_scale": 32768.0
+    },
+    "kmeans_k8_200k": {
+      "card": "kmeans_k8_200k.card",
+      "centroids": "4c00fd9afb3066eb989c73101124e08ff80d84782290ba4dc54279598af7cb77",
+      "inertia": "34def85f07a5f4851d1514f4cda369c9db74fe62a1bd827d0ccc7bc3ce30d9b9",
+      "inertia_value": 359019.40625,
+      "kind": "kmeans",
+      "labels": "227c4326d54a43218583f919fb22524c450de5d8feaf67edb47866cec9764006",
+      "n_iter": 79,
+      "seconds": 0.62,
+      "spec": {
+        "n_clusters": 8,
+        "random_state": 7
+      },
+      "stages": 602,
+      "sum_scale": 8192.0,
+      "weight_scale": 4096.0
+    },
+    "kmeans_k8_array": {
+      "card": "kmeans_k8_array.card",
+      "centroids": "ab194fe76a57448c926f57f7687791994904560ad280301f6eb068da59a00ecf",
+      "inertia": "64b69cfd865cd1499d7aab1d120d79efe9c6489ce28134548a8be07f44b7dfed",
+      "inertia_value": 35786.765625,
+      "kind": "kmeans",
+      "labels": "a140dbc4cc73c51636d76cd5cfbd6ec82d8f54d5fbe550fda4f177e9397da42d",
+      "n_iter": 82,
+      "seconds": 0.36,
+      "spec": {
+        "init": "array",
+        "init_centroids": "C0",
+        "n_clusters": 8,
+        "random_state": 7
+      },
+      "stages": 581,
+      "sum_scale": 65536.0,
+      "weight_scale": 32768.0
+    },
+    "kmeans_k8_maxiter2": {
+      "card": "kmeans_k8_maxiter2.card",
+      "centroids": "c0fb4d0b6ff16fa90a6b37e3a38b80fe2b2d3d7bc1f03fa103b02eedabe0aeed",
+      "inertia": "aa735547eddf023f54a6a6b76994197f9c706de3fd4297665690a63ec503f085",
+      "inertia_value": 36030.34375,
+      "kind": "kmeans",
+      "labels": "cb7c2b9f7d19d1ec0363571e6c545f47d1c19fd62a5d7376584b5cc56ed0a73b",
+      "n_iter": 3,
+      "seconds": 0.34,
+      "spec": {
+        "max_iter": 2,
+        "n_clusters": 8,
+        "random_state": 7
+      },
+      "stages": 49,
+      "sum_scale": 65536.0,
+      "weight_scale": 32768.0
+    },
+    "kmeans_k8_ninit3": {
+      "card": "kmeans_k8_ninit3.card",
+      "centroids": "a19c2d7f9eb96d5a9b76f61d40f82d024373043968e971fa667f3141fc8d9dd9",
+      "inertia": "3a521bc32a4502ebdc4661d6789e84d068a7725a43822113551e716934e9fc25",
+      "inertia_value": 35805.75,
+      "kind": "kmeans",
+      "labels": "75aefddc749ca21fbfd9f36d533318e1a59ed11ed2e1b46e4d62291baf391b3c",
+      "n_iter": 111,
+      "seconds": 0.5,
+      "spec": {
+        "n_clusters": 8,
+        "n_init": 3,
+        "random_state": 7
+      },
+      "stages": 1884,
+      "sum_scale": 65536.0,
+      "weight_scale": 32768.0
+    },
+    "kmeans_k8_random": {
+      "card": "kmeans_k8_random.card",
+      "centroids": "7f3964aded98bfefaed96f3e1a9a1f601f48f48837f782d5742c1bde011eedb0",
+      "inertia": "637c0eb835d5104676d61048c3c95e46ac9191292d2992c6186967cb7ba27ece",
+      "inertia_value": 35822.3671875,
+      "kind": "kmeans",
+      "labels": "11463766dc034b3396e406a46a6ceba5bf794a201fd19a83c9740a54958cf7ad",
+      "n_iter": 70,
+      "seconds": 0.35,
+      "spec": {
+        "init": "random",
+        "n_clusters": 8,
+        "random_state": 7
+      },
+      "stages": 497,
+      "sum_scale": 65536.0,
+      "weight_scale": 32768.0
+    },
+    "kmeans_k8_seed11": {
+      "card": "kmeans_k8_seed11.card",
+      "centroids": "b331314bbe2cdf38571bf67256c2fbc4836010422e118274144354985c517ff1",
+      "inertia": "40bd37f033359b5c5f52d8a2a112937da643f09bc62eaf3c6029837e4b3bff67",
+      "inertia_value": 35804.7265625,
+      "kind": "kmeans",
+      "labels": "cdff1c357f5749beeeb94b856528eefe0c8c5634af886394e096f0efc3516535",
+      "n_iter": 67,
+      "seconds": 0.37,
+      "spec": {
+        "n_clusters": 8,
+        "random_state": 11
+      },
+      "stages": 518,
+      "sum_scale": 65536.0,
+      "weight_scale": 32768.0
+    },
+    "kmeans_k8_sw": {
+      "card": "kmeans_k8_sw.card",
+      "centroids": "bfae6fe51697df91603bd1585db36e46a737d3cc07354b45819de54c2bd42e81",
+      "inertia": "79346867c95b160d4539ce0b2d0affc573eb954cb72111cb8cd5516945806fec",
+      "inertia_value": 107318.0546875,
+      "kind": "kmeans",
+      "labels": "e99e2b8c1fd3c1260ebe105bc27ee144cacaf9c0bc881aae6b42e60b966b6aec",
+      "n_iter": 56,
+      "seconds": 0.37,
+      "spec": {
+        "n_clusters": 8,
+        "random_state": 7
+      },
+      "stages": 427,
+      "sum_scale": 65536.0,
+      "weight_scale": 16384.0
+    },
+    "kmeans_k8_ties": {
+      "card": "kmeans_k8_ties.card",
+      "centroids": "91545b338f2cf24529b6c401e333f5ecc2fa5afeb8e5dc9459ef71009f2aa389",
+      "inertia": "b87c381e0151388aa79ae56471417a104a50865a798dbfad626b0aa71d92fb5b",
+      "inertia_value": 35659.42578125,
+      "kind": "kmeans",
+      "labels": "ef31f9e331f64b2a0c61919d26817f9e3355478a26a8cd5552083fc039132640",
+      "n_iter": 73,
+      "seconds": 0.36,
+      "spec": {
+        "n_clusters": 8,
+        "random_state": 7
+      },
+      "stages": 567,
+      "sum_scale": 65536.0,
+      "weight_scale": 32768.0
+    },
+    "kmeans_k8_tol1e-2": {
+      "card": "kmeans_k8_tol1e-2.card",
+      "centroids": "ef5969ce848005ad86308f235acd36bd8280b870a3b4bc2b77354a54031109c1",
+      "inertia": "166fc78ae306f53e84264fe8a2be39db3a548df6806b676459c106e6363f0ff1",
+      "inertia_value": 36002.70703125,
+      "kind": "kmeans",
+      "labels": "6aa47cb659fce2413f279581afdd39b67c000748afa71eab441d083ed3308de2",
+      "n_iter": 3,
+      "seconds": 0.33,
+      "spec": {
+        "n_clusters": 8,
+        "random_state": 7,
+        "tol": 0.01
+      },
+      "stages": 56,
+      "sum_scale": 65536.0,
+      "weight_scale": 32768.0
+    },
+    "kmeans_k8_wide": {
+      "card": "kmeans_k8_wide.card",
+      "centroids": "3b57750772e1d6da7ddc83bf30149b3bc2e417fa5e2acb05844f9798cf3e6aed",
+      "inertia": "a0db17a07d2ae0e60f8a324cdeb0329d77580d971afc86917f0bf7bdea442c4c",
+      "inertia_value": 67278.890625,
+      "kind": "kmeans",
+      "labels": "bef30d228279230053b323b5ca68ea423fae88c5ffb521f4a9cb2fe94d4afe4a",
+      "n_iter": 30,
+      "seconds": 0.35,
+      "spec": {
+        "n_clusters": 8,
+        "random_state": 7
+      },
+      "stages": 266,
+      "sum_scale": 262144.0,
+      "weight_scale": 131072.0
+    },
+    "knn_algorithm_kd_tree": {
+      "kind": "knn",
+      "refused": "ValueError: mojolearn NearestNeighbors: algorithm='kd_tree' is refused; this class is exact brute force ('brute', which 'auto' also means here) and ships no tree or graph index",
+      "seconds": 0.0,
+      "spec": {
+        "algorithm": "kd_tree",
+        "n_neighbors": 10
+      }
+    },
+    "knn_clf_k15_3class": {
+      "card": "knn_clf_k15_3class.card",
+      "classes": "a296c7e7cc1e6e0056364c5572a77c816f4bcee8214189856920f0868be345f8",
+      "kind": "knn_clf",
+      "n_classes": 3,
+      "predictions": "1da84f3fc0b8c21f788c5a761f75fad829194b62f2254ab6cb7af0cca4c6c60e",
+      "proba": "304b5be9921a6251943b0c059dd8fd13032ccfcd850351c2619505990c8958b6",
+      "seconds": 0.34,
+      "spec": {
+        "n_neighbors": 15
+      },
+      "stages": 9,
+      "used_query_tile": 256
+    },
+    "knn_clf_k5": {
+      "card": "knn_clf_k5.card",
+      "classes": "a296c7e7cc1e6e0056364c5572a77c816f4bcee8214189856920f0868be345f8",
+      "kind": "knn_clf",
+      "n_classes": 3,
+      "predictions": "b2e15c69f35b1bb0cc9351a4ea2e71ff7815f1d39daefc72f8df5f0cca4e7bed",
+      "proba": "7e9bc1b7b891562b46c5098b13c75a99463584028a690ff398ea5822a2a69788",
+      "seconds": 0.33,
+      "spec": {
+        "n_neighbors": 5
+      },
+      "stages": 9,
+      "used_query_tile": 256
+    },
+    "knn_clf_ties": {
+      "card": "knn_clf_ties.card",
+      "classes": "6ba049c298f5563f3aa65636efc50fdc25f67f385d3086c4060b9a4b83281d66",
+      "kind": "knn_clf",
+      "n_classes": 2,
+      "predictions": "6cec249c74a476b5b6a1ab3739f29c739d319d27a08825eab12f062deab4b756",
+      "proba": "3b3f7e7d86556acda78e5aaad6e268837138f987d1c65f5376c78d12db7845be",
+      "seconds": 0.33,
+      "spec": {
+        "n_neighbors": 4
+      },
+      "stages": 9,
+      "used_query_tile": 256
+    },
+    "knn_clf_weights_distance_refused": {
+      "kind": "knn_clf",
+      "refused": "ValueError: mojolearn KNeighborsClassifier: weights='distance' is refused; only 'uniform' is ported. cuML refuses it too (kneighbors_classifier.pyx:191, 'Only uniform weighting strategy is supported currently') and the ported vote (neighbors/ported/selection/knn.mojo) carries no weight: a distance-weighted vote is a port, not a flag",
+      "seconds": 0.0,
+      "spec": {
+        "n_neighbors": 5,
+        "weights": "distance"
+      }
+    },
+    "knn_k1": {
+      "card": "knn_k1.card",
+      "distances": "cee0bffdae3ca2dd97cca02b0cc872b2c46e45091da766f4ef305f9e9d30b31e",
+      "indices": "44628167ce3917a9b55e0db67582819cda89fdfd2cf6579539ba3d829a7fe7ff",
+      "kind": "knn",
+      "seconds": 0.32,
+      "spec": {
+        "n_neighbors": 1
+      },
+      "stages": 6,
+      "used_query_tile": 256
+    },
+    "knn_k10": {
+      "card": "knn_k10.card",
+      "distances": "2b882a14efa0981905bfbf181f6f4dfcbd1fa7edb28325d961015574284b5ea7",
+      "indices": "9c0566c60022ad10df0b29f7169c7d4adec61830c9ce61a3773b4eeabddade2d",
+      "kind": "knn",
+      "seconds": 0.32,
+      "spec": {
+        "n_neighbors": 10
+      },
+      "stages": 6,
+      "used_query_tile": 256
+    },
+    "knn_k100": {
+      "card": "knn_k100.card",
+      "distances": "e98f9670e01efcfa9a05363e86557ce9f1a83a9ce9016b1a53b0c557b1a47b17",
+      "indices": "1c0f428b9b47f980f05a5c074cc988eb0c82566e7c7ed34a6662212fa328e93e",
+      "kind": "knn",
+      "seconds": 0.33,
+      "spec": {
+        "n_neighbors": 100
+      },
+      "stages": 6,
+      "used_query_tile": 256
+    },
+    "knn_k100_ties": {
+      "card": "knn_k100_ties.card",
+      "distances": "25e3db22db1b6bdbf9225a2de6ba573d8ca13e2c00ca0012a06f16204e7f6ae6",
+      "indices": "faf985455d617198f9bd7a8fa83195f366df5e59a9933dd215fbafe2f9449e35",
+      "kind": "knn",
+      "seconds": 0.33,
+      "spec": {
+        "n_neighbors": 100
+      },
+      "stages": 6,
+      "used_query_tile": 256
+    },
+    "knn_k10_200k": {
+      "card": "knn_k10_200k.card",
+      "distances": "d7023914fd39701dad3ac79b4703a12d47b881db24ccc0db107f9098662c58f2",
+      "indices": "47bf0bc340d2788ccb544987cce710ad943f3251527501311fbf67a79452f467",
+      "kind": "knn",
+      "seconds": 0.41,
+      "spec": {
+        "n_neighbors": 10
+      },
+      "stages": 6,
+      "used_query_tile": 256
+    },
+    "knn_k10_self": {
+      "card": "knn_k10_self.card",
+      "distances": "fcba2b16c4c142b38c473250cac734361bbaf5a94978bf1823d24f4e8b63e64a",
+      "indices": "d361f34919189c8992ef8d5d721968ec21377a4333f17b924451ece7b4b5f9da",
+      "kind": "knn",
+      "seconds": 0.33,
+      "spec": {
+        "n_neighbors": 10
+      },
+      "stages": 6,
+      "used_query_tile": 256
+    },
+    "knn_k10_ties": {
+      "card": "knn_k10_ties.card",
+      "distances": "f183bf0d8adedfedc0f375b2c5171426de0a21a00491e7ef62bb4a6b0811c5ea",
+      "indices": "b2d698f0b3b15966d125cec25de76855fd3f64e6bf4609b0cc193d2c95ebaea7",
+      "kind": "knn",
+      "seconds": 0.33,
+      "spec": {
+        "n_neighbors": 10
+      },
+      "stages": 6,
+      "used_query_tile": 256
+    },
+    "knn_k10_tile64": {
+      "card": "knn_k10_tile64.card",
+      "distances": "2b882a14efa0981905bfbf181f6f4dfcbd1fa7edb28325d961015574284b5ea7",
+      "indices": "9c0566c60022ad10df0b29f7169c7d4adec61830c9ce61a3773b4eeabddade2d",
+      "kind": "knn",
+      "seconds": 0.33,
+      "spec": {
+        "n_neighbors": 10,
+        "query_tile": 64
+      },
+      "stages": 6,
+      "used_query_tile": 64
+    },
+    "knn_k300": {
+      "kind": "knn",
+      "refused": "Exception: select_radix (IDENTICAL): k > 256 is refused. The rank pass gives one thread to each output slot; a larger k needs a loop, which is not written until something asks for it.",
+      "seconds": 0.32,
+      "spec": {
+        "n_neighbors": 300
+      }
+    },
+    "knn_k64_ties": {
+      "card": "knn_k64_ties.card",
+      "distances": "0d3735f1a5acf0ca57d3abae68689eade4ec25d83b6d15b2df73d41b81be7121",
+      "indices": "19785489f0b39bd1214c0d4649294afcba15cc35f0d6e00f55f42e7dba7b3a8b",
+      "kind": "knn",
+      "seconds": 0.32,
+      "spec": {
+        "n_neighbors": 64
+      },
+      "stages": 6,
+      "used_query_tile": 256
+    },
+    "knn_metric_cosine": {
+      "kind": "knn",
+      "refused": "ValueError: mojolearn NearestNeighbors: metric='cosine' is refused; only Euclidean ('euclidean', 'l2', 'minkowski' with p=2) is ported. The brute-force kernels carry the expanded-L2 arm only (neighbors/ported/neighbors/detail/knn_brute_force.mojo): another metric is a port, not a flag",
+      "seconds": 0.0,
+      "spec": {
+        "metric": "cosine",
+        "n_neighbors": 10
+      }
+    },
+    "knn_metric_l2": {
+      "card": "knn_metric_l2.card",
+      "distances": "2b882a14efa0981905bfbf181f6f4dfcbd1fa7edb28325d961015574284b5ea7",
+      "indices": "9c0566c60022ad10df0b29f7169c7d4adec61830c9ce61a3773b4eeabddade2d",
+      "kind": "knn",
+      "seconds": 0.32,
+      "spec": {
+        "metric": "l2",
+        "n_neighbors": 10
+      },
+      "stages": 6,
+      "used_query_tile": 256
+    },
+    "knn_metric_minkowski_p1": {
+      "kind": "knn",
+      "refused": "ValueError: mojolearn NearestNeighbors: metric='minkowski' with p=1 is refused; only p=2 (Euclidean) is ported",
+      "seconds": 0.0,
+      "spec": {
+        "metric": "minkowski",
+        "n_neighbors": 10,
+        "p": 1
+      }
+    },
+    "knn_reg_k5": {
+      "card": "knn_reg_k5.card",
+      "kind": "knn_reg",
+      "predictions": "86e3ca57cbadc7639dee31043a3ebcf2b1d05452388abfdb0d78a2da9e3cd68a",
+      "seconds": 0.33,
+      "spec": {
+        "n_neighbors": 5
+      },
+      "stages": 7,
+      "used_query_tile": 256
+    },
+    "knn_reg_k50": {
+      "card": "knn_reg_k50.card",
+      "kind": "knn_reg",
+      "predictions": "65d7e53c243ce07a3fb0b2e92e4d2ccf7f4c11045cacb030bf76cef18f15eb7e",
+      "seconds": 0.33,
+      "spec": {
+        "n_neighbors": 50
+      },
+      "stages": 7,
+      "used_query_tile": 256
+    },
+    "logreg_c1": {
+      "card": "logreg_c1.card",
+      "coef": "7a58d29afc1ad105a67dab90f32c24d77b816241fc505a3725e912140f16e28b",
+      "intercept": "3e6662c6eb3794322817f7afec763e1b0c8358ce2ddbc1e31feeff6d5872883d",
+      "kind": "logreg",
+      "n_iter": 23,
+      "objective": 0.09446299821138382,
+      "predictions": "8669f54c0708cb273088a291f64a21b17b23ef70d751d5ed15f0681ae8d9b4f0",
+      "proba": "15c60d1b95e0512a1e96cbe5839cb35dafc9f509b0b030884e6c330e4c0cf61a",
+      "retcode": 0,
+      "seconds": 0.37,
+      "spec": {
+        "C": 1.0
+      },
+      "stages": 74
+    },
+    "logreg_c100": {
+      "card": "logreg_c100.card",
+      "coef": "f045c9e79cb2bf51f50194d6106a83f5edd203141b3b03d6e200becce29fe07c",
+      "intercept": "fa35c9baa02b1adbadeeffd002d243889244c02c8f32c2d9c4f26bd221d4ac7d",
+      "kind": "logreg",
+      "n_iter": 35,
+      "objective": 0.020331235602498055,
+      "predictions": "72e0a94b31a4b514f18adeea3eebbdafef6081e5cd2a84bc954054ef389f9809",
+      "proba": "ff0cc468aeb3c602fe06fdb786cfbd6fafa1277382a18eed040d74df52e52e7a",
+      "retcode": 0,
+      "seconds": 0.38,
+      "spec": {
+        "C": 100.0
+      },
+      "stages": 110
+    },
+    "logreg_l1_refused": {
+      "kind": "logreg",
+      "refused": "NotImplementedError: mojolearn LogisticRegression: penalty='l1' selects OWL-QN (min_owlqn, qn_solvers.cuh:246), which is NOT PORTED; penalty='l2' or None (L-BFGS) are the ported arms. See glm/UNPORTED.tsv",
+      "seconds": 0.0,
+      "spec": {
+        "penalty": "l1"
+      }
+    },
+    "logreg_nointercept": {
+      "card": "logreg_nointercept.card",
+      "coef": "bbbe8e58f93efc0005be949e0bb34c1181502aa150920cbc23dacfdafb54ab87",
+      "intercept": "c383d0eb37e29b3fcb7f2dca0759f89e66765bc05a834b9cce580a653ddf4c47",
+      "kind": "logreg",
+      "n_iter": 14,
+      "objective": 0.5684740543365479,
+      "predictions": "82ee58ce309bf9d1349ef05fcb0540d1096f5aa11c7cc21fcaa11894800db845",
+      "proba": "58ca0e616ec1dd134568508ec4efb605333ca9488cb398899c2569c289c6425b",
+      "retcode": 0,
+      "seconds": 0.36,
+      "spec": {
+        "C": 1.0,
+        "fit_intercept": false
+      },
+      "stages": 47
+    },
+    "ols_200k": {
+      "card": "ols_200k.card",
+      "coef": "25458da1e378f22975070e023f48496c3a1a9d0c73fa0a6a05bb6015ea0cb1f8",
+      "intercept": "63d6ab4c8bc1e94b60fe07ae75149dbb2d1d0a964d5f6699b617898a9b3f3dda",
+      "intercept_value": -0.005040970107007325,
+      "kind": "ols",
+      "predictions": "3e1baff31c41083aa50e1c926a216244ce86d1bbb4af04e4481d466c157ce465",
+      "seconds": 0.35,
+      "spec": {},
+      "stages": 9
+    },
+    "ols_intercept": {
+      "card": "ols_intercept.card",
+      "coef": "8c899cf9408ff567536773a5260557b06fa99599b711fb3abb89ab061ef1e39f",
+      "intercept": "bb0a1e2eb4c053cd56125fc0881ed60d64b008b62e137af2f35db1e4adee43be",
+      "intercept_value": -0.007165150861432323,
+      "kind": "ols",
+      "predictions": "5e8e2c4d46b06634ab98ec41e766a1e8b53290e687446df776fa74219dc7a430",
+      "seconds": 0.34,
+      "spec": {},
+      "stages": 9
+    },
+    "ols_narrow4": {
+      "card": "ols_narrow4.card",
+      "coef": "a3ed1af2b1e2cc3f68321cd1fd7b3356a31f3d2e4805e4ce6b3d3c02194759b3",
+      "intercept": "7eb0e277eb37c3bb39e2684d85e6af184d25d4e2ea3cfd8c70c6c677065ae271",
+      "intercept_value": 4.1760878729179405,
+      "kind": "ols",
+      "predictions": "e62f246644321dbcc24878aab6bffc9b0756adcf3b5ca0fae153927ea1566f7c",
+      "seconds": 0.34,
+      "spec": {},
+      "stages": 9
+    },
+    "ols_nointercept": {
+      "card": "ols_nointercept.card",
+      "coef": "ac27997df5bbdddacb6acf55cb226df08ee1d44d6c33d160f75a7c39ea7c3c89",
+      "intercept": "746e75607f7ce3478b54dd31aa809ce25c0435996ce87be6a05d52790547d949",
+      "intercept_value": 0.0,
+      "kind": "ols",
+      "predictions": "397d018aef4af509acfe53f821a91344bd408e9add65a693d61b9a4d44d9591b",
+      "seconds": 0.34,
+      "spec": {
+        "fit_intercept": false
+      },
+      "stages": 9
+    },
+    "ols_onecol_refused": {
+      "kind": "ols",
+      "refused": "Exception: olsFit: n_cols == 1 selects lstsqSvdJacobi (ols.cuh:113), which is NOT PORTED. cuML forces the same switch and says the eig solver does not support a single column (linear_regression.pyx:390). See glm/UNPORTED.tsv",
+      "seconds": 0.25,
+      "spec": {}
+    },
+    "ols_sw_refused": {
+      "kind": "ols",
+      "refused": "NotImplementedError: mojolearn LinearRegression: sample_weight is not ported (ols.cuh:99-110; glm/UNPORTED.tsv)",
+      "seconds": 0.0,
+      "spec": {}
+    },
+    "ols_wide_refused": {
+      "kind": "ols",
+      "refused": "Exception: olsFit: n_cols > n_rows selects lstsqSvdJacobi (ols.cuh:113), which is NOT PORTED. The normal-equations solver cannot be used here: A^T A is singular by construction. See glm/UNPORTED.tsv",
+      "seconds": 0.27,
+      "spec": {}
+    },
+    "pca_all": {
+      "card": "pca_all.card",
+      "components": "1bea4925b250f5837cb8fcefbd8633ecae14ad777a0f39fd1e644a01d2e259b3",
+      "explained_variance": "5eba87d3059e7fb1bf85a00690e40ee158f3728f460d68f66843fb14f1f7275d",
+      "explained_variance_ratio": "fc9b565786884352f416b7036265a36bb0b2cf6dbc4ef402ee643e9c333508ee",
+      "kind": "pca",
+      "mean": "d7b405ea880f3fa64ef4a9e64ce30bc3f0123b7f75c5a1731fb27098d66cabb3",
+      "noise_variance": "746e75607f7ce3478b54dd31aa809ce25c0435996ce87be6a05d52790547d949",
+      "seconds": 0.34,
+      "singular_values": "491100e05087855557879d541b10f6aa8ae36ddf96f8668135c4ca43cec1b0e0",
+      "spec": {
+        "n_components": null
+      },
+      "stages": 6,
+      "transformed": "ffdc2c8a5ac3d41577a44055e2df88b991a67cbfb8d806fd22f6950880e25382"
+    },
+    "pca_c2": {
+      "card": "pca_c2.card",
+      "components": "2dbf58860ee35c1b201a7efa6c5d9fb06a92cf995abecc7074fde7a7a30223c7",
+      "explained_variance": "8802da9a893cee0c22c3fb6973214cb19c040eee01656e45ad5a675391d5c769",
+      "explained_variance_ratio": "dae386dd3fe0d460316fa39308a8e2118312d7f675ce76fc7560883de9f8e79e",
+      "kind": "pca",
+      "mean": "d7b405ea880f3fa64ef4a9e64ce30bc3f0123b7f75c5a1731fb27098d66cabb3",
+      "noise_variance": "07802bdc39c89ed7fe9ccdf0ef96dcdbaf28277f3a5d7b3dea96d45c2ce53651",
+      "seconds": 0.33,
+      "singular_values": "38a718a304a87623ca7efae29c1140b1e8a2f64fb443e55aae07428298263601",
+      "spec": {
+        "n_components": 2
+      },
+      "stages": 6,
+      "transformed": "928642b6dfab64c7c7f162b4808d1e81e804640d5af0e3c4ada542beb58a593b"
+    },
+    "pca_c8": {
+      "card": "pca_c8.card",
+      "components": "02f3b73ec4f4d708e76da1d9e16c16230364c79573c4aff0594ce4c534cf9fa1",
+      "explained_variance": "ec0ed37139ee270a3b5a184cf845ed9a3db3e3a62cd7b884cb8f3fc67b4904ab",
+      "explained_variance_ratio": "acfadd4e0486339affd9e7faf3006eac4a0751fbed6b163db4ed737e6c26fd8f",
+      "kind": "pca",
+      "mean": "d7b405ea880f3fa64ef4a9e64ce30bc3f0123b7f75c5a1731fb27098d66cabb3",
+      "noise_variance": "c0f2fea38b27c07b8f00f5fee2dd9bd859948192cc1d31ad00068ec8e6a52c94",
+      "seconds": 0.34,
+      "singular_values": "13a4e3a94ffb669a824166773159c14a247631ef9f83811f090a08932c278703",
+      "spec": {
+        "n_components": 8
+      },
+      "stages": 6,
+      "transformed": "6b2a3131ac225b6168b2e3d994a067a4d6971f40df73b14be32366dacaecc23e"
+    },
+    "pca_c8_200k": {
+      "card": "pca_c8_200k.card",
+      "components": "c2203550f77ef049bcf4c56c4ddc55183dd35b88b8f8f3d04f865dba126532ce",
+      "explained_variance": "6d21b828d8c4bf68d3806bd921c3d7fff349aaa131a80c7945d1fce960743735",
+      "explained_variance_ratio": "5c996908f3ee052a77aa500751c46b7487e0f78f4d15939ed31d8988f29fb761",
+      "kind": "pca",
+      "mean": "731ecdf732fcf685f69b6a04dcad40eca9a9bf4f0bbe0e527bb3f2f3b42cf339",
+      "noise_variance": "4e9db2df15d71bcd1dd0517218e804146af580cf649f8de8cce10630361eb326",
+      "seconds": 0.34,
+      "singular_values": "f24044566a999ee2702fa16f982603a2a87eb9aa9764197e3061d3e765e58044",
+      "spec": {
+        "n_components": 8
+      },
+      "stages": 6,
+      "transformed": "140e1faba57e56561dda896701b16fc296871a4a6cfb27a51dc58cfb10cc7964"
+    },
+    "pca_c8_wide": {
+      "kind": "pca",
+      "refused": "Exception: gemm_tn: NUMERIC_IDENTICAL refuses the Gram shape 200 x 200 x 4096. The split-K kernel (core/gram_splitk.mojo) is the only arm with a pinned summation order, and this shape is outside its capacity (needs m == n <= 128 and m*n <= 16384 register cells). The other arm is linalg.matmul, whose k-split is a per-vendor summation order, so running it would return a NON-identical model under a mode that promises one. IDENTITY_PATHS row 27. To close this refusal, widen the split-K kernel's staging tile; to work around it today, reduce the feature count or run NUMERIC_FAST and drop the cross-vendor claim.",
+      "seconds": 0.25,
+      "spec": {
+        "n_components": 8
+      }
+    },
+    "pca_solver_full": {
+      "kind": "pca",
+      "refused": "ValueError: mojolearn PCA: svd_solver='full' is refused; only 'auto' / 'covariance_eigh' (cuML's covariance + device Jacobi arm) is ported; 'full', 'randomized' and 'arpack' are different algorithms (decomposition/UNPORTED.tsv)",
+      "seconds": 0.0,
+      "spec": {
+        "n_components": 2,
+        "svd_solver": "full"
+      }
+    },
+    "pca_whiten": {
+      "kind": "pca",
+      "refused": "NotImplementedError: mojolearn PCA: whiten=True is refused; the whitening rescale of the components (and its inverse on inverse_transform) is not ported, and an unwhitened transform returned for whiten=True would be a wrong answer",
+      "seconds": 0.0,
+      "spec": {
+        "n_components": 2,
+        "whiten": true
+      }
+    },
+    "ridge_a1": {
+      "card": "ridge_a1.card",
+      "coef": "f846b096766830597d9799201c5724dc4aa2bb5ae386f09ea88ffa2f739c50aa",
+      "intercept": "ed74729239367a7c6d6d9563f67c10f67757213c916e4820a7220743302ad3dc",
+      "intercept_value": -0.0038104520894801652,
+      "kind": "ridge",
+      "predictions": "27349770f4fd33916c8e1cd266477e65a9a09820e6edc66869315b8f5b2fb85e",
+      "seconds": 0.35,
+      "spec": {
+        "alpha": 1.0
+      },
+      "stages": 14
+    },
+    "ridge_a100": {
+      "card": "ridge_a100.card",
+      "coef": "57ab43da3b3054d4f0d403af0078c1e1c691e1be3fef32f1fac1128f999b5fab",
+      "intercept": "828104434f4796fddaaf07a7108c10b63c8c0092992b87416942cd99d9327daa",
+      "intercept_value": 0.3097510867480864,
+      "kind": "ridge",
+      "predictions": "275cc1353daf23727e684dada1c92db77d8b61b06095a343a5905ccaa2b94021",
+      "seconds": 0.34,
+      "spec": {
+        "alpha": 100.0
+      },
+      "stages": 14
+    },
+    "ridge_nointercept": {
+      "card": "ridge_nointercept.card",
+      "coef": "868d0fbb0d3f6e83d5561ac6a4a96cda2826a75fff291e9c99cd777a3ae4bb02",
+      "intercept": "746e75607f7ce3478b54dd31aa809ce25c0435996ce87be6a05d52790547d949",
+      "intercept_value": 0.0,
+      "kind": "ridge",
+      "predictions": "23e26009dd6f55c5414bfce9fc95a09c7fd59e818a35831b99883876cd6c8741",
+      "seconds": 0.34,
+      "spec": {
+        "alpha": 1.0,
+        "fit_intercept": false
+      },
+      "stages": 14
+    },
+    "tsvd_c2": {
+      "card": "tsvd_c2.card",
+      "components": "303b36708927f84ccaed170948a449e225b7cab7100bd1413e9653669ae5d9bd",
+      "kind": "tsvd",
+      "seconds": 0.33,
+      "singular_values": "fd78d7eee782eb60c722acfa62045ba9e57e9c803fca5ed6e3708063bd497253",
+      "spec": {
+        "n_components": 2
+      },
+      "stages": 3,
+      "transformed": "2685837465d3ff7f79aeb5fb05a5b9a469ff599052ee4b993b1f2e76804bac42"
+    },
+    "tsvd_c8": {
+      "card": "tsvd_c8.card",
+      "components": "123a172e8aa81a08f54ba319b650b7f13ef3e4e52d3b362942048824f72ec792",
+      "kind": "tsvd",
+      "seconds": 0.34,
+      "singular_values": "e061696f7406dd8b722861f32e627750e6d83e8c8790b8570eb64fb63383d9e0",
+      "spec": {
+        "n_components": 8
+      },
+      "stages": 3,
+      "transformed": "bcc21da7e8e485a4bf05799d014dabad2c1280d291fbb856dd5d754acfab74ca"
+    },
+    "tsvd_c8_wide": {
+      "kind": "tsvd",
+      "refused": "Exception: gemm_tn: NUMERIC_IDENTICAL refuses the Gram shape 200 x 200 x 4096. The split-K kernel (core/gram_splitk.mojo) is the only arm with a pinned summation order, and this shape is outside its capacity (needs m == n <= 128 and m*n <= 16384 register cells). The other arm is linalg.matmul, whose k-split is a per-vendor summation order, so running it would return a NON-identical model under a mode that promises one. IDENTITY_PATHS row 27. To close this refusal, widen the split-K kernel's staging tile; to work around it today, reduce the feature count or run NUMERIC_FAST and drop the cross-vendor claim.",
+      "seconds": 0.25,
+      "spec": {
+        "n_components": 8
+      }
+    },
+    "tsvd_randomized": {
+      "kind": "tsvd",
+      "refused": "ValueError: mojolearn TruncatedSVD: algorithm='randomized' is refused; only 'covariance_eigh' (the Gram + device Jacobi arm cuML's tsvdFit takes) is ported; 'arpack' and 'randomized' are different algorithms",
+      "seconds": 0.0,
+      "spec": {
+        "algorithm": "randomized",
+        "n_components": 2
+      }
+    }
+  },
+  "commit": "fe00e8aae203b53d6d7bd2acb92dfc3669f97107",
+  "driver": "e2u",
+  "inputs": {
+    "C0": "09d72baac77347c606b0ec4a90977b55c246e10fadc174888d3fee05bfee4a4e",
+    "X": "5a095c2b4b84d5e01de5fb6be5486723093c6abd431b82b612bc28ee89484e95",
+    "X_blobs": "6b619f79e2b0dd5b258193598de84fe3521645f71d7fe6372b94ee4ff9eb8dcf",
+    "X_chain": "8a11433bb672dc09d76fd980ddd604a7b11bb35cb4817fa4aa74fb15685edb03",
+    "X_ols_wide": "d9126dc7bc873d6f03466d1b935abc0642699ca62e41f698a4fd6180d9e30187",
+    "X_ties": "a83aadd777521005a6e17a32ee30d83b6341be4f10ed06ecf3519e831620feee",
+    "X_wide": "c3a39be30811e8bf7a9532e280e29c53b4db0630b1246ad1ddd4cab2a750ebe0",
+    "Xb": "f677a70a0cd8a870f263a8f66d63a5e6c56ff98b11bf8a650122485178b1ce80",
+    "Xq": "f7af5e4967e5455e8bd0d4bb775dad8d6326401043168539fa2e117d959b007a",
+    "Xq_ties": "7e66684f8f9585f876aa45622a0749476bc3dd91a7543320ac56e1ac0d36d663",
+    "sw": "dc70834feb7e9806b2e8e9c17df83290fd7a09bf37d7d119a06e3409503b84f3",
+    "y_clf2": "66f61758631c071484d67c1341b6f848c84d853d7db20403a738f799f1938237",
+    "y_clf3": "d011af44e44d9bc82487bbd70705aa0642d0131b905eee521706e8123c67dd3e",
+    "y_ols_wide": "1df84470fdac59abad6ce08f405289230a5ae4bd5387097ef2436e8d72a50824",
+    "y_reg": "c9360efad18ce7e0414753c377d663e3a6035ea6d098457b9264a5768f1fe573",
+    "yb_reg": "a424cbbb79a28102880781cc2db1c80cacf22596ed4af77e657a74452771b8e3"
+  },
+  "machine": "mojolearn-e2-amd",
+  "numeric_mode": "identical",
+  "platform": "Linux-6.8.0-59-generic-x86_64-with-glibc2.39",
+  "reach": [
+    {
+      "note": "moved centroids,inertia,labels",
+      "parameter": "KMeans.n_clusters",
+      "verdict": "REACHES"
+    },
+    {
+      "note": "moved centroids,inertia,labels",
+      "parameter": "KMeans.init",
+      "verdict": "REACHES"
+    },
+    {
+      "note": "moved centroids,inertia,labels",
+      "parameter": "KMeans.n_init",
+      "verdict": "REACHES"
+    },
+    {
+      "note": "moved centroids,inertia,labels; n_iter: 81 -> 3",
+      "parameter": "KMeans.tol",
+      "verdict": "REACHES"
+    },
+    {
+      "note": "moved centroids,inertia,labels; n_iter: 81 -> 3",
+      "parameter": "KMeans.max_iter",
+      "verdict": "REACHES"
+    },
+    {
+      "note": "moved centroids,inertia,labels",
+      "parameter": "KMeans.random_state",
+      "verdict": "REACHES"
+    },
+    {
+      "note": "moved centroids,inertia,labels",
+      "parameter": "KMeans.sample_weight",
+      "verdict": "REACHES"
+    },
+    {
+      "note": "moved centroids,inertia,labels",
+      "parameter": "KMeans.init_centroids",
+      "verdict": "REACHES"
+    },
+    {
+      "note": "moved distances,indices",
+      "parameter": "NearestNeighbors.n_neighbors",
+      "verdict": "REACHES"
+    },
+    {
+      "note": "used_query_tile: 256 -> 64",
+      "parameter": "NearestNeighbors.query_tile",
+      "verdict": "INVARIANT"
+    },
+    {
+      "note": "distances,indices equal",
+      "parameter": "NearestNeighbors.metric='l2'",
+      "verdict": "INVARIANT"
+    },
+    {
+      "note": "moved predictions,proba",
+      "parameter": "KNeighborsClassifier.n_neighbors",
+      "verdict": "REACHES"
+    },
+    {
+      "note": "moved predictions",
+      "parameter": "KNeighborsRegressor.n_neighbors",
+      "verdict": "REACHES"
+    },
+    {
+      "note": "moved labels",
+      "parameter": "DBSCAN.eps",
+      "verdict": "REACHES"
+    },
+    {
+      "note": "moved labels",
+      "parameter": "DBSCAN.min_samples",
+      "verdict": "REACHES"
+    },
+    {
+      "note": "labels equal",
+      "parameter": "DBSCAN.algorithm",
+      "verdict": "INVARIANT"
+    },
+    {
+      "note": "labels equal",
+      "parameter": "DBSCAN.algorithm (min50)",
+      "verdict": "INVARIANT"
+    },
+    {
+      "note": "labels equal",
+      "parameter": "DBSCAN.algorithm (uniform24)",
+      "verdict": "INVARIANT"
+    },
+    {
+      "note": "batches: 1 -> 67",
+      "parameter": "DBSCAN.max_mbytes_per_batch (rbc)",
+      "verdict": "INVARIANT"
+    },
+    {
+      "note": "batches: 1 -> 67",
+      "parameter": "DBSCAN.max_mbytes_per_batch (brute)",
+      "verdict": "INVARIANT"
+    },
+    {
+      "note": "Exception: weak_cc_batched: label propagation did not converge in 200 ",
+      "parameter": "DBSCAN.max_iterations (chain, cap 200 binds)",
+      "verdict": "REFUSED"
+    },
+    {
+      "note": "labels equal",
+      "parameter": "DBSCAN.max_iterations (chain, None = fixed point)",
+      "verdict": "INVARIANT"
+    },
+    {
+      "note": "Exception: weak_cc_batched: label propagation did not converge in 1 pa",
+      "parameter": "DBSCAN.max_iterations (blobs, converges in 1)",
+      "verdict": "REFUSED"
+    },
+    {
+      "note": "labels equal",
+      "parameter": "DBSCAN.algorithm (chain)",
+      "verdict": "INVARIANT"
+    },
+    {
+      "note": "moved components,explained_variance,explained_variance_ratio,noise_variance,singular_values,transformed",
+      "parameter": "PCA.n_components",
+      "verdict": "REACHES"
+    },
+    {
+      "note": "moved components,singular_values,transformed",
+      "parameter": "TruncatedSVD.n_components",
+      "verdict": "REACHES"
+    },
+    {
+      "note": "moved coef,intercept,predictions",
+      "parameter": "LinearRegression.fit_intercept",
+      "verdict": "REACHES"
+    },
+    {
+      "note": "moved coef,intercept,predictions",
+      "parameter": "Ridge.alpha",
+      "verdict": "REACHES"
+    },
+    {
+      "note": "moved coef,intercept,predictions",
+      "parameter": "Ridge.fit_intercept",
+      "verdict": "REACHES"
+    },
+    {
+      "note": "moved coef,intercept,predictions,proba; n_iter: 23 -> 35",
+      "parameter": "LogisticRegression.C",
+      "verdict": "REACHES"
+    },
+    {
+      "note": "moved coef,intercept,predictions,proba; n_iter: 23 -> 14",
+      "parameter": "LogisticRegression.fit_intercept",
+      "verdict": "REACHES"
+    }
+  ]
+}

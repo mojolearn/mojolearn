@@ -583,31 +583,44 @@ def check_jacobi_fold_width_is_pinned() raises:
     var nvidia = lib_block_size_for[K_LIB_JACOBI_EIGH, COLUMN_NVIDIA]()
     var amd = lib_block_size_for[K_LIB_JACOBI_EIGH, COLUMN_AMD]()
     var floor = lib_block_size_for[K_LIB_JACOBI_EIGH, COLUMN_BIT_IDENTICAL]()
+    var here = lib_block_size_for[K_LIB_JACOBI_EIGH, TARGET_COLUMN]()
 
-    if apple != floor or nvidia != floor or amd != floor:
+    # The row is NUMERIC and listed (2026-08-23), so under IDENTICAL every
+    # column resolves to the floor -- that is the invariant. Under FAST the
+    # row may carry a vendor number, and AMD's is its 64-wide wavefront
+    # (the library fold cannot compile narrower there); Apple and NVIDIA
+    # read the floor's 32.
+    if floor != 32:
         raise Error(
-            "check_jacobi_fold_width_is_pinned: the eigensolver's fold width"
-            " resolves to "
-            + String(apple)
-            + "/"
-            + String(nvidia)
-            + "/"
-            + String(amd)
-            + " on Apple/NVIDIA/AMD against "
-            + String(floor)
-            + " on the identity floor. That width is a SUMMATION ORDER and"
-            " the stride of the per-thread partials, so a vendor number on"
-            " this row splits the sweep count between two machines. Either"
-            " put K_LIB_JACOBI_EIGH in lib_block_bounds_a_float_fold or"
-            " leave the row flat."
+            "check_jacobi_fold_width_is_pinned: the identity floor reads "
+            + String(floor) + ", not 32 -- the certified cards were cut at 32"
         )
-    if JACOBI_TPB != floor:
+    comptime if IDENTICAL_BUILD:
+        if apple != floor or nvidia != floor or amd != floor:
+            raise Error(
+                "check_jacobi_fold_width_is_pinned: under IDENTICAL the"
+                " eigensolver's fold width resolves to "
+                + String(apple) + "/" + String(nvidia) + "/" + String(amd)
+                + " on Apple/NVIDIA/AMD against " + String(floor)
+                + " on the identity floor. That width is a SUMMATION ORDER"
+                " and the stride of the per-thread partials, so a vendor"
+                " number here splits the sweep count between two machines."
+            )
+    else:
+        if apple != 32 or nvidia != 32 or amd != 64:
+            raise Error(
+                "check_jacobi_fold_width_is_pinned: the FAST row reads "
+                + String(apple) + "/" + String(nvidia) + "/" + String(amd)
+                + " on Apple/NVIDIA/AMD; expected 32/32/64 (AMD's wavefront)"
+            )
+    if JACOBI_TPB != here:
         raise Error(
             "check_jacobi_fold_width_is_pinned: JACOBI_TPB is "
             + String(JACOBI_TPB)
             + " but the matrix row reads "
-            + String(floor)
-            + " -- the kernel and the table disagree about the fold width"
+            + String(here)
+            + " for this build's column -- the kernel and the table disagree"
+            " about the fold width"
         )
     if JACOBI_TPB <= 0 or (JACOBI_TPB & (JACOBI_TPB - 1)) != 0:
         raise Error(
@@ -619,10 +632,12 @@ def check_jacobi_fold_width_is_pinned() raises:
     print(
         "check_jacobi_fold_width_is_pinned OK ("
         + _mode_name()
-        + "): every column resolves K_LIB_JACOBI_EIGH to "
+        + "): K_LIB_JACOBI_EIGH resolves to "
+        + String(apple) + "/" + String(nvidia) + "/" + String(amd)
+        + " (Apple/NVIDIA/AMD) against the identity floor's "
         + String(floor)
-        + ", a power of two, and the kernel compiles against that same"
-        " number. NOTE: "
+        + "; this build compiles against " + String(JACOBI_TPB)
+        + ", a power of two. NOTE: "
         + String(floor)
         + " threads is HALF an AMD CDNA wavefront -- under IDENTICAL the"
         " halving tree touches only the "

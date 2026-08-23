@@ -1,0 +1,9 @@
+{
+  "kind": "knn",
+  "refused": "ValueError: mojolearn NearestNeighbors: algorithm='kd_tree' is refused; this class is exact brute force ('brute', which 'auto' also means here) and ships no tree or graph index",
+  "seconds": 0.0,
+  "spec": {
+    "algorithm": "kd_tree",
+    "n_neighbors": 10
+  }
+}

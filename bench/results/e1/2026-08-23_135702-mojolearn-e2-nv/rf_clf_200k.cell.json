@@ -1,0 +1,12 @@
+{
+  "card": "rf_clf_200k.card",
+  "kind": "rf_clf",
+  "model": "880adafa12a3cfffc7e04e2b597f288d7fa28a45fd70d556bbec471447b35677",
+  "predictions": "b2de17e270535489feed010fc6cbdef2f6f40cbe6d12bc8b72eaaf95e96ad5cb",
+  "seconds": 0.82,
+  "spec": {
+    "max_depth": 8,
+    "n_estimators": 10,
+    "random_state": 7
+  }
+}

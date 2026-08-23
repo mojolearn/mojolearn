@@ -1,0 +1,19 @@
+{
+  "best_iteration": 0,
+  "card": "gbdt_multiclass.card",
+  "kind": "gbdt",
+  "loss_curve": "da5ba1aec4b747e593772b4a327bad0fbba24fc9c52752ca671e1ade23eaaa7f",
+  "model": "1db62bb14e0ef6d8f2e9e40994172981056cbd4569f169a9f3f60a43b91b072a",
+  "predictions": "8bbafb4b8eac0b0b00d8d524600f0adbb667bc420ba248de1d00628a7c209a85",
+  "proba": "714d74b550b42ff6c01790a3c8966fcae5ee9f175e248e3dd6200c8088ba1cd4",
+  "seconds": 0.95,
+  "spec": {
+    "border_count": 128,
+    "learning_rate": 0.3,
+    "loss": "MultiClass",
+    "max_depth": 6,
+    "n_estimators": 20,
+    "random_state": 7
+  },
+  "stopped_early": 0
+}

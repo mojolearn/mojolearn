@@ -1,0 +1,19 @@
+{
+  "best_iteration": 0,
+  "card": "gbdt_expectile.card",
+  "kind": "gbdt",
+  "loss_curve": "7cc14bcfc969e36a212df163cb965afe2c5274a061b91240bc390da276e85ab3",
+  "model": "8971cf75c6e932d0f5b62eb8d1d983603d2e75fb8bf1c7364392d51e73556d99",
+  "predictions": "386c1b78427bafa363ee437b8f9c40db0aa38a58963fb56920e36e3cf456b4dc",
+  "seconds": 0.72,
+  "spec": {
+    "border_count": 128,
+    "learning_rate": 0.3,
+    "loss": "Expectile",
+    "loss_alpha": 0.3,
+    "max_depth": 6,
+    "n_estimators": 20,
+    "random_state": 7
+  },
+  "stopped_early": 0
+}

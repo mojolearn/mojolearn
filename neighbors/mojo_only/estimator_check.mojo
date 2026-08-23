@@ -42,6 +42,7 @@ only the default would have been green on one shape and silently describing
 the other. That is the exact failure rule 8 was written for.
 """
 
+from mojo_only.kernel_matrix import TARGET_COLUMN, lib_lane_width_for
 from max.gpu.host import DeviceContext
 from std.math import sqrt
 
@@ -336,6 +337,17 @@ def check_knn_search_arms_agree() raises:
     names.append(String("AUTO"))
 
     for m in range(3):
+        if methods[m] == KNN_METHOD_FUSED and lib_lane_width_for[TARGET_COLUMN]() != 32:
+            # the FUSED arm refuses at entry on a 64-lane wavefront
+            # (IDENTITY_PATHS row 23) and AUTO never selects it there
+            # (DEVIATION 512 / 509); on the MI325X 2026-08-23 this loop
+            # raised that refusal and took the gate down. RECORDED.
+            print(
+                "check_knn_search_arms_agree: arm FUSED RECORDED as REFUSED"
+                " on this column (lane width "
+                + String(lib_lane_width_for[TARGET_COLUMN]()) + ")"
+            )
+            continue
         _ = knn_search(
             ctx,
             h_index.unsafe_ptr(),
