@@ -1,0 +1,5 @@
+# dbscan n=2048 d=4 eps=1.05 min_pts=8 batches=1
+# format: mojolearn-identity-trace v1
+0	dbscan.core	u8	2048	87e003e2fa1bc972
+1	dbscan.labels.merged	i32	2048	eef7ae2b335def25
+2	dbscan.labels.final	i32	2048	c7b2de02633fe525

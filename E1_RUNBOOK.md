@@ -91,15 +91,26 @@ fixture that is an integer-exact function of a constant seed, and an input
 hash printed before the fit so both machines can be proven to have fitted
 the same bytes before anything else is compared.
 
-    for arm in kmeans knn dbscan; do
-      : > $OUT/$arm.card
-      MOJOLEARN_IDENTITY_TRACE=$OUT/$arm.card MOJOLEARN_UNSUP_ARM=$arm \
-        pixi run mojo run -I . bench/unsupervised_trace_main.mojo \
-        | tee $OUT/$arm.hashes
-    done
+    sh tools/e1_unsupervised.sh
+
+on EACH machine. It records the resolved column and lane width, runs
+`check-ieee-arith` and `check-portable-translog` (row 10's precondition and
+row 12's certificate line), runs the six local gates under IDENTICAL, then
+writes `kmeans.card`, `knn.card`, `dbscan.card` and their console hashes
+into `bench/results/e1u/<stamp>-<host>/`. Every card's mode is READ BACK
+from the run rather than assumed from the flip (DEVIATION 514).
+
+It is separate from `e1_bootstrap.sh` because it needs none of the five
+binding builds -- there is no Python surface for `cluster/`, `neighbors/`
+or `dbscan/`, which is why rows 19-26 had never been to E1 at all -- so it
+runs in minutes on a box that has nothing but pixi.
 
 Then diff each `<arm>.card` against the other machine's. Compare
 `input.*` FIRST; a card diff against different inputs measures nothing.
+
+**The Apple leg is already committed** at
+`bench/results/e1u/2026-08-23_065611-MacBook-Air-1-terrabyte/`, so an AMD
+box only has to produce its own directory and diff against that one.
 
 Read the k-NN card knowing what its stages are. `knn.out_dist` /
 `knn.out_idx` are PRE-SORT and record an arm's internal order, which the
