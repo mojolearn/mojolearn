@@ -9,7 +9,7 @@ construction; 611 is reserved and NOT spent (see `shuffle` below); 612 is
 the card's NaN canonicalization and 613 the NaN/inf parameter refusals
 (the ROW 39 AUDIT section); 614-619 are unused.
 
-## Status: CERTIFIED Apple M4 <-> NVIDIA H100 at leg 11 (commit 144aa5b, judged by tools/e3_round_judge.sh section 7 on 2026-08-23): the IDENTICAL card is bit-identical across the two vendors, 20 stages; the FAST cards differ, recorded, the shipped arm makes no cross-vendor claim; AMD MI325X is OWED (that leg was not run).
+## Status: CERTIFIED Apple M4 <-> NVIDIA H100 <-> AMD MI325X at leg 11 both halves (commit 144aa5b, judged by tools/e3_round_judge.sh section 7 on 2026-08-23): the IDENTICAL card is bit-identical across the three vendors, 20 stages; the FAST cards differ, recorded, the shipped arm makes no cross-vendor claim; AMD MI325X is OWED (that leg was not run).
 
 Built and gated 2026-08-23 on one M4. Nothing here has been compiled for
 or run on NVIDIA or AMD. No performance was measured and no timing is

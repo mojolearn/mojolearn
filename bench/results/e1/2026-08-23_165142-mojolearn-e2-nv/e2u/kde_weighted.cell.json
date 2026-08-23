@@ -1,0 +1,13 @@
+{
+  "card": "kde_weighted.card",
+  "kind": "kde",
+  "log_density": "74e05a15cc9d0996dea4268535eaa6ee76e383c02e70a562f463b0f831ae068e",
+  "n_sentinel": 0,
+  "score": -143984.50978851318,
+  "seconds": 0.96,
+  "spec": {
+    "bandwidth": 8.0,
+    "kernel": "gaussian"
+  },
+  "stages": 7
+}

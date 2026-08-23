@@ -6,7 +6,7 @@ IMPROVE**, with five numbered departures (DEVIATIONS 600-604, below).
 
 ## Status
 
-**CERTIFIED Apple M4 <-> NVIDIA H100 at leg 11 (commit 144aa5b, judged by `tools/e3_round_judge.sh` section 7 on 2026-08-23): the IDENTICAL card is bit-identical across the two vendors, 7 stages; the FAST cards differ, recorded, the shipped arm makes no cross-vendor claim; AMD MI325X is OWED (that leg was not run).** Built and gated 2026-08-23 on one M4 in both modes. No
+**CERTIFIED Apple M4 <-> NVIDIA H100 <-> AMD MI325X at leg 11 both halves (commit 144aa5b, judged by `tools/e3_round_judge.sh` section 7 on 2026-08-23): the IDENTICAL card is bit-identical across the three vendors, 7 stages; the FAST cards differ, recorded, the shipped arm makes no cross-vendor claim; AMD MI325X is OWED (that leg was not run).** Built and gated 2026-08-23 on one M4 in both modes. No
 performance number exists for it and none is claimed.
 
     pixi run check-kde                                                          # FAST (the task is `mojo run -I . kde/mojo_only/kde_check.mojo`; needs the GPU: use the lock)
@@ -408,4 +408,4 @@ fixture.
 - Their `Policy4x4` Contractions tile for the unexpanded distance (speed
   only).
 - Bindings and the Python class (HAND-OFF 2).
-- AMD MI325X. NVIDIA H100 is closed at leg 11 (144aa5b); AMD has not run.
+- (closed) AMD MI325X ran at leg 11 both halves (144aa5b, 2026-08-23): IDENTICAL, 7 stages, judge section 7.

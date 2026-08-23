@@ -8,7 +8,7 @@ for SEMANTICS only and its formula stands beside each of ours in a comment.
 
 ## Status
 
-CERTIFIED Apple M4 <-> NVIDIA H100 at leg 11 (commit 144aa5b, judged by tools/e3_round_judge.sh section 7 on 2026-08-23): the IDENTICAL card is bit-identical across the two vendors, 34 stages; the FAST cards differ, recorded, the shipped arm makes no cross-vendor claim; AMD MI325X is OWED (that leg was not run).
+CERTIFIED Apple M4 <-> NVIDIA H100 <-> AMD MI325X at leg 11 both halves (commit 144aa5b, judged by tools/e3_round_judge.sh section 7 on 2026-08-23): the IDENTICAL card is bit-identical across the three vendors, 34 stages; the FAST cards differ, recorded, the shipped arm makes no cross-vendor claim; AMD MI325X is OWED (that leg was not run).
 
 All four groups are ported, gated in both modes on one Apple M4, and
 sabotaged: A (the label metrics), B (r2, KL divergence), C (silhouette,

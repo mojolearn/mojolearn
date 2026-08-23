@@ -1,0 +1,19 @@
+{
+  "best_iteration": 0,
+  "card": "gbdt_huber.card",
+  "kind": "gbdt",
+  "loss_curve": "95346ee2c80836ca1349cc00d3b0a25f24f78d5c6b3c51f9d4977d2ca348196c",
+  "model": "cf9177d20381346920f3cd0d2d8d03a3cef069edcfeb6ecbc1db1e09a3dc9a85",
+  "predictions": "548088e56029cc91e1ac282322e16836ad4b9000e88a3233f3bde3023f3d7db6",
+  "seconds": 0.41,
+  "spec": {
+    "border_count": 128,
+    "learning_rate": 0.3,
+    "loss": "Huber",
+    "loss_delta": 6.0,
+    "max_depth": 6,
+    "n_estimators": 20,
+    "random_state": 7
+  },
+  "stopped_early": 0
+}

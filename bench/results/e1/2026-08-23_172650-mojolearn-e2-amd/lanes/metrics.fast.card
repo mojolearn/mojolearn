@@ -1,0 +1,37 @@
+# metrics card, mode FAST, labels n=2053 true=6 pred=5, float n=2053, silhouette n=521 d=4 k=5, trust n=301 m=6 d=2 k=5
+# format: mojolearn-identity-trace v1
+0	metrics.input.y_true	i32	2053	7c64ca35b6f588f7
+1	metrics.input.y_pred	i32	2053	9be37945a20d2282
+2	metrics.contingency	i32	36	299a55662a89eefe
+3	metrics.rand.a	i64	1	81e11739a9f69604
+4	metrics.rand.b	i64	1	95f1d8c224f39d88
+5	metrics.accuracy_score	f32	1	0072b5a9fd7da10c
+6	metrics.rand_index	f64	1	98290002104be3e8
+7	metrics.adjusted_rand_index	f64	1	3256eb6103c94271
+8	metrics.entropy	f64	1	4fa318f0436f2162
+9	metrics.mutual_info_score	f64	1	4ee4259d073f3cd7
+10	metrics.homogeneity_score	f64	1	9b8b8c75c2cfd385
+11	metrics.completeness_score	f64	1	30db16bd98f22bb6
+12	metrics.v_measure	f64	1	2c45837181de7a25
+13	metrics.input.y	f32	2053	e07500e5447c96d8
+14	metrics.input.y_hat	f32	2053	d96bd4127b82c672
+15	metrics.r2_score	f32	1	b5613c7b05f7464f
+16	metrics.input.p	f32	2053	958e01fec4ed280a
+17	metrics.input.q	f32	2053	1e01053b46a8e008
+18	metrics.kl_divergence	f32	1	2d01b70b383a079c
+19	metrics.input.X	f32	2084	90b243782dba896c
+20	metrics.input.labels	i32	521	e0ae90b11c5c2944
+21	metrics.silhouette_samples	f32	521	a6446a57bf8d2948
+22	metrics.silhouette_score	f32	1	19168197a67060c0
+23	metrics.input.trust_X	f32	1806	f4295a2e30518d78
+24	metrics.input.trust_X_embedded	f32	602	008c167a82aaeca3
+# knn n_index=301 n_queries=301 d=2 k=6 method=2 sqrt=True
+25	knn.index_norm	f32	301	d308d3dfa5337731
+26	knn.query_norm	f32	301	d308d3dfa5337731
+27	knn.out_dist	f32	1806	28a5e52106c4b937
+28	knn.out_idx	u32	1806	87b5c8db91f9a1f1
+29	knn.sorted_dist	f32	1806	903dfc5701deaf27
+30	knn.sorted_idx	u32	1806	80d0215528ddc135
+31	trust.emb_ind	u32	1806	80d0215528ddc135
+32	trust.rank_sum	i64	1	36cf12f235b83511
+33	metrics.trustworthiness	f64	1	d4ac41032689b1ff

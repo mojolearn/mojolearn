@@ -1,15 +1,16 @@
 # E1G — the cross-vendor GEMM identity run (Apple, NVIDIA, AMD)
 
-**STATUS, 2026-08-23: THIS LEG HAS NOT BEEN RUN.** Not once, not partially.
-`tools/gemm_remote_leg.sh` has had a `sh -n` syntax check and nothing more:
-not even its dry run has executed, no pod has been created, no remote card
-exists, and no line below has been exercised against a real NVIDIA or AMD
-device.
-It cannot be run from this machine today: the session that wrote it has no
-RunPod access, and the orchestrator's standing order for this round is
-Apple-M4-only construction with no rented GPU. Every result in `gemm/` is
-therefore CONSTRUCTION plus one Apple device's gates; no second vendor has
-run this. When the leg does run, replace this paragraph with the result
+**STATUS, 2026-08-23 (later the same day): THE CROSS-VENDOR QUESTION THIS
+RUNBOOK EXISTS TO ANSWER WAS ANSWERED BY A DIFFERENT LEG.** The gemm lane
+rode E-series leg 11 (phase 8 of `tools/e1_bootstrap.sh`, via
+`tools/e2_remote_leg.sh` on DigitalOcean, commit 144aa5b): the IDENTICAL
+card is bit-identical Apple M4 <-> NVIDIA H100 and Apple M4 <-> AMD MI325X,
+60 stages each, judged by `tools/e3_round_judge.sh` section 7 (E3 round 11).
+`tools/gemm_remote_leg.sh` itself has still never run (only `sh -n`): no
+RunPod pod has ever been created by it. It remains the procedure for any
+FUTURE vendor or architecture column (a second NVIDIA architecture, a
+consumer AMD part) and for re-certifying after a profile change; RunPod
+access requires Andrew to authenticate. When it runs, record the result
 directory and the verdict -- do not append to it.
 
 DEVIATION 536. The operator's document for `tools/gemm_remote_leg.sh`.

@@ -1,0 +1,37 @@
+[13:25:14 amd] dead-man timer pid 52254 (3600 s, keyed by tag e2 + name mojolearn-e2-amd)
+[13:25:14 amd] creating mojolearn-e2-amd (gpu-mi325x1-256gb, tor1)
+[13:25:15 amd] droplet id 594592483
+[13:25:58 amd] active at 143.198.46.34
+[amd gpu] GPU[0]		: Card Series: 		AMD Instinct Mi325X VF
+[13:26:26 amd] bundle 144aa5b2040422f5a3360ed1f245c55e84262761 (branch e2-run)
+144aa5b2040422f5a3360ed1f245c55e84262761
+1
+[13:26:49 amd] bootstrap (phases 0-4) -- this is the long step
+BOOTSTRAP-EXIT=0
+  gemm [identical] check OK (128 OK lines)
+  cd [identical]: card 20 records -- [IDENTICAL]
+  cd [identical] check OK (10 OK lines)
+  kde [identical]: card 7 records -- [IDENTICAL]
+  kde [identical] check OK (11 OK lines)
+  linkage [identical]: card 8 records -- 
+  linkage [identical] check OK (44 OK lines)
+  svm [identical]: card 32 records -- [IDENTICAL]
+  svm [identical] check OK (4 OK lines)
+  metrics [identical]: card 34 records -- mode IDENTICAL
+  metrics-labels [identical] check OK (17 OK lines)
+  metrics-regression [identical] check OK (17 OK lines)
+  metrics-silhouette [identical] check OK (7 OK lines)
+  metrics-trust [identical] check OK (5 OK lines)
+
+=== done === 17:44:27
+artifacts in /root/mojolearn/bench/results/e1/2026-08-23_172650-mojolearn-e2-amd
+next: fetch this directory beside the other machine's and run
+  python3 tools/e2_matrix_diff.py <mac>:APPLE <gpu>:VENDOR --write
+  python3 tools/identity_trace_diff.py <mac>/<cell>.card <gpu>/<cell>.card
+[13:44:27 amd] fetch artifacts
+[13:44:37 amd] fetched: e2_run_amd_leg11.log
+[13:44:40 amd] leg done; destroying
+[13:44:40 amd] teardown (rc=0)
+[13:44:41 amd] DELETE droplet 594592483 -> HTTP 204
+[13:44:46 amd] post-destroy status: active
+[13:44:46 amd] dead-man timer cancelled

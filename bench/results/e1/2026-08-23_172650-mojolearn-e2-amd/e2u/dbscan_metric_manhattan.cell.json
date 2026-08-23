@@ -1,0 +1,10 @@
+{
+  "kind": "dbscan",
+  "refused": "ValueError: mojolearn DBSCAN: metric='manhattan' is refused; only 'euclidean' is ported (the eps kernels in dbscan/ported/neighbors/epsilon_neighborhood.mojo carry L2 only, and cuML's runner.cuh:152-156 downgrades every other metric to L2Sqrt as well)",
+  "seconds": 0.0,
+  "spec": {
+    "eps": 0.3,
+    "metric": "manhattan",
+    "min_samples": 5
+  }
+}

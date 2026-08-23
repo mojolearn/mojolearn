@@ -1,0 +1,10 @@
+# hierarchy/linkage_main.mojo mode=FAST fixture=blobs_dups n_rows=102 n_cols=5 n_clusters=3 metric=L2SqrtExpanded connectivity=pairwise
+# format: mojolearn-identity-trace v1
+0	linkage.x	f32	510	51b79ed6ed4a230a
+1	linkage.norms	f32	102	b571290320a0f61c
+2	linkage.dists	f32	10404	20533a80b1d37d71
+3	linkage.mst.rounds	i32	1	2d401a55eec16520
+4	linkage.mst.edges	i32	202	b02e705a34e1c6c0
+5	linkage.mst.weights	f32	101	35d93df68e6bdfa4
+6	linkage.children	i32	202	bbd71ae9a7c474a4
+7	linkage.labels	i32	102	1ff4250dd4aab576

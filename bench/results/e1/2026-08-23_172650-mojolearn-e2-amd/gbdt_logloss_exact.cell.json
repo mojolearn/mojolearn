@@ -1,0 +1,19 @@
+{
+  "best_iteration": 0,
+  "card": "gbdt_logloss_exact.card",
+  "kind": "gbdt",
+  "loss_curve": "f7659256364c81b9b7b8335d987035b7c4660a2f986aa86aadae75b1e8e4ff4d",
+  "model": "b4079ffa7a8232c68fc0d6072ce0960cfc9989746ecab8ec63a665fe510ab788",
+  "predictions": "61fea0c2e56e386f2b613dc94b3296cca5e6935ce6c793d0e08ad93bf519548e",
+  "seconds": 0.43,
+  "spec": {
+    "border_count": 128,
+    "leaf_estimation_method": "Exact",
+    "learning_rate": 0.3,
+    "loss": "Logloss",
+    "max_depth": 6,
+    "n_estimators": 20,
+    "random_state": 7
+  },
+  "stopped_early": 0
+}

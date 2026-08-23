@@ -1,0 +1,107 @@
+Imported from /root/mojolearn/hierarchy/mojo_only/linkage_check.mojo:76:
+/root/mojolearn/core/identity_trace.mojo:374:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/hierarchy/mojo_only/linkage_check.mojo:117:
+Imported from /root/mojolearn/hierarchy/ported/cluster/detail/connectivities.mojo:54:
+Imported from /root/mojolearn/core/row_norms.mojo:58:
+/root/mojolearn/core/pinned_reduce.mojo:97:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        red[tid] = value
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/hierarchy/mojo_only/linkage_check.mojo:117:
+Imported from /root/mojolearn/hierarchy/ported/cluster/detail/connectivities.mojo:54:
+Imported from /root/mojolearn/core/row_norms.mojo:58:
+/root/mojolearn/core/pinned_reduce.mojo:102:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/hierarchy/mojo_only/linkage_check.mojo:117:
+Imported from /root/mojolearn/hierarchy/ported/cluster/detail/connectivities.mojo:54:
+Imported from /root/mojolearn/core/row_norms.mojo:58:
+/root/mojolearn/core/pinned_reduce.mojo:102:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                           ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/hierarchy/mojo_only/linkage_check.mojo:117:
+Imported from /root/mojolearn/hierarchy/ported/cluster/detail/connectivities.mojo:54:
+Imported from /root/mojolearn/core/row_norms.mojo:58:
+/root/mojolearn/core/pinned_reduce.mojo:102:42: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                                      ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/hierarchy/mojo_only/linkage_check.mojo:117:
+Imported from /root/mojolearn/hierarchy/ported/cluster/detail/connectivities.mojo:54:
+Imported from /root/mojolearn/core/row_norms.mojo:58:
+/root/mojolearn/core/pinned_reduce.mojo:105:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var total = red[0]
+                    ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/hierarchy/mojo_only/linkage_check.mojo:76:
+/root/mojolearn/core/identity_trace.mojo:246:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/hierarchy/mojo_only/linkage_check.mojo:76:
+/root/mojolearn/core/identity_trace.mojo:384:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/hierarchy/mojo_only/linkage_check.mojo:76:
+/root/mojolearn/core/identity_trace.mojo:101:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+linkage_check mode=IDENTICAL
+check_linkage_distances_match_host_pinned [IDENTICAL] OK: blobs 9216 cells bitwise equal to the host pinned arithmetic, symmetric, FLT_MAX diagonal
+check_linkage_distances_match_host_pinned [IDENTICAL] OK: dups_lattice 2304 cells bitwise equal to the host pinned arithmetic, symmetric, FLT_MAX diagonal
+check_linkage_distances_match_host_pinned [IDENTICAL] OK: chain 4096 cells bitwise equal to the host pinned arithmetic, symmetric, FLT_MAX diagonal
+check_linkage_distances_match_host_pinned [IDENTICAL] OK: hashed203 41209 cells bitwise equal to the host pinned arithmetic, symmetric, FLT_MAX diagonal
+check_linkage_distances_match_host_pinned [IDENTICAL] OK: blobs_dups 10404 cells bitwise equal to the host pinned arithmetic, symmetric, FLT_MAX diagonal
+check_linkage_mst_matches_kruskal [IDENTICAL] OK: blobs 95 edges, set and order equal to host Kruskal, weights bitwise, boruvka rounds 5
+check_linkage_mst_matches_kruskal [IDENTICAL] OK: dups_lattice 47 edges, set and order equal to host Kruskal, weights bitwise, boruvka rounds 3
+check_linkage_mst_matches_kruskal [IDENTICAL] OK: chain 63 edges, set and order equal to host Kruskal, weights bitwise, boruvka rounds 5
+check_linkage_mst_matches_kruskal [IDENTICAL] OK: hashed203 202 edges, set and order equal to host Kruskal, weights bitwise, boruvka rounds 4
+check_linkage_mst_matches_kruskal [IDENTICAL] OK: blobs_dups 101 edges, set and order equal to host Kruskal, weights bitwise, boruvka rounds 5
+check_linkage_dendrogram_and_labels [IDENTICAL] OK: blobs 95 children rows, 96 labels bitwise, partition at n_clusters=3 agrees
+check_linkage_dendrogram_and_labels [IDENTICAL] OK: dups_lattice 47 children rows, 48 labels bitwise, partition at n_clusters=4 agrees
+check_linkage_dendrogram_and_labels [IDENTICAL] OK: chain 63 children rows, 64 labels bitwise, partition at n_clusters=5 agrees
+check_linkage_dendrogram_and_labels [IDENTICAL] OK: hashed203 202 children rows, 203 labels bitwise, partition at n_clusters=7 agrees
+check_linkage_dendrogram_and_labels [IDENTICAL] OK: blobs_dups 101 children rows, 102 labels bitwise, partition at n_clusters=3 agrees
+check_linkage_entry_matches_stages [IDENTICAL] OK: blobs entry == stages, rounds 5
+check_linkage_entry_matches_stages [IDENTICAL] OK: dups_lattice entry == stages, rounds 3
+check_linkage_entry_matches_stages [IDENTICAL] OK: chain entry == stages, rounds 5
+check_linkage_entry_matches_stages [IDENTICAL] OK: hashed203 entry == stages, rounds 4
+check_linkage_entry_matches_stages [IDENTICAL] OK: blobs_dups entry == stages, rounds 5
+check_linkage_union_find_matches_a_naive_one OK: blobs 95 unions, identical roots and sizes
+check_linkage_union_find_matches_a_naive_one OK: dups_lattice 47 unions, identical roots and sizes
+check_linkage_union_find_matches_a_naive_one OK: chain 63 unions, identical roots and sizes
+check_linkage_union_find_matches_a_naive_one OK: hashed203 202 unions, identical roots and sizes
+check_linkage_union_find_matches_a_naive_one OK: blobs_dups 101 unions, identical roots and sizes
+check_linkage_launch_invariance [IDENTICAL] OK: hashed203 children, labels and round count (and under IDENTICAL the distance and MST bytes) identical across tile 256/64/32, MST 256/128/1024, extract 256/64/512, two input paddings/poisons, two output paddings/poisons
+check_linkage_launch_invariance [IDENTICAL] OK: dups_lattice children, labels and round count (and under IDENTICAL the distance and MST bytes) identical across tile 256/64/32, MST 256/128/1024, extract 256/64/512, two input paddings/poisons, two output paddings/poisons
+check_linkage_batch_composition [IDENTICAL] OK: all 1369 cells of the 37-row launch equal the same cells of the 203-row launch
+check_linkage_float64_reference OK: blobs MST total 99.48099733889103 Float64 reference 99.48099600913307 rel 1.3366954670052686e-08
+check_linkage_float64_reference OK: dups_lattice MST total 35.0 Float64 reference 35.0 rel 0.0
+check_linkage_float64_reference OK: chain MST total 70.58399742096663 Float64 reference 70.58721160888672 rel 4.553498922585121e-05
+check_linkage_float64_reference OK: hashed203 MST total 1101.0795413255692 Float64 reference 1101.079559245864 rel 1.6275204315864777e-08
+check_linkage_float64_reference OK: blobs_dups MST total 99.48099733889103 Float64 reference 99.48099600913307 rel 1.3366954670052686e-08
+check_linkage_refusals OK: use_knn=True, metric=L1, n_clusters > n_rows, n_rows > 46340 each raise by name
+check_linkage_sabotages OK: LINK_SAB_RANDOM_ALTERATION on dups_lattice FAILED the MST gate as required: 38 of 47 sorted edge slots differ from Kruskal; children differ
+check_linkage_sabotages REPORT: LINK_SAB_RANDOM_ALTERATION on blobs (tie-free) MST equal -- a random tie-break only moves ties
+check_linkage_sabotages [IDENTICAL] OK: LINK_SAB_ROTATE_CONTRACTION on hashed203 FAILED the distance gate as required: 4553 of 41209 cells moved
+check_linkage_sabotages REPORT: LINK_SAB_STD_SQRT on hashed203: 6788 of 41209 cells differ from identical_sqrt's (Apple's sqrt is correctly rounded, so 0 is the expected Apple result; this arm would move cells on NVIDIA's approximate sqrt, DEVIATION 258)
+check_linkage_sabotages OK: LINK_SAB_SORT_WEIGHT_ONLY on dups_lattice FAILED the dendrogram gate as required: 47 of 47 children rows moved; labels MOVED
+check_linkage_card_is_stable [IDENTICAL] OK: two launch shapes, 6 records, identical
+check_linkage_signed_zero_mst [IDENTICAL] OK: order A (-0.0 first, +0.0 second): slot 0 (0,1,0x80000000) slot 1 (0,2,0x00000000) -- the -0.0 edge wins by KEY (-1 < 0), device == Kruskal bitwise, children == host dendrogram, MST block 256 == 64
+check_linkage_signed_zero_mst [IDENTICAL] OK: order B (+0.0 first, -0.0 second): slot 0 (0,2,0x80000000) slot 1 (0,1,0x00000000) -- the -0.0 edge wins by KEY (-1 < 0), device == Kruskal bitwise, children == host dendrogram, MST block 256 == 64
+check_linkage_nan_distances_refused [IDENTICAL] OK: two overflowing rows (5, 6) refused by name before any stage: 2 of 64 NaN cells
+check_linkage_nan_distances_refused [IDENTICAL] OK: every row overflowing refused by name before any stage: 56 of 64 NaN cells
+check_linkage_nan_distances_refused [IDENTICAL] OK: one NaN input cell (row 3, col 1) refused by name before any stage: 14 of 64 NaN cells
+check_linkage_nan_distances_refused RECORDED [IDENTICAL]: guard SKIPPED (LINK_SAB_SKIP_NAN_GUARD): the MST completed in 2 rounds and 7 of 7 mst.weights are NaN with THIS DEVICE'S payload 0x7fffffff (FACT 2: Apple 0x7fc00000, NVIDIA 0x7fffffff, AMD 0xffc00000) -- the byte DEVIATION 623 keeps out of linkage.dists / linkage.mst.weights
+linkage_check mode=IDENTICAL ALL OK

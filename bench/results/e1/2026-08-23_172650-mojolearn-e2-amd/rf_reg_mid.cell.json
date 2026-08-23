@@ -1,0 +1,13 @@
+{
+  "card": "rf_reg_mid.card",
+  "kind": "rf_reg",
+  "model": "e9e14b6f08683e9130cc83530e8d56706c8590181d2de8d4b14f79470f641658",
+  "predictions": "99ba0e31c9548deb874eb31cdce0e19378b32f40f2f2a253ac267f4094fa5ebd",
+  "seconds": 0.46,
+  "spec": {
+    "max_depth": 8,
+    "min_impurity_decrease": 0.001,
+    "n_estimators": 10,
+    "random_state": 7
+  }
+}

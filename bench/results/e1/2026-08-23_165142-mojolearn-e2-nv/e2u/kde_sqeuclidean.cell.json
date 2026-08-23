@@ -1,0 +1,14 @@
+{
+  "card": "kde_sqeuclidean.card",
+  "kind": "kde",
+  "log_density": "e738f190b5e77f025cfb9523f68b8c300cb809559a03f0b1a5bf3843060c5071",
+  "n_sentinel": 0,
+  "score": -243739.56999206543,
+  "seconds": 0.96,
+  "spec": {
+    "bandwidth": 64.0,
+    "kernel": "gaussian",
+    "metric": "sqeuclidean"
+  },
+  "stages": 7
+}

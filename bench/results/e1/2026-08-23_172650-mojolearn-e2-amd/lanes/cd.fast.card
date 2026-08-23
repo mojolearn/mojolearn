@@ -1,0 +1,23 @@
+# solver/cd_main.mojo mode=FAST fixture=planted_sparse n=2048 d=16
+# cdFit n_rows=2048 n_cols=16 fit_intercept=True epochs=1000 alpha=0.01 l1_ratio=1.0 tol=0.001 shuffle=false
+# format: mojolearn-identity-trace v1
+0	cd.input.x	f32	32768	9651fea33cfa6b5c
+1	cd.input.y	f32	2048	1038adc235a16ec1
+2	cd.mu_input	f32	16	d6689d14f4c6bde4
+3	cd.mu_labels	f32	1	5ca4e0fad4c8afad
+4	cd.l1_alpha	f32	1	671ce6ceeee018f2
+5	cd.l2_alpha	f32	1	4d25767f9dce13f5
+6	cd.colnorm	f32	16	6a292c7d26053b4d
+7	cd.squared	f32	16	6a292c7d26053b4d
+8	cd.sweep000.coef	f32	16	83c57cc1d58ac517
+9	cd.sweep000.resid	f32	2048	3416105af513db85
+10	cd.sweep000.conv	f32	3	d53c6eb09e666659
+11	cd.sweep001.coef	f32	16	e2543c2053777718
+12	cd.sweep001.resid	f32	2048	25d5cb5b9fcd05e3
+13	cd.sweep001.conv	f32	3	fe3f0d856ad30906
+14	cd.sweep002.coef	f32	16	12d8bbd79554dcd6
+15	cd.sweep002.resid	f32	2048	4016bf09e28597b3
+16	cd.sweep002.conv	f32	3	f941fca55e0bca2d
+17	cd.final.coef	f32	16	12d8bbd79554dcd6
+18	cd.intercept	f32	1	c8974e73faca9e4b
+19	cd.n_iter	i32	1	ed202287f403d086

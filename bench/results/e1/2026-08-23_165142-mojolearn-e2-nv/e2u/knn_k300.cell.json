@@ -1,0 +1,8 @@
+{
+  "kind": "knn",
+  "refused": "Exception: select_radix (IDENTICAL): k > 256 is refused. The rank pass gives one thread to each output slot; a larger k needs a loop, which is not written until something asks for it.",
+  "seconds": 0.6,
+  "spec": {
+    "n_neighbors": 300
+  }
+}

@@ -241,6 +241,46 @@ found by listing the account and destroyed by hand. The script now arms
 the dead-man BEFORE the create call, keyed by tag + name, adopts a
 no-id droplet by name, and sweeps by name at teardown (`eb5a2d1`).
 
+## Round 11, commit `144aa5b` (2026-08-23): the classical lanes on three vendors
+
+The first round with phase 8 (the six classical lanes: gemm, cd, kde,
+linkage, svm, metrics) on both boxes. H100 leg
+`bench/results/e1/2026-08-23_165142-mojolearn-e2-nv` (judged same day in
+`d9869d2`, AMD then owed); MI325X leg
+`bench/results/e1/2026-08-23_172650-mojolearn-e2-amd` (launched 13:25 EDT
+on Andrew's authorization, 19 minutes create-to-destroy, droplet 594592483
+destroyed and verified gone by API). Judge: `tools/e3_round_judge.sh
+<mac 123452> <nv 165142> <amd 172650> --write`.
+
+- **Section 7, the round's point: every classical lane's IDENTICAL card is
+  bit-identical on THREE VENDORS** -- Apple M4 <-> NVIDIA H100 and Apple
+  M4 <-> AMD MI325X: gemm 60 stages, cd 20, kde 7, linkage 8, svm 32,
+  metrics 34. The gemm FAST cards happen to agree too on both boxes; every
+  other lane's FAST cards differ (recorded; the shipped arm makes no
+  cross-vendor claim). **This closes the gemm three-vendor run:** profile
+  `mojolearn.identical.gemm.fp32.v1` is a measured cross-vendor sentence
+  for the card's 62 shapes and eight plans (IDENTITY_PATHS row 40;
+  `gemm/README.md`; `gemm/E1G_RUNBOOK.md` updated -- `gemm_remote_leg.sh`
+  itself has still never run and is kept for future columns).
+- Trees: NVIDIA and AMD both IDENTICAL 109 + IDENTICAL(no-card) 2 +
+  REFUSED= 5. Unsupervised: both IDENTICAL 71 + REFUSED= 22.
+- Cross-infer: Mac models on NVIDIA 111/111, NVIDIA models on Mac 111/111,
+  AMD models on Mac 111/111. Mac models on AMD DID NOT RUN this leg (the
+  13:25 launch omitted MAC_REF_DIR); that direction was 111/111 on AMD in
+  rounds 8-10 at earlier commits and is owed again only if a tree path
+  changes.
+- **Verdict: NOT-CLOSED (rc=1), for two already-known items, neither new
+  and neither a lane-card divergence:** (1) the linalg gate's
+  `check_ols_is_launch_invariant` fails on BOTH boxes in BOTH modes (two
+  identical OLS fits in one process disagree at coefficient 0; open since
+  leg 10; not seen on Apple; the traced-repro hook printed no diverging
+  stage because the card fixture's two fits agreed -- localization still
+  owed); (2) the phase-8 metrics-regression FAST assertion on NVIDIA
+  (subnormal KL operand), already demoted to RECORDED in `d9869d2`, which
+  is AFTER 144aa5b -- it will not appear at the next leg's commit.
+- AMD FAST gbdt build still the designed 32-lane refusal (recorded, as in
+  rounds 9-10).
+
 ## Owed
 
 1. The linalg gate's IDENTICAL pass on both boxes (one leg; the scripts

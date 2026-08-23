@@ -1,0 +1,14 @@
+{
+  "card": "knn_clf_k5.card",
+  "classes": "a296c7e7cc1e6e0056364c5572a77c816f4bcee8214189856920f0868be345f8",
+  "kind": "knn_clf",
+  "n_classes": 3,
+  "predictions": "b2e15c69f35b1bb0cc9351a4ea2e71ff7815f1d39daefc72f8df5f0cca4e7bed",
+  "proba": "7e9bc1b7b891562b46c5098b13c75a99463584028a690ff398ea5822a2a69788",
+  "seconds": 0.33,
+  "spec": {
+    "n_neighbors": 5
+  },
+  "stages": 9,
+  "used_query_tile": 256
+}
