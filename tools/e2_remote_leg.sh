@@ -58,7 +58,13 @@ teardown() {
   rc=$?
   log "teardown (rc=$rc)"
   destroy
-  [ -n "$DEADMAN_PID" ] && kill "$DEADMAN_PID" 2>/dev/null && log "dead-man timer cancelled"
+  # kill the wrapper AND its sleep child: killing only the wrapper leaves an
+  # orphan `sleep` (harmless -- the DELETE after it dies with the wrapper --
+  # but seven of them were found after the first E2 day)
+  if [ -n "$DEADMAN_PID" ]; then
+    pkill -P "$DEADMAN_PID" 2>/dev/null
+    kill "$DEADMAN_PID" 2>/dev/null && log "dead-man timer cancelled"
+  fi
   exit $rc
 }
 trap teardown EXIT
