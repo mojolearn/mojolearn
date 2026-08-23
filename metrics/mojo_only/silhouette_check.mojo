@@ -39,6 +39,18 @@ The checks, in order:
                                         clusters (two clusters at the same
                                         mean distance: the value is the
                                         same whichever index wins)
+                                        the a == b == 0 case (all points
+                                        identical) in BOTH cluster orders
+                                        -> 0x00000000, both modes (ROW 39:
+                                        -0.0 is unreachable as an operand,
+                                        so the tie IS the fixture)
+    check_silhouette_inf_distances      DEVIATION 656: an overflow-scale
+                                        finite X drives a = +inf; the NaN
+                                        quotient records +0.0, the b = inf
+                                        arm is shown unreachable (b stays
+                                        FLT_MAX -> exactly 1.0), ordinary
+                                        rows stay ordinary; both modes
+    (every fixture)                     negative-zero scores counted: 0
     check_silhouette_refusals           n_labels < 2, n_labels > n_rows-1,
                                         metric != L2SqrtUnexpanded, chunk
                                         < 1 RAISE by name; chunk 1 vs
@@ -59,6 +71,10 @@ SABOTAGES PERFORMED (2026-08-23), each reverted; outputs in the README:
         the expected null; the pin's value is the NVIDIA column
     (i) `ftz` dropped from the device distance's stored diff: null on
         Apple (hardware flush; no subnormal on this fixture anyway)
+    (k) DEVIATION 656's NaN guard removed from sil_op: check_silhouette_
+        inf_distances fails (`row 0 ... must record +0.0, got 0x7fc00000`)
+    (l) the min over clusters flipped from `<` to `<=`: NO CHANGE on any
+        vendor, by proof (no candidate pair differs only in zero sign)
 """
 
 from std.math import sqrt
@@ -205,6 +221,19 @@ def _rel(a: Float64, b: Float64) -> Float64:
     return dd / m
 
 
+def _count_neg_zero(v: List[Float32], n: Int) -> Int:
+    """IDENTITY_PATHS row 39: a `-0.0` score is unreachable on any legal X
+    (silhouette_score.mojo's header proves it); every fixture counts them
+    and asserts none, in BOTH modes (the proof does not depend on the fold
+    shape: no sum of nonnegative terms seeded +0.0 is -0.0 under any tree,
+    and the quotient never underflows)."""
+    var c = 0
+    for i in range(n):
+        if bits32(v[i]) == "0x80000000":
+            c += 1
+    return c
+
+
 def _compare_samples(
     tag: String,
     got: List[Float32],
@@ -306,6 +335,10 @@ def check_silhouette_matches_oracle(ctx: DeviceContext) raises:
     )
     if rel > 1e-4 or worst > 1e-4:
         raise Error("silhouette off the Float64 reference")
+    var nz = _count_neg_zero(got[0], N)
+    print("    negative-zero scores: " + String(nz) + " (row 39: must be 0)")
+    if nz != 0:
+        raise Error("a -0.0 silhouette score was recorded; row 39 says unreachable")
     print("  OK")
 
 
@@ -391,6 +424,129 @@ def check_silhouette_planted_ties(ctx: DeviceContext) raises:
     var w2 = _oracle_silhouette(x2, y2, 4, 2, 3)
     _ = _compare_samples("samples(min tie)", g2[0], w2[0], 4, IDENTICAL)
     print("    row0 with b_1 == b_2 == sqrt2: " + bits32(g2[0][0]) + " (a = 2 > b: (b-a)/a)")
+    # ROW 39: the `a == b == 0` case (ALL points identical, two clusters),
+    # in BOTH cluster orders. sklearn's spelling is `(b - a) / max(a, b)` =
+    # `0 / 0` = NaN -> nan_to_num -> 0; RAFT's (ours) takes the tie branch
+    # BEFORE any division, so no NaN is computed and no `max(+0, -0)` is
+    # asked: the recorded bits are `0x00000000` on every vendor, not -0.0,
+    # not a NaN payload. `-0.0` as an operand is unreachable (a and b are
+    # +0.0-seeded sums of nonnegative terms), which is why the fixture is
+    # the tie and not a planted negative zero. Asserted in BOTH modes: a
+    # branch on equal inputs, not a rounding.
+    var x3 = List[Float32]()
+    for _ in range(6):
+        x3.append(Float32(0.75))
+        x3.append(Float32(-2.5))
+    var y3a = List[Int32]()
+    var y3b = List[Int32]()
+    for i in range(6):
+        y3a.append(Int32(0) if i < 3 else Int32(1))
+        y3b.append(Int32(1) if i < 3 else Int32(0))
+    var g3a = _run(ctx, x3, y3a, 6, 2, 2)
+    var w3a = _oracle_silhouette(x3, y3a, 6, 2, 2)
+    var g3b = _run(ctx, x3, y3b, 6, 2, 2)
+    var w3b = _oracle_silhouette(x3, y3b, 6, 2, 2)
+    _ = _compare_samples("samples(all identical, labels 0|1)", g3a[0], w3a[0], 6, True)
+    _ = _compare_samples("samples(all identical, labels 1|0)", g3b[0], w3b[0], 6, True)
+    var bad3 = 0
+    for i in range(6):
+        if bits32(g3a[0][i]) != "0x00000000" or bits32(g3b[0][i]) != "0x00000000":
+            bad3 += 1
+    print(
+        "    all-identical points (a == b == 0) both orders: "
+        + bits32(g3a[0][0])
+        + " / "
+        + bits32(g3b[0][0])
+        + ", mean "
+        + bits32(g3a[1])
+        + " / "
+        + bits32(g3b[1])
+    )
+    if bad3 != 0 or bits32(g3a[1]) != "0x00000000" or bits32(g3b[1]) != "0x00000000":
+        raise Error("a == b == 0 must record +0.0 (0x00000000) in both cluster orders")
+    if _count_neg_zero(got[0], 3) + _count_neg_zero(g2[0], 4) != 0:
+        raise Error("a -0.0 score was recorded on a tie fixture")
+    print("  OK")
+
+
+def check_silhouette_inf_distances(ctx: DeviceContext) raises:
+    """DEVIATION 656's gate. An OVERFLOW-SCALE but finite X, 9 rows, 4
+    clusters:
+      c0 = {row 0 (0, 0), row 1 (3e38, 0)}: `(3e38 - 0)^2` is +inf, so
+           d(0,1) = +inf and a(0) = a(1) = +inf;
+      c1 = rows 2-4 near the origin; c3 = rows 7-8 near (10, 10);
+      c2 = {row 5 (-3e38, 1e18), row 6 (-3e38, -1e18)}: d(5,6) = 2e18 is
+           FINITE, every other distance from them is +inf.
+    Row 0: a = inf, b = min(c1 finite, c2 inf, c3 finite) finite -> `(b -
+    a) / a = -inf / inf` = NaN -> +0.0 (THE NaN ARM, finite b). Row 1: a =
+    inf and every other cluster's mean is +inf, which never wins the min
+    seeded FLT_MAX, so b = FLT_MAX -> the same arm with b = FLT_MAX -> +0.0.
+    Rows 5, 6: a = 2e18, every other cluster's mean is +inf -> b = FLT_MAX
+    -> `(FLT_MAX - a) / FLT_MAX` = exactly 1.0 (0x3f800000): the `b = inf`
+    arm is UNREACHABLE (b <= FLT_MAX always), and the score is finite and
+    defined (RAFT's). Rows 2-4 and 7-8: a and b finite -> ORDINARY scores
+    (reach: the fixture is not all zeros). Asserted in BOTH modes (inf
+    arithmetic, an exact division and the guard's compare are IEEE on every
+    vendor); bitwise vs the oracle under IDENTICAL."""
+    print("check_silhouette_inf_distances [" + _mode_name() + "]")
+    var x = List[Float32]()
+    var y = List[Int32]()
+    x.append(0.0); x.append(0.0); y.append(0)          # row 0
+    x.append(3.0e38); x.append(0.0); y.append(0)       # row 1
+    x.append(1.0); x.append(0.5); y.append(1)          # row 2
+    x.append(-1.0); x.append(0.25); y.append(1)        # row 3
+    x.append(0.5); x.append(-1.5); y.append(1)         # row 4
+    x.append(-3.0e38); x.append(1.0e18); y.append(2)   # row 5
+    x.append(-3.0e38); x.append(-1.0e18); y.append(2)  # row 6
+    x.append(10.0); x.append(10.5); y.append(3)        # row 7
+    x.append(9.5); x.append(10.0); y.append(3)         # row 8
+    var n = 9
+    var got = _run(ctx, x, y, n, 2, 4)
+    var want = _oracle_silhouette(x, y, n, 2, 4)
+    _ = _compare_samples("samples(inf distances)", got[0], want[0], n, IDENTICAL)
+    var line = String("    scores:")
+    for i in range(n):
+        line += " " + bits32(got[0][i])
+    print(line + "  mean " + bits32(got[1]))
+    # the NaN arm (a = inf): row 0 (b finite) and row 1 (b = FLT_MAX)
+    for r in range(2):
+        if bits32(got[0][r]) != "0x00000000":
+            raise Error(
+                "row " + String(r) + " (the NaN arm of SilOp) must record +0.0, got "
+                + bits32(got[0][r])
+            )
+    # b = FLT_MAX with a finite a: exactly 1.0 (the `b = inf` arm is unreachable)
+    for r in range(5, 7):
+        if bits32(got[0][r]) != "0x3f800000":
+            raise Error(
+                "row " + String(r) + " (a finite, b = FLT_MAX) must be exactly 1.0, got "
+                + bits32(got[0][r])
+            )
+    # REACH of both arms through the oracle's own distances
+    var d01 = host_l2sqrt_unexpanded(x, 0, 1, 2)
+    var d50 = host_l2sqrt_unexpanded(x, 5, 0, 2)
+    var d52 = host_l2sqrt_unexpanded(x, 5, 2, 2)
+    var d56 = host_l2sqrt_unexpanded(x, 5, 6, 2)
+    print(
+        "    d(0,1) " + bits32(d01) + " d(5,0) " + bits32(d50) + " d(5,2) " + bits32(d52)
+        + " d(5,6) " + bits32(d56)
+    )
+    if bits32(d01) != "0x7f800000" or bits32(d50) != "0x7f800000" or bits32(d52) != "0x7f800000":
+        raise Error("fixture does not reach the inf distances; a NaN arm is unreached")
+    if bits32(d56) == "0x7f800000":
+        raise Error("d(5,6) must be finite (rows 5, 6 are the finite-a, b = FLT_MAX rows)")
+    # the ordinary rows: finite, nonzero, in (-1, 1)
+    var ord_rows = List[Int]()
+    ord_rows.append(2); ord_rows.append(3); ord_rows.append(4); ord_rows.append(7); ord_rows.append(8)
+    for q in range(5):
+        var v = got[0][ord_rows[q]]
+        if not (v > Float32(-1.0) and v < Float32(1.0)) or v == Float32(0.0):
+            raise Error("row " + String(ord_rows[q]) + " must be an ordinary finite score, got " + bits32(v))
+    if got[1] != got[1]:
+        raise Error("the mean must not be NaN")
+    if _count_neg_zero(got[0], n) != 0:
+        raise Error("a -0.0 score was recorded on the inf fixture")
+    print("    NaN arm rows 0 (b finite), 1 (b = FLT_MAX) -> +0.0; rows 5,6 (b = FLT_MAX) = 1.0; rows 2-4, 7-8 ordinary")
     print("  OK")
 
 
@@ -524,6 +680,7 @@ def main() raises:
     check_silhouette_matches_oracle(ctx)
     check_silhouette_singleton_and_empty(ctx)
     check_silhouette_planted_ties(ctx)
+    check_silhouette_inf_distances(ctx)
     check_silhouette_refusals(ctx)
     check_silhouette_launch_invariant(ctx)
     print("ALL GROUP C CHECKS PASSED [" + _mode_name() + "]")

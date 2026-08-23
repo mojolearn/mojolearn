@@ -372,6 +372,15 @@ def check_accuracy_exact(ctx: DeviceContext) raises:
             + " host "
             + bits32(want_acc)
         )
+    # row 39: n = 0 would be 0 / 0 (a NaN in a recorded scalar); refused
+    var refused_n0 = False
+    try:
+        _ = accuracy_score_py(ctx, dt, dp, 0)
+    except e:
+        print("    n=0: " + String(e))
+        refused_n0 = True
+    if not refused_n0:
+        raise Error("accuracy_score(n=0) must be refused by name (0 / 0)")
     print(
         "    count "
         + String(got)
@@ -595,6 +604,15 @@ def check_mutual_info_epilogue(ctx: DeviceContext) raises:
             + String(mi0)
         )
     print("    product-structured 4096: MI == 0.0 exactly")
+    # row 39: size = 0 would be `h_MI / size` = 0 / 0 (RAFT :161); refused
+    var refused_s0 = False
+    try:
+        _ = mutual_info_score(ctx, da, db, 0, 0, 1)
+    except e:
+        print("    size=0: " + String(e))
+        refused_s0 = True
+    if not refused_s0:
+        raise Error("mutual_info_score(size=0) must be refused by name (0 / 0)")
     print("  OK")
 
 

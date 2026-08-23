@@ -21,6 +21,41 @@ through `identical_log` (row 12), their difference stored through `ftz`,
 the product `p * diff` one multiply stored through `ftz` (no addition in
 the term, so no contraction seam; the tree's additions are separate).
 FAST: the stdlib `log` and `block.sum`, a report.
+
+=========================================================================
+DEVIATION 658 (metrics lane, 2026-08-23): THE PER-TERM OPERANDS ARE
+FLUSHED ON LOAD, AND A NaN RESULT CARRIES THE ONE CANONICAL PAYLOAD.
+=========================================================================
+(1) THE OPERAND FLUSH. `KLDOp` tests `modelPDF == 0` on the raw load. An
+FTZ device (Apple) reads a SUBNORMAL p as zero and takes the `0` branch; a
+denormal-honoring device (NVIDIA, AMD) reads it as nonzero, and under
+IDENTICAL `identical_log` then flushes it (row 10) and returns `-inf`, so
+the term is `p * (-inf - log q) = -inf`: ONE legal input (a probability
+below 1.18e-38), two answers, a DIVERGENCE the first draft carried. The
+row-10 policy is "flush operands to signed zero" (numerics.mojo's `ftz`
+docstring); the first draft flushed every stored intermediate and missed
+the two LOADS. OURS: `p = ftz(model_pdf)`, `q = ftz(candidate_pdf)` before
+the compare, so every vendor sees the same zero and the term is `0`.
+Bit-inert on Apple (the hardware already flushed); on the others it moves
+the subnormal-p term from `-inf` to `0` under IDENTICAL (FAST is the
+vendor's stdlib `log` of the unflushed p, a finite report). MEASURED:
+`regression_metrics_check.mojo::check_kl_subnormal_p_and_nan` plants a
+subnormal p and reads a FINITE sum bitwise equal to the host model on
+Apple; without the flush the host model (which keeps denormals and
+flushes inside `identical_log`) says `-inf` while Apple's device says
+finite -- the check FAILS on Apple before the fix, which is how the hole
+was found and is the sabotage of record.
+(2) THE NaN. On every NON-NEGATIVE FINITE (p, q) the sum is NaN-free: `p >
+0, q == 0` is `+inf` (as RAFT and scipy), `p == 0` is `0`, and an
+all-`>= -finite` sum with at most `+inf` terms never forms `inf - inf`.
+A NEGATIVE or non-finite entry is outside cuML's contract (P and Q are
+probability distributions) and is not scanned for; should one reach the
+kernel its NaN (`log` of a negative) is returned AS A NaN but through
+`canonicalize_nan` (pinned_sum.mojo): `0x7fc00000` on every vendor and
+host, never the vendor's payload (IDENTITY_PATHS row 39; NVIDIA's
+arithmetic re-canonicalizes any NaN input to 0x7fffffff, so the payload
+`identical_log` writes does not survive the multiply there). MEASURED:
+the same check plants `q[7] = -1` and reads `0x7fc00000` in both modes.
 """
 
 from std.gpu import thread_idx
@@ -30,6 +65,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from metrics.mojo_only.pinned_sum import (
     PINNED_SUM_TPB,
     PINNED_SUM_W,
+    canonicalize_nan,
     chunk_count,
     host_fold_partials,
     linear_block_id,
@@ -40,8 +76,11 @@ from mojo_only.numerics import ftz, identical_log
 
 
 @always_inline
-def kld_op(model_pdf: Float32, candidate_pdf: Float32) -> Float32:
-    """`KLDOp` (:34-43), the per-term map, through the row-12 log."""
+def kld_op(model_pdf_in: Float32, candidate_pdf_in: Float32) -> Float32:
+    """`KLDOp` (:34-43), the per-term map, through the row-12 log; the
+    operands flushed on load (DEVIATION 658, IDENTITY_PATHS rows 10/39)."""
+    var model_pdf = ftz(model_pdf_in)
+    var candidate_pdf = ftz(candidate_pdf_in)
     if model_pdf == Float32(0.0):
         return Float32(0.0)
     var lp = ftz(identical_log(model_pdf))
@@ -120,4 +159,6 @@ def kl_divergence_launch[
         lst.append(h.unsafe_ptr().unsafe_load(c))
     _ = h^
     _ = partials^
-    return host_fold_partials(lst, chunks)
+    # DEVIATION 658 (2): a NaN (only from an out-of-contract negative or
+    # non-finite entry) leaves with ONE payload.
+    return canonicalize_nan(host_fold_partials(lst, chunks))

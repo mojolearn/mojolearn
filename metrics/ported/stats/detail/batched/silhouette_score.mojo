@@ -54,9 +54,11 @@ chain; FAST is a report.
 
 THE MIN OVER CLUSTERS has no tie-break to state for the VALUE (a min is
 a selection; two equal b's give the same b) and the `+0.0/-0.0` and NaN
-hazards are absent (silhouette_score.mojo's header); it is written
-ascending with first-index-wins so a future per-sample `argmin` output
-would be pinned too.
+hazards are absent (silhouette_score.mojo's header; IDENTITY_PATHS row
+39); it is written ascending with first-index-wins, a strict `<` compare
+and never a hardware `min`, so a future per-sample `argmin` output would
+be pinned too. The `SilOp` that follows carries DEVIATION 656 (a NaN
+quotient from an `inf` distance is +0.0, sklearn's `nan_to_num`).
 
 `chunk` (cuML's `chunksize`) is ACCEPTED and validated (`1 <= chunk`) and
 changes no bit: ours materializes no distance tile, so there is nothing
@@ -161,6 +163,13 @@ def silhouette_rows_kernel[
                             var idx = row * n_labels + c
                             b.unsafe_store(idx, ftz(b.unsafe_load(idx) + ftz(part)))
         # reduce<min_op>(b[i, :], init MAX) (:248-260), then SilOp (:262-263)
+        # IDENTITY_PATHS row 39: a POSITIONAL fold (strict `<`, ascending c,
+        # first index wins), never a hardware `min`. Its candidates are
+        # `FLT_MAX` (own / empty slot), `+0.0`, or a `+0.0`-seeded sum of
+        # nonnegative terms: no `-0.0` (x + y is -0.0 only when both are),
+        # no NaN (no `inf - inf` in an all-nonnegative sum), so the winner's
+        # VALUE is the same whichever vendor runs it. silhouette_score.mojo's
+        # header carries the proof.
         if tid == 0:
             var bmin = _float32_max()
             for c in range(n_labels):

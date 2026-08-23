@@ -18,8 +18,11 @@ identity card (one stage per metric).
 
 ## Commands
 
-No pixi task (pixi.toml is not this lane's). Every device run goes
-through the build lock:
+The pixi tasks `check-metrics-labels`, `check-metrics-regression`,
+`check-metrics-silhouette` and `check-metrics-trust` exist (FAST via
+`pixi run <task>`; IDENTICAL via `tools/with_identical_mode.sh pixi run
+<task>`; no `*-identity` task exists by design). Every device run goes
+through the build lock; the long forms:
 
     tools/with_build_lock.sh     pixi run mojo run -I . metrics/mojo_only/label_metrics_check.mojo
     tools/with_identical_mode.sh pixi run mojo run -I . metrics/mojo_only/label_metrics_check.mojo
@@ -79,10 +82,10 @@ grid shapes.
 | entropy | entropy.cu | entropy.cuh | yes (DEV 650, 651) | -- | IDENTICAL bitwise vs oracle; both vs Float64 ref 1e-6; constant -> 0, size 0 -> 1 | (c) null, recorded |
 | mutual_info_score | mutual_info_score.cu | mutual_info_score.cuh | yes (DEV 650, 651) | -- | IDENTICAL bitwise; both vs ref; MI == 0 exactly on a product-structured labeling | (b) |
 | homogeneity / completeness / v_measure | homogeneity_score.cu, completeness_score.cu, v_measure.cu | homogeneity_score.cuh, v_measure.cuh | yes | -- | IDENTICAL bitwise; both vs ref; constant-truth (1,0,0), constant-pred (0,1,0), both-constant (1,1,1), independent (0,0,0), singleton | (b) |
-| r2_score | r2_score.cu | scores.cuh | yes (DEV 653), float | double overload | y_bar/sse/ssto/r2 bitwise vs host tree model (IDENTICAL); vs Float64 sklearn r2 1e-5 (both); FTZ seam visible on an all-subnormal sse fixture; LAUNCH INVARIANT across block 64/256, grid 1-D/2-D, pad 0/37 NaN | (d), (e), (f) |
-| kl_divergence | kl_divergence.cu | kl_divergence.cuh | yes (DEV 653), float | double overload | bitwise vs host tree model (IDENTICAL); vs Float64 scipy spelling 1e-5; p == 0 branch (42 planted); q == 0 -> +inf; LAUNCH INVARIANT as r2 | (d) by construction (same fold) |
-| trustworthiness | trustworthiness.cu | trustworthiness_score.cuh | yes (DEV 655): ranks counted not sorted, embedded k-NN = neighbors' knn_search | n_neighbors + 1 > 256 by name; batchSize validated | rank sum EXACT vs host count given the same neighbors; neighbor sets == Float64 host k-NN on 523 rows; t bitwise = sklearn formula (and = sklearn 1.9's value 0.7837041712302066); perfect -> 1.0, scrambled 0.496; planted duplicate rows (exact ties) EXACT; 4 refusals; launch invariant | (j) fails |
-| silhouette_score / silhouette_samples | silhouette_score_batched_float.cu | detail/batched/silhouette_score.cuh (+ SilOp, countLabels of silhouette_score.cuh) | yes (DEV 654), float, batched path, metric L2SqrtUnexpanded | double; unbatched path (never dispatched); other metrics by name | 1031 per-sample scores + mean bitwise vs host model (IDENTICAL); vs Float64 sklearn 1e-4; singleton +0.0; empty label slot; exact tie a == b -> +0.0; two-way min tie; 4 refusals; chunk is scheduling (3 values one pattern); LAUNCH INVARIANT 8 launches x 1031 cells | (g) fails; (h) (i) null on Apple |
+| r2_score | r2_score.cu | scores.cuh | yes (DEV 653, 657), float | double overload | y_bar/sse/ssto/r2 bitwise vs host tree model (IDENTICAL); vs Float64 sklearn r2 1e-5 (both); FTZ seam visible on an all-subnormal sse fixture; LAUNCH INVARIANT across block 64/256, grid 1-D/2-D, pad 0/37 NaN; constant y -> 1.0 / 0.0 and overflow y -> canonical NaN 0x7fc00000 (both modes) | (d), (e), (f), (o) fail; (p) Apple-inert |
+| kl_divergence | kl_divergence.cu | kl_divergence.cuh | yes (DEV 653, 658), float | double overload | bitwise vs host tree model (IDENTICAL); vs Float64 scipy spelling 1e-5; p == 0 branch (42 planted); q == 0 -> +inf; subnormal p -> finite, bitwise (IDENTICAL); negative q -> canonical NaN 0x7fc00000 (both); LAUNCH INVARIANT as r2 | (d) by construction (same fold); (n) fails |
+| trustworthiness | trustworthiness.cu | trustworthiness_score.cuh | yes (DEV 655): ranks counted not sorted, embedded k-NN = neighbors' knn_search | n_neighbors + 1 > 256 by name; 2 n_neighbors >= n by name (cuML .pyx:114); batchSize validated | rank sum EXACT vs host count given the same neighbors; neighbor sets == Float64 host k-NN on 523 rows; t bitwise = sklearn formula (and = sklearn 1.9's value 0.7837041712302066); perfect -> 1.0, scrambled 0.496; planted duplicate rows (exact ties) EXACT; 5 refusals; launch invariant (all asserted under IDENTICAL, RECORDED under FAST) | (j) fails (IDENTICAL; RECORDED under FAST) |
+| silhouette_score / silhouette_samples | silhouette_score_batched_float.cu | detail/batched/silhouette_score.cuh (+ SilOp, countLabels of silhouette_score.cuh) | yes (DEV 654, 656), float, batched path, metric L2SqrtUnexpanded | double; unbatched path (never dispatched); other metrics by name | 1031 per-sample scores + mean bitwise vs host model (IDENTICAL); vs Float64 sklearn 1e-4; singleton +0.0; empty label slot; exact tie a == b -> +0.0; a == b == 0 (all points identical) both cluster orders -> +0.0; two-way min tie; inf distances (NaN arm) -> +0.0; no -0.0 score on any fixture; 4 refusals; chunk is scheduling (3 values one pattern); LAUNCH INVARIANT 8 launches x 1031 cells | (g) (k) fail; (h) (i) null on Apple; (l) inert everywhere (proved) |
 
 ## Group A: what the gates printed (Apple M4, 2026-08-23)
 
@@ -128,6 +131,13 @@ REPORTs and asserts only the Float64 references and the branches):
     check_kl_matches_oracle        0x3f7b5f74 bitwise; 42 planted p == 0; q[5] = 0 -> inf
                                    (0x7f800000); vs Float64 rel 8.9e-08 (FAST 0x3f7b5f73, REPORT)
     check_kl_launch_invariant      8 launches one byte pattern 0x3f7b5f74
+    check_r2_undefined_cases       constant y (n 512, y 2.0): y_hat == y -> r2 0x3f800000,
+                                   y_hat != y -> 0x00000000 (ssto 0x00000000 both); overflow
+                                   y (+-2^64): sse 0x7f800000 ssto 0x7f800000 r2 0x7fc00000
+                                   (oracle the same; both modes)
+    check_kl_subnormal_p_and_nan   subnormal p[3]: device 0x3f7b6548 oracle 0x3f7b6548
+                                   bitwise (FAST 0x3f7b6547 REPORT); q[7] = -1: 0x7fc00000
+                                   both modes
 
 **A rotation inside the chunk is invisible to the halving tree** (the
 first sabotage model tried it: rot 1 / 7 / 64 all equal the tree). The
@@ -165,6 +175,13 @@ report line shows exactly that split (device 0x00000000, oracle
     check_silhouette_planted_ties      row0 (a == b == 1) 0x00000000, row1 0x3e95f619 = host
                                        formula, row2 (singleton) 0x00000000; min tie b_1 == b_2
                                        = sqrt2: 0xbe95f61a, 4 cells bitwise
+                                       all-identical points (a == b == 0), labels 0|1 and 1|0:
+                                       6 + 6 scores 0x00000000, means 0x00000000 (both modes)
+    check_silhouette_inf_distances     scores 0x00000000 0x00000000 0x3f582a0f 0x3f5a5572
+                                       0x3f5aa020 0x3f800000 0x3f800000 0x3f73998b 0x3f72f878
+                                       mean 0x3f378584; d(0,1) d(5,0) d(5,2) = 0x7f800000,
+                                       d(5,6) 0x5dde0b6b; 9 bitwise vs oracle (both modes agree)
+    check_silhouette_matches_oracle    negative-zero scores: 0 (both modes)
     check_silhouette_refusals          n_labels 1 and 64 (= n_rows), metric 1, chunk 0 RAISE by
                                        name; chunk 1 / 40000 / 7 one byte pattern 0x3f28a853
     check_silhouette_launch_invariant  8 launches (b256/b64 x g1d/g2d x pad0/pad37), 1031 cells +
@@ -176,7 +193,9 @@ report line shows exactly that split (device 0x00000000, oracle
 ## Group D: what the gates printed (Apple M4, 2026-08-23)
 
 `trustworthiness_check.mojo`, both modes (the metric is integer plus one
-Float64 closed form; IDENTICAL and FAST print the same numbers):
+Float64 closed form; IDENTICAL and FAST print the same numbers on this
+Apple; the device-vs-host and neighbor-set claims are ASSERTED under
+IDENTICAL and RECORDED under FAST, see the row 39 audit):
 
     check_trust_rank_sum_exact        rank sum device 291291 host 291291; embedded neighbor
                                       sets vs Float64 host k-NN: 0 rows differ; t
@@ -185,8 +204,8 @@ Float64 closed form; IDENTICAL and FAST print the same numbers):
                                       float64): 0.7837041712302066
     check_trust_perfect_and_scrambled perfect: rank sum 0, t 1.0; scrambled: t 0.4956
     check_trust_planted_duplicates    device 189301 = host(j < e) 189301; host(j <= e) 191658
-    check_trust_refusals              n_neighbors 0, n_neighbors + 1 > n, > TRUST_MAX_K,
-                                      batchSize 0 RAISE by name
+    check_trust_refusals              n_neighbors 0, n_neighbors = n, 2 n_neighbors >= n
+                                      (cuML .pyx:114), > TRUST_MAX_K, batchSize 0 RAISE by name
     check_trust_launch_invariant      b256/b64 x g1d/g2d: 291291 x 4
 
 ## The card (`metrics_main.mojo`, Apple M4, 2026-08-23)
@@ -237,7 +256,10 @@ Contractions kernel for the unexpanded distance is not ported (UNPORTED).
 **The max(a, b) hazard** is stated in `silhouette_score.mojo`: RAFT's
 `SilOp` never calls `max`; the tie and 0/0 cases are explicit `+0.0`
 branches, `-0.0` cannot arise as a or b (sums of nonnegative terms seeded
-+0.0 or FLT_MAX), and the gate plants an exact tie and reads `0x00000000`.
++0.0 or FLT_MAX), and the gates plant an exact tie and the all-identical
+case (both cluster orders) and read `0x00000000`. The one NaN a finite X
+reaches (`a = +inf` from an overflow-scale coordinate) is +0.0 by
+DEVIATION 656 (sklearn's `nan_to_num`); the row 39 audit below.
 
 **Completeness is the transposed fold.** `completeness_score.cu` calls
 `homogeneity_score(y_hat, y)`, so RAFT computes a SECOND mutual information
@@ -259,6 +281,99 @@ quantity, last bits differ, both within 1e-6 of each other in the gates).
 `a[i] * b[j]` is an `int` product (overflows past 46,340 samples in one
 class pair); ours is Int64. Recorded in `mutual_info_score.mojo`.
 
+## ROW 39 AUDIT (2026-08-23): signed zero, NaN payloads, FAST-mode gates
+
+IDENTITY_PATHS row 39 measured on three vendors: `max(+0.0, -0.0)` is -0.0
+on Apple and +0.0 on NVIDIA/AMD; a COMPUTED NaN's payload is the vendor's
+(Apple 0x7fc00000, NVIDIA 0x7fffffff, AMD 0xffc00000, an x86 host
+0xffc00000, the M4's ARM host 0x7fc00000); the phase-6 gates run the FAST
+pass on every vendor. Every float `max`/`min`/fold, every recorded stage
+and every FAST assertion in `metrics/` was read against that.
+
+**Sites reviewed** (every `max(`, `min(`, `abs(`, `Atomic.min/max`, and
+compare-fold over a float in the directory):
+
+| site | what it is | can +-0 / NaN reach it | verdict |
+|---|---|---|---|
+| `ported/stats/detail/batched/silhouette_score.mojo:177` | the min over clusters for b: strict `<`, ascending c, first index wins, seeded FLT_MAX | NO. Candidates are FLT_MAX, +0.0, or +0.0-seeded sums of nonnegative terms: `x + y` is -0.0 only when both are, so no sum is -0.0; an all-nonnegative sum never forms `inf - inf`, so none is NaN. `+inf` candidates never win against FLT_MAX, so b <= FLT_MAX always | KEPT, positional; proof in the comment at the site and in silhouette_score.mojo's header; sabotage (l) (`<=`) inert everywhere, as the proof says |
+| `ported/stats/detail/silhouette_score.mojo` `sil_op` | RAFT's SilOp: tie branch, then `(b - a) / a` or `/ b` | the tie branch returns +0.0 BEFORE any division, so `0 / 0` is never computed and no `max(a, b)` is asked; a -0.0 score is unreachable (a nonzero `b - a` is at least one ulp of a value >= sqrt(FLT_MIN)/n, never subnormal; the quotient is >= ~6e-8 or exactly 0); the ONE NaN a finite X reaches is `a = +inf` (overflow-scale coordinates): `-inf / inf` | CHANGED: DEVIATION 656, NaN -> +0.0 (sklearn's nan_to_num); gate `check_silhouette_inf_distances`; sabotage (k) fails |
+| `mojo_only/pinned_distance.mojo` | `acc = fma(diff, diff, acc)` seeded +0.0, then sqrt | `diff * diff >= +0.0` always, `+0.0 + +0.0 = +0.0`: acc is never -0.0; sqrt of a nonnegative is never NaN; finite X gives finite or +inf | PROVEN in the header comment |
+| `ported/stats/detail/trustworthiness_score.mojo:133` | the rank compare `dj < de or (dj == de and j < ei)` | distances >= +0.0, never -0.0, never NaN on finite X (above); `+inf == +inf` ties by index, as their stable sort | KEPT, positional; comment at the site |
+| `ported/stats/detail/contingency_matrix.mojo:126-127` | `Atomic.min` / `Atomic.max` on Int32 labels | integer | KEPT |
+| `ported/stats/detail/adjusted_rand_index.mojo:123-124` | lower/upper label range `<` / `>` on Int32 | integer | KEPT |
+| `mojo_only/*_check.mojo` `abs(a) if abs(a) > abs(b) else abs(b)` (3 sites), `_host_knn_f64`'s `dist[j] < bd`, `_ref_silhouette_f64`'s `a if a > b else b` | host tolerance helpers and Float64 references | abs() values / host Float64 references; the reference's `0 / 0` is guarded by `mx != 0.0` | KEPT |
+| `ported/stats/detail/scores.mojo` `r2 = 1 - sse / ssto` | host epilogue | `ssto == 0` (constant y) gives -inf or `0 / 0`; an overflow-scale y gives `inf / inf` | CHANGED: DEVIATION 657 (`r2_epilogue`: force_finite values, canonical NaN); gate `check_r2_undefined_cases`; sabotage (o) fails, (p) Apple-inert |
+| `ported/stats/detail/kl_divergence.mojo` `kld_op` | `p == 0 ? 0 : p (log p - log q)` | a SUBNORMAL p took the `0` branch on Apple (hardware reads it as zero) and the `-inf` branch on a denormal-keeping vendor (identical_log flushes inside): a divergence; `q == 0` is +inf (defined, 0x7f800000 everywhere); NaN only from an out-of-contract negative/non-finite entry | CHANGED: DEVIATION 658 (operands flushed on load; the returned scalar's NaN canonical); gate `check_kl_subnormal_p_and_nan`; sabotage (n) fails |
+| `ported/stats/detail/entropy.mojo`, `mutual_info_score.mojo`, `adjusted_rand_index.mojo`, `rand_index.mojo`, `homogeneity_score.mojo`, `v_measure.mojo` | host Float64/Float32 epilogues | entropy's `p == 0` and MI's `ab == 0 or c == 0` branches skip the log (no `0 log 0`); ARI's `max - expected != 0` and `size < 2`, rand's `size < 2`, homogeneity's `size == 0` and `H != 0`, v's `h + c == 0` are all guarded as RAFT's; MI with `size == 0` was `0 / 0`, accuracy with `n == 0` was `0 / 0` | REFUSED BY NAME (mutual_info_score size <= 0, accuracy_score n <= 0); gated in label_metrics_check |
+| closed form `1 - 2 t / (n k (2n - 3k - 1))` | trustworthiness' host Float64 | `2n = 3k + 1` (e.g. n 5, k 3) makes the denominator 0: `2 / 0 * t` is inf or `0 * inf` = NaN | REFUSED BY NAME: `2 * n_neighbors >= n` (cuML's own `trustworthiness.pyx:114`), which subsumes the old `n_neighbors + 1 > n`; 5 refusals gated |
+
+**No value-first clamp exists in metrics/** (no `max(v, 0)`/`min(v, 0)`
+form at all), and no hardware `max`/`min`/`reduce_max`/`clamp` on a float
+anywhere in the directory; both folds are strict-compare positional.
+
+**The -0.0 fixture.** A `-0.0` operand is UNREACHABLE at both fold sites
+by legal input (the proofs above: every candidate is a +0.0-seeded sum of
+nonnegative terms or a constant, and the only zero such a sum can hold is
++0.0), so no fixture can plant one through the real inputs; what was added
+instead is the EXACT TIE (`a == b > 0`, row 0 of the 3-point fixture,
+already there) plus the `a == b == 0` case (all points identical, two
+clusters) in BOTH cluster orders (labels 0|1 and 1|0), asserting the
+recorded score and mean bits are `0x00000000` (not -0.0, not a NaN
+payload) bitwise vs the host model, in BOTH modes (a branch on equal
+inputs, not a rounding), and every silhouette fixture now counts negative-
+zero scores and asserts none. SABOTAGE (l): the min flipped from `<` to
+`<=` moves nothing on any vendor, and that is the content of the proof
+(no candidate pair differs only in zero sign), not an Apple accident. The
+lane's Apple-INERT sabotage is (p): dropping `canonicalize_nan` from the
+r2 epilogue moves nothing on the M4 because its ARM host already computes
+`1 - inf/inf` as 0x7fc00000; on the x86 hosts of the NVIDIA and AMD legs
+the raw NaN is 0xffc00000 and the gate FAILS there, which is exactly why
+the canonical payload is required before the scalar is recorded.
+
+**NaN audit, per recorded stage of the card** (`metrics_main.mojo`, 34
+stages): the inputs are host-recorded fixtures; `metrics.contingency`,
+`metrics.rand.a/b`, `knn.*` (neighbors'), `trust.emb_ind`,
+`trust.rank_sum` are INTEGER; `metrics.accuracy_score` is count / n with
+n > 0 refused otherwise; `metrics.rand_index` / `adjusted_rand_index` /
+`entropy` / `mutual_info_score` / `homogeneity` / `completeness` /
+`v_measure` are guarded host epilogues (table above), NaN-free for every
+size > 0 (MI refuses size 0, the rest return RAFT's 1.0); `metrics.r2_score`
+is NaN-free on every finite y (DEVIATION 657) and a canonical 0x7fc00000 on
+an overflow-scale y; `metrics.kl_divergence` is NaN-free on every
+nonnegative finite (P, Q) and canonical otherwise (DEVIATION 658);
+`metrics.silhouette_samples` (a DEVICE stage) and `metrics.silhouette_score`
+are NaN-free on every finite X (DEVIATION 656) -- a NaN INPUT coordinate
+also leaves as +0.0 through the same guard; `metrics.trustworthiness` is
+a Float64 closed form whose denominator is > 0 by the new refusal. The
+launch-invariance fixtures' NaN PADDING (37 NaN rows for silhouette, 37
+NaN pad values for r2/KL) never reaches a recorded stage: the record
+counts are `N` and the kernels' `i < n` / `j < n_rows` guards skip the
+pad (the invariance gate itself shows the padded and unpadded bytes
+equal). Non-finite inputs are out of the contract and are not scanned
+for on the device; the hand-off asks the Python surface to validate as
+sklearn's `check_array` does.
+
+**FAST demotions (FACT 3).** `trustworthiness_check.mojo`: the device-vs-
+host rank sum (two fixtures), the neighbor-set equality with the Float64
+host k-NN, `t` vs the closed form of the host sum, the perfect embedding's
+exact 1.0, and the launch invariance ride on neighbors' `knn_search` (a
+vendor matmul path under FAST) and on the rank compare over distances
+whose FAST spelling is the vendor's sqrt; all six now go through `_gate`:
+asserted under IDENTICAL, `RECORDED [FAST] ...` under FAST. Kept asserted
+in both modes: the refusals, the flipped tie-break's teeth (host-only),
+the coarse ranges (`0.5 < t < 1`, `t2 < 0.8`). `label_metrics_check.mojo`
+(integer device product, host epilogue), `regression_metrics_check.mojo`
+and `silhouette_check.mojo` (bitwise already mode-gated; the branch and
+refusal claims are by construction) needed no demotion. Sabotage (j) under
+FAST now prints `RECORDED [FAST] rank sum differs` and the run finishes
+`ALL GROUP D CHECKS PASSED [FAST]`.
+
+**Check results after the audit (Apple M4, 2026-08-23)**: all four checks
+`ALL GROUP * CHECKS PASSED` in both modes; the card driver's 34 stages and
+every printed value are unchanged from the table above (two IDENTICAL runs
+diff `RESULT: IDENTICAL`). No bit of any existing fixture moved; the
+deviations touch only the undefined cases they name.
+
 ## Sabotages (each reverted in the same session; a check that cannot fail is not a check)
 
 | # | what was broken | check | failing output |
@@ -272,7 +387,12 @@ class pair); ours is Int64. Recorded in `mutual_info_score.mojo`.
 | (g) | the silhouette row kernel's j partition shifted by one WITH WRAP (`j = (j0 + 1) % n_rows`) | check_silhouette_matches_oracle (IDENTICAL) | `samples row 1 device 0x3f11ad85 oracle 0x3f11ad84 ... samples: 347 of 1031 scores differ` |
 | (h) | `identical_sqrt` -> `std.math.sqrt` in the device distance | check_silhouette_matches_oracle (IDENTICAL) | NO CHANGE on Apple (its sqrt is correctly rounded; DEVIATION 258 measured NVIDIA's approximate: 180,714 of 2^20 off by one ulp); recorded as the expected null -- the pin's value is the NVIDIA column |
 | (i) | `ftz` dropped from the device distance's diff and accumulator | check_silhouette_matches_oracle (IDENTICAL) | NO CHANGE on Apple (hardware flush; no subnormal on this fixture); recorded as the expected null |
-| (j) | the trustworthiness rank tie-break flipped to `j <= e` | check_trust_rank_sum_exact (both modes) | `rank sum device 293696 host 291291 ... rank sum differs` (every neighbor now counts itself); the planted-duplicate fixture separates the DISTINCT-row tie too: host(j < e) 189301 vs host(j <= e) 191658 |
+| (j) | the trustworthiness rank tie-break flipped to `j <= e` | check_trust_rank_sum_exact (IDENTICAL asserts; FAST records) | `rank sum device 293696 host 291291 ... rank sum differs` (every neighbor now counts itself); the planted-duplicate fixture separates the DISTINCT-row tie too: host(j < e) 189301 vs host(j <= e) 191658. Re-run 2026-08-23 under FAST after the row 39 audit: `RECORDED [FAST] rank sum differs (vendor-shaped under FAST; not asserted)` and the run continues to `ALL GROUP D CHECKS PASSED [FAST]` |
+| (k) | DEVIATION 656's NaN guard removed from `sil_op` | check_silhouette_inf_distances (both modes) | `scores: 0x7fc00000 0x7fc00000 ... mean 0x7fc00000` then `row 0 (the NaN arm of SilOp) must record +0.0, got 0x7fc00000` (Apple's payload; NVIDIA would record 0x7fffffff, AMD 0xffc00000) |
+| (l) | the min over clusters flipped from strict `<` to `<=` (last index wins) | silhouette_check.mojo, all checks (IDENTICAL) | NO CHANGE, on every vendor by proof: no two candidates differ only in the sign of a zero (b is +0.0-seeded, nonnegative, never -0.0, never NaN), so WHICH index wins cannot move the value; recorded as the expected null. The positional spelling is kept for a future per-sample argmin |
+| (n) | the operand flush removed from `kld_op` (DEVIATION 658) | check_kl_subnormal_p_and_nan (IDENTICAL) | `subnormal p[3]: device 0x3f7b6548 oracle 0xff800000` then `BITWISE MISMATCH kl(subnormal p) device 0.9820142 (0x3f7b6548) oracle -inf (0xff800000)`: Apple's hardware reads the subnormal as zero in the compare, the denormal-keeping host (and NVIDIA/AMD) takes the log branch and gets -inf; this is the divergence the flush closes |
+| (o) | the `ssto == 0` arm removed from `r2_epilogue` (DEVIATION 657) | check_r2_undefined_cases (both modes) | `constant y, y_hat == y: ... r2 0x7fc00000`, `y_hat != y: ... r2 0xff800000` then `r2(constant y, perfect) must be 1.0 (force_finite), got 0x7fc00000` |
+| (p) | `canonicalize_nan` removed from `r2_epilogue` | check_r2_undefined_cases (both modes) | NO CHANGE ON APPLE: the M4's ARM host computes `1 - inf/inf` as 0x7fc00000 natively, so the raw NaN already carries the canonical payload here. EXPECTED TO FAIL on the NVIDIA and AMD legs, whose x86 hosts compute 0xffc00000 (IDENTITY_PATHS row 39: "the host 0xffc00000"); that is exactly why the canonicalization is required and why this sabotage is the lane's Apple-inert one |
 
 ## Deviations spent
 
@@ -284,15 +404,18 @@ class pair); ours is Int64. Recorded in `mutual_info_score.mojo`.
 | 655 | trustworthiness_score.mojo | ranks COUNTED per (row, embedded neighbor) with the stable-sort tie-break (same integer as their sort + lookup table, O(nk) per row); the embedded k-NN is neighbors' knn_search (expanded L2) with k+1; Int32 row partials summed in Int64; n_neighbors + 1 > 256 refused by name |
 | 654 | batched/silhouette_score.mojo, mojo_only/pinned_distance.mojo | the float atomicAdd into a and b[i, c] replaced by one fixed tree per (row, cluster) over j (a pure function of n and the cluster membership), the distance tile by the one-thread unexpanded formula through identical_mul_add/ftz/identical_sqrt, min + SilOp in the row's thread; chunk is scheduling; metric != L2SqrtUnexpanded refused by name |
 | 653 | mojo_only/pinned_sum.mojo, scores.mojo (r2), kl_divergence.mojo | the float sums over n as one fixed slab tree + ascending host fold, launch-invariant by construction; FAST arm is block.sum; r2's `powerScalar(x,2)` spelled `x*x`, `mean = sum * (1/n)` as mean.cuh |
+| 656 | silhouette_score.mojo (`sil_op`) | a NaN silhouette score (`a = +inf` from an overflow-scale coordinate difference, `-inf / inf`) is +0.0, sklearn's `nan_to_num`; RAFT records the vendor's NaN payload |
+| 657 | scores.mojo (`r2_epilogue`) | `ssto == 0` -> 1.0 (sse == 0) / 0.0, cuML's own Python surface and sklearn `force_finite=True`; any other NaN (`inf / inf` from an overflow-scale y) leaves with the one canonical payload 0x7fc00000 (`pinned_sum.mojo::canonicalize_nan`) |
+| 658 | kl_divergence.mojo (`kld_op`, the returned scalar) | the per-term operands are flushed on load (row 10: a subnormal p took the `0` branch on Apple and the `-inf` branch on a denormal-keeping vendor); a NaN (only from an out-of-contract negative or non-finite entry) leaves as 0x7fc00000 |
 
-## ROW TEXT FOR THE IDENTITY LANE
+## ROW TEXT FOR THE IDENTITY LANE (assigned rows 45-48 in IDENTITY_PATHS.md, commit 633a562)
 
 | n | path | what is vendor-dependent in their spelling | what we did | status |
 |---|---|---|---|---|
-| (next) | metrics: trustworthiness (Group D) | `brute_force_knn` on the embedding (L2SqrtUnexpanded), `pairwise_distance` + `sort_cols_per_row` (CUB segmented radix sort) + lookup table on X, `atomicAdd(double)` of INTEGER ranks (exact) | DEVIATION 655: ranks counted with the stable-sort tie-break on pinned unexpanded distances, k-NN through neighbors' knn_search, Int64 host sum; integer half gated EXACTLY, neighbor sets vs a Float64 host k-NN, t = sklearn's value on the fixture; sabotage (j) fails | Apple FAST+IDENTICAL green; the embedded k-NN rides on neighbors' row 24; no second vendor |
-| (next) | metrics: silhouette_score / silhouette_samples (Group C, batched path) | cuVS `pairwise_distance` L2SqrtUnexpanded (a tiled contraction, vendor tile policy; cuBLAS TF32 on the expanded arms), float `atomicAdd` of `d/count` into a and b from every (i, j) thread of every chunk tile (arrival order, chunksize-dependent), CUB min reduce, thrust::reduce mean | DEVIATION 654: row-owned kernel, one slab tree per (row, cluster) over j ascending, the distance one thread per cell through identical_mul_add/ftz/identical_sqrt, min and SilOp in the same thread, the mean DEVIATION 653's tree; gated bitwise per sample vs a host model, launch-invariant over 8 launches x 1031 cells, chunk proven scheduling, ties planted; sabotage (g) fails, (h) (i) null on Apple | Apple FAST+IDENTICAL green; no second vendor |
-| (next) | metrics: r2_score, kl_divergence (Group B) | `thrust::reduce` / `mapThenSumReduce`: a CUB block fold + float `atomicAdd` of block partials (arrival order, vendor lane width), vendor `powf`/`log` | DEVIATION 653: one PINNED_SUM_W slab tree per chunk whose width is a constant of the source (not the block), chunk totals folded ascending on the host, ftz at every stored seam, `identical_log` per term; gated bitwise vs a host model, launch-invariant across 8 launches (two block sizes, two grid shapes, two paddings), FTZ seam visible on an all-subnormal fixture; sabotages (d)(e) fail, (f) null on Apple | Apple FAST+IDENTICAL green; no second vendor |
-| (next) | metrics: label metrics (accuracy, rand, ARI, entropy, MI, h/c/v) | contingency matrix and histograms are INTEGER atomics (order-free, identity-safe on every vendor); the float epilogue is a device double `atomicAdd` fold (arrival order) with the vendor's `log` | device product stays integer and is gated EXACTLY per cell; the float epilogue moves to the host, serial ascending, Float32 through identical_log/identical_mul_add/ftz under IDENTICAL (DEVIATIONS 650, 651); completeness is the transposed fold as theirs; gated bitwise vs an oracle and 1e-6 vs a Float64 sklearn-spelled reference; two sabotages fail, one null recorded | Apple FAST+IDENTICAL green; no second vendor |
+| 45 | metrics: trustworthiness (Group D) | `brute_force_knn` on the embedding (L2SqrtUnexpanded), `pairwise_distance` + `sort_cols_per_row` (CUB segmented radix sort) + lookup table on X, `atomicAdd(double)` of INTEGER ranks (exact) | DEVIATION 655: ranks counted with the stable-sort tie-break on pinned unexpanded distances, k-NN through neighbors' knn_search, Int64 host sum; integer half gated EXACTLY, neighbor sets vs a Float64 host k-NN, t = sklearn's value on the fixture; sabotage (j) fails | Apple FAST+IDENTICAL green; the embedded k-NN rides on neighbors' row 24; no second vendor |
+| 46 | metrics: silhouette_score / silhouette_samples (Group C, batched path) | cuVS `pairwise_distance` L2SqrtUnexpanded (a tiled contraction, vendor tile policy; cuBLAS TF32 on the expanded arms), float `atomicAdd` of `d/count` into a and b from every (i, j) thread of every chunk tile (arrival order, chunksize-dependent), CUB min reduce, thrust::reduce mean | DEVIATION 654: row-owned kernel, one slab tree per (row, cluster) over j ascending, the distance one thread per cell through identical_mul_add/ftz/identical_sqrt, min and SilOp in the same thread, the mean DEVIATION 653's tree; gated bitwise per sample vs a host model, launch-invariant over 8 launches x 1031 cells, chunk proven scheduling, ties planted; sabotage (g) fails, (h) (i) null on Apple | Apple FAST+IDENTICAL green; no second vendor |
+| 47 | metrics: r2_score, kl_divergence (Group B) | `thrust::reduce` / `mapThenSumReduce`: a CUB block fold + float `atomicAdd` of block partials (arrival order, vendor lane width), vendor `powf`/`log` | DEVIATION 653: one PINNED_SUM_W slab tree per chunk whose width is a constant of the source (not the block), chunk totals folded ascending on the host, ftz at every stored seam, `identical_log` per term; gated bitwise vs a host model, launch-invariant across 8 launches (two block sizes, two grid shapes, two paddings), FTZ seam visible on an all-subnormal fixture; sabotages (d)(e) fail, (f) null on Apple | Apple FAST+IDENTICAL green; no second vendor |
+| 48 | metrics: label metrics (accuracy, rand, ARI, entropy, MI, h/c/v) | contingency matrix and histograms are INTEGER atomics (order-free, identity-safe on every vendor); the float epilogue is a device double `atomicAdd` fold (arrival order) with the vendor's `log` | device product stays integer and is gated EXACTLY per cell; the float epilogue moves to the host, serial ascending, Float32 through identical_log/identical_mul_add/ftz under IDENTICAL (DEVIATIONS 650, 651); completeness is the transposed fold as theirs; gated bitwise vs an oracle and 1e-6 vs a Float64 sklearn-spelled reference; two sabotages fail, one null recorded | Apple FAST+IDENTICAL green; no second vendor |
 
 ## HAND-OFF (Python surface, for the bindings lane)
 
@@ -316,13 +439,10 @@ and `upper_class_range = max(...)` exactly as cuML's `.pyx` files do and
 passes them to the Mojo entry; a label outside the range is a host-side
 raise by name (RAFT writes out of bounds; we do not port that). Float64
 inputs to the float metrics are refused by name (no Float64 on device).
-pixi lines to register when pixi.toml is next edited by its owner:
-
-    check-metrics-labels     = "mojo run -I . metrics/mojo_only/label_metrics_check.mojo"
-    check-metrics-regression = "mojo run -I . metrics/mojo_only/regression_metrics_check.mojo"
-    check-metrics-silhouette = "mojo run -I . metrics/mojo_only/silhouette_check.mojo"
-    check-metrics-trust      = "mojo run -I . metrics/mojo_only/trustworthiness_check.mojo"
-    metrics-card             = "mojo run -I . metrics/metrics_main.mojo"
+The pixi tasks exist: `check-metrics-labels`, `check-metrics-regression`,
+`check-metrics-silhouette`, `check-metrics-trust` (FAST via `pixi run
+<task>`, IDENTICAL via `tools/with_identical_mode.sh pixi run <task>`);
+the card driver is run by its long form in "Commands".
 
 ## HAND-OFF TO THE IDENTITY LANE (and to neighbors/)
 
@@ -335,4 +455,13 @@ Nothing outside `metrics/` was edited. Three asks, none blocking:
    a portable Float64 log (Cephes, the `portable_exp64` shape) would let
    DEVIATION 651 keep RAFT's double precision under IDENTICAL. Until then
    IDENTICAL is Float32 at these seams.
-2. IDENTITY_PATHS.md: the row above.
+2. IDENTITY_PATHS.md rows 45-48 carry the row text above; the row 39
+   audit below adds to them (DEVIATIONS 656-658, the refusals, the FAST
+   demotions); the ledger's owner may fold it in.
+3. The Python surface (bindings lane): validate inputs as sklearn's
+   `check_array` does before calling the Mojo entries -- finite X for
+   silhouette/trustworthiness, finite y/y_hat for r2, finite and
+   nonnegative P/Q for kl_divergence. The Mojo entries do not scan their
+   device inputs; the row 39 audit states what each stage does with an
+   out-of-contract value (a NaN input reaches sil_op as +0.0 through
+   DEVIATION 656; r2 and KL return the canonical NaN).

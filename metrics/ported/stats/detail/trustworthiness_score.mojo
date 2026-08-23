@@ -126,6 +126,10 @@ def trust_rank_kernel[
             for q in range(k1):
                 var de = d_e[unsafe_offset = q]
                 var ei = Int(e_idx[unsafe_offset = q])
+                # IDENTITY_PATHS row 39: a positional compare on distances
+                # that are `>= +0.0`, never `-0.0`, never NaN on a finite X
+                # (pinned_distance.mojo's header); `+inf` ties with `+inf`
+                # and the index decides, as in their stable sort.
                 if dj < de or (dj == de and j < ei):
                     _ = Atomic.fetch_add(counts.unsafe_offset(q), Int32(1))
             j += block_size
@@ -161,12 +165,20 @@ def trustworthiness_rank_sum(
     lesson), then `trust.emb_ind` and `trust.rank_sum` are recorded."""
     if n_neighbors < 1:
         raise Error("trustworthiness: n_neighbors must be >= 1")
-    if n_neighbors + 1 > n:
+    # cuML's own surface (`python/cuml/cuml/metrics/trustworthiness.pyx:
+    # 114`): `if n_neighbors < 1 or 2 * n_neighbors >= n_samples: raise
+    # ValueError`. Mirrored here so the closed form's denominator `(n k)
+    # (2n - 3k - 1)` is always > 0 (with 2k < n and n >= 3 it is >= n k /
+    # 2): no `2 / 0`, no `0 * inf`, no NaN reaches the recorded scalar
+    # (IDENTITY_PATHS row 39). This subsumes the older `n_neighbors + 1 >
+    # n` refusal.
+    if 2 * n_neighbors >= n:
         raise Error(
-            "trustworthiness: n_neighbors + 1 = "
-            + String(n_neighbors + 1)
-            + " exceeds n = "
+            "trustworthiness: n_neighbors ("
+            + String(n_neighbors)
+            + ") must be >= 1 and < n_samples / 2; n_samples is "
             + String(n)
+            + " (cuML trustworthiness.pyx:114)"
         )
     if n_neighbors + 1 > TRUST_MAX_K:
         raise Error(

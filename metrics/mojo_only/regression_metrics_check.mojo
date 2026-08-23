@@ -57,6 +57,21 @@ SABOTAGES PERFORMED (2026-08-23), each reverted; outputs in the README:
     (c) `ftz` dropped from the DEVICE kernel's sse term: no bit moves on
         Apple (the hardware flushes; the pin is inert on this column, as
         numerics.mojo says) -- recorded as the expected null
+
+ROW 39 AUDIT (2026-08-23) additions:
+    check_r2_undefined_cases       DEVIATION 657: constant y -> 1.0 / 0.0,
+                                   overflow y -> canonical NaN 0x7fc00000
+                                   (both modes; oracle through the same
+                                   epilogue)
+    check_kl_subnormal_p_and_nan   DEVIATION 658: a subnormal p is finite
+                                   and bitwise (IDENTICAL), a negative q
+                                   is the canonical NaN (both modes)
+    sabotages: (n) the operand flush dropped from kld_op -> `BITWISE
+    MISMATCH kl(subnormal p) device 0x3f7b6548 oracle -inf (0xff800000)`;
+    (o) the ssto == 0 arm dropped -> `r2(constant y, perfect) must be 1.0,
+    got 0x7fc00000`; (p) canonicalize_nan dropped -> NO CHANGE on Apple
+    (the ARM host's NaN is already 0x7fc00000; an x86 host's is
+    0xffc00000, where it fails)
 """
 
 from std.gpu import thread_idx
@@ -75,6 +90,7 @@ from metrics.mojo_only.fixtures import (
 )
 from metrics.mojo_only.pinned_sum import (
     PINNED_SUM_W,
+    canonicalize_nan,
     host_tree_sum,
     sabotage_shifted_host_tree_sum,
     virtual_block_sum,
@@ -85,7 +101,11 @@ from metrics.ported.stats.detail.kl_divergence import (
     kl_divergence_launch,
     kld_op,
 )
-from metrics.ported.stats.detail.scores import r2_score_launch, r2_score_parts
+from metrics.ported.stats.detail.scores import (
+    r2_epilogue,
+    r2_score_launch,
+    r2_score_parts,
+)
 from mojo_only.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
@@ -132,7 +152,9 @@ def _oracle_r2(
         st.append(ftz(d2 * d2))
     var sse = host_tree_sum(se, n)
     var ssto = host_tree_sum(st, n)
-    return (y_bar, sse, ssto, ftz(Float32(1.0) - ftz(sse / ssto)))
+    # DEVIATION 657: the same epilogue as the device path (the oracle's
+    # job is the three SUMS; the epilogue is two compares and one division)
+    return (y_bar, sse, ssto, r2_epilogue(sse, ssto))
 
 
 def _ref_r2_f64(y: List[Float32], y_hat: List[Float32], n: Int) -> Float64:
@@ -160,7 +182,8 @@ def _oracle_kl(p: List[Float32], q: List[Float32], n: Int) -> Float32:
         # What this oracle is independent of is the FOLD, which is the
         # thing DEVIATION 653 pins.
         terms.append(kld_op(p[i], q[i]))
-    return host_tree_sum(terms, n)
+    # DEVIATION 658 (2): the same canonical NaN as the device path
+    return canonicalize_nan(host_tree_sum(terms, n))
 
 
 def _ref_kl_f64(p: List[Float32], q: List[Float32], n: Int) -> Float64:
@@ -475,6 +498,112 @@ def check_kl_matches_oracle(ctx: DeviceContext) raises:
     print("  OK")
 
 
+def check_r2_undefined_cases(ctx: DeviceContext) raises:
+    """DEVIATION 657's gate. n = 512 (a power of two, so `sum * (1/n)` is
+    exact and `y_bar == y` for a constant y under ANY fold) and y = 2.0:
+    ssto == 0 exactly in both modes. y_hat == y -> sse == 0 -> 1.0; y_hat
+    = y + 1 -> sse = 512 -> 0.0 (cuML's surface / sklearn force_finite).
+    Then an OVERFLOW-SCALE y: +-2^64 alternating (every partial sum of
+    +-2^64 over 512 terms is an exact multiple of 2^64, so y_bar is exactly
+    0 under ANY fold and no `inf - inf` forms in the mean), y_hat = -y, so
+    every (y - y_hat)^2 = 2^130 and (y - y_bar)^2 = 2^128 is +inf, sse =
+    ssto = +inf, and `inf / inf` is a NaN that leaves with the canonical
+    payload 0x7fc00000. Asserted in BOTH modes (exact sums and IEEE infinities,
+    no rounding involved); the oracle goes through the same epilogue."""
+    print("check_r2_undefined_cases [" + _mode_name() + "]")
+    var n = 512
+    var y = List[Float32]()
+    var same = List[Float32]()
+    var off = List[Float32]()
+    for _ in range(n):
+        y.append(Float32(2.0))
+        same.append(Float32(2.0))
+        off.append(Float32(3.0))
+    var dy = upload_f32(ctx, y)
+    var dsame = upload_f32(ctx, same)
+    var doff = upload_f32(ctx, off)
+    var p1 = r2_score_parts[256](ctx, dy, dsame, n, 0)
+    var p2 = r2_score_parts[256](ctx, dy, doff, n, 0)
+    var o1 = _oracle_r2(y, same, n)
+    var o2 = _oracle_r2(y, off, n)
+    print(
+        "    constant y, y_hat == y: y_bar " + bits32(p1[0]) + " sse " + bits32(p1[1])
+        + " ssto " + bits32(p1[2]) + " r2 " + bits32(p1[3]) + " (oracle " + bits32(o1[3]) + ")"
+    )
+    print(
+        "    constant y, y_hat != y: sse " + bits32(p2[1]) + " ssto " + bits32(p2[2])
+        + " r2 " + bits32(p2[3]) + " (oracle " + bits32(o2[3]) + ")"
+    )
+    if bits32(p1[2]) != "0x00000000" or bits32(p2[2]) != "0x00000000":
+        raise Error("ssto of a constant y must be exactly +0.0 on this fixture")
+    if bits32(p1[3]) != "0x3f800000" or bits32(o1[3]) != "0x3f800000":
+        raise Error("r2(constant y, perfect) must be 1.0 (force_finite), got " + bits32(p1[3]))
+    if bits32(p2[3]) != "0x00000000" or bits32(o2[3]) != "0x00000000":
+        raise Error("r2(constant y, imperfect) must be 0.0 (force_finite), got " + bits32(p2[3]))
+    var via = r2_score_py(ctx, dy, doff, n)
+    if bits32(via) != bits32(p2[3]):
+        raise Error("r2_score_py and r2_score_parts disagree on the constant fixture")
+    # overflow: sse = ssto = +inf -> inf / inf -> canonical NaN
+    var big = List[Float32]()
+    var neg = List[Float32]()
+    for i in range(n):
+        var v = Float32(18446744073709551616.0) if i % 2 == 0 else Float32(-18446744073709551616.0)
+        big.append(v)
+        neg.append(-v)
+    var dbig = upload_f32(ctx, big)
+    var dneg = upload_f32(ctx, neg)
+    var p3 = r2_score_parts[256](ctx, dbig, dneg, n, 0)
+    var o3 = _oracle_r2(big, neg, n)
+    print(
+        "    overflow y: sse " + bits32(p3[1]) + " ssto " + bits32(p3[2]) + " r2 "
+        + bits32(p3[3]) + " (oracle " + bits32(o3[3]) + ")"
+    )
+    if bits32(p3[0]) != "0x00000000":
+        raise Error("y_bar of the +-2^64 fixture must be exactly +0.0, got " + bits32(p3[0]))
+    if bits32(p3[1]) != "0x7f800000" or bits32(p3[2]) != "0x7f800000":
+        raise Error("overflow fixture must drive sse and ssto to +inf")
+    if bits32(p3[3]) != "0x7fc00000" or bits32(o3[3]) != "0x7fc00000":
+        raise Error("r2 = inf / inf must leave as the canonical NaN 0x7fc00000, got " + bits32(p3[3]))
+    print("    1.0 / 0.0 / 0x7fc00000: the three undefined cases are defined, both modes")
+    print("  OK")
+
+
+def check_kl_subnormal_p_and_nan(ctx: DeviceContext) raises:
+    """DEVIATION 658's gate. (1) p[3] is SUBNORMAL (1e-40) with q[3] normal:
+    an FTZ device reads it as 0 and takes the `0` branch, a denormal-
+    honoring device reads it as nonzero and `identical_log` flushes it to
+    `-inf`; with the operand flush both take the `0` branch. The device sum
+    is FINITE (both modes; FAST's stdlib log of 1e-40 is finite too) and
+    bitwise the host model's under IDENTICAL. (2) q[7] = -1: `log(-1)` is
+    NaN, the term and the sum are NaN, and the returned scalar is the
+    canonical 0x7fc00000 in both modes (the canonicalization is a host
+    compare; IEEE says log of a negative is NaN everywhere)."""
+    print("check_kl_subnormal_p_and_nan [" + _mode_name() + "]")
+    var f = _kl_fixture()
+    var p = f[0].copy()
+    var q = f[1].copy()
+    p[3] = Float32(1.0e-40)
+    if not (p[3] != Float32(0.0) and abs(p[3]) < Float32(1.1754943508222875e-38)):
+        raise Error("p[3] is not subnormal on this host; the fixture is not planted")
+    var dp = upload_f32(ctx, p)
+    var dq = upload_f32(ctx, q)
+    var got = kl_divergence(ctx, dp, dq, N)
+    var want = _oracle_kl(p, q, N)
+    print("    subnormal p[3]: device " + bits32(got) + " oracle " + bits32(want))
+    if got != got or bits32(got) == "0xff800000" or bits32(got) == "0x7f800000":
+        raise Error("a subnormal p must contribute 0, not -inf or NaN: " + bits32(got))
+    _assert_bits32("kl(subnormal p)", got, want)
+    var qn = q.copy()
+    qn[7] = Float32(-1.0)
+    var dqn = upload_f32(ctx, qn)
+    var nan = kl_divergence(ctx, dp, dqn, N)
+    var nan_o = _oracle_kl(p, qn, N)
+    print("    q[7] = -1: device " + bits32(nan) + " oracle " + bits32(nan_o))
+    if bits32(nan) != "0x7fc00000" or bits32(nan_o) != "0x7fc00000":
+        raise Error("KL's NaN must leave as the canonical 0x7fc00000, got " + bits32(nan))
+    print("  OK")
+
+
 def check_kl_launch_invariant(ctx: DeviceContext) raises:
     print("check_kl_launch_invariant [" + _mode_name() + "]")
     var f = _kl_fixture()
@@ -523,6 +652,8 @@ def main() raises:
     check_r2_matches_oracle(ctx)
     check_r2_ftz_seam_is_visible(ctx)
     check_r2_launch_invariant(ctx)
+    check_r2_undefined_cases(ctx)
     check_kl_matches_oracle(ctx)
+    check_kl_subnormal_p_and_nan(ctx)
     check_kl_launch_invariant(ctx)
     print("ALL GROUP B CHECKS PASSED [" + _mode_name() + "]")

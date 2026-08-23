@@ -145,6 +145,16 @@ def mutual_info_score(
 ) raises -> Float64:
     """`mutual_info_score(first, second, size, lower, upper, stream)`
     (:93-162)."""
+    # `h_MI / size` (:161) with size 0 is 0 / 0 in theirs; REFUSED by name
+    # (a NaN must not reach the recorded scalar, IDENTITY_PATHS row 39).
+    # `homogeneity_score` / `entropy` return 1.0 for size 0 before reaching
+    # here, as theirs do.
+    if size <= 0:
+        raise Error(
+            "mutual_info_score: size must be positive, got "
+            + String(size)
+            + " (0 / 0 is refused by name)"
+        )
     var k = Int(upper_label_range - lower_label_range + 1)
     var c = contingency_matrix_host(
         ctx,

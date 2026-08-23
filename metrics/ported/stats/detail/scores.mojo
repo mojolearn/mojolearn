@@ -45,10 +45,36 @@ Two spellings of theirs are re-spelled and named:
     The difference itself is stored through `ftz` under IDENTICAL.
 The mean's division by n and the final `1 - sse/ssto` are one division
 and one subtraction each, correctly rounded everywhere; `math_t` is
-Float32 throughout as cuML's `r2_score_py(float*)` is. `ssto == 0`
-(constant y) returns what theirs returns -- `1 - sse/0`, i.e. `-inf` or
-NaN -- where sklearn's `force_finite=True` default returns 0.0 (or 1.0
-when sse is also 0). COPY, DO NOT IMPROVE; the README states it.
+Float32 throughout as cuML's `r2_score_py(float*)` is.
+
+`accuracy_score` with `n == 0` is `0 / 0` in theirs; ours REFUSES `n <= 0`
+by name (a NaN must not reach the recorded scalar, IDENTITY_PATHS row 39,
+and there is no accuracy of nothing to report).
+
+=========================================================================
+DEVIATION 657 (metrics lane, 2026-08-23): r2's UNDEFINED CASES ARE cuML's
+OWN SURFACE'S `force_finite=True` VALUES, AND ANY OTHER NaN IS THE ONE
+CANONICAL PAYLOAD.
+=========================================================================
+THEIRS (RAFT :72) returns `1 - sse / ssto` unguarded: a constant `y`
+(`ssto == 0`) gives `-inf` (sse > 0) or `0 / 0 = NaN` (sse == 0, a
+perfect prediction of a constant). cuML's OWN Python `r2_score`
+(`python/cuml/cuml/metrics/regression.py`, the function cuML users call)
+does not call this kernel at all and defaults `force_finite=True`, exactly
+sklearn's: `ssto == 0` -> `1.0` when `sse == 0`, else `0.0`. OURS mirrors
+that surface in `r2_epilogue`: it is the value the user of either library
+sees. WHY HERE: `metrics.r2_score` is a RECORDED SCALAR and a computed NaN
+carries the vendor's payload (row 39), so the raw spelling would give a
+different card per vendor on one legal input. The second arm: an
+OVERFLOW-SCALE `y` (`|y - y_hat|` or `|y - y_bar|` above `1.8e19`
+squares to `+inf`) makes `sse` and `ssto` `+inf` and `inf / inf` is NaN
+in theirs, in sklearn (force_finite guards only `ssto == 0`) and in ours;
+that NaN is returned AS A NaN but through `canonicalize_nan` (pinned_sum.
+mojo), so its bits are `0x7fc00000` on every vendor and host. No finite
+r2 moves: both arms are compares on the finished sums. MEASURED:
+`regression_metrics_check.mojo::check_r2_undefined_cases` (constant y
+with y_hat == y -> 0x3f800000, with y_hat != y -> 0x00000000, overflow ->
+0x7fc00000, both modes, the oracle through the same epilogue).
 """
 
 from std.atomic import Atomic
@@ -59,6 +85,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from metrics.mojo_only.pinned_sum import (
     PINNED_SUM_TPB,
     PINNED_SUM_W,
+    canonicalize_nan,
     chunk_count,
     host_fold_partials,
     linear_block_id,
@@ -98,6 +125,12 @@ def accuracy_score(
     n: Int,
 ) raises -> Float32:
     """`accuracy_score(predictions, ref_predictions, n, stream)` (:84-101)."""
+    if n <= 0:
+        raise Error(
+            "accuracy_score: n must be positive, got "
+            + String(n)
+            + " (0 / 0 is refused by name)"
+        )
     var count = count_correct(ctx, predictions, ref_predictions, n)
     # `correctly_predicted * 1.0f / n` (:99)
     return Float32(count) / Float32(n)
@@ -292,6 +325,19 @@ def r2_score_parts[
     _ = sum_p^
     _ = sse_p^
     _ = ssto_p^
-    # `return 1.0 - sse / ssto;` (:72)
+    return (y_bar, sse, ssto, r2_epilogue(sse, ssto))
+
+
+@always_inline
+def r2_epilogue(sse: Float32, ssto: Float32) -> Float32:
+    """`return 1.0 - sse / ssto;` (:72) with DEVIATION 657's two guards.
+    The oracle in regression_metrics_check.mojo calls this same function
+    on its own sums, so what it gates is the SUMS; the epilogue is host
+    arithmetic (one division, one subtraction, two compares)."""
+    # DEVIATION 657: cuML's surface / sklearn `force_finite=True`.
+    if ssto == Float32(0.0):
+        return Float32(1.0) if sse == Float32(0.0) else Float32(0.0)
     var r2 = ftz(Float32(1.0) - ftz(sse / ssto))
-    return (y_bar, sse, ssto, r2)
+    # DEVIATION 657: `inf / inf` from an overflow-scale y stays a NaN but
+    # with ONE payload (IDENTITY_PATHS row 39).
+    return canonicalize_nan(r2)

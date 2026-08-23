@@ -53,7 +53,7 @@ it under IDENTICAL. It is the oracle every Group B and C check reads first.
 """
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.memory import stack_allocation
+from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.primitives.block import sum as block_sum
 from max.gpu.sync import barrier
@@ -154,6 +154,26 @@ def host_tree_sum(values: List[Float32], n: Int) -> Float32:
             step //= 2
         partials.append(slab[0])
     return host_fold_partials(partials, chunks)
+
+
+#: numerics.mojo's quiet-NaN payload (`identical_log`/`identical_sqrt`
+#: write it explicitly); the ONE payload a recorded scalar may carry.
+comptime CANONICAL_NAN_BITS: UInt32 = 0x7FC00000
+
+
+@always_inline
+def canonicalize_nan(x: Float32) -> Float32:
+    """IDENTITY_PATHS row 39: a COMPUTED NaN carries the vendor's payload
+    (Apple 0x7fc00000, NVIDIA 0x7fffffff, AMD 0xffc00000; an x86 host
+    0xffc00000, an ARM host 0x7fc00000), so a metric's returned scalar that
+    can be NaN is passed through this before it is recorded or returned:
+    NaN -> the one payload `CANONICAL_NAN_BITS`, every non-NaN untouched
+    (the compare is the only op; no bit of a finite or infinite value
+    moves). Used by the r2 (DEVIATION 657) and KL (DEVIATION 658)
+    epilogues; their checks plant the NaN and read these bits."""
+    if x != x:
+        return bitcast[DType.float32](CANONICAL_NAN_BITS)
+    return x
 
 
 def host_fold_partials(partials: List[Float32], chunks: Int) -> Float32:

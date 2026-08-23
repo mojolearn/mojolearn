@@ -29,11 +29,18 @@ structures plus one Float64 closed form. The gates:
                                       host count vs device EXACT; the
                                       flipped tie-break (`j <= e`) gives a
                                       DIFFERENT sum here (teeth)
-    check_trust_refusals              n_neighbors 0, n_neighbors + 1 > n,
+    check_trust_refusals              n_neighbors 0, n_neighbors = n,
+                                      2 * n_neighbors >= n (cuML .pyx:114),
                                       n_neighbors + 1 > TRUST_MAX_K,
                                       batchSize 0 RAISE by name
     check_trust_launch_invariant      block 64 / 256, grid 1-D / 2-D: the
                                       same integer (trivially, and run)
+
+ROW 39 AUDIT (2026-08-23): the device-vs-host and neighbor-set claims
+are vendor-shaped under FAST (the embedded k-NN is a vendor matmul path,
+the rank distances the vendor's sqrt) and go through `_gate`: asserted
+under IDENTICAL, `RECORDED [FAST]` under FAST. Refusals now 5 (2 *
+n_neighbors >= n, cuML trustworthiness.pyx:114).
 
 SABOTAGES PERFORMED (2026-08-23), each reverted; outputs in the README:
     (j) the device tie-break flipped to `j <= ei`: check_trust_rank_sum_
@@ -153,6 +160,22 @@ def _sets_differ(a: List[UInt32], b: List[Int], n: Int, k1: Int) -> Int:
     return rows_differ
 
 
+def _gate(ok: Bool, what: String) raises:
+    """FACT 3 of the row-39 audit: the device-vs-host comparisons below
+    ride on (a) neighbors' `knn_search`, a vendor matmul path under FAST
+    (expanded distances), and (b) the rank compare on distances whose
+    FAST spelling is the vendor's `sqrt` (approximate on NVIDIA, DEVIATION
+    258). Both are vendor-shaped under FAST: asserted under IDENTICAL,
+    RECORDED under FAST. Integer-only and host-only claims (refusals, the
+    flipped tie-break's teeth, coarse ranges) stay asserted in both."""
+    if ok:
+        return
+    comptime if IDENTICAL:
+        raise Error(what)
+    else:
+        print("    RECORDED [FAST] " + what + " (vendor-shaped under FAST; not asserted)")
+
+
 def _closed_form(t: Int64, n: Int, k: Int) -> Float64:
     var nn = Float64(n)
     var kk = Float64(k)
@@ -168,18 +191,15 @@ def check_trust_rank_sum_exact(ctx: DeviceContext) raises:
     var r = trustworthiness_rank_sum(ctx, trace, x, emb, N, M, DE, K, False, 0)
     var host = _host_rank_sum(x, r[1], N, M, K + 1, False)
     print("    rank sum device " + String(r[0]) + " host " + String(host))
-    if r[0] != host:
-        raise Error("rank sum differs")
+    _gate(r[0] == host, "rank sum differs")
     var hk = _host_knn_f64(emb, N, DE, K + 1)
     var rows = _sets_differ(r[1], hk, N, K + 1)
     print("    embedded neighbor sets vs Float64 host k-NN: " + String(rows) + " rows differ")
-    if rows != 0:
-        raise Error("knn_search neighbor sets differ from the Float64 host k-NN")
+    _gate(rows == 0, "knn_search neighbor sets differ from the Float64 host k-NN")
     var t = trustworthiness_score(ctx, x, emb, N, M, DE, K)
     var want = _closed_form(host, N, K)
     print("    t " + String(t) + " (" + bits64(t) + ") sklearn formula " + bits64(want))
-    if bits64(t) != bits64(want):
-        raise Error("t differs from the closed form of the host sum")
+    _gate(bits64(t) == bits64(want), "t differs from the closed form of the host sum")
     if not (t > 0.5 and t < 1.0):
         raise Error("t out of the expected range for this embedding")
     print("  OK")
@@ -194,8 +214,10 @@ def check_trust_perfect_and_scrambled(ctx: DeviceContext) raises:
     var r = trustworthiness_rank_sum(ctx, trace, x, same, N, M, M, K, False, 0)
     var t1 = trustworthiness_score(ctx, x, same, N, M, M, K)
     print("    perfect embedding: rank sum " + String(r[0]) + " t " + String(t1))
-    if r[0] != Int64(0) or t1 != 1.0:
-        raise Error("a perfect embedding must score exactly 1.0")
+    # exact 1.0 needs the embedded k-NN (expanded L2, vendor matmul under
+    # FAST) and the unexpanded rank distances to agree on every neighbor:
+    # IDENTICAL asserts, FAST records (FACT 3)
+    _gate(r[0] == Int64(0) and t1 == 1.0, "a perfect embedding must score exactly 1.0")
     # scrambled: a hashed permutation of the rows as the embedding
     var perm = List[Int]()
     for i in range(N):
@@ -237,8 +259,7 @@ def check_trust_planted_duplicates(ctx: DeviceContext) raises:
         + " host(j <= e) "
         + String(flipped)
     )
-    if r[0] != host:
-        raise Error("rank sum differs on the duplicate fixture")
+    _gate(r[0] == host, "rank sum differs on the duplicate fixture")
     if flipped == host:
         raise Error("the flipped tie-break does not move the sum; no teeth")
     print("  OK")
@@ -260,6 +281,13 @@ def check_trust_refusals(ctx: DeviceContext) raises:
     except e:
         print("    n_neighbors=n: " + String(e))
         refused += 1
+    # cuML trustworthiness.pyx:114: 2 * n_neighbors >= n_samples is refused
+    # (the closed form's denominator would reach 0 at 2n = 3k + 1; row 39)
+    try:
+        _ = trustworthiness_score(ctx, x, emb, N, M, DE, (N + 1) // 2)
+    except e:
+        print("    2 * n_neighbors >= n: " + String(e))
+        refused += 1
     try:
         _ = trustworthiness_score(ctx, x, emb, N, M, DE, TRUST_MAX_K)
     except e:
@@ -270,8 +298,8 @@ def check_trust_refusals(ctx: DeviceContext) raises:
     except e:
         print("    batchSize=0: " + String(e))
         refused += 1
-    if refused != 4:
-        raise Error("expected 4 refusals, got " + String(refused))
+    if refused != 5:
+        raise Error("expected 5 refusals, got " + String(refused))
     print("  OK")
 
 
@@ -295,8 +323,10 @@ def check_trust_launch_invariant(ctx: DeviceContext) raises:
         + " b64 g2d "
         + String(d[0])
     )
-    if a[0] != b[0] or a[0] != c[0] or a[0] != d[0]:
-        raise Error("rank sum moved across launches")
+    # the rank kernel itself is one thread per (row, neighbor) with no fold,
+    # but each call re-runs the embedded k-NN (vendor matmul under FAST):
+    # IDENTICAL asserts, FAST records (FACT 3)
+    _gate(a[0] == b[0] and a[0] == c[0] and a[0] == d[0], "rank sum moved across launches")
     print("  OK")
 
 

@@ -23,6 +23,20 @@ order that is a function of the tile policy; that kernel is NOT ported
 (UNPORTED.tsv) and the one-thread formula stands in under both modes.
 Under FAST the helpers are the naive chain and the stdlib sqrt; under
 IDENTICAL one arithmetic on every vendor.
+
+SIGNED ZERO AND NaN (IDENTITY_PATHS row 39): the accumulator is seeded
+`+0.0` and each step adds `diff * diff`, which is `>= +0.0` for every
+real `diff` (`(-0.0) * (-0.0)` is `+0.0`; a flushed subnormal square is
+`+0.0`), and `+0.0 + (+0.0)` is `+0.0` under round-to-nearest, so `acc`
+is never `-0.0` and `sqrt(acc)` is `+0.0` or positive, never `-0.0`
+(`identical_sqrt(+0.0)` returns `+0.0`, numerics.mojo). On a FINITE X no
+NaN can arise: `diff` is finite or `+-inf` (overflow of the subtraction),
+its square is finite or `+inf`, an all-nonnegative sum never forms
+`inf - inf`, and `sqrt` of a nonnegative is never NaN. The callers
+(silhouette's a/b sums, trustworthiness' rank compare) therefore never
+see a negative zero or a NaN distance; the `+inf` distance is handled by
+DEVIATION 656 in `sil_op` and compares as an ordinary largest value in
+the rank count.
 """
 
 from mojo_only.numerics import ftz, identical_mul_add, identical_sqrt
