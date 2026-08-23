@@ -354,6 +354,203 @@ def identical_log(x: Float32) -> Float32:
     return log(x)
 
 
+# ============ DEVIATION 258 (2026-08-23): ROW 10 ON NVIDIA -- sqrt IS NOT
+# ============ CORRECTLY ROUNDED; ROW 12's REMAINING DEVICE TRANSCENDENTALS,
+# ============ cos AND pow. Consumers routed in the same commit:
+# ============ compute_scores.mojo (symmetric Cosine, 3 sites),
+# ============ pointwise_scores.mojo (pointwise Cosine 2 sites + the
+# ============ log(weight+1) score terms), random_gen.mojo (Box-Muller
+# ============ sqrt/log/cos, next_poisson's log and sqrt),
+# ============ bootstrap.mojo (Bayesian -log(u) and tmp**temperature).
+# ============ Gate: check-portable-sqrtcos. E2 round 1 measured the
+# ============ consequence at c7a3493: Apple<->NVIDIA 43 GBDT cells
+# ============ OUTPUT-ONLY@winners.scores and 15 DIVERGENT (argmax flips on
+# ============ tied Quantile-class scores, Bayesian/Lq first histograms),
+# ============ every ET/RF cell IDENTICAL.
+# `check-ieee-arith` on the H100 (E2, 2026-08-23): sqrt 180,714 of 2^20
+# hashed patterns off by one ulp -- 176,577 of them NORMAL, so this is not
+# the denormal policy -- while div is 0 wrong and fma exact; the Cosine
+# score shape was 141,895 wrong. Mojo's `std.math.sqrt` lowers to an
+# APPROXIMATE PTX sqrt there, where Metal and HIP are correctly rounded,
+# so every `score / sqrt(denum_sqr)` differs on the NVIDIA column only:
+# that is E1's unexplained `tree001.winners.scores` NVIDIA divergence
+# (E1_RESULTS.md), named. Row 10's sentence "IEEE-correct on normals
+# everywhere measured" was true of two vendors and false of the third.
+#
+# The closure has row 12's shape: ONE arithmetic from the basic ops that
+# ARE correctly rounded on every column measured (add/mul/div/fma), so the
+# bits are the same everywhere the same bits go in. `portable_sqrtf` is
+# additionally CORRECTLY ROUNDED by construction (candidate selection on
+# the exact-enough fma residual), measured 0 mismatches against a float64
+# reference over 2^20 patterns (`check-portable-translog`), so under
+# IDENTICAL the Metal/HIP bits do not move either. `portable_cosf` is
+# Cephes cosf (Cody-Waite three-part pi/4 reduction, the sin/cos
+# polynomials) for the ONE consumer on the tree paths -- Box-Muller's
+# `cos(2*pi*u)` in `gbdt/gpu_util/kernel/random_gen.mojo`, |x| < 2*pi.
+# `portable_powf` is `exp(p * log(x))` through the two row-12 functions,
+# for the Bayesian bootstrap's `tmp ** bagging_temperature` when the
+# temperature is not 1. Every step below is an explicit fma or a single
+# basic op: the reductions are written as fma ON PURPOSE so no backend's
+# codegen can contract (row 9) them differently.
+
+
+def portable_sqrtf(x_in: Float32) -> Float32:
+    """`sqrtf` as one arithmetic, correctly rounded. NaN and negative ->
+    quiet NaN; +-0 -> itself; +inf -> +inf; a subnormal input is flushed
+    to +0 first (row 10's policy) and returns +0."""
+    from std.memory import bitcast
+
+    var x = x_in
+    if x != x:
+        return x
+    if x < Float32(0.0):
+        return bitcast[DType.float32](UInt32(0x7FC00000))
+    if abs(x) < Float32(1.1754943508222875e-38):
+        return Float32(0.0)  # +-0 and subnormals
+    if x == bitcast[DType.float32](UInt32(0x7F800000)):
+        return x
+    # TINY INPUTS ARE SCALED UP FIRST: below 2^-96 the selection residual
+    # x - c*c (~2^-23 x) would fall under the normal range and round or
+    # flush to zero, blinding the pick (measured: 968 of 2^20 lanes wrong
+    # before this, every one with x < 2^-100). 2^64 in and 2^-32 out are
+    # exact.
+    var scaled_down = False
+    if x < bitcast[DType.float32](UInt32(0x0F800000)):  # 2^-96
+        x = x * bitcast[DType.float32](UInt32(0x5F800000))  # 2^64
+        scaled_down = True
+    # exponent-halving seed (~3.5% error), then three Heron steps through
+    # the correctly-rounded divide: 3.5% -> 6e-4 -> 2e-7 -> below an ulp
+    var bits = rebind[UInt32](x.to_bits())
+    var y = bitcast[DType.float32]((bits >> 1) + UInt32(0x1FBD1DF5))
+    y = Float32(0.5) * (y + x / y)
+    y = Float32(0.5) * (y + x / y)
+    y = Float32(0.5) * (y + x / y)
+    # candidate selection: the root is within two ulps of y after three
+    # rounded Heron steps; pick the neighbour in y-2..y+2 with the
+    # smallest |x - c*c|, each residual one fma (a single rounding of a
+    # quantity ~2^-23 smaller than the gap between neighbours' residuals,
+    # so the order is exact and the pick is the correctly rounded root)
+    var yb = rebind[UInt32](y.to_bits())
+    var best = y
+    var r_best = abs(_fma_f32(-y, y, x))
+    for k in range(4):
+        var cb: UInt32
+        if k == 0:
+            cb = yb - UInt32(1)
+        elif k == 1:
+            cb = yb + UInt32(1)
+        elif k == 2:
+            cb = yb - UInt32(2)
+        else:
+            cb = yb + UInt32(2)
+        var c = bitcast[DType.float32](cb)
+        var r = abs(_fma_f32(-c, c, x))
+        if r < r_best:
+            best = c
+            r_best = r
+    if scaled_down:
+        best = best * bitcast[DType.float32](UInt32(0x2F800000))  # 2^-32
+    return best
+
+
+def portable_cosf(x_in: Float32) -> Float32:
+    """`cosf` as one arithmetic: Cephes single-precision cosf over the
+    Cody-Waite reduction's domain |x| < 8192. Measured: <= 2 ulp on the
+    tree paths' one consumer range (Box-Muller's `cos(2*pi*u)`, |x| <
+    2*pi) and <= 8 ulp across the domain (the ulp count grows near the
+    zeros of cos, where the result is tiny -- the ABSOLUTE error stays at
+    the 1e-7 level). NaN and +-inf return quiet NaN."""
+    from std.math import floor
+    from std.memory import bitcast
+
+    if x_in != x_in or abs(x_in) == bitcast[DType.float32](UInt32(0x7F800000)):
+        return bitcast[DType.float32](UInt32(0x7FC00000))
+    var x = abs(x_in)
+    # j = floor(x * 4/pi), made even, mod 8
+    var j = Int(floor(x * Float32(1.27323954473516)))
+    var yj = Float32(j)
+    if (j & 1) != 0:
+        j += 1
+        yj = yj + Float32(1.0)
+    j = j & 7
+    # three-part pi/4 reduction, each step one fma (one rounding)
+    x = _fma_f32(yj, Float32(-0.78515625), x)
+    x = _fma_f32(yj, Float32(-2.4187564849853515625e-4), x)
+    x = _fma_f32(yj, Float32(-3.77489497744594108e-8), x)
+    var sign = Float32(1.0)
+    if j > 3:
+        j -= 4
+        sign = -sign
+    if j > 1:
+        sign = -sign
+    var z = x * x
+    var y: Float32
+    if j == 1 or j == 2:
+        # sin polynomial: x + x*z*P(z)
+        var p = Float32(-1.9515295891e-4)
+        p = _fma_f32(p, z, Float32(8.3321608736e-3))
+        p = _fma_f32(p, z, Float32(-1.6666654611e-1))
+        y = _fma_f32(x * z, p, x)
+    else:
+        # cos polynomial: 1 - z/2 + z*z*P(z)
+        var p = Float32(2.443315711809948e-5)
+        p = _fma_f32(p, z, Float32(-1.388731625493765e-3))
+        p = _fma_f32(p, z, Float32(4.166664568298827e-2))
+        y = _fma_f32(z * z, p, _fma_f32(Float32(-0.5), z, Float32(1.0)))
+    return sign * y
+
+
+def portable_powf(x: Float32, p: Float32) -> Float32:
+    """`powf(x, p)` for x > 0 as `exp(p * log(x))` through the two row-12
+    functions -- the Bayesian bootstrap's `tmp ** bagging_temperature`
+    (`gbdt/gpu_util/kernel/bootstrap.mojo`) is the consumer, and its
+    `tmp` is `-log(u + 1e-20) > 0`. x == 0 returns 0 for p > 0 (and +inf
+    for p < 0, 1 for p == 0); negative x is the consumer's bug and
+    returns NaN. The bits are the same everywhere; accuracy is the
+    composition's (a few ulp)."""
+    from std.memory import bitcast
+
+    if p == Float32(0.0):
+        return Float32(1.0)
+    if x != x or p != p:
+        return bitcast[DType.float32](UInt32(0x7FC00000))
+    if x < Float32(0.0):
+        return bitcast[DType.float32](UInt32(0x7FC00000))
+    if x == Float32(0.0):
+        if p > Float32(0.0):
+            return Float32(0.0)
+        return bitcast[DType.float32](UInt32(0x7F800000))
+    return portable_expf(p * portable_logf(x))
+
+
+def identical_sqrt(x: Float32) -> Float32:
+    """Row 10's sqrt seam call: IDENTICAL routes through `portable_sqrtf`
+    (one arithmetic, correctly rounded, the same bits on the approximate-
+    sqrt column too); FAST is the stdlib's device path verbatim."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        return portable_sqrtf(x)
+    from std.math import sqrt
+
+    return sqrt(x)
+
+
+def identical_cos(x: Float32) -> Float32:
+    """Row 12's `cos` seam call (Box-Muller). Same two-arm contract."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        return portable_cosf(x)
+    from std.math import cos
+
+    return cos(x)
+
+
+def identical_pow(x: Float32, p: Float32) -> Float32:
+    """Row 12's `pow` seam call (Bayesian bootstrap temperature). Same
+    two-arm contract; FAST is the `**` the site used."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        return portable_powf(x, p)
+    return x**p
+
+
 # ============ THE SIMD SPELLINGS OF THE SAME TWO CONSTRUCTIONS ===========
 # Added 2026-08-23 by the UNSUPERVISED IDENTITY lane (IDENTITY_PATHS rows
 # 19-24). They are not a new idea and must never become one: each is the

@@ -94,6 +94,7 @@ from mojo_only.numerics import (
     NUMERIC_IDENTICAL,
     ftz,
     identical_mul_add,
+    identical_sqrt,  # DEVIATION 258: row 10, NVIDIA sqrt is approximate
 )
 from gbdt.options.catboost_options import (
     SCORE_FUNCTION_COSINE,
@@ -498,7 +499,7 @@ def compute_optimal_splits_kernel[
                 # denormal-honoring backend part ways. Flushed at the
                 # derivation, as the leafwise twin below flushes;
                 # comptime no-op under FAST.
-                final_score = ftz(score / sqrt(denum_sqr))
+                final_score = ftz(score / identical_sqrt(denum_sqr))
             else:
                 final_score = -FLOAT32_MAX
 
@@ -1090,11 +1091,11 @@ def _leafwise_scan_part[
             # FTZ hardware and a denormal-honoring backend part ways.
             # Flushed at the derivation; comptime no-op under FAST.
             if denum_sqr > Float32(1e-15):
-                final_score = ftz(score / sqrt(denum_sqr))
+                final_score = ftz(score / identical_sqrt(denum_sqr))
             else:
                 final_score = -FLOAT32_MAX
             if denum_sqr_b > Float32(1e-15):
-                score_before = ftz(score_b / sqrt(denum_sqr_b))
+                score_before = ftz(score_b / identical_sqrt(denum_sqr_b))
             else:
                 score_before = -FLOAT32_MAX
 

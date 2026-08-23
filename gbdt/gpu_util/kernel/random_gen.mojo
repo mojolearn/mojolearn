@@ -17,7 +17,11 @@ stream is bit-identical to theirs; only the final scaling to [0,1) is
 f32, which changes no distribution and keeps every draw deterministic.
 """
 
-from std.math import cos, log, sqrt
+# DEVIATION 258: Box-Muller and the Poisson draw ran the DEVICE sqrt/log/cos,
+# which differ per vendor (row 10 sqrt is approximate on NVIDIA; row 12 log
+# and cos are each vendor's own); under IDENTICAL the three seam calls are
+# the portable pair, under FAST the stdlib verbatim
+from mojo_only.numerics import identical_cos, identical_log, identical_sqrt
 
 
 def advance_seed(s: UInt64) -> UInt64:
@@ -68,8 +72,8 @@ def next_normal_f(s: UInt64) -> Tuple[Float32, UInt64]:
     var da = next_uniform_f(s)
     var db = next_uniform_f(da[1])
     return (
-        sqrt(Float32(-2.0) * log(da[0]))
-        * cos(Float32(2.0) * Float32(CUDART_PI_F) * db[0]),
+        identical_sqrt(Float32(-2.0) * identical_log(da[0]))
+        * identical_cos(Float32(2.0) * Float32(CUDART_PI_F) * db[0]),
         db[1],
     )
 
@@ -109,7 +113,7 @@ def next_poisson_f(s: UInt64, alpha: Float32) -> Tuple[Float32, UInt64]:
         for _ in range(16):
             var dn = next_normal_f(st)
             st = dn[1]
-            var a = sqrt(alpha) * dn[0] + alpha
+            var a = identical_sqrt(alpha) * dn[0] + alpha
             if a >= Float32(0.0):
                 return (a, st)
         return (alpha, st)
@@ -122,7 +126,7 @@ def next_poisson_f(s: UInt64, alpha: Float32) -> Tuple[Float32, UInt64]:
         k += 1
         var d = next_uniform_f(st2)
         st2 = d[1]
-        logp += log(d[0])
+        logp += identical_log(d[0])
         if logp <= limit:
             break
     return (Float32(k - 1), st2)
