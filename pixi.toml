@@ -623,6 +623,14 @@ check-ctr = "mojo run -I . mojo_only/ctr_check.mojo"
 # exact references. Run on every backend the kernel matrix carries.
 check-ieee-arith = "mojo run -I . mojo_only/ieee_arith_check.mojo"
 
+# IDENTITY_PATHS row 12: the portable exp/log pair. Accuracy vs float64
+# stdlib (<= 4 ulp over 2^20 hashed inputs each), device bits == host
+# bits lane for lane, and a `sabotage` argv arm proving the compare can
+# fail. The printed device hash must be the SAME NUMBER on every vendor
+# column -- it is the cross-vendor certificate line. Run FIRST on any
+# new backend, right after check-ieee-arith.
+check-portable-translog = "mojo run -I . mojo_only/portable_translog_check.mojo"
+
 # The DEVICE FeatureFreq calcer -- TWeightedBinFreqCalcerGpu and its
 # compute_simple_ctrs_device driver -- against the host driver PER CELL
 # (bit-equal: trivial weights make every float sum exact) and an

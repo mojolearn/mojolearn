@@ -208,3 +208,210 @@ def _fma_f32(a: Float32, b: Float32, c: Float32) -> Float32:
     from std.math import fma
 
     return fma(a, b, c)
+
+
+# ============ ROW 12: THE PORTABLE TRANSCENDENTALS ========================
+# `std.math.exp`/`log` lower to whatever each target ships (PTX fast paths,
+# OCML on AMD, Metal's own), so exp(x)'s last bit is a VENDOR CHOICE even
+# with every reduction pinned. E1 measured it: with byte-identical inputs
+# and tree 0 identical through winners, Apple<->AMD Logloss first diverged
+# at `tree000.perm0.leaves.estimated` (2026-08-22), and NVIDIA produced a
+# THIRD set of bits (2026-08-23). The closure is the pair below: ONE
+# polynomial from ONE source, evaluated through fma and basic ops only --
+# each correctly rounded on every backend (`check-ieee-arith`) -- so the
+# same bits come out everywhere the same bits go in.
+#
+# The polynomials are Cephes single-precision expf/logf (Moshier's tables,
+# the ancestor of half the world's float32 libms): degree-5 exp on
+# [-ln2/2, ln2/2] after 2^k reduction, degree-8 log-mantissa on
+# [sqrt(1/2), sqrt(2)). Accuracy is a measured <= 2 ulp against a float64
+# reference (`check-portable-translog`), which is libm-class; the property
+# purchased is not accuracy but SAMENESS. Both functions flush subnormal
+# inputs and never produce a subnormal output (row 10's policy is baked in
+# UNCONDITIONALLY, so the bits do not depend on the build mode) -- exp
+# underflows straight to zero at the FLT_MIN boundary and log treats a
+# flushed input as zero.
+
+
+def portable_expf(x: Float32) -> Float32:
+    """`expf` as one arithmetic. Out-of-range saturates: above 88.722835
+    returns +inf, below -87.33655 returns 0.0 (everything below is
+    subnormal, which row 10 flushes anyway), and a subnormal result at
+    the boundary itself is flushed explicitly so the underflow edge is
+    the same bit on FTZ and denormal-honoring backends alike."""
+    from std.math import floor
+    from std.memory import bitcast
+
+    if x != x:  # NaN propagates untouched
+        return x
+    if x > Float32(88.722835):
+        return bitcast[DType.float32](UInt32(0x7F800000))  # +inf
+    if x < Float32(-87.33655):
+        return Float32(0.0)
+
+    # k = round(x / ln2); r = x - k*ln2 via the split constant, each step
+    # one rounding
+    var t = x * Float32(1.4426950408889634)
+    t = t + Float32(0.5)
+    var zf = floor(t)  # exact
+    var k = Int(zf)
+    var r = _fma_f32(zf, Float32(-0.693359375), x)
+    r = _fma_f32(zf, Float32(2.12194440e-4), r)
+
+    var q = Float32(1.9875691500e-4)
+    q = _fma_f32(q, r, Float32(1.3981999507e-3))
+    q = _fma_f32(q, r, Float32(8.3334519073e-3))
+    q = _fma_f32(q, r, Float32(4.1665795894e-2))
+    q = _fma_f32(q, r, Float32(1.6666665459e-1))
+    q = _fma_f32(q, r, Float32(5.0000001201e-1))
+    var r2 = r * r
+    var y = _fma_f32(q, r2, r)
+    y = y + Float32(1.0)
+
+    # scale by 2^k in two exact power-of-two multiplies so k = 128 and
+    # k = -126 both stay inside the exponent field
+    var k1 = k >> 1
+    var k2 = k - k1
+    y = y * bitcast[DType.float32](UInt32((k1 + 127) << 23))
+    y = y * bitcast[DType.float32](UInt32((k2 + 127) << 23))
+    # the underflow edge: a denormal-honoring backend can produce a
+    # gradual-underflow subnormal here where Metal already flushed; one
+    # explicit flush makes the edge one bit everywhere
+    if y < Float32(1.1754943508222875e-38):
+        return Float32(0.0)
+    return y
+
+
+def portable_logf(x_in: Float32) -> Float32:
+    """`logf` as one arithmetic. log(0) is -inf, log(negative) is NaN,
+    log(+inf) is +inf; a subnormal input is flushed to zero FIRST (row
+    10's policy), so it returns -inf like the zero it is on an FTZ
+    backend."""
+    from std.memory import bitcast
+
+    var x = x_in
+    if x != x:
+        return x
+    if abs(x) < Float32(1.1754943508222875e-38):
+        x = Float32(0.0)
+    if x == Float32(0.0):
+        return bitcast[DType.float32](UInt32(0xFF800000))  # -inf
+    if x < Float32(0.0):
+        return bitcast[DType.float32](UInt32(0x7FC00000))  # quiet NaN
+    if x == bitcast[DType.float32](UInt32(0x7F800000)):
+        return x  # +inf
+
+    # frexp by bits: m in [0.5, 1), then fold to [sqrt(1/2), sqrt(2))
+    var bits = rebind[UInt32](x.to_bits())
+    var e = Int((bits >> 23) & UInt32(0xFF)) - 126
+    var m = bitcast[DType.float32](
+        (bits & UInt32(0x007FFFFF)) | UInt32(0x3F000000)
+    )
+    if m < Float32(0.7071067811865476):
+        e -= 1
+        m = m + m
+    var t = m - Float32(1.0)
+    var z = t * t
+
+    var p = Float32(7.0376836292e-2)
+    p = _fma_f32(p, t, Float32(-1.1514610310e-1))
+    p = _fma_f32(p, t, Float32(1.1676998740e-1))
+    p = _fma_f32(p, t, Float32(-1.2420140846e-1))
+    p = _fma_f32(p, t, Float32(1.4249322787e-1))
+    p = _fma_f32(p, t, Float32(-1.6668057665e-1))
+    p = _fma_f32(p, t, Float32(2.0000714765e-1))
+    p = _fma_f32(p, t, Float32(-2.4999993993e-1))
+    p = _fma_f32(p, t, Float32(3.3333331174e-1))
+
+    var tz = t * z
+    var y = tz * p
+    var ef = Float32(e)  # exact, |e| <= 150
+    y = _fma_f32(ef, Float32(-2.12194440e-4), y)
+    y = _fma_f32(Float32(-0.5), z, y)
+    var r = t + y
+    r = _fma_f32(ef, Float32(0.693359375), r)
+    return r
+
+
+def identical_exp(x: Float32) -> Float32:
+    """Row 12's seam call. IDENTICAL routes through `portable_expf` (one
+    arithmetic everywhere); FAST is the stdlib's device path verbatim, so
+    Apple FAST bits do not move."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        return portable_expf(x)
+    from std.math import exp
+
+    return exp(x)
+
+
+def identical_log(x: Float32) -> Float32:
+    """Row 12's seam call, `log` side. Same two-arm contract as
+    `identical_exp`."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        return portable_logf(x)
+    from std.math import log
+
+    return log(x)
+
+
+# ============ THE SIMD SPELLINGS OF THE SAME TWO CONSTRUCTIONS ===========
+# Added 2026-08-23 by the UNSUPERVISED IDENTITY lane (IDENTITY_PATHS rows
+# 19-24). They are not a new idea and must never become one: each is the
+# scalar function above applied lane by lane, and any divergence between a
+# scalar site and a SIMD site would be a second arithmetic wearing the same
+# name.
+#
+# They exist because the distance kernels this repository actually ships --
+# `cluster/.../fused_distance_nn/simt_kernel.mojo`,
+# `neighbors/.../fused_l2_knn.mojo`, `dbscan/.../epsilon_neighborhood.mojo`
+# -- carry their accumulators as `SIMD[DType.float32, AccColsPerTh]`,
+# because that is what RAFT's `Policy4x4` register tile IS. Writing
+# `identical_mul_add` at those seams one lane at a time would either
+# scalarize the register tile or need a loop the codegen has to re-vectorize.
+
+
+def ftz_simd[w: Int](x: SIMD[DType.float32, w]) -> SIMD[DType.float32, w]:
+    """`ftz`, lane by lane. Comptime no-op under FAST.
+
+    Same model the `check-ieee-arith` ftz arm reproduced all 53,041 Metal
+    divergences with: a denormal operand or result flushes to a zero
+    CARRYING ITS SIGN, everything else is untouched.
+    """
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        # LANE BY LANE THROUGH THE SCALAR FUNCTION, not a re-derivation of
+        # it in SIMD predicates. The invariant this file needs is that a
+        # scalar seam and a SIMD seam flush IDENTICALLY, and the cheapest
+        # way to guarantee that is for one of them to BE the other. The
+        # loop is comptime, so it unrolls to `w` copies of the same three
+        # instructions.
+        var out = x
+        comptime for i in range(w):
+            out[i] = ftz(x[i])
+        return out
+    return x
+
+
+def identical_mul_add_simd[
+    w: Int
+](
+    a: SIMD[DType.float32, w],
+    b: SIMD[DType.float32, w],
+    c: SIMD[DType.float32, w],
+) -> SIMD[DType.float32, w]:
+    """`identical_mul_add`, lane by lane: ONE rounding under IDENTICAL, the
+    naive chain under FAST."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        return _fma_f32_simd[w](a, b, c)
+    return a * b + c
+
+
+def _fma_f32_simd[
+    w: Int
+](
+    a: SIMD[DType.float32, w],
+    b: SIMD[DType.float32, w],
+    c: SIMD[DType.float32, w],
+) -> SIMD[DType.float32, w]:
+    from std.math import fma
+
+    return fma(a, b, c)
