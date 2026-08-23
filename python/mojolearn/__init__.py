@@ -72,7 +72,7 @@ numeric_mode = _backend.numeric_mode
 
 from .cluster import KMeans
 from .decomposition import PCA, TruncatedSVD
-from .density import DBSCAN
+from .density import DBSCAN, KernelDensity
 from .ensemble import GradientBoosting
 from .extratrees import ExtraTreesClassifier, ExtraTreesRegressor
 from .linear_model import LinearRegression, LogisticRegression, Ridge
@@ -85,6 +85,7 @@ from .randomforest import RandomForestClassifier, RandomForestRegressor
 
 __all__ = [
     "DBSCAN",
+    "KernelDensity",
     "ExtraTreesClassifier",
     "ExtraTreesRegressor",
     "GradientBoosting",

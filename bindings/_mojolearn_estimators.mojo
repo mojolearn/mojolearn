@@ -13,6 +13,7 @@ from std.python.bindings import PythonModuleBuilder
 from max.gpu.host import DeviceContext
 
 from dbscan.estimator import dbscan_fit
+from kde.estimator import kde_score_samples_host
 from decomposition.estimator import (
     inverse_transform_host,
     pca_fit_host,
@@ -359,11 +360,74 @@ def qn_sigmoid_binding(
     return PythonObject(0)
 
 
+def kde_score_samples_binding(
+    train_addr: PythonObject,
+    query_addr: PythonObject,
+    weights_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+    kernel: PythonObject,
+    metric: PythonObject,
+) raises -> PythonObject:
+    """KernelDensity.score_samples (kde/, DEVIATIONS 600-604): log density
+    of each query row under the fitted training set. Writes `n_query`
+    float32 to `out_addr`. `params`, in this order (mirrored in
+    `python/mojolearn/density.py`):
+
+        0  n_train
+        1  n_query
+        2  n_features
+        3  bandwidth   (float)
+        4  has_weights (0/1; weights_addr is read only when 1)
+
+    `kernel` and `metric` are the sklearn/cuML names; the host entry
+    refuses every unported one BY NAME (kde/estimator.mojo). Returns
+    n_query. Added 2026-08-23 by the identity lane on the kde lane's
+    hand-off (kde/README.md).
+    """
+    if len(params) != 5:
+        raise Error(
+            "kde_score_samples: params must contain 5 values, got "
+            + String(len(params))
+        )
+    var tp = _f32_ptr(Int(py=train_addr))
+    var qp = _f32_ptr(Int(py=query_addr))
+    var op = _f32_ptr(Int(py=out_addr))
+    var n_train = Int(py=params[0])
+    var n_query = Int(py=params[1])
+    var n_features = Int(py=params[2])
+    var bandwidth = Float32(Float64(py=params[3]))
+    var has_weights = Int(py=params[4]) != 0
+    var kname = String(py=kernel)
+    var mname = String(py=metric)
+    var train = List[Float32]()
+    var query = List[Float32]()
+    var weights = List[Float32]()
+    for i in range(n_train * n_features):
+        train.append(tp.unsafe_load(i))
+    for i in range(n_query * n_features):
+        query.append(qp.unsafe_load(i))
+    if has_weights:
+        var wp = _f32_ptr(Int(py=weights_addr))
+        for i in range(n_train):
+            weights.append(wp.unsafe_load(i))
+    var out = List[Float32]()
+    with GILReleased(Python()):
+        out = kde_score_samples_host(
+            train, n_train, query, n_query, n_features, bandwidth, kname,
+            mname, weights, has_weights,
+        )
+    for i in range(n_query):
+        op.unsafe_store(i, out[i])
+    return PythonObject(n_query)
+
+
 @export
 def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_estimators")
         m.def_function[dbscan_fit_binding]("dbscan_fit")
+        m.def_function[kde_score_samples_binding]("kde_score_samples")
         m.def_function[pca_fit_binding]("pca_fit")
         m.def_function[pca_transform_binding]("pca_transform")
         m.def_function[tsvd_fit_binding]("tsvd_fit")

@@ -48,6 +48,7 @@ OUTPUT_KEYS = (
     "singular_values", "mean", "noise_variance", "transformed",
     "coef", "intercept",
     "classes",  # KNeighborsClassifier.classes_ (e2u, 2026-08-23)
+    "log_density",  # KernelDensity.score_samples (e2u, 2026-08-23)
 )
 
 

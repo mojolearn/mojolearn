@@ -319,6 +319,28 @@ cell("logreg_c100", "logreg", C=100.0, _y="y_bin")
 cell("logreg_nointercept", "logreg", C=1.0, fit_intercept=False, _y="y_bin")
 cell("logreg_l1_refused", "logreg", penalty="l1", _y="y_bin")  # REFUSED
 
+# --- KernelDensity (kde/, DEVIATIONS 600-604; surface 2026-08-23): X is the
+# 20000 x 24 matrix, queries Xq; bandwidth 8 on that scale so every kernel
+# with compact support sees neighbours on most rows and none on some (the
+# -3.4e38 sentinel rows, cuML's, are part of the answer). One card per
+# cell through kde/estimator.mojo's trace.
+KDE_BASE = dict(bandwidth=8.0)
+cell("kde_gaussian", "kde", kernel="gaussian", **KDE_BASE)
+cell("kde_tophat", "kde", kernel="tophat", **KDE_BASE)
+cell("kde_epanechnikov", "kde", kernel="epanechnikov", **KDE_BASE)
+cell("kde_exponential", "kde", kernel="exponential", **KDE_BASE)
+cell("kde_linear", "kde", kernel="linear", **KDE_BASE)
+cell("kde_cosine", "kde", kernel="cosine", **KDE_BASE)  # DEVIATION 602: ours, not sklearn's, at even d
+cell("kde_bw2", "kde", kernel="gaussian", bandwidth=2.0)
+# a compact kernel at a bandwidth most rows cannot reach: the -3.4e38
+# sentinel rows (cuML's, DEVIATION 603 keeps them -inf-not-NaN) are the cell
+cell("kde_tophat_bw1", "kde", kernel="tophat", bandwidth=1.0)
+cell("kde_l1", "kde", kernel="gaussian", metric="l1", **KDE_BASE)
+cell("kde_sqeuclidean", "kde", kernel="gaussian", metric="sqeuclidean", bandwidth=64.0)
+cell("kde_weighted", "kde", kernel="gaussian", _fit=dict(sample_weight="sw"), **KDE_BASE)
+cell("kde_metric_cosine_refused", "kde", kernel="gaussian", metric="cosine", **KDE_BASE)  # REFUSED (unported metric)
+cell("kde_bw_scott_refused", "kde", kernel="gaussian", bandwidth="scott")  # REFUSED
+
 
 # ---------------------------------------------------------------- reach
 # (parameter, cell A, cell B, expectation). "differ": the parameter
@@ -327,6 +349,10 @@ cell("logreg_l1_refused", "logreg", penalty="l1", _y="y_bin")  # REFUSED
 # agree (an invariance gate), while the named side field shows the
 # parameter reached the kernel.
 REACH = [
+    ("KernelDensity.kernel", "kde_gaussian", "kde_tophat", "differ", None),
+    ("KernelDensity.bandwidth", "kde_gaussian", "kde_bw2", "differ", None),
+    ("KernelDensity.metric", "kde_gaussian", "kde_l1", "differ", None),
+    ("KernelDensity.sample_weight", "kde_gaussian", "kde_weighted", "differ", None),
     ("KMeans.n_clusters", "kmeans_k8", "kmeans_k3", "differ", None),
     ("KMeans.init", "kmeans_k8", "kmeans_k8_random", "differ", None),
     ("KMeans.n_init", "kmeans_k8", "kmeans_k8_ninit3", "differ", None),
@@ -380,7 +406,8 @@ REACH = [
 _HASH_KEYS = ("labels", "centroids", "inertia", "distances", "indices",
               "components", "explained_variance", "explained_variance_ratio",
               "singular_values", "mean", "noise_variance", "transformed",
-              "coef", "intercept", "predictions", "proba", "classes")
+              "coef", "intercept", "predictions", "proba", "classes",
+              "log_density")
 
 
 # ---------------------------------------------------------------- one cell
@@ -510,6 +537,12 @@ def run_cell(name, out_dir):
             entry["intercept"] = sha256_of(np.float64(m.intercept_))
             entry["intercept_value"] = float(m.intercept_)
             entry["predictions"] = sha256_of(m.predict(X[:N_QUERIES]))
+        elif kind == "kde":
+            m = mojolearn.KernelDensity(**spec).fit(X, **fit_kw)
+            ld = m.score_samples(Xq)
+            entry["log_density"] = sha256_of(ld)
+            entry["n_sentinel"] = int((ld <= -1e38).sum())
+            entry["score"] = float(np.sum(ld[ld > -1e38], dtype=np.float64))
         elif kind == "logreg":
             m = mojolearn.LogisticRegression(**spec).fit(X, y, **fit_kw)
             entry["coef"] = sha256_of(m.coef_)
