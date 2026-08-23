@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security report
+    url: https://github.com/mojolearn/mojolearn/security/advisories/new
+    about: Report vulnerabilities privately. Do not include security details in a public issue.
+  - name: Support policy
+    url: https://github.com/mojolearn/mojolearn/blob/main/SUPPORT.md
+    about: Read the support levels and diagnostic-bundle instructions.

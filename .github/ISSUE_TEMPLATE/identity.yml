@@ -1,0 +1,61 @@
+name: Identity divergence
+description: Report a repeatability, cross-vendor, or cross-geometry identity failure
+title: "[identity] "
+labels: ["identity", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Identity reports receive high priority when they include the first differing stage. Attach both cards when possible. Do not report expected FAST variation as an IDENTICAL defect.
+  - type: dropdown
+    id: comparison
+    attributes:
+      label: Comparison that diverged
+      options:
+        - Repeated runs on one device
+        - Apple versus NVIDIA
+        - Apple versus AMD
+        - NVIDIA versus AMD
+        - Different batch or launch geometry
+        - Different released versions of the same numerical profile
+    validations:
+      required: true
+  - type: input
+    id: first_stage
+    attributes:
+      label: First differing stage
+      placeholder: Stage name from identity_trace_diff.py, or "not yet isolated"
+    validations:
+      required: true
+  - type: textarea
+    id: hashes
+    attributes:
+      label: Hashes or trace diff
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: reproducer
+    attributes:
+      label: Minimal reproducer and exact commands
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: bundle
+    attributes:
+      label: Reviewed diagnostic bundles and cards
+      description: Attach one bundle per environment and the relevant identity cards.
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Submission checks
+      options:
+        - label: Every reported run used IDENTICAL mode and the same declared profile.
+          required: true
+        - label: Inputs or serialized models were compared by hash.
+          required: true
+        - label: I reviewed every attachment for private data.
+          required: true

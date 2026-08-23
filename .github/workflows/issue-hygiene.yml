@@ -1,0 +1,60 @@
+name: Issue hygiene
+
+on:
+  schedule:
+    - cron: "23 9 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  close-stale-needs-reproducer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Ensure triage labels exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh label create needs-triage --repo "$GH_REPO" --color D4C5F9 --description "Awaiting initial maintainer triage" --force
+          gh label create needs-reproducer --repo "$GH_REPO" --color FBCA04 --description "Waiting for a minimal reproducer or diagnostic bundle" --force
+          gh label create compatibility-report --repo "$GH_REPO" --color 0E8A16 --description "Measurement from a configuration outside the current support matrix" --force
+          gh label create identity --repo "$GH_REPO" --color B60205 --description "Potential numerical identity-contract issue" --force
+          gh label create performance --repo "$GH_REPO" --color 1D76DB --description "Performance result or regression" --force
+          gh label create cross-vendor-pending --repo "$GH_REPO" --color C2E0C6 --description "Local evidence complete; other hardware columns still need certification" --force
+      - name: Close reports waiting 14 days for a reproducer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh issue list \
+            --repo "$GH_REPO" \
+            --state open \
+            --label needs-reproducer \
+            --limit 200 \
+            --json number,updatedAt > /tmp/mojolearn-needs-reproducer.json
+
+          python3 - <<'PY' > /tmp/mojolearn-close-numbers.txt
+          import datetime
+          import json
+
+          now = datetime.datetime.now(datetime.timezone.utc)
+          with open("/tmp/mojolearn-needs-reproducer.json", encoding="utf-8") as stream:
+              issues = json.load(stream)
+          for issue in issues:
+              updated = datetime.datetime.fromisoformat(
+                  issue["updatedAt"].replace("Z", "+00:00")
+              )
+              if now - updated >= datetime.timedelta(days=14):
+                  print(int(issue["number"]))
+          PY
+
+          while read -r number; do
+            test -n "$number" || continue
+            gh issue close "$number" \
+              --repo "$GH_REPO" \
+              --comment "Closing because the requested minimal reproducer or diagnostic bundle has not arrived in 14 days. This is housekeeping, not a rejection: comment with the missing evidence and a maintainer can reopen the report immediately."
+          done < /tmp/mojolearn-close-numbers.txt

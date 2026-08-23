@@ -1,0 +1,65 @@
+name: Bug report
+description: Report a reproducible correctness, crash, installation, or API defect
+title: "[bug] "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for helping improve MojoLearn. Run `mojolearn bug-report reproduce.py`, review the archive, and attach it below. Reports from new hardware are welcome.
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Numerical mode
+      options:
+        - FAST
+        - IDENTICAL
+        - Both
+        - Import or installation fails before a mode runs
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Actual behavior
+      description: Include the complete error text or the incorrect result.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: Link the API or numerical contract when one defines the expectation.
+    validations:
+      required: true
+  - type: textarea
+    id: reproducer
+    attributes:
+      label: Minimal reproducer
+      description: Paste a small synthetic-data reproducer or attach it with the bundle.
+      render: python
+    validations:
+      required: true
+  - type: textarea
+    id: bundle
+    attributes:
+      label: Diagnostic bundle
+      description: Drag the reviewed `mojolearn-bug-*.zip` here. If the command itself fails, paste `mojolearn doctor --json` after reviewing it.
+    validations:
+      required: true
+  - type: input
+    id: regression
+    attributes:
+      label: Last known working release
+      placeholder: v0.1.0, commit, or "unknown"
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Submission checks
+      options:
+        - label: I reviewed the uploaded files for credentials, private data, and identifying paths.
+          required: true
+        - label: The reproducer uses synthetic or publicly shareable data.
+          required: true
+        - label: I searched existing issues for this behavior.
+          required: true

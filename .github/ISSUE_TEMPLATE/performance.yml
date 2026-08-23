@@ -1,0 +1,43 @@
+name: Performance report
+description: Report a reproducible performance regression or new hardware result
+title: "[performance] "
+labels: ["performance", "needs-triage"]
+body:
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Report type
+      options:
+        - Regression from an earlier MojoLearn release
+        - Unexpectedly slow supported operation
+        - New hardware measurement
+        - Benchmark methodology question
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Complete benchmark command
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: methodology
+    attributes:
+      label: Shapes and methodology
+      description: Include input shapes, dtype, rounds, warm-up, synchronization, repetitions, and comparison versions.
+    validations:
+      required: true
+  - type: textarea
+    id: results
+    attributes:
+      label: Results
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: bundle
+    attributes:
+      label: Reviewed `mojolearn doctor` report
+    validations:
+      required: true

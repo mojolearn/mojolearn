@@ -94,10 +94,16 @@ Homepage = "https://github.com/mojolearn/mojolearn"
 Repository = "https://github.com/mojolearn/mojolearn"
 Issues = "https://github.com/mojolearn/mojolearn/issues"
 
+[project.scripts]
+# Kept outside the mojolearn package deliberately: this command must work
+# when importing a compiled extension is the thing a user needs to diagnose.
+mojolearn = "mojolearn_diagnostics:main"
+
 [tool.setuptools]
 # Listed explicitly rather than discovered, so a new subpackage is a
 # deliberate edit and not a silent addition to a published artifact.
 packages = ["mojolearn"]
+py-modules = ["mojolearn_diagnostics"]
 include-package-data = false
 
 [tool.setuptools.package-data]
