@@ -131,6 +131,8 @@ def oracle_distance(
     if metric == DIST_LINF:
         for f in range(d):
             var diff = abs(ftz(ftz(query[q * d + f]) - ftz(train[j * d + f])))
+            # row 39: the device's strict `>` over abs() candidates, seeded
+            # +0.0; a tie is the same bits either way (distance_ops.mojo).
             if diff > acc:
                 acc = diff
         return acc
@@ -179,11 +181,16 @@ def oracle_log_kernel(x: Float32, h: Float32, kernel: Int) -> Float32:
 def oracle_logsumexp_row(
     logk: List[Float32], base: Int, n_train: Int
 ) -> Tuple[Float32, Float32]:
-    """Their numba kernel, serial ascending: `(rowmax, log(sum) + max)`."""
+    """Their numba kernel, serial ascending: `(rowmax, log(sum) + max)`.
+    Row 39: strict `>` from `j = 0`, the lower index wins a tie of `-0.0`
+    and `+0.0` (the device's rule, `logsumexp_kernel`). DEVIATION 603: a
+    row of all `-inf` is `-inf`, not `exp(NaN)`."""
     var max_exp = logk[base]
     for j in range(1, n_train):
         if logk[base + j] > max_exp:
             max_exp = logk[base + j]
+    if max_exp == bitcast[DType.float32](UInt32(0xFF800000)):
+        return (max_exp, max_exp)
     var s = Float32(0.0)
     for j in range(n_train):
         s = ftz(s + ftz(identical_exp(ftz(logk[base + j] - max_exp))))

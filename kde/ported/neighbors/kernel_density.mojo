@@ -4,7 +4,9 @@ PORT OF cuML `python/cuml/cuml/neighbors/kernel_density.py` at cuML
 `00094f7` (the 25.08 Python layer: `*_log_kernel` at `:43-99`,
 `logVn`/`logSn`/`norm_log_probabilities` at `:112-141`,
 `logsumexp_kernel` at `:144-156`, `KernelDensity.fit` at `:220-262`,
-`KernelDensity.score_samples` at `:264-363`). Do not improve.
+`KernelDensity.score_samples` at `:264-363`). Do not improve. Five
+numbered departures: DEVIATIONS 600-602 (below), 603 (`logsumexp_kernel`)
+and 604 (the refusals above `kde_float32_min`).
 
 WHY THE 25.08 PYTHON FILE AND NOT THE 26.08 C++
 ------------------------------------------------
@@ -91,7 +93,7 @@ every host. HAND-OFF: a `portable_log64`/`portable_lgamma64` in
 is not this lane's.
 """
 
-from std.math import lgamma, log, pi
+from std.math import lgamma, log, pi, sqrt
 from std.memory import bitcast
 
 from std.gpu import block_dim, block_idx, thread_idx
@@ -133,6 +135,40 @@ comptime KDE_FLOAT32_MIN_BITS: UInt32 = 0xFF7FFFFF
 #: The `1e-30` floor under the log (`:62`, `:81`, `:92`), as float32.
 comptime KDE_LOG_FLOOR = Float32(1e-30)
 
+# ============ DEVIATION 604 (2026-08-23): INPUTS WHOSE FLOAT32 ARITHMETIC IS
+# ============ NaN ARE REFUSED BY NAME BEFORE ANY LAUNCH ==================
+# THEIRS: `fit`/`score_samples` (`:220-363`) validate `bandwidth > 0`, the
+# kernel and metric names, `sample_weight.min() > 0` and its length; the
+# data is `input_to_cuml_array` with no finiteness check, so a NaN or an
+# infinity in X, a subnormal or infinite weight, a bandwidth whose square
+# underflows, or a row norm that overflows in the expanded `sqeuclidean`
+# identity all flow to the device and come back as NaN (or, for the
+# subnormals, as a column-dependent value: `log(1e-40)` is -92 where
+# denormals are kept and -inf where they flush).
+# OURS: REFUSED BY NAME on the host before a buffer is uploaded. The
+# reason is IDENTITY_PATHS row 39's FACT 2: every stage of this estimator
+# is recorded on the card (`kde.dists` ... `kde.scores`) and a COMPUTED
+# NaN carries the vendor's payload, so it can never be allowed to reach a
+# recorded stage; refusing the input is the guard that costs no bit on
+# any legal input. scikit-learn (the semantics oracle) refuses non-finite
+# X the same way (`validate_data`: "Input X contains NaN" / "infinity").
+# The four rules, each naming the offending parameter and position:
+#   (1) `X` / `X_query` finite (no NaN, no +-inf);
+#   (2) `metric='sqeuclidean'` only: every |x| < 2^63 / sqrt(n_features),
+#       so `||x||^2`, `||y||^2`, their sum and `2 x.y` stay below 2^128
+#       and the expanded identity cannot form `inf - inf` (the unexpanded
+#       metrics saturate to +inf and never NaN, so they carry no bound);
+#   (3) `bandwidth >= 2^-63`, so `h*h` and `2*h*h` are normal float32;
+#   (4) `sample_weight` normal and finite (>= 2^-126, < inf).
+# MEASURED: `check_kde_nan_cannot_reach_a_stage` drives each rule and the
+# `check_kde_refusals` table gained them. DEVIATION 603 (in
+# `logsumexp_kernel`) covers the one NaN a legal finite input can still
+# compute after these: a row whose every log-kernel is -inf.
+# ==========================================================================
+comptime KDE_MIN_BANDWIDTH = Float32(1.0842021724855044e-19)  # 2^-63
+comptime KDE_FLOAT32_MIN_NORMAL = Float32(1.1754943508222875e-38)  # 2^-126
+comptime KDE_INF_BITS: UInt32 = 0x7F800000
+
 #: SCHEDULING. `KDE_ELEM_TPB` is the one-thread-per-cell width of the
 #: elementwise kernels, `KDE_LSE_TPB` the one-thread-per-ROW width of the
 #: logsumexp. Neither moves a bit; `kde_check` varies both.
@@ -142,6 +178,45 @@ comptime KDE_LSE_TPB = 128
 
 def kde_float32_min() -> Float32:
     return bitcast[DType.float32](KDE_FLOAT32_MIN_BITS)
+
+
+def kde_inf() -> Float32:
+    return bitcast[DType.float32](KDE_INF_BITS)
+
+
+def kde_validate_data(
+    x: List[Float32], n_rows: Int, n_features: Int, metric: Int, what: String
+) raises:
+    """DEVIATION 604, rules (1) and (2): `x` (row-major `n_rows x
+    n_features`, named `what` in the message) must be finite, and under
+    `sqeuclidean` every |value| must be below `2^63 / sqrt(n_features)`.
+    Host-only; no device bit depends on it. A NaN is found by `v != v`."""
+    if len(x) != n_rows * n_features:
+        raise Error(
+            "kde: " + what + " has " + String(len(x)) + " values, expected "
+            + String(n_rows * n_features)
+        )
+    var bound = Float32(0.0)
+    var bounded = metric == DIST_L2_EXPANDED
+    if bounded:
+        # 2^63 / sqrt(d), formed in float64 on the host (a threshold, not
+        # a certified value).
+        bound = Float32(9.223372036854775808e18 / sqrt(Float64(n_features)))
+    for i in range(n_rows * n_features):
+        var v = x[i]
+        if v != v or v == kde_inf() or v == -kde_inf():
+            raise Error(
+                "kde: " + what + " contains " + ("NaN" if v != v else "infinity")
+                + " at row " + String(i // n_features) + ", column "
+                + String(i % n_features) + " (DEVIATION 604)"
+            )
+        if bounded and abs(v) >= bound:
+            raise Error(
+                "kde: metric='sqeuclidean' needs |" + what + "| < 2^63/sqrt("
+                + String(n_features) + ") so the expanded identity cannot form"
+                " inf - inf; row " + String(i // n_features) + ", column "
+                + String(i % n_features) + " is " + String(v) + " (DEVIATION 604)"
+            )
 
 
 def kernel_from_name(name: String) raises -> Int:
@@ -616,6 +691,49 @@ def logsumexp_kernel(
     ROW 12: `exp` and `log` through `identical_exp`/`identical_log`.
     ROW 10: the partial sum and the result stored through `ftz`. `exp` of
     the `FLOAT_MIN - max` gap underflows to exactly `0.0`.
+
+    ROW 39 (2026-08-23, the signed-zero audit): `rowmax` is a RECORDED
+    stage, so the sign bit of a zero max IS certified, and the fold below
+    is the one place in this lane a `+0.0` and a `-0.0` could be the two
+    candidates. It is NOT a hardware `max` (whose answer on (+0, -0) is
+    the vendor's: -0 on Apple, +0 on NVIDIA/AMD): it is their strict `>`
+    from `j = 0`, so on a tie the LOWER index survives -- decided by
+    position in a serial walk, the same answer on every vendor, and a NaN
+    candidate (`>` false both ways) never displaces a non-NaN seed.
+    Reachability: no LEGAL row mixes the two zeros at all. Unweighted,
+    gaussian/exponential/tophat produce only `-0.0` (`-(+0)/h2`, `-0/h`,
+    `0 * FLOAT_MIN`; a negative subnormal flushes to `-0.0`, never `+0.0`)
+    and epanechnikov/linear/cosine only `+0.0` (`identical_log(1.0)`,
+    gated `+0.0`; `log(z)` for `z < 1` is at least 2^-24 in magnitude, never
+    a zero). Weighted, every cell is `logk + log(w)`: `-0.0 + (+0.0)` is
+    `+0.0`, a nonzero `log(w)` is at least 2^-24 in magnitude, and a
+    difference of two floats that large is zero or at least 2^-47 (never a
+    subnormal), so a weighted row's zeros are all `+0.0`. The positional
+    rule is therefore never exercised by real input; `kde/mojo_only/
+    kde_check.mojo::check_kde_row39_signed_zero_rowmax` PLANTS mixed rows
+    into this kernel (both orders) and asserts the lower-index zero's bits.
+
+    ============ DEVIATION 603 (2026-08-23): A ROW OF ALL -inf IS -inf, NOT
+    ============ NaN ====================================================
+    THEIRS (`logsumexp_kernel:144-156`): `max_exp = -inf` when every cell
+    is `-inf` (gaussian/exponential with `x*x/(2 h^2)` or `x/h`
+    overflowed -- legal finite input, e.g. h = 2^-62 and points 3 apart),
+    then `math.exp(-inf - (-inf))` = `exp(NaN)` = NaN, so `log(sum) + max`
+    is NaN and the score is NaN. scikit-learn (the semantics oracle)
+    folds the same row with `logaddexp`, whose `(-inf, -inf)` is `-inf`.
+    OURS: `if max_exp == -inf: lse = -inf` before the sum -- the value
+    the mathematics and sklearn give. WHY: IDENTITY_PATHS row 39's FACT
+    2 -- a COMPUTED NaN carries the vendor's payload (Apple 0x7fc00000,
+    NVIDIA 0x7fffffff, AMD 0xffc00000) and can never sit in a certified
+    stage; `kde.logsumexp` and `kde.scores` are certified. MEASURED:
+    `check_kde_nan_cannot_reach_a_stage` plants the row and asserts
+    `0xFF800000` at both stages on the device and the oracle, and the
+    sabotage (guard dropped) is recorded in the README. The mixed row
+    (some `-inf`, a finite max) needed no change: `exp(-inf - max)` is
+    `+0.0`. Every other NaN a legal input could compute is REFUSED BY
+    NAME before any launch (DEVIATION 604, `kde_fit_validate` /
+    `kde_validate_data`).
+    ======================================================================
     """
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var n_query = Int(n_query_in)
@@ -626,12 +744,17 @@ def logsumexp_kernel(
     var max_exp = logk.unsafe_load(base)
     for j in range(1, n_train):
         var v = logk.unsafe_load(base + j)
+        # ROW 39: strict `>`, lower index wins a tie; NOT a hardware max.
         if v > max_exp:
             max_exp = v
+    rowmax.unsafe_store(i, max_exp)
+    # DEVIATION 603: every cell -inf -> the log-sum-exp is -inf.
+    if max_exp == bitcast[DType.float32](UInt32(0xFF800000)):
+        lse.unsafe_store(i, max_exp)
+        return
     var s = Float32(0.0)
     for j in range(0, n_train):
         s = ftz(s + ftz(identical_exp(ftz(logk.unsafe_load(base + j) - max_exp))))
-    rowmax.unsafe_store(i, max_exp)
     lse.unsafe_store(i, ftz(identical_log(s) + max_exp))
 
 
@@ -668,9 +791,19 @@ def kde_fit_validate(
 ) raises:
     """`KernelDensity.__init__:211-214` and `fit:240-252`: `bandwidth > 0`,
     a valid kernel, a valid metric, `sample_weight.min() > 0` when given
-    and its length `n_train`. Every refusal names the parameter."""
+    and its length `n_train`. Every refusal names the parameter. Plus
+    DEVIATION 604's rules (3) and (4): `bandwidth >= 2^-63`, weights
+    normal and finite; the data rules (1) and (2) are `kde_validate_data`."""
     if not (bandwidth > Float32(0.0)):
         raise Error("bandwidth must be positive")
+    # DEVIATION 604: below 2^-63 the kernels' `h*h` and `2*h*h` underflow
+    # float32 (to zero on an FTZ column), and `-(0)/0` at a coincident
+    # query is NaN.
+    if bandwidth < KDE_MIN_BANDWIDTH:
+        raise Error(
+            "bandwidth=" + String(bandwidth)
+            + " is below 2^-63: h*h underflows float32 (DEVIATION 604)"
+        )
     if kernel < 0 or kernel >= KDE_N_KERNELS:
         raise Error("invalid kernel: value " + String(kernel))
     if (
@@ -695,6 +828,16 @@ def kde_fit_validate(
         for i in range(n_train):
             if not (weights[i] > Float32(0.0)):
                 raise Error("sample_weight must have positive values")
+            # DEVIATION 604: `log(w)` must be finite on every column. A
+            # subnormal weight flushes to zero on an FTZ column (`log` is
+            # -inf, a whole row can become -inf); an infinite one makes
+            # `log(w) = inf` and `inf - inf = NaN` in the logsumexp.
+            if weights[i] < KDE_FLOAT32_MIN_NORMAL or weights[i] == kde_inf():
+                raise Error(
+                    "sample_weight[" + String(i) + "]=" + String(weights[i])
+                    + " is subnormal or infinite: log(w) is not finite in"
+                    " float32 (DEVIATION 604)"
+                )
 
 
 def host_sum_weights(weights: List[Float32]) -> Float32:

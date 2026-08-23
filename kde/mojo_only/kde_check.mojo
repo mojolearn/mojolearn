@@ -45,6 +45,27 @@ DEVIATIONS 600-602's gates. The checks, in order:
                                        a batch of 3 and a batch of 3000
     check_kde_card_is_emitted          the card's stage list and its
                                        run-to-run control
+    check_kde_row39_signed_zero_rowmax IDENTITY_PATHS row 39: mixed
+                                       -0.0/+0.0 rows PLANTED into the real
+                                       `logsumexp_kernel` (both orders, both
+                                       ends, three lse_tpb): device AND
+                                       oracle rowmax are the lower-index
+                                       zero's bits; the two real rows whose
+                                       max is a zero, card vs card
+    check_kde_nan_cannot_reach_a_stage row 39 FACT 2: DEVIATION 604's
+                                       refusals by name (NaN/inf data, the
+                                       sqeuclidean magnitude bound) and
+                                       DEVIATION 603's all--inf row, which
+                                       is -inf (0xff800000) on device and
+                                       oracle, never a vendor-payload NaN
+
+ROW 39 FAST DEMOTIONS (2026-08-23): `check_kde_weights`' all-ones ==
+unweighted claim is RECORDED under FAST (the vendor's `log(1.0)`);
+everything else that asserts under FAST is by construction on every
+vendor (refusals, shapes, host-only tolerance compares, or a one-thread-
+per-cell / per-row kernel with no fold and no library call); the two
+device-vs-oracle bit compares and the FAST sqeuclidean launch arm were
+already REPORTS.
 
 SABOTAGES PERFORMED (2026-08-23), each reverted; the README carries the
 failing lines:
@@ -57,6 +78,13 @@ failing lines:
         argued inert everywhere (README)
     (e) `log_kernel_matrix_kernel` launched with the kernel id + 1 mod 6
         (a mis-wired branch)
+    ROW 39 (2026-08-23), on `logsumexp_kernel`:
+    (s1) `>` -> `>=`: row39 check FAILED ([-0,+0,...] rowmax 0x00000000)
+    (s2) `max_exp = max(max_exp, v)`: FAILED on Apple the same way
+    (s3) `max_exp = max(v, max_exp)`: APPLE-INERT (second operand = the
+         accumulator); expected to FAIL on NVIDIA/AMD (IEEE maximum)
+    (s4) DEVIATION 603's guard dropped: nan check FAILED, device score
+         0x7fc00000 (Apple's NaN payload)
 
 Run:
 
@@ -89,9 +117,11 @@ from kde.ported.neighbors.kernel_density import (
     host_sum_weights,
     kde_fit_validate,
     kde_float32_min,
+    kde_validate_data,
     kernel_from_name,
     kernel_name,
     log_kernel_norm,
+    logsumexp_kernel,
     metric_from_name,
     metric_name,
 )
@@ -102,6 +132,7 @@ from kde.mojo_only.kde_fixture import (
 )
 from kde.mojo_only.kde_oracle import (
     KdeOracleStages,
+    oracle_logsumexp_row,
     oracle_naive_log_sum_row,
     oracle_score_samples,
     reference_log_kernel_norm_f64,
@@ -205,6 +236,9 @@ def _device_scores(
     pad: Int = 0,
     poison: Float32 = Float32(-987654.0),
 ) raises -> List[Float32]:
+    # DEVIATION 604 on the gates' path too (the host entry calls the same).
+    kde_validate_data(train, n_train, d, metric, "train")
+    kde_validate_data(query, n_query, d, metric, "query")
     var dtrain = _upload(ctx, train, pad, poison)
     var dquery = _upload(ctx, query, pad, poison)
     var dummy = List[Float32]()
@@ -324,6 +358,18 @@ def check_kde_refusals() raises:
     _expect_raise("sample_weight with a zero", "gaussian", "euclidean", Float32(1.0), bad_w, True)
     var short_w = _weight_fixture(N_TRAIN - 1, 1)
     _expect_raise("sample_weight of the wrong length", "gaussian", "euclidean", Float32(1.0), short_w, True)
+    # DEVIATION 604, rules (3) and (4)
+    _expect_raise("bandwidth=1e-20 (below 2^-63, h*h underflows)", "gaussian", "euclidean", Float32(1e-20), none, False)
+    var sub_w = _weight_fixture(N_TRAIN, 1)
+    sub_w[5] = Float32(1e-40)
+    _expect_raise("sample_weight with a subnormal (1e-40)", "gaussian", "euclidean", Float32(1.0), sub_w, True)
+    var inf_w = _weight_fixture(N_TRAIN, 1)
+    inf_w[6] = bitcast[DType.float32](UInt32(0x7F800000))
+    _expect_raise("sample_weight with +inf", "gaussian", "euclidean", Float32(1.0), inf_w, True)
+    # and the smallest accepted bandwidth / weight resolve
+    var ok_w = _weight_fixture(N_TRAIN, 1)
+    ok_w[0] = Float32(1.1754943508222875e-38)
+    kde_fit_validate(N_TRAIN, N_FEATURES, Float32(1.0842021724855044e-19), KDE_KERNEL_GAUSSIAN, DIST_L2_SQRT_UNEXPANDED, ok_w, True)
     # metric_arg != 2.0 at the 26.08 entry
     var ctx = DeviceContext()
     var train = _train_fixture(4, 2, 0)
@@ -352,7 +398,7 @@ def check_kde_refusals() raises:
     _ = dq^
     _ = dw^
     _ = dout^
-    print("check_kde_refusals OK [" + _mode_name() + "]: 10 refusals by name, 13 names resolve")
+    print("check_kde_refusals OK [" + _mode_name() + "]: 13 refusals by name, 13 names resolve, h=2^-63 and w=2^-126 accepted")
 
 
 def check_kde_zero_sign_cannot_leak() raises:
@@ -619,10 +665,18 @@ def check_kde_weights() raises:
                 moved += 1
         n_moved += moved
         if diff_1 != 0:
-            raise Error(
+            var msg = (
                 "check_kde_weights: " + kernel_name(kernel) + " weights of all ones differ from unweighted at "
                 + String(diff_1) + " scores (query 0: " + _hex32(dev_1[0]) + " vs " + _hex32(dev_0[0]) + ")"
             )
+            # Row 39 FACT 3: under FAST the weight path's `log(1.0)` is the
+            # vendor's device log (a specific rounding is vendor-shaped), so
+            # RECORDED there; under IDENTICAL `identical_log(1.0)` is gated
+            # `+0.0` and this asserts.
+            comptime if IDENTICAL:
+                raise Error(msg)
+            else:
+                print("  RECORDED [FAST] " + msg)
         if moved == 0:
             raise Error("check_kde_weights: " + kernel_name(kernel) + " hashed weights moved NO score -- the weight path is not reached")
         comptime if IDENTICAL:
@@ -755,6 +809,260 @@ def check_kde_card_is_emitted() raises:
     print("check_kde_card_is_emitted OK [" + _mode_name() + "]: 7 stages (" + expect[0] + " ... " + expect[6] + "), run-to-run control identical")
 
 
+def _device_logsumexp(
+    ctx: DeviceContext, logk: List[Float32], n_query: Int, n_train: Int, lse_tpb: Int
+) raises -> Tuple[List[Float32], List[Float32]]:
+    """`logsumexp_kernel` launched on a PLANTED log-kernel matrix (the real
+    kernel, synthetic input): returns (rowmax, logsumexp)."""
+    var dlogk = _upload(ctx, logk, 0, Float32(-987654.0))
+    var poison = List[Float32]()
+    for _ in range(n_query):
+        poison.append(Float32(-987654.0))
+    var dlse = _upload(ctx, poison, 0, Float32(-987654.0))
+    var dmax = _upload(ctx, poison, 0, Float32(-987654.0))
+    ctx.enqueue_function[logsumexp_kernel](
+        dlogk.unsafe_ptr(),
+        dlse.unsafe_ptr(),
+        dmax.unsafe_ptr(),
+        Int32(n_query),
+        Int32(n_train),
+        grid_dim=((n_query + lse_tpb - 1) // lse_tpb, 1, 1),
+        block_dim=(lse_tpb, 1, 1),
+    )
+    ctx.synchronize()
+    var rmax = _read(ctx, dmax, n_query)
+    var lse = _read(ctx, dlse, n_query)
+    for i in range(n_query):
+        if rmax[i] == Float32(-987654.0) or lse[i] == Float32(-987654.0):
+            raise Error("check_kde_row39: the poison survived at row " + String(i))
+    _ = dlogk^
+    _ = dlse^
+    _ = dmax^
+    return (rmax^, lse^)
+
+
+def check_kde_row39_signed_zero_rowmax() raises:
+    """IDENTITY_PATHS row 39: the per-row max is RECORDED (`kde.rowmax`),
+    so the sign of a zero max is certified. No legal input puts `-0.0` and
+    `+0.0` in one row (`logsumexp_kernel`'s docstring proves it), so the
+    mixed rows are PLANTED into the real kernel, in both orders and at
+    both ends of the row, and the expected bits are stated by POSITION
+    (strict `>` from j = 0: the lower-index zero survives), not taken
+    from the oracle -- the oracle is compared as a second spelling. Then
+    the two real-input rows whose max IS a zero (tophat: all `-0.0`
+    inside; epanechnikov at a coincident query: one `+0.0`) are run on
+    the device with a card and diffed stage by stage against the oracle.
+    `rowmax` asserts in BOTH modes (a compare, no arithmetic, no library
+    fold); the log-sum-exp asserts under IDENTICAL and is a REPORT under
+    FAST (the vendor exp/log).
+
+    SABOTAGE (README): `>` -> `>=` fails both orders everywhere; the
+    hardware `max(max_exp, v)` fails on Apple in both orders; the
+    hardware `max(v, max_exp)` is APPLE-INERT (Apple returns the second
+    operand, which IS the lower index) and is expected to FAIL on NVIDIA/
+    AMD for the `[-0.0, +0.0]` order (IEEE maximum gives +0.0)."""
+    var ctx = DeviceContext()
+    var nz = Float32(-0.0)
+    var pz = Float32(0.0)
+    var n_train = 4
+    # (row, expected rowmax bits, description)
+    var rows = List[List[Float32]]()
+    var expect = List[UInt32]()
+    var names = List[String]()
+    rows.append([nz, pz, Float32(-1.0), Float32(-0.5)])
+    expect.append(UInt32(0x80000000))
+    names.append("[-0,+0,-1,-.5]")
+    rows.append([pz, nz, Float32(-1.0), Float32(-0.5)])
+    expect.append(UInt32(0x00000000))
+    names.append("[+0,-0,-1,-.5]")
+    rows.append([Float32(-1.0), Float32(-0.5), nz, pz])
+    expect.append(UInt32(0x80000000))
+    names.append("[-1,-.5,-0,+0]")
+    rows.append([Float32(-1.0), Float32(-0.5), pz, nz])
+    expect.append(UInt32(0x00000000))
+    names.append("[-1,-.5,+0,-0]")
+    rows.append([nz, Float32(-0.5), pz, Float32(-1.0)])
+    expect.append(UInt32(0x80000000))
+    names.append("[-0,-.5,+0,-1]")
+    rows.append([pz, Float32(-0.5), nz, Float32(-1.0)])
+    expect.append(UInt32(0x00000000))
+    names.append("[+0,-.5,-0,-1]")
+    rows.append([nz, nz, nz, nz])
+    expect.append(UInt32(0x80000000))
+    names.append(String("[-0,-0,-0,-0] (tophat's real row)"))
+    rows.append([Float32(-0.5), pz, Float32(-1.0), Float32(-2.0)])
+    expect.append(UInt32(0x00000000))
+    names.append("[-.5,+0,-1,-2] (a coincident-query row)")
+    var n_query = len(rows)
+    var flat = List[Float32]()
+    for r in range(n_query):
+        for j in range(n_train):
+            flat.append(rows[r][j])
+    var n_lse_diff = 0
+    var first_lse = String("")
+    for lse_tpb in [128, 32, 1]:
+        var got = _device_logsumexp(ctx, flat, n_query, n_train, lse_tpb)
+        for r in range(n_query):
+            var dev_bits = bitcast[DType.uint32](got[0][r])
+            if dev_bits != expect[r]:
+                raise Error(
+                    "check_kde_row39_signed_zero_rowmax FAILED: row " + names[r] + " device rowmax "
+                    + _hex32(got[0][r]) + ", the lower-index zero is " + _hex32(bitcast[DType.float32](expect[r]))
+                    + " (lse_tpb " + String(lse_tpb) + ")"
+                )
+            var orc = oracle_logsumexp_row(flat, r * n_train, n_train)
+            if bitcast[DType.uint32](orc[0]) != expect[r]:
+                raise Error(
+                    "check_kde_row39_signed_zero_rowmax FAILED: row " + names[r] + " ORACLE rowmax "
+                    + _hex32(orc[0]) + ", expected " + _hex32(bitcast[DType.float32](expect[r]))
+                )
+            if bitcast[DType.uint32](got[1][r]) != bitcast[DType.uint32](orc[1]):
+                n_lse_diff += 1
+                if first_lse == "":
+                    first_lse = names[r] + " device lse " + _hex32(got[1][r]) + " oracle " + _hex32(orc[1])
+    if n_lse_diff != 0:
+        comptime if IDENTICAL:
+            raise Error("check_kde_row39_signed_zero_rowmax FAILED: logsumexp device vs oracle: " + first_lse)
+        else:
+            print("  RECORDED [FAST] row39 planted rows: logsumexp device vs oracle differ at " + String(n_lse_diff) + " (" + first_lse + ")")
+    # the real-input rows, through the whole device pipeline and the card
+    var train = _train_fixture(5, 3, 3)
+    var query = List[Float32]()
+    for k in range(3):
+        query.append(train[2 * 3 + k])  # exactly training row 2
+    var none = List[Float32]()
+    var n_real = 0
+    for kernel in [KDE_KERNEL_TOPHAT, KDE_KERNEL_EPANECHNIKOV]:
+        var want = UInt32(0x80000000) if kernel == KDE_KERNEL_TOPHAT else UInt32(0x00000000)
+        var st = _oracle(train, query, none, False, 5, 1, 3, Float32(0.5), kernel, DIST_L2_SQRT_UNEXPANDED)
+        if bitcast[DType.uint32](st.rowmax[0]) != want:
+            raise Error(
+                "check_kde_row39_signed_zero_rowmax: " + kernel_name(kernel) + " coincident row: oracle max "
+                + _hex32(st.rowmax[0]) + ", expected " + _hex32(bitcast[DType.float32](want))
+            )
+        var dpath = SCRATCH + "/mojolearn_kde_row39_dev_" + kernel_name(kernel) + ".card"
+        var opath = SCRATCH + "/mojolearn_kde_row39_orc_" + kernel_name(kernel) + ".card"
+        var tr = IdentityTrace.to_path(dpath)
+        var dev = _device_scores(ctx, train, query, none, False, 5, 1, 3, Float32(0.5), kernel, DIST_L2_SQRT_UNEXPANDED, tr)
+        _oracle_trace(st, opath)
+        var div = first_divergence(dpath, opath)
+        if div != "" or bitcast[DType.uint32](dev[0]) != bitcast[DType.uint32](st.scores[0]):
+            var msg = kernel_name(kernel) + " coincident row: first stage " + div + "; score device " + _hex32(dev[0]) + " oracle " + _hex32(st.scores[0])
+            comptime if IDENTICAL:
+                raise Error("check_kde_row39_signed_zero_rowmax FAILED (device card vs oracle card) " + msg)
+            else:
+                print("  RECORDED [FAST] " + msg)
+        else:
+            n_real += 1
+    print(
+        "check_kde_row39_signed_zero_rowmax OK [" + _mode_name() + "]: " + String(n_query)
+        + " planted rows x lse_tpb 128/32/1: device AND oracle rowmax are the lower-index zero's bits (both orders, both ends); "
+        + String(n_real) + " real coincident rows (tophat max -0.0, epanechnikov max +0.0) card-identical device vs oracle"
+        + ("" if IDENTICAL else " where asserted")
+    )
+
+
+def check_kde_nan_cannot_reach_a_stage() raises:
+    """Row 39 FACT 2: no legal input may compute a NaN into a recorded
+    stage. DEVIATION 604's data rules are driven (NaN / inf in X and the
+    query, the sqeuclidean magnitude bound -- and the same value ACCEPTED
+    under euclidean, where it saturates to +inf and no NaN); then
+    DEVIATION 603's planted row: gaussian and exponential at h = 2^-62
+    with a query 1e20 away, every log-kernel -inf, and the device AND the
+    oracle must write `0xFF800000` at `kde.logsumexp` and `kde.scores`
+    (not NaN). A coincident query beside it (`[-0.0, -inf, ...]`) shows the
+    mixed row is finite. Card-identical device vs oracle under IDENTICAL,
+    RECORDED under FAST; the -inf bits assert in both modes (a branch, not
+    a rounding)."""
+    var ctx = DeviceContext()
+    var nan = bitcast[DType.float32](UInt32(0x7FC00000))
+    var pinf = bitcast[DType.float32](UInt32(0x7F800000))
+    var n_refused = 0
+    # --- rules (1) and (2)
+    var x = _train_fixture(4, 7, 2)
+    var cases = List[Tuple[String, Int, Float32, Int]]()  # (name, index, value, metric)
+    cases.append((String("X with NaN at row 1, column 2"), 1 * 7 + 2, nan, DIST_L2_SQRT_UNEXPANDED))
+    cases.append((String("X with +inf at row 0, column 0"), 0, pinf, DIST_L1))
+    cases.append((String("X with -inf at row 3, column 6"), 3 * 7 + 6, -pinf, DIST_LINF))
+    cases.append((String("X with 2^62 under sqeuclidean (norm overflows)"), 2 * 7 + 1, Float32(4.611686018427387904e18), DIST_L2_EXPANDED))
+    for c in cases:
+        var bad = x.copy()
+        bad[c[1]] = c[2]
+        var raised = False
+        try:
+            kde_validate_data(bad, 4, 7, c[3], "X")
+        except e:
+            raised = True
+            n_refused += 1
+            print("  refused  " + c[0] + ": " + String(e))
+        if not raised:
+            raise Error("check_kde_nan_cannot_reach_a_stage: " + c[0] + " did NOT raise")
+    # the same 2^62 under euclidean is ACCEPTED and saturates, no NaN
+    var big = x.copy()
+    big[2 * 7 + 1] = Float32(4.611686018427387904e18)
+    kde_validate_data(big, 4, 7, DIST_L2_SQRT_UNEXPANDED, "X")
+    var q = _query_fixture(x, 4, 2, 7, 2)
+    var none = List[Float32]()
+    var st_big = _oracle(big, q, none, False, 4, 2, 7, BANDWIDTH, KDE_KERNEL_GAUSSIAN, DIST_L2_SQRT_UNEXPANDED)
+    for i in range(len(st_big.dists)):
+        if st_big.dists[i] != st_big.dists[i]:
+            raise Error("check_kde_nan_cannot_reach_a_stage: euclidean with 2^62 made a NaN distance at cell " + String(i))
+    for i in range(2):
+        if st_big.scores[i] != st_big.scores[i]:
+            raise Error("check_kde_nan_cannot_reach_a_stage: euclidean with 2^62 made a NaN score at " + String(i))
+    # --- DEVIATION 603: the all--inf row
+    var h = Float32(2.168404344971009e-19)  # 2^-62, accepted (>= 2^-63)
+    var train = _train_fixture(16, 2, 5)
+    var query = List[Float32]()
+    query.append(Float32(1e20))
+    query.append(Float32(-1e20))   # row 0: every log-kernel -inf
+    query.append(train[0])
+    query.append(train[1])              # row 1: coincident with training row 0
+    var n_ok = 0
+    for kernel in [KDE_KERNEL_GAUSSIAN, KDE_KERNEL_EXPONENTIAL]:
+        var st = _oracle(train, query, none, False, 16, 2, 2, h, kernel, DIST_L2_SQRT_UNEXPANDED)
+        var n_neg_inf = 0
+        for j in range(16):
+            if bitcast[DType.uint32](st.logk[j]) == UInt32(0xFF800000):
+                n_neg_inf += 1
+        if n_neg_inf != 16:
+            raise Error("check_kde_nan_cannot_reach_a_stage: " + kernel_name(kernel) + " planted row has " + String(n_neg_inf) + " of 16 cells at -inf -- the plant is too mild")
+        if bitcast[DType.uint32](st.rowmax[0]) != UInt32(0xFF800000) or bitcast[DType.uint32](st.logsumexp[0]) != UInt32(0xFF800000) or bitcast[DType.uint32](st.scores[0]) != UInt32(0xFF800000):
+            raise Error(
+                "check_kde_nan_cannot_reach_a_stage FAILED: " + kernel_name(kernel) + " all--inf row: oracle rowmax "
+                + _hex32(st.rowmax[0]) + " logsumexp " + _hex32(st.logsumexp[0]) + " score " + _hex32(st.scores[0]) + " (DEVIATION 603 expects 0xff800000)"
+            )
+        if st.scores[1] != st.scores[1] or st.logsumexp[1] != st.logsumexp[1]:
+            raise Error("check_kde_nan_cannot_reach_a_stage: " + kernel_name(kernel) + " mixed row is NaN on the oracle")
+        var dpath = SCRATCH + "/mojolearn_kde_nan_dev_" + kernel_name(kernel) + ".card"
+        var opath = SCRATCH + "/mojolearn_kde_nan_orc_" + kernel_name(kernel) + ".card"
+        var tr = IdentityTrace.to_path(dpath)
+        var dev = _device_scores(ctx, train, query, none, False, 16, 2, 2, h, kernel, DIST_L2_SQRT_UNEXPANDED, tr)
+        _oracle_trace(st, opath)
+        if bitcast[DType.uint32](dev[0]) != UInt32(0xFF800000):
+            raise Error(
+                "check_kde_nan_cannot_reach_a_stage FAILED: " + kernel_name(kernel) + " all--inf row: DEVICE score "
+                + _hex32(dev[0]) + ", DEVIATION 603 expects 0xff800000 (a NaN here would carry the vendor's payload)"
+            )
+        if dev[1] != dev[1]:
+            raise Error("check_kde_nan_cannot_reach_a_stage FAILED: " + kernel_name(kernel) + " mixed row is NaN on the device")
+        var div = first_divergence(dpath, opath)
+        if div != "" or bitcast[DType.uint32](dev[1]) != bitcast[DType.uint32](st.scores[1]):
+            var msg = kernel_name(kernel) + ": first stage " + div + "; mixed-row score device " + _hex32(dev[1]) + " oracle " + _hex32(st.scores[1])
+            comptime if IDENTICAL:
+                raise Error("check_kde_nan_cannot_reach_a_stage FAILED (device card vs oracle card) " + msg)
+            else:
+                print("  RECORDED [FAST] " + msg)
+        else:
+            n_ok += 1
+    print(
+        "check_kde_nan_cannot_reach_a_stage OK [" + _mode_name() + "]: " + String(n_refused)
+        + " non-finite/overflow inputs refused by name (DEVIATION 604), 2^62 under euclidean saturates without NaN; "
+        "gaussian+exponential all--inf rows at h=2^-62 are 0xff800000 at rowmax/logsumexp/scores on device and oracle (DEVIATION 603), "
+        "mixed row finite; " + String(n_ok) + " cards identical device vs oracle" + ("" if IDENTICAL else " where asserted")
+    )
+
+
 def main() raises:
     print("== kde/mojo_only/kde_check.mojo [" + _mode_name() + "] ==")
     check_kde_refusals()
@@ -766,3 +1074,5 @@ def main() raises:
     check_kde_weights()
     check_kde_launch_invariance()
     check_kde_card_is_emitted()
+    check_kde_row39_signed_zero_rowmax()
+    check_kde_nan_cannot_reach_a_stage()

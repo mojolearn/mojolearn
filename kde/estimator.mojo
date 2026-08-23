@@ -9,7 +9,9 @@ it should reach, shaped like `glm/estimator.mojo::ols_fit_host`.
 optional weights as host lists, validates exactly as cuML's `fit` and
 `score_samples` do (`kde/ported/neighbors/kernel_density.mojo::
 kde_fit_validate`, `kernel_from_name`, `metric_from_name` -- every
-unported choice REFUSED BY NAME), uploads, runs `ML::KDE::score_samples`
+unported choice REFUSED BY NAME) plus DEVIATION 604's finiteness rules
+(`kde_validate_data`: no NaN/inf in the data, the sqeuclidean magnitude
+bound, a normal bandwidth and normal finite weights), uploads, runs `ML::KDE::score_samples`
 (`kde/ported/kde/kde.mojo`) with the environment's identity trace
 (`MOJOLEARN_IDENTITY_TRACE`), and returns `n_query` float32 log-densities.
 
@@ -28,6 +30,7 @@ from kde.ported.neighbors.kernel_density import (
     KDE_LSE_TPB,
     host_sum_weights,
     kde_fit_validate,
+    kde_validate_data,
     kernel_from_name,
     metric_from_name,
 )
@@ -67,18 +70,12 @@ def kde_score_samples_host(
     var k = kernel_from_name(kernel)
     var m = metric_from_name(metric)
     kde_fit_validate(n_train, n_features, bandwidth, k, m, weights, has_weights)
-    if len(train) != n_train * n_features:
-        raise Error(
-            "kde: train has " + String(len(train)) + " values, expected "
-            + String(n_train * n_features)
-        )
-    if len(query) != n_query * n_features:
-        raise Error(
-            "kde: query has " + String(len(query)) + " values, expected "
-            + String(n_query * n_features) + " (n_features must match fit)"
-        )
     if n_query <= 0:
         raise Error("kde: X must have at least one row (n_query)")
+    # DEVIATION 604: finite data (and the sqeuclidean magnitude bound),
+    # refused by name BEFORE any upload; the length check is inside.
+    kde_validate_data(train, n_train, n_features, m, "train")
+    kde_validate_data(query, n_query, n_features, m, "query")
     var ctx = DeviceContext()
     var dtrain = _upload(ctx, train)
     var dquery = _upload(ctx, query)

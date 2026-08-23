@@ -94,9 +94,19 @@ def linf_core(acc: Float32, x: Float32, y: Float32) -> Float32:
 
     Written as their `max`: the larger survives, and on a tie either one
     (they are the same bits -- both non-negative, so no zero-sign question).
+
+    IDENTITY_PATHS row 39 (2026-08-23), proof that neither zero's sign nor
+    a NaN can make this selection vendor-shaped: `acc` is seeded `+0.0` by
+    the caller and only ever takes a `diff`; every `diff` is `abs(...)`,
+    whose sign bit is clear, so `-0.0` is never a candidate and a `+0.0`
+    tie returns identical bits whichever side wins; the compare is a
+    strict `>` (first-seen wins), not a hardware `max`; inputs are refused
+    non-finite before any launch (DEVIATION 604), and a finite `x - y`
+    is finite or +-inf, whose `abs` is +inf, never NaN. The host oracle
+    (`kde_oracle.mojo::oracle_distance`) spells the same strict `>`.
     """
     var diff = abs(ftz(x - y))
-    if diff > acc:
+    if diff > acc:  # row 39: strict `>`, operands non-negative
         return diff
     return acc
 
