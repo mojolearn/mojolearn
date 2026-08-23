@@ -917,6 +917,21 @@ check-depthwise = "mojo run -I . mojo_only/depthwise_check.mojo"
 # claims (three policies differ, budgets bind, NS model round-trips, the
 # hist-mode control after DEVIATION 261)
 check-grow-policy = "mojo run -I . mojo_only/grow_policy_check.mojo"
+# The classical cuML-mirror lanes opened 2026-08-23 (orchestrator
+# cascadeprojects-a6, DEVIATIONS 600-699; IDENTITY_PATHS rows 40-48). One
+# task per check file, FAST; the IDENTICAL pass is the injector, exactly as
+# for every other gate here:  tools/with_identical_mode.sh pixi run check-cd
+check-cd = "mojo run -I . solver/mojo_only/cd_check.mojo"
+cd-main = "mojo run -I . solver/cd_main.mojo"
+check-kde = "mojo run -I . kde/mojo_only/kde_check.mojo"
+check-linkage = "mojo run -I . hierarchy/mojo_only/linkage_check.mojo"
+linkage-main = "mojo run -I . hierarchy/linkage_main.mojo"
+check-svm = "mojo run -I . svm/svc_main.mojo"
+check-svm-oracle = "mojo run -I . svm/svc_main.mojo -- oracle"
+check-metrics-labels = "mojo run -I . metrics/mojo_only/label_metrics_check.mojo"
+check-metrics-regression = "mojo run -I . metrics/mojo_only/regression_metrics_check.mojo"
+check-metrics-silhouette = "mojo run -I . metrics/mojo_only/silhouette_check.mojo"
+check-metrics-trust = "mojo run -I . metrics/mojo_only/trustworthiness_check.mojo"
 
 # The depthwise IDENTITY TRACE: one hash record per stage of a fit, so a
 # bitwise disagreement between two GPUs has an ADDRESS instead of only
