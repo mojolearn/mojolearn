@@ -64,6 +64,7 @@ from bench.gemm_shapes import (
     leaf_count,
 )
 from core.identity_trace import IdentityTrace
+from mojo_only.kernel_matrix import TARGET_COLUMN, column_name
 from gemm.mojo_only.gemm_oracle import gemm_oracle, gemm_oracle_serial
 from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
@@ -138,6 +139,18 @@ def main() raises:
     print("== bench/gemm_card_main.mojo [" + _mode_name() + "] ==")
     print("profile mojolearn.identical.gemm.fp32.v1")
     print("arm", arm)
+    # THE COLUMN WITNESS. `tools/gemm_column_invariance.sh` compiles this
+    # file against three vendor columns with `-D MOJOLEARN_COLUMN_<COL>=1`
+    # and greps this line back out. Without it the sweep can PASS THE DEFINE
+    # AND NEVER KNOW WHETHER THE COMPILER SAW IT -- three matching cards
+    # would look identical whether the define landed or was silently
+    # dropped, which is agreement by coincidence dressed as a gate.
+    #
+    # Invisible today, because the oracle arm is host-only scalar code that
+    # reads no column at all. It becomes load-bearing the moment the device
+    # arm lands, which is exactly when the gate starts meaning something --
+    # so it goes in now rather than being remembered then.
+    print("column", column_name(TARGET_COLUMN))
 
     if arm == "device":
         raise Error(
