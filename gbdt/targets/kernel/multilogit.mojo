@@ -74,22 +74,39 @@ are, so a caller that pads its planes still works. Every caller in this port
 passes `size`. Mojo 1.0 ships no non-temporal or read-only-cache load hint;
 the same deviation `transform.mojo` and `fill.mojo` already record.
 
-`__expf` and `__logf` are `std.math.exp` and `std.math.log`. Their file uses
+DEVIATION 254: `__expf` and `__logf` are `routed_exp` and `routed_log`,
+the `@always_inline` shims in `pointwise_targets.mojo` over IDENTITY_PATHS
+row 12's `identical_exp`/`identical_log` -- under FAST each inlines to the
+`std.math` call it replaced at the site (measured bit for bit; the shims'
+own block records why the plain wrapper was not enough); under IDENTICAL
+both route through the one portable polynomial pair in
+`mojo_only/numerics.mojo`, one arithmetic on every backend. Their file uses
 the CUDA fast-math forms at every site, so the substitution is in-family --
 and `pointwise_target_check` measured Mojo's device `exp` at about twenty
 ulp against libm, which is looser than `__expf`'s two. No check may expect
-bitwise der parity against a CatBoost fit.
+bitwise der parity against a CatBoost fit. The isfinite guard in the
+one-vs-all score is kept exactly; only the transcendental calls are routed.
 ===================================================
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
-from std.math import exp, isfinite, log
+from std.math import isfinite
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 # IDENTITY_PATHS row 8 (DEVIATION 251): under `NUMERIC_IDENTICAL` the
 # within-block fold must not follow the hardware warp width (64 on AMD),
 # so every fv/magnitude reduce below goes through the pinned-shape fold.
-from gbdt.targets.kernel.pointwise_targets import pinned_block_sum
+#
+# DEVIATION 254 (see the module deviation block): `routed_exp`/`routed_log`
+# are the `@always_inline` shims beside `pinned_block_sum` -- FAST arm the
+# stdlib call inlined at the site (measured bit-for-bit against the direct
+# call; a plain `def` wrapper MOVED FAST BITS, see the shims' block), the
+# IDENTICAL arm row 12's `identical_exp`/`identical_log`.
+from gbdt.targets.kernel.pointwise_targets import (
+    pinned_block_sum,
+    routed_exp,
+    routed_log,
+)
 
 #: `const ui32 blockSize = 256` (`multilogit.cu:180`, `:204`)
 comptime MULTILOGIT_BLOCK_SIZE = 256
@@ -247,13 +264,13 @@ def multilogit_val_and_first_der_kernel[
         var se = Float32(0.0)
         if in_range:
             for k in range(eff):
-                se += exp(
+                se += routed_exp(
                     predictions.unsafe_load(li + k * pred_align) - mx
                 )
         # `sumExpApproxForAllClasses[j] += __expf(0.0f - maxApprox[j])`
         # -- the PINNED class's term, added whether or not idx < size,
         # exactly as theirs is (`:53` sits outside the ternary)
-        se += exp(Float32(0.0) - mx)
+        se += routed_exp(Float32(0.0) - mx)
         sum_exp[j] = se
 
     # their second block (`:59-64`)
@@ -287,7 +304,7 @@ def multilogit_val_and_first_der_kernel[
 
             for k in range(eff):
                 var pk = (
-                    exp(
+                    routed_exp(
                         predictions.unsafe_load(li + k * pred_align)
                         - max_approx[j]
                     )
@@ -308,7 +325,7 @@ def multilogit_val_and_first_der_kernel[
             mag_weight += abs(weight[j])
 
         if compute_fv != Int32(0):
-            var log_denum = log(sum_exp[j])
+            var log_denum = routed_log(sum_exp[j])
             if idx < size:
                 tmp_score += weight[j] * (class_approx[j] - log_denum)
 
@@ -404,10 +421,10 @@ def multilogit_second_der_row_kernel[
         var se = Float32(0.0)
         if in_range:
             for k in range(eff):
-                se += exp(
+                se += routed_exp(
                     predictions.unsafe_load(idx + k * pred_align) - mx
                 )
-        se += exp(Float32(0.0) - mx)
+        se += routed_exp(Float32(0.0) - mx)
         sum_exp[j] = se
 
     @parameter
@@ -425,7 +442,7 @@ def multilogit_second_der_row_kernel[
             var p_row: Float32
             if der2_row < eff:
                 p_row = (
-                    exp(
+                    routed_exp(
                         predictions.unsafe_load(
                             idx + der2_row * pred_align
                         )
@@ -435,11 +452,11 @@ def multilogit_second_der_row_kernel[
                 )
             else:
                 # the PINNED class's probability (`:157-158`)
-                p_row = exp(-max_approx[j]) / sum_exp[j]
+                p_row = routed_exp(-max_approx[j]) / sum_exp[j]
 
             for k in range(der2_row):
                 var pk = (
-                    exp(
+                    routed_exp(
                         predictions.unsafe_load(idx + k * pred_align)
                         - max_approx[j]
                     )
@@ -726,7 +743,7 @@ def one_vs_all_val_and_first_der_kernel[
                 val = predictions.unsafe_load(
                     load_index[j] + clazz * pred_align
                 )
-            var exp_val = exp(val)
+            var exp_val = routed_exp(val)
             var p = clip_prob(exp_val / (Float32(1.0) + exp_val))
             var c = (
                 Float32(1.0) if Int(target_class[j]) == clazz
@@ -745,9 +762,11 @@ def one_vs_all_val_and_first_der_kernel[
 
             if compute_fv != Int32(0):
                 # `isfinite(expVal) ? __logf(1 + expVal) : val` (`:653`)
+                # DEVIATION 254: their fallback kept exactly; only the
+                # `log` call is routed.
                 var log_term = val
                 if isfinite(exp_val):
-                    log_term = log(Float32(1.0) + exp_val)
+                    log_term = routed_log(Float32(1.0) + exp_val)
                 if in_range:
                     tmp_score += (
                         weight[j]
@@ -831,7 +850,7 @@ def one_vs_all_second_der_kernel[
                 var val = predictions.unsafe_load(
                     idx + clazz * pred_align
                 )
-                var exp_val = exp(val)
+                var exp_val = routed_exp(val)
                 var p = clip_prob(exp_val / (Float32(1.0) + exp_val))
                 der2.unsafe_store(
                     idx + clazz * der2_align,

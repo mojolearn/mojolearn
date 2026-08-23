@@ -1574,6 +1574,13 @@ def fit_with_test(
         # a MultiClass leaf holds `numClasses - 1` values and the model's
         # dimension matches the CURSOR's, not the walker's.
         weak.dim = approx_dim
+        # DEVIATION 256, justified UNPINNED: IDENTITY_PATHS row 9 names
+        # the LEAF RESCALE, and this multiply is it -- the device half
+        # was already closed as the cursor-update fma
+        # (`add_model_value_kernel`, `39a0d88`), and what remains is one
+        # correctly-rounded HOST Float32 multiply with no chain to
+        # contract and no device flush policy in play, so its bits are
+        # the same on every host.
         for i in range(len(leaf_values)):
             weak.leaf_values.append(leaf_values[i] * learning_rate)
         model.add_weak_model(weak^)

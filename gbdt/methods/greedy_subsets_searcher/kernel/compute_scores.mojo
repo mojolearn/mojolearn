@@ -1007,6 +1007,24 @@ def _leafwise_scan_part[
         var total_sum_left = Float32(0.0)
         var total_sum_part = Float32(0.0)
 
+        # ======================== DEVIATION 255 ======================
+        # THE LEAFWISE ARM'S TWO REMAINING SCORE-PATH GAPS, closed with
+        # DEVIATION 253's exact pattern from the symmetric arm above.
+        # 253 reported them open when it pinned the symmetric body -- the
+        # `total_sum_*` accumulations here ran unflushed (the symmetric
+        # twins are flushed at their `totalSumLeft += sumLeft` lines and
+        # at the multiclass `totalSumPart - totalSumLeft` derivation),
+        # and the gain intermediate below went into the feature-weight
+        # multiply unflushed (the symmetric arm flushes it BEFORE the
+        # multiply, because a denormal difference times a large weight
+        # is normal again and the outer flush cannot un-diverge that).
+        # Sums of SIGNED gradients cancel into the denormal range, and
+        # both totals become `AddLeaf` operands on the multiclass arm.
+        # The noise fma results ride along, as they do on the symmetric
+        # arm -- each is an operand of the gain subtraction. Every
+        # `ftz` is a comptime no-op under FAST, so the FAST arm is
+        # character for character the chain it was.
+        # =============================================================
         for stat_id in range(1, stat_count):
             var stat_slot = (
                 leaf_base + stat_id * bin_feature_count + bin_feature_id
@@ -1015,7 +1033,9 @@ def _leafwise_scan_part[
             var part_stat = ldg(
                 part_stats + (this_part_id * stat_count + stat_id)
             )
-            total_sum_part += part_stat
+            # DEVIATION 255 / row 10: flushed accumulation, the
+            # symmetric arm's `total_sum_part` twin.
+            total_sum_part = ftz(total_sum_part + part_stat)
             # row 10 again: `partStat - sumLeft` is THE cancellation step
             # of the kernel (module docstring), so it is the likeliest
             # producer of a denormal on this path. Flushed at derivation.
@@ -1034,13 +1054,17 @@ def _leafwise_scan_part[
             _add_leaf[score_function, normalize, True](
                 part_stat, part_weight, lambda_l2, score_b, denum_sqr_b
             )
-            total_sum_left += sum_left
+            # DEVIATION 255 / row 10: `totalSumLeft += sumLeft` (`:447`),
+            # flushed like the symmetric arm's twin.
+            total_sum_left = ftz(total_sum_left + sum_left)
 
         # `if (multiclassOptimization) { ... beforeSplitCalcer.AddLeaf(
         # -totalSumPart, partWeight); }` (`:448-454`). Same pinned-class
         # identity as the symmetric arm, plus the before-calcer's own term.
         if multiclass_optimization != Int32(0):
-            var total_sum_right = total_sum_part - total_sum_left
+            # DEVIATION 255 / row 10: one more cancelling subtraction,
+            # flushed at derivation like the symmetric arm's.
+            var total_sum_right = ftz(total_sum_part - total_sum_left)
             _add_leaf[score_function, normalize, True](
                 -total_sum_left, weight_left, lambda_l2, score, denum_sqr
             )
@@ -1088,12 +1112,20 @@ def _leafwise_scan_part[
                 # noise block above: a multiply feeding a subtract is a
                 # contraction seam, pinned to one `fma` under IDENTICAL;
                 # the FAST arm is the same mul-then-add chain bit for bit.
+                # DEVIATION 255 / row 10 rides along, as DEVIATION 253
+                # does on the symmetric arm -- each fma result is an
+                # operand of the gain subtraction below, so it is
+                # stored through `ftz`. Comptime no-op under FAST.
                 var neg_draw = -draw[0]
-                final_score = identical_mul_add(
-                    neg_draw, score_std_dev, final_score
+                final_score = ftz(
+                    identical_mul_add(
+                        neg_draw, score_std_dev, final_score
+                    )
                 )
-                score_before = identical_mul_add(
-                    neg_draw, score_std_dev, score_before
+                score_before = ftz(
+                    identical_mul_add(
+                        neg_draw, score_std_dev, score_before
+                    )
                 )
 
         if to_zero_part_split:
@@ -1109,7 +1141,12 @@ def _leafwise_scan_part[
         # a hopeless leaf reports. Theirs is a literal 0 and so is this.
         var gain = Float32(0.0)
         if not to_zero_part_split:
-            gain = final_score - score_before
+            # DEVIATION 255 extends the flush to the INTERMEDIATE, the
+            # symmetric arm's DEVIATION 253 argument verbatim: a
+            # denormal difference times a large feature weight is
+            # NORMAL again, so the outer `ftz` cannot un-diverge it.
+            # The degenerate arm's literal 0 needs no flush.
+            gain = ftz(final_score - score_before)
         # IDENTITY_PATHS ROW 10: flushed BEFORE the argmax compare, same
         # argument as the symmetric arm's gain -- flushing only at the
         # store would leave the in-block RANKING divergent on a

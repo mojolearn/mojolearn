@@ -82,6 +82,19 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.primitives.block import sum as block_sum
 
 from gbdt.targets.kernel.pointwise_targets import pinned_block_sum
+
+# ============================ DEVIATION 256 ============================
+# IDENTITY_PATHS row 9's open list names the ESTIMATOR DERIVATIONS, and
+# this file computes the Exact estimator's -- the residual, the MAPE
+# weight quotient and the need-weight sum. AUDITED FOR DEVICE exp/log
+# (row 12) as well; there are NONE in this file, so the closure here is
+# row 10's flush on the derived seams plus the row 8 fold the
+# need-weights reduce already routes through `pinned_block_sum`. The
+# binary search and the flag kernel are selection and integer work and
+# carry justified-unpinned notes at their sites. Every `ftz` below is a
+# comptime no-op under FAST.
+# =======================================================================
+from mojo_only.numerics import ftz
 from std.gpu import block_dim, block_idx, thread_idx
 
 #: `const ui32 blockSize = 1024` (`exact_estimation.cu:107`). Metal's
@@ -123,9 +136,15 @@ def compute_exact_value_kernel(
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i >= Int(size_in):
         return
+    # DEVIATION 256 / row 10: `target - approx` IS the Exact estimator's
+    # derivation, a cancelling subtraction whose result seeds the
+    # segmented sort's ORDER -- a denormal residual that Metal flushes
+    # and CUDA keeps would sort to a different rank and move the
+    # quantile. Flushed at the seam store.
     out_values.unsafe_store(
-        i, targets.unsafe_load(i) - approx.unsafe_load(i)
+        i, ftz(targets.unsafe_load(i) - approx.unsafe_load(i))
     )
+    # justified unpinned -- a load or the literal 1.0, copied exactly.
     var w = Float32(1.0)
     if has_weights != Int32(0):
         w = weights.unsafe_load(i)
@@ -152,8 +171,12 @@ def compute_weights_with_targets_kernel(
     if i >= Int(size_in):
         return
     var delta = max(Float32(1.0), abs(targets.unsafe_load(i)))
+    # DEVIATION 256 / row 10: the quotient of a small weight by a large
+    # |target| can land denormal, and this store feeds the segmented
+    # prefix sum the quantile search reads. Flushed at the seam store;
+    # `delta` itself is a max over exact values and needs no flush.
     weights_with_targets.unsafe_store(
-        i, weights.unsafe_load(i) / delta
+        i, ftz(weights.unsafe_load(i) / delta)
     )
 
 
@@ -183,6 +206,8 @@ def make_end_of_bins_flags_kernel(
     leaf order and a prefix sum of the sizes is the wrong segmentation
     (`doc_parallel_boosting.mojo` records that trap at its export).
     """
+    # DEVIATION 256, justified UNPINNED: integer flag writes only, no
+    # float arithmetic anywhere in this kernel.
     var seg = Int(block_idx.x)
     if Int(seg_sizes.unsafe_load(seg)) == 0:
         return
@@ -221,17 +246,22 @@ def compute_need_weights_kernel(
     var tid = Int(thread_idx.x)
 
     # `for (idx = begin; idx < end; idx += BLOCK_SIZE) totalSum += w[idx]`
+    # DEVIATION 256 / row 10 on the accumulation: weights carry no sign
+    # guarantee at this type, so the chain is flushed per step like
+    # `compute_target_variance_kernel`'s. Comptime no-ops under FAST.
     var total_sum = Float32(0.0)
     var idx = tid
     while idx < size:
-        total_sum += weights.unsafe_load(base + idx)
+        total_sum = ftz(total_sum + weights.unsafe_load(base + idx))
         idx += NEED_WEIGHTS_BLOCK
 
     # IDENTITY_PATHS row 8's last site (E1 2026-08-22: gbdt_logloss's
     # first divergent stage is leaves.estimated, this path).
     var blocks_sum = pinned_block_sum[NEED_WEIGHTS_BLOCK](total_sum)
     if tid == 0 and size > 0:
-        need_weights.unsafe_store(seg, blocks_sum * alpha)
+        # DEVIATION 256 / row 10: kernel-to-kernel seam (the quantile
+        # search compares against it), flushed at the store.
+        need_weights.unsafe_store(seg, ftz(blocks_sum * alpha))
 
 
 def compute_weighted_quantile_kernel(
@@ -283,6 +313,11 @@ def compute_weighted_quantile_kernel(
     var left = base
     var right = base + size - 1
 
+    # DEVIATION 256, justified UNPINNED: the loop below is SELECTION --
+    # integer interval halving plus one compare whose float side,
+    # `need - eps`, is a single correctly-rounded subtraction of values
+    # both produced through flushed seams, so its bits are already one
+    # answer on every backend.
     var eps = Float32(1.1920929e-07)  # FLT_EPSILON
     var need = need_weights.unsafe_load(i)
     for _ in range(Int(binary_search_iterations_in)):

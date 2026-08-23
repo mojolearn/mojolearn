@@ -45,14 +45,78 @@ silently invert every early-stopping comparison later.
 """
 
 from std.atomic import Atomic
-from std.math import exp, isfinite, log
+from std.math import isfinite
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.primitives.block import sum as block_sum
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+
+# ============================ DEVIATION 254 ============================
+# EVERY DEVICE exp/log IN THIS FILE ROUTES THROUGH `identical_exp` /
+# `identical_log` (IDENTITY_PATHS row 12). Their sites are a mixture of
+# one vendor's fast math and libm inside one CUDA build (`__expf` in
+# TPoissonTarget and TLogLinQuantileTarget, `std::exp` in TTweedieTarget,
+# `__expf`/`__logf` in CrossEntropyImpl); ours must be ONE arithmetic on
+# three vendors, and E1 measured the stdlib's device exp/log as the
+# Logloss fit's first divergence (`tree000.perm0.leaves.estimated`,
+# Apple<->AMD, 2026-08-22). Under FAST each call compiles to the
+# `std.math` call it replaced, verbatim, so FAST bits cannot move; under
+# IDENTICAL both route through the Cephes polynomials in
+# `mojo_only/numerics.mojo` (measured <= 2 ulp, same bits everywhere).
+# The isfinite guard structure around the `log(1 + exp)` scores is kept
+# exactly as ported -- only the transcendental calls are routed. The
+# routing covers `exp`/`log` only; Lq's `**` (their `__powf`/`powf`)
+# stays the stdlib operator and is recorded as row 12's open pow tail.
+#
+# THE ROUTING GOES THROUGH THE `@always_inline` SHIMS BELOW, not through
+# `numerics.identical_exp` directly, and the reason is MEASURED, not
+# stylistic. Routing the calls through the plain `def` wrapper moved
+# FAST bits -- `check-multiclass-train`'s device loss walked from
+# 0.12890586256980896 to 0.12890584766864777 with the mode never
+# leaving FAST -- because the stdlib exp/log lower to Mojo polynomials
+# whose internal mul-add chains the codegen contracts PER CONTEXT
+# ([[mojo-log-breaks-ties]]'s sibling; the same lesson DEVIATION 253
+# records as "contraction must be measured PER SEAM"). A separate
+# function body is a different context. The shims force the FAST arm
+# back to the stdlib call inlined AT THE SITE, which restores the
+# pre-routing codegen context and with it the pre-routing bits
+# (re-measured; the gate diff is clean). The IDENTICAL arm calls
+# `numerics.identical_exp`/`identical_log`, so there is ONE portable
+# polynomial and no second arithmetic wearing the same name.
+# =======================================================================
+from mojo_only.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
+    ftz,
+    identical_exp,
+    identical_log,
+)
+
+
+@always_inline
+def routed_exp(x: Float32) -> Float32:
+    """DEVIATION 254's site call. FAST is `std.math.exp` inlined at the
+    call site, bit for bit the direct call it replaced; IDENTICAL is
+    row 12's `identical_exp`. See the deviation block above for why the
+    inlining is load-bearing."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        return identical_exp(x)
+    from std.math import exp
+
+    return exp(x)
+
+
+@always_inline
+def routed_log(x: Float32) -> Float32:
+    """DEVIATION 254's site call, `log` side. Same two-arm contract as
+    `routed_exp`."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        return identical_log(x)
+    from std.math import log
+
+    return log(x)
 
 #: The mode this build compiles against; see `mojo_only/numerics.mojo`. Same
 #: declaration as the histogram kernels', and `pinned_block_sum` below is the
@@ -294,7 +358,7 @@ def target_score[objective: Int](
         return multiplier * val
     elif objective == OBJECTIVE_LOGLINQUANTILE:
         # `TLogLinQuantileTarget::Score` (`:126-131`)
-        var val = t - exp(p)
+        var val = t - routed_exp(p)
         var multiplier = (
             alpha if val > Float32(0.0) else -(Float32(1.0) - alpha)
         )
@@ -304,7 +368,7 @@ def target_score[objective: Int](
         return abs(t - p) / max(Float32(1.0), abs(t))
     elif objective == OBJECTIVE_POISSON:
         # `TPoissonTarget::Score` (`:164-166`)
-        return exp(p) - t * p
+        return routed_exp(p) - t * p
     elif objective == OBJECTIVE_LQ:
         # `TLqTarget::Score` (`:204-207`); their `__powf`
         var abs_loss = abs(t - p)
@@ -321,10 +385,12 @@ def target_score[objective: Int](
         # `VariancePower` -- see the deviation block on the kernel.
         var val = (
             -t
-            * exp((Float32(1.0) - alpha) * p)
+            * routed_exp((Float32(1.0) - alpha) * p)
             / (Float32(1.0) - alpha)
         )
-        var delta = exp((Float32(2.0) - alpha) * p) / (Float32(2.0) - alpha)
+        var delta = routed_exp((Float32(2.0) - alpha) * p) / (
+            Float32(2.0) - alpha
+        )
         return val + delta
     elif objective == OBJECTIVE_HUBER:
         # `THuberTarget::Score` (`:68-75`), `alpha` is their `Delta`
@@ -359,7 +425,7 @@ def target_der[objective: Int](
         return alpha if val > Float32(0.0) else -(Float32(1.0) - alpha)
     elif objective == OBJECTIVE_LOGLINQUANTILE:
         # `:133-136`
-        var exp_pred = exp(p)
+        var exp_pred = routed_exp(p)
         if t - exp_pred > Float32(0.0):
             return alpha * exp_pred
         return -(Float32(1.0) - alpha) * exp_pred
@@ -370,7 +436,7 @@ def target_der[objective: Int](
         return Float32(-1.0) / max(Float32(1.0), abs(t))
     elif objective == OBJECTIVE_POISSON:
         # `:168-171`
-        return t - exp(p)
+        return t - routed_exp(p)
     elif objective == OBJECTIVE_LQ:
         # `:209-213`
         var abs_loss = abs(t - p)
@@ -385,8 +451,8 @@ def target_der[objective: Int](
         return Float32(2.0) * multiplier * val
     elif objective == OBJECTIVE_TWEEDIE:
         # `:46-50`
-        var der = t * exp((Float32(1.0) - alpha) * p)
-        var delta = exp((Float32(2.0) - alpha) * p)
+        var der = t * routed_exp((Float32(1.0) - alpha) * p)
+        var delta = routed_exp((Float32(2.0) - alpha) * p)
         return der - delta
     elif objective == OBJECTIVE_HUBER:
         # `:77-84`
@@ -425,7 +491,7 @@ def target_der2[objective: Int](
         return Float32(0.0)
     elif objective == OBJECTIVE_POISSON:
         # `:173-175`
-        return exp(p)
+        return routed_exp(p)
     elif objective == OBJECTIVE_LQ:
         # `:215-218`: BELOW q = 2 their second derivative is the constant
         # 1, not the true one. Copied, because it is what their Newton
@@ -449,11 +515,12 @@ def target_der2[objective: Int](
         # `:52-56`
         var der2 = (
             t
-            * exp((Float32(1.0) - alpha) * p)
+            * routed_exp((Float32(1.0) - alpha) * p)
             * (Float32(1.0) - alpha)
         )
         var delta = (
-            exp((Float32(2.0) - alpha) * p) * (Float32(2.0) - alpha)
+            routed_exp((Float32(2.0) - alpha) * p)
+            * (Float32(2.0) - alpha)
         )
         return -der2 + delta
     elif objective == OBJECTIVE_HUBER:
@@ -575,8 +642,10 @@ def pointwise_target_kernel[
       tail for `function_value` AND the two fixed-point plane magnitudes
       -- the 2026-08-21 determinism fix, same buffers, same
       `deterministic_sum_lanes_kernel` fold.
-    * `exp` and `**` here are `std.math` / Mojo's operator, where theirs
-      are a MIXTURE of CUDA fast-math and libm within a single file:
+    * `exp` here is `identical_exp` (DEVIATION 254 -- the FAST arm is
+      `std.math.exp` verbatim, the IDENTICAL arm row 12's portable
+      polynomial) and `**` is Mojo's operator, where theirs are a
+      MIXTURE of CUDA fast-math and libm within a single file:
       `TPoissonTarget` and `TLogLinQuantileTarget` use `__expf`,
       `TTweedieTarget` uses `std::exp`, `TLqTarget::Score` uses `__powf`
       and its `Der`/`Der2` use `powf`. CatBoost accepts approximate
@@ -629,7 +698,16 @@ def pointwise_target_kernel[
 
     # `der[i] = weight * target.Der(relev, val)` (`:265-266`)
     # `der2[i] = weight * target.Der2(relev, val)` (`:268-269`)
-    var der = weight * target_der[objective](relev, val, alpha)
+    #
+    # DEVIATION 256 / IDENTITY_PATHS row 10 on the ESTIMATOR DERIVATIONS
+    # (row 9's open list names them; E1 measured `leaves.estimated` as
+    # the Logloss fit's first divergent stage). A tiny weight times a
+    # tiny derivative lands the product denormal, and the stats planes
+    # are a kernel-to-kernel seam the estimator's reduces consume, so
+    # each derived value is flushed AT DERIVATION -- one policy for
+    # every consumer (estimation stores, search stores, magnitudes).
+    # Every `ftz` is a comptime no-op under FAST.
+    var der = ftz(weight * target_der[objective](relev, val, alpha))
 
     # what SEARCH plane 0 holds, per `second_der_as_weights` -- see the
     # deviation block. The der2 arm is their `der2[i] = weight *
@@ -638,16 +716,19 @@ def pointwise_target_kernel[
 
     @parameter
     if second_der_as_weights:
-        plane0 = weight * target_der2[objective](relev, val, alpha)
+        # DEVIATION 256 / row 10, same flush-at-derivation policy.
+        plane0 = ftz(weight * target_der2[objective](relev, val, alpha))
 
     if in_range:
 
         @parameter
         if estimation:
             stats.unsafe_store(i, der)
+            # DEVIATION 256 / row 10: the Newton Hessian plane, same
+            # seam, same flush.
             stats.unsafe_store(
                 size + i,
-                weight * target_der2[objective](relev, val, alpha),
+                ftz(weight * target_der2[objective](relev, val, alpha)),
             )
         else:
             stats.unsafe_store(i, plane0)
@@ -836,8 +917,10 @@ def cross_entropy_kernel[
       fv/magnitude summation order is ours either way, because the partials
       buffers already are.
 
-    And one of substance: `exp`/`log` here are `std.math`, where theirs are
-    CUDA's `__expf`/`__logf` fast-math approximations (~2 ulp). CatBoost
+    And one of substance: `exp`/`log` here are `identical_exp`/
+    `identical_log` (DEVIATION 254 -- FAST is `std.math` verbatim,
+    IDENTICAL is row 12's portable pair), where theirs are CUDA's
+    `__expf`/`__logf` fast-math approximations (~2 ulp). CatBoost
     itself accepts approximate transcendentals at this exact site, so the
     substitution is in-family, but the two arms' derivatives differ in last
     bits BY CONSTRUCTION and no check may expect bitwise der parity against
@@ -859,9 +942,11 @@ def cross_entropy_kernel[
             weight = weights.unsafe_load(i)
 
     # `const float expVal = idx < size ? __expf(val) : 0;` (`:353`)
+    # DEVIATION 254: the guard structure is theirs untouched; only the
+    # transcendental is routed.
     var exp_val = Float32(0.0)
     if in_range:
-        exp_val = exp(val)
+        exp_val = routed_exp(val)
     # `p = max(min(isfinite(expVal) ? expVal / (1.0f + expVal) : 1.0f,
     #              1.0f - 1e-40f), 1e-40f)` (`:354`)
     var p = Float32(1.0)
@@ -886,8 +971,15 @@ def cross_entropy_kernel[
         " does not"
     )
 
-    var direction = c - p  # their `direction[j] = c - p` (`:358`)
-    var scale = p * (Float32(1.0) - p)  # their `scale[j]` (`:359`)
+    # DEVIATION 256 / IDENTITY_PATHS row 10 on the ESTIMATOR
+    # DERIVATIONS -- `c - p` cancels when c and p are near each other, and
+    # `p * (1 - p)` at the 1e-40 clamp IS denormal, so both are flushed
+    # at derivation and each stored product is flushed at its seam --
+    # the stats planes feed the estimator's reduces, which is the
+    # `leaves.estimated` stage E1 measured divergent. Comptime no-ops
+    # under FAST.
+    var direction = ftz(c - p)  # their `direction[j] = c - p` (`:358`)
+    var scale = ftz(p * (Float32(1.0) - p))  # their `scale[j]` (`:359`)
 
     # what SEARCH plane 0 holds, per `second_der_as_weights` -- see the
     # deviation block. The der2 arm is their `der2[idx] = weight[j] *
@@ -896,17 +988,17 @@ def cross_entropy_kernel[
 
     @parameter
     if second_der_as_weights:
-        plane0 = weight * scale
+        plane0 = ftz(weight * scale)
 
     if in_range:
 
         @parameter
         if estimation:
-            stats.unsafe_store(i, weight * direction)
-            stats.unsafe_store(size + i, weight * scale)
+            stats.unsafe_store(i, ftz(weight * direction))
+            stats.unsafe_store(size + i, ftz(weight * scale))
         else:
             stats.unsafe_store(i, plane0)
-            stats.unsafe_store(size + i, weight * direction)
+            stats.unsafe_store(size + i, ftz(weight * direction))
             # no third plane in search mode; see the deviation block.
     _ = scale
 
@@ -916,9 +1008,13 @@ def cross_entropy_kernel[
         # (`:362-364`).
         var score = Float32(0.0)
         if in_range:
+            # DEVIATION 254: their isfinite fallback kept exactly; only
+            # the `log` call is routed.
             var log_exp_val_plus_one = val
             if isfinite(exp_val):
-                log_exp_val_plus_one = log(Float32(1.0) + exp_val)
+                log_exp_val_plus_one = routed_log(
+                    Float32(1.0) + exp_val
+                )
             score = weight * (c * val - log_exp_val_plus_one)
         var total = pinned_block_sum[block_size=MSE_BLOCK_SIZE](score)
         if thread_idx.x == 0:

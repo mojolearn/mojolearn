@@ -65,7 +65,12 @@ from std.math import exp, log, sqrt
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from mojo_only.kernel_matrix import partition_chunks_sm_for
-from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from mojo_only.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
+    ftz,
+    identical_mul_add,
+)
 from gbdt.targets.kernel.pointwise_targets import (
     deterministic_sum_lanes_kernel,
     pinned_block_sum,
@@ -105,10 +110,22 @@ def std_dev_partials_kernel(
     var stat_line_size = Int(stat_line_size_in)
     var i = STD_DEV_BLOCK * Int(block_idx.x) + Int(thread_idx.x)
     var acc = Float32(0.0)
+    # ======================== DEVIATION 256 ==========================
+    # IDENTITY_PATHS row 9 names this chain by name -- the
+    # `std_dev_partials_kernel` `w*tmp*tmp` leftover. `acc += w*tmp*tmp`
+    # is a multiply feeding an add, so which backend fuses it was the
+    # codegen's whim; `identical_mul_add` pins it to one `fma` under
+    # IDENTICAL and is the naive chain under FAST, same association
+    # (`(w*tmp)*tmp + acc`), same bits. Row 10 rides along -- `tmp` is a
+    # quotient and `w*tmp` squares toward zero, so both intermediates
+    # and the accumulator are stored through `ftz` (the gradient can be
+    # denormal-small while the noise scale it feeds is not). Every
+    # `ftz` is a comptime no-op under FAST.
+    # =================================================================
     while i < size:
         var w = stats.unsafe_load(i)
-        var tmp = stats.unsafe_load(stat_line_size + i) / w
-        acc += w * tmp * tmp
+        var tmp = ftz(stats.unsafe_load(stat_line_size + i) / w)
+        acc = ftz(identical_mul_add(ftz(w * tmp), tmp, acc))
         i += Int(grid_dim.x) * STD_DEV_BLOCK
     # IDENTITY_PATHS row 8 (DEVIATION 251): the pinned-shape fold, so the
     # within-block sum does not follow AMD's 64-wide wavefront.
@@ -215,6 +232,10 @@ def calc_score_model_length_mult(
     scale is not a decision. It would NOT be tolerable inside the score
     comparison, and no caller may reuse this value as a tie-break.
     """
+    # DEVIATION 256, justified UNPINNED: HOST-side Float64 exp/log, so
+    # IDENTITY_PATHS row 12 (device transcendentals) does not reach it,
+    # and the docstring above already prices the libm error as a scale
+    # on a random normal, never a decision.
     var model_exp_length = log(sample_count)
     var model_left = exp(model_exp_length - model_size)
     return model_left / (1.0 + model_left)
