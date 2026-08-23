@@ -40,9 +40,31 @@ def dbscan_fit_binding(
     labels_addr: PythonObject,
     params: PythonObject,
 ) raises -> PythonObject:
-    """params: n_rows, n_features, eps, min_samples, budget_mb, max_iter."""
-    if len(params) != 6:
-        raise Error("dbscan_fit: params must contain 6 values")
+    """Fit DBSCAN. Returns the propagation pass count.
+
+    `params` is, in this exact order (mirrored in
+    `python/mojolearn/density.py`):
+
+        0  n_rows
+        1  n_features
+        2  eps            (float)
+        3  min_samples
+        4  budget_mb      (max_mbytes_per_batch; 0 = cuML's own estimate)
+        5  max_iter       (max_iterations of the label propagation; 0 =
+                           run to the fixed point, DEVIATION 519)
+        6  eps_nn_method  (0 = EPS_NN_BRUTE_FORCE, 1 = EPS_NN_RBC)
+
+    Slot 6 was added 2026-08-23 (DEVIATION 516): the wrapper used to have
+    no way to choose the eps-neighbourhood arm, so the ball cover -- the
+    shipped DEFAULT, DEVIATION 35 -- was the only arm a Python caller
+    could reach and the brute-force arm E1U certified was unreachable
+    from Python. `dbscan/estimator.mojo` refuses any other value by name.
+    """
+    if len(params) != 7:
+        raise Error(
+            "dbscan_fit: params must contain 7 values, got "
+            + String(len(params))
+        )
     var xp = _f32_ptr(Int(py=x_addr))
     var lp = _i32_ptr(Int(py=labels_addr))
     var nr = Int(py=params[0])
@@ -51,11 +73,13 @@ def dbscan_fit_binding(
     var min_samples = Int(py=params[3])
     var budget = Int(py=params[4])
     var max_iter = Int(py=params[5])
+    var eps_nn_method = Int(py=params[6])
     var passes = 0
     with GILReleased(Python()):
         var ctx = DeviceContext()
         passes = dbscan_fit(
-            ctx, xp, nr, nf, eps, min_samples, lp, budget, max_iter
+            ctx, xp, nr, nf, eps, min_samples, lp, budget, max_iter,
+            eps_nn_method,
         )
     return PythonObject(passes)
 

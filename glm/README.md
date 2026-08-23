@@ -82,8 +82,11 @@ that is not safe, and its docstring recorded the bypass as closed; it was
 closed for the Mojo callers only. A Python user handing in a wide design or
 a single column got a plausible vector out of a singular `A^T A` and no
 error. Fixed, and gated by `check_ols_host_surface_takes_the_guard`.
-**The shipped `_mojolearn_estimators.so` predates the fix and has to be
-rebuilt before a Python user sees it.**
+The shipped `_mojolearn_estimators.so` was rebuilt with the fix on
+2026-08-23 (the DEVIATION 517 commit, which also routes `ols_fit_host`
+through `ols_fit_traced` so `mojolearn.LinearRegression().fit` leaves the
+same `ols.step*` card the Mojo driver does; `tools/e2u_matrix_fit.py`
+reads it).
 
 **`DivideByNonZero`'s threshold is absolute.** `1e-10` is compared against
 an eigenvalue of `A^T A`, which scales with the SQUARE of the data and with

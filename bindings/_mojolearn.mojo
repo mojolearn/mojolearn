@@ -25,10 +25,12 @@ to have to be unpacked in TWO files that could silently disagree about the
 order of a flat list -- which is a wrong answer, not a failure. Now there is
 one. Do not re-add a gbdt import here.
 
-DBSCAN, PCA and OLS have verified kernels and no such surface yet, so binding
-them would mean inventing one here, at the boundary, where no check can see
-it. They are named in the wrapper's `__all__` as absent rather than silently
-missing.
+DBSCAN, PCA, truncated SVD and OLS are bound in the THIRD extension,
+`bindings/_mojolearn_estimators.mojo`, and exported from `mojolearn` since
+2026-08-23 (`mojolearn.DBSCAN`, `.PCA`, `.TruncatedSVD`,
+`.LinearRegression`). This paragraph used to say they had no surface; that
+stopped being true when their host-pointer surfaces landed and the sentence
+outlived the fact.
 
 THE DEVICE CONTEXT IS CREATED PER CALL, AND THAT IS A REAL COST
 ----------------------------------------------------------------
@@ -158,10 +160,12 @@ def kmeans_fit_binding(
         9  metric
 
     All four returns are given because a wrong answer here comes from the two
-    scales, and a caller reproducing a result needs them. **`inertia` is 0.0
-    when it was NEVER COMPUTED**: `inertia_check` is False by default, per
-    cuVS, and with it off the Lloyd loop never forms the cluster cost. Do not
-    read a 0.0 as a perfect clustering. The wrapper repeats this warning.
+    scales, and a caller reproducing a result needs them. `inertia` is the
+    weighted cost against the FINAL centroids from cuVS's post-loop
+    assignment (`detail/kmeans.cuh:516-535`) and is always formed;
+    `inertia_check` (False by default, per cuVS) governs only the IN-LOOP
+    cost. This docstring used to say "0.0 when it was NEVER COMPUTED",
+    which was false (corrected 2026-08-23).
     """
     if len(params) != 10:
         raise Error(

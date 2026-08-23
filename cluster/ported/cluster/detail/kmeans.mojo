@@ -522,9 +522,23 @@ def init_scalable_kmeans_plus_plus(
     n_samples: Int,
     n_features: Int,
     mut rng: HostRng,
+    mut trace: IdentityTrace,
+    tag_prefix: String,
 ) raises:
     """`initScalableKMeansPlusPlus`, `detail/kmeans.cuh:568-785`. The DEFAULT
     initialization (`oversampling_factor = 2.0` selects it, `:910-915`).
+
+    `trace` / `tag_prefix` (DEVIATION 518, 2026-08-23): step 8's recluster
+    is a FULL `kmeans_fit_main` on the candidate set, and until this round
+    that inner fit constructed its OWN `IdentityTrace()` -- a second card
+    with its own `seq 0` APPENDED INTO the outer fit's file, between the
+    outer `seq 0` and `seq 1`. Every k-means++ card the Python surface
+    produced was therefore unreadable by `tools/identity_trace_diff.py`
+    ("seq out of order"), and nothing had noticed because every traced
+    k-means run before `tools/e2u_matrix_fit.py` used `INIT_ARRAY`
+    (E1U_RESULTS.md names that gap). The inner fit now writes into the
+    OUTER trace under `<restart>.init.par.` -- one sequence, unique tags --
+    so the recluster's stages are in the card and aligned like any other.
 
     Bahmani et al.'s k-means|| (arXiv:1203.6402), their numbering:
 
@@ -849,7 +863,7 @@ def init_scalable_kmeans_plus_plus(
         var inner = KMeansParams.default()
         inner.n_clusters = k
         inner.init = INIT_ARRAY
-        _ = kmeans_fit_main(
+        _ = kmeans_fit_main_traced(
             ctx,
             cand_buf,
             weight,
@@ -860,6 +874,8 @@ def init_scalable_kmeans_plus_plus(
             d,
             inner_sum_scale,
             inner_weight_scale,
+            trace,
+            tag_prefix + "init.par.",
         )
     elif cand_count < k:
         # `:755-777`: supplement with random into the FIRST `k - |C|` rows,
@@ -924,22 +940,51 @@ def kmeans_fit_main(
 
     `centroids` is in-out. On `INIT_ARRAY` it is read as the starting set,
     which is theirs (`:916-924`), and on return it holds the best restart.
+
+    THE STAGE HASHES (`core/identity_trace.mojo`). Off unless
+    `MOJOLEARN_IDENTITY_TRACE` is set, one `getenv` for the whole fit, and
+    every `record_*` sits behind `trace.enabled` so a shipping run does not
+    even build the tag strings. This entry constructs the trace and hands
+    it to `kmeans_fit_main_traced`, which is the whole fit; the k-means||
+    init re-enters THAT function with the same trace and a tag prefix
+    (DEVIATION 518), so one caller-facing fit is one card however many
+    inner fits the init runs.
+    """
+    var trace = IdentityTrace()
+    return kmeans_fit_main_traced(
+        ctx, x, weights, centroids, labels, params, n_samples, n_features,
+        sum_scale, weight_scale, trace, String(""),
+    )
+
+
+def kmeans_fit_main_traced(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    mut weights: DeviceBuffer[DType.float32],
+    mut centroids: DeviceBuffer[DType.float32],
+    mut labels: DeviceBuffer[DType.uint32],
+    params: KMeansParams,
+    n_samples: Int,
+    n_features: Int,
+    sum_scale: Float32,
+    weight_scale: Float32,
+    mut trace: IdentityTrace,
+    tag_prefix: String,
+) raises -> FitResult:
+    """`kmeans_fit_main` with the card it writes into passed in. See there.
+
+    WHY A FIT IS THE UNIT. The tags carry `restartNN.iterMM.` prefixes,
+    which are ALGORITHM positions and identical on every machine (rule 2
+    in `core/identity_trace.mojo`). Two caller-facing fits in one process
+    would collide on those tags and the writer RAISES on a duplicate, which
+    is the instrument stating its contract rather than producing a file the
+    differ would misalign: a traced run is one fit, exactly as E1_RUNBOOK
+    already requires. The k-means|| recluster is the one sanctioned
+    re-entry and it arrives with `tag_prefix = "<restart>.init.par."`.
     """
     params.validate()
 
-    # THE STAGE HASHES (`core/identity_trace.mojo`). Off unless
-    # `MOJOLEARN_IDENTITY_TRACE` is set, one `getenv` for the whole fit, and
-    # every `record_*` below sits behind `trace.enabled` so a shipping run
-    # does not even build the tag strings.
-    #
-    # WHY A FIT IS THE UNIT. The tags carry `restartNN.iterMM.` prefixes,
-    # which are ALGORITHM positions and identical on every machine (rule 2
-    # in that file). Two fits in one process would collide on those tags and
-    # the writer RAISES on a duplicate, which is the instrument stating its
-    # contract rather than producing a file the differ would misalign: a
-    # traced run is one fit, exactly as E1_RUNBOOK already requires.
-    var trace = IdentityTrace()
-    if trace.enabled:
+    if trace.enabled and tag_prefix == "":
         trace.header(
             String("kmeans n=") + String(n_samples) + " d="
             + String(n_features) + " k=" + String(params.n_clusters)
@@ -991,7 +1036,9 @@ def kmeans_fit_main(
         )
         ctx.synchronize()
         if trace.enabled:
-            trace.record_device(ctx, "fit.x_norm", x_norm, n_samples)
+            trace.record_device(
+                ctx, tag_prefix + "fit.x_norm", x_norm, n_samples
+            )
 
     var rng = HostRng(params.seed)
     var best_inertia = Float64(1.0e308)
@@ -1006,7 +1053,7 @@ def kmeans_fit_main(
         n_init = 1
 
     for _seed_iter in range(n_init):
-        var restart_tag = String("restart") + _pad2(_seed_iter) + "."
+        var restart_tag = tag_prefix + "restart" + _pad2(_seed_iter) + "."
         if params.init == INIT_ARRAY:
             ctx.enqueue_function[copy_f32_kernel](
                 cur_centroids.unsafe_ptr(),
@@ -1037,6 +1084,8 @@ def kmeans_fit_main(
                 n_samples,
                 n_features,
                 rng,
+                trace,
+                restart_tag,
             )
         else:
             kmeans_plus_plus(
@@ -1311,7 +1360,7 @@ def kmeans_fit_main(
             ctx.synchronize()
 
     if trace.enabled:
-        trace.record_device(ctx, "fit.centroids", centroids, cd)
-        trace.record_device(ctx, "fit.labels", labels, n_samples)
+        trace.record_device(ctx, tag_prefix + "fit.centroids", centroids, cd)
+        trace.record_device(ctx, tag_prefix + "fit.labels", labels, n_samples)
 
     return FitResult(best_inertia, best_iter)

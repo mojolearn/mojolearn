@@ -1,8 +1,38 @@
-"""Host-pointer surfaces for PCA and truncated SVD."""
+"""Host-pointer surfaces for PCA and truncated SVD.
+
+THE IDENTITY CARD (DEVIATION 518, 2026-08-23 -- the same deviation also
+repairs the k-means++ card, see `cluster/ported/cluster/detail/kmeans.mojo`
+`init_scalable_kmeans_plus_plus`). `pca_fit_host` and `tsvd_fit_host` are
+the paths `mojolearn.PCA` / `mojolearn.TruncatedSVD` take, and neither left
+a stage card: `decomposition/` has no `IdentityTrace` anywhere below this
+file, so `tools/e2u_matrix_fit.py` could hash the outputs and nothing else.
+The records below are taken AT THIS SURFACE, from the buffers the ported
+fit hands back:
+
+    pca.mean              the column means (`mu`, device)
+    pca.jacobi.a          the covariance AFTER the device Jacobi, in place;
+                          its diagonal is the eigenvalues. A divergence
+                          here with `pca.mean` agreeing is the Gram/covariance
+                          or the eigensolver (DEVIATION 511's two block.sum
+                          folds live there and are NOT pinned)
+    pca.components        what the caller gets, after the host ordering,
+                          truncation and sign convention
+    pca.explained_var
+    pca.singular_vals
+    pca.noise_var
+
+and `tsvd.jacobi.a` / `tsvd.components` / `tsvd.singular_vals` for the
+uncentered twin. WHAT IS MISSING, named rather than glossed: a record of
+the covariance BEFORE the Jacobi (`compute_covariance`'s output). It would
+separate the Gram from the eigensolver and it needs one line inside
+`decomposition/ported/linalg/detail/pca.mojo::pca_fit`, which is the
+decomposition lane's file; left for that lane.
+"""
 
 from max.gpu.host import DeviceContext
 
 from core.column_stats import TRANSPOSE_TILE, shift_columns_kernel, transpose_kernel
+from core.identity_trace import IdentityTrace
 from core.gemm import gemm_nt
 from decomposition.ported.linalg.detail.pca import pca_fit, pca_transform
 from decomposition.ported.linalg.detail.tsvd import tsvd_fit
@@ -27,15 +57,35 @@ def pca_fit_host(
     var cov = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
     ctx.synchronize()
+    var trace = IdentityTrace()
+    if trace.enabled:
+        trace.header(
+            String("pca n=") + String(n_rows) + " d=" + String(n_features)
+            + " n_components=" + String(n_components)
+        )
     var result = pca_fit(
         ctx, x, xa, xa2, mu, cov, n_rows, n_features, n_components
     )
+    if trace.enabled:
+        trace.record_device(ctx, "pca.mean", mu, n_features)
+        trace.record_device(ctx, "pca.jacobi.a", cov, n_features * n_features)
+    var comp32 = List[Float32]()
+    var expl32 = List[Float32]()
+    var sing32 = List[Float32]()
     for i in range(n_components * n_features):
+        comp32.append(Float32(result.components[i]))
         components_ptr.unsafe_store(i, Float32(result.components[i]))
     for i in range(n_components):
+        expl32.append(Float32(result.explained_var[i]))
+        sing32.append(Float32(result.singular_vals[i]))
         explained_ptr.unsafe_store(i, Float32(result.explained_var[i]))
         ratio_ptr.unsafe_store(i, Float32(result.explained_var_ratio[i]))
         singular_ptr.unsafe_store(i, Float32(result.singular_vals[i]))
+    if trace.enabled:
+        trace.record_list_f32("pca.components", comp32)
+        trace.record_list_f32("pca.explained_var", expl32)
+        trace.record_list_f32("pca.singular_vals", sing32)
+        trace.record_scalar_f32("pca.noise_var", Float32(result.noise_var))
     var hmu = ctx.enqueue_create_host_buffer[DType.float32](n_features)
     ctx.enqueue_copy(dst_ptr=hmu.unsafe_ptr(), src_buf=mu)
     ctx.synchronize()
@@ -82,11 +132,28 @@ def tsvd_fit_host(
     var xa2 = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
     ctx.synchronize()
+    var trace = IdentityTrace()
+    if trace.enabled:
+        trace.header(
+            String("tsvd n=") + String(n_rows) + " d=" + String(n_features)
+            + " n_components=" + String(n_components)
+        )
     var result = tsvd_fit(ctx, x, gram, xa, xa2, n_rows, n_features, n_components)
+    if trace.enabled:
+        trace.record_device(
+            ctx, "tsvd.jacobi.a", gram, n_features * n_features
+        )
+    var comp32 = List[Float32]()
+    var sing32 = List[Float32]()
     for i in range(n_components * n_features):
+        comp32.append(Float32(result.components[i]))
         components_ptr.unsafe_store(i, Float32(result.components[i]))
     for i in range(n_components):
+        sing32.append(Float32(result.singular_vals[i]))
         singular_ptr.unsafe_store(i, Float32(result.singular_vals[i]))
+    if trace.enabled:
+        trace.record_list_f32("tsvd.components", comp32)
+        trace.record_list_f32("tsvd.singular_vals", sing32)
 
 
 def tsvd_transform_host(

@@ -42,7 +42,10 @@ class KMeans:
     init : {'k-means++', 'random', 'array'}, default 'k-means++'
         'array' takes the starting centroids from `init_centroids`.
     n_init : int, default 1
-        cuVS's default. Untested above 1 at this boundary.
+        cuVS's default. Restarts share one seeded host RNG, so restart 2
+        draws different starting centroids than restart 1; the best
+        post-loop inertia wins (`tools/e2u_matrix_fit.py` measures that
+        `n_init=3` moves the answer on its fixture).
     max_iter : int, default 300
     tol : float, default 1e-4
     random_state : int, default 0
@@ -57,10 +60,16 @@ class KMeans:
         no aggregate metric would reveal; cuVS and scikit-learn both run the
         extra pass and so does this.
     inertia_ : float
-        **0.0 MEANS NEVER COMPUTED, not a perfect clustering.** cuVS's
-        `inertia_check` defaults to False, and with it off the Lloyd loop
-        never forms the cluster cost; the only convergence criterion is the
-        centroid shift. This mirrors them.
+        The weighted sum of squared distances to the FINAL centroids, from
+        the one fresh assignment cuVS runs after the loop
+        (`detail/kmeans.cuh:516-535`); with `n_init > 1` it is the best
+        restart's and decides which restart is kept. **This docstring used
+        to say "0.0 MEANS NEVER COMPUTED", and that was false** (corrected
+        2026-08-23, measured: a 256 x 4 fit reports 55.44). What cuVS's
+        `inertia_check=False` turns off is the IN-LOOP cost, which would
+        make the cost ratio a second stopping rule; the only convergence
+        criterion is the centroid shift, and the post-loop inertia is
+        always formed. This mirrors them.
     n_iter_ : int
     sum_scale_, weight_scale_ : float
         The fixed-point accumulator multipliers chosen for your data. Exposed

@@ -61,9 +61,12 @@ WHAT IS NOT HERE YET, NAMED SO IT IS NOT MISTAKEN FOR DONE
   (`knn_brute_force.mojo`'s dispatch note), so cosine and L1 are a port, not
   a flag.
 - `KNeighborsClassifier` / `KNeighborsRegressor`. A vote and a mean over what
-  `knn_search` already returns.
-- **A CPython extension module.** mojotrees' `bindings/` shows the shape and
-  it has shipped a wheel, but nothing here is importable from Python yet.
+  `knn_search` already returns (`mojolearn.__init__`'s `_NOT_YET` names
+  them).
+- The CPython extension EXISTS: `bindings/_mojolearn.mojo::knn_search_binding`
+  and `python/mojolearn/neighbors.py` (`mojolearn.NearestNeighbors`). This
+  bullet used to say nothing here was importable from Python; that stopped
+  being true when the binding landed and the sentence outlived it.
 
 THE REPRODUCIBILITY LIMITATION, WHICH IS REAL AND IS NOT HIDDEN
 ---------------------------------------------------------------

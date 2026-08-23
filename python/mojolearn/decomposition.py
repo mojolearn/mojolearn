@@ -16,11 +16,45 @@ def _component_count(n_components, shape):
 
 
 class PCA:
-    """Covariance-eigendecomposition PCA on the GPU.
+    """Covariance-eigendecomposition PCA on the GPU: cuML's `pcaFit` route
+    (covariance, then an eigensolver) with the eigensolver being cuML's
+    JACOBI arm (`svd_solver='jacobi'`, cuSOLVER syevj there, a device
+    Jacobi here). cuML's own 'auto' reaches the divide-and-conquer `eigDC`
+    (syevd), which is NOT ported (decomposition/UNPORTED.tsv); this class
+    accepts 'auto' and runs the Jacobi arm, and says so here.
 
-    The preliminary API supports full-component fitting and transformation.
-    Whitening, randomized solvers, incremental fitting, and sparse input are
-    not implemented.
+    WHAT IS HONORED, WHAT IS REFUSED, AND WHY (measured row by row by
+    `tools/e2u_matrix_fit.py`):
+
+        n_components  honored   1..n_features; None means min(n_samples,
+                                n_features). The eigendecomposition is of
+                                the FULL covariance on every setting; the
+                                count selects how many eigenpairs are kept
+                                and sets `noise_variance_` (the mean of the
+                                discarded eigenvalues, cuML's
+                                truncCompExpVars)
+        svd_solver    refused   anything but 'auto' / 'covariance_eigh'
+                                (both name the one ported arm, the device
+                                Jacobi); 'full' / 'randomized' / 'arpack'
+                                are different algorithms that are not
+                                ported (decomposition/UNPORTED.tsv)
+        whiten        refused   True is not ported: it needs the
+                                `explained_var` rescale of the components
+                                on transform and its inverse on
+                                inverse_transform (cuml pca.cuh's
+                                whitening arms); refused by name rather
+                                than silently unwhitened
+        tol, iterated_power, random_state, n_oversamples -- not on this
+                                surface: the device Jacobi runs RAFT's own
+                                defaults (tol 1e-7, 15 sweeps; see
+                                decomposition/ported/linalg/detail/pca.mojo)
+        n_features > 128 refused UNDER NUMERIC_IDENTICAL ONLY: the pinned
+                                split-K Gram kernel's capacity
+                                (IDENTITY_PATHS row 27; the refusal names
+                                the shape). FAST runs any width through
+                                the vendor matmul.
+
+    Incremental fitting and sparse input are not implemented.
     """
 
     def __init__(self, n_components=None, *, whiten=False, svd_solver="auto"):
@@ -30,9 +64,19 @@ class PCA:
 
     def fit(self, X, y=None):
         if self.whiten:
-            raise NotImplementedError("mojolearn PCA does not yet support whiten=True")
+            raise NotImplementedError(
+                "mojolearn PCA: whiten=True is refused; the whitening "
+                "rescale of the components (and its inverse on "
+                "inverse_transform) is not ported, and an unwhitened "
+                "transform returned for whiten=True would be a wrong answer"
+            )
         if self.svd_solver not in ("auto", "covariance_eigh"):
-            raise ValueError("mojolearn PCA supports only covariance_eigh")
+            raise ValueError(
+                f"mojolearn PCA: svd_solver={self.svd_solver!r} is refused; "
+                "only 'auto' / 'covariance_eigh' (cuML's covariance + device "
+                "Jacobi arm) is ported; 'full', 'randomized' and 'arpack' are "
+                "different algorithms (decomposition/UNPORTED.tsv)"
+            )
         x, self.input_copied_ = as_f32_c(X, "X")
         if x.shape[0] < 2 or x.shape[1] < 2:
             raise ValueError("mojolearn PCA requires at least 2 rows and 2 features")
@@ -81,11 +125,30 @@ class PCA:
 
 
 class TruncatedSVD:
-    """Uncentered truncated SVD on the GPU.
+    """Uncentered truncated SVD on the GPU, mirroring cuML's `tsvdFit`
+    (Gram matrix + the same device Jacobi eigensolver PCA uses).
 
-    Components and singular values are exposed. Explained variance is omitted
-    because the current fit kernel does not compute cuML's transformed-data
-    definition of that quantity.
+    WHAT IS HONORED, WHAT IS REFUSED, AND WHY (measured row by row by
+    `tools/e2u_matrix_fit.py`):
+
+        n_components  honored   1..n_features, the eigenpairs kept
+        algorithm     refused   anything but 'covariance_eigh' (the Gram +
+                                Jacobi arm). scikit-learn's 'arpack' and
+                                'randomized' are different algorithms that
+                                are not ported. NOTE the default is NOT
+                                scikit-learn's 'randomized', because
+                                accepting that name for a different
+                                algorithm would be a silent substitution
+        n_iter, random_state, tol -- not on this surface (they belong to the
+                                refused solvers)
+        n_features > 128 refused UNDER NUMERIC_IDENTICAL ONLY, as for PCA
+                                (IDENTITY_PATHS row 27)
+
+    Components and singular values are exposed. `explained_variance_` is
+    omitted because the fit kernel does not compute cuML's
+    transformed-data definition of that quantity (tsvd.cuh's
+    `explained_var` comes from the transformed matrix's column variances,
+    a second pass this port does not make).
     """
 
     def __init__(self, n_components=2, *, algorithm="covariance_eigh"):
@@ -94,7 +157,12 @@ class TruncatedSVD:
 
     def fit(self, X, y=None):
         if self.algorithm != "covariance_eigh":
-            raise ValueError("mojolearn TruncatedSVD supports covariance_eigh only")
+            raise ValueError(
+                f"mojolearn TruncatedSVD: algorithm={self.algorithm!r} is "
+                "refused; only 'covariance_eigh' (the Gram + device Jacobi "
+                "arm cuML's tsvdFit takes) is ported; 'arpack' and "
+                "'randomized' are different algorithms"
+            )
         x, self.input_copied_ = as_f32_c(X, "X")
         if x.shape[0] < 2 or x.shape[1] < 2:
             raise ValueError("mojolearn TruncatedSVD requires at least 2 rows and 2 features")

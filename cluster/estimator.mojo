@@ -69,9 +69,12 @@ THE POLICY CHOICES
    behaviour.
 
    `inertia_check=False` is the one to read twice: with it off the Lloyd loop
-   never computes the cluster cost and the only convergence criterion is the
-   centroid shift. **A returned `inertia` of 0.0 means it was never computed**,
-   not that the clustering is perfect.
+   never computes the IN-LOOP cluster cost and the only convergence
+   criterion is the centroid shift. The returned `inertia` is a different
+   quantity and is ALWAYS formed: cuVS's post-loop assignment against the
+   final centroids (`detail/kmeans.cuh:516-535`, `fit`'s `best_inertia`).
+   This paragraph used to say "a returned `inertia` of 0.0 means it was
+   never computed"; that was false (corrected 2026-08-23).
 
 5. **WEIGHTS ARE EXPLICIT, NOT OPTIONAL-BY-NULL.** `n_weights` is a required
    argument: 0 means unit weights and `weights_ptr` is never read, anything
@@ -88,14 +91,15 @@ WHAT IS NOT HERE YET, NAMED SO IT IS NOT MISTAKEN FOR DONE
 - `predict` against new data with an already-fitted model. `predict` exists in
   the ported layer and wants a caller-facing wrapper of its own; it is a
   different call and is not wired here.
-- `n_init > 1`. The parameter is honoured because it is passed straight
-  through, but no check in this repository exercises a restart, so it is
-  untested at this boundary.
+- `n_init > 1` and `INIT_ARRAY` are exercised at this boundary since
+  2026-08-23 by `tools/e2u_matrix_fit.py` (`kmeans_k8_ninit3`,
+  `kmeans_k8_array`: both move the answer against the baseline, and the
+  restart card tags `restart01.*` appear). No Mojo check covers them.
 - Metrics other than `METRIC_L2_EXPANDED`. `METRIC_L2_SQRT_EXPANDED` and
-  `METRIC_COSINE_EXPANDED` pass through untested from here.
-- `INIT_ARRAY` with caller-supplied centroids. The plumbing is present (the
-  centroids buffer is uploaded before the fit) but no check covers it.
-- The CPython extension. This is the Mojo half only.
+  `METRIC_COSINE_EXPANDED` pass through untested from here, and the Python
+  surface does not expose `metric` at all.
+- The CPython extension EXISTS (`bindings/_mojolearn.mojo::kmeans_fit_binding`,
+  `python/mojolearn/cluster.py`); this sentence used to say it did not.
 """
 
 from max.gpu.host import DeviceContext
@@ -122,9 +126,10 @@ struct KMeansFitResult(Copyable, ImplicitlyCopyable, Movable):
     """
 
     var inertia: Float64
-    """0.0 WHEN NEVER COMPUTED. `inertia_check` is False by default, per
-    cuVS, and with it off the loop never forms the cluster cost. Do not read
-    a 0.0 here as a perfect clustering."""
+    """The weighted cost against the FINAL centroids, from cuVS's post-loop
+    assignment (`detail/kmeans.cuh:516-535`); always formed. The in-loop
+    cost that `inertia_check=False` turns off is a different number and
+    never leaves the fit."""
 
     var n_iter: Int
     var sum_scale: Float64

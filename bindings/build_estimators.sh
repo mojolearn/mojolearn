@@ -152,8 +152,9 @@ import numpy as np
 # points take bare `.ctypes.data` addresses plus a packed `params` tuple, so
 # a hand-rolled call here would encode that ABI a second time and drift from
 # it. `density`, `decomposition` and `linear_model` already encode it and are
-# what a user reaches. Note they are NOT exported from `mojolearn/__init__.py`
-# (they sit in `_NOT_YET`), so they must be imported as submodules.
+# what a user reaches (exported from `mojolearn/__init__.py` since
+# 2026-08-23; imported as submodules here so this gate does not depend on
+# the package's export list).
 from mojolearn import density, decomposition, linear_model
 
 X = np.random.default_rng(0).random((128, 3), dtype=np.float32)

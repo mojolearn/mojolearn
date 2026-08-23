@@ -17,16 +17,19 @@ docstring records the bypass as a defect that was found and closed --
 with a Python user on the other end, still went around it and returned a
 plausible vector of garbage from a singular inverse, with no error.
 
-It now goes through `ols_fit`. The refusal is the same one every other
-caller already got, and `check_ols_host_surface_takes_the_guard` asserts it
-at both shapes rather than trusting this sentence.
+It now goes through `ols_fit_traced` (the same guards and dispatch as
+`ols_fit`, carrying the identity card -- DEVIATION 517 below). The refusal
+is the same one every other caller already got, and
+`check_ols_host_surface_takes_the_guard` asserts it at both shapes rather
+than trusting this sentence.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceContext
 
 from core.gemm import gemv_n
-from glm.ported.glm.ols import OLS_ALGO_EIG, ols_fit
+from core.identity_trace import IdentityTrace
+from glm.ported.glm.ols import OLS_ALGO_EIG, ols_fit_traced
 from mojo_only.numerics import ftz
 
 
@@ -79,9 +82,25 @@ def ols_fit_host(
     # THROUGH `olsFit`'s DISPATCH (`ols.cuh:112`), NOT AROUND IT. See the
     # module docstring: this line used to call `lstsq_eig` and that is the
     # DEVIATION 527 defect.
-    ols_fit(
+    #
+    # AND THROUGH THE TRACED ENTRY (DEVIATION 517, 2026-08-23). This is the
+    # path `mojolearn.LinearRegression().fit` takes, and until now it called
+    # `ols_fit`, whose trace is constructed DISABLED -- so the one OLS path
+    # with a Python user on the other end was the one path that could not
+    # leave an identity card, while `glm/ols_trace_main.mojo` carded a path
+    # no user takes. `IdentityTrace()` reads `MOJOLEARN_IDENTITY_TRACE` and
+    # is off unless it is set, so the shipping behaviour is unchanged; set,
+    # `tools/e2u_matrix_fit.py` gets the same `ols.step*` stages the Mojo
+    # driver does.
+    var trace = IdentityTrace()
+    if trace.enabled:
+        trace.header(
+            String("ols n=") + String(n_rows) + " d=" + String(n_features)
+            + " algo=" + String(OLS_ALGO_EIG)
+        )
+    ols_fit_traced(
         ctx, x, y, w, cov, q, qs, s, ab, inv, xa, xa2,
-        n_rows, n_features, OLS_ALGO_EIG,
+        n_rows, n_features, trace, OLS_ALGO_EIG,
     )
     var hw = ctx.enqueue_create_host_buffer[DType.float32](n_features)
     ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=w)
@@ -108,13 +127,21 @@ def ols_predict_host(
     gemv_n(ctx, out, x, coef, n_rows, n_features)
     # A HOST FLOAT COMPARISON DECIDING A LAUNCH, audited for DEVIATION 527
     # and left as it is. `intercept` is a value the caller hands in, not one
-    # this repository computed, so the compare is against a constant and is
-    # the same answer on every host; and `ols_fit_host` refuses
-    # `fit_intercept`, so on the fitted path it is always exactly 0.0. What
-    # the branch DOES change, and it is the honest residue: `x + 0.0` is `x`
-    # for every `x` except `-0.0`, which becomes `+0.0`. That is one sign
-    # bit on one value, identical on every vendor, and taking the branch out
-    # would launch a kernel over every prediction to achieve it.
+    # this repository computed on the device, so the compare is against a
+    # host constant and is the same answer on every host. THE SENTENCE THAT
+    # STOOD HERE -- "`ols_fit_host` refuses `fit_intercept`, so on the
+    # fitted path it is always exactly 0.0" -- WAS FALSE at the surface
+    # (corrected 2026-08-23, DEVIATION 517): the ported `ols_fit` refuses
+    # `fit_intercept`, but `python/mojolearn/linear_model.py` centers X and
+    # y ON THE HOST before calling this file and hands a NON-ZERO intercept
+    # back in, so `mojolearn.LinearRegression()`'s default takes this
+    # branch on every fit. The intercept is a host float64 quantity
+    # (exactly-rounded sums, no BLAS; see that file), so the compare is
+    # still a function of the inputs alone. What the branch DOES change,
+    # and it is the honest residue: `x + 0.0` is `x` for every `x` except
+    # `-0.0`, which becomes `+0.0`. That is one sign bit on one value,
+    # identical on every vendor, and taking the branch out would launch a
+    # kernel over every prediction to achieve it.
     if intercept != Float32(0.0):
         ctx.enqueue_function[_add_scalar_kernel](
             out.unsafe_ptr(), Int32(n_rows), intercept,
