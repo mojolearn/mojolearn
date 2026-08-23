@@ -65,7 +65,13 @@ from bench.gemm_shapes import (
 )
 from core.identity_trace import IdentityTrace
 from mojo_only.kernel_matrix import TARGET_COLUMN, column_name
-from gemm.mojo_only.gemm_oracle import gemm_oracle, gemm_oracle_serial
+from gemm.mojo_only.gemm_oracle import (
+    OP_NN as ORACLE_OP_NN,
+    OP_NT as ORACLE_OP_NT,
+    OP_TN as ORACLE_OP_TN,
+    gemm_oracle,
+    gemm_oracle_serial,
+)
 from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 
@@ -101,6 +107,40 @@ def _exact(i: Int, salt: Int) -> Float32:
     """
     var num = Int(_mix(i, salt) % 2097151) - 1048575
     return Float32(num) / Float32(1048576.0)
+
+
+def _oracle_op(tbl: Int) -> Int:
+    """Translate the TABLE's orientation code into the ORACLE's.
+
+    **TWO FILES NUMBER THE SAME THREE WORDS DIFFERENTLY**, and this card
+    shipped without noticing:
+
+        bench/gemm_shapes.mojo    NT = 0, TN = 1, NN = 2
+        gemm/mojo_only/gemm_oracle.mojo   NN = 0, NT = 1, TN = 2
+
+    So a table `OP_TN` (1) reached the oracle as `OP_NT`, and a table
+    `OP_NT` (0) reached it as `OP_NN`. **Every row of the reference card was
+    a product the table does not describe.**
+
+    IT NEVER TRAPPED AND THAT IS WHY IT SURVIVED. The fill branches below
+    are written against the TABLE's codes and are correct, so every buffer
+    was the right size; the mis-indexing stayed in bounds and returned a
+    plausible float. A card of plausible floats is exactly as diffable as a
+    card of correct ones, so Phase 3 would have compared vendors against a
+    reference that was wrong in the same way on both sides and reported
+    agreement.
+
+    Found by the Phase 4 lane, which hit the same mismatch and wrote its own
+    map first (`gemm/mojo_only/gemm_device_check.mojo::_tbl_op`). Two lanes
+    independently needing this map is the argument for one of the two files
+    changing its constants; until then the map is written where it is used
+    and says so.
+    """
+    if tbl == OP_NT:
+        return ORACLE_OP_NT
+    if tbl == OP_TN:
+        return ORACLE_OP_TN
+    return ORACLE_OP_NN
 
 
 def _capped(m: Int, n: Int, k: Int) -> Tuple[Int, Int]:
@@ -227,10 +267,14 @@ def main() raises:
         t.record_list_f32(name + ".in.b", b)
 
         var c: List[Float32]
+        # THE TABLE'S CODE FILLS THE BUFFERS, THE ORACLE'S CODE DOES THE
+        # PRODUCT. `op` above is the table's and the fill branches want it;
+        # the oracle wants its own numbering. See `_oracle_op`.
+        var oop = _oracle_op(op)
         if arm == "oracle":
-            c = gemm_oracle(a, b, op, m, n, k)
+            c = gemm_oracle(a, b, oop, m, n, k)
         else:
-            c = gemm_oracle_serial(a, b, op, m, n, k)
+            c = gemm_oracle_serial(a, b, oop, m, n, k)
 
         t.record_list_f32(name + ".out", c)
         ran += 1
