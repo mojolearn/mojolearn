@@ -1836,6 +1836,30 @@ def classification_key_shift(row_count: Int) -> Int:
     return s if s > 0 else 0
 
 
+def float_gain_key(gain: Float32) -> Int64:
+    """The order-preserving SIGN-MAGNITUDE map of a Float32 gain onto
+    `Int64`, the ENTROPY cell's `num` (with `den = 1`). DEVIATION 459.
+
+    `key = mag` for a non-negative gain and `-mag` for a negative one, where
+    `mag` is the low 31 bits of the float's pattern. For finite floats the
+    magnitude bits order exactly as the magnitudes do, so the signed key
+    orders exactly as the float does under `<`; `-0.0` and `+0.0` both map to
+    `0`, which is the tie float `==` gives them and the tie cuML's
+    `Split::update` first arm gives them. NaN never reaches this (every
+    entropy term is `log` of a probability in `[1/n, 1]`). Stored in the
+    `Int64` numerator, compared by `compare_exact_key` with `den == 1` on
+    both sides, so the reduction's cross-multiply is this integer's order.
+    Shared by the finalize kernel and the host oracle so there is no second
+    copy to drift. NOT `range_key`: that map orders the two zeros, which is
+    the right answer for a range fold and the wrong one for a gain tie.
+    """
+    var bits = Int64(Int(gain.to_bits()))
+    var mag = bits & Int64(0x7FFFFFFF)
+    if (bits & Int64(0x80000000)) != 0:
+        return -mag
+    return mag
+
+
 def regression_key_shift(row_count: Int) -> Int:
     """`j`, the NODE-UNIFORM right shift on `|A|`. DEVIATION BLOCK 191.
 

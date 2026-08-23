@@ -164,9 +164,11 @@ if d == 0.0:
     raise SystemExit("smoke: regressor arms bit-equal -- device arm did not"
                      " quantize, so it did not run on the device")
 
-# Refusals must cross the boundary by name.
-for bad in (dict(bootstrap=True), dict(warm_start=True),
-            dict(ccp_alpha=0.1)):
+# Refusals must cross the boundary by name. (bootstrap=True and
+# criterion='entropy' were in this list until DEVIATIONS 459/460 ported
+# them; they are now REACH-checked below instead.)
+for bad in (dict(oob_score=True), dict(warm_start=True),
+            dict(ccp_alpha=0.1), dict(max_samples=0.5)):
     try:
         et.ExtraTreesClassifier(**bad).fit(X, yc)
     except Exception as e:
@@ -174,12 +176,29 @@ for bad in (dict(bootstrap=True), dict(warm_start=True),
             raise SystemExit(f"smoke: refusal for {bad} does not name it")
     else:
         raise SystemExit(f"smoke: {bad} was accepted")
-try:
-    et.ExtraTreesClassifier(criterion="entropy")
-except NotImplementedError:
-    pass
-else:
-    raise SystemExit("smoke: criterion='entropy' was accepted")
+# DEVIATION 459/460 reach: entropy and bootstrap must each MOVE the
+# classifier's forest on the device arm (the lane's wrapper_reach_check
+# does the full table; this is the build gate's one-line version). A
+# 4-CLASS target: on the separable binary one above, gini and entropy pick
+# the same feature at every node (measured 2026-08-23, same digest), so a
+# binary fixture cannot see the criterion at all.
+def digest(m):
+    import hashlib
+    h = hashlib.sha256()
+    for a in (m._offsets, m._colid, m._quesval, m._left_child, m._leaves):
+        h.update(np.ascontiguousarray(a).tobytes())
+    return h.hexdigest()
+ym = np.digitize(X @ np.array([3, -2, 1, 0, 2, -1], dtype=np.float32),
+                 [0.5, 1.5, 2.5])
+base = digest(et.ExtraTreesClassifier(device="gpu", **kw).fit(X, ym))
+ent = digest(et.ExtraTreesClassifier(device="gpu", criterion="entropy",
+                                     **kw).fit(X, ym))
+boot = digest(et.ExtraTreesClassifier(device="gpu", bootstrap=True,
+                                      **kw).fit(X, ym))
+if ent == base:
+    raise SystemExit("smoke: criterion='entropy' built the gini forest")
+if boot == base:
+    raise SystemExit("smoke: bootstrap=True built the no-bootstrap forest")
 shutil.rmtree(tmp, ignore_errors=True)
 PY
 }

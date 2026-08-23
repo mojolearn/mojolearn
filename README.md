@@ -16,9 +16,11 @@ on the class.
 
 ## Install in five minutes
 
-Requirements are a Mac with Apple silicon, macOS 11 or later, Python 3.10
-through 3.14, and numpy. There is no CPU path; every estimator runs on the
-GPU.
+Requirements are the lowest that can run it, not the machine it was built
+on. Any Apple silicon Mac from the M1 up, macOS 11 or later, Python 3.10
+through 3.14, numpy 1.24 or later. The wheel and every runtime library in
+it are built for macOS 11 and the M1 instruction set, and the build refuses
+anything newer. There is no CPU path; every estimator runs on the GPU.
 
 ```sh
 python3 -m venv .venv && source .venv/bin/activate

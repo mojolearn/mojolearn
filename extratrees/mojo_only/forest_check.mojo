@@ -17,6 +17,16 @@ precisely because reaching for a zeroing wrapper here returns the LAST tree's
 leaf vector and is invisible on any fixture where the trees agree. So the vote
 is checked against an independently computed average, per row, per class — on
 a fixture built so the trees do NOT agree.
+
+**The bootstrap can be inert, or not a bootstrap (DEVIATION 460).** Since
+2026-08-23 `row_sample_for` draws cuML's with-replacement sample
+(`randomforest.cuh:64-67`) through the RF lane's Philox port. This file pins
+the per-tree seed chain to hand-computed fnv1a32 values, requires the sample
+to be a with-replacement sample (duplicates, every id in range, `n_sampled`
+long, different per tree, identical per (seed, tree) twice), and requires a
+bootstrap forest to DIFFER from the no-bootstrap forest on the same data and
+seed and to equal itself on a second fit. And a sabotage: `max_samples`
+(`n_sampled_rows`) without bootstrap is refused by name.
 """
 
 from std.testing import assert_equal, assert_true
@@ -38,6 +48,27 @@ from extratrees.ported.randomforest.randomforest import (
     predict_regression_forest,
     row_sample_for,
 )
+from extratrees.mojo_only.pcg_rng import row_sample_seed
+
+
+def forests_equal(a: Forest, b: Forest) -> Bool:
+    if len(a.trees) != len(b.trees):
+        return False
+    for t in range(len(a.trees)):
+        if a.trees[t].num_nodes() != b.trees[t].num_nodes():
+            return False
+        for i in range(a.trees[t].num_nodes()):
+            if not (a.trees[t].sparsetree[i] == b.trees[t].sparsetree[i]):
+                return False
+        if len(a.trees[t].vector_leaf) != len(b.trees[t].vector_leaf):
+            return False
+        for i in range(len(a.trees[t].vector_leaf)):
+            if (
+                a.trees[t].vector_leaf[i].to_bits()
+                != b.trees[t].vector_leaf[i].to_bits()
+            ):
+                return False
+    return True
 
 
 def column_major(fixture: FixtureDataset) -> List[Float32]:
@@ -269,10 +300,100 @@ def main() raises:
     assert_true(seed_changed, "a different seed must give a different forest")
     cells += 1
 
+    # ---------------- the bootstrap (DEVIATION 460) -------------------------
+    print("[bootstrap] cuML's get_row_sample arm, seed chain pinned")
+    # `randomforest.cuh:59-62` by hand (python, fnv1a32 over the low word,
+    # the RF lane's DEVIATION 400 high-half round, then tree_id):
+    assert_equal(Int(row_sample_seed(0, 0)), 2615243109, "rs(0,0)")
+    assert_equal(Int(row_sample_seed(7, 0)), 2210223106, "rs(7,0)")
+    assert_equal(Int(row_sample_seed(7, 1)), 3555300115, "rs(7,1)")
+    assert_equal(Int(row_sample_seed(7, 2)), 3815036384, "rs(7,2)")
+    assert_equal(Int(row_sample_seed(0xABC123, 5)), 1686781639, "rs(abc123,5)")
+    assert_equal(
+        Int(row_sample_seed(UInt64(1) << 40, 0)),
+        2917598650,
+        "rs(2^40,0): the high half gets its round (RF lane DEVIATION 400)",
+    )
+    cells += 6
+    var samp0 = row_sample_for(1024, True, 0, 0xABC123, 0)
+    var samp0b = row_sample_for(1024, True, 0, 0xABC123, 0)
+    var samp1 = row_sample_for(1024, True, 0, 0xABC123, 1)
+    var samp_half = row_sample_for(1024, True, 300, 0xABC123, 0)
+    assert_equal(len(samp0), 1024, "n_sampled_rows=0 means every row")
+    assert_equal(len(samp_half), 300, "n_sampled_rows=300 means 300 draws")
+    var in_range = True
+    var dup = False
+    var seen = List[Int](length=1024, fill=0)
+    for i in range(len(samp0)):
+        var v = Int(samp0[i])
+        if v < 0 or v >= 1024:
+            in_range = False
+        else:
+            if seen[v] > 0:
+                dup = True
+            seen[v] += 1
+    assert_true(in_range, "every drawn id is in [0, n_rows)")
+    assert_true(dup, "WITH replacement: 1024 draws from 1024 must repeat")
+    var same = True
+    var differ = False
+    for i in range(1024):
+        if samp0[i] != samp0b[i]:
+            same = False
+        if samp0[i] != samp1[i]:
+            differ = True
+    assert_true(same, "the same (seed, tree) draws the same rows twice")
+    assert_true(differ, "tree 0 and tree 1 draw different rows")
+    var prefix = True
+    for i in range(300):
+        if samp_half[i] != samp0[i]:
+            prefix = False
+    assert_true(
+        prefix,
+        "a shorter sample is the longer one's prefix (RAFT's stride mapping:"
+        " thread t writes t, t+stride, ...; 300 < stride)",
+    )
+    cells += 6
+
+    var boot = fit_classification(
+        xc, labels, Int32(hashed.n_rows), Int32(hashed.n_cols),
+        Int32(hashed.n_classes), p, 12, 0xABC123, True,
+    )
+    var boot_again = fit_classification(
+        xc, labels, Int32(hashed.n_rows), Int32(hashed.n_cols),
+        Int32(hashed.n_classes), p, 12, 0xABC123, True,
+    )
+    var boot_half = fit_classification(
+        xc, labels, Int32(hashed.n_rows), Int32(hashed.n_cols),
+        Int32(hashed.n_classes), p, 12, 0xABC123, True, 512,
+    )
+    assert_true(
+        not forests_equal(boot, forest),
+        "REACH: bootstrap=True must build a different forest than"
+        " bootstrap=False on the same data and seed",
+    )
+    assert_true(
+        forests_equal(boot, boot_again),
+        "bootstrap=True twice at one seed is the same forest",
+    )
+    assert_true(
+        not forests_equal(boot, boot_half),
+        "REACH: n_sampled_rows=512 must build a different forest than 1024",
+    )
+    var root_half = 0
+    for t in range(len(boot_half.trees)):
+        if boot_half.trees[t].sparsetree[0].InstanceCount() == 512:
+            root_half += 1
+    assert_equal(
+        root_half, 12, "every tree's root holds exactly n_sampled_rows rows"
+    )
+    cells += 4
+    print("     bootstrap forest differs, repeats, and honours n_sampled_rows")
+
     # ---------------- refusals ---------------------------------------------
     var refused = 0
     try:
-        _ = row_sample_for(10, True)
+        # the SABOTAGE arm of DEVIATION 460: max_samples without bootstrap
+        _ = row_sample_for(10, False, 5)
     except:
         refused += 1
     try:
@@ -304,7 +425,8 @@ def main() raises:
     assert_equal(
         refused,
         3,
-        "bootstrap=True, n_trees=0 and n_rows=0 must each be refused BY NAME",
+        "n_sampled_rows without bootstrap, n_trees=0 and n_rows=0 must each"
+        " be refused BY NAME",
     )
     cells += 3
 

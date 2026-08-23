@@ -41,6 +41,11 @@ from extratrees.estimator import (
     fit_extra_trees_regressor,
     fit_extra_trees_regressor_device,
 )
+from extratrees.ported.decisiontree.decisiontree import (
+    CRITERION_ENTROPY,
+    CRITERION_GINI,
+    CRITERION_MSE,
+)
 from extratrees.ported.decisiontree.flatnode import (
     SparseTreeNode,
     TreeMetaDataNode,
@@ -70,7 +75,7 @@ def _copy_f32(addr: PythonObject, n: Int) raises -> List[Float32]:
     return out^
 
 
-comptime N_FIT_PARAMS = 21
+comptime N_FIT_PARAMS = 22
 """`params` for both fit entry points, in this exact order -- the wrapper
 names the same order in the same words, because a silent reordering here is a
 wrong answer rather than a failure:
@@ -95,28 +100,37 @@ wrong answer rather than a failure:
     15  ccp_alpha        (float)
     16  has_class_weight (0/1)
     17  has_monotonic_cst(0/1)
-    18  max_samples_set  (0/1)
+    18  max_samples      (sklearn's max_samples RESOLVED TO A COUNT by the
+                          wrapper: 0 = None; honoured with bootstrap=1,
+                          refused by name otherwise -- DEVIATION 460. This
+                          slot was a 0/1 `max_samples_set` flag while
+                          bootstrap was refused)
     19  max_leaf_nodes   (-1 = sklearn's None)
     20  device           (0 host, 1 GPU)
+    21  criterion        (the `decisiontree.mojo` CRITERION_* code:
+                          0 GINI, 1 ENTROPY for the classifier; 2 MSE for
+                          the regressor -- DEVIATION 459)
 
 Every refused sklearn parameter RIDES THROUGH so the refusal fires in
 `refuse_unported` by name, in one place, rather than being re-decided at this
-boundary. The criterion does NOT ride: `et_classifier_fit` is Gini and
-`et_regressor_fit` is squared_error by construction (the `ExtraTreesConfig`
-defaults), and the OTHER criteria are refused by name in the WRAPPER, which
-cites the same UNPORTED.tsv rows validity_check does.
+boundary. The criterion RIDES AS SLOT 21 since DEVIATION 459 (it did not
+while each entry point had exactly one criterion): `et_classifier_fit`
+admits GINI and ENTROPY, `et_regressor_fit` admits MSE, and the OTHER
+criteria are refused by name in the WRAPPER, which cites the same
+UNPORTED.tsv rows validity_check does.
 """
 
 
 def _config_from(
     params: PythonObject, base: ExtraTreesConfig
 ) raises -> ExtraTreesConfig:
-    """Slots 3-19 written OVER `base`. Read under the GIL.
+    """Slots 3-19 and 21 written OVER `base`. Read under the GIL.
 
-    `base` carries the one field the slots do not: the criterion.
-    `et_classifier_fit` passes `ExtraTreesConfig()` (Gini) and
-    `et_regressor_fit` passes `ExtraTreesConfig().for_regression()`
-    (squared_error). Every slot overwrites its field AFTER the base is taken,
+    `base` carries the defaults the slots then overwrite; since DEVIATION
+    459 the criterion is slot 21 and `base`'s criterion is only a default
+    the slot replaces. `et_classifier_fit` passes `ExtraTreesConfig()` and
+    `et_regressor_fit` passes `ExtraTreesConfig().for_regression()`. Every
+    slot overwrites its field AFTER the base is taken,
     so no default can shadow what the caller sent -- DEVIATION 458 is what
     happened when the regressor applied `for_regression()` the other way round
     and its `max_features_spec = ALL` default overwrote slots 8-9 of every
@@ -138,8 +152,11 @@ def _config_from(
     config.ccp_alpha = Float64(py=params[15])
     config.has_class_weight = Int(py=params[16]) != 0
     config.has_monotonic_cst = Int(py=params[17]) != 0
-    config.max_samples_set = Int(py=params[18]) != 0
+    config.max_samples = Int(py=params[18])
     config.max_leaf_nodes = Int32(Int(py=params[19]))
+    # slot 21, DEVIATION 459: the criterion code, written over the base's
+    # default like every other slot.
+    config.criterion = Int32(Int(py=params[21]))
     return config^
 
 
@@ -148,8 +165,10 @@ def _forest_out(result: FitResult) raises -> PythonObject:
     meta]`, all Python lists.
 
     `meta` is `[n_trees, num_outputs, depth_cap_bound, resolved_max_depth,
-    max_features_count]` -- the last three are what `FitResult`/`FitPlan`
-    exist to report rather than hide."""
+    max_features_count, n_sampled_rows]` -- the last four are what
+    `FitResult`/`FitPlan` exist to report rather than hide (`n_sampled_rows`
+    is the bootstrap sample size the fit used, 0 without bootstrap;
+    DEVIATION 460)."""
     var offsets = Python.list()
     var colid = Python.list()
     var quesval = Python.list()
@@ -176,6 +195,7 @@ def _forest_out(result: FitResult) raises -> PythonObject:
     meta.append(PythonObject(1 if result.depth_cap_bound else 0))
     meta.append(PythonObject(Int(result.plan.params.max_depth)))
     meta.append(PythonObject(result.plan.max_features_count))
+    meta.append(PythonObject(Int(result.plan.n_sampled_rows)))
     var out = Python.list()
     out.append(offsets)
     out.append(colid)
@@ -206,6 +226,11 @@ def et_classifier_fit_binding(
     var n_classes = Int(py=params[2])
     var device = Int(py=params[20]) != 0
     var config = _config_from(params, ExtraTreesConfig())
+    if config.criterion != CRITERION_GINI and config.criterion != CRITERION_ENTROPY:
+        raise Error(
+            "et_classifier_fit: criterion (slot 21) must be GINI (0) or"
+            " ENTROPY (1); got " + String(config.criterion)
+        )
     var x = _copy_f32(x_addr, n_rows * n_features)
     var y = _copy_f32(y_addr, n_rows)
 
@@ -249,6 +274,11 @@ def et_regressor_fit_binding(
     var n_features = Int(py=params[1])
     var device = Int(py=params[20]) != 0
     var config = _config_from(params, ExtraTreesConfig().for_regression())
+    if config.criterion != CRITERION_MSE:
+        raise Error(
+            "et_regressor_fit: criterion (slot 21) must be MSE (2); got "
+            + String(config.criterion)
+        )
     var x = _copy_f32(x_addr, n_rows * n_features)
     var y = _copy_f32(y_addr, n_rows)
 

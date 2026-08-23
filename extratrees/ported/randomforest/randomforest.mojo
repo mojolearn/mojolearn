@@ -17,11 +17,17 @@ tree `j` draw different thresholds on identical data. `tree_check` asserts
 exactly that, because a forest whose trees are identical is one tree reported a
 hundred times.
 
-**`bootstrap=False` IS sklearn's ExtraTrees default and it simplifies this
-file to almost nothing.** cuML's `get_row_sample` (`:68-70`) takes the
-`thrust::sequence` branch when bootstrap is off — the identity permutation,
-every row, every tree. So there is no row sampler here at all. What there IS,
-and what is easy to miss: **each tree needs its OWN `row_ids` buffer**, because
+**`bootstrap=False` IS sklearn's ExtraTrees default.** cuML's
+`get_row_sample` (`:68-70`) takes the `thrust::sequence` branch when bootstrap
+is off — the identity permutation, every row, every tree. **`bootstrap=True`
+is honoured too, since DEVIATION 460** (2026-08-23): the `:64-67` arm draws
+`n_sampled_rows` rows with replacement through RAFT's Philox `uniformInt`,
+seeded by the `:59-62` fnv1a32 chain over `(seed, tree_id)` — the host form is
+`core.philox.uniform_int_host`, the device form `launch_uniform_int`, BOTH the
+RF lane's ports (`ensemble/`), reused rather than re-invented, with the seed
+chain in `mojo_only/pcg_rng.mojo::row_sample_seed`. `n_sampled_rows` is
+sklearn's `max_samples` resolved to a count (None = `n_rows`). What is easy to
+miss either way: **each tree needs its OWN `row_ids` buffer**, because
 `train_*` PARTITIONS it in place. Theirs is per-stream
 (`selected_rows[stream_id]`, `:169`); ours is per tree.
 
@@ -36,7 +42,7 @@ far, and it must not reach for the zeroing convenience wrapper.
 **THE FOREST HAS A DEVICE ARM, AND IT IS THE SAME LOOP.** `fit_classification`
 calls the host trainer per tree; `fit_classification_device` calls
 `train_classification_device` per tree instead, and nothing else about the loop
-changes — same `error_checking`, same `bootstrap=True` refusal by name, same
+changes — same `error_checking`, same `row_sample_for` seed per tree, same
 per-tree `row_ids`, same `i` passed as the tree id. That is the whole of the
 difference, and it is why the two produce the SAME forest: deviation 183 closed
 the last gap between the device and host trees, so tree `i` of the device
@@ -62,7 +68,7 @@ not consequences:
 `fit_regression_device` is the regression twin of the same loop, added when
 deviation 206 brought the regression device path level: same upload-once
 dataset (DEVIATION 184's shape), same per-tree `row_ids`, same `bootstrap`
-refusal by name, with the workspace also hoisted to the fit because deviation
+handling, with the workspace also hoisted to the fit because deviation
 202 gave regression a per-tree workspace to hoist. It takes labels ALREADY
 QUANTIZED (deviation 135) plus the scale that produced them; the estimator's
 `fit_extra_trees_regressor_device` derives that quantization so callers do not
@@ -87,36 +93,82 @@ from extratrees.ported.decisiontree.batched_levelalgo.builder import (
     upload_dataset,
 )
 from extratrees.ported.decisiontree.batched_levelalgo.dataset import Dataset
+from extratrees.mojo_only.pcg_rng import row_sample_seed
+from core.philox import RNG_STRIDE, uniform_int_host
 from max.gpu.host import DeviceContext
 
 
 comptime BOOTSTRAP_DEFAULT = False
 """sklearn's `ExtraTreesClassifier`/`Regressor` default. cuML's `RF_params`
 defaults it TRUE (`randomforest.hpp`), which is Random Forest's default, not
-ExtraTrees'. This directory is ExtraTrees, so the default is sklearn's, and
-`fit_*` REFUSES `bootstrap=True` rather than silently ignoring it — the row
-sampler is not ported."""
+ExtraTrees'. This directory is ExtraTrees, so the default is sklearn's;
+`bootstrap=True` is honoured (DEVIATION 460), never silently ignored."""
 
 
-def row_sample_for(n_rows: Int32, bootstrap: Bool) raises -> List[Int32]:
-    """`randomforest.cuh:50-72`, the `bootstrap == false` arm.
-
-    Theirs is `thrust::sequence(...)` over `selected_rows` (`:69`) — the
-    identity permutation. The bootstrap arm (`:66`) draws
-    `uniformInt(0, n_rows)` with replacement through a Philox generator seeded
-    by `fnv1a32(fnv1a32(basis, seed), tree_id)`; it is NOT ported, because
-    sklearn's ExtraTrees does not use it and porting a sampler nothing calls
-    would be an unwired file (rule 3).
-    """
+def resolve_n_sampled_rows(
+    n_rows: Int32, bootstrap: Bool, n_sampled_rows: Int32
+) raises -> Int32:
+    """`selected_rows.size()`: `n_sampled_rows` when bootstrapping (0 = all
+    `n_rows`, sklearn's `max_samples=None`), exactly `n_rows` otherwise --
+    the identity permutation has no other width (`:69`), so a caller who
+    sets a count without bootstrap is refused by name, as sklearn refuses
+    `max_samples` without `bootstrap` (`_forest.py:411-416`)."""
     if bootstrap:
+        if n_sampled_rows < 0:
+            raise Error(
+                "n_sampled_rows must be >= 0; got " + String(n_sampled_rows)
+            )
+        return n_rows if n_sampled_rows == 0 else n_sampled_rows
+    if n_sampled_rows != 0 and n_sampled_rows != n_rows:
         raise Error(
-            "bootstrap=True is not ported in extratrees/: sklearn's"
-            " ExtraTrees defaults to bootstrap=False and the row sampler"
-            " (randomforest.cuh:66) has no caller here. Refused by name"
-            " rather than silently ignored."
+            "n_sampled_rows="
+            + String(n_sampled_rows)
+            + " without bootstrap: the identity permutation (randomforest"
+            ".cuh:69) is n_rows wide. sklearn refuses max_samples without"
+            " bootstrap=True for the same reason (_forest.py:411)."
+        )
+    return n_rows
+
+
+def row_sample_for(
+    n_rows: Int32,
+    bootstrap: Bool,
+    n_sampled_rows: Int32 = 0,
+    seed: UInt64 = 0,
+    tree_id: Int32 = 0,
+) raises -> List[Int32]:
+    """`randomforest.cuh:50-72`, `get_row_sample`, BOTH arms, on the host.
+
+    `bootstrap == false` (`:68-70`): `thrust::sequence(...)` over
+    `selected_rows` -- the identity permutation.
+
+    `bootstrap == true` (`:64-67`, DEVIATION 460):
+
+        rng.uniformInt<int>(selected_rows->data(), selected_rows->size(),
+                            0, n_rows, stream);
+
+    under `raft::random::Rng rng(rs, GenPhilox)` with `rs` from `:59-62`
+    (`row_sample_seed`). The host form is `core.philox.uniform_int_host`
+    with the RF lane's pinned stride (`RNG_STRIDE`, its DEVIATION 184: the
+    4 x 108 x 256 geometry of a 108-SM part, because RAFT's mapping is a
+    function of the GPU model and ONE constant has to be chosen), so the
+    list here is BIT-IDENTICAL to the device slot `launch_uniform_int`
+    fills in `builder.mojo::fill_row_slots` -- that is what makes the host
+    and device arms train the same bootstrap forest, and `forest_check`
+    holds them to it.
+    """
+    var n = resolve_n_sampled_rows(n_rows, bootstrap, n_sampled_rows)
+    if bootstrap:
+        return uniform_int_host(
+            UInt64(Int(row_sample_seed(seed, tree_id))),
+            UInt64(0),
+            RNG_STRIDE,
+            Int(n),
+            Int32(0),
+            n_rows,
         )
     var out = List[Int32]()
-    for r in range(Int(n_rows)):
+    for r in range(Int(n)):
         out.append(Int32(r))
     return out^
 
@@ -158,6 +210,7 @@ def fit_classification(
     n_trees: Int32,
     seed: UInt64,
     bootstrap: Bool = BOOTSTRAP_DEFAULT,
+    n_sampled_rows: Int32 = 0,
 ) raises -> Forest:
     """`randomforest.cuh:155-195`, the tree loop.
 
@@ -175,11 +228,15 @@ def fit_classification(
     if n_classes < 1:
         raise Error("n_classes must be >= 1; got " + String(n_classes))
 
+    var n_sampled = resolve_n_sampled_rows(n_rows, bootstrap, n_sampled_rows)
     var forest = Forest(n_classes)
     for tree_id in range(Int(n_trees)):
         # `:169` -- each tree gets its OWN row list, because `train_*`
-        # partitions it in place.
-        var row_ids = row_sample_for(n_rows, bootstrap)
+        # partitions it in place. `:59-67` -- the bootstrap arm is keyed by
+        # `(seed, tree_id)` (DEVIATION 460).
+        var row_ids = row_sample_for(
+            n_rows, bootstrap, n_sampled, seed, Int32(tree_id)
+        )
         var dataset = Dataset(
             rebind[MutPointer[Float32, MutUntrackedOrigin]](
                 x_col_major.unsafe_ptr()
@@ -189,7 +246,7 @@ def fit_classification(
             ),
             n_rows,
             n_cols,
-            n_rows,
+            n_sampled,
             n_cols,
             rebind[MutPointer[Int32, MutUntrackedOrigin]](
                 row_ids.unsafe_ptr()
@@ -276,12 +333,14 @@ def fit_classification_device(
     n_trees: Int32,
     seed: UInt64,
     bootstrap: Bool = BOOTSTRAP_DEFAULT,
+    n_sampled_rows: Int32 = 0,
 ) raises -> Forest:
     """`randomforest.cuh:155-195` again, with the split search on the GPU.
 
     Everything the host loop does, this does: `error_checking` and
-    `validity_check` first, `bootstrap=True` REFUSED BY NAME through
-    `row_sample_for`, and `i` passed as the tree id — which is what makes the
+    `validity_check` first, the bootstrap count resolved through
+    `resolve_n_sampled_rows` (the draw itself is the device's,
+    `fill_row_slots`, DEVIATION 460), and `i` passed as the tree id — which is what makes the
     trees differ (deviation 130 hashes it into the split key). The argument
     list is the host one plus a `DeviceContext`, and the labels stay
     `Float32` on purpose so a caller can hand the SAME data to either arm and
@@ -322,11 +381,11 @@ def fit_classification_device(
         ctx, x_col_major, class_ids, n_rows, n_cols, n_classes
     )
 
-    # The bootstrap refusal (`row_sample_for` raises BY NAME) fires once for
-    # the forest; the identity permutation it returns is never read by the
-    # device path -- deviation 200 fills row lists with a sequence KERNEL.
-    var row_ids = row_sample_for(n_rows, bootstrap)
-    _ = row_ids.unsafe_ptr()
+    # The count is resolved (and a bad one refused BY NAME) once for the
+    # forest; the rows themselves are drawn ON THE DEVICE -- deviation 200
+    # fills the identity with a sequence KERNEL, DEVIATION 460 fills a
+    # bootstrap slot with `launch_uniform_int`.
+    var n_sampled = resolve_n_sampled_rows(n_rows, bootstrap, n_sampled_rows)
 
     # DEVIATION 211: the whole forest through ONE merged-frontier trainer --
     # every tree's level runs in the same launches -- instead of a per-tree
@@ -346,7 +405,8 @@ def fit_classification_device(
         tree_ids.append(Int32(tree_id))
     var forest = Forest(n_classes)
     forest.trees = train_forest_classification_device(
-        ctx, device_dataset, params, tree_ids, seed
+        ctx, device_dataset, params, tree_ids, seed,
+        bootstrap=bootstrap, n_sampled_rows=n_sampled,
     )
     forest.n_trees = n_trees
     return forest^
@@ -361,14 +421,18 @@ def fit_regression(
     n_trees: Int32,
     seed: UInt64,
     bootstrap: Bool = BOOTSTRAP_DEFAULT,
+    n_sampled_rows: Int32 = 0,
 ) raises -> Forest:
     """The regression arm of the same loop."""
     error_checking(n_rows, n_cols, n_trees)
     validity_check(params)
 
+    var n_sampled = resolve_n_sampled_rows(n_rows, bootstrap, n_sampled_rows)
     var forest = Forest(1)
     for tree_id in range(Int(n_trees)):
-        var row_ids = row_sample_for(n_rows, bootstrap)
+        var row_ids = row_sample_for(
+            n_rows, bootstrap, n_sampled, seed, Int32(tree_id)
+        )
         var dataset = Dataset(
             rebind[MutPointer[Float32, MutUntrackedOrigin]](
                 x_col_major.unsafe_ptr()
@@ -378,7 +442,7 @@ def fit_regression(
             ),
             n_rows,
             n_cols,
-            n_rows,
+            n_sampled,
             n_cols,
             rebind[MutPointer[Int32, MutUntrackedOrigin]](
                 row_ids.unsafe_ptr()
@@ -404,6 +468,7 @@ def fit_regression_device(
     n_trees: Int32,
     seed: UInt64,
     bootstrap: Bool = BOOTSTRAP_DEFAULT,
+    n_sampled_rows: Int32 = 0,
 ) raises -> Forest:
     """A regression forest with its split search on the GPU.
 
@@ -423,10 +488,9 @@ def fit_regression_device(
     var dataset = upload_dataset(
         ctx, x_col_major, labels_q, n_rows, n_cols, 1
     )
-    # The bootstrap refusal fires once for the forest; deviation 200 fills
-    # the device row lists with a sequence kernel and never reads this.
-    var row_ids = row_sample_for(n_rows, bootstrap)
-    _ = row_ids.unsafe_ptr()
+    # The count is resolved once for the forest; the rows are drawn on the
+    # device (deviation 200's sequence kernel, DEVIATION 460's Philox draw).
+    var n_sampled = resolve_n_sampled_rows(n_rows, bootstrap, n_sampled_rows)
     # DEVIATION 211: one merged-frontier trainer for the whole forest; the
     # per-group workspace lives inside it now (deviation 202, further).
     var tree_ids = List[Int32]()
@@ -434,7 +498,8 @@ def fit_regression_device(
         tree_ids.append(Int32(tree_id))
     var forest = Forest(1)
     forest.trees = train_forest_regression_device(
-        ctx, dataset, scale, params, tree_ids, seed
+        ctx, dataset, scale, params, tree_ids, seed,
+        bootstrap=bootstrap, n_sampled_rows=n_sampled,
     )
     forest.n_trees = n_trees
     return forest^

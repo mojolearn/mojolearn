@@ -12,8 +12,9 @@ the caller's side, from one that works. Almost all refusals fire in the Mojo
 layer (`extratrees/estimator.mojo`), which is the single place both the host
 and device arms resolve their configuration; this wrapper refuses only what
 never crosses the boundary: the criteria this port has not transcribed
-(UNPORTED.tsv rows 7 and 11-14) and the two forest-level knobs that do not
-exist here (`n_jobs`, `verbose`). The one time this sentence was false --
+(UNPORTED.tsv rows 7 and 12-14; row 11, entropy, is PORTED -- DEVIATION
+459) and the two forest-level knobs that do not exist here (`n_jobs`,
+`verbose`). The one time this sentence was false --
 the regressor's `max_features` rode across and was overwritten on the far
 side (DEVIATION 458) -- `extratrees/tools/wrapper_reach_check.py` now gates
 from this side of the boundary.
@@ -26,10 +27,21 @@ TWO DEVIATIONS FROM sklearn'S CONTRACT, STATED RATHER THAN HIDDEN:
   default. Pass an int to choose a different seed.
 * `device` is a constructor parameter sklearn does not have: "gpu" (default)
   runs the split search on the GPU, "cpu" runs the host transcription. The
-  two produce the SAME forest for classification (bit-identical, the lane's
-  device_forest_check) and structure-identical trees for regression whose
-  leaf values differ by at most one fixed-point quantization step
-  (deviation 135).
+  two produce the SAME forest for classification under `criterion='gini'`
+  (bit-identical, the lane's device_forest_check) and structure-identical
+  trees for regression whose leaf values differ by at most one fixed-point
+  quantization step (deviation 135). Under `criterion='entropy'` the split
+  key is a Float32 built with `log` (DEVIATION 459): bit-identical across
+  the two arms under NUMERIC_IDENTICAL (one portable `log`); under the
+  default FAST build each arm uses its own backend's `log` and the two
+  forests can differ where a last-bit difference re-decides a near-tie.
+
+BOOTSTRAP (DEVIATION 460): `bootstrap=True` draws each tree's rows with
+replacement through cuML's own sampler (the fnv1a32 `(seed, tree)` chain
+feeding RAFT's Philox `uniformInt`, reused from the RF lane), and
+`max_samples` is resolved exactly as sklearn's `_get_n_samples_bootstrap`
+resolves it (None = n_rows, int = that count, float f = max(int(f *
+n_rows), 1)). `oob_score` stays refused: the out-of-bag mask is not ported.
 
 X IS COPIED TWICE PER FIT: once by NumPy to column-major float32 (the
 builder's layout, cuML's own) and once across the boundary into Mojo. On
@@ -50,12 +62,21 @@ _MF_SQRT = -1
 _MF_LOG2 = -2
 _MF_ALL = -3
 
+# decisiontree.mojo's CRITERION_* codes, slot 21 of the params list.
+_CRITERION_GINI = 0
+_CRITERION_ENTROPY = 1
+_CRITERION_MSE = 2
+
+# sklearn's classifier criteria -> the code; 'log_loss' is sklearn's alias
+# of 'entropy' (the same Entropy criterion object, _classes.py).
+_CLASSIFIER_CRITERIA = {
+    "gini": _CRITERION_GINI,
+    "entropy": _CRITERION_ENTROPY,
+    "log_loss": _CRITERION_ENTROPY,
+}
+
 _UNPORTED_CRITERIA = {
     # sklearn name -> (which estimator, the recorded reason)
-    "entropy": ("classifier", "UNPORTED.tsv row 11: cuML objectives.cuh"
-                ":110-193, marked 'not yet'"),
-    "log_loss": ("classifier", "sklearn's alias of entropy; UNPORTED.tsv"
-                 " row 11"),
     "friedman_mse": ("regressor", "no cuML counterpart; the exhaustive"
                      " splitter it serves is the ensemble/ lane"),
     "absolute_error": ("regressor", "UNPORTED.tsv row 7: MAE needs an order"
@@ -100,14 +121,35 @@ def _max_features_slots(max_features):
     return 0, float(max_features)
 
 
-def _fit_params(n_rows, n_features, n_classes, cfg, device):
-    """The 21-slot params list, in _mojolearn_trees.mojo's exact order:
+def _n_samples_bootstrap(n_rows, max_samples):
+    """sklearn's `_get_n_samples_bootstrap` (`ensemble/_bootstrap.py:10-62`,
+    unweighted branch), as the COUNT slot 18 carries: None -> 0 (meaning
+    n_rows), int -> itself, float f -> max(int(f * n_rows), 1). The value
+    check is sklearn's `_parameter_constraints` (`_forest.py:198-202`)."""
+    if max_samples is None:
+        return 0
+    if isinstance(max_samples, bool):
+        raise ValueError("max_samples must be None, an int >= 1 or a float")
+    if isinstance(max_samples, (int, np.integer)):
+        if max_samples < 1:
+            raise ValueError(
+                f"max_samples={max_samples} must be >= 1 when an int"
+            )
+        return int(max_samples)
+    f = float(max_samples)
+    if not f > 0.0:
+        raise ValueError(f"max_samples={max_samples} must be > 0 when a float")
+    return max(int(f * n_rows), 1)
+
+
+def _fit_params(n_rows, n_features, n_classes, cfg, device, criterion):
+    """The 22-slot params list, in _mojolearn_trees.mojo's exact order:
     n_rows, n_features, n_classes, n_estimators, max_depth,
     min_samples_split, min_samples_leaf, min_weight_fraction_leaf,
     max_features_spec, max_features_fraction, min_impurity_decrease,
     bootstrap, oob_score, random_state, warm_start, ccp_alpha,
-    has_class_weight, has_monotonic_cst, max_samples_set, max_leaf_nodes,
-    device."""
+    has_class_weight, has_monotonic_cst, max_samples (resolved count),
+    max_leaf_nodes, device, criterion."""
     spec, fraction = _max_features_slots(cfg["max_features"])
     return [
         int(n_rows),
@@ -128,9 +170,10 @@ def _fit_params(n_rows, n_features, n_classes, cfg, device):
         float(cfg["ccp_alpha"]),
         0 if cfg["class_weight"] is None else 1,
         0 if cfg["monotonic_cst"] is None else 1,
-        0 if cfg["max_samples"] is None else 1,
+        _n_samples_bootstrap(n_rows, cfg["max_samples"]),
         -1 if cfg["max_leaf_nodes"] is None else int(cfg["max_leaf_nodes"]),
         1 if device == "gpu" else 0,
+        int(criterion),
     ]
 
 
@@ -159,7 +202,8 @@ class _ExtraTreesBase:
         Xf = np.asfortranarray(Xa, dtype=np.float32)
         ya = np.ascontiguousarray(y, dtype=np.float32)
         params = _fit_params(
-            n_rows, n_features, n_classes, self._cfg, self.device
+            n_rows, n_features, n_classes, self._cfg, self.device,
+            self._criterion_code,
         )
         out = fit_fn(_addr_ro(Xf), _addr_ro(ya), params)
         del Xf, ya  # the borrow ends with the call
@@ -175,6 +219,10 @@ class _ExtraTreesBase:
         self.depth_cap_bound_ = bool(meta[2])
         self.max_depth_resolved_ = int(meta[3])
         self.max_features_ = int(meta[4])
+        # sklearn's private `_n_samples_bootstrap` (None without bootstrap);
+        # the count the fit USED, reported from the far side of the boundary
+        # so a check can see the knob reach it (DEVIATION 460).
+        self._n_samples_bootstrap = int(meta[5]) or None
         return self
 
     def _vote(self, X):
@@ -307,13 +355,15 @@ class ExtraTreesClassifier(_ExtraTreesBase):
     ):
         super().__init__(device)
         _refuse_forest_knobs(n_jobs, verbose)
-        if criterion != "gini":
+        if criterion not in _CLASSIFIER_CRITERIA:
             reason = _UNPORTED_CRITERIA.get(criterion)
             raise NotImplementedError(
                 f"criterion={criterion!r} is not ported"
                 + (f" ({reason[1]})" if reason else "")
-                + "; only 'gini' is."
+                + "; 'gini', 'entropy' and its alias 'log_loss' are."
             )
+        self.criterion = criterion
+        self._criterion_code = _CLASSIFIER_CRITERIA[criterion]
         self._cfg = dict(
             n_estimators=n_estimators,
             max_depth=max_depth,
@@ -391,6 +441,8 @@ class ExtraTreesRegressor(_ExtraTreesBase):
                 + (f" ({reason[1]})" if reason else "")
                 + "; only 'squared_error' is."
             )
+        self.criterion = criterion
+        self._criterion_code = _CRITERION_MSE
         self._cfg = dict(
             n_estimators=n_estimators,
             max_depth=max_depth,

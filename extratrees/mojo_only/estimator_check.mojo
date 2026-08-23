@@ -36,11 +36,35 @@ from extratrees.ported.decisiontree.decisiontree import (
     CRITERION_ENTROPY,
     CRITERION_GINI,
     CRITERION_MSE,
+    CRITERION_POISSON,
 )
 from extratrees.ported.decisiontree.batched_levelalgo.builder import (
     n_sampled_cols_for,
 )
-from extratrees.ported.randomforest.randomforest import predict_class_forest
+from extratrees.ported.randomforest.randomforest import (
+    Forest,
+    predict_class_forest,
+)
+
+
+def forests_equal(a: Forest, b: Forest) -> Bool:
+    if len(a.trees) != len(b.trees):
+        return False
+    for t in range(len(a.trees)):
+        if a.trees[t].num_nodes() != b.trees[t].num_nodes():
+            return False
+        for i in range(a.trees[t].num_nodes()):
+            if not (a.trees[t].sparsetree[i] == b.trees[t].sparsetree[i]):
+                return False
+        if len(a.trees[t].vector_leaf) != len(b.trees[t].vector_leaf):
+            return False
+        for i in range(len(a.trees[t].vector_leaf)):
+            if (
+                a.trees[t].vector_leaf[i].to_bits()
+                != b.trees[t].vector_leaf[i].to_bits()
+            ):
+                return False
+    return True
 
 
 def refused(config: ExtraTreesConfig) -> Bool:
@@ -154,17 +178,24 @@ def main() raises:
     c3.has_class_weight = True
     assert_true(refused(c3), "class_weight")
     n_refused += 1
+    # DEVIATION 460: bootstrap=True is HONOURED -- both sides of the switch.
     var c4 = base.copy()
     c4.bootstrap = True
-    assert_true(refused(c4), "bootstrap=True")
-    n_refused += 1
+    assert_true(not refused(c4), "bootstrap=True is accepted (DEVIATION 460)")
+    var c4b = base.copy()
+    c4b.bootstrap = True
+    c4b.max_samples = 100
+    assert_true(
+        not refused(c4b), "bootstrap=True with max_samples is accepted"
+    )
+    cells += 2
     var c5 = base.copy()
     c5.oob_score = True
     assert_true(refused(c5), "oob_score")
     n_refused += 1
     var c6 = base.copy()
-    c6.max_samples_set = True
-    assert_true(refused(c6), "max_samples")
+    c6.max_samples = 100
+    assert_true(refused(c6), "max_samples WITHOUT bootstrap (sklearn raises)")
     n_refused += 1
     var c7 = base.copy()
     c7.warm_start = True
@@ -190,18 +221,38 @@ def main() raises:
     cells += n_refused
     print("    ", n_refused, "parameters refused by name; the default accepted")
 
-    # A criterion the tree layer refuses must also not slip through here.
+    # DEVIATION 459: entropy is ACCEPTED and rides to the tree params as
+    # itself; a criterion the tree layer refuses (POISSON here, the sabotage
+    # arm of the same switch) must still not slip through.
     var ce = base.copy()
     ce.criterion = CRITERION_ENTROPY
-    var entropy_refused = False
-    try:
-        _ = resolve(ce, 100, 8)
-    except:
-        entropy_refused = True
-    assert_true(
-        entropy_refused, "entropy must be refused, not downgraded to gini"
+    var plan_e = resolve(ce, 100, 8)
+    assert_equal(
+        plan_e.params.split_criterion,
+        Int32(CRITERION_ENTROPY),
+        "entropy must reach DecisionTreeParams as ENTROPY, not as gini",
     )
-    cells += 1
+    var cp = base.copy()
+    cp.criterion = CRITERION_POISSON
+    var poisson_refused = False
+    try:
+        _ = resolve(cp, 100, 8)
+    except:
+        poisson_refused = True
+    assert_true(
+        poisson_refused, "poisson must be refused, not downgraded to gini"
+    )
+    # and the bootstrap plan reports the count it will use
+    var plan_b = resolve(c4b, 1000, 8)
+    assert_true(plan_b.bootstrap, "the plan carries bootstrap")
+    assert_equal(Int(plan_b.n_sampled_rows), 100, "max_samples=100 -> 100")
+    var plan_b0 = resolve(c4, 1000, 8)
+    assert_equal(Int(plan_b0.n_sampled_rows), 1000, "max_samples=None -> n")
+    assert_equal(
+        Int(resolve(base, 1000, 8).n_sampled_rows), 0,
+        "no bootstrap -> 0 reported",
+    )
+    cells += 6
 
     # ---- max_depth=None: mapped, and the substitution REPORTED -----------
     print("[max_depth] sklearn's None, mapped and reported")
@@ -330,10 +381,69 @@ def main() raises:
     assert_equal(len(rfit.forest.trees), 6)
     cells += 2
 
+    # ---- DEVIATION 459 / 460 REACH on the host arm -----------------------
+    # entropy vs gini must build DIFFERENT forests on a fixture where the
+    # criteria are distinguishable (a 4-class hashed target, where the two
+    # impurities rank candidates differently -- a separable binary target
+    # cannot tell them apart, measured); bootstrap vs not must differ;
+    # bootstrap at one seed twice must be identical.
+    print("[reach] entropy and bootstrap move the host forest")
+    var h4 = hashed_classification(0xE459, 2048, 12, 4)
+    var x4 = List[Float32](length=h4.n_rows * h4.n_cols, fill=Float32(0.0))
+    for r in range(h4.n_rows):
+        for c in range(h4.n_cols):
+            x4[c * h4.n_rows + r] = h4.value(r, c)
+    var y4 = List[Float32]()
+    for r in range(h4.n_rows):
+        y4.append(Float32(Int(h4.label[r])))
+    var cg = ExtraTreesConfig()
+    cg.n_estimators = 4
+    cg.max_depth = 6
+    cg.random_state = 7
+    var ce4 = cg.copy()
+    ce4.criterion = CRITERION_ENTROPY
+    var cb4 = cg.copy()
+    cb4.bootstrap = True
+    var fg = fit_extra_trees_classifier(
+        x4, y4, Int32(h4.n_rows), Int32(h4.n_cols), 4, cg
+    )
+    var fe = fit_extra_trees_classifier(
+        x4, y4, Int32(h4.n_rows), Int32(h4.n_cols), 4, ce4
+    )
+    var fb = fit_extra_trees_classifier(
+        x4, y4, Int32(h4.n_rows), Int32(h4.n_cols), 4, cb4
+    )
+    var fb2 = fit_extra_trees_classifier(
+        x4, y4, Int32(h4.n_rows), Int32(h4.n_cols), 4, cb4
+    )
+    var fg2 = fit_extra_trees_classifier(
+        x4, y4, Int32(h4.n_rows), Int32(h4.n_cols), 4, cg
+    )
+    assert_true(
+        forests_equal(fg.forest, fg2.forest), "gini twice is one forest"
+    )
+    assert_true(
+        not forests_equal(fg.forest, fe.forest),
+        "REACH: criterion=entropy must build a different forest than gini",
+    )
+    assert_true(
+        not forests_equal(fg.forest, fb.forest),
+        "REACH: bootstrap=True must build a different forest than False",
+    )
+    assert_true(
+        forests_equal(fb.forest, fb2.forest),
+        "bootstrap=True at random_state 7 twice is one forest",
+    )
+    assert_equal(Int(fb.plan.n_sampled_rows), h4.n_rows)
+    cells += 5
+    print("     gini != entropy, bootstrap != none, bootstrap repeats")
+
     _ = gx.unsafe_ptr()
     _ = glab.unsafe_ptr()
     _ = hx.unsafe_ptr()
     _ = hy.unsafe_ptr()
+    _ = x4.unsafe_ptr()
+    _ = y4.unsafe_ptr()
 
     print("estimator: ", cells, "cells")
     print("estimator_check: PASS")

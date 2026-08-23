@@ -3379,3 +3379,210 @@ ONE digest per arm (three FAIL pairs on gpu, three on cpu) and
 `max_features_` is 16 for every form (three FAILs per arm), classifier ok
 -- the check sees exactly the defect and nothing else. FAST rebuild shipped; the
 full lane suite result is in the commit message.
+
+---
+
+## DEVIATION 459 -- Entropy: cuML's float gain is the key, published as a FLOAT SEAM beside the integer Gini core (UNPORTED.tsv row 11 retired)
+
+**Theirs.** `EntropyObjectiveFunction` (`objectives.cuh:110-193` at
+`00094f7`): `GainPerSplit` (`:132-168`) is the information gain in `DataT`,
+`raft::log(p) / raft::log(DataT(2))` per class per child with the
+`min_samples_leaf` early return and the three `!= 0` guards; the builder
+reduces candidates on that float through `Split::update` (`split.cuh:76-
+90`): greater gain wins, equal gain falls to `colid`, then `quesval`.
+`SetLeafVector` (`:181-191`) is byte for byte Gini's.
+
+**Ours.** `objectives.mojo::EntropyObjectiveFunction` transcribes
+`GainPerSplit` statement for statement (DEVIATION 143's two index edits,
+their locals' names, THEIR association order -- no `fma` introduced where
+theirs has none, because the gain IS the key here and an fma would be a
+different key), plus sklearn `Entropy.node_impurity` /
+`children_impurity` (`_criterion.pyx:548-602`) for the reported
+impurities, and `GainKeyExact`, which is the whole deviation:
+
+The Gini core selects on DEVIATION 144's EXACT INTEGER rational, published
+per cell as `(num, den)` and compared by cross-multiplication in the
+reduction (`split.mojo::compare_exact_key`). Entropy CANNOT live in that
+core -- `p log p` has no rational form in the counts, and a fixed-point log
+table would be an invention neither upstream has. So entropy is a FLOAT
+SEAM published THROUGH the same integer pair: `num =
+float_gain_key(gain)`, `den = 1`, `valid = 1`, where `float_gain_key`
+(`builder_kernels_impl.mojo`, shared by the kernel and the host oracle) is
+the order-preserving sign-magnitude map of the Float32 gain onto `Int64`.
+With `den == 1` the reduction's cross-multiply IS an integer compare of the
+keys, so the candidate order is exactly cuML's float `>`; an EQUAL key
+(equal gain bits -- and the map gives `-0.0` and `+0.0` the same key, as
+float `==` does) falls through to DEVIATION 194's tie arms, which are
+cuML's `colid`, then `quesval`. `range_key` was NOT reused: it orders the
+two zeros, right for a range fold and wrong for a gain tie. Nothing in the
+reduction, the readback, `split_not_valid` or the host-side `Split`
+construction changes; `score_to_candidate_kernel` gains a `criterion`
+argument and, for ENTROPY, computes the gain through the ONE transcription
+(`builder.mojo::entropy_gain_per_split` bitcasts the kernel's Int32
+accumulators to `CountBin` -- no second copy to drift, unlike Gini's
+historical `gain_per_split`) and publishes it as metric AND key. The host
+`node_split_random_gini` takes the same `criterion`, builds the same
+`GiniProxyExact(key, 1)` and runs the same `CompareProxyExact`, so host
+and device ORDER identically by construction; a device/host difference
+can only come from the gain BITS.
+
+**The log, and where its bits come from.** Every `raft::log` is
+`identical_log` (`mojo_only/numerics.mojo`, IDENTITY_PATHS row 12) --
+the shape `ensemble/decisiontree/batched_levelalgo/objectives.mojo`'s
+DEVIATION 406 gave RF's entropy, with its `_log_seam` / `_ftz_seam`
+helpers copied. Under NUMERIC_FAST the wrapper IS `std.math.log`
+verbatim, so the default build is cuML's expression through each
+backend's own lowering; under NUMERIC_IDENTICAL it is `portable_logf`,
+one Cephes polynomial through fma on every backend, and every stored
+intermediate is `ftz`'d (row 10) in cuML's association order so the FAST
+arm is the transcription's arithmetic unchanged. The 217 clamp applies
+(the information gain is provably non-negative; a negative float is
+cancellation and would leaf the node through `split_not_valid`).
+
+**What is claimed about device == host, and what is not.** Under
+IDENTICAL the host arm and the device arm compute the same `log` and the
+same pinned arithmetic, so the entropy forest is bit-identical across the
+arms, and `device_forest_check` ASSERTS it under that build. Under FAST
+the host's `std.math.log` and Metal's `log` are two lowerings; a last-bit
+difference in a gain can re-decide a near-tie. `device_forest_check`
+REPORTS the node difference under FAST instead of asserting zero (0 of
+424 nodes on the 4-class hashed fixture on this M4, 2026-08-23, and 0 of
+the 20000-row E2 fixture's forest: `et_clf_entropy` 10 trees hash equal
+gpu vs cpu through the wrapper -- measured, not promised). The wrapper's
+docstring states this. The exact-argmax guarantee DEVIATION 144 gives
+Gini is NOT extended to entropy.
+
+**Price.** Entropy candidates are ordered by a Float32 built with a
+vendor `log` under FAST -- two candidates whose true gains differ by less
+than the rounding can order either way, which is cuML's own behaviour;
+sklearn (float64, libm) is not bit-comparable to either.
+
+**MEASURED** (wrapper_reach_check fixture, 4096x16 hashed, 4-class target,
+`n_estimators=4, max_depth=6, random_state=7`, forest sha256 prefix):
+gini `c24fb8381387eb18`, entropy `1ba1ae84157063fa`, log_loss
+`1ba1ae84157063fa` (the alias), same on gpu and cpu; SABOTAGE -- the
+wrapper says entropy, params slot 21 forced to gini's code -- collapses
+to `c24fb8381387eb18`. On the separable BINARY fixture the build smoke
+used (512x6), gini and entropy built the SAME forest (`bb123f221810c43b`)
+-- a binary separable target cannot see the criterion, so every reach
+check uses a 4-class one. E2 (20000x24, 10 trees, depth 8, seed 7):
+`et_clf_entropy` pred `b8924c3a87f9aba5` FAST, `et_clf_logloss_alias`
+equal. `objectives_check` holds the f32 `GainPerSplit` within 1e-5
+relative and the f64 one within 1e-12 of an independent class-major
+float64 information gain on 64 hashed candidates, the sklearn impurities
+and proxy within 1e-12 of their definition, the key's order equal to the
+float's on every consecutive pair, the two zeros tied, and 5 consecutive
+candidate pairs ranked oppositely by gini and entropy (the fixture CAN see
+the criterion).
+
+**Gate.** objectives_check (entropy section), host_splitter_check,
+estimator_check (entropy accepted and reaches `DecisionTreeParams`;
+poisson still refused), device_forest_check section 11, params_check
+(ENTROPY moved to the accepted list), wrapper_reach_check (the table above
+with the slot-21 sabotage), and the build smoke's 4-class reach line.
+Existing cells' hashes unchanged (E2 FAST: et_clf `f6ecbc1ac97d3cf0`,
+et_reg `49243f47fb559159`, et_clf_allfeat `05b257ee8fe8c61a`,
+et_clf_3class `2ed393e4c6085e0e`, et_clf_deep `3d78c1ea6e3ba776`, et_reg_cpu
+`f1e6628a87edf97e`, all equal to the pre-change baseline run).
+
+---
+
+## DEVIATION 460 -- bootstrap=True: cuML's `get_row_sample` bootstrap arm, through the RF lane's Philox port; `max_samples` as sklearn resolves it (UNPORTED.tsv row 15 retired)
+
+**Theirs.** `randomforest.cuh:50-72`: `rs = fnv1a32(fnv1a32(basis,
+seed), tree_id)` (`:59-62`), `raft::random::Rng rng(rs, GenPhilox)`, and
+`rng.uniformInt<int>(selected_rows->data(), selected_rows->size(), 0,
+n_rows, stream)` when `bootstrap` (`:64-67`) else `thrust::sequence`
+(`:68-70`). `selected_rows.size()` is `n_sampled_rows`, cuML's
+`max_samples * n_rows`.
+
+**Ours.** The `bootstrap == true` arm is ported on BOTH arms of the
+forest, and nothing about it is invented here:
+
+* the seed chain is `mojo_only/pcg_rng.mojo::row_sample_seed` -- their
+  two lines on this lane's own `fnv1a32`, WITH the RF lane's DEVIATION
+  400 (`ensemble/.../random_utils.mojo::fnv1a32_hash_seed_tree`): the
+  high half of a 64-bit seed gets its round exactly when nonzero, so every
+  seed below 2^32 keeps the transcription's bits and a bootstrap forest
+  here and in `ensemble/` draw the same rows from the same `(seed,
+  tree)`. `forest_check` pins six values computed by hand in Python.
+* the draw is `core/philox.mojo`, the RF lane's port of RAFT's Philox
+  `uniformInt` with its oracle and its DEVIATION 184 geometry (the
+  stride pinned to 4 x 108 x 256, because RAFT's mapping is a function of
+  the GPU model and ONE constant had to be chosen): the host arm calls
+  `uniform_int_host` (`randomforest.mojo::row_sample_for`), the device
+  arm calls `launch_uniform_int` ONCE PER TREE SLOT on a
+  `create_sub_buffer` view of that slot (`builder.mojo::fill_row_slots`,
+  replacing `row_ids_tiled_sequence_kernel` when bootstrapping). No
+  synchronize after the draw, as theirs has none: every reader is
+  queue-ordered behind it. The two arms draw the SAME rows, row for row
+  (`device_forest_check` section 11(a), 1152 slot cells, 0 mismatches).
+* the per-tree row SLOT is `n_sampled_rows` wide (`selected_rows.size()`),
+  not `n_rows`: `NodeQueue`'s root count, the slot base, the group cap
+  and the workspace's row-scaled pieces all take `slot_rows`; the
+  resident dataset stays `n_rows` (M) wide and a slot's entries INDEX it.
+  With-replacement duplicates are fine everywhere a row id is READ
+  (score, range, leaf, partition -- the partition permutes positions, not
+  ids), which is how cuML's builder consumes its own bootstrap.
+* `max_samples` crosses the Python boundary ALREADY RESOLVED to a count by
+  `_n_samples_bootstrap` -- sklearn's `_get_n_samples_bootstrap`
+  (`ensemble/_bootstrap.py:10-62`, unweighted branch): None -> `n_rows`,
+  int -> itself, float f -> `max(int(f * n_rows), 1)`; the value
+  constraints are `_forest.py:198-202`'s. The count rides as params slot
+  18 (the old 0/1 `max_samples_set` flag, which only existed to refuse),
+  `ExtraTreesConfig.max_samples: Int` (0 = None), `FitPlan.n_sampled_rows`,
+  and is reported back as `meta[5]` / `_n_samples_bootstrap` so a check can
+  see the knob reach the far side.
+* what stays REFUSED, by name: `max_samples` without `bootstrap` (sklearn
+  raises, `_forest.py:411-416`; `resolve_n_sampled_rows` refuses on both
+  arms), and `oob_score` -- the out-of-bag set needs the per-tree
+  bootstrap MASK (`RowSampler::store_bootstrap_mask`, `:170-183`), which
+  neither this lane nor `ensemble/` carries. The refusal text names that,
+  not "bootstrap is not ported".
+* the identity trace (DEVIATION 454) records `gN.bootstrap.rowids` --
+  the drawn slots before any level touches them -- when bootstrapping, so
+  a cross-vendor Philox difference has an address ahead of the first
+  `partition.rowids`. Algorithm position only.
+
+**MEASURED** (wrapper_reach_check fixture as in 459, forest sha256 prefix):
+classifier no-bootstrap `c24fb8381387eb18`, bootstrap `9f7ccc54f231982f`
+twice at random_state 7, max_samples=0.5 `8c3bb214800eddb5` reporting
+2048, SAME on gpu and cpu; SABOTAGES -- slot 11 forced to 0 under
+bootstrap=True collapses to `c24fb8381387eb18`, slot 18 forced to 0 under
+max_samples=0.5 collapses to `9f7ccc54f231982f`. Regressor gpu plain
+`47a66dec39eb5828` / bootstrap `a9e235c0a9722740` (twice), cpu
+`b6c8e13769e61582` / `e8076e105848a6a4` (twice). E2 (20000x24, 10 trees,
+depth 8, seed 7, FAST): `et_clf_bootstrap` `5b62e7ed79521ca1`,
+`et_reg_bootstrap` `ba50139fd1769415`, `et_clf_bootstrap_maxsamples`
+`6da435a95ef785b8` -- the two former REFUSED= cells run. `forest_check`:
+1024 draws from 1024 repeat (with replacement), every id in range, tree 0
+and tree 1 differ, a 300-draw sample is the 1024-draw sample's prefix
+(thread t writes t, t+stride, ...; 300 < stride), bootstrap forest !=
+plain, == itself, and every root of a `n_sampled_rows=512` forest holds
+exactly 512 rows. `device_forest_check`: device bootstrap forest ==
+host bootstrap forest bit for bit (also at max_samples=700), != plain,
+repeats. `device_regression_check`: device bootstrap regressor structure
+== host over 396 nodes, != plain.
+
+**Gate.** forest_check, estimator_check, device_forest_check sections 10
+and 11, device_regression_check, wrapper_reach_check, the build smoke.
+
+---
+
+## DEVIATION 461 -- the Python boundary: 22 params slots (criterion rides as slot 21), slot 18 is a count, `meta[5]` reports the sample size
+
+`N_FIT_PARAMS` 21 -> 22. While each entry point had exactly ONE criterion
+the criterion did not ride the params list -- it arrived in the `base`
+config DEVIATION 458 introduced. With ENTROPY admitted (459) the classifier
+entry has two, so the criterion is slot 21 (`decisiontree.mojo`'s
+`CRITERION_*` code), written over `base` like every other slot, and each
+entry point checks the code it admits by name (`et_classifier_fit`: GINI or
+ENTROPY; `et_regressor_fit`: MSE). Slot 18 carries `max_samples` RESOLVED
+TO A COUNT (460) instead of a 0/1 flag. `meta` grows to six:
+`n_sampled_rows` last. The wrapper's `_fit_params` names the 22 slots in
+the same words; `wrapper_reach_check` sabotages slots 11, 18 and 21 from
+the Python side and watches each forest collapse to the unsabotaged one.
+The 21-slot contract never shipped in a release, so no compatibility arm
+is kept.
+
+DEVIATION 462 is reserved and unused by this round.

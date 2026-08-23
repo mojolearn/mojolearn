@@ -113,9 +113,13 @@ byte-for-byte the uninstrumented program.
   records: `dataset.data` / `dataset.labels` (regression adds
   `dataset.labels.quantized` and `dataset.scale`, the fixed-point boundary —
   ET has no quantile/binning stage, so the resident dataset is that
-  boundary), then per group `gN` and level cycle `cM`: `gN.cM.reduce.*` (the
+  boundary), then per group `gN`: `gN.bootstrap.rowids` (the drawn row
+  slots, only when `bootstrap=True` -- DEVIATION 460), and per level cycle
+  `cM`: `gN.cM.reduce.*` (the
   reduced per-node winners off the readback — `colid`/`num`/`den` for
-  classification, `colid`/`gain` for regression), `gN.cM.split.*`
+  classification, where under `criterion='entropy'` `num` is the
+  sign-magnitude key of the float gain and `den` is 1 (DEVIATION 459);
+  `colid`/`gain` for regression), `gN.cM.split.*`
   (post-rescue selected splits: `thresh`/`colid`/`nleft`/`gain`),
   `gN.cM.partition.rowids` (the partition's output permutation), and
   `gN.leaves` (the leaf pass's output). That file's four rules govern every

@@ -61,9 +61,14 @@ out of the regression path, where it does not exist.
 
 from extratrees.mojo_only.pcg_rng import key_for
 from extratrees.ported.decisiontree.batched_levelalgo.dataset import Dataset
+from extratrees.ported.decisiontree.decisiontree import (
+    CRITERION_ENTROPY,
+    CRITERION_GINI,
+)
 from extratrees.ported.decisiontree.batched_levelalgo.objectives import (
     AggregateBin,
     CountBin,
+    EntropyObjectiveFunction,
     GiniObjectiveFunction,
     GiniProxyExact,
     MSEObjectiveFunction,
@@ -487,7 +492,8 @@ def node_split_random_gini[
     seed: UInt64,
     tree_id: Int32,
     weighted_n_samples: Scalar[dtype] = Scalar[dtype](0),
-) raises -> HostSplitResult[dtype]:
+    criterion: Int32 = CRITERION_GINI,
+) raises -> HostSplitResult[dtype] where dtype.is_floating_point():
     """`_splitter.pyx:507-720` for CLASSIFICATION, on our keyed draws.
 
     `weighted_n_samples` is the WHOLE TREE's sample weight, which only
@@ -496,7 +502,23 @@ def node_split_random_gini[
     `improvement`; leave it at 0 and the node's own row count is used, which
     makes `improvement` node-local. Nothing else in the result depends on it,
     and NOTHING in the selection does.
+
+    `criterion` (DEVIATION 459) is `CRITERION_GINI` -- the exact rational
+    selects, `objective` scores -- or `CRITERION_ENTROPY`, where an
+    `EntropyObjectiveFunction` built from the same `nclasses` /
+    `min_samples_leaf` computes cuML's float gain, `GainKeyExact` turns it
+    into the `(key, 1)` pair, and the SAME `CompareProxyExact` orders it.
+    The name keeps `_gini` because the loop is unchanged and every caller is
+    unchanged; the objective is one branch at `:691`.
     """
+    if criterion != CRITERION_GINI and criterion != CRITERION_ENTROPY:
+        raise Error(
+            "node_split_random_gini: criterion must be GINI or ENTROPY; got "
+            + String(criterion)
+        )
+    var entropy_objective = EntropyObjectiveFunction[dtype](
+        objective.nclasses, objective.min_samples_leaf
+    )
     var begin = Int(work_item.instances.begin)
     var count = Int(work_item.instances.count)
     var nclasses = Int(objective.nclasses)
@@ -644,13 +666,26 @@ def node_split_random_gini[
         # `:674-677` min_weight_leaf and `:679-689` monotonic_cst -> 154.
 
         # `:691` `current_proxy_improvement = criterion.proxy_impurity_improvement()`
-        var proxy_float = objective.ProxyImpurityImprovement(
-            hl, ht, Int32(count), Int32(n_left)
-        )
-        var proxy_exact = objective.ProxyImpurityExact(
-            hl, ht, Int32(count), Int32(n_left)
-        )
-        var gain = objective.GainPerSplit(hl, ht, Int32(count), Int32(n_left))
+        var proxy_float: Scalar[dtype]
+        var proxy_exact: GiniProxyExact
+        var gain: Scalar[dtype]
+        if criterion == CRITERION_ENTROPY:
+            # DEVIATION 459: cuML's entropy gain is the metric AND the key.
+            proxy_float = entropy_objective.ProxyImpurityImprovement(
+                hl, ht, Int32(count), Int32(n_left)
+            )
+            gain = entropy_objective.GainPerSplit(
+                hl, ht, Int32(count), Int32(n_left)
+            )
+            proxy_exact = entropy_objective.GainKeyExact(gain, Int32(count))
+        else:
+            proxy_float = objective.ProxyImpurityImprovement(
+                hl, ht, Int32(count), Int32(n_left)
+            )
+            proxy_exact = objective.ProxyImpurityExact(
+                hl, ht, Int32(count), Int32(n_left)
+            )
+            gain = objective.GainPerSplit(hl, ht, Int32(count), Int32(n_left))
 
         # `:693` `if current_proxy_improvement > best_proxy_improvement`.
         # Ours: DEVIATION 145 -- the EXACT comparator decides, and only on an
@@ -711,15 +746,26 @@ def node_split_random_gini[
         var wl = Scalar[dtype](Int(best.n_left))
         var wr = wn - wl
         var htp = hist_total.unsafe_ptr()
-        impurity_parent = objective.NodeImpurity(htp, wn)
-        objective.ChildrenImpurity(
-            records[best_index].hist_left.unsafe_ptr(),
-            htp,
-            wl,
-            wr,
-            impurity_left,
-            impurity_right,
-        )
+        if criterion == CRITERION_ENTROPY:
+            impurity_parent = entropy_objective.NodeImpurity(htp, wn)
+            entropy_objective.ChildrenImpurity(
+                records[best_index].hist_left.unsafe_ptr(),
+                htp,
+                wl,
+                wr,
+                impurity_left,
+                impurity_right,
+            )
+        else:
+            impurity_parent = objective.NodeImpurity(htp, wn)
+            objective.ChildrenImpurity(
+                records[best_index].hist_left.unsafe_ptr(),
+                htp,
+                wl,
+                wr,
+                impurity_left,
+                impurity_right,
+            )
         var wtotal = weighted_n_samples
         if not (wtotal > 0):
             wtotal = wn

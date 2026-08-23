@@ -65,6 +65,7 @@ the feature), and every kernel in this lane keeps it.
 |---|---|---|---|---|
 | the tree loop | `:165` | HOST, `#pragma omp parallel for` over `n_streams` | HOST, serial | **Metal has no streams** — traps register. Trees are independent, so the answer does not depend on order. |
 | `get_row_sample`, `bootstrap=false` | `:68-70` | `thrust::sequence` on DEVICE | `row_ids_sequence_kernel` on DEVICE | MIRRORED (deviation 200) |
+| `get_row_sample`, `bootstrap=true` | `:59-67` | fnv1a32 `(seed, tree)` -> Philox `uniformInt` on DEVICE | `row_sample_seed` -> `core.philox.launch_uniform_int` per tree slot on DEVICE (`fill_row_slots`) | MIRRORED (DEVIATION 460; the RF lane's RAFT port, its pinned stride) |
 | the dataset | `dataset.h:22-38` | resident for the whole fit | resident for the whole fit | MIRRORED (deviation 184, closed) |
 | `predict` | `:229-242` | HOST loop, `+=` per tree | HOST loop, `+=` per tree | MIRRORED (deviation 147) |
 

@@ -413,14 +413,81 @@ def main() raises:
     # estimator_check for the host arm).
     var refused = False
     var bad = ExtraTreesConfig().for_regression()
-    bad.bootstrap = True
+    bad.max_samples = 50  # WITHOUT bootstrap -- the DEVIATION 460 sabotage arm
     try:
         _ = fit_extra_trees_regressor_device(
             ctx, x_est, y_est, Int32(hashed.n_rows), Int32(hashed.n_cols), bad
         )
     except:
         refused = True
-    assert_true(refused, "bootstrap=True refused by name on the device arm")
+    assert_true(
+        refused, "max_samples without bootstrap refused by name on the device arm"
+    )
+    # DEVIATION 460 on the regressor: bootstrap=True is honoured on BOTH arms,
+    # the device structure equals the host structure (the draw is integer,
+    # the split key exact), and the bootstrap forest differs from the
+    # no-bootstrap one.
+    var boot_cfg = ExtraTreesConfig().for_regression()
+    boot_cfg.bootstrap = True
+    boot_cfg.n_estimators = 4
+    boot_cfg.max_depth = 6
+    boot_cfg.random_state = 7
+    var plain_cfg = boot_cfg.copy()
+    plain_cfg.bootstrap = False
+    var dboot = fit_extra_trees_regressor_device(
+        ctx, x_est, y_est, Int32(hashed.n_rows), Int32(hashed.n_cols), boot_cfg
+    )
+    var hboot = fit_extra_trees_regressor(
+        x_est, y_est, Int32(hashed.n_rows), Int32(hashed.n_cols), boot_cfg
+    )
+    var dplain = fit_extra_trees_regressor_device(
+        ctx, x_est, y_est, Int32(hashed.n_rows), Int32(hashed.n_cols), plain_cfg
+    )
+    var boot_struct_diff = 0
+    var boot_nodes = 0
+    var boot_vs_plain_same = True
+    for t in range(len(dboot.forest.trees)):
+        if dboot.forest.trees[t].num_nodes() != hboot.forest.trees[t].num_nodes():
+            boot_struct_diff += 1
+        else:
+            for i in range(dboot.forest.trees[t].num_nodes()):
+                boot_nodes += 1
+                var a = dboot.forest.trees[t].sparsetree[i]
+                var b = hboot.forest.trees[t].sparsetree[i]
+                if not (
+                    a.ColumnId() == b.ColumnId()
+                    and a.QueryValue().to_bits() == b.QueryValue().to_bits()
+                    and a.LeftChildId() == b.LeftChildId()
+                    and a.InstanceCount() == b.InstanceCount()
+                ):
+                    boot_struct_diff += 1
+        if dboot.forest.trees[t].num_nodes() != dplain.forest.trees[t].num_nodes():
+            boot_vs_plain_same = False
+        else:
+            for i in range(dboot.forest.trees[t].num_nodes()):
+                if not (
+                    dboot.forest.trees[t].sparsetree[i]
+                    == dplain.forest.trees[t].sparsetree[i]
+                ):
+                    boot_vs_plain_same = False
+    assert_equal(
+        boot_struct_diff,
+        0,
+        "the device bootstrap regression forest must have the host bootstrap"
+        " forest's structure, node for node (DEVIATION 460)",
+    )
+    assert_true(
+        not boot_vs_plain_same,
+        "REACH: bootstrap=True must build a different regression forest"
+        " than bootstrap=False on the device arm",
+    )
+    assert_equal(Int(dboot.plan.n_sampled_rows), hashed.n_rows)
+    print(
+        "     bootstrap regressor: device == host structure over",
+        boot_nodes,
+        "nodes; differs from the no-bootstrap forest",
+    )
+    cells += 3
     var wrong_crit = ExtraTreesConfig()  # Gini, the classifier default
     refused = False
     try:

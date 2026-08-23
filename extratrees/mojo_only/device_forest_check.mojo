@@ -95,8 +95,14 @@ from extratrees.mojo_only.fixtures import (
 from extratrees.ported.decisiontree.decisiontree import (
     CRITERION_ENTROPY,
     CRITERION_MSE,
+    CRITERION_POISSON,
     DecisionTreeParams,
 )
+from extratrees.ported.decisiontree.batched_levelalgo.builder import (
+    fill_row_slots,
+)
+from extratrees.ported.randomforest.randomforest import row_sample_for
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from extratrees.ported.decisiontree.flatnode import (
     TreeMetaDataNode,
     predict_leaf,
@@ -162,6 +168,27 @@ def trees_differ(forest: Forest, a: Int, b: Int) -> Bool:
         if not (forest.trees[a].sparsetree[i] == forest.trees[b].sparsetree[i]):
             return True
     return False
+
+
+def forests_equal(a: Forest, b: Forest) -> Bool:
+    """Node for node (the four compared fields) and leaf for leaf."""
+    if len(a.trees) != len(b.trees):
+        return False
+    for t in range(len(a.trees)):
+        if a.trees[t].num_nodes() != b.trees[t].num_nodes():
+            return False
+        for i in range(a.trees[t].num_nodes()):
+            if not nodes_agree(a.trees[t], b.trees[t], i):
+                return False
+        if len(a.trees[t].vector_leaf) != len(b.trees[t].vector_leaf):
+            return False
+        for i in range(len(a.trees[t].vector_leaf)):
+            if (
+                a.trees[t].vector_leaf[i].to_bits()
+                != b.trees[t].vector_leaf[i].to_bits()
+            ):
+                return False
+    return True
 
 
 def device_refused(
@@ -824,12 +851,12 @@ def main() raises:
     c2.has_monotonic_cst = True
     var c3 = cfg.copy()
     c3.has_class_weight = True
-    var c4 = cfg.copy()
-    c4.bootstrap = True
+    # c4 (bootstrap=True) and c11 (entropy) were refusals until DEVIATIONS
+    # 460 / 459 ported them; they are now REACH cases in section 11 below.
     var c5 = cfg.copy()
     c5.oob_score = True
     var c6 = cfg.copy()
-    c6.max_samples_set = True
+    c6.max_samples = 100  # WITHOUT bootstrap: sklearn refuses, so do we
     var c7 = cfg.copy()
     c7.warm_start = True
     var c8 = cfg.copy()
@@ -839,11 +866,11 @@ def main() raises:
     var c10 = cfg.copy()
     c10.n_estimators = 0
     var c11 = cfg.copy()
-    c11.criterion = CRITERION_ENTROPY
+    c11.criterion = CRITERION_POISSON  # a criterion the tree layer refuses
     var c12 = cfg.copy()
     c12.max_features_spec = Int(hashed.n_cols + 4)
 
-    for bad in [c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12]:
+    for bad in [c1, c2, c3, c5, c6, c7, c8, c9, c10, c11, c12]:
         tried += 1
         if device_refused(
             ctx,
@@ -976,7 +1003,8 @@ def main() raises:
             p12,
             4,
             1,
-            True,  # bootstrap
+            False,  # no bootstrap ...
+            100,  # ... but a sample count: the DEVIATION 460 sabotage arm
         )
     except:
         forest_refusals += 1
@@ -1029,10 +1057,163 @@ def main() raises:
     assert_equal(
         forest_refusals,
         4,
-        "bootstrap=True, n_trees=0, n_rows=0 and an out-of-range class id"
-        " must each be refused BY NAME on the device forest",
+        "n_sampled_rows without bootstrap, n_trees=0, n_rows=0 and an"
+        " out-of-range class id must each be refused BY NAME on the device"
+        " forest",
     )
     cells += 4
+
+    # ================= 11. DEVIATIONS 459 / 460 on the device arm ========
+    # (a) the bootstrap SAMPLER, cell for cell: the device slots
+    # `fill_row_slots` writes against the host list `row_sample_for` draws
+    # for the same (seed, tree). Integer draws, so bit-equal or wrong.
+    print("[bootstrap] device row slots == host row sample, per tree")
+    var slot_rows = Int32(hashed.n_rows)
+    var n_slots = 3
+    var d_slots = ctx.enqueue_create_buffer[DType.int32](
+        n_slots * Int(slot_rows)
+    )
+    var slot_trees = List[Int32]()
+    slot_trees.append(Int32(0))
+    slot_trees.append(Int32(3))
+    slot_trees.append(Int32(11))
+    fill_row_slots(
+        ctx, d_slots, n_slots, slot_rows, Int32(hashed.n_rows), True,
+        slot_trees, 0, 0xABC123,
+    )
+    var h_slots = ctx.enqueue_create_host_buffer[DType.int32](
+        n_slots * Int(slot_rows)
+    )
+    ctx.enqueue_copy(dst_buf=h_slots, src_buf=d_slots)
+    ctx.synchronize()
+    var slot_mismatch = 0
+    var slot_cells = 0
+    for si in range(n_slots):
+        var host_rows = row_sample_for(
+            Int32(hashed.n_rows), True, 0, 0xABC123, slot_trees[si]
+        )
+        for i in range(Int(slot_rows)):
+            slot_cells += 1
+            if (
+                h_slots.unsafe_ptr()[unsafe_offset = si * Int(slot_rows) + i]
+                != host_rows[i]
+            ):
+                slot_mismatch += 1
+    assert_equal(
+        slot_mismatch,
+        0,
+        "the device bootstrap slot must equal the host draw, row for row"
+        " (same Philox, same stride, same seed chain)",
+    )
+    print("     ", slot_cells, "slot cells, 0 mismatches")
+    cells += slot_cells
+    _ = d_slots^
+    _ = h_slots^
+
+    # (b) the FORESTS. A 4-class hashed fixture, where gini and entropy
+    # rank candidates differently (a separable binary one cannot see the
+    # criterion -- measured). Bootstrap: device == host bit for bit, differs
+    # from no-bootstrap, repeats at one seed. Entropy: differs from gini on
+    # the device; device == host asserted under NUMERIC_IDENTICAL (one
+    # portable log) and REPORTED under FAST, where each arm's `log` is its
+    # backend's own and a last-bit difference may re-decide a near-tie
+    # (DEVIATION 459).
+    print("[reach] entropy and bootstrap on the device arm")
+    var h4 = hashed_classification(0xE459, 2048, 12, 4)
+    var x4 = column_major(h4)
+    var y4 = float_labels(h4)
+    var cg = ExtraTreesConfig()
+    cg.n_estimators = 4
+    cg.max_depth = 6
+    cg.random_state = 7
+    var ce4 = cg.copy()
+    ce4.criterion = CRITERION_ENTROPY
+    var cb4 = cg.copy()
+    cb4.bootstrap = True
+    var cbh = cg.copy()
+    cbh.bootstrap = True
+    cbh.max_samples = 700
+    var dg4 = fit_extra_trees_classifier_device(
+        ctx, x4, y4, Int32(h4.n_rows), Int32(h4.n_cols), 4, cg
+    )
+    var de4 = fit_extra_trees_classifier_device(
+        ctx, x4, y4, Int32(h4.n_rows), Int32(h4.n_cols), 4, ce4
+    )
+    var he4 = fit_extra_trees_classifier(
+        x4, y4, Int32(h4.n_rows), Int32(h4.n_cols), 4, ce4
+    )
+    var db4 = fit_extra_trees_classifier_device(
+        ctx, x4, y4, Int32(h4.n_rows), Int32(h4.n_cols), 4, cb4
+    )
+    var db4b = fit_extra_trees_classifier_device(
+        ctx, x4, y4, Int32(h4.n_rows), Int32(h4.n_cols), 4, cb4
+    )
+    var hb4 = fit_extra_trees_classifier(
+        x4, y4, Int32(h4.n_rows), Int32(h4.n_cols), 4, cb4
+    )
+    var dbh = fit_extra_trees_classifier_device(
+        ctx, x4, y4, Int32(h4.n_rows), Int32(h4.n_cols), 4, cbh
+    )
+    var hbh = fit_extra_trees_classifier(
+        x4, y4, Int32(h4.n_rows), Int32(h4.n_cols), 4, cbh
+    )
+    assert_true(
+        not forests_equal(dg4.forest, de4.forest),
+        "REACH: criterion=entropy must build a different device forest"
+        " than gini",
+    )
+    assert_true(
+        not forests_equal(dg4.forest, db4.forest),
+        "REACH: bootstrap=True must build a different device forest than"
+        " False",
+    )
+    assert_true(
+        forests_equal(db4.forest, db4b.forest),
+        "bootstrap=True twice at random_state 7 is one device forest",
+    )
+    assert_true(
+        forests_equal(db4.forest, hb4.forest),
+        "the device bootstrap forest must equal the host bootstrap forest"
+        " bit for bit (integer draws, Gini's exact key)",
+    )
+    assert_true(
+        not forests_equal(db4.forest, dbh.forest),
+        "REACH: max_samples=700 must build a different device forest",
+    )
+    assert_true(
+        forests_equal(dbh.forest, hbh.forest),
+        "device == host at max_samples=700 too",
+    )
+    assert_equal(Int(dbh.plan.n_sampled_rows), 700)
+    var ent_nodes = 0
+    var ent_diff = 0
+    for t in range(len(de4.forest.trees)):
+        if de4.forest.trees[t].num_nodes() != he4.forest.trees[t].num_nodes():
+            ent_diff += 1
+            continue
+        for i in range(de4.forest.trees[t].num_nodes()):
+            ent_nodes += 1
+            if not nodes_agree(de4.forest.trees[t], he4.forest.trees[t], i):
+                ent_diff += 1
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        assert_equal(
+            ent_diff,
+            0,
+            "under NUMERIC_IDENTICAL the device entropy forest must equal"
+            " the host entropy forest (one portable log, DEVIATION 459)",
+        )
+        print("     entropy device == host:", ent_nodes, "nodes (IDENTICAL)")
+    else:
+        print(
+            "     entropy device vs host (FAST, each arm's own log):",
+            ent_diff,
+            "of",
+            ent_nodes,
+            "nodes differ -- reported, not asserted (DEVIATION 459)",
+        )
+    cells += 7
+    _ = x4.unsafe_ptr()
+    _ = y4.unsafe_ptr()
 
     _ = xc.unsafe_ptr()
     _ = labels.unsafe_ptr()

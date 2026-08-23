@@ -55,9 +55,10 @@ Per node batch (breadth-first frontier, same shape as any level builder):
 5. **Partition**: stable partition of the node's rows by the winning
    predicate; children join the frontier.
 
-Defaults are sklearn's: `bootstrap=False` (the whole learn set, every tree —
-so this lane does not even need a bootstrap sampler), `max_features='sqrt'`
-classification / `1.0` regression.
+Defaults are sklearn's: `bootstrap=False` (the whole learn set, every tree),
+`max_features='sqrt'` classification / `1.0` regression. `bootstrap=True`
+is honoured too since DEVIATION 460 (cuML's sampler through the RF lane's
+Philox port), and `criterion='entropy'` since DEVIATION 459.
 
 ## Determinism and the oracle problem, stated up front
 
@@ -238,6 +239,8 @@ and three oracles. Every one of them now exists on BOTH the host and the GPU.
 | leaf values | DONE | DONE |
 | breadth-first frontier | DONE | host, as cuML's is — and MERGED ACROSS TREES (deviation 211) |
 | `bootstrap=False` | DONE | DONE |
+| `bootstrap=True`, `max_samples` | DONE (DEVIATION 460) | DONE |
+| `criterion='entropy'` / `'log_loss'` | DONE (DEVIATION 459) | DONE |
 | `max_features` sqrt/1.0 | DONE | DONE |
 | oracle 1: exact host transcription | DONE | it IS the device's oracle |
 | oracle 2: analytic + adversarial fixtures | DONE | DONE |

@@ -172,11 +172,10 @@ def validity_check(params: DecisionTreeParams) raises:
         raise Error(
             "split_criterion=INVERSE_GAUSSIAN is not ported in extratrees/"
         )
-    if params.split_criterion == CRITERION_ENTROPY:
-        raise Error(
-            "split_criterion=ENTROPY is not ported in extratrees/ yet; use"
-            " GINI"
-        )
+    # ENTROPY was refused here until DEVIATION 459 (2026-08-23) ported
+    # `EntropyObjectiveFunction` (`objectives.cuh:110-193`); it now passes
+    # like GINI and MSE do, and `classifier_plan` admits it for the
+    # classifier.
     if params.split_criterion > CRITERION_END or params.split_criterion < 0:
         raise Error(
             "Unknown split criterion " + String(params.split_criterion)

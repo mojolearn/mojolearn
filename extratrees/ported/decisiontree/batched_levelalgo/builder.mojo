@@ -43,6 +43,9 @@ from extratrees.mojo_only.host_splitter import (
     node_split_random_mse,
 )
 from extratrees.ported.decisiontree.decisiontree import (
+    CRITERION_END,
+    CRITERION_ENTROPY,
+    CRITERION_GINI,
     DecisionTreeParams,
     validity_check,
 )
@@ -54,6 +57,7 @@ from extratrees.ported.decisiontree.batched_levelalgo.dataset import Dataset
 from extratrees.ported.decisiontree.batched_levelalgo.objectives import (
     AggregateBin,
     CountBin,
+    EntropyObjectiveFunction,
     GiniObjectiveFunction,
     MSEObjectiveFunction,
 )
@@ -88,6 +92,7 @@ from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels_im
     RANGE_SAB_NONE,
     SCORE_STATUS_SCORED,
     build_workload_info,
+    float_gain_key,
     leaf_kernel,
     node_split_kernel,
     node_feature_range_init_kernel,
@@ -121,6 +126,8 @@ from std.math import ceildiv, fma
 from std.sys.info import size_of
 
 from mojo_only.numerics import ftz
+from core.philox import launch_uniform_int
+from extratrees.mojo_only.pcg_rng import row_sample_seed
 
 
 def max_nodes(max_depth: Int32) -> Int:
@@ -600,6 +607,11 @@ def train_classification(
     var objective = GiniObjectiveFunction[DType.float32](
         n_classes, params.min_samples_leaf
     )
+    # `decisiontree.cuh:253`: CRITERION_END resolves to GINI for
+    # classification. ENTROPY rides through (DEVIATION 459).
+    var criterion = params.split_criterion
+    if criterion == CRITERION_END:
+        criterion = CRITERION_GINI
     var k = n_sampled_cols_for(params, dataset.n)
     var queue = NodeQueue[DType.float32](
         params, dataset.n_sampled_rows, n_classes, tree_id
@@ -625,9 +637,13 @@ def train_classification(
             for c in range(Int(k)):
                 my_colids.append(colids[i * Int(k) + c])
 
-            # `computeSplitKernel`'s replacement, DEVIATION 137.
+            # `computeSplitKernel`'s replacement, DEVIATION 137. The
+            # criterion rides as `params.split_criterion`: Gini selects on
+            # DEVIATION 144's exact rational, Entropy on cuML's float gain
+            # through the same comparator (DEVIATION 459).
             var result = node_split_random_gini[DType.float32](
-                dataset, item, my_colids, objective, seed, tree_id
+                dataset, item, my_colids, objective, seed, tree_id,
+                criterion=criterion,
             )
 
             # DEVIATION 205, which closes 151. `_splitter.pyx:573-577` keeps
@@ -648,7 +664,8 @@ def train_classification(
                     var one = List[Int32]()
                     one.append(nonconst[u])
                     result = node_split_random_gini[DType.float32](
-                        dataset, item, one, objective, seed, tree_id
+                        dataset, item, one, objective, seed, tree_id,
+                        criterion=criterion,
                     )
             splits.append(result.split)
 
@@ -867,6 +884,37 @@ def gain_per_split(
     return gain
 
 
+def entropy_gain_per_split(
+    acc_left: MutPointer[Int32, MutAnyOrigin],
+    acc_total: MutPointer[Int32, MutAnyOrigin],
+    base: Int,
+    nclasses: Int,
+    len_in: Int32,
+    n_left_in: Int32,
+    min_samples_leaf: Int32,
+) -> Float32:
+    """`EntropyObjectiveFunction::GainPerSplit`, `objectives.cuh:132-168`,
+    on device. DEVIATION 459.
+
+    NOT a second transcription: the kernel's Int32 accumulator slices are
+    bitcast to `CountBin` (one `Int32` field, same layout) and handed to the
+    ONE transcription in `objectives.mojo`, which the host oracle also calls.
+    `gain_per_split` above carries its own Gini copy for DEVIATION 183's
+    historical reason; entropy arrives after the rule and takes the single
+    copy. The `log` inside is `identical_log` -- the stdlib under FAST,
+    `portable_logf` under IDENTICAL -- and the 217 clamp is applied inside.
+    """
+    var objective = EntropyObjectiveFunction[DType.float32](
+        Int32(nclasses), min_samples_leaf
+    )
+    return objective.GainPerSplit(
+        acc_left.unsafe_offset(base).unsafe_bitcast[CountBin](),
+        acc_total.unsafe_offset(base).unsafe_bitcast[CountBin](),
+        len_in,
+        n_left_in,
+    )
+
+
 def score_to_candidate_kernel(
     cand_quesval: MutPointer[Float32, MutAnyOrigin],
     cand_colid: MutPointer[Int32, MutAnyOrigin],
@@ -887,8 +935,18 @@ def score_to_candidate_kernel(
     n_cells_in: Int32,
     n_classes_in: Int32,
     min_samples_leaf_in: Int32,
+    criterion_in: Int32,
 ):
     """Scored cells into reduction candidates, elementwise.
+
+    `criterion_in` selects the classification objective (DEVIATION 459):
+    `CRITERION_GINI` publishes the finalize kernel's exact rational and
+    cuML's Gini gain as the metric; `CRITERION_ENTROPY` computes cuML's
+    entropy gain HERE, publishes it as the metric AND as the key
+    (`float_gain_key(gain)` / `1`), so the reduction orders on the float
+    gain exactly as `Split::update` would. The regression path passes
+    `CRITERION_MSE` and takes the first branch (its pair is DEVIATION
+    189's exact MSE key, its metric the `n_classes = 1` gain as before).
 
     ==================================================================
     DEVIATION BLOCK 182 -- this kernel exists because 170 split their
@@ -933,24 +991,40 @@ def score_to_candidate_kernel(
     var n_cells = Int(n_cells_in)
     var n_classes = Int(n_classes_in)
     var min_samples_leaf = min_samples_leaf_in
+    var entropy = criterion_in == CRITERION_ENTROPY
     var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)
     while idx < n_cells:
         if in_status[unsafe_offset=idx] == SCORE_STATUS_SCORED:
             cand_quesval[unsafe_offset=idx] = in_threshold[unsafe_offset=idx]
             cand_colid[unsafe_offset=idx] = colids[unsafe_offset=idx]
-            cand_metric[unsafe_offset=idx] = gain_per_split(
-                in_acc_left,
-                in_acc_total,
-                idx * n_classes,
-                n_classes,
-                in_n_total[unsafe_offset=idx],
-                in_n_left[unsafe_offset=idx],
-                min_samples_leaf,
-            )
             cand_nleft[unsafe_offset=idx] = in_n_left[unsafe_offset=idx]
-            cand_num[unsafe_offset=idx] = in_gini_num[unsafe_offset=idx]
-            cand_den[unsafe_offset=idx] = in_gini_den[unsafe_offset=idx]
+            if entropy:
+                # DEVIATION 459: the float gain is the metric AND the key.
+                var g = entropy_gain_per_split(
+                    in_acc_left,
+                    in_acc_total,
+                    idx * n_classes,
+                    n_classes,
+                    in_n_total[unsafe_offset=idx],
+                    in_n_left[unsafe_offset=idx],
+                    min_samples_leaf,
+                )
+                cand_metric[unsafe_offset=idx] = g
+                cand_num[unsafe_offset=idx] = float_gain_key(g)
+                cand_den[unsafe_offset=idx] = Int64(1)
+            else:
+                cand_metric[unsafe_offset=idx] = gain_per_split(
+                    in_acc_left,
+                    in_acc_total,
+                    idx * n_classes,
+                    n_classes,
+                    in_n_total[unsafe_offset=idx],
+                    in_n_left[unsafe_offset=idx],
+                    min_samples_leaf,
+                )
+                cand_num[unsafe_offset=idx] = in_gini_num[unsafe_offset=idx]
+                cand_den[unsafe_offset=idx] = in_gini_den[unsafe_offset=idx]
             cand_valid[unsafe_offset=idx] = Int32(1)
         else:
             cand_quesval[unsafe_offset=idx] = Float32.MIN_FINITE
@@ -1019,6 +1093,63 @@ def row_ids_tiled_sequence_kernel(
     while idx < total:
         row_ids[unsafe_offset=idx] = Int32(idx - (idx // n_rows) * n_rows)
         idx += stride
+
+
+def fill_row_slots(
+    ctx: DeviceContext,
+    mut d_row_ids: DeviceBuffer[DType.int32],
+    g: Int,
+    slot_rows: Int32,
+    n_rows: Int32,
+    bootstrap: Bool,
+    tree_ids: List[Int32],
+    first: Int,
+    seed: UInt64,
+) raises:
+    """`get_row_sample` (`randomforest.cuh:50-72`) for every tree SLOT of one
+    group, on the device. DEVIATION 460.
+
+    THEIRS, per tree: `rs = fnv1a32(fnv1a32(basis, seed), tree_id)`;
+    `rng(rs, GenPhilox)`; `bootstrap ? rng.uniformInt(selected_rows, 0,
+    n_rows) : thrust::sequence(selected_rows)`.
+
+    OURS: the `bootstrap == false` arm is `row_ids_tiled_sequence_kernel`
+    (DEVIATION 200/211, unchanged); the `bootstrap == true` arm is
+    `core.philox.launch_uniform_int` -- the RF lane's port of RAFT's
+    `uniformInt` under `GenPhilox` (its DEVIATION 184 geometry, its oracle)
+    -- called ONCE PER SLOT on a sub-buffer view of that slot, seeded by
+    `row_sample_seed(seed, tree_id)` (`pcg_rng.mojo`, the same fnv1a32
+    chain with the RF lane's DEVIATION 400 high-half round). Slot `s` is
+    `[s * slot_rows, (s + 1) * slot_rows)` where `slot_rows` is
+    `n_sampled_rows` (sklearn's `max_samples`, None = `n_rows`), so a
+    bootstrap slot is exactly `selected_rows.size()` wide. No synchronize:
+    every kernel that reads the slot is queue-ordered behind the draw, as
+    theirs is behind `uniformInt` on the stream.
+    """
+    var total_rows = g * Int(slot_rows)
+    if not bootstrap:
+        ctx.enqueue_function[row_ids_tiled_sequence_kernel](
+            d_row_ids.unsafe_ptr(),
+            Int32(total_rows),
+            slot_rows,
+            grid_dim=ceildiv(total_rows, 128),
+            block_dim=128,
+        )
+        return
+    for s in range(g):
+        var slot = d_row_ids.create_sub_buffer[DType.int32](
+            s * Int(slot_rows), Int(slot_rows)
+        )
+        launch_uniform_int(
+            ctx,
+            slot,
+            Int(slot_rows),
+            Int32(0),
+            n_rows,
+            UInt64(Int(row_sample_seed(seed, tree_ids[first + s]))),
+        )
+        _ = slot^
+    _ = d_row_ids.unsafe_ptr()
 
 
 @fieldwise_init
@@ -1981,6 +2112,7 @@ def search_batch(
         Int32(n_cells),
         n_classes,
         params.min_samples_leaf,
+        params.split_criterion,
         grid_dim=ceildiv(n_cells, 64),
         block_dim=64,
     )
@@ -2095,15 +2227,23 @@ def train_forest_classification_device(
     seed: UInt64,
     sabotage: Int32 = FOREST_SAB_NONE,
     row_slot_cap: Int = FOREST_ROW_SLOT_CAP,
+    bootstrap: Bool = False,
+    n_sampled_rows: Int32 = 0,
 ) raises -> List[TreeMetaDataNode[DType.float32]]:
     """The shipping entry point: an INERT clock, so no synchronize is ever
     added -- see `PhaseClock`. `_timed` below is the same function with the
     micro-step clock threaded; `bench/fit_once.mojo` calls it directly.
     `MOJOLEARN_STAGE_TIMES=1` (read once, here) enables the clock and prints
-    stage -> seconds at fit end -- see `STAGE_TIMES_ENV`."""
+    stage -> seconds at fit end -- see `STAGE_TIMES_ENV`.
+
+    `bootstrap` / `n_sampled_rows` (DEVIATION 460): with `bootstrap` each
+    tree's row slot is a with-replacement sample of `n_sampled_rows` rows
+    (0 = `n_rows`) drawn by `fill_row_slots`; without it the slot is the
+    identity permutation and `n_sampled_rows` must be 0 or `n_rows`."""
     var clock = PhaseClock(stage_times_enabled())
     var out = train_forest_classification_device_timed(
-        ctx, dataset, params, tree_ids, seed, sabotage, row_slot_cap, clock
+        ctx, dataset, params, tree_ids, seed, sabotage, row_slot_cap, clock,
+        bootstrap, n_sampled_rows,
     )
     print_stage_times(clock, "extratrees classification forest fit")
     return out^
@@ -2118,6 +2258,8 @@ def train_forest_classification_device_timed(
     sabotage: Int32,
     row_slot_cap: Int,
     mut clock: PhaseClock,
+    bootstrap: Bool = False,
+    n_sampled_rows: Int32 = 0,
 ) raises -> List[TreeMetaDataNode[DType.float32]]:
     """Every requested ExtraTree, with ONE merged frontier driving the GPU.
 
@@ -2232,7 +2374,22 @@ def train_forest_classification_device_timed(
     var out = List[TreeMetaDataNode[DType.float32]]()
     # `row_slot_cap` defaults to FOREST_ROW_SLOT_CAP; the batched check
     # passes a tiny cap to REACH the multi-group path at fixture sizes.
-    var group_cap = row_slot_cap // Int(n_rows)
+    # DEVIATION 460: the per-tree row SLOT is `n_sampled_rows` wide --
+    # `selected_rows.size()` in `get_row_sample` -- which is `n_rows` unless
+    # the caller bootstraps with sklearn's `max_samples`. The dataset stays
+    # `n_rows` (M) wide; a slot's entries INDEX it.
+    var slot_rows = n_rows
+    if bootstrap:
+        if n_sampled_rows > 0:
+            slot_rows = n_sampled_rows
+    elif n_sampled_rows != 0 and n_sampled_rows != n_rows:
+        raise Error(
+            "n_sampled_rows="
+            + String(n_sampled_rows)
+            + " without bootstrap: the identity permutation is n_rows wide"
+            " (randomforest.cuh:69)"
+        )
+    var group_cap = row_slot_cap // Int(slot_rows)
     if group_cap < 1:
         group_cap = 1
     clock.mark(ctx)
@@ -2243,19 +2400,25 @@ def train_forest_classification_device_timed(
         var g = len(tree_ids) - first
         if g > group_cap:
             g = group_cap
-        var total_rows = g * Int(n_rows)
+        var total_rows = g * Int(slot_rows)
 
         # ONE row-id buffer for the whole group, slot `s` holding tree
         # `tree_ids[first + s]`'s identity permutation (deviation 200,
-        # tiled). The partition mutates each slot in place across levels.
+        # tiled) or its bootstrap sample (DEVIATION 460). The partition
+        # mutates each slot in place across levels.
         var d_row_ids = ctx.enqueue_create_buffer[DType.int32](total_rows)
-        ctx.enqueue_function[row_ids_tiled_sequence_kernel](
-            d_row_ids.unsafe_ptr(),
-            Int32(total_rows),
-            n_rows,
-            grid_dim=ceildiv(total_rows, 128),
-            block_dim=128,
+        fill_row_slots(
+            ctx, d_row_ids, g, slot_rows, n_rows, bootstrap, tree_ids,
+            first, seed,
         )
+        if trace.enabled and bootstrap:
+            # DEVIATION 460: the drawn row sample is a stage a bit can move
+            # at (the Philox draw, its stride, its range reduction), so it
+            # is recorded BEFORE any level touches it. Algorithm position
+            # only, never a machine property.
+            trace.record_device(
+                ctx, String("g") + String(gi) + ".bootstrap.rowids", d_row_ids
+            )
 
         # THE WORKSPACE, ONCE PER GROUP (deviation 202, further). Its two
         # row-scaled pieces -- the workload bound and the partition's
@@ -2272,12 +2435,12 @@ def train_forest_classification_device_timed(
 
         var queues = List[NodeQueue[DType.float32]]()
         for s in range(g):
-            var base = Int32(s) * n_rows
+            var base = Int32(s) * slot_rows
             if sabotage == FOREST_SAB_SHARED_ROW_BASE:
                 base = Int32(0)
             queues.append(
                 NodeQueue[DType.float32](
-                    params, n_rows, n_classes, tree_ids[first + s], base
+                    params, slot_rows, n_classes, tree_ids[first + s], base
                 )
             )
 
@@ -3010,6 +3173,7 @@ def search_batch_regression(
         Int32(n_cells),
         Int32(1),
         params.min_samples_leaf,
+        params.split_criterion,
         grid_dim=ceildiv(n_cells, 64),
         block_dim=64,
     )
@@ -3145,14 +3309,17 @@ def train_forest_regression_device(
     seed: UInt64,
     sabotage: Int32 = FOREST_SAB_NONE,
     row_slot_cap: Int = FOREST_ROW_SLOT_CAP,
+    bootstrap: Bool = False,
+    n_sampled_rows: Int32 = 0,
 ) raises -> List[TreeMetaDataNode[DType.float32]]:
     """The shipping entry point: an INERT clock -- see `PhaseClock` and the
     classification twin above. `MOJOLEARN_STAGE_TIMES=1` (read once, here)
-    enables the clock and prints stage -> seconds at fit end."""
+    enables the clock and prints stage -> seconds at fit end. `bootstrap` /
+    `n_sampled_rows` as in the classification twin (DEVIATION 460)."""
     var clock = PhaseClock(stage_times_enabled())
     var out = train_forest_regression_device_timed(
         ctx, dataset, scale, params, tree_ids, seed, sabotage, row_slot_cap,
-        clock,
+        clock, bootstrap, n_sampled_rows,
     )
     print_stage_times(clock, "extratrees regression forest fit")
     return out^
@@ -3168,6 +3335,8 @@ def train_forest_regression_device_timed(
     sabotage: Int32,
     row_slot_cap: Int,
     mut clock: PhaseClock,
+    bootstrap: Bool = False,
+    n_sampled_rows: Int32 = 0,
 ) raises -> List[TreeMetaDataNode[DType.float32]]:
     """`train_forest_classification_device`'s regression twin: the SAME
     merged-frontier forest loop (DEVIATION 211 -- read that block; it is not
@@ -3224,7 +3393,22 @@ def train_forest_regression_device_timed(
     var out = List[TreeMetaDataNode[DType.float32]]()
     # `row_slot_cap` defaults to FOREST_ROW_SLOT_CAP; the batched check
     # passes a tiny cap to REACH the multi-group path at fixture sizes.
-    var group_cap = row_slot_cap // Int(n_rows)
+    # DEVIATION 460: the per-tree row SLOT is `n_sampled_rows` wide --
+    # `selected_rows.size()` in `get_row_sample` -- which is `n_rows` unless
+    # the caller bootstraps with sklearn's `max_samples`. The dataset stays
+    # `n_rows` (M) wide; a slot's entries INDEX it.
+    var slot_rows = n_rows
+    if bootstrap:
+        if n_sampled_rows > 0:
+            slot_rows = n_sampled_rows
+    elif n_sampled_rows != 0 and n_sampled_rows != n_rows:
+        raise Error(
+            "n_sampled_rows="
+            + String(n_sampled_rows)
+            + " without bootstrap: the identity permutation is n_rows wide"
+            " (randomforest.cuh:69)"
+        )
+    var group_cap = row_slot_cap // Int(slot_rows)
     if group_cap < 1:
         group_cap = 1
     clock.mark(ctx)
@@ -3235,16 +3419,19 @@ def train_forest_regression_device_timed(
         var g = len(tree_ids) - first
         if g > group_cap:
             g = group_cap
-        var total_rows = g * Int(n_rows)
+        var total_rows = g * Int(slot_rows)
 
         var d_row_ids = ctx.enqueue_create_buffer[DType.int32](total_rows)
-        ctx.enqueue_function[row_ids_tiled_sequence_kernel](
-            d_row_ids.unsafe_ptr(),
-            Int32(total_rows),
-            n_rows,
-            grid_dim=ceildiv(total_rows, 128),
-            block_dim=128,
+        # DEVIATION 460: identity permutation or bootstrap sample per slot,
+        # exactly as the classification twin.
+        fill_row_slots(
+            ctx, d_row_ids, g, slot_rows, n_rows, bootstrap, tree_ids,
+            first, seed,
         )
+        if trace.enabled and bootstrap:
+            trace.record_device(
+                ctx, String("g") + String(gi) + ".bootstrap.rowids", d_row_ids
+            )
 
         var ws = make_level_workspace(
             ctx,
@@ -3258,12 +3445,12 @@ def train_forest_regression_device_timed(
 
         var queues = List[NodeQueue[DType.float32]]()
         for s in range(g):
-            var base = Int32(s) * n_rows
+            var base = Int32(s) * slot_rows
             if sabotage == FOREST_SAB_SHARED_ROW_BASE:
                 base = Int32(0)
             queues.append(
                 NodeQueue[DType.float32](
-                    params, n_rows, 1, tree_ids[first + s], base
+                    params, slot_rows, 1, tree_ids[first + s], base
                 )
             )
 

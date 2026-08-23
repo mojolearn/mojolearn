@@ -111,6 +111,7 @@ step, which is 135's ruling and not a defect.
 
 from extratrees.mojo_only.fixed_point import ceil_log2, choose_scale, quantize
 from extratrees.ported.decisiontree.decisiontree import (
+    CRITERION_ENTROPY,
     CRITERION_GINI,
     CRITERION_MSE,
     DecisionTreeParams,
@@ -246,7 +247,12 @@ struct ExtraTreesConfig(ImplicitlyCopyable, Movable):
     var ccp_alpha: Float64
     var has_class_weight: Bool
     var has_monotonic_cst: Bool
-    var max_samples_set: Bool
+    var max_samples: Int
+    """sklearn's `max_samples` RESOLVED TO A COUNT by the caller
+    (`_bootstrap.py::_get_n_samples_bootstrap`: None -> 0 here, meaning
+    `n_rows`; an int -> itself; a float f -> `max(int(f * n_rows), 1)`).
+    Honoured when `bootstrap`; refused by name otherwise, as sklearn does
+    (`_forest.py:411-416`). DEVIATION 460."""
 
     def __init__(out self):
         """`ExtraTreesClassifier()`'s defaults, name for name."""
@@ -267,7 +273,8 @@ struct ExtraTreesConfig(ImplicitlyCopyable, Movable):
         self.ccp_alpha = 0.0
         self.has_class_weight = False
         self.has_monotonic_cst = False
-        self.max_samples_set = False
+        self.max_samples = 0
+
 
     def for_regression(self) -> Self:
         """`ExtraTreesRegressor()`'s defaults: the same, except `criterion`
@@ -302,23 +309,29 @@ def refuse_unported(config: ExtraTreesConfig) raises:
             "class_weight is not ported: it becomes a per-sample weight, and"
             " sample_weight is unported. See UNPORTED.tsv."
         )
-    if config.bootstrap:
-        raise Error(
-            "bootstrap=True is not ported: sklearn's ExtraTrees defaults to"
-            " False and cuML's with-replacement row sampler"
-            " (randomforest.cuh:64-67) has no caller here. See UNPORTED.tsv."
-        )
+    # `bootstrap=True` is HONOURED since DEVIATION 460 (cuML's
+    # `get_row_sample` bootstrap arm, `randomforest.cuh:64-67`, through the
+    # RF lane's Philox port). What stays refused is what that arm does not
+    # bring: out-of-bag scoring, and `max_samples` without a bootstrap.
     if config.oob_score:
         raise Error(
-            "oob_score=True requires bootstrap=True, which is not ported;"
-            " with bootstrap=False every tree sees every row and there is no"
-            " out-of-bag set to score."
+            "oob_score=True is not ported: out-of-bag scoring needs the"
+            " per-tree bootstrap MASK (cuML RowSampler::store_bootstrap_mask,"
+            " randomforest.cuh:170-183), which neither this lane nor"
+            " ensemble/ carries. The bootstrap itself IS ported"
+            " (DEVIATION 460); only its complement set is not."
         )
-    if config.max_samples_set:
+    if config.max_samples != 0 and not config.bootstrap:
         raise Error(
-            "max_samples applies only when bootstrap=True, which is not"
-            " ported. sklearn itself raises for this combination."
+            "max_samples applies only when bootstrap=True; sklearn itself"
+            " raises for this combination (_forest.py:411-416)."
         )
+    if config.max_samples < 0:
+        raise Error(
+            "max_samples must resolve to a count >= 1 (sklearn's"
+            " _get_n_samples_bootstrap); got " + String(config.max_samples)
+        )
+
     if config.warm_start:
         raise Error(
             "warm_start=True is not ported: there is no incremental fit here,"
@@ -358,6 +371,12 @@ struct FitPlan(ImplicitlyCopyable, Movable):
     """True when the caller passed sklearn's `max_depth=None` and this plan
     substituted a cap. `depth_cap_bound` after the fit says whether it
     mattered."""
+    var bootstrap: Bool
+    """sklearn's `bootstrap`, rides to `fit_*` unchanged (DEVIATION 460)."""
+    var n_sampled_rows: Int32
+    """`selected_rows.size()`: `max_samples` resolved (0 = all rows) when
+    `bootstrap`, else 0. Reported back as `meta[5]` so a caller can see the
+    count the fit used."""
 
 
 def resolve(
@@ -385,7 +404,14 @@ def resolve(
         params.max_depth = config.max_depth
 
     validity_check(params)
-    return FitPlan(params, config.n_estimators, count, unlimited)
+    var n_sampled = Int32(0)
+    if config.bootstrap:
+        n_sampled = Int32(config.max_samples) if config.max_samples > 0 else Int32(n_rows)
+    return FitPlan(
+        params, config.n_estimators, count, unlimited, config.bootstrap,
+        n_sampled,
+    )
+
 
 
 @fieldwise_init
@@ -411,10 +437,11 @@ def classifier_plan(
     refusal cannot reach one and miss the other, and adding one to a single arm
     would require splitting this function first.
     """
-    if config.criterion != CRITERION_GINI:
+    if config.criterion != CRITERION_GINI and config.criterion != CRITERION_ENTROPY:
         raise Error(
-            "the classification criterion must be gini; entropy and the"
-            " regression criteria are refused by validity_check"
+            "the classification criterion must be gini or entropy"
+            " (DEVIATION 459); the regression criteria are refused by"
+            " validity_check"
         )
     return resolve(config, Int(n_rows), Int(n_features))
 
@@ -453,6 +480,8 @@ def fit_extra_trees_classifier(
         plan.params,
         plan.n_trees,
         config.random_state,
+        plan.bootstrap,
+        plan.n_sampled_rows,
     )
     var bound = depth_cap_bound(forest, plan)
     return FitResult(forest^, plan, bound)
@@ -502,6 +531,8 @@ def fit_extra_trees_classifier_device(
         plan.params,
         plan.n_trees,
         config.random_state,
+        plan.bootstrap,
+        plan.n_sampled_rows,
     )
     var bound = depth_cap_bound(forest, plan)
     return FitResult(forest^, plan, bound)
@@ -563,6 +594,8 @@ def fit_extra_trees_regressor(
         plan.params,
         plan.n_trees,
         config.random_state,
+        plan.bootstrap,
+        plan.n_sampled_rows,
     )
     var bound = depth_cap_bound(forest, plan)
     return FitResult(forest^, plan, bound)
@@ -616,6 +649,8 @@ def fit_extra_trees_regressor_device(
         plan.params,
         plan.n_trees,
         config.random_state,
+        plan.bootstrap,
+        plan.n_sampled_rows,
     )
     var bound = depth_cap_bound(forest, plan)
     return FitResult(forest^, plan, bound)

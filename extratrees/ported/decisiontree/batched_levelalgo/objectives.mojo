@@ -1,4 +1,4 @@
-"""Split-scoring objectives: Gini for classification, MSE for regression.
+"""Split-scoring objectives: Gini and Entropy for classification, MSE for regression.
 
 WHAT THIS FILE IS, AND WHAT IT IS NOT
 -------------------------------------
@@ -40,6 +40,12 @@ PROVENANCE, FUNCTION BY FUNCTION
 | `GiniObjectiveFunction.ProxyImpurityExact`   | --                    | `147-163` + `647-687`    |
 | `GiniObjectiveFunction.CompareProxyExact`    | --                    | (exact form of the above)|
 | `GiniObjectiveFunction.SetLeafVector`        | `97-107`              | --                       |
+| `EntropyObjectiveFunction.GainPerSplit`      | `110-168`             | --                       |
+| `EntropyObjectiveFunction.NodeImpurity`      | --                    | `548-567`                |
+| `EntropyObjectiveFunction.ChildrenImpurity`  | --                    | `569-602`                |
+| `EntropyObjectiveFunction.ProxyImpurityImprovement` | --             | `147-163` + `569-602`    |
+| `EntropyObjectiveFunction.GainKeyExact`      | --                    | (DEVIATION 459)          |
+| `EntropyObjectiveFunction.SetLeafVector`     | `181-191`             | --                       |
 | `MSEObjectiveFunction.GainPerSplit`          | `225-244`             | --                       |
 | `MSEObjectiveFunction.NodeImpurity`          | --                    | `928-942`                |
 | `MSEObjectiveFunction.ProxyImpurityImprovement` | --                 | `944-973`                |
@@ -84,11 +90,12 @@ NOT PORTED HERE, DELIBERATELY
   `AggregateBin::IncrementHistogram` / `AtomicAdd` (`bins.cuh:54-62`) — the
   device histogram-scatter ops. Histogram-free: the accumulators are a
   handful of registers per candidate, not a scattered array.
-- `EntropyObjectiveFunction` (`:110-193`), `PoissonObjectiveFunction`
-  (`:267-346`), `GammaObjectiveFunction` (`:348-424`),
-  `InverseGaussianObjectiveFunction` (`:426-502`) — sklearn's ExtraTrees
-  defaults are `criterion='gini'` and `criterion='squared_error'`, and rule 3
+- `PoissonObjectiveFunction` (`:267-346`), `GammaObjectiveFunction`
+  (`:348-424`), `InverseGaussianObjectiveFunction` (`:426-502`) — sklearn's
+  ExtraTrees regression default is `criterion='squared_error'`, and rule 3
   says an unported thing must be visible rather than half-present.
+  `EntropyObjectiveFunction` (`:110-193`) WAS in this list until DEVIATION
+  459 (2026-08-23) ported it; it is below, beside Gini.
 
 HOST/DEVICE DISCIPLINE
 ----------------------
@@ -97,10 +104,13 @@ pointers. Nothing allocates, nothing raises, nothing touches `List`, `String`
 or any other host-only type, so each is callable unchanged from a kernel.
 """
 
-from std.math import fma
+from std.math import fma, log
+
+from mojo_only.numerics import ftz, identical_log
 
 from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import (
     classification_key_shift,
+    float_gain_key,
 )
 
 
@@ -820,6 +830,323 @@ struct GiniObjectiveFunction[dtype: DType](Copyable, Movable):
             out_ptr[unsafe_offset=i] = Scalar[Self.dtype](
                 Int(shist[unsafe_offset=i].x)
             ) / Scalar[Self.dtype](Int(total))
+
+
+# ==========================================================================
+# DEVIATION BLOCK 459 -- Entropy: cuML's float gain IS the key, as a
+#                        float seam beside the integer Gini core
+#
+# THEIRS. `EntropyObjectiveFunction` (`objectives.cuh:110-193`):
+#   `GainPerSplit` is the information gain in `DataT`, built from
+#   `raft::log(p) / raft::log(DataT(2))` per class and per child, and the
+#   builder reduces candidates on that float through `Split::update`
+#   (`split.cuh:76-90`): greater gain wins, equal gain falls to `colid`,
+#   then `quesval`.
+# OURS. The Gini core selects on DEVIATION 144's EXACT INTEGER rational
+#   (`num/den`), published per cell as two `Int64`s and compared by
+#   cross-multiplication in the reduction. Entropy CANNOT live in that core:
+#   `p*log(p)` is not a rational in the counts, there is no integer form of
+#   it, and a fixed-point `log` table would be an invention neither upstream
+#   has. So the entropy criterion is a FLOAT SEAM published THROUGH the same
+#   integer pair: the cell's key is `num = float_gain_key(gain)`, `den = 1`,
+#   where `float_gain_key` (`builder_kernels_impl.mojo`) is the
+#   order-preserving sign-magnitude map of the Float32 gain onto `Int64`.
+#   With `den == 1` the reduction's cross-multiply IS an integer compare of
+#   the keys, so the candidate ORDER is exactly cuML's float `>`, and an
+#   EQUAL key -- the same gain bits, which the sign-magnitude map also
+#   gives to `-0.0` and `+0.0`, as float `==` does -- falls through to
+#   DEVIATION 194's tie arms (`colid`, then `quesval`), which are cuML's
+#   remaining two arms. Nothing in the reduction, the readback or the
+#   host-side `Split` construction changes; only the finalize site writes
+#   a different pair. The host oracle builds the SAME `GiniProxyExact(key,
+#   1)` and runs the SAME comparator, so host and device order identically
+#   by construction -- a device/host difference can only come from the
+#   gain BITS.
+# THE LOG, AND WHERE ITS BITS COME FROM. Every `raft::log` routes through
+#   `identical_log` (`mojo_only/numerics.mojo`, IDENTITY_PATHS row 12),
+#   copying the shape `ensemble/decisiontree/batched_levelalgo/
+#   objectives.mojo`'s DEVIATION 406 gave RF's entropy: under NUMERIC_FAST
+#   the wrapper IS `std.math.log` verbatim (each backend's own lowering --
+#   the host's and Metal's CAN differ in the last bit, so FAST does not
+#   promise device==host for entropy and `device_forest_check` pins that
+#   equality only under IDENTICAL); under NUMERIC_IDENTICAL it is
+#   `portable_logf`, one Cephes polynomial through fma on every backend,
+#   and the arithmetic AROUND it is pinned with row 9/10's `ftz` on every
+#   stored intermediate, decomposed in cuML's association order so the
+#   FAST arm is the transcription's arithmetic unchanged.
+#   `raft::log(DataT(2))` is recomputed per term, where they compute it.
+# THE CLAMP. DEVIATION 217's argument holds verbatim: the information gain
+#   is provably non-negative and a negative float value is cancellation,
+#   which `split_not_valid` would leaf. Clamped at zero on both arms.
+# PRICE. Entropy candidates are ordered by a Float32 computed with a
+#   vendor `log` under FAST -- two candidates whose true gains differ by
+#   less than the rounding can order either way, which is cuML's own
+#   behaviour and sklearn's (float64) is not bit-comparable to either. The
+#   exact-argmax guarantee DEVIATION 144 gives Gini is NOT extended to
+#   entropy and is not claimed for it.
+# ==========================================================================
+
+
+@always_inline
+def _log_seam[
+    dt: DType, //
+](x: Scalar[dt]) -> Scalar[dt] where dt.is_floating_point():
+    """`numerics.identical_log` for a generic-dtype seam -- the shape of RF's
+    DEVIATION 406 `_log_seam`. Under FAST the wrapper IS `std.math.log`;
+    under IDENTICAL it is `portable_logf`. Any non-float32 width keeps the
+    stdlib call (no float64 on the device, no portable polynomial for it)."""
+    comptime if dt == DType.float32:
+        return identical_log(x.cast[DType.float32]()).cast[dt]()
+    return log(x)
+
+
+@always_inline
+def _ftz_seam[dt: DType, //](x: Scalar[dt]) -> Scalar[dt]:
+    """`numerics.ftz` for a generic-dtype seam (RF's DEVIATION 405 shape):
+    a comptime no-op under FAST, the row-10 flush under IDENTICAL."""
+    comptime if dt == DType.float32:
+        return ftz(x.cast[DType.float32]()).cast[dt]()
+    return x
+
+
+@fieldwise_init
+struct EntropyObjectiveFunction[dtype: DType](
+    Copyable, Movable
+) where dtype.is_floating_point():
+    """Entropy. cuML `objectives.cuh:110-193` for shape and for the SELECTION
+    score, sklearn `Entropy` (`_criterion.pyx:532-602`) for the reported
+    impurities. DEVIATION BLOCK 459 above.
+
+    `nclasses` / `min_samples_leaf` are theirs (`objectives.cuh:117-118`);
+    `NumClasses`, `GainPerSplit`, `SetLeafVector` are theirs by name; the
+    `BinT` is `CountBin` as theirs is (`:122`).
+    """
+
+    comptime DataT = Scalar[Self.dtype]
+    comptime BinT = CountBin
+
+    var nclasses: Int32
+    var min_samples_leaf: Int32
+
+    def NumClasses(self) -> Int32:
+        """`objectives.cuh:127`."""
+        return self.nclasses
+
+    def GainPerSplit[
+        ml: Bool,
+        mt: Bool, //,
+        ol: Origin[mut=ml],
+        ot: Origin[mut=mt],
+    ](
+        self,
+        hist_left: Pointer[CountBin, ol],
+        hist_total: Pointer[CountBin, ot],
+        len: Int32,
+        nLeft: Int32,
+    ) -> Scalar[Self.dtype]:
+        """compute the Entropy (or information gain) for each split.
+
+        cuML `objectives.cuh:132-168`, transcribed statement for statement
+        with DEVIATION 143's two index edits (`hist[n_bins*c + i]` ->
+        `hist_left[c]`, `hist[n_bins*c + n_bins-1]` -> `hist_total[c]`).
+        Their locals keep their names. Every `raft::log` is `_log_seam`,
+        every stored intermediate is `_ftz_seam`d, and the three
+        accumulations are decomposed in THEIR association order:
+        `log(a)/log(2) * lval * invLen` is `((log(a)/log(2)) * lval) *
+        invLen`, left to right as C++ parses it. Under FAST the seams are
+        the identity, so this IS their arithmetic; no `fma` is introduced
+        where theirs has none, because the gain is the key here and an fma
+        would be a different key.
+
+        THIS FUNCTION IS CALLED FROM THE DEVICE (`builder.mojo::
+        entropy_gain_per_split` bitcasts the kernel's Int32 accumulators to
+        `CountBin`), so there is ONE transcription, not a host copy and a
+        device copy that can drift.
+        """
+        var nRight = len - nLeft
+        var gain = Scalar[Self.dtype](0.0)
+        # if there aren't enough samples in this split, don't bother!
+        if nLeft < self.min_samples_leaf or nRight < self.min_samples_leaf:
+            return Scalar[Self.dtype].MIN_FINITE
+        comptime One = Scalar[Self.dtype](1.0)
+        comptime Two = Scalar[Self.dtype](2.0)
+        var invLeft = _ftz_seam(One / Scalar[Self.dtype](Int(nLeft)))
+        var invRight = _ftz_seam(One / Scalar[Self.dtype](Int(nRight)))
+        var invLen = _ftz_seam(One / Scalar[Self.dtype](Int(len)))
+        for c in range(Int(self.nclasses)):
+            var val_i: Int32 = 0
+            var lval_i = hist_left[unsafe_offset=c].x
+            if lval_i != 0:
+                var lval = Scalar[Self.dtype](Int(lval_i))
+                # gain += raft::log(lval * invLeft) / raft::log(DataT(2)) * lval * invLen;
+                var larg = _ftz_seam(lval * invLeft)
+                var l1 = _ftz_seam(_log_seam(larg) / _log_seam(Two))
+                var l2 = _ftz_seam(l1 * lval)
+                var l3 = _ftz_seam(l2 * invLen)
+                gain = _ftz_seam(gain + l3)
+
+            val_i += lval_i
+            var total_sum = hist_total[unsafe_offset=c].x
+            var rval_i = total_sum - lval_i
+            if rval_i != 0:
+                var rval = Scalar[Self.dtype](Int(rval_i))
+                # gain += raft::log(rval * invRight) / raft::log(DataT(2)) * rval * invLen;
+                var rarg = _ftz_seam(rval * invRight)
+                var r1 = _ftz_seam(_log_seam(rarg) / _log_seam(Two))
+                var r2 = _ftz_seam(r1 * rval)
+                var r3 = _ftz_seam(r2 * invLen)
+                gain = _ftz_seam(gain + r3)
+
+            val_i += rval_i
+            if val_i != 0:
+                var val = _ftz_seam(Scalar[Self.dtype](Int(val_i)) * invLen)
+                # gain -= val * raft::log(val) / raft::log(DataT(2));
+                var v1 = _ftz_seam(val * _log_seam(val))
+                var v2 = _ftz_seam(v1 / _log_seam(Two))
+                gain = _ftz_seam(gain - v2)
+
+        # DEVIATION 217, applied to entropy: the true information gain is
+        # non-negative; a negative float is cancellation and would feed
+        # `split_not_valid`. Both arms clamp, or they would grow different
+        # trees.
+        if gain < Scalar[Self.dtype](0.0):
+            gain = Scalar[Self.dtype](0.0)
+        return gain
+
+    def GainKeyExact(self, gain: Scalar[Self.dtype], len: Int32) -> GiniProxyExact:
+        """The float gain as the reduction's exact pair. DEVIATION 459.
+
+        `num = float_gain_key(gain)`, `den = 1`, valid. `MIN_FINITE` -- the
+        rejected-candidate sentinel -- is INVALID rather than keyed, so a
+        rejected entropy candidate ranks exactly where a rejected Gini one
+        does. `GiniProxyExact` is reused rather than given a sibling because
+        the reduction's `ExactKey` already carries exactly these three
+        fields and nothing downstream reads the name."""
+        if gain == Scalar[Self.dtype].MIN_FINITE:
+            return GiniProxyExact(0, 0, Int64(Int(len)), False)
+        return GiniProxyExact(
+            float_gain_key(gain.cast[DType.float32]()),
+            1,
+            Int64(Int(len)),
+            True,
+        )
+
+    # ----------------------------------------------------------------------
+    # sklearn's arithmetic, for REPORTING. `_criterion.pyx:532-602`.
+    # ----------------------------------------------------------------------
+
+    def NodeImpurity[
+        mt: Bool, //, ot: Origin[mut=mt]
+    ](
+        self,
+        hist_total: Pointer[CountBin, ot],
+        weighted_n_node_samples: Scalar[Self.dtype],
+    ) -> Scalar[Self.dtype]:
+        """sklearn `Entropy.node_impurity`, `_criterion.pyx:548-567`, the
+        `n_outputs == 1` body:
+
+            for c: count_k = sum_total[c]
+                   if count_k > 0.0: count_k /= w; entropy -= count_k * log(count_k)
+            return entropy / n_outputs
+
+        Their `log` is libm's double; here it is `_log_seam` on `dtype`
+        (DEVIATION 459), because this value is reporting and the report
+        must be one arithmetic everywhere under IDENTICAL."""
+        var entropy = Scalar[Self.dtype](0.0)
+        var count_k: Scalar[Self.dtype]
+        for c in range(Int(self.nclasses)):
+            count_k = Scalar[Self.dtype](Int(hist_total[unsafe_offset=c].x))
+            if count_k > 0.0:
+                count_k /= weighted_n_node_samples
+                entropy -= count_k * _log_seam(count_k)
+        return entropy
+
+    def ChildrenImpurity[
+        ml: Bool,
+        mt: Bool, //,
+        ol: Origin[mut=ml],
+        ot: Origin[mut=mt],
+    ](
+        self,
+        hist_left: Pointer[CountBin, ol],
+        hist_total: Pointer[CountBin, ot],
+        weighted_n_left: Scalar[Self.dtype],
+        weighted_n_right: Scalar[Self.dtype],
+        mut impurity_left: Scalar[Self.dtype],
+        mut impurity_right: Scalar[Self.dtype],
+    ):
+        """sklearn `Entropy.children_impurity`, `_criterion.pyx:569-602`,
+        with `sum_right` recovered as `total - left` the way
+        `GiniObjectiveFunction.ChildrenImpurity` recovers it."""
+        var entropy_left = Scalar[Self.dtype](0.0)
+        var entropy_right = Scalar[Self.dtype](0.0)
+        var count_k: Scalar[Self.dtype]
+        for c in range(Int(self.nclasses)):
+            count_k = Scalar[Self.dtype](Int(hist_left[unsafe_offset=c].x))
+            if count_k > 0.0:
+                count_k /= weighted_n_left
+                entropy_left -= count_k * _log_seam(count_k)
+
+            count_k = Scalar[Self.dtype](
+                Int(
+                    hist_total[unsafe_offset=c].x
+                    - hist_left[unsafe_offset=c].x
+                )
+            )
+            if count_k > 0.0:
+                count_k /= weighted_n_right
+                entropy_right -= count_k * _log_seam(count_k)
+
+        impurity_left = entropy_left
+        impurity_right = entropy_right
+
+    def ProxyImpurityImprovement[
+        ml: Bool,
+        mt: Bool, //,
+        ol: Origin[mut=ml],
+        ot: Origin[mut=mt],
+    ](
+        self,
+        hist_left: Pointer[CountBin, ol],
+        hist_total: Pointer[CountBin, ot],
+        len: Int32,
+        nLeft: Int32,
+    ) -> Scalar[Self.dtype]:
+        """sklearn's proxy (`_criterion.pyx:147-163` over `:569-602`), for
+        REPORTING ONLY: entropy SELECTS on cuML's `GainPerSplit` (DEVIATION
+        459), not on this. `min_samples_leaf` is applied as Gini's twin
+        applies it, so the two report the same rejections."""
+        var nRight = len - nLeft
+        if nLeft < self.min_samples_leaf or nRight < self.min_samples_leaf:
+            return Scalar[Self.dtype].MIN_FINITE
+        var weighted_n_left = Scalar[Self.dtype](Int(nLeft))
+        var weighted_n_right = Scalar[Self.dtype](Int(nRight))
+        var impurity_left = Scalar[Self.dtype](0.0)
+        var impurity_right = Scalar[Self.dtype](0.0)
+        self.ChildrenImpurity(
+            hist_left,
+            hist_total,
+            weighted_n_left,
+            weighted_n_right,
+            impurity_left,
+            impurity_right,
+        )
+        return proxy_impurity_improvement[Self.dtype](
+            weighted_n_left, weighted_n_right, impurity_left, impurity_right
+        )
+
+    @staticmethod
+    def SetLeafVector[
+        ms: Bool, //, os: Origin[mut=ms], oo: MutOrigin
+    ](
+        shist: Pointer[CountBin, os],
+        nclasses: Int32,
+        out_ptr: Pointer[Scalar[Self.dtype], oo],
+    ):
+        """`objectives.cuh:181-191` -- byte for byte Gini's `:97-107`, so it
+        CALLS Gini's rather than transcribing the same ten lines twice."""
+        GiniObjectiveFunction[Self.dtype].SetLeafVector(shist, nclasses, out_ptr)
+
 
 
 # ==========================================================================

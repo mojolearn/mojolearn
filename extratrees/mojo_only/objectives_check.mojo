@@ -58,12 +58,17 @@ a per-cell comparison against scattered counts can see it.
 from extratrees.ported.decisiontree.batched_levelalgo.objectives import (
     AggregateBin,
     CountBin,
+    EntropyObjectiveFunction,
     GiniObjectiveFunction,
     GiniProxyExact,
     MSEObjectiveFunction,
     impurity_improvement,
     proxy_impurity_improvement,
 )
+from extratrees.ported.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import (
+    float_gain_key,
+)
+from std.math import log
 
 
 comptime F = DType.float64
@@ -969,6 +974,198 @@ def check_rejection() -> Int:
 # ==========================================================================
 
 
+def ref_entropy_gain(
+    left: List[Int64], total: List[Int64], n_left: Int64, n: Int64
+) -> Float64:
+    """An INDEPENDENT float64 information gain: H(parent) - sum_c w_c H(c),
+    in nats / log(2), class-major -- a different association and a different
+    route than cuML's per-class accumulation, so agreement is a check on the
+    transcription's arithmetic and not a copy of it."""
+    var n_right = n - n_left
+
+    def h(counts: List[Int64], w: Int64) -> Float64:
+        var e = Float64(0.0)
+        for c in range(len(counts)):
+            if counts[c] > 0:
+                var p = Float64(counts[c]) / Float64(w)
+                e -= p * log(p)
+        return e / log(Float64(2.0))
+
+    var right = List[Int64]()
+    for c in range(len(total)):
+        right.append(total[c] - left[c])
+    return (
+        h(total, n)
+        - Float64(n_left) / Float64(n) * h(left, n_left)
+        - Float64(n_right) / Float64(n) * h(right, n_right)
+    )
+
+
+def check_entropy_scattered() -> Int:
+    """DEVIATION 459: `EntropyObjectiveFunction.GainPerSplit` against an
+    independent float64 reference on the hashed fixture, the sklearn
+    impurities against their definition, `float_gain_key`'s order against
+    the float's, and the pair `GainKeyExact` publishes."""
+    print("[entropy] scattered fixture,", N_ROWS, "rows,", N_CAND, "candidates")
+    var obj = EntropyObjectiveFunction[DType.float32](Int32(N_CLASSES), 1)
+    var obj64 = EntropyObjectiveFunction[F](Int32(N_CLASSES), 1)
+    var order = sorted_x()
+    var left_buf = List[CountBin](length=N_CLASSES, fill=CountBin(0))
+    var total_buf = List[CountBin](length=N_CLASSES, fill=CountBin(0))
+    var hist_left = left_buf.unsafe_ptr()
+    var hist_total = total_buf.unsafe_ptr()
+    for i in range(N_ROWS):
+        total_buf[Int(fixture_label(i))].x += 1
+
+    var c_gain = Cell(String("cuML entropy GainPerSplit (f32 vs f64 ref)"))
+    var c_gain64 = Cell(String("GainPerSplit f64 vs f64 ref"))
+    var c_nonneg = Cell(String("gain >= 0 after the 217 clamp"))
+    var c_key = Cell(String("float_gain_key order == float order"))
+    var c_pair = Cell(String("GainKeyExact pair (key, 1, valid)"))
+    var c_imp = Cell(String("sklearn entropy impurities"))
+    var c_proxy = Cell(String("sklearn entropy proxy"))
+    var c_differs = Cell(String("entropy order differs from gini somewhere"))
+    var gini = GiniObjectiveFunction[F](Int32(N_CLASSES), 1)
+
+    var prev_gain = Float32(0.0)
+    var prev_key = Int64(0)
+    var have_prev = False
+    var order_flips = 0
+    var tot = List[Int64]()
+    for c in range(N_CLASSES):
+        tot.append(Int64(Int(total_buf[c].x)))
+    var prev_gini_val = Scalar[F](0)
+    var prev_ent_val = Float64(0)
+
+    for c in range(N_CAND):
+        var thr = fixture_threshold(order, c)
+        for k in range(N_CLASSES):
+            left_buf[k].x = 0
+        var n_left: Int64 = 0
+        for i in range(N_ROWS):
+            if fixture_x(i) <= thr:
+                left_buf[Int(fixture_label(i))].x += 1
+                n_left += 1
+        var lft = List[Int64]()
+        for k in range(N_CLASSES):
+            lft.append(Int64(Int(left_buf[k].x)))
+        var want = ref_entropy_gain(lft, tot, n_left, Int64(N_ROWS))
+        var g32 = obj.GainPerSplit(
+            hist_left, hist_total, Int32(N_ROWS), Int32(n_left)
+        )
+        var g64 = obj64.GainPerSplit(
+            hist_left, hist_total, Int32(N_ROWS), Int32(n_left)
+        )
+        # float32 accumulation of ~15 terms of size <= log2(5): 1e-5 relative
+        c_gain.close_f(Float64(g32), want, 1e-5, c)
+        c_gain64.close_f(g64, want, 1e-12, c)
+        c_nonneg.ok(g32 >= Float32(0.0), String("cell ") + String(c))
+        var key = float_gain_key(g32)
+        var pair = obj.GainKeyExact(g32, Int32(N_ROWS))
+        c_pair.ok(
+            pair.valid and pair.den == 1 and pair.num == key,
+            String("cell ") + String(c) + ": pair is not (key, 1, valid)",
+        )
+        if have_prev:
+            var f_order = 0
+            if g32 > prev_gain:
+                f_order = 1
+            elif g32 < prev_gain:
+                f_order = -1
+            var k_order = 0
+            if key > prev_key:
+                k_order = 1
+            elif key < prev_key:
+                k_order = -1
+            c_key.ok(
+                f_order == k_order,
+                String("cell ") + String(c) + ": key order != float order",
+            )
+            # where gini and entropy rank consecutive candidates oppositely
+            var gv = gini.ProxyImpurityExact(
+                hist_left, hist_total, Int32(N_ROWS), Int32(n_left)
+            ).value[F]()
+            if (gv > prev_gini_val) != (want > prev_ent_val):
+                order_flips += 1
+            prev_gini_val = gv
+            prev_ent_val = want
+        else:
+            prev_gini_val = gini.ProxyImpurityExact(
+                hist_left, hist_total, Int32(N_ROWS), Int32(n_left)
+            ).value[F]()
+            prev_ent_val = want
+        prev_gain = g32
+        prev_key = key
+        have_prev = True
+
+        # sklearn's impurities: -sum p log p per child, nats
+        var il = Scalar[F](0)
+        var ir = Scalar[F](0)
+        obj64.ChildrenImpurity(
+            hist_left,
+            hist_total,
+            Scalar[F](n_left),
+            Scalar[F](Int64(N_ROWS) - n_left),
+            il,
+            ir,
+        )
+        var ref_il = Float64(0)
+        var ref_ir = Float64(0)
+        for k in range(N_CLASSES):
+            if lft[k] > 0:
+                var pl = Float64(lft[k]) / Float64(n_left)
+                ref_il -= pl * log(pl)
+            var rk = tot[k] - lft[k]
+            if rk > 0:
+                var pr = Float64(rk) / Float64(Int64(N_ROWS) - n_left)
+                ref_ir -= pr * log(pr)
+        c_imp.close_f(il, ref_il, 1e-12, c)
+        c_imp.close_f(ir, ref_ir, 1e-12, c)
+        var proxy = obj64.ProxyImpurityImprovement(
+            hist_left, hist_total, Int32(N_ROWS), Int32(n_left)
+        )
+        c_proxy.close_f(
+            proxy,
+            -Float64(Int64(N_ROWS) - n_left) * ref_ir - Float64(n_left) * ref_il,
+            1e-12,
+            c,
+        )
+
+    c_differs.ok(
+        order_flips > 0,
+        String("gini and entropy ranked every consecutive pair alike; the"
+        " fixture cannot see the criterion"),
+    )
+    print("   ", order_flips, "consecutive pairs ranked oppositely by gini and entropy")
+
+    # the key on hand-picked floats: the two zeros tie, negatives order
+    var c_zero = Cell(String("float_gain_key: -0.0 == +0.0, sign order"))
+    c_zero.ok(float_gain_key(Float32(-0.0)) == float_gain_key(Float32(0.0)), String("zeros"))
+    c_zero.ok(float_gain_key(Float32(-1.0)) < float_gain_key(Float32(-0.5)), String("neg order"))
+    c_zero.ok(float_gain_key(Float32(-0.5)) < float_gain_key(Float32(0.0)), String("neg < 0"))
+    c_zero.ok(float_gain_key(Float32(0.0)) < float_gain_key(Float32(1e-30)), String("0 < tiny"))
+    c_zero.ok(float_gain_key(Float32(1.5)) < float_gain_key(Float32(2.0)), String("pos order"))
+    # the rejected sentinel is INVALID, not keyed
+    c_zero.ok(
+        not obj.GainKeyExact(Float32.MIN_FINITE, 10).valid,
+        String("MIN_FINITE must be invalid"),
+    )
+
+    _ = total_buf^
+    _ = left_buf^
+    var failed = 0
+    failed += c_gain.report()
+    failed += c_gain64.report()
+    failed += c_nonneg.report()
+    failed += c_key.report()
+    failed += c_pair.report()
+    failed += c_imp.report()
+    failed += c_proxy.report()
+    failed += c_differs.report()
+    failed += c_zero.report()
+    return failed
+
+
 def main() raises:
     print("objectives_check -- extratrees split scoring, per cell")
     print("")
@@ -976,6 +1173,8 @@ def main() raises:
     failed += check_gini_scattered()
     print("")
     failed += check_mse_scattered()
+    print("")
+    failed += check_entropy_scattered()
     print("")
     failed += check_analytic()
     print("")

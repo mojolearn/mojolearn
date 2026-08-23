@@ -66,6 +66,33 @@ def fnv1a32(hash: UInt32, txt: UInt32) -> UInt32:
     return h
 
 
+def row_sample_seed(seed: UInt64, tree_id: Int32) -> UInt32:
+    """`randomforest.cuh:59-62`, the per-tree ROW-SAMPLE seed. DEVIATION 460.
+
+        auto rs = DT::fnv1a32_basis;
+        rs      = DT::fnv1a32(rs, rf_params.seed);
+        rs      = DT::fnv1a32(rs, tree_id);
+
+    Their `fnv1a32` takes `uint32_t`, so the `uint64_t seed` is folded in
+    ONE round on its low 32 bits and the high half is discarded. The RF lane
+    (`ensemble/decisiontree/batched_levelalgo/random_utils.mojo::
+    fnv1a32_hash_seed_tree`, its DEVIATION 400) rules that their bug, not
+    their design, and gives the high half its round exactly when it is
+    nonzero -- every seed below 2^32 keeps the transcription's bits. This
+    lane REUSES that seed contract rather than inventing a second one, so a
+    bootstrap forest here and one in `ensemble/` draw the same rows from the
+    same `(seed, tree_id)`; `forest_check` pins the values. Widened to
+    `UInt64` by zero extension at the call, as `RngState::seed` widens it.
+    """
+    var rs = FNV1A32_BASIS
+    rs = fnv1a32(rs, UInt32(seed & 0xFFFFFFFF))
+    var hi = UInt32((seed >> 32) & 0xFFFFFFFF)
+    if hi != 0:
+        rs = fnv1a32(rs, hi)
+    rs = fnv1a32(rs, UInt32(Int(tree_id)))
+    return rs
+
+
 struct PCGenerator(Copyable, Movable):
     """RAFT's PCG, `rng_device.cuh:546-683`.
 
