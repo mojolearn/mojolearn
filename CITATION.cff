@@ -6,6 +6,8 @@ authors:
   - family-names: Hendel
     given-names: Andrew
     alias: ajhendel
+    orcid: "https://orcid.org/0009-0000-9877-3623"
+    affiliation: "Latent Archon"
 license: Apache-2.0
 repository-code: "https://github.com/mojolearn/mojolearn"
 abstract: >-
