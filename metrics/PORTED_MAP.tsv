@@ -25,6 +25,9 @@ ported/stats/detail/silhouette_score.mojo	raft cpp/include/raft/stats/detail/sil
 ported/stats/detail/batched/silhouette_score.mojo	raft cpp/include/raft/stats/detail/batched/silhouette_score.cuh	transliterated	DEVIATION 654: fill_b + compute_chunked_a_b + min reduce + SilOp as one row-owned kernel with fixed trees; the ASSERT; chunk validated, scheduling; metric refused by name
 mojo_only/pinned_distance.mojo	none	mojo-only	DEVIATION 654's distance: one thread per cell, unexpanded L2 sqrt through identical_mul_add/ftz/identical_sqrt, plus the host twin for the oracle
 mojo_only/silhouette_check.mojo	none	mojo-only	Group C gates; sabotages (g)(h)(i) in the README
+ported/metrics/trustworthiness.mojo	cuml cpp/src/metrics/trustworthiness.cu	transliterated	the one instantiation <float, L2SqrtUnexpanded>; host-array boundary (knn_search's)
+ported/stats/detail/trustworthiness_score.mojo	raft cpp/include/raft/stats/detail/trustworthiness_score.cuh	partial	DEVIATION 655: build_lookup_table + compute_rank as a counting kernel; run_knn -> neighbors' knn_search; batchSize validated (scheduling); the closed form in Float64 on the host
+mojo_only/trustworthiness_check.mojo	none	mojo-only	Group D gates; sabotage (j) in the README
 mojo_only/pinned_sum.mojo	none	mojo-only	DEVIATION 653: virtual_block_sum (a PINNED_SUM_W slab tree independent of the physical block), host_tree_sum (the bitwise oracle), host_fold_partials, the shifted-partition sabotage model (and why a rotation is invisible to a halving tree)
 mojo_only/fixtures.mojo	none	mojo-only	hashed, skewed, non-uniform fixtures; planted singleton / constant / product-structured / subnormal-square cases
 mojo_only/device_io.mojo	none	mojo-only	host<->device copies for the checks

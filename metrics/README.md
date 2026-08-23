@@ -10,10 +10,11 @@ for SEMANTICS only and its formula stands beside each of ours in a comment.
 
 CONSTRUCTION plus one Apple device's gates; no second vendor has run this.
 
-Groups A (the label metrics), B (r2, KL divergence) and C (silhouette,
-the batched path cuML dispatches) are ported, gated in both modes, and
-sabotaged. Group D (trustworthiness) is recorded below as it lands; a
-metric absent from the per-metric table has no gate yet.
+All four groups are ported, gated in both modes on one Apple M4, and
+sabotaged: A (the label metrics), B (r2, KL divergence), C (silhouette,
+the batched path cuML dispatches) and D (trustworthiness). `metrics_main.
+mojo` runs every ported metric on one hashed fixture and emits the
+identity card (one stage per metric).
 
 ## Commands
 
@@ -26,6 +27,14 @@ through the build lock:
     tools/with_identical_mode.sh pixi run mojo run -I . metrics/mojo_only/regression_metrics_check.mojo
     tools/with_build_lock.sh     pixi run mojo run -I . metrics/mojo_only/silhouette_check.mojo
     tools/with_identical_mode.sh pixi run mojo run -I . metrics/mojo_only/silhouette_check.mojo
+    tools/with_build_lock.sh     pixi run mojo run -I . metrics/mojo_only/trustworthiness_check.mojo
+    tools/with_identical_mode.sh pixi run mojo run -I . metrics/mojo_only/trustworthiness_check.mojo
+
+The card (one stage per metric; diff two machines' cards with
+`tools/identity_trace_diff.py`):
+
+    MOJOLEARN_IDENTITY_TRACE=/tmp/metrics.mac.card tools/with_identical_mode.sh pixi run mojo run -I . metrics/metrics_main.mojo
+    python3 tools/identity_trace_diff.py /tmp/metrics.mac.card /tmp/metrics.other.card
 
 Every printed line carries the mode the binary COMPILED in.
 
@@ -72,6 +81,7 @@ grid shapes.
 | homogeneity / completeness / v_measure | homogeneity_score.cu, completeness_score.cu, v_measure.cu | homogeneity_score.cuh, v_measure.cuh | yes | -- | IDENTICAL bitwise; both vs ref; constant-truth (1,0,0), constant-pred (0,1,0), both-constant (1,1,1), independent (0,0,0), singleton | (b) |
 | r2_score | r2_score.cu | scores.cuh | yes (DEV 653), float | double overload | y_bar/sse/ssto/r2 bitwise vs host tree model (IDENTICAL); vs Float64 sklearn r2 1e-5 (both); FTZ seam visible on an all-subnormal sse fixture; LAUNCH INVARIANT across block 64/256, grid 1-D/2-D, pad 0/37 NaN | (d), (e), (f) |
 | kl_divergence | kl_divergence.cu | kl_divergence.cuh | yes (DEV 653), float | double overload | bitwise vs host tree model (IDENTICAL); vs Float64 scipy spelling 1e-5; p == 0 branch (42 planted); q == 0 -> +inf; LAUNCH INVARIANT as r2 | (d) by construction (same fold) |
+| trustworthiness | trustworthiness.cu | trustworthiness_score.cuh | yes (DEV 655): ranks counted not sorted, embedded k-NN = neighbors' knn_search | n_neighbors + 1 > 256 by name; batchSize validated | rank sum EXACT vs host count given the same neighbors; neighbor sets == Float64 host k-NN on 523 rows; t bitwise = sklearn formula (and = sklearn 1.9's value 0.7837041712302066); perfect -> 1.0, scrambled 0.496; planted duplicate rows (exact ties) EXACT; 4 refusals; launch invariant | (j) fails |
 | silhouette_score / silhouette_samples | silhouette_score_batched_float.cu | detail/batched/silhouette_score.cuh (+ SilOp, countLabels of silhouette_score.cuh) | yes (DEV 654), float, batched path, metric L2SqrtUnexpanded | double; unbatched path (never dispatched); other metrics by name | 1031 per-sample scores + mean bitwise vs host model (IDENTICAL); vs Float64 sklearn 1e-4; singleton +0.0; empty label slot; exact tie a == b -> +0.0; two-way min tie; 4 refusals; chunk is scheduling (3 values one pattern); LAUNCH INVARIANT 8 launches x 1031 cells | (g) fails; (h) (i) null on Apple |
 
 ## Group A: what the gates printed (Apple M4, 2026-08-23)
@@ -163,6 +173,31 @@ report line shows exactly that split (device 0x00000000, oracle
                                        one ulp against b256 -- block.sum is a function of the
                                        block, which is exactly what IDENTICAL must not be)
 
+## Group D: what the gates printed (Apple M4, 2026-08-23)
+
+`trustworthiness_check.mojo`, both modes (the metric is integer plus one
+Float64 closed form; IDENTICAL and FAST print the same numbers):
+
+    check_trust_rank_sum_exact        rank sum device 291291 host 291291; embedded neighbor
+                                      sets vs Float64 host k-NN: 0 rows differ; t
+                                      0.7837041712302066 (0x3fe9141ac525854c) = sklearn
+                                      formula; sklearn 1.9.0 on the same fixture (Python,
+                                      float64): 0.7837041712302066
+    check_trust_perfect_and_scrambled perfect: rank sum 0, t 1.0; scrambled: t 0.4956
+    check_trust_planted_duplicates    device 189301 = host(j < e) 189301; host(j <= e) 191658
+    check_trust_refusals              n_neighbors 0, n_neighbors + 1 > n, > TRUST_MAX_K,
+                                      batchSize 0 RAISE by name
+    check_trust_launch_invariant      b256/b64 x g1d/g2d: 291291 x 4
+
+**What trustworthiness rests on that is not integer:** the embedded k-NN
+(`neighbors/estimator.mojo::knn_search`, the EXPANDED L2 arm, where RAFT
+asks `brute_force_knn` for `L2SqrtUnexpanded`) and the rank comparison
+`d(i,j) < d(i,e)` on Float32 unexpanded distances. Near-tied embedded
+neighbors could order differently under the two distance spellings and
+move the integer sum; on the hashed fixture the neighbor sets agree with
+a Float64 host k-NN on every row. A k-NN entry for the unexpanded metric
+is neighbors/'s to add (hand-off below).
+
 **The distance is the UNEXPANDED formula, not the neighbors tile.**
 `neighbors/mojo_only/pinned_distance_tile.mojo` is the EXPANDED L2 from
 precomputed norms (cuVS `L2Expanded`); cuML's silhouette dispatches
@@ -210,6 +245,7 @@ class pair); ours is Int64. Recorded in `mutual_info_score.mojo`.
 | (g) | the silhouette row kernel's j partition shifted by one WITH WRAP (`j = (j0 + 1) % n_rows`) | check_silhouette_matches_oracle (IDENTICAL) | `samples row 1 device 0x3f11ad85 oracle 0x3f11ad84 ... samples: 347 of 1031 scores differ` |
 | (h) | `identical_sqrt` -> `std.math.sqrt` in the device distance | check_silhouette_matches_oracle (IDENTICAL) | NO CHANGE on Apple (its sqrt is correctly rounded; DEVIATION 258 measured NVIDIA's approximate: 180,714 of 2^20 off by one ulp); recorded as the expected null -- the pin's value is the NVIDIA column |
 | (i) | `ftz` dropped from the device distance's diff and accumulator | check_silhouette_matches_oracle (IDENTICAL) | NO CHANGE on Apple (hardware flush; no subnormal on this fixture); recorded as the expected null |
+| (j) | the trustworthiness rank tie-break flipped to `j <= e` | check_trust_rank_sum_exact (both modes) | `rank sum device 293696 host 291291 ... rank sum differs` (every neighbor now counts itself); the planted-duplicate fixture separates the DISTINCT-row tie too: host(j < e) 189301 vs host(j <= e) 191658 |
 
 ## Deviations spent
 
@@ -218,6 +254,7 @@ class pair); ours is Int64. Recorded in `mutual_info_score.mojo`.
 | 650 | entropy.mojo (banner), mutual_info_score.mojo, adjusted_rand_index.mojo | the label metrics' float epilogue runs on the HOST, serially, from the INTEGER device product; readback is k or k^2 ints instead of one scalar |
 | 651 | entropy.mojo (banner), mutual_info_score.mojo | IDENTICAL: Float32 through identical_log / identical_mul_add / ftz; FAST: Float64 host log (RAFT's precision) |
 | 652 | rand_index.mojo | 64-bit atomic replaced by per-block Int32 partials summed on the host in Int64 (Apple has no 64-bit atomic; a 32-bit total overflows past 65,536 samples) |
+| 655 | trustworthiness_score.mojo | ranks COUNTED per (row, embedded neighbor) with the stable-sort tie-break (same integer as their sort + lookup table, O(nk) per row); the embedded k-NN is neighbors' knn_search (expanded L2) with k+1; Int32 row partials summed in Int64; n_neighbors + 1 > 256 refused by name |
 | 654 | batched/silhouette_score.mojo, mojo_only/pinned_distance.mojo | the float atomicAdd into a and b[i, c] replaced by one fixed tree per (row, cluster) over j (a pure function of n and the cluster membership), the distance tile by the one-thread unexpanded formula through identical_mul_add/ftz/identical_sqrt, min + SilOp in the row's thread; chunk is scheduling; metric != L2SqrtUnexpanded refused by name |
 | 653 | mojo_only/pinned_sum.mojo, scores.mojo (r2), kl_divergence.mojo | the float sums over n as one fixed slab tree + ascending host fold, launch-invariant by construction; FAST arm is block.sum; r2's `powerScalar(x,2)` spelled `x*x`, `mean = sum * (1/n)` as mean.cuh |
 
@@ -225,6 +262,7 @@ class pair); ours is Int64. Recorded in `mutual_info_score.mojo`.
 
 | n | path | what is vendor-dependent in their spelling | what we did | status |
 |---|---|---|---|---|
+| (next) | metrics: trustworthiness (Group D) | `brute_force_knn` on the embedding (L2SqrtUnexpanded), `pairwise_distance` + `sort_cols_per_row` (CUB segmented radix sort) + lookup table on X, `atomicAdd(double)` of INTEGER ranks (exact) | DEVIATION 655: ranks counted with the stable-sort tie-break on pinned unexpanded distances, k-NN through neighbors' knn_search, Int64 host sum; integer half gated EXACTLY, neighbor sets vs a Float64 host k-NN, t = sklearn's value on the fixture; sabotage (j) fails | Apple FAST+IDENTICAL green; the embedded k-NN rides on neighbors' row 24; no second vendor |
 | (next) | metrics: silhouette_score / silhouette_samples (Group C, batched path) | cuVS `pairwise_distance` L2SqrtUnexpanded (a tiled contraction, vendor tile policy; cuBLAS TF32 on the expanded arms), float `atomicAdd` of `d/count` into a and b from every (i, j) thread of every chunk tile (arrival order, chunksize-dependent), CUB min reduce, thrust::reduce mean | DEVIATION 654: row-owned kernel, one slab tree per (row, cluster) over j ascending, the distance one thread per cell through identical_mul_add/ftz/identical_sqrt, min and SilOp in the same thread, the mean DEVIATION 653's tree; gated bitwise per sample vs a host model, launch-invariant over 8 launches x 1031 cells, chunk proven scheduling, ties planted; sabotage (g) fails, (h) (i) null on Apple | Apple FAST+IDENTICAL green; no second vendor |
 | (next) | metrics: r2_score, kl_divergence (Group B) | `thrust::reduce` / `mapThenSumReduce`: a CUB block fold + float `atomicAdd` of block partials (arrival order, vendor lane width), vendor `powf`/`log` | DEVIATION 653: one PINNED_SUM_W slab tree per chunk whose width is a constant of the source (not the block), chunk totals folded ascending on the host, ftz at every stored seam, `identical_log` per term; gated bitwise vs a host model, launch-invariant across 8 launches (two block sizes, two grid shapes, two paddings), FTZ seam visible on an all-subnormal fixture; sabotages (d)(e) fail, (f) null on Apple | Apple FAST+IDENTICAL green; no second vendor |
 | (next) | metrics: label metrics (accuracy, rand, ARI, entropy, MI, h/c/v) | contingency matrix and histograms are INTEGER atomics (order-free, identity-safe on every vendor); the float epilogue is a device double `atomicAdd` fold (arrival order) with the vendor's `log` | device product stays integer and is gated EXACTLY per cell; the float epilogue moves to the host, serial ascending, Float32 through identical_log/identical_mul_add/ftz under IDENTICAL (DEVIATIONS 650, 651); completeness is the transposed fold as theirs; gated bitwise vs an oracle and 1e-6 vs a Float64 sklearn-spelled reference; two sabotages fail, one null recorded | Apple FAST+IDENTICAL green; no second vendor |
@@ -242,7 +280,10 @@ chunksize=40000)` and `silhouette_samples(...)` (float32 row-major X; the
 Python side maps labels to `0..n_labels-1` with `np.unique(...,
 return_inverse=True)` exactly as cuML's `.pyx` does and passes
 `n_labels`; `metric` other than 'euclidean'/'l2' and float64 X are
-refused by name). Each label metric takes
+refused by name), and `trustworthiness(X, X_embedded, n_neighbors=5,
+metric='euclidean', batch_size=512)` (float32 host arrays, the Mojo entry
+takes `List[Float32]` because it calls knn_search's host-pointer
+boundary; other metrics refused by name). Each label metric takes
 int32 labels; the Python side computes `lower_class_range = min(y, y_hat)`
 and `upper_class_range = max(...)` exactly as cuML's `.pyx` files do and
 passes them to the Mojo entry; a label outside the range is a host-side
@@ -253,10 +294,16 @@ pixi lines to register when pixi.toml is next edited by its owner:
     check-metrics-labels     = "mojo run -I . metrics/mojo_only/label_metrics_check.mojo"
     check-metrics-regression = "mojo run -I . metrics/mojo_only/regression_metrics_check.mojo"
     check-metrics-silhouette = "mojo run -I . metrics/mojo_only/silhouette_check.mojo"
+    check-metrics-trust      = "mojo run -I . metrics/mojo_only/trustworthiness_check.mojo"
+    metrics-card             = "mojo run -I . metrics/metrics_main.mojo"
 
-## HAND-OFF TO THE IDENTITY LANE
+## HAND-OFF TO THE IDENTITY LANE (and to neighbors/)
 
-Nothing outside `metrics/` was edited. Two asks, neither blocking:
+Nothing outside `metrics/` was edited. Three asks, none blocking:
+0. neighbors/: a `knn_search` arm for `L2SqrtUnexpanded` (RAFT's
+   `run_knn` metric for trustworthiness). Until then trustworthiness's
+   embedded k-NN is the expanded arm (DEVIATION 655), which can order
+   near-tied neighbors differently in the last bit.
 1. `mojo_only/numerics.mojo` has `identical_exp64` but no `identical_log64`;
    a portable Float64 log (Cephes, the `portable_exp64` shape) would let
    DEVIATION 651 keep RAFT's double precision under IDENTICAL. Until then
