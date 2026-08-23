@@ -115,6 +115,19 @@ if [ -x tools/e2_mojo_cards.sh ]; then
   bash tools/e2_mojo_cards.sh "$OUT" || echo "PHASE4-FINDING: e2_mojo_cards failed (see log)"
 fi
 
+step "phase 5: the unsupervised cards (k-means, k-NN, DBSCAN) -- IDENTICAL"
+# tools/e1_unsupervised.sh is the unsupervised lane's leg (rows 19-26); it
+# re-enters itself through the injector and writes bench/results/e1u/<stamp>;
+# a copy of that directory lands beside this run's artifacts
+sh tools/e1_unsupervised.sh "$OUT/e1u" || echo "PHASE5-FINDING: unsupervised leg (see log)"
+
+step "phase 6: the linear-algebra identity gates (GEMM, column stats, Jacobi/PCA, OLS) -- both modes"
+# rows 27-32; verdicts, not numbers (both modes, ~22 device runs). The
+# decomposition bindings did not BUILD on AMD before 4ecf43c; the gate
+# running at all here is part of the result.
+pixi run check-linalg-identity || echo "PHASE6-FINDING: linalg identity (see log)"
+pixi run check-unsupervised-identity || echo "PHASE6-FINDING: unsupervised identity (see log)"
+
 step "done"
 echo "artifacts in $OUT"
 echo "next: fetch this directory beside the other machine's and run"

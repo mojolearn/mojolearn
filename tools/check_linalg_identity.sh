@@ -86,7 +86,7 @@ fi
 # inside ANOTHER session's flip window and print "FAST" over IDENTICAL
 # numbers -- the race DEVIATION 514 was opened for, from the other side.
 echo "== NUMERIC_FAST (the shipped build) =="
-MOJOLEARN_LINALG_INNER=1 tools/with_build_lock.sh "$0"
+MOJOLEARN_LINALG_INNER=1 MOJOLEARN_MOJO_DEFINES= MOJOLEARN_NUMERIC_MODE=fast tools/with_build_lock.sh "$0"
 
 echo
 echo "== NUMERIC_IDENTICAL (session-local flip, reverted on exit) =="

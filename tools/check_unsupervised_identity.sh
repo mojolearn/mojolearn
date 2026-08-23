@@ -59,7 +59,7 @@ run_all() {
     fail=0
     for f in $FILES; do
         echo "  -- $f"
-        out=$(pixi run mojo run $COLDEF -I . "$f" 2>&1) || fail=1
+        out=$(pixi run mojo run ${MOJOLEARN_MOJO_DEFINES:-} $COLDEF -I . "$f" 2>&1) || fail=1
         echo "$out" | grep -E "^check_|^ball_cover|^Unhandled|error:" || true
         if [ "$fail" -ne 0 ]; then
             echo "FAILED: $f"
@@ -83,7 +83,7 @@ fi
 # binary and prints "FAST", because `_mode_name()` reads the constant it was
 # compiled against. Both arms hold the lock, so the two cannot interleave.
 echo "== NUMERIC_FAST (the shipped build) =="
-MOJOLEARN_UNSUP_INNER=1 tools/with_build_lock.sh "$0" || exit 1
+MOJOLEARN_UNSUP_INNER=1 MOJOLEARN_MOJO_DEFINES= MOJOLEARN_NUMERIC_MODE=fast tools/with_build_lock.sh "$0" || exit 1
 
 echo
 echo "== NUMERIC_IDENTICAL (session-local flip, reverted on exit) =="

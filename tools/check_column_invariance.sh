@@ -107,7 +107,7 @@ for arm in $ARMS; do
         log="$OUT/${arm}_${tag}.log"
         : > "$card"
         if MOJOLEARN_IDENTITY_TRACE="$card" MOJOLEARN_UNSUP_ARM="$arm" \
-            pixi run mojo run -D "MOJOLEARN_COLUMN_${col}=1" -I . \
+            pixi run mojo run ${MOJOLEARN_MOJO_DEFINES:-} -D "MOJOLEARN_COLUMN_${col}=1" -I . \
             bench/unsupervised_trace_main.mojo > "$log" 2>&1; then
             # THE CONTAMINATION GUARD (DEVIATION 514's other half).
             # `mojo_only/numerics.mojo` is a SHARED FILE that this gate

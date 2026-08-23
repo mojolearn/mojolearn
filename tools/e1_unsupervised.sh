@@ -37,7 +37,11 @@
 #      teaches nothing when diffed against another.
 #   4  the three cards.
 #
-# THE MODE FLIP is session-local, holds the shared build lock, and reverts
+# THE MODE is a build define since 2026-08-23 (`tools/with_identical_mode.sh`
+# injects -D MOJOLEARN_NUMERIC_IDENTICAL=1 / exports MOJOLEARN_MOJO_DEFINES,
+# which the mojo calls below splice in); nothing is flipped. The paragraph
+# that follows described the flip and is kept for the history only.
+# THE MODE FLIP WAS session-local, held the shared build lock, and reverted
 # on exit (`tools/with_identical_mode.sh`, DEVIATION 514). It must never be
 # committed. On a 64-lane column the FAST build of some sections is a
 # compile error BY DESIGN, so IDENTICAL is not optional there.
@@ -91,15 +95,16 @@ step "phase 0: which column did this build resolve to"
 # Any arm prints it; kmeans is the cheapest. A card is written and thrown
 # away -- the driver refuses to run without a trace path, deliberately.
 MOJOLEARN_IDENTITY_TRACE="$OUT/.probe.card" MOJOLEARN_UNSUP_ARM=kmeans \
-    pixi run mojo run -I . bench/unsupervised_trace_main.mojo 2>&1 \
+    pixi run mojo run ${MOJOLEARN_MOJO_DEFINES:-} -I . bench/unsupervised_trace_main.mojo 2>&1 \
     | grep -E "^arm|^mode|^column" | tee "$OUT/column.txt"
 rm -f "$OUT/.probe.card"
 
 step "phase 1: vendor characterization (row 10's precondition)"
-pixi run check-ieee-arith || echo "PHASE1-FINDING: ieee-arith"
+tools/with_identical_mode.sh pixi run check-ieee-arith || echo "PHASE1-FINDING: ieee-arith"
 
 step "phase 1b: the portable transcendental certificate"
-pixi run check-portable-translog || echo "PHASE1-FINDING: portable-translog"
+tools/with_identical_mode.sh pixi run check-portable-translog || echo "PHASE1-FINDING: portable-translog"
+tools/with_identical_mode.sh pixi run check-portable-sqrtcos || echo "PHASE1-FINDING: portable-sqrtcos"
 
 step "phase 2: the local gates, IDENTICAL"
 # Already inside the flip, so the files run directly rather than through
@@ -111,7 +116,7 @@ for f in cluster/mojo_only/kmeans_identity_check.mojo \
          neighbors/knn_main.mojo \
          dbscan/dbscan_main.mojo; do
     echo "--- $f"
-    pixi run mojo run -I . "$f" 2>&1 | grep -E "^check_|^ball_cover|Unhandled|error:" \
+    pixi run mojo run ${MOJOLEARN_MOJO_DEFINES:-} -I . "$f" 2>&1 | grep -E "^check_|^ball_cover|Unhandled|error:" \
         || echo "PHASE2-FINDING: $f produced no check lines"
 done
 
@@ -120,7 +125,7 @@ for arm in kmeans knn dbscan; do
     echo "--- $arm"
     : > "$OUT/$arm.card"
     if MOJOLEARN_IDENTITY_TRACE="$OUT/$arm.card" MOJOLEARN_UNSUP_ARM="$arm" \
-        pixi run mojo run -I . bench/unsupervised_trace_main.mojo 2>&1 \
+        pixi run mojo run ${MOJOLEARN_MOJO_DEFINES:-} -I . bench/unsupervised_trace_main.mojo 2>&1 \
         | grep -E "^arm|^mode|^column|^input\.|^output\.|^query_tile|^batches|^done|Unhandled|error:" \
         | tee "$OUT/$arm.hashes"; then
         :
