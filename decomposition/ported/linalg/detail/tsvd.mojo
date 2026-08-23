@@ -71,7 +71,11 @@ exist.
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.gemm import gemm_tn
-from decomposition.ported.linalg.detail.pca import PCAResult, eig_and_truncate
+from decomposition.ported.linalg.detail.pca import (
+    PCAResult,
+    eig_and_truncate,
+    pca_validate,
+)
 
 
 def tsvd_fit(
@@ -89,16 +93,7 @@ def tsvd_fit(
     Unlike `pca_fit` this does not modify `x` at all, so there is no restore
     step to forget. Theirs has the same property for the same reason.
     """
-    if n_cols <= 1:
-        raise Error("Parameter n_cols: number of columns cannot be less than two")
-    if n_rows <= 1:
-        raise Error("Parameter n_rows: number of rows cannot be less than two")
-    if n_components <= 0:
-        raise Error(
-            "Parameter n_components: number of components cannot be less than one"
-        )
-    if n_components > n_cols:
-        raise Error("n_components cannot exceed n_cols")
+    pca_validate(n_rows, n_cols, n_components)  # the same four, same order
 
     # Step 1. `alpha = 1`, so scale 1: the raw Gram matrix, not a covariance,
     # and no centering. Their `tsvd_fit` asks cuBLAS for exactly this:

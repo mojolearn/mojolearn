@@ -358,6 +358,24 @@ def compute_covariance(
     ctx.synchronize()
 
 
+def pca_validate(n_rows: Int, n_cols: Int, n_components: Int) raises:
+    """The four shape refusals `pca_fit` makes first (cuML's `pcaFit`
+    asserts, in their order). Split out 2026-08-23 so the traced surface
+    (`decomposition/estimator.mojo`) can run the two halves of the fit
+    itself and record the covariance BETWEEN them (IDENTITY_PATHS row 38);
+    `pca_fit` is unchanged for every other caller."""
+    if n_cols <= 1:
+        raise Error("Parameter n_cols: number of columns cannot be less than two")
+    if n_rows <= 1:
+        raise Error("Parameter n_rows: number of rows cannot be less than two")
+    if n_components <= 0:
+        raise Error(
+            "Parameter n_components: number of components cannot be less than one"
+        )
+    if n_components > n_cols:
+        raise Error("n_components cannot exceed n_cols")
+
+
 def pca_fit(
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32],
@@ -379,16 +397,7 @@ def pca_fit(
     `decomposition/mojo_only/jacobi_eigh.mojo` is the host reference the
     device solver is checked against, not the path a fit takes.
     """
-    if n_cols <= 1:
-        raise Error("Parameter n_cols: number of columns cannot be less than two")
-    if n_rows <= 1:
-        raise Error("Parameter n_rows: number of rows cannot be less than two")
-    if n_components <= 0:
-        raise Error(
-            "Parameter n_components: number of components cannot be less than one"
-        )
-    if n_components > n_cols:
-        raise Error("n_components cannot exceed n_cols")
+    pca_validate(n_rows, n_cols, n_components)
 
     # Mojo refuses one buffer as two mutable kernel arguments (PORTING.md 24),
     # and X^T X names X twice, so the caller supplies an aliased copy.

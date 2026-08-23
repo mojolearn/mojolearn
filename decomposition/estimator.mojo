@@ -34,8 +34,13 @@ from max.gpu.host import DeviceContext
 from core.column_stats import TRANSPOSE_TILE, shift_columns_kernel, transpose_kernel
 from core.identity_trace import IdentityTrace
 from core.gemm import gemm_nt
-from decomposition.ported.linalg.detail.pca import pca_fit, pca_transform
-from decomposition.ported.linalg.detail.tsvd import tsvd_fit
+from decomposition.ported.linalg.detail.pca import (
+    compute_covariance,
+    eig_and_truncate,
+    pca_transform,
+    pca_validate,
+)
+from core.gemm import gemm_tn
 
 
 def pca_fit_host(
@@ -63,11 +68,22 @@ def pca_fit_host(
             String("pca n=") + String(n_rows) + " d=" + String(n_features)
             + " n_components=" + String(n_components)
         )
-    var result = pca_fit(
-        ctx, x, xa, xa2, mu, cov, n_rows, n_features, n_components
-    )
+    # The two halves of `pca_fit`, called here by name so the covariance
+    # can be recorded BETWEEN them (IDENTITY_PATHS row 38, 2026-08-23): the
+    # Jacobi kernel diagonalizes `cov` IN PLACE, so a card that records it
+    # only after the fit holds the eigensolver's output and cannot say
+    # whether a divergence began in the Gram (rows 27/29) or in the solve
+    # (row 31). `pca.cov` is the product as the solver receives it;
+    # `pca.jacobi.a` keeps its name and is the matrix the solver left.
+    pca_validate(n_rows, n_features, n_components)
+    compute_covariance(ctx, x, xa, xa2, mu, cov, n_rows, n_features, True)
     if trace.enabled:
         trace.record_device(ctx, "pca.mean", mu, n_features)
+        trace.record_device(ctx, "pca.cov", cov, n_features * n_features)
+    var result = eig_and_truncate(
+        ctx, cov, n_features, n_components, n_rows - 1
+    )
+    if trace.enabled:
         trace.record_device(ctx, "pca.jacobi.a", cov, n_features * n_features)
     var comp32 = List[Float32]()
     var expl32 = List[Float32]()
@@ -138,7 +154,14 @@ def tsvd_fit_host(
             String("tsvd n=") + String(n_rows) + " d=" + String(n_features)
             + " n_components=" + String(n_components)
         )
-    var result = tsvd_fit(ctx, x, gram, xa, xa2, n_rows, n_features, n_components)
+    # The two halves of `tsvd_fit` by name, the Gram recorded between them
+    # (row 38; see the PCA surface above for why).
+    pca_validate(n_rows, n_features, n_components)
+    gemm_tn(ctx, gram, x, xa, xa2, n_features, n_features, n_rows)
+    ctx.synchronize()
+    if trace.enabled:
+        trace.record_device(ctx, "tsvd.gram", gram, n_features * n_features)
+    var result = eig_and_truncate(ctx, gram, n_features, n_components, 1)
     if trace.enabled:
         trace.record_device(
             ctx, "tsvd.jacobi.a", gram, n_features * n_features
