@@ -105,11 +105,20 @@ done
 [ $ok = 1 ] || { log "ssh never came up"; exit 5; }
 $SSH 'nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null || rocm-smi --showproductname 2>/dev/null | grep -i "card series\|name" | head -2' | sed "s/^/[$VENDOR gpu] /"
 
-log "rsync tree (commit $(git -C "$REPO" rev-parse --short HEAD))"
-rsync -az --exclude '.pixi' --exclude 'python/mojolearn/_mojolearn*.so' \
-  --exclude 'bench/results' --exclude 'bench/external/.gbm-bench' \
-  "$REPO/" "root@$IP:/root/mojolearn/" || { log "rsync failed"; exit 6; }
-$SSH 'git config --global --add safe.directory /root/mojolearn; cd /root/mojolearn && git rev-parse HEAD && git status --short | head -5'
+# SHIP THE COMMIT, NOT THE WORKING TREE. The first E2 legs rsync'd a
+# worktree whose numerics.mojo the Mac's own bootstrap had ALREADY flipped
+# to IDENTICAL (the flip is session-local and the two sessions shared the
+# tree), and whose .git was a worktree pointer file; the remote bootstrap
+# refused the flip and git had no repository. A bundle of HEAD is exact
+# by construction: the remote clones it, checks out the hash, and the
+# commit recorded in every artifact is the commit that ran.
+COMMIT="${E2_COMMIT:-$(git -C "$REPO" rev-parse HEAD)}"   # pin to the Mac reference run's commit
+BUNDLE="/tmp/mojolearn-e2-$COMMIT.bundle"
+log "bundle $COMMIT"
+git -C "$REPO" bundle create "$BUNDLE" "$COMMIT" >/dev/null 2>&1 || { log "bundle failed"; exit 6; }
+scp -q -o StrictHostKeyChecking=accept-new "$BUNDLE" "root@$IP:/root/e2.bundle" || { log "scp failed"; exit 6; }
+$SSH "rm -rf /root/mojolearn && git clone -q /root/e2.bundle /root/mojolearn && cd /root/mojolearn && git checkout -q --detach $COMMIT && git rev-parse HEAD && git status --short | head -3 && grep -c '^comptime GLOBAL_NUMERIC_MODE = NUMERIC_FAST' mojo_only/numerics.mojo" \
+  || { log "remote clone/checkout failed"; exit 6; }
 
 log "bootstrap (phases 0-4) -- this is the long step"
 $SSH 'export PATH=/root/.pixi/bin:$PATH; cd /root/mojolearn && bash tools/e1_bootstrap.sh > /root/e2_run.log 2>&1; echo "BOOTSTRAP-EXIT=$?"; tail -20 /root/e2_run.log'
