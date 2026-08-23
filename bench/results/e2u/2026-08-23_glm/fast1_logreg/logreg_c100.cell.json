@@ -1,0 +1,16 @@
+{
+  "card": "logreg_c100.card",
+  "coef": "cfe52988c9f345001950ec1d9a8abe6df247b04768904c1d51bb17735502263b",
+  "intercept": "d3726e22ae0eb11b9fe576cace8fef673b89176c9ff40c4bccae3249fd9d5b7d",
+  "kind": "logreg",
+  "n_iter": 32,
+  "objective": 0.02033121883869171,
+  "predictions": "72e0a94b31a4b514f18adeea3eebbdafef6081e5cd2a84bc954054ef389f9809",
+  "proba": "931106a448433c5769485b6718a76a0d22c3f0ebcec6fd608f6300e451ea7526",
+  "retcode": 0,
+  "seconds": 0.25,
+  "spec": {
+    "C": 100.0
+  },
+  "stages": 101
+}

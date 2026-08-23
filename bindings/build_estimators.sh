@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build the DBSCAN / PCA / tSVD / OLS CPython extension into
+# Build the DBSCAN / PCA / tSVD / OLS / Ridge / logistic CPython extension into
 # python/mojolearn/_mojolearn_estimators.so. Run from anywhere; requires pixi.
 #
 # FIXED 2026-08-22. THIS SCRIPT SHIPPED A ZERO-KERNEL ARTIFACT FOR HOURS AND
@@ -168,7 +168,10 @@ density.DBSCAN(eps=0.5, min_samples=3).fit(X)
 decomposition.PCA(n_components=2).fit(X).transform(X)
 decomposition.TruncatedSVD(n_components=2).fit(X).transform(X)
 linear_model.LinearRegression().fit(X, y).predict(X)
-print("  smoke: dbscan, pca and ols each launched")
+linear_model.Ridge(alpha=1.0).fit(X, y).predict(X)
+yb = (X[:, 0] > 0.5).astype(np.int32)
+linear_model.LogisticRegression(max_iter=5).fit(X, yb).predict_proba(X)
+print("  smoke: dbscan, pca, ols, ridge and logistic each launched")
 PY
 
 mv "$out" "$OUTDIR/_mojolearn_estimators.so"

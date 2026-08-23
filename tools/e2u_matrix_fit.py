@@ -307,6 +307,18 @@ cell("ols_wide_refused", "ols", _X="X_ols_wide", _y="y_ols_wide")  # REFUSED
 cell("ols_onecol_refused", "ols", _X="X_col1")  # REFUSED
 cell("ols_sw_refused", "ols", _fit=dict(sample_weight="sw"))  # REFUSED
 
+# --- Ridge (DEVIATION 545) -----------------------------------------------------
+cell("ridge_a1", "ridge", alpha=1.0)
+cell("ridge_a100", "ridge", alpha=100.0)
+cell("ridge_nointercept", "ridge", alpha=1.0, fit_intercept=False)
+
+# --- LogisticRegression (DEVIATIONS 546-549) -----------------------------------
+# the binary target is derived from X with no new RNG draw (see _derived)
+cell("logreg_c1", "logreg", C=1.0, _y="y_bin")
+cell("logreg_c100", "logreg", C=100.0, _y="y_bin")
+cell("logreg_nointercept", "logreg", C=1.0, fit_intercept=False, _y="y_bin")
+cell("logreg_l1_refused", "logreg", penalty="l1", _y="y_bin")  # REFUSED
+
 
 # ---------------------------------------------------------------- reach
 # (parameter, cell A, cell B, expectation). "differ": the parameter
@@ -358,6 +370,11 @@ REACH = [
     ("TruncatedSVD.n_components", "tsvd_c2", "tsvd_c8", "differ", None),
     ("LinearRegression.fit_intercept", "ols_intercept", "ols_nointercept",
      "differ", None),
+    ("Ridge.alpha", "ridge_a1", "ridge_a100", "differ", None),
+    ("Ridge.fit_intercept", "ridge_a1", "ridge_nointercept", "differ", None),
+    ("LogisticRegression.C", "logreg_c1", "logreg_c100", "differ", "n_iter"),
+    ("LogisticRegression.fit_intercept", "logreg_c1", "logreg_nointercept",
+     "differ", "n_iter"),
 ]
 
 _HASH_KEYS = ("labels", "centroids", "inertia", "distances", "indices",
@@ -375,6 +392,18 @@ def _derived(data, name):
         return np.ascontiguousarray(data["X"][:, :4])
     if name == "X_col1":
         return np.ascontiguousarray(data["X"][:, :1])
+    if name == "y_bin":
+        # THE LOGISTIC TARGET: the sign of the integer matmul about its
+        # median -- integers only, no float op, no new draw, so every
+        # existing hash is untouched and the two classes are balanced.
+        q = (data["X"] * 1024.0).astype(np.int64)
+        # wq is the same integer weight vector make_inputs used; recompute
+        # it from the same stream position by redrawing X, Xq, w
+        r = np.random.RandomState(SEED)
+        r.rand(N_ROWS, N_COLS); r.rand(N_QUERIES, N_COLS)
+        wq = (r.rand(N_COLS).astype(np.float32) * 1024.0).astype(np.int64)
+        qw = q @ wq
+        return (qw > np.median(qw)).astype(np.int64)
     if name == "sw_blobs":
         n = data["X_blobs"].shape[0]
         return (1 + (np.arange(n, dtype=np.int64) * 7919) % 5).astype(
@@ -475,6 +504,21 @@ def run_cell(name, out_dir):
             entry["intercept"] = sha256_of(np.float64(m.intercept_))
             entry["intercept_value"] = float(m.intercept_)
             entry["predictions"] = sha256_of(m.predict(X[:N_QUERIES]))
+        elif kind == "ridge":
+            m = mojolearn.Ridge(**spec).fit(X, y, **fit_kw)
+            entry["coef"] = sha256_of(m.coef_)
+            entry["intercept"] = sha256_of(np.float64(m.intercept_))
+            entry["intercept_value"] = float(m.intercept_)
+            entry["predictions"] = sha256_of(m.predict(X[:N_QUERIES]))
+        elif kind == "logreg":
+            m = mojolearn.LogisticRegression(**spec).fit(X, y, **fit_kw)
+            entry["coef"] = sha256_of(m.coef_)
+            entry["intercept"] = sha256_of(m.intercept_)
+            entry["predictions"] = sha256_of(m.predict(X[:N_QUERIES]))
+            entry["proba"] = sha256_of(m.predict_proba(X[:N_QUERIES]))
+            entry["n_iter"] = int(m.n_iter_[0])
+            entry["retcode"] = int(m.retcode_)
+            entry["objective"] = float(m.objective_)
         else:
             raise AssertionError(kind)
     except Exception as exc:

@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- `Ridge` (cuML `ridgeFit`, the `eig` arm: `svdEig` + `ridgeSolve`;
+  DEVIATION 545) and `LogisticRegression` (cuML `qnFit`, the binary L-BFGS
+  sigmoid arm with the Armijo line search; DEVIATIONS 546-549; OWL-QN / l1,
+  softmax / multiclass, sample_weight and class_weight refused by name).
+  Under IDENTICAL every reduction in the objective, gradient and solver is a
+  pinned fold (cuML's are float atomics), so the iteration count is part of
+  the certificate (`qn.n_iter`). Gates: `glm/mojo_only/ridge_check.mojo`,
+  `glm/mojo_only/logistic_check.mojo`, both modes, in
+  `pixi run check-linalg-identity`; E2U cells `ridge_*`, `logreg_*`.
+
 ## 0.1.0 (2026-08-23)
 
 First public release. One wheel, `pip install mojolearn`, macOS arm64,

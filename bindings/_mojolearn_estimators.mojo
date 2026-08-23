@@ -1,4 +1,4 @@
-"""CPython boundary for the verified DBSCAN, PCA, tSVD and OLS kernels.
+"""CPython boundary for the verified DBSCAN, PCA, tSVD, OLS, Ridge and logistic kernels.
 
 Kept in a separate extension so the independently changing primary binding
 does not become a merge point. Arrays cross as borrowed NumPy addresses; all
@@ -20,7 +20,14 @@ from decomposition.estimator import (
     tsvd_fit_host,
     tsvd_transform_host,
 )
-from glm.estimator import ols_fit_host, ols_predict_host
+from glm.estimator import (
+    ols_fit_host,
+    ols_predict_host,
+    qn_decision_function_host,
+    qn_fit_host,
+    qn_sigmoid_host,
+    ridge_fit_host,
+)
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -33,6 +40,12 @@ def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
     if addr == 0:
         raise Error("mojolearn: null int32 buffer address")
     return MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=addr)
+
+
+def _f64_ptr(addr: Int) raises -> MutPointer[Float64, MutUntrackedOrigin]:
+    if addr == 0:
+        raise Error("mojolearn: null float64 buffer address")
+    return MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=addr)
 
 
 def dbscan_fit_binding(
@@ -244,6 +257,108 @@ def ols_predict_binding(
     return PythonObject(0)
 
 
+def ridge_fit_binding(
+    x_addr: PythonObject,
+    y_addr: PythonObject,
+    coef_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`ridgeFit`, the eig arm (DEVIATION 545). params: n_rows, n_features,
+    alpha. The intercept is the Python layer's host centering, as for OLS."""
+    if len(params) != 3:
+        raise Error("ridge_fit: params must contain n_rows, n_features, alpha")
+    var xp = _f32_ptr(Int(py=x_addr))
+    var yp = _f32_ptr(Int(py=y_addr))
+    var wp = _f32_ptr(Int(py=coef_addr))
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var alpha = Float32(Float64(py=params[2]))
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        ridge_fit_host(ctx, xp, yp, wp, nr, nf, alpha)
+    return PythonObject(0)
+
+
+def qn_fit_binding(
+    x_addr: PythonObject,
+    y_addr: PythonObject,
+    coef_addr: PythonObject,
+    info_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`qnFit`, QN_LOSS_LOGISTIC (DEVIATIONS 546-549). params: n_rows,
+    n_features, n_classes, penalty_l1, penalty_l2, grad_tol, change_tol,
+    max_iter, linesearch_max_iter, lbfgs_memory, fit_intercept,
+    penalty_normalized, has_sample_weight -- cuML's `qn_params` in its
+    field order. Returns num_iters; info[0] = objective, info[1] = retcode."""
+    if len(params) != 13:
+        raise Error("qn_fit: params must carry the 13 qn_params fields")
+    var xp = _f32_ptr(Int(py=x_addr))
+    var yp = _f32_ptr(Int(py=y_addr))
+    var wp = _f32_ptr(Int(py=coef_addr))
+    var ip = _f32_ptr(Int(py=info_addr))
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var nc = Int(py=params[2])
+    var l1 = Float64(py=params[3])
+    var l2 = Float64(py=params[4])
+    var grad_tol = Float64(py=params[5])
+    var change_tol = Float64(py=params[6])
+    var max_iter = Int(py=params[7])
+    var ls_max = Int(py=params[8])
+    var mem = Int(py=params[9])
+    var fit_intercept = Int(py=params[10]) != 0
+    var normalized = Int(py=params[11]) != 0
+    var has_sw = Int(py=params[12]) != 0
+    var iters = 0
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        iters = qn_fit_host(
+            ctx, xp, yp, wp, ip, nr, nf, nc, l1, l2, grad_tol, change_tol,
+            max_iter, ls_max, mem, fit_intercept, normalized, has_sw,
+        )
+    return PythonObject(iters)
+
+
+def qn_decision_function_binding(
+    x_addr: PythonObject,
+    coef_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`qnDecisionFunction`: scores = X w + b. params: n_rows, n_features,
+    fit_intercept."""
+    if len(params) != 3:
+        raise Error("qn_decision_function: params must contain n_rows, n_features, fit_intercept")
+    var xp = _f32_ptr(Int(py=x_addr))
+    var cp = _f32_ptr(Int(py=coef_addr))
+    var op = _f32_ptr(Int(py=out_addr))
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var fi = Int(py=params[2]) != 0
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        qn_decision_function_host(ctx, xp, cp, op, nr, nf, fi)
+    return PythonObject(0)
+
+
+def qn_sigmoid_binding(
+    scores_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """The binary predict_proba link on the host through identical_exp64
+    (DEVIATION 549): out is float64 (n_rows, 2)."""
+    if len(params) != 1:
+        raise Error("qn_sigmoid: params must contain n_rows")
+    var sp = _f32_ptr(Int(py=scores_addr))
+    var op = _f64_ptr(Int(py=out_addr))
+    var nr = Int(py=params[0])
+    with GILReleased(Python()):
+        qn_sigmoid_host(sp, op, nr)
+    return PythonObject(0)
+
+
 @export
 def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
     try:
@@ -256,6 +371,10 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
         m.def_function[inverse_transform_binding]("inverse_transform")
         m.def_function[ols_fit_binding]("ols_fit")
         m.def_function[ols_predict_binding]("ols_predict")
+        m.def_function[ridge_fit_binding]("ridge_fit")
+        m.def_function[qn_fit_binding]("qn_fit")
+        m.def_function[qn_decision_function_binding]("qn_decision_function")
+        m.def_function[qn_sigmoid_binding]("qn_sigmoid")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_estimators: ", e))

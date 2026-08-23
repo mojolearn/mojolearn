@@ -1,0 +1,241 @@
+{
+  "cells": {
+    "logreg_c1": {
+      "card": "logreg_c1.card",
+      "coef": "7a58d29afc1ad105a67dab90f32c24d77b816241fc505a3725e912140f16e28b",
+      "intercept": "3e6662c6eb3794322817f7afec763e1b0c8358ce2ddbc1e31feeff6d5872883d",
+      "kind": "logreg",
+      "n_iter": 23,
+      "objective": 0.09446299821138382,
+      "predictions": "8669f54c0708cb273088a291f64a21b17b23ef70d751d5ed15f0681ae8d9b4f0",
+      "proba": "15c60d1b95e0512a1e96cbe5839cb35dafc9f509b0b030884e6c330e4c0cf61a",
+      "retcode": 0,
+      "seconds": 0.14,
+      "spec": {
+        "C": 1.0
+      },
+      "stages": 74
+    },
+    "logreg_c100": {
+      "card": "logreg_c100.card",
+      "coef": "f045c9e79cb2bf51f50194d6106a83f5edd203141b3b03d6e200becce29fe07c",
+      "intercept": "fa35c9baa02b1adbadeeffd002d243889244c02c8f32c2d9c4f26bd221d4ac7d",
+      "kind": "logreg",
+      "n_iter": 35,
+      "objective": 0.020331235602498055,
+      "predictions": "72e0a94b31a4b514f18adeea3eebbdafef6081e5cd2a84bc954054ef389f9809",
+      "proba": "ff0cc468aeb3c602fe06fdb786cfbd6fafa1277382a18eed040d74df52e52e7a",
+      "retcode": 0,
+      "seconds": 0.18,
+      "spec": {
+        "C": 100.0
+      },
+      "stages": 110
+    },
+    "logreg_l1_refused": {
+      "kind": "logreg",
+      "refused": "NotImplementedError: mojolearn LogisticRegression: penalty='l1' selects OWL-QN (min_owlqn, qn_solvers.cuh:246), which is NOT PORTED; penalty='l2' or None (L-BFGS) are the ported arms. See glm/UNPORTED.tsv",
+      "seconds": 0.0,
+      "spec": {
+        "penalty": "l1"
+      }
+    },
+    "logreg_nointercept": {
+      "card": "logreg_nointercept.card",
+      "coef": "bbbe8e58f93efc0005be949e0bb34c1181502aa150920cbc23dacfdafb54ab87",
+      "intercept": "c383d0eb37e29b3fcb7f2dca0759f89e66765bc05a834b9cce580a653ddf4c47",
+      "kind": "logreg",
+      "n_iter": 14,
+      "objective": 0.5684740543365479,
+      "predictions": "82ee58ce309bf9d1349ef05fcb0540d1096f5aa11c7cc21fcaa11894800db845",
+      "proba": "58ca0e616ec1dd134568508ec4efb605333ca9488cb398899c2569c289c6425b",
+      "retcode": 0,
+      "seconds": 0.1,
+      "spec": {
+        "C": 1.0,
+        "fit_intercept": false
+      },
+      "stages": 47
+    }
+  },
+  "commit": "a81d17658d263ff1804ff91184215ef5df026cbf",
+  "driver": "e2u",
+  "inputs": {
+    "C0": "09d72baac77347c606b0ec4a90977b55c246e10fadc174888d3fee05bfee4a4e",
+    "X": "5a095c2b4b84d5e01de5fb6be5486723093c6abd431b82b612bc28ee89484e95",
+    "X_blobs": "6b619f79e2b0dd5b258193598de84fe3521645f71d7fe6372b94ee4ff9eb8dcf",
+    "X_chain": "8a11433bb672dc09d76fd980ddd604a7b11bb35cb4817fa4aa74fb15685edb03",
+    "X_ols_wide": "d9126dc7bc873d6f03466d1b935abc0642699ca62e41f698a4fd6180d9e30187",
+    "X_ties": "a83aadd777521005a6e17a32ee30d83b6341be4f10ed06ecf3519e831620feee",
+    "X_wide": "c3a39be30811e8bf7a9532e280e29c53b4db0630b1246ad1ddd4cab2a750ebe0",
+    "Xb": "f677a70a0cd8a870f263a8f66d63a5e6c56ff98b11bf8a650122485178b1ce80",
+    "Xq": "f7af5e4967e5455e8bd0d4bb775dad8d6326401043168539fa2e117d959b007a",
+    "Xq_ties": "7e66684f8f9585f876aa45622a0749476bc3dd91a7543320ac56e1ac0d36d663",
+    "sw": "dc70834feb7e9806b2e8e9c17df83290fd7a09bf37d7d119a06e3409503b84f3",
+    "y_clf2": "66f61758631c071484d67c1341b6f848c84d853d7db20403a738f799f1938237",
+    "y_clf3": "d011af44e44d9bc82487bbd70705aa0642d0131b905eee521706e8123c67dd3e",
+    "y_ols_wide": "1df84470fdac59abad6ce08f405289230a5ae4bd5387097ef2436e8d72a50824",
+    "y_reg": "c9360efad18ce7e0414753c377d663e3a6035ea6d098457b9264a5768f1fe573",
+    "yb_reg": "a424cbbb79a28102880781cc2db1c80cacf22596ed4af77e657a74452771b8e3"
+  },
+  "machine": "MacBook-Air-1-terrabyte.local",
+  "numeric_mode": "identical",
+  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "reach": [
+    {
+      "note": "",
+      "parameter": "KMeans.n_clusters",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "KMeans.init",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "KMeans.n_init",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "KMeans.tol",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "KMeans.max_iter",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "KMeans.random_state",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "KMeans.sample_weight",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "KMeans.init_centroids",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "NearestNeighbors.n_neighbors",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "NearestNeighbors.query_tile",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "NearestNeighbors.metric='l2'",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "KNeighborsClassifier.n_neighbors",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "KNeighborsRegressor.n_neighbors",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "DBSCAN.eps",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "DBSCAN.min_samples",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "DBSCAN.algorithm",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "DBSCAN.algorithm (min50)",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "DBSCAN.algorithm (uniform24)",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "DBSCAN.max_mbytes_per_batch (rbc)",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "DBSCAN.max_mbytes_per_batch (brute)",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "DBSCAN.max_iterations (chain, cap 200 binds)",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "DBSCAN.max_iterations (chain, None = fixed point)",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "DBSCAN.max_iterations (blobs, converges in 1)",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "DBSCAN.algorithm (chain)",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "PCA.n_components",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "TruncatedSVD.n_components",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "LinearRegression.fit_intercept",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "Ridge.alpha",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "",
+      "parameter": "Ridge.fit_intercept",
+      "verdict": "MISSING"
+    },
+    {
+      "note": "moved coef,intercept,predictions,proba; n_iter: 23 -> 35",
+      "parameter": "LogisticRegression.C",
+      "verdict": "REACHES"
+    },
+    {
+      "note": "moved coef,intercept,predictions,proba; n_iter: 23 -> 14",
+      "parameter": "LogisticRegression.fit_intercept",
+      "verdict": "REACHES"
+    }
+  ]
+}

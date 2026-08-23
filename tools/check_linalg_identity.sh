@@ -1,10 +1,10 @@
 #!/bin/sh
-# The linear-algebra identity gate: the matrix products, PCA, tSVD and OLS,
-# in BOTH modes.
+# The linear-algebra identity gate: the matrix products, PCA, tSVD, OLS,
+# ridge and logistic regression, in BOTH modes.
 #
 #   pixi run check-linalg-identity
 #
-# IDENTITY_PATHS rows 27-31. DEVIATIONS 520, 521, 522, 523, 524, 525, 526.
+# IDENTITY_PATHS rows 27-31 (and the ridge / logistic rows). DEVIATIONS 520-527, 545-549.
 #
 # WHY BOTH MODES, AND WHY THAT IS THE WHOLE DESIGN OF THIS SCRIPT.
 #
@@ -54,6 +54,8 @@ mojo_only/gram_splitk_check.mojo
 decomposition/mojo_only/jacobi_check.mojo
 decomposition/mojo_only/pca_check.mojo
 glm/mojo_only/ols_check.mojo
+glm/mojo_only/ridge_check.mojo
+glm/mojo_only/logistic_check.mojo
 decomposition/pca_main.mojo
 decomposition/jacobi_main.mojo
 glm/ols_main.mojo"

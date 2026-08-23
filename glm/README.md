@@ -1,6 +1,9 @@
-# glm: ordinary least squares, from RAFT
+# glm: ordinary least squares, ridge and logistic regression, from cuML and RAFT
 
-Sixth section. **COPY, DO NOT IMPROVE.**
+Sixth section. **COPY, DO NOT IMPROVE.** Three estimators: `LinearRegression`
+(RAFT `lstsqEig`, below), `Ridge` (cuML `ridgeFit`, the `eig` arm; DEVIATION
+545) and `LogisticRegression` (cuML `qnFit`, the L-BFGS sigmoid arm;
+DEVIATIONS 546-549). The second and third are at the end of this file.
 
 ## Status: launched and passing
 
@@ -127,24 +130,126 @@ scikit-learn's `LinearRegression` uses LAPACK `gelsd`, also an SVD route, so
 this difference is real and belongs in any accuracy comparison rather than
 being discovered during one.
 
-## Logistic regression: why it is not here, and why its GPU case is weaker
+## Ridge (DEVIATION 545): cuML's `eig` solver is an SVD, not "OLS plus alpha"
 
-cuML does logistic and softmax regression in `cpp/src/glm/qn/`, 2737 lines.
-It is not a linear-algebra routine, it is an **LBFGS / OWL-QN solver** with a
-line search, an objective/regularizer class hierarchy, and its own dense and
-sparse matrix wrappers. Porting it is a project, not a follow-on.
+`cuml/cpp/src/glm/ridge.cuh::ridgeFit` -> `glm/ported/glm/ridge.mojo`, with
+`raft/linalg/detail/svd.cuh::svdEig` -> `glm/ported/linalg/detail/svd.mojo`
+and the RAFT matrix primitives it calls -> `glm/ported/matrix/math.mojo`.
+`glm/UNPORTED.tsv` used to say ridge "is lstsqEig with alpha added to the
+eigenvalues before inverting. Cheap once wanted." That sentence is deleted:
+their `ridgeEig` is
 
-**And the GPU upside is smaller than for anything else in this repository,**
-which is worth saying before it gets built rather than after:
+    svdEig(A): covA = A^T A; eig -> V, S (descending); S = sqrt(S);
+               U = A V; U /= S per column (|S| < 1e-10 left AS IS)
+    ridgeSolve: setSmallValuesZero(S, 1e-10); S_nnz = S^2 + alpha;
+                S = S / S_nnz (|S_nnz| < 1e-10 -> 0); V *= S per column;
+                S_nnz = U^T b; w = V S_nnz
 
-- Least squares is dominated by `A^T A`, which is `O(n d^2)` and
-  arithmetic-dense. That is matrix-MATRIX work and it is where a GPU wins.
-- Each LBFGS iteration is `X w` and `X^T r`, both `O(n d)`. That is
-  matrix-VECTOR work, which is bandwidth-bound: it reads the whole dataset to
-  do one multiply-add per element.
-- And the iterations are strictly serial, with a host-side line search
-  between them, so the control-plane cost per iteration lands on top.
+which is algebraically `(A^T A + alpha I)^-1 A^T b` and is a different
+PROGRAM from that closed form, with an extra `A V` pass and two absolute
+thresholds on a SINGULAR VALUE (the `OLS_NONZERO_THRESH` deviation again,
+carried and gated). The Gram, the Jacobi and `U^T b` are rows 27, 31 and 29
+unchanged; `U = A V` and `w = V S_nnz` are row 28's pinned products; the
+elementwise RAFT ops are one thread per cell.
 
-That is the same profile as gradient boosting, which this repository already
-measured as the weakest GPU case it has. Worth porting for completeness;
-not worth porting first if the goal is a number that makes the case.
+    pixi run mojo run -I . glm/mojo_only/ridge_check.mojo
+    tools/with_identical_mode.sh pixi run mojo run -I . glm/mojo_only/ridge_check.mojo
+
+    check_ridge_matches_closed_form    device == float64 Gaussian elimination
+                                       at alpha 0/1/100 to 1e-3
+    check_ridge_alpha_reaches          ||w|| decreases 0 -> 1 -> 100, bits move
+    check_ridge_dispatch_guard         n_cols==1, algo 0, fit_intercept,
+                                       normalize, alpha<0 RAISE by name
+    check_ridge_device_equals_host     IDENTICAL: U (8192 cells) and w bit for
+                                       bit against the host replay of every
+                                       kernel this lane added; FAST: a report
+    check_ridge_run_twice_identical    IDENTICAL asserts, FAST reports
+    check_ridge_card_is_emitted        14 stages (`ridge.input.A/b/alpha`,
+                                       `ridge.svd.covA/eigvals/info/order/S/V/U`,
+                                       `ridge.solve.S_over/nnz/Utb`, `ridge.coef`;
+                                       `order` and `nnz` are the INTEGER
+                                       stages), run-to-run control
+
+The Python surface `mojolearn.Ridge(alpha, solver='auto'|'eig',
+fit_intercept, normalize=False)` centers on the host exactly as
+`LinearRegression` does (DEVIATION 517's note applies verbatim); `'svd'`,
+`'cd'`, `normalize`, `sample_weight` and one column are refused by name.
+Four sabotages are recorded in `glm/mojo_only/ridge_check.mojo`'s header.
+
+## Logistic regression (DEVIATIONS 546-549): cuML's QN solver, the L-BFGS sigmoid arm
+
+cuML's `cpp/src/glm/qn/` is an L-BFGS / OWL-QN solver with a line search and
+an objective class hierarchy, and the section's earlier note -- that porting
+it "is a project, not a follow-on" and that its GPU upside is the weakest in
+the repository (each iteration is `X w` and `X^T r`, matrix-VECTOR,
+bandwidth-bound, strictly serial with a host line search between) -- stands
+as written and is why it was ported LAST. It is ported now, one file per
+theirs:
+
+    cuml/cpp/src/glm/qn/qn.cuh             -> glm/ported/glm/qn/qn.mojo
+    cuml/cpp/src/glm/qn/glm_base.cuh       -> glm/ported/glm/qn/glm_base.mojo
+    cuml/cpp/src/glm/qn/glm_logistic.cuh   -> glm/ported/glm/qn/glm_logistic.mojo
+    cuml/cpp/src/glm/qn/glm_regularizer.cuh-> glm/ported/glm/qn/glm_regularizer.mojo
+    cuml/cpp/src/glm/qn/qn_solvers.cuh     -> glm/ported/glm/qn/qn_solvers.mojo
+    cuml/cpp/src/glm/qn/qn_linesearch.cuh  -> glm/ported/glm/qn/qn_linesearch.mojo
+    cuml/cpp/src/glm/qn/qn_util.cuh        -> glm/ported/glm/qn/qn_util.mojo
+    cuml/cpp/src/glm/qn/simple_mat/dense.hpp -> glm/ported/glm/qn/simple_mat/dense.mojo
+    cuml/cpp/include/cuml/linear_model/qn.h  -> glm/ported/linear_model/qn.mojo
+
+NOT PORTED, each refused by name at the layer it would enter:
+`glm_softmax.cuh` (multinomial; > 2 classes), `min_owlqn` (penalty 'l1' /
+'elasticnet'), `add_sample_weights` (sample_weight, class_weight),
+`glm_linear.cuh` / `glm_svm.cuh` (the other losses), `qnFitSparse`.
+
+**THEIR REDUCTIONS ARE FLOAT ATOMICS, AND THAT IS THE IDENTITY STORY
+(DEVIATION 547).** `dot`, `nrm2`, the loss sum and the regularizer sum all go
+through `raft::linalg::mapThenSumReduce`, whose kernel folds each block with
+CUB and then `atomicAdd`s the block partials (`map_then_reduce.cuh:33-38`).
+The number the Armijo test compares, the `ys <= eps * yy` skipping test, the
+convergence test -- every branch in the solver -- is a branch on a float
+whose last bit depends on which block arrived first. cuML ships one backend
+and accepts that. Here every one of them is REPLACED by one block of
+`STATS_TPB` strided partials through `pinned_block_sum`; the gradient
+`X^T dZ` is row 29's `xty_kernel`; `X w` is row 28's gemv; `exp`/`log` in
+the loss go through `identical_exp`/`identical_log` (row 12); the line
+search's one host multiply-add `fx_init + step * dg_test` is an fma; and the
+bias gradient's `mean` is `sum * (1/N)` as `raft::stats::mean` spells it
+(a multiply, which is why `column_mean_kernel`'s `s / n` is not reused).
+Under IDENTICAL the accepted steps, the L-BFGS history, the ITERATION COUNT
+and the coefficients are a function of the inputs alone, and the card records
+them: `qn.init.loss/grad`, per iteration `qn.iterNNNN.loss/grad/ls` (`ls` =
+the line-search return code and its evaluation count, two integers),
+`qn.coef`, `qn.n_iter`, `qn.retcode`. Measured on this Mac: FAST and
+IDENTICAL take **32 vs 35 iterations** on the E2U `logreg_c100` cell -- the
+fold shape moves the count, which is exactly the thing the certificate has to
+carry.
+
+    pixi run mojo run -I . glm/mojo_only/logistic_check.mojo
+    tools/with_identical_mode.sh pixi run mojo run -I . glm/mojo_only/logistic_check.mojo
+
+    check_logistic_planted_separable   planted signs recovered, accuracy > 0.97
+    check_logistic_is_a_minimizer      float64 host gradient Linf at the device
+                                       solution <= tol * max(fx, tol) (the
+                                       solver's own rule), below 8 perturbed
+                                       objectives -- the oracle, no sklearn
+    check_logistic_c_reaches           C 1 / 100 / none: ||w|| grows, bits move;
+                                       fit_intercept=False has D parameters
+    check_logistic_refuses_by_name     l1, softmax, 3 classes, sample_weight,
+                                       an unknown loss
+    check_logistic_device_equals_host  ONE objective evaluation: loss and every
+                                       gradient entry bit for bit (IDENTICAL)
+    check_logistic_run_twice_identical coefficients AND n_iter (IDENTICAL)
+    check_logistic_card_is_emitted     2 + 3 n_iter + 3 stages, control
+
+Three sabotages are recorded in `glm/mojo_only/logistic_check.mojo`'s header;
+the first -- the gradient SIGN flipped -- is the one to read: the solver
+declares SUCCESS at the zero model in 10 iterations, and only the oracle sees
+it.
+
+The Python surface is `mojolearn.LogisticRegression(penalty='l2'|None, C,
+tol, fit_intercept, max_iter, linesearch_max_iter, solver='qn')` with
+`coef_ (1, D)`, `intercept_ (1,)`, `classes_`, `n_iter_`, `objective_`,
+`retcode_`, `predict`, `predict_proba` (float64, the sigmoid through
+`identical_exp64` on the host -- DEVIATION 549; cuML's cupy computes it in
+float32 on the device), `decision_function`. Its docstring carries the
+HONORED / REFUSED table.

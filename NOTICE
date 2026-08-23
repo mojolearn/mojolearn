@@ -101,6 +101,21 @@ was deliberately left out.
     neighbors/ported/knn/knn.mojo            (added 2026-08-23, the k-NN
         classifier and regressor; neighbors/PORTED_MAP.tsv)
     neighbors/ported/selection/knn.mojo
+    glm/ported/glm/ols.mojo                  (cpp/src/glm/ols.cuh; the
+        dispatch and guards; glm/PORTED_MAP.tsv)
+    glm/ported/glm/ridge.mojo                (added 2026-08-23, cpp/src/glm/
+        ridge.cuh: ridgeSolve, ridgeEig, ridgeFit)
+    glm/ported/linear_model/qn.mojo          (added 2026-08-23, cpp/include/
+        cuml/linear_model/qn.h)
+    glm/ported/glm/qn/qn.mojo                (added 2026-08-23, and the
+        seven below: cpp/src/glm/qn/, the L-BFGS logistic solver)
+    glm/ported/glm/qn/glm_base.mojo
+    glm/ported/glm/qn/glm_logistic.mojo
+    glm/ported/glm/qn/glm_regularizer.mojo
+    glm/ported/glm/qn/qn_solvers.mojo
+    glm/ported/glm/qn/qn_linesearch.mojo
+    glm/ported/glm/qn/qn_util.mojo
+    glm/ported/glm/qn/simple_mat/dense.mojo
 
     cuML
     Copyright (c) 2018-2026, NVIDIA CORPORATION & AFFILIATES
@@ -139,6 +154,11 @@ These are DERIVATIVE WORKS of RAFT, translated from CUDA C++ into Mojo. The
     dbscan/ported/sparse/detail/csr.mojo
     decomposition/ported/linalg/detail/pca.mojo   (sign_flip_kernel only,
         from raft matrix/detail/math.cuh:367 signFlipKernel)
+    glm/ported/linalg/detail/svd.mojo   (added 2026-08-23; svdEig from
+        linalg/detail/svd.cuh)
+    glm/ported/matrix/math.mojo         (added 2026-08-23; the matrix
+        primitives from matrix/detail/math.cuh and addScalar from
+        linalg/detail/add.cuh that ridgeSolve and svdEig call)
 
   at RAFT commit 9aa17e5:
 
