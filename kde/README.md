@@ -129,6 +129,12 @@ quadrature of the true volume against their loop:
 | 5 | 0.276853 | 0.276853 |
 | 6 | 0.114016 | 5.516700 |
 
+Independently re-run by the orchestrator the same day against the installed
+scikit-learn 1.9.0 itself (`KernelDensity(kernel='cosine', bandwidth=1).fit(0).score_samples(0)`
+in the `bench` environment, Simpson n=200000): the six numbers above reproduce
+to the printed digits, d = 4 is `nan`. The bug is in the shipped library, not
+in a reading of its source.
+
 Ours is `I_{d-1}` by its power series `sum_k (-1)^k (pi/2)^{2k} / ((2k)!
 (n+2k+1))` in both arms (not the corrected recurrence, which cancels:
 float32 was off by 2.8e-3 at d = 9), gated at d = 2 (`log(4 - 8/pi)`)
