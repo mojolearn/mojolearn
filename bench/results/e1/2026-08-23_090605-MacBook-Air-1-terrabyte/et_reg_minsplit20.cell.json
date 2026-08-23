@@ -1,0 +1,13 @@
+{
+  "card": "et_reg_minsplit20.card",
+  "kind": "et_reg",
+  "model": "d4e88bf4fa1edace89b3d0c7eb43bb3fa5d6060002678fbb3410345b360ef99c",
+  "predictions": "aeecfe6db029f47bcebd544e49c9bfbe2156406b2c9146bf2b2cde24067cb986",
+  "seconds": 0.15,
+  "spec": {
+    "max_depth": 8,
+    "min_samples_split": 20,
+    "n_estimators": 10,
+    "random_state": 7
+  }
+}

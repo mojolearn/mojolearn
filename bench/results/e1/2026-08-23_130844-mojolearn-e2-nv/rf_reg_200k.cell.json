@@ -1,0 +1,12 @@
+{
+  "card": "rf_reg_200k.card",
+  "kind": "rf_reg",
+  "model": "bad4b39ae6334deb729f733cdeef515e2a5937e6962a4cb9de8e20ce2d554034",
+  "predictions": "671c35e5617ced2a34e7693db782ec2885520692a454b5c26390440957139583",
+  "seconds": 0.92,
+  "spec": {
+    "max_depth": 8,
+    "n_estimators": 10,
+    "random_state": 7
+  }
+}

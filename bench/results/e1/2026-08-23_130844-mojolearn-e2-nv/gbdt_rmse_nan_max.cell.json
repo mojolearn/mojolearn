@@ -1,0 +1,19 @@
+{
+  "best_iteration": 0,
+  "card": "gbdt_rmse_nan_max.card",
+  "kind": "gbdt",
+  "loss_curve": "2320ba1821525b4bb36b35c026422fae31a633644cbc34aa0c9e54d43b2bdc6e",
+  "model": "a2717d4ae2ed82d0baee61a13a73fc951e951738c5fc0aafc90ca769d6d4c677",
+  "predictions": "00ca4d2e8a8ca424719827d28850783613090faafee3ddc871c705c63d9269f7",
+  "seconds": 0.71,
+  "spec": {
+    "border_count": 128,
+    "learning_rate": 0.3,
+    "loss": "RMSE",
+    "max_depth": 6,
+    "n_estimators": 20,
+    "nan_mode": "Max",
+    "random_state": 7
+  },
+  "stopped_early": 0
+}

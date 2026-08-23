@@ -1,0 +1,18 @@
+{
+  "best_iteration": 0,
+  "card": "gbdt_loglinquantile.card",
+  "kind": "gbdt",
+  "loss_curve": "26626aae7366534cd46c0dd35dacef363a428ea648ec10a41b5ccd85db6e9aa4",
+  "model": "a5886c08d74ea505bc4408fe5252e471f993b17b7c8b522a3b16b3863bc5881a",
+  "predictions": "04358a2dc6291f9076d8955d1b0054f6e23e156ee735ddb99c74b1ca914fb408",
+  "seconds": 0.47,
+  "spec": {
+    "border_count": 128,
+    "learning_rate": 0.3,
+    "loss": "LogLinQuantile",
+    "max_depth": 6,
+    "n_estimators": 20,
+    "random_state": 7
+  },
+  "stopped_early": 0
+}

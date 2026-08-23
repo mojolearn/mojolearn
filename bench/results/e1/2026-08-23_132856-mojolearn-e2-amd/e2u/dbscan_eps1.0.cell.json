@@ -1,0 +1,15 @@
+{
+  "batches": 1,
+  "card": "dbscan_eps1.0.card",
+  "kind": "dbscan",
+  "labels": "3f49644f0adc53536f46c79bf34172c6acd6f827db2b8369e236f28b7c1c127c",
+  "n_clusters": 8,
+  "n_iter": 2,
+  "n_noise": 396,
+  "seconds": 0.33,
+  "spec": {
+    "eps": 1.0,
+    "min_samples": 5
+  },
+  "stages": 3
+}

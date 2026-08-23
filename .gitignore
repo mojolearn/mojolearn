@@ -28,3 +28,8 @@ __pycache__/
 
 # the NUMERIC_IDENTICAL binary set (MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_*.sh); built per machine, never committed
 python/mojolearn/identical/
+
+# E1/E2/E3 leg artifacts: the saved models are reproducible from the cells (tools/e1_traced_fit.py, e2_matrix_fit.py) and are not committed
+bench/results/e1/*/*.model.npz
+bench/results/e1/*/control/
+bench/results/e1/.leg-*.state

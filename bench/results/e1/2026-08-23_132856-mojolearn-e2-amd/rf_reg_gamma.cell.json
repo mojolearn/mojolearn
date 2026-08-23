@@ -1,0 +1,13 @@
+{
+  "card": "rf_reg_gamma.card",
+  "kind": "rf_reg",
+  "model": "394ff7710e9aba435b24186aa8273c6c4b5bdcc1a2fcda178e05f84c2b3ec723",
+  "predictions": "d46f70b508bacc06c69d99940f769ee67ef9548f98ab4ce1157ddde54a6acab2",
+  "seconds": 0.46,
+  "spec": {
+    "criterion": "gamma",
+    "max_depth": 8,
+    "n_estimators": 10,
+    "random_state": 7
+  }
+}

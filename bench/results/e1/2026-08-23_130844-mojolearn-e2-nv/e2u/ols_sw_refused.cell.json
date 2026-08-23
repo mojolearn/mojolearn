@@ -1,0 +1,6 @@
+{
+  "kind": "ols",
+  "refused": "NotImplementedError: mojolearn LinearRegression: sample_weight is not ported (ols.cuh:99-110; glm/UNPORTED.tsv)",
+  "seconds": 0.0,
+  "spec": {}
+}

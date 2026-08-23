@@ -1,0 +1,17 @@
+{
+  "card": "logreg_nointercept.card",
+  "coef": "bbbe8e58f93efc0005be949e0bb34c1181502aa150920cbc23dacfdafb54ab87",
+  "intercept": "c383d0eb37e29b3fcb7f2dca0759f89e66765bc05a834b9cce580a653ddf4c47",
+  "kind": "logreg",
+  "n_iter": 14,
+  "objective": 0.5684740543365479,
+  "predictions": "82ee58ce309bf9d1349ef05fcb0540d1096f5aa11c7cc21fcaa11894800db845",
+  "proba": "58ca0e616ec1dd134568508ec4efb605333ca9488cb398899c2569c289c6425b",
+  "retcode": 0,
+  "seconds": 0.61,
+  "spec": {
+    "C": 1.0,
+    "fit_intercept": false
+  },
+  "stages": 47
+}

@@ -1,0 +1,19 @@
+{
+  "best_iteration": 0,
+  "card": "gbdt_mae_gradient.card",
+  "kind": "gbdt",
+  "loss_curve": "4e0db0708116affe41da40a562a50dcdc091a7bc95be263afe552cc75635f933",
+  "model": "a1f6836aa00d3121c225685e1c07ea82fad138d28791bf3a680a98619463c0ec",
+  "predictions": "08539f2b52d0b7069de9a10b9bae5e0b4a01a2c646d20cccf2d884f8b2044326",
+  "seconds": 0.45,
+  "spec": {
+    "border_count": 128,
+    "leaf_estimation_method": "Gradient",
+    "learning_rate": 0.3,
+    "loss": "MAE",
+    "max_depth": 6,
+    "n_estimators": 20,
+    "random_state": 7
+  },
+  "stopped_early": 0
+}

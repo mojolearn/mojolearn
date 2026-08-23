@@ -1,0 +1,19 @@
+{
+  "best_iteration": 0,
+  "card": "gbdt_crossentropy.card",
+  "kind": "gbdt",
+  "loss_curve": "417268597fbc1cdefa69539bdf5ca2c32aca28c2f83e794632fcd5e3c43f5fed",
+  "model": "c26c839105f7fb36718c0c2e1ec83b036d86ece92dbfcd9a9a94c956ac09ee00",
+  "predictions": "31ddaae492cba65036fe9b5c3349b8c2eeeec0e1df60f6a8e17472c2e2da0490",
+  "proba": "0a0fdfee64bc35bd62d6c2cf14779e25d28e9e4d7e3669942c2abe34cd35ffce",
+  "seconds": 0.77,
+  "spec": {
+    "border_count": 128,
+    "learning_rate": 0.3,
+    "loss": "CrossEntropy",
+    "max_depth": 6,
+    "n_estimators": 20,
+    "random_state": 7
+  },
+  "stopped_early": 0
+}

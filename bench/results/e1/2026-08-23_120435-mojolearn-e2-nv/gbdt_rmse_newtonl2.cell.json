@@ -1,0 +1,19 @@
+{
+  "best_iteration": 0,
+  "card": "gbdt_rmse_newtonl2.card",
+  "kind": "gbdt",
+  "loss_curve": "8272135d40d04648b91eb863452e6833510de8415520a4f09f05c3d2250424c0",
+  "model": "d4f40612beac3c04802ded6d5158a6c53feea1bb11af02c6a1da9c99e8f9a3e7",
+  "predictions": "585f9c23c47f33273375797b2a72176b8eb74c4aa03890cd9480ce98a7dad933",
+  "seconds": 0.75,
+  "spec": {
+    "border_count": 128,
+    "learning_rate": 0.3,
+    "loss": "RMSE",
+    "max_depth": 6,
+    "n_estimators": 20,
+    "random_state": 7,
+    "score_function": "NewtonL2"
+  },
+  "stopped_early": 0
+}

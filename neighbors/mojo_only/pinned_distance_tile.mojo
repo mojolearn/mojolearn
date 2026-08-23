@@ -50,9 +50,8 @@ calling `gemm_nt` plus `expand_distances_kernel` in the default build.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
-from std.math import sqrt
 
-from mojo_only.numerics import ftz, identical_mul_add
+from mojo_only.numerics import ftz, identical_mul_add, identical_sqrt
 
 
 comptime PINNED_TILE_TPB = 256
@@ -107,5 +106,12 @@ def pinned_distance_tile_kernel(
     if dist <= Float32(0.0):
         dist = Float32(0.0)
     if is_sqrt_in != 0:
-        dist = ftz(sqrt(dist))
+        # DEVIATION 550 (2026-08-23): `identical_sqrt`, not the stdlib
+        # `sqrt`. This tile is the IDENTICAL arm, and the stdlib sqrt is
+        # NVIDIA's approximate PTX sqrt (DEVIATION 258: 180,714 of 2^20
+        # inputs off by one ulp) -- E1U's knn card at 8660400 agreed on
+        # index_norm and query_norm and diverged at out_dist on the H100,
+        # which is exactly one unrouted sqrt after the norms. Apple's
+        # native sqrt is correctly rounded, so this moves no Apple bit.
+        dist = ftz(identical_sqrt(dist))
     z.unsafe_store(idx, dist)

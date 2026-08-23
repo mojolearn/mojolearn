@@ -1,0 +1,8 @@
+# pca n=20000 d=24 n_components=24
+# format: mojolearn-identity-trace v1
+0	pca.mean	f32	24	552c91d3d99033e9
+1	pca.jacobi.a	f32	576	71246d34a11f0e98
+2	pca.components	f32	576	2a021b52b02ca540
+3	pca.explained_var	f32	24	86afea55449676ad
+4	pca.singular_vals	f32	24	b9849662c168694e
+5	pca.noise_var	f32	1	4d25767f9dce13f5

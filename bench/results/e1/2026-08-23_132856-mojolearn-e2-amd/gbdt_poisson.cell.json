@@ -1,0 +1,18 @@
+{
+  "best_iteration": 0,
+  "card": "gbdt_poisson.card",
+  "kind": "gbdt",
+  "loss_curve": "ab403d04653961c90691ccd7c4ab79796f6bcb66ebdaf02f2add1fca2aee0c95",
+  "model": "403a7bf7c4946288e66264dca6f8f066335eec810a25fd6627bcc15b55542210",
+  "predictions": "6085d71ba4c1c7a94d669a24a5a0a6e0688e1600985bdfde52dd80e8732cb9bc",
+  "seconds": 0.41,
+  "spec": {
+    "border_count": 128,
+    "learning_rate": 0.3,
+    "loss": "Poisson",
+    "max_depth": 6,
+    "n_estimators": 20,
+    "random_state": 7
+  },
+  "stopped_early": 0
+}

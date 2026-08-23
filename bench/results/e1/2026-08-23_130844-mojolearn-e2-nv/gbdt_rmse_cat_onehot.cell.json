@@ -1,0 +1,24 @@
+{
+  "best_iteration": 0,
+  "card": "gbdt_rmse_cat_onehot.card",
+  "kind": "gbdt",
+  "loss_curve": "52ea1cb32edd25e84dfdd7816d7118f812af2b4abed65a65c6c089eb725be171",
+  "model": "063e02833346c9aa8f801319b8a0bee2d874a1ba2713a99dc96dc44d36884e4d",
+  "predictions": "15a234c8ed9b98b5a402929e81d07f003980186d9936a148a1d2225754dc4285",
+  "seconds": 0.77,
+  "spec": {
+    "border_count": 128,
+    "cat_features": [
+      1
+    ],
+    "learning_rate": 0.3,
+    "loss": "RMSE",
+    "max_depth": 6,
+    "n_estimators": 20,
+    "one_hot_features": [
+      0
+    ],
+    "random_state": 7
+  },
+  "stopped_early": 0
+}

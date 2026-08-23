@@ -1,0 +1,13 @@
+{
+  "card": "knn_k10_tile64.card",
+  "distances": "e3a5bddf255d3164f0cead12033d6ebbca65cb48a9f260da79dd8bf8610251f1",
+  "indices": "9c0566c60022ad10df0b29f7169c7d4adec61830c9ce61a3773b4eeabddade2d",
+  "kind": "knn",
+  "seconds": 0.6,
+  "spec": {
+    "n_neighbors": 10,
+    "query_tile": 64
+  },
+  "stages": 6,
+  "used_query_tile": 64
+}

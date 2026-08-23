@@ -111,7 +111,7 @@ from std.bit import count_trailing_zeros, pop_count
 from std.gpu import block_idx, thread_idx
 from std.gpu.primitives.warp import lane_id, shuffle_idx, vote
 from std.gpu.primitives.warp import sum as warp_sum
-from std.math import sqrt
+from mojo_only.numerics import identical_sqrt  # DEVIATION 550
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from mojo_only.kernel_matrix import TARGET_COLUMN, lib_lane_width_for
@@ -277,7 +277,7 @@ def block_rbc_kernel_eps_csr_pass(
             var r_size = Int(r_indptr.unsafe_load(cur_k + 1)) - r_start
 
             # we have precomputed the query<->landmark distance
-            var cur_r_dist = sqrt(
+            var cur_r_dist = identical_sqrt(  # DEVIATION 550: the bound's sqrt, pinned under IDENTICAL (FAST = stdlib, verbatim)
                 shuffle_idx(lane_r_dist_sq, UInt32(k_offset))
             )
 
@@ -419,7 +419,7 @@ def block_rbc_kernel_eps_dense(
             var cur_k = cur_k0 + k_offset
             var r_start = Int(r_indptr.unsafe_load(cur_k))
             var r_size = Int(r_indptr.unsafe_load(cur_k + 1)) - r_start
-            var cur_r_dist = sqrt(
+            var cur_r_dist = identical_sqrt(  # DEVIATION 550: the bound's sqrt, pinned under IDENTICAL (FAST = stdlib, verbatim)
                 shuffle_idx(lane_r_dist_sq, UInt32(k_offset))
             )
 
@@ -544,7 +544,7 @@ def block_rbc_kernel_eps_max_k(
             var cur_k = cur_k0 + k_offset
             var r_start = Int(r_indptr.unsafe_load(cur_k))
             var r_size = Int(r_indptr.unsafe_load(cur_k + 1)) - r_start
-            var cur_r_dist = sqrt(
+            var cur_r_dist = identical_sqrt(  # DEVIATION 550: the bound's sqrt, pinned under IDENTICAL (FAST = stdlib, verbatim)
                 shuffle_idx(lane_r_dist_sq, UInt32(k_offset))
             )
 

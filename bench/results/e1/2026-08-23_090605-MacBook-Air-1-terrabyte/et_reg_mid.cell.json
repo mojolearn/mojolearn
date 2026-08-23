@@ -1,0 +1,13 @@
+{
+  "card": "et_reg_mid.card",
+  "kind": "et_reg",
+  "model": "a572e7b20af0a49795c96b62c4ccac0bf1435c56ed731ac0ad73060ba1ade3f7",
+  "predictions": "49243f47fb559159ab1e4f84f172fb3f24962d12281e5483c01ba79d6d322d62",
+  "seconds": 0.21,
+  "spec": {
+    "max_depth": 8,
+    "min_impurity_decrease": 0.001,
+    "n_estimators": 10,
+    "random_state": 7
+  }
+}

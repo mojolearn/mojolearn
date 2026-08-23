@@ -1,0 +1,13 @@
+{
+  "card": "et_clf_allfeat.card",
+  "kind": "et_clf",
+  "model": "3a25a4b3631327655e328d342b410c9b98c5f6d0cbfc3067aa4579874ae606c2",
+  "predictions": "05b257ee8fe8c61a600eff9703a61c5adf3168b4bfecad5da08a9c290b6e8f7a",
+  "seconds": 0.17,
+  "spec": {
+    "max_depth": 8,
+    "max_features": 1.0,
+    "n_estimators": 10,
+    "random_state": 7
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "card": "et_reg_halffeat.card",
+  "kind": "et_reg",
+  "model": "3b7fd5ee3593f5d60b54b688b84278b40718161defa35c694704646536cea868",
+  "predictions": "11d4dad380b22bd72d679ae370fe492332385a7864bb45271ed291d588ace12d",
+  "seconds": 0.7,
+  "spec": {
+    "max_depth": 8,
+    "max_features": 0.5,
+    "n_estimators": 10,
+    "random_state": 7
+  }
+}
