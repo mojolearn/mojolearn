@@ -937,6 +937,45 @@ comptime TARGET_COLUMN = (
 )
 
 
+#: What the column would have been with NO `-D` override: the vendor of the
+#: device this build will actually run on.
+comptime DETECTED_COLUMN = (
+    COLUMN_AMD if has_amd_gpu_accelerator() else
+    COLUMN_NVIDIA if has_nvidia_gpu_accelerator() else
+    COLUMN_APPLE
+)
+
+
+def column_is_simulated() -> Bool:
+    """True when `-D MOJOLEARN_COLUMN_*` names a vendor this device is not.
+
+    ADDED 2026-08-23, and it exists to bound a technique rather than to
+    enable one. Building another vendor's column locally
+    (`-D MOJOLEARN_COLUMN_AMD=1` on an M4) is genuinely useful --
+    `tools/check_column_invariance.sh` is built on it and it found DEVIATIONS
+    509/512/513 before any AMD hardware existed -- because most of what a
+    column decides is a CONSTANT that the source responds to: a block size, a
+    shared budget, a core count, a grid.
+
+    IT IS NOT USEFUL, AND IS ACTIVELY MISLEADING, FOR A KERNEL WHOSE
+    CORRECTNESS IS COUPLED TO THE HARDWARE'S LANE WIDTH. `vote` returns one
+    bit per lane of the REAL wavefront. A 64-lane ballot compiled for
+    `COLUMN_AMD` and executed on a 32-lane Metal warp does not approximate
+    AMD's answer, it is wrong: the top 32 bits are never set and the
+    `pop_count(mask & lid_mask)` positions are garbage.
+
+    THE PREVIOUS STATE WAS WORSE THAN A FAILING CHECK, WHICH IS WHY THIS
+    EXISTS. Before DEVIATION 515, `RBC_LANES` was the literal 32, so an
+    AMD-column build silently compiled a THIRTY-TWO-lane ball cover and
+    `check_dbscan_arms_agree_on_the_border` passed on it -- a green check
+    that was testing the Apple kernel while its header said AMD. Making
+    `RBC_LANES` follow the column turned that false pass into a real
+    failure, and this predicate is how a check says "not answerable on this
+    build" instead of either lying or failing.
+    """
+    return TARGET_COLUMN != DETECTED_COLUMN
+
+
 def hist_floats_per_thread_for[kernel: Int]() -> Int:
     """Shared floats per thread. `GetHistSize()` is this times the block."""
     if (

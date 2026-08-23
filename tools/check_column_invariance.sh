@@ -33,6 +33,16 @@
 #     one backend. It cannot fail for any of them.
 #   - a kernel that would not launch on real AMD (an LDS budget that fits
 #     Metal but not CDNA, or the reverse) is not exercised.
+#   - A KERNEL COUPLED TO THE HARDWARE'S LANE WIDTH CANNOT BE ANSWERED HERE
+#     AT ALL, and this is the sharpest limit. `vote` returns one bit per
+#     lane of the REAL wavefront, so a 64-lane ballot compiled for
+#     COLUMN_AMD and executed on a 32-lane Metal warp is not an
+#     approximation of AMD's answer, it is garbage: the top half never
+#     sets and every `pop_count(mask & lid_mask)` position is wrong. Such
+#     checks call `column_is_simulated()` and report NOT ANSWERABLE.
+#     Before DEVIATION 515 they did something worse -- `RBC_LANES` was the
+#     literal 32, so an "AMD" build silently compiled a 32-lane ball cover
+#     and the check PASSED, testing the Apple kernel under an AMD header.
 #   - REFUSALS ARE COLUMN-CORRECT ANSWERS, not failures: the fused k-NN arm
 #     raises on a 64-lane column by design (row 23), which is why the k-NN
 #     arm here goes through the default and DEVIATION 509 pins that to the

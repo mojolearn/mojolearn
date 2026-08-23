@@ -45,6 +45,11 @@ from max.gpu.host import DeviceContext, HostBuffer
 
 from dbscan.ported.dbscan.runner import EPS_NN_BRUTE_FORCE, EPS_NN_RBC
 from dbscan.estimator import dbscan_fit
+from mojo_only.kernel_matrix import (
+    TARGET_COLUMN,
+    column_is_simulated,
+    lib_lane_width_for,
+)
 from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 
@@ -341,6 +346,32 @@ def check_dbscan_arms_agree_on_the_border() raises:
     applied to one arm and forgotten on the other, which is how row 9's
     checklist has been missed before.
     """
+    # NOT ANSWERABLE ON A SIMULATED COLUMN. The ball-cover eps kernels walk
+    # one query per WAVEFRONT and build a `vote` ballot with one bit per
+    # lane of the REAL warp, so `RBC_LANES` (DEVIATION 515: read from the
+    # column) must equal the hardware's width or the mask is garbage --
+    # not approximate, garbage: on 32-lane silicon a 64-lane ballot never
+    # sets its top half and every `pop_count(mask & lid_mask)` position is
+    # wrong. `-D MOJOLEARN_COLUMN_AMD=1` on an M4 is exactly that build.
+    #
+    # This is a REPORT, not a silent return, and the distinction is the
+    # point: before 515 this check PASSED on an AMD-column build, because
+    # `RBC_LANES` was the literal 32 and the "AMD" build silently compiled a
+    # 32-lane ball cover. A green check that was testing the Apple kernel
+    # under an AMD header is worse than a red one.
+    if column_is_simulated() and lib_lane_width_for[TARGET_COLUMN]() != 32:
+        print(
+            "check_dbscan_arms_agree_on_the_border NOT ANSWERABLE (" ,
+            _mode_name(),
+            "): this build targets a",
+            lib_lane_width_for[TARGET_COLUMN](),
+            "lane column on hardware that is not that vendor's, and the",
+            "ball-cover ballot is coupled to the REAL wavefront width.",
+            "Nothing about the rbc arm is verified here; run it on the",
+            "vendor itself (E1_RUNBOOK Phase 3u).",
+        )
+        return
+
     var ctx = DeviceContext()
     var x = _build(ctx)
 

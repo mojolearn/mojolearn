@@ -114,6 +114,8 @@ from std.gpu.primitives.warp import sum as warp_sum
 from std.math import sqrt
 from max.gpu.host import DeviceBuffer, DeviceContext
 
+from mojo_only.kernel_matrix import TARGET_COLUMN, lib_lane_width_for
+
 from neighbors.ported.neighbors.ball_cover.common import (
     RBC_FLT_MAX,
     eps_dist_sq,
@@ -129,11 +131,42 @@ from neighbors.ported.neighbors.ball_cover.scan import (
 #: The lane group one query is walked by. `vote`, `shuffle_idx`, `warp_sum`
 #: and `pop_count(mask & lid_mask)` all range over exactly this many lanes,
 #: so it is the hardware warp and nothing else.
-comptime RBC_LANES = 32
+#:
+#: DEVIATION 515 (2026-08-23): READ FROM THE COLUMN, was the literal 32.
+#: This is the constant the DEVIATION 2 banner above already told a future
+#: vendor to change -- "A vendor that wants their 64 must set `RBC_QPB` from
+#: its own lane width, not from a constant" -- and an MI300X made it
+#: mandatory rather than tidy. On a 64-wide wavefront the old code did not
+#: merely compute a merged ballot, IT DID NOT COMPILE:
+#:
+#:   LLVM ERROR: Cannot select: i32 = AMDGPUISD::SETCC <i1 CopyFromReg>, 0,
+#:   setne   In function: neighbors_ported_neighbors_ba..._658cdd32df991420
+#:
+#: because `vote[DType.uint32]` (what stood here) asks for a 32-bit
+#: ballot of a 64-lane
+#: wavefront and there is no such instruction. Measured on RunPod MI300X,
+#: ROCm 6.4.1, Mojo 1.0.0 (ed45d567), 2026-08-23: it aborted the whole
+#: compile, so `cluster/` and `dbscan/` could not be built on AMD at all
+#: even though neither of them calls this kernel -- one module, one codegen.
+comptime RBC_LANES = lib_lane_width_for[TARGET_COLUMN]()
+
+#: The BALLOT'S WIDTH, and it is a correctness type rather than a tuning
+#: one: `vote` returns one bit per lane of the wavefront, so a 64-lane
+#: column needs 64 bits to hold it. `count_trailing_zeros`, `pop_count` and
+#: the `mask &= mask - 1` walk are all width-generic once the type is.
+comptime RBC_MASK_DT = DType.uint64 if RBC_LANES == 64 else DType.uint32
 
 #: Threads per block. Theirs is 64, two queries per block
 #: (`registers.cuh:1332-1335`). See DEVIATION 2 and the measurement in it.
-comptime RBC_TPB = 32
+#:
+#: PINNED TO ONE QUERY PER WAVEFRONT, which is what makes widening SAFE.
+#: The DEVIATION 2 banner's correctness argument is that `vote` returns a
+#: mask over the WHOLE warp, so two 32-lane query groups sharing one 64-lane
+#: wavefront would merge two queries' ballots and silently corrupt both.
+#: Setting this to `RBC_LANES` keeps `RBC_QPB == 1` on every column, so that
+#: hazard cannot arise on any of them. The M4 measurement in the banner is
+#: unaffected: on a 32-lane column this is still 32.
+comptime RBC_TPB = RBC_LANES
 
 #: Queries per block, derived. `RBC_TPB // RBC_LANES` is their
 #: `num_warps = tpb / WarpSize` (`registers.cuh:1330`) and the query id is
@@ -185,7 +218,7 @@ def block_rbc_kernel_eps_csr_pass(
     var eps = eps_in
 
     var lid = Int(lane_id())
-    var lid_mask = (UInt32(1) << UInt32(lid)) - UInt32(1)
+    var lid_mask = (Scalar[RBC_MASK_DT](1) << Scalar[RBC_MASK_DT](lid)) - Scalar[RBC_MASK_DT](1)
 
     # `raft::shfl(blockIdx.x * num_warps + threadIdx.x / WarpSize, 0)`, `:600`.
     # Their comment: "this should help the compiler to prevent branches".
@@ -227,15 +260,15 @@ def block_rbc_kernel_eps_csr_pass(
             var bound = eps + r_radius.unsafe_load(lane_k)
             lane_check = lane_r_dist_sq <= bound * bound
 
-        var lane_mask = vote[DType.uint32](lane_check)
-        if lane_mask == UInt32(0):
+        var lane_mask = vote[RBC_MASK_DT](lane_check)
+        if lane_mask == Scalar[RBC_MASK_DT](0):
             continue
 
-        while lane_mask != UInt32(0):
+        while lane_mask != Scalar[RBC_MASK_DT](0):
             # look for next k_offset
             var k_offset = Int(count_trailing_zeros(lane_mask))
             # update lane_mask for next iteration - erase bits up to k_offset
-            lane_mask &= lane_mask - UInt32(1)
+            lane_mask &= lane_mask - Scalar[RBC_MASK_DT](1)
 
             var cur_k = cur_k0 + k_offset
 
@@ -265,7 +298,7 @@ def block_rbc_kernel_eps_csr_pass(
                 )
             var in_range = dist <= eps2
             if write_pass:
-                var mask = vote[DType.uint32](in_range)
+                var mask = vote[RBC_MASK_DT](in_range)
                 if in_range:
                     var index = r_1nn_cols.unsafe_load(r_start + i)
                     var row_pos = Int(pop_count(mask & lid_mask))
@@ -293,7 +326,7 @@ def block_rbc_kernel_eps_csr_pass(
                 )
                 var in_range2 = dist2 <= eps2
                 if write_pass:
-                    var mask2 = vote[DType.uint32](in_range2)
+                    var mask2 = vote[RBC_MASK_DT](in_range2)
                     if in_range2:
                         var index2 = r_1nn_cols.unsafe_load(
                             r_start + i0 + lid
@@ -375,13 +408,13 @@ def block_rbc_kernel_eps_dense(
             var bound = eps + r_radius.unsafe_load(lane_k)
             lane_check = lane_r_dist_sq <= bound * bound
 
-        var lane_mask = vote[DType.uint32](lane_check)
-        if lane_mask == UInt32(0):
+        var lane_mask = vote[RBC_MASK_DT](lane_check)
+        if lane_mask == Scalar[RBC_MASK_DT](0):
             continue
 
-        while lane_mask != UInt32(0):
+        while lane_mask != Scalar[RBC_MASK_DT](0):
             var k_offset = Int(count_trailing_zeros(lane_mask))
-            lane_mask &= lane_mask - UInt32(1)
+            lane_mask &= lane_mask - Scalar[RBC_MASK_DT](1)
 
             var cur_k = cur_k0 + k_offset
             var r_start = Int(r_indptr.unsafe_load(cur_k))
@@ -471,7 +504,7 @@ def block_rbc_kernel_eps_max_k(
     var eps = eps_in
 
     var lid = Int(lane_id())
-    var lid_mask = (UInt32(1) << UInt32(lid)) - UInt32(1)
+    var lid_mask = (Scalar[RBC_MASK_DT](1) << Scalar[RBC_MASK_DT](lid)) - Scalar[RBC_MASK_DT](1)
 
     var query_id = Int(
         shuffle_idx(
@@ -500,13 +533,13 @@ def block_rbc_kernel_eps_max_k(
             var bound = eps + r_radius.unsafe_load(lane_k)
             lane_check = lane_r_dist_sq <= bound * bound
 
-        var lane_mask = vote[DType.uint32](lane_check)
-        if lane_mask == UInt32(0):
+        var lane_mask = vote[RBC_MASK_DT](lane_check)
+        if lane_mask == Scalar[RBC_MASK_DT](0):
             continue
 
-        while lane_mask != UInt32(0):
+        while lane_mask != Scalar[RBC_MASK_DT](0):
             var k_offset = Int(count_trailing_zeros(lane_mask))
-            lane_mask &= lane_mask - UInt32(1)
+            lane_mask &= lane_mask - Scalar[RBC_MASK_DT](1)
 
             var cur_k = cur_k0 + k_offset
             var r_start = Int(r_indptr.unsafe_load(cur_k))
@@ -528,7 +561,7 @@ def block_rbc_kernel_eps_max_k(
                     x, x_base, x_reordered, (r_start + i) * n_cols, n_cols
                 )
             var in_range = dist <= eps2
-            var mask = vote[DType.uint32](in_range)
+            var mask = vote[RBC_MASK_DT](in_range)
             if in_range:
                 var row_pos = column_count + Int(pop_count(mask & lid_mask))
                 # we still continue to look for more hits to return valid vd
@@ -554,7 +587,7 @@ def block_rbc_kernel_eps_max_k(
                     n_cols,
                 )
                 var in_range2 = dist2 <= eps2
-                var mask2 = vote[DType.uint32](in_range2)
+                var mask2 = vote[RBC_MASK_DT](in_range2)
                 if in_range2:
                     var row_pos2 = column_count + Int(
                         pop_count(mask2 & lid_mask)
