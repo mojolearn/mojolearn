@@ -143,6 +143,63 @@ PYTHONPATH="$REPO/python" pixi run -e gbmbench python3 tools/e2u_matrix_fit.py "
   || PYTHONPATH="$REPO/python" python3 tools/e2u_matrix_fit.py "$OUT/e2u" \
   || echo "PHASE7-FINDING: E2U matrix driver failed (see log)"
 
+step "phase 8: the classical lanes (gemm, cd, kde, linkage, svm, metrics) -- both modes, cards + checks"
+# Andrew's order 2026-08-23 (via the orchestrator): everything that exists
+# today must be bit-identical across all three GPUs. One card per lane per
+# mode (the drivers read MOJOLEARN_IDENTITY_TRACE from the environment and
+# print their compiled mode on the banner), plus each lane's gate in both
+# modes. Judged by tools/e3_round_judge.sh section 7: the IDENTICAL cards
+# Apple vs NVIDIA vs AMD through identity_trace_diff; FAST cards recorded.
+# A lane that fails here is a FINDING, never an abort: the others still run.
+mkdir -p "$OUT/lanes"
+run_lane_arm() {  # <lane> <mode fast|identical> <cmd...>
+  local lane="$1" mode="$2"; shift 2
+  local card="$OUT/lanes/$lane.$mode.card" log="$OUT/lanes/$lane.$mode.log"
+  rm -f "$card"
+  if [ "$mode" = identical ]; then
+    MOJOLEARN_IDENTITY_TRACE="$card" "$IDENT" "$@" > "$log" 2>&1 \
+      || echo "PHASE8-FINDING: $lane [$mode] failed (see $log)"
+  else
+    MOJOLEARN_IDENTITY_TRACE="$card" MOJOLEARN_MOJO_DEFINES= MOJOLEARN_NUMERIC_MODE=fast "$@" > "$log" 2>&1 \
+      || echo "PHASE8-FINDING: $lane [$mode] failed (see $log)"
+  fi
+  if [ -f "$card" ]; then
+    # read the mode BACK from the card's own header or the driver's banner,
+    # never from the flag that was passed (the shared-checkout rule)
+    echo "  $lane [$mode]: card $(grep -vc '^#\|^$' "$card") records -- $( (grep -m1 -oE '\[(FAST|IDENTICAL)\]|mode (FAST|IDENTICAL)' "$card" "$log" 2>/dev/null | head -1 | sed 's/^[^:]*://') )"
+  else
+    echo "  $lane [$mode]: NO CARD written ($(grep -m1 -E 'rror|FAIL' "$log" | cut -c1-120))"
+  fi
+}
+run_lane_check() {  # <lane> <mode> <cmd...>
+  local lane="$1" mode="$2"; shift 2
+  local log="$OUT/lanes/$lane.$mode.check.log"
+  if [ "$mode" = identical ]; then
+    "$IDENT" "$@" > "$log" 2>&1 && echo "  $lane [$mode] check OK ($(grep -c ' OK' "$log") OK lines)" \
+      || echo "PHASE8-FINDING: $lane [$mode] check FAILED: $(grep -m1 -E 'Unhandled|rror:|FAIL' "$log" | cut -c1-160)"
+  else
+    MOJOLEARN_MOJO_DEFINES= MOJOLEARN_NUMERIC_MODE=fast "$@" > "$log" 2>&1 && echo "  $lane [$mode] check OK ($(grep -c ' OK' "$log") OK lines)" \
+      || echo "PHASE8-FINDING: $lane [$mode] check FAILED: $(grep -m1 -E 'Unhandled|rror:|FAIL' "$log" | cut -c1-160)"
+  fi
+}
+for mode in fast identical; do
+  echo "-- lanes, $mode --"
+  MOJOLEARN_GEMM_CARD_ARM=device MOJOLEARN_GEMM_CARD_HOST_CAP=1 run_lane_arm gemm "$mode" pixi run mojo run -I . bench/gemm_card_main.mojo
+  run_lane_check gemm "$mode" pixi run mojo run -I . gemm/mojo_only/gemm_device_check.mojo
+  run_lane_arm cd "$mode" pixi run mojo run -I . solver/cd_main.mojo
+  run_lane_check cd "$mode" pixi run check-cd
+  run_lane_arm kde "$mode" pixi run mojo run -I . kde/kde_main.mojo
+  run_lane_check kde "$mode" pixi run check-kde
+  run_lane_arm linkage "$mode" pixi run mojo run -I . hierarchy/linkage_main.mojo
+  run_lane_check linkage "$mode" pixi run check-linkage
+  run_lane_arm svm "$mode" pixi run mojo run -I . svm/svc_main.mojo -- card
+  run_lane_check svm "$mode" pixi run check-svm
+  run_lane_arm metrics "$mode" pixi run mojo run -I . metrics/metrics_main.mojo
+  for t in check-metrics-labels check-metrics-regression check-metrics-silhouette check-metrics-trust; do
+    run_lane_check "metrics-${t#check-metrics-}" "$mode" pixi run "$t"
+  done
+done
+
 step "done"
 echo "artifacts in $OUT"
 echo "next: fetch this directory beside the other machine's and run"

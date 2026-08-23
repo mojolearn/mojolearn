@@ -19,6 +19,9 @@
 #   6. train-here-infer-there: the box's cross_infer_mac_models_on_box.json
 #      (Mac models predicted on the box), and the other direction run HERE
 #      under IDENTICAL mode (box models predicted on this Mac)
+#   7. the classical lanes' cards (bootstrap phase 8: gemm, cd, kde,
+#      linkage, svm, metrics): IDENTICAL cards Apple vs each box through
+#      identity_trace_diff (judged); FAST cards recorded; phase-8 findings
 #
 # Exit code is 0 only when 2, 3 and 4 are all IDENTICAL/REFUSED= and 5
 # shows no FAIL lines. With --write the tables land as
@@ -124,6 +127,28 @@ ok = sum(1 for v in e2.values() if v.get("match"))
 bad = [k for k, v in e2.items() if not v.get("match")]
 print(f"  {lab} models on Mac: {ok}/{len(e2)} E2 cells match" + (f"; MISMATCH {bad[:8]}" if bad else ""))
 PY
+done
+
+echo "########## 7. the classical lanes' cards (phase 8): IDENTICAL judged, FAST recorded"
+for lane in gemm cd kde linkage svm metrics; do
+  for d in "${DIRS[@]:1}"; do
+    a="$REF/lanes/$lane.identical.card"; b="$d/lanes/$lane.identical.card"
+    if [ ! -f "$a" ] || [ ! -f "$b" ]; then echo "  $lane IDENTICAL APPLE vs $(label_of "$d"): card MISSING ($([ -f "$a" ] || echo ref)$([ -f "$b" ] || echo ' other'))"; RC=1; continue; fi
+    out="$(python3 tools/identity_trace_diff.py "$a" "$b" 2>&1)"; r=$?
+    n="$(grep -vc '^#\|^$' "$a")"
+    if [ $r = 0 ]; then echo "  $lane IDENTICAL APPLE vs $(label_of "$d"): IDENTICAL ($n stages)"
+    else echo "  $lane IDENTICAL APPLE vs $(label_of "$d"): DIVERGENT"; echo "$out" | grep -E 'FIRST DIVERGENCE|A: seq|B: seq|record counts' | head -4 | sed 's/^/      /'; RC=1; fi
+    fa="$REF/lanes/$lane.fast.card"; fb="$d/lanes/$lane.fast.card"
+    if [ -f "$fa" ] && [ -f "$fb" ]; then
+      if python3 tools/identity_trace_diff.py "$fa" "$fb" >/dev/null 2>&1; then echo "      (FAST cards happen to agree too)"; else echo "      (FAST cards differ -- recorded, the shipped arm makes no cross-vendor claim)"; fi
+    fi
+  done
+done
+for d in "${DIRS[@]}"; do
+  [ -d "$d/lanes" ] || continue
+  nf=$(grep -c 'PHASE8-FINDING' "$d/bootstrap.log" 2>/dev/null)
+  echo "  $(label_of "$d"): $nf phase-8 findings$( [ "$nf" != 0 ] && grep 'PHASE8-FINDING' "$d/bootstrap.log" | head -6 | sed 's/^/\n      /' )"
+  [ "$nf" = 0 ] || RC=1
 done
 
 if [ $WRITE = 1 ]; then
