@@ -225,8 +225,17 @@ from std.gpu import block_idx, thread_idx
 from std.math import sqrt
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
-from max.gpu.primitives.block import max as block_max
-from max.gpu.primitives.block import min as block_min
+# DEVIATION 528: NOT `max.gpu.primitives.block`. Its reductions carry
+# `constraint failed: Block size must be a greater than warp size`, so at
+# `SIGNFLIP_TPB = 32` they REFUSE TO COMPILE on a 64-wide wavefront and this
+# whole section failed to build on the MI325X (E2's AMD leg, 2026-08-23).
+# These two return the same bits on every width -- a selection, not a sum --
+# so nothing here is mode-gated; see `core/pinned_reduce.mojo`'s block
+# comment for the +/-0.0 and NaN caveat and why this call site is clear of it.
+from core.pinned_reduce import (
+    pinned_block_max as block_max,
+    pinned_block_min as block_min,
+)
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
 

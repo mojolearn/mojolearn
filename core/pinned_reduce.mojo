@@ -107,3 +107,112 @@ def pinned_block_sum[block_size: Int](value: Float32) -> Float32:
         return total
     else:
         return block_sum[block_size=block_size](value)
+
+
+# ===========================================================================
+# THE SELECTIONS (DEVIATION 528, IDENTITY_PATHS row 30's compile half)
+# ===========================================================================
+#
+# `pinned_block_sum` above exists because a SUM's fold shape changes its
+# bits. A MAX or a MIN is a selection over a total order, exactly associative
+# and commutative, so no fold shape can move it and by that reasoning these
+# two should not need to exist at all.
+#
+# THEY EXIST FOR A DIFFERENT REASON, AND IT IS NOT NUMERIC: the library
+# primitive REFUSES TO COMPILE at these block sizes on a 64-wide wavefront.
+#
+#     max/mojo/max/gpu/primitives/block.mojo:186:
+#     constraint failed: Block size must be a greater than warp size
+#
+# Measured on an MI325X, 2026-08-23, by the E2 lane's AMD leg:
+# `bindings/build_estimators.sh` FAILED there, and the two call sites were
+# `block_max`/`block_min` at `SIGNFLIP_TPB = 32` in
+# `decomposition/ported/linalg/detail/pca.mojo`. So **PCA and truncated SVD
+# did not build on AMD at all**, in either mode, while every gate on this
+# side was green -- a whole-section failure that one M4 cannot see and that
+# no amount of bit-comparison would have found, because there were no bits.
+#
+# 32 is not an arbitrary choice there either: the sign rule's tie-break is
+# stated over lanes and the fixtures plant ties both across and within a
+# 32-lane group, so widening the block to satisfy the constraint would move
+# what the check is checking. Replacing the primitive is the smaller change.
+#
+# NO MODE GATE, deliberately, and this is the difference from
+# `pinned_block_sum`. A halving selection returns exactly what CUB's shape
+# returns, so there is no FAST arm to preserve and no IDENTICAL arm to buy
+# anything: swapping these in moves ZERO bits on every column, which
+# `check_sign_flip_matches_host_rule` asserts against a fold-free host scan.
+# A mode gate here would imply a difference that does not exist.
+#
+# THE ±0.0 AND NaN CAVEAT, because a selection is only exactly commutative
+# away from them (IDENTITY_PATHS row 13). `max(+0.0, -0.0)` may return
+# either, so WHICH zero survives is a fold-order question after all, and a
+# NaN operand makes `>` false in both directions. Neither reaches these at
+# their one call site: pass 1 folds `abs(...)`, and `abs(-0.0)` is `+0.0`, so
+# no negative zero is ever compared; and the per-thread partial is seeded
+# `+0.0` and only updated on a strict `>`, so a NaN never enters it. A future
+# caller that cannot say the same about its inputs must state why before
+# using these.
+
+
+@always_inline
+def pinned_block_max[block_size: Int](value: Float32) -> Float32:
+    """Block-wide max through threadgroup memory, no lane primitive.
+
+    Same contract as `pinned_block_sum`: EVERY thread of the block calls
+    it, threads with no data pass the identity (`+0.0` for a fold over
+    magnitudes), only thread 0's return is meaningful, `block_size` is a
+    power of two, and the trailing `barrier()` protects the slab so
+    back-to-back calls in one kernel are safe.
+
+    Unlike the sum, this is bit-for-bit the library's answer on any width;
+    see the block comment above for why it exists anyway.
+    """
+    var tid = Int(thread_idx.x)
+    var red = stack_allocation[
+        block_size,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    red[tid] = value
+    barrier()
+    var step = block_size // 2
+    while step > 0:
+        if tid < step:
+            var other = red[tid + step]
+            if other > red[tid]:
+                red[tid] = other
+        barrier()
+        step //= 2
+    var total = red[0]
+    barrier()
+    return total
+
+
+@always_inline
+def pinned_block_min[block_size: Int](value: Float32) -> Float32:
+    """Block-wide min through threadgroup memory, no lane primitive.
+
+    The twin of `pinned_block_max`; same contract, and the identity a
+    dataless thread passes is whatever sentinel the caller uses as its "no
+    candidate" value (at the sign-flip call site that is `Float32(n)`).
+    """
+    var tid = Int(thread_idx.x)
+    var red = stack_allocation[
+        block_size,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    red[tid] = value
+    barrier()
+    var step = block_size // 2
+    while step > 0:
+        if tid < step:
+            var other = red[tid + step]
+            if other < red[tid]:
+                red[tid] = other
+        barrier()
+        step //= 2
+    var total = red[0]
+    barrier()
+    return total

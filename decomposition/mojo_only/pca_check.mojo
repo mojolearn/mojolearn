@@ -375,11 +375,36 @@ def check_covariance_fused_and_fallback_restore() raises:
     """
     from core.gram_splitk import gram_splitk_applies
 
+    # THE FUSED ARM IS NOT EVERY COLUMN'S ARM UNDER FAST, and this guard used
+    # to treat that as a broken fixture (DEVIATION 528). It is not broken: by
+    # IDENTITY_PATHS row 27 the split-K kernel is the APPLE column's FAST arm
+    # and the BIT-IDENTICAL column's arm in both modes, so a FAST build
+    # against the NVIDIA or AMD column correctly sends this shape to
+    # `linalg.matmul` -- and then there is no fused centered read to compare,
+    # because that arm centers in place through `shift_columns_kernel`.
+    # Raising there reported a defect where the answer is "this column takes
+    # the other arm", which is the same over-reading `check_gram_arm_is_pinned`
+    # was rewritten for. Found by compiling this file with
+    # `-D MOJOLEARN_COLUMN_AMD=1`, which is the cheapest cross-vendor
+    # instrument in the tree.
+    from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+
     if not gram_splitk_applies(PCA_COLS, PCA_COLS, PCA_ROWS):
-        raise Error(
-            "fixture assumption broke: the 4-column shape no longer"
-            " dispatches to split-K, so this check tests nothing"
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+            raise Error(
+                "check_covariance_fused_and_fallback_restore: under"
+                " IDENTICAL the split-K kernel is the arm on EVERY column"
+                " (DEVIATION 521), and this shape did not take it. That is"
+                " a real dispatch defect, not a fixture assumption."
+            )
+        print(
+            "check_covariance_fused_and_fallback_restore SKIPPED (FAST):"
+            " this column sends the Gram shape to linalg.matmul, so there"
+            " is no fused centered read on it to compare. Not a failure --"
+            " IDENTITY_PATHS row 27. Under IDENTICAL every column takes the"
+            " split-K arm and this check asserts."
         )
+        return
     var ctx = DeviceContext()
     var x = ctx.enqueue_create_buffer[DType.float32](PCA_ROWS * PCA_COLS)
     var mu = ctx.enqueue_create_buffer[DType.float32](PCA_COLS)

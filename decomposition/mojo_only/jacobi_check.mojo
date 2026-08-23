@@ -58,7 +58,9 @@ from mojo_only.kernel_matrix import (
     COLUMN_BIT_IDENTICAL,
     COLUMN_NVIDIA,
     K_LIB_JACOBI_EIGH,
+    TARGET_COLUMN,
     lib_block_size_for,
+    lib_lane_width_for,
 )
 from mojo_only.numerics import (
     GLOBAL_NUMERIC_MODE,
@@ -489,6 +491,13 @@ def check_jacobi_scale_invariance() raises:
 
 comptime _FOLD_PROBE_TPB = JACOBI_TPB
 
+#: The sentinel the probe writes when the library fold cannot be instantiated
+#: at `_FOLD_PROBE_TPB` on this column. A NaN would be tempting and is wrong:
+#: it compares unequal to everything including itself, so a comparison that
+#: forgot to check the sentinel would report a DIFFERENCE where the truth is
+#: that no measurement was taken.
+comptime _LIBRARY_ARM_ABSENT = Float32(-987654.0)
+
 
 def _f32_bits(x: Float32) -> UInt32:
     return rebind[UInt32](x.to_bits())
@@ -639,7 +648,31 @@ def jacobi_fold_probe_kernel(
     var tid = Int(thread_idx.x)
     var v = a.unsafe_load(tid)
     var p = pinned_block_sum[_FOLD_PROBE_TPB](v)
-    var l = block_sum[block_size=_FOLD_PROBE_TPB, broadcast=True](v)
+    # THE LIBRARY ARM DOES NOT EXIST AT EVERY WIDTH, AND THAT IS ITSELF A
+    # FINDING (DEVIATION 528). `max.gpu.primitives.block` carries
+    # `constraint failed: Block size must be a greater than warp size`, so at
+    # this solver's 32-thread block it REFUSES TO COMPILE on a 64-lane
+    # column -- measured on an MI325X where `build_estimators.sh` failed for
+    # exactly this reason. Compiling it unconditionally would make this check
+    # unbuildable on the column it most needs to run on.
+    #
+    # So the arm is comptime-gated on the column's own lane width and the
+    # sentinel says WHICH case ran. It is a REPORT, not a skip: the check
+    # below prints "not instantiable at this width" rather than silently
+    # comparing one number against itself.
+    var l = _LIBRARY_ARM_ABSENT
+    # `>=`, NOT `>`, AND THE DIFFERENCE IS MEASURED RATHER THAN DERIVED.
+    # MAX's constraint text reads "Block size must be a greater than warp
+    # size", which would elide this arm on Apple too (32 is not > 32) -- but
+    # it demonstrably COMPILES AND RUNS at 32/32 on the Apple column and has
+    # since this check was written, so the constraint is not the whole story
+    # of when the primitive is instantiable. `>=` is the rule that matches
+    # what both columns actually do: keep the arm where it is known to build
+    # (Apple, NVIDIA, 32 lanes) and drop it where it is known not to (AMD,
+    # 64). If a future column instantiates at 32 on a 64-lane part, this
+    # under-reports rather than failing to build, which is the safe side.
+    comptime if _FOLD_PROBE_TPB >= lib_lane_width_for[TARGET_COLUMN]():
+        l = block_sum[block_size=_FOLD_PROBE_TPB, broadcast=True](v)
     if tid == 0:
         out_pinned.unsafe_store(0, p)
         out_library.unsafe_store(0, l)
@@ -786,23 +819,59 @@ def check_jacobi_fold_shape() raises:
             halving,
             "vs",
             sequential,
-            "). The library fold on THIS device returned",
-            library,
-            "-- same bits" if library == pinned else "-- DIFFERENT bits",
+            "). The library fold on THIS device",
+            (
+                "was NOT INSTANTIABLE at this width (block size must exceed"
+                " the lane width; DEVIATION 528), so no comparison was taken"
+            ) if library == _LIBRARY_ARM_ABSENT else (
+                "returned " + String(library) + (
+                    " -- same bits" if library == pinned
+                    else " -- DIFFERENT bits"
+                )
+            ),
         )
     else:
-        print(
-            "check_jacobi_fold_shape OK (FAST): the library fold ran and"
-            " pinned_block_sum is it, bit for bit (",
-            pinned,
-            "==",
-            library,
-            "). Host halving",
-            halving,
-            "and sequential",
-            sequential,
-            "differ, so the IDENTICAL arm's equality has teeth.",
-        )
+        if library == _LIBRARY_ARM_ABSENT:
+            # A FAST build on a 64-lane column is a compile error by design
+            # (E1_RUNBOOK's preconditions, the hist-2 LANE_WIDTH asserts), so
+            # this branch should be unreachable there. Reported rather than
+            # assumed, because "should be unreachable" is how the last three
+            # findings in this file started.
+            print(
+                "check_jacobi_fold_shape OK (FAST): the library fold was NOT"
+                " INSTANTIABLE at width",
+                _FOLD_PROBE_TPB,
+                "on this column (DEVIATION 528), so this run says nothing"
+                " about whether pinned_block_sum's FAST arm equals it. Host"
+                " halving",
+                halving,
+                "and sequential",
+                sequential,
+                "still differ, so the IDENTICAL arm's equality has teeth.",
+            )
+        else:
+            if pinned != library:
+                raise Error(
+                    "check_jacobi_fold_shape (FAST): pinned_block_sum's FAST"
+                    " arm is supposed to BE the library call, and it is not:"
+                    " device pinned "
+                    + String(pinned)
+                    + " vs library "
+                    + String(library)
+                    + ". Under FAST the shipped bits must not move."
+                )
+            print(
+                "check_jacobi_fold_shape OK (FAST): the library fold ran and"
+                " pinned_block_sum is it, bit for bit (",
+                pinned,
+                "==",
+                library,
+                "). Host halving",
+                halving,
+                "and sequential",
+                sequential,
+                "differ, so the IDENTICAL arm's equality has teeth.",
+            )
 
 
 # ------------------------------------------------------------------------
