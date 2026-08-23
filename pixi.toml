@@ -871,6 +871,21 @@ check-depthwise = "mojo run -I . mojo_only/depthwise_check.mojo"
 # `check-ieee-arith`, then `check-depthwise`, then this.
 check-depthwise-trace = "mojo run -I . mojo_only/depthwise_trace_probe.mojo"
 
+# E2 IDENTITY CARDS FOR THE TRAINING PATHS PYTHON CANNOT REACH. The sweep
+# driver (`tools/e2_matrix_fit.py`) emits a card per Python-reachable
+# configuration; four paths have no Python surface -- DEPTHWISE and
+# LOSSGUIDE growth (no `grow_policy` slot on `gbdt_fit`),
+# `MultiClassOneVsAll` (refused by name in `ensemble.py`) and the
+# feature-parallel searcher (no caller but its own check, UNWIRED.md) --
+# and this probe emits theirs: `<out_dir>/<name>.card`, ONE fit per file,
+# hashed fixtures that are pure functions of constants, machine-independent
+# tags, and a record-count floor per card so an unwired trace cannot pass
+# as agreement. The feature-parallel card is OUTPUT-LEVEL (splits +
+# docBins; the searcher has no trace plumbing). Takes `<out_dir>` and an
+# optional card-name filter; `tools/e2_mojo_cards.sh` runs it twice (the
+# run-to-run control) and writes `e2_mojo_cards.json`. NOT A BENCHMARK.
+e2-growth-cards = "mojo run -I . mojo_only/e2_growth_cards.mojo"
+
 [feature.bench.tasks]
 # CatBoost's own Logloss leaf values at ten Newton iterations and at one,
 # with the leaf-order mapping proved twice inside the generator and written

@@ -63,6 +63,8 @@ machine that fails its own gates teaches nothing.
 
 ## Phase 3 — the card diff (the actual E1)
 
+**Mojo-only cards (E2).** Four training paths have no Python surface and so fall outside `tools/e2_matrix_fit.py`: depthwise growth, lossguide growth, `MultiClassOneVsAll`, and the feature-parallel searcher. `tools/e2_mojo_cards.sh <out_dir>` emits one card each (`gbdt_depthwise.card`, `gbdt_lossguide.card`, `gbdt_multiclass_ova.card`, `gbdt_feature_parallel.card`; one fit per file, hashed fixtures that are pure functions of constants, machine-independent tags) via `mojo_only/e2_growth_cards.mojo` (pixi task `e2-growth-cards`), runs the set a second time into `<out_dir>/control/` as the run-to-run control, and writes `<out_dir>/e2_mojo_cards.json` (name, record count, description, `control_match`, numeric mode). A card whose control does not match under FAST is read only under IDENTICAL. The feature-parallel card is OUTPUT-LEVEL (splits + docBins; that searcher has no in-searcher trace plumbing). Diff them exactly like the Python cards below.
+
 Same fixture, same seed, both machines:
 
     MOJOLEARN_IDENTITY_TRACE=<out>.card  <the traced fixture run>
