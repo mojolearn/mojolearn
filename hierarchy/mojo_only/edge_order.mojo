@@ -114,6 +114,18 @@ def weight_order_key(w: Float32) -> Int32:
     (all NaN payloads to one key, so `NaN == NaN` for the equality test
     in `min_edge_per_supervertex`). Exactly invertible for every non-NaN
     input: `weight_order_unkey(weight_order_key(x))` is `x` bit for bit.
+
+    SIGNED ZERO (IDENTITY_PATHS row 39, audited 2026-08-23): `-0.0` and
+    `+0.0` map to DISTINCT keys, `-1` and `0`, so `-0.0` sorts FIRST and an
+    edge of weight `-0.0` beats an edge of weight `+0.0` in every min this
+    file's order decides -- on every vendor, because the INTEGER key
+    decides, not a hardware `min`/`max` whose answer on a (+0, -0) pair is
+    the vendor's (Apple returns the second operand, NVIDIA and AMD the
+    IEEE-2019 minimum). Every NaN payload maps to ONE key, so the MST
+    never sees a payload; the raw float is still what `temp_weights`
+    carries out, which is why `pairwise_distances` refuses a NaN distance
+    before it reaches a recorded stage (DEVIATION 623). `hierarchy/mojo_only/
+    linkage_check.mojo::check_linkage_signed_zero_mst` plants both zeros.
     """
     if w != w:
         return WEIGHT_KEY_NAN
@@ -159,15 +171,48 @@ def triple_less(
     return hi_a < hi_b
 
 
+# ======================================================================
+# DEVIATION BLOCK -- DEVIATION 624. THE HOST PACKING OF THE WEIGHT KEY
+# ORDERS A NEGATIVE KEY (-0.0, ANY NEGATIVE WEIGHT) THE WAY THE DEVICE DOES.
+# ======================================================================
+#
+# NOT A DEPARTURE FROM RAFT (theirs has no key; DEVIATION 620 introduced
+# it) but a departure from this file's first draft, found by the row-39
+# audit (2026-08-23) when `check_linkage_signed_zero_mst` planted a `-0.0`
+# weight. The device compares keys as SIGNED Int32 (`triple_less`,
+# `Atomic.min`), so `-0.0` (key -1) sorts before `+0.0` (key 0). The first
+# draft of `pack_edge_key` placed the key's RAW 32 bits in the top half of
+# the UInt64, so on the host `-0.0` packed as 0xFFFFFFFF... and sorted LAST:
+# Boruvka took the `-0.0` edge first, `coo_sort_by_weight` then put it
+# last, and the oracle's Kruskal rejected it altogether -- device and host
+# disagreed on the MST of a graph holding one `-0.0`. MEASURED before the
+# fix, IDENTICAL build, Apple M4, 2026-08-23:
+#     check_linkage_signed_zero_mst [IDENTICAL] order A (-0.0 first, +0.0
+#     second): the -0.0 edge did not win by key; slot 0 (0,2,0x00000000)
+#     slot 1 (1,6,0x3f93c680), want slot 0 (0,1,0x80000000) slot 1
+#     (0,2,0x00000000)
+# (Boruvka had taken the -0.0 edge; the host sort put it LAST). The fix
+# flips the key's sign bit on the way into the UInt64 (`^ 0x80000000`), the
+# standard signed-to-unsigned order map, and `unpack_edge_wk` flips it
+# back. For every NON-NEGATIVE key (every clamped L2 distance, FLT_MAX,
+# +inf, the NaN key) the packed order is UNCHANGED, so no bit of any
+# existing fixture or card moves; only a graph fed straight into
+# `build_sorted_mst` with a `-0.0` or negative weight is ordered
+# differently, and now the same way on the host as on the device.
+# ======================================================================
+
+
 def pack_edge_key(wk: Int32, lo: Int32, hi: Int32) -> UInt64:
     """The triple as ONE UInt64 whose integer order is the triple's order,
-    for HOST sorts (Kruskal in the oracle, `coo_sort_by_weight`). `wk` is
-    non-negative for every distance (it is the raw bit pattern), `lo` and
-    `hi` are below 2^16 because `hierarchy` refuses `n_rows > 46340` (their
-    `value_idx nnz = m * m` overflows Int32 there, `connectivities.cuh:145`).
-    Asserted, not assumed: a negative key or an index past 16 bits is a
-    caller bug and is made loud by the mask check."""
-    var w = UInt64(bitcast[DType.uint32](wk)) & UInt64(0xFFFFFFFF)
+    for HOST sorts (Kruskal in the oracle, `coo_sort_by_weight`). The key's
+    sign bit is flipped so the SIGNED Int32 order the device uses becomes
+    the UNSIGNED order of the top 32 bits (DEVIATION 624; `-0.0`'s key -1
+    lands below `+0.0`'s key 0, as on the device). `lo` and `hi` are below
+    2^16 because `hierarchy` refuses `n_rows > 46340` (their `value_idx nnz
+    = m * m` overflows Int32 there, `connectivities.cuh:145`); the masks
+    truncate, they do not assert, so a caller past 16 bits must refuse
+    before packing, as `pairwise_distances` does."""
+    var w = UInt64(bitcast[DType.uint32](wk) ^ UInt32(0x80000000)) & UInt64(0xFFFFFFFF)
     var l = UInt64(bitcast[DType.uint32](lo)) & UInt64(0xFFFFFFFF)
     var h = UInt64(bitcast[DType.uint32](hi)) & UInt64(0xFFFFFFFF)
     return (w << UInt64(32)) | (l << UInt64(16)) | h
@@ -182,7 +227,10 @@ def unpack_edge_hi(key: UInt64) -> Int32:
 
 
 def unpack_edge_wk(key: UInt64) -> Int32:
-    return Int32(Int(key >> UInt64(32)))
+    """The inverse of `pack_edge_key`'s key half (DEVIATION 624)."""
+    return bitcast[DType.int32](
+        UInt32(Int((key >> UInt64(32)) & UInt64(0xFFFFFFFF))) ^ UInt32(0x80000000)
+    )
 
 
 # ======================================================================
@@ -217,6 +265,12 @@ comptime LINK_SAB_SORT_WEIGHT_ONLY = 4
 discovery order, i.e. one of the orders `thrust::sort_by_key` is allowed
 to return. Must FAIL the dendrogram gate on the equal-distance fixture
 (DEVIATION 621)."""
+
+
+comptime LINK_SAB_SKIP_NAN_GUARD = 5
+"""Skip DEVIATION 623's NaN refusal in `pairwise_distances`, so the check
+can show a planted NaN distance reaching the MST weights (with the
+vendor's payload) when the guard is absent. Touches nothing else."""
 
 
 @always_inline

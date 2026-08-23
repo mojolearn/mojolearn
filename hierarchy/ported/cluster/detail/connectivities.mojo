@@ -34,6 +34,16 @@ counting iterator; `self_loop_max_kernel` below is that transform.
 THE `nnz` TYPE. Theirs is `value_idx nnz = m * m` (`:145`), an `int` that
 overflows silently at `m >= 46341`. Refused by name at `pairwise_distances`
 rather than inherited.
+
+THE NaN GUARD (DEVIATION 623, `hierarchy/mojo_only/nan_guard.mojo`). After
+the self-loop transform the matrix is scanned once and any NaN cell raises
+by name. Theirs has no such line; ours needs it because a computed NaN's
+payload is the vendor's (IDENTITY_PATHS row 39) and `linkage_main.mojo`
+records these bytes. The clamp inside both distance arms is `if dist <=
+0.0: dist = 0.0`, which maps `-0.0` AND every negative cancellation
+residue to `+0.0` on every vendor (an IEEE compare, not a hardware
+`max`), so no `-0.0` leaves this function either; the MST's `-0.0` gate
+therefore plants at `build_sorted_mst` (`linkage_check.mojo`).
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
@@ -42,7 +52,13 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.expand_distances import expand_distances_kernel
 from core.gemm import gemm_nt
 from core.row_norms import NORM_TPB, row_norm_kernel
-from hierarchy.mojo_only.edge_order import LINK_SAB_NONE
+from hierarchy.mojo_only.edge_order import (
+    LINK_SAB_NONE,
+    LINK_SAB_ROTATE_CONTRACTION,
+    LINK_SAB_SKIP_NAN_GUARD,
+    LINK_SAB_STD_SQRT,
+)
+from hierarchy.mojo_only.nan_guard import refuse_nan_distances
 from hierarchy.mojo_only.sabotage_tile import sabotage_distance_tile_kernel
 from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from neighbors.mojo_only.pinned_distance_tile import (
@@ -176,8 +192,10 @@ def pairwise_distances(
     # the same memory (what `make_device_matrix_view(X, m, n)` twice is).
     var x_view = x.create_sub_buffer[DType.float32](0, m * n)
     var norms_view = norms.create_sub_buffer[DType.float32](0, m)
-    if sabotage != LINK_SAB_NONE:
-        # THE CHECK'S ARMS ONLY: `hierarchy/mojo_only/sabotage_tile.mojo`.
+    if sabotage == LINK_SAB_ROTATE_CONTRACTION or sabotage == LINK_SAB_STD_SQRT:
+        # THE CHECK'S TILE ARMS ONLY: `hierarchy/mojo_only/sabotage_tile.mojo`.
+        # The other arms (tie-break, sort, NaN guard) leave the distance
+        # step on its production path in both modes.
         ctx.enqueue_function[sabotage_distance_tile_kernel](
             data.unsafe_ptr(),
             x.unsafe_ptr(),
@@ -231,6 +249,12 @@ def pairwise_distances(
     ctx.synchronize()
     _ = x_view^
     _ = norms_view^
+    # NOT THEIRS. DEVIATION 623 (IDENTITY_PATHS row 39): a NaN distance is
+    # refused by name here, before any stage is recorded or any gate reads
+    # the matrix. `LINK_SAB_SKIP_NAN_GUARD` is the check's arm that lets the
+    # NaN through to show what the guard prevents.
+    if sabotage != LINK_SAB_SKIP_NAN_GUARD:
+        refuse_nan_distances(ctx, data, nnz, "hierarchy.pairwise_distances")
 
 
 def get_distance_graph(
