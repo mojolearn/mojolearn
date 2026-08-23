@@ -100,8 +100,12 @@ jobs:
           # this repository, and a self-hosted runner keeps the checkout's
           # git credentials on a disk somebody else may use.
           persist-credentials: false
-          # So the Version agreement step can see whether HEAD is a tag.
-          fetch-tags: true
+          # NOT fetch-tags: true. With a tag ref (`gh workflow run --ref
+          # v0.1.0`) and an annotated tag, actions/checkout fails with
+          # "Cannot fetch both <sha> and refs/tags/v0.1.0 to
+          # refs/tags/v0.1.0" (run 32639387919, 2026-08-23). The dispatched
+          # ref is fetched as refs/tags/<tag> anyway, which is all the
+          # Version agreement step needs.
 
       # Refuse early on the wrong machine: the whole point of the label set is
       # a native Apple silicon Mac with a real GPU, and a 60 minute build on
