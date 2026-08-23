@@ -22,9 +22,10 @@ decision about the neural layer is made later against a written list.
 2. **The Mamba-specific piece is exactly one primitive: a pinned selective
    scan.** Everything else in the block is GEMM (have, `gemm/` v1), a 4-tap
    causal depthwise conv (trivial, serial), RMSNorm (missing, small), and
-   elementwise transcendentals (SiLU/sigmoid, softplus, exp, rsqrt: missing,
-   but one polynomial each on top of `portable_expf`/`portable_logf` plus a
-   division pin). There is **no pinned prefix scan or linear recurrence of
+   elementwise transcendentals (SiLU/sigmoid, softplus, exp, rsqrt: LANDED
+   2026-08-23 as `portable_sigmoidf`/`portable_siluf`/`portable_softplusf`/
+   `portable_rsqrtf`/`portable_log1pf` plus the division pin `portable_divf`,
+   `mojo_only/numerics.mojo`, IDENTITY_PATHS rows 49-54, Apple-gated only). There is **no pinned prefix scan or linear recurrence of
    any kind, in any dtype, anywhere in this tree** (every existing scan is
    integer-typed: `core/block_scan.mojo`, `core/scan_by_key.mojo`,
    `gbdt/gpu_util/kernel/scan.mojo`), and MAX ships no device cumsum
@@ -55,18 +56,21 @@ decision about the neural layer is made later against a written list.
 | step | reference spelling | why it is not bit-stable | what a pinned version does |
 |---|---|---|---|
 | selective scan over L | `csrc/selective_scan/selective_scan_fwd_kernel.cuh`: `cub::BlockScan<float2, kNThreads, BLOCK_SCAN_WARP_SCANS>` with `SSMScanOp (a,b)∘(a',b') = (a'a, a'b+b')`, `kChunkSize = kNThreads*kNItems`, traits picked by seqlen bucket and DIFFERENT on the ROCm branch (`<64,*>` vs `<32,*>`) | the combine tree is a function of kNItems, kNThreads, warp width (32 vs 64) and the cub algorithm; the affine op re-associates under rounding | the order is a pure function of L and a profile chunk constant: serial inside a chunk, one fixed tree across chunks (the GEMM v1 leaf/fold split, applied to an affine op). **MAX's own `state_space.selective_scan_fwd_gpu` is one thread per (batch, dim), serial over L and over N=16**; that design is already order-fixed along L, so the cheapest identical scan is MAX's shape plus pinned arithmetic, and the chunked one is the priced follow-on |
-| compiler policy | `setup.py` builds nvcc with `--use_fast_math`; HIP gets only `-fgpu-flush-denormals-to-zero` | same source, two exp/division/denormal policies | `identical_exp`, `ftz` at the seams, one division policy (row 10's division characterization, not yet a pin) |
-| softplus, sigmoid/SiLU | `log1pf(expf(delta))` with a `delta <= 20` guard; `z/(1+expf(-z))` | vendor `expf`/`log1pf` | one polynomial each; `log1p` does not exist yet in `numerics.mojo` |
+| compiler policy | `setup.py` builds nvcc with `--use_fast_math`; HIP gets only `-fgpu-flush-denormals-to-zero` | same source, two exp/division/denormal policies | `identical_exp`, `ftz` at the seams, one division policy (`identical_div`, row 49, characterized per class on Apple by `check-division`) |
+| softplus, sigmoid/SiLU | `log1pf(expf(delta))` with a `delta <= 20` guard; `z/(1+expf(-z))` | vendor `expf`/`log1pf` | `identical_softplus` / `identical_sigmoid` / `identical_silu` (rows 52-54; silu keeps the reference's ONE-division spelling) |
 | C·h dot over N=16 | serial over `state_idx` in the CUDA kernel; `einsum` in the reference | einsum order is torch-defined | serial ascending, fixed |
-| RMSNorm | `rms_norm_ref`: `1/sqrt(mean(x²)+eps)`; Triton `tl.sum` | `tl.sum`'s tree is Triton's | pinned sum-of-squares tree (`pinned_block_sum` + fixed fold), `identical_sqrt`, one division |
+| RMSNorm | `rms_norm_ref`: `1/sqrt(mean(x²)+eps)`; Triton `tl.sum` | `tl.sum`'s tree is Triton's | pinned sum-of-squares tree (`pinned_block_sum` + fixed fold), `identical_rsqrt` (row 50: `1/portable_sqrtf`, the reference's spelling) |
 | Mamba-2 / SSD | `ssd_combined.py`: chunk cumsum, `tl.dot` intra-chunk, a SERIAL inter-chunk state pass, `chunk_size` default 256 | every reduction boundary moves with `chunk_size`; `tl.dot` is a vendor GEMM | GEMM-shaped: intra-chunk through GEMM v1, inter-chunk serial, the chunk size a PROFILE constant |
 
 ## If and when it is promoted: build order
 
-1. `numerics.mojo` rows (identity lane's file; request, do not edit): a
-   division pin or a characterization strong enough to rely on, `rsqrt`,
-   `log1p`, `sigmoid`/`silu`, `softplus`, `portable_sinf` — each with a
-   `check-ieee-arith`-style sweep and a ledger row.
+1. `numerics.mojo` rows (identity lane's file; request, do not edit):
+   DONE 2026-08-23 except `portable_sinf` (not asked for by the Mamba-1
+   block): `identical_div` (division characterized per class, row 49),
+   `identical_rsqrt`, `identical_log1p`, `identical_sigmoid`,
+   `identical_silu`, `identical_softplus` (rows 50-54), gates
+   `check-division` and `check-portable-nn`, Apple-gated; the H100/MI325X
+   certificate re-prints are owed with step 5.
 2. A pinned FP32 SCAN profile (`mojolearn.identical.scan.fp32.v1`): the
    affine-recurrence scan as its own directory, contract first, serial oracle,
    chunked oracle, distinguishing fixtures (serial vs chunked vs two chunk

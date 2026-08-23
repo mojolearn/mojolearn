@@ -352,6 +352,17 @@ def portable_logf(x_in: Float32) -> Float32:
         e -= 1
         m = m + m
     var t = m - Float32(1.0)
+    return _cephes_logf_core(t, e)
+
+
+def _cephes_logf_core(t: Float32, e: Int) -> Float32:
+    """The Cephes logf mantissa polynomial and exponent re-entry, ONE
+    source for two callers: `portable_logf` (t = m - 1 on [sqrt(1/2),
+    sqrt(2)), e the unbiased exponent) and `portable_log1pf`'s small-x
+    branch (t = x itself, e = 0, DEVIATION 742). Factored out 2026-08-23
+    with the op sequence UNCHANGED -- `check-portable-translog`'s device
+    hash 8705486125800438413 is the proof that `portable_logf`'s bits did
+    not move."""
     var z = t * t
 
     var p = Float32(7.0376836292e-2)
@@ -436,18 +447,29 @@ def identical_log(x: Float32) -> Float32:
 
 
 def portable_sqrtf(x_in: Float32) -> Float32:
-    """`sqrtf` as one arithmetic, correctly rounded. NaN and negative ->
-    quiet NaN; +-0 -> itself; +inf -> +inf; a subnormal input is flushed
-    to +0 first (row 10's policy) and returns +0."""
+    """`sqrtf` as one arithmetic, correctly rounded. NaN and negative
+    normals -> quiet NaN; +inf -> +inf; +0, -0 AND every subnormal OF
+    EITHER SIGN return +0 (the flush branch below catches them all -- so
+    sqrt(-0) is +0 here where IEEE says -0; this sentence used to read
+    "+-0 -> itself", corrected 2026-08-23 by the numerics-NN lane, which
+    plants it through `portable_rsqrtf(-0) = +inf`)."""
     from std.memory import bitcast
 
     var x = x_in
     if x != x:
         return x
+    # THE FLUSH BRANCH BEFORE THE SIGN TEST (reordered 2026-08-23 by the
+    # numerics-NN lane): Metal flushes COMPARE operands, so with the sign
+    # test first a NEGATIVE SUBNORMAL took `x < 0` on the host (NaN) and
+    # not on the device (+0) -- 2,046 of 2^20 raw-pattern lanes in
+    # check-portable-nn's rsqrt sweep, the first sweep to feed this
+    # function negative subnormals. Flush first and both columns return
+    # +0. No other input's bits move (check-portable-sqrtcos hash
+    # 12295913102197186379 unchanged).
+    if abs(x) < Float32(1.1754943508222875e-38):
+        return Float32(0.0)  # +-0 and subnormals, either sign
     if x < Float32(0.0):
         return bitcast[DType.float32](UInt32(0x7FC00000))
-    if abs(x) < Float32(1.1754943508222875e-38):
-        return Float32(0.0)  # +-0 and subnormals
     if x == bitcast[DType.float32](UInt32(0x7F800000)):
         return x
     # TINY INPUTS ARE SCALED UP FIRST: below 2^-96 the selection residual
@@ -808,3 +830,321 @@ def _fma_f32_simd[
     from std.math import fma
 
     return fma(a, b, c)
+
+
+# ============ DEVIATIONS 740-746 (2026-08-23): THE NEURAL-BLOCK PRIMITIVES
+# ============ -- division CHARACTERIZED and named, rsqrt, log1p, sigmoid,
+# ============ silu, softplus. Built for the Mamba-1 identity block
+# ============ (IDENTICAL_SSM_NOTES.md "build order" item 1, promoted by
+# ============ Andrew 2026-08-23); the mamba lane imports these, nothing
+# ============ else in the tree calls them yet. Gates: check-division (row
+# ============ 49) and check-portable-nn (rows 50-54). No performance work.
+#
+# Every function here is built the way `portable_expf`/`portable_sqrtf`
+# are: one spelling from one source, every step an explicit fma or one
+# basic op, row 10's flush policy baked in UNCONDITIONALLY (the bits of a
+# portable_* function never depend on the build mode), special values
+# PLANTED (row 39) and asserted by the gate, identical bits host and
+# device, a printed certificate hash the H100/MI325X legs re-print. Each
+# has an `identical_*` seam: portable under IDENTICAL, the stdlib/hardware
+# spelling verbatim under FAST.
+#
+# The reference for the spellings is mamba_ssm at e9594ce
+# (/Users/andrewhendel/CascadeProjects/upstream/mamba):
+#   softplus  csrc/selective_scan/selective_scan_fwd_kernel.cuh:160
+#             `delta <= 20.f ? log1pf(expf(delta)) : delta`
+#   silu      csrc/selective_scan/selective_scan_fwd_kernel.cuh:298
+#             `z_val / (1 + expf(-z_val))`  (ONE division, no multiply --
+#             the same spelling ATen's silu kernel uses, which is what
+#             `selective_scan_ref`'s `F.silu(z)` reaches)
+#   sigmoid   mamba_ssm/ops/triton/k_activations.py:42 `tl.sigmoid(x)`
+#             (= 1 / (1 + exp(-x)))
+#   rsqrt     mamba_ssm/ops/triton/layer_norm.py:120 (reference) and :272
+#             (Triton kernel): `1 / sqrt(var + eps)` -- the reference
+#             never calls an rsqrt intrinsic, so neither do we
+#   log1p     the `log1pf` above; Triton 3 spells it `log(exp(dt) + 1)`
+#             (mamba_ssm/ops/triton/softplus.py:11), we do not
+#
+# DEVIATION 740 -- DIVISION, row 10's open clause, CHARACTERIZED on Apple
+# by `check-division` (2^20 hashed (a, b) pairs in 13 classes: normals,
+# each-operand-subnormal, both-subnormal, zero dividend, zero divisor,
+# inf, NaN, quotient overflow, quotient underflow to a subnormal, to
+# zero, exact power-of-two quotients, raw patterns). Apple M4 through MAX:
+# the NORMAL class is correctly rounded (0 wrong), every subnormal-touching
+# class is reproduced bit for bit by row 10's flush model (operands flushed
+# to signed zero, one correctly rounded division, result flushed), zero
+# lanes match neither. So on Apple `a / b` IS correctly rounded on every
+# class once the flush is the reference, and `portable_divf` below is
+# plain `/` wrapped in that flush -- bit-inert on Apple, aligning on a
+# denormal-honoring column. NOT claimed for NVIDIA or AMD until a leg
+# re-prints the certificate hash: `check-ieee-arith` measured div 0 wrong
+# on the H100 and MI325X over ITS patterns, but "correctly rounded
+# everywhere measured" was false once already (sqrt, DEVIATION 258), so
+# the named seam exists so a vendor that is wrong has one place to be
+# fixed (a Newton-refined reciprocal with an fma correction step would go
+# here, under IDENTICAL only).
+#
+# DEVIATION 741 -- rsqrt PIN (a): `1 / portable_sqrtf(x)`, two correctly
+# rounded operations, NOT the correctly rounded rsqrt: measured on Apple
+# against the float64 1/sqrt rounded once, max 1 ulp, off on 134,858 of
+# 520,133 positive-normal lanes in check-portable-nn (187,068 of 720,414
+# in check-division's D arm). Chosen over (b) a correctly-rounded-by-
+# construction rsqrt because the reference's spelling IS `1 / sqrt(...)`
+# (layer_norm.py:120, :272), the contract is "one fixed function of the
+# input bits" and not "correctly rounded", and (b) is NOT cheap: the
+# residual `x*c*c - 1` needs a split product (two fmas round the product
+# once too often to order the neighbours), a second candidate loop for no
+# identity gain. RECORDED (DEVIATION 746) and it is worth knowing: Metal's
+# `rsqrt` INTRINSIC matched the float64 1/sqrt on 720,414 of 720,414
+# positive normals (0 wrong, max 0 ulp) -- Apple's intrinsic is the
+# correctly rounded one and the pin is the one that is not. It is still
+# never called on a pinned path: an intrinsic is per-vendor by definition
+# (PTX `rsqrt.approx` is ~2 ulp), and the pin's property is sameness.
+#
+# DEVIATION 742 -- log1p: the Cephes logf polynomial applied to t = x
+# directly (e = 0, no 1+x formed, no cancellation) on the polynomial's own
+# design domain x in [sqrt(1/2)-1, sqrt(2)-1] = [-0.29289..., 0.41421...],
+# and `portable_logf(1 + x)` (one rounding on 1+x, then the certified log)
+# outside it. The branch points are those two constants as Float32
+# (0xBE95F61A and 0x3ED413CD), compared `<=` on both sides. Cephes single
+# ships no log1pf; this IS its log kernel, one source, not a new table.
+#
+# DEVIATION 743 -- sigmoid: `1 / (1 + portable_expf(-x))` through
+# `portable_divf`. Large negative x: exp overflows to +inf, 1/+inf = +0.0
+# (planted, x <= -88.72). The band x in (-88.72, -87.34]: exp(-x) is
+# finite in [2^126, 2^128), 1/(1+e) is a SUBNORMAL quotient -- the flush
+# in `portable_divf` returns +0.0 on every column where a denormal-
+# honoring backend would keep 2^-127 (planted at x = -88). Large positive
+# x: exp(-x) underflows or is absorbed, 1 + 0 = 1, result exactly 1.0
+# (planted at x >= 17 and +inf).
+#
+# DEVIATION 744 -- silu: the REFERENCE'S spelling `x / (1 + portable_expf(-x))`,
+# one division through `portable_divf`, NOT `x * sigmoid(x)`: the two
+# differ in the last bit (one rounding against two), the reference kernel
+# and ATen both spell it as the single quotient, and Andrew's order is "do
+# what the reference does". Consequences planted: silu(-inf) = -inf/+inf =
+# NaN (the reference's too); x <= -88.72 gives x/+inf = -0.0 (SIGNED);
+# silu(+-0) = +-0; silu(+inf) = +inf; a subnormal x is flushed by the
+# division's operand flush and returns a signed zero.
+#
+# DEVIATION 745 -- softplus: `x <= 20 ? log1p(exp(x)) : x`, the reference
+# kernel's guard verbatim (selective_scan_fwd_kernel.cuh:160). The guard
+# boundary is planted both sides: x = 20.0 takes the log1p(exp) arm, the
+# next float above 20 returns itself; NaN fails `<=` and returns itself;
+# -inf -> exp 0 -> log1p(0) = +0; x < -87.34 -> +0.
+#
+# DEVIATION 746 -- the hardware `rsqrt` intrinsic (`std.math.rsqrt`) is
+# RECORDED by check-division (mismatch count and max ulp against the
+# float64 1/sqrt, and against the pin), never used. Apple M4: 0 of
+# 720,414 off the float64 answer; off the pin on 187,068; hash
+# 8605842820492558534 (per-vendor, not a certificate).
+#
+# ALSO FOUND BUILDING THESE (2026-08-23), both about row 10 on Metal:
+#   (i) METAL FLUSHES COMPARE OPERANDS: `-subnormal < 0.0` is false there,
+#       so `portable_sqrtf`'s sign test ran BEFORE its flush branch and a
+#       negative subnormal returned NaN on the host and +0 on the device
+#       (2,046 of 2^20 lanes, the first sweep to feed it one); the two
+#       branches are reordered (flush first, both columns +0; the sqrtcos
+#       certificate hash did not move) and `_ftz_always` flushes BY BITS.
+#  (ii) `std.math.log1p` lowers Float32 through FLOAT64 and Metal cannot
+#       compile a kernel that calls it; the FAST arms spell `log(1 + x)`.
+
+
+def _ftz_always(x: Float32) -> Float32:
+    """Row 10's flush, UNCONDITIONAL and BY BITS: the portable_* functions
+    below bake the policy in so their bits do not depend on the build mode
+    (the same choice `portable_expf`/`portable_logf` made inline). A
+    subnormal becomes a zero carrying its sign; zero, normals, infinities
+    and NaN pass through untouched. `ftz` above is the mode-gated seam
+    spelling; this one is for inside a portable function only.
+
+    BY BITS, NOT BY COMPARE, because METAL FLUSHES COMPARE OPERANDS TOO
+    (measured 2026-08-23, check-portable-nn's first device run): on Metal
+    `-subnormal < 0.0` is FALSE and `subnormal != 0.0` is FALSE, so a
+    compare-written flush returns the subnormal bit pattern unchanged and
+    a sign test before the flush takes the wrong branch (2,046 of 2^20
+    rsqrt lanes: host NaN, device +inf, every one a negative subnormal).
+    Integer ops do not flush. The mode-gated `ftz` above is compare-
+    written and therefore bit-inert on Metal for a PASS-THROUGH subnormal
+    (one loaded from memory and stored with no arithmetic in between);
+    that is named in IDENTITY_PATHS row 49 and left to its owner."""
+    from std.memory import bitcast
+
+    var b = rebind[UInt32](x.to_bits())
+    if (b & UInt32(0x7F800000)) == UInt32(0):
+        return bitcast[DType.float32](b & UInt32(0x80000000))
+    return x
+
+
+def portable_divf(a: Float32, b: Float32) -> Float32:
+    """DEVIATION 740: `a / b` under row 10's flush model -- operands
+    flushed to signed zero, ONE hardware division (correctly rounded on
+    every column measured: Apple normal class 0 wrong over 2^20 pairs in
+    `check-division`; the H100/MI325X `check-ieee-arith` div arms 0
+    wrong), result flushed. On an FTZ column this is bitwise `a / b`; on a
+    denormal-honoring column it aligns the subnormal classes to the FTZ
+    ones. Planted: 1/+0 = +inf, 1/-0 = -inf, +-0/x = +-0 (sign rule),
+    x/inf = signed 0, inf/inf and 0/0 = NaN, a subnormal operand divides
+    as the signed zero it flushes to (so subnormal/normal = signed 0 and
+    normal/subnormal = signed inf), a subnormal quotient returns signed 0."""
+    return _ftz_always(_ftz_always(a) / _ftz_always(b))
+
+
+def portable_rsqrtf(x_in: Float32) -> Float32:
+    """DEVIATION 741, pin (a): `1 / portable_sqrtf(x)`. NaN -> NaN;
+    negative -> quiet NaN; +0, -0 and every subnormal -> +inf (the sqrt
+    flushes all three to +0 -- so rsqrt(-0) is +inf here where IEEE says
+    -inf; planted); +inf -> +0. Never a subnormal result (1/sqrt of any
+    normal is in [2^-64, 2^63])."""
+    from std.memory import bitcast
+
+    var x = _ftz_always(x_in)  # BEFORE the sign test: Metal compares flush
+    if x != x:
+        return x
+    if x < Float32(0.0):
+        return bitcast[DType.float32](UInt32(0x7FC00000))
+    var s = portable_sqrtf(x)
+    if s == Float32(0.0):
+        return bitcast[DType.float32](UInt32(0x7F800000))  # +inf
+    if s == bitcast[DType.float32](UInt32(0x7F800000)):
+        return Float32(0.0)
+    return portable_divf(Float32(1.0), s)
+
+
+def portable_log1pf(x_in: Float32) -> Float32:
+    """DEVIATION 742: `log1pf` as one arithmetic. NaN -> NaN; +-0 -> +-0
+    (IEEE's sign rule, planted); a subnormal input is flushed first and
+    returns the signed zero it flushes to; +inf -> +inf; x == -1 -> -inf;
+    x < -1 -> quiet NaN. On [-0.29289..., 0.41421...] the Cephes logf
+    polynomial is evaluated on t = x with e = 0 (no 1+x, no
+    cancellation); outside, `portable_logf(x + 1)`. Measured <= 2 ulp
+    against libm's double log1p over 2^20 hashed inputs
+    (`check-portable-nn`)."""
+    from std.memory import bitcast
+
+    var x = _ftz_always(x_in)
+    if x != x:
+        return x
+    if x == Float32(0.0):
+        return x
+    if x == bitcast[DType.float32](UInt32(0x7F800000)):
+        return x
+    if x < Float32(-1.0):
+        return bitcast[DType.float32](UInt32(0x7FC00000))
+    if x == Float32(-1.0):
+        return bitcast[DType.float32](UInt32(0xFF800000))  # -inf
+    # the branch points, sqrt(1/2)-1 and sqrt(2)-1 as Float32:
+    # 0xBE95F61A = -0.29289323, 0x3ED413CD = 0.41421357
+    if x >= bitcast[DType.float32](UInt32(0xBE95F61A)) and x <= bitcast[
+        DType.float32
+    ](UInt32(0x3ED413CD)):
+        return _cephes_logf_core(x, 0)
+    return portable_logf(x + Float32(1.0))
+
+
+def portable_sigmoidf(x: Float32) -> Float32:
+    """DEVIATION 743: `1 / (1 + portable_expf(-x))` through `portable_divf`.
+    NaN -> NaN; +-0 -> 0.5; x <= -88.72 -> +0.0 (exp overflow, 1/+inf);
+    x in (-88.72, -87.34] -> +0.0 (a subnormal quotient, flushed);
+    x >= ~17 and +inf -> exactly 1.0; -inf -> +0.0."""
+    if x != x:
+        return x
+    var e = portable_expf(-x)
+    var d = e + Float32(1.0)
+    return portable_divf(Float32(1.0), d)
+
+
+def portable_siluf(x: Float32) -> Float32:
+    """DEVIATION 744: the reference's `x / (1 + portable_expf(-x))`, one
+    division through `portable_divf` (NOT x * sigmoid(x)). NaN -> NaN;
+    +-0 -> +-0; +inf -> +inf; -inf -> NaN (-inf/+inf, the reference's
+    answer too); x <= -88.72 -> -0.0 (x/+inf, signed); a subnormal x ->
+    its signed zero (operand flush)."""
+    if x != x:
+        return x
+    var e = portable_expf(-x)
+    var d = e + Float32(1.0)
+    return portable_divf(x, d)
+
+
+def portable_softplusf(x: Float32) -> Float32:
+    """DEVIATION 745: `x <= 20 ? log1p(exp(x)) : x`, selective_scan_fwd_
+    kernel.cuh:160 verbatim through the portable pair. NaN -> NaN (fails
+    the `<=`); -inf -> +0; x < -87.34 -> +0 (exp underflow); x = 20.0
+    takes the log1p(exp) arm; the next float above 20 returns itself;
+    +inf -> +inf."""
+    if x <= Float32(20.0):
+        return portable_log1pf(portable_expf(x))
+    return x
+
+
+def identical_div(a: Float32, b: Float32) -> Float32:
+    """Row 49's seam: IDENTICAL routes through `portable_divf` (the flush
+    model around one correctly rounded division); FAST is plain `/`.
+    Bit-inert on Apple in both modes; the value of the pin is a denormal-
+    honoring column. NOT cross-vendor certified until a leg re-prints
+    `check-division`'s certificate hash (the DEVIATION 258 lesson)."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        return portable_divf(a, b)
+    return a / b
+
+
+def identical_rsqrt(x: Float32) -> Float32:
+    """Row 50's seam: IDENTICAL is `portable_rsqrtf`; FAST is the
+    reference's own spelling `1 / sqrt(x)` through the stdlib sqrt (the
+    vendor's sqrt -- approximate on NVIDIA, DEVIATION 258), never the
+    rsqrt intrinsic."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        return portable_rsqrtf(x)
+    from std.math import sqrt
+
+    return Float32(1.0) / sqrt(x)
+
+
+def identical_log1p(x: Float32) -> Float32:
+    """Row 51's seam: IDENTICAL is `portable_log1pf`; FAST is `log(1 + x)`
+    through the stdlib log -- Triton 3's own spelling of the same thing
+    (mamba_ssm/ops/triton/softplus.py:11) -- and NOT `std.math.log1p`,
+    because that one lowers the Float32 case THROUGH FLOAT64
+    (`air.convert.f.f64.f.f32` ... `llvm.fma.f64`) and Metal refuses to
+    compile a kernel that calls it (measured 2026-08-23 building
+    check-portable-nn's first sabotage arm). A stdlib function that does
+    not exist on one column is not a FAST arm."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        return portable_log1pf(x)
+    from std.math import log
+
+    return log(Float32(1.0) + x)
+
+
+def identical_sigmoid(x: Float32) -> Float32:
+    """Row 52's seam: IDENTICAL is `portable_sigmoidf`; FAST is
+    `1 / (1 + exp(-x))` through the stdlib exp."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        return portable_sigmoidf(x)
+    from std.math import exp
+
+    return Float32(1.0) / (Float32(1.0) + exp(-x))
+
+
+def identical_silu(x: Float32) -> Float32:
+    """Row 53's seam: IDENTICAL is `portable_siluf`; FAST is the reference's
+    `x / (1 + exp(-x))` through the stdlib exp."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        return portable_siluf(x)
+    from std.math import exp
+
+    return x / (Float32(1.0) + exp(-x))
+
+
+def identical_softplus(x: Float32) -> Float32:
+    """Row 54's seam: IDENTICAL is `portable_softplusf`; FAST is the
+    reference's guard around Triton 3's `log(exp(x) + 1)` through the
+    stdlib (not `log1p`: see `identical_log1p` for why it cannot be)."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        return portable_softplusf(x)
+    from std.math import exp, log
+
+    if x <= Float32(20.0):
+        return log(exp(x) + Float32(1.0))
+    return x

@@ -642,6 +642,26 @@ check-portable-sqrtcos = "mojo run -I . mojo_only/portable_sqrtcos_check.mojo"
 # host-only: portable_log64 (Cephes double log) against the host libm, 2 ulp, + its own hash
 check-portable-log64 = "mojo run -I . mojo_only/portable_log64_check.mojo"
 
+# IDENTITY_PATHS row 49 (DEVIATION 740): DIVISION characterized per class
+# on this backend -- 2^20 hashed (a, b) pairs in 13 classes (normals, each
+# operand subnormal, zeros, infs, NaNs, over/underflowing quotients, exact
+# quotients) judged bit for bit against the correctly rounded host quotient
+# (fp32 fdiv, cross-checked against the f64 route) and row 10's flush
+# model; `portable_divf` device == host on every lane, its hash the
+# certificate line (the same number on every column); the hardware rsqrt
+# intrinsic RECORDED, not used. Run on every column beside check-ieee-arith.
+check-division = "mojo run -I . mojo_only/division_check.mojo"
+
+# IDENTITY_PATHS rows 50-54 (DEVIATIONS 741-745): the neural-block
+# primitives rsqrt / log1p / sigmoid / silu / softplus -- accuracy vs a
+# float64 libm reference over 2^20 hashed inputs each (rsqrt <= 1 ulp,
+# log1p <= 2, the three activations <= 4), every planted special value
+# by bit, device bits == host bits lane for lane, a `sabotage` arm that
+# runs the vendor spellings on the device and must fail the compare. The
+# printed `nn device hash` is the certificate line. Run beside
+# check-portable-translog on every column.
+check-portable-nn = "mojo run -I . mojo_only/portable_nn_check.mojo"
+
 # E2U: the unsupervised sub-feature matrix through the Python surface
 # (tools/e2u_README.md); append the out dir:
 #   pixi run e2u-matrix bench/results/e2u/<stamp>/fast1
