@@ -3311,3 +3311,71 @@ arm's boundary instead of going red on the libm arm's.
 
 **Gate.** FAST -- ET lane suite green, `feature_sampler_check` prints the
 sweep tallies and the single ARM FLIP line above.
+
+---
+
+## DEVIATION 458 -- the regressor binding overwrote `max_features` after reading it
+
+**What the port did.** `bindings/_mojolearn_trees.mojo` reads the 21-slot
+params list into an `ExtraTreesConfig` (`_config_from`, slots 3-19, with
+slots 8-9 = `max_features_spec` / `max_features_fraction`) and then, on the
+regressor entry only, called `.for_regression()` on the RESULT:
+
+    var config = _config_from(params).for_regression()
+
+`for_regression()` is `estimator.mojo`'s DEFAULTS switch -- it sets
+`criterion = MSE` AND `max_features_spec = MAX_FEATURES_ALL` (sklearn's
+regressor default of 1.0). Applied after the read, the second assignment
+overwrote whatever the caller sent in slots 8-9. Every
+`ExtraTreesRegressor` fit, host arm and device arm, sampled ALL columns at
+every node; `max_features_` reported `n_features` for every form. The
+classifier entry builds from `ExtraTreesConfig()` and never re-applied a
+default, so it honoured every form -- which is why the lane's Python
+surface looked right whenever the classifier was the one under test.
+
+**Why no check saw it.** Every check in `extratrees/tools/check.sh` is a
+Mojo program that constructs an `ExtraTreesConfig` directly; none crossed
+the Python boundary. `bindings/build_trees.sh`'s smoke fits the regressor
+at its default (1.0), the one value the overwrite preserves. The module
+docstring's "every parameter is honoured or refused by name" was false for
+this one parameter on this one estimator, and nothing was positioned to
+say so. A path that runs is not a path that is gated.
+
+**MEASURED** (E2 fixture, 20000x24 uniform float32, integer-matmul target,
+`n_estimators=10, max_depth=8, random_state=7`, prediction sha256 prefix):
+
+    max_features      before (all five = one forest)   after
+    1.0               49243f47fb559159                 49243f47fb559159
+    0.5               49243f47fb559159                 11d4dad380b22bd7
+    0.1               49243f47fb559159                 f0be1f4b94dc52c8
+    3                 49243f47fb559159                 4efabfa1836532ab
+    "sqrt"            49243f47fb559159                 717ceb5e2c6a01c6
+
+`max_features_` after: 24 / 12 / 2 / 3 / 4, sklearn's resolution of each
+form on 24 columns. The 1.0 hash is UNCHANGED -- 1.0 was the one form the
+overwrite happened to agree with, so the E2 `et_reg` cell stays comparable
+and nothing about the 1.0 result was wrong. The classifier's hashes are
+bit-unchanged on the same fixture (1.0 `05b257ee…`, 0.5 `0832c8a9…`, 3
+`7da20d1d…`, "sqrt" `f6ecbc1a…`): its entry did not move.
+
+**The fix.** `_config_from(params, base)` now takes the defaults struct as
+an argument and writes slots 3-19 OVER it; the classifier passes
+`ExtraTreesConfig()`, the regressor `ExtraTreesConfig().for_regression()`.
+The criterion still does not ride the params (the `N_FIT_PARAMS` contract
+is unchanged), it arrives in `base`, and no default can shadow a slot
+because every slot is written after the base is taken. One line moved in
+each entry; `estimator.mojo`, the Python wrapper's slot encoding and the
+sentinels are untouched. The wrapper's regressor still folds a float `1.0`
+into `None` before the slots; both resolve to `n_features`, so that fold
+is a no-op and is left as is.
+
+**Gate.** `extratrees/tools/wrapper_reach_check.py`, run by `check.sh` after
+the Mojo checks against the SHIPPED `_mojolearn_trees.so`: for the
+regressor (gpu AND cpu arms) and the classifier, `max_features` 1.0 / 0.5 /
+"sqrt" / 3 must build pairwise DIFFERENT forests (sha256 of the five forest
+arrays) and `max_features_` must equal sklearn's resolved count. Sabotaged
+against HEAD's pre-fix extension: the regressor's four forms collapse to
+ONE digest per arm (three FAIL pairs on gpu, three on cpu) and
+`max_features_` is 16 for every form (three FAILs per arm), classifier ok
+-- the check sees exactly the defect and nothing else. FAST rebuild shipped; the
+full lane suite result is in the commit message.

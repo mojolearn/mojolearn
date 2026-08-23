@@ -108,9 +108,21 @@ cites the same UNPORTED.tsv rows validity_check does.
 """
 
 
-def _config_from(params: PythonObject) raises -> ExtraTreesConfig:
-    """Slots 3-19 into an `ExtraTreesConfig`. Read under the GIL."""
-    var config = ExtraTreesConfig()
+def _config_from(
+    params: PythonObject, base: ExtraTreesConfig
+) raises -> ExtraTreesConfig:
+    """Slots 3-19 written OVER `base`. Read under the GIL.
+
+    `base` carries the one field the slots do not: the criterion.
+    `et_classifier_fit` passes `ExtraTreesConfig()` (Gini) and
+    `et_regressor_fit` passes `ExtraTreesConfig().for_regression()`
+    (squared_error). Every slot overwrites its field AFTER the base is taken,
+    so no default can shadow what the caller sent -- DEVIATION 458 is what
+    happened when the regressor applied `for_regression()` the other way round
+    and its `max_features_spec = ALL` default overwrote slots 8-9 of every
+    regressor fit.
+    """
+    var config = base.copy()
     config.n_estimators = Int32(Int(py=params[3]))
     config.max_depth = Int32(Int(py=params[4]))
     config.min_samples_split = Int32(Int(py=params[5]))
@@ -193,7 +205,7 @@ def et_classifier_fit_binding(
     var n_features = Int(py=params[1])
     var n_classes = Int(py=params[2])
     var device = Int(py=params[20]) != 0
-    var config = _config_from(params)
+    var config = _config_from(params, ExtraTreesConfig())
     var x = _copy_f32(x_addr, n_rows * n_features)
     var y = _copy_f32(y_addr, n_rows)
 
@@ -236,7 +248,7 @@ def et_regressor_fit_binding(
     var n_rows = Int(py=params[0])
     var n_features = Int(py=params[1])
     var device = Int(py=params[20]) != 0
-    var config = _config_from(params).for_regression()
+    var config = _config_from(params, ExtraTreesConfig().for_regression())
     var x = _copy_f32(x_addr, n_rows * n_features)
     var y = _copy_f32(y_addr, n_rows)
 

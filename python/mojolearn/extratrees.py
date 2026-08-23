@@ -13,7 +13,10 @@ layer (`extratrees/estimator.mojo`), which is the single place both the host
 and device arms resolve their configuration; this wrapper refuses only what
 never crosses the boundary: the criteria this port has not transcribed
 (UNPORTED.tsv rows 7 and 11-14) and the two forest-level knobs that do not
-exist here (`n_jobs`, `verbose`).
+exist here (`n_jobs`, `verbose`). The one time this sentence was false --
+the regressor's `max_features` rode across and was overwritten on the far
+side (DEVIATION 458) -- `extratrees/tools/wrapper_reach_check.py` now gates
+from this side of the boundary.
 
 TWO DEVIATIONS FROM sklearn'S CONTRACT, STATED RATHER THAN HIDDEN:
 

@@ -62,6 +62,27 @@ for c in $checks; do
   fi
 done
 rm -f /tmp/et_check.$$
+
+# The one check that crosses the PYTHON boundary (DEVIATION 458): every
+# Mojo check above takes an `ExtraTreesConfig` directly, so none of them
+# could see `bindings/_mojolearn_trees.mojo` overwrite the regressor's
+# max_features after reading it. Runs against the SHIPPED extension under the
+# python it was built for (pkg/gbmbench, 3.14); skipped with a SKIP line, not
+# silently, when that environment is absent.
+reach=extratrees/tools/wrapper_reach_check.py
+if [ -f python/mojolearn/_mojolearn_trees.so ]; then
+  if PYTHONPATH=python pixi run -e gbmbench python "$reach" >/tmp/et_check.$$ 2>&1; then
+    printf 'ok    %s\n' "$reach"
+  else
+    printf 'FAIL  %s\n' "$reach"
+    tail -20 /tmp/et_check.$$
+    failed=1
+  fi
+  rm -f /tmp/et_check.$$
+else
+  printf 'SKIP  %s (python/mojolearn/_mojolearn_trees.so not built)\n' "$reach"
+fi
+
 if [ "$failed" -ne 0 ]; then
   echo "extratrees: SOME CHECKS FAILED"
   exit 1
