@@ -189,6 +189,33 @@ Float64 closed form; IDENTICAL and FAST print the same numbers):
                                       batchSize 0 RAISE by name
     check_trust_launch_invariant      b256/b64 x g1d/g2d: 291291 x 4
 
+## The card (`metrics_main.mojo`, Apple M4, 2026-08-23)
+
+34 stages, one `seq`: the inputs (`metrics.input.*`), the integer
+products (`metrics.contingency`, `metrics.rand.a/b`, neighbors'
+`knn.*` six stages, `trust.emb_ind`, `trust.rank_sum`), the per-sample
+silhouettes, and every returned value by its bits. Two IDENTICAL runs:
+
+    python3 tools/identity_trace_diff.py /tmp/metrics.ident.card /tmp/metrics.ident2.card
+    RESULT: IDENTICAL. Same stage sequence, same counts, same hashes.
+
+IDENTICAL against FAST diverges first at stage 8, `metrics.entropy` --
+DEVIATION 651's Float32-vs-Float64 epilogue, by design; the integer
+stages 0-4 agree, as they must. The values, IDENTICAL / FAST:
+
+    accuracy_score      0x3f426680 / same          rand_index        0x3fe8c307da380cc0 / same
+    adjusted_rand_index 0x3fde6f24da913871 / same  entropy(y_true)   0x3ff6a22320000000 / 0x3ff6a22304271931
+    mutual_info_score   0x3fe1b503a0000000 / 0x3fe1b503bebf2960
+    homogeneity         0x3fd908f8572bc9a9 / 0x3fd908f8a171bee4  (completeness, v_measure likewise)
+    r2_score            0x3f320e9b / 0x3f320e9c     kl_divergence     0x3f809113 / same
+    silhouette_score    0x3ef548da / same           trustworthiness   0x3fe99369e91a2645 / same
+
+**Trustworthiness's k-NN stages come from neighbors/**: the metric's
+traced entry hands the card to `knn_search_traced`, so `knn.*` and
+`trust.*` share one `seq` (the DEVIATION 518 lesson: a second
+`IdentityTrace()` appends a second `seq 0` the differ refuses; the first
+draft of this driver did exactly that and the card showed it).
+
 **What trustworthiness rests on that is not integer:** the embedded k-NN
 (`neighbors/estimator.mojo::knn_search`, the EXPANDED L2 arm, where RAFT
 asks `brute_force_knn` for `L2SqrtUnexpanded`) and the rank comparison

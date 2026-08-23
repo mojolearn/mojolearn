@@ -8,8 +8,10 @@ pointers (DEVIATION 655)."""
 
 from max.gpu.host import DeviceContext
 
+from core.identity_trace import IdentityTrace
 from metrics.ported.stats.detail.trustworthiness_score import (
     trustworthiness_score as _raft_trust,
+    trustworthiness_score_traced as _raft_trust_traced,
 )
 
 
@@ -26,3 +28,20 @@ def trustworthiness_score(
     """`double trustworthiness_score<float, L2SqrtUnexpanded>(h, X,
     X_embedded, n, m, d, n_neighbors, batchSize)`."""
     return _raft_trust(ctx, x, x_embedded, n, m, d, n_neighbors, batch_size)
+
+
+def trustworthiness_score_traced(
+    ctx: DeviceContext,
+    mut trace: IdentityTrace,
+    mut x: List[Float32],
+    mut x_embedded: List[Float32],
+    n: Int,
+    m: Int,
+    d: Int,
+    n_neighbors: Int,
+    batch_size: Int = 512,
+) raises -> Float64:
+    """The same call carrying a card (the `knn.*` and `trust.*` stages)."""
+    return _raft_trust_traced(
+        ctx, trace, x, x_embedded, n, m, d, n_neighbors, batch_size
+    )

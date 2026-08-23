@@ -68,13 +68,14 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
+from core.identity_trace import IdentityTrace
 from metrics.mojo_only.pinned_distance import l2sqrt_unexpanded
 from metrics.mojo_only.pinned_sum import (
     PINNED_SUM_TPB,
     linear_block_id,
     physical_block_count,
 )
-from neighbors.estimator import knn_search
+from neighbors.estimator import knn_search_traced
 
 
 #: The threadgroup slab for the k+1 embedded-neighbor distances and ranks.
@@ -143,6 +144,7 @@ def trust_rank_kernel[
 
 def trustworthiness_rank_sum(
     ctx: DeviceContext,
+    mut trace: IdentityTrace,
     mut x_host: List[Float32],
     mut x_embedded_host: List[Float32],
     n: Int,
@@ -153,7 +155,10 @@ def trustworthiness_rank_sum(
     grid_x_override: Int,
 ) raises -> Tuple[Int64, List[UInt32]]:
     """The integer half: `(rank sum, emb_ind)`; exposed so the check can
-    gate it EXACTLY and see the neighbor structure it rests on."""
+    gate it EXACTLY and see the neighbor structure it rests on. `trace`
+    is handed to `knn_search_traced` so the k-NN's `knn.*` stages land in
+    the SAME card as the metric's (one `seq` per file; the DEVIATION 518
+    lesson), then `trust.emb_ind` and `trust.rank_sum` are recorded."""
     if n_neighbors < 1:
         raise Error("trustworthiness: n_neighbors must be >= 1")
     if n_neighbors + 1 > n:
@@ -182,8 +187,9 @@ def trustworthiness_rank_sum(
     ctx.synchronize()
     for i in range(n * d):
         h_emb.unsafe_ptr().unsafe_store(i, x_embedded_host[i])
-    _ = knn_search(
+    _ = knn_search_traced(
         ctx,
+        trace,
         h_emb.unsafe_ptr(),
         n,
         h_emb.unsafe_ptr(),
@@ -223,6 +229,14 @@ def trustworthiness_rank_sum(
     var total = Int64(0)
     for i in range(n):
         total += Int64(h.unsafe_ptr().unsafe_load(i))
+    if trace.enabled:
+        var tmp_idx = out_idx.copy()
+        trace.record_host("trust.emb_ind", tmp_idx.unsafe_ptr(), n * k1)
+        _ = tmp_idx^
+        var one = List[Int64]()
+        one.append(total)
+        trace.record_host("trust.rank_sum", one.unsafe_ptr(), 1)
+        _ = one^
     _ = h^
     _ = partials^
     _ = emb^
@@ -244,13 +258,33 @@ def trustworthiness_score(
     batch_size: Int = 512,
 ) raises -> Float64:
     """`trustworthiness_score<math_t, L2SqrtUnexpanded>(h, X, X_embedded, n,
-    m, d, n_neighbors, batchSize)` (:122-207). `batchSize` is their
-    memory tiling of the X distance rows and is validated (>= 1) and
-    otherwise scheduling here (no tile is materialized)."""
+    m, d, n_neighbors, batchSize)` (:122-207), with a trace read from the
+    environment (`ols_fit` / `ols_fit_traced`'s split, DEVIATION 517)."""
+    var trace = IdentityTrace()
+    return trustworthiness_score_traced(
+        ctx, trace, x_host, x_embedded_host, n, m, d, n_neighbors, batch_size
+    )
+
+
+def trustworthiness_score_traced(
+    ctx: DeviceContext,
+    mut trace: IdentityTrace,
+    mut x_host: List[Float32],
+    mut x_embedded_host: List[Float32],
+    n: Int,
+    m: Int,
+    d: Int,
+    n_neighbors: Int,
+    batch_size: Int = 512,
+) raises -> Float64:
+    """The traced form: `knn.*` (neighbors'), `trust.emb_ind`, `trust.
+    rank_sum` land in `trace`. `batchSize` is their memory tiling of the
+    X distance rows and is validated (>= 1) and otherwise scheduling here
+    (no tile is materialized)."""
     if batch_size < 1:
         raise Error("trustworthiness: batchSize must be >= 1")
     var r = trustworthiness_rank_sum(
-        ctx, x_host, x_embedded_host, n, m, d, n_neighbors, False, 0
+        ctx, trace, x_host, x_embedded_host, n, m, d, n_neighbors, False, 0
     )
     var t = Float64(r[0])
     # (:204), in double

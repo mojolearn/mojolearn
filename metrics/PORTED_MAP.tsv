@@ -28,6 +28,7 @@ mojo_only/silhouette_check.mojo	none	mojo-only	Group C gates; sabotages (g)(h)(i
 ported/metrics/trustworthiness.mojo	cuml cpp/src/metrics/trustworthiness.cu	transliterated	the one instantiation <float, L2SqrtUnexpanded>; host-array boundary (knn_search's)
 ported/stats/detail/trustworthiness_score.mojo	raft cpp/include/raft/stats/detail/trustworthiness_score.cuh	partial	DEVIATION 655: build_lookup_table + compute_rank as a counting kernel; run_knn -> neighbors' knn_search; batchSize validated (scheduling); the closed form in Float64 on the host
 mojo_only/trustworthiness_check.mojo	none	mojo-only	Group D gates; sabotage (j) in the README
+metrics_main.mojo	none	mojo-only	every ported metric on one hashed fixture; the 34-stage identity card (inputs, integer products, knn.* via the traced k-NN entry, every value by its bits)
 mojo_only/pinned_sum.mojo	none	mojo-only	DEVIATION 653: virtual_block_sum (a PINNED_SUM_W slab tree independent of the physical block), host_tree_sum (the bitwise oracle), host_fold_partials, the shifted-partition sabotage model (and why a rotation is invisible to a halving tree)
 mojo_only/fixtures.mojo	none	mojo-only	hashed, skewed, non-uniform fixtures; planted singleton / constant / product-structured / subnormal-square cases
 mojo_only/device_io.mojo	none	mojo-only	host<->device copies for the checks

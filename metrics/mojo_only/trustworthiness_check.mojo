@@ -36,13 +36,16 @@ structures plus one Float64 closed form. The gates:
                                       same integer (trivially, and run)
 
 SABOTAGES PERFORMED (2026-08-23), each reverted; outputs in the README:
-    (j) the device tie-break flipped to `j <= ei`: check_trust_planted_
-        duplicates fails EXACTLY (and the unplanted fixture does not
-        move, which is why the duplicates are planted)
+    (j) the device tie-break flipped to `j <= ei`: check_trust_rank_sum_
+        exact fails EXACTLY (293696 vs 291291: every neighbor now counts
+        itself), and the planted-duplicate fixture separates the DISTINCT-
+        row tie too (host 189301 vs flipped 191658)
 """
 
 from std.math import sqrt
 from max.gpu.host import DeviceContext
+
+from core.identity_trace import IdentityTrace
 
 from metrics.mojo_only.fixtures import bits64, hashed_points, u01, splitmix
 from metrics.mojo_only.pinned_distance import host_l2sqrt_unexpanded
@@ -157,11 +160,12 @@ def _closed_form(t: Int64, n: Int, k: Int) -> Float64:
 
 
 def check_trust_rank_sum_exact(ctx: DeviceContext) raises:
+    var trace = IdentityTrace.disabled()
     print("check_trust_rank_sum_exact [" + _mode_name() + "]")
     var f = _fixture(3)
     var x = f[0].copy()
     var emb = f[1].copy()
-    var r = trustworthiness_rank_sum(ctx, x, emb, N, M, DE, K, False, 0)
+    var r = trustworthiness_rank_sum(ctx, trace, x, emb, N, M, DE, K, False, 0)
     var host = _host_rank_sum(x, r[1], N, M, K + 1, False)
     print("    rank sum device " + String(r[0]) + " host " + String(host))
     if r[0] != host:
@@ -182,11 +186,12 @@ def check_trust_rank_sum_exact(ctx: DeviceContext) raises:
 
 
 def check_trust_perfect_and_scrambled(ctx: DeviceContext) raises:
+    var trace = IdentityTrace.disabled()
     print("check_trust_perfect_and_scrambled [" + _mode_name() + "]")
     var f = _fixture(5)
     var x = f[0].copy()
     var same = x.copy()
-    var r = trustworthiness_rank_sum(ctx, x, same, N, M, M, K, False, 0)
+    var r = trustworthiness_rank_sum(ctx, trace, x, same, N, M, M, K, False, 0)
     var t1 = trustworthiness_score(ctx, x, same, N, M, M, K)
     print("    perfect embedding: rank sum " + String(r[0]) + " t " + String(t1))
     if r[0] != Int64(0) or t1 != 1.0:
@@ -212,6 +217,7 @@ def check_trust_perfect_and_scrambled(ctx: DeviceContext) raises:
 
 
 def check_trust_planted_duplicates(ctx: DeviceContext) raises:
+    var trace = IdentityTrace.disabled()
     print("check_trust_planted_duplicates [" + _mode_name() + "]")
     var f = _fixture(11)
     var x = f[0].copy()
@@ -220,7 +226,7 @@ def check_trust_planted_duplicates(ctx: DeviceContext) raises:
         x[11 * M + q] = x[10 * M + q]
     for q in range(DE):
         emb[11 * DE + q] = emb[10 * DE + q]
-    var r = trustworthiness_rank_sum(ctx, x, emb, N, M, DE, K, False, 0)
+    var r = trustworthiness_rank_sum(ctx, trace, x, emb, N, M, DE, K, False, 0)
     var host = _host_rank_sum(x, r[1], N, M, K + 1, False)
     var flipped = _host_rank_sum(x, r[1], N, M, K + 1, True)
     print(
@@ -270,14 +276,15 @@ def check_trust_refusals(ctx: DeviceContext) raises:
 
 
 def check_trust_launch_invariant(ctx: DeviceContext) raises:
+    var trace = IdentityTrace.disabled()
     print("check_trust_launch_invariant [" + _mode_name() + "]")
     var f = _fixture(3)
     var x = f[0].copy()
     var emb = f[1].copy()
-    var a = trustworthiness_rank_sum(ctx, x, emb, N, M, DE, K, False, 0)
-    var b = trustworthiness_rank_sum(ctx, x, emb, N, M, DE, K, True, 0)
-    var c = trustworthiness_rank_sum(ctx, x, emb, N, M, DE, K, False, 7)
-    var d = trustworthiness_rank_sum(ctx, x, emb, N, M, DE, K, True, 7)
+    var a = trustworthiness_rank_sum(ctx, trace, x, emb, N, M, DE, K, False, 0)
+    var b = trustworthiness_rank_sum(ctx, trace, x, emb, N, M, DE, K, True, 0)
+    var c = trustworthiness_rank_sum(ctx, trace, x, emb, N, M, DE, K, False, 7)
+    var d = trustworthiness_rank_sum(ctx, trace, x, emb, N, M, DE, K, True, 7)
     print(
         "    b256 g1d "
         + String(a[0])
