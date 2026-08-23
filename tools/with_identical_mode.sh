@@ -75,8 +75,37 @@ if ! grep -q "^$FAST_LINE\$" "$NUMERICS"; then
     exit 2
 fi
 
+# ------------------------------------------------------------------------
+# THE REVERT PUTS BACK THE LINE, NOT THE FILE (2026-08-23)
+# ------------------------------------------------------------------------
+# This used to `cp` the whole file and `mv` it back on exit. That silently
+# DESTROYS any edit made to numerics.mojo during the window, and the window
+# is minutes long in a checkout worked by parallel sessions. It is not
+# hypothetical: the E2 lane lost an edit to a flip/revert cycle at 06:44
+# today and had to re-derive it.
+#
+# The flip is ONE LINE, so the revert is one line. `sed` the mode line back
+# and leave everything else in the file exactly as whoever else was editing
+# it left it. The backup is still taken, but only as evidence for the
+# refusal below -- it is never restored over the working file.
+#
+# The refusal at the end catches the remaining case: if the line is not
+# where we left it when we exit, someone else changed the MODE underneath a
+# lock-holding run, and that is worth a loud message rather than a silent
+# overwrite in either direction.
 cp "$NUMERICS" "$NUMERICS.identbak"
-revert() { mv -f "$NUMERICS.identbak" "$NUMERICS" 2>/dev/null || true; }
+revert() {
+    if grep -q "^$IDENT_LINE\$" "$NUMERICS" 2>/dev/null; then
+        sed -i.tmp "s/^$IDENT_LINE\$/$FAST_LINE/" "$NUMERICS"
+        rm -f "$NUMERICS.tmp"
+    elif ! grep -q "^$FAST_LINE\$" "$NUMERICS" 2>/dev/null; then
+        echo "with_identical_mode: WARNING -- on exit the mode line is" >&2
+        echo "  neither FAST nor IDENTICAL. Not touching the file; the" >&2
+        echo "  copy taken at flip time is at $NUMERICS.identbak." >&2
+        return
+    fi
+    rm -f "$NUMERICS.identbak"
+}
 trap revert EXIT INT TERM
 
 sed -i.tmp "s/^$FAST_LINE\$/$IDENT_LINE/" "$NUMERICS"

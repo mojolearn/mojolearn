@@ -1735,8 +1735,22 @@ def lib_block_bounds_a_float_fold[kernel: Int]() -> Bool:
     `K_LIB_JACOBI_EIGH` is the one row this list cannot dismiss and does
     not pin HERE: `decomposition/mojo_only/jacobi_eigh_device.mojo` folds
     two Float32 sums at that width, and its 32 is the LANE WIDTH rather
-    than a scheduling choice, so the fix there is the fold, not the row.
-    See DEVIATION 511 and the note in that file.
+    than a scheduling choice. See DEVIATION 511 and the note in that file.
+
+    **THE SENTENCE THAT USED TO END THAT PARAGRAPH -- "so the fix there is
+    the fold, not the row" -- IS INCOMPLETE AND IS DELETED** (DEVIATION
+    524, IDENTITY_PATHS row 31). Replacing the fold with
+    `core/pinned_reduce.pinned_block_sum` removes the LANE-width
+    dependence, which is what it was built to do. It does not remove the
+    BLOCK-SIZE dependence: this number is simultaneously the fold's width
+    AND the stride the per-thread partials are strided by, so two columns
+    carrying two values here would compute two different multisets of
+    partials and then fold each of them correctly. The row is flat 32 in
+    every column TODAY, so nothing moves on any machine that exists, and
+    the invariant is gated from the consumer's side by
+    `check_jacobi_fold_width_is_pinned` rather than left to whoever lands
+    the next vendor number. If a measured per-column value ever wants to
+    land here, it must come with the row added to this list.
 
     BIT-INERT TODAY, AND THAT IS THE POINT. `lib_block_size` returns 128
     for all four in every column, so gating them moves nothing on any
