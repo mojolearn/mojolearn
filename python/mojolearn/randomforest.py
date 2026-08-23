@@ -32,8 +32,11 @@ boundary); on large matrices that is the dominant cost of the CALL.
 
 import numpy as np
 
-from . import _mojolearn_rf
+from . import _mojolearn_rf, _serialize
 from ._arrays import _addr, _addr_ro, as_f32_c
+
+#: The npz model-file format tag `save` writes and `load` requires.
+_MODEL_FORMAT = "mojolearn-randomforest-1"
 
 _CUML_DEFAULT_MAX_DEPTH = 16
 _CUML_DEFAULT_N_BINS = 128
@@ -216,6 +219,68 @@ class _RandomForestBase:
                 f"X has {n_features} features, fit saw {self.n_features_in_}"
             )
         return Xa, n_rows, n_features
+
+    def save(self, path):
+        """Write the fitted forest to `path` as an npz.
+
+        The file holds the five prediction arrays exactly as fitted, raw
+        bytes and exact dtypes, so a model saved on one machine and loaded
+        on another predicts the SAME BITS. Floats never pass through
+        decimal text. The bytes of the file itself are a pure function of
+        the model (see `_serialize.write_npz`), so equal models give equal
+        file hashes across machines.
+        """
+        if not hasattr(self, "_offsets"):
+            raise RuntimeError("this estimator is not fitted yet")
+        arrays = {
+            "format": np.asarray(_MODEL_FORMAT),
+            "estimator": np.asarray(type(self).__name__),
+            "device": np.asarray(self.device),
+            "offsets": self._offsets,
+            "colid": self._colid,
+            "quesval": self._quesval,
+            "left_child": self._left_child,
+            "leaves": self._leaves,
+            "meta": np.asarray(
+                [
+                    self.n_features_in_,
+                    self._n_trees,
+                    self._num_outputs,
+                ],
+                dtype=np.int64,
+            ),
+        }
+        if hasattr(self, "classes_"):
+            arrays["classes"] = np.asarray(self.classes_)
+        return _serialize.write_npz(path, arrays)
+
+    @classmethod
+    def load(cls, path):
+        """Load a forest saved by `save`. The result predicts; it does not
+        refit. Loading a file saved by the other estimator class raises
+        rather than reinterpreting its leaves."""
+        arrays = _serialize.read_npz(path, _MODEL_FORMAT)
+        saved_as = _serialize.scalar_str(arrays, "estimator")
+        if saved_as != cls.__name__:
+            raise ValueError(
+                f"mojolearn: {path!r} was saved by {saved_as}, not "
+                f"{cls.__name__}"
+            )
+        obj = cls.__new__(cls)
+        obj.device = _serialize.scalar_str(arrays, "device")
+        obj._offsets = _serialize.exact(arrays, "offsets", np.int32)
+        obj._colid = _serialize.exact(arrays, "colid", np.int32)
+        obj._quesval = _serialize.exact(arrays, "quesval", np.float32)
+        obj._left_child = _serialize.exact(arrays, "left_child", np.int32)
+        obj._leaves = _serialize.exact(arrays, "leaves", np.float32)
+        meta = _serialize.exact(arrays, "meta", np.int64)
+        obj.n_features_in_ = int(meta[0])
+        obj._n_trees = int(meta[1])
+        obj._num_outputs = int(meta[2])
+        if "classes" in arrays:
+            obj.classes_ = arrays["classes"]
+            obj.n_classes_ = int(len(obj.classes_))
+        return obj
 
 
 class RandomForestClassifier(_RandomForestBase):

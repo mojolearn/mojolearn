@@ -23,6 +23,11 @@ Fits, against E1_RUNBOOK.md's expectation table:
   gbdt_logloss -- EXPECTED DIVERGENT at row 12 (device exp/log); included
                 so the card diff demonstrates the ledger naming the stage.
 
+Each successful fit is also SAVED into the out_dir as `<name>.model.npz`
+with its file sha256 recorded under the fit's `model` entry. That file is
+the train-here-infer-there leg's artifact; `tools/e1_cross_infer.py`
+loads it on the other machine and hashes the predictions there.
+
 usage: PYTHONPATH=python python3 tools/e1_traced_fit.py <out_dir>
 """
 
@@ -88,7 +93,7 @@ def main():
         card = os.path.join(out_dir, name + ".card")
         os.environ["MOJOLEARN_IDENTITY_TRACE"] = card
         try:
-            pred = build_and_fit_predict()
+            model, pred = build_and_fit_predict()
         except Exception as exc:  # a REFUSE arm raising by name is a result
             record["fits"][name] = {"refused": str(exc)}
             print(name, "REFUSED:", exc)
@@ -97,25 +102,37 @@ def main():
             os.environ.pop("MOJOLEARN_IDENTITY_TRACE", None)
         entry = {"predictions": sha256_of(pred),
                  "card": os.path.basename(card)}
+        # THE TRAIN-HERE-INFER-THERE ARTIFACT: the fitted model, saved
+        # beside its card for `tools/e1_cross_infer.py` to load on the
+        # other machine. The file's bytes are a pure function of the
+        # model, so on a bit-identical fit this hash matches across
+        # machines too.
+        model_path = os.path.join(out_dir, name + ".model.npz")
+        model.save(model_path)
+        with open(model_path, "rb") as fh:
+            entry["model"] = hashlib.sha256(fh.read()).hexdigest()
         record["fits"][name] = entry
         print(name, "pred", entry["predictions"][:16], "card", card)
 
-    traced("et_clf", lambda: (
+    # each fit returns (model, predictions); the fit and predict calls
+    # themselves are unchanged, the model is kept only so `traced` can
+    # save it.
+    traced("et_clf", lambda: (lambda m: (m, m.predict(X)))(
         ExtraTreesClassifier(n_estimators=10, max_depth=8, random_state=7)
-        .fit(X, y_clf).predict(X)))
-    traced("rf_reg", lambda: (
+        .fit(X, y_clf)))
+    traced("rf_reg", lambda: (lambda m: (m, m.predict(X)))(
         RandomForestRegressor(n_estimators=10, max_depth=8, random_state=7)
-        .fit(X, y_reg).predict(X)))
-    traced("gbdt_rmse", lambda: (
+        .fit(X, y_reg)))
+    traced("gbdt_rmse", lambda: (lambda m: (m, m.predict(X)))(
         mojolearn.GradientBoosting(
             loss="RMSE", n_estimators=20, max_depth=6,
             learning_rate=0.3, border_count=128, random_state=7)
-        .fit(X, y_reg).predict(X)))
-    traced("gbdt_logloss", lambda: (
+        .fit(X, y_reg)))
+    traced("gbdt_logloss", lambda: (lambda m: (m, m.predict_proba(X)))(
         mojolearn.GradientBoosting(
             loss="Logloss", n_estimators=20, max_depth=6,
             learning_rate=0.3, border_count=128, random_state=7)
-        .fit(X, y_clf).predict_proba(X)))
+        .fit(X, y_clf)))
 
     with open(os.path.join(out_dir, "e1_fits.json"), "w") as fh:
         json.dump(record, fh, indent=2, sort_keys=True)

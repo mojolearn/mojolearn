@@ -78,6 +78,25 @@ first. Only then read the float stages. On the first float divergence,
 re-run with `MOJOLEARN_IDENTITY_TRACE_DUMP=<tag>` on both sides for the
 per-cell ULP/denormal classification.
 
+## The train-here-infer-there leg (models cross machines, not just hashes)
+
+Phase 3's driver also saves each fitted model beside its card as
+`<name>.model.npz` and records the file's sha256 under the fit's `model`
+entry. The npz carries floats as raw bytes, never as decimal text, and
+its file bytes are a pure function of the model, so a bit-identical fit
+gives a bit-identical model file. Ship the out_dir to the other machine
+and run
+
+    PYTHONPATH=python python3 tools/e1_cross_infer.py <out_dir>
+
+It rebuilds the E1 inputs from the seed with the driver's exact recipe,
+loads each saved model, predicts, and writes `e1_infer.json`. A
+`predictions` hash there equal to the fitting machine's `e1_fits.json`
+entry is the one-line claim that fit on A plus load and predict on B
+reproduce the prediction bits. `tools/check_serialization.py` is the
+local gate for the round trip itself, fresh-process load plus a sabotage
+arm proving predict consumes the loaded file.
+
 ## Phase 4 — end-to-end harness pair (optional, needs the dataset)
 
     bench/external/run_gbm_bench.sh year 100 <pair>

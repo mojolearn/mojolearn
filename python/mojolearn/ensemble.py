@@ -84,8 +84,11 @@ import numpy as np
 # that reason turned out not to exist. See PORTING.md 70: the kernels were
 # being lost to `MACOSX_DEPLOYMENT_TARGET` in the environment plus a compiler
 # cache that does not key on it, and the basename never mattered.
-from . import _mojolearn_gbdt
+from . import _mojolearn_gbdt, _serialize
 from ._arrays import _addr, _addr_ro, as_f32_c
+
+#: The npz model-file format tag `save` writes and `load` requires.
+_MODEL_FORMAT = "mojolearn-gbdt-1"
 
 #: CatBoost's `ELossFunction` spellings that this port trains. The list is
 #: the reachable set of their GPU pointwise target
@@ -1046,3 +1049,86 @@ class GradientBoosting:
                 f"this model was fitted with {self.loss!r}."
             )
         return np.argmax(self.predict_proba(X), axis=1).astype(np.int64)
+
+    def save(self, path):
+        """Write the fitted ensemble to `path` as an npz.
+
+        The payload is `model_`, the text format `check-model-io` already
+        gates bit-for-bit. Every float in that text carries its hex bit
+        pattern beside the decimal and the loader reads the BITS half, so
+        the text is a bit-exact carrier by construction. It travels here
+        as raw utf-8 bytes; nothing in this method formats a number. The
+        model text is self contained for prediction. The quantization
+        borders live in it as one `feature ... borders ...` table per
+        feature, each border with its hex bits, and every split references
+        a border by index, which is why `gbdt_predict` takes only the text
+        and raw feature rows.
+
+        The curve attributes (`loss_curve_`, `test_loss_curve_`) are not
+        reconstructed by `load`; a loaded model carries them as None. The
+        model text does record per-iteration learn losses on its `loss`
+        lines, so nothing is destroyed, but `load` populates only what
+        prediction reads.
+        """
+        if self.model_ is None:
+            raise RuntimeError("mojolearn: save() before fit()")
+        arrays = {
+            "format": np.asarray(_MODEL_FORMAT),
+            "estimator": np.asarray(type(self).__name__),
+            "loss": np.asarray(self.loss),
+            "model": np.frombuffer(
+                str(self.model_).encode("utf-8"), dtype=np.uint8
+            ),
+            "meta": np.asarray(
+                [
+                    self.n_features_in_,
+                    self.approx_dim_,
+                    -1 if self.n_classes_ is None else self.n_classes_,
+                    -1 if self.best_iteration_ is None
+                    else self.best_iteration_,
+                    1 if self.stopped_early_ else 0,
+                ],
+                dtype=np.int64,
+            ),
+            # raw float64 bytes, already parsed from the text's BITS half
+            "bias": np.asarray(self.bias_, dtype=np.float64),
+        }
+        return _serialize.write_npz(path, arrays)
+
+    @classmethod
+    def load(cls, path):
+        """Load an ensemble saved by `save`. The result predicts; it does
+        not refit, and it does not carry the training configuration or
+        the loss curves. `approx_dim_` is re-derived from the model text
+        exactly as `fit` derives it, and a file whose stored value
+        disagrees is refused as corrupt."""
+        arrays = _serialize.read_npz(path, _MODEL_FORMAT)
+        saved_as = _serialize.scalar_str(arrays, "estimator")
+        if saved_as != cls.__name__:
+            raise ValueError(
+                f"mojolearn: {path!r} was saved by {saved_as}, not "
+                f"{cls.__name__}"
+            )
+        obj = cls.__new__(cls)
+        obj.loss = _serialize.scalar_str(arrays, "loss")
+        obj.model_ = bytes(
+            _serialize.exact(arrays, "model", np.uint8)
+        ).decode("utf-8")
+        meta = _serialize.exact(arrays, "meta", np.int64)
+        obj.n_features_in_ = int(meta[0])
+        obj.approx_dim_ = int(_mojolearn_gbdt.gbdt_model_dim(obj.model_))
+        if obj.approx_dim_ != int(meta[1]):
+            raise ValueError(
+                f"mojolearn: {path!r} stores approx_dim {int(meta[1])} but "
+                f"its model text holds {obj.approx_dim_}; the file is "
+                "corrupt"
+            )
+        obj.n_classes_ = None if meta[2] < 0 else int(meta[2])
+        obj.best_iteration_ = None if meta[3] < 0 else int(meta[3])
+        obj.stopped_early_ = bool(meta[4])
+        obj.bias_ = float(
+            _serialize.exact(arrays, "bias", np.float64).reshape(-1)[0]
+        )
+        obj.loss_curve_ = None
+        obj.test_loss_curve_ = None
+        return obj
