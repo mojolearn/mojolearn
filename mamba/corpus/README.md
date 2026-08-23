@@ -1,0 +1,253 @@
+# Mamba-1 reference corpus
+
+An independent reference corpus for the Mamba-1 block identity lane (see
+`IDENTICAL_SSM_NOTES.md` at the repository root). The lane's expected values
+must not be solely our own tally, so this directory carries small hashed
+Mamba-1 block cases whose per-stage reference outputs are computed by somebody
+else's algorithm. The math is `selective_scan_ref` from state-spaces/mamba,
+copied verbatim into `gen_corpus.py` with a citation, composed in the block
+order of HuggingFace transformers' `modeling_mamba.py`, re-implemented in pure
+torch with each step cited by file and line.
+
+Read this before trusting anything here. `ref64/` is a TOLERANCE reference
+(float64 torch, cast up from the committed float32 inputs). The lane's bitwise
+oracle is its own pinned host oracle; this corpus exists so the lane's
+expected values have an outside anchor. `ref32/` is a plain torch float32 CPU
+run of the same stages, informative only, never a target and never a gate.
+This corpus is not a bitwise certificate of anything.
+
+## Versions and commits
+
+Everything below was generated on macOS arm64 (Darwin 25.5.0, Apple silicon)
+with a scratch venv OUTSIDE the repository's pixi environment.
+
+| component | version / commit |
+|---|---|
+| Python | 3.14.6 |
+| torch (CPU wheel, `--index-url https://download.pytorch.org/whl/cpu`) | 2.13.0 |
+| numpy | 2.5.2 |
+| einops (only for the verbatim `selective_scan_ref` copy's `rearrange`/`repeat`) | 0.8.2 |
+| state-spaces/mamba | `e9594ce1c732d97440f0332fdc43170a2294dbfa` |
+| huggingface/transformers | `d56c55bf564ddb176759eb6ec199442682564916` |
+
+Both upstream clones live at `/Users/andrewhendel/CascadeProjects/upstream/`
+(outside this repository). Neither package is imported by the generator. The
+mamba_ssm math is `mamba_ssm/ops/selective_scan_interface.py::selective_scan_ref`
+(lines 127-194 at that commit), copied verbatim. The block order is
+`src/transformers/models/mamba/modeling_mamba.py` at that commit. Note that
+the method historically named `MambaMixer.slow_forward` no longer exists under
+that name there; its body is `MambaMixer.forward` (lines 359-477) plus the
+pure-torch fallbacks `causal_conv1d_fn` (lines 78-98) and
+`mamba_selective_scan` (lines 162-258), plus `MambaRMSNorm.forward` (lines
+494-499) and `MambaBlock.forward` (lines 514-527, `hidden = residual +
+mixer(norm(residual))`). `gen_corpus.py` cites each step inline.
+
+## How to regenerate
+
+```sh
+python3 -m venv /path/to/mamba-ref-venv
+/path/to/mamba-ref-venv/bin/pip install torch --index-url https://download.pytorch.org/whl/cpu
+/path/to/mamba-ref-venv/bin/pip install numpy einops
+/path/to/mamba-ref-venv/bin/python mamba/corpus/gen_corpus.py --verify
+```
+
+`--verify` re-runs the verbatim `selective_scan_ref` over the HF-shaped path
+with `z` and `D` supplied (the way `mamba_selective_scan` calls it) and
+demands bit equality with the composed stages in both float64 and float32,
+checks that the two composition rows equal the parent's rows bit for bit,
+regenerates every file into a temp directory and byte-compares (determinism),
+and prints evidence that each adversarial case reaches its intent. The
+generator prints a corpus sha256 over all `.f32`, `.f64` and `.json` files;
+the committed corpus hashes to
+`318a67310ad3d9edb260875a42a40ba32003ac10a7ef6b306751ca5ee07886ca`.
+
+The hashed input values do not depend on torch or numpy RNGs (see the hash
+spec), so only the `ref64/` and `ref32/` stage files could ever move with a
+torch upgrade; regenerating with the pinned versions above reproduces the
+corpus byte for byte.
+
+## The block, stage by stage
+
+Fixed structure for every case. `d_state` N = 16, `d_conv` K = 4, `expand` = 2
+so `d_inner` = 2 * `d_model`, `dt_rank` = ceil(`d_model` / 16), RMSNorm eps =
+1e-5 (HF `layer_norm_epsilon`), no bias on `in_proj`, `x_proj`, `out_proj`
+(HF `use_bias` False), bias on `conv1d` (HF `use_conv_bias` True) and on
+`dt_proj`.
+
+| stage | definition | shape |
+|---|---|---|
+| `norm.out` | `weight * (x * rsqrt(mean(x^2, last_dim) + 1e-5))` | `[B, L, d_model]` |
+| `in_proj.out` | `(norm.out @ in_proj.weight^T)` transposed to channels-first; rows `0..d_inner` are the hidden half, rows `d_inner..2*d_inner` are the gate z | `[B, 2*d_inner, L]` |
+| `conv.out` | causal depthwise conv1d of the hidden half, kernel 4, padding 3, truncated to L, plus `conv1d.bias` | `[B, d_inner, L]` |
+| `silu.out` | `silu(conv.out)` (this is u) | `[B, d_inner, L]` |
+| `x_proj.out` | `silu.out^T @ x_proj.weight^T`; columns split as (dt_rank, N, N) into (dt_low, B, C) | `[B, L, dt_rank + 2N]` |
+| `dt_proj.out` | `dt_proj.weight @ dt_low^T + dt_proj.bias` (bias INCLUDED; HF adds it inside the scan as `delta_bias`, same sum) | `[B, d_inner, L]` |
+| `softplus.out` | `softplus(dt_proj.out)`, torch semantics with threshold 20, i.e. `x if x > 20 else log1p(exp(x))` (this is delta; the CUDA kernel's `delta <= 20` guard is the same rule) | `[B, d_inner, L]` |
+| `scan.y` | `selective_scan_ref(u, dt_raw, A=-exp(A_log), B, C, D, z=None, delta_bias=dt_proj.bias, delta_softplus=True)`; the recurrence is `h_t = exp(delta_t*A)*h_{t-1} + delta_t*B_t*u_t`, `y_t = h_t . C_t`, and `scan.y` INCLUDES the `+ u*D` term (selective_scan_ref adds it) but NOT the gate | `[B, d_inner, L]` |
+| `scan.h_last` | the state after the last token | `[B, d_inner, N]` |
+| `scan.h_all` | the state after every token (only on cases with L <= 4; the decode reference) | `[B, L, d_inner, N]` |
+| `gate.out` | `scan.y * silu(z)` | `[B, d_inner, L]` |
+| `out_proj.out` | `gate.out^T @ out_proj.weight^T` | `[B, L, d_model]` |
+| `block.out` | `x + out_proj.out` (the residual add) | `[B, L, d_model]` |
+
+Decode note, item (g) of the lane brief. The per-token decode step of this
+block (HF `causal_conv1d_update` plus `mamba_selective_state_update`) computes
+the same values as the prefill at token t, so this corpus carries no separate
+decode reference. The lane's decode-vs-prefill gate compares its own decode
+path against its own prefill bits; against this corpus, a decode driver checks
+its step outputs against the prefill reference read one token at a time, and
+its state after every token against `scan.h_all` on the L <= 4 cases.
+`base_b1_l1_d8` and `base_b1_l1_d16` are single-token cases, which is exactly
+the decode step shape.
+
+## Hash spec (`mojolearn.mamba.corpus.hash.v1`)
+
+Every tensor element is a HASHED value, never a library RNG draw, so a Mojo
+program can regenerate the identical float32 bits from this section alone.
+
+```c
+uint64 splitmix64(uint64 z) {
+    z += 0x9E3779B97F4A7C15;
+    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9;
+    z = (z ^ (z >> 27)) * 0x94D049BB133111EB;
+    return z ^ (z >> 31);
+}
+
+/* per tensor: seed is the case seed, tid the tensor id from the manifest */
+uint64 key = splitmix64(seed ^ (tid << 32));
+
+/* element at row-major flat index i (all arithmetic wraps mod 2^64) */
+uint64 h   = splitmix64(key + (uint64)i);
+double f   = (double)(h >> 40) * 0x1p-24;      /* top 24 bits, in [0, 1) */
+double v64 = lo + (hi - lo) * f;               /* exact in float64, see below */
+float  v   = (float)v64;                       /* ONE round, to nearest even */
+```
+
+Every `(lo, hi)` pair used in this corpus is a dyadic rational with few
+significant bits (the per-case `manifest.json` records the pair for every
+tensor), so `(hi - lo) * f` and the sum with `lo` are exact in float64 and the
+only rounding is the final cast to float32. The generator asserts this
+exactness against exact rationals for every element of every tensor. Case
+seeds follow `seed_k = 0x4D616D6261436F72 + 0x1000 * k` with k the case index
+in the top-level `manifest.json` (the two `comp_row*` cases reuse the parent's
+seed; their manifests say so).
+
+Default ranges (adversarial cases override some of them; the manifest is
+authoritative).
+
+| tensor | id | shape | default `[lo, hi]` |
+|---|---|---|---|
+| `x` | 1 | `[B, L, d_model]` | `[-2, 2]` |
+| `in_proj.weight` | 2 | `[2*d_inner, d_model]` | `[-s, s]`, `s = 0.5 / 2^ceil(log2(d_model)/2)` (a dyadic stand-in for `0.5/sqrt(fan_in)`) |
+| `conv1d.weight` | 3 | `[d_inner, 1, 4]` | `[-0.5, 0.5]` |
+| `conv1d.bias` | 4 | `[d_inner]` | `[-0.125, 0.125]` |
+| `x_proj.weight` | 5 | `[dt_rank + 2N, d_inner]` | `[-s, s]`, `s` rule with fan_in `d_inner` |
+| `dt_proj.weight` | 6 | `[d_inner, dt_rank]` | `[-1, 1]` |
+| `dt_proj.bias` | 7 | `[d_inner]` | `[-7, -2]`, so softplus(dt) spans about `[0.0009, 0.127]`, matching upstream's dt_min/dt_max intent |
+| `A_log` | 8 | `[d_inner, N]` | `[0, 2.75]`, so `A = -exp(A_log)` spans `[-15.64, -1]` (a dyadic-range stand-in for log of values in `[1, 16]`) |
+| `D` | 9 | `[d_inner]` | `[0.5, 1.5]` |
+| `out_proj.weight` | 10 | `[d_model, d_inner]` | `[-s, s]`, `s` rule with fan_in `d_inner` |
+| `norm.weight` | 11 | `[d_model]` | `[0.5, 1.5]` |
+
+The signed-zeros case additionally plants zeros AFTER hashing x. The rule is
+`x[b,t,:] = +0.0` for `t % 4 == 0`, `x[b,t,:] = -0.0` for `t % 4 == 2`, and of
+the remaining elements those with row-major flat index `i % 7 == 3` become
+`-0.0`. The gate-saturation case maps the gate half of `in_proj.weight` (rows
+`d_inner..2*d_inner`) through the override range recorded in its manifest
+segments entry, using the same hashed `f` values as the default mapping.
+
+## Cases
+
+Sixteen cases; every L in {1, 4, 16, 64, 257}, both d_model in {8, 16} and
+every B in {1, 2, 3} appear at least once. Seeds are in the top-level
+`manifest.json`.
+
+| case | B | L | d_model | what it is for |
+|---|---|---|---|---|
+| `base_b1_l1_d8` | 1 | 1 | 8 | smallest shape; L=1 is the decode step shape |
+| `base_b2_l4_d8` | 2 | 4 | 8 | L equals d_conv, the conv window exactly fills; `scan.h_all` written |
+| `base_b3_l16_d8` | 3 | 16 | 8 | odd batch |
+| `base_b1_l64_d8` | 1 | 64 | 8 | longer L |
+| `base_b1_l1_d16` | 1 | 1 | 16 | d_model 16 decode shape |
+| `base_b3_l4_d16` | 3 | 4 | 16 | d_model 16, B=3, L=d_conv; `scan.h_all` written |
+| `base_b2_l16_d16` | 2 | 16 | 16 | d_model 16 |
+| `base_b1_l64_d16` | 1 | 64 | 16 | d_model 16, longer L |
+| `adv_softplus_guard_b2_l8_d8` | 2 | 8 | 8 | (a) `dt_proj.bias` in `[19.875, 20.125]`; dt_proj outputs straddle torch's softplus threshold 20 (190 elements at or below, 66 above; the CUDA kernel's `delta <= 20` guard) |
+| `adv_a_very_negative_b1_l16_d16` | 1 | 16 | 16 | (b) `A_log` in `[6, 10]`, A in `[-22026, -403]`; in FP32 `exp(delta*A)` lands 2987 zeros and 247 denormals out of 8192; ref64 keeps the true tiny values, so an FTZ mismatch is invisible to the tolerance and only the lane's bitwise oracle can see it |
+| `adv_a_near_zero_b3_l8_d8` | 3 | 8 | 8 | (c) `A_log` in `[-18, -12]`, A in `[-6.1e-6, -1.5e-8]`; FP32 `exp(delta*A)` is within 6 ulp of 1 and rounds to exactly 1 for 4570 of 6144 products |
+| `adv_signed_zeros_b2_l8_d8` | 2 | 8 | 8 | (d) x carries whole `+0.0` tokens, whole `-0.0` tokens and scattered `-0.0` (73 zeros in all, 41 of them negative); RMSNorm of a zero token is `0 * rsqrt(eps)`; note that torch's GEMM emits `+0.0` for the `-0.0` tokens (accumulator starts at `+0.0`), so a lane spelling that starts from the first product differs in the zero's SIGN, which the tolerance cannot see |
+| `adv_gate_saturation_b1_l8_d16` | 1 | 8 | 16 | (e) gate half of `in_proj.weight` in `[-2^30, 2^30]`; z spans 6.8e6 to 7.4e9 in magnitude, `exp(-z)` overflows to inf for negative z, sigmoid is exactly 0 for 138 and exactly 1 for 118 of 256 elements, silu of large negative z is `-0.0`, and the residual is lost in `block.out` (max magnitude 1.3e8) |
+| `comp_b2_l257_d8` | 2 | 257 | 8 | (f) long L, one past a 256 chunk; reduced stage set (`scan.y`, `scan.h_last`, `block.out`) to keep the corpus small |
+| `comp_row0_b1_l257_d8` | 1 | 257 | 8 | (f) row 0 of the parent as a B=1 case, SAME seed and parameters, x is a byte slice of the parent's x; batch composition |
+| `comp_row1_b1_l257_d8` | 1 | 257 | 8 | (f) row 1, same construction |
+
+The generator verifies that both composition rows reproduce the parent's rows
+bit for bit in ref64 and in ref32 (torch CPU float64 and float32 are
+batch-invariant for these shapes; the lane's own batch-invariance gate remains
+the lane's, this is only the corpus being consistent with itself).
+
+## File format
+
+Per case directory `mamba/corpus/<case>/`
+
+- `<tensor>.f32` for x and every parameter, HF module names as listed above.
+  Raw little-endian IEEE-754 float32, row-major, no header. Shapes, ranges,
+  tensor ids and the seed are in the case's `manifest.json`.
+- `ref64/<stage>.f64` float64 reference, computed by torch in float64 from the
+  committed float32 inputs cast up. Raw little-endian float64, row-major,
+  shapes as in the stage table (also recorded per stage in the manifest).
+- `ref32/<stage>.f32` the same stages from a plain torch float32 CPU run.
+  Informative only.
+- `manifest.json` everything a regenerator or a driver needs for this case.
+
+The top-level `manifest.json` lists all cases, seeds, tensor ids, stage
+definitions and the upstream pins.
+
+## The stage-dump convention and the check
+
+The lane's driver writes, for one case, a directory of raw little-endian
+float32 files named exactly `<stage>.f32` (`norm.out.f32`, `in_proj.out.f32`,
+`conv.out.f32`, `silu.out.f32`, `x_proj.out.f32`, `dt_proj.out.f32`,
+`softplus.out.f32`, `scan.y.f32`, `scan.h_last.f32`, `scan.h_all.f32`,
+`gate.out.f32`, `out_proj.out.f32`, `block.out.f32`), row-major, in the shapes
+of the stage table above (channels-first `[B, d_inner, L]` where the table
+says so; the manifest is authoritative per case). Stages the driver does not
+dump are skipped and listed, never failed.
+
+```sh
+python tools/mamba_corpus_check.py mamba/corpus/<case> <dump_dir> [--rtol 1e-5 --atol 1e-6]
+python tools/mamba_corpus_check.py mamba/corpus/<case> --self-test
+```
+
+The check compares each dumped stage to `ref64` with
+`|dump - ref| <= atol + rtol * |ref|` per element (NaNs must match, infs must
+match in sign), prints per-stage max abs and max rel error and the first
+failing flat index with both values, and exits 0 only when every present
+stage passes and at least one stage was compared (exit 1 on any failure, exit
+2 when nothing was compared). Only numpy is required, so it runs in the
+repository's pixi envs; torch is not needed for checking.
+
+## Tolerance calibration (measured, ref32 vs ref64)
+
+`--self-test` feeds the case's own `ref32` through the comparison and reports
+the smallest rtol from the ladder {1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2} at
+which plain torch FP32 passes with atol 1e-6. Measured on the committed
+corpus (torch 2.13.0 CPU, single thread)
+
+- every stage of every case passes at rtol 1e-7 with atol 1e-6, EXCEPT the
+  large-magnitude stages of `adv_gate_saturation_b1_l8_d16`, where
+  `in_proj.out` needs rtol 1e-5 (max abs 6.8e2 on values of order 1e9, max rel
+  5.5e-5 on tiny elements covered by neither bound at 1e-7) and `gate.out`,
+  `out_proj.out`, `block.out` need rtol 1e-4 (max abs up to 2.2e2 on values of
+  order 1e8).
+- so the default gate of rtol 1e-5, atol 1e-6 is one torch-FP32-width looser
+  than torch itself everywhere except the gate-saturation case, where a driver
+  as good as torch FP32 still needs `--rtol 1e-4`. Use `--rtol 1e-4` for that
+  case and the default for the rest.
+- worst per-stage max rel errors sit on elements of tiny magnitude (for
+  example `scan.h_last` max rel 1.8e-2 on a state element of order 2e-10) and
+  are absorbed by atol; that is why both bounds exist.
+
+These numbers calibrate the tolerance honestly; they say nothing about
+bitwise identity. A dump that passes the check is consistent with the
+reference algorithm at FP32-roundoff scale, nothing more.
