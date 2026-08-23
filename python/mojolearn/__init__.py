@@ -6,9 +6,16 @@ those can reach. See NOTICE for the attribution each carries.
 
 WHAT IS IN THIS ALPHA, AND WHAT IS NOT
 ---------------------------------------
-Three estimators: `NearestNeighbors`, `KMeans` and `GradientBoosting`. All
-are backed by kernels verified against hand-computed expectations and, for
-k-means and the ensemble, against cuVS and CatBoost's own output.
+Eleven estimators: `NearestNeighbors`, `KMeans`, `DBSCAN`, `PCA`,
+`TruncatedSVD`, `LinearRegression`, `GradientBoosting`,
+`RandomForestClassifier`, `RandomForestRegressor`, `ExtraTreesClassifier`
+and `ExtraTreesRegressor`. All are backed by kernels verified against
+hand-computed expectations and, for k-means, the forests and the ensemble,
+against cuVS, cuML, scikit-learn and CatBoost's own output. Each
+class docstring carries a WHAT IS HONORED / REFUSED table: a parameter the
+kernel does not carry is refused BY NAME with the reason, never accepted
+and ignored, and `tools/e2u_matrix_fit.py` measures that every honored
+parameter moves the answer on a fixture that should move.
 
 `GradientBoosting` is the CatBoost oblivious-tree learner and trains twelve
 of their loss functions -- RMSE, Logloss, CrossEntropy, Quantile, MAE,
@@ -19,13 +26,14 @@ one-dimensional and `predict_proba` would need routing through the softmax
 over `numClasses - 1` stored approxes. It is named here rather than left out
 silently.
 
-**DBSCAN, PCA and OLS are NOT here**, and they are named rather than left
-out silently. Their kernels exist in the repository, are verified, and are
-benchmarked -- the PCA and OLS numbers quoted in the README come from them --
-but they have no caller-facing surface yet, and binding a kernel directly at
-this boundary would put policy decisions (workspace budgets, fixed-point
-scales, normalization) somewhere no check can see them. That is the mistake
-this library is organized to avoid. They land when their surfaces do.
+**`DBSCAN`, `PCA`, `TruncatedSVD` and `LinearRegression` ARE here** (since
+2026-08-23). This docstring used to say they were not, and that sentence
+outlived the fact by a day: `density.py`, `decomposition.py` and
+`linear_model.py` had been bound through `_mojolearn_estimators` with the
+policy each needs stated on the class, and were reachable only as
+submodules while `__getattr__` still told a caller they had no surface.
+What is STILL absent is named in `_NOT_YET` below, with the line where
+the thing that exists stops.
 
 WHAT THIS IS NOT
 ----------------
@@ -59,33 +67,55 @@ _backend.select()
 numeric_mode = _backend.numeric_mode
 
 from .cluster import KMeans
+from .decomposition import PCA, TruncatedSVD
+from .density import DBSCAN
 from .ensemble import GradientBoosting
+from .extratrees import ExtraTreesClassifier, ExtraTreesRegressor
+from .linear_model import LinearRegression
 from .neighbors import NearestNeighbors
+from .randomforest import RandomForestClassifier, RandomForestRegressor
 
 __all__ = [
+    "DBSCAN",
+    "ExtraTreesClassifier",
+    "ExtraTreesRegressor",
     "GradientBoosting",
     "KMeans",
+    "LinearRegression",
     "NearestNeighbors",
+    "PCA",
+    "RandomForestClassifier",
+    "RandomForestRegressor",
+    "TruncatedSVD",
     "__version__",
     "numeric_mode",
 ]
 
 # Named absences. Importing one of these raises with a reason rather than an
-# AttributeError, because "why is DBSCAN missing" is a question the answer to
-# is interesting and short.
+# AttributeError, because "why is KNeighborsClassifier missing" is a
+# question the answer to is interesting and short. Each value names the
+# thing that EXISTS and where it stops.
 _NOT_YET = {
-    "DBSCAN": "dbscan/ported/dbscan/dbscan.mojo:132 (dbscan_fit_impl)",
-    "PCA": "decomposition/ported/linalg/detail/pca.mojo:262 (pca_fit)",
-    "LinearRegression": "glm/ported/glm/ols.mojo:82 (ols_fit)",
+    "KNeighborsClassifier": (
+        "neighbors/estimator.mojo (knn_search): a vote over what it "
+        "returns, not written"
+    ),
+    "KNeighborsRegressor": (
+        "neighbors/estimator.mojo (knn_search): a mean over what it "
+        "returns, not written"
+    ),
+    "RadiusNeighbors": (
+        "neighbors/ported/neighbors/ball_cover/ (radius search exists for "
+        "DBSCAN's eps neighbourhood); no caller-facing surface"
+    ),
 }
 
 
 def __getattr__(name):
     if name in _NOT_YET:
         raise AttributeError(
-            f"mojolearn.{name} is not in this release. Its kernel exists and "
-            f"is verified at {_NOT_YET[name]}, but it has no caller-facing "
-            "surface yet, and binding a kernel directly would put policy "
-            "where no check can see it. See the module docstring."
+            f"mojolearn.{name} is not in this release. What exists stops at "
+            f"{_NOT_YET[name]}; binding it directly would put policy where "
+            "no check can see it. See the module docstring."
         )
     raise AttributeError(f"module 'mojolearn' has no attribute {name!r}")
