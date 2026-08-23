@@ -269,13 +269,28 @@ def check_hardware_matrix() raises:
                 " 32x32x4M Gram to split-K and does not"
             )
     else:
-        # A non-apple build must NOT run the hand-written Gram kernel.
-        if gram_splitk_applies(32, 32, 4000000):
-            raise Error(
-                "check_hardware_matrix FAIL: a non-apple build routed the"
-                " Gram shape to the split-K kernel; MAX's own matmul owns"
-                " that regime off Apple"
-            )
+        # A non-apple FAST build must NOT run the hand-written Gram kernel.
+        # Under IDENTICAL the answer is the OPPOSITE on every column:
+        # DEVIATION 521 routes the Gram shape to split-K everywhere, because
+        # the vendor matmul is a closed k-split (and TF32 on NVIDIA, row 33).
+        # Until 2026-08-23 this branch asserted the FAST answer in both
+        # modes and phase 0 of every NVIDIA/AMD E1 leg printed a FINDING
+        # for what was DEVIATION 521 doing its job.
+        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+            if gram_splitk_applies(32, 32, 4000000):
+                raise Error(
+                    "check_hardware_matrix FAIL: a non-apple build routed"
+                    " the Gram shape to the split-K kernel; MAX's own"
+                    " matmul owns that regime off Apple"
+                )
+        else:
+            if not gram_splitk_applies(32, 32, 4000000):
+                raise Error(
+                    "check_hardware_matrix FAIL: an IDENTICAL build on a"
+                    " non-apple column handed the 32x32x4M Gram to the"
+                    " vendor matmul; DEVIATION 521 pins split-K on every"
+                    " column"
+                )
 
     # ---- 5. THE IDENTITY FLOOR, and the regression it guards -----------
     #

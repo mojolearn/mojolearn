@@ -1446,18 +1446,32 @@ def check_jacobi_denormal_exit_test() raises:
     var info = _run_device_f32(ctx, a, n, 15, tol, da, dv)
 
     if Int(info[2]) != 0 or info[0] != Float32(1.0):
-        raise Error(
+        var msg = String(
             "check_jacobi_denormal_exit_test: this backend did NOT flush --"
             " it ran "
-            + String(Int(info[2]))
-            + " sweeps with converged = "
-            + String(info[0])
-            + " where a flushing backend converges at sweep 0. Under"
+        ) + String(Int(info[2])) + " sweeps with converged = " + String(
+            info[0]
+        ) + (
+            " where a flushing backend converges at sweep 0. Under"
             " IDENTICAL that is a REACHED-PIN failure: the `ftz` calls on"
             " the partial-sum loads and on `limit` are what make this"
             " column agree with Metal. Under FAST it is the honest"
             " hardware answer and the row-10 divergence, measured."
         )
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+            raise Error(msg)
+        # FAST on a denormal-honoring column (NVIDIA, AMD): the message
+        # above says this is the honest answer, and until 2026-08-23 the
+        # check raised anyway, which aborted the FAST pass of
+        # check-linalg-identity on every non-Metal leg and with it the
+        # IDENTICAL pass the script runs after it. A FAST build does not
+        # claim to flush; it is RECORDED here, and the judgement is the
+        # IDENTICAL build's.
+        print(
+            "check_jacobi_denormal_exit_test RECORDED (" + _mode_name()
+            + "): " + msg
+        )
+        return
     var untouched = True
     for i in range(n * n):
         if _f32_bits(da[i]) != _f32_bits(a[i]):

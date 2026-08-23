@@ -312,11 +312,24 @@ def _gram_one(ctx: DeviceContext, m: Int, k: Int, arm: Int) raises -> String:
                         + String(b)
                     )
     if asym != 0:
-        if _arm_is_vendor_product(m, k, arm) and vendor_fp32_matmul_is_lossy(
-            TARGET_COLUMN, ctx.compute_capability()
-        ):
+        # Any VENDOR product arm is a closed library (IDENTITY_PATHS row
+        # 28): its per-cell accumulation order is its own, so (i, j) and
+        # (j, i) are two different folds of the same products and bitwise
+        # symmetry is a MEASUREMENT, not a promise -- lossy (TF32, fp19)
+        # or fp32 alike. Measured 2026-08-23 on the MI325X (fp32 vendor
+        # matmul, FAST): 768x768x257 cells (0, 32) and mirror 7.1912665 vs
+        # 7.1912646. Until then the report branch covered only the LOSSY
+        # vendor product, so that leg FAILED the FAST pass of
+        # check-linalg-identity and never reached the IDENTICAL pass. Only
+        # OUR split-K arm is held to bitwise symmetry.
+        if _arm_is_vendor_product(m, k, arm):
+            var lossy = vendor_fp32_matmul_is_lossy(
+                TARGET_COLUMN, ctx.compute_capability()
+            )
             print(
-                "  REPORT: the lossy vendor product at "
+                "  REPORT: the "
+                + ("lossy " if lossy else "fp32 ")
+                + "vendor product at "
                 + String(m)
                 + "x"
                 + String(m)
@@ -326,7 +339,7 @@ def _gram_one(ctx: DeviceContext, m: Int, k: Int, arm: Int) raises -> String:
                 + String(asym)
                 + " cell pairs ("
                 + asym_first
-                + "); a closed tensor-core kernel promises no symmetry and"
+                + "); a closed vendor kernel promises no symmetry and"
                 " this is the measurement of whether it has it"
             )
         else:

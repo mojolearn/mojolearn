@@ -56,6 +56,7 @@ from neighbors.ported.neighbors.detail.fused_l2_knn import (
     FKNN_SMEM_PAGE_Y,
     FKNN_THREADS,
     fused_l2_knn,
+    fused_l2_knn_grid,
     fused_l2_knn_launch,
 )
 from neighbors.ported.neighbors.detail.knn_brute_force import (
@@ -1114,13 +1115,29 @@ def check_dispatch_takes_fused() raises:
     # count -- and DEVIATION 509 pins AUTO to TILED on every column,
     # superseding DEVIATION 502's pin to cuVS's own FUSED dispatch (that arm
     # REFUSES on a 64-lane column, so it cannot be the identical column's).
-    if untouched3 != FCHK_QUERIES * kf:
+    # The FAST expectation is read off THIS column's launch computation,
+    # not off the M4's (2026-08-23: the H100's 108 SMs give a different
+    # grid, and a check that hardcodes "(16, 4) here" fails on every
+    # non-Apple FAST leg for the geometry doing what DEVIATION 36 says).
+    var g_small = fused_l2_knn_grid(FCHK_QUERIES, FCHK_INDEX)
+    var want_fused_small = (
+        False if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else g_small[0] == 1
+    )
+    if (not want_fused_small) and untouched3 != FCHK_QUERIES * kf:
         raise Error(
             "DEFAULT DISPATCH at k=8 on the (53 x 4,093) fixture wrote"
             " out_idx, so the FUSED arm ran. Under FAST that is DEVIATION"
-            " 36's x-split regime (fused_l2_knn_grid picks grid (16, 4)"
-            " here) and under IDENTICAL it is DEVIATION 509's pin; either"
+            " 36's x-split regime (fused_l2_knn_grid picks grid ("
+            + String(g_small[0]) + ", " + String(g_small[1])
+            + ") here) and under IDENTICAL it is DEVIATION 509's pin; either"
             " the default moved or AUTO is not reading the mode."
+        )
+    if want_fused_small and untouched3 != 0:
+        raise Error(
+            "DEFAULT DISPATCH at k=8 on the (53 x 4,093) fixture left"
+            " out_idx at its sentinel, so the TILED arm ran, but this"
+            " column's fused_l2_knn_grid gives grid_x == 1 and DEVIATION 36"
+            " (FAST) takes FUSED there; AUTO is not reading the geometry."
         )
     var bad3 = 0
     for i in range(FCHK_QUERIES):
@@ -1209,15 +1226,30 @@ def check_dispatch_takes_fused() raises:
                 " mode where the arm may not depend on the query count."
             )
     else:
-        if fused_wrote != big_q * kf or tiled_untouched != big_q * kf:
-            raise Error(
-                "DEFAULT DISPATCH at k=8 with 1,920 queries: expected the"
-                " FUSED arm (grid_x == 1 regime), but out_idx has "
-                + String(big_q * kf - fused_wrote)
-                + " sentinel slots left and out_idx32 has "
-                + String(big_q * kf - tiled_untouched)
-                + " written slots; AUTO is not reading the geometry"
-            )
+        # "1,920 queries = minGridSize" is the M4's number; on this column
+        # the expectation is whatever its own launch computation says.
+        var g_big = fused_l2_knn_grid(big_q, FCHK_INDEX)
+        if g_big[0] == 1:
+            if fused_wrote != big_q * kf or tiled_untouched != big_q * kf:
+                raise Error(
+                    "DEFAULT DISPATCH at k=8 with 1,920 queries: expected"
+                    " the FUSED arm (this column's grid_x == 1 regime), but"
+                    " out_idx has "
+                    + String(big_q * kf - fused_wrote)
+                    + " sentinel slots left and out_idx32 has "
+                    + String(big_q * kf - tiled_untouched)
+                    + " written slots; AUTO is not reading the geometry"
+                )
+        else:
+            if fused_wrote != 0 or tiled_untouched != 0:
+                raise Error(
+                    "DEFAULT DISPATCH at k=8 with 1,920 queries: this"
+                    " column's fused_l2_knn_grid gives grid_x = "
+                    + String(g_big[0])
+                    + " so DEVIATION 36 takes TILED, but out_idx has "
+                    + String(fused_wrote)
+                    + " written slots; AUTO is not reading the geometry"
+                )
 
     print(
         "check_dispatch_takes_fused OK: with KNN_METHOD_FUSED, k=8 wrote"
@@ -1230,9 +1262,10 @@ def check_dispatch_takes_fused() raises:
             " ties differently, and the FUSED arm 502 used to pin to"
             " refuses outright on a 64-lane column)"
             if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-            else "TILED on the (53 x 4,093) x-split shape and FUSED on the"
-            " 1,920-query grid_x == 1 shape, which is DEVIATION 36"
-            " (revised)"
+            else "the arm this column's fused_l2_knn_grid selects on each"
+            " shape (FUSED iff grid_x == 1; on the M4: TILED on the"
+            " (53 x 4,093) x-split shape and FUSED on the 1,920-query"
+            " shape), which is DEVIATION 36 (revised)"
         ),
     )
 

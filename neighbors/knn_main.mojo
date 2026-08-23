@@ -14,6 +14,7 @@ those two files also has its own `main` for the loop while working on one:
 """
 
 from mojo_only.hardware_matrix_check import check_hardware_matrix
+from mojo_only.kernel_matrix import TARGET_COLUMN, lib_lane_width_for
 from neighbors.mojo_only.estimator_check import (
     check_knn_search_arms_agree,
     check_knn_search_matches_host,
@@ -54,15 +55,33 @@ def main() raises:
     check_knn()
     check_knn_reach_by_sabotage()
     check_vendor_topk_matches_ported()
-    check_fused_l2_knn()
-    check_fused_edge_shapes()
-    check_fused_reach_by_sabotage()
-    check_fused_queue_reach_by_sabotage()
-    check_fused_k_ceiling()
-    check_dispatch_takes_fused()
-    check_launch_config_values()
-    check_fused_griddimx_merge()
-    check_fused_griddimx_one_capped_y()
+    # THE FUSED ARM EXISTS ONLY ON A 32-LANE COLUMN (IDENTITY_PATHS row
+    # 23): `fused_l2_knn` refuses at entry on a 64-wide wavefront, by
+    # design, and the eight checks below call it by name. On the MI325X
+    # (2026-08-23, FAST leg) `check_fused_l2_knn` raised that refusal and
+    # took the whole gate -- and the IDENTICAL pass the script runs after
+    # it -- down with it, for an arm the column never ships. The refusal
+    # is the measurement; record it once and run everything else.
+    if lib_lane_width_for[TARGET_COLUMN]() == 32:
+        check_fused_l2_knn()
+        check_fused_edge_shapes()
+        check_fused_reach_by_sabotage()
+        check_fused_queue_reach_by_sabotage()
+        check_fused_k_ceiling()
+        check_dispatch_takes_fused()
+        check_launch_config_values()
+        check_fused_griddimx_merge()
+        check_fused_griddimx_one_capped_y()
+    else:
+        print(
+            "fused-arm checks RECORDED as REFUSED on this column: lane"
+            " width "
+            + String(lib_lane_width_for[TARGET_COLUMN]())
+            + " != 32, so `fused_l2_knn` refuses at entry (row 23) and"
+            " AUTO never selects it here (DEVIATION 512 under FAST, 509"
+            " under IDENTICAL); the tiled arm above and the surface below"
+            " are this column's whole k-NN."
+        )
     # The caller-facing surface, last: it is the only thing here a user
     # can reach, and it is worth nothing if the kernels above are wrong.
     check_plan_query_tile()
