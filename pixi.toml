@@ -839,6 +839,14 @@ check-linalg-column-invariance = "sh tools/check_linalg_column_invariance.sh"
 # run-to-run control beside it.
 ols-card = "sh tools/ols_card.sh"
 
+# THE GEMM IDENTITY PROFILE, phases 0-1 (IDENTICAL_GEMM_PLAN.md's charter).
+# Host only, no GPU: the serial ascending-k oracle plus the adversarial
+# fixtures that SEPARATE serial from split-k, one partition count from
+# another, fused from unfused, FTZ from gradual underflow, a balanced fold
+# from a serial one, and the signed-zero and cancellation cases. Run in both
+# modes; two of its fixtures refused themselves before they worked.
+check-gemm-oracle = "mojo run -I . gemm/mojo_only/gemm_oracle_check.mojo"
+
 # THE COLUMN-INVARIANCE GATE (2026-08-23). The half of the cross-vendor debt
 # that does NOT need cross-vendor hardware: `TARGET_COLUMN` is a comptime
 # choice, so `-D MOJOLEARN_COLUMN_AMD` compiles this source against AMD's

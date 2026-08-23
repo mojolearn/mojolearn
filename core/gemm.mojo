@@ -151,7 +151,17 @@ def pinned_gemm_nt_kernel(
                 acc,
             )
         )
-    z.unsafe_store(cell, ftz(acc))
+    # THE FOLD IS UNCONDITIONAL, and at one partition it is a one-term
+    # fold rather than a bypass. `gemm/IDENTICAL_FP32_CONTRACT.md` section
+    # 9.2(b): seeding at `+0.0` and always folding is what keeps the SIGN OF
+    # A ZERO from being a function of the partition count. `0.0 + x` is `x`
+    # for every x except `-0.0`, where it is `+0.0` -- so a cell that
+    # accumulates to negative zero comes out `+0.0` here AND under a
+    # partitioned arm, instead of `-0.0` here and `+0.0` there. Inert today
+    # because this kernel is always one partition; it stops being inert the
+    # moment the generalized kernel lands, and IDENTITY_PATHS row 13 is what
+    # a signed zero does downstream when a min or a max consumes it.
+    z.unsafe_store(cell, ftz(Float32(0.0) + ftz(acc)))
 
 
 def pinned_gemv_n_kernel(
@@ -180,7 +190,10 @@ def pinned_gemv_n_kernel(
                 ftz(x.unsafe_load(i * k + p)), ftz(y.unsafe_load(p)), acc
             )
         )
-    z.unsafe_store(i, ftz(acc))
+    # Section 9.2(b)'s one-term fold, as in the kernel above and for the
+    # same reason: the sign of a zero must not depend on the partition
+    # count.
+    z.unsafe_store(i, ftz(Float32(0.0) + ftz(acc)))
 
 
 #: Threads per block for the two pinned products. SCHEDULING and provably so:
