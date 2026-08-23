@@ -159,3 +159,52 @@ Two things follow, and the second is the one that matters:
 The kernel this tree actually ports is their SIMT one
 (`cpp/src/distance/detail/fused_distance_nn/simt_kernel.cuh`), which has no
 tensor-op path in it at all.
+
+### The same finding from the other side: OUR vendor products on NVIDIA are 1xTF32 (DEVIATION 529, 2026-08-23)
+
+The H100 leg of E2 failed `check_assignment_arm_dispatch` under FAST with
+"fused and unfused min_dist diverge, worst relative 51968000000.0" after
+every fused-arm check before it had passed and with the labels agreeing.
+The number decodes: the old comparison was `|a - b| / max(|a|, 1e-6)` with
+`a` the FUSED value, so 5.2e10 means the fused arm returned ~0 (correct:
+the fixture's points sit 100x the jitter from their own centroid and the
+expanded form at magnitude 1.3e9 clamps to zero) and the UNFUSED arm
+returned ~51968, which is 4e-5 of the magnitude, 400 ulps -- not an fp32
+accumulation of 32 terms, a TF32 tensor-core product. The unfused arm is
+`core/gemm.mojo::gemm_nt` = MAX 26.5.0's `linalg.matmul`, and on NVIDIA that
+is **1xTF32 by default with no compilable opt-out before Blackwell**
+(`use_tf32=True` is the default, the cuBLAS fallback hard-codes
+`CUBLAS_TF32_TENSOR_OP_MATH`, `use_tf32=False` asserts at compile time
+except on SM100; `mojo_only/kernel_matrix.mojo::column_vendor_fp32_matmul_is_tf32`
+carries the source lines).
+
+Three consequences, in order of how much they matter:
+
+1. **The fused arm -- the arm the fit ships -- was RIGHT.** It is the SIMT
+   kernel above, fp32 on every column, and the diff that failed was
+   against the lossy arm. The fix is the judge: both arms are now held to
+   a Float64 oracle with a MAGNITUDE-relative budget (fp32 for the fused
+   arm everywhere; fp32 on an exact column and the TF32 bound on a lossy
+   one for the unfused arm, the line printed naming which), and their
+   outputs are poisoned before every launch so an unwritten row reads back
+   as poison. `check_assignment_arms_match_oracle` is the well-conditioned
+   twin where the distances are resolvable (fp32 arms land ~1e-7 of the
+   magnitude; a TF32-rounded self-sabotage lands ~1e-4, rejected by the
+   fp32 budget and admitted by the TF32 bound, on this Mac).
+2. **Under FAST on NVIDIA, the parts of k-means that DO run through
+   `gemm_nt` are TF32-accuracy:** the k-means++ candidate costs
+   (`detail/kmeans.mojo`, `gemm_nt` into `candidate_cost_kernel`) and the
+   unfused assignment arm if anything ever selects it. The Lloyd assignment
+   itself is not -- so on an H100 our k-means distance arithmetic is MORE
+   precise than cuVS's 3xTF32 for the assignment and LESS for the seeding.
+   Under IDENTICAL neither is reachable: `gemm_nt` is the pinned fp32
+   kernel (DEVIATION 526).
+3. **The column sims found two more NVIDIA failures waiting in this file
+   behind the one the leg hit.** `check_fused_policy_dispatch`'s fixture
+   was a constant 8256 rows sized to the M4's 120-block grid cap; on a
+   132-SM H100 the cap is larger, the fixture fits under it, and the check
+   refused itself with "fixture too small". The row count is now derived
+   from the launcher's own cap. And its "fused == unfused" label clause is
+   now excused per row where the oracle gap sits inside the lossy arm's
+   budget. `mojo_only/gram_splitk_check.mojo` had the same class of
+   Apple-only assertion (DEVIATION 540).

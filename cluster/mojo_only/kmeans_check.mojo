@@ -37,7 +37,7 @@ planted ones, each matched exactly once, and that every row's label follows
 its planted membership through that permutation.
 """
 
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
@@ -94,6 +94,15 @@ from cluster.ported.cluster.kmeans_params import (
 )
 from core.row_norms import NORM_TPB, row_norm_kernel
 from mojo_only.fixed_point import choose_scale
+from mojo_only.kernel_matrix import (
+    TARGET_COLUMN,
+    VENDOR_TF32_PRODUCT_REL_BOUND,
+    column_name,
+    vendor_fp32_matmul_is_lossy,
+    vendor_fp32_matmul_precision_name,
+)
+from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from std.memory import bitcast
 
 
 comptime CHECK_ROWS = 512
@@ -825,6 +834,61 @@ comptime ARM_FEATURES = 32
 comptime ARM_CLUSTERS = 64
 comptime ARM_SENTINEL = Float32(-777.25)
 
+#: The fp32 budget an assignment arm's min_dist is held to, relative to the
+#: MAGNITUDE of the expanded form's operands (`xn + yn + 2|x.c|`), the same
+#: number `mojo_only/gram_splitk_check.mojo` holds the Gram product to and
+#: for the same reason: it covers fp32 accumulation-order spread, and a
+#: vendor product on a lossy column is allowed `VENDOR_TF32_PRODUCT_REL_BOUND`
+#: on top of it (DEVIATION 529).
+comptime ARM_FP32_REL_BUDGET = Float64(1.0e-5)
+
+#: Output poison: a NaN value and a key no cluster index can be.
+comptime ARM_POISON_KEY = UInt32(0xDEADBEEF)
+
+
+def _poison_outputs(
+    ctx: DeviceContext,
+    mut keys: DeviceBuffer[DType.uint32],
+    mut values: DeviceBuffer[DType.float32],
+    n: Int,
+) raises:
+    """Fill an assignment arm's outputs with poison before its launch, so a
+    row it never writes reads back as poison rather than as whatever the
+    allocator left there (DEVIATION 529)."""
+    var hk = ctx.enqueue_create_host_buffer[DType.uint32](n)
+    var hv = ctx.enqueue_create_host_buffer[DType.float32](n)
+    ctx.synchronize()
+    var nan_bits = UInt32(0x7FC0BEEF)
+    for i in range(n):
+        hk.unsafe_ptr().unsafe_store(i, ARM_POISON_KEY)
+        hv.unsafe_ptr().unsafe_store(i, bitcast[DType.float32](nan_bits))
+    ctx.enqueue_copy(dst_buf=keys, src_ptr=hk.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=values, src_ptr=hv.unsafe_ptr())
+    ctx.synchronize()
+
+
+def _surviving_poison(
+    keys: HostBuffer[DType.uint32], values: HostBuffer[DType.float32], n: Int
+) -> Int:
+    """Rows where either output still carries the poison. A NaN value is
+    counted as poison whatever its payload: no arm may return one."""
+    var count = 0
+    for i in range(n):
+        var v = values.unsafe_ptr().unsafe_load(i)
+        if keys.unsafe_ptr().unsafe_load(i) == ARM_POISON_KEY or v != v:
+            count += 1
+    return count
+
+
+def _round_to_tf32(x: Float32) -> Float32:
+    """Host model of a tensor core's operand conversion: the fp32 mantissa
+    rounded to 10 explicit bits, nearest-even. Used by the self-sabotage in
+    `check_assignment_arms_match_oracle`."""
+    var bits = bitcast[DType.uint32](x)
+    var lsb = (bits >> 13) & 1
+    bits = (bits + 0xFFF + lsb) & ~UInt32(0x1FFF)
+    return bitcast[DType.float32](bits)
+
 
 def check_assignment_arm_dispatch() raises:
     """Prove WHICH assignment arm the fit's entry point takes, by a sentinel
@@ -853,14 +917,50 @@ def check_assignment_arm_dispatch() raises:
     Both arms must also AGREE here: same labels bitwise (planted separation
     is 100 per cluster against jitter <= 1, so no near-ties; both arms
     reduce with `raft::argmin_op`'s total order, PORTING.md 14), and
-    distances within float tolerance -- NOT bitwise, because the two arms
-    sum the dot product in different orders, exactly as upstream's two arms
-    do.
+    distances within a tolerance -- NOT bitwise, because the two arms sum
+    the dot product in different orders, exactly as upstream's two arms do.
+
+    **THE DISTANCE TOLERANCE IS PER COLUMN, AND THAT IS DEVIATION 529
+    (2026-08-23).** On the H100 leg of E2 this check FAILED under FAST with
+    "fused and unfused min_dist diverge, worst relative 51968000000.0"
+    after every fused-arm check before it (including a 40-cluster host
+    argmin across 16 owner lanes) had passed, and the labels agreed. The
+    number decodes: the old comparison was `|a - b| / max(|a|, 1e-6)` with
+    `a` the FUSED value, so 5.2e10 means the fused arm returned ~0 (the
+    clamped expanded form of a point 100x the jitter from its own centroid,
+    correct to fp32 at magnitude 1.3e9) and the UNFUSED arm returned
+    ~51968 -- 4e-5 of the magnitude, 400 ulps, which fp32 accumulation of
+    32 terms cannot produce and a TF32 tensor-core product does. The
+    unfused arm is `gemm_nt` = MAX 26.5.0's `linalg.matmul`, and on NVIDIA
+    that is TF32 BY DEFAULT with no compilable opt-out before Blackwell
+    (`mojo_only/kernel_matrix.mojo::column_vendor_fp32_matmul_is_tf32`,
+    with the MAX source lines). **So the fused arm -- the one the fit
+    ships -- was RIGHT, and the arm it was being diffed against was the
+    lossy one.** The fix is the judge, not the kernel: both arms are now
+    judged against a Float64 host oracle with a MAGNITUDE-relative budget
+    (the expanded form `xn + yn - 2 x.c` is a cancellation at this
+    fixture's scale, so a value-relative comparison was never a sound
+    measure of either arm), the fused arm held to the fp32 budget on EVERY
+    column, the unfused arm to the fp32 budget where the vendor product is
+    exact and to the TF32 bound where it is not, the line printed naming
+    which. The outputs of both arms are POISONED before the launch (NaN
+    values, 0xDEADBEEF keys) and every row must be overwritten, which is
+    the gate for the uninitialized-output class this failure was first
+    read as. `check_assignment_arms_match_oracle` below is the
+    well-conditioned twin of this comparison, where the distances are
+    resolvable and the budget has teeth on this box.
     """
     var ctx = DeviceContext()
     var n = ARM_ROWS
     var d = ARM_FEATURES
     var k = ARM_CLUSTERS
+    var unfused_lossy = vendor_fp32_matmul_is_lossy(
+        TARGET_COLUMN, ctx.compute_capability()
+    )
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        # The unfused arm's product is `pinned_gemm_nt_kernel` under
+        # IDENTICAL (DEVIATION 526), fp32 on every column.
+        unfused_lossy = False
 
     var x = ctx.enqueue_create_buffer[DType.float32](n * d)
     var c = ctx.enqueue_create_buffer[DType.float32](k * d)
@@ -903,6 +1003,11 @@ def check_assignment_arm_dispatch() raises:
     ctx.enqueue_copy(dst_buf=dist_buf, src_ptr=hpoison.unsafe_ptr())
     ctx.synchronize()
 
+    # --- poison both arms' OUTPUTS too (DEVIATION 529): a row the kernel
+    # never writes must read back as poison, not as whatever the allocator
+    # left there -- which Metal tends to zero and CUDA does not.
+    _poison_outputs(ctx, labels, min_dist, n)
+
     # --- the entry the fit calls -------------------------------------------
     min_cluster_and_distance_compute(
         ctx, x, xn, c, cn, dist_buf, labels, min_dist,
@@ -939,11 +1044,19 @@ def check_assignment_arm_dispatch() raises:
             "fused arm mislabeled " + String(mislabeled) + " of " + String(n)
             + " rows on a fixture separated by 100x the jitter"
         )
+    var fused_poison = _surviving_poison(hl, hm, n)
+    if fused_poison != 0:
+        raise Error(
+            "fused arm left " + String(fused_poison) + " of " + String(n)
+            + " output rows UNWRITTEN (poison survived): the kernel is"
+            " reading or skipping rows it must write"
+        )
 
     # --- the sabotage half: the unfused arm MUST destroy the sentinel ------
     var labels_u = ctx.enqueue_create_buffer[DType.uint32](n)
     var min_dist_u = ctx.enqueue_create_buffer[DType.float32](n)
     ctx.synchronize()
+    _poison_outputs(ctx, labels_u, min_dist_u, n)
     min_cluster_and_distance_compute_unfused(
         ctx, x, xn, c, cn, dist_buf, labels_u, min_dist_u,
         n, d, k, METRIC_L2_EXPANDED, 0, 0,
@@ -968,26 +1081,79 @@ def check_assignment_arm_dispatch() raises:
             " fused-arm conclusion above is worthless."
         )
 
+    var unfused_poison = _surviving_poison(hlu, hmu, n)
+    if unfused_poison != 0:
+        raise Error(
+            "unfused arm left " + String(unfused_poison) + " of " + String(n)
+            + " output rows UNWRITTEN (poison survived)"
+        )
+
     var label_diff = 0
-    var worst_rel = Float64(0.0)
     for i in range(n):
         if hlu.unsafe_ptr().unsafe_load(i) != hl.unsafe_ptr().unsafe_load(i):
             label_diff += 1
-        var a = Float64(hm.unsafe_ptr().unsafe_load(i))
-        var b = Float64(hmu.unsafe_ptr().unsafe_load(i))
-        var denom = abs(a) if abs(a) > 1.0e-6 else 1.0e-6
-        var rel = abs(a - b) / denom
-        if rel > worst_rel:
-            worst_rel = rel
     if label_diff != 0:
         raise Error(
             "the two arms disagree on " + String(label_diff)
             + " labels; they reduce with the same total order and must not"
         )
-    if worst_rel > 1.0e-4:
+
+    # --- the distances, each arm against the Float64 oracle with a
+    # MAGNITUDE-relative budget (docstring, DEVIATION 529) --------------
+    var fused_budget = ARM_FP32_REL_BUDGET
+    var unfused_budget = ARM_FP32_REL_BUDGET
+    if unfused_lossy:
+        unfused_budget += VENDOR_TF32_PRODUCT_REL_BOUND
+    var worst_fused = Float64(0.0)
+    var worst_unfused = Float64(0.0)
+    var bit_equal = 0
+    for i in range(n):
+        var m = i % k
+        var true_d = Float64(0.0)
+        var xn64 = Float64(0.0)
+        var cn64 = Float64(0.0)
+        var dot = Float64(0.0)
+        for f in range(d):
+            var xv = Float64(hx.unsafe_ptr().unsafe_load(i * d + f))
+            var cv = Float64(hc.unsafe_ptr().unsafe_load(m * d + f))
+            true_d += (xv - cv) * (xv - cv)
+            xn64 += xv * xv
+            cn64 += cv * cv
+            dot += xv * cv
+        # The operands of the expanded form the kernels evaluate: their
+        # magnitude is what an fp32 (or TF32) error is relative to.
+        var mag = xn64 + cn64 + 2.0 * abs(dot)
+        var a = Float64(hm.unsafe_ptr().unsafe_load(i))
+        var b = Float64(hmu.unsafe_ptr().unsafe_load(i))
+        if hm.unsafe_ptr().unsafe_load(i) == hmu.unsafe_ptr().unsafe_load(i):
+            bit_equal += 1
+        var rel_a = abs(a - true_d) / mag
+        var rel_b = abs(b - true_d) / mag
+        if rel_a > worst_fused:
+            worst_fused = rel_a
+        if rel_b > worst_unfused:
+            worst_unfused = rel_b
+    if worst_fused > fused_budget:
         raise Error(
-            "fused and unfused min_dist diverge, worst relative "
-            + String(worst_rel)
+            "FUSED min_dist misses the Float64 oracle: worst "
+            + String(worst_fused)
+            + " of the expanded form's magnitude, budget "
+            + String(fused_budget)
+            + " (fp32; this arm is ours and is fp32 on every column)"
+        )
+    if worst_unfused > unfused_budget:
+        raise Error(
+            "UNFUSED min_dist misses the Float64 oracle: worst "
+            + String(worst_unfused)
+            + " of the expanded form's magnitude, budget "
+            + String(unfused_budget)
+            + " (this arm's product is "
+            + vendor_fp32_matmul_precision_name(
+                TARGET_COLUMN, ctx.compute_capability()
+            )
+            + " on column "
+            + column_name(TARGET_COLUMN)
+            + ")"
         )
 
     print(
@@ -995,8 +1161,30 @@ def check_assignment_arm_dispatch() raises:
         + String(n * k)
         + " tile cells written; unfused sabotage overwrote "
         + String(destroyed)
-        + "); arms agree on all labels, min_dist worst rel "
-        + String(worst_rel)
+        + "); no output poison survived either arm; arms agree on all"
+        " labels; min_dist vs the Float64 oracle, magnitude-relative:"
+        " fused worst "
+        + String(worst_fused)
+        + " (budget "
+        + String(fused_budget)
+        + ", fp32), unfused worst "
+        + String(worst_unfused)
+        + " (budget "
+        + String(unfused_budget)
+        + ", "
+        + (
+            "the TF32 bound -- DEVIATION 529, this column's vendor product is "
+            + vendor_fp32_matmul_precision_name(
+                TARGET_COLUMN, ctx.compute_capability()
+            )
+            if unfused_lossy
+            else "fp32"
+        )
+        + "); "
+        + String(bit_equal)
+        + "/"
+        + String(n)
+        + " rows bit-equal across arms"
     )
 
 
@@ -1099,6 +1287,323 @@ def _zero_and_wait(
         Int32(n),
         grid_dim=((n + 255) // 256, 1, 1),
         block_dim=(256, 1, 1),
+    )
+
+
+# --- both assignment arms against a resolvable oracle -----------------------
+
+comptime ORACLE_ROWS = 512
+comptime ORACLE_FEATURES = 32
+comptime ORACLE_CLUSTERS = 64
+
+
+def _oracle_val(i: Int, salt: Int) -> Float32:
+    """A hashed value in [-1, 1): splitmix64 bits, so adjacent cells land
+    nowhere near each other and no two rows are alike."""
+    var z = UInt64(i + 1) * 0x9E3779B97F4A7C15 + UInt64(salt + 1) * 0xBF58476D1CE4E5B9
+    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9
+    z = (z ^ (z >> 27)) * 0x94D049BB133111EB
+    z = z ^ (z >> 31)
+    return Float32(Int(z % 2000001) - 1000000) * Float32(1.0e-6)
+
+
+def _run_both_arms_on(
+    ctx: DeviceContext,
+    hx: HostBuffer[DType.float32],
+    hc: HostBuffer[DType.float32],
+    n: Int,
+    d: Int,
+    k: Int,
+    mut hl: HostBuffer[DType.uint32],
+    mut hm: HostBuffer[DType.float32],
+    mut hlu: HostBuffer[DType.uint32],
+    mut hmu: HostBuffer[DType.float32],
+) raises:
+    """Upload one fixture, compute norms the way the fit does, run the
+    fused entry and the unfused arm on it with poisoned outputs, and read
+    both back. Shared by the oracle check and its self-sabotage."""
+    var x = ctx.enqueue_create_buffer[DType.float32](n * d)
+    var c = ctx.enqueue_create_buffer[DType.float32](k * d)
+    var xn = ctx.enqueue_create_buffer[DType.float32](n)
+    var cn = ctx.enqueue_create_buffer[DType.float32](k)
+    var dist_buf = ctx.enqueue_create_buffer[DType.float32](n * k)
+    var labels = ctx.enqueue_create_buffer[DType.uint32](n)
+    var min_dist = ctx.enqueue_create_buffer[DType.float32](n)
+    var labels_u = ctx.enqueue_create_buffer[DType.uint32](n)
+    var min_dist_u = ctx.enqueue_create_buffer[DType.float32](n)
+    ctx.synchronize()
+    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=c, src_ptr=hc.unsafe_ptr())
+    ctx.synchronize()
+    ctx.enqueue_function[row_norm_kernel](
+        xn.unsafe_ptr(), x.unsafe_ptr(), Int32(d), Int32(0),
+        grid_dim=(n, 1, 1), block_dim=(NORM_TPB, 1, 1),
+    )
+    compute_centroid_norms(ctx, c, cn, k, d, METRIC_L2_EXPANDED)
+    ctx.synchronize()
+    _poison_outputs(ctx, labels, min_dist, n)
+    _poison_outputs(ctx, labels_u, min_dist_u, n)
+    min_cluster_and_distance_compute(
+        ctx, x, xn, c, cn, dist_buf, labels, min_dist,
+        n, d, k, METRIC_L2_EXPANDED, 0, 0,
+    )
+    ctx.synchronize()
+    min_cluster_and_distance_compute_unfused(
+        ctx, x, xn, c, cn, dist_buf, labels_u, min_dist_u,
+        n, d, k, METRIC_L2_EXPANDED, 0, 0,
+    )
+    ctx.synchronize()
+    ctx.enqueue_copy(dst_ptr=hl.unsafe_ptr(), src_buf=labels)
+    ctx.enqueue_copy(dst_ptr=hm.unsafe_ptr(), src_buf=min_dist)
+    ctx.enqueue_copy(dst_ptr=hlu.unsafe_ptr(), src_buf=labels_u)
+    ctx.enqueue_copy(dst_ptr=hmu.unsafe_ptr(), src_buf=min_dist_u)
+    ctx.synchronize()
+
+
+struct _ArmVerdict(Copyable, Movable):
+    """One arm judged against the oracle: worst magnitude-relative miss of
+    `min_dist`, how many labels are not the oracle argmin, and how many of
+    those sit on a gap the arm's budget could legitimately re-decide."""
+    var worst_rel: Float64
+    var wrong_labels: Int
+    var excused_labels: Int
+    var poison: Int
+
+    def __init__(out self):
+        self.worst_rel = 0.0
+        self.wrong_labels = 0
+        self.excused_labels = 0
+        self.poison = 0
+
+
+def _judge_arm(
+    hx: HostBuffer[DType.float32],
+    hc: HostBuffer[DType.float32],
+    hl: HostBuffer[DType.uint32],
+    hm: HostBuffer[DType.float32],
+    n: Int,
+    d: Int,
+    k: Int,
+    budget: Float64,
+) -> _ArmVerdict:
+    """Per row: the Float64 true squared distance to EVERY centroid, the
+    argmin with the lowest-index tie rule, and the expanded form's operand
+    magnitude at the winner. The arm's value must be within `mag x budget`
+    of the true minimum; its label must be the argmin unless the runner-up
+    is within that same margin (then the arm's arithmetic may legitimately
+    have re-decided it, and the row is EXCUSED, counted separately)."""
+    var v = _ArmVerdict()
+    for i in range(n):
+        var xn64 = Float64(0.0)
+        for f in range(d):
+            var xv = Float64(hx.unsafe_ptr().unsafe_load(i * d + f))
+            xn64 += xv * xv
+        var best_j = 0
+        var best_d = Float64(1.0e300)
+        var second_d = Float64(1.0e300)
+        var best_mag = Float64(0.0)
+        for j in range(k):
+            var dd = Float64(0.0)
+            var cn64 = Float64(0.0)
+            var dot = Float64(0.0)
+            for f in range(d):
+                var xv = Float64(hx.unsafe_ptr().unsafe_load(i * d + f))
+                var cv = Float64(hc.unsafe_ptr().unsafe_load(j * d + f))
+                dd += (xv - cv) * (xv - cv)
+                cn64 += cv * cv
+                dot += xv * cv
+            if dd < best_d:
+                second_d = best_d
+                best_d = dd
+                best_j = j
+                best_mag = xn64 + cn64 + 2.0 * abs(dot)
+            elif dd < second_d:
+                second_d = dd
+        var got_v = hm.unsafe_ptr().unsafe_load(i)
+        var got_k = hl.unsafe_ptr().unsafe_load(i)
+        if got_k == ARM_POISON_KEY or got_v != got_v:
+            v.poison += 1
+            continue
+        var rel = abs(Float64(got_v) - best_d) / best_mag
+        if rel > v.worst_rel:
+            v.worst_rel = rel
+        if Int(got_k) != best_j:
+            if second_d - best_d <= best_mag * budget:
+                v.excused_labels += 1
+            else:
+                v.wrong_labels += 1
+    return v^
+
+
+def check_assignment_arms_match_oracle() raises:
+    """BOTH assignment arms against a Float64 oracle on a fixture whose
+    distances are RESOLVABLE, with the per-column budget of DEVIATION 529,
+    and a self-sabotage that proves the budget has teeth on this box.
+
+    `check_assignment_arm_dispatch`'s fixture plants centers 100 apart so
+    its labels are beyond doubt, and at that scale the expanded form
+    `xn + yn - 2 x.c` is a cancellation: the true distance is a few units
+    and the operands are 1e9, so the clamped result is 0 on every correct
+    arm and a value comparison there has nothing to measure (on the Apple
+    M4 both arms return 0.0 bit for bit, and the H100 leg's 51968 came
+    from a TF32 product, not from a wrong kernel). This check is the one
+    where the numbers mean something: x and the centroids are hashed in
+    [-1, 1), so the true minimum is ~10 and the operand magnitude ~30, and
+    an fp32 arm resolves the value to ~1e-7 of the magnitude where a TF32
+    one lands ~1e-4.
+
+    The dispatch shape is the fit's (d=32, k=64: normal policy, veclen 4,
+    the vendor matmul at n_clusters=64) so the arms run are the arms that
+    ship. The argmin is the ORACLE'S (lowest index on a tie), not a
+    planted label, and a label that disagrees is wrong unless the
+    runner-up sits inside the arm's own budget, in which case it is
+    counted as EXCUSED and printed -- that is what a TF32 product does to
+    a near-tie and the count is the measurement of it.
+
+    THE SELF-SABOTAGE IS THE PROOF THE GATE WOULD FAIL ON APPLE WITH THE
+    BUG PRESENT. The same fixture is rounded to ten mantissa bits on the
+    host -- a tensor core's operand conversion, modelled exactly -- and
+    run through the FUSED arm, then judged against the UNROUNDED oracle.
+    That product is TF32-class by construction, on every column, without
+    a tensor core; the fp32 budget must REJECT it and the TF32 bound must
+    ADMIT it. If the first half fails, the fp32 budget cannot see the
+    class of error the H100 leg surfaced and the per-column split is
+    decoration; if the second fails, the TF32 bound is too tight for what
+    it names. Run on the fused arm deliberately: its arithmetic is known
+    fp32 on every column, so the ONLY lossy step is the planted one.
+    """
+    var ctx = DeviceContext()
+    var n = ORACLE_ROWS
+    var d = ORACLE_FEATURES
+    var k = ORACLE_CLUSTERS
+    var cc = ctx.compute_capability()
+    var unfused_lossy = vendor_fp32_matmul_is_lossy(TARGET_COLUMN, cc)
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        unfused_lossy = False  # pinned_gemm_nt_kernel, DEVIATION 526
+
+    var hx = ctx.enqueue_create_host_buffer[DType.float32](n * d)
+    var hc = ctx.enqueue_create_host_buffer[DType.float32](k * d)
+    var hl = ctx.enqueue_create_host_buffer[DType.uint32](n)
+    var hm = ctx.enqueue_create_host_buffer[DType.float32](n)
+    var hlu = ctx.enqueue_create_host_buffer[DType.uint32](n)
+    var hmu = ctx.enqueue_create_host_buffer[DType.float32](n)
+    ctx.synchronize()
+    for i in range(n * d):
+        hx.unsafe_ptr().unsafe_store(i, _oracle_val(i, 11))
+    for i in range(k * d):
+        hc.unsafe_ptr().unsafe_store(i, _oracle_val(i, 23))
+
+    _run_both_arms_on(ctx, hx, hc, n, d, k, hl, hm, hlu, hmu)
+
+    var fused_budget = ARM_FP32_REL_BUDGET
+    var unfused_budget = ARM_FP32_REL_BUDGET
+    if unfused_lossy:
+        unfused_budget += VENDOR_TF32_PRODUCT_REL_BOUND
+    var vf = _judge_arm(hx, hc, hl, hm, n, d, k, fused_budget)
+    var vu = _judge_arm(hx, hc, hlu, hmu, n, d, k, unfused_budget)
+    if vf.poison != 0 or vu.poison != 0:
+        raise Error(
+            "output poison survived: fused " + String(vf.poison)
+            + " rows, unfused " + String(vu.poison) + " rows of " + String(n)
+        )
+    if vf.worst_rel > fused_budget:
+        raise Error(
+            "FUSED arm misses the Float64 oracle on the resolvable fixture:"
+            " worst " + String(vf.worst_rel) + " of the operand magnitude,"
+            " budget " + String(fused_budget) + " (fp32, every column)"
+        )
+    if vf.wrong_labels != 0:
+        raise Error(
+            "FUSED arm returned " + String(vf.wrong_labels) + " labels that"
+            " are not the oracle argmin and not within the fp32 budget of"
+            " it"
+        )
+    if vu.worst_rel > unfused_budget:
+        raise Error(
+            "UNFUSED arm misses the Float64 oracle on the resolvable"
+            " fixture: worst " + String(vu.worst_rel) + " of the operand"
+            " magnitude, budget " + String(unfused_budget) + " (product is "
+            + vendor_fp32_matmul_precision_name(TARGET_COLUMN, cc)
+            + " on column " + column_name(TARGET_COLUMN) + ")"
+        )
+    if vu.wrong_labels != 0:
+        raise Error(
+            "UNFUSED arm returned " + String(vu.wrong_labels) + " labels"
+            " that are not the oracle argmin and not within its budget ("
+            + String(unfused_budget) + ") of it"
+        )
+
+    # --- the self-sabotage: a TF32-class product through the fused arm --
+    var hx_t = ctx.enqueue_create_host_buffer[DType.float32](n * d)
+    var hc_t = ctx.enqueue_create_host_buffer[DType.float32](k * d)
+    var hl_t = ctx.enqueue_create_host_buffer[DType.uint32](n)
+    var hm_t = ctx.enqueue_create_host_buffer[DType.float32](n)
+    var hlu_t = ctx.enqueue_create_host_buffer[DType.uint32](n)
+    var hmu_t = ctx.enqueue_create_host_buffer[DType.float32](n)
+    ctx.synchronize()
+    var moved = 0
+    for i in range(n * d):
+        var v0 = hx.unsafe_ptr().unsafe_load(i)
+        var t = _round_to_tf32(v0)
+        if t != v0:
+            moved += 1
+        hx_t.unsafe_ptr().unsafe_store(i, t)
+    for i in range(k * d):
+        hc_t.unsafe_ptr().unsafe_store(
+            i, _round_to_tf32(hc.unsafe_ptr().unsafe_load(i))
+        )
+    if moved < (n * d) // 2:
+        raise Error(
+            "the TF32 rounding moved only " + String(moved) + " of "
+            + String(n * d) + " operands; the sabotage is not a sabotage"
+        )
+    _run_both_arms_on(ctx, hx_t, hc_t, n, d, k, hl_t, hm_t, hlu_t, hmu_t)
+    # Judged against the UNROUNDED fixture's oracle.
+    var tf32_bound = ARM_FP32_REL_BUDGET + VENDOR_TF32_PRODUCT_REL_BOUND
+    var vs = _judge_arm(hx, hc, hl_t, hm_t, n, d, k, tf32_bound)
+    if vs.worst_rel <= ARM_FP32_REL_BUDGET:
+        raise Error(
+            "SABOTAGE NOT SEEN: the fused arm on TF32-rounded operands"
+            " passed the fp32 budget (worst " + String(vs.worst_rel)
+            + " <= " + String(ARM_FP32_REL_BUDGET) + "), so the budget"
+            " cannot see a TF32-class product and DEVIATION 529's"
+            " per-column split is decoration"
+        )
+    if vs.worst_rel > tf32_bound:
+        raise Error(
+            "the TF32 bound is too tight for what it names: a TF32-rounded"
+            " product lands " + String(vs.worst_rel) + " > "
+            + String(tf32_bound)
+        )
+    if vs.wrong_labels != 0:
+        raise Error(
+            "the TF32-rounded product moved " + String(vs.wrong_labels)
+            + " labels by more than the TF32 bound explains"
+        )
+
+    print(
+        "check_assignment_arms_match_oracle OK: " + String(n) + " rows x "
+        + String(k) + " clusters x " + String(d) + " features hashed in"
+        " [-1, 1), both arms vs a Float64 oracle (argmin and value),"
+        " no poison survived; fused worst " + String(vf.worst_rel)
+        + " of the operand magnitude (budget " + String(fused_budget)
+        + ", fp32), " + String(vf.excused_labels) + " near-tie labels"
+        " excused; unfused worst " + String(vu.worst_rel) + " (budget "
+        + String(unfused_budget) + ", "
+        + (
+            "the TF32 bound, DEVIATION 529 -- this column's vendor product is "
+            + vendor_fp32_matmul_precision_name(TARGET_COLUMN, cc)
+            if unfused_lossy else "fp32"
+        )
+        + "), " + String(vu.excused_labels) + " near-tie labels excused."
+        " SABOTAGE: the fused arm on operands rounded to 10 mantissa bits ("
+        + String(moved) + " of " + String(n * d) + " moved) lands worst "
+        + String(vs.worst_rel) + " with " + String(vs.excused_labels)
+        + " labels re-decided -- REJECTED by the fp32 budget, ADMITTED by"
+        " the TF32 bound " + String(tf32_bound) + ", so the two budgets"
+        " separate a TF32-class arm from an fp32 one on this box (column "
+        + column_name(TARGET_COLUMN) + ", compute capability " + String(cc)
+        + ")"
     )
 
 
@@ -1409,13 +1914,74 @@ def check_accumulate_veclen_dispatch() raises:
 
 # --- fused policy selection --------------------------------------------------
 
-comptime POL_ROWS = 8256  # 129 row tiles of Mblk=64: more than the M4's
-#                           minGridSize of 120 blocks at 256 threads, so the
-#                           launcher's grid.y is capped BELOW the tile count
-#                           and the kernel's m grid-stride loop must cover
-#                           the rest. The check verifies that inequality at
-#                           runtime rather than trusting this comment.
+#: Row tiles of Mblk=64 BEYOND the launcher's grid.y cap that the policy
+#: fixture carries, so the kernel's m grid-stride loop must cover them. The
+#: fixture used to be a constant 8256 rows = 129 tiles, "more than the M4's
+#: minGridSize of 120 blocks" -- true of one column and false of the
+#: others: `launchConfigGenerator`'s cap is `numSMs x blocksPerSM`, 120 on
+#: the Apple column and an order of magnitude more on a 132-SM H100 or a
+#: 304-CU MI300X, where 129 tiles fit under the cap and the check refused
+#: itself with "fixture too small" (found by the `-D MOJOLEARN_COLUMN_NVIDIA`
+#: build on the Mac while closing DEVIATION 529, and it would have been the
+#: H100 leg's next stop in this file). The row count is now DERIVED from
+#: the launcher's own cap at runtime, `_policy_rows`, so the inequality the
+#: check verifies is constructed on every column rather than assumed.
+comptime POL_TILES_PAST_CAP = 9
 comptime POL_CLUSTERS = 40
+
+
+def _policy_rows(expect_veclen: Int) raises -> Int:
+    """`(grid.y cap + POL_TILES_PAST_CAP) x Mblk` rows for the normal
+    policy at this veclen. The cap is read from `launch_config_generator`
+    itself by asking it about a row count no device's cap exceeds."""
+    comptime mblk = 4 * FUSED_NORMAL_TR
+    var probe = launch_config_generator(
+        1 << 30,
+        POL_CLUSTERS,
+        mblk,
+        4 * FUSED_NORMAL_TC,
+        FUSED_NORMAL_TR * FUSED_NORMAL_TC,
+        fused_smem_bytes(False, expect_veclen),
+    )
+    return (probe[1] + POL_TILES_PAST_CAP) * mblk
+
+
+def _planted_gap_within(
+    hx: HostBuffer[DType.float32],
+    hc: HostBuffer[DType.float32],
+    i: Int,
+    d: Int,
+    k: Int,
+    budget: Float64,
+) -> Bool:
+    """Float64 oracle for ONE row of the planted fixture: True iff the gap
+    between the nearest and second-nearest centroid is within `budget` of
+    the expanded form's operand magnitude at the winner -- the margin a
+    product with that budget may legitimately re-decide."""
+    var xn64 = Float64(0.0)
+    for f in range(d):
+        var xv = Float64(hx.unsafe_ptr().unsafe_load(i * d + f))
+        xn64 += xv * xv
+    var best_d = Float64(1.0e300)
+    var second_d = Float64(1.0e300)
+    var best_mag = Float64(0.0)
+    for j in range(k):
+        var dd = Float64(0.0)
+        var cn64 = Float64(0.0)
+        var dot = Float64(0.0)
+        for f in range(d):
+            var xv = Float64(hx.unsafe_ptr().unsafe_load(i * d + f))
+            var cv = Float64(hc.unsafe_ptr().unsafe_load(j * d + f))
+            dd += (xv - cv) * (xv - cv)
+            cn64 += cv * cv
+            dot += xv * cv
+        if dd < best_d:
+            second_d = best_d
+            best_d = dd
+            best_mag = xn64 + cn64 + 2.0 * abs(dot)
+        elif dd < second_d:
+            second_d = dd
+    return second_d - best_d <= best_mag * budget
 
 
 def _policy_arm_correct(d: Int, expect_veclen: Int) raises:
@@ -1429,7 +1995,7 @@ def _policy_arm_correct(d: Int, expect_veclen: Int) raises:
     ~330,000 squared against a float32 error orders smaller, so equality is
     the expectation, not luck)."""
     var ctx = DeviceContext()
-    var n = POL_ROWS
+    var n = _policy_rows(expect_veclen)
     var k = POL_CLUSTERS
 
     var x = ctx.enqueue_create_buffer[DType.float32](n * d)
@@ -1459,8 +2025,9 @@ def _policy_arm_correct(d: Int, expect_veclen: Int) raises:
         )
 
     # The fixture must actually exercise the m grid-stride: the launcher's
-    # grid.y (their launchConfigGenerator, M4 inputs) must be SMALLER than
-    # the number of row tiles.
+    # grid.y (their launchConfigGenerator, this column's inputs) must be
+    # SMALLER than the number of row tiles. `_policy_rows` constructed that;
+    # this is the independent verification of it.
     var y_chunks = (n + 4 * FUSED_NORMAL_TR - 1) // (4 * FUSED_NORMAL_TR)
     var cfg = launch_config_generator(
         n,
@@ -1517,9 +2084,19 @@ def _policy_arm_correct(d: Int, expect_veclen: Int) raises:
     ctx.enqueue_copy(dst_ptr=hlu.unsafe_ptr(), src_buf=labels_u)
     ctx.synchronize()
 
+    # The unfused arm's product is the vendor matmul: on a lossy column
+    # (DEVIATION 529) a label it moves is excused only if the row's oracle
+    # gap between best and runner-up is inside the TF32 bound of the
+    # operand magnitude -- the same rule `_judge_arm` applies.
+    var unfused_budget = ARM_FP32_REL_BUDGET
+    if vendor_fp32_matmul_is_lossy(TARGET_COLUMN, ctx.compute_capability()):
+        unfused_budget += VENDOR_TF32_PRODUCT_REL_BOUND
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        unfused_budget = ARM_FP32_REL_BUDGET
     var mislabeled = 0
     var tail_checked = 0
     var arm_diff = 0
+    var arm_diff_excused = 0
     var stride_floor = cfg[1] * 4 * FUSED_NORMAL_TR
     for i in range(n):
         if Int(hl.unsafe_ptr().unsafe_load(i)) != i % k:
@@ -1527,7 +2104,10 @@ def _policy_arm_correct(d: Int, expect_veclen: Int) raises:
         if i >= stride_floor:
             tail_checked += 1
         if hl.unsafe_ptr().unsafe_load(i) != hlu.unsafe_ptr().unsafe_load(i):
-            arm_diff += 1
+            if _planted_gap_within(hx, hc, i, d, k, unfused_budget):
+                arm_diff_excused += 1
+            else:
+                arm_diff += 1
     if mislabeled != 0:
         raise Error(
             "veclen=" + String(expect_veclen) + " arm mislabeled "
@@ -1542,13 +2122,20 @@ def _policy_arm_correct(d: Int, expect_veclen: Int) raises:
     if arm_diff != 0:
         raise Error(
             "fused and unfused labels differ on " + String(arm_diff)
-            + " rows at d=" + String(d)
+            + " rows at d=" + String(d) + " beyond what the unfused arm's"
+            " budget (" + String(unfused_budget) + " of the magnitude)"
+            " could re-decide"
         )
     print(
         "  veclen=" + String(expect_veclen) + " arm at d=" + String(d)
         + ": " + String(n) + " labels correct (grid.y " + String(cfg[1])
         + " of " + String(y_chunks) + " tiles, " + String(tail_checked)
         + " rows past the resident grid), fused == unfused"
+        + (
+            "" if arm_diff_excused == 0
+            else " except " + String(arm_diff_excused) + " near-tie rows"
+            " the lossy vendor product re-decided inside its budget"
+        )
     )
 
 

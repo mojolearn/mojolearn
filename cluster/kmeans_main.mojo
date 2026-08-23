@@ -14,6 +14,7 @@ from cluster.mojo_only.estimator_check import (
 from cluster.mojo_only.kmeans_check import (
     check_accumulate_veclen_dispatch,
     check_assignment_arm_dispatch,
+    check_assignment_arms_match_oracle,
     check_device_inclusive_scan,
     check_fused_policy_dispatch,
     check_fused_reduction_across_lanes,
@@ -37,6 +38,7 @@ def main() raises:
     check_scalable_supplement_branch()
     check_fused_reduction_across_lanes()
     check_assignment_arm_dispatch()
+    check_assignment_arms_match_oracle()
     check_fused_policy_dispatch()
     check_privatized_accumulate()
     check_accumulate_veclen_dispatch()

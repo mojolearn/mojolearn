@@ -168,6 +168,40 @@ window, `check_unsupervised_identity.sh`'s FAST arm takes the same lock, and
 `check_column_invariance.sh` READS THE MODE BACK from each run rather than
 assuming it from the flip.
 
+## The third round, 2026-08-23: the H100 leg, and the arm the check was judging
+
+The first real NVIDIA run of `cluster/kmeans_main.mojo` under FAST failed
+ONE check, `check_assignment_arm_dispatch`, with "fused and unfused min_dist
+diverge, worst relative 51968000000.0", after the 40-cluster cross-lane
+argmin, the geometry invariance, the fit and both init paths had passed in
+the same process, and with the labels agreeing. Under IDENTICAL the k-means
+card matched Apple stage for stage. The brief for the fix read it as a
+fused-kernel defect. It was not: the number decodes to a fused value of ~0
+(correct, the clamped expanded form of a point 100x the jitter from its
+own centroid at magnitude 1.3e9) against an unfused value of ~51968, 400
+ulps, which fp32 accumulation of 32 terms cannot produce -- and the
+unfused arm is `gemm_nt`, MAX 26.5.0's `linalg.matmul`, **TF32 on NVIDIA by
+default with no compilable opt-out before Blackwell.** The Gram check in
+`mojo_only/gram_splitk_check.mojo` failed the same leg at 2.4e-5 of the
+magnitude for the same reason.
+
+DEVIATION 529 (k-means) and DEVIATION 540 (Gram): the capability is a
+kernel-matrix row (`column_vendor_fp32_matmul_is_tf32`, with MAX's source
+lines); each arm is judged against a Float64 oracle with a MAGNITUDE-relative
+budget, fp32 for anything that is ours and fp32 + the TF32 bound for a
+vendor product on a lossy column, the printed line naming which; outputs
+are poisoned before every launch; and each check carries a host-side TF32
+rounding sabotage proving on the Mac that the fp32 budget rejects a
+TF32-class product and the TF32 bound admits it. `check_assignment_arms_match_oracle`
+is the new well-conditioned gate (fp32 arms ~1e-7 of the magnitude,
+TF32-rounded ~1e-4). Two further Apple-only assertions that would have been
+the leg's NEXT two failures -- the policy fixture sized to the M4's grid cap,
+and the Gram dispatch asserting Apple's predicate answers -- were found by
+the `-D MOJOLEARN_COLUMN_NVIDIA` build and fixed. FAST bits did not move
+anywhere; no kernel changed. The shipped k-means assignment arm is the fused
+SIMT kernel and is fp32 on every vendor; k-means++ seeding costs under FAST
+on NVIDIA are TF32-accuracy (`cluster/README.md`).
+
 ## The k-NN classifier and regressor, 2026-08-23 (DEVIATIONS 541-544)
 
 `mojolearn.KNeighborsClassifier` / `KNeighborsRegressor` landed as cuML's

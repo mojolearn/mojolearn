@@ -614,6 +614,111 @@ def column_compares_flush_subnormals(column: Int) -> Bool:
     return column == COLUMN_APPLE
 
 
+#: The per-operand truncation of a TF32 tensor-core product, as a relative
+#: bound on ONE fp32 multiply: TF32 keeps 10 explicit mantissa bits, so each
+#: operand is rounded to within 2^-11 of itself and the product of two is
+#: within ~2^-10 = 9.77e-4 of the exact fp32 product. Accumulation is fp32.
+#: A cell of `A . B^T` is therefore within `2^-10 * sum |a_t b_t|` of exact,
+#: PLUS the ordinary fp32 accumulation budget. Rounded up to one decimal
+#: digit so a check can print it. Measured on an H100, 2026-08-23, through
+#: MAX 26.5.0's `linalg.matmul`: 2.4e-5 of the magnitude at 33x33x257
+#: (`mojo_only/gram_splitk_check.mojo`), 4e-5 at 512x64x32 (the k-means
+#: unfused arm) -- both well inside this bound and ~100x outside the fp32
+#: budget the checks held every column to before DEVIATION 529.
+comptime VENDOR_TF32_PRODUCT_REL_BOUND = Float64(1.0e-3)
+
+
+def column_vendor_fp32_matmul_is_tf32(column: Int) -> Bool:
+    """CAPABILITY. Whether MAX's `linalg.matmul` on fp32 inputs runs TF32
+    tensor cores on this vendor -- i.e. whether a FAST build's vendor
+    matrix products (`core/gemm.mojo::gemm_nt`, `gemm_tn`'s transpose arm)
+    are TF32-accuracy rather than fp32-accuracy.
+
+    NOT a knob this project chooses; the library's default. Read from the
+    pinned toolchain's source (`max/kernels/src/linalg/matmul`, tag
+    `max/v26.5.0`), and it is the root cause of BOTH NVIDIA-only FAST
+    failures of the 2026-08-23 H100 leg (DEVIATIONS 529 and 540, the
+    k-means arm comparison and the Gram vendor arm):
+
+    - `matmul/__init__.mojo:59`: `use_tf32: Bool = True` is the default and
+      `:90` documents it as "allow TF32 tensor-core truncation for fp32
+      inputs".
+    - `matmul/gpu/__init__.mojo:493-498`: `use_tf32=False` is a
+      COMPILE-TIME ASSERT on every NVIDIA part before SM100 (Blackwell):
+      "use_tf32=False is only implemented for the SM100 matmul dispatch".
+      So on an H100 there is no flag to ask for fp32; the opt-out does not
+      compile.
+    - `matmul/vendor/matmul.mojo:73,116`: the cuBLAS fallback (the arm a
+      dynamic-shape fp32 product lands on) hard-codes
+      `vendor_matmul[use_tf32=True]`, which at `vendor/blas.mojo:751-758`
+      is `COMPUTE_32F_FAST_TF32` plus `CUBLAS_TF32_TENSOR_OP_MATH`; the
+      source's own comment: "the result is not bit-wise identical to the
+      result of FP32". The SM90 warp-specialized fp32 path is a tf32 `mma`
+      as well (`_multistage_gemm_gpu.mojo:738`).
+
+    WHY THE OTHER FOUNDING COLUMNS ANSWER FALSE, from the same source:
+    Apple M1-M4 take `gemm_kernel_apple_8x8` (`gpu/__init__.mojo:657-688`),
+    an fp32 `simdgroup_matrix` kernel -- the M4 this row was measured on
+    returns the fused kernel's bits exactly. AMD CDNA's fp32 MFMA is
+    `16x16x4` f32 (`layout/tensor_core.mojo:1446`), a full-precision
+    instruction, and its rocBLAS fallback ignores `use_tf32`
+    (`vendor/blas.mojo:929`, `compute_type = float32`). RDNA has no fp32
+    WMMA at all in MAX and the others are undeclared, so they stay False --
+    held to the fp32 budget until a device says otherwise, which is the
+    direction a tolerance row should err.
+
+    **THE APPLE COLUMN HAS A GENERATION INSIDE IT, AND THIS ROW CANNOT SEE
+    IT AT COMPILE TIME.** On an M5 (`ctx.compute_capability() == 5`) MAX
+    26.5.0 routes fp32 products with `m > 1, n >= 64, k >= 16` to
+    `enqueue_apple_matmul`, whose simdgroup MMA "truncates them to fp19"
+    (`utils_gpu.mojo:564-569`), and that path is ON BY DEFAULT --
+    `MODULAR_APPLE_M5_ALLOW_LOSSY_F32_MATMUL` defaults to "1" and only "0"
+    selects the precise kernel. fp19 is 10 explicit mantissa bits, the
+    same width as TF32, so on an M5 the vendor arm is TF32-class unless the
+    caller sets that variable. The column is one build for every Apple
+    part, so the generation is a RUNTIME fact: checks ask
+    `vendor_fp32_matmul_is_lossy(column, compute_capability)` below, which
+    folds it in, rather than this predicate alone. Untested on an M5 --
+    transcribed from the dispatch, flagged for first device contact.
+
+    WHO READS THIS. Two checks, so the answer lives here rather than in
+    either: `mojo_only/gram_splitk_check.mojo` (the Gram vendor arm) and
+    `cluster/mojo_only/kmeans_check.mojo` (the unfused assignment arm),
+    each of which holds the vendor arm to `VENDOR_TF32_PRODUCT_REL_BOUND`
+    on a lossy column and to the fp32 budget on an exact one, and SAYS SO
+    in the line it prints. IDENTICAL never consults this row: under
+    IDENTICAL `gemm_nt` is `pinned_gemm_nt_kernel` and `gemm_tn` is the
+    split-K kernel or a refusal (DEVIATIONS 521, 526), and neither calls
+    `linalg.matmul`.
+    """
+    return column == COLUMN_NVIDIA
+
+
+def vendor_fp32_matmul_is_lossy(column: Int, compute_capability: Int) -> Bool:
+    """The runtime form of `column_vendor_fp32_matmul_is_tf32`: the column
+    predicate OR'd with the one generation fact the column cannot carry --
+    an Apple part reporting `compute_capability == 5` (M5) runs MAX
+    26.5.0's fp19 simdgroup path by default. Pass
+    `DeviceContext.compute_capability()`; it is the same query MAX's own
+    dispatch makes (`matmul/gpu/__init__.mojo:619`). On every non-Apple
+    column the second argument is ignored."""
+    if column_vendor_fp32_matmul_is_tf32(column):
+        return True
+    return column == COLUMN_APPLE and compute_capability == 5
+
+
+def vendor_fp32_matmul_precision_name(
+    column: Int, compute_capability: Int
+) -> String:
+    """What a check prints beside its tolerance: the precision class of the
+    vendor fp32 product on this build and device."""
+    if column_vendor_fp32_matmul_is_tf32(column):
+        return String("TF32 (10-bit mantissa tensor-core product)")
+    if column == COLUMN_APPLE and compute_capability == 5:
+        return String("fp19 (Apple M5 simdgroup MMA, 10-bit mantissa)")
+    return String("fp32")
+
+
 def column_has_threadgroup_int_atomics(column: Int) -> Bool:
     """Whether a block can `atomicAdd` an `Int32` in THREADGROUP memory.
 
