@@ -1,0 +1,29 @@
+{
+  "commit": "ca0e635bad535ba7d934e01eb544eab6e59ad834",
+  "fits": {
+    "et_clf": {
+      "card": "et_clf.card",
+      "predictions": "f6ecbc1ac97d3cf0f42e162fb371d17bd2d99d3a1b5f7caaeca2a102de94beb7"
+    },
+    "gbdt_logloss": {
+      "card": "gbdt_logloss.card",
+      "predictions": "0b25bd4224bfa4bdd853bfe5d394f1044ad561fb5635f1d2bd719643196c00c1"
+    },
+    "gbdt_rmse": {
+      "card": "gbdt_rmse.card",
+      "predictions": "54d59bd64ca5276623688653209181a436b2b7431d9aae806a98fb3a2f43ea10"
+    },
+    "rf_reg": {
+      "card": "rf_reg.card",
+      "predictions": "99ba0e31c9548deb874eb31cdce0e19378b32f40f2f2a253ac267f4094fa5ebd"
+    }
+  },
+  "inputs": {
+    "X": "5cbddce1deb73cde4aeb6a4be43a3cdb3efd2150cdbfd6e1887eb5ec73b1be8a",
+    "y_clf": "3d78c1ea6e3ba776dd102193f112c835bfd8a8fc48993afba187536f4a5ec75d",
+    "y_reg": "58be14758af89c51c76e3dae88bb1986391d5e6afd234a43bcc1e5e9bea1240b"
+  },
+  "machine": "mojolearn-e1",
+  "mode_flip": true,
+  "platform": "Linux-6.8.0-59-generic-x86_64-with-glibc2.39"
+}
