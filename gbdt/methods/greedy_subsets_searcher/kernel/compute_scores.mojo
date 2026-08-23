@@ -114,7 +114,9 @@ comptime FLOAT32_MAX = Float32(3.4028234663852886e38)
 
 @always_inline
 def _add_leaf[
-    score_function: Int, normalize: Bool, pin_mul_add: Bool = False
+    score_function: Int,
+    normalize: Bool,
+    pin_mul_add: Bool = (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL),
 ](
     sum: Float32,
     weight: Float32,
@@ -143,7 +145,13 @@ def _add_leaf[
         #     DenumSqr += weight * mu * mu;
         var lam = lambda_l2
         comptime if normalize:
-            lam = lambda_l2 * weight
+            # DEVIATION 253 / IDENTITY_PATHS ROW 10: this product can
+            # land denormal and becomes a divide operand two lines down;
+            # stored through `ftz` (comptime no-op under FAST).
+            # Unreachable today -- every launch takes the default
+            # `normalize = False` -- pinned so the seam holds the day it
+            # is not.
+            lam = ftz(lambda_l2 * weight)
         var mu = Float32(0.0)
         if weight > Float32(0.0):
             mu = sum / (weight + lam)
@@ -185,13 +193,23 @@ def _add_leaf[
         #
         # `pin_mul_add` routes it through `numerics.identical_mul_add`,
         # which is `fma` under IDENTICAL and the naive chain under FAST.
-        # DEFAULT FALSE, and the false arm is character-for-character the
-        # source that was here before, so the symmetric arm above is
-        # unchanged in both modes and no other lane's numbers move.
         #
-        # THE SYMMETRIC ARM HAS THE SAME SEAM AND IS STILL UNPINNED. That
-        # is an OPEN row-9 item for whoever owns it, not an oversight of
-        # this one; the AIR diff above is the evidence it needs.
+        # ======================== DEVIATION 253 ======================
+        # THE DEFAULT NOW FOLLOWS THE MODE: `pin_mul_add` defaults to
+        # true under IDENTICAL and false under FAST. Their source has
+        # no such switch -- one CUDA build, contraction left to nvcc's
+        # whim -- and the E1 campaign measured the whim disagreeing:
+        # NVIDIA H100 first diverged at tree001.winners.scores (RMSE;
+        # tree000 for Logloss) while Apple and AMD agreed bit for bit,
+        # with every stage upstream of the score computation identical
+        # on all three (E1 2026-08-23). This function IS the score
+        # computation, and its unpinned mul-add chains were the seams;
+        # the mode-derived default is what makes the pinned arm the arm
+        # IDENTICAL compiles on the symmetric call sites below, which
+        # pass no explicit `pin_mul_add`. Under FAST the default stays
+        # false, so those sites compile the else arm character for
+        # character as before and no lane's FAST numbers move. The
+        # kernel-body ftz seams below share this deviation number.
         # =============================================================
         comptime if pin_mul_add:
             # IDENTITY_PATHS ROW 10 rides along on the pinned arm: `mu` is
@@ -219,7 +237,21 @@ def _add_leaf[
         # `sum^2 / lambda` here and 0 in theirs, and divides by zero
         # outright if lambda is ever 0.
         if weight > Float32(1e-20):
-            score += (sum * sum) / (weight + lambda_l2)
+            comptime if pin_mul_add:
+                # DEVIATION 253 / row 10: no contractible seam here (the
+                # product feeds a divide, not an add), but `sum * sum`
+                # squares a gradient and can land denormal, and so can
+                # the quotient of a cancelled numerator; both stored
+                # through `ftz` so an FTZ backend and a denormal-honoring
+                # one accumulate the same terms. `weight + lambda_l2` is
+                # a sum of nonnegatives from flushed producers and
+                # cannot cancel into the denormal range. Same products,
+                # same association as the else arm; comptime no-ops
+                # under FAST.
+                var num = ftz(sum * sum)
+                score = ftz(score + ftz(num / (weight + lambda_l2)))
+            else:
+                score += (sum * sum) / (weight + lambda_l2)
 
 
 def compute_optimal_splits_kernel[
@@ -342,9 +374,19 @@ def compute_optimal_splits_kernel[
                 ldg(histograms + (leaf_base + bin_feature_id)),
                 Float32(0.0),
             )
-            var weight_right = max(
-                ldg(part_stats + leaf_id * stat_count) - weight_left,
-                Float32(0.0),
+            # DEVIATION 253 / IDENTITY_PATHS ROW 10: the subtraction can
+            # cancel into the denormal range, and a denormal weight fed
+            # to `sum / (weight + lambda)` diverges between Metal's FTZ
+            # hardware and a denormal-honoring backend. Flushed at
+            # derivation, as the leafwise scan below flushes its twin.
+            # `weight_left` needs no flush: a load and a max are exact,
+            # and the histogram's own store seam is the producer's
+            # flush. Comptime no-op under FAST.
+            var weight_right = ftz(
+                max(
+                    ldg(part_stats + leaf_id * stat_count) - weight_left,
+                    Float32(0.0),
+                )
             )
 
             # their `double totalSumLeft` / `double totalSumPart`
@@ -369,7 +411,12 @@ def compute_optimal_splits_kernel[
                 var part_stat = ldg(
                     part_stats + (leaf_id * stat_count + stat_id)
                 )
-                var sum_right = part_stat - sum_left
+                # DEVIATION 253 / row 10: `partStat - sumLeft` is THE
+                # cancellation step of this kernel (module docstring),
+                # so it is the likeliest producer of a denormal on this
+                # path. Flushed at derivation, as the leafwise scan
+                # below flushes its twin; comptime no-op under FAST.
+                var sum_right = ftz(part_stat - sum_left)
 
                 # `calcer.AddLeaf(sumLeft, weightLeft)` then
                 # `calcer.AddLeaf(sumRight, weightRight)`
@@ -380,9 +427,13 @@ def compute_optimal_splits_kernel[
                 _add_leaf[score_function, normalize](
                     sum_right, weight_right, lambda_l2, score, denum_sqr
                 )
-                # `totalSumLeft += sumLeft` (`:103`)
-                total_sum_left += sum_left
-                total_sum_part += part_stat
+                # `totalSumLeft += sumLeft` (`:103`). DEVIATION 253 /
+                # row 10: sums of SIGNED gradients can cancel into the
+                # denormal range, and both totals become `AddLeaf`
+                # operands on the multiclass arm below. Stored through
+                # `ftz`; comptime no-ops under FAST.
+                total_sum_left = ftz(total_sum_left + sum_left)
+                total_sum_part = ftz(total_sum_part + part_stat)
 
             # THE MULTICLASS ARM (`compute_scores.cu:105-110`).
             #
@@ -406,7 +457,9 @@ def compute_optimal_splits_kernel[
             # binary-ish 7-class problem the pinned class can carry most
             # of the mass.
             if multiclass_optimization != Int32(0):
-                var total_sum_right = total_sum_part - total_sum_left
+                # DEVIATION 253 / row 10: one more cancelling
+                # subtraction, flushed at derivation like `sum_right`.
+                var total_sum_right = ftz(total_sum_part - total_sum_left)
                 _add_leaf[score_function, normalize](
                     -total_sum_left, weight_left, lambda_l2,
                     score, denum_sqr,
@@ -439,7 +492,13 @@ def compute_optimal_splits_kernel[
             # loses every comparison here exactly as FLT_MAX loses every
             # comparison there.
             if denum_sqr > Float32(1e-15):
-                final_score = score / sqrt(denum_sqr)
+                # DEVIATION 253 / row 10 is TITLED "division and sqrt
+                # in scoring": the quotient of a cancelled numerator can
+                # land denormal, where Metal's FTZ hardware and a
+                # denormal-honoring backend part ways. Flushed at the
+                # derivation, as the leafwise twin below flushes;
+                # comptime no-op under FAST.
+                final_score = ftz(score / sqrt(denum_sqr))
             else:
                 final_score = -FLOAT32_MAX
 
@@ -502,11 +561,19 @@ def compute_optimal_splits_kernel[
                 # by the lossguide lane's audit, routed here by the
                 # orchestrator 2026-08-22.
                 var neg_draw = -draw[0]
-                final_score = identical_mul_add(
-                    neg_draw, score_std_dev, final_score
+                # DEVIATION 253 / row 10 rides along: each fma result is
+                # an operand of the gain subtraction below, so it is
+                # stored through `ftz` like every derived float on this
+                # path. Comptime no-op under FAST.
+                final_score = ftz(
+                    identical_mul_add(
+                        neg_draw, score_std_dev, final_score
+                    )
                 )
-                score_before = identical_mul_add(
-                    neg_draw, score_std_dev, score_before
+                score_before = ftz(
+                    identical_mul_add(
+                        neg_draw, score_std_dev, score_before
+                    )
                 )
 
         # `gain = score - scoreBefore`, then
@@ -527,8 +594,16 @@ def compute_optimal_splits_kernel[
         # Metal's FTZ hardware, and the tie rule then picks different
         # bins; flushing at the store alone would leave the ranking
         # divergent. Comptime no-op under FAST.
+        #
+        # DEVIATION 253 extends the flush to the INTERMEDIATE: with a
+        # non-unit feature weight, a denormal difference times a large
+        # weight is NORMAL again -- Metal (operands flushed) gets zero
+        # where a denormal-honoring backend gets a nonzero product, and
+        # the outer `ftz` cannot un-diverge that. Row 10's checklist:
+        # intermediates stored through `ftz`.
         var gain = ftz(
-            (final_score - score_before) * ldg(feature_weights + feature_id)
+            ftz(final_score - score_before)
+            * ldg(feature_weights + feature_id)
         )
 
         if gain > best_gain:
