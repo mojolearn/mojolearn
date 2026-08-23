@@ -18,6 +18,26 @@ first.
     4. a / sqrt(b')     the Cosine final score, `compute_scores.mojo:356`
     5. a*b + c          the canonical contraction shape, judged against
                         BOTH references below
+    6. built-to-separate a*b + c patterns (see ARM 6 in main)
+    7. THE SIGNED-ZERO TABLE (2026-08-23): 16 fixed (a, b, c) cases
+                        planting -0.0, +0.0 and negative subnormals
+                        through + - * / sqrt neg abs ==  <, the literal
+                        `0.0 - a` / `a * 0.0` / `a + 0.0` fast-math
+                        probes, fma, and max/min. IEEE-specified columns
+                        are JUDGED (device must equal the exact chain or
+                        its FTZ model); max/min(+0, -0) and the flush
+                        SIGN of a negative subnormal are vendor-defined
+                        and RECORDED, with one FNV-1a64 over all 256
+                        device bits as the vendor's fingerprint. That
+                        hash is NOT expected to agree across vendors
+                        (NVIDIA/AMD keep subnormals; Metal flushes); it
+                        names, per vendor, which zero `max(+0,-0)`
+                        returns -- the fact the ±0 notes in
+                        extratrees/.../builder_kernels_impl.mojo:873 and
+                        core/pinned_reduce.mojo:148 reason about.
+                        Apple (M4, 2026-08-23): 12832708934203007326,
+                        max/min return the SECOND operand, flushes are
+                        signed (-0.0), 0 IEEE mismatches.
 
 ## Why the references are exact, not approximate
 
@@ -83,6 +103,75 @@ def arith_kernel(
         out_cos.unsafe_store(i, av / sqrt(bp))
         # the contraction canary: written as the naive chain on purpose
         out_fma.unsafe_store(i, av * bv + cv)
+
+
+comptime SZ_CASES = 16
+comptime SZ_OUTS = 16
+
+
+def signed_zero_kernel(
+    a: UnsafePointer[Float32, MutAnyOrigin],
+    b: UnsafePointer[Float32, MutAnyOrigin],
+    c: UnsafePointer[Float32, MutAnyOrigin],
+    outp: UnsafePointer[Float32, MutAnyOrigin],
+):
+    # ARM 7 (2026-08-23): every operand is a RUNTIME value read from
+    # memory, so nothing here is constant-folded on the host; the two
+    # arms that spell a LITERAL zero (`0.0 - a`, `a * 0.0`, `a + 0.0`) do
+    # so on purpose -- they are the fast-math probes (an `nsz` rewrite
+    # turns `0.0 - a` into `-a` and `a * 0.0` into `0.0`, and both differ
+    # from IEEE on exactly the signed-zero inputs this table carries).
+    var i = Int(thread_idx.x)
+    if i >= SZ_CASES:
+        return
+    var av = a.unsafe_load(i)
+    var bv = b.unsafe_load(i)
+    var cv = c.unsafe_load(i)
+    var o = outp + i * SZ_OUTS
+    o.unsafe_store(0, av + bv)
+    o.unsafe_store(1, bv + av)
+    o.unsafe_store(2, av - bv)
+    o.unsafe_store(3, av * bv)
+    o.unsafe_store(4, av / bv)
+    o.unsafe_store(5, sqrt(av))
+    o.unsafe_store(6, Float32(0.0) - av)
+    o.unsafe_store(7, -av)
+    o.unsafe_store(8, abs(av))
+    o.unsafe_store(9, av * Float32(0.0))
+    o.unsafe_store(10, av + Float32(0.0))
+    o.unsafe_store(11, max(av, bv))
+    o.unsafe_store(12, min(av, bv))
+    o.unsafe_store(13, fma(av, bv, cv))
+    o.unsafe_store(14, Float32(1.0) if av == bv else Float32(0.0))
+    o.unsafe_store(15, Float32(1.0) if av < bv else Float32(0.0))
+
+
+def _sz_refs(av: Float32, bv: Float32, cv: Float32) -> List[Float32]:
+    """ARM 7's exact host chain for one (a, b, c): the IEEE answer of
+    each column, computed in Float64 (exact for every op here) and
+    rounded once. Called twice per case: on the raw operands (the IEEE
+    model) and on flushed operands with the results flushed (the FTZ
+    model arms 1-2 measured on Metal); the device must match one."""
+    var a64 = Float64(av)
+    var b64 = Float64(bv)
+    var refs = List[Float32]()
+    refs.append(Float32(a64 + b64))
+    refs.append(Float32(b64 + a64))
+    refs.append(Float32(a64 - b64))
+    refs.append(Float32(a64 * b64))
+    refs.append(Float32(a64 / b64))
+    refs.append(Float32(sqrt(a64)))
+    refs.append(Float32(Float64(0.0) - a64))
+    refs.append(Float32(-a64))
+    refs.append(Float32(abs(a64)))
+    refs.append(Float32(a64 * Float64(0.0)))
+    refs.append(Float32(a64 + Float64(0.0)))
+    refs.append(Float32(0.0))  # max: recorded, not judged
+    refs.append(Float32(0.0))  # min: recorded, not judged
+    refs.append(fma(av, bv, cv))  # the host fma, one rounding
+    refs.append(Float32(1.0) if a64 == b64 else Float32(0.0))
+    refs.append(Float32(1.0) if a64 < b64 else Float32(0.0))
+    return refs^
 
 
 def _finite_pattern(h: UInt32) -> UInt32:
@@ -424,6 +513,130 @@ def main() raises:
     # it is not a fast-math substitution. What would make row 10 REAL is
     # a mismatch on NORMAL values -- a reciprocal or rsqrt -- and that is
     # what fails this check.
+    # ---- ARM 7: SIGNED ZERO AND THE ADDITIVE IDENTITY (2026-08-23) ------
+    # Arms 1-6 draw hashed 32-bit patterns; -0.0 is ONE pattern in 2^32
+    # and never arrives. Yet `x + (+0.0) == x` for every finite x, every
+    # infinity and every NaN EXCEPT x = -0.0 -- so a +0.0-seeded fold, a
+    # +0.0 pad, or any identity element added to make a shape regular is
+    # invisible to every fixture that does not plant a negative zero (the
+    # gemm lane passed 42 shapes before one did; IDENTITY_PATHS rows
+    # 27/28). This arm plants them, on purpose, in a FIXED table, and
+    # answers three different questions per case:
+    #   - the IEEE-SPECIFIED ops (+ - * / sqrt neg abs == <): the device
+    #     must match the exact host chain, or its signed flush of it; a
+    #     mismatch FAILS the gate (it is an `nsz`/fast-math rewrite)
+    #   - `max`/`min` of (+0, -0): IEEE 754-2008 maxNum leaves this to
+    #     the implementation; RECORDED per vendor, never judged
+    #   - a negative SUBNORMAL sum/product: whether it flushes, and the
+    #     SIGN it flushes to, is a platform property (Metal flushes);
+    #     RECORDED
+    # One FNV-1a64 over all 256 device output bits is the vendor's
+    # signed-zero fingerprint; three vendors printing one number means
+    # the sign of every zero in this table is identical across them.
+    var sz_a = ctx.enqueue_create_host_buffer[DType.float32](SZ_CASES)
+    var sz_b = ctx.enqueue_create_host_buffer[DType.float32](SZ_CASES)
+    var sz_c = ctx.enqueue_create_host_buffer[DType.float32](SZ_CASES)
+    var sz_o = ctx.enqueue_create_host_buffer[DType.float32](
+        SZ_CASES * SZ_OUTS
+    )
+    ctx.synchronize()
+    var pz = Float32(0.0)
+    var nz = -Float32(0.0)
+    var tiny = Float32(1.17549435e-38)  # 2^-126, FLT_MIN
+    var t75 = Float32(2.6469779601696886e-23)  # 2^-75
+    # (a, b, c) per case; the comment is the IEEE answer of the first arm
+    var cases_a = List[Float32]()
+    var cases_b = List[Float32]()
+    var cases_c = List[Float32]()
+
+
+    cases_a.append(pz); cases_b.append(nz); cases_c.append(pz)      # 0: +0 + -0 = +0
+    cases_a.append(nz); cases_b.append(pz); cases_c.append(pz)      # 1: -0 + +0 = +0
+    cases_a.append(nz); cases_b.append(nz); cases_c.append(nz)      # 2: -0 + -0 = -0
+    cases_a.append(pz); cases_b.append(pz); cases_c.append(pz)      # 3: +0 + +0 = +0
+    cases_a.append(Float32(1.0)); cases_b.append(nz); cases_c.append(pz)   # 4
+    cases_a.append(nz); cases_b.append(Float32(1.0)); cases_c.append(nz)   # 5: -0*1 = -0; fma(-0,1,-0) = -0
+    cases_a.append(Float32(-3.0)); cases_b.append(pz); cases_c.append(nz)  # 6: -3*+0 = -0; -3/+0 = -inf
+    cases_a.append(pz); cases_b.append(Float32(-3.0)); cases_c.append(pz)  # 7: +0*-3 = -0
+    cases_a.append(tiny); cases_b.append(-Float32(1.5) * tiny); cases_c.append(pz)  # 8: sum -0.5*2^-126 SUBNORMAL
+    cases_a.append(-tiny); cases_b.append(Float32(0.75) * tiny); cases_c.append(nz) # 9: sum -0.25*2^-126 SUBNORMAL
+    cases_a.append(Float32(-1.0)); cases_b.append(pz); cases_c.append(nz)  # 10: -1/+0 = -inf
+    cases_a.append(Float32(1.0)); cases_b.append(nz); cases_c.append(pz)   # 11: 1/-0 = -inf
+    cases_a.append(nz); cases_b.append(Float32(1.0)); cases_c.append(pz)   # 12: fma(-0,1,+0) = +0
+    cases_a.append(-tiny); cases_b.append(tiny); cases_c.append(pz)        # 13: exact cancel = +0
+    cases_a.append(t75); cases_b.append(-t75); cases_c.append(nz)          # 14: product -2^-150 SUBNORMAL; fma adds -0
+    cases_a.append(nz); cases_b.append(nz); cases_c.append(pz)             # 15: fma(-0,-0,+0) = +0; -0*-0 = +0
+    for i in range(SZ_CASES):
+        sz_a.unsafe_ptr().unsafe_store(i, cases_a[i])
+        sz_b.unsafe_ptr().unsafe_store(i, cases_b[i])
+        sz_c.unsafe_ptr().unsafe_store(i, cases_c[i])
+    var dz_a = ctx.enqueue_create_buffer[DType.float32](SZ_CASES)
+    var dz_b = ctx.enqueue_create_buffer[DType.float32](SZ_CASES)
+    var dz_c = ctx.enqueue_create_buffer[DType.float32](SZ_CASES)
+    var dz_o = ctx.enqueue_create_buffer[DType.float32](SZ_CASES * SZ_OUTS)
+    ctx.enqueue_copy(dst_buf=dz_a, src_ptr=sz_a.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=dz_b, src_ptr=sz_b.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=dz_c, src_ptr=sz_c.unsafe_ptr())
+    ctx.synchronize()
+    ctx.enqueue_function[signed_zero_kernel](
+        dz_a.unsafe_ptr(), dz_b.unsafe_ptr(), dz_c.unsafe_ptr(),
+        dz_o.unsafe_ptr(),
+        grid_dim=(1, 1, 1), block_dim=(32, 1, 1),
+    )
+    ctx.synchronize()
+    ctx.enqueue_copy(dst_ptr=sz_o.unsafe_ptr(), src_buf=dz_o)
+    ctx.synchronize()
+
+    var sz_fail = 0
+    var sz_flushed = 0
+    var sz_kept = 0
+    var sz_hash = UInt64(0xCBF29CE484222325)
+    print("  signed-zero table (ARM 7), device bits per case,")
+    print("    cols: a+b b+a a-b a*b a/b sqrt(a) 0-a -a |a| a*0 a+0 max min fma == <")
+    for i in range(SZ_CASES):
+        var av = cases_a[i]
+        var bv = cases_b[i]
+        var cv = cases_c[i]
+        # two references: the IEEE chain, and the FTZ model (operands
+        # flushed, op, result flushed -- arms 1-2 measured that this IS
+        # Metal's arithmetic, bit for bit)
+        var refs = _sz_refs(av, bv, cv)
+        var refs_f = _sz_refs(_ftz(av), _ftz(bv), _ftz(cv))
+        var line = String("    case ") + String(i) + ":"
+        for j in range(SZ_OUTS):
+            var got = sz_o.unsafe_ptr().unsafe_load(i * SZ_OUTS + j)
+            var gb = _bits(got)
+            sz_hash = (sz_hash ^ UInt64(gb & UInt32(0xFF))) * UInt64(0x100000001B3)
+            sz_hash = (sz_hash ^ UInt64((gb >> 8) & UInt32(0xFF))) * UInt64(0x100000001B3)
+            sz_hash = (sz_hash ^ UInt64((gb >> 16) & UInt32(0xFF))) * UInt64(0x100000001B3)
+            sz_hash = (sz_hash ^ UInt64((gb >> 24) & UInt32(0xFF))) * UInt64(0x100000001B3)
+            line += " " + hex(Int(gb))
+            if j == 11 or j == 12:
+                continue  # max/min of signed zeros: implementation-defined
+            var rb = _bits(refs[j])
+            var fb = _bits(_ftz(refs_f[j]))
+            if gb == rb:
+                if rb != fb:
+                    sz_kept += 1  # a subnormal result the device KEPT
+            elif gb == fb:
+                sz_flushed += 1  # the device's SIGNED flush of a subnormal
+            else:
+                sz_fail += 1
+                line += "  <-- col " + String(j) + " expected " + hex(Int(rb))
+        print(line)
+    print(
+        "  signed-zero arm: IEEE-specified mismatches", sz_fail,
+        " subnormal results kept", sz_kept, " flushed (signed)", sz_flushed,
+        " max/min(+0,-0) recorded",
+    )
+    print("  signed-zero arm hash:", sz_hash)
+    if sz_fail != 0:
+        raise Error(
+            "signed-zero arm: the device disagrees with IEEE on a"
+            " signed-zero input -- an nsz/fast-math rewrite is live on"
+            " this backend (see the <-- columns above)"
+        )
+
     var non_denorm = (
         (wrong_div - denorm_div)
         + (wrong_sqrt - denorm_sqrt)
