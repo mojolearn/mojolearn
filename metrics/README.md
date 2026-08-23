@@ -10,10 +10,10 @@ for SEMANTICS only and its formula stands beside each of ours in a comment.
 
 CONSTRUCTION plus one Apple device's gates; no second vendor has run this.
 
-Group A (the label metrics) and Group B (r2, KL divergence) are ported,
-gated in both modes, and sabotaged. Groups C (silhouette) and D
-(trustworthiness) are recorded below as they land; a metric absent from
-the per-metric table has no gate yet.
+Groups A (the label metrics), B (r2, KL divergence) and C (silhouette,
+the batched path cuML dispatches) are ported, gated in both modes, and
+sabotaged. Group D (trustworthiness) is recorded below as it lands; a
+metric absent from the per-metric table has no gate yet.
 
 ## Commands
 
@@ -24,6 +24,8 @@ through the build lock:
     tools/with_identical_mode.sh pixi run mojo run -I . metrics/mojo_only/label_metrics_check.mojo
     tools/with_build_lock.sh     pixi run mojo run -I . metrics/mojo_only/regression_metrics_check.mojo
     tools/with_identical_mode.sh pixi run mojo run -I . metrics/mojo_only/regression_metrics_check.mojo
+    tools/with_build_lock.sh     pixi run mojo run -I . metrics/mojo_only/silhouette_check.mojo
+    tools/with_identical_mode.sh pixi run mojo run -I . metrics/mojo_only/silhouette_check.mojo
 
 Every printed line carries the mode the binary COMPILED in.
 
@@ -70,6 +72,7 @@ grid shapes.
 | homogeneity / completeness / v_measure | homogeneity_score.cu, completeness_score.cu, v_measure.cu | homogeneity_score.cuh, v_measure.cuh | yes | -- | IDENTICAL bitwise; both vs ref; constant-truth (1,0,0), constant-pred (0,1,0), both-constant (1,1,1), independent (0,0,0), singleton | (b) |
 | r2_score | r2_score.cu | scores.cuh | yes (DEV 653), float | double overload | y_bar/sse/ssto/r2 bitwise vs host tree model (IDENTICAL); vs Float64 sklearn r2 1e-5 (both); FTZ seam visible on an all-subnormal sse fixture; LAUNCH INVARIANT across block 64/256, grid 1-D/2-D, pad 0/37 NaN | (d), (e), (f) |
 | kl_divergence | kl_divergence.cu | kl_divergence.cuh | yes (DEV 653), float | double overload | bitwise vs host tree model (IDENTICAL); vs Float64 scipy spelling 1e-5; p == 0 branch (42 planted); q == 0 -> +inf; LAUNCH INVARIANT as r2 | (d) by construction (same fold) |
+| silhouette_score / silhouette_samples | silhouette_score_batched_float.cu | detail/batched/silhouette_score.cuh (+ SilOp, countLabels of silhouette_score.cuh) | yes (DEV 654), float, batched path, metric L2SqrtUnexpanded | double; unbatched path (never dispatched); other metrics by name | 1031 per-sample scores + mean bitwise vs host model (IDENTICAL); vs Float64 sklearn 1e-4; singleton +0.0; empty label slot; exact tie a == b -> +0.0; two-way min tie; 4 refusals; chunk is scheduling (3 values one pattern); LAUNCH INVARIANT 8 launches x 1031 cells | (g) fails; (h) (i) null on Apple |
 
 ## Group A: what the gates printed (Apple M4, 2026-08-23)
 
@@ -137,6 +140,43 @@ sse is a sum of 64 subnormal squares only: +0.0 under the row-10 policy,
 report line shows exactly that split (device 0x00000000, oracle
 0x000098bb), which is the Apple-vs-host behavior FAST is entitled to.
 
+## Group C: what the gates printed (Apple M4, 2026-08-23)
+
+`silhouette_check.mojo`, IDENTICAL:
+
+    check_silhouette_matches_oracle    cluster counts 483 251 155 67 41 34; 1031 per-sample
+                                       scores bitwise; mean 0x3f10f331 bitwise; vs Float64
+                                       sklearn mean 0.56621081619 rel 1.7e-08, worst per-sample
+                                       abs 1.4e-07
+                                       (FAST: 309 of 1031 cells and the mean REPORT one ulp off
+                                       the tree model; block.sum is a different fold)
+    check_silhouette_singleton_and_empty
+                                       1031 bitwise; singleton row 41 = 0x00000000; label 6 empty
+    check_silhouette_planted_ties      row0 (a == b == 1) 0x00000000, row1 0x3e95f619 = host
+                                       formula, row2 (singleton) 0x00000000; min tie b_1 == b_2
+                                       = sqrt2: 0xbe95f61a, 4 cells bitwise
+    check_silhouette_refusals          n_labels 1 and 64 (= n_rows), metric 1, chunk 0 RAISE by
+                                       name; chunk 1 / 40000 / 7 one byte pattern 0x3f28a853
+    check_silhouette_launch_invariant  8 launches (b256/b64 x g1d/g2d x pad0/pad37), 1031 cells +
+                                       mean, one byte pattern 0x3f10f331
+                                       (FAST: the b64 launches move 279 cells and the mean by
+                                       one ulp against b256 -- block.sum is a function of the
+                                       block, which is exactly what IDENTICAL must not be)
+
+**The distance is the UNEXPANDED formula, not the neighbors tile.**
+`neighbors/mojo_only/pinned_distance_tile.mojo` is the EXPANDED L2 from
+precomputed norms (cuVS `L2Expanded`); cuML's silhouette dispatches
+`'euclidean'` to `L2SqrtUnexpanded`, a different arithmetic, so
+`metrics/mojo_only/pinned_distance.mojo` mirrors that tile's discipline
+(one thread per cell, ascending features, `identical_mul_add`, `ftz`,
+`identical_sqrt`) on the unexpanded formula and does not call it. cuVS's
+Contractions kernel for the unexpanded distance is not ported (UNPORTED).
+
+**The max(a, b) hazard** is stated in `silhouette_score.mojo`: RAFT's
+`SilOp` never calls `max`; the tie and 0/0 cases are explicit `+0.0`
+branches, `-0.0` cannot arise as a or b (sums of nonnegative terms seeded
++0.0 or FLT_MAX), and the gate plants an exact tie and reads `0x00000000`.
+
 **Completeness is the transposed fold.** `completeness_score.cu` calls
 `homogeneity_score(y_hat, y)`, so RAFT computes a SECOND mutual information
 over the transposed contingency matrix. A transposed fold is a different
@@ -167,6 +207,9 @@ class pair); ours is Int64. Recorded in `mutual_info_score.mojo`.
 | (d) | the device sse/ssto chunk partition shifted by one value WITH WRAP (`i = (i0 + 1) % n`: same multiset, different chunks) | check_r2_matches_oracle (IDENTICAL) | `BITWISE MISMATCH ssto device 4113270.7 (0x4a7b0ddb) oracle 4113270.5 (0x4a7b0dda)` (sse happened to agree; r2 gated per part for this reason) |
 | (e) | every `ftz` dropped from the ORACLE's sse path (term, slab load, tree, partial fold) | check_r2_ftz_seam_is_visible (IDENTICAL) | `BITWISE MISMATCH sse(all-subnormal) device 0.0 (0x00000000) oracle 5.479e-41 (0x000098bb)`; the same sabotage on check_r2_matches_oracle moved NOTHING (1e-42 into 1e6), which is why the second fixture exists |
 | (f) | `ftz` dropped from the DEVICE sse term | check_r2_ftz_seam_is_visible (IDENTICAL) | NO CHANGE on Apple (the hardware flushes; the pin is inert on this column, as numerics.mojo says of every pin here); recorded as the expected null -- the pin's value is the denormal-honoring column |
+| (g) | the silhouette row kernel's j partition shifted by one WITH WRAP (`j = (j0 + 1) % n_rows`) | check_silhouette_matches_oracle (IDENTICAL) | `samples row 1 device 0x3f11ad85 oracle 0x3f11ad84 ... samples: 347 of 1031 scores differ` |
+| (h) | `identical_sqrt` -> `std.math.sqrt` in the device distance | check_silhouette_matches_oracle (IDENTICAL) | NO CHANGE on Apple (its sqrt is correctly rounded; DEVIATION 258 measured NVIDIA's approximate: 180,714 of 2^20 off by one ulp); recorded as the expected null -- the pin's value is the NVIDIA column |
+| (i) | `ftz` dropped from the device distance's diff and accumulator | check_silhouette_matches_oracle (IDENTICAL) | NO CHANGE on Apple (hardware flush; no subnormal on this fixture); recorded as the expected null |
 
 ## Deviations spent
 
@@ -175,12 +218,14 @@ class pair); ours is Int64. Recorded in `mutual_info_score.mojo`.
 | 650 | entropy.mojo (banner), mutual_info_score.mojo, adjusted_rand_index.mojo | the label metrics' float epilogue runs on the HOST, serially, from the INTEGER device product; readback is k or k^2 ints instead of one scalar |
 | 651 | entropy.mojo (banner), mutual_info_score.mojo | IDENTICAL: Float32 through identical_log / identical_mul_add / ftz; FAST: Float64 host log (RAFT's precision) |
 | 652 | rand_index.mojo | 64-bit atomic replaced by per-block Int32 partials summed on the host in Int64 (Apple has no 64-bit atomic; a 32-bit total overflows past 65,536 samples) |
+| 654 | batched/silhouette_score.mojo, mojo_only/pinned_distance.mojo | the float atomicAdd into a and b[i, c] replaced by one fixed tree per (row, cluster) over j (a pure function of n and the cluster membership), the distance tile by the one-thread unexpanded formula through identical_mul_add/ftz/identical_sqrt, min + SilOp in the row's thread; chunk is scheduling; metric != L2SqrtUnexpanded refused by name |
 | 653 | mojo_only/pinned_sum.mojo, scores.mojo (r2), kl_divergence.mojo | the float sums over n as one fixed slab tree + ascending host fold, launch-invariant by construction; FAST arm is block.sum; r2's `powerScalar(x,2)` spelled `x*x`, `mean = sum * (1/n)` as mean.cuh |
 
 ## ROW TEXT FOR THE IDENTITY LANE
 
 | n | path | what is vendor-dependent in their spelling | what we did | status |
 |---|---|---|---|---|
+| (next) | metrics: silhouette_score / silhouette_samples (Group C, batched path) | cuVS `pairwise_distance` L2SqrtUnexpanded (a tiled contraction, vendor tile policy; cuBLAS TF32 on the expanded arms), float `atomicAdd` of `d/count` into a and b from every (i, j) thread of every chunk tile (arrival order, chunksize-dependent), CUB min reduce, thrust::reduce mean | DEVIATION 654: row-owned kernel, one slab tree per (row, cluster) over j ascending, the distance one thread per cell through identical_mul_add/ftz/identical_sqrt, min and SilOp in the same thread, the mean DEVIATION 653's tree; gated bitwise per sample vs a host model, launch-invariant over 8 launches x 1031 cells, chunk proven scheduling, ties planted; sabotage (g) fails, (h) (i) null on Apple | Apple FAST+IDENTICAL green; no second vendor |
 | (next) | metrics: r2_score, kl_divergence (Group B) | `thrust::reduce` / `mapThenSumReduce`: a CUB block fold + float `atomicAdd` of block partials (arrival order, vendor lane width), vendor `powf`/`log` | DEVIATION 653: one PINNED_SUM_W slab tree per chunk whose width is a constant of the source (not the block), chunk totals folded ascending on the host, ftz at every stored seam, `identical_log` per term; gated bitwise vs a host model, launch-invariant across 8 launches (two block sizes, two grid shapes, two paddings), FTZ seam visible on an all-subnormal fixture; sabotages (d)(e) fail, (f) null on Apple | Apple FAST+IDENTICAL green; no second vendor |
 | (next) | metrics: label metrics (accuracy, rand, ARI, entropy, MI, h/c/v) | contingency matrix and histograms are INTEGER atomics (order-free, identity-safe on every vendor); the float epilogue is a device double `atomicAdd` fold (arrival order) with the vendor's `log` | device product stays integer and is gated EXACTLY per cell; the float epilogue moves to the host, serial ascending, Float32 through identical_log/identical_mul_add/ftz under IDENTICAL (DEVIATIONS 650, 651); completeness is the transposed fold as theirs; gated bitwise vs an oracle and 1e-6 vs a Float64 sklearn-spelled reference; two sabotages fail, one null recorded | Apple FAST+IDENTICAL green; no second vendor |
 
@@ -192,7 +237,12 @@ y_pred)`, `rand_score`, `adjusted_rand_score`, `mutual_info_score`,
 `entropy(labels)` (cuML exposes `cuml.metrics.cluster.entropy`),
 `r2_score(y_true, y_pred)` (float32; the Python side passes `n`), and
 `kl_divergence(P, Q)` (float32; cuML's `cuml.metrics.kl_divergence`,
-which does NOT normalize). Each label metric takes
+which does NOT normalize), `silhouette_score(X, labels, metric='euclidean',
+chunksize=40000)` and `silhouette_samples(...)` (float32 row-major X; the
+Python side maps labels to `0..n_labels-1` with `np.unique(...,
+return_inverse=True)` exactly as cuML's `.pyx` does and passes
+`n_labels`; `metric` other than 'euclidean'/'l2' and float64 X are
+refused by name). Each label metric takes
 int32 labels; the Python side computes `lower_class_range = min(y, y_hat)`
 and `upper_class_range = max(...)` exactly as cuML's `.pyx` files do and
 passes them to the Mojo entry; a label outside the range is a host-side
@@ -202,6 +252,7 @@ pixi lines to register when pixi.toml is next edited by its owner:
 
     check-metrics-labels     = "mojo run -I . metrics/mojo_only/label_metrics_check.mojo"
     check-metrics-regression = "mojo run -I . metrics/mojo_only/regression_metrics_check.mojo"
+    check-metrics-silhouette = "mojo run -I . metrics/mojo_only/silhouette_check.mojo"
 
 ## HAND-OFF TO THE IDENTITY LANE
 

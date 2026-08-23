@@ -20,6 +20,11 @@ ported/stats/detail/homogeneity_score.mojo	raft cpp/include/raft/stats/detail/ho
 ported/metrics/kl_divergence.mojo	cuml cpp/src/metrics/kl_divergence.cu	partial	the float overload; double refused by name (no Float64 on device)
 ported/stats/detail/kl_divergence.mojo	raft cpp/include/raft/stats/detail/kl_divergence.cuh	transliterated	KLDOp through identical_log; DEVIATION 653 fold; no normalization (theirs has none)
 ported/stats/detail/v_measure.mojo	raft cpp/include/raft/stats/detail/v_measure.cuh	transliterated	
+ported/metrics/silhouette_score_batched_float.mojo	cuml cpp/src/metrics/silhouette_score_batched_float.cu	transliterated	the float batched entry (the one cuML's Python dispatches); defaults chunk 40000, metric L2SqrtUnexpanded
+ported/stats/detail/silhouette_score.mojo	raft cpp/include/raft/stats/detail/silhouette_score.cuh	partial	SilOp and countLabels (the pieces the batched path reaches); the unbatched driver NOT ported (never dispatched)
+ported/stats/detail/batched/silhouette_score.mojo	raft cpp/include/raft/stats/detail/batched/silhouette_score.cuh	transliterated	DEVIATION 654: fill_b + compute_chunked_a_b + min reduce + SilOp as one row-owned kernel with fixed trees; the ASSERT; chunk validated, scheduling; metric refused by name
+mojo_only/pinned_distance.mojo	none	mojo-only	DEVIATION 654's distance: one thread per cell, unexpanded L2 sqrt through identical_mul_add/ftz/identical_sqrt, plus the host twin for the oracle
+mojo_only/silhouette_check.mojo	none	mojo-only	Group C gates; sabotages (g)(h)(i) in the README
 mojo_only/pinned_sum.mojo	none	mojo-only	DEVIATION 653: virtual_block_sum (a PINNED_SUM_W slab tree independent of the physical block), host_tree_sum (the bitwise oracle), host_fold_partials, the shifted-partition sabotage model (and why a rotation is invisible to a halving tree)
 mojo_only/fixtures.mojo	none	mojo-only	hashed, skewed, non-uniform fixtures; planted singleton / constant / product-structured / subnormal-square cases
 mojo_only/device_io.mojo	none	mojo-only	host<->device copies for the checks
