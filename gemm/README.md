@@ -16,9 +16,7 @@ its eight execution plans with six sabotages all shown to fail, the
 invariance gates (launch, batch, and batch COMPOSITION) run, and the price
 harness is wired.
 
-**The one thing this status does not say is the one that matters most: NONE
-OF IT HAS RUN ON A SECOND VENDOR.** Every claim above is CONSTRUCTION plus
-one Apple device's gates. `tools/gemm_column_invariance.sh` compiles three
+**LEG 11 (commit 144aa5b, 2026-08-23): the v1 device card is bit-identical Apple M4 <-> NVIDIA H100, 60 stages, judged by `tools/e3_round_judge.sh` section 7; the FAST cards happen to agree too. AMD MI325X is OWED (that leg was not run), so the three-vendor completion sentence is not yet earned.** Everything above that is not the H100 column is construction plus one Apple device's gates. `tools/gemm_column_invariance.sh` compiles three
 vendor COLUMNS onto ONE backend, which catches a source that reads its
 vendor's constants and cannot catch contraction, denormal policy or `sqrt`
 rounding — those are the BACKEND's and not the column's. The standing proof

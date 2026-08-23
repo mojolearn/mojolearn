@@ -11,8 +11,7 @@ and why, parameter by parameter, in `UNPORTED.tsv`. DEVIATION numbers
 
 ## Status
 
-**CONSTRUCTION plus one Apple device's gates; no second vendor has run
-this.** Rung 1 -- `single_linkage` on dense Float32 with `L2SqrtExpanded`
+**CERTIFIED Apple M4 <-> NVIDIA H100 at leg 11 (commit 144aa5b, judged by `tools/e3_round_judge.sh` section 7 on 2026-08-23): the IDENTICAL card is bit-identical across the two vendors, 8 stages; the FAST cards differ, recorded, the shipped arm makes no cross-vendor claim; AMD MI325X is OWED (that leg was not run).** Rung 1 -- `single_linkage` on dense Float32 with `L2SqrtExpanded`
 (cuML's `metric="euclidean"`), `connectivity="pairwise"`, `n_clusters`
 given, `children` + `labels` out -- is ported, wired from cuML's entry down
 to RAFT's kernels, and gated bit for bit against a host oracle in BOTH
@@ -385,7 +384,7 @@ sequence, same counts, same hashes.` against the card above.
   overloads; pin the host overload's random vertex choice) + `merge_msts`
   + `cross_component_nn`. Everything it needs below it (the MST with
   `initialize_colors=false`, the loop shape) is here.
-- A second vendor. Nothing here has run on NVIDIA or AMD; the NVIDIA risk
+- AMD MI325X (NVIDIA H100 is closed at leg 11); the NVIDIA risk
   is the one the std-sqrt sabotage names (approximate sqrt at the distance
   seam, routed through `identical_sqrt`, unverified there), and the
   `atomicMin` phases are integer and should be inert.

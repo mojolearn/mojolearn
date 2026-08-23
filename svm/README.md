@@ -238,7 +238,7 @@ IDENTICAL, head of the output (the full run prints every fixture's
 `n_support`, `b` as decimal/hex, KKT gap and accuracy):
 
     == svm/svc_main.mojo [IDENTICAL] all ==
-    CONSTRUCTION plus one Apple device's gates; no second vendor has run this.
+    CERTIFIED Apple M4 <-> NVIDIA H100 at leg 11 (commit 144aa5b, judged by tools/e3_round_judge.sh section 7 on 2026-08-23): the IDENTICAL card is bit-identical across the two vendors, 32 stages; the FAST cards differ, recorded, the shipped arm makes no cross-vendor claim; AMD MI325X is OWED (that leg was not run).
       F1.blobs [IDENTICAL] oracle f32: n_support=5 outer=4 inner=11 b=0.09479656/0x3dc224b3 kkt_gap=0.00087659806/0x3a65cb80 acc=1.0
     PASS oracle_kkt_and_accuracy F1.blobs ... F7.wide_k            (7 gates)
     PASS oracle_objective_decreases F1.blobs, F2.xor                (worst relative rise 0.0)
