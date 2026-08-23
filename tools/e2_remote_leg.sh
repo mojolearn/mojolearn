@@ -112,16 +112,29 @@ $SSH 'nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null || rocm-smi 
 # refused the flip and git had no repository. A bundle of HEAD is exact
 # by construction: the remote clones it, checks out the hash, and the
 # commit recorded in every artifact is the commit that ran.
-COMMIT="${E2_COMMIT:-$(git -C "$REPO" rev-parse HEAD)}"   # pin to the Mac reference run's commit
+COMMIT="$(git -C "$REPO" rev-parse "${E2_COMMIT:-HEAD}")"   # pin to the Mac reference run's commit
 BUNDLE="/tmp/mojolearn-e2-$COMMIT.bundle"
-log "bundle $COMMIT"
-git -C "$REPO" bundle create "$BUNDLE" "$COMMIT" >/dev/null 2>&1 || { log "bundle failed"; exit 6; }
+# a bundle needs a REF (a bare sha is "Refusing to create empty bundle")
+git -C "$REPO" branch -f "e2-run" "$COMMIT" >/dev/null 2>&1
+log "bundle $COMMIT (branch e2-run)"
+git -C "$REPO" bundle create "$BUNDLE" e2-run >/dev/null 2>&1 || { log "bundle failed"; exit 6; }
 scp -q -o StrictHostKeyChecking=accept-new "$BUNDLE" "root@$IP:/root/e2.bundle" || { log "scp failed"; exit 6; }
-$SSH "rm -rf /root/mojolearn && git clone -q /root/e2.bundle /root/mojolearn && cd /root/mojolearn && git checkout -q --detach $COMMIT && git rev-parse HEAD && git status --short | head -3 && grep -c '^comptime GLOBAL_NUMERIC_MODE = NUMERIC_FAST' mojo_only/numerics.mojo" \
+$SSH "rm -rf /root/mojolearn && git clone -q -b e2-run /root/e2.bundle /root/mojolearn && cd /root/mojolearn && git rev-parse HEAD && git status --short | head -3 && grep -c '^comptime GLOBAL_NUMERIC_MODE = NUMERIC_FAST' mojo_only/numerics.mojo" \
   || { log "remote clone/checkout failed"; exit 6; }
 
 log "bootstrap (phases 0-4) -- this is the long step"
 $SSH 'export PATH=/root/.pixi/bin:$PATH; cd /root/mojolearn && bash tools/e1_bootstrap.sh > /root/e2_run.log 2>&1; echo "BOOTSTRAP-EXIT=$?"; tail -20 /root/e2_run.log'
+
+# TRAIN-HERE-INFER-THERE, the Mac -> box direction: the Mac reference
+# run's models (MAC_REF_DIR, optional) are loaded on the box with the
+# IDENTICAL .so the bootstrap just built and predicted there. The box ->
+# Mac direction runs on the Mac after the fetch.
+if [ -n "${MAC_REF_DIR:-}" ] && [ -d "$MAC_REF_DIR" ]; then
+  log "cross-infer: Mac models on the box"
+  rsync -az --include '*.model.npz' --include '*.json' --exclude '*' "$MAC_REF_DIR/" "root@$IP:/root/mac_ref/" \
+    && $SSH 'export PATH=/root/.pixi/bin:$PATH; cd /root/mojolearn && OUT=$(ls -td bench/results/e1/*/ | head -1) && PYTHONPATH=python pixi run -e gbmbench python3 tools/e1_cross_infer.py /root/mac_ref "$OUT/cross_infer_mac_models_on_box.json" 2>&1 | tail -8' \
+    || log "cross-infer on box FAILED (see above)"
+fi
 
 log "fetch artifacts"
 mkdir -p "$REPO/bench/results/e1"

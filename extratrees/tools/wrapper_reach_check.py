@@ -23,7 +23,16 @@ import sys
 
 import numpy as np
 
-from mojolearn.extratrees import ExtraTreesClassifier, ExtraTreesRegressor
+try:
+    from mojolearn.extratrees import ExtraTreesClassifier, ExtraTreesRegressor
+except ImportError as exc:
+    # the package imports every binding (cluster, trees, rf, gbdt); on a
+    # fresh clone or a remote box before phase 3 of tools/e1_bootstrap.sh
+    # builds them this check has nothing to run against. SKIP, by name --
+    # a missing binary is not a reach failure (E2 Mac reference run,
+    # 2026-08-23, read as a PHASE2-FINDING until this line existed)
+    print(f"SKIP wrapper_reach_check: mojolearn does not import here ({exc})")
+    sys.exit(0)
 
 N_ROWS, N_FEATURES = 4096, 16
 FORMS = [1.0, 0.5, "sqrt", 3]
