@@ -20,7 +20,7 @@ set -uo pipefail
 VENDOR="${1:?amd|nv}"
 TOKFILE="${2:?token file}"
 TOK="$(cat "$TOKFILE")"
-DEADMAN_SECONDS="${DEADMAN_SECONDS:-7200}"   # 2 h hard cap per leg
+DEADMAN_SECONDS="${DEADMAN_SECONDS:-3600}"   # ONE HOUR hard cap per leg (Andrew, 2026-08-23: a rented GPU expires on its own after an hour, in code, not in memory)
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 API=https://api.digitalocean.com/v2
 SSH_KEY_FP="df:f7:6b:0c:56:da:48:a5:6f:6d:ae:44:af:de:f3:0b"
