@@ -212,6 +212,35 @@ port (a 64-lane histogram layout for three accumulators), not a gate
 fix**, and the bootstrap now keeps each FAST build's log with the first
 error line instead of a bare "did not build".
 
+## Round 10, commit `afb22dd` (2026-08-23): the gates' IDENTICAL passes on the boxes
+
+Same cell verdicts as round 9 (116 / 80 / 3 identical on both vendors;
+box-trained models on the Mac 111/111 x2; Mac-trained on the H100
+111/111). What this round was for: with the phase-6 gate scripts now
+running both passes unconditionally, **the IDENTICAL pass of the
+unsupervised identity gate ran and is GREEN on the H100 and on the
+MI325X** (reach-by-sabotage, geometry invariance, tie-set and fold-shape
+proofs, on the vendors they were written about). The linalg gate's
+IDENTICAL pass ran on both and FAILED on both at ONE check,
+`check_ols_is_launch_invariant`: two identical OLS fits in one process
+disagree at coefficient 0 — H100 0xbbc76fa8 vs 0xbbc6fa1b (0.2%),
+MI325X 0xbbca3989 vs 0xbba71c67 (2.5%) — in both modes, while the FIRST
+fit of every process is bit-identical across all three vendors (that is
+why every E2U OLS cell, one fit per subprocess, has been identical on
+every leg). Not a summation order: a fit-internal read-before-write that
+Metal's zeroed allocations hide. The check now prints the first diverging
+stage of two traced fits before raising (`eb5a2d1`); round 11 localizes
+it. On AMD the FAST k-NN surface check and the knn_main gate were clean;
+on the H100 the FAST tiled arm's TF32 distances are RECORDED with their
+label (8 of 320 neighbours reordered, worst distance 0.0022).
+
+Also this round: a DigitalOcean create call returned a non-JSON body for
+a droplet it HAD created; the leg script saw no id, exited, and its
+id-keyed dead-man had never been armed — an orphan MI325X for 19 minutes,
+found by listing the account and destroyed by hand. The script now arms
+the dead-man BEFORE the create call, keyed by tag + name, adopts a
+no-id droplet by name, and sweeps by name at teardown (`eb5a2d1`).
+
 ## Owed
 
 1. The linalg gate's IDENTICAL pass on both boxes (one leg; the scripts
