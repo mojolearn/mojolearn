@@ -43,7 +43,11 @@ from gbdt.models.ctr_value_table import (
     column_plan,
     expand_raw_columns,
 )
-from std.math import exp, log2
+from std.math import log2
+
+# DEVIATION 258: the probability links (double, as CatBoost computes them)
+# go through the host-portable exp64 under IDENTICAL; FAST is the stdlib
+from mojo_only.numerics import identical_exp64
 from gbdt.methods.doc_parallel_boosting import (
     TAdditiveModel,
     fit_with_test,
@@ -1900,7 +1904,7 @@ def one_vs_all_probabilities(
     for i in range(n_rows * num_classes):
         out.append(
             Float32(
-                1.0 / (1.0 + exp(-Float64(approxes[i])))
+                1.0 / (1.0 + identical_exp64(-Float64(approxes[i])))
             )
         )
     return out^
@@ -1936,11 +1940,11 @@ def multiclass_probabilities(
                 mx = v
         var se = Float64(0.0)
         for k in range(eff):
-            se += exp(Float64(approxes[r * eff + k]) - mx)
-        se += exp(-mx)
+            se += identical_exp64(Float64(approxes[r * eff + k]) - mx)
+        se += identical_exp64(-mx)
         for k in range(eff):
             out.append(
-                Float32(exp(Float64(approxes[r * eff + k]) - mx) / se)
+                Float32(identical_exp64(Float64(approxes[r * eff + k]) - mx) / se)
             )
-        out.append(Float32(exp(-mx) / se))
+        out.append(Float32(identical_exp64(-mx) / se))
     return out^

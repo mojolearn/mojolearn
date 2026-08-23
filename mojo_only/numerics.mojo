@@ -523,6 +523,61 @@ def portable_powf(x: Float32, p: Float32) -> Float32:
     return portable_expf(p * portable_logf(x))
 
 
+def portable_exp64(x: Float64) -> Float64:
+    """HOST-ONLY (no float64 on device, `mojolearn-hardware-limits`):
+    `exp` for Float64 as one arithmetic, for the PROBABILITY LINKS --
+    the sigmoid/softmax CatBoost computes in double
+    (`eval_processing.h:186-226`) and this port's
+    `one_vs_all_probabilities` / `multiclass_probabilities` / the Python
+    wrapper's Logloss sigmoid mirror. Each host libm rounds double exp
+    differently in the last bit (macOS Accelerate vs glibc), so a
+    probability computed through `std.math.exp` carried the host's bit
+    even when every raw margin matched (E2 round 1: gbdt_logloss
+    DIVERGENT@proba, cards identical). Cephes `exp` for double: 2^k
+    reduction with the split ln2, the (P2, Q3) rational on r^2, one fma
+    per step; ~1 ulp of double, which after the cast to float32 is the
+    correctly-rounded float32 probability in all but double-rounding
+    corner cases."""
+    from std.math import floor, fma
+    from std.memory import bitcast
+
+    if x != x:
+        return x
+    if x > 709.782712893384:
+        return bitcast[DType.float64](UInt64(0x7FF0000000000000))  # +inf
+    if x < -708.3964185322641:
+        return Float64(0.0)
+    var k = floor(x * 1.4426950408889634 + 0.5)
+    var r = fma(k, -6.93145751953125e-1, x)
+    r = fma(k, -1.42860682030941723212e-6, r)
+    var xx = r * r
+    var px = fma(1.26177193074810590878e-4, xx, 3.02994407707441961300e-2)
+    px = fma(px, xx, 9.99999999999999999910e-1)
+    px = px * r
+    var qx = fma(3.00198505138664455042e-6, xx, 2.52448340349684104192e-3)
+    qx = fma(qx, xx, 2.27265548208155028766e-1)
+    qx = fma(qx, xx, 2.00000000000000000009e0)
+    var y = px / (qx - px)
+    y = fma(2.0, y, 1.0)
+    # scale by 2^k in two exact steps so |k| up to 1074 stays in range
+    var ki = Int(k)
+    var k1 = ki >> 1
+    var k2 = ki - k1
+    y = y * bitcast[DType.float64](UInt64(k1 + 1023) << 52)
+    y = y * bitcast[DType.float64](UInt64(k2 + 1023) << 52)
+    return y
+
+
+def identical_exp64(x: Float64) -> Float64:
+    """The probability links' seam call (host): IDENTICAL routes through
+    `portable_exp64`, FAST is the host stdlib verbatim."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        return portable_exp64(x)
+    from std.math import exp
+
+    return exp(x)
+
+
 def identical_sqrt(x: Float32) -> Float32:
     """Row 10's sqrt seam call: IDENTICAL routes through `portable_sqrtf`
     (one arithmetic, correctly rounded, the same bits on the approximate-
