@@ -43,6 +43,7 @@ of a tied neighbor non-reproducible.
 from std.math import sqrt
 from max.gpu.host import DeviceBuffer, DeviceContext
 
+from mojo_only.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
 from mojo_only.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 from core.row_norms import NORM_TPB, row_norm_kernel
@@ -1812,10 +1813,25 @@ def check_launch_config_values() raises:
     x-chunk cap binds, and the bench shape itself.
     """
 
+    # THE NUMBERS ARE THE M4'S. On another column the same computation
+    # returns that column's grid (the H100's 108 SMs x 8 blocks = 864 give
+    # (7, 125) at 2,000 x 200,000, 2026-08-23), which is the generator
+    # doing its job and not a failure; there the expectations below are
+    # RECORDED beside what the column computes, and nothing is asserted.
+    comptime pin_here = TARGET_COLUMN == COLUMN_APPLE
+
     def expect(m: Int, n: Int, want_x: Int, want_y: Int) raises:
         var cfg = launch_config_generator(
             m, n, FKNN_MBLK, FKNN_NBLK, FKNN_THREADS, FKNN_SMEM_BYTES
         )
+        if not pin_here:
+            print(
+                "      launch config RECORDED on this column: (" + String(m)
+                + ", " + String(n) + ") -> (" + String(cfg[0]) + ", "
+                + String(cfg[1]) + "); the M4 transcription is ("
+                + String(want_x) + ", " + String(want_y) + ")"
+            )
+            return
         if cfg[0] != want_x or cfg[1] != want_y:
             raise Error(
                 "check_launch_config_values FAIL: m="

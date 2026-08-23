@@ -37,7 +37,13 @@ first.
                         core/pinned_reduce.mojo:148 reason about.
                         Apple (M4, 2026-08-23): 12832708934203007326,
                         max/min return the SECOND operand, flushes are
-                        signed (-0.0), 0 IEEE mismatches.
+                        signed (-0.0), NaN payload 0x7fc00000, 0 IEEE
+                        mismatches. NVIDIA (H100, 2026-08-23):
+                        11697540916885723060, max(+0,-0) = +0 and
+                        min = -0 (IEEE-2019 maximum/minimum: -0 < +0),
+                        subnormals KEPT, NaN payload 0x7fffffff, 0 IEEE
+                        mismatches once NaN is judged as NaN (the first
+                        run counted the payload as 9 mismatches).
 
 ## Why the references are exact, not approximate
 
@@ -590,6 +596,8 @@ def main() raises:
     var sz_fail = 0
     var sz_flushed = 0
     var sz_kept = 0
+    var sz_nan = 0
+    var sz_nan_payload = UInt32(0)
     var sz_hash = UInt64(0xCBF29CE484222325)
     print("  signed-zero table (ARM 7), device bits per case,")
     print("    cols: a+b b+a a-b a*b a/b sqrt(a) 0-a -a |a| a*0 a+0 max min fma == <")
@@ -615,7 +623,18 @@ def main() raises:
                 continue  # max/min of signed zeros: implementation-defined
             var rb = _bits(refs[j])
             var fb = _bits(_ftz(refs_f[j]))
-            if gb == rb:
+            # a NaN is a NaN: IEEE specifies WHEN (0/0, sqrt(-x)) and not
+            # the payload. Measured 2026-08-23: Apple 0x7fc00000, NVIDIA
+            # 0x7fffffff, this host 0xffc00000 -- three payloads for one
+            # answer, which is why a certified stage must never carry a
+            # computed NaN (its bits are the vendor's). Recorded, not judged.
+            var got_nan = (gb & UInt32(0x7FFFFFFF)) > UInt32(0x7F800000)
+            var ref_nan = (rb & UInt32(0x7FFFFFFF)) > UInt32(0x7F800000)
+            if got_nan and ref_nan:
+                if sz_nan_payload == UInt32(0):
+                    sz_nan_payload = gb
+                sz_nan += 1
+            elif gb == rb:
                 if rb != fb:
                     sz_kept += 1  # a subnormal result the device KEPT
             elif gb == fb:
@@ -627,7 +646,12 @@ def main() raises:
     print(
         "  signed-zero arm: IEEE-specified mismatches", sz_fail,
         " subnormal results kept", sz_kept, " flushed (signed)", sz_flushed,
-        " max/min(+0,-0) recorded",
+        " NaN results", sz_nan, "with payload", hex(Int(sz_nan_payload)),
+        " max/min(+0,-0) recorded:",
+        "max(+0,-0) =", hex(Int(_bits(sz_o.unsafe_ptr().unsafe_load(11)))),
+        "min(+0,-0) =", hex(Int(_bits(sz_o.unsafe_ptr().unsafe_load(12)))),
+        "max(-0,+0) =", hex(Int(_bits(sz_o.unsafe_ptr().unsafe_load(SZ_OUTS + 11)))),
+        "min(-0,+0) =", hex(Int(_bits(sz_o.unsafe_ptr().unsafe_load(SZ_OUTS + 12)))),
     )
     print("  signed-zero arm hash:", sz_hash)
     if sz_fail != 0:
