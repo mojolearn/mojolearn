@@ -1,0 +1,57 @@
+{
+  "title": "mojolearn: GPU machine-learning algorithms in Mojo, portable to Apple Silicon",
+  "upload_type": "software",
+  "license": "Apache-2.0",
+  "access_right": "open",
+  "creators": [
+    {
+      "name": "Hendel, Andrew"
+    }
+  ],
+  "description": "<p>Ports of GPU machine-learning algorithms into Mojo from the CUDA implementations that established them, targeting Apple Silicon via Metal first and CUDA and ROCm from the same source. Gradient-boosted oblivious (symmetric) trees, random forests and extremely randomized trees mirror CatBoost; k-means and brute-force k-nearest-neighbors mirror cuVS; DBSCAN and PCA mirror cuML; ordinary least squares and top-k selection mirror RAFT. Every derivation is recorded per file in PORTED_MAP.tsv and the license obligations each carries are in NOTICE. Each estimator runs in a FAST mode and an IDENTICAL mode whose results are bit-identical across Metal, HIP and CUDA; the cross-vendor certificates are in E1_RESULTS.md and E2_RESULTS.md.</p>",
+  "keywords": [
+    "machine learning",
+    "gpu",
+    "mojo",
+    "apple silicon",
+    "metal",
+    "cuda",
+    "rocm",
+    "gradient boosting",
+    "random forest",
+    "k-means",
+    "bitwise reproducibility"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/mojolearn/mojolearn",
+      "relation": "isSupplementTo",
+      "resource_type": "software",
+      "scheme": "url"
+    },
+    {
+      "identifier": "https://github.com/catboost/catboost",
+      "relation": "isDerivedFrom",
+      "resource_type": "software",
+      "scheme": "url"
+    },
+    {
+      "identifier": "https://github.com/rapidsai/cuvs",
+      "relation": "isDerivedFrom",
+      "resource_type": "software",
+      "scheme": "url"
+    },
+    {
+      "identifier": "https://github.com/rapidsai/cuml",
+      "relation": "isDerivedFrom",
+      "resource_type": "software",
+      "scheme": "url"
+    },
+    {
+      "identifier": "https://github.com/rapidsai/raft",
+      "relation": "isDerivedFrom",
+      "resource_type": "software",
+      "scheme": "url"
+    }
+  ]
+}
