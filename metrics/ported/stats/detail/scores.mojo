@@ -238,6 +238,24 @@ def r2_score_launch[
     threads per block, and a grid of `grid_x_override` columns (0 = one
     block per chunk, 1-D) arranged 2-D so the same chunks are served by a
     different grid shape."""
+    var parts = r2_score_parts[block_size](ctx, y, y_hat, n, grid_x_override)
+    return parts[3]
+
+
+def r2_score_parts[
+    block_size: Int
+](
+    ctx: DeviceContext,
+    mut y: DeviceBuffer[DType.float32],
+    mut y_hat: DeviceBuffer[DType.float32],
+    n: Int,
+    grid_x_override: Int,
+) raises -> Tuple[Float32, Float32, Float32, Float32]:
+    """`(y_bar, sse, ssto, r2)`. The three sums are exposed because `r2 =
+    1 - sse/ssto` ABSORBS a last-bit move in either sum whenever `sse <<
+    ssto` (measured: a shifted chunk partition moved sse and not r2 on
+    the 4099-row fixture), so the checks gate the sums, not only the
+    ratio."""
     if n <= 0:
         raise Error("r2_score: n must be positive, got " + String(n))
     var chunks = chunk_count(n)
@@ -275,4 +293,5 @@ def r2_score_launch[
     _ = sse_p^
     _ = ssto_p^
     # `return 1.0 - sse / ssto;` (:72)
-    return ftz(Float32(1.0) - ftz(sse / ssto))
+    var r2 = ftz(Float32(1.0) - ftz(sse / ssto))
+    return (y_bar, sse, ssto, r2)

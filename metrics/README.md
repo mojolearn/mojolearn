@@ -10,11 +10,10 @@ for SEMANTICS only and its formula stands beside each of ours in a comment.
 
 CONSTRUCTION plus one Apple device's gates; no second vendor has run this.
 
-Group A (the label metrics) is ported, gated in both modes, and sabotaged.
-`r2_score` (Group B) is WRITTEN in `scores.mojo` and smoke-run, NOT YET
-GATED: its checks land with the Group B commit. KL, Groups C (silhouette)
-and D (trustworthiness) are recorded below as they land; a metric absent
-from the per-metric table has no gate yet.
+Group A (the label metrics) and Group B (r2, KL divergence) are ported,
+gated in both modes, and sabotaged. Groups C (silhouette) and D
+(trustworthiness) are recorded below as they land; a metric absent from
+the per-metric table has no gate yet.
 
 ## Commands
 
@@ -23,6 +22,8 @@ through the build lock:
 
     tools/with_build_lock.sh     pixi run mojo run -I . metrics/mojo_only/label_metrics_check.mojo
     tools/with_identical_mode.sh pixi run mojo run -I . metrics/mojo_only/label_metrics_check.mojo
+    tools/with_build_lock.sh     pixi run mojo run -I . metrics/mojo_only/regression_metrics_check.mojo
+    tools/with_identical_mode.sh pixi run mojo run -I . metrics/mojo_only/regression_metrics_check.mojo
 
 Every printed line carries the mode the binary COMPILED in.
 
@@ -67,6 +68,8 @@ grid shapes.
 | entropy | entropy.cu | entropy.cuh | yes (DEV 650, 651) | -- | IDENTICAL bitwise vs oracle; both vs Float64 ref 1e-6; constant -> 0, size 0 -> 1 | (c) null, recorded |
 | mutual_info_score | mutual_info_score.cu | mutual_info_score.cuh | yes (DEV 650, 651) | -- | IDENTICAL bitwise; both vs ref; MI == 0 exactly on a product-structured labeling | (b) |
 | homogeneity / completeness / v_measure | homogeneity_score.cu, completeness_score.cu, v_measure.cu | homogeneity_score.cuh, v_measure.cuh | yes | -- | IDENTICAL bitwise; both vs ref; constant-truth (1,0,0), constant-pred (0,1,0), both-constant (1,1,1), independent (0,0,0), singleton | (b) |
+| r2_score | r2_score.cu | scores.cuh | yes (DEV 653), float | double overload | y_bar/sse/ssto/r2 bitwise vs host tree model (IDENTICAL); vs Float64 sklearn r2 1e-5 (both); FTZ seam visible on an all-subnormal sse fixture; LAUNCH INVARIANT across block 64/256, grid 1-D/2-D, pad 0/37 NaN | (d), (e), (f) |
+| kl_divergence | kl_divergence.cu | kl_divergence.cuh | yes (DEV 653), float | double overload | bitwise vs host tree model (IDENTICAL); vs Float64 scipy spelling 1e-5; p == 0 branch (42 planted); q == 0 -> +inf; LAUNCH INVARIANT as r2 | (d) by construction (same fold) |
 
 ## Group A: what the gates printed (Apple M4, 2026-08-23)
 
@@ -89,6 +92,50 @@ FAST and IDENTICAL, `label_metrics_check.mojo`:
                                       MI ascending 0x3ed6ddd8, descending 0x3ed6ddd9: the
                                       fixture separates a reversed fold by one ulp, so the
                                       bitwise gates have teeth
+
+## Group B: what the gates printed (Apple M4, 2026-08-23)
+
+`regression_metrics_check.mojo`, IDENTICAL (FAST prints the same lines as
+REPORTs and asserts only the Float64 references and the branches):
+
+    check_virtual_sum_equals_pinned_block_sum
+                                   virtual 0xc68a95a8 pinned_block_sum 0xc68a95a8 host model 0xc68a95a8
+                                   (FAST: block.sum 0xc68a95a7 twice, model 0xc68a95a8: the
+                                   library fold is a different tree, as designed)
+    check_sum_order_is_visible     tree 0x45c552fb shift1 0x45c552ff shift7 0x45c55301
+                                   shift64 0x45c552ff serial 0x45c55331 (3 of 3 shifts and
+                                   the serial fold differ)
+    check_r2_matches_oracle        y_bar 0xbd9285e0, sse 0x498b256f, ssto 0x4a7b0dda,
+                                   r2 0x3f390e67 bitwise; vs Float64 sklearn 0.72287604861
+                                   rel 5.0e-08 (FAST: y_bar 0xbd9285fd REPORT, rel 2.3e-08)
+    check_r2_ftz_seam_is_visible   sse device 0x00000000 oracle 0x00000000 (the unflushed
+                                   host sum of the 64 subnormal squares is 0x000098bb)
+    check_r2_launch_invariant      8 launches (b256/b64 x g1d/g2d x pad0/pad37) one byte
+                                   pattern 0x3f390e67
+    check_kl_matches_oracle        0x3f7b5f74 bitwise; 42 planted p == 0; q[5] = 0 -> inf
+                                   (0x7f800000); vs Float64 rel 8.9e-08 (FAST 0x3f7b5f73, REPORT)
+    check_kl_launch_invariant      8 launches one byte pattern 0x3f7b5f74
+
+**A rotation inside the chunk is invisible to the halving tree** (the
+first sabotage model tried it: rot 1 / 7 / 64 all equal the tree). The
+tree's subtrees at level k are the residue classes of the slot index mod
+2^k, and a rotation maps residue classes onto residue classes, so every
+pairing adds the same multisets and addition commutes. What a launch-
+dependent partition really does is move the CHUNK BOUNDARIES, and that is
+what the teeth check and sabotage (d) do. `pinned_sum.mojo::
+sabotage_shifted_host_tree_sum` carries the derivation.
+
+**`r2 = 1 - sse/ssto` absorbs a last-bit move in sse whenever `sse <<
+ssto`** (measured: the first fixture had r2 = 0.9957 and the shifted
+partition moved sse and not r2). The checks therefore gate the three SUMS
+(`r2_score_parts`) and the fixture was rebuilt so r2 sits at 0.72.
+
+**A planted subnormal inside a 1e6 sum is reached and invisible** (1e-42
+into 1e6 is 1e6); the FTZ seam is made VISIBLE by a second fixture whose
+sse is a sum of 64 subnormal squares only: +0.0 under the row-10 policy,
+0x000098bb (5.5e-41) on a host that keeps denormals. Under FAST the
+report line shows exactly that split (device 0x00000000, oracle
+0x000098bb), which is the Apple-vs-host behavior FAST is entitled to.
 
 **Completeness is the transposed fold.** `completeness_score.cu` calls
 `homogeneity_score(y_hat, y)`, so RAFT computes a SECOND mutual information
@@ -117,6 +164,9 @@ class pair); ours is Int64. Recorded in `mutual_info_score.mojo`.
 | (a) | contingency index written `(pd - off) * width + gt - off` (transposed) | check_contingency_matrix_exact | `cell 0,1 device 160 host 185 ... contingency matrix k=7 (SMEM arm): 38 cells differ` |
 | (b) | the ported MI epilogue's (i, j) loop run DESCENDING | check_mutual_info_epilogue (IDENTICAL) | `BITWISE MISMATCH mutual_info_score got 0.4196613132953644 (0x3fdadbbb20000000) oracle 0.419661283493042 (0x3fdadbbb00000000)` |
 | (c) | `ftz` dropped from the entropy epilogue's stored term | check_entropy_epilogue (IDENTICAL) | NO CHANGE on Apple: no term is subnormal on the label fixtures and the host flushes nothing either; recorded as the expected null. The FTZ seam that CAN be reached is Group B's (planted subnormal squares), where the sabotage must fail |
+| (d) | the device sse/ssto chunk partition shifted by one value WITH WRAP (`i = (i0 + 1) % n`: same multiset, different chunks) | check_r2_matches_oracle (IDENTICAL) | `BITWISE MISMATCH ssto device 4113270.7 (0x4a7b0ddb) oracle 4113270.5 (0x4a7b0dda)` (sse happened to agree; r2 gated per part for this reason) |
+| (e) | every `ftz` dropped from the ORACLE's sse path (term, slab load, tree, partial fold) | check_r2_ftz_seam_is_visible (IDENTICAL) | `BITWISE MISMATCH sse(all-subnormal) device 0.0 (0x00000000) oracle 5.479e-41 (0x000098bb)`; the same sabotage on check_r2_matches_oracle moved NOTHING (1e-42 into 1e6), which is why the second fixture exists |
+| (f) | `ftz` dropped from the DEVICE sse term | check_r2_ftz_seam_is_visible (IDENTICAL) | NO CHANGE on Apple (the hardware flushes; the pin is inert on this column, as numerics.mojo says of every pin here); recorded as the expected null -- the pin's value is the denormal-honoring column |
 
 ## Deviations spent
 
@@ -125,12 +175,13 @@ class pair); ours is Int64. Recorded in `mutual_info_score.mojo`.
 | 650 | entropy.mojo (banner), mutual_info_score.mojo, adjusted_rand_index.mojo | the label metrics' float epilogue runs on the HOST, serially, from the INTEGER device product; readback is k or k^2 ints instead of one scalar |
 | 651 | entropy.mojo (banner), mutual_info_score.mojo | IDENTICAL: Float32 through identical_log / identical_mul_add / ftz; FAST: Float64 host log (RAFT's precision) |
 | 652 | rand_index.mojo | 64-bit atomic replaced by per-block Int32 partials summed on the host in Int64 (Apple has no 64-bit atomic; a 32-bit total overflows past 65,536 samples) |
-| 653 | mojo_only/pinned_sum.mojo, scores.mojo (r2) | the float sums over n as one fixed slab tree + ascending host fold, launch-invariant by construction; FAST arm is block.sum |
+| 653 | mojo_only/pinned_sum.mojo, scores.mojo (r2), kl_divergence.mojo | the float sums over n as one fixed slab tree + ascending host fold, launch-invariant by construction; FAST arm is block.sum; r2's `powerScalar(x,2)` spelled `x*x`, `mean = sum * (1/n)` as mean.cuh |
 
 ## ROW TEXT FOR THE IDENTITY LANE
 
 | n | path | what is vendor-dependent in their spelling | what we did | status |
 |---|---|---|---|---|
+| (next) | metrics: r2_score, kl_divergence (Group B) | `thrust::reduce` / `mapThenSumReduce`: a CUB block fold + float `atomicAdd` of block partials (arrival order, vendor lane width), vendor `powf`/`log` | DEVIATION 653: one PINNED_SUM_W slab tree per chunk whose width is a constant of the source (not the block), chunk totals folded ascending on the host, ftz at every stored seam, `identical_log` per term; gated bitwise vs a host model, launch-invariant across 8 launches (two block sizes, two grid shapes, two paddings), FTZ seam visible on an all-subnormal fixture; sabotages (d)(e) fail, (f) null on Apple | Apple FAST+IDENTICAL green; no second vendor |
 | (next) | metrics: label metrics (accuracy, rand, ARI, entropy, MI, h/c/v) | contingency matrix and histograms are INTEGER atomics (order-free, identity-safe on every vendor); the float epilogue is a device double `atomicAdd` fold (arrival order) with the vendor's `log` | device product stays integer and is gated EXACTLY per cell; the float epilogue moves to the host, serial ascending, Float32 through identical_log/identical_mul_add/ftz under IDENTICAL (DEVIATIONS 650, 651); completeness is the transposed fold as theirs; gated bitwise vs an oracle and 1e-6 vs a Float64 sklearn-spelled reference; two sabotages fail, one null recorded | Apple FAST+IDENTICAL green; no second vendor |
 
 ## HAND-OFF (Python surface, for the bindings lane)
@@ -138,7 +189,10 @@ class pair); ours is Int64. Recorded in `mutual_info_score.mojo`.
 Names, mirroring `cuml.metrics`: `mojolearn.metrics.accuracy_score(y_true,
 y_pred)`, `rand_score`, `adjusted_rand_score`, `mutual_info_score`,
 `homogeneity_score`, `completeness_score`, `v_measure_score(beta=1.0)`,
-`entropy(labels)` (cuML exposes `cuml.metrics.cluster.entropy`). Each takes
+`entropy(labels)` (cuML exposes `cuml.metrics.cluster.entropy`),
+`r2_score(y_true, y_pred)` (float32; the Python side passes `n`), and
+`kl_divergence(P, Q)` (float32; cuML's `cuml.metrics.kl_divergence`,
+which does NOT normalize). Each label metric takes
 int32 labels; the Python side computes `lower_class_range = min(y, y_hat)`
 and `upper_class_range = max(...)` exactly as cuML's `.pyx` files do and
 passes them to the Mojo entry; a label outside the range is a host-side
@@ -146,7 +200,8 @@ raise by name (RAFT writes out of bounds; we do not port that). Float64
 inputs to the float metrics are refused by name (no Float64 on device).
 pixi lines to register when pixi.toml is next edited by its owner:
 
-    check-metrics = "mojo run -I . metrics/mojo_only/label_metrics_check.mojo"
+    check-metrics-labels     = "mojo run -I . metrics/mojo_only/label_metrics_check.mojo"
+    check-metrics-regression = "mojo run -I . metrics/mojo_only/regression_metrics_check.mojo"
 
 ## HAND-OFF TO THE IDENTITY LANE
 

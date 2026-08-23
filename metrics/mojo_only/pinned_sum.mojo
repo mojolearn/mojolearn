@@ -167,14 +167,26 @@ def host_fold_partials(partials: List[Float32], chunks: Int) -> Float32:
     return acc
 
 
-def sabotage_rotated_host_tree_sum(
-    values: List[Float32], n: Int, rotate_by: Int
+def sabotage_shifted_host_tree_sum(
+    values: List[Float32], n: Int, shift: Int
 ) -> Float32:
-    """FOR THE SABOTAGE GATE ONLY. The same tree with the fold START rotated
-    by `rotate_by` slots inside each chunk -- the addition that a different
-    block count, warp width or arrival order would perform. It is the
-    wrong answer the checks must be able to tell from the right one; see
-    the README's sabotage table."""
+    """FOR THE SABOTAGE GATE ONLY. The same tree with the CHUNK BOUNDARIES
+    shifted by `shift` values (chunk c holds values `[c*W + shift, (c+1)*W +
+    shift)`, the first `shift` values wrap into the last chunk) -- what a
+    partition that is not a pure function of `n` would fold. It is the
+    wrong answer the checks must be able to tell from the right one.
+
+    WHY NOT A ROTATION WITHIN THE CHUNK. The first draft rotated the slab
+    fill by `r` slots inside each chunk and found it INVISIBLE for every
+    r: the halving tree's subtrees at level k are the residue classes of
+    the slot index mod 2^k, and a rotation maps residue classes onto
+    residue classes, so every pairing adds the same two multisets and
+    addition commutes. Rotation by W/2 is the obvious case (it swaps the
+    two operands of every first-level add); odd rotations are the same
+    fact one level down. A sabotage of THIS tree must change which values
+    share a chunk, or abandon the tree for a serial fold. Measured 2026-
+    08-23: rot 1 / 7 / 64 all `0x45c552fb` = the tree; the serial fold
+    `0x45c55331`; shift 1 differs (regression_metrics_check.mojo)."""
     var partials = List[Float32]()
     var chunks = chunk_count(n)
     var slab = List[Float32]()
@@ -182,8 +194,11 @@ def sabotage_rotated_host_tree_sum(
         slab.append(Float32(0.0))
     for c in range(chunks):
         for t in range(PINNED_SUM_W):
-            var i = c * PINNED_SUM_W + ((t + rotate_by) % PINNED_SUM_W)
-            slab[t] = ftz(values[i]) if i < n else Float32(0.0)
+            var i = c * PINNED_SUM_W + t
+            if i < n:
+                slab[t] = ftz(values[(i + shift) % n])
+            else:
+                slab[t] = Float32(0.0)
         var step = PINNED_SUM_W // 2
         while step > 0:
             for t in range(step):

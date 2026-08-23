@@ -17,8 +17,11 @@ ported/stats/detail/adjusted_rand_index.mojo	raft cpp/include/raft/stats/detail/
 ported/stats/detail/entropy.mojo	raft cpp/include/raft/stats/detail/entropy.cuh	transliterated	DEVIATIONS 650 (host epilogue from integer counts) and 651 (IDENTICAL: Float32 through identical_log; FAST: Float64 host log)
 ported/stats/detail/mutual_info_score.mojo	raft cpp/include/raft/stats/detail/mutual_info_score.cuh	transliterated	DEVIATIONS 650, 651; their int a[i]*b[j] (overflows past 46,340 per class pair) is Int64 here
 ported/stats/detail/homogeneity_score.mojo	raft cpp/include/raft/stats/detail/homogeneity_score.cuh	transliterated	
+ported/metrics/kl_divergence.mojo	cuml cpp/src/metrics/kl_divergence.cu	partial	the float overload; double refused by name (no Float64 on device)
+ported/stats/detail/kl_divergence.mojo	raft cpp/include/raft/stats/detail/kl_divergence.cuh	transliterated	KLDOp through identical_log; DEVIATION 653 fold; no normalization (theirs has none)
 ported/stats/detail/v_measure.mojo	raft cpp/include/raft/stats/detail/v_measure.cuh	transliterated	
-mojo_only/pinned_sum.mojo	none	mojo-only	DEVIATION 653: virtual_block_sum (a PINNED_SUM_W slab tree independent of the physical block), host_tree_sum (the bitwise oracle), host_fold_partials, the rotated sabotage model
+mojo_only/pinned_sum.mojo	none	mojo-only	DEVIATION 653: virtual_block_sum (a PINNED_SUM_W slab tree independent of the physical block), host_tree_sum (the bitwise oracle), host_fold_partials, the shifted-partition sabotage model (and why a rotation is invisible to a halving tree)
 mojo_only/fixtures.mojo	none	mojo-only	hashed, skewed, non-uniform fixtures; planted singleton / constant / product-structured / subnormal-square cases
 mojo_only/device_io.mojo	none	mojo-only	host<->device copies for the checks
 mojo_only/label_metrics_check.mojo	none	mojo-only	Group A gates; two sabotages recorded in its header and the README
+mojo_only/regression_metrics_check.mojo	none	mojo-only	Group B gates: oracle bitwise, FTZ-visible fixture, launch invariance (8 launches), KL branches; sabotages (d)(e)(f) in the README
