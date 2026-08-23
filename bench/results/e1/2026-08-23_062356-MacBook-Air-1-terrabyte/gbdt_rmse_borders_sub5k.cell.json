@@ -1,0 +1,19 @@
+{
+  "best_iteration": 0,
+  "card": "gbdt_rmse_borders_sub5k.card",
+  "kind": "gbdt",
+  "loss_curve": "6000dba27c105ad4353492619c0d5f21933d50005aa7a96f49d777b624a4f595",
+  "model": "7dc7b17f3bf1be1eb43567aa51ba186b09329c030e196f90dc2bece78016f21d",
+  "predictions": "cbf6459b2947671cde6b5069ee138b2a1e81fa0d48e857e5b0f68053fc964da0",
+  "seconds": 0.51,
+  "spec": {
+    "border_build_max_samples": 5000,
+    "border_count": 128,
+    "learning_rate": 0.3,
+    "loss": "RMSE",
+    "max_depth": 6,
+    "n_estimators": 20,
+    "random_state": 7
+  },
+  "stopped_early": 0
+}

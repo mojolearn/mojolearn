@@ -92,6 +92,7 @@ from mojo_only.numerics import (
     ftz,
     identical_exp,
     identical_log,
+    identical_pow,
 )
 
 
@@ -106,6 +107,17 @@ def routed_exp(x: Float32) -> Float32:
     from std.math import exp
 
     return exp(x)
+
+
+@always_inline
+def routed_pow(x: Float32, p: Float32) -> Float32:
+    """DEVIATION 258's site call, `pow` side (Lq's `__powf` three ways:
+    score, der, der2). FAST is the `**` the sites used, inlined;
+    IDENTICAL is `identical_pow` (row 12). E2 round 1 measured gbdt_lq
+    DIVERGENT at the FIRST histogram on both AMD and NVIDIA before this."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        return identical_pow(x, p)
+    return x**p
 
 
 @always_inline
@@ -372,7 +384,7 @@ def target_score[objective: Int](
     elif objective == OBJECTIVE_LQ:
         # `TLqTarget::Score` (`:204-207`); their `__powf`
         var abs_loss = abs(t - p)
-        return abs_loss**alpha
+        return routed_pow(abs_loss, alpha)
     elif objective == OBJECTIVE_EXPECTILE:
         # `TExpectileTarget::Score` (`:102-106`)
         var val = t - p
@@ -440,7 +452,7 @@ def target_der[objective: Int](
     elif objective == OBJECTIVE_LQ:
         # `:209-213`
         var abs_loss = abs(t - p)
-        var abs_loss_q = abs_loss ** (alpha - Float32(1.0))
+        var abs_loss_q = routed_pow(abs_loss, alpha - Float32(1.0))
         return alpha * _target_sign(t - p) * abs_loss_q
     elif objective == OBJECTIVE_EXPECTILE:
         # `:108-112`
@@ -501,7 +513,7 @@ def target_der2[objective: Int](
             return (
                 alpha
                 * (alpha - Float32(1.0))
-                * abs_loss ** (alpha - Float32(2.0))
+                * routed_pow(abs_loss, alpha - Float32(2.0))
             )
         return Float32(1.0)
     elif objective == OBJECTIVE_EXPECTILE:

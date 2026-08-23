@@ -1,0 +1,20 @@
+{
+  "best_iteration": 0,
+  "card": "gbdt_multiclass_pointwise.card",
+  "kind": "gbdt",
+  "loss_curve": "0ffb6fcbb2ebba113e1598ee6e8e0b990da4df9100614abaa783235660f4eb6c",
+  "model": "112187136dc343e298c98ec38a9977d43a87ac838d5375024b4f604f92180d9f",
+  "predictions": "9bc67e4583ede2c7cce25bc42c14a4e86aa242db9bf3ffc9534fd7734a31c28b",
+  "proba": "e62ed6f8f3bae6eea69256f11d7b5c7898c030156cac9d6ee7db78ae57c4ebf6",
+  "seconds": 0.77,
+  "spec": {
+    "border_count": 128,
+    "learning_rate": 0.3,
+    "loss": "MultiClass",
+    "max_depth": 6,
+    "n_estimators": 20,
+    "random_state": 7,
+    "use_pointwise_searcher": true
+  },
+  "stopped_early": 0
+}

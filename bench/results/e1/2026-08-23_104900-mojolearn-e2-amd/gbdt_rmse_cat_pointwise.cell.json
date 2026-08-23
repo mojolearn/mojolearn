@@ -1,0 +1,23 @@
+{
+  "best_iteration": 0,
+  "card": "gbdt_rmse_cat_pointwise.card",
+  "kind": "gbdt",
+  "loss_curve": "ec1fac84ce9993dc7b3a1b717b6f5ed8f9a96d80fbecbb4613c92de4109f9812",
+  "model": "8189ecdb77eddedd0e6947e0ef81647735241e1103a390fa6e169390224f8724",
+  "predictions": "8c6cd9b978524a1223f131325365e53cb31cc87a5d754e6031b52d33b206c32d",
+  "seconds": 0.47,
+  "spec": {
+    "border_count": 128,
+    "cat_features": [
+      0,
+      1
+    ],
+    "learning_rate": 0.3,
+    "loss": "RMSE",
+    "max_depth": 6,
+    "n_estimators": 20,
+    "random_state": 7,
+    "use_pointwise_searcher": true
+  },
+  "stopped_early": 0
+}

@@ -374,8 +374,19 @@ def identical_log(x: Float32) -> Float32:
     return log(x)
 
 
-# ============ ROW 10 ON NVIDIA: sqrt IS NOT CORRECTLY ROUNDED; ROW 12's
-# ============ REMAINING DEVICE TRANSCENDENTALS: cos AND pow
+# ============ DEVIATION 258 (2026-08-23): ROW 10 ON NVIDIA -- sqrt IS NOT
+# ============ CORRECTLY ROUNDED; ROW 12's REMAINING DEVICE TRANSCENDENTALS,
+# ============ cos AND pow. Consumers routed in the same commit:
+# ============ compute_scores.mojo (symmetric Cosine, 3 sites),
+# ============ pointwise_scores.mojo (pointwise Cosine 2 sites + the
+# ============ log(weight+1) score terms), random_gen.mojo (Box-Muller
+# ============ sqrt/log/cos, next_poisson's log and sqrt),
+# ============ bootstrap.mojo (Bayesian -log(u) and tmp**temperature).
+# ============ Gate: check-portable-sqrtcos. E2 round 1 measured the
+# ============ consequence at c7a3493: Apple<->NVIDIA 43 GBDT cells
+# ============ OUTPUT-ONLY@winners.scores and 15 DIVERGENT (argmax flips on
+# ============ tied Quantile-class scores, Bayesian/Lq first histograms),
+# ============ every ET/RF cell IDENTICAL.
 # `check-ieee-arith` on the H100 (E2, 2026-08-23): sqrt 180,714 of 2^20
 # hashed patterns off by one ulp -- 176,577 of them NORMAL, so this is not
 # the denormal policy -- while div is 0 wrong and fma exact; the Cosine
@@ -403,12 +414,13 @@ def identical_log(x: Float32) -> Float32:
 # codegen can contract (row 9) them differently.
 
 
-def portable_sqrtf(x: Float32) -> Float32:
+def portable_sqrtf(x_in: Float32) -> Float32:
     """`sqrtf` as one arithmetic, correctly rounded. NaN and negative ->
     quiet NaN; +-0 -> itself; +inf -> +inf; a subnormal input is flushed
     to +0 first (row 10's policy) and returns +0."""
     from std.memory import bitcast
 
+    var x = x_in
     if x != x:
         return x
     if x < Float32(0.0):
@@ -417,6 +429,15 @@ def portable_sqrtf(x: Float32) -> Float32:
         return Float32(0.0)  # +-0 and subnormals
     if x == bitcast[DType.float32](UInt32(0x7F800000)):
         return x
+    # TINY INPUTS ARE SCALED UP FIRST: below 2^-96 the selection residual
+    # x - c*c (~2^-23 x) would fall under the normal range and round or
+    # flush to zero, blinding the pick (measured: 968 of 2^20 lanes wrong
+    # before this, every one with x < 2^-100). 2^64 in and 2^-32 out are
+    # exact.
+    var scaled_down = False
+    if x < bitcast[DType.float32](UInt32(0x0F800000)):  # 2^-96
+        x = x * bitcast[DType.float32](UInt32(0x5F800000))  # 2^64
+        scaled_down = True
     # exponent-halving seed (~3.5% error), then three Heron steps through
     # the correctly-rounded divide: 3.5% -> 6e-4 -> 2e-7 -> below an ulp
     var bits = rebind[UInt32](x.to_bits())
@@ -424,31 +445,41 @@ def portable_sqrtf(x: Float32) -> Float32:
     y = Float32(0.5) * (y + x / y)
     y = Float32(0.5) * (y + x / y)
     y = Float32(0.5) * (y + x / y)
-    # candidate selection: the root is within one ulp of y; pick the
-    # neighbour with the smallest |x - c*c|, where the residual is one
-    # fma (a single rounding of a quantity ~2^-23 smaller than the gap
-    # between candidates' residuals, so the order is exact)
+    # candidate selection: the root is within two ulps of y after three
+    # rounded Heron steps; pick the neighbour in y-2..y+2 with the
+    # smallest |x - c*c|, each residual one fma (a single rounding of a
+    # quantity ~2^-23 smaller than the gap between neighbours' residuals,
+    # so the order is exact and the pick is the correctly rounded root)
     var yb = rebind[UInt32](y.to_bits())
-    var lo = bitcast[DType.float32](yb - UInt32(1))
-    var hi = bitcast[DType.float32](yb + UInt32(1))
-    var r_mid = abs(_fma_f32(-y, y, x))
-    var r_lo = abs(_fma_f32(-lo, lo, x))
-    var r_hi = abs(_fma_f32(-hi, hi, x))
     var best = y
-    var r_best = r_mid
-    if r_lo < r_best:
-        best = lo
-        r_best = r_lo
-    if r_hi < r_best:
-        best = hi
+    var r_best = abs(_fma_f32(-y, y, x))
+    for k in range(4):
+        var cb: UInt32
+        if k == 0:
+            cb = yb - UInt32(1)
+        elif k == 1:
+            cb = yb + UInt32(1)
+        elif k == 2:
+            cb = yb - UInt32(2)
+        else:
+            cb = yb + UInt32(2)
+        var c = bitcast[DType.float32](cb)
+        var r = abs(_fma_f32(-c, c, x))
+        if r < r_best:
+            best = c
+            r_best = r
+    if scaled_down:
+        best = best * bitcast[DType.float32](UInt32(0x2F800000))  # 2^-32
     return best
 
 
 def portable_cosf(x_in: Float32) -> Float32:
-    """`cosf` as one arithmetic: Cephes single-precision cosf. Accurate
-    (<= 2 ulp measured) for |x| < 8192 -- the Cody-Waite reduction's
-    domain -- which covers the tree paths' one consumer, Box-Muller's
-    `cos(2*pi*u)`. NaN and +-inf return quiet NaN."""
+    """`cosf` as one arithmetic: Cephes single-precision cosf over the
+    Cody-Waite reduction's domain |x| < 8192. Measured: <= 2 ulp on the
+    tree paths' one consumer range (Box-Muller's `cos(2*pi*u)`, |x| <
+    2*pi) and <= 8 ulp across the domain (the ulp count grows near the
+    zeros of cos, where the result is tiny -- the ABSOLUTE error stays at
+    the 1e-7 level). NaN and +-inf return quiet NaN."""
     from std.math import floor
     from std.memory import bitcast
 
@@ -510,6 +541,61 @@ def portable_powf(x: Float32, p: Float32) -> Float32:
             return Float32(0.0)
         return bitcast[DType.float32](UInt32(0x7F800000))
     return portable_expf(p * portable_logf(x))
+
+
+def portable_exp64(x: Float64) -> Float64:
+    """HOST-ONLY (no float64 on device, `mojolearn-hardware-limits`):
+    `exp` for Float64 as one arithmetic, for the PROBABILITY LINKS --
+    the sigmoid/softmax CatBoost computes in double
+    (`eval_processing.h:186-226`) and this port's
+    `one_vs_all_probabilities` / `multiclass_probabilities` / the Python
+    wrapper's Logloss sigmoid mirror. Each host libm rounds double exp
+    differently in the last bit (macOS Accelerate vs glibc), so a
+    probability computed through `std.math.exp` carried the host's bit
+    even when every raw margin matched (E2 round 1: gbdt_logloss
+    DIVERGENT@proba, cards identical). Cephes `exp` for double: 2^k
+    reduction with the split ln2, the (P2, Q3) rational on r^2, one fma
+    per step; ~1 ulp of double, which after the cast to float32 is the
+    correctly-rounded float32 probability in all but double-rounding
+    corner cases."""
+    from std.math import floor, fma
+    from std.memory import bitcast
+
+    if x != x:
+        return x
+    if x > 709.782712893384:
+        return bitcast[DType.float64](UInt64(0x7FF0000000000000))  # +inf
+    if x < -708.3964185322641:
+        return Float64(0.0)
+    var k = floor(x * 1.4426950408889634 + 0.5)
+    var r = fma(k, -6.93145751953125e-1, x)
+    r = fma(k, -1.42860682030941723212e-6, r)
+    var xx = r * r
+    var px = fma(1.26177193074810590878e-4, xx, 3.02994407707441961300e-2)
+    px = fma(px, xx, 9.99999999999999999910e-1)
+    px = px * r
+    var qx = fma(3.00198505138664455042e-6, xx, 2.52448340349684104192e-3)
+    qx = fma(qx, xx, 2.27265548208155028766e-1)
+    qx = fma(qx, xx, 2.00000000000000000009e0)
+    var y = px / (qx - px)
+    y = fma(2.0, y, 1.0)
+    # scale by 2^k in two exact steps so |k| up to 1074 stays in range
+    var ki = Int(k)
+    var k1 = ki >> 1
+    var k2 = ki - k1
+    y = y * bitcast[DType.float64](UInt64(k1 + 1023) << 52)
+    y = y * bitcast[DType.float64](UInt64(k2 + 1023) << 52)
+    return y
+
+
+def identical_exp64(x: Float64) -> Float64:
+    """The probability links' seam call (host): IDENTICAL routes through
+    `portable_exp64`, FAST is the host stdlib verbatim."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        return portable_exp64(x)
+    from std.math import exp
+
+    return exp(x)
 
 
 def identical_sqrt(x: Float32) -> Float32:

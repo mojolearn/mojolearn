@@ -1,0 +1,11 @@
+{
+  "kind": "et_clf",
+  "refused": "Exception: max_leaf_nodes is not ported under sklearn's semantics. sklearn's is a BEST-FIRST growth limit that changes the ORDER nodes are expanded in; cuML's max_leaves is a soft cap on a breadth-first frontier (builder.cuh:86-88) and stops pushing work once the counter is reached. They are different algorithms, so accepting the name would be accepting a different model. Use cuML's max_leaves through DecisionTreeParams if that is what you want.",
+  "seconds": 0.03,
+  "spec": {
+    "max_depth": 8,
+    "max_leaf_nodes": 64,
+    "n_estimators": 10,
+    "random_state": 7
+  }
+}

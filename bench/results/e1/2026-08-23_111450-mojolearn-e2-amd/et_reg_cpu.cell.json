@@ -1,0 +1,13 @@
+{
+  "card": null,
+  "kind": "et_reg",
+  "model": "373d33ef5284121bc0d8fa409a44c61c1a76fbadda0b275513d55356caec0f1a",
+  "predictions": "f1e6628a87edf97e2648a029b5f3ef883c3ea8aa850adb3eb1038fecddb91165",
+  "seconds": 0.2,
+  "spec": {
+    "device": "cpu",
+    "max_depth": 8,
+    "n_estimators": 10,
+    "random_state": 7
+  }
+}

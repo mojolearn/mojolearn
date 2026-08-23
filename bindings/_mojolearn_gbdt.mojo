@@ -59,6 +59,43 @@ from gbdt.estimator import (
     gbdt_predict,
     gbdt_predict_multi,
 )
+from mojo_only.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
+    identical_exp64,
+)
+
+
+def _f64_ptr(addr: Int) raises -> MutPointer[Float64, MutUntrackedOrigin]:
+    if addr == 0:
+        raise Error("mojolearn: null buffer address")
+    return MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=addr)
+
+
+def gbdt_numeric_mode_binding() raises -> PythonObject:
+    """1 when the binding was built under NUMERIC_IDENTICAL, else 0. The
+    wrapper reads it ONCE to pick the arm of its host-side links."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        return PythonObject(1)
+    return PythonObject(0)
+
+
+def gbdt_sigmoid_binding(
+    raw_addr: PythonObject, out_addr: PythonObject, n: PythonObject
+) raises -> PythonObject:
+    """`out[i] = 1 / (1 + exp(-raw[i]))` in double, `n` values, through
+    `identical_exp64` -- DEVIATION 258: under IDENTICAL the Logloss /
+    CrossEntropy probability is the same bits on every host (the wrapper
+    used numpy's exp, whose last bit is the host libm's); under FAST this
+    is the host stdlib and the wrapper keeps numpy. Both buffers are
+    float64, the caller's."""
+    var rp = _f64_ptr(Int(py=raw_addr))
+    var op = _f64_ptr(Int(py=out_addr))
+    var count = Int(py=n)
+    for i in range(count):
+        var r = rp.unsafe_load(i)
+        op.unsafe_store(i, 1.0 / (1.0 + identical_exp64(-r)))
+    return PythonObject(count)
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -358,6 +395,8 @@ def PyInit__mojolearn_gbdt() abi("C") -> PythonObject:
         m.def_function[gbdt_predict_binding]("gbdt_predict")
         m.def_function[gbdt_model_dim_binding]("gbdt_model_dim")
         m.def_function[gbdt_predict_multi_binding]("gbdt_predict_multi")
+        m.def_function[gbdt_numeric_mode_binding]("gbdt_numeric_mode")
+        m.def_function[gbdt_sigmoid_binding]("gbdt_sigmoid")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_gbdt module: ", e))

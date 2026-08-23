@@ -1,0 +1,19 @@
+{
+  "best_iteration": 0,
+  "card": "gbdt_logloss_newtonl2.card",
+  "kind": "gbdt",
+  "loss_curve": "a0dffdf226cb6000625f9698534b75d4ea51b23c0fb061a6d88af747244b3509",
+  "model": "3cd825b4a4b1ca5ba02450063b9a0f6cef73b405da3cdb5ee006a1c885ce62b5",
+  "predictions": "91acd158ce4f42a203e748864dc6b961312e10e6fb318c207f67a885be4f6c66",
+  "seconds": 0.61,
+  "spec": {
+    "border_count": 128,
+    "learning_rate": 0.3,
+    "loss": "Logloss",
+    "max_depth": 6,
+    "n_estimators": 20,
+    "random_state": 7,
+    "score_function": "NewtonL2"
+  },
+  "stopped_early": 0
+}

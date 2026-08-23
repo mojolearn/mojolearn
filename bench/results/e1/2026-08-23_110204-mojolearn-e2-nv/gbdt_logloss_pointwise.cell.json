@@ -1,0 +1,19 @@
+{
+  "best_iteration": 0,
+  "card": "gbdt_logloss_pointwise.card",
+  "kind": "gbdt",
+  "loss_curve": "44024d98dd91df1cc150a4fc7e62e57193684679aa052e8f84f74a81b7e4fe1e",
+  "model": "e5dd7003d7c4bac6da997a4d334ffecd98b50cba7bbb8a5c7ecb6aa0157497f1",
+  "predictions": "df2b4e1d59ae8f6b10fb4d64e40a27897e87352a5e9ab9db2482fb5fa9ce0c28",
+  "seconds": 0.77,
+  "spec": {
+    "border_count": 128,
+    "learning_rate": 0.3,
+    "loss": "Logloss",
+    "max_depth": 6,
+    "n_estimators": 20,
+    "random_state": 7,
+    "use_pointwise_searcher": true
+  },
+  "stopped_early": 0
+}

@@ -636,7 +636,7 @@ check-portable-translog = "mojo run -I . mojo_only/portable_translog_check.mojo"
 # 2026-08-23: 180,714 of 2^20 one ulp off, 176,577 of them normal), so the
 # Cosine scores differed on that column alone. portable_sqrtf must match
 # the float64 reference EXACTLY (0 mismatches); cos <= 2 ulp on |x| <
-# 8192; pow <= 8 ulp. The printed device hash is the certificate line,
+# 2pi; pow <= 64 ulp. The printed device hash is the certificate line,
 # the same number on every column. Run beside check-portable-translog.
 check-portable-sqrtcos = "mojo run -I . mojo_only/portable_sqrtcos_check.mojo"
 

@@ -1,0 +1,19 @@
+{
+  "best_iteration": 0,
+  "card": "gbdt_quantile_newton.card",
+  "kind": "gbdt",
+  "loss_curve": "c50764942589675dbcf641706a9c9f70d5407bdb613dd45656c54afab576b57c",
+  "model": "8e11ce5dfe086b23aa1c77fce47031c8fb1ef55a51a2e9765ef3b4639c6a10b5",
+  "predictions": "66adb9a97127bab9166b56aec5e679e27dc9b2309b6b724af074405ad983d088",
+  "seconds": 0.75,
+  "spec": {
+    "border_count": 128,
+    "leaf_estimation_method": "Newton",
+    "learning_rate": 0.3,
+    "loss": "Quantile",
+    "max_depth": 6,
+    "n_estimators": 20,
+    "random_state": 7
+  },
+  "stopped_early": 0
+}

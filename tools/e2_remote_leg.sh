@@ -20,7 +20,7 @@ set -uo pipefail
 VENDOR="${1:?amd|nv}"
 TOKFILE="${2:?token file}"
 TOK="$(cat "$TOKFILE")"
-DEADMAN_SECONDS="${DEADMAN_SECONDS:-7200}"   # 2 h hard cap per leg
+DEADMAN_SECONDS="${DEADMAN_SECONDS:-3600}"   # ONE HOUR hard cap per leg (Andrew, 2026-08-23: a rented GPU expires on its own after an hour, in code, not in memory)
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 API=https://api.digitalocean.com/v2
 SSH_KEY_FP="df:f7:6b:0c:56:da:48:a5:6f:6d:ae:44:af:de:f3:0b"
@@ -129,6 +129,11 @@ $SSH 'export PATH=/root/.pixi/bin:$PATH; cd /root/mojolearn && bash tools/e1_boo
 # run's models (MAC_REF_DIR, optional) are loaded on the box with the
 # IDENTICAL .so the bootstrap just built and predicted there. The box ->
 # Mac direction runs on the Mac after the fetch.
+# MAC_REF_GLOB resolves LATE (the Mac reference run may still be writing
+# when this leg starts; its stamped directory name is unknown up front)
+if [ -n "${MAC_REF_GLOB:-}" ]; then
+  MAC_REF_DIR="$(ls -td $MAC_REF_GLOB 2>/dev/null | head -1)"
+fi
 if [ -n "${MAC_REF_DIR:-}" ] && [ -d "$MAC_REF_DIR" ]; then
   log "cross-infer: Mac models on the box"
   rsync -az --include '*.model.npz' --include '*.json' --exclude '*' "$MAC_REF_DIR/" "root@$IP:/root/mac_ref/" \

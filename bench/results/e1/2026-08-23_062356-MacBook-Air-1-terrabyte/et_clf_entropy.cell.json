@@ -1,0 +1,11 @@
+{
+  "kind": "et_clf",
+  "refused": "NotImplementedError: criterion='entropy' is not ported (UNPORTED.tsv row 11: cuML objectives.cuh:110-193, marked 'not yet'); only 'gini' is.",
+  "seconds": 0.0,
+  "spec": {
+    "criterion": "entropy",
+    "max_depth": 8,
+    "n_estimators": 10,
+    "random_state": 7
+  }
+}

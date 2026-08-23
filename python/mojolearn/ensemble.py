@@ -1032,8 +1032,17 @@ class GradientBoosting:
                 f"{self.loss!r}. Use predict() and apply the link "
                 f"yourself."
             )
-        raw = self.predict(X).astype(np.float64)
-        p1 = 1.0 / (1.0 + np.exp(-raw))
+        raw = np.ascontiguousarray(self.predict(X).astype(np.float64))
+        if _mojolearn_gbdt.gbdt_numeric_mode() == 1:
+            # DEVIATION 258: under NUMERIC_IDENTICAL the sigmoid runs
+            # through the portable double exp so the probability bits are
+            # the same on every host; numpy's exp carries the host libm's
+            # last bit (E2 round 1: gbdt_logloss DIVERGENT@proba with
+            # identical cards and identical raw margins)
+            p1 = np.empty_like(raw)
+            _mojolearn_gbdt.gbdt_sigmoid(_addr_ro(raw), _addr(p1), raw.shape[0])
+        else:
+            p1 = 1.0 / (1.0 + np.exp(-raw))
         return np.column_stack((1.0 - p1, p1))
 
     def predict_classes(self, X):

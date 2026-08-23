@@ -246,7 +246,11 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.gpu.intrinsics import ldg
-from std.math import copysign, log, sqrt
+from std.math import copysign
+
+# DEVIATION 258 (row 10 sqrt on NVIDIA; row 12 log): both seam calls are
+# the stdlib under FAST and the portable pair under IDENTICAL
+from mojo_only.numerics import identical_log, identical_pow, identical_sqrt
 from std.memory import stack_allocation
 
 from gbdt.gpu_util.kernel.random_gen import (
@@ -373,7 +377,7 @@ struct ScoreCalcer[score_function: Int](Copyable, ImplicitlyCopyable, Movable):
             if weight > Float32(1e-20):
                 self.score += (
                     (-sum * sum)
-                    * (Float32(1.0) + Float32(2.0) * log(weight + Float32(1.0)))
+                    * (Float32(1.0) + Float32(2.0) * identical_log(weight + Float32(1.0)))
                 ) / weight
 
         comptime if (
@@ -400,7 +404,7 @@ struct ScoreCalcer[score_function: Int](Copyable, ImplicitlyCopyable, Movable):
                 # the `weight > 1e-20f` branch above was taken.
                 self.score += (
                     copysign(
-                        (abs(leaf_score) / weight) ** self.meta_exponent,
+                        identical_pow(abs(leaf_score) / weight, self.meta_exponent),
                         leaf_score,
                     )
                     * weight
@@ -499,7 +503,7 @@ struct ScoreCalcer[score_function: Int](Copyable, ImplicitlyCopyable, Movable):
             or Self.score_function == SCORE_FUNCTION_NEWTON_COSINE
         ):
             if self.denum_sqr > Float32(1e-15):
-                out = -self.score / sqrt(self.denum_sqr)
+                out = -self.score / identical_sqrt(self.denum_sqr)
             else:
                 out = FLOAT32_MAX
             if self.score_std_dev != Float32(0.0):
@@ -766,12 +770,12 @@ def find_optimal_split_solar_kernel[
             if left_total_weight > Float32(2.0):
                 score += left_score * (
                     Float32(1.0)
-                    + Float32(2.0) * log(left_total_weight + Float32(1.0))
+                    + Float32(2.0) * identical_log(left_total_weight + Float32(1.0))
                 )
             if right_total_weight > Float32(2.0):
                 score += right_score * (
                     Float32(1.0)
-                    + Float32(2.0) * log(right_total_weight + Float32(1.0))
+                    + Float32(2.0) * identical_log(right_total_weight + Float32(1.0))
                 )
 
         # `:117-120`
@@ -1080,7 +1084,7 @@ def find_optimal_split_cosine_kernel[
 
         # `:381`
         if denum_sqr > Float32(1e-15):
-            score = -score / sqrt(denum_sqr)
+            score = -score / identical_sqrt(denum_sqr)
         else:
             score = FLOAT32_MAX
 
