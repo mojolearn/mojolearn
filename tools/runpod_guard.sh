@@ -17,28 +17,54 @@
 # laptop is the wrong primary defence -- it is exactly the thing that is gone
 # when it is needed. The primary defence has to live ON THE POD.
 #
-# LAYER 1 (primary, credential-free, survives everything on this end)
-# -------------------------------------------------------------------
-# A RunPod pod runs `sleep infinity` as PID 1. Killing PID 1 exits the
-# container, the pod goes to EXITED, and GPU billing stops. So `arm` puts
+# WHAT WAS TRIED FIRST, AND WHY IT DOES NOT WORK ON RUNPOD
+# ---------------------------------------------------------
+# The first design was credential-free and looked right: a RunPod pod runs a
+# `sleep`-shaped PID 1, so a detached `sleep N; kill 1` would exit the
+# container at the deadline and stop GPU billing, with no API key needed and
+# nothing on this end required to stay alive.
 #
-#     nohup sh -c 'sleep <N>; kill 1' &
+# **IT WAS TESTED ON A REAL POD ON 2026-08-23 AND IT DOES NOT STOP BILLING.**
+# Measured on an RTX 4090 (83fcj1xbnychde, runpod/pytorch, $0.34/hr):
 #
-# on the box, detached, before any work starts. No API key is needed on the
-# pod, nothing here has to stay running, and the deadline holds if this
-# machine is closed, crashes, or loses its network the second after arming.
+#   1. the watchdog armed and fired exactly on time -- ssh dropped at the
+#      deadline with "Connection closed by remote host", so `kill 1` did
+#      reach PID 1 and the container did exit;
+#   2. **RunPod RESTARTED the container.** 30 seconds later the pod was
+#      reachable again, PID 1 was a fresh `docker-init`, `status` was still
+#      RUNNING and `uptime` had reset. Billing never paused.
+#   3. and the watchdog was GONE, because the restart wiped the process --
+#      so the box was then MORE exposed than an unguarded one, since the
+#      lease file on this end still said it was protected.
 #
-# It is deliberately `kill 1` and not `shutdown`/`poweroff`: those need init
-# and privileges the container does not have, and a guard that silently fails
-# to arm is worse than no guard, which is why `arm` VERIFIES the watchdog is
-# running before it returns and refuses loudly if it is not.
+# That last point is why this is recorded at length rather than quietly
+# fixed. A guard that fires, gets undone, and leaves a lease file claiming
+# protection is worse than no guard at all: it converts a checkable property
+# into a belief, which is the same failure the numerics ledger exists to
+# prevent. Two other bugs surfaced in the same test and are noted at their
+# sites: `exec -a` is a bash extension and RunPod images link /bin/sh to
+# dash, and the lease file's ssh target must be quoted because the file is
+# `.`-sourced.
 #
-# LAYER 2 (secondary, needs a key, reclaims the disk too)
-# -------------------------------------------------------
-# An EXITED pod still bills its disk (~$0.02/hr at 120 GB). `reap` reads the
-# lease files and terminates anything past its deadline through the REST API,
-# using RUNPOD_API_KEY from the environment. Run it whenever you are at the
-# machine; it is a cleanup, not the safety net.
+# PID 1 IS ALSO NOT WHAT THE FIRST DESIGN ASSUMED. On this image it is
+# `docker-init` running an entrypoint, not `sleep infinity`. The earlier
+# `sleep infinity` observation came from a pod created with an explicit
+# `args`, so the premise held for that pod and not in general.
+#
+# THE ONLY THING THAT STOPS RUNPOD BILLING IS TERMINATING THE POD through
+# the API. And because the orphan case is THIS MACHINE GOING AWAY, the call
+# has to be made FROM THE POD. That needs an API key on the box, which is a
+# real cost and is why `arm` now REFUSES rather than pretending:
+#
+#   - with RUNPOD_API_KEY in this environment, `arm` installs a watchdog
+#     that sleeps to the deadline and then DELETEs the pod through the REST
+#     API. That survives this machine disappearing, which is the whole
+#     requirement.
+#   - without it, `arm` REFUSES and says the box is unguarded. Do not use a
+#     box that could not be armed; terminate it.
+#
+# LAYER 2, unchanged: `reap` terminates expired leases from this machine.
+# It is a cleanup for when you are here, never the safety net.
 #
 # EXTENDING A LEASE IS RE-ARMING, NEVER REMOVING. `extend` kills the old
 # watchdog and starts a new one. There is no `disarm`, deliberately: the only
@@ -74,12 +100,58 @@ cmd_arm() {
 
     # `setsid` where available so the watchdog does not die with the ssh
     # session; `nohup` alone is enough on these images but both is cheap.
+    # PORTABLE `sh`, NOT BASH. The first version of this used
+    # `exec -a mojolearn-lease-watchdog ...` to give the watchdog a
+    # greppable name. `exec -a` is a BASH extension and RunPod's Ubuntu
+    # images link /bin/sh to dash, which does not have it -- so the
+    # watchdog never started, `pgrep` found nothing, and `arm` refused.
+    # It refused CORRECTLY, which is the only reason this was a caught bug
+    # rather than a silent one, but a guard that always refuses is a guard
+    # that is never armed. Found by preparing to test it on a real pod;
+    # it had never been run against one.
+    #
+    # So: no `exec -a`, no name matching. The watchdog is an ordinary
+    # backgrounded `sh -c` and its PID is written to a file, which is both
+    # portable and unambiguous -- `pgrep -f` on a `sleep` pattern would
+    # also match this very ssh command line and any other lease on the box.
+    if [ -z "${RUNPOD_API_KEY:-}" ]; then
+        echo "REFUSING to arm $pod: RUNPOD_API_KEY is not set." >&2
+        echo "  The credential-free watchdog was TESTED and does not stop" >&2
+        echo "  billing on RunPod -- kill 1 exits the container and RunPod" >&2
+        echo "  RESTARTS it, wiping the watchdog and leaving the box less" >&2
+        echo "  protected than before. See this file's header." >&2
+        echo "  Self-termination through the API is the only mechanism that" >&2
+        echo "  survives this machine going away, and it needs a key ON THE" >&2
+        echo "  POD. Set RUNPOD_API_KEY and re-arm, or terminate the box:" >&2
+        echo "    tools/runpod_guard.sh reap --force $pod" >&2
+        exit 1
+    fi
+
+    # The key goes to the pod through the ssh COMMAND'S ENVIRONMENT, not
+    # through a file and not through the argv of the watchdog, so it does
+    # not sit in `ps` output for anything else on the box to read.
     pod_ssh "$target" "
-        pkill -f 'mojolearn-lease-watchdog' >/dev/null 2>&1 || true
-        nohup sh -c 'exec -a mojolearn-lease-watchdog sh -c \"sleep $secs; kill 1\"' \
+        if [ -f /tmp/mojolearn-lease.pid ]; then
+            kill \"\$(cat /tmp/mojolearn-lease.pid)\" 2>/dev/null || true
+        fi
+        umask 077
+        cat > /tmp/mojolearn-lease.sh <<'WATCHDOG'
+#!/bin/sh
+# Installed by tools/runpod_guard.sh. Terminates THIS POD at the deadline.
+sleep SECONDS_PLACEHOLDER
+curl -fsS -X DELETE \"https://rest.runpod.io/v1/pods/POD_PLACEHOLDER\" \
+     -H \"Authorization: Bearer \$RUNPOD_API_KEY\" >/tmp/mojolearn-lease.out 2>&1
+WATCHDOG
+        sed -i \"s/SECONDS_PLACEHOLDER/$secs/; s/POD_PLACEHOLDER/$pod/\" \
+            /tmp/mojolearn-lease.sh
+        chmod 700 /tmp/mojolearn-lease.sh
+        RUNPOD_API_KEY='$RUNPOD_API_KEY' nohup /tmp/mojolearn-lease.sh \
             >/tmp/mojolearn-lease.log 2>&1 &
+        echo \$! > /tmp/mojolearn-lease.pid
         sleep 1
-        pgrep -f mojolearn-lease-watchdog >/dev/null && echo WATCHDOG_ARMED
+        if kill -0 \"\$(cat /tmp/mojolearn-lease.pid)\" 2>/dev/null; then
+            echo \"WATCHDOG_ARMED pid=\$(cat /tmp/mojolearn-lease.pid) secs=$secs\"
+        fi
     " > /tmp/mojolearn_arm_out 2>&1 || true
 
     if ! grep -q WATCHDOG_ARMED /tmp/mojolearn_arm_out; then
@@ -96,9 +168,14 @@ cmd_arm() {
     now=$(date -u +%s)
     deadline=$((now + secs))
     {
-        echo "pod=$pod"
-        echo "target=$target"
-        echo "armed_utc=$(date -u -r "$now" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)"
+        # EVERY VALUE IS QUOTED, because this file is `.`-sourced by `check`
+        # and `list`. The ssh target contains spaces ("-p 24054 root@host"),
+        # so an unquoted `target=` line makes the shell try to RUN `-p` as a
+        # command -- measured: `line 2: 24054: command not found`. A lease
+        # file that cannot be read is a lease nobody can check.
+        echo "pod='$pod'"
+        echo "target='$target'"
+        echo "armed_utc='$(date -u -r "$now" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)'"
         echo "deadline_epoch=$deadline"
         echo "minutes=$mins"
     } > "$LEASES/$pod.lease"
