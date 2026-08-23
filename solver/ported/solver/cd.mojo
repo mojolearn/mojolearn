@@ -117,7 +117,7 @@ from solver.mojo_only.record_canon import (
     record_scalar_f32_canon,
 )
 from solver.ported.functions.linear_reg import linear_reg_h
-from solver.ported.glm.preprocess import post_process_data, pre_process_data
+from glm.ported.glm.preprocess import post_process_data, pre_process_data
 from solver.ported.linalg.axpy import AXPY_TPB, axpy_device_alpha
 from solver.ported.linalg.norm import col_norm_l2_squared
 from solver.ported.solver.shuffle import init_shuffle

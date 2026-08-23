@@ -53,7 +53,7 @@ lines above are the whole interface.
 | `solver/ported/solver/cd.mojo` | `cuml cpp/src/solver/cd.cuh` | `cdFit` line for line (guards, preprocess, `l1_alpha`/`l2_alpha`, colNorm + addScalar, the five-operation coordinate step with DEVICE-pointer alphas, one host read per epoch, the stopping rule, postprocess), `cdUpdateCoefKernel` transcribed, `cdPredict` |
 | `solver/ported/solver/shuffle.mojo` | `cd solver/shuffle.h` | `initShuffle` (the identity permutation); `shuffle` REFUSED, see below |
 | `solver/ported/solvers/params.mojo` | `cuml include/cuml/solvers/params.hpp` | the three enums |
-| `solver/ported/glm/preprocess.mojo` | `cuml cpp/src/glm/preprocess.cuh` | `preProcessData` / `postProcessData`, unweighted arms, IN PLACE as theirs (HAND-OFF: it belongs under `glm/ported/`) |
+| `glm/ported/glm/preprocess.mojo (moved there 2026-08-23 by the identity lane, per the hand-off)` | `cuml cpp/src/glm/preprocess.cuh` | `preProcessData` / `postProcessData`, unweighted arms, IN PLACE as theirs (HAND-OFF: it belongs under `glm/ported/`) |
 | `solver/ported/functions/linear_reg.mojo` | `cuml cpp/src_prims/functions/linearReg.cuh` | `linearRegH` only |
 | `solver/ported/linalg/coalesced_reduction.mojo` | `raft linalg/detail/coalesced_reduction-inl.cuh` | `coalescedSumMediumKernel<256>` with its per-thread Kahan-Babushka-Neumaier sum and two `BlockReduce.Sum`s -- the FAST arm of colNorm and mean |
 | `solver/ported/linalg/norm.mojo` | `raft linalg/detail/norm.cuh` | `colNorm<L2Norm, rowMajor=false>` (a SUM OF SQUARES; no sqrt) |
@@ -401,7 +401,7 @@ host-only computation.
    binding goes beside `LinearRegression`/`Ridge` in
    `bindings/_mojolearn_estimators.mojo` and `python/mojolearn/linear_model.py`;
    the card prefix is `cd`.
-2. **`solver/ported/glm/preprocess.mojo` belongs under `glm/ported/glm/`**
+2. **`glm/ported/glm/preprocess.mojo (moved there 2026-08-23 by the identity lane, per the hand-off)` belongs under `glm/ported/glm/`**
    (it is cuML's `glm/preprocess.cuh`, which `glm/UNPORTED.tsv` lists as
    NOT PORTED). Move it and delete that UNPORTED entry in the same commit;
    `glm/estimator.mojo`'s host-side centering could then call it.

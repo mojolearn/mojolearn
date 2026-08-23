@@ -1,12 +1,14 @@
 """`cuml/cpp/src/glm/preprocess.cuh::{preProcessData, postProcessData}`, the
 UNWEIGHTED arms -- cuML 26.08, pinned in `solver/PORTED_MAP.tsv`.
 
-This file lives under `solver/ported/glm/` and not `glm/ported/glm/`
-because the glm section does not port `preprocess.cuh` (`glm/UNPORTED.tsv`:
-"NOT PORTED, AND fit_intercept IS ON THEIR DEFAULT PATH"; its Python
-surface centers on the host instead) and another lane owns `glm/`. It is
-the same upstream file and belongs there; moving it is a HAND-OFF item in
-`solver/README.md`. Nothing here is solver-specific.
+This file was written under `solver/ported/glm/` by the cd lane (the glm
+section had `preprocess.cuh` as NOT PORTED; OLS's Python surface centers
+on the host instead) and MOVED here 2026-08-23 by the identity lane, per
+the hand-off in `solver/README.md`: it is the same upstream file and this
+is where it belongs. `solver/ported/solver/cd.mojo` is its one caller
+today; `glm/ported/glm/ols.mojo` still refuses `fit_intercept` on the
+device and could take it next (glm/UNPORTED.tsv). Nothing here is
+solver-specific.
 
 `preProcessData(handle, input, n_rows, n_cols, labels, intercept, mu_input,
 mu_labels, fit_intercept, sample_weight = nullptr)`, `preprocess.cuh:36-73`:
