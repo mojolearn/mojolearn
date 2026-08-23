@@ -250,7 +250,7 @@ from std.math import copysign
 
 # DEVIATION 258 (row 10 sqrt on NVIDIA; row 12 log): both seam calls are
 # the stdlib under FAST and the portable pair under IDENTICAL
-from mojo_only.numerics import identical_log, identical_sqrt
+from mojo_only.numerics import identical_log, identical_pow, identical_sqrt
 from std.memory import stack_allocation
 
 from gbdt.gpu_util.kernel.random_gen import (
@@ -404,7 +404,7 @@ struct ScoreCalcer[score_function: Int](Copyable, ImplicitlyCopyable, Movable):
                 # the `weight > 1e-20f` branch above was taken.
                 self.score += (
                     copysign(
-                        (abs(leaf_score) / weight) ** self.meta_exponent,
+                        identical_pow(abs(leaf_score) / weight, self.meta_exponent),
                         leaf_score,
                     )
                     * weight
