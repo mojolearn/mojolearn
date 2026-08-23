@@ -292,6 +292,35 @@ struct TDepthwiseWorkspace(Movable):
     var h_right: HostBuffer[DType.uint32]
     var d_ids: DeviceBuffer[DType.uint32]
     var h_ids: HostBuffer[DType.uint32]
+    # ============================ DEVIATION 261 ============================
+    # THREE ID LISTS PER LEVEL, THREE STAGING PAIRS -- not one reused.
+    # A level stages three host-built id lists before its first drain: the
+    # ZERO set (`plan.compute_ids`, for `zero_histograms_kernel`), the
+    # BUILD set (`non_zero`, for the histogram kernels and the scan) and
+    # the ALL set (`0..len(leaves)`, for `compute_partition_stats`). They
+    # used to share `h_ids`/`d_ids`: the host wrote list 2 into `h_ids`
+    # while list 1's `enqueue_copy` was still QUEUED, so the device-side
+    # copy could read list 2 (or 3) -- the step-33 race class
+    # (`[[mojo-buffer-freed-at-last-use]]`'s host-staging sibling; the
+    # symmetric lane's DEVIATION 134 is the same mechanism). Invisible to
+    # every lane gate (4,096 rows, one tree, and a traced run drains at
+    # every record) and found 2026-08-23 by the boosting loop's
+    # run-to-run control at 20,000 rows x 24 features x 128 borders: the
+    # shared-Int32 histogram arms -- whose kernels are the fast ones, so
+    # the host reached the next write first -- disagreed with themselves
+    # from depth 4 on, while the float arms happened to land on the right
+    # side of the race. The symmetric driver never had it: its lists are
+    # `ids_compute` / `dense_ids` / the drained `h_off`/`h_sz` pairs. Fix:
+    # one pair per list, so no host buffer is rewritten under a queued
+    # copy; the two drains their control plane already takes per level
+    # (`score.read`, `split.sizes`) sit between one level's writes and
+    # the next's. `d_ids`/`h_ids` stay the BUILD pair (and the end-of-tree
+    # all-leaves list, which follows a drain).
+    # =======================================================================
+    var d_zero_ids: DeviceBuffer[DType.uint32]
+    var h_zero_ids: HostBuffer[DType.uint32]
+    var d_all_ids: DeviceBuffer[DType.uint32]
+    var h_all_ids: HostBuffer[DType.uint32]
     var h_part_stats: HostBuffer[DType.float32]
 
     def __init__(
@@ -325,6 +354,14 @@ struct TDepthwiseWorkspace(Movable):
         )
         self.d_ids = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
         self.h_ids = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
+        self.d_zero_ids = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+        self.h_zero_ids = ctx.enqueue_create_host_buffer[DType.uint32](
+            max_leaves
+        )
+        self.d_all_ids = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+        self.h_all_ids = ctx.enqueue_create_host_buffer[DType.uint32](
+            max_leaves
+        )
         self.h_part_stats = ctx.enqueue_create_host_buffer[DType.float32](
             max_leaves * stat_count
         )
@@ -749,6 +786,10 @@ def fit_non_symmetric_tree[
     ref h_right = dws[0].h_right
     ref d_ids = dws[0].d_ids
     ref h_ids = dws[0].h_ids
+    ref d_zero_ids = dws[0].d_zero_ids
+    ref h_zero_ids = dws[0].h_zero_ids
+    ref d_all_ids = dws[0].d_all_ids
+    ref h_all_ids = dws[0].h_all_ids
     ref h_part_stats = dws[0].h_part_stats
 
     var table = TBinFeatureTable(layout)
@@ -978,10 +1019,13 @@ def fit_non_symmetric_tree[
             # and is kept identical so the two cannot drift.
             stage_times.begin(ctx)
             for i in range(len(plan.compute_ids)):
-                h_ids.unsafe_ptr().unsafe_store(i, plan.compute_ids[i])
-            ctx.enqueue_copy(dst_buf=d_ids, src_ptr=h_ids.unsafe_ptr())
+                h_zero_ids.unsafe_ptr().unsafe_store(i, plan.compute_ids[i])
+            # DEVIATION 261: its own staging pair
+            ctx.enqueue_copy(
+                dst_buf=d_zero_ids, src_ptr=h_zero_ids.unsafe_ptr()
+            )
             ctx.enqueue_function[zero_histograms_kernel](
-                d_ids.unsafe_ptr(),
+                d_zero_ids.unsafe_ptr(),
                 Int32(hist_cells_per_leaf),
                 hist.unsafe_ptr(),
                 grid_dim=(
@@ -1123,11 +1167,14 @@ def fit_non_symmetric_tree[
             # ...)` (`:443`) over leaves `[0, leafCount)`. See DEVIATION 352.
             stage_times.begin(ctx)
             for i in range(len(leaves)):
-                h_ids.unsafe_ptr().unsafe_store(i, UInt32(i))
-            ctx.enqueue_copy(dst_buf=d_ids, src_ptr=h_ids.unsafe_ptr())
+                h_all_ids.unsafe_ptr().unsafe_store(i, UInt32(i))
+            # DEVIATION 261: its own staging pair
+            ctx.enqueue_copy(
+                dst_buf=d_all_ids, src_ptr=h_all_ids.unsafe_ptr()
+            )
             compute_partition_stats(
                 ctx, len(leaves), n_rows, stat_count, n_rows,
-                d_ids, p_off, p_sz, stats, stat_partials, part_stats,
+                d_all_ids, p_off, p_sz, stats, stat_partials, part_stats,
                 sm_count=sm_count,
             )
             mgr.stream_kernel()
