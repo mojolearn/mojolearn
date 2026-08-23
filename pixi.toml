@@ -913,6 +913,11 @@ price-unsupervised-identity = "sh tools/price_unsupervised_identity.sh"
 #   7 sabotage: one row's gradient changed must move the model.
 check-depthwise = "mojo run -I . mojo_only/depthwise_check.mojo"
 
+# DEVIATION 259/260: grow_policy on train() and the Python surface -- seven
+# claims (three policies differ, budgets bind, NS model round-trips, the
+# hist-mode control after DEVIATION 261)
+check-grow-policy = "mojo run -I . mojo_only/grow_policy_check.mojo"
+
 # The depthwise IDENTITY TRACE: one hash record per stage of a fit, so a
 # bitwise disagreement between two GPUs has an ADDRESS instead of only
 # "the models differ".
