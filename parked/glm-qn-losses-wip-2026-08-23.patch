@@ -1,0 +1,496 @@
+diff --git a/glm/ported/glm/qn/glm_base.mojo b/glm/ported/glm/qn/glm_base.mojo
+index 6bfe7b6..0e50efe 100644
+--- a/glm/ported/glm/qn/glm_base.mojo
++++ b/glm/ported/glm/qn/glm_base.mojo
+@@ -1,10 +1,13 @@
+ """`linearFwd`, `linearBwd`, `GLMDims`, `GLMBase::getLossAndDZ`/`loss_grad`,
+ `GLMWithData`: the objective the L-BFGS solver calls.
+ 
+-PORT OF `cuml/cpp/src/glm/qn/glm_base.cuh` at cuML `00094f7`. `C == 1`
+-(one target: the sigmoid and squared losses), dense row-major `X`, no
+-sample weights (`add_sample_weights` and the weighted arm of `getLossAndDZ`
+-are refused by name in `qn.mojo`). Do not improve.
++PORT OF `cuml/cpp/src/glm/qn/glm_base.cuh` at cuML `00094f7`. Dense
++row-major `X`, no sample weights (`add_sample_weights` and the weighted arm
++of `getLossAndDZ` are refused by name in `qn.mojo`). `C == 1` is the path
++below, kernel for kernel; `C > 1` (the softmax objective) dispatches on
++`dims.C` to the kernels `glm_softmax.mojo` carries (DEVIATION 706), and
++`getLossAndDZ` / `gradNorm` dispatch on the loss id to `glm_logistic.mojo`,
++`glm_linear.mojo`, `glm_svm.mojo`, `glm_softmax.mojo`. Do not improve.
+ 
+ THE THREE STEPS OF ONE OBJECTIVE EVALUATION, `loss_grad` (`glm_base.cuh:
+ 174-187`), and what each runs on here:
+@@ -46,12 +49,44 @@ from std.gpu import block_dim, block_idx, thread_idx
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ 
+ from core.column_stats import STATS_TPB, xty_kernel
+-from core.gemm import gemv_n
++from core.gemm import gemm_nt, gemv_n
+ from core.pinned_reduce import pinned_block_sum
++from glm.ported.glm.qn.glm_linear import (
++    abs_loss_dz_kernel,
++    nrm1,
++    squared_loss_dz_kernel,
++)
+ from glm.ported.glm.qn.glm_logistic import logistic_loss_dz_kernel
+ from glm.ported.glm.qn.glm_regularizer import tikhonov_reg_grad_kernel
+-from glm.ported.glm.qn.simple_mat.dense import VEC_ELEM_TPB, _read_scalar, nrm_max
+-from glm.ported.linear_model.qn import QN_LOSS_LOGISTIC
++from glm.ported.glm.qn.glm_softmax import (
++    add_bias_multi_kernel,
++    mean_rows_multi_kernel,
++    softmax_loss_dz_kernel,
++    transpose_w_kernel,
++    xtdz_multi_kernel,
++)
++from glm.ported.glm.qn.glm_svm import (
++    svc_l1_loss_dz_kernel,
++    svc_l2_loss_dz_kernel,
++    svr_l1_loss_dz_kernel,
++    svr_l2_loss_dz_kernel,
++)
++from glm.ported.glm.qn.simple_mat.dense import (
++    VEC_ELEM_TPB,
++    _read_scalar,
++    nrm_max,
++    squared_norm,
++)
++from glm.ported.linear_model.qn import (
++    QN_LOSS_ABS,
++    QN_LOSS_LOGISTIC,
++    QN_LOSS_SOFTMAX,
++    QN_LOSS_SQUARED,
++    QN_LOSS_SVC_L1,
++    QN_LOSS_SVC_L2,
++    QN_LOSS_SVR_L1,
++    QN_LOSS_SVR_L2,
++)
+ from mojo_only.numerics import ftz
+ 
+ 
+@@ -158,12 +193,34 @@ def linear_fwd(
+     n_rows: Int,
+     dims: GLMDims,
+ ) raises:
+-    """`linearFwd(handle, Z, X, W)`, `glm_base.cuh:39-61`, for `C = 1`.
++    """`linearFwd(handle, Z, X, W)`, `glm_base.cuh:39-61`.
+ 
+-    `w_weights` is the `col_slice(W, weights, 0, D)` view -- the first `D`
+-    entries of `w` -- materialized as its own buffer because the vendor
+-    gemv takes a whole buffer as its vector operand. A D-float copy."""
++    `C = 1`: `w_weights` is the `col_slice(W, weights, 0, D)` view -- the
++    first `D` entries of `w` -- materialized as its own buffer because the
++    vendor gemv takes a whole buffer as its vector operand. A D-float copy.
++
++    `C > 1` (DEVIATION 706, `glm_softmax.mojo`): `w_weights` is the
++    ROW-major `C x D` copy of the column-major weight block, the product is
++    `gemm_nt` (`z[i*C + c]` IS their column-major `z[c + C*i]`), and the
++    bias column is added per class."""
+     var d = dims.D
++    if dims.C > 1:
++        var cd = dims.C * d
++        ctx.enqueue_function[transpose_w_kernel](
++            w_weights.unsafe_ptr(), w.unsafe_ptr(), Int32(dims.C), Int32(d),
++            grid_dim=((cd + VEC_ELEM_TPB - 1) // VEC_ELEM_TPB, 1, 1),
++            block_dim=(VEC_ELEM_TPB, 1, 1),
++        )
++        gemm_nt(ctx, z, x, w_weights, n_rows, dims.C, d)
++        if dims.fit_intercept:
++            var cn = dims.C * n_rows
++            ctx.enqueue_function[add_bias_multi_kernel](
++                z.unsafe_ptr(), w.unsafe_ptr(), Int32(dims.C), Int32(d),
++                Int32(n_rows),
++                grid_dim=((cn + VEC_ELEM_TPB - 1) // VEC_ELEM_TPB, 1, 1),
++                block_dim=(VEC_ELEM_TPB, 1, 1),
++            )
++        return
+     var w_head = w.create_sub_buffer[DType.float32](0, d)
+     ctx.enqueue_copy(dst_buf=w_weights, src_buf=w_head)
+     gemv_n(ctx, z, x, w_weights, n_rows, d)
+@@ -186,10 +243,33 @@ def linear_bwd(
+     dims: GLMDims,
+     set_zero: Bool,
+ ) raises:
+-    """`linearBwd(handle, G, X, dZ, setZero)`, `glm_base.cuh:63-94`."""
++    """`linearBwd(handle, G, X, dZ, setZero)`, `glm_base.cuh:63-94`. The
++    `C > 1` arm (DEVIATION 706) is the same three steps with the class
++    stride: `xtdz_multi_kernel` (one block per `(c, j)` cell), the same
++    cuBLAS epilogue over `C*D` cells, `mean_rows_multi_kernel` per class."""
+     var d = dims.D
+     # `alpha = 1.0 / X.m`: a double narrowed to T. `beta = setZero ? 0 : 1`.
+     var alpha = Float32(1.0 / Float64(n_rows))
++    if dims.C > 1:
++        var cd = dims.C * d
++        ctx.enqueue_function[xtdz_multi_kernel](
++            xtdz.unsafe_ptr(), x.unsafe_ptr(), dz.unsafe_ptr(),
++            Int32(n_rows), Int32(d), Int32(dims.C),
++            grid_dim=(cd, 1, 1), block_dim=(STATS_TPB, 1, 1),
++        )
++        ctx.enqueue_function[gemm_epilogue_kernel](
++            g.unsafe_ptr(), xtdz.unsafe_ptr(), Int32(cd), alpha,
++            Int32(0) if set_zero else Int32(1),
++            grid_dim=((cd + VEC_ELEM_TPB - 1) // VEC_ELEM_TPB, 1, 1),
++            block_dim=(VEC_ELEM_TPB, 1, 1),
++        )
++        if dims.fit_intercept:
++            ctx.enqueue_function[mean_rows_multi_kernel](
++                g.unsafe_ptr() + cd, dz.unsafe_ptr(), Int32(n_rows),
++                Int32(dims.C),
++                grid_dim=(dims.C, 1, 1), block_dim=(STATS_TPB, 1, 1),
++            )
++        return
+     ctx.enqueue_function[xty_kernel](
+         xtdz.unsafe_ptr(), x.unsafe_ptr(), dz.unsafe_ptr(),
+         Int32(n_rows), Int32(d),
+@@ -212,16 +292,19 @@ def linear_bwd(
+ 
+ struct GLMWithData(Movable):
+     """`GLMWithData<T, Objective>` (`glm_base.cuh:200-240`), with the
+-    objective's two shapes -- `LogisticLoss` alone, or `RegularizedGLM<
+-    LogisticLoss, Tikhonov>` -- selected by `l2 == 0` exactly as `qn_fit`
+-    selects them (`qn.cuh:61-86`). Owns the `Z` scratch their `qn_fit_x`
+-    allocates (`qn.cuh:117-118`) and this port's extra per-row / per-feature
+-    scratch."""
++    objective's two shapes -- the loss alone, or `RegularizedGLM<Loss,
++    Tikhonov>` -- selected by `l2 == 0` exactly as `qn_fit` selects them
++    (`qn.cuh:61-86`), and the loss itself selected by `loss` (their
++    template argument) in `get_loss_and_dz` / `grad_norm`. Owns the `Z`
++    scratch their `qn_fit_x` allocates (`qn.cuh:117-118`, `n_targets x N`)
++    and this port's extra per-row / per-cell scratch. `svr_eps` is the
++    SVR losses' `sensitivity` and is read by nothing else."""
+ 
+     var dims: GLMDims
+     var n_rows: Int
+     var loss: Int
+     var l2: Float32
++    var svr_eps: Float32
+     var x: DeviceBuffer[DType.float32]
+     var y: DeviceBuffer[DType.float32]
+     var z: DeviceBuffer[DType.float32]
+@@ -240,26 +323,34 @@ struct GLMWithData(Movable):
+         dims: GLMDims,
+         loss: Int,
+         l2: Float32,
++        svr_eps: Float32 = Float32(0.0),
+     ) raises:
+         self.dims = dims
+         self.n_rows = n_rows
+         self.loss = loss
+         self.l2 = l2
++        self.svr_eps = svr_eps
+         self.x = x^
+         self.y = y^
+-        self.z = ctx.enqueue_create_buffer[DType.float32](n_rows)
++        # `Z` is `n_targets x N` (`qn.cuh:117`); one loss term per row
++        # whatever `C` is; `C x D` for the weight-block scratch.
++        self.z = ctx.enqueue_create_buffer[DType.float32](dims.C * n_rows)
+         self.loss_terms = ctx.enqueue_create_buffer[DType.float32](n_rows)
+-        self.xtdz = ctx.enqueue_create_buffer[DType.float32](dims.D)
+-        self.w_weights = ctx.enqueue_create_buffer[DType.float32](dims.D)
++        self.xtdz = ctx.enqueue_create_buffer[DType.float32](dims.C * dims.D)
++        self.w_weights = ctx.enqueue_create_buffer[DType.float32](dims.C * dims.D)
+         self.scalar = ctx.enqueue_create_buffer[DType.float32](1)
+         self.n_evals = 0
+         ctx.synchronize()
+ 
+     def get_loss_and_dz(mut self, ctx: DeviceContext) raises -> Float32:
+         """`GLMBase::getLossAndDZ`, the unweighted arm (`glm_base.cuh:
+-        152-165`): `loss = sum lz(y, Z) * normalization`, `Z = dlz(y, Z)`."""
++        152-165`): `loss = sum lz(y, Z) * normalization`, `Z = dlz(y, Z)`;
++        for `Softmax` its own `getLossAndDZ` (`glm_softmax.cuh:172-178`,
++        `launchLogsoftmax`), whose per-row `(lse - eta_y) / N` lands in the
++        same `loss_terms` and the same pinned fold (DEVIATION 705)."""
+         var n = self.n_rows
+         var normalization = Float32(1.0 / Float64(n))
++        var grid = (n + VEC_ELEM_TPB - 1) // VEC_ELEM_TPB
+         if self.loss == QN_LOSS_LOGISTIC:
+             ctx.enqueue_function[logistic_loss_dz_kernel](
+                 self.loss_terms.unsafe_ptr(), self.z.unsafe_ptr(),
+@@ -267,10 +358,52 @@ struct GLMWithData(Movable):
+                 grid_dim=((n + VEC_ELEM_TPB - 1) // VEC_ELEM_TPB, 1, 1),
+                 block_dim=(VEC_ELEM_TPB, 1, 1),
+             )
++        elif self.loss == QN_LOSS_SOFTMAX:
++            ctx.enqueue_function[softmax_loss_dz_kernel](
++                self.loss_terms.unsafe_ptr(), self.z.unsafe_ptr(),
++                self.y.unsafe_ptr(), Int32(self.dims.C), Int32(n),
++                grid_dim=(grid, 1, 1), block_dim=(VEC_ELEM_TPB, 1, 1),
++            )
++        elif self.loss == QN_LOSS_SQUARED:
++            ctx.enqueue_function[squared_loss_dz_kernel](
++                self.loss_terms.unsafe_ptr(), self.z.unsafe_ptr(),
++                self.y.unsafe_ptr(), Int32(n), normalization,
++                grid_dim=(grid, 1, 1), block_dim=(VEC_ELEM_TPB, 1, 1),
++            )
++        elif self.loss == QN_LOSS_ABS:
++            ctx.enqueue_function[abs_loss_dz_kernel](
++                self.loss_terms.unsafe_ptr(), self.z.unsafe_ptr(),
++                self.y.unsafe_ptr(), Int32(n), normalization,
++                grid_dim=(grid, 1, 1), block_dim=(VEC_ELEM_TPB, 1, 1),
++            )
++        elif self.loss == QN_LOSS_SVC_L1:
++            ctx.enqueue_function[svc_l1_loss_dz_kernel](
++                self.loss_terms.unsafe_ptr(), self.z.unsafe_ptr(),
++                self.y.unsafe_ptr(), Int32(n), normalization,
++                grid_dim=(grid, 1, 1), block_dim=(VEC_ELEM_TPB, 1, 1),
++            )
++        elif self.loss == QN_LOSS_SVC_L2:
++            ctx.enqueue_function[svc_l2_loss_dz_kernel](
++                self.loss_terms.unsafe_ptr(), self.z.unsafe_ptr(),
++                self.y.unsafe_ptr(), Int32(n), normalization,
++                grid_dim=(grid, 1, 1), block_dim=(VEC_ELEM_TPB, 1, 1),
++            )
++        elif self.loss == QN_LOSS_SVR_L1:
++            ctx.enqueue_function[svr_l1_loss_dz_kernel](
++                self.loss_terms.unsafe_ptr(), self.z.unsafe_ptr(),
++                self.y.unsafe_ptr(), Int32(n), normalization, self.svr_eps,
++                grid_dim=(grid, 1, 1), block_dim=(VEC_ELEM_TPB, 1, 1),
++            )
++        elif self.loss == QN_LOSS_SVR_L2:
++            ctx.enqueue_function[svr_l2_loss_dz_kernel](
++                self.loss_terms.unsafe_ptr(), self.z.unsafe_ptr(),
++                self.y.unsafe_ptr(), Int32(n), normalization, self.svr_eps,
++                grid_dim=(grid, 1, 1), block_dim=(VEC_ELEM_TPB, 1, 1),
++            )
+         else:
+             raise Error(
+                 "qn: loss id " + String(self.loss) + " has no getLossAndDZ"
+-                " here; only QN_LOSS_LOGISTIC is ported (glm/UNPORTED.tsv)"
++                " here (glm/UNPORTED.tsv)"
+             )
+         ctx.enqueue_function[sum_terms_kernel](
+             self.scalar.unsafe_ptr(), self.loss_terms.unsafe_ptr(), Int32(n),
+@@ -310,9 +443,11 @@ struct GLMWithData(Movable):
+         if self.l2 == Float32(0.0):
+             return self.loss_grad(ctx, w, g, True)
+         ctx.enqueue_memset(g, Float32(0.0))
++        # `G[:, 0:n_param - has_bias]`: the first `C*D` entries of the
++        # column-major `W` are the weight block, the bias column is last.
+         ctx.enqueue_function[tikhonov_reg_grad_kernel](
+             self.scalar.unsafe_ptr(), g.unsafe_ptr(), w.unsafe_ptr(),
+-            Int32(self.dims.D), self.l2,
++            Int32(self.dims.C * self.dims.D), self.l2,
+             grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
+         )
+         var reg_host = _read_scalar(ctx, self.scalar)
+@@ -322,5 +457,21 @@ struct GLMWithData(Movable):
+     def grad_norm(
+         mut self, ctx: DeviceContext, mut g: DeviceBuffer[DType.float32]
+     ) raises -> Float32:
+-        """`GLMWithData::gradNorm` -> `LogisticLoss::gradNorm` = `nrmMax`."""
++        """`GLMWithData::gradNorm` -> the loss's `gradNorm`: `nrmMax` for
++        `LogisticLoss` and `Softmax`; `squaredNorm * 0.5` for `SquaredLoss`,
++        `SVCL2Loss`, `SVRL2Loss`; `nrm1` for `AbsLoss`, `SVCL1Loss`,
++        `SVRL1Loss` (`glm_linear.cuh`, `glm_svm.cuh`, `glm_softmax.cuh`).
++        The `* 0.5` is a host `T * double` narrowed back: exact."""
++        if (
++            self.loss == QN_LOSS_SQUARED
++            or self.loss == QN_LOSS_SVC_L2
++            or self.loss == QN_LOSS_SVR_L2
++        ):
++            return squared_norm(ctx, g, self.dims.n_param, self.scalar) * Float32(0.5)
++        if (
++            self.loss == QN_LOSS_ABS
++            or self.loss == QN_LOSS_SVC_L1
++            or self.loss == QN_LOSS_SVR_L1
++        ):
++            return nrm1(ctx, g, self.dims.n_param, self.scalar)
+         return nrm_max(ctx, g, self.dims.n_param, self.scalar)
+diff --git a/glm/ported/glm/qn/qn.mojo b/glm/ported/glm/qn/qn.mojo
+index 8de0e7d..b76d755 100644
+--- a/glm/ported/glm/qn/qn.mojo
++++ b/glm/ported/glm/qn/qn.mojo
+@@ -1,12 +1,14 @@
+ """`qn_fit`, `qn_fit_x`, `qnFit`, `qn_decision_function`, `qn_predict`.
+ 
+ PORT OF `cuml/cpp/src/glm/qn/qn.cuh` at cuML `00094f7`. Partial: the loss
+-switch (`qn_fit_x`, `qn.cuh:121-173`) ports `QN_LOSS_LOGISTIC` and RAISES
+-by name on every other id -- `QN_LOSS_SOFTMAX` (`glm_softmax.cuh`, the
+-multinomial arm), `QN_LOSS_SQUARED`, the four SVM losses, `QN_LOSS_ABS` --
+-and on `sample_weight` (`add_sample_weights`, the weighted arm of
+-`getLossAndDZ`). The sparse entries (`qnFitSparse` and siblings) are not
+-ported. Do not improve.
++switch (`qn_fit_x`, `qn.cuh:121-173`) ports all eight ids -- `QN_LOSS_
++LOGISTIC`, `QN_LOSS_SOFTMAX` (`glm_softmax.mojo`, the multinomial arm),
++`QN_LOSS_SQUARED` / `QN_LOSS_ABS` (`glm_linear.mojo`), the four SVM losses
++(`glm_svm.mojo`) -- each with their `ASSERT` on `C` and their `n_targets =
++is_classification && C == 2 ? 1 : C`, and RAISES by name on `sample_weight`
++(`add_sample_weights`, the weighted arm of `getLossAndDZ`). `svr_eps` is
++their trailing parameter (default 0). The sparse entries (`qnFitSparse` and
++siblings) and `qn_predict`'s argmax arm are not ported. Do not improve.
+ 
+ WHAT `qn_fit` DOES WITH THE PENALTY, `qn.cuh:53-86`, copied:
+ 
+@@ -46,6 +48,18 @@ from glm.ported.linear_model.qn import (
+ )
+ 
+ 
++def qn_is_classification(loss: Int) -> Bool:
++    """`qn_is_classification(qn_loss_type)`, `qn_util.cuh:119-128`: the
++    four classification ids. Belongs in `qn_util.mojo`; placed here under
++    the QN-losses lane's file scope (HAND-OFF in `glm/README.md`)."""
++    return (
++        loss == QN_LOSS_LOGISTIC
++        or loss == QN_LOSS_SOFTMAX
++        or loss == QN_LOSS_SVC_L1
++        or loss == QN_LOSS_SVC_L2
++    )
++
++
+ def qn_fit(
+     ctx: DeviceContext,
+     pams: QNParams,
+@@ -81,8 +95,11 @@ def qn_fit_x(
+     mut num_iters: Int,
+     has_sample_weight: Bool,
+     mut trace: IdentityTrace,
++    svr_eps: Float32 = Float32(0.0),
+ ) raises -> Int:
+-    """`qn_fit_x`, `qn.cuh:89-174`: the loss switch."""
++    """`qn_fit_x`, `qn.cuh:89-174`: the loss switch. Every arm is their
++    `ASSERT` on `C`, the objective with `n_targets` (`:106`), `qn_fit`, and
++    the three closing card stages (`qn.coef`, `qn.n_iter`, `qn.retcode`)."""
+     if has_sample_weight:
+         raise Error(
+             "qn: sample_weight is NOT PORTED (GLMBase::add_sample_weights,"
+@@ -94,6 +111,8 @@ def qn_fit_x(
+     var l2 = Float32(pams.penalty_l2)
+     if pams.penalty_normalized:
+         l2 = l2 / Float32(n_rows)
++    # `qn.cuh:106`: `n_targets = qn_is_classification(loss) && C == 2 ? 1 : C`.
++    var n_targets = 1 if (qn_is_classification(pams.loss) and n_classes == 2) else n_classes
+ 
+     if pams.loss == QN_LOSS_LOGISTIC:
+         if n_classes != 2:
+@@ -110,23 +129,102 @@ def qn_fit_x(
+         trace.record_list_i32("qn.retcode", rc)
+         return ret
+     elif pams.loss == QN_LOSS_SQUARED:
+-        raise Error("qn: QN_LOSS_SQUARED (glm_linear.cuh) is NOT PORTED")
++        if n_classes != 1:
++            raise Error("qn.h: squared loss invalid C")
++        return _qn_fit_loss(
++            ctx, pams, x^, y^, n_rows, n_cols, n_targets, w0, fx, num_iters,
++            trace, QN_LOSS_SQUARED, "QN_LOSS_SQUARED", l2, svr_eps,
++        )
+     elif pams.loss == QN_LOSS_SOFTMAX:
+-        raise Error(
+-            "qn: QN_LOSS_SOFTMAX (glm_softmax.cuh, the multinomial arm) is"
+-            " NOT PORTED; more than two classes are refused by name. See"
+-            " glm/UNPORTED.tsv"
++        if not (n_classes > 2):
++            raise Error("qn.h: softmax invalid C")
++        return _qn_fit_loss(
++            ctx, pams, x^, y^, n_rows, n_cols, n_targets, w0, fx, num_iters,
++            trace, QN_LOSS_SOFTMAX, "QN_LOSS_SOFTMAX", l2, svr_eps,
++        )
++    elif pams.loss == QN_LOSS_SVC_L1:
++        if n_classes != 2:
++            raise Error("qn.h: SVC-L1 loss invalid C")
++        return _qn_fit_loss(
++            ctx, pams, x^, y^, n_rows, n_cols, n_targets, w0, fx, num_iters,
++            trace, QN_LOSS_SVC_L1, "QN_LOSS_SVC_L1", l2, svr_eps,
++        )
++    elif pams.loss == QN_LOSS_SVC_L2:
++        if n_classes != 2:
++            raise Error("qn.h: SVC-L2 loss invalid C")
++        return _qn_fit_loss(
++            ctx, pams, x^, y^, n_rows, n_cols, n_targets, w0, fx, num_iters,
++            trace, QN_LOSS_SVC_L2, "QN_LOSS_SVC_L2", l2, svr_eps,
++        )
++    elif pams.loss == QN_LOSS_SVR_L1:
++        if n_classes != 1:
++            raise Error("qn.h: SVR-L1 loss invalid C")
++        return _qn_fit_loss(
++            ctx, pams, x^, y^, n_rows, n_cols, n_targets, w0, fx, num_iters,
++            trace, QN_LOSS_SVR_L1, "QN_LOSS_SVR_L1", l2, svr_eps,
++        )
++    elif pams.loss == QN_LOSS_SVR_L2:
++        if n_classes != 1:
++            raise Error("qn.h: SVR-L2 loss invalid C")
++        return _qn_fit_loss(
++            ctx, pams, x^, y^, n_rows, n_cols, n_targets, w0, fx, num_iters,
++            trace, QN_LOSS_SVR_L2, "QN_LOSS_SVR_L2", l2, svr_eps,
+         )
+-    elif pams.loss == QN_LOSS_SVC_L1 or pams.loss == QN_LOSS_SVC_L2 or pams.loss == QN_LOSS_SVR_L1 or pams.loss == QN_LOSS_SVR_L2:
+-        raise Error("qn: the SVM losses (glm_svm.cuh) are NOT PORTED")
+     elif pams.loss == QN_LOSS_ABS:
+-        raise Error("qn: QN_LOSS_ABS (glm_linear.cuh) is NOT PORTED")
++        if n_classes != 1:
++            raise Error("qn.h: abs loss (L1) invalid C")
++        return _qn_fit_loss(
++            ctx, pams, x^, y^, n_rows, n_cols, n_targets, w0, fx, num_iters,
++            trace, QN_LOSS_ABS, "QN_LOSS_ABS", l2, svr_eps,
++        )
+     else:
+         raise Error(
+             "qn.h: unknown loss function type (id = " + String(pams.loss) + ")."
+         )
+ 
+ 
++def _qn_fit_loss(
++    ctx: DeviceContext,
++    pams: QNParams,
++    var x: DeviceBuffer[DType.float32],
++    var y: DeviceBuffer[DType.float32],
++    n_rows: Int,
++    n_cols: Int,
++    n_targets: Int,
++    mut w0: DeviceBuffer[DType.float32],
++    mut fx: Float32,
++    mut num_iters: Int,
++    mut trace: IdentityTrace,
++    loss_id: Int,
++    loss_name: StaticString,
++    l2: Float32,
++    svr_eps: Float32,
++) raises -> Int:
++    """One `case` of the switch for the seven non-logistic losses: the
++    objective at `n_targets`, `qn_fit`, the closing card stages -- the
++    logistic arm above character for character, parameterized. The `w0`
++    length guard is ours: theirs takes a raw pointer and cannot check it;
++    a `w0` sized for one target handed to the softmax arm would be read
++    past its end."""
++    var dims = GLMDims.make(n_targets, n_cols, pams.fit_intercept)
++    if len(w0) < dims.n_param:
++        raise Error(
++            "qn: " + String(loss_name) + " needs w0 of n_param = C * dims = "
++            + String(dims.n_param) + " floats (C = " + String(n_targets)
++            + ", dims = " + String(dims.dims) + "), got " + String(len(w0))
++        )
++    var obj = GLMWithData(ctx, x^, y^, n_rows, dims, loss_id, l2, svr_eps)
++    var ret = qn_fit(ctx, pams, obj, w0, fx, num_iters, trace)
++    trace.record_device[DType.float32](ctx, "qn.coef", w0, dims.n_param)
++    var ints = List[Int32]()
++    ints.append(Int32(num_iters))
++    trace.record_list_i32("qn.n_iter", ints)
++    var rc = List[Int32]()
++    rc.append(Int32(ret))
++    trace.record_list_i32("qn.retcode", rc)
++    return ret
++
++
+ def qn_decision_function(
+     ctx: DeviceContext,
+     pams: QNParams,
+@@ -135,10 +233,17 @@ def qn_decision_function(
+     n_cols: Int,
+     mut params: DeviceBuffer[DType.float32],
+     mut scores: DeviceBuffer[DType.float32],
++    n_classes: Int = 1,
+ ) raises:
+-    """`qn_decision_function`, `qn.cuh:216-228`, binary: `scores = W X^T + b`."""
+-    var dims = GLMDims.make(1, n_cols, pams.fit_intercept)
+-    var w_weights = ctx.enqueue_create_buffer[DType.float32](n_cols)
++    """`qn_decision_function`, `qn.cuh:216-228`: `scores = W X^T + b`, with
++    `n_targets = qn_is_classification(loss) && C == 2 ? 1 : C` (`:213`),
++    so `scores` is `n_targets x N` column-major (`scores[c + C*i]`). The
++    default `n_classes = 1` is the one-target shape every existing caller
++    (binary logistic, the regressions) wants; the softmax caller passes
++    its `C`."""
++    var n_targets = 1 if (qn_is_classification(pams.loss) and n_classes == 2) else n_classes
++    var dims = GLMDims.make(n_targets, n_cols, pams.fit_intercept)
++    var w_weights = ctx.enqueue_create_buffer[DType.float32](n_targets * n_cols)
+     ctx.synchronize()
+     linear_fwd(ctx, scores, x, params, w_weights, n_rows, dims)
+     ctx.synchronize()
