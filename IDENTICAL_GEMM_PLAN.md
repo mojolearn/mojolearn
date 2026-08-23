@@ -359,3 +359,83 @@ Implementation; numerical-contract documentation; IDENTITY_PATHS row and
 deviation numbers; adversarial correctness and sabotage gates; an
 Apple/NVIDIA/AMD result card; a benchmark report; an explicit list of
 unsupported semantics; and a concise recommendation for the next lane.
+
+---
+
+# LANE BOUNDARY, set 2026-08-23
+
+Two lanes now work this tree and they overlap on the word "GEMM". This
+section is the line between them, written down rather than agreed in
+conversation, because a boundary that lives in a chat log is not a boundary.
+
+The other lane is the **identity / E2 lane** (`cascadeprojects-55`), which
+Andrew asked to take the unsupervised and linear-algebra identity work for
+the CROSS-VENDOR LEGS, the IDENTICAL feature flag (moving the `sed` flip to a
+`-D MOJOLEARN_NUMERIC_IDENTICAL=1` build define with both binaries shipped),
+and TIMING.
+
+## What each lane owns
+
+**THIS LANE (`gemm/`) owns building the general FP32 profile:**
+
+    gemm/**                        the contract, both oracles, the scalable
+                                   kernel, its gates, its benchmark
+    IDENTICAL_GEMM_PLAN.md         this file
+    bench/gemm_*                   anything new it needs
+    tools/gemm_*                   anything new it needs
+
+DEVIATIONS 530-539 are this lane's.
+
+**THE IDENTITY / E2 LANE owns everything already shipped, and everything
+about how it is built, certified and timed:**
+
+    mojo_only/numerics.mojo, kernel_matrix.mojo, hardware_matrix.mojo
+    IDENTITY_PATHS.md              the ledger
+    pixi.toml                      task registration
+    core/**, decomposition/**, glm/**, cluster/**, neighbors/**, dbscan/**
+    gbdt/**, ensemble/**, extratrees/**
+    tools/**                       every existing script, INCLUDING the four
+                                   this lane wrote (check_linalg_identity.sh,
+                                   check_linalg_column_invariance.sh,
+                                   price_linalg_identity.sh, ols_card.sh) --
+                                   they are already being rewired for the
+                                   `-D` migration and that is correct
+    every cross-vendor leg, every rented box, every timing number
+
+IDENTITY_PATHS rows 27-32 are theirs to maintain from here. This lane writes
+ROW TEXT when it closes something and hands it over; it does not edit the
+ledger.
+
+## The three places the line is not clean, and what to do at each
+
+1. **`core/gemm.mojo` is theirs and is this lane's eventual consumer.**
+   Rows 27 and 28 ship there today. When `gemm.fp32.v1` is ready to become
+   the house rule for that file, it is a BIT-MOVING MIGRATION of committed,
+   certified behaviour, and it needs both lanes to agree before a line is
+   edited. It is the LAST step of Phase 2, never an incidental one.
+
+2. **`core/gram_splitk.mojo` folds partials SERIALLY and row 27 is closed on
+   that spelling.** The v1 contract's fold is a FIXED BALANCED TREE. Those
+   are different arithmetic. Either the Gram kernel is a separate profile
+   with its own certificate, or it migrates and its bits move. Naming it now
+   is cheap; discovering it after v1 is published is not.
+
+3. **`GLOBAL_NUMERIC_MODE` is moving from a source line to a build define.**
+   This lane depends on the SYMBOL and not on the mechanism, so the migration
+   should be invisible here. If any `gemm/` file ever tests how the mode was
+   selected rather than what it is, that is this lane's bug.
+
+## Working rules
+
+- This lane does not edit anything in the other lane's list. If it needs a
+  change there, it reports the exact change and waits.
+- No pixi task is registered from this lane. `pixi run mojo run -I . <file>`
+  needs none, and task registration is theirs.
+- **GPU exclusivity.** Phases 0 and 1 are HOST ONLY and safe to run beside
+  anything. Phase 2 onward touches the device: every device run goes through
+  `tools/with_build_lock.sh`, and no timing produced here is trustworthy
+  while the other lane is running a leg. Timing is theirs anyway; this lane
+  reports device numbers as indicative and says so.
+- Every check prints the mode it COMPILED in, read from the comptime
+  constant. Three mislabelled measurements were caught by that today and it
+  survives the `-D` migration unchanged.
