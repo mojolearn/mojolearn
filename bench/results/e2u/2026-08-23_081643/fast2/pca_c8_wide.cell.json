@@ -1,0 +1,16 @@
+{
+  "card": "pca_c8_wide.card",
+  "components": "08f54a3b65bc9cbdccb3ecb284aaf851096de298d1f30649fd8acedeebf7d936",
+  "explained_variance": "de15fae88aa2c7bdce6956698bf4195b6eeb5cc1e90f6d81a234011b7933c6e3",
+  "explained_variance_ratio": "1debaba129d677d28c923cee3f3e45e4007ed58ca8e5203a7415f57201717e6b",
+  "kind": "pca",
+  "mean": "8dfac4fe0075336617bc5c30a4f9fc92721d56227383491843cdb552da4c6ea1",
+  "noise_variance": "4b6c1e74a79c2dbecb204ca255249db3b9f060edcd8ce6b167a8c19c1d88ab76",
+  "seconds": 0.54,
+  "singular_values": "51d25e608f79aabc7046324f769ba1c5c53b55b5197b62164e6977f9982475bc",
+  "spec": {
+    "n_components": 8
+  },
+  "stages": 6,
+  "transformed": "27f32cb9b84cd8dca6d2d7f6cf0f962ec68428196494b3738a5cfd47cc5f55df"
+}

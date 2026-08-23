@@ -1,0 +1,18 @@
+{
+  "card": "kmeans_k8_tol1e-2.card",
+  "centroids": "ef5969ce848005ad86308f235acd36bd8280b870a3b4bc2b77354a54031109c1",
+  "inertia": "8c86c7180bc49ce9475cd029e6e468339fbfefc26ece2e44591645007ed14800",
+  "inertia_value": 36002.7109375,
+  "kind": "kmeans",
+  "labels": "6aa47cb659fce2413f279581afdd39b67c000748afa71eab441d083ed3308de2",
+  "n_iter": 3,
+  "seconds": 0.08,
+  "spec": {
+    "n_clusters": 8,
+    "random_state": 7,
+    "tol": 0.01
+  },
+  "stages": 56,
+  "sum_scale": 65536.0,
+  "weight_scale": 32768.0
+}

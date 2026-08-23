@@ -1,0 +1,5 @@
+# tsvd n=20000 d=24 n_components=2
+# format: mojolearn-identity-trace v1
+0	tsvd.jacobi.a	f32	576	f36d2339382a2cad
+1	tsvd.components	f32	48	029292973fbd5bf4
+2	tsvd.singular_vals	f32	2	151512ae676c922b

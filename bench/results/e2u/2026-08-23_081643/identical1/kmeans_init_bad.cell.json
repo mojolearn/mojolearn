@@ -1,0 +1,10 @@
+{
+  "kind": "kmeans",
+  "refused": "ValueError: mojolearn: init must be one of ['array', 'k-means++', 'random'], got 'pca-ish'",
+  "seconds": 0.0,
+  "spec": {
+    "init": "pca-ish",
+    "n_clusters": 8,
+    "random_state": 7
+  }
+}

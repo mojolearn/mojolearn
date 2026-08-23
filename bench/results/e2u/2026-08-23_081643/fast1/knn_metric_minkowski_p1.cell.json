@@ -1,0 +1,10 @@
+{
+  "kind": "knn",
+  "refused": "ValueError: mojolearn NearestNeighbors: metric='minkowski' with p=1 is refused; only p=2 (Euclidean) is ported",
+  "seconds": 0.0,
+  "spec": {
+    "metric": "minkowski",
+    "n_neighbors": 10,
+    "p": 1
+  }
+}

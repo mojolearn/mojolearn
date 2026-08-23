@@ -38,9 +38,26 @@ class CardError(Exception):
     pass
 
 
+# The caller-visible output hashes a cell may carry. The first three are
+# the tree matrix's; the rest are `tools/e2u_matrix_fit.py`'s (added
+# 2026-08-23, additive). A key absent on both sides is not compared.
+OUTPUT_KEYS = (
+    "predictions", "proba", "model",
+    "labels", "centroids", "inertia", "distances", "indices",
+    "components", "explained_variance", "explained_variance_ratio",
+    "singular_values", "mean", "noise_variance", "transformed",
+    "coef", "intercept",
+)
+
+
 def load_dir(path):
     cells = {}
-    for fn in ("e2_cells.json", "e1_fits.json", "e2_mojo_cards.json"):
+    # `e2u_cells.json` is `tools/e2u_matrix_fit.py`'s record (the
+    # unsupervised matrix, added 2026-08-23): same shape, same verdicts,
+    # read the same way. Its cell names (`kmeans_*`, `knn_*`, `dbscan_*`,
+    # `pca_*`, `tsvd_*`, `ols_*`) do not collide with the tree matrix's.
+    for fn in ("e2_cells.json", "e2u_cells.json", "e1_fits.json",
+               "e2_mojo_cards.json"):
         p = os.path.join(path, fn)
         if not os.path.exists(p):
             continue
@@ -55,14 +72,15 @@ def load_dir(path):
                 e["card_path"] = os.path.join(path, e["card"])
             cells.setdefault(name, e)
     inputs = {}
-    p = os.path.join(path, "e2_cells.json")
-    if os.path.exists(p):
-        with open(p) as fh:
-            d = json.load(fh)
-        inputs = d.get("inputs", {})
-        commit = d.get("commit")
-    else:
-        commit = None
+    commit = None
+    for fn in ("e2_cells.json", "e2u_cells.json"):
+        p = os.path.join(path, fn)
+        if os.path.exists(p):
+            with open(p) as fh:
+                d = json.load(fh)
+            inputs = d.get("inputs", {})
+            commit = d.get("commit")
+            break
     return cells, inputs, commit
 
 
@@ -126,7 +144,7 @@ def judge(ref, other):
         return "REFUSED!=", (f"ref={str(ref.get('refused'))[:50]} | "
                              f"other={str(other.get('refused'))[:50]}")
     out_same = all(ref.get(k) == other.get(k)
-                   for k in ("predictions", "proba", "model")
+                   for k in OUTPUT_KEYS
                    if k in ref or k in other)
     pa, pb = ref.get("card_path"), other.get("card_path")
     if pa and pb and os.path.exists(pa) and os.path.exists(pb):
@@ -137,7 +155,7 @@ def judge(ref, other):
         if tag is None and out_same:
             return "IDENTICAL", f"{n} stages" + (f" ({note})" if note else "")
         if tag is None and not out_same:
-            which = [k for k in ("predictions", "proba", "model")
+            which = [k for k in OUTPUT_KEYS
                      if ref.get(k) != other.get(k)]
             return "DIVERGENT@" + "+".join(which), f"cards agree on {n} stages"
         if out_same:
@@ -145,7 +163,7 @@ def judge(ref, other):
         return "DIVERGENT@" + tag, note
     if out_same:
         return "IDENTICAL(no-card)", ""
-    which = [k for k in ("predictions", "proba", "model")
+    which = [k for k in OUTPUT_KEYS
              if ref.get(k) != other.get(k)]
     return "DIVERGENT@" + "+".join(which), "no card"
 

@@ -1,0 +1,16 @@
+{
+  "batches": 1,
+  "card": "dbscan_chain_iter200.card",
+  "kind": "dbscan",
+  "labels": "4f9a2e37fb6dc111aca9ebe8c72fdb4f6377eda9d23e2d326f584fac4eb457fb",
+  "n_clusters": 7,
+  "n_iter": 200,
+  "n_noise": 0,
+  "seconds": 0.1,
+  "spec": {
+    "eps": 0.1875,
+    "max_iterations": 200,
+    "min_samples": 2
+  },
+  "stages": 3
+}

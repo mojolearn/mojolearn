@@ -1,0 +1,9 @@
+{
+  "kind": "pca",
+  "refused": "ValueError: mojolearn PCA: svd_solver='full' is refused; only 'auto' / 'covariance_eigh' (cuML's covariance + device Jacobi arm) is ported; 'full', 'randomized' and 'arpack' are different algorithms (decomposition/UNPORTED.tsv)",
+  "seconds": 0.0,
+  "spec": {
+    "n_components": 2,
+    "svd_solver": "full"
+  }
+}

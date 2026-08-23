@@ -1,0 +1,12 @@
+{
+  "card": "tsvd_c8.card",
+  "components": "59e74e0739ae312aa5261eed5b69c71967eb2c3e63cfee5405757b13f4bb4e29",
+  "kind": "tsvd",
+  "seconds": 0.08,
+  "singular_values": "4286770aabfc020612706246cacd21f92ed56f070d445f55b51ab296ec7f916b",
+  "spec": {
+    "n_components": 8
+  },
+  "stages": 3,
+  "transformed": "8a9dab677f207a27df4ba4979ae10700f9457abf0698b8cfafd879f15c94d4e7"
+}

@@ -1,0 +1,11 @@
+# ols n=20000 d=24 algo=1
+# format: mojolearn-identity-trace v1
+0	ols.step1.covA	f32	576	34bd89557f1875e0
+1	ols.step2.Ab	f32	24	f69ab0d3f2716654
+2	ols.step3.eigvals	f32	24	55717354c8a521c3
+3	ols.step3.eigvecs	f32	576	ec9081ba76320fe4
+4	ols.step3.info	f32	3	dcdb31e8f3448bb3
+5	ols.step4.rank	i32	1	4ca59747b2d7c18d
+6	ols.step4.QS	f32	576	b715b95cc683a8a6
+7	ols.step5.inv	f32	576	090d71e21ae02f7b
+8	ols.step6.coef	f32	24	0b034c6d91a627c5

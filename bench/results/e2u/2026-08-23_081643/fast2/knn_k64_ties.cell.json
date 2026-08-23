@@ -1,0 +1,12 @@
+{
+  "card": "knn_k64_ties.card",
+  "distances": "0d3735f1a5acf0ca57d3abae68689eade4ec25d83b6d15b2df73d41b81be7121",
+  "indices": "a2d9d32c441eb7e42fd5a5ce9149c8ba81a2ed944cf82ff571a09850e77a429e",
+  "kind": "knn",
+  "seconds": 0.1,
+  "spec": {
+    "n_neighbors": 64
+  },
+  "stages": 6,
+  "used_query_tile": 256
+}

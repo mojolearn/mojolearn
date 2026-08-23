@@ -1,0 +1,96 @@
+E2U matrix (identical): 67 cells -> /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/e2u/2026-08-23_081643/identical1
+[ 1/67] kmeans_k8                    0f1feb6120205a47 n_iter=81 stages=602                        0.7s
+[ 2/67] kmeans_k3                    3bec35ededf9ccc7 n_iter=60 stages=490                        0.5s
+[ 3/67] kmeans_k32                   8d40568a34588920 n_iter=117 stages=889                       0.6s
+[ 4/67] kmeans_k8_random             11463766dc034b33 n_iter=70 stages=497                        0.4s
+[ 5/67] kmeans_k8_ninit3             75aefddc749ca21f n_iter=111 stages=1884                      1.4s
+[ 6/67] kmeans_k8_tol1e-2            6aa47cb659fce241 n_iter=3 stages=56                          0.2s
+[ 7/67] kmeans_k8_maxiter2           cb7c2b9f7d19d1ec n_iter=3 stages=49                          0.2s
+[ 8/67] kmeans_k8_seed11             cdff1c357f5749be n_iter=67 stages=518                        0.5s
+[ 9/67] kmeans_k8_sw                 e99e2b8c1fd3c126 n_iter=56 stages=427                        0.4s
+[10/67] kmeans_k8_array              a140dbc4cc73c516 n_iter=82 stages=581                        0.5s
+[11/67] kmeans_k32_random            0fb6401ed83a2300 n_iter=118 stages=833                       0.7s
+[12/67] kmeans_k8_200k               227c4326d54a4321 n_iter=79 stages=602                        1.9s
+[13/67] kmeans_k8_wide               bef30d2282792300 n_iter=30 stages=266                        0.4s
+[14/67] kmeans_k8_ties               ef31f9e331f64b2a n_iter=73 stages=567                        0.5s
+[15/67] kmeans_init_bad              REFUSED ValueError: mojolearn: init must be one              0.2s
+[16/67] knn_k1                       cee0bffdae3ca2dd used_query_tile=256 stages=6                0.3s
+[17/67] knn_k10                      2b882a14efa09819 used_query_tile=256 stages=6                0.3s
+[18/67] knn_k100                     e98f9670e01efcfa used_query_tile=256 stages=6                0.3s
+[19/67] knn_k10_self                 fcba2b16c4c142b3 used_query_tile=256 stages=6                0.3s
+[20/67] knn_k10_ties                 f183bf0d8adedfed used_query_tile=256 stages=6                0.2s
+[21/67] knn_k64_ties                 0d3735f1a5acf0ca used_query_tile=256 stages=6                0.2s
+[22/67] knn_k100_ties                25e3db22db1b6bdb used_query_tile=256 stages=6                0.3s
+[23/67] knn_k300                     REFUSED Exception: select_radix (IDENTICAL): k >             0.2s
+[24/67] knn_k10_tile64               2b882a14efa09819 used_query_tile=64 stages=6                 0.3s
+[25/67] knn_k10_200k                 d7023914fd39701d used_query_tile=256 stages=6                0.9s
+[26/67] knn_metric_cosine            REFUSED ValueError: mojolearn NearestNeighbors:              0.2s
+[27/67] knn_metric_minkowski_p1      REFUSED ValueError: mojolearn NearestNeighbors:              0.2s
+[28/67] knn_algorithm_kd_tree        REFUSED ValueError: mojolearn NearestNeighbors:              0.2s
+[29/67] knn_metric_l2                2b882a14efa09819 used_query_tile=256 stages=6                0.3s
+[30/67] dbscan_rbc                   ece90482443a2d28 n_iter=2 n_clusters=8 n_noise=399 batches=1 stages=3 0.3s
+[31/67] dbscan_brute                 ece90482443a2d28 n_iter=2 n_clusters=8 n_noise=399 batches=1 stages=3 0.3s
+[32/67] dbscan_eps0.15               300ce3546935ede5 n_iter=3 n_clusters=8 n_noise=409 batches=1 stages=3 0.3s
+[33/67] dbscan_eps1.0                3f49644f0adc5353 n_iter=2 n_clusters=8 n_noise=396 batches=1 stages=3 0.3s
+[34/67] dbscan_min2                  e8d0d8c5b84b8409 n_iter=2 n_clusters=9 n_noise=397 batches=1 stages=3 0.4s
+[35/67] dbscan_min50                 c33b3568065e760d n_iter=2 n_clusters=5 n_noise=469 batches=1 stages=3 0.3s
+[36/67] dbscan_min200                6a7a678b1a078e0e n_iter=2 n_clusters=4 n_noise=570 batches=1 stages=3 0.3s
+[37/67] dbscan_min50_brute           c33b3568065e760d n_iter=2 n_clusters=5 n_noise=469 batches=1 stages=3 0.3s
+[38/67] dbscan_rbc_budget1mb         ece90482443a2d28 n_iter=202 n_clusters=8 n_noise=399 batches=67 stages=3 0.9s
+[39/67] dbscan_brute_budget1mb       ece90482443a2d28 n_iter=200 n_clusters=8 n_noise=399 batches=67 stages=3 0.8s
+[40/67] dbscan_maxiter1              REFUSED Exception: weak_cc_batched: label propag             0.3s
+[41/67] dbscan_chain_default         9cbead1bd198bc90 n_iter=730 n_clusters=1 n_noise=0 batches=1 stages=3 0.6s
+[42/67] dbscan_chain_iter200         REFUSED Exception: weak_cc_batched: label propag             0.3s
+[43/67] dbscan_chain_iter5000        9cbead1bd198bc90 n_iter=732 n_clusters=1 n_noise=0 batches=1 stages=3 0.6s
+[44/67] dbscan_chain_iter5000_brute  9cbead1bd198bc90 n_iter=718 n_clusters=1 n_noise=0 batches=1 stages=3 0.6s
+[45/67] dbscan_metric_manhattan      REFUSED ValueError: mojolearn DBSCAN: metric='ma             0.3s
+[46/67] dbscan_algorithm_bad         REFUSED ValueError: mojolearn DBSCAN: algorithm=             0.2s
+[47/67] dbscan_sw                    REFUSED NotImplementedError: mojolearn DBSCAN: s             0.3s
+[48/67] dbscan_uniform24             6d2bb5ae05235e95 n_iter=3 n_clusters=1 n_noise=86 batches=1 stages=3 1.1s
+[49/67] dbscan_uniform24_brute       6d2bb5ae05235e95 n_iter=3 n_clusters=1 n_noise=86 batches=1 stages=3 0.7s
+[50/67] pca_c2                       2dbf58860ee35c1b stages=6                                    0.4s
+[51/67] pca_c8                       02f3b73ec4f4d708 stages=6                                    0.5s
+[52/67] pca_all                      1bea4925b250f583 stages=6                                    0.6s
+[53/67] pca_c8_wide                  REFUSED Exception: gemm_tn: NUMERIC_IDENTICAL re             0.4s
+[54/67] pca_c8_200k                  c2203550f77ef049 stages=6                                    0.5s
+[55/67] pca_whiten                   REFUSED NotImplementedError: mojolearn PCA: whit             0.2s
+[56/67] pca_solver_full              REFUSED ValueError: mojolearn PCA: svd_solver='f             0.2s
+[57/67] tsvd_c2                      303b36708927f84c stages=3                                    0.3s
+[58/67] tsvd_c8                      123a172e8aa81a08 stages=3                                    0.3s
+[59/67] tsvd_c8_wide                 REFUSED Exception: gemm_tn: NUMERIC_IDENTICAL re             0.3s
+[60/67] tsvd_randomized              REFUSED ValueError: mojolearn TruncatedSVD: algo             0.2s
+[61/67] ols_intercept                8c899cf9408ff567 stages=9                                    0.4s
+[62/67] ols_nointercept              ac27997df5bbddda stages=9                                    0.3s
+[63/67] ols_narrow4                  a3ed1af2b1e2cc3f stages=9                                    0.3s
+[64/67] ols_200k                     25458da1e378f229 stages=9                                    0.4s
+[65/67] ols_wide_refused             REFUSED Exception: olsFit: n_cols > n_rows selec             0.3s
+[66/67] ols_onecol_refused           REFUSED Exception: olsFit: n_cols == 1 selects l             0.3s
+[67/67] ols_sw_refused               REFUSED NotImplementedError: mojolearn LinearReg             0.3s
+
+REACH
+  KMeans.n_clusters                            REACHES            moved centroids,inertia,labels
+  KMeans.init                                  REACHES            moved centroids,inertia,labels
+  KMeans.n_init                                REACHES            moved centroids,inertia,labels
+  KMeans.tol                                   REACHES            moved centroids,inertia,labels; n_iter: 81 -> 3
+  KMeans.max_iter                              REACHES            moved centroids,inertia,labels; n_iter: 81 -> 3
+  KMeans.random_state                          REACHES            moved centroids,inertia,labels
+  KMeans.sample_weight                         REACHES            moved centroids,inertia,labels
+  KMeans.init_centroids                        REACHES            moved centroids,inertia,labels
+  NearestNeighbors.n_neighbors                 REACHES            moved distances,indices
+  NearestNeighbors.query_tile                  INVARIANT          used_query_tile: 256 -> 64
+  NearestNeighbors.metric='l2'                 INVARIANT          distances,indices equal
+  DBSCAN.eps                                   REACHES            moved labels
+  DBSCAN.min_samples                           REACHES            moved labels
+  DBSCAN.algorithm                             INVARIANT          labels equal
+  DBSCAN.algorithm (min50)                     INVARIANT          labels equal
+  DBSCAN.algorithm (uniform24)                 INVARIANT          labels equal
+  DBSCAN.max_mbytes_per_batch (rbc)            INVARIANT          batches: 1 -> 67
+  DBSCAN.max_mbytes_per_batch (brute)          INVARIANT          batches: 1 -> 67
+  DBSCAN.max_iterations (chain, cap 200 binds) REFUSED            Exception: weak_cc_batched: label propagation did not converge in 200 
+  DBSCAN.max_iterations (chain, None = fixed point) INVARIANT          labels equal
+  DBSCAN.max_iterations (blobs, converges in 1) REFUSED            Exception: weak_cc_batched: label propagation did not converge in 1 pa
+  DBSCAN.algorithm (chain)                     INVARIANT          labels equal
+  PCA.n_components                             REACHES            moved components,explained_variance,explained_variance_ratio,noise_variance,singular_values,transformed
+  TruncatedSVD.n_components                    REACHES            moved components,singular_values,transformed
+  LinearRegression.fit_intercept               REACHES            moved coef,intercept,predictions
+wrote /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/e2u/2026-08-23_081643/identical1/e2u_cells.json

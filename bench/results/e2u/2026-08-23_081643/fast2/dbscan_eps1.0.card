@@ -1,0 +1,5 @@
+# dbscan n=3570 d=4 eps=1.0 min_pts=5 batches=1
+# format: mojolearn-identity-trace v1
+0	dbscan.core	u8	3570	3a43ab291fc21c4f
+1	dbscan.labels.merged	i32	3570	861d85367d9860d2
+2	dbscan.labels.final	i32	3570	46e1bd11c5023040

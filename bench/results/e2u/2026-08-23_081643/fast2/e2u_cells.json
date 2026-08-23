@@ -1,0 +1,1071 @@
+{
+  "cells": {
+    "dbscan_algorithm_bad": {
+      "kind": "dbscan",
+      "refused": "ValueError: mojolearn DBSCAN: algorithm='kd_tree' is refused; it must be one of ['brute', 'rbc'] ('rbc' is the ball-cover eps search, DEVIATION 35's default; 'brute' is cuML's default arm)",
+      "seconds": 0.0,
+      "spec": {
+        "algorithm": "kd_tree",
+        "eps": 0.3,
+        "min_samples": 5
+      }
+    },
+    "dbscan_brute": {
+      "batches": 1,
+      "card": "dbscan_brute.card",
+      "kind": "dbscan",
+      "labels": "ece90482443a2d2888696f40bb30099075ba71b1864e937196653b630b7f5bb2",
+      "n_clusters": 8,
+      "n_iter": 2,
+      "n_noise": 399,
+      "seconds": 0.07,
+      "spec": {
+        "algorithm": "brute",
+        "eps": 0.3,
+        "min_samples": 5
+      },
+      "stages": 3
+    },
+    "dbscan_brute_budget1mb": {
+      "batches": 67,
+      "card": "dbscan_brute_budget1mb.card",
+      "kind": "dbscan",
+      "labels": "ece90482443a2d2888696f40bb30099075ba71b1864e937196653b630b7f5bb2",
+      "n_clusters": 8,
+      "n_iter": 200,
+      "n_noise": 399,
+      "seconds": 0.42,
+      "spec": {
+        "algorithm": "brute",
+        "eps": 0.3,
+        "max_mbytes_per_batch": 1,
+        "min_samples": 5
+      },
+      "stages": 3
+    },
+    "dbscan_chain_default": {
+      "batches": 1,
+      "card": "dbscan_chain_default.card",
+      "kind": "dbscan",
+      "labels": "9cbead1bd198bc908fb5e5babc0fa654e44f0e4ef17b861738e4c475a055c1c2",
+      "n_clusters": 1,
+      "n_iter": 729,
+      "n_noise": 0,
+      "seconds": 0.27,
+      "spec": {
+        "eps": 0.1875,
+        "min_samples": 2
+      },
+      "stages": 3
+    },
+    "dbscan_chain_iter200": {
+      "batches": 1,
+      "card": "dbscan_chain_iter200.card",
+      "kind": "dbscan",
+      "labels": "739231677fea56cf1d036823746426d58ca83fffbe03a521facff2c2a164ff3d",
+      "n_clusters": 7,
+      "n_iter": 200,
+      "n_noise": 0,
+      "seconds": 0.1,
+      "spec": {
+        "eps": 0.1875,
+        "max_iterations": 200,
+        "min_samples": 2
+      },
+      "stages": 3
+    },
+    "dbscan_chain_iter5000": {
+      "batches": 1,
+      "card": "dbscan_chain_iter5000.card",
+      "kind": "dbscan",
+      "labels": "9cbead1bd198bc908fb5e5babc0fa654e44f0e4ef17b861738e4c475a055c1c2",
+      "n_clusters": 1,
+      "n_iter": 729,
+      "n_noise": 0,
+      "seconds": 0.27,
+      "spec": {
+        "eps": 0.1875,
+        "max_iterations": 5000,
+        "min_samples": 2
+      },
+      "stages": 3
+    },
+    "dbscan_chain_iter5000_brute": {
+      "batches": 1,
+      "card": "dbscan_chain_iter5000_brute.card",
+      "kind": "dbscan",
+      "labels": "9cbead1bd198bc908fb5e5babc0fa654e44f0e4ef17b861738e4c475a055c1c2",
+      "n_clusters": 1,
+      "n_iter": 702,
+      "n_noise": 0,
+      "seconds": 0.23,
+      "spec": {
+        "algorithm": "brute",
+        "eps": 0.1875,
+        "max_iterations": 5000,
+        "min_samples": 2
+      },
+      "stages": 3
+    },
+    "dbscan_eps0.15": {
+      "batches": 1,
+      "card": "dbscan_eps0.15.card",
+      "kind": "dbscan",
+      "labels": "300ce3546935ede58f83be2e594deb4a1e58e8381c19211ae5b380fe03dcdb05",
+      "n_clusters": 8,
+      "n_iter": 3,
+      "n_noise": 409,
+      "seconds": 0.12,
+      "spec": {
+        "eps": 0.15,
+        "min_samples": 5
+      },
+      "stages": 3
+    },
+    "dbscan_eps1.0": {
+      "batches": 1,
+      "card": "dbscan_eps1.0.card",
+      "kind": "dbscan",
+      "labels": "3f49644f0adc53536f46c79bf34172c6acd6f827db2b8369e236f28b7c1c127c",
+      "n_clusters": 8,
+      "n_iter": 2,
+      "n_noise": 396,
+      "seconds": 0.09,
+      "spec": {
+        "eps": 1.0,
+        "min_samples": 5
+      },
+      "stages": 3
+    },
+    "dbscan_maxiter1": {
+      "batches": 1,
+      "card": "dbscan_maxiter1.card",
+      "kind": "dbscan",
+      "labels": "ece90482443a2d2888696f40bb30099075ba71b1864e937196653b630b7f5bb2",
+      "n_clusters": 8,
+      "n_iter": 1,
+      "n_noise": 399,
+      "seconds": 0.07,
+      "spec": {
+        "eps": 0.3,
+        "max_iterations": 1,
+        "min_samples": 5
+      },
+      "stages": 3
+    },
+    "dbscan_metric_manhattan": {
+      "kind": "dbscan",
+      "refused": "ValueError: mojolearn DBSCAN: metric='manhattan' is refused; only 'euclidean' is ported (the eps kernels in dbscan/ported/neighbors/epsilon_neighborhood.mojo carry L2 only, and cuML's runner.cuh:152-156 downgrades every other metric to L2Sqrt as well)",
+      "seconds": 0.0,
+      "spec": {
+        "eps": 0.3,
+        "metric": "manhattan",
+        "min_samples": 5
+      }
+    },
+    "dbscan_min2": {
+      "batches": 1,
+      "card": "dbscan_min2.card",
+      "kind": "dbscan",
+      "labels": "e8d0d8c5b84b84090fe5427dad6b390c9ea5cceac19cdbbe66ce51b212ce113e",
+      "n_clusters": 9,
+      "n_iter": 2,
+      "n_noise": 397,
+      "seconds": 0.06,
+      "spec": {
+        "eps": 0.3,
+        "min_samples": 2
+      },
+      "stages": 3
+    },
+    "dbscan_min200": {
+      "batches": 1,
+      "card": "dbscan_min200.card",
+      "kind": "dbscan",
+      "labels": "6a7a678b1a078e0eed33a8902dcd4da3540696902b19810ada105898421ed05e",
+      "n_clusters": 4,
+      "n_iter": 2,
+      "n_noise": 570,
+      "seconds": 0.06,
+      "spec": {
+        "eps": 0.3,
+        "min_samples": 200
+      },
+      "stages": 3
+    },
+    "dbscan_min50": {
+      "batches": 1,
+      "card": "dbscan_min50.card",
+      "kind": "dbscan",
+      "labels": "c33b3568065e760dc713e8227ffecbb9a338d894c44a440f6694c770d7008bad",
+      "n_clusters": 5,
+      "n_iter": 2,
+      "n_noise": 469,
+      "seconds": 0.06,
+      "spec": {
+        "eps": 0.3,
+        "min_samples": 50
+      },
+      "stages": 3
+    },
+    "dbscan_min50_brute": {
+      "batches": 1,
+      "card": "dbscan_min50_brute.card",
+      "kind": "dbscan",
+      "labels": "c33b3568065e760dc713e8227ffecbb9a338d894c44a440f6694c770d7008bad",
+      "n_clusters": 5,
+      "n_iter": 2,
+      "n_noise": 469,
+      "seconds": 0.06,
+      "spec": {
+        "algorithm": "brute",
+        "eps": 0.3,
+        "min_samples": 50
+      },
+      "stages": 3
+    },
+    "dbscan_rbc": {
+      "batches": 1,
+      "card": "dbscan_rbc.card",
+      "kind": "dbscan",
+      "labels": "ece90482443a2d2888696f40bb30099075ba71b1864e937196653b630b7f5bb2",
+      "n_clusters": 8,
+      "n_iter": 2,
+      "n_noise": 399,
+      "seconds": 0.05,
+      "spec": {
+        "eps": 0.3,
+        "min_samples": 5
+      },
+      "stages": 3
+    },
+    "dbscan_rbc_budget1mb": {
+      "batches": 67,
+      "card": "dbscan_rbc_budget1mb.card",
+      "kind": "dbscan",
+      "labels": "ece90482443a2d2888696f40bb30099075ba71b1864e937196653b630b7f5bb2",
+      "n_clusters": 8,
+      "n_iter": 202,
+      "n_noise": 399,
+      "seconds": 0.58,
+      "spec": {
+        "eps": 0.3,
+        "max_mbytes_per_batch": 1,
+        "min_samples": 5
+      },
+      "stages": 3
+    },
+    "dbscan_sw": {
+      "kind": "dbscan",
+      "refused": "NotImplementedError: mojolearn DBSCAN: sample_weight is not ported (dbscan/estimator.mojo, WHAT IS NOT HERE YET)",
+      "seconds": 0.0,
+      "spec": {
+        "eps": 0.3,
+        "min_samples": 5
+      }
+    },
+    "dbscan_uniform24": {
+      "batches": 1,
+      "card": "dbscan_uniform24.card",
+      "kind": "dbscan",
+      "labels": "6d2bb5ae05235e959848c322d2b27be658abd64b4ed4d39d37e5bc320388ea2e",
+      "n_clusters": 1,
+      "n_iter": 3,
+      "n_noise": 86,
+      "seconds": 0.67,
+      "spec": {
+        "eps": 1.25,
+        "min_samples": 5
+      },
+      "stages": 3
+    },
+    "dbscan_uniform24_brute": {
+      "batches": 1,
+      "card": "dbscan_uniform24_brute.card",
+      "kind": "dbscan",
+      "labels": "6d2bb5ae05235e959848c322d2b27be658abd64b4ed4d39d37e5bc320388ea2e",
+      "n_clusters": 1,
+      "n_iter": 3,
+      "n_noise": 86,
+      "seconds": 0.16,
+      "spec": {
+        "algorithm": "brute",
+        "eps": 1.25,
+        "min_samples": 5
+      },
+      "stages": 3
+    },
+    "kmeans_init_bad": {
+      "kind": "kmeans",
+      "refused": "ValueError: mojolearn: init must be one of ['array', 'k-means++', 'random'], got 'pca-ish'",
+      "seconds": 0.0,
+      "spec": {
+        "init": "pca-ish",
+        "n_clusters": 8,
+        "random_state": 7
+      }
+    },
+    "kmeans_k3": {
+      "card": "kmeans_k3.card",
+      "centroids": "3b5bda4188feebd407c8a86c20d83df957b1a834ebe799c5150d7ceddd06f0ee",
+      "inertia": "4d7d2bab481ddceba10fba9a25e13559874bfdfcb428e439e6a4d6903c01a08e",
+      "inertia_value": 37991.53125,
+      "kind": "kmeans",
+      "labels": "3bec35ededf9ccc73350f4c8e43018388b4643a7b58812ae0ef45a6b69344140",
+      "n_iter": 60,
+      "seconds": 0.31,
+      "spec": {
+        "n_clusters": 3,
+        "random_state": 7
+      },
+      "stages": 490,
+      "sum_scale": 65536.0,
+      "weight_scale": 32768.0
+    },
+    "kmeans_k32": {
+      "card": "kmeans_k32.card",
+      "centroids": "5acf6821d4e46144fa666ff7cefa42fcf52111fe5f3267c97c926689013ec96f",
+      "inertia": "f2cfe186e2ec6b037e43dc090d38599db33535985c3fb178a5dc7200cbb01062",
+      "inertia_value": 32023.044921875,
+      "kind": "kmeans",
+      "labels": "8d40568a3458892070e0f4963f6f7eec5ae3226383324595a879106a69dd9bf6",
+      "n_iter": 117,
+      "seconds": 0.59,
+      "spec": {
+        "n_clusters": 32,
+        "random_state": 7
+      },
+      "stages": 889,
+      "sum_scale": 65536.0,
+      "weight_scale": 32768.0
+    },
+    "kmeans_k32_random": {
+      "card": "kmeans_k32_random.card",
+      "centroids": "79db06992da79a1ee6d3a35ffec359c80f4660aabe2f6e6289e72b02fee6e140",
+      "inertia": "d9020c769ef87d4e5ecd761778bc6216024ab38aee9a1643198a50b70640a3f2",
+      "inertia_value": 32028.681640625,
+      "kind": "kmeans",
+      "labels": "0fb6401ed83a2300462e45c2f36b76fa72befb94f2c7f0d48e7dde00f9685489",
+      "n_iter": 118,
+      "seconds": 0.43,
+      "spec": {
+        "init": "random",
+        "n_clusters": 32,
+        "random_state": 7
+      },
+      "stages": 833,
+      "sum_scale": 65536.0,
+      "weight_scale": 32768.0
+    },
+    "kmeans_k8": {
+      "card": "kmeans_k8.card",
+      "centroids": "a75be13ae713757839f2ce42b1df3df8f6d596d54d66291b7f6dd3b99154f27b",
+      "inertia": "2f9de5ee7e340caa96e9d5ade987e65904aeb51dfade3c5abbc1548058553c88",
+      "inertia_value": 35844.81640625,
+      "kind": "kmeans",
+      "labels": "0f1feb6120205a47ba412a9a55b8e4af58b2cce2c7875b36697e81bac29da8c0",
+      "n_iter": 81,
+      "seconds": 0.51,
+      "spec": {
+        "n_clusters": 8,
+        "random_state": 7
+      },
+      "stages": 602,
+      "sum_scale": 65536.0,
+      "weight_scale": 32768.0
+    },
+    "kmeans_k8_200k": {
+      "card": "kmeans_k8_200k.card",
+      "centroids": "4c00fd9afb3066eb989c73101124e08ff80d84782290ba4dc54279598af7cb77",
+      "inertia": "ff83ddbe16fc30a6d9169d04d72e60487d58fb105817a5e3739687a24eb2aeef",
+      "inertia_value": 359019.4375,
+      "kind": "kmeans",
+      "labels": "227c4326d54a43218583f919fb22524c450de5d8feaf67edb47866cec9764006",
+      "n_iter": 79,
+      "seconds": 1.34,
+      "spec": {
+        "n_clusters": 8,
+        "random_state": 7
+      },
+      "stages": 602,
+      "sum_scale": 8192.0,
+      "weight_scale": 4096.0
+    },
+    "kmeans_k8_array": {
+      "card": "kmeans_k8_array.card",
+      "centroids": "ab194fe76a57448c926f57f7687791994904560ad280301f6eb068da59a00ecf",
+      "inertia": "1c32a851fe007308d0b32987968562bf000cf71a85bcc6d04db65f66cd0a8118",
+      "inertia_value": 35786.76953125,
+      "kind": "kmeans",
+      "labels": "a140dbc4cc73c51636d76cd5cfbd6ec82d8f54d5fbe550fda4f177e9397da42d",
+      "n_iter": 82,
+      "seconds": 0.31,
+      "spec": {
+        "init": "array",
+        "init_centroids": "C0",
+        "n_clusters": 8,
+        "random_state": 7
+      },
+      "stages": 581,
+      "sum_scale": 65536.0,
+      "weight_scale": 32768.0
+    },
+    "kmeans_k8_maxiter2": {
+      "card": "kmeans_k8_maxiter2.card",
+      "centroids": "c0fb4d0b6ff16fa90a6b37e3a38b80fe2b2d3d7bc1f03fa103b02eedabe0aeed",
+      "inertia": "aa735547eddf023f54a6a6b76994197f9c706de3fd4297665690a63ec503f085",
+      "inertia_value": 36030.34375,
+      "kind": "kmeans",
+      "labels": "cb7c2b9f7d19d1ec0363571e6c545f47d1c19fd62a5d7376584b5cc56ed0a73b",
+      "n_iter": 3,
+      "seconds": 0.13,
+      "spec": {
+        "max_iter": 2,
+        "n_clusters": 8,
+        "random_state": 7
+      },
+      "stages": 49,
+      "sum_scale": 65536.0,
+      "weight_scale": 32768.0
+    },
+    "kmeans_k8_ninit3": {
+      "card": "kmeans_k8_ninit3.card",
+      "centroids": "a19c2d7f9eb96d5a9b76f61d40f82d024373043968e971fa667f3141fc8d9dd9",
+      "inertia": "3a521bc32a4502ebdc4661d6789e84d068a7725a43822113551e716934e9fc25",
+      "inertia_value": 35805.75,
+      "kind": "kmeans",
+      "labels": "75aefddc749ca21fbfd9f36d533318e1a59ed11ed2e1b46e4d62291baf391b3c",
+      "n_iter": 111,
+      "seconds": 1.03,
+      "spec": {
+        "n_clusters": 8,
+        "n_init": 3,
+        "random_state": 7
+      },
+      "stages": 1884,
+      "sum_scale": 65536.0,
+      "weight_scale": 32768.0
+    },
+    "kmeans_k8_random": {
+      "card": "kmeans_k8_random.card",
+      "centroids": "7f3964aded98bfefaed96f3e1a9a1f601f48f48837f782d5742c1bde011eedb0",
+      "inertia": "637c0eb835d5104676d61048c3c95e46ac9191292d2992c6186967cb7ba27ece",
+      "inertia_value": 35822.3671875,
+      "kind": "kmeans",
+      "labels": "11463766dc034b3396e406a46a6ceba5bf794a201fd19a83c9740a54958cf7ad",
+      "n_iter": 70,
+      "seconds": 0.31,
+      "spec": {
+        "init": "random",
+        "n_clusters": 8,
+        "random_state": 7
+      },
+      "stages": 497,
+      "sum_scale": 65536.0,
+      "weight_scale": 32768.0
+    },
+    "kmeans_k8_seed11": {
+      "card": "kmeans_k8_seed11.card",
+      "centroids": "b331314bbe2cdf38571bf67256c2fbc4836010422e118274144354985c517ff1",
+      "inertia": "40bd37f033359b5c5f52d8a2a112937da643f09bc62eaf3c6029837e4b3bff67",
+      "inertia_value": 35804.7265625,
+      "kind": "kmeans",
+      "labels": "cdff1c357f5749beeeb94b856528eefe0c8c5634af886394e096f0efc3516535",
+      "n_iter": 67,
+      "seconds": 0.3,
+      "spec": {
+        "n_clusters": 8,
+        "random_state": 11
+      },
+      "stages": 518,
+      "sum_scale": 65536.0,
+      "weight_scale": 32768.0
+    },
+    "kmeans_k8_sw": {
+      "card": "kmeans_k8_sw.card",
+      "centroids": "bfae6fe51697df91603bd1585db36e46a737d3cc07354b45819de54c2bd42e81",
+      "inertia": "490b496dca81ba757c7553372a2dddda327d4c211e35b592f2ea928042e19104",
+      "inertia_value": 107318.046875,
+      "kind": "kmeans",
+      "labels": "e99e2b8c1fd3c1260ebe105bc27ee144cacaf9c0bc881aae6b42e60b966b6aec",
+      "n_iter": 56,
+      "seconds": 0.25,
+      "spec": {
+        "n_clusters": 8,
+        "random_state": 7
+      },
+      "stages": 427,
+      "sum_scale": 65536.0,
+      "weight_scale": 16384.0
+    },
+    "kmeans_k8_ties": {
+      "card": "kmeans_k8_ties.card",
+      "centroids": "91545b338f2cf24529b6c401e333f5ecc2fa5afeb8e5dc9459ef71009f2aa389",
+      "inertia": "b87c381e0151388aa79ae56471417a104a50865a798dbfad626b0aa71d92fb5b",
+      "inertia_value": 35659.42578125,
+      "kind": "kmeans",
+      "labels": "ef31f9e331f64b2a0c61919d26817f9e3355478a26a8cd5552083fc039132640",
+      "n_iter": 73,
+      "seconds": 0.31,
+      "spec": {
+        "n_clusters": 8,
+        "random_state": 7
+      },
+      "stages": 567,
+      "sum_scale": 65536.0,
+      "weight_scale": 32768.0
+    },
+    "kmeans_k8_tol1e-2": {
+      "card": "kmeans_k8_tol1e-2.card",
+      "centroids": "ef5969ce848005ad86308f235acd36bd8280b870a3b4bc2b77354a54031109c1",
+      "inertia": "8c86c7180bc49ce9475cd029e6e468339fbfefc26ece2e44591645007ed14800",
+      "inertia_value": 36002.7109375,
+      "kind": "kmeans",
+      "labels": "6aa47cb659fce2413f279581afdd39b67c000748afa71eab441d083ed3308de2",
+      "n_iter": 3,
+      "seconds": 0.09,
+      "spec": {
+        "n_clusters": 8,
+        "random_state": 7,
+        "tol": 0.01
+      },
+      "stages": 56,
+      "sum_scale": 65536.0,
+      "weight_scale": 32768.0
+    },
+    "kmeans_k8_wide": {
+      "card": "kmeans_k8_wide.card",
+      "centroids": "90208e67e41ef2712eb8486ebffec19dde725a30af80c247af5d42958fac351b",
+      "inertia": "9fc72490b4cab5e09561baf423acc8050b2ec4048361979a2ab6d2ac7e396545",
+      "inertia_value": 67278.8671875,
+      "kind": "kmeans",
+      "labels": "caf084c526f07f5dbb71684efab311916f0e790646efb6eaf6b1bc2b086ef420",
+      "n_iter": 30,
+      "seconds": 0.18,
+      "spec": {
+        "n_clusters": 8,
+        "random_state": 7
+      },
+      "stages": 266,
+      "sum_scale": 262144.0,
+      "weight_scale": 131072.0
+    },
+    "knn_algorithm_kd_tree": {
+      "kind": "knn",
+      "refused": "ValueError: mojolearn NearestNeighbors: algorithm='kd_tree' is refused; this class is exact brute force ('brute', which 'auto' also means here) and ships no tree or graph index",
+      "seconds": 0.0,
+      "spec": {
+        "algorithm": "kd_tree",
+        "n_neighbors": 10
+      }
+    },
+    "knn_k1": {
+      "card": "knn_k1.card",
+      "distances": "cee0bffdae3ca2dd97cca02b0cc872b2c46e45091da766f4ef305f9e9d30b31e",
+      "indices": "44628167ce3917a9b55e0db67582819cda89fdfd2cf6579539ba3d829a7fe7ff",
+      "kind": "knn",
+      "seconds": 0.09,
+      "spec": {
+        "n_neighbors": 1
+      },
+      "stages": 6,
+      "used_query_tile": 256
+    },
+    "knn_k10": {
+      "card": "knn_k10.card",
+      "distances": "2b882a14efa0981905bfbf181f6f4dfcbd1fa7edb28325d961015574284b5ea7",
+      "indices": "9c0566c60022ad10df0b29f7169c7d4adec61830c9ce61a3773b4eeabddade2d",
+      "kind": "knn",
+      "seconds": 0.08,
+      "spec": {
+        "n_neighbors": 10
+      },
+      "stages": 6,
+      "used_query_tile": 256
+    },
+    "knn_k100": {
+      "card": "knn_k100.card",
+      "distances": "e98f9670e01efcfa9a05363e86557ce9f1a83a9ce9016b1a53b0c557b1a47b17",
+      "indices": "1c0f428b9b47f980f05a5c074cc988eb0c82566e7c7ed34a6662212fa328e93e",
+      "kind": "knn",
+      "seconds": 0.2,
+      "spec": {
+        "n_neighbors": 100
+      },
+      "stages": 6,
+      "used_query_tile": 256
+    },
+    "knn_k100_ties": {
+      "card": "knn_k100_ties.card",
+      "distances": "25e3db22db1b6bdbf9225a2de6ba573d8ca13e2c00ca0012a06f16204e7f6ae6",
+      "indices": "43de4c4fbfb996c0c7cd9e100d763d030cbcd18b83430292c13e4e69510c21c3",
+      "kind": "knn",
+      "seconds": 0.1,
+      "spec": {
+        "n_neighbors": 100
+      },
+      "stages": 6,
+      "used_query_tile": 256
+    },
+    "knn_k10_200k": {
+      "card": "knn_k10_200k.card",
+      "distances": "d7023914fd39701dad3ac79b4703a12d47b881db24ccc0db107f9098662c58f2",
+      "indices": "47bf0bc340d2788ccb544987cce710ad943f3251527501311fbf67a79452f467",
+      "kind": "knn",
+      "seconds": 0.33,
+      "spec": {
+        "n_neighbors": 10
+      },
+      "stages": 6,
+      "used_query_tile": 256
+    },
+    "knn_k10_self": {
+      "card": "knn_k10_self.card",
+      "distances": "8d79664f57cd18cbd565b46198537776aa2662bd85e06677303ac4a3919d0546",
+      "indices": "d361f34919189c8992ef8d5d721968ec21377a4333f17b924451ece7b4b5f9da",
+      "kind": "knn",
+      "seconds": 0.07,
+      "spec": {
+        "n_neighbors": 10
+      },
+      "stages": 6,
+      "used_query_tile": 256
+    },
+    "knn_k10_ties": {
+      "card": "knn_k10_ties.card",
+      "distances": "f183bf0d8adedfedc0f375b2c5171426de0a21a00491e7ef62bb4a6b0811c5ea",
+      "indices": "254e6b36870e529a3d52b22c8746608d51055f23dc85de2384fa2a9a49561f61",
+      "kind": "knn",
+      "seconds": 0.07,
+      "spec": {
+        "n_neighbors": 10
+      },
+      "stages": 6,
+      "used_query_tile": 256
+    },
+    "knn_k10_tile64": {
+      "card": "knn_k10_tile64.card",
+      "distances": "2b882a14efa0981905bfbf181f6f4dfcbd1fa7edb28325d961015574284b5ea7",
+      "indices": "9c0566c60022ad10df0b29f7169c7d4adec61830c9ce61a3773b4eeabddade2d",
+      "kind": "knn",
+      "seconds": 0.09,
+      "spec": {
+        "n_neighbors": 10,
+        "query_tile": 64
+      },
+      "stages": 6,
+      "used_query_tile": 64
+    },
+    "knn_k300": {
+      "card": "knn_k300.card",
+      "distances": "5a0f69baa33a724493c9cd278cf0fda3ada7772a7eba319bc1927e017d02dd0c",
+      "indices": "d9d11f772de42fd8a8b124c88a8503505bc73935da277dc6566836fb1e00a7bd",
+      "kind": "knn",
+      "seconds": 0.53,
+      "spec": {
+        "n_neighbors": 300
+      },
+      "stages": 6,
+      "used_query_tile": 256
+    },
+    "knn_k64_ties": {
+      "card": "knn_k64_ties.card",
+      "distances": "0d3735f1a5acf0ca57d3abae68689eade4ec25d83b6d15b2df73d41b81be7121",
+      "indices": "a2d9d32c441eb7e42fd5a5ce9149c8ba81a2ed944cf82ff571a09850e77a429e",
+      "kind": "knn",
+      "seconds": 0.1,
+      "spec": {
+        "n_neighbors": 64
+      },
+      "stages": 6,
+      "used_query_tile": 256
+    },
+    "knn_metric_cosine": {
+      "kind": "knn",
+      "refused": "ValueError: mojolearn NearestNeighbors: metric='cosine' is refused; only Euclidean ('euclidean', 'l2', 'minkowski' with p=2) is ported. The brute-force kernels carry the expanded-L2 arm only (neighbors/ported/neighbors/detail/knn_brute_force.mojo): another metric is a port, not a flag",
+      "seconds": 0.0,
+      "spec": {
+        "metric": "cosine",
+        "n_neighbors": 10
+      }
+    },
+    "knn_metric_l2": {
+      "card": "knn_metric_l2.card",
+      "distances": "2b882a14efa0981905bfbf181f6f4dfcbd1fa7edb28325d961015574284b5ea7",
+      "indices": "9c0566c60022ad10df0b29f7169c7d4adec61830c9ce61a3773b4eeabddade2d",
+      "kind": "knn",
+      "seconds": 0.09,
+      "spec": {
+        "metric": "l2",
+        "n_neighbors": 10
+      },
+      "stages": 6,
+      "used_query_tile": 256
+    },
+    "knn_metric_minkowski_p1": {
+      "kind": "knn",
+      "refused": "ValueError: mojolearn NearestNeighbors: metric='minkowski' with p=1 is refused; only p=2 (Euclidean) is ported",
+      "seconds": 0.0,
+      "spec": {
+        "metric": "minkowski",
+        "n_neighbors": 10,
+        "p": 1
+      }
+    },
+    "ols_200k": {
+      "card": "ols_200k.card",
+      "coef": "35e2e5f63a51395444f2c5dfee56693da002fe083e8b12e5c5315853cf917c1c",
+      "intercept": "1de289e4a12525b20a98c13e61419e0791463e736914ec4b35609551e7a5a774",
+      "intercept_value": -0.00504103995802474,
+      "kind": "ols",
+      "predictions": "1939ea4dc99ef3e809abf83a2cde6661f0adbe81a028d74d08448bd1e04c84ef",
+      "seconds": 0.09,
+      "spec": {},
+      "stages": 9
+    },
+    "ols_intercept": {
+      "card": "ols_intercept.card",
+      "coef": "fc5a542e09087e87a124a1f99b97dbccaa1bb93812a9a57112c3a543fd1aa3ca",
+      "intercept": "297a9aabc122a97fdfc1e6856dd3d1fe4d2079ec5b6929cef727ff597ddc02cf",
+      "intercept_value": -0.0071624485270165295,
+      "kind": "ols",
+      "predictions": "8d7c0d0796c2256eb05bc0b90c02ab363c92b18a8f5d9ec663c1f9361ba50110",
+      "seconds": 0.05,
+      "spec": {},
+      "stages": 9
+    },
+    "ols_narrow4": {
+      "card": "ols_narrow4.card",
+      "coef": "01b8859dd08eb11872f40a0ef606399785b2d94d8893c52f90c4d7b6b5ee03a4",
+      "intercept": "106e6e4358a5627c70ec199754ca22a79a6c4b19f764b859926274cafb13ce44",
+      "intercept_value": 4.1760881402315375,
+      "kind": "ols",
+      "predictions": "9581b2cd1094feee02b69b3976affec96461a93e91e267a2bfaf9d3ea109a52c",
+      "seconds": 0.04,
+      "spec": {},
+      "stages": 9
+    },
+    "ols_nointercept": {
+      "card": "ols_nointercept.card",
+      "coef": "944067424e13411667b069b280b784e4f2c8c5e653b853e1d9c93355bf49f6c4",
+      "intercept": "746e75607f7ce3478b54dd31aa809ce25c0435996ce87be6a05d52790547d949",
+      "intercept_value": 0.0,
+      "kind": "ols",
+      "predictions": "d921a1edd4cb557a28722768d53cc64de959fe635cb03af53d55c7803f0dadb8",
+      "seconds": 0.05,
+      "spec": {
+        "fit_intercept": false
+      },
+      "stages": 9
+    },
+    "ols_onecol_refused": {
+      "kind": "ols",
+      "refused": "Exception: olsFit: n_cols == 1 selects lstsqSvdJacobi (ols.cuh:113), which is NOT PORTED. cuML forces the same switch and says the eig solver does not support a single column (linear_regression.pyx:390). See glm/UNPORTED.tsv",
+      "seconds": 0.06,
+      "spec": {}
+    },
+    "ols_sw_refused": {
+      "kind": "ols",
+      "refused": "NotImplementedError: mojolearn LinearRegression: sample_weight is not ported (ols.cuh:99-110; glm/UNPORTED.tsv)",
+      "seconds": 0.0,
+      "spec": {}
+    },
+    "ols_wide_refused": {
+      "kind": "ols",
+      "refused": "Exception: olsFit: n_cols > n_rows selects lstsqSvdJacobi (ols.cuh:113), which is NOT PORTED. The normal-equations solver cannot be used here: A^T A is singular by construction. See glm/UNPORTED.tsv",
+      "seconds": 0.05,
+      "spec": {}
+    },
+    "pca_all": {
+      "card": "pca_all.card",
+      "components": "da03adc550435157f0c6547de7dbe095d7baadf149bca8a63e665c7f332d0297",
+      "explained_variance": "238dab33294924f442df8a4680719e50546ca3da92a634653a5c5f272ee2e00b",
+      "explained_variance_ratio": "ba92c55580393e401a1357d62bc2a8aa0765d6776483f3fa9d78f9cde77b64f3",
+      "kind": "pca",
+      "mean": "0d2b3fded938a5193d7fdb93cd81643428e55f0f83c152954b78894bb5f5519a",
+      "noise_variance": "746e75607f7ce3478b54dd31aa809ce25c0435996ce87be6a05d52790547d949",
+      "seconds": 0.04,
+      "singular_values": "24dcf252d54aa27a075d8bf4f91d0a6fe656487ae610f1af89679c23bff6d345",
+      "spec": {
+        "n_components": null
+      },
+      "stages": 6,
+      "transformed": "67624c4383da32c7f96b1d80e8857f4984ce96f8a12a0c9ef540652d2c24bd79"
+    },
+    "pca_c2": {
+      "card": "pca_c2.card",
+      "components": "2037bcea934c7b5bd56629b491e1264fd27319dc30346c1be6f98eac2cf938bb",
+      "explained_variance": "8b68bbacfa996bac1bf5137f6284fc6c62fea92058a3128895c8b23fdbc69e73",
+      "explained_variance_ratio": "202badbee324cb19e8a4ad68b0b870e205cac793638985cc69a38d2fc37e2fd9",
+      "kind": "pca",
+      "mean": "0d2b3fded938a5193d7fdb93cd81643428e55f0f83c152954b78894bb5f5519a",
+      "noise_variance": "736a75669db4813c1ad38f33d59e593842316e9bb2b838acebeb0814deb151e0",
+      "seconds": 0.04,
+      "singular_values": "4c61017489e47c24bfd05e613dd5787160334277c0a27b40211d9f145107be5d",
+      "spec": {
+        "n_components": 2
+      },
+      "stages": 6,
+      "transformed": "cba100b8abe6402a4814e739820259690a2a1bc8786dbbe0324c82895b7cbd10"
+    },
+    "pca_c8": {
+      "card": "pca_c8.card",
+      "components": "595ea4b040123898c18b398230892b51ff19236467f2875b1e69e7cfb1a09b84",
+      "explained_variance": "de9ca12b2b3b94c530cbadb4a8a5b99df145f649ee56a432dbc9ea9f64cac6f8",
+      "explained_variance_ratio": "1440689285cde1a155f5b4cd7cf6d8281e07c632902dd0b95351417e146c896a",
+      "kind": "pca",
+      "mean": "0d2b3fded938a5193d7fdb93cd81643428e55f0f83c152954b78894bb5f5519a",
+      "noise_variance": "54b5e42e1fab36750fea3219653761ef9dddea0656081bb7e2089a567ea7bc23",
+      "seconds": 0.04,
+      "singular_values": "1e44187f8b2fc43b8ff1e617bd3b95195bc8e9f70c459127e19e7256bf64c873",
+      "spec": {
+        "n_components": 8
+      },
+      "stages": 6,
+      "transformed": "b155dd47a003b1e1f9f139172ff5be24465fafc87909e4f6294cda70a7ab584e"
+    },
+    "pca_c8_200k": {
+      "card": "pca_c8_200k.card",
+      "components": "2cd775595669c777170dbd99df2ba57b1bc3b7d11cb83c52476865e014f54b81",
+      "explained_variance": "43ec1194714b040cca03c0ac4dd6e413627d84d77cc02db34198d20ea3ad8c3d",
+      "explained_variance_ratio": "fdd270a7ab7fde626e9fe7cfb6075e19c47845c31647040ea677b01ffc1b7738",
+      "kind": "pca",
+      "mean": "c1e338105ecb2cab80d6ae04a61ebbfbb05bfa11b8191022d3806f9ddd97eed9",
+      "noise_variance": "6f7cec8cccd80d3b82b57a7d171b4f0e6daa07a787c5453a96a60046afd7b306",
+      "seconds": 0.05,
+      "singular_values": "4fa9acf89681cd1d5ff9ca099847f830e6b3fe22727d1b184f47ee6972a76cb4",
+      "spec": {
+        "n_components": 8
+      },
+      "stages": 6,
+      "transformed": "3c053c15851d527372651cc00384f569dd874323ee3c479d198ff681f524fcd3"
+    },
+    "pca_c8_wide": {
+      "card": "pca_c8_wide.card",
+      "components": "08f54a3b65bc9cbdccb3ecb284aaf851096de298d1f30649fd8acedeebf7d936",
+      "explained_variance": "de15fae88aa2c7bdce6956698bf4195b6eeb5cc1e90f6d81a234011b7933c6e3",
+      "explained_variance_ratio": "1debaba129d677d28c923cee3f3e45e4007ed58ca8e5203a7415f57201717e6b",
+      "kind": "pca",
+      "mean": "8dfac4fe0075336617bc5c30a4f9fc92721d56227383491843cdb552da4c6ea1",
+      "noise_variance": "4b6c1e74a79c2dbecb204ca255249db3b9f060edcd8ce6b167a8c19c1d88ab76",
+      "seconds": 0.54,
+      "singular_values": "51d25e608f79aabc7046324f769ba1c5c53b55b5197b62164e6977f9982475bc",
+      "spec": {
+        "n_components": 8
+      },
+      "stages": 6,
+      "transformed": "27f32cb9b84cd8dca6d2d7f6cf0f962ec68428196494b3738a5cfd47cc5f55df"
+    },
+    "pca_solver_full": {
+      "kind": "pca",
+      "refused": "ValueError: mojolearn PCA: svd_solver='full' is refused; only 'auto' / 'covariance_eigh' (cuML's covariance + device Jacobi arm) is ported; 'full', 'randomized' and 'arpack' are different algorithms (decomposition/UNPORTED.tsv)",
+      "seconds": 0.0,
+      "spec": {
+        "n_components": 2,
+        "svd_solver": "full"
+      }
+    },
+    "pca_whiten": {
+      "kind": "pca",
+      "refused": "NotImplementedError: mojolearn PCA: whiten=True is refused; the whitening rescale of the components (and its inverse on inverse_transform) is not ported, and an unwhitened transform returned for whiten=True would be a wrong answer",
+      "seconds": 0.0,
+      "spec": {
+        "n_components": 2,
+        "whiten": true
+      }
+    },
+    "tsvd_c2": {
+      "card": "tsvd_c2.card",
+      "components": "363e784bf7b0ebaad3d732907820bdadee100b400747038014186b77ac89df7f",
+      "kind": "tsvd",
+      "seconds": 0.06,
+      "singular_values": "79df400a6bb21102fd98ead36602e5905ffcf6cf454cea7eee833f1c102c3f6e",
+      "spec": {
+        "n_components": 2
+      },
+      "stages": 3,
+      "transformed": "f46136159aaeb40a31e6ef723842b57ef8d843dfb96f245c04100c249597a374"
+    },
+    "tsvd_c8": {
+      "card": "tsvd_c8.card",
+      "components": "59e74e0739ae312aa5261eed5b69c71967eb2c3e63cfee5405757b13f4bb4e29",
+      "kind": "tsvd",
+      "seconds": 0.08,
+      "singular_values": "4286770aabfc020612706246cacd21f92ed56f070d445f55b51ab296ec7f916b",
+      "spec": {
+        "n_components": 8
+      },
+      "stages": 3,
+      "transformed": "8a9dab677f207a27df4ba4979ae10700f9457abf0698b8cfafd879f15c94d4e7"
+    },
+    "tsvd_c8_wide": {
+      "card": "tsvd_c8_wide.card",
+      "components": "f853bc4cf3fb563be9442f988d8ed32bd92beba9ff52c3183054ff66326e61e0",
+      "kind": "tsvd",
+      "seconds": 0.57,
+      "singular_values": "45bd2b3be4fa489c0c5e7b8c23f86410aab91772a80ea655c4084df94869fba1",
+      "spec": {
+        "n_components": 8
+      },
+      "stages": 3,
+      "transformed": "e4a7bbb6ab1bf786237feb690218df4cbd52b99adb4433baea0b9940f2250436"
+    },
+    "tsvd_randomized": {
+      "kind": "tsvd",
+      "refused": "ValueError: mojolearn TruncatedSVD: algorithm='randomized' is refused; only 'covariance_eigh' (the Gram + device Jacobi arm cuML's tsvdFit takes) is ported; 'arpack' and 'randomized' are different algorithms",
+      "seconds": 0.0,
+      "spec": {
+        "algorithm": "randomized",
+        "n_components": 2
+      }
+    }
+  },
+  "commit": "96dc2840b9e227638e7a9134536536e525487c22",
+  "driver": "e2u",
+  "inputs": {
+    "C0": "09d72baac77347c606b0ec4a90977b55c246e10fadc174888d3fee05bfee4a4e",
+    "X": "5a095c2b4b84d5e01de5fb6be5486723093c6abd431b82b612bc28ee89484e95",
+    "X_blobs": "6b619f79e2b0dd5b258193598de84fe3521645f71d7fe6372b94ee4ff9eb8dcf",
+    "X_chain": "8a11433bb672dc09d76fd980ddd604a7b11bb35cb4817fa4aa74fb15685edb03",
+    "X_ols_wide": "d9126dc7bc873d6f03466d1b935abc0642699ca62e41f698a4fd6180d9e30187",
+    "X_ties": "a83aadd777521005a6e17a32ee30d83b6341be4f10ed06ecf3519e831620feee",
+    "X_wide": "c3a39be30811e8bf7a9532e280e29c53b4db0630b1246ad1ddd4cab2a750ebe0",
+    "Xb": "f677a70a0cd8a870f263a8f66d63a5e6c56ff98b11bf8a650122485178b1ce80",
+    "Xq": "f7af5e4967e5455e8bd0d4bb775dad8d6326401043168539fa2e117d959b007a",
+    "Xq_ties": "7e66684f8f9585f876aa45622a0749476bc3dd91a7543320ac56e1ac0d36d663",
+    "sw": "dc70834feb7e9806b2e8e9c17df83290fd7a09bf37d7d119a06e3409503b84f3",
+    "y_ols_wide": "1df84470fdac59abad6ce08f405289230a5ae4bd5387097ef2436e8d72a50824",
+    "y_reg": "c9360efad18ce7e0414753c377d663e3a6035ea6d098457b9264a5768f1fe573",
+    "yb_reg": "a424cbbb79a28102880781cc2db1c80cacf22596ed4af77e657a74452771b8e3"
+  },
+  "machine": "MacBook-Air-1-terrabyte.local",
+  "numeric_mode": "fast",
+  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "reach": [
+    {
+      "note": "moved centroids,inertia,labels",
+      "parameter": "KMeans.n_clusters",
+      "verdict": "REACHES"
+    },
+    {
+      "note": "moved centroids,inertia,labels",
+      "parameter": "KMeans.init",
+      "verdict": "REACHES"
+    },
+    {
+      "note": "moved centroids,inertia,labels",
+      "parameter": "KMeans.n_init",
+      "verdict": "REACHES"
+    },
+    {
+      "note": "moved centroids,inertia,labels; n_iter: 81 -> 3",
+      "parameter": "KMeans.tol",
+      "verdict": "REACHES"
+    },
+    {
+      "note": "moved centroids,inertia,labels; n_iter: 81 -> 3",
+      "parameter": "KMeans.max_iter",
+      "verdict": "REACHES"
+    },
+    {
+      "note": "moved centroids,inertia,labels",
+      "parameter": "KMeans.random_state",
+      "verdict": "REACHES"
+    },
+    {
+      "note": "moved centroids,inertia,labels",
+      "parameter": "KMeans.sample_weight",
+      "verdict": "REACHES"
+    },
+    {
+      "note": "moved centroids,inertia,labels",
+      "parameter": "KMeans.init_centroids",
+      "verdict": "REACHES"
+    },
+    {
+      "note": "moved distances,indices",
+      "parameter": "NearestNeighbors.n_neighbors",
+      "verdict": "REACHES"
+    },
+    {
+      "note": "used_query_tile: 256 -> 64",
+      "parameter": "NearestNeighbors.query_tile",
+      "verdict": "INVARIANT"
+    },
+    {
+      "note": "distances,indices equal",
+      "parameter": "NearestNeighbors.metric='l2'",
+      "verdict": "INVARIANT"
+    },
+    {
+      "note": "moved labels",
+      "parameter": "DBSCAN.eps",
+      "verdict": "REACHES"
+    },
+    {
+      "note": "moved labels",
+      "parameter": "DBSCAN.min_samples",
+      "verdict": "REACHES"
+    },
+    {
+      "note": "labels equal",
+      "parameter": "DBSCAN.algorithm",
+      "verdict": "INVARIANT"
+    },
+    {
+      "note": "labels equal",
+      "parameter": "DBSCAN.algorithm (min50)",
+      "verdict": "INVARIANT"
+    },
+    {
+      "note": "labels equal",
+      "parameter": "DBSCAN.algorithm (uniform24)",
+      "verdict": "INVARIANT"
+    },
+    {
+      "note": "batches: 1 -> 67",
+      "parameter": "DBSCAN.max_mbytes_per_batch (rbc)",
+      "verdict": "INVARIANT"
+    },
+    {
+      "note": "batches: 1 -> 67",
+      "parameter": "DBSCAN.max_mbytes_per_batch (brute)",
+      "verdict": "INVARIANT"
+    },
+    {
+      "note": "moved labels; n_iter: 729 -> 200",
+      "parameter": "DBSCAN.max_iterations (chain, cap 200 binds)",
+      "verdict": "REACHES"
+    },
+    {
+      "note": "labels equal",
+      "parameter": "DBSCAN.max_iterations (chain, None = fixed point)",
+      "verdict": "INVARIANT"
+    },
+    {
+      "note": "n_iter: 2 -> 1",
+      "parameter": "DBSCAN.max_iterations (blobs, converges in 1)",
+      "verdict": "INVARIANT"
+    },
+    {
+      "note": "labels equal",
+      "parameter": "DBSCAN.algorithm (chain)",
+      "verdict": "INVARIANT"
+    },
+    {
+      "note": "moved components,explained_variance,explained_variance_ratio,noise_variance,singular_values,transformed",
+      "parameter": "PCA.n_components",
+      "verdict": "REACHES"
+    },
+    {
+      "note": "moved components,singular_values,transformed",
+      "parameter": "TruncatedSVD.n_components",
+      "verdict": "REACHES"
+    },
+    {
+      "note": "moved coef,intercept,predictions",
+      "parameter": "LinearRegression.fit_intercept",
+      "verdict": "REACHES"
+    }
+  ]
+}
