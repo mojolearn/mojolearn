@@ -296,6 +296,31 @@ cell("gbdt_rmse_nan_min", gb(loss="RMSE", nan_mode="Min", _X="X_nan",
                              _y="y_reg", **GB_BASE))
 cell("gbdt_rmse_nan_max", gb(loss="RMSE", nan_mode="Max", _X="X_nan",
                              _y="y_reg", **GB_BASE))
+# 2026-08-23, the three owed knobs (E3_RESULTS.md): 'Forbidden' on a NaN
+# matrix is a REFUSAL (a certified answer, same message on every vendor)
+# and on a clean matrix is an ordinary fit through the same code (equal
+# to gbdt_rmse by construction, and certified so); the Bayesian bootstrap
+# at temperature 0 (every weight (-log u)^0 = 1, so equal to gbdt_rmse /
+# gbdt_rmse_noboot by construction -- measured, da34f396f968e546) and 3 (the
+# bagging_temperature -> weight = (-log(u))^t arm, DEVIATION 258's
+# portable log/pow on the device); and the 'Simple' leaf estimator.
+cell("gbdt_rmse_nan_forbidden_refused", gb(loss="RMSE", nan_mode="Forbidden",
+                                           _X="X_nan", _y="y_reg", **GB_BASE))
+cell("gbdt_rmse_nan_forbidden_clean", gb(loss="RMSE", nan_mode="Forbidden",
+                                         _y="y_reg", **GB_BASE))
+cell("gbdt_rmse_bayesian_temp0", gb(loss="RMSE", bootstrap_type="Bayesian",
+                                    bagging_temperature=0.0, _y="y_reg",
+                                    **GB_BASE))
+cell("gbdt_rmse_bayesian_temp3", gb(loss="RMSE", bootstrap_type="Bayesian",
+                                    bagging_temperature=3.0, _y="y_reg",
+                                    **GB_BASE))
+# (not RMSE: there 'Simple' IS the one Newton step the default takes and
+# the cell would equal gbdt_rmse bit for bit -- measured, da34f396f968e546
+# both -- so it could not show reach; Quantile's default is not Simple)
+cell("gbdt_quantile_simple", gb(loss="Quantile", leaf_estimation_method="Simple",
+                                _y="y_reg", **GB_BASE))
+cell("gbdt_logloss_simple", gb(loss="Logloss", leaf_estimation_method="Simple",
+                               _y="y_clf", _proba=True, **GB_BASE))
 for bc in (1, 15, 64, 254):
     spec = dict(GB_BASE)
     spec["border_count"] = bc
