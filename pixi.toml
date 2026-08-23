@@ -640,6 +640,14 @@ check-portable-translog = "mojo run -I . mojo_only/portable_translog_check.mojo"
 # the same number on every column. Run beside check-portable-translog.
 check-portable-sqrtcos = "mojo run -I . mojo_only/portable_sqrtcos_check.mojo"
 
+# E2U: the unsupervised sub-feature matrix through the Python surface
+# (tools/e2u_README.md); append the out dir:
+#   pixi run e2u-matrix bench/results/e2u/<stamp>/fast1
+#   pixi run e2u-diff <dir1>:A <dir2>:B --write     (run-to-run control)
+e2u-matrix = "PYTHONPATH=python python3 tools/e2u_matrix_fit.py"
+e2u-matrix-identical = "MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH=python python3 tools/e2u_matrix_fit.py"
+e2u-diff = "python3 tools/e2_matrix_diff.py"
+
 # The DEVICE FeatureFreq calcer -- TWeightedBinFreqCalcerGpu and its
 # compute_simple_ctrs_device driver -- against the host driver PER CELL
 # (bit-equal: trivial weights make every float sum exact) and an

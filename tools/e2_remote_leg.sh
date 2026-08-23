@@ -143,7 +143,7 @@ fi
 if [ -n "${MAC_REF_DIR:-}" ] && [ -d "$MAC_REF_DIR" ]; then
   log "cross-infer: Mac models on the box"
   rsync -az --include '*.model.npz' --include '*.json' --exclude '*' "$MAC_REF_DIR/" "root@$IP:/root/mac_ref/" \
-    && $SSH 'export PATH=/root/.pixi/bin:$PATH; cd /root/mojolearn && OUT=$(ls -td bench/results/e1/*/ | head -1) && PYTHONPATH=python pixi run -e gbmbench python3 tools/e1_cross_infer.py /root/mac_ref "$OUT/cross_infer_mac_models_on_box.json" 2>&1 | tail -8' \
+    && $SSH 'export PATH=/root/.pixi/bin:$PATH; export MOJOLEARN_NUMERIC_MODE=identical; cd /root/mojolearn && OUT=$(ls -td bench/results/e1/*/ | head -1) && PYTHONPATH=python pixi run -e gbmbench python3 tools/e1_cross_infer.py /root/mac_ref "$OUT/cross_infer_mac_models_on_box.json" 2>&1 | tail -8' \
     || log "cross-infer on box FAILED (see above)"
 fi
 

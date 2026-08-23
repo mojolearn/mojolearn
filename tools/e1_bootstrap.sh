@@ -128,6 +128,13 @@ step "phase 6: the linear-algebra identity gates (GEMM, column stats, Jacobi/PCA
 pixi run check-linalg-identity || echo "PHASE6-FINDING: linalg identity (see log)"
 pixi run check-unsupervised-identity || echo "PHASE6-FINDING: unsupervised identity (see log)"
 
+step "phase 7: E2U -- the unsupervised sub-feature matrix through the Python surface, IDENTICAL"
+# tools/e2u_matrix_fit.py (67 cells: KMeans/NearestNeighbors/DBSCAN/PCA/tSVD/OLS);
+# judged by tools/e2_matrix_diff.py against the Mac's e2u directory
+PYTHONPATH="$REPO/python" pixi run -e gbmbench python3 tools/e2u_matrix_fit.py "$OUT/e2u" \
+  || PYTHONPATH="$REPO/python" python3 tools/e2u_matrix_fit.py "$OUT/e2u" \
+  || echo "PHASE7-FINDING: E2U matrix driver failed (see log)"
+
 step "done"
 echo "artifacts in $OUT"
 echo "next: fetch this directory beside the other machine's and run"

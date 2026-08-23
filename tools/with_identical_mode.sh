@@ -56,17 +56,11 @@ export MOJOLEARN_MOJO_DEFINES="$DEFINE"
 if [ "${1:-}" = "pixi" ] && [ "${2:-}" = "run" ] && [ -n "${3:-}" ] \
    && [ "${3}" != "mojo" ] && [ "${3}" != "--" ]; then
     task="$3"; shift 3
-    cmd=$(cd "$REPO" && python3 - "$task" <<'PY'
-import sys, tomllib
-d = tomllib.load(open("pixi.toml", "rb"))
-t = d.get("tasks", {})
-for feat in d.get("feature", {}).values():
-    t.update(feat.get("tasks", {}))
-v = t.get(sys.argv[1])
-if v is None:
-    sys.exit(3)
-print(v if isinstance(v, str) else v.get("cmd", ""))
-PY
+    # dependency-free lookup (the boxes' system python predates tomllib):
+    # pixi.toml tasks are `name = "command"` lines; the last definition wins
+    cmd=$(cd "$REPO" && awk -v t="$task" '
+        $0 ~ "^" t " = \"" { line=$0; sub("^" t " = \"", "", line); sub("\"[[:space:]]*$", "", line); found=line }
+        END { if (found == "") exit 3; print found }' pixi.toml
 ) || { echo "with_identical_mode: no pixi task '$task'" >&2; exit 2; }
     case "$cmd" in
         "mojo run "*)   rest=${cmd#mojo run };   exec pixi run -- mojo run $DEFINE $rest "$@" ;;
