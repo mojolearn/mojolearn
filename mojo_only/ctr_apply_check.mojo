@@ -205,7 +205,14 @@ def reference_score(
                 if v > tm.borders[c][k]:
                     b += 1
             bins[c] = b
-        var acc = Float32(0.0)
+        # the model's bias is the cursor's starting value (their `SetBias`,
+        # `doc_parallel_boosting.h:434`; `predict` memsets the cursor to it
+        # before the first tree). RMSE resolves `boost_from_average` to
+        # TRUE by their rule (`AdjustBoostFromAverageDefaultValue`), so a
+        # trained RMSE model carries one, and a tally that started at 0
+        # disagreed on every row -- found red at HEAD 2026-08-23, fixed in
+        # passing by the grow_policy session.
+        var acc = Float32(tm.model.bias)
         for t in range(tm.model.size()):
             ref w = tm.model.weak_models[t]
             var leaf = 0

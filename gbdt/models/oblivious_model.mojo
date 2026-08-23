@@ -28,6 +28,13 @@ for free, and it would not have if we had kept `2i` and `2i+1`.
 """
 
 
+# `TNonSymmetricTree` imports `TBinarySplit` from THIS file and this file
+# imports it back: a package-level cycle Mojo resolves (probed 2026-08-23
+# on a two-module package before relying on it here). It mirrors their
+# include graph, where `additive_model.h` is templated over both shapes.
+from gbdt.models.non_symmetric_tree import TNonSymmetricTree
+
+
 # --- EBinSplitType (`cuda/data/feature.h:21-24`) -------------------------
 #
 # THEIR ORDER AND THEIR VALUES, so a number read out of one of their
@@ -157,17 +164,56 @@ struct TAdditiveModel(Copyable, Movable):
     var weak_models: List[TObliviousTreeModel]
     #: their `SetBias` value; 0.0 on every fit without `boost_from_average`
     var bias: Float64
+    #: THE OTHER TREE SHAPE. Their `TAdditiveModel<TWeakModel>` is a
+    #: TEMPLATE and the trainer returns one of two instantiations --
+    #: `std::variant<THolder<TAdditiveModel<TObliviousTreeModel>>,
+    #: THolder<TAdditiveModel<TNonSymmetricTree>>>`
+    #: (`cuda/train_lib/train.cpp:436-455`) -- so an ensemble is EITHER
+    #: oblivious OR non-symmetric, never both. This port has no templates
+    #: over the ensemble, so the variant is two lists and the rule that
+    #: exactly one of them is ever non-empty, enforced by the two adders
+    #: below. `EGrowPolicy::Depthwise` and `Lossguide` both produce
+    #: `TNonSymmetricTree` (`structure_searcher_template.h:66`); the policy
+    #: that grew a tree is not recorded on the model, exactly as their
+    #: `TModelTrees` records only `IsOblivious()`
+    #: (`libs/model/model.h:271-273`). DEVIATION 259.
+    var non_symmetric_models: List[TNonSymmetricTree]
 
     def __init__(out self):
         self.weak_models = List[TObliviousTreeModel]()
         self.bias = 0.0
+        self.non_symmetric_models = List[TNonSymmetricTree]()
 
-    def add_weak_model(mut self, var model: TObliviousTreeModel):
-        """Their `AddWeakModel`."""
+    def add_weak_model(mut self, var model: TObliviousTreeModel) raises:
+        """Their `AddWeakModel`, the `TObliviousTreeModel` instantiation."""
+        if len(self.non_symmetric_models) != 0:
+            raise Error(
+                "TAdditiveModel.add_weak_model: this ensemble already holds"
+                " non-symmetric trees; their TAdditiveModel<TWeakModel> is"
+                " one shape per ensemble (train.cpp:436-455)"
+            )
         self.weak_models.append(model^)
 
+    def add_non_symmetric_model(mut self, var model: TNonSymmetricTree) raises:
+        """Their `AddWeakModel`, the `TNonSymmetricTree` instantiation."""
+        if len(self.weak_models) != 0:
+            raise Error(
+                "TAdditiveModel.add_non_symmetric_model: this ensemble"
+                " already holds oblivious trees; their"
+                " TAdditiveModel<TWeakModel> is one shape per ensemble"
+                " (train.cpp:436-455)"
+            )
+        self.non_symmetric_models.append(model^)
+
+    def is_oblivious(self) -> Bool:
+        """Their `TModelTrees::IsOblivious()` (`libs/model/model.h:271-273`):
+        true when there are NO non-symmetric nodes. An EMPTY ensemble is
+        oblivious, as theirs is, and predicts its bias."""
+        return len(self.non_symmetric_models) == 0
+
     def size(self) -> Int:
-        return len(self.weak_models)
+        """The weak-model count, whichever shape the ensemble holds."""
+        return len(self.weak_models) + len(self.non_symmetric_models)
 
     def shrink(mut self, new_size: Int) raises:
         """Their `Shrink` (`additive_model.h:62-65`), and their
@@ -177,10 +223,12 @@ struct TAdditiveModel(Copyable, Movable):
         every tree after the best held-out iteration. It is a TRUNCATION
         and nothing is rescaled, because each weak model already carries
         the shrinkage in its leaves."""
-        if new_size > len(self.weak_models):
+        if new_size > self.size():
             raise Error(
                 "TAdditiveModel.shrink: new_size " + String(new_size)
-                + " exceeds " + String(len(self.weak_models))
+                + " exceeds " + String(self.size())
             )
         while len(self.weak_models) > new_size:
             _ = self.weak_models.pop()
+        while len(self.non_symmetric_models) > new_size:
+            _ = self.non_symmetric_models.pop()

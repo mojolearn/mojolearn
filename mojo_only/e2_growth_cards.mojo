@@ -1,4 +1,4 @@
-"""E2 identity cards for the training paths Python cannot reach.
+"""E2 identity cards for the training paths the Python matrix does not reach.
 
     pixi run e2-growth-cards <out_dir> [card ...]
     tools/e2_mojo_cards.sh <out_dir>          # the whole set, plus JSON
@@ -10,14 +10,20 @@ Apple, AMD and NVIDIA by comparing per-stage identity cards
 (`core/identity_trace.mojo`, one TAB record per stage;
 `tools/identity_trace_diff.py` names the first stage that moved). E2 is the
 sub-feature sweep, and `tools/e2_matrix_fit.py` drives every configuration
-the CPython binding can reach. Four training paths CANNOT be reached from
-Python -- there is no `grow_policy` slot on `gbdt_fit`, `MultiClassOneVsAll`
-is refused by name in `python/mojolearn/ensemble.py`, and the
-feature-parallel searcher has no caller but its own check (`UNWIRED.md`).
-Each of those needs a MOJO-level emitter or it sits outside the sweep. This
-file is that emitter: one card per path, ONE FIT PER FILE (the differ
-refuses a file holding more), every tag a position in the algorithm and
-never a property of the machine.
+the CPython binding can reach. When this file was written four training
+paths could NOT be reached from Python: there was no `grow_policy` slot on
+`gbdt_fit`, `MultiClassOneVsAll` is refused by name in
+`python/mojolearn/ensemble.py`, and the feature-parallel searcher has no
+caller but its own check (`UNWIRED.md`). **Since 2026-08-23 `grow_policy`
+IS on the Python surface (DEVIATION 259)** and the E2 matrix carries
+`gbdt_*_depthwise` / `gbdt_*_lossguide` cells through the boosting loop; the
+two growth cards here are KEPT as the lane-fixture cards -- one searcher
+call, the lane's 4,096-row hashed fixture, accumulation mode 0, no boosting
+around it -- which localizes a searcher divergence without the loop's
+estimator and apply in the way. The other two paths still need this emitter.
+One card per path, ONE FIT PER FILE (the differ refuses a file holding
+more), every tag a position in the algorithm and never a property of the
+machine.
 
 THE CARDS, and the fixture each rides:
 

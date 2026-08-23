@@ -6083,3 +6083,143 @@ are not reproducible from HEAD's sources; HEAD-clean gives
 matches E1_RESULTS.md, so the rebuilt .so is the recorded one).
 `check-loss-oracle` all nine pass, `check-pointwise-target` PASS,
 `check-options` green.
+
+
+## 259. `grow_policy` reaches `train()` and the Python surface: Depthwise and Lossguide boost non-symmetric trees
+
+Landed 2026-08-23. Until this entry `doc_parallel_boosting.fit_with_test`
+grew oblivious trees only and `catboost_options.check()` refused
+`grow_policy != SymmetricTree` by name, honestly, because three things were
+missing (UNWIRED.md's depthwise section named them): a policy on the
+searcher call, their `TAddModelDocParallel<TNonSymmetricTree>` apply, and a
+model / model-text that knows a second tree shape. All three are here.
+
+WHAT IS THEIRS, AND WHERE. `TGpuTrainer<TPointwiseTargetsImpl,
+TNonSymmetricTree>` is registered per (loss, policy) in
+`cuda/train_lib/pointwise_non_symmetric.cpp:7-29` -- eleven losses x
+{Lossguide, Depthwise} -- and its searcher is
+`TGreedyTreeLikeStructureSearcher<TNonSymmetricTree>`
+(`structure_searcher_template.h`), which this port already had as
+`greedy_search_helper_depthwise.fit_non_symmetric_tree` (one driver, four
+policy branches). The loop's per-tree step (`doc_parallel_boosting.h:
+353-398`) does not change shape: target at the cursor, `optimizer.Fit`,
+`NeedEstimation` -> `estimator.Estimate` per permutation (bins off the
+model, `doc_parallel_leaves_estimator.cpp:43-56`), `Rescale`,
+`AppendModels`. The non-symmetric arm in `fit_with_test` is exactly that:
+`fit_non_symmetric_tree` -> `compute_non_symmetric_bins_for_model` per
+permutation -> `partition_from_bins` -> `_estimate_and_apply` (the SAME
+estimator the pointwise arm uses; it runs unconditionally, as the pointwise
+arm's does, since the non-symmetric searcher never applies its own leaf --
+DEVIATION 64's RMSE shortcut belongs to the greedy oblivious arm and its
+numbers coincide here by 64's own derivation) -> `UpdateLeaves` +
+`Rescale(step)` folded into the stored values -> `add_non_symmetric_model`.
+The held-out arm and `predict` go through
+`gbdt/models/add_non_symmetric_tree_doc_parallel.mojo`, their
+`add_non_symmetric_tree_doc_parallel.cpp:182-216` (bins, then
+`AddBinModelValues`, which is the `add_bin_model_value_kernel` the
+estimator's `MoveTo` already had). `TAdditiveModel` carries
+`non_symmetric_models` beside `weak_models` -- their trainer returns a
+`std::variant` of the two `TAdditiveModel<T>` instantiations
+(`train.cpp:436-455`) and a model is one shape or the other, enforced by
+the two adders; `is_oblivious()` is their `TModelTrees::IsOblivious()`
+(`model.h:271-273`, "no non-symmetric step nodes"). The model text gains
+`ntree <t> nodes <n> dim <k> weights <0|1>` + one `node` record per
+pre-order `TTreeNode` (+ `split_type take_bin` on a one-hot split) + `leaf`
+per bin x dim + `weight` as a 64-bit token (their `LeafWeights` is
+`TVector<double>`); an oblivious file's bytes do not move and an older
+reader meets `ntree` as an unknown keyword and refuses. The GPU evaluator
+refuses a non-oblivious model with their own message
+(`libs/model/cuda/evaluator.cpp:25`).
+
+WHAT IS REFUSED, EACH WHERE THEY REFUSE IT (Python, `train()`, and the
+loop all say it by name):
+- a loss with no non-symmetric trainer: `Lq` and `MultiClass` here --
+  "Error: optimization scheme is not supported for GPU learning
+  Loss=...;OptimizationScheme=..." (`train.cpp:279-280`, the registry
+  `pointwise_non_symmetric.cpp:7-29`, `multiclass.cpp:5-14`);
+- `use_pointwise_searcher=True` with a non-symmetric policy: that is
+  `TDocParallelObliviousTreeSearcher`, oblivious by construction;
+- `max_leaves` off `1 << depth` on any policy but Lossguide
+  ("max_leaves option works only with lossguide tree growing",
+  `catboost_options.cpp:993-1001`); over 65536 under Lossguide
+  (`oblivious_tree_options.cpp:130-133`); depth over 16 on the full-binary
+  policies (`:126-129`, `enum_helpers.cpp:870-875`);
+- `min_data_in_leaf != 1` under SymmetricTree -- OURS, STRICTER: theirs
+  discards it (`greedy_search_helper.cpp:685`), their docs say it is for
+  Depthwise and Lossguide only, and an option accepted and dropped is
+  PORTING_RULES.md 3's failure;
+- `grow_policy='Region'`, no lane.
+And one DEFAULT mirrored: CatBoost's GPU resolves an unset `score_function`
+to NewtonL2 under Lossguide (`catboost_options.cpp:980-991`), Cosine
+elsewhere, so `GradientBoosting(score_function=None)` does the same.
+Ordered boosting / multi-host / PerTreeLevel sampling refusals of theirs
+(`catboost_options.cpp:757-771`) have nothing to refuse here: this port is
+Plain, one host, per-tree sampling.
+
+MEASURED. Reach by contrast on the E2 fixture (20k x 24, FAST, this M4):
+SymmetricTree `a1637c58ea8c9470` (UNCHANGED from the certified E2 hash,
+IDENTICAL `da34f396f968e546` also unchanged), Depthwise `59593f3d1a15d560`,
+Lossguide `213392e43fe6fc88`; Lossguide max_leaves 4 `d9ebebcea304e568`;
+Lossguide min_data_in_leaf 500 `56e64daa9f829861`; Depthwise
+min_data_in_leaf 500 `28c4dea293f4e01c`. Depthwise and Lossguide at a depth
+the leaf budget does not bind (depth 4, max_leaves 16) COINCIDE bit for bit
+on this fixture at either score function -- every leaf improves at every
+level, so "split every improving leaf" and "split the best leaf until the
+budget" close on the same full tree; they differ as soon as the budget
+binds (depth 6 vs 31 leaves) or `min_data_in_leaf` does.
+`mojo_only/grow_policy_check.mojo` is the gate (seven claims: the
+three-way contrast, the shape, the knobs, train/predict consistency, the
+`ntree` round trip, five refusals, and a run-to-run control at the 8-bit
+histogram shape); `check-depthwise`, `check-lossguide`,
+`check-lossguide-policy`, `check-options` and the growth cards stay green;
+`bindings/build_gbdt.sh`'s smoke gate fits all three policies, round-trips
+the non-symmetric ones through save/load and checks the refusals. The E2
+matrix gains `gbdt_rmse_depthwise`, `gbdt_logloss_depthwise`,
+`gbdt_rmse_depthwise_minleaf200`, `gbdt_rmse_lossguide`,
+`gbdt_rmse_lossguide_leaves8`, `gbdt_rmse_lossguide_cosine` (fits) and
+`gbdt_rmse_depthwise_pointwise`, `gbdt_multiclass_lossguide` (REFUSED by
+their message, the passing verdict); their cards carry `treeNNN.dN.*`
+tags only (the non-symmetric driver took a `tag_prefix`, empty for the
+single-tree gates so their cards are byte-identical).
+
+## 260. The non-symmetric arm runs at the kernel matrix's `HIST2_SMEM_MODE`, and the first measurement that said it could not was a race
+
+The lane gates (`check-depthwise`, `check-lossguide`, the E2 growth cards)
+drive `fit_non_symmetric_tree` at accumulation mode 0 (CatBoost's
+warp-private float); the boosting loop is the first caller to run it at
+the matrix row -- shared-Int32 on Apple and under IDENTICAL. The first
+run-to-run control at 20,000 x 24 x 128 borders said the Int32 arms were
+wrong through this driver (64 borders: loss 41.898 vs mode 0's 38.323; 128
+borders: 43.30 / 43.30 / 43.32 across three runs vs 38.299) while the
+symmetric driver's two modes agreed bit for bit at every depth on the same
+fixture. Bisected by depth: agreement through depth 3, divergence from
+depth 4, the shape at which leaves first fit one histogram block. The
+cause was DEVIATION 261, not the arms: after it the two modes agree bit for
+bit through the non-symmetric driver too (`0x8cedc2e5a5fc1ae5` at depth 6,
+128 borders, FAST; IDENTICAL deterministic at 38.299009). The matrix row
+stands for this arm; pinning mode 0 here would have been an inline
+vendor/arm fork hiding a race. Recorded because the wrong reading lasted
+an hour and the table is the evidence either way.
+
+## 261. The non-symmetric driver staged three id lists per level through ONE host buffer under queued copies
+
+`TDepthwiseWorkspace` had one `h_ids`/`d_ids` pair, and a level wrote three
+host-built lists into it before its first drain -- `plan.compute_ids` for
+`zero_histograms_kernel`, `non_zero` for the histogram kernels and the
+scan, `0..len(leaves)` for `compute_partition_stats` -- each followed by
+`enqueue_copy(dst_buf=d_ids, src_ptr=h_ids)` and no wait. The device reads
+the host buffer when the COPY EXECUTES, so list 2 or 3 could be what
+kernel 1 received: the step-33 race class (`[[mojo-buffer-freed-at-last-
+use]]`'s host-staging sibling; the symmetric lane's DEVIATION 134 is the
+same mechanism on a different buffer). Invisible to every lane gate (4,096
+rows, one tree) and to every traced run (a trace drains at every record);
+found by the boosting loop's untraced run-to-run control at 20k x 24 x 128
+(DEVIATION 260's table), where the faster Int32 histogram kernels let the
+host reach the next write first and the float arms happened not to. Fixed
+with one staging pair per list (`h_zero_ids`/`d_zero_ids`,
+`h_all_ids`/`d_all_ids` beside the build pair); the two drains their
+control plane already takes per level (`score.read`, `split.sizes`)
+separate one level's writes from the next's. `check-depthwise` (7 claims),
+`check-lossguide`, `check-lossguide-policy` and the growth cards are
+unchanged and green; `check-grow-policy` claim 7 is the control that
+fails without this fix.

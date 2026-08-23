@@ -70,7 +70,30 @@ tolerance on the model.
     split <t> <level> <feature_id> <bin_idx> split_type take_bin
     leaf <t> <leaf_index> <tok>
     weight <t> <leaf_index> <tok>          (only when weights is 1)
+    ntree <t> nodes <n> dim <k> weights <0|1>
+    node <t> <i> <feature_id> <bin> <left_subtree> <right_subtree>
+    node <t> <i> <feature_id> <bin> <left_subtree> <right_subtree> split_type take_bin
+    leaf <t> <bin_index> <tok>             (n + 1 leaves x dim values)
+    weight <t> <bin_index> <tok64>         (only when weights is 1)
     loss <iteration> <tok64>
+
+`tree`/`split` is the OBLIVIOUS shape and `ntree`/`node` the NON-SYMMETRIC
+one (Depthwise and Lossguide, DEVIATION 259); one file holds one shape,
+which is their `TModelTrees::IsOblivious()` -- `NonSymmetricStepNodes`
+empty or not (`libs/model/model.h:271-273`) -- and a file mixing the two
+is refused. A `node` record is one pre-order `TTreeNode`
+(`gpu_data/gpu_structures.mojo`): `left_subtree` / `right_subtree` are LEAF
+COUNTS, a subtree of 1 is a leaf, the left child's node is `i + 1` and the
+right child's `i + left_subtree`, which is the walk `visit_bins` and
+`compute_non_symmetric_decision_tree_bins_kernel` both take. A leaf's
+`bin_index` is the number of leaves to its left -- their
+`NonSymmetricNodeIdToLeafId` numbering, recovered by the walk rather than
+written as a second table. The `weight` token is 64-bit on this shape
+because `TNonSymmetricTree::LeafWeights` is `TVector<double>`
+(`non_symmetric_tree.h:120`). **An oblivious model's bytes do not move**:
+no record above this paragraph changed, and an older reader meets `ntree`
+as an unknown keyword and REFUSES, which is the right failure for a shape
+it cannot apply.
 
 The four header records come first and in that order. Every indexed record
 must arrive in ascending, gap-free index order and the counts must add up:
@@ -181,6 +204,11 @@ from gbdt.models.oblivious_model import (
     TBinarySplit,
     TObliviousTreeModel,
     TObliviousTreeStructure,
+)
+from gbdt.gpu_data.gpu_structures import TTreeNode
+from gbdt.models.non_symmetric_tree import (
+    TNonSymmetricTree,
+    TNonSymmetricTreeStructure,
 )
 from gbdt.train import TrainedModel
 
@@ -475,7 +503,73 @@ def model_text(tm: TrainedModel) raises -> String:
                 line += " " + String(tab.counts[c * per_entry + k])
             out += line + "\n"
 
-    for t in range(tm.model.size()):
+    # ---- the NON-SYMMETRIC shape (DEVIATION 259) ----
+    for t in range(
+        0 if tm.model.is_oblivious() else tm.model.size()
+    ):
+        ref ns = tm.model.non_symmetric_models[t]
+        var n_nodes = len(ns.model_structure.nodes)
+        var n_bins = ns.bin_count()
+        if len(ns.model_structure.split_types) != n_nodes:
+            raise Error(
+                "non-symmetric tree " + String(t) + " has " + String(n_nodes)
+                + " nodes and " + String(len(ns.model_structure.split_types))
+                + " split types"
+            )
+        if ns.dim < 1:
+            raise Error(
+                "non-symmetric tree " + String(t) + " has dim "
+                + String(ns.dim)
+            )
+        if len(ns.leaf_values) != n_bins * ns.dim:
+            raise Error(
+                "non-symmetric tree " + String(t) + " has " + String(n_bins)
+                + " bins, dim " + String(ns.dim) + " and "
+                + String(len(ns.leaf_values)) + " leaf values"
+            )
+        var ns_has_weights = 1 if len(ns.leaf_weights) != 0 else 0
+        if ns_has_weights == 1 and len(ns.leaf_weights) != n_bins:
+            raise Error(
+                "non-symmetric tree " + String(t) + " has "
+                + String(len(ns.leaf_weights)) + " leaf weights, not "
+                + String(n_bins)
+            )
+        out += (
+            String("ntree ") + String(t) + " nodes " + String(n_nodes)
+            + " dim " + String(ns.dim) + " weights " + String(ns_has_weights)
+            + "\n"
+        )
+        for i in range(n_nodes):
+            ref node = ns.model_structure.nodes[i]
+            var line = (
+                String("node ") + String(t) + " " + String(i) + " "
+                + String(Int(node.feature_id)) + " " + String(Int(node.bin))
+                + " " + String(Int(node.left_subtree)) + " "
+                + String(Int(node.right_subtree))
+            )
+            var st = Int(ns.model_structure.split_types[i])
+            if st == BIN_SPLIT_TAKE_BIN:
+                line += " split_type take_bin"
+            elif st != BIN_SPLIT_TAKE_GREATER:
+                raise Error(
+                    "non-symmetric tree " + String(t) + " node " + String(i)
+                    + " has split type " + String(st)
+                    + ", which is neither TakeBin nor TakeGreater"
+                )
+            out += line + "\n"
+        for i in range(n_bins * ns.dim):
+            out += (
+                String("leaf ") + String(t) + " " + String(i) + " "
+                + f32_token(ns.leaf_values[i]) + "\n"
+            )
+        if ns_has_weights == 1:
+            for i in range(n_bins):
+                out += (
+                    String("weight ") + String(t) + " " + String(i) + " "
+                    + f64_token(ns.leaf_weights[i]) + "\n"
+                )
+
+    for t in range(tm.model.size() if tm.model.is_oblivious() else 0):
         ref weak = tm.model.weak_models[t]
         var depth = weak.structure.get_depth()
         var n_leaves = 1 << depth
@@ -603,6 +697,12 @@ def load_model_text(text: String) raises -> TrainedModel:
     var leaves_seen = List[Int]()
     var weights_seen = List[Int]()
     var weights_declared = List[Int]()
+    # the NON-SYMMETRIC shape: one `ntree` per tree, `nodes` declared;
+    # `depths`/`splits_seen` hold -1/0 for such a tree so the per-tree
+    # lists stay parallel across both shapes
+    var ns_nodes_declared = List[Int]()
+    var ns_nodes_seen = List[Int]()
+    var is_ns = List[Bool]()
     var features_seen = 0
     var trees_seen = 0
     var losses_seen = 0
@@ -861,12 +961,116 @@ def load_model_text(text: String) raises -> TrainedModel:
                 leaves_seen.append(0)
                 weights_seen.append(0)
                 weights_declared.append(Int(t[7]))
+                ns_nodes_declared.append(-1)
+                ns_nodes_seen.append(0)
+                is_ns.append(False)
                 trees_seen += 1
+            elif kind == String("ntree"):
+                # the NON-SYMMETRIC shape (DEVIATION 259). `add_non_symmetric_
+                # model` is what refuses a file that mixes the two shapes.
+                if Int(t[1]) != trees_seen:
+                    raise Error(
+                        "trees must arrive in order: expected "
+                        + String(trees_seen) + ", got " + String(t[1])
+                    )
+                if len(t) != 8:
+                    raise Error("an `ntree` record has 8 fields")
+                _expect(t, 2, String("nodes"), String("ntree"))
+                _expect(t, 4, String("dim"), String("ntree"))
+                _expect(t, 6, String("weights"), String("ntree"))
+                var n_nodes = Int(t[3])
+                # their `ui16` subtree sizes bound a tree at 65,535 leaves
+                # a side (`gpu_structures.mojo`), and `MaxLeaves <= 1 << 16`
+                # is their Lossguide cap (`oblivious_tree_options.cpp:132`)
+                if n_nodes < 0 or n_nodes > 65536:
+                    raise Error(
+                        "non-symmetric tree node count " + String(n_nodes)
+                        + " is not sane"
+                    )
+                var ns = TNonSymmetricTree(
+                    TNonSymmetricTreeStructure(), List[Float32](),
+                    List[Float64](), Int(t[5]),
+                )
+                model.add_non_symmetric_model(ns^)
+                depths.append(-1)
+                splits_seen.append(0)
+                leaves_seen.append(0)
+                weights_seen.append(0)
+                weights_declared.append(Int(t[7]))
+                ns_nodes_declared.append(n_nodes)
+                ns_nodes_seen.append(0)
+                is_ns.append(True)
+                trees_seen += 1
+            elif kind == String("node"):
+                var ti = Int(t[1])
+                if ti >= trees_seen:
+                    raise Error("a `node` for tree " + String(ti)
+                                + " before its `ntree` record")
+                if not is_ns[ti]:
+                    raise Error(
+                        "tree " + String(ti) + " is oblivious and carries"
+                        " a `node` record"
+                    )
+                if Int(t[2]) != ns_nodes_seen[ti]:
+                    raise Error(
+                        "tree " + String(ti) + " nodes must arrive in"
+                        " pre-order: expected " + String(ns_nodes_seen[ti])
+                        + ", got " + String(t[2])
+                    )
+                var st = BIN_SPLIT_TAKE_GREATER
+                if len(t) == 9:
+                    _expect(t, 7, String("split_type"), String("node"))
+                    if t[8] != String("take_bin"):
+                        raise Error(
+                            "a `node` record's split_type is `take_bin` or"
+                            " nothing at all (TakeGreater); got '" + t[8]
+                            + "'"
+                        )
+                    st = BIN_SPLIT_TAKE_BIN
+                elif len(t) != 7:
+                    raise Error(
+                        "a `node` record has 7 fields, or 9 with"
+                        " `split_type take_bin`; this one has "
+                        + String(len(t))
+                    )
+                var fid = Int(t[3])
+                var bin = Int(t[4])
+                var ls = Int(t[5])
+                var rs = Int(t[6])
+                if fid < 0 or fid > 65535 or bin < 0 or bin > 65535:
+                    raise Error(
+                        "node " + String(ns_nodes_seen[ti]) + " of tree "
+                        + String(ti) + " has feature/bin outside ui16"
+                    )
+                # `CB_ENSURE(LeftSubtree >= 1 && RightSubtree >= 1)`
+                # (`non_symmetric_tree.h:67`), at load rather than at the
+                # first apply
+                if ls < 1 or rs < 1 or ls > 65535 or rs > 65535:
+                    raise Error(
+                        "node " + String(ns_nodes_seen[ti]) + " of tree "
+                        + String(ti) + " has subtree sizes " + String(ls)
+                        + "/" + String(rs) + "; each is at least 1 and"
+                        " at most 65535"
+                    )
+                model.non_symmetric_models[ti].model_structure.nodes.append(
+                    TTreeNode(
+                        UInt16(fid), UInt16(bin), UInt16(ls), UInt16(rs)
+                    )
+                )
+                model.non_symmetric_models[
+                    ti
+                ].model_structure.split_types.append(Int32(st))
+                ns_nodes_seen[ti] += 1
             elif kind == String("split"):
                 var ti = Int(t[1])
                 if ti >= trees_seen:
                     raise Error("a `split` for tree " + String(ti)
                                 + " before its `tree` record")
+                if is_ns[ti]:
+                    raise Error(
+                        "tree " + String(ti) + " is non-symmetric and"
+                        " carries a `split` record"
+                    )
                 if Int(t[2]) != splits_seen[ti]:
                     raise Error(
                         "tree " + String(ti) + " levels must arrive in"
@@ -906,7 +1110,12 @@ def load_model_text(text: String) raises -> TrainedModel:
                         " order: expected " + String(leaves_seen[ti])
                         + ", got " + String(t[2])
                     )
-                model.weak_models[ti].leaf_values.append(parse_f32(t[3]))
+                if is_ns[ti]:
+                    model.non_symmetric_models[ti].leaf_values.append(
+                        parse_f32(t[3])
+                    )
+                else:
+                    model.weak_models[ti].leaf_values.append(parse_f32(t[3]))
                 leaves_seen[ti] += 1
             elif kind == String("weight"):
                 var ti = Int(t[1])
@@ -924,7 +1133,13 @@ def load_model_text(text: String) raises -> TrainedModel:
                         " order: expected " + String(weights_seen[ti])
                         + ", got " + String(t[2])
                     )
-                model.weak_models[ti].leaf_weights.append(parse_f32(t[3]))
+                if is_ns[ti]:
+                    # `TVector<double>` on this shape; a 64-bit token
+                    model.non_symmetric_models[ti].leaf_weights.append(
+                        parse_f64(t[3])
+                    )
+                else:
+                    model.weak_models[ti].leaf_weights.append(parse_f32(t[3]))
                 weights_seen[ti] += 1
             elif kind == String("loss"):
                 if Int(t[1]) != losses_seen:
@@ -964,6 +1179,46 @@ def load_model_text(text: String) raises -> TrainedModel:
             + String(losses_seen)
         )
     for t in range(trees_seen):
+        if is_ns[t]:
+            ref ns = model.non_symmetric_models[t]
+            if ns.dim < 1:
+                raise Error(
+                    "non-symmetric tree " + String(t) + " declared dim "
+                    + String(ns.dim)
+                )
+            if ns_nodes_seen[t] != ns_nodes_declared[t]:
+                raise Error(
+                    "non-symmetric tree " + String(t) + " declared "
+                    + String(ns_nodes_declared[t]) + " nodes and carries "
+                    + String(ns_nodes_seen[t])
+                )
+            var ns_bins = ns.bin_count()
+            if leaves_seen[t] != ns_bins * ns.dim:
+                raise Error(
+                    "non-symmetric tree " + String(t) + " needs "
+                    + String(ns_bins * ns.dim) + " leaf values and carries "
+                    + String(leaves_seen[t])
+                )
+            var ns_want_w = ns_bins if weights_declared[t] == 1 else 0
+            if weights_seen[t] != ns_want_w:
+                raise Error(
+                    "non-symmetric tree " + String(t) + " needs "
+                    + String(ns_want_w) + " leaf weights and carries "
+                    + String(weights_seen[t])
+                )
+            # THE WALK IS THE STRUCTURAL CHECK: their `VisitBins` raises on
+            # a missing subtree and numbers exactly `LeavesCount()` bins
+            # when the subtree sizes are consistent, so a node array whose
+            # sizes do not add up is caught here and not at apply time
+            var visited = ns.model_structure.visit_bins()
+            if len(visited) != ns_bins:
+                raise Error(
+                    "non-symmetric tree " + String(t) + " declares "
+                    + String(ns_bins) + " leaves and its node walk visits "
+                    + String(len(visited))
+                    + "; the subtree sizes are inconsistent"
+                )
+            continue
         # `dim` values per leaf; see the writer's note on the layout
         var want_leaves = (1 << depths[t]) * model.weak_models[t].dim
         if model.weak_models[t].dim < 1:
@@ -1065,6 +1320,29 @@ def load_model_text(text: String) raises -> TrainedModel:
     # (`add_oblivious_tree_model_doc_parallel.cpp:43-47`), run against the
     # feature table this file carries instead of against a live layout.
     for t in range(trees_seen):
+        if is_ns[t]:
+            ref nsm = model.non_symmetric_models[t]
+            for i in range(len(nsm.model_structure.nodes)):
+                var nfid = Int(nsm.model_structure.nodes[i].feature_id)
+                if nfid < 0 or nfid >= features_seen:
+                    raise Error(
+                        "non-symmetric tree " + String(t) + " node "
+                        + String(i) + " splits on feature " + String(nfid)
+                        + " of " + String(features_seen)
+                    )
+                var n_is_bin = (
+                    Int(nsm.model_structure.split_types[i])
+                    == BIN_SPLIT_TAKE_BIN
+                )
+                if n_is_bin != (feature_kinds[nfid] == String("cat")):
+                    raise Error(
+                        "non-symmetric tree " + String(t) + " node "
+                        + String(i) + " is a "
+                        + String("TakeBin" if n_is_bin else "TakeGreater")
+                        + " split on feature " + String(nfid)
+                        + ", whose type is '" + feature_kinds[nfid] + "'"
+                    )
+            continue
         ref w = model.weak_models[t]
         for lvl in range(len(w.structure.splits)):
             var fid = Int(w.structure.splits[lvl].feature_id)

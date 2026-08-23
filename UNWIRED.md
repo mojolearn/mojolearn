@@ -944,20 +944,22 @@ the four files under it (`models/non_symmetric_tree.mojo`,
 `ComputeNonSymmetricDecisionTreeBinsImpl` arm of
 `models/kernel/add_bin_values.mojo`).
 
-**Reached by `pixi run check-depthwise` and by NOTHING ELSE.** Audited by
-grep 2026-08-22: no other importer exists. `doc_parallel_boosting.fit` grows
-symmetric trees only, and `catboost_options.check()` still refuses
-`grow_policy=Depthwise` **by name**.
-
-That refusal is the honest state and it should come off LAST. Their
-`GetTrainerFactoryKey(loss, EGrowPolicy::Depthwise)` registers a whole
-trainer per loss (`cuda/train_lib/pointwise_non_symmetric.cpp:19-29`), and on
-this side the boosting driver would need: a policy on the searcher call, a
-`TNonSymmetricTree` arm on `AppendModels` (their
-`add_non_symmetric_tree_doc_parallel.{h,cpp}`, unported), and the
-`TAdditiveModel` / model-text writer taught a second tree shape. Relaxing the
-option before those exist would make an option that is accepted and dropped,
-which is what `PORTING_RULES.md` rule 3 forbids.
+**WIRED 2026-08-23 (DEVIATION 259).** This section used to read "reached by
+`check-depthwise` and by NOTHING ELSE ... the boosting driver would need: a
+policy on the searcher call, a `TNonSymmetricTree` arm on `AppendModels`
+(their `add_non_symmetric_tree_doc_parallel.{h,cpp}`, unported), and the
+`TAdditiveModel` / model-text writer taught a second tree shape", and that
+refusal was the honest state until all three landed in one session:
+`doc_parallel_boosting.fit_with_test(grow_policy=, max_leaves=,
+min_data_in_leaf=)` dispatches on the policy per tree, `gbdt/models/
+add_non_symmetric_tree_doc_parallel.mojo` is their apply, `TAdditiveModel`
+carries `non_symmetric_models` (their `std::variant` of the two
+instantiations, `train.cpp:436-455`), `model_text` writes `ntree`/`node`
+records, and `catboost_options.check()`, `train()` and
+`python/mojolearn/ensemble.py` accept the two policies with CatBoost's own
+refusals beside them. `pixi run check-grow-policy` is the gate. The paragraph
+is kept because the state it describes lasted a day and the entry is what
+made it visible.
 
 ### Written and NOT written, so the difference is on the record
 
@@ -966,7 +968,7 @@ which is what `PORTING_RULES.md` rule 3 forbids.
 | `TNonSymmetricTreeStructure.visit_bins` (their `VisitBins`) | `GetHash` -- a `THashMap` key this port replaces with the parent LEAF ID |
 | `TFlatTreeBuilder`, BOTH duplicate policies | `BuildTreeLikeModel<TObliviousTreeModel>` -- the symmetric lane returns a split list directly and never folds paths back |
 | `compute_non_symmetric_decision_tree_bins_kernel` | `BuildTreeLikeModel<TRegionModel>` -- `EGrowPolicy::Region`, no lane |
-| `TTreeStructureSearcherOptions.check()` | `TNonSymmetricTree::Rescale` / `ShiftLeafValues` / `UpdateLeaves` / `UpdateWeights` -- the boosting loop's, and this lane does not own it |
+| `TTreeStructureSearcherOptions.check()` | `TNonSymmetricTree::ShiftLeafValues` / `UpdateWeights` -- `Rescale` and `UpdateLeaves` are the boosting loop's two lines (values replaced by the estimator's, then scaled; 2026-08-23); the estimator's `WriteWeights` is not ported for either tree shape, so the non-symmetric leaf weights stay the searcher's |
 | the `sm_count_override` test knob (claim 6) | `SortPath` / `SortUniquePath` -- the Region model builder's |
 | | `TTreeStructureSearcherOptions.BootstrapOptions` -- the boosting driver bootstraps one level up in this port, so the field would be a second unread copy |
 | | `TTreeStructureSearcherOptions.FixedBinarySplits` -- fed only by `fixed_binary_splits`, an option refused by name |

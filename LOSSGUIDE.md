@@ -464,8 +464,10 @@ is STALE and is replaced: the merged driver now carries the ladder end to end
 `best.*`, `split.*`, `rowindex`, `stats`, `parts.*`, `final.*`, `model.*`),
 and `check-lossguide` L6 gates its REACH on this policy's path (94 records on
 the fixture fit, traced tree identical to untraced). The table below is the
-intent; the driver spells the per-iteration prefix `d<iter>.` -- the
-`treeNN.` layer lands when the boosting loop carries the trace across trees.
+intent; the driver spells the per-iteration prefix `d<iter>.`, and since
+2026-08-23 the boosting loop hands it the `treeNNN.` layer (`tag_prefix`, one
+card per fit across every tree; the single-tree gates pass no prefix and
+their cards are unchanged).
 
 **Two stages the driver's ladder could NOT supply are now this lane's
 `select_leaves_to_split_traced`** (`greedy_search_helper_lossguide.mojo`):
@@ -586,6 +588,7 @@ rather than doing it.
 | `ComputeOptimalSplit`, the Lossguide scorer | **PORTED AND GATED**, `check-leafwise-scores`, five teeth |
 | leaf selection (`FindBestLeafToSplit`, no sign test, argmin) | **PORTED AND GATED**, `check-lossguide-policy`, six claims incl. a device sign-convention gate |
 | the fit loop | **PORTED AND GATED**, `check-lossguide`, six claims -- ONE DRIVER with four policy branches, not a second driver |
+| the boosting loop and the Python surface | **ON THE SURFACE SINCE 2026-08-23** (DEVIATION 259): `train(grow_policy="Lossguide", max_leaves=, min_data_in_leaf=)` and `GradientBoosting(grow_policy="Lossguide", ...)`, through `doc_parallel_boosting.fit_with_test`'s non-symmetric arm, their `NeedEstimation` estimation, `add_non_symmetric_tree_doc_parallel` apply and `ntree` model text; CatBoost's own GPU default score function there (NewtonL2, `catboost_options.cpp:980-991`) is the Python default; `check-grow-policy` gates it, E2 cells `gbdt_rmse_lossguide`, `_leaves8`, `_cosine` carry the cards, `gbdt_multiclass_lossguide` is REFUSED as their registry refuses it |
 | the non-symmetric model + apply | the depthwise lane's, consumed |
 | the stage-hash instrument | **LANDED**, `check-identity-trace`, writer and reader gated together; both lanes on it |
 | the queue + selected-leaf checkpoints | **LANDED** in `select_leaves_to_split_traced`, gated by `check-lossguide-policy` P7; the one-line driver swap is OWED (depthwise lane's file, requested via orchestrator) |

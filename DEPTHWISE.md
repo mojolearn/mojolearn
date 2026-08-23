@@ -332,9 +332,21 @@ prevent.
   at our default of 0 — **CatBoost's own default is 1.0**
   (`oblivious_tree_options.cpp:17`), so it bites when boosting is wired. The
   fix has exact precedent in row 7's `partition_chunks_sm_for`.
-* **Not wired into training.** `train()` still refuses `grow_policy=Depthwise`
-  BY NAME, and that refusal is honest until `AppendModels` has a
-  `TNonSymmetricTree` arm. `UNWIRED.md` carries the order.
+* **On the training and Python surface since 2026-08-23** (DEVIATION 259):
+  `train(grow_policy="Depthwise", min_data_in_leaf=...)` and
+  `GradientBoosting(grow_policy="Depthwise")` grow this searcher's trees
+  inside `doc_parallel_boosting.fit_with_test`, estimate their leaves
+  through their `NeedEstimation` arm (bins off the model, the loss's
+  estimator), apply them with `models/add_non_symmetric_tree_doc_parallel.
+  mojo` (their `TAddModelDocParallel<TNonSymmetricTree>`), and save them as
+  `ntree` records. `pixi run check-grow-policy` gates the dispatch; the E2
+  cells `gbdt_rmse_depthwise`, `gbdt_logloss_depthwise`,
+  `gbdt_rmse_depthwise_minleaf200` carry the cards. THE BOOSTING LOOP RUNS
+  THIS SEARCHER AT THE KERNEL MATRIX'S `HIST2_SMEM_MODE` (shared-Int32 on
+  Apple), where every gate in this file runs it at mode 0; the two agree bit
+  for bit on a 20k x 24 x 128-border fixture after DEVIATION 261 -- the
+  per-level id staging race this wiring found (one `h_ids` rewritten under
+  three queued copies), invisible at this file's 4,096-row fixture.
 * **No CatBoost differential** for depthwise, and **no benchmark**. The vec4
   arms landed on a documented 5.9x that this lane has still never measured.
 * **Region and Lossguide** are absent / the other lane's.

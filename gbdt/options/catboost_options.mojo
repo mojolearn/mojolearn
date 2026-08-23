@@ -87,6 +87,29 @@ def grow_policy_name(p: Int) -> String:
     return String("Lossguide")
 
 
+def grow_policy_from_name(name: String) raises -> Int:
+    """Their `EGrowPolicy` spellings (`enums.h`), `FromString` semantics:
+    the three this port grows, by name; `Region` and anything else raise
+    by name rather than defaulting. An empty string is SymmetricTree, the
+    constructed default (`oblivious_tree_options.cpp:23`)."""
+    if name == "" or name == "SymmetricTree":
+        return GROW_SYMMETRIC
+    if name == "Depthwise":
+        return GROW_DEPTHWISE
+    if name == "Lossguide":
+        return GROW_LOSSGUIDE
+    if name == "Region":
+        raise Error(
+            "grow_policy='Region' is EGrowPolicy::Region, which no lane"
+            " ports (greedy_search_helper.cpp:325-350); SymmetricTree,"
+            " Depthwise and Lossguide are the three grown here"
+        )
+    raise Error(
+        "grow_policy must be SymmetricTree, Depthwise or Lossguide, got '"
+        + name + "'"
+    )
+
+
 # --- score_function --------------------------------------------------------
 #
 # `enum class EScoreFunction` -- `private/libs/options/enums.h:72-80`. THEIR
@@ -265,20 +288,16 @@ struct CatBoostOptions(Copyable, Movable):
     """`depth`. CatBoost's default is 6. HONORED: `run_tree`'s `max_depth`."""
 
     var grow_policy: Int
-    """`grow_policy`. Default SymmetricTree. HONORED for SymmetricTree only;
-    Depthwise and Lossguide are refused here rather than silently growing a
-    symmetric tree under another name.
-
-    **THE REFUSAL IS NOW ABOUT THE BOOSTING DRIVER, NOT ABOUT THE SEARCHER.**
-    As of 2026-08-22 a Depthwise searcher EXISTS -- `greedy_subsets_searcher/
-    greedy_search_helper_depthwise.mojo`, gated by `pixi run check-depthwise`
-    -- and a Lossguide one is being written beside it. What does not exist is
-    a `doc_parallel_boosting.fit` that can carry a policy, an `AppendModels`
-    arm for `TNonSymmetricTree` (their `add_non_symmetric_tree_doc_parallel`,
-    unported), or a model writer that knows a second tree shape. Until those
-    three land, accepting the option here would accept it and drop it, which
-    is what `PORTING_RULES.md` rule 3 forbids. `UNWIRED.md` carries the
-    order."""
+    """`grow_policy`. Default SymmetricTree. HONORED for all three of
+    CatBoost's GPU policies since 2026-08-23 (DEVIATION 259): SymmetricTree
+    is `run_tree_layout` / the pointwise searcher; Depthwise and Lossguide
+    are `greedy_subsets_searcher/greedy_search_helper_depthwise.
+    fit_non_symmetric_tree`, carried by `doc_parallel_boosting.fit_with_test`
+    through their `NeedEstimation` arm, applied by
+    `models/add_non_symmetric_tree_doc_parallel.mojo` (their
+    `TAddModelDocParallel<TNonSymmetricTree>`), and written as `ntree`
+    records by `models/model_text.mojo`. `Region` is refused by name: no
+    lane ports it. `pixi run check-grow-policy` gates the dispatch."""
 
     var max_leaves: Int
     """`max_leaves`. **Default `1 << depth`, which is 64 at the default depth
@@ -291,8 +310,12 @@ struct CatBoostOptions(Copyable, Movable):
     `ShouldTerminate` stops the tree at `leafCount >= Options.MaxLeaves`
     (`greedy_search_helper.cpp:678-683`), and at `1 << depth` that bound is
     reached exactly when the depth bound is. `check()` enforces the equality
-    so that a caller who sets 31 by hand gets CatBoost's refusal rather than a
-    tree silently truncated to depth 5."""
+    for every policy but Lossguide so that a caller who sets 31 by hand gets
+    CatBoost's refusal rather than a tree silently truncated to depth 5;
+    under Lossguide it is the LEAF BUDGET, the user's number, and the only
+    bound their Validate puts on it is `<= 1 << 16`
+    (`oblivious_tree_options.cpp:130-133`). Since 2026-08-23 (DEVIATION 259)
+    `train(grow_policy="Lossguide", max_leaves=...)` reads it."""
 
     var min_data_in_leaf: Int
     """`min_data_in_leaf`. Default 1.
@@ -304,20 +327,20 @@ struct CatBoostOptions(Copyable, Movable):
     kernel has no minimum-count test either, which for SymmetricTree is
     agreement and not a gap.
 
-    **IT IS NO LONGER TRUE THAT NOTHING IN THIS TREE READS IT.** The
-    depthwise searcher went live on 2026-08-22 and its `is_terminal_leaf`
+    **IT IS LIVE UNDER DEPTHWISE AND LOSSGUIDE** (2026-08-22 in the
+    searcher, 2026-08-23 from `train()`, DEVIATION 259): `is_terminal_leaf`
     runs their size test, boundary included -- theirs is `leaf.Size <=
     MinLeafSize`, so a minimum of 1 marks a ONE-ROW LEAF TERMINAL rather
     than permitting it. `mojo_only/depthwise_check.mojo` claim 5 probes that
-    `<=` at a leaf size that actually occurs. That searcher takes its
-    options through `greedy_subsets_searcher/structure_searcher_options.
-    mojo`, not through this struct, which is why the refusal below is still
-    correct for anything reached from `train()`.
+    `<=` at a leaf size that actually occurs, and `check-grow-policy` claim
+    3 shows 1 vs 500 move a boosted model under both policies.
 
-    `check()` still refuses anything but 1 here. That is STRICTER than
-    CatBoost, which accepts any value and discards it, and it is kept so the
-    option cannot become silently live the day the boosting driver takes a
-    grow policy."""
+    `check()` refuses anything but 1 UNDER SYMMETRICTREE. That is STRICTER
+    than CatBoost, which accepts any value there and discards it
+    (`greedy_search_helper.cpp:685`), and it is kept because an option that
+    is accepted and dropped is the failure PORTING_RULES.md 3 names; their
+    own docs say the option "can be used only with the Lossguide and
+    Depthwise growing policies"."""
 
     var l2_leaf_reg: Float32
     """`l2_leaf_reg`. Default 3.0 (`oblivious_tree_options.cpp:15`, and
@@ -577,16 +600,28 @@ struct CatBoostOptions(Copyable, Movable):
         worse than one that is absent, because absent fails loudly and
         ignored fails silently.
         """
-        if self.grow_policy != GROW_SYMMETRIC:
+        # All three GPU policies are grown since 2026-08-23 (DEVIATION
+        # 259); `Region` and anything else has no searcher.
+        if (
+            self.grow_policy != GROW_SYMMETRIC
+            and self.grow_policy != GROW_DEPTHWISE
+            and self.grow_policy != GROW_LOSSGUIDE
+        ):
             raise Error(
                 "grow_policy="
                 + grow_policy_name(self.grow_policy)
-                + " is not ported; only SymmetricTree is implemented, and"
-                " growing a symmetric tree under another policy's name would"
-                " be a silently wrong model"
+                + " has no searcher in this port; SymmetricTree, Depthwise"
+                " and Lossguide are grown, EGrowPolicy::Region is not"
             )
-        if self.depth < 1 or self.depth > 16:
-            raise Error("depth must be in [1, 16]; got " + String(self.depth))
+        # `CB_ENSURE(MaxDepth <= 16, "Maximum tree depth is 16")` applies to
+        # the FULL-BINARY-TREE policies (`IsBuildingFullBinaryTree`:
+        # SymmetricTree and Depthwise, `enum_helpers.cpp:870-875`,
+        # `oblivious_tree_options.cpp:126-129`); Lossguide's depth is the
+        # per-leaf bound and their Validate does not cap it
+        if self.depth < 1:
+            raise Error("depth must be at least 1; got " + String(self.depth))
+        if self.grow_policy != GROW_LOSSGUIDE and self.depth > 16:
+            raise Error("Maximum tree depth is 16; got " + String(self.depth))
         # `CB_ENSURE(MaxLeaves == 1u << MaxDepth, "max_leaves option works
         # only with lossguide tree growing")` -- `catboost_options.cpp:993`.
         # Theirs is a hard refusal for every policy but Lossguide, and the
@@ -594,17 +629,27 @@ struct CatBoostOptions(Copyable, Movable):
         # `leafCount >= MaxLeaves` (`greedy_search_helper.cpp:678-683`), so
         # the option's constructed 31 would cap a depth-6 symmetric tree at
         # 32 leaves, which is depth 5.
-        if self.max_leaves != (1 << self.depth):
-            raise Error(
-                "max_leaves option works only with lossguide tree growing;"
-                " for SymmetricTree CatBoost requires max_leaves == 1 <<"
-                " depth, which is "
-                + String(1 << self.depth)
-                + " at depth "
-                + String(self.depth)
-                + "; got "
-                + String(self.max_leaves)
-            )
+        if self.grow_policy != GROW_LOSSGUIDE:
+            if self.max_leaves != (1 << self.depth):
+                raise Error(
+                    "max_leaves option works only with lossguide tree"
+                    " growing; for "
+                    + grow_policy_name(self.grow_policy)
+                    + " CatBoost requires max_leaves == 1 << depth, which is "
+                    + String(1 << self.depth)
+                    + " at depth "
+                    + String(self.depth)
+                    + "; got "
+                    + String(self.max_leaves)
+                )
+        else:
+            # `oblivious_tree_options.cpp:130-133`
+            if self.max_leaves < 2 or self.max_leaves > (1 << 16):
+                raise Error(
+                    "Maximum leaves count for Lossguide grow policy is"
+                    " 65536 (and at least 2); got "
+                    + String(self.max_leaves)
+                )
         # `leaf_estimation_method` and `leaf_estimation_iterations` were
         # REFUSED HERE until 2026-08-21, when the descent walker, the
         # Gradient arm and the Exact weighted-quantile estimator landed.
@@ -686,12 +731,18 @@ struct CatBoostOptions(Copyable, Movable):
                 " NOTE that at 0.5 this is no longer a no-op either once a"
                 " fit has CTR columns -- see the option's docstring"
             )
-        if self.min_data_in_leaf != 1:
+        if self.min_data_in_leaf < 0:
             raise Error(
-                "min_data_in_leaf is not ported; CatBoost itself ignores it"
-                " under SymmetricTree (greedy_search_helper.cpp:691-694) and"
-                " the score kernel here applies no minimum-count test either,"
-                " so it is refused rather than accepted and discarded"
+                "min_data_in_leaf must be non-negative; got "
+                + String(self.min_data_in_leaf)
+            )
+        if self.grow_policy == GROW_SYMMETRIC and self.min_data_in_leaf != 1:
+            raise Error(
+                "min_data_in_leaf does nothing under SymmetricTree: CatBoost"
+                " itself ignores it there (greedy_search_helper.cpp:685) and"
+                " the symmetric score kernel applies no minimum-count test,"
+                " so it is refused rather than accepted and discarded; it is"
+                " live under Depthwise and Lossguide (DEVIATION 259)"
             )
         # The three boosting options, all honored. `boost_from_average`
         # (PORTED 2026-08-22) is validated against the losses whose

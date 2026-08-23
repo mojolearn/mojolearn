@@ -533,6 +533,18 @@ def pack_model_for_evaluator(
             " Use predict_multi_floats, which goes through the"
             " multi-dimensional apply."
         )
+    # OBLIVIOUS ONLY, AND THAT TOO IS THEIRS: `CB_ENSURE(model.IsOblivious(),
+    # "Model is not oblivious, GPU evaluation impossible")`
+    # (`libs/model/cuda/evaluator.cpp:25`). A Depthwise/Lossguide model
+    # (DEVIATION 259) predicts through `predict_floats`, whose
+    # non-symmetric arm is their `TAddModelDocParallel<TNonSymmetricTree>`.
+    if not model.is_oblivious():
+        raise Error(
+            "Model is not oblivious, GPU evaluation impossible -- their own"
+            " `libs/model/cuda/evaluator.cpp:25` refuses the same case."
+            " Use predict_floats, whose non-symmetric apply is"
+            " add_non_symmetric_tree_doc_parallel.mojo."
+        )
 
     var total_levels = 0
     var total_leaves = 0

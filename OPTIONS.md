@@ -90,13 +90,18 @@ Missing values were on this list until 2026-08-21 and are not any more:
 `Min`, resolves PER FEATURE the way `ComputeNanMode` resolves it, spends one
 of the column's borders on the sentinel as `CalcQuantization` does, travels
 in the model text, and refuses a NaN on a column the learn pool had none in.
-**The knob is not on the Python surface yet** -- the default reaches it
-through `train`, so NaNs are handled from Python, but `nan_mode="Max"` is
-not selectable there until the extension is rebuilt.
+The knob is on the Python surface (`GradientBoosting(nan_mode=...)`,
+`NAN_MODES` in `python/mojolearn/ensemble.py`).
 
-Also absent from their GPU learner: `Depthwise` / `Lossguide` / `Region` grow
-policies and non-symmetric trees, snapshotting, multi-GPU, and custom
-objectives.
+`Depthwise` and `Lossguide` grow policies and their non-symmetric trees were
+on this list until 2026-08-23 and are not any more: `grow_policy`,
+`max_leaves` and `min_data_in_leaf` are on `train()` and on
+`GradientBoosting` (DEVIATION 259; `DEPTHWISE.md`, `LOSSGUIDE.md`), with
+CatBoost's own refusals beside them -- no non-symmetric trainer for `Lq` or
+`MultiClass` (`pointwise_non_symmetric.cpp:7-29`), `max_leaves` pinned to
+`1 << depth` off Lossguide (`catboost_options.cpp:993-1001`), the pointwise
+searcher oblivious-only. Still absent from this port of their GPU learner:
+the `Region` grow policy, snapshotting, multi-GPU, and custom objectives.
 
 ## 3. CatBoost the product
 

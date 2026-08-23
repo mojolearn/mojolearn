@@ -168,10 +168,15 @@ def gbdt_fit_binding(
         27  border_build_max_samples  (0 = every row)
         28  permutation_count            (-1 = unset)
         29  ctr_estimation_permutation_id (-1 = unset)
-        30  n_class_weights  (0 means none)
+        30  boost_from_average (-1 = unset, 0 off, 1 on)
+        31  grow_policy      (0 SymmetricTree, 1 Depthwise, 2 Lossguide --
+                              their EGrowPolicy order)
+        32  max_leaves       (-1 = unset: 1 << depth, or 31 under Lossguide)
+        33  min_data_in_leaf
+        34  n_class_weights  (0 means none)
 
     AND THEN `n_class_weights` MORE VALUES, the class weights themselves,
-    at `params[31 .. 31 + n_class_weights)`. They ride in this list rather
+    at `params[35 .. 35 + n_class_weights)`. They ride in this list rather
     than at a seventh buffer address for two reasons. The arity: this
     function already takes eight arguments and
     `PythonModuleBuilder.def_function` stops inferring a signature at
@@ -197,27 +202,31 @@ def gbdt_fit_binding(
     `catboost_options.cpp:273-360`. A caller that passes explicit values
     is overriding CatBoost's own defaults and should know it.
     """
-    # 32 FIXED SLOTS PLUS ONE PER CLASS WEIGHT (slot 30 grew
-    # boost_from_average 2026-08-22; the count moved to 31). The count is
-    # checked against its slot rather than assumed, because a wrapper that
+    # 35 FIXED SLOTS PLUS ONE PER CLASS WEIGHT (slot 30 grew
+    # boost_from_average 2026-08-22 and the count moved to 31; slots 31-33
+    # grew grow_policy / max_leaves / min_data_in_leaf 2026-08-23,
+    # DEVIATION 259, and the count moved to 34 -- the count is ALWAYS the
+    # last fixed slot, so a new option goes before it and bumps these
+    # three numbers and the wrapper's `_params`). The count is checked
+    # against its slot rather than assumed, because a wrapper that
     # appended the wrong number of weights would otherwise read whatever
     # followed them -- and for a weight that is a wrong answer, not a
     # failure.
-    if len(params) < 32:
+    if len(params) < 35:
         raise Error(
-            "gbdt_fit: params must hold at least 32 values, got "
+            "gbdt_fit: params must hold at least 35 values, got "
             + String(len(params))
         )
-    var n_class_weights = Int(py=params[31])
+    var n_class_weights = Int(py=params[34])
     if n_class_weights < 0:
         raise Error(
             "gbdt_fit: n_class_weights must not be negative, got "
             + String(n_class_weights)
         )
-    if len(params) != 32 + n_class_weights:
+    if len(params) != 35 + n_class_weights:
         raise Error(
-            "gbdt_fit: params must hold 32 + n_class_weights ("
-            + String(32 + n_class_weights)
+            "gbdt_fit: params must hold 35 + n_class_weights ("
+            + String(35 + n_class_weights)
             + ") values, got "
             + String(len(params))
         )
@@ -248,7 +257,20 @@ def gbdt_fit_binding(
     # race, not a slow path.
     var class_weights = List[Float32]()
     for i in range(n_class_weights):
-        class_weights.append(Float32(Float64(py=params[32 + i])))
+        class_weights.append(Float32(Float64(py=params[35 + i])))
+    # their `EGrowPolicy` by ORDINAL (enums.h order: SymmetricTree,
+    # Depthwise, Lossguide), resolved to the spelling `train` takes
+    var grow_code = Int(py=params[31])
+    var grow_name = String("SymmetricTree")
+    if grow_code == 1:
+        grow_name = String("Depthwise")
+    elif grow_code == 2:
+        grow_name = String("Lossguide")
+    elif grow_code != 0:
+        raise Error(
+            "gbdt_fit: grow_policy code must be 0 (SymmetricTree), 1"
+            " (Depthwise) or 2 (Lossguide), got " + String(grow_code)
+        )
 
     var fp = GbdtFitParams(
         Int(py=params[4]),
@@ -282,6 +304,9 @@ def gbdt_fit_binding(
         Int(py=params[29]),
         Int(py=params[30]),
         class_weights^,
+        grow_name,
+        Int(py=params[32]),
+        Int(py=params[33]),
     )
     var n_eval_rows = Int(py=params[20])
 

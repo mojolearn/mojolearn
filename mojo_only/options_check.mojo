@@ -123,13 +123,39 @@ def check_options() raises:
     )
     print("    determinism", determinism_name(d.determinism))
 
+    # `grow_policy` WAS A REFUSAL until 2026-08-23 (DEVIATION 259) and is a
+    # feature: Depthwise and Lossguide are grown from `train()`. This check
+    # asserted the refusal and went red when it was deleted, which is what
+    # a refusal check is for. What CatBoost refuses BESIDE the policy is
+    # what stays refused, by their rule: `max_leaves` off `1 << depth` on
+    # any policy but Lossguide (`catboost_options.cpp:993-1001`), a
+    # Lossguide budget past 65536 (`oblivious_tree_options.cpp:130-133`),
+    # and `min_data_in_leaf` under SymmetricTree (ours, stricter: theirs
+    # discards it, `greedy_search_helper.cpp:685`).
     var a = CatBoostOptions.default()
     a.grow_policy = GROW_LOSSGUIDE
-    expect_refusal(a, String("grow_policy=Lossguide"))
+    a.max_leaves = 31
+    a.check()
+    var a2 = CatBoostOptions.default()
+    a2.grow_policy = GROW_LOSSGUIDE
+    a2.max_leaves = 1 << 17
+    expect_refusal(a2, String("grow_policy=Lossguide max_leaves=131072"))
 
     var b = CatBoostOptions.default()
     b.grow_policy = GROW_DEPTHWISE
-    expect_refusal(b, String("grow_policy=Depthwise"))
+    b.check()
+    var b2 = CatBoostOptions.default()
+    b2.grow_policy = GROW_DEPTHWISE
+    b2.max_leaves = 31
+    expect_refusal(b2, String("grow_policy=Depthwise max_leaves=31"))
+    var b3 = CatBoostOptions.default()
+    b3.grow_policy = GROW_DEPTHWISE
+    b3.min_data_in_leaf = 20
+    b3.check()
+    print(
+        "    accepted: grow_policy Depthwise / Lossguide; Lossguide"
+        " max_leaves=31; Depthwise min_data_in_leaf=20"
+    )
 
     # `leaf_estimation_iterations` and `leaf_estimation_method` were
     # REFUSALS until 2026-08-21 and are now features: the descent walker,

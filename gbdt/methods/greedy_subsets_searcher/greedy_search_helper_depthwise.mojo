@@ -641,6 +641,16 @@ def fit_non_symmetric_tree[
     # other machine. -1 means "read the device", which is every
     # non-test caller.
     sm_count_override: Int = -1,
+    # ---- THE TRACE TAG PREFIX, for a fit that grows MANY trees ----
+    # `core/identity_trace.mojo` requires every tag to be unique within a
+    # trace, and every tag this function emits is rooted at `d<level>.`,
+    # `final.` or `model.`. One tree per file (the checks, the E2 growth
+    # cards) needs no prefix and passes none, so their cards are byte for
+    # byte what they were; the boosting loop passes `treeNNN.` -- the
+    # same `_tree_tag` the symmetric arm hands `run_tree_layout_traced` --
+    # so twenty non-symmetric trees in one card stay distinguishable.
+    # DEVIATION 259.
+    tag_prefix: String = String(""),
 ) raises -> TNonSymmetricTree:
     """`TGreedyTreeLikeStructureSearcher<TNonSymmetricTree>::FitImpl`.
 
@@ -995,7 +1005,7 @@ def fit_non_symmetric_tree[
         var non_zero = non_zero_leaves(records, plan.compute_ids)
         stage_times.end(ctx, "host.plan")
 
-        var d_tag = String("d") + String(iteration - 1) + "."
+        var d_tag = tag_prefix + String("d") + String(iteration - 1) + "."
         trace.record_list_i32(d_tag + "leaves", _one_i32(len(leaves)))
         trace.record_list_i32(
             d_tag + "plan.compute", _u32_as_i32(plan.compute_ids)
@@ -1792,7 +1802,7 @@ def fit_non_symmetric_tree[
             stage_times.end(ctx, "leaf.values")
 
             trace.record_device(
-                ctx, "final.partstats", part_stats,
+                ctx, tag_prefix + "final.partstats", part_stats,
                 len(leaves) * stat_count,
             )
 
@@ -1857,8 +1867,8 @@ def fit_non_symmetric_tree[
         var flat_w = List[Float32]()
         for i in range(len(result_weights)):
             flat_w.append(Float32(result_weights[i]))
-        trace.record_list_f32("final.leafvalues", flat_v)
-        trace.record_list_f32("final.leafweights", flat_w)
+        trace.record_list_f32(tag_prefix + "final.leafvalues", flat_v)
+        trace.record_list_f32(tag_prefix + "final.leafweights", flat_w)
 
     # `return BuildTreeLikeModel<TModel>(leaves, leavesWeights, leavesValues)`
     stage_times.begin(ctx)
@@ -1883,13 +1893,13 @@ def fit_non_symmetric_tree[
             nodes.append(Int32(Int(n.bin)))
             nodes.append(Int32(Int(n.left_subtree)))
             nodes.append(Int32(Int(n.right_subtree)))
-        trace.record_list_i32("model.nodes", nodes)
+        trace.record_list_i32(tag_prefix + "model.nodes", nodes)
         trace.record_list_i32(
-            "model.splittypes", model.model_structure.split_types
+            tag_prefix + "model.splittypes", model.model_structure.split_types
         )
-        trace.record_list_f32("model.values", model.leaf_values)
+        trace.record_list_f32(tag_prefix + "model.values", model.leaf_values)
         trace.record_list_i32(
-            "model.leaves", _one_i32(model.bin_count())
+            tag_prefix + "model.leaves", _one_i32(model.bin_count())
         )
     return model^
 
@@ -1914,6 +1924,7 @@ def fit_depthwise_tree[
     multiclass_optimization: Bool = False,
     random_seed: UInt64 = UInt64(0),
     sm_count_override: Int = -1,
+    tag_prefix: String = String(""),
 ) raises -> TNonSymmetricTree:
     """The Depthwise name, kept so nothing that already calls it moves.
 
@@ -1959,4 +1970,5 @@ def fit_depthwise_tree[
         multiclass_optimization,
         random_seed,
         sm_count_override,
+        tag_prefix,
     )

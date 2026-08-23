@@ -155,6 +155,28 @@ from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
     run_tree_layout_traced,
     TTreeWorkspace,
 )
+# ---- the NON-SYMMETRIC arm (DEVIATION 259): CatBoost's
+# `TGreedyTreeLikeStructureSearcher<TNonSymmetricTree>`, the searcher their
+# `pointwise_non_symmetric.cpp:7-29` registers for every single-target
+# pointwise loss under `EGrowPolicy::Depthwise` and `Lossguide`
+from gbdt.methods.greedy_subsets_searcher.greedy_search_helper_depthwise import (
+    TDepthwiseWorkspace,
+    fit_non_symmetric_tree,
+)
+from gbdt.methods.greedy_subsets_searcher.structure_searcher_options import (
+    TTreeStructureSearcherOptions,
+)
+from gbdt.models.non_symmetric_tree import TNonSymmetricTree
+from gbdt.models.add_non_symmetric_tree_doc_parallel import (
+    add_non_symmetric_tree_to_cursor,
+    compute_non_symmetric_bins_for_model,
+)
+from gbdt.options.catboost_options import (
+    GROW_DEPTHWISE,
+    GROW_LOSSGUIDE,
+    GROW_SYMMETRIC,
+    grow_policy_name,
+)
 from gbdt.models.oblivious_model import (
     BIN_SPLIT_TAKE_BIN,
     TAdditiveModel,
@@ -184,6 +206,7 @@ from gbdt.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
 )
 from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_base import (
     HIST2_SMEM_IS_I32,
+    HIST2_SMEM_MODE,
 )
 from gbdt.data.permutation import TRandom
 from gbdt.methods.leaves_estimation.doc_parallel_leaves_estimator import (
@@ -335,11 +358,21 @@ def _apply_last_tree_to_test(
     var t = model.size() - 1
     if t < 0:
         return
+    var n = test.n_rows
+    if not model.is_oblivious():
+        # their `AppendModels` through `TAddModelDocParallel<
+        # TNonSymmetricTree>` (`add_non_symmetric_tree_doc_parallel.cpp:
+        # 182-206`): bins off the model, then `AddBinModelValues`. The
+        # stored values already carry the rate, as above.
+        add_non_symmetric_tree_to_cursor(
+            ctx, layout, model.non_symmetric_models[t], test.cindex, n,
+            test.cursor,
+        )
+        return
     ref weak = model.weak_models[t]
     var depth = weak.structure.get_depth()
     if depth == 0:
         return
-    var n = test.n_rows
 
     for level in range(depth):
         ref cf = layout.features[
@@ -769,6 +802,42 @@ def fit_with_test(
     od_type: Int = OD_NONE,
     od_pvalue: Float64 = OD_DEFAULT_STOP_PVALUE,
     od_wait: Int = OD_DEFAULT_WAIT_ITERATIONS,
+    # ============================ DEVIATION 259 ============================
+    # `grow_policy`, `max_leaves`, `min_data_in_leaf` -- their
+    # `TObliviousTreeLearnerOptions::{GrowPolicy, MaxLeaves, MinDataInLeaf}`
+    # (`oblivious_tree_options.cpp:23-25`). Additive with defaults, like
+    # every argument after `trace`, so the nine `fit` call sites and every
+    # oracle fixture run the code they ran before, to the bit.
+    #
+    # SymmetricTree (the default) is the loop this file has always been.
+    # Depthwise and Lossguide grow `TNonSymmetricTree` through
+    # `fit_non_symmetric_tree` -- ONE searcher for both, as theirs is one
+    # `TGreedySearchHelper` with `switch (Options.Policy)` -- and then take
+    # their `NeedEstimation` arm UNCONDITIONALLY: `ComputeBins` off the
+    # model (`doc_parallel_leaves_estimator.cpp:48`), the estimator, and
+    # `AddBinModelValues` for the apply. DEVIATION 64's RMSE shortcut is
+    # the GREEDY OBLIVIOUS arm's (its leaf is applied inside
+    # `run_tree_layout`); this arm has no such in-searcher apply and runs
+    # the estimator exactly as the pointwise arm does, so for RMSE the
+    # numbers are the same Newton step from zero by DEVIATION 64's own
+    # derivation.
+    #
+    # THE MODEL IS A `TNonSymmetricTree` PER WEAK MODEL. Their trainer
+    # returns `TAdditiveModel<TNonSymmetricTree>` for these policies
+    # (`train.cpp:436-455`); here the same `model` carries them in
+    # `non_symmetric_models`, and `predict` / the held-out apply / the
+    # model text dispatch on the shape.
+    #
+    # `max_leaves` is READ ONLY UNDER LOSSGUIDE (`catboost_options.cpp:
+    # 993-1001` pins every other policy to `1 << depth`, which is what the
+    # -1 resolves to); `min_data_in_leaf` is `MinLeafSize`, live under the
+    # non-symmetric policies only (`greedy_search_helper.cpp:685` guards
+    # the size test with `Policy != SymmetricTree`). The CALLER refuses
+    # the pairs CatBoost refuses; this function takes resolved numbers.
+    # =======================================================================
+    grow_policy: Int = GROW_SYMMETRIC,
+    max_leaves: Int = -1,
+    min_data_in_leaf: Int = 1,
 ) raises -> FitResult:
     """Their `Fit` (`doc_parallel_boosting.h:302`), one permutation.
 
@@ -841,6 +910,72 @@ def fit_with_test(
             )
         approx_dim = num_classes
     var stat_count = 1 + approx_dim
+
+    # ---- the non-symmetric policies' own refusals (DEVIATION 259) ----
+    var non_symmetric = grow_policy != GROW_SYMMETRIC
+    if non_symmetric:
+        if grow_policy != GROW_DEPTHWISE and grow_policy != GROW_LOSSGUIDE:
+            raise Error(
+                "grow_policy " + String(grow_policy) + " is not"
+                " SymmetricTree, Depthwise or Lossguide; EGrowPolicy::Region"
+                " is unported (structure_searcher_options.check)"
+            )
+        if use_pointwise_searcher:
+            # `TDocParallelObliviousTreeSearcher` grows OBLIVIOUS trees and
+            # nothing else: their non-symmetric trainers are
+            # `TGpuTrainer<TPointwiseTargetsImpl, TNonSymmetricTree>`
+            # through `train_template_pointwise_greedy_subsets_searcher.h`
+            # (`pointwise_non_symmetric.cpp:5`), never the doc-parallel
+            # oblivious searcher. Refused by name rather than silently
+            # growing a symmetric tree under a non-symmetric name.
+            raise Error(
+                "use_pointwise_searcher is TDocParallelObliviousTreeSearcher,"
+                " an OBLIVIOUS searcher; grow_policy="
+                + grow_policy_name(grow_policy)
+                + " is grown by TGreedySubsetsSearcher<TNonSymmetricTree>"
+                " only (pointwise_non_symmetric.cpp:5-29)"
+            )
+        if objective == OBJECTIVE_MULTICLASS or objective == OBJECTIVE_MULTICLASS_OVA:
+            # their GPU trainer registry has NO (MultiClass, Depthwise) or
+            # (MultiClass, Lossguide) entry -- `multiclass.cpp:5-14`
+            # registers the multiclass targets at the default grow policy
+            # only -- so `TGpuTrainerFactory::Has` fails with "optimization
+            # scheme is not supported for GPU learning" (`train.cpp:279`).
+            raise Error(
+                "Error: optimization scheme is not supported for GPU learning"
+                " Loss=MultiClass;OptimizationScheme="
+                + grow_policy_name(grow_policy)
+                + " (their TGpuTrainerFactory has no non-symmetric"
+                " multiclass trainer, multiclass.cpp:5-14, train.cpp:279)"
+            )
+    # `catboost_options.cpp:993-1001`: every policy but Lossguide pins
+    # MaxLeaves to `1 << MaxDepth`; -1 here is their IsDefault() arm
+    var ns_max_leaves = max_leaves
+    if grow_policy != GROW_LOSSGUIDE:
+        if max_leaves >= 0 and max_leaves != (1 << max_depth):
+            raise Error(
+                "max_leaves option works only with lossguide tree growing"
+                " (catboost_options.cpp:998); for "
+                + grow_policy_name(grow_policy)
+                + " it is 1 << depth == " + String(1 << max_depth)
+                + ", got " + String(max_leaves)
+            )
+        ns_max_leaves = 1 << max_depth
+    elif ns_max_leaves < 0:
+        # their constructed default, `MaxLeaves("max_leaves", 31)`
+        # (`oblivious_tree_options.cpp:24`), which only Lossguide keeps
+        ns_max_leaves = 31
+    if non_symmetric and ns_max_leaves < 2:
+        raise Error(
+            "max_leaves must be at least 2 under "
+            + grow_policy_name(grow_policy) + ", got "
+            + String(ns_max_leaves)
+        )
+    if non_symmetric and min_data_in_leaf < 0:
+        raise Error(
+            "min_data_in_leaf must be non-negative, got "
+            + String(min_data_in_leaf)
+        )
 
     # their `cursor`: the running prediction for every row. With
     # `boost_from_average` false, `cursors->StartingPoint` is unset and
@@ -1030,7 +1165,11 @@ def fit_with_test(
     # `ReadAndEstimateLeaves` -- so the pointwise arm has no leaf to reuse
     # and must run the estimator whatever item 64 says. Leaving `est_sm` at
     # -1 hands the estimator's reduce an invalid block count.
-    if need_estimation or use_pointwise_searcher:
+    # ...and the NON-SYMMETRIC arm too, for the same reason as the pointwise
+    # one: `fit_non_symmetric_tree` returns the searcher's own leaf values
+    # but never applies them, so the estimator runs on every tree whatever
+    # DEVIATION 64 says (the numbers coincide for RMSE by its derivation).
+    if need_estimation or use_pointwise_searcher or non_symmetric:
         est_sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
     # the `random_strength` reduces are machine-sized like every strided
     # grid of theirs, and neither of the two conditions above implies the
@@ -1083,6 +1222,9 @@ def fit_with_test(
     var ws = List[TTreeWorkspace]()
     # the pointwise arm's pool of one (DEVIATION 143), same span: the FIT's
     var pw_pool = List[PointwiseTreeWorkspace]()
+    # the non-symmetric arm's per-leaf pool (`TDepthwiseWorkspace`), same
+    # span; `fit_non_symmetric_tree` re-keys it on the shape and reuses it
+    var dws = List[TDepthwiseWorkspace]()
 
     # `secondDerAsWeights = IsSecondOrderScoreFunction(scoreFunction)`.
     # BOTH their searchers key the stat planes' content on it -- the greedy
@@ -1369,8 +1511,143 @@ def fit_with_test(
         var leaf_values = List[Float32]()
         var leaf_offsets = List[Int]()
         var sizes = List[Int]()
+        # the non-symmetric arm's tree, empty on the oblivious arms
+        var ns_trees = List[TNonSymmetricTree]()
 
-        if use_pointwise_searcher:
+        if non_symmetric:
+            # ---- CatBoost's NON-SYMMETRIC learner (DEVIATION 259) -------
+            # `TGreedyTreeLikeStructureSearcher<TNonSymmetricTree>::FitImpl`
+            # through the merged Depthwise/Lossguide driver, then their
+            # estimation loop over every permutation, exactly as the
+            # pointwise arm below: the searcher's partition is NOT reused,
+            # the bins are recomputed from the MODEL on each permutation's
+            # compressed index (`task.Model->ComputeBins(*task.DataSet,
+            # &bins)`, `doc_parallel_leaves_estimator.cpp:48`), grouped by
+            # `partition_from_bins`, estimated, and applied. That is also
+            # what re-indexes the leaves: the searcher hands back values
+            # in LEAF-ID order and the model's bins are VISIT order
+            # (`model_builder.mojo`), and the estimator writes the values
+            # in the model's own bin order, which is the order the apply
+            # kernels read.
+            var opts = TTreeStructureSearcherOptions()
+            opts.policy = grow_policy
+            opts.max_depth = max_depth
+            opts.max_leaves = ns_max_leaves
+            opts.l2_reg = l2_leaf_reg
+            opts.score_function = score_function
+            opts.min_leaf_size = Float64(min_data_in_leaf)
+            # `options.RandomStrength *= randomStrengthMult`
+            # (`greedy_subsets_searcher.h:76`), the same multiply the
+            # greedy oblivious arm receives below
+            opts.random_strength = Float32(
+                noise_mult * Float64(random_strength)
+            )
+            # THE FIXED-POINT MAGNITUDES, read back like the pointwise arm's
+            # scale: the non-symmetric driver derives `choose_scale` on the
+            # host from the two plane magnitudes (DEVIATION 95's device
+            # derivation is wired to `run_tree_layout` only). One drain per
+            # tree to read two floats, under the builds that quantize;
+            # PRICED, same bill as the pointwise arm, and the same fix
+            # applies when someone measures it.
+            var wmag = Float32(0.0)
+            var gmag = Float32(0.0)
+
+            @parameter
+            if _needs_magnitudes:
+                var hm = ctx.enqueue_create_host_buffer[DType.float32](2)
+                ctx.enqueue_copy(dst_buf=hm, src_buf=mags)
+                ctx.synchronize()
+                wmag = hm[0]
+                gmag = hm[1]
+                _ = hm^  # past the drain
+            # ====================== DEVIATION 260 ======================
+            # THE hist_2 ACCUMULATION MODE IS THE KERNEL MATRIX'S
+            # `HIST2_SMEM_MODE` ROW, the same one the oblivious
+            # `run_tree_layout` defaults to: shared-Int32 on Apple and under
+            # IDENTICAL, CatBoost's warp-private float on NVIDIA/AMD FAST.
+            # The lane's own gates (`check-depthwise`, `check-lossguide`,
+            # the E2 growth cards) drive `fit_non_symmetric_tree` at mode 0
+            # (warp-private float), so this is the first caller to run the
+            # non-symmetric driver on the Int32 arms, and it is recorded
+            # because the first measurement said the arm was BROKEN here
+            # and that reading was wrong. One Depthwise tree, 20,000 rows
+            # x 24 features, three runs each, 2026-08-23 on this M4:
+            #
+            #   borders   mode 0 (loss)        HIST2_SMEM_MODE, before 261
+            #   15        38.508 deterministic 38.508 deterministic
+            #   64        38.323 deterministic 41.898 deterministic
+            #   128       38.299 deterministic 43.30 / 43.30 / 43.32
+            #
+            # The divergence began at depth 4 and was a HOST RACE in the
+            # non-symmetric driver (DEVIATION 261, one staging pair reused
+            # for three id lists per level) that the float arms happened to
+            # land on the right side of; after 261 the two modes agree BIT
+            # FOR BIT on this fixture (0x8cedc2e5a5fc1ae5 at depth 6, 128
+            # borders, FAST; IDENTICAL deterministic at 38.299009), exactly
+            # as the oblivious driver's two modes do. `mojo_only/
+            # grow_policy_check.mojo` claim 7 is the run-to-run control at
+            # this shape. The matrix row stands; an inline mode 0 here would
+            # have been a vendor/arm fork hiding a race.
+            # ============================================================
+            var tree = fit_non_symmetric_tree[HIST2_SMEM_MODE](
+                ctx, n_rows, fold_counts, opts,
+                lc, stats, row_index,
+                wmag, gmag,
+                ws, dws, trace,
+                one_hot=one_hot,
+                approx_dim=approx_dim,
+                multiclass_optimization=objective == OBJECTIVE_MULTICLASS,
+                random_seed=tree_seed,
+                tag_prefix=_tree_tag(iteration) + ".",
+            )
+            var n_bins = tree.bin_count()
+            for p in range(perm_count):
+                var pv = List[Float32]()
+                var d_bins = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+                if p == learn_p:
+                    compute_non_symmetric_bins_for_model(
+                        ctx, layout_for_test, tree.model_structure, lc,
+                        n_rows, d_bins,
+                    )
+                else:
+                    compute_non_symmetric_bins_for_model(
+                        ctx, layout_for_test, tree.model_structure,
+                        perm_cindexes[p], n_rows, d_bins,
+                    )
+                var part = partition_from_bins(ctx, d_bins, n_rows, n_bins)
+                _estimate_and_apply(
+                    ctx, n_rows, approx_dim, len(part.sizes),
+                    part.sizes, part.offsets,
+                    part.row_index, targets, weights, has_weights,
+                    cursors[p],
+                    objective, alpha, estimator_alpha, logloss_border,
+                    l2_leaf_reg, est_sm, leaf_estimation_method,
+                    num_classes, leaf_estimation_iterations,
+                    learning_rate,
+                    pv, not_pd_total,
+                    trace, stage_times,
+                    _tree_tag(iteration) + ".perm" + String(p)
+                    + ".leaves.estimated",
+                )
+                if p == est_p:
+                    leaf_values.clear()
+                    for i in range(len(pv)):
+                        leaf_values.append(pv[i])
+            # their `UpdateLeaves(std::move(point))` (`doc_parallel_leaves_
+            # estimator.cpp:39`), then `Rescale(step)` folded in as the
+            # oblivious arm folds it (DEVIATION 256 applies unchanged)
+            if len(leaf_values) != n_bins * approx_dim:
+                raise Error(
+                    "the estimator returned " + String(len(leaf_values))
+                    + " values for a non-symmetric tree of " + String(n_bins)
+                    + " bins x " + String(approx_dim)
+                )
+            tree.leaf_values.clear()
+            for i in range(len(leaf_values)):
+                tree.leaf_values.append(leaf_values[i] * learning_rate)
+            tree.dim = approx_dim
+            ns_trees.append(tree^)
+        elif use_pointwise_searcher:
             # ---- CatBoost's SINGLE-TARGET symmetric learner -----------
             # `TDocParallelObliviousTreeSearcher::FitImpl` returns the
             # STRUCTURE only (DEVIATION 104). The partition it grew is not
@@ -1490,7 +1767,7 @@ def fit_with_test(
                 random_seed=tree_seed,
             )
 
-        if need_estimation:
+        if need_estimation and not non_symmetric:
             # ---- their estimation loop (`doc_parallel_boosting.h:
             # 371-385`): ONE TASK PER PERMUTATION, each on its own dataset
             # and its own cursor, all estimating the SAME structure.
@@ -1564,26 +1841,31 @@ def fit_with_test(
         # their `result[i].AddWeakModel(iterationModels[i])` (`:398`).
         # `Rescale(step)` is folded into `add_model_value_kernel`, so the
         # stored values are UNSCALED and the rate is applied on the way out.
-        var structure = TObliviousTreeStructure()
-        for i in range(len(splits)):
-            structure.splits.append(splits[i])
-        var weak = TObliviousTreeModel(structure^)
-        # their `Dim` / `OutputDim()` (`oblivious_model.h:130-133`): the
-        # number of approxes a leaf carries. `MakeEstimationResult` already
-        # projected the walker's `numClasses`-wide point down to this, so
-        # a MultiClass leaf holds `numClasses - 1` values and the model's
-        # dimension matches the CURSOR's, not the walker's.
-        weak.dim = approx_dim
-        # DEVIATION 256, justified UNPINNED: IDENTITY_PATHS row 9 names
-        # the LEAF RESCALE, and this multiply is it -- the device half
-        # was already closed as the cursor-update fma
-        # (`add_model_value_kernel`, `39a0d88`), and what remains is one
-        # correctly-rounded HOST Float32 multiply with no chain to
-        # contract and no device flush policy in play, so its bits are
-        # the same on every host.
-        for i in range(len(leaf_values)):
-            weak.leaf_values.append(leaf_values[i] * learning_rate)
-        model.add_weak_model(weak^)
+        if non_symmetric:
+            # the `TAdditiveModel<TNonSymmetricTree>` instantiation; the
+            # rate was folded into the tree's values above
+            model.add_non_symmetric_model(ns_trees.pop())
+        else:
+            var structure = TObliviousTreeStructure()
+            for i in range(len(splits)):
+                structure.splits.append(splits[i])
+            var weak = TObliviousTreeModel(structure^)
+            # their `Dim` / `OutputDim()` (`oblivious_model.h:130-133`): the
+            # number of approxes a leaf carries. `MakeEstimationResult` already
+            # projected the walker's `numClasses`-wide point down to this, so
+            # a MultiClass leaf holds `numClasses - 1` values and the model's
+            # dimension matches the CURSOR's, not the walker's.
+            weak.dim = approx_dim
+            # DEVIATION 256, justified UNPINNED: IDENTITY_PATHS row 9 names
+            # the LEAF RESCALE, and this multiply is it -- the device half
+            # was already closed as the cursor-update fma
+            # (`add_model_value_kernel`, `39a0d88`), and what remains is one
+            # correctly-rounded HOST Float32 multiply with no chain to
+            # contract and no device flush policy in play, so its bits are
+            # the same on every host.
+            for i in range(len(leaf_values)):
+                weak.leaf_values.append(leaf_values[i] * learning_rate)
+            model.add_weak_model(weak^)
 
         # ---- their `AppendModels(..., learnCursors, testCursor)` -----
         # (`doc_parallel_boosting.h:391-396`): the SAME weak model goes on
@@ -1615,7 +1897,9 @@ def fit_with_test(
         # LAST tree's loss comes from one extra gradient pass below.
         if len(losses) < n_estimators:
             var v = Float64(h_fv.unsafe_ptr().unsafe_load(0))
-            if len(model.weak_models) > 1:
+            # `size()` counts either shape (the non-symmetric ensemble's
+            # trees are in `non_symmetric_models`)
+            if model.size() > 1:
                 losses.append(-v / Float64(n_rows))
 
     # the final tree's loss: one more `functionValue` pass over the settled
@@ -1677,7 +1961,9 @@ def fit_with_test(
             " fallback, as CatBoost's own dposv does",
         )
 
-    stage_times.report("symmetric fit (doc-parallel boosting)")
+    stage_times.report(
+        grow_policy_name(grow_policy) + " fit (doc-parallel boosting)"
+    )
 
     return FitResult(
         losses^, test_losses^, detector.best_iteration, stopped_early
@@ -1693,6 +1979,20 @@ def model_approx_dim(model: TAdditiveModel) raises -> Int:
     """
     if model.size() == 0:
         return 1
+    if not model.is_oblivious():
+        # `TNonSymmetricTree::OutputDim()` (`non_symmetric_tree.h:179-182`),
+        # the same one-dim-per-ensemble rule
+        var nd = model.non_symmetric_models[0].dim
+        for t in range(1, model.size()):
+            if model.non_symmetric_models[t].dim != nd:
+                raise Error(
+                    "non-symmetric tree " + String(t) + " has dim "
+                    + String(model.non_symmetric_models[t].dim)
+                    + " but tree 0 has " + String(nd)
+                )
+        if nd < 1:
+            raise Error("model dim is " + String(nd))
+        return nd
     var d = model.weak_models[0].dim
     for t in range(1, model.size()):
         if model.weak_models[t].dim != d:
@@ -1743,6 +2043,23 @@ def predict(
     # grew every tree against a cursor seeded there, so an apply that
     # started at zero would return the residual, not the target.
     ctx.enqueue_memset(cursor, Float32(model.bias))
+
+    if not model.is_oblivious():
+        # THE NON-SYMMETRIC SHAPE (DEVIATION 259): their
+        # `TAddModelDocParallel<TNonSymmetricTree>`, one tree at a time --
+        # bins off the model, `AddBinModelValues` onto the cursor
+        # (`add_non_symmetric_tree_doc_parallel.cpp:182-206`). Each tree
+        # drains once (its bins buffer is per tree); that is a fixed
+        # per-tree cost on a path that runs once per predict, stated
+        # rather than hidden, and the packed-once form the oblivious arm
+        # below takes is the fix if anyone measures a need.
+        for t in range(model.size()):
+            add_non_symmetric_tree_to_cursor(
+                ctx, layout, model.non_symmetric_models[t], cindex, n_rows,
+                cursor,
+            )
+        ctx.synchronize()
+        return
 
     # pack every tree's per-level records and leaf values, flat.
     # `total_leaves` counts VALUES, so it carries the approx dimension.

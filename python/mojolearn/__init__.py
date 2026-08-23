@@ -6,10 +6,11 @@ those can reach. See NOTICE for the attribution each carries.
 
 WHAT IS IN THIS ALPHA, AND WHAT IS NOT
 ---------------------------------------
-Thirteen estimators: `NearestNeighbors`, `KNeighborsClassifier`,
+Fifteen estimators: `NearestNeighbors`, `KNeighborsClassifier`,
 `KNeighborsRegressor`, `KMeans`, `DBSCAN`, `PCA`, `TruncatedSVD`,
-`LinearRegression`, `GradientBoosting`, `RandomForestClassifier`,
-`RandomForestRegressor`, `ExtraTreesClassifier` and `ExtraTreesRegressor`.
+`LinearRegression`, `Ridge`, `LogisticRegression` (binary, L-BFGS),
+`GradientBoosting`, `RandomForestClassifier`, `RandomForestRegressor`,
+`ExtraTreesClassifier` and `ExtraTreesRegressor`.
 All are backed by kernels verified against hand-computed expectations and,
 for k-means, k-NN classification and regression, the forests and the
 ensemble, against cuVS, cuML, scikit-learn and CatBoost's own output. Each
@@ -18,14 +19,16 @@ kernel does not carry is refused BY NAME with the reason, never accepted
 and ignored, and `tools/e2u_matrix_fit.py` measures that every honored
 parameter moves the answer on a fixture that should move.
 
-`GradientBoosting` is the CatBoost oblivious-tree learner and trains twelve
-of their loss functions -- RMSE, Logloss, CrossEntropy, Quantile, MAE,
-LogLinQuantile, MAPE, Poisson, Lq, Expectile, Tweedie, Huber -- with the leaf
-estimator CatBoost itself picks per loss. **MultiClass is not on this
-surface**: it is implemented and gated in the Mojo layer, but the wrapper is
-one-dimensional and `predict_proba` would need routing through the softmax
-over `numClasses - 1` stored approxes. It is named here rather than left out
-silently.
+`GradientBoosting` is the CatBoost GPU tree learner -- all three of its
+growth policies (`grow_policy`: the oblivious SymmetricTree default,
+Depthwise and Lossguide, the last two building non-symmetric trees) -- and
+trains thirteen of their loss functions -- RMSE, Logloss, CrossEntropy,
+Quantile, MAE, LogLinQuantile, MAPE, Poisson, Lq, Expectile, Tweedie, Huber,
+MultiClass -- with the leaf estimator CatBoost itself picks per loss.
+`MultiClassOneVsAll` is NOT on this surface and is named rather than left out
+silently (see `ensemble.py`'s `_UNREACHABLE_LOSSES` for why). The
+non-symmetric policies accept exactly the losses CatBoost's GPU registers a
+non-symmetric trainer for, and refuse the rest by name.
 
 **`DBSCAN`, `PCA`, `TruncatedSVD` and `LinearRegression` ARE here** (since
 2026-08-23). This docstring used to say they were not, and that sentence
@@ -72,7 +75,7 @@ from .decomposition import PCA, TruncatedSVD
 from .density import DBSCAN
 from .ensemble import GradientBoosting
 from .extratrees import ExtraTreesClassifier, ExtraTreesRegressor
-from .linear_model import LinearRegression
+from .linear_model import LinearRegression, LogisticRegression, Ridge
 from .neighbors import (
     KNeighborsClassifier,
     KNeighborsRegressor,
@@ -89,10 +92,12 @@ __all__ = [
     "KNeighborsClassifier",
     "KNeighborsRegressor",
     "LinearRegression",
+    "LogisticRegression",
     "NearestNeighbors",
     "PCA",
     "RandomForestClassifier",
     "RandomForestRegressor",
+    "Ridge",
     "TruncatedSVD",
     "__version__",
     "numeric_mode",

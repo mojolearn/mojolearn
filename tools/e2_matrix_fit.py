@@ -330,6 +330,38 @@ cell("gbdt_rmse_od_inctodec", gb(loss="RMSE", od_type="IncToDec",
 cell("gbdt_rmse_borders_sub5k", gb(loss="RMSE", border_build_max_samples=5000,
                                    _y="y_reg", **GB_BASE))
 
+# --- GBDT: grow policies (DEVIATION 259, on the Python surface 2026-08-23)
+# Depthwise and Lossguide build NON-SYMMETRIC trees through
+# TGreedySubsetsSearcher<TNonSymmetricTree> and the estimator; the model
+# text carries `ntree` records and the apply is their
+# TAddModelDocParallel<TNonSymmetricTree>. Lossguide's score function is
+# left UNSET so the cell takes CatBoost's own GPU default there, NewtonL2
+# (catboost_options.cpp:980-991); `_lossguide_cosine` pins Cosine so the
+# leafwise Cosine calcer (LOSSGUIDE.md DEVIATION 318) is in the sweep too.
+cell("gbdt_rmse_depthwise", gb(loss="RMSE", grow_policy="Depthwise",
+                               _y="y_reg", **GB_BASE))
+cell("gbdt_logloss_depthwise", gb(loss="Logloss", grow_policy="Depthwise",
+                                  _y="y_clf", _proba=True, **GB_BASE))
+cell("gbdt_rmse_lossguide", gb(loss="RMSE", grow_policy="Lossguide",
+                               _y="y_reg", **GB_BASE))
+cell("gbdt_rmse_lossguide_leaves8", gb(loss="RMSE", grow_policy="Lossguide",
+                                       max_leaves=8, _y="y_reg", **GB_BASE))
+cell("gbdt_rmse_lossguide_cosine", gb(loss="RMSE", grow_policy="Lossguide",
+                                      score_function="Cosine", _y="y_reg",
+                                      **GB_BASE))
+cell("gbdt_rmse_depthwise_minleaf200", gb(loss="RMSE", grow_policy="Depthwise",
+                                          min_data_in_leaf=200, _y="y_reg",
+                                          **GB_BASE))
+# the two CatBoost REFUSES, mirrored by name: the doc-parallel pointwise
+# searcher is oblivious-only (pointwise_non_symmetric.cpp:5), and their GPU
+# registers no (MultiClass, Lossguide) trainer (multiclass.cpp:5-14,
+# train.cpp:279). The passing verdict for both is REFUSED on every column.
+cell("gbdt_rmse_depthwise_pointwise", gb(loss="RMSE", grow_policy="Depthwise",
+                                         use_pointwise_searcher=True,
+                                         _y="y_reg", **GB_BASE))
+cell("gbdt_multiclass_lossguide", gb(loss="MultiClass", grow_policy="Lossguide",
+                                     _y="y_mc", _proba=True, **GB_BASE))
+
 # --- row-count regime: 200k rows (added for E2 round 2, 2026-08-23) -------
 cell("gbdt_rmse_200k", gb(loss="RMSE", _X="Xb", _y="yb_reg", **GB_BASE))
 cell("gbdt_logloss_200k", gb(loss="Logloss", _X="Xb", _y="yb_clf", **GB_BASE))

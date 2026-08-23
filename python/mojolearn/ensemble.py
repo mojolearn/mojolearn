@@ -1,4 +1,5 @@
-"""Gradient-boosted oblivious trees on the GPU, mirroring CatBoost.
+"""Gradient-boosted trees on the GPU, mirroring CatBoost: its three growth
+policies (oblivious SymmetricTree, Depthwise, Lossguide), its losses.
 
 **THE DEFAULTS ARE CatBoost's, NOT scikit-learn's**, and several of them
 change results rather than just speed:
@@ -21,10 +22,13 @@ retune is not ported. So these defaults equal a CatBoost user who
 passed `learning_rate=0.03, iterations=100` explicitly -- they are not
 "CatBoost's defaults", and any comparison run should pin both arms.
 
-The tree shape is OBLIVIOUS (symmetric): every node at a level takes the same
-split, which is CatBoost's structure and not scikit-learn's. A comparison
-against `GradientBoostingRegressor` at matched hyperparameters is still
-comparing two different tree families.
+The DEFAULT tree shape is OBLIVIOUS (symmetric): every node at a level takes
+the same split, which is CatBoost's default structure and not scikit-learn's.
+A comparison against `GradientBoostingRegressor` at matched hyperparameters
+is still comparing two different tree families. `grow_policy='Depthwise'`
+and `'Lossguide'` grow CatBoost's NON-SYMMETRIC trees (on the surface since
+2026-08-23, DEVIATION 259), and a Depthwise tree IS the level-wise binary
+tree scikit-learn grows -- same shape, CatBoost's score and estimator.
 
 X IS ROW-MAJOR HERE AND COLUMN-MAJOR INSIDE. `fit` transposes once. On a
 800,000 x 100 matrix that is a 320 MB copy, and it is reported rather than
@@ -249,6 +253,37 @@ _UNPORTED_SCORE_FUNCTIONS = {
     ),
 }
 
+#: their `EGrowPolicy` spellings (`oblivious_tree_options.cpp:23`), in
+#: their enum order -- the binding carries the ORDINAL. `Region`, their
+#: fourth, is absent: no lane ports it (`greedy_search_helper.cpp:325-350`).
+#: SymmetricTree is `TObliviousTreeModel`; Depthwise and Lossguide are
+#: `TNonSymmetricTree`, grown by `TGreedySubsetsSearcher<TNonSymmetricTree>`
+#: (`structure_searcher_template.h:66`) and applied by their
+#: `TAddModelDocParallel<TNonSymmetricTree>`. DEVIATION 259.
+GROW_POLICIES = ("SymmetricTree", "Depthwise", "Lossguide")
+
+_GROW_POLICY_CODES = {
+    "SymmetricTree": 0,
+    "Depthwise": 1,
+    "Lossguide": 2,
+}
+
+#: THE LOSSES CatBoost's GPU REGISTERS A NON-SYMMETRIC TRAINER FOR --
+#: `cuda/train_lib/pointwise_non_symmetric.cpp:7-29`, one
+#: `TGpuTrainer<TPointwiseTargetsImpl, TNonSymmetricTree>` registration
+#: per (loss, policy) pair, eleven losses x {Lossguide, Depthwise}. Any
+#: other pair fails their `TGpuTrainerFactory::Has` with "Error:
+#: optimization scheme is not supported for GPU learning
+#: Loss=...;OptimizationScheme=..." (`train.cpp:279-280`). Two of this
+#: surface's losses are NOT on their list and are refused here with that
+#: message: `Lq` (unregistered) and `MultiClass` (`multiclass.cpp:5-14`
+#: registers the multiclass targets at the default SymmetricTree policy
+#: only).
+_NON_SYMMETRIC_LOSSES = frozenset((
+    "Poisson", "MAPE", "MAE", "Quantile", "LogLinQuantile", "RMSE",
+    "Logloss", "CrossEntropy", "Expectile", "Tweedie", "Huber",
+))
+
 #: their `ENanMode` spellings (`data_processing_options.cpp:26`). 'Forbidden'
 #: RAISES on a NaN rather than binning it, which is CatBoost's behavior and
 #: not a validation nicety of ours.
@@ -279,7 +314,8 @@ def _tri(v):
 
 
 class GradientBoosting:
-    """Gradient-boosted oblivious trees, mirroring CatBoost's GPU learner.
+    """Gradient-boosted trees, mirroring CatBoost's GPU learner: its three
+    growth policies (`grow_policy`), its losses, its leaf estimators.
 
     Parameters
     ----------
@@ -291,8 +327,44 @@ class GradientBoosting:
     n_estimators : int, default 100
         CatBoost's `iterations`.
     max_depth : int, default 6
-        CatBoost's `depth`. The tree is oblivious, so this is exactly
-        `2 ** max_depth` leaves.
+        CatBoost's `depth`. Under `grow_policy='SymmetricTree'` the tree
+        is oblivious, so this is exactly `2 ** max_depth` leaves; under
+        Depthwise it is a bound on the level count and the leaf count is
+        ragged; under Lossguide it bounds any one leaf's depth and
+        `max_leaves` is what stops the tree.
+    grow_policy : {'SymmetricTree', 'Depthwise', 'Lossguide'}, \
+            default 'SymmetricTree'
+        CatBoost's `grow_policy` (`oblivious_tree_options.cpp:23`).
+        SymmetricTree is the oblivious tree; Depthwise splits every
+        improving leaf of a level on ITS OWN best split; Lossguide splits
+        ONE leaf per step, the one with the best score, until
+        `max_leaves`. Both non-symmetric policies are grown by the same
+        `TGreedySubsetsSearcher<TNonSymmetricTree>` CatBoost's GPU grows
+        them with (`pointwise_non_symmetric.cpp`), then take their
+        estimation arm -- bins off the model, the leaf estimator the loss
+        picks, `AddBinModelValues` -- and the saved model carries the
+        non-symmetric shape. **Refused by name, each where CatBoost
+        refuses it**: a loss with no non-symmetric GPU trainer (`Lq`,
+        `MultiClass` -- `pointwise_non_symmetric.cpp:7-29` lists the
+        eleven that have one; `train.cpp:279` is the error), and
+        `use_pointwise_searcher=True` (that is the doc-parallel OBLIVIOUS
+        searcher). Their `Region` policy is not ported and is refused by
+        name. DEVIATION 259.
+    max_leaves : int, optional
+        CatBoost's `max_leaves`, the Lossguide leaf budget. Their default
+        is 31 (`oblivious_tree_options.cpp:24`) and their cap is 65536
+        (`:130-133`). **Read under Lossguide only**: for every other policy
+        CatBoost pins it to `2 ** max_depth` and refuses a different value
+        with "max_leaves option works only with lossguide tree growing"
+        (`catboost_options.cpp:993-1001`), and so does this.
+    min_data_in_leaf : int, default 1
+        CatBoost's `min_data_in_leaf` (`oblivious_tree_options.cpp:25`), a
+        leaf with `size <= min_data_in_leaf` is terminal
+        (`greedy_search_helper.cpp:693`, their `<=`). **Live under
+        Depthwise and Lossguide only**: their `IsTerminalLeaf` guards the
+        size test with `Policy != SymmetricTree` (`:685`) and DISCARDS the
+        value on oblivious trees; this refuses any value but 1 there
+        rather than accepting what it would drop.
     learning_rate : float, default 0.03
         CatBoost's default (`boosting_options.cpp:10`), not scikit-learn's
         0.1.
@@ -357,10 +429,14 @@ class GradientBoosting:
         (`output_file_options.cpp:77`,
         `boosting_progress_tracker.cpp:162`).
 
-    score_function : {'Cosine', 'L2', 'NewtonCosine', 'NewtonL2'}, \
-            default 'Cosine'
-        The split score. Cosine is CatBoost's shipped GPU default
-        (`oblivious_tree_options.cpp:20`) and `TCosineScoreCalcer` is the
+    score_function : {'Cosine', 'L2', 'NewtonCosine', 'NewtonL2'}, optional
+        The split score. None (default) is CatBoost's OWN default FOR THE
+        POLICY: Cosine for SymmetricTree and Depthwise
+        (`oblivious_tree_options.cpp:20`), and NewtonL2 for Lossguide,
+        which their GPU option resolver sets when the option is unset
+        (`catboost_options.cpp:980-991`; L2 there for MultiClass, which
+        Lossguide refuses anyway). Cosine is what the shipped symmetric
+        oracle certifies, and `TCosineScoreCalcer` is the
         only one of their five calcers that carries the `random_strength`
         noise term (`score_calcers.cuh:152-167`); `TL2ScoreCalcer` (`:40-69`)
         has none. The Newton spellings run the SAME calcers with
@@ -469,7 +545,7 @@ class GradientBoosting:
         od_wait=None,
         use_best_model=None,
         best_model_min_trees=1,
-        score_function="Cosine",
+        score_function=None,
         nan_mode="Min",
         random_strength=0.0,
         use_pointwise_searcher=False,
@@ -478,6 +554,9 @@ class GradientBoosting:
         class_weights=None,
         permutation_count=None,
         ctr_estimation_permutation_id=None,
+        grow_policy="SymmetricTree",
+        max_leaves=None,
+        min_data_in_leaf=1,
     ):
         if loss in _UNREACHABLE_LOSSES:
             raise NotImplementedError(
@@ -513,6 +592,89 @@ class GradientBoosting:
                     f"{tuple(_LEAF_ESTIMATION_NAMES)}, got "
                     f"{leaf_estimation_method!r}"
                 )
+
+        # ---- the grow policy, and what CatBoost refuses beside it ----
+        # (DEVIATION 259; every refusal cites the line of theirs it mirrors)
+        if grow_policy == "Region":
+            raise NotImplementedError(
+                "mojolearn: grow_policy='Region' is EGrowPolicy::Region, "
+                "which no lane ports (greedy_search_helper.cpp:325-350); "
+                f"reachable values are {GROW_POLICIES}"
+            )
+        if grow_policy not in _GROW_POLICY_CODES:
+            raise ValueError(
+                f"mojolearn: grow_policy must be one of {GROW_POLICIES}, "
+                f"got {grow_policy!r}"
+            )
+        non_symmetric = grow_policy != "SymmetricTree"
+        if non_symmetric and loss not in _NON_SYMMETRIC_LOSSES:
+            # their `TGpuTrainerFactory::Has` failing: no
+            # (loss, Depthwise/Lossguide) registration for this loss
+            raise NotImplementedError(
+                "mojolearn: Error: optimization scheme is not supported for "
+                f"GPU learning Loss={loss};OptimizationScheme={grow_policy} "
+                "-- CatBoost's GPU registers a non-symmetric trainer for "
+                "exactly eleven losses (pointwise_non_symmetric.cpp:7-29; "
+                f"train.cpp:279 is the refusal): {sorted(_NON_SYMMETRIC_LOSSES)}"
+            )
+        if non_symmetric and use_pointwise_searcher:
+            raise ValueError(
+                "mojolearn: use_pointwise_searcher=True is "
+                "TDocParallelObliviousTreeSearcher, an OBLIVIOUS searcher; "
+                f"grow_policy={grow_policy!r} is grown by "
+                "TGreedySubsetsSearcher<TNonSymmetricTree> only "
+                "(pointwise_non_symmetric.cpp:5-29)"
+            )
+        if max_leaves is not None:
+            if int(max_leaves) < 2:
+                raise ValueError(
+                    f"mojolearn: max_leaves must be at least 2, got "
+                    f"{max_leaves}"
+                )
+            if grow_policy != "Lossguide" and int(max_leaves) != (
+                    1 << int(max_depth)):
+                # `CB_ENSURE(MaxLeaves == maxLeaves, "max_leaves option
+                # works only with lossguide tree growing")`
+                # (`catboost_options.cpp:993-1001`)
+                raise ValueError(
+                    "mojolearn: max_leaves option works only with lossguide "
+                    f"tree growing (catboost_options.cpp:998); under "
+                    f"grow_policy={grow_policy!r} CatBoost pins it to "
+                    f"2 ** max_depth == {1 << int(max_depth)}, got "
+                    f"{max_leaves}"
+                )
+            if grow_policy == "Lossguide" and int(max_leaves) > 65536:
+                # `oblivious_tree_options.cpp:130-133`
+                raise ValueError(
+                    "mojolearn: Maximum leaves count for Lossguide grow "
+                    f"policy is 65536, got {max_leaves}"
+                )
+        if int(min_data_in_leaf) < 0:
+            raise ValueError(
+                f"mojolearn: min_data_in_leaf must be >= 0, got "
+                f"{min_data_in_leaf}"
+            )
+        if not non_symmetric and int(min_data_in_leaf) != 1:
+            # CatBoost ACCEPTS AND DISCARDS it here (`IsTerminalLeaf` tests
+            # the size only when `Policy != SymmetricTree`,
+            # greedy_search_helper.cpp:685); this port refuses what it
+            # would drop
+            raise ValueError(
+                f"mojolearn: min_data_in_leaf={min_data_in_leaf} does "
+                "nothing under grow_policy='SymmetricTree' -- CatBoost's "
+                "IsTerminalLeaf tests the leaf size only for Depthwise and "
+                "Lossguide (greedy_search_helper.cpp:685) and discards the "
+                "value on oblivious trees. Use a non-symmetric grow_policy "
+                "or leave it at 1."
+            )
+        # THE SCORE FUNCTION'S DEFAULT DEPENDS ON THE POLICY, as theirs
+        # does: `SetNotSpecifiedOptionsToDefaults` leaves the constructed
+        # Cosine (`oblivious_tree_options.cpp:20`) for SymmetricTree and
+        # Depthwise and sets NewtonL2 for Lossguide on GPU
+        # (`catboost_options.cpp:980-991`; L2 for MultiClass / OneVsAll /
+        # RMSEWithUncertainty, none of which reaches Lossguide here)
+        if score_function is None:
+            score_function = "NewtonL2" if grow_policy == "Lossguide" else "Cosine"
 
         # AN OPTION ACCEPTED AND IGNORED IS WORSE THAN ONE ABSENT. Each
         # refusal below names the value the caller passed and the file:line
@@ -552,7 +714,9 @@ class GradientBoosting:
                 f"under score_function={score_function!r} -- only "
                 "TCosineScoreCalcer carries the noise term "
                 "(score_calcers.cuh:159-167). Use score_function='Cosine' "
-                "or 'NewtonCosine', or random_strength=0.0."
+                "or 'NewtonCosine', or random_strength=0.0. (Under "
+                "grow_policy='Lossguide' an unset score_function resolves "
+                "to NewtonL2, CatBoost's own GPU default there.)"
             )
         if border_build_max_samples < 0:
             raise ValueError(
@@ -639,6 +803,9 @@ class GradientBoosting:
         )
         self.permutation_count = permutation_count
         self.ctr_estimation_permutation_id = ctr_estimation_permutation_id
+        self.grow_policy = grow_policy
+        self.max_leaves = None if max_leaves is None else int(max_leaves)
+        self.min_data_in_leaf = int(min_data_in_leaf)
 
         self.model_ = None
         self.loss_curve_ = None
@@ -658,9 +825,11 @@ class GradientBoosting:
     # the same words. A silent reordering here is a wrong answer, not a
     # failure, which is why it is spelled out in both places.
     #
-    # SLOTS 0..30 ARE FIXED AND SLOT 30 IS A COUNT: everything after it is
+    # SLOTS 0..34 ARE FIXED AND SLOT 34 IS A COUNT: everything after it is
     # the class-weight tail, and the binding checks the length against it
-    # rather than trusting it.
+    # rather than trusting it. A new option goes BEFORE the count and bumps
+    # the binding's three length numbers with it (slots 31-33 landed that
+    # way 2026-08-23, DEVIATION 259).
     def _params(self, n_rows, n_features, n_flags, n_weights=0,
                 n_eval_rows=0):
         def f(v):
@@ -707,7 +876,11 @@ class GradientBoosting:
             -1 if self.ctr_estimation_permutation_id is None
             else int(self.ctr_estimation_permutation_id),  # 29
             _tri(self.boost_from_average),              # 30
-            len(cw),                                    # 31  n_class_weights
+            _GROW_POLICY_CODES[self.grow_policy],       # 31
+            -1 if self.max_leaves is None
+            else int(self.max_leaves),                  # 32
+            int(self.min_data_in_leaf),                 # 33
+            len(cw),                                    # 34  n_class_weights
             # ---- and then `n_class_weights` MORE, the weights themselves.
             # They ride in this list rather than at a seventh buffer address
             # because `gbdt_fit` already takes eight arguments and

@@ -93,8 +93,12 @@ from gbdt.options.data_processing_options import (
 from gbdt.options.loss_description import make_loss_description
 from gbdt.options.catboost_options import (
     COUNTER_CALC_FULL,
+    GROW_LOSSGUIDE,
+    GROW_SYMMETRIC,
     SCORE_FUNCTION_COSINE,
     TCatFeatureParams,
+    grow_policy_from_name,
+    grow_policy_name,
     set_leaves_estimation_default,
 )
 
@@ -486,6 +490,25 @@ def train(
     # got wrong before this port. 0 and 1 are explicit; 1 raises by name
     # for losses without a ported constant.
     boost_from_average: Int = -1,
+    # ============================ DEVIATION 259 ============================
+    # `grow_policy` / `max_leaves` / `min_data_in_leaf`, their
+    # `EGrowPolicy` spellings (`oblivious_tree_options.cpp:23-25`). The
+    # three policies CatBoost's GPU learner grows: SymmetricTree (this
+    # function's only arm until 2026-08-23), Depthwise and Lossguide, the
+    # two that build `TNonSymmetricTree` through
+    # `greedy_search_helper_depthwise.fit_non_symmetric_tree`. -1 for
+    # `max_leaves` is their `IsDefault()`: `1 << depth` for every policy
+    # but Lossguide (`catboost_options.cpp:993-1001`), 31 under Lossguide
+    # (`oblivious_tree_options.cpp:24`). `min_data_in_leaf` is live under
+    # the non-symmetric policies ONLY (`greedy_search_helper.cpp:685`) and
+    # is REFUSED here at any value but 1 under SymmetricTree, where CatBoost
+    # accepts and discards it -- their docs say the option "can be used only
+    # with the Lossguide and Depthwise growing policies", and this port
+    # refuses what it would otherwise silently drop.
+    # =======================================================================
+    grow_policy: String = String("SymmetricTree"),
+    max_leaves: Int = -1,
+    min_data_in_leaf: Int = 1,
 ) raises -> TrainedModel:
     """Borders -> device quantization -> fit, one call.
 
@@ -652,6 +675,42 @@ def train(
     `best_model_min_trees` above the best iteration gets a model with MORE
     trees than `best_iteration + 1`, and both numbers are correct.
     """
+    # ---- the grow policy, resolved and refused BY NAME where theirs is ----
+    var policy = grow_policy_from_name(grow_policy)
+    if policy == GROW_SYMMETRIC and min_data_in_leaf != 1:
+        raise Error(
+            "min_data_in_leaf=" + String(min_data_in_leaf) + " does nothing"
+            " under grow_policy=SymmetricTree: CatBoost guards its leaf-size"
+            " test with `Policy != SymmetricTree`"
+            " (greedy_search_helper.cpp:685) and discards the value; refused"
+            " here rather than accepted and ignored. It is live under"
+            " Depthwise and Lossguide."
+        )
+    if policy != GROW_LOSSGUIDE and max_leaves >= 0 and max_leaves != (
+        1 << max_depth
+    ):
+        raise Error(
+            "max_leaves option works only with lossguide tree growing"
+            " (catboost_options.cpp:998): under grow_policy="
+            + grow_policy_name(policy) + " CatBoost pins it to 1 << depth == "
+            + String(1 << max_depth) + ", got " + String(max_leaves)
+        )
+    if policy == GROW_LOSSGUIDE and max_leaves >= 0 and max_leaves > 65536:
+        # `CB_ENSURE(MaxLeaves <= 1 << 16, "Maximum leaves count for
+        # Lossguide grow policy is 65536")` (`oblivious_tree_options.cpp:
+        # 130-133`)
+        raise Error(
+            "Maximum leaves count for Lossguide grow policy is 65536; got "
+            + String(max_leaves)
+        )
+    if policy != GROW_SYMMETRIC and use_pointwise_searcher:
+        raise Error(
+            "use_pointwise_searcher is TDocParallelObliviousTreeSearcher, an"
+            " OBLIVIOUS searcher; grow_policy=" + grow_policy_name(policy)
+            + " is grown by TGreedySubsetsSearcher<TNonSymmetricTree> only"
+            " (pointwise_non_symmetric.cpp:5-29)"
+        )
+
     if len(x_colmajor) != n_rows * n_features:
         raise Error("x_colmajor size mismatch")
     if len(y) != n_rows:
@@ -1266,7 +1325,10 @@ def train(
     # MOJOLEARN_IDENTITY_TRACE is set.
     var trace = IdentityTrace()
     if trace.enabled:
-        trace.header("mojolearn train(): borders + symmetric fit")
+        trace.header(
+            "mojolearn train(): borders + " + grow_policy_name(policy)
+            + " fit"
+        )
         var border_counts = List[Int32]()
         var border_values = List[Float32]()
         for f in range(len(borders)):
@@ -1671,6 +1733,9 @@ def train(
         random_strength=random_strength,
         use_pointwise_searcher=use_pointwise_searcher,
         boost_from_average=bfa,
+        grow_policy=policy,
+        max_leaves=max_leaves,
+        min_data_in_leaf=min_data_in_leaf,
     )
     var losses = fit_result.learn_losses.copy()
     var t_losses = fit_result.test_losses.copy()
@@ -1697,7 +1762,7 @@ def train(
                 min_trees_err = t_losses[i]
                 min_trees_best = i
         var best_iter = min_trees_best + 1
-        if 0 < best_iter and best_iter < len(model.weak_models):
+        if 0 < best_iter and best_iter < model.size():
             model.shrink(best_iter)
 
     return TrainedModel(

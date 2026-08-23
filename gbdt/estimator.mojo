@@ -161,6 +161,19 @@ struct GbdtFitParams(Copyable, Movable):
     #: (`target/data_providers.cpp:168`). One entry per class slot; `train`
     #: raises if the length disagrees with the label set.
     var class_weights: List[Float32]
+    #: their `grow_policy` spelling -- "SymmetricTree", "Depthwise" or
+    #: "Lossguide" (`oblivious_tree_options.cpp:23`); empty is the default
+    #: SymmetricTree. DEVIATION 259.
+    var grow_policy: String
+    #: their `max_leaves`, -1 UNSET (`IsDefault()`): `1 << depth` for every
+    #: policy but Lossguide, 31 under Lossguide (`catboost_options.cpp:
+    #: 993-1001`, `oblivious_tree_options.cpp:24`). Read under Lossguide
+    #: only; any other policy refuses a value that is not `1 << depth`.
+    var max_leaves: Int
+    #: their `min_data_in_leaf`, default 1 (`oblivious_tree_options.cpp:
+    #: 25`); live under Depthwise and Lossguide, refused at any other value
+    #: under SymmetricTree, where CatBoost discards it.
+    var min_data_in_leaf: Int
 
 
 def default_gbdt_fit_params() -> GbdtFitParams:
@@ -195,6 +208,8 @@ def default_gbdt_fit_params() -> GbdtFitParams:
         # `train` by the AdjustBoostFromAverageDefaultValue port
         -1,
         List[Float32](),
+        # grow_policy SymmetricTree, max_leaves unset, min_data_in_leaf 1
+        String("SymmetricTree"), -1, 1,
     )
 
 
@@ -356,6 +371,9 @@ def gbdt_fit(
         ctr_estimation_permutation_id=params.ctr_estimation_permutation_id,
         boost_from_average=params.boost_from_average,
         class_weights=params.class_weights.copy(),
+        grow_policy=params.grow_policy,
+        max_leaves=params.max_leaves,
+        min_data_in_leaf=params.min_data_in_leaf,
     )
     var learn_losses = tm.losses.copy()
     var test_losses = tm.test_losses.copy()

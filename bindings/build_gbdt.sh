@@ -328,6 +328,39 @@ if len(me.loss_curve_) != len(me.test_loss_curve_):
 if not 0 <= me.best_iteration_ < len(me.test_loss_curve_):
     raise SystemExit("smoke: best_iteration_ is outside the curve")
 me.predict(X)
+# grow_policy (DEVIATION 259): the three policies are three models, the
+# non-symmetric ones round-trip through the model text, and the pairs
+# CatBoost refuses are refused by name
+preds = {}
+for gp in ("SymmetricTree", "Depthwise", "Lossguide"):
+    g = ens.GradientBoosting(loss="RMSE", n_estimators=3, max_depth=4,
+                             border_count=16, grow_policy=gp).fit(X, X[:, 0])
+    preds[gp] = g.predict(X)
+    if gp != "SymmetricTree":
+        if "\nntree " not in g.model_:
+            raise SystemExit(f"smoke: {gp} model text carries no ntree record")
+        p = os.path.join(tmp, gp + ".npz")
+        g.save(p)
+        if not (ens.GradientBoosting.load(p).predict(X) == preds[gp]).all():
+            raise SystemExit(f"smoke: {gp} save/load changed predictions")
+if (preds["SymmetricTree"] == preds["Depthwise"]).all():
+    raise SystemExit("smoke: Depthwise predictions equal SymmetricTree's")
+if (preds["SymmetricTree"] == preds["Lossguide"]).all():
+    raise SystemExit("smoke: Lossguide predictions equal SymmetricTree's")
+for kw, exc in ((dict(grow_policy="Depthwise", use_pointwise_searcher=True),
+                 ValueError),
+                (dict(grow_policy="SymmetricTree", min_data_in_leaf=3),
+                 ValueError),
+                (dict(grow_policy="Depthwise", max_leaves=5), ValueError),
+                (dict(grow_policy="Lossguide", loss="MultiClass"),
+                 NotImplementedError),
+                (dict(grow_policy="Region"), NotImplementedError)):
+    try:
+        ens.GradientBoosting(n_estimators=1, **kw)
+    except exc:
+        pass
+    else:
+        raise SystemExit(f"smoke: {kw} was accepted from Python")
 shutil.rmtree(tmp, ignore_errors=True)
 PY
 }
