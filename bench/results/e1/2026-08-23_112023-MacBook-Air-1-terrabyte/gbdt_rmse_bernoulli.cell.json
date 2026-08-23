@@ -1,0 +1,20 @@
+{
+  "best_iteration": 0,
+  "card": "gbdt_rmse_bernoulli.card",
+  "kind": "gbdt",
+  "loss_curve": "4b953a03d5676f71720bd278da6dcf05fdab603e64f63c505c256d62a050b643",
+  "model": "d449abd6a38d9f4e1806c2f9e7ccd7b9e0f59c1d7d0b5fd3cfee62e364717e61",
+  "predictions": "e9ef4b56b6281d3c7340d024f77660c0af958901334bb25252834ad0042200e0",
+  "seconds": 0.52,
+  "spec": {
+    "bootstrap_type": "Bernoulli",
+    "border_count": 128,
+    "learning_rate": 0.3,
+    "loss": "RMSE",
+    "max_depth": 6,
+    "n_estimators": 20,
+    "random_state": 7,
+    "subsample": 0.66
+  },
+  "stopped_early": 0
+}

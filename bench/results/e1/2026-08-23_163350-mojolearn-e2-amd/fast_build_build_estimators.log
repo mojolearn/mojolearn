@@ -1,0 +1,397 @@
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:35:
+/root/mojolearn/./core/identity_trace.mojo:246:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:35:
+/root/mojolearn/./core/identity_trace.mojo:360:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:35:
+/root/mojolearn/./core/identity_trace.mojo:374:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:34:
+/root/mojolearn/./core/column_stats.mojo:389:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        tile[ty * (TRANSPOSE_TILE + 1) + tx] = src.unsafe_load(r * n_cols + c)
+        ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:34:
+/root/mojolearn/./core/column_stats.mojo:396:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            r2 * n_rows + c2, tile[tx * (TRANSPOSE_TILE + 1) + ty]
+                              ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:41:
+Imported from ./decomposition/ported/linalg/detail/pca.mojo:255:
+./decomposition/mojo_only/jacobi_eigh_device.mojo:457:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        rot[0] = Float32(1.0)
+                        ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:41:
+Imported from ./decomposition/ported/linalg/detail/pca.mojo:255:
+./decomposition/mojo_only/jacobi_eigh_device.mojo:458:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        rot[1] = Float32(0.0)
+                        ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:41:
+Imported from ./decomposition/ported/linalg/detail/pca.mojo:255:
+./decomposition/mojo_only/jacobi_eigh_device.mojo:485:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        rot[0] = c
+                        ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:41:
+Imported from ./decomposition/ported/linalg/detail/pca.mojo:255:
+./decomposition/mojo_only/jacobi_eigh_device.mojo:486:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        rot[1] = ftz(t * c)
+                        ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:41:
+Imported from ./decomposition/ported/linalg/detail/pca.mojo:255:
+./decomposition/mojo_only/jacobi_eigh_device.mojo:489:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var c = rot[0]
+                        ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:41:
+Imported from ./decomposition/ported/linalg/detail/pca.mojo:255:
+./decomposition/mojo_only/jacobi_eigh_device.mojo:490:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var s = rot[1]
+                        ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:34:
+Imported from /root/mojolearn/./core/column_stats.mojo:92:
+/root/mojolearn/./core/pinned_reduce.mojo:97:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        red[tid] = value
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:34:
+Imported from /root/mojolearn/./core/column_stats.mojo:92:
+/root/mojolearn/./core/pinned_reduce.mojo:102:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:34:
+Imported from /root/mojolearn/./core/column_stats.mojo:92:
+/root/mojolearn/./core/pinned_reduce.mojo:102:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                           ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:34:
+Imported from /root/mojolearn/./core/column_stats.mojo:92:
+/root/mojolearn/./core/pinned_reduce.mojo:102:42: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = red[tid] + red[tid + step]
+                                      ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:34:
+Imported from /root/mojolearn/./core/column_stats.mojo:92:
+/root/mojolearn/./core/pinned_reduce.mojo:105:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var total = red[0]
+                    ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:35:
+/root/mojolearn/./core/identity_trace.mojo:101:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:35:
+/root/mojolearn/./core/identity_trace.mojo:384:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:41:
+./decomposition/ported/linalg/detail/pca.mojo:508:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sh[0] = reduced_max
+        ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:41:
+./decomposition/ported/linalg/detail/pca.mojo:510:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var biggest = sh[0]
+                  ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:41:
+./decomposition/ported/linalg/detail/pca.mojo:538:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sh[1] = reduced_first
+        ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:41:
+./decomposition/ported/linalg/detail/pca.mojo:539:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sh[2] = Float32(1.0)
+        ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:41:
+./decomposition/ported/linalg/detail/pca.mojo:541:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var first = sh[1]
+                ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:41:
+./decomposition/ported/linalg/detail/pca.mojo:561:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                sh[2] = Float32(-1.0)
+                ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:41:
+./decomposition/ported/linalg/detail/pca.mojo:563:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                sh[2] = Float32(1.0)
+                ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:41:
+./decomposition/ported/linalg/detail/pca.mojo:568:10: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    if sh[2] < Float32(0.0):
+       ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:34:
+Imported from /root/mojolearn/./core/column_stats.mojo:92:
+/root/mojolearn/./core/pinned_reduce.mojo:177:8: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    red[tid] = value
+    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:34:
+Imported from /root/mojolearn/./core/column_stats.mojo:92:
+/root/mojolearn/./core/pinned_reduce.mojo:182:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var other = red[tid + step]
+                        ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:34:
+Imported from /root/mojolearn/./core/column_stats.mojo:92:
+/root/mojolearn/./core/pinned_reduce.mojo:183:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if other > red[tid]:
+                       ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:34:
+Imported from /root/mojolearn/./core/column_stats.mojo:92:
+/root/mojolearn/./core/pinned_reduce.mojo:184:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = other
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:34:
+Imported from /root/mojolearn/./core/column_stats.mojo:92:
+/root/mojolearn/./core/pinned_reduce.mojo:187:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var total = red[0]
+                ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:34:
+Imported from /root/mojolearn/./core/column_stats.mojo:92:
+/root/mojolearn/./core/pinned_reduce.mojo:206:8: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    red[tid] = value
+    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:34:
+Imported from /root/mojolearn/./core/column_stats.mojo:92:
+/root/mojolearn/./core/pinned_reduce.mojo:211:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var other = red[tid + step]
+                        ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:34:
+Imported from /root/mojolearn/./core/column_stats.mojo:92:
+/root/mojolearn/./core/pinned_reduce.mojo:212:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if other < red[tid]:
+                       ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:34:
+Imported from /root/mojolearn/./core/column_stats.mojo:92:
+/root/mojolearn/./core/pinned_reduce.mojo:213:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = other
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:34:
+Imported from /root/mojolearn/./core/column_stats.mojo:92:
+/root/mojolearn/./core/pinned_reduce.mojo:216:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var total = red[0]
+                ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:15:
+Imported from ./dbscan/estimator.mojo:66:
+Imported from ./dbscan/ported/dbscan/dbscan.mojo:32:
+./dbscan/ported/dbscan/adjgraph/algo.mojo:313:24: warning: 'load' is deprecated, use 'unsafe_load' instead
+        var chunk = adj.load[width=ADJ_CHUNK_SIZE, alignment=1](row_off + j)
+                    ~~~^~~~~
+                        unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:41:
+Imported from ./decomposition/ported/linalg/detail/pca.mojo:243:
+/root/mojolearn/./core/gram_splitk.mojo:610:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    tile[i] = ftz(
+                    ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:41:
+Imported from ./decomposition/ported/linalg/detail/pca.mojo:243:
+/root/mojolearn/./core/gram_splitk.mojo:615:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    tile[i] = x.unsafe_load(t * m + i)
+                    ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:41:
+Imported from ./decomposition/ported/linalg/detail/pca.mojo:243:
+/root/mojolearn/./core/gram_splitk.mojo:630:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        cv[b] = tile[base + bj0 + b]
+                                ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:41:
+Imported from ./decomposition/ported/linalg/detail/pca.mojo:243:
+/root/mojolearn/./core/gram_splitk.mojo:632:38: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        var xi = tile[base + bi0 + a]
+                                 ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:41:
+Imported from ./decomposition/ported/linalg/detail/pca.mojo:243:
+/root/mojolearn/./core/gram_splitk.mojo:649:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var xj = tile[base + jm]
+                         ~~~~^~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:41:
+Imported from ./decomposition/ported/linalg/detail/pca.mojo:243:
+/root/mojolearn/./core/gram_splitk.mojo:654:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(ii[c])], xj, acc[c]
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:41:
+Imported from ./decomposition/ported/linalg/detail/pca.mojo:243:
+/root/mojolearn/./core/gram_splitk.mojo:668:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(ii[c])],
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Imported from ./decomposition/estimator.mojo:41:
+Imported from ./decomposition/ported/linalg/detail/pca.mojo:243:
+/root/mojolearn/./core/gram_splitk.mojo:669:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tile[base + Int(jj[c])],
+                            ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:15:
+Imported from ./dbscan/estimator.mojo:67:
+Imported from ./dbscan/ported/dbscan/runner.mojo:73:
+Imported from ./dbscan/ported/dbscan/vertexdeg/algo.mojo:54:
+./dbscan/ported/neighbors/epsilon_neighborhood.mojo:207:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            sx[r * GEMM_SMEM_STRIDE + c] = v
+            ~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:15:
+Imported from ./dbscan/estimator.mojo:67:
+Imported from ./dbscan/ported/dbscan/runner.mojo:73:
+Imported from ./dbscan/ported/dbscan/vertexdeg/algo.mojo:54:
+./dbscan/ported/neighbors/epsilon_neighborhood.mojo:216:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            sy[r2 * GEMM_SMEM_STRIDE + c2] = v2
+            ~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:15:
+Imported from ./dbscan/estimator.mojo:67:
+Imported from ./dbscan/ported/dbscan/runner.mojo:73:
+Imported from ./dbscan/ported/dbscan/vertexdeg/algo.mojo:54:
+./dbscan/ported/neighbors/epsilon_neighborhood.mojo:228:29: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                regy[j] = sy[
+                          ~~^
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:15:
+Imported from ./dbscan/estimator.mojo:67:
+Imported from ./dbscan/ported/dbscan/runner.mojo:73:
+Imported from ./dbscan/ported/dbscan/vertexdeg/algo.mojo:54:
+./dbscan/ported/neighbors/epsilon_neighborhood.mojo:247:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                sx[
+                ~~^
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:15:
+Imported from ./dbscan/estimator.mojo:67:
+Imported from ./dbscan/ported/dbscan/runner.mojo:73:
+Imported from ./dbscan/ported/dbscan/vertexdeg/algo.mojo:54:
+./dbscan/ported/neighbors/epsilon_neighborhood.mojo:256:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                sx[
+                ~~^
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:15:
+Imported from ./dbscan/estimator.mojo:67:
+Imported from ./dbscan/ported/dbscan/runner.mojo:73:
+Imported from ./dbscan/ported/dbscan/vertexdeg/algo.mojo:54:
+./dbscan/ported/neighbors/epsilon_neighborhood.mojo:265:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                sx[
+                ~~^
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:15:
+Imported from ./dbscan/estimator.mojo:67:
+Imported from ./dbscan/ported/dbscan/runner.mojo:73:
+Imported from ./dbscan/ported/dbscan/vertexdeg/algo.mojo:54:
+./dbscan/ported/neighbors/epsilon_neighborhood.mojo:274:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                sx[
+                ~~^
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators.mojo:24:
+Imported from ./glm/estimator.mojo:33:
+Imported from ./glm/ported/glm/qn/qn.mojo:33:
+./glm/ported/glm/qn/glm_base.mojo:208:28: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            g.unsafe_ptr() + d, dz.unsafe_ptr(), Int32(n_rows),
+            ~~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__add__' declared here
+/root/mojolearn/bindings/_mojolearn_estimators.mojo:90:18: warning: assignment to 'passes' was never used; assign to '_' instead?
+    var passes = 0
+                 ^
+/root/mojolearn/bindings/_mojolearn_estimators.mojo:121:24: warning: assignment to 'noise' was never used; assign to '_' instead?
+    var noise = Float64(0.0)
+                       ^
+/root/mojolearn/bindings/_mojolearn_estimators.mojo:313:17: warning: assignment to 'iters' was never used; assign to '_' instead?
+    var iters = 0
+                ^
+Included from /root/mojolearn/bindings/_mojolearn_estimators.mojo:17:
+Included from ./decomposition/estimator.mojo:41:
+Included from ./decomposition/ported/linalg/detail/pca.mojo:255:
+./decomposition/mojo_only/jacobi_eigh_device.mojo:474:40: warning: assignment to 't' was never used; assign to '_' instead?
+                        var t = Float32(0.0)
+                                       ^
+Included from /root/mojolearn/bindings/_mojolearn_estimators.mojo:24:
+Included from ./glm/estimator.mojo:33:
+Included from ./glm/ported/glm/qn/qn.mojo:34:
+./glm/ported/glm/qn/qn_solvers.mojo:171:15: warning: assignment to 'fxp' was never used; assign to '_' instead?
+    var fxp = fx
+              ^
+Included from /root/mojolearn/bindings/_mojolearn_estimators.mojo:24:
+Included from ./glm/estimator.mojo:33:
+Included from ./glm/ported/glm/qn/qn.mojo:34:
+./glm/ported/glm/qn/qn_solvers.mojo:177:17: warning: assignment to 'lsret' was never used; assign to '_' instead?
+    var lsret = LS_SUCCESS
+                ^
+built python/mojolearn/_mojolearn_estimators.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)

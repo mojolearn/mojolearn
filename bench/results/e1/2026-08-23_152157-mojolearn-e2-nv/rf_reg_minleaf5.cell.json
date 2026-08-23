@@ -1,0 +1,13 @@
+{
+  "card": "rf_reg_minleaf5.card",
+  "kind": "rf_reg",
+  "model": "7ba10a9663fd773727f4295fabe077114d54e6ba6045349fc02cfbdefd258593",
+  "predictions": "ed9426192559c886d8d7053b634f7d2a4ed56e381a9b402a14baca4fce4b7b4b",
+  "seconds": 0.72,
+  "spec": {
+    "max_depth": 8,
+    "min_samples_leaf": 5,
+    "n_estimators": 10,
+    "random_state": 7
+  }
+}

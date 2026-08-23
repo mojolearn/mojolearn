@@ -1,0 +1,19 @@
+{
+  "best_iteration": 0,
+  "card": "gbdt_logloss.card",
+  "kind": "gbdt",
+  "loss_curve": "11893f8f48c4a92620cc5baf9967ac7dbb8e12ff3416982db010549a3ea45c2a",
+  "model": "e1102519fb3a120276a1a1273607af3f3a59eac1fafb243ae15533097e42d41b",
+  "predictions": "97ab8164294392c55e74e80294a35b299e9c8677f5e01357af582e371850e59e",
+  "proba": "cb202a7526f6986835592f19b037e2ea9a569c3bfe52b1bfae212f98e76512bb",
+  "seconds": 1.08,
+  "spec": {
+    "border_count": 128,
+    "learning_rate": 0.3,
+    "loss": "Logloss",
+    "max_depth": 6,
+    "n_estimators": 20,
+    "random_state": 7
+  },
+  "stopped_early": 0
+}

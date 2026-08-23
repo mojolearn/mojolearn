@@ -1,0 +1,19 @@
+{
+  "best_iteration": 0,
+  "card": "gbdt_tweedie.card",
+  "kind": "gbdt",
+  "loss_curve": "b1cc1739bee4e7d7b0968657db617cc864e5d8defe9c388f5533457df83d21c5",
+  "model": "48222fe1bf790ea9f01d031477b596580a52c14fea27d72f154e1afafc46beca",
+  "predictions": "20359b7b817b0b21492ab86247a891068c1ab9e793d6ca2282981c413ab20d2a",
+  "seconds": 0.98,
+  "spec": {
+    "border_count": 128,
+    "learning_rate": 0.3,
+    "loss": "Tweedie",
+    "loss_variance_power": 1.5,
+    "max_depth": 6,
+    "n_estimators": 20,
+    "random_state": 7
+  },
+  "stopped_early": 0
+}

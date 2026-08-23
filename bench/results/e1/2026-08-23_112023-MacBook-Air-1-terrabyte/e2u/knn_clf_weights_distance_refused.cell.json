@@ -1,0 +1,9 @@
+{
+  "kind": "knn_clf",
+  "refused": "ValueError: mojolearn KNeighborsClassifier: weights='distance' is refused; only 'uniform' is ported. cuML refuses it too (kneighbors_classifier.pyx:191, 'Only uniform weighting strategy is supported currently') and the ported vote (neighbors/ported/selection/knn.mojo) carries no weight: a distance-weighted vote is a port, not a flag",
+  "seconds": 0.0,
+  "spec": {
+    "n_neighbors": 5,
+    "weights": "distance"
+  }
+}

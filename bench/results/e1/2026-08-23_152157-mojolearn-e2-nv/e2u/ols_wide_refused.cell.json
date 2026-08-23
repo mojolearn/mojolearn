@@ -1,0 +1,6 @@
+{
+  "kind": "ols",
+  "refused": "Exception: olsFit: n_cols > n_rows selects lstsqSvdJacobi (ols.cuh:113), which is NOT PORTED. The normal-equations solver cannot be used here: A^T A is singular by construction. See glm/UNPORTED.tsv",
+  "seconds": 0.25,
+  "spec": {}
+}

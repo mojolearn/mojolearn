@@ -1,0 +1,19 @@
+{
+  "best_iteration": 0,
+  "card": "gbdt_logloss_border.card",
+  "kind": "gbdt",
+  "loss_curve": "0746bdeba27cb9140db90d0f7f16b9b66cc4701149f0ee3ea165a549555732dd",
+  "model": "bb9bd3e043bf7fc474f21d5429b71d72284bf79f4d51a0d069c2accc9549fed1",
+  "predictions": "63d2b8fdabe5c7c289e2b069458acef12de022c1d3ff2b6b24cfdc028b4b580e",
+  "seconds": 0.43,
+  "spec": {
+    "border_count": 128,
+    "learning_rate": 0.3,
+    "loss": "Logloss",
+    "loss_border": 0.3,
+    "max_depth": 6,
+    "n_estimators": 20,
+    "random_state": 7
+  },
+  "stopped_early": 0
+}

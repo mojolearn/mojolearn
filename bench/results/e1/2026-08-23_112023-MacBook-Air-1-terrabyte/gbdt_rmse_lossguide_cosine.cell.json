@@ -1,0 +1,20 @@
+{
+  "best_iteration": 0,
+  "card": "gbdt_rmse_lossguide_cosine.card",
+  "kind": "gbdt",
+  "loss_curve": "9ee676dfca9c4bc1185f53c3543ff95433e0544f9e7a25afc7f42e1b53aa2ffd",
+  "model": "48526ef49c9f7381c6e56c272d61c09af459bcd83833f603fe17851f83f86aed",
+  "predictions": "655d16e12a9ce686298469e43f5bddb7b6f23c0f92b2f8e0fd32258d311e1865",
+  "seconds": 7.03,
+  "spec": {
+    "border_count": 128,
+    "grow_policy": "Lossguide",
+    "learning_rate": 0.3,
+    "loss": "RMSE",
+    "max_depth": 6,
+    "n_estimators": 20,
+    "random_state": 7,
+    "score_function": "Cosine"
+  },
+  "stopped_early": 0
+}

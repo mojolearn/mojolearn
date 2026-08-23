@@ -1,0 +1,17 @@
+{
+  "card": "kmeans_k8_ties.card",
+  "centroids": "91545b338f2cf24529b6c401e333f5ecc2fa5afeb8e5dc9459ef71009f2aa389",
+  "inertia": "b87c381e0151388aa79ae56471417a104a50865a798dbfad626b0aa71d92fb5b",
+  "inertia_value": 35659.42578125,
+  "kind": "kmeans",
+  "labels": "ef31f9e331f64b2a0c61919d26817f9e3355478a26a8cd5552083fc039132640",
+  "n_iter": 73,
+  "seconds": 0.64,
+  "spec": {
+    "n_clusters": 8,
+    "random_state": 7
+  },
+  "stages": 567,
+  "sum_scale": 65536.0,
+  "weight_scale": 32768.0
+}

@@ -1,0 +1,33 @@
+{
+  "commit": "afb22dd21103a239383c2a98778b5121a3563cf9",
+  "fits": {
+    "et_clf": {
+      "card": "et_clf.card",
+      "model": "29f17c2123ead3824da0745b7fad72dc9936ed1e4558060cc9b184947ace6222",
+      "predictions": "f6ecbc1ac97d3cf0f42e162fb371d17bd2d99d3a1b5f7caaeca2a102de94beb7"
+    },
+    "gbdt_logloss": {
+      "card": "gbdt_logloss.card",
+      "model": "e1102519fb3a120276a1a1273607af3f3a59eac1fafb243ae15533097e42d41b",
+      "predictions": "cb202a7526f6986835592f19b037e2ea9a569c3bfe52b1bfae212f98e76512bb"
+    },
+    "gbdt_rmse": {
+      "card": "gbdt_rmse.card",
+      "model": "f7184998deed64a29f78f9c8958361a28647e625d87cc045b9d10e57afc9c7e8",
+      "predictions": "da34f396f968e546a83efc3bd014be0593e6b2873961c49566f6536967864960"
+    },
+    "rf_reg": {
+      "card": "rf_reg.card",
+      "model": "e9e14b6f08683e9130cc83530e8d56706c8590181d2de8d4b14f79470f641658",
+      "predictions": "99ba0e31c9548deb874eb31cdce0e19378b32f40f2f2a253ac267f4094fa5ebd"
+    }
+  },
+  "inputs": {
+    "X": "5cbddce1deb73cde4aeb6a4be43a3cdb3efd2150cdbfd6e1887eb5ec73b1be8a",
+    "y_clf": "3d78c1ea6e3ba776dd102193f112c835bfd8a8fc48993afba187536f4a5ec75d",
+    "y_reg": "58be14758af89c51c76e3dae88bb1986391d5e6afd234a43bcc1e5e9bea1240b"
+  },
+  "machine": "MacBook-Air-1-terrabyte.local",
+  "numeric_mode": "identical",
+  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O"
+}

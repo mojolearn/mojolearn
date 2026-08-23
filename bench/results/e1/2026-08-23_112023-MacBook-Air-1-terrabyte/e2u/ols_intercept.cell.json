@@ -1,0 +1,11 @@
+{
+  "card": "ols_intercept.card",
+  "coef": "8c899cf9408ff567536773a5260557b06fa99599b711fb3abb89ab061ef1e39f",
+  "intercept": "bb0a1e2eb4c053cd56125fc0881ed60d64b008b62e137af2f35db1e4adee43be",
+  "intercept_value": -0.007165150861432323,
+  "kind": "ols",
+  "predictions": "5e8e2c4d46b06634ab98ec41e766a1e8b53290e687446df776fa74219dc7a430",
+  "seconds": 0.06,
+  "spec": {},
+  "stages": 9
+}

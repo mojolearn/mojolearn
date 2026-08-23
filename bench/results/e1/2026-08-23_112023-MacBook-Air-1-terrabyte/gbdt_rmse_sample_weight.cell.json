@@ -1,0 +1,18 @@
+{
+  "best_iteration": 0,
+  "card": "gbdt_rmse_sample_weight.card",
+  "kind": "gbdt",
+  "loss_curve": "c2878ea2aa44faba03bb0091e4ad3d8b33976597e745773a2249333faad67798",
+  "model": "abc36f6653e20d5f94a426f51e87815ae9b34d7a3293e1e78f407e97d0c291b6",
+  "predictions": "2897e8fbe01b752686b9a7aafae04bcef833b91e97d16f9114ec43cbafe8d3dc",
+  "seconds": 0.45,
+  "spec": {
+    "border_count": 128,
+    "learning_rate": 0.3,
+    "loss": "RMSE",
+    "max_depth": 6,
+    "n_estimators": 20,
+    "random_state": 7
+  },
+  "stopped_early": 0
+}

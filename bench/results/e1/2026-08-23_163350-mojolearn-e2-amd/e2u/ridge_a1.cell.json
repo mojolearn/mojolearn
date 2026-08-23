@@ -1,0 +1,13 @@
+{
+  "card": "ridge_a1.card",
+  "coef": "f846b096766830597d9799201c5724dc4aa2bb5ae386f09ea88ffa2f739c50aa",
+  "intercept": "ed74729239367a7c6d6d9563f67c10f67757213c916e4820a7220743302ad3dc",
+  "intercept_value": -0.0038104520894801652,
+  "kind": "ridge",
+  "predictions": "27349770f4fd33916c8e1cd266477e65a9a09820e6edc66869315b8f5b2fb85e",
+  "seconds": 0.34,
+  "spec": {
+    "alpha": 1.0
+  },
+  "stages": 14
+}

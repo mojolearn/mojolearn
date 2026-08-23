@@ -1,0 +1,13 @@
+{
+  "card": "rf_clf_3class.card",
+  "kind": "rf_clf",
+  "model": "6ca3bcbf1c87665cb372f7d89d0cceb3c699147cbd58ff02f2ecd2af014a33d9",
+  "predictions": "08a679eb2aa90b1f025ddba35380d78003bab5542ff3078d4bd40363100250b8",
+  "proba": "5abd5ad0f20c3d8e31efae0a0600d47d9caa50131e55e3901e068627b9072ee3",
+  "seconds": 0.67,
+  "spec": {
+    "max_depth": 8,
+    "n_estimators": 10,
+    "random_state": 7
+  }
+}
