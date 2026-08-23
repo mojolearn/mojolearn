@@ -411,6 +411,12 @@ def run_cell(name, out_dir):
     }[kind]
 
     card = os.path.join(out_dir, name + ".card")
+    # THE TRACE APPENDS. The E1 driver's four fits write cards of the same
+    # names into the same directory, and a card holding two fits is one
+    # the differ refuses (and one this matrix's differ mis-read as
+    # agreement before it learned to split them). Truncate first.
+    if os.path.exists(card):
+        os.remove(card)
     entry = {"kind": kind, "spec": {k: v for k, v in spec.items()}}
     t0 = time.time()
     os.environ["MOJOLEARN_IDENTITY_TRACE"] = card

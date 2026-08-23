@@ -34,6 +34,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from identity_trace_diff import TraceError, align, parse_trace  # noqa: E402
 
 
+class CardError(Exception):
+    pass
+
+
 def load_dir(path):
     cells = {}
     for fn in ("e2_cells.json", "e1_fits.json", "e2_mojo_cards.json"):
@@ -62,13 +66,38 @@ def load_dir(path):
     return cells, inputs, commit
 
 
+import tempfile
+
+
+def _last_fit(path):
+    """A card file holding MORE than one fit (the trace APPENDS when two
+    fits share a card path -- the E1 driver's four names collide with the
+    E2 cells' in one directory) is split at the seq-0 record and the LAST
+    fit is written to a temp file. Returns the path to parse."""
+    with open(path) as fh:
+        lines = fh.readlines()
+    starts = [i for i, l in enumerate(lines)
+              if l.split("\t")[0] == "0" and "\t" in l]
+    if len(starts) <= 1:
+        return path
+    block = lines[starts[-1]:]
+    # carry the comment header lines that precede the last block
+    hdr = [l for l in lines[starts[-2]:starts[-1]] if l.startswith("#")]
+    tmp = tempfile.NamedTemporaryFile("w", suffix=".card", delete=False)
+    tmp.writelines(hdr + block)
+    tmp.close()
+    return tmp.name
+
+
 def first_card_divergence(path_a, path_b):
-    """Returns (n_stages, first_differing_tag or None, note)."""
+    """Returns (n_stages, first_differing_tag or None, note). A parse
+    error raises CardError so the caller reports it as its OWN verdict --
+    never as agreement."""
     try:
-        ra, _, _ = parse_trace(path_a)
-        rb, _, _ = parse_trace(path_b)
+        ra, _, _ = parse_trace(_last_fit(path_a))
+        rb, _, _ = parse_trace(_last_fit(path_b))
     except TraceError as exc:
-        return 0, None, f"card parse error: {exc}"
+        raise CardError(str(exc))
     al = align(ra, rb)
     note = ""
     if al.a_only or al.b_only:
@@ -101,7 +130,10 @@ def judge(ref, other):
                    if k in ref or k in other)
     pa, pb = ref.get("card_path"), other.get("card_path")
     if pa and pb and os.path.exists(pa) and os.path.exists(pb):
-        n, tag, note = first_card_divergence(pa, pb)
+        try:
+            n, tag, note = first_card_divergence(pa, pb)
+        except CardError as exc:
+            return "CARD-ERROR", str(exc)[:100]
         if tag is None and out_same:
             return "IDENTICAL", f"{n} stages" + (f" ({note})" if note else "")
         if tag is None and not out_same:
