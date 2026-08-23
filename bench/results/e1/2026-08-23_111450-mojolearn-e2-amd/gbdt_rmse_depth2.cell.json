@@ -1,0 +1,18 @@
+{
+  "best_iteration": 0,
+  "card": "gbdt_rmse_depth2.card",
+  "kind": "gbdt",
+  "loss_curve": "a817516a90a1d5a7b44c28cf5469606b4fb61cc5225db0d77afb4f1290be8679",
+  "model": "34cb48ff001145156aa2bebcc22689e2fb066b94a8b55d90850720cd4900ece7",
+  "predictions": "bd2780773202aa62e64601fecacf44882fa7f2d0350535fd102a2c95b5470127",
+  "seconds": 0.36,
+  "spec": {
+    "border_count": 128,
+    "learning_rate": 0.3,
+    "loss": "RMSE",
+    "max_depth": 2,
+    "n_estimators": 20,
+    "random_state": 7
+  },
+  "stopped_early": 0
+}

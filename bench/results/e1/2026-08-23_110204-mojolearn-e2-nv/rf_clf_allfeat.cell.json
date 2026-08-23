@@ -1,0 +1,13 @@
+{
+  "card": "rf_clf_allfeat.card",
+  "kind": "rf_clf",
+  "model": "7073da4dc04e42fe7fd6df13d6b22ab3b2896d69cb302416b46500b10f4643ba",
+  "predictions": "3ac5c2a0302355b0526015f761d9b7d582c1dc4eeb4334a3d0d5ddba90862598",
+  "seconds": 0.79,
+  "spec": {
+    "max_depth": 8,
+    "max_features": 1.0,
+    "n_estimators": 10,
+    "random_state": 7
+  }
+}

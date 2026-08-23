@@ -1,0 +1,18 @@
+{
+  "best_iteration": 0,
+  "card": "gbdt_mape.card",
+  "kind": "gbdt",
+  "loss_curve": "e3c71f1095f6927b045bb75bacd5aa63d3298d63ba165a629ba663e5818cdff0",
+  "model": "ab6d93c12d9255619ee08bd016239af979a444ad72c0ad43795d937e9b60e56d",
+  "predictions": "72dc409c1a5712cf49a7788906dab2ab7d942b42f59913c3b8d286c5676694cc",
+  "seconds": 0.54,
+  "spec": {
+    "border_count": 128,
+    "learning_rate": 0.3,
+    "loss": "MAPE",
+    "max_depth": 6,
+    "n_estimators": 20,
+    "random_state": 7
+  },
+  "stopped_early": 0
+}

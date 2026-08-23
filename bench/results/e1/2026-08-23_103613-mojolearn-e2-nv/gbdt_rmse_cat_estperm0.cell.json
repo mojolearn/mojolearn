@@ -1,0 +1,24 @@
+{
+  "best_iteration": 0,
+  "card": "gbdt_rmse_cat_estperm0.card",
+  "kind": "gbdt",
+  "loss_curve": "1c481911b22276abc88cd0a257df2ab3d95590ff28659597fa7d7e0ffd941902",
+  "model": "426e53479393a696da52d13d8237cacae71b94f3f5044a6943a2aac89fdf8d4e",
+  "predictions": "d5c6eae05c7192748813b0fbf3c0bc1176590755ac350b1a3477eb9c687d3b67",
+  "seconds": 0.79,
+  "spec": {
+    "border_count": 128,
+    "cat_features": [
+      0,
+      1
+    ],
+    "ctr_estimation_permutation_id": 0,
+    "learning_rate": 0.3,
+    "loss": "RMSE",
+    "max_depth": 6,
+    "n_estimators": 20,
+    "permutation_count": 2,
+    "random_state": 7
+  },
+  "stopped_early": 0
+}

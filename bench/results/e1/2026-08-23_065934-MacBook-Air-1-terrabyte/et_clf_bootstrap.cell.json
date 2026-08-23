@@ -1,0 +1,11 @@
+{
+  "kind": "et_clf",
+  "refused": "Exception: bootstrap=True is not ported: sklearn's ExtraTrees defaults to False and cuML's with-replacement row sampler (randomforest.cuh:64-67) has no caller here. See UNPORTED.tsv.",
+  "seconds": 0.03,
+  "spec": {
+    "bootstrap": true,
+    "max_depth": 8,
+    "n_estimators": 10,
+    "random_state": 7
+  }
+}
