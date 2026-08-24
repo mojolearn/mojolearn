@@ -62,6 +62,7 @@ from std.gpu import thread_idx
 from std.math import ceildiv
 from max.gpu.host import DeviceBuffer, DeviceContext
 
+from core.identity_trace import IdentityTrace
 from metrics.mojo_only.pinned_sum import (
     PINNED_SUM_TPB,
     PINNED_SUM_W,
@@ -126,6 +127,20 @@ def kl_divergence(
     )
 
 
+def kl_divergence_traced(
+    ctx: DeviceContext,
+    mut trace: IdentityTrace,
+    mut model_pdf: DeviceBuffer[DType.float32],
+    mut candidate_pdf: DeviceBuffer[DType.float32],
+    size: Int,
+) raises -> Float32:
+    """The default launch, carrying a card. The same value `kl_divergence`
+    returns, from one call."""
+    return kl_divergence_launch_traced[PINNED_SUM_TPB](
+        ctx, trace, model_pdf, candidate_pdf, size, 0
+    )
+
+
 def kl_divergence_launch[
     block_size: Int
 ](
@@ -136,7 +151,45 @@ def kl_divergence_launch[
     grid_x_override: Int,
 ) raises -> Float32:
     """The launch-parameterized form (scores.mojo::r2_score_launch's
-    twin) for the invariance gate."""
+    twin) for the invariance gate. The untraced entry;
+    `kl_divergence_launch_traced` is the implementation."""
+    var off = IdentityTrace.disabled()
+    return kl_divergence_launch_traced[block_size](
+        ctx, off, model_pdf, candidate_pdf, size, grid_x_override
+    )
+
+
+def kl_divergence_launch_traced[
+    block_size: Int
+](
+    ctx: DeviceContext,
+    mut trace: IdentityTrace,
+    mut model_pdf: DeviceBuffer[DType.float32],
+    mut candidate_pdf: DeviceBuffer[DType.float32],
+    size: Int,
+    grid_x_override: Int,
+) raises -> Float32:
+    """The same fold carrying two stages.
+
+    `metrics.kl.partials` (f32, `chunk_count(size)`) is EVERY per-term
+    product this metric computes, folded once per chunk. Between the
+    recorded inputs and the recorded answer there was nothing: `n` log
+    terms and a fold, one scalar out. `chunk_count` is a PURE FUNCTION OF
+    `size` (`pinned_sum.mojo:72-74`), so this is not the machine-sized
+    scratch `core/identity_trace.mojo` rule 3 forbids -- the buffer has the
+    same length and the same contents under every legal launch, which is
+    what `check_kl_launch_invariant` proves at two block widths and two
+    grid shapes. Nothing about the block width, the grid shape or the
+    occupancy is in it; a card may record what the ALGORITHM decides and
+    not what the SCHEDULER decides.
+
+    `metrics.kl.sum_raw` (f32, 1) is the fold BEFORE `canonicalize_nan`.
+    That epilogue is a WASHER: DEVIATION 658 maps every NaN, whatever the
+    vendor made of it, onto the single payload `0x7fc00000`, which is
+    correct for the returned scalar and destructive for an instrument. The
+    pre-washer value is recorded so a NaN that arrives for two different
+    reasons on two vendors is still two different stages. Both values are
+    host floats; `size <= 0` is refused before either is formed."""
     if size <= 0:
         raise Error("kl_divergence: size must be positive, got " + String(size))
     var chunks = chunk_count(size)
@@ -158,7 +211,12 @@ def kl_divergence_launch[
     for c in range(chunks):
         lst.append(h.unsafe_ptr().unsafe_load(c))
     _ = h^
+    trace.record_device[DType.float32](
+        ctx, "metrics.kl.partials", partials, chunks
+    )
     _ = partials^
+    var raw = host_fold_partials(lst, chunks)
+    trace.record_scalar_f32("metrics.kl.sum_raw", raw)
     # DEVIATION 658 (2): a NaN (only from an out-of-contract negative or
     # non-finite entry) leaves with ONE payload.
-    return canonicalize_nan(host_fold_partials(lst, chunks))
+    return canonicalize_nan(raw)

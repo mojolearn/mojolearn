@@ -2,10 +2,12 @@
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
+from core.identity_trace import IdentityTrace
 from metrics.mojo_only.pinned_sum import PINNED_SUM_TPB
 from metrics.ported.stats.detail.scores import (
     r2_score as _raft_r2,
     r2_score_parts as _raft_r2_parts,
+    r2_score_parts_traced as _raft_r2_parts_traced,
 )
 
 
@@ -37,3 +39,16 @@ def r2_score_py_parts(
     measured to ABSORB a last-bit move in either sum whenever `sse << ssto`.
     """
     return _raft_r2_parts[PINNED_SUM_TPB](ctx, y, y_hat, n, 0)
+
+
+def r2_score_py_parts_traced(
+    ctx: DeviceContext,
+    mut trace: IdentityTrace,
+    mut y: DeviceBuffer[DType.float32],
+    mut y_hat: DeviceBuffer[DType.float32],
+    n: Int,
+) raises -> Tuple[Float32, Float32, Float32, Float32]:
+    """`r2_score_py_parts` carrying a card: the three chunk-partial buffers
+    (`metrics.r2.*_partials`) as well as the four returned values. One
+    launch, one set of numbers."""
+    return _raft_r2_parts_traced[PINNED_SUM_TPB](ctx, trace, y, y_hat, n, 0)

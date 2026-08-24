@@ -53,9 +53,9 @@ from metrics.ported.metrics.adjusted_rand_index import adjusted_rand_index
 from metrics.ported.metrics.completeness_score import completeness_score
 from metrics.ported.metrics.entropy import entropy
 from metrics.ported.metrics.homogeneity_score import homogeneity_score
-from metrics.ported.metrics.kl_divergence import kl_divergence
+from metrics.ported.metrics.kl_divergence import kl_divergence_traced
 from metrics.ported.metrics.mutual_info_score import mutual_info_score
-from metrics.ported.metrics.r2_score import r2_score_py_parts
+from metrics.ported.metrics.r2_score import r2_score_py_parts_traced
 from metrics.ported.metrics.rand_index import rand_index
 from metrics.ported.metrics.silhouette_score_batched_float import (
     silhouette_score,
@@ -183,7 +183,7 @@ def main() raises:
     # `r2_epilogue`'s two washers -- the `ssto == 0` force_finite branch and
     # `canonicalize_nan` (DEVIATION 657) -- so a divergence that either
     # washer maps onto one recorded r2 still has a stage of its own.
-    var r2_parts = r2_score_py_parts(ctx, dy, dyh, N_FLOAT)
+    var r2_parts = r2_score_py_parts_traced(ctx, trace, dy, dyh, N_FLOAT)
     trace.record_scalar_f32("metrics.r2.y_bar", r2_parts[0])
     trace.record_scalar_f32("metrics.r2.sse", r2_parts[1])
     trace.record_scalar_f32("metrics.r2.ssto", r2_parts[2])
@@ -199,7 +199,11 @@ def main() raises:
     trace.record_host("metrics.input.q", q_h.unsafe_ptr(), N_FLOAT)
     var dp = upload_f32(ctx, p_h)
     var dq = upload_f32(ctx, q_h)
-    var kl = kl_divergence(ctx, dp, dq, N_FLOAT)
+    # The traced entry records `metrics.kl.partials` (every per-term log
+    # product, folded once per chunk) and `metrics.kl.sum_raw` (the fold
+    # BEFORE `canonicalize_nan` washes a NaN to one payload). Between the
+    # recorded p, q and the recorded answer there was nothing at all.
+    var kl = kl_divergence_traced(ctx, trace, dp, dq, N_FLOAT)
     trace.record_scalar_f32("metrics.kl_divergence", kl)
     _show32("kl_divergence", kl)
 

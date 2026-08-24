@@ -82,6 +82,7 @@ from std.gpu import block_dim, block_idx, thread_idx
 from std.math import ceildiv
 from max.gpu.host import DeviceBuffer, DeviceContext
 
+from core.identity_trace import IdentityTrace
 from metrics.mojo_only.pinned_sum import (
     PINNED_SUM_TPB,
     PINNED_SUM_W,
@@ -288,7 +289,53 @@ def r2_score_parts[
     1 - sse/ssto` ABSORBS a last-bit move in either sum whenever `sse <<
     ssto` (measured: a shifted chunk partition moved sse and not r2 on
     the 4099-row fixture), so the checks gate the sums, not only the
-    ratio."""
+    ratio -- and since 2026-08-24 so does the CARD, which recorded only
+    the ratio through the E3 round 11 certification.
+
+    The untraced entry. `r2_score_parts_traced` is the implementation;
+    a disabled trace records nothing and costs one boolean test per
+    would-be record."""
+    var off = IdentityTrace.disabled()
+    return r2_score_parts_traced[block_size](
+        ctx, off, y, y_hat, n, grid_x_override
+    )
+
+
+def r2_score_parts_traced[
+    block_size: Int
+](
+    ctx: DeviceContext,
+    mut trace: IdentityTrace,
+    mut y: DeviceBuffer[DType.float32],
+    mut y_hat: DeviceBuffer[DType.float32],
+    n: Int,
+    grid_x_override: Int,
+) raises -> Tuple[Float32, Float32, Float32, Float32]:
+    """The same computation carrying a card: `metrics.r2.sum_partials`,
+    `metrics.r2.sse_partials`, `metrics.r2.ssto_partials`, one f32 per
+    chunk.
+
+    WHY THE PARTIALS ARE RULE-LEGAL, AND WHY THEY ARE THE RIGHT STAGE.
+    `core/identity_trace.mojo` rule 3 forbids hashing a MACHINE-SIZED
+    SCRATCH, because two backends legitimately hold different amounts of
+    it. These are not that. `chunk_count(n) = ceil(n / PINNED_SUM_W)` is a
+    PURE FUNCTION OF n (`pinned_sum.mojo:72-74`, and its docstring says
+    so): `PINNED_SUM_W` is a NUMERIC constant of that file ("a different W
+    is a different tree"), not a launch width, and `block_size` and the
+    grid shape reach only WHICH PHYSICAL BLOCK SERVES WHICH CHUNK, never
+    which values share a chunk. So this buffer has the same length and the
+    same contents under every legal launch -- which is exactly the
+    property `check_r2_launch_invariant` proves at two block widths and
+    two grid shapes -- and recording it cannot break the launch-invariance
+    claim these cards are asserted under. The partition is the ALGORITHM's
+    structure; the scheduler's choices are not in it.
+
+    They are also the buffer the absorption HIDES IN. `sse` and `ssto` are
+    single scalars folded from these; a chunk partial that moved and a
+    host fold that rounded it away leaves the recorded sums equal and the
+    partials unequal, which is the mamba lesson (a fold sabotage that
+    moves 13 of 16 stages with the output bit-identical) applied to the
+    one fold this lane owns."""
     if n <= 0:
         raise Error("r2_score: n must be positive, got " + String(n))
     var chunks = chunk_count(n)
@@ -305,6 +352,9 @@ def r2_score_parts[
         grid_dim=(gx, gy, 1),
         block_dim=(block_size, 1, 1),
     )
+    trace.record_device[DType.float32](
+        ctx, "metrics.r2.sum_partials", sum_p, chunks
+    )
     var y_sum = _fold_partials(ctx, sum_p, chunks)
     # `mean.cuh:22,39`: `ratio = 1 / N` then `mul_const_op(ratio)` -- TWO
     # roundings, not `sum / n`. Copied, not improved.
@@ -319,6 +369,12 @@ def r2_score_parts[
         ssto_p.unsafe_ptr(),
         grid_dim=(gx, gy, 1),
         block_dim=(block_size, 1, 1),
+    )
+    trace.record_device[DType.float32](
+        ctx, "metrics.r2.sse_partials", sse_p, chunks
+    )
+    trace.record_device[DType.float32](
+        ctx, "metrics.r2.ssto_partials", ssto_p, chunks
     )
     var sse = _fold_partials(ctx, sse_p, chunks)
     var ssto = _fold_partials(ctx, ssto_p, chunks)

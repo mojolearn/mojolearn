@@ -249,6 +249,60 @@ stages 0-4 agree, as they must. The values, IDENTICAL / FAST:
     r2_score            0x3f320e9b / 0x3f320e9c     kl_divergence     0x3f809113 / same
     silhouette_score    0x3ef548da / same           trustworthiness   0x3fe99369e91a2645 / same
 
+### What the card records now (2026-08-24), and why each stage exists
+
+The leg-11 card recorded, for fourteen scores, THE INPUTS AND THEN A FINAL
+SCALAR. A final scalar is a lossy hash of the arithmetic that made it, and
+this lane had already MEASURED the loss: `scores.mojo::r2_score_parts` says
+`r2 = 1 - sse/ssto` absorbs a last-bit move in either sum whenever
+`sse << ssto`, found by moving `sse` on this very fixture and watching `r2`
+not move. The checks gated the sums; the card did not. Three other lanes
+measured the same class of blindness on 2026-08-23 (NOVELTY_NOTES 13, 14,
+15: a fold sabotage moving 13 of 16 stages with the final output
+bit-identical). These stages close it.
+
+| stage | type, count | what it is, and what it catches |
+|---|---|---|
+| `metrics.r2.y_bar` | f32, 1 | `sum(y) * (1/n)`, the scalar the sse/ssto kernel reads. A move here moves both sums; recorded, it separates "the mean moved" from "a square moved". |
+| `metrics.r2.sse` | f32, 1 | The absorbed sum. `1 - sse/ssto` with `sse << ssto` rounds its last bit away. |
+| `metrics.r2.ssto` | f32, 1 | The other absorbed sum. Also the PRE-VALUE of `r2_epilogue`'s `ssto == 0` force_finite branch (DEVIATION 657), which maps a whole family of inputs onto exactly 1.0 or 0.0. |
+| `metrics.r2.sum_partials` | f32, `ceil(n/256)` | Every chunk total of the mean's fold, before the host folds them. Where a divergence the sum re-rounds away survives. |
+| `metrics.r2.sse_partials` | f32, `ceil(n/256)` | Same, for `sum((y - y_hat)^2)`. |
+| `metrics.r2.ssto_partials` | f32, `ceil(n/256)` | Same, for `sum((y - y_bar)^2)`. |
+| `metrics.kl.partials` | f32, `ceil(n/256)` | Every `p * (log p - log q)` term this metric computes, folded once per chunk. Between the recorded p, q and the recorded answer there was previously NOTHING. |
+| `metrics.kl.sum_raw` | f32, 1 | The fold BEFORE `canonicalize_nan` (DEVIATION 658). That epilogue maps every NaN, whatever the vendor made of it, onto `0x7fc00000`: correct for the returned scalar, destructive for an instrument. |
+
+**The chunk partials are rule-legal, and the reason is worth stating once.**
+`core/identity_trace.mojo` rule 3 forbids hashing a MACHINE-SIZED SCRATCH,
+because two backends legitimately hold different amounts of it reducing to
+the same answer. These are not that. `chunk_count(n) = ceil(n /
+PINNED_SUM_W)` is a PURE FUNCTION OF n (`mojo_only/pinned_sum.mojo:72-74`,
+and its own docstring says so); `PINNED_SUM_W` is a NUMERIC constant of
+that file ("a different W is a different tree"), not a launch width; and
+`block_size` and grid shape reach only WHICH PHYSICAL BLOCK SERVES WHICH
+CHUNK, never which values share a chunk. That is exactly the property
+`check_r2_launch_invariant` and `check_kl_launch_invariant` prove at two
+block widths x two grid shapes.
+
+**A stage must be a decision the ALGORITHM makes, not one the SCHEDULER
+makes.** These cards are ASSERTED launch-invariant, so a stage carrying a
+block width, a grid shape, an occupancy or a core count would differ
+between two legal launches BY CONSTRUCTION and would break the exact
+property the invariance gates exist to prove. Nothing may be recorded here
+whose value is chosen from the device. One candidate in this directory
+FAILS that test and is deliberately left out: `rand_index.mojo`'s
+`partials` array is `2 * gx * gy` ints where the grid comes from
+`RAND_BLOCK_DIM_X/Y`, constants that file labels SCHEDULING (`:46-48`), so
+its partition is the scheduler's and not the algorithm's. Its REDUCED
+result is recorded instead, as rule 3 says: `metrics.rand.a`,
+`metrics.rand.b`.
+
+**Both cards must come from ONE pinned SHA.** Adding stages changes the
+record list, so a leg-11 card diffed against a current one reports a
+STRUCTURAL divergence meaning only "two different builds". A leg builds
+both ends from one SHA, so this is survivable, but a stale card mismatch is
+not a finding.
+
 **Trustworthiness's k-NN stages come from neighbors/**: the metric's
 traced entry hands the card to `knn_search_traced`, so `knn.*` and
 `trust.*` share one `seq` (the DEVIATION 518 lesson: a second
