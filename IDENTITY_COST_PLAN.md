@@ -166,3 +166,83 @@ per the GEMM charter's ruling on `core/gram_splitk.mojo`.
 Sequenced AFTER the v1 serial scan lands, never beside it, because two profiles
 of the same math written at once is the file convergence that has killed
 rounds.
+
+---
+
+## Part 5. The implementation ladder
+
+Added 2026-08-23 night. Andrew's words: "i would REALLY like to implement that
+eventually." So this section exists to make sure that when it starts, it starts
+at the right rung, and to record which rung needs nothing new.
+
+**The important correction to Part 3.** Part 3 says the claims need identity
+closed for TRAINING, and that is true of the STRONG claims. It is NOT true of a
+first useful version. The six classical lanes are already bit-identical on
+three vendors, Apple M4 against H100 against MI325X, certified at E3 round 11
+(`a32e304`, leg commit 144aa5b, gemm 60 stages). A cost oracle over what we
+ALREADY certify does not wait on anything.
+
+### Stage 1. The static identity tax calculator. NEEDS NOTHING NEW.
+
+Part 1's five terms, computed from the frozen contracts and
+`mojo_only/numerics.mojo` by counting. Output is a predicted tax per stage per
+lane, with the derivation shown, and it is FALSIFIABLE later.
+
+This is the only rung that proceeds under the standing measurement freeze,
+because it is source analysis. No GPU, no timing, no clean window, and
+therefore no exposure to the M4's thermal drift, which pins the governor at
+minimum clock for 96% of a trace and makes short measurements fiction anyway.
+Start here.
+
+### Stage 2. The eligibility gate over the existing certificates.
+
+The oracle's hard part is not the cost formula, it is deciding which devices
+are ELIGIBLE. That machinery already exists and is not recognized as a product
+component yet:
+
+- `core/identity_trace.mojo` cards, one hash record per stage
+- the certificate hashes already carried in IDENTITY_PATHS rows
+- `tools/e3_round_judge.sh` section 7, which already judges lanes across
+  vendors and already reports IDENTICAL against RECORDED
+- `tools/e2_remote_leg.sh`, which already provisions a rented GPU with a
+  one-hour lease baked in and destroys it
+
+A device joins the equivalence set only when its card matches stage for stage.
+A device that diverges, or that the floor REFUSES, is ineligible and is
+reported as ineligible rather than as slower. That refusal path is already how
+this repo behaves and it is the honest half of the product.
+
+### Stage 3. The price side. BLOCKED ON THE MEASUREMENT FREEZE.
+
+Wall time per fit times the user's real rate, on-demand or spot or negotiated.
+`tools/lanes_price.sh` already has the discipline that makes such a number
+trustworthy: built once per mode, alternated, mode witness read back from the
+run, contaminated windows rejected. It is a timing harness, so it is FROZEN by
+Andrew's standing order and nothing here lifts that.
+
+Note the ordering this implies. Stage 1 predicts, stage 3 measures, and stage 3
+exists partly to falsify stage 1.
+
+### Stage 4. A forward neural workload with a certificate.
+
+The Mamba-1 block is nearly this already. Extend to a multi-block model, still
+forward only, still no training. That gives a neural workload whose eligibility
+can be judged the same way the classical lanes are judged, which is what makes
+the oracle interesting to anyone outside this repo.
+
+### Stage 5. Training closure, the narrow target.
+
+Float32 MLP, fixed batch shapes, ReLU, softmax cross entropy, the landed GEMM,
+plain SGD, one GPU. Then backward, optimizer state, RNG, data ordering, and
+CANONICAL CHECKPOINT SERIALIZATION, which is the one people forget and the one
+mid-run migration depends on.
+
+### Stage 6. The counterfactual claims.
+
+Mid-run vendor migration and spot arbitrage during a run. Requires stage 5 plus
+bit-equal checkpoints across vendors. This is where the strong claims of Part 2
+become demonstrable rather than argued.
+
+**Read the ladder as strictly ordered.** Every stage after 1 depends on the one
+before it, and the temptation to jump to stage 6 because it is the exciting one
+is how this becomes a demo that cannot be defended.
