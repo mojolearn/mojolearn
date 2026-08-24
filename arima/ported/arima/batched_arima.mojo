@@ -395,13 +395,23 @@ def batched_loglike_grad(
     h: Float32,
     trans: Bool,
     mut params: ARIMAParams,
+    mut d_x_pert: DeviceBuffer[DType.float32],
 ) raises -> List[Float32]:
-    """`:515-590`. Returns the base log-likelihood (host) beside the device
+    """`:515-591`. Returns the base log-likelihood (host) beside the device
     gradient, because the L-BFGS caller needs both and theirs evaluates the
-    base inside this call."""
+    base inside this call.
+
+    `d_x_pert` is the CALLER'S scratch, which is what theirs is too
+    (`arima_mem.x_pert`, `:534`). It was a local here until 2026-08-23.
+    Making it the caller's is what lets a gate READ IT BACK after the call
+    and assert it returned to `d_x` bitwise, and that assertion is the ONLY
+    thing that catches the reset regressing: the `-0.0` a broken reset
+    destroys does not survive far enough through the filter to move the
+    log-likelihood, so the indirect gate written first was INERT and
+    sabotage (g) moved nothing against it. See
+    `check_grad_reset_preserves_negative_zero`."""
     var N = order.complexity()
-    var d_x_pert = ctx.enqueue_create_buffer[DType.float32](N * batch_size)
-    ctx.enqueue_copy(dst_buf=d_x_pert, src_buf=d_x.create_sub_buffer[DType.float32](0, N * batch_size))
+    ctx.enqueue_copy(dst_buf=d_x_pert.create_sub_buffer[DType.float32](0, N * batch_size), src_buf=d_x.create_sub_buffer[DType.float32](0, N * batch_size))
     var base = batched_loglike_packed(ctx, d_y, batch_size, n_obs, order, d_x, trans, params)
     comptime TPB = 128
     var grid = (batch_size + TPB - 1) // TPB
@@ -425,5 +435,4 @@ def batched_loglike_grad(
     ctx.synchronize()
     var ll = base.loglike.copy()
     _ = base^
-    _ = d_x_pert^
     return ll^

@@ -58,6 +58,7 @@ The two the brief names are (a) and (c):
 """
 
 from std.math import abs
+from std.os import getenv
 from std.memory import bitcast
 from max.gpu.host import DeviceContext
 
@@ -132,11 +133,31 @@ def _mode_name() -> String:
     return String("FAST")
 
 
+def _survey() -> Bool:
+    """SURVEY MODE, for sabotage runs only (`MOJOLEARN_ARIMA_SURVEY=1`).
+
+    A gate that raises on its FIRST differing stage answers "did this
+    sabotage bite" and nothing else. The question a sabotage table has to
+    answer is WHICH stages moved and HOW MANY cells in each, because an arm
+    that moves an intermediate stage but leaves the final output alone is
+    the arm a naive output-only gate would call inert. Under survey mode
+    `_gate` prints `SABOTAGE-MOVED` and CONTINUES, so one run enumerates
+    every stage the sabotage reached.
+
+    Never set this for a real gate run: it turns every assertion into a
+    print. The green runs recorded in `arima/README.md` are made with it
+    unset."""
+    return getenv("MOJOLEARN_ARIMA_SURVEY") == "1"
+
+
 def _gate(ok: Bool, what: String) raises:
     """Vendor-shaped claims (a bitwise device-vs-oracle line rides on the
     stdlib transcendental under FAST): asserted under IDENTICAL, RECORDED
     under FAST. Structural, refusal and integer claims use `_assert`."""
     if ok:
+        return
+    if _survey():
+        print("    SABOTAGE-MOVED " + what)
         return
     comptime if IDENTICAL:
         raise Error(what)
@@ -146,6 +167,9 @@ def _gate(ok: Bool, what: String) raises:
 
 def _assert(ok: Bool, what: String) raises:
     if not ok:
+        if _survey():
+            print("    SABOTAGE-MOVED (assert) " + what)
+            return
         raise Error(what)
 
 
@@ -516,7 +540,8 @@ def check_grad_device_equals_oracle(ctx: DeviceContext, mut trace: IdentityTrace
     var xb = upload_f32(ctx, xh)
     var gb = ctx.enqueue_create_buffer[DType.float32](N * f.batch_size)
     var scratch = ARIMAParams(ctx, order, f.batch_size)
-    var base_ll = batched_loglike_grad(ctx, y, f.batch_size, f.n_obs, order, xb, gb, h, True, scratch)
+    var xpert = ctx.enqueue_create_buffer[DType.float32](N * f.batch_size)
+    var base_ll = batched_loglike_grad(ctx, y, f.batch_size, f.n_obs, order, xb, gb, h, True, scratch, xpert)
     var grad = download_f32(ctx, gb, N * f.batch_size)
     trace.record_list_f32("arima.grad", grad)
 
@@ -578,7 +603,8 @@ def check_grad_reset_preserves_negative_zero(ctx: DeviceContext) raises:
     var xb = upload_f32(ctx, xh)
     var gb = ctx.enqueue_create_buffer[DType.float32](N * f.batch_size)
     var scratch = ARIMAParams(ctx, order, f.batch_size)
-    _ = batched_loglike_grad(ctx, y, f.batch_size, f.n_obs, order, xb, gb, h, True, scratch)
+    var xpert = ctx.enqueue_create_buffer[DType.float32](N * f.batch_size)
+    _ = batched_loglike_grad(ctx, y, f.batch_size, f.n_obs, order, xb, gb, h, True, scratch, xpert)
     var grad = download_f32(ctx, gb, N * f.batch_size)
     # the input vector must come back UNTOUCHED: `d_x` is never written
     var xback = download_f32(ctx, xb, N * f.batch_size)
@@ -586,6 +612,24 @@ def check_grad_reset_preserves_negative_zero(ctx: DeviceContext) raises:
     print("      d_x after the gradient: " + String(nd) + " of " + String(N * f.batch_size)
           + " cells differ (must be 0)")
     _assert(nd == 0, "batched_loglike_grad wrote to its input parameter vector")
+    # THE DIRECT ASSERTION, and the only one with teeth. After the last
+    # reset, x_pert must be d_x BITWISE, negative zeros included. The
+    # indirect test below (the gradient of the last parameter) was written
+    # first and is INERT: sabotage (g) restored the broken `x + 0.0` reset
+    # and moved nothing, because a `-0.0` in `mu` is washed out by the very
+    # first `0.0 + x` in the filter and never reaches the log-likelihood.
+    # An inert gate is worse than no gate, so this reads the buffer itself.
+    var xp_back = download_f32(ctx, xpert, N * f.batch_size)
+    var np_ = count_cells_differ(xh, xp_back)
+    print("      x_pert after the last reset: " + String(np_) + " of "
+          + String(N * f.batch_size) + " cells differ from d_x (must be 0)")
+    for b in range(f.batch_size):
+        if not same_bits(xp_back[N * b], xh[N * b]):
+            print("        series " + String(b) + " parameter 0: x_pert " + bits32(xp_back[N * b])
+                  + " vs d_x " + bits32(xh[N * b]))
+    _assert(np_ == 0,
+            "the reset did not restore x_pert to d_x bitwise: a later column was evaluated "
+            + "on a different vector (this is the `x + 0.0` is not a copy defect)")
     # host replay with the -0.0 KEPT throughout
     var base_host = _loglike_host(f, order, unpack_host(xh, order, f.batch_size))
     var last = N - 1
