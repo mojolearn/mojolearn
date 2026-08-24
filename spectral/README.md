@@ -59,10 +59,10 @@ true, and the only thing that is:
     stages and cells moved, and WHICH FIXTURE reached it. Three of the
     seven live arms are carried by ONE FIXTURE EACH, which is the finding
     to read before any of the green ones.
-  * The run stopped at `check_spectral_blobs_separate` (13 of 144 points
-    nearer another blob's centroid in the 2-column embedding) and the four
-    checks after it, including the rung-2 clustering one, never executed.
-    That failure is UNDIAGNOSED. See "What is owed".
+  * `check_spectral_blobs_separate` is DIAGNOSED and fixed, and the four
+    checks it used to block now run. **ALL 18 CHECKS PASS** under
+    IDENTICAL on one M4. The verdict is section 3.1 and it went against
+    the CHECK, not the port.
 
 ## 1. Path mirroring
 
@@ -146,6 +146,63 @@ artifact of reading 25.08. With `cuvs-v26.08.00` (`6ba2ce2`) in hand:
     26.08 one.
 
 ## 3. THE AUDIT, symbol by symbol
+
+### 3.05 THE BLOBS VERDICT: the check was wrong, and the reason is a real
+### property of the algorithm being mirrored
+
+`check_spectral_blobs_separate` failed 13 of 144 for four rounds. Two
+hypotheses were on the table with opposite consequences. **The check was
+wrong**, and the evidence is structural rather than a judgement call:
+
+  1. **The kNN graph of three well-separated blobs at `n_neighbors = 10`
+     has EXACTLY THREE CONNECTED COMPONENTS and zero cross-blob edges.**
+     Union-find over the graph's own index arrays, asserted in
+     `check_spectral_disconnected_graph_records_the_limit`. The blob
+     centers are 34.7 to 43.9 apart with clouds of radius under 2, and
+     each blob holds 48 points, so a 10-neighbor search never leaves its
+     own blob. The graph does not become connected until `k = 49`.
+  2. **On RAFT's actual normalized Laplacian that gives eigenvalue ZERO
+     WITH MULTIPLICITY THREE.** Note RAFT normalizes by `sqrt(diag(L))`,
+     NOT by `sqrt(degree)` (`laplacian.cuh:267-270`), then forces the
+     diagonal to `1.0` (`:276`). An exact float64 eigendecomposition of
+     that matrix gives `0, 0, 0, 0.16515296, 0.18516985, ...`.
+  3. **A single-vector Lanczos cannot return three copies of a triple
+     eigenvalue.** `K(A, v0)` contains only the projection of `v0` onto
+     each eigenspace, so it holds ONE direction in a three-dimensional
+     null space, and RAFT reorthogonalizes fully at every step
+     (`lanczos.cuh:343-369`), removing the rounding noise that would let
+     the other copies re-emerge. The solver returns the degenerate value
+     once and fills the remaining slots with HIGHER eigenvectors, which
+     are not constant on a component and do not separate the blobs.
+  4. **Measured, and the two arms disagree in exactly the way the theory
+     predicts.** The Float32 arm returns two near-zeros plus the spurious
+     `0.16515295`; the Float64 arm returns ONE near-zero plus `0.16515295`
+     and `0.18516985`. Different counts, because which copies re-emerge is
+     precisely what rounding decides. The device and oracle Float32 arms
+     agree with each other BIT FOR BIT throughout, so the identity claim
+     was never in question.
+
+So the port was faithful and the check was asserting a property of the
+EXACT eigendecomposition rather than of the algorithm. **This lane's own
+contract already said so** (section 3: a `k`-column embedding of a
+`c`-component graph with `k <= c` sits entirely inside a degenerate
+subspace) and the check had been written without honoring the clause.
+
+THE FIX, in two parts:
+  * `check_spectral_blobs_separate` now runs at `n_neighbors = 52`. Not
+    arbitrary: the graph connects at 49, and 52 is the first value that
+    also leaves a comfortable gap, with L's three smallest eigenvalues
+    `0, 0.0463, 0.1208`, all SIMPLE. It passes 144 of 144.
+    `check_spectral_clustering_labels` moved for the same reason and
+    recovers the planted partition exactly.
+  * `check_spectral_disconnected_graph_records_the_limit` keeps the
+    `n_neighbors = 10` case and turns it into a regression test on the
+    ALGORITHM: it ASSERTS the component count, which is structural, exact
+    and vendor-independent, and only RECORDS how many near-zeros came
+    back, because asserting that number would be asserting our own tally
+    of a rounding accident. It also stands as a guard against a future
+    author "fixing" this with a block Lanczos, which would be a
+    reinvention rather than a port.
 
 ### 3.1 What checks out
 
@@ -334,17 +391,11 @@ unexercised. A self-test that forces one to fire is OWED.
      convergence, which is the heavy case this lane defers), and a
      SELF-TEST FOR THE VACUOUS CONTROLS, which never fired in ten runs and
      are therefore themselves unexercised.
-  2. **Diagnose `check_spectral_blobs_separate`.** 13 of 144 points land
-     nearer another blob's centroid. Two hypotheses, untested: the kNN
-     graph of three well-separated blobs has three connected components,
-     so `L`'s three smallest eigenvalues are all zero and the whole
-     2-column embedding sits inside a triple-degenerate subspace, in which
-     case the check is asserting a convention that does not exist and the
-     CHECK is wrong; or the embedding really is not separating and the
-     PORT is wrong. Contract section 3's degeneracy clause predicts the
-     first. Nothing may be concluded until it is measured.
-  3. **Run the four checks that never executed**, including the rung-2
-     clustering one.
+  2. ~~Diagnose `check_spectral_blobs_separate`.~~ **DONE, section 3.05.
+     The CHECK was wrong, the port was faithful.**
+  3. ~~Run the four checks that never executed.~~ **DONE. ALL 18 CHECKS
+     PASS**, including rung-2 clustering, launch invariance, the card
+     emission and the five device refusals.
   4. ~~A CERTIFICATE gate for `symmetric_eig_host` so seam J4 and the
      sweep cap have teeth.~~ **NO LONGER BLOCKING**: the sweep cap is
      caught by `check_tsolve_against_float64_jacobi`, seam J4 by

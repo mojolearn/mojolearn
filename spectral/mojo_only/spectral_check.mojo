@@ -133,6 +133,7 @@ from spectral.ported.cuvs.cluster.detail.spectral import (
 )
 from spectral.ported.cuvs.preprocessing.spectral.detail.spectral_embedding import (
     SpectralEmbeddingParams,
+    create_connectivity_graph,
     transform_dataset,
     transform_graph,
 )
@@ -996,14 +997,126 @@ def check_spectral_knn_graph_matches_host() raises:
     )
 
 
+def _n_components_of(g: CooGraph) -> Int:
+    """Connected components of a symmetric COO, by union-find on the host.
+
+    STRUCTURAL AND EXACT: it reads only the index arrays, so it is the same
+    integer on every vendor and in every mode, which is what makes it safe
+    to ASSERT where the spectrum below is only RECORDED.
+    """
+    var parent = List[Int]()
+    for i in range(g.n):
+        parent.append(i)
+    for e in range(g.nnz()):
+        var a = Int(g.rows[e])
+        var b = Int(g.cols[e])
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        while parent[b] != b:
+            parent[b] = parent[parent[b]]
+            b = parent[b]
+        if a != b:
+            parent[a] = b
+    var roots = 0
+    for i in range(g.n):
+        if parent[i] == i:
+            roots += 1
+    return roots
+
+
+def check_spectral_disconnected_graph_records_the_limit() raises:
+    """THE BLOBS VERDICT, 2026-08-24, recorded as a property of the
+    algorithm we mirror rather than as a defect of the port.
+
+    Three well-separated blobs with `n_neighbors = 10` produce a kNN graph
+    with THREE CONNECTED COMPONENTS and no cross-blob edge at all. RAFT's
+    `laplacian_normalized` scales by `sqrt(diag(L))` (`laplacian.cuh:267-
+    270`), not by `sqrt(degree)`, and then forces the diagonal to `1.0`
+    (`:276`); on that matrix an exact eigendecomposition has eigenvalue
+    ZERO WITH MULTIPLICITY THREE, one per component, and the fourth
+    eigenvalue is 0.16515296.
+
+    **A SINGLE-VECTOR LANCZOS CANNOT RETURN THREE COPIES OF A TRIPLE
+    EIGENVALUE.** The Krylov space `K(A, v0)` contains only the projection
+    of `v0` onto each eigenspace, so it holds ONE direction in that
+    three-dimensional null space; and RAFT reorthogonalizes fully at every
+    step (`lanczos.cuh:343-369`), which removes the rounding noise that
+    would otherwise let the other copies re-emerge. So the solver returns
+    the degenerate eigenvalue once and fills the remaining slots with
+    HIGHER eigenvectors, which are not constant on a component and do not
+    separate the blobs. Measured here: the Float32 arm returns two
+    near-zeros plus the spurious 0.16515295, and the Float64 arm returns
+    ONE near-zero plus 0.16515295 and 0.18516985 -- different counts,
+    because which copies re-emerge is exactly what rounding decides.
+
+    THIS IS UPSTREAM'S ALGORITHM, FAITHFULLY MIRRORED, and this lane's own
+    contract already said so: `IDENTICAL_SPECTRAL_CONTRACT.md` section 3
+    warns that a `k`-column embedding of a `c`-component graph with
+    `k <= c` sits entirely inside a degenerate subspace. The check that
+    used to fail here was written without honoring that clause.
+
+    So: ASSERT only the structural fact, which is exact and vendor-
+    independent, and RECORD the spectrum. Asserting how many near-zeros
+    came back would be asserting our own tally of a rounding accident.
+    """
+    var ctx = DeviceContext()
+    var bl = blobs_fixture(48, 3, 4, 0xB10B5)
+    var data = bl[0].copy()
+    var n = 144
+    var params = SpectralEmbeddingParams(
+        n_components=3, n_neighbors=10, norm_laplacian=True, drop_first=True,
+        tolerance=Float32(1e-5), has_seed=True, seed=UInt64(42),
+    )
+    var tr = IdentityTrace.disabled()
+    var w = create_connectivity_graph(ctx, params, data, n, 4, tr)
+    var comps = _n_components_of(w)
+    if comps != 3:
+        raise Error(
+            "blobs at n_neighbors=10 were expected to give a 3-COMPONENT kNN"
+            " graph (that is the whole point of this check); got "
+            + String(comps)
+        )
+    var r32 = oracle_embedding[DType.float32](w, 3, True, True, Float32(1e-5), 42)
+    var near_zero = 0
+    var ritz = String("")
+    for c in range(len(r32.ritz)):
+        var lam = -Float64(r32.ritz[c])  # eigenvalue of L
+        ritz += String(lam) + " "
+        if abs(lam) < 1e-5:
+            near_zero += 1
+    print(
+        "check_spectral_disconnected_graph_records_the_limit OK: blobs at"
+        " n_neighbors=10 give a kNN graph with EXACTLY 3 CONNECTED"
+        " COMPONENTS (asserted, structural), so L's null space is"
+        " triple-degenerate. RECORDED (not asserted): the ported"
+        " single-vector Lanczos returned " + String(near_zero) + " of 3"
+        " near-zero Ritz values, eigenvalues of L = " + ritz
+        + "-- a multiplicity a single-vector Krylov method cannot resolve"
+        " by construction, and the reason check_spectral_blobs_separate"
+        " runs on a CONNECTED graph instead"
+    )
+
+
 def check_spectral_blobs_separate() raises:
+    """The separation property, on a CONNECTED graph, which is the only
+    shape whose embedding is well posed (contract section 3).
+
+    `n_neighbors = 52` rather than 10, and the number is not arbitrary: at
+    `k <= 48` every point's 10 nearest neighbors are inside its own
+    48-point blob and the graph has three components (the check above).
+    The graph becomes connected at `k = 49`; `52` is the first value that
+    also leaves a comfortable spectral gap, with L's three smallest
+    eigenvalues 0, 0.0463 and 0.1208 -- SIMPLE, so the Lanczos can resolve
+    them and the embedding means what it is being asked to mean.
+    """
     var ctx = DeviceContext()
     var bl = blobs_fixture(48, 3, 4, 0xB10B5)
     var data = bl[0].copy()
     var labels = bl[1].copy()
     var n = 144
     var params = SpectralEmbeddingParams(
-        n_components=3, n_neighbors=10, norm_laplacian=True, drop_first=True,
+        n_components=3, n_neighbors=52, norm_laplacian=True, drop_first=True,
         tolerance=Float32(1e-5), has_seed=True, seed=UInt64(42),
     )
     var tr = IdentityTrace.disabled()
@@ -1041,10 +1154,15 @@ def check_spectral_blobs_separate() raises:
         if best != Int(labels[i]):
             wrong += 1
     if wrong != 0:
-        raise Error("blobs: " + String(wrong) + " of 144 points nearer another blob's centroid in the embedding")
+        raise Error(
+            "blobs: " + String(wrong) + " of 144 points nearer another blob's"
+            " centroid in the embedding (n_neighbors=52, a CONNECTED graph, so"
+            " unlike the n_neighbors=10 case this is not a degeneracy excuse)"
+        )
     print(
-        "check_spectral_blobs_separate OK: 3 blobs x 48, d=4, k=10: the 2-d embedding puts"
-        " 144 of 144 points nearest their own blob's centroid"
+        "check_spectral_blobs_separate OK: 3 blobs x 48, d=4, n_neighbors=52 (CONNECTED,"
+        " L's 3 smallest eigenvalues simple): the 2-d embedding puts 144 of 144 points"
+        " nearest their own blob's centroid"
     )
 
 
@@ -1288,7 +1406,7 @@ def check_spectral_clustering_labels() raises:
     var planted = bl[1].copy()
     var n = 144
     var cfg = SpectralClusteringParams(
-        n_clusters=3, n_components=3, n_init=10, n_neighbors=10, tolerance=Float32(1e-5), seed=UInt64(42)
+        n_clusters=3, n_components=3, n_init=10, n_neighbors=52, tolerance=Float32(1e-5), seed=UInt64(42)
     )
     var labels = List[Int32]()
     var emb = List[Float32]()
@@ -1338,6 +1456,7 @@ def main() raises:
     check_spectral_signed_zero()
     check_spectral_device_equals_oracle()
     check_spectral_knn_graph_matches_host()
+    check_spectral_disconnected_graph_records_the_limit()
     check_spectral_blobs_separate()
     check_spectral_launch_invariance()
     check_spectral_card_is_emitted()
