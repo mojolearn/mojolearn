@@ -37,6 +37,7 @@ from the read-back matrix (DEVIATION 650's split) in Int64, which holds
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
+from core.identity_trace import IdentityTrace
 from metrics.ported.stats.detail.contingency_matrix import (
     get_input_class_cardinality,
 )
@@ -84,8 +85,36 @@ def count_unique(
 
 def adjusted_rand_index_from_contingency(
     c: List[Int32], k: Int, size: Int
-) -> Float64:
-    """Lines :161-191 from a host copy of the matrix."""
+) raises -> Float64:
+    """Lines :161-191 from a host copy of the matrix. The untraced entry;
+    `adjusted_rand_index_from_contingency_traced` is the implementation."""
+    var off = IdentityTrace.disabled()
+    return adjusted_rand_index_from_contingency_traced(off, c, k, size)
+
+
+def adjusted_rand_index_from_contingency_traced(
+    mut trace: IdentityTrace, c: List[Int32], k: Int, size: Int
+) raises -> Float64:
+    """The same epilogue, recording `metrics.ari.pair_sums` (i64, 3):
+    `(nChooseTwoSum, aCTwoSum, bCTwoSum)`.
+
+    WHY THESE THREE. ARI is `(index - expected) / (max - expected)`, A
+    DIFFERENCE OF LARGE NUMBERS OVER A DIFFERENCE OF LARGE NUMBERS: with
+    `expected` close to `max`, both differences are catastrophic
+    cancellations and the quotient tells you nothing about which operand
+    moved. These three integers are every input to those five host Float64
+    ops, they are EXACT (Int64 sums of `nCTwo`), and therefore a difference
+    in one of them is a DEFECT and not a rounding -- a distinction the
+    single recorded `metrics.adjusted_rand_index` cannot make.
+
+    `n_choose_two`, `expected_index`, `max_index` and `index` are NOT
+    recorded: each is a correctly-rounded host op on these three recorded
+    integers and on `size`, so they are derivable, and adding them would
+    record the same information four more times. The `max - expected == 0`
+    guard is likewise a compare on derivable values.
+
+    Tags are fixed rather than caller-supplied because ARI is computed once
+    per card; entropy and MI take a `tag_prefix` because they are not."""
     var n_choose_two_sum = Int64(0)
     for idx in range(k * k):
         n_choose_two_sum += n_c_two(Int64(c[idx]))
@@ -96,6 +125,12 @@ def adjusted_rand_index_from_contingency(
     for i in range(k):
         a_c_two_sum += n_c_two(a[i])
         b_c_two_sum += n_c_two(b[i])
+    var pair_sums = List[Int64]()
+    pair_sums.append(n_choose_two_sum)
+    pair_sums.append(a_c_two_sum)
+    pair_sums.append(b_c_two_sum)
+    trace.record_host("metrics.ari.pair_sums", pair_sums.unsafe_ptr(), 3)
+    _ = pair_sums^
     var n_choose_two = Float64(size) * Float64(size - 1) / 2.0
     var expected_index = (
         Float64(a_c_two_sum) * Float64(b_c_two_sum) / n_choose_two
@@ -114,6 +149,42 @@ def compute_adjusted_rand_index(
     size: Int,
 ) raises -> Float64:
     """`compute_adjusted_rand_index(first, second, size, stream)` (:113-192)."""
+    var off = IdentityTrace.disabled()
+    return compute_adjusted_rand_index_traced(
+        ctx, off, first_cluster_array, second_cluster_array, size
+    )
+
+
+def compute_adjusted_rand_index_traced(
+    ctx: DeviceContext,
+    mut trace: IdentityTrace,
+    mut first_cluster_array: DeviceBuffer[DType.int32],
+    mut second_cluster_array: DeviceBuffer[DType.int32],
+    size: Int,
+) raises -> Float64:
+    """ARI carrying a card: `metrics.ari.uniq`, `metrics.ari.contingency`,
+    `metrics.ari.pair_sums`.
+
+    `metrics.ari.uniq` (i32, 4) is `(nUniqFirst, nUniqSecond, lowerLabel,
+    upperLabel)` -- ARI's OWN label range, derived from `countUnique` over
+    BOTH arrays (:123-127), which need not be the `(lower, upper)` the
+    caller passes to entropy and MI. It is recorded BEFORE the early
+    return, so the DECISION at :130-132 (`nUniqFirst == nUniqSecond` and
+    either 1 or `size` -> return 1.0) is on the card whether or not it
+    fires. A decision that changes no number still needs a stage: that is
+    the holtwinters `CRIT_ORDER` lesson (DEVIATION 665), where the stop
+    criterion moves ZERO of 2800 cells and is visible only because it is
+    recorded.
+
+    `metrics.ari.contingency` (i32, `nClasses^2`) is the matrix THIS call
+    consumed, at ARI's own label range. Without it the card carried one
+    contingency matrix at the driver's range and silently assumed ARI used
+    the same one.
+
+    The `size < 2` arm (:119-122) returns RAFT's 1.0 with NO stage
+    recorded. UNREACHABLE from the card driver, whose fixture has 2053
+    rows; a run that took it would record three fewer stages and the differ
+    would report a STRUCTURAL divergence, which is correct and readable."""
     if size < 2:
         return 1.0  # (:119-122)
     var u1 = count_unique(ctx, first_cluster_array, size)
@@ -123,6 +194,13 @@ def compute_adjusted_rand_index(
     var lower_label_range = u1[1] if u1[1] < u2[1] else u2[1]
     var upper_label_range = u1[2] if u1[2] > u2[2] else u2[2]
     var n_classes = Int(upper_label_range - lower_label_range + 1)
+    var uniq = List[Int32]()
+    uniq.append(Int32(n_uniq_first))
+    uniq.append(Int32(n_uniq_second))
+    uniq.append(lower_label_range)
+    uniq.append(upper_label_range)
+    trace.record_host("metrics.ari.uniq", uniq.unsafe_ptr(), 4)
+    _ = uniq^
     if n_uniq_first == n_uniq_second:
         if n_uniq_first == 1 or n_uniq_first == size:
             return 1.0  # (:130-132)
@@ -134,4 +212,7 @@ def compute_adjusted_rand_index(
         lower_label_range,
         upper_label_range,
     )
-    return adjusted_rand_index_from_contingency(c, n_classes, size)
+    trace.record_list_i32("metrics.ari.contingency", c)
+    return adjusted_rand_index_from_contingency_traced(
+        trace, c, n_classes, size
+    )

@@ -60,6 +60,7 @@ relative. The card (`metrics_main.mojo`) records the Float64 bits.
 from std.math import log
 from max.gpu.host import DeviceBuffer, DeviceContext
 
+from core.identity_trace import IdentityTrace
 from metrics.ported.stats.detail.histogram import histogram
 from mojo_only.numerics import (
     GLOBAL_NUMERIC_MODE,
@@ -94,10 +95,45 @@ def count_labels(
     return out^
 
 
-def entropy_from_counts(counts: List[Int32], size: Int) -> Float64:
+def entropy_from_counts(counts: List[Int32], size: Int) raises -> Float64:
     """`divideScalar` then `mapThenSumReduce(entropyOp)` (:129-135), on the
     host (DEVIATIONS 650, 651). `entropyOp(p) = p ? -1 * p * log(p) : 0`
-    (:35-43)."""
+    (:35-43). The untraced entry; `entropy_from_counts_traced` is the
+    implementation and a disabled trace records nothing."""
+    var off = IdentityTrace.disabled()
+    return entropy_from_counts_traced(off, counts, size, String(""))
+
+
+def entropy_from_counts_traced(
+    mut trace: IdentityTrace,
+    counts: List[Int32],
+    size: Int,
+    tag_prefix: String,
+) raises -> Float64:
+    """The same fold, recording `<tag_prefix>.acc`: the RUNNING TOTAL after
+    each class, one Float64 per class.
+
+    WHY. This epilogue runs ON THE HOST (DEVIATION 650) and its log is
+    `identical_log` on Float32 (DEVIATION 651), so the divergence it can
+    carry is a HOST divergence -- an x86 leg host against an ARM one -- and
+    it lands in one recorded scalar for the whole label set. The trail says
+    WHICH CLASS moved. Recorded as Float64 in BOTH modes: IDENTICAL's
+    accumulator is Float32 and Float32 -> Float64 is EXACT AND INJECTIVE, so
+    the widening loses no bit the hash could have seen, and one dtype per
+    stage means an IDENTICAL card and a FAST card still align stage for
+    stage instead of differing in their `dtype` field.
+
+    The `p != 0` skip is NOT recorded separately: `p` is one division of
+    `counts[i]` by `size`, and the counts are recorded by
+    `entropy_traced` as the integers the device produced, so the branch is
+    a deterministic integer function of a stage that is already on the
+    card. A decision derivable from recorded INTEGERS needs no stage of its
+    own; a decision derivable only from unrecorded floats does.
+
+    The list is built only when the trace is enabled. `bench/lanes_price_
+    main.mojo` calls this path through `homogeneity_score` in a TIMED
+    window, and a card instrument may not put an allocation in it."""
+    var accs = List[Float64]()
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         var acc = Float32(0.0)
         var fsize = Float32(size)
@@ -106,6 +142,13 @@ def entropy_from_counts(counts: List[Int32], size: Int) -> Float64:
             if p != Float32(0.0):
                 var lp = ftz(identical_log(p))
                 acc = ftz(identical_mul_add(-p, lp, acc))
+            if trace.enabled:
+                accs.append(Float64(acc))
+        if trace.enabled:
+            trace.record_host(
+                tag_prefix + ".acc", accs.unsafe_ptr(), len(accs)
+            )
+        _ = accs^
         return Float64(acc)
     else:
         var acc = Float64(0.0)
@@ -114,6 +157,13 @@ def entropy_from_counts(counts: List[Int32], size: Int) -> Float64:
             var p = Float64(counts[i]) / dsize
             if p != 0.0:
                 acc += -1.0 * p * log(p)
+            if trace.enabled:
+                accs.append(acc)
+        if trace.enabled:
+            trace.record_host(
+                tag_prefix + ".acc", accs.unsafe_ptr(), len(accs)
+            )
+        _ = accs^
         return acc
 
 
@@ -125,9 +175,52 @@ def entropy(
     upper_label_range: Int32,
 ) raises -> Float64:
     """`entropy(clusterArray, size, lower, upper, stream)` (:105-143)."""
+    var off = IdentityTrace.disabled()
+    return entropy_traced(
+        ctx,
+        off,
+        cluster_array,
+        size,
+        lower_label_range,
+        upper_label_range,
+        String(""),
+    )
+
+
+def entropy_traced(
+    ctx: DeviceContext,
+    mut trace: IdentityTrace,
+    mut cluster_array: DeviceBuffer[DType.int32],
+    size: Int,
+    lower_label_range: Int32,
+    upper_label_range: Int32,
+    tag_prefix: String,
+) raises -> Float64:
+    """`entropy` carrying a card: `<tag_prefix>.counts` (i32, one per class)
+    and `<tag_prefix>.acc` (f64, the running fold).
+
+    `.counts` is the DEVICE PRODUCT of this metric -- the integer histogram
+    `histogram.mojo` builds with integer atomics -- and it was recorded
+    NOWHERE. The card recorded `metrics.contingency`, which is a different
+    device product built by a different kernel from a different launch
+    shape; the two agreeing proves nothing about the histogram. With
+    `.counts` on the card, "the histograms agree and the entropies do not"
+    is a different finding from "the histograms differ", which is the whole
+    purpose of the instrument.
+
+    `tag_prefix` is the CALLER's, because entropy is computed twice over
+    two different label arrays in one card (H(y_true) and H(y_pred), the
+    denominators of homogeneity and completeness) and tags must be unique
+    within a trace.
+
+    `size == 0` returns RAFT's 1.0 with NO stage recorded. The card fixture
+    has size 2053, so that arm is UNREACHABLE from this driver; a card that
+    took it would record two fewer stages and the differ would report a
+    STRUCTURAL divergence, which is the correct visible behavior."""
     if size == 0:
         return 1.0  # `if (!size) return 1.0;` (:112); sklearn agrees
     var counts = count_labels(
         ctx, cluster_array, size, lower_label_range, upper_label_range
     )
-    return entropy_from_counts(counts, size)
+    trace.record_list_i32(tag_prefix + ".counts", counts)
+    return entropy_from_counts_traced(trace, counts, size, tag_prefix)

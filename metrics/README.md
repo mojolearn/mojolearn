@@ -225,9 +225,10 @@ IDENTICAL and RECORDED under FAST, see the row 39 audit):
 ## The card (`metrics_main.mojo`, Apple M4, 2026-08-23)
 
 One `seq`. THE 34-STAGE CARD BELOW IS THE LEG-11 CARD (commit a32e304);
-the stage list grew this round and the exact new count is OWED from the
-next build slot, which is why a leg-11 card and a current card do not
-compare stage for stage. What was there at leg 11: the inputs
+the stage list grew by 27 stages this round, to an EXPECTED 61, and that
+count is OWED from the next build slot because nothing in this round was
+compiled. A leg-11 card and a current card therefore do not compare stage
+for stage. What was there at leg 11: the inputs
 (`metrics.input.*`), the integer products (`metrics.contingency`,
 `metrics.rand.a/b`, neighbors' `knn.*` six stages, `trust.emb_ind`,
 `trust.rank_sum`), the per-sample silhouettes, and every returned value by
@@ -271,6 +272,17 @@ bit-identical). These stages close it.
 | `metrics.r2.ssto_partials` | f32, `ceil(n/256)` | Same, for `sum((y - y_bar)^2)`. |
 | `metrics.kl.partials` | f32, `ceil(n/256)` | Every `p * (log p - log q)` term this metric computes, folded once per chunk. Between the recorded p, q and the recorded answer there was previously NOTHING. |
 | `metrics.kl.sum_raw` | f32, 1 | The fold BEFORE `canonicalize_nan` (DEVIATION 658). That epilogue maps every NaN, whatever the vendor made of it, onto `0x7fc00000`: correct for the returned scalar, destructive for an instrument. |
+| `metrics.ari.uniq` | i32, 4 | `(nUniqFirst, nUniqSecond, lowerLabel, upperLabel)`: ARI's OWN label range, which need not be the `(lo, hi)` the driver passes to entropy and MI. Recorded BEFORE the `:130-132` early return, so the DECISION is on the card whether or not it fires. |
+| `metrics.ari.contingency` | i32, `nClasses^2` | The matrix ARI actually consumed, at ARI's own range. The card previously carried one matrix at the driver's range and assumed ARI used it. |
+| `metrics.ari.pair_sums` | i64, 3 | `(nChooseTwoSum, aCTwoSum, bCTwoSum)`, every input to ARI's five host Float64 ops. ARI is a difference of large numbers over a difference of large numbers; these are exact, so a difference here is a DEFECT and not a rounding. |
+| `metrics.entropy.counts` | i32, k | The device histogram H(y_true) rests on. It was recorded NOWHERE: `metrics.contingency` is a different kernel's product and the two agreeing proves nothing about this one. |
+| `metrics.entropy.acc` | f64, k | The running host fold, one value per class. Says WHICH CLASS moved when the entropy bits move. |
+| `metrics.mi.contingency` | i32, k*k | The matrix `MI(y_true, y_pred)` consumed, recorded by the call that consumed it. |
+| `metrics.mi.row_sums` / `.col_sums` | i64, k each | `a[i]`, `b[j]`. Integer and exact: separates a defect from a rounding before the float epilogue is even read. |
+| `metrics.mi.terms` | f64, k*k | Per cell, `log(size*c) - log(a*b)` -- the last value the cell owns alone, since `identical_mul_add(fc, diff, acc)` never materializes the product. `+0.0` for a guarded-out cell. |
+| `metrics.mi.acc` | f64, k*k | The running total after each cell. Localizes an absorbed term to the cell after which the total stopped moving. |
+| `metrics.entropy_pred.*`, `metrics.entropy_pred` | as above + f64, 1 | H(y_pred), COMPLETENESS'S DENOMINATOR, which no stage carried. |
+| `metrics.mi_swapped.*`, `metrics.mutual_info_score_swapped` | as above + f64, 1 | `MI(y_pred, y_true)`, COMPLETENESS'S NUMERATOR, which no stage carried. Not a copy of `metrics.mi`: it folds the TRANSPOSED matrix, so the host's serial ascending walk visits the cells in a different sequence and the two are the same quantity in exact arithmetic and not necessarily the same Float32 bits. |
 
 **The chunk partials are rule-legal, and the reason is worth stating once.**
 `core/identity_trace.mojo` rule 3 forbids hashing a MACHINE-SIZED SCRATCH,
@@ -296,6 +308,34 @@ FAILS that test and is deliberately left out: `rand_index.mojo`'s
 its partition is the scheduler's and not the algorithm's. Its REDUCED
 result is recorded instead, as rule 3 says: `metrics.rand.a`,
 `metrics.rand.b`.
+
+**The eight cluster scores, and why three of them are traced through their
+operands instead of through their own calls.** `homogeneity = MI(true,
+pred) / H(true)`, `completeness = MI(pred, true) / H(pred)` (RAFT computes
+it as homogeneity with the arguments swapped) and `v_measure = (1+beta) h c
+/ (beta h + c)`. Every one of those operands is now a recorded stage, and
+what remains in each is one host division, or two multiplies, an add and a
+division, all correctly rounded on any host. So `homogeneity_score`,
+`completeness_score` and `v_measure` are called UNTRACED from the driver:
+tracing them would record MI and entropy FOUR more times under four more
+prefixes and localize nothing new. Their returned scalars are recorded, so
+a card whose operands agree and whose homogeneity does not has found
+something real, in the duplicate computation those three perform
+internally, which is the one thing here left unrecorded.
+
+**Groups C and D were audited and need nothing; the work was not padded to
+reach them.** Silhouette records the PER-SAMPLE scores
+(`metrics.silhouette_samples`, a device stage) and the mean is folded from
+exactly those, so the buffer the score compresses is already hashed.
+`sil_op`'s NaN -> +0.0 (DEVIATION 656) is a washer the samples are recorded
+downstream of, and it is deliberately not bracketed: its whole purpose is
+that one IEEE answer gives one card on three vendors, and
+`check_silhouette_inf_distances` measured that only an OVERFLOW-SCALE
+fixture reaches it -- on the card's fixture every quotient is finite and
+the washer is UNREACHABLE, so a pre-value stage would record the same bits
+under a second name. Trustworthiness routes `knn.*` (six stages),
+`trust.emb_ind` and `trust.rank_sum` through the same `seq` and its final
+value is a closed form of the recorded rank sum.
 
 **Both cards must come from ONE pinned SHA.** Adding stages changes the
 record list, so a leg-11 card diffed against a current one reports a

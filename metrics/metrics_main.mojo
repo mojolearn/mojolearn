@@ -49,12 +49,14 @@ from metrics.mojo_only.fixtures import (
     u01,
 )
 from metrics.ported.metrics.accuracy_score import accuracy_score_py
-from metrics.ported.metrics.adjusted_rand_index import adjusted_rand_index
+from metrics.ported.metrics.adjusted_rand_index import (
+    adjusted_rand_index_traced,
+)
 from metrics.ported.metrics.completeness_score import completeness_score
-from metrics.ported.metrics.entropy import entropy
+from metrics.ported.metrics.entropy import entropy_traced
 from metrics.ported.metrics.homogeneity_score import homogeneity_score
 from metrics.ported.metrics.kl_divergence import kl_divergence_traced
-from metrics.ported.metrics.mutual_info_score import mutual_info_score
+from metrics.ported.metrics.mutual_info_score import mutual_info_score_traced
 from metrics.ported.metrics.r2_score import r2_score_py_parts_traced
 from metrics.ported.metrics.rand_index import rand_index
 from metrics.ported.metrics.silhouette_score_batched_float import (
@@ -134,6 +136,13 @@ def main() raises:
     var yp = upload_i32(ctx, yp_h)
     var lo = Int32(0)
     var hi = Int32(N_TRUE - 1)
+    # The driver's own read of the matrix. `mutual_info_score_traced` and
+    # `adjusted_rand_index_traced` each record the matrix THEIR call
+    # consumed (`metrics.mi.contingency`, `metrics.mi_swapped.contingency`,
+    # `metrics.ari.contingency`), so this stage is no longer standing in
+    # for theirs: the four agreeing is a real internal-consistency check of
+    # one device kernel run four times, and ARI's is built at ARI's OWN
+    # label range, which need not be this (lo, hi) at all.
     var cmat = contingency_matrix_host(ctx, yt, yp, N_LABELS_ROWS, lo, hi)
     trace.record_host("metrics.contingency", cmat.unsafe_ptr(), N_TRUE * N_TRUE)
     var ab = rand_index_counts(ctx, yt, yp, N_LABELS_ROWS)
@@ -146,15 +155,59 @@ def main() raises:
     var ri = rand_index(ctx, yt, yp, N_LABELS_ROWS)
     _rec64(trace, "metrics.rand_index", ri)
     _show64("rand_index", ri)
-    var ari = adjusted_rand_index(ctx, yt, yp, N_LABELS_ROWS)
+    # ARI is a DIFFERENCE OF LARGE NUMBERS OVER A DIFFERENCE OF LARGE
+    # NUMBERS; `metrics.ari.pair_sums` is the three exact integers those
+    # differences are formed from, and `metrics.ari.uniq` is the early-
+    # return decision, recorded whether or not it fires.
+    var ari = adjusted_rand_index_traced(ctx, trace, yt, yp, N_LABELS_ROWS)
     _rec64(trace, "metrics.adjusted_rand_index", ari)
     _show64("adjusted_rand_index", ari)
-    var h_true = entropy(ctx, yt, N_LABELS_ROWS, lo, hi)
+    var h_true = entropy_traced(
+        ctx, trace, yt, N_LABELS_ROWS, lo, hi, String("metrics.entropy")
+    )
     _rec64(trace, "metrics.entropy", h_true)
     _show64("entropy(y_true)", h_true)
-    var mi = mutual_info_score(ctx, yt, yp, N_LABELS_ROWS, lo, hi)
+    var mi = mutual_info_score_traced(
+        ctx, trace, yt, yp, N_LABELS_ROWS, lo, hi, String("metrics.mi")
+    )
     _rec64(trace, "metrics.mutual_info_score", mi)
     _show64("mutual_info_score", mi)
+
+    # ===================================================================
+    # COMPLETENESS'S TWO OPERANDS, WHICH NO STAGE CARRIED.
+    # ===================================================================
+    # `homogeneity = MI(true, pred) / H(true)` and `completeness =
+    # MI(pred, true) / H(pred)` (RAFT computes completeness as homogeneity
+    # with the arguments swapped, and `v_measure` calls it a second time).
+    # Homogeneity's two operands were already on the card above. THE
+    # SWAPPED PAIR WAS NOT, and it is not a copy of the unswapped pair:
+    # MI(pred, true) folds the TRANSPOSED contingency matrix, so the host's
+    # serial ascending walk visits the cells in a different sequence and
+    # the two are the same quantity in exact arithmetic and not
+    # necessarily the same Float32 bits. H(y_pred) is a different
+    # histogram over a different label array.
+    #
+    # With these two recorded, EVERY OPERAND of the three remaining host
+    # epilogues is a recorded stage: homogeneity and completeness are one
+    # division each, v_measure is two multiplies, an add and a division on
+    # their results, all correctly rounded on any host. That is why
+    # `homogeneity_score`, `completeness_score` and `v_measure` below are
+    # called UNTRACED: tracing them would record MI and entropy four more
+    # times under four more prefixes and localize nothing new. Their
+    # returned scalars are recorded, so a card whose operands agree and
+    # whose homogeneity does not has found something real -- in the
+    # duplicate computation, which is the one thing left unrecorded here.
+    var h_pred = entropy_traced(
+        ctx, trace, yp, N_LABELS_ROWS, lo, hi, String("metrics.entropy_pred")
+    )
+    _rec64(trace, "metrics.entropy_pred", h_pred)
+    _show64("entropy(y_pred)", h_pred)
+    var mi_sw = mutual_info_score_traced(
+        ctx, trace, yp, yt, N_LABELS_ROWS, lo, hi, String("metrics.mi_swapped")
+    )
+    _rec64(trace, "metrics.mutual_info_score_swapped", mi_sw)
+    _show64("mutual_info_score(y_pred, y_true)", mi_sw)
+
     var hom = homogeneity_score(ctx, yt, yp, N_LABELS_ROWS, lo, hi)
     _rec64(trace, "metrics.homogeneity_score", hom)
     _show64("homogeneity_score", hom)

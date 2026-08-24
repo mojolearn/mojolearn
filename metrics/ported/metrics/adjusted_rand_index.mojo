@@ -2,8 +2,10 @@
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
+from core.identity_trace import IdentityTrace
 from metrics.ported.stats.detail.adjusted_rand_index import (
     compute_adjusted_rand_index,
+    compute_adjusted_rand_index_traced,
 )
 
 
@@ -15,3 +17,15 @@ def adjusted_rand_index(
 ) raises -> Float64:
     """`double adjusted_rand_index(handle, const int* y, const int* y_hat, const int n)`."""
     return compute_adjusted_rand_index(ctx, y, y_hat, n)
+
+
+def adjusted_rand_index_traced(
+    ctx: DeviceContext,
+    mut trace: IdentityTrace,
+    mut y: DeviceBuffer[DType.int32],
+    mut y_hat: DeviceBuffer[DType.int32],
+    n: Int,
+) raises -> Float64:
+    """The same call carrying a card (`metrics.ari.uniq`,
+    `metrics.ari.contingency`, `metrics.ari.pair_sums`)."""
+    return compute_adjusted_rand_index_traced(ctx, trace, y, y_hat, n)
