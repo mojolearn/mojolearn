@@ -1,10 +1,14 @@
 #!/bin/sh
-# DEVIATION 536 -- ONE GUARDED RUNPOD LEG: the `gemm.fp32.v1` identity card
-# taken to a second and a third vendor, and the box terminated afterwards.
+# DEVIATION 536 -- ONE GUARDED RUNPOD LEG: an identity payload taken to a
+# second and a third vendor, and the box terminated afterwards.
 #
 #   tools/gemm_remote_leg.sh nvidia                 DRY RUN. Rents nothing.
 #   tools/gemm_remote_leg.sh amd                    DRY RUN. Rents nothing.
 #   tools/gemm_remote_leg.sh nvidia --rent          RENTS. BILLS. One hour.
+#   tools/gemm_remote_leg.sh nvidia --payload phase8 --rent
+#                                                   RENTS. Phase 8 of
+#                                                   tools/e1_bootstrap.sh:
+#                                                   SEVEN lanes, not one.
 #   tools/gemm_remote_leg.sh reap [pod-id]          orphan recovery
 #
 # **THE DEFAULT IS A DRY RUN AND THAT IS DELIBERATE.** Renting needs BOTH
@@ -26,6 +30,48 @@
 # It is the sibling of `tools/e2_remote_leg.sh` (the identity lane's
 # DigitalOcean leg) and it is deliberately NOT a copy of it. See "TWO LANES,
 # TWO PROVIDERS" below.
+#
+# TWO PAYLOADS, ONE SET OF GUARDS
+# ===============================
+# The safety path -- pre-flight, arm-before-work, the ready timeout, the key
+# on stdin, `git archive` at a pinned sha, terminate-and-verify, one vendor
+# per leg -- is the same for both. Only what runs on the box differs.
+#
+#   --payload gemm    (default)  gemm_device_check.mojo, then
+#       `tools/gemm_card.sh device`, under IDENTICAL. The Apple side is
+#       generated HERE by this script and the two cards are diffed HERE. One
+#       lane, one profile, one answer, and this file is the whole procedure.
+#
+#   --payload phase8             `tools/e1_bootstrap.sh`, UNMODIFIED, whose
+#       phase 8 writes SEVEN lanes' cards in both modes (gemm, cd, kde,
+#       linkage, svm, metrics and mamba) into `<run>/lanes/*.card`. That
+#       directory is fetched to `bench/results/e1/<stamp>-runpod-<vendor>/`,
+#       beside the Mac's own bootstrap directory, and the verdict is
+#       `tools/e3_round_judge.sh` section 7 -- THIS LEG DOES NOT DIFF THOSE
+#       CARDS. It gets them home, intact, attributed and mode-witnessed.
+#
+# WHY phase8 RUNS THE BOOTSTRAP RATHER THAN A COPY OF PHASE 8. A copy would
+# be a second list of lanes to keep in step with `tools/e1_bootstrap.sh` and
+# `tools/e3_round_judge.sh`, and the day they gained `mamba` (2026-08-23) the
+# copy would have gone on producing a green six-lane leg with the new lane
+# silently absent. The cards the judge reads have to come out of the program
+# the judge is named after. The cost of that choice is that phase8 pays for
+# phases 0-7 as well: measured on DigitalOcean at commit 144aa5b, the whole
+# bootstrap was 27 minutes (H100) and 18 minutes (MI325X) on images that
+# ALREADY HAD PIXI -- a cold `pixi install` here is the risk to the hour, and
+# it is why the phase8 body bounds the bootstrap with `timeout` and keeps a
+# reserve for the fetch. A leg that runs out of hour then comes home with the
+# lanes that finished instead of being killed by its own watchdog holding
+# every card.
+#
+# THE mamba LANE, TWICE, BECAUSE BOTH SURPRISE PEOPLE:
+#   * ITS FAST ARM HAS NEVER BEEN BUILT ANYWHERE. A
+#     `PHASE8-FINDING: mamba [fast]` line is EXPECTED, is information, and is
+#     not an abort. `tools/e1_bootstrap.sh` says so at the lane itself.
+#   * ITS SHAPE MUST NOT BE WIDENED ON A RENTED BOX. `mamba_check.mojo` reads
+#     `MOJOLEARN_MAMBA_CHECK_B` / `_L` / `_DM` and every shape is another
+#     compile inside the lease. The remote body UNSETS all three rather than
+#     assuming the pod's environment is empty.
 #
 # WHAT THIS CANNOT TELL YOU
 # =========================
@@ -204,6 +250,14 @@
 #   * `LEG_GPU_*` and `LEG_IMAGE_*` below are DEFAULTS, not measurements.
 #   * whether the images have `pixi`, and how long `pixi install` takes on a
 #     cold box. That is the main risk to the one-hour cap.
+#   * EVERYTHING THE phase8 PAYLOAD DOES ON THE BOX. `tools/e1_bootstrap.sh`
+#     has run on DigitalOcean droplets many times and on a RunPod pod never;
+#     its five bindings builds, its pixi environments and its phase-8
+#     compiles are what fills the hour, and whether `bash`, `timeout` and
+#     `git` are on the image is unmeasured here. The fetch of the bootstrap
+#     directory, the commit.txt rewrite and the lane mode read-back are
+#     rehearsed against planted artifacts on every dry run, but they have
+#     never seen a real one.
 # The first paid run is therefore a bring-up run. Budget it as one, and read
 # the runbook's "first paid run" section before starting it.
 #
@@ -227,6 +281,16 @@
 #                                  SECOND leg can bring `.bin` sidecars home
 #                                  for the differ's cell-level step. It is a
 #                                  SUBSTRING match; keep it narrow.
+#   MOJOLEARN_GEMM_LEG_PAYLOAD     gemm (default) or phase8; --payload wins.
+#   MOJOLEARN_GEMM_LEG_APPLE_DIR   phase8 only: the Apple bootstrap directory
+#                                  this box's column will be judged against.
+#                                  The default is the newest one under
+#                                  bench/results/e1/ that has a lanes/
+#                                  directory AND records this commit.
+#   MOJOLEARN_GEMM_LEG_WORK_TIMEOUT phase8 only: seconds the bootstrap may
+#                                  run on the box. 0 (default) derives it
+#                                  from the lease minus a 600s fetch-and-
+#                                  terminate reserve.
 #   MOJOLEARN_GEMM_LEG_REHEARSAL   internal interlock. When 1, any paid call
 #                                  aborts. Set on the children the dry run
 #                                  spawns so a rehearsal can never rent.
@@ -262,6 +326,24 @@ RP_PODS_PATH="/v2/pods"
 # `check` and `list` telling the truth afterwards.
 LEASE_DIR="${MOJOLEARN_LEASE_DIR:-bench/results/runpod_leases}"
 
+# THE PAYLOAD. See "TWO PAYLOADS" above. `gemm` is this lane's original leg;
+# `phase8` runs tools/e1_bootstrap.sh so that phase 8's seven lanes come home
+# for tools/e3_round_judge.sh section 7.
+PAYLOAD="${MOJOLEARN_GEMM_LEG_PAYLOAD:-gemm}"
+# phase8 only: the Apple column this box's column will be judged against.
+APPLE_DIR="${MOJOLEARN_GEMM_LEG_APPLE_DIR:-}"
+APPLE_MISSING=0
+# phase8 only, and it is the same idea as --ready-timeout: the work is
+# bounded IN CODE. The lease's watchdog is the backstop for a dead session,
+# not a schedule, and a box killed by its own watchdog mid-bootstrap dies
+# with every card still on it because the fetch never runs. 0 means "the
+# lease minus the reserve".
+WORK_TIMEOUT="${MOJOLEARN_GEMM_LEG_WORK_TIMEOUT:-0}"
+WORK_RESERVE=600
+# phase8 only: where the box's bootstrap directory lands on this Mac.
+E1_DEST=""
+LANES=""
+
 VENDOR=""
 MODE="dry"
 MINUTES="${MOJOLEARN_GEMM_LEG_MINUTES:-60}"
@@ -283,6 +365,7 @@ LEG_DUMP="${MOJOLEARN_IDENTITY_TRACE_DUMP:-}"
 POD_ID=""
 POD_NAME=""
 POD_TERMINATED=0
+FETCH_RED=0
 ARMED=0
 TMPD=""
 CURLRC=""
@@ -294,11 +377,15 @@ PY=/usr/bin/python3
 [ -x "$PY" ] || PY=python3
 
 leg_usage() {
-    sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
     echo
     echo "options: --rent --dry-run --minutes N --gpu ID --image REF"
     echo "         --ssh TARGET --local-card PATH --column-sweep"
     echo "         --ready-timeout SECONDS"
+    echo "         --payload gemm|phase8   (--phase8 is the short form)"
+    echo "         --apple-dir DIR         phase8: the Apple column to be"
+    echo "                                 judged against"
+    echo "         --work-timeout SECONDS  phase8: bound the bootstrap"
 }
 
 leg_say() { printf '[%s %s] %s\n' "$(date +%T)" "${VENDOR:-leg}" "$*"; }
@@ -330,6 +417,10 @@ while [ $# -gt 0 ]; do
         --local-card)    shift; LOCAL_CARD="${1:-}" ;;
         --ready-timeout) shift; READY_TIMEOUT="${1:-}" ;;
         --column-sweep)  SWEEP=1 ;;
+        --payload)       shift; PAYLOAD="${1:-}" ;;
+        --phase8)        PAYLOAD="phase8" ;;
+        --apple-dir)     shift; APPLE_DIR="${1:-}" ;;
+        --work-timeout)  shift; WORK_TIMEOUT="${1:-}" ;;
         -h|--help|help)  leg_usage; exit 0 ;;
         *)
             echo "gemm_remote_leg: unknown argument '$1'." >&2
@@ -371,6 +462,51 @@ case "$READY_TIMEOUT" in
     ''|*[!0-9]*) leg_die "gemm_remote_leg: --ready-timeout must be seconds, got '$READY_TIMEOUT'." ;;
 esac
 
+# THE PAYLOAD IS REFUSED BY NAME LIKE THE VENDOR IS, and for the same reason:
+# a payload this script does not understand must not fall through to the
+# default one and rent a box to run the wrong program.
+case "$PAYLOAD" in
+    gemm|phase8) : ;;
+    *)
+        echo "gemm_remote_leg: unknown payload '$PAYLOAD'." >&2
+        echo "  gemm   (default) gemm_device_check.mojo + gemm_card.sh" >&2
+        echo "                   device, diffed HERE against this Mac's" >&2
+        echo "                   Apple card." >&2
+        echo "  phase8           tools/e1_bootstrap.sh, whose phase 8 writes" >&2
+        echo "                   the seven lanes' cards; judged by" >&2
+        echo "                   tools/e3_round_judge.sh section 7, not by" >&2
+        echo "                   this leg." >&2
+        exit 2 ;;
+esac
+
+if [ "$PAYLOAD" = "phase8" ]; then
+    # Two gemm-payload options that phase8 cannot honor. Refused by name
+    # rather than ignored: an ignored flag is an operator who believes
+    # something ran.
+    if [ "$SWEEP" = "1" ]; then
+        echo "gemm_remote_leg: --column-sweep belongs to the gemm payload." >&2
+        echo "  It runs tools/gemm_column_invariance.sh on the remote" >&2
+        echo "  backend; phase 8 does not run it and this leg will not" >&2
+        echo "  pretend it did. Drop the flag or drop --payload phase8." >&2
+        exit 2
+    fi
+    if [ -n "$LOCAL_CARD" ]; then
+        echo "gemm_remote_leg: --local-card belongs to the gemm payload." >&2
+        echo "  Under phase8 the reference is a whole Apple BOOTSTRAP" >&2
+        echo "  DIRECTORY rather than one card, because the judge diffs" >&2
+        echo "  seven lanes out of it. Name it with --apple-dir <dir>." >&2
+        exit 2
+    fi
+fi
+
+case "$WORK_TIMEOUT" in
+    ''|*[!0-9]*) leg_die "gemm_remote_leg: --work-timeout must be seconds, got '$WORK_TIMEOUT'." ;;
+esac
+if [ "$WORK_TIMEOUT" -eq 0 ]; then
+    WORK_TIMEOUT=$(( MINUTES * 60 - WORK_RESERVE ))
+    if [ "$WORK_TIMEOUT" -lt 300 ]; then WORK_TIMEOUT=300; fi
+fi
+
 if [ "$MODE" != "reap" ]; then
     case "$VENDOR" in
         nvidia) : "${GPU_ID:=$LEG_GPU_NVIDIA}"; : "${IMAGE:=$LEG_IMAGE_NVIDIA}"; SMI_CMD='nvidia-smi --query-gpu=name,driver_version --format=csv,noheader' ;;
@@ -380,10 +516,23 @@ if [ "$MODE" != "reap" ]; then
 fi
 
 STAMP=$(date +%Y-%m-%d_%H%M%S)
+PSUF=""
+if [ "$PAYLOAD" = "phase8" ]; then PSUF="-phase8"; fi
 if [ "$MODE" = "dry" ]; then
-    OUT="${MOJOLEARN_GEMM_LEG_OUT:-bench/results/e1g/${STAMP}-${VENDOR}-dryrun}"
+    OUT="${MOJOLEARN_GEMM_LEG_OUT:-bench/results/e1g/${STAMP}-${VENDOR}${PSUF}-dryrun}"
 else
-    OUT="${MOJOLEARN_GEMM_LEG_OUT:-bench/results/e1g/${STAMP}-${VENDOR}}"
+    OUT="${MOJOLEARN_GEMM_LEG_OUT:-bench/results/e1g/${STAMP}-${VENDOR}${PSUF}}"
+fi
+if [ "$MODE" != "reap" ] && [ "$PAYLOAD" = "phase8" ]; then
+    # WHERE THE JUDGE WILL LOOK. tools/e3_round_judge.sh takes one bootstrap
+    # directory per machine out of bench/results/e1/ and labels each column
+    # from the BASENAME (its label_of: *-nv* -> NVIDIA, *-amd* -> AMD). The
+    # name is composed HERE rather than taken from the pod, because a RunPod
+    # container's hostname is a hex id and `<stamp>-<hex>` would land this
+    # column in the judge's default branch under a name nobody can read.
+    # tools/e2_remote_leg.sh gets the same effect for free: its droplets are
+    # NAMED mojolearn-e2-nv / -amd, so `hostname -s` already carries it.
+    E1_DEST="bench/results/e1/${STAMP}-runpod-${VENDOR}"
 fi
 
 # ---------------------------------------------------------------------------
@@ -676,6 +825,183 @@ leg_require_identical() {
     fi
     echo "  $_what: mode read back from the run itself = [$_got]"
     return 0
+}
+
+# ---------------------------------------------------------------------------
+# the phase8 payload: the reference column, the lane list, the mode witness
+# ---------------------------------------------------------------------------
+
+leg_lanes() {
+    # THE LANE LIST COMES FROM THE JUDGE, NOT FROM A COPY OF IT. `mamba` was
+    # added to tools/e1_bootstrap.sh phase 8 and to tools/e3_round_judge.sh
+    # section 7 on 2026-08-23; a hardcoded list in this file would have gone
+    # on reporting a green six-lane leg with the new lane silently absent,
+    # which is the whole failure mode this leg exists to prevent. The
+    # fallback is announced on stderr so a silent extraction failure cannot
+    # look like a lane list.
+    _l=$(sed -n 's/^for lane in \(.*\); do$/\1/p' tools/e3_round_judge.sh | head -1)
+    if [ -z "$_l" ]; then
+        _l="gemm cd kde linkage svm metrics mamba"
+        echo "  NOTE: the lane list could not be read out of" >&2
+        echo "        tools/e3_round_judge.sh; falling back to the literal" >&2
+        echo "        list '$_l', which may be stale." >&2
+    fi
+    printf '%s' "$_l"
+}
+
+leg_apple_column() {
+    # THE REFERENCE FOR THE phase8 PAYLOAD IS A WHOLE APPLE BOOTSTRAP
+    # DIRECTORY, not a card: tools/e3_round_judge.sh section 7 diffs
+    # <apple>/lanes/<lane>.identical.card against the box's, and its section
+    # 1 refuses the round outright unless every column records the SAME
+    # commit. Renting a box to produce the second column when the first does
+    # not exist at this commit buys cards with nothing to compare them to,
+    # which is exactly what the gemm payload's L1 refuses to do.
+    APPLE_LANES=""
+    _cand=""
+    if [ -n "$APPLE_DIR" ]; then
+        _cand="${APPLE_DIR%/}"
+        if [ ! -d "$_cand/lanes" ]; then
+            echo "  --apple-dir $_cand has no lanes/ subdirectory, so phase 8"
+            echo "  never ran in it and it is not a reference column."
+            return 1
+        fi
+    else
+        for _d in $(ls -dt bench/results/e1/*/ 2>/dev/null || true); do
+            [ -d "${_d}lanes" ] || continue
+            _c=$(head -1 "${_d}commit.txt" 2>/dev/null || echo "")
+            if [ "$_c" = "$COMMIT" ]; then _cand="${_d%/}"; break; fi
+        done
+        if [ -z "$_cand" ]; then
+            echo "  NO APPLE COLUMN AT THIS COMMIT. Nothing under"
+            echo "  bench/results/e1/ has both a lanes/ directory and"
+            echo "  commit.txt = $COMMIT."
+            echo "  The Apple column is made on this Mac, for nothing, with"
+            echo "      bash tools/e1_bootstrap.sh"
+            echo "  at this commit; or name an existing one with --apple-dir."
+            return 1
+        fi
+    fi
+    _c=$(head -1 "$_cand/commit.txt" 2>/dev/null || echo "")
+    if [ "$_c" != "$COMMIT" ]; then
+        echo "  THE APPLE COLUMN IS AT A DIFFERENT COMMIT."
+        echo "    $_cand records ${_c:-<no commit.txt>}"
+        echo "    this leg would ship $COMMIT"
+        echo "  The judge's section 1 requires every column to record the"
+        echo "  same commit, so this pair cannot be judged whatever the"
+        echo "  cards say. Two commits is two variables."
+        return 1
+    fi
+    APPLE_DIR="$_cand"
+    for _l in $LANES; do
+        if [ -f "$_cand/lanes/$_l.identical.card" ]; then
+            APPLE_LANES="$APPLE_LANES $_l"
+        else
+            echo "  NOTE: the Apple column has no lanes/$_l.identical.card."
+            echo "        The judge will call that lane's pair MISSING and"
+            echo "        the box's card will have nothing to answer."
+        fi
+    done
+    echo "  Apple column: $_cand (commit $_c)"
+    echo "  its IDENTICAL lane cards:$APPLE_LANES"
+    return 0
+}
+
+leg_witness_lane_mode() {
+    # THE LANE DRIVERS DO NOT ALL SPEAK THE SAME BANNER, so this reads the
+    # two spellings tools/e1_bootstrap.sh's own read-back accepts -- `[MODE]`
+    # and `mode MODE` -- out of the CARD first and then the LOG. Measured on
+    # leg 11 (2026-08-23, bench/results/e1/2026-08-23_165142-mojolearn-e2-nv):
+    # gemm, cd, kde and svm print `[IDENTICAL]`, metrics prints `mode
+    # IDENTICAL`, and LINKAGE PRINTS NEITHER -- its line in that bootstrap
+    # log ends in an empty witness. mamba prints none either. An absent
+    # witness is reported as UNWITNESSED by the caller; it is never read as a
+    # pass, and it is not treated as a contamination either, because a
+    # silence is not a claim.
+    grep -m1 -ohE '\[(FAST|IDENTICAL)\]|mode (FAST|IDENTICAL)' "$1" "$2" 2>/dev/null \
+        | head -1 | sed -e 's/^\[//' -e 's/\]$//' -e 's/^mode //'
+}
+
+leg_phase8_artifacts() {
+    # WHAT CAME HOME, lane by lane. This leg does NOT judge these cards --
+    # tools/e3_round_judge.sh section 7 does, against the Apple column. What
+    # is checked here is everything that would make judging them meaningless:
+    # a card that is not there, and a card whose own run says it was compiled
+    # in the other arithmetic.
+    _rc=0
+    _unwit=""
+    if [ ! -d "$E1_DEST/lanes" ]; then
+        echo "  NO lanes/ DIRECTORY CAME HOME. Phase 8 wrote no card on this"
+        echo "  box. Read $E1_DEST/bootstrap.log, or"
+        echo "  $OUT/remote/bootstrap_console.log if even that is missing."
+        return 1
+    fi
+    echo "  lane cards in $E1_DEST/lanes:"
+    for _l in $LANES; do
+        _card="$E1_DEST/lanes/$_l.identical.card"
+        _log="$E1_DEST/lanes/$_l.identical.log"
+        if [ ! -s "$_card" ]; then
+            echo "    $_l [IDENTICAL]: NO CARD -- the judge will call this"
+            echo "        pair MISSING. ($_log)"
+            _rc=1
+            continue
+        fi
+        _n=$(grep -vc '^#\|^$' "$_card" || true)
+        _w=$(leg_witness_lane_mode "$_card" "$_log")
+        case "$_w" in
+            IDENTICAL)
+                echo "    $_l [IDENTICAL]: $_n records, mode read back from the run = [IDENTICAL]" ;;
+            FAST)
+                echo "    $_l [IDENTICAL]: $_n records, AND THE RUN REPORTS MODE [FAST]."
+                echo "        CONTAMINATED: this card is filed as a"
+                echo "        NUMERIC_IDENTICAL claim and the binary that"
+                echo "        wrote it was the other arithmetic. Do not judge"
+                echo "        it. ($_log)"
+                _rc=1 ;;
+            *)
+                echo "    $_l [IDENTICAL]: $_n records, mode UNWITNESSED"
+                _unwit="$_unwit $_l" ;;
+        esac
+    done
+    if [ -n "$_unwit" ]; then
+        echo "  UNWITNESSED lanes:$_unwit"
+        echo "    Those drivers print no mode line at all, so nothing in"
+        echo "    their own output says which arithmetic they were compiled"
+        echo "    with. Measured 2026-08-23: linkage and mamba are the two."
+        echo "    This is REPORTED rather than asserted in either direction;"
+        echo "    the evidence that the pass was IDENTICAL is the other"
+        echo "    lanes' banners from the same loop, which is weaker than a"
+        echo "    banner of their own and must not be quoted as one."
+    fi
+    echo "  FAST cards (recorded, never a cross-vendor claim):"
+    for _l in $LANES; do
+        if [ -s "$E1_DEST/lanes/$_l.fast.card" ]; then
+            echo "    $_l [FAST]: present"
+        else
+            echo "    $_l [FAST]: absent"
+        fi
+    done
+    if [ -f "$E1_DEST/bootstrap.log" ]; then
+        _nf=$(grep -c 'PHASE8-FINDING' "$E1_DEST/bootstrap.log" 2>/dev/null || true)
+        echo "  phase-8 findings: ${_nf:-0}"
+        grep 'PHASE8-FINDING' "$E1_DEST/bootstrap.log" 2>/dev/null | sed 's/^/      /' || true
+        echo "    A FINDING IS NOT AN ABORT and it is not this leg's verdict"
+        echo "    (tools/e1_bootstrap.sh: 'a lane that fails here is a"
+        echo "    FINDING, never an abort'). In particular mamba's FAST arm"
+        echo "    HAS NEVER BEEN BUILT ANYWHERE, so a 'mamba [fast]' finding"
+        echo "    is EXPECTED here and is information."
+    fi
+    return $_rc
+}
+
+leg_archive_required() {
+    # What must be inside the archive for THIS payload to be worth shipping.
+    # A word list on purpose, so the caller can iterate it.
+    if [ "$PAYLOAD" = "phase8" ]; then
+        echo "tools/e1_bootstrap.sh mamba/mojo_only/mamba_check.mojo gemm/mojo_only/gemm_identical.mojo"
+    else
+        echo "gemm/mojo_only/gemm_identical.mojo"
+    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -1000,7 +1326,16 @@ leg_check_key_not_in_ps() {
 
 leg_build_remote_body() {
     _body="$OUT/remote_body.sh"
-    cat > "$_body" <<'REMOTE_BODY'
+    if [ "$PAYLOAD" = "phase8" ]; then
+        leg_body_phase8 > "$_body"
+    else
+        leg_body_gemm > "$_body"
+    fi
+    leg_check_remote_body
+}
+
+leg_body_gemm() {
+    cat <<'REMOTE_BODY'
 #!/bin/sh
 # Generated by tools/gemm_remote_leg.sh (DEVIATION 536). RUNS ON THE POD.
 #
@@ -1076,7 +1411,126 @@ fi
 echo "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$OUT/leg.txt"
 echo REMOTE_BODY_DONE
 REMOTE_BODY
+}
 
+leg_body_phase8() {
+    cat <<'REMOTE_BODY_P8'
+#!/bin/sh
+# Generated by tools/gemm_remote_leg.sh (DEVIATION 536, --payload phase8).
+# RUNS ON THE POD.
+#
+# IT RUNS tools/e1_bootstrap.sh AND REIMPLEMENTS NOT ONE LINE OF PHASE 8. A
+# copy of that loop here would be a second list of lanes to keep in step with
+# e1_bootstrap.sh and e3_round_judge.sh, and the cards the judge read would
+# not have come from the program the judge is named after.
+#
+# DELIBERATELY `set -u` AND NOT `set -e`. A lane that goes red is a RESULT and
+# its card and log have to come home; dying at the first non-zero would fetch
+# an empty directory and lose the finding. e1_bootstrap.sh says the same
+# thing in its own words at phase 8: "a lane that fails here is a FINDING,
+# never an abort".
+#
+# POSIX sh, but it invokes `bash` for the bootstrap on purpose:
+# tools/e1_bootstrap.sh line 26 uses process substitution and IS a bash
+# script. (`sh -n` reports a false syntax error there for the same reason.)
+set -u
+ROOT=/root/mojolearn
+OUT=/root/gemm_leg_out
+mkdir -p "$OUT"
+cd "$ROOT" || exit 9
+
+{
+  echo "vendor=@VENDOR@"
+  echo "payload=phase8"
+  echo "commit=@COMMIT@"
+  echo "work_timeout=@WORKTIMEOUT@"
+  echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+} > "$OUT/leg.txt"
+
+uname -a > "$OUT/uname.txt" 2>&1
+@SMI@ > "$OUT/gpu.txt" 2>&1 || echo "no vendor smi tool answered" >> "$OUT/gpu.txt"
+
+# THE MAMBA GATE'S SHAPE STAYS TINY ON A RENTED BOX. mamba_check.mojo reads
+# MOJOLEARN_MAMBA_CHECK_B / _L / _DM from the environment (defaults B=1, L=4,
+# d_model=8) and every shape is another compile inside the lease. These are
+# UNSET rather than assumed absent: a pod template carries an environment of
+# its own, and a widened shape would be invisible here until the bill.
+unset MOJOLEARN_MAMBA_CHECK_B MOJOLEARN_MAMBA_CHECK_L MOJOLEARN_MAMBA_CHECK_DM
+
+# THE SOURCE HASH, computed BEFORE pixi installs anything, with the same
+# recipe the Mac used on the extracted archive. This box has no .git by
+# design, so this is the only comparison of what was shipped against what
+# ran -- and it is why e1_bootstrap.sh's own provenance step, which is
+# `git rev-parse HEAD | tee commit.txt`, writes an EMPTY commit.txt here. The
+# driving host rewrites that file from the sha it PINNED after the fetch and
+# leaves commit_provenance.txt beside it saying so.
+{ find . -name '*.mojo' -not -path './.pixi/*' -not -path './bench/results/*' \
+    | LC_ALL=C sort | xargs shasum -a 256 2>/dev/null || \
+  find . -name '*.mojo' -not -path './.pixi/*' -not -path './bench/results/*' \
+    | LC_ALL=C sort | xargs sha256sum ; } \
+  | { shasum -a 256 2>/dev/null || sha256sum ; } \
+  | awk '{print $1}' > "$OUT/source_sha256.txt"
+
+if [ ! -x "$HOME/.pixi/bin/pixi" ] && ! command -v pixi > /dev/null 2>&1; then
+    curl -fsSL https://pixi.sh/install.sh | sh > "$OUT/pixi_install.log" 2>&1
+fi
+PATH="$HOME/.pixi/bin:$PATH"
+export PATH
+command -v pixi > "$OUT/pixi_which.txt" 2>&1 || echo "NO PIXI" >> "$OUT/pixi_which.txt"
+command -v bash > "$OUT/bash_which.txt" 2>&1 || \
+    echo "NO BASH ON THIS IMAGE -- tools/e1_bootstrap.sh cannot run" >> "$OUT/bash_which.txt"
+
+# THE WORK IS BOUNDED IN CODE, exactly like the ready wait. The lease's
+# watchdog is the backstop for a dead session, not a schedule: if it fires
+# mid-bootstrap the box dies with every card still on it, because the fetch
+# has not run yet. @WORKTIMEOUT@ seconds leaves the lease its reserve, so a
+# leg that runs out of hour comes home with the lanes that finished.
+if command -v timeout > /dev/null 2>&1; then
+    timeout -k 30 @WORKTIMEOUT@ bash tools/e1_bootstrap.sh > "$OUT/bootstrap_console.log" 2>&1
+    echo "bootstrap_exit=$?" >> "$OUT/leg.txt"
+    echo "note: a bootstrap_exit of 124 is the work timeout firing" >> "$OUT/leg.txt"
+else
+    echo "no timeout(1) on this image: THE BOOTSTRAP RAN UNBOUNDED and the" >> "$OUT/leg.txt"
+    echo "  lease watchdog is the only thing between it and the hour" >> "$OUT/leg.txt"
+    bash tools/e1_bootstrap.sh > "$OUT/bootstrap_console.log" 2>&1
+    echo "bootstrap_exit=$?" >> "$OUT/leg.txt"
+fi
+tail -40 "$OUT/bootstrap_console.log"
+
+# WHICH DIRECTORY DID IT WRITE? Read the bootstrap's own last line -- it
+# prints `artifacts in <dir>` -- rather than guessing from a listing. The
+# newest-directory fallback is for the run that never got that far, and WHICH
+# ONE WAS USED is recorded rather than left to be inferred later.
+E1DIR=$(sed -n 's|^artifacts in ||p' "$OUT/bootstrap_console.log" | tail -1)
+if [ -n "$E1DIR" ] && [ -d "$E1DIR" ]; then
+    echo "e1dir_source=the bootstrap's own 'artifacts in' line" >> "$OUT/leg.txt"
+else
+    E1DIR=$(ls -dt "$ROOT"/bench/results/e1/*/ 2>/dev/null | head -1)
+    E1DIR=${E1DIR%/}
+    echo "e1dir_source=newest directory under bench/results/e1 (the bootstrap never printed 'artifacts in')" >> "$OUT/leg.txt"
+fi
+echo "e1dir=$E1DIR" >> "$OUT/leg.txt"
+
+if [ -n "$E1DIR" ] && [ -d "$E1DIR" ]; then
+    cp "$OUT/source_sha256.txt" "$E1DIR/source_sha256.txt" 2>/dev/null
+    ls "$E1DIR/lanes" > "$OUT/lanes_listing.txt" 2>&1 || \
+        echo "NO lanes/ DIRECTORY" > "$OUT/lanes_listing.txt"
+    grep 'PHASE8-FINDING' "$E1DIR/bootstrap.log" > "$OUT/phase8_findings.txt" 2>/dev/null
+    echo "identical_cards=$(ls "$E1DIR"/lanes/*.identical.card 2>/dev/null | wc -l)" >> "$OUT/leg.txt"
+    echo "fast_cards=$(ls "$E1DIR"/lanes/*.fast.card 2>/dev/null | wc -l)" >> "$OUT/leg.txt"
+    echo "phase8_findings=$(grep -c 'PHASE8-FINDING' "$E1DIR/bootstrap.log" 2>/dev/null)" >> "$OUT/leg.txt"
+else
+    echo "NO ARTIFACT DIRECTORY: the bootstrap wrote nothing under bench/results/e1" >> "$OUT/leg.txt"
+fi
+
+echo "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$OUT/leg.txt"
+cat "$OUT/leg.txt"
+echo REMOTE_BODY_DONE
+REMOTE_BODY_P8
+}
+
+leg_check_remote_body() {
+    _body="$OUT/remote_body.sh"
     # SUBSTITUTION, AND THEN A CHECK THAT IT HAPPENED. A `sed` without `/g`
     # has already left one of this repository's guards holding a literal
     # placeholder, so the trailing grep is the part that matters: it does not
@@ -1086,6 +1540,7 @@ REMOTE_BODY
         -e "s|@CARDFULL@|$CARD_FULL|g" \
         -e "s|@SWEEP@|$SWEEP|g" \
         -e "s|@DUMP@|$LEG_DUMP|g" \
+        -e "s|@WORKTIMEOUT@|$WORK_TIMEOUT|g" \
         -e "s|@SMI@|$SMI_CMD|g" \
         "$_body" > "$_body.subst"
     mv "$_body.subst" "$_body"
@@ -1123,6 +1578,23 @@ REMOTE_BODY
         sed 's/^/    /' "$TMPD/bashisms"
         return 1
     fi
+    if [ "$PAYLOAD" = "phase8" ]; then
+        # THE TWO THINGS THIS PAYLOAD IS ABOUT, checked in the shipped text
+        # rather than believed from the heredoc above it.
+        if ! grep -q 'bash tools/e1_bootstrap.sh' "$_body"; then
+            echo "  the phase8 body does not run tools/e1_bootstrap.sh."
+            echo "  A body that reimplements phase 8 is a second lane list"
+            echo "  and the judge would be reading cards from a different"
+            echo "  program than the one it is named after."
+            return 1
+        fi
+        if ! grep -q 'unset MOJOLEARN_MAMBA_CHECK_B' "$_body"; then
+            echo "  the phase8 body does not unset the mamba shape variables."
+            echo "  MOJOLEARN_MAMBA_CHECK_B/_L/_DM widen the mamba gate and"
+            echo "  every shape is another compile inside the lease."
+            return 1
+        fi
+    fi
     return 0
 }
 
@@ -1136,10 +1608,12 @@ leg_ship_and_run() {
     # A PIPELINE'S STATUS IS ITS LAST COMMAND'S, so neither `git archive` nor
     # the untar above can report a failure through `set -e`. Check the
     # RESULT instead: the file the leg is entirely about has to be in there.
-    [ -f "$TMPD/archive/gemm/mojo_only/gemm_identical.mojo" ] || leg_die \
-"THE ARCHIVE DOES NOT CONTAIN gemm/mojo_only/gemm_identical.mojo.
-  Either 'git archive' of $COMMIT failed, or the kernel is not committed at
+    for _need in $(leg_archive_required); do
+        [ -f "$TMPD/archive/$_need" ] || leg_die \
+"THE ARCHIVE DOES NOT CONTAIN $_need.
+  Either 'git archive' of $COMMIT failed, or that file is not committed at
   this commit. Shipping it would rent a box to build nothing."
+    done
     leg_source_sha_recipe "$TMPD/archive" > "$OUT/source_sha256_local.txt"
     leg_say "  archive source sha256: $(cut -c1-32 < "$OUT/source_sha256_local.txt")"
 
@@ -1152,10 +1626,68 @@ leg_ship_and_run() {
     tail -5 "$OUT/remote_console.log" | sed 's/^/    /'
 }
 
+leg_fetch_e1dir() {
+    # THE CARDS THE JUDGE READS. tools/e3_round_judge.sh wants one bootstrap
+    # directory per machine under bench/results/e1/, so the box's lands
+    # beside the Mac's with a name the judge's own label_of resolves to
+    # $VLABEL. This is the phase8 payload's whole deliverable.
+    _rd=$(sed -n 's/^e1dir=//p' "$OUT/remote/leg.txt" 2>/dev/null | tail -1)
+    if [ -z "$_rd" ]; then
+        echo "  NO e1dir RECORDED. The box's leg.txt does not name a"
+        echo "  bootstrap directory, so there is nothing to fetch for the"
+        echo "  judge. Read $OUT/remote/bootstrap_console.log."
+        return 1
+    fi
+    mkdir -p "$E1_DEST"
+    # A PIPELINE'S STATUS IS ITS LAST COMMAND'S, so neither the remote tar
+    # nor ssh can report a failure here. Check the RESULT instead.
+    leg_ssh "cd '$_rd' && tar czf - ." | ( cd "$E1_DEST" && tar xzf - ) || true
+    if [ -d "$E1_DEST/lanes" ] || [ -f "$E1_DEST/bootstrap.log" ]; then
+        echo "  fetched $_rd"
+        echo "       -> $E1_DEST"
+    else
+        echo "  FETCH FAILED for $_rd -- neither lanes/ nor bootstrap.log"
+        echo "  arrived. It is still on the box, which is about to be"
+        echo "  terminated, so read $OUT/remote/ for what did come home."
+        return 1
+    fi
+    # COMMIT ATTRIBUTION ON A BOX WITH NO .git. e1_bootstrap.sh's provenance
+    # step is `git rev-parse HEAD | tee commit.txt`, and this leg ships a
+    # `git archive`, so on the pod that command writes an EMPTY commit.txt --
+    # the same failure as the AMD leg whose commit.txt read "unknown" -- and
+    # the judge's section 1 would read this column as MISSING. The sha is
+    # written here from the sha this leg PINNED, and commit_provenance.txt
+    # says so IN THE DIRECTORY, because a file that looks like git's output
+    # and is not must say which it is. What it rests on is not a belief:
+    # source_sha256 is compared at both ends in step 8.
+    printf '%s\n' "$COMMIT" > "$E1_DEST/commit.txt"
+    {
+        echo "commit.txt in this directory was written by"
+        echo "tools/gemm_remote_leg.sh --payload phase8, NOT by git on the box."
+        echo
+        echo "commit=$COMMIT_LINE"
+        echo "vendor=$VENDOR"
+        echo "remote_dir=$_rd"
+        echo "pod=$POD_ID"
+        echo
+        echo "The box has no .git: the source arrives as 'git archive' at a"
+        echo "pinned sha (see this leg's header for why a clone and a bundle"
+        echo "were both rejected), so the bootstrap's own 'git rev-parse HEAD'"
+        echo "wrote an empty file. The evidence that the box ran this commit"
+        echo "is source_sha256.txt, computed with one recipe at both ends:"
+        echo "  here:  $(cat "$OUT/source_sha256_local.txt" 2>/dev/null)"
+        echo "  there: $(cat "$OUT/remote/source_sha256.txt" 2>/dev/null)"
+    } > "$E1_DEST/commit_provenance.txt"
+    return 0
+}
+
 leg_fetch() {
     mkdir -p "$OUT/remote"
     leg_ssh 'cd /root/gemm_leg_out && tar czf - .' | ( cd "$OUT/remote" && tar xzf - ) \
         || echo "  FETCH FAILED -- the remote log is /root/gemm_leg_out"
+    if [ "$PAYLOAD" = "phase8" ]; then
+        leg_fetch_e1dir || FETCH_RED=1
+    fi
     # THE KEY LEAVES THE BOX BEFORE THE BOX DOES. Its only jobs -- letting an
     # operator self-terminate from the pod, and giving the ps check a pattern
     # file -- are both finished here. If the terminate below then fails, what
@@ -1220,6 +1752,27 @@ leg_rehearse() {
         rbad "A4 --rent without a key refuses" "got exit $_rc: $_out"
     fi
 
+    _out=$(MOJOLEARN_GEMM_LEG_REHEARSAL=1 "$0" nvidia --payload lanes 2>&1) && _rc=0 || _rc=$?
+    if [ "$_rc" = "2" ] && echo "$_out" | grep -q "unknown payload"; then
+        rok "A5 an unknown payload is refused by name (exit 2)"
+    else
+        rbad "A5 an unknown payload is refused by name" "got exit $_rc: $_out"
+    fi
+
+    _out=$(MOJOLEARN_GEMM_LEG_REHEARSAL=1 "$0" nvidia --payload phase8 --column-sweep 2>&1) && _rc=0 || _rc=$?
+    if [ "$_rc" = "2" ] && echo "$_out" | grep -q "column-sweep belongs to the gemm payload"; then
+        rok "A6 --column-sweep is refused under phase8 rather than ignored"
+    else
+        rbad "A6 --column-sweep is refused under phase8" "got exit $_rc: $_out"
+    fi
+
+    _out=$(MOJOLEARN_GEMM_LEG_REHEARSAL=1 "$0" nvidia --payload phase8 --local-card /tmp/nope.card 2>&1) && _rc=0 || _rc=$?
+    if [ "$_rc" = "2" ] && echo "$_out" | grep -q "local-card belongs to the gemm payload"; then
+        rok "A7 --local-card is refused under phase8 rather than ignored"
+    else
+        rbad "A7 --local-card is refused under phase8" "got exit $_rc: $_out"
+    fi
+
     # -- B. the interlock ---------------------------------------------------
     # `trap - EXIT` first: leg_create_pod refuses by calling leg_die, and a
     # shell that runs EXIT traps inside ( ) would otherwise delete this dry
@@ -1270,6 +1823,11 @@ leg_rehearse() {
     else
         rbad "C4 leg_arm propagates the guard's refusal" "IT DID NOT. Work would start on an unguarded box. got exit $_rc"
     fi
+
+    # -- D and E belong to the gemm payload: leg_require_identical and
+    # leg_diff_cards are on ITS path and not on phase8's, where the mode
+    # read-back is per lane (group P) and the judge does the diffing.
+    if [ "$PAYLOAD" != "phase8" ]; then
 
     # -- D. the contamination guard -----------------------------------------
     printf '== bench/gemm_card_main.mojo [FAST] ==\nstages: 60 over 20 shapes; 0 skipped\n' > "$TMPD/fast.log"
@@ -1366,6 +1924,8 @@ leg_rehearse() {
         rbad "E1/E2/E3/E4 the differ plumbing" "no local card to rehearse against"
     fi
 
+    fi
+
     # -- F. the remote body --------------------------------------------------
     COMMIT="${COMMIT:-0000000}"
     if leg_build_remote_body > "$TMPD/f1.out" 2>&1; then
@@ -1382,6 +1942,110 @@ leg_rehearse() {
         rbad "F2 the leftover-placeholder detector" "it did not see a planted placeholder"
     fi
     sed '$d' "$OUT/remote_body.sh" > "$TMPD/rb" && mv "$TMPD/rb" "$OUT/remote_body.sh"
+
+    # -- P. the phase8 payload -----------------------------------------------
+    if [ "$PAYLOAD" = "phase8" ]; then
+        # P1 IS THE ONE THAT KEEPS THE REST HONEST: every check below reads
+        # $LANES, and a lane list that quietly fell back to a literal would
+        # make all of them pass while the newest lane went unchecked.
+        _raw=$(sed -n 's/^for lane in \(.*\); do$/\1/p' tools/e3_round_judge.sh | head -1)
+        if [ -n "$_raw" ] && echo " $_raw " | grep -q ' mamba '; then
+            rok "P1 the lane list is READ OUT OF tools/e3_round_judge.sh ($_raw)"
+        else
+            rbad "P1 the lane list comes from the judge, not a copy" "the extraction returned '$_raw', so the leg would use a literal list that goes stale the next time a lane is added"
+        fi
+
+        # P2: the fetched directory's NAME is what the judge labels the
+        # column from, and this asks the judge's OWN label_of rather than a
+        # copy of its patterns.
+        _lo=$(sed -n '/^label_of() {/,/^}/p' tools/e3_round_judge.sh)
+        if [ -n "$_lo" ]; then
+            _got=$( eval "$_lo"; label_of "$E1_DEST" )
+            if [ "$_got" = "$VLABEL" ]; then
+                rok "P2 the judge's own label_of reads $(basename "$E1_DEST") as $_got"
+            else
+                rbad "P2 the fetched directory is labelled $VLABEL by the judge" "label_of said '$_got'. The column would be judged under the wrong name."
+            fi
+        else
+            rbad "P2 label_of could not be read out of tools/e3_round_judge.sh" "the naming of $E1_DEST is then unverified"
+        fi
+
+        _p8="$TMPD/p8"
+        rm -rf "$_p8"; mkdir -p "$_p8/lanes"
+        printf '# format: mojolearn-identity-trace v1\n0\tp8.in.a\tf32\t4\t0123456789abcdef\n' \
+            > "$_p8/lanes/gemm.identical.card"
+
+        printf '== bench/gemm_card_main.mojo [IDENTICAL] ==\n' > "$_p8/lanes/gemm.identical.log"
+        if ( trap - EXIT; E1_DEST="$_p8"; LANES="gemm"; leg_phase8_artifacts ) > "$TMPD/p3.out" 2>&1; then
+            if grep -q 'mode read back from the run = \[IDENTICAL\]' "$TMPD/p3.out"; then
+                rok "P3 a lane whose run reports [IDENTICAL] is accepted (the guard is not just always-red)"
+            else
+                rbad "P3 an [IDENTICAL] lane is accepted and says so" "$(head -3 "$TMPD/p3.out")"
+            fi
+        else
+            rbad "P3 an [IDENTICAL] lane is accepted" "it was rejected: $(head -3 "$TMPD/p3.out")"
+        fi
+
+        printf '== bench/gemm_card_main.mojo [FAST] ==\n' > "$_p8/lanes/gemm.identical.log"
+        if ( trap - EXIT; E1_DEST="$_p8"; LANES="gemm"; leg_phase8_artifacts ) > "$TMPD/p4.out" 2>&1; then
+            rbad "P4 an IDENTICAL card whose run reports [FAST] is caught" "IT WAS ACCEPTED. Every card this payload brings home could be the wrong arithmetic."
+        else
+            if grep -q CONTAMINATED "$TMPD/p4.out"; then
+                rok "P4 an IDENTICAL card whose run reports [FAST] is CONTAMINATED"
+            else
+                rbad "P4 a [FAST] lane is rejected" "rejected, but not with the contamination message"
+            fi
+        fi
+
+        printf 'warning: something, and no mode line anywhere\n' > "$_p8/lanes/gemm.identical.log"
+        if ( trap - EXIT; E1_DEST="$_p8"; LANES="gemm"; leg_phase8_artifacts ) > "$TMPD/p5.out" 2>&1; then
+            if grep -q UNWITNESSED "$TMPD/p5.out"; then
+                rok "P5 a lane with no banner is called UNWITNESSED, not passed and not failed (linkage and mamba are both like this)"
+            else
+                rbad "P5 an unwitnessed lane is named" "accepted without saying the mode was never witnessed"
+            fi
+        else
+            rbad "P5 an unwitnessed lane is reported, not failed" "it was treated as red; linkage and mamba would make every leg red"
+        fi
+
+        if ( trap - EXIT; E1_DEST="$_p8"; LANES="cd"; leg_phase8_artifacts ) > "$TMPD/p6.out" 2>&1; then
+            rbad "P6 a lane with no card at all is caught" "IT WAS ACCEPTED"
+        else
+            if grep -q 'NO CARD' "$TMPD/p6.out"; then
+                rok "P6 a lane with no IDENTICAL card is named, and the judge's MISSING is predicted"
+            else
+                rbad "P6 a missing lane card is named" "rejected for the wrong reason"
+            fi
+        fi
+
+        if ( trap - EXIT; E1_DEST="$TMPD/no-such-column"; LANES="gemm"; leg_phase8_artifacts ) > "$TMPD/p7.out" 2>&1; then
+            rbad "P7 a column with no lanes/ directory is caught" "IT WAS ACCEPTED"
+        else
+            rok "P7 a column with no lanes/ directory at all is caught"
+        fi
+
+        # P8: the two content checks in leg_check_remote_body, proven against
+        # a planted body. A body that had stopped running e1_bootstrap.sh, or
+        # had stopped unsetting the mamba shape, must not ship.
+        cp "$OUT/remote_body.sh" "$TMPD/body.keep"
+        grep -v 'bash tools/e1_bootstrap.sh' "$TMPD/body.keep" > "$OUT/remote_body.sh"
+        if ( trap - EXIT; leg_check_remote_body ) > "$TMPD/p8.out" 2>&1; then
+            rbad "P8 a body that does not run e1_bootstrap.sh is refused" "IT WAS ACCEPTED. The leg could ship a copy of phase 8 and the judge would never know."
+        elif grep -q 'does not run tools/e1_bootstrap.sh' "$TMPD/p8.out"; then
+            rok "P8 a body that stopped running tools/e1_bootstrap.sh is refused, by name"
+        else
+            rbad "P8 a body that stopped running e1_bootstrap.sh is refused BY NAME" "it was refused for another reason: $(head -2 "$TMPD/p8.out")"
+        fi
+        grep -v 'unset MOJOLEARN_MAMBA_CHECK_B' "$TMPD/body.keep" > "$OUT/remote_body.sh"
+        if ( trap - EXIT; leg_check_remote_body ) > "$TMPD/p9.out" 2>&1; then
+            rbad "P9 a body that does not pin the mamba shape is refused" "IT WAS ACCEPTED. A widened mamba shape is another compile inside the lease."
+        elif grep -q 'does not unset the mamba shape' "$TMPD/p9.out"; then
+            rok "P9 a body that stopped unsetting the mamba shape is refused, by name"
+        else
+            rbad "P9 a body that stopped unsetting the mamba shape is refused BY NAME" "it was refused for another reason: $(head -2 "$TMPD/p9.out")"
+        fi
+        cp "$TMPD/body.keep" "$OUT/remote_body.sh"
+    fi
 
     # -- K. key hygiene ------------------------------------------------------
     # A LOW-ENTROPY FAKE, never a real key: this string is written to disk and
@@ -1465,7 +2129,13 @@ leg_rehearse() {
     fi
 
     # -- L. the reference leg ------------------------------------------------
-    if [ "${LOCAL_CARD_SYNTHETIC:-0}" = "1" ]; then
+    if [ "$PAYLOAD" = "phase8" ]; then
+        if [ "$APPLE_MISSING" = "1" ]; then
+            rblock "L1 an Apple column exists at this commit" "THERE IS NONE. The box would produce seven cards with nothing to compare them to, and the judge's section 1 refuses a round whose columns record different commits. Make it here first: bash tools/e1_bootstrap.sh -- or name one with --apple-dir."
+        else
+            rok "L1 the Apple column exists at this commit ($APPLE_DIR)"
+        fi
+    elif [ "${LOCAL_CARD_SYNTHETIC:-0}" = "1" ]; then
         rblock "L1 the Apple reference card is a real measurement" "IT IS SYNTHETIC. The local device arm failed, so the checks above tested the plumbing against a card that measures nothing. Renting now would buy a remote card with nothing to compare it to."
     else
         rok "L1 the Apple reference card is a real measurement"
@@ -1481,10 +2151,14 @@ leg_rehearse() {
         else
             rbad "G1 the source hash recipe" "got '$_h'"
         fi
-        if [ -f "$TMPD/dryarch/gemm/mojo_only/gemm_identical.mojo" ]; then
-            rok "G2 the archive contains the kernel the leg is about"
+        _miss=""
+        for _need in $(leg_archive_required); do
+            [ -f "$TMPD/dryarch/$_need" ] || _miss="$_miss $_need"
+        done
+        if [ -z "$_miss" ]; then
+            rok "G2 the archive contains everything the $PAYLOAD payload runs ($(leg_archive_required))"
         else
-            rbad "G2 the archive contains gemm/mojo_only/gemm_identical.mojo" "it does not -- the leg would build nothing"
+            rbad "G2 the archive contains what the $PAYLOAD payload runs" "MISSING:$_miss -- the leg would rent a box to build nothing"
         fi
     else
         rbad "G1 git archive" "$(cat "$TMPD/g1.err")"
@@ -1552,6 +2226,7 @@ mkdir -p "$OUT"
 echo "== gemm.fp32.v1 remote leg (DEVIATION 536) =="
 echo "   profile:  mojolearn.identical.gemm.fp32.v1"
 echo "   vendor:   $VENDOR    label in the diff: $VLABEL"
+echo "   payload:  $PAYLOAD$( [ "$PAYLOAD" = phase8 ] && echo '   (tools/e1_bootstrap.sh; phase 8 is seven lanes)' )"
 echo "   mode:     $MODE$( [ "$MODE" = dry ] && echo '  (nothing is rented; --rent opts in)' )"
 echo "   gpu:      $GPU_ID"
 echo "   image:    $IMAGE"
@@ -1577,6 +2252,35 @@ COMMIT_LINE=$(git log -1 --format='%h parent %p' 2>/dev/null || echo unknown)
 } > "$OUT/leg.txt"
 echo "   commit:   $COMMIT_LINE"
 echo
+
+if [ "$PAYLOAD" = "phase8" ]; then
+
+echo "== step 1: the Apple reference column =="
+echo "   The phase8 payload builds NOTHING on this Mac. Its reference is an"
+echo "   Apple bootstrap directory that already exists, and the comparison"
+echo "   is made by tools/e3_round_judge.sh once the box's directory lands"
+echo "   beside it -- this leg does not diff phase-8 cards."
+LANES=$(leg_lanes)
+echo "   lanes (read out of tools/e3_round_judge.sh section 7): $LANES"
+if leg_apple_column; then
+    :
+else
+    APPLE_MISSING=1
+    if [ "$MODE" = "rent" ]; then
+        leg_die "NOTHING IS RENTED WITHOUT AN APPLE COLUMN AT THIS COMMIT.
+  The box would produce seven cards with nothing to compare them to, and
+  the Mac's column cannot be made later at this commit once the shared
+  checkout has moved on. Make it first (it costs nothing but the build
+  lock):
+    bash tools/e1_bootstrap.sh
+  or name an existing one:  --apple-dir bench/results/e1/<stamp>-...
+  This is the phase8 payload's L1: the gemm payload refuses to rent
+  against a reference card it does not have, for the same reason."
+    fi
+    echo "  (dry run: continuing so the rest of the plumbing is exercised)"
+fi
+
+else
 
 echo "== step 1: the Apple reference card =="
 if leg_local_card; then
@@ -1608,6 +2312,8 @@ else
     } > "$LOCAL_CARD"
 fi
 
+fi
+
 if [ "$MODE" = "dry" ]; then
     leg_rehearse || DRY_RC=$?
     echo
@@ -1620,14 +2326,27 @@ if [ "$MODE" = "dry" ]; then
     echo "      refusal -> TERMINATE, no work, no card"
     echo "   5. key to the pod on stdin (0600), then read the pod's ps back"
     echo "   6. git archive $COMMIT -> the box; compare source sha both ways"
+    if [ "$PAYLOAD" = "phase8" ]; then
+    echo "   7. bash tools/e1_bootstrap.sh, bounded at ${WORK_TIMEOUT}s so the"
+    echo "      fetch keeps its reserve; phase 8 writes lanes/*.card"
+    echo "   8. fetch the bootstrap directory to"
+    echo "      $E1_DEST; rewrite its commit.txt"
+    echo "      from the pinned sha; read each lane's mode back"
+    echo "   9. NO DIFF HERE. tools/e3_round_judge.sh section 7 judges it"
+    else
     echo "   7. gemm_device_check.mojo, then gemm_card.sh device, IDENTICAL"
     echo "   8. fetch; read the mode back out of BOTH remote logs"
     echo "   9. diff against the Apple card; name the FIRST diverging stage"
+    fi
     echo "  10. reap, verify by asking the API, print the lease remaining"
     echo
     echo "   the command:"
     echo "     export RUNPOD_API_KEY=...   # or MOJOLEARN_RUNPOD_KEY_FILE"
+    if [ "$PAYLOAD" = "phase8" ]; then
+    echo "     tools/gemm_remote_leg.sh $VENDOR --payload phase8 --rent --minutes $MINUTES"
+    else
     echo "     tools/gemm_remote_leg.sh $VENDOR --rent --minutes $MINUTES"
+    fi
     echo
     if [ "${DRY_RC:-0}" = "1" ]; then
         echo "DRY RUN: RED -- THIS SCRIPT is broken (a FAIL above). Fix it"
@@ -1684,11 +2403,15 @@ leg_fetch
 
 echo
 echo "== step 8: what came home =="
-RED=0
-REMOTE_CARD="$OUT/remote/$VENDOR.card"
-leg_require_file "$REMOTE_CARD" "the remote never produced a card; read $OUT/remote/card_driver.log" || RED=1
-leg_require_identical "$OUT/remote/$VENDOR.card.log" "remote card" || RED=1
-leg_require_identical "$OUT/remote/device_check.log" "remote device check" || RED=1
+RED=$FETCH_RED
+if [ "$PAYLOAD" = "phase8" ]; then
+    leg_phase8_artifacts || RED=1
+else
+    REMOTE_CARD="$OUT/remote/$VENDOR.card"
+    leg_require_file "$REMOTE_CARD" "the remote never produced a card; read $OUT/remote/card_driver.log" || RED=1
+    leg_require_identical "$OUT/remote/$VENDOR.card.log" "remote card" || RED=1
+    leg_require_identical "$OUT/remote/device_check.log" "remote device check" || RED=1
+fi
 
 if [ -f "$OUT/remote/source_sha256.txt" ]; then
     _rs=$(cat "$OUT/remote/source_sha256.txt")
@@ -1714,17 +2437,48 @@ fi
 if [ -f "$OUT/remote/leg.txt" ]; then
     sed 's/^/    /' "$OUT/remote/leg.txt"
 fi
-if grep -q 'device_check_exit=0' "$OUT/remote/leg.txt" 2>/dev/null; then
-    echo "  the device kernel's own gates: GREEN on this silicon"
+if [ "$PAYLOAD" = "phase8" ]; then
+    if grep -q 'bootstrap_exit=0' "$OUT/remote/leg.txt" 2>/dev/null; then
+        echo "  the bootstrap ran to the end on this box"
+    elif grep -q 'bootstrap_exit=124' "$OUT/remote/leg.txt" 2>/dev/null; then
+        echo "  THE WORK TIMEOUT FIRED (${WORK_TIMEOUT}s). The bootstrap was"
+        echo "    stopped so the fetch would still happen, which is why any"
+        echo "    card above came home at all. Whatever is missing above is"
+        echo "    missing because of the clock, not because of the silicon."
+    else
+        echo "  the bootstrap exited non-zero. That is not by itself a"
+        echo "    finding about this silicon -- e1_bootstrap.sh runs every"
+        echo "    phase and reports rather than aborts -- but read"
+        echo "    $E1_DEST/bootstrap.log before reading any card."
+    fi
 else
-    echo "  the device kernel's own gates: RED or unrun on this silicon."
-    echo "    A machine that fails its own gates teaches nothing when diffed"
-    echo "    against another. Read $OUT/remote/device_check.log FIRST; the"
-    echo "    card diff below is secondary until that is resolved."
-    RED=1
+    if grep -q 'device_check_exit=0' "$OUT/remote/leg.txt" 2>/dev/null; then
+        echo "  the device kernel's own gates: GREEN on this silicon"
+    else
+        echo "  the device kernel's own gates: RED or unrun on this silicon."
+        echo "    A machine that fails its own gates teaches nothing when diffed"
+        echo "    against another. Read $OUT/remote/device_check.log FIRST; the"
+        echo "    card diff below is secondary until that is resolved."
+        RED=1
+    fi
 fi
 
 echo
+if [ "$PAYLOAD" = "phase8" ]; then
+echo "== step 9: the judge, which is not this leg =="
+echo "  This leg does not diff phase-8 cards and must not:"
+echo "  tools/e3_round_judge.sh is what the round is recorded from, it"
+echo "  reads the whole column (commits, the tree matrix, E2U, the E1U"
+echo "  cards, the gate lines, cross-infer) and section 7 is the lanes."
+echo
+echo "    bash tools/e3_round_judge.sh \\"
+echo "        ${APPLE_DIR:-<apple bootstrap dir>} \\"
+echo "        $E1_DEST --write"
+echo
+echo "  Run BOTH vendors' legs first and judge all three columns in one"
+echo "  command; the judge takes <mac> <nv> [<amd>] and one invocation is"
+echo "  one round."
+else
 echo "== step 9: Apple vs $VLABEL =="
 if [ "$RED" = "0" ]; then
     leg_diff_cards "$LOCAL_CARD" "$REMOTE_CARD" "$OUT/diff_apple_vs_$VENDOR.txt" || RED=1
@@ -1732,13 +2486,19 @@ else
     echo "  NOT DIFFING. Something above is unsound and a stage name produced"
     echo "  from an unsound pair is worse than no stage name at all."
 fi
+fi
 
 {
     echo "commit=$COMMIT_LINE"
     echo "vendor=$VENDOR"
+    echo "payload=$PAYLOAD"
     echo "pod=$POD_ID"
     echo "gpu_requested=$GPU_ID"
     echo "red=$RED"
+    if [ "$PAYLOAD" = "phase8" ]; then
+        echo "e1_dir=$E1_DEST"
+        echo "apple_dir=${APPLE_DIR:-<none>}"
+    fi
     echo "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } >> "$OUT/leg.txt"
 
@@ -1749,7 +2509,15 @@ leg_terminate
 
 echo
 echo "artifacts: $OUT"
-echo "next: gemm/E1G_RUNBOOK.md, 'reading the result'. Write the row into"
-echo "E1G_RESULTS.md before the pod's details are only in this scrollback."
+if [ "$PAYLOAD" = "phase8" ]; then
+    echo "the column:  $E1_DEST"
+    echo "$E1_DEST" > "$OUT/e1_dir.txt"
+    echo "next: gemm/E1G_RUNBOOK.md, 'the phase8 payload'. The verdict is"
+    echo "tools/e3_round_judge.sh and it is recorded in E3_RESULTS.md, not"
+    echo "in E1G_RESULTS.md -- one round per entry, never appended to."
+else
+    echo "next: gemm/E1G_RUNBOOK.md, 'reading the result'. Write the row into"
+    echo "E1G_RESULTS.md before the pod's details are only in this scrollback."
+fi
 [ "$RED" = "0" ] || exit 1
 exit 0

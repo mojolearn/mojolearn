@@ -6,12 +6,21 @@ rode E-series leg 11 (phase 8 of `tools/e1_bootstrap.sh`, via
 `tools/e2_remote_leg.sh` on DigitalOcean, commit 144aa5b): the IDENTICAL
 card is bit-identical Apple M4 <-> NVIDIA H100 and Apple M4 <-> AMD MI325X,
 60 stages each, judged by `tools/e3_round_judge.sh` section 7 (E3 round 11).
-`tools/gemm_remote_leg.sh` itself has still never run (only `sh -n`): no
-RunPod pod has ever been created by it. It remains the procedure for any
-FUTURE vendor or architecture column (a second NVIDIA architecture, a
-consumer AMD part) and for re-certifying after a profile change; RunPod
-access requires Andrew to authenticate. When it runs, record the result
-directory and the verdict -- do not append to it.
+**No RunPod pod has ever been created by `tools/gemm_remote_leg.sh`.** Its
+dry run does run, and passes, on every commit; everything below the create
+call is unexercised. It remains the procedure for any FUTURE vendor or
+architecture column (a second NVIDIA architecture, a consumer AMD part) and
+for re-certifying after a profile change; RunPod access requires Andrew to
+authenticate. When it runs, record the result directory and the verdict --
+do not append to it.
+
+**AND IT NOW CARRIES THE WHOLE LIBRARY, NOT JUST THIS LANE.** DEVIATION 536,
+2026-08-24: `--payload phase8` runs phase 8 of `tools/e1_bootstrap.sh` on the
+rented pod -- SEVEN lanes including the new `mamba` one -- and brings the
+column home for `tools/e3_round_judge.sh` section 7. Until then the only
+script that ran phase 8 remotely was `tools/e2_remote_leg.sh`, which rents
+DigitalOcean droplets and cannot be used by this lane. See **The phase8
+payload** below; the safety path is the same one, unchanged, for both.
 
 DEVIATION 536. The operator's document for `tools/gemm_remote_leg.sh`.
 `E1_RUNBOOK.md` is the sibling for the tree-ensemble and unsupervised legs
@@ -27,6 +36,13 @@ Everything else this lane needs is finished on one desk. The contract, both
 oracles, the device kernel, its sabotage gates, the column sweep and the
 price harness all run on the Mac. **The three-vendor run is the only thing
 left in this lane that a Mac cannot answer.**
+
+The `phase8` payload's claim is the same sentence with a wider subject: that
+every lane phase 8 carries -- gemm, cd, kde, linkage, svm, metrics and mamba
+-- produces a byte-identical card on all three vendors at one commit. It is
+not this leg's verdict to give; `tools/e3_round_judge.sh` section 7 gives it,
+from the artifacts, which is why this leg's whole job there is to get the
+cards home intact, attributed and mode-witnessed.
 
 ---
 
@@ -72,7 +88,9 @@ must never be quoted as a cross-vendor result.
   key file inside the checkout is refused by name.
 - **Neither lane publishes timing while the other has a box up.** Nothing in
   this leg is a timing number anyway.
-- Artifacts land in `bench/results/e1g/<stamp>-<vendor>/`.
+- Artifacts land in `bench/results/e1g/<stamp>-<vendor>/`, and for
+  `--payload phase8` in `bench/results/e1g/<stamp>-<vendor>-phase8/` plus the
+  fetched column at `bench/results/e1/<stamp>-runpod-<vendor>/`.
 
 ---
 
@@ -89,19 +107,30 @@ Run these on the Mac. Every one of them is a defect found for nothing.
 A machine that fails its own gates teaches nothing when diffed against
 another machine, so a red here is fixed before a box is created.
 
+**The phase8 payload's free work is a different list**, and the largest item
+on it is the Apple column itself: `bash tools/e1_bootstrap.sh` on this Mac,
+at the commit the leg will ship. Without it the leg refuses to rent (`BLOCK
+L1`). See **The phase8 payload** below.
+
 ---
 
 ## Phase 1 — the dry run, which is the default
 
     tools/gemm_remote_leg.sh nvidia
     tools/gemm_remote_leg.sh amd
+    tools/gemm_remote_leg.sh nvidia --payload phase8
+    tools/gemm_remote_leg.sh amd --payload phase8
 
 **Nothing is rented.** `--rent` plus a key in the environment are both
 required, and there is an interlock (`MOJOLEARN_GEMM_LEG_REHEARSAL`) that
 aborts any paid call reached from inside a rehearsal.
 
-The dry run generates the Apple reference card for real and then executes
-every non-paid path in the leg. **That first step takes as long as it takes**
+**Under `--payload phase8` the dry run builds NOTHING on this Mac**: that
+payload's reference is an Apple bootstrap directory that already exists, so
+the dry run checks for one (`L1`) and goes straight to the plumbing. Under
+the default gemm payload it generates the Apple reference card for real and
+then executes every non-paid path in the leg. **That first step takes as long
+as it takes**
 -- it is a device build behind `tools/with_build_lock.sh`, which four
 sessions share, and it has been measured queued for more than ten minutes
 behind three other agents' builds. Pass `--local-card <path>` to reuse a card
@@ -124,8 +153,10 @@ scars from guard bugs found only by running the guard. What it checks:
 | E3-E4 | a card the differ CANNOT PARSE is reported as unreadable rather than as a divergence, and a block-count mismatch is named rather than read as one |
 | F1-F2 | the remote body substitutes cleanly, passes `sh -n` (and `dash -n` where available), carries no bashism, and the leftover-placeholder detector is proven against a planted `@LEFTOVER@` |
 | K1-K5 | key hygiene: mode 600, outside the repo, not tracked, present in the curl config and absent from curl's argv, and a `ps` detector proven against a planted key |
-| L1 | the Apple reference card is a real measurement and not the synthetic placeholder the dry run falls back to when the local device arm fails |
-| G1-G3 | `git archive` extracts and hashes, contains the kernel, and the tree is clean |
+| A5-A7 | the payload is refused by name when it is not `gemm` or `phase8`, and `--column-sweep` and `--local-card` are refused UNDER phase8 rather than silently ignored |
+| P1-P9 | phase8 only: the lane list is read out of the judge rather than copied; the fetched directory's name resolves through the judge's OWN `label_of`; a lane reporting `[IDENTICAL]` is accepted, one reporting `[FAST]` is CONTAMINATED, one with no banner is UNWITNESSED and one with no card is named; a column with no `lanes/` at all is caught; and a remote body that stopped running `tools/e1_bootstrap.sh` or stopped pinning the mamba shape is refused BY NAME |
+| L1 | gemm: the Apple reference card is a real measurement and not the synthetic placeholder the dry run falls back to when the local device arm fails. phase8: an Apple COLUMN exists at this commit |
+| G1-G3 | `git archive` extracts and hashes, contains everything THIS payload runs, and the tree is clean |
 
 **Two kinds of red, and they mean different things.**
 
@@ -204,7 +235,171 @@ extension is a decision**:
 
 ---
 
-## Reading the result
+## The phase8 payload — the whole library, on the same guards
+
+    tools/gemm_remote_leg.sh nvidia --payload phase8                       # DRY RUN
+    tools/gemm_remote_leg.sh nvidia --payload phase8 --rent --minutes 60   # RENTS
+    tools/gemm_remote_leg.sh amd    --payload phase8 --rent --minutes 60   # RENTS
+
+**Why it exists.** The cross-vendor question this lane is asked now is not
+one card. Phase 8 of `tools/e1_bootstrap.sh` carries SEVEN lanes -- gemm, cd,
+kde, linkage, svm, metrics and **mamba** -- in both modes, cards and checks,
+and `tools/e3_round_judge.sh` section 7 is what judges them. Before DEVIATION
+536's second payload the only script that ran phase 8 on a rented box was
+`tools/e2_remote_leg.sh`, which is DigitalOcean-only, and this lane rents on
+RunPod. Everything in the safety story above is shared, unchanged: the two
+free pre-flight GETs, arm-before-any-work with TERMINATE on refusal,
+`--ready-timeout`, the key on stdin into a 0600 file and the `grep -F -f`
+`ps` check, `git archive` at a pinned sha with `source_sha256` at both ends,
+terminate-verify-and-print-the-lease, one vendor per leg, and the two kinds
+of red.
+
+**What runs on the box is `tools/e1_bootstrap.sh`, unmodified.** Not a copy
+of phase 8. A copy would be a second lane list to keep in step with the
+bootstrap and the judge, and on the day those two gained `mamba`
+(2026-08-23) the copy would have gone on producing a green six-lane leg with
+the new lane silently absent. The dry run's P1 reads the lane list out of
+`tools/e3_round_judge.sh` itself, and P8 proves the leg refuses to ship a
+body that stopped calling the bootstrap.
+
+**The price of that choice is phases 0-7.** Measured on DigitalOcean at
+commit `144aa5b` (2026-08-23, E3 round 11), the whole bootstrap ran 27
+minutes on the H100 and 18 minutes on the MI325X -- on images that ALREADY
+HAD PIXI (their `=== pixi ===` step took 3 seconds). A cold `pixi install` on
+a stock RunPod image is unmeasured and is the main risk to the one-hour cap,
+and phase 8 itself was 6 and 4 minutes of that WITHOUT the mamba lane, which
+adds two more compiles. So the payload bounds its own work IN CODE the way
+the ready wait does: `--work-timeout` (default: the lease minus a 600s
+reserve) stops the bootstrap with time left to FETCH. **A leg that runs out
+of hour then comes home with the lanes that finished, instead of being killed
+by its own watchdog holding every card.** `bootstrap_exit=124` in
+`remote/leg.txt` is that timeout firing and the leg says so by name.
+
+**The mamba lane, twice, because both surprise people.**
+
+- **Its FAST arm has never been built anywhere.** A
+  `PHASE8-FINDING: mamba [fast]` line is EXPECTED, is information, and is not
+  an abort -- `tools/e1_bootstrap.sh` says so at the lane itself. The leg
+  prints every phase-8 finding and does not go red for any of them.
+- **Its shape must not be widened on a rented box.** `mamba_check.mojo` reads
+  `MOJOLEARN_MAMBA_CHECK_B` / `_L` / `_DM` (defaults B=1, L=4, d_model=8) and
+  every shape is another compile inside the lease. The remote body UNSETS all
+  three rather than assuming the pod's environment is empty, and P9 refuses a
+  body that stopped doing it.
+
+### The Apple column, and why a missing one is a BLOCK
+
+The reference for this payload is not a card, it is a whole Apple bootstrap
+directory: the judge diffs `<apple>/lanes/<lane>.identical.card` against the
+box's, and its section 1 refuses the round outright unless every column
+records the SAME commit. So the leg looks for the newest directory under
+`bench/results/e1/` that has a `lanes/` directory AND `commit.txt` equal to
+the commit it is about to ship, and **refuses to rent when there is none**
+(`BLOCK L1`; `--rent` dies before the create call). Make it here, for
+nothing:
+
+    bash tools/e1_bootstrap.sh          # on this Mac, at this commit
+
+or name an existing one with `--apple-dir <dir>`, which is still checked for
+the commit rather than trusted.
+
+**As of 2026-08-24 there is no such directory in this checkout.** The newest
+Mac column is `bench/results/e1/2026-08-23_112023-MacBook-Air-1-terrabyte`
+and it has no `lanes/`; round 11's Apple column is not in the tree. The
+`mamba` lane is newer than round 11 in any case, so a fresh Apple column is
+owed before either box column means anything.
+
+### Two things the bootstrap cannot do on this box, and what the leg does
+
+- **`commit.txt` would be EMPTY.** The bootstrap's provenance step is
+  `git rev-parse HEAD | tee commit.txt` and this leg ships a `git archive`,
+  so the pod has no `.git` at all -- the same failure as the AMD leg whose
+  `commit.txt` read "unknown", and the judge's section 1 would read the
+  column as MISSING. The leg rewrites that file after the fetch from the sha
+  it PINNED, and writes `commit_provenance.txt` beside it saying so and
+  quoting both ends' `source_sha256`. A file that looks like git's output and
+  is not has to say which it is.
+- **The directory name would be a hex id.** The judge labels a column from
+  the BASENAME (`label_of`: `*-nv*` is NVIDIA, `*-amd*` is AMD), and a RunPod
+  container's hostname is hex. The leg composes the destination itself,
+  `bench/results/e1/<stamp>-runpod-<vendor>`, and the dry run's P2 asks the
+  judge's own `label_of` what it makes of that name.
+  (`tools/e2_remote_leg.sh` gets this for free: its droplets are NAMED
+  `mojolearn-e2-nv` / `-amd`, so `hostname -s` already carries it.)
+
+### The mode read-back is PER LANE, and two lanes do not answer
+
+The leg reads each lane's mode back out of the run itself, accepting the two
+spellings `tools/e1_bootstrap.sh`'s own read-back accepts (`[IDENTICAL]` and
+`mode IDENTICAL`), from the card first and then the log. Three outcomes:
+
+- `[IDENTICAL]` -- the witness this payload wants.
+- `[FAST]` on an identical card -- **CONTAMINATED, the leg goes red**, and
+  that card must not be judged. It is the same defect DEVIATION 514 recorded
+  three times in one day.
+- no banner at all -- **UNWITNESSED**, printed by name and counted, and NOT
+  read as a pass. **Measured on leg 11: `linkage` and `mamba` are both like
+  this** -- neither driver prints a mode line, so nothing in their own output
+  says which arithmetic compiled them. The only evidence for those two is
+  that the other lanes in the same loop witnessed IDENTICAL, which is weaker
+  than a banner of their own and must never be quoted as one. **The fix
+  belongs to those two lanes: print the mode.** Making an absent witness
+  fatal here would instead paint every leg red for ever.
+
+### What the phase8 leg does, in the order it enforces
+
+Steps 1-6 and 10 are the shared ones above, unchanged. Only these differ:
+
+7. **`bash tools/e1_bootstrap.sh`**, under `timeout`, bounded by
+   `--work-timeout`, with the mamba shape variables unset. `pixi` is
+   installed first if the image has none.
+8. **Fetch twice.** First `/root/gemm_leg_out` (the leg's own record: the
+   source hash, the gpu, the bootstrap console, the findings), then the
+   bootstrap directory itself into `bench/results/e1/<stamp>-runpod-<vendor>`
+   -- checked by RESULT rather than by the pipeline's status, which is the
+   remote tar's and not the local one's. Then `commit.txt` is rewritten and
+   every lane's mode is read back.
+9. **NO DIFF HERE.** This leg does not judge phase-8 cards. It prints the
+   judge command:
+
+       bash tools/e3_round_judge.sh <apple dir> <this column> --write
+
+   Run both vendors' legs first and judge all three columns in ONE
+   invocation: the judge takes `<mac> <nv> [<amd>]` and one invocation is one
+   round.
+
+### Reading a phase8 result
+
+`bench/results/e1g/<stamp>-<vendor>-phase8/` holds the leg's own record --
+`create_request.json`, `create_response.json`, `pod_id.txt`, `arm.log`,
+`lease.txt`, `key_in_ps.txt`, `teardown.txt`, `remote_body.sh`,
+`remote_console.log`, `source_sha256_local.txt`, `e1_dir.txt` -- exactly as
+the gemm payload does, plus `remote/`:
+
+| file | what it means |
+|---|---|
+| `remote/leg.txt` | `bootstrap_exit` (124 = the work timeout fired), `e1dir` and `e1dir_source`, the card counts, the findings count |
+| `remote/bootstrap_console.log` | the bootstrap's own stdout, which is where a run that never wrote a directory explains itself |
+| `remote/source_sha256.txt` | the box's half of the commit-parity evidence |
+| `remote/lanes_listing.txt`, `remote/phase8_findings.txt` | what phase 8 wrote and what it found, recorded on the box so they survive a failed fetch of the big directory |
+| `remote/gpu.txt` | what silicon actually answered |
+
+and the column itself is `bench/results/e1/<stamp>-runpod-<vendor>/`, which
+is an ordinary bootstrap directory (`bootstrap.log`, `lanes/`, `e1u/`,
+`e2u/`, `e2_cells.json`, ...) plus the leg's `commit.txt` and
+`commit_provenance.txt`.
+
+**Record a phase8 leg in `E3_RESULTS.md`, as a round, from the judge's
+output** -- not in `E1G_RESULTS.md`, which is this lane's one-card ledger.
+One round per entry, never appended to. Stage explicitly:
+
+    git add bench/results/e1/<stamp>-runpod-<vendor> \
+            bench/results/e1g/<stamp>-<vendor>-phase8 E3_RESULTS.md
+    git show --stat        # READ IT before pushing
+
+---
+
+## Reading the result (the gemm payload)
 
 `bench/results/e1g/<stamp>-<vendor>/`
 
@@ -407,7 +602,7 @@ inside it, the console is the ground truth.
 
 ---
 
-## Recording the result
+## Recording the result (the gemm payload; phase8 goes to `E3_RESULTS.md`)
 
 Write `E1G_RESULTS.md` in the repository root, modelled on `E1U_RESULTS.md`
 (86 stages, 0 divergences, Apple vs a real MI300X -- that is the shape of the
