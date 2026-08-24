@@ -147,6 +147,7 @@ scars from guard bugs found only by running the guard. What it checks:
 | A1-A4 | argument validation, refusals by name, the one-hour hard cap, `--rent` without a key |
 | B1 | the interlock: a rehearsal child cannot reach the create call |
 | C1-C3 | `tools/runpod_guard.sh` `arm`, `check` and `reap` refusal paths, run for real against no pod |
+| C5-C11 | the guard's two closed defects, proved against no pod: `reap --force` with no id is refused while `--force --all` is accepted; an unknown option and two pod ids are refused by name; a pod id SCOPES the reap while `--all` still takes everything; a plain reap takes only the expired lease; a truncated lease is skipped rather than inheriting the previous pod; and stub `ssh` and `curl` prove the key travels on stdin and into a 0600 config and appears in NO argv on either machine |
 | C4 | the leg turns the guard's refusal into a refusal. This is the check that found the bug where `arm ... | sed` reported SED's exit status, so a refusal read as a successful arm |
 | D1-D5 | the contamination guard, including a `[FAST]` banner, a missing banner, a missing log and a missing card, plus an `[IDENTICAL]` banner that must be ACCEPTED so the guard is not just always-red |
 | E1-E2 | the differ, both outcomes: an identical synthetic remote card, then one with a planted hash flip that must be caught AND named |
@@ -590,9 +591,10 @@ removes its lease file, then **verifies by asking the API** -- because "the
 DELETE returned 200" and "the pod is gone" are different claims and only the
 second one stops the bill.
 
-It deliberately does not call `tools/runpod_guard.sh reap --force <pod-id>`.
-See the last section: that helper ignores the pod argument and reaps every
-lease it can see.
+`tools/runpod_guard.sh reap --force <pod-id>` is targeted too since
+2026-08-24, and it will terminate a pod that has no lease file at all. The leg
+keeps its own DELETE because it then ASKS THE API whether the pod is gone,
+which the guard does not do.
 
 If the leg died between create and arm, the pod exists, is billing, and has
 **no watchdog at all** -- that is the one window where the lease cannot save
@@ -619,68 +621,67 @@ sessions share it:
 
 ---
 
-## Two changes `tools/runpod_guard.sh` needs, and why this lane did not make them
+## What `tools/runpod_guard.sh` does about the two things this leg leans on
 
-That file belongs to the identity / E2 lane and this lane may not edit it.
-Both of these were found by reading it against the leg that calls it.
+Both were defects in that file, both were found by reading it against the leg
+that calls it, and both were CLOSED on 2026-08-24 (commit in `E3_RESULTS.md`'s
+round for this leg). They are recorded here because the leg's behavior depends
+on them and an operator reading a terminate message needs to know which
+version they are on.
 
-### 1. `reap --force <pod-id>` ignores the pod id and reaps EVERYTHING
+### 1. `reap --force <pod-id>` terminates THAT POD
 
-`cmd_reap` shifts `--force` off, which shifts the pod argument off with it,
-and the loop that follows terminates every `*.lease` in the lease directory:
+It used to terminate every lease in the directory: `cmd_reap` shifted
+`--force` off, which shifted the pod argument off with it. So the form that
+READ like a targeted terminate was a terminate-everything -- harmless under
+this lane's one-box-at-a-time discipline and a way to destroy another lane's
+box on the first day two are up. The forms now are:
 
-    cmd_reap() {
-        force=""
-        if [ "$1" = "--force" ]; then force="1"; shift; fi
-        ...
-        for f in "$LEASES"/*.lease; do ... if [ -n "$force" ] || expired; then
-            curl -X DELETE .../$pod
+    tools/runpod_guard.sh reap                    every EXPIRED lease
+    tools/runpod_guard.sh reap <pod-id>           that one, if EXPIRED
+    tools/runpod_guard.sh reap --force <pod-id>   that one, NOW
+    tools/runpod_guard.sh reap --force --all      every lease, NOW
+    tools/runpod_guard.sh reap --dry-run ...      print the selection only
 
-So `reap --force <pod-id>` READS like a targeted terminate and is a
-reap-everything. It is harmless under a one-box-at-a-time discipline and it
-is exactly the kind of gap that stays harmless until the day two boxes are
-up. **The change**: accept an optional pod id after `--force` and, when one
-is given, terminate only that lease. `tools/gemm_remote_leg.sh` works around
-it today by issuing the targeted DELETE itself and removing that pod's lease
-file, so `check` and `list` stay honest afterwards.
+`reap --force` with no pod id is REFUSED, because the destructive form has to
+be asked for by the name `--all`. A pod id that matches no lease file is not
+silence any more either: with `--force` it is terminated by id and the leg
+says the pod had no lease, which is exactly the orphan case (created, never
+armed, still billing).
 
-### 2. The key is in the remote argv for the length of an `arm`
+Two smaller things went with it, both on the same destructive loop: the lease
+variables are cleared before each `.`-source, so a truncated lease file can no
+longer inherit the previous iteration's `pod` and get the WRONG box
+terminated; and the DELETE's success no longer reports FAILED when there is no
+lease file to remove.
 
-**The defect.** `cmd_arm` passes the key to the pod inside the ssh command
-string:
+`tools/gemm_remote_leg.sh` still issues its own targeted DELETE rather than
+calling the guard, and that is now a choice about VERIFICATION rather than a
+workaround: the leg asks the API afterwards whether the pod is gone, which the
+guard does not do.
 
-    RUNPOD_API_KEY='$RUNPOD_API_KEY' nohup /tmp/mojolearn-lease.sh ...
+### 2. The key is in no argv, on either machine
 
-The watchdog itself is clean -- the key is in its environment, not its argv,
-which is what the surrounding comment claims and it is true of that process.
-But sshd runs the whole command string through `sh -c`, so **for the second
-or so that `arm` runs, the key is in the argv of that remote shell** and
-visible to anything on the box calling `ps`. That is the same class of defect
-as the leak the guard's own history records.
+`cmd_arm` used to interpolate `RUNPOD_API_KEY='...'` into the ssh command
+string. The watchdog itself was clean -- the key was in its environment, not
+its argv -- but sshd runs the whole command string through `sh -c`, so for the
+second or so that `arm` ran the key sat in the argv of that remote shell, and
+in `ssh`'s own argv on this Mac. Two process lists, one interpolation.
 
-**The change.** Send the key on ssh STDIN into a 0600 file and have the
-watchdog read it, instead of interpolating it into the command string. In
-`cmd_arm`, ship the key with
+The credential now goes over ssh STDIN into a 0600 `/tmp/mojolearn-lease.curlrc`
+on the pod, before any command string is built, and the watchdog authenticates
+with `curl -K`. Not `-H "Authorization: Bearer $(cat ...)"`, which would move
+the leak into curl's argv on the pod at the moment the lease fires. The
+guard's own `reap` was the same defect at a second site and got the same fix.
 
-    printf '%s' "$RUNPOD_API_KEY" | pod_ssh "$target" \
-        'umask 077; cat > /tmp/mojolearn-lease.key'
+**Because the leak is closed, the leg now ASSERTS the residue is absent
+instead of recording it**: `KEY_VISIBLE_IN_PS` in `key_in_ps.txt` makes the
+leg exit non-zero and asks for the key to be rotated. It is kept separate from
+the soundness red, because a credential exposure says nothing about whether
+the cards can be believed.
 
-as a separate call before the heredoc, and drop the `RUNPOD_API_KEY='...'`
-prefix from the launch line so it becomes a plain
-`nohup /tmp/mojolearn-lease.sh`. The `arm` heredoc is already quoted with
-`<<'WATCHDOG'`, so nothing else in it moves.
-
-**Do not substitute `-H "Authorization: Bearer $(cat /tmp/mojolearn-lease.key)"`
-in the watchdog.** That moves the leak rather than closing it -- the key would
-then be in `curl`'s argv on the pod at fire time. Write a 0600 curl config
-beside the key and use `curl -K`, which is what `tools/gemm_remote_leg.sh`
-does for the same reason on this end:
-
-    header = "Authorization: Bearer <key>"
-
-Until that lands, `tools/gemm_remote_leg.sh` MEASURES the residue rather than
-asserting it is absent: after arming, it dumps the pod's process list and
-searches it with `grep -F -f <keyfile>`, and `key_in_ps.txt` in every result
-directory says `KEY_NOT_IN_PS` or `KEY_VISIBLE_IN_PS`. **Verify the claim, do
-not assert it** -- a previous version of the guard leaked a key into `ps`
-while carrying a comment in the same edit saying that it did not.
+The dry run proves all of this without a pod: C5-C11 run the real guard
+against a fabricated lease directory, a `--dry-run` reap that calls nothing,
+and stub `ssh` and `curl` that record their own argv. Each has an ACCEPT case
+beside its refusal, and each was verified to FAIL when the property it checks
+is deliberately broken.

@@ -172,13 +172,17 @@
 #     command line. After arming, the pod's own `ps` output is dumped to a
 #     file and searched with `grep -F -f <keyfile>` -- the pattern comes from
 #     a FILE, so the check itself does not leak what it is looking for.
-#   * KNOWN AND UNFIXED HERE: `tools/runpod_guard.sh arm` passes the key to
-#     the pod inside the ssh command string, so for the ~1 second that arm
-#     runs the key is in the argv of the remote `sh -c` that sshd spawns.
-#     That file belongs to the identity lane and this lane may not edit it.
-#     The exact change is written up in this leg's report and in
-#     `gemm/E1G_RUNBOOK.md`; the post-arm check below is what makes the
-#     residue visible rather than assumed.
+#   * `tools/runpod_guard.sh arm` used to pass the key to the pod inside the
+#     ssh command string, so for the ~1 second that arm ran it was in the
+#     argv of the remote `sh -c` that sshd spawns AND in ssh's own argv
+#     here. CLOSED 2026-08-24: the guard sends its credential on ssh stdin
+#     into a 0600 curl config and the watchdog uses `curl -K`. The dry run's
+#     C10 proves it with a stub ssh that records its own argv, and C11 does
+#     the same for the guard's `reap`.
+#   * BECAUSE THAT IS CLOSED, THE POST-ARM CHECK IS NOW AN ASSERTION. A
+#     `KEY_VISIBLE_IN_PS` result used to be an expected residue to record;
+#     it is now an unexplained exposure, and this leg exits non-zero for it
+#     and asks for the key to be rotated.
 #
 # HOW THE SOURCE GETS ONTO THE BOX, AND WHY IT IS `git archive`
 # =============================================================
@@ -366,6 +370,7 @@ POD_ID=""
 POD_NAME=""
 POD_TERMINATED=0
 FETCH_RED=0
+KEY_RED=0
 ARMED=0
 TMPD=""
 CURLRC=""
@@ -582,17 +587,18 @@ leg_verify_terminated() {
     return 1
 }
 
-# TARGETED, AND DELIBERATELY NOT `runpod_guard.sh reap --force <pod>`.
+# TARGETED, AND STILL NOT `runpod_guard.sh reap --force <pod>` -- but for a
+# different reason than when this was written.
 #
-# THAT HELPER IGNORES ITS POD ARGUMENT. `cmd_reap` shifts `--force` off and
-# then shifts the pod id off with it, and the loop that follows terminates
-# EVERY lease file in the lease directory. So `reap --force <pod-id>` READS
-# like a targeted terminate and is a reap-everything -- harmless under this
-# lane's one-box-at-a-time discipline, and exactly the kind of gap that is
-# only harmless until the day two boxes are up. This leg deletes the pod it
-# created, by id, and then removes that pod's lease file so `check` and
-# `list` are still telling the truth afterwards. The exact change the guard
-# needs is in gemm/E1G_RUNBOOK.md; that file is the identity lane's.
+# It used to be a workaround: that helper shifted `--force` off and shifted
+# the pod id off WITH it, so `reap --force <pod-id>` read like a targeted
+# terminate and was a reap-everything. CLOSED 2026-08-24 -- the pod id scopes
+# it now, `--force` with no id is refused, and the reap-everything form is
+# `--force --all`. What is left is a real difference: this leg DELETEs the pod
+# it created, by id, then removes that pod's lease file so `check` and `list`
+# stay honest, and then ASKS THE API whether the pod is actually gone. The
+# guard does not verify, and "the DELETE returned 200" and "the pod is gone"
+# are different claims.
 leg_terminate() {
     [ -n "$POD_ID" ] || return 0
     [ "$POD_TERMINATED" = "1" ] && return 0
@@ -1824,6 +1830,156 @@ leg_rehearse() {
         rbad "C4 leg_arm propagates the guard's refusal" "IT DID NOT. Work would start on an unguarded box. got exit $_rc"
     fi
 
+    # C5-C11 ARE THE GUARD'S TWO CLOSED DEFECTS, PROVED. Both lived on the
+    # paid path, so both are exercised here against no pod and no API: a
+    # fabricated lease directory (MOJOLEARN_LEASE_DIR), a `--dry-run` reap
+    # that calls nothing, and stub `ssh` / `curl` that record their own argv
+    # instead of connecting. Every one of them has an ACCEPT case beside the
+    # refusal, because a guard that refuses everything passes a test that
+    # only feeds it the bad case.
+    _cfake="rpa_FAKE_KEY_FOR_REHEARSAL_0000"
+    ( umask 077; printf '%s' "$_cfake" > "$TMPD/cfake.key" )
+
+    _out=$( ( unset RUNPOD_API_KEY; tools/runpod_guard.sh reap --force 2>&1 ) ) && _rc=0 || _rc=$?
+    if [ "$_rc" = "2" ] && echo "$_out" | grep -q "would terminate EVERY"; then
+        rok "C5 'reap --force' with no pod id is REFUSED (it used to reap every lease)"
+    else
+        rbad "C5 'reap --force' with no pod id is refused" "got exit $_rc: $_out"
+    fi
+
+    # THE ACCEPT CASE FOR C5: the same command WITH --all must get PAST the
+    # form check and die at the key gate instead. Without this, a reap that
+    # refused every invocation would pass C5.
+    _out=$( ( unset RUNPOD_API_KEY; tools/runpod_guard.sh reap --force --all 2>&1 ) ) && _rc=0 || _rc=$?
+    if [ "$_rc" = "2" ] && echo "$_out" | grep -q "reap needs RUNPOD_API_KEY"; then
+        rok "C5b 'reap --force --all' is ACCEPTED by the form check (it stops at the key)"
+    else
+        rbad "C5b the reap-everything form is still reachable by name" "got exit $_rc: $_out"
+    fi
+
+    _out=$( ( unset RUNPOD_API_KEY; tools/runpod_guard.sh reap --wat 2>&1 ) ) && _rc=0 || _rc=$?
+    _out2=$( ( unset RUNPOD_API_KEY; tools/runpod_guard.sh reap podA podB 2>&1 ) ) && _rc2=0 || _rc2=$?
+    if [ "$_rc" = "2" ] && echo "$_out" | grep -q "unknown option" \
+       && [ "$_rc2" = "2" ] && echo "$_out2" | grep -q "two pod ids"; then
+        rok "C6 reap refuses an unknown option and two pod ids, both by name"
+    else
+        rbad "C6 reap's argument validation" "unknown-option: exit $_rc; two-ids: exit $_rc2"
+    fi
+
+    # The fabricated lease directory. `gemm-dry-zbroken` sorts LAST on
+    # purpose: the inheritance bug it tests can only show when a READABLE
+    # lease was sourced before it.
+    _ld="$TMPD/leases"
+    rm -rf "$_ld"; mkdir -p "$_ld"
+    _nowe=$(date -u +%s)
+    printf "pod='gemm-dry-expired'\ntarget='-p 1 root@nowhere'\narmed_utc='x'\ndeadline_epoch=%s\nminutes=60\n" \
+        "$((_nowe - 600))" > "$_ld/gemm-dry-expired.lease"
+    printf "pod='gemm-dry-live'\ntarget='-p 2 root@nowhere'\narmed_utc='x'\ndeadline_epoch=%s\nminutes=60\n" \
+        "$((_nowe + 3600))" > "$_ld/gemm-dry-live.lease"
+    printf "# truncated lease: it names no pod and no deadline\nminutes=60\n" \
+        > "$_ld/gemm-dry-zbroken.lease"
+
+    _out=$(MOJOLEARN_LEASE_DIR="$_ld" tools/runpod_guard.sh reap --force gemm-dry-live --dry-run 2>&1) && _rc=0 || _rc=$?
+    if echo "$_out" | grep -q "WOULD TERMINATE gemm-dry-live" \
+       && ! echo "$_out" | grep -q "gemm-dry-expired"; then
+        rok "C7 'reap --force <pod-id>' terminates THAT POD AND NOTHING ELSE"
+    else
+        rbad "C7 the pod id scopes the reap" "IT DID NOT. Other lanes' boxes are in range of this command. got: $_out"
+    fi
+
+    _out=$(MOJOLEARN_LEASE_DIR="$_ld" tools/runpod_guard.sh reap --force --all --dry-run 2>&1) && _rc=0 || _rc=$?
+    if echo "$_out" | grep -q "WOULD TERMINATE gemm-dry-live" \
+       && echo "$_out" | grep -q "WOULD TERMINATE gemm-dry-expired"; then
+        rok "C7b '--force --all' still selects every lease (the scoping is not just always-one)"
+    else
+        rbad "C7b --force --all selects every lease" "got: $_out"
+    fi
+
+    _out=$(MOJOLEARN_LEASE_DIR="$_ld" tools/runpod_guard.sh reap --dry-run 2>&1) && _rc=0 || _rc=$?
+    if echo "$_out" | grep -q "WOULD TERMINATE gemm-dry-expired" \
+       && echo "$_out" | grep -q "leaving gemm-dry-live alone"; then
+        rok "C8 a plain reap takes the EXPIRED lease and leaves the live one alone"
+    else
+        rbad "C8 a plain reap is expiry-scoped" "got: $_out"
+    fi
+
+    _n=$(MOJOLEARN_LEASE_DIR="$_ld" tools/runpod_guard.sh reap --force --all --dry-run 2>&1 \
+         | grep -c 'WOULD TERMINATE gemm-dry-live' || true)
+    _out=$(MOJOLEARN_LEASE_DIR="$_ld" tools/runpod_guard.sh reap --force --all --dry-run 2>&1) && _rc=0 || _rc=$?
+    if [ "${_n:-0}" = "1" ] && echo "$_out" | grep -q "SKIPPING unreadable lease"; then
+        rok "C9 a truncated lease file is SKIPPED and does not inherit the previous pod"
+    else
+        rbad "C9 a truncated lease cannot make the reap terminate the wrong pod" "gemm-dry-live was selected ${_n:-0} time(s) and it must be exactly 1. The lease file is '.'-sourced into the loop's own shell, so an unreadable one inherits the previous iteration's pod and this loop DELETES what \$pod names."
+    fi
+
+    # C10: THE KEY DOES NOT REACH THE POD IN AN ARGV. A stub `ssh` records
+    # its own argv and its stdin and answers what the guard greps for. The
+    # guard is invoked with stdin on /dev/null so the stub's second `cat`
+    # cannot block; the credential push makes its own pipe.
+    _sd="$TMPD/stub"; rm -rf "$_sd"; mkdir -p "$_sd"
+    _rec="$TMPD/rec"; rm -rf "$_rec"; mkdir -p "$_rec"
+    {
+        echo '#!/bin/sh'
+        echo '# stub ssh for the dry run: records argv and stdin, connects to nothing.'
+        echo "printf '%s\n' \"\$@\" >> $_rec/argv.txt"
+        echo "cat >> $_rec/stdin.bin"
+        echo 'echo CREDENTIAL_ON_POD'
+        echo 'echo "WATCHDOG_ARMED pid=4242 secs=3600"'
+    } > "$_sd/ssh"
+    chmod 700 "$_sd/ssh"
+    _ld2="$TMPD/leases2"; rm -rf "$_ld2"; mkdir -p "$_ld2"
+    ( trap - EXIT
+      PATH="$_sd:$PATH"; export PATH
+      RUNPOD_API_KEY="$_cfake"; export RUNPOD_API_KEY
+      MOJOLEARN_LEASE_DIR="$_ld2"; export MOJOLEARN_LEASE_DIR
+      tools/runpod_guard.sh arm gemm-dry-armpod "-p 9 root@nowhere" 60
+    ) > "$TMPD/c10.out" 2>&1 < /dev/null || true
+    if [ ! -s "$_rec/argv.txt" ]; then
+        rbad "C10 the key never enters an ssh argv" "THE STUB RECORDED NOTHING. The check proved nothing: $(head -3 "$TMPD/c10.out")"
+    elif ! grep -q 'gemm-dry-armpod' "$_rec/argv.txt"; then
+        rbad "C10 the key never enters an ssh argv" "the recorded argv does not even name the pod, so it is not the arm's argv"
+    elif ! grep -q -F -f "$TMPD/cfake.key" "$_rec/stdin.bin" 2>/dev/null; then
+        rbad "C10 the key reaches the pod on STDIN" "IT DID NOT. Either the credential push did not run or it sent something else."
+    elif grep -q -F -f "$TMPD/cfake.key" "$_rec/argv.txt"; then
+        rbad "C10 the key never enters an ssh argv" "THE KEY IS IN THE ARM'S ARGV. Anything running ps on the pod can read it, and so can anything on this Mac."
+    else
+        rok "C10 arm: the key travels on ssh STDIN and appears in NO argv, on either machine"
+    fi
+
+    # C11: the same property for the guard's own DELETE. A stub `curl`
+    # records its argv and copies whatever `-K` pointed at, so the test can
+    # see both halves: the config carries the key, the command line does not.
+    {
+        echo '#!/bin/sh'
+        echo '# stub curl for the dry run: records argv and the -K config, calls nothing.'
+        echo "printf '%s\n' \"\$@\" >> $_rec/curl_argv.txt"
+        echo 'prev=""'
+        echo 'for a in "$@"; do'
+        echo "  if [ \"\$prev\" = \"-K\" ]; then cat \"\$a\" >> $_rec/curl_config.txt; fi"
+        echo '  prev="$a"'
+        echo 'done'
+        echo 'exit 0'
+    } > "$_sd/curl"
+    chmod 700 "$_sd/curl"
+    _ld3="$TMPD/leases3"; rm -rf "$_ld3"; mkdir -p "$_ld3"
+    printf "pod='gemm-dry-reappod'\ntarget='-p 3 root@nowhere'\narmed_utc='x'\ndeadline_epoch=%s\nminutes=60\n" \
+        "$((_nowe - 60))" > "$_ld3/gemm-dry-reappod.lease"
+    ( trap - EXIT
+      PATH="$_sd:$PATH"; export PATH
+      RUNPOD_API_KEY="$_cfake"; export RUNPOD_API_KEY
+      MOJOLEARN_LEASE_DIR="$_ld3"; export MOJOLEARN_LEASE_DIR
+      tools/runpod_guard.sh reap --force gemm-dry-reappod
+    ) > "$TMPD/c11.out" 2>&1 < /dev/null || true
+    if [ ! -s "$_rec/curl_argv.txt" ]; then
+        rbad "C11 the key never enters curl's argv" "THE STUB RECORDED NOTHING, so the check proved nothing: $(head -3 "$TMPD/c11.out")"
+    elif ! grep -q -F -f "$TMPD/cfake.key" "$_rec/curl_config.txt" 2>/dev/null; then
+        rbad "C11 the reap's curl config carries the key" "IT DOES NOT, so -K would send no auth and every terminate would 401"
+    elif grep -q -F -f "$TMPD/cfake.key" "$_rec/curl_argv.txt"; then
+        rbad "C11 the key never enters curl's argv" "THE KEY IS IN curl's COMMAND LINE on this machine"
+    else
+        rok "C11 reap: the key is in a 0600 curl config and in NO argv"
+    fi
+
     # -- D and E belong to the gemm payload: leg_require_identical and
     # leg_diff_cards are on ITS path and not on phase8's, where the mode
     # read-back is per lane (group P) and the judge does the diffing.
@@ -2391,7 +2547,13 @@ leg_arm
 echo
 echo "== step 5: the key on the pod, and where it is visible =="
 leg_key_to_pod 2>&1 | sed 's/^/    /' || true
-leg_check_key_not_in_ps || true
+# ASSERTED, NOT RECORDED. Until 2026-08-24 `tools/runpod_guard.sh arm` put
+# the key in the argv of the remote `sh -c` that sshd spawns, so this check
+# was a MEASUREMENT of a known residue and could not be a gate. That leak is
+# closed -- the guard sends its credential on stdin into a 0600 curl config
+# and the dry run's C10 proves it -- so KEY_VISIBLE_IN_PS now means something
+# is wrong that nobody knows about, and the leg goes red for it.
+leg_check_key_not_in_ps || KEY_RED=1
 
 echo
 echo "== step 6: the source =="
@@ -2430,6 +2592,13 @@ else
     RED=1
 fi
 
+if [ "$KEY_RED" = "1" ]; then
+    echo "  CREDENTIAL EXPOSURE: the key was visible in the pod's process"
+    echo "    list. That is not a claim about the cards -- they are as sound"
+    echo "    as everything else above says -- but this leg exits non-zero"
+    echo "    for it and the key must be ROTATED after this run. Read"
+    echo "    $OUT/key_in_ps.txt and find what put it there."
+fi
 if [ -f "$OUT/remote/gpu.txt" ]; then
     echo "  gpu on the box:"
     sed 's/^/    /' "$OUT/remote/gpu.txt" | head -4
@@ -2519,5 +2688,9 @@ else
     echo "next: gemm/E1G_RUNBOOK.md, 'reading the result'. Write the row into"
     echo "E1G_RESULTS.md before the pod's details are only in this scrollback."
 fi
+# The two reds are separate on purpose. RED is about whether the cards can
+# be believed; KEY_RED is about a credential. Neither one gets to hide the
+# other, and either one makes this leg exit non-zero.
 [ "$RED" = "0" ] || exit 1
+[ "$KEY_RED" = "0" ] || exit 1
 exit 0

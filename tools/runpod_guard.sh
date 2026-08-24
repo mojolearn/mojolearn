@@ -4,8 +4,15 @@
 #   tools/runpod_guard.sh arm   <pod-id> <ssh-target> [minutes]   # default 60
 #   tools/runpod_guard.sh check <pod-id>
 #   tools/runpod_guard.sh list
-#   tools/runpod_guard.sh reap                                    # needs a key
 #   tools/runpod_guard.sh extend <pod-id> <ssh-target> [minutes]
+#
+#   tools/runpod_guard.sh reap                    every EXPIRED lease
+#   tools/runpod_guard.sh reap <pod-id>           that one, if EXPIRED
+#   tools/runpod_guard.sh reap --force <pod-id>   that one, NOW
+#   tools/runpod_guard.sh reap --force --all      every lease, NOW
+#   tools/runpod_guard.sh reap --dry-run ...      print the selection only
+#                                                 (reap needs a key; --dry-run
+#                                                  does not, it calls nothing)
 #
 # WHY THIS EXISTS, AND WHY IT IS NOT A CHECKLIST ITEM
 # ---------------------------------------------------
@@ -60,6 +67,11 @@
 #     that sleeps to the deadline and then DELETEs the pod through the REST
 #     API. That survives this machine disappearing, which is the whole
 #     requirement.
+#     THE CREDENTIAL REACHES THE POD ON SSH STDIN, into a 0600 curl config
+#     at /tmp/mojolearn-lease.curlrc, and the watchdog authenticates with
+#     `curl -K`. It is in no argv on either machine at any point. That file
+#     stays on the pod for the life of the lease because the watchdog needs
+#     it; it dies with the pod.
 #   - without it, `arm` REFUSES and says the box is unguarded. Do not use a
 #     box that could not be armed; terminate it.
 #
@@ -77,8 +89,25 @@ mkdir -p "$LEASES"
 
 SSH_OPTS="-o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -o BatchMode=yes"
 
+GUARD_CURLRC=""
+
+guard_curlrc() {
+    # THE KEY GOES INTO A 0600 FILE AND NEVER INTO AN ARGV. `printf` is a
+    # SHELL BUILTIN here, so composing the line spawns no process and there
+    # is no command line for it to leak into; `curl -K` then reads the
+    # Authorization header out of the file. `-H "Authorization: Bearer $KEY"`
+    # is the spelling this replaces and it put the key in curl's own argv,
+    # readable by anything that could run `ps` while the call was in flight.
+    # tools/gemm_remote_leg.sh does exactly this at the same seam.
+    GUARD_CURLRC="${TMPDIR:-/tmp}/mojolearn-guard-$$.curlrc"
+    ( umask 077
+      printf 'header = "Authorization: Bearer %s"\nsilent\nshow-error\n' \
+          "$RUNPOD_API_KEY" > "$GUARD_CURLRC" )
+    trap 'rm -f "$GUARD_CURLRC"' EXIT INT TERM
+}
+
 usage() {
-    sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'
     exit 2
 }
 
@@ -127,10 +156,48 @@ cmd_arm() {
         exit 1
     fi
 
-    # The key goes to the pod through the ssh COMMAND'S ENVIRONMENT, not
-    # through a file and not through the argv of the watchdog, so it does
-    # not sit in `ps` output for anything else on the box to read.
+    # THE CREDENTIAL GOES OVER STDIN, INTO A 0600 CURL CONFIG, BEFORE ANY
+    # COMMAND STRING IS BUILT. It is never in an argv on either machine.
+    #
+    # What this replaces, and why it was wrong: the arm used to interpolate
+    # `RUNPOD_API_KEY='$RUNPOD_API_KEY'` into the ssh command string. The
+    # WATCHDOG was clean -- the key was in its environment, not its argv --
+    # and the comment that sat here said exactly that and was true of that
+    # process. But sshd runs the whole command string through `sh -c`, so for
+    # the second or so that arm ran THE KEY WAS IN THE ARGV OF THAT REMOTE
+    # SHELL, readable by anything on the box that could run `ps`; and `ssh`
+    # on THIS machine had the same string in its own argv. Two process lists,
+    # one interpolation. Closed 2026-08-24.
+    #
+    # `printf` is a shell BUILTIN, so composing the config spawns no process
+    # here either. The watchdog reads the header with `curl -K`. Do NOT
+    # "simplify" that to `-H "Authorization: Bearer $(cat ...)"`: that moves
+    # the leak rather than closing it, into curl's argv on the pod at the
+    # moment the lease fires.
+    printf 'header = "Authorization: Bearer %s"\nsilent\nshow-error\n' \
+        "$RUNPOD_API_KEY" \
+        | pod_ssh "$target" '
+            umask 077
+            cat > /tmp/mojolearn-lease.curlrc
+            chmod 600 /tmp/mojolearn-lease.curlrc
+            if [ -s /tmp/mojolearn-lease.curlrc ]; then echo CREDENTIAL_ON_POD; fi
+        ' > /tmp/mojolearn_cred_out 2>&1 || true
+    if ! grep -q CREDENTIAL_ON_POD /tmp/mojolearn_cred_out; then
+        echo "REFUSING: the credential did not land on $pod." >&2
+        echo "  The watchdog terminates this pod through the API and cannot" >&2
+        echo "  do it without one, so arming now would install a watchdog" >&2
+        echo "  that fires and fails -- the worst kind, because the lease" >&2
+        echo "  file would say the box is guarded." >&2
+        echo "  ssh output:" >&2
+        sed 's/^/    /' /tmp/mojolearn_cred_out >&2
+        exit 1
+    fi
+
     pod_ssh "$target" "
+        if [ ! -s /tmp/mojolearn-lease.curlrc ]; then
+            echo NO_CREDENTIAL_ON_POD
+            exit 3
+        fi
         if [ -f /tmp/mojolearn-lease.pid ]; then
             kill \"\$(cat /tmp/mojolearn-lease.pid)\" 2>/dev/null || true
         fi
@@ -146,7 +213,7 @@ sleep SECONDS_PLACEHOLDER
 for u in \"https://api.runpod.io/v2/pods/POD_PLACEHOLDER\" \
          \"https://rest.runpod.io/v1/pods/POD_PLACEHOLDER\"; do
     code=\$(curl -s -o /tmp/mojolearn-lease.body -w '%{http_code}' \
-            -X DELETE \"\$u\" -H \"Authorization: Bearer \$RUNPOD_API_KEY\")
+            -X DELETE \"\$u\" -K /tmp/mojolearn-lease.curlrc)
     echo \"\$(date -u +%FT%TZ) DELETE \$u -> \$code\" >> /tmp/mojolearn-lease.out
     case \"\$code\" in 2*) exit 0 ;; esac
 done
@@ -155,8 +222,7 @@ WATCHDOG
         sed -i \"s/SECONDS_PLACEHOLDER/$secs/g; s/POD_PLACEHOLDER/$pod/g\" \
             /tmp/mojolearn-lease.sh
         chmod 700 /tmp/mojolearn-lease.sh
-        RUNPOD_API_KEY='$RUNPOD_API_KEY' nohup /tmp/mojolearn-lease.sh \
-            >/tmp/mojolearn-lease.log 2>&1 &
+        nohup /tmp/mojolearn-lease.sh >/tmp/mojolearn-lease.log 2>&1 &
         echo \$! > /tmp/mojolearn-lease.pid
         sleep 1
         if kill -0 \"\$(cat /tmp/mojolearn-lease.pid)\" 2>/dev/null; then
@@ -164,6 +230,12 @@ WATCHDOG
         fi
     " > /tmp/mojolearn_arm_out 2>&1 || true
 
+    if grep -q NO_CREDENTIAL_ON_POD /tmp/mojolearn_arm_out; then
+        echo "REFUSING: the credential was gone from $pod by the time the" >&2
+        echo "  watchdog was installed. Something removed" >&2
+        echo "  /tmp/mojolearn-lease.curlrc between the two ssh calls." >&2
+        exit 1
+    fi
     if ! grep -q WATCHDOG_ARMED /tmp/mojolearn_arm_out; then
         echo "REFUSING: the watchdog did not come up on $pod." >&2
         echo "  A guard that silently fails to arm is worse than no guard," >&2
@@ -235,29 +307,142 @@ cmd_list() {
     [ "$found" -eq 1 ] || echo "no leases recorded in $LEASES"
 }
 
+# THE POD ID SCOPES THE REAP. Until 2026-08-24 it did not: `cmd_reap` shifted
+# `--force` off, which shifted the pod argument off WITH it, and the loop that
+# followed terminated EVERY lease in the directory. So
+# `reap --force <pod-id>` READ like a targeted terminate and was a
+# terminate-everything -- harmless under a one-box-at-a-time discipline, and a
+# way to destroy another lane's box on the first day two are up. Found by
+# reading this file against tools/gemm_remote_leg.sh, which is why that leg
+# issues its own targeted DELETE.
+#
+# The reap-everything form still exists, because ending every lease at once is
+# a real thing to want after a bad night. It has to be asked for BY NAME:
+# `reap --force --all`. `reap --force` alone is REFUSED.
+reap_one() {
+    _pod="$1"; _f="$2"
+    if [ -n "$dry" ]; then
+        if [ -n "$_f" ]; then
+            echo "WOULD TERMINATE $_pod (lease $_f)   [--dry-run: nothing was called]"
+        else
+            echo "WOULD TERMINATE $_pod (no lease file)   [--dry-run: nothing was called]"
+        fi
+        return 0
+    fi
+    echo "terminating $_pod ..."
+    # NOT `... && { echo; rm -f "$_f"; } || echo FAILED`. When $_f is empty
+    # the `rm` branch of that spelling returns non-zero and the `||` fires,
+    # so a SUCCESSFUL terminate reports FAILED. A pipeline's status is its
+    # last command's and an && chain's is the last thing that ran.
+    if curl -fsS -X DELETE "https://api.runpod.io/v2/pods/$_pod" \
+            -K "$GUARD_CURLRC" >/dev/null; then
+        echo "  terminated"
+        if [ -n "$_f" ]; then rm -f "$_f"; fi
+    else
+        echo "  FAILED -- terminate $_pod by hand in the console"
+    fi
+}
+
 cmd_reap() {
-    force=""
-    if [ "$1" = "--force" ]; then force="1"; shift; fi
-    if [ -z "${RUNPOD_API_KEY:-}" ]; then
+    force=""; all=""; only=""; dry=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --force)   force="1" ;;
+            --all)     all="1" ;;
+            --dry-run) dry="1" ;;
+            -*)
+                echo "reap: unknown option '$1'." >&2
+                echo "  reap                    every EXPIRED lease" >&2
+                echo "  reap <pod-id>           that one, if EXPIRED" >&2
+                echo "  reap --force <pod-id>   that one, NOW" >&2
+                echo "  reap --force --all      every lease, NOW" >&2
+                echo "  reap --dry-run ...      print the selection, call nothing" >&2
+                exit 2 ;;
+            *)
+                if [ -n "$only" ]; then
+                    echo "reap: two pod ids given ('$only' then '$1')." >&2
+                    echo "  One reap is one pod. Run it twice, or say --all." >&2
+                    exit 2
+                fi
+                only="$1" ;;
+        esac
+        shift
+    done
+
+    if [ -n "$all" ] && [ -n "$only" ]; then
+        echo "reap: --all and a pod id ('$only') contradict each other." >&2
+        echo "  --all is every lease; a pod id is one. Pick one of them." >&2
+        exit 2
+    fi
+    if [ -n "$force" ] && [ -z "$only" ] && [ -z "$all" ]; then
+        echo "REFUSING: 'reap --force' with no pod id would terminate EVERY" >&2
+        echo "  lease in $LEASES, expired or not -- including another lane's" >&2
+        echo "  box, which is not yours to end. It reads like a targeted" >&2
+        echo "  terminate, so it is refused rather than obeyed." >&2
+        echo "    tools/runpod_guard.sh reap --force <pod-id>   one, now" >&2
+        echo "    tools/runpod_guard.sh reap --force --all      all, now" >&2
+        echo "    tools/runpod_guard.sh reap --force --all --dry-run" >&2
+        echo "                                                  see it first" >&2
+        exit 2
+    fi
+
+    # --dry-run calls nothing, so it needs no credential. Every other form
+    # does, and it is checked here rather than at the curl so that a keyless
+    # reap costs nothing and touches no lease file.
+    if [ -z "$dry" ] && [ -z "${RUNPOD_API_KEY:-}" ]; then
         echo "reap needs RUNPOD_API_KEY in the environment." >&2
         echo "  This is the SECONDARY layer -- it reclaims the DISK of a pod" >&2
         echo "  whose container the on-pod watchdog already exited. GPU" >&2
         echo "  billing has already stopped without it." >&2
         exit 2
     fi
+    if [ -z "$dry" ]; then guard_curlrc; fi
+
+    matched=0
     for f in "$LEASES"/*.lease; do
         [ -e "$f" ] || continue
+        # EVERY VARIABLE IS CLEARED BEFORE THE SOURCE. This file is
+        # `.`-sourced into THIS shell (the loop needs $pod afterwards), so a
+        # lease that fails to set `pod` would otherwise inherit the PREVIOUS
+        # iteration's value -- and this loop DELETES what $pod names. A
+        # truncated lease file would have terminated the pod before it.
+        pod=""; deadline_epoch=""; target=""; minutes=""
         # shellcheck disable=SC1090
         . "$f"
+        if [ -z "$pod" ] || [ -z "$deadline_epoch" ]; then
+            echo "SKIPPING unreadable lease $f (it names no pod or no deadline)"
+            continue
+        fi
+        if [ -n "$only" ] && [ "$pod" != "$only" ]; then
+            continue
+        fi
+        if [ -n "$only" ]; then matched=1; fi
         now=$(date -u +%s)
         if [ -n "$force" ] || [ "$now" -ge "$deadline_epoch" ]; then
-            echo "terminating $pod ..."
-            curl -fsS -X DELETE "https://api.runpod.io/v2/pods/$pod" \
-                -H "Authorization: Bearer $RUNPOD_API_KEY" >/dev/null \
-                && { echo "  terminated"; rm -f "$f"; } \
-                || echo "  FAILED -- terminate $pod by hand in the console"
+            reap_one "$pod" "$f"
+        else
+            echo "leaving $pod alone: $(( (deadline_epoch - now) / 60 )) minute(s) left"
+            echo "  (--force ends an unexpired lease early; it is a decision)"
         fi
     done
+
+    if [ -n "$only" ] && [ "$matched" = "0" ]; then
+        # A NAMED POD WITH NO LEASE FILE IS THE ORPHAN CASE ITSELF: a box
+        # that was created and never armed has no lease here and is exactly
+        # the one that is still billing. Silence would be the worst answer,
+        # so say so, and terminate it when it was named with --force.
+        if [ -n "$force" ]; then
+            echo "no lease file for $only -- terminating it BY ID anyway,"
+            echo "  because you named it. A pod with no lease is the orphan"
+            echo "  case: created, never armed, still billing."
+            reap_one "$only" ""
+        else
+            echo "no lease file for $only. It may never have been armed." >&2
+            echo "  If it exists and is billing, end it now:" >&2
+            echo "    tools/runpod_guard.sh reap --force $only" >&2
+            exit 1
+        fi
+    fi
 }
 
 case "${1:-}" in
