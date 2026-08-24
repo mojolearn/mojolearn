@@ -20,6 +20,22 @@ design -- that is the pin -- and `hw_eval.mojo`'s header names it.
 from std.math import fma, sqrt
 
 from holtwinters.ported.holtwinters.internal.hw_decompose import host_filter, host_r1qt
+from holtwinters.ported.holtwinters.internal.hw_optim import (
+    HW_DEC_ALPHA_HI,
+    HW_DEC_ALPHA_LO,
+    HW_DEC_BETA_HI,
+    HW_DEC_BETA_LO,
+    HW_DEC_BOTH_CRIT,
+    HW_DEC_GAMMA_HI,
+    HW_DEC_GAMMA_LO,
+    HW_DEC_HALVING_SHIFT,
+    HW_DEC_HESSIAN_RESET,
+    HW_DEC_H_NAN,
+    HW_DEC_ITER_LIMIT,
+    HW_DEC_LS_LIMIT,
+    HW_DEC_RHO_ZERO,
+    HW_DEC_ZERO_DIR,
+)
 from holtwinters.ported.holtwinters.internal.hw_utils import STMP_EPS
 from holtwinters.ported.holtwinters.runner import (
     HW_ALPHA0,
@@ -133,6 +149,8 @@ struct HWOracleFit[dt: DType](Movable):
     var gamma: List[Scalar[Self.dt]]
     var criterion: List[Int]
     var niter: List[Int]
+    #: DEVIATION 699's packed branch record (mirrors the device bit for bit).
+    var decisions: List[Int]
     var iter_trace: List[Scalar[Self.dt]]    # [(iter*3+k)*batch + s]
     var trace_iters: Int
     var sse: List[Scalar[Self.dt]]
@@ -157,6 +175,7 @@ struct HWOracleFit[dt: DType](Movable):
         self.gamma = List[Scalar[Self.dt]]()
         self.criterion = List[Int]()
         self.niter = List[Int]()
+        self.decisions = List[Int]()
         self.iter_trace = List[Scalar[Self.dt]]()
         self.trace_iters = trace_iters
         self.sse = List[Scalar[Self.dt]]()
@@ -405,12 +424,16 @@ def oracle_fit[dt: DType](
         _gradient[dt](s, fit, pseason, x1, x2, x3, eps, g1, g2, g3)
         var crit = OPTIM_BFGS_ITER_LIMIT
         var niter = 0
+        # DEVIATION 699, mirrored from the device term for term.
+        var decisions = 0
+        var ls_halvings = 0
         for it in range(p.bfgs_iter_limit):
             var p1 = -_dot3[dt](H11, H12, H13, g1, g2, g3)
             var p2 = -_dot3[dt](H12, H22, H23, g1, g2, g3)
             var p3 = -_dot3[dt](H13, H23, H33, g1, g2, g3)
             var phi = _dot3[dt](p1, p2, p3, g1, g2, g3)
             if phi > Scalar[dt](0):
+                decisions |= HW_DEC_HESSIAN_RESET
                 H11 = Scalar[dt](1)
                 H12 = Scalar[dt](0)
                 H13 = Scalar[dt](0)
@@ -422,6 +445,7 @@ def oracle_fit[dt: DType](
                 p3 = -g3
             var pp = _dot3[dt](p1, p2, p3, p1, p2, p3)
             if zero_dir_guard and pp == Scalar[dt](0):
+                decisions |= HW_DEC_ZERO_DIR
                 crit = OPTIM_MIN_GRAD_NORM
                 break
             var step_size = _f[dt](ls_initial / _sqrt[dt](pp))
@@ -439,6 +463,9 @@ def oracle_fit[dt: DType](
                 nx3 = _f[dt](_mad[dt](step_size, p3, x3))
                 loss = _loss[dt](s, fit, pseason, nx1, nx2, nx3)
                 i += 1
+            ls_halvings += i
+            if i >= p.linesearch_iter_limit:
+                decisions |= HW_DEC_LS_LIMIT
             var dx1 = abs(_f[dt](x1 - nx1))
             var dx2 = abs(_f[dt](x2 - nx2))
             var dx3 = abs(_f[dt](x3 - nx3))
@@ -451,10 +478,14 @@ def oracle_fit[dt: DType](
                 fit.iter_trace[(it * 3 + 0) * batch_size + s] = x1
                 fit.iter_trace[(it * 3 + 1) * batch_size + s] = x2
                 fit.iter_trace[(it * 3 + 2) * batch_size + s] = x3
-            if min_param_diff > mx:
+            var crit_param = min_param_diff > mx
+            var crit_error = min_error_diff > abs(_f[dt](loss - loss_ref))
+            if crit_param and crit_error:
+                decisions |= HW_DEC_BOTH_CRIT
+            if crit_param:
                 crit = OPTIM_MIN_PARAM_DIFF
                 break
-            if min_error_diff > abs(_f[dt](loss - loss_ref)):
+            if crit_error:
                 crit = OPTIM_MIN_ERROR_DIFF
                 break
             var ng1 = Scalar[dt](0)
@@ -472,6 +503,8 @@ def oracle_fit[dt: DType](
             var y2 = _f[dt](ng2 - g2)
             var y3 = _f[dt](ng3 - g3)
             var rho_ = _dot3[dt](y1, y2, y3, s1, s2, s3)
+            if rho_ == Scalar[dt](0):
+                decisions |= HW_DEC_RHO_ZERO
             var rho = _f[dt](Scalar[dt](1) / rho_)
             var Hy1 = _dot3[dt](H11, H12, H13, y1, y2, y3)
             var Hy2 = _dot3[dt](H12, H22, H23, y1, y2, y3)
@@ -484,11 +517,31 @@ def oracle_fit[dt: DType](
             H22 = _f[dt](H22 + _f[dt](_f[dt](_f[dt](k * s2) * s2) - _f[dt](_f[dt](two_rho * s2) * Hy2)))
             H23 = _f[dt](H23 + _f[dt](_f[dt](_f[dt](k * s2) * s3) - _f[dt](rho * _f[dt](_mad[dt](s3, Hy2, _f[dt](s2 * Hy3))))))
             H33 = _f[dt](H33 + _f[dt](_f[dt](_f[dt](k * s3) * s3) - _f[dt](_f[dt](two_rho * s3) * Hy3)))
+            if not (H11 == H11 and H22 == H22 and H33 == H33
+                    and H12 == H12 and H13 == H13 and H23 == H23):
+                decisions |= HW_DEC_H_NAN
             g1 = ng1
             g2 = ng2
             g3 = ng3
+        if crit == OPTIM_BFGS_ITER_LIMIT:
+            # the loop ran to completion: the device's fall-through return.
+            decisions |= HW_DEC_ITER_LIMIT
+        if not (x1 > Scalar[dt](0)):
+            decisions |= HW_DEC_ALPHA_LO
+        elif x1 > Scalar[dt](1):
+            decisions |= HW_DEC_ALPHA_HI
+        if not (x2 > Scalar[dt](0)):
+            decisions |= HW_DEC_BETA_LO
+        elif x2 > Scalar[dt](1):
+            decisions |= HW_DEC_BETA_HI
+        if not (x3 > Scalar[dt](0)):
+            decisions |= HW_DEC_GAMMA_LO
+        elif x3 > Scalar[dt](1):
+            decisions |= HW_DEC_GAMMA_HI
+        decisions |= ls_halvings << HW_DEC_HALVING_SHIFT
         fit.criterion.append(crit)
         fit.niter.append(niter)
+        fit.decisions.append(decisions)
         fit.alpha[s] = _bound[dt](x1)
         fit.beta[s] = _bound[dt](x2)
         fit.gamma[s] = _bound[dt](x3)

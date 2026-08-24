@@ -108,6 +108,45 @@ same NaN -> bound -> 0 chain) deterministically on every vendor, and the
 card hashes its NaNs through DEVIATION 661's one payload.
 ============================================================================
 
+============ DEVIATION 699 (2026-08-24): THE OPTIMIZER RECORDS ITS
+============ DECISIONS, NOT ONLY ITS NUMBERS ==============================
+WHAT THEIRS DOES: nothing. Every branch this optimizer takes -- whether the
+Hessian was reset, whether the line search ran out of halvings, whether
+`rho_` was zero, whether a clamp fired -- is invisible once the fit
+returns, in theirs and (until now) in ours.
+WHY THIS EXISTS, and it is a MEASURED reason, not a tidiness one. This
+lane's `CRIT_ORDER` sabotage swaps the order of the two stop-criterion
+tests. It moves ZERO of 2800 numeric cells and changes exactly one thing:
+which criterion is REPORTED. It was caught only because DEVIATION 665 had
+already made the criterion a recorded stage. `LS_TIE`, which loosens the
+line-search acceptance test to `>=`, moves 9 stages and 64 cells and
+leaves the FINAL FORECAST BIT-IDENTICAL. Both are the same lesson: A
+DECISION IS A DIVERGENCE EVEN WHEN NO NUMBER MOVES, and a gate that hashes
+only numbers has no instrument for that entire class.
+WHAT OURS DOES: one extra Int32 per series, `hw.opt.decisions`, packed:
+    bit 0   the DEVIATION 662 zero-direction guard returned
+    bit 1   `phi > 0` reset the Hessian to the identity at least once
+    bit 2   the line search hit `linesearch_iter_limit` at least once
+            (cuml#888's path: the LAST nx is stored, not the minimising one)
+    bit 3   `rho_ == 0` at least once -- the second NaN route, where
+            `rho = 1/0 = inf` and `k = inf * 0 = NaN` poisons every H entry
+    bit 4   a Hessian entry was NaN at least once
+    bit 5   BOTH stop criteria were true on the stopping iteration (the
+            exact tie `CRIT_ORDER` perturbs; without this bit nobody can
+            say whether that arm's tie is reached on a given fixture)
+    bit 6   returned at `bfgs_iter_limit`
+    bits 7-12  which arm of `bound_device` fired for alpha, beta, gamma
+            (low arm = the value was not > 0, so -0.0 and NaN land here;
+            high arm = clamped to 1). DEVIATION 663's decision, recorded.
+    bits 16+   the TOTAL number of line-search halvings over the whole fit
+No arithmetic is added and none is moved: every bit is set from a compare
+the optimizer already performed. The cost is one integer per series.
+MEASURED: OWED. This is written but NOT BUILT (the lane had no compile
+slot when it was written); the gate compares it device-vs-oracle like
+every other stage, and the oracle sets the same bits from the same
+compares.
+============================================================================
+
 ============ DEVIATION 665 (2026-08-23): THE OPTIMIZER WRITES ITS
 ============ PER-ITERATION PARAMETERS, ITERATION COUNT AND CRITERION ========
 WHAT THEIRS DOES: `optim_result[tid]` (the criterion) is the only trace of
@@ -151,6 +190,22 @@ from mojo_only.numerics import ftz, identical_mul_add, identical_sqrt
 
 #: `(Dtype)0.866` -- the double literal rounded to float
 comptime HW_LS_INITIAL = Float32(Float64(0.866))
+
+#: DEVIATION 699's bit layout for `hw.opt.decisions`.
+comptime HW_DEC_ZERO_DIR = 1
+comptime HW_DEC_HESSIAN_RESET = 2
+comptime HW_DEC_LS_LIMIT = 4
+comptime HW_DEC_RHO_ZERO = 8
+comptime HW_DEC_H_NAN = 16
+comptime HW_DEC_BOTH_CRIT = 32
+comptime HW_DEC_ITER_LIMIT = 64
+comptime HW_DEC_ALPHA_LO = 128
+comptime HW_DEC_ALPHA_HI = 256
+comptime HW_DEC_BETA_LO = 512
+comptime HW_DEC_BETA_HI = 1024
+comptime HW_DEC_GAMMA_LO = 2048
+comptime HW_DEC_GAMMA_HI = 4096
+comptime HW_DEC_HALVING_SHIFT = 16
 
 
 @always_inline
@@ -324,6 +379,8 @@ def holtwinters_bfgs_optim_device(
     iter_trace: MutPointer[Float32, MutAnyOrigin],
     trace_iters: Int,
     mut niter: Int,
+    mut decisions: Int,
+    mut ls_halvings: Int,
 ) -> Int:
     """`holtwinters_bfgs_optim_device` (`hw_optim.cuh:351-586`) with
     DEVIATION 662's guard and DEVIATION 665's instrumentation. Returns the
@@ -348,6 +405,8 @@ def holtwinters_bfgs_optim_device(
     )
 
     niter = 0
+    decisions = 0
+    ls_halvings = 0
     for it in range(bfgs_iter_limit):
         # Step direction: p = -H g
         var p1 = -_dot3(H11, H12, H13, g1, g2, g3)
@@ -356,6 +415,7 @@ def holtwinters_bfgs_optim_device(
 
         var phi = _dot3(p1, p2, p3, g1, g2, g3)
         if phi > Float32(0.0):
+            decisions |= HW_DEC_HESSIAN_RESET
             H11 = Float32(1.0)
             H12 = Float32(0.0)
             H13 = Float32(0.0)
@@ -375,6 +435,7 @@ def holtwinters_bfgs_optim_device(
                 # DEVIATION 662: a zero direction is their min_grad_norm
                 # criterion met; theirs divides by sqrt(0) here.
                 if pp == Float32(0.0):
+                    decisions |= HW_DEC_ZERO_DIR
                     return OPTIM_MIN_GRAD_NORM
             step_size = _f(HW_LS_INITIAL / _sqrt_seam(pp))
         else:
@@ -406,6 +467,12 @@ def holtwinters_bfgs_optim_device(
                 pseason_width, start_season, use_beta, use_gamma, nx1, nx2, nx3, additive,
             )
             i += 1
+        ls_halvings += i
+        if i >= linesearch_iter_limit:
+            # cuml#888: `x = nx` below stores the LAST nx, not the one that
+            # minimised loss. Their bug, ported faithfully; recorded so a
+            # fixture that reaches it can be identified from the card.
+            decisions |= HW_DEC_LS_LIMIT
         # end of line search
 
         # see if new {params} meet stop condition
@@ -427,15 +494,22 @@ def holtwinters_bfgs_optim_device(
         # so on an iteration where both fire the reported criterion is
         # MIN_PARAM_DIFF. SAB_CRIT_ORDER swaps the two tests and must move
         # `hw.opt.criterion`.
+        # DEVIATION 699 bit 5: BOTH criteria true on this iteration is the
+        # exact tie SAB_CRIT_ORDER perturbs. Evaluated from the SAME two
+        # compares the returns below use; no arithmetic is added.
+        var crit_param = min_param_diff > mx
+        var crit_error = min_error_diff > abs_device(_f(loss - loss_ref))
+        if crit_param and crit_error:
+            decisions |= HW_DEC_BOTH_CRIT
         comptime if SAB_CRIT_ORDER:
-            if min_error_diff > abs_device(_f(loss - loss_ref)):
+            if crit_error:
                 return OPTIM_MIN_ERROR_DIFF
-            if min_param_diff > mx:
+            if crit_param:
                 return OPTIM_MIN_PARAM_DIFF
         else:
-            if min_param_diff > mx:
+            if crit_param:
                 return OPTIM_MIN_PARAM_DIFF
-            if min_error_diff > abs_device(_f(loss - loss_ref)):
+            if crit_error:
                 return OPTIM_MIN_ERROR_DIFF
 
         # next gradient
@@ -462,6 +536,11 @@ def holtwinters_bfgs_optim_device(
         var y3 = _f(ng3 - g3)
         # rho_ = y.s; rho = 1/rho_
         var rho_ = _dot3(y1, y2, y3, s1, s2, s3)
+        if rho_ == Float32(0.0):
+            # the SECOND NaN route (UNPORTED.tsv): rho = 1/0 = inf, then
+            # k = inf * 0 = NaN poisons every H entry. Their arithmetic on a
+            # non-degenerate input; NOT guarded, only recorded.
+            decisions |= HW_DEC_RHO_ZERO
         var rho = _f(Float32(1.0) / rho_)
 
         var Hy1 = _dot3(H11, H12, H13, y1, y2, y3)
@@ -485,10 +564,15 @@ def holtwinters_bfgs_optim_device(
         # H33 += k*s3*s3 - 2*rho*s3*Hy3
         H33 = _f(H33 + _f(_f(_f(k * s3) * s3) - _f(_f(two_rho * s3) * Hy3)))
 
+        if not (H11 == H11 and H22 == H22 and H33 == H33
+                and H12 == H12 and H13 == H13 and H23 == H23):
+            decisions |= HW_DEC_H_NAN
+
         g1 = ng1
         g2 = ng2
         g3 = ng3
 
+    decisions |= HW_DEC_ITER_LIMIT
     return OPTIM_BFGS_ITER_LIMIT
 
 
@@ -512,6 +596,7 @@ def holtwinters_optim_gpu_global_kernel(
     optim_result: MutPointer[Int32, MutAnyOrigin],
     iter_trace: MutPointer[Float32, MutAnyOrigin],
     niter_out: MutPointer[Int32, MutAnyOrigin],
+    decisions_out: MutPointer[Int32, MutAnyOrigin],
     flags_in: Int32,
     write_mask_in: Int32,
     eps: Float32,
@@ -557,6 +642,8 @@ def holtwinters_optim_gpu_global_kernel(
 
         # Optimization (the BFGS arm; `single_param` is UNPORTED)
         var niter = 0
+        var decisions = 0
+        var ls_halvings = 0
         var optim = holtwinters_bfgs_optim_device(
             tid, ts, n, batch_size, frequency, shift, plevel, ptrend,
             pseason.unsafe_offset(tid), batch_size, start_season, use_beta, use_gamma,
@@ -564,8 +651,27 @@ def holtwinters_optim_gpu_global_kernel(
             eps, min_param_diff, min_error_diff, min_grad_norm,
             Int(bfgs_iter_limit_in), Int(linesearch_iter_limit_in),
             linesearch_tau, linesearch_c, linesearch_step_size, additive,
-            iter_trace, Int(trace_iters_in), niter,
+            iter_trace, Int(trace_iters_in), niter, decisions, ls_halvings,
         )
+
+        # DEVIATION 699: WHICH ARM of the clamp fired, per parameter, read
+        # off the same compares `bound_device` makes. The LOW arm is where a
+        # -0.0 and a NaN both land (neither is `> 0`), which is the decision
+        # SAB_CLAMP_GE breaks and that no numeric stage can distinguish from
+        # a value that was legitimately +0.0.
+        if not (alpha_ > Float32(0.0)):
+            decisions |= HW_DEC_ALPHA_LO
+        elif alpha_ > Float32(1.0):
+            decisions |= HW_DEC_ALPHA_HI
+        if not (beta_ > Float32(0.0)):
+            decisions |= HW_DEC_BETA_LO
+        elif beta_ > Float32(1.0):
+            decisions |= HW_DEC_BETA_HI
+        if not (gamma_ > Float32(0.0)):
+            decisions |= HW_DEC_GAMMA_LO
+        elif gamma_ > Float32(1.0):
+            decisions |= HW_DEC_GAMMA_HI
+        decisions |= ls_halvings << HW_DEC_HALVING_SHIFT
 
         if optim_alpha:
             alpha.unsafe_store(tid, bound_device(alpha_))
@@ -575,6 +681,7 @@ def holtwinters_optim_gpu_global_kernel(
             gamma.unsafe_store(tid, bound_device(gamma_))
         optim_result.unsafe_store(tid, Int32(optim))
         niter_out.unsafe_store(tid, Int32(niter))
+        decisions_out.unsafe_store(tid, Int32(decisions))
 
         if write_error or write_mask != 0:
             # Final fit
@@ -612,6 +719,7 @@ def holtwinters_optim_gpu(
     write_error: Bool,
     mut optim_result: DeviceBuffer[DType.int32],
     mut niter: DeviceBuffer[DType.int32],
+    mut decisions: DeviceBuffer[DType.int32],
     mut iter_trace: DeviceBuffer[DType.float32],
     trace_iters: Int,
     additive: Bool,
@@ -668,7 +776,7 @@ def holtwinters_optim_gpu(
         alpha.unsafe_ptr(), beta.unsafe_ptr(), gamma.unsafe_ptr(),
         level.unsafe_ptr(), trend.unsafe_ptr(), season.unsafe_ptr(), xhat.unsafe_ptr(),
         error.unsafe_ptr(), optim_result.unsafe_ptr(), iter_trace.unsafe_ptr(),
-        niter.unsafe_ptr(),
+        niter.unsafe_ptr(), decisions.unsafe_ptr(),
         Int32(flags), Int32(write_mask),
         eps, min_param_diff, min_error_diff, min_grad_norm,
         Int32(bfgs_iter_limit), Int32(linesearch_iter_limit),

@@ -12,7 +12,8 @@ batch), `hw.decomp.trend` / `hw.decomp.season` (the smoothed trend and the
 residual over the first `start_periods` seasons), `hw.start.level`,
 `hw.start.trend`, `hw.start.season`, `hw.opt.iterNNN.params` (NNN < the
 largest iteration count in the batch, capped at `trace_iters`),
-`hw.opt.niter` (i32), `hw.opt.criterion` (i32), `hw.params` (bounded
+`hw.opt.niter` (i32), `hw.opt.criterion` (i32), `hw.opt.decisions` (i32,
+DEVIATION 699's packed branch record), `hw.params` (bounded
 alpha | beta | gamma), `hw.sse`, `hw.level`, `hw.trend`, `hw.season`;
 `HoltWintersForecastHelper` adds `hw.forecast`.
 
@@ -254,6 +255,7 @@ def holtwinters_fit_helper(
     mut gamma_d: DeviceBuffer[DType.float32],
     mut criterion_d: DeviceBuffer[DType.int32],
     mut niter_d: DeviceBuffer[DType.int32],
+    mut decisions_d: DeviceBuffer[DType.int32],
     mut iter_trace_d: DeviceBuffer[DType.float32],
     trace_iters: Int,
     mut trace: IdentityTrace,
@@ -278,7 +280,7 @@ def holtwinters_fit_helper(
     var tpb_d = tpb_decomp if tpb_decomp > 0 else get_threads_per_block(batch_size)
     if len(level_d) < sizes.components_len or len(trend_d) < sizes.components_len or len(season_d) < sizes.components_len:
         raise Error("holtwinters_fit_helper: level/trend/season must hold components_len = " + String(sizes.components_len))
-    if len(error_d) < batch_size or len(alpha_d) < batch_size or len(beta_d) < batch_size or len(gamma_d) < batch_size or len(criterion_d) < batch_size or len(niter_d) < batch_size:
+    if len(error_d) < batch_size or len(alpha_d) < batch_size or len(beta_d) < batch_size or len(gamma_d) < batch_size or len(criterion_d) < batch_size or len(niter_d) < batch_size or len(decisions_d) < batch_size:
         raise Error("holtwinters_fit_helper: per-series outputs must hold batch_size")
     if trace_iters > 0 and len(iter_trace_d) < trace_iters * 3 * batch_size:
         raise Error("holtwinters_fit_helper: iter_trace_d must hold trace_iters * 3 * batch_size")
@@ -341,7 +343,7 @@ def holtwinters_fit_helper(
         alpha_d, True, beta_d, True, gamma_d, True,
         level_d, trend_d, season_d, xhat_dummy, error_d,
         HW_WRITE_ALL ^ 8, True,  # level, trend, season; xhat is their nullptr
-        criterion_d, niter_d, iter_trace_d, trace_iters,
+        criterion_d, niter_d, decisions_d, iter_trace_d, trace_iters,
         additive, True, True,
         p.eps, p.min_param_diff, p.min_error_diff, p.min_grad_norm,
         p.bfgs_iter_limit, p.linesearch_iter_limit,
@@ -370,6 +372,9 @@ def holtwinters_fit_helper(
             record_device_canon(ctx, trace, _iter_stage_tag(it), view, 3 * batch_size, canon_scratch)
             _ = view^
         trace.record_device[DType.int32](ctx, "hw.opt.niter", niter_d, batch_size)
+        # DEVIATION 699: the decision mask. An i32, so no NaN canonicalisation
+        # applies and it is recorded raw.
+        trace.record_device[DType.int32](ctx, "hw.opt.decisions", decisions_d, batch_size)
         trace.record_device[DType.int32](ctx, "hw.opt.criterion", criterion_d, batch_size)
         # hw.params: alpha | beta | gamma
         var params = ctx.enqueue_create_buffer[DType.float32](3 * batch_size)
@@ -463,6 +468,7 @@ def holtwinters_optim(
     mut error: DeviceBuffer[DType.float32],
     mut optim_result: DeviceBuffer[DType.int32],
     mut niter: DeviceBuffer[DType.int32],
+    mut decisions: DeviceBuffer[DType.int32],
     mut iter_trace: DeviceBuffer[DType.float32],
     trace_iters: Int,
     epsilon: Float32,
@@ -488,7 +494,7 @@ def holtwinters_optim(
         ctx, ts_time_major, n, batch_size, frequency, start_level, start_trend, start_season,
         alpha, True, beta, True, gamma, True,
         level, trend, season, xhat, error, HW_WRITE_ALL ^ 8, True,
-        optim_result, niter, iter_trace, trace_iters,
+        optim_result, niter, decisions, iter_trace, trace_iters,
         seasonal == SEASONAL_ADDITIVE, True, True,
         p.eps, p.min_param_diff, p.min_error_diff, p.min_grad_norm,
         p.bfgs_iter_limit, p.linesearch_iter_limit,

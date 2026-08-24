@@ -41,6 +41,7 @@ def fit(
     mut gamma_d: DeviceBuffer[DType.float32],
     mut criterion_d: DeviceBuffer[DType.int32],
     mut niter_d: DeviceBuffer[DType.int32],
+    mut decisions_d: DeviceBuffer[DType.int32],
     mut iter_trace_d: DeviceBuffer[DType.float32],
     mut trace: IdentityTrace,
     trace_iters: Int = HW_DEFAULT_TRACE_ITERS,
@@ -51,12 +52,12 @@ def fit(
 ) raises:
     """`ML::HoltWinters::fit` (`holtwinters.cu:37-62`, float). The extra
     outputs (`alpha/beta/gamma`, `criterion`, `niter`, `iter_trace`) are
-    DEVIATION 665's instrumentation; theirs leaves the fitted parameters on
+    DEVIATION 665's instrumentation, `decisions` is DEVIATION 699's; theirs leaves the fitted parameters on
     the device and discards them."""
     holtwinters_fit_helper(
         ctx, data, n, batch_size, frequency, start_periods, seasonal, epsilon,
         level_d, trend_d, season_d, error_d, alpha_d, beta_d, gamma_d,
-        criterion_d, niter_d, iter_trace_d, trace_iters, trace,
+        criterion_d, niter_d, decisions_d, iter_trace_d, trace_iters, trace,
         tpb_decomp, tpb_optim, scratch_pad, scratch_poison,
     )
 

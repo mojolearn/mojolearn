@@ -48,6 +48,8 @@ struct HWFit(Movable):
     var gamma: List[Float32]
     var criterion: List[Int32]
     var niter: List[Int32]
+    #: DEVIATION 699's packed branch record, one per series.
+    var decisions: List[Int32]
     var iter_trace: List[Float32]
     var trace_iters: Int
 
@@ -65,6 +67,7 @@ struct HWFit(Movable):
         self.gamma = List[Float32]()
         self.criterion = List[Int32]()
         self.niter = List[Int32]()
+        self.decisions = List[Int32]()
         self.iter_trace = List[Float32]()
         self.trace_iters = trace_iters
 
@@ -145,6 +148,7 @@ def holtwinters_fit_host_traced(
     var gamma_d = ctx.enqueue_create_buffer[DType.float32](batch_size + scratch_pad)
     var criterion_d = ctx.enqueue_create_buffer[DType.int32](batch_size + scratch_pad)
     var niter_d = ctx.enqueue_create_buffer[DType.int32](batch_size + scratch_pad)
+    var decisions_d = ctx.enqueue_create_buffer[DType.int32](batch_size + scratch_pad)
     var n_trace = trace_iters * 3 * batch_size
     var iter_trace_d = ctx.enqueue_create_buffer[DType.float32]((n_trace if n_trace > 0 else 1) + scratch_pad)
     level_d.enqueue_fill(scratch_poison)
@@ -154,6 +158,7 @@ def holtwinters_fit_host_traced(
     iter_trace_d.enqueue_fill(scratch_poison)
     criterion_d.enqueue_fill(Int32(-7))
     niter_d.enqueue_fill(Int32(-7))
+    decisions_d.enqueue_fill(Int32(-7))
     ctx.synchronize()
     trace.header(
         "holtwinters: n=" + String(n) + " batch_size=" + String(batch_size) + " frequency="
@@ -163,7 +168,7 @@ def holtwinters_fit_host_traced(
     fit(
         ctx, n, batch_size, frequency, start_periods, st, eps, ddata,
         level_d, trend_d, season_d, error_d, alpha_d, beta_d, gamma_d,
-        criterion_d, niter_d, iter_trace_d, trace, trace_iters,
+        criterion_d, niter_d, decisions_d, iter_trace_d, trace, trace_iters,
         tpb_decomp, tpb_optim, scratch_pad, scratch_poison,
     )
     var out = HWFit(n, batch_size, frequency, st, trace_iters)
@@ -176,6 +181,7 @@ def holtwinters_fit_host_traced(
     out.gamma = download_f32(ctx, gamma_d, batch_size)
     out.criterion = download_i32(ctx, criterion_d, batch_size)
     out.niter = download_i32(ctx, niter_d, batch_size)
+    out.decisions = download_i32(ctx, decisions_d, batch_size)
     out.iter_trace = download_f32(ctx, iter_trace_d, n_trace)
     _ = ddata^
     _ = level_d^
@@ -187,6 +193,7 @@ def holtwinters_fit_host_traced(
     _ = gamma_d^
     _ = criterion_d^
     _ = niter_d^
+    _ = decisions_d^
     _ = iter_trace_d^
     return out^
 

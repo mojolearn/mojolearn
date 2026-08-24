@@ -547,6 +547,7 @@ def _compare_fit(tag: String, f: HWFit, o: HWOracleFit[DType.float32], fc: List[
     checks.append(_first_diff(tag + " hw.params.beta", f.beta, o.beta))
     checks.append(_first_diff(tag + " hw.params.gamma", f.gamma, o.gamma))
     checks.append(_first_diff_i(tag + " hw.opt.niter", f.niter, o.niter))
+    checks.append(_first_diff_i(tag + " hw.opt.decisions", f.decisions, o.decisions))
     checks.append(_first_diff_i(tag + " hw.opt.criterion", f.criterion, o.criterion))
     checks.append(_first_diff(tag + " hw.opt.iter*.params", f.iter_trace, o.iter_trace))
     checks.append(_first_diff(tag + " hw.level", f.level, o.level))
@@ -589,6 +590,10 @@ def _oracle_card(path: String, o: HWOracleFit[DType.float32], ofc: List[Float32]
     for v in o.criterion:
         cr.append(Int32(v))
     t.record_list_i32("hw.opt.niter", ni)
+    var dec = List[Int32]()
+    for v in o.decisions:
+        dec.append(Int32(v))
+    t.record_list_i32("hw.opt.decisions", dec)
     t.record_list_i32("hw.opt.criterion", cr)
     var params = List[Float32]()
     for v in o.alpha:
@@ -641,7 +646,13 @@ def check_hw_device_equals_oracle() raises:
         # check_hw_launch_invariance
         var tpb_d = 4 if name == "mixed" else -1
         var f = _device_fit(ctx, data, n, bs, _seasonal_str(seasonal), dt, tpb_d, 4 if name == "mixed" else 128)
-        var fc = holtwinters_forecast_host_traced(ctx, f, H, dt)
+        # `mixed` runs the decomposition AND optimizer at tpb 4 (two blocks
+        # for a batch of 7); the FORECAST kernel had no such fixture and ran
+        # at one block on all six, so a launch-geometry defect in it was
+        # compared against the oracle by nothing. tpb 4 here puts it on two
+        # blocks. (ROTATE_CONV showed what a one-block fixture hides: the
+        # rotation is the identity when block_idx.x is always 0.)
+        var fc = holtwinters_forecast_host_traced(ctx, f, H, dt, 4 if name == "mixed" else -1)
         var o = oracle_fit[DType.float32](data, n, bs, FREQ, START_PERIODS, seasonal, HW_DEFAULT_EPS, TRACE_ITERS)
         var ofc = oracle_forecast[DType.float32](o, H)
         _oracle_card(opath, o, ofc, "hw oracle " + name)
@@ -1042,7 +1053,10 @@ def check_hw_signed_zero_clamp() raises:
     var zni = ctx.enqueue_create_buffer[DType.int32](bsz)
     var ztr = ctx.enqueue_create_buffer[DType.float32](1)
     ctx.synchronize()
-    holtwinters_optim(ctx, zts, N, bsz, FREQ, zsl, zst, zss, zal, zbe, zga, zlv, ztv, zsv, zev, zcr, zni, ztr, 0, HW_DEFAULT_EPS, SEASONAL_ADDITIVE)
+    var zde = ctx.enqueue_create_buffer[DType.int32](bsz)
+    zde.enqueue_fill(Int32(-7))
+    ctx.synchronize()
+    holtwinters_optim(ctx, zts, N, bsz, FREQ, zsl, zst, zss, zal, zbe, zga, zlv, ztv, zsv, zev, zcr, zni, zde, ztr, 0, HW_DEFAULT_EPS, SEASONAL_ADDITIVE)
     var ra = download_f32(ctx, zal, bsz)
     var rb = download_f32(ctx, zbe, bsz)
     var rg = download_f32(ctx, zga, bsz)
@@ -1137,6 +1151,7 @@ def check_hw_card_is_emitted() raises:
             s = "0" + s
         expect.append("hw.opt.iter" + s + ".params")
     expect.append("hw.opt.niter")
+    expect.append("hw.opt.decisions")
     expect.append("hw.opt.criterion")
     expect.append("hw.params")
     expect.append("hw.sse")
