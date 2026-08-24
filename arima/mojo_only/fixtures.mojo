@@ -51,14 +51,26 @@ from tsa.mojo_only.fixtures import (
 # ---------------------------------------------------------------------------
 
 
+comptime PLANT_NONE = 0
+comptime PLANT_UNIT_ROOT = 1
+comptime PLANT_PIVOT_TIE = 2
+
+
 @fieldwise_init
 struct OrderCase(Movable, Copyable):
+    """An order plus WHICH parameter plant it needs.
+
+    The plant used to be selected by comparing `oc.name` to a string literal
+    at four call sites. That is the shape of bug where one call site is
+    updated and three are not, so the code now travels with the order."""
+
     var order: ARIMAOrder
     var name: String
+    var plant: Int
 
 
 def order_table() -> List[OrderCase]:
-    """Eight orders, each chosen for a BRANCH, not for coverage of a grid.
+    """Ten orders, each chosen for a BRANCH, not for coverage of a grid.
 
         arma11_k    (1,0,1) k=1   n_diff = 0, intercept ON  -> the alpha0
                                   `(I - T*)^-1 c` path, r = 2
@@ -78,6 +90,22 @@ def order_table() -> List[OrderCase]:
                                   rd = 7
         sarima_rd8  (1,1,0)(0,1,1)[3]  n_diff = 4, r = 4, rd = 8 == RD_MAX,
                                   the largest state this lane accepts
+        arma44      (4,0,4) k=0   r = 5 == LYAP_R_MAX, so the Lyapunov LU is
+                                  25 x 25 == LYAP_R2_MAX, the largest this
+                                  lane accepts; AND `p = q = 4` is the only
+                                  row whose Jones `j` recursion runs more
+                                  than one iteration, on both the AR and the
+                                  MA side. Added 2026-08-24 to close the
+                                  reach gap sabotage (c') exposed: every
+                                  other order has `p, q <= 2`, so the
+                                  multi-lag recursion -- the exact code the
+                                  contraction defect lived in -- had NO
+                                  end-to-end coverage at all
+        ar2_tie     (2,0,0) k=0   parameters planted so that the LU PIVOT
+                                  SEARCH meets an exact magnitude TIE; see
+                                  PLANT_PIVOT_TIE below. Added 2026-08-24 to
+                                  make sabotage (e) a live arm instead of a
+                                  recorded reach failure
 
     `rd <= 8` and `r <= 5` hold for every row; anything larger is refused by
     name in `validate_order` and is in `arima/UNPORTED.tsv`.
@@ -92,20 +120,82 @@ def order_table() -> List[OrderCase]:
     row before the first run, not by the run.
     """
     var out = List[OrderCase]()
-    out.append(OrderCase(ARIMAOrder(1, 0, 1, 0, 0, 0, 0, 1, 0), String("arma11_k")))
-    out.append(OrderCase(ARIMAOrder(1, 0, 0, 0, 0, 0, 0, 0, 0), String("ar1")))
-    out.append(OrderCase(ARIMAOrder(0, 0, 2, 0, 0, 0, 0, 0, 0), String("ma2")))
-    out.append(OrderCase(ARIMAOrder(1, 1, 1, 0, 0, 0, 0, 0, 0), String("arima111")))
-    out.append(OrderCase(ARIMAOrder(2, 1, 2, 0, 0, 0, 0, 1, 0), String("arima212")))
-    out.append(OrderCase(ARIMAOrder(2, 0, 0, 0, 0, 0, 0, 0, 0), String("ar2_unit")))
-    out.append(OrderCase(ARIMAOrder(1, 1, 1, 1, 1, 1, 2, 0, 0), String("sarima_full")))
-    out.append(OrderCase(ARIMAOrder(1, 1, 0, 0, 1, 1, 3, 0, 0), String("sarima_rd8")))
+    out.append(OrderCase(ARIMAOrder(1, 0, 1, 0, 0, 0, 0, 1, 0), String("arma11_k"), PLANT_NONE))
+    out.append(OrderCase(ARIMAOrder(1, 0, 0, 0, 0, 0, 0, 0, 0), String("ar1"), PLANT_NONE))
+    out.append(OrderCase(ARIMAOrder(0, 0, 2, 0, 0, 0, 0, 0, 0), String("ma2"), PLANT_NONE))
+    out.append(OrderCase(ARIMAOrder(1, 1, 1, 0, 0, 0, 0, 0, 0), String("arima111"), PLANT_NONE))
+    out.append(OrderCase(ARIMAOrder(2, 1, 2, 0, 0, 0, 0, 1, 0), String("arima212"), PLANT_NONE))
+    out.append(OrderCase(ARIMAOrder(2, 0, 0, 0, 0, 0, 0, 0, 0), String("ar2_unit"), PLANT_UNIT_ROOT))
+    out.append(OrderCase(ARIMAOrder(1, 1, 1, 1, 1, 1, 2, 0, 0), String("sarima_full"), PLANT_NONE))
+    out.append(OrderCase(ARIMAOrder(1, 1, 0, 0, 1, 1, 3, 0, 0), String("sarima_rd8"), PLANT_NONE))
+    out.append(OrderCase(ARIMAOrder(4, 0, 4, 0, 0, 0, 0, 0, 0), String("arma44"), PLANT_NONE))
+    out.append(OrderCase(ARIMAOrder(2, 0, 0, 0, 0, 0, 0, 0, 0), String("ar2_tie"), PLANT_PIVOT_TIE))
     return out^
 
 
 # ---------------------------------------------------------------------------
 # parameters
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# PLANT_PIVOT_TIE: an EXACT magnitude tie in the LU pivot search
+# ---------------------------------------------------------------------------
+#
+# Sabotage (e) flips `lu_inverse`'s pivot comparison from `>` to `>=` and, on
+# every fixture that existed before 2026-08-24, moved NOTHING. That is not a
+# pass: it means no column of `I - T (x) T` ever contains two entries of equal
+# maximum magnitude, so the tie branch is unreached and DEVIATION 674's pivot
+# rule -- which is OURS, because cuBLAS's is not readable from source -- is
+# gated by nothing at all.
+#
+# A tie is CONSTRUCTIBLE, so it is constructed rather than hoped for. Take an
+# AR(2) with `n_diff = 0`, so `r = 2` and the transition block is
+#
+#     A = [[phi1, 1],
+#          [phi2, 0]]
+#
+# (column-major in `T`: the first column of the r-block holds phi_1..phi_r,
+# the superdiagonal holds ones). Its Kronecker square has first column
+#
+#     (A (x) A)[:, 0] = [phi1*phi1, phi1*phi2, phi2*phi1, phi2*phi2]
+#                        ^ row 0    ^ row 1    ^ row 2    ^ row 3
+#
+# so column 0 of `I - A (x) A` is
+#
+#     [1 - phi1^2, -phi1*phi2, -phi2*phi1, -phi2^2]
+#
+# ROWS 1 AND 2 ARE THE SAME PRODUCT WITH THE OPERANDS COMMUTED. IEEE-754
+# multiplication is commutative and correctly rounded, so they are equal
+# BIT FOR BIT, not merely close, and no rounding accident can separate them.
+# `kron_minus_identity` computes them as `(-A[0,0]) * A[1,0]` and
+# `(-A[1,0]) * A[0,0]` respectively, which is exactly that commutation.
+#
+# The tie is only REACHED if it is also the maximum of the column, i.e. if
+# |phi1*phi2| exceeds both |1 - phi1^2| and |phi2^2|. Choosing
+# phi1 ~ 0.907 and phi2 ~ -0.5 gives column magnitudes
+#
+#     [0.17817, 0.45327, 0.45327, 0.25000]
+#
+# so the maximum is attained at rows 1 and 2 with a margin of 0.20 over the
+# nearest rival. The pivot loop starts at `best = 0`, moves to row 1 on a
+# strict `>`, and then meets row 2 with `m == best_mag`: `>` keeps row 1 and
+# `>=` takes row 2. Two different permutations, two different `P0`.
+#
+# These constants are UNTRANSFORMED, because the Jones transform stands
+# between the fixture and `T`. For p = 2 AR the transform is
+# `phi1 = t0 * (1 - t1)`, `phi2 = t1` with `ti = tanh(xi / 2)`, so
+# `x1 = 2*atanh(-0.5) = -1.09861` puts phi2 at -0.5, and `x0 = 1.4` gives
+# `t0 = tanh(0.7) = 0.6044` and `phi1 = 0.6044 * 1.5 = 0.907`. The resulting
+# AR(2) is stationary (|phi2| < 1, phi1 + phi2 < 1, phi2 - phi1 < 1), so the
+# Lyapunov solve is well posed and DEVIATION 673 has no reason to fire; and
+# |phi2 + 1| = 0.5, far outside 0.01, so the `rd == 2 && p == 2` unit-root
+# guard does NOT fire and cannot be confused with this arm.
+#
+# `check_lu_pivot_tie_is_reached` asserts the tie is actually present in the
+# matrix the device builds, so this derivation is checked and not trusted.
+comptime PIVOT_TIE_X0 = Float32(1.4)
+comptime PIVOT_TIE_X1 = Float32(-1.09861)
 
 
 def _hashed(kind: Int, bid: Int, i: Int, salt: Int, lo: Float64, hi: Float64) -> Float32:
@@ -115,7 +205,7 @@ def _hashed(kind: Int, bid: Int, i: Int, salt: Int, lo: Float64, hi: Float64) ->
 
 
 def arima_params_fixture(
-    order: ARIMAOrder, batch_size: Int, salt: Int, unit_root: Bool = False
+    order: ARIMAOrder, batch_size: Int, salt: Int, plant: Int = PLANT_NONE
 ) raises -> ARIMAParamsHost:
     """Hashed UNTRANSFORMED parameters, one vector per series.
 
@@ -125,8 +215,8 @@ def arima_params_fixture(
     product and the Jones `tanh` both meet a negative zero (ADDENDUM 11);
     series 1 gets `sigma2 = 1.0` exactly so one cell of `RQ` is a copy.
 
-    `unit_root = True` sets `ar[1]` of every series to `-20.0`, which is what
-    `ar2_unit` needs to REACH `init_batched_kalman_matrices`'s guard.
+    `plant = PLANT_UNIT_ROOT` sets `ar[1]` of every series to `-20.0`, which
+    is what `ar2_unit` needs to REACH `init_batched_kalman_matrices`'s guard.
 
     The value has to be that large and the reason is worth writing down.
     These parameters are UNTRANSFORMED: the Jones transform stands between
@@ -167,9 +257,13 @@ def arima_params_fixture(
         sigma2.append(Float32(1.0) if bid == 1 else _hashed(5, bid, 0, salt, 0.25, 2.25))
     if order.q > 0 and batch_size > 0:
         ma[0] = Float32(-0.0)
-    if unit_root and order.p >= 2:
+    if plant == PLANT_UNIT_ROOT and order.p >= 2:
         for bid in range(batch_size):
             ar[order.p * bid + 1] = Float32(-20.0)
+    if plant == PLANT_PIVOT_TIE and order.p >= 2:
+        for bid in range(batch_size):
+            ar[order.p * bid] = PIVOT_TIE_X0
+            ar[order.p * bid + 1] = PIVOT_TIE_X1
     # every kind must hold at least one element so the buffers have a
     # pointer to pass, matching ARIMAParams' `max(1, ...)` allocation
     if len(mu) == 0:

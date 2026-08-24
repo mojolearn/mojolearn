@@ -78,7 +78,7 @@ def main() raises:
         var rd2 = rd * rd
         var b = f.batch_size
 
-        var ph = arima_params_fixture(order, b, SALT, oc.name == "ar2_unit")
+        var ph = arima_params_fixture(order, b, SALT, oc.plant)
         var params = upload_params(ctx, ph, order, b)
         if order.k != 0:
             trace.record_device[DType.float32](ctx, tag + ".param.mu", params.mu, b)

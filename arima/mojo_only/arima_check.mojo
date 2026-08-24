@@ -40,10 +40,19 @@ refusals, the Float64 tolerance and the structural claims assert in both.
     check_unit_root_guard_is_reached    `rd == 2 && p == 2` REWRITES T[1] to
                                         -0.99 on the `ar2_unit` order, and
                                         the guard's absence moves the bits
+    check_lu_pivot_tie_is_reached       DEVIATION 674's pivot tie rule: an
+                                        EXACT magnitude tie is planted in
+                                        column 0 of `I - T (x) T` on the
+                                        `ar2_tie` order and asserted both
+                                        PRESENT and MAXIMAL, so sabotage (e)
+                                        is a live arm and not a recorded
+                                        reach failure
     check_fold_order_is_visible         a descending `_mm` fold and a
-                                        Float64 fold both move the
-                                        log-likelihood: the bitwise gates
-                                        above have teeth
+                                        Float64 fold both move the T*P
+                                        contraction, swept over EVERY order
+                                        so the argument does not rest on one
+                                        fixture: the bitwise gates above
+                                        have teeth
 
 SABOTAGES PERFORMED (2026-08-23), each reverted; outputs in arima/README.md.
 The two the brief names are (a) and (c):
@@ -73,6 +82,8 @@ from mojo_only.numerics import (
 from arima.mojo_only.fixtures import (
     ArimaFixture,
     OrderCase,
+    PLANT_PIVOT_TIE,
+    PLANT_UNIT_ROOT,
     arima_fixture,
     arima_params_fixture,
     bits32,
@@ -89,6 +100,7 @@ from arima.mojo_only.fixtures import (
     upload_f32_padded,
     upload_params,
 )
+from arima.ported.linalg.batched.matrix import kron_minus_identity_host
 from arima.mojo_only.kalman_oracle import (
     KalmanHostStages,
     copy_forecast_host,
@@ -332,7 +344,7 @@ def check_kalman_device_equals_oracle(ctx: DeviceContext, mut trace: IdentityTra
     var table = order_table()
     for oc in table:
         var order = oc.order
-        var ph = arima_params_fixture(order, f.batch_size, SALT, oc.name == "ar2_unit")
+        var ph = arima_params_fixture(order, f.batch_size, SALT, oc.plant)
         print("    " + oc.name + " (p" + String(order.p) + " d" + String(order.d)
               + " q" + String(order.q) + " P" + String(order.P) + " D" + String(order.D)
               + " Q" + String(order.Q) + " s" + String(order.s) + " k" + String(order.k)
@@ -372,7 +384,7 @@ def check_lyapunov_solves_the_equation(ctx: DeviceContext) raises:
     var table = order_table()
     for oc in table:
         var order = oc.order
-        var ph = arima_params_fixture(order, f.batch_size, SALT, oc.name == "ar2_unit")
+        var ph = arima_params_fixture(order, f.batch_size, SALT, oc.plant)
         var pair = _run_pair(ctx, f, order, ph, 0)
         var T = pair[0][2].copy()
         var RQR = pair[0][4].copy()
@@ -428,7 +440,7 @@ def check_predict_device_equals_oracle(ctx: DeviceContext, mut trace: IdentityTr
         var order = oc.order
         if order.rd() > 8:
             continue
-        var ph_raw = arima_params_fixture(order, f.batch_size, SALT, oc.name == "ar2_unit")
+        var ph_raw = arima_params_fixture(order, f.batch_size, SALT, oc.plant)
         # `predict` is handed FITTED parameters and calls `batched_loglike`
         # with `trans = false` (`batched_arima.cu:175`), so the vector it
         # receives must ALREADY be transformed. Transform on the host once
@@ -664,7 +676,7 @@ def check_kalman_matches_float64(ctx: DeviceContext) raises:
     var table = order_table()
     for oc in table:
         var order = oc.order
-        var ph = arima_params_fixture(order, f.batch_size, SALT, oc.name == "ar2_unit")
+        var ph = arima_params_fixture(order, f.batch_size, SALT, oc.plant)
         var pair = _run_pair(ctx, f, order, ph, 0)
         var ll32 = pair[0][9].copy()
         var tp = batched_jones_transform_host(order, f.batch_size, False, ph)
@@ -858,7 +870,7 @@ def check_unit_root_guard_is_reached(ctx: DeviceContext) raises:
     var f = arima_fixture(N_OBS, SALT)
     var order = ARIMAOrder(2, 0, 0, 0, 0, 0, 0, 0, 0)
     _assert(order.rd() == 2 and order.p == 2, "the ar2_unit order does not select the guard")
-    var ph = arima_params_fixture(order, f.batch_size, SALT, True)
+    var ph = arima_params_fixture(order, f.batch_size, SALT, PLANT_UNIT_ROOT)
     var pair = _run_pair(ctx, f, order, ph, 0)
     var T = pair[0][2].copy()
     var fired = 0
@@ -886,47 +898,164 @@ def check_unit_root_guard_is_reached(ctx: DeviceContext) raises:
             "the transformed phi_2 is not at the Jones clamp, so the guard was reached by accident")
 
 
+def check_lu_pivot_tie_is_reached(ctx: DeviceContext) raises:
+    """DEVIATION 674's PIVOT TIE RULE, made gateable.
+
+    Sabotage (e) flips `lu_inverse`'s `>` to `>=` and, before the `ar2_tie`
+    fixture existed, moved nothing on any order: no column of
+    `I - T (x) T` contained two entries of equal maximum magnitude, so the
+    tie branch was UNREACHED and the rule -- which is OURS, cuBLAS's being
+    unreadable -- was gated by nothing.
+
+    This asserts the tie is really there, in the matrix the DEVICE built,
+    before the arm is claimed to be live. It checks three things, because
+    only all three together mean the pivot loop meets it:
+
+      1. rows 1 and 2 of column 0 are equal BIT FOR BIT (they are the same
+         product with the operands commuted, so IEEE-754 makes this exact);
+      2. that shared magnitude is the strict maximum of the column, so the
+         search actually selects it;
+      3. the tie is at rows > 0, so the search reaches it at all (the loop
+         starts at `best = j` and scans `j+1 ..`).
+
+    A tie that exists but is not the maximum is `reached but inert` all over
+    again, which is why (2) is asserted and not assumed."""
+    print("check_lu_pivot_tie_is_reached [" + _mode_name() + "]")
+    var f = arima_fixture(N_OBS, SALT)
+    var order = ARIMAOrder(2, 0, 0, 0, 0, 0, 0, 0, 0)
+    var ph = arima_params_fixture(order, f.batch_size, SALT, PLANT_PIVOT_TIE)
+    var pair = _run_pair(ctx, f, order, ph, 0)
+    var T = pair[0][2].copy()
+    var rd = order.rd()
+    var r = order.r()
+    var r2 = r * r
+    _assert(r == 2 and rd == 2, "ar2_tie must have r = rd = 2 for this derivation")
+    var tied = 0
+    for b in range(f.batch_size):
+        var imaa = kron_minus_identity_host(T, b * rd * rd, rd, 0, r)
+        # column 0 of the r2 x r2 matrix
+        var mags = List[Float32]()
+        for i in range(r2):
+            mags.append(abs(imaa[i]))
+        print("      series " + String(b) + ": phi1 " + bits32(T[b * 4])
+              + " phi2 " + bits32(T[b * 4 + 1]) + "  column 0 magnitudes "
+              + String(mags[0]) + " " + String(mags[1]) + " "
+              + String(mags[2]) + " " + String(mags[3]))
+        # (1) exact bitwise tie between rows 1 and 2
+        _assert(same_bits(imaa[1], imaa[2]),
+                "series " + String(b) + ": rows 1 and 2 of column 0 are not bit-identical, "
+                + "so the commuted product did not tie")
+        # (2) it is the strict maximum
+        var mx = mags[1]
+        var second = mags[0] if mags[0] > mags[3] else mags[3]
+        _assert(mx > second,
+                "series " + String(b) + ": the tied magnitude " + String(mx)
+                + " is not the strict maximum of column 0 (nearest rival " + String(second)
+                + "), so the pivot search never selects it and sabotage (e) stays inert")
+        # (3) reached by the search, which starts at row 0 and scans upward
+        tied += 1
+    print("    an exact pivot-magnitude tie is present and maximal in column 0 on "
+          + String(tied) + " of " + String(f.batch_size) + " series")
+    _assert(tied == f.batch_size, "the planted pivot tie is not present on every series")
+    # and the unit-root guard must NOT be what produced this T
+    for b in range(f.batch_size):
+        _assert(not same_bits(T[b * 4 + 1], Float32(-0.99)),
+                "series " + String(b) + ": the rd == 2 && p == 2 guard fired on ar2_tie; "
+                + "this arm would then be testing the guard, not the pivot rule")
+
+
 def check_fold_order_is_visible(ctx: DeviceContext) raises:
-    """Host only. The oracle's `_mm` against a DESCENDING k fold and against
-    a Float64 fold of the same products. At least one series' log-likelihood
-    must move under each, else the bitwise gates could not see a fold."""
+    """Host only, and WIDENED 2026-08-24. The oracle's `T*P` contraction
+    against a DESCENDING k fold and against a Float64 fold of the same
+    products, over EVERY order in the table rather than one.
+
+    Why it changed. This gate is the one whose entire job is to show the
+    bitwise gates have teeth, and it used to run on `arma11_k` alone, where
+    `rd = 2` gives 24 cells and a fold chain two terms long. It moved 2 of
+    24 cells under IDENTICAL and 1 of 24 under FAST. That is a real signal
+    but a thin one, and a gate that argues for every other gate should not
+    rest on one or two cells of one fixture.
+
+    REACH IS PER FIXTURE, which is the lesson other lanes have now paid for
+    twice: the spectral lane found three of its arms each carried by a
+    single fixture, and the mamba lane's fold arm went from 1 of 4 rows to 3
+    of 4 purely by widening `d_model` from 8 to 16. The width that matters
+    here is `rd`, because `rd` IS the length of the fold chain: at `rd = 2`
+    a reversal permutes two terms, and two-term sums are very often
+    associative by accident. The table now runs to `rd = 8` (`sarima_rd8`)
+    and `r = 5` (`arma44`), so this gate sweeps chain lengths 1 through 8
+    and cell counts from 6 to 384 instead of one length and 24 cells.
+
+    PREDICTION, recorded before any run so the run can falsify it: `ar1`
+    (`rd = 1`) must move ZERO cells, because a one-term fold has no order;
+    `rd = 2` orders may move very few; and the `rd >= 4` orders should move
+    a substantial fraction. The floor asserted below is deliberately weak
+    (`>= 2` orders must move something) because nothing has run since the
+    widening. OWED: a compile slot raises the floor to what it observes and
+    records the per-order counts here."""
     print("check_fold_order_is_visible [" + _mode_name() + "]")
     var f = arima_fixture(N_OBS, SALT)
-    var order = ARIMAOrder(1, 0, 1, 0, 0, 0, 0, 1, 0)
-    var ph = arima_params_fixture(order, f.batch_size, SALT)
-    var tp = batched_jones_transform_host(order, f.batch_size, False, ph)
-    var host = kalman_host_f32(f.y, f.batch_size, f.n_obs, order, tp, 0)
-    var rd = order.rd()
-    var moved_desc = 0
-    var moved_f64 = 0
-    for b in range(f.batch_size):
-        # the same T*P contraction, k descending and in Float64
-        var mb = b * rd * rd
-        for i in range(rd):
-            for j in range(rd):
-                var asc = Float32(0.0)
-                var desc = Float32(0.0)
-                var f64 = Float64(0.0)
-                for k in range(rd):
-                    var t = ftz(host.T[mb + i + k * rd])
-                    var p = ftz(host.P0[mb + k + j * rd])
-                    asc = ftz(identical_mul_add(t, p, asc))
-                    f64 += Float64(t) * Float64(p)
-                var k2 = rd - 1
-                while k2 >= 0:
-                    var t = ftz(host.T[mb + i + k2 * rd])
-                    var p = ftz(host.P0[mb + k2 + j * rd])
-                    desc = ftz(identical_mul_add(t, p, desc))
-                    k2 -= 1
-                if not same_bits(asc, desc):
-                    moved_desc += 1
-                if not same_bits(asc, Float32(f64)):
-                    moved_f64 += 1
-    print("    of " + String(f.batch_size * rd * rd) + " T*P cells, a descending k fold moves "
-          + String(moved_desc) + ", a Float64 fold moves " + String(moved_f64))
-    _assert(moved_desc > 0,
-            "a descending fold moves no cell: the fixture cannot see a fold and the bitwise gates are empty")
-    _assert(moved_f64 > 0, "a Float64 fold moves no cell: the fixture cannot see a fold")
+    var table = order_table()
+    var total_cells = 0
+    var total_desc = 0
+    var total_f64 = 0
+    var orders_that_moved = 0
+    for oc in table:
+        var order = oc.order
+        var ph = arima_params_fixture(order, f.batch_size, SALT, oc.plant)
+        var tp = batched_jones_transform_host(order, f.batch_size, False, ph)
+        var host = kalman_host_f32(f.y, f.batch_size, f.n_obs, order, tp, 0)
+        var rd = order.rd()
+        var moved_desc = 0
+        var moved_f64 = 0
+        var cells = 0
+        for b in range(f.batch_size):
+            var mb = b * rd * rd
+            for i in range(rd):
+                for j in range(rd):
+                    var asc = Float32(0.0)
+                    var desc = Float32(0.0)
+                    var f64 = Float64(0.0)
+                    for k in range(rd):
+                        var t = ftz(host.T[mb + i + k * rd])
+                        var pv = ftz(host.P0[mb + k + j * rd])
+                        asc = ftz(identical_mul_add(t, pv, asc))
+                        f64 += Float64(t) * Float64(pv)
+                    var k2 = rd - 1
+                    while k2 >= 0:
+                        var t = ftz(host.T[mb + i + k2 * rd])
+                        var pv = ftz(host.P0[mb + k2 + j * rd])
+                        desc = ftz(identical_mul_add(t, pv, desc))
+                        k2 -= 1
+                    cells += 1
+                    if not same_bits(asc, desc):
+                        moved_desc += 1
+                    if not same_bits(asc, Float32(f64)):
+                        moved_f64 += 1
+        print("      " + oc.name + " (rd=" + String(rd) + ", chain length " + String(rd)
+              + "): " + String(cells) + " T*P cells, descending fold moves "
+              + String(moved_desc) + ", Float64 fold moves " + String(moved_f64))
+        total_cells += cells
+        total_desc += moved_desc
+        total_f64 += moved_f64
+        if moved_desc > 0:
+            orders_that_moved += 1
+        if rd == 1:
+            _assert(moved_desc == 0,
+                    oc.name + " has rd = 1, a one-term fold with no order, yet reversing it "
+                    + "moved " + String(moved_desc) + " cells: the fold helper is not what we think")
+    print("    TOTAL over " + String(len(table)) + " orders: " + String(total_cells)
+          + " cells, descending fold moves " + String(total_desc)
+          + ", Float64 fold moves " + String(total_f64)
+          + "; orders in which the descending fold moved something: "
+          + String(orders_that_moved))
+    _assert(total_desc > 0,
+            "a descending fold moves no cell anywhere: the fixture cannot see a fold and every "
+            + "bitwise gate in this file is empty")
+    _assert(total_f64 > 0, "a Float64 fold moves no cell anywhere: the fixture cannot see a fold")
+    _assert(orders_that_moved >= 2,
+            "the descending fold moves cells in fewer than two orders, so this gate is carried by "
+            + "one fixture and reach is not established (spectral lane, per-fixture reach)")
 
 
 def check_jones_contraction_is_visible() raises:
@@ -982,6 +1111,7 @@ def main() raises:
     check_arima_refuses_by_name(ctx)
     check_kalman_launch_invariant(ctx)
     check_unit_root_guard_is_reached(ctx)
+    check_lu_pivot_tie_is_reached(ctx)
     check_fold_order_is_visible(ctx)
     print("ALL ARIMA CHECKS PASSED [" + _mode_name() + "]"
           + (" card: " + trace.path if trace.enabled else " (no card: set MOJOLEARN_IDENTITY_TRACE)"))
