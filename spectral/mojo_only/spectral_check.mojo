@@ -756,6 +756,15 @@ def check_spectral_device_equals_oracle() raises:
     var m4 = _compare_graph_run(ctx, "hashed_unnorm", hashed_graph_fixture(300, 4, 5), 3, False, False, 11, n_diff)
     if m4 != "":
         msgs.append(m4)
+    # THE TINY FIXTURE EXISTS TO MAKE THE `n - k` CLAMP BIND, and for no
+    # other reason. `ncv = min(n - k, max(2k + 1, 20))` takes the `n - k`
+    # branch only when `n < k + 20`; at n=22, k=4 that is `min(18, 20) = 18`.
+    # Every other fixture in this lane is large enough that `max(2k+1, 20)`
+    # always wins, which made MOJOLEARN_SPECTRAL_SABOTAGE_NCV inert on all
+    # five and therefore no test of the bound at all (measured 2026-08-23).
+    var m5 = _compare_graph_run(ctx, "tiny_ncv_clamp", hashed_graph_fixture(22, 2, 3), 4, True, True, 7, n_diff)
+    if m5 != "":
+        msgs.append(m5)
     # the dataset path: blobs -> device W -> the oracle on THAT W
     var bl = blobs_fixture(48, 3, 4, 0xB10B5)
     var data = bl[0].copy()
@@ -831,7 +840,8 @@ def check_spectral_device_equals_oracle() raises:
     else:
         print(
             "check_spectral_device_equals_oracle OK [" + _mode_name() + "]: path, ring, hashed,"
-            " hashed_unnorm(n=300), blobs(dataset path): every stage hash (L, diag, v0, each"
+            " hashed_unnorm(n=300), tiny_ncv_clamp(n=22, the ncv clamp bound),"
+            " blobs(dataset path): every stage hash (L, diag, v0, each"
             " step's alpha/beta, each restart's Ritz values and residual, the Ritz vectors,"
             " the embedding) and every embedding cell bit for bit; sabotage=" + spectral_sabotage_name()
         )

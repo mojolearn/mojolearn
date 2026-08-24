@@ -53,10 +53,12 @@ true, and the only thing that is:
           values and residual, the Ritz vectors, the embedding) and every
           embedding cell bit for bit
 
-  * **NO SABOTAGE HAS EVER BEEN RUN.** Not one. A green check whose path
-    has not been sabotaged proves nothing, which is this repository's
-    oldest standing rule, so the sentence above is EVIDENCE and not a
-    gate. All eight arms exist in source; all eight are unrun.
+  * **ALL NINE SABOTAGE ARMS HAVE NOW RUN**, one build each, 2026-08-23,
+    IDENTICAL, one M4. **Seven bite.** Section 6 carries the measured
+    table: which check each arm failed, which stage moved first, how many
+    stages and cells moved, and WHICH FIXTURE reached it. Three of the
+    seven live arms are carried by ONE FIXTURE EACH, which is the finding
+    to read before any of the green ones.
   * The run stopped at `check_spectral_blobs_separate` (13 of 144 points
     nearer another blob's centroid in the 2-column embedding) and the four
     checks after it, including the rung-2 clustering one, never executed.
@@ -253,26 +255,85 @@ copies the device setup `cluster/estimator.mojo::kmeans_fit` performs.
 
 ## 6. The sabotages, and what each is honestly expected to do
 
-All eight are build defines, none on by default, **none has been run**.
-Three of them state in advance that they are expected NOT to fail a gate,
-so that a pass cannot later be misread as a success.
+All nine are build defines, none on by default. **All nine RAN**, one
+build each, 2026-08-23, IDENTICAL, one M4. Seven bite.
 
-| define | expected |
-|---|---|
-| `..._SIGN_FLIP` | FAIL device == oracle at the first Ritz-vector stage |
-| `..._LAPLACIAN_SEAM` | FAIL at `spectral.L.vals` (reassociates seam L6, no fusion change) |
-| `..._SPMV_ROTATE` | FAIL device == oracle (makes the matvec order a function of `blockIdx`) |
-| `..._NCV` | FAIL, and STRUCTURALLY: a different stage count. **Mirror fidelity, not a choice of ours**: it reverts `ncv` to cuVS 25.08's spelling |
-| `..._SWEEP_CAP` | FAIL `check_spectral_path_exact`. NOT device == oracle: the solver is SHARED by both arms |
-| `..._MAXITER` | EXPECTED INERT. Every fixture converges long before either bound. **Mirror fidelity**: it reverts `max_iterations` to cuVS 25.08's literal `1000` |
-| `..._ROTATE_UNFUSED` | EXPECTED REACHED BUT INERT, **and that is a hole**: seam J4 has no gate with teeth until a certificate lands |
-| `..._STD_SQRT` | REPORT. Inert on a host with a correctly rounded `sqrt`; it exists to be measured per host |
+| arm | verdict | which check, and which FIXTURE reached it | stages moved | cells moved |
+|---|---|---|---|---|
+| `SIGN_FLIP` | **BITES** | `device == oracle`, **`hashed` ONLY** | 2/119, first `spectral.ritz.vectors` | 144/144 |
+| `LAPLACIAN_SEAM` | **BITES** | `device == oracle`, **`hashed` ONLY** | 101/119, first `spectral.L.vals` | 143/144 |
+| `SPMV_ROTATE` | **BITES** | `device == oracle`, **`hashed_unnorm` (n=300) ONLY** | 205/230, first `spectral.lanczos.step0003.beta` | 735/900 |
+| `NCV` | **BITES** | `device == oracle`, **`tiny_ncv_clamp` (n=22) ONLY** | **STRUCTURAL, 85 vs 77** | 64/66 |
+| `SWEEP_CAP` | **BITES** | `check_tsolve_against_float64_jacobi` | n/a, host solver | worst eigenvalue error 6.9e-4 against a 2e-6 budget |
+| `ROTATE_UNFUSED` | **BITES** | `check_spectral_ring_exact` | n/a, closed form | breaks the ring's DEGENERATE PAIR: 5 distinct Ritz values where `{0, l1, l1, l2, l2}` is required |
+| `TIE_REVERSE` | **BITES** | `check_tsolve_tie_order_is_stable` | n/a, host | eigenvector column 0 is no longer `e_1` |
+| `MAXITER` | **INERT** | nothing | 0 | 0. **REACH FAILURE, not a pass** |
+| `STD_SQRT` | **INERT** | nothing | 0 | 0. **A MEASUREMENT**: this host's `std.math.sqrt` is correctly rounded on every value this lane feeds it |
+
+
+**REACH IS PER FIXTURE, and three of the seven live arms are carried by ONE
+FIXTURE EACH.** That is the most important thing this run produced, because
+it means deleting one fixture would silently disarm a clause:
+
+  * `SIGN_FLIP` is inert on `path`, `ring`, `hashed_unnorm` and `blobs`.
+    MECHANISM: after a restart the projected matrix built from `-beta_k` is
+    exactly `D T D` with `D = diag(-1 for i < k, +1 otherwise)`, so its
+    eigenvectors differ from the unsabotaged ones by a sign pattern that
+    `pin_column_signs` then re-canonicalizes. Whether the final flip
+    survives to the embedding depends on the fixture, and only `hashed`
+    keeps it. **The device-side instrument for DEVIATION 770 rests on one
+    fixture.** (The sign rule also has two host instruments that this arm
+    does not target, so the clause is not undefended, but the DEVICE path
+    is.)
+  * `LAPLACIAN_SEAM` is unreached on four. `ring` and `hashed_unnorm` run
+    `norm_laplacian = false`, so seam L6 never executes at all; `path` and
+    `blobs` carry weights that are exactly `1.0` or `0.5`, and multiplying
+    by a power of two is exact, so the reassociation moves no bit. Only a
+    fixture with NON-POWER-OF-TWO weights AND a normalized Laplacian
+    reaches it, which is exactly what `hashed_graph_fixture`'s docstring
+    claims it exists for.
+  * `SPMV_ROTATE` is unreached on four FOR A BORING REASON: at
+    `LANCZOS_TPB = 256` the graphs with n = 22, 48, 64 and 144 all fit in
+    ONE BLOCK, where `blockIdx.x` is 0 and the rotation is the identity.
+    Only n = 300 spans two blocks. A launch-invariance arm that only ever
+    runs one block tests nothing.
+  * `NCV` was inert on all five original fixtures and is now carried by a
+    sixth added for it. `ncv = min(n - k, max(2k + 1, 20))` takes the
+    `n - k` branch only when `n < k + 20`, and every fixture here was
+    larger, so the clamp never bound. `tiny_ncv_clamp` is n=22, k=4, where
+    it is `min(18, 20) = 18`; the arm then takes `min(20, 22) = 20` and the
+    two runs take a DIFFERENT NUMBER OF LANCZOS STEPS, which is the
+    structural shape a changed bound has.
+
+**TWO PREDICTIONS IN THIS DOCUMENT WERE WRONG, BOTH IN THE LANE'S FAVOR,
+and they are corrected rather than quietly updated.**
+
+  1. `SWEEP_CAP` was predicted to fail `check_spectral_path_exact`. It
+     fails EARLIER, at `check_tsolve_against_float64_jacobi`, which is a
+     tighter and more direct independent reference.
+  2. `ROTATE_UNFUSED` was declared **EXPECTED REACHED BUT INERT, AND THAT
+     IS A HOLE**. IT BITES. It fails `check_spectral_ring_exact` by
+     BREAKING THE RING'S DEGENERATE PAIR: with NR's four roundings the
+     solver returns five distinct Ritz values where the doubled spectrum
+     requires `{0, l1, l1, l2, l2}`. So seam J4 does have an instrument,
+     and it is the degeneracy this lane had been treating only as a hazard
+     to be RECORDED. A degenerate spectrum turns out to be the most
+     sensitive test surface in the lane, not the least trustworthy one.
+
+
+**The VACUOUS negative controls did not fire in any of the ten runs**,
+which is the correct outcome and also means the controls are themselves
+unexercised. A self-test that forces one to fire is OWED.
 
 ## 7. What is owed, and every item needs a compile slot
 
-  1. **Run the eight sabotage arms.** Nothing in this lane is gated until
-     they run and each behaves as the table above predicts. An arm that
-     surprises the table is a finding either way.
+  1. ~~Run the eight sabotage arms.~~ **DONE**, and a ninth added for the
+     tie rule. Seven bite. What remains owed from that run: a fixture that
+     makes `MAXITER` reach (it needs a graph that genuinely exceeds 1000
+     Lanczos steps while staying under `10n`, so `n > 100` AND slow
+     convergence, which is the heavy case this lane defers), and a
+     SELF-TEST FOR THE VACUOUS CONTROLS, which never fired in ten runs and
+     are therefore themselves unexercised.
   2. **Diagnose `check_spectral_blobs_separate`.** 13 of 144 points land
      nearer another blob's centroid. Two hypotheses, untested: the kNN
      graph of three well-separated blobs has three connected components,
@@ -284,9 +345,16 @@ so that a pass cannot later be misread as a success.
      first. Nothing may be concluded until it is measured.
   3. **Run the four checks that never executed**, including the rung-2
      clustering one.
-  4. **A CERTIFICATE gate for `symmetric_eig_host`** so seam J4 and the
-     sweep cap have teeth (`UNPORTED.tsv`).
-  5. **A fixture that makes `max_iterations` bite**, so C2 is testable.
+  4. ~~A CERTIFICATE gate for `symmetric_eig_host` so seam J4 and the
+     sweep cap have teeth.~~ **NO LONGER BLOCKING**: the sweep cap is
+     caught by `check_tsolve_against_float64_jacobi`, seam J4 by
+     `check_spectral_ring_exact`, and the tie rule by the new
+     `check_tsolve_tie_order_is_stable`. A certificate would still be
+     cheaper and sharper than three indirect references, so it stays a
+     nice-to-have rather than a hole.
+  5. **A fixture that makes `max_iterations` bite**, so the C2 row is
+     testable. Still owed; the `ncv` clamp's equivalent gap WAS closed this
+     round by adding `tiny_ncv_clamp` (n=22, k=4).
   6. **Re-run everything under FAST** and record, not assert.
   7. **The cross-vendor legs.** Nothing here has run anywhere but one M4,
      so no cross-vendor claim exists.

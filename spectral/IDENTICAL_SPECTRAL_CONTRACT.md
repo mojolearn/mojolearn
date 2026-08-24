@@ -380,8 +380,81 @@ degeneracy RECORDED not asserted; (e) every clause above falsifiable by a
 named sabotage that FAILS a gate.
 
 **THE SABOTAGE ARMS THIS CONTRACT REQUIRES**, each a build define, none
-ever on by default. Sources are in the lane; NONE HAS BEEN RUN, because
-the lane lost its compile slot.
+ever on by default. **ALL NINE WERE RUN ON 2026-08-23**, one build each,
+IDENTICAL, one Apple M4. Seven bite. The table below is the MEASURED
+result; the predictions it replaces are corrected underneath rather than
+deleted.
+
+| arm | verdict | which check, and which FIXTURE reached it | stages moved | cells moved |
+|---|---|---|---|---|
+| `SIGN_FLIP` | **BITES** | `device == oracle`, **`hashed` ONLY** | 2/119, first `spectral.ritz.vectors` | 144/144 |
+| `LAPLACIAN_SEAM` | **BITES** | `device == oracle`, **`hashed` ONLY** | 101/119, first `spectral.L.vals` | 143/144 |
+| `SPMV_ROTATE` | **BITES** | `device == oracle`, **`hashed_unnorm` (n=300) ONLY** | 205/230, first `spectral.lanczos.step0003.beta` | 735/900 |
+| `NCV` | **BITES** | `device == oracle`, **`tiny_ncv_clamp` (n=22) ONLY** | **STRUCTURAL, 85 vs 77** | 64/66 |
+| `SWEEP_CAP` | **BITES** | `check_tsolve_against_float64_jacobi` | n/a, host solver | worst eigenvalue error 6.9e-4 against a 2e-6 budget |
+| `ROTATE_UNFUSED` | **BITES** | `check_spectral_ring_exact` | n/a, closed form | breaks the ring's DEGENERATE PAIR: 5 distinct Ritz values where `{0, l1, l1, l2, l2}` is required |
+| `TIE_REVERSE` | **BITES** | `check_tsolve_tie_order_is_stable` | n/a, host | eigenvector column 0 is no longer `e_1` |
+| `MAXITER` | **INERT** | nothing | 0 | 0. **REACH FAILURE, not a pass** |
+| `STD_SQRT` | **INERT** | nothing | 0 | 0. **A MEASUREMENT**: this host's `std.math.sqrt` is correctly rounded on every value this lane feeds it |
+
+**REACH IS PER FIXTURE, and three of the seven live arms are carried by ONE
+FIXTURE EACH.** That is the most important thing this run produced, because
+it means deleting one fixture would silently disarm a clause:
+
+  * `SIGN_FLIP` is inert on `path`, `ring`, `hashed_unnorm` and `blobs`.
+    MECHANISM: after a restart the projected matrix built from `-beta_k` is
+    exactly `D T D` with `D = diag(-1 for i < k, +1 otherwise)`, so its
+    eigenvectors differ from the unsabotaged ones by a sign pattern that
+    `pin_column_signs` then re-canonicalizes. Whether the final flip
+    survives to the embedding depends on the fixture, and only `hashed`
+    keeps it. **The device-side instrument for DEVIATION 770 rests on one
+    fixture.** (The sign rule also has two host instruments that this arm
+    does not target, so the clause is not undefended, but the DEVICE path
+    is.)
+  * `LAPLACIAN_SEAM` is unreached on four. `ring` and `hashed_unnorm` run
+    `norm_laplacian = false`, so seam L6 never executes at all; `path` and
+    `blobs` carry weights that are exactly `1.0` or `0.5`, and multiplying
+    by a power of two is exact, so the reassociation moves no bit. Only a
+    fixture with NON-POWER-OF-TWO weights AND a normalized Laplacian
+    reaches it, which is exactly what `hashed_graph_fixture`'s docstring
+    claims it exists for.
+  * `SPMV_ROTATE` is unreached on four FOR A BORING REASON: at
+    `LANCZOS_TPB = 256` the graphs with n = 22, 48, 64 and 144 all fit in
+    ONE BLOCK, where `blockIdx.x` is 0 and the rotation is the identity.
+    Only n = 300 spans two blocks. A launch-invariance arm that only ever
+    runs one block tests nothing.
+  * `NCV` was inert on all five original fixtures and is now carried by a
+    sixth added for it. `ncv = min(n - k, max(2k + 1, 20))` takes the
+    `n - k` branch only when `n < k + 20`, and every fixture here was
+    larger, so the clamp never bound. `tiny_ncv_clamp` is n=22, k=4, where
+    it is `min(18, 20) = 18`; the arm then takes `min(20, 22) = 20` and the
+    two runs take a DIFFERENT NUMBER OF LANCZOS STEPS, which is the
+    structural shape a changed bound has.
+
+**TWO PREDICTIONS IN THIS DOCUMENT WERE WRONG, BOTH IN THE LANE'S FAVOR,
+and they are corrected rather than quietly updated.**
+
+  1. `SWEEP_CAP` was predicted to fail `check_spectral_path_exact`. It
+     fails EARLIER, at `check_tsolve_against_float64_jacobi`, which is a
+     tighter and more direct independent reference.
+  2. `ROTATE_UNFUSED` was declared **EXPECTED REACHED BUT INERT, AND THAT
+     IS A HOLE**. IT BITES. It fails `check_spectral_ring_exact` by
+     BREAKING THE RING'S DEGENERATE PAIR: with NR's four roundings the
+     solver returns five distinct Ritz values where the doubled spectrum
+     requires `{0, l1, l1, l2, l2}`. So seam J4 does have an instrument,
+     and it is the degeneracy this lane had been treating only as a hazard
+     to be RECORDED. A degenerate spectrum turns out to be the most
+     sensitive test surface in the lane, not the least trustworthy one.
+
+**Every run also passed the VACUOUS negative controls** (`_refuse_vacuous`
+and the two inline guards), which raise VACUOUS rather than FAILED when a
+comparison covers zero cells or a card carries too few stages. They did not
+fire once in ten runs, which is the correct outcome and also means THE
+CONTROLS THEMSELVES ARE UNEXERCISED. A self-test that forces one to fire is
+OWED.
+
+The original prediction table, kept because a prediction this document got
+wrong is worth as much as one it got right:
 
 | define | what it breaks | which clause it falsifies | must |
 |---|---|---|---|
