@@ -153,7 +153,22 @@ def get_threads_per_block(n: Int, max_threads: Int = 512) -> Int:
 
 
 def get_num_blocks(n: Int, max_threads: Int = 512, max_blocks: Int = MAX_BLOCKS_PER_DIM) -> Int:
-    """`GET_NUM_BLOCKS(n, max_threads, max_blocks)`."""
+    """`GET_NUM_BLOCKS(n, max_threads, max_blocks)`.
+
+    NOT ON THE LAUNCH PATH, AND DELIBERATELY SO. Every kernel launcher in
+    this lane computes `(n + tpb - 1) // tpb` directly instead of calling
+    this, because THEIR 65535 cap silently under-covers: past the cap the
+    grid stops growing and the tail of the batch is never written. That is
+    a bug, and not launching with the cap is the fix.
+
+    It is kept because it is their spelling and PORTED_MAP.tsv cites it,
+    not because anything calls it. It is also UNREACHABLE in effect: the
+    cap binds only above `65535 * GET_THREADS_PER_BLOCK(batch_size)`
+    series, and `GET_THREADS_PER_BLOCK` returns 512 for any batch past
+    1024, so it needs more than 33.5 million series -- at this lane's
+    n = 48 that is over 6 GB of input before a single kernel runs. No
+    shape this lane will ever run approaches it. UNPORTED.tsv records it
+    as UNPORTED-IN-EFFECT rather than pretending it is gated."""
     var ret = (n - 1) // get_threads_per_block(n, max_threads) + 1
     return max_blocks if ret > max_blocks else ret
 

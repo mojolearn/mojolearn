@@ -273,6 +273,51 @@ the batch of 512 must not all carry row 0's SSE. They raise the word
 VACUOUS rather than FAILED, because a vacuous gate and a broken kernel
 are different diagnoses.
 
+## Which DECISIONS are recorded, and which are only listed
+
+Andrew asked whether there are more hashes worth taking. This lane has the
+sharpest evidence that there are, because two of its own arms move almost
+no numbers:
+
+* `CRIT_ORDER` moves **zero of 2800 numeric cells** and changes only which
+  stop criterion is reported.
+* `LS_TIE` moves 9 stages and 64 cells and leaves the **final forecast
+  bit-identical**.
+
+A card that hashes only numbers has no instrument for that class at all.
+DEVIATION 665 already bought the criterion; DEVIATION 699 buys the rest of
+the cheap ones as a single packed `Int32` per series, `hw.opt.decisions`,
+every bit read off a compare the optimizer already performs.
+
+### Added (DEVIATION 699)
+
+| decision | bit | why it is load-bearing |
+|---|---|---|
+| zero-direction guard returned | 0 | DEVIATION 662's whole behaviour; invisible otherwise |
+| Hessian reset (`phi > 0`) | 1 | changes the entire search trajectory, and is a pure comparison |
+| line search hit its limit | 2 | cuml#888's path, where the LAST nx is stored rather than the minimising one |
+| `rho_ == 0` | 3 | the second NaN route; `UNPORTED.tsv` argued it terminates deterministically and nothing could confirm reach |
+| a Hessian entry went NaN | 4 | the consequence of the above, one step later |
+| BOTH stop criteria true | 5 | the exact tie `CRIT_ORDER` perturbs. Without it nobody can say the arm's tie is reached |
+| returned at `bfgs_iter_limit` | 6 | the fall-through return |
+| which clamp arm fired, x3 | 7-12 | the low arm is where `-0.0` and NaN both land, and no numeric stage distinguishes that from a legitimate `+0.0`. `SAB_CLAMP_GE`'s target |
+| total line-search halvings | 16+ | a scalar summary of the path `LS_TIE` perturbs |
+
+### Listed, for the orchestrator to weigh
+
+| decision | where | cost | argument |
+|---|---|---|---|
+| the multiplicative `stmp_eps` clamp fired | inside `holtwinters_eval_device`, per step | MEDIUM: the eval has many call sites and an out-param touches all of them | genuinely load-bearing, and vendor-relevant: a flushed subnormal `stmp` changes the branch. The best candidate on this list |
+| per-ITERATION criterion, not just the final one | the BFGS loop | LOW-MEDIUM: another `trace_iters`-sized stage | would localise a criterion divergence to an iteration, as `hw.opt.iterNNN.params` does for the numbers |
+| which `stmp` source was used (`start_season` vs `pseason`) | eval, per step | LOW | a pure function of `i` and `frequency`; no vendor can answer it differently. Low value |
+| the `shift` selection (`use_beta` / `use_gamma`) | kernel entry | LOW | constant per fit and already implied by the header. Low value |
+| whether a poisoned scratch cell was ever read | every kernel | HIGH: needs a sentinel check per read | would turn the padding knob from a passive control into an active one. Worth it only if a read-before-write is ever suspected |
+| **grid and block dims per launch** | host | LOW | **argued AGAINST, and this is the interesting one.** Andrew named it, but it must NOT go in the identity card: the card is asserted LAUNCH-INVARIANT, and a stage that records the launch geometry would differ between the two tpb settings by construction, breaking the very property `check_hw_launch_invariance` exists to prove. It belongs in a separate non-card assertion ("this configuration really did launch 2 blocks"), which is what the missing multi-block fixtures were about |
+
+The last row generalises: **a decision worth hashing is one the algorithm
+makes, not one the scheduler makes.** Scheduler facts belong in
+assertions, because the card's job is to be independent of them.
+
 ## What the gates check
 
     check_hw_refusals                13 refusals by name (their pyx rules + DEVIATION 664)
@@ -342,30 +387,37 @@ number is the orchestrator's to assign):
 
 | n | path | what is vendor-dependent in their spelling | what we did | status |
 |---|---|---|---|---|
-| NN | holtwinters: Holt-Winters exponential smoothing (`runner.cuh`, `internal/hw_{eval,optim,decompose,forecast}.cuh`) | a strictly sequential recurrence with no fold to pin, so the exposure is elsewhere: every `a*x + b*y` update leaves the contraction to the compiler (C++ does not say which product fuses); every stored intermediate inherits the vendor's denormal mode; `bound_device` is `fminf(fmaxf(v,0),1)` and meets both `-0.0` and a computed NaN; `batched_ls` reaches `pinv([1,t])` through cuSOLVER geqrf/orgqr + cuBLAS gemm; the Hessian diagonal is computed in float64 in H11/H33 and float32 in H22 through a `2.` vs `2` literal; the optimizer can compute NaN on a legal all-zero series and report (0,0,0) | DEVIATION 698 (one flush-and-fuse rule, first product fused and second stored at every seam, ftz at every stored intermediate; seam table in the README); DEVIATION 663 (the clamp as a compare chain); DEVIATION 660 (R1Qt as a host float64 closed form); DEVIATION 697 (the Hessian diagonal in float32 on all three entries -- Metal has no float64, so their arm is unportable); DEVIATION 662 (a zero direction returns their own MIN_GRAD_NORM criterion); DEVIATION 661 (one NaN payload in the card); DEVIATION 664 (non-finite and non-positive-under-multiplicative refused by name); DEVIATION 665 (per-iteration parameters, niter and criterion recorded) | device == oracle bitwise under IDENTICAL on one Apple M4, 6 fixtures x every stage and cell; launch-invariant across two block widths, two paddings, two poisons, and batch 1 == 7 == 512; 7 sabotage arms fail, 2 recorded Apple-null; NO SECOND VENDOR; part of the tree uncompiled since the green run (README OWED list) |
+| NN | holtwinters: Holt-Winters exponential smoothing (`runner.cuh`, `internal/hw_{eval,optim,decompose,forecast}.cuh`) | a strictly sequential recurrence with no fold to pin, so the exposure is elsewhere: every `a*x + b*y` update leaves the contraction to the compiler (C++ does not say which product fuses); every stored intermediate inherits the vendor's denormal mode; `bound_device` is `fminf(fmaxf(v,0),1)` and meets both `-0.0` and a computed NaN; `batched_ls` reaches `pinv([1,t])` through cuSOLVER geqrf/orgqr + cuBLAS gemm; the Hessian diagonal is computed in float64 in H11/H33 and float32 in H22 through a `2.` vs `2` literal; the optimizer can compute NaN on a legal all-zero series and report (0,0,0) | DEVIATION 698 (one flush-and-fuse rule, first product fused and second stored at every seam, ftz at every stored intermediate; seam table in the README); DEVIATION 663 (the clamp as a compare chain); DEVIATION 660 (R1Qt as a host float64 closed form); DEVIATION 697 (the Hessian diagonal in float32 on all three entries -- Metal has no float64, so their arm is unportable); DEVIATION 662 (a zero direction returns their own MIN_GRAD_NORM criterion); DEVIATION 661 (one NaN payload in the card); DEVIATION 664 (non-finite and non-positive-under-multiplicative refused by name); DEVIATION 665 (per-iteration parameters, niter and criterion recorded); DEVIATION 699 (the optimizer's DECISIONS recorded as a packed mask -- which clamp arm fired, whether the Hessian was reset, whether the line search hit its limit, whether rho_ was zero, whether BOTH stop criteria fired -- because this lane MEASURED two arms that move almost no numbers: CRIT_ORDER moves 0 of 2800 cells and LS_TIE leaves the final forecast bit-identical) | device == oracle bitwise under IDENTICAL on one Apple M4, 6 fixtures x every stage and cell; launch-invariant across two block widths, two paddings, two poisons, and batch 1 == 7 == 512, with two negative controls proving the comparison is not vacuous; 9 sabotage arms built and run, 7 FAIL with stage and cell counts recorded, and 2 (STD_SQRT, HW_MAX_CLAMP) are APPLE-NULL and counted as REACH FAILURES, NOT passes -- both are other vendors' arms and ONLY a second vendor can exercise them; NO SECOND VENDOR HAS RUN THIS, so every cross-vendor sentence is a claim about the spelling and not a measurement; DEVIATION 699 and the reach census are WRITTEN BUT UNBUILT (README OWED list) |
 
 **The Python surface** is not this lane's directory. `estimator.mojo` is
 the entry `bindings/` should reach.
 
 ## OWED, and it is not a short list
 
-Items 1, 2 and 3 of the previous list are DONE and are the tables above.
-What remains:
+**Everything written since the last green run is UNBUILT.** DEVIATION
+699, the decision census, the limit-override seam and the forecast
+two-block fixture were all written without a compile slot. The first job
+of the next slot is to build them; expect compile errors, because three
+were already found by re-reading (an invented helper, two missing
+imports).
 
-1. **NVIDIA and AMD re-prints** of the whole gate. `STD_SQRT` and
-   `HW_MAX_CLAMP` are reach failures on Apple and can only be exercised
-   there; every "identical across vendors" claim in this file is a claim
-   about the spelling, not a measurement.
-2. **A fixture that reaches `bfgs_iter_limit`** so the cuml#888
-   line-search behaviour recorded in `UNPORTED.tsv` is exercised rather
-   than argued about. No current fixture hits the 1000-iteration limit
-   (the gate prints `0 hit the 1000-iteration limit`).
-3. **A fixture that reaches the second NaN route** (`rho_ = 0` from two
-   bitwise-equal consecutive gradients).
-4. **`get_num_blocks`'s 65535 cap** is ported but not on the launch path
-   and no fixture approaches it. Ungated.
-5. **A `ROTATE_CONV`-style multi-block fixture for the OTHER kernels.**
-   `mixed` gives two blocks for the decomposition path; the optimizer and
-   forecast kernels are only ever run at one block by five of the six
-   fixtures. Their launch-geometry independence rides on the batch-512
-   arm of `check_hw_launch_invariance` rather than on a sabotage.
+1. **Build what is written.** Clean IDENTICAL and FAST, then all nine
+   sabotage arms, which now must also agree on `hw.opt.decisions`.
+2. **READ THE REACH CENSUS FIRST.** `check_hw_decision_branches` prints
+   which DEVIATION 699 bits the standard fixtures already set. That may
+   show `RHO_ZERO` and `LS_LIMIT` are already reached by fixtures that
+   exist, in which case items 3 and 4 below are already done and no new
+   fixture is needed. If it shows them unreached, it names exactly what
+   is missing. Do not write a fixture before reading it.
+3. **A fixture reaching `RHO_ZERO`** (the second NaN route), if the
+   census says nothing reaches it.
+4. **A fixture reaching `LS_LIMIT`** on DEFAULT limits, if wanted. The
+   limit-override fixture reaches the branch; it does not prove a natural
+   series can.
+5. **NVIDIA and AMD re-prints.** `STD_SQRT` and `HW_MAX_CLAMP` are
+   Apple-null reach failures that ONLY a second vendor can exercise, and
+   every cross-vendor sentence in this file is a claim about the
+   spelling, not a measurement.
+6. **`get_num_blocks`'s 65535 cap is now recorded as UNREACHABLE**, not
+   ungated: it binds above 33.5 million series. Nothing to do; it is
+   closed as UNPORTED-IN-EFFECT.
