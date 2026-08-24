@@ -40,7 +40,7 @@ struct OptimParams(Copyable, Movable, ImplicitlyCopyable):
 
 
 def seasonal_from_name(name: String) raises -> Int:
-    """`holtwinters.pyx:190-198`: 'additive' | 'add' -> ADDITIVE,
+    """`holtwinters.pyx:193-198`: 'additive' | 'add' -> ADDITIVE,
     'multiplicative' | 'mul' -> MULTIPLICATIVE, anything else raises by
     name."""
     if name == "additive" or name == "add":

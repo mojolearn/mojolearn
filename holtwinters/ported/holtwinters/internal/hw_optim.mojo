@@ -25,7 +25,7 @@ because the fused spelling is the lane's rule.) The line-search test
 
 ============ DEVIATION 697 (2026-08-23): THE HESSIAN DIAGONAL IS UPDATED IN
 ============ float32, NOT IN THEIR ACCIDENTAL float64 ======================
-WHAT THEIRS DOES (`hw_optim.cuh:583-588`), read literal by literal:
+WHAT THEIRS DOES (`hw_optim.cuh:573-578`), read literal by literal:
 
     H11 += k * s1 * s1 - 2. * rho * s1 * Hy1;      // `2.`  -> DOUBLE
     H12 += k * s1 * s2 - rho * (s2 * Hy1 + s1 * Hy2);
@@ -73,7 +73,7 @@ reason. That is stated rather than papered over with an inert arm.
 
 ============ DEVIATION 662 (2026-08-23): A ZERO SEARCH DIRECTION STOPS, IT
 ============ DOES NOT STEP BY inf ==========================================
-WHAT THEIRS DOES (`hw_optim.cuh:420-425`): `step_size = 0.866 / sqrt(p.p)`
+WHAT THEIRS DOES (`hw_optim.cuh:430-432`): `step_size = 0.866 / sqrt(p.p)`
 with no guard. A ZERO gradient -- a LEGAL input reaches it: an all-zero
 additive series has SSE exactly 0 at every parameter, so both finite
 differences are 0 -- gives `p = 0`, `step_size = +inf`, `nx = x + inf * 0
@@ -183,7 +183,7 @@ def _sqrt_seam(x: Float32) -> Float32:
 @always_inline
 def _ls_reject(loss: Float32, target: Float32) -> Bool:
     """Their line-search rejection test `loss > loss_ref + step * cauchy`
-    (`hw_optim.cuh:497`), STRICT: an exact tie ACCEPTS the step. SAB_LS_TIE
+    (`hw_optim.cuh:485`), STRICT: an exact tie ACCEPTS the step. SAB_LS_TIE
     loosens it to `>=` and must fail."""
     comptime if SAB_LS_TIE:
         return loss >= target
@@ -247,7 +247,7 @@ def holtwinters_finite_gradient_device(
     eps: Float32,
     additive: Bool,
 ):
-    """`holtwinters_finite_gradient_device` (`hw_optim.cuh:175-349`):
+    """`holtwinters_finite_gradient_device` (`hw_optim.cuh:190-349`):
     central differences `(right - left) / (eps * 2)`, each side one full
     eval. A gradient that is not asked for (`nullptr` theirs) is left
     untouched."""
@@ -325,7 +325,7 @@ def holtwinters_bfgs_optim_device(
     trace_iters: Int,
     mut niter: Int,
 ) -> Int:
-    """`holtwinters_bfgs_optim_device` (`hw_optim.cuh:355-592`) with
+    """`holtwinters_bfgs_optim_device` (`hw_optim.cuh:351-586`) with
     DEVIATION 662's guard and DEVIATION 665's instrumentation. Returns the
     `OptimCriterion`; `x1..x3` hold the UNBOUNDED result (the caller
     bounds, as theirs does)."""
@@ -423,7 +423,7 @@ def holtwinters_bfgs_optim_device(
             iter_trace.unsafe_store((it * 3 + 0) * batch_size + tid, x1)
             iter_trace.unsafe_store((it * 3 + 1) * batch_size + tid, x2)
             iter_trace.unsafe_store((it * 3 + 2) * batch_size + tid, x3)
-        # Their order (`hw_optim.cuh:520-523`): param-diff is tested FIRST,
+        # Their order (`hw_optim.cuh:524-526`): param-diff is tested FIRST,
         # so on an iteration where both fire the reported criterion is
         # MIN_PARAM_DIFF. SAB_CRIT_ORDER swaps the two tests and must move
         # `hw.opt.criterion`.
@@ -525,7 +525,7 @@ def holtwinters_optim_gpu_global_kernel(
     linesearch_step_size: Float32,
     trace_iters_in: Int32,
 ):
-    """`holtwinters_optim_gpu_global_kernel` (`hw_optim.cuh:699-793`), the
+    """`holtwinters_optim_gpu_global_kernel` (`hw_optim.cuh:711-830`), the
     BFGS arm. `flags_in` bits: 1 use_beta, 2 use_gamma, 4 optim_alpha, 8
     optim_beta, 16 optim_gamma, 32 additive, 64 write_error."""
     var tid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -629,7 +629,7 @@ def holtwinters_optim_gpu(
     mut pseason: DeviceBuffer[DType.float32],
     tpb: Int,
 ) raises:
-    """`holtwinters_optim_gpu` (`hw_optim.cuh:797-921`): the global-scratch
+    """`holtwinters_optim_gpu` (`hw_optim.cuh:832-921`): the global-scratch
     arm, BFGS only (`single_param` raises by name). Theirs launches 128
     threads per block; `tpb` is that width (scheduling; the gates vary
     it). `pseason` holds `batch_size * frequency`; `iter_trace` holds

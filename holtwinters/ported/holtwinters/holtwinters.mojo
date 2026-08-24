@@ -18,7 +18,7 @@ from holtwinters.ported.holtwinters.internal.hw_utils import HW_OPTIM_TPB
 
 
 def buffer_size(n: Int, batch_size: Int, frequency: Int) raises -> HWBufferSizes:
-    """`ML::HoltWinters::buffer_size` (`holtwinters.cu:12-34`): use_beta =
+    """`ML::HoltWinters::buffer_size` (`holtwinters.cu:13-35`): use_beta =
     use_gamma = true."""
     return holtwinters_buffer_size(n, batch_size, frequency, True, True)
 
@@ -49,7 +49,7 @@ def fit(
     scratch_pad: Int = 0,
     scratch_poison: Float32 = Float32(0.0),
 ) raises:
-    """`ML::HoltWinters::fit` (`holtwinters.cu:36-58`, float). The extra
+    """`ML::HoltWinters::fit` (`holtwinters.cu:37-62`, float). The extra
     outputs (`alpha/beta/gamma`, `criterion`, `niter`, `iter_trace`) are
     DEVIATION 665's instrumentation; theirs leaves the fitted parameters on
     the device and discards them."""
@@ -75,7 +75,7 @@ def forecast(
     mut trace: IdentityTrace,
     tpb: Int = -1,
 ) raises:
-    """`ML::HoltWinters::forecast` (`holtwinters.cu:84-98`, float)."""
+    """`ML::HoltWinters::forecast` (`holtwinters.cu:91-104`, float)."""
     holtwinters_forecast_helper(
         ctx, n, batch_size, frequency, h, seasonal, level_d, trend_d, season_d,
         forecast_d, trace, tpb,

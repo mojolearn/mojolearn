@@ -32,7 +32,7 @@ def holtwinters_seasonal_forecast_kernel(
     season_coef: MutPointer[Float32, MutAnyOrigin],
     additive_in: Int32,
 ):
-    """`holtwinters_seasonal_forecast_kernel` (`hw_forecast.cuh:9-32`).
+    """`holtwinters_seasonal_forecast_kernel` (`hw_forecast.cuh:9-31`).
     `level_coef`/`trend_coef` are already offset to the last fitted row,
     `season_coef` to the last `frequency` rows (the runner's shifts)."""
     var tid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)

@@ -7,7 +7,7 @@ sabotage has one switchboard.
 
 ============ DEVIATION 663 (2026-08-23): `bound_device` IS A COMPARE CHAIN,
 ============ NOT `fminf(fmaxf(val, 0), 1)` ==================================
-WHAT THEIRS DOES (`hw_utils.cuh:58-66`): `fminf(fmaxf(val, .0), 1.)` on the
+WHAT THEIRS DOES (`hw_utils.cuh:63-71`): `fminf(fmaxf(val, .0), 1.)` on the
 float instantiation. On NVIDIA `fmaxf(-0.0, +0.0)` is `+0.0` (IEEE maximum)
 and `fmaxf(NaN, 0)` is `0` (the non-NaN operand).
 WHAT OURS DOES: `if v > 0: r = v else r = +0.0; if r > 1: r = 1`. No
@@ -94,7 +94,7 @@ comptime SAB_SWAP_FMA = is_defined["MOJOLEARN_HW_SABOTAGE_SWAP_FMA"]()
 comptime SAB_LS_TIE = is_defined["MOJOLEARN_HW_SABOTAGE_LS_TIE"]()
 #: THE OPTIMIZER'S TIE-BREAK, arm 2: the two stop criteria tested in the
 #: OTHER order (`min_error_diff` before `min_param_diff`). Their order
-#: (`hw_optim.cuh:520-523`) decides which criterion is REPORTED on an
+#: (`hw_optim.cuh:524-526`) decides which criterion is REPORTED on an
 #: iteration where BOTH fire, and `hw.opt.criterion` is a recorded stage.
 #: Pure tie-break: no arithmetic changes, only the label -- and, because
 #: the criterion is what the fit returns, the answer a caller reads.
@@ -134,7 +134,7 @@ comptime GOLD = Float32(Float64(0.3819660112501051517954131656343618822796908201
 comptime PG_EPS = Float32(Float64(1e-10))
 comptime MAX_BLOCKS_PER_DIM = 65535
 
-# The seasonal fit path's fixed optimizer launch width (`hw_optim.cuh:867-868`).
+# The seasonal fit path's fixed optimizer launch width (`hw_optim.cuh:862-863`).
 comptime HW_OPTIM_TPB = 128
 
 

@@ -142,7 +142,7 @@ def holtwinters_eval_device(
     write_mask: Int,
     additive_seasonal: Bool,
 ) -> Float32:
-    """`holtwinters_eval_device` (`hw_eval.cuh:13-95`) line for line; the
+    """`holtwinters_eval_device` (`hw_eval.cuh:13-94`) line for line; the
     pointer-nullness tests become `use_beta`/`use_gamma`/`write_mask`.
     `pseason` is already offset to this thread's scratch (`+ tid`), stride
     `pseason_width`. Returns the SSE."""
@@ -241,7 +241,7 @@ def holtwinters_eval_gpu_global_kernel(
     use_gamma_in: Int32,
     additive_in: Int32,
 ):
-    """`holtwinters_eval_gpu_global_kernel` (`hw_eval.cuh:149-205`)."""
+    """`holtwinters_eval_gpu_global_kernel` (`hw_eval.cuh:158-217`)."""
     var tid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var n = Int(n_in)
     var batch_size = Int(batch_size_in)
@@ -296,7 +296,7 @@ def holtwinters_eval_gpu(
     mut pseason: DeviceBuffer[DType.float32],
     tpb: Int,
 ) raises:
-    """`holtwinters_eval_gpu` (`hw_eval.cuh:209-288`): the global-scratch
+    """`holtwinters_eval_gpu` (`hw_eval.cuh:219-288`): the global-scratch
     arm (their shared arm is placement only). `pseason` must hold
     `batch_size * frequency` floats; `tpb` is their
     `GET_THREADS_PER_BLOCK(batch_size)` (scheduling; the gates vary it)."""

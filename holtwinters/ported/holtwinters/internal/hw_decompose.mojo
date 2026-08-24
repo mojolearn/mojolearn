@@ -24,7 +24,7 @@ device-vs-oracle and launch invariance (README).
 
 ============ DEVIATION 660 (2026-08-23): `batched_ls` WITHOUT cuSOLVER:
 ============ THE CLOSED-FORM PSEUDO-INVERSE OF [1, t] ======================
-WHAT THEIRS DOES (`hw_decompose.cuh:153-257`): builds the CONSTANT design
+WHAT THEIRS DOES (`hw_decompose.cuh:146-241`): builds the CONSTANT design
 matrix `A = [1, t]` (`t = 1 .. trend_len`), QR-factors it with cuSOLVER
 `geqrf`, inverts the 2x2 `R` in a one-thread kernel, forms `Q` with
 `orgqr`, multiplies `R^-1 Q^T` with cuBLAS `gemm` into `R1Qt` (2 x
@@ -84,7 +84,7 @@ def conv1d_kernel(
     output: MutPointer[Float32, MutAnyOrigin],
     output_size_in: Int32,
 ):
-    """`conv1d_kernel` (`hw_decompose.cuh:24-39`): one thread per series,
+    """`conv1d_kernel` (`hw_decompose.cuh:23-42`): one thread per series,
     `out += filter[i] * input[tid + (i + o) * batch_size]` ascending in
     `i`, from `0.`."""
     var tid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -119,7 +119,7 @@ def conv1d(
     output_size: Int,
     tpb: Int,
 ) raises:
-    """`conv1d` (`:41-56`); `tpb` is their `GET_THREADS_PER_BLOCK(batch_size)`."""
+    """`conv1d` (`:44-59`); `tpb` is their `GET_THREADS_PER_BLOCK(batch_size)`."""
     ctx.enqueue_function[conv1d_kernel](
         inp.unsafe_ptr(), Int32(batch_size), filter.unsafe_ptr(), Int32(filter_size),
         output.unsafe_ptr(), Int32(output_size),
@@ -137,8 +137,8 @@ def season_residual_kernel(
     additive_in: Int32,
 ):
     """Their `cublasgeam(1, ts + ts_offset, -1, trend)` (additive,
-    `:303-316`) / `eltwiseDivide(season, aligned_ts, trend)` (multiplicative,
-    `:317-322`): both are ELEMENTWISE over the contiguous `trend_len *
+    `:293-306`) / `eltwiseDivide(season, aligned_ts, trend)` (multiplicative,
+    `:308-311`): both are ELEMENTWISE over the contiguous `trend_len *
     batch_size` block (`geam`'s lda = ldb = ldc = trend_len on a contiguous
     buffer is cell `k` against cell `k`), so one thread per cell is the
     whole of it."""
@@ -161,7 +161,7 @@ def season_mean_kernel(
     half_filter_size_in: Int32,
     additive_in: Int32,
 ):
-    """`season_mean_kernel` (`:59-88`) line for line: per phase `i` the
+    """`season_mean_kernel` (`:61-95`) line for line: per phase `i` the
     ascending sum over `k = i, i + f, ...` divided by its count, written at
     `(i + half_filter_size) % frequency`; the mean of the phase means; then
     `-= mean` (additive) or `/= mean` (multiplicative)."""
@@ -178,7 +178,7 @@ def season_mean_kernel(
             while k < length:
                 period_mean = _f(period_mean + season.unsafe_load(k * batch_size + tid))
                 k += frequency
-            # `1 + ((len - i - 1) / frequency)` (`:73`). A TRAP kept in
+            # `1 + ((len - i - 1) / frequency)` (`:81`). A TRAP kept in
             # view: C's `/` TRUNCATES toward zero and Mojo's `//` FLOORS,
             # so these two agree only while `length - i - 1 >= 0`. It
             # always is -- `trend_len >= frequency` for every
@@ -211,7 +211,7 @@ def season_mean(
     seasonal: Int,
     tpb: Int,
 ) raises:
-    """`season_mean` (`:91-107`)."""
+    """`season_mean` (`:97-112`)."""
     ctx.enqueue_function[season_mean_kernel](
         season.unsafe_ptr(), Int32(length), Int32(batch_size), start_season.unsafe_ptr(),
         Int32(frequency), Int32(half_filter_size),
@@ -248,7 +248,7 @@ def batched_ls_solver_kernel(
     level: MutPointer[Float32, MutAnyOrigin],
     trend: MutPointer[Float32, MutAnyOrigin],
 ):
-    """`batched_ls_solver_kernel` (`:136-151`): one thread per series, the
+    """`batched_ls_solver_kernel` (`:129-144`): one thread per series, the
     two dots ascending in `i` from `0.`."""
     var tid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var batch_size = Int(batch_size_in)
@@ -273,7 +273,7 @@ def batched_ls(
     mut trend: DeviceBuffer[DType.float32],
     tpb: Int,
 ) raises:
-    """`batched_ls` (`:153-257`) with DEVIATION 660's host `R1Qt`."""
+    """`batched_ls` (`:146-241`) with DEVIATION 660's host `R1Qt`."""
     var rq_h = host_r1qt(trend_len)
     var rq = ctx.enqueue_create_buffer[DType.float32](2 * trend_len)
     var host = ctx.enqueue_create_host_buffer[DType.float32](2 * trend_len)
@@ -294,7 +294,7 @@ def batched_ls(
 
 def host_filter(frequency: Int) -> List[Float32]:
     """`filter_h(filter_size, 1. / frequency)` with the ends halved for an
-    even frequency (`:282-287`): `(Dtype)(1. / frequency)` is a float64
+    even frequency (`:273-276`): `(Dtype)(1. / frequency)` is a float64
     division rounded to float32."""
     var filter_size = (frequency // 2) * 2 + 1
     var v = Float32(Float64(1.0) / Float64(frequency))
@@ -324,7 +324,7 @@ def stl_decomposition_gpu(
     mut trend_scratch_out: DeviceBuffer[DType.float32],
     mut season_scratch_out: DeviceBuffer[DType.float32],
 ) raises:
-    """`stl_decomposition_gpu` (`:259-324`). `tpb` is their
+    """`stl_decomposition_gpu` (`:243-324`). `tpb` is their
     `GET_THREADS_PER_BLOCK(batch_size)` for the per-series kernels (the
     elementwise residual takes the same width). `scratch_pad` /
     `scratch_poison` over-allocate and pre-fill the two scratch buffers

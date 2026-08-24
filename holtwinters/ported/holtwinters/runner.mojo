@@ -78,7 +78,7 @@ from holtwinters.ported.tsa.holtwinters_params import (
 )
 from solver.mojo_only.record_canon import record_device_canon
 
-#: `HoltWintersFitHelper`'s initial alpha/beta/gamma (`runner.cuh:334-336`)
+#: `HoltWintersFitHelper`'s initial alpha/beta/gamma (`runner.cuh:331-333`)
 comptime HW_ALPHA0 = Float32(0.4)
 comptime HW_BETA0 = Float32(0.3)
 comptime HW_GAMMA0 = Float32(0.3)
@@ -89,8 +89,8 @@ comptime HW_DEFAULT_TRACE_ITERS = 64
 
 
 def default_optim_params(epsilon: Float32) -> OptimParams:
-    """`HoltWintersOptim`'s defaults (`runner.cuh:210-219`): no caller of
-    the fit path passes an `OptimParams`, so the override block (`:221-240`)
+    """`HoltWintersOptim`'s defaults (`runner.cuh:226-234`): no caller of
+    the fit path passes an `OptimParams`, so the override block (`:236-253`)
     never runs and is not ported (UNPORTED.tsv)."""
     return OptimParams(
         eps=epsilon,
@@ -118,7 +118,7 @@ struct HWBufferSizes(Copyable, Movable, ImplicitlyCopyable):
 def holtwinters_buffer_size(
     n: Int, batch_size: Int, frequency: Int, use_beta: Bool, use_gamma: Bool
 ) raises -> HWBufferSizes:
-    """`HoltWintersBufferSize` (`runner.cuh:53-96`), `w_len = frequency`
+    """`HoltWintersBufferSize` (`runner.cuh:56-97`), `w_len = frequency`
     when `use_gamma`. Their int64 overflow trap is Mojo's native Int."""
     var w_len: Int
     if use_gamma:
@@ -146,7 +146,7 @@ def hw_transpose_kernel(
     batch_size_in: Int32,
     n_in: Int32,
 ):
-    """`HWTranspose` (`runner.cuh:27-37`): RAFT `transpose` (a cuBLAS
+    """`HWTranspose` (`runner.cuh:28-38`): RAFT `transpose` (a cuBLAS
     `geam`, CLOSED) of the `batch_size x n` row-major input into the
     `n x batch_size` time-major dataset the kernels read (`ts[tid + t *
     batch_size]`). A pure permutation: no arithmetic, so one thread per
@@ -262,7 +262,7 @@ def holtwinters_fit_helper(
     scratch_pad: Int = 0,
     scratch_poison: Float32 = Float32(0.0),
 ) raises:
-    """`HoltWintersFitHelper` (`runner.cuh:320-428`): transpose, decompose,
+    """`HoltWintersFitHelper` (`runner.cuh:309-412`): transpose, decompose,
     optimize (BFGS, all three parameters), with the card. `data` is the
     `batch_size x n` row-major input (series-major). Outputs: `level_d`,
     `trend_d`, `season_d` hold `components_len = (n - frequency) *
@@ -426,7 +426,7 @@ def holtwinters_eval(
     seasonal: Int,
     tpb: Int = -1,
 ) raises:
-    """`HoltWintersEval` (`runner.cuh:144-195`), the seasonal arm (all three
+    """`HoltWintersEval` (`runner.cuh:142-189`), the seasonal arm (all three
     parameters present): the recurrence at GIVEN parameters. `ts` is
     time-major (already transposed). Used by the gates to plant parameters
     at the clamp."""
@@ -469,7 +469,7 @@ def holtwinters_optim(
     seasonal: Int,
     tpb: Int = HW_OPTIM_TPB,
 ) raises:
-    """`HoltWintersOptim` (`runner.cuh:201-299`), the seasonal BFGS arm
+    """`HoltWintersOptim` (`runner.cuh:191-286`), the seasonal BFGS arm
     with their defaults: optimize all three parameters FROM THE GIVEN
     `alpha/beta/gamma` (theirs: whatever the caller uploaded; the fit helper
     uploads 0.4/0.3/0.3). `ts` is time-major. The gates use this to plant
@@ -513,7 +513,7 @@ def holtwinters_forecast_helper(
     mut trace: IdentityTrace,
     tpb: Int = -1,
 ) raises:
-    """`HoltWintersForecastHelper` (`runner.cuh:431-460`): the seasonal
+    """`HoltWintersForecastHelper` (`runner.cuh:414-458`): the seasonal
     forecast from the LAST fitted row of level/trend and the last
     `frequency` rows of season. `forecast_d` holds `h * batch_size`
     (time-major). Card: `hw.forecast`."""
