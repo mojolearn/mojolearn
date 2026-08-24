@@ -51,9 +51,9 @@ from spectral.ported.sparse.coo import CooGraph
 
 @fieldwise_init
 struct SpectralClusteringParams(Copyable, Movable):
-    """`cuvs::cluster::spectral::params` (`spectral.hpp:27-46`):
-    `n_clusters`, `n_components`, `n_init`, `n_neighbors`, `tolerance`,
-    `rng_state{0}` (its seed)."""
+    """`cuvs::cluster::spectral::params` (`cuvs/cluster/spectral.hpp:25-43`
+    of v26.08.00, VERIFIED): `n_clusters`, `n_components`, `n_init`,
+    `n_neighbors`, `tolerance`, `rng_state{0}` (its seed)."""
 
     var n_clusters: Int
     var n_components: Int
@@ -174,7 +174,19 @@ def fit_predict_dataset(
 ) raises:
     """`fit_predict` on a dataset (`:64-80`): `create_connectivity_graph`
     with `embed_params.n_neighbors = config.n_neighbors`, then the graph
-    overload."""
+    overload.
+
+    THEIR PARAMS STRUCT IS PARTLY UNINITIALIZED HERE AND OURS IS NOT.
+    `:73-74` default-constructs `spectral_embedding::params` and sets ONLY
+    `n_neighbors` before handing it to
+    `helpers::create_connectivity_graph` (`:76-77`, which forwards to
+    `detail::create_connectivity_graph`, `spectral_embedding.cu:43-49`).
+    `n_components`, `norm_laplacian` and `drop_first` are POD and are read
+    by nobody on that path, so it is harmless in theirs; ours passes a
+    fully-initialized struct through `default_with`. Recorded because a
+    reader diffing the two will see a difference that is not one, and
+    because a later edit that made `create_connectivity_graph` read one of
+    those fields would be a live bug upstream and not here."""
     var embed_params = SpectralEmbeddingParams.default_with(
         config.n_components, config.n_neighbors
     )

@@ -75,9 +75,11 @@ from spectral.ported.sparse.solver.lanczos_types import (
 @fieldwise_init
 struct SpectralEmbeddingParams(Copyable, Movable):
     """`cuvs::preprocessing::spectral_embedding::params`
-    (`spectral_embedding.hpp:27-63` of v26.08.00): `n_components`,
-    `n_neighbors`, `norm_laplacian`, `drop_first`, `tolerance{1e-5f}`,
-    `std::optional<uint64_t> seed` (as `has_seed` + `seed`)."""
+    (`cuvs/preprocessing/spectral_embedding.hpp:28-69` of v26.08.00, VERIFIED
+    against `~/CascadeProjects/upstream/cuvs-v26.08.00`): `n_components`,
+    `n_neighbors`, `norm_laplacian`, `drop_first`, `tolerance{1e-5f}` (`:59`),
+    `std::optional<uint64_t> seed = std::nullopt` (`:68`, as `has_seed` +
+    `seed`). Field for field, defaults included."""
 
     var n_components: Int
     var n_neighbors: Int
@@ -234,12 +236,12 @@ def compute_eigenpairs(
     n_out` row-major with `n_out = n_components - 1` when `drop_first`.
     Returns `n_out`."""
     var k = params.n_components
-    # DEVIATION 780: `ncv`, `max_iterations` and the plumbed `tolerance`
-    # below are CHOSEN, not mirrored. cuVS 25.08 -- the only cuVS in any
-    # checkout on this machine -- writes three literals instead
-    # (`spectral_embedding.cu:176-181`: `ncv = min(n_samples, max(2k+1,
-    # 20))`, `max_iterations = 1000`, `tolerance = 1e-5`). See
-    # `spectral/IDENTICAL_SPECTRAL_CONTRACT.md` section 4 and section 10.
+    # `max_iterations = 10 * n_samples` (:64), the RAFT_EXPECTS (:65-66),
+    # `ncv = min(n - n_components, max(2k + 1, 20))` (:67) and
+    # `tolerance = config.tolerance` (:68) are ALL VERBATIM THEIRS, checked
+    # against cuvs-v26.08.00. They were briefly recorded as DEVIATION 780
+    # while no 26.08 checkout existed; that claim is STRUCK. Nothing in this
+    # block is a choice of ours.
     # RAFT_EXPECTS(n_samples - n_components > 0)  (:65-66)
     if n_samples - k <= 0:
         raise Error("Please set `ncv` to a value in (0, n_samples)")

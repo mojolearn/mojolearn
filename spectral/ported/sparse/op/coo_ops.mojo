@@ -165,9 +165,18 @@ def coo_remove_scalar(g: CooGraph, scalar: Float32) -> CooGraph:
 
 
 def sorted_coo_to_csr(g: CooGraph) -> List[Int32]:
-    """`csr.cuh:78-90` plus the `row_ind[n] = nnz` terminator cuVS writes
-    by hand (`spectral_embedding.cu:134` of the 25.08 CSR path): `n + 1`
-    row offsets of a ROW-SORTED COO."""
+    """`csr.cuh:78-90`, plus an `n + 1`-th entry holding `nnz`.
+
+    THE TERMINATOR IS OURS. Theirs writes `m` row offsets and no
+    terminator, and every reader compensates with `get_stop_idx`
+    (`raft/sparse/detail/utils.h:97-105`), which returns `nnz` for the last
+    row; `coo_symmetrize` allocates its `in_row_ind` at length `n`
+    accordingly (`symmetrize.cuh:188`). Carrying the `n + 1` form here lets
+    every per-row loop in this lane read `indptr[r + 1]` unconditionally,
+    which is THE SAME NUMBERS by construction. (A previous version of this
+    docstring credited the terminator to cuVS 25.08's `coo_to_csr_matrix`
+    at `spectral_embedding.cu:134`; that function does not exist at 26.08,
+    which builds the Laplacian straight from the COO.)"""
     var n = g.n
     var counts = List[Int32]()
     for _ in range(n):

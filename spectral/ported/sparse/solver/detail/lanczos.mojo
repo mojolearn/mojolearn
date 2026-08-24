@@ -93,19 +93,45 @@ which owns the rounding of its own accumulator and has no `beta` entry
 point. The same shape applies to the restart's `u -= 1 * temp`
 (`:664-671`), where the `1 *` moves no bits either way. Named here so
 nobody rediscovers it from a diff. Contract section 5.2, seam K6.
-============ DEVIATION 780: `ncv` AND `max_iterations` ARE OURS, NOT THEIRS
-The only cuVS on this machine is 25.08 (`94c2819`), and it sets
-`ncv = min(n_samples, max(2 * n_components + 1, 20))`,
-`max_iterations = 1000` and `tolerance = 1e-5` as three literals
-(`spectral_embedding.cu:176-181`). This lane computes
-`ncv = min(n - k, max(2k + 1, 20))`, `max_iterations = 10 * n` and takes
-`tolerance` from the params struct. Those three are CHOSEN, not mirrored,
-because the 26.08 cuVS whose signatures cuML 26.08 calls is NOT IN ANY
-CHECKOUT HERE. The `n - k` clamp is a repair of a real hole in the 25.08
-line -- `min(n_samples, ...)` can return `ncv == n`, which violates RAFT's
-own `n_components + 1 < ncv < n` (`lanczos_types.hpp:50`) -- but a repair
-is still a choice. Contract section 4, C1/C2/C3/C6; each has a sabotage
-arm. A checkout of cuVS 26.08 settles all of them at once.
+============ DEVIATION 780: THE SOLVER BOUNDS THAT ARE ACTUALLY OURS ======
+**THREE OF THIS DEVIATION'S ORIGINAL FIVE CLAUSES ARE STRUCK. THEY WERE
+NEVER DEVIATIONS.** They were recorded as ours on 2026-08-23 while no cuVS
+26.08 existed on this machine, by comparing against cuVS 25.08, which
+spells the same three things as literals. cuVS 26.08 landed at
+`~/CascadeProjects/upstream/cuvs-v26.08.00` (tag v26.08.00, `6ba2ce2`) and
+says, VERBATIM, what this lane computes:
+
+    detail/spectral_embedding.cuh:64  config.max_iterations = 10 * n_samples;
+    detail/spectral_embedding.cuh:65-66
+        RAFT_EXPECTS(n_samples - config.n_components > 0,
+                     "Please set `ncv` to a value in (0, n_samples)");
+    detail/spectral_embedding.cuh:67
+        config.ncv = std::min(n_samples - config.n_components,
+                              std::max(2 * config.n_components + 1, 20));
+    detail/spectral_embedding.cuh:68  config.tolerance = spectral_embedding_config.tolerance;
+
+So STRUCK: C1 (`ncv`), C2 (`max_iterations`) and C3 (a plumbed
+`tolerance`; the field is real, `preprocessing/spectral_embedding.hpp:59`,
+defaulted `1e-5f`). The `n - k` clamp this header once described as
+"repairing a hole in theirs" IS THEIRS, and so is the RAFT_EXPECTS beside
+it, down to the message string this lane raises. Reading the wrong tree
+does not only invent defects in our code, it invents ORIGINALITY we do not
+have, and claiming a deviation we did not make is exactly as bad as
+missing one.
+
+WHAT REMAINS UNDER 780, and both live in code that stands where a CLOSED
+vendor library does, not in the mirrored driver:
+  (a) the host Jacobi's sweep cap of 60, which RETURNS an unconverged
+      basis instead of raising, where Numerical Recipes uses 50 and calls
+      `nrerror` (`mojo_only/symmetric_eig_host.mojo`, contract seam J6);
+  (b) `lanczos_smallest`'s admissibility guard below, which admits
+      `ncv == n` where `lanczos_types.hpp:50` says `n_components + 1 < ncv
+      < n`, strict at both ends. Unreachable through the ported driver,
+      since theirs computes `ncv <= n - k < n`; it can only be reached by
+      a direct caller.
+The `NCV` and `MAXITER` sabotage arms below KEEP THEIR VALUE and change
+their meaning: they no longer test a choice of ours, they inject cuVS
+25.08's older spelling and so test that this lane mirrors the 26.08 one.
 ============ THEIR TRANSPOSED LAUNCH BOUNDS, NOT PORTED, NO BITS MOVED ====
 `lanczos_solve_ritz` launches `kernel_triangular_populate` as
 `<<<blockSize, numBlocks>>>` (`:161-162`) with `blockSize = 256` and
@@ -171,8 +197,11 @@ comptime SAB_SIGN_FLIP = is_defined["MOJOLEARN_SPECTRAL_SABOTAGE_SIGN_FLIP"]()
 #: `identical_sqrt`. On a host with a correctly rounded sqrt this is INERT
 #: (reported, not asserted); it exists to be measured on each host.
 comptime SAB_STD_SQRT = is_defined["MOJOLEARN_SPECTRAL_SABOTAGE_STD_SQRT"]()
-#: CHOSEN BOUND C1 (DEVIATION 780). Drop the `n - k` clamp from `ncv`, so
-#: `ncv = max(2k + 1, 20)` -- cuVS 25.08's literal. READ BY
+#: MIRROR-FIDELITY ARM (DEVIATION 780). Drop the `n - k` clamp from `ncv`,
+#: so `ncv = min(n_samples, max(2k + 1, 20))` -- cuVS 25.08's spelling,
+#: which 26.08 replaced (`detail/spectral_embedding.cuh:67`). This is not a
+#: choice of ours being tested; it is a REGRESSION ARM against the older
+#: upstream. READ BY
 #: `ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo`; it
 #: lives here because that module imports this one and the reverse would
 #: be a cycle. The device arm's `ncv` then differs from the oracle's, which
@@ -180,8 +209,9 @@ comptime SAB_STD_SQRT = is_defined["MOJOLEARN_SPECTRAL_SABOTAGE_STD_SQRT"]()
 #: arm must fail as a STRUCTURAL divergence, which is the shape a changed
 #: bound has and is why the card records `converged_restarts_iter`.
 comptime SAB_NCV = is_defined["MOJOLEARN_SPECTRAL_SABOTAGE_NCV"]()
-#: CHOSEN BOUND C2 (DEVIATION 780). `max_iterations = 1000`, cuVS 25.08's
-#: literal, instead of `10 * n`. REPORT, not FAIL: on every fixture in
+#: MIRROR-FIDELITY ARM (DEVIATION 780). `max_iterations = 1000`, cuVS
+#: 25.08's literal, where 26.08 writes `10 * n_samples`
+#: (`detail/spectral_embedding.cuh:64`). REPORT, not FAIL: on every fixture in
 #: this lane the residual converges long before either bound, so this arm
 #: is EXPECTED TO BE INERT and its value is telling us so. A fixture it
 #: does not move is a fixture that does not test the bound, and the lane

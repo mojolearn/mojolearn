@@ -82,7 +82,7 @@ they are different algorithms (`UNPORTED.tsv` says which).
 |---|---|---|
 | RAFT | **v26.08.00** | `~/CascadeProjects/upstream/raft-v26.08.00` |
 | cuML | **v26.08.00** | `~/CascadeProjects/upstream/cuml-v26.08.00` |
-| cuVS | `94c2819` = **25.08.00** | `~/CascadeProjects/upstream/cuvs` |
+| cuVS | **v26.08.00**, `6ba2ce2` | `~/CascadeProjects/upstream/cuvs-v26.08.00` |
 
 **`upstream/raft` and `upstream/cuml` are 25.08 checkouts and are NOT what
 this lane was read against.** That is not a pedantic distinction. The two
@@ -97,18 +97,51 @@ and 25.08's `laplacian.cuh` has **no COO overload of
 which this lane ports. An audit against the wrong tree produces confident
 nonsense.
 
-**THERE IS NO cuVS 26.08 ON THIS MACHINE, AND THIS LANE'S cuVS LAYER WAS
-WRITTEN AGAINST ONE.** `spectral/ported/cuvs/**` cites
-`cpp/src/preprocessing/spectral/detail/spectral_embedding.cuh` and
-`cpp/src/cluster/detail/spectral.cuh` "v26.08.00", with line ranges.
-Neither file exists in the only cuVS checkout here. That a 26.08 cuVS with
-those files exists is not in doubt: cuML 26.08 includes
-`<cuvs/cluster/spectral.hpp>` and calls
-`cuvs::cluster::spectral::fit_predict`, and neither symbol is in 25.08. It
-is simply not here, so **every cuVS line citation in this lane is
-UNVERIFIED** and three numbers taken from it are recorded as CHOSEN
-(DEVIATION 780). Getting that checkout is the highest-value thing anyone
-can do for this lane; `UNPORTED.tsv` lists the five questions it settles.
+`upstream/cuvs` is a 25.08 checkout and is likewise NOT what this lane
+reads. **The cuVS 26.08 checkout landed on 2026-08-23** and settled five
+open questions at once; what it settled, including one finding that went
+against this lane, is section 3.0.
+
+## 3.0 WHAT THE cuVS 26.08 CHECKOUT SETTLED, INCLUDING AGAINST US
+
+For one round this README said the two files this lane's cuVS layer cites
+did not exist and that every cuVS citation was unverified. That was an
+artifact of reading 25.08. With `cuvs-v26.08.00` (`6ba2ce2`) in hand:
+
+  * **Both files exist exactly where the headers said**, at
+    `cpp/src/preprocessing/spectral/detail/spectral_embedding.cuh` (225
+    lines) and `cpp/src/cluster/detail/spectral.cuh` (82 lines), and **18
+    of this lane's 20 cuVS line citations are EXACT**. The two that were
+    wrong were both `params` struct ranges and are corrected. The old
+    finding 1 is WITHDRAWN in full.
+  * **The Laplacian overload is COO, which is what this lane ported.**
+    `spectral_embedding.cuh:127` and `:219` instantiate
+    `create_laplacian<..., raft::device_coo_matrix<...>>` explicitly, and
+    26.08 has no `coo_to_csr_matrix` at all. The old finding 8's self-loop
+    rounding hazard DOES NOT ARISE and nothing is invalidated.
+  * **AND THE ONE AGAINST US: DEVIATION 780 CLAIMED THREE BOUNDS THAT ARE
+    VERBATIM UPSTREAM.** `max_iterations = 10 * n_samples` (`:64`), the
+    `RAFT_EXPECTS(n_samples - n_components > 0)` (`:65-66`),
+    `ncv = min(n_samples - n_components, max(2 * n_components + 1, 20))`
+    (`:67`) and `config.tolerance = spectral_embedding_config.tolerance`
+    (`:68`, and the field is real at
+    `preprocessing/spectral_embedding.hpp:59`). Every one of those was
+    recorded as OURS. The `n - k` clamp this README described as REPAIRING
+    a hole in theirs IS THEIRS, message string included. **C1, C2 and C3
+    are STRUCK. They were never deviations.** Reading the wrong tree does
+    not only invent defects in our code, it invents ORIGINALITY we do not
+    have, and claiming a deviation we did not make is exactly as bad as
+    missing one.
+  * What survives of DEVIATION 780 is two clauses, and both live in code
+    that stands where a CLOSED vendor library does rather than in the
+    mirrored driver: the host Jacobi's sweep cap of 60 that returns an
+    unconverged basis instead of raising (C4), and this lane's own
+    admissibility guard admitting `ncv == n` (C6), which the ported driver
+    cannot even reach because their `ncv` is always below `n`.
+  * The `NCV` and `MAXITER` sabotage arms keep their value and change
+    their meaning. They no longer test a choice of ours; they inject cuVS
+    **25.08**'s older spelling and so test that this lane mirrors the
+    26.08 one.
 
 ## 3. THE AUDIT, symbol by symbol
 
@@ -135,18 +168,15 @@ port keeps two roundings in that order (`diagonal.cuh:216`).
 
 ### 3.2 What was invented, missing or silently divergent
 
-  1. **The cuVS layer's citations point at files that do not exist**
-     (section 2). This is the largest finding in the lane.
-  2. **`ncv`, `max_iterations` and a plumbed `tolerance` are OURS.**
-     cuVS 25.08 writes three literals (`spectral_embedding.cu:176-181`):
-     `ncv = min(n_samples, max(2k+1, 20))`, `max_iterations = 1000`,
-     `tolerance = 1e-5`, and its `params` struct has no tolerance field at
-     all. This lane computes `ncv = min(n - k, max(2k+1, 20))`,
-     `max_iterations = 10 * n`, and reads `tolerance` from params. The
-     `n - k` clamp is a REPAIR of a real hole (`min(n_samples, ...)` can
-     return `ncv == n`, violating RAFT's own `n_components + 1 < ncv < n`
-     at `lanczos_types.hpp:50`), but a repair is still a choice.
-     DEVIATION 780, and each has a sabotage arm.
+  1. ~~**The cuVS layer's citations point at files that do not exist.**~~
+     **WITHDRAWN**, see section 3.0. The files exist and 18 of 20
+     citations were exact. Struck rather than deleted, because a finding
+     this lane got wrong is worth as much to the next reader as one it got
+     right.
+  2. ~~**`ncv`, `max_iterations` and a plumbed `tolerance` are OURS.**~~
+     **WITHDRAWN, AND THIS IS THE ONE THAT WENT AGAINST US.** All three
+     are verbatim `spectral_embedding.cuh:64-68`. C1, C2 and C3 of
+     DEVIATION 780 are STRUCK; C4 and C6 survive. Section 3.0.
   3. **DEVIATION 777, a defect that stopped the kNN path dead.** The
      repeated-key refusal was spelled inside `coo_sort`, and the dataset
      path raised `repeated (row, col) pair (0, 0)` before a single bit was
@@ -179,13 +209,24 @@ port keeps two roundings in that order (`diagonal.cuh:216`).
      dead `V_k_T` transpose theirs computes and never reads (`:644-647`),
      and transposed launch bounds at `:161-162` that happen to cover every
      row and move no bit.
-  8. **Which Laplacian overload is the path is UNSETTLED** and is the one
-     finding that could invalidate real work. cuVS 25.08 converts to CSR
-     and reaches the CSR overload; this lane ported the COO one. The two
-     agree on every value and NOT on every rounding, because the CSR
-     kernel excludes a self-loop from the degree and the COO overload sums
-     it in and subtracts it back, two roundings against none, on a graph
-     that always has a self-loop. `UNPORTED.tsv` carries this in full.
+  8. ~~**Which Laplacian overload is the path is UNSETTLED.**~~
+     **WITHDRAWN: SETTLED, AND THIS LANE PORTED THE RIGHT ONE.**
+     `spectral_embedding.cuh:127` and `:219` instantiate
+     `create_laplacian<..., raft::device_coo_matrix<...>>` explicitly and
+     26.08 has no `coo_to_csr_matrix`. The self-loop rounding hazard
+     between the two overloads does not arise on this path. It is still
+     worth knowing that the two overloads round differently, so
+     `UNPORTED.tsv` keeps the mechanism and drops the alarm.
+  9. **NEW, from the 26.08 tree: their dataset `fit_predict` hands
+     `create_connectivity_graph` a PARTLY UNINITIALIZED params struct.**
+     `cluster/detail/spectral.cuh:73-74` default-constructs
+     `spectral_embedding::params` and sets only `n_neighbors`;
+     `n_components`, `norm_laplacian` and `drop_first` are POD and are
+     read by nobody on that path, so it is harmless in theirs. Ours passes
+     a fully-initialized struct. Recorded because a reader diffing the two
+     will see a difference that is not one, and because an upstream edit
+     that made that function read one of those fields would be a live bug
+     there and not here.
 
 The classic failure the audit was told to hunt, one variable of theirs
 split into two of ours, **was not found**. The one place it could have
@@ -221,9 +262,9 @@ so that a pass cannot later be misread as a success.
 | `..._SIGN_FLIP` | FAIL device == oracle at the first Ritz-vector stage |
 | `..._LAPLACIAN_SEAM` | FAIL at `spectral.L.vals` (reassociates seam L6, no fusion change) |
 | `..._SPMV_ROTATE` | FAIL device == oracle (makes the matvec order a function of `blockIdx`) |
-| `..._NCV` | FAIL, and STRUCTURALLY: a different stage count, which is the shape a changed bound has |
+| `..._NCV` | FAIL, and STRUCTURALLY: a different stage count. **Mirror fidelity, not a choice of ours**: it reverts `ncv` to cuVS 25.08's spelling |
 | `..._SWEEP_CAP` | FAIL `check_spectral_path_exact`. NOT device == oracle: the solver is SHARED by both arms |
-| `..._MAXITER` | EXPECTED INERT. Every fixture converges long before either bound |
+| `..._MAXITER` | EXPECTED INERT. Every fixture converges long before either bound. **Mirror fidelity**: it reverts `max_iterations` to cuVS 25.08's literal `1000` |
 | `..._ROTATE_UNFUSED` | EXPECTED REACHED BUT INERT, **and that is a hole**: seam J4 has no gate with teeth until a certificate lands |
 | `..._STD_SQRT` | REPORT. Inert on a host with a correctly rounded `sqrt`; it exists to be measured per host |
 
@@ -249,8 +290,9 @@ so that a pass cannot later be misread as a success.
   6. **Re-run everything under FAST** and record, not assert.
   7. **The cross-vendor legs.** Nothing here has run anywhere but one M4,
      so no cross-vendor claim exists.
-  8. **A cuVS 26.08 checkout**, which is not a compile slot but is the
-     item that unblocks the most.
+  8. ~~A cuVS 26.08 checkout.~~ **DONE**, 2026-08-23, `6ba2ce2`. It
+     settled five questions at once and cost this lane three deviation
+     clauses it should never have claimed. Section 3.0.
 
 The pixi task line and the IDENTITY_PATHS row this lane needs are in the
 lane report rather than applied here, because `pixi.toml` and

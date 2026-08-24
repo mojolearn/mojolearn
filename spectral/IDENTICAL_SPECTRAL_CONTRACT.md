@@ -40,7 +40,9 @@ to.
 | the graph Laplacian | `raft/sparse/linalg/detail/laplacian.cuh`, the COO overload of `compute_graph_laplacian` (:119-234), `laplacian_normalized` (:257-282), `zero_to_one_functor` (:24-30) | same |
 | the COO diagonal ops | `raft/sparse/matrix/detail/diagonal.cuh` | same |
 | the kNN symmetrize | `raft/sparse/linalg/detail/symmetrize.cuh::coo_symmetrize_kernel` (:44-107) | same |
-| the embedding driver | `cuvs::preprocessing::spectral_embedding` -- `create_connectivity_graph`, `coo_to_csr_matrix`, `create_laplacian`, `compute_eigenpairs`, `transform` | rapidsai/cuvs `94c2819` (25.08), `cpp/src/preprocessing/spectral/spectral_embedding.cu`, 260 lines. **SEE SECTION 10: THE 26.08 CUVS THIS LANE'S HEADERS CITE IS NOT ON THIS MACHINE.** |
+| the embedding driver | `cuvs::preprocessing::spectral_embedding::detail` -- `create_laplacian` (`:31-52`), `compute_eigenpairs` (`:54-116`), `transform` on a COO (`:118-131`), `create_connectivity_graph` (`:133-205`), `transform` on a dataset (`:207-223`) | rapidsai/cuvs **`v26.08.00`, `6ba2ce2`**, `~/CascadeProjects/upstream/cuvs-v26.08.00`, `cpp/src/preprocessing/spectral/detail/spectral_embedding.cuh`, 225 lines |
+| the embedding params | `cuvs::preprocessing::spectral_embedding::params` (`:28-69`, `tolerance{1e-5f}` at `:59`, `std::optional<uint64_t> seed` at `:68`) | same, `cpp/include/cuvs/preprocessing/spectral_embedding.hpp` |
+| the clustering driver | `cuvs::cluster::spectral::detail::fit_predict`, the graph overload (`:17-62`) and the dataset overload (`:64-80`); `params` at `cuvs/cluster/spectral.hpp:25-43` | same, `cpp/src/cluster/detail/spectral.cuh`, 82 lines |
 | the cuML surface | `cpp/src/spectral/spectral_clustering.cu`, `cpp/src/spectral/spectral_embedding.hpp`, `cpp/include/cuml/cluster/spectral_clustering.hpp`, `cpp/include/cuml/manifold/spectral_embedding.hpp` | rapidsai/cuml `v26.08.00`, `~/CascadeProjects/upstream/cuml-v26.08.00` |
 | every contraction over `n` or `ncv` | profile `mojolearn.identical.gemm.fp32.v1`, IDENTITY_PATHS row 40 | this repository |
 | the k-means at the end of clustering | `cluster/`'s ported `fit_predict`, read and imported, never copied | this repository |
@@ -179,22 +181,32 @@ must be read with it in mind.
 | alpha clamp | `1e-9`, `fabs(x) < t ? 0 : x` | `lanczos.cuh:374` | mirrored |
 | u clamp | `1e-7`, same select | `lanczos.cuh:385-386` | mirrored |
 | beta clamp | `1e-6`, same select | `lanczos.cuh:388-389` | mirrored |
-| `tolerance` | the caller's `params.tolerance`, default `1e-5` | cuVS 25.08 HARD-CODES `1e-5` (`:179`) and its `params` has no such field; cuML 26.08's `params::eigen_tol` and `to_cuvs`'s `tolerance` imply a 26.08 cuVS that plumbs it | **CHOSEN (C3)** |
-| `ncv` | `min(n - k, max(2k + 1, 20))` | cuVS 25.08 is `min(n_samples, max(2k + 1, 20))` (`:178`); the `n - k` clamp is ours | **CHOSEN (C1)** |
-| `max_iterations` | `10 * n_samples` | cuVS 25.08 hard-codes `1000` (`:177`) | **CHOSEN (C2)** |
-| Jacobi sweep cap | `60`, and it RETURNS rather than raising | Numerical Recipes `jacobi` uses `50` and calls `nrerror` | **CHOSEN (C4)** |
-| `ncv` admissibility | `k + 1 < ncv <= n` | `lanczos_types.hpp:50` says `n_components + 1 < ncv < n`, strict at both ends | **CHOSEN (C6)**, ours admits `ncv == n` |
+| `tolerance` | the caller's `params.tolerance`, default `1e-5` | `detail/spectral_embedding.cuh:68`, `config.tolerance = spectral_embedding_config.tolerance`; the field is real, `preprocessing/spectral_embedding.hpp:59` | mirrored (**C3 STRUCK**) |
+| `ncv` | `min(n - k, max(2k + 1, 20))` | `detail/spectral_embedding.cuh:67`, verbatim, with its `RAFT_EXPECTS` at `:65-66` | mirrored (**C1 STRUCK**) |
+| `max_iterations` | `10 * n_samples` | `detail/spectral_embedding.cuh:64`, verbatim | mirrored (**C2 STRUCK**) |
+| Jacobi sweep cap | `60`, and it RETURNS rather than raising | Numerical Recipes `jacobi` uses `50` and calls `nrerror`. This solver mirrors nothing: it stands where cuSOLVER `syevd` is called | **CHOSEN (C4)** |
+| `ncv` admissibility | `k + 1 < ncv <= n` | `lanczos_types.hpp:50` says `n_components + 1 < ncv < n`, strict at both ends. Unreachable through the ported driver, whose `ncv` is always below `n` | **CHOSEN (C6)**, ours admits `ncv == n` |
 | launch widths | `LAPLACIAN_TPB = 256`, `LANCZOS_TPB = 256` | `laplacian.cuh:105`, `lanczos.cuh:382` | scheduling, OUTSIDE the profile (C5) |
 
-These five CHOSEN rows are **DEVIATION 780** collectively: they are what
-the absent cuVS 26.08 (section 10) leaves undetermined, and they are
-recorded together so a later checkout of that cuVS can settle all five at
-once.
+**C1, C2 AND C3 WERE STRUCK ON 2026-08-23 AND THIS IS THE CORRECTION.**
+DEVIATION 780 originally claimed all five rows as ours. It was written
+while no cuVS 26.08 existed on this machine, against cuVS 25.08, which
+spells those three as literals. With `cuvs-v26.08.00` (`6ba2ce2`)
+checked out they turn out to be VERBATIM UPSTREAM, down to the message
+string of the `RAFT_EXPECTS` at `:65-66`, including the `n - k` clamp this
+document once described as repairing a hole in theirs. **Reading the wrong
+tree does not only invent defects in our code, it invents ORIGINALITY we
+do not have, and claiming a deviation we did not make is exactly as bad as
+missing one.**
 
-**EVERY ROW MARKED CHOSEN IS A BOUND THIS LANE PICKED, AND A CHOSEN BOUND
-MUST BE SABOTAGED BEFORE IT MAY BE BELIEVED.** C1, C2 and C4 each get a
-named sabotage arm in section 9. C3 and C6 are recorded and are covered by
-C1's arm, which moves the same code path.
+What remains under **DEVIATION 780** is C4 and C6, and both live in code
+that stands where a CLOSED vendor library does rather than in the mirrored
+driver: the host Jacobi's sweep cap, and this lane's own admissibility
+guard. **A CHOSEN BOUND MUST BE SABOTAGED BEFORE IT MAY BE BELIEVED**, so
+C4 keeps its arm in section 9. The `NCV` and `MAXITER` arms keep their
+value and change their MEANING: they no longer test a choice of ours, they
+inject cuVS 25.08's older spelling and so test that this lane mirrors the
+26.08 one.
 
 ## 5. The seams, every one, with the fused-or-unfused decision
 
@@ -375,8 +387,8 @@ the lane lost its compile slot.
 |---|---|---|---|
 | `MOJOLEARN_SPECTRAL_SABOTAGE_SIGN_FLIP` | the device arm re-flips every selected eigenvector's sign after the shared host solve | section 2, the sign rule | FAIL at the first Ritz-vector stage |
 | `MOJOLEARN_SPECTRAL_SABOTAGE_LAPLACIAN_SEAM` | seam L6 becomes `row_scale * (value * col_scale)`, one reassociation, no fusion | section 5.1 L6, the normalization seam | FAIL at `spectral.L.vals` |
-| `MOJOLEARN_SPECTRAL_SABOTAGE_NCV` | the CHOSEN bound C1 becomes `max(2k + 1, 20)` with no `n - k` clamp | section 4, C1 | FAIL, and by a STRUCTURAL divergence (a different stage count), which is the shape a bound change has |
-| `MOJOLEARN_SPECTRAL_SABOTAGE_MAXITER` | the CHOSEN bound C2 becomes `1000`, cuVS 25.08's literal | section 4, C2 | RECORD which fixtures it moves; a fixture it does not move is a fixture that does not test the bound |
+| `MOJOLEARN_SPECTRAL_SABOTAGE_NCV` | MIRROR FIDELITY, not a choice: `ncv` reverts to cuVS **25.08**'s `min(n_samples, max(2k + 1, 20))`, dropping the `n - k` clamp that 26.08 writes at `:67` | section 4, the C1 row | FAIL, and by a STRUCTURAL divergence (a different stage count), which is the shape a bound change has |
+| `MOJOLEARN_SPECTRAL_SABOTAGE_MAXITER` | MIRROR FIDELITY: `max_iterations` reverts to cuVS **25.08**'s literal `1000`, where 26.08 writes `10 * n_samples` at `:64` | section 4, the C2 row | RECORD which fixtures it moves; a fixture it does not move is a fixture that does not test the bound |
 | `MOJOLEARN_SPECTRAL_SABOTAGE_SWEEP_CAP` | the CHOSEN bound C4 drops the Jacobi cap to 3 sweeps | section 4, C4 and seam J6 | FAIL `check_spectral_path_exact`. **NOT device equals oracle**: `symmetric_eig_host` is SHARED by both arms, so this moves both together and the bit compare cannot see it. Its reach is against the INDEPENDENT reference, the closed form `1 - cos(pi j / 63)` at `1e-4`, which three sweeps on a 20x20 cannot reach |
 | `MOJOLEARN_SPECTRAL_SABOTAGE_ROTATE_UNFUSED` | seam J4 becomes NR's four roundings | section 5.3 J4 | **EXPECTED REACHED BUT INERT, AND THAT IS A HOLE.** Shared solver again, and the perturbation is a last-bit one that every tolerance in this lane absorbs. Seam J4 HAS NO GATE WITH TEETH until a CERTIFICATE check lands: an FNV hash of `symmetric_eig_host`'s output on a pinned fixture, compared against a literal. That check is OWED |
 | `MOJOLEARN_SPECTRAL_SABOTAGE_SPMV_ROTATE` | seam K1's per-row contraction starts at an offset that is a function of `blockIdx` | section 5.2 K1, launch invariance | FAIL device equals oracle |
@@ -390,20 +402,31 @@ coverage rather than papering over it: `reached but inert` is not a gate.
 
 ## 10. What is NOT claimed, and the one thing a reader must know first
 
-**THE CUVS THIS LANE'S HEADERS CITE IS NOT ON THIS MACHINE.** The ported
-files under `spectral/ported/cuvs/` cite
-`cpp/src/preprocessing/spectral/detail/spectral_embedding.cuh` and
-`cpp/src/cluster/detail/spectral.cuh` "v26.08.00" with line ranges.
-Neither file exists in `~/CascadeProjects/upstream/cuvs`, which is
-`94c2819`, version 25.08, and whose spectral embedding lives at
-`cpp/src/preprocessing/spectral/spectral_embedding.cu` (260 lines, no
-`detail/`, no COO overload, no `tolerance` field, and a
-`coo_to_csr_matrix` step that reaches the CSR Laplacian overload rather
-than the COO one). **Every line citation into cuVS in this lane is
-therefore UNVERIFIED**, section 4's C1, C2 and C3 are the visible
-consequence, and `UNPORTED.tsv` and `PORTED_MAP.tsv` mark every such row.
-The RAFT and cuML citations ARE verified against `raft-v26.08.00` and
-`cuml-v26.08.00` and are correct except where the audit says otherwise.
+**THE cuVS 26.08 CHECKOUT LANDED ON 2026-08-23 AND EVERYTHING IN THIS
+SECTION THAT DEPENDED ON ITS ABSENCE IS WITHDRAWN.**
+`~/CascadeProjects/upstream/cuvs-v26.08.00`, tag `v26.08.00`, `6ba2ce2`.
+For one round this document said the two files this lane's cuVS layer
+cites did not exist and that every cuVS citation was unverified. Both
+files exist exactly where the headers said, at
+`cpp/src/preprocessing/spectral/detail/spectral_embedding.cuh` (225 lines)
+and `cpp/src/cluster/detail/spectral.cuh` (82 lines), and **18 of the 20
+cuVS line citations in this lane are exact**. The two that were wrong were
+both `params` struct ranges and are corrected
+(`preprocessing/spectral_embedding.hpp:28-69`,
+`cuvs/cluster/spectral.hpp:25-43`).
+
+Three consequences, all in this lane's favor and one against it:
+  (a) The Laplacian overload question is SETTLED and this lane ported the
+      right one. `detail/spectral_embedding.cuh:127` and `:219` instantiate
+      `create_laplacian<..., raft::device_coo_matrix<...>>` explicitly, and
+      26.08 has no `coo_to_csr_matrix` at all. The self-loop rounding
+      hazard between the CSR and COO Laplacian overloads DOES NOT ARISE.
+  (b) The 26.08 driver reaches the kNN through
+      `cuvs::neighbors::all_neighbors::build` (`:150-159`), not 25.08's
+      `brute_force::build` plus `search`, which is what this lane's header
+      already said.
+  (c) AGAINST THIS LANE: C1, C2 and C3 of section 4 were claimed as ours
+      and are verbatim theirs. See section 4.
 
 Not claimed: no cross-vendor result of any kind (nothing has run anywhere
 but one M4). No performance number, ever, in this lane. No `LM` or `SM`

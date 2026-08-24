@@ -54,6 +54,12 @@ not. CHOSEN, and it carries a sabotage arm
 (`MOJOLEARN_SPECTRAL_SABOTAGE_ROTATE_UNFUSED`) that must fail the gate.
 Contract section 5.3, seam J4.
 ============ THE SWEEP CAP IS CHOSEN, AND IT IS SILENT (DEVIATION 780) ====
+This is one of the TWO clauses that survive DEVIATION 780's correction of
+2026-08-23. Three of that deviation's original five were struck once cuVS
+26.08 was checked out and turned out to spell them verbatim; this one
+stands, because this solver is not a mirror of anything. It stands where
+cuSOLVER `syevd` is called, and the cap is a number nobody upstream ever
+had to pick.
 `max_sweeps = 60`, where NR's `jacobi` uses 50 and calls `nrerror` when it
 runs out. This routine RETURNS the unconverged basis and its sweep count
 instead of raising. That is a bound this lane picked and a failure mode it
