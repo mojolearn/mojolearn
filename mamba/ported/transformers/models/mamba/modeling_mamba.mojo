@@ -140,6 +140,22 @@ below goes through `_gemm_op_nt`, which imports `OP_NT` from `gemm_oracle`
 and says which numbering it is in.** The sabotage arm `S17_OP_NUMBERING` is
 that mistake, planted, so a gate proves it is caught.
 
+WHAT IS GATED SO FAR, AND WHAT IS NOT
+--------------------------------------
+GREEN: one shape, B = 1, L = 4, d_model = 8, IDENTICAL mode, all sixteen
+computed stages bit-identical to `mamba_oracle.mojo::mamba_block_oracle`,
+and all seventeen tags of contract section 7 emitted once each in order.
+
+OWED, and nothing here may be read as covering it: the rest of contract
+section 3's shape sweep (B in {1,2,3}, L in {1,4,16,64,257}, d_model 16),
+FAST mode, the eight-launch repeat of clause (b), the batch-composition
+clause (c), the decode-equals-prefill clause (d) at this composition point,
+the row-39 planted-value audit of clause (e), and every one of the six
+sabotage arms below -- ALL SIX ARE UNRUN. A sabotage nobody has fired is not
+a gate, so no clause in section 4 is falsified by anything in this file yet.
+The machine was crashed by parallel builds on 2026-08-23 and the lane was
+cut to one tiny run; that is why, and the list above is the debt.
+
 WHAT `NUMERIC_FAST` DOES HERE
 ------------------------------
 Everything, with the pins compiled away, on the same code and the same
