@@ -693,6 +693,20 @@ def lanczos_smallest(
     if len(v0) != n:
         raise Error("lanczos: v0 must have n entries")
 
+    # A DECISION, RECORDED. The solver's shape is chosen before any float
+    # moves and is invisible in every other stage: two runs can agree on
+    # every alpha and beta and still have been asked different questions.
+    # `ncv` in particular is DEVIATION 780's surviving subject, and the
+    # NCV sabotage was caught only INDIRECTLY, by a stage-count mismatch.
+    # Recording the config makes a changed bound visible AT the bound.
+    var cfg = List[Int32]()
+    cfg.append(Int32(n))
+    cfg.append(Int32(k))
+    cfg.append(Int32(ncv))
+    cfg.append(Int32(maxIter))
+    cfg.append(Int32(which))
+    trace.record_list_i32("spectral.lanczos.config", cfg)
+
     # V: ncv x n, ZERO-FILLED (DEVIATION 773)
     var V = ctx.enqueue_create_buffer[DType.float32](ncv * n)
     ctx.enqueue_memset(V, Float32(0.0))
@@ -727,7 +741,9 @@ def lanczos_smallest(
     var beta_k = List[Float32]()
     for _ in range(k):
         beta_k.append(Float32(0.0))
-    _ = lanczos_solve_ritz(alpha, beta, beta_k, False, k, which, ncv, eigenvalues_k, eigenvectors_k)
+    var sweeps = lanczos_solve_ritz(
+        alpha, beta, beta_k, False, k, which, ncv, eigenvalues_k, eigenvectors_k
+    )
 
     # ritz = V^T E_k  (:501-507): ours `E_k^T V`, k x n row-major
     var ritz = ctx.enqueue_create_buffer[DType.float32](k * n + scratch_pad)
@@ -740,6 +756,10 @@ def lanczos_smallest(
     var restarts = 0
     trace.record_list_f32("spectral.lanczos.restart0000.ritz", eigenvalues_k)
     trace.record_scalar_f32("spectral.lanczos.restart0000.res", res)
+    # A DECISION, RECORDED: how many Jacobi sweeps the projected solve took.
+    # The sweep CAP is DEVIATION 780's other surviving clause and this is
+    # the only stage that can see it directly.
+    trace.record_list_i32("spectral.lanczos.restart0000.sweeps", _one_i32(sweeps))
 
     var iter = ncv
     while res > tol and iter < maxIter:
@@ -822,12 +842,15 @@ def lanczos_smallest(
         lanczos_aux(ctx, A, V, u, alpha, beta, k + 1, ncv, ncv, v, aux_uu, vv, tmp, trace, step, tpb)
         iter += ncv - k
         # solve_ritz with beta_k  (:703-716)
-        _ = lanczos_solve_ritz(alpha, beta, beta_k, True, k, which, ncv, eigenvalues_k, eigenvectors_k)
+        sweeps = lanczos_solve_ritz(
+            alpha, beta, beta_k, True, k, which, ncv, eigenvalues_k, eigenvectors_k
+        )
         var E2 = upload_f32(ctx, eigenvectors_k)
         identical_gemm(ctx, ritz, E2, V, k, n, ncv, OP_TN)
         res = _residual(beta[ncv - 1], eigenvectors_k, k, ncv, beta_k)
         trace.record_list_f32(_restart_tag(restarts, "ritz"), eigenvalues_k)
         trace.record_scalar_f32(_restart_tag(restarts, "res"), res)
+        trace.record_list_i32(_restart_tag(restarts, "sweeps"), _one_i32(sweeps))
         _ = uu^
         _ = vk^
         _ = d_beta_k^
@@ -851,6 +874,13 @@ def lanczos_smallest(
     _ = ritz^
     _ = E^
     return restarts
+
+
+def _one_i32(v: Int) -> List[Int32]:
+    """One integer as a list, so it can go through `record_list_i32`."""
+    var out = List[Int32]()
+    out.append(Int32(v))
+    return out^
 
 
 def _restart_tag(r: Int, what: StringSlice) -> String:

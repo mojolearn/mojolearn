@@ -354,10 +354,12 @@ property (`core/identity_trace.mojo` rules).
     spectral.L.vals
     spectral.diag                                  normalized only
     spectral.lanczos.v0
+    spectral.lanczos.config        [5] INTEGER    n, k, ncv, max_iterations, which
     spectral.lanczos.stepNNNN.alpha                per Lanczos step
     spectral.lanczos.stepNNNN.beta                 per Lanczos step
     spectral.lanczos.restartNNNN.ritz              per restart, k values
     spectral.lanczos.restartNNNN.res               per restart
+    spectral.lanczos.restartNNNN.sweeps [1] INT    Jacobi sweeps that solve took
     spectral.lanczos.converged_restarts_iter       INTEGER triple
     spectral.ritz
     spectral.ritz.vectors                          k x n row-major
@@ -394,7 +396,7 @@ deleted.
 | `SWEEP_CAP` | **BITES** | `check_tsolve_against_float64_jacobi` | n/a, host solver | worst eigenvalue error 6.9e-4 against a 2e-6 budget |
 | `ROTATE_UNFUSED` | **BITES** | `check_spectral_ring_exact` | n/a, closed form | breaks the ring's DEGENERATE PAIR: 5 distinct Ritz values where `{0, l1, l1, l2, l2}` is required |
 | `TIE_REVERSE` | **BITES** | `check_tsolve_tie_order_is_stable` | n/a, host | eigenvector column 0 is no longer `e_1` |
-| `MAXITER` | **INERT** | nothing | 0 | 0. **REACH FAILURE, not a pass** |
+| `MAXITER` | **BITES** | `device == oracle`, **ALL SIX fixtures** | **1 stage, `spectral.lanczos.config`** | **0 cells** |
 | `STD_SQRT` | **INERT** | nothing | 0 | 0. **A MEASUREMENT**: this host's `std.math.sqrt` is correctly rounded on every value this lane feeds it |
 
 **REACH IS PER FIXTURE, and three of the seven live arms are carried by ONE

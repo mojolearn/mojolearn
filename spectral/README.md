@@ -324,7 +324,7 @@ build each, 2026-08-23, IDENTICAL, one M4. Seven bite.
 | `SWEEP_CAP` | **BITES** | `check_tsolve_against_float64_jacobi` | n/a, host solver | worst eigenvalue error 6.9e-4 against a 2e-6 budget |
 | `ROTATE_UNFUSED` | **BITES** | `check_spectral_ring_exact` | n/a, closed form | breaks the ring's DEGENERATE PAIR: 5 distinct Ritz values where `{0, l1, l1, l2, l2}` is required |
 | `TIE_REVERSE` | **BITES** | `check_tsolve_tie_order_is_stable` | n/a, host | eigenvector column 0 is no longer `e_1` |
-| `MAXITER` | **INERT** | nothing | 0 | 0. **REACH FAILURE, not a pass** |
+| `MAXITER` | **BITES** | `device == oracle`, **ALL SIX fixtures** | **1 stage, `spectral.lanczos.config`** | **0 cells** |
 | `STD_SQRT` | **INERT** | nothing | 0 | 0. **A MEASUREMENT**: this host's `std.math.sqrt` is correctly rounded on every value this lane feeds it |
 
 
@@ -361,6 +361,16 @@ it means deleting one fixture would silently disarm a clause:
     it is `min(18, 20) = 18`; the arm then takes `min(20, 22) = 20` and the
     two runs take a DIFFERENT NUMBER OF LANCZOS STEPS, which is the
     structural shape a changed bound has.
+  * `MAXITER` WAS a reach failure too, and was fixed WITHOUT the heavy
+    fixture it was thought to need. Recording `spectral.lanczos.config`
+    means a changed bound is caught AT THE BOUND: the arm now moves ONE
+    stage and ZERO CELLS on all six fixtures. An arm that moves no number
+    at all is still a real catch when the DECISION it changes is itself a
+    recorded stage.
+  * The one remaining inert arm, `STD_SQRT`, is a MEASUREMENT and not a
+    failure: this host's `std.math.sqrt` is correctly rounded on every
+    value this lane feeds it, which is exactly what that arm exists to
+    find out per host.
 
 **TWO PREDICTIONS IN THIS DOCUMENT WERE WRONG, BOTH IN THE LANE'S FAVOR,
 and they are corrected rather than quietly updated.**
@@ -382,15 +392,55 @@ and they are corrected rather than quietly updated.**
 which is the correct outcome and also means the controls are themselves
 unexercised. A self-test that forces one to fire is OWED.
 
+## 6.5 MORE HASHES: the decisions this pipeline makes, and which are recorded
+
+Andrew asked whether there are more hashes to take. There were. DEVIATION
+778's tie rule was a DECISION with no instrument until one was built for
+it, so the whole pipeline was re-read for others.
+
+**ADDED THIS ROUND**, both host-side integers, no new kernel and no new
+cross-thread fold:
+
+  * `spectral.lanczos.config` -- `n`, `k`, `ncv`, `max_iterations`,
+    `which`, as one integer stage. The solver's SHAPE is chosen before any
+    float moves and was invisible in every other stage: two runs could
+    agree on every alpha and beta and still have been asked different
+    questions. This is what turned `MAXITER` from inert into a live arm.
+  * `spectral.lanczos.restartNNNN.sweeps` -- how many Jacobi sweeps the
+    projected solve took. The sweep cap is DEVIATION 780's other surviving
+    clause and this is the only stage that can see it directly.
+
+**ALREADY RECORDED, checked rather than assumed**: how many Lanczos steps
+ran and which criterion stopped the loop (the `converged_restarts_iter`
+triple makes `res <= tol` against `iter >= maxIter` derivable); whether a
+restart broke down (it raises by name); whether `kernel_normalize`'s
+`beta == 0` branch fired (`beta` is a recorded per-step scalar, so the
+branch is derivable from it); whether `coo_symmetrize` found a transpose
+(0.5 against 1.0 in the recorded `spectral.W.vals`); how many entries the
+zero-compaction dropped (implied by the recorded `W.rows` length).
+
+**HANDED OVER, NOT ADDED, and the reason is the same for both.** Each
+needs a COUNT over a device buffer, which is a cross-thread reduction and
+therefore a NEW fold whose own order would have to be pinned before it
+could be trusted. **An instrument that is itself an identity hazard is not
+an improvement**, so these are named for the orchestrator rather than
+taken unilaterally:
+
+  * **whether the `u` clamp at `1e-7` fired, and on how many entries.**
+    `u` is never a card stage, so this clamp is the one seam in the
+    Lanczos with no instrument at all.
+  * **whether `zero_to_one_functor` substituted a `1.0` for a zero
+    degree.** `spectral.diag` records the post-substitution value, so a
+    `1.0` there is currently ambiguous between a genuine unit degree and a
+    substituted zero.
+
 ## 7. What is owed, and every item needs a compile slot
 
   1. ~~Run the eight sabotage arms.~~ **DONE**, and a ninth added for the
-     tie rule. Seven bite. What remains owed from that run: a fixture that
-     makes `MAXITER` reach (it needs a graph that genuinely exceeds 1000
-     Lanczos steps while staying under `10n`, so `n > 100` AND slow
-     convergence, which is the heavy case this lane defers), and a
-     SELF-TEST FOR THE VACUOUS CONTROLS, which never fired in ten runs and
-     are therefore themselves unexercised.
+     tie rule. **EIGHT of nine bite**; the one that does not is a
+     measurement. Both follow-ups from that run are closed too: the
+     VACUOUS self-test landed, and `MAXITER`'s reach failure was fixed by
+     recording the decision rather than by building a heavy fixture.
   2. ~~Diagnose `check_spectral_blobs_separate`.~~ **DONE, section 3.05.
      The CHECK was wrong, the port was faithful.**
   3. ~~Run the four checks that never executed.~~ **DONE. ALL 18 CHECKS
@@ -403,9 +453,10 @@ unexercised. A self-test that forces one to fire is OWED.
      `check_tsolve_tie_order_is_stable`. A certificate would still be
      cheaper and sharper than three indirect references, so it stays a
      nice-to-have rather than a hole.
-  5. **A fixture that makes `max_iterations` bite**, so the C2 row is
-     testable. Still owed; the `ncv` clamp's equivalent gap WAS closed this
-     round by adding `tiny_ncv_clamp` (n=22, k=4).
+  5. ~~A fixture that makes `max_iterations` bite.~~ **NO LONGER NEEDED,
+     and it was the heavy item.** Recording `spectral.lanczos.config`
+     catches a changed bound directly, so the arm bites on all six
+     existing fixtures with zero cells moved.
   6. **Re-run everything under FAST** and record, not assert.
   7. **The cross-vendor legs.** Nothing here has run anywhere but one M4,
      so no cross-vendor claim exists.

@@ -235,6 +235,8 @@ struct OracleResult[dt: DType](Movable):
     var restart_res: List[Scalar[Self.dt]]
     var restart_ritz: List[Scalar[Self.dt]]
     """`k` Ritz values per restart (restart 0 = the first pass), flat."""
+    var restart_sweeps: List[Int32]
+    """Jacobi sweeps the projected solve took, one per restart."""
     var ritz: List[Scalar[Self.dt]]
     var ritz_vectors: List[Scalar[Self.dt]]
     var embedding: List[Scalar[Self.dt]]
@@ -248,6 +250,7 @@ struct OracleResult[dt: DType](Movable):
         self.step_beta = List[Scalar[Self.dt]]()
         self.restart_res = List[Scalar[Self.dt]]()
         self.restart_ritz = List[Scalar[Self.dt]]()
+        self.restart_sweeps = List[Int32]()
         self.ritz = List[Scalar[Self.dt]]()
         self.ritz_vectors = List[Scalar[Self.dt]]()
         self.embedding = List[Scalar[Self.dt]]()
@@ -348,7 +351,7 @@ def _host_solve_ritz[
     ncv: Int,
     mut eigenvalues_k: List[Scalar[dt]],
     mut eigenvectors_k: List[Scalar[dt]],
-) raises:
+) raises -> Int:
     var t = List[Scalar[dt]]()
     for _ in range(ncv * ncv):
         t.append(Scalar[dt](0))
@@ -365,7 +368,7 @@ def _host_solve_ritz[
             t[tid * ncv + k] = beta_k[tid]
     var evals = List[Scalar[dt]]()
     var evecs = List[Scalar[dt]]()
-    _ = symmetric_eig_host[dt](t, ncv, evals, evecs)
+    var sweeps = symmetric_eig_host[dt](t, ncv, evals, evecs)
     var first: Int
     if which == LANCZOS_SA:
         first = 0
@@ -380,6 +383,7 @@ def _host_solve_ritz[
     for j in range(ncv):
         for c in range(k):
             eigenvectors_k.append(evecs[j * ncv + (first + c)])
+    return sweeps
 
 
 def _host_ritz_vectors[
@@ -442,7 +446,9 @@ def host_lanczos_smallest[
     var beta_k = List[Scalar[dt]]()
     for _ in range(k):
         beta_k.append(Scalar[dt](0))
-    _host_solve_ritz[dt](alpha, beta, beta_k, False, k, which, ncv, eigenvalues_k, E)
+    res.restart_sweeps.append(
+        Int32(_host_solve_ritz[dt](alpha, beta, beta_k, False, k, which, ncv, eigenvalues_k, E))
+    )
     var ritz = _host_ritz_vectors[dt](E, V, k, n, ncv)
     var r = _host_residual[dt](beta[ncv - 1], E, k, ncv, beta_k)
     res.restart_res.append(r)
@@ -493,7 +499,9 @@ def host_lanczos_smallest[
             V[(k + 1) * n + p] = hflush[dt](u[p] / beta_kk)
         _host_lanczos_aux[dt](L, V, u, alpha, beta, k + 1, ncv, ncv, res)
         iter += ncv - k
-        _host_solve_ritz[dt](alpha, beta, beta_k, True, k, which, ncv, eigenvalues_k, E)
+        res.restart_sweeps.append(
+            Int32(_host_solve_ritz[dt](alpha, beta, beta_k, True, k, which, ncv, eigenvalues_k, E))
+        )
         ritz = _host_ritz_vectors[dt](E, V, k, n, ncv)
         r = _host_residual[dt](beta[ncv - 1], E, k, ncv, beta_k)
         res.restart_res.append(r)

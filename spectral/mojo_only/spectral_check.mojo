@@ -146,7 +146,7 @@ from spectral.ported.sparse.solver.detail.lanczos import (
     spectral_sabotage_name,
     spmv_kernel,
 )
-from spectral.ported.sparse.solver.lanczos_types import LANCZOS_SM
+from spectral.ported.sparse.solver.lanczos_types import LANCZOS_LA, LANCZOS_SM
 
 comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime SCRATCH = "/tmp"
@@ -642,6 +642,13 @@ def _oracle_trace[
     for i in range(len(res.v0)):
         v0.append(Float32(res.v0[i]))
     t.record_list_f32("spectral.lanczos.v0", v0)
+    var cfg = List[Int32]()
+    cfg.append(Int32(g.n))
+    cfg.append(Int32(k))
+    cfg.append(Int32(ncv))
+    cfg.append(Int32(10 * g.n))
+    cfg.append(Int32(LANCZOS_LA))
+    t.record_list_i32("spectral.lanczos.config", cfg)
     var step = 0
     var steps_this = ncv
     for r in range(res.restarts + 1):
@@ -654,6 +661,9 @@ def _oracle_trace[
             rz.append(Float32(res.restart_ritz[r * k + c]))
         t.record_list_f32(_restart_tag(r, "ritz"), rz)
         t.record_scalar_f32(_restart_tag(r, "res"), Float32(res.restart_res[r]))
+        var sw = List[Int32]()
+        sw.append(res.restart_sweeps[r])
+        t.record_list_i32(_restart_tag(r, "sweeps"), sw)
         steps_this = ncv - k
     var conv = List[Int32]()
     conv.append(Int32(1) if res.converged else Int32(0))
@@ -1310,8 +1320,10 @@ def check_spectral_card_is_emitted() raises:
     var lines = read_trace_lines(p1)
     var need: List[String] = [
         "spectral.L.indptr", "spectral.L.cols", "spectral.L.vals", "spectral.diag",
-        "spectral.lanczos.v0", "spectral.lanczos.step0000.alpha", "spectral.lanczos.step0000.beta",
+        "spectral.lanczos.v0", "spectral.lanczos.config",
+        "spectral.lanczos.step0000.alpha", "spectral.lanczos.step0000.beta",
         "spectral.lanczos.restart0000.ritz", "spectral.lanczos.restart0000.res",
+        "spectral.lanczos.restart0000.sweeps",
         "spectral.lanczos.converged_restarts_iter", "spectral.ritz", "spectral.ritz.vectors",
         "spectral.embedding",
     ]
@@ -1325,7 +1337,7 @@ def check_spectral_card_is_emitted() raises:
             raise Error("card: stage " + tag + " missing")
     print(
         "check_spectral_card_is_emitted OK: " + String(len(lines)) + " stages, two runs agree"
-        " line for line, the 13 documented tags present"
+        " line for line, the 15 documented tags present"
     )
 
 
