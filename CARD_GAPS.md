@@ -229,11 +229,25 @@ Every one is a scalar or a handful of integers. None adds a large buffer.
 
 ## Two audit notes that are not hashes
 
-- **isolation_forest, possible defect**: `isolation_tree_builder.mojo:296-297`,
-  `if node_idx >= max_nodes_per_tree: continue` silently DROPS a node, leaving
-  `node_feature/threshold/left/right` at the poison fill while a parent still
-  points at it, and `structure.*` records only `n_used` entries so the dangling
-  child is never hashed. Needs a lane verdict.
+- **isolation_forest: ADJUDICATED 2026-08-24, and THIS AUDIT WAS WRONG ON THE
+  SECOND HALF.** The branch is `isolation_tree_builder.mojo:296-297`,
+  `if node_idx >= max_nodes_per_tree: continue`. Verdict: **UNREACHABLE and
+  CLOSED**, with the proof written beside the branch so it is re-checked if the
+  bound or the push sites change. Upstream does the same thing VERBATIM
+  (`cuml-v26.08.00/cpp/src/isolation_forest/isolation_tree_builder.cuh:158`), so
+  DEVIATION policy is not engaged and no number was consumed. The bound is at
+  least 1, the root pushes 0, and the two child pushes run only past the
+  capacity arm of the stopping condition where `n_nodes + 2 <= bound`, so every
+  pushed index is strictly below it. **The claim that the card would be blind to
+  it is FALSE and is struck**: a dropped index is always `< n_nodes` because it
+  was produced by incrementing `n_nodes`, and the card records
+  `for i in range(n_used)` with `n_used = n_nodes`, so a poisoned dangling child
+  lands INSIDE the hashed range and would diverge from the oracle on
+  `structure.feat`. Worth adjudicating anyway, because the two poisons fail
+  differently if it ever did fire: the all-zero poison makes a traversal loop to
+  the root FOREVER, while the NaN poison `0xffc0dead` has a negative feature
+  word so the node reads as a LEAF and the traversal SILENTLY RETURNS THE POISON
+  as a path length. A silent wrong score is the case that justified the read.
 - **hierarchy/linkage**: the card RE-RUNS `pairwise_distances`
   (`linkage_main.mojo:85-89`) and `build_sorted_mst` (`:108-110`) to produce
   `linkage.dists` and `linkage.mst.*`, rather than recording the buffers the
