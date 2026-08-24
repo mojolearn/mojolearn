@@ -662,6 +662,36 @@ check-division = "mojo run -I . mojo_only/division_check.mojo"
 # check-portable-translog on every column.
 check-portable-nn = "mojo run -I . mojo_only/portable_nn_check.mojo"
 
+# DEVIATION 820: the RoPE trig pair. `check_cos_bits_did_not_move` runs first
+# because portable_cosf is CERTIFIED and its body moved into the shared
+# `_cephes_sincosf_core`; the AUTHORITATIVE proof is check-portable-sqrtcos
+# still printing 12295913102197186379, so run that one before this. Then sin's
+# planted specials BY SIGN BIT, oddness over 2^20 lanes, octant coverage, and
+# the RoPE 8192 domain ladder RECORDED rather than asserted (this spelling's
+# ulp bound has never been measured). Four `-D MOJOLEARN_TRIG_SABOTAGE_*` arms,
+# two of which are host-inert by construction and need Metal to bite.
+check-portable-trig = "mojo run -I . mojo_only/portable_trig_check.mojo"
+
+# DEVIATIONS 821-824: tanh, erf and the TWO gelus. `check_two_gelus_disagree`
+# is a NEGATIVE control and is the point of the file: the erf gelu and the tanh
+# gelu must MEASURE as different functions, or a seam was copy-pasted. Plus
+# tanh(-0.0) = -0.0 by sign bit, which is a Cephes bug this lane fixed (the
+# sign cancels twice through the odd polynomial), and gelu(-inf) = NaN
+# ASSERTED rather than treated as a defect. Accuracy is recorded, never
+# asserted. The kernel also launches std.math.tanh and std.math.erf on the
+# device, which is what answers DEVIATION 821's open float64-lowering question;
+# if Metal refuses to compile, that refusal IS the answer.
+check-portable-gelu = "mojo run -I . mojo_only/portable_gelu_check.mojo"
+
+# DEVIATION 825 + 826: softmax's row maximum. `check_fmax_fold_invariant` is
+# the point, because the consumer is a REDUCTION: one planted row folded left
+# to right, right to left and as a balanced tree must give ONE answer, and a
+# pairwise check structurally cannot see the row-13 defect. Also pins
+# identical_mul's signed zeros against all three pinned_mul copies in mamba/.
+# NOTE: this gate imports extratrees and mamba to catch copy drift, so it
+# compiles more than mojo_only/.
+check-portable-fmax = "mojo run -I . mojo_only/portable_fmax_check.mojo"
+
 # E2U: the unsupervised sub-feature matrix through the Python surface
 # (tools/e2u_README.md); append the out dir:
 #   pixi run e2u-matrix bench/results/e2u/<stamp>/fast1
