@@ -23,6 +23,7 @@ DEVIATION 670, the hand-off list, and the row text for both directories.
     held by other lanes). Everything in this block is source only:
         DEVIATION 677, the diffuse-step refusal
         the `guards` / `piv` / `info_*` decision stages on the card
+        the `Fs` and `P_final` stages, and `guards` bit 2 (the sign choice)
         orders `arma44` and `ar2_tie`, plants PIVOT_TIE and INTERCEPT_NUDGE
         gates check_lu_pivot_tie_is_reached, check_guard_decisions_are_recorded
         the widened check_fold_order_is_visible
@@ -151,8 +152,48 @@ load-bearing AND cheap:
                  healthy run, and a buffer of zeros is worth recording
                  because it proves THE REFUSAL PATH WAS NOT TAKEN.
 
+Three more, added 2026-08-24 after a repo-wide audit ranked them:
+
+    Fs           the innovation variance `F = Z P Z'` at EVERY timestep. It
+                 is the quantity the DEVIATION 673 / 677 guard READS, so a
+                 refusal that fires on one vendor and not another shows up
+                 here one stage before it shows up as a raise. And
+                 `identical_log` compresses the whole series into a single
+                 `sum_logFs` fold, so a per-step difference that cancels
+                 inside that fold otherwise leaves no trace at all.
+    P_final      the covariance AFTER the filter. Only `P0`, the covariance
+                 BEFORE it, was recorded, so everything the filter did to the
+                 covariance and carried forward was invisible.
+    guards bit 2 WHICH SIGN the `r == 1` intercept nudge chose.
+                 `raft::signPrim`'s double specialization is `signbit`, so
+                 `-0.0` and `+0.0` send the intercept to OPPOSITE SIGNS while
+                 looking identical in every float stage. A row-10 signed-zero
+                 hazard sitting directly on a model parameter.
+
+**A limit worth naming, because it is an argument for one more stage.**
+`_numerical_stability` runs at the end of every iteration: `A = 0.5(A + A')`
+AVERAGES AWAY any antisymmetric difference between two vendors, and
+`A_ii = |A_ii|` ABSOLUTE-VALUES AWAY any diagonal sign difference, `-0.0`
+against `+0.0` included. The covariance is therefore a SINK for exactly the
+class of divergence this repo hunts. `P_final` catches what survives that
+sink; it cannot catch what the sink erased. The strictly better instrument
+is `P` BEFORE the stabilization, and it is not yet taken -- listed below.
+
 **Listed, not added.** Each with why it was left:
 
+    P before             the covariance BEFORE `_numerical_stability`, per
+    stabilization        iteration or at least at the last one. Strictly
+                         better than `P_final` for the reason above: the
+                         stabilization is a sink that erases antisymmetric
+                         and diagonal-sign divergence, so a vendor difference
+                         can exist, be erased, and never appear in any stage.
+                         Left for now because it needs either a per-iteration
+                         buffer (`n_obs * rd2 * batch`, no longer free) or a
+                         deliberate choice of which single iteration to keep.
+                         The cheap version is a per-series MAX ASYMMETRY
+                         scalar, `max |P_ij - P_ji|` before stabilization,
+                         which is one float per series and would show that a
+                         difference existed even after it was averaged away.
     jones clamp mask     which parameters the Jones clamp bound, per series.
                          A clamped parameter is a DIFFERENT MODEL, so this is
                          load-bearing. Left out because it is DERIVABLE from

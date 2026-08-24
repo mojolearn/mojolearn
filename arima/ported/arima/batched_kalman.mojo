@@ -336,10 +336,23 @@ def kalman_init_state_kernel(
                 # raft::signPrim: signbit(x) ? -1 : +1
                 var neg = (bitcast[DType.uint32](v) >> 31) != 0
                 d_ImT.unsafe_store(ib, Float32(-1e-3) if neg else Float32(1e-3))
-                # DECISION STAGE: the intercept nudge fired. Nothing else can
-                # record it -- `ImT` is overwritten in place by its own LU
-                # below, so by the time any stage is read the evidence is gone.
-                d_guards.unsafe_store(bid, d_guards.unsafe_load(bid) | UInt8(2))
+                # DECISION STAGE: the intercept nudge fired (bit 1) and WHICH
+                # SIGN it chose (bit 2). Nothing else can record either --
+                # `ImT` is overwritten in place by its own LU below, so by the
+                # time any stage is read the evidence is gone.
+                #
+                # The sign is its own decision and not a detail of the first.
+                # `raft::signPrim`'s double specialization is `signbit(x)`, so
+                # `v = -0.0` takes the NEGATIVE branch while `v = +0.0` takes
+                # the positive one: two bit-identical-looking zeros choose
+                # `-1e-3` against `+1e-3` and the intercept ends up with the
+                # opposite sign. That is an IDENTITY_PATHS row-10 signed-zero
+                # hazard sitting directly on a model parameter, and bit 2 is
+                # the only thing that would show it.
+                var bits = UInt8(2)
+                if neg:
+                    bits |= UInt8(4)
+                d_guards.unsafe_store(bid, d_guards.unsafe_load(bid) | bits)
         var inf2 = lu_inverse(d_ImT, ib, d_ImT_inv, ib, r, d_piv, bid * LYAP_R2_MAX)
         if inf2 != 0 and info == 0:
             info = inf2
@@ -417,6 +430,7 @@ def batched_kalman_loop_kernel(
     d_mu: MutPointer[Float32, MutAnyOrigin],
     d_pred: MutPointer[Float32, MutAnyOrigin],
     d_vs: MutPointer[Float32, MutAnyOrigin],
+    d_Fs: MutPointer[Float32, MutAnyOrigin],
     d_loglike: MutPointer[Float32, MutAnyOrigin],
     d_fc: MutPointer[Float32, MutAnyOrigin],
     d_info: MutPointer[Int32, MutAnyOrigin],
@@ -497,6 +511,8 @@ def batched_kalman_loop_kernel(
                 for j in range(rd):
                     var t0 = ftz(l_P[j * rd + i] * l_Z[i])
                     _Fs = ftz(identical_mul_add(t0, l_Z[j], _Fs))
+        d_Fs.unsafe_store(b_ys + it, _Fs)
+
         # DEVIATION 677: the check covers EVERY step, not only the summed
         # ones. `it < n_diff` records a NEGATIVE code so the host can tell
         # the two cases apart; the arithmetic below is untouched, so the
@@ -541,6 +557,26 @@ def batched_kalman_loop_kernel(
         for i in range(rd2):
             l_P[i] = ftz(l_P[i] + l_RQR[i])
         _numerical_stability(rd, l_P)
+
+    # THE FINAL P, written back (added 2026-08-24). Theirs never does: the
+    # loop kernel loads `P` into registers and the caller never looks again.
+    # Ours writes it back into the SAME buffer the initial state came from,
+    # which is safe because `batched_kalman_filter` has already copied that
+    # into `ws.P0`; so `P0` is the state before the filter and `P` is the
+    # state after, and both are recordable.
+    #
+    # WHY IT IS WORTH A STAGE, and the limit of it. `_numerical_stability`
+    # runs at the end of every iteration: `A = 0.5(A + A')` AVERAGES AWAY any
+    # antisymmetric difference between two vendors, and `A_ii = |A_ii|`
+    # ABSOLUTE-VALUES AWAY any diagonal sign difference including `-0.0`
+    # against `+0.0`. So the covariance is a SINK for exactly the class of
+    # divergence this repo hunts. Recording the final `P` catches what
+    # survives that sink. It does NOT catch what the sink erased -- for that
+    # the instrument would have to be `P` BEFORE the stabilization, which is
+    # a strictly better probe and is listed in `arima/README.md` as not yet
+    # taken.
+    for i in range(rd2):
+        P.unsafe_store(b_rd2 + i, l_P[i])
 
     # log-likelihood
     var n_obs_ll_f = Float32(n_obs_ll)
@@ -592,17 +628,31 @@ struct KalmanWorkspace(Movable):
     var guards: DeviceBuffer[DType.uint8]
     """DECISION BITS per series, one byte (added 2026-08-24). Bit 0: the
     `rd == 2 && p == 2` unit-root guard rewrote `T[1]` to -0.99. Bit 1: the
-    `r == 1` intercept guard nudged `I - T*` away from zero. Both are RARE
+    `r == 1` intercept guard nudged `I - T*` away from zero, and bit 2: that
+    nudge took the NEGATIVE branch (`signPrim` read a set sign bit). Bits 0
+    and 1 are RARE
     rewrites that change the model, and neither was recoverable from any
     recorded stage: the unit-root one only shows up as a suspicious -0.99 in
     `T` if you already know to look for it, and the intercept one is
     invisible because `ImT` is OVERWRITTEN IN PLACE by its own LU
-    factorisation before anything could record it."""
+    factorization before anything could record it. Bit 2 exists because the
+    SIGN is a second decision: `signPrim` is `signbit`, so `-0.0` and `+0.0`
+    send the intercept to opposite signs while looking identical in every
+    float stage."""
 
     var info_init: DeviceBuffer[DType.int32]
     var info_loop: DeviceBuffer[DType.int32]
     var pred: DeviceBuffer[DType.float32]
     var vs: DeviceBuffer[DType.float32]
+    var Fs: DeviceBuffer[DType.float32]
+    """The innovation variance `F = Z P Z'` at EVERY timestep (added
+    2026-08-24). Ours, not theirs: theirs keeps `_Fs` in a register. It is
+    recorded for two reasons. It is the quantity the DEVIATION 673 / 677
+    guard reads, so a refusal that fires on one vendor and not another is
+    visible here one stage before it is visible as a raise. And
+    `identical_log` then compresses the whole series of them into a single
+    `sum_logFs` fold, so a per-step difference that cancels inside that fold
+    leaves no trace anywhere else."""
     var loglike: DeviceBuffer[DType.float32]
     var fc: DeviceBuffer[DType.float32]
     var P0: DeviceBuffer[DType.float32]
@@ -631,6 +681,7 @@ struct KalmanWorkspace(Movable):
         self.info_loop = ctx.enqueue_create_buffer[DType.int32](batch_size)
         self.pred = ctx.enqueue_create_buffer[DType.float32](n_obs * batch_size)
         self.vs = ctx.enqueue_create_buffer[DType.float32](n_obs * batch_size)
+        self.Fs = ctx.enqueue_create_buffer[DType.float32](n_obs * batch_size)
         self.loglike = ctx.enqueue_create_buffer[DType.float32](batch_size)
         self.fc = ctx.enqueue_create_buffer[DType.float32](max(1, fc_steps * batch_size))
         self.P0 = ctx.enqueue_create_buffer[DType.float32](rd2 * batch_size)
@@ -712,7 +763,8 @@ def batched_kalman_filter(
     ctx.enqueue_function[batched_kalman_loop_kernel](
         d_ys.unsafe_ptr(), ws.T.unsafe_ptr(), ws.Z.unsafe_ptr(), ws.RQR.unsafe_ptr(),
         ws.P.unsafe_ptr(), ws.alpha.unsafe_ptr(), params.mu.unsafe_ptr(),
-        ws.pred.unsafe_ptr(), ws.vs.unsafe_ptr(), ws.loglike.unsafe_ptr(), ws.fc.unsafe_ptr(),
+        ws.pred.unsafe_ptr(), ws.vs.unsafe_ptr(), ws.Fs.unsafe_ptr(),
+        ws.loglike.unsafe_ptr(), ws.fc.unsafe_ptr(),
         ws.info_loop.unsafe_ptr(),
         Int32(rd), Int32(nobs), Int32(batch_size), Int32(order.k), Int32(n_diff), Int32(fc_steps),
         grid_dim=(_grid(batch_size, kalman_tpb), 1, 1), block_dim=(kalman_tpb, 1, 1),

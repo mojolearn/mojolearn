@@ -12,7 +12,7 @@ untransformed parameters, then the Jones-TRANSFORMED parameters (read those
 second when two cards disagree: a different `t_params` is a different model
 and everything downstream of it is noise), then every stage of the filter in
 the order the device writes them --  `Z`, `R`, `T`, `RQ`, `RQR`, `P0`,
-`alpha0`, `pred`, `vs`, `loglike`, `fc` -- and last the DECISION stages
+`alpha0`, `pred`, `vs`, `Fs`, `loglike`, `fc`, `P_final` -- and last the DECISION stages
 `piv`, `info_init`, `info_loop` and `guards`, for each of the ten orders in
 `arima/mojo_only/fixtures.mojo`'s table.
 
@@ -126,8 +126,13 @@ def main() raises:
         trace.record_device[DType.float32](ctx, tag + ".alpha0", res.ws.alpha0, rd * b)
         trace.record_device[DType.float32](ctx, tag + ".pred", res.ws.pred, f.n_obs * b)
         trace.record_device[DType.float32](ctx, tag + ".vs", res.ws.vs, f.n_obs * b)
+        trace.record_device[DType.float32](ctx, tag + ".Fs", res.ws.Fs, f.n_obs * b)
         trace.record_device[DType.float32](ctx, tag + ".loglike", res.ws.loglike, b)
         trace.record_device[DType.float32](ctx, tag + ".fc", res.ws.fc, FC_STEPS * b)
+        # `P0` is the covariance BEFORE the filter; `P_final` is after it. Only
+        # the first was ever recorded, so every vendor difference the filter
+        # introduced into the covariance and then carried forward was invisible.
+        trace.record_device[DType.float32](ctx, tag + ".P_final", res.ws.P, rd2 * b)
 
         # ------------------------------------------------------------------
         # DECISION STAGES (added 2026-08-24, Andrew's "are there more hashes

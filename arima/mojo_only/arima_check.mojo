@@ -916,7 +916,7 @@ def check_guard_decisions_are_recorded(ctx: DeviceContext) raises:
     before 2026-08-24 neither appeared in any recorded stage on any card:
     bit 0 was only inferable from a suspicious -0.99 sitting in `T` if you
     already knew to look, and bit 1 was not inferable at all, because `ImT`
-    is overwritten in place by its own LU factorisation before anything
+    is overwritten in place by its own LU factorization before anything
     could have read it.
 
     Three arms, because a decision stage that is always 0 or always 1 is not
@@ -982,7 +982,19 @@ def check_lu_pivot_tie_is_reached(ctx: DeviceContext) raises:
          starts at `best = j` and scans `j+1 ..`).
 
     A tie that exists but is not the maximum is `reached but inert` all over
-    again, which is why (2) is asserted and not assumed."""
+    again, which is why (2) is asserted and not assumed.
+
+    THIS GATE FAILS LOUDLY BY DESIGN. A fixture that silently misses its
+    branch is WORSE THAN NO FIXTURE: it converts an uncovered branch into an
+    apparently covered one, and the next reader sees a green arm and moves
+    on. So none of the three properties is checked with a print and a shrug;
+    each raises, naming the series and the numbers, and the arm below asserts
+    the unit-root guard did NOT fire on this order so a passing
+    `check_unit_root_guard_is_reached` can never be mistaken for this one.
+
+    (Under `MOJOLEARN_ARIMA_SURVEY=1` these become prints, as every assertion
+    does, because a sabotage run must enumerate rather than stop. Survey mode
+    is never used for a green run and the baseline prints nothing.)"""
     print("check_lu_pivot_tie_is_reached [" + _mode_name() + "]")
     var f = arima_fixture(N_OBS, SALT)
     var order = ARIMAOrder(2, 0, 0, 0, 0, 0, 0, 0, 0)
