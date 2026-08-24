@@ -155,7 +155,7 @@ failure:
   sliced, so row 0's input bits are identical by construction. Row 0's cells
   are then compared across all three compositions, and row 1's between B = 2
   and B = 3. PASS on 4,152 compared cells of all 16 stages at B up to 3,
-  L = 4, d_model = 8. What would hide a failure: comparing whole buffers
+  L = 4, d_model = 8, and on 7,896 cells at d_model = 16. What would hide a failure: comparing whole buffers
   rather than ROW SLICES, because the buffers are three different lengths
   and a whole-buffer compare cannot even be spelled; and forgetting the
   per-batch stages (`conv.window`, `scan.h`), which are indexed `[B, ...]`
