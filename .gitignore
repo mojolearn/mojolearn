@@ -38,8 +38,7 @@ bench/results/e1/.leg-*.state
 # Regenerated on every run, never an input to anything here.
 catboost_info/
 
-# Cards produced from a dirty tree are contaminated by our own labeling.
-# The -dirty suffix exists to make them identifiable; never let them accumulate.
-bench/results/**/*-dirty/
+# NOTE: -dirty ladder runs are DELIBERATELY TRACKED records (see gemm/ DEVIATION 533).
+# They are not junk and must not be ignored or removed.
 # Dry-run leg output is not a record.
 bench/results/e1g/*-dryrun/
