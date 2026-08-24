@@ -16,11 +16,18 @@ scalar with nothing in between for fourteen scores, so a divergence in a
 value the score ABSORBS -- `r2 = 1 - sse/ssto` with `sse << ssto`, which
 this lane measured and then did not record -- passed it. The 34-stage
 result is not thereby wrong; it is weaker than it reads. The card grew
-this round (CARD_GAPS.md), so **a leg-11 card and a current card do not
+this round (CARD_GAPS.md) to **61 stages, built and read back in both
+modes on 2026-08-24**, so **a leg-11 card and a current card do not
 compare stage for stage**: a leg builds both ends from one pinned SHA, so
 that is survivable, but a stale card diffed against a fresh one reports a
-STRUCTURAL divergence and means only that the two builds differ. Re-running
-the three-vendor leg on the grown card is OWED.
+STRUCTURAL divergence and means only that the two builds differ.
+
+**OWED: the three-vendor leg on the grown card.** Apple M4 is done and
+green -- both modes build, the four gates pass in both modes, two IDENTICAL
+runs diff `RESULT: IDENTICAL` over all 61 stages. H100 and MI325X have NOT
+run the 61-stage card; leg-11's three-vendor result stands only for the
+34-stage one. The leg is blocked on RunPod authentication and is Andrew's
+to unblock; nothing in this directory blocks it.
 
 All four groups are ported, gated in both modes on one Apple M4, and
 sabotaged: A (the label metrics), B (r2, KL divergence), C (silhouette,
@@ -225,10 +232,13 @@ IDENTICAL and RECORDED under FAST, see the row 39 audit):
 ## The card (`metrics_main.mojo`, Apple M4, 2026-08-23)
 
 One `seq`. THE 34-STAGE CARD BELOW IS THE LEG-11 CARD (commit a32e304);
-the stage list grew by 27 stages this round, to an EXPECTED 61, and that
-count is OWED from the next build slot because nothing in this round was
-compiled. A leg-11 card and a current card therefore do not compare stage
-for stage. What was there at leg 11: the inputs
+the stage list grew by 27 stages this round, to **61 STAGES, READ BACK
+FROM A BUILD IN BOTH MODES ON 2026-08-24** (`card written: ... (61
+stages)`), which is what the previous commits predicted by arithmetic and
+marked OWED. Every dtype and count in the table below was read back from
+the card, not derived: k = 6, k*k = 36, `chunk_count(2053)` = 9,
+ARI's `nClasses` = 6. A leg-11 card and a current card therefore do not
+compare stage for stage. What was there at leg 11: the inputs
 (`metrics.input.*`), the integer products (`metrics.contingency`,
 `metrics.rand.a/b`, neighbors' `knn.*` six stages, `trust.emb_ind`,
 `trust.rank_sum`), the per-sample silhouettes, and every returned value by
@@ -336,6 +346,119 @@ the washer is UNREACHABLE, so a pre-value stage would record the same bits
 under a second name. Trustworthiness routes `knn.*` (six stages),
 `trust.emb_ind` and `trust.rank_sum` through the same `seq` and its final
 value is a closed form of the recorded rank sum.
+
+### What the grown card MEASURED on its first run (Apple M4, 2026-08-24)
+
+Both modes built FIRST TIME and every leg-11 value is unchanged, in both
+modes, so no arithmetic moved: `accuracy 0x3f426680`, `rand_index
+0x3fe8c307da380cc0`, `ari 0x3fde6f24da913871`, `entropy 0x3ff6a22320000000
+/ 0x3ff6a22304271931`, `r2 0x3f320e9b / 0x3f320e9c`, `kl 0x3f809113`,
+`silhouette 0x3ef548da`, `trustworthiness 0x3fe99369e91a2645`. The four
+`check-metrics-*` gates pass in BOTH modes (eight runs), including the r2
+and KL launch-invariance arms at `8 launches, one byte pattern` -- the
+property the chunk-partial stages were argued not to break, confirmed
+rather than asserted.
+
+**THE ABSORPTION, EXHIBITED ON THE SHIPPING FIXTURE, WITH NO SABOTAGE.**
+`metrics.mi.terms` (`1323933d3ce488a0`) and `metrics.mi_swapped.terms`
+(`00137a4e34f30324`) differ. `metrics.mi.acc` (`8051998489c61127`) and
+`metrics.mi_swapped.acc` (`9f40b5a567c27d97`) differ. And
+`metrics.mutual_info_score` and `metrics.mutual_info_score_swapped` are
+`522cc1ae6bc734b9` BIT FOR BIT. Two demonstrably different arithmetic
+sequences -- the second folds the transposed matrix, so the host's serial
+ascending walk visits the same 36 terms in column-major instead of
+row-major order -- land on the identical Float32. Thirty-six accumulator
+cells differ and the answer does not.
+
+That is not an anomaly of this fixture in the direction one might guess:
+`label_metrics_check.mojo` prints, on ITS fixture and in BOTH modes,
+`MI(truth, pred) 0x3fe0589f00000000 MI(pred, truth) 0x3fe0589ee0000000
+(transposed fold differs)`. So the two folds are NOT equal in general;
+they merely coincide on the card's fixture. REACH IS PER FIXTURE. Under
+the leg-11 card `MI(pred, truth)` was recorded nowhere at all, and even a
+scalar stage for it would have agreed here and reported nothing.
+
+**THE r2 MODE DIFFERENCE NOW HAS AN ADDRESS.** `metrics.r2.sse` is
+`0x4917d77d` under IDENTICAL and `0x4917d77c` under FAST, ONE ULP;
+`metrics.r2.ssto` (`0x49f95bcd`) and `metrics.r2.y_bar` (`0x3f210f9d`) are
+IDENTICAL IN BOTH MODES. The leg-11 card could say only "r2_score differs
+between modes". The grown card says which sum moved and which two did not.
+
+**THE THREE CONTINGENCY MATRICES AGREE**, which was an assumption and is
+now a measurement: `metrics.contingency`, `metrics.ari.contingency` and
+`metrics.mi.contingency` are all `299a55662a89eefe`, so one device kernel
+at three call sites gives one answer AND ARI's independently derived label
+range resolves to the same `(0, 5)` the driver passes. The card also
+validates its own swapped path: `metrics.mi_swapped.row_sums` equals
+`metrics.mi.col_sums` (`7c1011b1cffbd026`) and `.col_sums` equals
+`.row_sums` (`0cad4a0881be0324`), exactly the transpose relation, while
+`metrics.mi_swapped.contingency` (`cf657f5e1447fc02`) differs from
+`metrics.mi.contingency` as a transposed matrix must.
+
+**THE FIRST IDENTICAL-vs-FAST DIVERGENCE MOVED ONE STAGE EARLIER.** It was
+`metrics.entropy` on the leg-11 card; it is now `metrics.entropy.acc`
+(seq 12), so DEVIATION 651's Float32-vs-Float64 epilogue is caught in the
+fold trail rather than in the finished score. The 12 stages before it
+agree, as they must, and they now include `metrics.entropy.counts` and
+`metrics.ari.pair_sums` -- integer stages that place the divergence AFTER
+the device product and INSIDE the host epilogue, which is the whole claim
+of DEVIATION 650.
+
+**`metrics.kl.sum_raw` equals `metrics.kl_divergence`** (`2d01b70b383a079c`)
+on this fixture: `canonicalize_nan` is the identity on a non-NaN, so the
+pre-washer stage shows the washer INERT, which is the correct reading and
+not a redundancy -- its value is on the out-of-contract inputs
+`check_kl_subnormal_p_and_nan` plants.
+
+**NaN audit for the 27 new stages.** `metrics.ari.{uniq,contingency,
+pair_sums}`, `metrics.entropy{,_pred}.counts` and `metrics.mi{,_swapped}.
+{contingency,row_sums,col_sums}` are INTEGER. `metrics.entropy{,_pred}.acc`
+folds `-p log p` over `p` in `(0, 1]`, and `metrics.mi{,_swapped}.
+{terms,acc}` are evaluated only where the guard has already established
+`c > 0` and `a*b > 0`, so both are NaN-free for every `size > 0`.
+`metrics.r2.{y_bar,sse,ssto}` and the three partial buffers are sums of
+squares: `+inf` at worst on an overflow-scale `y`, never NaN, and
+`check_r2_undefined_cases` PRINTS `sse 0x7f800000 ssto 0x7f800000` on
+exactly that fixture. `metrics.kl.partials` is NaN-free on every
+nonnegative finite (P, Q) by DEVIATION 658. **ONE HONEST CAVEAT:**
+`metrics.kl.sum_raw` is recorded BEFORE `canonicalize_nan` ON PURPOSE, so
+on an input OUTSIDE cuML's contract (a negative or non-finite entry, which
+P and Q as probability distributions cannot have) it would record a NaN
+carrying the vendor's or host's payload and two legs would differ at that
+one stage. That is the price of the diagnostic and it is worth paying:
+canonicalizing before recording is what made the washer invisible in the
+first place, and every in-contract input leaves the stage NaN-free.
+
+### The instrument was checked against itself, and it can fail
+
+A gate that cannot fail is not a gate, so all three layers of the differ
+were driven to a failure on the new stages:
+
+- **Hash walk.** Two IDENTICAL runs: `RESULT: IDENTICAL`, 61 of 61 matched
+  pairs agreeing on dtype, count and hash -- 61 comparisons, not zero. The
+  same walk over IDENTICAL vs FAST: `RESULT: DIVERGENT` at seq 12. The
+  walk moves when something moves.
+- **Cell classifier on f64.** `metrics.entropy.acc`, `.mi.acc`,
+  `.mi_swapped.acc` and `.entropy_pred.acc` are THE FIRST f64 BUFFER
+  STAGES in this card, and `tools/identity_trace_diff.py` had never
+  classified one. Pointed at `metrics.entropy.acc` with dumps on both
+  sides it decoded all six cells correctly (cell 5 reads
+  `0x3ff6a22320000000 = 1.4145842790603638`, exactly the printed IDENTICAL
+  entropy, against `0x3ff6a22304271931` = the printed FAST one), reported
+  `6 of 6` differing, and classified them LARGE. **LARGE is the CORRECT
+  verdict, not a too-tight tolerance inventing a defect:** the A-side cells
+  have their low 29 mantissa bits ZERO because IDENTICAL's epilogue is
+  Float32 widened to Float64 (DEVIATION 651), so the gap against a native
+  Float64 fold is ~2^29 ULPs BY DESIGN and is documented as "roughly the
+  7th significant digit". A classifier that called this ULP noise would
+  have been the broken one. The dump also makes the code's claim visible:
+  the widening really is exact, the low bits really are zero.
+- **Dump integrity.** Flipping ONE BIT in the lowest mantissa byte of cell
+  0 of `metrics.entropy.acc`'s dump makes the differ refuse the whole
+  report: `!!! DUMP/HASH INTEGRITY FAILURE !!! ... EVERY other conclusion
+  in this report is void`. So the writer and this reader agree on the f64
+  encoding, and would say so if they did not. (Sabotage reverted in the
+  same session.)
 
 **Both cards must come from ONE pinned SHA.** Adding stages changes the
 record list, so a leg-11 card diffed against a current one reports a
