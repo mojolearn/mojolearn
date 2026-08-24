@@ -136,10 +136,9 @@ be VACUOUS.
 
 OWED, and this file does not cover any of it
 ----------------------------------------------
-L = 16, 64 and 257; FAST mode; clause (d), decode == prefill at this
-composition point; clause (e), the row-39 planted NaN and infinity audit; the
-corpus cross-check against `mamba/corpus/`; and every column that is not this
-Apple box.
+L = 16, 64 and 257; FAST mode; clause (e), the row-39 planted NaN and
+infinity audit; the corpus cross-check against `mamba/corpus/`; and every
+column that is not this Apple box.
 
 CLAUSES (b) AND (c) ARE CHECKED HERE, and each says what would have hidden a
 failure:
@@ -171,9 +170,29 @@ failure:
   15 batched stages. A zero there RAISES and calls the clause vacuous rather
   than passing it (`[[verify-reach-not-output]]`).
 
+* **(d), decode == prefill AT THE COMPOSITION POINT.** Gate D is green for
+  `mamba_simple.mojo` in isolation; this is the same claim for
+  `mamba_block_forward`, which is a different thing and is what the card is
+  made of. A length-L sequence is run once as a prefill and then one token at
+  a time through the SAME entry point with the state carried, and every token
+  of every stage is compared. PASS on 2,152 cells at d_model = 8 and 4,168 at
+  d_model = 16. This is the clause DEVIATION 721's bias seed exists to make
+  true BY CONSTRUCTION, and it is now measured rather than argued.
+
+  **AND ITS CONTROL, because this is the clause most exposed to a blind
+  gate.** If the decode path and the prefill path shared a buffer or a cached
+  card, the comparison would be a value against ITSELF and would pass for
+  ever on every vendor. So the clause first compares decode step `t` against
+  prefill token `t + 1`, a deliberate MISALIGNMENT that must differ: it
+  differs on 39 stage comparisons. A zero there raises VACUOUS, not FAILED.
+  The per-batch stages (`conv.window`, `scan.h`) are the state AFTER the
+  call, so they are comparable only at the last token, and that is the only
+  token at which they are compared.
+
 Clause (c) is a device-versus-device invariance claim. It does not re-check
 correctness: a block that was wrong in a batch-INDEPENDENT way would pass it.
-Clause (a), the oracle compare above, is what covers that.
+Clause (a), the oracle compare above, is what covers that. The same is true
+of clause (d).
 """
 
 from std.memory import bitcast
@@ -332,6 +351,20 @@ def row_slice(
     return out^
 
 
+def token_slice(
+    values: List[Float32], i: Int, t: Int, dims: MambaDims
+) -> List[Float32]:
+    """The cells of TOKEN-kind stage `i` belonging to token `t` of a B = 1
+    call. Clause (d) needs this because a decode step's whole buffer is ONE
+    token and a prefill's is L of them: the comparison is only expressible
+    per token."""
+    var w = stage_width(i, dims)
+    var out = List[Float32]()
+    for j in range(w):
+        out.append(values[t * w + j])
+    return out^
+
+
 def oracle_dump(st: MambaStages) -> List[List[Float32]]:
     """The host oracle's stages, card order, matching `stage_names()`."""
     var out = List[List[Float32]]()
@@ -408,6 +441,30 @@ def run_block(
     var out = device_dump(ctx, dstages, b, l, dims)
     _ = dw^
     _ = dstate^
+    _ = dstages^
+    _ = dx^
+    return out^
+
+
+def run_step(
+    ctx: DeviceContext,
+    mut dw: MambaDeviceWeights,
+    mut dstate: MambaDeviceState,
+    x: List[Float32],
+    b: Int,
+    l: Int,
+    dims: MambaDims,
+    mut trace: IdentityTrace,
+    prefix: String,
+) raises -> List[List[Float32]]:
+    """One block call against a CALLER-OWNED state, so the caller can carry
+    it from one call to the next. That is the whole of the decode path:
+    contract section 5 says the decode step is this same function at `l == 1`
+    with the conv window and the SSM state carried."""
+    var dstages = MambaDeviceStages(ctx, b, l, dims)
+    var dx = mamba_upload(ctx, x)
+    mamba_block_forward(ctx, dstages, dstate, dw, dx, b, l, trace, prefix)
+    var out = device_dump(ctx, dstages, b, l, dims)
     _ = dstages^
     _ = dx^
     return out^
@@ -779,6 +836,134 @@ def clause_c(
 
 
 # ===========================================================================
+# CLAUSE (d): decode == prefill, bitwise, per token
+# ===========================================================================
+
+
+def clause_d(
+    ctx: DeviceContext,
+    w: MambaWeights,
+    x: List[Float32],
+    l: Int,
+    dims: MambaDims,
+) raises:
+    """Contract section 8 clause (d), AT THE COMPOSITION POINT. Gate D is
+    green for `mamba_simple.mojo` in isolation; this is the same claim for
+    `mamba_block_forward`, which is a different thing and is what the block's
+    card is made of.
+
+    This clause is what DEVIATION 721 exists to make true BY CONSTRUCTION.
+    `Mamba.step` sums the conv taps and adds the bias afterwards, while the
+    prefill kernels seed the accumulator WITH the bias; the profile uses the
+    bias seed on BOTH paths, precisely so that two spellings cannot make this
+    clause false. So it should pass, and a failure here would be the most
+    important finding of the night rather than a bug in this file.
+
+    A length-L sequence is run once as a prefill and then one token at a time
+    through the SAME entry point with the state carried, and every token of
+    every stage is compared. The per-batch stages (`conv.window`, `scan.h`)
+    are the state AFTER the call, so they are comparable only at the last
+    token, and that is where they are compared.
+
+    THE NEGATIVE CONTROL, and clause (d) is the clause most exposed without
+    one. If the decode path and the prefill path shared a buffer or a cached
+    card, the comparison would be a value against ITSELF and would pass for
+    ever on every vendor. So the clause first compares decode step `t`
+    against prefill token `t + 1` -- a DELIBERATE MISALIGNMENT that MUST
+    differ. If it does not, the comparison cannot tell two tokens apart and
+    the clause raises VACUOUS rather than FAILED."""
+    var dm = dims.d_model
+    var names = stage_names()
+
+    print("clause (d): decode == prefill at the block, per token, per stage")
+
+    var dw1 = MambaDeviceWeights(ctx, w)
+    var st1 = MambaDeviceState(ctx, 1, dims)
+    var off1 = IdentityTrace.disabled()
+    var pre = run_step(ctx, dw1, st1, x, 1, l, dims, off1, "prefill")
+
+    var dw2 = MambaDeviceWeights(ctx, w)
+    var st2 = MambaDeviceState(ctx, 1, dims)
+    var steps = List[List[List[Float32]]]()
+    for t in range(l):
+        var xt = List[Float32]()
+        for j in range(dm):
+            xt.append(x[t * dm + j])
+        var off2 = IdentityTrace.disabled()
+        steps.append(run_step(ctx, dw2, st2, xt, 1, 1, dims, off2, "decode"))
+
+    # ---- the control: misaligned tokens MUST differ ----------------------
+    var control = 0
+    for t in range(l - 1):
+        for i in range(len(names)):
+            if stage_kind(i) != KIND_TOKEN:
+                continue
+            var a = token_slice(pre[i], i, t + 1, dims)
+            var b = token_slice(steps[t][i], i, 0, dims)
+            var d = compare_stage("control", a, b, False)
+            if d.n_diff > 0:
+                control += 1
+    if l > 1 and control == 0:
+        raise Error(
+            "mamba_check: CLAUSE (d) IS VACUOUS. Decode step t is"
+            " bit-identical to prefill token t+1 on every stage, which"
+            " cannot be true of different tokens. The decode and prefill"
+            " paths are not two computations here -- they share a buffer or"
+            " a cached card -- so the aligned comparison below is a value"
+            " against itself ([[reached-but-inert]])."
+        )
+    print(
+        "clause (d) control: decode step t vs prefill token t+1 differs on "
+        + String(control)
+        + " misaligned stage comparisons, so the comparison distinguishes"
+        " tokens"
+    )
+
+    # ---- the clause: aligned tokens must MATCH ---------------------------
+    var cells = 0
+    var bad = 0
+    var first_bad = String("")
+    for t in range(l):
+        for i in range(len(names)):
+            var kind = stage_kind(i)
+            if kind == KIND_BATCH and t != l - 1:
+                continue  # state AFTER the call: comparable at the last token
+            var a: List[Float32]
+            var b: List[Float32]
+            if kind == KIND_TOKEN:
+                a = token_slice(pre[i], i, t, dims)
+                b = token_slice(steps[t][i], i, 0, dims)
+            else:
+                a = pre[i].copy()
+                b = steps[t][i].copy()
+            cells += len(a)
+            var d = compare_stage(
+                names[i] + " token " + String(t), a, b, True
+            )
+            if d.n_diff > 0:
+                bad += 1
+                if first_bad == "":
+                    first_bad = names[i] + " at token " + String(t)
+    if bad != 0:
+        raise Error(
+            String("mamba_check: CLAUSE (d) FAILED on ")
+            + String(bad)
+            + " stage-tokens, first at "
+            + first_bad
+            + ". DEVIATION 721's bias seed was supposed to make this true by"
+            + " construction, so this is a finding about the profile and not"
+            + " about the gate."
+        )
+    print(
+        "clause (d): PASS, "
+        + String(l)
+        + " decode steps bit-identical to the prefill on all "
+        + String(cells)
+        + " compared cells"
+    )
+
+
+# ===========================================================================
 
 
 def main() raises:
@@ -881,6 +1066,17 @@ def main() raises:
         else:
             print(
                 "clause (c): SKIPPED (set MOJOLEARN_MAMBA_CHECK_CLAUSE_C=1)"
+            )
+        if env_on("MOJOLEARN_MAMBA_CHECK_CLAUSE_D"):
+            if b != 1:
+                raise Error(
+                    "mamba_check: clause (d) is written for B=1; set"
+                    " MOJOLEARN_MAMBA_CHECK_B=1"
+                )
+            clause_d(ctx, w, x, l, dims)
+        else:
+            print(
+                "clause (d): SKIPPED (set MOJOLEARN_MAMBA_CHECK_CLAUSE_D=1)"
             )
         print(
             "SCOPE: this shape only, IDENTICAL only. L=16/64/257, FAST,"
