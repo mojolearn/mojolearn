@@ -210,6 +210,32 @@ paper.
    testing are the neighbouring literatures and the claim must be positioned
    against them, not presented as new in kind.
 
+15. **A determinism clause's coverage is PER FIXTURE, and can be exactly one
+   fixture wide without anyone noticing.** Measured in the spectral lane: of
+   seven live sabotage arms, THREE are caught by a single fixture each, and
+   deleting that one fixture would silently disarm a contract clause while
+   every gate stayed green. The three mechanisms are all different, which is
+   what makes this a class rather than an anecdote. `SIGN_FLIP` is inert on
+   four of five because after a restart the projected matrix built from
+   `-beta_k` is exactly `D T D`, so the sign pin RE-CANONICALIZES the flip
+   away. `LAPLACIAN_SEAM` is inert on four for two unrelated reasons: two
+   fixtures never execute the seam, and two carry power-of-two weights where
+   the reassociation is exact. `SPMV_ROTATE` is inert on four for a purely
+   mechanical reason -- they fit in one block, so the rotation is the
+   identity. holtwinters hit that third mechanism independently the same
+   night. A fourth arm, `NCV`, was inert on EVERY fixture and only became live
+   when a fixture was built for it alone.
+   The consequence for practice: a sabotage table reporting pass/fail per ARM
+   is not enough. Reach must be reported per ARM PER FIXTURE, and an arm
+   carried by one fixture is a fixture that may not be deleted. Note also that
+   an inert arm is NOT one thing: spectral's `STD_SQRT` is inert because this
+   host's sqrt is correctly rounded, which is a MEASUREMENT the arm exists to
+   take, while `MAXITER` is inert because nothing reaches it, which is a
+   REACH FAILURE. Conflating them turns a hole into a result.
+   Evidence: IDENTITY_PATHS row 59, `spectral/mojo_only/spectral_check.mojo`.
+   PRIOR-ART CHECK NEEDED, against mutation-testing coverage literature, where
+   the neighbouring notion is mutant-killing test minimality.
+
 ## C. Toolchain findings (report upstream, never paper claims)
 
 8. **Metal AOT suppression + cache poisoning (replaces the retracted
