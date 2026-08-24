@@ -129,8 +129,11 @@ print(f"  {lab} models on Mac: {ok}/{len(e2)} E2 cells match" + (f"; MISMATCH {b
 PY
 done
 
-echo "########## 7. the classical lanes' cards (phase 8): IDENTICAL judged, FAST recorded"
-for lane in gemm cd kde linkage svm metrics; do
+echo "########## 7. the lanes' cards (phase 8): IDENTICAL judged, FAST recorded"
+# `mamba` joined this list 2026-08-23. It is NOT a classical lane: it is the
+# Mamba-1 block under profile mojolearn.identical.mamba1.fp32.v1, and its FAST
+# arm has never been built, so a missing fast card for it is expected.
+for lane in gemm cd kde linkage svm metrics mamba; do
   for d in "${DIRS[@]:1}"; do
     a="$REF/lanes/$lane.identical.card"; b="$d/lanes/$lane.identical.card"
     if [ ! -f "$a" ] || [ ! -f "$b" ]; then echo "  $lane IDENTICAL APPLE vs $(label_of "$d"): card MISSING ($([ -f "$a" ] || echo ref)$([ -f "$b" ] || echo ' other'))"; RC=1; continue; fi

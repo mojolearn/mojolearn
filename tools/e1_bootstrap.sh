@@ -194,6 +194,15 @@ for mode in fast identical; do
   run_lane_check linkage "$mode" pixi run check-linkage
   run_lane_arm svm "$mode" pixi run mojo run -I . svm/svc_main.mojo -- card
   run_lane_check svm "$mode" pixi run check-svm
+  # mamba, added 2026-08-23 once contract section 8 clauses (a)-(f) were all
+  # gated on Apple. The gate is its own card driver (it honors
+  # MOJOLEARN_IDENTITY_TRACE), so the arm and the check are the same binary:
+  # the arm captures the card, the check asserts. FAST MODE HAS NEVER BEEN
+  # BUILT FOR THIS LANE, so a PHASE8-FINDING on the fast arm is EXPECTED here
+  # and is information, not an alarm. The IDENTICAL arm is the one the leg is
+  # for. Shape defaults to the tiny one; do not widen it on a rented box.
+  run_lane_arm mamba "$mode" pixi run mojo run -I . mamba/mojo_only/mamba_check.mojo
+  run_lane_check mamba "$mode" pixi run check-mamba-block
   run_lane_arm metrics "$mode" pixi run mojo run -I . metrics/metrics_main.mojo
   for t in check-metrics-labels check-metrics-regression check-metrics-silhouette check-metrics-trust; do
     run_lane_check "metrics-${t#check-metrics-}" "$mode" pixi run "$t"
