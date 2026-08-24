@@ -31,6 +31,34 @@ UNSUBSTANTIATED. No run produced it. They are left in place rather than
 deleted so the compile slot can check each one against a real run and
 either earn it or strike it.
 
+## Which upstream tree this was audited against
+
+**`/Users/andrewhendel/CascadeProjects/upstream/cuml-v26.08.00`**, VERSION
+`26.08.00`, commit `265b9da6a0e75dbef071a3168398b993a5ff6f0e`.
+
+There is a trap here that cost another lane a round. The sibling checkout
+`/Users/andrewhendel/CascadeProjects/upstream/cuml` is **branch-25.08**
+(VERSION `25.08.00`, commit `00094f7e`), and all six ARIMA files differ
+between the two trees. Every symbol this lane cites sits 10 to 11 lines
+LATER in 25.08 than in 26.08, so an audit read against the wrong tree
+produces citations that look plausible, resolve to a neighboring
+statement, and are wrong everywhere.
+
+This lane's audit was read against v26.08.00 throughout, and that was
+re-verified after the trap was reported by resolving all 27 header and
+PORTED_MAP citations plus all 29 `SEAMS.tsv` rows in BOTH trees and
+comparing. Every recorded number matched v26.08.00 exactly and none matched
+25.08. No finding was an artifact of the wrong tree. The two rows the whole
+audit hangs on both resolve to the exact statement:
+
+    jones_transform.cuh:47  tmp[k] += sign * (a * myNewParams[j - k - 1]);
+    jones_transform.cuh:79  tmp[k] = (myNewParams[k] + sign * (a * myNewParams[j - k - 1])) / (1 - (a * a));
+
+Eleven `SEAMS.tsv` rows were nonetheless re-pinned in that pass, because
+they had been pointing at a closing brace or a comment a few lines off the
+statement they described. None changed a finding; a citation that lands on
+`}` is still a wrong citation.
+
 ## What is here
 
     cuml/cpp/include/cuml/tsa/arima_common.h      -> arima/ported/tsa/arima_common.mojo
@@ -186,7 +214,7 @@ passing (d) cannot be mistaken for an unobservable one.
 
 ### 2. The gradient reset was not a copy (bit-moving)
 
-`batched_arima.cu:583-586` resets with `d_x_pert[N*bid+i] = d_x[N*bid+i]`.
+`batched_arima.cu:587` resets with `d_x_pert[N*bid+i] = d_x[N*bid+i]`.
 The pile reused `perturb_kernel` with `h = 0`. `-0.0 + 0.0` is `+0.0`, so a
 negative-zero parameter came back positive zero after its own iteration and
 every LATER parameter's log-likelihood was evaluated on a vector one bit
@@ -331,15 +359,33 @@ nothing while the number is very much in use. Check both spellings.
 
 ### A hand-off about this checkout
 
-The 17 source files of this lane were staged for their own commit and were
-swept into `561006a` ("spectral: the dead agent's untracked pile LANDS") by
-another lane running a wildcard `git add`. The content landed intact and is
-byte-identical to what was staged, but the arima source now sits in history
-under a commit message about spectral clustering. The status block that
-should have accompanied it is this README and the commit that carries it.
-`never git add -A in the shared checkout` is the standing rule and it was
-not mine that broke it, but the cost is real and is recorded here so the
-history is readable later.
+CORRECTED 2026-08-23, twice, because the first two accounts written here
+were both wrong within the hour. What actually happened:
+
+The 17 source files of this lane were staged for a commit of their own and
+were swept into another lane's commit by a wildcard `git add`. A later
+`git reset --soft HEAD~1` in the shared checkout then DROPPED that commit,
+so the whole lane survived only as staged index entries while `01df837`
+carried nothing but the five doc files. The orchestrator recovered the
+source at `162ad1e`. Nothing was lost; nothing was safe either.
+
+Two standing rules come out of it, and the second one is new:
+
+  * `never git add -A in the shared checkout`. Stage explicit paths, and
+    commit with `git commit -o <paths>` so the commit is limited to them no
+    matter what a peer staged in between.
+  * **NEVER REWRITE HISTORY HERE.** No `git reset` of any kind, no
+    `--amend`, no `rebase`, no force push. Four resets appear in one
+    night's reflog; they destroyed two isolation_forest commits and
+    orphaned this entire lane. A reset drops whatever a PEER committed in
+    the window. A bad commit is fixed FORWARD with a new commit. An ugly
+    honest history beats a clean one that ate someone's work.
+
+The earlier revisions of this paragraph are left described rather than
+deleted because the failure mode is the point: in a shared checkout, what
+you believe about your own commit can be false by the time you write it
+down, and the only cure is to re-read `git log -- <your paths>` rather than
+trust your memory of what you staged.
 
 ---
 

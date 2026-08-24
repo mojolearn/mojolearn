@@ -336,7 +336,8 @@ def perturb_kernel(
     i_in: Int32,
     h: Float32,
 ):
-    """`:554-557`: `x_pert[N*bid + i] = x[N*bid + i] + h`."""
+    """`:558-561`: `x_pert[N*bid + i] = x[N*bid + i] + h` (the statement
+    itself is `:560`)."""
     var bid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if bid >= Int(batch_size_in):
         return
@@ -351,7 +352,8 @@ def reset_param_kernel(
     N_in: Int32,
     i_in: Int32,
 ):
-    """`:583-586`: `x_pert[N*bid + i] = x[N*bid + i]`, a COPY.
+    """`:585-588`: `x_pert[N*bid + i] = x[N*bid + i]` (the statement
+    itself is `:587`), a COPY.
 
     An earlier revision reused `perturb_kernel` with `h = 0` for this. That
     is NOT their statement: `x + 0.0` maps `-0.0` to `+0.0`, so a parameter
