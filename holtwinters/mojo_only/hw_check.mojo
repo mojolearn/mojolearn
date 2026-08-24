@@ -85,7 +85,7 @@ from std.memory import bitcast
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from core.identity_trace import IdentityTrace, first_divergence
+from core.identity_trace import IdentityTrace, first_divergence, read_trace_lines
 from holtwinters.estimator import (
     HWFit,
     download_f32,
@@ -456,6 +456,90 @@ def check_hw_forecast_continues_pattern() raises:
     print("check_hw_forecast_continues_pattern OK [" + _mode_name() + "]: noiseless planted additive and multiplicative series continued within 0.5% over 2 seasons (worst rel " + String(worst_all) + ")")
 
 
+def _tag_of(line: String) -> String:
+    """The tag column of a trace record (`idx\ttag\tdtype\tcount\thash`)."""
+    var parts = line.split("\t")
+    if len(parts) >= 2:
+        return String(parts[1])
+    return String(line)
+
+
+def _stage_delta(path_a: String, path_b: String) raises -> String:
+    """HOW MANY STAGES MOVED, not just the first.
+
+    The mamba lane measured (2026-08-23, one M4) an arm that moves 13 of 16
+    stages and 23 of 64 cells of the second-to-last stage while leaving the
+    FINAL OUTPUT bit-identical, because a later add puts a small term beside
+    a large one and rounds the difference away. First-divergence alone
+    cannot tell that arm from one that moves a single trailing stage, so
+    every sabotage arm here reports a COUNT.
+    """
+    var a = read_trace_lines(path_a)
+    var b = read_trace_lines(path_b)
+    if len(a) != len(b):
+        return (
+            String("stages STRUCTURAL (") + String(len(a)) + " vs " + String(len(b))
+            + " records: the two runs did not take the same stages)"
+        )
+    var n_diff = 0
+    var first = String("")
+    for i in range(len(a)):
+        if a[i] != b[i]:
+            n_diff += 1
+            if first == "":
+                first = _tag_of(a[i])
+    if n_diff == 0:
+        return String("stages 0/") + String(len(a))
+    return (
+        String("stages ") + String(n_diff) + "/" + String(len(a))
+        + " (first " + first + ")"
+    )
+
+
+def _count_diff(a: List[Float32], b: List[Float32]) -> Int:
+    var n = len(a) if len(a) < len(b) else len(b)
+    var c = 0
+    for i in range(n):
+        if bitcast[DType.uint32](canon_nan_f32(a[i])) != bitcast[DType.uint32](canon_nan_f32(b[i])):
+            c += 1
+    return c
+
+
+def _cell_delta(f: HWFit, o: HWOracleFit[DType.float32], fc: List[Float32], ofc: List[Float32]) -> String:
+    """HOW MANY CELLS MOVED, per field and in total. An arm that fails only
+    on the last stage may be hiding that it fails on nothing that matters;
+    an arm that moves the fitted parameters but no component cell is saying
+    something different from one that moves every component."""
+    var names = ["sse", "alpha", "beta", "gamma", "iter", "level", "trend", "season", "fcast"]
+    var da = List[Int]()
+    da.append(_count_diff(f.sse, o.sse))
+    da.append(_count_diff(f.alpha, o.alpha))
+    da.append(_count_diff(f.beta, o.beta))
+    da.append(_count_diff(f.gamma, o.gamma))
+    da.append(_count_diff(f.iter_trace, o.iter_trace))
+    da.append(_count_diff(f.level, o.level))
+    da.append(_count_diff(f.trend, o.trend))
+    da.append(_count_diff(f.season, o.season))
+    da.append(_count_diff(fc, ofc))
+    var tot = 0
+    var totn = len(f.sse) + len(f.alpha) + len(f.beta) + len(f.gamma) + len(f.iter_trace)
+    totn += len(f.level) + len(f.trend) + len(f.season) + len(fc)
+    var parts = String("")
+    for i in range(len(da)):
+        tot += da[i]
+        if da[i] != 0:
+            if parts != "":
+                parts += " "
+            parts += names[i] + "=" + String(da[i])
+    var out = String("cells ") + String(tot) + "/" + String(totn)
+    if parts != "":
+        out += " [" + parts + "]"
+    # THE OUTPUT-ONLY BLIND SPOT, named: forecast is the last stage.
+    if tot != 0 and da[len(da) - 1] == 0:
+        out += " (FINAL FORECAST UNCHANGED)"
+    return out
+
+
 def _compare_fit(tag: String, f: HWFit, o: HWOracleFit[DType.float32], fc: List[Float32], ofc: List[Float32]) -> String:
     var checks = List[String]()
     checks.append(_first_diff(tag + " hw.sse", f.sse, o.sse))
@@ -568,6 +652,10 @@ def check_hw_device_equals_oracle() raises:
             bad = name + " card: " + bad
         else:
             bad = _compare_fit(name, f, o, fc, ofc)
+        # ALWAYS, pass or fail: which stages moved and how many cells.
+        var delta = _stage_delta(dpath, opath) + "; " + _cell_delta(f, o, fc, ofc)
+        if bad != "" or hw_sabotage_name() != "none":
+            print("  DELTA " + name + ": " + delta)
         if bad != "":
             comptime if IDENTICAL:
                 raise Error("check_hw_device_equals_oracle FAILED under IDENTICAL (sabotage " + hw_sabotage_name() + "): " + bad)
@@ -707,6 +795,30 @@ def check_hw_launch_invariance() raises:
         # C: A again
         var fcc = _device_fit(ctx, d, N, BATCH, name, tr, 32, 128, 0, Float32(-987654.0))
         var fccf = holtwinters_forecast_host_traced(ctx, fcc, H, tr, 32)
+        # NEGATIVE CONTROL (the mamba lane's clause-(c) lesson, 2026-08-23).
+        # Everything below is a chain of `_first_diff(...) == ""`. If
+        # `_all_bits` came back empty, or `_device_fit` quietly ignored its
+        # tpb / pad / poison arguments, every comparison here would compare a
+        # thing to ITSELF and this gate would pass for ever, on every vendor,
+        # while proving nothing. So first prove the machinery can SEE a
+        # difference at all: a fit of a DIFFERENT series must differ.
+        var d_other = hw_fixture(sp, N, BATCH, FREQ, 77)
+        var fo = _device_fit(ctx, d_other, N, BATCH, name, tr, 32, 128, 0, Float32(-987654.0))
+        var fco = holtwinters_forecast_host_traced(ctx, fo, H, tr, 32)
+        var ctrl_a = _all_bits(fa, fca)
+        var ctrl_b = _all_bits(fo, fco)
+        if len(ctrl_a) == 0:
+            raise Error(
+                "check_hw_launch_invariance VACUOUS [" + _mode_name() + "]:"
+                " _all_bits returned 0 cells, so every comparison below is empty"
+            )
+        if _first_diff("ctrl", ctrl_a, ctrl_b) == "":
+            raise Error(
+                "check_hw_launch_invariance VACUOUS [" + _mode_name() + "]: a fit of a"
+                " DIFFERENT series produced identical bits over " + String(len(ctrl_a))
+                + " cells, so the comparisons below cannot see a difference and"
+                " their passes mean nothing"
+            )
         var bad = _first_diff(name + " A vs B", _all_bits(fa, fca), _all_bits(fb, fcb))
         if bad == "":
             bad = _first_diff(name + " A vs C (run twice)", _all_bits(fa, fca), _all_bits(fcc, fccf))
@@ -729,6 +841,21 @@ def check_hw_launch_invariance() raises:
                         big.append(filler[q * N + t])
             var fbig = _device_fit(ctx, big, N, 512, name, tr)
             var fcbig = holtwinters_forecast_host_traced(ctx, fbig, H, tr)
+            # NEGATIVE CONTROL for the batch arm: the batch of 512 must
+            # actually HOLD different series. Had the construction above
+            # filled every row from one source, each slice comparison would
+            # compare a row to an identical row and pass vacuously.
+            var distinct = False
+            for q in range(1, 8):
+                if bitcast[DType.uint32](canon_nan_f32(fbig.sse[0])) != bitcast[DType.uint32](canon_nan_f32(fbig.sse[q])):
+                    distinct = True
+            if not distinct:
+                raise Error(
+                    "check_hw_launch_invariance VACUOUS [" + _mode_name() + "]: rows 1-7"
+                    " of the batch of 512 all have the SSE of row 0, so the batch"
+                    " does not hold distinct series and the slice comparisons are"
+                    " comparing rows to themselves"
+                )
             for k in range(3):
                 var one = List[Float32]()
                 for t in range(N):
