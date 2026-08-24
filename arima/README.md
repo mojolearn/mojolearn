@@ -9,27 +9,103 @@ DEVIATION 670, the hand-off list, and the row text for both directories.
 
 ---
 
-## Status: SOURCE ONLY. Nothing here has been gated. Read this first.
+## Status: BUILDS, GATED GREEN ON ONE APPLE DEVICE. No second vendor.
 
-    the ported tree parses                     YES (verified 2026-08-23)
-    arima/mojo_only/{fixtures,arima_check}     NOT VERIFIED TO PARSE
-    any gate has run                           NO. NOT ONCE.
-    any sabotage has run                       NO
-    a second vendor                            NO
-    an identity card produced                  NO
+    the whole tree builds                      YES
+    check-arima, IDENTICAL                     PASSES
+    check-arima, FAST                          PASSES (23 RECORDED lines)
+    arima-card                                 138 stage records
+    sabotages run                              9 of 9
+    inherited MEASURED claims judged           4 of 4 (2 earned, 2 struck)
+    a second vendor                            NO. Apple M4 only.
 
-This lane became a no-compile lane part-way through its round (seven agents
-were invoking the Mojo compiler at once and the machine went down). What
-landed is source and an audit, and both are worth having on their own; what
-did NOT land is every number. Treat every claim below as derived from
-READING cuML's source against ours, which is exactly what it is, and treat
-the OWED list at the foot as the honest remainder.
+Shapes are the smallest that still reach every branch: `n_obs = 24`,
+`batch = 6`, `fc_steps = 3`, eight orders. No timing was taken, at any
+point, for any reason.
 
-Any sentence in a docstring under `arima/` that says "MEASURED" and was
-written before 2026-08-23 is INHERITED FROM THE AGENT THAT DIED AND IS
-UNSUBSTANTIATED. No run produced it. They are left in place rather than
-deleted so the compile slot can check each one against a real run and
-either earn it or strike it.
+**The headline.** The Kalman filter is bit-identical device-versus-oracle on
+all eight orders across all eleven stages -- `Z R T RQ RQR P0 alpha0 pred vs
+loglike fc` -- with ZERO cells differing anywhere, including at `rd = 8`,
+the largest state this lane accepts. So is `predict`, and so is the
+finite-difference gradient.
+
+**What that does and does not mean.** It means the device and a serial host
+replay through the same numeric helpers agree bit for bit on one machine. It
+does NOT mean bitwise identity across vendors, which is the actual goal and
+which nothing here has tested. Row 58 stays SOURCE-ONLY on the vendor
+question until an NVIDIA or AMD card is diffed against this one.
+
+## What the gates found (2026-08-23, Apple M4, both modes)
+
+    check_jones_device_equals_oracle    16 stage comparisons, p = 1..4, AR
+                                        and MA, forward and inverse: 0 cells
+                                        differ. Round trip inverse(forward)
+                                        worst relative 2.73e-6 (~23 Float32
+                                        ulp), REPORTED not asserted
+    check_jones_refuses_by_name         batchSize < 1, parameter < 1,
+                                        parameter > 8, all raised by name
+    check_jones_contraction_is_visible  of 160 accumulations the two
+                                        contraction spellings differ on 27
+    check_kalman_device_equals_oracle   8 orders x 11 stages: 0 cells differ
+    check_lyapunov_solves_the_equation  worst relative residual 3.5e-6
+                                        (ar2_unit); 7.3e-8 to 4.3e-7 on the
+                                        other seven
+    check_predict_sentinel_is_reached   4 of 8 orders reach it, res_offset
+                                        1, 1, 3, 4
+    check_predict_device_equals_oracle  8 orders x 162 cells: 0 differ;
+                                        0/0/0/6/6/0/18/24 sentinel cells
+                                        checked, all 0x7fc00000
+    check_grad_device_equals_oracle     24 gradient cells, 0 differ
+    check_grad_reset_preserves_neg_zero d_x untouched; x_pert back to d_x
+                                        bitwise
+    check_kalman_matches_float64        n_diff = 0: 4.7e-8 to 1.5e-7.
+                                        n_diff > 0: up to 1.8e-3
+    check_arima_refuses_by_name         11 refusals, each by name
+    check_kalman_launch_invariant       block 32/64/128, 41 poisoned floats,
+                                        batch of 6 vs batch of 3, run twice:
+                                        0 cells differ
+    check_unit_root_guard_is_reached    fires on 6 of 6 series; pre-guard
+                                        phi_2 is the clamp 0xbf7ff972
+    check_fold_order_is_visible         of 24 T*P cells a descending fold
+                                        moves 2, a Float64 fold moves 2
+
+**Three findings worth carrying forward.**
+
+`check_fold_order_is_visible` moves only 2 of 24 cells (1 of 24 under FAST).
+That is a real signal but a THIN one, and it is the gate whose whole job is
+to prove the bitwise gates have teeth. At `n_obs = 24` the fixture barely
+sees a fold. OWED: either strengthen it or say plainly that the teeth
+argument rests on the sabotage table instead.
+
+`check_kalman_matches_float64` splits by `n_diff`, not by anything else, and
+`arima212` is the exception that shows why: `n_diff = 1` yet it agrees to 7
+digits like the undifferenced orders. The diffuse `kappa = 1e6` block costs
+accuracy in proportion to how much weight the filter puts on those states,
+not merely by existing.
+
+The two loosest bounds in the gate (`5e-3` Lyapunov, `2e-2` Float64) are
+DERIVED and sit three orders of magnitude above what was measured. They are
+not yet bounds anyone has earned.
+
+## The inherited MEASURED claims, judged
+
+Every "MEASURED" sentence in this lane was written by an agent that died
+before compiling anything. All four have now been checked against real runs.
+
+    STRUCK  jones_transform.mojo  "round trip within 4 ulp" -- it is 2.73e-6,
+                                  about 23 ulp, nearly six times the claim.
+                                  Replaced with the number and its cause.
+    STRUCK  arima_common.mojo     "agrees to the sixth digit" and the
+                                  attribution to simple_differencing. It is
+                                  the seventh digit undifferenced and the
+                                  third differenced, and the split is n_diff,
+                                  not a switch this lane implements.
+    EARNED  matrix.mojo           residual <= 1e-5 holds (worst 3.5e-6);
+                                  per-order table substituted for the bound.
+    EARNED  batched_kalman.mojo   the refusal names series and step, quoted
+                                  verbatim now. One correction (it named a
+                                  gate that does not exist) and one addition
+                                  (it fired for real, not just when planted).
 
 ## Which upstream tree this was audited against
 
@@ -336,14 +412,14 @@ loop runs zero times and a gate that never enters it proves nothing.
     check-arima = "mojo run -I . arima/mojo_only/arima_check.mojo"
     arima-card  = "mojo run -I . arima/arima_main.mojo"
 
-### IDENTITY_PATHS row (I do not own `IDENTITY_PATHS.md`)
+### IDENTITY_PATHS row 58 (I do not own `IDENTITY_PATHS.md`)
 
-Rung 1's row is 49 (`tsa`). This is the next free number at the time of
-writing; renumber as needed.
+Landed by the orchestrator as row 58 (55 is mamba's). The status cell needs
+replacing now that the lane has run. Corrected text below.
 
 | n | path | what is vendor-dependent in their spelling | what we did | status |
 |---|---|---|---|---|
-| 55 | arima: the batched Kalman filter log-likelihood, prediction and finite-difference gradient (`batched_kalman.cu`, `batched_arima.cu`, `jones_transform.cuh`) | every ARIMA kernel is `double` only and Metal has no Float64; `P0` is a cuBLAS batched `getrf`/`getri` whose association and pivot tie rule are closed and whose `info` the caller never reads; `RQR` and the Lyapunov solve are `cublasgemmStridedBatched`; `raft::tanh` / `raft::atanh` are the vendor's transcendentals (row 12); the undefined in-sample predictions are `nan("")`, whose payload differs per vendor in a recorded buffer; `d_y_p[0] = 0.0` is a cross-thread race in their lambda | DEVIATION 670 (Float32 device, Float64 host reference beside it); DEVIATION 673 (`F <= 0` refused by name, not carried into `log`); DEVIATION 674 (the LU, both substitutions and both gemm shapes written out serial ascending through `identical_mul_add`, `info` raised by name); DEVIATION 675 (`tanh`/`atanh` through `identical_exp`/`identical_log`); DEVIATION 676 (the sentinel is the constant `0x7fc00000`, never computed); their race not ported. `rd > 8`, `r > 5`, exog, confidence intervals, CSS and missing observations all refused by name | **SOURCE ONLY. No gate has run, on any vendor. Do not enter this row as a result.** |
+| 58 | arima: the batched Kalman filter log-likelihood, prediction and finite-difference gradient (`batched_kalman.cu`, `batched_arima.cu`, `jones_transform.cuh`) | every ARIMA kernel is `double` only and Metal has no Float64; `P0` is a cuBLAS batched `getrf`/`getri` whose association and pivot tie rule are closed and whose `info` the caller never reads; `RQR` and the Lyapunov solve are `cublasgemmStridedBatched`; `raft::tanh` / `raft::atanh` are the vendor's transcendentals (row 12); the undefined in-sample predictions are `nan("")`, whose payload differs per vendor in a recorded buffer; `d_y_p[0] = 0.0` is a cross-thread race in their lambda | DEVIATION 670 (Float32 device, Float64 host reference beside it); DEVIATION 673 (`F <= 0` refused by name, not carried into `log`); DEVIATION 674 (the LU, both substitutions and both gemm shapes written out serial ascending through `identical_mul_add`, `info` raised by name); DEVIATION 675 (`tanh`/`atanh` through `identical_exp`/`identical_log`); DEVIATION 676 (the sentinel is the constant `0x7fc00000`, never computed); their race not ported. `rd > 8`, `r > 5`, exog, confidence intervals, CSS and missing observations all refused by name | **ONE APPLE DEVICE, both modes, 2026-08-23.** Device == host oracle BITWISE on 8 orders x 11 stages (`Z R T RQ RQR P0 alpha0 pred vs loglike fc`), 0 cells differing, at `rd` up to 8; `predict` and the finite-difference gradient likewise; launch-invariant over block width 32/64/128, 41 poisoned padding floats, batch composition and a repeat run. 9 of 9 sabotages run: 6 bite, 3 null, and two of the nulls are recorded REACH FAILURES (DEVIATION 674's pivot tie rule is unreached and therefore UNGATED; DEVIATION 676's vendor-payload claim cannot be tested on Apple, where `0.0/0.0` is already `0x7fc00000`). **NO SECOND VENDOR: the cross-vendor claim this row exists to make is UNTESTED.** |
 
 ### A hand-off to whoever owns the deviation ledger
 
