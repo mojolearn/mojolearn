@@ -232,7 +232,20 @@ paper.
    host's sqrt is correctly rounded, which is a MEASUREMENT the arm exists to
    take, while `MAXITER` is inert because nothing reaches it, which is a
    REACH FAILURE. Conflating them turns a hole into a result.
-   Evidence: IDENTITY_PATHS row 59, `spectral/mojo_only/spectral_check.mojo`.
+   A FOURTH mechanism, and the sharpest, because it makes the SMALLEST
+   fixture the wrong one: a fixture can be STRUCTURALLY BLIND to the property
+   under test. The mamba corpus cross-check compares stages stored
+   channel-major against ours stored token-major, so the reindexing is the
+   thing most likely to be wrong. At L=1 THE TWO LAYOUTS ARE THE SAME BYTES,
+   so the smallest corpus case passes identically whether the reindexing is
+   right or wrong. The orchestrator had explicitly instructed 'smallest case
+   first', which for that question was exactly backwards, and the lane said so
+   rather than reporting the green. Certified instead at L=4 with a
+   transposed-dump control that fails exactly the 7 channel-major stages and
+   no others -- a control that bit EVERYTHING would have been weaker than one
+   that bites exactly what it corrupts.
+   Evidence: IDENTITY_PATHS rows 55 and 59, `spectral/mojo_only/spectral_check.mojo`,
+   `mamba/mojo_only/mamba_check.mojo`.
    PRIOR-ART CHECK NEEDED, against mutation-testing coverage literature, where
    the neighbouring notion is mutant-killing test minimality.
 

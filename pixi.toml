@@ -956,6 +956,17 @@ check-metrics-silhouette = "mojo run -I . metrics/mojo_only/silhouette_check.moj
 check-metrics-trust = "mojo run -I . metrics/mojo_only/trustworthiness_check.mojo"
 check-holtwinters = "mojo run -I . holtwinters/mojo_only/hw_check.mojo"
 check-mamba-block = "mojo run -I . mamba/mojo_only/mamba_check.mojo"
+# The INDEPENDENT cross-check: torch float64 per-stage reference, the only
+# comparison in this lane whose other side is not our own code. TWO STEPS --
+# the dump is produced by the gate above, then compared:
+#   MOJOLEARN_MAMBA_CORPUS_CASE=1 MOJOLEARN_MAMBA_CORPUS_DUMP=<dir> pixi run check-mamba-block
+#   MOJOLEARN_MAMBA_CORPUS_DUMP=<dir> pixi run check-mamba-corpus
+# Tolerance is NOT arbitrary: 1e-7/1e-6 is what plain torch FP32 achieves
+# against the same float64 reference (tools/mamba_corpus_check.py --self-test),
+# two orders tighter than that tool's 1e-5 default. Use base_b2_l4_d8, NOT the
+# smaller b1_l1 case: at L=1 token-major and channel-major are the same bytes,
+# so the smaller case cannot certify the reindexing at all.
+check-mamba-corpus = "python tools/mamba_corpus_check.py mamba/corpus/base_b2_l4_d8 $MOJOLEARN_MAMBA_CORPUS_DUMP --rtol 1e-7 --atol 1e-6"
 # arima: SOURCE ONLY, never built -- these two are expected to FAIL until a compile slot lands them
 check-arima = "mojo run -I . arima/mojo_only/arima_check.mojo"
 arima-card = "mojo run -I . arima/arima_main.mojo"
