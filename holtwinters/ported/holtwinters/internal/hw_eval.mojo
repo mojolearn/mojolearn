@@ -29,6 +29,48 @@ observation term) is the fused one and the second is a stored product.
 under FAST); `ftz` compiles away under FAST. `SAB_SWAP_FMA` fuses the other
 product in the level update and must fail device-vs-oracle.
 
+============ DEVIATION 698 (2026-08-23): THE LANE'S ONE FLUSH-AND-FUSE
+============ RULE, NAMED, BECAUSE IT IS NOT THEIR SPELLING ================
+The recurrence above had been written down but never NUMBERED, which left
+the single most identity-load-bearing decision in the lane as a docstring.
+It is a deviation and it is stated once, here, for every file in
+`holtwinters/ported/`:
+
+  FLUSH. Every STORED intermediate goes through `ftz` (`mojo_only/
+  numerics.mojo`, IDENTITY_PATHS row 10). Theirs flushes nothing
+  explicitly and inherits whatever the vendor's default denormal mode is
+  -- which is exactly the disagreement row 10 exists to close (Apple
+  flushes, NVIDIA and AMD keep). Any recurrence term can be subnormal:
+  `pts - xhat_` on a nearly-recovered series, `1 - alpha_` for alpha at
+  the clamp, `clevel - plevel` at convergence. Under FAST `ftz` compiles
+  away, so FAST is the vendor-default arm and IDENTICAL is the pinned one.
+
+  FUSE. At every `a * x + b * y` seam the FIRST product is FUSED into the
+  add and the SECOND is stored: `fma(a, x, ftz(b * y))`. C++ says nothing
+  about which of the two nvcc contracts (`-fmad=true` is the default and
+  the choice is the compiler's), so THEIR spelling does not determine one;
+  a pin was required and this is it. It is applied in `_mix` (level, trend
+  and season), in the SSE accumulation `fma(diff, diff, error_)`, in
+  `conv1d`, in `batched_ls_solver`, in the forecast's `fma(trend, i+1,
+  level)`, in `_dot3`, in `fma(step, p, x)`, in `fma(step, cauchy,
+  loss_ref)` and in the three off-diagonal Hessian terms. ONE rule, no
+  exceptions, so a reader never has to ask which way a seam went.
+
+  WHERE IT IS NOT APPLIED, deliberately: the `2 * rho * s * Hy` chains and
+  the `k * s * s` chains keep every product stored, because theirs
+  parenthesizes them left to right with no add to fuse INTO.
+
+WHY a pin at all rather than "whatever the compiler does": the lane's goal
+is Metal == CUDA == HIP, and three compilers contracting the same
+expression by their own rules is precisely how that fails. The cost is
+that our numbers are not bit-for-bit cuML's on NVIDIA; that was never the
+goal and the README says so.
+MEASURED: `SAB_SWAP_FMA` fuses the OTHER product in the level update and
+`SAB_NO_FTZ` drops the flush; both FAIL device-vs-oracle under IDENTICAL
+(README carries the lines). The oracle in `holtwinters/mojo_only/
+hw_oracle.mojo` is written to the same rule, term for term.
+============================================================================
+
 `pseason` is the per-thread scratch of the last `frequency` season values:
 their shared-memory kernel indexes it `pseason[s * blockDim.x]` from
 `pseason + threadIdx.x`, the global one `pseason[s * batch_size]` from

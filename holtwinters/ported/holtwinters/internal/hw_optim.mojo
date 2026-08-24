@@ -11,11 +11,65 @@ THE PINNED ARITHMETIC (row 9 / row 10). Every 3-term dot is `_dot3`: the
 first product stored, the next two fused onto it, ascending (`a1*b1`, then
 `fma(a2, b2, .)`, then `fma(a3, b3, .)`), each stored through `ftz`. Every
 `x + step * p` is `fma(step, p, x)`. The BFGS Hessian update keeps their
-operand order with each product stored (so no codegen can fuse a different
-pair). The line-search test `loss > loss_ref + step_size * cauchy` is
+operand order left to right with every product STORED except the one
+`s2 * Hy1 + s1 * Hy2` shape in the three off-diagonal terms, where the
+FIRST product is fused and the second stored -- the same rule `_mix` uses
+in the eval (DEVIATION 698), so the lane has ONE contraction rule and not
+two. (An earlier revision of this header claimed every product here was
+stored; it never was, and the sentence is corrected rather than the code,
+because the fused spelling is the lane's rule.) The line-search test
+`loss > loss_ref + step_size * cauchy` is
 `fma(step_size, cauchy, loss_ref)`. The step-size `sqrt` is `identical_sqrt`
 (row 10: `std.math.sqrt` is approximate on NVIDIA). `abs` is exact.
 `bound_device` and `max3` are DEVIATION 663's compare chains (hw_utils).
+
+============ DEVIATION 697 (2026-08-23): THE HESSIAN DIAGONAL IS UPDATED IN
+============ float32, NOT IN THEIR ACCIDENTAL float64 ======================
+WHAT THEIRS DOES (`hw_optim.cuh:583-588`), read literal by literal:
+
+    H11 += k * s1 * s1 - 2. * rho * s1 * Hy1;      // `2.`  -> DOUBLE
+    H12 += k * s1 * s2 - rho * (s2 * Hy1 + s1 * Hy2);
+    H13 += k * s1 * s3 - rho * (s3 * Hy1 + s1 * Hy3);
+    H22 += k * s2 * s2 - 2 * rho * s2 * Hy2;       // `2`   -> int, FLOAT
+    H23 += k * s2 * s3 - rho * (s3 * Hy2 + s2 * Hy3);
+    H33 += k * s3 * s3 - 2. * rho * s3 * Hy3;      // `2.`  -> DOUBLE
+
+On the `Dtype = float` instantiation `2.` is a DOUBLE literal, so in H11
+and H33 the entire subtrahend `2. * rho * s1 * Hy1` is evaluated in
+float64, the subtraction widens the float32 minuend to float64, and only
+the `+=` rounds back to float32. H22 got an INT literal, so its identical
+expression is evaluated wholly in float32. THREE DIAGONAL ENTRIES OF ONE
+SYMMETRIC MATRIX, TWO PRECISIONS, DECIDED BY A TYPED '.'. Nothing in
+cuML's source, tests or issues marks this as intentional; it is a typo
+that compiles.
+WHAT OURS DOES: all three diagonal updates in float32, in H22's spelling,
+with `two_rho = ftz(2.0f * rho)` hoisted (`(2*rho)` is their first
+operation, so hoisting moves no bit).
+WHY, in order:
+  (a) HARDWARE. Metal has no float64 (mojolearn's standing hardware
+      limit). Their H11/H33 arm is not portable AT ALL -- it cannot be
+      mirrored on one of the three vendors this lane must be identical on,
+      so "port it exactly" is not among the options.
+  (b) It is a BUG, not a design choice, by the repo's own test: the same
+      formula for the same symmetric matrix must not depend on whether
+      someone typed `2` or `2.`. The standing rule is to fix their bugs,
+      numbered and recorded, not to port them.
+  (c) Their double arm is not even reproducible for THEM across GPU
+      models: fp64 throughput differs, but more to the point a build with
+      `--fmad` or a different nvcc would contract the double chain
+      differently while H22's float chain is already pinned here.
+COST, priced: our H11 and H33 lose the extra float64 precision their
+subtrahend had. That precision was never load-bearing -- `H` is an
+APPROXIMATION of an inverse Hessian, and the very next iteration
+overwrites it -- but it does mean this port's fitted parameters are not
+expected to be their bits on NVIDIA. It is one of the two places the
+lane's numbers are not cuML's (the other is DEVIATION 660's `R1Qt`), and
+the README says so under its own heading.
+MEASURED: the whole gate is green with the float32 spelling on device and
+oracle, both modes; no sabotage arm is offered for this one, because the
+double arm CANNOT BE BUILT on Metal, which is the deviation's entire
+reason. That is stated rather than papered over with an inert arm.
+============================================================================
 
 ============ DEVIATION 662 (2026-08-23): A ZERO SEARCH DIRECTION STOPS, IT
 ============ DOES NOT STEP BY inf ==========================================
@@ -78,6 +132,8 @@ from holtwinters.ported.holtwinters.internal.hw_eval import (
     holtwinters_eval_device,
 )
 from holtwinters.ported.holtwinters.internal.hw_utils import (
+    SAB_CRIT_ORDER,
+    SAB_LS_TIE,
     SAB_NO_FTZ,
     SAB_NO_ZERO_DIR_GUARD,
     SAB_STD_SQRT,
@@ -122,6 +178,16 @@ def _sqrt_seam(x: Float32) -> Float32:
 
         return sqrt(x)
     return identical_sqrt(x)
+
+
+@always_inline
+def _ls_reject(loss: Float32, target: Float32) -> Bool:
+    """Their line-search rejection test `loss > loss_ref + step * cauchy`
+    (`hw_optim.cuh:497`), STRICT: an exact tie ACCEPTS the step. SAB_LS_TIE
+    loosens it to `>=` and must fail."""
+    comptime if SAB_LS_TIE:
+        return loss >= target
+    return loss > target
 
 
 @always_inline
@@ -328,8 +394,8 @@ def holtwinters_bfgs_optim_device(
             pseason_width, start_season, use_beta, use_gamma, nx1, nx2, nx3, additive,
         )
         var i = 0
-        while i < linesearch_iter_limit and (
-            loss > _f(identical_mul_add(step_size, cauchy, loss_ref))
+        while i < linesearch_iter_limit and _ls_reject(
+            loss, _f(identical_mul_add(step_size, cauchy, loss_ref))
         ):
             step_size = _f(step_size * linesearch_tau)
             nx1 = _f(identical_mul_add(step_size, p1, x1))
@@ -357,10 +423,20 @@ def holtwinters_bfgs_optim_device(
             iter_trace.unsafe_store((it * 3 + 0) * batch_size + tid, x1)
             iter_trace.unsafe_store((it * 3 + 1) * batch_size + tid, x2)
             iter_trace.unsafe_store((it * 3 + 2) * batch_size + tid, x3)
-        if min_param_diff > mx:
-            return OPTIM_MIN_PARAM_DIFF
-        if min_error_diff > abs_device(_f(loss - loss_ref)):
-            return OPTIM_MIN_ERROR_DIFF
+        # Their order (`hw_optim.cuh:520-523`): param-diff is tested FIRST,
+        # so on an iteration where both fire the reported criterion is
+        # MIN_PARAM_DIFF. SAB_CRIT_ORDER swaps the two tests and must move
+        # `hw.opt.criterion`.
+        comptime if SAB_CRIT_ORDER:
+            if min_error_diff > abs_device(_f(loss - loss_ref)):
+                return OPTIM_MIN_ERROR_DIFF
+            if min_param_diff > mx:
+                return OPTIM_MIN_PARAM_DIFF
+        else:
+            if min_param_diff > mx:
+                return OPTIM_MIN_PARAM_DIFF
+            if min_error_diff > abs_device(_f(loss - loss_ref)):
+                return OPTIM_MIN_ERROR_DIFF
 
         # next gradient
         var ng1 = Float32(0.0)
@@ -393,6 +469,8 @@ def holtwinters_bfgs_optim_device(
         var Hy3 = _dot3(H13, H23, H33, y1, y2, y3)
         var k = _f(_f(rho * rho) * _f(_dot3(y1, y2, y3, Hy1, Hy2, Hy3) + rho_))
 
+        # DEVIATION 697: float32 for ALL THREE diagonals (theirs: `2.` in
+        # H11/H33 is a double literal, `2` in H22 is not).
         var two_rho = _f(Float32(2.0) * rho)
         # H11 += k*s1*s1 - 2*rho*s1*Hy1
         H11 = _f(H11 + _f(_f(_f(k * s1) * s1) - _f(_f(two_rho * s1) * Hy1)))

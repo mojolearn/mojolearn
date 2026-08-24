@@ -58,13 +58,22 @@ DEVIATIONS 660-665's gates. The checks, in order:
                                        control
 
 SABOTAGES (each a `-D MOJOLEARN_HW_SABOTAGE_<NAME>=1` build, run under
-IDENTICAL, nothing edited; the README carries the failing lines):
-    ROTATE_CONV         conv1d's sum starts at block_idx.x % filter_size
-    STD_SQRT            std.math.sqrt for the BFGS step size
-    NO_FTZ              ftz dropped at every stored intermediate
-    NO_ZERO_DIR_GUARD   DEVIATION 662 off
-    HW_MAX_CLAMP        bound_device as min(max(0.0, v), 1.0)
-    SWAP_FMA            the other product fused in the eval's level update
+IDENTICAL, nothing edited; the README carries the failing lines and the
+measured verdict of every arm):
+    FAIL on Apple, as they must
+      ROTATE_CONV       conv1d's sum starts at block_idx.x % filter_size
+      NO_FTZ            ftz dropped at every stored intermediate
+      SWAP_FMA          the other product fused in the eval's level update
+      NO_ZERO_DIR_GUARD DEVIATION 662 off
+      CLAMP_GE          DEVIATION 663's lower test loosened to `>=`, so a
+                        -0.0 survives the clamp
+      LS_TIE            the line-search acceptance test loosened to `>=`
+      CRIT_ORDER        the two stop criteria tested in the other order
+    NULL on Apple, RECORDED with the reason (both are other vendors' arms)
+      STD_SQRT          std.math.sqrt for the BFGS step size -- on Metal
+                        both spellings are the same correctly-rounded sqrt
+      HW_MAX_CLAMP      bound_device as min(max(0.0, v), 1.0) -- the
+                        constant zero lets LLVM fold the maxnum away
 
 Run:
 

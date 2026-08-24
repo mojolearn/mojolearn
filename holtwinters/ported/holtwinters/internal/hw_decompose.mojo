@@ -178,6 +178,14 @@ def season_mean_kernel(
             while k < length:
                 period_mean = _f(period_mean + season.unsafe_load(k * batch_size + tid))
                 k += frequency
+            # `1 + ((len - i - 1) / frequency)` (`:73`). A TRAP kept in
+            # view: C's `/` TRUNCATES toward zero and Mojo's `//` FLOORS,
+            # so these two agree only while `length - i - 1 >= 0`. It
+            # always is -- `trend_len >= frequency` for every
+            # `start_periods >= 2`, which the wrapper refuses below -- and
+            # if it ever were not, theirs would divide by 1 and OURS WOULD
+            # DIVIDE BY ZERO. Do not copy this idiom to a place where the
+            # numerator's sign is not proven.
             var count = 1 + ((length - i - 1) // frequency)
             period_mean = _f(period_mean / Float32(count))
             var ss_idx = (i + half_filter_size) % frequency

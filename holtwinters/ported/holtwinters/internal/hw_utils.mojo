@@ -22,10 +22,22 @@ clamp may not be a hardware max. A COMPUTED NaN in the optimizer (their
 known instability, cuml#888; DEVIATION 662 closes the one legal-input
 route) reaches this clamp and must come out the same bits everywhere.
 MEASURED: `hw_check::check_hw_signed_zero_clamp` plants `-0.0` and NaN at
-the clamp on the host helper and as the `alpha/beta/gamma` of a direct eval
-launch (device and oracle); the sabotage `MOJOLEARN_HW_SABOTAGE_HW_MAX_CLAMP`
-spells it `min(max(0.0, v), 1.0)` (the hardware max, zero first) and FAILS
-on Apple (`-0.0` survives). README carries the lines.
+the clamp on the host helper, as the `alpha/beta/gamma` of a direct eval
+launch (device and oracle), and at the RECORDED clamp (`hw.params` on the
+zero series). TWO sabotage arms, and only one bites:
+  CLAMP_GE      the lower test loosened to `val >= lo`, so `-0.0` survives.
+                FAILS on Apple at the recorded clamp -- this is DEVIATION
+                663's gate.
+  HW_MAX_CLAMP  the hardware `min(max(0.0, v), 1.0)`. NULL ON APPLE, and
+                the reason is worth keeping: row 39 measured `max(+0.0,
+                -0.0)` on two RUNTIME operands, but the clamp's zero is a
+                compile-time constant and `llvm.maxnum(0.0, v)` is folded
+                to a compare-select returning `+0.0` on the tie, which LLVM
+                may do because maxnum's zero-tie answer is unspecified. The
+                arm is kept unrun for a vendor that does not fold it.
+That null is exactly why the clamp is a compare chain and not a `max`: the
+spelling's answer here depends on whether a constant got folded, which is
+not a property anyone should be relying on for a recorded stage.
 ============================================================================
 """
 
@@ -42,20 +54,51 @@ from std.sys.compile import is_defined
 comptime SAB_ROTATE_CONV = is_defined["MOJOLEARN_HW_SABOTAGE_ROTATE_CONV"]()
 #: the BFGS step-size `sqrt` through `std.math.sqrt` instead of
 #: `identical_sqrt` (row 10: approximate on NVIDIA, correctly rounded on
-#: Apple/AMD). REPORT/FAIL as measured.
+#: Apple/AMD). MEASURED 2026-08-23: NULL ON APPLE -- the whole gate is
+#: byte-identical to the clean build, because on Metal both spellings are
+#: the correctly-rounded hardware sqrt. It is the NVIDIA arm of the seam
+#: and stays here unrun until a second vendor prints. RECORDED, not a
+#: failing arm on this box.
 comptime SAB_STD_SQRT = is_defined["MOJOLEARN_HW_SABOTAGE_STD_SQRT"]()
 #: `ftz` dropped at the eval recurrence's stored intermediates. RECORD.
 comptime SAB_NO_FTZ = is_defined["MOJOLEARN_HW_SABOTAGE_NO_FTZ"]()
 #: DEVIATION 662 off: a zero search direction takes their `0.866 / sqrt(0)`
 #: step. MUST FAIL the zero-series gate (NaN params, canonicalized).
 comptime SAB_NO_ZERO_DIR_GUARD = is_defined["MOJOLEARN_HW_SABOTAGE_NO_ZERO_DIR_GUARD"]()
-#: DEVIATION 663 off: `bound_device` as `min(max(0.0, v), 1.0)` (hardware
-#: max, zero FIRST). MUST FAIL the -0.0 clamp gate on Apple.
+#: DEVIATION 663 off, arm 1: `bound_device` as `min(max(0.0, v), 1.0)`
+#: (hardware max, zero FIRST -- the orientation IDENTITY_PATHS row 39 warns
+#: about). MEASURED 2026-08-23: NULL ON APPLE. Row 39's `max(+0.0, -0.0) =
+#: second operand` was measured on a GPU expression with two RUNTIME
+#: operands; here one operand is the compile-time constant `+0.0`, and both
+#: the host and Metal fold `maxnum(0.0, v)` to a compare-select whose tie
+#: answer is `+0.0`. LLVM is allowed to: `llvm.maxnum(+0, -0)` may return
+#: EITHER operand, so the fold is legal and the sabotage never bites. It
+#: stays as the arm that would bite on a vendor whose `max` is not folded.
 comptime SAB_HW_MAX_CLAMP = is_defined["MOJOLEARN_HW_SABOTAGE_HW_MAX_CLAMP"]()
+#: DEVIATION 663 off, arm 2 -- THE ARM THAT BITES. The compare chain's
+#: LOWER test loosened from `val > lo` to `val >= lo`, so a `-0.0` compares
+#: equal to `+0.0`, takes the value branch and SURVIVES the clamp. One
+#: character, and it is the exact mis-spelling a reader would write. MUST
+#: FAIL `check_hw_signed_zero_clamp` at the RECORDED clamp.
+comptime SAB_CLAMP_GE = is_defined["MOJOLEARN_HW_SABOTAGE_CLAMP_GE"]()
 #: the eval's level update with the OTHER product fused (`fma((1-a), lt,
 #: a*x)` instead of `fma(a, x, (1-a)*lt)`): a different contraction
 #: spelling. MUST FAIL device-vs-oracle (the oracle keeps the pinned one).
 comptime SAB_SWAP_FMA = is_defined["MOJOLEARN_HW_SABOTAGE_SWAP_FMA"]()
+#: THE OPTIMIZER'S TIE-BREAK, arm 1: the line-search acceptance test
+#: loosened from `loss > loss_ref + step * cauchy` to `>=`. On an EXACT tie
+#: -- and a tie is not exotic here: a flat or exactly-recovered series has
+#: `loss == loss_ref` and `cauchy == 0` -- theirs accepts the step and ours
+#: would take another halving, so `step_size`, `nx` and every bit after
+#: them move. MUST FAIL.
+comptime SAB_LS_TIE = is_defined["MOJOLEARN_HW_SABOTAGE_LS_TIE"]()
+#: THE OPTIMIZER'S TIE-BREAK, arm 2: the two stop criteria tested in the
+#: OTHER order (`min_error_diff` before `min_param_diff`). Their order
+#: (`hw_optim.cuh:520-523`) decides which criterion is REPORTED on an
+#: iteration where BOTH fire, and `hw.opt.criterion` is a recorded stage.
+#: Pure tie-break: no arithmetic changes, only the label -- and, because
+#: the criterion is what the fit returns, the answer a caller reads.
+comptime SAB_CRIT_ORDER = is_defined["MOJOLEARN_HW_SABOTAGE_CRIT_ORDER"]()
 
 
 def hw_sabotage_name() -> String:
@@ -70,8 +113,14 @@ def hw_sabotage_name() -> String:
         s += "NO_ZERO_DIR_GUARD "
     comptime if SAB_HW_MAX_CLAMP:
         s += "HW_MAX_CLAMP "
+    comptime if SAB_CLAMP_GE:
+        s += "CLAMP_GE "
     comptime if SAB_SWAP_FMA:
         s += "SWAP_FMA "
+    comptime if SAB_LS_TIE:
+        s += "LS_TIE "
+    comptime if SAB_CRIT_ORDER:
+        s += "CRIT_ORDER "
     if s == "":
         return String("none")
     return s
@@ -126,10 +175,17 @@ def bound_device(val: Float32, lo: Float32 = Float32(0.0), hi: Float32 = Float32
         # val-first spelling is accidentally right here and was inert.
         return min(max(lo, val), hi)
     var r: Float32
-    if val > lo:
-        r = val
+    comptime if SAB_CLAMP_GE:
+        # the documented sabotage: `>=` lets a -0.0 through the lower test.
+        if val >= lo:
+            r = val
+        else:
+            r = lo
     else:
-        r = lo
+        if val > lo:
+            r = val
+        else:
+            r = lo
     if r > hi:
         r = hi
     return r
