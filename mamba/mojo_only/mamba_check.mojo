@@ -136,8 +136,9 @@ be VACUOUS.
 
 OWED, and this file does not cover any of it
 ----------------------------------------------
-L = 16, 64 and 257; FAST mode; the corpus cross-check against
-`mamba/corpus/`; and every column that is not this Apple box.
+L = 16, 64 and 257; FAST mode; the 14 corpus cases beyond the two run here
+(the adversarial and composition ones); and every column that is not this
+Apple box.
 
 CLAUSES (b) AND (c) ARE CHECKED HERE, and each says what would have hidden a
 failure:
@@ -204,6 +205,76 @@ failure:
   and that it records all 17 stages. That is the arima shape of blind gate:
   the arm fine, the gate incapable of failing.
 
+THE CORPUS CROSS-CHECK, RUN 2026-08-24, AND THE ONE DISAGREEMENT IT FOUND
+--------------------------------------------------------------------------
+Every clause above compares the device against `mamba_block_oracle`, which is
+OUR host code. `mamba/corpus/` is the only INDEPENDENT reference this lane
+has, and it is the only thing that can catch our oracle being wrong in the
+same way as our device.
+
+THE TOLERANCE IS NOT A PICK. `tools/mamba_corpus_check.py --self-test` feeds
+the case's own `ref32` (plain torch FP32 on a CPU, an independent float32
+implementation) against the same float64 reference and reports the smallest
+rtol at which it passes. On `base_b1_l1_d8` torch FP32 passes at
+**rtol = 1e-7, atol = 1e-6** on every stage, two orders TIGHTER than the
+tool's 1e-5 default. That is the tolerance used here, and it is the level an
+independent FP32 implementation of the same algorithm actually achieves.
+
+RESULTS, both cases run, 12 of 13 stages compared (`scan.h_all` is not a
+stage this lane records):
+
+    case                B  L  d_model   inputs byte-equal   stages at 1e-7
+    base_b1_l1_d8       1  1  8         11 / 11             12 / 12 PASS
+    base_b2_l4_d8       2  4  8         11 / 11             12 / 12 PASS
+
+The INPUT comparison is bitwise, not a tolerance: our fixture regenerates the
+corpus's tensors from the hash spec and the bytes are compared to the
+committed files. 11 of 11 on both cases. Two independently written
+implementations of `mojolearn.mamba.corpus.hash.v1` agreeing bit for bit is
+itself evidence, and it is the fixture docstring's stated first gate.
+
+**THE DISAGREEMENT, AND IT IS A NAME AND NOT A NUMBER.** The first run
+reported `dt_proj.out` off by 100% relative (ours -0.0285, reference -3.2279)
+while EVERY STAGE DOWNSTREAM of it passed -- which is the shape of a
+definition mismatch, since a genuinely wrong `dt_proj` would have carried
+into `softplus.out`. Measured: `reference - ours == dt_proj.bias` elementwise
+to 1.26e-9, which is float32 rounding of the bias add. Contract section 7
+defines `dt_proj.out` with the bias NOT added (MM:429 is
+`self.dt_proj.weight @ time_step`, the weight alone, and the bias reaches the
+scan as `delta_bias`); the corpus manifest defines the same name as
+"dt_proj.weight @ dt_low^T + dt_proj.bias (bias INCLUDED)" and
+`gen_corpus.py:408` says so in a comment. **Both sides are internally correct
+and documented. Neither is a defect.** The trap is that the obvious repair --
+folding the bias into S17 so the cross-check goes green -- would have broken
+contract section 7 and DEVIATION 727's stage split to satisfy a naming clash.
+What is dumped under the corpus's name is therefore the corpus's QUANTITY,
+derived on the comparison side; the profile's `dt_proj.out` is unchanged.
+
+TWO WAYS THIS CROSS-CHECK COULD HAVE PASSED WHILE TESTING NOTHING:
+
+1. **The L = 1 case cannot certify the reindexing.** Our stages are
+   token-major `[M, W]`; the corpus stores the d_inner-wide ones
+   channel-major `[B, W, L]`. At L = 1 those are the SAME BYTES, so
+   `base_b1_l1_d8` passes identically whether the permutation is right or
+   wrong. `base_b2_l4_d8` is the smallest case that can tell. The control is
+   a deliberately TRANSPOSED dump at L = 4, and it fails exactly the seven
+   channel-major stages (`in_proj.out`, `conv.out`, `silu.out`,
+   `dt_proj.out`, `softplus.out`, `scan.y`, `gate.out`) while leaving the
+   five that it does not corrupt (`norm.out`, `x_proj.out`, `scan.h_last`,
+   `out_proj.out`, `block.out`) passing. A control that bit everything would
+   have been a weaker result than one that bites exactly what it corrupts.
+2. **`atol` can swamp a small-valued stage.** Where every `|ref|` is below
+   atol, the comparison passes for any dump. Measured per stage on
+   `base_b2_l4_d8`: no stage is entirely atol-dominated; `scan.h_last` has 51
+   of 512 cells below atol and `gate.out` has 2 of 128, and every other stage
+   has none. So the check is not vacuous, but 53 cells across two stages are
+   carried by atol rather than by rtol and are not evidence of much.
+
+NAMING, recorded so nobody rediscovers it: the corpus's `scan.y` is `y + u*D`,
+which is OUR `skip.out`; our own `scan.y` (before the D skip) has NO corpus
+counterpart and is deliberately not dumped. The corpus's `block.out` is our
+`residual.out`.
+
 Clause (c) is a device-versus-device invariance claim. It does not re-check
 correctness: a block that was wrong in a batch-INDEPENDENT way would pass it.
 Clause (a), the oracle compare above, is what covers that. The same is true
@@ -225,13 +296,18 @@ from mamba.mojo_only.mamba_fixture import (
     f32_from_bits,
     MambaDims,
     MambaWeights,
+    CorpusCase,
+    corpus_case,
     corpus_case_seed,
+    corpus_case_weights,
+    corpus_case_x,
     corpus_tensor,
     corpus_weights,
     corpus_x,
     mode_name,
 )
 from mamba.mojo_only.mamba_oracle import MambaState, MambaStages, mamba_block_oracle
+from mojo_only.numerics import ftz
 from mamba.ported.transformers.models.mamba.modeling_mamba import (
     BLOCK_ANY_SABOTAGE,
     MambaDeviceStages,
@@ -1255,6 +1331,198 @@ def clause_e(
 
 
 # ===========================================================================
+# THE CORPUS CROSS-CHECK: the only INDEPENDENT reference this lane has
+# ===========================================================================
+# Every other clause in this file compares the device against
+# `mamba_block_oracle`, which is OUR host code. Both sides are ours, so all of
+# it is us agreeing with us, and an oracle that is wrong the same way as the
+# device is precisely the failure a self-consistent gate cannot see.
+#
+# `mamba/corpus/` is the exception: 16 hashed cases with a per-stage torch
+# FLOAT64 reference generated by `gen_corpus.py` from state-spaces/mamba's
+# `selective_scan_ref` in the HuggingFace block order, written so that neither
+# side was derived from the other. This section runs a corpus case through OUR
+# block and writes the stages in the CORPUS's names, shapes and layouts, so
+# that `tools/mamba_corpus_check.py` can compare them against ref64.
+#
+# TWO NAMING TRAPS, both of which would produce a plausible wrong comparison:
+#
+#   * The corpus's `scan.y` is `y + u * D`, which is OUR `skip.out`. Our own
+#     `scan.y` is the value BEFORE the D skip and has NO corpus counterpart.
+#     Dumping ours under that name would compare two different quantities and
+#     report a small, believable, meaningless gap.
+#   * The corpus's `block.out` is our `residual.out`.
+#
+# AND THE LAYOUT TRAP, which is the one the coordinator's warning is about.
+# Our stages are TOKEN-major `[M, W]` with `M = B * L`. The corpus stores the
+# d_inner-wide stages CHANNEL-major, `[B, W, L]`. Those two are the same bytes
+# whenever L == 1, so the SMALLEST corpus case cannot tell a correct
+# reindexing from a transposed one. `base_b2_l4_d8` (L = 4) is the smallest
+# case that can, and it is the one that certifies the permutation.
+
+
+comptime CORPUS_DIR = "mamba/corpus"
+
+
+def write_f32(path: String, values: List[Float32]) raises:
+    """Raw little-endian float32, the format `tools/mamba_corpus_check.py`
+    reads with `np.fromfile(dtype="<f4")`."""
+    var bytes = List[UInt8]()
+    for i in range(len(values)):
+        var u = bitcast[DType.uint32](values[i])
+        bytes.append(UInt8(Int(u & UInt32(0xFF))))
+        bytes.append(UInt8(Int((u >> UInt32(8)) & UInt32(0xFF))))
+        bytes.append(UInt8(Int((u >> UInt32(16)) & UInt32(0xFF))))
+        bytes.append(UInt8(Int((u >> UInt32(24)) & UInt32(0xFF))))
+    with open(path, "w") as fh:
+        fh.write_bytes(Span(bytes))
+
+
+def to_channel_major(
+    tokens: List[Float32], b: Int, l: Int, w: Int
+) -> List[Float32]:
+    """`[M, W]` token-major (ours) to `[B, W, L]` channel-major (the
+    corpus's). THE REINDEXING the corpus README says the gate does rather
+    than recomputing. At L == 1 this is the identity, which is exactly why
+    the L == 1 case cannot certify it."""
+    var out = List[Float32]()
+    for bb in range(b):
+        for d in range(w):
+            for li in range(l):
+                out.append(tokens[(bb * l + li) * w + d])
+    return out^
+
+
+def dump_corpus_case(
+    ctx: DeviceContext, k: Int, dump_dir: String, transpose_control: Bool
+) raises:
+    """Run corpus case `k` through OUR block and write its stages under the
+    corpus's names, shapes and layouts.
+
+    `transpose_control` deliberately writes the channel-major stages in
+    TOKEN-major order instead. It must make `tools/mamba_corpus_check.py`
+    FAIL. If it does not, the comparison is permutation-blind and every green
+    it has ever printed is worthless -- which at L == 1 it genuinely is, by
+    construction."""
+    var c = corpus_case(k)
+    var b = c.b
+    var l = c.l
+    var dims = MambaDims.of(c.d_model)
+    var dm = dims.d_model
+    var di = dims.d_inner
+    var xr = dims.x_proj_rows()
+    var w = corpus_case_weights(k)
+    var x = corpus_case_x(k)
+
+    print(
+        "corpus case "
+        + String(k)
+        + " "
+        + String(c.name)
+        + ": B="
+        + String(b)
+        + " L="
+        + String(l)
+        + " d_model="
+        + String(dm)
+        + ("   TRANSPOSE CONTROL ARMED" if transpose_control else "")
+    )
+    if l == 1 and not transpose_control:
+        print(
+            "  NOTE: L == 1, so channel-major and token-major are the SAME"
+            " BYTES here. This case cannot certify the reindexing; case 1"
+            " (base_b2_l4_d8, L=4) is the smallest that can."
+        )
+
+    var off = IdentityTrace.disabled()
+    var dw = MambaDeviceWeights(ctx, w)
+    var dstate = MambaDeviceState(ctx, b, dims)
+    var dev = run_step(ctx, dw, dstate, x, b, l, dims, off, "corpus")
+
+    # The INPUTS as we generated them, so the caller can byte-compare them
+    # against the corpus's own files. The fixture's docstring calls this the
+    # first gate: the two lanes agreeing on the fixture is itself evidence,
+    # and it is BITWISE, not a tolerance.
+    write_f32(dump_dir + "/input.x.f32", x)
+    write_f32(dump_dir + "/input.norm.weight.f32", w.norm_w)
+    write_f32(dump_dir + "/input.in_proj.weight.f32", w.w_in)
+    write_f32(dump_dir + "/input.conv1d.weight.f32", w.conv_w)
+    write_f32(dump_dir + "/input.conv1d.bias.f32", w.conv_b)
+    write_f32(dump_dir + "/input.x_proj.weight.f32", w.w_x)
+    write_f32(dump_dir + "/input.dt_proj.weight.f32", w.w_dt)
+    write_f32(dump_dir + "/input.dt_proj.bias.f32", w.b_dt)
+    write_f32(dump_dir + "/input.A_log.f32", w.a_log)
+    write_f32(dump_dir + "/input.D.f32", w.d_skip)
+    write_f32(dump_dir + "/input.out_proj.weight.f32", w.w_out)
+
+    # TOKEN-major stages: the corpus stores these [B, L, W] too, so the bytes
+    # go out as they are.
+    write_f32(dump_dir + "/norm.out.f32", dev[1])
+    write_f32(dump_dir + "/x_proj.out.f32", dev[7])
+    write_f32(dump_dir + "/out_proj.out.f32", dev[14])
+    write_f32(dump_dir + "/block.out.f32", dev[15])  # ours: residual.out
+
+    # CHANNEL-major stages: [B, W, L]. `dev[10]` (our scan.y, before D) is
+    # deliberately NOT written -- the corpus has no such stage.
+    var cm_in_proj = to_channel_major(dev[2], b, l, 2 * di)
+    var cm_conv = to_channel_major(dev[4], b, l, di)
+    var cm_silu = to_channel_major(dev[5], b, l, di)
+    # THE STAGE-NAME COLLISION, and it is a REAL one that would have been
+    # "fixed" the wrong way. Contract section 7 defines `dt_proj.out` as
+    # S17's output with the bias NOT added (MM:429 is
+    # `self.dt_proj.weight @ time_step`, the weight alone; the bias reaches
+    # the scan as `delta_bias` and enters at S14). The corpus defines the
+    # SAME NAME the other way -- its manifest says
+    # "dt_proj.weight @ dt_low^T + dt_proj.bias  (bias INCLUDED)" and
+    # `gen_corpus.py:408` says so in a comment. Both are internally correct
+    # and documented; the NAME is what collides.
+    #
+    # Dumping our bias-free stage under that name reports a 100% relative
+    # miss on a block whose every downstream stage passes, and the tempting
+    # repair -- folding the bias into S17 -- would break contract section 7
+    # and DEVIATION 727's stage split for the sake of a naming clash.
+    # So what goes out under the corpus's name is the corpus's QUANTITY,
+    # derived here from two of our recorded values in S14's own spelling.
+    # It is a comparison-side derivation, not a recomputation of a seam, and
+    # the profile's `dt_proj.out` remains the bias-free one.
+    var biased = List[Float32]()
+    for t in range(b * l):
+        for d in range(di):
+            biased.append(ftz(ftz(dev[8][t * di + d]) + ftz(w.b_dt[d])))
+    var cm_dt = to_channel_major(biased, b, l, di)
+    var cm_soft = to_channel_major(dev[9], b, l, di)
+    var cm_skip = to_channel_major(dev[12], b, l, di)  # corpus "scan.y"
+    var cm_gate = to_channel_major(dev[13], b, l, di)
+    if transpose_control:
+        cm_in_proj = dev[2].copy()
+        cm_conv = dev[4].copy()
+        cm_silu = dev[5].copy()
+        cm_dt = biased.copy()
+        cm_soft = dev[9].copy()
+        cm_skip = dev[12].copy()
+        cm_gate = dev[13].copy()
+    write_f32(dump_dir + "/in_proj.out.f32", cm_in_proj)
+    write_f32(dump_dir + "/conv.out.f32", cm_conv)
+    write_f32(dump_dir + "/silu.out.f32", cm_silu)
+    write_f32(dump_dir + "/dt_proj.out.f32", cm_dt)
+    write_f32(dump_dir + "/softplus.out.f32", cm_soft)
+    write_f32(dump_dir + "/scan.y.f32", cm_skip)
+    write_f32(dump_dir + "/gate.out.f32", cm_gate)
+
+    # [B, d_inner, d_state] on both sides.
+    write_f32(dump_dir + "/scan.h_last.f32", dev[11])
+
+    print(
+        "  wrote 12 stage dumps and 11 input dumps to "
+        + dump_dir
+        + " (our scan.y, the value BEFORE the D skip, is deliberately not"
+        " written: the corpus has no such stage)"
+    )
+    _ = dw^
+    _ = dstate^
+
+
+# ===========================================================================
 
 
 def main() raises:
@@ -1368,6 +1636,20 @@ def main() raises:
         else:
             print(
                 "clause (d): SKIPPED (set MOJOLEARN_MAMBA_CHECK_CLAUSE_D=1)"
+            )
+        if env_on("MOJOLEARN_MAMBA_CORPUS_CASE"):
+            var k = env_int("MOJOLEARN_MAMBA_CORPUS_CASE", 0)
+            var dd = String(getenv("MOJOLEARN_MAMBA_CORPUS_DUMP"))
+            if dd == "":
+                raise Error(
+                    "mamba_check: set MOJOLEARN_MAMBA_CORPUS_DUMP to an"
+                    " existing directory for the stage dumps"
+                )
+            dump_corpus_case(
+                ctx,
+                k,
+                dd,
+                env_on("MOJOLEARN_MAMBA_CORPUS_TRANSPOSE_CONTROL"),
             )
         if env_on("MOJOLEARN_MAMBA_CHECK_CLAUSE_E"):
             clause_e(ctx, b, l, dims)
