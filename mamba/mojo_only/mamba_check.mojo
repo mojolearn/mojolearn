@@ -367,6 +367,56 @@ So two of four are settled at this case, one is measured but not independent,
 and one is untestable by construction. That is the answer to "can the shape
 express the property", asked before trusting the pass rather than after.
 
+THE OTHER THREE ADVERSARIAL CASES, AND A TOLERANCE THAT WAS TOO TIGHT
+----------------------------------------------------------------------
+    case                          inputs   stages    at rtol
+    adv_a_very_negative_b1_l16_d16  11/11   12/12     1e-7
+    adv_a_near_zero_b3_l8_d8        11/11   12/12     1e-7
+    adv_gate_saturation_b1_l8_d16   11/11   12/12     1e-3  (see below)
+
+**`adv_gate_saturation` FAILED 4 of 12 at rtol = 1e-7, and the tolerance was
+the defect, not the block.** That case puts the gate half of
+`in_proj.weight` in [-2^30, 2^30], so `in_proj.out` reaches 7.25e8 and one
+float32 ulp there is about 64. A global rtol of 1e-7 is below float32 epsilon
+(1.19e-7), so no float32 implementation can pass it once cancellation is in
+play -- and `--self-test` confirms it: **torch's OWN FP32 fails the SAME four
+stages at 1e-7** and needs 1e-5 on `in_proj.out` and 1e-4 on `gate.out`,
+`out_proj.out` and `block.out`.
+
+The lesson is the mirror of the atol one already in this file. A tolerance
+that is too LOOSE passes anything; a tolerance that is too TIGHT reports a
+defect that is not there, and the tempting repair is to go changing the
+block. **Calibrate per case**, with the corpus's own `--self-test`, and never
+carry one case's number to another.
+
+Ours against torch FP32 on that case, both measured against the same float64
+reference, worst relative error per stage:
+
+    stage           ours       torch      ratio
+    in_proj.out     4.286e-05  5.514e-05   0.78   (we are TIGHTER)
+    scan.h_last     1.104e-04  1.278e-04   0.86   (we are TIGHTER)
+    dt_proj.out     5.797e-08  5.797e-08   1.00
+    softplus.out    3.083e-07  3.083e-07   1.00
+    out_proj.out    2.048e-05  1.742e-05   1.18
+    block.out       2.049e-05  1.741e-05   1.18
+    norm.out        2.015e-07  1.330e-07   1.51
+    x_proj.out      4.487e-05  1.706e-05   2.63
+    conv.out        2.028e-04  4.254e-05   4.77
+    silu.out        2.028e-04  4.255e-05   4.77
+    scan.y          2.249e-04  4.720e-05   4.77
+    gate.out        2.250e-04  4.721e-05   4.77
+
+The four stages at exactly 4.77 are one cause propagating: `conv.out` is the
+first of them and `silu.out`, `scan.y` and `gate.out` are downstream of it.
+In ABSOLUTE terms `conv.out` is 8.8e-8 against torch's 5.6e-8, both float32
+noise on cells where cancellation makes the relative measure unstable, so
+this is not evidence of a defect. It IS a real difference and is recorded
+rather than smoothed over: the likely mechanism is row 12's pinned portable
+`exp` polynomial inside `identical_silu` against the platform libm torch
+calls, amplified by a gate argument of order 2^30. Worth a look if anyone
+ever needs this profile to be accurate as well as identical -- those are
+different properties and this profile only claims the second.
+
 NAMING, recorded so nobody rediscovers it: the corpus's `scan.y` is `y + u*D`,
 which is OUR `skip.out`; our own `scan.y` (before the D skip) has NO corpus
 counterpart and is deliberately not dumped. The corpus's `block.out` is our
