@@ -37,3 +37,9 @@ bench/results/e1/.leg-*.state
 # CatBoost writes this training-log directory beside whatever invoked it.
 # Regenerated on every run, never an input to anything here.
 catboost_info/
+
+# Cards produced from a dirty tree are contaminated by our own labeling.
+# The -dirty suffix exists to make them identifiable; never let them accumulate.
+bench/results/**/*-dirty/
+# Dry-run leg output is not a record.
+bench/results/e1g/*-dryrun/
