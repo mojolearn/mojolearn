@@ -16,7 +16,9 @@ Read this before trusting anything below.
   IDENTICAL gate, the clean FAST gate, and all nine sabotage arms. The
   earlier "uncompiled since the green run" caveat is discharged. Seven
   arms fail as designed; two are Apple-null and are counted as REACH
-  FAILURES, not passes.
+  FAILURES, not passes. DEVIATION 699's decision mask builds and is green
+  in both modes; the reach census retired the owed `RHO_ZERO` fixture and
+  did not retire `LS_LIMIT`.
 
 ## UPSTREAM IS DEPRECATING THIS ALGORITHM IN 26.12
 
@@ -392,32 +394,57 @@ number is the orchestrator's to assign):
 **The Python surface** is not this lane's directory. `estimator.mojo` is
 the entry `bindings/` should reach.
 
-## OWED, and it is not a short list
+## The reach census, and what it retired
 
-**Everything written since the last green run is UNBUILT.** DEVIATION
-699, the decision census, the limit-override seam and the forecast
-two-block fixture were all written without a compile slot. The first job
-of the next slot is to build them; expect compile errors, because three
-were already found by re-reading (an invented helper, two missing
-imports).
+DEVIATION 699's mask turned four "is this branch ever reached?" arguments
+into facts. Measured on one M4, IDENTICAL:
 
-1. **Build what is written.** Clean IDENTICAL and FAST, then all nine
-   sabotage arms, which now must also agree on `hw.opt.decisions`.
-2. **READ THE REACH CENSUS FIRST.** `check_hw_decision_branches` prints
-   which DEVIATION 699 bits the standard fixtures already set. That may
-   show `RHO_ZERO` and `LS_LIMIT` are already reached by fixtures that
-   exist, in which case items 3 and 4 below are already done and no new
-   fixture is needed. If it shows them unreached, it names exactly what
-   is missing. Do not write a fixture before reading it.
-3. **A fixture reaching `RHO_ZERO`** (the second NaN route), if the
-   census says nothing reaches it.
-4. **A fixture reaching `LS_LIMIT`** on DEFAULT limits, if wanted. The
-   limit-override fixture reaches the branch; it does not prove a natural
-   series can.
-5. **NVIDIA and AMD re-prints.** `STD_SQRT` and `HW_MAX_CLAMP` are
-   Apple-null reach failures that ONLY a second vendor can exercise, and
-   every cross-vendor sentence in this file is a claim about the
-   spelling, not a measurement.
-6. **`get_num_blocks`'s 65535 cap is now recorded as UNREACHABLE**, not
-   ungated: it binds above 33.5 million series. Nothing to do; it is
-   closed as UNPORTED-IN-EFFECT.
+| bit | reached by the standard fixtures? |
+|---|---|
+| `ZERO_DIR` | YES, `constant` and `zero` |
+| `HESSIAN_RESET` | YES, `additive` |
+| `BOTH_CRIT` | **YES**, `additive` and `mixed`. This settles `CRIT_ORDER`: the tie its arm perturbs is genuinely reached, so its test ORDER is a real decision. It had been an inference |
+| clamp arms | YES: `ALPHA_HI`, `BETA_LO`, `GAMMA_HI` (and `GAMMA_LO` under FAST) |
+| `LS_LIMIT` | NO |
+| `RHO_ZERO` | NO |
+| `H_NAN` | NO |
+| `ITER_LIMIT` | NO on default limits |
+
+For the two that the census said were unreached, a BOUNDED REACH SEARCH
+(128 fits: 64 hashed salts x two seasonal types, all at the standard small
+size) was run rather than guessing at a construction:
+
+* **`RHO_ZERO` is RETIRED.** The search found the second NaN route on a
+  NATURAL series, multiplicative salt 102, on 1 of 7 series. It is now a
+  PINNED fixture asserted both ways: the bit must still be set, and the
+  whole mask must equal the oracle's. `UNPORTED.tsv` said this route
+  "terminates deterministically on every vendor"; that is now a thing a
+  fixture exercises rather than an argument this lane makes.
+* **`LS_LIMIT` is NOT retired.** 128 fits did not reach it. The
+  `linesearch_iter_limit = 1` override fixture reaches the BRANCH, but
+  nothing shows a natural series reaches it on the default limit of 100,
+  and that is recorded as owed rather than papered over.
+
+The census also shows the mask is MODE-SENSITIVE: under FAST, `mixed`
+series 0 sets no flag where under IDENTICAL it sets `BOTH_CRIT`. The
+optimizer takes a different path, which is exactly what a decision stage
+is for.
+
+## OWED
+
+1. **`LS_LIMIT` on default limits.** 128 hashed fits did not reach it.
+   Reaching 100 consecutive Armijo failures needs a numerical plateau
+   where `step * cauchy` underflows while `loss(nx)` stays strictly above
+   `loss_ref`; constructing that deliberately is a search problem, and it
+   is left owed rather than faked.
+2. **NVIDIA and AMD prints.** `STD_SQRT` and `HW_MAX_CLAMP` are
+   Apple-null REACH FAILURES and only a second vendor can exercise them.
+   DEVIATION 699 did NOT rescue them, and that is worth saying: a
+   decision stage promotes an arm only when the arm is decision-shaped,
+   and these two are a `sqrt` spelling and an LLVM constant fold.
+3. **The multiplicative `stmp_eps` clamp**, still the best remaining
+   candidate for a decision stage. The build made it no cheaper: the
+   Metal 31-argument cap means it must reuse an existing slice rather
+   than add an output, so it is a slice-packing job, not a one-liner.
+4. **`H_NAN` and `ITER_LIMIT` on default limits** remain unreached by any
+   natural fixture; `ITER_LIMIT` is covered by the override fixture.

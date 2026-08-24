@@ -1263,6 +1263,61 @@ def check_hw_decision_branches() raises:
                 max_halv = hv
         print("  census " + name + " s0: " + _dec_names(Int(f.decisions[0])))
 
+    # (1b) A BOUNDED REACH SEARCH for the two bits the standard fixtures do
+    # NOT set: LS_LIMIT (bit 2, cuml#888's path) and RHO_ZERO (bit 3, the
+    # second NaN route). Both need a pathological series rather than a
+    # pathological parameter, so the honest way to look is to LOOK: 64
+    # hashed salts x two seasonal types, all at the standard small size.
+    # This is a reach search, not a sweep and not a benchmark -- it either
+    # names a salt to pin as a fixture or it records, with a number, that 128
+    # tries did not reach the branch.
+    var found_ls = -1
+    var found_rho = -1
+    for salt in range(64):
+        for k in range(2):
+            var sp2 = spec_additive() if k == 0 else spec_multiplicative()
+            var seas2 = SEASONAL_ADDITIVE if k == 0 else SEASONAL_MULTIPLICATIVE
+            var dsc = hw_fixture(sp2, N, BATCH, FREQ, salt + 100)
+            var fsc = _device_fit(ctx, dsc, N, BATCH, _seasonal_str(seas2), tr)
+            for s in range(BATCH):
+                var dv = Int(fsc.decisions[s])
+                if (dv & 4) != 0 and found_ls < 0:
+                    found_ls = salt * 10 + k
+                if (dv & 8) != 0 and found_rho < 0:
+                    found_rho = salt * 10 + k
+    var searched = String("; reach search 128 fits: LS_LIMIT ")
+    searched += ("salt*10+kind " + String(found_ls)) if found_ls >= 0 else "NOT REACHED"
+    searched += ", RHO_ZERO "
+    searched += ("salt*10+kind " + String(found_rho)) if found_rho >= 0 else "NOT REACHED"
+
+    # (1c) THE PINNED RHO_ZERO FIXTURE. The search above found the second
+    # NaN route on a NATURAL series -- salt 102, multiplicative -- so
+    # UNPORTED.tsv's claim that the route "terminates deterministically on
+    # every vendor" is now a thing a fixture exercises instead of an
+    # argument. Pinned by salt, asserted BOTH ways: the bit must still be
+    # set (a fixture that silently stops reaching its branch turns an
+    # uncovered branch into an apparently covered one) and the whole
+    # decision mask must equal the oracle's.
+    var d_rho = hw_fixture(spec_multiplicative(), N, BATCH, FREQ, 102)
+    var f_rho = _device_fit(ctx, d_rho, N, BATCH, "multiplicative", tr)
+    var o_rho = oracle_fit[DType.float32](d_rho, N, BATCH, FREQ, START_PERIODS, SEASONAL_MULTIPLICATIVE, HW_DEFAULT_EPS, TRACE_ITERS)
+    var n_rho = 0
+    for s in range(BATCH):
+        if (Int(f_rho.decisions[s]) & 8) != 0:
+            n_rho += 1
+    if n_rho == 0:
+        raise Error(
+            "check_hw_decision_branches REACH FAILURE: the pinned RHO_ZERO"
+            " fixture (multiplicative, salt 102) no longer sets RHO_ZERO on any"
+            " series, so the second NaN route is uncovered again"
+        )
+    var bad_rho = _first_diff_i("rho_zero hw.opt.decisions", f_rho.decisions, o_rho.decisions)
+    if bad_rho != "":
+        comptime if IDENTICAL:
+            raise Error("check_hw_decision_branches FAILED on the pinned RHO_ZERO fixture (sabotage " + hw_sabotage_name() + "): " + bad_rho)
+        else:
+            print("  RECORDED [FAST] " + bad_rho)
+
     # (2) the two LIMIT branches, reached exactly.
     var d2 = hw_fixture(spec_additive(), N, BATCH, FREQ, 2)
     var ts_h2 = List[Float32]()
@@ -1334,7 +1389,8 @@ def check_hw_decision_branches() raises:
         "check_hw_decision_branches " + ("OK" if IDENTICAL else "REPORT") + " [" + _mode_name()
         + "]: decisions device == oracle on 5 fixtures; union of bits seen on the"
         " standard fixtures = [" + _dec_names(seen) + "] max halvings " + String(max_halv)
-        + "; bfgs_iter_limit=2 reached"
+        + searched + "; pinned RHO_ZERO fixture sets the bit on " + String(n_rho)
+        + "/" + String(BATCH) + " series, decisions == oracle; bfgs_iter_limit=2 reached"
         " ITER_LIMIT on " + String(n_limit) + "/" + String(BATCH) + " series, criterion "
         + criterion_name(Int(cc[0]))
     )
