@@ -39,7 +39,24 @@ keywords = [
     "bitwise reproducibility",
 ]
 
-# THE FLOOR IS 3.12 AND IT IS MEASURED, NOT GUESSED.
+# THE FLOOR IS 3.10 AND IT IS THE VERIFY LOOP THAT BACKS IT.
+#
+# This block read "THE FLOOR IS 3.12 AND IT IS MEASURED" and closed with "3.10
+# and 3.11 are NOT claimed because they were not run, and a floor is a
+# promise". Both sentences are now false and are deleted rather than softened.
+# Measured 2026-08-24: python3.10 through python3.14 are ALL present on this
+# machine (/opt/homebrew/bin), and packaging/macos/verify_wheel.sh:37 loops
+# over all five by name. The paragraph thirty lines below always said the
+# oldest verified numpy was 1.26.4 "on python3.10, running the full smoke
+# fit", so the two halves of this file already disagreed.
+#
+# `requires-python = ">=3.10"` therefore matches both the classifier list and
+# what the verify loop exercises, and it is what 0.1.0 already shipped.
+#
+# THE PROMISE IS ONLY AS GOOD AS THE RUN. verify_wheel.sh must come back green
+# on python3.10 and python3.11 for this floor to be honest. If either reports
+# SKIP or fails, the floor moves up to where the loop is green, in the same
+# commit; it does not stay at 3.10 because a comment says so.
 # The extension links NO libpython (`otool -L` shows only the two MAX runtime
 # dylibs and libSystem), so it resolves CPython by name at runtime and one
 # artifact can serve several interpreters. That is the mechanism; the floor is

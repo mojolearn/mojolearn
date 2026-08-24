@@ -206,8 +206,15 @@ for mode in identical fast; do
   run_lane_arm svm "$mode" pixi run mojo run -I . svm/svc_main.mojo -- card
   run_lane_check svm "$mode" pixi run check-svm
   # mamba, added 2026-08-23 once contract section 8 clauses (a)-(f) were all
-  # gated on Apple. The gate is its own card driver (it honors
-  # MOJOLEARN_IDENTITY_TRACE), so the arm and the check are the same binary:
+  # gated on Apple. The gate is its own card driver, so the arm and the check
+  # are the same binary:
+  #
+  # THE PARENTHESIS THAT STOOD HERE SAID "(it honors MOJOLEARN_IDENTITY_TRACE)"
+  # AND IT WAS FALSE UNTIL 2026-08-24. mamba_check.mojo read a hardcoded
+  # TRACE_PATH, so the card landed in /tmp and this loop reported "NO CARD
+  # written" for a lane whose gate had just passed. Fixed in that file under
+  # DEVIATION 970; the sentence is corrected here rather than left, because it
+  # is the sentence that made the defect invisible.
   # the arm captures the card, the check asserts. FAST MODE HAS NEVER BEEN
   # BUILT FOR THIS LANE, so a PHASE8-FINDING on the fast arm is EXPECTED here
   # and is information, not an alarm. The IDENTICAL arm is the one the leg is

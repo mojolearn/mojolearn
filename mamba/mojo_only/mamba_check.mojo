@@ -467,7 +467,36 @@ from mamba.ported.transformers.models.mamba.modeling_mamba import (
 )
 
 
+# THE CARD PATH IS THE CALLER'S WHEN THE CALLER NAMES ONE (DEVIATION 970).
+#
+# This alias was read DIRECTLY by every write site, so the card always landed
+# in /tmp no matter what the caller asked for. `tools/e1_bootstrap.sh` phase 8
+# sets MOJOLEARN_IDENTITY_TRACE to `<out>/lanes/mamba.identical.card` and its
+# own comment claims this driver "honors MOJOLEARN_IDENTITY_TRACE". It did not.
+#
+# The cost was not theoretical. The Apple column of 2026-08-24 ran this lane
+# GREEN -- clause (a) PASS, 16/16 stages bit-identical to the oracle, a 17-tag
+# card written -- and phase 8 reported "mamba [identical]: NO CARD written",
+# because the card was sitting in /tmp under this name while the judge looked
+# in lanes/. `tools/e3_round_judge.sh` section 7 treats a missing IDENTICAL
+# card as a hard failure, so the one lane the leg was FOR could never have been
+# judged, and the rental would have been spent finding that out.
+#
+# TRACE_PATH remains the fallback so a standalone run still works with no
+# environment set, which is how this file is usually driven by hand.
 comptime TRACE_PATH = "/tmp/mojolearn_mamba_block_tiny.trace"
+
+
+def card_path() -> String:
+    """`MOJOLEARN_IDENTITY_TRACE` when the caller set it, else `TRACE_PATH`.
+
+    The same precedence `bench/gemm_card_main.mojo:553` uses. Read at RUN
+    time, never at compile time, because the harness chooses the directory.
+    """
+    var p = String(getenv("MOJOLEARN_IDENTITY_TRACE"))
+    if p.byte_length() > 0:
+        return p^
+    return String(TRACE_PATH)
 comptime TAG_PREFIX = "tiny"
 
 #: The number of repeated launches contract section 8 clause (b) names.
@@ -1276,7 +1305,7 @@ def clause_e(
     var di = dims.d_inner
     var r = dims.dt_rank
     var xr = dims.x_proj_rows()
-    var path = String(TRACE_PATH) + ".clause_e"
+    var path = card_path() + ".clause_e"
     var checked = 0
 
     print(
@@ -1301,7 +1330,7 @@ def clause_e(
     var cdw = MambaDeviceWeights(ctx, cw)
     var cdstate = MambaDeviceState(ctx, b, dims)
     var cdx = mamba_upload(ctx, cx)
-    var cpath = String(TRACE_PATH) + ".clause_e_control"
+    var cpath = card_path() + ".clause_e_control"
     var ctrace = IdentityTrace.to_path(cpath)
     var cstages = MambaDeviceStages(ctx, b, l, dims)
     var ctrl_raised = False
@@ -1724,14 +1753,14 @@ def main() raises:
     )
 
     var ctx = DeviceContext()
-    var trace = IdentityTrace.to_path(TRACE_PATH)
+    var trace = IdentityTrace.to_path(card_path())
     var dev = run_block(ctx, w, x, b, l, dims, trace, TAG_PREFIX)
 
     print("clause (a): stages, device vs host oracle, BITWISE:")
     var diffs = compare_dumps(host, dev, True)
     var n_moved = count_moved(diffs)
 
-    _ = check_card_tags(TRACE_PATH)
+    _ = check_card_tags(card_path())
 
     # THE CORPUS DUMP RUNS IN BOTH BUILD MODES, and it has to. It lived
     # inside the clean-build branch below until 2026-08-24, which meant a
