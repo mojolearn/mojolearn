@@ -73,11 +73,30 @@ DEVICE (tools/with_build_lock.sh / with_identical_mode.sh):
                                           partition exactly (a bijection
                                           between labels and blobs)
 
-SABOTAGES (build defines, README carries the failing lines):
-    -D MOJOLEARN_SPECTRAL_SABOTAGE_SPMV_ROTATE=1   must FAIL device == oracle
-    -D MOJOLEARN_SPECTRAL_SABOTAGE_SIGN_FLIP=1     must FAIL device == oracle
-    -D MOJOLEARN_SPECTRAL_SABOTAGE_STD_SQRT=1      REPORT (inert on a
-                                                   correctly-rounded host)
+SABOTAGES (build defines; NONE HAS EVER BEEN RUN; README section 6 and
+IDENTICAL_SPECTRAL_CONTRACT.md section 9 carry the full table). Three of
+the eight declare IN ADVANCE that they are expected not to fail, so that a
+pass cannot afterwards be read as a success:
+    -D MOJOLEARN_SPECTRAL_SABOTAGE_SIGN_FLIP=1      must FAIL device == oracle
+    -D MOJOLEARN_SPECTRAL_SABOTAGE_LAPLACIAN_SEAM=1 must FAIL at spectral.L.vals
+    -D MOJOLEARN_SPECTRAL_SABOTAGE_SPMV_ROTATE=1    must FAIL device == oracle
+    -D MOJOLEARN_SPECTRAL_SABOTAGE_NCV=1            must FAIL, STRUCTURALLY
+                                                    (a different stage count)
+    -D MOJOLEARN_SPECTRAL_SABOTAGE_SWEEP_CAP=1      must FAIL
+                                                    check_spectral_path_exact.
+                                                    NOT device == oracle: the
+                                                    solver is SHARED by both
+                                                    arms and the bit compare
+                                                    cannot see it
+    -D MOJOLEARN_SPECTRAL_SABOTAGE_MAXITER=1        EXPECTED INERT (every
+                                                    fixture converges early)
+    -D MOJOLEARN_SPECTRAL_SABOTAGE_ROTATE_UNFUSED=1 EXPECTED REACHED BUT
+                                                    INERT, AND THAT IS A HOLE:
+                                                    seam J4 has no gate with
+                                                    teeth until a certificate
+                                                    check lands (UNPORTED.tsv)
+    -D MOJOLEARN_SPECTRAL_SABOTAGE_STD_SQRT=1       REPORT (inert on a
+                                                    correctly-rounded host)
 """
 
 from std.math import sqrt
