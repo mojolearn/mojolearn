@@ -193,6 +193,19 @@ paper.
    `HW_MAX_CLAMP` is an LLVM constant fold; neither is a branch the algorithm
    takes, and no amount of decision recording makes a vendor-arithmetic
    question answerable on one vendor.
+   **AND IT HAS NOW BEEN EXHIBITED WITHOUT A SABOTAGE AT ALL, ON A SHIPPING
+   FIXTURE, WHICH IS QUALITATIVELY STRONGER EVIDENCE THAN ANY ARM.** The first
+   run of the widened metrics card, 2026-08-24: `metrics.mi.terms` and
+   `metrics.mi_swapped.terms` differ, their accumulators differ on 36 of 36
+   cells (a row-major fold against a column-major fold of the same 36 terms),
+   and the two RETURNED SCORES are equal BIT FOR BIT at `522cc1ae6bc734b9`. No
+   injected fault, no perturbation, just two legitimate orderings of one sum
+   agreeing in the answer and disagreeing everywhere behind it. Under the
+   previous card, which recorded only the returned score, that entire
+   divergence was invisible, and `MI(pred, truth)` was not recorded in any form.
+   And the coincidence is NOT a law: on a second fixture the same two folds
+   DIFFER in the returned score. So the old card was not merely weak, it was
+   weak in a way that depended on which fixture ran.
    PRIOR-ART CHECK NEEDED: reproducibility work generally reports final-output
    equality, so the question is whether anyone has shown it INSUFFICIENT.
 
