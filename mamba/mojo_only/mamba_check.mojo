@@ -320,6 +320,53 @@ TWO BLIND SPOTS FOUND WHILE MEASURING THAT, both in the instruments
    asserts every file exists and is non-empty before comparing, and fails
    loudly as a CONTROL failure rather than reporting a difference.
 
+`adv_signed_zeros`: WHAT IS ACTUALLY TESTED AND WHAT IS NOT
+------------------------------------------------------------
+`adv_signed_zeros_b2_l8_d8`: inputs 11/11 byte-identical (including all 41
+planted NEGATIVE zeros in `x`, so two independent generators agree on the
+sign bit itself), 12/12 stages PASS at rtol = 1e-7.
+
+**THE TOLERANCE PASS IS WORTH NOTHING HERE.** `np.isclose` treats `+0.0` and
+`-0.0` as equal, so a block that laundered every negative zero would score
+12/12. Contract section 6's claims are BIT claims and are checked by SIGN
+BIT, by bits, never with `==` (Metal flushes compare operands, row 49).
+
+    stage          cells   our 0   our -0   ref 0   ref -0   sign bits
+    norm.out         128      73       41      73       41   AGREE 73/73
+    in_proj.out      512     256        0     256        0   AGREE 256/256
+    gate.out         256     128       84     128       84   AGREE 128/128
+    out_proj.out     128      64        0      64        0   AGREE 64/64
+    block.out        128      64        0      64        0   AGREE 64/64
+    conv.out .. scan.h_last (7 stages)                       NO ZEROS AT ALL
+
+585 zero cells compared by sign bit, 0 mismatches. Section 6's four claims,
+scored honestly:
+
+1. **`pinned_mul`'s `-0.0` addend keeps a negative zero product** -- TESTED,
+   AND INDEPENDENTLY. 41 negative zeros survive S3/S4 into `norm.out` and 84
+   survive S12 into `gate.out`, and every sign bit matches the float64
+   reference. A `+0.0` addend would have laundered all 125 to `+0.0`. This is
+   the one section 6 claim the corpus can settle, and it settles it.
+2. **The S1 fold seeds `+0.0`, so an all-zero row sums to `+0.0`** --
+   REACHED AND MEASURED, but not independently: the corpus has no
+   `norm.sumsq` stage, so this file dumps ours next to the corpus's and reads
+   it. The case has 8 all-zero token rows of 16, 4 of them entirely `-0.0`,
+   and `norm.sumsq` on all four is exactly `0x00000000`. A `-0.0` seed would
+   have given `0x80000000` (`fma(-0, -0, -0) = -0`). The S10 half of the same
+   clause is NOT reached: `scan.y` holds no zeros here.
+3. **The conv's bias seed makes the sign of a zero conv output a pure
+   function of the input bits** -- NOT REACHED, and structurally so.
+   `conv.out` has 0 zeros in 256 cells, because the conv bias is a nonzero
+   hashed value and the accumulator is seeded WITH it, so the output is
+   essentially never exactly zero. No corpus case can test this clause by
+   accident; it needs a fixture that plants a zero conv bias.
+4. **The inherited clause, `k = dt_rank = 1` laundering a `-0.0` dt product
+   to `+0.0`** -- NOT REACHED: `dt_proj.out` holds no zeros here either.
+
+So two of four are settled at this case, one is measured but not independent,
+and one is untestable by construction. That is the answer to "can the shape
+express the property", asked before trusting the pass rather than after.
+
 NAMING, recorded so nobody rediscovers it: the corpus's `scan.y` is `y + u*D`,
 which is OUR `skip.out`; our own `scan.y` (before the D skip) has NO corpus
 counterpart and is deliberately not dumped. The corpus's `block.out` is our
@@ -1508,6 +1555,13 @@ def dump_corpus_case(
     # TOKEN-major stages: the corpus stores these [B, L, W] too, so the bytes
     # go out as they are.
     write_f32(dump_dir + "/norm.out.f32", dev[1])
+    # NOT a corpus stage (the tool lists it as "no reference" and moves on).
+    # Written because contract section 6's SECOND signed-zero claim -- the S1
+    # fold seeds `+0.0`, so an all-zero row sums to `+0.0` on every vendor --
+    # has no corpus counterpart and would otherwise be inferred rather than
+    # measured. `adv_signed_zeros` plants whole -0.0 TOKENS, so the rows that
+    # test it exist in that case and nowhere else.
+    write_f32(dump_dir + "/norm.sumsq.f32", dev[0])
     write_f32(dump_dir + "/x_proj.out.f32", dev[7])
     write_f32(dump_dir + "/out_proj.out.f32", dev[14])
     write_f32(dump_dir + "/block.out.f32", dev[15])  # ours: residual.out
