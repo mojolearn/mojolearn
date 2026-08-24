@@ -1,0 +1,11 @@
+{
+  "card": "knn_reg_k50.card",
+  "kind": "knn_reg",
+  "predictions": "65d7e53c243ce07a3fb0b2e92e4d2ccf7f4c11045cacb030bf76cef18f15eb7e",
+  "seconds": 0.1,
+  "spec": {
+    "n_neighbors": 50
+  },
+  "stages": 7,
+  "used_query_tile": 256
+}

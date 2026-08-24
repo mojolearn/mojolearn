@@ -1,0 +1,11 @@
+{
+  "card": "ols_200k.card",
+  "coef": "25458da1e378f22975070e023f48496c3a1a9d0c73fa0a6a05bb6015ea0cb1f8",
+  "intercept": "63d6ab4c8bc1e94b60fe07ae75149dbb2d1d0a964d5f6699b617898a9b3f3dda",
+  "intercept_value": -0.005040970107007325,
+  "kind": "ols",
+  "predictions": "3e1baff31c41083aa50e1c926a216244ce86d1bbb4af04e4481d466c157ce465",
+  "seconds": 0.06,
+  "spec": {},
+  "stages": 9
+}

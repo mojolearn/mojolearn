@@ -1,0 +1,13 @@
+{
+  "card": "kde_linear.card",
+  "kind": "kde",
+  "log_density": "36de0d747357cfeeb5ea2a6a679efc4636da7b1fe47c5042caf228067bc96e16",
+  "n_sentinel": 0,
+  "score": -81444.29801559448,
+  "seconds": 1.73,
+  "spec": {
+    "bandwidth": 8.0,
+    "kernel": "linear"
+  },
+  "stages": 7
+}

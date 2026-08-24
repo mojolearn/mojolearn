@@ -1,0 +1,44 @@
+== metrics/mojo_only/label_metrics_check.mojo [IDENTICAL] ==
+check_contingency_matrix_exact [IDENTICAL]
+    k=7 SMEM arm, minLabel=3: 49 cells EXACT, sum 4099
+    k=31 SMEM arm, minLabel=3: 961 cells EXACT, sum 4099
+    k=40 GLOBAL arm, minLabel=3: 1600 cells EXACT, sum 4099
+  OK
+check_accuracy_exact [IDENTICAL]
+    n=0: accuracy_score: n must be positive, got 0 (0 / 0 is refused by name)
+    count 3315 of 4099 EXACT; value 0.8087338 0x3f4f092e bitwise
+  OK
+check_rand_index_exact [IDENTICAL]
+    bitwise OK  rand_index got 0.7756771729847333 (0x3fe8d258ef472429) oracle 0.7756771729847333 (0x3fe8d258ef472429)
+    a=1942300 b=4572497 EXACT (two host tallies agree); size<2 -> 1.0
+  OK
+check_adjusted_rand_index [IDENTICAL]
+    bitwise OK  adjusted_rand_index got 0.5034975459487259 (0x3fe01ca6e2aee9c2) oracle 0.5034975459487259 (0x3fe01ca6e2aee9c2)
+    bitwise OK  adjusted_rand_index(singleton) got 0.5030740847594559 (0x3fe0192ed2b0394e) oracle 0.5030740847594559 (0x3fe0192ed2b0394e)
+    size<2, both-constant, perfect -> 1.0; pred constant -> 0.0
+  OK
+check_entropy_epilogue [IDENTICAL]
+    bitwise OK  entropy got 1.495345115661621 (0x3ff7ecef00000000) oracle 1.495345115661621 (0x3ff7ecef00000000)
+    vs Float64 sklearn spelling: rel 4.084905135671803e-09
+    constant -> 0.0; size 0 -> 1.0
+  OK
+check_mutual_info_epilogue [IDENTICAL]
+    bitwise OK  mutual_info_score got 0.419661283493042 (0x3fdadbbb00000000) oracle 0.419661283493042 (0x3fdadbbb00000000)
+    vs Float64 sklearn spelling: rel 1.506751522643192e-07
+    product-structured 4096: MI == 0.0 exactly
+    size=0: mutual_info_score: size must be positive, got 0 (0 / 0 is refused by name)
+  OK
+check_homogeneity_completeness_v [IDENTICAL]
+    bitwise OK  homogeneity got 0.36577812897589657 (0x3fd768e8ab62c974) oracle 0.36577812897589657 (0x3fd768e8ab62c974)
+    bitwise OK  completeness got 0.389522234131822 (0x3fd8edeeaa2a4e53) oracle 0.389522234131822 (0x3fd8edeeaa2a4e53)
+    bitwise OK  v_measure got 0.3772769641179931 (0x3fd8254e479af0c7) oracle 0.3772769641179931 (0x3fd8254e479af0c7)
+    vs Float64 sklearn spelling: h rel 2.733871230699479e-07 c rel 2.6675775708798407e-07 v rel 2.7017664265912615e-07
+    perfect: h 1.0 (0x3ff0000000000000) v 1.0
+    MI(truth, pred) 0x3fe0589f00000000 MI(pred, truth) 0x3fe0589ee0000000 (transposed fold differs)
+    bitwise OK  v_measure(singleton) got 0.3770284950611923 (0x3fd8213c1ffcaab2) oracle 0.3770284950611923 (0x3fd8213c1ffcaab2)
+    constant truth (1,0,0), constant pred (0,1,0), both constant (1,1,1), independent (0,0,0), singleton: all as sklearn defines
+  OK
+check_label_epilogue_order_is_visible [IDENTICAL]
+    MI ascending 0x3ed6ddd8 descending 0x3ed6ddd9 float64 0x3fdadbbb43e53a3e
+  OK
+ALL GROUP A CHECKS PASSED [IDENTICAL]

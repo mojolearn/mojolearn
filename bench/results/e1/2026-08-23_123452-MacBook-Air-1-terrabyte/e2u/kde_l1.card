@@ -1,0 +1,9 @@
+# kde: n_train=20000 n_query=2000 n_features=24 kernel=gaussian metric=l1 weighted=False
+# format: mojolearn-identity-trace v1
+0	kde.dists	f32	40000000	6e7e957aea98023a
+1	kde.logk	f32	40000000	0240cfc733335077
+2	kde.rowmax	f32	2000	32a0ec90fb15791f
+3	kde.logsumexp	f32	2000	4d66b075b4e6061f
+4	kde.logsw	f32	1	7dd9e6c7678be353
+5	kde.lognorm	f32	1	319ccf45f10fc308
+6	kde.scores	f32	2000	75c20ace1abc5bcf

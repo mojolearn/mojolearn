@@ -1,0 +1,35 @@
+# svm card [FAST] fixture F2.xor rbf gamma=0.5 C=10 n=240 k=2
+# svm.svc_fit n_rows=240 n_cols=2 kernel=2 C=10.0 tol=0.001
+# format: mojolearn-identity-trace v1
+0	svm.input.x	f32	480	f1bede5adf1cbefb
+1	svm.input.y	f32	240	cb5d8e9c6b5ab6a5
+2	svm.init.f	f32	240	41d87f54894e7aa5
+3	svm.iter000.ws_idx	i32	240	c0bf736ed055bca5
+4	svm.iter000.diff	f32	1	4d25b67f9dce80b5
+5	svm.iter000.alpha	f32	240	ce53e1a5efdb4e3d
+6	svm.iter000.f	f32	240	f4ae17ddbfe863b0
+7	svm.iter001.ws_idx	i32	240	c0bf736ed055bca5
+8	svm.iter001.diff	f32	1	661f8c75b2b325c1
+9	svm.iter001.alpha	f32	240	0445c0436c94281d
+10	svm.iter001.f	f32	240	183abe1f611f6c31
+11	svm.iter002.ws_idx	i32	240	c0bf736ed055bca5
+12	svm.iter002.diff	f32	1	f1c2cfe1e074e598
+13	svm.iter002.alpha	f32	240	1828e6b6c2640903
+14	svm.iter002.f	f32	240	d1ed86b4e0f6895c
+15	svm.iter003.ws_idx	i32	240	c0bf736ed055bca5
+16	svm.iter003.diff	f32	1	39f1a90e9b0de817
+17	svm.iter003.alpha	f32	240	c9b9e2e5a8766df9
+18	svm.iter003.f	f32	240	08dd42b7a8f10015
+19	svm.iter004.ws_idx	i32	240	c0bf736ed055bca5
+20	svm.iter004.diff	f32	1	60a52b7e8732f6c5
+21	svm.iter004.alpha	f32	240	c9b9e2e5a8766df9
+22	svm.iter004.f	f32	240	08dd42b7a8f10015
+23	svm.b	f32	1	4e69f66b28868cb8
+24	svm.dual_coefs	f32	16	6c9599b969305b49
+25	svm.support_idx	i32	16	99f8a3e31359f7f8
+26	svm.n_iter	f32	1	4d03bb7f9db1a2ce
+27	svm.n_outer_iter	f32	1	4b05767f9bffad95
+28	svm.predict.decision.x	f32	554	cd8eb29d1bfbba34
+29	svm.predict.decision.out	f32	277	9e24256f7397439a
+30	svm.predict.class.x	f32	554	cd8eb29d1bfbba34
+31	svm.predict.class.out	f32	277	69efac922cd70328
