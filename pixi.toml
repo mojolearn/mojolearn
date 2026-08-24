@@ -959,6 +959,10 @@ check-mamba-block = "mojo run -I . mamba/mojo_only/mamba_check.mojo"
 # arima: SOURCE ONLY, never built -- these two are expected to FAIL until a compile slot lands them
 check-arima = "mojo run -I . arima/mojo_only/arima_check.mojo"
 arima-card = "mojo run -I . arima/arima_main.mojo"
+# spectral: SOURCE ONLY, no gate and no sabotage has ever run. The five sabotage arms written
+# 2026-08-23 have NEVER BEEN COMPILED, so a syntax error in them would break this build.
+check-spectral = "mojo run -I . spectral/mojo_only/spectral_check.mojo"
+spectral-card = "mojo run -I . spectral/spectral_main.mojo"
 check-if = "mojo run -I . isolation_forest/mojo_only/if_check.mojo"
 
 # The depthwise IDENTITY TRACE: one hash record per stage of a fit, so a
