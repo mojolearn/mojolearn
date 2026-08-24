@@ -563,7 +563,7 @@ struct KalmanWorkspace(Movable):
 
 def init_batched_kalman_matrices(
     ctx: DeviceContext,
-    params: ARIMAParams,
+    mut params: ARIMAParams,
     batch_size: Int,
     order: ARIMAOrder,
     mut ws: KalmanWorkspace,
@@ -593,7 +593,7 @@ def batched_kalman_filter(
     ctx: DeviceContext,
     mut d_ys: DeviceBuffer[DType.float32],
     nobs: Int,
-    params: ARIMAParams,
+    mut params: ARIMAParams,
     order: ARIMAOrder,
     batch_size: Int,
     fc_steps: Int,

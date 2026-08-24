@@ -228,7 +228,7 @@ def _grid(batch_size: Int) -> Int:
 
 def pack(
     ctx: DeviceContext,
-    params: ARIMAParams,
+    mut params: ARIMAParams,
     order: ARIMAOrder,
     batch_size: Int,
     mut param_vec: DeviceBuffer[DType.float32],

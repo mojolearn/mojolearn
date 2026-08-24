@@ -146,7 +146,7 @@ def _refuse_non_finite(
     _ = h^
 
 
-def _copy_params(ctx: DeviceContext, src: ARIMAParams, mut dst: ARIMAParams, order: ARIMAOrder, batch_size: Int) raises:
+def _copy_params(ctx: DeviceContext, mut src: ARIMAParams, mut dst: ARIMAParams, order: ARIMAOrder, batch_size: Int) raises:
     if order.k != 0:
         ctx.enqueue_copy(dst_buf=dst.mu.create_sub_buffer[DType.float32](0, batch_size), src_buf=src.mu.create_sub_buffer[DType.float32](0, batch_size))
     if order.p != 0:
