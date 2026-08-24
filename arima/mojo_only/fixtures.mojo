@@ -58,7 +58,7 @@ struct OrderCase(Movable, Copyable):
 
 
 def order_table() -> List[OrderCase]:
-    """Seven orders, each chosen for a BRANCH, not for coverage of a grid.
+    """Eight orders, each chosen for a BRANCH, not for coverage of a grid.
 
         arma11_k    (1,0,1) k=1   n_diff = 0, intercept ON  -> the alpha0
                                   `(I - T*)^-1 c` path, r = 2
@@ -72,11 +72,24 @@ def order_table() -> List[OrderCase]:
                                   once; rd = 4
         ar2_unit    (2,0,0) k=0   phi_2 planted at -1 + 1e-3 so
                                   `rd == 2 && p == 2` FIRES (T[1] := -0.99)
-        sarima      (1,1,1)(1,1,1)[4]  seasonal differencing: the `D` loops in
-                                  Z and T, n_diff = 5, rd = 8 == RD_MAX
+        sarima_full (1,1,1)(1,1,1)[2]  seasonal EVERYTHING: the `D` loops in
+                                  Z and T, the seasonal AR and MA arms of
+                                  reduced_polynomial, n_diff = 3, r = 4,
+                                  rd = 7
+        sarima_rd8  (1,1,0)(0,1,1)[3]  n_diff = 4, r = 4, rd = 8 == RD_MAX,
+                                  the largest state this lane accepts
 
     `rd <= 8` and `r <= 5` hold for every row; anything larger is refused by
     name in `validate_order` and is in `arima/UNPORTED.tsv`.
+
+    A ROW OF THIS TABLE WAS ITSELF REFUSED, and the arithmetic is written out
+    here so it cannot happen again quietly. The first version of the seasonal
+    row was `(1,1,1)(1,1,1)[4]`, which the docstring claimed had `rd = 8`.
+    It does not: `n_phi = p + s*P = 1 + 4 = 5`, `n_theta = q + s*Q = 5`, so
+    `r = max(5, 6) = 6` and `rd = n_diff + r = 5 + 6 = 11`. Both `r > 5` and
+    `rd > 8`, so `validate_order` would have raised and the gate would have
+    died on its last order rather than testing it. Caught by computing every
+    row before the first run, not by the run.
     """
     var out = List[OrderCase]()
     out.append(OrderCase(ARIMAOrder(1, 0, 1, 0, 0, 0, 0, 1, 0), String("arma11_k")))
@@ -85,7 +98,8 @@ def order_table() -> List[OrderCase]:
     out.append(OrderCase(ARIMAOrder(1, 1, 1, 0, 0, 0, 0, 0, 0), String("arima111")))
     out.append(OrderCase(ARIMAOrder(2, 1, 2, 0, 0, 0, 0, 1, 0), String("arima212")))
     out.append(OrderCase(ARIMAOrder(2, 0, 0, 0, 0, 0, 0, 0, 0), String("ar2_unit")))
-    out.append(OrderCase(ARIMAOrder(1, 1, 1, 1, 1, 1, 4, 0, 0), String("sarima")))
+    out.append(OrderCase(ARIMAOrder(1, 1, 1, 1, 1, 1, 2, 0, 0), String("sarima_full")))
+    out.append(OrderCase(ARIMAOrder(1, 1, 0, 0, 1, 1, 3, 0, 0), String("sarima_rd8")))
     return out^
 
 
@@ -111,10 +125,27 @@ def arima_params_fixture(
     product and the Jones `tanh` both meet a negative zero (ADDENDUM 11);
     series 1 gets `sigma2 = 1.0` exactly so one cell of `RQ` is a copy.
 
-    `unit_root = True` sets `ar[1]` of every series to `-0.999`, which is
-    what `ar2_unit` needs: after the Jones transform `phi_2` lands within
-    0.01 of `-1` and `init_batched_kalman_matrices`'s guard rewrites
-    `T[1]` to `-0.99`.
+    `unit_root = True` sets `ar[1]` of every series to `-20.0`, which is what
+    `ar2_unit` needs to REACH `init_batched_kalman_matrices`'s guard.
+
+    The value has to be that large and the reason is worth writing down.
+    These parameters are UNTRANSFORMED: the Jones transform stands between
+    them and `T`, and its whole job is to map the real line onto the
+    stationary region, so no untransformed value produces a `phi_2` outside
+    `(-1, 1)`. `T[1]` is exactly `tanh(ar[1] / 2)` after the clamp (for
+    `p = 2, s = 0`, `reduced_polynomial` returns the transformed `ar[1]`
+    unchanged, and the `j` loop rewrites only `new[0]`). So reaching
+    `|T[1] + 1| < 0.01` means driving `tanh(x/2)` into the `-0.9999` CLAMP:
+
+        x = -0.999  ->  tanh(x/2) = -0.4617  ->  |T[1]+1| = 0.538  guard no
+        x = -4.0    ->  tanh(x/2) = -0.9640  ->  |T[1]+1| = 0.036  guard no
+        x = -10.0   ->  clamped to  -0.9999  ->  |T[1]+1| = 1e-4   FIRES
+        x = -20.0   ->  clamped to  -0.9999  ->  |T[1]+1| = 1e-4   FIRES
+
+    The first version of this fixture used `-0.999`, read as though it were
+    the transformed coefficient, and the guard was UNREACHABLE. The gate
+    caught it by asserting the guard fired rather than by assuming it did,
+    which is the entire argument for `verify reach, not output`.
     """
     var mu = List[Float32]()
     var ar = List[Float32]()
@@ -138,7 +169,7 @@ def arima_params_fixture(
         ma[0] = Float32(-0.0)
     if unit_root and order.p >= 2:
         for bid in range(batch_size):
-            ar[order.p * bid + 1] = Float32(-0.999)
+            ar[order.p * bid + 1] = Float32(-20.0)
     # every kind must hold at least one element so the buffers have a
     # pointer to pass, matching ARIMAParams' `max(1, ...)` allocation
     if len(mu) == 0:

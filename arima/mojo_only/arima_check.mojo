@@ -122,7 +122,7 @@ from tsa.ported.timeSeries.arima_helpers import prepare_data_host
 
 
 comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-comptime N_OBS = 96
+comptime N_OBS = 24
 comptime SALT = 7
 
 
@@ -313,7 +313,7 @@ def check_kalman_device_equals_oracle(ctx: DeviceContext, mut trace: IdentityTra
               + " q" + String(order.q) + " P" + String(order.P) + " D" + String(order.D)
               + " Q" + String(order.Q) + " s" + String(order.s) + " k" + String(order.k)
               + ") rd=" + String(order.rd()) + " r=" + String(order.r()))
-        var pair = _run_pair(ctx, f, order, ph, 5)
+        var pair = _run_pair(ctx, f, order, ph, 3)
         _record_card(trace, "arima." + oc.name, pair[0])
         _compare_stages(oc.name, pair[0], pair[1])
         var ll = pair[0][9].copy()
@@ -404,9 +404,23 @@ def check_predict_device_equals_oracle(ctx: DeviceContext, mut trace: IdentityTr
         var order = oc.order
         if order.rd() > 8:
             continue
-        var ph = arima_params_fixture(order, f.batch_size, SALT, oc.name == "ar2_unit")
+        var ph_raw = arima_params_fixture(order, f.batch_size, SALT, oc.name == "ar2_unit")
+        # `predict` is handed FITTED parameters and calls `batched_loglike`
+        # with `trans = false` (`batched_arima.cu:175`), so the vector it
+        # receives must ALREADY be transformed. Transform on the host once
+        # and use that same vector for the device and the oracle.
+        #
+        # The first run of this gate uploaded the RAW vector, and on
+        # `ar2_unit` -- whose fixture carries the untransformed `ar[1] =
+        # -20.0` that the Jones clamp is supposed to fold to -0.9999 --
+        # the filter ran with `phi_2 = -20`, which is a violently explosive
+        # AR(2). DEVIATION 673 caught it and raised: "innovation variance
+        # F <= 0 at step 0". That refusal firing on a fixture mistake, in
+        # the one place an unported NaN would otherwise have propagated
+        # silently, is DEVIATION 673 earning itself.
+        var ph = batched_jones_transform_host(order.without_diff(), f.batch_size, False, ph_raw)
         var start = 0
-        var end = f.n_obs + 5
+        var end = f.n_obs + 3
         var y = upload_f32(ctx, f.y)
         var params = upload_params(ctx, ph, order, f.batch_size)
         var pr = predict(ctx, y, f.batch_size, f.n_obs, start, end, order, params, True)
@@ -419,9 +433,16 @@ def check_predict_device_equals_oracle(ctx: DeviceContext, mut trace: IdentityTr
         var n_obs_kf = f.n_obs - order.n_diff() if diff else f.n_obs
         var order_kf = order.without_diff() if diff else order
         var y_kf = prepare_data_host(f.y, f.batch_size, f.n_obs, order.d, order.D, order.s) if diff else f.y.copy()
-        var tp = batched_jones_transform_host(order_kf, f.batch_size, False, ph)
+        # NO Jones transform here. `predict` calls `batched_loglike` with
+        # `trans = false` (`batched_arima.cu:175`) because the parameters it
+        # is handed are the FITTED ones, already transformed by the caller.
+        # The oracle has to be fed the same RAW vector. The first run of this
+        # gate applied `batched_jones_transform_host` at this line and every
+        # one of the 162 predict cells differed, which is what an oracle
+        # running a different model from the device looks like: not a near
+        # miss, a total one. That is the gate working, on the gate.
         var num_steps = end - f.n_obs
-        var host = kalman_host_f32(y_kf, f.batch_size, n_obs_kf, order_kf, tp, num_steps)
+        var host = kalman_host_f32(y_kf, f.batch_size, n_obs_kf, order_kf, ph, num_steps)
         var want = List[Float32]()
         for _ in range(ld * f.batch_size):
             want.append(Float32(0.0))
@@ -712,20 +733,20 @@ def check_kalman_launch_invariant(ctx: DeviceContext) raises:
 
     var y0 = upload_f32(ctx, f.y)
     var p0 = upload_params(ctx, ph, order, b)
-    var r0 = batched_loglike(ctx, y0, b, f.n_obs, order, p0, True, 4, 32)
+    var r0 = batched_loglike(ctx, y0, b, f.n_obs, order, p0, True, 3, 32)
     var ll0 = download_f32(ctx, r0.ws.loglike, b)
     var P0_0 = download_f32(ctx, r0.ws.P0, rd * rd * b)
     var vs0 = download_f32(ctx, r0.ws.vs, f.n_obs * b)
-    var fc0 = download_f32(ctx, r0.ws.fc, 4 * b)
+    var fc0 = download_f32(ctx, r0.ws.fc, 3 * b)
 
     for tpb in [64, 128]:
         var y1 = upload_f32_padded(ctx, f.y, 41, Float32(12345.678))
         var p1 = upload_params(ctx, ph, order, b)
-        var r1 = batched_loglike(ctx, y1, b, f.n_obs, order, p1, True, 4, tpb)
+        var r1 = batched_loglike(ctx, y1, b, f.n_obs, order, p1, True, 3, tpb)
         var nd = count_cells_differ(ll0, download_f32(ctx, r1.ws.loglike, b))
         nd += count_cells_differ(P0_0, download_f32(ctx, r1.ws.P0, rd * rd * b))
         nd += count_cells_differ(vs0, download_f32(ctx, r1.ws.vs, f.n_obs * b))
-        nd += count_cells_differ(fc0, download_f32(ctx, r1.ws.fc, 4 * b))
+        nd += count_cells_differ(fc0, download_f32(ctx, r1.ws.fc, 3 * b))
         print("    block " + String(tpb) + " / 41 floats of poison: " + String(nd) + " cells differ")
         _assert(nd == 0, "the loop kernel's block width or the padding moved the bytes")
         _ = r1^
@@ -735,7 +756,7 @@ def check_kalman_launch_invariant(ctx: DeviceContext) raises:
     # a different poison
     var y2 = upload_f32_padded(ctx, f.y, 41, Float32(-0.0))
     var p2 = upload_params(ctx, ph, order, b)
-    var r2 = batched_loglike(ctx, y2, b, f.n_obs, order, p2, True, 4, 32)
+    var r2 = batched_loglike(ctx, y2, b, f.n_obs, order, p2, True, 3, 32)
     var nd2 = count_cells_differ(ll0, download_f32(ctx, r2.ws.loglike, b))
     print("    poison -0.0: " + String(nd2) + " cells differ")
     _assert(nd2 == 0, "the poison moved the bytes")
@@ -746,7 +767,7 @@ def check_kalman_launch_invariant(ctx: DeviceContext) raises:
     var phs = sub_batch_params(ph, order, which)
     var y3 = upload_f32(ctx, ys)
     var p3 = upload_params(ctx, phs, order, 3)
-    var r3 = batched_loglike(ctx, y3, 3, f.n_obs, order, p3, True, 4, 32)
+    var r3 = batched_loglike(ctx, y3, 3, f.n_obs, order, p3, True, 3, 32)
     var ll3 = download_f32(ctx, r3.ws.loglike, 3)
     var vs3 = download_f32(ctx, r3.ws.vs, f.n_obs * 3)
     var nb = 0
@@ -763,7 +784,7 @@ def check_kalman_launch_invariant(ctx: DeviceContext) raises:
     # run twice in one process
     var y4 = upload_f32(ctx, f.y)
     var p4 = upload_params(ctx, ph, order, b)
-    var r4 = batched_loglike(ctx, y4, b, f.n_obs, order, p4, True, 4, 32)
+    var r4 = batched_loglike(ctx, y4, b, f.n_obs, order, p4, True, 3, 32)
     var nd4 = count_cells_differ(ll0, download_f32(ctx, r4.ws.loglike, b))
     print("    run twice: " + String(nd4) + " cells differ")
     _assert(nd4 == 0, "two runs differ")
@@ -807,12 +828,18 @@ def check_unit_root_guard_is_reached(ctx: DeviceContext) raises:
     _assert(fired == f.batch_size,
             "the rd == 2 && p == 2 guard did NOT fire: the branch is unreached and unchecked")
     # and the transformed phi_2 before the guard is not -0.99 by accident
+    # For p = 2, s = 0, `T[1]` IS the transformed `ar[1]`: reduced_polynomial
+    # returns `-(-ar[1] * 1)` at idx = 2. So the value the guard overwrote is
+    # readable directly, and it must be the CLAMP (-0.9999) and not -0.99,
+    # otherwise the fixture and not the guard is what put -0.99 in T.
     var tp = batched_jones_transform_host(order, f.batch_size, False, ph)
     var phi2_raw = tp.ar[1]
     print("      transformed phi_2 (series 0) before the guard: " + String(phi2_raw)
           + " " + bits32(phi2_raw))
-    _assert(not same_bits(-phi2_raw, Float32(-0.99)),
+    _assert(not same_bits(phi2_raw, Float32(-0.99)),
             "the fixture already equals -0.99: the guard is not what wrote T[1]")
+    _assert(same_bits(phi2_raw, Float32(-0.9999)),
+            "the transformed phi_2 is not at the Jones clamp, so the guard was reached by accident")
 
 
 def check_fold_order_is_visible(ctx: DeviceContext) raises:

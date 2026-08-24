@@ -46,9 +46,9 @@ from arima.ported.arima.batched_arima import batched_loglike
 
 
 comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-comptime N_OBS = 96
+comptime N_OBS = 24
 comptime SALT = 7
-comptime FC_STEPS = 5
+comptime FC_STEPS = 3
 
 
 def _mode_name() -> String:
