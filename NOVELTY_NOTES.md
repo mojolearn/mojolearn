@@ -163,6 +163,21 @@ paper.
    equality is the WRONG INSTRUMENT for a determinism contract, and cannot
    falsify the clauses such a contract is made of. Evidence:
    `mamba/mojo_only/mamba_check.mojo`'s sabotage ledger, IDENTITY_PATHS row 55.
+   **INDEPENDENTLY REPRODUCED THE SAME NIGHT IN AN UNRELATED ALGORITHM**, which
+   is what moves this off "a mamba quirk". holtwinters, 9 sabotage arms run on
+   one M4: `LS_TIE` moves 9 of 37 stages and 64 of 2800 cells and leaves the
+   FINAL FORECAST bit-identical. Stronger still, `CRIT_ORDER` moves ZERO cells
+   of 2800 -- it changes one recorded LABEL, the stop criterion -- so a gate
+   comparing parameters and fitted components passes it for ever, and it is
+   caught only because the criterion is itself a recorded stage. That extends
+   the claim: it is not only per-STAGE recording that is required, it is
+   recording the non-numeric DECISIONS too, or a whole class of divergence has
+   no instrument at all. A third arm, `ROTATE_CONV`, is reached by one fixture
+   in six because the other five run a single block where the rotation is the
+   identity -- an arm can look inert for a reason that has nothing to do with
+   absorption, so reach must be measured per fixture as well.
+   Evidence: `holtwinters/mojo_only/hw_check.mojo` arm table, IDENTITY_PATHS
+   row 57.
    PRIOR-ART CHECK NEEDED: reproducibility work generally reports final-output
    equality, so the question is whether anyone has shown it INSUFFICIENT.
 
