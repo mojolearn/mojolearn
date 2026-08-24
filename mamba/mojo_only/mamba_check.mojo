@@ -270,6 +270,56 @@ TWO WAYS THIS CROSS-CHECK COULD HAVE PASSED WHILE TESTING NOTHING:
    has none. So the check is not vacuous, but 53 cells across two stages are
    carried by atol rather than by rtol and are not evidence of much.
 
+THE ADVERSARIAL CASES: `adv_softplus_guard`, AND WHAT IT CANNOT DO
+-------------------------------------------------------------------
+Run 2026-08-24. `adv_softplus_guard_b2_l8_d8` (B=2, L=8, d_model=8): inputs
+11/11 byte-identical, **12/12 stages PASS at rtol = 1e-7, atol = 1e-6**.
+
+It was taken up in the hope that it would close the loop on
+`S14_THRESHOLD_10`, whose only current falsification uses a band THIS FILE
+plants for itself. **It does not close it, and that is now measured rather
+than argued.** Where the case's softplus inputs actually land, read off the
+float64 reference:
+
+    softplus input, 256 cells   min 19.8748   max 20.1038
+      <= 20, the log1p(exp) arm                190 cells
+      >  20, the identity arm                   66 cells
+      inside [8, 14], the DISTINGUISHING band    0 cells
+
+The case straddles the boundary at 20; it does not enter the band where a
+guard moved to 10 can change a bit. Contract section 4 says exactly this
+("a fixture that only straddles 20 passes it vacuously; the corpus's
+`adv_softplus_guard` case is kept anyway, as the boundary's regression
+record") and the contract is right.
+
+**MEASURED, NOT INFERRED.** The case was dumped again from a build with
+`-D MOJOLEARN_MAMBA_SABOTAGE_S14_THRESHOLD_10=1` and compared to the clean
+dump BY BYTES: all 23 files byte-identical, zero differing. The arm is not
+merely within tolerance on this case, it is BITWISE INERT on it. At x near 20
+the two arms differ by `log1p(exp(-20))`, about 2.06e-9, which is roughly
+0.001 ulp of 20 and rounds away completely.
+
+So the independence gap on the S14 threshold clause STAYS OPEN: the only
+fixture that falsifies it is still one we wrote. What the corpus case does
+buy is real but different -- both ARMS of the guard validated against an
+independent float64 reference, 190 cells through `log1p(exp(x))` and 66
+through the identity, all within rtol 1e-7. The guard's PLACEMENT is
+independently checked; a guard MOVED is not.
+
+TWO BLIND SPOTS FOUND WHILE MEASURING THAT, both in the instruments
+--------------------------------------------------------------------
+1. **The corpus dump did not run under a sabotaged build.** It sat inside
+   the clean-build branch of `main`, so `-D ...SABOTAGE...` wrote no dumps at
+   all -- and the one question the adversarial cases exist to answer is
+   whether an arm reaches them. It is hoisted above the verdict branch now
+   and runs in both modes.
+2. **The shell comparison that found it was itself blind.** `cmp -s a b`
+   reports "differ" when `b` does not exist, so an EMPTY dump directory
+   looked like a stage that had moved on every cell. The first reading of
+   this experiment was therefore exactly backwards. The comparison now
+   asserts every file exists and is non-empty before comparing, and fails
+   loudly as a CONTROL failure rather than reporting a difference.
+
 NAMING, recorded so nobody rediscovers it: the corpus's `scan.y` is `y + u*D`,
 which is OUR `skip.out`; our own `scan.y` (before the D skip) has NO corpus
 counterpart and is deliberately not dumped. The corpus's `block.out` is our
@@ -1579,6 +1629,26 @@ def main() raises:
 
     _ = check_card_tags(TRACE_PATH)
 
+    # THE CORPUS DUMP RUNS IN BOTH BUILD MODES, and it has to. It lived
+    # inside the clean-build branch below until 2026-08-24, which meant a
+    # SABOTAGED build silently wrote no dumps at all -- so the corpus could
+    # never be used to measure whether an arm reaches it, which is the one
+    # question the adversarial cases exist to answer. The shell comparison
+    # that found it was itself blind: `cmp` reports "differ" for a file that
+    # does not exist, so an empty directory looked like a stage that moved on
+    # every cell. Both halves of that are recorded in this file's header.
+    if env_on("MOJOLEARN_MAMBA_CORPUS_CASE"):
+        var k = env_int("MOJOLEARN_MAMBA_CORPUS_CASE", 0)
+        var dd = String(getenv("MOJOLEARN_MAMBA_CORPUS_DUMP"))
+        if dd == "":
+            raise Error(
+                "mamba_check: set MOJOLEARN_MAMBA_CORPUS_DUMP to an"
+                " existing directory for the stage dumps"
+            )
+        dump_corpus_case(
+            ctx, k, dd, env_on("MOJOLEARN_MAMBA_CORPUS_TRANSPOSE_CONTROL")
+        )
+
     comptime if BLOCK_ANY_SABOTAGE:
         if n_moved == 0:
             raise Error(
@@ -1636,20 +1706,6 @@ def main() raises:
         else:
             print(
                 "clause (d): SKIPPED (set MOJOLEARN_MAMBA_CHECK_CLAUSE_D=1)"
-            )
-        if env_on("MOJOLEARN_MAMBA_CORPUS_CASE"):
-            var k = env_int("MOJOLEARN_MAMBA_CORPUS_CASE", 0)
-            var dd = String(getenv("MOJOLEARN_MAMBA_CORPUS_DUMP"))
-            if dd == "":
-                raise Error(
-                    "mamba_check: set MOJOLEARN_MAMBA_CORPUS_DUMP to an"
-                    " existing directory for the stage dumps"
-                )
-            dump_corpus_case(
-                ctx,
-                k,
-                dd,
-                env_on("MOJOLEARN_MAMBA_CORPUS_TRANSPOSE_CONTROL"),
             )
         if env_on("MOJOLEARN_MAMBA_CHECK_CLAUSE_E"):
             clause_e(ctx, b, l, dims)
