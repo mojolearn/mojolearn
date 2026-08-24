@@ -325,9 +325,14 @@ source. A chosen bound must be sabotaged (`sabotage-when-required`).
 
   The prediction written above was that a hashed fixture makes a magnitude
   TIE unlikely and that a null would mean the branch is unreached. That is
-  what happened. **DEVIATION 674's pivot tie rule is therefore NOT GATED by
-  anything**, on any order, and the `>` in `lu_inverse` could be `>=`
-  tonight without a single gate noticing.
+  what happened. **DEVIATION 674's pivot tie rule was therefore UNREACHED**
+  on every order, and the `>` in `lu_inverse` could have been `>=` that night
+  without a single gate noticing.
+
+  UNREACHED, not "ungated": the distinction matters and the wrong word sends
+  the next reader off to write a gate rather than to fix the fixture. There
+  was nothing wrong with the arm; there was nothing for it to bite. The fix
+  was a fixture, and it landed on 2026-08-24 as `ar2_tie`. See arm (h).
 
   This matters more than an ordinary null because the tie rule is OURS. cuBLAS
   `getrfBatched`'s rule is not readable from source, so this lane CHOSE strict

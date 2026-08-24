@@ -102,7 +102,7 @@ changes, so `kalman_loop_host` needs no matching edit and every existing
 bitwise gate stays valid.
 
 NOT YET GATED. Reaching this branch needs a fixture whose `P0` has a
-non-positive diffuse diagonal entry, and the diffuse block is initialised to
+non-positive diffuse diagonal entry, and the diffuse block is initialized to
 `kappa = 1e6` by construction, so it is hard to reach by accident and no
 current fixture reaches it. That is recorded as OWED rather than claimed:
 the branch is written and unreached, and an unreached branch is an unchecked

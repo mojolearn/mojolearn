@@ -19,6 +19,17 @@ DEVIATION 670, the hand-off list, and the row text for both directories.
     inherited MEASURED claims judged           4 of 4 (2 earned, 2 struck)
     a second vendor                            NO. Apple M4 only.
 
+    WRITTEN 2026-08-24 AND NOT BUILT (a no-compile round; both slots were
+    held by other lanes). Everything in this block is source only:
+        DEVIATION 677, the diffuse-step refusal
+        the `guards` / `piv` / `info_*` decision stages on the card
+        orders `arma44` and `ar2_tie`, plants PIVOT_TIE and INTERCEPT_NUDGE
+        gates check_lu_pivot_tie_is_reached, check_guard_decisions_are_recorded
+        the widened check_fold_order_is_visible
+        sabotage arms (h) and (i)
+    The green results below predate all of it. A compile slot must rebuild
+    before any of it may be quoted.
+
 Shapes are the smallest that still reach every branch: `n_obs = 24`,
 `batch = 6`, `fc_steps = 3`, eight orders. No timing was taken, at any
 point, for any reason.
@@ -83,9 +94,101 @@ digits like the undifferenced orders. The diffuse `kappa = 1e6` block costs
 accuracy in proportion to how much weight the filter puts on those states,
 not merely by existing.
 
-The two loosest bounds in the gate (`5e-3` Lyapunov, `2e-2` Float64) are
-DERIVED and sit three orders of magnitude above what was measured. They are
-not yet bounds anyone has earned.
+The loosest bounds in the gate are DERIVED and sit three orders of magnitude
+above what was measured. They are not yet bounds anyone has earned. The
+table below says what each should be replaced with and, more importantly,
+what evidence makes the replacement legitimate; a compile slot can work
+straight down it.
+
+| bound | where | asserted | measured worst | replace with | the evidence that earns it |
+|---|---|---|---|---|---|
+| Lyapunov residual | `check_lyapunov_solves_the_equation` | `5e-3` | `3.5e-6` (`ar2_unit`); `7.3e-8` to `4.3e-7` elsewhere | `2e-5` | Must ALSO hold at `arma44`, whose `r = 5` makes the LU 25x25 and is the worst conditioning the lane accepts; that order did not exist when `3.5e-6` was measured. Then sabotage `lu_inverse`'s trailing update and confirm the residual blows past the new bound, so the bound is known to be a bound and not a ceiling nothing touches. |
+| Float64 gap, `n_diff = 0` | `check_kalman_matches_float64` | `5e-3` | `1.5e-7` | `1e-6` | Straight tightening; the four undifferenced orders sit at `4.7e-8` to `1.5e-7`, so `1e-6` is roughly 7x headroom. |
+| Float64 gap, `n_diff > 0` | `check_kalman_matches_float64` | `2e-2` | `1.8e-3` | `5e-3` | Keep the headroom wide here and say why in the message: the diffuse `kappa = 1e6` cost is a MECHANISM, not noise, and `arima212` shows it does not scale with `n_diff` (`n_diff = 1` yet `7.2e-8`). A tight bound would be fitted to the fixture rather than to the mechanism. |
+| Jones round trip | `check_jones_device_equals_oracle` | `1e-2` | `2.73e-6` | `1e-5` | This one is REPORTED, not a correctness claim, so the bound's only job is to catch a gross regression. `1e-5` is about 4x the measured value and still far below anything that would indicate a real break. |
+
+None of these should be changed by a lane that cannot run the gate: a bound
+edited without a run is a bound that turns the next build red for a reason
+nobody can see. They are written here and left alone deliberately.
+
+## More hashes: the decisions this pipeline makes
+
+Andrew asked whether there are more hashes to take. There were. Every stage
+this lane recorded was a float BUFFER, and a buffer records a VALUE; the
+things below are CHOICES, and a choice can differ between vendors while
+every value stays bit-identical. That is not hypothetical: the holtwinters
+lane's `CRIT_ORDER` sabotage moves ZERO of 2800 float cells and is caught
+solely because the criterion is a recorded stage.
+
+**THE RULE (CARD_GAPS.md): a decision worth hashing is one the ALGORITHM
+makes, not one the SCHEDULER makes.** Launch geometry must never enter an
+identity card. The card is ASSERTED launch-invariant, so recording block
+width would make two settings differ BY CONSTRUCTION and destroy the exact
+property `check_kalman_launch_invariant` exists to prove. Anything whose
+value depends on the machine, the occupancy or the dispatch is out; anything
+the algorithm itself decides from computed values is in. Every entry in the
+"added" list below is a comparison the arithmetic performed. Every entry in
+the "listed, not added" tail is either derivable from the order or, in the
+last case, scheduler state that is barred outright.
+
+**Added to the card (2026-08-24).** Four, chosen because they are
+load-bearing AND cheap:
+
+    piv          the LU permutation, per column, for BOTH solves. This IS
+                 DEVIATION 674's tie rule, which this lane CHOSE because
+                 cuBLAS's is unreadable. NOT derivable from any float stage:
+                 `P0` is the product of the solve, not of the permutation
+                 that produced it. Sabotage (h) can leave `P0` bit-identical
+                 and still be wrong; `piv` is then the only witness.
+    guards       one byte per series. Bit 0: the `rd == 2 && p == 2`
+                 unit-root guard rewrote `T[1]`. Bit 1: the `r == 1`
+                 intercept guard nudged `I - T*`. Bit 0 was only inferable
+                 from a suspicious `-0.99` in `T` if you already knew to
+                 look; bit 1 was NOT INFERABLE AT ALL, because `ImT` is
+                 overwritten in place by its own LU before any stage is read.
+    info_init    the singular-solve column, per series.
+    info_loop    the refused step, per series. Both are all-zero on a
+                 healthy run, and a buffer of zeros is worth recording
+                 because it proves THE REFUSAL PATH WAS NOT TAKEN.
+
+**Listed, not added.** Each with why it was left:
+
+    jones clamp mask     which parameters the Jones clamp bound, per series.
+                         A clamped parameter is a DIFFERENT MODEL, so this is
+                         load-bearing. Left out because it is DERIVABLE from
+                         `t_params`, which is already a recorded stage
+                         (compare against +-0.9999), and because capturing it
+                         at the source would change `jones_transform`'s
+                         signature, which is shared by four call sites.
+    n_obs_ll             how many observations entered the likelihood.
+                         Derivable from `n_obs` and `n_diff`; recorded
+                         nowhere, but it is a function of the order, not of
+                         the data, so it cannot differ between vendors.
+    predict's shape      `dD`, `res_offset`, `p_start`, `p_end`, `period1`,
+                         `period2`. All host-side integers derived from the
+                         order; a vendor cannot disagree about them.
+    prepare_data branch  `d + D` in {0, 1, 2}. Same: a function of the order.
+    finalize_forecast    single vs double undifferencing. Same.
+    trans vs copy        whether the Jones transform ran or `_copy_params`
+                         did. A caller's argument, not a device decision.
+    the loop kernel's    `n_diff == 0` vs `n_diff > 0` arms in `pred` and
+    n_diff arms          `F`. Determined by the order; derivable.
+    kalman_tpb, grid     BARRED, not merely omitted. These are SCHEDULER
+                         state, and CARD_GAPS.md's rule puts them out of an
+                         identity card categorically: the card is asserted
+                         launch-invariant, so recording block width would
+                         make two settings differ BY CONSTRUCTION and break
+                         the very property `check_kalman_launch_invariant`
+                         proves. `kalman_tpb` is a parameter of
+                         `batched_kalman_filter` precisely so that gate can
+                         vary it and show nothing moves.
+
+The pattern in the "listed" column is worth stating once: almost everything
+left out is a function of the ORDER rather than of the arithmetic, and two
+vendors running the same order cannot disagree about it. What is worth
+hashing is a decision made from COMPUTED VALUES -- a pivot comparison, a
+guard threshold, a refusal test -- because those are where two vendors can
+legitimately part company.
 
 ## The inherited MEASURED claims, judged
 
@@ -203,6 +306,37 @@ does not check either, and neither do we, so those steps can still produce a
 non-finite `_1_Fs`. That is faithful and it is also a hole, and it is
 recorded here rather than papered over.
 
+## DEVIATION 677: the same refusal at the diffuse steps too
+
+DEVIATION 673's check was guarded by `it >= n_diff`, so the first `n_diff`
+steps were not checked. That looked harmless, because those steps contribute
+no term to the log-likelihood. It was not harmless: `_1_Fs = 1.0 / _Fs` is
+computed UNCONDITIONALLY at step 3, so a non-positive `F` at a diffuse step
+makes the Kalman gain infinite, `alpha` NaN at the next update and `P` NaN
+for the rest of the series. Every one of those is a recorded card stage, so
+the hole was a live route to a vendor-dependent NaN payload inside a hash.
+
+Theirs checks at no step at all, so this is not a fresh disagreement with
+cuML. Having already decided in 673 that a non-positive innovation variance
+is refused by name rather than filtered, checking only some steps was an
+inconsistency in OUR code. `info` is now signed: `it + 1` for a summed step,
+`-(it + 1)` for a diffuse one, which raises a distinct message. The
+arithmetic is untouched, so no oracle and no recorded stage changes.
+
+UNREACHED BY EVERY CURRENT FIXTURE, and NOT PROVEN UNREACHABLE. Those are
+two different states and the distinction is the point. The diffuse diagonal
+is initialized to `kappa = 1e6`, so nothing drives `F` non-positive there
+today; but `F = Z P Z'` mixes the diffuse and stationary blocks and `P`
+evolves, so no argument on hand says it CANNOT happen. The branch is
+therefore defensive and unchecked, which is honest, and it is listed as
+OWED with the two ways to settle it: construct a fixture that reaches it, as
+the pivot tie was constructed, or prove it unreachable and close it.
+
+"Ungated" would be the wrong word here and is deliberately not used. A
+branch nobody can reach does not want gating, it wants a proof and a
+closure; saying "ungated" invites someone to spend a round writing a gate
+that can never fire.
+
 ## DEVIATION 674: cuBLAS getrf/getri/gemm are closed; the solve is spelled here
 
 THEIRS. `Matrix::inv` is `cublasgetrfBatched` then `cublasgetriBatched`
@@ -244,15 +378,77 @@ and `2 * std.math.atanh(v)`. Neither identity is the libm algorithm, so
 IDENTICAL bits differ from FAST bits by design, as every row-12 seam does;
 what is purchased is one arithmetic on every backend.
 
-**A cost this deviation carries and nobody has priced.** `(e^x - 1)` cancels
-for small `|x|`: at `x = 1e-4` the absolute error in `e^x` is about
-`eps = 1.2e-7` while `e^x - 1` is about `1e-4`, so roughly ten bits are
-lost, and `tanh(x/2)` is exactly where the optimizer spends its time near
-convergence. `check_jones_device_equals_oracle` reports the round-trip
-`inverse(forward(x))` relative error for this reason. It has not run, so
-the number in that report does not exist yet. If it turns out large, the
-fix is a numbered replacement identity (`expm1(x)/(expm1(x)+2)`) and NOT a
-quiet edit.
+### THE DECISION (2026-08-24): ACCEPT FOR NOW, AND TAKE THE ONE MEASUREMENT THAT WOULD OVERTURN IT
+
+Asked for a decision rather than another measurement. Here it is, with the
+reasoning, because the reasoning contains a finding.
+
+**What is measured.** `inverse(forward(x))` returns to x with worst relative
+error 2.73e-6, about 23 Float32 ulp, uniform over p = 1..4 and both AR and
+MA. The cause is cancellation: `identical_exp(x)` is accurate to about a ulp
+of `e^x`, but for small `|x|` the subtraction `e^x - 1` is about `x`, so the
+numerator's relative error is roughly `ulp(1)/|x|`. At `|x| ~ 0.03` that is
+2e-6, which is what the gate reports.
+
+**FINDING: only HALF of that spelling is on the ported path, and it is the
+half that cannot be fixed here.** `batched_jones_transform` is called from
+exactly one place, `batched_arima.mojo:111`, with `is_inv = false`. Nothing
+in this lane ever calls the inverse: `two_atanh` is reached only by
+`check_jones_device_equals_oracle`. The inverse transform belongs to the
+optimizer, which maps fitted parameters back to unconstrained coordinates,
+and the optimizer is NOT PORTED. So:
+
+    tanh half  (identical_exp)   ON the ported path, runs every fit
+    atanh half (identical_log)   OFF it, gate-only, optimizer's rung
+
+**The options, and what each costs.**
+
+  A. ACCEPT and document. Costs nothing. Keeps every recorded card valid.
+  B. Fix the atanh half with `identical_log1p`, which ALREADY EXISTS
+     (`mojo_only/numerics.mojo`, row 51's seam): `2*atanh(v) =
+     log1p(2v/(1-v))` removes that cancellation entirely. Available today,
+     no new primitive.
+  C. Fix the tanh half with `expm1`: `tanh(x/2) = expm1(x)/(expm1(x)+2)`.
+     `identical_expm1` DOES NOT EXIST and `mojo_only/numerics.mojo` is not
+     this lane's file, so this is a HAND-OFF to the numerics lane, not
+     something that can be done here.
+  D. Refuse small `|x|`. Not sensible: small coefficients are the normal
+     case, not an edge.
+
+**RECOMMENDATION: A now, C later if and only if one measurement says so, and
+NOT B.**
+
+Not B, even though B is free and available. B improves code that the ported
+pipeline never executes, and it would move bits: every `arima.jones.inv.*`
+stage on every card changes, invalidating the recorded baseline, in exchange
+for accuracy on a path only the gate walks. Spending a deviation number and
+a card revision on that is the wrong trade. It becomes right the day the
+optimizer is ported, and it is listed as a hand-off so that day is not a
+rediscovery.
+
+A now, because the cost of the tanh half is genuinely unknown and the only
+honest thing to do with an unknown cost is not to pay for it blind.
+
+**THE MEASUREMENT THAT WOULD OVERTURN THIS, and why it has not been taken.**
+`kalman_host_f64` is fed the SAME Float32 transformed parameters the device
+uses (`kalman_oracle.mojo` says so in its docstring: it "isolates the
+filter's precision"). That is deliberate and it is also the reason the
+existing numbers CANNOT settle this question: the Float64 reference starts
+DOWNSTREAM of the transform, so DEVIATION 675's contribution is not in the
+1.5e-7 / 1.8e-3 figures at all. Nobody has ever measured what 23 ulp in a
+model parameter does to a log-likelihood.
+
+The fix is cheap and moves no device bit: give `kalman_host_f64` its own
+Float64 Jones transform, applied to the UNTRANSFORMED parameters with the
+stdlib `tanh`, so the reference spans the whole pipeline. Then the gate
+reports the end-to-end cost of DEVIATION 675 directly.
+
+    DECISION RULE, fixed in advance so the answer is not chosen after
+    seeing it: if the end-to-end contribution is below the filter's own
+    Float32 error (1.5e-7 undifferenced, 1.8e-3 differenced), ACCEPT
+    permanently and delete this section's OWED entry. If it is comparable or
+    larger, raise the `identical_expm1` hand-off with the numerics lane and
+    spend DEVIATION 678 on option C.
 
 ## DEVIATION 676: the undefined predictions are the canonical NaN, by constant
 
@@ -419,7 +615,7 @@ replacing now that the lane has run. Corrected text below.
 
 | n | path | what is vendor-dependent in their spelling | what we did | status |
 |---|---|---|---|---|
-| 58 | arima: the batched Kalman filter log-likelihood, prediction and finite-difference gradient (`batched_kalman.cu`, `batched_arima.cu`, `jones_transform.cuh`) | every ARIMA kernel is `double` only and Metal has no Float64; `P0` is a cuBLAS batched `getrf`/`getri` whose association and pivot tie rule are closed and whose `info` the caller never reads; `RQR` and the Lyapunov solve are `cublasgemmStridedBatched`; `raft::tanh` / `raft::atanh` are the vendor's transcendentals (row 12); the undefined in-sample predictions are `nan("")`, whose payload differs per vendor in a recorded buffer; `d_y_p[0] = 0.0` is a cross-thread race in their lambda | DEVIATION 670 (Float32 device, Float64 host reference beside it); DEVIATION 673 (`F <= 0` refused by name, not carried into `log`); DEVIATION 674 (the LU, both substitutions and both gemm shapes written out serial ascending through `identical_mul_add`, `info` raised by name); DEVIATION 675 (`tanh`/`atanh` through `identical_exp`/`identical_log`); DEVIATION 676 (the sentinel is the constant `0x7fc00000`, never computed); their race not ported. `rd > 8`, `r > 5`, exog, confidence intervals, CSS and missing observations all refused by name | **ONE APPLE DEVICE, both modes, 2026-08-23.** Device == host oracle BITWISE on 8 orders x 11 stages (`Z R T RQ RQR P0 alpha0 pred vs loglike fc`), 0 cells differing, at `rd` up to 8; `predict` and the finite-difference gradient likewise; launch-invariant over block width 32/64/128, 41 poisoned padding floats, batch composition and a repeat run. 9 of 9 sabotages run: 6 bite, 3 null, and two of the nulls are recorded REACH FAILURES (DEVIATION 674's pivot tie rule is unreached and therefore UNGATED; DEVIATION 676's vendor-payload claim cannot be tested on Apple, where `0.0/0.0` is already `0x7fc00000`). **NO SECOND VENDOR: the cross-vendor claim this row exists to make is UNTESTED.** |
+| 58 | arima: the batched Kalman filter log-likelihood, prediction and finite-difference gradient (`batched_kalman.cu`, `batched_arima.cu`, `jones_transform.cuh`) | every ARIMA kernel is `double` only and Metal has no Float64; `P0` is a cuBLAS batched `getrf`/`getri` whose association and pivot tie rule are closed and whose `info` the caller never reads; `RQR` and the Lyapunov solve are `cublasgemmStridedBatched`; `raft::tanh` / `raft::atanh` are the vendor's transcendentals (row 12); the undefined in-sample predictions are `nan("")`, whose payload differs per vendor in a recorded buffer; `d_y_p[0] = 0.0` is a cross-thread race in their lambda | DEVIATION 670 (Float32 device, Float64 host reference beside it); DEVIATION 673 (`F <= 0` refused by name, not carried into `log`); DEVIATION 674 (the LU, both substitutions and both gemm shapes written out serial ascending through `identical_mul_add`, `info` raised by name); DEVIATION 675 (`tanh`/`atanh` through `identical_exp`/`identical_log`); DEVIATION 676 (the sentinel is the constant `0x7fc00000`, never computed); their race not ported. `rd > 8`, `r > 5`, exog, confidence intervals, CSS and missing observations all refused by name | **ONE APPLE DEVICE, both modes, 2026-08-23.** Device == host oracle BITWISE on 8 orders x 11 stages (`Z R T RQ RQR P0 alpha0 pred vs loglike fc`), 0 cells differing, at `rd` up to 8; `predict` and the finite-difference gradient likewise; launch-invariant over block width 32/64/128, 41 poisoned padding floats, batch composition and a repeat run. 9 of 9 sabotages run: 6 bite, 3 null, and two of the nulls are recorded REACH FAILURES (DEVIATION 674's pivot tie rule was UNREACHED, not merely ungated, because no fixture produced a magnitude tie; DEVIATION 676's vendor-payload claim cannot be tested on Apple at all, where `0.0/0.0` is already `0x7fc00000`). **NO SECOND VENDOR: the cross-vendor claim this row exists to make is UNTESTED.** |
 
 ### A hand-off to whoever owns the deviation ledger
 
@@ -465,31 +661,61 @@ trust your memory of what you staged.
 
 ---
 
-## OWED. Everything below needs a compile slot.
+## OWED
 
-1. **Build `arima/mojo_only/fixtures.mojo` and `arima_check.mojo`.** Three
-   parse errors were found and fixed (a by-value `IdentityTrace` where
-   `record_device` needs `mut`, `case` used as a loop variable when it is
-   reserved, `arma11_series` called with five arguments where it takes six).
-   The rebuild after the third fix never completed. Assume more.
-2. **Run the check in both modes** and paste the output into this README
-   under a "What the gates found" heading, in tsa's shape.
-3. **Run every row of `SABOTAGES.md`** and fill in its OBSERVED column,
-   including the two expected nulls, (c) and (f). A row still empty is a
-   claim nobody has earned.
-4. **Replace every DERIVED bound with an observed one**: the Float64
-   tolerances in `check_kalman_matches_float64`, the `5e-3` Lyapunov
-   residual bound, and the `1e-2` Jones round-trip bound. All three were
-   chosen by reasoning, and a chosen bound must be sabotaged.
-5. **Price DEVIATION 675's cancellation.** The round-trip number does not
-   exist yet. If it is large, replace the identity with a numbered one.
-6. **Build and run `arima/arima_main.mojo`** and produce a card. The driver
-   is written (all seven orders, the untransformed parameters, the
-   Jones-transformed parameters, and eleven filter stages each, about 100
-   tags) and has NEVER RUN. It has not been verified to parse either.
-7. **A second vendor.** Nothing here has run anywhere but nowhere.
-8. **Check whether the `it < n_diff` steps can produce a non-finite
-   `_1_Fs`** on any fixture, per DEVIATION 673's recorded hole.
-9. **Decide whether the LU tie branch is reachable at all** (sabotage (e)).
-   If not, plant a tie in the fixture before claiming DEVIATION 674's tie
-   rule is gated.
+Reordered 2026-08-24. Items marked WRITTEN exist in source and need only a
+build; the rest still need someone to write them.
+
+**Needs a compile slot, nothing else:**
+
+1. **BUILD AND RUN EVERYTHING WRITTEN ON 2026-08-24.** Two new orders, two
+   new plants, two new gates, a widened gate, DEVIATION 677, and four new
+   card stages. None has been compiled. Expect signature errors around the
+   `guards` buffer in particular: it threads a new argument through two
+   kernel launches.
+2. **Run sabotage (h)**, the pivot tie rule re-armed on `ar2_tie`, and
+   record `piv` and `P0` SEPARATELY. If `piv` moves and `P0` does not, that
+   is the result worth having and not a weak one: it is this lane's
+   holtwinters `CRIT_ORDER`.
+3. **Run sabotage (i)**, the guards decision bit, and confirm NO float stage
+   moves. If one does, the edit was not confined to the decision.
+4. **Re-run the widened `check_fold_order_is_visible`** and raise its floor
+   from "at least two orders move something" to what is observed, per order.
+   The docstring carries a falsifiable prediction: `ar1` must move zero,
+   `rd = 2` few, `rd >= 4` a substantial fraction.
+5. **Take the DEVIATION 675 end-to-end measurement** described in that
+   section: give `kalman_host_f64` its own Float64 Jones transform so the
+   reference spans the transform instead of starting downstream of it. The
+   decision rule is fixed in advance there. UNWRITTEN, but small, and it
+   moves no device bit.
+6. **Replace the four derived bounds** using the table under "What the gates
+   found". Do not do this without running.
+
+**Needs a second vendor:**
+
+7. **A SECOND VENDOR.** Still the only goal of this work and still entirely
+   untested. `arima-card` now emits the four decision stages too, so a
+   cross-vendor diff can separate "same decisions, different arithmetic"
+   from "different decisions", which a float-only card could not.
+8. **Sabotage (f) cannot be closed on Apple**, where `0.0/0.0` is already
+   `0x7fc00000`. Only NVIDIA or AMD can test DEVIATION 676's claim.
+
+**Still unwritten:**
+
+9. **DEVIATION 677's branch is unreached.** It needs a fixture whose `P0`
+   has a non-positive diffuse diagonal entry, and `kappa = 1e6` makes that
+   hard by construction. Either construct one, as the pivot tie was
+   constructed, or record permanently that the branch is defensive and
+   unreachable from the ported surface.
+10. **The Jones clamp mask** is derivable from `t_params` but is not
+    recorded as a decision. If a cross-vendor diff ever shows `t_params`
+    moving, the first question will be "did the clamp bind differently", and
+    answering that from raw floats is slower than reading a bit.
+11. **`numerical_stability`'s symmetrizing half is inert on two orders**
+    (`arma11_k`, `arima111`): sabotage (b) moved nothing there. `arma44` may
+    now cover it; check when (b) is re-run.
+12. **Hand-off: `identical_expm1`** to whoever owns
+    `mojo_only/numerics.mojo`, needed only if item 5's measurement says
+    DEVIATION 675's tanh half matters. And `identical_log1p` for the atanh
+    half the day the optimizer is ported, not before: that half is off the
+    ported path today.
