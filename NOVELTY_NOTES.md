@@ -181,6 +181,29 @@ paper.
    PRIOR-ART CHECK NEEDED: reproducibility work generally reports final-output
    equality, so the question is whether anyone has shown it INSUFFICIENT.
 
+14. **A determinism gate is likelier to be VACUOUS than to be wrong, and
+   vacuity has a cheap general remedy.** In one night, FOUR independent lanes
+   each found a gate of their own that would have passed for ever, on every
+   vendor, while testing nothing. mamba: a row-slice comparison where a slicer
+   returning row 0 for every request would compare each row to itself.
+   holtwinters: a launch-invariance check spelled as a chain of
+   `_first_diff(..) == ""`, green if the bit collector returned empty or the
+   fit ignored tpb/pad/poison. arima: a sabotage that came back null because
+   the gate planted `-0.0` where the filter's first `0.0 + x` washes the sign
+   out -- the ARM was fine and the GATE was blind. spectral: gates whose
+   helpers were not yet checked for the same property. None of these is a bug
+   in the code under test; all are gates that cannot fail.
+   The remedy is a NEGATIVE CONTROL beside each gate, asserting that inputs
+   which MUST differ do differ, and raising a distinct VACUOUS verdict rather
+   than FAILED so the two are never confused in a log. Cost is one extra
+   comparison per gate. The general lesson for a determinism contract: an
+   equality gate's default failure mode is silence, so every clause needs both
+   a sabotage (does a violation move the number) and a control (can this gate
+   move at all). Evidence: the four lanes' check files and IDENTITY_PATHS rows
+   55, 57, 58, 59. PRIOR-ART CHECK NEEDED -- mutation testing and metamorphic
+   testing are the neighbouring literatures and the claim must be positioned
+   against them, not presented as new in kind.
+
 ## C. Toolchain findings (report upstream, never paper claims)
 
 8. **Metal AOT suppression + cache poisoning (replaces the retracted
