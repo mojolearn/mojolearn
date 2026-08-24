@@ -191,7 +191,13 @@ paper.
    fit ignored tpb/pad/poison. arima: a sabotage that came back null because
    the gate planted `-0.0` where the filter's first `0.0 + x` washes the sign
    out -- the ARM was fine and the GATE was blind. spectral: gates whose
-   helpers were not yet checked for the same property. None of these is a bug
+   helpers were not yet checked for the same property. mamba a second time, and
+   this is the sharpest case: its clause (e) planted 26 NaN and infinity values
+   and all 26 were refused by name, but an UNCONDITIONALLY raising refusal
+   would have produced exactly that result while gating nothing. The agent had
+   already seen the 26 come back green before it noticed, and said so rather
+   than quietly adding the control. The control is a CLEAN call that must NOT
+   raise and must record all 17 stages. None of these is a bug
    in the code under test; all are gates that cannot fail.
    The remedy is a NEGATIVE CONTROL beside each gate, asserting that inputs
    which MUST differ do differ, and raising a distinct VACUOUS verdict rather
