@@ -136,9 +136,8 @@ be VACUOUS.
 
 OWED, and this file does not cover any of it
 ----------------------------------------------
-L = 16, 64 and 257; FAST mode; clause (e), the row-39 planted NaN and
-infinity audit; the corpus cross-check against `mamba/corpus/`; and every
-column that is not this Apple box.
+L = 16, 64 and 257; FAST mode; the corpus cross-check against
+`mamba/corpus/`; and every column that is not this Apple box.
 
 CLAUSES (b) AND (c) ARE CHECKED HERE, and each says what would have hidden a
 failure:
@@ -189,6 +188,22 @@ failure:
   call, so they are comparable only at the last token, and that is the only
   token at which they are compared.
 
+* **(e), the row-39 planted audit.** All thirteen names
+  `mamba_refuse_bad_inputs` walks, each planted with a quiet NaN and with
+  `+inf`, by BITS and never by compares (Metal flushes compare operands, row
+  49), at cell `len / 2` rather than cell 0. 26 plants, all refused BY NAME
+  with zero stages recorded. Each plant is READ BACK OFF THE DEVICE first and
+  its non-finite cells counted, so a refusal that fired for another reason
+  cannot be mistaken for the audit passing: reach is measured, not inferred.
+
+  **AND ITS CONTROL, which is the one that matters here.** If the refusal
+  raised UNCONDITIONALLY -- a stray raise, a walk over the wrong buffer, a
+  mask that matched every finite value -- then all 26 plants would be
+  "refused by name" and the clause would pass for ever while gating nothing.
+  So the clause first runs a CLEAN call and requires that it does NOT raise
+  and that it records all 17 stages. That is the arima shape of blind gate:
+  the arm fine, the gate incapable of failing.
+
 Clause (c) is a device-versus-device invariance claim. It does not re-check
 correctness: a block that was wrong in a batch-INDEPENDENT way would pass it.
 Clause (a), the oracle compare above, is what covers that. The same is true
@@ -202,9 +217,12 @@ from max.gpu.host import DeviceContext
 
 from core.identity_trace import IdentityTrace, read_trace_lines
 from mamba.mojo_only.mamba_fixture import (
+    BITS_POS_INF,
+    BITS_QNAN,
     D_CONV,
     D_STATE,
     TID_B_DT,
+    f32_from_bits,
     MambaDims,
     MambaWeights,
     corpus_case_seed,
@@ -964,6 +982,279 @@ def clause_d(
 
 
 # ===========================================================================
+# CLAUSE (e): the row-39 planted audit of the refusal
+# ===========================================================================
+
+
+def refuse_names() -> List[String]:
+    """The thirteen names `mamba_refuse_bad_inputs` tests, IN ITS ORDER. The
+    order matters to this clause: a plant in the last of them only raises if
+    the refusal walked past the twelve before it."""
+    var n: List[String] = [
+        String("x"),
+        String("norm.weight"),
+        String("in_proj.weight"),
+        String("conv1d.weight"),
+        String("conv1d.bias"),
+        String("x_proj.weight"),
+        String("dt_proj.weight"),
+        String("dt_proj.bias"),
+        String("A_log"),
+        String("D"),
+        String("out_proj.weight"),
+        String("state.conv_win"),
+        String("state.h"),
+    ]
+    return n^
+
+
+def nonfinite_cells(values: List[Float32]) -> Int:
+    """How many cells are NaN or infinity, BY BITS. Not by compares: Metal
+    flushes compare operands (row 49), so a compare-written test has a
+    different meaning on different columns and this one must have exactly
+    one."""
+    var n = 0
+    for i in range(len(values)):
+        var au = bitcast[DType.uint32](values[i]) & UInt32(0x7FFFFFFF)
+        if au >= UInt32(0x7F800000):
+            n += 1
+    return n
+
+
+def clause_e(
+    ctx: DeviceContext, b: Int, l: Int, dims: MambaDims
+) raises:
+    """Contract section 8 clause (e), the row-39 audit. A NaN or an infinity
+    in ANY named input or parameter must be REFUSED BY NAME before any
+    recorded stage, because NaN payloads are vendor-shaped (row 39 measured
+    three payloads for one IEEE answer) and a certified stage may never hold
+    one.
+
+    Every one of the thirteen names is planted, with each of the two bit
+    patterns, at cell `len / 2` rather than cell 0 -- a plant at index 0 is
+    the one a loop that skips its first element would still catch.
+
+    THREE THINGS ARE CHECKED PER PLANT, and the first is the one the warning
+    from the other lanes is about:
+
+    1. **REACH, MEASURED.** The planted buffer is read BACK OFF THE DEVICE
+       and its non-finite cells counted by bits. If the plant did not survive
+       the upload, the refusal that follows fired for some other reason and
+       the audit proves nothing. Reach is measured, never inferred.
+    2. The call RAISES, and the message NAMES that input. A refusal that
+       fires on the wrong name means the walk is not covering what it claims.
+    3. The trace holds ZERO records. "Before any recorded stage" is the
+       actual clause, and a refusal that fires after `input.x` was hashed has
+       already put a vendor-shaped payload into a card."""
+    var names = refuse_names()
+    var patterns: List[UInt32] = [BITS_QNAN, BITS_POS_INF]
+    var pat_names: List[String] = [String("NaN"), String("infinity")]
+    var dm = dims.d_model
+    var di = dims.d_inner
+    var r = dims.dt_rank
+    var xr = dims.x_proj_rows()
+    var path = String(TRACE_PATH) + ".clause_e"
+    var checked = 0
+
+    print(
+        "clause (e): row-39 planted audit, "
+        + String(len(names))
+        + " named inputs x "
+        + String(len(patterns))
+        + " bit patterns"
+    )
+
+    # ---- THE CONTROL, and without it all 26 plants below prove nothing. --
+    # If `mamba_refuse_bad_inputs` raised UNCONDITIONALLY -- a stray `raise`,
+    # a walk that tested the wrong buffer, a bit mask that matched every
+    # finite value -- then every plant would be "refused by name" and this
+    # clause would pass for ever while gating nothing. That is the shape of
+    # the blind gate the arima lane hit tonight: the arm was fine and the
+    # GATE was the thing that could not fail. So first prove the refusal is
+    # SILENT on clean inputs and that the call gets all the way to a full
+    # card.
+    var cw = planted_weights(dims)
+    var cx = corpus_x(corpus_case_seed(1), b, l, dm)
+    var cdw = MambaDeviceWeights(ctx, cw)
+    var cdstate = MambaDeviceState(ctx, b, dims)
+    var cdx = mamba_upload(ctx, cx)
+    var cpath = String(TRACE_PATH) + ".clause_e_control"
+    var ctrace = IdentityTrace.to_path(cpath)
+    var cstages = MambaDeviceStages(ctx, b, l, dims)
+    var ctrl_raised = False
+    try:
+        mamba_block_forward(
+            ctx, cstages, cdstate, cdw, cdx, b, l, ctrace, "clause_e_ctrl"
+        )
+    except e:
+        ctrl_raised = True
+    if ctrl_raised:
+        raise Error(
+            "mamba_check: CLAUSE (e) IS VACUOUS. The refusal fires on CLEAN"
+            " inputs, so every plant below would be 'refused' whatever it"
+            " held and this clause gates nothing."
+        )
+    var ctrl_recs = read_trace_lines(cpath)
+    if len(ctrl_recs) != 17:
+        raise Error(
+            String("mamba_check: CLAUSE (e) IS VACUOUS. A clean call recorded ")
+            + String(len(ctrl_recs))
+            + " stages instead of 17, so 'zero stages recorded' below does"
+            + " not distinguish a refusal from a call that never ran."
+        )
+    print(
+        "clause (e) control: a clean call does NOT raise and records all 17"
+        " stages, so the refusal is not unconditional and 'zero records' is"
+        " a real signal"
+    )
+    _ = cstages^
+    _ = cdw^
+    _ = cdstate^
+    _ = cdx^
+
+    for k in range(len(patterns)):
+        var bitpat = patterns[k]
+        for idx in range(len(names)):
+            var w = planted_weights(dims)
+            var x = corpus_x(corpus_case_seed(1), b, l, dm)
+            var v = f32_from_bits(bitpat)
+            if idx == 0:
+                x[len(x) // 2] = v
+            elif idx == 1:
+                w.norm_w[len(w.norm_w) // 2] = v
+            elif idx == 2:
+                w.w_in[len(w.w_in) // 2] = v
+            elif idx == 3:
+                w.conv_w[len(w.conv_w) // 2] = v
+            elif idx == 4:
+                w.conv_b[len(w.conv_b) // 2] = v
+            elif idx == 5:
+                w.w_x[len(w.w_x) // 2] = v
+            elif idx == 6:
+                w.w_dt[len(w.w_dt) // 2] = v
+            elif idx == 7:
+                w.b_dt[len(w.b_dt) // 2] = v
+            elif idx == 8:
+                w.a_log[len(w.a_log) // 2] = v
+            elif idx == 9:
+                w.d_skip[len(w.d_skip) // 2] = v
+            elif idx == 10:
+                w.w_out[len(w.w_out) // 2] = v
+
+            var dw = MambaDeviceWeights(ctx, w)
+            var dstate = MambaDeviceState(ctx, b, dims)
+            var dx = mamba_upload(ctx, x)
+
+            if idx == 11:
+                var win = List[Float32]()
+                for _ in range(b * di * D_CONV):
+                    win.append(Float32(0.0))
+                win[len(win) // 2] = v
+                dstate.conv_win = mamba_upload(ctx, win)
+            if idx == 12:
+                var hh = List[Float32]()
+                for _ in range(b * di * D_STATE):
+                    hh.append(Float32(0.0))
+                hh[len(hh) // 2] = v
+                dstate.h = mamba_upload(ctx, hh)
+
+            # ---- 1. REACH, off the device, by bits ----------------------
+            var back: List[Float32]
+            if idx == 0:
+                back = mamba_download(ctx, dx, b * l * dm)
+            elif idx == 1:
+                back = mamba_download(ctx, dw.norm_w, dm)
+            elif idx == 2:
+                back = mamba_download(ctx, dw.w_in, 2 * di * dm)
+            elif idx == 3:
+                back = mamba_download(ctx, dw.conv_w, di * D_CONV)
+            elif idx == 4:
+                back = mamba_download(ctx, dw.conv_b, di)
+            elif idx == 5:
+                back = mamba_download(ctx, dw.w_x, xr * di)
+            elif idx == 6:
+                back = mamba_download(ctx, dw.w_dt, di * r)
+            elif idx == 7:
+                back = mamba_download(ctx, dw.b_dt, di)
+            elif idx == 8:
+                back = mamba_download(ctx, dw.a_log, di * D_STATE)
+            elif idx == 9:
+                back = mamba_download(ctx, dw.d_skip, di)
+            elif idx == 10:
+                back = mamba_download(ctx, dw.w_out, dm * di)
+            elif idx == 11:
+                back = mamba_download(ctx, dstate.conv_win, b * di * D_CONV)
+            else:
+                back = mamba_download(ctx, dstate.h, b * di * D_STATE)
+            var reached = nonfinite_cells(back)
+            if reached != 1:
+                raise Error(
+                    String("mamba_check: CLAUSE (e) IS VACUOUS for ")
+                    + names[idx]
+                    + " / "
+                    + pat_names[k]
+                    + ": the plant did NOT arrive on the device ("
+                    + String(reached)
+                    + " non-finite cells read back, expected 1). Any refusal"
+                    + " after this fired for another reason"
+                    + " ([[reached-but-inert]])."
+                )
+
+            # ---- 2 and 3. the refusal, by name, before any stage ---------
+            var trace = IdentityTrace.to_path(path)
+            var dstages = MambaDeviceStages(ctx, b, l, dims)
+            var raised = False
+            var msg = String("")
+            try:
+                mamba_block_forward(
+                    ctx, dstages, dstate, dw, dx, b, l, trace, "clause_e"
+                )
+            except e:
+                raised = True
+                msg = String(e)
+            if not raised:
+                raise Error(
+                    String("mamba_check: CLAUSE (e) FAILED. A ")
+                    + pat_names[k]
+                    + " planted in "
+                    + names[idx]
+                    + " was NOT refused, and it reached the device (checked"
+                    + " above). A vendor-shaped payload can now enter a card."
+                )
+            if msg.find(names[idx]) < 0:
+                raise Error(
+                    String("mamba_check: CLAUSE (e) FAILED. A ")
+                    + pat_names[k]
+                    + " planted in "
+                    + names[idx]
+                    + " was refused, but the refusal does not NAME it: "
+                    + msg
+                )
+            var recs = read_trace_lines(path)
+            if len(recs) != 0:
+                raise Error(
+                    String("mamba_check: CLAUSE (e) FAILED. The refusal for ")
+                    + names[idx]
+                    + " fired, but "
+                    + String(len(recs))
+                    + " stage(s) were already recorded. The clause is"
+                    + " REFUSED BEFORE ANY RECORDED STAGE."
+                )
+            checked += 1
+            _ = dstages^
+            _ = dw^
+            _ = dstate^
+            _ = dx^
+
+    print(
+        "clause (e): PASS, "
+        + String(checked)
+        + " plants, each read back off the device before the call, each"
+        " refused BY NAME, each with 0 stages recorded"
+    )
+
+
+# ===========================================================================
 
 
 def main() raises:
@@ -1078,7 +1369,14 @@ def main() raises:
             print(
                 "clause (d): SKIPPED (set MOJOLEARN_MAMBA_CHECK_CLAUSE_D=1)"
             )
+        if env_on("MOJOLEARN_MAMBA_CHECK_CLAUSE_E"):
+            clause_e(ctx, b, l, dims)
+        else:
+            print(
+                "clause (e): SKIPPED (set MOJOLEARN_MAMBA_CHECK_CLAUSE_E=1)"
+            )
         print(
-            "SCOPE: this shape only, IDENTICAL only. L=16/64/257, FAST,"
-            " clauses (d) and (e) and the corpus cross-check are OWED."
+            "SCOPE: this shape only, IDENTICAL only. Clauses (a), (b), (c),"
+            " (d), (e) and (f) are gated HERE; L=16/64/257, FAST mode, the"
+            " corpus cross-check and every non-Apple column are OWED."
         )
