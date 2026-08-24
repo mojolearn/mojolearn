@@ -22,12 +22,16 @@ eight orders). Scoreboard:
                                                     after the gate was fixed;
                                                     it was INERT first
 
-ADDED 2026-08-24, WRITTEN BUT NOT RUN (no-compile lane):
+ADDED AND RUN 2026-08-24:
 
-    (h)  the pivot tie rule, RE-ARMED       ?       (e) on a fixture that
-                                                    actually has a tie
-    (i)  the guards decision bit            ?       proves the decision stage
-                                                    is load-bearing
+    (h)  the pivot tie rule, RE-ARMED       BITES   6 of 229 card tags; piv
+                                                    AND P0 both move, so piv
+                                                    is corroborating, not
+                                                    decisive. loglike absorbs
+                                                    it entirely (0 of 6)
+    (i)  the guards decision bit            BITES   1 of 229 card tags, and
+                                                    ZERO float stages: the
+                                                    decision-only shape
 
 Runs use `MOJOLEARN_ARIMA_SURVEY=1`, which makes the gate print
 `SABOTAGE-MOVED` and CONTINUE instead of raising on the first differing
@@ -425,7 +429,33 @@ matrix the device built, so the arm is known to be armed before it is fired.
   moves and `P0` does not, that is not a weak result, it is the whole reason
   `piv` was added as a stage. It is this lane's holtwinters `CRIT_ORDER`: a
   decision-only sabotage that no float comparison anywhere can see.
-- OBSERVED: _(not run: written 2026-08-24 in a no-compile lane)_
+- OBSERVED 2026-08-24, Apple M4, IDENTICAL: **BITES, and BOTH `piv` AND the
+  numeric stages move.** Card diff against the clean tree, 6 of 229 tags:
+
+      arima.ar2_tie.piv        i32 150   DIFFERS (2e3c0bfa.. -> 18c120ba..)
+      arima.ar2_tie.P0         f32  24   6 of 24 cells differ
+      arima.ar2_tie.P_final    f32  24   DIFFERS
+      arima.ar2_tie.Fs         f32 144   DIFFERS
+      arima.ar2_tie.pred       f32 144   14 of 144 cells differ
+      arima.ar2_tie.vs         f32 144   9 of 144 cells differ
+
+  Every other order is untouched, which is the control: `ar2_tie` is the
+  only order carrying a planted tie, so an arm that moved anything else
+  would have been perturbing something other than the tie.
+
+  **THE HOPED-FOR SHAPE DID NOT HAPPEN, and that is reported rather than
+  spun.** The prediction written above was that `piv` might move while `P0`
+  stayed bit-identical, making `piv` the sole witness. On this fixture it
+  does not: swapping the two tied rows changes the permutation AND the
+  arithmetic that follows it, so `P0` moves too and a numeric-only gate
+  would have caught this arm. `piv` is corroborating here, not decisive.
+  Arm (i) is where the decision-only shape actually shows up.
+
+  ONE THING DID REPRODUCE, though: `ar2_tie.loglike` moved ZERO of 6 cells
+  while `pred`, `vs`, `P0`, `P_final` and `Fs` all moved. The headline
+  output absorbed the whole perturbation. A gate comparing only the
+  log-likelihood would have called this arm inert, exactly as one comparing
+  only `loglike` would have called arm (a) inert on `arma11_k`.
 
 ## (i) the guards decision stage
 
@@ -441,7 +471,24 @@ value-comparing gate anywhere can notice.
   series, and `ar2_unit.guards` on the card.
 - MUST NOT FAIL: any float stage. If a float stage moves, the edit was not
   confined to the decision bit.
-- OBSERVED: _(not run: written 2026-08-24 in a no-compile lane)_
+- OBSERVED 2026-08-24, Apple M4, IDENTICAL: **BITES, AND IT IS THE
+  DECISION-ONLY SHAPE.** Exactly one thing moved, in the whole gate and in
+  the whole card:
+
+      check-arima  1 SABOTAGE-MOVED line, the guards assertion on ar2_unit
+      card diff    1 of 229 tags: arima.ar2_unit.guards
+      float stages 0. NOT ONE.
+
+  The `T[1] = -0.99` rewrite still happens, so the model is unchanged and
+  every float stage in every order is bit-identical. The only thing that
+  changed is that the pipeline stopped SAYING it had rewritten the model,
+  and the only thing that noticed is the decision stage.
+
+  This is this lane's holtwinters `CRIT_ORDER`: a sabotage that moves zero
+  float cells anywhere and is caught solely because a decision is recorded.
+  It is the evidence that `guards` is load-bearing rather than decorative,
+  and it is the answer to whether the four decision stages were worth
+  adding.
 
 ---
 
