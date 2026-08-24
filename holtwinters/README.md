@@ -11,11 +11,12 @@ Read this before trusting anything below.
 * **No second vendor has run this.** Every cross-vendor claim here is a
   claim about what the spelling is designed to guarantee, not a
   measurement. NVIDIA and AMD re-prints are OWED.
-* **Some of this tree has not been compiled since that green run.** The
-  lane was made read-only mid-round (the machine was crashed by seven
-  parallel compiles), so the commits after the green one carry source
-  edits that are unbuilt. The OWED list at the bottom names every one of
-  them. Do not read a green line in this file as covering them.
+* **Every arm and both modes have now been built and run against the
+  current tree** (2026-08-23, serially, one compile at a time): the clean
+  IDENTICAL gate, the clean FAST gate, and all nine sabotage arms. The
+  earlier "uncompiled since the green run" caveat is discharged. Seven
+  arms fail as designed; two are Apple-null and are counted as REACH
+  FAILURES, not passes.
 
 ## UPSTREAM IS DEPRECATING THIS ALGORITHM IN 26.12
 
@@ -201,22 +202,76 @@ places the lane is not cuML's numbers.
 ## Sabotage table
 
 Every arm is a `-D MOJOLEARN_HW_SABOTAGE_<NAME>=1` build under IDENTICAL;
-nothing is edited and nothing is reverted.
+nothing is edited and nothing is reverted. All nine were built and run
+serially on one M4 on 2026-08-23 against the current tree. **Stages and
+cells are counted, not just first divergence**, because the mamba lane
+measured an arm that moves 13 of 16 stages and still leaves the final
+output bit-identical. Cell counts are device vs oracle on the `additive`
+fixture (2800 cells) unless the row says otherwise.
 
-| arm | what it breaks | result |
-|---|---|---|
-| `ROTATE_CONV` | `conv1d`'s filter sum starts at `block_idx.x % filter_size` and wraps: the same terms in a launch-dependent order | FAILS. `mixed card: hw.decomp.trend f32 84 c85b27cf43373bd2 VS b08af783e8b81cc1` |
-| `NO_FTZ` | `ftz` dropped at every stored intermediate | FAILS. `additive card: record counts differ: 42 vs 37` -- a STRUCTURAL divergence, because the flush changes the optimizer's path and the two runs stop after different numbers of iterations |
-| `SWAP_FMA` | the OTHER product fused in the eval's level update | FAILS. `additive card: record counts differ: 39 vs 37` |
-| `NO_ZERO_DIR_GUARD` | DEVIATION 662 off: their unguarded `0.866 / sqrt(0)` | FAILS. `series 0 params 0.0/0.0/0.0 criterion OPTIM_MIN_ERROR_DIFF niter 1 sse 0x00000000 iter000 0x7fc00000/0x7fc00000/0x7fc00000` -- the NaN, canonicalized by DEVIATION 661, and the (0,0,0) the deviation exists to prevent |
-| `CLAMP_GE` | DEVIATION 663's lower test loosened from `val > lo` to `val >= lo`, so a `-0.0` compares equal to `+0.0` and survives the clamp | FAILS. `bound_device(-0.0) = 0x80000000, expected 0x00000000` |
-| `LS_TIE` | the line-search acceptance test loosened from `>` to `>=`: on an exact tie the step is rejected and halved again | FAILS. `additive card: hw.opt.iter008.params f32 21 4bcc383a5858277b VS 6da3d5f0c043ed14` |
-| `CRIT_ORDER` | the two stop criteria tested in the other order, so an iteration where both fire reports the other criterion | **UNVERIFIED.** The build was cut off by the compile freeze. OWED |
-| `STD_SQRT` | `std.math.sqrt` for the BFGS step size instead of `identical_sqrt` | **NULL ON APPLE**, recorded. The whole gate is byte-identical to the clean build, because on Metal both spellings are the same correctly-rounded hardware sqrt. It is the NVIDIA arm of that seam (row 10: approximate there) and stays unrun until a second vendor prints |
-| `HW_MAX_CLAMP` | `bound_device` as `min(max(0.0, v), 1.0)`, the hardware max with the zero FIRST | **NULL ON APPLE**, recorded, and the reason is the interesting part. Row 39 measured `max(+0.0, -0.0)` on two RUNTIME operands. Here one operand is the compile-time constant `+0.0`, and `llvm.maxnum(0.0, v)` is folded to a compare-select whose tie answer is `+0.0`. LLVM may do that, because maxnum's zero-tie answer is unspecified. That null is itself the argument for the compare chain: a `max` here answers correctly only if a constant happened to get folded, which is not a property to rest a recorded stage on. `CLAMP_GE` is the arm that bites |
+| arm | what it breaks | stages | cells | verdict |
+|---|---|---|---|---|
+| `NO_FTZ` | `ftz` dropped at every stored intermediate | STRUCTURAL 42 vs 37 | 1398/2800 `[sse=7 alpha=7 beta=1 gamma=7 iter=317 level=418 trend=60 season=420 fcast=161]` | FAILS, hardest arm in the lane |
+| `SWAP_FMA` | the OTHER product fused in the eval's level update | STRUCTURAL 39 vs 37 | 1471/2800 `[sse=7 alpha=7 beta=1 gamma=7 iter=387 level=416 trend=60 season=420 fcast=166]` | FAILS. DEVIATION 698's fuse choice is load-bearing, not cosmetic |
+| `ROTATE_CONV` | `conv1d`'s filter sum starts at `block_idx.x % filter_size` | 34/41 on `mixed`, **0/37 on the other five** | 506/2800 on `mixed` `[sse=2 alpha=2 beta=1 gamma=2 iter=132 level=90 trend=120 season=115 fcast=42]`, 0 elsewhere | FAILS, but REACHED BY ONE FIXTURE ONLY. See below |
+| `LS_TIE` | line-search acceptance loosened `>` to `>=` | 9/37 (first `hw.opt.iter008.params`) | 64/2800 `[beta=1 iter=7 trend=56]` **FINAL FORECAST UNCHANGED** | FAILS. See below |
+| `CRIT_ORDER` | the two stop criteria tested in the other order | 1/37 (`hw.opt.criterion`) | **0/2800** | FAILS. See below |
+| `NO_ZERO_DIR_GUARD` | DEVIATION 662 off | fails earlier, at `check_hw_zero_series_keeps_start` | n/a | FAILS: `params 0.0/0.0/0.0 criterion OPTIM_MIN_ERROR_DIFF niter 1 iter000 0x7fc00000 x3` |
+| `CLAMP_GE` | DEVIATION 663's lower test loosened `>` to `>=` | fails earlier, at `check_hw_signed_zero_clamp` | n/a | FAILS: `bound_device(-0.0) = 0x80000000, expected 0x00000000` |
+| `STD_SQRT` | `std.math.sqrt` for the BFGS step size | **0/37, 0/36, 0/15, 0/14, 0/29, 0/41** | **0 on all six fixtures** | **APPLE-NULL: a REACH FAILURE, not a pass** |
+| `HW_MAX_CLAMP` | `bound_device` as `min(max(0.0, v), 1.0)` | **0/37, 0/36, 0/15, 0/14, 0/29, 0/41** | **0 on all six fixtures** | **APPLE-NULL: a REACH FAILURE, not a pass** |
 
-Two arms being Apple-null is a finding, not a gap: both are other
-vendors' arms and both are recorded as owed rather than counted as passes.
+### Three arms that an output-only comparison would have called inert
+
+This lane reproduces the mamba lane's result, twice, and it is the single
+most important thing on this page.
+
+* **`CRIT_ORDER` moves ZERO cells.** Not one of 2800. It changes exactly
+  one stage, `hw.opt.criterion`, and nothing else: the arithmetic is
+  untouched and only the REPORTED criterion changes. A gate that compared
+  fitted parameters and components would have passed it for ever. It is
+  caught only because the criterion is a recorded stage (DEVIATION 665),
+  which is the entire argument for recording it. It also settles a
+  question the arm was written to ask: **the tie IS reached** -- both stop
+  criteria fire on the same iteration on the additive fixture, so their
+  test ORDER is a real decision and not a theoretical one.
+* **`LS_TIE` leaves the final forecast bit-identical.** It moves 9 stages
+  and 64 cells, including 56 trend cells, and the forecast -- the thing a
+  caller actually reads -- does not move at all. An output-only comparison
+  sees nothing. This is the mamba lane's `S1_FOLD_DESCENDING` finding
+  reproduced in a completely different algorithm.
+* **`ROTATE_CONV` is reached by one fixture in six.** Five fixtures show
+  0/37 stages and 0 cells, and that is not a weak arm: with `batch_size`
+  7 at `tpb` 32 there is exactly ONE block, so `block_idx.x %
+  filter_size` is 0 and the rotation is the identity. Only `mixed`, which
+  the gate deliberately runs at `tpb` 4 to get two blocks, reaches it --
+  and there it moves 34 of 41 stages. REACH IS PER-BRANCH: had `mixed`
+  not existed, this arm would have looked inert while the defect it
+  models was fully live on any batch large enough to need two blocks.
+
+### The two Apple-null arms are reach failures, and are counted as such
+
+Neither is a pass. `STD_SQRT` is null because on Metal `std.math.sqrt`
+and `identical_sqrt` are the same correctly-rounded hardware instruction;
+it is the NVIDIA arm of that seam (row 10: approximate there) and cannot
+be exercised here. `HW_MAX_CLAMP` is null because the clamp's zero is a
+compile-time constant, so `llvm.maxnum(0.0, v)` folds to a compare-select
+answering `+0.0`; LLVM may do that because maxnum's zero-tie answer is
+unspecified. Both now carry counts across all six fixtures rather than a
+single "no difference", so a future vendor run has a baseline to move.
+`CLAMP_GE` is the arm that bites where `HW_MAX_CLAMP` does not.
+
+### Negative controls, so the passes are not vacuous
+
+`check_hw_launch_invariance` is a chain of `_first_diff(...) == ""`. If
+`_all_bits` returned an empty list, or `_device_fit` ignored its tpb, pad
+and poison arguments, every comparison would compare a thing to itself
+and the gate would pass for ever on every vendor. Two controls now run
+before any of it is believed, and both PASS: a fit of a DIFFERENT series
+must produce different bits over a non-empty cell list, and rows 1-7 of
+the batch of 512 must not all carry row 0's SSE. They raise the word
+VACUOUS rather than FAILED, because a vacuous gate and a broken kernel
+are different diagnoses.
 
 ## What the gates check
 
@@ -238,11 +293,32 @@ vendors' arms and both are recorded as owed rather than counted as passes.
     check_hw_card_is_emitted         the stage list and the run-to-run control
 
 Measured 2026-08-23 on one M4, IDENTICAL: all nine OK, 6 of 6 fixtures
-bit-identical at every stage and cell, 37 stages recorded. FAST: all nine
-run, and `check_hw_device_equals_oracle` REPORTS rather than asserts (1 of
-6 identical) -- the expected FAST split, and the divergence is inside the
-optimizer's iterations, so the two runs take different numbers of stages
-and the card difference is structural rather than per-cell.
+bit-identical at every stage and cell, 37 stages recorded, both negative
+controls pass.
+
+FAST, rebuilt and run the same day, RECORDED not asserted (exit 0): all
+nine checks run and `check_hw_device_equals_oracle` REPORTS rather than
+asserts, 1 of 6 fixtures identical (`zero`). The divergence is now
+QUANTIFIED per fixture instead of being summarised as "the counts
+differ":
+
+| fixture | stages | cells |
+|---|---|---|
+| additive | STRUCTURAL 41 vs 35 | 1471/2800 |
+| multiplicative | STRUCTURAL 45 vs 43 | 1124/2800 |
+| constant | 9/15 (first `hw.opt.iter000.params`) | 215/2800 |
+| zero | 0 | 0 (identical) |
+| short | STRUCTURAL 27 vs 29 | 565/1792 |
+| mixed | 31/37 (first `hw.opt.iter000.params`) | 905/2800 |
+
+The divergence starts at `hw.opt.iter000.params` wherever it is not
+structural, i.e. in the optimizer's FIRST iteration, and then compounds:
+the two runs stop after different iteration counts, which is why four of
+the six are structural rather than per-cell. That is the expected FAST
+split (no `ftz`, `identical_mul_add` as the naive chain), and it is
+recorded rather than asserted because FAST is the vendor-default arm by
+construction. `check_hw_launch_invariance` is OK under FAST too, controls
+included: launch invariance does not depend on the numeric mode.
 
 ## Two places this port is NOT cuML's bits, stated plainly
 
@@ -273,25 +349,23 @@ the entry `bindings/` should reach.
 
 ## OWED, and it is not a short list
 
-Everything here needs a compile slot. None of it has been run.
+Items 1, 2 and 3 of the previous list are DONE and are the tables above.
+What remains:
 
-1. **`CRIT_ORDER` sabotage** -- written, build cut off by the freeze.
-   Must FAIL `hw.opt.criterion`. If it turns out Apple-null (both criteria
-   never fire on the same iteration on these fixtures), that is a REACH
-   failure, not a pass: it means the tie the arm targets is unreached and
-   a fixture must be built that reaches it.
-2. **A FAST-mode rebuild** of everything after the green run.
-3. **The six pre-existing sabotage arms re-run** against the current tree.
-   They passed against the pre-edit tree; the edits are believed
-   bit-neutral (the clean IDENTICAL gate was rebuilt once after them and
-   printed identical hashes) but the arms themselves were not re-run.
-4. **NVIDIA and AMD re-prints** of the whole gate. `STD_SQRT` and
-   `HW_MAX_CLAMP` are specifically waiting on these.
-5. **A fixture that reaches the `bfgs_iter_limit`** so the cuml#888
+1. **NVIDIA and AMD re-prints** of the whole gate. `STD_SQRT` and
+   `HW_MAX_CLAMP` are reach failures on Apple and can only be exercised
+   there; every "identical across vendors" claim in this file is a claim
+   about the spelling, not a measurement.
+2. **A fixture that reaches `bfgs_iter_limit`** so the cuml#888
    line-search behaviour recorded in `UNPORTED.tsv` is exercised rather
-   than argued about.
-6. **A fixture that reaches the second NaN route** (`rho_ = 0` from two
-   bitwise-equal consecutive gradients) to confirm it terminates the way
-   `UNPORTED.tsv` says it does.
-7. **`get_num_blocks`'s 65535 cap** is ported but not on the launch path
+   than argued about. No current fixture hits the 1000-iteration limit
+   (the gate prints `0 hit the 1000-iteration limit`).
+3. **A fixture that reaches the second NaN route** (`rho_ = 0` from two
+   bitwise-equal consecutive gradients).
+4. **`get_num_blocks`'s 65535 cap** is ported but not on the launch path
    and no fixture approaches it. Ungated.
+5. **A `ROTATE_CONV`-style multi-block fixture for the OTHER kernels.**
+   `mixed` gives two blocks for the decomposition path; the optimizer and
+   forecast kernels are only ever run at one block by five of the six
+   fixtures. Their launch-geometry independence rides on the batch-512
+   arm of `check_hw_launch_invariance` rather than on a sabotage.
