@@ -28,12 +28,37 @@ import importlib.util
 import os
 import sys
 
+# DEVIATION 869, 2026-08-24. THIS TUPLE AND `_build_script` BELOW MUST LIST
+# EVERY EXTENSION, AND THE COST OF FORGETTING ONE IS A MISLABELLED
+# MEASUREMENT RATHER THAN A FAILURE.
+#
+# `select()` only installs the identical binary for names IT KNOWS. An
+# extension absent from this tuple is never re-pointed, so under
+# MOJOLEARN_NUMERIC_MODE=identical a plain `from . import _mojolearn_x`
+# resolves to the FAST binary sitting beside it and returns the fast
+# arithmetic under the identical label. That is the exact failure this
+# module's docstring says is impossible to make by accident, and it was
+# possible for five extensions at once until this edit.
+#
+# Five bindings landed on 2026-08-24 (svm/isolation-forest, solver/hierarchy,
+# metrics/spectral, holtwinters/tsa, and the linalg GEMM surface). FOUR of
+# their authors independently found this tuple stale and each wrote a private
+# mode-aware loader to work around it. Those workarounds are now dead code
+# and their authors marked them for deletion; delete them when convenient.
+#
+# When you add a binding, add it in BOTH places or the build will work and
+# the numbers will be quietly wrong.
 _MODULES = (
     "_mojolearn",
     "_mojolearn_estimators",
     "_mojolearn_gbdt",
     "_mojolearn_rf",
     "_mojolearn_trees",
+    "_mojolearn_svm",
+    "_mojolearn_solver",
+    "_mojolearn_metrics",
+    "_mojolearn_tsa",
+    "_mojolearn_linalg",
 )
 _SELECTED = None
 
@@ -117,13 +142,22 @@ class _MissingIdentical(type(sys)):
 
 
 def _build_script(name):
+    # `.get` with a derived fallback, not `[name]`. A KeyError here would
+    # fire from inside the MISSING-binary path, replacing a clear "build it
+    # with this command" message with a traceback about a dict, at exactly
+    # the moment the caller most needs to be told what to run.
     return {
         "_mojolearn": "build.sh",
         "_mojolearn_estimators": "build_estimators.sh",
         "_mojolearn_gbdt": "build_gbdt.sh",
         "_mojolearn_rf": "build_rf.sh",
         "_mojolearn_trees": "build_trees.sh",
-    }[name]
+        "_mojolearn_svm": "build_svm.sh",
+        "_mojolearn_solver": "build_solver.sh",
+        "_mojolearn_metrics": "build_metrics.sh",
+        "_mojolearn_tsa": "build_tsa.sh",
+        "_mojolearn_linalg": "build_linalg.sh",
+    }.get(name, "build" + name[len("_mojolearn"):] + ".sh")
 
 
 def numeric_mode():

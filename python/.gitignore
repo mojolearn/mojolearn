@@ -6,6 +6,19 @@ mojolearn/_mojolearn_gbdt.so
 mojolearn/_mojolearn_estimators.so
 mojolearn/_mojolearn_rf.so
 mojolearn/_mojolearn_trees.so
+# The 2026-08-24 bindings. Listed BY NAME rather than as `mojolearn/*.so`,
+# keeping this file's existing shape: a glob would also swallow a .so that
+# someone genuinely meant to track, and the explicit list is what makes a
+# forgotten binding show up as untracked instead of vanishing silently.
+mojolearn/_mojolearn_svm.so
+mojolearn/_mojolearn_solver.so
+mojolearn/_mojolearn_metrics.so
+mojolearn/_mojolearn_tsa.so
+mojolearn/_mojolearn_linalg.so
+# Build output copied in by packaging/macos/build_release_wheel.sh so that
+# `python -m mojolearn verify` has a comparator inside the wheel. The single
+# source stays tools/identity_trace_diff.py in git.
+mojolearn/_identity_trace_diff.py
 mojolearn/identical/
 mojolearn/.dylibs/
 dist/

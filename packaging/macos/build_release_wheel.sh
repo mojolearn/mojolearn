@@ -42,15 +42,27 @@ cp "$here/LICENSE" "$here/NOTICE" "$here/README.md" "$here/python/"
 # `_mojolearn_estimators.so` shipped as a ZERO-KERNEL artifact on 2026-08-22
 # while this file said "every extension" and built two of three.
 #
-# AS OF 2026-08-23 THE LIST IS FIVE EXTENSIONS IN TWO NUMERIC MODES. The
+# AS OF 2026-08-24 THE LIST IS TEN EXTENSIONS IN TWO NUMERIC MODES. The
 # FAST set lands at python/mojolearn/*.so and the IDENTICAL set at
 # python/mojolearn/identical/*.so; python/mojolearn/_backend.py loads the
 # identical set when MOJOLEARN_NUMERIC_MODE=identical is set at import
 # (mojo_only/numerics.mojo reads the build define). Both sets ship in ONE
 # wheel. The list below is THE list: bindings/build_*.sh that is not named
 # here does not ship, and a name here with no script fails the build.
-BUILD_SCRIPTS="build.sh build_gbdt.sh build_estimators.sh build_rf.sh build_trees.sh"
-EXT_NAMES="_mojolearn _mojolearn_gbdt _mojolearn_estimators _mojolearn_rf _mojolearn_trees"
+# 2026-08-24: five bindings were added at once (svm/isolation-forest,
+# solver/hierarchy, metrics/spectral, holtwinters/tsa, and the linalg GEMM
+# surface). They are listed here because a build script that is not named
+# here does not ship, and python/mojolearn/_backend.py now knows all ten.
+#
+# DELIBERATELY NOT MIRRORED IN tools/e1_bootstrap.sh, AND THAT ASYMMETRY IS
+# THE POINT. That script builds bindings on a RENTED GPU under a work bound.
+# Phase 8 drives every lane gate through `mojo run` on the lane's own driver,
+# not through a Python binding, so the five new extensions buy a leg nothing
+# and would roughly double its binding-build time. A leg that spends its
+# lease compiling and comes home with an empty lanes/ has bought nothing at
+# all. Add a binding there only when a phase actually imports it.
+BUILD_SCRIPTS="build.sh build_gbdt.sh build_estimators.sh build_rf.sh build_trees.sh build_svm.sh build_solver.sh build_metrics.sh build_tsa.sh build_linalg.sh"
+EXT_NAMES="_mojolearn _mojolearn_gbdt _mojolearn_estimators _mojolearn_rf _mojolearn_trees _mojolearn_svm _mojolearn_solver _mojolearn_metrics _mojolearn_tsa _mojolearn_linalg"
 
 # THE PER-SCRIPT GATES ARE OFF HERE, AND THE REASON IS A CLEAN CHECKOUT.
 # Each bindings/build_*.sh ends by copying python/mojolearn/ aside and

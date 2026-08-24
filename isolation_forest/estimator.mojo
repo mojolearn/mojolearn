@@ -23,6 +23,12 @@ the device is `Float32(-offset_)` as their `<float>threshold` cast.
 `random_state=None` is NOT a fresh random seed here: it is 0, stated,
 because a fit whose seed nobody recorded cannot be reproduced and this
 repository's product is the reproducible fit.
+
+`iforest_run_host` at the foot is the ONE-SHOT form the CPython binding
+calls (`bindings/_mojolearn_svm.mojo`, `python/mojolearn/_iforest_impl.py`).
+The estimator struct above is the one the gates use, and it keeps its model
+between calls; the binding may not, and DEVIATION 874 at that entry says
+what that costs.
 """
 
 from max.gpu.host import DeviceContext
@@ -240,3 +246,148 @@ struct IsolationForestEstimator(Movable):
     ) raises -> List[Int32]:
         self.fit(ctx, x_rowmajor, n_rows, n_cols)
         return self.predict(ctx, x_rowmajor, n_rows, n_cols)
+
+
+# ===========================================================================
+# THE ONE-SHOT HOST ENTRY: what `bindings/_mojolearn_svm.mojo` calls.
+#
+# `IsolationForestEstimator` above holds an `IsolationForestModel`, and that
+# model is eight `DeviceBuffer`s. `bindings/_mojolearn_estimators.mojo`'s
+# header states the rule this lane inherits -- "all device buffers and
+# contexts live for one call and no pointer is retained" -- so the estimator
+# CANNOT live between two Python calls.
+#
+# DEVIATION 874: therefore `iforest_run_host` fits and scores in ONE call,
+# and `python/mojolearn/_iforest_impl.py` keeps the training matrix and
+# calls it again for every `score_samples`, `decision_function` and
+# `predict`. Each of those REFITS the forest.
+#
+# That is honest rather than free. It is CORRECT because the forest is a
+# pure function of `(random_state, tree_id, X bits)` -- `isolation_forest/
+# README.md` "Where the identity actually lives", and `random_state=None`
+# is 0 here rather than a fresh draw, stated in this file's own docstring
+# -- so the refit is the same forest bit for bit and `check_if_launch_
+# invariance` is the gate on that. It COSTS a full fit per scoring call.
+#
+# The alternative, handing the four node arrays and the tree offsets back
+# to Python and uploading them again at predict, was not taken: it needs a
+# model-reconstruction path that no gate in this lane covers, and a mistake
+# in it returns wrong scores silently rather than raising.
+# ===========================================================================
+
+
+comptime IF_WANT_SCORE_SAMPLES = 0
+comptime IF_WANT_DECISION_FUNCTION = 1
+comptime IF_WANT_PREDICT = 2
+
+
+struct IFRunOutputs(Copyable, Movable):
+    """One fit-and-score. `values` is filled for `score_samples` and
+    `decision_function`, `labels` for `predict`; the other is empty. The
+    three fitted attributes come back on every call because the Python
+    layer publishes them as `offset_`, `max_samples_` and
+    `n_features_in_`."""
+
+    var values: List[Float32]
+    var labels: List[Int32]
+    var offset_: Float64
+    var max_samples_: Int
+    var n_features_in_: Int
+
+    def __init__(out self):
+        self.values = List[Float32]()
+        self.labels = List[Int32]()
+        self.offset_ = -0.5
+        self.max_samples_ = 0
+        self.n_features_in_ = 0
+
+
+def iforest_run_host(
+    train: List[Float32],
+    n_train: Int,
+    n_features: Int,
+    query: List[Float32],
+    n_query: Int,
+    n_estimators: Int,
+    max_samples_mode: Int,
+    max_samples_int: Int,
+    max_samples_frac: Float64,
+    max_depth: Int,
+    max_features_mode: Int,
+    max_features_int: Int,
+    max_features_frac: Float64,
+    bootstrap: Bool,
+    random_state: Int,
+    contamination_auto: Bool,
+    contamination: Float64,
+    want: Int,
+) raises -> IFRunOutputs:
+    """`IsolationForest(...).fit(train)` then one of `score_samples`,
+    `decision_function` or `predict` on `query`, in one call.
+
+    Both matrices are ROW-MAJOR `n x n_features`; `fit` transposes to
+    column-major itself, as cuML's `fit` does (`order="F"`, `:599-605`).
+
+    `max_samples_mode`: 0 = "auto" (`min(256, n_samples)`), 1 = an int,
+    2 = a float fraction. `max_features_mode`: 0 = a float fraction
+    (their default 1.0), 1 = an int. `max_depth` -1 is their `None`.
+    `contamination_auto` true is their `"auto"` (`offset_ = -0.5`), false
+    takes the quantile and needs `contamination` in (0, 0.5].
+
+    Every refusal here is `IsolationForestEstimator.fit`'s, which is cuML's
+    `fit` transcribed, plus DEVIATION 680's finiteness scan inside the
+    ported `fit`. `warm_start` and `sample_weight` have no argument on this
+    entry at all; the Python layer refuses them by name before it gets here,
+    which is where their `UnsupportedOnGPU` sits too (`:592-595`).
+    """
+    if n_train <= 0:
+        raise Error("iforest_run_host: n_rows must be at least one")
+    if n_features <= 0:
+        raise Error("iforest_run_host: n_features must be at least one")
+    if len(train) != n_train * n_features:
+        raise Error(
+            "iforest_run_host: X has " + String(len(train))
+            + " values, n_rows x n_features is " + String(n_train * n_features)
+        )
+    if n_query <= 0:
+        raise Error("iforest_run_host: the query matrix must have at least one row")
+    if len(query) != n_query * n_features:
+        raise Error(
+            "iforest_run_host: the query X has " + String(len(query))
+            + " values, n_rows x n_features is " + String(n_query * n_features)
+        )
+    if want < IF_WANT_SCORE_SAMPLES or want > IF_WANT_PREDICT:
+        raise Error(
+            "iforest_run_host: want=" + String(want) + " is not one of 0"
+            " (score_samples), 1 (decision_function), 2 (predict)"
+        )
+
+    var ctx = DeviceContext()
+    var est = IsolationForestEstimator()
+    est.n_estimators = n_estimators
+    est.max_samples_mode = max_samples_mode
+    est.max_samples_int = max_samples_int
+    est.max_samples_frac = max_samples_frac
+    est.max_depth = max_depth
+    est.max_features_mode = max_features_mode
+    est.max_features_int = max_features_int
+    est.max_features_frac = max_features_frac
+    est.bootstrap = bootstrap
+    est.random_state = random_state
+    est.contamination_auto = contamination_auto
+    est.contamination = contamination
+    est.warm_start = False
+    est.fit(ctx, train, n_train, n_features)
+
+    var out = IFRunOutputs()
+    out.offset_ = est.offset_
+    out.max_samples_ = est.max_samples_
+    out.n_features_in_ = est.n_features_in_
+    if want == IF_WANT_PREDICT:
+        out.labels = est.predict(ctx, query, n_query, n_features)
+    elif want == IF_WANT_DECISION_FUNCTION:
+        out.values = est.decision_function(ctx, query, n_query, n_features)
+    else:
+        out.values = est.score_samples(ctx, query, n_query, n_features)
+    _ = est^
+    return out^

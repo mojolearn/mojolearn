@@ -1,8 +1,13 @@
-"""Host-list surface for Holt-Winters: what `bindings/` will call.
+"""Host surface for Holt-Winters: what `bindings/` calls.
 
-**NOT YET WIRED** into `bindings/` or `python/` (not this lane's
-directories; COMMON_BRIEF). The README's HAND-OFF names the Python surface;
-this is the entry it should reach, shaped like `kde/estimator.mojo`.
+WIRED 2026-08-24 (DEVIATIONS 900-909). `bindings/_mojolearn_tsa.mojo` calls
+`holtwinters_fit_ptr` / `holtwinters_forecast_ptr` at the bottom of this
+file, and `python/mojolearn/_tsa_impl.py::ExponentialSmoothing` calls those.
+The list-shaped entries in the middle of the file are what the gates and the
+pointer entries both go through, so there is one fit path and not two.
+
+The sentence this replaced said NOT YET WIRED, which was true when it was
+written and stopped being true here.
 
 `holtwinters_fit_host` takes the `batch_size x n` series-major data as a
 host list (each series contiguous, cuML's numpy convention `(ts_num, n)`),
@@ -244,3 +249,189 @@ def holtwinters_forecast_host(fitted: HWFit, h: Int) raises -> List[Float32]:
     var ctx = DeviceContext()
     var trace = IdentityTrace()
     return holtwinters_forecast_host_traced(ctx, fitted, h, trace)
+
+
+# =============================================================================
+# THE POINTER SURFACE bindings/_mojolearn_tsa.mojo CALLS
+# =============================================================================
+# ADDED 2026-08-24 with the Python surface (DEVIATIONS 900-909). The two
+# entries above take and return host `List`s, which is the right shape for a
+# gate and the wrong shape for a CPython binding: a binding wants to hold the
+# GIL released across the whole device call, and moving a `HWFit` across that
+# boundary buys nothing. These two take the caller's numpy addresses directly,
+# in the same style as `decomposition/estimator.mojo::pca_fit_host`, and every
+# byte of arithmetic still goes through `holtwinters_fit_host` /
+# `holtwinters_forecast_host` above, so there is one fit path and not two.
+#
+# THE PACKED BUFFERS, AND WHY THEY ARE PACKED. `PythonModuleBuilder.
+# def_function` infers its signature from arity and gives out around nine
+# arguments, so `fit` cannot hand back eight separate addresses. The three
+# component series share one float32 buffer and the four per-series scalars
+# share another. Each layout is written out below and in the SAME WORDS in
+# `bindings/_mojolearn_tsa.mojo` and `python/mojolearn/_tsa_impl.py`. A
+# silently reordered slice is a wrong answer rather than a failure, which is
+# why the three copies of the order are meant to be diffable by eye.
+
+
+def holtwinters_fit_ptr(
+    data_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    comps_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    stats_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    flags_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    n: Int,
+    batch_size: Int,
+    frequency: Int,
+    start_periods: Int,
+    seasonal: String,
+    eps: Float32,
+) raises -> Int:
+    """`ExponentialSmoothing(endog, seasonal, seasonal_periods=frequency,
+    start_periods, ts_num=batch_size, eps).fit()`. Returns `components_len
+    = (n - frequency) * batch_size`.
+
+    `data_ptr` reads `batch_size * n` float32, SERIES-MAJOR: series `s`
+    occupies `[s * n, (s + 1) * n)`. That is `holtwinters.pyx::_check_dims`
+    on a numpy input, which takes an `(ts_num, n)` array and `ravel()`s it
+    in C order.
+
+    `comps_ptr` is written with `3 * components_len` float32, in this exact
+    order (the same words in `bindings/_mojolearn_tsa.mojo` and
+    `python/mojolearn/_tsa_impl.py`):
+
+        [0 * components_len, 1 * components_len)   level
+        [1 * components_len, 2 * components_len)   trend
+        [2 * components_len, 3 * components_len)   season
+
+    Each block is TIME-MAJOR: series `s` at step `i` is at `[s + i *
+    batch_size]`. That is `holtwinters.pyx:341-344`'s `reshape((ts_num,
+    num_rows), order='F')`, and it is a TRANSPOSE of the input's layout.
+
+    `stats_ptr` is written with `4 * batch_size` float32, in this exact
+    order:
+
+        [0 * batch_size, 1 * batch_size)   sse    (their `SSE`)
+        [1 * batch_size, 2 * batch_size)   alpha
+        [2 * batch_size, 3 * batch_size)   beta
+        [3 * batch_size, 4 * batch_size)   gamma
+
+    `flags_ptr` is written with `2 * batch_size` int32, in this exact
+    order:
+
+        [0 * batch_size, 1 * batch_size)   niter      (DEVIATION 665)
+        [1 * batch_size, 2 * batch_size)   criterion  (OptimCriterion,
+                                                       DEVIATION 665)
+
+    `sse` is cuML's; `alpha`/`beta`/`gamma`/`niter`/`criterion` are OURS.
+    cuML's `ExponentialSmoothing` returns none of the last five: the
+    parameters live in device scratch their pyx never reads back, and
+    `optim_result` is written only in the arm their fit does not take
+    (`runner.cuh` / `hw_optim.cuh:801`, `holtwinters/UNPORTED.tsv`).
+    DEVIATION 699's `decisions` mask is NOT handed out here: it is a card
+    instrument, it means nothing without the sabotage table beside it, and
+    a published integer nobody can read is a liability.
+    """
+    # DEVIATION 931, 2026-08-24. THESE TWO GUARDS MUST PRECEDE THE READ LOOP
+    # AND THE COMMENT THAT STOOD HERE SAID THEY DID NOT NEED TO.
+    #
+    # It read: "Validation is `holtwinters_fit_host`'s, by name, and it runs
+    # before any upload; nothing is duplicated here." That is true of the
+    # UPLOAD and false of the HOST READ below it. `holtwinters_validate_params`
+    # runs inside `holtwinters_fit_host`, which is called AFTER this loop has
+    # already dereferenced `data_ptr` `batch_size * n` times. A caller passing
+    # a bad `n` or `batch_size` therefore reads out of bounds before any
+    # validation sees the values, and `data_ptr` is a RAW ADDRESS crossing
+    # from Python, so the caller supplying it is a user, not this tree.
+    #
+    # The sibling entry `holtwinters_forecast_ptr` already got this right and
+    # guards before its own read. This is that pattern, and nothing more: the
+    # FULL validation is still `holtwinters_fit_host`'s and is not duplicated.
+    # These guard exactly the extents this loop dereferences.
+    if batch_size < 1:
+        raise Error(
+            "holtwinters fit: batch_size must be >= 1 (batch_size="
+            + String(batch_size) + "); the input read is batch_size * n cells"
+        )
+    if n < 1:
+        raise Error(
+            "holtwinters fit: n must be >= 1 (n=" + String(n)
+            + "); the input read is batch_size * n cells"
+        )
+    var _cells = batch_size * n
+    if _cells < 0 or _cells // batch_size != n:
+        raise Error(
+            "holtwinters fit: batch_size * n overflowed (batch_size="
+            + String(batch_size) + ", n=" + String(n) + ")"
+        )
+    var data = List[Float32]()
+    data.reserve(_cells)
+    for i in range(_cells):
+        data.append(data_ptr.unsafe_load(i))
+    var fitted = holtwinters_fit_host(
+        data, n, batch_size, frequency, start_periods, seasonal, eps
+    )
+    var components_len = len(fitted.level)
+    for i in range(components_len):
+        comps_ptr.unsafe_store(i, fitted.level[i])
+        comps_ptr.unsafe_store(components_len + i, fitted.trend[i])
+        comps_ptr.unsafe_store(2 * components_len + i, fitted.season[i])
+    for b in range(batch_size):
+        stats_ptr.unsafe_store(b, fitted.sse[b])
+        stats_ptr.unsafe_store(batch_size + b, fitted.alpha[b])
+        stats_ptr.unsafe_store(2 * batch_size + b, fitted.beta[b])
+        stats_ptr.unsafe_store(3 * batch_size + b, fitted.gamma[b])
+        flags_ptr.unsafe_store(b, fitted.niter[b])
+        flags_ptr.unsafe_store(batch_size + b, fitted.criterion[b])
+    _ = fitted^
+    return components_len
+
+
+def holtwinters_forecast_ptr(
+    comps_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n: Int,
+    batch_size: Int,
+    frequency: Int,
+    seasonal: String,
+    h: Int,
+) raises -> Int:
+    """`.forecast(h)`. Returns `h * batch_size`.
+
+    `comps_ptr` reads `3 * components_len` float32 in the SAME packed order
+    `holtwinters_fit_ptr` wrote them: level, then trend, then season, each
+    `components_len = (n - frequency) * batch_size` and each time-major.
+
+    `out_ptr` is written with `h * batch_size` float32, TIME-MAJOR: series
+    `s` at step `i` is at `[s + i * batch_size]`. That is
+    `holtwinters.pyx:386-388`'s `(ts_num, h)` array with `order="F"`.
+
+    `n` and `frequency` are the FIT's, not the forecast's; they are what
+    `HoltWintersForecastHelper` needs to find the last component of each
+    series (`runner.cuh:414-458`).
+    """
+    var st = seasonal_from_name(seasonal)
+    if n <= frequency:
+        raise Error(
+            "holtwinters forecast: n (" + String(n) + ") must exceed frequency ("
+            + String(frequency) + "); there would be no fitted components"
+        )
+    if batch_size < 1:
+        raise Error(
+            "holtwinters forecast: batch_size must be >= 1 (batch_size="
+            + String(batch_size) + ")"
+        )
+    var components_len = (n - frequency) * batch_size
+    var fitted = HWFit(n, batch_size, frequency, st, 0)
+    fitted.level.reserve(components_len)
+    fitted.trend.reserve(components_len)
+    fitted.season.reserve(components_len)
+    for i in range(components_len):
+        fitted.level.append(comps_ptr.unsafe_load(i))
+        fitted.trend.append(comps_ptr.unsafe_load(components_len + i))
+        fitted.season.append(comps_ptr.unsafe_load(2 * components_len + i))
+    # `h <= 0` is refused inside `holtwinters_forecast_host_traced`, by name,
+    # in their words ("h must be > 0. Currently: ...").
+    var fc = holtwinters_forecast_host(fitted, h)
+    for i in range(h * batch_size):
+        out_ptr.unsafe_store(i, fc[i])
+    _ = fitted^
+    return h * batch_size

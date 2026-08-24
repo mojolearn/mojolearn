@@ -6,7 +6,7 @@ those can reach. See NOTICE for the attribution each carries.
 
 WHAT IS IN THIS ALPHA, AND WHAT IS NOT
 ---------------------------------------
-Fifteen estimators: `NearestNeighbors`, `KNeighborsClassifier`,
+Twenty-three estimators, two submodules and two functions: `NearestNeighbors`, `KNeighborsClassifier`,
 `KNeighborsRegressor`, `KMeans`, `DBSCAN`, `PCA`, `TruncatedSVD`,
 `LinearRegression`, `Ridge`, `LogisticRegression` (binary, L-BFGS),
 `GradientBoosting`, `RandomForestClassifier`, `RandomForestRegressor`,
@@ -83,23 +83,61 @@ from .neighbors import (
 )
 from .randomforest import RandomForestClassifier, RandomForestRegressor
 
+# ---------------------------------------------------------------------------
+# THE 2026-08-24 SURFACE. Seven estimators, two submodules and two functions
+# over lanes that were finished and CERTIFIED at the kernel level and simply
+# unreachable from Python. Each carries its own WHAT IS HONORED / REFUSED
+# table and its own cross-vendor status, and those statuses DIFFER: `SVC`,
+# `Lasso`, `ElasticNet`, `AgglomerativeClustering` and `mojolearn.metrics`
+# stand on lanes with three-vendor identity cards at leg 11; `IsolationForest`,
+# `SpectralClustering` and `ExponentialSmoothing` do NOT and say so on the
+# class. Read the class, not this list.
+#
+# `ARIMA` is deliberately absent and is named in `_NOT_YET` below. Its lane
+# has no `fit`: the optimizer that would produce the coefficients is unported,
+# so the class would have to demand its own answer as an argument.
+#
+# Imported eagerly, like the block above, which is safe because every impl
+# module resolves its binding on FIRST USE rather than at import. A partial
+# build therefore still yields an importable package whose missing pieces
+# raise BY NAME when touched, which is `_backend.py`'s whole design.
+from . import _linalg_impl as linalg
+from . import _metrics_impl as metrics
+from ._hierarchy_impl import AgglomerativeClustering
+from ._iforest_impl import IsolationForest
+from ._solver_impl import ElasticNet, Lasso
+from ._spectral_impl import SpectralClustering
+from ._svm_impl import SVC
+from ._tsa_impl import ExponentialSmoothing, kpss_test, select_d
+
 __all__ = [
+    "AgglomerativeClustering",
     "DBSCAN",
     "KernelDensity",
     "ExtraTreesClassifier",
     "ExtraTreesRegressor",
+    "ElasticNet",
     "GradientBoosting",
+    "ExponentialSmoothing",
+    "IsolationForest",
     "KMeans",
     "KNeighborsClassifier",
     "KNeighborsRegressor",
+    "Lasso",
     "LinearRegression",
     "LogisticRegression",
+    "SVC",
+    "SpectralClustering",
     "NearestNeighbors",
     "PCA",
     "RandomForestClassifier",
     "RandomForestRegressor",
     "Ridge",
     "TruncatedSVD",
+    "kpss_test",
+    "linalg",
+    "metrics",
+    "select_d",
     "__version__",
     "numeric_mode",
 ]
@@ -110,6 +148,18 @@ __all__ = [
 # EXISTS and where it stops. (`KNeighborsClassifier` / `KNeighborsRegressor`
 # were here until 2026-08-23; they are exported above now.)
 _NOT_YET = {
+    "ARIMA": (
+        "arima/ (the batched Kalman filter likelihood, its gradient and "
+        "predict all exist and are gated on one Apple M4); NO fit. "
+        "`estimate_x0`, the batched L-BFGS driver and the CSS likelihood are "
+        "NOT PORTED (arima/UNPORTED.tsv), and those are exactly what produces "
+        "the coefficients every existing entry point REQUIRES as input, so an "
+        "`ARIMA` class would have to demand its own answer as an argument"
+    ),
+    "SVR": (
+        "svm/ (C-SVC only: svmType != C_SVC raises); regression is rung 2 in "
+        "svm/UNPORTED.tsv"
+    ),
     "RadiusNeighbors": (
         "neighbors/ported/neighbors/ball_cover/ (radius search exists for "
         "DBSCAN's eps neighbourhood); no caller-facing surface"
