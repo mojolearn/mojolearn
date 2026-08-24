@@ -17,21 +17,57 @@ Read this before trusting anything below.
   edits that are unbuilt. The OWED list at the bottom names every one of
   them. Do not read a green line in this file as covering them.
 
+## UPSTREAM IS DEPRECATING THIS ALGORITHM IN 26.12
+
+`holtwinters.pyx` in the pinned tree carries, and the 25.08 tree does not:
+
+    .. deprecated:: 26.08
+        ``cuml.tsa.ExponentialSmoothing`` and ``cuml.ExponentialSmoothing``
+        are deprecated and will be removed in the cuML 26.12 release.
+
+and `__init__` calls `warn_deprecated_tsa_api("cuml.tsa.ExponentialSmoothing")`.
+So the thing this lane mirrors is on its way out of cuML. That does not
+change the port -- v26.08.00 is the pinned target and this is a faithful
+mirror of it -- but it does mean there will be no upstream to re-sync
+against after 26.12, and any future "check us against a real cuML run"
+has a deadline. Flagged for the orchestrator, not decided here.
+
 ## Where the upstream is, and the trap
 
-    /Users/andrewhendel/CascadeProjects/upstream/cuml-v26.08.00   <- THIS ONE, 265b9da6
-    /Users/andrewhendel/CascadeProjects/upstream/cuml             <- NOT THIS ONE, 00094f7e
+    /Users/andrewhendel/CascadeProjects/upstream/cuml-v26.08.00   <- THIS ONE, 265b9da6, v26.08.00
+    /Users/andrewhendel/CascadeProjects/upstream/cuml             <- NOT THIS ONE, 00094f7e, branch-25.08
 
-Both contain a complete `cpp/src/holtwinters`. They differ: the newer
-checkout still has the 13-line Apache header where the pinned tree has a
-2-line SPDX one, which shifts every line number by about eleven; it lacks
-the `checked_arithmetic.hpp` guards; and it has a `holtwinters_api.cpp`
-that v26.08.00 does not. An audit of this lane was already run against the
-wrong tree once and produced two findings that were false (it flagged our
-`RAFT_FAIL` port as invented code, and missed that our `trend_len`
-parenthesization mirrors the pinned `checked_sub`). Every line span in
-`PORTED_MAP.tsv` and in the `.mojo` headers is against the PINNED tree and
-was recomputed by brace-matching on 2026-08-23.
+Both contain a complete `cpp/src/holtwinters`. The wrong one is a whole
+RELEASE behind (VERSION 25.08.00), not a near-copy. They differ: 25.08 has
+the 13-line Apache header where the pinned tree has a 2-line SPDX one,
+which shifts every line number by about eleven; it lacks the
+`checked_arithmetic.hpp` guards and the `RAFT_FAIL` in
+`stl_decomposition_gpu`; its `holtwinters.pyx` has no `check_array` call
+at all (so DEVIATION 664's premise does not even exist there); and it has
+a `holtwinters_api.cpp` that v26.08.00 does not. An audit of this lane was
+run against 25.08 once and produced two findings that were false (it
+flagged our `RAFT_FAIL` port as invented code, and missed that our
+`trend_len` parenthesization mirrors the pinned `checked_sub`).
+
+**Provenance of every finding in this file.** After catching the mistake,
+all six `.cuh`/`runner.cuh` files, the params header, `holtwinters.cu` and
+`holtwinters.pyx` were diffed BETWEEN the two trees, so the exact regions
+where 25.08 could have misled a reader are known rather than assumed:
+
+| file | 25.08 vs pinned | consequence for the audit |
+|---|---|---|
+| `hw_utils.cuh` | license header ONLY | first-pass read valid as-is |
+| `hw_eval.cuh` | license header ONLY | first-pass read valid as-is |
+| `hw_forecast.cuh` | license header ONLY | first-pass read valid as-is |
+| `holtwinters.cu` | license header ONLY | first-pass read valid as-is |
+| `hw_optim.cuh` | header + a `checked_arithmetic` include + one `checked_mul` on the `pseason` allocation | the gradient, the BFGS body, the line search and the Hessian update are byte-identical between trees; DEVIATION 697 re-verified directly in the pinned tree at `:573-578` |
+| `hw_decompose.cuh` | header + the `RAFT_FAIL` guard, `checked_sub` `trend_len`, `batch_trend_n` | only `stl_decomposition_gpu` was affected, and it was re-read in the pinned tree; the kernels were not |
+| `runner.cuh` | header + `hw_narrow_size` and the int64 `HoltWintersBufferSize` rewrite | only `HoltWintersBufferSize` was affected, and it was re-read; the other seven entry points were not |
+| `holtwinters_params.h` | header + `namespace CUML_EXPORT ML` and an `export.hpp` include | a visibility attribute; no semantic change to the enums or `OptimParams` |
+| `holtwinters.pyx` | substantial: the deprecation above, `handle` removed, `CumlArrayDescriptor` -> `ReflectedAttr`, `input_to_cupy_array` -> `check_array(..., ensure_all_finite=False)` | the VALIDATION raises this lane mirrors are unchanged between trees, and the two cited lines (`:164` eps default, `:197` seasonal refusal) plus DEVIATION 664's `check_array` at `:237-241` were each verified in the pinned tree directly |
+
+Every line span in `PORTED_MAP.tsv` and in the `.mojo` headers is against
+the PINNED tree and was recomputed by brace-matching on 2026-08-23.
 
 ## What is here
 
