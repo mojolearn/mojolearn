@@ -82,6 +82,55 @@ once over the inputs and the weights before any recorded stage. Nothing here
 re-tests, and nothing here can produce a NaN from finite inputs under the
 profile's ranges.
 
+THE DEVIATIONS THIS FILE USES
+-----------------------------
+**DEVIATION 720** (shared with `mamba_oracle.mojo:41-54`, its host spelling):
+`pinned_mul`, a multiply spelled `identical_mul_add(a, b, -0.0)` so no codegen
+can contract it into a neighboring add and so a `-0.0` product survives.
+
+**DEVIATION 722**: the KERNEL SHAPE is MAX's `selective_scan_fwd_gpu` and not
+the reference's loop structure, and the parts of MAX's kernel that would move
+bits are refused. TAKEN: one thread per `(batch, dim)` pair with a linear
+thread id and a bounds check (`:174-179`); the whole `DSTATE` state vector in
+registers (`:186-190`); A's row for the thread's dim hoisted out of the token
+loop (`:215-220`); the sequence walked serially, ascending, one token at a
+time (`:246-330`). REFUSED, each because it is a different arithmetic and not
+a different schedule: the `exp2(A * LOG2E * delta)` substitution for
+`exp(delta * A)` (`:38`, `:215-220`, `:320` -- an extra rounding in the LOG2E
+product, and `exp2` is not `exp`; `SAB_S5_EXP2`); the `B * (delta * u)`
+pairing at S8 (`:309`, `:321`; `SAB_S8_CUDA_PAIRING`); the SIMD tree fold
+`(state * C_vals).reduce_add()` at S10 (`:323`) in place of the serial
+ascending fma chain (`SAB_S10_DESCENDING` breaks the same clause a different
+way). NOT PORTED AT ALL, because they serve a backward pass and a schedule
+this profile does not have: the `TILE_SIZE = 8` staging with its pre-loaded
+B/C tiles and buffered stores (`:243-330`), the `cum_a` / `cum_b` running
+products, the `x` checkpoint tensor and its chunking, the group/`n_groups`
+fan-out, and the `out_z` fused gate.
+
+Also under 722, and it is a departure from the REFERENCE's shape rather than
+MAX's: the reference materializes `deltaA` and `deltaB_u` as full
+`[B, D, L, N]` tensors BEFORE the recurrence (ref:162, :167) and this kernel
+computes each element inside the recurrence, at the moment it is used. Every
+one of those elements is a pure function of its own `(b, d, l, n)` inputs, so
+moving the computation moves no bit; what it buys is that the kernel needs no
+storage that grows with `L`, which is what lets one thread own a whole
+sequence.
+
+**DEVIATION 723**: the entry point mirrors upstream's argument order and
+names but REFUSES four of the configurations they admit, each refused BY NAME
+at the door rather than implemented and left untested (`reached-but-inert`).
+`z` and `delta_bias` are presence flags and True raises, because S12 and S14
+are the block's recorded stages; `delta_softplus` True raises for the same
+reason; `return_last_state` False raises because `h_state` is in-and-out on
+every call. Three branches of `selective_scan_ref` are likewise NOT ported
+and cannot be reached from this signature: the complex-`A` arm (`:152-156`,
+`:185-186` -- FP32 real only, contract section 3), the non-variable `B`/`C`
+arm (`:163-164`, `:176-177` -- Mamba-1's `x_proj` always makes both
+per-token), and the 4-D grouped `B`/`C` arms with their `repeat` fan-out
+(`:168-170`, `:171-172`, `:181-182`), since the profile is `n_groups = 1`.
+
+**DEVIATION 724 IS NOT USED BY THIS FILE** and remains free for the lane.
+
 `[[mojo-buffer-freed-at-last-use]]`: every buffer here is the CALLER's and
 the caller keeps it alive past `ctx.synchronize()`.
 """
@@ -365,8 +414,9 @@ def selective_scan_fwd_kernel[
         # torch-internal; the order pinned is the CUDA kernel's ascending
         # `state_idx` walk (cuh:168-266). MAX folds this seam as a SIMD
         # tree, `(state * C_vals).reduce_add()` (`selective_scan.mojo:323`),
-        # which is a third order again and is NOT taken (DEVIATION 722). The `+0.0` seed makes an all-zero
-        # row sum to `+0.0` on every vendor (contract section 6).
+        # which is a third order again and is NOT taken (DEVIATION 722).
+        # The `+0.0` seed makes an all-zero row sum to `+0.0` on every
+        # vendor (contract section 6).
         var acc = Float32(0.0)
         comptime if SAB_S11_D_FIRST:
             # SABOTAGE: the CUDA kernel seeds its output accumulator with
