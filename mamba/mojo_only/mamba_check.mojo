@@ -7,7 +7,10 @@ host oracle (`mamba/mojo_only/mamba_oracle.mojo`) and compares every recorded
 stage BY BITS.
 
 **THIS GATE IS DELIBERATELY TINY AND IT IS NOT THE CONTRACT'S GATE YET.**
-ONE shape, B = 1, L = 4, d_model = 8, and ONE launch. Andrew's machine was
+The DEFAULT is one shape, B = 1, L = 4, d_model = 8, and one launch. The
+shape is read from the environment (`MOJOLEARN_MAMBA_CHECK_B`, `_L`, `_DM`)
+so that closing a clause that demands a bigger fold costs ONE build and not
+one build per shape; nothing here sweeps. Andrew's machine was
 crashed on 2026-08-23 by seven agents compiling Mojo at once, and this lane
 was cut to a single compile at a time at the smallest shape that exists. What
 this file gates is clause (a) of section 8 at one point, plus clause (f), the
@@ -102,25 +105,68 @@ THREE THINGS THE LEDGER SAYS THAT A PASS OR FAIL WOULD NOT
    the whole reference card of plausible wrong products, reproduced on
    demand.
 
-WHERE THE LEDGER IS THIN, and it is thin
-------------------------------------------
-`S1_FOLD_DESCENDING` bites on ONE of four rows at `d_model = 8`. Eight terms
-is a short fold and most rows round the same way in both directions. The arm
-is genuinely falsifying, but weakly, and `d_model = 16` is owed before the
-S1 clause should be called well gated. `S14_THRESHOLD_10` is reported only
-because the fixture plants the band and the reach count above is nonzero;
-against the corpus default ranges it would be VACUOUS.
+THE THIN CLAUSE, MEASURED AT d_model = 16 AND NO LONGER THIN
+--------------------------------------------------------------
+`S1_FOLD_DESCENDING` bit on ONE of four rows at `d_model = 8` and moved
+`norm.sumsq` and NOTHING ELSE. That was reported as a weak falsification with
+`d_model = 16` owed. It has now been run there, B = 1, L = 4, d_model = 16:
+
+    d_model    rows moved    stages moved    reaches
+    8          1 of 4        1 of 16         norm.sumsq only
+    16         3 of 4        13 of 16        through to out_proj.out
+
+Eight terms was simply too short a fold for most rows to round differently in
+the two directions. At sixteen the arm propagates the whole way down the
+block. The S1 clause is WELL GATED at d_model = 16 and only marginally gated
+at 8, and the honest reading is that the fold-order clause needs the wider
+row to be tested at all.
+
+**AND THE BLOCK'S OUTPUT STILL DOES NOT MOVE.** At d_model = 16 thirteen of
+sixteen stages differ, `out_proj.out` among them on 23 of 64 cells, and
+`residual.out` is STILL bit-identical: `residual + out_proj` adds an
+out_proj of order 1e-3 to an input of order 1, and the difference rounds
+away. So even at the shape where this arm is strongest, a gate that compared
+only the block's output would report it inert. That is the sharpest form of
+the absorption finding in this file and it is an argument about the card's
+design rather than about this block.
+
+`S14_THRESHOLD_10` is reported only because the fixture plants the band and
+the reach count above is nonzero; against the corpus default ranges it would
+be VACUOUS.
 
 OWED, and this file does not cover any of it
 ----------------------------------------------
-The rest of contract section 3's sweep (B in {1,2,3}, L in {1,16,64,257},
-d_model 16); FAST mode; clause (b), eight repeated launches; clause (c),
-batch composition; clause (d), decode == prefill at this composition point;
-clause (e), the row-39 planted NaN and infinity audit; the corpus cross-check
-against `mamba/corpus/`; and every column that is not this Apple box.
+L = 16, 64 and 257; FAST mode; clause (d), decode == prefill at this
+composition point; clause (e), the row-39 planted NaN and infinity audit; the
+corpus cross-check against `mamba/corpus/`; and every column that is not this
+Apple box.
+
+CLAUSES (b) AND (c) ARE CHECKED HERE, and each says what would have hidden a
+failure:
+
+* **(b), eight repeated launches.** The block is run eight times in one
+  process, each run its own fresh state, stage buffers and kernel dispatches,
+  and runs 2 through 8 are compared to run 1 on every cell of every stage.
+  What would hide a failure: comparing only the final `residual.out`, since
+  four of the six sabotage arms already showed that stage absorbing an
+  upstream difference entirely. The comparison is therefore per stage.
+* **(c), batch composition.** The same sequence is run alone (B = 1), beside
+  one other (B = 2) and beside two others (B = 3), from ONE `x` that is
+  sliced, so row 0's input bits are identical by construction. Row 0's cells
+  are then compared across all three compositions, and row 1's between B = 2
+  and B = 3. What would hide a failure: comparing whole buffers rather than
+  ROW SLICES, because the buffers are different lengths and a whole-buffer
+  compare cannot even be spelled; and forgetting the per-batch stages
+  (`conv.window`, `scan.h`), which are indexed `[B, ...]` rather than by
+  token and are exactly where a batch-dependent bug would live.
+
+Clause (c) is a device-versus-device invariance claim. It does not re-check
+correctness: a block that was wrong in a batch-INDEPENDENT way would pass it.
+Clause (a), the oracle compare above, is what covers that.
 """
 
 from std.memory import bitcast
+from std.os import getenv
 
 from max.gpu.host import DeviceContext
 
@@ -150,11 +196,36 @@ from mamba.ported.transformers.models.mamba.modeling_mamba import (
 )
 
 
-comptime CHECK_B = 1
-comptime CHECK_L = 4
-comptime CHECK_DM = 8
 comptime TRACE_PATH = "/tmp/mojolearn_mamba_block_tiny.trace"
 comptime TAG_PREFIX = "tiny"
+
+#: The number of repeated launches contract section 8 clause (b) names.
+comptime CLAUSE_B_LAUNCHES = 8
+
+#: Stage layout kinds. TOKEN: `[M, W]`, `M = B * L` rows. BATCH: `[B, W]`,
+#: one block per sequence. GLOBAL: one buffer for the whole call.
+comptime KIND_TOKEN = 0
+comptime KIND_BATCH = 1
+comptime KIND_GLOBAL = 2
+
+
+def env_int(name: String, dflt: Int) raises -> Int:
+    var s = String(getenv(name))
+    if s == "":
+        return dflt
+    var v = 0
+    for i in range(s.byte_length()):
+        var c = ord(String(s[byte=i]))
+        if c < 48 or c > 57:
+            raise Error(
+                String("mamba_check: ") + name + " is not a number: '" + s + "'"
+            )
+        v = v * 10 + (c - 48)
+    return v
+
+
+def env_on(name: String) raises -> Bool:
+    return String(getenv(name)) != ""
 
 
 def hexbits(v: Float32) -> String:
@@ -167,6 +238,175 @@ def hexbits(v: Float32) -> String:
     return out
 
 
+# ===========================================================================
+# THE STAGE TABLE. Card order, contract section 7, minus `input.x` (which is
+# the input and not computed). Widths and kinds are what makes a ROW SLICE
+# expressible, which is the whole of clause (c).
+# ===========================================================================
+
+
+def stage_names() -> List[String]:
+    var n: List[String] = [
+        String("norm.sumsq"),
+        String("norm.out"),
+        String("in_proj.out"),
+        String("A.out"),
+        String("conv.out"),
+        String("silu.out"),
+        String("conv.window"),
+        String("x_proj.out"),
+        String("dt_proj.out"),
+        String("softplus.out"),
+        String("scan.y"),
+        String("scan.h"),
+        String("skip.out"),
+        String("gate.out"),
+        String("out_proj.out"),
+        String("residual.out"),
+    ]
+    return n^
+
+
+def stage_kind(i: Int) -> Int:
+    if i == 3:
+        return KIND_GLOBAL  # A.out, [d_inner, D_STATE], no batch axis
+    if i == 6 or i == 11:
+        return KIND_BATCH  # conv.window, scan.h: [B, ...]
+    return KIND_TOKEN
+
+
+def stage_width(i: Int, dims: MambaDims) -> Int:
+    var dm = dims.d_model
+    var di = dims.d_inner
+    if i == 0:
+        return 1
+    if i == 1 or i == 14 or i == 15:
+        return dm
+    if i == 2:
+        return 2 * di
+    if i == 3:
+        return di * D_STATE
+    if i == 6:
+        return di * D_CONV
+    if i == 7:
+        return dims.x_proj_rows()
+    if i == 11:
+        return di * D_STATE
+    return di
+
+
+def row_slice(
+    values: List[Float32], i: Int, bb: Int, l: Int, dims: MambaDims
+) -> List[Float32]:
+    """The cells of stage `i` belonging to batch row `bb`. THE POINT OF
+    CLAUSE (c): a row's bits must not depend on who else shares the launch,
+    and the only way to say that is to cut the row out of buffers of three
+    different lengths."""
+    var w = stage_width(i, dims)
+    var kind = stage_kind(i)
+    var start: Int
+    var count: Int
+    if kind == KIND_TOKEN:
+        start = bb * l * w
+        count = l * w
+    elif kind == KIND_BATCH:
+        start = bb * w
+        count = w
+    else:
+        start = 0
+        count = w
+    var out = List[Float32]()
+    for j in range(count):
+        out.append(values[start + j])
+    return out^
+
+
+def oracle_dump(st: MambaStages) -> List[List[Float32]]:
+    """The host oracle's stages, card order, matching `stage_names()`."""
+    var out = List[List[Float32]]()
+    out.append(st.norm_sumsq.copy())
+    out.append(st.norm_out.copy())
+    out.append(st.in_proj.copy())
+    out.append(st.a_out.copy())
+    out.append(st.conv_out.copy())
+    out.append(st.silu_out.copy())
+    out.append(st.conv_win.copy())
+    out.append(st.x_proj.copy())
+    out.append(st.dt_proj.copy())
+    out.append(st.softplus_out.copy())
+    out.append(st.scan_y.copy())
+    out.append(st.scan_h.copy())
+    out.append(st.skip_out.copy())
+    out.append(st.gate_out.copy())
+    out.append(st.out_proj.copy())
+    out.append(st.residual_out.copy())
+    return out^
+
+
+def device_dump(
+    ctx: DeviceContext, mut d: MambaDeviceStages, b: Int, l: Int, dims: MambaDims
+) raises -> List[List[Float32]]:
+    """Every stage buffer back on the host, card order. Downloading rather
+    than comparing on device keeps every comparison in one place and makes a
+    row slice a list slice."""
+    var dm = dims.d_model
+    var di = dims.d_inner
+    var xr = dims.x_proj_rows()
+    var m = b * l
+    var out = List[List[Float32]]()
+    out.append(mamba_download(ctx, d.norm_sumsq, m))
+    out.append(mamba_download(ctx, d.norm_out, m * dm))
+    out.append(mamba_download(ctx, d.in_proj, m * 2 * di))
+    out.append(mamba_download(ctx, d.a_out, di * D_STATE))
+    out.append(mamba_download(ctx, d.conv_out, m * di))
+    out.append(mamba_download(ctx, d.silu_out, m * di))
+    out.append(mamba_download(ctx, d.conv_win, b * di * D_CONV))
+    out.append(mamba_download(ctx, d.x_proj, m * xr))
+    out.append(mamba_download(ctx, d.dt_proj, m * di))
+    out.append(mamba_download(ctx, d.softplus_out, m * di))
+    out.append(mamba_download(ctx, d.scan_y, m * di))
+    out.append(mamba_download(ctx, d.scan_h, b * di * D_STATE))
+    out.append(mamba_download(ctx, d.skip_out, m * di))
+    out.append(mamba_download(ctx, d.gate_out, m * di))
+    out.append(mamba_download(ctx, d.out_proj, m * dm))
+    out.append(mamba_download(ctx, d.residual_out, m * dm))
+    return out^
+
+
+def run_block(
+    ctx: DeviceContext,
+    w: MambaWeights,
+    x: List[Float32],
+    b: Int,
+    l: Int,
+    dims: MambaDims,
+    mut trace: IdentityTrace,
+    prefix: String,
+) raises -> List[List[Float32]]:
+    """One whole block call on the device, stages returned on the host.
+
+    `[[mojo-buffer-freed-at-last-use]]`: the weights, the state and the input
+    are locals here and every one of them is still alive when
+    `mamba_block_forward` returns, because that function synchronizes before
+    it does."""
+    var dw = MambaDeviceWeights(ctx, w)
+    var dstate = MambaDeviceState(ctx, b, dims)
+    var dstages = MambaDeviceStages(ctx, b, l, dims)
+    var dx = mamba_upload(ctx, x)
+    mamba_block_forward(ctx, dstages, dstate, dw, dx, b, l, trace, prefix)
+    var out = device_dump(ctx, dstages, b, l, dims)
+    _ = dw^
+    _ = dstate^
+    _ = dstages^
+    _ = dx^
+    return out^
+
+
+# ===========================================================================
+# COMPARING
+# ===========================================================================
+
+
 @fieldwise_init
 struct StageDiff(Copyable, Movable):
     var name: String
@@ -176,7 +416,7 @@ struct StageDiff(Copyable, Movable):
 
 
 def compare_stage(
-    name: String, host: List[Float32], dev: List[Float32]
+    name: String, host: List[Float32], dev: List[Float32], loud: Bool
 ) raises -> StageDiff:
     """Bitwise, cell by cell. A LENGTH mismatch is reported as such rather
     than compared to the shorter of the two, because a stage that is the
@@ -187,9 +427,9 @@ def compare_stage(
             + name
             + " has "
             + String(len(host))
-            + " cells on the host and "
+            + " cells on one side and "
             + String(len(dev))
-            + " on the device"
+            + " on the other"
         )
     var n_diff = 0
     var first = -1
@@ -199,7 +439,8 @@ def compare_stage(
             if first < 0:
                 first = i
     if n_diff == 0:
-        print("  OK    " + name + "  (" + String(len(host)) + " cells)")
+        if loud:
+            print("  OK    " + name + "  (" + String(len(host)) + " cells)")
     else:
         print(
             "  MOVED "
@@ -210,12 +451,49 @@ def compare_stage(
             + String(len(host))
             + " cells, first cell "
             + String(first)
-            + "  host "
+            + "  a "
             + hexbits(host[first])
-            + "  device "
+            + "  b "
             + hexbits(dev[first])
         )
     return StageDiff(name, len(host), n_diff, first)
+
+
+def compare_dumps(
+    a: List[List[Float32]], b: List[List[Float32]], loud: Bool
+) raises -> List[StageDiff]:
+    var names = stage_names()
+    var out = List[StageDiff]()
+    for i in range(len(names)):
+        out.append(compare_stage(names[i], a[i], b[i], loud))
+    return out^
+
+
+def count_moved(diffs: List[StageDiff]) -> Int:
+    var n = 0
+    for i in range(len(diffs)):
+        if diffs[i].n_diff > 0:
+            n += 1
+    return n
+
+
+def first_moved(diffs: List[StageDiff]) -> String:
+    for i in range(len(diffs)):
+        if diffs[i].n_diff > 0:
+            return (
+                diffs[i].name
+                + " on "
+                + String(diffs[i].n_diff)
+                + " of "
+                + String(diffs[i].n_cells)
+                + " cells"
+            )
+    return String("")
+
+
+# ===========================================================================
+# THE CARD
+# ===========================================================================
 
 
 def contract_section_7_tags() -> List[String]:
@@ -245,11 +523,6 @@ def contract_section_7_tags() -> List[String]:
 
 
 def check_card_tags(path: String) raises -> Int:
-    """The emitted tag SEQUENCE against contract section 7. Returns the
-    number of tags read. The differ aligns two traces by their tag
-    sequences, so an order that drifts between vendors is a divergence
-    report on every stage; an order that drifts from the CONTRACT is a card
-    that is no longer the card the contract froze."""
     var want = contract_section_7_tags()
     var lines = read_trace_lines(path)
     print(
@@ -287,6 +560,11 @@ def check_card_tags(path: String) raises -> Int:
     return len(lines)
 
 
+# ===========================================================================
+# THE FIXTURE
+# ===========================================================================
+
+
 def planted_weights(dims: MambaDims) raises -> MambaWeights:
     """The corpus's default ranges with contract section 4's fixture F7
     planted: `dt_proj.bias` for channels `d % 4 == 3` drawn from [8, 14],
@@ -318,18 +596,152 @@ def softplus_band_reach(
     return n
 
 
+# ===========================================================================
+# CLAUSE (b): the same bits on every one of eight repeated launches
+# ===========================================================================
+
+
+def clause_b(
+    ctx: DeviceContext,
+    w: MambaWeights,
+    x: List[Float32],
+    b: Int,
+    l: Int,
+    dims: MambaDims,
+    base: List[List[Float32]],
+) raises:
+    """Contract section 8 clause (b). Eight launches, each with its OWN
+    fresh state, stage buffers and kernel dispatches, every stage compared to
+    the first on every cell.
+
+    Comparing only `residual.out` would hide a failure: the sabotage ledger
+    in this file's header measured four of six arms being absorbed before
+    that stage. So every stage is compared."""
+    print(
+        "clause (b): "
+        + String(CLAUSE_B_LAUNCHES)
+        + " repeated launches, every stage, every cell"
+    )
+    var total_cells = 0
+    for i in range(len(base)):
+        total_cells += len(base[i])
+    for run in range(2, CLAUSE_B_LAUNCHES + 1):
+        var off = IdentityTrace.disabled()
+        var got = run_block(ctx, w, x, b, l, dims, off, "repeat")
+        var diffs = compare_dumps(base, got, False)
+        var moved = count_moved(diffs)
+        if moved != 0:
+            raise Error(
+                String("mamba_check: CLAUSE (b) FAILED, launch ")
+                + String(run)
+                + " differs from launch 1 at "
+                + first_moved(diffs)
+            )
+    print(
+        "clause (b): PASS, launches 2.."
+        + String(CLAUSE_B_LAUNCHES)
+        + " bit-identical to launch 1 on all "
+        + String(total_cells)
+        + " cells of all 16 stages"
+    )
+
+
+# ===========================================================================
+# CLAUSE (c): batch composition invariance
+# ===========================================================================
+
+
+def clause_c(
+    ctx: DeviceContext, w: MambaWeights, l: Int, dims: MambaDims
+) raises:
+    """Contract section 8 clause (c). A row's bits are identical whether its
+    sequence shares the launch with 0, 1 or 2 others.
+
+    The contract notes this is the clause vLLM's batch-invariant mode cannot
+    give Mamba (`supports_batch_invariance()` is False for its Mamba
+    backends), so it is the most interesting one in the section.
+
+    ONE `x` is generated at B = 3 and SLICED, so row 0's input bits are
+    identical across the three compositions by construction rather than by
+    coincidence. Then row 0 is compared across all three and row 1 between
+    B = 2 and B = 3. Whole-buffer comparison cannot even be spelled here (the
+    buffers are three different lengths), which is exactly why the per-batch
+    stages `conv.window` and `scan.h` are the ones to watch: they are indexed
+    `[B, ...]` and are where a batch-dependent bug would live."""
+    var dm = dims.d_model
+    var x3 = corpus_x(corpus_case_seed(1), 3, l, dm)
+    var row_len = l * dm
+    var x1 = List[Float32]()
+    for i in range(row_len):
+        x1.append(x3[i])
+    var x2 = List[Float32]()
+    for i in range(2 * row_len):
+        x2.append(x3[i])
+
+    print("clause (c): batch composition, the same row at B=1, B=2 and B=3")
+    var off1 = IdentityTrace.disabled()
+    var d1 = run_block(ctx, w, x1, 1, l, dims, off1, "b1")
+    var off2 = IdentityTrace.disabled()
+    var d2 = run_block(ctx, w, x2, 2, l, dims, off2, "b2")
+    var off3 = IdentityTrace.disabled()
+    var d3 = run_block(ctx, w, x3, 3, l, dims, off3, "b3")
+
+    var names = stage_names()
+    var cells = 0
+    var bad = 0
+    for i in range(len(names)):
+        var r0_1 = row_slice(d1[i], i, 0, l, dims)
+        var r0_2 = row_slice(d2[i], i, 0, l, dims)
+        var r0_3 = row_slice(d3[i], i, 0, l, dims)
+        cells += len(r0_1) * 2
+        var a = compare_stage(
+            names[i] + " row0 B=1 vs B=2", r0_1, r0_2, False
+        )
+        var b = compare_stage(
+            names[i] + " row0 B=1 vs B=3", r0_1, r0_3, False
+        )
+        if a.n_diff > 0 or b.n_diff > 0:
+            bad += 1
+        # row 1 exists in B=2 and B=3 and must also be composition-free
+        var r1_2 = row_slice(d2[i], i, 1, l, dims)
+        var r1_3 = row_slice(d3[i], i, 1, l, dims)
+        cells += len(r1_2)
+        var c = compare_stage(
+            names[i] + " row1 B=2 vs B=3", r1_2, r1_3, False
+        )
+        if c.n_diff > 0:
+            bad += 1
+    if bad != 0:
+        raise Error(
+            String("mamba_check: CLAUSE (c) FAILED on ")
+            + String(bad)
+            + " stages: a row's bits depend on who shares its launch"
+        )
+    print(
+        "clause (c): PASS, row 0 identical at B=1, B=2 and B=3 and row 1"
+        " identical at B=2 and B=3, on all "
+        + String(cells)
+        + " compared cells of all 16 stages"
+    )
+
+
+# ===========================================================================
+
+
 def main() raises:
-    var b = CHECK_B
-    var l = CHECK_L
-    var dm = CHECK_DM
+    var b = env_int("MOJOLEARN_MAMBA_CHECK_B", 1)
+    var l = env_int("MOJOLEARN_MAMBA_CHECK_L", 4)
+    var dm = env_int("MOJOLEARN_MAMBA_CHECK_DM", 8)
     var dims = MambaDims.of(dm)
     var di = dims.d_inner
     var r = dims.dt_rank
-    var xr = dims.x_proj_rows()
     var m = b * l
     var armed = mamba_block_sabotage_name()
 
-    print("=== mamba block identity gate, profile mojolearn.identical.mamba1.fp32.v1")
+    print(
+        "=== mamba block identity gate, profile"
+        " mojolearn.identical.mamba1.fp32.v1"
+    )
     print("mode " + mode_name() + "   block sabotage: " + armed)
     print(
         "shape B="
@@ -342,15 +754,14 @@ def main() raises:
         + String(di)
         + " dt_rank="
         + String(r)
-        + "   (ONE shape, ONE launch: the machine-load freeze)"
     )
 
     var w = planted_weights(dims)
     var x = corpus_x(corpus_case_seed(1), b, l, dm)
 
-    # ---- the host oracle, the ANSWER -------------------------------------
     var hstate = MambaState(b, dims)
     var st = mamba_block_oracle(w, x, b, l, hstate)
+    var host = oracle_dump(st)
 
     var reach = softplus_band_reach(w, st, m, di)
     print(
@@ -361,125 +772,16 @@ def main() raises:
         + " cells  (fixture F7's band; 0 would make S14_THRESHOLD_10 vacuous)"
     )
 
-    # ---- the device block -------------------------------------------------
     var ctx = DeviceContext()
-    var dw = MambaDeviceWeights(ctx, w)
-    var dstate = MambaDeviceState(ctx, b, dims)
-    var dstages = MambaDeviceStages(ctx, b, l, dims)
-    var dx = mamba_upload(ctx, x)
     var trace = IdentityTrace.to_path(TRACE_PATH)
-    mamba_block_forward(ctx, dstages, dstate, dw, dx, b, l, trace, TAG_PREFIX)
+    var dev = run_block(ctx, w, x, b, l, dims, trace, TAG_PREFIX)
 
-    # ---- every computed stage, bitwise ------------------------------------
-    print("stages, device vs host oracle, BITWISE:")
-    var diffs = List[StageDiff]()
-    diffs.append(
-        compare_stage(
-            "norm.sumsq", st.norm_sumsq, mamba_download(ctx, dstages.norm_sumsq, m)
-        )
-    )
-    diffs.append(
-        compare_stage(
-            "norm.out", st.norm_out, mamba_download(ctx, dstages.norm_out, m * dm)
-        )
-    )
-    diffs.append(
-        compare_stage(
-            "in_proj.out",
-            st.in_proj,
-            mamba_download(ctx, dstages.in_proj, m * 2 * di),
-        )
-    )
-    diffs.append(
-        compare_stage(
-            "A.out", st.a_out, mamba_download(ctx, dstages.a_out, di * D_STATE)
-        )
-    )
-    diffs.append(
-        compare_stage(
-            "conv.out", st.conv_out, mamba_download(ctx, dstages.conv_out, m * di)
-        )
-    )
-    diffs.append(
-        compare_stage(
-            "silu.out", st.silu_out, mamba_download(ctx, dstages.silu_out, m * di)
-        )
-    )
-    diffs.append(
-        compare_stage(
-            "conv.window",
-            st.conv_win,
-            mamba_download(ctx, dstages.conv_win, b * di * D_CONV),
-        )
-    )
-    diffs.append(
-        compare_stage(
-            "x_proj.out", st.x_proj, mamba_download(ctx, dstages.x_proj, m * xr)
-        )
-    )
-    diffs.append(
-        compare_stage(
-            "dt_proj.out", st.dt_proj, mamba_download(ctx, dstages.dt_proj, m * di)
-        )
-    )
-    diffs.append(
-        compare_stage(
-            "softplus.out",
-            st.softplus_out,
-            mamba_download(ctx, dstages.softplus_out, m * di),
-        )
-    )
-    diffs.append(
-        compare_stage(
-            "scan.y", st.scan_y, mamba_download(ctx, dstages.scan_y, m * di)
-        )
-    )
-    diffs.append(
-        compare_stage(
-            "scan.h",
-            st.scan_h,
-            mamba_download(ctx, dstages.scan_h, b * di * D_STATE),
-        )
-    )
-    diffs.append(
-        compare_stage(
-            "skip.out", st.skip_out, mamba_download(ctx, dstages.skip_out, m * di)
-        )
-    )
-    diffs.append(
-        compare_stage(
-            "gate.out", st.gate_out, mamba_download(ctx, dstages.gate_out, m * di)
-        )
-    )
-    diffs.append(
-        compare_stage(
-            "out_proj.out",
-            st.out_proj,
-            mamba_download(ctx, dstages.out_proj, m * dm),
-        )
-    )
-    diffs.append(
-        compare_stage(
-            "residual.out",
-            st.residual_out,
-            mamba_download(ctx, dstages.residual_out, m * dm),
-        )
-    )
+    print("clause (a): stages, device vs host oracle, BITWISE:")
+    var diffs = compare_dumps(host, dev, True)
+    var n_moved = count_moved(diffs)
 
-    var n_moved = 0
-    var first_moved = String("")
-    var first_moved_cells = 0
-    for i in range(len(diffs)):
-        if diffs[i].n_diff > 0:
-            n_moved += 1
-            if first_moved == "":
-                first_moved = diffs[i].name
-                first_moved_cells = diffs[i].n_diff
-
-    # ---- the card ---------------------------------------------------------
     _ = check_card_tags(TRACE_PATH)
 
-    # ---- the verdict, INVERTED when an arm is armed -----------------------
     comptime if BLOCK_ANY_SABOTAGE:
         if n_moved == 0:
             raise Error(
@@ -498,27 +800,36 @@ def main() raises:
             + " of "
             + String(len(diffs))
             + " stages moved, first at "
-            + first_moved
-            + " on "
-            + String(first_moved_cells)
-            + " cells. The clause it targets is falsifiable."
+            + first_moved(diffs)
+            + ". The clause it targets is falsifiable."
+        )
+        print(
+            "clauses (b) and (c) are NOT run under a sabotage build: they are"
+            " invariance claims and a deterministic sabotage satisfies them."
         )
     else:
         if n_moved != 0:
             raise Error(
-                String("mamba_check: CLEAN BUILD FAILED, ")
+                String("mamba_check: CLAUSE (a) FAILED, ")
                 + String(n_moved)
                 + " stages differ from the oracle, first at "
-                + first_moved
+                + first_moved(diffs)
             )
         print(
-            "CLEAN: "
+            "clause (a): PASS, "
             + String(len(diffs))
             + "/"
             + String(len(diffs))
             + " stages bit-identical to the oracle, 17/17 card tags."
         )
+        clause_b(ctx, w, x, b, l, dims, dev)
+        if env_on("MOJOLEARN_MAMBA_CHECK_CLAUSE_C"):
+            clause_c(ctx, w, l, dims)
+        else:
+            print(
+                "clause (c): SKIPPED (set MOJOLEARN_MAMBA_CHECK_CLAUSE_C=1)"
+            )
         print(
-            "SCOPE: one shape, one launch, IDENTICAL only. The sweep, FAST,"
-            " clauses (b)-(e) and the corpus cross-check are OWED."
+            "SCOPE: this shape only, IDENTICAL only. L=16/64/257, FAST,"
+            " clauses (d) and (e) and the corpus cross-check are OWED."
         )
