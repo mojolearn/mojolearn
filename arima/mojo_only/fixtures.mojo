@@ -54,6 +54,7 @@ from tsa.mojo_only.fixtures import (
 comptime PLANT_NONE = 0
 comptime PLANT_UNIT_ROOT = 1
 comptime PLANT_PIVOT_TIE = 2
+comptime PLANT_INTERCEPT_NUDGE = 3
 
 
 @fieldwise_init
@@ -260,6 +261,18 @@ def arima_params_fixture(
     if plant == PLANT_UNIT_ROOT and order.p >= 2:
         for bid in range(batch_size):
             ar[order.p * bid + 1] = Float32(-20.0)
+    if plant == PLANT_INTERCEPT_NUDGE and order.p >= 1:
+        # Drive the transformed `phi` into the Jones clamp so that
+        # `I - T* = 1 - 0.9999 = 1e-4` falls inside the `r == 1` intercept
+        # guard's `abs(d_ImT[bid]) < 1e-3`. `tanh(20/2)` is 0.99999999, which
+        # clamps to 0.9999; there is no `j` loop at `p = 1`, so the clamped
+        # value IS `phi`. NOT a table row: this fixture is deliberately
+        # near-singular (`1 - phi^2 = 2e-4`), which is fine for REACHING a
+        # guard and wrong for measuring precision, so it is built locally by
+        # `check_guard_decisions_are_recorded` and never enters the shared
+        # order table where the Float64 tolerance gate would see it.
+        for bid in range(batch_size):
+            ar[order.p * bid] = Float32(20.0)
     if plant == PLANT_PIVOT_TIE and order.p >= 2:
         for bid in range(batch_size):
             ar[order.p * bid] = PIVOT_TIE_X0
@@ -427,6 +440,22 @@ def sub_batch_params(
     if len(sma) == 0:
         sma.append(Float32(0.0))
     return ARIMAParamsHost(mu=mu^, ar=ar^, ma=ma^, sar=sar^, sma=sma^, sigma2=sigma2^)
+
+
+def download_u8(ctx: DeviceContext, buf: DeviceBuffer[DType.uint8], n: Int) raises -> List[UInt8]:
+    var h = ctx.enqueue_create_host_buffer[DType.uint8](n if n > 0 else 1)
+    if n > 0:
+        if n == len(buf):
+            ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf)
+        else:
+            var view = buf.create_sub_buffer[DType.uint8](0, n)
+            ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=view)
+    ctx.synchronize()
+    var out = List[UInt8]()
+    for i in range(n):
+        out.append(h.unsafe_ptr().unsafe_load(i))
+    _ = h^
+    return out^
 
 
 def count_cells_differ_i32(a: List[Int32], b: List[Int32]) -> Int:

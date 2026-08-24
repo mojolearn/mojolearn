@@ -72,9 +72,41 @@ rather than a planted one, and it is worth more than the planted case: it
 is the exact situation where theirs would have carried a NaN into the
 log-likelihood and returned it to the optimizer without a word.
 
-THE HOLE, unchanged and still recorded: the check is guarded by
-`it >= n_diff`. For `it < n_diff` theirs does not check either, and neither
-do we, so those steps can still produce a non-finite `_1_Fs`. OWED.
+=============================================================================
+DEVIATION 677: THE SAME REFUSAL AT THE DIFFUSE STEPS TOO
+=============================================================================
+THE HOLE THIS CLOSES. Until 2026-08-24 the check above was guarded by
+`it >= n_diff`, so the first `n_diff` steps -- the diffuse ones, which
+contribute no term to the log-likelihood -- were not checked at all. A
+non-positive `F` there does not corrupt `sum_logFs` or `ll_s2`, because
+neither is touched. It corrupts something worse: `_1_Fs = 1.0 / _Fs` is
+computed UNCONDITIONALLY at step 3, so `F = 0` makes the Kalman gain
+infinite, `alpha` NaN at the next update, and `P` NaN forever after. The
+series then runs to the end producing NaN in `pred`, `vs`, `P` and the
+log-likelihood, and NOTHING refuses it. Every one of those is a recorded
+card stage, so this was a live route to a vendor-dependent NaN payload
+inside a hash, which is the exact thing ADDENDUM 11 exists to prevent.
+
+THEIRS does not check at any step, diffuse or not, so this is DEVIATION
+673's logic applied consistently rather than a new disagreement with them:
+having already decided that a non-positive innovation variance is refused
+by name rather than filtered, refusing it at only some steps was an
+inconsistency in OUR code, not fidelity to theirs.
+
+OURS. `_Fs <= 0` now sets `info` at EVERY step. The code is SIGNED so the
+host can tell the cases apart: `it + 1` for a summed step (DEVIATION 673's
+original message, unchanged), `-(it + 1)` for a diffuse one, which raises a
+message naming the step as diffuse and saying it contributes no term. The
+arithmetic is untouched: no accumulator, no stage and no recorded byte
+changes, so `kalman_loop_host` needs no matching edit and every existing
+bitwise gate stays valid.
+
+NOT YET GATED. Reaching this branch needs a fixture whose `P0` has a
+non-positive diffuse diagonal entry, and the diffuse block is initialised to
+`kappa = 1e6` by construction, so it is hard to reach by accident and no
+current fixture reaches it. That is recorded as OWED rather than claimed:
+the branch is written and unreached, and an unreached branch is an unchecked
+one (PORTING_RULES 8).
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -120,6 +152,7 @@ def init_batched_kalman_matrices_kernel(
     d_Z_b: MutPointer[Float32, MutAnyOrigin],
     d_R_b: MutPointer[Float32, MutAnyOrigin],
     d_T_b: MutPointer[Float32, MutAnyOrigin],
+    d_guards: MutPointer[UInt8, MutAnyOrigin],
     nb_in: Int32,
     p_in: Int32, d_in: Int32, q_in: Int32,
     P_in: Int32, D_in: Int32, Q_in: Int32, s_in: Int32,
@@ -191,10 +224,13 @@ def init_batched_kalman_matrices_kernel(
         d_T_b.unsafe_store(tb + (n_diff + i + 1) * rd + n_diff + i, Float32(1.0))
 
     # If rd=2 and phi_2=-1, I-TxT is singular (:1243-1244)
+    var guard_bits = UInt8(0)
     if rd == 2 and p == 2:
         var t1 = ftz(d_T_b.unsafe_load(tb + 1))
         if abs(ftz(t1 + Float32(1.0))) < Float32(0.01):
             d_T_b.unsafe_store(tb + 1, Float32(-0.99))
+            guard_bits |= UInt8(1)  # DECISION STAGE: the unit-root rewrite fired
+    d_guards.unsafe_store(bid, guard_bits)
 
 
 # ---------------------------------------------------------------------------
@@ -218,6 +254,7 @@ def kalman_init_state_kernel(
     d_ImT: MutPointer[Float32, MutAnyOrigin],
     d_ImT_inv: MutPointer[Float32, MutAnyOrigin],
     d_info: MutPointer[Int32, MutAnyOrigin],
+    d_guards: MutPointer[UInt8, MutAnyOrigin],
     batch_size_in: Int32,
     rd_in: Int32,
     r_in: Int32,
@@ -299,6 +336,10 @@ def kalman_init_state_kernel(
                 # raft::signPrim: signbit(x) ? -1 : +1
                 var neg = (bitcast[DType.uint32](v) >> 31) != 0
                 d_ImT.unsafe_store(ib, Float32(-1e-3) if neg else Float32(1e-3))
+                # DECISION STAGE: the intercept nudge fired. Nothing else can
+                # record it -- `ImT` is overwritten in place by its own LU
+                # below, so by the time any stage is read the evidence is gone.
+                d_guards.unsafe_store(bid, d_guards.unsafe_load(bid) | UInt8(2))
         var inf2 = lu_inverse(d_ImT, ib, d_ImT_inv, ib, r, d_piv, bid * LYAP_R2_MAX)
         if inf2 != 0 and info == 0:
             info = inf2
@@ -456,11 +497,14 @@ def batched_kalman_loop_kernel(
                 for j in range(rd):
                     var t0 = ftz(l_P[j * rd + i] * l_Z[i])
                     _Fs = ftz(identical_mul_add(t0, l_Z[j], _Fs))
+        # DEVIATION 677: the check covers EVERY step, not only the summed
+        # ones. `it < n_diff` records a NEGATIVE code so the host can tell
+        # the two cases apart; the arithmetic below is untouched, so the
+        # oracle needs no matching change and no recorded stage moves.
+        if _Fs <= Float32(0.0) and info == 0:
+            info = Int32(it + 1) if it >= n_diff else Int32(-(it + 1))
         if it >= n_diff:
-            if _Fs <= Float32(0.0):
-                if info == 0:
-                    info = Int32(it + 1)
-            else:
+            if _Fs > Float32(0.0):
                 b_sum_logFs = ftz(b_sum_logFs + ftz(identical_log(_Fs)))
                 var v2 = ftz(vs_it * vs_it)
                 b_ll_s2 = ftz(b_ll_s2 + ftz(v2 / _Fs))
@@ -545,6 +589,16 @@ struct KalmanWorkspace(Movable):
     var vecq: DeviceBuffer[DType.float32]
     var ImT: DeviceBuffer[DType.float32]
     var ImT_inv: DeviceBuffer[DType.float32]
+    var guards: DeviceBuffer[DType.uint8]
+    """DECISION BITS per series, one byte (added 2026-08-24). Bit 0: the
+    `rd == 2 && p == 2` unit-root guard rewrote `T[1]` to -0.99. Bit 1: the
+    `r == 1` intercept guard nudged `I - T*` away from zero. Both are RARE
+    rewrites that change the model, and neither was recoverable from any
+    recorded stage: the unit-root one only shows up as a suspicious -0.99 in
+    `T` if you already know to look for it, and the intercept one is
+    invisible because `ImT` is OVERWRITTEN IN PLACE by its own LU
+    factorisation before anything could record it."""
+
     var info_init: DeviceBuffer[DType.int32]
     var info_loop: DeviceBuffer[DType.int32]
     var pred: DeviceBuffer[DType.float32]
@@ -572,6 +626,7 @@ struct KalmanWorkspace(Movable):
         self.vecq = ctx.enqueue_create_buffer[DType.float32](r2 * batch_size)
         self.ImT = ctx.enqueue_create_buffer[DType.float32](r2 * batch_size)
         self.ImT_inv = ctx.enqueue_create_buffer[DType.float32](r2 * batch_size)
+        self.guards = ctx.enqueue_create_buffer[DType.uint8](batch_size)
         self.info_init = ctx.enqueue_create_buffer[DType.int32](batch_size)
         self.info_loop = ctx.enqueue_create_buffer[DType.int32](batch_size)
         self.pred = ctx.enqueue_create_buffer[DType.float32](n_obs * batch_size)
@@ -593,6 +648,7 @@ def init_batched_kalman_matrices(
     ctx.enqueue_function[init_batched_kalman_matrices_kernel](
         params.ar.unsafe_ptr(), params.ma.unsafe_ptr(), params.sar.unsafe_ptr(),
         params.sma.unsafe_ptr(), ws.Z.unsafe_ptr(), ws.R.unsafe_ptr(), ws.T.unsafe_ptr(),
+        ws.guards.unsafe_ptr(),
         Int32(batch_size), Int32(order.p), Int32(order.d), Int32(order.q),
         Int32(order.P), Int32(order.D), Int32(order.Q), Int32(order.s),
         grid_dim=(_grid(batch_size, INIT_TPB), 1, 1), block_dim=(INIT_TPB, 1, 1),
@@ -637,6 +693,7 @@ def batched_kalman_filter(
         ws.RQ.unsafe_ptr(), ws.RQR.unsafe_ptr(), ws.P.unsafe_ptr(), ws.alpha.unsafe_ptr(),
         ws.ImAA.unsafe_ptr(), ws.ImAA_inv.unsafe_ptr(), ws.piv.unsafe_ptr(), ws.vecq.unsafe_ptr(),
         ws.ImT.unsafe_ptr(), ws.ImT_inv.unsafe_ptr(), ws.info_init.unsafe_ptr(),
+        ws.guards.unsafe_ptr(),
         Int32(batch_size), Int32(rd), Int32(r), Int32(n_diff), Int32(order.k),
         grid_dim=(_grid(batch_size, INIT_TPB), 1, 1), block_dim=(INIT_TPB, 1, 1),
     )
@@ -662,9 +719,17 @@ def batched_kalman_filter(
     )
     var info1 = _read_info(ctx, ws.info_loop, batch_size)
     for b in range(batch_size):
-        if info1[b] != 0:
+        if info1[b] > 0:
             raise Error(
                 "batched_kalman_filter: series " + String(b) + ": innovation variance F <= 0 at step "
                 + String(info1[b] - 1) + "; refused by name rather than carrying log(F) into the likelihood"
+            )
+        if info1[b] < 0:
+            raise Error(
+                "batched_kalman_filter: series " + String(b)
+                + ": innovation variance F <= 0 at DIFFUSE step " + String(-info1[b] - 1)
+                + " (before it >= n_diff = " + String(n_diff) + ", so it contributes no term to the "
+                + "log-likelihood); refused by name rather than carrying 1/F = inf into the gain "
+                + "(DEVIATION 677)"
             )
     return ws^

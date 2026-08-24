@@ -40,6 +40,12 @@ refusals, the Float64 tolerance and the structural claims assert in both.
     check_unit_root_guard_is_reached    `rd == 2 && p == 2` REWRITES T[1] to
                                         -0.99 on the `ar2_unit` order, and
                                         the guard's absence moves the bits
+    check_guard_decisions_are_recorded  the two RARE rewrites -- the
+                                        `rd == 2 && p == 2` unit-root guard
+                                        and the `r == 1` intercept nudge --
+                                        read back from the `guards` decision
+                                        stage: one arm that must set each
+                                        bit and one that must set neither
     check_lu_pivot_tie_is_reached       DEVIATION 674's pivot tie rule: an
                                         EXACT magnitude tie is planted in
                                         column 0 of `I - T (x) T` on the
@@ -82,8 +88,11 @@ from mojo_only.numerics import (
 from arima.mojo_only.fixtures import (
     ArimaFixture,
     OrderCase,
+    PLANT_INTERCEPT_NUDGE,
+    PLANT_NONE,
     PLANT_PIVOT_TIE,
     PLANT_UNIT_ROOT,
+    download_u8,
     arima_fixture,
     arima_params_fixture,
     bits32,
@@ -898,6 +907,60 @@ def check_unit_root_guard_is_reached(ctx: DeviceContext) raises:
             "the transformed phi_2 is not at the Jones clamp, so the guard was reached by accident")
 
 
+def check_guard_decisions_are_recorded(ctx: DeviceContext) raises:
+    """THE TWO RARE REWRITES, and the stage that finally records them.
+
+    `guards` is one byte per series. Bit 0 says the `rd == 2 && p == 2`
+    unit-root guard rewrote `T[1]` to -0.99; bit 1 says the `r == 1`
+    intercept guard nudged `I - T*` off zero. Both CHANGE THE MODEL, and
+    before 2026-08-24 neither appeared in any recorded stage on any card:
+    bit 0 was only inferable from a suspicious -0.99 sitting in `T` if you
+    already knew to look, and bit 1 was not inferable at all, because `ImT`
+    is overwritten in place by its own LU factorisation before anything
+    could have read it.
+
+    Three arms, because a decision stage that is always 0 or always 1 is not
+    a stage, it is a constant:
+
+      * `ar2_unit` must set bit 0 and NOT bit 1
+      * a locally built `(1,0,0) k=1` with the intercept plant must set
+        bit 1 and NOT bit 0
+      * `arma11_k` must set NEITHER
+
+    The second fixture is built HERE rather than added to `order_table`
+    because it is deliberately near-singular (`1 - phi^2 = 2e-4`), which is
+    what makes it reach the guard and also what would make it a dishonest
+    row in the Float64 precision gate."""
+    print("check_guard_decisions_are_recorded [" + _mode_name() + "]")
+    var f = arima_fixture(N_OBS, SALT)
+    var arms = [
+        (ARIMAOrder(2, 0, 0, 0, 0, 0, 0, 0, 0), PLANT_UNIT_ROOT, UInt8(1), String("ar2_unit: unit-root rewrite")),
+        (ARIMAOrder(1, 0, 0, 0, 0, 0, 0, 1, 0), PLANT_INTERCEPT_NUDGE, UInt8(2), String("ar1_k_nudge: r == 1 intercept nudge")),
+        (ARIMAOrder(1, 0, 1, 0, 0, 0, 0, 1, 0), PLANT_NONE, UInt8(0), String("arma11_k: neither guard")),
+    ]
+    for arm in arms:
+        var order = arm[0]
+        var ph = arima_params_fixture(order, f.batch_size, SALT, arm[1])
+        var y = upload_f32(ctx, f.y)
+        var params = upload_params(ctx, ph, order, f.batch_size)
+        var res = batched_loglike(ctx, y, f.batch_size, f.n_obs, order, params, True, 0)
+        var g = download_u8(ctx, res.ws.guards, f.batch_size)
+        var want = arm[2]
+        var bad = 0
+        for b in range(f.batch_size):
+            if g[b] != want:
+                bad += 1
+        print("      " + arm[3] + ": guards byte " + String(Int(g[0]))
+              + " on series 0, expected " + String(Int(want)) + "; "
+              + String(bad) + " of " + String(f.batch_size) + " series disagree")
+        _assert(bad == 0,
+                arm[3] + ": the guards decision stage does not read back as expected, so either "
+                + "the guard did not fire where it must or the stage is not recording it")
+        _ = res^
+        _ = params^
+        _ = y^
+
+
 def check_lu_pivot_tie_is_reached(ctx: DeviceContext) raises:
     """DEVIATION 674's PIVOT TIE RULE, made gateable.
 
@@ -1112,6 +1175,7 @@ def main() raises:
     check_kalman_launch_invariant(ctx)
     check_unit_root_guard_is_reached(ctx)
     check_lu_pivot_tie_is_reached(ctx)
+    check_guard_decisions_are_recorded(ctx)
     check_fold_order_is_visible(ctx)
     print("ALL ARIMA CHECKS PASSED [" + _mode_name() + "]"
           + (" card: " + trace.path if trace.enabled else " (no card: set MOJOLEARN_IDENTITY_TRACE)"))

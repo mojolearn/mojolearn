@@ -12,8 +12,18 @@ untransformed parameters, then the Jones-TRANSFORMED parameters (read those
 second when two cards disagree: a different `t_params` is a different model
 and everything downstream of it is noise), then every stage of the filter in
 the order the device writes them --  `Z`, `R`, `T`, `RQ`, `RQR`, `P0`,
-`alpha0`, `pred`, `vs`, `loglike`, `fc` -- for each of the seven orders in
-`arima/mojo_only/fixtures.mojo`'s table. Tags are unique and carry no launch
+`alpha0`, `pred`, `vs`, `loglike`, `fc` -- and last the DECISION stages
+`piv`, `info_init`, `info_loop` and `guards`, for each of the ten orders in
+`arima/mojo_only/fixtures.mojo`'s table.
+
+THE DECISION STAGES ARE NOT DECORATION. Every float stage records a VALUE;
+these four record a CHOICE, and a choice can differ between vendors while
+every value stays bit-identical. `piv` is the LU permutation and therefore
+DEVIATION 674's tie rule; `guards` says which of the two rare rewrites fired
+per series; `info_init` and `info_loop` are all zero on a healthy run and
+prove the refusal paths were NOT taken. The holtwinters lane established the
+shape of this argument: its `CRIT_ORDER` sabotage moves zero of 2800 float
+cells and is caught only because the criterion is a recorded stage. Tags are unique and carry no launch
 parameter, so a card is a function of the fixture and the mode alone.
 
 READ THE STAGES IN ORDER. `T` before `P0` before `alpha0` before `pred`: the
@@ -43,6 +53,7 @@ from arima.mojo_only.fixtures import (
     upload_params,
 )
 from arima.ported.arima.batched_arima import batched_loglike
+from arima.ported.linalg.batched.matrix import LYAP_R2_MAX
 
 
 comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
@@ -117,6 +128,35 @@ def main() raises:
         trace.record_device[DType.float32](ctx, tag + ".vs", res.ws.vs, f.n_obs * b)
         trace.record_device[DType.float32](ctx, tag + ".loglike", res.ws.loglike, b)
         trace.record_device[DType.float32](ctx, tag + ".fc", res.ws.fc, FC_STEPS * b)
+
+        # ------------------------------------------------------------------
+        # DECISION STAGES (added 2026-08-24, Andrew's "are there more hashes
+        # we can take"). Every stage above is a float BUFFER. These three are
+        # the CHOICES the pipeline made, and until now they were recorded
+        # nowhere, on any card, in this lane.
+        #
+        # `piv` is the important one. It is the LU permutation: which row was
+        # selected as pivot in each column of `I - T (x) T` and of `I - T*`.
+        # That sequence IS DEVIATION 674's decision -- the tie rule this lane
+        # CHOSE, because cuBLAS's is not readable -- and it is not derivable
+        # from any float stage, because `P0` is the product of the solve and
+        # not of the permutation that produced it. Sabotage (e) perturbs
+        # exactly this: flipping `>` to `>=` on a tied column changes the
+        # permutation, and it can perfectly well leave `P0` bit-identical by
+        # luck, in which case `piv` is the ONLY stage that moves. That is the
+        # holtwinters CRIT_ORDER case in this lane: a decision-only sabotage
+        # that no float comparison can see.
+        #
+        # `info_init` and `info_loop` are the refusal codes. On a healthy run
+        # they are all zero, and recording a buffer of zeros sounds useless
+        # until you ask what it proves: that the REFUSAL PATH WAS NOT TAKEN.
+        # A vendor whose `P0` solve went singular where ours did not, or
+        # whose `F` went non-positive at a step where ours did not, differs
+        # in `info` before it differs anywhere a human would look.
+        trace.record_device[DType.int32](ctx, tag + ".piv", res.ws.piv, LYAP_R2_MAX * b)
+        trace.record_device[DType.int32](ctx, tag + ".info_init", res.ws.info_init, b)
+        trace.record_device[DType.int32](ctx, tag + ".info_loop", res.ws.info_loop, b)
+        trace.record_device[DType.uint8](ctx, tag + ".guards", res.ws.guards, b)
 
         var ll = download_f32(ctx, res.ws.loglike, b)
         print("  " + oc.name + " rd=" + String(rd) + " r=" + String(order.r())

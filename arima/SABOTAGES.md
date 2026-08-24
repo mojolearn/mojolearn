@@ -6,7 +6,7 @@ values are OUR OWN tally (the host oracle), the paths are all new, two of
 the branches are rare, and DEVIATION 674 chose a bound and a tie rule that
 theirs does not expose.
 
-**ALL NINE HAVE NOW BEEN RUN**, 2026-08-23, Apple M4, IDENTICAL, at the
+**ALL NINE OF THE ORIGINAL ARMS HAVE BEEN RUN**, 2026-08-23, Apple M4, IDENTICAL, at the
 smallest shapes that reach the branches (n_obs 24, batch 6, fc_steps 3,
 eight orders). Scoreboard:
 
@@ -21,6 +21,13 @@ eight orders). Scoreboard:
     (g)  gradient reset x + 0.0             BITES    7 of 24 cells -- but ONLY
                                                     after the gate was fixed;
                                                     it was INERT first
+
+ADDED 2026-08-24, WRITTEN BUT NOT RUN (no-compile lane):
+
+    (h)  the pivot tie rule, RE-ARMED       ?       (e) on a fixture that
+                                                    actually has a tie
+    (i)  the guards decision bit            ?       proves the decision stage
+                                                    is load-bearing
 
 Runs use `MOJOLEARN_ARIMA_SURVEY=1`, which makes the gate print
 `SABOTAGE-MOVED` and CONTINUE instead of raising on the first differing
@@ -395,6 +402,41 @@ found: call `perturb_kernel` with `h = 0` in place of `reset_param_kernel`.
   invisible here by construction. DEVIATION 676's entire claim is about a
   payload that differs BETWEEN vendors, and one vendor cannot test it.
   STILL OWED, and only NVIDIA or AMD can discharge it.
+
+## (h) the LU pivot tie rule, ON A FIXTURE THAT HAS A TIE
+
+**This is (e) re-armed.** Same edit, `arima/ported/linalg/batched/matrix.mojo`,
+`lu_inverse`, `if m > best_mag:` becomes `if m >= best_mag:`. What changed is
+not the sabotage but the fixture: the `ar2_tie` order now plants an EXACT
+magnitude tie in column 0 of `I - T (x) T`, maximal by a 0.20 margin, so the
+pivot loop actually meets the comparison this arm perturbs.
+`check_lu_pivot_tie_is_reached` asserts the tie is present and maximal in the
+matrix the device built, so the arm is known to be armed before it is fired.
+
+- MUST FAIL: at minimum `ar2_tie.piv`, the LU permutation decision stage.
+- WATCH `P0` SEPARATELY. Swapping which of two EQUAL-magnitude rows becomes
+  the pivot changes the permutation for certain, but it does not have to
+  change `P0`: the two eliminations can produce the same inverse. If `piv`
+  moves and `P0` does not, that is not a weak result, it is the whole reason
+  `piv` was added as a stage. It is this lane's holtwinters `CRIT_ORDER`: a
+  decision-only sabotage that no float comparison anywhere can see.
+- OBSERVED: _(not run: written 2026-08-24 in a no-compile lane)_
+
+## (i) the guards decision stage
+
+`arima/ported/arima/batched_kalman.mojo`. Delete the `guard_bits |= UInt8(1)`
+line in `init_batched_kalman_matrices_kernel` (leaving the `T[1] = -0.99`
+rewrite itself in place), so the guard still fires but stops SAYING it fired.
+
+The point is to prove the stage is load-bearing rather than decorative. The
+rewrite still happens, so every float stage is bit-identical and no
+value-comparing gate anywhere can notice.
+
+- MUST FAIL: `check_guard_decisions_are_recorded`, `ar2_unit` arm, all six
+  series, and `ar2_unit.guards` on the card.
+- MUST NOT FAIL: any float stage. If a float stage moves, the edit was not
+  confined to the decision bit.
+- OBSERVED: _(not run: written 2026-08-24 in a no-compile lane)_
 
 ---
 
