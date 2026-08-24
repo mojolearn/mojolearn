@@ -1659,6 +1659,9 @@ def main() raises:
             )
         print(
             "SCOPE: this shape only, IDENTICAL only. Clauses (a), (b), (c),"
-            " (d), (e) and (f) are gated HERE; L=16/64/257, FAST mode, the"
-            " corpus cross-check and every non-Apple column are OWED."
+            " (d), (e) and (f) are gated HERE, and the INDEPENDENT corpus"
+            " cross-check passed on cases 0 and 1 at rtol=1e-7 (run it with"
+            " MOJOLEARN_MAMBA_CORPUS_CASE + tools/mamba_corpus_check.py)."
+            " OWED: the other 14 corpus cases, L=16/64/257, FAST mode, every"
+            " non-Apple column."
         )
