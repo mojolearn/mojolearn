@@ -19,17 +19,15 @@ DEVIATION 670, the hand-off list, and the row text for both directories.
     inherited MEASURED claims judged           4 of 4 (2 earned, 2 struck)
     a second vendor                            NO. Apple M4 only.
 
-    WRITTEN 2026-08-24 AND NOT BUILT (a no-compile round; both slots were
-    held by other lanes). Everything in this block is source only:
-        DEVIATION 677, the diffuse-step refusal
-        the `guards` / `piv` / `info_*` decision stages on the card
-        the `Fs` and `P_final` stages, and `guards` bit 2 (the sign choice)
-        orders `arma44` and `ar2_tie`, plants PIVOT_TIE and INTERCEPT_NUDGE
-        gates check_lu_pivot_tie_is_reached, check_guard_decisions_are_recorded
-        the widened check_fold_order_is_visible
-        sabotage arms (h) and (i)
-    The green results below predate all of it. A compile slot must rebuild
-    before any of it may be quoted.
+    ALL OF THE 2026-08-24 WORK NOW BUILDS AND PASSES, both modes: DEVIATION
+    677, the six new card stages, orders `arma44` and `ar2_tie`, the two new
+    gates, the widened fold gate, and sabotage arms (h) and (i). The card
+    carries 229 stage records, up from 137. 11 of 11 sabotage arms have run.
+
+    A PREDICTION OF MINE THAT WAS WRONG, recorded because it was written
+    down first: I expected signature errors around `guards`, `Fs` and the
+    `P` writeback, "they thread new arguments through two kernels". All
+    three binaries compiled clean on the first attempt.
 
 Shapes are the smallest that still reach every branch: `n_obs = 24`,
 `batch = 6`, `fc_steps = 3`, eight orders. No timing was taken, at any
@@ -78,16 +76,55 @@ question until an NVIDIA or AMD card is diffed against this one.
                                         0 cells differ
     check_unit_root_guard_is_reached    fires on 6 of 6 series; pre-guard
                                         phi_2 is the clamp 0xbf7ff972
-    check_fold_order_is_visible         of 24 T*P cells a descending fold
-                                        moves 2, a Float64 fold moves 2
+    check_lu_pivot_tie_is_reached       an EXACT tie (0.45327485 twice),
+                                        maximal by 0.20, on 6 of 6 series
+    check_guard_decisions_are_recorded  three arms: bit 0 set, bit 1 set,
+                                        neither set; 0 of 6 series disagree
+                                        on each
+    check_fold_order_is_visible         55 of 1110 cells over 10 orders
+                                        (FAST 63), 8 orders moving,
+                                        strongest 25
 
 **Three findings worth carrying forward.**
 
-`check_fold_order_is_visible` moves only 2 of 24 cells (1 of 24 under FAST).
-That is a real signal but a THIN one, and it is the gate whose whole job is
-to prove the bitwise gates have teeth. At `n_obs = 24` the fixture barely
-sees a fold. OWED: either strengthen it or say plainly that the teeth
-argument rests on the sabotage table instead.
+`check_fold_order_is_visible` was thin: 2 of 24 cells on one order. WIDENED
+2026-08-24 to all ten orders, and the result overturned the model I had
+written down in advance. Measured (IDENTICAL / FAST), 55 / 63 cells of 1110,
+8 of 10 orders moving, strongest single order 25 / 24:
+
+    order         rd  n_phi   cells   moved   moved%
+    ar1            1      1       6     0/0     0.0
+    ma2            3      0      54     0/0     0.0
+    sarima_rd8     8      1     384     1/2     0.3
+    arima111       3      1      54     2/1     3.7
+    ar2_unit       2      2      24     1/3     4.2
+    sarima_full    7      3     294    13/18    4.4
+    arima212       4      2      96     5/7     5.2
+    arma11_k       2      1      24     2/1     8.3
+    arma44         5      4     150    25/24   16.7
+    ar2_tie        2      2      24     6/7    25.0
+
+**CHAIN LENGTH IS NOT THE DRIVER, and my recorded prediction was wrong.** It
+said `ar1` moves zero (right), `rd = 2` orders move very few (wrong:
+`ar2_tie` at `rd = 2` moves the MOST of anything, 25%), and `rd >= 4` moves
+a substantial fraction (wrong: `sarima_rd8` has the LONGEST chain at `rd = 8`
+and moves 0.3%, the least of anything that moved). One clause of three held.
+
+THE DRIVER IS `n_phi`, the count of NON-TRIVIAL entries in `T`. A differenced
+or seasonal `T` is mostly structural: exact `0.0` and exact `1.0` from the
+differencing rows, the seasonal shift and the companion superdiagonal. A fold
+over exact values is order-independent, so those cells cannot move however
+long the chain is. Only the `n_phi` hashed AR coefficients carry rounding.
+`ma2` has `n_phi = 0` and moves NOTHING despite `rd = 3`.
+
+The lesson generalizes past this gate, which is why the wrong prediction is
+left in the docstring rather than quietly replaced: widening a fixture means
+widening the part that CARRIES ARITHMETIC, not the part that carries
+structure. `rd` was the wrong knob; `n_phi` is the right one.
+
+Floors raised from "at least 2 orders move something" to the observed numbers
+with headroom: at least 6 orders, at least 35 cells total, and at least one
+order moving 15.
 
 `check_kalman_matches_float64` splits by `n_diff`, not by anything else, and
 `arima212` is the exception that shows why: `n_diff = 1` yet it agrees to 7
@@ -111,6 +148,34 @@ straight down it.
 None of these should be changed by a lane that cannot run the gate: a bound
 edited without a run is a bound that turns the next build red for a reason
 nobody can see. They are written here and left alone deliberately.
+
+## Metal's 31-argument kernel cap, and this lane's headroom
+
+The holtwinters lane hit it on 2026-08-24: one added `Int32` output took a
+kernel from 31 arguments to 32 and the build died with `Metal Compiler
+failed to compile metallib`, naming no argument, no parameter, and pointing
+at line 1 of the CHECK file. It is a backend limit, so CUDA and HIP would
+not have shown it, and the message says nothing about the real cause.
+
+This lane adds six card stages and is an obvious candidate, so the arguments
+were COUNTED rather than assumed:
+
+    kalman_init_state_kernel                21 arguments, 10 to spare
+    batched_kalman_loop_kernel              19 arguments, 12 to spare
+    init_batched_kalman_matrices_kernel     16 arguments, 15 to spare
+    in_sample_prediction_kernel             14 arguments, 17 to spare
+    grad / perturb / reset / copy_forecast   5 to  7 arguments
+
+That headroom is why the six new stages built first time. `kalman_init_
+state_kernel` is the one to watch: SIX of its twenty-one arguments are
+Lyapunov scratch buffers (`ImAA`, `ImAA_inv`, `piv`, `vecq`, `ImT`,
+`ImT_inv`), and the day a seventh output is needed they should collapse into
+ONE buffer with named slices split out in the launcher, which is the fix
+that worked in holtwinters. A future output REUSES A SLICE; it does not add
+an argument.
+
+If a build here ever fails with a metallib error pointing somewhere useless,
+count the arguments before hunting anything else.
 
 ## More hashes: the decisions this pipeline makes
 
@@ -656,7 +721,7 @@ replacing now that the lane has run. Corrected text below.
 
 | n | path | what is vendor-dependent in their spelling | what we did | status |
 |---|---|---|---|---|
-| 58 | arima: the batched Kalman filter log-likelihood, prediction and finite-difference gradient (`batched_kalman.cu`, `batched_arima.cu`, `jones_transform.cuh`) | every ARIMA kernel is `double` only and Metal has no Float64; `P0` is a cuBLAS batched `getrf`/`getri` whose association and pivot tie rule are closed and whose `info` the caller never reads; `RQR` and the Lyapunov solve are `cublasgemmStridedBatched`; `raft::tanh` / `raft::atanh` are the vendor's transcendentals (row 12); the undefined in-sample predictions are `nan("")`, whose payload differs per vendor in a recorded buffer; `d_y_p[0] = 0.0` is a cross-thread race in their lambda | DEVIATION 670 (Float32 device, Float64 host reference beside it); DEVIATION 673 (`F <= 0` refused by name, not carried into `log`); DEVIATION 674 (the LU, both substitutions and both gemm shapes written out serial ascending through `identical_mul_add`, `info` raised by name); DEVIATION 675 (`tanh`/`atanh` through `identical_exp`/`identical_log`); DEVIATION 676 (the sentinel is the constant `0x7fc00000`, never computed); their race not ported. `rd > 8`, `r > 5`, exog, confidence intervals, CSS and missing observations all refused by name | **ONE APPLE DEVICE, both modes, 2026-08-23.** Device == host oracle BITWISE on 8 orders x 11 stages (`Z R T RQ RQR P0 alpha0 pred vs loglike fc`), 0 cells differing, at `rd` up to 8; `predict` and the finite-difference gradient likewise; launch-invariant over block width 32/64/128, 41 poisoned padding floats, batch composition and a repeat run. 9 of 9 sabotages run: 6 bite, 3 null, and two of the nulls are recorded REACH FAILURES (DEVIATION 674's pivot tie rule was UNREACHED, not merely ungated, because no fixture produced a magnitude tie; DEVIATION 676's vendor-payload claim cannot be tested on Apple at all, where `0.0/0.0` is already `0x7fc00000`). **NO SECOND VENDOR: the cross-vendor claim this row exists to make is UNTESTED.** |
+| 58 | arima: the batched Kalman filter log-likelihood, prediction and finite-difference gradient (`batched_kalman.cu`, `batched_arima.cu`, `jones_transform.cuh`) | every ARIMA kernel is `double` only and Metal has no Float64; `P0` is a cuBLAS batched `getrf`/`getri` whose association and pivot tie rule are closed and whose `info` the caller never reads; `RQR` and the Lyapunov solve are `cublasgemmStridedBatched`; `raft::tanh` / `raft::atanh` are the vendor's transcendentals (row 12); the undefined in-sample predictions are `nan("")`, whose payload differs per vendor in a recorded buffer; `d_y_p[0] = 0.0` is a cross-thread race in their lambda | DEVIATION 670 (Float32 device, Float64 host reference beside it); DEVIATION 673 (`F <= 0` refused by name); DEVIATION 677 (the same refusal at the diffuse steps, where an unchecked `1/F` reached the gain); DEVIATION 674 (the LU, both substitutions and both gemm shapes written out serial ascending through `identical_mul_add`, `info` raised by name); DEVIATION 675 (`tanh`/`atanh` through `identical_exp`/`identical_log`, ACCEPTED at ~23 ulp with the decision rule recorded); DEVIATION 676 (the sentinel is the constant `0x7fc00000`); their race not ported. `rd > 8`, `r > 5`, exog, confidence intervals, CSS and missing observations all refused by name | **ONE APPLE DEVICE, both modes, 2026-08-24.** Device == host oracle BITWISE on 10 orders x 11 stages, 0 cells differing, at `rd` up to 8 and `r = 5` (the 25x25 Lyapunov LU); `predict` and the gradient likewise; launch-invariant over block width, poisoned padding, batch composition and a repeat run. Card carries 229 stage records including four DECISION stages (`piv`, `guards`, `info_init`, `info_loop`) plus `Fs` and `P_final`. 11 of 11 sabotage arms run: 8 bite, 3 null. **Arm (i) is decision-only: 1 of 229 card tags, ZERO float stages** -- the model rewrite still happens and only the hashed decision notices. Arm (h) re-armed DEVIATION 674's pivot tie on a CONSTRUCTED exact tie and bites (6 of 229 tags), but `piv` and `P0` BOTH move, so `piv` is corroborating there and not decisive. Two arms remain null for recorded reasons: (c) is structural, (f) needs a second vendor. **NO SECOND VENDOR: the cross-vendor claim this row exists to make is UNTESTED.** |
 
 ### A hand-off to whoever owns the deviation ledger
 

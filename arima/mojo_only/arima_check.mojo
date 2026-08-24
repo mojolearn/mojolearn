@@ -1061,13 +1061,46 @@ def check_fold_order_is_visible(ctx: DeviceContext) raises:
     and `r = 5` (`arma44`), so this gate sweeps chain lengths 1 through 8
     and cell counts from 6 to 384 instead of one length and 24 cells.
 
-    PREDICTION, recorded before any run so the run can falsify it: `ar1`
-    (`rd = 1`) must move ZERO cells, because a one-term fold has no order;
-    `rd = 2` orders may move very few; and the `rd >= 4` orders should move
-    a substantial fraction. The floor asserted below is deliberately weak
-    (`>= 2` orders must move something) because nothing has run since the
-    widening. OWED: a compile slot raises the floor to what it observes and
-    records the per-order counts here."""
+    THE PREDICTION WAS RECORDED IN ADVANCE AND WAS MOSTLY WRONG. It said:
+    `ar1` (`rd = 1`) moves ZERO, `rd = 2` orders move very few, and
+    `rd >= 4` orders move a substantial fraction. Measured 2026-08-24,
+    IDENTICAL / FAST:
+
+        order         rd  n_phi   cells   moved   moved%
+        arma11_k       2      1      24     2/1     8.3
+        ar1            1      1       6     0/0     0.0
+        ma2            3      0      54     0/0     0.0
+        arima111       3      1      54     2/1     3.7
+        arima212       4      2      96     5/7     5.2
+        ar2_unit       2      2      24     1/3     4.2
+        sarima_full    7      3     294    13/18    4.4
+        sarima_rd8     8      1     384     1/2     0.3
+        arma44         5      4     150    25/24   16.7
+        ar2_tie        2      2      24     6/7    25.0
+
+    One of three clauses held. `ar1` moved zero, as predicted and now
+    asserted. The other two were wrong, and wrong in the same way: CHAIN
+    LENGTH IS NOT THE DRIVER. `sarima_rd8` has the LONGEST chain in the
+    table (`rd = 8`) and moves 0.3%, the least of anything that moved at
+    all; `ar2_tie` has one of the shortest (`rd = 2`) and moves 25%, the
+    most.
+
+    THE DRIVER IS `n_phi`, the count of NON-TRIVIAL entries in `T`. A
+    differenced or seasonal `T` is mostly structural: exact `0.0` and exact
+    `1.0` from the differencing rows, the seasonal shift and the companion
+    superdiagonal. A fold over exact values is order-independent, so those
+    cells cannot move however long the chain is. Only the `n_phi` hashed AR
+    coefficients carry rounding, and the movement tracks them: `ma2` has
+    `n_phi = 0` and moves NOTHING despite `rd = 3`; `arma44` has `n_phi = 4`
+    and moves most.
+
+    The lesson generalizes past this gate and is the reason the wrong
+    prediction is left here rather than quietly replaced: widening a fixture
+    means widening the part that CARRIES ARITHMETIC, not the part that
+    carries structure. `rd` was the wrong knob and `n_phi` is the right one.
+
+    The floors below are the observed numbers with headroom, and they hold
+    in both modes (IDENTICAL totals 55, FAST 63)."""
     print("check_fold_order_is_visible [" + _mode_name() + "]")
     var f = arima_fixture(N_OBS, SALT)
     var table = order_table()
@@ -1075,6 +1108,7 @@ def check_fold_order_is_visible(ctx: DeviceContext) raises:
     var total_desc = 0
     var total_f64 = 0
     var orders_that_moved = 0
+    var best_order_moved = 0
     for oc in table:
         var order = oc.order
         var ph = arima_params_fixture(order, f.batch_size, SALT, oc.plant)
@@ -1107,7 +1141,10 @@ def check_fold_order_is_visible(ctx: DeviceContext) raises:
                         moved_desc += 1
                     if not same_bits(asc, Float32(f64)):
                         moved_f64 += 1
-        print("      " + oc.name + " (rd=" + String(rd) + ", chain length " + String(rd)
+        # n_phi is the count of NON-TRIVIAL entries in T and is what actually
+        # drives this; rd is only the chain length and most of a differenced
+        # T is exact 0.0 / 1.0, which no reordering can move.
+        print("      " + oc.name + " (rd=" + String(rd) + ", n_phi=" + String(order.n_phi())
               + "): " + String(cells) + " T*P cells, descending fold moves "
               + String(moved_desc) + ", Float64 fold moves " + String(moved_f64))
         total_cells += cells
@@ -1115,6 +1152,8 @@ def check_fold_order_is_visible(ctx: DeviceContext) raises:
         total_f64 += moved_f64
         if moved_desc > 0:
             orders_that_moved += 1
+        if moved_desc > best_order_moved:
+            best_order_moved = moved_desc
         if rd == 1:
             _assert(moved_desc == 0,
                     oc.name + " has rd = 1, a one-term fold with no order, yet reversing it "
@@ -1128,9 +1167,21 @@ def check_fold_order_is_visible(ctx: DeviceContext) raises:
             "a descending fold moves no cell anywhere: the fixture cannot see a fold and every "
             + "bitwise gate in this file is empty")
     _assert(total_f64 > 0, "a Float64 fold moves no cell anywhere: the fixture cannot see a fold")
-    _assert(orders_that_moved >= 2,
-            "the descending fold moves cells in fewer than two orders, so this gate is carried by "
-            + "one fixture and reach is not established (spectral lane, per-fixture reach)")
+    print("      strongest single order moved " + String(best_order_moved) + " cells")
+    # FLOORS, raised 2026-08-24 from "at least 2 orders" to the observed
+    # numbers with headroom. Observed: 8 orders moved, 55 cells total
+    # (IDENTICAL) / 63 (FAST), strongest order 25 / 24.
+    _assert(orders_that_moved >= 6,
+            "the descending fold moves cells in fewer than six orders (observed 8), so this gate "
+            + "has lost reach it used to have (spectral lane, per-fixture reach)")
+    _assert(total_desc >= 35,
+            "the descending fold moves fewer than 35 cells in total (observed 55 IDENTICAL, "
+            + "63 FAST): the fixture has stopped seeing the fold")
+    _assert(best_order_moved >= 15,
+            "no single order moves 15 cells (observed 25 IDENTICAL, 24 FAST on arma44): the "
+            + "argument that the bitwise gates have teeth has lost its strongest witness. "
+            + "n_phi is the knob -- an order with more non-trivial AR coefficients, not a "
+            + "longer state vector")
 
 
 def check_jones_contraction_is_visible() raises:
