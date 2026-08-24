@@ -1,7 +1,7 @@
 """cuML `cpp/src/spectral/spectral_embedding.hpp` + `spectral_embedding.cu`
 (v26.08.00) and `include/cuml/manifold/spectral_embedding.hpp`:
 `ML::SpectralEmbedding::params`, `to_cuvs`, and the three `transform`
-overloads -- every one a forward to cuVS (`spectral_embedding.cu:14-48`).
+overloads -- every one a forward to cuVS (`spectral_embedding.cu:14-47`).
 
 cuML's file is 27 + 49 lines and does no arithmetic of its own; the
 algorithm is `spectral/ported/cuvs/preprocessing/spectral/detail/
@@ -28,7 +28,7 @@ from spectral.ported.sparse.coo import CooGraph
 @fieldwise_init
 struct MLSpectralEmbeddingParams(Copyable, Movable):
     """`ML::SpectralEmbedding::params` (`cuml/manifold/spectral_embedding.hpp:
-    19-35`): `n_components`, `n_neighbors`, `norm_laplacian`, `drop_first`,
+    21-36`): `n_components`, `n_neighbors`, `norm_laplacian`, `drop_first`,
     `std::optional<uint64_t> seed`. No `tolerance` field: cuML's struct
     predates cuVS's and `to_cuvs` leaves cuVS's default `1e-5f`."""
 
@@ -63,7 +63,7 @@ def transform(
     mut embedding: List[Float32],
     mut trace: IdentityTrace,
 ) raises -> Int:
-    """`transform(handle, config, dataset, embedding)` (`:14-20`). Returns
+    """`transform(handle, config, dataset, embedding)` (`:14-21`). Returns
     the number of embedding columns (`n_components`, or `n_components - 1`
     when `drop_first`)."""
     return transform_dataset(ctx, to_cuvs(config), dataset, n_samples, n_features, embedding, trace)
@@ -77,5 +77,5 @@ def transform_connectivity(
     mut trace: IdentityTrace,
 ) raises -> Int:
     """`transform(handle, config, connectivity_graph, embedding)` (`:22-29`)
-    and the `(rows, cols, vals)` form (`:31-48`)."""
+    and the `(rows, cols, vals)` form (`:31-47`)."""
     return transform_graph(ctx, to_cuvs(config), connectivity_graph, embedding, trace)

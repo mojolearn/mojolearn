@@ -4,11 +4,13 @@ sorted_coo_to_csr`, as HOST index plumbing.
 
 ============ DEVIATION 775: THRUST/CUB INDEX PLUMBING RUNS ON THE HOST, AND
 ============ REPEATED (row, col) KEYS ARE REFUSED BY NAME ==================
-THEIRS: `coo_sort` is `thrust::sort_by_key` over a `(row, col)` zip with
-`TupleComp` (`sort.h:35-49`; NOT stable, so two entries with the same key
-land in an unspecified order); `coo_remove_scalar` is two `exclusive_scan`s
-and a per-row compaction kernel (`filter.cuh:39-120`); `sorted_coo_to_csr`
-is `coo_degree` plus an `exclusive_scan` (`csr.cuh:78-90`). All integer
+THEIRS: `coo_sort` (`sort.h:62-70`) is `thrust::sort_by_key` over a
+`(row, col)` zip with the `TupleComp` comparator (`sort.h:33-50`); NOT
+stable, so two entries with the same key land in an unspecified order.
+`coo_remove_scalar` is a per-row compaction kernel (`filter.cuh:39-85`)
+behind two `exclusive_scan`s, reached by cuVS through the `raft::resources`
+overload (`filter.cuh:197-250`); `sorted_coo_to_csr` is `coo_degree` plus
+an `exclusive_scan` (`csr.cuh:78-90`). All integer
 work; none of it rounds a float.
 OURS: the same three operations on the host, over `List[Int32]`/
 `List[Float32]`, because (a) the repository has no device sort to port them
@@ -54,7 +56,7 @@ from spectral.ported.sparse.coo import CooGraph
 
 
 def coo_sort(g: CooGraph) raises -> CooGraph:
-    """`sort.h:35-49` to the total order `(row, col, original index)`.
+    """`sort.h:62-70` to the total order `(row, col, original index)`.
 
     A PURE SORT, as theirs is. It does NOT refuse repeated keys: see
     DEVIATION 777 below and `refuse_repeated_keys`, which carries the
@@ -148,7 +150,7 @@ def _sort_indices_by_key(mut order: List[Int], keys: List[UInt64]):
 
 
 def coo_remove_scalar(g: CooGraph, scalar: Float32) -> CooGraph:
-    """`filter.cuh:39-120`: keep every entry whose value `!= scalar`, in
+    """`filter.cuh:39-85`: keep every entry whose value `!= scalar`, in
     order. (`coo_remove_zeros` is this at `0.0`; `-0.0 != 0.0` is false, so
     a negative zero is removed too, exactly as theirs.)"""
     var rows = List[Int32]()

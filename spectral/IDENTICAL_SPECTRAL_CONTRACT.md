@@ -377,13 +377,16 @@ the lane lost its compile slot.
 | `MOJOLEARN_SPECTRAL_SABOTAGE_LAPLACIAN_SEAM` | seam L6 becomes `row_scale * (value * col_scale)`, one reassociation, no fusion | section 5.1 L6, the normalization seam | FAIL at `spectral.L.vals` |
 | `MOJOLEARN_SPECTRAL_SABOTAGE_NCV` | the CHOSEN bound C1 becomes `max(2k + 1, 20)` with no `n - k` clamp | section 4, C1 | FAIL, and by a STRUCTURAL divergence (a different stage count), which is the shape a bound change has |
 | `MOJOLEARN_SPECTRAL_SABOTAGE_MAXITER` | the CHOSEN bound C2 becomes `1000`, cuVS 25.08's literal | section 4, C2 | RECORD which fixtures it moves; a fixture it does not move is a fixture that does not test the bound |
-| `MOJOLEARN_SPECTRAL_SABOTAGE_SWEEP_CAP` | the CHOSEN bound C4 drops the Jacobi cap to 3 sweeps | section 4, C4 and seam J6 | FAIL device equals oracle, and prove the cap is REACHED rather than merely present |
-| `MOJOLEARN_SPECTRAL_SABOTAGE_ROTATE_UNFUSED` | seam J4 becomes NR's four roundings | section 5.3 J4 | FAIL device equals oracle |
+| `MOJOLEARN_SPECTRAL_SABOTAGE_SWEEP_CAP` | the CHOSEN bound C4 drops the Jacobi cap to 3 sweeps | section 4, C4 and seam J6 | FAIL `check_spectral_path_exact`. **NOT device equals oracle**: `symmetric_eig_host` is SHARED by both arms, so this moves both together and the bit compare cannot see it. Its reach is against the INDEPENDENT reference, the closed form `1 - cos(pi j / 63)` at `1e-4`, which three sweeps on a 20x20 cannot reach |
+| `MOJOLEARN_SPECTRAL_SABOTAGE_ROTATE_UNFUSED` | seam J4 becomes NR's four roundings | section 5.3 J4 | **EXPECTED REACHED BUT INERT, AND THAT IS A HOLE.** Shared solver again, and the perturbation is a last-bit one that every tolerance in this lane absorbs. Seam J4 HAS NO GATE WITH TEETH until a CERTIFICATE check lands: an FNV hash of `symmetric_eig_host`'s output on a pinned fixture, compared against a literal. That check is OWED |
 | `MOJOLEARN_SPECTRAL_SABOTAGE_SPMV_ROTATE` | seam K1's per-row contraction starts at an offset that is a function of `blockIdx` | section 5.2 K1, launch invariance | FAIL device equals oracle |
 | `MOJOLEARN_SPECTRAL_SABOTAGE_STD_SQRT` | the host norms' `sqrt` becomes `std.math.sqrt` | seams K3, K13, L4 | REPORT. Inert on a host with a correctly rounded `sqrt`; it exists to be measured per host, not asserted |
 
-**A sabotage that passes is a finding, not a nuisance.** Two of the eight
-above are declared REPORT rather than FAIL for exactly that reason.
+**A sabotage that passes is a finding, not a nuisance.** Three of the eight
+above are declared REPORT or EXPECTED-INERT rather than FAIL, and each says
+why BEFORE it runs, so that a pass cannot later be read as a success. The
+`ROTATE_UNFUSED` row in particular records a real hole in this lane's
+coverage rather than papering over it: `reached but inert` is not a gate.
 
 ## 10. What is NOT claimed, and the one thing a reader must know first
 

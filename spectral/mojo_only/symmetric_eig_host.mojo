@@ -42,14 +42,61 @@ that one is Float64-only and this solver runs INSIDE the fit, not beside it;
 that one is what `check_tsolve_against_float64_jacobi` compares against.
 WHY THE RESTART MATRIX IS NOT TRIDIAGONAL, which is why a general symmetric
 solver is needed and not a `tql2`: after a restart `lanczos_solve_ritz`
-writes `beta_k` into row `k` and column `k` (`lanczos.cuh:87-98`), so the
+writes `beta_k` into row `k` and column `k` (`lanczos.cuh:86-98`), so the
 matrix is "arrowhead plus tridiagonal", and Jacobi does not care.
+============ DEVIATION 781: `ROTATE` IS TWO FMAS, NOT FOUR ROUNDINGS =====
+NR's C is `a[i][j] = g - s*(h + g*tau)` and `a[k][l] = h + s*(g - h*tau)`,
+four roundings per entry as written. A C compiler with contraction on
+(nvcc's default, and clang's `-ffp-contract=fast`) gives two. This file
+pins the FUSED two, `hfma(g, tau, h)` then `hfma(-s, t1, g)`, because a
+fused seam has a portable spelling and "whatever the compiler did" does
+not. CHOSEN, and it carries a sabotage arm
+(`MOJOLEARN_SPECTRAL_SABOTAGE_ROTATE_UNFUSED`) that must fail the gate.
+Contract section 5.3, seam J4.
+============ THE SWEEP CAP IS CHOSEN, AND IT IS SILENT (DEVIATION 780) ====
+`max_sweeps = 60`, where NR's `jacobi` uses 50 and calls `nrerror` when it
+runs out. This routine RETURNS the unconverged basis and its sweep count
+instead of raising. That is a bound this lane picked and a failure mode it
+chose to make quiet, so it is CHOSEN, it is recorded here, and
+`MOJOLEARN_SPECTRAL_SABOTAGE_SWEEP_CAP` drops the cap to 3 to prove the
+cap is REACHED and not merely present. Contract section 4, C4, seam J6.
 ======================================================================
 """
 
 from std.math import sqrt
+from std.sys.compile import is_defined
 
 from mojo_only.numerics import ftz, identical_mul_add, identical_sqrt
+
+#: SABOTAGE. Drop the Jacobi sweep cap from 60 to 3, so the sweeps stop
+#: before the off-diagonal is annihilated and the returned basis is not an
+#: eigenbasis. CHOSEN bound C4 (DEVIATION 780).
+#:
+#: REACH, stated honestly and BEFORE it is run: this solver is SHARED by
+#: the device arm (`lanczos_solve_ritz`) and the oracle
+#: (`_host_solve_ritz`), so this arm moves BOTH and is expected to be
+#: INERT against `check_spectral_device_equals_oracle`. Its reach is
+#: against the INDEPENDENT references instead: `check_spectral_path_exact`
+#: holds P_64's normalized Ritz values to `1e-4` of `1 - cos(pi j / 63)`,
+#: and three sweeps on a 20x20 cannot get there. That is the gate this arm
+#: must fail.
+comptime SAB_SWEEP_CAP = is_defined["MOJOLEARN_SPECTRAL_SABOTAGE_SWEEP_CAP"]()
+
+#: SABOTAGE. Spell `ROTATE` as NR's FOUR roundings instead of the pinned
+#: TWO fmas (DEVIATION 781, seam J4).
+#:
+#: REACH, stated honestly and BEFORE it is run: shared solver again, so
+#: this is expected to be INERT against device == oracle, AND the
+#: perturbation is a last-bit one that every existing tolerance in this
+#: lane (`1e-4` on the closed forms, `2e-6` on the Float64 Jacobi compare)
+#: absorbs. **THIS ARM IS THEREFORE EXPECTED TO BE REACHED BUT INERT, AND
+#: THAT IS A HOLE, NOT A PASS.** Seam J4 has no gate with teeth until this
+#: lane records a CERTIFICATE -- an FNV hash of `symmetric_eig_host`'s
+#: output on a pinned fixture, compared against a literal. That check is
+#: OWED and is named in `spectral/README.md`.
+comptime SAB_ROTATE_UNFUSED = is_defined[
+    "MOJOLEARN_SPECTRAL_SABOTAGE_ROTATE_UNFUSED"
+]()
 
 
 # ---------------------------------------------------------------------------
@@ -108,10 +155,17 @@ def _rotate[
     flushed."""
     var g = a[i * n + j]
     var h = a[k * n + l]
-    var t1 = hflush[dt](hfma[dt](g, tau, h))  # h + g*tau
-    a[i * n + j] = hflush[dt](hfma[dt](-s, t1, g))  # g - s*t1
-    var t2 = hflush[dt](hfma[dt](-h, tau, g))  # g - h*tau
-    a[k * n + l] = hflush[dt](hfma[dt](s, t2, h))  # h + s*t2
+    comptime if SAB_ROTATE_UNFUSED:
+        # NR's C, four roundings: g - s*(h + g*tau), h + s*(g - h*tau)
+        var u1 = hflush[dt](h + hflush[dt](g * tau))
+        a[i * n + j] = hflush[dt](g - hflush[dt](s * u1))
+        var u2 = hflush[dt](g - hflush[dt](h * tau))
+        a[k * n + l] = hflush[dt](h + hflush[dt](s * u2))
+    else:
+        var t1 = hflush[dt](hfma[dt](g, tau, h))  # h + g*tau
+        a[i * n + j] = hflush[dt](hfma[dt](-s, t1, g))  # g - s*t1
+        var t2 = hflush[dt](hfma[dt](-h, tau, g))  # g - h*tau
+        a[k * n + l] = hflush[dt](hfma[dt](s, t2, h))  # h + s*t2
 
 
 def symmetric_eig_host[
@@ -147,8 +201,11 @@ def symmetric_eig_host[
         b.append(a[i * n + i])
         z.append(zero)
 
+    var cap = max_sweeps
+    comptime if SAB_SWEEP_CAP:
+        cap = 3
     var sweeps_used = 0
-    for sweep in range(1, max_sweeps + 1):
+    for sweep in range(1, cap + 1):
         sweeps_used = sweep
         var sm = zero
         for p in range(n - 1):

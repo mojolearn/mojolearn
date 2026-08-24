@@ -9,7 +9,8 @@ REFUSED BY NAME by `lanczos_compute_eigenpairs` (DEVIATION 772 in
 second behavior.
 """
 
-#: `LANCZOS_WHICH`, `lanczos_types.hpp:20-29`.
+#: `LANCZOS_WHICH`, `lanczos_types.hpp:20-29`. `LA` is the only arm cuVS
+#: reaches; `LM`/`SM` are refused by name in `detail/lanczos.mojo`.
 comptime LANCZOS_LA = 0  # largest algebraic -- the only arm cuVS reaches
 comptime LANCZOS_LM = 1  # largest magnitude
 comptime LANCZOS_SA = 2  # smallest algebraic
@@ -30,7 +31,10 @@ def lanczos_which_name(which: Int) -> String:
 
 @fieldwise_init
 struct LanczosSolverConfig(Copyable, Movable):
-    """`lanczos_solver_config<float>`, `lanczos_types.hpp:40-70`."""
+    """`lanczos_solver_config<float>`, `lanczos_types.hpp:39-68`.
+
+    Their `ncv` doc note (`:50`) is `n_components + 1 < ncv < n`, STRICT at
+    both ends. Ours admits `ncv == n` -- DEVIATION 780 (C6)."""
 
     var n_components: Int
     var max_iterations: Int

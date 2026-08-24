@@ -12,8 +12,21 @@ scatter with no race.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
+from std.sys.compile import is_defined
 
 from mojo_only.numerics import ftz
+
+#: SABOTAGE. Reassociate seam L6 to `row_scale * (value * col_scale)`.
+#: Theirs is `row_scale * value * col_scale`, C++ left to right
+#: (`diagonal.cuh:216`), TWO roundings in THAT order. This arm keeps two
+#: roundings and moves the parenthesis, so it is a pure ASSOCIATIVITY
+#: change with no fusion in it -- the smallest perturbation the
+#: normalization seam admits. Reaches the DEVICE arm only: the oracle
+#: spells L6 inline in `host_laplacian`. Must FAIL device == oracle at
+#: `spectral.L.vals`. Contract section 9.
+comptime SAB_LAPLACIAN_SEAM = is_defined[
+    "MOJOLEARN_SPECTRAL_SABOTAGE_LAPLACIAN_SEAM"
+]()
 
 
 def coo_diagonal_kernel(
@@ -60,8 +73,12 @@ def coo_scale_by_diagonal_symmetric_kernel(
     var col_scale = Float32(0.0)
     if dc != Float32(0.0):
         col_scale = ftz(Float32(1.0) / dc)
-    var t = ftz(row_scale * vals.unsafe_load(idx))
-    vals.unsafe_store(idx, ftz(t * col_scale))
+    comptime if SAB_LAPLACIAN_SEAM:
+        var t = ftz(vals.unsafe_load(idx) * col_scale)
+        vals.unsafe_store(idx, ftz(row_scale * t))
+    else:
+        var t = ftz(row_scale * vals.unsafe_load(idx))
+        vals.unsafe_store(idx, ftz(t * col_scale))
 
 
 def coo_set_diagonal_kernel(

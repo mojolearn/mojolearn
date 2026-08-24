@@ -1,5 +1,10 @@
 """`raft/sparse/linalg/detail/symmetrize.cuh::coo_symmetrize_kernel`
-(`:44-107`) and `coo_symmetrize` (`:119-`), for the kNN connectivity graph.
+(`:44-115`) and the HANDLE overload of `coo_symmetrize` (`:168-234`), for
+the kNN connectivity graph. (There are two `coo_symmetrize` overloads; the
+one cuVS calls takes `raft::resources` and a `device_coo_matrix_view`,
+`spectral_embedding.cu:90-93`. A previous version of this header cited
+`:44-107` and `:119-`, which are the kernel truncated and the OTHER
+overload.)
 
 The kernel is ONE THREAD PER ROW of a ROW-SORTED input COO: for each entry
 `(r, c, v)` of the row it looks up the transposed entry `(c, r)` inside row
@@ -7,14 +12,20 @@ The kernel is ONE THREAD PER ROW of a ROW-SORTED input COO: for each entry
 -- cuVS passes `0.5f * (a + b)` (`spectral_embedding.cuh:186-188`) -- and
 writes `(c, r, res)` when no transpose existed and `v != 0`, then `(r, c,
 res)` when `res != 0`, into an output of `2 * nnz` slots starting at `2 *
-start_idx`, which the caller zero-fills so `coo_remove_zeros` compacts the
-unused slots away. No float fold anywhere: one add and one multiply per
+start_idx`. **THE CALLER ZERO-FILLS THAT OUTPUT AND IT IS THEIRS**:
+`coo_symmetrize` runs three `raft::matrix::fill`s over `out_nnz = 2 * nnz`
+rows, cols and values (`:205-209`) before the launch, so the slots no row
+wrote come back as `(0, 0, 0.0)` and the caller compacts them with
+`coo_sort` then `coo_remove_scalar(0)`. DEVIATION 777 exists because a
+repeated-key refusal was once spelled inside `coo_sort`, where THIS
+padding lives. No float fold anywhere: one add and one multiply per
 entry, on values that for the kNN graph are exactly `0`, `0.5` or `1`.
 
-`get_stop_idx(row, n, nnz, row_ind)` is `row_ind[row + 1]` for every row but
-the last, which stops at `nnz` (`symmetrize.cuh` uses a `row_ind` of length
-`n` without a terminator); ours carries the `n + 1` form and reads
-`row_ind[row + 1]` always, the same numbers.
+`get_stop_idx(row, m, nnz, ind)` (`raft/sparse/detail/utils.h:97-105`) is
+`ind[row + 1]` for every row but the last, which stops at `nnz`;
+`coo_symmetrize` allocates `in_row_ind` at length `n` with no terminator
+(`:188`). Ours carries the `n + 1` form and reads `row_ind[row + 1]`
+always, the same numbers.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx

@@ -62,6 +62,8 @@ from spectral.ported.sparse.linalg.detail.symmetrize import coo_symmetrize
 from spectral.ported.sparse.op.coo_ops import coo_remove_scalar, coo_sort
 from spectral.ported.sparse.solver.detail.lanczos import (
     LANCZOS_TPB,
+    SAB_MAXITER,
+    SAB_NCV,
     lanczos_compute_eigenpairs,
 )
 from spectral.ported.sparse.solver.lanczos_types import (
@@ -232,6 +234,12 @@ def compute_eigenpairs(
     n_out` row-major with `n_out = n_components - 1` when `drop_first`.
     Returns `n_out`."""
     var k = params.n_components
+    # DEVIATION 780: `ncv`, `max_iterations` and the plumbed `tolerance`
+    # below are CHOSEN, not mirrored. cuVS 25.08 -- the only cuVS in any
+    # checkout on this machine -- writes three literals instead
+    # (`spectral_embedding.cu:176-181`: `ncv = min(n_samples, max(2k+1,
+    # 20))`, `max_iterations = 1000`, `tolerance = 1e-5`). See
+    # `spectral/IDENTICAL_SPECTRAL_CONTRACT.md` section 4 and section 10.
     # RAFT_EXPECTS(n_samples - n_components > 0)  (:65-66)
     if n_samples - k <= 0:
         raise Error("Please set `ncv` to a value in (0, n_samples)")
@@ -241,9 +249,19 @@ def compute_eigenpairs(
     var ncv = n_samples - k
     if ncv_hi < ncv:
         ncv = ncv_hi
+    comptime if SAB_NCV:
+        # C1 sabotage: cuVS 25.08's `min(n_samples, max(2k+1, 20))`, i.e.
+        # no `n - k` clamp. The oracle recomputes `ncv` its own way, so the
+        # two cards take a different number of Lanczos steps.
+        ncv = ncv_hi
+        if ncv > n_samples:
+            ncv = n_samples
+    var max_iterations = 10 * n_samples
+    comptime if SAB_MAXITER:
+        max_iterations = 1000
     var config = LanczosSolverConfig(
         n_components=k,
-        max_iterations=10 * n_samples,
+        max_iterations=max_iterations,
         ncv=ncv,
         tolerance=params.tolerance,
         which=LANCZOS_LA,

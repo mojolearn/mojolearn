@@ -1,7 +1,7 @@
 """cuML `cpp/src/spectral/spectral_clustering.cu` and
 `include/cuml/cluster/spectral_clustering.hpp` (v26.08.00):
-`ML::SpectralClustering::params`, `to_cuvs` (`:21-32`) and the three
-`fit_predict` overloads (`:34-64`), every one a forward to
+`ML::SpectralClustering::params`, `to_cuvs` (`:22-33`) and the three
+`fit_predict` overloads (`:35-64`), every one a forward to
 `cuvs::cluster::spectral::fit_predict`.
 
 No arithmetic here. The algorithm is `spectral/ported/cuvs/cluster/detail/
@@ -26,7 +26,7 @@ from spectral.ported.sparse.coo import CooGraph
 
 @fieldwise_init
 struct MLSpectralClusteringParams(Copyable, Movable):
-    """`ML::SpectralClustering::params` (`spectral_clustering.hpp:18-33`):
+    """`ML::SpectralClustering::params` (`spectral_clustering.hpp:19-32`):
     `n_clusters`, `n_components`, `n_init`, `n_neighbors`, `eigen_tol`,
     `seed`."""
 
@@ -39,7 +39,7 @@ struct MLSpectralClusteringParams(Copyable, Movable):
 
 
 def to_cuvs(config: MLSpectralClusteringParams) -> SpectralClusteringParams:
-    """`to_cuvs` (`spectral_clustering.cu:21-32`): `tolerance = eigen_tol`,
+    """`to_cuvs` (`spectral_clustering.cu:22-33`): `tolerance = eigen_tol`,
     `rng_state = RngState(seed)`."""
     return SpectralClusteringParams(
         n_clusters=config.n_clusters,
@@ -61,7 +61,7 @@ def fit_predict(
     mut embedding_out: List[Float32],
     mut trace: IdentityTrace,
 ) raises:
-    """`fit_predict(handle, config, dataset, labels)` (`:34-40`)."""
+    """`fit_predict(handle, config, dataset, labels)` (`:35-41`)."""
     fit_predict_dataset(
         ctx, to_cuvs(config), dataset, n_samples, n_features, labels, embedding_out, trace
     )
@@ -75,6 +75,6 @@ def fit_predict_connectivity(
     mut embedding_out: List[Float32],
     mut trace: IdentityTrace,
 ) raises:
-    """`fit_predict(handle, config, connectivity_graph, labels)` (`:42-48`)
-    and the `(rows, cols, vals)` form (`:50-64`)."""
+    """`fit_predict(handle, config, connectivity_graph, labels)` (`:43-49`)
+    and the `(rows, cols, vals)` form (`:51-64`)."""
     fit_predict_graph(ctx, to_cuvs(config), connectivity_graph, labels, embedding_out, trace)

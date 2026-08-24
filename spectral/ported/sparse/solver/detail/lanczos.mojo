@@ -82,6 +82,39 @@ OURS: `V` is memset to zero. `fma(0, 0, vv) == vv` bit for bit, so against
 a zero `V[ncv - 1]` the axpy is an exact no-op and the bits equal a
 reference-BLAS `saxpy` that returns early on `alpha == 0`; the deviation
 only removes the poison arm.
+============ DEVIATION 779: `u -= V^T uu` IS TWO ROUNDINGS, NOT ONE =======
+THEIRS: ONE `cublas gemv` with `CUBLAS_OP_N`, `alpha = -1`, `beta = 1`
+(`:357-369`), which is free to fuse its `beta` epilogue into the last
+accumulation of each coordinate.
+OURS: `identical_gemm` `OP_TN` into a temporary, then `sub_kernel`'s
+`ftz(y - x)`. ONE EXTRA ROUNDING PER COORDINATE, taken deliberately:
+the contraction belongs to profile `mojolearn.identical.gemm.fp32.v1`,
+which owns the rounding of its own accumulator and has no `beta` entry
+point. The same shape applies to the restart's `u -= 1 * temp`
+(`:664-671`), where the `1 *` moves no bits either way. Named here so
+nobody rediscovers it from a diff. Contract section 5.2, seam K6.
+============ DEVIATION 780: `ncv` AND `max_iterations` ARE OURS, NOT THEIRS
+The only cuVS on this machine is 25.08 (`94c2819`), and it sets
+`ncv = min(n_samples, max(2 * n_components + 1, 20))`,
+`max_iterations = 1000` and `tolerance = 1e-5` as three literals
+(`spectral_embedding.cu:176-181`). This lane computes
+`ncv = min(n - k, max(2k + 1, 20))`, `max_iterations = 10 * n` and takes
+`tolerance` from the params struct. Those three are CHOSEN, not mirrored,
+because the 26.08 cuVS whose signatures cuML 26.08 calls is NOT IN ANY
+CHECKOUT HERE. The `n - k` clamp is a repair of a real hole in the 25.08
+line -- `min(n_samples, ...)` can return `ncv == n`, which violates RAFT's
+own `n_components + 1 < ncv < n` (`lanczos_types.hpp:50`) -- but a repair
+is still a choice. Contract section 4, C1/C2/C3/C6; each has a sabotage
+arm. A checkout of cuVS 26.08 settles all of them at once.
+============ THEIR TRANSPOSED LAUNCH BOUNDS, NOT PORTED, NO BITS MOVED ====
+`lanczos_solve_ritz` launches `kernel_triangular_populate` as
+`<<<blockSize, numBlocks>>>` (`:161-162`) with `blockSize = 256` and
+`numBlocks = ceil(ncv / 256)`: the two arguments are SWAPPED relative to
+its neighbor `kernel_triangular_beta_k` (`:165-168`), so it runs 256
+blocks of `ceil(ncv/256)` threads instead of the reverse. It happens to
+COVER every row, because `256 * ceil(ncv/256) >= ncv` at every `ncv`, and
+the kernel writes each cell once, so NO BIT MOVES. Recorded, not ported:
+ours builds the projected matrix in a host loop over all `ncv` rows.
 ============ DEVIATION 774: A RESTART BREAKDOWN IS REFUSED, NOT DIVIDED ====
 THEIRS: after the restart, `V[k + 1] = u / beta[k]` (`:681-687`) with NO
 zero guard (unlike `kernel_normalize`'s `beta == 0 -> / 1`, `:106-110`), so
@@ -109,8 +142,13 @@ from mojo_only.numerics import (
     identical_sqrt,
 )
 from spectral.mojo_only.device_io import download_f32, upload_f32
-from spectral.mojo_only.symmetric_eig_host import symmetric_eig_host
+from spectral.mojo_only.symmetric_eig_host import (
+    SAB_ROTATE_UNFUSED,
+    SAB_SWEEP_CAP,
+    symmetric_eig_host,
+)
 from spectral.ported.sparse.linalg.detail.laplacian import DeviceCoo
+from spectral.ported.sparse.matrix.detail.diagonal import SAB_LAPLACIAN_SEAM
 from spectral.ported.sparse.solver.lanczos_types import (
     LANCZOS_LA,
     LANCZOS_SA,
@@ -133,9 +171,29 @@ comptime SAB_SIGN_FLIP = is_defined["MOJOLEARN_SPECTRAL_SABOTAGE_SIGN_FLIP"]()
 #: `identical_sqrt`. On a host with a correctly rounded sqrt this is INERT
 #: (reported, not asserted); it exists to be measured on each host.
 comptime SAB_STD_SQRT = is_defined["MOJOLEARN_SPECTRAL_SABOTAGE_STD_SQRT"]()
+#: CHOSEN BOUND C1 (DEVIATION 780). Drop the `n - k` clamp from `ncv`, so
+#: `ncv = max(2k + 1, 20)` -- cuVS 25.08's literal. READ BY
+#: `ported/cuvs/preprocessing/spectral/detail/spectral_embedding.mojo`; it
+#: lives here because that module imports this one and the reverse would
+#: be a cycle. The device arm's `ncv` then differs from the oracle's, which
+#: recomputes it, so the two cards carry DIFFERENT NUMBERS OF STAGES: this
+#: arm must fail as a STRUCTURAL divergence, which is the shape a changed
+#: bound has and is why the card records `converged_restarts_iter`.
+comptime SAB_NCV = is_defined["MOJOLEARN_SPECTRAL_SABOTAGE_NCV"]()
+#: CHOSEN BOUND C2 (DEVIATION 780). `max_iterations = 1000`, cuVS 25.08's
+#: literal, instead of `10 * n`. REPORT, not FAIL: on every fixture in
+#: this lane the residual converges long before either bound, so this arm
+#: is EXPECTED TO BE INERT and its value is telling us so. A fixture it
+#: does not move is a fixture that does not test the bound, and the lane
+#: OWES one that does (README).
+comptime SAB_MAXITER = is_defined["MOJOLEARN_SPECTRAL_SABOTAGE_MAXITER"]()
 
 
 def spectral_sabotage_name() -> String:
+    """Every sabotage arm this lane defines, named in one string, so a card
+    and a gate line both carry which arms were compiled in. An arm that is
+    on and unnamed is the worst state an instrument of this kind can be
+    in."""
     var s = String("")
     comptime if SAB_SPMV_ROTATE:
         s += "SPMV_ROTATE "
@@ -143,6 +201,16 @@ def spectral_sabotage_name() -> String:
         s += "SIGN_FLIP "
     comptime if SAB_STD_SQRT:
         s += "STD_SQRT "
+    comptime if SAB_NCV:
+        s += "NCV "
+    comptime if SAB_MAXITER:
+        s += "MAXITER "
+    comptime if SAB_LAPLACIAN_SEAM:
+        s += "LAPLACIAN_SEAM "
+    comptime if SAB_SWEEP_CAP:
+        s += "SWEEP_CAP "
+    comptime if SAB_ROTATE_UNFUSED:
+        s += "ROTATE_UNFUSED "
     if s == "":
         return String("none")
     return s
