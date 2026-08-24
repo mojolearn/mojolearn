@@ -27,7 +27,7 @@ certificate; a released result card is.
 | Extra Trees | Available | Three-vendor E1/E2 cards for the recorded configurations | Supported beta |
 | k-means, k-NN, DBSCAN | Available | Apple/AMD cards recorded; consult the unsupervised ledger for the NVIDIA status | Experimental cross-vendor certificate |
 | PCA, truncated SVD, OLS | Available | Identity paths remain tied to the linalg/GEMM certificate status | Experimental identity surface |
-| General FP32 GEMM | Available through existing specialized routes | Contract and implementation are under active development | Experimental; not yet a released cross-vendor claim |
+| General FP32 GEMM | Available through existing specialized routes | Profile `mojolearn.identical.gemm.fp32.v1`, frozen; the identity card is bit-identical on Apple M4, NVIDIA H100 and AMD MI325X, 60 stages each, at leg 11 commit `144aa5b` (E3 round 11, judge section 7). Shapes and plans outside the card's 62-shape, eight-plan sweep have run on Apple only | Measured cross-vendor for the card's sweep; no Python surface for it is built into the released wheel |
 | Neural-network operators | Not released | Not released | Out of scope for the current release |
 
 ## Version rule

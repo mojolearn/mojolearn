@@ -14,15 +14,16 @@ DEVIATION 670, the hand-off list, and the row text for both directories.
     the whole tree builds                      YES
     check-arima, IDENTICAL                     PASSES
     check-arima, FAST                          PASSES (23 RECORDED lines)
-    arima-card                                 138 stage records
-    sabotages run                              9 of 9
+    arima-card                                 229 stage records
+    sabotages run                              11 of 11 (8 bite, 3 null)
     inherited MEASURED claims judged           4 of 4 (2 earned, 2 struck)
     a second vendor                            NO. Apple M4 only.
 
     ALL OF THE 2026-08-24 WORK NOW BUILDS AND PASSES, both modes: DEVIATION
     677, the six new card stages, orders `arma44` and `ar2_tie`, the two new
     gates, the widened fold gate, and sabotage arms (h) and (i). The card
-    carries 229 stage records, up from 137. 11 of 11 sabotage arms have run.
+    carries 229 stage records, up from the 138 recorded on 2026-08-23
+    (`arima/PORTED_MAP.tsv` lines 3 and 13). 11 of 11 sabotage arms have run.
 
     A PREDICTION OF MINE THAT WAS WRONG, recorded because it was written
     down first: I expected signature errors around `guards`, `Fs` and the

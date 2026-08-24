@@ -104,9 +104,18 @@ All reverted; the tree is clean (`diff` against the backup printed nothing).
 
 ## ROW TEXT FOR THE IDENTITY LANE
 
+**`tsa/` HAS NO ROW IN `IDENTITY_PATHS.md`.** This table used to head its row
+`49`; row 49 there is the mamba lane's `portable_divf` division row
+(DEVIATION 740, `IDENTITY_PATHS.md`), and the ledger runs 1 to 59 with no tsa
+entry anywhere in it. The number is deleted rather than corrected, because
+there is no number to correct it to. As in `holtwinters/README.md`, I do not
+own `IDENTITY_PATHS.md` and the row number is the orchestrator's to assign;
+the next free index is 60. The row text below is the hand-off and is written
+to be pasted unchanged.
+
 | n | path | what is vendor-dependent in their spelling | what we did | status |
 |---|---|---|---|---|
-| 49 | tsa: KPSS stationarity test (`stationarity.cuh`) and auto_arima's `d` loop | per-series sums are `raft::linalg::coalescedReduction`: a per-thread Kahan chain whose thread->element map follows a policy table keyed on `n_obs`, a logical-warp shuffle fold, a CUB block fold past 512 rows, and a dispatch that reads `getMultiProcessorCount()`; the scan is Thrust's decoupled look-back; `0/0` yields a NaN whose payload is the vendor's | DEVIATION 671: one pinned shape per series (STATS_TPB strided partials, `pinned_block_sum`, serial scan); DEVIATION 672: `0/0 -> 0.0`, same decision; non-finite inputs refused by name; FOUND: `pinned_block_sum`'s tree keeps or flushes a subnormal partial per vendor (hand-off) | device == oracle bitwise under IDENTICAL on the M4 for 5 orders x 10 stages; launch/batch invariant both modes; no second vendor |
+| NN | tsa: KPSS stationarity test (`stationarity.cuh`) and auto_arima's `d` loop | per-series sums are `raft::linalg::coalescedReduction`: a per-thread Kahan chain whose thread->element map follows a policy table keyed on `n_obs`, a logical-warp shuffle fold, a CUB block fold past 512 rows, and a dispatch that reads `getMultiProcessorCount()`; the scan is Thrust's decoupled look-back; `0/0` yields a NaN whose payload is the vendor's | DEVIATION 671: one pinned shape per series (STATS_TPB strided partials, `pinned_block_sum`, serial scan); DEVIATION 672: `0/0 -> 0.0`, same decision; non-finite inputs refused by name; FOUND: `pinned_block_sum`'s tree keeps or flushes a subnormal partial per vendor (hand-off) | device == oracle bitwise under IDENTICAL on the M4 for 5 orders x 10 stages; launch/batch invariant both modes; no second vendor |
 
 ## HAND-OFF
 

@@ -33,9 +33,11 @@
 #
 # TWO PAYLOADS, ONE SET OF GUARDS
 # ===============================
-# The safety path -- pre-flight, arm-before-work, the ready timeout, the key
-# on stdin, `git archive` at a pinned sha, terminate-and-verify, one vendor
-# per leg -- is the same for both. Only what runs on the box differs.
+# The safety path -- pre-flight, the detached dead-man armed BEFORE the
+# create, arm-before-work, the ready timeout, the key on stdin, `git archive`
+# at a pinned sha, the payload run detached and polled, terminate-and-verify,
+# one vendor per leg -- is the same for both. Only what runs on the box
+# differs.
 #
 #   --payload gemm    (default)  gemm_device_check.mojo, then
 #       `tools/gemm_card.sh device`, under IDENTICAL. The Apple side is
@@ -127,10 +129,14 @@
 #     a pod up, and no unexpired lease may be sitting in the lease directory.
 #     Double-renting is the cheapest orphan to prevent and the easiest to
 #     cause by re-running a script that failed late.
-#  1. The pod is created. **From this instant to step 3 the box is BILLING
-#     AND UNARMED.** That window is bounded IN CODE by --ready-timeout
-#     (default 600s), not by whoever is watching the terminal, and running
-#     out of it terminates the pod.
+#  1. **A DETACHED DEAD-MAN IS ARMED ON THIS MACHINE, BEFORE THE CREATE
+#     CALL** (DEVIATION 862). The pod is then created, and from that instant
+#     to step 3 the box is BILLING AND ITS OWN WATCHDOG DOES NOT EXIST YET.
+#     That window is bounded IN CODE by --ready-timeout (default 600s), and
+#     the timeout is a loop IN THIS PROCESS -- so if this process is killed
+#     inside the window, the loop dies with it and only the dead-man is left.
+#     The dead-man is keyed by pod NAME as well as by id, because the worst
+#     case in this file is a create that succeeded and an id nobody parsed.
 #  2. SSH comes up.
 #  3. **THE LEASE IS ARMED BEFORE ANY WORK.** `tools/runpod_guard.sh arm`
 #     installs an on-pod watchdog that DELETEs this pod through the API at
@@ -139,9 +145,11 @@
 #     pretending. **If arm refuses, the box is not used -- it is
 #     TERMINATED.** A box that cannot be armed is an orphan that has not
 #     happened yet.
-#  4. Work runs. Terminate happens at the END OF THE WORK, not at the end of
-#     the lease. The lease is the backstop for when this session disappears;
-#     it is not the plan.
+#  4. Work runs, DETACHED ON THE BOX, polled from here (DEVIATION 863). A
+#     dropped ssh no longer kills the payload and no longer makes this leg
+#     mistake a cut-off run for a finished one. Terminate happens at the END
+#     OF THE WORK, not at the end of the lease. The lease is the backstop for
+#     when this session disappears; it is not the plan.
 #  5. Teardown is an EXIT trap, so every failure path above reaches it, and
 #     it VERIFIES the termination by asking the API instead of assuming the
 #     DELETE worked. It prints the lease's remaining minutes at exit, which
@@ -150,8 +158,13 @@
 #
 #     LAYER ONE is the on-pod watchdog (survives this Mac). LAYER TWO is the
 #     `reap` this script performs from here (reclaims the DISK, which keeps
-#     accruing on RunPod even after container exit stops GPU billing). Both
-#     layers, always, because they cover different failures.
+#     accruing on RunPod even after container exit stops GPU billing). LAYER
+#     THREE, added by DEVIATION 862, is the detached dead-man of step 1, and
+#     it is the only one that covers the window before layer one exists. All
+#     three, always, because they cover different failures. The teardown
+#     CANCELS the dead-man only when the pod is confirmed gone; if the
+#     terminate could not be verified it is deliberately LEFT ARMED and said
+#     so, because that is precisely the run it was written for.
 #
 # ONE HOUR IS A HARD CAP. --minutes above 60 is refused BY NAME. Extending is
 # re-arming (`tools/runpod_guard.sh extend`), each extension is a decision a
@@ -254,6 +267,12 @@
 #   * `LEG_GPU_*` and `LEG_IMAGE_*` below are DEFAULTS, not measurements.
 #   * whether the images have `pixi`, and how long `pixi install` takes on a
 #     cold box. That is the main risk to the one-hour cap.
+#   * THE DEAD-MAN FIRING (DEVIATION 862) and THE POLL LOOP SEEING A REAL
+#     DETACHED RUN (DEVIATION 863). The dry run composes the dead-man,
+#     syntax-checks it, proves its key is in no argv, and RUNS IT against
+#     stub `curl` and stub `sleep` so the DELETE it would issue is recorded
+#     (checks M1-M4). What no dry run can exercise is the API answering it,
+#     or an ssh actually dropping mid-poll.
 #   * EVERYTHING THE phase8 PAYLOAD DOES ON THE BOX. `tools/e1_bootstrap.sh`
 #     has run on DigitalOcean droplets many times and on a RunPod pod never;
 #     its five bindings builds, its pixi environments and its phase-8
@@ -267,6 +286,10 @@
 #
 # ENVIRONMENT
 #   RUNPOD_API_KEY                 required by --rent. Never logged.
+#   MOJOLEARN_RUNPOD_PODS_PATH     bring-up only: the pods REST path this leg
+#                                  lists, creates and deletes through
+#                                  (default /v2/pods). It does NOT move the
+#                                  on-pod watchdog's endpoints.
 #   MOJOLEARN_RUNPOD_KEY_FILE      read the key from this file instead, so it
 #                                  need not be in shell history. The file
 #                                  must be 0600 and outside this repository;
@@ -325,7 +348,21 @@ RP_HOST="${MOJOLEARN_RUNPOD_API_HOST:-https://api.runpod.io}"
 # standing between an orphan and the bill, and an API deprecation that
 # silently 404s would disarm every terminate at once.
 RP_HOST_V1="${MOJOLEARN_RUNPOD_API_HOST_V1:-https://rest.runpod.io}"
-RP_PODS_PATH="/v2/pods"
+# DEVIATION 867 -- THE PODS PATH IS OVERRIDABLE, FOR THE BRING-UP RUN ONLY.
+# `/v2/pods` under api.runpod.io is written from the shape
+# tools/runpod_guard.sh's DELETE already uses and it has NEVER been confirmed
+# for a LIST or a CREATE on this account. If the account's pods REST surface
+# turns out to be rest.runpod.io/v1 instead, the host was already overridable
+# and the path was not, so the leg could be told half of the truth and no
+# more -- which is a knob that cannot fix the thing it is for. Confirm both
+# with the free GETs in gemm/E1G_RUNBOOK.md BEFORE the first paid run; a
+# wrong path makes the pre-flight GET non-2xx and the leg refuses to create
+# anything, which is the safe direction and is where this will show up.
+# THE GUARD'S OWN ENDPOINTS DO NOT MOVE WITH THIS. The on-pod watchdog walks
+# its own hardcoded v2-then-v1 pair, so the box still self-terminates however
+# this is set. That separation is deliberate: the layer that survives this
+# Mac must not depend on an environment variable set on this Mac.
+RP_PODS_PATH="${MOJOLEARN_RUNPOD_PODS_PATH:-/v2/pods}"
 # The guard's lease directory, mirrored (not owned) so a terminate can leave
 # `check` and `list` telling the truth afterwards.
 LEASE_DIR="${MOJOLEARN_LEASE_DIR:-bench/results/runpod_leases}"
@@ -369,6 +406,8 @@ LEG_DUMP="${MOJOLEARN_IDENTITY_TRACE_DUMP:-}"
 POD_ID=""
 POD_NAME=""
 POD_TERMINATED=0
+DEADMAN_PID=""
+DEADMAN_DIR=""
 FETCH_RED=0
 KEY_RED=0
 ARMED=0
@@ -631,9 +670,25 @@ leg_teardown() {
             echo "pod=$POD_ID"
             echo "armed=$ARMED"
             echo "terminated=$POD_TERMINATED"
+            echo "deadman_pid=$DEADMAN_PID"
             echo "exit=$_rc"
             echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
         } >> "$OUT/teardown.txt" 2>/dev/null || true
+    fi
+    # THE DEAD-MAN IS CANCELLED ONLY BY A CONFIRMED TERMINATE (DEVIATION 862).
+    # Cancelling it after a DELETE that could not be verified would remove the
+    # one layer still able to end that pod from this machine, at exactly the
+    # moment it is needed. A leg that never created a pod cancels it too --
+    # there is nothing for it to guard and it holds a credential on disk.
+    if [ -n "$POD_ID" ] && [ "$POD_TERMINATED" != "1" ]; then
+        echo "  THE DEAD-MAN IS LEFT ARMED ON PURPOSE: $POD_ID was not"
+        echo "  confirmed gone, so the layer that can still end it from here"
+        echo "  keeps running (pid $DEADMAN_PID, $DEADMAN_DIR)."
+        echo "  Terminate by hand, and only then cancel it:"
+        echo "    tools/gemm_remote_leg.sh reap $POD_ID"
+        echo "    kill $DEADMAN_PID; rm -rf $DEADMAN_DIR"
+    else
+        leg_cancel_deadman
     fi
     [ -n "$TMPD" ] && rm -rf "$TMPD"
     exit "$_rc"
@@ -730,18 +785,52 @@ PYEOF
 
 LEG_SOURCE_PATHS="gemm/mojo_only bench/gemm_card_main.mojo bench/gemm_shapes.mojo tools/gemm_card.sh tools/with_identical_mode.sh tools/with_build_lock.sh mojo_only pixi.toml pixi.lock"
 
+# DEVIATION 865 -- THE DIRTY-TREE RULE APPLIES TO phase8 TOO, ONE STEP
+# REMOVED, AND THE gemm LIST IS THE WRONG LIST FOR IT.
+#
+# The phase8 payload builds nothing on this Mac, so at first reading the
+# rule looks like it does not apply. It does. That payload's reference is an
+# APPLE BOOTSTRAP DIRECTORY, and that directory was produced by running
+# `bash tools/e1_bootstrap.sh` FROM THIS WORKING TREE and filed under
+# whatever `git rev-parse HEAD` said at the time. The box runs `git archive`
+# of that same sha. So an uncommitted edit under any lane phase 8 compiles
+# makes the two columns two different programs wearing one commit -- and
+# leg_apple_column cannot see it, because all it can compare is the sha, and
+# the sha is exactly what the dirt is hiding behind. One variable is the
+# device; an uncommitted local edit is a second one and it is invisible in
+# every card.
+#
+# This is the list of what phase 8 actually compiles: the bootstrap itself,
+# the injector and the build lock, and each lane's source. Four sessions
+# share this checkout, so it WILL block sometimes. That is the check working:
+# commit or stash, then rent.
+LEG_SOURCE_PATHS_PHASE8="tools/e1_bootstrap.sh tools/with_identical_mode.sh tools/with_build_lock.sh tools/gemm_card.sh bench/gemm_card_main.mojo bench/gemm_shapes.mojo gemm/mojo_only solver kde hierarchy svm metrics mamba mojo_only bindings python/mojolearn pixi.toml pixi.lock"
+
 leg_check_tree_clean() {
     # THE LOCAL CARD COMES FROM THE WORKING TREE AND THE REMOTE CARD COMES
     # FROM THE COMMIT. If those differ for any file that can reach the bits,
     # the diff has two variables in it and the device is not the one being
     # measured. Documentation and results directories are deliberately not
     # in the list: they cannot reach a float.
-    # LEG_SOURCE_PATHS is a deliberate word list, so it is unquoted.
+    # The list is per payload: phase8 compiles seven lanes, the gemm payload
+    # compiles one (DEVIATION 865).
+    _paths="$LEG_SOURCE_PATHS"
+    if [ "$PAYLOAD" = "phase8" ]; then _paths="$LEG_SOURCE_PATHS_PHASE8"; fi
+    # The list is a deliberate word list, so it is unquoted.
     # shellcheck disable=SC2086
-    _dirty=$(git status --porcelain -- $LEG_SOURCE_PATHS 2>/dev/null || true)
+    _dirty=$(git status --porcelain -- $_paths 2>/dev/null || true)
     if [ -n "$_dirty" ]; then
-        echo "  the working tree is DIRTY for paths that reach the bits:"
+        echo "  the working tree is DIRTY for paths the $PAYLOAD payload's"
+        echo "  numbers can reach:"
         echo "$_dirty" | sed 's/^/    /'
+        # AN UNTRACKED FILE COUNTS TOO, and that is the half people argue
+        # with. `git archive` does not ship it, so the BOX never sees it --
+        # but the Apple side does: under phase8 that side is a bootstrap
+        # directory built from THIS TREE, and under gemm it is a card built
+        # from this tree. A new file that any lane imports is therefore in
+        # one column and not the other, which is the two-variable case wearing
+        # a different hat. Four sessions share this checkout, so this WILL
+        # block sometimes; commit or stash, then rent.
         return 1
     fi
     return 0
@@ -1004,7 +1093,12 @@ leg_archive_required() {
     # What must be inside the archive for THIS payload to be worth shipping.
     # A word list on purpose, so the caller can iterate it.
     if [ "$PAYLOAD" = "phase8" ]; then
-        echo "tools/e1_bootstrap.sh mamba/mojo_only/mamba_check.mojo gemm/mojo_only/gemm_identical.mojo"
+        # EVERY LANE PHASE 8 DRIVES, not only the two this file is named
+        # after (DEVIATION 866). G2 checks each of these is inside the
+        # archive, so a lane whose driver is not committed at this sha is
+        # caught HERE, for nothing, instead of surfacing as a PHASE8-FINDING
+        # forty minutes into a rental with no card to show for it.
+        echo "tools/e1_bootstrap.sh bench/gemm_card_main.mojo gemm/mojo_only/gemm_identical.mojo solver/cd_main.mojo kde/kde_main.mojo hierarchy/linkage_main.mojo svm/svc_main.mojo metrics/metrics_main.mojo mamba/mojo_only/mamba_check.mojo"
     else
         echo "gemm/mojo_only/gemm_identical.mojo"
     fi
@@ -1143,6 +1237,185 @@ leg_diff_cards() {
 }
 
 # ---------------------------------------------------------------------------
+# DEVIATION 862 -- THE UNARMED WINDOW, CLOSED FROM THIS MACHINE
+#
+# The safety story above says "the pod is created; from this instant to step
+# 3 the box is BILLING AND UNARMED", and until this deviation that window had
+# exactly one guard: --ready-timeout, which is a `while` loop IN THIS
+# PROCESS. Kill this process inside that window -- a SIGKILL, a terminal that
+# goes away, a Ctrl-C at the wrong second -- and NOTHING anywhere ends the
+# pod. The EXIT trap does not run for SIGKILL. The on-pod watchdog does not
+# exist yet. RunPod bills until a pod is TERMINATED, and a container that
+# exits is RESTARTED rather than stopped (tools/runpod_guard.sh header,
+# measured on a real pod). So the claim that the window was "bounded IN CODE"
+# was true only for the paths where this process survives, which are not the
+# paths that produce orphans.
+#
+# tools/e2_remote_leg.sh met this shape on DigitalOcean as leg 10: the create
+# succeeded, the response body was unreadable, the script parsed no id,
+# printed "create FAILED" and exited through a teardown that had nothing to
+# destroy -- an orphan MI325X found by hand nineteen minutes later. Its
+# answer was a DETACHED dead-man armed BEFORE the create and keyed by NAME
+# rather than by an id the script might never learn. This is that answer,
+# ported to RunPod and to this file's key discipline.
+#
+# THREE LAYERS, FAILING DIFFERENTLY:
+#   1. the on-pod watchdog. Survives this Mac entirely -- power, sleep,
+#      network. It cannot exist before the pod does, which is the hole.
+#   2. THIS. A detached `sh` here, surviving this script's death and the
+#      shell that launched it. It does NOT survive the laptop powering off,
+#      which is why it is not layer one.
+#   3. leg_terminate at the end of the work, which ends a normal leg.
+#
+# THE CLOCK IS DELIBERATELY THE LATEST OF THE THREE: READY_TIMEOUT + the
+# lease + 300s, measured from just before the create. Later than the on-pod
+# watchdog's deadline in every timing this leg can reach, so it never
+# pre-empts layer 1 and never kills a leg that is still fetching. It exists
+# for the run where layer 1 WAS NEVER ARMED. With the defaults it caps an
+# abandoned unarmed pod at 75 minutes instead of forever.
+#
+# THE KEY IS NOT IN ITS ARGV EITHER. tools/e2_remote_leg.sh interpolates its
+# DigitalOcean token into a `nohup bash -c "..."` string, so that token sits
+# in a process command line for the whole hour. This one writes its own 0600
+# curl config beside its script, OUTSIDE TMPD (which the teardown deletes),
+# and both go when it fires or when it is cancelled. The dry run's M2 proves
+# the key is in no argv and M4 runs the thing against stubs.
+#
+# `trap "" HUP INT` BEFORE `exec`, AND NOT TERM. Ignored signals survive an
+# exec, so this is how a POSIX shell gets what bash spells `disown`: a Ctrl-C
+# in this terminal sends SIGINT to the whole foreground process group and
+# would otherwise take the dead-man with it -- the one signal most likely to
+# arrive at the exact moment the guard is needed. TERM is left deliverable so
+# that leg_cancel_deadman's `kill` still works.
+# ---------------------------------------------------------------------------
+
+leg_write_deadman() {   # <dir> <seconds> <pod name>; composes, never arms
+    _dmd="$1"; _dmsecs="$2"; _dmname="$3"
+    ( umask 077; mkdir -p "$_dmd" )
+    ( umask 077
+      printf 'header = "Authorization: Bearer %s"\nsilent\nshow-error\n' \
+          "$RUNPOD_API_KEY" > "$_dmd/curlrc" )
+    cat > "$_dmd/deadman.sh" <<'DEADMAN_EOF'
+#!/bin/sh
+# Written by tools/gemm_remote_leg.sh (DEVIATION 862). DETACHED ON PURPOSE.
+# It ends the pod that leg created, if that leg is no longer here to do it.
+# Keyed by id when the id is known and by NAME when it is not, because the
+# worst case in this file is a create that succeeded and an id nobody parsed.
+set -u
+D="$(cd "$(dirname "$0")" && pwd)"
+sleep @SECS@
+_log="$D/deadman.log"
+echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) dead-man firing for @PODNAME@" >> "$_log"
+_ids=""
+if [ -s "$D/pod_id.txt" ]; then _ids="$(cat "$D/pod_id.txt")"; fi
+if [ -z "$_ids" ]; then
+    curl -K "$D/curlrc" -o "$D/pods.json" -X GET "@HOST@@PODSPATH@" >> "$_log" 2>&1
+    _ids="$(@PY@ "$D/byname.py" "$D/pods.json" "@PODNAME@")"
+fi
+if [ -z "$_ids" ]; then
+    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) no id file and no pod named @PODNAME@: nothing to end" >> "$_log"
+else
+    for _id in $_ids; do
+        for _u in "@HOST@@PODSPATH@/$_id" "@HOSTV1@/v1/pods/$_id"; do
+            _c="$(curl -K "$D/curlrc" -o /dev/null -w '%{http_code}' -X DELETE "$_u" 2>>"$_log")"
+            echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) DELETE $_u -> $_c" >> "$_log"
+            case "$_c" in 2*|404) break ;; esac
+        done
+    done
+fi
+# THE CREDENTIAL LEAVES WITH THE JOB. Its only reason to be on disk was that
+# DELETE; the log beside it is the evidence and carries nothing secret.
+rm -f "$D/curlrc"
+DEADMAN_EOF
+    # The by-name parser is a FILE rather than a heredoc inside the script
+    # above, because a heredoc nested in a heredoc is how a generator quietly
+    # ships a body that ends early. One file, one job, and `sh -n` can see it.
+    cat > "$_dmd/byname.py" <<'BYNAME_EOF'
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+except Exception:
+    sys.exit(0)
+if isinstance(d, list):
+    d = {"items": d}
+pods = d.get("items") or d.get("pods") or d.get("data") or []
+print(" ".join(str(p.get("id", "")) for p in pods if p.get("name") == sys.argv[2]))
+BYNAME_EOF
+    sed -e "s|@SECS@|$_dmsecs|g" \
+        -e "s|@PODNAME@|$_dmname|g" \
+        -e "s|@HOST@|$RP_HOST|g" \
+        -e "s|@HOSTV1@|$RP_HOST_V1|g" \
+        -e "s|@PODSPATH@|$RP_PODS_PATH|g" \
+        -e "s|@PY@|$PY|g" \
+        "$_dmd/deadman.sh" > "$_dmd/deadman.sh.subst"
+    mv "$_dmd/deadman.sh.subst" "$_dmd/deadman.sh"
+    # SUBSTITUTION, AND THEN A CHECK THAT IT HAPPENED -- the same shape and
+    # the same reason as leg_check_remote_body: a `sed` that missed would
+    # leave this guard sleeping for the literal string @SECS@, which is to
+    # say not sleeping and not guarding.
+    if grep -q '@[A-Z][A-Z0-9_]*@' "$_dmd/deadman.sh"; then
+        echo "  UNSUBSTITUTED PLACEHOLDER in the dead-man:"
+        grep -n '@[A-Z][A-Z0-9_]*@' "$_dmd/deadman.sh" | sed 's/^/    /'
+        return 1
+    fi
+    sh -n "$_dmd/deadman.sh" || { echo "  the dead-man script is not valid sh"; return 1; }
+    chmod 700 "$_dmd/deadman.sh"
+    return 0
+}
+
+leg_arm_deadman() {
+    DEADMAN_DIR="${TMPDIR:-/tmp}/mojolearn-gemm-deadman-$$"
+    _secs=$(( READY_TIMEOUT + MINUTES * 60 + 300 ))
+    if leg_write_deadman "$DEADMAN_DIR" "$_secs" "$POD_NAME" > "$OUT/deadman_build.log" 2>&1; then
+        :
+    else
+        sed 's/^/    /' "$OUT/deadman_build.log"
+        leg_die "THE DEAD-MAN DID NOT BUILD, so nothing is created.
+  It is the only thing that ends this pod if this process is killed between
+  the create call and the arm, and a leg that rents without it is renting
+  without the guarantee this file exists to make."
+    fi
+    # `trap "" HUP INT` then `exec`: see the block above. TERM stays
+    # deliverable so leg_cancel_deadman can still cancel it.
+    nohup sh -c 'trap "" HUP INT; exec sh "$0"' "$DEADMAN_DIR/deadman.sh" \
+        > /dev/null 2>&1 < /dev/null &
+    DEADMAN_PID=$!
+    # READ IT BACK. `nohup ... &` succeeding and a process existing are two
+    # claims, and every other gate in this file checks the second one. A
+    # dead-man that never started, with this script believing it did, is the
+    # `arm` failure mode tools/runpod_guard.sh refuses by name.
+    sleep 1
+    if kill -0 "$DEADMAN_PID" 2>/dev/null; then
+        echo "$DEADMAN_DIR" > "$OUT/deadman_dir.txt"
+        leg_say "dead-man ARMED before the create: pid $DEADMAN_PID, fires in ${_secs}s, keyed by name $POD_NAME"
+        leg_say "  cancel by hand only after the pod is confirmed gone:  kill $DEADMAN_PID; rm -rf $DEADMAN_DIR"
+    else
+        rm -rf "$DEADMAN_DIR"
+        DEADMAN_PID=""; DEADMAN_DIR=""
+        leg_die "THE DEAD-MAN DID NOT START. Nothing was created.
+  Renting now would put a box up with no guard covering the window before
+  the on-pod watchdog exists, which is the one window nothing else covers."
+    fi
+}
+
+# Every line below runs from the EXIT trap, so shellcheck calls it dead.
+# shellcheck disable=SC2317
+leg_cancel_deadman() {
+    [ -n "$DEADMAN_PID" ] || return 0
+    # KILL THE WRAPPER AND ITS `sleep` CHILD. Killing only the wrapper leaves
+    # an orphan `sleep` -- harmless, since the DELETE after it dies with the
+    # wrapper -- but tools/e2_remote_leg.sh found seven of them after one day
+    # and they are indistinguishable at a glance from a live guard.
+    pkill -P "$DEADMAN_PID" 2>/dev/null || true
+    if kill "$DEADMAN_PID" 2>/dev/null; then
+        echo "  dead-man cancelled (pid $DEADMAN_PID)"
+    fi
+    [ -n "$DEADMAN_DIR" ] && rm -rf "$DEADMAN_DIR"
+    DEADMAN_PID=""; DEADMAN_DIR=""
+    return 0
+}
+
+# ---------------------------------------------------------------------------
 # the paid steps
 # ---------------------------------------------------------------------------
 
@@ -1183,6 +1456,11 @@ leg_create_pod() {
         leg_die "INTERLOCK: a rehearsal child reached leg_create_pod. Nothing was created. This is the interlock working; if you meant to rent, run the leg directly rather than from inside a dry run."
     fi
     POD_NAME="mojolearn-gemm-${VENDOR}-${STAMP}"
+    # THE DEAD-MAN IS ARMED HERE: after the interlock (so no rehearsal child
+    # can reach it) and BEFORE the POST that starts the bill. Arming it after
+    # the create would leave uncovered the one instant it exists for -- the
+    # create that succeeds and is never parsed.
+    leg_arm_deadman
     cat > "$TMPD/create.json" <<JSONEOF
 {
   "name": "$POD_NAME",
@@ -1212,6 +1490,7 @@ JSONEOF
         rp_call GET "$RP_PODS_PATH"
         POD_ID=$(rp_json "([str(p.get('id','')) for p in (d.get('items') or d.get('pods') or d.get('data') or []) if p.get('name')=='$POD_NAME'] or [''])[0]")
         if [ -n "$POD_ID" ]; then
+            [ -n "$DEADMAN_DIR" ] && printf '%s\n' "$POD_ID" > "$DEADMAN_DIR/pod_id.txt"
             echo "  ADOPTED $POD_ID by name. The teardown trap now owns it."
             leg_die "create response was unparseable but a pod exists; terminating it and stopping. Fix the create parsing before the next paid run: see $OUT/create_response.json"
         fi
@@ -1223,6 +1502,10 @@ JSONEOF
     fi
     leg_say "pod $POD_ID created"
     echo "$POD_ID" > "$OUT/pod_id.txt"
+    # HAND THE ID TO THE DEAD-MAN. Without it the dead-man falls back to a
+    # by-name listing, which needs the API to answer at the moment it fires;
+    # an id it already holds needs nothing but the DELETE.
+    [ -n "$DEADMAN_DIR" ] && printf '%s\n' "$POD_ID" > "$DEADMAN_DIR/pod_id.txt"
 }
 
 leg_wait_ready() {
@@ -1415,6 +1698,12 @@ if [ "@SWEEP@" = "1" ]; then
 fi
 
 echo "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$OUT/leg.txt"
+# THE COMPLETION SENTINEL, WRITTEN LAST (DEVIATION 863). The driving host no
+# longer holds an ssh session open for the whole run; it starts this body
+# detached and polls for this file. Nothing else on the box distinguishes
+# "the payload finished" from "the ssh dropped and the payload was killed",
+# and leg_check_remote_body refuses a body that stopped writing it.
+: > /root/gemm_leg.done
 echo REMOTE_BODY_DONE
 REMOTE_BODY
 }
@@ -1531,6 +1820,12 @@ fi
 
 echo "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$OUT/leg.txt"
 cat "$OUT/leg.txt"
+# THE COMPLETION SENTINEL, WRITTEN LAST (DEVIATION 863). The driving host no
+# longer holds an ssh session open for the whole run; it starts this body
+# detached and polls for this file. Nothing else on the box distinguishes
+# "the payload finished" from "the ssh dropped and the payload was killed",
+# and leg_check_remote_body refuses a body that stopped writing it.
+: > /root/gemm_leg.done
 echo REMOTE_BODY_DONE
 REMOTE_BODY_P8
 }
@@ -1584,6 +1879,17 @@ leg_check_remote_body() {
         sed 's/^/    /' "$TMPD/bashisms"
         return 1
     fi
+    # THE SENTINEL IS WHAT THE POLL LOOP WAITS FOR (DEVIATION 863). A body
+    # that stopped writing it would make every leg poll all the way to its
+    # outer deadline and then report a complete run as a cut-off one, which
+    # is a false finding about the box printed with total confidence.
+    if ! grep -q 'gemm_leg.done' "$_body"; then
+        echo "  the remote body never writes /root/gemm_leg.done."
+        echo "  That file is the poll loop's only 'the payload finished'"
+        echo "  signal; without it every leg waits out its outer deadline and"
+        echo "  then calls a finished run partial."
+        return 1
+    fi
     if [ "$PAYLOAD" = "phase8" ]; then
         # THE TWO THINGS THIS PAYLOAD IS ABOUT, checked in the shipped text
         # rather than believed from the heredoc above it.
@@ -1627,8 +1933,108 @@ leg_ship_and_run() {
         > /dev/null
     leg_ssh 'cd /root/mojolearn && tar xzf -' < "$TMPD/src.tgz"
     leg_ssh 'umask 022; cat > /root/gemm_leg.sh' < "$OUT/remote_body.sh"
-    leg_say "running the leg on the box (this is the long step)"
-    leg_ssh 'sh /root/gemm_leg.sh' > "$OUT/remote_console.log" 2>&1 || true
+    leg_run_payload
+}
+
+# ---------------------------------------------------------------------------
+# DEVIATION 863 -- THE PAYLOAD RUNS DETACHED AND THIS LEG POLLS IT
+#
+# It used to be one foreground `leg_ssh 'sh /root/gemm_leg.sh'` with `|| true`
+# after it. Under --payload phase8 that holds an ssh session open for the
+# length of a whole bootstrap: measured 27 minutes on an H100 and 18 on an
+# MI325X ON IMAGES THAT ALREADY HAD PIXI, and this lane's images do not. One
+# dropped ssh -- a wifi blip, a closed lid, ServerAliveInterval giving up
+# after ninety seconds -- did two things, and the second is much worse than
+# the first. The remote `sh` took SIGHUP and the bootstrap died mid-lane; and
+# the `|| true` swallowed it, so this script walked on to the fetch, brought
+# home whichever half of phase 8 had finished, terminated the box and
+# reported a leg. NOTHING IN THE ARTIFACTS SAID THE RUN WAS CUT OFF. That is
+# a fabricated column, and one whole rental to discover.
+#
+# So the body is started with `nohup`, in the background, writing to a file
+# on the box, and polled with short ssh calls that are each allowed to fail
+# and be retried. The sentinel is a file the body writes as its last act. The
+# liveness test is `kill -0` on the remote pid, so THREE states are told
+# apart: finished (sentinel), still running (pid alive), and DIED WITHOUT
+# FINISHING (no sentinel, no pid) -- which is a finding and is recorded as
+# one rather than passed off as a complete run.
+#
+# The body still bounds itself with `timeout @WORKTIMEOUT@`. The deadline
+# here is that plus a margin, and it is the bound for the case where the
+# body is gone, the sentinel never appeared, and the image had no timeout(1).
+# ---------------------------------------------------------------------------
+leg_run_payload() {
+    leg_say "starting the payload DETACHED on the box, then polling for it"
+    leg_ssh 'rm -f /root/gemm_leg.done /root/gemm_leg_console.log;
+             nohup sh /root/gemm_leg.sh > /root/gemm_leg_console.log 2>&1 < /dev/null &
+             echo "REMOTE_PID=$!"' > "$OUT/remote_start.log" 2>&1 || true
+    sed 's/^/    /' "$OUT/remote_start.log"
+    _rpid=$(sed -n 's/^REMOTE_PID=//p' "$OUT/remote_start.log" | tr -d "\r" | tail -1)
+    if [ -z "$_rpid" ]; then
+        leg_die "THE PAYLOAD DID NOT START. The box answered without a pid, so
+  there is nothing running there and polling would poll to the deadline for
+  no reason. Read $OUT/remote_start.log. Terminating."
+    fi
+    # THE OUTER DEADLINE IS CAPPED BY THE LEASE, not only by the work bound.
+    # Two reasons, and the second one only shows on a bad day. The body binds
+    # itself with timeout(1) at WORK_TIMEOUT, so a little past that is all a
+    # healthy run needs. But when the POD dies -- the on-pod watchdog fires,
+    # RunPod evicts it, the network goes -- every poll from then on is simply
+    # unreachable, and an uncapped deadline would sit here retrying a box that
+    # no longer exists, for as long as the work bound allowed, with the fetch
+    # and the terminate still waiting behind it. The cap leaves the lease its
+    # last five minutes so the fetch below still has somewhere to run.
+    _polllimit=$(( WORK_TIMEOUT + 240 ))
+    _leasecap=$(( MINUTES * 60 - 300 ))
+    if [ "$_polllimit" -gt "$_leasecap" ]; then _polllimit=$_leasecap; fi
+    if [ "$_polllimit" -lt 120 ]; then _polllimit=120; fi
+    leg_say "  remote pid $_rpid; polling every 30s, giving up after ${_polllimit}s"
+    _pdeadline=$(( $(date -u +%s) + _polllimit ))
+    _unreach=0
+    while : ; do
+        if [ "$(date -u +%s)" -ge "$_pdeadline" ]; then
+            echo "    OUTER POLL DEADLINE reached (${_polllimit}s)."
+            echo "    The body bounds itself with timeout(1) at ${WORK_TIMEOUT}s,"
+            echo "    so getting here means either that bound did not hold (no"
+            echo "    timeout(1) on the image, or no sentinel written) or the"
+            echo "    box stopped answering and never came back. Fetching what"
+            echo "    exists, then terminating."
+            FETCH_RED=1
+            break
+        fi
+        _st=$(leg_ssh "if [ -f /root/gemm_leg.done ]; then echo LEG_DONE;
+                       elif kill -0 $_rpid 2>/dev/null; then echo LEG_RUNNING;
+                       else echo LEG_GONE; fi" 2>/dev/null) || _st=""
+        case "$_st" in
+            *LEG_DONE*)
+                leg_say "  the payload finished (its sentinel is on the box)"
+                break ;;
+            *LEG_RUNNING*)
+                _unreach=0 ;;
+            *LEG_GONE*)
+                echo "    THE PAYLOAD PROCESS IS GONE AND WROTE NO SENTINEL."
+                echo "    It was killed, or it died before its last line. What"
+                echo "    is on the box is a PARTIAL run. The fetch below still"
+                echo "    happens so the finding comes home, and this leg goes"
+                echo "    red rather than reporting a clean column."
+                FETCH_RED=1
+                break ;;
+            *)
+                # AN UNANSWERED POLL IS NOT A DEAD RUN. The work is detached
+                # from the ssh session on purpose, so a poll that fails is a
+                # statement about the network and about nothing else. Say so
+                # occasionally and keep going until the deadline.
+                _unreach=$((_unreach + 1))
+                if [ "$_unreach" = "1" ] || [ "$_unreach" = "10" ]; then
+                    echo "    poll $_unreach: the box did not answer. The payload is"
+                    echo "    DETACHED, so this says nothing about the run itself."
+                    echo "    Retrying until the deadline."
+                fi ;;
+        esac
+        sleep 30
+    done
+    leg_ssh 'cat /root/gemm_leg_console.log' > "$OUT/remote_console.log" 2>/dev/null \
+        || echo "    could not read the remote console log"
     tail -5 "$OUT/remote_console.log" | sed 's/^/    /'
 }
 
@@ -1639,10 +2045,31 @@ leg_fetch_e1dir() {
     # $VLABEL. This is the phase8 payload's whole deliverable.
     _rd=$(sed -n 's/^e1dir=//p' "$OUT/remote/leg.txt" 2>/dev/null | tail -1)
     if [ -z "$_rd" ]; then
-        echo "  NO e1dir RECORDED. The box's leg.txt does not name a"
-        echo "  bootstrap directory, so there is nothing to fetch for the"
-        echo "  judge. Read $OUT/remote/bootstrap_console.log."
-        return 1
+        # DEVIATION 864 -- ASK THE BOX BEFORE GIVING UP. leg.txt is written by
+        # the remote body and arrives through the tar in leg_fetch, and either
+        # of those can fail on its own while the bootstrap directory is
+        # sitting on the pod, intact, one ssh away. This is the LAST MOMENT
+        # that directory exists: the terminate is two steps below. Giving up
+        # here threw away the entire deliverable of a paid leg because a small
+        # text file did not come home.
+        # The fallback is the one the remote body itself uses -- the newest
+        # directory under bench/results/e1 -- and it is ANNOUNCED, because a
+        # directory picked by mtime is a weaker claim than one the bootstrap
+        # named in its own output.
+        _rd=$(leg_ssh 'ls -dt /root/mojolearn/bench/results/e1/*/ 2>/dev/null | head -1' 2>/dev/null | tr -d "\r" | sed 's|/$||')
+        if [ -n "$_rd" ]; then
+            echo "  NO e1dir RECORDED in the box's leg.txt. Asked the box"
+            echo "  directly and took the NEWEST directory under"
+            echo "  bench/results/e1:"
+            echo "    $_rd"
+            echo "  That is an mtime guess and not the bootstrap's own answer."
+            echo "  Read $E1_DEST/bootstrap.log to confirm it is this run's."
+        else
+            echo "  NO e1dir RECORDED, and the box has no directory under"
+            echo "  bench/results/e1 either, so there is nothing to fetch for"
+            echo "  the judge. Read $OUT/remote/bootstrap_console.log."
+            return 1
+        fi
     fi
     mkdir -p "$E1_DEST"
     # A PIPELINE'S STATUS IS ITS LAST COMMAND'S, so neither the remote tar
@@ -2099,6 +2526,103 @@ leg_rehearse() {
     fi
     sed '$d' "$OUT/remote_body.sh" > "$TMPD/rb" && mv "$TMPD/rb" "$OUT/remote_body.sh"
 
+    # F3: the poll loop's sentinel, proved against a body that stopped
+    # writing it. Without this the leg would wait out its outer deadline and
+    # then call a complete run partial -- a false finding about the box,
+    # printed with the same confidence as a true one.
+    cp "$OUT/remote_body.sh" "$TMPD/body.keep3"
+    grep -v 'gemm_leg.done' "$TMPD/body.keep3" > "$OUT/remote_body.sh"
+    if ( trap - EXIT; leg_check_remote_body ) > "$TMPD/f3.out" 2>&1; then
+        rbad "F3 a body that writes no completion sentinel is refused" "IT WAS ACCEPTED. Every leg would poll to its outer deadline and then report a finished run as cut off."
+    elif grep -q 'never writes /root/gemm_leg.done' "$TMPD/f3.out"; then
+        rok "F3 a body that stopped writing the poll sentinel is refused, by name"
+    else
+        rbad "F3 a body with no sentinel is refused BY NAME" "it was refused for another reason: $(head -2 "$TMPD/f3.out")"
+    fi
+    cp "$TMPD/body.keep3" "$OUT/remote_body.sh"
+
+    # -- M. the dead-man (DEVIATION 862) -------------------------------------
+    # It is armed BEFORE the create call and it is the ONLY guard covering the
+    # window before the on-pod watchdog exists, so it gets what the guard
+    # itself gets: composed for real, syntax-checked, proved to keep the key
+    # out of every argv, and then RUN against stub `curl` and stub `sleep` so
+    # the DELETE it would issue is RECORDED rather than assumed. A guard that
+    # has never fired is a guard nobody has any reason to believe.
+    _dm="$TMPD/deadman"; rm -rf "$_dm"
+    if ( trap - EXIT; RUNPOD_API_KEY="$_cfake"
+         leg_write_deadman "$_dm" 0 mojolearn-gemm-dry-podname ) > "$TMPD/m1.out" 2>&1; then
+        rok "M1 the dead-man composes, substitutes cleanly and passes sh -n"
+    else
+        rbad "M1 the dead-man is built and syntax-checked" "$(cat "$TMPD/m1.out")"
+    fi
+
+    if [ ! -f "$_dm/deadman.sh" ]; then
+        rbad "M2 the dead-man's key is in a 0600 config and in no script" "no dead-man script was composed at all"
+    elif ! grep -q -F -f "$TMPD/cfake.key" "$_dm/curlrc" 2>/dev/null; then
+        rbad "M2 the dead-man's curl config carries the key" "IT DOES NOT, so every DELETE it issues would 401. It would fire and fail, which is the worst kind of guard."
+    elif grep -q -F -f "$TMPD/cfake.key" "$_dm/deadman.sh"; then
+        rbad "M2 the key is NOT in the dead-man's script" "THE KEY IS IN THE SCRIPT ITSELF -- a file that outlives this process by design, sitting next to the pod name it is for."
+    else
+        rok "M2 the dead-man's key is in a 0600 curl config, and in no script and no argv"
+    fi
+
+    if [ -f "$_dm/deadman.sh" ]; then
+        printf '# @LEFTOVER@\n' >> "$_dm/deadman.sh"
+        if grep -q '@[A-Z][A-Z0-9_]*@' "$_dm/deadman.sh"; then
+            rok "M3 the dead-man's leftover-placeholder detector sees a planted @LEFTOVER@"
+        else
+            rbad "M3 the dead-man's placeholder detector is not inert" "it did not see a planted placeholder. A missed @SECS@ would leave the guard sleeping on a literal string, which is to say not guarding."
+        fi
+        sed '$d' "$_dm/deadman.sh" > "$TMPD/dmrb" && mv "$TMPD/dmrb" "$_dm/deadman.sh"
+        chmod 700 "$_dm/deadman.sh"
+    fi
+
+    # M4: RUN IT. `sleep` and `curl` are stubs, so it waits for nothing and
+    # calls nothing, but every other line is the real one -- the id file it
+    # reads, the two DELETE urls it walks, and the credential it removes on
+    # the way out.
+    {
+        echo '#!/bin/sh'
+        echo '# stub sleep for the dry run: the dead-man must not actually wait.'
+        echo 'exit 0'
+    } > "$_sd/sleep"
+    chmod 700 "$_sd/sleep"
+    : > "$_rec/curl_argv.txt"; : > "$_rec/curl_config.txt"
+    printf '%s\n' "gemm-dry-deadpod" > "$_dm/pod_id.txt"
+    ( trap - EXIT
+      PATH="$_sd:$PATH"; export PATH
+      sh "$_dm/deadman.sh" ) > "$TMPD/m4.out" 2>&1 || true
+    if ! grep -q 'gemm-dry-deadpod' "$_rec/curl_argv.txt" 2>/dev/null; then
+        rbad "M4 the dead-man DELETEs the pod it was armed for" "IT CALLED NOTHING NAMING THAT POD. An armed dead-man that issues no DELETE is a lease file with nothing behind it: $(head -3 "$TMPD/m4.out")"
+    elif ! grep -qx 'DELETE' "$_rec/curl_argv.txt"; then
+        rbad "M4 the dead-man issues a DELETE" "it called curl for that pod, but not with -X DELETE"
+    elif grep -q -F -f "$TMPD/cfake.key" "$_rec/curl_argv.txt"; then
+        rbad "M4 the key never enters the dead-man's curl argv" "THE KEY IS IN A COMMAND LINE that, unlike this leg, lives for the whole lease."
+    elif ! grep -q -F -f "$TMPD/cfake.key" "$_rec/curl_config.txt" 2>/dev/null; then
+        rbad "M4 the dead-man's -K config carries the key at the moment it fires" "it does not, so the DELETE would 401"
+    elif [ -f "$_dm/curlrc" ]; then
+        rbad "M4 the dead-man removes its credential when it fires" "the 0600 curl config is still on disk after the only job it existed for"
+    else
+        rok "M4 the dead-man fires: DELETEs its pod by id on both endpoints, keeps the key out of every argv, and removes the credential afterwards"
+    fi
+    rm -f "$_sd/sleep"
+
+    # M5: THE BY-NAME PATH, WHICH M4 DOES NOT REACH. M4 plants an id file, so
+    # it walks the DELETE straight away; the branch that matters most is the
+    # other one -- no id, because the create response was unreadable. That is
+    # the leg-10 shape exactly (tools/e2_remote_leg.sh: a droplet created, a
+    # body nobody could parse, an orphan found by hand nineteen minutes
+    # later). Its parser is a separate file for this reason, so it can be fed
+    # a planted listing here without an API and without a pod.
+    printf '%s' '{"items":[{"id":"other-lane-pod","name":"mojolearn-e2-nv"},{"id":"gemm-dry-bynamepod","name":"mojolearn-gemm-dry-podname"}]}' \
+        > "$TMPD/m5_pods.json"
+    _m5=$("$PY" "$_dm/byname.py" "$TMPD/m5_pods.json" mojolearn-gemm-dry-podname 2>&1)
+    if [ "$_m5" = "gemm-dry-bynamepod" ]; then
+        rok "M5 the dead-man's by-name lookup finds ITS pod and no other lane's"
+    else
+        rbad "M5 the by-name lookup selects this leg's pod only" "it returned '$_m5' and it must be exactly 'gemm-dry-bynamepod'. This is the branch that runs when the create response was unparseable, which is the one case an id-keyed guard cannot cover -- and a lookup that over-matches would terminate another lane's box."
+    fi
+
     # -- P. the phase8 payload -----------------------------------------------
     if [ "$PAYLOAD" = "phase8" ]; then
         # P1 IS THE ONE THAT KEEPS THE REST HONEST: every check below reads
@@ -2475,6 +2999,9 @@ if [ "$MODE" = "dry" ]; then
     echo
     echo "== what --rent WOULD do, in order =="
     echo "   1. list leases here and pods there; refuse if either is occupied"
+    echo "   1b. ARM A DETACHED DEAD-MAN HERE, before the create: it ends a"
+    echo "      pod named mojolearn-gemm-$VENDOR-<stamp> after"
+    echo "      $((READY_TIMEOUT + MINUTES * 60 + 300))s even if this process is killed"
     echo "   2. POST $RP_HOST$RP_PODS_PATH  ->  a $GPU_ID pod named"
     echo "      mojolearn-gemm-$VENDOR-<stamp>   [THE BILL STARTS HERE]"
     echo "   3. wait up to ${READY_TIMEOUT}s for ssh; time out -> TERMINATE"
@@ -2483,8 +3010,18 @@ if [ "$MODE" = "dry" ]; then
     echo "   5. key to the pod on stdin (0600), then read the pod's ps back"
     echo "   6. git archive $COMMIT -> the box; compare source sha both ways"
     if [ "$PAYLOAD" = "phase8" ]; then
-    echo "   7. bash tools/e1_bootstrap.sh, bounded at ${WORK_TIMEOUT}s so the"
-    echo "      fetch keeps its reserve; phase 8 writes lanes/*.card"
+    echo "   7. bash tools/e1_bootstrap.sh, DETACHED and polled, bounded at"
+    echo "      ${WORK_TIMEOUT}s so the fetch keeps its reserve; phase 8 writes"
+    echo "      lanes/*.card"
+    echo "      READ THIS BEFORE RENTING: phase 8 loops 'for mode in fast"
+    echo "      identical', so the ENTIRE FAST PASS -- seven lanes, arm and"
+    echo "      check, roughly twenty compiles -- runs BEFORE the first"
+    echo "      IDENTICAL card is written. The whole bootstrap was 27 min"
+    echo "      (H100) and 18 min (MI325X) on images that ALREADY HAD PIXI;"
+    echo "      a cold pixi install here is unmeasured. If the ${WORK_TIMEOUT}s"
+    echo "      bound fires inside the fast pass the box comes home with NO"
+    echo "      identical cards at all, and that is a clock finding, not a"
+    echo "      silicon one. bootstrap_exit=124 in remote/leg.txt says so."
     echo "   8. fetch the bootstrap directory to"
     echo "      $E1_DEST; rewrite its commit.txt"
     echo "      from the pinned sha; read each lane's mode back"

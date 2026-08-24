@@ -720,52 +720,61 @@ A 25-line probe confirms Metal takes `(ptr + i).load[width=4]()` for both
 `UInt32` and `Float32`. So `FourElements` is not blocked by the toolchain; it
 was simply not ported.
 
-### `select_warpsort`, 2026-08-19: COMPILES, NEVER RUN
+### `select_warpsort`: RUNS ON DEVICE, AND IS IN NO SHIPPING PATH
 
-`neighbors/gbdt/matrix/detail/select_warpsort.mojo` is a port of RAFT's
+`neighbors/ported/matrix/detail/select_warpsort.mojo` is a port of RAFT's
 `select_warpsort.cuh`, the family this repository ruled UNTRANSLATABLE on the
 claim that Mojo has no warp primitives. That claim was false and the port
 exists now.
 
-**It compiles and it has never executed.** By the four tiers in
-`VENDOR_LIBRARIES.md` it is at COMPILES, not at RUNS ON DEVICE, and those are
-different things: `linalg.transpose` compiles too and signals on device
-pointers.
+**THE PARAGRAPHS THAT STOOD HERE SAID "COMPILES, NEVER RUN", "Nothing calls
+it" AND "compiles alone, cannot be instantiated". All three are false and are
+deleted, not softened.** They were written on 2026-08-19 and the same day's
+lane round fixed the two compiler crashes under them and ran the kernel on
+device. The record is `bench/results/LANE_warpsort_2026-08-19.md`: two
+independent compiler crashes (one of them a bare `while` loop with no GPU,
+no SIMD and no parametric anything in it, which also RETIRES this file's old
+suspicion of the recursive parametric bitonic network), then
 
-Nothing calls it. `knn_brute_force.mojo` still selects between the ported
-radix select and `nn.topk.top_k`. Wiring it in is deliberately a separate
-step, and it must go in BESIDE those two rather than replacing either, so
-that `check_vendor_topk_matches_ported` can be extended to a three-way
-agreement. That is this repo's rule for any new selection implementation and
-it is the only thing that would catch a wrong answer here.
+    $ /tmp/warpsort_probe_main.bin
+    check_warpsort_matches_radix: OK
+    check_warpsort_reach_by_sabotage: OK
+    check_warpselect_matches_oracle: OK
+    check_warpselect_reach_by_sabotage: OK
+
+four device checks, each proved non-vacuous by a negative control, comparing
+`warpsort_topk_block_kernel` three ways against the ported radix select and
+an independent Float64 host oracle on a scattered hashed fixture
+(`neighbors/mojo_only/warpsort_check.mojo`, driven by
+`neighbors/warpsort_probe_main.mojo`). By the four tiers in
+`VENDOR_LIBRARIES.md` it is at RUNS ON DEVICE.
+
+**What is still true, and is why the file stays in UNWIRED.** Three things,
+each checked against the tree on 2026-08-24 rather than inherited:
+
+1. **No shipping path reaches it.** `knn_brute_force.mojo` imports
+   `radix_topk_one_block_kernel`, `radix_topk_identical_kernel` and
+   `nn.topk.top_k` and nothing else; its own comment at `:50` still says
+   "`select_radix.mojo` is ported and is the selector here". Wiring warpsort
+   in must go in BESIDE those rather than replacing either, so that
+   `check_vendor_topk_matches_ported` becomes a three-way agreement. That is
+   this repo's rule for any new selection implementation and it is the only
+   thing that would catch a wrong answer here.
+2. **Nothing automated runs the checks.** `pixi.toml` registers no task for
+   `neighbors/warpsort_probe_main.mojo`; the run above was a hand build to
+   `/tmp`. So the four checks are evidence that the kernel worked once on one
+   Apple M4, and they are not a gate: no CI, no `check-*` task, and nothing
+   re-runs them when the file or its dependencies change.
+3. **No leg has ever carried it.** Phase 8 of `tools/e1_bootstrap.sh` names
+   gemm, cd, kde, linkage, svm, mamba and metrics, and every
+   `bench/results/e1/*/lanes/` directory holds exactly those. Warpsort has
+   never run on an NVIDIA or AMD box.
 
 Why it is worth finishing: RAFT's own dispatch (`select_k-inl.cuh:38`) sends
 `2 < k <= 256` to this family and only `k > 256` to radix, so every k a k-NN
 user actually asks for goes here. We currently run their second choice across
-the whole practical range.
-
-**AND HERE IS WHERE IT STOPS, 2026-08-19.** Wiring it into
-`knn_brute_force.mojo` behind a `use_warpsort` flag **crashes the Mojo
-compiler**. Not a type error, not a constraint failure: `mojo build` dies and
-the crash handler runs.
-
-    UniversalExceptionRaise: (os/kern) failure (5)
-    crash_report_exception_handler.cc:257
-
-Isolated by bisection: the file COMPILES on its own
-(`mojo build --emit=object` is clean, after 15 mechanical `Self.`-qualifier
-fixes). It is instantiating `warpsort_topk_block_kernel[16, True, 8]` at a
-launch site that kills the compiler. The wiring is reverted; the port stays.
-
-So warpsort is not at COMPILES either, by the four tiers in
-`VENDOR_LIBRARIES.md`. It is at "compiles alone, cannot be instantiated".
-
-The suspect is the recursive parametric bitonic network: `bitonic_merge` and
-`bitonic_sort` recurse on a comptime `SIZE` over `mut SIMD` arguments, and a
-`@parameter if` that fails to prune the dead branch recurses forever. That
-would explain a compiler death rather than a diagnostic. **Unverified** —
-narrowing it means bisecting the network with a standalone harness, which is
-the next step and is not this session's.
+the whole practical range. The handoff signature for the fused path is in
+`bench/results/LANE_warpsort_2026-08-19.md` section 7.
 
 ## 2026-08-21: what the loss-breadth round left unreached
 

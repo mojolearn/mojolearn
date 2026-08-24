@@ -887,12 +887,25 @@ was measured.
    in those words. An identical GEMM gives identical LINEAR LAYERS. Logits
    need every intervening norm, softmax, RoPE and residual pinned as well;
    tokens need sampling and serving state pinned on top of that.
-2. **It is not a cross-vendor measurement.** Everything here is CONSTRUCTION.
-   As of this writing no arm of it has run on a second vendor. IDENTITY_PATHS'
-   rows 19-26 are closed on Apple and have never been to a second column, and
-   the GBDT lane's E1 run is the reason anybody knows that two backends
-   agreeing closes nothing: Apple and AMD agreed bit for bit through 302
-   stages while NVIDIA diverged at `tree001.winners.scores`.
+2. **It is a cross-vendor measurement only for what the card covers.**
+   Everything outside the identity card's 62 shapes and eight plans is
+   CONSTRUCTION. Inside it, the measurement exists: at leg 11 (commit
+   `144aa5b`, 2026-08-23) the v1 device card was bit-identical Apple M4 <->
+   NVIDIA H100 <-> AMD MI325X, 60 stages each, judged by
+   `tools/e3_round_judge.sh` section 7
+   (`bench/results/e1/2026-08-23_165142-mojolearn-e2-nv/lanes/gemm.identical.card`,
+   its MI325X sibling under `2026-08-23_172650-mojolearn-e2-amd`,
+   `E3_RESULTS.md` round 11).
+
+   The sentence that stood here, "As of this writing no arm of it has run on
+   a second vendor", is deleted rather than softened, and so is its companion
+   claim that IDENTITY_PATHS' rows 19-26 "have never been to a second
+   column": E3 round 8 (`fe00e8a`) judged all 80 unsupervised and linear
+   cells identical on both boxes. What has NOT changed is the reason the old
+   text gave for caution, and it still stands: two backends agreeing closes
+   nothing by itself. The GBDT lane's E1 run is why anybody knows that --
+   Apple and AMD agreed bit for bit through 302 stages while NVIDIA diverged
+   at `tree001.winners.scores`.
 3. **It does not promise NaN payload bits** (section 9.1).
 4. **It does not promise that IDENTICAL equals FAST**, on any vendor, and it
    does not promise that they DIFFER either. On Apple they coincide at the
@@ -903,8 +916,12 @@ was measured.
    the scalable design, and do not present the 2.85x pinned-distance cost, or
    the 4.7x measured on `nt.4096x64x64`, as universal. Phase 4 measures.
 6. **It does not promise that the balanced fold is FASTER than the serial one
-   it replaced.** Section 13 is an ANALYSIS with its assumptions written out,
-   and no arm of the v1 fold has run on a device. The reason clause 3 gives
+   it replaced.** Section 13 is an ANALYSIS with its assumptions written out.
+   (The clause "and no arm of the v1 fold has run on a device" stood here
+   and is deleted: phases 2b and 3 landed and the v1 device card ran on
+   three vendors at leg 11, item 2 above. It was false in the same way
+   and for the same reason, and a partial correction would have left
+   this section contradicting itself.) The reason clause 3 gives
    for the tree is the DEPENDENCY DEPTH — a property of the arithmetic DAG,
    which is a thing a bit contract may legitimately constrain — and not a
    measured speedup.

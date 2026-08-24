@@ -8,7 +8,8 @@ Andrew's Phase 2 contract call, which also replaced the fold ACROSS leaves
 with a fixed balanced tree. Changing the leaf rule or the fold topology from
 here creates a v2; it does not amend v1.
 
-**Status: PHASES 0, 1, 2a, 2b, 3 AND 4 ARE LANDED, ON ONE DEVICE.** The
+**Status: PHASES 0, 1, 2a, 2b, 3 AND 4 ARE LANDED, AND THE IDENTITY CARD
+HAS RUN ON THREE VENDORS (leg 11, below).** The
 contract is written and versioned, the two oracles are split and named, the
 fixtures — covering all seven of clause 5's distinctions — run green in both
 modes, the device kernel matches the oracle bit-for-bit at 62 shapes across
@@ -22,8 +23,22 @@ vendor's constants and cannot catch contraction, denormal policy or `sqrt`
 rounding — those are the BACKEND's and not the column's. The standing proof
 that this distinction is not pedantic is NVIDIA's `sqrt`, which is not
 correctly rounded on 180,714 of 2^20 patterns, 176,577 of them on normals: a
-defect only its own silicon shows. Until `gemm/E1G_RUNBOOK.md`'s leg runs,
-the completion sentence in the charter has NOT been earned.
+defect only its own silicon shows.
+
+**TWO THINGS ARE TRUE AT ONCE HERE AND THE OLD TEXT COLLAPSED THEM.** The
+sentence that stood here, "Until `gemm/E1G_RUNBOOK.md`'s leg runs, the
+completion sentence in the charter has NOT been earned", is deleted because
+its premise is gone. (a) THE THREE-VENDOR LEG HAS RUN. Leg 11 carried this
+lane to an H100 and an MI325X as phase 8 of `tools/e1_bootstrap.sh`, driven
+by `tools/e2_remote_leg.sh` on DigitalOcean droplets
+(`bench/results/e1/2026-08-23_165142-mojolearn-e2-nv/lanes/gemm.identical.card`,
+its MI325X sibling under `2026-08-23_172650-mojolearn-e2-amd`,
+`bench/results/e1/e2_run_amd_leg11.log`, E3 round 11), so the completion
+sentence IS earned for the card's 62 shapes and eight plans. (b) THE SCRIPT
+IN THIS LANE'S RUNBOOK HAS STILL NEVER CREATED A POD.
+`tools/gemm_remote_leg.sh` (DEVIATION 536) has never run, on RunPod or
+anywhere else; it remains the procedure for a FUTURE column, and nothing
+about leg 11 exercised it. Neither fact cancels the other.
 
 This ordering was deliberate and is worth keeping in view when reading the
 file table below: clause 5 says the distinguishing gates come BEFORE
@@ -55,7 +70,10 @@ written.
     # Phase 4, the price harness. WIRING, not a published number:
     tools/gemm_price.sh
 
-    # The three-vendor leg. UNRUN; read gemm/E1G_RUNBOOK.md first:
+    # THIS SCRIPT has never created a pod. The three-vendor leg that HAS
+    # run (leg 11) went through tools/e1_bootstrap.sh phase 8 on droplets
+    # created by tools/e2_remote_leg.sh, not through this file. Read
+    # gemm/E1G_RUNBOOK.md before using it for a future column:
     tools/gemm_remote_leg.sh
 
 No pixi task is registered; the orchestrator registers it.
@@ -171,10 +189,10 @@ by other lanes.
 |---|---|---|---|---|---|---|
 | 1 | `gemm_nt` (dispatcher) | `core/gemm.mojo:211` | `C = A·Bᵀ` | general; `n == 1` rerouted to `gemv_n` first | dispatcher | **YES — `OP_NT`** |
 | 1a | ↳ `matmul[transpose_b=True]` | `core/gemm.mojo:274` | `C = A·Bᵀ` | the FAST arm | **VENDOR** (MAX `linalg.matmul`) | stays under FAST; IDENTICAL must never fall through to it |
-| 1b | ↳ `pinned_gemm_nt_kernel` | `core/gemm.mojo:122` | `C = A·Bᵀ`, one thread per cell, k ascending | any | OURS | **YES** — it is the contract at `P == 1`, and see the defect below |
+| 1b | ↳ `pinned_gemm_nt_kernel` | `core/gemm.mojo:122` | `C = A·Bᵀ`, one thread per cell, k ascending | any | OURS | **YES** — it is the contract at `P == 1`, and see "Reported, not fixed" item 1 below, `core/gemm.mojo`'s two pinned kernels LAUNDER a `-0.0` at `P == 1` |
 | 2 | `gemv_n` (dispatcher) | `core/gemm.mojo:455` | `z = A·y` | OLS step 6 at 128x128; OLS predict at `n_rows x n_features` | dispatcher | **YES — `OP_NT` at `n == 1`** |
 | 2a | ↳ `gemv_gpu[transpose_b=False]` | `core/gemm.mojo:505` | `z = A·y` | the FAST arm | **VENDOR** (MAX `linalg.gemv`) | stays under FAST |
-| 2b | ↳ `pinned_gemv_n_kernel` | `core/gemm.mojo:157` | `z = A·y`, one thread per element | any | OURS | **YES** — same defect |
+| 2b | ↳ `pinned_gemv_n_kernel` | `core/gemm.mojo:157` | `z = A·y`, one thread per element | any | OURS | **YES** — same defect, same item |
 | 3 | `gemm_tn` (dispatcher) | `core/gemm.mojo:277` | `C = Aᵀ·B` (Gram) | m = n = n_features ≤ 128, k = n_rows in the millions | dispatcher; RAISES under IDENTICAL over capacity | **YES — `OP_TN`** |
 | 3a | ↳ `gemm_tn_via_transpose` | `core/gemm.mojo:362` | two `transpose_kernel` launches then `gemm_nt` | outputs with enough tiles to fill the device | **VENDOR** behind two of our transposes | in scope as the thing `OP_TN` replaces |
 | 3b | ↳ split-K Gram pair | `core/gram_splitk.mojo:423`, `:679`, `:693`, `:711` | `C = AᵀA`, k-chunked partials + a serial ascending fold | tiny square output, enormous k | OURS | **YES** — it is Phase 2's architectural seed |

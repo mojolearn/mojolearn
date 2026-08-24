@@ -182,7 +182,18 @@ run_lane_check() {  # <lane> <mode> <cmd...>
       || echo "PHASE8-FINDING: $lane [$mode] check FAILED: $(grep -m1 -E 'Unhandled|rror:|FAIL' "$log" | cut -c1-160)"
   fi
 }
-for mode in fast identical; do
+# THE IDENTICAL PASS RUNS FIRST, AND THE ORDER IS LOAD-BEARING ON A RENTAL.
+# DEVIATION 868, 2026-08-24. This loop read `for mode in fast identical` until
+# now, which meant the ENTIRE FAST pass ran before the first IDENTICAL card was
+# written. On a rented box under a work bound, a slow FAST pass therefore spent
+# the whole lease and the leg came home with an empty `lanes/` -- zero identical
+# cards, which is the only arm `tools/e3_round_judge.sh` section 7 ASSERTS. The
+# FAST cards are recorded, never judged, so they are the half that can be lost.
+#
+# The two passes are independent: `run_lane_arm` rebuilds per mode and each
+# writes its own card, so swapping the order cannot move a bit in either one.
+# The leg-11 artifacts are unaffected and stay comparable.
+for mode in identical fast; do
   echo "-- lanes, $mode --"
   MOJOLEARN_GEMM_CARD_ARM=device MOJOLEARN_GEMM_CARD_HOST_CAP=1 run_lane_arm gemm "$mode" pixi run mojo run -I . bench/gemm_card_main.mojo
   run_lane_check gemm "$mode" pixi run mojo run -I . gemm/mojo_only/gemm_device_check.mojo

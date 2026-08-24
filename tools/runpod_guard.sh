@@ -262,7 +262,7 @@ WATCHDOG
         echo "minutes=$mins"
     } > "$LEASES/$pod.lease"
 
-    echo "ARMED. Pod $pod exits its container in $mins minutes."
+    echo "ARMED. Pod $pod is TERMINATED through the API in $mins minutes."
     echo "  lease: $LEASES/$pod.lease"
     echo "  extend with: tools/runpod_guard.sh extend $pod '$target' <minutes>"
 }

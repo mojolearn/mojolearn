@@ -34,8 +34,15 @@ DEVIATION 674's hand-written LU where theirs is a closed cuBLAS batched
 
 Not a port: cuML ships one backend and needs no card.
 
-STATUS: WRITTEN, NEVER RUN. No card has been produced from this file on any
-vendor. See `arima/README.md`'s OWED list.
+STATUS: RUN ON ONE APPLE M4, BOTH MODES. This file emits a 229-stage card
+(138 when it first ran on 2026-08-23; the 2026-08-24 round added the four
+DECISION stages, `Fs` and `P_final`). See `arima/README.md`'s status block,
+`arima/PORTED_MAP.tsv` and IDENTITY_PATHS row 58.
+
+NO SECOND VENDOR. `tools/e1_bootstrap.sh` phase 8 carries gemm, cd, kde,
+linkage, svm, mamba and metrics, and not this lane, so no leg has ever
+produced an arima card on an NVIDIA or AMD box and the cross-vendor claim
+this card exists to make is UNTESTED. See `arima/README.md`'s OWED list.
 """
 
 from max.gpu.host import DeviceContext

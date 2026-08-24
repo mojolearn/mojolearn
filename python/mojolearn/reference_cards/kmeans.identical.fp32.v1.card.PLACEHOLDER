@@ -1,0 +1,49 @@
+# THIS IS NOT A REFERENCE CARD. IT IS A PLACEHOLDER, AND IT IS DELIBERATE.
+#
+# `python -m mojolearn verify` compares the stage card this build produces
+# against `kmeans.identical.fp32.v1.card` in this directory. That file does
+# not exist yet, because nobody has run the fixture on a reference machine
+# and installed the result. Until they do, `verify` exits 5 (NO REFERENCE)
+# and says so.
+#
+# WHY A PLACEHOLDER AND NOT SIMPLY NOTHING. A missing file is a silence, and
+# a silence gets read as "the packaging step dropped it". This file says
+# which of the two it is, points at the procedure, and carries the token
+# FILL-IN so that copying it into place under the real name still fails
+# loudly (DEVIATION 925, see python/mojolearn/_verify.py). A shipped
+# placeholder that silently passed would be the worst outcome this feature
+# has available to it.
+#
+# ------------------------------------------------------------------------
+# TO PRODUCE THE REAL CARD
+# ------------------------------------------------------------------------
+#
+#   1. On the reference machine, with a clean checkout at a known commit and
+#      the IDENTICAL extensions built:
+#
+#        MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH=python \
+#          pixi run python3 -m mojolearn verify \
+#          --emit-reference /tmp/kmeans.apple.card
+#
+#   2. Do the same on a SECOND vendor, at the SAME commit, and compare:
+#
+#        python3 tools/identity_trace_diff.py --labels APPLE,NVIDIA \
+#          /tmp/kmeans.apple.card /tmp/kmeans.nvidia.card
+#
+#      If that does not print RESULT: IDENTICAL, there is no reference to
+#      install and there is a finding to chase instead. A card from one
+#      machine claims nothing across vendors, and installing one anyway is
+#      how the whole feature becomes a number with no evidence behind it.
+#
+#   3. Install the agreed card as
+#      python/mojolearn/reference_cards/kmeans.identical.fp32.v1.card,
+#      delete this placeholder, and record BOTH runs in docs/VERIFY.md under
+#      "Where the reference card came from".
+#
+# The full procedure, including what to do after a legitimate change moves
+# the bits, is in docs/VERIFY.md.
+#
+# provenance: FILL-IN
+# commit: FILL-IN
+# device: FILL-IN
+# peer-vendor-run: FILL-IN
