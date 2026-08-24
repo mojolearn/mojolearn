@@ -60,9 +60,15 @@ true, and the only thing that is:
     seven live arms are carried by ONE FIXTURE EACH, which is the finding
     to read before any of the green ones.
   * `check_spectral_blobs_separate` is DIAGNOSED and fixed, and the four
-    checks it used to block now run. **ALL 18 CHECKS PASS** under
-    IDENTICAL on one M4. The verdict is section 3.1 and it went against
-    the CHECK, not the port.
+    checks it used to block now run. **ALL 18 CHECKS PASS**, under
+    IDENTICAL **and under FAST**, on one M4. The verdict is section 3.05
+    and it went against the CHECK, not the port.
+  * **FAST is RECORDED, never asserted.** Under FAST the identity clauses
+    print `RECORDED [FAST] agreement on this column (no identity claim
+    under FAST)` instead of raising, per the metrics lane's leg-11 lesson.
+    The device and oracle arms did agree bitwise under FAST on this Apple
+    column, which is an OBSERVATION about this column and not a property
+    of the profile: FAST is unversioned and makes no identity claim.
 
 ## 1. Path mirroring
 
@@ -457,7 +463,9 @@ taken unilaterally:
      and it was the heavy item.** Recording `spectral.lanczos.config`
      catches a changed bound directly, so the arm bites on all six
      existing fixtures with zero cells moved.
-  6. **Re-run everything under FAST** and record, not assert.
+  6. ~~Re-run everything under FAST and record, not assert.~~ **DONE.**
+     All 18 pass under FAST; the identity clauses RECORD rather than
+     assert, and the recorded outcome on this Apple column is agreement.
   7. **The cross-vendor legs.** Nothing here has run anywhere but one M4,
      so no cross-vendor claim exists.
   8. ~~A cuVS 26.08 checkout.~~ **DONE**, 2026-08-23, `6ba2ce2`. It
