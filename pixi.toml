@@ -954,6 +954,8 @@ check-metrics-labels = "mojo run -I . metrics/mojo_only/label_metrics_check.mojo
 check-metrics-regression = "mojo run -I . metrics/mojo_only/regression_metrics_check.mojo"
 check-metrics-silhouette = "mojo run -I . metrics/mojo_only/silhouette_check.mojo"
 check-metrics-trust = "mojo run -I . metrics/mojo_only/trustworthiness_check.mojo"
+check-holtwinters = "mojo run -I . holtwinters/mojo_only/hw_check.mojo"
+check-if = "mojo run -I . isolation_forest/mojo_only/if_check.mojo"
 
 # The depthwise IDENTITY TRACE: one hash record per stage of a fit, so a
 # bitwise disagreement between two GPUs has an ADDRESS instead of only
