@@ -34,7 +34,7 @@ Arguments after the outputs are upstream's ORDER and NAMES --
 `(u, delta, A, B, C, D, z, delta_bias, delta_softplus, return_last_state)`,
 `selective_scan_interface.py:127-128`. Outputs come first because the device
 kernel shape this file takes does that (`max/kernels/src/state_space/
-selective_scan.mojo::selective_scan_fwd_gpu:88-101`, `output` then `x` then
+selective_scan.mojo::selective_scan_fwd_gpu:95-105`, `output` then `x` then
 `out_z` then `u`).
 
 WHAT IS MIRRORED, AND FROM WHICH SOURCE
@@ -53,14 +53,18 @@ WHAT IS MIRRORED, AND FROM WHICH SOURCE
 CUDA kernel forms `B * (delta * u)` (`csrc/selective_scan/
 selective_scan_fwd_kernel.cuh:162` computes `delta_u_vals = delta * u`, `:222`
 multiplies `B_vals[i] * delta_u_vals[r][i]`) and MAX follows it
-(`selective_scan.mojo:311-313`: `var delta_u = delta_val * u_val;
-var b_t = B_vals * delta_u`). The reference pairs the other way, `(delta * B)
+(`selective_scan.mojo:309` `var delta_u = delta_val * u_val`, `:321`
+`var b_t = B_vals * delta_u`). The reference pairs the other way, `(delta * B)
 * u` -- `torch.einsum('bdl,bnl,bdl->bdln', delta, B, u)` contracts its
 operands left to right, and HuggingFace spells the same order explicitly
-(`modeling_mamba.py:188-189`, `discrete_B = dt * B` then `deltaB_u =
+(`modeling_mamba.py:214-215`, `discrete_B = dt * B` then `deltaB_u =
 discrete_B * u`). At S11 the CUDA kernel SEEDS its output accumulator with
-`D * u` (`:163`) and adds the C-h terms onto it, D FIRST; the reference adds
-`u * D` to the finished `y`, D LAST (`:189`). Contract section 4 pins the
+`D * u` (`:163`) and adds the C-h terms onto it (`:266`), D FIRST; the
+reference adds `u * D` to the finished `y`, D LAST (`:189`). **MAX does NOT
+follow the CUDA kernel here** -- `selective_scan.mojo:323`, `:328-329` reduces
+the C-h terms first and then does `output_val += D_val * u_val`, D last, which
+is the reference's order and this profile's -- so a reader who took S8 from
+MAX must not assume S11 came from there too. Contract section 4 pins the
 REFERENCE's order at both seams. Fixtures F5 and F6 separate them, and the
 sabotage switches below are how this file is shown to be on the right side of
 each. **Do not "fix" either seam toward the kernel.**
@@ -97,8 +101,8 @@ from mojo_only.numerics import ftz, identical_exp, identical_mul_add
 # ===========================================================================
 
 comptime MAX_DSTATE = 16
-"""`MAX_DSTATE` in BOTH device kernels -- `selective_scan.mojo:37` and
-`selective_scan_fwd_kernel.cuh`'s `kMaxDState` -- and `d_state` in contract
+"""`MAX_DSTATE` in BOTH device kernels -- `selective_scan.mojo:39` and
+`selective_scan_fwd_kernel.cuh`'s `MAX_DSTATE` -- and `d_state` in contract
 section 3. Declared here rather than imported from
 `mamba/mojo_only/mamba_fixture.mojo` because both upstream kernels declare it
 themselves, and because the device spelling is an INDEPENDENT transcription
@@ -122,7 +126,7 @@ things shared with the host side are the seam functions in
 #         -I . mamba/mojo_only/mamba_check.mojo
 #
 #: S8 pairs the CUDA way, `B * (delta * u)` (cuh:162 with :222, and MAX
-#: `selective_scan.mojo:311-313`), instead of the reference's `(delta * B) *
+#: `selective_scan.mojo:309`, `:321`), instead of the reference's `(delta * B) *
 #: u`. Contract section 4 seam S8, fixture F5.
 comptime SAB_S8_CUDA_PAIRING = is_defined[
     "MOJOLEARN_MAMBA_SABOTAGE_S8_CUDA_PAIRING"
@@ -141,14 +145,14 @@ comptime SAB_S11_D_FIRST = is_defined[
 ]()
 #: S10 folds n DESCENDING instead of ascending. The einsum's fold order is
 #: torch-internal, so the contract pins the CUDA kernel's ascending
-#: `state_idx` walk (cuh:185-266); a descending fold is the same set of terms
+#: `state_idx` walk (cuh:168-266); a descending fold is the same set of terms
 #: in a different order and rounds differently.
 comptime SAB_S10_DESCENDING = is_defined[
     "MOJOLEARN_MAMBA_SABOTAGE_S10_DESCENDING"
 ]()
 #: S6 computes `exp2(A * LOG2E * delta)` instead of `exp(delta * A)` -- MAX's
-#: optimization (`selective_scan.mojo:34`, `:216-219`, `:308`) and the CUDA
-#: kernel's (`cuh:170-173`, `:222`). A DIFFERENT FUNCTION: the LOG2E product
+#: optimization (`selective_scan.mojo:38`, `:215-220`, `:320`) and the CUDA
+#: kernel's (`cuh:174-176`, `:222`). A DIFFERENT FUNCTION: the LOG2E product
 #: is a rounding the reference does not have, and `exp2` is not `exp`.
 #: Contract section 4 seam S5-S6, and row 12's whole argument.
 comptime SAB_S5_EXP2 = is_defined["MOJOLEARN_MAMBA_SABOTAGE_S5_EXP2"]()
@@ -251,7 +255,7 @@ def selective_scan_fwd_kernel[
 ):
     """One `(batch, dim)` pair per thread, the whole sequence in order.
 
-    THE SHAPE IS MAX'S (`selective_scan_fwd_gpu:164-176`): `thread_id =
+    THE SHAPE IS MAX'S (`selective_scan_fwd_gpu:174-179`): `thread_id =
     block_dim.x * block_idx.x + thread_idx.x`, bounds check, `b, d =
     divmod(thread_id, dim)`, `DSTATE` state values in registers. THE ORDER IS
     THE REFERENCE'S (`selective_scan_ref:160-187`), line for line:
@@ -292,16 +296,16 @@ def selective_scan_fwd_kernel[
     if bb >= batch or d >= dim:
         return
 
-    # `x = A.new_zeros((batch, dim, dstate))` (ref:158) is the caller's zero
+    # `x = A.new_zeros((batch, dim, dstate))` (ref:160) is the caller's zero
     # buffer; a decode step passes the state carried from the previous call
     # (contract section 5). MAX holds the same values in a SIMD register file
-    # (`selective_scan.mojo:181`, "max dstate 16 to fit in registers").
+    # (`selective_scan.mojo:186-190`, "max dstate 16 to fit in registers").
     var state = SIMD[DType.float32, DSTATE](0.0)
     comptime for n in range(DSTATE):
         state[n] = ftz(h_ptr.unsafe_load((bb * dim + d) * DSTATE + n))
 
     # A's row for this dim, hoisted -- MAX hoists the same row
-    # (`selective_scan.mojo:214-219`). A LOAD AND A FLUSH ARE LOOP INVARIANT,
+    # (`selective_scan.mojo:215-220`). A LOAD AND A FLUSH ARE LOOP INVARIANT,
     # so this moves no bits: the oracle re-reads `a[d * D_STATE + n]` and
     # flushes it inside the token loop and gets the same value every time.
     # WHAT IS NOT TAKEN FROM MAX: it also multiplies each A by LOG2E here so
@@ -313,8 +317,8 @@ def selective_scan_fwd_kernel[
         a_vals[n] = ftz(a_ptr.unsafe_load(d * DSTATE + n))
     var d_val = ftz(d_ptr.unsafe_load(d))
 
-    # `for i in range(u.shape[2])` (ref:172). Serial, ascending, one token at
-    # a time -- MAX's shape too (`selective_scan.mojo:243+`, minus its
+    # `for i in range(u.shape[2])` (ref:174). Serial, ascending, one token at
+    # a time -- MAX's shape too (`selective_scan.mojo:246-330`, minus its
     # TILE_SIZE staging, DEVIATION 722).
     for li in range(seqlen):
         var t = bb * seqlen + li
@@ -340,10 +344,10 @@ def selective_scan_fwd_kernel[
                 dbu = ftz(pinned_mul(bv, du))
             else:
                 # S7: `delta * B`, the einsum's first pairing (ref:167), HF's
-                # `discrete_B = dt * B` (modeling_mamba.py:188).
+                # `discrete_B = dt * B` (modeling_mamba.py:214).
                 var db = ftz(pinned_mul(dl, bv))
                 # S8: `(delta * B) * u`, the second pairing (ref:167), HF's
-                # `deltaB_u = discrete_B * u` (modeling_mamba.py:189).
+                # `deltaB_u = discrete_B * u` (modeling_mamba.py:215).
                 dbu = ftz(pinned_mul(db, uv))
 
             # S9: `x = deltaA * x + deltaB_u` (ref:175). ONE rounding. The
@@ -359,7 +363,9 @@ def selective_scan_fwd_kernel[
         # S10: `y = einsum('bdn,bn->bd', x, C[:, :, i])` (ref:180). Serial
         # ascending n from +0.0, one fma per term. The einsum's fold order is
         # torch-internal; the order pinned is the CUDA kernel's ascending
-        # `state_idx` walk (cuh:185-266). The `+0.0` seed makes an all-zero
+        # `state_idx` walk (cuh:168-266). MAX folds this seam as a SIMD
+        # tree, `(state * C_vals).reduce_add()` (`selective_scan.mojo:323`),
+        # which is a third order again and is NOT taken (DEVIATION 722). The `+0.0` seed makes an all-zero
         # row sum to `+0.0` on every vendor (contract section 6).
         var acc = Float32(0.0)
         comptime if SAB_S11_D_FIRST:
@@ -429,7 +435,7 @@ def selective_scan_fn(
     block_size: Int = 64,
 ) raises:
     """`selective_scan_fn(u, delta, A, B, C, D, z, delta_bias,
-    delta_softplus, return_last_state)` (`selective_scan_interface.py:114-125`)
+    delta_softplus, return_last_state)` (`selective_scan_interface.py:118-125`)
     under profile `mojolearn.identical.mamba1.fp32.v1`, seams S5-S11.
 
     ARGUMENT NAMES AND ORDER ARE UPSTREAM'S. `z` and `delta_bias` are
