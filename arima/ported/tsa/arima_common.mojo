@@ -26,14 +26,34 @@ IDENTICAL helpers, the parameter vector the host hands in and reads back
 is Float32, and every host oracle that must match the device BITWISE is
 Float32 too. A Float64 HOST reference is carried beside it (`arima/
 mojo_only/kalman_oracle.mojo::kalman_host_f64`) so the tolerance between the
-two is MEASURED and printed by `check_kalman_matches_float64`, not assumed:
-on the default path (`simple_differencing=True`, so no diffuse 1e6 initial
-variance ever enters the filter) the log-likelihood agrees to the sixth
-digit; on `simple_differencing=False` the diffuse `kappa = 1e6` diagonal
-(`batched_kalman.cu:1003`) costs Float32 about `ulp(1e6) = 0.0625` of
-absolute error in the stationary block of `P` after the first step, and the
-check prints that gap instead of asserting it away. A Float64 device arm is
-not offered; the refusal is by dtype, at the Python surface.
+two is MEASURED and printed by `check_kalman_matches_float64`, not assumed.
+
+MEASURED 2026-08-23, Apple M4, n_obs 24, batch 6, IDENTICAL. Worst relative
+log-likelihood gap against the Float64 reference, per order:
+
+    n_diff = 0                       n_diff > 0 (kappa = 1e6 enters)
+      arma11_k     4.7e-08             arima111     1.8e-03   (n_diff 1)
+      ar1          8.1e-08             arima212     7.2e-08   (n_diff 1)
+      ma2          1.4e-07             sarima_full  1.6e-03   (n_diff 3)
+      ar2_unit     1.5e-07             sarima_rd8   9.8e-04   (n_diff 4)
+
+AN EARLIER REVISION OF THIS PARAGRAPH IS STRUCK. It said the log-likelihood
+"agrees to the sixth digit" and attributed the loose case to
+`simple_differencing=False`. Neither survives the run. The undifferenced
+orders agree to the SEVENTH digit, better than claimed; the differenced
+orders agree to the THIRD, three digits worse than claimed. And the split is
+not about `simple_differencing` at all, which this lane does not implement as
+a switch: it is simply whether `n_diff > 0`, because that is what puts the
+diffuse `kappa = 1e6` on `P0`'s leading diagonal and costs Float32 about
+`ulp(1e6) = 0.0625` of absolute error there after the first step.
+
+`arima212` is the instructive exception: `n_diff = 1` and it still agrees to
+7 digits, so the diffuse block is not automatically fatal. The gap depends on
+how much weight the filter ends up putting on the diffuse states, not on
+their mere presence. The gate's bounds (5e-3 and 2e-2) are DERIVED, not
+observed, and the measured worst is 1.8e-3. OWED: tighten them.
+
+A Float64 device arm is not offered; the refusal is by dtype.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext

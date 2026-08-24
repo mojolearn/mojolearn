@@ -49,10 +49,27 @@ one local per op through `ftz`. Under FAST they are `std.math.tanh(x * 0.5)`
 and `2 * std.math.atanh(v)`, the stdlib device path verbatim (Apple FAST
 bits do not move). Neither identity is the libm algorithm, so IDENTICAL
 bits differ from FAST bits by design, as every row-12 seam does; what is
-purchased is one arithmetic on every backend. MEASURED (`arima/mojo_only/
-arima_check.mojo::check_jones_device_equals_oracle`): device == host replay
-bitwise under IDENTICAL for p = 1..4 AR and MA, forward and inverse, and
-inverse(forward(x)) returns to x within 4 ulp (Float32, reported).
+purchased is one arithmetic on every backend.
+
+MEASURED 2026-08-23, Apple M4, n_obs 24, batch 6
+(`arima/mojo_only/arima_check.mojo::check_jones_device_equals_oracle`):
+device == host replay BITWISE under IDENTICAL, 0 cells differing, for
+p = 1..4, AR and MA, forward and inverse (16 stage comparisons, 6 to 24
+cells each).
+
+THE ROUND TRIP IS WORSE THAN THIS FILE USED TO CLAIM. An earlier revision
+said `inverse(forward(x))` returns to x "within 4 ulp (Float32,
+reported)". It does not, and nothing had ever run when that was written.
+The measured worst relative error is 2.73e-6, which is about 23 Float32
+ulp, uniform across p = 1..4 and both AR and MA. STRUCK and replaced with
+the number.
+
+That is DEVIATION 675's price and it is a real one: `(e^x - 1)` cancels for
+small `|x|`, and `atanh` near 0 is where the optimizer lives. It is
+REPORTED and bounded loosely (the gate asserts only < 1e-2), not asserted
+tight, because the goal here is one arithmetic on every backend and not
+accuracy. OWED: decide whether `expm1(x)/(expm1(x)+2)` is worth a numbered
+replacement.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext

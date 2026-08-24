@@ -49,11 +49,32 @@ NaN/-inf, whose payload is the vendor's, in a recorded stage.
 OURS (ADDENDUM 11: no computed NaN in a hashed stage). A non-positive `F`
 at a summed step sets `info[bid]` to `it + 1` and the host RAISES BY NAME
 after the launch; the loop still runs to the end so every series is
-checked. With `sigma2 >= 1e-6` (the Jones floor) and the
-symmetric/positive-diagonal stabilization it has not fired on any planted
-fixture; the gate `check_kalman_refuses_by_name` reaches it with
-`sigma2 = 0` and `trans = False`. MEASURED there: the raise names the
-series and the step.
+checked.
+
+MEASURED 2026-08-23, Apple M4, both modes. The gate is
+`check_arima_refuses_by_name` (an earlier revision of this paragraph called
+it `check_kalman_refuses_by_name`, which is not the name of anything).
+It reaches the branch with `sigma2 = 0` and `trans = False`, which defeats
+the Jones floor, and the raise reads:
+
+    batched_kalman_filter: series 0: innovation variance F <= 0 at step 0;
+    refused by name rather than carrying log(F) into the likelihood
+
+It names the series and the step, as claimed.
+
+AND IT FIRED ONCE FOR REAL, which the earlier "it has not fired on any
+planted fixture" no longer covers. While `check_predict_device_equals_oracle`
+was being fixed, `ar2_unit` was briefly handed its UNTRANSFORMED parameters
+(`predict` runs with `trans = false`), so the filter ran with
+`phi_2 = -20`, a violently explosive AR(2). This refusal caught it at the
+first step. That is the deviation earning itself on an accidental mistake
+rather than a planted one, and it is worth more than the planted case: it
+is the exact situation where theirs would have carried a NaN into the
+log-likelihood and returned it to the optimizer without a word.
+
+THE HOLE, unchanged and still recorded: the check is guarded by
+`it >= n_diff`. For `it < n_diff` theirs does not check either, and neither
+do we, so those steps can still produce a non-finite `_1_Fs`. OWED.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext

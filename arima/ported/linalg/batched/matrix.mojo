@@ -41,11 +41,29 @@ cell through `identical_mul_add`. A ZERO PIVOT sets `info[bid] = column + 1`
 and the host RAISES BY NAME (`batched_kalman.mojo::_batched_kalman_filter`)
 instead of filtering with a non-finite `P0` -- ADDENDUM 11 (no computed NaN
 in a recorded stage) and `assume-our-code-is-broken`'s corollary that
-theirs is right about design, not about dropping an error code. MEASURED:
-`arima/mojo_only/arima_check.mojo::check_lyapunov_solves_the_equation`
-residual `T X T' - X + Q` per cell <= 1e-5 relative in Float32 against a
-Float64 host solve, and the device `P0` bitwise equal to the host replay of
-this exact spelling under IDENTICAL.
+theirs is right about design, not about dropping an error code.
+
+MEASURED 2026-08-23, Apple M4, n_obs 24, batch 6, IDENTICAL
+(`arima/mojo_only/arima_check.mojo::check_lyapunov_solves_the_equation`).
+The residual `Ts P Ts' - P + RQRs` is evaluated in Float64 on the device's
+own Float32 `P0` and scaled by `max|RQRs|`, so this is `P0` against the
+EQUATION it is supposed to solve and not merely against an oracle that
+shares its spelling. Worst relative residual, per order:
+
+    arma11_k     7.3e-08     arima212     1.9e-07
+    ar1          9.3e-08     ar2_unit     3.5e-06
+    ma2          8.2e-08     sarima_full  4.3e-07
+    arima111     7.3e-08     sarima_rd8   1.9e-07
+
+`ar2_unit` is the loosest by an order of magnitude and that is expected: its
+`phi_2` is pinned at the Jones clamp and then rewritten to -0.99 by the
+unit-root guard, which is as near-singular as `I - T (x) T` gets here. The
+gate's asserted bound is 5e-3, which is DERIVED and not observed; the
+measured worst is 3.5e-6, roughly three orders of magnitude inside it. OWED:
+tighten the bound to something the numbers actually justify.
+
+The device `P0` is additionally bitwise equal to the host replay of this
+exact spelling under IDENTICAL, 0 cells differing on all eight orders.
 """
 
 from mojo_only.numerics import ftz, identical_mul_add
