@@ -234,3 +234,30 @@ construction is thin for a venue accepting 22%.
 **And if E1 fails or stays unrun, the determinism material still ships** ---
 inside Paper 1, where it is supporting evidence and does not have to carry
 anything on its own.
+
+---
+
+# ADDED 2026-08-23 night: a THIRD thread, named but NOT scheduled
+
+Andrew asked whether identity lets you price hardware and name the cheapest
+GPU for a job. The full argument, the prior-art position and the honest lift
+are in **IDENTITY_COST_PLAN.md**, and the two candidate claims are
+NOVELTY_NOTES entries 11 and 12, with what is explicitly NOT ours added to
+section D.
+
+The short version for planning purposes.
+
+**The cheap half is available now and needs no measurement.** The identity
+tax is derivable from the frozen contracts by counting, so it can proceed
+under the standing measurement freeze and it is the stronger of the two
+claims. It would slot into an existing paper as a section, not stand alone.
+
+**The expensive half is a research program, not a paper.** Cost comparison as
+a controlled counterfactual, mid-run vendor migration and the audit
+certificate all need identity closed for TRAINING. The narrowest honest first
+target is a float32 MLP with fixed batch shapes, ReLU, softmax cross entropy,
+the landed GEMM, plain SGD, one GPU.
+
+**It competes with committed calendar.** IAAI system paper September 8, ICLR
+methods paper September 18. Naming it here does not schedule it, and it
+should not displace either one without Andrew saying so.

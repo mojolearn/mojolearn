@@ -73,6 +73,38 @@ paper.
    for a training system by bit-exact behavioral modeling of one
    vendor. PRIOR-ART CHECK NEEDED.
 
+11. **The cost of a determinism contract derived FROM the contract,
+   rather than measured as a slowdown.** Because the profiles are frozen
+   versioned documents that enumerate every seam, the identity tax is
+   countable by reading source: a transcendental term (ops in the
+   portable polynomial times call sites per stage), a flush term (the
+   17 enumerated seams' `ftz` insertions, provably ZERO on flushing
+   hardware), a fold-depth term (the profile's tree against the native
+   warp primitive), a refused-hardware term (datasheet peaks), and an
+   occupancy term (the pinned launch geometry). The prediction is
+   FALSIFIABLE: `tools/lanes_price.sh` becomes the falsification of the
+   static estimate rather than its source, and a disagreement is a
+   finding about the toolchain. Needs no measurement, which is why it
+   can proceed under the standing measurement freeze. Evidence and
+   method: IDENTITY_COST_PLAN.md Part 1. PRIOR-ART CHECK NEEDED, and
+   the check is narrow: has anyone derived determinism cost from a
+   numerical contract instead of reporting a measured slowdown?
+
+12. **Cross-vendor cost comparison as a controlled counterfactual.**
+   Under a certified identity contract the step count is shared BY
+   CONSTRUCTION, so the "does the other device reach the same outcome"
+   term is not modeled, it is eliminated, and choosing hardware becomes
+   arithmetic over a measured per-step time. Two corollaries with no
+   incumbent: mid-run migration between vendors without perturbing the
+   trajectory (spot arbitrage DURING a run), and a cheaper run that
+   carries stage-by-stage evidence it performed the identical
+   computation, which is a compliance object and not only an
+   optimization. HEAVILY CAVEATED: both need identity closed for
+   TRAINING (backward, optimizer state, RNG, data order, checkpoint
+   serialization, collectives) and today the repo has classical lanes
+   plus ONE forward-only Mamba-1 block. Evidence: IDENTITY_COST_PLAN.md
+   Parts 2 and 3. PRIOR-ART CHECK NEEDED.
+
 ## B. Methodological contributions (novel-ish practice, not theorems)
 
 6. **A benchmark protocol that catches its own lies.** Both arms
@@ -146,3 +178,14 @@ paper.
   hole, interesting only for how it hid -- every benchmark correctly
   quantized outside the timed region, so the user-facing path was the
   one place nobody timed.
+* Predicting a network's runtime on another GPU from measurements on
+  one you have, explicitly for cost-efficient selection: Habitat
+  (arXiv 2102.00527, 11.8% average error over six architectures).
+  Recommending cost-efficient cloud GPU configurations: Srifty (MLSys
+  2022). The cost formula C = steps * time * price is NOT ours and must
+  never be presented as a contribution. See IDENTITY_COST_PLAN.md Part 2.
+* Deterministic training on ONE fixed hardware and software
+  configuration: ordinary engineering, widely done. Likewise noticing
+  that cuDNN and PyTorch decline to guarantee bitwise reproducibility
+  across architectures; the absence of that guarantee is THEIR
+  documented position, and citing it is context, not a finding.
