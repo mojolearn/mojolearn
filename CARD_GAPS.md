@@ -164,6 +164,32 @@ stage agreement mean something.
 So for every oracle, ask two questions before trusting a green: where does it
 START, and does it share any code with the thing it is checking?
 
+### A fourth corollary: a TOO-TIGHT tolerance invents a defect
+
+From the mamba lane, 2026-08-24, and it is the mirror of the usual warning.
+Everyone knows a loose tolerance hides a defect. **A tight one MANUFACTURES
+one, and the tempting repair is to change the code under test.**
+
+`adv_gate_saturation` failed 4 of 12 stages at rtol=1e-7. The block was fine.
+That case puts gate weights in [-2^30, 2^30], so values reach 7.25e8 where one
+float32 ulp is about 64, and 1e-7 sits BELOW float32 epsilon. The corpus's own
+`--self-test` settles it: TORCH'S OWN FP32 fails the same four stages at the
+same tolerance. Calibrate per case, against what an independent float32
+implementation achieves on THAT case, never once globally.
+
+Same lane, same night, the other direction: 53 cells of an earlier case were
+carried by `atol` rather than `rtol` and are weak evidence. Measure which of
+your passing cells are carried by which bound.
+
+### A fifth: a comparison tool can report DIFFER for a file that is not there
+
+`cmp -s a b` exits non-zero when `b` does not exist, so an EMPTY dump
+directory read as "every one of 23 files moved". The first reading of that
+result was exactly backwards. Any comparison harness must assert EXISTENCE and
+NON-EMPTINESS first and report a missing input as a CONTROL failure, never as
+a difference. Related trap in the same round: zsh does not word-split unquoted
+parameters, so a loop silently ran three cases with a mangled index.
+
 ## The top five, if only five land
 
 Every one is a scalar or a handful of integers. None adds a large buffer.
