@@ -401,6 +401,24 @@ def _normal(b: UInt32) -> Bool:
     return e != UInt32(0) and e != UInt32(0x7F800000)
 
 
+def _mag_band(x: Float32) -> Int:
+    """Six magnitude bands of |x|, for the vendor witness's band table.
+    A defect that lives in one band is invisible in an aggregate maximum
+    and obvious in this one."""
+    var a = abs(x)
+    if a < Float32(1e-30):
+        return 0
+    if a < Float32(1e-20):
+        return 1
+    if a < Float32(1e-10):
+        return 2
+    if a < Float32(1e-3):
+        return 3
+    if a < Float32(1.0):
+        return 4
+    return 5
+
+
 def _tanh64(x: Float64) -> Float64:
     return external_call["tanh", Float64](x)
 
@@ -1317,27 +1335,128 @@ def main() raises:
           " gelu_erf", mm2, " gelu_tanh", mm3)
 
     # ---- DEVIATION 942: the vendor witness, RECORDED -------------------
+    # DEVIATION 949's second half. The first run of this gate printed
+    # `vendor tanh vs portable_tanhf: max 72109828 ulp`. Seventy-two
+    # million ulp is not a rounding disagreement: tanh's RANGE IS [-1, 1],
+    # so two correct answers cannot be more than about 2^25 ulp apart
+    # anywhere in it, and 72,109,828 is 0x044C4F04, which read as a float32
+    # bit pattern is a NORMAL of exponent field 8, about 2.4e-36. That is
+    # the signature of one side being a tiny normal while the other is
+    # zero, and this block exists to say which side, at which input, in
+    # which band -- because "max 72109828" is a number nobody can act on.
+    #
+    # NOTHING HERE IS ASSERTED. The FAST arm is the vendor's own spelling
+    # and is allowed to differ; this gate's job is to CHARACTERIZE, and
+    # anything it finds belongs in a report to Modular, not in a failure.
     comptime if not NO_VENDOR_WITNESS:
         var vt_max = Int64(0)
         var ve_max = Int64(0)
         var vt_exact = 0
         var ve_exact = 0
         var vn = 0
+        var vt_absmax = Float64(0.0)
+        # the worst vendor-tanh lane and the two previous record-holders,
+        # kept by INDEX so they can be DESCRIBED afterwards rather than
+        # merely counted. Three rather than one because a single outlier
+        # and a whole broken band read identically as one number.
+        var wt0 = -1
+        var wt1 = -1
+        var wt2 = -1
+        var we0 = -1
+        # the census that separates "last bit differs" from "structurally
+        # wrong". tanh and erf both map into [-1, 1]; a vendor answer
+        # outside it, or non-finite, is a defect on its face.
+        var vt_out_of_range = 0
+        var ve_out_of_range = 0
+        var vt_nonfinite = 0
+        var ve_nonfinite = 0
+        var vt_zeroed = 0     # vendor is +-0 where portable is not
+        var vt_unzeroed = 0   # portable is +-0 where vendor is not
+        var vt_signflip = 0   # both non-zero, opposite signs
+        # max ulp per magnitude band of |x|, which localizes a defect that
+        # lives in one band instead of averaging it away
+        var bmax0 = Int64(0)
+        var bmax1 = Int64(0)
+        var bmax2 = Int64(0)
+        var bmax3 = Int64(0)
+        var bmax4 = Int64(0)
+        var bmax5 = Int64(0)
+        var bn0 = 0
+        var bn1 = 0
+        var bn2 = 0
+        var bn3 = 0
+        var bn4 = 0
+        var bn5 = 0
         for i in range(N):
             var x = px.unsafe_load(i)
             if not _normal(_bits(x)) or abs(x) > Float32(8.0):
                 continue
             vn += 1
-            var dt = _ulp_dist(qvt.unsafe_load(i), pt.unsafe_load(i))
-            var de = _ulp_dist(qve.unsafe_load(i), pe.unsafe_load(i))
+            var vt = qvt.unsafe_load(i)
+            var ve = qve.unsafe_load(i)
+            var ht = pt.unsafe_load(i)
+            var he = pe.unsafe_load(i)
+            var dt = _ulp_dist(vt, ht)
+            var de = _ulp_dist(ve, he)
             if dt == Int64(0):
                 vt_exact += 1
             if de == Int64(0):
                 ve_exact += 1
             if dt > vt_max:
                 vt_max = dt
+                wt2 = wt1
+                wt1 = wt0
+                wt0 = i
             if de > ve_max:
                 ve_max = de
+                we0 = i
+            if _finite(_bits(vt)):
+                if abs(vt) > Float32(1.0):
+                    vt_out_of_range += 1
+                var da = abs(Float64(vt) - Float64(ht))
+                if da > vt_absmax:
+                    vt_absmax = da
+            else:
+                vt_nonfinite += 1
+            if _finite(_bits(ve)):
+                if abs(ve) > Float32(1.0):
+                    ve_out_of_range += 1
+            else:
+                ve_nonfinite += 1
+            if vt == Float32(0.0) and ht != Float32(0.0):
+                vt_zeroed += 1
+            if ht == Float32(0.0) and vt != Float32(0.0):
+                vt_unzeroed += 1
+            if vt != Float32(0.0) and ht != Float32(0.0):
+                if (_bits(vt) & UInt32(0x80000000)) != (
+                    _bits(ht) & UInt32(0x80000000)
+                ):
+                    vt_signflip += 1
+            var b = _mag_band(x)
+            if b == 0:
+                bn0 += 1
+                if dt > bmax0:
+                    bmax0 = dt
+            elif b == 1:
+                bn1 += 1
+                if dt > bmax1:
+                    bmax1 = dt
+            elif b == 2:
+                bn2 += 1
+                if dt > bmax2:
+                    bmax2 = dt
+            elif b == 3:
+                bn3 += 1
+                if dt > bmax3:
+                    bmax3 = dt
+            elif b == 4:
+                bn4 += 1
+                if dt > bmax4:
+                    bmax4 = dt
+            else:
+                bn5 += 1
+                if dt > bmax5:
+                    bmax5 = dt
         print("VENDOR WITNESS, RECORDED (DEVIATION 942). `std.math.tanh` and")
         print("  `std.math.erf` COMPILED AND RAN on this device -- that alone")
         print("  answers DEVIATION 821's open float64-lowering question for")
@@ -1348,6 +1467,57 @@ def main() raises:
               vt_exact)
         print("  vendor erf  vs portable_erff : max", ve_max, "ulp, exact on",
               ve_exact)
+        print("  max ABSOLUTE difference, vendor tanh:", vt_absmax)
+        print("    (tanh maps into [-1, 1], so anything near or above 2 here")
+        print("     is structural and not a rounding disagreement)")
+        print("  vendor range census: tanh |v| > 1 on", vt_out_of_range,
+              "lanes, non-finite on", vt_nonfinite)
+        print("                       erf  |v| > 1 on", ve_out_of_range,
+              "lanes, non-finite on", ve_nonfinite)
+        print("  vendor tanh returned +-0 where portable did not:", vt_zeroed)
+        print("  portable returned +-0 where vendor tanh did not:", vt_unzeroed)
+        print("  opposite signs, both non-zero:", vt_signflip)
+        print("  max ulp by |x| band (lane count, max ulp):")
+        print("    |x| < 1e-30        ", bn0, bmax0)
+        print("    1e-30 .. 1e-20     ", bn1, bmax1)
+        print("    1e-20 .. 1e-10     ", bn2, bmax2)
+        print("    1e-10 .. 1e-3      ", bn3, bmax3)
+        print("    1e-3  .. 1         ", bn4, bmax4)
+        print("    1     .. 8         ", bn5, bmax5)
+        print("  THE WORST VENDOR TANH LANE AND THE TWO PREVIOUS RECORDS:")
+        for t in range(3):
+            var wi = wt0
+            if t == 1:
+                wi = wt1
+            elif t == 2:
+                wi = wt2
+            if wi < 0:
+                continue
+            var xw = px.unsafe_load(wi)
+            var hw = pt.unsafe_load(wi)
+            var vw = qvt.unsafe_load(wi)
+            print("    lane", wi)
+            print("      x        =", xw, hex(_bits(xw)))
+            print("      portable =", hw, hex(_bits(hw)))
+            print("      vendor   =", vw, hex(_bits(vw)))
+            print("      ulp dist =", _ulp_dist(vw, hw),
+                  " abs diff =", abs(Float64(vw) - Float64(hw)))
+        if we0 >= 0:
+            var xe = px.unsafe_load(we0)
+            print("  THE WORST VENDOR ERF LANE:")
+            print("    lane", we0)
+            print("      x        =", xe, hex(_bits(xe)))
+            print("      portable =", pe.unsafe_load(we0),
+                  hex(_bits(pe.unsafe_load(we0))))
+            print("      vendor   =", qve.unsafe_load(we0),
+                  hex(_bits(qve.unsafe_load(we0))))
+        print("  READ IT AS: if the out-of-range and non-finite counts are 0")
+        print("  and the large band maxes sit only in the tiny-|x| bands,")
+        print("  the vendor is losing a tiny argument that tanh must return")
+        print("  UNCHANGED (tanh(x) = x below about 1e-4), which is an")
+        print("  underflow in its own reduction and not a rounding choice.")
+        print("  If instead |v| > 1 or non-finite is non-zero, the lowering")
+        print("  itself is broken and the band table says where.")
 
     if mm0 + mm1 + mm2 + mm3 != 0:
         raise Error(

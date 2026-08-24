@@ -46,9 +46,9 @@ assertion that the copy has not drifted. With an arm armed it must
 disagree, in the predicted place and nowhere else.
 
 DEVIATION 941: THE ARMS ARE SELF-JUDGING. Four counters are printed per
-function, not one, because two of the four arms are bit-inert on the host
-BY CONSTRUCTION and a single mismatch count cannot tell "inert" from
-"blind":
+function, not one, because two of the four arms have a PER-COLUMN
+prediction and a single mismatch count cannot tell "inert on this column"
+from "blind":
 
     dev(portable) vs host(portable)   arm 2. MUST be 0 in every build.
     host(portable) vs host(sab)       host reach.
@@ -73,13 +73,33 @@ SABOTAGE ARMS, and what each must do:
         MUST NOT move cos. Host reach. Together with the arm above this is
         what proves the shared core did not quietly turn sin into cos.
   -D MOJOLEARN_TRIG_SABOTAGE_SIGN_BY_COMPARE=1
-        Take sin's sign with `x_in < 0.0` instead of the sign bit.
-        BIT-INERT ON THE HOST BY CONSTRUCTION. It can only bite where the
-        column flushes compare operands, so the fixture carries 2^17
-        subnormal lanes of both signs and the run judges the arm against
-        the measured flush probe: on a flushing column (Metal) the device
-        reach MUST be non-zero, and a zero there means the arm is broken,
-        not the code. On NVIDIA and AMD it is EXPECTED INERT.
+        Take sin's sign with `x_in < 0.0` instead of the sign bit. THIS
+        ARM PINS TWO SEPARATE DECISIONS AND ITS CLAUSE IS AN EXACT COUNT,
+        NOT A "MUST DIFFER" (DEVIATION 949; the first version of this file
+        asserted the arm was host-inert BY CONSTRUCTION, which was FALSE,
+        and the run that proved it wrong is the reason this paragraph is
+        this long):
+
+          (i) `-0.0` SEPARATES THE TWO SPELLINGS ON EVERY COLUMN, with no
+              flushing involved at all, because `-0.0 < 0.0` is FALSE
+              while `-0.0`'s SIGN BIT IS SET. Sign-by-bits gives
+              `sin(-0.0) = -0.0` and sign-by-compare gives `+0.0`. That
+              is DEVIATION 820's KNOWING DEVIATION FROM CEPHES -- IEEE,
+              torch and numpy all say `-0.0` and Cephes's own
+              `if (xx < 0)` loses it -- so this arm is precisely the
+              sabotage that undoes that decision, and it MUST move those
+              lanes on the host too. HOST REACH IS EXACTLY THE NUMBER OF
+              `-0.0` INPUTS IN THE FIXTURE (one), and the run asserts the
+              count AND that the moved lane's input is `0x80000000`.
+          (ii) NEGATIVE SUBNORMALS separate them only where the column
+              flushes compare operands (DEVIATION 746 (i)): on Metal
+              `-subnormal < 0.0` is FALSE and on the host it is TRUE. So
+              DEVICE REACH IS EXACTLY `n(-0.0) + n(negative subnormal)`
+              on a flushing column and EXACTLY `n(-0.0)` on one that
+              honors denormals. The fixture carries 2^17 subnormal lanes
+              of both signs so that half of the clause has something to
+              count, and the run judges it against the MEASURED flush
+              probe rather than against an assumption about the vendor.
   -D MOJOLEARN_TRIG_SABOTAGE_NO_INPUT_FLUSH=1
         Drop `_ftz_always` from `portable_sinf`. Host reach MUST be
         non-zero (the host keeps the subnormal, the portable function
@@ -138,9 +158,14 @@ move sin alone."""
 comptime SAB_SIGN_BY_COMPARE = is_defined[
     "MOJOLEARN_TRIG_SABOTAGE_SIGN_BY_COMPARE"
 ]()
-"""Cephes's own `if (xx < 0)`, which DEVIATION 820 refused. Bit-inert on a
-denormal-honoring host; on Metal `-subnormal < 0.0` is FALSE, so sin of a
-negative subnormal comes back `+0.0` instead of `-0.0`."""
+"""Cephes's own `if (xx < 0)`, which DEVIATION 820 refused, and it is
+wrong for TWO independent reasons rather than one. `-0.0 < 0.0` is FALSE
+on EVERY column while `-0.0`'s sign bit is SET, so `sin(-0.0)` comes back
+`+0.0` here and `-0.0` from the real function -- that half needs no
+flushing and bites on the host. And on Metal `-subnormal < 0.0` is FALSE
+too (DEVIATION 746 (i)), so every negative subnormal comes back `+0.0` as
+well -- that half is per-column. NOT bit-inert on the host: the first
+version of this file said it was, and DEVIATION 949 is the correction."""
 
 comptime SAB_NO_INPUT_FLUSH = is_defined[
     "MOJOLEARN_TRIG_SABOTAGE_NO_INPUT_FLUSH"
@@ -225,8 +250,11 @@ def _sab_sinf(x_in: Float32) -> Float32:
         x = _ftz_always(x_in)
     var sign = Float32(1.0)
     comptime if SAB_SIGN_BY_COMPARE:
-        # Cephes's own spelling. The compare operand is the UNFLUSHED
-        # argument on purpose: that is where Metal's compare flush bites.
+        # Cephes's own spelling, and it loses the sign in two places.
+        # `-0.0 < 0.0` is FALSE on every column, so this misses a
+        # negative zero everywhere; and the compare operand is the
+        # UNFLUSHED argument on purpose, which is where Metal's compare
+        # flush additionally loses every negative subnormal.
         if x_in < Float32(0.0):
             sign = Float32(-1.0)
     else:
@@ -774,16 +802,40 @@ def check_sabotage_arms(
     dev_cos: MutPointer[Float32, MutUntrackedOrigin],
     dev_sin_sab: MutPointer[Float32, MutUntrackedOrigin],
     dev_cos_sab: MutPointer[Float32, MutUntrackedOrigin],
+    xs: MutPointer[Float32, MutUntrackedOrigin],
     device_flushes: Bool,
 ) raises:
-    """DEVIATION 941's four counters, and the per-arm judgment."""
+    """DEVIATION 941's four counters, and the per-arm judgment.
+
+    `xs` is here so that a moved lane can be described BY ITS INPUT rather
+    than only counted. DEVIATION 949: the first version of this file
+    asserted SIGN_BY_COMPARE was host-inert, the run found one moved host
+    lane, and nobody could tell from the output WHICH lane it was. A
+    counter that cannot name what it counted costs a round."""
     var host_reach_sin = 0
     var host_reach_cos = 0
     var dev_reach_sin = 0
     var dev_reach_cos = 0
     var arm2_sab_sin = 0
     var arm2_sab_cos = 0
+    # the fixture census the SIGN_BY_COMPARE clause is an exact count over
+    var n_neg_zero = 0
+    var n_neg_sub = 0
+    # the first three moved host lanes, described rather than tallied
+    var moved_n = 0
+    var moved_i0 = -1
+    var moved_i1 = -1
+    var moved_i2 = -1
     for i in range(N):
+        var xb = _bits(xs.unsafe_load(i))
+        if xb == UInt32(0x80000000):
+            n_neg_zero += 1
+        elif (
+            (xb & UInt32(0x80000000)) != UInt32(0)
+            and (xb & UInt32(0x7F800000)) == UInt32(0)
+            and (xb & UInt32(0x007FFFFF)) != UInt32(0)
+        ):
+            n_neg_sub += 1
         var hs = _bits(host_sin.unsafe_load(i))
         var hc = _bits(host_cos.unsafe_load(i))
         var hss = _bits(host_sin_sab.unsafe_load(i))
@@ -794,6 +846,13 @@ def check_sabotage_arms(
         var dcs = _bits(dev_cos_sab.unsafe_load(i))
         if not _same(hs, hss):
             host_reach_sin += 1
+            if moved_n == 0:
+                moved_i0 = i
+            elif moved_n == 1:
+                moved_i1 = i
+            elif moved_n == 2:
+                moved_i2 = i
+            moved_n += 1
         if not _same(hc, hcs):
             host_reach_cos += 1
         if not _same(ds, dss):
@@ -809,6 +868,25 @@ def check_sabotage_arms(
     print("  device reach sin", dev_reach_sin, " cos", dev_reach_cos)
     print("  arm 2 under sabotage (dev(sab) vs host(sab)) sin", arm2_sab_sin,
           " cos", arm2_sab_cos)
+    print("  fixture census:", n_neg_zero, "inputs are exactly -0.0,",
+          n_neg_sub, "are negative subnormals")
+    # EVERY moved host lane is DESCRIBED, not just counted, so the next
+    # reader does not have to re-derive which input separated the two
+    # spellings (DEVIATION 949).
+    if moved_n != 0:
+        print("  the first", 3 if moved_n > 3 else moved_n,
+              "moved host SIN lane(s), described by their INPUT:")
+        for t in range(3):
+            var mi = moved_i0
+            if t == 1:
+                mi = moved_i1
+            elif t == 2:
+                mi = moved_i2
+            if mi < 0:
+                continue
+            print("    lane", mi, " x =", hex(_bits(xs.unsafe_load(mi))),
+                  " portable sin =", hex(_bits(host_sin.unsafe_load(mi))),
+                  " sabotaged sin =", hex(_bits(host_sin_sab.unsafe_load(mi))))
 
     comptime if not ANY_SABOTAGE:
         if (host_reach_sin != 0 or host_reach_cos != 0
@@ -846,27 +924,83 @@ def check_sabotage_arms(
             )
         print("  POLY_NOT_SWAPPED: sin moved, cos did not -- as predicted")
     comptime if SAB_SIGN_BY_COMPARE:
-        if host_reach_sin != 0:
+        # DEVIATION 949. THIS CLAUSE PINS TWO SEPARATE PROPERTIES AND BOTH
+        # ARE EXACT COUNTS. The first version asserted host inertness "by
+        # construction" and was WRONG: `-0.0 < 0.0` is FALSE while
+        # `-0.0`'s sign bit is SET, so a negative zero separates the two
+        # spellings on EVERY column with no flushing involved. That is
+        # DEVIATION 820's knowing deviation from Cephes, and this arm is
+        # exactly the sabotage that undoes it.
+        if host_reach_cos != 0:
+            raise Error(
+                "SIGN_BY_COMPARE moved COS on " + String(host_reach_cos)
+                + " lanes. Cos takes no sign from its argument at all, so"
+                + " it has no such decision to undo"
+            )
+        # (i) the -0.0 half, true on every column
+        if host_reach_sin != n_neg_zero:
             raise Error(
                 "SIGN_BY_COMPARE moved " + String(host_reach_sin)
-                + " HOST lanes. It is bit-inert on the host by construction"
-                + " (a host compare does not flush its operands), so a host"
-                + " mismatch means this arm is not the arm it claims to be"
+                + " HOST lanes but the fixture carries exactly "
+                + String(n_neg_zero)
+                + " inputs of -0.0, and -0.0 is the ONLY input that"
+                + " separates a bit-taken sign from a compare-taken one"
+                + " without a flush. Read the moved-lane list printed"
+                + " above: if the extra lanes are not -0.0 then this arm"
+                + " is reaching a decision nobody has modelled, and THAT"
+                + " is the finding"
             )
-        if device_flushes:
-            if dev_reach_sin == 0:
+        if moved_i0 >= 0:
+            var mb = _bits(xs.unsafe_load(moved_i0))
+            if mb != UInt32(0x80000000):
                 raise Error(
-                    "SIGN_BY_COMPARE found ZERO device mismatches on a column"
-                    + " that WAS MEASURED to flush subnormals. The arm is"
-                    + " broken, not the code -- check that the fixture's"
-                    + " negative subnormals reached the device"
+                    "SIGN_BY_COMPARE's moved host lane has input " + hex(mb)
+                    + ", not -0.0 (0x80000000). The count matched by"
+                    + " coincidence and the clause is pinning the wrong"
+                    + " thing"
                 )
-            print("  SIGN_BY_COMPARE: flushing column, device reach",
-                  dev_reach_sin, "-- the bit-taken sign is load-bearing")
+            if _bits(host_sin.unsafe_load(moved_i0)) != UInt32(0x80000000):
+                raise Error(
+                    "portable_sinf(-0.0) is not -0.0 in this very run, so"
+                    + " DEVIATION 820's IEEE sign rule is not live and this"
+                    + " arm has nothing to undo"
+                )
+            if _bits(host_sin_sab.unsafe_load(moved_i0)) != UInt32(0x00000000):
+                raise Error(
+                    "the compare-taken sign did not give Cephes's +0.0 at"
+                    + " -0.0; the arm is not the arm it claims to be"
+                )
+        print("  SIGN_BY_COMPARE (i): host reach", host_reach_sin,
+              "= the fixture's", n_neg_zero, "input(s) of -0.0.")
+        print("    portable sin(-0.0) = 0x80000000, sabotaged = 0x00000000.")
+        print("    DEVIATION 820's departure from Cephes is LIVE on the host.")
+        # (ii) the negative-subnormal half, per column
+        if device_flushes:
+            if dev_reach_sin != n_neg_zero + n_neg_sub:
+                raise Error(
+                    "SIGN_BY_COMPARE device reach is " + String(dev_reach_sin)
+                    + " but this column WAS MEASURED to flush and the"
+                    + " fixture carries " + String(n_neg_zero) + " -0.0 plus "
+                    + String(n_neg_sub)
+                    + " negative subnormals, every one of which must move."
+                    + " A shortfall means the compare flush did not reach"
+                    + " every lane; an excess means the arm moves something"
+                    + " that is neither"
+                )
+            print("  SIGN_BY_COMPARE (ii): flushing column, device reach",
+                  dev_reach_sin, "=", n_neg_zero, "+", n_neg_sub,
+                  "-- every negative subnormal moved and nothing else did")
         else:
-            print("  SIGN_BY_COMPARE: EXPECTED INERT on this column (it does")
-            print("    not flush). Device reach", dev_reach_sin,
-                  "; run this arm on Metal before concluding anything.")
+            if dev_reach_sin != n_neg_zero:
+                raise Error(
+                    "SIGN_BY_COMPARE device reach is " + String(dev_reach_sin)
+                    + " on a column measured NOT to flush, where only the "
+                    + String(n_neg_zero) + " -0.0 input(s) can move"
+                )
+            print("  SIGN_BY_COMPARE (ii): this column HONORS denormals, so")
+            print("    only the -0.0 lane moves and device reach is",
+                  dev_reach_sin, "as it must be. The subnormal half of this")
+            print("    arm is EXPECTED INERT here; it needs Metal.")
     comptime if SAB_NO_INPUT_FLUSH:
         if host_reach_sin == 0:
             raise Error(
@@ -1100,6 +1234,7 @@ def main() raises:
         qc.unsafe_origin_cast[MutUntrackedOrigin](),
         qss.unsafe_origin_cast[MutUntrackedOrigin](),
         qcs.unsafe_origin_cast[MutUntrackedOrigin](),
+        px.unsafe_origin_cast[MutUntrackedOrigin](),
         device_flushes,
     )
 

@@ -1,0 +1,6 @@
+# e2 card gbdt_feature_parallel: feature_parallel_identity_check fixture (16434 rows, 10 features, hashed bins), depth 4, sm_count 10. OUTPUT-LEVEL: splits + docBins, no in-searcher stages
+# format: mojolearn-identity-trace v1
+0	fp.splits.feature	i32	3	4760780bfce4a126
+1	fp.splits.bin	i32	3	cfbe069202b56011
+2	fp.splits.type	i32	3	de24483a76fbb974
+3	fp.docbins	u32	16434	faf2b9c8f2112cb6
