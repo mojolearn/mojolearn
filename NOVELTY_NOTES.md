@@ -178,6 +178,14 @@ paper.
    absorption, so reach must be measured per fixture as well.
    Evidence: `holtwinters/mojo_only/hw_check.mojo` arm table, IDENTITY_PATHS
    row 57.
+   **AND THE CONVERSE, MEASURED IN A THIRD LANE 2026-08-24, which is the
+   practical payoff rather than the warning:** recording ONE decision stage in
+   spectral (`spectral.lanczos.config`) converted its `MAXITER` sabotage from a
+   recorded REACH FAILURE into a live arm biting on all six fixtures, moving 1
+   stage and ZERO cells, and thereby RETIRED an owed heavy fixture (n > 100
+   with slow convergence) rather than deferring it. A decision stage did what a
+   heavy fixture could not. Recording decisions is not only how you SEE a class
+   of divergence, it is how you make clauses reachable at all.
    PRIOR-ART CHECK NEEDED: reproducibility work generally reports final-output
    equality, so the question is whether anyone has shown it INSUFFICIENT.
 

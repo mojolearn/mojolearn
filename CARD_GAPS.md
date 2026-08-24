@@ -119,6 +119,28 @@ branch nobody can reach.** It invites someone to gate it. holtwinters'
 than 6 GB of input at n=48, so it is recorded UNPORTED-IN-EFFECT and CLOSED
 rather than left on an owed list for ever.
 
+### Corollary: an instrument that is itself an identity hazard is not an improvement
+
+From the spectral lane, 2026-08-24. Two candidate decision-stages were HANDED
+BACK rather than added, because each needs a COUNT OVER A DEVICE BUFFER, which
+is a cross-thread reduction, which is a new fold whose own order would have to
+be pinned before the stage could be trusted. Adding an unpinned fold in order
+to instrument a pinned one makes the card worse. The two are: whether the `u`
+clamp at 1e-7 fired and on how many entries (`u` is the one Lanczos seam with
+no instrument at all), and whether `zero_to_one_functor` substituted a 1.0 for
+a zero degree (`spectral.diag` records only the post-substitution value, so a
+1.0 there is ambiguous). Both remain open and both are correctly open.
+
+### And the payoff, measured
+
+The program is not theoretical. Recording ONE decision stage
+(`spectral.lanczos.config`: n, k, ncv, max_iterations, which) converted the
+`MAXITER` sabotage from a RECORDED REACH FAILURE into a live arm that bites on
+all six fixtures, moving 1 stage and ZERO cells. That RETIRED an owed heavy
+fixture (n > 100 with slow convergence) instead of deferring it. Eight of nine
+arms in that lane now bite. A decision stage did what a heavy fixture could
+not.
+
 ## The top five, if only five land
 
 Every one is a scalar or a handful of integers. None adds a large buffer.
