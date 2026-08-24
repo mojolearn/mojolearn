@@ -186,6 +186,13 @@ paper.
    with slow convergence) rather than deferring it. A decision stage did what a
    heavy fixture could not. Recording decisions is not only how you SEE a class
    of divergence, it is how you make clauses reachable at all.
+   **AND THE LIMIT OF THAT, measured the same day, which keeps the claim
+   honest:** holtwinters' DEVIATION 699 added eight recorded decisions and
+   promoted NONE of its two inert arms, because a decision stage promotes an
+   arm only when the arm is DECISION-SHAPED. `STD_SQRT` is a sqrt spelling and
+   `HW_MAX_CLAMP` is an LLVM constant fold; neither is a branch the algorithm
+   takes, and no amount of decision recording makes a vendor-arithmetic
+   question answerable on one vendor.
    PRIOR-ART CHECK NEEDED: reproducibility work generally reports final-output
    equality, so the question is whether anyone has shown it INSUFFICIENT.
 
