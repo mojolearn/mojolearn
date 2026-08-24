@@ -1405,6 +1405,9 @@ def check_if_card_is_emitted() raises:
         expect.append("if.tree" + s + ".structure.thr")
         expect.append("if.tree" + s + ".structure.left")
         expect.append("if.tree" + s + ".structure.right")
+        expect.append("if.tree" + s + ".split.bounds")
+        expect.append("if.tree" + s + ".split.choice")
+        expect.append("if.tree" + s + ".rng.final")
     expect.append("if.pathlen")
     expect.append("if.scores")
     if len(lines) != len(expect):
@@ -1414,7 +1417,8 @@ def check_if_card_is_emitted() raises:
             raise Error("check_if_card_is_emitted: record " + String(i) + " is '" + lines[i] + "', expected tag " + expect[i])
     print(
         "check_if_card_is_emitted OK" + _tag() + ": " + String(len(expect)) + " stages (if.rng.probe, "
-        + String(n_trees) + " x {rows, features, meta, structure.feat/thr/left/right}, if.pathlen, if.scores),"
+        + String(n_trees) + " x {rows, features, meta, structure.feat/thr/left/right,"
+        + " split.bounds, split.choice, rng.final}, if.pathlen, if.scores),"
         + " run-to-run control identical across build_tpb 128/32, pad 0/37, two poisons"
     )
 

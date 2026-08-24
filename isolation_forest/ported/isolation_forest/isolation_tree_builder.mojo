@@ -137,6 +137,27 @@ comptime IF_BUILD_TPB = 128
 """`build_isolation_trees_global_kernel<T><<<n_trees, 128, 0, stream>>>`
 (`:397`). A scheduling width: only the gather uses the block's threads."""
 
+comptime IF_DECISION_WORDS = 6
+"""Int32 words of RECORDED DECISION per node (CARD_GAPS.md's isolation
+forest items 1-4). See `build_tree_iterative_global` for the layout.
+
+These are decisions the ALGORITHM makes, never ones the scheduler makes:
+every word is a pure function of (seed, tree_id, data bits), and the node
+count is a pure function of (max_depth, max_samples). Nothing here is the
+machine-sized scratch that `core/identity_trace.mojo` rule 3 forbids."""
+
+comptime IF_RNG_STATE_WORDS = 6
+"""`curandStateXORWOW`'s d, v0..v4: the stream POSITION a tree finished at."""
+
+comptime IF_STACK_WORDS = 4
+"""`StackEntry` as four Int32 words (DEVIATION 686)."""
+
+comptime IF_SCRATCH_WORDS_PER_NODE = IF_STACK_WORDS + IF_DECISION_WORDS
+"""10. One tree's scratch is `max_nodes_per_tree * 10 + IF_RNG_STATE_WORDS`
+Int32, carved into three disjoint slices. IT IS ONE KERNEL ARGUMENT, not
+three, ON PURPOSE: Metal caps a kernel at 31 arguments and this one already
+stands at 25. A new output here REUSES A SLICE."""
+
 comptime IF_PATH_TPB = 256
 """`compute_path_lengths`' `threads = 256` (`isolation_forest.cuh:146`)."""
 
@@ -244,6 +265,58 @@ def _stack_push(
     top += 1
 
 
+def _record_decision(
+    decisions: MutPointer[Int32, MutAnyOrigin],
+    node_idx: Int,
+    min_val: Float32,
+    max_val: Float32,
+    rand_frac: Float32,
+    feature_start: Int,
+    local_feature: Int,
+    flags: Int,
+):
+    """Write one node's decision record. Six Int32 words at
+    `IF_DECISION_WORDS * node_idx`:
+
+        0  min_val bits      the node's per-feature minimum, as float bits
+        1  max_val bits      its maximum
+        2  rand_frac bits    `curand_uniform`'s draw for this split
+        3  feature_start     the random feature offset the retry loop began at
+        4  flags             see below
+        5  local_feature     the column chosen, -1 when none was
+
+    flags, one bit each:
+
+        1   this node is a leaf
+        2   stopping arm `depth >= max_depth` held
+        4   stopping arm `n_node_samples <= 1` held
+        8   stopping arm `n_nodes + 2 > max_nodes_per_tree` held
+        16  leaf because no feature had `min < max`
+        32  THE REPARTITION FALLBACK FIRED
+
+    WHY EACH ONE EARNS ITS BYTES. (1) `threshold = fma(rand_frac,
+    ftz(max_val - min_val), min_val)`, so when `(max - min)` is small
+    against `|min|` the whole product is ABSORBED and a divergence in
+    either bound produces the IDENTICAL recorded threshold. Recording the
+    two bounds and the draw is that absorption result applied verbatim.
+    (2) The repartition fallback OVERWRITES `threshold` with `max_val`, so
+    `structure.thr` is a hash taken AFTER a repair and whether the repair
+    fired was recorded nowhere: one bit per node fixes it. (3) When two
+    stopping arms hold at once the leaf written is byte-identical either
+    way -- the `CRIT_ORDER` shape that holtwinters measured to move ZERO
+    cells and to be catchable only by a recorded decision. (4)
+    `feature_start` is the per-node draw that decides WHICH column is
+    tried first, and it is invisible in the tree whenever the first
+    candidate happens to be splittable."""
+    var base = IF_DECISION_WORDS * node_idx
+    decisions.unsafe_store(base + 0, bitcast[DType.int32](min_val))
+    decisions.unsafe_store(base + 1, bitcast[DType.int32](max_val))
+    decisions.unsafe_store(base + 2, bitcast[DType.int32](rand_frac))
+    decisions.unsafe_store(base + 3, Int32(feature_start))
+    decisions.unsafe_store(base + 4, Int32(flags))
+    decisions.unsafe_store(base + 5, Int32(local_feature))
+
+
 def build_tree_iterative_global(
     local_data: MutPointer[Float32, MutAnyOrigin],
     n_samples: Int,
@@ -261,6 +334,7 @@ def build_tree_iterative_global(
     max_depth_out: MutPointer[Int32, MutAnyOrigin],
     work_indices: MutPointer[Int32, MutAnyOrigin],
     stack: MutPointer[Int32, MutAnyOrigin],
+    decisions: MutPointer[Int32, MutAnyOrigin],
     tid: Int,
     n_threads: Int,
 ):
@@ -270,7 +344,12 @@ def build_tree_iterative_global(
     the original one when `has_feature_indices`. The node pointers are
     already offset to this tree. `tid`/`n_threads` are the block's thread
     index and width (the `work_indices` fill is the only parallel line;
-    everything after `if tid == 0` is one thread's serial walk)."""
+    everything after `if tid == 0` is one thread's serial walk).
+
+    `decisions` is the card's per-node decision slice, `IF_DECISION_WORDS`
+    Int32 per node, written by `_record_decision` at every node the walk
+    finishes. It is an OUTPUT ONLY: nothing in the build reads it back, so
+    it cannot change a single bit of the tree."""
     var i = tid
     while i < n_samples:
         work_indices.unsafe_store(i, Int32(i))
@@ -336,11 +415,14 @@ def build_tree_iterative_global(
                 continue
 
             # Stopping condition: max depth, isolated sample, or exhausted capacity.
-            if (
-                depth >= max_depth
-                or n_node_samples <= 1
-                or n_nodes + 2 > max_nodes_per_tree
-            ):
+            # EVERY arm is evaluated for the record, not just the first
+            # one `or` stops at: when two hold, the leaf written is
+            # byte-identical either way, and which held is the only thing
+            # that can tell two vendors apart here.
+            var stop_depth = depth >= max_depth
+            var stop_isolated = n_node_samples <= 1
+            var stop_capacity = n_nodes + 2 > max_nodes_per_tree
+            if stop_depth or stop_isolated or stop_capacity:
                 var path_length = ftz(
                     Float32(depth) + compute_c_n(n_node_samples)
                 )
@@ -348,6 +430,23 @@ def build_tree_iterative_global(
                 node_threshold.unsafe_store(node_idx, path_length)
                 node_left.unsafe_store(node_idx, Int32(-1))
                 node_right.unsafe_store(node_idx, Int32(-1))
+                var flags = 1
+                if stop_depth:
+                    flags += 2
+                if stop_isolated:
+                    flags += 4
+                if stop_capacity:
+                    flags += 8
+                _record_decision(
+                    decisions,
+                    node_idx,
+                    Float32(0.0),
+                    Float32(0.0),
+                    Float32(0.0),
+                    -1,
+                    -1,
+                    flags,
+                )
                 continue
 
             # Try every feature, starting from a random offset, before concluding
@@ -384,6 +483,16 @@ def build_tree_iterative_global(
                 node_threshold.unsafe_store(node_idx, path_length)
                 node_left.unsafe_store(node_idx, Int32(-1))
                 node_right.unsafe_store(node_idx, Int32(-1))
+                _record_decision(
+                    decisions,
+                    node_idx,
+                    Float32(0.0),
+                    Float32(0.0),
+                    Float32(0.0),
+                    feature_start,
+                    -1,
+                    1 + 16,
+                )
                 continue
 
             var original_feature = Int32(local_feature)
@@ -408,7 +517,8 @@ def build_tree_iterative_global(
                     work_indices.unsafe_store(r, tmp)
                     left_end += 1
 
-            if left_end == start or left_end == end:
+            var repartitioned = left_end == start or left_end == end
+            if repartitioned:
                 # Numerical rounding can move the random threshold onto an endpoint.
                 # Repartition with max_val so the stored split and training partition
                 # remain consistent. Since min_val < max_val, both children are nonempty.
@@ -425,6 +535,22 @@ def build_tree_iterative_global(
                         )
                         work_indices.unsafe_store(r, tmp)
                         left_end += 1
+
+            # AFTER the fallback, so the record says whether the stored
+            # `structure.thr` is the drawn threshold or the repaired one.
+            var split_flags = 0
+            if repartitioned:
+                split_flags += 32
+            _record_decision(
+                decisions,
+                node_idx,
+                min_val,
+                max_val,
+                rand_frac,
+                feature_start,
+                local_feature,
+                split_flags,
+            )
 
             var left_child = n_nodes
             var right_child = n_nodes + 1
@@ -514,7 +640,21 @@ def build_isolation_trees_global_kernel(
     var tree_sample_indices = sample_indices.unsafe_offset(tree_id * max_samples)
     var tree_feature_indices = feature_indices.unsafe_offset(tree_id * max_features)
     var tree_work_indices = work_indices.unsafe_offset(tree_id * max_samples)
-    var tree_stack = stack.unsafe_offset(tree_id * max_nodes_per_tree * 4)
+    # ONE buffer, THREE disjoint slices, so the kernel's argument count
+    # stays at 25 (Metal caps a kernel at 31; holtwinters died on the 32nd).
+    #   [0, 4*mn)              the stack
+    #   [4*mn, 10*mn)          the per-node decision records
+    #   [10*mn, 10*mn + 6)     this tree's final RNG state
+    var tree_scratch_base = tree_id * (
+        max_nodes_per_tree * IF_SCRATCH_WORDS_PER_NODE + IF_RNG_STATE_WORDS
+    )
+    var tree_stack = stack.unsafe_offset(tree_scratch_base)
+    var tree_decisions = stack.unsafe_offset(
+        tree_scratch_base + max_nodes_per_tree * IF_STACK_WORDS
+    )
+    var tree_rng_out = stack.unsafe_offset(
+        tree_scratch_base + max_nodes_per_tree * IF_SCRATCH_WORDS_PER_NODE
+    )
     var t_feature = node_feature.unsafe_offset(tree_offset)
     var t_threshold = node_threshold.unsafe_offset(tree_offset)
     var t_left = node_left.unsafe_offset(tree_offset)
@@ -581,9 +721,22 @@ def build_isolation_trees_global_kernel(
         tree_max_depth.unsafe_offset(tree_id),
         tree_work_indices,
         tree_stack,
+        tree_decisions,
         tid,
         n_threads,
     )
+
+    # The stream POSITION this tree finished at. `if.rng.probe` verifies the
+    # PORT (that our XORWOW is cuRAND's); this verifies that a tree consumed
+    # the draws we think it did. A vendor that took one extra rejection in
+    # `sample_bounded`, or one fewer, lands here and nowhere else.
+    if tid == 0:
+        tree_rng_out.unsafe_store(0, bitcast[DType.int32](rng_state.d))
+        tree_rng_out.unsafe_store(1, bitcast[DType.int32](rng_state.v0))
+        tree_rng_out.unsafe_store(2, bitcast[DType.int32](rng_state.v1))
+        tree_rng_out.unsafe_store(3, bitcast[DType.int32](rng_state.v2))
+        tree_rng_out.unsafe_store(4, bitcast[DType.int32](rng_state.v3))
+        tree_rng_out.unsafe_store(5, bitcast[DType.int32](rng_state.v4))
 
 
 # ---------------------------------------------------------------------------

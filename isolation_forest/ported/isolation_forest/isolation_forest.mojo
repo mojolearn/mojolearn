@@ -71,7 +71,11 @@ from isolation_forest.ported.curand.curand_kernel import (
 )
 from isolation_forest.ported.isolation_forest.isolation_tree_builder import (
     IF_BUILD_TPB,
+    IF_DECISION_WORDS,
     IF_PATH_TPB,
+    IF_RNG_STATE_WORDS,
+    IF_SCRATCH_WORDS_PER_NODE,
+    IF_STACK_WORDS,
     build_isolation_trees_global_kernel,
     compute_path_lengths_global_kernel,
 )
@@ -539,9 +543,14 @@ struct IsolationForest(Movable):
         )
         var sample_indices = _poisoned_i64(ctx, n_trees * n_sampled_rows, pad, poison)
         var work_indices = _poisoned_i32(ctx, n_trees * n_sampled_rows, pad, poison)
-        var stack = _poisoned_i32(
-            ctx, n_trees * model.max_nodes_per_tree * 4, pad, poison
+        # One scratch buffer per tree carved into three disjoint slices
+        # (stack, per-node decisions, final RNG state). ONE kernel argument:
+        # Metal caps a kernel at 31 and this one stands at 25.
+        var scratch_stride = (
+            model.max_nodes_per_tree * IF_SCRATCH_WORDS_PER_NODE
+            + IF_RNG_STATE_WORDS
         )
+        var stack = _poisoned_i32(ctx, n_trees * scratch_stride, pad, poison)
         var tables = XorwowDeviceTables(ctx)
 
         # The card's RNG probe: the first 16 draws of tree 0's state, on the
@@ -599,6 +608,7 @@ struct IsolationForest(Movable):
         if trace.enabled:
             var rows = read_i64(ctx, sample_indices, n_trees * n_sampled_rows)
             var feats = read_i32(ctx, model.global_feature_indices, n_trees * n_sampled_features)
+            var h_scratch = read_i32(ctx, stack, n_trees * scratch_stride)
             var h_feat = read_i32(ctx, model.node_feature, total_nodes)
             var h_thr = read_f32(ctx, model.node_threshold, total_nodes)
             var h_left = read_i32(ctx, model.node_left, total_nodes)
@@ -633,6 +643,34 @@ struct IsolationForest(Movable):
                 trace.record_list_f32(tag + ".structure.thr", sthr)
                 trace.record_list_i32(tag + ".structure.left", sl)
                 trace.record_list_i32(tag + ".structure.right", sr)
+                # CARD_GAPS.md items 1-4 for this lane. `structure.thr` is a
+                # hash taken on the far side of two washers: the mul-add
+                # ABSORBS a divergence in either bound whenever (max - min)
+                # is small against |min|, and the repartition fallback
+                # OVERWRITES the drawn threshold with max_val. These three
+                # stages record the decisions themselves.
+                var dbase = t * scratch_stride + (
+                    model.max_nodes_per_tree * IF_STACK_WORDS
+                )
+                var bounds = List[Float32]()
+                var choice = List[Int32]()
+                for i in range(n_used):
+                    var w = dbase + IF_DECISION_WORDS * i
+                    bounds.append(bitcast[DType.float32](h_scratch[w + 0]))
+                    bounds.append(bitcast[DType.float32](h_scratch[w + 1]))
+                    bounds.append(bitcast[DType.float32](h_scratch[w + 2]))
+                    choice.append(h_scratch[w + 3])
+                    choice.append(h_scratch[w + 4])
+                    choice.append(h_scratch[w + 5])
+                trace.record_list_f32(tag + ".split.bounds", bounds)
+                trace.record_list_i32(tag + ".split.choice", choice)
+                var rng_final = List[Int32]()
+                var rbase = t * scratch_stride + (
+                    model.max_nodes_per_tree * IF_SCRATCH_WORDS_PER_NODE
+                )
+                for i in range(IF_RNG_STATE_WORDS):
+                    rng_final.append(h_scratch[rbase + i])
+                trace.record_list_i32(tag + ".rng.final", rng_final)
 
         _ = data^
         _ = subsample_buffer^

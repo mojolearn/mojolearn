@@ -205,10 +205,83 @@ halves of the seed (`s0` from the low 32, `s1` from the high 32). And
 `subsequence = tree_id = blockIdx.x` is a semantic key, one block per tree,
 not an SM-count-dependent one. There is no analogue of the RF defect to fix.
 
+## What the card records, and the three washers it now sees behind
+
+Per tree: `rows`, `features`, `meta`, `structure.{feat,thr,left,right}`,
+and, added 2026-08-24 in answer to `CARD_GAPS.md`:
+
+| stage | dtype | what |
+| --- | --- | --- |
+| `split.bounds` | Float32 | `min_val`, `max_val`, `rand_frac` per node |
+| `split.choice` | Int32 | `feature_start`, `flags`, `local_feature` per node |
+| `rng.final` | Int32 | the tree's finishing XORWOW state, `d` and `v0..v4` |
+
+`structure.thr` was a hash taken on the far side of **two** washers:
+
+1. **Absorption.** `threshold = fma(rand_frac, ftz(max_val - min_val),
+   min_val)`. When `(max - min)` is small against `|min|` the whole product
+   is absorbed and a divergence in *either* bound yields the identical
+   recorded threshold. `split.bounds` records the two bounds and the draw,
+   so the divergence has somewhere to land.
+2. **Repair.** When the drawn threshold falls on an endpoint the fallback
+   sets `threshold = max_val` and repartitions, overwriting what was
+   recorded. Whether that repair fired was recorded nowhere. It is now bit
+   32 of `flags`.
+
+`flags` also carries which stopping arm fired at each leaf (bits 2, 4, 8,
+and 16 for "no feature had `min < max`"). Every arm is evaluated, not just
+the first one `or` stops at, because when two hold the leaf written is
+**byte-identical either way**. That is the `CRIT_ORDER` shape holtwinters
+measured to move zero cells and to be catchable only by a recorded
+decision.
+
+`rng.final` closes the other half of the RNG question. `if.rng.probe`
+verifies the **port** (that our XORWOW is cuRAND's). It says nothing about
+the stream **position** any tree actually reached. A vendor that took one
+extra rejection in `sample_bounded`, or one fewer, lands in `rng.final`
+and nowhere else.
+
+All of it is a decision the **algorithm** makes, never one the scheduler
+makes: every word is a pure function of `(seed, tree_id, data bits)`, and
+the node count is a pure function of `(max_depth, max_samples)`. None of it
+is the machine-sized scratch `core/identity_trace.mojo` rule 3 forbids.
+
+### One kernel argument, not three: Metal caps a kernel at 31
+
+`build_isolation_trees_global_kernel` stands at **25 arguments** and is
+unchanged at 25 after this work. Six new output buffers would have put it
+at exactly 31, which is where holtwinters died with a metallib error naming
+no argument and pointing at line 1 of an unrelated file.
+
+So the new outputs **reuse a slice**. The existing per-tree scratch buffer
+is widened and carved into three disjoint regions:
+
+```
+[0,        4*mn)          the stack, 4 Int32 per entry
+[4*mn,    10*mn)          the per-node decision records, 6 Int32 per node
+[10*mn,   10*mn + 6)      this tree's final RNG state
+```
+
+where `mn = max_nodes_per_tree`. Stride per tree is `mn * 10 + 6`.
+
 ## What is owed
 
 - The DEVIATION 750 probe above, on an NVIDIA box.
 - NVIDIA and AMD legs. Everything here is Apple M4 only.
+- **A gate run for the card stages added 2026-08-24. THEY HAVE NEVER BEEN
+  COMPILED.** They were written in a read-only slot, so `if_check.mojo` has
+  not been built since. Three things must be checked the moment a slot
+  opens: that it compiles; that `check_if_device_equals_oracle` still shows
+  37,496 cells bit-equal (recording already-computed locals must not move a
+  single bit, and if it does, the instrument is itself an identity hazard
+  and must come back out); and that `check_if_card_is_emitted` sees the new
+  stage count.
+- The oracle half of those stages. `if_oracle.mojo` has every one of these
+  values as a local (`min_val`, `max_val`, `frac`, `feature_start`,
+  `local_feature`, and the repartition test at its `if left_end == start or
+  left_end == end`), but does not record them, so the new stages are
+  cross-vendor instruments only and are not yet checked against the
+  independent transcription locally.
 - A second sabotage on the split tie-break (each sabotage needs its own
   rebuild; only one was run).
 - The shape sweep and the repeat-launch gate beyond what
