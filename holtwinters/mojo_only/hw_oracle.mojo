@@ -312,6 +312,8 @@ def oracle_fit[dt: DType](
     eps_f32: Float32,
     trace_iters: Int,
     zero_dir_guard: Bool = True,
+    bfgs_iter_limit: Int = -1,
+    linesearch_iter_limit: Int = -1,
 ) raises -> HWOracleFit[dt]:
     """`HoltWintersFitHelper` on the host: transpose, decompose, BFGS,
     final eval. `data` is series-major float32 (widened exactly for
@@ -391,6 +393,11 @@ def oracle_fit[dt: DType](
 
     # Step 3: BFGS per series
     var p = default_optim_params(eps_f32)
+    # their override block's two gate-relevant members (see runner.mojo)
+    if bfgs_iter_limit > 0:
+        p.bfgs_iter_limit = bfgs_iter_limit
+    if linesearch_iter_limit > 0:
+        p.linesearch_iter_limit = linesearch_iter_limit
     var eps = _const[dt](p.eps)
     var min_param_diff = _const[dt](p.min_param_diff)
     var min_error_diff = _const[dt](p.min_error_diff)

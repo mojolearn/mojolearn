@@ -89,6 +89,7 @@ from core.identity_trace import IdentityTrace, first_divergence, read_trace_line
 from holtwinters.estimator import (
     HWFit,
     download_f32,
+    download_i32,
     holtwinters_fit_host_traced,
     holtwinters_forecast_host_traced,
     upload_f32,
@@ -116,6 +117,7 @@ from holtwinters.mojo_only.hw_oracle import (
 )
 from holtwinters.ported.holtwinters.internal.hw_decompose import host_filter, host_r1qt
 from holtwinters.ported.holtwinters.internal.hw_utils import (
+    HW_OPTIM_TPB,
     bound_device,
     hw_float32_inf,
     hw_sabotage_name,
@@ -1174,6 +1176,179 @@ def check_hw_card_is_emitted() raises:
     print("check_hw_card_is_emitted OK [" + _mode_name() + "]: " + String(len(expect)) + " stages (" + expect[0] + " ... " + String(shown) + " iteration stages ... hw.forecast), run-to-run control identical")
 
 
+def _dec_names(d: Int) -> String:
+    """DEVIATION 699's mask, spelled out."""
+    var out = String("")
+    if (d & 1) != 0:
+        out += "ZERO_DIR "
+    if (d & 2) != 0:
+        out += "HESSIAN_RESET "
+    if (d & 4) != 0:
+        out += "LS_LIMIT "
+    if (d & 8) != 0:
+        out += "RHO_ZERO "
+    if (d & 16) != 0:
+        out += "H_NAN "
+    if (d & 32) != 0:
+        out += "BOTH_CRIT "
+    if (d & 64) != 0:
+        out += "ITER_LIMIT "
+    if (d & 128) != 0:
+        out += "ALPHA_LO "
+    if (d & 256) != 0:
+        out += "ALPHA_HI "
+    if (d & 512) != 0:
+        out += "BETA_LO "
+    if (d & 1024) != 0:
+        out += "BETA_HI "
+    if (d & 2048) != 0:
+        out += "GAMMA_LO "
+    if (d & 4096) != 0:
+        out += "GAMMA_HI "
+    var halv = d >> 16
+    if out == "":
+        out = "(none) "
+    return out + "halvings=" + String(halv)
+
+
+def check_hw_decision_branches() raises:
+    """DEVIATION 699's gate, and the REACH CENSUS the lane could not take
+    before it.
+
+    Two jobs. (1) Print which decision bits the six standard fixtures
+    actually set, so `LS_LIMIT`, `RHO_ZERO`, `ITER_LIMIT` and the clamp arms
+    stop being branches nobody can say are reached. (2) Reach the two LIMIT
+    branches deliberately, at the smallest size that reaches them, using
+    cuML's own `bfgs_iter_limit` / `linesearch_iter_limit` (their override
+    block, `runner.cuh:236-253`) rather than hunting for a series that fails
+    to converge in 1000 iterations.
+    """
+    var ctx = DeviceContext()
+    var tr = IdentityTrace.disabled()
+    var names = ["additive", "multiplicative", "constant", "zero", "mixed"]
+    var seen = 0
+    for fi in range(len(names)):
+        var name = names[fi]
+        var seasonal = SEASONAL_ADDITIVE
+        var data: List[Float32]
+        if name == "additive":
+            data = hw_fixture(spec_additive(), N, BATCH, FREQ, 2)
+        elif name == "multiplicative":
+            seasonal = SEASONAL_MULTIPLICATIVE
+            data = hw_fixture(spec_multiplicative(), N, BATCH, FREQ, 2)
+        elif name == "constant":
+            data = hw_fixture(spec_constant(), N, BATCH, FREQ, 2)
+        elif name == "zero":
+            data = hw_fixture(spec_zero(), N, BATCH, FREQ, 2)
+        else:
+            var specs: List[HWFixtureSpec] = [spec_additive(), spec_constant(), spec_additive_noiseless(), spec_zero()]
+            data = hw_fixture_mixed(specs, N, BATCH, FREQ, 6)
+        var f = _device_fit(ctx, data, N, BATCH, _seasonal_str(seasonal), tr)
+        var o = oracle_fit[DType.float32](data, N, BATCH, FREQ, START_PERIODS, seasonal, HW_DEFAULT_EPS, TRACE_ITERS)
+        var bad = _first_diff_i(name + " hw.opt.decisions", f.decisions, o.decisions)
+        if bad != "":
+            comptime if IDENTICAL:
+                raise Error("check_hw_decision_branches FAILED (sabotage " + hw_sabotage_name() + "): " + bad)
+            else:
+                print("  RECORDED [FAST] " + bad)
+        for s in range(BATCH):
+            seen |= Int(f.decisions[s])
+        print("  census " + name + " s0: " + _dec_names(Int(f.decisions[0])))
+
+    # (2) the two LIMIT branches, reached exactly.
+    var d2 = hw_fixture(spec_additive(), N, BATCH, FREQ, 2)
+    var ts_h2 = List[Float32]()
+    for t in range(N):
+        for s in range(BATCH):
+            ts_h2.append(d2[s * N + t])
+    var ts_d = upload_f32(ctx, ts_h2)
+    var sl = ctx.enqueue_create_buffer[DType.float32](BATCH)
+    var st = ctx.enqueue_create_buffer[DType.float32](BATCH)
+    var ss = ctx.enqueue_create_buffer[DType.float32](FREQ * BATCH)
+    var comps = (N - FREQ) * BATCH
+    var lv = ctx.enqueue_create_buffer[DType.float32](comps)
+    var tv = ctx.enqueue_create_buffer[DType.float32](comps)
+    var sv = ctx.enqueue_create_buffer[DType.float32](comps)
+    var ev = ctx.enqueue_create_buffer[DType.float32](BATCH)
+    var cr = ctx.enqueue_create_buffer[DType.int32](BATCH)
+    var ni = ctx.enqueue_create_buffer[DType.int32](BATCH)
+    var de = ctx.enqueue_create_buffer[DType.int32](BATCH)
+    var itr = ctx.enqueue_create_buffer[DType.float32](1)
+    # the decomposition's start values, from the oracle (a host quantity)
+    var ob = oracle_fit[DType.float32](d2, N, BATCH, FREQ, START_PERIODS, SEASONAL_ADDITIVE, HW_DEFAULT_EPS, 0, True, 2, 1)
+    var h_sl = List[Float32]()
+    var h_st = List[Float32]()
+    for s in range(BATCH):
+        h_sl.append(ob.start_level[s])
+        h_st.append(ob.start_trend[s])
+    var h_ss = List[Float32]()
+    for i in range(FREQ * BATCH):
+        h_ss.append(ob.start_season[i])
+    var sl2 = upload_f32(ctx, h_sl)
+    var st2 = upload_f32(ctx, h_st)
+    var ss2 = upload_f32(ctx, h_ss)
+    var a0 = List[Float32]()
+    var b0 = List[Float32]()
+    var g0 = List[Float32]()
+    for _ in range(BATCH):
+        a0.append(HW_ALPHA0)
+        b0.append(HW_BETA0)
+        g0.append(HW_GAMMA0)
+    var al = upload_f32(ctx, a0)
+    var be = upload_f32(ctx, b0)
+    var ga = upload_f32(ctx, g0)
+    ctx.synchronize()
+    holtwinters_optim(
+        ctx, ts_d, N, BATCH, FREQ, sl2, st2, ss2, al, be, ga, lv, tv, sv, ev,
+        cr, ni, de, itr, 0, HW_DEFAULT_EPS, SEASONAL_ADDITIVE, HW_OPTIM_TPB, 2, 1,
+    )
+    var dd = download_i32(ctx, de, BATCH)
+    var cc = download_i32(ctx, cr, BATCH)
+    var n_limit = 0
+    for s in range(BATCH):
+        if (Int(dd[s]) & 64) != 0:
+            n_limit += 1
+        if Int(dd[s]) != Int(ob.decisions[s]):
+            comptime if IDENTICAL:
+                raise Error(
+                    "check_hw_decision_branches FAILED at the limit fixture (sabotage "
+                    + hw_sabotage_name() + "): series " + String(s) + " device decisions "
+                    + String(dd[s]) + " [" + _dec_names(Int(dd[s])) + "] oracle "
+                    + String(ob.decisions[s]) + " [" + _dec_names(Int(ob.decisions[s])) + "]"
+                )
+    if n_limit == 0:
+        raise Error(
+            "check_hw_decision_branches REACH FAILURE: bfgs_iter_limit = 2 did not"
+            " set ITER_LIMIT on any series, so the fall-through return is still"
+            " uncovered and the fixture does not do what it claims"
+        )
+    print(
+        "check_hw_decision_branches " + ("OK" if IDENTICAL else "REPORT") + " [" + _mode_name()
+        + "]: decisions device == oracle on 5 fixtures; union of bits seen on the"
+        " standard fixtures = [" + _dec_names(seen) + "]; bfgs_iter_limit=2 reached"
+        " ITER_LIMIT on " + String(n_limit) + "/" + String(BATCH) + " series, criterion "
+        + criterion_name(Int(cc[0]))
+    )
+    _ = ts_d^
+    _ = sl^
+    _ = st^
+    _ = ss^
+    _ = sl2^
+    _ = st2^
+    _ = ss2^
+    _ = al^
+    _ = be^
+    _ = ga^
+    _ = lv^
+    _ = tv^
+    _ = sv^
+    _ = ev^
+    _ = cr^
+    _ = ni^
+    _ = de^
+    _ = itr^
+
+
 def main() raises:
     print("== holtwinters/mojo_only/hw_check.mojo [" + _mode_name() + "] sabotage=" + hw_sabotage_name() + " ==")
     check_hw_refusals()
@@ -1185,4 +1360,5 @@ def main() raises:
     check_hw_device_equals_oracle()
     check_hw_launch_invariance()
     check_hw_card_is_emitted()
+    check_hw_decision_branches()
     print("== hw_check: ALL OK [" + _mode_name() + "] ==")
