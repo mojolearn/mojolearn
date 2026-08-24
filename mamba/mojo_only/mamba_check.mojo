@@ -62,6 +62,55 @@ the FAILURE, because it means the sabotage was reached and made no
 difference, or was never reached at all. Both are `[[reached-but-inert]]` and
 both are reported as such.
 
+THE SABOTAGE LEDGER, MEASURED 2026-08-23 (Apple, IDENTICAL, this shape)
+------------------------------------------------------------------------
+All six arms of `modeling_mamba.mojo` were run one at a time, each its own
+build. Every one BIT. What matters is not that they failed but WHERE, so the
+first stage to move and its cell count are recorded here:
+
+    arm                    first stage moved   cells    stages moved
+    S14_THRESHOLD_10       softplus.out        13 / 64      4 / 16
+    S13_BIAS_LAST          conv.out            33 / 64     10 / 16
+    S13_TAPS_REVERSED      conv.out            24 / 64      9 / 16
+    S1_FOLD_DESCENDING     norm.sumsq           1 / 4       1 / 16
+    S12_MUL_SIGMOID        gate.out            15 / 64      3 / 16
+    S17_OP_NUMBERING       in_proj.out        128 / 128    13 / 16
+
+Each arm moves the stage its own seam writes and no earlier one, which is
+the evidence that it is reached where it is aimed and nowhere else.
+
+THREE THINGS THE LEDGER SAYS THAT A PASS OR FAIL WOULD NOT
+------------------------------------------------------------
+1. **The card is what makes S1 falsifiable at all.** `S1_FOLD_DESCENDING`
+   moves `norm.sumsq` on one row and moves NOTHING ELSE: `norm.out` is
+   already identical again, because a 1 ulp change in the sum of squares is
+   absorbed by the divide and the reciprocal square root. A gate that
+   compared only the block OUTPUT would call that arm inert and would then
+   have licensed any fold order at S1. The per-row `norm.sumsq` stage is the
+   only reason contract section 4's S1 clause is falsifiable here.
+2. **Absorption is everywhere and it is not a bug.** `S14_THRESHOLD_10`
+   moves 13 cells of `softplus.out` and 13 of `scan.y` but only ONE cell of
+   `skip.out` and no cell of `gate.out`, `out_proj.out` or `residual.out`:
+   `y + u * D` adds a tiny y to a much larger `u * D` and rounds the
+   difference away. `S13_TAPS_REVERSED` reaches `residual.out` on zero
+   cells. So four of the six arms are invisible in the block's output at
+   this shape and are caught only by the intermediate stages.
+3. **The orientation trap is exactly as advertised.**
+   `S17_OP_NUMBERING` moves 13 of 16 stages, `in_proj.out` on ALL 128 cells,
+   and NOTHING RAISES: no bound is exceeded and no size check fires, because
+   every operand read as its transpose has the same element count. That is
+   the whole reference card of plausible wrong products, reproduced on
+   demand.
+
+WHERE THE LEDGER IS THIN, and it is thin
+------------------------------------------
+`S1_FOLD_DESCENDING` bites on ONE of four rows at `d_model = 8`. Eight terms
+is a short fold and most rows round the same way in both directions. The arm
+is genuinely falsifying, but weakly, and `d_model = 16` is owed before the
+S1 clause should be called well gated. `S14_THRESHOLD_10` is reported only
+because the fixture plants the band and the reach count above is nonzero;
+against the corpus default ranges it would be VACUOUS.
+
 OWED, and this file does not cover any of it
 ----------------------------------------------
 The rest of contract section 3's sweep (B in {1,2,3}, L in {1,16,64,257},
